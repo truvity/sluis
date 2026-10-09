@@ -134,11 +134,12 @@ func OpenDomains(ctx context.Context, st *store.Stores, create bool) (*Domains, 
 	return OpenDomainsExporting(ctx, st, create, nil)
 }
 
-// OpenDomainsExporting is [OpenDomains] for a side that may be on layout v4: an
+// OpenDomainsExporting is [OpenDomains] for a side that may keep its secrets in the
+// layout-v4 stores (the ssm source): an
 // installed runner App, and a catalogue App for which exported says true, is
 // the document external/github/<app> there and not an internal credential, and
 // a Slack App's bot token is external/slack/<app> (ADR 0041). exported may be
-// nil (no catalogue App is exported). On layout v3 it changes nothing.
+// nil (no catalogue App is exported). A side without v4 stores changes nothing.
 func OpenDomainsExporting(ctx context.Context, st *store.Stores, create bool, exported func(id string) bool) (*Domains, error) {
 	if st.Adapter != store.AdapterLegacy {
 		base := portstore.New(st.Ports).WithV4(st.V4).ExportGitHubApps(exported)

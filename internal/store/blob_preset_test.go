@@ -56,7 +56,7 @@ ports:
 	if err = c.validatePorts(); err != nil {
 		t.Fatal(err)
 	}
-	stores := secretstore.FromStore(statememory.New(), secretstore.LayoutV4, "")
+	stores := secretstore.FromStore(statememory.New(), "")
 	c.v4 = &v4Holder{stores: stores}
 	doc, _ := stores.Internal.S3Credentials("internal/blobs/r2")
 	if _, err = doc.Put(ctx, secretstore.S3Credentialsv1{AccessKeyID: "example-id", SecretAccessKey: "example-secret"}, ""); err != nil {
@@ -126,7 +126,7 @@ func (a *presetAPI) PermissionGroups(context.Context) (map[string]string, error)
 // document exists, and the minter credential is what clones the prototype.
 func TestTheBlobMintsItsOwnR2CredentialsFromAPreset(t *testing.T) {
 	ctx := context.Background()
-	stores := secretstore.FromStore(statememory.New(), secretstore.LayoutV4, "")
+	stores := secretstore.FromStore(statememory.New(), "")
 	mv, _ := stores.Internal.CloudflareMinter("internal/cloudflare/main/minter")
 	if _, err := mv.Put(ctx, secretstore.CloudflareMinterv1{Token: "minter-secret"}, ""); err != nil {
 		t.Fatal(err)

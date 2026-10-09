@@ -284,8 +284,7 @@ type (
 		PathStyle bool   `json:"pathStyle,omitempty"`
 		// CredentialsRef is the internal address (`internal/<kind>/<id>`) of
 		// the s3-credentials/v1 document the installation's secrets store
-		// holds for Endpoint. It needs Endpoint and `secrets.layout` v4 or
-		// transition.
+		// holds for Endpoint. It needs Endpoint and the ssm secrets source.
 		CredentialsRef string `json:"credentialsRef,omitempty"`
 		// Credentials makes sluis mint its own R2 credentials from a
 		// `cloudflare.presets` entry instead of reading a static document. It
@@ -304,7 +303,7 @@ type (
 
 	// Secrets is how the secrets a document names are delivered: `env`
 	// (SLUIS_SECRET_<NAME>), `file` (<root>/<name>, read on every use) or
-	// `ssm` (<root>/private/config/<name>, read at once and again after
+	// `ssm` (<root>/internal/config/<name>, read at once and again after
 	// `refresh`). See internal/secrets.
 	Secrets struct {
 		Source   string    `json:"source"`
@@ -315,11 +314,11 @@ type (
 		// KMSKeyID is `ssm`'s customer-managed key for the parameters the
 		// service writes (credentials, exports). Unset is the AWS-managed key.
 		KMSKeyID string `json:"kmsKeyId,omitempty"`
-		// Layout is the storage layout of an `ssm` installation: `v3` (the
-		// default), `transition` or `v4` (ADR 0041).
+		// Layout is the storage layout of an `ssm` installation: `v4` (ADR
+		// 0041), the only one and the default.
 		Layout string `json:"layout,omitempty"`
 		// Grace is how long a rotated client secret's previous value is still
-		// accepted under layout v4 (default 24h). It is the overlap of a
+		// accepted (default 24h). It is the overlap of a
 		// rotation: the previous revision of the document, while the current
 		// one is younger than this.
 		Grace *Duration `json:"grace,omitempty"`
@@ -581,9 +580,5 @@ func (s *Sluis) SlackController() *ControllerSlack {
 	return &ControllerSlack{Roster: r, CredentialsDir: g.CredentialsDir}
 }
 
-// The values of [Secrets].Layout.
-const (
-	SecretsLayoutV3         = "v3"
-	SecretsLayoutTransition = "transition"
-	SecretsLayoutV4         = "v4"
-)
+// SecretsLayoutV4 is the one value of [Secrets].Layout.
+const SecretsLayoutV4 = "v4"

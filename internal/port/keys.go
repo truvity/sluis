@@ -19,7 +19,7 @@ import (
 //     compound (`stable/acme`);
 //   - DynamoDB stores the kind as `pk` and the id as `sk`;
 //   - the Secrets of a credential live under `credentials/<kind>/<id>/<ref>`,
-//     which the ssm adapter puts at `/sluis/private/credentials/...`.
+//     which the ssm adapter puts at `/sluis/<instance>/internal/credentials/...`.
 //
 // A key no rule names is the kind [KindOther] with the whole key as its id: it
 // is correct (and listable by a scan) and a new family is named here.

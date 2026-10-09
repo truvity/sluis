@@ -17,6 +17,5 @@
 // versions.
 //
 // [Open] builds the two namespaces from a serve document's `secrets` section.
-// Which layout an installation is on ([Layout]) is that section's `layout`;
-// this package does not decide what the callers do with it.
+// The `layout` of that section can only be v4 ([CheckLayout]).
 package secretstore

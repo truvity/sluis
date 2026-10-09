@@ -45,7 +45,7 @@ func TestACredentialsRefMustBeAnInternalAddress(t *testing.T) {
 func TestACredentialsRefNeedsV4Secrets(t *testing.T) {
 	c := blobWith(config.PortsBlobS3{Bucket: "b", Endpoint: "http://127.0.0.1:1", CredentialsRef: "internal/blobs/r2"})
 	c.v4 = &v4Holder{}
-	if _, err := c.s3Blob(context.Background()); err == nil || !strings.Contains(err.Error(), "layout") {
+	if _, err := c.s3Blob(context.Background()); err == nil || !strings.Contains(err.Error(), "ssm secrets source") {
 		t.Fatalf("no v4 stores: %v", err)
 	}
 }
@@ -55,7 +55,7 @@ func TestACredentialsRefNeedsV4Secrets(t *testing.T) {
 // from the endpoint (unreachable here, so the store is unavailable).
 func TestTheBlobReadsItsCredentialsFromTheInternalAddress(t *testing.T) {
 	ctx := context.Background()
-	stores := secretstore.FromStore(statememory.New(), secretstore.LayoutV4, "")
+	stores := secretstore.FromStore(statememory.New(), "")
 	c := blobWith(config.PortsBlobS3{Bucket: "b", Endpoint: "http://127.0.0.1:1", PathStyle: true, CredentialsRef: "internal/blobs/r2"})
 	c.v4 = &v4Holder{stores: stores}
 

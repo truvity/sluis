@@ -20,7 +20,7 @@ import (
 func newStores(t *testing.T) (*secretstore.Stores, state.Store) {
 	t.Helper()
 	root := memory.New()
-	return secretstore.FromStore(root, secretstore.LayoutV4, ""), root
+	return secretstore.FromStore(root, ""), root
 }
 
 func readFile(t *testing.T, parts ...string) []byte {
@@ -240,7 +240,7 @@ func TestOIDCRotation(t *testing.T) {
 	now := time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC)
 	clock := now
 	root := memory.New(memory.WithClock(func() time.Time { return clock }))
-	st := secretstore.FromStore(root, secretstore.LayoutV4, "")
+	st := secretstore.FromStore(root, "")
 	v := st.External.OIDC("rp").WithClock(func() time.Time { return clock })
 
 	rev, err := v.Put(ctx, secretstore.OIDCv1{ClientID: "rp", ClientSecret: "one"}, "")
@@ -262,24 +262,16 @@ func TestOIDCRotation(t *testing.T) {
 	}
 }
 
-func TestParseLayout(t *testing.T) {
-	for in, want := range map[string]secretstore.Layout{
-		"": secretstore.LayoutV3, "v3": secretstore.LayoutV3,
-		"transition": secretstore.LayoutTransition, "v4": secretstore.LayoutV4,
-	} {
-		if got, err := secretstore.ParseLayout(in); err != nil || got != want {
-			t.Errorf("ParseLayout(%q) = %q, %v; want %q", in, got, err, want)
+func TestCheckLayout(t *testing.T) {
+	for _, in := range []string{"", "v4"} {
+		if err := secretstore.CheckLayout(in); err != nil {
+			t.Errorf("CheckLayout(%q) = %v", in, err)
 		}
 	}
-	if _, err := secretstore.ParseLayout("v5"); err == nil {
-		t.Fatal("v5 accepted")
-	}
-	tr := secretstore.LayoutTransition
-	if !tr.ReadsV4() || !tr.WritesV4() || !tr.WritesV3() {
-		t.Error("transition reads v4 and writes both")
-	}
-	if secretstore.LayoutV3.ReadsV4() || secretstore.LayoutV4.WritesV3() || !secretstore.LayoutV4.WritesV4() {
-		t.Error("v3 and v4 each write their own")
+	for _, in := range []string{"v3", "transition", "v5"} {
+		if err := secretstore.CheckLayout(in); err == nil {
+			t.Errorf("CheckLayout(%q) accepted", in)
+		}
 	}
 }
 
@@ -292,9 +284,9 @@ func TestOpen(t *testing.T) {
 		gotOpts = state.ResolveOptions(state.Options{}, opts...)
 		return memory.New(), nil
 	}
-	st, err := secretstore.Open(ctx, &config.Secrets{
+	_, err := secretstore.Open(ctx, &config.Secrets{
 		Source: "ssm", Root: "/sluis/example", Region: "eu-west-1", Endpoint: "http://localhost:4566",
-		KMSKeyID: "alias/example", Layout: "transition",
+		KMSKeyID: "alias/example", Layout: "v4",
 	}, open)
 	if err != nil {
 		t.Fatal(err)
@@ -302,22 +294,20 @@ func TestOpen(t *testing.T) {
 	if gotPrefix != "/sluis/example" || gotOpts.Region != "eu-west-1" || gotOpts.Endpoint != "http://localhost:4566" {
 		t.Fatalf("opened %q with %+v", gotPrefix, gotOpts)
 	}
-	if st.Layout != secretstore.LayoutTransition {
-		t.Fatalf("layout = %q", st.Layout)
-	}
-	// The default layout is v3.
-	st, err = secretstore.Open(ctx, &config.Secrets{Source: "ssm", Root: "/sluis/example"}, open)
-	if err != nil || st.Layout != secretstore.LayoutV3 {
-		t.Fatalf("default layout = %v, %v", st, err)
+	// The default layout is v4.
+	if _, err = secretstore.Open(ctx, &config.Secrets{Source: "ssm", Root: "/sluis/example"}, open); err != nil {
+		t.Fatalf("default layout: %v", err)
 	}
 
 	for name, cfg := range map[string]*config.Secrets{
-		"nil":      nil,
-		"env":      {Source: "env"},
-		"file":     {Source: "file", Root: "/run/secrets"},
-		"no root":  {Source: "ssm"},
-		"bad root": {Source: "ssm", Root: "sluis/x"},
-		"layout":   {Source: "ssm", Root: "/sluis/x", Layout: "v9"},
+		"nil":        nil,
+		"env":        {Source: "env"},
+		"file":       {Source: "file", Root: "/run/secrets"},
+		"no root":    {Source: "ssm"},
+		"bad root":   {Source: "ssm", Root: "sluis/x"},
+		"layout":     {Source: "ssm", Root: "/sluis/x", Layout: "v9"},
+		"v3":         {Source: "ssm", Root: "/sluis/x", Layout: "v3"},
+		"transition": {Source: "ssm", Root: "/sluis/x", Layout: "transition"},
 	} {
 		if _, err := secretstore.Open(ctx, cfg, open); err == nil {
 			t.Errorf("%s: accepted", name)

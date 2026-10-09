@@ -109,12 +109,12 @@ The documents name secrets and hold none. With the SSM adapter each secret is a 
 
 ```sh
 kubectl create namespace sluis
-aws ssm put-parameter --type SecureString --name /sluis/demo/private/config/issuer/state-secret \
+aws ssm put-parameter --type SecureString --name /sluis/demo/internal/config/issuer/state-secret \
   --value "$(openssl rand -base64 32)"
-aws ssm get-parameters-by-path --path /sluis/demo/private/config/ --recursive --query 'Parameters[].Name'
+aws ssm get-parameters-by-path --path /sluis/demo/internal/config/ --recursive --query 'Parameters[].Name'
 ```
 
-Expect a parameter version, then `["/sluis/demo/private/config/issuer/state-secret"]`. Print names only, never values. The state secret keys the sign-in state and must be the same in every replica.
+Expect a parameter version, then `["/sluis/demo/internal/config/issuer/state-secret"]`. Print names only, never values. The state secret keys the sign-in state and must be the same in every replica.
 
 ### With OpenBao instead of SSM
 

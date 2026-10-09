@@ -4,7 +4,7 @@ Make sluis clone a disabled Cloudflare prototype token into expiring account tok
 
 ## Before you start
 
-- Set `secrets.source: ssm` and `secrets.layout: v4` or `transition`.
+- Set `secrets.source: ssm`.
 
 - The minter can mint anything the account owner can (checked 2026-10-08). Only sluis's refusal list guards the account.
 

@@ -317,16 +317,14 @@ func TestWithAnInstanceTheRoleHasTheSSMGrantsOfTheLambdaRoleUnderItsRoot(t *test
 	p := rec.one(t, "aws:iam/policy:Policy", "staging-sluis-policy")
 	g := grants(statements(t, prop(p, "policy").StringValue()))
 	ssmArn := arnp + "ssm:eu-west-1:" + account + ":parameter"
-	creds := []string{ssmArn + "/sluis/staging/private/credentials", ssmArn + "/sluis/staging/private/credentials/*"}
-	cfg := []string{ssmArn + "/sluis/staging/private/config", ssmArn + "/sluis/staging/private/config/*"}
 	v4creds := []string{ssmArn + "/sluis/staging/internal/credentials", ssmArn + "/sluis/staging/internal/credentials/*"}
 	v4cfg := []string{ssmArn + "/sluis/staging/internal/config", ssmArn + "/sluis/staging/internal/config/*"}
 	external := []string{ssmArn + "/sluis/staging/external", ssmArn + "/sluis/staging/external/*"}
-	writes := append(append(append([]string{}, creds...), v4creds...), external...)
+	writes := append(append([]string{}, v4creds...), external...)
 	if got := g["ssm:PutParameter"]; !reflect.DeepEqual(sortedCopy(got), sortedCopy(writes)) {
 		t.Errorf("writes %v, want %v", got, writes)
 	}
-	if got := g["ssm:GetParametersByPath"]; !reflect.DeepEqual(sortedCopy(got), sortedCopy(append(append(append([]string{}, writes...), cfg...), v4cfg...))) {
+	if got := g["ssm:GetParametersByPath"]; !reflect.DeepEqual(sortedCopy(got), sortedCopy(append(append([]string{}, writes...), v4cfg...))) {
 		t.Errorf("reads %v", got)
 	}
 	for a, res := range g {

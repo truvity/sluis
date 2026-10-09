@@ -13,15 +13,15 @@ secrets:
   region: eu-west-1    # ssm only
   refresh: 5m          # ssm only
   kmsKeyId: alias/example   # ssm only: the key the service's own writes are encrypted with
-  layout: v3           # ssm only: v3 (default) | transition | v4, see "SSM layout v4"
-  grace: 24h           # ssm, transition or v4: how long a rotated client secret's previous value is accepted
+  layout: v4           # ssm only: v4 (the only value and the default), see "SSM layout"
+  grace: 24h           # ssm only: how long a rotated client secret's previous value is accepted
 ```
 
 | `source` | A name is delivered as | Read |
 |---|---|---|
 | `env` (the default) | the variable `SLUIS_SECRET_<NAME>`: the name upper-cased, every character that is not a letter or a digit an underscore (`valkey/password` is `SLUIS_SECRET_VALKEY_PASSWORD`). Two names may not share a variable | once, at start; for a local run |
 | `file` | the file `<root>/<name>` | on every use, so a rotated Secret the platform mounts takes effect without a restart. The chart's `secrets` value projects each name as a file under `/var/run/sluis/secrets` |
-| `ssm` | the SecureString `<root>/private/config/<name>` of AWS SSM Parameter Store | every parameter under `<root>/private/config/` at once (decrypted, paged), and again once `refresh` (`5m`) has passed |
+| `ssm` | the SecureString `<root>/internal/config/<name>` of AWS SSM Parameter Store | every parameter under `<root>/internal/config/` at once (decrypted, paged), and again once `refresh` (`5m`) has passed |
 
 
 An undelivered name stops the start and appears in the error, never its value. Kubernetes defaults to `file`, Lambda to `ssm`. See [OpenBao](openbao-secrets-adapter.md).
@@ -37,35 +37,21 @@ An undelivered name stops the start and appears in the error, never its value. K
 | `directory/<id>/key` | `directory.workspaces[].keySecret` | a declared workspace's service-account key |
 | `valkey/password` | `valkey.passwordSecret` | the shared store's password |
 
-## SSM layout v3
+## SSM layout
 
-`secrets.root` is `/sluis/<instance>` (lower-case letters, digits, dashes).
-
-```text
-/sluis/<instance>/private/config/<name>                    what an operator seeds: the names above
-/sluis/<instance>/private/credentials/<kind>/<id>/<ref>    what sluis writes: the credentials of the Secrets port
-/sluis/<instance>/export/<path>                            layout v3's exports (retired, nothing writes it)
-```
-
-The `ssm` Secrets adapter takes the same root; another is refused. A v1 document with no root keeps `/sluis` (layout v2). `private`, `export`, `internal` and `external` are reserved names.
-
-IAM per function: [AWS Lambda](lambda.md#iam-one-role).
-
-Migrate from v2: `sluis migrate ssm-layout --to-root /sluis/<instance>` (`--dry-run` first), then `sluis migrate`: [upgrade to v1.62](../../guides/sluis/upgrade/v1.62.md). A differing destination needs `--overwrite`; `--kms-key` replaces each source's KMS key.
-
-## SSM layout v4
-
-Layout v4 ([ADR 0041](../../decisions/0041-the-secret-contract.md)) keeps each value once, in two namespaces of the root:
+Layout v4 ([ADR 0041](../../decisions/0041-the-secret-contract.md)) keeps each value once, in two namespaces of the root. `secrets.root` is `/sluis/<instance>` (lower-case letters, digits, dashes):
 
 ```text
-/sluis/<instance>/internal/config/<name>                   what an operator seeds: the names above (was private/config/)
-/sluis/<instance>/internal/credentials/<kind>/<id>/<ref>   what sluis writes (was private/credentials/)
+/sluis/<instance>/internal/config/<name>                   what an operator seeds: the names above
+/sluis/<instance>/internal/credentials/<kind>/<id>/<ref>   what sluis writes: the credentials of the Secrets port
 /sluis/<instance>/external/<kind>/<id>                     one typed document per address: the public contract
 ```
 
-Only sluis reads `internal/`. `external/` is granted per consumer on exact addresses.
+Only sluis reads `internal/`. `external/` is granted per consumer on exact addresses. The `ssm` Secrets adapter takes the same root; another is refused. `private`, `export`, `internal` and `external` are reserved names.
 
-`secrets.layout` (`ssm` only) is `v3` (default), `transition` (read v4, fall back to v3; write v4, then v3) or `v4`. Change it with `sluis migrate secrets-layout` ([steps](../../guides/sluis/migrate/migrate-secrets-layout.md)).
+IAM per function: [AWS Lambda](lambda.md#iam-one-role).
+
+`secrets.layout` (`ssm` only) is `v4`, which is also the default. Layouts v3 (`private/` and `export/`) and `transition` were removed in v1.75: an installation still on one runs v1.74.x and `sluis migrate secrets-layout` first, then upgrades.
 
 ### The external documents
 
@@ -84,15 +70,15 @@ Every field is a JSON string. A breaking change is a new address, `external/<kin
 
 A catalogue GitHub App's id may not begin `runner-`. A consumer reads a field with `remoteRef: {key: <address>, property: <field>}`.
 
-### What follows from the layout
+### What each value is
 
-| Value | `v3` | `v4` |
-|---|---|---|
-| The names above (`secrets.source: ssm`) | `<root>/private/config/<name>` | `<root>/internal/config/<name>`; `transition` reads v4 and falls back to v3 |
-| The console session key, directory credentials, links, organisations' keys, the link App, Slack workspaces | `<root>/private/credentials/<kind>/<id>/<ref>` | `<root>/internal/credentials/<kind>/<id>/<ref>`, a `{"value": "<base64>"}` document |
-| A generated client's secret | `private/credentials/oidc-client/<id>/secret`, a record with `previous` and `previous_valid_until` | the `oidc/v1` document `external/oidc/<id>`; a rotation is one write, and the previous secret is the document's previous revision while the current one is younger than `secrets.grace`. A rotation with no overlap refuses the old secret at once |
-| A confidential client's secret an operator seeded | `private/config/clients/<id>/secret` | the same `oidc/v1` document |
-| An installed runner App, or a catalogue App with `export: true` | `private/credentials/github-…/<ref>` | the `github/v1` document `external/github/<app>`, ids from the App's record; a pending App's key stays internal until it is installed |
-| A catalogue Slack App | `private/credentials/slack-app/<id>/<ref>`, client secret and bot token | the bot token is the `slack/v1` document `external/slack/<id>`; the client secret stays internal |
+| Value | Address |
+|---|---|
+| The names above (`secrets.source: ssm`) | `<root>/internal/config/<name>` |
+| The console session key, directory credentials, links, organisations' keys, the link App, Slack workspaces | `<root>/internal/credentials/<kind>/<id>/<ref>`, a `{"value": "<base64>"}` document |
+| A generated client's secret | the `oidc/v1` document `external/oidc/<id>`; a rotation is one write, and the previous secret is the document's previous revision while the current one is younger than `secrets.grace`. A rotation with no overlap refuses the old secret at once |
+| A confidential client's secret an operator seeded | the same `oidc/v1` document |
+| An installed runner App, or a catalogue App with `export: true` | the `github/v1` document `external/github/<app>`, ids from the App's record; a pending App's key stays internal until it is installed |
+| A catalogue Slack App | the bot token is the `slack/v1` document `external/slack/<id>`; the client secret stays internal |
 
 A failing client secret is rechecked once against a fresh read (once per five seconds per client).

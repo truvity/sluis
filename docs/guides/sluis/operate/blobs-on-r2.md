@@ -6,7 +6,7 @@ Keep the Blob port (status reports, directory snapshots) in a bucket of an S3-co
 
 - You need a bucket and a key pair that can read, write, list and delete in it.
 
-- Secrets must be on layout `v4` or `transition` (`secrets.layout`, [secrets](../../../reference/sluis/secrets.md)), because the address is in that layout's internal namespace.
+- Secrets must be on the `ssm` source ([secrets](../../../reference/sluis/secrets.md)), because the address is in its internal namespace.
 - `credentialsRef` without `endpoint` is refused. On AWS S3 the identity is the platform's: Pod Identity, IRSA or a Lambda role.
 
 ## Steps

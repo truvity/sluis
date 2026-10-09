@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"slices"
 	"sort"
 	"strings"
@@ -22,7 +21,7 @@ const DefaultGrace = 24 * time.Hour
 // maxHistory bounds the walk back to a document's first revision.
 const maxHistory = 100
 
-// Secrets is the [port.Secrets] of an installation on layout transition or v4:
+// Secrets is the [port.Secrets] of an installation on layout v4:
 // the callers keep their paths (`credentials/<kind>/<id>/<ref>`, `config/…`)
 // and this maps each to its v4 address, so that nothing above the Secrets port
 // knows the layout.
@@ -36,15 +35,8 @@ const maxHistory = 100
 //     else is kept (an orphan mark is derived from the policy).
 //   - every other path under `credentials/` or `config/` is the internal value
 //     of the same path, a {"value": <base64>} document.
-//   - `export/…` is v3's and is passed through; the exports controller still
-//     runs in these layouts.
-//
-// In transition every write goes to v4 and then to v3, and a read tries v4
-// first; in v4 v3 is never touched except for `export/`.
 type Secrets struct {
-	layout Layout
 	stores *Stores
-	v3     port.Secrets
 	grace  time.Duration
 	now    func() time.Time
 }
@@ -54,13 +46,12 @@ var (
 	_ clientcreds.Overlapper = (*Secrets)(nil)
 )
 
-// NewSecrets returns the Secrets port over the v4 stores. v3 is the layout-v3
-// port: required in transition and for `export/`, otherwise may be nil.
-func NewSecrets(stores *Stores, v3 port.Secrets, grace time.Duration) *Secrets {
+// NewSecrets returns the Secrets port over the v4 stores.
+func NewSecrets(stores *Stores, grace time.Duration) *Secrets {
 	if grace <= 0 {
 		grace = DefaultGrace
 	}
-	return &Secrets{layout: stores.Layout, stores: stores, v3: v3, grace: grace, now: time.Now}
+	return &Secrets{stores: stores, grace: grace, now: time.Now}
 }
 
 // Overlap is the grace period: the overlap of every rotation.
@@ -68,8 +59,6 @@ func (s *Secrets) Overlap() time.Duration { return s.grace }
 
 // WithClock replaces the clock the grace period is compared to, for a test.
 func (s *Secrets) WithClock(now func() time.Time) *Secrets { s.now = now; return s }
-
-func isExport(path string) bool { return strings.HasPrefix(path, port.ExportPrefix) }
 
 // oidcClient is the client id of a generated client's record path.
 func oidcClient(path string) (string, bool) {
@@ -106,26 +95,10 @@ func internalKey(path string) string { return path }
 
 // Get implements [port.Secrets].
 func (s *Secrets) Get(ctx context.Context, path string) (port.Secret, error) {
-	if isExport(path) {
-		return s.v3Get(ctx, path)
-	}
 	if err := port.CheckSecretPath(path); err != nil {
 		return port.Secret{}, err
 	}
-	if s.layout.ReadsV4() {
-		got, err := s.getV4(ctx, path)
-		if !errors.Is(err, port.ErrNotFound) || s.layout != LayoutTransition {
-			return got, err
-		}
-	}
-	return s.v3Get(ctx, path)
-}
-
-func (s *Secrets) v3Get(ctx context.Context, path string) (port.Secret, error) {
-	if s.v3 == nil {
-		return port.Secret{}, port.ErrNotFound
-	}
-	return s.v3.Get(ctx, path)
+	return s.getV4(ctx, path)
 }
 
 func (s *Secrets) getV4(ctx context.Context, path string) (port.Secret, error) {
@@ -140,7 +113,7 @@ func (s *Secrets) getV4(ctx context.Context, path string) (port.Secret, error) {
 	return port.Secret{Value: val, Version: string(rev)}, nil
 }
 
-// getRecord builds the v3-shaped record of a generated client from its
+// getRecord builds the record of a generated client from its
 // document and revisions.
 func (s *Secrets) getRecord(ctx context.Context, id string) (port.Secret, error) {
 	doc := s.stores.External.OIDC(id).WithClock(s.now)
@@ -192,63 +165,12 @@ func (s *Secrets) PutIfVersion(ctx context.Context, path string, value []byte, v
 	return s.put(ctx, path, value, &version)
 }
 
-// put writes to v4 and then, in transition, to v3. version is nil for an
-// unconditional write.
+// put writes the secret. version is nil for an unconditional write.
 func (s *Secrets) put(ctx context.Context, path string, value []byte, version *string) (string, error) {
-	if isExport(path) {
-		return s.v3Put(ctx, path, value, version)
-	}
 	if err := port.CheckSecretWrite(path, value); err != nil {
 		return "", err
 	}
-	if !s.layout.WritesV4() {
-		return s.v3Put(ctx, path, value, version)
-	}
-	if s.layout != LayoutTransition {
-		return s.putV4(ctx, path, value, version)
-	}
-	// Transition. The caller saw a version from v4 when v4 holds the secret,
-	// else from v3: condition the write on the store that holds it, and write
-	// the other unconditionally once the first has won.
-	if _, err := s.getV4(ctx, path); err == nil {
-		rev, err := s.putV4(ctx, path, value, version)
-		if err != nil {
-			return "", err
-		}
-		return rev, s.mirrorV3(ctx, path, value)
-	} else if !errors.Is(err, port.ErrNotFound) {
-		return "", err
-	}
-	// Absent from v4: v3 decides (a create-only write is conflict-checked
-	// there too), then v4 takes the value as its first revision.
-	if _, err := s.v3Put(ctx, path, value, version); err != nil {
-		return "", err
-	}
-	rev, err := s.putV4(ctx, path, value, nil)
-	if errors.Is(err, port.ErrConflict) {
-		return "", err
-	}
-	return rev, err
-}
-
-func (s *Secrets) mirrorV3(ctx context.Context, path string, value []byte) error {
-	if s.v3 == nil {
-		return nil
-	}
-	if _, err := s.v3.Put(ctx, path, value); err != nil {
-		return fmt.Errorf("secretstore: v4 holds the new value and the v3 copy could not be written: %w", err)
-	}
-	return nil
-}
-
-func (s *Secrets) v3Put(ctx context.Context, path string, value []byte, version *string) (string, error) {
-	if s.v3 == nil {
-		return "", fmt.Errorf("%w: no layout-v3 store for %s", port.ErrUnsupported, path)
-	}
-	if version == nil {
-		return s.v3.Put(ctx, path, value)
-	}
-	return s.v3.PutIfVersion(ctx, path, value, *version)
+	return s.putV4(ctx, path, value, version)
 }
 
 func (s *Secrets) putV4(ctx context.Context, path string, value []byte, version *string) (string, error) {
@@ -357,9 +279,6 @@ func sortedUnique(in []string) []string {
 
 // Delete implements [port.Secrets]. An absent secret is not an error.
 func (s *Secrets) Delete(ctx context.Context, path string) error {
-	if isExport(path) || !s.layout.WritesV4() {
-		return s.v3Delete(ctx, path)
-	}
 	var err error
 	if id, ok := oidcClient(path); ok {
 		err = s.stores.External.Store().Delete(ctx, "oidc/"+segment(id))
@@ -369,29 +288,13 @@ func (s *Secrets) Delete(ctx context.Context, path string) error {
 	if err != nil && !errors.Is(err, state.ErrNotFound) {
 		return err
 	}
-	if s.layout == LayoutTransition {
-		return s.v3Delete(ctx, path)
-	}
 	return nil
-}
-
-func (s *Secrets) v3Delete(ctx context.Context, path string) error {
-	if s.v3 == nil {
-		return nil
-	}
-	return s.v3.Delete(ctx, path)
 }
 
 // List implements [port.Secrets]. A v4 listing is of the keys directly under
 // the prefix (the state store lists one level): the callers list one kind's
 // ids, `credentials/oidc-client`, and ask whether `credentials` answers.
 func (s *Secrets) List(ctx context.Context, prefix string) ([]string, error) {
-	if isExport(prefix) || strings.TrimSuffix(prefix, "/") == strings.TrimSuffix(port.ExportPrefix, "/") || !s.layout.ReadsV4() {
-		if s.v3 == nil {
-			return nil, nil
-		}
-		return s.v3.List(ctx, prefix)
-	}
 	norm, err := port.SecretPrefix(prefix)
 	if err != nil {
 		return nil, err
@@ -416,21 +319,6 @@ func (s *Secrets) List(ctx context.Context, prefix string) ([]string, error) {
 		}
 		for _, n := range names {
 			out = append(out, norm+n)
-		}
-	}
-	if s.layout == LayoutTransition && s.v3 != nil {
-		old, err := s.v3.List(ctx, prefix)
-		if err != nil {
-			return nil, err
-		}
-		seen := map[string]bool{}
-		for _, p := range out {
-			seen[p] = true
-		}
-		for _, p := range old {
-			if !seen[p] {
-				out = append(out, p)
-			}
 		}
 	}
 	return sortedUnique(out), nil

@@ -13,19 +13,9 @@ import (
 	"github.com/truvity/sluis/internal/cloudflare"
 	"github.com/truvity/sluis/internal/cloudflare/minter"
 	"github.com/truvity/sluis/internal/config"
-	"github.com/truvity/sluis/internal/secretstore"
 )
 
 var ctx = context.Background()
-
-func TestNewRefusesALayoutThatCannotHoldTheCredentials(t *testing.T) {
-	e := setup(t)
-	_, err := minter.New(minter.Config{Instance: "example", Cloudflare: goodSection(), Layout: secretstore.LayoutV3,
-		Internal: e.stores.Internal, External: e.stores.External, Dial: func(context.Context, string, string) (minter.API, error) { return nil, nil }})
-	if err == nil || !strings.Contains(err.Error(), "secrets.layout") {
-		t.Fatalf("v3: %v", err)
-	}
-}
 
 func goodSection() *config.Cloudflare {
 	return &config.Cloudflare{
@@ -401,7 +391,7 @@ func (busyLock) Do(context.Context, string, string, func(context.Context)) (bool
 
 func TestATickWhoseLeaseIsHeldElsewhereDoesNothing(t *testing.T) {
 	e := setup(t)
-	m2, err := minter.New(minter.Config{Instance: "example", Cloudflare: goodSection(), Layout: e.stores.Layout, Internal: e.stores.Internal,
+	m2, err := minter.New(minter.Config{Instance: "example", Cloudflare: goodSection(), Internal: e.stores.Internal,
 		External: e.stores.External, Lock: busyLock{}, Dial: func(context.Context, string, string) (minter.API, error) { return e.api, nil }})
 	if err != nil {
 		t.Fatal(err)

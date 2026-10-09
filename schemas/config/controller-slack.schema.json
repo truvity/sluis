@@ -364,7 +364,7 @@
                 },
                 "credentials": {
                   "additionalProperties": false,
-                  "description": "Instead of a static document, sluis mints its own R2 credentials from a Cloudflare preset: the account's minter credential clones the preset's prototype, the credentials are renewed with a third of their lifetime left and minted again once after a 403. Exclusive with `credentialsRef`. Needs `endpoint`, `secrets.layout` v4 or transition, and the `cloudflare` section.",
+                  "description": "Instead of a static document, sluis mints its own R2 credentials from a Cloudflare preset: the account's minter credential clones the preset's prototype, the credentials are renewed with a third of their lifetime left and minted again once after a 403. Exclusive with `credentialsRef`. Needs `endpoint`, the ssm secrets source, and the `cloudflare` section.",
                   "properties": {
                     "preset": {
                       "description": "A key of `cloudflare.presets` that has an `endpoint` (an R2 preset).",
@@ -378,7 +378,7 @@
                   "type": "object"
                 },
                 "credentialsRef": {
-                  "description": "The internal address, `internal/<kind>/<id>`, of the `s3-credentials/v1` document (`access_key_id`, `secret_access_key`) that holds the static credentials for `endpoint`, in the installation's secrets store (`secrets.layout: v4` or `transition`). Read at start and again after an answer of 403, at most once a minute. Needs `endpoint`; `region` defaults to `auto` with it. Any other address is refused. This static document is the simple way and needs nothing else: no `cloudflare` section is involved.",
+                  "description": "The internal address, `internal/<kind>/<id>`, of the `s3-credentials/v1` document (`access_key_id`, `secret_access_key`) that holds the static credentials for `endpoint`, in the installation's secrets store (the ssm secrets source). Read at start and again after an answer of 403, at most once a minute. Needs `endpoint`; `region` defaults to `auto` with it. Any other address is refused. This static document is the simple way and needs nothing else: no `cloudflare` section is involved.",
                   "pattern": "^internal/[a-z0-9][a-z0-9-]{0,30}/[a-z0-9][a-z0-9._-]{0,62}$",
                   "type": "string"
                 },

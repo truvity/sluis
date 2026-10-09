@@ -11,10 +11,9 @@ import (
 // headroom for none. Larger content is a blob.
 const MaxSecret = 8 << 10
 
-// ExportPrefix is where layout v3 kept the copies of secrets made out of the
-// service (ADR 0034, retired by ADR 0041): `export/<path>`. Nothing writes it
-// any more; the v3 adapters still address it, so a migration can read and
-// delete what an earlier release left.
+// ExportPrefix is where the copies of secrets made out of the service were kept
+// (ADR 0034, retired by ADR 0041): `export/<path>`. Nothing writes it any more;
+// the openbao adapter still addresses it.
 const ExportPrefix = "export/"
 
 // Secret is a secret as read.

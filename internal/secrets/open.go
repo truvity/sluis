@@ -33,7 +33,6 @@ func Open(ctx context.Context, f *config.Serve, more ...string) (Source, error) 
 			if err != nil {
 				return nil, err
 			}
-			ssm.Layout = s.Layout
 			src = ssm
 		default:
 			return nil, fmt.Errorf("secrets.source: %q is env, file or ssm", s.Source)

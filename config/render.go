@@ -24,7 +24,7 @@ import (
 // installation names none: the one the Pulumi library's grants are written for.
 func DefaultSignKeyAlias(instance string) string { return "alias/sluis-" + instance + "-sign" }
 
-// The names layout v3 gives the secrets sluis itself writes. They are fixed,
+// The names the layout gives the secrets sluis itself writes. They are fixed,
 // so an installation never repeats them.
 const (
 	// StateSecretName is the issuer's sign-in state secret.
@@ -45,7 +45,7 @@ const LiveAlias = "live"
 
 var instancePattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$`)
 
-// SSMRoot is the installation's secrets root in layout v3: /sluis/<instance>.
+// SSMRoot is the installation's secrets root: /sluis/<instance>.
 func SSMRoot(instance string) string { return "/sluis/" + instance }
 
 // Render writes the two documents of an installation: the service document
@@ -281,7 +281,7 @@ func (in *Installation) secrets(s *internal.Sluis) error {
 	return nil
 }
 
-// signing names the state secret of a KMS signer, which layout v3 fixes.
+// signing names the state secret of a KMS signer, which the layout fixes.
 func (in *Installation) signing(s *internal.Sluis) error {
 	k := s.SigningKey
 	if k == nil {

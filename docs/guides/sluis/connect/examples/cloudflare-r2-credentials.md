@@ -6,7 +6,7 @@ Give people, CI jobs and pods S3 credentials for one R2 bucket that expire in mi
 
 ## What you need
 
-- `secrets.source: ssm` with `secrets.layout: v4` (or `transition`).
+- `secrets.source: ssm`.
 - A Cloudflare **minter** token (account token, Account API Tokens Read and Write only) stored at
   `internal/cloudflare/main/minter`, and a **disabled** prototype token holding Bucket Item Read and Write on the bucket.
   Custody of the minter is the account owner's: it can mint anything the owner can, and sluis's refusal list is the only guard.

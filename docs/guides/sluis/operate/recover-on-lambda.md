@@ -4,11 +4,11 @@ Sign in with the recovery password on a Lambda installation when no directory ca
 
 ## Before you start
 
-- You need `ssm:GetParameter` on `/sluis/<instance>/private/config/*`, and `kms:Decrypt` on `ParameterKeyArn` when set.
+- You need `ssm:GetParameter` on `/sluis/<instance>/internal/config/*`, and `kms:Decrypt` on `ParameterKeyArn` when set.
 
 - Lambda has no API server, so recovery is a password. The browser, cookie and `429` refusals of [lost operator access](lost-operator-access.md) apply here.
 
-- `sluispulumi.NewLambda` generates a 40-character password that an apply never rotates. It stores it as the SSM SecureString `/sluis/<instance>/private/config/recovery/password`, and the service reads it at cold start and every five minutes. The `RecoveryPasswordParameter` output holds the name, never the value.
+- `sluispulumi.NewLambda` generates a 40-character password that an apply never rotates. It stores it as the SSM SecureString `/sluis/<instance>/internal/config/recovery/password`, and the service reads it at cold start and every five minutes. The `RecoveryPasswordParameter` output holds the name, never the value.
 
 - Without `recovery.passwordSecret` ([secrets](../../../reference/sluis/secrets.md#the-names)), recovery on Lambda logs an ERROR and builds nothing.
 
@@ -24,7 +24,7 @@ Sign in with the recovery password on a Lambda installation when no directory ca
 
    ```sh
    aws ssm get-parameter --with-decryption \
-     --name /sluis/<instance>/private/config/recovery/password \
+     --name /sluis/<instance>/internal/config/recovery/password \
      --query Parameter.Value --output text
    ```
 

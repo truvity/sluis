@@ -104,7 +104,6 @@ jobs:
       - run: hack/dynamodb-conformance.sh
       - run: hack/storage-conformance.sh
       - run: hack/keys-conformance.sh
-      - run: hack/secrets-layout-conformance.sh
       - run: hack/openbao-conformance.sh
 
   # audit's tests that skip without their service: Postgres, S3 with SQS and

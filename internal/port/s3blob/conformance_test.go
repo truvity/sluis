@@ -139,7 +139,7 @@ func TestConformanceWithStaticCredentials(t *testing.T) {
 	t.Setenv("AWS_ACCESS_KEY_ID", "wrong")
 	t.Setenv("AWS_SECRET_ACCESS_KEY", "wrong")
 	ctx := context.Background()
-	stores := secretstore.FromStore(statememory.New(), secretstore.LayoutV4, "")
+	stores := secretstore.FromStore(statememory.New(), "")
 	doc, err := stores.Internal.S3Credentials("internal/blobs/example")
 	if err != nil {
 		t.Fatal(err)

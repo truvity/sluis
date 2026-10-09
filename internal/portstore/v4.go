@@ -12,7 +12,7 @@ import (
 // WithV4 puts the Apps' exported credentials on layout v4 (ADR 0041): an
 // installed App whose key is exported is the whole document at
 // external/github/<app>, with the ids from the App's record, and its key is no
-// longer an internal credential. A nil v4 (layout v3) changes nothing.
+// longer an internal credential. A nil v4 changes nothing.
 func (b *Base) WithV4(v4 *secretstore.Stores) *Base {
 	b.v4 = v4
 	return b
@@ -25,15 +25,16 @@ func (b *Base) ExportGitHubApps(exported func(id string) bool) *Base {
 	return b
 }
 
-// v4Writes is whether a credential also goes to layout v4.
-func (b *Base) v4Writes() bool { return b.v4 != nil && b.v4.Layout.WritesV4() }
+// v4Writes is whether a credential also goes to layout v4: whenever the
+// installation has v4 stores.
+func (b *Base) v4Writes() bool { return b.v4 != nil }
 
 // v4Reads is whether layout v4 is read first.
-func (b *Base) v4Reads() bool { return b.v4 != nil && b.v4.Layout.ReadsV4() }
+func (b *Base) v4Reads() bool { return b.v4 != nil }
 
 // keepInternal is whether an exported credential is also kept as an internal
-// one: until the installation is on v4, v3 readers still need it.
-func (b *Base) keepInternal() bool { return b.v4 == nil || b.v4.Layout.WritesV3() }
+// one: only when there are no v4 stores to export it to.
+func (b *Base) keepInternal() bool { return b.v4 == nil }
 
 func (b *Base) putGitHub(
 	ctx context.Context, value state.Value[secretstore.GitHubv1], appID, installationID int64, privateKey, webhookSecret string,

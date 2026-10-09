@@ -67,10 +67,9 @@ type Config struct {
 	Cloudflare *config.Cloudflare
 	// Grants is the policy's cloudflare section.
 	Grants *config.PolicyCloudflare
-	// Layout, Internal and External are the installation's secrets on layout
-	// v4: the minter credential is read from Internal, the stored credentials
-	// are written to External. A v3 layout has neither and is refused.
-	Layout   secretstore.Layout
+	// Internal and External are the installation's secrets: the minter
+	// credential is read from Internal, the stored credentials are written to
+	// External.
 	Internal secretstore.Internal
 	External secretstore.External
 	// Dial opens an account (cfapi.Dial).
@@ -104,15 +103,10 @@ type cachedGroups struct {
 	names map[string]string
 }
 
-// New makes a minter. It refuses a layout that cannot hold the stored
-// credentials: `secrets.layout` must be v4 or transition.
+// New makes a minter.
 func New(cfg Config) (*Minter, error) {
 	if cfg.Cloudflare == nil || len(cfg.Cloudflare.Presets) == 0 {
 		return nil, errors.New("cloudflare: the service document declares no presets")
-	}
-	if !cfg.Layout.WritesV4() {
-		return nil, fmt.Errorf("cloudflare: the stored credentials live at external/cloudflare/<preset> and the minter credential at internal/..., so secrets.layout must be %s or %s (it is %q)",
-			secretstore.LayoutTransition, secretstore.LayoutV4, cfg.Layout)
 	}
 	if cfg.Dial == nil {
 		return nil, errors.New("cloudflare: no way to reach Cloudflare is configured")

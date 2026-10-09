@@ -17,7 +17,6 @@ type Opener func(ctx context.Context, prefix string, opts ...state.Option) (stat
 
 // Stores are the two namespaces of one installation on one backend.
 type Stores struct {
-	Layout   Layout
 	Internal Internal
 	External External
 }
@@ -34,8 +33,7 @@ func Open(ctx context.Context, cfg *config.Secrets, open Opener) (*Stores, error
 	if cfg == nil || cfg.Source != "ssm" {
 		return nil, ErrNoStore
 	}
-	layout, err := ParseLayout(cfg.Layout)
-	if err != nil {
+	if err := CheckLayout(cfg.Layout); err != nil {
 		return nil, err
 	}
 	root := strings.TrimSuffix(cfg.Root, "/")
@@ -53,18 +51,17 @@ func Open(ctx context.Context, cfg *config.Secrets, open Opener) (*Stores, error
 	if err != nil {
 		return nil, fmt.Errorf("secrets: opening %s: %w", root, err)
 	}
-	return FromStore(base, layout, cfg.KMSKeyID), nil
+	return FromStore(base, cfg.KMSKeyID), nil
 }
 
 // FromStore splits a store rooted at <root> into the two namespaces. keyAlias,
 // when set, is the encryption key both use.
-func FromStore(root state.Store, layout Layout, keyAlias string) *Stores {
+func FromStore(root state.Store, keyAlias string) *Stores {
 	var opts []state.Option
 	if keyAlias != "" {
 		opts = append(opts, state.WithKeyAlias(keyAlias))
 	}
 	return &Stores{
-		Layout:   layout,
 		Internal: NewInternal(root.Child("internal", opts...)),
 		External: NewExternal(root.Child("external", opts...)),
 	}

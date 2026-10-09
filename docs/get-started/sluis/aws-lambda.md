@@ -241,7 +241,7 @@ The log group is `/aws/lambda/<function name>`, `sluis` unless the installation 
 The library generated the recovery password. Read it from a terminal:
 
 ```sh
-aws ssm get-parameter --with-decryption --name /sluis/demo/private/config/recovery/password \
+aws ssm get-parameter --with-decryption --name /sluis/demo/internal/config/recovery/password \
   --query Parameter.Value --output text
 ```
 

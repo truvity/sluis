@@ -119,7 +119,7 @@ See [AWS Lambda](lambda.md) and [the concept](../../concepts/sluis/lambda.md).
 ```go
 l, _ := sluispulumi.NewLambda(ctx, "access", &sluispulumi.LambdaArgs{
 	Region: "eu-central-1", AccountID: accountID,
-	Instance:      "acme",    // the SSM root /sluis/acme (layout v3)
+	Instance:      "acme",    // the SSM root /sluis/acme
 	Package:       "dist/sluis-lambda_1.63.0_linux_arm64.zip", // or an https URL
 	PackageSHA256: "<the release's digest, pinned here>",
 	Installation:  installation, // *sluisconfig.Installation: the library renders both documents from it
