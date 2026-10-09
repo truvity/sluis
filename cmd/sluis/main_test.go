@@ -48,7 +48,7 @@ func TestSubcommandsNeedTheirFile(t *testing.T) {
 }
 
 func TestAModuleWithoutAProcessSaysNotYetSplit(t *testing.T) {
-	for _, module := range []string{"console", "cloudflare", "google", "backup"} {
+	for _, module := range []string{"console", "google", "backup"} {
 		var out bytes.Buffer
 		err := run([]string{module}, &out)
 		if !errors.Is(err, errNotSplit) {
@@ -60,7 +60,7 @@ func TestAModuleWithoutAProcessSaysNotYetSplit(t *testing.T) {
 // A module that has a role today runs that role's command: with no file it
 // refuses exactly as the command does.
 func TestAModuleWithARoleRunsTodaysCommand(t *testing.T) {
-	for _, module := range []string{"issuer", "github", "slack"} {
+	for _, module := range []string{"issuer", "github", "slack", "cloudflare"} {
 		var out bytes.Buffer
 		err := run([]string{module}, &out)
 		if err == nil || !strings.Contains(err.Error(), "--config") {
@@ -93,7 +93,7 @@ func TestAnUnknownFlagOrCommandIsAUsageError(t *testing.T) {
 
 // The module commands tick one target like `tick` does: no target, a usage error.
 func TestAModuleTickNeedsATarget(t *testing.T) {
-	for _, module := range []string{"github", "slack"} {
+	for _, module := range []string{"github", "slack", "cloudflare"} {
 		var out bytes.Buffer
 		if err := run([]string{module, "tick", "--config", "x.yaml"}, &out); !errors.Is(err, errUsage) {
 			t.Errorf("%s tick: %v", module, err)

@@ -9,6 +9,7 @@ import (
 	"github.com/urfave/cli/v3"
 
 	"github.com/truvity/sluis/internal/module"
+	"github.com/truvity/sluis/internal/module/cloudflare"
 	"github.com/truvity/sluis/internal/module/github"
 	"github.com/truvity/sluis/internal/module/issuer"
 	"github.com/truvity/sluis/internal/module/slack"
@@ -83,13 +84,13 @@ func newApp(out io.Writer) *cli.Command {
 		},
 		Commands: []*cli.Command{
 			// The modules (docs/decisions/0071). Until a module has a process of its
-			// own, the issuer role is the one process `serve` is, and github and slack
-			// are the controllers' loops.
+			// own, the issuer role is the one process `serve` is; github and slack are
+			// the controllers' loops and cloudflare is the minter's rotation.
 			moduleCmd(issuer.Module{}, "sluis", "the issuer role: today the one process of `serve`", out),
 			moduleCmd(module.Unsplit("console"), "sluis", "the console (not yet split)", out),
 			moduleCmd(github.Module{}, "controller-github", "the GitHub module: the controller's loop, or `tick <target>` once", out),
 			moduleCmd(slack.Module{}, "controller-slack", "the Slack module: the controller's loop, or `tick <target>` once", out),
-			moduleCmd(module.Unsplit("cloudflare"), "sluis", "the Cloudflare module (not yet split)", out),
+			moduleCmd(cloudflare.Module{}, "sluis", "the Cloudflare module: the STS minter's rotation loop, or `tick <preset>` once", out),
 			moduleCmd(module.Unsplit("google"), "sluis", "the Google directory module (not yet split)", out),
 			moduleCmd(module.Unsplit("backup"), "sluis", "the scheduled backup (not yet split)", out),
 			// Today's commands, unchanged.

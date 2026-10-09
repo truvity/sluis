@@ -62,7 +62,7 @@ func TestModuleBoundaries(t *testing.T) {
 	github := []string{"internal/githubroster", "internal/githubapp"}
 	slack := []string{"internal/slackroster", "internal/slackapp"}
 	cloudflare := []string{"internal/cloudflare"}
-	modules := []string{"internal/module/github", "internal/module/slack", "internal/module/issuer"}
+	modules := []string{"internal/module/github", "internal/module/slack", "internal/module/issuer", "internal/module/cloudflare"}
 	front := []string{"internal/issuer", "internal/issuerapp", "internal/hub", "internal/hublocal", "internal/server",
 		"internal/rosterapp", "internal/lambdaapp"}
 
@@ -106,33 +106,39 @@ func TestModuleBoundaries(t *testing.T) {
 			name:   "the Cloudflare module imports neither the front end nor another provider",
 			from:   cloudflare,
 			forbid: append(append(append([]string{}, front...), github...), slack...),
-			sees:   "internal/cloudflare/minter",
+			sees:   "internal/cloudflare/app",
 		},
 		{
 			// The contract every role implements: it knows no role.
 			name:   "the module contract imports no role",
 			from:   []string{"internal/module"},
-			except: []string{"internal/module/issuer", "internal/module/github", "internal/module/slack"},
+			except: []string{"internal/module/issuer", "internal/module/github", "internal/module/slack", "internal/module/cloudflare"},
 			forbid: slices.Concat(front, github, slack, cloudflare, modules),
 			sees:   "internal/module",
 		},
 		{
 			name:   "the GitHub module wraps only the GitHub role",
 			from:   []string{"internal/module/github"},
-			forbid: append(append(append([]string{}, front...), slack...), append(cloudflare, "internal/module/slack", "internal/module/issuer")...),
+			forbid: append(append(append([]string{}, front...), slack...), append(cloudflare, "internal/module/slack", "internal/module/issuer", "internal/module/cloudflare")...),
 			sees:   "internal/module/github",
 		},
 		{
 			name:   "the Slack module wraps only the Slack role",
 			from:   []string{"internal/module/slack"},
-			forbid: append(append(append([]string{}, front...), github...), append(cloudflare, "internal/module/github", "internal/module/issuer")...),
+			forbid: append(append(append([]string{}, front...), github...), append(cloudflare, "internal/module/github", "internal/module/issuer", "internal/module/cloudflare")...),
 			sees:   "internal/module/slack",
 		},
 		{
 			name:   "the issuer module wraps no provider module",
 			from:   []string{"internal/module/issuer"},
-			forbid: []string{"internal/module/github", "internal/module/slack", "internal/githubroster", "internal/slackroster"},
+			forbid: []string{"internal/module/github", "internal/module/slack", "internal/module/cloudflare", "internal/githubroster", "internal/slackroster", "internal/cloudflare"},
 			sees:   "internal/module/issuer",
+		},
+		{
+			name:   "the Cloudflare module wraps only the Cloudflare role",
+			from:   []string{"internal/module/cloudflare"},
+			forbid: slices.Concat(front, github, slack, []string{"internal/module/github", "internal/module/slack", "internal/module/issuer"}),
+			sees:   "internal/module/cloudflare",
 		},
 		{
 			// A role is assembled by its module and the main, never the reverse.
@@ -202,4 +208,74 @@ func TestTheSignerSeesTheKeyAdapter(t *testing.T) {
 		}
 	}
 	t.Fatalf("internal/signer does not import storage/keys/kms: the signer moved, update the rule")
+}
+
+// minterPackages are the Cloudflare minter and its real client: whoever imports
+// them can mint Cloudflare credentials.
+var minterPackages = []string{"internal/cloudflare/minter", "internal/cloudflare/cfapi"}
+
+// minterWiring are the packages outside the Cloudflare module that import the
+// minter today, because the issuer's process still carries it (the console, the
+// on-demand exchange and the blob credentials). Each goes when the exchange
+// becomes an Invoke boundary to the Cloudflare module (docs/decisions/0071
+// D93 a); an entry nobody uses any more is an error, so the list only shrinks.
+var minterWiring = map[string]string{
+	"internal/issuer":    "the on-demand token exchange and the grants listing (cloudflaretoken_http.go)",
+	"internal/rosterapp": "assembles the minter into the one process of `serve`",
+	"internal/server":    "the console's view of the minter (CloudflareSTS)",
+	"internal/store":     "the blob credentials of a preset (credentials.preset)",
+}
+
+// minterImporters reports the problems with who imports the minter: a package
+// outside the Cloudflare packages that is not listed in wiring, and a listed one
+// that does not import it.
+func minterImporters(pkgs map[string][]string, wiring map[string]string) []string {
+	var problems []string
+	used := map[string]bool{}
+	for pkg, deps := range pkgs {
+		rel := strings.TrimPrefix(pkg, mod)
+		if anyUnder(rel, []string{"internal/cloudflare", "internal/module/cloudflare"}) {
+			continue
+		}
+		for _, d := range deps {
+			drel := strings.TrimPrefix(d, mod)
+			if d == drel || !anyUnder(drel, minterPackages) {
+				continue
+			}
+			if _, ok := wiring[rel]; ok {
+				used[rel] = true
+				continue
+			}
+			problems = append(problems, rel+" imports "+drel)
+		}
+	}
+	for rel := range wiring {
+		if !used[rel] {
+			problems = append(problems, rel+" is listed as minter wiring and no longer imports the minter: remove it from the list")
+		}
+	}
+	slices.Sort(problems)
+	return problems
+}
+
+func TestOnlyTheCloudflarePackagesAndTheIssuerWiringImportTheMinter(t *testing.T) {
+	for _, p := range minterImporters(imports(t), minterWiring) {
+		t.Error(p)
+	}
+}
+
+func TestTheMinterExemptionsAreHeldToUse(t *testing.T) {
+	pkgs := map[string][]string{
+		mod + "internal/cloudflare/app": {mod + "internal/cloudflare/minter"},
+		mod + "internal/rosterapp":      {mod + "internal/cloudflare/minter"},
+		mod + "internal/hub":            {mod + "internal/cloudflare/cfapi"},
+	}
+	got := minterImporters(pkgs, map[string]string{"internal/rosterapp": "x", "internal/server": "y"})
+	want := []string{
+		"internal/hub imports internal/cloudflare/cfapi",
+		"internal/server is listed as minter wiring and no longer imports the minter: remove it from the list",
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("got %q, want %q", got, want)
+	}
 }
