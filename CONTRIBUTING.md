@@ -71,7 +71,7 @@ The retired names stay out of the docs except where `hack/docs-hygiene-allow.tsv
 
 - Keep the chart `version` at `0.0.0`. The release workflow stamps the tag at package time.
 
-- Change the audit catalogue only with a new catalogue `version` and its `testdata/released/` fixture in the same pull request. See [extend](docs/guides/sluis/change-the-audit-catalogue.md).
+- Change any catalogue, comments included, only with a new `version` and its `testdata/released/` fixture in the same pull request. See [extend](docs/guides/sluis/change-the-audit-catalogue.md).
 
 ### Logging
 

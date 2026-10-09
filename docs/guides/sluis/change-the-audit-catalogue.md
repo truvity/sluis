@@ -4,7 +4,7 @@ Add or change an audit action without stopping the service at the next start. Yo
 
 ## Before you start
 
-- An audit installation keeps every catalogue version it was sent and refuses a different document under a version it holds. That stops the service at start. Any change to `internal/audit/catalogue/roster.yaml`, even one new action, needs a new `version`.
+- An audit installation keeps every catalogue version it was sent and refuses a different document under a version it holds. That stops the service at start. Any change to `internal/audit/catalogue/roster.yaml`, even a comment, needs a new `version`.
 
 - The catalogue is the document plus its `.json` schemas. The writer refuses to start without every schema the document references. A Lambda writer given only the YAML fails each cold start.
 
@@ -17,6 +17,8 @@ Change `roster.yaml` and set a new `version`. Save the document as shipped:
 ```sh
 cp internal/audit/catalogue/roster.yaml internal/audit/catalogue/testdata/released/roster-<version>.yaml
 ( cd internal/audit/catalogue/testdata/released && sha256sum roster-<version>.yaml >> SHA256SUMS )
+( cd internal/audit/catalogue && for f in *.json; do
+    echo "$(sha256sum < "$f" | cut -d' ' -f1)  roster-<version>/$f"; done >> testdata/released/SHA256SUMS )
 ```
 
 Register a new data schema file beside `roster.yaml` and add it to the action's `data_schema`. Put no address, name or secret in data.
@@ -28,7 +30,7 @@ just audit-catalogue
 go test ./internal/audit/...
 ```
 
-The recipe validates the document, fails on an action emitted and not declared, and regenerates `frontend/src/auditSentences.ts`. Commit the result, because the recipe fails on a diff. The tests fail on a released version that differs from its fixture, a rewritten fixture, and a declared action with no constructor.
+The recipe validates the document, fails on an action emitted and not declared, and regenerates `frontend/src/auditSentences.ts`. Commit the result, because the recipe fails on a diff. The tests fail on a document or schema unlike its fixture, a missing or rewritten fixture, and a declared action with no constructor.
 
 ## 3. Roll out
 
