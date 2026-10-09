@@ -250,6 +250,7 @@ docs-check:
     ./hack/check-docs-symbols.py
     ./hack/check-docs-hygiene.py
     ./hack/check-docs-length.py
+    ./hack/check-changelog-headings.py
     go run ./cmd/docsgen -check
     go test -count=1 ./internal/contractsdoc/ ./internal/port/matrixdoc/
 

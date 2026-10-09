@@ -11,7 +11,7 @@ allow	*	@truvity/access-roster	the deprecated npm alias, still published (releas
 allow	*	`access-roster` grants preset	the grants preset name (ADR 0035: kept)
 allow	*	access-roster-overview|access-roster overview	the dashboard's file name, uid and title, not renamed yet: renaming one re-creates it in every Grafana
 allow	*	kernel-access-issuer-audit	an existing AWS role of the estate (decision N9a), retired by its own runbook step
-allow	README.md	Formerly \*\*access-roster\*\*	the rename notice itself
+allow	README.md	NATS, OpenBao and PostgreSQL	audit's in-cluster services (the audit shape), not the retired sluis state adapter
 allow	*	migrating-from-the-access-issuer-chart|migrating from the access-issuer chart|from the `access-issuer` chart|`access-issuer` chart until|the `access-issuer` chart	the migration guide is named for the chart it migrates from
 allow	*	/var/run/access-issuer/	the chart's real mount paths for the mounted documents (Deployment template; changing them is a chart change)
 allow	*	access-issuer-recovery	the chart's default recovery ServiceAccount name and audience (kept; renaming re-keys the recovery grant)
