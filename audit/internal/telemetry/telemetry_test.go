@@ -5,9 +5,15 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
+	"connectrpc.com/connect"
+	"github.com/google/uuid"
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
@@ -17,6 +23,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/truvity/sluis/audit/internal/telemetry"
+	sdktelemetry "github.com/truvity/sluis/audit/sdk/telemetry"
 )
 
 // The alert a deployment needs is on objects the indexer did not take, labelled
@@ -227,5 +234,107 @@ func TestUnknownCatalogueIsCountedByNameAndBoundedInLabels(t *testing.T) {
 	}
 	if series > 21 || counts["other@other"] == 0 {
 		t.Errorf("%d series, other = %d: the labels are not bounded", series, counts["other@other"])
+	}
+}
+func attrs(t *testing.T) map[string]string {
+	t.Helper()
+	res, err := telemetry.Resource("svc", "v1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := map[string]string{}
+	for _, kv := range res.Attributes() {
+		out[string(kv.Key)] = kv.Value.Emit()
+	}
+	return out
+}
+
+// Two concurrent processes (Lambda execution environments) must not export the
+// same series: the resource names this one, and keeps the name for its life.
+func TestTheResourceNamesTheInstance(t *testing.T) {
+	t.Setenv("OTEL_SERVICE_NAME", "")
+	t.Setenv("AWS_LAMBDA_FUNCTION_NAME", "")
+	a := attrs(t)
+	if _, err := uuid.Parse(a["service.instance.id"]); err != nil {
+		t.Errorf("service.instance.id %q: %v", a["service.instance.id"], err)
+	}
+	if a["service.instance.id"] != attrs(t)["service.instance.id"] {
+		t.Error("the instance id changed within a process")
+	}
+	if a["service.name"] != "svc" || a["service.version"] != "v1" {
+		t.Errorf("service attributes %v", a)
+	}
+	for _, k := range []string{"faas.name", "faas.instance", "cloud.provider", "cloud.region"} {
+		if _, ok := a[k]; ok {
+			t.Errorf("%s set outside Lambda", k)
+		}
+	}
+}
+
+func TestTheResourceNamesTheLambdaEnvironment(t *testing.T) {
+	t.Setenv("AWS_LAMBDA_FUNCTION_NAME", "example-fn")
+	t.Setenv("AWS_LAMBDA_LOG_STREAM_NAME", "2026/10/09/[$LATEST]abc123")
+	t.Setenv("AWS_REGION", "eu-west-1")
+	a := attrs(t)
+	want := map[string]string{
+		"faas.name": "example-fn", "faas.instance": "2026/10/09/[$LATEST]abc123",
+		"cloud.provider": "aws", "cloud.region": "eu-west-1",
+	}
+	for k, v := range want {
+		if a[k] != v {
+			t.Errorf("%s = %q, want %q", k, a[k], v)
+		}
+	}
+}
+
+type jsonCodec struct{}
+
+func (jsonCodec) Name() string                    { return "json" }
+func (jsonCodec) Marshal(any) ([]byte, error)     { return []byte("{}"), nil }
+func (jsonCodec) Unmarshal(_ []byte, _ any) error { return nil }
+
+// A span from an otelconnect call (v0.10 sets rpc.system.name, rpc.method,
+// rpc.response.status_code and, on a failure, error.type) keeps them through the
+// exporter's allowlist, and loses the error's message.
+func TestAConnectSpanKeepsItsRPCAttributes(t *testing.T) {
+	memory := tracetest.NewInMemoryExporter()
+	provider := sdktrace.NewTracerProvider(sdktrace.WithSyncer(telemetry.FilterExporter(memory)))
+	previous := otel.GetTracerProvider()
+	otel.SetTracerProvider(provider)
+	t.Cleanup(func() { otel.SetTracerProvider(previous); _ = provider.Shutdown(context.Background()) })
+
+	mux := http.NewServeMux()
+	mux.Handle("/pkg.Service/Method", connect.NewUnaryHandler("/pkg.Service/Method",
+		func(context.Context, *connect.Request[struct{}]) (*connect.Response[struct{}], error) {
+			return nil, connect.NewError(connect.CodePermissionDenied, errors.New("alice@example.com is not allowed"))
+		}, append([]connect.HandlerOption{connect.WithCodec(jsonCodec{})}, sdktelemetry.ConnectOptions()...)...))
+	server := httptest.NewServer(mux)
+	defer server.Close()
+	client := connect.NewClient[struct{}, struct{}](server.Client(), server.URL+"/pkg.Service/Method",
+		append([]connect.ClientOption{connect.WithCodec(jsonCodec{})}, sdktelemetry.ConnectClientOptions()...)...)
+	if _, err := client.CallUnary(context.Background(), connect.NewRequest(&struct{}{})); err == nil {
+		t.Fatal("the handler's refusal did not arrive")
+	}
+
+	spans := memory.GetSpans()
+	if len(spans) == 0 {
+		t.Fatal("no span exported")
+	}
+	for i := range spans {
+		got := map[string]string{}
+		for _, kv := range spans[i].Attributes {
+			got[string(kv.Key)] = kv.Value.Emit()
+		}
+		for k, v := range map[string]string{
+			"rpc.system.name": "connectrpc", "rpc.method": "pkg.Service/Method",
+			"rpc.response.status_code": "PERMISSION_DENIED", "error.type": "PERMISSION_DENIED",
+		} {
+			if got[k] != v {
+				t.Errorf("span %q: %s = %q, want %q (attributes %v)", spans[i].Name, k, got[k], v, got)
+			}
+		}
+		if strings.Contains(fmt.Sprint(spans[i]), "alice@example.com") {
+			t.Errorf("the error's message left the process")
+		}
 	}
 }
