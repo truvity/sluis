@@ -93,6 +93,10 @@ func newClientSecretManager(
 // It also reports, once each, the stored secrets whose client is no longer a
 // generated client of the policy (see [clientcreds.ReconcileOrphans]).
 func (a *App) ReconcileClientSecrets(ctx context.Context) clientcreds.Result {
+	return a.reconcile(ctx, true)
+}
+
+func (a *App) reconcile(ctx context.Context, orphans bool) clientcreds.Result {
 	if a.credStore == nil {
 		return clientcreds.Result{}
 	}
@@ -128,8 +132,21 @@ func (a *App) ReconcileClientSecrets(ctx context.Context) clientcreds.Result {
 	if len(a.generated) > 0 {
 		res = clientcreds.Reconcile(ctx, a.generated, a.credStore, input, now, a.log, hooks)
 	}
-	clientcreds.ReconcileOrphans(ctx, a.generated, a.credStore, now, a.log, hooks)
+	if orphans {
+		clientcreds.ReconcileOrphans(ctx, a.generated, a.credStore, now, a.log, hooks)
+	}
 	return res
+}
+
+// reconcileGenerated is the pass at start: the generated clients' secrets, so
+// a first deploy has them as soon as it serves, and not the look for orphans,
+// which lists every record and is the tick's. A cold start is the one read
+// every new Lambda environment makes, and a herd of them is what SSM throttles:
+// an installation with no generated client reads nothing here.
+func (a *App) reconcileGenerated(ctx context.Context) {
+	if len(a.generated) > 0 {
+		a.reconcile(ctx, false)
+	}
 }
 
 // watchClientSecrets repeats [App.ReconcileClientSecrets] until ctx ends.

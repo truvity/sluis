@@ -83,7 +83,8 @@ type Config struct {
 	SecretsRegion   string
 	SecretsEndpoint string
 	SecretsGrace    time.Duration
-	// OpenState opens the backend of the v4 stores (storage/state/ssm.Open).
+	// OpenState opens the backend of the v4 stores (storage/state/ssm over the
+	// service's retryer, openSSMState).
 	// Nil is that backend.
 	OpenState secretstore.Opener
 

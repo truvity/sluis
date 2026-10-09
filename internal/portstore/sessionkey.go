@@ -51,13 +51,25 @@ func (b *Base) PutSessionKey(ctx context.Context, key []byte) error {
 
 // CheckSecrets proves the Secrets port is there and answers, so that a
 // deployment whose adapters have none stops at start naming the setting,
-// instead of failing on the first credential an operator connects.
+// instead of failing on the first credential an operator connects. The proof
+// is one read, of the console's session key, which may be absent: a listing of
+// every credential would be pages of reads at every start, and every new
+// Lambda environment of a herd starts.
 func (b *Base) CheckSecrets(ctx context.Context) error {
+	if err := b.RequireSecrets(); err != nil {
+		return err
+	}
+	if _, err := b.Secrets.Get(ctx, secretPath(sessionKeyKey, "")); err != nil && !errors.Is(err, port.ErrNotFound) {
+		return fmt.Errorf("the Secrets port does not answer: %w", err)
+	}
+	return nil
+}
+
+// RequireSecrets is CheckSecrets without the read, for a caller that reads the
+// session key next anyway.
+func (b *Base) RequireSecrets() error {
 	if b.Secrets == nil {
 		return fmt.Errorf("credentials are kept in Secrets, and none is configured: choose a secrets adapter (adapters.secrets, or a preset): %w", errNoSecrets)
-	}
-	if _, err := b.Secrets.List(ctx, secretPrefix); err != nil {
-		return fmt.Errorf("the Secrets port does not answer: %w", err)
 	}
 	return nil
 }

@@ -134,6 +134,11 @@ func TestAnOrphanIsAuditedOnceAndARestoredClientIsAuditedAsAdoptedFromTheRecord(
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The start settles the generated clients; the orphans are the tick's.
+	if got := targetsOf(trail, "roster.client.secret.orphaned"); len(got) != 0 {
+		t.Fatalf("the start looked for orphans: %v", got)
+	}
+	app.ReconcileClientSecrets(context.Background())
 	if got := targetsOf(trail, "roster.client.secret.orphaned"); len(got) != 1 || got[0] != "old-client" {
 		t.Fatalf("orphaned %v; all: %v", got, trail.Actions())
 	}
@@ -185,12 +190,13 @@ clients:
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := targetsOf(trail, "roster.client.secret.orphaned"); len(got) != 1 || got[0] != "old-client" {
-		t.Fatalf("orphaned %v; all: %v", got, trail.Actions())
-	}
 	if res := app.ReconcileClientSecrets(context.Background()); len(res.Outcomes) != 0 {
 		t.Errorf("outcomes = %v", res.Outcomes)
 	}
+	if got := targetsOf(trail, "roster.client.secret.orphaned"); len(got) != 1 || got[0] != "old-client" {
+		t.Fatalf("orphaned %v; all: %v", got, trail.Actions())
+	}
+	app.ReconcileClientSecrets(context.Background())
 	if got := trail.Find("roster.client.secret.orphaned"); len(got) != 1 {
 		t.Errorf("reported %d times", len(got))
 	}

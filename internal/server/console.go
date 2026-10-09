@@ -772,8 +772,11 @@ func (c *Console) GetPolicy(
 	out := &directoryrosterv1.GetPolicyResponse{
 		RecoveryEnabled: recoveryEnabled(c.deps.Recovery),
 		RecoveryKind:    recoveryKindOf(c.deps.Recovery),
-		LoginSources:    c.deps.LoginSources,
-		Groups:          make([]*directoryrosterv1.PolicyGroup, 0, len(groups)),
+		// The location, not the password: the console's setup step names the
+		// parameter of this instance and layout rather than an example's.
+		RecoveryPasswordLocation: recoveryLocationOf(c.deps.Recovery),
+		LoginSources:             c.deps.LoginSources,
+		Groups:                   make([]*directoryrosterv1.PolicyGroup, 0, len(groups)),
 	}
 	githubGrants := c.githubGroupGrants()
 	for i := range groups {

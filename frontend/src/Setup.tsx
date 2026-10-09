@@ -33,6 +33,9 @@ export type Progress = {
    *  shape that is a standing credential. Recovery by cluster access
    *  stores nothing, so there is nothing to turn off. */
   standingPassword: boolean;
+  /** Where this installation keeps that password, as its secrets source
+   *  names it ("ssm <parameter>"), or empty. Never the password. */
+  passwordLocation: string;
   setup: ConnectorSetup[];
   operatorGroup: string;
 };
@@ -94,8 +97,8 @@ export function Setup({ progress, operator }: { progress: Progress; operator: bo
       body: (
         <Typography variant="body2" color="text.secondary">
           Once a directory works, set <Mono>recovery.enabled: false</Mono> in the configuration. The password
-          stays where it is kept (on AWS Lambda, the SSM parameter{" "}
-          <Mono>/sluis/private/config/recovery/password</Mono>), so turning it back on is the same one-line
+          stays where it is kept
+          <PasswordLocation location={progress.passwordLocation} />, so turning it back on is the same one-line
           change and nothing is rotated. Or run sluis in a cluster, where recovery is a short-lived token
           proving access to the API server and no password is kept at all.
         </Typography>
@@ -132,6 +135,31 @@ export function Setup({ progress, operator }: { progress: Progress; operator: bo
         </Typography>
       ) : null}
     </Section>
+  );
+}
+
+/** This installation's own location of the recovery password, as the
+ *  service reports it: the SSM parameter of its instance and secrets layout,
+ *  never an example's. Nothing when the service does not say. */
+function PasswordLocation({ location }: { location: string }) {
+  const [kind, ...rest] = location.split(" ");
+  const where = rest.join(" ");
+  if (!where) {
+    return null;
+  }
+  if (kind === "ssm") {
+    return (
+      <>
+        {" "}
+        (the SSM parameter <Mono>{where}</Mono>)
+      </>
+    );
+  }
+  return (
+    <>
+      {" "}
+      (<Mono>{location}</Mono>)
+    </>
   );
 }
 
