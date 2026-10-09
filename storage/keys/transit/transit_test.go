@@ -58,13 +58,21 @@ func TestConformance(t *testing.T) {
 	f.key(t, "sym", "aes256-gcm96", false)
 	f.key(t, "sym2", "aes256-gcm96", false)
 	f.key(t, "sig", "ecdsa-p384", false)
-	c := f.dev.Client(t, policy(f.mount, "sym", "sym2", "sig"))
+	// The pseudonym key is "sym", so the tenants' keys are sym.pseudonym.*:
+	// the writer's rights on them, and the eraser's (the trailing glob
+	// reaches keys/<name>/rotate, config and trim). Here one role is both.
+	tenants := fmt.Sprintf(`
+path "%[1]s/keys/sym.pseudonym.*" { capabilities = ["read", "create", "update"] }
+path "%[1]s/encrypt/sym.pseudonym.*" { capabilities = ["create", "update"] }
+path "%[1]s/decrypt/sym.pseudonym.*" { capabilities = ["update"] }
+path "%[1]s/hmac/sym.pseudonym.*" { capabilities = ["update"] }
+`, f.mount)
+	c := f.dev.Client(t, policy(f.mount, "sym", "sym2", "sig")+tenants)
 	conformance.Run(t, conformance.Subject{
 		Backend:        transit.New(c, transit.WithMount(f.mount)),
 		Symmetric:      "sym",
 		OtherSymmetric: "sym2",
 		Signing:        "sig",
-		NoDestroy:      true, // see the package documentation, "Erasing a tenant"
 	})
 }
 
@@ -216,29 +224,30 @@ func TestSignPinsTheVersion(t *testing.T) {
 	}
 }
 
+// The shared-key MAC of the purposes that have no key per tenant.
 func TestMACIsStableAndRotationProof(t *testing.T) {
 	f := setup(t)
 	f.key(t, "mac", "aes256-gcm96", false)
 	c := f.dev.Client(t, policy(f.mount, "mac"))
 	b := transit.New(c, transit.WithMount(f.mount))
 	ctx := t.Context()
-	m1, err := b.MAC(ctx, "mac", keys.Pseudonym, "tenant-1", []byte("alice"))
+	m1, err := b.MAC(ctx, "mac", keys.Archive, "tenant-1", []byte("alice"))
 	if err != nil || len(m1) != 32 {
 		t.Fatalf("%d bytes, %v", len(m1), err)
 	}
 	f.dev.MustRoot(t, "POST", f.mount+"/keys/mac/rotate", nil)
-	m2, err := b.MAC(ctx, "mac", keys.Pseudonym, "tenant-1", []byte("alice"))
+	m2, err := b.MAC(ctx, "mac", keys.Archive, "tenant-1", []byte("alice"))
 	if err != nil || !bytes.Equal(m1, m2) {
 		t.Fatalf("a rotation changed a pseudonym: %x vs %x, %v", m1, m2, err)
 	}
 	// ("ab", "c") and ("a", "bc") must not collide.
-	a, _ := b.MAC(ctx, "mac", keys.Pseudonym, "ab", []byte("c"))
-	z, _ := b.MAC(ctx, "mac", keys.Pseudonym, "a", []byte("bc"))
+	a, _ := b.MAC(ctx, "mac", keys.Archive, "ab", []byte("c"))
+	z, _ := b.MAC(ctx, "mac", keys.Archive, "a", []byte("bc"))
 	if bytes.Equal(a, z) {
 		t.Fatal("(tenant ab, data c) collides with (tenant a, data bc)")
 	}
 	// A pinned version that does not exist is an error, not a silent other key.
-	if _, err := transit.New(c, transit.WithMount(f.mount), transit.WithMACKeyVersion(7)).MAC(ctx, "mac", keys.Pseudonym, "t", nil); err == nil {
+	if _, err := transit.New(c, transit.WithMount(f.mount), transit.WithMACKeyVersion(7)).MAC(ctx, "mac", keys.Archive, "t", nil); err == nil {
 		t.Fatal("MAC under a version that does not exist")
 	}
 }

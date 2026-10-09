@@ -92,7 +92,9 @@
 //     deleted with all its versions. Another process holding the plaintext
 //     stops within kms.DefaultMACKeyTTL.
 //   - local: remembered in the backend's memory only; for tests.
-//   - transit: unsupported, see the transit package.
+//   - transit: for the pseudonym purpose, the tenant's own transit key is
+//     rotated and its first version trimmed; the key stays as the tombstone.
+//     See the transit package.
 //
 // Only MAC has material per tenant. Encrypt, Decrypt and Sign work under one
 // key for the installation, so there is nothing of a tenant's in them to

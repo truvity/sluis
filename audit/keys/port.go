@@ -36,11 +36,12 @@ import (
 // pseudonym key for the same port tenant Pseudonym uses, which removes the
 // per-tenant secret and leaves a tombstone, after which Pseudonym and Seal and
 // Open for that tenant and purpose return ErrDestroyed. What it can do depends
-// on the backend (kms and local can; transit returns ErrUnsupported, see
-// github.com/truvity/sluis/storage/keys/transit), and an ErrUnsupported is not
-// an erasure.
+// on the backend (kms, local and transit can), and an ErrUnsupported is not an
+// erasure.
 //
-// Seal and Open use one conceal key for the installation, so a sealed
+// Seal and Open use the tenant's own key where the backend keeps one (transit:
+// destroying the tenant makes what it sealed unreadable by cryptography).
+// Otherwise they use one conceal key for the installation, and a sealed
 // identifier is not shredded by Destroy: this provider refuses to Seal or open
 // it once the tenant's pseudonym key is destroyed, but the ciphertext stays
 // readable to whoever holds the conceal key. Where the sealed identifiers must
@@ -147,12 +148,19 @@ func (p *PortProvider) refuseDestroyed(ctx context.Context, tenant string, purpo
 // Close implements Provider.
 func (p *PortProvider) Close() error { return nil }
 
-// Seal implements Sealer under the conceal key. The tenant and purpose are
-// sealed with the value and checked on Open, so a sealed identifier does not
-// open as another tenant's.
+// Seal implements Sealer. Where the pseudonym key keeps a key per tenant
+// (transit), the value is encrypted under the tenant's own key, so destroying
+// the tenant makes it unreadable by cryptography; otherwise it is encrypted
+// under the conceal key. The tenant and purpose are sealed with the value and
+// checked on Open, so a sealed identifier does not open as another tenant's.
 func (p *PortProvider) Seal(ctx context.Context, tenant string, purpose Purpose, plaintext []byte) ([]byte, error) {
 	if err := checkName(tenant, purpose); err != nil {
 		return nil, err
+	}
+	bound := append([]byte(scope(tenant, purpose)+"\x00"), plaintext...)
+	if p.perTenantCipher() {
+		out, err := p.PseudonymKey.EncryptFor(ctx, scope(tenant, purpose), bound)
+		return out, p.cipherErr(tenant, purpose, err)
 	}
 	if p.ConcealKey == nil {
 		return nil, fmt.Errorf("keys: no conceal key is configured (keys.conceal): %w", skeys.ErrNotConfigured)
@@ -160,7 +168,7 @@ func (p *PortProvider) Seal(ctx context.Context, tenant string, purpose Purpose,
 	if err := p.refuseDestroyed(ctx, tenant, purpose); err != nil {
 		return nil, err
 	}
-	return p.ConcealKey.Encrypt(ctx, append([]byte(scope(tenant, purpose)+"\x00"), plaintext...))
+	return p.ConcealKey.Encrypt(ctx, bound)
 }
 
 // Open implements Sealer.
@@ -168,13 +176,20 @@ func (p *PortProvider) Open(ctx context.Context, tenant string, purpose Purpose,
 	if err := checkName(tenant, purpose); err != nil {
 		return nil, err
 	}
-	if p.ConcealKey == nil {
-		return nil, fmt.Errorf("keys: no conceal key is configured (keys.conceal): %w", skeys.ErrNotConfigured)
+	var plain []byte
+	var err error
+	if p.perTenantCipher() {
+		plain, err = p.PseudonymKey.DecryptFor(ctx, scope(tenant, purpose), sealed)
+		err = p.cipherErr(tenant, purpose, err)
+	} else {
+		if p.ConcealKey == nil {
+			return nil, fmt.Errorf("keys: no conceal key is configured (keys.conceal): %w", skeys.ErrNotConfigured)
+		}
+		if err := p.refuseDestroyed(ctx, tenant, purpose); err != nil {
+			return nil, err
+		}
+		plain, err = p.ConcealKey.Decrypt(ctx, sealed)
 	}
-	if err := p.refuseDestroyed(ctx, tenant, purpose); err != nil {
-		return nil, err
-	}
-	plain, err := p.ConcealKey.Decrypt(ctx, sealed)
 	if err != nil {
 		return nil, err
 	}
@@ -183,6 +198,18 @@ func (p *PortProvider) Open(ctx context.Context, tenant string, purpose Purpose,
 		return nil, skeys.ErrDecrypt
 	}
 	return []byte(rest), nil
+}
+
+func (p *PortProvider) perTenantCipher() bool {
+	return p.PseudonymKey != nil && p.PseudonymKey.PerTenantCipher()
+}
+
+// cipherErr names the tenant in the port's ErrDestroyed.
+func (p *PortProvider) cipherErr(tenant string, purpose Purpose, err error) error {
+	if errors.Is(err, skeys.ErrDestroyed) {
+		return fmt.Errorf("%w: %s/%s", ErrDestroyed, purpose, tenant)
+	}
+	return err
 }
 
 // PortSigner is a Signer over the seal key of a storage port: an asymmetric

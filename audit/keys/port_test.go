@@ -9,6 +9,8 @@ import (
 	"github.com/truvity/sluis/audit/keys"
 	skeys "github.com/truvity/sluis/storage/keys"
 	localkeys "github.com/truvity/sluis/storage/keys/local"
+	transitkeys "github.com/truvity/sluis/storage/keys/transit"
+	"github.com/truvity/sluis/storage/openbao/openbaotest"
 )
 
 // port opens a storage port over the local backend with every audit purpose.
@@ -148,5 +150,59 @@ func TestAPortSealKeySignsWhatVerifyChecks(t *testing.T) {
 	}
 	if _, err := keys.NewPortSigner(port(t), "x"); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// On transit the pseudonym key is a key per tenant: destroying the tenant makes
+// its sealed identifiers unreadable (the engine refuses its key), and no conceal
+// key is needed.
+func TestAPortOnTransitErasesATenantsSealedIdentities(t *testing.T) {
+	ctx := context.Background()
+	f := openbaotest.NewFakeTransit(t)
+	set, err := skeys.Open(skeys.Config{Adapter: "transit", Keys: map[skeys.Purpose]skeys.Entry{
+		skeys.Pseudonym: {Key: "audit"},
+	}}, skeys.Options{Backend: transitkeys.New(f.Client(t)), Instance: "test"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := keys.NewPortProvider(set)
+	if err != nil || p == nil {
+		t.Fatalf("provider %v, %v", p, err)
+	}
+	pa, err := p.Pseudonym(ctx, "acme@eu.1", "security", "alice")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pb, _ := p.Pseudonym(ctx, "acme", "security", "alice"); pa == pb {
+		t.Fatal("two tenants share a pseudonym")
+	}
+	sealed, err := p.Seal(ctx, "acme@eu.1", "security", []byte("alice"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, _ := p.Seal(ctx, "acme", "security", []byte("alice"))
+	// Pseudonymising and sealing, the writer's calls, never decrypt.
+	for _, r := range f.Requests() {
+		if strings.HasPrefix(r, "POST decrypt/") {
+			t.Fatalf("the writer's calls reached %s", r)
+		}
+	}
+	if got, err := p.Open(ctx, "acme@eu.1", "security", sealed); err != nil || string(got) != "alice" {
+		t.Fatalf("open = %q, %v", got, err)
+	}
+	if err := p.Destroy(ctx, "acme@eu.1", "security"); err != nil {
+		t.Fatal(err)
+	}
+	for name, err := range map[string]error{
+		"pseudonym": func() error { _, e := p.Pseudonym(ctx, "acme@eu.1", "security", "alice"); return e }(),
+		"open":      func() error { _, e := p.Open(ctx, "acme@eu.1", "security", sealed); return e }(),
+		"seal":      func() error { _, e := p.Seal(ctx, "acme@eu.1", "security", []byte("x")); return e }(),
+	} {
+		if !errors.Is(err, keys.ErrDestroyed) {
+			t.Errorf("%s after destroy = %v, want ErrDestroyed", name, err)
+		}
+	}
+	if got, err := p.Open(ctx, "acme", "security", other); err != nil || string(got) != "alice" {
+		t.Fatalf("another tenant: %q, %v", got, err)
 	}
 }

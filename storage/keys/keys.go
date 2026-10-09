@@ -119,6 +119,18 @@ type DestroyBackend interface {
 	Destroyed(ctx context.Context, key string, purpose Purpose, tenant string) (bool, error)
 }
 
+// TenantCipherBackend is the optional capability behind Key.EncryptFor and
+// Key.DecryptFor: encryption under key material that belongs to one tenant,
+// so that destroying the tenant (DestroyBackend) makes what it sealed
+// unreadable by cryptography, not only refused. Only the pseudonym purpose
+// has per-tenant material; another purpose gets ErrUnsupported. Both calls
+// return ErrDestroyed for a destroyed tenant, and DecryptTenant never makes
+// material that is not there.
+type TenantCipherBackend interface {
+	EncryptTenant(ctx context.Context, key string, purpose Purpose, tenant string, plaintext []byte, ec map[string]string) ([]byte, error)
+	DecryptTenant(ctx context.Context, key string, purpose Purpose, tenant string, ciphertext []byte, ec map[string]string) ([]byte, error)
+}
+
 // Options are what Open needs besides the configuration.
 type Options struct {
 	// Backend is the key service. Its Name must equal Config.Adapter.
@@ -308,6 +320,36 @@ func (k *Key) MAC(ctx context.Context, tenant string, data []byte) ([]byte, erro
 		return nil, fmt.Errorf("%w: backend %q has no MAC", ErrUnsupported, k.backend.Name())
 	}
 	return m.MAC(ctx, k.name, k.purpose, tenant, data)
+}
+
+// PerTenantCipher reports whether EncryptFor and DecryptFor work on this key:
+// the backend keeps a key per tenant for the pseudonym purpose (transit).
+func (k *Key) PerTenantCipher() bool {
+	_, ok := k.backend.(TenantCipherBackend)
+	return ok && k.purpose == Pseudonym
+}
+
+// EncryptFor encrypts under the tenant's own key material, with the
+// configured context. See TenantCipherBackend.
+func (k *Key) EncryptFor(ctx context.Context, tenant string, plaintext []byte) ([]byte, error) {
+	if tenant == "" {
+		return nil, errors.New("keys: EncryptFor needs a tenant")
+	}
+	if !k.PerTenantCipher() {
+		return nil, fmt.Errorf("%w: backend %q has no per-tenant cipher for %s", ErrUnsupported, k.backend.Name(), k.purpose)
+	}
+	return k.backend.(TenantCipherBackend).EncryptTenant(ctx, k.name, k.purpose, tenant, plaintext, k.ec)
+}
+
+// DecryptFor opens a ciphertext EncryptFor made, with the configured context.
+func (k *Key) DecryptFor(ctx context.Context, tenant string, ciphertext []byte) ([]byte, error) {
+	if tenant == "" {
+		return nil, errors.New("keys: DecryptFor needs a tenant")
+	}
+	if !k.PerTenantCipher() {
+		return nil, fmt.Errorf("%w: backend %q has no per-tenant cipher for %s", ErrUnsupported, k.backend.Name(), k.purpose)
+	}
+	return k.backend.(TenantCipherBackend).DecryptTenant(ctx, k.name, k.purpose, tenant, ciphertext, k.ec)
 }
 
 func cloneMap(m map[string]string) map[string]string {
