@@ -42,7 +42,10 @@ ALLOW = ROOT / "hack" / "docs-hygiene-allow.tsv"
 
 SKIP_DIRS = {".git", "node_modules", ".devbox", "dist", ".next", "build", ".venv"}
 # History: what an old name is allowed to appear in.
-HISTORY = ("docs/decisions/", "CHANGELOG.md")
+HISTORY_DIRS = ("docs/decisions/", "internal/audit/catalogue/testdata/released/")
+HISTORY_FILES = ("CHANGELOG.md",)
+# The writing standard lists the old names so that nobody uses them.
+HISTORY_PATHS = ("docs/WRITING.md",)
 # audit's own tree: its vocabulary is its own (it runs on NATS), so only the
 # repository-wide terms apply there.
 AUDIT_TREES = ("audit/", "docs/audit/", "charts/audit/")
@@ -50,7 +53,7 @@ SLUIS_ONLY = {"NATS", "access-issuer", "access-roster"}
 
 
 def is_history(path):
-    return path.startswith(HISTORY[0]) or path.rsplit("/", 1)[-1] == HISTORY[1]
+    return path.startswith(HISTORY_DIRS) or path.rsplit("/", 1)[-1] in HISTORY_FILES or path in HISTORY_PATHS
 
 TERMS = {
     "github.com/truvity/audit": re.compile(r"github\.com/truvity/audit\b"),
@@ -58,6 +61,14 @@ TERMS = {
     "access-issuer": re.compile(r"access-issuer"),
     "access-roster": re.compile(r"access-roster"),
 }
+
+# The old product names (docs/WRITING.md, rule 9). Reported as warnings under
+# --warn-terms while the documentation passes remove them; without the flag they
+# fail like the terms above. They apply to every tree, audit's included.
+RETIRED_TERMS = {name: re.compile(name, re.I) for name in (
+    "github-roster", "githubroster", "slack-roster", "slackroster",
+    "directoryroster", "accessctl", "access-proxy",
+)}
 
 
 def files():
@@ -205,9 +216,44 @@ def check_names(allow, baseline):
     return errors
 
 
+def check_retired(allow, warn):
+    """The retired product names; returns (errors, per-directory counts)."""
+    found, counts = [], {}
+    for p in files():
+        path = rel(p)
+        if is_history(path):
+            continue
+        rules = [rx for glob, rx, _ in allow if fnmatch.fnmatch(path, glob)]
+        for lineno, line in enumerate(p.read_text(encoding="utf-8").splitlines(), 1):
+            for rx in rules:
+                line = rx.sub(" ", line)
+            for term, rx in RETIRED_TERMS.items():
+                n = len(rx.findall(line))
+                if n:
+                    found.append((path, lineno, term, n))
+                    d = path.rsplit("/", 1)[0] if "/" in path else "."
+                    counts[d] = counts.get(d, 0) + n
+    level = "warning" if warn else "error"
+    msgs = [f"::{level} file={path},line={lineno}::the retired name {term!r}: use the current name, or add an `allow` row for an identifier that keeps it"
+            if warn else f"{path}:{lineno}: the retired name {term!r}: use the current name, or add an `allow` row for an identifier that keeps it"
+            for path, lineno, term, _ in found]
+    return msgs, counts
+
+
 def main():
+    warn_terms = "--warn-terms" in sys.argv[1:]
     allow, baseline, links = load_allow()
     errors = check_links(links) + check_names(allow, baseline)
+    retired, counts = check_retired(allow, warn_terms)
+    if warn_terms:
+        for m in retired:
+            print(m)
+        if counts:
+            print(f"docs hygiene: {sum(counts.values())} use(s) of the retired names (warning), by directory:", file=sys.stderr)
+            for d, n in sorted(counts.items()):
+                print(f"  {d:40s} {n:5d}", file=sys.stderr)
+    else:
+        errors += retired
     if errors:
         print("docs hygiene:", file=sys.stderr)
         for e in errors:

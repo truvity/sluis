@@ -11,8 +11,31 @@ import posixpath
 import re
 from pathlib import Path
 
+import yaml
+
 REPO = "https://github.com/truvity/sluis"
 LINK = re.compile(r"(\]\()([^)\s#]+)(#[^)\s]*)?(\))")
+
+
+def on_config(config):
+    """Merge every docs/_redirects/*.yaml into the redirects plugin's redirect_maps.
+
+    Each file is a map `old.md: new.md` (paths relative to docs/; a target may be an
+    external URL). A documentation pass adds its own file instead of editing mkdocs.yaml.
+    """
+    plugin = config["plugins"].get("redirects")
+    if plugin is None:
+        return config
+    maps = plugin.config.setdefault("redirect_maps", {})
+    for f in sorted((Path(config["docs_dir"]) / "_redirects").glob("*.yaml")):
+        data = yaml.safe_load(f.read_text(encoding="utf-8")) or {}
+        if not isinstance(data, dict):
+            raise ValueError(f"{f}: want a map of old.md: new.md")
+        for old, new in data.items():
+            if old in maps and maps[old] != new:
+                raise ValueError(f"{f}: {old} already redirects to {maps[old]}")
+            maps[old] = new
+    return config
 
 
 def on_page_markdown(markdown, page, config, files):
