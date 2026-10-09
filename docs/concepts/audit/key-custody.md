@@ -25,14 +25,14 @@ For resolve, the writer also seals the identifier with AES-GCM under a sealing k
 |---|---|---|
 | `none` | no keys | anything that need not crypto-shred |
 | `local` | 32-byte data keys wrapped under a 32-byte root in a Secret, kept by the local adapter | tests, a laptop, one instance |
-| `transit` | one key per purpose inside an OpenBAO or Vault transit engine | more than one replica, or secrets already in OpenBAO |
+| `transit` | one key per profile and tenant for the `pseudonym` purpose inside an OpenBAO or Vault transit engine | more than one replica, or secrets already in OpenBAO |
 | `kms` (`keys.adapter`) | data keys from `GenerateDataKey` under one customer-managed KMS key, wrapped copies in the index database or SSM (`keys.state`) | AWS without OpenBAO |
 
 With `local`, set the root with `keys.rootFile`; the adapter is for tests and a single instance.
 
-With `transit`, the writer creates each key on first use and signs in with the pod's projected service-account token on a JWT auth mount. Key material never leaves the engine. Policy scopes each role:
+With `transit`, the writer creates each tenant's key on first use and signs in with the pod's projected service-account token on a JWT auth mount. Key material never leaves the engine. Policy scopes each role:
 
-- The writer may `hmac` and `encrypt` on its purposes and touch nothing under `transit/keys`.
+- The writer may `hmac` and `encrypt` on its profiles' keys, and touch nothing that rotates, configures or trims a key. Sealed identifiers are `encrypt` on the tenant's key, so destroying it makes them unreadable.
 - The resolve role may `decrypt` and nothing else.
 - Only a human eraser role reaches `rotate`, `config` and `trim`.
 
@@ -50,7 +50,7 @@ Rotating a pseudonymisation key gives every person a second, unrelated pseudonym
 
 The pseudonyms stay in the archive but nothing can compute or match them, and every sealed identity is unreadable. The provider leaves a tombstone, checked before any key is created, so a later record cannot mint a fresh key.
 
-With `transit`, destroy rotates the key once, raises the minimum usable version past the first and trims the first version. A tenant destroyed before it was seen gets a key made and destroyed at once.
+With `transit`, destroy rotates the tenant's key once, raises the minimum usable version past the first and trims the first version. The key stays as the tombstone, found before any create, so a destroyed tenant never gets a second identity. A tenant destroyed before it was seen gets a key made and destroyed at once.
 
 ## Signing key
 
