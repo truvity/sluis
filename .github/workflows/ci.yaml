@@ -120,6 +120,7 @@ jobs:
       AUDIT_SQS_URL: http://localhost:4566
       AUDIT_DYNAMODB_URL: http://localhost:4566
       AUDIT_OPENBAO_URL: http://localhost:8200
+      AUDIT_KMS_URL: http://localhost:4566
       AUDIT_OPENBAO_TOKEN: root
       CGO_ENABLED: "0"
       GOEXPERIMENT: jsonv2

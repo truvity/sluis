@@ -36,4 +36,5 @@ ran ./dedupe/dynamodbdedupe/ TestLocalStackConditionalPut TestLocalStackConditio
 ran ./sink/sqssink/ TestLocalStackRoundTrip TestLocalStackRoundTrip/fifo
 ran ./internal/s3test/ TestTheIndexerOverS3 TestTheIndexerOverS3/indexes_every_tenant_and_profile_it_finds_by_listing
 
+ran ./index/postgres/ TestTheKMSAdapterOverThePostgresWrappedStore TestTheKMSAdapterOverThePostgresWrappedStore
 ran ./keys/ TestTransitReplicasAgreeAndPurposesDoNot TestTransitReplicasAgreeAndPurposesDoNot
