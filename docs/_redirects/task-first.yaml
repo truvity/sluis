@@ -236,8 +236,8 @@ sluis/README.md: concepts/sluis/README.md
 sluis/deployment/README.md: get-started/sluis/deployment/README.md
 sluis/deployment/aws-behind-cloudflare.md: get-started/sluis/deployment/aws-behind-cloudflare.md
 sluis/deployment/aws-lambda.md: get-started/sluis/deployment/aws-lambda.md
-sluis/deployment/edge-aws.md: get-started/sluis/deployment/edge-aws.md
-sluis/deployment/kubernetes-openbao.md: get-started/sluis/deployment/kubernetes-openbao.md
+sluis/deployment/edge-aws.md: get-started/sluis/deployment/README.md#aws-edge-module
+sluis/deployment/kubernetes-openbao.md: get-started/sluis/deployment/README.md#kubernetes-with-openbao
 sluis/examples/README.md: guides/sluis/connect/examples/README.md
 sluis/examples/aws-ci-job-role.md: guides/sluis/connect/examples/aws-ci-job-role.md
 sluis/examples/aws-person-profile.md: guides/sluis/connect/examples/aws-person-profile.md

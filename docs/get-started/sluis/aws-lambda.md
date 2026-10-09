@@ -1,37 +1,25 @@
 # Tutorial: sluis on AWS Lambda
 
-By the end you have one sluis function on AWS Lambda behind a mutual-TLS custom domain, with its state in DynamoDB,
-its blobs in S3, its secrets in SSM and its tokens signed by key pairs the function generates and wraps under a KMS
-key you supply. You write the facts of the
-installation once, in an installation file, and the Pulumi library does the rest. This is the preset `aws-hybrid`
-(`aws-serverless` differs only in having no Kubernetes beside it). Allow about an hour, most of it waiting for AWS.
+You deploy one sluis function on AWS Lambda behind a mutual-TLS custom domain (preset `aws-hybrid`; `aws-serverless` has no Kubernetes beside it). State is in DynamoDB, blobs in S3, secrets in SSM. Tokens are signed by key pairs the function generates and wraps under a KMS key you supply. Allow about an hour, most of it waiting for AWS.
 
-Not here: why it is built this way ([ports](../../concepts/sluis/ports.md)), every library argument
-([Pulumi library](../../reference/sluis/pulumi-library.md)), every key ([configuration](../../reference/sluis/configuration.md)).
+Design: [ports](../../concepts/sluis/ports.md). Library arguments: [Pulumi library](../../reference/sluis/pulumi-library.md). Keys: [configuration](../../reference/sluis/configuration.md).
 
 ## What you need
 
-- An AWS account and credentials that can create IAM, Lambda, API Gateway, DynamoDB, S3, KMS, SSM and EventBridge
-  resources; the account id and a region (`111122223333` and `eu-central-1` below), and the ARN of the IAM role you apply
-  with (`applyRoleArn` below): only it may write the truststore.
-- A symmetric KMS key with the alias `alias/demo-sluis-sign` (step 0 creates it). The library creates no key: it looks
-  the alias up and grants on the key behind it.
-- An ACM certificate in that region for the host you will serve (`access.example.test` below), and its ARN. You supply
-  it; the library does not issue one.
-- An SQS ingest queue of an existing audit installation, its URL and its ARN, so the tutorial sends the function's
-  audit records to it (`Audit.Use`, v1.74 or later). Left out, the library installs audit beside the function by default (operational,
-  with its own archive bucket); that takes the audit release's writer package and catalogue, see
-  [Audit](../../reference/sluis/pulumi-library.md#audit).
-- Go, `pulumi` logged in to a backend, `gh`, `openssl`, `curl`.
-- `sluisctl` of the release you deploy, from the release's `sluisctl_<version>_<os>_<arch>` archive.
+All names are placeholders; replace them.
 
-All names below are placeholders; replace them.
+| Item | Detail |
+|---|---|
+| AWS account | Credentials that create IAM, Lambda, API Gateway, DynamoDB, S3, KMS, SSM and EventBridge resources. Below: `111122223333`, `eu-central-1`. |
+| Apply role | The ARN of the IAM role you apply with (`applyRoleArn`). Only it may write the truststore. |
+| KMS key | Symmetric, alias `alias/demo-sluis-sign`. Step 0 creates it. The library looks the alias up and creates no key. |
+| ACM certificate | In that region, for `access.example.test`. You supply its ARN. |
+| Audit queue | URL and ARN of an existing audit installation's SQS ingest queue (`Audit.Use`, v1.74 or later). Without it the library installs audit beside the function: see [Audit](../../reference/sluis/pulumi-library.md#audit). |
+| Tools | Go, `pulumi` logged in to a backend, `gh`, `openssl`, `curl`, and `sluisctl` from the release's `sluisctl_<version>_<os>_<arch>` archive. |
 
 ## 0. Create the signing key
 
-The estate owns the key that wraps the function's signing keys, so it exists before the stack that grants on it. A
-symmetric key with an alias is enough; the key policy is the account's default (IAM policies govern it), which lets the
-function's role use the key once the library grants it, only under the context `{instance, purpose: sign}`.
+The key exists before the stack that grants on it. A symmetric key with an alias and the account's default key policy is enough. Once the library grants it, the function's role uses the key under the context `{instance, purpose: sign}`.
 
 ```sh
 KEY=$(aws kms create-key --description "demo sluis: wraps the signing keys" --query KeyMetadata.KeyId --output text)
@@ -41,8 +29,7 @@ aws kms create-alias --alias-name alias/demo-sluis-sign --target-key-id "$KEY"
 
 ## 1. Write the installation
 
-`installation.yaml` holds what you know about this installation and no secret. Its shape is
-`apiVersion: sluis.truvity.github.io/installation/v1`, held to `schemas/config/installation.schema.json`.
+`installation.yaml` holds what you know about the installation and no secret. It is held to `schemas/config/installation.schema.json`.
 
 ```yaml
 apiVersion: sluis.truvity.github.io/installation/v1
@@ -79,8 +66,7 @@ access:
       requires: [all:access-roster:viewer]
 ```
 
-`instance` names the installation; its SSM root is `/sluis/demo`. `table` and `bucket` are the names the library
-creates in step 4, and the adapters are configured to them.
+`instance` names the installation, and its SSM root is `/sluis/demo`. `table` and `bucket` are the names the library creates in step 4.
 
 ## 2. Render it and read the result
 
@@ -88,36 +74,28 @@ creates in step 4, and the adapters are configured to them.
 sluisctl render --installation installation.yaml --out rendered
 ```
 
-Expect no output and exit status 0. `rendered/` now holds the two documents the function will read: `sluis.yaml`
-(the service document) and `policy.yaml`. Open `sluis.yaml` and check that `preset: aws-hybrid`, the DynamoDB table,
-the S3 bucket and `secrets: {source: ssm, root: /sluis/demo}` are what you meant. A mistake in the installation stops
-here, naming the key. The library renders the same documents itself in step 4 (the same function), so what you read is
-what runs. Do not deploy `rendered/`; it is for reading.
+Expect no output and exit status 0. `rendered/` holds `sluis.yaml` (the service document) and `policy.yaml`. In `sluis.yaml`, check `preset: aws-hybrid`, the DynamoDB table, the S3 bucket and `secrets: {source: ssm, root: /sluis/demo}`. A mistake in the installation stops here and names the key. The library renders the same documents in step 4. Do not deploy `rendered/`.
 
 ## 3. Fetch the release and pin its digest
 
-The Pulumi library and the binary move together, so use one release for both. `Installation` needs v1.64 or later.
+Use one release for the Pulumi library and the binary. This tutorial needs v1.74 or later, where `Audit.Use` and the edge module start.
 
 ```sh
-VERSION=1.64.0        # the release you chose, without the v
+VERSION=1.74.0        # the release you chose, without the v
 gh release download "v$VERSION" --repo truvity/sluis --dir dist \
   --pattern "sluis-lambda_${VERSION}_linux_arm64.zip" --pattern checksums.txt
 grep "sluis-lambda_${VERSION}_linux_arm64.zip" dist/checksums.txt
 ```
 
-Expect one line: a 64-character SHA-256 and the file name. Copy the digest into `main.go` (step 4) as a constant and
-commit it. The library checks the zip against it and deploys the zip byte for byte. A digest fetched at deploy time
-beside the zip proves nothing about it, so do not read it from `dist/checksums.txt` in the program.
+Expect one line: a 64-character SHA-256 and the file name. Copy the digest into `main.go` as a constant and commit it. Do not read it from `dist/checksums.txt` in the program. The library checks the zip against the constant and deploys it byte for byte.
 
 ## 4. Write the Pulumi program
 
-In an empty Pulumi Go project (`pulumi new aws-go`), add the library at the release's tag and copy `installation.yaml`
-beside `main.go`. A truststore is the PEM of the CAs a client certificate must chain to; for this tutorial make your
-own CA and a client certificate to test with:
+In an empty Pulumi Go project (`pulumi new aws-go`), add the library at the release's tag and copy `installation.yaml` beside `main.go`. The truststore is the PEM of the CAs a client certificate must chain to. Make a test CA and client certificate:
 
 ```sh
-go get github.com/truvity/sluis/deploy/pulumi@v1.64.0 github.com/truvity/sluis/deploy/pulumi/edge/cloudflare@v1.64.0 \
-  github.com/truvity/sluis@v1.64.0
+go get github.com/truvity/sluis/deploy/pulumi@v1.74.0 github.com/truvity/sluis/deploy/pulumi/edge/cloudflare@v1.74.0 \
+  github.com/truvity/sluis@v1.74.0
 openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -days 30 \
   -keyout ca.key -out truststore.pem -subj "/CN=demo-client-ca"
 openssl req -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes \
@@ -144,7 +122,7 @@ import (
 const (
 	region       = "eu-central-1"
 	account      = "111122223333"
-	version      = "1.64.0"
+	version      = "1.74.0"
 	lambdaSHA256 = "<the digest from step 3>"
 	certArn      = "<the ACM certificate's ARN>"
 	applyRoleArn = "<the ARN of the IAM role you apply with>"
@@ -212,9 +190,7 @@ func main() {
 }
 ```
 
-The installation names the account, region, instance and function name; `NewLambda` fills in what it leaves out and
-refuses one that disagrees with the arguments, naming the argument. It replaces the deprecated `Config`, `Policy` and
-`PolicyPath` arguments.
+`NewLambda` fills in what the installation leaves out and refuses a value that disagrees with the arguments, naming the argument. It replaces the deprecated `Config`, `Policy` and `PolicyPath` arguments.
 
 ## 5. Preview, then apply
 
@@ -222,35 +198,43 @@ refuses one that disagrees with the arguments, naming the argument. It replaces 
 pulumi preview
 ```
 
-Read it. Expect the bucket, the table, the function, its role and layer, the HTTP API, the
-custom domain with the truststore object, the SSM parameters for the recovery password and the state secret, and the schedules, all as
-creates and nothing else. Then:
+Expect only creates:
+
+- the bucket and the table
+
+- the function with its role and layer
+
+- the HTTP API
+
+- the custom domain with the truststore object
+
+- the SSM parameters for the recovery password and the state secret
+
+- the schedules
+
+Then apply:
 
 ```sh
 pulumi up
 ```
 
-Expect `domainTarget` and `functionName` in the outputs. If the apply refuses the package, the message names the digest
-or the version: the zip must be the release the library is.
+Expect `domainTarget` and `functionName` in the outputs. If the apply refuses the package, the message names the digest or version: the zip must match the library's release.
 
 ## 6. Point DNS at it and ask the issuer
 
-Create a CNAME for `access.example.test` to `domainTarget`. The domain is mutual TLS, so a request without a client
-certificate never reaches the function. Ask with the one you made:
+Create a CNAME from `access.example.test` to `domainTarget`. A request without a client certificate never reaches the function. Ask with the certificate you made:
 
 ```sh
 curl --cert client.crt --key client.key https://access.example.test/.well-known/openid-configuration
 ```
 
-Expect JSON whose `issuer` is `https://access.example.test`. A TLS failure means the certificate does not chain to
-`truststore.pem` or the CNAME has not propagated. For the function's own view:
+Expect JSON whose `issuer` is `https://access.example.test`. A TLS failure means the certificate does not chain to `truststore.pem` or the CNAME has not propagated. Read the function's log:
 
 ```sh
 aws logs tail /aws/lambda/sluis --since 15m
 ```
 
-The log group is `/aws/lambda/<function name>` (`sluis` unless the installation says `aws.functionName`). A document
-the loader refuses stops the cold start and is named there.
+The log group is `/aws/lambda/<function name>`, `sluis` unless the installation sets `aws.functionName`. A document the loader refuses stops the cold start and is named there.
 
 ## 7. Sign in
 
@@ -261,17 +245,12 @@ aws ssm get-parameter --with-decryption --name /sluis/demo/private/config/recove
   --query Parameter.Value --output text
 ```
 
-Open `https://access.example.test/console/login` in a browser that presents your client certificate (import
-`client.crt` and `client.key` as a PKCS#12 file), expand **Recovery sign-in** and paste it. You are `recovery`, an operator. Details and the
-audit trail of the attempt: [Recovery on Lambda](../../guides/sluis/operate/recover-on-lambda.md).
+Import `client.crt` and `client.key` into a browser as a PKCS#12 file. Open `https://access.example.test/console/login`, expand **Recovery sign-in** and paste the password. You are `recovery`, an operator. The attempt's audit trail is in [Recovery on Lambda](../../guides/sluis/operate/recover-on-lambda.md).
 
-## You now have
+## Next
 
-- one function `sluis` from the released zip, byte for byte, with the installation's two documents in an immutable
-  layer: a change to `installation.yaml` is a `pulumi up` that publishes a new layer version;
-- DynamoDB state, S3 blobs, SSM secrets under `/sluis/demo`, and tokens signed by key pairs the function generates and wraps under your KMS key;
-- an issuer that answers its discovery document, and a console you can sign in to.
+- Connect a directory: [Google Workspace](../../guides/sluis/connect/google-workspace.md). Then connect each relying party: [how-to index](../../concepts/sluis/README.md).
 
-Next: connect a directory ([Google Workspace](../../guides/sluis/connect/google-workspace.md)), then each thing that trusts the
-issuer ([how-to index](../../concepts/sluis/README.md)). Taking a release: [upgrade pages](../../guides/sluis/upgrade/v1.64.md). Operations on
-Lambda: [Lambda reference](../../reference/sluis/lambda.md).
+- Take a release: [upgrade pages](../../guides/sluis/upgrade/v1.64.md).
+
+- Operate on Lambda: [Lambda reference](../../reference/sluis/lambda.md).
