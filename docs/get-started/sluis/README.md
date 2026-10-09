@@ -1,10 +1,8 @@
 # Getting started: choose a deployment
 
-sluis is ports and adapters: each concern (state, secrets, blobs, signing, trigger, schedule, audit) is served by an
-adapter chosen **by name**. A *preset* names one adapter per concern, so you answer a few questions about your platform
-instead of choosing seven adapters. One tutorial per shape follows from the answers.
+Each concern (state, secrets, blobs, signing, trigger, schedule, audit) is served by an adapter chosen by name. A preset names one adapter per concern, so you answer a few questions about your platform instead of choosing seven adapters.
 
-## The decision tree
+## Decision tree
 
 ```text
 AWS? ── no ──► Kubernetes? ── no ──► server              (unavailable)
@@ -15,36 +13,24 @@ AWS? ── no ──► Kubernetes? ── no ──► server              (un
                                             └ no ─► k8s-aws
 ```
 
-The answers are the `platform` block of the service document (`aws`, `kubernetes`, `openbao`, `runtime`); `preset`
-names a preset outright, and an installation's shape picks one when it names none
-([the installation document](../../reference/sluis/installation-document.md)). The same tree is
-`port.PresetFor` in `internal/port/resolve.go`. Which adapter each preset names for each concern is in the
-[generated matrix](../../reference/sluis/adapters.md#presets).
+The answers are the `platform` block of the service document. `preset` names a preset outright; see [the installation document](../../reference/sluis/installation-document.md). The same tree is `port.PresetFor` in `internal/port/resolve.go`.
 
-## The tutorials
+## Tutorials
 
 | You have | Preset | Tutorial |
 |---|---|---|
-| AWS, and you want sluis on Lambda (with or without Kubernetes beside it) | `aws-hybrid`, `aws-serverless` | [sluis on AWS Lambda](aws-lambda.md) |
-| Kubernetes on EKS, and you want sluis as a pod with DynamoDB, S3 and KMS | `k8s-aws` | [Kubernetes with AWS storage](kubernetes-aws.md) |
-| An installation that already runs on Kubernetes objects and Valkey | `legacy` adapters, no preset | [An existing installation on the legacy store](kubernetes-legacy-store.md) |
+| AWS, and you want sluis on Lambda | `aws-hybrid`, `aws-serverless` | [sluis on AWS Lambda](aws-lambda.md) |
+| EKS, and you want sluis as a pod with DynamoDB, S3 and KMS | `k8s-aws` | [Kubernetes with AWS storage](kubernetes-aws.md) |
+| An installation on Kubernetes objects and Valkey | `legacy` adapters, no preset | [Legacy store](kubernetes-legacy-store.md) |
 
-`aws-hybrid` is the path the maintainers' estates run. A single concern can be changed on top of a preset with
-`adapters.<concern>` in the configuration; the adapters that exist, what each needs and the runtimes it works on are in
-[reference/adapters.md](../../reference/sluis/adapters.md), generated from the registry so that it cannot drift from the code.
-An adapter that does not exist is added in a fork: [adding an adapter](../../guides/sluis/add-an-adapter.md). The design behind
-the registry, resolution order and start-up validation is in
-[ports](../../concepts/sluis/ports.md#adapters-presets-and-the-platform).
+Shapes beyond the tutorials, including Cloudflare in front of Lambda, are in [deployment shapes](deployment/README.md).
 
 ## Availability
 
-A preset that names an adapter which is not built is **unavailable**: loading it fails with a message that names the
-preset and the missing adapters, unless `adapters` replaces every one of them. There is no tutorial for these:
+A preset that names an adapter that is not built is unavailable. Loading it fails, naming the preset and the missing adapters, unless `adapters` replaces every one of them.
 
-- `server`: unavailable. Its state, secrets, blobs, signing and trigger adapters are planned, not built.
-- `k8s-minimal`: unavailable. Its state, secrets, blobs and trigger adapters are planned, not built.
-- `k8s-openbao`: unavailable. Its state, blobs, signing and trigger adapters are planned, not built.
+- `aws-serverless`, `aws-hybrid` and `k8s-aws` are available. `aws-eks` is the deprecated name of `k8s-aws`: it resolves to it and start warns.
 
-Available: `aws-serverless`, `aws-hybrid`, `k8s-aws`. `aws-eks` is the deprecated name of `k8s-aws`: it resolves to it
-and start warns. The list is generated from the registry:
-[adapters, availability](../../reference/sluis/adapters.md#availability).
+- `server`, `k8s-minimal` and `k8s-openbao` are unavailable.
+
+To change one concern on top of a preset, set `adapters.<concern>`. The [adapter reference](../../reference/sluis/adapters.md) lists the presets, adapters and availability. To add an adapter, see [adding an adapter](../../guides/sluis/add-an-adapter.md). Design: [ports](../../concepts/sluis/ports.md#adapters-presets-and-the-platform).
