@@ -34,7 +34,7 @@ exchange:
   aws:
     maxAge: 5m
     accounts:
-      - account: "123456789012"
+      - account: "111122223333"
         name: apps
         issuer: https://example-id.tokens.sts.global.api.aws
 ```
@@ -43,7 +43,7 @@ exchange:
 groups:
   otlp:billing:writer:
     matchers:
-      - aws: { account: "123456789012", role: "billing-*" }
+      - aws: { account: "111122223333", role: "billing-*" }
 clients:
   otlp: { kind: exchange, requires: [otlp:billing:writer], ttl_cap: 15m }
 ```
@@ -63,7 +63,7 @@ curl -u otlp: https://access.example.com/token \
 
 ## Verify
 
-The response's `access_token` has `sub=aws:123456789012:role/billing-api` and `aud=otlp`. The subject is the role, never the
+The response's `access_token` has `sub=aws:111122223333:role/billing-api` and `aud=otlp`. The subject is the role, never the
 session. The audit trail has `roster.token.exchanged` with proof `workload`. A role in no group is refused and recorded.
 
 ## Undo

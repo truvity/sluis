@@ -4,7 +4,7 @@ Each example is one integration from goal to undo, on one template: **Goal, What
 or command, Verify, Undo**. The recipe it condenses is linked at the end of each page; the integrations index is
 [Connect something](../../how-to/connect/README.md).
 
-Hostnames and accounts are examples (`example.com`, `123456789012`). Every snippet is accepted by
+Hostnames and accounts are examples (`example.com`, `111122223333`). Every snippet is accepted by
 `sluisctl policy render` (policy) or the chart's values schema (values), and each page names the fixture or test it comes
 from.
 
