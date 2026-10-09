@@ -1,80 +1,42 @@
 # Day one: the first sign-in of a standalone installation
 
-## Purpose
-
 Sign the first operator in to a standalone installation and finish its setup in the console.
-
-## Preconditions
-
-- The chart is installed and the Deployment is Ready.
-- You are a cluster administrator, or somebody who may `create` on `serviceaccounts/token` for the recovery
-  ServiceAccount (`config.recovery.serviceAccount`).
-- A deployment whose values carry a workspace and a non-empty operators group has **no day one**: people sign in through
-  the directory from the first boot. Go to [connect a Google Workspace](../connect/google-workspace.md) when you add the
-  next tenant.
 
 ## Before you start
 
-- **The redirect URI is the installation's own hostname, and that is where a day-one setup goes wrong.** Overview shows
-  this installation's own values to copy; paste those, not a placeholder.
-- **Outside a cluster there is no API server to prove access to.** The service prints a generated recovery password once
-  at start; read it off the log (on AWS Lambda it is an SSM parameter: [recover on Lambda](recover-on-lambda.md)). That
-  installation gets a fifth setup step, turn the password off, because a stored password is a standing credential and a
-  token is not.
+- The chart is installed and the Deployment is Ready ([install with Helm](install-with-helm.md)).
+
+- You are a cluster administrator, or you may `create` on `serviceaccounts/token` for the recovery ServiceAccount (`config.recovery.serviceAccount`).
+
+- With a workspace and a non-empty operators group in the values, there is no day one. People sign in through the directory ([connect a Google Workspace](../connect/google-workspace.md)).
+
+- Outside a cluster there is no API server to prove access. The service prints a generated recovery password once at start. Read it from the log, or on Lambda from SSM ([recover on Lambda](recover-on-lambda.md)). Such an installation has a fifth step: turn the password off.
 
 ## Steps
 
-### 1. Install
+1. Check the install created the session key and the recovery ServiceAccount. No password exists.
 
-**Run** the install ([install with Helm](install-with-helm.md)).
-**Expect** `Secret <release>-session-key` and the recovery ServiceAccount to exist; there is no password anywhere.
-**Verify** `kubectl -n <namespace> get secret <release>-session-key serviceaccount/<recovery serviceAccount>`.
-**Rollback**: uninstall the release.
+   ```sh
+   kubectl -n <namespace> get secret <release>-session-key serviceaccount/<recovery serviceAccount>
+   ```
 
-### 2. Mint a recovery token
+2. Mint a recovery token. It expires in ten minutes and is not stored. `config.recovery.serviceAccount` and `config.recovery.audience` name the account and audience.
 
-**Run**
+   ```sh
+   kubectl -n <namespace> create token <recovery serviceAccount> \
+     --audience <recovery audience> --duration 10m
+   ```
 
-```sh
-kubectl -n <namespace> create token <recovery serviceAccount> \
-  --audience <recovery audience> --duration 10m
-```
+3. Port-forward the service, or go through the gateway. Open `/login`, expand **Recovery sign-in** and paste the token. The session shows the identity that minted it. A refusal is one of the cases in [lost operator access](lost-operator-access.md#before-you-start).
 
-`config.recovery.serviceAccount` and `config.recovery.audience` are the names the values carry. Granting `create` on
-`serviceaccounts/token` for that account is how you let somebody else do this.
-**Expect** a JWT on stdout.
-**Verify** it is accepted in step 3.
-**Rollback**: none, because a token expires in ten minutes and is not stored.
+4. Follow the four steps Overview lists. Register an OAuth client with the directory, give it to the service, connect the first directory, and attach a directory group to the operators group. Each disappears when done. Only the first leaves the console: [connect a Google Workspace](../connect/google-workspace.md) walks it, and Overview shows the two values to paste. The redirect URI is the installation's own hostname, so copy the values Overview shows.
 
-### 3. Sign in with it
+5. Sign out, sign in through the directory and search for yourself.
 
-**Run** port-forward the service's port (or go through the gateway), open `/login`, expand **Recovery sign-in**, paste
-the token.
-**Expect** the console, with Overview on top.
-**Verify** the session shows the identity that minted the token. A refusal is one of the cases in
-[lost operator access](lost-operator-access.md#before-you-start).
-**Rollback**: sign out.
+## Verify
 
-### 4. Follow Overview
+Your page shows *operator* and the membership that granted it. The directory page shows the workspace healthy once the first snapshot has run ([check health](check-health.md)).
 
-**Run** the four steps Overview lists: register an OAuth client with the directory, give it to the service, connect the
-first directory, attach a directory group to the operators group. Each disappears as it completes. The first one is the
-only one that leaves the console: [connect a Google Workspace](../connect/google-workspace.md) walks the cloud-console
-visit, and Overview has the two values to paste into it.
-**Expect** Overview empties.
-**Verify** the directory page shows the workspace healthy.
-**Rollback**: *Disconnect* the directory; the other steps are values you can change again.
+## Roll back
 
-### 5. Sign in as yourself
-
-**Run** sign out, sign in through the directory, search for yourself.
-**Expect** your page shows *operator* and the membership that granted it.
-**Verify** the same page.
-**Rollback**: none, because it only reads.
-
-## Afterwards
-
-- The console signs people in as a client of the issuer it shares an origin with, so steps 3 and 5 are the issuer's own
-  sign-in page, and recovery stays reachable by port-forward.
-- Check [the installation's health](check-health.md) once the first snapshot has run.
-- Tell the operators group who is in it, and that [recovery](lost-operator-access.md) exists.
+Sign out to end the recovery session. *Disconnect* the directory to undo step 4. Uninstall the release to undo step 1.

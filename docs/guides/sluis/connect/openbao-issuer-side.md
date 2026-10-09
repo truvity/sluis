@@ -1,39 +1,22 @@
-# OpenBAO: what sluis must provide
+# OpenBao: what the issuer provides
 
-OpenBAO trusts sluis on two auth mounts per namespace, maps the
-`groups` claim onto its identity groups by name, and signs the SSH and
-database certificates `sluisctl bao` and `sluisctl pg`/`psql` ask for
-([ADR 0013](../../../decisions/0013-openbao-access-through-the-bao-cli.md)).
-**The contract,
-end to end, lives with OpenBAO**:
-[truvity/openbao docs/integrations/sluis.md](https://github.com/truvity/openbao/blob/master/docs/integrations/sluis.md).
-It is proven there by a conformance test that runs a real OpenBAO server
-against an issuer shaped like this one, and `pkg/model`'s `Roster` preset
-builds the OpenBAO side of it. The how-to for an installation is
-[connect OpenBAO](openbao.md).
+OpenBao trusts the issuer on two auth mounts per namespace, maps the `groups` claim onto its identity groups by name and signs the certificates `sluisctl bao` and `sluisctl pg`/`psql` request. The contract lives in [truvity/openbao docs/integrations/sluis.md](https://github.com/truvity/openbao/blob/master/docs/integrations/sluis.md). The installation steps are in [connect OpenBao](openbao.md).
 
-This page is only what **this** side must provide for that contract to
-hold. Each item is something sluis, `sluisctl` or the policy
-already does; a change here that breaks one breaks OpenBAO sign-in.
+A change to any item below breaks OpenBao sign-in.
 
-## The issuer
+## Before you start
 
-- **Discovery and keys reachable from OpenBAO.** The mount fetches
-  `/.well-known/openid-configuration` and the key set when it is
-  configured and when keys rotate. Tokens are signed with
-  whatever the signing key chose (ES384 by default with KMS-wrapped or generated keys; RS256 for an RSA
-  key, or where a client or resource pins `signing_alg`), and the discovery document says which. OpenBAO's
-  JWT auth reads the key set, so it follows either; a configuration that
-  pins `jwt_supported_algs` must name the same one.
-- **`iss` is the issuer URL exactly.** It is OpenBAO's bound issuer: a
-  trailing slash on one side and not the other refuses every login.
-- **`sub` and `groups` in every token**, ID tokens included: `sub` names
-  the entity (a person's is their address, and the database credential
-  role checks it reads as one), and `groups` is the flat list of internal
-  group names — the whole of the authorization, bound as it is. No
-  `groups` scope is needed or advertised.
+- OpenBao can reach `/.well-known/openid-configuration` and the key set, both when configured and when keys rotate.
 
-## The policy: two clients
+- A mount that pins `jwt_supported_algs` names the algorithm the signing key uses. ES384 is the default, RS256 applies to an RSA key or a pinned `signing_alg`.
+
+- `iss` equals the issuer URL, so a trailing slash on one side refuses every login.
+
+- Every token carries `sub` and `groups`, ID tokens included. No `groups` scope is needed.
+
+## Steps
+
+### 1. Declare two clients
 
 ```yaml
 clients:
@@ -50,54 +33,28 @@ clients:
     requires: [all:openbao:operator, staging:ssh:user, staging:ssh:admin, staging:db:client]
 ```
 
-- **`openbao`** is the audience of every token presented at OpenBAO's
-  `jwt-roster` login: `sluisctl bao`, `sluisctl pg`/`psql`, `sluisctl
-  token --audience openbao`, and CI jobs exchanging their own identity.
-  Keep its cap short; it is only ever presented at the login.
-- **`openbao-ui`** is the web UI's sign-in. OpenBAO holds its secret and
-  redeems the code itself, so the secret must reach whatever applies
-  OpenBAO's configuration. **One redirect** serves every namespace:
-  OpenBAO carries the namespace in the OIDC state, never in the URL.
-- **`requires` on the two are the same list, less the groups only jobs
-  hold** (those are on `openbao` alone: a job has no browser). They are
-  two doors to one set of OpenBAO identity groups, so a group admitted
-  through one and refused at the other reads as a broken console rather
-  than as a policy. Keep them equal by a test in the repository that owns
-  the policy, not by review.
-- **Every group OpenBAO holds a policy for** belongs in `requires`, named
-  by the [naming rule](../../../concepts/sluis/trust.md#naming); a group missing here is
-  refused at the exchange, before OpenBAO is reached (`sluisctl` exit
-  `4`).
+- `openbao` is the audience at the `jwt-roster` login: `sluisctl bao`, `sluisctl pg`/`psql`, `sluisctl token --audience openbao` and CI jobs. Keep its cap short.
 
-## sluisctl
+- `openbao-ui` is the web UI sign-in. OpenBao redeems the code, so the secret must reach whatever applies OpenBao's configuration. One redirect serves every namespace.
 
-- `bao` authenticates (logs in on `jwt-roster` as role `roster` with a
-  token for `openbao` — `--mount`, `--login-role`, `--audience` override
-  them) and then runs the real `bao` binary unchanged: `bao ssh
-  -mode=ca` for an SSH certificate, `bao write pki/sign/<role>
-  csr=@...` for a machine certificate, `bao kv get` for anything else.
-  The login is cached rather than revoked, and `--forget` clears it.
-- `pg`/`psql` share `bao`'s own login and additionally make **one**
-  `pki/sign/<role>` call, over a CSR for an **ECDSA P-384** key with the
-  subject as its common name. No TTL is ever sent either way.
-- The namespace is `bao`'s own `-namespace` flag (or `BAO_NAMESPACE`) for
-  `bao`; `-ns` (or `BAO_NAMESPACE`) for `pg`/`psql` — both read the SAME
-  variable, just through a flag spelled for what each command is. Paths:
-  `ssh/sign/<role>` and `pki/sign/<role>` (`bao`'s own syntax names
-  these for itself); `pki/sign/<role>` for `pg`/`psql`. `--ca-cert` or
-  `BAO_CACERT` adds a private root for the OpenBAO connection alone.
-- Exit codes: `4` for a refusal (the issuer's, or OpenBAO's `403`), `5`
-  for unreachable, `2` for usage ([reference](../../../reference/sluis/sluisctl.md#exit-codes)).
+- Keep the two `requires` lists equal, except for groups only jobs hold. Enforce it with a test in the repository that owns the policy.
 
-## CI
+- Every group OpenBao holds a policy for belongs in `requires`, per the [naming rule](../../../concepts/sluis/trust.md#naming). A missing group is refused at the exchange and `sluisctl` exits `4`.
 
-A job with `id-token: write` exchanges its GitHub token for `openbao`
-exactly as for any other audience, and the `ci` rules decide its groups
-([GitHub Actions](github-actions.md)). The GitHub
-Action writes kubeconfigs and AWS profiles only, so an OpenBAO login in a
-job runs `sluisctl token --audience openbao`, or `sluisctl bao`/`pg`/
-`psql` for a certificate, since a job has no agent to hand an SSH
-certificate to and no interactive `psql` session to run.
+### 2. Check sluisctl
 
-This page is what the issuer side holds to; it has no steps of its own. Nothing here is applied: the policy is
-changed through the installation ([install](../operate/install-with-helm.md)).
+- `bao` logs in on `jwt-roster` as role `roster` with a token for `openbao`. `--mount`, `--login-role` and `--audience` override them.
+
+- `pg`/`psql` share that login and make one `pki/sign/<role>` call over a CSR for an ECDSA P-384 key. No TTL is sent.
+
+- Exit codes: `4` refused, `5` unreachable, `2` usage ([reference](../../../reference/sluis/sluisctl.md#exit-codes)).
+
+### 3. Check CI
+
+A job with `id-token: write` exchanges its GitHub token for `openbao`, and the `ci` rules decide its groups ([GitHub Actions](github-actions.md)). The GitHub Action writes kubeconfigs and AWS profiles only. For OpenBao a job runs `sluisctl token --audience openbao`, or `sluisctl bao`/`pg`/`psql`.
+
+The installation applies policy changes ([install](../operate/install-with-helm.md)).
+
+## Decided in
+
+- [ADR 0013](../../../decisions/0013-openbao-access-through-the-bao-cli.md)

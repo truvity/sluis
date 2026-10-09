@@ -1,33 +1,31 @@
 # Keep and back up a GitHub App's key
 
-Where a catalogue App's private key lives, how to back it up, and how to hand one App to a consumer. The App itself is
-declared and created as in [A catalogue of GitHub Apps](github-apps-catalogue.md).
+Back up a catalogue App's private key and hand one App to a consumer. Declare and create the App as in [A catalogue of GitHub Apps](github-apps-catalogue.md).
 
-## Where the key is kept
+## Before you start
 
-Every catalogue App is in one Secret, `<release>-github-catalogue-apps`,
-created empty at the service's first start:
+- No copy of a key exists outside the Secret: not in git, not in a password manager.
+- A pushed key is a second durable copy of a real credential. Rotate both together; the store is in the App's blast radius.
+- With a `ports.adapter` other than `legacy` and layout v4, read the `github/v1` document at `external/github/<id>` instead of the Secret. See [secrets](../../../reference/sluis/secrets.md#the-external-documents) and [ADR 0041](../../../decisions/0041-the-secret-contract.md).
+
+## 1. Find the key
+
+The service creates the Secret `<release>-github-catalogue-apps` empty at its first start.
 
 | Key | Holds |
 |---|---|
-| `<id>.github_app_id` | the App's numeric id |
-| `<id>.github_app_installation_id` | the installation on the organisation |
-| `<id>.github_app_private_key` | the App's private key, PEM, exactly as GitHub issued it |
-| `<id>.record.json` | the App's record: `version`, `id`, `org`, `app_id`, `app_slug`, `installation_id`, `html_url`, `connected_at`, `connected_by`, and for an App with a webhook `webhook_url` and `hook_rotated_at` (neither is secret) |
-| `<id>.pending_private_key` | the key of an App created and **not yet installed**, instead of the three above |
-| `<id>.webhook_secret` | only for an App whose entry declares a `webhook`: the secret GitHub signs its deliveries with, kept from creation and through install ([Delivering events](github-apps-catalogue.md#delivering-events)) |
+| `<id>.github_app_id` | The App's numeric id |
+| `<id>.github_app_installation_id` | The installation on the organisation |
+| `<id>.github_app_private_key` | The private key, PEM as GitHub issued it |
+| `<id>.record.json` | `version`, `id`, `org`, `app_id`, `app_slug`, `installation_id`, `html_url`, `connected_at`, `connected_by`; with a webhook also `webhook_url`, `hook_rotated_at`. Nothing secret |
+| `<id>.pending_private_key` | The key of an App created and not yet installed, instead of the three above |
+| `<id>.webhook_secret` | Only for an App with a `webhook`: kept from creation through install ([Deliver events](github-apps-catalogue.md#3-deliver-events-preview)) |
 
-The three property keys exist only once the App is installed, so a copy
-taken between the two clicks never hands anything an App that cannot
-mint a token. No copy of a key exists anywhere else — not in git, not in
-a password manager.
+The three property keys exist only once the App is installed.
 
-### Backing it up
+## 2. Back it up
 
-A deployment copies the Secret to a store that travels with its backups.
-An External Secrets `PushSecret` does that for any provider External
-Secrets writes to — a Vault or OpenBao, a cloud secret manager — and the
-restore is the matching `ExternalSecret`:
+Copy the Secret to a store that travels with your backups. An External Secrets `PushSecret` writes to any provider External Secrets supports:
 
 ```yaml
 apiVersion: external-secrets.io/v1alpha1
@@ -67,34 +65,15 @@ spec:
           property: record
 ```
 
-One block of four entries per App. The same keys are what anything else
-that needs the App — a job that mints its own tokens today — reads, under
-names that do not change for the life of the App.
+Repeat the four entries per App. The restore is the matching `ExternalSecret`.
 
-**Restoring** is putting the Secret back, with its label
-`access-roster.truvity.github.io/kind: github-catalogue-apps`, before the
-service starts. The records are beside the keys, so nothing else is
-needed ([configuration](../operate/back-up-and-restore.md)).
+## 3. Restore
 
-That is a **backup**: every App, every key, one place, read by nobody
-until a restore. Handing one App to a consumer is the next section, and
-it is deliberately a different object.
+Put the Secret back with its label `access-roster.truvity.github.io/kind: github-catalogue-apps` before the service starts. The records are beside the keys. See [back up and restore](../operate/back-up-and-restore.md).
 
-### Projecting one App to a secret store
+## 4. Project one App to a consumer (deprecated)
 
-> **On a State adapter, read the document.** `push` is **deprecated**: it renders a
-> PushSecret over the Kubernetes Secret only the `legacy` storage writes. With
-> `ports.adapter` other than `legacy` and layout v4 the installed App is the `github/v1` document at
-> `external/github/<id>`, which the consumer reads with its own grant
-> ([secrets](../../../reference/sluis/secrets.md#the-external-documents),
-> [0041](../../../decisions/0041-the-secret-contract.md)).
-
-Some consumers cannot ask the issuer at the moment they run. The one this
-was built for is the program that manages the estate — a Pulumi or
-Terraform apply that must work while this service is being upgraded,
-replaced or restored. For those, an entry may carry `push`, and the chart
-renders a `PushSecret` that copies **that App's three property keys** to
-a store and a path the operator names:
+A program that must work while this service is upgraded or restored, such as a Pulumi or Terraform apply, cannot ask the issuer. Add `push` to the entry and the chart renders a `PushSecret` for that App's three property keys:
 
 ```yaml
 githubApps:
@@ -112,25 +91,14 @@ githubApps:
         deletionPolicy: None         # optional; None (default) | Delete
 ```
 
-| At `remoteKey` | From the Secret | Is |
-|---|---|---|
-| `app_id` | `<id>.github_app_id` | the App's numeric id |
-| `installation_id` | `<id>.github_app_installation_id` | its installation on the organisation |
-| `private_key` | `<id>.github_app_private_key` | the App's private key, PEM |
+| At `remoteKey` | From the Secret |
+|---|---|
+| `app_id` | `<id>.github_app_id` |
+| `installation_id` | `<id>.github_app_installation_id` |
+| `private_key` | `<id>.github_app_private_key` |
 
-- **Off unless written.** No entry pushes anything by default, and the
-  chart invents neither the store nor the path.
-- **Three keys, never the Secret.** The record is not pushed, and no
-  other App's keys are in the object. The three exist only once the App
-  is installed, so an App created and left uninstalled pushes nothing.
-- **Refused at render:** two entries pushing to one path in one store
-  (one would overwrite the other, and the reader could not tell which
-  App's key it held), and `push` without `config.store: kubernetes`
-  (there would be no Secret to push from).
-- **What lands there is a real credential** — the App's private key, a
-  second durable copy, to be rotated as one, and the store that holds it
-  is in the App's blast radius.
+Nothing is pushed unless you write `push`. The record is never pushed, and an App created but not installed pushes nothing. The chart refuses two entries pushing to one path in one store, and `push` without `config.store: kubernetes`.
 
-The worked consumer, the rotation procedure and when to prefer the
-run-time exchange instead are in
-[Connect an infrastructure-as-code program](infrastructure-as-code.md).
+## Verify
+
+Read `remoteKey` in the store and check the three properties. For the worked consumer, rotation and the run-time exchange, see [Connect an infrastructure-as-code program](infrastructure-as-code.md).

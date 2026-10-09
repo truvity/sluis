@@ -287,7 +287,7 @@ the recommended repo pattern.
 `~/.ssh/known_hosts.d/sluisctl` by default, so a laptop trusts a
 fleet's SSH host certificate authorities before the first connection
 instead of being prompted for one — see
-[connect/ssh.md#hosts-host-certificates-from-openbaos-ssh-ca](../../guides/sluis/connect/ssh.md#hosts-host-certificates-from-openbaos-ssh-ca)
+[connect/ssh-hosts.md](../../guides/sluis/connect/ssh-hosts.md)
 for the shape of what it replaces, and
 [docs/decisions/0016](../../decisions/0016-a-managed-known-hosts-file-for-ssh-host-cas.md)
 for why this is a laptop-configuration command rather than an OpenBAO

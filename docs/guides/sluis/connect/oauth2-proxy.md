@@ -1,50 +1,25 @@
-# Run oauth2-proxy on a gateway that is not Envoy Gateway
+# Run oauth2-proxy on another gateway
 
-Sluis does not ship or deploy oauth2-proxy. The `access-proxy` chart that wrapped it was removed in v1.32.0
-([ADR 0003](../../../decisions/0003-deprecate-access-proxy.md)). This page is a recipe for running the upstream
-`oauth2-proxy` yourself, as a confidential client of sluis, in the one case nothing else covers: a console with no
-authorization model of its own, behind a gateway that cannot run OIDC itself.
-
-Pick the door first:
-
-- **Gateway-native OIDC** on Envoy Gateway runs the code flow in the gateway, with no proxy to run:
-  [Envoy Gateway OIDC](envoy-gateway-oidc.md). This is the default for a console that cannot run OpenID itself.
-- **Native OIDC in the application** is the right answer when the console needs identity inside itself (per-user
-  authorization, per-user audit, tokens of its own): [Connect a console](console-app.md).
-- **This page**: any other gateway, a console with no OpenID flow of its own.
+Run upstream `oauth2-proxy` as a confidential client of sluis. Use it for a console with no authorization model of its own, on a gateway other than Envoy Gateway. Sluis does not ship or run the proxy. The proxy chart was removed in v1.32.0 ([ADR 0003](../../../decisions/0003-deprecate-access-proxy.md)).
 
 ## Purpose
 
-Put a login against sluis, a session that outlives a token, and a bearer forwarded to the backend in front of a console,
-using upstream oauth2-proxy and one declared client row.
-
-## Preconditions
-
-- A gateway that can route a hostname to a Service and forward `/oauth2/*` to the proxy.
-- A console backend reachable from the proxy.
-- Permission to change the policy (`clients`) and to hold two Secrets: the client's secret and the proxy's cookie secret.
-- The proxy is yours: you pin its image, run it, patch it and watch it. Nothing in sluis does.
+On Envoy Gateway, use [Envoy Gateway OIDC](envoy-gateway-oidc.md). For identity inside the console, use [Connect a console](console-app.md). The choice is in [choose native or gateway OIDC](choosing-native-or-gateway-oidc.md).
 
 ## Before you start
 
-- **Keep the cookie secret in a Secret you own.** A new cookie secret on every render signs everyone out. Do not
-  generate it in a template that re-renders.
-- **The issuer gates access, not the proxy.** `--email-domain=*` is deliberate: admission is the client's `requires`.
-  Without a `requires`, any signed-in person gets in.
-- **oauth2-proxy cannot receive Back-Channel Logout.** It encrypts each session with a key that lives only in the
-  browser's cookie, so nothing server-side can open one. A revoked person is stopped when the proxy next refreshes:
-  bounded by the client's `ttl_cap` and by the proxy's `--cookie-lifetime` (168 hours by default). Read
-  [sessions](../../../concepts/sluis/sessions.md) and [back-channel logout](../../../concepts/sluis/back-channel-logout.md) before promising an operator anything shorter.
-- **Declare the client; there is no self-registration.** An endpoint that mints clients is the surface an issuer least
-  wants, and a declaration keeps *who can obtain tokens for which audience* answerable from the repository.
-- **Preview the policy before you roll it out** (`sluisctl policy render policy/ -o policy.yaml`, then read the diff): a typo in `redirects` is a
-  sign-in that fails at the issuer, not in the proxy.
+
+- You own the proxy: pin its image, patch it and watch it.
+
+- Keep the cookie secret in a Secret you own. A new secret on every render signs everyone out.
+
+- The client's `requires` gates access. `--email-domain=*` admits any signed-in person, so declare `requires`.
+
+- The proxy cannot receive Back-Channel Logout. A revoke lands at the next refresh, bounded by `ttl_cap` and `--cookie-lifetime` (168 hours by default).
 
 ## Steps
 
 ### 1. Declare the client row
-
-**Run**: add a confidential client to the policy's `clients` table, keyed by its id.
 
 ```yaml
 clients:
@@ -56,15 +31,9 @@ clients:
     requires: ["all:my-console:viewer"]
 ```
 
-**Expect**: the policy loads. The secret named by `secret` is the one you create next.
+Create the Secret that `secret` names. Run `sluisctl policy render policy/ -o policy.yaml` and read the diff: a typo in `redirects` fails at the issuer. Fields are in [policy clients](../../../reference/sluis/policy-clients.md).
 
-**Verify**: render the policy (`sluisctl policy render`) and read the client's row ([policy clients](../../../reference/sluis/policy-clients.md)).
-
-**Rollback**: remove the row; the proxy's sign-in then fails at the issuer and admits nobody.
-
-### 2. Run upstream oauth2-proxy
-
-**Run**:
+### 2. Run the proxy
 
 ```bash
 oauth2-proxy \
@@ -81,47 +50,36 @@ oauth2-proxy \
   --upstream=http://backend-service:8080/
 ```
 
-`--oidc-issuer-url` is sluis's root URL; `--client-id` and `--client-secret` are the row's id and the Secret its
-`secret` names; `--pass-access-token` and `--set-authorization-header` forward the bearer to the backend. Route
-`https://myconsole.example.com` on your gateway to the proxy at `:4180`.
-
-**Expect**: opening the console redirects to the issuer's sign-in and back to `/oauth2/callback`.
-
-**Verify**: the backend receives an `Authorization: Bearer` header that its `identity` verifier accepts
-([Connect a console](console-app.md)).
-
-**Rollback**: route the hostname back to the backend, or remove the route.
+Route `https://myconsole.example.com` and `/oauth2/*` on your gateway to port 4180. The backend receives `Authorization: Bearer` and verifies it with the `identity` verifier ([Connect a console](console-app.md)).
 
 ### 3. Wire sign-out
 
-Two halves, both needed. `/oauth2/sign_out` ends this proxy's session, one application's cookie. The issuer still holds
-the sign-in, so on its own that leaves the next click admitted again with no password. The proxy must redirect to the
-issuer's `end_session`, which ends the sign-in and every session that browser opened. The inner address is
-percent-encoded, or the `&` would end `rd`.
-
-**Run**: point the console's sign-out link at
+Point the console's sign-out link at the proxy with the issuer's `end_session` as `rd`:
 
 ```
 GET /oauth2/sign_out?rd=https%3A%2F%2Fissuer.example.com%2Fend_session%3Fclient_id%3Dmy-console-proxy%26id_token_hint%3D<token>
 ```
 
-**Expect**: the issuer's logout lands back on the `signed_out` address you declared.
+`/oauth2/sign_out` ends only the proxy cookie. The `end_session` redirect ends the issuer sign-in. Percent-encode the inner address, or its `&` ends `rd`.
 
-**Verify**: after sign-out, a click on the console asks for sign-in again.
+## Verify
 
-**Rollback**: none, because it is a link in your console; restore the old link.
 
-## Afterwards
+- Open the console: it redirects to the issuer and back to `/oauth2/callback`.
 
-- Check that a person removed from `requires` is stopped within `ttl_cap` and `--cookie-lifetime`.
-- Pin the proxy image and put it on your own update path.
-- Tell the console's owners that sign-out is two halves and revocation is bounded by the refresh, not instant.
+- Sign out and click the console: it asks for sign-in again.
+
+- Remove a person from `requires`: they are stopped within `ttl_cap` and `--cookie-lifetime`.
+
+## Roll back
+
+Route the hostname back to the backend, then remove the client row.
 
 ## Why not something else
 
-- **Not Envoy Gateway's native OIDC filter**, if you are on Envoy: it runs the code flow, keeps a session in its own
-  cookie, forwards the bearer and refreshes in the background, all from configuration. Use that.
-- **Not a proxy of sluis**: identity-critical code on every request path, for no capability oauth2-proxy lacks
-  ([ADR 0003](../../../decisions/0003-deprecate-access-proxy.md)).
-- **Not sluis as the authorization backend**: it would hold per-user sessions and sit on every console's request path,
-  which is oauth2-proxy rebuilt inside it.
+
+- Envoy Gateway's OIDC filter needs no proxy: use it on Envoy.
+
+- A proxy built into sluis puts identity code on every request path.
+
+The decision is in [ADR 0001](../../../decisions/0001-sessions-and-an-absolute-limit.md).

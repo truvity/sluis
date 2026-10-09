@@ -35,7 +35,7 @@ reader is doing; pick the column that matches. Pages marked *planned* describe w
 - Policy: [turn enforce on](../../guides/sluis/turn-enforce-on.md), [declare a vocabulary](../../guides/sluis/declare-a-vocabulary.md),
   [test the policy](../../guides/sluis/test-the-policy.md), [bind GitHub teams](../../guides/sluis/bind-github-teams.md),
   [bind Slack channels](../../guides/sluis/bind-slack-channels-in-git.md)
-- Connect something: [everything under how-to/connect/](../../guides/sluis/connect/corporate-directory.md): the
+- Connect something: [everything under how-to/connect/](../../guides/sluis/connect/google-workspace.md): the
   corporate directory, GitHub, Slack, clusters, AWS, OpenBao, SSH, PostgreSQL, MCP, gateways, CI
 - Contribute: [extend sluis](../../guides/sluis/extend.md), [add an adapter](../../guides/sluis/add-an-adapter.md),
   [testing](../../guides/sluis/testing.md), [CONTRIBUTING](../../../CONTRIBUTING.md)

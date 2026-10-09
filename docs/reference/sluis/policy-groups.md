@@ -20,7 +20,7 @@ before a field existed keeps meaning what it meant. `job_workflow_ref`
 (`example-org/app/.github/workflows/release.yml@refs/heads/main`) is the workflow file the job is defined in (the called
 file, for a reusable workflow), and `workflow_ref` the file the run started from. Together with `ref` and `event_name`
 they pin a group to one reviewed workflow on one branch. That is the shape a group behind a write grant of a
-[catalogue App](../../guides/sluis/connect/github-app-tokens.md#pinning-a-grant-to-one-workflow) should have.
+[catalogue App](../../guides/sluis/connect/github-app-tokens.md#3-pin-a-grant-to-one-workflow) should have.
 
 `email` and `email_domain` matchers are the escape hatch for the day before any directory group exists, and for a
 population no group describes. `members` is the normal way, because it is the one the directory can confirm and

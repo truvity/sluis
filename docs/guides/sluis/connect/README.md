@@ -1,8 +1,8 @@
 # Connect something
 
-One row per integration: what it connects, the direction, the how-to and, where one exists, the
-[worked example](examples/README.md). Direction is read from sluis: *in* means the thing signs in to or calls
-sluis; *out* means sluis calls it or manages it; *both* means each.
+One row per integration, with its how-to and worked example.
+
+*In* means the thing signs in to or calls sluis. *Out* means sluis calls it or manages it. *Both* means each.
 
 ## People and consoles
 
@@ -14,6 +14,7 @@ sluis; *out* means sluis calls it or manages it; *both* means each.
 | oauth2-proxy | a console behind any other gateway | in | [oauth2-proxy](oauth2-proxy.md) | [example](examples/oidc-oauth2-proxy.md) |
 | Business surface | a test surface for employees | in | [business-surface](business-surface.md) | |
 | MCP server | a resource server and self-described clients | in | [mcp](mcp.md) | [example](examples/oidc-mcp-server.md) |
+| MCP server proxy | a stock MCP server behind a sidecar | in | [mcp-resource-proxy](mcp-resource-proxy.md) | |
 | Argo CD | its own OIDC flow | in | [argocd](argocd.md) | |
 | Kargo | its own OIDC flow and CLI | in | [kargo](kargo.md) | |
 | Generated client secret | a relying party's secret | out | [generate](../let-the-issuer-generate-a-clients-secret.md) | [example](examples/oidc-generated-client-secret.md) |
@@ -35,8 +36,9 @@ sluis; *out* means sluis calls it or manages it; *both* means each.
 | Integration | Connects | Direction | How-to | Example |
 |---|---|---|---|---|
 | OpenBao | certificates for SSH and databases | both | [openbao](openbao.md), [issuer side](openbao-issuer-side.md) | |
-| SSH | people, machines and hosts | in | [ssh](ssh.md) | |
-| PostgreSQL | short-lived client certificates | in | [postgresql](postgresql.md) | |
+| SSH | people and machines | in | [ssh](ssh.md) | |
+| SSH hosts | host certificates from the SSH CA | in | [ssh-hosts](ssh-hosts.md) | |
+| PostgreSQL | short-lived client certificates | in | [postgresql](postgresql.md), [server side](postgresql-server.md) | |
 | R2 credential broker | prefix-scoped object credentials | in | [r2-storage](r2-storage.md) | |
 | Cloudflare tokens and R2 | short-lived tokens and R2 credentials | both | [cloudflare-tokens](../cloudflare-tokens.md) | [R2](examples/cloudflare-r2-credentials.md), [token](examples/cloudflare-api-token.md) |
 
@@ -44,7 +46,7 @@ sluis; *out* means sluis calls it or manages it; *both* means each.
 
 | Integration | Connects | Direction | How-to | Example |
 |---|---|---|---|---|
-| Corporate directory | the people source | out | [corporate-directory](corporate-directory.md) | |
+| Corporate directory | the people source | out | [corporate directory](google-workspace.md) | |
 | Google Workspace | users, groups and domains | out | [google-workspace](google-workspace.md) | |
 | GitHub organisation | teams and runner Apps | out | [github-organisation](github-organisation.md) | [runner Apps](examples/runner-apps.md) |
 | GitHub account links | a person's account | both | [github-account-links](github-account-links.md) | |

@@ -2,8 +2,7 @@
 
 ## Goal
 
-Declare a GitHub App for one automation, create it with two clicks, deliver its key to a consumer that cannot ask the
-issuer (an ExternalSecret with `property:`), and let one pinned workflow mint a narrowed installation token.
+Declare a GitHub App for one automation and create it with two clicks. Deliver its key to a consumer that cannot ask the issuer, using an ExternalSecret with `property:`. Let one pinned workflow mint a narrowed installation token.
 
 ## What you need
 
@@ -44,8 +43,7 @@ groups:
 
 ## The exchange / command
 
-1. Roll the values out. In the console, GitHub page, *Apps* tab, press *Create* on `publisher`; an owner confirms on GitHub
-   and picks the repositories at the install page.
+1. Roll the values out. In the console, GitHub page, *Apps* tab, press *Create* on `publisher`. An owner confirms on GitHub and picks the repositories.
 2. Hand the key to a consumer that cannot ask the issuer. The document is at `external/github/publisher`; an ExternalSecret
    reads one property of it:
 
@@ -89,8 +87,7 @@ The App's page reads *installed*. The consumer's Secret holds the key. The audit
 
 ## Undo
 
-Remove the catalogue entry or press *Disconnect* (it uninstalls the App and forgets the key here; deleting the App on GitHub
-stays the owner's act). Remove the ExternalSecret.
+Remove the catalogue entry or press *Disconnect*, which uninstalls the App and forgets the key. Deleting the App on GitHub stays the owner's act. Remove the ExternalSecret.
 
 Recipes: [a catalogue of GitHub Apps](../github-apps-catalogue.md),
 [mint a GitHub App token](../github-app-tokens.md),

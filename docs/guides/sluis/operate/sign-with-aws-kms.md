@@ -1,98 +1,55 @@
 # Sign with AWS KMS
 
-> **Deprecated.** Direct KMS signing (`signingKey.kms`) logs a warning at start. New installations use the signing ring:
-> sluis generates the key pairs and wraps them under a symmetric key named by `keys.sign`
-> ([signing on AWS](../../../concepts/sluis/signing-on-aws.md#the-sign-key-and-moving-between-signers) says how to move). This page
-> stays for installations that have not moved.
+> **Deprecated.** `signingKey.kms` logs a warning at start. New installations use the signing ring: sluis wraps generated key pairs under a symmetric key named by `keys.sign`. To move, see [signing on AWS](../../../concepts/sluis/signing-on-aws.md#the-sign-key-and-moving-between-signers). For the ring keys, see [configuration](../../../reference/sluis/configuration.md#the-service-document).
 
-## Purpose
-
-Keep the issuer's signing key in AWS KMS (`signingKey.kms`), so the estate's master key is never in a pod, a Secret or a
-backup. For the ring, see `signingKey.kmsWrapped` and `keys.sign` in
-[configuration](../../../reference/sluis/configuration.md#the-service-document).
-
-## Preconditions
-
-- One KMS key per estate, created as `ECC_NIST_P384` with usage `SIGN_VERIFY` and an alias such as `alias/sluis-signing`.
-  For RS256 relying parties (Kargo, EKS's OIDC provider) one `RSA_2048`, `RSA_3072` or `RSA_4096` `SIGN_VERIFY` key more,
-  listed under `signingKey.kms.additional`.
-- The pod's AWS identity: EKS Pod Identity, or IRSA with `serviceAccount.awsIdentity: irsa`
-  ([chart values](../../../reference/sluis/chart-values.md)).
-- The sign-in state secret `issuer/state-secret` ([secrets](../../../reference/sluis/secrets.md#the-names)), because a KMS key has no
-  private bytes to derive the state from.
+Keep the issuer's signing key in AWS KMS so the master key is never in a pod, a Secret or a backup.
 
 ## Before you start
 
-- **`signingKey.kms` is exclusive with `signingKey.file`.** Both is refused at load. In the chart, write
-  `config.signingKey.file: null` to drop the chart's default path, and remove `signingKey.existingSecret` and
-  `signingKey.additional`.
-- **A key of another spec or usage stops the start.**
-- **Without `kms:GetPublicKey` the service refuses to start**, and the log line names the permission and the key. Without
-  `kms:Sign` it starts and fails every token, counted in `access_issuer.kms_signatures{result="error"}`.
-- **An alias is not a key policy resource.** Grant on the key the alias points at, or use a `kms:ResourceAliases` condition
-  if the grant must follow the alias.
-- **Throughput has a ceiling.** Every token is one `kms:Sign` call, so the account's KMS request quota for asymmetric
-  `Sign` (a regional, adjustable quota shared by everything in the account that signs) bounds token throughput.
-- **Preview before every apply, and read the preview.**
+- Create one `ECC_NIST_P384` `SIGN_VERIFY` key with an alias such as `alias/sluis-signing`. For RS256 relying parties (Kargo, EKS's OIDC provider) add one `RSA_2048`, `RSA_3072` or `RSA_4096` `SIGN_VERIFY` key under `signingKey.kms.additional`.
+
+- Give the pod an AWS identity: Pod Identity, or `serviceAccount.awsIdentity: irsa` ([chart values](../../../reference/sluis/chart-values.md)).
+
+- Set the sign-in state secret `issuer/state-secret` ([secrets](../../../reference/sluis/secrets.md#the-names)). A KMS key has no private bytes to derive it from.
+
+- `signingKey.kms` excludes `signingKey.file`. In the chart write `config.signingKey.file: null` and remove `signingKey.existingSecret` and `signingKey.additional`.
+
+- A key of another spec or usage stops the start. Without `kms:GetPublicKey` the start fails naming the permission. Without `kms:Sign` it starts and fails every token, counted in `access_issuer.kms_signatures{result="error"}`.
+
+- Grant on the key, not the alias, or use a `kms:ResourceAliases` condition. Each token is one `kms:Sign` call, so the account's request quota bounds throughput.
 
 ## Steps
 
-### 1. Grant the role
+1. Attach this statement to the service's role, for each key in `signingKey.kms.keys` and `signingKey.kms.additional[].keys`:
 
-**Run** attach this to the role the service runs as, on each key in `signingKey.kms.keys` and in every
-`signingKey.kms.additional[].keys`:
+   ```json
+   {
+     "Effect": "Allow",
+     "Action": ["kms:Sign", "kms:GetPublicKey"],
+     "Resource": ["<the ARN of each key>"]
+   }
+   ```
 
-```json
-{
-  "Effect": "Allow",
-  "Action": ["kms:Sign", "kms:GetPublicKey"],
-  "Resource": ["<the ARN of each key>"]
-}
-```
+2. Configure the keys. List them oldest first: the last one signs.
 
-**Expect** the role to list both actions on each key.
+   ```yaml
+   config:
+     signingKey:
+       file: null
+       kms:
+         keys: [alias/sluis-signing]
+         region: eu-west-1
+         stateSecret: issuer/state-secret
+   ```
 
-**Verify** `aws kms get-public-key --key-id <key>` as that role succeeds.
+   The algorithm is ES384. The start log names each key and its `kid`.
 
-**Rollback**: detach the statement.
+3. To rotate, append a new key to `keys`. It is published at once and signs after `signingKey.activationDelay`. The earlier key stays published for `signingKey.overlap`. The list is reread every `pollInterval`. Never insert a key before one already seen.
 
-### 2. Configure the keys
+## Verify
 
-**Run**
+`aws kms get-public-key --key-id <key>` as the role succeeds. `curl -s https://<issuer>/keys | jq -r '.keys[].kid'` lists the key, a sign-in succeeds and `access_issuer.kms_signatures{result="ok"}` rises. Alert on `result="error"` and `result="throttled"` ([telemetry](../../../reference/sluis/telemetry.md#alerts)).
 
-```yaml
-config:
-  signingKey:
-    file: null
-    kms:
-      keys: [alias/sluis-signing]        # oldest first; the last one signs
-      region: eu-west-1
-      stateSecret: issuer/state-secret
-```
+## Roll back
 
-**Expect** at start the log names each key and its `kid`, the RFC 7638 thumbprint of the public key (the same as a file
-holding that key would have). The algorithm is ES384; each token is a `kms:Sign` of the SHA-384 of the signing input.
-
-**Verify** `curl -s https://<issuer>/keys | jq -r '.keys[].kid'` lists the key; a sign-in succeeds and
-`access_issuer.kms_signatures{result="ok"}` rises. Every signature is also in CloudTrail.
-
-**Rollback**: restore `signingKey.file` and the chart's certificate. Tokens the KMS key signed stop verifying unless it is
-kept as a verify-only key ([cut over](../migrate/cut-over-to-kms-wrapped-signing.md) shows the mechanics).
-
-### 3. Rotate by appending a key
-
-**Run** append a new key to `keys`. It is published at once and signs only after `signingKey.activationDelay`; the earlier
-key stays published for `signingKey.overlap`; the list is re-read every `pollInterval`, which also notices an alias moved
-to another key. Never insert a key before one already seen.
-
-**Expect** both keys in the JWKS, then the new one signing.
-
-**Verify** the `kid`s in `/keys`; `kms_signatures` by `kid` moves to the new key.
-
-**Rollback**: none, because a published key stays published for the overlap. List order is age: only the last key is newly
-adopted, and a key that has retired stays retired while it is listed (remove it when convenient).
-
-## Afterwards
-
-- Watch `access_issuer.kms_signatures{result="throttled"}`: it says the quota is being hit. Request a raise before it is.
-- Raise an alert on `result="error"` ([telemetry](../../../reference/sluis/telemetry.md#alerts)).
+Detach the statement. Restore `signingKey.file` and the chart's certificate; tokens the KMS key signed stop verifying unless it stays as a verify-only key ([cut over](../migrate/cut-over-to-kms-wrapped-signing.md)).

@@ -46,7 +46,7 @@ GenerateDataKey on the key behind it, only under the context `{instance, purpose
 creates no key and no `kms:Sign` grant. The key may be shared with other workloads: the context keeps the ciphertexts
 apart, and the grant is on the key and not on the alias. Letting the library create the key
 (`WrappedSigning`, with its reserved-context key policy) is deprecated: [the policy it wrote](../../reference/sluis/aws-signing-key.md#legacy-wrappedsigning-the-library-creates-the-key)
-is kept for stacks that still use it, and [the move to supplied aliases](../../guides/sluis/migrate/cutover.md#moving-a-stack-from-library-created-keys-to-supplied-ones)
+is kept for stacks that still use it, and [the move to supplied aliases](../../guides/sluis/migrate/supply-your-own-signing-keys.md)
 keeps the key.
 
 **How it works.** For each algorithm (ES384, RS256) the process generates a key pair locally, wraps the private half

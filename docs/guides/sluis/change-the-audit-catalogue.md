@@ -1,53 +1,43 @@
 # Change what the audit trail records
 
-## Purpose
-
-Add or change an audit action without stopping the service at the next start.
-
-## Preconditions
-
-- A checkout of the sluis repository and its devbox (`just`).
+Add or change an audit action without stopping the service at the next start. You need a checkout of the sluis repository and its devbox.
 
 ## Before you start
 
-- **An audit installation keeps every catalogue version it was sent and refuses a different document under a version it
-  already holds.** That stops the service (and the controllers) at start. v1.41.0 and v1.42.0 did exactly this; v1.42.1
-  fixed it. Any change to `internal/audit/catalogue/roster.yaml`, even one new action, is a new `version`.
-- **The catalogue is the document plus its `.json` schemas.** The audit writer refuses to start without every schema the
-  document references (and with one nothing references). A Lambda writer that was given only `roster.yaml` fails each cold
-  start. The release ships both as `sluis-audit-catalogue_<version>.tar.gz`, held to its source by a test; vendor the
-  whole directory.
-- **A name built at run time is invisible to the check.** Every action is spelled once, in `internal/audit/events.go`.
+- An audit installation keeps every catalogue version it was sent and refuses a different document under a version it holds. That stops the service at start. Any change to `internal/audit/catalogue/roster.yaml`, even one new action, needs a new `version`.
 
-## Steps
+- The catalogue is the document plus its `.json` schemas. The writer refuses to start without every schema the document references. A Lambda writer given only the YAML fails each cold start.
 
-### 1. Edit and bump
+- Spell every action once, in `internal/audit/events.go`. A name built at run time is invisible to the check.
 
-**Run** change `internal/audit/catalogue/roster.yaml` and set a new `version` (the current one is the `version` already in that file; bump it from there). Save the
-released document as `internal/audit/catalogue/testdata/released/roster-<version>.yaml`, a copy of the file as shipped.
-**Expect** the diff to hold the document, its schemas, and the fixture.
-**Verify** next step.
-**Rollback**: revert the files.
+## 1. Edit and bump
 
-### 2. Run the gate
+Change `roster.yaml` and set a new `version`. Save the document as shipped:
 
-**Run** `just audit-catalogue`.
-**Expect** it validates the document, fails on an action emitted and not declared (or the reverse), and regenerates
-`frontend/src/auditSentences.ts`; the recipe fails on a diff, so commit the result.
-**Verify** `go test ./internal/audit/...`: `TestAReleasedCatalogueVersionIsNeverChanged` fails if a catalogue carrying a
-released version differs from its fixture.
-**Rollback**: revert.
+```sh
+cp internal/audit/catalogue/roster.yaml internal/audit/catalogue/testdata/released/roster-<version>.yaml
+( cd internal/audit/catalogue/testdata/released && sha256sum roster-<version>.yaml >> SHA256SUMS )
+```
 
-### 3. Roll out
+Register a new data schema file beside `roster.yaml` and add it to the action's `data_schema`. Put no address, name or secret in data.
 
-**Run** release as usual. An installation connected to this release accepts the new version at start; roll the audit
-installation's grants and `workloadIdentity` only if a new source was added.
-**Expect** `audit catalogue registered` in the log.
-**Verify** `the audit installation refused the catalogue` does not appear; if it does, the process ends and the rollout
-stalls with the old pod serving ([check health](operate/check-health.md#2-a-rollout-that-does-not-complete)).
-**Rollback**: roll back the release; the installation keeps the new version and the old one is still accepted.
+## 2. Run the gate
 
-## Afterwards
+```sh
+just audit-catalogue
+go test ./internal/audit/...
+```
 
-- Update [audit actions](../../reference/sluis/audit-actions.md) (generated from the catalogue) and mention the new actions in the
-  release's upgrade page.
+The recipe validates the document, fails on an action emitted and not declared, and regenerates `frontend/src/auditSentences.ts`. Commit the result, because the recipe fails on a diff. The tests fail on a released version that differs from its fixture, a rewritten fixture, and a declared action with no constructor.
+
+## 3. Roll out
+
+Release as usual. Roll the audit installation's grants and `workloadIdentity` only when you add a source. The log shows `audit catalogue registered`. If `the audit installation refused the catalogue` appears, the process ends and the old pod keeps serving ([check health](operate/check-health.md#2-a-rollout-that-does-not-complete)).
+
+The release ships both parts as `sluis-audit-catalogue_<version>.tar.gz`. Vendor the whole directory.
+
+Update [audit actions](../../reference/sluis/audit-actions.md), which is generated from the catalogue, and mention new actions in the release's upgrade page.
+
+## Roll back
+
+Revert the files, or roll back the release. The installation keeps the new version and still accepts the old one.

@@ -1,0 +1,3 @@
+# Pages merged during the docs reduction pass.
+
+guides/sluis/connect/corporate-directory.md: guides/sluis/connect/google-workspace.md

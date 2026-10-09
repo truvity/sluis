@@ -1,18 +1,11 @@
-# Registries and artifacts on top of the profiles
+# Use ECR and CodeArtifact
 
+ECR and CodeArtifact trust the AWS credential that sluis prepares: a profile `<role>@<account>` ([AWS account](aws-account.md)). Everything here is AWS tooling reading those profiles.
 
-ECR and CodeArtifact have no trust relationship of their own with the
-issuer. Both are an AWS credential plus a tool-specific handshake, and
-the credential is what sluis prepared: a profile per granted role,
-named `<role>@<account>`, on a laptop with `sluisctl aws` behind it and in
-a job with a web-identity token file. Everything on this page is AWS's own
-tooling using those profiles. Many registries, many accounts, many
-artifact domains: many profiles and many `--profile` flags.
+## Before you start
 
-## The rule
-
-Grant roles whose only purpose is registry or artifact access, so a job
-or a person who needs to push an image does not also get anything else:
+- Grant roles used only for registry or artifact access.
+- Use one `--profile` per account or domain.
 
 ```yaml
 groups:
@@ -23,10 +16,9 @@ clients:
   aws:444455556666:artifacts-reader: { kind: exchange, requires: [engineer] }
 ```
 
-## ECR
+## ECR in a job
 
-**In a job**, one step per account, the official action with the profile
-selected by environment:
+One step per account, with the profile in the environment:
 
 ```yaml
 - uses: aws-actions/amazon-ecr-login@v2
@@ -37,8 +29,9 @@ selected by environment:
   with: { registries: "444455556666" }
 ```
 
-**On a laptop**, Amazon's credential helper, mapped per registry host so
-`docker push` never sees an expired login:
+## ECR on a laptop
+
+Map Amazon's credential helper per registry host in `~/.docker/config.json`:
 
 ```json
 { "credHelpers": {
@@ -46,14 +39,11 @@ selected by environment:
     "444455556666.dkr.ecr.eu-west-1.amazonaws.com": "ecr-login" } }
 ```
 
-The helper reads the profile in `AWS_PROFILE`; when two registries need
-two roles, set the profile per shell or use the helper's per-registry
-profile mapping. `sluisctl setup` prints this block for the registries
-implied by your granted roles.
+The helper reads `AWS_PROFILE`. When two registries need two roles, set the profile per shell or use the helper's per-registry mapping. `sluisctl setup` prints this block for your granted roles.
 
 ## CodeArtifact
 
-One login per domain and tool, always with `--profile`:
+Log in once per domain and tool, always with `--profile`. Tokens live twelve hours. In a job, run the login after the sluis step. On a laptop, `sluisctl setup` prints the lines for your domains.
 
 | Tool | Command |
 |---|---|
@@ -67,13 +57,6 @@ One login per domain and tool, always with `--profile`:
 | Go | `export GOPROXY=https://aws:$(aws codeartifact get-authorization-token --domain d --domain-owner 444455556666 --query authorizationToken --output text --profile artifacts-reader@444455556666)@d-444455556666.d.codeartifact.eu-west-1.amazonaws.com/go/go-store/` |
 | Maven | the same token as `<password>` for the repository's `<server>` in `settings.xml`, endpoint from `aws codeartifact get-repository-endpoint --format maven` |
 | Gradle | the same token in `gradle.properties` for the repository credentials |
-| generic | `aws codeartifact get-authorization-token` and the repository endpoint from `get-repository-endpoint --format generic` |
+| generic | `aws codeartifact get-authorization-token` and the endpoint from `get-repository-endpoint --format generic` |
 
-Tokens live twelve hours. In a job, run the login after the sluis
-step; on a laptop, `sluisctl setup` prints the exact lines for the
-domains your granted roles reach, and a shell alias per tool is the usual
-way to keep them handy.
-
-## Anything else on AWS
-
-`--profile <role>@<account>`. That is the entire integration.
+For any other AWS service, pass `--profile <role>@<account>`.

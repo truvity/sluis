@@ -108,7 +108,7 @@ the dependency; run it on its own with `just vuln`, the same way
   nothing adds it afterwards. A patch cut only for dependency bumps has no heading. A change
   to `internal/audit/catalogue/roster.yaml` needs a new catalogue `version`
   and its `testdata/released/roster-<version>.yaml` fixture in the same pull
-  request ([extending.md](docs/guides/sluis/extend.md#7-an-audit-action)).
+  request ([extending.md](docs/guides/sluis/change-the-audit-catalogue.md)).
 - **Rebase-merge only.** Branch from `master`, never stack pull requests.
 - **Generated code is committed.** `just generate` rebuilds `gen/` from
   `proto/`; CI does not run buf. A contract change and its generated code

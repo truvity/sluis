@@ -54,6 +54,6 @@ is a `roster.token.exchanged` record.
 Remove the group's matcher (the job then holds nothing) and the client row.
 
 Recipe: [Connect GitHub Actions](../github-actions.md) and
-[Connect an AWS account](../aws-account.md#4-job-side).
+[Connect an AWS account](../aws-account.md#4-set-up-the-job).
 
 Snippet source: `docs/guides/sluis/connect/github-actions.md`; accepted by `sluisctl policy render`.
