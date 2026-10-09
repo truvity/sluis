@@ -12,8 +12,11 @@ import (
 	"time"
 )
 
-// maxBody bounds a call and its answer.
-const maxBody = 1 << 20
+// maxBody bounds what the listener reads of a call: the largest payload any
+// method may take plus the envelope. A method's own bound ([MaxBytes]) is
+// checked by [Server.Dispatch]; this one only stops a body that no method could
+// accept.
+const maxBody = HardMaxBytes + envelopeSlack
 
 // RPCPath is where a module's Service answers calls.
 const RPCPath = "/rpc"
@@ -73,6 +76,11 @@ func (s *Server) Handler(verify Verifier, opts ...HandlerOption) http.Handler {
 		}
 		var req Request
 		if err = json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBody)).Decode(&req); err != nil {
+			var tooBig *http.MaxBytesError
+			if errors.As(err, &tooBig) {
+				writeJSON(w, Response{Error: &Error{Code: CodeBadRequest, Message: "the request is too large"}})
+				return
+			}
 			http.Error(w, "bad request", http.StatusBadRequest)
 			return
 		}
@@ -80,11 +88,15 @@ func (s *Server) Handler(verify Verifier, opts ...HandlerOption) http.Handler {
 		if !mapped {
 			class = ClassOfSubject(subject)
 		}
-		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("Cache-Control", "no-store")
-		_ = json.NewEncoder(w).Encode(s.Dispatch(WithCaller(r.Context(), class), req))
+		writeJSON(w, s.Dispatch(WithCaller(r.Context(), class), req))
 	})
 	return mux
+}
+
+func writeJSON(w http.ResponseWriter, resp Response) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	_ = json.NewEncoder(w).Encode(resp)
 }
 
 // HTTPCaller calls modules' Services.
@@ -95,6 +107,9 @@ type HTTPCaller struct {
 	Audiences map[string]string
 	Token     TokenSource
 	Client    *http.Client
+	// MaxBytes bounds a request payload and a result ([DefaultMaxBytes] when 0);
+	// raise it only for a callee that registered a larger [MaxBytes].
+	MaxBytes int
 }
 
 // Call implements [Caller].
@@ -111,7 +126,16 @@ func (c *HTTPCaller) Call(ctx context.Context, module, method string, payload []
 	if err != nil {
 		return nil, &Error{Code: CodeUnavailable, Message: "no credential for " + module}
 	}
-	body, err := json.Marshal(Request{V: Version, Kind: Kind, Module: module, Method: method, Payload: payload})
+	ctx, envelope, p, err := Begin(ctx, module, method, payload, c.MaxBytes)
+	if err != nil {
+		return nil, err
+	}
+	out, err := c.post(ctx, base, bearer, module, envelope, p.max)
+	return p.Finish(out, err)
+}
+
+func (c *HTTPCaller) post(ctx context.Context, base, bearer, module string, envelope Request, maxBytes int) ([]byte, error) {
+	body, err := json.Marshal(envelope)
 	if err != nil {
 		return nil, err
 	}
@@ -130,9 +154,13 @@ func (c *HTTPCaller) Call(ctx context.Context, module, method string, payload []
 		return nil, fmt.Errorf("%w: module %s: %w", ErrTransport, module, err)
 	}
 	defer func() { _ = res.Body.Close() }()
-	raw, err := io.ReadAll(io.LimitReader(res.Body, maxBody))
+	limit := int64(maxBytes + envelopeSlack)
+	raw, err := io.ReadAll(io.LimitReader(res.Body, limit+1))
 	if err != nil {
 		return nil, fmt.Errorf("%w: module %s: %w", ErrTransport, module, err)
+	}
+	if int64(len(raw)) > limit {
+		return nil, &Error{Code: CodeInternal, Message: "the result is too large"}
 	}
 	if res.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("%w: module %s answered %d", ErrTransport, module, res.StatusCode)
