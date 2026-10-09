@@ -81,7 +81,7 @@ The file holds none. The `OTEL_*` variables configure telemetry. The chart's `te
 
 ### Evidence: the writer's start-up record
 
-`audit.writer.started` carries these as `data` (schema `writer-started.json`, common catalogue 2.1.0). The writer refuses a file that changed between its two reads, before and after validation.
+`audit.writer.started` carries these as `data` (schema `writer-started.json`). The writer refuses a file that changed between its two reads, before and after validation.
 
 | Field | Value |
 |---|---|

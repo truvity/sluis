@@ -9,6 +9,10 @@
 
 - **`just docs-check` fails on the documentation budget.** `hack/check-docs-budget.py --fail` turns the page word limits, the per-directory ceilings in `hack/docs-budget.tsv`, sentence length and the banned phrases into errors, and the hygiene check fails on retired product names outside its allowlist. A list item (`- `, `* `, `1. `) counts as a sentence of its own, so bullets need no blank line between them. The site was cut by tab to fit: see [docs/WRITING.md](docs/WRITING.md).
 
+### Fixed
+
+- **The audit writer starts again on an archive written by v1.74.0-rc.1 or older: the common catalogue is 2.2.0.** v1.74.0-rc.2 and rc.3 changed the common catalogue's `data_schema` URLs (to `https://truvity.github.io/sluis/schemas/audit/v1/common/`) without a new version, so their writers refuse an archive written by rc.1 or by audit v0.11.0 to v0.16.0, which holds the original 2.1.0, and exit with `writer: catalogue audit 2.1.0: writer: the archive holds a different catalogue under this version: catalogue/audit/2.1.0 holds 7830 bytes (sha256 c8e31974…) and this writer has 7872 (…)`. The changed document is now **2.2.0**; a writer on this release registers `catalogue/audit/2.2.0` beside 2.1.0, which is untouched, and the old URLs still resolve. No configuration changes. To stop it recurring, the new package `github.com/truvity/sluis/audit/sdk/catalogue/released` holds every catalogue in the repository (audit's `common.yaml`, sluis's `roster.yaml`, and any added later, found by walking the tree) to the exact bytes of each released version in `testdata/released/` beside it: a document that differs from the record of its version, a version without a record, a rewritten or removed record, and a changed `.json` schema beside the document (now pinned in `SHA256SUMS` as `<stem>-<version>/<file>`) each fail the tests of both the root and the audit module. The roster check compared parsed YAML; it now compares bytes, as the installation does.
+
 ## v1.74.0-rc.3
 
 ### Fixed
