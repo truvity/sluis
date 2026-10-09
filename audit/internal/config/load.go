@@ -353,10 +353,6 @@ func (w *WriterLambda) finish() error {
 	if err := w.Archive.adoptKey(w.Keys); err != nil {
 		return err
 	}
-	if w.Keys.local() && w.Keys.Local.Dir == "" {
-		return errors.New("keys.local with no dir keeps the keys in memory, and every invocation environment would mint " +
-			"its own: the same person would get a different pseudonym in each; use keys.transit")
-	}
 	return nil
 }
 
@@ -392,10 +388,6 @@ func (w *Writer) finish() error {
 		}
 		if err := w.Archive.adoptKey(w.Keys); err != nil {
 			return err
-		}
-		if w.Replicas > 1 && w.Keys.local() && w.Keys.Local.Dir == "" {
-			return errors.New("replicas above 1 with keys held only in memory: each replica would mint its own keys " +
-				"and the same person would get a different pseudonym on each; give keys.local.dir on storage every replica shares")
 		}
 	}
 	return checkDatabase(w.Database)
@@ -637,9 +629,6 @@ func (q *Query) finish() error {
 		if q.Archive == nil {
 			return errors.New("keys turn resolve on, which needs archive: resolve opens what the writer sealed in the archive")
 		}
-		if q.Keys.local() && q.Keys.Local.Dir == "" {
-			return errors.New("resolve needs the writer's key directory: keys.local.dir")
-		}
 	}
 	return checkDatabase(q.Database)
 }
@@ -750,20 +739,9 @@ func (a *Archive) adoptKey(k *Keys) error {
 	return nil
 }
 
-// storage reports whether the keys block is in the storage shape (adapter).
-func (k *Keys) storage() bool { return k != nil && k.Adapter != "" }
-
-// Storage reports whether the keys are named by purpose through the storage
-// port, rather than by the first releases' provider.
-func (k *Keys) Storage() bool { return k.storage() }
-
 func (k *Keys) enabled() bool {
-	if k.storage() {
-		return k.Pseudonym != nil || k.Conceal != nil
-	}
-	return k != nil && k.Provider != "" && k.Provider != "none"
+	return k != nil && (k.Pseudonym != nil || k.Conceal != nil)
 }
-func (k *Keys) local() bool { return k != nil && !k.storage() && k.Provider == "local" }
 
 // check holds a keys block to what the schema's shape cannot say: one shape,
 // and what each adapter needs to reach its keys.
@@ -771,14 +749,8 @@ func (k *Keys) check() error {
 	if k == nil {
 		return nil
 	}
-	legacy := k.Provider != "" || k.Local != nil || k.Transit != nil
-	switch {
-	case k.storage() && legacy:
-		return errors.New("keys names adapter and provider: use the adapter shape (provider is the first releases')")
-	case !k.storage() && !legacy:
-		return errors.New("keys names neither adapter nor provider")
-	case !k.storage():
-		return nil
+	if k.Adapter == "" {
+		return errors.New("keys names no adapter: name kms, transit or local")
 	}
 	if k.Seal == nil && k.Pseudonym == nil && k.Conceal == nil && k.Archive == nil {
 		return errors.New("keys.adapter is set and no purpose is: name seal, pseudonym, conceal or archive")
@@ -827,10 +799,6 @@ func (k *Keys) check() error {
 
 // Enabled reports whether a key provider is named at all.
 func (k *Keys) Enabled() bool { return k.enabled() }
-
-// IsLocal reports whether the provider is the local one, whose directory is
-// the only copy of the keys.
-func (k *Keys) IsLocal() bool { return k.local() }
 
 // checkDatabase refuses what the schema's pattern cannot express: a URL that
 // does not parse, or that names no host and no socket to reach.

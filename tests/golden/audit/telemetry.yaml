@@ -237,10 +237,10 @@ data:
       url: postgres://audit_writer@db.example.test:5432/audit?sslmode=verify-full
     deployment: /etc/audit/deployment.yaml
     keys:
-      local:
-        dir: /var/lib/audit/keys
-        rootFile: /etc/audit/keys/root
-      provider: local
+      adapter: local
+      instance: audit
+      pseudonym: audit-pseudonym
+      rootFile: /etc/audit/keys/root
     replicas: 3
     stream:
       consumer: audit-writer
@@ -484,10 +484,10 @@ data:
         name: audit-exports
     grants: /etc/audit/grants.yaml
     keys:
-      local:
-        dir: /var/lib/audit/keys
-        rootFile: /etc/audit/keys/root
-      provider: local
+      adapter: local
+      instance: audit
+      pseudonym: audit-pseudonym
+      rootFile: /etc/audit/keys/root
     sink:
       tokenFile: /var/run/audit/token
       url: http://audit:8080
@@ -717,7 +717,7 @@ spec:
         app.kubernetes.io/instance: audit
         app.kubernetes.io/component: query
       annotations:
-        checksum/config: c6e0fbd3310725a85d70690f84943c32626e819ca383042b3b37244bf7b0b729
+        checksum/config: b89add342c661cd15e3bbcc0fed01103737b70eafe64181063060552077db385
         checksum/grants: 64a2af7a257e3558f4c717cd5961046d26a7a78787c31965c503d3e1aa5589a9
         # A grant preset turns roles into profiles, so the profiles are part
         # of what a grant means.
@@ -1000,7 +1000,7 @@ spec:
       annotations:
         # A changed configuration must reach a running pod, and a file mounted
         # with subPath is never updated in place, so the pod is replaced.
-        checksum/config: f11c7715af7d82aad72d804d97392350a26d0c87a9819f4c05b9dc8352d77b83
+        checksum/config: cc7fe14fa9df1d5a4db778462675b48dc738cf6c5e977ae5cde351f25286b792
         # Likewise a change to the profile document, hashed whole: it also holds
         # externalIdentifiersAreOpaque, which changes what a profile keeps.
         checksum/deployment: 39c280a6cd7cdaad883bfffe0473bab658a58810358a835e8925fb0d2ec1626e

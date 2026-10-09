@@ -12,17 +12,8 @@ archive:
   lockMode: none
   kmsKey: alias/audit-archive
 signer:
-  transit:
-    key: audit-seal
-    openbao:
-      address: https://openbao.example.test:8200
-      mount: transit
-      namespace: devel
-      caFile: /etc/audit/trust/ca.crt
-      login:
-        mount: jwt-devel
-        role: audit-notary
-        jwtFile: /var/run/openbao/token
+  file:
+    path: /etc/audit/seal/key.pem
 profiles:
   - security
   - billing

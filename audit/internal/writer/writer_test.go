@@ -2,7 +2,6 @@ package writer_test
 
 import (
 	"context"
-	"crypto/rand"
 	"errors"
 	"io"
 	"strings"
@@ -20,6 +19,7 @@ import (
 	"github.com/truvity/sluis/audit/internal/recobj"
 	"github.com/truvity/sluis/audit/internal/writer"
 	"github.com/truvity/sluis/audit/keys"
+	"github.com/truvity/sluis/audit/keys/keystest"
 	"github.com/truvity/sluis/audit/sdk/record"
 	"github.com/truvity/sluis/audit/sdk/sink"
 	"github.com/truvity/sluis/audit/store"
@@ -70,17 +70,9 @@ func buildWith(t *testing.T, p parts) *built {
 	registry := &writer.Registry{}
 	registry.Register(c)
 
-	root := make([]byte, 32)
-	if _, err := rand.Read(root); err != nil {
-		t.Fatal(err)
-	}
 	provider := p.provider
 	if provider == nil {
-		local, err := keys.NewLocal(root, t.TempDir())
-		if err != nil {
-			t.Fatal(err)
-		}
-		t.Cleanup(func() { _ = local.Close() })
+		local := keystest.New(t)
 		provider = local
 	}
 

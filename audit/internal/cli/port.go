@@ -108,9 +108,6 @@ func OpenKeyPort(ctx context.Context, k *config.Keys, secrets *config.Secrets, w
 	for _, f := range with {
 		f(&o)
 	}
-	if !k.Storage() {
-		return nil, "", errors.New("keys: not in the adapter shape")
-	}
 	cfg := skeys.Config{Adapter: k.Adapter, Keys: map[skeys.Purpose]skeys.Entry{}}
 	for p, e := range map[skeys.Purpose]*skeys.Entry{
 		skeys.Seal: k.Seal, skeys.Pseudonym: k.Pseudonym, skeys.Conceal: k.Conceal, skeys.Archive: k.Archive,

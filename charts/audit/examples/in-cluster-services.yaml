@@ -133,10 +133,11 @@ jobs:
         url: http://audit:8080
     # OpenBAO transit instead of KMS, signing with a token from a Secret:
     #   keys: null
-    #   signer:
-    #     transit:
-    #       key: audit-seal
-    #       openbao: {address: http://openbao.secrets.svc:8200, tokenSecret: AUDIT_BAO_TOKEN}
+    #   keys:
+    #     adapter: transit
+    #     instance: audit
+    #     seal: audit-seal
+    #     openbao: {address: http://openbao.secrets.svc:8200, tokenSecret: AUDIT_BAO_TOKEN}
     # with a `secretEnv` entry for AUDIT_BAO_TOKEN.
   verify:
     enabled: true
@@ -171,6 +172,7 @@ jobs:
 # Or in OpenBAO transit, every writer asking the same engine, with a token with
 # the writer's policy in AUDIT_BAO_TOKEN and the query service given one of its own:
 #   keys:
-#     provider: transit
-#     transit:
-#       openbao: {address: http://openbao.secrets.svc:8200, tokenSecret: AUDIT_BAO_TOKEN}
+#     adapter: transit
+#     instance: audit
+#     pseudonym: audit-pseudonym
+#     openbao: {address: http://openbao.secrets.svc:8200, tokenSecret: AUDIT_BAO_TOKEN}

@@ -56,7 +56,7 @@ audit:
 ```
 
 Replace the hosts and Secret names. For R2, set the preset's `endpoint` and give each pod that touches the archive its access key from a Secret.
-For OpenBao transit, replace the notary's `keys` with a `signer.transit` block. The example file shows both.
+For OpenBao transit, set the notary's `keys.adapter` to `transit`. The example file shows both.
 
 ## 3. Install
 

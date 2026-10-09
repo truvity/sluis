@@ -2,7 +2,6 @@ package cli_test
 
 import (
 	"context"
-	"crypto/rand"
 	"errors"
 	"strings"
 	"testing"
@@ -11,23 +10,16 @@ import (
 	"github.com/truvity/sluis/audit/internal/hold"
 	"github.com/truvity/sluis/audit/internal/ulid"
 	"github.com/truvity/sluis/audit/keys"
+	"github.com/truvity/sluis/audit/keys/keystest"
 	auditv1 "github.com/truvity/sluis/audit/sdk/gen/audit/v1"
 	"github.com/truvity/sluis/audit/sdk/sink"
 	"github.com/truvity/sluis/audit/store"
 	"github.com/truvity/sluis/audit/store/storetest"
 )
 
-func destroyer(t *testing.T, into sink.Sink) (cli.KeyDestroy, *storetest.Memory, *keys.Local) {
+func destroyer(t *testing.T, into sink.Sink) (cli.KeyDestroy, *storetest.Memory, *keys.PortProvider) {
 	t.Helper()
-	root := make([]byte, 32)
-	if _, err := rand.Read(root); err != nil {
-		t.Fatal(err)
-	}
-	provider, err := keys.NewLocal(root, t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = provider.Close() })
+	provider := keystest.New(t)
 
 	s := storetest.NewMemory()
 	return cli.KeyDestroy{

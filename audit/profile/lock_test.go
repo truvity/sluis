@@ -1,7 +1,6 @@
 package profile
 
 import (
-	"strings"
 	"testing"
 )
 
@@ -24,15 +23,5 @@ func TestCheckFrameworksLock(t *testing.T) {
 
 	if err := CheckFrameworksLock([]string{"security"}, "weird"); err == nil {
 		t.Fatal("an unknown mode is refused")
-	}
-}
-
-func TestTheOldPresetsKeyIsRefusedByName(t *testing.T) {
-	_, err := ParseDeployment([]byte("apiVersion: " + DeploymentAPIVersion + "\nprofiles:\n  security:\n    presets: [security]\n"))
-	if err == nil || !strings.Contains(err.Error(), "`presets` is now `frameworks`") {
-		t.Fatalf("the old key was not refused by name: %v", err)
-	}
-	if _, err := ParseDeployment([]byte("apiVersion: " + DeploymentAPIVersion + "\nprofiles:\n  security:\n    frameworks: [security]\n")); err != nil {
-		t.Fatalf("the new key was refused: %v", err)
 	}
 }

@@ -70,7 +70,7 @@ Three traps:
 - The library and the zips must be the same release, or the preview fails ([ship a release](../../guides/audit/operate/aws-ship-a-release.md)).
 
 A writer secret, such as an OpenBAO token for pseudonymisation keys, is an SSM SecureString under `/audit/<name>/private/config`
-([store the writer's secrets in SSM](../../guides/audit/operate/aws-store-secrets-in-ssm.md)). A trial with `keys.provider: none`, the default, needs none.
+([store the writer's secrets in SSM](../../guides/audit/operate/aws-store-secrets-in-ssm.md)). A trial with no `keys` block, the default, needs none.
 
 ## 3. Deploy
 

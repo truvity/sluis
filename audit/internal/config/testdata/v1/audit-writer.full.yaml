@@ -26,19 +26,6 @@ database:
   passwordEnv: AUDIT_DATABASE_PASSWORD
   maxConnections: 20
 replicas: 3
-keys:
-  provider: transit
-  transit:
-    prefix: audit
-    openbao:
-      address: https://openbao.example.test:8200
-      mount: transit
-      namespace: devel
-      caFile: /etc/audit/trust/ca.crt
-      login:
-        mount: jwt-devel
-        role: audit-writer
-        jwtFile: /var/run/openbao/token
 forgetIdentities: true
 stream:
   nats:

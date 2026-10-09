@@ -146,10 +146,10 @@ externalIdentifiersAreOpaque: false
 writer:
   config:
     keys:
-      provider: local
-      local:
-        rootFile: /etc/audit/keys/root
-        dir: /var/lib/audit/keys
+      adapter: local
+      instance: audit
+      pseudonym: audit-pseudonym
+      rootFile: /etc/audit/keys/root
   secretMounts:
     - secretName: audit-key-root
       mountPath: /etc/audit/keys
@@ -162,8 +162,8 @@ keysVolume:
 			t.Fatalf("%v\n%s", err, stderr)
 		}
 		assertNoAWS(t, out)
-		if !strings.Contains(out, "provider: local") || !strings.Contains(out, "PersistentVolumeClaim") {
-			t.Error("the local provider's render has neither the provider nor a keys volume")
+		if !strings.Contains(out, "adapter: local") || !strings.Contains(out, "PersistentVolumeClaim") {
+			t.Error("the local adapter's render has neither the adapter nor a keys volume")
 		}
 	})
 }
@@ -176,10 +176,10 @@ externalIdentifiersAreOpaque: false
 writer:
   config:
     keys:
-      provider: local
-      local:
-        rootFile: /etc/audit/keys/root
-        dir: /var/lib/audit/keys
+      adapter: local
+      instance: audit
+      pseudonym: audit-pseudonym
+      rootFile: /etc/audit/keys/root
 keysVolume:
   enabled: true
   accessModes: [ReadWriteOnce]

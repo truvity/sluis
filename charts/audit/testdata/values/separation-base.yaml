@@ -8,14 +8,15 @@ writer:
     deployment: /etc/audit/deployment.yaml
     anonymousWrites: true
     keys:
-      provider: transit
-      transit:
-        openbao:
-          address: https://openbao.example.test:8200
-          login:
-            mount: jwt-devel
-            role: audit-writer
-            jwtFile: /var/run/openbao/token
+      adapter: transit
+      instance: audit
+      pseudonym: audit-pseudonym
+      openbao:
+        address: https://openbao.example.test:8200
+        login:
+          mount: jwt-devel
+          role: audit-writer
+          jwtFile: /var/run/openbao/token
 jobs:
   notary:
     enabled: false

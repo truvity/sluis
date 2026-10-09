@@ -200,10 +200,10 @@ Every refusal is a start-up error naming the key. The grants file has its own, u
 | `forward` with none or several of `nats`, `sqs`, `log`; `consume` with none or both of `nats`, `sqs`; `forward` in a writer |
 | `require: archived` in a receiver; `forward.log` without `require: logged`; `require` on an emitter with no `sink` |
 | A `writer` without `archive` |
-| `keys.provider` `local` without `local`, `transit` without `transit`, or either block beside another provider |
+| `keys` with no `adapter`, or with the removed `provider`, `local` or `transit` keys |
 | An `openbao` with none or several of `login`, `tokenFile`, `tokenSecret` |
 | `secrets` with `root` and source `env`; source `file` or `ssm` with a root that is not an absolute directory or SSM path |
-| A `signer` with none or several of `keyFile`, `kmsKey`, `transit` |
+| A `signer` with none or several of `kms`, `file` |
 | A database URL with a password |
 | A query service with the `postgres` searcher and no `database`, or `s3scan` and no `archive` |
 
@@ -213,8 +213,7 @@ Every refusal is a start-up error naming the key. The grants file has its own, u
 | `forward.sqs.fifo: true` on a URL not ending in `.fifo` | URL and flag disagree |
 | `stream.ackWait` not longer than `roll.interval` | The stream would offer unacknowledged records to another writer |
 | `replicas` above 1 without `database` | In-process deduplication misses a redelivery landing on another replica |
-| `replicas` above 1 with local keys and no `keys.local.dir` | Each replica would mint its own keys and pseudonyms |
-| `keys` on the query service without `archive`, or with the local provider and no `keys.local.dir` | Resolve opens what the writer sealed in the archive |
+| `keys` on the query service without `archive` | Resolve opens what the writer sealed in the archive |
 | A `database.url` that does not parse | Invalid URL |
 | A profile demanding a stricter Object Lock than its preset's bucket gives, or whose preset is not under `presets` | The writer names the profile and preset |
 | A profile name containing `/` | It is a key component |

@@ -155,9 +155,6 @@ const (
 // ParseDeployment reads a deployment document. Unknown keys are refused: a
 // misspelt field in a document that decides retention is not one to ignore.
 func ParseDeployment(raw []byte) (*Deployment, error) {
-	if err := refuseOldKey(raw); err != nil {
-		return nil, err
-	}
 	var d Deployment
 	if err := yaml.UnmarshalStrict(raw, &d); err != nil {
 		return nil, fmt.Errorf("deployment: %w", err)
@@ -372,25 +369,6 @@ func (d *Deployment) Features() Features {
 		f.PseudonymKeys = f.PseudonymKeys || g.PseudonymKeys
 	}
 	return f
-}
-
-// refuseOldKey names the new key to a document that still uses the old one.
-// A profile's framework profiles were listed under `presets:` before the
-// rename; strict parsing would call the key unknown and say nothing of where it
-// went, and "preset" now means something else.
-func refuseOldKey(raw []byte) error {
-	var doc struct {
-		Profiles map[string]map[string]any `json:"profiles"`
-	}
-	if err := yaml.Unmarshal(raw, &doc); err != nil {
-		return nil // the strict parse says what is wrong with it
-	}
-	for name, entry := range doc.Profiles {
-		if _, old := entry["presets"]; old {
-			return fmt.Errorf("deployment: profile %s: the key `presets` is now `frameworks` (the framework profiles it is composed from); rename it", name)
-		}
-	}
-	return nil
 }
 
 // Compose resolves every profile a deployment declares.

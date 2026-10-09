@@ -14,7 +14,6 @@ What a framework profile says, what composing several produces, and what a deplo
 | Files | [`profiles/`](../../../audit/profiles/) |
 | Meta-schema | [`profile.schema.json`](../../../audit/sdk/schemas/profile.schema.json) |
 | Go package | `profile` |
-| Refused key | `presets:` names framework profiles no longer; the message names `frameworks:` |
 | Version-change event | `audit.preset.changed` (target type `preset`); renaming an archived action is a catalogue major version |
 
 ## Composition into a profile

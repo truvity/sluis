@@ -88,7 +88,7 @@ usage:
         pseudonyms can never be recomputed again: this is what erasure means
         here, and it cannot be undone.
 
-  audit key public --key <file>|--kms-key <id>|--transit-key <name> [--thumbprint|--jwks]
+  audit key public --key <file>|--kms-key <id> [--thumbprint|--jwks]
         Print the public half of a signing key: as PEM, as the RFC 7638
         thumbprint a verifier pins (--thumbprint), or as the JWK Set that goes
         in keys/roots.jwks (--jwks).
@@ -632,19 +632,6 @@ func profilesFor(path string) (map[string]*profile.Profile, error) {
 	return d.Compose(frameworks)
 }
 
-// transitOptions names an OpenBAO transit signing key and how to reach it.
-type transitOptions struct {
-	key     *string
-	openbao *cli.OpenBAOFlags
-}
-
-func transitFlags(flags *flag.FlagSet) transitOptions {
-	return transitOptions{
-		key:     flags.String("transit-key", "", "an OpenBAO transit ecdsa-p384 key to sign with"),
-		openbao: cli.NewOpenBAOFlags(flags, nil),
-	}
-}
-
 // given counts the options that were set.
 func given(values ...string) int {
 	n := 0
@@ -656,10 +643,9 @@ func given(values ...string) int {
 	return n
 }
 
-// signerFor is the signer a command was given: a key file, a KMS key or
-// a transit key — the last two keeping the private half out of the archive's
-// reach.
-func signerFor(ctx context.Context, keyFile, keyID, kmsKey, region string, transit transitOptions) (keys.Signer, error) {
+// signerFor is the signer a command was given: a key file or a KMS key — the
+// latter keeping the private half out of the archive's reach.
+func signerFor(ctx context.Context, keyFile, keyID, kmsKey, region string) (keys.Signer, error) {
 	switch {
 	case kmsKey != "":
 		cfg, err := config.LoadDefaultConfig(ctx)
@@ -670,13 +656,6 @@ func signerFor(ctx context.Context, keyFile, keyID, kmsKey, region string, trans
 			cfg.Region = region
 		}
 		return &keys.KMSSigner{Client: kms.NewFromConfig(cfg), Key: kmsKey}, nil
-	case transit.key != nil && *transit.key != "":
-		o := transit.openbao
-		login, token, tokenFile := o.Credentials()
-		return keys.NewTransitSigner(ctx, &keys.TransitSigner{
-			Address: *o.Address, Mount: *o.Mount, Namespace: *o.Namespace, CAFile: *o.CAFile, Key: *transit.key,
-			Login: login, Token: token, TokenFile: tokenFile,
-		})
 	default:
 		return keys.LoadLocalSignerFile(keyID, keyFile)
 	}
@@ -687,21 +666,20 @@ func signerFor(ctx context.Context, keyFile, keyID, kmsKey, region string, trans
 func keyPublic(args []string) error {
 	flags := flag.NewFlagSet("key public", flag.ContinueOnError)
 	var (
-		key     = flags.String("key", "", "PEM private key file")
-		kmsKey  = flags.String("kms-key", "", "an AWS KMS signing key")
-		region  = flags.String("region", env("AWS_REGION", ""), "the region, when it is not in the environment")
-		transit = transitFlags(flags)
-		pin     = flags.Bool("thumbprint", false, "print the RFC 7638 thumbprint, which is what a verifier pins, and not the PEM")
-		jwks    = flags.Bool("jwks", false, "print the key as a JWK Set, the form of keys/roots.jwks, and not the PEM")
+		key    = flags.String("key", "", "PEM private key file")
+		kmsKey = flags.String("kms-key", "", "an AWS KMS signing key")
+		region = flags.String("region", env("AWS_REGION", ""), "the region, when it is not in the environment")
+		pin    = flags.Bool("thumbprint", false, "print the RFC 7638 thumbprint, which is what a verifier pins, and not the PEM")
+		jwks   = flags.Bool("jwks", false, "print the key as a JWK Set, the form of keys/roots.jwks, and not the PEM")
 	)
 	if _, err := parse(flags, args); err != nil {
 		return err
 	}
-	if given(*key, *kmsKey, *transit.key) != 1 {
-		return errors.New("give exactly one of --key, --kms-key and --transit-key")
+	if given(*key, *kmsKey) != 1 {
+		return errors.New("give exactly one of --key and --kms-key")
 	}
 	ctx := context.Background()
-	signer, err := signerFor(ctx, *key, "", *kmsKey, *region, transit)
+	signer, err := signerFor(ctx, *key, "", *kmsKey, *region)
 	if err != nil {
 		return err
 	}
@@ -896,10 +874,9 @@ func keyCmd(args []string) error {
 		by           = flags.String("by", "", "who is destroying it, as this deployment names them")
 		reason       = flags.String("reason", "", "why, recorded with the erasure")
 		writerConfig = flags.String("writer-config", "", "the writer's configuration file: its keys block names the keys, "+
-			"including the storage-shaped one (kms, transit, local adapters); instead of the --key-* flags")
+			"the kms, transit and local adapters")
 		sinkURL = flags.String("sink", "", "the writer the erasure is recorded through")
 	)
-	keyFlags := cli.NewKeyFlags(flags, nil)
 	archiveFlags := cli.NewArchiveFlags(flags, env, cli.Reads)
 	if _, err := parse(flags, args[1:]); err != nil {
 		return err
@@ -909,8 +886,8 @@ func keyCmd(args []string) error {
 		return errors.New("name the archive's bucket with --bucket: the holds are read from it")
 	case *sinkURL == "":
 		return errors.New("give the writer with --sink: an erasure nobody recorded is one nobody can prove was lawful")
-	case *writerConfig == "" && !keyFlags.Configured():
-		return errors.New("name the keys: --writer-config, or --key-root (and --key-dir), or --key-provider transit with --transit-address")
+	case *writerConfig == "":
+		return errors.New("name the keys with --writer-config: its keys block names the adapter and the pseudonym key")
 	}
 
 	ctx := context.Background()
@@ -919,7 +896,7 @@ func keyCmd(args []string) error {
 		return err
 	}
 	var provider keys.Provider
-	if *writerConfig != "" {
+	{
 		cfg, err := auditconfig.LoadWriter(*writerConfig)
 		if err != nil {
 			return err
@@ -943,13 +920,11 @@ func keyCmd(args []string) error {
 		if err != nil {
 			return err
 		}
-	} else if provider, err = keyFlags.Open(ctx); err != nil {
-		return err
 	}
 	if provider == nil {
 		return errors.New(
-			"this needs a key provider: name one with --key-provider, since the default is none " +
-				"and a deployment without keys has nothing to destroy or resolve")
+			"this needs a key provider: name one in the writer configuration's keys block; " +
+				"a deployment without keys has nothing to destroy or resolve")
 	}
 	defer provider.Close() //nolint:errcheck // shutting down
 	common, err := catalogue.Common()

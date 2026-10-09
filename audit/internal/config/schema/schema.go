@@ -248,13 +248,13 @@ func keyEntryDefs() m {
 }
 
 // keysDef is the keys block: the storage port's shape (`adapter` and a key per
-// purpose), or the first releases' pseudonymisation provider (`provider`).
+// purpose).
 func keysDef() m {
 	entry := func(desc string) m { return m{"$ref": "#/$defs/keys/$defs/entry", "description": desc} }
 	return m{
 		"type":                 "object",
 		"additionalProperties": false,
-		"description":          "Where the keys live. Use `adapter` and a key by purpose (seal, pseudonym, conceal, archive), the shape of the storage port. `provider` is the first releases' shape (a pseudonymisation provider), deprecated. Unset, or provider `none`, means no pseudonyms, no key material and no resolve.",
+		"description":          "Where the keys live. Use `adapter` and a key by purpose (seal, pseudonym, conceal, archive), the shape of the storage port. Unset means no pseudonyms, no key material and no resolve.",
 		"$defs":                keyEntryDefs(),
 		"properties": m{
 			"adapter":   m{"enum": []string{"kms", "transit", "local"}, "description": "The key service: `kms` (AWS KMS, keys by alias), `transit` (OpenBAO) or `local` (a root file; development)."},
@@ -270,30 +270,8 @@ func keysDef() m {
 			}),
 			"openbao":  def("openbao"),
 			"rootFile": str("The local adapter's root: a file of 32 bytes."),
-			"provider": m{"enum": []string{"none", "local", "transit"}, "deprecated": true, "description": "Deprecated: use `adapter`. `none`, `local` (a root and a directory) or `transit` (OpenBAO), with a key per tenant and purpose."},
-			"local": obj("Deprecated (with `provider`): the local provider.", m{
-				"rootFile": str("A file holding the 32-byte root the data keys are wrapped under."),
-				"dir":      str("Where the wrapped data keys are kept. They are random, not derived, so this directory is the only copy; unset keeps them in memory, which a trial install may do and nothing else should."),
-			}, "rootFile"),
-			"transit": obj("Deprecated (with `provider`): the transit provider.", m{
-				"prefix":  strDefault("What every key's name starts with: <prefix>.<purpose>.<tenant>.", "audit"),
-				"openbao": def("openbao"),
-			}, "openbao"),
 		},
-		"oneOf": []any{
-			m{"required": []string{"adapter"}, "properties": m{"provider": false, "local": false, "transit": false}},
-			m{"required": []string{"provider"}, "properties": m{
-				"adapter": false, "instance": false, "seal": false, "pseudonym": false, "conceal": false, "archive": false,
-				"state": false, "openbao": false, "rootFile": false}},
-		},
-		"allOf": []any{
-			m{"if": m{"properties": m{"provider": m{"const": "local"}}, "required": []string{"provider"}},
-				"then": m{"required": []string{"local"}, "properties": m{"transit": false}}},
-			m{"if": m{"properties": m{"provider": m{"const": "transit"}}, "required": []string{"provider"}},
-				"then": m{"required": []string{"transit"}, "properties": m{"local": false}}},
-			m{"if": m{"properties": m{"provider": m{"const": "none"}}, "required": []string{"provider"}},
-				"then": m{"properties": m{"local": false, "transit": false}}},
-		},
+		"required": []string{"adapter"},
 	}
 }
 
@@ -571,23 +549,18 @@ func signer() m {
 	return m{
 		"type":                 "object",
 		"additionalProperties": false,
-		"description":          "The key seals are signed with, a P-384 key (ES384). The private half should never be on the notary's disk: a managed key (`kms`, `transit`) keeps it where the writer's role cannot reach it, which a `file` cannot.",
+		"description":          "The key seals are signed with, a P-384 key (ES384). The private half should never be on the notary's disk: a managed key (`kms`) keeps it where the writer's role cannot reach it, which a `file` cannot.",
 		"properties": m{
 			"kms": obj("An AWS KMS key: ECC_NIST_P384, SIGN_VERIFY, signing ECDSA_SHA_384. The credentials are the SDK's ambient ones: in a cluster, the notary's Pod Identity or IRSA role, which is not the writer's.", m{
 				"key":    str("The key's ARN, ID or alias."),
 				"region": str("The key's region, when it is not the SDK's."),
 			}, "key"),
-			"transit": obj("An OpenBAO transit key of type ecdsa-p384.", m{
-				"key":     str("The transit key's name."),
-				"openbao": def("openbao"),
-			}, "key", "openbao"),
 			"file": obj("A P-384 private key in a PEM file (PKCS#8 or SEC 1), for development.", m{
 				"path": str("The file."),
 			}, "path"),
 		},
 		"oneOf": []any{
 			m{"required": []string{"kms"}},
-			m{"required": []string{"transit"}},
 			m{"required": []string{"file"}},
 		},
 	}

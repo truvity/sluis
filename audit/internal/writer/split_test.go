@@ -2,7 +2,6 @@ package writer_test
 
 import (
 	"context"
-	"crypto/rand"
 	"strings"
 	"testing"
 
@@ -13,6 +12,7 @@ import (
 
 	"github.com/truvity/sluis/audit/internal/writer"
 	"github.com/truvity/sluis/audit/keys"
+	"github.com/truvity/sluis/audit/keys/keystest"
 	"github.com/truvity/sluis/audit/profile"
 	"github.com/truvity/sluis/audit/sdk/catalogue"
 	"github.com/truvity/sluis/audit/sdk/record"
@@ -119,15 +119,7 @@ func profiles(t *testing.T) map[string]*profile.Profile {
 
 func splitter(t *testing.T) *writer.Splitter {
 	t.Helper()
-	root := make([]byte, 32)
-	if _, err := rand.Read(root); err != nil {
-		t.Fatal(err)
-	}
-	provider, err := keys.NewLocal(root, t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = provider.Close() })
+	provider := keystest.New(t)
 	return &writer.Splitter{Profiles: profiles(t), Keys: provider}
 }
 

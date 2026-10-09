@@ -4,11 +4,11 @@ Crypto-shred a tenant's pseudonyms for the purposes not under a legal duty, when
 
 ## Before you start
 
-- The installation needs a key provider. With `keys.provider: none` (the default) there is nothing to destroy: the application erases the end user in its own database and the archive's opaque identifier then resolves to nobody ([0055](../../../decisions/0055-no-pseudonymisation-keys-by-default.md)).
+- The installation needs a key provider. With no `keys` block (the default) there is nothing to destroy: the application erases the end user in its own database and the archive's opaque identifier then resolves to nobody ([0055](../../../decisions/0055-no-pseudonymisation-keys-by-default.md)).
 
-- Act as a person allowed to erase. Under `transit`, a human role whose policy reaches `transit/keys/<prefix>.*`; the writer's cannot. Under the storage port (`keys.adapter`) `kms` needs delete on the state store's objects under the wrapped-key prefix.
+- Act as a person allowed to erase. Under the storage port (`keys.adapter`) `kms` needs delete on the state store's objects under the wrapped-key prefix.
 
-- The port erases on `kms` and, for tests, `local`. The port's `transit` adapter has one key for the installation, so `audit key destroy` refuses with "operation not supported" and destroys nothing. Put the `pseudonym` purpose on `kms`, or use `--key-provider transit`, which keeps a key per tenant.
+- The port erases on `kms` and, for tests, `local`. The port's `transit` adapter has one key for the installation, so `audit key destroy` refuses with "operation not supported" and destroys nothing. Put the `pseudonym` purpose on `kms`.
 
 - You need a writer to record through (`--sink`).
 
@@ -33,9 +33,7 @@ Crypto-shred a tenant's pseudonyms for the purposes not under a legal duty, when
    ```
    audit key destroy --tenant <id> --purpose <p> --by <who> --reason <why> \
        --bucket <b> --sink <writer> \
-       --writer-config <writer.yaml>           # the storage port: the keys block of the writer's own configuration
-       # or: --key-provider transit            # BAO_ADDR, BAO_NAMESPACE, BAO_TOKEN from your shell
-       # or: --key-root <file> --key-dir <dir> # the local provider
+       --writer-config <writer.yaml>           # the keys block of the writer's own configuration
    ```
 
    With `--writer-config` the command opens the writer's keys and calls the port's `Key.Destroy`. It deletes the tenant's secret with all versions and leaves a tombstone, so a later pseudonym is refused with "destroyed". Running it again succeeds.

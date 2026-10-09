@@ -2,7 +2,6 @@ package writer_test
 
 import (
 	"context"
-	"crypto/rand"
 	"strings"
 	"testing"
 
@@ -10,7 +9,7 @@ import (
 
 	"github.com/truvity/sluis/audit/internal/pgtest"
 	"github.com/truvity/sluis/audit/internal/recobj"
-	"github.com/truvity/sluis/audit/keys"
+	"github.com/truvity/sluis/audit/keys/keystest"
 	"github.com/truvity/sluis/audit/sdk/catalogue"
 	auditv1 "github.com/truvity/sluis/audit/sdk/gen/audit/v1"
 	"github.com/truvity/sluis/audit/sdk/record"
@@ -27,17 +26,9 @@ func TestReplicasShareTheDatabaseAndItsKeyDirectory(t *testing.T) {
 	pool := pgtest.Open(t)
 	ctx := context.Background()
 	archive := storetest.NewMemory()
-	root := make([]byte, 32)
-	if _, err := rand.Read(root); err != nil {
-		t.Fatal(err)
-	}
 	dir := t.TempDir()
 	open := func(instance, keyDir string) (*writer.Writer, error) {
-		provider, err := keys.NewLocal(root, keyDir)
-		if err != nil {
-			t.Fatal(err)
-		}
-		t.Cleanup(func() { _ = provider.Close() })
+		provider := keystest.New(t)
 		return writer.Open(ctx, writer.Config{
 			Archive: archive, Profiles: profiles(t), Keys: provider,
 			Database: pool, Replicas: 2, Instance: instance, Self: "workload:test",

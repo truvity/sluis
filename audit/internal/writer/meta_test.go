@@ -2,14 +2,13 @@ package writer_test
 
 import (
 	"context"
-	"crypto/rand"
 	"encoding/json"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/truvity/sluis/audit/internal/writer"
-	"github.com/truvity/sluis/audit/keys"
+	"github.com/truvity/sluis/audit/keys/keystest"
 	"github.com/truvity/sluis/audit/sdk/catalogue"
 	"github.com/truvity/sluis/audit/sdk/record"
 	"github.com/truvity/sluis/audit/sdk/sink"
@@ -45,15 +44,7 @@ func buildReportingWith(t *testing.T, evidence writer.Evidence) *reporting {
 	registry.Register(wallet)
 	registry.Register(common)
 
-	root := make([]byte, 32)
-	if _, err := rand.Read(root); err != nil {
-		t.Fatal(err)
-	}
-	provider, err := keys.NewLocal(root, t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = provider.Close() })
+	provider := keystest.New(t)
 
 	s := storetest.NewMemory()
 	at := day(t, "2026-09-17T10:30:00Z")

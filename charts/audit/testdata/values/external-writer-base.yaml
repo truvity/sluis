@@ -114,16 +114,17 @@ jobs:
         sqs:
           queueUrl: https://sqs.eu-west-1.amazonaws.com/ACCOUNT/audit-ingest.fifo
           region: eu-west-1
-      signer:
-        transit:
-          key: audit-seal
-          openbao:
-            address: https://openbao.example:8200
-            caFile: /etc/audit/trust/ca.crt
-            login:
-              mount: jwt-kubernetes
-              role: audit-notary
-              jwtFile: /var/run/openbao/token
+      keys:
+        adapter: transit
+        instance: audit
+        seal: audit-seal
+        openbao:
+          address: https://openbao.example:8200
+          caFile: /etc/audit/trust/ca.crt
+          login:
+            mount: jwt-kubernetes
+            role: audit-notary
+            jwtFile: /var/run/openbao/token
     tokens:
       - audience: openbao
         mountPath: /var/run/openbao

@@ -147,7 +147,7 @@ A grant's window narrows a wider request. 64-bit integers (`count`, `line`, `rec
 | Rule | Detail |
 |---|---|
 | No key provider | `unimplemented`. This is the default ([0055](../../decisions/0055-no-pseudonymisation-keys-by-default.md)) |
-| Offered when | The service has the keys: `keys` and `archive` in `audit-query`'s configuration (local provider with `keys.local.rootFile` and `.dir`, or `transit` with a login that may decrypt) |
+| Offered when | The service has the keys: `keys` and `archive` in `audit-query`'s configuration (a `local` adapter with `keys.rootFile`, or `transit` with a login that may decrypt) |
 | Permission | The `resolve` operation on the profile, from an explicit rule only. No read grant or group name implies it. The tenant must be one the grant covers |
 | Audit | `audit.pseudonym.resolved` is recorded and confirmed before the identity returns. If the trail cannot take it, nothing resolves. It names the pseudonym and the rule, never the identity |
 | Scope | Only actor and subject pseudonyms. The writer seals each identifier under the tenant's key (`identity/` in the archive) |

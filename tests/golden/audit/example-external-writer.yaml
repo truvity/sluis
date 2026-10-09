@@ -111,17 +111,18 @@ data:
   config.yaml: |
     apiVersion: audit.truvity.github.io/audit-notary/v2
     deployment: /etc/audit/deployment.yaml
+    keys:
+      adapter: transit
+      instance: audit
+      openbao:
+        address: https://openbao.example:8200
+        caFile: /etc/audit/trust/ca.crt
+        login:
+          jwtFile: /var/run/openbao/token
+          mount: jwt-kubernetes
+          role: audit-notary
+      seal: audit-seal
     require: queued
-    signer:
-      transit:
-        key: audit-seal
-        openbao:
-          address: https://openbao.example:8200
-          caFile: /etc/audit/trust/ca.crt
-          login:
-            jwtFile: /var/run/openbao/token
-            mount: jwt-kubernetes
-            role: audit-notary
     sink:
       sqs:
         queueUrl: https://sqs.eu-west-1.amazonaws.com/ACCOUNT/audit-ingest.fifo
@@ -496,7 +497,7 @@ spec:
             app.kubernetes.io/name: audit
             app.kubernetes.io/instance: audit
           annotations:
-            checksum/config: caa0ff546af7503a093cdf3c980dfe18909a6ea3fca0deaa5744fa72f5c15b4e
+            checksum/config: 0659324279dea95e4b033600d84fc71e5b2186689eaa97757ce45664b2800051
             checksum/deployment: b670c40113793a993731c3f110596c8dac76fc4993c85b23816db743c4118625
         spec:
           restartPolicy: OnFailure

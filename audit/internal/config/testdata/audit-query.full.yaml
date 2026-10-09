@@ -29,8 +29,8 @@ exports:
   expiry: 168h0m0s
   linkValid: 1h0m0s
 keys:
-  provider: local
-  local:
-    rootFile: /etc/audit/keys/root
-    dir: /var/lib/audit/keys
+  adapter: local
+  instance: audit
+  pseudonym: audit-pseudonym
+  rootFile: /etc/audit/keys/root
 require: queued

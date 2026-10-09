@@ -19,7 +19,7 @@ These names are vocabulary for choosing a deployment. They are not chart options
 | `aws-serverless` | writer and notary Lambdas, S3, DynamoDB dedupe | `full` (lock on) or `lite` | [AWS library](../../reference/audit/aws-pulumi-library.md) |
 | `aws-eks` | the chart on EKS, Pod Identity, S3, notary job on KMS | `full` | chart, [direct](direct-mode.md) or [stream](stream-mode.md) |
 | `aws-hybrid` | Lambdas for ingest and notary; observe and query on Kubernetes with IRSA | `full` | AWS library plus chart with `writer.enabled: false` |
-| `k8s-openbao` | the chart on any cluster; seals on OpenBAO Transit; S3 or compatible | `full` with a lock, else `lite` | chart (`jobs.notary` with `signer.transit`) |
+| `k8s-openbao` | the chart on any cluster; seals on OpenBAO Transit; S3 or compatible | `full` with a lock, else `lite` | chart (`jobs.notary` with `keys.adapter: transit` and `keys.seal`) |
 | `in-cluster` | the chart with NATS, PostgreSQL and Kubernetes Secrets; archive on S3 or R2 | `full` with a lock, else `lite` | [chart in the cluster](../../get-started/audit/in-cluster.md) |
 | `k8s-minimal` | the chart, S3-compatible store, no lock, no notary | `lite` | chart |
 | `server` | the binaries on a host, a local seal key | `lite` | [direct](direct-mode.md) |
@@ -40,7 +40,7 @@ A `lite` estate runs `aws-hybrid` with the `k8s-openbao` notary. The writer Lamb
 |---|---|---|---|
 | Writer on Lambda, SQS, DynamoDB dedupe | implemented | implemented | not applicable |
 | Notary on Lambda with a KMS key | implemented | implemented | not applicable |
-| Notary as a CronJob on OpenBAO Transit | implemented (`keys.TransitSigner`) | `Notary.Disabled`, `ArchiveWriter` | implemented (`jobs.notary`, `signer.transit`; golden `transit`) |
+| Notary as a CronJob on OpenBAO Transit | implemented (`keys.PortSigner` over the transit adapter) | `Notary.Disabled`, `ArchiveWriter` | implemented (`jobs.notary`, `keys.adapter: transit`; golden `transit`) |
 | Notary with a local key | implemented (`signer.file`) | on request | implemented |
 | Archive without a lock | implemented (`lockMode: none`) | implemented (`NONE`) | implemented |
 | Lock in GOVERNANCE, then COMPLIANCE | implemented | implemented | not applicable (the bucket's) |

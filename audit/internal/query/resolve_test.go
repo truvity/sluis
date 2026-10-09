@@ -2,13 +2,13 @@ package query_test
 
 import (
 	"context"
-	"crypto/rand"
 	"errors"
 	"testing"
 
 	"github.com/truvity/sluis/audit/internal/identity"
 	"github.com/truvity/sluis/audit/internal/query"
 	"github.com/truvity/sluis/audit/keys"
+	"github.com/truvity/sluis/audit/keys/keystest"
 	"github.com/truvity/sluis/audit/sdk/auth"
 	"github.com/truvity/sluis/audit/sdk/catalogue"
 	auditv1 "github.com/truvity/sluis/audit/sdk/gen/audit/v1"
@@ -18,16 +18,9 @@ import (
 
 // resolving builds a service that can resolve, with one person's identity kept
 // under acme's security key, the pseudonym for it, and the keys.
-func resolving(t *testing.T, g auth.Grant, to sink.Sink) (*query.Service, string, *keys.Local) {
+func resolving(t *testing.T, g auth.Grant, to sink.Sink) (*query.Service, string, *keys.PortProvider) {
 	t.Helper()
-	root := make([]byte, 32)
-	if _, err := rand.Read(root); err != nil {
-		t.Fatal(err)
-	}
-	provider, err := keys.NewLocal(root, t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
+	provider := keystest.New(t)
 	ctx := context.Background()
 	pseudonym, err := provider.Pseudonym(ctx, "acme", "security", "alice")
 	if err != nil {
