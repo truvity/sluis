@@ -4,7 +4,6 @@ package server
 import (
 	"context"
 	"errors"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -340,7 +339,7 @@ func TestWhoamiSaysWhetherTheConsoleHasACloudflarePage(t *testing.T) {
 		if on {
 			console.deps.Cloudflare = newFakeSTS()
 		}
-		s := &ConsoleServer{console: console, log: slog.New(slog.NewTextHandler(io.Discard, nil))}
+		s := &ConsoleServer{console: console, log: slog.New(slog.DiscardHandler)}
 		r := httptest.NewRequest(http.MethodGet, "/.access/whoami", nil).WithContext(asRole(access.RoleNone))
 		w := httptest.NewRecorder()
 		s.whoami(w, r)

@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sort"
 	"time"
 
@@ -15,7 +16,7 @@ import (
 	"github.com/truvity/sluis/internal/audit"
 	"github.com/truvity/sluis/internal/cloudflare"
 	"github.com/truvity/sluis/internal/cloudflare/minter"
-	"github.com/truvity/sluis/internal/logsafe"
+	"github.com/truvity/sluis/storage/logattr"
 )
 
 // CloudflareSTS is the minter of Cloudflare credentials, as the console uses
@@ -91,7 +92,7 @@ func prototypeOf(id string, err error) *directoryrosterv1.CloudflarePrototype {
 		return out
 	}
 	out.Status = prototypeUnreachable
-	out.Detail = logsafe.Error(err)
+	out.Detail = logattr.Error(err)
 	return out
 }
 
@@ -136,12 +137,12 @@ func (c *Console) presetView(ctx context.Context, sts CloudflareSTS, info minter
 	}
 	live, lerr := sts.Live(ctx, info.Name)
 	if lerr != nil {
-		out.LiveError = logsafe.Error(lerr)
+		out.LiveError = logattr.Error(lerr)
 	}
 	stored, serr := sts.Stored(ctx, info.Name)
 	switch {
 	case serr != nil:
-		out.Stored = &directoryrosterv1.CloudflareStored{Error: logsafe.Error(serr)}
+		out.Stored = &directoryrosterv1.CloudflareStored{Error: logattr.Error(serr)}
 	case stored.Present:
 		out.Stored = &directoryrosterv1.CloudflareStored{
 			Present: true, TokenId: stored.AccessKeyID, MintedAt: stamp(stored.MintedAt), ExpiresOn: stamp(stored.ExpiresOn),
@@ -193,7 +194,7 @@ func (c *Console) RotateCloudflarePreset(
 	if err != nil {
 		return nil, cloudflareError(err)
 	}
-	c.log().InfoContext(ctx, "a Cloudflare preset was rotated from the console", "preset", logsafe.Value(req.Msg.GetPreset()), "by", logsafe.Value(id.Who()))
+	c.log().InfoContext(ctx, "a Cloudflare preset was rotated from the console", slog.String("preset", logattr.Safe(req.Msg.GetPreset())), slog.String("by", logattr.Safe(id.Who())))
 	return connect.NewResponse(&directoryrosterv1.RotateCloudflarePresetResponse{
 		TokenId: minted.TokenID, ExpiresOn: stamp(minted.ExpiresOn),
 	}), nil

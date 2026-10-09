@@ -59,13 +59,13 @@ func (a *App) runCloudflare(ctx context.Context) {
 	// sign-in, and the mint refuses the same prototype every time. A function
 	// does not do this at each cold start.
 	for preset, err := range a.cloudflare.Check(ctx) {
-		a.log.WarnContext(ctx, "a Cloudflare preset's prototype is not usable", "preset", preset, "error", err)
+		a.log.WarnContext(ctx, "a Cloudflare preset's prototype is not usable", slog.String("preset", preset), slog.Any("error", err))
 	}
 	t := time.NewTicker(cloudflareInterval)
 	defer t.Stop()
 	for {
 		if res := a.cloudflare.Tick(ctx); res.Failed() > 0 {
-			a.log.WarnContext(ctx, "some Cloudflare presets did not rotate; the next tick retries", "failed", res.Failed())
+			a.log.WarnContext(ctx, "some Cloudflare presets did not rotate; the next tick retries", slog.Int("failed", res.Failed()))
 		}
 		select {
 		case <-ctx.Done():

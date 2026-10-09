@@ -4,7 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
+
+	"github.com/truvity/sluis/storage/logattr"
 
 	"github.com/truvity/sluis/internal/audit"
 	"github.com/truvity/sluis/internal/cloudflare"
@@ -137,7 +140,7 @@ func (m *Minter) rotateNow(ctx context.Context, preset string, p config.Cloudfla
 	}
 	meters.lastRotationAt(ctx, preset, now)
 	if _, err = m.sweep(ctx, preset, p, minted.TokenID, now); err != nil {
-		m.log.WarnContext(ctx, "the sweep after a rotation failed; the next tick retries", "preset", preset, "error", err)
+		m.log.WarnContext(ctx, "the sweep after a rotation failed; the next tick retries", slog.String("preset", preset), logattr.SafeError("error", err))
 	}
 	return minted, nil
 }

@@ -7,9 +7,10 @@ import (
 	"fmt"
 	"log/slog"
 	"sort"
-	"strings"
 	"sync"
 	"time"
+
+	"github.com/truvity/sluis/storage/logattr"
 
 	"github.com/truvity/sluis/audit/sdk/record"
 	"github.com/truvity/sluis/internal/audit"
@@ -318,7 +319,7 @@ func (m *Minter) mint(ctx context.Context, preset string, p config.CloudflarePre
 		dctx := context.WithoutCancel(ctx)
 		if derr := api.DeleteToken(dctx, created.ID); derr != nil && !errors.Is(derr, cloudflare.ErrNotFound) {
 			m.log.WarnContext(ctx, "a minted token could not be recorded and could not be deleted",
-				slog.String("preset", oneLine(preset)), slog.String("token", created.ID), slog.Any("error", derr))
+				logattr.SafeString("preset", preset), slog.String("token", created.ID), logattr.SafeError("error", derr))
 		}
 		return nil, &storeError{err: fmt.Errorf("record the minted token: %w", err)}
 	}
@@ -465,7 +466,7 @@ func (m *Minter) fail(ctx context.Context, actor audit.Actor, preset, variant st
 		meters.prototypeRefused(ctx, preset, reason)
 	}
 	m.log.WarnContext(ctx, "a Cloudflare token was not minted",
-		slog.String("preset", oneLine(preset)), slog.String("variant", variant), slog.String("reason", reason), slog.Any("error", err))
+		logattr.SafeString("preset", preset), slog.String("variant", variant), slog.String("reason", reason), logattr.SafeError("error", err))
 }
 
 func (c Config) record(ctx context.Context, r *record.Record) {
@@ -479,11 +480,4 @@ func (m *Minter) sortedPresets() []string {
 	names := m.cfg.Cloudflare.PresetNames()
 	sort.Strings(names)
 	return names
-}
-
-// oneLine is a value from a caller made safe for a log line: a preset name an
-// on-demand caller sent reaches the log before or without matching a
-// configured preset, and a line break in it must not start a forged entry.
-func oneLine(s string) string {
-	return strings.ReplaceAll(strings.ReplaceAll(s, "\n", ""), "\r", "")
 }
