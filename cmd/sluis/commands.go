@@ -92,7 +92,7 @@ func newApp(out io.Writer) *cli.Command {
 			legacy("serve", "the one process: the issuer, the directory hub and the console, and the controllers the document names", serveRun, out),
 			legacy("controller", "(deprecated) a controller alone: github or slack", controllerCmd, out),
 			legacy("tick", "one tick, once: github or slack, then the target", tickCmd, out),
-			legacy("migrate", "copy the State from one storage to another: --from <config> --to <config>", func(o io.Writer, a []string) error { return migrateCmd(o, a) }, out),
+			legacy("migrate", "copy the State from one storage to another: --from <config> --to <config>", migrateCmd, out),
 			{
 				Name:  "version",
 				Usage: "print the version",
