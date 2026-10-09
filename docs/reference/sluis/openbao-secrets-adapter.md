@@ -1,10 +1,6 @@
-# The OpenBao Secrets adapter
+# OpenBao Secrets adapter
 
-`adapters.secrets: {adapter: openbao}` keeps the Secrets port (the credentials sluis writes and reads back, and the
-exports) in an OpenBao KV version 2 mount, in the layout of [SSM v3](secrets.md#ssm-layout-v3). It needs no
-`platform.openbao` answer. The configuration secrets can stay where they are (`secrets.source: file`, the chart
-projecting them): the source delivers the inputs, the adapter holds what sluis writes. The adapter's place among the
-others is [adapters](adapters.md); the policy it needs is at the end of this page. Source: `internal/port/openbao`.
+`adapters.secrets: {adapter: openbao}` keeps the Secrets port in an OpenBao KV version 2 mount, in the layout of [SSM v3](secrets.md#ssm-layout-v3). It needs no `platform.openbao` answer. Source: `internal/port/openbao`. The other adapters are listed in [adapters](adapters.md).
 
 ## Settings
 
@@ -28,18 +24,19 @@ adapters:
 
 | Setting | Meaning |
 |---|---|
-| `address` | the OpenBao, `https://host[:port]`, no path. **https only**: a token and a login JWT cross the connection, and a redirect is never followed |
-| `caFile` | PEM authorities the server's certificate is verified against, instead of the system's. TLS verification is always on: there is no insecure flag |
-| `namespace` | the OpenBao namespace the secrets live in; empty is the root namespace |
-| `mount` | the KV version 2 mount; `kv` |
-| `root` | required, no default: the installation's key hierarchy under the mount |
-| `auth.method`, `.mount`, `.role` | the login: `POST auth/<mount>/login {role, jwt}`; the token it returns is kept until 80% of its lease has passed, per namespace |
-| `auth.tokenFile` | the JWT; `jwt` requires it, `kubernetes` defaults to the pod's own token |
+| `address` | `https://host[:port]`, no path. https only, redirects are not followed |
+| `caFile` | PEM authorities that verify the server. TLS verification is always on |
+| `namespace` | OpenBao namespace; empty is the root namespace |
+| `mount` | KV v2 mount, default `kv` |
+| `root` | Required. Key hierarchy of the installation under the mount |
+| `auth.method`, `.mount`, `.role` | Login `POST auth/<mount>/login {role, jwt}`. The token is kept per namespace until 80% of its lease has passed |
+| `auth.tokenFile` | The JWT. Required for `jwt`; `kubernetes` defaults to the pod's token |
 
-## The root and the layout
+`secrets.source` stays `file`: the source delivers inputs, the adapter holds what sluis writes. `secrets.root` is unused by this adapter.
 
-OpenBao namespaces already separate installations, so the recommendation is root `sluis` in the installation's own
-namespace: namespace `staging`, mount `kv`, and
+## Layout
+
+With namespace `staging`, mount `kv` and root `sluis`:
 
 ```text
 kv/sluis/private/config/<name>                       what an operator seeds (read only if used)
@@ -47,20 +44,19 @@ kv/sluis/private/credentials/<kind>/<id>/<ref>       what sluis writes and reads
 kv/sluis/export/<path>                               what sluis copies out, for consumers
 ```
 
-`sluis/<instance>` is the option for an OpenBao without a namespace per installation (`kv/sluis/acme/export/...`).
-Either way `private` and `export` are reserved: a root with such a segment is refused at start. `secrets.root` is not used
-by this adapter (with `source: file` it is a directory).
+Use `sluis/<instance>` as the root when the OpenBao has no namespace per installation. A root with a `private` or `export` segment is refused at start. On layout v4 the same grants apply to `internal/` and `external/`.
 
 ## Values
 
-A secret is one KV key with one field, `value` (text) or `value_b64` (bytes that are not UTF-8), so
-`bao kv put kv/sluis/private/config/<name> value=...` seeds one. A JSON object under `export/` (what layout v3's exports wrote) is stored as the properties themselves, one field
-each; `Get` puts the object back together. `PutIfVersion` is KV's check-and-set, atomic on the server. The mount must not set `cas_required`, or
-unconditional writes are refused. A value is never logged, and an error names the operation, the path and the status only.
+- A secret is one KV key with one field: `value` (text) or `value_b64` (bytes that are not UTF-8).
+- Seed one with `bao kv put kv/sluis/private/config/<name> value=...`.
+- A JSON object under `export/` is stored as one field per property.
+- `PutIfVersion` is KV check-and-set. The mount must not set `cas_required`.
+- Errors name the operation, path and status. Values are never logged.
 
-## The policy it needs
+## Policy
 
-Least privilege, with root `sluis` and mount `kv`, in the namespace:
+Least privilege for root `sluis` and mount `kv`, in the namespace. A consumer on layout v4 gets `read` on its own `kv/data/sluis/external/<kind>/<id>` only.
 
 ```hcl
 # what sluis writes and reads back
@@ -79,20 +75,9 @@ path "kv/metadata/sluis/export/" { capabilities = ["list"] }
 path "kv/data/sluis/private/config/*" { capabilities = ["read"] }
 ```
 
-`delete` and `list` on the
-metadata are for `Delete` and `List`, and may be left out when nothing deletes or lists. On layout v4 the same grants are on `internal/` and `external/`, and a consumer gets `read` on the exact
-`kv/data/sluis/external/<kind>/<id>` it needs and nothing else.
+## Example
 
-## Example: Kubernetes on EKS with KMS-wrapped signing and OpenBao secrets
-
-The `k8s-aws` preset (the former `aws-eks`) is DynamoDB state, S3 blobs, KMS-wrapped signing and an
-in-process ticker; the secrets are SSM, or OpenBao as here. The inputs (the signing state secret, a
-client's secret) arrive as files, so `secrets.source` stays `file`; the openbao adapter holds what
-sluis writes. OpenBao scopes by namespace, so the root is `sluis` in the
-installation's own namespace (`kv/sluis/private/credentials/...` on layout v3, `kv/sluis/internal/...` and `kv/sluis/external/...` on v4).
-With KMS signing the chart renders no Certificate and mounts no signing Secret; the chart's default
-`config.signingKey.file` is dropped with a `null`. The pod's AWS role comes from EKS Pod Identity
-(nothing to render) or, with `serviceAccount.awsIdentity: irsa`, from the annotation of `awsRoleArn`.
+The `k8s-aws` preset with KMS-wrapped signing and OpenBao secrets. The pod's AWS role comes from EKS Pod Identity or, with `serviceAccount.awsIdentity: irsa`, from `awsRoleArn`.
 
 ```yaml
 config:
@@ -135,4 +120,3 @@ exports:
       -----END CERTIFICATE-----
     token: {audience: openbao-staging}   # a ServiceAccount token projected for the jwt login
 ```
-

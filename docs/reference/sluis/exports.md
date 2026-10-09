@@ -15,10 +15,7 @@ contract, and the consumer reads it there with its own grant:
 | A confidential client's secret | `external/oidc/<client>`, an `oidc/v1` document |
 | The recovery bundles | Retired; backup and restore are whole-installation |
 
-The documents, their fields and their JSON Schemas are in [secrets](secrets.md#the-external-documents). A consumer reads
-one field with External Secrets' `remoteRef: {key: <address>, property: <field>}` and names the key of its own Secret
-itself, so there is no per-consumer field rename to configure. Moving an installation to the new addresses is
-`sluis migrate secrets-layout`; the sequence is in [ADR 0041](../../decisions/0041-the-secret-contract.md#migration).
+The documents and their schemas are in [secrets](secrets.md#the-external-documents). A consumer reads one field with External Secrets `remoteRef: {key: <address>, property: <field>}` and names its own Secret's key. To move to the new addresses, run `sluis migrate secrets-layout` ([ADR 0041](../../decisions/0041-the-secret-contract.md#migration)).
 
 The alerts `AccessRosterExportFailing` and `AccessRosterExportStale`, the `exportFailing` and `exportStale` chart values,
 the dashboard row and the Lambda `{"kind":"exports"}` event are gone with the controller.

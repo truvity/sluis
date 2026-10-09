@@ -1,27 +1,23 @@
 # Slack reference
 
-States, scopes, the Slack area of the console, metrics and audit actions of the Slack controller. For the reasoning see [How a Slack pass decides](../../concepts/sluis/slack-pass.md); to connect a workspace see [Connect a Slack workspace](../../guides/sluis/connect/slack-workspace.md).
+States, scopes, console screens, metrics and audit actions of the Slack controller.
+Mechanics: [How a Slack pass decides](../../concepts/sluis/slack-pass.md). Setup: [Connect a Slack workspace](../../guides/sluis/connect/slack-workspace.md).
 
 ## Held, retrying and reported rows
 
 | State | Means |
 |---|---|
-| `held` | something is to be done and is not being done until a person acts. The reason says what: no Slack account yet, the account is deactivated or a bot's, it belongs to another workspace, no address of the person is in the owning directory's served domains, the workspace has no owner, a private channel of that name exists that the bot cannot see (invite the bot to it), an archived channel has that name (unarchive it or rename it), the visibility disagrees with the policy |
-| `retrying` | a removal the directory could not vouch for this pass, or a change Slack refused (with Slack's words); tried again next pass |
-| `reported` | said, never acted on: a guest, an account of another workspace, an account with no address |
-| `ignored` | on the channel's `ignore` list |
+| `held` | Work is waiting for a person. The reason names it: no Slack account yet, a deactivated or bot account, an account of another workspace, no address in the owning directory's served domains, no workspace owner, an invisible private channel of that name (invite the bot), an archived channel of that name (unarchive or rename it), or a visibility that disagrees with the policy |
+| `retrying` | A removal the directory could not vouch for, or a change Slack refused with Slack's words; tried again next pass |
+| `reported` | Said, never acted on: a guest, an account of another workspace, an account with no address |
+| `ignored` | On the channel's `ignore` list |
 
-A row held only because the person has no Slack account yet is shown on the
-console as *waiting for them*: only the person can move it forward. Every other
-hold is *needs you*.
-
-A hold is recorded in the audit trail once, when it becomes held, as
-`roster.slack_action.held`; not every pass, and not again after a restart.
+The console shows a row held only for a missing Slack account as *waiting for them*; every other hold is *needs you*.
+`roster.slack_action.held` is audited once, when the row becomes held.
 
 ## Bot scopes
 
-The bot scopes are one list, `connection.BotScopes`, each for a method the
-roster calls:
+`connection.BotScopes` is the one list.
 
 | Scope | For |
 |---|---|
@@ -37,84 +33,67 @@ roster calls:
 
 ## What the Slack area shows
 
-SYSTEMS, Slack is one entry with five tabs: Workspaces, Channels, Slack Connect,
-Discovered and Apps.
+SYSTEMS, Slack is one entry with five tabs.
 
-**Workspaces** (`#/slack`) shows, per workspace, the connection (*not
-connected*, *created, not installed*, *installed*, *scopes missing*), the team
-once recorded, the owning directory, whether the controller **acts** or is in a
-**dry run**, when its last pass was, how many channels it manages (a link to the
-Channels tab), a breaker banner with **Confirm**, and the leavers.
+| Tab | Address | Shows |
+|---|---|---|
+| Workspaces | `#/slack` | Per workspace: connection (*not connected*, *created, not installed*, *installed*, *scopes missing*), team, owning directory, **acts** or **dry run**, last pass, managed channel count, breaker banner with **Confirm**, leavers |
+| Channels | `#/slack/channels` | Every managed channel of every workspace, with *New channel* for operators. Filters: workspace, kind (policy, console, Slack Connect), state (ok, pending, waiting, held, invalid, not reported), name or Slack-id search. Filters live in the address: `?workspace=&kind=&state=&q=` |
+| Slack Connect | `#/slack/connect` | [Slack Connect channels](../../guides/sluis/connect/slack-connect-channels.md) |
+| Discovered | `#/slack/discovered` | [Slack Connect channels](../../guides/sluis/connect/slack-connect-channels.md) |
+| Apps | `#/slack/apps` | [Slack Apps](../../guides/sluis/connect/slack-apps-catalogue.md) |
 
-**Channels** (`#/slack/channels`) lists every managed channel of every
-workspace in one list (policy channels, console channels and Slack Connect
-channels), with *New channel* for operators. It narrows by workspace (any side
-of a channel), kind (policy, console, Slack Connect), state (ok, pending,
-waiting, held, invalid, not reported; *pending* is a channel the controller is
-about to create, adopt or accept) and a name or Slack-id search, reads "N of M
-shown" when a filter hides some, and keeps every selection in the address
-(`#/slack/channels?workspace=&kind=&state=&q=`).
+*Pending* is a channel the controller is about to create, adopt or accept.
 
-**Slack Connect** (`#/slack/connect`) and **Discovered** (`#/slack/discovered`)
-are described on [Slack Connect channels](../../guides/sluis/connect/slack-connect-channels.md), and
-**Apps** (`#/slack/apps`) on [Slack Apps](../../guides/sluis/connect/slack-apps-catalogue.md). The old
-addresses `#/slack-apps` and `#/slack-connect` still open the matching tab.
+A channel page, `#/slack/channels/<workspace>/<name>`, shows:
 
-Every managed channel has a page of its own,
-`#/slack/channels/<workspace>/<name>` (or by Slack id): what feeds it (internal
-groups for a policy channel; directory groups and individual addresses for a
-console or Slack Connect channel), its mode, each person's state and why, each
-side of a Slack Connect channel, the removal breaker with its **Confirm**, and
-its history from the audit trail. The pages of a directory group, an internal
-group and a person link back: a directory group lists the Slack channels it
-feeds and how its people stand there; an internal group lists the policy
-channels that name it; a person's page has a Slack section with each channel's
-state and reason, and marks the channels that list them individually. Nothing on
-these pages is a credential.
+| Part | Shows |
+|---|---|
+| Feed | Internal groups, or directory groups and addresses |
+| Channel | Mode, privacy, and whether it is created, adopted or held |
+| People | Each person as in step, **will invite**, **will remove**, **held** with the reason, **retrying** or **reported** |
+| Slack Connect | Each side of the channel |
+| Safety | The removal breaker with **Confirm**, and the audit history |
 
-Per channel the page says its mode, privacy, whether it will be created or
-adopted or is held, and each person as in step, **will invite**, **will
-remove**, **held** (with the reason), **retrying** or **reported**.
+A person's page lists each channel's state and reason.
 
 ## Confirming a breaker from the console
 
-A workspace or channel whose pass would remove more than half of its members
-shows a red banner with the set's fingerprint behind a **Confirm** button
-(operators only). Confirming writes `_confirm.<workspace>.json`, or
-`_confirm.<workspace>.<channel>.json` for a channel's own breaker, into the
-records ConfigMap, records `roster.slack_removals.confirmed`, and lapses after
-24 hours. The console refuses a fingerprint that is not the latest report's for
-that gate: a set that changed since the page was loaded needs looking at again.
+A pass that would remove over half of a workspace's or channel's members shows a banner and **Confirm** (operators only).
+Confirming writes `_confirm.<workspace>.json` into the records ConfigMap. A channel writes `_confirm.<workspace>.<channel>.json`. It records `roster.slack_removals.confirmed`.
+It lapses after 24 hours. The console refuses a fingerprint that is not the latest report's.
 
-The API behind the area is `SlackService` (`GetSlackStatus`,
-`BeginSlackWorkspaceConnect`, `RequestSlackPass`, `ChangeSlackWorkspaceOwner`,
-`DisconnectSlackWorkspace`, `ConfirmSlackRemovals`), `SlackChannelService` for
-console channels (`ListSlackChannels`, `CreateSlackChannel`,
-`UpdateSlackChannel`, `DeleteSlackChannel`), `SlackSharedChannelService` for
-Slack Connect records (`ListSlackSharedChannels`, `CreateSlackSharedChannel`,
-`UpdateSlackSharedChannel`, `DeleteSlackSharedChannel`) and `SlackAppService`
-for catalogue Apps (`ListSlackApps`, `CreateSlackApp`, `InstallSlackApp`). The
-directory side is `AccessService.ListServedDomains` and
-`ResolveDirectoryGroups`; every call is in the
-[contracts](contracts.md). The catalogue's
-[Slack Apps](../../guides/sluis/connect/slack-apps-catalogue.md) are separate: they create Apps for other
-purposes; this page's App is the roster's own.
+## API
+
+| Service | Calls |
+|---|---|
+| `SlackService` | `GetSlackStatus`, `BeginSlackWorkspaceConnect`, `RequestSlackPass`, `ChangeSlackWorkspaceOwner`, `DisconnectSlackWorkspace`, `ConfirmSlackRemovals` |
+| `SlackChannelService` | `ListSlackChannels`, `CreateSlackChannel`, `UpdateSlackChannel`, `DeleteSlackChannel` |
+| `SlackSharedChannelService` | `ListSlackSharedChannels`, `CreateSlackSharedChannel`, `UpdateSlackSharedChannel`, `DeleteSlackSharedChannel` |
+| `SlackAppService` | `ListSlackApps`, `CreateSlackApp`, `InstallSlackApp` |
+| `AccessService` | `ListServedDomains`, `ResolveDirectoryGroups` |
+
+See the [contracts](contracts.md).
 
 ## Metrics
 
-Pushed over OTLP like the GitHub controller's: `slack_roster.passes` (by
-workspace and outcome), `slack_roster.changes` (by action and whether Slack
-accepted it), `slack_roster.breaker_trips`, `slack_roster.rows` and
-`slack_roster.channels` (by state), `slack_roster.leavers` and
-`slack_roster.shared_invalid`.
+Over OTLP:
+
+| Metric | Labels |
+|---|---|
+| `slack_roster.passes` | `workspace`, `outcome` |
+| `slack_roster.changes` | `workspace`, `action`, `outcome` |
+| `slack_roster.rows`, `slack_roster.channels` | `workspace`, `state` |
+| `slack_roster.user_cache` | `workspace`, `result` |
+| `slack_roster.breaker_trips`, `slack_roster.leavers`, `slack_roster.shared_invalid` | `workspace` |
+
+The metric prefix is a legacy identifier, renamed in v1.75–v1.76.
 
 ## Audit
 
-Every action is in the audit catalogue (`internal/audit/catalogue/roster.yaml`,
-version 1.7.0). The controller records for itself; the console records what it
-does:
+Every action is in [audit actions](audit-actions.md).
 
 | Recorded by | Actions |
 |---|---|
-| the controller | `roster.slack_channel.created`, `.adopted`; `roster.slack_member.invited`, `.removed`; `roster.slack_shared.invited`, `.accepted`; `roster.slack_action.held`; `roster.slack_leaver.reported` |
-| the console | `roster.slack_workspace.connected`, `.owner_changed`, `.connect_refused`, `.disconnected`; `roster.slack_app.created`, `.installed`, `.install_refused`; `roster.slack_console_channel.created`, `.updated`, `.deleted`; `roster.slack_shared_channel.created`, `.updated`, `.deleted`; `roster.slack_channel.archived`; `roster.slack_removals.confirmed` |
+| controller | `roster.slack_channel.created`, `.adopted`; `roster.slack_member.invited`, `.removed`; `roster.slack_shared.invited`, `.accepted`; `roster.slack_action.held`; `roster.slack_leaver.reported` |
+| console | `roster.slack_workspace.connected`, `.owner_changed`, `.connect_refused`, `.disconnected`; `roster.slack_app.created`, `.installed`, `.install_refused`; `roster.slack_console_channel.created`, `.updated`, `.deleted`; `roster.slack_shared_channel.created`, `.updated`, `.deleted`; `roster.slack_channel.archived`; `roster.slack_removals.confirmed` |

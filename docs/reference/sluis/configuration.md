@@ -1,10 +1,6 @@
 # Configuration
 
-An installation is configured by two documents, each one YAML file: the **service document** (`sluis.yaml`,
-`apiVersion: sluis.truvity.github.io/sluis/v3`), which says how the one process runs, and the **policy document**, which
-says what the installation decides. This page is the reference for the service document and the way a binary loads its
-documents. Why it is shaped this way (one file, one binary, one chart; immutable per instance): [Configuration: the
-model](../../concepts/sluis/configuration.md).
+The service document (`sluis.yaml`, `apiVersion: sluis.truvity.github.io/sluis/v3`) configures the process. Model: [Configuration: the model](../../concepts/sluis/configuration.md).
 
 | For | See |
 |---|---|
@@ -21,45 +17,19 @@ model](../../concepts/sluis/configuration.md).
 | the objects the service writes in its namespace | [Kubernetes objects](kubernetes-objects.md) |
 | the adapters and presets | [adapters](adapters.md) |
 
-To change from the old forms: [migrate from environment variables](../../guides/sluis/migrate/migrate-from-environment-variables.md),
-[migrate from the access-issuer chart](../../guides/sluis/migrate/migrate-from-the-access-issuer-chart.md).
-
 ## Loading
 
-- `sluis serve` takes its service document with `--config <file>` or, with no `--config`, from the variable
-  `SLUIS_CONFIG`; the service document names the policy document with `policy.file`. Those two are all that configures the
-  process: `--version` and `--help` are the only other flags.
-- `sluis tick github|slack <target>` runs one target's tick once and reads the same file (the controller's section of it);
-  the target comes first: an organisation's login or `github:links` for GitHub, a workspace's key for Slack. It refuses to
-  run until a shared State exists, because a running controller's lease would not exclude it; with the service scaled to 0,
-  `--unsafe-local-lease` runs it.
-- `sluis controller github` and `sluis controller slack` are deprecated: they still run a controller as a process of its
-  own (and say so in the log), reading their own v2 documents or the one v3 document, whose `controllers.<kind>` section
-  they then take. They are removed in a later release.
-- **Validated before anything starts.** Each document is held to its JSON Schema (`schemas/config/<document>.schema.json`:
-  `sluis` or `policy`, embedded in the binary; the v2 `serve`, `controller-github` and `controller-slack` schemas stay for
-  the documents this release still loads). An unknown key, a missing required key or a value of the wrong type refuses to
-  start and names the path to it. The chart's `values.schema.json` embeds the same schemas under `config` and `policy`.
-- **A secret is named, never written** ([secrets](secrets.md)).
-- **Telemetry is not here.** It is OpenTelemetry's own `OTEL_*` environment, set on the pod by the platform (the chart's
-  `telemetry.otlp` values). Nothing in a document restates it.
-- **The old environment is refused, not ignored.** A retired variable that is still set stops the process at start,
-  naming the key that replaces it ([the table below](#retired-environment-variables)).
-- **Durations** are Go duration strings (`30s`, `15m`, `168h`).
-- The schemas are the exhaustive reference, with every key's description and default. The tables below give each key, its
-  default when unset and what to know. A key with no default is unset by default, which is the binary's own behaviour.
+| Command | Reads | Notes |
+|---|---|---|
+| `sluis serve` | `--config <file>` or `SLUIS_CONFIG`; `policy.file` names the policy | `--version` and `--help` are the only other flags |
+| `sluis tick github\|slack <target>` | the same file | target: organisation login, `github:links` or Slack workspace key. Refuses without a shared State; with the service scaled to 0, `--unsafe-local-lease` runs it |
+| `sluis controller github\|slack` | v2 controller documents or the v3 `controllers.<kind>` section | deprecated; a later release removes it |
+
+An unknown key or a wrong type refuses to start and names the path. The embedded schemas are `schemas/config/<document>.schema.json`. A secret is named, never written ([secrets](secrets.md)). Durations are Go strings (`30s`). Telemetry is the platform's `OTEL_*` environment.
 
 ## Documents and `apiVersion`
 
-Every document carries an `apiVersion` of the form `sluis.truvity.github.io/<kind>/<version>`: the service document is
-`sluis/v3` and the policy `policy/v2`. **Absent means v1.** A binary reads its documents' version N and N-1, and converts
-N-1 as it loads it: this build reads the service document at v3, and the v2 `serve` document (and v1, with no
-`apiVersion`) as a v3 document with no controllers. (The v2 `controller-github` and `controller-slack` documents are read
-only by the deprecated `sluis controller` subcommands, and `sluis tick` and `sluis migrate` read either.) A deployment
-rolls the binary first and its configuration second. A v1 document is held to the schema it was written against
-(`schemas/config/v1/`, frozen as v1.61 wrote it): what v1 kept in a service document and v2 keeps in the policy document
-is read from the files v1 named, and each secret is read where v1 named it. A v2 document that names a key v2 retired is
-refused with where it went ([retired keys](#retired-keys)). A schema change that cannot be converted is a major step.
+The service document is `sluis/v3`, the policy `policy/v2`; absent means v1. A binary reads N and N-1 and converts N-1 on load; deploy the binary first. A v2 document with a [retired key](#retired-keys) is refused.
 
 ```yaml
 apiVersion: sluis.truvity.github.io/sluis/v3
@@ -71,13 +41,7 @@ controllers:                       # optional: absent is no controller
   slack: {consoleURL: "http://sluis.access.svc:8080/console"}
 ```
 
-Layering exists in exactly one place, rendering the policy ([the policy document](policy-document.md#rendering)): a running
-binary reads one finished document and merges nothing.
-
 ## The service document
-
-What `sluis serve` reads, and the chart's `config`: the issuer, the console and the directory hub in one process, with the
-GitHub and Slack controllers beside them under [`controllers`](#controllers-the-github-and-slack-controllers).
 
 <!-- generated: config-keys -->
 
@@ -278,21 +242,7 @@ Source: `schemas/config/sluis.schema.json`. Generated by `just docs-generate`; k
 
 ### `controllers`: the GitHub and Slack controllers
 
-`controllers.github` and `controllers.slack` of the service document each run one
-controller as a loop of its own in `sluis serve`; **a section that is absent is a
-controller that is off**, and an empty one (`github: {}`) takes the defaults. A controller
-holds only what is its own below; the release, the policy, `ports`, `platform`, `preset`,
-`adapters`, `audit`, `log` and `probes` are the process's, which a controller shares, so
-the controllers' `/readyz` is the process's (ready only once each controller has begun),
-a controller that fails to start (a refused audit catalogue, an enabled organisation the
-policy does not bind) stops the process, and a controller waits for the console to
-answer before its first pass. `policy.file` is required when a controller is named.
-The code of a controller runs with the service's permissions and in its pod: that cost is
-accepted ([0037](../../decisions/0037-one-process-everywhere.md)).
-
-What a controller may *change* is the policy document's `controllers.github.enabledOrgs`
-and `controllers.slack.enabledWorkspaces`, as before: each organisation or workspace is a
-dry run until listed.
+`controllers.github` and `controllers.slack` each run a controller loop in `sluis serve`. An absent section is a controller that is off, and `github: {}` takes the defaults. `policy.file` is required. Each organisation or workspace is a dry run until the policy's `enabledOrgs` or `enabledWorkspaces` lists it ([0037](../../decisions/0037-one-process-everywhere.md)).
 
 <!-- generated: config-keys-controllers -->
 
@@ -323,27 +273,11 @@ Source: `schemas/config/sluis.schema.json`. Generated by `just docs-generate`; k
 | `controllers.slack.tokenFile` | string | `"/var/run/secrets/slack-roster/token"` | This pod's projected ServiceAccount token, presented to the console and read afresh on every call. |
 <!-- /generated -->
 
-(The directory names keep the controllers' old names: they are paths the chart mounts,
-and the chart refuses a `tokenFile`, `appsDir`, `credentialsDir` or `recordsDir` that is
-not where it mounts them.)
-
-On Kubernetes the controllers run as the release's own ServiceAccount, which the chart gives, by name, `get`, `update` and
-`patch` on the ConfigMaps they report into (`<release>-github-status`, `<release>-slack-status`) and `get` and `update` on
-the Secret `<release>-github-links` the GitHub controller rewrites as it checks links. The Apps' keys and the console's
-records are volumes, so there is no permission to read any other Secret or ConfigMap. The policy's `exchange` must admit
-that ServiceAccount (the controllers read the console as it), and the audit installation's `workloadIdentity` map must
-name the one account. More than one replica needs `config.ports.adapter: dynamodb`, and the chart refuses it otherwise.
-See [Enable a GitHub organisation](../../guides/sluis/enable-github-organisation.md) and
-[Enable a Slack workspace](../../guides/sluis/enable-slack-workspace.md).
-
+The chart refuses a `tokenFile`, `appsDir`, `credentialsDir` or `recordsDir` outside its mounts. RBAC: [Kubernetes objects](kubernetes-objects.md#controller-access). Guides: [GitHub organisation](../../guides/sluis/enable-github-organisation.md), [Slack workspace](../../guides/sluis/enable-slack-workspace.md).
 
 ## Retired environment variables
 
-Everything the subcommands read from the environment is a key of a document. A retired variable that is still set is
-refused at start with the key that replaces it; nothing is ignored (`internal/config/retired.go`, which a test holds to
-this page). The platform-supplied `NAMESPACE` (read from the pod's mounted service-account namespace) and `POD_NAME` (the
-pod's hostname) are not configuration, and the chart no longer sets them. The procedure:
-[migrate from environment variables](../../guides/sluis/migrate/migrate-from-environment-variables.md).
+A retired variable that is still set stops the process, naming its replacement key. Procedure: [migrate from environment variables](../../guides/sluis/migrate/migrate-from-environment-variables.md).
 
 ### The service
 
@@ -392,10 +326,6 @@ pod's hostname) are not configuration, and the chart no longer sets them. The pr
 
 ### The controllers
 
-The v1.62 and earlier `controller-github` and `controller-slack` documents' keys, which are the `controllers.github` and
-`controllers.slack` sections of the service document since v1.63 (the keys other than `consoleURL`, `tokenFile`,
-`appsDir`, `credentialsDir`, `recordsDir`, `interval` and `console` are the service document's own):
-
 | Old variable | `controller-github` | `controller-slack` |
 |---|---|---|
 | `RELEASE_NAME` | `release` | `release` |
@@ -414,9 +344,7 @@ The v1.62 and earlier `controller-github` and `controller-slack` documents' keys
 
 ### The function's environment (AWS Lambda)
 
-Retired for every role in v1.62.0, with the configuration layer and the `secrets` source: a function that still sets one
-stops at start, naming the v1.62 Pulumi library to deploy with, because the binary and the library move together
-([AWS Lambda](lambda.md#version-coupling)).
+A function that sets one stops at start ([AWS Lambda](lambda.md#package)).
 
 | Old variable | Now |
 |---|---|
@@ -427,8 +355,7 @@ stops at start, naming the v1.62 Pulumi library to deploy with, because the bina
 
 ## Retired keys
 
-A v2 document that names a key v2 retired is refused with where it went. A v1
-document (no `apiVersion`) keeps working with every one of them until it moves.
+A v2 document that names a retired key is refused with where it went. A v1 document keeps working.
 
 | Document | Retired key | Now |
 |---|---|---|

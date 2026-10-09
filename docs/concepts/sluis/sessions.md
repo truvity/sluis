@@ -268,7 +268,7 @@ which for a proxied console is its `ttl_cap`.
 Considered for an installation where MCP clients refresh every few minutes, the
 issuer's State traffic per grant is a cost to keep small. Measured in State
 operations, a `refresh_token` grant makes 4 writes and 4 reads, one of the reads
-eventually consistent ([`RevisionPeeker`](../../reference/sluis/ports.md#peeking-a-revision-optional)),
+eventually consistent ([`RevisionPeeker`](../../reference/sluis/ports.md#state)),
 and asks the directory once; an `authorization_code` grant makes 9 writes and 5
 reads. The saving comes from not rewriting what has not changed: one directory
 resolution per request, the access-token record written once, the spent refresh

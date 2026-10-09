@@ -4,7 +4,7 @@
 > enabled after a supervised dry run.
 
 How the controller decides is in [How a GitHub pass decides](../../../concepts/sluis/github-pass.md); the
-Secrets and records it keeps are in [GitHub roster reference](../../../reference/sluis/github-roster.md); linking a person's
+Secrets and records it keeps are in [GitHub organisation reference](../../../reference/sluis/github-roster.md); linking a person's
 account is [its own page](github-account-links.md).
 
 **Anchor:** none of ours. The controller holds one GitHub App per

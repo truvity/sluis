@@ -12,7 +12,7 @@ Record an application's actions from its own process with the emit library: desc
 
 ## Before you start
 
-- **The emitter is a library in the application's own process**, in a Go module of its own (`go get github.com/truvity/sluis/audit/sdk`): it brings in Connect, protobuf and the OpenTelemetry API, not the writer's database driver or object-store client ([layout](../../../reference/audit/repository-layout.md#the-sdk-module)).
+- **The emitter is a library in the application's own process**, in a Go module of its own (`go get github.com/truvity/sluis/audit/sdk`): it brings in Connect, protobuf and the OpenTelemetry API, not the writer's database driver or object-store client ([layout](../../../reference/audit/repository-layout.md#modules)).
 - **A `block` action fails when the receiver is down; an `async` one queues** and is dropped only if the queue overflows ([recover from an outage](../operate/recover-from-an-outage.md)).
 - **Registration is refused, not retried, for a malformed catalogue** (`emit.ErrCatalogueRefused`); a receiver that is merely unreachable may be retried.
 
@@ -27,7 +27,7 @@ module of its own: `go get github.com/truvity/sluis/audit/sdk`. An application i
 `sdk/emit`, `sdk/record`, `sdk/catalogue`, `sdk/sink` and `sdk/gen/audit/v1`,
 and what that brings in is Connect, protobuf and the OpenTelemetry API — not
 the writer's database driver, stream server or object-store client
-([layout](../../../reference/audit/repository-layout.md#the-sdk-module)). Everything
+([layout](../../../reference/audit/repository-layout.md#modules)). Everything
 after it — the receiver, the writer, the query service — is a Deployment in
 the application's namespace
 ([0053](../../../decisions/0053-one-installation-per-service-or-product.md)), so the

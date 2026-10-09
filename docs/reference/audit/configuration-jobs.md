@@ -1,27 +1,23 @@
 # Configuration: the jobs
 
-The notary and the four scheduled commands of `audit` that read one `--config` file each.
-Shared blocks are in [configuration](configuration.md#shared-blocks).
+The notary and the four scheduled commands of `audit`, each reading one `--config` file. Shared blocks are in [configuration](configuration.md#shared-blocks).
 
 ## Scheduled jobs
 
-Each job is `audit <command> --config <file>` (the notary is its own binary,
-`audit-notary --config <file>`), runs to completion and records what it did
-through the writer's own sink, so each needs `sink` and, where the writer
-verifies callers, a `tokenFile`. Each has its own identity.
+Each job runs `audit <command> --config <file>` to completion. The notary is its own binary: `audit-notary --config <file>`. A job records what it did through the writer's sink, so it needs `sink` and, where the writer verifies callers, a `tokenFile`. Each job has its own identity.
 
 ### audit-notary
 
-Seals the archive ([0061](../../decisions/0061-seals.md)): for every profile and
-tenant, and every hour that has ended and settled since the last seal, one
-signed seal of what the hour holds, chained to the one before, written to
-`seals/<profile>/<tenant>/<yyyy>/<mm>/<dd>/<hh>.jws`
-([bucket contract](bucket-contract.md#seals)). Hourly in the chart. It is the one
-part that signs, so its `signer` is a managed key the writer's identity cannot
-use ([key custody](../../concepts/audit/key-custody.md#signing-key)), and it runs as an
-identity of its own, which the chart enforces. A rerun writes nothing new, and an
-hour whose objects do not match their metadata is not sealed, nor is any hour
-after it.
+Seals the archive ([0061](../../decisions/0061-seals.md)). Hourly in the chart.
+
+| Behaviour | Detail |
+|---|---|
+| Seal | One signed seal per profile, tenant and ended, settled hour, chained to the previous one |
+| Path | `seals/<profile>/<tenant>/<yyyy>/<mm>/<dd>/<hh>.jws` ([bucket contract](bucket-contract.md#seals)) |
+| Signer | A managed key the writer's identity cannot use ([key custody](../../concepts/audit/key-custody.md#signing-key)); the chart enforces a separate identity |
+| Rerun | Writes nothing new |
+| Mismatch | An hour whose objects do not match their metadata is not sealed, nor is any later hour |
+| First seal | The hour of the tenant's first object; empty hours are sealed from then on |
 
 <!-- generated: config-audit-notary -->
 | key | type | default | meaning |
@@ -37,20 +33,11 @@ after it.
 | `require` | `logged`, `queued` or `archived` | none | the weakest durability the writer's acknowledgements may carry; needs `sink` and `sink.expect` |
 <!-- /generated -->
 
-It reports `audit.seal.age` (the age of the newest sealed hour, per profile, of
-the tenant furthest behind), `audit.seal.written` and `audit.seal.failures`
-over OTLP ([telemetry](telemetry.md)). The first seal of a tenant is
-of the hour of its first object; an hour with no objects is sealed too, from then
-on.
+It reports `audit.seal.age` (newest sealed hour per profile, of the tenant furthest behind), `audit.seal.written` and `audit.seal.failures` over OTLP ([telemetry](telemetry.md)).
 
 ### audit verify
 
-Checks every record object of a range of ingest time against the
-[bucket contract](bucket-contract.md) and reports what it finds
-([verification](../../guides/audit/operate/verify-the-trail.md)). It reads the archive only, so its
-`archive` has no `lockMode`, and it needs no key. Nightly in the chart, over the
-last 24 hours. One job checks every profile it names, or every profile the
-deployment composes.
+Checks the record objects of a range of ingest time against the [bucket contract](bucket-contract.md) ([verification](../../guides/audit/operate/verify-the-trail.md)). It reads the archive only, so `archive` has no `lockMode` and no key is needed. Nightly in the chart, over the last 24 hours, for each profile it names or the deployment composes.
 
 <!-- generated: config-audit-verify -->
 | key | type | default | meaning |
@@ -64,15 +51,11 @@ deployment composes.
 | `require` | `logged`, `queued` or `archived` | none | the weakest durability the writer's acknowledgements may carry; needs `sink` and `sink.expect` ([durability](configuration-writer.md#durability-require-forward-consume)) |
 <!-- /generated -->
 
-The keys `publicKeyFile`, `lookback` and `record` of the v0 job are gone: the
-check needs no key (`seals.roots` are thumbprints), the range is of ingest time
-so there is nothing to look back over, and there is no `verified/` prefix to
-write.
+The v0 keys `publicKeyFile`, `lookback` and `record` are gone.
 
 ### audit purge
 
-Brings the index and the deduplication table within the profiles. Daily in the
-chart. It never touches the archive.
+Brings the index and the deduplication table within the profiles. Daily in the chart. It never touches the archive.
 
 <!-- generated: config-audit-purge -->
 | key | type | default | meaning |
@@ -99,9 +82,7 @@ Compares the clock with UTC and records the answer. Daily in the chart.
 
 ### audit migrate
 
-Applies the schema and grants each part's database role what the part needs
-and takes back the rest. In the chart it is a pre-install and pre-upgrade hook
-Job; run it by hand from one place otherwise.
+Applies the schema, grants each part's database role what it needs, and takes back the rest. In the chart it is a pre-install and pre-upgrade hook Job; otherwise run it by hand from one place.
 
 <!-- generated: config-audit-migrate -->
 | key | type | default | meaning |
@@ -113,7 +94,4 @@ Job; run it by hand from one place otherwise.
 | `purge` | string | none | the purge job's role: delete from the index and the deduplication table |
 <!-- /generated -->
 
-Each role must already exist, and no role may be named for two parts: the
-separation is that they are different. A part left unnamed is not granted
-anything, and one that connects as the owner has no separation at all.
-
+Each role must already exist, and no role may serve two parts. A part left unnamed gets no grant. A part that connects as the owner has no separation.

@@ -118,4 +118,4 @@ states only what it changes.
 
 - Remove the old variables from every place that set them (a Compose file, a unit, a CI job), or the next start refuses.
 - On AWS Lambda the function's own variables (`SLUIS_CONFIG_FILE`, `SLUIS_SECRET_FILES`, `SLUIS_ROLE`) are retired too: the
-  Pulumi library of the same version sets `SLUIS_CONFIG` ([AWS Lambda](../../../reference/sluis/lambda.md#version-coupling)).
+  Pulumi library of the same version sets `SLUIS_CONFIG` ([AWS Lambda](../../../reference/sluis/lambda.md#package)).

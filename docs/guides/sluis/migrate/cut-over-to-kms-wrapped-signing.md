@@ -15,7 +15,7 @@ signed keeps verifying until it expires.
   RS256), reachable with `kubectl` and `helm`.
 - The KMS symmetric key and the role that may use it, as the `kmsWrapped` fields describe them
   ([configuration](../../../reference/sluis/configuration.md#the-service-document): `signingKey.kmsWrapped`; the example in the
-  [OpenBao adapter page](../../../reference/sluis/openbao-secrets-adapter.md#example-kubernetes-on-eks-with-kms-wrapped-signing-and-openbao-secrets)).
+  [OpenBao adapter page](../../../reference/sluis/openbao-secrets-adapter.md#example)).
 - The sign-in state secret `issuer/state-secret` ([secrets](../../../reference/sluis/secrets.md#the-names)): at least 32 random bytes,
   the same in every replica.
 

@@ -69,7 +69,7 @@ hold none; they are SSM parameters read by path.
 - The service (issuer and console) is assembled once per execution environment and kept across invocations. A controller
   is assembled per invocation, as `sluis tick` does.
 - The binary is built without the Kubernetes and Valkey clients, so they are not 30 MB of cold start
-  ([how it is held](../../reference/sluis/lambda.md#building-and-checking-the-binary)).
+  ([how it is held](../../reference/sluis/lambda.md#package)).
 
 ## Security notes
 
@@ -83,4 +83,4 @@ hold none; they are SSM parameters read by path.
   forged endpoint serves forged secrets and State. `Telemetry.Env` takes only the layer's own variables: the
   environment cannot carry `SLUIS_*`, `LD_*` or another `AWS_*` variable.
 - **An `aws` matcher with no `role` admits every role of the account**, including roles created later; the issuer warns
-  at start ([the reference](../../reference/sluis/lambda.md#two-audiences-two-doors)).
+  at start ([the reference](../../reference/sluis/lambda.md#how-a-controller-authenticates-to-the-console)).

@@ -1,41 +1,21 @@
 # Telemetry
 
-What sluis publishes, what it never publishes, the alerts and the
-dashboard that read it, and how to install them. The contract it follows is
-[0026](../../decisions/0026-two-platforms-permanently-kubernetes-and-aws-lambda.md)
-to
-[0032](../../decisions/0032-one-configuration-file-one-binary-one-chart.md) and
-[ports](../../concepts/sluis/ports.md): telemetry is the OpenTelemetry
-environment and nothing else, it is exported only when a collector is named, and
-it carries no personal data.
+Telemetry is the OpenTelemetry environment, exported only to a named collector, without personal data.
 
 ## Configuration
 
-There is none in the configuration file. The platform sets the OpenTelemetry
-variables on the pods and the SDK reads them:
+The platform sets these variables on the pods; the configuration file has no telemetry key.
 
 | Variable | Effect |
 |---|---|
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | Names a collector for metrics and traces. Unset (and neither signal's own variable below set), nothing is exported and every instrument records into a no-op. |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | Names a collector for metrics and traces. With neither this nor a signal's own variable set, nothing is exported. |
 | `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT`, `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | The same, for one signal. |
-| `OTEL_EXPORTER_OTLP_HEADERS`, `OTEL_METRIC_EXPORT_INTERVAL`, `OTEL_SERVICE_NAME`, `OTEL_RESOURCE_ATTRIBUTES` | The SDK's own. The one process names itself `access-issuer` when `OTEL_SERVICE_NAME` is unset (the resource's historic name, kept so series and dashboards keep their identity). Since v1.63 the controllers' series carry it too: **a dashboard or alert that selects `service_name` `github-roster` or `slack-roster` must select `access-issuer`** (the controllers' own metric names, and the `kind` and `target` labels, are unchanged). |
-| `OTEL_TRACES_SAMPLER`, `OTEL_TRACES_SAMPLER_ARG` | The sampler. **Unset, it is parent based with `always_on`**: a caller's decision wins and every root trace is kept. |
-
-**The sampler default is provisional.** truvity/audit keeps a tenth of root
-traces (`parentbased_traceidratio` at 0.1) because its write path is frequent and
-repetitive. This service's traffic is a sign-in and a tick per interval, which a
-trace store can hold whole, so the default here is `always_on`. Which of the two
-this service should ship is not decided. It is one function
-(`defaultSampler` in `internal/telemetry/telemetry.go`), and
-`OTEL_TRACES_SAMPLER=parentbased_traceidratio` with `OTEL_TRACES_SAMPLER_ARG=0.1`
-on the pods gives audit's behaviour without a release.
+| `OTEL_EXPORTER_OTLP_HEADERS`, `OTEL_METRIC_EXPORT_INTERVAL`, `OTEL_SERVICE_NAME`, `OTEL_RESOURCE_ATTRIBUTES` | The SDK's own. With `OTEL_SERVICE_NAME` unset the process names itself `access-issuer`, and the controllers' series carry that name too: select `service_name` `access-issuer`, not a controller name. |
+| `OTEL_TRACES_SAMPLER`, `OTEL_TRACES_SAMPLER_ARG` | The sampler. Unset, it is parent based with `always_on`: a caller's decision wins and every root trace is kept. The default is provisional (`defaultSampler` in `internal/telemetry/telemetry.go`). `parentbased_traceidratio` with argument `0.1` gives truvity/audit's behaviour. |
 
 ## Wiring it with the chart
 
-The chart sets those variables on the pod from one value block, `telemetry.otlp` (`endpoint`, `protocol`, `extraEnv`).
-With `endpoint` empty it renders nothing and the pod exports nothing
-([policy ADR 0006](https://github.com/truvity/policy/blob/master/docs/decisions/0006-telemetry-is-the-sdk-environment.md)).
-The steps, and what the chart refuses, are in [install telemetry](../../guides/sluis/operate/install-telemetry.md).
+The chart sets them from `telemetry.otlp`; an empty `endpoint` renders nothing. Steps: [install telemetry](../../guides/sluis/operate/install-telemetry.md).
 
 ## Traces
 
@@ -51,40 +31,20 @@ A tracer exists only when a collector is named for traces.
 
 ### What leaves the process
 
-Spans are read by everyone with a grant on the trace store, so the rule that
-they hold no personal data is a property of the exporter and not a promise by
-each call site. Every span leaves through an allowlist exporter
-(`telemetry.FilterExporter`, the one truvity/audit uses):
+Spans leave through the allowlist exporter `telemetry.FilterExporter`; only these attributes survive (`telemetry.SpanAttributeAllowlist`):
 
-- **Attributes.** Only the names in `telemetry.SpanAttributeAllowlist` survive:
-  `access_roster.target.kind`, `access_roster.target.id`, `access_roster.outcome`,
-  `access_roster.port`, `access_roster.operation`, `rpc.system.name`,
-  `rpc.method`, `rpc.response.status_code`, `error.type`,
-  `http.request.method`, `http.response.status_code` and `http.route`. The HTTP
-  and RPC instrumentation record the client's address, the user agent, the raw
-  URL path and the peer; they are dropped, whoever set them.
-- **Events, links' attributes and the status text** are removed outright: a
-  recorded error's message is free text and may quote an address or a group.
-- **The key of a port call is never an attribute or a label.** A key names a
-  person (`ses.<person>.`) or a target.
+```text
+access_roster.target.kind  access_roster.target.id  access_roster.outcome
+access_roster.port  access_roster.operation  rpc.system.name  rpc.method
+rpc.response.status_code  error.type  http.request.method
+http.response.status_code  http.route
+```
 
-The one identifier a span may carry is the target's own name, a GitHub
-organisation or a Slack workspace the policy declares. Never an email, a
-subject, a group name, a token or its hash, or an address.
-
-`internal/telemetry` has a test that plants those markers in attributes, events,
-errors, status text and links, and in a real HTTP request and a real Connect
-call, and asserts that none of them reaches the next exporter.
+Events, link attributes and status text are removed. A port call's key is never an attribute. A test in `internal/telemetry` asserts no personal marker reaches the next exporter.
 
 ## Metrics
 
-The names below are the OpenTelemetry names; the Prometheus names are what the
-metrics gateway makes of them: dots to underscores, `_total` on a counter, the
-unit as a suffix (`access_issuer.http.requests` is
-`access_issuer_http_requests_total`). Only the cluster, the namespace and the
-tier become labels from the resource; every label below is a metric attribute.
-
-Source: the instruments in `internal/issuer/metrics.go`, `internal/rails` and the controllers' packages.
+Prometheus names turn dots into underscores and add `_total` to counters: `access_issuer.http.requests` is `access_issuer_http_requests_total`. Only cluster, namespace and tier come from the resource.
 
 ### The issuer
 
@@ -103,35 +63,26 @@ Source: the instruments in `internal/issuer/metrics.go`, `internal/rails` and th
 | `access_issuer.signing_key_transitions` | counter | `event`, `algorithm` | Keys seen, activated, retired. |
 | `access_issuer.kms_signatures` | counter | `kid`, `result` | `kms:Sign` calls of a KMS signer: `ok`, `throttled` or `error` ([signing with KMS](../../guides/sluis/operate/sign-with-aws-kms.md)). |
 
-**Why `client_id` is a safe label.** The policy declares every client, so an
-installation has tens, not thousands, and the label cannot grow with its users.
-The code holds that bound itself: an id the policy does not declare is `other`,
-and a request with no client (a workload's exchange) is `none`, so a request
-naming a client nobody declared cannot mint a series.
+`client_id` is bounded by the policy: undeclared is `other`, none is `none`. `reuse_detected` counts codes presented twice and refresh tokens presented after the 30-second grace.
 
-**The `login.failures` reasons** are a fixed set: `bad_state` (a callback or
-a form whose state is missing, expired, forged or not from this browser),
-`unknown_provider`, `provider_failed` (the directory's own exchange),
-`directory_refused`, `directory_unreachable`, `not_entitled` (signed in, but not
-in a group the application requires), `recovery_refused`, `unaudited` (the audit
-trail could not be written), `not_waiting` (the authorization request is gone),
-`consent_refused` (an agent connection's consent page was not accepted in the
-browser that was shown it, or its sign-in no longer stands) and `bad_request`.
+`login.failures` has these `reason` values:
 
-**`reuse_detected` has two kinds with two meanings.** An authorization code
-presented twice is a certain reuse, and the session it opened is ended. A
-refresh token presented after its 30-second grace is either spent in a live
-session or unknown. A spent one ends that session, but only once the library has
-authenticated the client and matched it to the session's; the count does not say
-which of the two it was, and a forged or unsealable mark counts as unknown.
-A burst of either is a client bug or a stolen credential; one is noise.
-A refresh token refused from the negative cache is still counted here, so the
-rate does not drop when the cache answers; `dead_refresh_token_hits` says how
-much of it cost no State read.
+| Reason | Meaning |
+|---|---|
+| `bad_state` | the callback or form state is missing, expired, forged or from another browser |
+| `unknown_provider` | the provider is not declared |
+| `provider_failed` | the directory's exchange failed |
+| `directory_refused`, `directory_unreachable` | the directory refused or did not answer |
+| `not_entitled` | signed in, but not in a group the application requires |
+| `recovery_refused` | the recovery sign-in was refused |
+| `unaudited` | the audit trail could not be written |
+| `not_waiting` | the authorization request is gone |
+| `consent_refused` | an agent connection's consent was not accepted in that browser |
+| `bad_request` | the request was malformed |
 
 ### Generated client secrets
 
-Source: `internal/clientcreds/telemetry.go`. No client id is ever a label, so a guessed id cannot mint a series.
+Source: `internal/clientcreds/telemetry.go`.
 
 | Metric | Type | Labels | What it says |
 |---|---|---|---|
@@ -164,27 +115,17 @@ Source: `internal/clientcreds/telemetry.go`. No client id is ever a label, so a 
 | `access_roster.leases.lost` | counter | `kind` | Leases held and lost: taken over, or not renewable for a whole lifetime. The tick stopped before its next write. |
 | `access_roster.leases.held` | up-down counter | `kind` | Leases this runner holds now. |
 
-**What a controller emits on every tick, to alert on its absence.** Each tick
-(one target, under its lease) emits `access_roster.ticks` and
-`access_roster.tick.duration` and, when it ended ok,
-`access_roster.tick.last_success_timestamp`, with the target in `target`
-(`github-tick` and `github-links` for GitHub, `slack-tick` for Slack, in `kind`). The
-per-controller series that move with each pass over a target are
-`github_roster.passes` (by `org` and `outcome`) and `slack_roster.passes` (by
-`workspace` and `outcome`), with the `*.rows` gauges recorded in the same call.
-A controller that has stopped shows as `access_roster_tick_last_success_timestamp_seconds`
-ageing past two intervals, or as `increase(github_roster_passes_total[1h]) == 0`; a
-series that has gone altogether needs `absent_over_time(...)`, which the chart's
-`AccessRosterTickStale` does not do (it looks back a day). With more than one replica the lease counters
-(`access_roster.leases.contended`) rise by design.
 
-The controllers' own metrics are the existing ones: `github_roster.passes`,
-`.changes`, `.link_changes`, `.breaker_trips`, `.rows`, `.seats_free`,
-`.seats_short`, `.links`, and the rate-limit pair `github_roster.rate_limited`
-(waits, by `kind`) and `github_roster.rate_limit_remaining` (the budget left, by
-`resource`), and the Slack equivalents `slack_roster.*`. The audit emitter's
-`audit.emit.*` instruments are the audit component's, and its own alerts read
-them.
+Each tick emits `access_roster.ticks`, `access_roster.tick.duration` and, when ok, `access_roster.tick.last_success_timestamp` (`kind`: `github-tick`, `github-links`, `slack-tick`). A vanished series needs `absent_over_time(...)`; `AccessRosterTickStale` looks back a day.
+
+The other controller series:
+
+```text
+github_roster.passes (org, outcome)  .changes  .link_changes  .breaker_trips  .rows
+.seats_free  .seats_short  .links  .rate_limited (kind)  .rate_limit_remaining (resource)
+slack_roster.passes (workspace, outcome)  and the same family
+audit.emit.*  (the audit component's, alerted there)
+```
 
 ### The ports
 
@@ -192,32 +133,17 @@ them.
 |---|---|---|---|
 | `access_roster.port.operation.duration` | histogram, `s` | `port`, `operation`, `outcome` | One storage port call. |
 
-`port` is `state`, `index` or `blob`. `operation` is the call (`get`, `put`,
-`create`, `update`, `delete`, `delete_if_revision`, `peek_revision`, `list`,
-`add`, `remove`, `members`, `read`, `write`, `write_if_version`, `replace`,
-`read_all`).
-`outcome` is `ok`, `not_found`, `exists`, `conflict`, `unavailable` (the store
-is down), `canceled` (the caller gave up) or `error`. The histogram's count by
-outcome is the call rate, the error rate and the **compare-and-swap conflicts**
-(`outcome="conflict"`): a lost conflict is a lease or a session rotation
-working, and is not an error.
+| Label | Values |
+|---|---|
+| `port` | `state`, `index`, `blob` |
+| `operation` | `get`, `put`, `create`, `update`, `delete`, `delete_if_revision`, `peek_revision`, `list`, `add`, `remove`, `members`, `read`, `write`, `write_if_version`, `replace`, `read_all` |
+| `outcome` | `ok`, `not_found`, `exists`, `conflict`, `unavailable` (store down), `canceled` (caller gave up), `error` |
 
-### No workspace or organisation label on the issuer's series
-
-Nothing on the issuer's or the ports' series is labelled by workspace,
-organisation, person or group. The controllers' series carry the target
-(`target`, `org`, `workspace`) for one reason: an alert on "this organisation
-has stopped" has to say which. A target is a GitHub organisation or a Slack
-workspace the policy declares (`acts_in`), so the label is bounded by the
-installation's own declaration, a handful, and does not grow with its people.
-Nothing a person controls becomes a label.
+A conflict is a lease or session rotation working, not an error. Issuer and port series carry no workspace, organisation, person or group label; controller series carry `target`, `org` or `workspace`.
 
 ## Alerts
 
-Eleven rules, in one group, rendered by the chart with `renders: alerts`. Every
-threshold is a value (`alerts.rules.<rule>`) and its reason is in the comment
-above the rule in `charts/sluis/templates/alerts.yaml`. Every
-aggregation keeps the cluster label, since one store holds many clusters.
+Eleven rules, rendered with `renders: alerts`. Each threshold is `alerts.rules.<rule>`. A rule whose series is absent does not fire.
 
 <!-- generated: telemetry-alerts -->
 
@@ -238,125 +164,18 @@ Source: `tests/golden/sluis/alerts.yaml`, the render of `charts/sluis/templates/
 | `AccessRosterPortErrors` | critical | 10m | More than 5% of the calls to this storage port failed in the last 5 minutes. | `( sum by (k8s_cluster_name, namespace, port) (increase(access_roster_port_operation_duration_seconds_count{namespace="sluis",outcome=~"unavailable\|error"}[5m])) / sum by (k8s_cluster_name, namespace, port) (increase(access_roster_port_operation_duration_seconds_count{namespace="sluis"}[5m])) ) > 0.05 and sum by (k8s_cluster_name, namespace, port) (increase(access_roster_port_operation_duration_seconds_count{namespace="sluis",outcome=~"unavailable\|error"}[5m])) >= 5` |
 <!-- /generated -->
 
-A rule whose series is absent does not fire: whether the issuer or the
-controller is running at all is the platform's alert on its own scrape, not
-this chart's.
-
 ### Runbook
 
-#### AccessRosterNoSigningKeyPublished
-
-The issuer's key ring holds no key to publish for an algorithm, so its JWKS is
-empty: no relying party can verify a token, and a new one cannot be signed. Look
-at the Secret the chart mounts at `config.signingKey.file` (cert-manager's
-Certificate, or `signingKey.existingSecret`) and the issuer's log for why the
-file was not read ("the active signing key changed" and "a signing key was seen"
-are the lines that say a key arrived). A rollout shows a zero for seconds; five
-minutes is not a rollout.
-
-#### AccessRosterSigningKeyRotationStalled
-
-The active key has not been replaced. cert-manager replaces the certificate
-`signingKey.certificate.renewBefore` ahead of its end (720h before 8760h by
-default), so a key is at most about 335 days old and the rule fires at 350. Look
-at the Certificate (`kubectl describe certificate`), its issuer, and whether the
-issuer is reading the mounted file (`config.signingKey.pollInterval`). The day
-the certificate expires every token stops verifying. If you changed `duration`
-or `renewBefore`, set `maxAgeSeconds` to their difference plus two weeks; if the
-key is rotated by hand (`signingKey.existingSecret`), turn the rule off or set it
-to your cadence.
-
-#### AccessRosterIssuer5xx
-
-The listener answers server errors. The dashboard's 5xx panel names the route,
-the issuer's log has the error. If `AccessRosterPortErrors` is also firing, the
-store is the cause: look there first. Otherwise a directory that cannot be
-reached (`directory_unreachable` in the sign-in failures) or a policy that does
-not load are the usual causes.
-
-#### AccessRosterTokenEndpointSlow
-
-Token requests are slow at the 99th percentile. A token is signed in memory and
-costs one store write, so look at the port latency panel (a slow DynamoDB, or a
-slow API server on the namespace's objects with the legacy store), then the size of the policy.
-
-#### AccessRosterTickFailing
-
-A controller's ticks of one target failed three times in 45 minutes. The
-controller's page in the console shows the report and the error; in the log it
-is "a pass over an organisation failed" (GitHub) or the Slack equivalent. An
-uninstalled App, a revoked credential and GitHub being down are the causes. The
-console answering under another policy during a rollout is retried within
-seconds and does not reach this rule.
-
-#### AccessRosterTickStale
-
-A target has completed no tick for an hour. This is the absence rule: it fires
-when the controller is not running, when nobody can take the lease, and when the
-loop hangs. Check the sluis pod (the controllers run in it, one process), whether a lease is held by a
-runner that is gone (it expires on its own after its lifetime), and the log. A
-target the policy no longer declares fires for at most a day and then leaves,
-because the last value is looked back over a day; remove it from the policy
-first.
-
-#### AccessRosterLeaseLost
-
-A lease is lost when another runner takes it over, or it could not be renewed
-for a whole lifetime. One loss is the design working: the tick stopped before its
-next write. Repeated losses are two runners on one target (more than one replica where the State is not shared, which the chart
-refuses; see [high availability](../../guides/sluis/operate/high-availability.md)) or a State that cannot be reached
-to renew: see `AccessRosterPortErrors`.
-
-#### AccessRosterCloudflareRotationStale
-
-A preset's stored credential was minted more than twice its `rotation` ago, so
-the schedule is not replacing it and consumers will soon read an expired one.
-The log line "a Cloudflare token was not minted" carries the reason:
-`prototype_active`, `prototype_forbidden` or `prototype_missing` (fix the
-prototype in Cloudflare), `minter_missing` (the `internal/cloudflare/<account>/minter`
-document), `store_error` or `cloudflare_error`. On Lambda check that the
-`{"kind":"cloudflare"}` schedule exists and is invoking the function.
-
-#### AccessRosterGitHubRateLimitLow
-
-GitHub's budget for a resource has been under 100 requests for half an hour.
-`github_roster_rate_limited_total` says how often a call already waited. Lengthen
-the controller's `interval`, or look for something else spending the App's budget.
-
-#### AccessRosterSeatsShort
-
-An organisation has fewer free seats than the invitations the policy admits. The
-controller is healthy; buy a seat or remove a member who no longer belongs and
-the next pass sends the invitations.
-
-#### AccessRosterPortErrors
-
-More than 5% of the calls to a storage port failed. State and index are DynamoDB, or the
-namespace's ConfigMaps and Secrets with the legacy store; blobs are S3, or the reports' ConfigMaps.
-`unavailable` is the store being down (check its own health and the
-NetworkPolicy to it); `error` is anything else, and the log line beside it names
-the call. Lost conflicts and missing keys are not counted.
-
-## Installing the modes
-
-The chart's `renders` value chooses what a release is: `app` (the default), `alerts` or `dashboards`. The last two render only
-the named objects. Installing them is [install telemetry](../../guides/sluis/operate/install-telemetry.md).
-
-## How it is held
-
-`just telemetry` (its own CI job, and part of `check`):
-
-- regenerates the dashboard from `hack/dashboards/access-roster-overview.py` and
-  fails on a difference from the committed JSON;
-- runs `dashboardlint` from truvity/observability at a pinned version over it, and
-  proves the lint is real by feeding it the same dashboard with a literal
-  datasource, which must fail;
-- unit-tests every rule with `vmalert-tool` (a pinned, checksum-verified
-  VictoriaMetrics release, the engine of the estate's own ruler) against
-  `tests/rules/sluis-alerts.test.yaml`. Every rule has a case that fires
-  it, with its labels and text, and at least one that must not, and
-  `tests/chart/alerts_test.go` refuses a rule without both.
-
-`just chart-lint` holds the goldens for both modes
-(`tests/golden/sluis/alerts.yaml`, `dashboards.yaml`) and that the
-default render did not change.
+| Alert | Cause and check |
+|---|---|
+| `AccessRosterNoSigningKeyPublished` | The key ring is empty, so the JWKS is empty. Check the Secret at `config.signingKey.file` (cert-manager's Certificate or `signingKey.existingSecret`) and the issuer log ("the active signing key changed", "a signing key was seen"). A rollout shows zero for seconds, not five minutes. |
+| `AccessRosterSigningKeyRotationStalled` | The active key was not replaced. cert-manager renews `signingKey.certificate.renewBefore` early (720h before 8760h), so a key is at most about 335 days old and the rule fires at 350. Check `kubectl describe certificate` and `config.signingKey.pollInterval`. After changing `duration` or `renewBefore`, set `maxAgeSeconds` to their difference plus two weeks. For hand rotation, turn the rule off or set your cadence. |
+| `AccessRosterIssuer5xx` | Server errors. The dashboard's 5xx panel names the route. If `AccessRosterPortErrors` also fires, the store is the cause. Otherwise check `directory_unreachable` and policy loading. |
+| `AccessRosterTokenEndpointSlow` | Slow p99. A token costs one store write: check the port latency panel (DynamoDB, or the API server with the legacy store), then the policy size. |
+| `AccessRosterTickFailing` | A target's ticks failed three times in 45 minutes. The console's controller page and the log ("a pass over an organisation failed") give the error: uninstalled App, revoked credential or GitHub down. |
+| `AccessRosterTickStale` | No tick for an hour: the controller is not running, nobody can take the lease, or the loop hangs. Check the sluis pod, a lease held by a gone runner (it expires on its own) and the log. A target removed from the policy fires for at most a day, so remove it from the policy first. |
+| `AccessRosterLeaseLost` | One loss is normal. Repeated losses mean two runners on one target (more than one replica without a shared State, which the chart refuses; [high availability](../../guides/sluis/operate/high-availability.md)) or an unreachable State: see `AccessRosterPortErrors`. |
+| `AccessRosterCloudflareRotationStale` | A preset's credential is older than twice its `rotation`. The log line "a Cloudflare token was not minted" gives the reason: `prototype_active`, `prototype_forbidden`, `prototype_missing`, `minter_missing`, `store_error` or `cloudflare_error`. On Lambda check that the `{"kind":"cloudflare"}` schedule invokes the function. |
+| `AccessRosterGitHubRateLimitLow` | Budget under 100 for half an hour. `github_roster_rate_limited_total` shows waits. Lengthen the controller's `interval` or find what else spends the App's budget. |
+| `AccessRosterSeatsShort` | Fewer free seats than invitations. Buy a seat or remove a member; the next pass invites. |
+| `AccessRosterPortErrors` | Over 5% of storage calls failed. `unavailable` is the store down: check its health and NetworkPolicy. `error` is anything else: the log line names the call. Conflicts and missing keys do not count. |

@@ -1,33 +1,25 @@
 # Capabilities
 
-What each platform can do today and what is designed. The
-[architecture](../../concepts/audit/architecture.md) says how the parts fit; the decisions
-[0058](../../decisions/0058-three-parts-installed-independently.md) to
-[0066](../../decisions/0066-indexer-and-query-are-separate-processes.md) say where it is
-going.
+What each platform can do today and what is designed. The [architecture](../../concepts/audit/architecture.md) explains the parts; decisions [0058](../../decisions/0058-three-parts-installed-independently.md) to [0066](../../decisions/0066-indexer-and-query-are-separate-processes.md) set the direction.
 
 | mark | means |
 |---|---|
 | 📄 designed | described in a decision or reference page; no code |
 | 🧪 built | the code exists and is tested; not yet run live |
 | ✅ supported | built, tested in CI and run in an installation |
-| — | does not apply to that platform |
+| n/a | does not apply to that platform |
 
-Today's state is that the ingest path writes the v1 layout (🧪), the notary seals
-it (🧪), the readers around it follow it, observe follows the bucket by cursor (🧪),
-and the rest of the target architecture is 📄. The
-v0 archive is not read or written by anything in this release: it is readable
-only with the previous release's CLI (v0.6.x).
+The ingest path, notary and cursor observe write and read the v1 layout (🧪). The rest of the target architecture is 📄. Only the previous release's CLI (v0.6.x) reads the v0 archive.
 
 ## Ingest
 
 | feature | Kubernetes | AWS | self-hosted |
 |---|---|---|---|
 | `http` sink (Connect to the receiver) | ✅ | 📄 | 📄 |
-| `nats` sink and consumer (JetStream) | ✅ | — | 📄 |
-| `sqs` sink and consumer, selectable as `forward.sqs` and `consume.sqs` (untested live) | — | 🧪 | — |
-| `lambda` sink (direct invocation of the writer) | — | 📄 | — |
-| the writer as an AWS Lambda behind an SQS event source mapping, with partial batch responses (`audit-writer-lambda`, [AWS](aws-pulumi-library.md)) | — | 🧪 | — |
+| `nats` sink and consumer (JetStream) | ✅ | n/a | 📄 |
+| `sqs` sink and consumer, selectable as `forward.sqs` and `consume.sqs` (untested live) | n/a | 🧪 | n/a |
+| `lambda` sink (direct invocation of the writer) | n/a | 📄 | n/a |
+| the writer as an AWS Lambda behind an SQS event source mapping, with partial batch responses (`audit-writer-lambda`, [AWS](aws-pulumi-library.md)) | n/a | 🧪 | n/a |
 | `s3` sink (in process: the writer puts the object) | ✅ | ✅ | ✅ |
 | `log` sink | 🧪 | 🧪 | 🧪 |
 | acknowledgement carries Archived, Queued or Logged | 🧪 | 🧪 | 🧪 |
@@ -35,24 +27,22 @@ only with the previous release's CLI (v0.6.x).
 | sink conformance suite (`sdk/sink/sinktest`) | 🧪 | 🧪 | 🧪 |
 | a full spool fails the write | 📄 | 📄 | 📄 |
 | deduplication on Postgres or in memory | ✅ | 📄 | 📄 |
-| deduplication on JetStream (duplicate window, KV with TTL) | 📄 | — | — |
-| deduplication on DynamoDB (conditional put with TTL, `dedupe/dynamodbdedupe`; LocalStack in CI) | — | 🧪 | — |
+| deduplication on JetStream (duplicate window, KV with TTL) | 📄 | n/a | n/a |
+| deduplication on DynamoDB (conditional put with TTL, `dedupe/dynamodbdedupe`; LocalStack in CI) | n/a | 🧪 | n/a |
 | one configuration file against a schema, version 2 (version 1 read for one minor) | ✅ | 🧪 | 📄 |
 | secrets named by `...Secret` and found through `secrets.source` (`env`, `file`, `ssm`); `env` refused on Lambda; SSM read with the function's own role | ✅ | 🧪 | 📄 |
-| `/readyz` beside `/healthz` on the writer, query service and indexer; the chart's readiness probes read it | ✅ | — | 📄 |
+| `/readyz` beside `/healthz` on the writer, query service and indexer; the chart's readiness probes read it | ✅ | n/a | 📄 |
 | `event=unknown_catalogue` and `audit_writer_catalogue_unknown_total` for a record naming a catalogue version the writer lacks, and the `<name>-writer-unknown-catalogue` alarm | 🧪 | 🧪 | 🧪 |
-| the ingest queue's sender model: `Ingest.Senders` (required) and `Redrivers`, a deny to every other principal | — | 🧪 | — |
+| the ingest queue's sender model: `Ingest.Senders` (required) and `Redrivers`, a deny to every other principal | n/a | 🧪 | n/a |
 | metrics over OTLP: acknowledgements by durability, write latency per transport, index lag, consumer failures | 🧪 | 🧪 | 🧪 |
-| queue metrics: the age of each message at receive (`audit.queue.message.age`, from `SentTimestamp`), and CloudWatch alarms on the DLQ and the oldest message | — | 🧪 | — |
-| chart value `telemetry.otlp` (`endpoint`, `protocol`, `extraEnv`): the OpenTelemetry environment on every pod | 🧪 | — | — |
-| telemetry from a Lambda with the function role's identity and no secret (the OTLP extension layer `audit-otlp`, which sluis publishes, [AWS](../../guides/audit/operate/aws-send-lambda-telemetry.md)) | — | 🧪 | — |
+| queue metrics: the age of each message at receive (`audit.queue.message.age`, from `SentTimestamp`), and CloudWatch alarms on the DLQ and the oldest message | n/a | 🧪 | n/a |
+| chart value `telemetry.otlp` (`endpoint`, `protocol`, `extraEnv`): the OpenTelemetry environment on every pod | 🧪 | n/a | n/a |
+| telemetry from a Lambda with the function role's identity and no secret (the OTLP extension layer `audit-otlp`, which sluis publishes, [AWS](../../guides/audit/operate/aws-send-lambda-telemetry.md)) | n/a | 🧪 | n/a |
 | traces over OTLP: server and client spans, `traceparent` across NATS headers and SQS attributes, no personal data on a span | 🧪 | 🧪 | 🧪 |
 | chart `renders: alerts`: nine alert rules as a `VMRule` or `PrometheusRule`, unit-tested on vmalert-tool | 🧪 | 🧪 | 🧪 |
 | chart `renders: dashboards`: the audit overview for Grafana's sidecar, held to the observability dashboard lint | 🧪 | 🧪 | 🧪 |
 
-The `s3` sink works against any store that speaks the S3 API; on a store
-without Object Lock it is the `attested` tier of
-[0056](../../decisions/0056-lock-modes-and-store-tiers.md).
+The `s3` sink works against any S3-compatible store. Without Object Lock it is the `attested` tier ([0056](../../decisions/0056-lock-modes-and-store-tiers.md)).
 
 ## The archive
 
@@ -62,39 +52,34 @@ without Object Lock it is the `attested` tier of
 | `catalogue/<app>/<version>`, written once, compared when present | 🧪 | 🧪 | 🧪 |
 | `audit verify`: key, metadata, sha256 and per-record hashes of every object | 🧪 | 🧪 | 🧪 |
 | `audit verify --root`: the seals of a range, against pinned roots (below) | 🧪 | 🧪 | 🧪 |
-| Object Lock, compliance mode | ✅ | ✅ | — |
-| governance trial, then compliance ([0065](../../decisions/0065-archive-retention-and-lifecycle.md)); the Pulumi library takes `NONE`, `GOVERNANCE` or `COMPLIANCE` | 📄 | 🧪 | — |
-| lifecycle to Glacier Instant Retrieval and Deep Archive (a rule per profile prefix in the Pulumi library) | — | 🧪 | — |
+| Object Lock, compliance mode | ✅ | ✅ | n/a |
+| governance trial, then compliance ([0065](../../decisions/0065-archive-retention-and-lifecycle.md)); the Pulumi library takes `NONE`, `GOVERNANCE` or `COMPLIANCE` | 📄 | 🧪 | n/a |
+| lifecycle to Glacier Instant Retrieval and Deep Archive (a rule per profile prefix in the Pulumi library) | n/a | 🧪 | n/a |
 | bucket-contract conformance suite (records, catalogue and ordering, against the memory store and S3) | 🧪 | 🧪 | 🧪 |
 | conformance of seals, delegation and revocation: against the memory store and S3, with a key file and a KMS P-384 key (LocalStack) | 🧪 | 🧪 | 🧪 |
 
 ## Notary
 
-The v0 digest job was removed with the v0 layout; seals replace it
-([0061](../../decisions/0061-seals.md)). The notary is `audit-notary`, a binary and an
-image of its own.
+Seals ([0061](../../decisions/0061-seals.md)) come from `audit-notary`, a binary and image of its own.
 
 | feature | Kubernetes | AWS | self-hosted |
 |---|---|---|---|
 | seals, chained through `prev`, one per profile, tenant and hour, empty hours too; settle window; idempotent; refuses to seal what does not match its metadata | 🧪 | 🧪 | 🧪 |
 | Merkle root over per-record hashes (RFC 6962), inclusion proofs and the vectors for n = 0, 1, 2, 3 and 5 (`internal/merkle`) | 🧪 | 🧪 | 🧪 |
 | `keys/roots.jwks`, written once; thumbprints pinned by the verifier | 🧪 | 🧪 | 🧪 |
-| chart: `jobs.notary`, an hourly CronJob under an identity of its own, refused if it is the writer's | 🧪 | — | — |
+| chart: `jobs.notary`, an hourly CronJob under an identity of its own, refused if it is the writer's | 🧪 | n/a | n/a |
 | seal age: `audit.seal.age`, the `AuditSealStale` alert and a dashboard panel | 🧪 | 🧪 | 🧪 |
 | verifying a delegation (window, scope, 25 hours) and a revocation | 🧪 | 🧪 | 🧪 |
 | signing a delegation: a notary on a short-lived delegated key (decision L3: daily) | 📄 | 📄 | 📄 |
-| signer: AWS KMS `ECC_NIST_P384` | 🧪 | 🧪 | — |
-| signer: OpenBAO transit `ecdsa-p384` | 🧪 | — | 🧪 |
+| signer: AWS KMS `ECC_NIST_P384` | 🧪 | 🧪 | n/a |
+| signer: OpenBAO transit `ecdsa-p384` | 🧪 | n/a | 🧪 |
 | signer: P-384 key file | 🧪 | 🧪 | 🧪 |
-| signer: PKCS#11 | — | — | 📄 |
-| signer: TPM | — | — | 📄 |
-| notary as a function on an EventBridge Scheduler schedule (`audit-notary-lambda`) | — | 🧪 | — |
+| signer: PKCS#11 | n/a | n/a | 📄 |
+| signer: TPM | n/a | n/a | 📄 |
+| notary as a function on an EventBridge Scheduler schedule (`audit-notary-lambda`) | n/a | 🧪 | n/a |
 | `audit verify` of seals: signature, chain, count and root against the objects, missing seals | 🧪 | 🧪 | 🧪 |
 
-The seals are tested against the in-memory store and against LocalStack S3, with
-the notary signing with a key file and with a KMS key; they have not run in an
-installation, which is what ✅ asks for. The signers that predate seals (an
-ed25519 or P-256 key) still sign and verify in `keys`, and sign no seal.
+Seals are tested against the in-memory store and LocalStack S3, signed by a key file and a KMS key. No installation has run them, so none is ✅. The ed25519 and P-256 signers still sign and verify in `keys`, and sign no seal.
 
 ## Observe
 
@@ -113,8 +98,8 @@ ed25519 or P-256 key) still sign and verify in `keys`, and sign no seal.
 | feature | Kubernetes | AWS | self-hosted |
 |---|---|---|---|
 | `audit` toolchain archives and container images | ✅ | ✅ | ✅ |
-| Helm chart | ✅ | — | — |
-| Helm chart modes per part | 📄 | — | — |
-| Pulumi library (bucket with Object Lock and lifecycle, keys, queue and DLQ, functions, roles, schedule, alarms, a cross-account read role; `deploy/pulumi`, mocks only) | — | 🧪 | — |
-| CloudWatch alarm set: throttles, DLQ not empty, oldest message age, errors, unknown catalogue version, notary silence, to SNS and alert-ingress | — | 🧪 | — |
-| rpm and deb packages | — | — | 📄 |
+| Helm chart | ✅ | n/a | n/a |
+| Helm chart modes per part | 📄 | n/a | n/a |
+| Pulumi library (bucket with Object Lock and lifecycle, keys, queue and DLQ, functions, roles, schedule, alarms, a cross-account read role; `deploy/pulumi`, mocks only) | n/a | 🧪 | n/a |
+| CloudWatch alarm set: throttles, DLQ not empty, oldest message age, errors, unknown catalogue version, notary silence, to SNS and alert-ingress | n/a | 🧪 | n/a |
+| rpm and deb packages | n/a | n/a | 📄 |

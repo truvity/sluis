@@ -1,49 +1,31 @@
 # `audit verify`: what it checks
 
-The command, the checks it makes on records and on seals, its flags and its output. The procedure
-for an auditor or an operator is [verify the trail](../../guides/audit/operate/verify-the-trail.md).
+The checks on records and seals, the flags and the output. The auditor's procedure is [verify the trail](../../guides/audit/operate/verify-the-trail.md).
 
 ```
 audit verify --profile security --from 2026-09-01 --to 2026-09-17 \
   --bucket <name> --prefix audit/<application> [--json]
 ```
 
-A date, an hour (`2026-09-17T10`) or a full timestamp are all accepted, and
-the range is of **ingest time**: the hours from the one `--from` is in up to,
-but not including, the one `--to` is in. The command needs the archive and
-nothing else: no public key, no database, no writer. Run it with read-only
-credentials and your own copy of the binary, because an answer that depended
-on the operator of the archive would not be worth having.
+The range is of ingest time: from the hour `--from` is in, up to but not including the hour `--to` is in. Give a date, an hour (`2026-09-17T10`) or a full timestamp. The command needs only the archive and read-only credentials.
 
-**One command, every installation.** Each installation writes one prefix of
-the environment's bucket. Verifying an application means naming its
-`--prefix`; no other application's records are read, and none is needed. The
-two deployment shapes make no difference here either: direct and stream write
-the same objects, under the same keys, so an auditor need not know which one
-produced them.
+Name an application's `--prefix` to verify only its records. Verify one profile per run.
 
-For every record object under `records/<profile>/` whose ingest hour is in the
-range, in key order, it checks, against the
-[bucket contract](bucket-contract.md):
+## Record checks
 
-1. **The key.** It has the grammar the contract gives: profile, tenant, the
-   ingest hour, a ULID.
-2. **The metadata.** `format` is `1`, and `sha256` and `count` are present and
-   well formed.
-3. **The bytes.** The SHA-256 of the stored bytes is the `sha256` the object
-   names.
-4. **The records.** The object decompresses, has `count` lines, and each line's
-   `hash` is the SHA-256 of the canonical encoding of its `record`.
-5. **The lock**, when given the deployment: an object with no retention is
-   `unlocked` under a profile that demands no lock, and `INVALID` under one
-   that does ([0056](../../decisions/0056-lock-modes-and-store-tiers.md)).
+For every object under `records/<profile>/` in the range, in key order, against the [bucket contract](bucket-contract.md):
 
-What this shows is that each object is the object that was written and each
-record is the record that was hashed. What it cannot show is that nothing was
-removed or added beside them: that is what seals vouch for
-([0061](../../decisions/0061-seals.md)), and `--root` checks them.
+| Check | Passes when |
+|---|---|
+| Key | It has the contract's grammar: profile, tenant, ingest hour, ULID |
+| Metadata | `format` is `1`; `sha256` and `count` are present and well formed |
+| Bytes | The SHA-256 of the stored bytes is the object's `sha256` |
+| Records | The object decompresses, has `count` lines, and each `hash` is the SHA-256 of its `record`'s canonical encoding |
+| Lock | Given the deployment: an object without retention is `unlocked` under a profile that demands no lock and `INVALID` under one that does ([0056](../../decisions/0056-lock-modes-and-store-tiers.md)) |
 
-## Seals
+These checks cannot show that nothing was removed or added beside the objects. Seals show that ([0061](../../decisions/0061-seals.md)); `--root` checks them.
+
+## Seal checks
 
 ```
 audit verify --profile security --from 2026-09-01 --to 2026-09-17 \
@@ -51,52 +33,29 @@ audit verify --profile security --from 2026-09-01 --to 2026-09-17 \
   --root <thumbprint>[,<thumbprint>...]
 ```
 
-With `--root` the command also checks the seals of the range, for every tenant
-of the profile, and the thumbprints are the **only** keys it trusts: the ones
-you were given by the operator out of band (`audit key public --thumbprint` on
-their side). Nothing in the bucket, `keys/roots.jwks` included, can add one.
-For every hour in the range:
+With `--root` the command checks the seals of every tenant of the profile. The thumbprints are the only keys it trusts: get them from the operator out of band (`audit key public --thumbprint`). Nothing in the bucket, `keys/roots.jwks` included, can add one.
 
-1. **A seal exists**, when the hour is due one: it has ended, the notary's
-   settle window (`--settle`, default 10m) has passed and so has a grace for its
-   hourly schedule (`--grace`, default 1h). A quiet hour has a seal too, so a
-   missing seal is a fault and never silence, from the hour of the tenant's first
-   object on. This is what finds a seal that was removed, and a notary that
-   stopped.
-2. **It is signed by a key to be believed**: a pinned root, or a key a pinned
-   root delegated to, for this profile and tenant, within the delegation's
-   window (at most 25 hours) and not revoked as of the seal. The bucket's own
-   time of writing the seal is checked beside the seal's `sealed_at`.
-3. **It chains**: its `prev` is the SHA-256 of the seal of the hour before, and
-   the first seal of a tenant has none.
-4. **It says what the hour holds now**: the count, the first and last key and
-   the Merkle root are recomputed from the objects in the bucket, so that an
-   object added to a sealed hour, removed from it or changed breaks the seal. A
-   changed object whose metadata was made to agree is caught here, by the
-   root, and not by its own sha256.
-5. **The lock**, when given the deployment: a seal is locked as long as the
-   records it covers.
+| Check | Passes when |
+|---|---|
+| Exists | Each due hour has a seal. An hour is due once it has ended and the settle window (`--settle`, default 10m) and grace (`--grace`, default 1h) have passed. Quiet hours have a seal too, from the tenant's first object on. A missing seal finds a removed seal or a stopped notary |
+| Signed | By a pinned root, or a key it delegated to for this profile and tenant, within the delegation window (at most 25 hours), not revoked as of the seal. The bucket's write time is checked beside `sealed_at` |
+| Chains | `prev` is the SHA-256 of the previous hour's seal. A tenant's first seal has none |
+| Current | Count, first and last key and Merkle root, recomputed from the bucket, match. An added, removed or changed object breaks the seal, including one whose metadata was made to agree |
+| Lock | Given the deployment: the seal is locked as long as the records it covers |
 
-A range in the middle of a chain checks its first seal against the seal just
-before the range. Each finding names the rule it breaks (`seal.signature`,
-`seal.chain`, `seal.root`, `seal.missing`, `seal.key`, `seal.payload`,
-`seal.jws`, `seal.lock`, `keys.roots`, `keys.statement`), the seal's key and the
-tenant.
+A range in the middle of a chain checks its first seal against the seal before the range.
 
-Output: one line per object and per seal, `valid`, `unlocked` or
-`INVALID: <reason>`, and a summary of the objects and records checked. Exit code
-non-zero on any invalid entry; `unlocked` is information and does not count.
+| Finding | Meaning |
+|---|---|
+| `seal.signature`, `seal.chain`, `seal.root`, `seal.missing`, `seal.key`, `seal.payload`, `seal.jws`, `seal.lock`, `keys.roots`, `keys.statement` | The rule broken. Each finding also names the seal's key and the tenant |
 
-Auditors run it with read-only credentials scoped to the installation's
-prefix. The nightly run inside the cluster (`audit verify --config`, whose
-file has the same settings under their own names) does the same for the
-previous day and, when it checks seals (`seals.roots` in its file), records the
-outcome through the writer, per ingest hour, as `audit.seal.verified` or
-`audit.seal.failed` (the target of each is
-`records/<profile>/<yyyy>/<mm>/<dd>/<hh>`, the prefix of the hour). These
-events say what they name: a run that checked no seal records none, because a
-record claiming it had would be false assurance. They replace the v0
-`audit.digest.*` events (common catalogue 2.0.0).
+## Output
+
+| Item | Value |
+|---|---|
+| Lines | One per object and per seal: `valid`, `unlocked` or `INVALID: <reason>` |
+| Summary | Objects and records checked |
+| Exit code | Non-zero on any invalid entry. `unlocked` is information |
 
 <!-- generated: verify-flags -->
 | flag | what |
@@ -112,21 +71,10 @@ record claiming it had would be false assurance. They replace the v0
 | `--endpoint`, `--path-style` | an S3-compatible store that is not AWS, as [prepare the bucket](../../guides/audit/operate/prepare-the-bucket.md#s3-compatible-stores) has it |
 <!-- /generated -->
 
-`--profile` is required, and a profile is verified on its own: an
-installation composing two profiles is two runs, because each profile has its
-own retention to check against.
+## Scheduled job
 
-The scheduled job's configuration is `archive` (the bucket and prefix, and
-nothing about a lock mode: it only reads), `deployment`, `last` (default
-`24h`), optionally `profiles`, `seals` (`roots`, the thumbprints to pin, and
-`settle` and `grace`) and `sink` with `require`. It holds no key, only the
-thumbprints of public ones.
+The nightly in-cluster run is `audit verify --config`; see [configuration: the jobs](configuration-jobs.md#audit-verify). When it checks seals (`seals.roots`), it records `audit.seal.verified` or `audit.seal.failed` per ingest hour through the writer. The target is `records/<profile>/<yyyy>/<mm>/<dd>/<hh>`. A run that checked no seal records none.
 
-**The old archive is not read.** An archive written before the v1 layout, with
-`profile=<p>/tenant=<t>/year=…` keys and a signed digest chain under
-`digest/`, is read by nothing in v1 and is not checked by this command. It
-stays verifiable with the previous release's CLI (v0.6.x), whose `audit verify`
-walks that digest chain with the public key.
+The archive written before the v1 layout is not read. Verify it with the previous release's CLI (v0.6.x).
 
-What a failed verification means, and what to do about it, is in
-[investigate a failed verification](../../guides/audit/operate/investigate-a-failed-verification.md).
+For a failed verification, see [investigate a failed verification](../../guides/audit/operate/investigate-a-failed-verification.md).

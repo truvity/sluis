@@ -1,80 +1,47 @@
 # API reference
 
-Contracts: [sink.proto](../../../audit/proto/audit/v1/sink.proto),
-[registry.proto](../../../audit/proto/audit/v1/registry.proto),
-[query.proto](../../../audit/proto/audit/v1/query.proto). Served over ConnectRPC;
-JSON is snake_case, timestamps RFC 3339. As in all proto3 JSON, a field
-at its zero value is omitted, so a search that matches nothing returns no
-`items` key at all rather than an empty list; read absence as empty.
+ConnectRPC serves [sink.proto](../../../audit/proto/audit/v1/sink.proto), [registry.proto](../../../audit/proto/audit/v1/registry.proto) and [query.proto](../../../audit/proto/audit/v1/query.proto) as snake_case JSON with RFC 3339 timestamps. An empty search has no `items` key.
 
-Two processes serve these. The **receiver** (`audit-writer`) serves
-`SinkService` and `RegistryService`; the **query service** (`audit-query`)
-serves `QueryService`. There is no third service and no `audit-registry`
-binary: an installation has one application to hear a catalogue from, so the
-process that validates every record against the catalogue is also the one
-that accepts it
-([0053](../../decisions/0053-one-installation-per-service-or-product.md)).
+| Process | Serves |
+|---|---|
+| Receiver (`audit-writer`) | `SinkService`, `RegistryService` ([0053](../../decisions/0053-one-installation-per-service-or-product.md)) |
+| Query service (`audit-query`) | `QueryService` |
 
 ## Write
 
-`audit.v1.SinkService/Write` — a batch of records with a delivery.
-Reachable by the application's workloads and by adapters; never by browsers.
+`audit.v1.SinkService/Write` takes a batch with a delivery, from workloads and adapters, never browsers. The response gives the accepted count, each `Rejection` with a reason, and the `Durability`. A structural refusal, such as an unknown catalogue version, refuses the whole batch. Decided in [0054](../../decisions/0054-two-deliveries-and-a-durable-ack.md) and [0059](../../decisions/0059-sink-durability-and-transports.md).
 
-The response says how many were accepted, lists each `Rejection` by id
-with a machine-readable reason, and names the batch's `Durability`. A whole batch is refused before any record
-is accepted when the refusal is structural — an unknown catalogue version, a
-schema violation.
-
-There are two deliveries, `block` and `async`
-([0054](../../decisions/0054-two-deliveries-and-a-durable-ack.md)), and the
-acknowledgement says how durable the batch is
-([0059](../../decisions/0059-sink-durability-and-transports.md)).
-
-| the catalogue says | on the wire | the call returns |
+| Catalogue `delivery` | On the wire | The call returns |
 |---|---|---|
-| `block` | `DELIVERY_BLOCK` | when the records are durable at the next hop |
-| `async` (the default) | `DELIVERY_ASYNC` | at once; the record waits in the emitter's bounded queue |
+| `block` | `DELIVERY_BLOCK` | When the records are durable at the next hop |
+| `async` (default) | `DELIVERY_ASYNC` | At once; the record waits in the emitter's bounded queue |
 
-| `durability` | means |
+| `durability` | Means |
 |---|---|
-| `DURABILITY_ARCHIVED` | the records are in the archive's bucket; the writer's own put reports this |
-| `DURABILITY_QUEUED` | a durable, replicated queue holds them: the JetStream and SQS publishers report this, after every acknowledgement |
-| `DURABILITY_LOGGED` | the process wrote them to its log |
-| `DURABILITY_UNSPECIFIED` | the hop did not say, which counts as weaker than all of the above |
+| `DURABILITY_ARCHIVED` | The records are in the archive's bucket; the writer's own put reports this |
+| `DURABILITY_QUEUED` | A replicated queue holds them; the JetStream and SQS publishers report this after every acknowledgement |
+| `DURABILITY_LOGGED` | The process wrote them to its log |
+| `DURABILITY_UNSPECIFIED` | The hop did not say; weaker than all others |
 
-The values are ordered, a higher number surviving more, and a hop reports what
-the last hop that took the batch reported: a receiver forwards its next hop's
-answer, and a wrapper never reports more than its successor did. The field was
-added to the response without renumbering, so a caller built before it reads
-`UNSPECIFIED`.
+A higher value survives more. A hop reports what the hop that took the batch reported, and a wrapper never reports more.
 
-In Go, a sink declares the best it will ever report with `Guarantees()`;
-`sink.Require(s, min)` refuses a chain that cannot give `min` when the process
-starts, and `sink.Guard(s, min)` does that and also fails any write whose
-acknowledgement is weaker at run time. A Connect client cannot know what the
-far side is configured to give, so `Client.Expecting` says.
+| Go call | Effect |
+|---|---|
+| `Guarantees()` | A sink declares the best it will ever report |
+| `sink.Require(s, min)` | Refuses at start-up a chain that cannot give `min` |
+| `sink.Guard(s, min)` | Does that, and fails any write whose acknowledgement is weaker at run time |
+| `Client.Expecting` | States what a Connect client's far side gives, which it cannot learn |
 
-`DELIVERY_OUTBOX` and `DELIVERY_BEST_EFFORT` stay in the enum, deprecated. A
-value removed is a record nobody can read, and this package is `v1`, so they
-remain decodable and nothing produces them: the catalogue loader refuses both
-spellings by name. `DELIVERY_OUTBOX` never reached the wire in any case — it
-named a mode of the emitter, and the file it named is gone.
+`DELIVERY_OUTBOX` and `DELIVERY_BEST_EFFORT` are deprecated and never produced.
 
 ## Catalogue registration
 
-`audit.v1.RegistryService/RegisterCatalogue`, `GetCatalogue`,
-`ListCatalogues` — **served by the receiver**, on the same port as `Write`.
+`audit.v1.RegistryService` is served by the receiver on the port of `Write`.
 
-The application calls `RegisterCatalogue` at start-up with the catalogue
-document and the JSON Schemas of its extension slots. An empty `problems`
-list means registered; a malformed catalogue comes back with its findings
-and the application does not start. The first use of a version copies it
-into the archive, beside the records it describes, so a record written under
-it still reads after the catalogue changed.
-
-`GetCatalogue` and `ListCatalogues` answer what this installation has been
-told. An installation admits one application, so the list is short and the
-source is the one the receiver verified.
+| Call | Behaviour |
+|---|---|
+| `RegisterCatalogue` | Called at start-up with the catalogue document and its extension schemas. An empty `problems` list means registered. A malformed catalogue returns its findings and the application does not start. The first use of a version copies it into the archive beside its records |
+| `GetCatalogue`, `ListCatalogues` | Answer what this installation has been told. The list is short: an installation admits one application |
 
 ## Query
 
@@ -107,29 +74,20 @@ Response:
 }
 ```
 
-`first` is a cursor like the others and means this same question from the
-beginning, so a client holds one kind of cursor rather than two. There is no
-`last`: counting what is behind a query is the expense keyset paging exists to
-avoid.
+`first` restarts the same question. There is no `last`. The service refuses operators not built.
 
-Operators per type. **Built** is what the service compiles today; the rest are
-in the proto and are refused, because a reference that promises an operator the
-service ignores is worse than one that admits the gap.
-
-| type | operators | built |
+| Type | Operators | Built |
 |---|---|---|
 | string | equal, not_equal, in, not_in, prefix | yes |
 | string | is_null, is_not_null | no |
 | time | between, greater_than, greater_than_or_equal, less_than, less_than_or_equal | yes, each as a half-open range |
 | integer | equal | yes |
 | integer | not_equal, in, not_in, between, comparisons | no |
-| targets | in, not_in (empty id matches the type) | yes |
+| targets | in, not_in (an empty id matches the type) | yes |
 | attributes | equal, not_equal, key_is_null, key_is_not_null | no |
 | data path | string, integer or time predicate on a filterable property | yes |
 
-A predicate on `id` takes whole identifiers: record ids are UUIDs, so a value
-that is not one, or a `prefix`, is `invalid_argument`. `Get` of an id that is
-not a UUID is `not_found`.
+A predicate on `id` takes whole UUIDs; anything else is `invalid_argument`. `Get` of a non-UUID is `not_found`.
 
 `Facets` counts values of fields under the same filter:
 
@@ -138,9 +96,7 @@ not a UUID is `not_found`.
 → {"facets": [{"field": "action", "values": [{"value": "shop.order.placed", "count": "42"}]}]}
 ```
 
-`Get` returns one record and where its copy is. `digest_id` and `verified_at`
-are for the seal that covers it and when that was last verified clean; they are
-empty until seals ([0061](../../decisions/0061-seals.md)) set them:
+`Get` returns one record and its copy's location. `digest_id` and `verified_at` stay empty until seals ([0061](../../decisions/0061-seals.md)) set them:
 
 ```json
 {"profile": "security", "id": "0199b100-…"}
@@ -149,8 +105,7 @@ empty until seals ([0061](../../decisions/0061-seals.md)) set them:
                   "digest_id": "", "verified_at": ""}}
 ```
 
-`Export` starts a job over a filter; `GetExport` polls it and, when ready,
-returns a signed link that expires:
+`Export` starts a job. `GetExport` polls it and returns an expiring signed link:
 
 ```json
 {"profile": "security", "filter": [ … ], "format": "FORMAT_NDJSON"}
@@ -160,17 +115,19 @@ returns a signed link that expires:
 → {"state": "EXPORT_STATE_READY", "url": "https://…", "expires_at": "…", "records": "1204"}
 ```
 
-64-bit integers (`count`, `line`, `records`) are strings in JSON, as proto3
-JSON maps them. Limits, enforced by the
-service rather than by whichever searcher is configured: `filter` 4 terms,
-`sort` 4, `in` 100 values, a `limit` ceiling of 1000 (a larger value is cut to it), and an export size cap. A
-grant's window narrows a wider request rather than refusing it.
+| Limit | Value |
+|---|---|
+| `filter` | 4 terms |
+| `sort` | 4 terms |
+| `in` | 100 values |
+| `limit` | 1000; a larger value is cut to it |
+| Export | A size cap |
+
+A grant's window narrows a wider request. 64-bit integers (`count`, `line`, `records`) are JSON strings.
 
 ## Access
 
-`audit.v1.QueryService/Access` says what the caller may read: every profile a
-grant names, with the operations the caller holds on it over at least one
-tenant, the tenants, and the period.
+`audit.v1.QueryService/Access` lists each profile a grant names with the caller's operations, tenants and period. It reads no record and is not recorded. `AuditView` calls it when the host passes no profiles.
 
 ```json
 {}
@@ -182,56 +139,28 @@ tenant, the tenants, and the period.
   ]}
 ```
 
-It is the same grants and the same rule every other call is held to, so a
-page can offer what the caller may open without its host knowing the
-deployment's profile names; `AuditView` asks it when the host passes no
-profiles. It reads no record and is not recorded. A profile a grant names
-with no tenant to read it over is not listed.
-
 ## Resolve
 
-`audit.v1.QueryService/Resolve` maps a pseudonym back to the identity behind
-it: `{"profile": "security", "tenant_id": "acme", "pseudonym": "ps_…"}` →
-`{"identifier": "…"}`. Pseudonyms differ per profile, so name the profile whose
-copy carried it.
+`audit.v1.QueryService/Resolve` maps a pseudonym to its identity: `{"profile": "security", "tenant_id": "acme", "pseudonym": "ps_…"}` returns `{"identifier": "…"}`. Name the profile that carried it.
 
-**It is `unimplemented` in a deployment with no key provider, which is the
-default** ([0055](../../decisions/0055-no-pseudonymisation-keys-by-default.md)):
-where nothing was pseudonymised there is nothing to resolve, and the service
-says so rather than returning nothing. The rest of this section describes a
-deployment that has chosen a provider.
-
-It needs the `resolve` operation on that profile, which no read grant implies
-and no group name grants — only an explicit rule. The tenant must be one the
-grant covers. The resolution is recorded as `audit.pseudonym.resolved`, and
-the record confirmed, **before** the identity is returned; if the trail cannot
-take it, nothing is resolved. The record names the pseudonym and the rule,
-never the identity. The service offers resolve only when it is given the keys
-(`keys` and `archive` in `audit-query`'s configuration: the local
-provider with `keys.local.rootFile` and `.dir`, or `transit` with a login that
-may decrypt); otherwise
-`unimplemented`.
-
-Only actor and subject pseudonyms resolve. The writer keeps each one's
-identifier sealed under the same tenant's key (`identity/` in the archive), so
-destroying the key — erasure — makes resolving impossible: `failed_precondition`.
-Values hashed by `x-audit-sensitive: hmac` are findable and never readable, and
-have no way back.
+| Rule | Detail |
+|---|---|
+| No key provider | `unimplemented`. This is the default ([0055](../../decisions/0055-no-pseudonymisation-keys-by-default.md)) |
+| Offered when | The service has the keys: `keys` and `archive` in `audit-query`'s configuration (local provider with `keys.local.rootFile` and `.dir`, or `transit` with a login that may decrypt) |
+| Permission | The `resolve` operation on the profile, from an explicit rule only. No read grant or group name implies it. The tenant must be one the grant covers |
+| Audit | `audit.pseudonym.resolved` is recorded and confirmed before the identity returns. If the trail cannot take it, nothing resolves. It names the pseudonym and the rule, never the identity |
+| Scope | Only actor and subject pseudonyms. The writer seals each identifier under the tenant's key (`identity/` in the archive) |
+| Erasure | Destroying the key makes resolve fail with `failed_precondition` |
+| `x-audit-sensitive: hmac` | Findable, never readable |
 
 ## Errors
 
-Connect codes:
-
-| code | when |
+| Connect code | When |
 |---|---|
-| `invalid_argument` | a malformed filter, or a cursor from a different query |
-| `permission_denied` | the grant excludes the profile, the operation or the tenant |
-| `resource_exhausted` | a published limit exceeded, or an export over its cap |
-| `failed_precondition` | resolve of a pseudonym whose tenant key was destroyed — erasure did what it is for; retrying never helps |
-| `not_found` | no such record — **also** what a record outside the grant returns, because "no such record" and "a record you may not read" are the same answer to somebody who should not know it exists |
-| `unimplemented` | something this deployment does not offer: resolve with no key provider, export with no bucket configured |
-| `unavailable` | the searcher is down |
-
-`unavailable` is the default for anything unrecognised, deliberately. Calling a
-searcher outage `invalid_argument` would tell a well-behaved client never to try
-again, and turn a database restart into an outage that outlives it.
+| `invalid_argument` | A malformed filter, or a cursor from a different query |
+| `permission_denied` | The grant excludes the profile, the operation or the tenant |
+| `resource_exhausted` | A published limit or an export cap exceeded |
+| `failed_precondition` | Resolve of a pseudonym whose tenant key was destroyed; retrying never helps |
+| `not_found` | No such record, and also a record outside the grant, so a caller cannot learn it exists |
+| `unimplemented` | Resolve with no key provider; export with no bucket configured |
+| `unavailable` | The searcher is down. Also the default for anything unrecognised |

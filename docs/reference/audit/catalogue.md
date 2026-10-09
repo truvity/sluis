@@ -1,106 +1,68 @@
 # Catalogue reference
 
-Format: [catalogue.schema.json](../../../audit/sdk/schemas/catalogue.schema.json).
-Example: [common.yaml](../../../audit/sdk/catalogue/common.yaml).
+One catalogue belongs to one application, and an installation admits one application. Format: [catalogue.schema.json](../../../audit/sdk/schemas/catalogue.schema.json). Example: [common.yaml](../../../audit/sdk/catalogue/common.yaml).
+
+Applications share the format and the [framework profiles](../../../audit/profiles/README.md), never a catalogue. Decided in [0053](../../decisions/0053-one-installation-per-service-or-product.md).
 
 ## Where it lives
 
-Next to the code that emits, under version control with it, validated in
-that repository's CI against this repository's validator, embedded in the
-binary or mounted by the chart, and registered at start-up over
-`RegistryService`, which the **receiver** serves — there is no registry
-service of its own
-([0053](../../decisions/0053-one-installation-per-service-or-product.md)). The
-receiver copies every version into the archive on first use.
-
-One catalogue belongs to one application, and an installation admits one
-application. What is shared between applications is this format and the
-[framework profiles](../../../audit/profiles/README.md) that profiles are composed from, never a
-catalogue.
+| Step | Detail |
+|---|---|
+| Location | Next to the emitting code, under its version control |
+| CI | Validated in that repository against this repository's validator |
+| Delivery | Embedded in the binary or mounted by the chart |
+| Registration | At start-up over `RegistryService`, which the receiver serves |
+| Archive | The receiver copies every version into the archive on first use |
 
 ## Fields
 
-- `source`, `version`, `locales`.
-- `actor_kinds`: name → category (internal, external, machine),
-  attributes schema.
-- `target_types`: name → is_person, attributes schema.
-- `context_areas`: name → schema.
-- `meters`: name → kind (count, gauge), unit, dimensions schema.
-- `actions`: `source.resource.verb` → summary, operation, categories,
-  profiles, capture level, delivery, target types, data schema and
-  version, message per locale, meter with quantity path and the outcomes
-  that count (success only unless the action says otherwise).
+| Field | Content |
+|---|---|
+| `source`, `version`, `locales` | Identity and languages |
+| `actor_kinds` | name: category (internal, external, machine), attributes schema |
+| `target_types` | name: `is_person`, attributes schema |
+| `context_areas` | name: schema |
+| `meters` | name: kind (count, gauge), unit, dimensions schema |
+| `actions` | `source.resource.verb`: summary, operation, categories, profiles, capture level, delivery, target types, data schema and version, message per locale, meter with quantity path and counted outcomes (success only by default) |
 
 ## Delivery
 
-An action declares one of two deliveries, and the choice is the action's,
-not the deployment's: the same catalogue behaves the same way in direct and
-in stream mode
-([0054](../../decisions/0054-two-deliveries-and-a-durable-ack.md)).
+The action declares its delivery, so a catalogue behaves the same in direct and stream mode. Decided in [0054](../../decisions/0054-two-deliveries-and-a-durable-ack.md) and [0059](../../decisions/0059-sink-durability-and-transports.md).
 
-| `delivery` | the application's call returns | if the receiver is down | for |
+| `delivery` | The call returns | Receiver down | For |
 |---|---|---|---|
-| `block` | when the receiver has acknowledged durability | the action **fails** | a privileged sign-in, a key destruction, a billable operation |
-| `async` (the default) | at once | the record waits in a bounded in-memory queue and is retried with backoff | everything else |
+| `block` | When the receiver acknowledges durability | The action fails | Privileged sign-in, key destruction, billable operation |
+| `async` (default) | At once | The record waits in a bounded in-memory queue and is retried with backoff | Everything else |
 
-An acknowledgement says how durable the batch is ([0059](../../decisions/0059-sink-durability-and-transports.md)), in either shape. An `async` record
-is dropped only if the queue overflows, and then it is counted
-(`audit.emit.records.dropped`) and logged.
+An `async` record is dropped only when the queue overflows. The emitter counts it as `audit.emit.records.dropped` and logs it.
 
-`outbox` and `best_effort` are retired. **The loader refuses either, naming
-the replacement**: `outbox` is `block` where the action may not go
-unrecorded, and `async` otherwise; `best_effort` is `async`. There is no
-file outbox and no volume on the emitting pod.
-
-[catalogue.schema.json](../../../audit/sdk/schemas/catalogue.schema.json) lists the two
-and defaults to `async`. A document declaring one of the retired spellings is
-refused where it is loaded, before any emitter sees it.
+The loader refuses the retired values `outbox` (use `block` or `async`) and `best_effort` (use `async`), naming the replacement.
 
 ## Categories
 
-Framework profiles require categories, never actions. A profile's required categories
-must be covered by the installation as a whole — the application's catalogue
-and the component's own together — not by each source: an application that
-signs people in need not also read logs. `audit validate --deployment` fails
-on a gap in the application's CI, and the receiver logs one after each
-registration; neither refuses an application for a category it has no reason
-to emit.
-The categories:
+Profiles require categories, never actions. The application's catalogue and the component's own together must cover a profile's required categories. `audit validate --deployment` reports a gap in CI. The receiver logs one after each registration. Neither refuses an application.
 
-`authentication`, `privileged_access`, `account_lifecycle`,
-`authorization_decision`, `configuration_change`, `data_access`,
-`data_change`, `key_lifecycle`, `credential_lifecycle`, `log_access`,
-`logging_control`, `clock`, `billing`.
+| Categories |
+|---|
+| `authentication`, `privileged_access`, `account_lifecycle`, `authorization_decision`, `configuration_change`, `data_access`, `data_change`, `key_lifecycle`, `credential_lifecycle`, `log_access`, `logging_control`, `clock`, `billing` |
 
 ## Message templates
 
-ICU MessageFormat per locale, one per declared locale, all required. The
-validator reads enough of the grammar to tell an argument from a plural or
-select submessage, and refuses a template that names anything a record of the
-action does not carry. The viewer renders in the browser; exports render no
-sentences yet.
+Each action has one ICU MessageFormat template per declared locale. The viewer renders them in the browser with FormatJS; exports render none yet. The validator refuses a template that names an argument the record lacks. It also refuses a dotted name, and a data schema where two properties map to one name (`/a_b` and `/a/b` are both `data_a_b`). An argument a record does not carry renders as a gap.
 
-An argument names a field of the record, with an underscore for each step:
-`{targets_0_id}`, `{data_items}`, `{data_address_city}`. ICU forbids dots in
-argument names, so these templates render as written in any ICU
-implementation — the viewer uses FormatJS. The validator refuses a dotted name
-and says what the underscore spelling is, and refuses a data schema where two
-properties would answer to the same name (`/a_b` and `/a/b` are both
-`data_a_b`). An argument a record does not carry renders as a gap.
+An argument names a record field with an underscore for each step, such as `{targets_0_id}` or `{data_address_city}`.
 
-Arguments a template may name:
-
-| argument | value |
+| Argument | Value |
 |---|---|
-| `id`, `source`, `action`, `operation`, `tenant`, `profile` | the core fields |
-| `occurred_at`, `recorded_at` | timestamps |
-| `actor`, `actor_id`, `actor_kind` | the actor; `actor` alone is its id |
-| `subject`, `subject_id`, `subject_kind` | the subject |
-| `outcome`, `outcome_result`, `outcome_reason`, `outcome_code` | how it ended; `outcome` is the result word (`success`, `failure`, `denied`) |
-| `observer_id`, `observer_instance` | who reported it |
-| `targets_N_id`, `targets_N_name`, `targets_N_type` for N in 0..3 | the first four targets |
-| `data_<property>` | any property the action's data schema declares; nested properties join with underscores (`/address/city` is `data_address_city`) |
-| `meter_name`, `meter_quantity`, `meter_unit` | when the action is metered |
+| `id`, `source`, `action`, `operation`, `tenant`, `profile` | Core fields |
+| `occurred_at`, `recorded_at` | Timestamps |
+| `actor`, `actor_id`, `actor_kind` | The actor; `actor` alone is its id |
+| `subject`, `subject_id`, `subject_kind` | The subject |
+| `outcome`, `outcome_result`, `outcome_reason`, `outcome_code` | `outcome` is the result word: `success`, `failure` or `denied` |
+| `observer_id`, `observer_instance` | Who reported it |
+| `targets_N_id`, `targets_N_name`, `targets_N_type` | The first four targets, N in 0..3 |
+| `data_<property>` | Any property of the action's data schema; nested names join with underscores |
+| `meter_name`, `meter_quantity`, `meter_unit` | When the action is metered |
 
 ## Validation in CI
 
@@ -109,8 +71,7 @@ audit validate ./catalogue.yaml
 audit check-emitters ./ --catalogue ./catalogue.yaml
 ```
 
-`validate` loads the document and every `.json` schema beside it. With
-`--deployment <file>` it also composes the deployment's profiles and reports
-any category a profile requires that nothing emits. `check-emitters` reads the
-string literals in a source tree and fails on an action the catalogue does not
-declare; it says plainly that it cannot see a name assembled at run time.
+| Command | Checks |
+|---|---|
+| `validate` | The document and every `.json` schema beside it. With `--deployment <file>`, also the categories a profile requires that nothing emits |
+| `check-emitters` | String literals in a source tree against the catalogue's actions. It cannot see a name assembled at run time |

@@ -1,13 +1,14 @@
 # Audit actions
 
-Every action sluis records, from the catalogue [`internal/audit/catalogue/roster.yaml`](../../../internal/audit/catalogue/roster.yaml)
-(the version and the number of actions are in the table below). All are kept under the `security` profile in the installation's tenant `@platform`.
-Delivery `async` goes on a bounded queue in the process; `block` is recorded before the action completes and refuses
-it when it cannot be. Why the trail is shaped this way: [audit](../../concepts/sluis/audit.md).
+The actions sluis records, from the catalogue [`internal/audit/catalogue/roster.yaml`](../../../internal/audit/catalogue/roster.yaml). The trail is explained in [audit](../../concepts/sluis/audit.md).
 
-Actor kinds: `person`, `recovery`, `ci`, `workload`, `system`, `anonymous`. Target types: `client`, `workspace`,
-`organisation`, `team`, `github_account`, `github_app`, `slack_workspace`, `slack_channel`, `slack_user`, `slack_app`,
-`directory_group`, `directory_user`.
+| Term | Meaning |
+|---|---|
+| Profile | All actions are kept under `security`, in the installation's tenant `@platform` |
+| Delivery `async` | Goes on a bounded in-process queue |
+| Delivery `block` | Recorded before the action completes; the action is refused when it cannot be |
+| Actor kinds | `person`, `recovery`, `ci`, `workload`, `system`, `anonymous` |
+| Target types | `client`, `workspace`, `organisation`, `team`, `github_account`, `github_app`, `slack_workspace`, `slack_channel`, `slack_user`, `slack_app`, `directory_group`, `directory_user` |
 
 <!-- generated: audit-actions -->
 
