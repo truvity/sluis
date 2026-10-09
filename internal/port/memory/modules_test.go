@@ -117,7 +117,6 @@ func TestPeerViews(t *testing.T) {
 	if _, ok := g.(port.State); ok {
 		t.Error("a peer view is a State")
 	}
-	var _ port.StateReader = g
 }
 
 func TestOwnedKeepsOptionalCapabilities(t *testing.T) {
