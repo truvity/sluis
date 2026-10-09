@@ -4,9 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/truvity/sluis/storage/logattr"
 
 	"github.com/truvity/sluis/internal/audit"
 	"github.com/truvity/sluis/internal/cloudflare"
@@ -112,7 +115,7 @@ func (m *Minter) tick(ctx context.Context, preset string, p config.CloudflarePre
 		due = true
 	case errors.Is(err, secretstore.ErrSchema):
 		// A document that is not ours, or damaged: replaced rather than trusted.
-		m.log.WarnContext(ctx, "the stored Cloudflare document is not valid; minting a new one", "preset", preset, "error", err)
+		m.log.WarnContext(ctx, "the stored Cloudflare document is not valid; minting a new one", slog.String("preset", preset), logattr.SafeError("error", err))
 		due = true
 	case err != nil:
 		res.Outcome, res.Err = OutcomeFailed, fmt.Errorf("read external/cloudflare/%s: %w", preset, err)
@@ -165,7 +168,8 @@ func (m *Minter) rotate(ctx context.Context, preset string, p config.CloudflareP
 		Variant: audit.CloudflareStored, R2: p.R2(), Account: p.Account, TokenID: minted.TokenID, ExpiresOn: minted.ExpiresOn,
 	}))
 	meters.mint(ctx, preset, audit.CloudflareStored, "ok")
-	m.log.InfoContext(ctx, "a Cloudflare credential was rotated", "preset", preset, "account", p.Account, "token", minted.TokenID, "expires_on", minted.ExpiresOn)
+	m.log.InfoContext(ctx, "a Cloudflare credential was rotated", slog.String("preset", preset), slog.String("account", p.Account),
+		slog.String("token", minted.TokenID), slog.Time("expires_on", minted.ExpiresOn))
 	return minted, nil
 }
 
@@ -176,7 +180,7 @@ func (m *Minter) dropUnstored(ctx context.Context, preset string, p config.Cloud
 	}
 	if err != nil && !errors.Is(err, cloudflare.ErrNotFound) {
 		m.log.WarnContext(ctx, "a minted token could not be stored and could not be deleted; the sweep deletes it when it expires",
-			"preset", preset, "token", minted.TokenID, "error", err)
+			slog.String("preset", preset), slog.String("token", minted.TokenID), logattr.SafeError("error", err))
 	}
 }
 
@@ -330,7 +334,8 @@ func (m *Minter) Revoke(ctx context.Context, preset, tokenID string, actor audit
 	}
 	m.cfg.record(ctx, audit.CloudflareTokenRevoked(actor, preset, p.Account, tokenID))
 	if err = m.untrack(ctx, preset, tokenID); err != nil {
-		m.log.WarnContext(ctx, "a revoked token could not be removed from the record; the sweep forgets it", "preset", preset, "token", tokenID, "error", err)
+		m.log.WarnContext(ctx, "a revoked token could not be removed from the record; the sweep forgets it", slog.String("preset", preset),
+			slog.String("token", tokenID), logattr.SafeError("error", err))
 	}
 	var res RevokeResult
 	if !cloudflare.IsStored(tok.Name, m.cfg.Instance, preset) {
