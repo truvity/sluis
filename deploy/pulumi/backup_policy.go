@@ -187,3 +187,33 @@ func ArchiveBucketPolicyStatements(g ArchiveGrant, backupRoleArn, restoreRoleArn
 	}
 	return out, nil
 }
+
+// RestoreRoleStatements is the statement list of the restore function's role:
+// the module pattern for the role [RoleRestore] (its own table, which holds
+// `rec.backup.restore.*` and `lease.restore:*`, and the write-all cross-grant on
+// the other five modules' tables, parameters and blob prefixes; no deny of the
+// maintenance flag: this role alone writes it), the archive for reading, and
+// lambda:InvokeFunction on the ARNs it continues itself through.
+//
+// A restore that pauses invokes the very ARN (alias included) it was invoked
+// through, so selfArns are the aliases of the callers allowed to start one.
+func RestoreRoleStatements(env ModuleEnv, g ArchiveGrant, selfArns []string) ([]map[string]any, error) {
+	if err := g.validate(); err != nil {
+		return nil, err
+	}
+	if len(selfArns) == 0 {
+		return nil, errors.New("sluispulumi: RestoreRoleStatements: the role continues itself through its own aliases: none given")
+	}
+	st, err := ModuleRoleStatements(env, Role{Name: RoleRestore, Hosts: []Module{ModuleBackup}})
+	if err != nil {
+		return nil, err
+	}
+	st = append(st, restoreArchiveStatements(g)...)
+	st = append(st, statement{
+		"Sid": sidRestoreSelf, "Effect": "Allow", "Action": lambdaInvokeFunction, "Resource": sortedStrings(selfArns),
+	})
+	if err := uniqueSids(st); err != nil {
+		return nil, err
+	}
+	return st, nil
+}

@@ -9,6 +9,7 @@ Source: `deploy/pulumi`. Identifiers: [Go packages](../../sdk/go/sluis.md). Deci
 | `NewStates` | `sluis:aws:States` | One table per module ([ADR 0072](../../decisions/0072-storage-layout-v5-module-first.md)), and the legacy table adopted |
 | `NewLambda` | `sluis:aws:Lambda` | Function, role, HTTP API, signing key, schedules. The main path |
 | `NewBackup` | `sluis:aws:Backup` | The [backup function](#backup), its role, aliases, schedules and alarms; optionally the archive bucket |
+| `NewRestore` | `sluis:aws:Restore` | The [restore function](#restore): `backup.role: restore`, its role, two aliases, the resource policy and an alarm |
 | `NewKubernetesIdentity` | `sluis:aws:KubernetesIdentity` | The EKS Pod Identity role of the one pod |
 
 Pass the provider with `pulumi.Providers(p)`. `RenderPorts` and `RenderPortsYAML` render `ports:`.
@@ -161,6 +162,32 @@ The role trusts `pods.eks.amazonaws.com` for this cluster and ServiceAccount.
 |---|---|
 | `BackupRoleStatements(env, ArchiveGrant)` | The role above, for an estate that builds its own |
 | `ArchiveBucketPolicyStatements(grant, backupRoleArn, restoreRoleArn)` | The bucket policy for a bucket in another account; its owner also names the roles in the bucket key's policy |
+
+### Restore
+
+| `RestoreArgs` | Default | Meaning |
+|---|---|---|
+| `BackupCommon` | As `BackupArgs` | The same installation, archive and key. `Archive.Create` is refused: `NewBackup` makes the bucket. `FunctionName` defaults to `sluis-<instance>-restore` |
+| `RestoreInvokers` | Required | `AdminRoleArns` and `BreakglassRoleArns`, at least one role each. A wildcard, an account root, a user, or a role in both lists is refused |
+| `Function.TimeoutSeconds` | 900 | At least 180, twice `RestoreMargin` (90 s): the slice a restore keeps back before it pauses and continues itself |
+
+| Detail | Behavior |
+|---|---|
+| Function | The release zip with a document of `backup.role: restore`. No reserved concurrency, because `lease.restore:run` allows one restore at a time. No schedule |
+| Aliases | `live-admin` and `live-breakglass` only. Both are asynchronous without retry |
+| Resource policy | One `lambda:InvokeFunction` permission per invoker, on the alias of its class: administrators on `live-admin`, break-glass roles on `live-breakglass`. No unqualified permission, no service principal. Identity policies of other principals must not grant the invoke |
+| Alarm | `<function>-invoked`: `Invocations` at least 1 in a minute |
+| Outputs | `FunctionArn`, `FunctionName`, `RoleArn`, `RoleName`, `ConfigLayerArn`, `AliasArns`, `ArchiveKeyArn`, `AlarmNames` |
+
+| Restore role grant | Actions | Resource |
+|---|---|---|
+| `SluisTableBackup` | Table read and write | The backup table: `rec.backup.restore.*`, `lease.restore:*` and the `maintenance` flag |
+| `SluisCross<Module>Table`, `…Parameters`, `…Blobs` | Table read and write; `ssm:GetParameter`, `PutParameter`, `DeleteParameter`; `s3:GetObject`, `PutObject`, `DeleteObject` | The other five modules' tables, `internal/<module>/*`, `external/<module>/*`, `<module>/` prefixes, and the key through SSM |
+| `SluisCrossCloudflareMinter` | `ssm:GetParameter` | The `MinterRefs` parameters, with `credentials.preset` |
+| `SluisArchiveObjects`, `SluisArchiveList` | `s3:GetObject`, `GetObjectVersion`; `ListBucket`, `ListBucketVersions` | `<bucket>/<prefix>backup/<instance>/*`. No put, no delete |
+| `SluisArchiveKey` | `kms:Decrypt` | The archive key, context `{instance, purpose=archive}`. No `GenerateDataKey` |
+| `SluisRestoreSelf` | `lambda:InvokeFunction` | Its own two aliases: a paused restore continues through the ARN it was invoked through |
+| Maintenance flag | n/a | No `SluisMaintenanceDeny`: this role alone writes the flag in every table. `RestoreRoleStatements(env, grant, selfArns)` renders it |
 
 ## Ports configuration
 

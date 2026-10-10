@@ -306,3 +306,156 @@ func TestTheCrossAccountBucketPolicyNamesTheRolesAndTheirPathOnly(t *testing.T) 
 		t.Error("no backup role accepted")
 	}
 }
+
+func TestRestoreRoleWritesEveryModuleAndTheMaintenanceFlag(t *testing.T) {
+	env := testModuleEnv()
+	st, err := RestoreRoleStatements(env, testArchive(), []string{"alias:admin", "alias:breakglass"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, m := range Modules() {
+		table := env.TableArns[m]
+		for _, a := range []string{"dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem", "dynamodb:GetItem", "dynamodb:Query", "dynamodb:Scan"} {
+			if !allowed(t, st, ddb(a, table, "any")) {
+				t.Errorf("the restore role cannot %s on the %s table", a, m)
+			}
+			if !allowed(t, st, ddb(a, table, MaintenancePartition)) {
+				t.Errorf("the restore role cannot %s the maintenance flag in the %s table", a, m)
+			}
+		}
+		for _, kind := range []string{"internal", "external"} {
+			arn := arnPrefix + "ssm:r1:000000000000:parameter/sluis/i1/" + kind + "/" + string(m) + "/x"
+			for _, a := range []string{"ssm:GetParameter", "ssm:PutParameter", "ssm:DeleteParameter"} {
+				if !allowed(t, st, iamReq{action: a, resource: arn}) {
+					t.Errorf("the restore role cannot %s %s/%s", a, kind, m)
+				}
+			}
+		}
+		for _, a := range []string{"s3:GetObject", "s3:PutObject", "s3:DeleteObject"} {
+			if !allowed(t, st, iamReq{action: a, resource: "bkt/" + string(m) + "/x"}) {
+				t.Errorf("the restore role cannot %s the %s blobs", a, m)
+			}
+		}
+	}
+	// The records of a restore and its lease are the backup table's own.
+	for _, partition := range []string{"rec", "lease"} {
+		if !allowed(t, st, ddb("dynamodb:PutItem", env.TableArns[ModuleBackup], partition)) {
+			t.Errorf("the restore role cannot write the %s records of the backup table", partition)
+		}
+	}
+	for _, a := range ddbMaintenanceDenied[:3] {
+		for _, s := range st {
+			if s["Effect"] == "Deny" && slices.Contains(strs(s["Action"]), a) {
+				t.Errorf("the restore role carries the deny %v", s["Sid"])
+			}
+		}
+	}
+}
+
+// Only the restore role writes the flag: the backup role and the module roles
+// are denied it, whatever else they hold, and the restore role is not.
+func TestOnlyTheRestoreRoleWritesTheMaintenanceFlag(t *testing.T) {
+	env := testModuleEnv()
+	restore, err := RestoreRoleStatements(env, testArchive(), []string{"alias:admin"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	backup, err := BackupRoleStatements(env, testArchive())
+	if err != nil {
+		t.Fatal(err)
+	}
+	roles := map[string][]map[string]any{"backup": backup, "restore": restore}
+	for _, r := range testRoles() {
+		if r.Name != RoleBackup && r.Name != RoleRestore {
+			st, err := ModuleRoleStatements(env, r)
+			if err != nil {
+				t.Fatal(err)
+			}
+			roles[r.Name] = st
+		}
+	}
+	for name, st := range roles {
+		for _, m := range Modules() {
+			for _, a := range []string{"dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem"} {
+				got := allowed(t, st, ddb(a, env.TableArns[m], MaintenancePartition))
+				// Every other role's allowances on a table it does not hold are absent
+				// anyway; the point is that no role but restore ever holds the write.
+				if want := name == RoleRestore; got != want {
+					t.Errorf("role %s: %s of the flag in the %s table = %v, want %v", name, a, m, got, want)
+				}
+			}
+		}
+	}
+}
+
+func TestRestoreRoleReadsTheArchiveAndWritesNothingToIt(t *testing.T) {
+	st, err := RestoreRoleStatements(testModuleEnv(), testArchive(), []string{"alias:admin"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	in := "arch/pre/backup/i1/20261010T020000Z-3fa9c1/manifest"
+	for _, a := range []string{"s3:GetObject", "s3:GetObjectVersion"} {
+		if !allowed(t, st, iamReq{action: a, resource: in}) || allowed(t, st, iamReq{action: a, resource: "arch/pre/backup/other/x"}) {
+			t.Errorf("%s is not bound to the archive path", a)
+		}
+	}
+	for _, a := range []string{"s3:PutObject", "s3:DeleteObject", "s3:DeleteObjectVersion", "s3:PutBucketPolicy"} {
+		if allowed(t, st, iamReq{action: a, resource: in}) || allowed(t, st, iamReq{action: a, resource: "arch"}) {
+			t.Errorf("the restore role can %s in the archive", a)
+		}
+	}
+	list := func(a string) bool {
+		return allowed(t, st, iamReq{action: a, resource: "arch", keys: map[string][]string{"s3:prefix": {"pre/backup/i1/"}}})
+	}
+	if !list("s3:ListBucket") || !list("s3:ListBucketVersions") {
+		t.Error("the restore role cannot list the archive path")
+	}
+	ctx := map[string]string{"instance": "i1", "purpose": ArchivePurpose}
+	if !allowed(t, st, kmsCtx("kms:Decrypt", "akey", ctx)) {
+		t.Error("the restore role cannot open a data key")
+	}
+	for _, a := range []string{"kms:GenerateDataKey", "kms:Encrypt"} {
+		if allowed(t, st, kmsCtx(a, "akey", ctx)) {
+			t.Errorf("the restore role can %s with the archive key: it writes no archive", a)
+		}
+	}
+	if allowed(t, st, kmsCtx("kms:Decrypt", "akey", map[string]string{"instance": "i2", "purpose": ArchivePurpose})) {
+		t.Error("the restore role opens another instance's data key")
+	}
+}
+
+func TestRestoreRoleInvokesItsOwnAliasesAndNothingElse(t *testing.T) {
+	st, err := RestoreRoleStatements(testModuleEnv(), testArchive(), []string{"alias:breakglass", "alias:admin"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, own := range []string{"alias:admin", "alias:breakglass"} {
+		if !allowed(t, st, iamReq{action: "lambda:InvokeFunction", resource: own}) {
+			t.Errorf("the restore role cannot continue through %s", own)
+		}
+	}
+	for _, other := range []string{"fn:issuer", "fn:cf", "fn:bk", "alias:live"} {
+		if allowed(t, st, iamReq{action: "lambda:InvokeFunction", resource: other}) {
+			t.Errorf("the restore role can invoke %s", other)
+		}
+	}
+	if _, err := RestoreRoleStatements(testModuleEnv(), testArchive(), nil); err == nil {
+		t.Error("a restore role that cannot continue itself was accepted")
+	}
+}
+
+func TestRestoreRoleReadsTheMinterWithoutHostingCloudflare(t *testing.T) {
+	env := testModuleEnv()
+	env.MinterRefs = []string{"internal/cloudflare/acct/minter"}
+	st, err := RestoreRoleStatements(env, testArchive(), []string{"alias:admin"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var found bool
+	for _, s := range st {
+		found = found || s["Sid"] == "SluisCrossCloudflareMinter"
+	}
+	if !found {
+		t.Error("no minter cross-grant for credentials.preset")
+	}
+}
