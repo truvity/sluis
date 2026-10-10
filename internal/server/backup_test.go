@@ -35,7 +35,8 @@ func (f *fakeBackup) RestoreStatus(context.Context) (restorejob.Status, error) {
 func newFakeBackup() *fakeBackup {
 	at := time.Date(2026, 10, 10, 2, 0, 0, 0, time.UTC)
 	run := &job.View{ID: "20261010T020000Z-3fa9c1", State: "paused", Started: at, Updated: at, Units: 8, Done: 3, Records: 40}
-	done := &job.View{ID: "20261009T020000Z-aa", State: "completed", Started: at.Add(-24 * time.Hour), Finished: at.Add(-23 * time.Hour), Modules: 4, Records: 90, Chunks: 6}
+	done := &job.View{ID: "20261009T020000Z-aa", State: "completed", Started: at.Add(-24 * time.Hour),
+		Finished: at.Add(-23 * time.Hour), Modules: 4, Records: 90, Chunks: 6}
 	return &fakeBackup{
 		status: job.Status{Latest: run, LastCompleted: done, Unfinished: run,
 			Retention: &job.Pass{At: at, Keep: 7, MaxAge: "720h", Kept: 7, Removed: []string{"a", "b"}, Failed: []string{"c"}}},
