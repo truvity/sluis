@@ -1473,7 +1473,8 @@ func TestWhatTheLibraryRefusesToPublish(t *testing.T) {
 	}
 	for k, ok := range map[string]bool{
 		"OTEL_EXPORTER_OTLP_ENDPOINT": true, "ACCESS_ROSTER_OTLP_AUDIENCE": true, "OPENTELEMETRY_COLLECTOR_CONFIG_URI": true,
-		"AWS_LAMBDA_EXEC_WRAPPER": true, "SLUIS_CONFIG": false, "SLUIS_ROLE": false, "SLUIS_SECRET_FILES": false,
+		"AWS_LAMBDA_EXEC_WRAPPER": true, "SLUIS_OTLP_AUDIENCE": true, "SLUIS_ISSUER": true,
+		"SLUIS_TELEMETRY_BUFFER_QUEUE_ITEMS": true, "SLUIS_CONFIG": false, "SLUIS_NOPE": false, "SLUIS_ROLE": false, "SLUIS_SECRET_FILES": false,
 		"LD_PRELOAD": false, "AWS_REGION": false, "AWS_ENDPOINT_URL_SSM": false, "HTTPS_PROXY": false,
 	} {
 		_, _, err := buildLambda(t, estate{mutate: func(a *arp.LambdaArgs) {

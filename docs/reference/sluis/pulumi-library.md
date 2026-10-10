@@ -176,7 +176,7 @@ l, _ := sluispulumi.NewLambda(ctx, "access", &sluispulumi.LambdaArgs{
 | `CloudflareRotation.Rate`, `.Disabled`, `.Paused` | `rate(1 minute)`, false, false | Invokes `{"kind":"cloudflare"}`. Exists only when `Installation.Cloudflare` declares presets, which also grants SSM read on `internal/cloudflare/*`, read and write on `internal/cloudflare-minted/*`, write on `external/cloudflare/*` ([Cloudflare tokens](../../guides/sluis/cloudflare-tokens.md)) |
 | `WebIdentityAudience` | Any | Restricts the audience of the role's web identity token |
 | `AdditionalWebIdentityAudiences` | None | Extra exact audiences after it. Any code under the role can mint them. Empty, duplicate, or with empty `WebIdentityAudience`: refused |
-| `Telemetry.LayerArn`, `.Env` | nil | The `otlp-lambda` layer; `Env` accepts `OTEL_*`, `OPENTELEMETRY_*`, `ACCESS_ROSTER_*`, `AWS_LAMBDA_EXEC_WRAPPER` and nothing else. `OTEL_SERVICE_NAME` defaults to the function name. The layer's token comes from an issuer: one other than the function it observes keeps telemetry flowing while that function is saturated. The function drops what the layer refuses |
+| `Telemetry.LayerArn`, `.Env` | nil | The `otlp-lambda` layer; `Env` accepts `OTEL_*`, `OPENTELEMETRY_*`, the layer's `SLUIS_*` settings (`ACCESS_ROSTER_*` until v1.76), `AWS_LAMBDA_EXEC_WRAPPER` and nothing else. `OTEL_SERVICE_NAME` defaults to the function name. The layer's token comes from an issuer: one other than the function it observes keeps telemetry flowing while that function is saturated. The function drops what the layer refuses |
 | `Tags` | None | On everything that takes tags |
 
 ### Outputs
