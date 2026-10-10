@@ -175,8 +175,13 @@ type API interface {
 
 // Config is how a table is reached and made.
 type Config struct {
-	// Table is the table's name. Required.
+	// Table is the table's name in layout 4: one table for every module.
+	// Exactly one of Table and Tables is set.
 	Table string
+	// Tables is layout 5 (ADR 0072): one table per module, by module. A module
+	// absent here has no table, and a process cannot open or read it. Open
+	// them with [OpenTables]. See [DefaultTables] for the default names.
+	Tables map[port.Module]string
 	// Region is the table's region; empty is the SDK's own resolution
 	// (AWS_REGION).
 	Region string
@@ -197,10 +202,16 @@ func WithClock(now func() time.Time) Option { return func(s *Store) { s.now = no
 // WithPollInterval sets how often a Watch lists its prefix.
 func WithPollInterval(d time.Duration) Option { return func(s *Store) { s.poll = d } }
 
-// Store is the State, Index and Trigger over one table.
+// Store is the State, Index and Trigger over one table: the whole service's
+// in layout 4, one module's in layout 5 ([Tables]).
 type Store struct {
 	api   API
 	table string
+	// v5 is a table of one module, addressed by internal/port/layout5.go. It
+	// refuses a write of another module's key ([port.ErrNotOwner]) and reads
+	// one as absent: that record is in the other module's table.
+	v5     bool
+	module port.Module
 
 	now    func() time.Time
 	offset atomic.Int64
@@ -213,6 +224,14 @@ func Open(ctx context.Context, cfg Config, opts ...Option) (*Store, error) {
 	if cfg.Table == "" {
 		return nil, errors.New("dynamodb: no table")
 	}
+	client, err := newClient(ctx, cfg)
+	if err != nil {
+		return nil, err
+	}
+	return New(ctx, client, cfg, opts...)
+}
+
+func newClient(ctx context.Context, cfg Config) (API, error) {
 	var loaders []func(*awsconfig.LoadOptions) error
 	if cfg.Region != "" {
 		loaders = append(loaders, awsconfig.WithRegion(cfg.Region))
@@ -221,23 +240,22 @@ func Open(ctx context.Context, cfg Config, opts ...Option) (*Store, error) {
 	if err != nil {
 		return nil, unavailable(err)
 	}
-	client := ddb.NewFromConfig(awsCfg, func(o *ddb.Options) {
+	return ddb.NewFromConfig(awsCfg, func(o *ddb.Options) {
 		if cfg.Endpoint != "" {
 			o.BaseEndpoint = aws.String(cfg.Endpoint)
 		}
-	})
-	return New(ctx, client, cfg, opts...)
+	}), nil
 }
 
-// New binds the table over a client the caller made.
+// New binds the layout 4 table over a client the caller made.
 func New(ctx context.Context, api API, cfg Config, opts ...Option) (*Store, error) {
 	if cfg.Table == "" {
 		return nil, errors.New("dynamodb: no table")
 	}
-	s := &Store{api: api, table: cfg.Table, now: time.Now, poll: DefaultPollInterval}
-	for _, opt := range opts {
-		opt(s)
+	if len(cfg.Tables) > 0 {
+		return nil, errors.New("dynamodb: table and tables are both set (layout 4 and layout 5 do not mix)")
 	}
+	s := newStore(api, cfg.Table, opts)
 	if cfg.Create {
 		if err := s.createTable(ctx); err != nil {
 			return nil, unavailable(fmt.Errorf("table %q: %w", cfg.Table, err))
@@ -247,6 +265,14 @@ func New(ctx context.Context, api API, cfg Config, opts ...Option) (*Store, erro
 		return nil, fmt.Errorf("table %q: %w (set ports.dynamodb.create to make it, or make it with the infrastructure code)", cfg.Table, err)
 	}
 	return s, nil
+}
+
+func newStore(api API, table string, opts []Option) *Store {
+	s := &Store{api: api, table: table, now: time.Now, poll: DefaultPollInterval}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
 }
 
 func (s *Store) createTable(ctx context.Context) error {
@@ -340,10 +366,21 @@ func unavailable(err error) error {
 // --- keys, revisions, lifetimes ---
 
 // locate is where a key lives: its kind (pk) and its id (sk), by the layout of
-// internal/port (keys.go), which every adapter shares.
-func locate(key string) (pk, sk string, err error) {
-	a, err := port.Locate(key)
-	if err != nil {
+// internal/port (keys.go, or layout5.go in a module's table), which every
+// adapter shares. A key of another module than the table's is
+// [port.ErrNotOwner]; a key of no module is the table's own.
+func (s *Store) locate(key string) (pk, sk string, err error) {
+	var a port.Address
+	if s.v5 {
+		a5, err := port.Locate5(key)
+		if err != nil {
+			return "", "", err
+		}
+		if a5.Module != "" && a5.Module != s.module {
+			return "", "", fmt.Errorf("%w: %q is the %s module's, this table is %s", port.ErrNotOwner, key, a5.Module, s.module)
+		}
+		a = port.Address{Kind: a5.Kind, ID: a5.ID}
+	} else if a, err = port.Locate(key); err != nil {
 		return "", "", err
 	}
 	if len(a.ID) > maxKey {
@@ -486,7 +523,7 @@ func (s *Store) live(ctx context.Context, pk, sk string) (item, error) {
 // revision, the expiry and the index mark so that no value is ever read this
 // way.
 func (s *Store) PeekRevision(ctx context.Context, key string) (port.Revision, error) {
-	pk, sk, err := locate(key)
+	pk, sk, err := s.locate(key)
 	if err != nil {
 		return "", port.ErrNotFound
 	}
@@ -521,7 +558,7 @@ func (s *Store) PeekRevision(ctx context.Context, key string) (port.Revision, er
 
 // Get implements [port.State].
 func (s *Store) Get(ctx context.Context, key string) (port.Record, error) {
-	pk, sk, err := locate(key)
+	pk, sk, err := s.locate(key)
 	if err != nil {
 		return port.Record{}, port.ErrNotFound
 	}
@@ -556,7 +593,7 @@ func (s *Store) checkWrite(key string, value []byte, ttl time.Duration) (pk, sk 
 	if err = port.CheckWrite(key, value, ttl); err != nil {
 		return "", "", err
 	}
-	return locate(key)
+	return s.locate(key)
 }
 
 // Create implements [port.State]: the write is conditioned on the key being
@@ -644,7 +681,10 @@ func (s *Store) Update(ctx context.Context, key string, value []byte, ttl time.D
 
 // Delete implements [port.State].
 func (s *Store) Delete(ctx context.Context, key string) error {
-	pk, sk, err := locate(key)
+	pk, sk, err := s.locate(key)
+	if errors.Is(err, port.ErrNotOwner) {
+		return err
+	}
 	if err != nil {
 		return nil // such a key was never written
 	}
@@ -658,7 +698,10 @@ func (s *Store) Delete(ctx context.Context, key string) error {
 
 // DeleteIfRevision implements [port.State].
 func (s *Store) DeleteIfRevision(ctx context.Context, key string, rev port.Revision) error {
-	pk, sk, err := locate(key)
+	pk, sk, err := s.locate(key)
+	if errors.Is(err, port.ErrNotOwner) {
+		return err
+	}
 	if err != nil {
 		return port.ErrNotFound
 	}
@@ -689,3 +732,6 @@ func (s *Store) DeleteIfRevision(ctx context.Context, key string, rev port.Revis
 
 // Table is the table's name.
 func (s *Store) Table() string { return s.table }
+
+// Module is the module whose table this is: empty for the layout 4 table.
+func (s *Store) Module() port.Module { return s.module }

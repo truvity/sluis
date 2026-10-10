@@ -53,6 +53,13 @@ type Env struct {
 	// Proof makes a token the adapter's Identity accepts; nil skips nothing
 	// silently, it is an assertion listed in Skips.
 	Proof func() Proof
+	// RecordPrefix is the key family the suite writes records with a lifetime
+	// in; empty is "tok." (the oidc module's). A table that holds one module
+	// names a family of that module ("gh.org." for github).
+	RecordPrefix string
+	// PermanentPrefix is the same for the permanent record; empty is "gh.org."
+	// (the github module's). Name a permanent family of the table's module.
+	PermanentPrefix string
 	// Skips maps an assertion name to the engine reason it cannot pass.
 	Skips map[string]string
 }
@@ -221,7 +228,7 @@ func exactlyOne(t *testing.T, errs []error, loser error) {
 }
 
 func casUpdateRace(t *testing.T, e Env) {
-	key := recordPrefix + "cas"
+	key := e.record() + "cas"
 	rev := mustPut(t, e.Set.State, key, "v0", lifetime)
 	errs := race(racers, func(i int) error {
 		_, err := e.Set.State.Update(ctx(), key, []byte("v"+strconv.Itoa(i+1)), lifetime, rev)
@@ -231,7 +238,7 @@ func casUpdateRace(t *testing.T, e Env) {
 }
 
 func casCreateRace(t *testing.T, e Env) {
-	key := recordPrefix + "create"
+	key := e.record() + "create"
 	errs := race(racers, func(i int) error {
 		_, err := e.Set.State.Create(ctx(), key, []byte("v"+strconv.Itoa(i)), lifetime)
 		return err
@@ -240,7 +247,7 @@ func casCreateRace(t *testing.T, e Env) {
 }
 
 func casDeleteIfRevision(t *testing.T, e Env) {
-	key := recordPrefix + "delrev"
+	key := e.record() + "delrev"
 	rev := mustPut(t, e.Set.State, key, "one", lifetime)
 	newer := mustPut(t, e.Set.State, key, "two", lifetime)
 	if err := e.Set.State.DeleteIfRevision(ctx(), key, rev); !errors.Is(err, port.ErrConflict) {
@@ -264,7 +271,7 @@ func casDeleteIfRevision(t *testing.T, e Env) {
 }
 
 func ttlVisibility(t *testing.T, e Env) {
-	key := recordPrefix + "ttl"
+	key := e.record() + "ttl"
 	mustPut(t, e.Set.State, key, "x", lifetime)
 	e.Advance(lifetime / 2)
 	if _, err := e.Set.State.Get(ctx(), key); err != nil {
@@ -282,7 +289,7 @@ func ttlVisibility(t *testing.T, e Env) {
 }
 
 func ttlCreateOverExpired(t *testing.T, e Env) {
-	key := recordPrefix + "reuse"
+	key := e.record() + "reuse"
 	if _, err := e.Set.State.Create(ctx(), key, []byte("first"), lifetime); err != nil {
 		t.Fatal(err)
 	}
@@ -299,14 +306,14 @@ func ttlCreateOverExpired(t *testing.T, e Env) {
 }
 
 func ttlListOmitsExpired(t *testing.T, e Env) {
-	mustPut(t, e.Set.State, recordPrefix+"l.short", "s", lifetime)
-	mustPut(t, e.Set.State, recordPrefix+"l.long", "l", 10*lifetime)
+	mustPut(t, e.Set.State, e.record()+"l.short", "s", lifetime)
+	mustPut(t, e.Set.State, e.record()+"l.long", "l", 10*lifetime)
 	e.Advance(2 * lifetime)
-	page, err := e.Set.State.List(ctx(), recordPrefix+"l.", "", 0)
+	page, err := e.Set.State.List(ctx(), e.record()+"l.", "", 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(page.Records) != 1 || page.Records[0].Key != recordPrefix+"l.long" {
+	if len(page.Records) != 1 || page.Records[0].Key != e.record()+"l.long" {
 		t.Fatalf("List after expiry: %v, want only the long-lived record", keys(page.Records))
 	}
 }
@@ -397,14 +404,14 @@ func pageAll(t *testing.T, s port.State, prefix string, limit int) []string {
 }
 
 func pagingEveryRecord(t *testing.T, e Env) {
-	prefix := recordPrefix + "p."
+	prefix := e.record() + "p."
 	var want []string
 	for i := range 25 {
 		key := fmt.Sprintf("%s%03d", prefix, i)
 		mustPut(t, e.Set.State, key, "v", lifetime)
 		want = append(want, key)
 	}
-	mustPut(t, e.Set.State, recordPrefix+"other.1", "v", lifetime)
+	mustPut(t, e.Set.State, e.record()+"other.1", "v", lifetime)
 	got := pageAll(t, e.Set.State, prefix, 10)
 	if fmt.Sprint(got) != fmt.Sprint(want) {
 		t.Fatalf("paged listing: %v\nwant %v", got, want)
@@ -412,7 +419,7 @@ func pagingEveryRecord(t *testing.T, e Env) {
 }
 
 func pagingConcurrentWrite(t *testing.T, e Env) {
-	prefix := recordPrefix + "pc."
+	prefix := e.record() + "pc."
 	for i := range 20 {
 		mustPut(t, e.Set.State, fmt.Sprintf("%s%03d", prefix, i*2), "v", lifetime)
 	}
@@ -451,20 +458,20 @@ func pagingConcurrentWrite(t *testing.T, e Env) {
 
 func pagingForeignToken(t *testing.T, e Env) {
 	for i := range 3 {
-		mustPut(t, e.Set.State, fmt.Sprintf("%sf.a.%d", recordPrefix, i), "v", lifetime)
-		mustPut(t, e.Set.State, fmt.Sprintf("%sf.b.%d", recordPrefix, i), "v", lifetime)
+		mustPut(t, e.Set.State, fmt.Sprintf("%sf.a.%d", e.record(), i), "v", lifetime)
+		mustPut(t, e.Set.State, fmt.Sprintf("%sf.b.%d", e.record(), i), "v", lifetime)
 	}
-	page, err := e.Set.State.List(ctx(), recordPrefix+"f.a.", "", 1)
+	page, err := e.Set.State.List(ctx(), e.record()+"f.a.", "", 1)
 	if err != nil || page.Next == "" {
 		t.Fatalf("first page: %v next=%q", err, page.Next)
 	}
-	if _, err = e.Set.State.List(ctx(), recordPrefix+"f.b.", page.Next, 1); !errors.Is(err, port.ErrBadPage) {
+	if _, err = e.Set.State.List(ctx(), e.record()+"f.b.", page.Next, 1); !errors.Is(err, port.ErrBadPage) {
 		t.Fatalf("a token from another prefix: %v, want ErrBadPage", err)
 	}
 }
 
 func revisionsChangeWithContent(t *testing.T, e Env) {
-	key := recordPrefix + "rev"
+	key := e.record() + "rev"
 	r1 := mustPut(t, e.Set.State, key, "one", lifetime)
 	r2 := mustPut(t, e.Set.State, key, "two", lifetime)
 	if r1 == r2 {
@@ -477,7 +484,7 @@ func revisionsChangeWithContent(t *testing.T, e Env) {
 }
 
 func revisionsIdenticalRewrite(t *testing.T, e Env) {
-	key := recordPrefix + "rev.same"
+	key := e.record() + "rev.same"
 	r1 := mustPut(t, e.Set.State, key, "same", lifetime)
 	r2 := mustPut(t, e.Set.State, key, "same", lifetime)
 	if r1 == r2 {
@@ -486,7 +493,7 @@ func revisionsIdenticalRewrite(t *testing.T, e Env) {
 }
 
 func revisionsStaleUpdate(t *testing.T, e Env) {
-	key := recordPrefix + "rev.stale"
+	key := e.record() + "rev.stale"
 	r1 := mustPut(t, e.Set.State, key, "one", lifetime)
 	mustPut(t, e.Set.State, key, "two", lifetime)
 	if _, err := e.Set.State.Update(ctx(), key, []byte("three"), lifetime, r1); !errors.Is(err, port.ErrConflict) {
@@ -520,12 +527,12 @@ func expect(t *testing.T, ch <-chan port.Event, key string, deleted bool, what s
 func watchPutDelete(t *testing.T, e Env) {
 	c, cancel := context.WithCancel(ctx())
 	defer cancel()
-	prefix := recordPrefix + "w."
+	prefix := e.record() + "w."
 	ch, err := e.Set.State.Watch(c, prefix)
 	if err != nil {
 		t.Fatal(err)
 	}
-	mustPut(t, e.Set.State, recordPrefix+"elsewhere", "x", lifetime)
+	mustPut(t, e.Set.State, e.record()+"elsewhere", "x", lifetime)
 	mustPut(t, e.Set.State, prefix+"a", "x", lifetime)
 	expect(t, ch, prefix+"a", false, "a put")
 	if err = e.Set.State.Delete(ctx(), prefix+"a"); err != nil {
@@ -537,7 +544,7 @@ func watchPutDelete(t *testing.T, e Env) {
 func watchExpiry(t *testing.T, e Env) {
 	c, cancel := context.WithCancel(ctx())
 	defer cancel()
-	prefix := recordPrefix + "we."
+	prefix := e.record() + "we."
 	ch, err := e.Set.State.Watch(c, prefix)
 	if err != nil {
 		t.Fatal(err)
@@ -550,7 +557,7 @@ func watchExpiry(t *testing.T, e Env) {
 
 func watchRecover(t *testing.T, e Env) {
 	c, cancel := context.WithCancel(ctx())
-	prefix := recordPrefix + "wr."
+	prefix := e.record() + "wr."
 	ch, err := e.Set.State.Watch(c, prefix)
 	if err != nil {
 		t.Fatal(err)
@@ -568,29 +575,29 @@ func watchRecover(t *testing.T, e Env) {
 func limitsTooLarge(t *testing.T, e Env) {
 	big := bytes.Repeat([]byte("x"), port.MaxValue+1)
 	for name, write := range map[string]func() error{
-		"Put":    func() error { _, err := e.Set.State.Put(ctx(), recordPrefix+"big", big, lifetime); return err },
-		"Create": func() error { _, err := e.Set.State.Create(ctx(), recordPrefix+"big", big, lifetime); return err },
+		"Put":    func() error { _, err := e.Set.State.Put(ctx(), e.record()+"big", big, lifetime); return err },
+		"Create": func() error { _, err := e.Set.State.Create(ctx(), e.record()+"big", big, lifetime); return err },
 	} {
 		if err := write(); !errors.Is(err, port.ErrTooLarge) {
 			t.Fatalf("%s of %d bytes: %v, want ErrTooLarge", name, len(big), err)
 		}
 	}
-	if _, err := e.Set.State.Put(ctx(), recordPrefix+"max", big[:port.MaxValue], lifetime); err != nil {
+	if _, err := e.Set.State.Put(ctx(), e.record()+"max", big[:port.MaxValue], lifetime); err != nil {
 		t.Fatalf("a value of exactly the limit: %v", err)
 	}
 }
 
 func limitsNoLifetime(t *testing.T, e Env) {
-	if _, err := e.Set.State.Put(ctx(), recordPrefix+"nottl", []byte("x"), 0); !errors.Is(err, port.ErrNoLifetime) {
+	if _, err := e.Set.State.Put(ctx(), e.record()+"nottl", []byte("x"), 0); !errors.Is(err, port.ErrNoLifetime) {
 		t.Fatalf("Put with no lifetime to a key that needs one: %v, want ErrNoLifetime", err)
 	}
-	if _, err := e.Set.State.Create(ctx(), recordPrefix+"nottl", []byte("x"), 0); !errors.Is(err, port.ErrNoLifetime) {
+	if _, err := e.Set.State.Create(ctx(), e.record()+"nottl", []byte("x"), 0); !errors.Is(err, port.ErrNoLifetime) {
 		t.Fatalf("Create with no lifetime: %v, want ErrNoLifetime", err)
 	}
 }
 
 func limitsPermanent(t *testing.T, e Env) {
-	key := permanentPrefix + "acme"
+	key := e.permanent() + "acme"
 	rev, err := e.Set.State.Put(ctx(), key, []byte(`{"org":"acme"}`), 0)
 	if err != nil {
 		t.Fatalf("Put of a permanent key: %v", err)
@@ -606,7 +613,7 @@ func limitsPermanent(t *testing.T, e Env) {
 	if _, err = e.Set.State.Update(ctx(), key, []byte(`{"org":"acme","owner":"x"}`), 0, rev); err != nil {
 		t.Fatalf("Update of a permanent record: %v", err)
 	}
-	if got := pageAll(t, e.Set.State, permanentPrefix, 0); len(got) != 1 || got[0] != key {
+	if got := pageAll(t, e.Set.State, e.permanent(), 0); len(got) != 1 || got[0] != key {
 		t.Fatalf("listing the permanent family: %v", got)
 	}
 	if err = e.Set.State.Delete(ctx(), key); err != nil {
@@ -775,4 +782,18 @@ func identityVerify(t *testing.T, e Env) {
 	if _, err = e.Set.Identity.Verify(ctx(), "not-a-token", []string{p.Audience}); err == nil {
 		t.Fatal("a token nobody minted verified")
 	}
+}
+
+func (e Env) record() string {
+	if e.RecordPrefix != "" {
+		return e.RecordPrefix
+	}
+	return recordPrefix
+}
+
+func (e Env) permanent() string {
+	if e.PermanentPrefix != "" {
+		return e.PermanentPrefix
+	}
+	return permanentPrefix
 }

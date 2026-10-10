@@ -2,6 +2,7 @@ package dynamodb
 
 import (
 	"context"
+	"errors"
 
 	"github.com/truvity/sluis/internal/port"
 )
@@ -23,6 +24,11 @@ func init() {
 				var cfg Config
 				if err := s.Decode(&cfg); err != nil {
 					return nil, err
+				}
+				if len(cfg.Tables) > 0 {
+					// Layout 5 is a set of stores, one per module, which the store
+					// package wires (OpenTables); this factory builds one table.
+					return nil, errors.New("dynamodb: tables is layout 5 and is opened per module, not as one State")
 				}
 				return Open(ctx, cfg)
 			},
