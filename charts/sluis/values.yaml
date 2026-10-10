@@ -198,6 +198,13 @@ image:
   # release.
   tag: ""
   pullPolicy: IfNotPresent
+  # false runs every pod from the one multi-call image above. true runs each
+  # module from its own image, named beside it: the Deployment from
+  # ghcr.io/truvity/sluis/sluis-issuer, and the backup CronJobs and the restore
+  # Job from ghcr.io/truvity/sluis/sluis-backup, at the same tag. A module's
+  # image refuses another module's commands. `repository` is still the name
+  # the module images' parent is taken from.
+  perModule: false
 
 # The service document: the file `sluis serve --config` reads, rendered as it
 # stands into a ConfigMap and mounted. It is the one document of the one

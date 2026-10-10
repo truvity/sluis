@@ -46,7 +46,7 @@ spec:
       type: RuntimeDefault
   containers:
     - name: {{ .component }}
-      image: "{{ $root.Values.image.repository }}:{{ $root.Values.image.tag | default $root.Chart.AppVersion }}"
+      image: {{ include "sluis.image" (dict "root" $root "module" "backup") | quote }}
       imagePullPolicy: {{ $root.Values.image.pullPolicy }}
       securityContext:
         allowPrivilegeEscalation: false

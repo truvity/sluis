@@ -5442,6 +5442,10 @@
     "image": {
       "additionalProperties": false,
       "properties": {
+        "perModule": {
+          "description": "Run each module from its own image (sluis-issuer, sluis-backup) beside image.repository, at the same tag, instead of the one multi-call image.",
+          "type": "boolean"
+        },
         "pullPolicy": {
           "enum": [
             "Always",

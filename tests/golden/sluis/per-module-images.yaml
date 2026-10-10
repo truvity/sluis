@@ -1,0 +1,686 @@
+---
+# Source: sluis/templates/backup.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sluis-backup
+  labels:
+    app.kubernetes.io/name: sluis-backup
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: backup
+    app.kubernetes.io/part-of: sluis
+  annotations:
+    eks.amazonaws.com/role-arn: arn:example:iam::acct:role/sluis-backup
+
+---
+# Source: sluis/templates/backup.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sluis-restore
+  labels:
+    app.kubernetes.io/name: sluis-restore
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: restore
+    app.kubernetes.io/part-of: sluis
+
+---
+# Source: sluis/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sluis
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+
+---
+# Source: sluis/templates/serviceaccount.yaml
+# The account a recovery token is minted for. Deliberately bound to
+# NOTHING: it needs no permissions, because the token is a proof of
+# identity and not a way to act. Granting `create` on
+# `serviceaccounts/token` for this account is how an installation says who
+# may recover, and that grant is the whole of the access control.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: access-issuer-recovery
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+
+---
+# Source: sluis/templates/backup-configmap.yaml
+# What `sluis backup` and `sluis restore --config` read: `backup.config`, as the
+# values give it, with the apiVersion the chart writes. The binary validates it
+# against schemas/config/sluis-backup.schema.json at start, and values.schema.json
+# holds the values to the same schema before this renders. The restore Job reads
+# this very document: its role comes from the command, not from the document.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sluis-backup-config
+  labels:
+    app.kubernetes.io/name: sluis-backup
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: backup
+    app.kubernetes.io/part-of: sluis
+data:
+  config.yaml: |
+    apiVersion: sluis.truvity.github.io/sluis-backup/v1
+    audit:
+      tokenFile: /var/run/audit/token
+      writer: https://audit.example:8443
+    backup:
+      retention:
+        keep: 7
+        maxAge: 720h
+      target:
+        bucket: sluis-archive
+        prefix: sluis
+        region: eu-west-1
+    instance: sluis
+    keys:
+      adapter: kms
+      archive: alias/sluis-archive
+    ports:
+      blob:
+        adapter: s3
+        s3:
+          bucket: sluis-blobs
+          region: eu-west-1
+      dynamodb:
+        region: eu-west-1
+        tables:
+          backup: sluis-backup
+          cloudflare: sluis-cloudflare
+          github: sluis-github
+          google: sluis-google
+          oidc: sluis-oidc
+          slack: sluis-slack
+    preset: k8s-aws
+    secrets:
+      layout: v5
+      root: /sluis
+      source: ssm
+
+---
+# Source: sluis/templates/configmap.yaml
+# What `sluis serve --config` reads: `config`, as the values give it, with
+# nothing added, renamed or dropped but the apiVersion the chart writes. The
+# binary validates it against schemas/config/sluis.schema.json at start, and
+# values.schema.json holds the values to the same schema before this renders.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sluis-config
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: serve
+data:
+  config.yaml: |
+    apiVersion: sluis.truvity.github.io/sluis/v3
+    audit:
+      tokenFile: /var/run/audit/token
+    inCluster: true
+    issuerURL: https://access.example
+    lifetimes:
+      absolute: 24h
+      hold: 4h
+      refresh: 12h
+      token: 1h
+    listen:
+      address: :8080
+    policy:
+      file: /var/run/access-issuer/policy/policy.yaml
+    ports:
+      blob:
+        adapter: s3
+        s3:
+          bucket: sluis-blobs
+          region: eu-west-1
+      dynamodb:
+        region: eu-west-1
+        tables:
+          backup: sluis-backup
+          cloudflare: sluis-cloudflare
+          github: sluis-github
+          google: sluis-google
+          oidc: sluis-oidc
+          slack: sluis-slack
+    preset: k8s-aws
+    probes:
+      address: :7070
+    recovery:
+      audience: access-issuer-recovery
+      enabled: true
+      serviceAccount: access-issuer-recovery
+    secrets:
+      layout: v5
+      root: /sluis
+      source: ssm
+    signingKey:
+      activationDelay: 15m
+      kmsWrapped:
+        keyId: alias/sluis-signing
+        region: eu-west-1
+        stateSecret: internal/oidc/state-secret
+      pollInterval: 30s
+    store: kubernetes
+
+---
+# Source: sluis/templates/policy-configmap.yaml
+# The policy document (schemas/config/policy.schema.json): what every process
+# of this installation decides by, read once at start. Mounted as a directory
+# by the service and both controllers, so a change rolls all three.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sluis-policy
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+data:
+  policy.yaml: |
+    apiVersion: sluis.truvity.github.io/policy/v2
+
+---
+# Source: sluis/templates/serviceaccount.yaml
+# The one cluster-scoped permission this service ever needs, and the one
+# thing left that asks the API server anything: creating TokenReviews, so
+# that recovery can check a token proving cluster access. It reads
+# nothing.
+#
+# Workloads used to need it too. They do not any more: a
+# ServiceAccount token is verified against the key set its own cluster
+# publishes, so this service holds no access to any cluster including its
+# own. Recovery keeps it because on the day everything else is broken it
+# should depend on nothing but the cluster.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: sluis-default-tokenreview
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+rules:
+  - apiGroups: ["authentication.k8s.io"]
+    resources: ["tokenreviews"]
+    verbs: ["create"]
+
+---
+# Source: sluis/templates/serviceaccount.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: sluis-default-tokenreview
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: sluis-default-tokenreview
+subjects:
+  - kind: ServiceAccount
+    name: sluis
+    namespace: default
+
+---
+# Source: sluis/templates/serviceaccount.yaml
+# The directory store is plain Kubernetes objects in THIS namespace:
+# workspace records (ConfigMaps) and their credentials (Secrets), written
+# by this service itself. A namespaced Role and never a ClusterRole —
+# which is why this service gets a namespace of its own.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: sluis
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+rules:
+  - apiGroups: [""]
+    resources: ["secrets", "configmaps"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+---
+# Source: sluis/templates/serviceaccount.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: sluis
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: sluis
+subjects:
+  - kind: ServiceAccount
+    name: sluis
+    namespace: default
+
+---
+# Source: sluis/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: sluis
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selector:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+  ports:
+    - name: issuer
+      port: 8080
+      targetPort: issuer
+
+---
+# Source: sluis/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sluis
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sluis
+      app.kubernetes.io/instance: sluis
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: sluis
+        app.kubernetes.io/instance: sluis
+      annotations:
+        # Configuration and policy are immutable for an instance: each document
+        # is read once, at start, so a change to either is a rollout. One
+        # checksum per document this process reads: the service document (the
+        # controllers' sections are in it) and the policy.
+        checksum/config: 8398a8d66999506b45cbcabc4d9b1c2f347f558f7b7e17e005ae6e466abef9af
+        checksum/policy: d8fee78c7b9f81d2a4c598c3b432515f29384a0f4a1fe3e4ccda3db4f307843b
+    spec:
+      serviceAccountName: sluis
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: serve
+          image: "ghcr.io/truvity/sluis/sluis-issuer:0.0.0"
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          ports:
+            - name: issuer
+              containerPort: 8080
+            - name: health
+              containerPort: 7070
+          # The whole of the configuration is the service document, `config`
+          # rendered as it stands, and the policy document it names. The
+          # environment carries only the secrets the document names.
+          args:
+            - serve
+            - --config=/etc/sluis/config.yaml
+          volumeMounts:
+            # Read once, at start: a subPath is enough, since a change replaces
+            # the pod (checksum/*). The policy keeps its directory.
+            - name: config
+              mountPath: /etc/sluis/config.yaml
+              subPath: config.yaml
+              readOnly: true
+            - name: policy
+              mountPath: /var/run/access-issuer/policy
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+            
+          livenessProbe:
+            httpGet: { path: /healthz, port: health }
+          readinessProbe:
+            # Readiness follows the shared store; liveness deliberately
+            # does not. A replica that cannot reach it leaves the
+            # rotation, and the gateway answers fast instead of hanging;
+            # nothing is restarted, so one blip cannot restart the fleet.
+            #
+            # timeoutSeconds exceeds the service's own 2s check so the
+            # answer is the reason ("the session store does not answer:
+            # i/o timeout") rather than the kubelet's timeout. Three
+            # failures at ten seconds is thirty seconds of trouble before
+            # a replica leaves, which a reconnect comfortably beats.
+            httpGet: { path: /readyz, port: health }
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+      volumes:
+        - name: config
+          configMap:
+            name: sluis-config
+        - name: policy
+          configMap:
+            name: sluis-policy
+        # The root filesystem is read-only, and the directory backends
+        # want somewhere to write.
+        - name: tmp
+          emptyDir: {}
+        
+
+---
+# Source: sluis/templates/backup.yaml
+# An administrator's Job, never a CronJob. A restore sets every module under
+# maintenance, writes, reads everything back and lifts the flag only when it
+# matches; one that fails leaves the modules closed, and running it again
+# retries. One restore at a time, under `lease.restore:run`.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: sluis-restore-20261010t020000z-3fa9c1
+  labels:
+    app.kubernetes.io/name: sluis-restore
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: restore
+    app.kubernetes.io/part-of: sluis
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: sluis-restore
+        app.kubernetes.io/instance: sluis
+        app.kubernetes.io/version: "0.0.0"
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/component: restore
+        app.kubernetes.io/part-of: sluis
+      annotations:
+        checksum/config: 39b156c2092c7c64435773c4c663a7c899341fdd41bf279b948aa418df6a3624
+    spec:
+      restartPolicy: Never
+      serviceAccountName: sluis-restore
+      # The role's credentials are the platform's (Pod Identity, IRSA), which inject
+      # their own token; the cluster API token is never used.
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: restore
+          image: "ghcr.io/truvity/sluis/sluis-backup:0.0.0"
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          args:
+            - "restore"
+            - "start"
+            - "20261010T020000Z-3fa9c1"
+            - "--confirm"
+            - "sluis"
+            - "--config=/etc/sluis-backup/config.yaml"
+          env:
+            - name: OTEL_EXPORTER_OTLP_HEADERS
+              valueFrom:
+                secretKeyRef:
+                  name: sluis-backup-inputs
+                  key: otlp-headers
+          volumeMounts:
+            - name: config
+              mountPath: /etc/sluis-backup/config.yaml
+              subPath: config.yaml
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+            
+            - name: audit-token
+              mountPath: /var/run/audit
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: sluis-backup-config
+        - name: tmp
+          emptyDir: {}
+        
+        - name: audit-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  audience: "audit"
+                  expirationSeconds: 3600
+                  path: token
+
+---
+# Source: sluis/templates/backup.yaml
+# The backup: `sluis backup run` takes the lease, exports the installation and
+# seals it into the archive bucket. A run that finds the lease held, or a module
+# under maintenance, says so and exits 0. Forbid by default, because the second
+# run would only wait on the lease.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: sluis-backup
+  labels:
+    app.kubernetes.io/name: sluis-backup
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: backup
+    app.kubernetes.io/part-of: sluis
+spec:
+  schedule: "5 1 * * *"
+  timeZone: "Europe/Amsterdam"
+  suspend: false
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: sluis-backup
+            app.kubernetes.io/instance: sluis
+            app.kubernetes.io/version: "0.0.0"
+            app.kubernetes.io/managed-by: Helm
+            app.kubernetes.io/component: backup
+            app.kubernetes.io/part-of: sluis
+          annotations:
+            checksum/config: 39b156c2092c7c64435773c4c663a7c899341fdd41bf279b948aa418df6a3624
+        spec:
+          restartPolicy: Never
+          serviceAccountName: sluis-backup
+          # The role's credentials are the platform's (Pod Identity, IRSA), which inject
+          # their own token; the cluster API token is never used.
+          automountServiceAccountToken: false
+          securityContext:
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: backup
+              image: "ghcr.io/truvity/sluis/sluis-backup:0.0.0"
+              imagePullPolicy: IfNotPresent
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: [ALL]
+              args:
+                - "backup"
+                - "run"
+                - "--config=/etc/sluis-backup/config.yaml"
+              env:
+                - name: OTEL_EXPORTER_OTLP_HEADERS
+                  valueFrom:
+                    secretKeyRef:
+                      name: sluis-backup-inputs
+                      key: otlp-headers
+              volumeMounts:
+                - name: config
+                  mountPath: /etc/sluis-backup/config.yaml
+                  subPath: config.yaml
+                  readOnly: true
+                - name: tmp
+                  mountPath: /tmp
+                
+                - name: audit-token
+                  mountPath: /var/run/audit
+                  readOnly: true
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 256Mi
+          volumes:
+            - name: config
+              configMap:
+                name: sluis-backup-config
+            - name: tmp
+              emptyDir: {}
+            
+            - name: audit-token
+              projected:
+                sources:
+                  - serviceAccountToken:
+                      audience: "audit"
+                      expirationSeconds: 3600
+                      path: token
+
+---
+# Source: sluis/templates/backup.yaml
+# The retention rule: the newest `backup.config.backup.retention.keep` backups stay, any other
+# goes when older than `maxAge`. Under its own lease, so it can overlap a run.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: sluis-backup-prune
+  labels:
+    app.kubernetes.io/name: sluis-backup
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: backup
+    app.kubernetes.io/part-of: sluis
+spec:
+  schedule: "47 3 * * *"
+  timeZone: "Europe/Amsterdam"
+  suspend: false
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: sluis-backup
+            app.kubernetes.io/instance: sluis
+            app.kubernetes.io/version: "0.0.0"
+            app.kubernetes.io/managed-by: Helm
+            app.kubernetes.io/component: backup
+            app.kubernetes.io/part-of: sluis
+          annotations:
+            checksum/config: 39b156c2092c7c64435773c4c663a7c899341fdd41bf279b948aa418df6a3624
+        spec:
+          restartPolicy: Never
+          serviceAccountName: sluis-backup
+          # The role's credentials are the platform's (Pod Identity, IRSA), which inject
+          # their own token; the cluster API token is never used.
+          automountServiceAccountToken: false
+          securityContext:
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: backup
+              image: "ghcr.io/truvity/sluis/sluis-backup:0.0.0"
+              imagePullPolicy: IfNotPresent
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: [ALL]
+              args:
+                - "backup"
+                - "prune"
+                - "--config=/etc/sluis-backup/config.yaml"
+              env:
+                - name: OTEL_EXPORTER_OTLP_HEADERS
+                  valueFrom:
+                    secretKeyRef:
+                      name: sluis-backup-inputs
+                      key: otlp-headers
+              volumeMounts:
+                - name: config
+                  mountPath: /etc/sluis-backup/config.yaml
+                  subPath: config.yaml
+                  readOnly: true
+                - name: tmp
+                  mountPath: /tmp
+                
+                - name: audit-token
+                  mountPath: /var/run/audit
+                  readOnly: true
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 256Mi
+          volumes:
+            - name: config
+              configMap:
+                name: sluis-backup-config
+            - name: tmp
+              emptyDir: {}
+            
+            - name: audit-token
+              projected:
+                sources:
+                  - serviceAccountToken:
+                      audience: "audit"
+                      expirationSeconds: 3600
+                      path: token
