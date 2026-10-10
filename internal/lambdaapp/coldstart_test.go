@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/aws/aws-lambda-go/events"
@@ -175,6 +176,12 @@ var (
 // first, the discovery document, which needs no secret.
 func coldStart(t *testing.T, fake *ssmFake, l layout) (*lambdaapp.Function, error) {
 	t.Helper()
+	return coldStartWith(t, fake, l, "")
+}
+
+// coldStartWith is coldStart over a document with extra top-level settings.
+func coldStartWith(t *testing.T, fake *ssmFake, l layout, extra string) (*lambdaapp.Function, error) {
+	t.Helper()
 	srv := httptest.NewServer(fake)
 	t.Cleanup(srv.Close)
 	t.Setenv("AWS_ACCESS_KEY_ID", "AKIDEXAMPLE")
@@ -213,7 +220,7 @@ adapters:
   state: {adapter: memory}
   blobs: {adapter: memory}
   trigger: {adapter: memory}
-`), 0o600); err != nil {
+`+extra), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	fn, err := lambdaapp.Open(context.Background(), func(k string) string {
@@ -354,5 +361,215 @@ func TestAReadOutlastsAThrottledSSM(t *testing.T) {
 	authenticate(t, fn, "grafana", "s3cret-grafana")
 	if total, _ := fake.count(); total != 4+1 {
 		t.Errorf("SSM calls = %d, want the 4 throttled and the 1 read: %q", total, fake.log)
+	}
+}
+
+// kmsFake is KMS over its own wire protocol (JSON 1.1, the operation in
+// X-Amz-Target), reached through AWS_ENDPOINT_URL_KMS, so the wrapped ring is
+// measured through the real client. Encrypt and Decrypt are enough for it: a
+// ciphertext is a handle to the plaintext and the context it was made under.
+type kmsFake struct {
+	mu    sync.Mutex
+	blobs map[string]kmsBlob
+	calls map[string]int
+}
+
+type kmsBlob struct {
+	plaintext []byte
+	context   map[string]string
+}
+
+func newKMSFake() *kmsFake { return &kmsFake{blobs: map[string]kmsBlob{}, calls: map[string]int{}} }
+
+func (f *kmsFake) count() (total int, by map[string]int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	by = map[string]int{}
+	for k, v := range f.calls {
+		by[k], total = v, total+v
+	}
+	return total, by
+}
+
+func (f *kmsFake) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	op := strings.TrimPrefix(r.Header.Get("X-Amz-Target"), "TrentService.")
+	body, _ := io.ReadAll(r.Body)
+	var in struct {
+		KeyID             string `json:"KeyId"`
+		Plaintext         []byte
+		CiphertextBlob    []byte
+		EncryptionContext map[string]string
+	}
+	_ = json.Unmarshal(body, &in)
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls[op]++
+	w.Header().Set("Content-Type", "application/x-amz-json-1.1")
+	switch op {
+	case "Encrypt":
+		handle := fmt.Sprintf("blob-%d", len(f.blobs))
+		f.blobs[handle] = kmsBlob{plaintext: in.Plaintext, context: in.EncryptionContext}
+		_ = json.NewEncoder(w).Encode(map[string]any{"CiphertextBlob": []byte(handle), "KeyId": in.KeyID})
+	case "Decrypt":
+		blob, ok := f.blobs[string(in.CiphertextBlob)]
+		if !ok || fmt.Sprint(blob.context) != fmt.Sprint(in.EncryptionContext) {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]string{"__type": "InvalidCiphertextException", "message": "no"})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"Plaintext": blob.plaintext, "KeyId": in.KeyID})
+	default:
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"__type": "UnsupportedOperation", "message": op})
+	}
+}
+
+// wrappedLayout adds the state secret of the KMS-wrapped signing to a layout's
+// fixture, and says where it lives.
+func wrappedFixture(l layout) (params map[string]string, stateSecret string) {
+	params = fixtureParams(l)
+	stateSecret = "/sluis/example/internal/config/issuer/state-secret"
+	if l.name == "v5" {
+		stateSecret = "/sluis/example/internal/oidc/state-secret"
+	}
+	raw := make([]byte, 32)
+	for i := range raw {
+		raw[i] = byte(i*7 + 1)
+	}
+	params[stateSecret] = l.encode(base64.StdEncoding.EncodeToString(raw))
+	return params, stateSecret
+}
+
+const wrappedSettings = `
+instance: example
+keys: {adapter: kms, sign: alias/sluis-example-sign}
+signingKey:
+  kmsWrapped: {stateSecret: issuer/state-secret}
+`
+
+// coldStartWrapped is a cold start of a function that signs with KMS-wrapped
+// keys, over fakes of SSM and KMS, followed by the discovery request.
+func coldStartWrapped(t *testing.T, l layout) (*lambdaapp.Function, *ssmFake, *kmsFake, string) {
+	t.Helper()
+	params, stateSecret := wrappedFixture(l)
+	fake, kmsF := newSSMFake(params), newKMSFake()
+	kmsSrv := httptest.NewServer(kmsF)
+	t.Cleanup(kmsSrv.Close)
+	t.Setenv("AWS_ENDPOINT_URL_KMS", kmsSrv.URL)
+	fn, err := coldStartWith(t, fake, l, wrappedSettings)
+	if err != nil {
+		t.Fatalf("cold start: %v", err)
+	}
+	return fn, fake, kmsF, stateSecret
+}
+
+func keySet(t *testing.T, fn *lambdaapp.Function) (int, string) {
+	t.Helper()
+	out, err := fn.Handler.Handle(context.Background(), json.RawMessage(`{"version":"2.0","rawPath":"/keys",`+
+		`"requestContext":{"http":{"method":"GET","path":"/keys"}},"headers":{"host":"access.example"}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp := out.(events.APIGatewayV2HTTPResponse)
+	return resp.StatusCode, resp.Body
+}
+
+// With KMS-wrapped signing a cold start, and the discovery request after it,
+// make no SSM call and no KMS call: the state secret is the seed the signing
+// keys are built over, and opening them calls KMS, so both wait for the first
+// request that needs a key. That is the request for the key set (/keys) or the
+// first token signed; the discovery document lists the configured algorithms
+// and does not.
+func TestAWrappedColdStartMakesNoSSMOrKMSCall(t *testing.T) {
+	for _, l := range []layout{layoutV4, layoutV5} {
+		t.Run(l.name, func(t *testing.T) {
+			_, fake, kmsF, _ := coldStartWrapped(t, l)
+			if total, by := fake.count(); total != 0 {
+				t.Errorf("SSM calls per cold start = %d %v, want none: %q", total, by, fake.log)
+			}
+			if total, by := kmsF.count(); total != 0 {
+				t.Errorf("KMS calls per cold start = %d %v, want none", total, by)
+			}
+		})
+	}
+}
+
+// The request that needs a key reads the state secret once, by name, and opens
+// the keys; nothing after it within the cache reads or calls again.
+func TestTheFirstKeySetReadsTheStateSecretOnce(t *testing.T) {
+	for _, l := range []layout{layoutV4, layoutV5} {
+		t.Run(l.name, func(t *testing.T) {
+			fn, fake, kmsF, stateSecret := coldStartWrapped(t, l)
+			if code, body := keySet(t, fn); code != http.StatusOK || !strings.Contains(body, `"keys"`) {
+				t.Fatalf("/keys = %d %s", code, body)
+			}
+			total, by := fake.count()
+			if total != 1 || by["GetParameter"] != 1 || !strings.Contains(fake.log[0], stateSecret) {
+				t.Errorf("the first /keys made %d SSM calls %v, want one GetParameter of the state secret: %q", total, by, fake.log)
+			}
+			opened, _ := kmsF.count()
+			if opened == 0 {
+				t.Error("the first /keys made no KMS call: the keys were not opened")
+			}
+			keySet(t, fn)
+			if again, _ := fake.count(); again != 1 {
+				t.Errorf("a second /keys made %d SSM calls in all, want 1: %q", again, fake.log)
+			}
+			if again, _ := kmsF.count(); again != opened {
+				t.Errorf("a second /keys made %d KMS calls in all, want %d", again, opened)
+			}
+		})
+	}
+}
+
+// Concurrent first requests for a key share one read of the state secret and
+// one opening of the keys.
+func TestConcurrentFirstKeySetsReadTheStateSecretOnce(t *testing.T) {
+	for _, l := range []layout{layoutV4, layoutV5} {
+		t.Run(l.name, func(t *testing.T) {
+			single, _, singleKMS, _ := coldStartWrapped(t, l)
+			keySet(t, single)
+			want, _ := singleKMS.count()
+
+			fn, fake, kmsF, stateSecret := coldStartWrapped(t, l)
+			var wg sync.WaitGroup
+			var failed atomic.Int32
+			start := make(chan struct{})
+			for range 12 {
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					<-start
+					if code, _ := keySet(t, fn); code != http.StatusOK {
+						failed.Add(1)
+					}
+				}()
+			}
+			close(start)
+			wg.Wait()
+			if failed.Load() != 0 {
+				t.Errorf("%d of 12 concurrent /keys failed", failed.Load())
+			}
+			if total, by := fake.count(); total != 1 || by["GetParameter"] != 1 || !strings.Contains(fake.log[0], stateSecret) {
+				t.Errorf("12 concurrent first /keys made %d SSM calls %v, want one: %q", total, by, fake.log)
+			}
+			if got, _ := kmsF.count(); got != want {
+				t.Errorf("12 concurrent first /keys made %d KMS calls, one makes %d", got, want)
+			}
+		})
+	}
+}
+
+// A client that authenticates and is refused its grant signs nothing, so it
+// reads its own secret and not the state secret.
+func TestAnAuthenticationDoesNotOpenTheKeys(t *testing.T) {
+	l := layoutV4
+	fn, fake, kmsF, _ := coldStartWrapped(t, l)
+	authenticate(t, fn, "grafana", "s3cret-grafana")
+	if total, by := fake.count(); total != 1 || !strings.Contains(fake.log[0], l.client+"grafana"+l.suffix) {
+		t.Errorf("the authentication made %d SSM calls %v, want one read of the client's secret: %q", total, by, fake.log)
+	}
+	if total, by := kmsF.count(); total != 0 {
+		t.Errorf("the authentication made %d KMS calls %v, want none", total, by)
 	}
 }

@@ -421,7 +421,7 @@ func NewStorage(
 		now:           time.Now,
 		// The session index's clock, so that time a test moves for the
 		// sessions moves for the cache's TTL too.
-		dead: newDeadRefreshes(fingerprintKey(dir.Secret(fingerprintLabel)), deadRefreshEntries, deadRefreshConfirm, deadRefreshTTL,
+		dead: newLazyDeadRefreshes(func() []byte { return dir.Secret(fingerprintLabel) }, deadRefreshEntries, deadRefreshConfirm, deadRefreshTTL,
 			func() time.Time { return iss.Sessions().now() }),
 	}, nil
 }
@@ -484,6 +484,9 @@ func checkSigningAlgorithms(set *policy.Set, keys signer.Directory) error {
 // marked the carrier would look, from here, identical to one that was
 // never asked to be anything but the default.
 func (s *Storage) SigningKey(ctx context.Context) (op.SigningKey, error) {
+	if err := s.openKeys(ctx); err != nil {
+		return nil, err
+	}
 	s.dir.Maintain(ctx)
 	alg := s.dir.Default()
 	if id, ok := signingAudienceFrom(ctx).get(); ok {
@@ -508,6 +511,15 @@ func (s *Storage) SigningKey(ctx context.Context) (op.SigningKey, error) {
 		return nil, errors.New("issuer: no signing key is available yet")
 	}
 	return s.libraryKey(ctx, alg, kid)
+}
+
+// openKeys opens the key rings where they are opened on first use; it is
+// nothing where they were opened at start.
+func (s *Storage) openKeys(ctx context.Context) error {
+	if o, ok := s.dir.(signer.Opener); ok {
+		return o.Open(ctx)
+	}
+	return nil
 }
 
 // signingAlgorithmFor is the algorithm a token FOR audience id is signed
@@ -544,10 +556,17 @@ func (s *Storage) signingAlgorithmFor(id string) jose.SignatureAlgorithm {
 // to accept a token a moment away from expiring under a previous key, and
 // one that reads `aud` for a client with no `signing_alg` still has to
 // accept whatever the installation default is.
+//
+// Where the keys are opened on first use ([signer.Opener]) and are not open
+// yet, this answers from the configured algorithms and opens nothing, so the
+// discovery document of a cold start costs no secret read and no KMS call.
 func (s *Storage) SignatureAlgorithms(ctx context.Context) ([]jose.SignatureAlgorithm, error) {
-	public, err := s.signer.PublicKeys(ctx)
-	if err != nil {
-		return nil, err
+	var public []signer.PublicKey
+	if o, lazy := s.dir.(signer.Opener); !lazy || o.Opened() {
+		var err error
+		if public, err = s.signer.PublicKeys(ctx); err != nil {
+			return nil, err
+		}
 	}
 	algs := s.dir.Algorithms()
 	for _, k := range s.verifyOnlyKeys(opKeys(public)) {

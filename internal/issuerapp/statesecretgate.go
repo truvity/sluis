@@ -25,7 +25,17 @@ type stateSecretGate struct {
 }
 
 func newStateSecretGate(state issuer.State, seed []byte, leases *rails.Leases) *stateSecretGate {
+	return newLazyStateSecretGate(state, func(context.Context) ([]byte, error) { return seed, nil }, leases)
+}
+
+// newLazyStateSecretGate is [newStateSecretGate] over a secret that is read
+// when the check first runs, so that building the gate reads nothing.
+func newLazyStateSecretGate(state issuer.State, secret func(context.Context) ([]byte, error), leases *rails.Leases) *stateSecretGate {
 	return &stateSecretGate{passed: lazy.New(stateSecretCheckTTL, func(ctx context.Context) (struct{}, error) {
+		seed, err := secret(ctx)
+		if err != nil {
+			return struct{}{}, err
+		}
 		var inner error
 		if leases != nil {
 			ran, err := leases.Do(ctx, "state-secret-check", "fingerprint", func(lctx context.Context) {

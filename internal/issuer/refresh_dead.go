@@ -103,6 +103,10 @@ const (
 // Keyed by the FULL HMAC, never by the 8-hex fingerprint the log shows:
 // 32 bits collide, and a collision would refuse a valid token.
 type deadRefreshes struct {
+	// keyFn, while set, yields the key derived from the installation's secret
+	// when that is available; keyMu guards it and key.
+	keyMu   sync.Mutex
+	keyFn   func() []byte
 	key     []byte
 	limit   int
 	confirm time.Duration
@@ -139,6 +143,32 @@ func newDeadRefreshes(key []byte, limit int, confirm, ttl time.Duration, now fun
 	}
 }
 
+// newLazyDeadRefreshes is [newDeadRefreshes] over a key that is derived when
+// the first token is read, not as the cache is built: the secret it derives
+// from may not be open yet. Until it is, the cache uses a key of its own, and
+// switches to the derived one as soon as there is one (the entries made under
+// the first are then not found, which costs a State read and nothing worse).
+func newLazyDeadRefreshes(derive func() []byte, limit int, confirm, ttl time.Duration, now func() time.Time) *deadRefreshes {
+	c := newDeadRefreshes(nil, limit, confirm, ttl, now)
+	c.keyFn = derive
+	return c
+}
+
+// hmacKey is the key sum uses.
+func (c *deadRefreshes) hmacKey() []byte {
+	c.keyMu.Lock()
+	defer c.keyMu.Unlock()
+	if c.keyFn != nil {
+		if derived := c.keyFn(); len(derived) > 0 {
+			c.key, c.keyFn = derived, nil
+		}
+	}
+	if len(c.key) == 0 {
+		c.key = fingerprintKey(nil)
+	}
+	return c.key
+}
+
 // fingerprintKey is the HMAC key of the cache and of the logged fingerprint:
 // the secret the signer derived for [fingerprintLabel] from the installation's
 // sign-in state secret (HKDF, never the raw secret; see [signer.Directory]).
@@ -156,7 +186,7 @@ func fingerprintKey(derived []byte) []byte {
 
 // sum is the HMAC-SHA-256 of a refresh token under the cache's key.
 func (c *deadRefreshes) sum(token string) [sha256.Size]byte {
-	mac := hmac.New(sha256.New, c.key)
+	mac := hmac.New(sha256.New, c.hmacKey())
 	mac.Write([]byte(token))
 
 	var out [sha256.Size]byte
