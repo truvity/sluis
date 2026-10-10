@@ -5,6 +5,7 @@
 // (GetGitHubStatus's catalogue and runner sections, the catalogue and runner
 // Begin, Disconnect and Check) are served from the same code, so a client
 // written for them reads what it always read.
+
 package server
 
 import (
