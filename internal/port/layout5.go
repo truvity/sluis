@@ -158,9 +158,11 @@ var rules5 = []rule5{
 	r5(ModuleGitHub, "claim", "gate.github-claim.", convID),
 	r5(ModuleGitHub, "gate", "gate.github.", convDots),
 
-	// backup: the status of each run and the last retention pass. A backup does
-	// not carry them: a restore must not roll back the record of its own runs.
+	// backup: the status of each run, of each restore, and the last retention
+	// pass. A backup does not carry them: a restore must not roll back the record
+	// of its own runs.
 	r5(ModuleBackup, "run", "rec.backup.run.", convID),
+	r5(ModuleBackup, "restore", "rec.backup.restore.", convID),
 	r5exact(ModuleBackup, "retention", "rec.backup.retention", "last"),
 
 	// oidc: the issuer's records and the console's session key.

@@ -69,11 +69,11 @@ const (
 var regenerated = map[string]bool{"lease": true, "notify": true, "gate": true, "cache": true, "dedupe": true,
 	"maintenance": true}
 
-// ownRecord reports whether the key is one of the backup module's own run
-// records or its retention marker: they describe the installation that was
+// ownRecord reports whether the key is one of the backup module's own run or
+// restore records or its retention marker: they describe the installation that was
 // backed up, not the one restored into, and the module writes them afresh.
 func ownRecord(a port.Address5) bool {
-	return a.Module == port.ModuleBackup && (a.Kind == "run" || a.Kind == "retention")
+	return a.Module == port.ModuleBackup && (a.Kind == "run" || a.Kind == "restore" || a.Kind == "retention")
 }
 
 // Preview verifies the archive and reports what Apply would do. It writes

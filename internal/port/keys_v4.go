@@ -108,6 +108,7 @@ var keyRules = []keyRule{
 	// The backup module's own records (internal/backup/job): one status record
 	// per run and the outcome of the last retention pass.
 	{prefix: "rec.backup.run.", kind: "backup-run"},
+	{prefix: "rec.backup.restore.", kind: "backup-restore"},
 	{prefix: "rec.backup.retention", kind: "backup-retention", exact: "last"},
 
 	// The issuer's records, in the layout's dotted form ...
