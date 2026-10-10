@@ -226,12 +226,17 @@ func (s *store) Delete(ctx context.Context, key string) error {
 	return nil
 }
 
-func (s *store) List(ctx context.Context) ([]string, error) {
+func (s *store) List(ctx context.Context) ([]string, error) { return s.list(ctx, false) }
+
+// Walk implements [state.Walker].
+func (s *store) Walk(ctx context.Context) ([]string, error) { return s.list(ctx, true) }
+
+func (s *store) list(ctx context.Context, recursive bool) ([]string, error) {
 	path := s.prefix
 	if path == "" {
 		path = "/"
 	}
-	in := &awsssm.GetParametersByPathInput{Path: aws.String(path), Recursive: aws.Bool(false)}
+	in := &awsssm.GetParametersByPathInput{Path: aws.String(path), Recursive: aws.Bool(recursive)}
 	out := []string{}
 	for {
 		page, err := s.api.GetParametersByPath(ctx, in)

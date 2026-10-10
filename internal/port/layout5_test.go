@@ -3,6 +3,7 @@ package port_test
 import (
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/truvity/sluis/internal/port"
@@ -328,5 +329,35 @@ func TestLocateModule5(t *testing.T) {
 		if got, ok := port.LocateModule5(prefix); ok {
 			t.Errorf("LocateModule5(%q) = %q, want none", prefix, got)
 		}
+	}
+}
+
+func TestStatePrefixes5CoverEveryOwnedKind(t *testing.T) {
+	seen := map[port.Module]map[string]bool{}
+	for _, m := range port.Modules() {
+		seen[m] = map[string]bool{}
+		for _, p := range port.StatePrefixes5(m) {
+			for _, q := range port.StatePrefixes5(m) {
+				if p != q && strings.HasPrefix(q, p) {
+					t.Errorf("%s: %q is covered by %q", m, q, p)
+				}
+			}
+			if a, err := port.Locate5(p + "x"); err == nil && a.Module == m {
+				seen[m][a.Kind] = true
+			}
+		}
+	}
+	for _, k := range port.SharedKinds {
+		for m := range seen {
+			if seen[m][k] {
+				t.Errorf("%s: shared kind %q is in the module's prefixes", m, k)
+			}
+		}
+	}
+	if len(port.StatePrefixes5(port.ModuleOIDC)) == 0 || len(port.SetPrefixes5(port.ModuleOIDC)) == 0 {
+		t.Error("oidc has no prefixes")
+	}
+	if len(port.SetPrefixes5(port.ModuleGitHub)) != 0 || len(port.StatePrefixes5("")) != 0 {
+		t.Error("only oidc owns sets, and no module is empty")
 	}
 }
