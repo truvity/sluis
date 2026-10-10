@@ -207,7 +207,7 @@ l, _ := sluispulumi.NewLambda(ctx, "access", &sluispulumi.LambdaArgs{
 |---|---|---|---|
 | `v4` | The legacy table; `internal/credentials`, `internal/config`, `external` (and the Cloudflare paths with presets); the whole bucket | `internal/config/issuer/state-secret`, `internal/config/recovery/password` | `ports.dynamodb.table` or the adapter, as the estate wrote it |
 | `v4+v5` | Both sets; a statement the sets share is written once | The v4 pair and `internal/oidc/state-secret`, `internal/oidc/recovery-password`, the same values from the same generators | The v4 document |
-| `v5` | `ModuleRoleStatements` of the hosted modules (`oidc`, `github`, `slack`, `google`, and `cloudflare` with presets): their tables, `internal/<module>`, `external/<module>`, `<module>/` blob prefixes; the backup table for the maintenance item only | The v5 pair; the v4 pair stays until `Compat.DropV4` | `secrets.layout: v5` and `ports.dynamodb.tables`; `aws.table` and `ports.dynamodb.table` are refused |
+| `v5` | `ModuleRoleStatements` of the hosted modules (`oidc`, `github`, `slack`, `google`, and `cloudflare` with presets): their tables, `internal/<module>`, `external/<module>`, `<module>/` blob prefixes; `SluisMaintenanceDeny` on their tables | The v5 pair; the v4 pair stays until `Compat.DropV4` | `secrets.layout: v5` and `ports.dynamodb.tables`; `aws.table` and `ports.dynamodb.table` are refused |
 
 | Detail | Behavior |
 |---|---|
@@ -215,7 +215,7 @@ l, _ := sluispulumi.NewLambda(ctx, "access", &sluispulumi.LambdaArgs{
 | Preview, `v4+v5` to `v5` | The role policy and the layer change; no parameter changes |
 | Preview, `Compat.DropV4` | 2 deleted (the v4 parameters), 0 created, 0 replaced |
 | `v5` and `credentials.preset` | A role that does not host `cloudflare` reads the minter parameters the document declares (`SluisCrossCloudflareMinter`), read only |
-| Needs | `v5` and `v4+v5`: `State.Tables` (`States.Grant()`) for the hosted modules and `backup`; `v4+v5` also `State.TableArn` |
+| Needs | `v5` and `v4+v5`: `State.Tables` (`States.Grant()`) for the hosted modules; `v4+v5` also `State.TableArn` |
 
 ### Outputs
 
