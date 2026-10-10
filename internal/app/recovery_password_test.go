@@ -30,7 +30,7 @@ func TestTheRecoveryPasswordIsReadFromItsSecret(t *testing.T) {
 	if err := os.WriteFile(file, []byte("a-long-generated-password\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	recovery, err := openRecovery(ctx, Config{recoveryEnabled: true, recoveryLogin: "recovery/password"}, stores{}, src, log)
+	recovery, err := openRecovery(ctx, Config{recoveryEnabled: true, recoveryLogin: "recovery/password"}, stores{}, src, nil, log)
 	if err != nil || recovery == nil {
 		t.Fatalf("openRecovery = %v, %v", recovery, err)
 	}
@@ -46,7 +46,7 @@ func TestTheRecoveryPasswordIsReadFromItsSecret(t *testing.T) {
 
 	// Turned off keeps the file and builds nothing; turning it on again is
 	// the same file, no new password.
-	off, err := openRecovery(ctx, Config{recoveryEnabled: false, recoveryLogin: "recovery/password"}, stores{}, src, log)
+	off, err := openRecovery(ctx, Config{recoveryEnabled: false, recoveryLogin: "recovery/password"}, stores{}, src, nil, log)
 	if err != nil || off != nil {
 		t.Errorf("recovery turned off = %v, %v, want none", off, err)
 	}
@@ -57,11 +57,11 @@ func TestTheRecoveryPasswordIsReadFromItsSecret(t *testing.T) {
 	if err = os.WriteFile(filepath.Join(dir, "recovery", "empty"), []byte(" \n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = openRecovery(ctx, Config{recoveryEnabled: true, recoveryLogin: "recovery/empty"}, stores{}, src, log); err == nil ||
+	if _, err = openRecovery(ctx, Config{recoveryEnabled: true, recoveryLogin: "recovery/empty"}, stores{}, src, nil, log); err == nil ||
 		!strings.Contains(err.Error(), "recovery.passwordSecret") {
 		t.Errorf("an empty password = %v, want a refusal naming the key", err)
 	}
-	if _, err = openRecovery(ctx, Config{recoveryEnabled: true, recoveryLogin: "recovery/absent"}, stores{}, src, log); err == nil {
+	if _, err = openRecovery(ctx, Config{recoveryEnabled: true, recoveryLogin: "recovery/absent"}, stores{}, src, nil, log); err == nil {
 		t.Error("a missing password was not refused")
 	}
 }
@@ -73,7 +73,7 @@ func TestOnLambdaAMissingPasswordFailsClosedWithoutPrintingOne(t *testing.T) {
 	t.Setenv("AWS_LAMBDA_FUNCTION_NAME", "sluis-http")
 	log, logs := logtest.Logger()
 
-	recovery, err := openRecovery(context.Background(), Config{recoveryEnabled: true}, stores{}, nil, log)
+	recovery, err := openRecovery(context.Background(), Config{recoveryEnabled: true}, stores{}, nil, nil, log)
 	if err != nil || recovery != nil {
 		t.Fatalf("openRecovery = %v, %v, want no recovery and no error", recovery, err)
 	}

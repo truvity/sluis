@@ -39,6 +39,7 @@ import (
 	"github.com/truvity/sluis/internal/port/memory"
 	"github.com/truvity/sluis/internal/rails"
 	"github.com/truvity/sluis/internal/secrets"
+	"github.com/truvity/sluis/internal/secretstore"
 	"github.com/truvity/sluis/internal/signer"
 	"github.com/truvity/sluis/internal/store"
 	"github.com/truvity/sluis/internal/telemetry"
@@ -76,6 +77,10 @@ type Config struct {
 	// secrets delivers every secret this document names, by name: the
 	// stores' source, set at New.
 	secrets secrets.Source
+	// v5 is the installation's secrets on layout v5, nil on v4: the state
+	// secret is then read from internal/oidc/state-secret whatever name the
+	// document gives it.
+	v5 *secretstore.StoresV5
 	// clusters and aws are whom the token exchange trusts: the policy
 	// document's exchange.clusters and exchange.aws.
 	clusters []config.FederatedCluster
@@ -549,7 +554,7 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 	if stores == nil {
 		stores = &store.Stores{}
 	}
-	cfg.secrets = stores.Secrets
+	cfg.secrets, cfg.v5 = stores.Secrets, stores.V5
 	shared := openState(ctx, stores, log)
 
 	core := issuer.New(issuer.Config{
@@ -635,7 +640,7 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 	if cfg.secrets != nil {
 		input = cfg.secrets
 	}
-	creds := clientcreds.NewResolver(stores.Ports.Secrets, input, log)
+	creds := clientcreds.NewResolver(stores.ClientSecretPort(), input, log)
 	// Only a generated client's record is consulted; the policy in force says
 	// which, so a client returned to a named input secret is served by it.
 	creds.UseGenerated(func(id string) bool {
@@ -643,7 +648,7 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 		return ok && c.SecretGenerated()
 	})
 	secretsAdmin, leases := newClientSecretManager(set, stores, creds, log)
-	if stores.Ports.Secrets != nil {
+	if stores.ClientSecretPort() != nil {
 		core.UseClientSecrets(secretsAdmin)
 	}
 	keys, err := signer.NewKeyRings(key, additionalKeys, shared, signer.KeyRingConfig{}, nil)
@@ -778,7 +783,7 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 	handler = telemetry.HTTPHandler(handler, "access-issuer", issuer.Route)
 	app := &App{handler: handler, health: healthMux, issuer: core, storage: storage, keys: keys,
 		cfg: cfg, log: log, kms: kmsRefs, wrapped: wrapped != nil, state: shared,
-		generated: generated, creds: creds, credStore: stores.Ports.Secrets, leases: leases}
+		generated: generated, creds: creds, credStore: stores.ClientSecretPort(), leases: leases}
 	// At start, and not only on the tick, so a first deploy has its secrets as
 	// soon as it serves. A client that fails here does not stop the issuer: it
 	// is logged and tried again, and the input secret serves it meanwhile.
@@ -1144,6 +1149,17 @@ func readClient(ctx context.Context, cfg *Config) error {
 // readStateSecret reads the sign-in state's secret the document names, and
 // parses it.
 func readStateSecret(ctx context.Context, cfg Config, name, key string) ([]byte, error) {
+	if cfg.v5 != nil {
+		raw, _, err := cfg.v5.OIDC().StateSecret().Get(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("read %s (%s/state-secret): %w", key, cfg.v5.OIDC().Prefix(), err)
+		}
+		seed, err := parseStateSecret(raw)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", key, err)
+		}
+		return seed, nil
+	}
 	if cfg.secrets == nil {
 		return nil, fmt.Errorf("%s: no secrets source is configured", key)
 	}
