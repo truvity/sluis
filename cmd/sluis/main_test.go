@@ -168,3 +168,27 @@ func TestTheRestoreCommand(t *testing.T) {
 		t.Error("restore status took --overwrite")
 	}
 }
+
+func TestAPinnedBuildRunsOnlyItsModulesCommands(t *testing.T) {
+	for _, tc := range []struct {
+		pin  string
+		args []string
+		ok   bool
+	}{
+		{"", []string{"backup", "run"}, true},
+		{"issuer", []string{"serve", "--config=x"}, true},
+		{"issuer", []string{"backup", "run"}, false},
+		{"backup", []string{"backup", "run"}, true},
+		{"backup", []string{"restore", "start"}, true},
+		{"backup", []string{"serve"}, false},
+		{"cloudflare", []string{"cloudflare"}, true},
+		{"cloudflare", []string{"restore"}, false},
+		{"backup", []string{"--version"}, true},
+		{"backup", []string{"version"}, true},
+		{"nonsense", []string{"serve"}, false},
+	} {
+		if err := checkPin(tc.pin, tc.args); (err == nil) != tc.ok {
+			t.Errorf("checkPin(%q, %v) = %v, want ok=%v", tc.pin, tc.args, err, tc.ok)
+		}
+	}
+}

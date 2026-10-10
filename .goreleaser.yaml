@@ -1,5 +1,5 @@
-# Release: two images (sluis and the resource-proxy sidecar) and
-# their binaries, from one tag.
+# Release: images (sluis, one per module for Kubernetes, and the
+# resource-proxy sidecar) and their binaries, from one tag.
 #
 # The tag is the sole version authority. The chart's own version field is
 # a placeholder the release workflow stamps, and this file stamps the
@@ -300,6 +300,80 @@ kos:
       org.opencontainers.image.version: "{{ .Version }}"
       org.opencontainers.image.source: https://github.com/truvity/sluis
 
+  # One image per module, for Kubernetes (U34c, docs/decisions/0072): the zip per
+  # module is for Lambda, and this is its container counterpart. Each is the
+  # multi-call `sluis` main built with its module name pinned
+  # (`-X .../internal/version.Module=sluis-module=<module>`), so a module image
+  # refuses another module's commands (cmd/sluis checkPin). The chart runs them
+  # with `image.perModule: true` and keeps the single `sluis` image by default.
+  # The repository is set per image, not by the cmd directory, since all three
+  # build ./cmd/sluis; the id IS the image name (the artifacts table reads it).
+  - id: sluis-issuer
+    main: ./cmd/sluis
+    repositories:
+      - "{{ .Env.KO_DOCKER_REPO }}/sluis-issuer"
+    env: [CGO_ENABLED=0]
+    flags: [-trimpath]
+    ldflags:
+      - -s -w -X github.com/truvity/sluis/internal/version.Version={{.Version}} -X github.com/truvity/sluis/internal/version.Module=sluis-module=issuer
+    tags:
+      - "{{ .Version }}"
+      - "{{ if not .IsSnapshot }}latest{{ end }}"
+    platforms: [linux/amd64, linux/arm64]
+    bare: true
+    preserve_import_paths: false
+    base_import_paths: false
+    base_image: gcr.io/distroless/static:nonroot
+    sbom: none  # attested on the digest instead (release.yaml, `attest`)
+    labels:
+      org.opencontainers.image.title: sluis-issuer
+      org.opencontainers.image.version: "{{ .Version }}"
+      org.opencontainers.image.source: https://github.com/truvity/sluis
+
+  - id: sluis-cloudflare
+    main: ./cmd/sluis
+    repositories:
+      - "{{ .Env.KO_DOCKER_REPO }}/sluis-cloudflare"
+    env: [CGO_ENABLED=0]
+    flags: [-trimpath]
+    ldflags:
+      - -s -w -X github.com/truvity/sluis/internal/version.Version={{.Version}} -X github.com/truvity/sluis/internal/version.Module=sluis-module=cloudflare
+    tags:
+      - "{{ .Version }}"
+      - "{{ if not .IsSnapshot }}latest{{ end }}"
+    platforms: [linux/amd64, linux/arm64]
+    bare: true
+    preserve_import_paths: false
+    base_import_paths: false
+    base_image: gcr.io/distroless/static:nonroot
+    sbom: none  # attested on the digest instead (release.yaml, `attest`)
+    labels:
+      org.opencontainers.image.title: sluis-cloudflare
+      org.opencontainers.image.version: "{{ .Version }}"
+      org.opencontainers.image.source: https://github.com/truvity/sluis
+
+  - id: sluis-backup
+    main: ./cmd/sluis
+    repositories:
+      - "{{ .Env.KO_DOCKER_REPO }}/sluis-backup"
+    env: [CGO_ENABLED=0]
+    flags: [-trimpath]
+    ldflags:
+      - -s -w -X github.com/truvity/sluis/internal/version.Version={{.Version}} -X github.com/truvity/sluis/internal/version.Module=sluis-module=backup
+    tags:
+      - "{{ .Version }}"
+      - "{{ if not .IsSnapshot }}latest{{ end }}"
+    platforms: [linux/amd64, linux/arm64]
+    bare: true
+    preserve_import_paths: false
+    base_import_paths: false
+    base_image: gcr.io/distroless/static:nonroot
+    sbom: none  # attested on the digest instead (release.yaml, `attest`)
+    labels:
+      org.opencontainers.image.title: sluis-backup
+      org.opencontainers.image.version: "{{ .Version }}"
+      org.opencontainers.image.source: https://github.com/truvity/sluis
+
 release:
   github:
     owner: truvity
@@ -314,6 +388,7 @@ release:
     |---|---|
     | Image | `ghcr.io/truvity/sluis/sluis:{{ .Version }}` |
     | Sidecar image | `ghcr.io/truvity/sluis/resource-proxy:{{ .Version }}` |
+    | Module images | `ghcr.io/truvity/sluis/sluis-{issuer,cloudflare,backup}:{{ .Version }}` |
     | Chart | `oci://ghcr.io/truvity/charts/sluis:{{ .Version }}` |
     | TypeScript | `@truvity/sluis@{{ .Version }}` on GitHub Packages |
     | Go | `go get github.com/truvity/sluis@{{ .Tag }}` |
