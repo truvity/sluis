@@ -132,7 +132,9 @@ func TestTheRotationAlertFollowsTheRotationInterval(t *testing.T) {
 			for _, r := range rulesOf(t, d) {
 				if r["alert"] == "AccessRosterSigningKeyRotationStalled" {
 					expr := r["expr"].(string)
-					return strings.TrimSpace(expr[strings.LastIndex(expr, ">")+1:])
+					// The expression is `(<sluis_ names>) or (<old names>)`: the last
+					// threshold is followed by the closing parenthesis.
+					return strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(expr[strings.LastIndex(expr, ">")+1:]), ")"))
 				}
 			}
 		}

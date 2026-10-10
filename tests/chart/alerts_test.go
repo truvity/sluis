@@ -53,9 +53,14 @@ func rulesOf(t *testing.T, doc map[string]any) []map[string]any {
 	return out
 }
 
-// The number of rules the chart ships. A guard that sweeps nothing proves
-// nothing, so each check below counts what it saw against this.
-const ruleCount = 11
+// The number of rules the chart ships, and the number written in its template.
+// In the v1.75 dual-name window each template rule renders twice, as the
+// `AccessRoster...` rule and the `Sluis...` one. A guard that sweeps nothing
+// proves nothing, so each check below counts what it saw against these.
+const (
+	templateRuleCount = 11
+	ruleCount         = 2 * templateRuleCount
+)
 
 // `renders: alerts` renders the rule object and nothing else, and none of the
 // service's own validation applies: the values here name no issuer URL.
@@ -85,7 +90,7 @@ func TestAlertsCanBeAPrometheusRuleAndOneRuleCanBeOff(t *testing.T) {
 	docs := renderArgs(t, "-f", alertsCase,
 		"--set", "alerts.format=prometheusrule", "--set", "alerts.rules.seatsShort.enabled=false",
 		"--set", "alerts.runbookBaseUrl=")
-	if docs[0]["kind"] != "PrometheusRule" || len(rulesOf(t, docs[0])) != ruleCount-1 {
+	if docs[0]["kind"] != "PrometheusRule" || len(rulesOf(t, docs[0])) != ruleCount-2 {
 		t.Fatalf("%v with %d rules", docs[0]["kind"], len(rulesOf(t, docs[0])))
 	}
 	for _, r := range rulesOf(t, docs[0]) {
@@ -162,8 +167,8 @@ func TestEveryRuleStatesItsThreshold(t *testing.T) {
 			t.Errorf("%s has %d comment lines above it; state the threshold and why", strings.TrimSpace(l), n)
 		}
 	}
-	if found != ruleCount {
-		t.Fatalf("found %d rules in the template, expected %d: a guard must not pass an empty sweep", found, ruleCount)
+	if found != templateRuleCount {
+		t.Fatalf("found %d rules in the template, expected %d: a guard must not pass an empty sweep", found, templateRuleCount)
 	}
 }
 
@@ -248,5 +253,36 @@ func TestTheRulesFireOnWhatTheyShouldAndNotOnWhatTheyShouldNot(t *testing.T) {
 	}
 	if len(fires) == 0 {
 		t.Fatal("no test fires any rule: the unit tests prove nothing")
+	}
+}
+
+// With a collector named, the pod reports as `sluis`, and the old metric names
+// are on in v1.75 and off when `telemetry.legacyMetrics` says so.
+func TestTelemetryEnvNamesSluisAndCarriesTheLegacySwitch(t *testing.T) {
+	env := func(args ...string) map[string]string {
+		out := map[string]string{}
+		for _, d := range renderArgs(t, append([]string{"-f", filepath.Join("..", "cases", "sluis", "telemetry", "values.yaml")}, args...)...) {
+			if d["kind"] != "Deployment" {
+				continue
+			}
+			spec, _ := dig(d, "spec", "template", "spec", "containers")
+			for _, c := range spec.([]any) {
+				list, _ := c.(map[string]any)["env"].([]any)
+				for _, e := range list {
+					m := e.(map[string]any)
+					if v, ok := m["value"].(string); ok {
+						out[m["name"].(string)] = v
+					}
+				}
+			}
+		}
+		return out
+	}
+	got := env()
+	if got["OTEL_SERVICE_NAME"] != "sluis" || got["SLUIS_LEGACY_METRICS"] != "true" {
+		t.Errorf("default: OTEL_SERVICE_NAME=%q SLUIS_LEGACY_METRICS=%q, want sluis and true", got["OTEL_SERVICE_NAME"], got["SLUIS_LEGACY_METRICS"])
+	}
+	if got := env("--set", "telemetry.legacyMetrics=false"); got["SLUIS_LEGACY_METRICS"] != "false" {
+		t.Errorf("legacyMetrics=false: SLUIS_LEGACY_METRICS=%q, want false", got["SLUIS_LEGACY_METRICS"])
 	}
 }

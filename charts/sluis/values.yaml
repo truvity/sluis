@@ -353,10 +353,16 @@ secretEnv: []
 # Telemetry is the OpenTelemetry SDK's own environment (ADR 0006), never the
 # config file (ADR 0032). With `otlp.endpoint` set, every pod of `renders: app`
 # gets OTEL_EXPORTER_OTLP_ENDPOINT, OTEL_EXPORTER_OTLP_PROTOCOL and an
-# OTEL_SERVICE_NAME of `access-issuer` (the one process's name: the controllers
-# report under it), then each `extraEnv` entry. Unset, nothing is
-# rendered and the pods export nothing. How to wire it: docs/reference/sluis/telemetry.md.
+# OTEL_SERVICE_NAME of `sluis` (the one process's name: the controllers
+# report under it), SLUIS_LEGACY_METRICS from `legacyMetrics`, then each
+# `extraEnv` entry. Unset, nothing is rendered and the pods export nothing.
+# How to wire it: docs/reference/sluis/telemetry.md.
 telemetry:
+  # v1.75 publishes every metric under its `sluis.*` name and, while this is
+  # true, under the old `access_issuer.*` and `access_roster.*` name too.
+  # Set it false once no dashboard or rule selects an old name; v1.76 removes
+  # the old names and this key.
+  legacyMetrics: true
   otlp:
     # The collector or metrics gateway, an http(s) URL, e.g.
     # http://<gateway>.<namespace>.svc:4318. Empty: no export.

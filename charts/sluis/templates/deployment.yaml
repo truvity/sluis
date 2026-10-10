@@ -62,9 +62,9 @@ spec:
           args:
             - serve
             - --config=/etc/sluis/config.yaml
-          {{- /* The one process reports as access-issuer: the controllers' series are its own. */}}
+          {{- /* The one process reports as sluis: the controllers' series are its own. */}}
           {{- /* Beside the secrets, the SDK variables telemetry.otlp names (ADR 0006). */}}
-          {{- $otel := include "sluis.otelEnv" (dict "root" . "service" "access-issuer") }}
+          {{- $otel := include "sluis.otelEnv" (dict "root" . "service" "sluis") }}
           {{- if or .Values.secretEnv $otel }}
           env:
             {{- range .Values.secretEnv }}
