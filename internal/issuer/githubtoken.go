@@ -211,7 +211,7 @@ func (i *Issuer) MintGitHubToken(ctx context.Context, groups []string, request G
 		return out, err
 	}
 
-	var minter githubtokens.Minter = apps.Minter
+	minter := apps.Minter
 	if minter == nil {
 		minter = githubtokens.InProcess{Store: apps.Store, HTTP: apps.HTTP, Now: apps.Now}
 	}
