@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # The DynamoDB adapter, and a migration into it, against a real DynamoDB API
-# (LocalStack), and a refusal to call an empty run a pass.
+# (LocalStack), and a refusal to call an empty run a pass. That includes the
+# layout v4 to v5 migration end to end (internal/issuerapp, which also needs the
+# SSM the same LocalStack serves), with the issuer started on each side.
 #
 # ACCESS_ROSTER_DYNAMODB_URL names the endpoint. The tests SKIP when it is unset
 # so that `go test ./...` needs nothing (the adapter runs the same suite over a
@@ -14,7 +16,7 @@ set -euo pipefail
 out="$(mktemp)"
 trap 'rm -f "$out"' EXIT
 
-go test -count=1 -v ./internal/port/dynamodb/ ./internal/migrate/ ./internal/store/ -run 'TestConformance$|TestAMissingTable|TestCreatingAnExistingTable|TestTheTableHasTTL|DynamoDB' 2>&1 | tee "$out"
+go test -count=1 -v ./internal/port/dynamodb/ ./internal/migrate/ ./internal/store/ ./internal/issuerapp/ -run 'TestConformance$|TestAMissingTable|TestCreatingAnExistingTable|TestTheTableHasTTL|DynamoDB' 2>&1 | tee "$out"
 
 # The only skips allowed are the ports a DynamoDB table does not hold; each says so.
 if grep -- '--- SKIP' "$out" | grep -v -E 'TestConformance[A-Za-z]*/([a-z]+/)?(blob|identity)/'; then
@@ -59,6 +61,8 @@ required=(
     'TestTheTableHasTTLOnExpires'
     'TestMemoryToDynamoDBCopiesAndVerifies'
     'TestTheDynamoDBAdapterSharesStateAndTheTriggerAcrossStores'
+    'TestV5MigrationEndToEndOnDynamoDB'
+    'TestV5CopyOverAStartedDestinationNeedsOverwriteOnDynamoDB'
 )
 for name in "${required[@]}"; do
     if ! grep -q -- "--- PASS: ${name} " "$out"; then
