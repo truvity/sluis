@@ -26,6 +26,8 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
+
+	"github.com/truvity/sluis/internal/telemetry"
 )
 
 // KMSAPI is the part of the AWS KMS client the issuer calls. It is narrow so
@@ -236,7 +238,7 @@ func derToRaw(der []byte, size int) ([]byte, error) {
 // configuration, so the set is small, and "which key is signing, and which is
 // failing" is the question this metric exists to answer.
 type kmsInstruments struct {
-	signatures metric.Int64Counter
+	signatures telemetry.Int64Counter
 }
 
 var kmsMetricsOnce = sync.OnceValue(kmsMetrics)
@@ -255,7 +257,7 @@ func kmsResult(err error) string {
 }
 
 func kmsMetrics() kmsInstruments {
-	signatures, _ := otel.Meter(keyRingMeterName).Int64Counter("access_issuer.kms_signatures",
+	signatures := telemetry.NewInt64Counter(otel.Meter(keyRingMeterName), "access_issuer.kms_signatures",
 		metric.WithDescription("kms:Sign calls made to sign a token, by the signing key's kid and their result: ok, throttled or error."))
 	return kmsInstruments{signatures: signatures}
 }

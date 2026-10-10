@@ -101,6 +101,16 @@ func TestATickIsCountedTimedAndTraced(t *testing.T) {
 	if got := value(t, "access_roster.tick.duration", kind("test-tick"), attribute.String("outcome", "ok")); got != 1 {
 		t.Errorf("duration samples = %d, want 1", got)
 	}
+	// Each of the three is also recorded under the name that replaces it.
+	if got := value(t, "sluis.ticks", kind("test-tick"), target, attribute.String("outcome", "failed")); got != failedBefore+1 {
+		t.Errorf("sluis.ticks failed = %d, want %d", got, failedBefore+1)
+	}
+	if got := value(t, "sluis.tick.last_success_timestamp", kind("test-tick"), target); got < started {
+		t.Errorf("sluis.tick.last_success_timestamp = %d, want at least %d", got, started)
+	}
+	if got := value(t, "sluis.tick.duration", kind("test-tick"), attribute.String("outcome", "ok")); got != 1 {
+		t.Errorf("sluis.tick.duration samples = %d, want 1", got)
+	}
 
 	spans := memoryExport.GetSpans()
 	if len(spans) != 2 || spans[0].Name != "tick test-tick" {

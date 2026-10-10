@@ -53,10 +53,10 @@ const (
 
 const meterName = "github.com/truvity/access-roster/port"
 
-var duration = func() metric.Float64Histogram {
+var duration = func() telemetry.Float64Histogram {
 	// Instrument creation fails only on an invalid name, which this is not; a
 	// failed one is a no-op instrument, never a stopped port.
-	h, _ := otel.Meter(meterName).Float64Histogram("access_roster.port.operation.duration",
+	h := telemetry.NewFloat64Histogram(otel.Meter(meterName), "access_roster.port.operation.duration",
 		metric.WithUnit("s"),
 		metric.WithDescription("Seconds a storage port call took, by port, operation and outcome. "+
 			"Its count by outcome is the call rate, the error rate and the compare-and-swap conflicts."),

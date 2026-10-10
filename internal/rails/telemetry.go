@@ -34,14 +34,14 @@ const (
 const meterName = "github.com/truvity/access-roster/rails"
 
 type instruments struct {
-	ticks       metric.Int64Counter
-	tickTime    metric.Float64Histogram
-	lastSuccess metric.Int64Gauge
+	ticks       telemetry.Int64Counter
+	tickTime    telemetry.Float64Histogram
+	lastSuccess telemetry.Int64Gauge
 
-	acquired  metric.Int64Counter
-	contended metric.Int64Counter
-	lost      metric.Int64Counter
-	held      metric.Int64UpDownCounter
+	acquired  telemetry.Int64Counter
+	contended telemetry.Int64Counter
+	lost      telemetry.Int64Counter
+	held      telemetry.Int64UpDownCounter
 }
 
 var meters = newInstruments()
@@ -50,23 +50,23 @@ func newInstruments() instruments {
 	meter := otel.Meter(meterName)
 	// Instrument creation fails only on an invalid name, which these are not;
 	// a failed one is a no-op instrument, never a stopped controller.
-	ticks, _ := meter.Int64Counter("access_roster.ticks",
+	ticks := telemetry.NewInt64Counter(meter, "access_roster.ticks",
 		metric.WithDescription("Ticks, by target kind, target and outcome (ok or failed)."))
-	tickTime, _ := meter.Float64Histogram("access_roster.tick.duration",
+	tickTime := telemetry.NewFloat64Histogram(meter, "access_roster.tick.duration",
 		metric.WithUnit("s"),
 		metric.WithDescription("Seconds a tick took, by target kind and outcome."),
 		metric.WithExplicitBucketBoundaries(0.1, 0.5, 1, 2.5, 5, 10, 30, 60, 120, 300, 600))
-	lastSuccess, _ := meter.Int64Gauge("access_roster.tick.last_success_timestamp",
+	lastSuccess := telemetry.NewInt64Gauge(meter, "access_roster.tick.last_success_timestamp",
 		metric.WithUnit("s"),
 		metric.WithDescription("When a target's last ok tick ended, as seconds since the Unix epoch."))
-	acquired, _ := meter.Int64Counter("access_roster.leases.acquired",
+	acquired := telemetry.NewInt64Counter(meter, "access_roster.leases.acquired",
 		metric.WithDescription("Tick leases taken by this runner, by target kind."))
-	contended, _ := meter.Int64Counter("access_roster.leases.contended",
+	contended := telemetry.NewInt64Counter(meter, "access_roster.leases.contended",
 		metric.WithDescription("Tick leases this runner asked for and another held, by target kind."))
-	lost, _ := meter.Int64Counter("access_roster.leases.lost",
+	lost := telemetry.NewInt64Counter(meter, "access_roster.leases.lost",
 		metric.WithDescription("Tick leases this runner held and lost, taken over or not renewable for a whole lifetime, "+
 			"by target kind. The tick stopped before its next write."))
-	held, _ := meter.Int64UpDownCounter("access_roster.leases.held",
+	held := telemetry.NewInt64UpDownCounter(meter, "access_roster.leases.held",
 		metric.WithDescription("Tick leases this runner holds now, by target kind."))
 	return instruments{ticks, tickTime, lastSuccess, acquired, contended, lost, held}
 }

@@ -150,17 +150,17 @@ func HTTPHandler(next http.Handler, service string, route func(*http.Request) st
 const httpMeterName = "github.com/truvity/access-roster/http"
 
 type httpInstruments struct {
-	requests metric.Int64Counter
-	duration metric.Float64Histogram
+	requests Int64Counter
+	duration Float64Histogram
 }
 
 func newHTTPInstruments() httpInstruments {
 	meter := otel.Meter(httpMeterName)
 	// Instrument creation fails only on an invalid name, which these are not;
 	// a failed one is a no-op instrument, never a stopped server.
-	requests, _ := meter.Int64Counter("access_issuer.http.requests",
+	requests := NewInt64Counter(meter, "access_issuer.http.requests",
 		metric.WithDescription("HTTP requests the issuer's listener answered, by route (a fixed set of names, never the raw path) and status class."))
-	duration, _ := meter.Float64Histogram("access_issuer.http.request.duration",
+	duration := NewFloat64Histogram(meter, "access_issuer.http.request.duration",
 		metric.WithUnit("s"),
 		metric.WithDescription("Seconds from a request's arrival to the handler returning, by route and status class."),
 		metric.WithExplicitBucketBoundaries(0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10))

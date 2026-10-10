@@ -7,6 +7,8 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
+
+	"github.com/truvity/sluis/internal/telemetry"
 )
 
 // keyRingMeterName is the instrumentation scope every instrument here is
@@ -17,20 +19,20 @@ const keyRingMeterName = "github.com/truvity/access-roster/issuer"
 // keyRingInstruments are the ring's metrics. With no collector named the
 // global provider is a no-op and every record costs nothing.
 type keyRingInstruments struct {
-	transitions metric.Int64Counter
-	published   metric.Int64Gauge
-	activeSince metric.Int64Gauge
+	transitions telemetry.Int64Counter
+	published   telemetry.Int64Gauge
+	activeSince telemetry.Int64Gauge
 }
 
 func newKeyRingInstruments() keyRingInstruments {
 	meter := otel.Meter(keyRingMeterName)
 	// Instrument creation fails only on an invalid name, which these are
 	// not; a failed one is a no-op instrument, never a stopped ring.
-	transitions, _ := meter.Int64Counter("access_issuer.signing_key_transitions",
+	transitions := telemetry.NewInt64Counter(meter, "access_issuer.signing_key_transitions",
 		metric.WithDescription("Signing keys, by what just happened to them and their algorithm: seen, activated, retired."))
-	published, _ := meter.Int64Gauge("access_issuer.signing_keys_published",
+	published := telemetry.NewInt64Gauge(meter, "access_issuer.signing_keys_published",
 		metric.WithDescription("Keys currently published in the JWKS by this replica, signing or retiring, by algorithm."))
-	activeSince, _ := meter.Int64Gauge("access_issuer.signing_key.active_since_timestamp",
+	activeSince := telemetry.NewInt64Gauge(meter, "access_issuer.signing_key.active_since_timestamp",
 		metric.WithUnit("s"),
 		metric.WithDescription("When the active signing key became active, as seconds since the Unix epoch, by algorithm. "+
 			"The first replica to see a key decides it, so it is the key's age in the installation, not its certificate's."))
