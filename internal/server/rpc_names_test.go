@@ -26,6 +26,7 @@ type named struct {
 	directoryrosterv1connect.UnimplementedSlackChannelServiceHandler
 	directoryrosterv1connect.UnimplementedSlackServiceHandler
 	directoryrosterv1connect.UnimplementedCloudflareServiceHandler
+	directoryrosterv1connect.UnimplementedBackupServiceHandler
 }
 
 func (named) ListHolders(
@@ -87,6 +88,7 @@ func TestEveryLegacyServiceHasANewNameOnTheMux(t *testing.T) {
 		directoryrosterv1connect.SlackChannelServiceName:       sluisv1connect.SlackChannelServiceName,
 		directoryrosterv1connect.SlackServiceName:              sluisv1connect.SlackServiceName,
 		directoryrosterv1connect.CloudflareServiceName:         sluisv1connect.CloudflareServiceName,
+		directoryrosterv1connect.BackupServiceName:             sluisv1connect.BackupServiceName,
 	}
 	for legacy, current := range pairs {
 		for _, name := range []string{legacy, current} {

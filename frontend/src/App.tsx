@@ -27,6 +27,7 @@ import MenuIcon from "@mui/icons-material/Menu";
 import LogoutIcon from "@mui/icons-material/Logout";
 import PeopleIcon from "@mui/icons-material/People";
 import SettingsIcon from "@mui/icons-material/Settings";
+import BackupIcon from "@mui/icons-material/Backup";
 import ShieldIcon from "@mui/icons-material/Shield";
 import AppsIcon from "@mui/icons-material/Apps";
 import RuleIcon from "@mui/icons-material/Rule";
@@ -52,6 +53,7 @@ import { SlackHub } from "./SlackHub";
 import { AuditPage } from "./Audit";
 import { SettingsView } from "./Settings";
 import { CloudflarePage } from "./Cloudflare";
+import { BackupsPage } from "./Backups";
 
 const drawerWidth = 236;
 
@@ -71,6 +73,7 @@ const icons: Record<string, React.ReactNode> = {
   github: <GitHubIcon fontSize="small" />,
   slack: <TagIcon fontSize="small" />,
   cloudflare: <CloudIcon fontSize="small" />,
+  backups: <BackupIcon fontSize="small" />,
   audit: <HistoryIcon fontSize="small" />,
   settings: <SettingsIcon fontSize="small" />,
 };
@@ -198,7 +201,7 @@ export function App() {
         </Typography>
       </Box>
       <List dense disablePadding sx={{ pb: 1 }}>
-        {clusters({ sessions: operator && issuerIsSameOrigin(identityInfo?.issuerUrl), audit: Boolean(identityInfo?.audit), cloudflare: Boolean(identityInfo?.cloudflare) }).map((cluster) => (
+        {clusters({ sessions: operator && issuerIsSameOrigin(identityInfo?.issuerUrl), audit: Boolean(identityInfo?.audit), cloudflare: Boolean(identityInfo?.cloudflare), backup: Boolean(identityInfo?.backup) && roles.includes("viewer") }).map((cluster) => (
           <Box key={cluster.heading ?? "start"}>
             {cluster.heading ? (
               <ListSubheader disableSticky sx={{ mt: 1.5, textTransform: "uppercase", letterSpacing: "0.06em", fontSize: "0.7rem", lineHeight: "32px" }} title={cluster.hint}>
@@ -345,6 +348,8 @@ function PageFor({
       return <CloudflarePage me={me} operator={operator} onDone={onDone} />;
     case "sessions":
       return <SessionsPage operator={operator} />;
+    case "backups":
+      return <BackupsPage />;
     case "audit":
       return <AuditPage query={query} connected={Boolean(me?.audit)} />;
     case "settings":

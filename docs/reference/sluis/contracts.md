@@ -2,13 +2,13 @@
 
 Console services, roles, routes and errors. The proto files under [`proto/`](../../../proto) are the source of truth.
 
-Connect also speaks JSON over HTTP, so `curl` works. The proto package is `sluis.v1`; the legacy `directoryroster.v1` and `accessissuer.v1` stay served until v1.76. Tables write `<package>` for either hub package.
+Connect also speaks JSON over HTTP, so `curl` works. The proto package is `sluis.v1`; the legacy `directoryroster.v1` and `accessissuer.v1` stay served until v1.76. Tables write `<package>` for either package.
 
 ## Services
 
 | Services | Reached by | Path prefix |
 |---|---|---|
-| `WorkspaceService`, `SettingsService`, `AccessService`, `GitHubService`, `SlackService`, `SlackChannelService`, `SlackSharedChannelService`, `SlackAppService`, `CloudflareService`, the SPA, and the audit `QueryService` forwarded under `/audit/` | the console, same origin under `console.mount`; a workload with its own ServiceAccount token | `/<package>.*/` |
+| `WorkspaceService`, `SettingsService`, `AccessService`, `GitHubService`, `SlackService`, `SlackChannelService`, `SlackSharedChannelService`, `SlackAppService`, `CloudflareService`, `BackupService`, the SPA, and the audit `QueryService` forwarded under `/audit/` | the console, same origin under `console.mount`; a workload with its own ServiceAccount token | `/<package>.*/` |
 | `sluis.v1.SessionService` | a browser at the issuer's host (SSO cookie); any caller with a token from this issuer | `/sluis.v1.SessionService/`, legacy `/accessissuer.v1.SessionService/` |
 | `/login/*`, `/connect/*`, `/.access/*` | the origin root: bootstrap surface and CLI endpoints | none |
 | `directory.v1.DirectoryService` | nothing: it has no listener and no chart value enables one | none |
@@ -266,6 +266,14 @@ Minted Cloudflare tokens and R2 credentials. Only `GetCloudflareCredential` retu
 | `RevokeCloudflareToken` | operator | `preset`, `token_id` | `replaced` | `not_found` for a token sluis did not mint; a revoked stored token is replaced; audit `roster.cloudflare.token.revoked` |
 | `ListMyCloudflarePresets` | any signed-in | none | `available`, `presets[]{name, description, endpoint, lifetime_seconds}` | presets granted by `cloudflare.grants` |
 | `GetCloudflareCredential` | granted by `cloudflare.grants` | `preset`, `lifetime_seconds?` | `preset`, `token_id`, `expires_on`, `token` or `access_key_id`, `secret_access_key`, `endpoint` | shown once, `Cache-Control: no-store`; audit `roster.cloudflare.token.minted` or `.refused` |
+
+## BackupService
+
+| RPC | Role | Request | Response | Notes |
+|---|---|---|---|---|
+| `GetBackupStatus` | viewer | none | `available`, `latest`, `last_completed`, `unfinished` (`units`, `done`), `retention` | calls `backup.status` as caller class `console`; `Unavailable` when the module does not answer |
+| `ListBackups` | viewer | `limit?` | `available`, `backups[]` newest first | `backup.list`; manifests are unverified; no RPC runs a backup |
+| `GetRestoreStatus` | viewer | none | `available`, `latest`, `unfinished`, `last_completed`, `maintenance[]` | `restore.status`; no RPC starts or previews a restore |
 
 ## SessionService
 

@@ -1,0 +1,139 @@
+syntax = "proto3";
+
+package directoryroster.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// BackupService is the console's read-only view of the backup module and of the
+// restore function: how the last backups went, what the archive holds, and how
+// a restore stands. It calls the modules as the caller class `console`, which
+// those modules allow to read and nothing else.
+//
+// There is no method here that starts a backup or a restore, or previews one.
+// A restore is started with `sluisctl` by an administrator or the break-glass
+// role, never through the console. No message carries a value from a record.
+service BackupService {
+  // GetBackupStatus is the latest backup run and its state, the newest
+  // completed one, a run that is running or paused with its progress, and the
+  // last retention pass. Viewer.
+  rpc GetBackupStatus(GetBackupStatusRequest) returns (GetBackupStatusResponse);
+
+  // ListBackups is what the archive holds, newest first, from the backups'
+  // own manifests. The manifests are not verified here, so they are
+  // informational. Viewer.
+  rpc ListBackups(ListBackupsRequest) returns (ListBackupsResponse);
+
+  // GetRestoreStatus is the latest restore, one that is running or paused,
+  // and the modules whose maintenance flag is set. Viewer.
+  rpc GetRestoreStatus(GetRestoreStatusRequest) returns (GetRestoreStatusResponse);
+}
+
+message GetBackupStatusRequest {}
+
+message GetBackupStatusResponse {
+  // Available is false when this deployment has no backup module to ask.
+  bool available = 1;
+  BackupRun latest = 2;
+  BackupRun last_completed = 3;
+  // Unfinished is a run that is running or paused; units and done say how far.
+  BackupRun unfinished = 4;
+  BackupRetention retention = 5;
+}
+
+// BackupRun is one run of the backup, as the module recorded it.
+message BackupRun {
+  string id = 1;
+  // State is running, paused, completed or failed.
+  string state = 2;
+  string trigger = 3;
+  string creator = 4;
+  google.protobuf.Timestamp started = 5;
+  google.protobuf.Timestamp updated = 6;
+  google.protobuf.Timestamp finished = 7;
+  int32 modules = 8;
+  int64 records = 9;
+  int32 chunks = 10;
+  bool resumed = 11;
+  string reason = 12;
+  string error = 13;
+  // Units and done are the progress of a run that is not finished.
+  int32 units = 14;
+  int32 done = 15;
+}
+
+// BackupRetention is the last prune: how many backups stayed and how many went.
+message BackupRetention {
+  google.protobuf.Timestamp at = 1;
+  int32 keep = 2;
+  string max_age = 3;
+  int32 kept = 4;
+  int32 removed = 5;
+  int32 cleaned = 6;
+  int32 refused = 7;
+}
+
+message ListBackupsRequest {
+  // Limit is the newest backups wanted; 0 is all.
+  int32 limit = 1;
+}
+
+message ListBackupsResponse {
+  bool available = 1;
+  repeated BackupInfo backups = 2;
+}
+
+// BackupInfo is one backup from its manifest.
+message BackupInfo {
+  string id = 1;
+  google.protobuf.Timestamp created = 2;
+  string creator = 3;
+  int32 format = 4;
+  string layout = 5;
+  int32 modules = 6;
+  int64 records = 7;
+  int32 chunks = 8;
+  // Error is set when the manifest could not be read.
+  string error = 9;
+}
+
+message GetRestoreStatusRequest {}
+
+message GetRestoreStatusResponse {
+  // Available is false when this deployment has no restore function to ask.
+  bool available = 1;
+  RestoreRun latest = 2;
+  RestoreRun unfinished = 3;
+  RestoreRun last_completed = 4;
+  repeated ModuleMaintenance maintenance = 5;
+}
+
+// RestoreRun is one restore, as the restore function recorded it.
+message RestoreRun {
+  string id = 1;
+  string backup_id = 2;
+  // State is running, paused, completed or failed.
+  string state = 3;
+  bool overwrite = 4;
+  string by = 5;
+  string note = 6;
+  google.protobuf.Timestamp started = 7;
+  google.protobuf.Timestamp updated = 8;
+  google.protobuf.Timestamp finished = 9;
+  // Maintenance is "on" from the first flag written until it is lifted.
+  string maintenance = 10;
+  int32 slices = 11;
+  int32 create = 12;
+  int32 overwritten = 13;
+  int32 same = 14;
+  string reason = 15;
+  string error = 16;
+}
+
+// ModuleMaintenance is a module whose maintenance flag is set, or cannot be read.
+message ModuleMaintenance {
+  string module = 1;
+  string state = 2;
+  google.protobuf.Timestamp since = 3;
+  string by = 4;
+  bool unreadable = 5;
+}

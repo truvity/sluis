@@ -54,6 +54,9 @@ func rpcModule(procedure string) port.Module {
 		return port.ModuleSlack
 	case "CloudflareService":
 		return port.ModuleCloudflare
+	case "BackupService":
+		// Reads only; mapped so that a write added later is held by its own flag.
+		return port.ModuleBackup
 	}
 	// Settings and access are the issuer's own and have no write: the policy in
 	// force and who holds what.

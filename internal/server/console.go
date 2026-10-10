@@ -198,6 +198,10 @@ type ConsoleDeps struct {
 	// deployment with no `cloudflare` section and no Cloudflare page; it is
 	// connected late, by [ConsoleServer.UseCloudflare].
 	Cloudflare CloudflareSTS
+	// Backup is the backup module and the restore function, read through
+	// modcall as the caller class `console`. Nil is a deployment with neither
+	// and no Backups page; it is connected late, by [ConsoleServer.UseBackup].
+	Backup BackupModule
 	// WebhookHTTP sends the signed ping a webhook rotation checks a new
 	// target with. Nil is a client with a short timeout that follows no
 	// redirect, so a target that moves counts as one that refused.
@@ -242,6 +246,7 @@ var (
 	_ directoryrosterv1connect.SlackChannelServiceHandler       = (*Console)(nil)
 	_ directoryrosterv1connect.SlackServiceHandler              = (*Console)(nil)
 	_ directoryrosterv1connect.CloudflareServiceHandler         = (*Console)(nil)
+	_ directoryrosterv1connect.BackupServiceHandler             = (*Console)(nil)
 )
 
 // NewConsole returns the operator services.

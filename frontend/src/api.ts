@@ -16,6 +16,7 @@ import { SlackSharedChannelService } from "./gen/sluis/v1/slack_connect_pb";
 import { SlackChannelService } from "./gen/sluis/v1/slack_channels_pb";
 import { SlackService } from "./gen/sluis/v1/slack_pb";
 import { CloudflareService } from "./gen/sluis/v1/cloudflare_pb";
+import { BackupService } from "./gen/sluis/v1/backup_pb";
 import { SessionService, How } from "./gen/sluis/v1/session_pb";
 import { withLegacyFallback } from "./legacyFallback";
 import { hubReason, issuerReason } from "./reasonModel";
@@ -58,6 +59,7 @@ export const slackConnect = createClient(SlackSharedChannelService, transport);
 export const slackChannels = createClient(SlackChannelService, transport);
 export const slack = createClient(SlackService, transport);
 export const cloudflare = createClient(CloudflareService, transport);
+export const backups = createClient(BackupService, transport);
 
 // The audit installation's query service, through this console: the console
 // forwards /audit/ with a token it mints for the person signed in, so the page
@@ -106,6 +108,8 @@ export type Me = Identity & {
   /** sluis mints Cloudflare credentials here, so the console has a
    *  Cloudflare page; what a person may ask for on it is the grants'. */
   cloudflare?: boolean;
+  /** the backup module is connected, so the console has a Backups page */
+  backup?: boolean;
   /** a module is being restored: writes are refused until it is lifted */
   maintenance?: Maintenance;
 };
