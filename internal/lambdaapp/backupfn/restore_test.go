@@ -1,4 +1,4 @@
-package lambdaapp
+package backupfn
 
 import (
 	"context"
@@ -13,6 +13,7 @@ import (
 
 	"github.com/truvity/sluis/internal/backup/restore"
 	"github.com/truvity/sluis/internal/backup/restorejob"
+	"github.com/truvity/sluis/internal/lambdaapp"
 )
 
 type fakeRestorer struct {
@@ -58,7 +59,7 @@ func paused() restorejob.Result {
 
 func TestAPausedRestoreStartsItsOwnNextInvocationThroughTheSameAlias(t *testing.T) {
 	f, api := &fakeRestorer{res: paused()}, &fakeLambda{}
-	out, err := restoreEvent(lambdaCtx(), f, api, slog.Default(), RestoreEvent{Backup: "b1", Overwrite: true, By: "ada"})
+	out, err := restoreEvent(lambdaCtx(), f, api, slog.Default(), lambdaapp.RestoreEvent{Backup: "b1", Overwrite: true, By: "ada"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,7 +83,7 @@ func TestOnlyAPausedRestoreContinues(t *testing.T) {
 		{Outcome: restorejob.OutcomeRefused, Reason: "backup", Error: "no such backup"},
 	} {
 		api := &fakeLambda{}
-		out, err := restoreEvent(lambdaCtx(), &fakeRestorer{res: res}, api, slog.Default(), RestoreEvent{Backup: "b1"})
+		out, err := restoreEvent(lambdaCtx(), &fakeRestorer{res: res}, api, slog.Default(), lambdaapp.RestoreEvent{Backup: "b1"})
 		if err != nil || len(api.in) != 0 || out.Continued || out.Outcome != res.Outcome {
 			t.Errorf("%s: %+v, %v, invoked %d", res.Outcome, out, err, len(api.in))
 		}
@@ -90,7 +91,7 @@ func TestOnlyAPausedRestoreContinues(t *testing.T) {
 }
 
 func TestAFailedContinuationIsSaidAndNotAnError(t *testing.T) {
-	out, err := restoreEvent(lambdaCtx(), &fakeRestorer{res: paused()}, &fakeLambda{err: errors.New("access denied")}, slog.Default(), RestoreEvent{Resume: true})
+	out, err := restoreEvent(lambdaCtx(), &fakeRestorer{res: paused()}, &fakeLambda{err: errors.New("access denied")}, slog.Default(), lambdaapp.RestoreEvent{Resume: true})
 	if err != nil || out.Continued || out.Error == "" || out.Outcome != "paused" {
 		t.Errorf("%+v, %v", out, err)
 	}
@@ -98,28 +99,28 @@ func TestAFailedContinuationIsSaidAndNotAnError(t *testing.T) {
 
 func TestAPreviewWritesNothingAndStartsNothing(t *testing.T) {
 	f, api := &fakeRestorer{}, &fakeLambda{}
-	out, err := restoreEvent(lambdaCtx(), f, api, slog.Default(), RestoreEvent{Backup: "b1", Preview: true})
+	out, err := restoreEvent(lambdaCtx(), f, api, slog.Default(), lambdaapp.RestoreEvent{Backup: "b1", Preview: true})
 	if err != nil || out.Outcome != "preview" || out.Report == nil || len(f.got) != 0 || len(api.in) != 0 {
 		t.Errorf("%+v, %v", out, err)
 	}
-	if out, err = restoreEvent(lambdaCtx(), f, api, slog.Default(), RestoreEvent{Backup: "nope", Preview: true}); err != nil || out.Outcome != "refused" {
+	if out, err = restoreEvent(lambdaCtx(), f, api, slog.Default(), lambdaapp.RestoreEvent{Backup: "nope", Preview: true}); err != nil || out.Outcome != "refused" {
 		t.Errorf("%+v, %v", out, err)
 	}
 }
 
 func TestTheRestoreEventIsCheckedAndOnlyTheRestoreFunctionTakesIt(t *testing.T) {
-	h := NewHTTP(nil, nil, nil)
+	h := lambdaapp.NewHTTP(nil, nil, nil)
 	if _, err := h.Handle(context.Background(), json.RawMessage(`{"kind":"restore","backup":"b1"}`)); err == nil {
 		t.Fatal("a function with no restore answered the event")
 	}
 	f := &fakeRestorer{res: restorejob.Result{Outcome: restorejob.OutcomeCompleted, ID: "r1", Run: &restorejob.Run{ID: "r1", BackupID: "b1", State: "completed"}}}
-	h.WithRestore(func(ctx context.Context, ev RestoreEvent) (RestoreResult, error) {
+	h.WithRestore(func(ctx context.Context, ev lambdaapp.RestoreEvent) (lambdaapp.RestoreResult, error) {
 		return restoreEvent(ctx, f, nil, slog.Default(), ev)
 	})
 	for _, bad := range []string{`{"kind":"restore"}`, `{"kind":"restore","preview":true}`, `{"kind":"restore","backup":"b1","resume":true}`,
 		`{"kind":"restore","resume":true,"preview":true}`} {
 		out, err := h.Handle(context.Background(), json.RawMessage(bad))
-		if res, ok := out.(RestoreResult); err != nil || !ok || res.Outcome != "refused" || res.Kind != KindRestore {
+		if res, ok := out.(lambdaapp.RestoreResult); err != nil || !ok || res.Outcome != "refused" || res.Kind != lambdaapp.KindRestore {
 			t.Errorf("%s: %+v, %v", bad, out, err)
 		}
 	}
@@ -127,7 +128,7 @@ func TestTheRestoreEventIsCheckedAndOnlyTheRestoreFunctionTakesIt(t *testing.T) 
 		t.Errorf("a malformed event reached the restore: %+v", f.got)
 	}
 	out, err := h.Handle(context.Background(), json.RawMessage(`{"kind":"restore","backup":"b1"}`))
-	if res, ok := out.(RestoreResult); err != nil || !ok || res.Outcome != "completed" || res.Maintenance != "" || res.Kind != KindRestore {
+	if res, ok := out.(lambdaapp.RestoreResult); err != nil || !ok || res.Outcome != "completed" || res.Maintenance != "" || res.Kind != lambdaapp.KindRestore {
 		t.Errorf("%+v, %v", out, err)
 	}
 	// A backup event is not the restore function's.

@@ -7,5 +7,11 @@ package version
 // workflow stamps it from the git tag; a development build says so.
 var Version = "dev"
 
+// Module is the module a Lambda zip is built for, set by the release with
+// `-ldflags -X` and empty in a development build. A zip whose main is another
+// module's refuses to start (internal/lambdaapp.StartModule), so the pin makes
+// a zip that cannot be run as a module it was not built for.
+var Module = ""
+
 // String returns the version.
 func String() string { return Version }
