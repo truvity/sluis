@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/truvity/sluis/internal/port"
+	"github.com/truvity/sluis/storage/state"
 )
 
 const sessionKeyKey = "rec.console.session-key"
@@ -14,6 +15,9 @@ const sessionKeyKey = "rec.console.session-key"
 // the first time. It is a secret, so every replica reads the same one: the
 // first writer wins the create and the others read what it wrote.
 func (b *Base) SessionKey(ctx context.Context, generate func() ([]byte, error)) ([]byte, error) {
+	if b.v5 != nil {
+		return b.sessionKeyV5(ctx, generate)
+	}
 	if b.Secrets == nil {
 		return nil, errNoSecrets
 	}
@@ -42,6 +46,15 @@ func (b *Base) SessionKey(ctx context.Context, generate func() ([]byte, error)) 
 // PutSessionKey replaces the key the console signs its sessions with, which a
 // migration does when it carries the source's key over a different one.
 func (b *Base) PutSessionKey(ctx context.Context, key []byte) error {
+	if b.v5 != nil {
+		v := b.v5.OIDC().ConsoleSessionKey()
+		_, rev, err := v.Get(ctx)
+		if err != nil && !errors.Is(err, state.ErrNotFound) {
+			return err
+		}
+		_, err = v.Put(ctx, key, rev)
+		return err
+	}
 	if b.Secrets == nil {
 		return errNoSecrets
 	}
@@ -59,6 +72,9 @@ func (b *Base) CheckSecrets(ctx context.Context) error {
 	if err := b.RequireSecrets(); err != nil {
 		return err
 	}
+	if b.v5 != nil {
+		return nil // each module's names are read when it needs them
+	}
 	if _, err := b.Secrets.Get(ctx, secretPath(sessionKeyKey, "")); err != nil && !errors.Is(err, port.ErrNotFound) {
 		return fmt.Errorf("the Secrets port does not answer: %w", err)
 	}
@@ -68,8 +84,33 @@ func (b *Base) CheckSecrets(ctx context.Context) error {
 // RequireSecrets is CheckSecrets without the read, for a caller that reads the
 // session key next anyway.
 func (b *Base) RequireSecrets() error {
-	if b.Secrets == nil {
+	if b.Secrets == nil && b.v5 == nil {
 		return fmt.Errorf("credentials are kept in Secrets, and none is configured: choose a secrets adapter (adapters.secrets, or a preset): %w", errNoSecrets)
 	}
 	return nil
+}
+
+// sessionKeyV5 is [Base.SessionKey] on layout v5: the key is
+// internal/oidc/console-session-key, created only if absent.
+func (b *Base) sessionKeyV5(ctx context.Context, generate func() ([]byte, error)) ([]byte, error) {
+	v := b.v5.OIDC().ConsoleSessionKey()
+	for range attempts {
+		got, _, err := v.Get(ctx)
+		switch {
+		case err == nil:
+			return got, nil
+		case !errors.Is(err, state.ErrNotFound):
+			return nil, err
+		}
+		key, err := generate()
+		if err != nil {
+			return nil, err
+		}
+		if _, err = v.Put(ctx, key, ""); err == nil {
+			return key, nil
+		} else if !errors.Is(err, state.ErrConflict) {
+			return nil, err
+		}
+	}
+	return nil, ErrBusy
 }

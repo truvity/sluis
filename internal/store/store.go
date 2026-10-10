@@ -438,6 +438,10 @@ type Stores struct {
 	// is not set: a caller reads its module's names from V5. The callers move
 	// to it module by module.
 	V5 *secretstore.StoresV5
+	// ClientSecrets is the Secrets port of the generated clients' records
+	// (external/oidc/<id>) on layout v5, where Ports.Secrets is not set. Nil on
+	// layout v4; [Stores.ClientSecretPort] picks the one in force.
+	ClientSecrets port.Secrets
 	// Tables is the table of each module on layout v5, nil on layout v4 and
 	// with any other adapter. Router, on it, is the one State over all of them
 	// that the migration and the backup use.
@@ -529,6 +533,12 @@ func Open(ctx context.Context, cfg Config, log *slog.Logger) (*Stores, error) {
 	st.V4, st.V5 = cfg.v4.stores, cfg.v4.v5
 	st.Plan = plan
 	st.Secrets = cfg.Secrets
+	if st.V5 != nil {
+		// The names the code asks for by a fixed spelling are read from their
+		// module-first address; any other name is delivered as before.
+		st.Secrets = secretstore.NewSourceV5(st.V5, cfg.Secrets)
+		st.ClientSecrets = secretstore.NewSecretsV5(st.V5, cfg.SecretsGrace)
+	}
 	if err = st.applyTrigger(ctx, log); err != nil {
 		st.Close()
 		return nil, err
@@ -698,4 +708,13 @@ func warnDeprecated(ctx context.Context, cfg Config, log *slog.Logger) {
 		log.WarnContext(ctx, "valkey is "+removal,
 			slog.String("setting", "valkey"), slog.String("docs", deprecationDocs))
 	}
+}
+
+// ClientSecretPort is the Secrets port that holds the generated clients'
+// records: [Stores.ClientSecrets] on layout v5, the Secrets port otherwise.
+func (s *Stores) ClientSecretPort() port.Secrets {
+	if s.ClientSecrets != nil {
+		return s.ClientSecrets
+	}
+	return s.Ports.Secrets
 }

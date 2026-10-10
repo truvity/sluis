@@ -53,6 +53,7 @@ import (
 	"github.com/truvity/sluis/internal/portstore"
 	"github.com/truvity/sluis/internal/rails"
 	"github.com/truvity/sluis/internal/secrets"
+	"github.com/truvity/sluis/internal/secretstore"
 	"github.com/truvity/sluis/internal/server"
 	"github.com/truvity/sluis/internal/settings"
 	slackcatalogue "github.com/truvity/sluis/internal/slackapp/catalogue"
@@ -343,7 +344,9 @@ func openSnapshots(ctx context.Context, st *store.Stores, log *slog.Logger) hub.
 // password is what is left: the one recovery.passwordFile holds (a platform
 // delivers as the secret recovery.passwordSecret names), or one generated and
 // printed once.
-func openRecovery(ctx context.Context, cfg Config, kept stores, src secrets.Source, log *slog.Logger) (server.Recovery, error) {
+func openRecovery(
+	ctx context.Context, cfg Config, kept stores, src secrets.Source, v5 *secretstore.StoresV5, log *slog.Logger,
+) (server.Recovery, error) {
 	if !cfg.recoveryEnabled {
 		log.InfoContext(ctx, "no recovery sign-in: this hub can only be entered through the directory")
 		return nil, nil //nolint:nilnil // no recovery is a configuration, not a failure
@@ -351,14 +354,27 @@ func openRecovery(ctx context.Context, cfg Config, kept stores, src secrets.Sour
 	if kept.reviewToken == nil {
 		password, where := "", ""
 		if cfg.recoveryLogin != "" {
-			if src == nil {
-				return nil, errors.New("recovery.passwordSecret: no secrets source is configured")
-			}
 			var err error
-			if password, err = src.Get(ctx, cfg.recoveryLogin); err != nil {
-				return nil, fmt.Errorf("recovery.passwordSecret: %w", err)
+			if v5 != nil {
+				// Layout v5: the password is at one fixed address, whatever the
+				// document names it.
+				raw, _, gerr := v5.OIDC().RecoveryPassword().Get(ctx)
+				if gerr != nil {
+					return nil, fmt.Errorf("recovery.passwordSecret: %w", gerr)
+				}
+				if len(raw) == 0 {
+					return nil, errors.New("recovery.passwordSecret: the password is empty")
+				}
+				password, where = string(raw), v5.OIDC().Prefix()+"/recovery-password"
+			} else {
+				if src == nil {
+					return nil, errors.New("recovery.passwordSecret: no secrets source is configured")
+				}
+				if password, err = src.Get(ctx, cfg.recoveryLogin); err != nil {
+					return nil, fmt.Errorf("recovery.passwordSecret: %w", err)
+				}
+				where = src.Describe(cfg.recoveryLogin)
 			}
-			where = src.Describe(cfg.recoveryLogin)
 			log.InfoContext(ctx, "recovery sign-in is by the secret the configuration names", slog.String("secret", where))
 		}
 		if password == "" && os.Getenv("AWS_LAMBDA_FUNCTION_NAME") != "" {
@@ -734,7 +750,7 @@ func New(ctx context.Context, cfg Config, st *store.Stores, log *slog.Logger) (*
 		return nil, err
 	}
 
-	recovery, err := openRecovery(ctx, cfg, kept, st.Secrets, log)
+	recovery, err := openRecovery(ctx, cfg, kept, st.Secrets, st.V5, log)
 	if err != nil {
 		return nil, err
 	}

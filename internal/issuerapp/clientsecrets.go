@@ -42,7 +42,7 @@ func checkGeneratedSecrets(ids []string, st *store.Stores) error {
 	if len(ids) == 0 {
 		return nil
 	}
-	if st.Plan.Name(port.ConcernSecrets) == store.AdapterLegacy || st.Ports.Secrets == nil {
+	if st.Plan.Name(port.ConcernSecrets) == store.AdapterLegacy || st.ClientSecretPort() == nil {
 		return fmt.Errorf("client %q has `secret: {generate: true}` and the secrets adapter cannot create a secret "+
 			"only if absent (the legacy adapter, or none): choose a secrets adapter (ssm, openbao or memory) "+
 			"or name the secret with `secret: <name>`", ids[0])
@@ -73,7 +73,7 @@ func newClientSecretManager(
 	state, _ := st.LeaseState()
 	leases := &rails.Leases{State: state, Holder: rails.NewHolder(), Log: log}
 	return &clientcreds.Manager{
-		Store:    st.Ports.Secrets,
+		Store:    st.ClientSecretPort(),
 		Lock:     leases,
 		Resolver: creds,
 		// The policy in force when asked, not when assembled.

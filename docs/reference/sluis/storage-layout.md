@@ -155,6 +155,18 @@ The logical key maps to kind and credential path as follows.
 | An organisation's `app_ref` names the App whose key it uses; without it, layout v5 refuses the connection | the organisation record |
 | Runner Apps whose tier and organisation join to one id are refused at the second write | the GitHub Apps store |
 
+## OIDC
+
+| Secret | Layout v4 | Layout v5 |
+|---|---|---|
+| the sign-in state secret | `<root>/internal/config/<name in the document>` | `<root>/internal/oidc/state-secret` |
+| the recovery password | `<root>/internal/config/<name in the document>` | `<root>/internal/oidc/recovery-password` |
+| the Google sign-in client | `<root>/internal/config/providers/google/<provider>/client-id` and `client-secret` | `<root>/internal/oidc/signin/<provider>/client-id` and `client-secret` |
+| the console session key | `<root>/internal/credentials/console/session-key` | `<root>/internal/oidc/console-session-key` |
+| a delivered client secret | `<root>/internal/config/clients/<id>/secret` | `<root>/internal/oidc/clients/<id>` |
+| a generated client's record | `<root>/external/oidc/<id>` | `<root>/external/oidc/<id>`, the same document |
+| the state secret's fingerprint (State, not a secret) | key `issuer:kms:state-secret-fingerprint` | the same key, in the `oidc` table |
+
 ## S3 (the `s3` Blob adapter)
 
 | Prefix | Content |
