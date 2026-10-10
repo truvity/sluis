@@ -28,6 +28,9 @@ sluisctl pg   --address https://openbao.example:8200 -ns staging -- pg_dump orde
 
 sluisctl r2 --service-url https://r2-broker.example.com -- credentials --bucket example-bucket --prefix nix/
 
+sluisctl backup status                          # the backup function, with your AWS credentials
+sluisctl restore start 20261010T020000Z-3fa9c1 --confirm example --wait
+
 sluisctl render --installation installation.yaml --out rendered/   # the service and policy documents
 sluisctl policy render policy/ -o policy.yaml   # the one policy document an installation reads
 ```
@@ -50,6 +53,7 @@ sluisctl policy render policy/ -o policy.yaml   # the one policy document an ins
 | `exchange` | the raw exchange: a token in, a token for an audience out | below |
 | `bao`, `r2` (deprecated), `psql`, `pg`, `ssh known-hosts` | authenticate, then run another program | [wrappers](sluisctl-wrappers.md) |
 | `clients rotate\|show\|purge` | look after a generated client's secret | [clients](#clients-rotate-show-purge) |
+| `backup run\|status\|list`, `restore preview\|start\|resume\|status` | invoke the backup and restore functions | [backup](#backup-and-restore) |
 | `render` | an installation in, the service and policy documents out | [render](#render-an-installation-in-the-two-documents-out) |
 | `policy render` | the one policy document an installation reads, from its layers | [policy render](#policy-render-the-one-policy-document) |
 
@@ -136,7 +140,7 @@ The result passes every check the service runs at start. Exit codes as `render`.
 | `cloudflare` | `<config>/cloudflare/<hash>.json` | the issuer, the client id, the preset and the lifetime asked for, hashed together | with a third of the credential's lifetime left (the lifetime is stored beside it) |
 | `r2` | `<config>/r2/<hash>.json` | the issuer, the client id and the audience, hashed together | a minute before the token's expiry, the same margin `kube-token` uses |
 
-A lock `<hash>.json.lock` beside each file makes many callers one exchange. `login` touches no cache; delete the `kube`, `aws`, `cloudflare` and `r2` directories to force a fresh exchange.
+A lock beside each file makes many callers one exchange. `login` touches no cache; delete a cache directory to force a fresh exchange.
 
 ## What it writes into files that are not its own
 
@@ -164,6 +168,28 @@ sluisctl clients purge <id>                    # delete the record of a client n
 | `purge` | Reminds you to delete `clients/<id>/secret` by hand |
 | Docs | [rotate a client secret](../../guides/sluis/operate/rotate-a-client-secret.md), [`/.access/client-secrets`](endpoints.md#client-secrets) |
 
+## backup and restore
+
+```sh
+sluisctl backup run [--resume] | status | list [--limit N]
+sluisctl restore preview <backup-id>
+sluisctl restore start <backup-id> --confirm <instance> [--overwrite] [--note TEXT] [--wait]
+sluisctl restore resume [--wait]
+sluisctl restore status
+```
+
+| Detail | Behavior |
+|---|---|
+| Credentials | The caller's own AWS credentials, the SDK's default chain, so a profile from `aws-config` works. No issuer, session or console. `--profile` and `--region` override |
+| Function | `--function`, else `$SLUISCTL_BACKUP_FUNCTION` or `$SLUISCTL_RESTORE_FUNCTION`, else `backup.function` or `backup.restoreFunction` in `config.yaml`; `backup.region` and `backup.instance` too. Addresses, no secret |
+| Class | `--as admin` (default) or `breakglass`: every call goes through the alias `live-<class>` |
+| Backup | Module calls `backup.run` (synchronous), `backup.status`, `backup.list`. See [backup](backup.md) |
+| `restore preview` | A synchronous restore event with `preview`: counts per module and section, names in `--json`, never values |
+| `restore start` | Refuses unless `--confirm` equals the instance (`--instance`, `$SLUISCTL_INSTANCE`, `backup.instance`). Sends the event asynchronously with `by` set to the caller's `sts:GetCallerIdentity` ARN, then looks up the run and prints its id. `--wait` polls `restore.status` every 5 seconds until `completed`, or `failed` (exit 1) |
+| `restore resume` | Does nothing when no restore is unfinished |
+| IAM | `lambda:InvokeFunction` on the function's `live-admin` or `live-breakglass` alias; a refusal exits 4 |
+| Output | Text, or `--json`; never a secret |
+
 ## Exit codes
 
 | Code | Means |
@@ -172,7 +198,7 @@ sluisctl clients purge <id>                    # delete the record of a client n
 | `1` | anything else: read the message. For `clients`: a client not generated, without a record, still declared, or busy |
 | `2` | usage: bad command line or overlap |
 | `3` | not signed in: run `sluisctl login` (a `401`) |
-| `4` | audience or App token not granted; for `bao`, `pg`, `psql` also OpenBAO's `403`. Do not retry |
+| `4` | audience or App token not granted; for `backup` and `restore`, AWS or the function refused the caller; for `bao`, `pg`, `psql` also OpenBAO's `403`. Do not retry |
 | `5` | issuer unreachable; for `bao`, `pg`, `psql` also OpenBAO. Retry may help |
 
 ## Installing it

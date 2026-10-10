@@ -157,6 +157,10 @@ func run(args []string) error {
 		return clientsCommand(args[1:])
 	case "policy":
 		return policyCommand(args[1:])
+	case "backup":
+		return backupCommand(args[1:])
+	case "restore":
+		return restoreCommand(args[1:])
 	case "render":
 		return renderCommand(args[1:])
 	case "help", "-h", "--help":
@@ -193,6 +197,8 @@ func usage(to *os.File) {
   exchange      the raw exchange: a token in, a token for an audience out
 
   clients       rotate, show or purge the stored secret of a generated client (operators)
+  backup        run, status, list: the backup function, with your AWS credentials
+  restore       preview, start, resume, status: the restore function (start needs --confirm)
   render        an installation in, the service and policy documents out
   policy render the one policy document an installation reads, from its layers
 

@@ -39,6 +39,10 @@ type Config struct {
 	// the same way when this is empty) is the only thing that decides
 	// what `sluisctl ssh known-hosts` ever writes.
 	SSHKnownHosts []sshKnownHostsEntry `yaml:"sshKnownHosts,omitempty"`
+	// Backup says where the backup and restore functions are, for
+	// `sluisctl backup` and `sluisctl restore` (see backup.go). Addresses
+	// only; those commands use the caller's AWS credentials.
+	Backup BackupConfig `yaml:"backup,omitempty"`
 }
 
 // Session is the cached login: the refresh token, and enough about the
