@@ -666,3 +666,19 @@ Takes the parsed service document.
 {{- end -}}
 {{- end -}}
 {{- end }}
+
+{{/*
+The image of one module's pod. Takes (dict "root" $ "module" "issuer"). By default
+it is the one multi-call image, image.repository. With image.perModule it is the
+module's own image, <image.repository's parent>/sluis-<module> (a release's
+ghcr.io/truvity/sluis/sluis-issuer, or the same name in a mirror of the
+repository), at the same tag.
+*/}}
+{{- define "sluis.image" -}}
+{{- $v := .root.Values.image -}}
+{{- $repo := $v.repository -}}
+{{- if $v.perModule -}}
+{{- $repo = printf "%s/sluis-%s" (dir $v.repository) .module -}}
+{{- end -}}
+{{- printf "%s:%s" $repo ($v.tag | default .root.Chart.AppVersion) -}}
+{{- end }}

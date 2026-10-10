@@ -26,6 +26,9 @@ Container images:
 |---|---|
 | sluis | `ghcr.io/truvity/sluis/sluis` |
 | sluis | `ghcr.io/truvity/sluis/resource-proxy` |
+| sluis | `ghcr.io/truvity/sluis/sluis-issuer` |
+| sluis | `ghcr.io/truvity/sluis/sluis-cloudflare` |
+| sluis | `ghcr.io/truvity/sluis/sluis-backup` |
 | audit | `ghcr.io/truvity/audit/audit-writer` |
 | audit | `ghcr.io/truvity/audit/audit-query` |
 | audit | `ghcr.io/truvity/audit/audit-notary` |
