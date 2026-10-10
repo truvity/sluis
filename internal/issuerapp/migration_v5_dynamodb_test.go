@@ -480,7 +480,7 @@ func firstSignIn(t *testing.T, st *store.Stores, secret string) error {
 
 // The guard conflict: a destination whose issuer already started and recorded
 // the fingerprint of its own state secret (at its first sign-in) holds something
-// the source does not, so a copy reports it as different and writes nothing until
+// the source may not, so a copy reports it as different and writes nothing until
 // it is told --overwrite.
 func TestV5CopyOverAStartedDestinationNeedsOverwriteOnDynamoDB(t *testing.T) {
 	endpoint := os.Getenv("ACCESS_ROSTER_DYNAMODB_URL")
@@ -555,9 +555,10 @@ func TestV5CopyOverAStartedDestinationNeedsOverwriteOnDynamoDB(t *testing.T) {
 					t.Errorf("%s is not among the different items: %v", kind, different)
 				}
 			}
-			// The fingerprint is a different item only when the source has one.
-			if different["guard"] != sourceSignedIn {
-				t.Errorf("the state secret's fingerprint is different = %v, want %v", different["guard"], sourceSignedIn)
+			// The fingerprint is a different item whether or not the source has
+			// one: the destination's guard is to match the source's, absence too.
+			if !different["guard"] {
+				t.Errorf("the state secret's fingerprint is not among the different items: %v", different)
 			}
 			if got := ringKeys(t, v5all); !slices.Equal(got, ringBefore) {
 				t.Errorf("a refused copy wrote to the destination's ring: %v, was %v", got, ringBefore)
@@ -580,13 +581,10 @@ func TestV5CopyOverAStartedDestinationNeedsOverwriteOnDynamoDB(t *testing.T) {
 				t.Errorf("the keys published after --overwrite are %v, want the source's %v", after, kidsBefore)
 			}
 			// The fingerprint the destination recorded for its own secret is
-			// replaced only when the source has one to replace it with.
-			err = firstSignIn(t, dstSite.open(t, true, port.ModuleOIDC), srcSecret)
-			switch {
-			case sourceSignedIn && err != nil:
+			// replaced by the source's, or deleted when the source has none, so
+			// the first sign-in with the source's secret passes either way.
+			if err = firstSignIn(t, dstSite.open(t, true, port.ModuleOIDC), srcSecret); err != nil {
 				t.Errorf("the first sign-in on the destination after --overwrite: %v", err)
-			case !sourceSignedIn && (err == nil || !strings.Contains(err.Error(), "fingerprint mismatch")):
-				t.Errorf("the destination kept its own fingerprint beside the source's secret, and the first sign-in = %v, want a fingerprint mismatch", err)
 			}
 		})
 	}
