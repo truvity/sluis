@@ -29,15 +29,26 @@ type ModuleEnv struct {
 var (
 	ddbReadActions  = []string{ddbGetItem, ddbQuery, ddbScan, ddbDescribeTable}
 	ddbWriteActions = []string{ddbGetItem, ddbPutItem, ddbUpdateItem, ddbDeleteItem, ddbQuery, ddbScan, ddbDescribeTable}
-	ssmReadActions  = []string{ssmGetParameter, ssmGetParameters}
-	ssmOwnActions   = []string{ssmGetParameter, ssmGetParameters, ssmGetParameterHistory, ssmPutParameter, ssmDeleteParameter}
+	// ddbMaintenanceDenied are the writes a role other than restore is denied on
+	// the maintenance partition. BatchWriteItem and TransactWriteItems are not
+	// granted to any role; they are named so that a grant added later does not
+	// open the flag.
+	ddbMaintenanceDenied = []string{ddbPutItem, ddbUpdateItem, ddbDeleteItem, "dynamodb:BatchWriteItem", "dynamodb:TransactWriteItems"}
+	ssmReadActions       = []string{ssmGetParameter, ssmGetParameters}
+	ssmOwnActions        = []string{ssmGetParameter, ssmGetParameters, ssmGetParameterHistory, ssmPutParameter, ssmDeleteParameter}
 )
 
 // ModuleRoleStatements is the statement list of one function's role, per the
 // pattern every role follows: its own modules' parameters, tables and blob
 // prefixes, the key only through SSM and only for those parameters, the audit
-// queue and its own log group, the maintenance item, and then CrossGrants.
-// The same input renders the same list.
+// queue and its own log group, and then CrossGrants. The same input renders the
+// same list.
+//
+// The maintenance flag is a record in each module's own table (partition
+// [MaintenancePartition]), so a role reads it through the grant on its own
+// table and needs no grant on another module's. Only the restore role writes
+// it: every other role carries an explicit deny of the writes of that
+// partition on its tables, which holds whatever else an Allow says.
 func ModuleRoleStatements(env ModuleEnv, role Role) ([]map[string]any, error) {
 	if err := env.Modules.validate(); err != nil {
 		return nil, err
@@ -90,20 +101,6 @@ func ModuleRoleStatements(env ModuleEnv, role Role) ([]map[string]any, error) {
 		st = append(st, env.blobStatements(m, "Sluis"+capitalize(m), []string{s3GetObject, s3PutObject, s3DeleteObject})...)
 	}
 
-	// The maintenance item: one read of one partition of the backup table.
-	if !own[ModuleBackup] {
-		arn, err := env.tableArn(ModuleBackup)
-		if err != nil {
-			return nil, err
-		}
-		st = append(st, statement{
-			"Sid": "SluisMaintenance", "Effect": "Allow", "Action": ddbGetItem, "Resource": arn,
-			"Condition": map[string]any{
-				"ForAllValues:StringEquals": map[string]any{"dynamodb:LeadingKeys": []string{MaintenancePartition}},
-			},
-		})
-	}
-
 	// Cross-grants.
 	keyActions := map[string]bool{}
 	var crossArns []string
@@ -136,6 +133,18 @@ func ModuleRoleStatements(env ModuleEnv, role Role) ([]map[string]any, error) {
 			}
 		}
 	}
+	// The maintenance flag is written by the restore role alone: every other
+	// role is denied the writes of that partition on every table it holds, its
+	// own and a peer's.
+	if role.Name != RoleRestore {
+		st = append(st, statement{
+			"Sid": sidMaintenanceDeny, "Effect": "Deny", "Action": ddbMaintenanceDenied, "Resource": tablesOf(tables),
+			"Condition": map[string]any{
+				"ForAnyValue:StringEquals": map[string]any{"dynamodb:LeadingKeys": []string{MaintenancePartition}},
+			},
+		})
+	}
+
 	if len(keyActions) > 0 {
 		var acts []string
 		for a := range keyActions {
@@ -181,6 +190,25 @@ func (env ModuleEnv) tableArn(m Module) (string, error) {
 		return "", fmt.Errorf("sluispulumi: no table ARN for module %q", m)
 	}
 	return arn, nil
+}
+
+// sidMaintenanceDeny is the Sid of the deny of the maintenance partition.
+const sidMaintenanceDeny = "SluisMaintenanceDeny"
+
+// tablesOf is the resource list of a deny: the tables, sorted and without
+// repeats, as one string when there is one.
+func tablesOf(arns []string) any {
+	out := sortedStrings(arns)
+	var uniq []string
+	for _, a := range out {
+		if len(uniq) == 0 || uniq[len(uniq)-1] != a {
+			uniq = append(uniq, a)
+		}
+	}
+	if len(uniq) == 1 {
+		return uniq[0]
+	}
+	return uniq
 }
 
 func tableStatement(sid, tableArn string, actions []string) statement {
