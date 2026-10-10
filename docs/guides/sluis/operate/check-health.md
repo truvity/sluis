@@ -43,6 +43,6 @@ To roll back, roll back the release. Do not scale the old Deployment down or del
 
 ## Alert on a stopped controller
 
-Alert on `access_roster.tick.last_success_timestamp` per `kind` and `target`. The chart's [AccessRosterTickStale](../../../reference/sluis/telemetry.md) ages it. The series is absent when a controller never ticked and after a day of silence, so add `absent_over_time(...)` for a controller gone for good. The series are listed in [telemetry](../../../reference/sluis/telemetry.md#the-controllers-and-the-rails). Stop a controller in a test installation to see the alert fire.
+Alert on `sluis.tick.last_success_timestamp` per `kind` and `target`. The chart's [AccessRosterTickStale](../../../reference/sluis/telemetry.md) ages it. The series is absent when a controller never ticked and after a day of silence, so add `absent(...)` over both names for a controller gone for good. The series are listed in [telemetry](../../../reference/sluis/telemetry.md#the-controllers-and-the-rails). Stop a controller in a test installation to see the alert fire.
 
 More than one replica is [high availability](high-availability.md): losing one pauses reconciling only while a new pod starts.

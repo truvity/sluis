@@ -10,18 +10,19 @@ The platform sets these variables on the pods; the configuration file has no tel
 |---|---|
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | Names a collector for metrics and traces. With neither this nor a signal's own variable set, nothing is exported. |
 | `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT`, `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | The same, for one signal. |
-| `OTEL_EXPORTER_OTLP_HEADERS`, `OTEL_METRIC_EXPORT_INTERVAL`, `OTEL_SERVICE_NAME`, `OTEL_RESOURCE_ATTRIBUTES` | The SDK's own. With `OTEL_SERVICE_NAME` unset the process names itself `access-issuer`, and the controllers' series carry that name too: select `service_name` `access-issuer`, not a controller name. |
+| `OTEL_EXPORTER_OTLP_HEADERS`, `OTEL_METRIC_EXPORT_INTERVAL`, `OTEL_SERVICE_NAME`, `OTEL_RESOURCE_ATTRIBUTES` | The SDK's own. With `OTEL_SERVICE_NAME` unset the process names itself `sluis`, and the controllers' series carry that name too: select `service_name` `sluis`, not a controller name. |
 | `OTEL_TRACES_SAMPLER`, `OTEL_TRACES_SAMPLER_ARG` | The sampler. Unset, it is parent based with `always_on`: a caller's decision wins and every root trace is kept. The default is provisional (`defaultSampler` in `internal/telemetry/telemetry.go`). `parentbased_traceidratio` with argument `0.1` gives truvity/audit's behaviour. |
 
 ## Wiring it with the chart
 
-The chart sets them from `telemetry.otlp`; an empty `endpoint` renders nothing. Steps: [install telemetry](../../guides/sluis/operate/install-telemetry.md).
+The chart sets them from `telemetry.otlp`; an empty `endpoint` renders nothing ([install telemetry](../../guides/sluis/operate/install-telemetry.md)).
 
 | Variable | From |
 |---|---|
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `telemetry.otlp.endpoint`, an http(s) URL |
 | `OTEL_EXPORTER_OTLP_PROTOCOL` | `telemetry.otlp.protocol`, default `http/protobuf` |
-| `OTEL_SERVICE_NAME` | `access-issuer` |
+| `OTEL_SERVICE_NAME` | `sluis` |
+| `SLUIS_LEGACY_METRICS` | `telemetry.legacyMetrics`, default `true`: also publish the old metric names (below) |
 | each `telemetry.otlp.extraEnv` entry, sorted, last | `OTEL_*` names only, never `OTEL_EXPORTER_OTLP_ENDPOINT` |
 
 ## Traces
@@ -48,11 +49,15 @@ rpc.response.status_code  error.type  http.request.method
 http.response.status_code  http.route
 ```
 
-Events, link attributes and status text are removed. A port call's key is never an attribute. A test in `internal/telemetry` asserts no personal marker reaches the next exporter.
+Events, link attributes and status text are removed. A port call's key is never an attribute. A test asserts no personal marker reaches the next exporter.
 
 ## Metrics
 
-Prometheus names turn dots into underscores and add `_total` to counters: `access_issuer.http.requests` is `access_issuer_http_requests_total`. Only cluster, namespace and tier come from the resource.
+Prometheus names turn dots into underscores and add `_total` to counters: `sluis.http.requests` is `sluis_http_requests_total`. Only cluster, namespace and tier come from the resource.
+
+| Old name | Published as | Until |
+|---|---|---|
+| `access_issuer.<name>`, `access_roster.<name>` | `sluis.<name>`, with the same type, unit and labels | Both are recorded while `telemetry.legacyMetrics` is on, the default in v1.75. v1.76 removes the old names and the setting, so move dashboards and rules first. The `sluis-overview` dashboard selects both. |
 
 ### The issuer
 
@@ -124,7 +129,11 @@ Source: `internal/clientcreds/telemetry.go`.
 | `access_roster.leases.held` | up-down counter | `kind` | Leases this runner holds now. |
 
 
-Each tick emits `access_roster.ticks`, `access_roster.tick.duration` and, when ok, `access_roster.tick.last_success_timestamp` (`kind`: `github-tick`, `github-links`, `slack-tick`). A vanished series needs `absent_over_time(...)`; `AccessRosterTickStale` looks back a day.
+Each tick emits `access_roster.ticks`, `access_roster.tick.duration` and, when ok, `access_roster.tick.last_success_timestamp` (`kind`: `github-tick`, `github-links`, `slack-tick`). A vanished series needs `absent(...)` over both names. `AccessRosterTickStale` looks back a day.
+
+```text
+absent(last_over_time(sluis_tick_last_success_timestamp_seconds[1d]) or last_over_time(access_roster_tick_last_success_timestamp_seconds[1d]))
+```
 
 The other controller series:
 
@@ -151,31 +160,43 @@ A conflict is a lease or session rotation working, not an error. Issuer and port
 
 ## Alerts
 
-Eleven rules, rendered with `renders: alerts`. Each threshold is `alerts.rules.<rule>`. A rule whose series is absent does not fire.
+Eleven rules, each also as `Sluis…`, rendered with `renders: alerts`. A threshold is `alerts.rules.<rule>`. A rule whose series is absent does not fire.
 
 <!-- generated: telemetry-alerts -->
 
-Source: `tests/golden/sluis/alerts.yaml`, the render of `charts/sluis/templates/alerts.yaml` with default values (11 rules). The expressions carry the default thresholds; every one is a value under `alerts.rules`.
+Source: `tests/golden/sluis/alerts.yaml`, the render of `charts/sluis/templates/alerts.yaml` with default values (22 rules). The expressions carry the default thresholds; every one is a value under `alerts.rules`.
 
 | Alert | Severity | For | What it says | Default expression |
 |---|---|---|---|---|
-| `AccessRosterNoSigningKeyPublished` | critical | 5m | The issuer's key ring holds no key to publish for this algorithm, so its JWKS is empty and no relying party can verify a token. | `min by (k8s_cluster_name, namespace, algorithm) (access_issuer_signing_keys_published{namespace="sluis"}) < 1` |
-| `AccessRosterSigningKeyRotationStalled` | warning | 1h | The active signing key is older than 30240000s and has not rotated. | `time() - max by (k8s_cluster_name, namespace, algorithm) (access_issuer_signing_key_active_since_timestamp_seconds{namespace="sluis"}) > 30240000` |
-| `AccessRosterIssuer5xx` | critical | 10m | More than 5% of the requests in the last 10 minutes failed on the server side. | `( sum by (k8s_cluster_name, namespace) (increase(access_issuer_http_requests_total{namespace="sluis",status_class="5xx"}[10m])) / sum by (k8s_cluster_name, namespace) (increase(access_issuer_http_requests_total{namespace="sluis"}[10m])) ) > 0.05 and sum by (k8s_cluster_name, namespace) (increase(access_issuer_http_requests_total{namespace="sluis",status_class="5xx"}[10m])) >= 5` |
-| `AccessRosterTokenEndpointSlow` | warning | 15m | Token requests are taking longer than 2s at the 99th percentile. | `histogram_quantile(0.99, sum by (k8s_cluster_name, namespace, le) (rate(access_issuer_http_request_duration_seconds_bucket{namespace="sluis",route="token"}[10m]))) > 2` |
-| `AccessRosterTickFailing` | warning | 0m | The controller's tick of this target failed 3 or more times within 45m. | `sum by (k8s_cluster_name, namespace, kind, target) (increase(access_roster_ticks_total{namespace="sluis",outcome="failed"}[45m])) >= 3` |
-| `AccessRosterTickStale` | critical | 10m | This target has not completed a tick for longer than 3600s. | `time() - max by (k8s_cluster_name, namespace, kind, target) (last_over_time(access_roster_tick_last_success_timestamp_seconds{namespace="sluis"}[1d])) > 3600` |
-| `AccessRosterLeaseLost` | warning | 0m | Controllers lost their lease on a target 3 or more times within 1h. | `sum by (k8s_cluster_name, namespace, kind) (increase(access_roster_leases_lost_total{namespace="sluis"}[1h])) >= 3` |
+| `AccessRosterNoSigningKeyPublished` | critical | 5m | The issuer's key ring holds no key to publish for this algorithm, so its JWKS is empty and no relying party can verify a token. | `(min by (k8s_cluster_name, namespace, algorithm) (sluis_signing_keys_published{namespace="sluis"}) < 1) or (min by (k8s_cluster_name, namespace, algorithm) (access_issuer_signing_keys_published{namespace="sluis"}) < 1)` |
+| `SluisNoSigningKeyPublished` | critical | 5m | The issuer's key ring holds no key to publish for this algorithm, so its JWKS is empty and no relying party can verify a token. | `(min by (k8s_cluster_name, namespace, algorithm) (sluis_signing_keys_published{namespace="sluis"}) < 1) or (min by (k8s_cluster_name, namespace, algorithm) (access_issuer_signing_keys_published{namespace="sluis"}) < 1)` |
+| `AccessRosterSigningKeyRotationStalled` | warning | 1h | The active signing key is older than 30240000s and has not rotated. | `(time() - max by (k8s_cluster_name, namespace, algorithm) (sluis_signing_key_active_since_timestamp_seconds{namespace="sluis"}) > 30240000) or (time() - max by (k8s_cluster_name, namespace, algorithm) (access_issuer_signing_key_active_since_timestamp_seconds{namespace="sluis"}) > 30240000)` |
+| `SluisSigningKeyRotationStalled` | warning | 1h | The active signing key is older than 30240000s and has not rotated. | `(time() - max by (k8s_cluster_name, namespace, algorithm) (sluis_signing_key_active_since_timestamp_seconds{namespace="sluis"}) > 30240000) or (time() - max by (k8s_cluster_name, namespace, algorithm) (access_issuer_signing_key_active_since_timestamp_seconds{namespace="sluis"}) > 30240000)` |
+| `AccessRosterIssuer5xx` | critical | 10m | More than 5% of the requests in the last 10 minutes failed on the server side. | `(( sum by (k8s_cluster_name, namespace) (increase(sluis_http_requests_total{namespace="sluis",status_class="5xx"}[10m])) / sum by (k8s_cluster_name, namespace) (increase(sluis_http_requests_total{namespace="sluis"}[10m])) ) > 0.05 and sum by (k8s_cluster_name, namespace) (increase(sluis_http_requests_total{namespace="sluis",status_class="5xx"}[10m])) >= 5) or (( sum by (k8s_cluster_name, namespace) (increase(access_issuer_http_requests_total{namespace="sluis",status_class="5xx"}[10m])) / sum by (k8s_cluster_name, namespace) (increase(access_issuer_http_requests_total{namespace="sluis"}[10m])) ) > 0.05 and sum by (k8s_cluster_name, namespace) (increase(access_issuer_http_requests_total{namespace="sluis",status_class="5xx"}[10m])) >= 5)` |
+| `SluisIssuer5xx` | critical | 10m | More than 5% of the requests in the last 10 minutes failed on the server side. | `(( sum by (k8s_cluster_name, namespace) (increase(sluis_http_requests_total{namespace="sluis",status_class="5xx"}[10m])) / sum by (k8s_cluster_name, namespace) (increase(sluis_http_requests_total{namespace="sluis"}[10m])) ) > 0.05 and sum by (k8s_cluster_name, namespace) (increase(sluis_http_requests_total{namespace="sluis",status_class="5xx"}[10m])) >= 5) or (( sum by (k8s_cluster_name, namespace) (increase(access_issuer_http_requests_total{namespace="sluis",status_class="5xx"}[10m])) / sum by (k8s_cluster_name, namespace) (increase(access_issuer_http_requests_total{namespace="sluis"}[10m])) ) > 0.05 and sum by (k8s_cluster_name, namespace) (increase(access_issuer_http_requests_total{namespace="sluis",status_class="5xx"}[10m])) >= 5)` |
+| `AccessRosterTokenEndpointSlow` | warning | 15m | Token requests are taking longer than 2s at the 99th percentile. | `(histogram_quantile(0.99, sum by (k8s_cluster_name, namespace, le) (rate(sluis_http_request_duration_seconds_bucket{namespace="sluis",route="token"}[10m]))) > 2) or (histogram_quantile(0.99, sum by (k8s_cluster_name, namespace, le) (rate(access_issuer_http_request_duration_seconds_bucket{namespace="sluis",route="token"}[10m]))) > 2)` |
+| `SluisTokenEndpointSlow` | warning | 15m | Token requests are taking longer than 2s at the 99th percentile. | `(histogram_quantile(0.99, sum by (k8s_cluster_name, namespace, le) (rate(sluis_http_request_duration_seconds_bucket{namespace="sluis",route="token"}[10m]))) > 2) or (histogram_quantile(0.99, sum by (k8s_cluster_name, namespace, le) (rate(access_issuer_http_request_duration_seconds_bucket{namespace="sluis",route="token"}[10m]))) > 2)` |
+| `AccessRosterTickFailing` | warning | 0m | The controller's tick of this target failed 3 or more times within 45m. | `(sum by (k8s_cluster_name, namespace, kind, target) (increase(sluis_ticks_total{namespace="sluis",outcome="failed"}[45m])) >= 3) or (sum by (k8s_cluster_name, namespace, kind, target) (increase(access_roster_ticks_total{namespace="sluis",outcome="failed"}[45m])) >= 3)` |
+| `SluisTickFailing` | warning | 0m | The controller's tick of this target failed 3 or more times within 45m. | `(sum by (k8s_cluster_name, namespace, kind, target) (increase(sluis_ticks_total{namespace="sluis",outcome="failed"}[45m])) >= 3) or (sum by (k8s_cluster_name, namespace, kind, target) (increase(access_roster_ticks_total{namespace="sluis",outcome="failed"}[45m])) >= 3)` |
+| `AccessRosterTickStale` | critical | 10m | This target has not completed a tick for longer than 3600s. | `(time() - max by (k8s_cluster_name, namespace, kind, target) (last_over_time(sluis_tick_last_success_timestamp_seconds{namespace="sluis"}[1d])) > 3600) or (time() - max by (k8s_cluster_name, namespace, kind, target) (last_over_time(access_roster_tick_last_success_timestamp_seconds{namespace="sluis"}[1d])) > 3600)` |
+| `SluisTickStale` | critical | 10m | This target has not completed a tick for longer than 3600s. | `(time() - max by (k8s_cluster_name, namespace, kind, target) (last_over_time(sluis_tick_last_success_timestamp_seconds{namespace="sluis"}[1d])) > 3600) or (time() - max by (k8s_cluster_name, namespace, kind, target) (last_over_time(access_roster_tick_last_success_timestamp_seconds{namespace="sluis"}[1d])) > 3600)` |
+| `AccessRosterLeaseLost` | warning | 0m | Controllers lost their lease on a target 3 or more times within 1h. | `(sum by (k8s_cluster_name, namespace, kind) (increase(sluis_leases_lost_total{namespace="sluis"}[1h])) >= 3) or (sum by (k8s_cluster_name, namespace, kind) (increase(access_roster_leases_lost_total{namespace="sluis"}[1h])) >= 3)` |
+| `SluisLeaseLost` | warning | 0m | Controllers lost their lease on a target 3 or more times within 1h. | `(sum by (k8s_cluster_name, namespace, kind) (increase(sluis_leases_lost_total{namespace="sluis"}[1h])) >= 3) or (sum by (k8s_cluster_name, namespace, kind) (increase(access_roster_leases_lost_total{namespace="sluis"}[1h])) >= 3)` |
 | `AccessRosterCloudflareRotationStale` | critical | 5m | The stored credential of this preset is older than 2 times its rotation. | `time() - max by (k8s_cluster_name, namespace, preset) (last_over_time(sluis_cloudflare_rotation_last_timestamp_seconds{namespace="sluis"}[1d])) > 2 * max by (k8s_cluster_name, namespace, preset) (last_over_time(sluis_cloudflare_rotation_interval_seconds{namespace="sluis"}[1d]))` |
+| `SluisCloudflareRotationStale` | critical | 5m | The stored credential of this preset is older than 2 times its rotation. | `time() - max by (k8s_cluster_name, namespace, preset) (last_over_time(sluis_cloudflare_rotation_last_timestamp_seconds{namespace="sluis"}[1d])) > 2 * max by (k8s_cluster_name, namespace, preset) (last_over_time(sluis_cloudflare_rotation_interval_seconds{namespace="sluis"}[1d]))` |
 | `AccessRosterGitHubRateLimitLow` | warning | 30m | The GitHub budget for this resource has been under 100 requests for 30m. | `min by (k8s_cluster_name, namespace, resource) (github_roster_rate_limit_remaining{namespace="sluis"}) < 100` |
+| `SluisGitHubRateLimitLow` | warning | 30m | The GitHub budget for this resource has been under 100 requests for 30m. | `min by (k8s_cluster_name, namespace, resource) (github_roster_rate_limit_remaining{namespace="sluis"}) < 100` |
 | `AccessRosterSeatsShort` | warning | 30m | The controller could not invite everyone the policy admits to this organisation because it has no free seats. | `max by (k8s_cluster_name, namespace, org) (github_roster_seats_short{namespace="sluis"}) > 0` |
-| `AccessRosterPortErrors` | critical | 10m | More than 5% of the calls to this storage port failed in the last 5 minutes. | `( sum by (k8s_cluster_name, namespace, port) (increase(access_roster_port_operation_duration_seconds_count{namespace="sluis",outcome=~"unavailable\|error"}[5m])) / sum by (k8s_cluster_name, namespace, port) (increase(access_roster_port_operation_duration_seconds_count{namespace="sluis"}[5m])) ) > 0.05 and sum by (k8s_cluster_name, namespace, port) (increase(access_roster_port_operation_duration_seconds_count{namespace="sluis",outcome=~"unavailable\|error"}[5m])) >= 5` |
+| `SluisSeatsShort` | warning | 30m | The controller could not invite everyone the policy admits to this organisation because it has no free seats. | `max by (k8s_cluster_name, namespace, org) (github_roster_seats_short{namespace="sluis"}) > 0` |
+| `AccessRosterPortErrors` | critical | 10m | More than 5% of the calls to this storage port failed in the last 5 minutes. | `(( sum by (k8s_cluster_name, namespace, port) (increase(sluis_port_operation_duration_seconds_count{namespace="sluis",outcome=~"unavailable\|error"}[5m])) / sum by (k8s_cluster_name, namespace, port) (increase(sluis_port_operation_duration_seconds_count{namespace="sluis"}[5m])) ) > 0.05 and sum by (k8s_cluster_name, namespace, port) (increase(sluis_port_operation_duration_seconds_count{namespace="sluis",outcome=~"unavailable\|error"}[5m])) >= 5) or (( sum by (k8s_cluster_name, namespace, port) (increase(access_roster_port_operation_duration_seconds_count{namespace="sluis",outcome=~"unavailable\|error"}[5m])) / sum by (k8s_cluster_name, namespace, port) (increase(access_roster_port_operation_duration_seconds_count{namespace="sluis"}[5m])) ) > 0.05 and sum by (k8s_cluster_name, namespace, port) (increase(access_roster_port_operation_duration_seconds_count{namespace="sluis",outcome=~"unavailable\|error"}[5m])) >= 5)` |
+| `SluisPortErrors` | critical | 10m | More than 5% of the calls to this storage port failed in the last 5 minutes. | `(( sum by (k8s_cluster_name, namespace, port) (increase(sluis_port_operation_duration_seconds_count{namespace="sluis",outcome=~"unavailable\|error"}[5m])) / sum by (k8s_cluster_name, namespace, port) (increase(sluis_port_operation_duration_seconds_count{namespace="sluis"}[5m])) ) > 0.05 and sum by (k8s_cluster_name, namespace, port) (increase(sluis_port_operation_duration_seconds_count{namespace="sluis",outcome=~"unavailable\|error"}[5m])) >= 5) or (( sum by (k8s_cluster_name, namespace, port) (increase(access_roster_port_operation_duration_seconds_count{namespace="sluis",outcome=~"unavailable\|error"}[5m])) / sum by (k8s_cluster_name, namespace, port) (increase(access_roster_port_operation_duration_seconds_count{namespace="sluis"}[5m])) ) > 0.05 and sum by (k8s_cluster_name, namespace, port) (increase(access_roster_port_operation_duration_seconds_count{namespace="sluis",outcome=~"unavailable\|error"}[5m])) >= 5)` |
 <!-- /generated -->
 
 ### Runbook
 
 | Alert | Cause and check |
 |---|---|
+| `Sluis…` | The row of the `AccessRoster…` rule of the same name. |
 | `AccessRosterNoSigningKeyPublished` | The key ring is empty, so the JWKS is empty. Check the Secret at `config.signingKey.file` (cert-manager's Certificate or `signingKey.existingSecret`) and the issuer log ("the active signing key changed", "a signing key was seen"). A rollout shows zero for seconds, not five minutes. |
 | `AccessRosterSigningKeyRotationStalled` | The active key was not replaced. cert-manager renews `signingKey.certificate.renewBefore` early (720h before 8760h), so a key is at most about 335 days old and the rule fires at 350. Check `kubectl describe certificate` and `config.signingKey.pollInterval`. After changing `duration` or `renewBefore`, set `maxAgeSeconds` to their difference plus two weeks. For hand rotation, turn the rule off or set your cadence. |
 | `AccessRosterIssuer5xx` | Server errors. The dashboard's 5xx panel names the route. If `AccessRosterPortErrors` also fires, the store is the cause. Otherwise check `directory_unreachable` and policy loading. |

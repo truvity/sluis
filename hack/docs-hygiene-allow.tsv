@@ -17,8 +17,6 @@ allow	*	/var/run/access-issuer/	the chart's real mount paths for the mounted doc
 allow	*	access-issuer-recovery	the chart's default recovery ServiceAccount name and audience (kept; renaming re-keys the recovery grant)
 allow	*	migrate-from-the-access-issuer-chart|migrate from the access-issuer chart	the migration guide is named for the chart it migrates from
 allow	docs/guides/sluis/migrate/migrate-from-the-access-issuer-chart.md	access-issuer	the guide is about the chart `access-issuer` (nameOverride, old object names)
-allow	docs/reference/sluis/telemetry.md	`access-issuer`	OTEL_SERVICE_NAME the chart still sets (deployment template); dashboards select it
-allow	docs/guides/sluis/operate/install-telemetry.md	`access-issuer`	OTEL_SERVICE_NAME the chart still sets (deployment template); dashboards select it
 allow	docs/guides/sluis/run-conformance.md	access-issuer	hack/conformance-plans.sh and conformance_drive.py hard-code the namespace, ServiceAccount, Secret and plan alias `access-issuer`
 allow	docs/reference/sluis/chart-values.md	access-issuer	generated from values.schema.json, whose nameOverride description names the chart a migration comes from
 link	CHANGELOG.md	docs/concepts/sluis/ports.md#the-nats-adapter	history: the heading went with the NATS adapter

@@ -14,7 +14,7 @@ Point the pod at an OpenTelemetry collector, then install the alert rules and th
 
 - Alerts and dashboards are separate releases. `renders: alerts` and `renders: dashboards` render only those objects, where the ruler and Grafana look.
 
-- Series report under the one process's service name, `access-issuer`: a legacy identifier, renamed in v1.75–v1.76. Dashboards select it ([ADR 0037](../../../decisions/0037-one-process-everywhere.md)).
+- Series report under the one process's service name, `sluis` ([ADR 0037](../../../decisions/0037-one-process-everywhere.md)). v1.75 also publishes the old metric names.
 
 ## Steps
 
@@ -61,7 +61,7 @@ Point the pod at an OpenTelemetry collector, then install the alert rules and th
 
 ## Verify
 
-- The pod has `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_PROTOCOL`, `OTEL_SERVICE_NAME` and your `extraEnv`. After a minute `access_issuer_http_requests_total` has series for the cluster.
+- The pod has `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_PROTOCOL`, `OTEL_SERVICE_NAME` and your `extraEnv`. After a minute `sluis_http_requests_total` has series for the cluster.
 
 - The ruler lists one group of twelve rules, none in error.
 
