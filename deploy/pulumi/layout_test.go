@@ -82,7 +82,6 @@ func TestLayoutV5GetsOnlyTheV5Grants(t *testing.T) {
 	res := resourcesOf(st)
 	for _, want := range []string{
 		tableArn("sluis-staging-oidc"), tableArn("sluis-staging-github"), tableArn("sluis-staging-slack"), tableArn("sluis-staging-google"),
-		tableArn("sluis-staging-backup"),
 		paramRoot + "/internal/oidc/*", paramRoot + "/external/oidc/*", paramRoot + "/internal/google/*", paramRoot + "/internal/github/*",
 		paramRoot + "/internal/slack/*", arnp + "s3:::" + bucket + "/oidc/*", arnp + "s3:::" + bucket + "/google/*",
 	} {
@@ -98,10 +97,9 @@ func TestLayoutV5GetsOnlyTheV5Grants(t *testing.T) {
 			t.Errorf("v5: a v4 or an unhosted resource is granted: %s", r)
 		}
 	}
-	// The backup table is read for the maintenance item only.
-	for _, s := range st {
-		if strs(s["Resource"])[0] == tableArn("sluis-staging-backup") && s["Sid"] != "SluisMaintenance" {
-			t.Errorf("the backup table: %v", s)
+	for _, r := range res {
+		if r == tableArn("sluis-staging-backup") {
+			t.Errorf("the backup table is named: %v", r)
 		}
 	}
 	// The rest of the role is the same on every layout.
@@ -167,7 +165,6 @@ func TestTheLayoutIsValidated(t *testing.T) {
 	for name, e := range map[string]estate{
 		"unknown layout":                withLayout("v6"),
 		"v5 without the module tables":  {mutate: func(a *arp.LambdaArgs) { a.Layout = arp.LayoutV5 }},
-		"v5 without the backup table":   withLayout(arp.LayoutV5, func(a *arp.LambdaArgs) { delete(a.State.Tables, arp.ModuleBackup) }),
 		"v4+v5 without the legacy":      withLayout(arp.LayoutV4V5, func(a *arp.LambdaArgs) { a.State.TableArn = nil }),
 		"DropV4 on v4":                  {mutate: func(a *arp.LambdaArgs) { a.Compat = &arp.CompatArgs{DropV4: true} }},
 		"DropV4 on v4+v5":               withLayout(arp.LayoutV4V5, func(a *arp.LambdaArgs) { a.Compat = &arp.CompatArgs{DropV4: true} }),
@@ -468,6 +465,39 @@ func TestTheMigrationRoleReadsTheLegacyTableAndNothingElse(t *testing.T) {
 	for _, r := range resourcesOf(policyOf(t, withLayout(arp.LayoutV5, func(a *arp.LambdaArgs) { a.MigrationRoleArn = roleArn }))) {
 		if r == legacyArn {
 			t.Error("the function's role reads the legacy table on v5")
+		}
+	}
+}
+
+// The maintenance partition is denied for writes on the module tables the role
+// holds, in one statement, on v5 and v4+v5. Layout v4 has no module tables and
+// is what it was.
+func TestTheMaintenanceDenyCoversTheModuleTables(t *testing.T) {
+	var want []string
+	for _, m := range []string{"oidc", "github", "slack", "google"} {
+		want = append(want, tableArn("sluis-staging-"+m))
+	}
+	slices.Sort(want)
+	for _, l := range []arp.Layout{arp.LayoutV4, arp.LayoutV5, arp.LayoutV4V5} {
+		var denies []map[string]any
+		for _, s := range policyOf(t, withLayout(l)) {
+			if s["Sid"] == "SluisMaintenanceDeny" {
+				denies = append(denies, s)
+			}
+		}
+		if l == arp.LayoutV4 {
+			if len(denies) != 0 {
+				t.Errorf("v4: %v", denies)
+			}
+			continue
+		}
+		if len(denies) != 1 || denies[0]["Effect"] != "Deny" {
+			t.Fatalf("%s: %v", l, denies)
+		}
+		got := strs(denies[0]["Resource"])
+		slices.Sort(got)
+		if !slices.Equal(got, want) {
+			t.Errorf("%s: deny on %v, want %v", l, got, want)
 		}
 	}
 }
