@@ -84,7 +84,7 @@ One table with string `pk` (hash) and string `sk` (range). `pk` is the kind, so 
 | `issuer-held` | `<identity>` | an identity's last-known directory groups, kept for the hold window (`lifetimes.hold`) |
 | `issuer-guard` | `state-secret-fingerprint` | the guard that a state secret has not changed |
 | `session`, `session-pointer` | `<person>/<sid>`, `<sid>` | a session of the layout's own form |
-| `sessions-of`, `sessions-for`, `sso-clients` (Index) | `<identity or client or sso id>/<member>` | the transitional session index |
+| `sessions-of`, `sessions-for`, `sso-clients`, `sso-of` (Index) | `<identity or client or sso id>/<member>` | the transitional session index |
 | `sessions-index`, `sso-index` (Index) | `all/<member>` | every session, every sign-in |
 | `other` | the whole logical key | a key the layout names no kind for (a test's) |
 
