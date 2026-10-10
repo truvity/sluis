@@ -12,6 +12,7 @@ import (
 	"github.com/truvity/sluis/internal/config"
 	"github.com/truvity/sluis/internal/lambdaapp"
 	_ "github.com/truvity/sluis/internal/lambdaapp/issuerfn"
+	"github.com/truvity/sluis/internal/version"
 )
 
 func backupDocument(t *testing.T) func(string) string {
@@ -69,7 +70,7 @@ func TestABuiltZipPinnedToAnotherModuleRefusesToStart(t *testing.T) {
 	} {
 		bin := filepath.Join(t.TempDir(), "bootstrap")
 		build := exec.Command("go", "build", "-tags", "lambda,lambda.norpc",
-			"-ldflags", "-X github.com/truvity/sluis/internal/version.Module="+c.pin, "-o", bin, "./cmd/"+c.main)
+			"-ldflags", "-X github.com/truvity/sluis/internal/version.Module="+version.ModulePrefix+c.pin, "-o", bin, "./cmd/"+c.main)
 		build.Dir = "../.."
 		if out, err := build.CombinedOutput(); err != nil {
 			t.Fatalf("go build %s: %v\n%s", c.main, err, out)

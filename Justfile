@@ -53,16 +53,20 @@ lambda-size: console
     set -euo pipefail
     out="$(mktemp -d)"
     trap 'rm -rf "$out"' EXIT
-    GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -tags lambda,lambda.norpc \
-        -ldflags='-s -w' -o "$out/bootstrap" ./cmd/sluis-lambda
-    size="$(wc -c < "$out/bootstrap" | tr -d " ")"
-    if [ "$size" -gt {{lambda_budget}} ]; then
-        echo "lambda-size: the Lambda bootstrap is $size bytes, over the budget of {{lambda_budget}} ($(( {{lambda_budget}} / 1048576 )) MiB)." >&2
-        echo "deploy/pulumi refuses a bootstrap over 104857600 bytes (100 MiB) unzipped: artifact.MaxBytes in audit/deploy/pulumi/artifact." >&2
-        echo "Find what grew: go tool nm -size -sort size on a build without -ldflags='-s -w'." >&2
-        exit 1
-    fi
-    echo "lambda-size: bootstrap is $size bytes (budget {{lambda_budget}}, deploy/pulumi limit 104857600)"
+    # Every Lambda zip's main, built the way .goreleaser.yaml builds it (ids
+    # sluis-lambda and sluis-<module>: keep them equal).
+    for main in sluis-lambda sluis-issuer sluis-cloudflare sluis-backup; do
+        GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -tags lambda,lambda.norpc \
+            -ldflags='-s -w' -o "$out/bootstrap" ./cmd/$main
+        size="$(wc -c < "$out/bootstrap" | tr -d " ")"
+        if [ "$size" -gt {{lambda_budget}} ]; then
+            echo "lambda-size: the $main bootstrap is $size bytes, over the budget of {{lambda_budget}} ($(( {{lambda_budget}} / 1048576 )) MiB)." >&2
+            echo "deploy/pulumi refuses a bootstrap over 104857600 bytes (100 MiB) unzipped: artifact.MaxBytes in audit/deploy/pulumi/artifact." >&2
+            echo "Find what grew: go tool nm -size -sort size on a build without -ldflags='-s -w'." >&2
+            exit 1
+        fi
+        echo "lambda-size: $main bootstrap is $size bytes (budget {{lambda_budget}}, deploy/pulumi limit 104857600)"
+    done
 
 # Run unit tests
 # `console` first, and the same on every recipe that COMPILES Go: CI
