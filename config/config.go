@@ -98,3 +98,20 @@ func Validate(name string, doc any) error { return internal.Validate(name, doc) 
 // runs at start. It is what `sluisctl policy render` runs; an estate that
 // writes an [Installation] has no layers to merge and calls [Render].
 func RenderPolicyLayers(path string) (*PolicyDocument, error) { return internal.Render(path) }
+
+// DeclaredSecret is one secret the service document and the policy declare:
+// the installation must hold it, and a deploy-time check looks for it. Name is
+// where layout v4 keeps it below `internal/config/`; for a Ref (a Cloudflare
+// minter, the S3 credentials document) it is the internal address the
+// document gives, the same on every layout.
+type DeclaredSecret = internal.DeclaredSecret
+
+// DeclaredSecrets is the set of secrets svc and pol declare, sorted and without
+// repeats; pol may be nil. It reads nothing, and no value is in it. It is what
+// a deploy-time check (`{"kind":"check"}`, `sluis check`) looks for.
+func DeclaredSecrets(svc *Sluis, pol *PolicyDocument) []DeclaredSecret {
+	if svc == nil {
+		return internal.DeclaredSecrets(nil, pol)
+	}
+	return internal.DeclaredSecrets(&svc.Serve, pol)
+}

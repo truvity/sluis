@@ -174,6 +174,7 @@ l, _ := sluispulumi.NewLambda(ctx, "access", &sluispulumi.LambdaArgs{
 | `Schedule.Paused`, `DirectoryRefresh.Paused` | false | Declares the schedules `DISABLED`, keeping roles and grants. `Paused` with `Disabled` is refused |
 | `DirectoryRefresh.Rate`, `.Disabled` | `rate(15 minutes)`, false | Invokes `{"kind":"refresh"}` |
 | `CloudflareRotation.Rate`, `.Disabled`, `.Paused` | `rate(1 minute)`, false, false | Invokes `{"kind":"cloudflare"}`. Exists only when `Installation.Cloudflare` declares presets, which also grants SSM read on `internal/cloudflare/*`, read and write on `internal/cloudflare-minted/*`, write on `external/cloudflare/*` ([Cloudflare tokens](../../guides/sluis/cloudflare-tokens.md)) |
+| `Check` | on (nil) | A post-deploy `aws.lambda.Invocation` of the live alias with `{"kind":"check"}`, after the function, its role policy and the parameters the stack writes exist. A declared secret that is missing, empty or malformed fails `pulumi up` with `check: N of M declared secrets are missing or invalid`, naming each address. Runs again when the function version or the declared names change. `false` leaves it out, for a CI step |
 | `WebIdentityAudience` | Any | Restricts the audience of the role's web identity token |
 | `AdditionalWebIdentityAudiences` | None | Extra exact audiences after it. Any code under the role can mint them. Empty, duplicate, or with empty `WebIdentityAudience`: refused |
 | `Telemetry.LayerArn`, `.Env` | nil | The `otlp-lambda` layer; `Env` accepts `OTEL_*`, `OPENTELEMETRY_*`, the layer's `SLUIS_*` settings (`ACCESS_ROSTER_*` until v1.76), `AWS_LAMBDA_EXEC_WRAPPER` and nothing else. `OTEL_SERVICE_NAME` defaults to the function name. The layer's token comes from an issuer: one other than the function it observes keeps telemetry flowing while that function is saturated. The function drops what the layer refuses |
@@ -194,6 +195,7 @@ l, _ := sluispulumi.NewLambda(ctx, "access", &sluispulumi.LambdaArgs{
 | `SchedulerRoleArn`, `ScheduleNames` | Scheduler role and schedules |
 | `LiveAliasArn`, `LiveVersion` | Alias `live` and its version |
 | `ConfigLayerArn` | Configuration layer version |
+| `DeclaredParameters` | SSM names the documents declare (layout v4: `internal/config/<name>`), sorted; set whether or not `Check` is on |
 | `StateSecretParameter` | SSM parameter of the OAuth-state secret |
 | `Audit` | `*auditpulumi.Audit` the library installed; nil with `Use`, `Enabled: false` or `AuditQueueArn` |
 | `AuditQueueURL`, `AuditQueueArn` | The publish queue; empty when audit is off |

@@ -109,6 +109,35 @@ func renderDocuments(a *LambdaArgs) (map[string]string, error) {
 	return out, nil
 }
 
+// declaredParameters is the SSM parameters the rendered documents declare, as
+// names below the installation's root, sorted: the set the post-deploy check
+// looks for. A secret of layout v4 is `internal/config/<name>` (an address a
+// document gives, `internal/<module>/<name>`, as it is); a document that
+// selects another layout names each secret by its kind and subject, which is
+// all the library knows of where that layout puts it.
+func declaredParameters(docs map[string]string) ([]string, error) {
+	svc, pol, err := loadDocuments(docs)
+	if err != nil {
+		return nil, err
+	}
+	v4 := svc.Secrets == nil || svc.Secrets.Layout == "" || svc.Secrets.Layout == "v4"
+	names := []string{}
+	for _, d := range sluisconfig.DeclaredSecrets(svc, pol) {
+		switch {
+		case d.Ref:
+			names = append(names, d.Name)
+		case v4 && d.Name != "":
+			names = append(names, "internal/config/"+d.Name)
+		case d.Subject != "":
+			names = append(names, d.Kind+"/"+d.Subject)
+		default:
+			names = append(names, d.Kind)
+		}
+	}
+	slices.Sort(names)
+	return slices.Compact(names), nil
+}
+
 // ownRuntime writes what the estate supplies and the runtime reads, beyond what
 // the renderer knows: `instance` and the `keys:` block (LambdaArgs.Keys), and
 // `ports.blob` for external blobs (StorageArgs.Blobs). It reports whether it
@@ -455,9 +484,16 @@ func renderPolicy(a *LambdaArgs) (string, error) {
 
 // validateDocuments loads each rendered document as the function will.
 func validateDocuments(docs map[string]string) error {
+	_, _, err := loadDocuments(docs)
+	return err
+}
+
+// loadDocuments loads each rendered document as the function will and returns
+// what it decoded; a document that does not load is nil.
+func loadDocuments(docs map[string]string) (*sluisconfig.Sluis, *sluisconfig.PolicyDocument, error) {
 	dir, err := os.MkdirTemp("", "sluis-layer-")
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
 	defer func() { _ = os.RemoveAll(dir) }()
 	path := func(name string) (string, error) {
@@ -465,19 +501,22 @@ func validateDocuments(docs map[string]string) error {
 		return p, os.WriteFile(p, []byte(docs[name]), 0o600)
 	}
 	var errs []error
-	for name, load := range map[string]func(string) error{
-		docSluis:  func(p string) error { _, err := sluisconfig.Load[sluisconfig.Sluis](p); return err },
-		docPolicy: func(p string) error { _, err := sluisconfig.Load[sluisconfig.PolicyDocument](p); return err },
-	} {
-		p, err := path(name)
-		if err != nil {
-			return err
-		}
-		if err = load(p); err != nil {
-			errs = append(errs, fmt.Errorf("sluispulumi: the %s document: %w", name, err))
-		}
+	p, err := path(docSluis)
+	if err != nil {
+		return nil, nil, err
 	}
-	return errors.Join(errs...)
+	svc, err := sluisconfig.Load[sluisconfig.Sluis](p)
+	if err != nil {
+		errs = append(errs, fmt.Errorf("sluispulumi: the %s document: %w", docSluis, err))
+	}
+	if p, err = path(docPolicy); err != nil {
+		return nil, nil, err
+	}
+	pol, err := sluisconfig.Load[sluisconfig.PolicyDocument](p)
+	if err != nil {
+		errs = append(errs, fmt.Errorf("sluispulumi: the %s document: %w", docPolicy, err))
+	}
+	return svc, pol, errors.Join(errs...)
 }
 
 func yamlMap(body, field string) (map[string]any, error) {
