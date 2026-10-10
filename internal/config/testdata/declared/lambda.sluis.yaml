@@ -2,7 +2,7 @@
 # declared workspace, a recovery password; secrets in SSM.
 apiVersion: sluis.truvity.github.io/sluis/v3
 issuerURL: https://access.example
-policy: {file: testdata/declared/kernel.policy.yaml}
+policy: {file: testdata/declared/lambda.policy.yaml}
 secrets: {source: ssm, root: /sluis/prod, region: eu-west-1, layout: v5}
 recovery: {enabled: true, serviceAccount: sluis-recovery, audience: sluis-recovery, passwordSecret: recovery/password}
 oauthClient: {provider: prod}
