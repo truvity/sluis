@@ -52,7 +52,7 @@ A failed pass, or a `tick` for an unrun target, returns an error.
 | Variable | Meaning |
 |---|---|
 | `SLUIS_CONFIG` | Service document, `/opt/sluis/sluis.yaml`. The library sets it |
-| `OTEL_*` | OpenTelemetry's own. Use the [OTLP Lambda layer](https://github.com/truvity/observability/blob/master/docs/integrations/aws-lambda.md); `Telemetry.Env` also accepts `OPENTELEMETRY_*`, `ACCESS_ROSTER_*` and `AWS_LAMBDA_EXEC_WRAPPER` |
+| `OTEL_*` | OpenTelemetry's own. Use the [OTLP Lambda layer](https://github.com/truvity/observability/blob/master/docs/integrations/aws-lambda.md); `Telemetry.Env` also accepts the layer's `SLUIS_*` settings, `OPENTELEMETRY_*` and `AWS_LAMBDA_EXEC_WRAPPER`. The layer's old `ACCESS_ROSTER_*` spelling is accepted until v1.76 |
 
 No other variable, flag or secret exists. The start refuses `SLUIS_ROLE`, `SLUIS_CONFIG_FILE`, `SLUIS_SECRET_FILES`, `ssm:<path>` values and [retired variables](configuration.md#retired-environment-variables).
 

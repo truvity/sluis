@@ -850,7 +850,7 @@ func (a *LambdaArgs) validate() (LambdaArgs, error) {
 		for k := range t.Env {
 			if !telemetryVariable(k) {
 				return out, fmt.Errorf("sluispulumi: Telemetry.Env: %s is not a telemetry setting: the environment holds OTEL_*, "+
-					"the telemetry layer's own (ACCESS_ROSTER_*, OPENTELEMETRY_*) and AWS_LAMBDA_EXEC_WRAPPER, and nothing else", k)
+					"the telemetry layer's own (the SLUIS_* names it lists, or the deprecated ACCESS_ROSTER_*; OPENTELEMETRY_*) and AWS_LAMBDA_EXEC_WRAPPER, and nothing else", k)
 			}
 		}
 	}
@@ -1645,16 +1645,31 @@ func scheduleState(paused bool) pulumi.StringPtrInput {
 	return pulumi.String("DISABLED")
 }
 
+// telemetryLayerSettings are the names, without a prefix, of the telemetry
+// layer's own settings. The layer reads each as SLUIS_<name> and, until sluis
+// v1.76, as ACCESS_ROSTER_<name>.
+var telemetryLayerSettings = map[string]bool{
+	"ISSUER": true, "AUDIENCE": true, "OTLP_AUDIENCE": true, "OTLP_ENDPOINT": true, "LISTEN": true,
+	"STS_DURATION_SECONDS": true, "STS_ALGORITHM": true, "TOKEN_FILE": true,
+	"PLATFORM_LOGS": true, "FUNCTION_LOGS": true, "EXTENSION_LOGS": true, "TELEMETRY_LISTEN": true,
+	"TELEMETRY_BUFFER_MAX_ITEMS": true, "TELEMETRY_BUFFER_MAX_BYTES": true,
+	"TELEMETRY_BUFFER_TIMEOUT_MS": true, "TELEMETRY_BUFFER_QUEUE_ITEMS": true,
+}
+
 // telemetryVariable is whether a variable may be set through Telemetry.Env: the
 // OpenTelemetry SDK's own, the telemetry layer's own, and the exec wrapper a
-// layer installs itself with. Never sluis's (SLUIS_*), never the loader's
-// (LD_*) and never another AWS_* variable.
+// layer installs itself with. The layer's settings are accepted under both
+// prefixes, ACCESS_ROSTER_* for as long as the layer reads it. Never another
+// SLUIS_* variable (SLUIS_CONFIG and the rest are sluis's), never the
+// loader's (LD_*) and never another AWS_* variable.
 func telemetryVariable(k string) bool {
 	switch {
 	case k == "AWS_LAMBDA_EXEC_WRAPPER":
 		return true
 	case strings.HasPrefix(k, "OTEL_"), strings.HasPrefix(k, "ACCESS_ROSTER_"), strings.HasPrefix(k, "OPENTELEMETRY_"):
 		return true
+	case strings.HasPrefix(k, "SLUIS_"):
+		return telemetryLayerSettings[strings.TrimPrefix(k, "SLUIS_")]
 	}
 	return false
 }
