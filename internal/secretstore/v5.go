@@ -114,6 +114,19 @@ func (s *StoresV5) CloudflareExternal() CloudflareExternal {
 	return CloudflareExternal{s.out(ModuleCloudflare)}
 }
 
+// S3Credentials is the static credential document of an S3-compatible store at
+// the internal address ref, `internal/<module>/<name>`: the module is the
+// first segment, and it must be one of [Modules].
+func (s *StoresV5) S3Credentials(ref string) (state.Value[S3Credentialsv1], error) {
+	rest, ok := strings.CutPrefix(ref, "internal/")
+	mod, _, _ := strings.Cut(rest, "/")
+	m, err := ParseModule(mod)
+	if !ok || err != nil {
+		return state.Value[S3Credentialsv1]{}, fmt.Errorf("%w: %q is not below internal/<module>/", ErrRef, ref)
+	}
+	return view{m, s.in(m)}.S3Credentials(ref)
+}
+
 // view is the part every internal view shares: the module and the store rooted
 // at internal/<module>.
 type view struct {
@@ -207,11 +220,28 @@ func (g GitHubInternal) AppCredential(id, ref string) state.Value[[]byte] {
 // DeleteAppCredential removes one write of a GitHub App's credential. An
 // absent one is not an error.
 func (g GitHubInternal) DeleteAppCredential(ctx context.Context, id, ref string) error {
-	err := g.s.Delete(ctx, "apps/"+segment(id)+"/"+segment(ref))
-	if err != nil && !errors.Is(err, state.ErrNotFound) {
+	return deleteName(ctx, g.s, "apps/"+segment(id)+"/"+segment(ref))
+}
+
+// DeleteLinkCredential removes one write of a person's GitHub link tokens. An
+// absent one is not an error.
+func (g GitHubInternal) DeleteLinkCredential(ctx context.Context, person, ref string) error {
+	return deleteName(ctx, g.s, "links/"+segment(person)+"/"+segment(ref))
+}
+
+// deleteName removes name from s; an absent one is not an error.
+func deleteName(ctx context.Context, s state.Store, name string) error {
+	if err := s.Delete(ctx, name); err != nil && !errors.Is(err, state.ErrNotFound) {
 		return err
 	}
 	return nil
+}
+
+// LinkCredential is one write of a person's GitHub link tokens:
+// github/links/<person>/<ref>. A fresh random ref per write keeps a refresh
+// token, which GitHub honours once, from being replaced by a stale writer.
+func (g GitHubInternal) LinkCredential(person, ref string) state.Value[[]byte] {
+	return state.NewValue(g.s, "links/"+segment(person)+"/"+segment(ref), state.Raw())
 }
 
 // PersonToken is a person's token pair for a linked GitHub account:
@@ -235,6 +265,18 @@ func (s SlackInternal) AppCredential(id, ref string) state.Value[[]byte] {
 	return state.NewValue(s.s, "apps/"+segment(id)+"/"+segment(ref), state.Raw())
 }
 
+// DeleteWorkspaceCredential removes one write of a workspace's credential. An
+// absent one is not an error.
+func (s SlackInternal) DeleteWorkspaceCredential(ctx context.Context, team, ref string) error {
+	return deleteName(ctx, s.s, "workspaces/"+segment(team)+"/"+segment(ref))
+}
+
+// DeleteAppCredential removes one write of a Slack App's credential. An absent
+// one is not an error.
+func (s SlackInternal) DeleteAppCredential(ctx context.Context, id, ref string) error {
+	return deleteName(ctx, s.s, "apps/"+segment(id)+"/"+segment(ref))
+}
+
 // CloudflareInternal is internal/cloudflare.
 type CloudflareInternal struct{ view }
 
@@ -250,6 +292,17 @@ func (c CloudflareInternal) Minter(account string) (state.Value[CloudflareMinter
 	return state.NewValue(c.s, segment(account)+"/minter", state.Codec[CloudflareMinterv1](cloudflareMinterCodec)), nil
 }
 
+// MinterAt is the minter credential at the address ref names, which the
+// service document gives (`internal/cloudflare/<account>/minter`) and which
+// must be below internal/cloudflare/.
+func (c CloudflareInternal) MinterAt(ref string) (state.Value[CloudflareMinterv1], error) {
+	name, err := CheckModuleRef(ModuleCloudflare, ref)
+	if err != nil {
+		return state.Value[CloudflareMinterv1]{}, err
+	}
+	return state.NewValue(c.s, name, state.Codec[CloudflareMinterv1](cloudflareMinterCodec)), nil
+}
+
 // Minted is the record of the tokens minted for a preset: cloudflare/minted/<preset>.
 func (c CloudflareInternal) Minted(preset string) state.Value[CloudflareMinted] {
 	return state.NewValue(c.s, minterRecordsDir+"/"+segment(preset), state.JSON[CloudflareMinted]())
@@ -262,6 +315,12 @@ type GoogleInternal struct{ view }
 // google/workspaces/<id>/key.
 func (g GoogleInternal) WorkspaceKey(id string) state.Value[[]byte] {
 	return state.NewValue(g.s, "workspaces/"+segment(id)+"/key", state.Raw())
+}
+
+// DeleteWorkspaceKey removes a Google Workspace's key. An absent one is not an
+// error.
+func (g GoogleInternal) DeleteWorkspaceKey(ctx context.Context, id string) error {
+	return deleteName(ctx, g.s, "workspaces/"+segment(id)+"/key")
 }
 
 // BackupInternal is internal/backup.
@@ -306,6 +365,12 @@ type SlackExternal struct{ s state.Store }
 // App is a Slack App's bot token at external/slack/<name>.
 func (e SlackExternal) App(name string) state.Value[Slackv1] {
 	return state.NewValue(e.s, segment(name), state.Codec[Slackv1](slackCodec))
+}
+
+// DeleteApp removes a Slack App's exported bot token. An absent one is not an
+// error.
+func (e SlackExternal) DeleteApp(ctx context.Context, name string) error {
+	return deleteName(ctx, e.s, segment(name))
 }
 
 // CloudflareExternal is external/cloudflare.

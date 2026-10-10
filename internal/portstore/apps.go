@@ -428,7 +428,7 @@ func (s *SlackCatalogueApps) Get(ctx context.Context, id string) (slackcatalogue
 // Delete forgets one App.
 func (s *SlackCatalogueApps) Delete(ctx context.Context, id string) error {
 	if s.b.v4Writes() {
-		if err := s.b.deleteExternal(ctx, s.b.v4.External.Store(), "slack/"+id); err != nil {
+		if err := s.b.deleteExternalSlackApp(ctx, id); err != nil {
 			return err
 		}
 	}

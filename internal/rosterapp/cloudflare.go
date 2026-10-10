@@ -23,8 +23,8 @@ import (
 const cloudflareInterval = time.Minute
 
 func newCloudflare(cfg Config, stores *store.Stores, rec audit.Recorder, log *slog.Logger) (*minter.Minter, error) {
-	if stores.V4 == nil {
-		return nil, errors.New("cloudflare: the minter credential and the stored credentials live in the layout-v4 secrets store, so `secrets.source: ssm` is required")
+	if stores.V4 == nil && stores.V5 == nil {
+		return nil, errors.New("cloudflare: the minter credential and the stored credentials live in the SSM secrets store (layout v4 or v5), so `secrets.source: ssm` is required")
 	}
 	dial := cfg.CloudflareDial
 	if dial == nil {
@@ -39,12 +39,17 @@ func newCloudflare(cfg Config, stores *store.Stores, rec audit.Recorder, log *sl
 		}
 		state = own.State
 	}
-	return minter.New(minter.Config{
+	mc := minter.Config{
 		Instance: cfg.Instance, Cloudflare: cfg.Cloudflare, Grants: cfg.Grants,
-		Internal: stores.V4.Internal, External: stores.V4.External,
 		Dial: dial, Audit: rec, Log: log,
 		Lock: &rails.Leases{State: state, Holder: rails.NewHolder(), Log: log},
-	})
+	}
+	if stores.V5 != nil {
+		mc.V5 = stores.V5
+	} else {
+		mc.Internal, mc.External = stores.V4.Internal, stores.V4.External
+	}
+	return minter.New(mc)
 }
 
 // Cloudflare is the minter of Cloudflare credentials, or nil when the service

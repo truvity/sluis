@@ -17,6 +17,7 @@ import (
 	"github.com/truvity/sluis/internal/config"
 	"github.com/truvity/sluis/internal/port"
 	"github.com/truvity/sluis/internal/secretstore"
+	"github.com/truvity/sluis/storage/state"
 	statememory "github.com/truvity/sluis/storage/state/memory"
 )
 
@@ -125,9 +126,22 @@ func (a *presetAPI) PermissionGroups(context.Context) (map[string]string, error)
 // The blob mints its own credentials from the preset: no s3-credentials
 // document exists, and the minter credential is what clones the prototype.
 func TestTheBlobMintsItsOwnR2CredentialsFromAPreset(t *testing.T) {
+	for _, layout := range []string{"v4", "v5"} {
+		t.Run(layout, func(t *testing.T) { blobMintsFromPreset(t, layout == "v5") })
+	}
+}
+
+func blobMintsFromPreset(t *testing.T, v5 bool) {
 	ctx := context.Background()
-	stores := secretstore.FromStore(statememory.New(), "")
-	mv, _ := stores.Internal.CloudflareMinter("internal/cloudflare/main/minter")
+	holder := &v4Holder{}
+	var mv state.Value[secretstore.CloudflareMinterv1]
+	if v5 {
+		holder.v5 = secretstore.FromStoreV5(statememory.New(), "")
+		mv, _ = holder.v5.Cloudflare().MinterAt("internal/cloudflare/main/minter")
+	} else {
+		holder.stores = secretstore.FromStore(statememory.New(), "")
+		mv, _ = holder.stores.Internal.CloudflareMinter("internal/cloudflare/main/minter")
+	}
 	if _, err := mv.Put(ctx, secretstore.CloudflareMinterv1{Token: "minter-secret"}, ""); err != nil {
 		t.Fatal(err)
 	}
@@ -145,7 +159,7 @@ func TestTheBlobMintsItsOwnR2CredentialsFromAPreset(t *testing.T) {
 		}
 		return api, nil
 	}
-	c.v4 = &v4Holder{stores: stores}
+	c.v4 = holder
 	blob, err := c.s3Blob(ctx)
 	if err != nil {
 		t.Fatal(err)

@@ -72,6 +72,12 @@ type Config struct {
 	// External.
 	Internal secretstore.Internal
 	External secretstore.External
+	// V5 is the installation's secrets on layout v5 (ADR 0072). When set it is
+	// used and Internal and External are not: the minter credential is read at
+	// the address the account names below internal/cloudflare/, the records of
+	// minted tokens are internal/cloudflare/minted/<preset> and the stored
+	// credentials external/cloudflare/<preset>.
+	V5 *secretstore.StoresV5
 	// Dial opens an account (cfapi.Dial).
 	Dial Dialer
 	// Audit receives the records; nil records nothing.
@@ -378,7 +384,7 @@ func (m *Minter) api(ctx context.Context, account string) (API, error) {
 	if !ok {
 		return nil, fmt.Errorf("cloudflare: account %q is not declared", account)
 	}
-	v, err := m.cfg.Internal.CloudflareMinter(a.Minter)
+	v, err := m.minterDoc(a.Minter)
 	if err != nil {
 		return nil, err
 	}
@@ -474,4 +480,28 @@ func (m *Minter) sortedPresets() []string {
 	names := m.cfg.Cloudflare.PresetNames()
 	sort.Strings(names)
 	return names
+}
+
+// minterDoc is the minter credential at the address ref, on the installation's layout.
+func (m *Minter) minterDoc(ref string) (state.Value[secretstore.CloudflareMinterv1], error) {
+	if m.cfg.V5 != nil {
+		return m.cfg.V5.Cloudflare().MinterAt(ref)
+	}
+	return m.cfg.Internal.CloudflareMinter(ref)
+}
+
+// mintedDoc is the record of the tokens minted for a preset.
+func (m *Minter) mintedDoc(preset string) state.Value[secretstore.CloudflareMinted] {
+	if m.cfg.V5 != nil {
+		return m.cfg.V5.Cloudflare().Minted(preset)
+	}
+	return m.cfg.Internal.CloudflareMinted(preset)
+}
+
+// stored is the preset's current credential.
+func (m *Minter) stored(preset string) state.Value[secretstore.Cloudflarev1] {
+	if m.cfg.V5 != nil {
+		return m.cfg.V5.CloudflareExternal().Preset(preset)
+	}
+	return m.cfg.External.Cloudflare(preset)
 }

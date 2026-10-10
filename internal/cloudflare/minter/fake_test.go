@@ -14,6 +14,7 @@ import (
 	"github.com/truvity/sluis/internal/cloudflare/minter"
 	"github.com/truvity/sluis/internal/config"
 	"github.com/truvity/sluis/internal/secretstore"
+	"github.com/truvity/sluis/storage/state"
 	"github.com/truvity/sluis/storage/state/memory"
 )
 
@@ -122,7 +123,39 @@ type env struct {
 	m      *minter.Minter
 	rec    *audittest.Recorder
 	stores *secretstore.Stores
+	// v5 is the secrets on layout v5 when the suite runs on it (TestMain); stores
+	// is then nil.
+	v5     *secretstore.StoresV5
+	v5Root state.Store
 	clock  *time.Time
+}
+
+// useV5 is whether the suite runs on layout v5. TestMain runs it on both.
+var useV5 bool
+
+// external is the preset's stored credential on the layout the suite runs on.
+func (e *env) external(preset string) state.Value[secretstore.Cloudflarev1] {
+	if e.v5 != nil {
+		return e.v5.CloudflareExternal().Preset(preset)
+	}
+	return e.stores.External.Cloudflare(preset)
+}
+
+// minterStore is the store the account's minter credential is kept in.
+func (e *env) minterStore() state.Store {
+	if e.v5 != nil {
+		return e.v5Root.Child("internal").Child("cloudflare/main")
+	}
+	return e.stores.Internal.Store().Child("cloudflare/main")
+}
+
+// secretsConfig puts the suite's secrets in a minter configuration.
+func (e *env) secretsConfig(c *minter.Config) {
+	if e.v5 != nil {
+		c.V5 = e.v5
+		return
+	}
+	c.Internal, c.External = e.stores.Internal, e.stores.External
 }
 
 func (e *env) advance(d time.Duration) { *e.clock = e.clock.Add(d) }
@@ -133,7 +166,15 @@ func setup(t *testing.T, grants ...config.CloudflareGrant) *env {
 	e := &env{t: t, clock: &clock, rec: audittest.New(t)}
 	now := func() time.Time { return clock }
 	e.api = newFake(now)
-	e.stores = secretstore.FromStore(memory.New(), "")
+	var minterAt func(string) (state.Value[secretstore.CloudflareMinterv1], error)
+	if useV5 {
+		e.v5Root = memory.New()
+		e.v5 = secretstore.FromStoreV5(e.v5Root, "")
+		minterAt = e.v5.Cloudflare().MinterAt
+	} else {
+		e.stores = secretstore.FromStore(memory.New(), "")
+		minterAt = e.stores.Internal.CloudflareMinter
+	}
 	cf := &config.Cloudflare{
 		Accounts: map[string]config.CloudflareAccount{"main": {ID: acct, Minter: "internal/cloudflare/main/minter"}},
 		Presets: map[string]config.CloudflarePreset{
@@ -143,7 +184,7 @@ func setup(t *testing.T, grants ...config.CloudflareGrant) *env {
 				Endpoint: "https://" + acct + ".r2.cloudflarestorage.com"},
 		},
 	}
-	mv, err := e.stores.Internal.CloudflareMinter("internal/cloudflare/main/minter")
+	mv, err := minterAt("internal/cloudflare/main/minter")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -153,9 +194,8 @@ func setup(t *testing.T, grants ...config.CloudflareGrant) *env {
 	e.api.put(cloudflare.Token{ID: dnsProto, Name: "proto dns", Status: cloudflare.StatusDisabled, Policies: policiesJSON("g-dns"),
 		Condition: json.RawMessage(`{"request_ip":{"in":["203.0.113.0/24"],"not_in":[]}}`)})
 	e.api.put(cloudflare.Token{ID: r2Proto, Name: "proto r2", Status: cloudflare.StatusDisabled, Policies: policiesJSON("g-r2")})
-	e.m, err = minter.New(minter.Config{
+	mc := minter.Config{
 		Instance: "example", Cloudflare: cf, Grants: &config.PolicyCloudflare{Grants: grants},
-		Internal: e.stores.Internal, External: e.stores.External,
 		Dial: func(_ context.Context, id, token string) (minter.API, error) {
 			if id != acct {
 				return nil, fmt.Errorf("wrong account %s", id)
@@ -164,7 +204,9 @@ func setup(t *testing.T, grants ...config.CloudflareGrant) *env {
 			return e.api, nil
 		},
 		Audit: e.rec, Now: now, Propagation: -1,
-	})
+	}
+	e.secretsConfig(&mc)
+	e.m, err = minter.New(mc)
 	if err != nil {
 		t.Fatal(err)
 	}

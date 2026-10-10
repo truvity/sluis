@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/truvity/sluis/internal/cloudflare/cfapi"
@@ -26,6 +27,7 @@ import (
 	_ "github.com/truvity/sluis/internal/port/ssm" // registers the ssm secrets adapter
 	"github.com/truvity/sluis/internal/secrets"
 	"github.com/truvity/sluis/internal/secretstore"
+	"github.com/truvity/sluis/storage/state"
 )
 
 // The adapters `ports.adapter` names.
@@ -152,6 +154,11 @@ func (c Config) validatePorts() error {
 			if _, err := secretstore.CheckInternalRef(ref); err != nil {
 				return fmt.Errorf("ports.blob.s3.credentialsRef: %w", err)
 			}
+			if c.SecretsLayout == config.SecretsLayoutV5 {
+				if _, err := blobRefModule(ref); err != nil {
+					return err
+				}
+			}
 			if b.S3.Endpoint == "" {
 				return errors.New("ports.blob.s3.credentialsRef: needs ports.blob.s3.endpoint (static credentials are for an S3-compatible store)")
 			}
@@ -185,25 +192,50 @@ func (c Config) compose(ctx context.Context, set port.Set, log *slog.Logger) (po
 	return set, nil
 }
 
+// blobRefModule is the module of a layout v5 credentialsRef,
+// `internal/<module>/<name>`.
+func blobRefModule(ref string) (secretstore.Module, error) {
+	rest, _ := strings.CutPrefix(ref, "internal/")
+	mod, _, _ := strings.Cut(rest, "/")
+	m, err := secretstore.ParseModule(mod)
+	if err != nil {
+		return "", fmt.Errorf("ports.blob.s3.credentialsRef: %q is not internal/<module>/<name> (the module is one of %v)",
+			ref, secretstore.Modules())
+	}
+	return m, nil
+}
+
 // s3Blob builds the S3 Blob adapter. With `credentialsRef` the credentials are
-// the document at that internal address of the installation's v4 secrets
-// stores, which secretsOf has built by now; `region` defaults to `auto`, the
+// the document at that internal address of the installation's secrets stores
+// (`internal/<kind>/<id>` on layout v4, `internal/<module>/<name>` on v5), which
+// secretsOf has built by now; `region` defaults to `auto`, the
 // region an S3-compatible store without regions wants.
 func (c Config) s3Blob(ctx context.Context) (*s3blob.Blob, error) {
 	b := c.Blob.S3
-	if (b.CredentialsRef != "" || b.Credentials != nil) && c.v4 != nil && c.v4.v5 != nil {
-		return nil, errors.New("ports.blob.s3: credentialsRef and credentials are read from the layout v4 stores, " +
-			"which a layout v5 installation does not open yet; use the platform's credentials")
-	}
+	v5 := c.v4 != nil && c.v4.v5 != nil
 	cfg := s3blob.Config{
 		Bucket: b.Bucket, Prefix: b.Prefix, Region: b.Region, KMSKey: b.KMSKey,
 		Endpoint: b.Endpoint, PathStyle: b.PathStyle,
 	}
 	if b.CredentialsRef != "" {
-		if c.v4 == nil || c.v4.stores == nil {
+		if c.v4 == nil || (c.v4.stores == nil && !v5) {
 			return nil, errors.New("credentialsRef needs the installation's secrets on the ssm secrets source (secrets.source), where the internal address is")
 		}
-		doc, err := c.v4.stores.Internal.S3Credentials(b.CredentialsRef)
+		var doc state.Value[secretstore.S3Credentialsv1]
+		var err error
+		if v5 {
+			// ADR 0072: the document is the module's, internal/<module>/<name>,
+			// and a process reads its own module's.
+			if m, merr := blobRefModule(b.CredentialsRef); merr != nil {
+				return nil, merr
+			} else if c.Module != "" && port.Module(m) != c.Module {
+				return nil, fmt.Errorf("ports.blob.s3.credentialsRef: %s is the %s module's, and this process runs the %s module",
+					b.CredentialsRef, m, c.Module)
+			}
+			doc, err = c.v4.v5.S3Credentials(b.CredentialsRef)
+		} else {
+			doc, err = c.v4.stores.Internal.S3Credentials(b.CredentialsRef)
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -219,13 +251,16 @@ func (c Config) s3Blob(ctx context.Context) (*s3blob.Blob, error) {
 		}
 	}
 	if b.Credentials != nil {
-		if c.v4 == nil || c.v4.stores == nil {
+		if c.v4 == nil || (c.v4.stores == nil && !v5) {
 			return nil, errors.New("credentials.preset needs the installation's secrets on the ssm source (secrets.source), where the minter credential is")
 		}
-		m, err := minter.New(minter.Config{
-			Instance: c.Instance, Cloudflare: c.Cloudflare,
-			Internal: c.v4.stores.Internal, External: c.v4.stores.External, Dial: c.dial(),
-		})
+		mc := minter.Config{Instance: c.Instance, Cloudflare: c.Cloudflare, Dial: c.dial()}
+		if v5 {
+			mc.V5 = c.v4.v5
+		} else {
+			mc.Internal, mc.External = c.v4.stores.Internal, c.v4.stores.External
+		}
+		m, err := minter.New(mc)
 		if err != nil {
 			return nil, err
 		}
