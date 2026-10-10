@@ -368,6 +368,20 @@ export function appView(app: GitHubApp): GitHubAppView {
   };
 }
 
+/** The tab a section of the GitHub page names. Runner Apps are Apps like the
+ *  others, so the old /github/runners address opens the one Apps list. */
+export function tabOf(section?: string): "overview" | "organisations" | "apps" {
+  switch (section) {
+    case "organisations":
+      return "organisations";
+    case "apps":
+    case "runners":
+      return "apps";
+    default:
+      return "overview";
+  }
+}
+
 /** What an App is for, in plain words. */
 export function purposeWords(app: GitHubAppView): string {
   switch (app.purpose) {

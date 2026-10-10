@@ -51,7 +51,7 @@ describe("parse", () => {
     expect(parse(`#${paths.slackChannel("acme", "C0123ABCD")}`).rest).toEqual(["acme", "C0123ABCD"]);
   });
 
-  it("opens the GitHub Runners tab", () => {
+  it("still parses the old Runners address, which opens the Apps tab", () => {
     expect(parse(`#${paths.githubRunners()}`)).toMatchObject({ view: "github", id: "runners", rest: [] });
   });
 

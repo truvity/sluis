@@ -26,7 +26,9 @@ import {
   recentTokensKept,
   recentTokensProblem,
   sentence,
+  purposeWords,
   summaryOf,
+  tabOf,
 } from "./githubModel";
 
 type AppInit = MessageInitShape<typeof GitHubAppSchema>;
@@ -131,6 +133,26 @@ describe("groupApps", () => {
     ]);
     expect(groups.map((g) => g.org)).toEqual(["", "b-org", "a-org"]);
     expect(groups[1].apps.map((a) => a.id)).toEqual(["b-tokens", "b-org-controller"]);
+  });
+});
+
+describe("one Apps list", () => {
+  it("lists a runner App among the others, each with its purpose", () => {
+    const groups = groupApps([
+      app({ id: "link", purpose: AppPurpose.LINK, origin: AppOrigin.PRESET, org: "a-org" }),
+      app({ id: "a-org-controller", purpose: AppPurpose.CONTROLLER, origin: AppOrigin.PRESET, org: "a-org" }),
+      app({ id: "a-org-runners-standard", purpose: AppPurpose.RUNNERS, origin: AppOrigin.PRESET, org: "a-org", tier: "standard" }),
+      app({ id: "a-tokens", org: "a-org" }),
+    ]);
+    const listed = groups.find((g) => g.org === "a-org")?.apps ?? [];
+    expect(listed.map((a) => purposeWords(a))).toEqual(["manages teams", "runners · standard", "tokens"]);
+  });
+
+  it("opens the old runners address on the Apps tab", () => {
+    expect(tabOf("runners")).toBe("apps");
+    expect(tabOf("apps")).toBe("apps");
+    expect(tabOf("organisations")).toBe("organisations");
+    expect(tabOf(undefined)).toBe("overview");
   });
 });
 
