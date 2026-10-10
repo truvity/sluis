@@ -257,9 +257,9 @@ func ringKeys(t *testing.T, st *store.Stores) []string {
 // planStatus is the status of the one item of a concern and kind in a report.
 func planStatus(r *migrate.PlanReport, concern, kind string) migrate.PlanStatus {
 	var found []migrate.PlanStatus
-	for _, m := range r.Modules {
-		for _, it := range m.Items {
-			if it.Concern == concern && it.Kind == kind {
+	for i := range r.Modules {
+		for j := range r.Modules[i].Items {
+			if it := &r.Modules[i].Items[j]; it.Concern == concern && it.Kind == kind {
 				found = append(found, it.Status)
 			}
 		}
