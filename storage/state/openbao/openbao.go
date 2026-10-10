@@ -79,7 +79,7 @@ type Config struct {
 	AssumeVersions bool
 }
 
-// ErrTooFewVersions: the mount keeps a single version per key, so the
+// ErrTooFewVersions reports that the mount keeps a single version per key, so the
 // previous version that Rotating reads would be gone.
 var ErrTooFewVersions = errors.New("openbao: the KV mount keeps one version per key; max_versions must be at least 2")
 

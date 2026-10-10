@@ -33,7 +33,7 @@ const DefaultInfoTTL = time.Minute
 type Binding int
 
 const (
-	// BindAuto: associated_data for a key that is not derived, context for a
+	// BindAuto binds associated_data for a key that is not derived, context for a
 	// derived one.
 	BindAuto Binding = iota
 	// BindAssociatedData always sends associated_data, and refuses a derived

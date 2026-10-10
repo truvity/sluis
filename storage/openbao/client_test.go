@@ -48,7 +48,7 @@ func newFake(t *testing.T) *fakeServer {
 		}
 		_, _ = w.Write([]byte(`{"data":{"token":"` + r.Header.Get("X-Vault-Token") + `"},"warnings":["w"]}`))
 	})
-	mux.HandleFunc("/v1/secret/denied", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/v1/secret/denied", func(w http.ResponseWriter, _ *http.Request) {
 		f.requests.Add(1)
 		http.Error(w, `{"errors":["permission denied"]}`, http.StatusForbidden)
 	})
