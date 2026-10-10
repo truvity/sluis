@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"os"
 	"strings"
 	"testing"
 
@@ -263,5 +264,91 @@ func TestSecretsOnLayout5AreModuleFirst(t *testing.T) {
 	c.Blob.S3.CredentialsRef = "internal/blobs/r2"
 	if err = c.validatePorts(); err == nil {
 		t.Error("validatePorts accepted a layout v4 address on layout v5")
+	}
+}
+
+// The credential of the blob port is read by every process that has the port,
+// from the one address the blob prefix has: internal/google/<name>. The oidc
+// process (the issuer, the hub and the console in one function), the roster
+// controllers and the backup are not the google module, and each reads it; a
+// credential in another module's prefix is still refused.
+func TestTheBlobCredentialOfTheOwnerIsReadableByEveryModule(t *testing.T) {
+	ctx := context.Background()
+	const ref = "internal/google/blobs-r2"
+	for _, m := range []port.Module{port.ModuleOIDC, port.ModuleGitHub, port.ModuleSlack, port.ModuleGoogle, port.ModuleBackup} {
+		root := statememory.New()
+		open := func(context.Context, string, ...state.Option) (state.Store, error) { return root, nil }
+		c := Config{SecretsRoot: "/sluis/example", SecretsKMSKey: "alias/example", SecretsLayout: "v5", OpenState: open, v4: &v4Holder{}}
+		if err := c.overLayout5(ctx, c.SecretsRoot, c.SecretsKMSKey); err != nil {
+			t.Fatal(err)
+		}
+		c = c.As(m)
+		c.Blob = &config.PortsBlob{Adapter: BlobS3, S3: &config.PortsBlobS3{Bucket: "b", Endpoint: "http://127.0.0.1:1", CredentialsRef: ref}}
+		doc, err := c.v4.v5.S3Credentials(ref)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err = doc.Put(ctx, secretstore.S3Credentialsv1{AccessKeyID: "k", SecretAccessKey: "s"}, ""); err != nil {
+			t.Fatal(err)
+		}
+		if err = c.validatePorts(); err != nil {
+			t.Errorf("%s: validatePorts = %v", m, err)
+		}
+		if _, err = c.s3Blob(ctx); err != nil {
+			t.Errorf("%s: s3Blob(%s) = %v", m, ref, err)
+		}
+		if m != port.ModuleGitHub {
+			c.Blob.S3.CredentialsRef = "internal/github/blobs-r2"
+			if _, err = c.s3Blob(ctx); err == nil || !strings.Contains(err.Error(), "is the github module's") {
+				t.Errorf("%s: another module's credential = %v, want a refusal", m, err)
+			}
+		}
+	}
+}
+
+// The service document the layout v5 library renders for an estate with an
+// external blob store is one the oidc process starts on. The library's own test
+// (deploy/pulumi, TestTheRenderedV5DocumentStartsTheRuntime) renders it and runs
+// this test over it, so that the library, the migration and the runtime cannot
+// name different addresses for the credential again.
+func TestTheRenderedLayoutV5DocumentPassesTheRuntimeChecks(t *testing.T) {
+	file := os.Getenv("SLUIS_RENDERED_SERVICE")
+	if file == "" {
+		t.Skip("SLUIS_RENDERED_SERVICE names the document deploy/pulumi renders; it is set by that test")
+	}
+	ctx := context.Background()
+	svc, err := config.Load[config.Sluis](file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := FromServe(&svc.Serve)
+	if err != nil {
+		t.Fatalf("FromServe: %v", err)
+	}
+	if c.Blob == nil || c.Blob.S3 == nil || c.Blob.S3.CredentialsRef == "" {
+		t.Fatalf("the rendered document has no ports.blob.s3.credentialsRef: %+v", c.Blob)
+	}
+	ref := c.Blob.S3.CredentialsRef
+	root := statememory.New()
+	open := func(context.Context, string, ...state.Option) (state.Store, error) { return root, nil }
+	c.OpenState = open
+	c.v4 = &v4Holder{}
+	if err = c.overLayout5(ctx, c.SecretsRoot, c.SecretsKMSKey); err != nil {
+		t.Fatal(err)
+	}
+	// The oidc process, with the peers the issuer reads.
+	c = c.As(port.ModuleOIDC, port.ModuleGoogle, port.ModuleGitHub, port.ModuleSlack)
+	doc, err := c.v4.v5.S3Credentials(ref)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = doc.Put(ctx, secretstore.S3Credentialsv1{AccessKeyID: "k", SecretAccessKey: "s"}, ""); err != nil {
+		t.Fatal(err)
+	}
+	if err = c.validatePorts(); err != nil {
+		t.Fatalf("validatePorts: %v", err)
+	}
+	if _, err = c.s3Blob(ctx); err != nil {
+		t.Fatalf("the oidc process cannot start on the rendered ref %s: %v", ref, err)
 	}
 }

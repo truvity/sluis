@@ -1,6 +1,9 @@
 package sluispulumi_test
 
 import (
+	"os"
+	"os/exec"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -575,5 +578,52 @@ func TestALayoutV4BlobCredentialsRefIsRefusedOnV5(t *testing.T) {
 	}
 	if got := arp.V5CredentialsRef("internal/google/blobs-r2"); got != "internal/google/blobs-r2" {
 		t.Errorf("V5CredentialsRef of a v5 ref = %s", got)
+	}
+}
+
+// The document the library renders on layout v5 for an estate whose blobs are
+// on an S3-compatible store (R2) is one the oidc process starts on, and the
+// role of the function reads exactly the parameter that document names. The
+// runtime half is the root module's own test of its config validation, run
+// here over the rendered file: the library cannot import the runtime's
+// internals, and a test that stopped at the library's own checks is what let
+// the library, the migration and the runtime name three addresses.
+func TestTheRenderedV5DocumentStartsTheRuntimeAndTheRoleReadsItsCredential(t *testing.T) {
+	const ref = "internal/google/blobs-r2"
+	rec, _ := mustLambda(t, withLayout(arp.LayoutV5, func(a *arp.LambdaArgs) {
+		noDomain(a)
+		e := r2()
+		e.CredentialsRef = arp.V5CredentialsRef("internal/blobs/r2")
+		a.Storage = &arp.StorageGrant{External: e}
+	}))
+	doc := layerFiles(t, rec)["sluis/sluis.yaml"]
+	if !strings.Contains(doc, "credentialsRef: "+ref) {
+		t.Fatalf("the document does not name %s:\n%s", ref, doc)
+	}
+
+	// The role reads the parameter the document names, below the secrets root.
+	grant := statementBySid(t, rec, "SluisBlobCredentials")
+	if grant == nil {
+		t.Fatal("no SluisBlobCredentials statement")
+	}
+	if res := resourcesOf([]map[string]any{grant}); len(res) != 1 || !strings.HasSuffix(res[0], "/"+ref) {
+		t.Errorf("the grant is on %v, want the parameter at %s", grant["Resource"], ref)
+	}
+	if !slices.Contains(strs(grant["Action"]), "ssm:GetParameter") {
+		t.Errorf("the grant has actions %v, want ssm:GetParameter", grant["Action"])
+	}
+
+	// The runtime half.
+	file := filepath.Join(t.TempDir(), "sluis.yaml")
+	if err := os.WriteFile(file, []byte(doc), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("go", "test", "-count=1", "-run", "^TestTheRenderedLayoutV5DocumentPassesTheRuntimeChecks$", "-v",
+		"./internal/store")
+	cmd.Dir = filepath.Join("..", "..")
+	cmd.Env = append(os.Environ(), "SLUIS_RENDERED_SERVICE="+file)
+	out, err := cmd.CombinedOutput()
+	if err != nil || strings.Contains(string(out), "SKIP") {
+		t.Fatalf("the runtime's checks over the rendered document: %v\n%s", err, out)
 	}
 }

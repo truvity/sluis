@@ -225,11 +225,15 @@ func (c Config) s3Blob(ctx context.Context) (*s3blob.Blob, error) {
 		var doc state.Value[secretstore.S3Credentialsv1]
 		var err error
 		if v5 {
-			// ADR 0072: the document is the module's, internal/<module>/<name>,
-			// and a process reads its own module's.
+			// ADR 0072: the document is internal/<module>/<name>. A process
+			// reads its own module's, and the blob owner's (google): the blob
+			// port is shared by every module (the snapshots of the directory,
+			// the reports of the controllers, the backup), so its credential
+			// has the one home the blob prefix has, and the role of each
+			// process names that parameter and no other.
 			if m, merr := blobRefModule(b.CredentialsRef); merr != nil {
 				return nil, merr
-			} else if c.Module != "" && port.Module(m) != c.Module {
+			} else if c.Module != "" && port.Module(m) != c.Module && m != secretstore.ModuleGoogle {
 				return nil, fmt.Errorf("ports.blob.s3.credentialsRef: %s is the %s module's, and this process runs the %s module",
 					b.CredentialsRef, m, c.Module)
 			}
