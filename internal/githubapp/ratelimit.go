@@ -44,7 +44,7 @@ func sleepContext(ctx context.Context, d time.Duration) error {
 	}
 }
 
-const meterName = "github.com/truvity/access-roster/githubapp"
+const meterName = "github.com/truvity/sluis/githubapp"
 
 var (
 	waits     metric.Int64Counter

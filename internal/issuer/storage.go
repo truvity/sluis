@@ -255,9 +255,32 @@ type Storage struct {
 // federated here" or "a ServiceAccount the cluster vouched for", and an
 // approximate standard value would be a claim that reads as precise.
 const (
-	ACRDirectory = "urn:truvity:access-roster:acr:directory"
-	ACRRecovery  = "urn:truvity:access-roster:acr:recovery"
+	ACRDirectory = "urn:truvity:sluis:acr:directory"
+	ACRRecovery  = "urn:truvity:sluis:acr:recovery"
 )
+
+// The spelling these classes had before v1.75. Discovery lists it beside
+// the current one for one release, and [NormalizeACR] reads it as the
+// current one; a token never carries it.
+const (
+	legacyACRDirectory = "urn:truvity:access-roster:acr:directory"
+	legacyACRRecovery  = "urn:truvity:access-roster:acr:recovery"
+)
+
+// NormalizeACR returns the current spelling of an authentication context
+// class given in either spelling, and the value unchanged when it is
+// neither. Every comparison of an ACR value, including a requested
+// `acr_values` entry, goes through it.
+func NormalizeACR(value string) string {
+	switch value {
+	case legacyACRDirectory:
+		return ACRDirectory
+	case legacyACRRecovery:
+		return ACRRecovery
+	}
+
+	return value
+}
 
 // RecoveryHow is what a recovery sign-in records as its method. The
 // rest of that vocabulary is a PROVIDER KIND -- "google", "entra" --

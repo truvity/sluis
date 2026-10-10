@@ -34,7 +34,7 @@ type issuerInstruments struct {
 
 // meterName is the instrumentation scope of the issuer's instruments, the
 // same one the key ring's use.
-const meterName = "github.com/truvity/access-roster/issuer"
+const meterName = "github.com/truvity/sluis/issuer"
 
 var issuerMetrics = newIssuerInstruments()
 

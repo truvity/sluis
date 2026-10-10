@@ -149,7 +149,7 @@ func (s *SessionsService) who(ctx context.Context, header http.Header) (caller, 
 	// in the meantime. It is refused, not ended (that is the issuer's
 	// pages' and the console's to do), and a bearer may still prove the
 	// caller.
-	if cookie := cookieIn(header, access.CookieNameFor(SSOCookieName, s.secure)); cookie != "" && s.signedIn != nil {
+	if cookie := cookieIn(header, SSOCookieName, s.secure); cookie != "" && s.signedIn != nil {
 		if held, ok := s.signedIn(ctx, cookie); ok {
 			return held, nil
 		}
@@ -211,8 +211,8 @@ func withGroups(identity string, groups []string) caller {
 
 // cookieIn reads one cookie out of a header, which is all a Connect
 // request exposes.
-func cookieIn(header http.Header, name string) string {
-	cookie, err := (&http.Request{Header: header}).Cookie(name)
+func cookieIn(header http.Header, base string, secure bool) string {
+	cookie, err := access.ReadCookie(&http.Request{Header: header}, base, secure)
 	if err != nil {
 		return ""
 	}

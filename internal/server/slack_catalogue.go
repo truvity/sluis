@@ -450,7 +450,7 @@ func (s *ConsoleServer) slackBound(r *http.Request, refuse slackRefusal, learn f
 		return "", "", false
 	}
 	learn(binding.Bind, binding.Actor)
-	cookie, err := r.Cookie(access.CookieNameFor(access.ConnectCookieName, s.sessions.Secure()))
+	cookie, err := access.ReadCookie(r, access.ConnectCookieName, s.sessions.Secure())
 	if err != nil || cookie.Value == "" || subtle.ConstantTimeCompare([]byte(cookie.Value), []byte(state)) != 1 {
 		refuse(http.StatusBadRequest, "This install did not start in this browser.", "", "the flow cookie is missing or is not this state's", []string{
 			"It was started in another browser, profile or private window.",
@@ -529,7 +529,7 @@ func (s *ConsoleServer) slackCatalogueCallback(w http.ResponseWriter, r *http.Re
 		return
 	}
 	// The flow ends here, whichever way it goes.
-	http.SetCookie(w, access.ConnectCookie("", s.sessions.Secure(), 0))
+	access.SetCookie(w, access.ConnectCookie("", s.sessions.Secure(), 0))
 	id, isCatalogue := strings.CutPrefix(bind, slackCatalogueBind)
 	if !isCatalogue || !slackcatalogue.ValidID(id) {
 		refuse(http.StatusBadRequest, "This is not a catalogue Slack App's install.", "", "the state is for another flow", nil)

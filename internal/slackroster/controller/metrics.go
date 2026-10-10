@@ -11,7 +11,7 @@ import (
 )
 
 // meterName is the instrumentation scope every instrument here is under.
-const meterName = "github.com/truvity/access-roster/slackroster"
+const meterName = "github.com/truvity/sluis/slackroster"
 
 // instruments are the controller's metrics. With no collector named the
 // global provider is a no-op and every record costs nothing.

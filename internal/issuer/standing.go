@@ -7,6 +7,7 @@ import (
 
 	"github.com/zitadel/oidc/v3/pkg/op"
 
+	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/storage/logattr"
 )
 
@@ -162,7 +163,7 @@ func standingSignIn(deps SignInDeps, w http.ResponseWriter, r *http.Request, res
 		deps.log().WarnContext(r.Context(), "browser session is no longer admitted",
 			logattr.SafeString("identity", standing.Session.Identity), logattr.SafeError("error", standing.Refusal))
 		_ = deps.SSO.End(r.Context(), standing.Session.ID)
-		http.SetCookie(w, deps.SSO.Cookie("", deps.Secure))
+		access.SetCookie(w, deps.SSO.Cookie("", deps.Secure))
 
 	case signInAbsent, signInStale:
 	}

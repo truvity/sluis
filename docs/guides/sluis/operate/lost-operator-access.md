@@ -12,7 +12,7 @@ Get an operator back into the console when nobody is in the operators group, the
 
 - `429 too many attempts`, outside a cluster: ten wrong passwords block the password, the correct one too, for a minute. Wait, then try once.
 
-- `400 this sign-in did not start in this browser`: post the form from the browser that loaded the sign-in page, which sets the recovery cookie `__Host-access_roster_recovery`. Two open recovery forms share the cookie, so only the last loaded can recover. A body over 16 KiB gets 413.
+- `400 this sign-in did not start in this browser`: post the form from the browser that loaded the sign-in page, which sets the recovery cookie `__Host-sluis_recovery`. Two open recovery forms share the cookie, so only the last loaded can recover. A body over 16 KiB gets 413.
 
 - Recovery disabled (`config.recovery.enabled: false`): step 1 turns it back on.
 

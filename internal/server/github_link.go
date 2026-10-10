@@ -169,7 +169,7 @@ func (s *ConsoleServer) githubLinkAppCallback(w http.ResponseWriter, r *http.Req
 	if !ok {
 		return
 	}
-	http.SetCookie(w, access.ConnectCookie("", s.sessions.Secure(), 0))
+	access.SetCookie(w, access.ConnectCookie("", s.sessions.Secure(), 0))
 	store := s.console.deps.GitHubLinkApp
 	if store == nil {
 		s.githubProblem(w, r, http.StatusConflict, "This deployment keeps no link App.", "", nil)
@@ -226,7 +226,7 @@ func (s *ConsoleServer) githubLinkPage(w http.ResponseWriter, r *http.Request) {
 		s.linkProblem(w, r, http.StatusConflict, "Linking could not be started. Reload the page.", err.Error())
 		return
 	}
-	http.SetCookie(w, access.LinkCookie(state, s.sessions.Secure(), githubLinkWindow))
+	access.SetCookie(w, access.LinkCookie(state, s.sessions.Secure(), githubLinkWindow))
 	authorize := githubapp.AuthorizeURL(credential.ClientID, s.console.githubRoot()+githubLinkCallbackPath, state)
 	body := `<h1>Link your GitHub account</h1>` +
 		`<p>Your GitHub account is added to your organisations and teams by the work address you verified on it. ` +
@@ -244,7 +244,7 @@ func (s *ConsoleServer) githubLinkPage(w http.ResponseWriter, r *http.Request) {
 // those it knows.
 func (s *ConsoleServer) githubLinkCallback(w http.ResponseWriter, r *http.Request) {
 	state := r.URL.Query().Get("state")
-	cookie, err := r.Cookie(access.CookieNameFor(access.LinkCookieName, s.sessions.Secure()))
+	cookie, err := access.ReadCookie(r, access.LinkCookieName, s.sessions.Secure())
 	if err != nil || cookie.Value == "" || subtle.ConstantTimeCompare([]byte(cookie.Value), []byte(state)) != 1 {
 		s.linkProblem(w, r, http.StatusBadRequest,
 			"This link did not start in this browser, or took longer than fifteen minutes. Start again.", "")
@@ -254,7 +254,7 @@ func (s *ConsoleServer) githubLinkCallback(w http.ResponseWriter, r *http.Reques
 		s.linkProblem(w, r, http.StatusBadRequest, "This link cannot be finished. Start again.", errString(err))
 		return
 	}
-	http.SetCookie(w, access.LinkCookie("", s.sessions.Secure(), 0))
+	access.SetCookie(w, access.LinkCookie("", s.sessions.Secure(), 0))
 	if problem := r.URL.Query().Get("error"); problem != "" {
 		s.linkProblem(w, r, http.StatusBadRequest, "GitHub did not authorize the link.", r.URL.Query().Get("error_description"))
 		return

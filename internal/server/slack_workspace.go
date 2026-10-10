@@ -331,7 +331,7 @@ func (s *ConsoleServer) slackWorkspaceCallback(w http.ResponseWriter, r *http.Re
 		return
 	}
 	// The flow ends here, whichever way it goes.
-	http.SetCookie(w, access.ConnectCookie("", s.sessions.Secure(), 0))
+	access.SetCookie(w, access.ConnectCookie("", s.sessions.Secure(), 0))
 	workspace, isWorkspace := strings.CutPrefix(bind, slackWorkspaceBind)
 	if !isWorkspace || !status.ValidWorkspace(workspace) {
 		refuse(http.StatusBadRequest, "This is not a Slack workspace's connect.", "", "the state is for another flow", nil)

@@ -15,7 +15,7 @@ import (
 )
 
 // CookieName is the console's session cookie.
-const CookieName = "access_roster_session"
+const CookieName = "sluis_session"
 
 // SessionKeyBytes is the length of a session-signing key.
 const SessionKeyBytes = 32
@@ -88,7 +88,7 @@ func (s *Sessions) Issue(w http.ResponseWriter, p Principal) error {
 		return fmt.Errorf("access: encode session: %w", err)
 	}
 	encoded := base64.RawURLEncoding.EncodeToString(body)
-	http.SetCookie(w, &http.Cookie{
+	SetCookie(w, &http.Cookie{
 		Name:     CookieNameFor(CookieName, s.secure),
 		Value:    encoded + "." + s.sign(encoded),
 		Path:     "/",
@@ -102,7 +102,7 @@ func (s *Sessions) Issue(w http.ResponseWriter, p Principal) error {
 
 // Read returns the principal a request carries.
 func (s *Sessions) Read(r *http.Request) (Principal, error) {
-	cookie, err := r.Cookie(CookieNameFor(CookieName, s.secure))
+	cookie, err := ReadCookie(r, CookieName, s.secure)
 	if err != nil {
 		return Principal{}, ErrNoSession
 	}
@@ -135,7 +135,7 @@ func (s *Sessions) Read(r *http.Request) (Principal, error) {
 
 // Clear removes the cookie.
 func (s *Sessions) Clear(w http.ResponseWriter) {
-	http.SetCookie(w, &http.Cookie{
+	SetCookie(w, &http.Cookie{
 		Name:     CookieNameFor(CookieName, s.secure),
 		Value:    "",
 		Path:     "/",

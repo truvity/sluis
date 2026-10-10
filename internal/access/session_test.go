@@ -101,7 +101,8 @@ func TestClearRemovesTheCookie(t *testing.T) {
 	rec := httptest.NewRecorder()
 	s.Clear(rec)
 	cookies := rec.Result().Cookies()
-	if len(cookies) != 1 || cookies[0].MaxAge >= 0 {
-		t.Errorf("cookies = %+v, want one expiring cookie", cookies)
+	// The current name and the one it had before the rename, both expiring.
+	if len(cookies) != 2 || cookies[0].MaxAge >= 0 || cookies[1].MaxAge >= 0 {
+		t.Errorf("cookies = %+v, want two expiring cookies", cookies)
 	}
 }

@@ -974,21 +974,21 @@ func TestWhatTheSignInStoreCosts(t *testing.T) {
 	})
 }
 
-// 9. The cookie keeps the names browsers already hold.
-func TestTheCookieNamesAreUnchanged(t *testing.T) {
+// 9. The cookie is written under the sluis name.
+func TestTheCookieIsNamedForSluis(t *testing.T) {
 	t.Parallel()
 
 	sso := issuer.NewSSO(newRecState(), time.Hour)
 
-	if got := sso.Cookie("v", true).Name; got != "__Host-access_issuer_sso" {
+	if got := sso.Cookie("v", true).Name; got != "__Host-sluis_sso" {
 		t.Errorf("secure cookie name = %q", got)
 	}
 
-	if got := sso.Cookie("v", false).Name; got != "access_issuer_sso" {
+	if got := sso.Cookie("v", false).Name; got != "sluis_sso" {
 		t.Errorf("plain cookie name = %q", got)
 	}
 
-	if issuer.SSOCookieName != "access_issuer_sso" {
+	if issuer.SSOCookieName != "sluis_sso" {
 		t.Errorf("SSOCookieName = %q", issuer.SSOCookieName)
 	}
 
@@ -996,7 +996,7 @@ func TestTheCookieNamesAreUnchanged(t *testing.T) {
 	rig := newSSORig(t, issuer.Config{})
 	b, _ := rig.signedInBrowser(t)
 
-	if b.cookies["access_issuer_sso"] == "" {
+	if b.cookies["sluis_sso"] == "" {
 		t.Errorf("a sign-in set %v, want the plain name over plain HTTP", b.cookies)
 	}
 }

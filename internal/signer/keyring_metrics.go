@@ -14,7 +14,7 @@ import (
 // keyRingMeterName is the instrumentation scope every instrument here is
 // under, matching the shape [github.com/truvity/sluis/internal/githubroster/controller]
 // already uses.
-const keyRingMeterName = "github.com/truvity/access-roster/issuer"
+const keyRingMeterName = "github.com/truvity/sluis/issuer"
 
 // keyRingInstruments are the ring's metrics. With no collector named the
 // global provider is a no-op and every record costs nothing.

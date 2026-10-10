@@ -51,7 +51,7 @@ const (
 	PortBlob  = "blob"
 )
 
-const meterName = "github.com/truvity/access-roster/port"
+const meterName = "github.com/truvity/sluis/port"
 
 var duration = func() telemetry.Float64Histogram {
 	// Instrument creation fails only on an invalid name, which this is not; a
