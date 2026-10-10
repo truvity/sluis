@@ -148,6 +148,83 @@ func GitHubTokenMinted(actor Actor, app string, t GitHubToken, o Outcome) *recor
 		subjectOf(actor), []*record.Target{{Type: "github_app", Id: app}}, d)
 }
 
+// ------------------------------------------------------- backup and restore
+
+func targetBackup(id string) *record.Target { return &record.Target{Type: "backup", Id: id} }
+
+// BackupRun is what a finished backup run holds, or how a failed one ended.
+// Counts and words only: never a record, a key or a name inside the archive.
+type BackupRun struct {
+	Installation string
+	// Trigger is what started the run: schedule, run or cli.
+	Trigger string
+	Modules int
+	Records int64
+	Chunks  int
+	Resumed bool
+	// Reason is a short word for a failure: export, archive, key, maintenance
+	// or canceled.
+	Reason string
+}
+
+func (b BackupRun) data() data {
+	d := data{"installation": b.Installation, "trigger": b.Trigger, "modules": b.Modules, "records": b.Records,
+		"chunks": b.Chunks, "reason": b.Reason}
+	if b.Resumed {
+		d["resumed"] = true
+	}
+	return d
+}
+
+// BackupCompleted is a backup written and its manifest sealed.
+func BackupCompleted(actor Actor, id string, b BackupRun) *record.Record {
+	return build("roster.backup.completed", actor, Succeeded(), subjectOf(actor), []*record.Target{targetBackup(id)}, b.data())
+}
+
+// BackupFailed is a backup that could not be completed.
+func BackupFailed(actor Actor, id string, b BackupRun, detail string) *record.Record {
+	return build("roster.backup.failed", actor, Failed(detail), subjectOf(actor), []*record.Target{targetBackup(id)}, b.data())
+}
+
+// BackupPruned is the retention pass deleting backups. removed are the ids of
+// backups, orphans the ids of runs that left chunks and no manifest, kept what
+// remains, rule the retention in force.
+func BackupPruned(actor Actor, removed, orphans []string, kept int, rule string) *record.Record {
+	targets := make([]*record.Target, 0, len(removed)+len(orphans))
+	for _, id := range append(append([]string{}, removed...), orphans...) {
+		targets = append(targets, targetBackup(id))
+	}
+	return build("roster.backup.pruned", actor, Succeeded(), subjectOf(actor), targets,
+		data{"removed": removed, "orphans": orphans, "kept": kept, "rule": rule})
+}
+
+// Restore is what a restore record carries.
+type Restore struct {
+	Installation string
+	Modules      int
+	// Reason is a short word for a failure.
+	Reason string
+}
+
+func (r Restore) data() data {
+	return data{"installation": r.Installation, "role": "restore", "modules": r.Modules, "reason": r.Reason}
+}
+
+// RestoreStarted is a restore beginning.
+func RestoreStarted(actor Actor, backupID string, r Restore) *record.Record {
+	return build("roster.restore.started", actor, Succeeded(), subjectOf(actor), []*record.Target{targetBackup(backupID)}, r.data())
+}
+
+// RestoreCompleted is a restore that verified.
+func RestoreCompleted(actor Actor, backupID string, r Restore) *record.Record {
+	return build("roster.restore.completed", actor, Succeeded(), subjectOf(actor), []*record.Target{targetBackup(backupID)}, r.data())
+}
+
+// RestoreFailed is a restore that did not complete or did not verify.
+func RestoreFailed(actor Actor, backupID string, r Restore, detail string) *record.Record {
+	return build("roster.restore.failed", actor, Failed(detail), subjectOf(actor), []*record.Target{targetBackup(backupID)}, r.data())
+}
+
 // ---------------------------------------------------------------- Cloudflare
 
 // The variants of a minted Cloudflare token.

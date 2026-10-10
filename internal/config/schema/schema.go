@@ -39,7 +39,7 @@ const policy = "https://github.com/truvity/policy/schemas/"
 // schemas/config/<name>.schema.json. The first three are the service documents,
 // one per process; `policy` is the one policy document they all name; `installation`
 // is what `sluisctl render` writes both from.
-var Names = []string{"sluis", "serve", "controller-github", "controller-slack", "policy", "installation"}
+var Names = []string{"sluis", "serve", "controller-github", "controller-slack", "sluis-backup", "policy", "installation"}
 
 // Services are the service documents: the ones a process is started with.
 // `sluis` is the one document of the one process (v3): the serve settings and,
@@ -542,6 +542,8 @@ func Schema(name string) ([]byte, bool) {
 		s = controllerGitHubSchema()
 	case "controller-slack":
 		s = controllerSlackSchema()
+	case "sluis-backup":
+		s = sluisBackupSchema()
 	case "policy":
 		s = policySchema()
 	case "installation":
@@ -644,4 +646,43 @@ func inlineDefs(v any, defs map[string]any) any {
 		return out
 	}
 	return v
+}
+
+// sluisBackupSchema is the backup module's document: the keys of `serve` that
+// open the storage it reads, the audit trail and the key service, and `backup`.
+// The module has no issuer, console or policy, so none of their keys are here.
+func sluisBackupSchema() m {
+	s := serveSchema()
+	all, _ := s["properties"].(m)
+	props := m{"apiVersion": m{"const": Group + "/sluis-backup/v1", "description": "Which version of which document this is: the backup module's own document (docs/decisions/0071)."}}
+	for _, k := range []string{"instance", "keys", "log", "ports", "platform", "preset", "adapters", "secrets", "audit"} {
+		props[k] = all[k]
+	}
+	props["backup"] = obj("What the backup module writes and where. The module reads every module's table, secrets and blobs through the `ports` and `secrets` above (its role has read access to them), and writes sealed chunks to `target`.", m{
+		"key": func() m {
+			e := keysSchema()["properties"].(m)["archive"].(m)
+			e["description"] = "The key that seals each backup's data key (purpose `archive`): an alias, or {key, context}. The same as `keys.archive`; give one of them. The adapter is `keys.adapter`, or kms."
+			return e
+		}(),
+		"region": str("The region of the key service, for adapter kms. Unset follows the AWS SDK's own resolution."),
+		"target": obj("The S3 bucket of the archive. For an AWS bucket with Object Lock, enable versioning and a default retention no longer than `retention`; credentials are the function role's and are never configured here.", m{
+			"bucket":    str("The bucket. It must exist."),
+			"prefix":    str("A key prefix inside the bucket, put before `backup/<instance>/`."),
+			"region":    str("The bucket's region. Unset follows the SDK's own resolution."),
+			"kmsKey":    str("A KMS key id, ARN or alias for server-side encryption of every write. Unset leaves the bucket's own default encryption."),
+			"endpoint":  url("Overrides the S3 address: LocalStack or an S3-compatible store."),
+			"pathStyle": boolean("Addresses the bucket in the path and not the host name, which LocalStack and most S3-compatible stores need."),
+		}, "bucket"),
+		"retention": obj("Which completed backups a prune keeps. A backup is deleted when it is beyond the `keep` newest AND older than `maxAge`.", m{
+			"keep":   integer("How many of the newest completed backups are always kept.", 1, 7),
+			"maxAge": duration("How old a backup beyond `keep` may be before it is deleted. 0s deletes it as soon as it is beyond `keep`.", "720h"),
+		}),
+	}, "target")
+	s["properties"] = props
+	s["required"] = []string{"apiVersion", "backup"}
+	delete(s, "allOf")
+	s["$id"] = ID("sluis-backup", apiVersionOf(props))
+	s["title"] = "sluis backup"
+	s["description"] = "The configuration of `sluis backup`, the backup module (docs/decisions/0071): a scheduled export of the installation, sealed with the archive key, into an S3 bucket." + secretsNote
+	return s
 }

@@ -1,0 +1,31 @@
+{
+  "$id": "https://schemas.example/access-roster/v1/restore.json",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "installation": {
+      "type": "string",
+      "description": "The installation the backup is of.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none"
+    },
+    "role": {
+      "type": "string",
+      "description": "The role that ran it: restore.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none"
+    },
+    "reason": {
+      "type": "string",
+      "description": "A short word for why a restore failed; absent otherwise.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none"
+    },
+    "modules": {
+      "type": "integer",
+      "description": "How many modules the restore wrote.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none"
+    }
+  }
+}

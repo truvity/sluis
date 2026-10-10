@@ -48,7 +48,7 @@ func TestSubcommandsNeedTheirFile(t *testing.T) {
 }
 
 func TestAModuleWithoutAProcessSaysNotYetSplit(t *testing.T) {
-	for _, module := range []string{"console", "google", "backup"} {
+	for _, module := range []string{"console", "google"} {
 		var out bytes.Buffer
 		err := run([]string{module}, &out)
 		if !errors.Is(err, errNotSplit) {
@@ -98,5 +98,31 @@ func TestAModuleTickNeedsATarget(t *testing.T) {
 		if err := run([]string{module, "tick", "--config", "x.yaml"}, &out); !errors.Is(err, errUsage) {
 			t.Errorf("%s tick: %v", module, err)
 		}
+	}
+}
+
+// The backup command is a tree of its own: a command is needed, an unknown one
+// is a usage error, and each command asks for its file like any other.
+func TestTheBackupCommand(t *testing.T) {
+	for _, args := range [][]string{{"backup"}, {"backup", "restore"}, {"backup", "--json"}} {
+		var out bytes.Buffer
+		if err := run(args, &out); !errors.Is(err, errUsage) {
+			t.Errorf("%v: %v", args, err)
+		}
+	}
+	for _, sub := range []string{"run", "list", "status", "prune"} {
+		var out bytes.Buffer
+		if err := run([]string{"backup", sub}, &out); err == nil || !strings.Contains(err.Error(), "--config") {
+			t.Errorf("backup %s: %v", sub, err)
+		}
+	}
+	var out bytes.Buffer
+	if err := run([]string{"backup", "--help"}, &out); err != nil || !strings.Contains(out.String(), "prune [--dry-run]") {
+		t.Errorf("backup --help: %v, %q", err, out.String())
+	}
+	// A flag that belongs to another command is the configuration line's to refuse.
+	out.Reset()
+	if err := run([]string{"backup", "list", "--dry-run", "--config", "x"}, &out); err == nil {
+		t.Error("backup list took --dry-run")
 	}
 }

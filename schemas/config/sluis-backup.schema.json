@@ -1,0 +1,1104 @@
+{
+  "$defs": {
+    "duration": {
+      "description": "A Go duration: 30s, 2m, 168h.",
+      "pattern": "^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$",
+      "type": "string"
+    },
+    "secretName": {
+      "description": "The NAME of a secret, delivered as `secrets.source` says: `valkey/password`, `issuer/state-secret`. A value is never in the document.",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*(/[A-Za-z0-9][A-Za-z0-9._-]*)*$",
+      "type": "string"
+    },
+    "url": {
+      "allOf": [
+        {
+          "pattern": "^https?://\\S+$"
+        },
+        {
+          "not": {
+            "pattern": "^https?://[^/?#\\s]*@"
+          }
+        }
+      ],
+      "description": "An http or https URL with a host and no credentials: a password in a URL is a secret in the file, and a secret is named, never carried.",
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "$id": "https://truvity.github.io/sluis/schemas/v1/config/sluis-backup.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "The configuration of `sluis backup`, the backup module (docs/decisions/0071): a scheduled export of the installation, sealed with the archive key, into an S3 bucket. Secrets are never in this file: a field ending in ...Secret holds the NAME of a secret, which `secrets` says how to deliver, and a field ending in ...File holds a path (a credential the platform mounts and rotates). Telemetry is the OTEL_* environment, not configuration.",
+  "properties": {
+    "adapters": {
+      "additionalProperties": false,
+      "description": "Names the adapter of single concerns, over the preset and the `ports` keys. The names and what each needs are in the matrix of docs/reference/sluis/adapters.md.",
+      "properties": {
+        "audit": {
+          "additionalProperties": false,
+          "description": "The adapter for the audit sink, replacing the preset's.",
+          "properties": {
+            "adapter": {
+              "description": "The adapter's name, as the compatibility matrix lists it.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "settings": {
+              "description": "The adapter's own settings (an object; the adapter refuses a key it does not know).",
+              "type": "object"
+            }
+          },
+          "required": [
+            "adapter"
+          ],
+          "type": "object"
+        },
+        "blobs": {
+          "additionalProperties": false,
+          "description": "The adapter for blobs, replacing the preset's.",
+          "properties": {
+            "adapter": {
+              "description": "The adapter's name, as the compatibility matrix lists it.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "settings": {
+              "description": "The adapter's own settings (an object; the adapter refuses a key it does not know).",
+              "type": "object"
+            }
+          },
+          "required": [
+            "adapter"
+          ],
+          "type": "object"
+        },
+        "schedule": {
+          "additionalProperties": false,
+          "description": "The adapter for the schedule of passes, replacing the preset's.",
+          "properties": {
+            "adapter": {
+              "description": "The adapter's name, as the compatibility matrix lists it.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "settings": {
+              "description": "The adapter's own settings (an object; the adapter refuses a key it does not know).",
+              "type": "object"
+            }
+          },
+          "required": [
+            "adapter"
+          ],
+          "type": "object"
+        },
+        "secrets": {
+          "additionalProperties": false,
+          "description": "The adapter for secrets (dynamic secrets), replacing the preset's.",
+          "properties": {
+            "adapter": {
+              "description": "The adapter's name, as the compatibility matrix lists it.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "settings": {
+              "description": "The adapter's own settings (an object; the adapter refuses a key it does not know).",
+              "type": "object"
+            }
+          },
+          "required": [
+            "adapter"
+          ],
+          "type": "object"
+        },
+        "signing": {
+          "additionalProperties": false,
+          "description": "The adapter for token signing, replacing the preset's.",
+          "properties": {
+            "adapter": {
+              "description": "The adapter's name, as the compatibility matrix lists it.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "settings": {
+              "description": "The adapter's own settings (an object; the adapter refuses a key it does not know).",
+              "type": "object"
+            }
+          },
+          "required": [
+            "adapter"
+          ],
+          "type": "object"
+        },
+        "state": {
+          "additionalProperties": false,
+          "description": "The adapter for state, sessions included, replacing the preset's.",
+          "properties": {
+            "adapter": {
+              "description": "The adapter's name, as the compatibility matrix lists it.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "settings": {
+              "description": "The adapter's own settings (an object; the adapter refuses a key it does not know).",
+              "type": "object"
+            }
+          },
+          "required": [
+            "adapter"
+          ],
+          "type": "object"
+        },
+        "trigger": {
+          "additionalProperties": false,
+          "description": "The adapter for the \"run a pass now\" trigger, replacing the preset's.",
+          "properties": {
+            "adapter": {
+              "description": "The adapter's name, as the compatibility matrix lists it.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "settings": {
+              "description": "The adapter's own settings (an object; the adapter refuses a key it does not know).",
+              "type": "object"
+            }
+          },
+          "required": [
+            "adapter"
+          ],
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "apiVersion": {
+      "const": "sluis.truvity.github.io/sluis-backup/v1",
+      "description": "Which version of which document this is: the backup module's own document (docs/decisions/0071)."
+    },
+    "audit": {
+      "additionalProperties": false,
+      "description": "The audit installation this service records to. Unset keeps the trail in the log only.",
+      "properties": {
+        "audience": {
+          "default": "audit",
+          "description": "The client whose audience the Audit page's tokens carry.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "forwardedForTrustedHops": {
+          "default": 0,
+          "description": "How many of the deployment's own proxies append to X-Forwarded-For; zero records the peer.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "queryURL": {
+          "$ref": "#/$defs/url",
+          "description": "The query service, for the console's Audit page. Its own setting: it needs no `writer`, so the page works with the `sqs` and `log` sinks. A path prefix (`https://audit.example/sluis`) is kept and the procedure path appended."
+        },
+        "tokenFile": {
+          "description": "This workload's projected service-account token, presented on every call.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "writer": {
+          "$ref": "#/$defs/url",
+          "description": "The installation's receiver."
+        }
+      },
+      "type": "object"
+    },
+    "backup": {
+      "additionalProperties": false,
+      "description": "What the backup module writes and where. The module reads every module's table, secrets and blobs through the `ports` and `secrets` above (its role has read access to them), and writes sealed chunks to `target`.",
+      "properties": {
+        "key": {
+          "description": "The key that seals each backup's data key (purpose `archive`): an alias, or {key, context}. The same as `keys.archive`; give one of them. The adapter is `keys.adapter`, or kms.",
+          "oneOf": [
+            {
+              "description": "An alias such as alias/audit-seal (kms) or a transit key name. An ARN or a key id is refused.",
+              "minLength": 1,
+              "not": {
+                "anyOf": [
+                  {
+                    "pattern": "^arn:"
+                  },
+                  {
+                    "pattern": "^(?i:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$"
+                  },
+                  {
+                    "pattern": "^(?i:mrk-[0-9a-f]{32})$"
+                  }
+                ]
+              },
+              "pattern": "^[^\\s]+$",
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "context": {
+                  "description": "The encryption context: \"default\" sends {instance, purpose}; \"off\" sends none; an object is sent as is.",
+                  "oneOf": [
+                    {
+                      "enum": [
+                        "default",
+                        "off"
+                      ]
+                    },
+                    {
+                      "additionalProperties": {
+                        "type": "string"
+                      },
+                      "minProperties": 1,
+                      "type": "object"
+                    }
+                  ]
+                },
+                "key": {
+                  "description": "An alias such as alias/audit-seal (kms) or a transit key name. An ARN or a key id is refused.",
+                  "minLength": 1,
+                  "not": {
+                    "anyOf": [
+                      {
+                        "pattern": "^arn:"
+                      },
+                      {
+                        "pattern": "^(?i:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$"
+                      },
+                      {
+                        "pattern": "^(?i:mrk-[0-9a-f]{32})$"
+                      }
+                    ]
+                  },
+                  "pattern": "^[^\\s]+$",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "key"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "region": {
+          "description": "The region of the key service, for adapter kms. Unset follows the AWS SDK's own resolution.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "retention": {
+          "additionalProperties": false,
+          "description": "Which completed backups a prune keeps. A backup is deleted when it is beyond the `keep` newest AND older than `maxAge`.",
+          "properties": {
+            "keep": {
+              "default": 7,
+              "description": "How many of the newest completed backups are always kept.",
+              "minimum": 1,
+              "type": "integer"
+            },
+            "maxAge": {
+              "$ref": "#/$defs/duration",
+              "default": "720h",
+              "description": "How old a backup beyond `keep` may be before it is deleted. 0s deletes it as soon as it is beyond `keep`."
+            }
+          },
+          "type": "object"
+        },
+        "target": {
+          "additionalProperties": false,
+          "description": "The S3 bucket of the archive. For an AWS bucket with Object Lock, enable versioning and a default retention no longer than `retention`; credentials are the function role's and are never configured here.",
+          "properties": {
+            "bucket": {
+              "description": "The bucket. It must exist.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "endpoint": {
+              "$ref": "#/$defs/url",
+              "description": "Overrides the S3 address: LocalStack or an S3-compatible store."
+            },
+            "kmsKey": {
+              "description": "A KMS key id, ARN or alias for server-side encryption of every write. Unset leaves the bucket's own default encryption.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "pathStyle": {
+              "description": "Addresses the bucket in the path and not the host name, which LocalStack and most S3-compatible stores need.",
+              "type": "boolean"
+            },
+            "prefix": {
+              "description": "A key prefix inside the bucket, put before `backup/<instance>/`.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "region": {
+              "description": "The bucket's region. Unset follows the SDK's own resolution.",
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "bucket"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "target"
+      ],
+      "type": "object"
+    },
+    "instance": {
+      "description": "The installation's name, bound into the default encryption context of `keys` ({instance, purpose}): stable and not secret, because a ciphertext made under it opens only with it. Unset is `release`.",
+      "pattern": "^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$",
+      "type": "string"
+    },
+    "keys": {
+      "additionalProperties": false,
+      "description": "Which key serves which purpose. Keys are named by alias (KMS) or by name (transit), never by ARN or key id. See the package documentation of github.com/truvity/sluis/storage/keys.",
+      "minProperties": 2,
+      "properties": {
+        "adapter": {
+          "description": "The key service.",
+          "enum": [
+            "kms",
+            "local",
+            "transit"
+          ]
+        },
+        "archive": {
+          "description": "Long-term storage.",
+          "oneOf": [
+            {
+              "description": "An alias such as alias/audit-seal (kms) or a transit key name. An ARN or a key id is refused.",
+              "minLength": 1,
+              "not": {
+                "anyOf": [
+                  {
+                    "pattern": "^arn:"
+                  },
+                  {
+                    "pattern": "^(?i:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$"
+                  },
+                  {
+                    "pattern": "^(?i:mrk-[0-9a-f]{32})$"
+                  }
+                ]
+              },
+              "pattern": "^[^\\s]+$",
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "context": {
+                  "description": "The encryption context: \"default\" sends {instance, purpose}; \"off\" sends none; an object is sent as is.",
+                  "oneOf": [
+                    {
+                      "enum": [
+                        "default",
+                        "off"
+                      ]
+                    },
+                    {
+                      "additionalProperties": {
+                        "type": "string"
+                      },
+                      "minProperties": 1,
+                      "type": "object"
+                    }
+                  ]
+                },
+                "key": {
+                  "description": "An alias such as alias/audit-seal (kms) or a transit key name. An ARN or a key id is refused.",
+                  "minLength": 1,
+                  "not": {
+                    "anyOf": [
+                      {
+                        "pattern": "^arn:"
+                      },
+                      {
+                        "pattern": "^(?i:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$"
+                      },
+                      {
+                        "pattern": "^(?i:mrk-[0-9a-f]{32})$"
+                      }
+                    ]
+                  },
+                  "pattern": "^[^\\s]+$",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "key"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "conceal": {
+          "description": "Values that must be recoverable.",
+          "oneOf": [
+            {
+              "description": "An alias such as alias/audit-seal (kms) or a transit key name. An ARN or a key id is refused.",
+              "minLength": 1,
+              "not": {
+                "anyOf": [
+                  {
+                    "pattern": "^arn:"
+                  },
+                  {
+                    "pattern": "^(?i:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$"
+                  },
+                  {
+                    "pattern": "^(?i:mrk-[0-9a-f]{32})$"
+                  }
+                ]
+              },
+              "pattern": "^[^\\s]+$",
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "context": {
+                  "description": "The encryption context: \"default\" sends {instance, purpose}; \"off\" sends none; an object is sent as is.",
+                  "oneOf": [
+                    {
+                      "enum": [
+                        "default",
+                        "off"
+                      ]
+                    },
+                    {
+                      "additionalProperties": {
+                        "type": "string"
+                      },
+                      "minProperties": 1,
+                      "type": "object"
+                    }
+                  ]
+                },
+                "key": {
+                  "description": "An alias such as alias/audit-seal (kms) or a transit key name. An ARN or a key id is refused.",
+                  "minLength": 1,
+                  "not": {
+                    "anyOf": [
+                      {
+                        "pattern": "^arn:"
+                      },
+                      {
+                        "pattern": "^(?i:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$"
+                      },
+                      {
+                        "pattern": "^(?i:mrk-[0-9a-f]{32})$"
+                      }
+                    ]
+                  },
+                  "pattern": "^[^\\s]+$",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "key"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "pseudonym": {
+          "description": "Per-tenant pseudonyms.",
+          "oneOf": [
+            {
+              "description": "An alias such as alias/audit-seal (kms) or a transit key name. An ARN or a key id is refused.",
+              "minLength": 1,
+              "not": {
+                "anyOf": [
+                  {
+                    "pattern": "^arn:"
+                  },
+                  {
+                    "pattern": "^(?i:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$"
+                  },
+                  {
+                    "pattern": "^(?i:mrk-[0-9a-f]{32})$"
+                  }
+                ]
+              },
+              "pattern": "^[^\\s]+$",
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "context": {
+                  "description": "The encryption context: \"default\" sends {instance, purpose}; \"off\" sends none; an object is sent as is.",
+                  "oneOf": [
+                    {
+                      "enum": [
+                        "default",
+                        "off"
+                      ]
+                    },
+                    {
+                      "additionalProperties": {
+                        "type": "string"
+                      },
+                      "minProperties": 1,
+                      "type": "object"
+                    }
+                  ]
+                },
+                "key": {
+                  "description": "An alias such as alias/audit-seal (kms) or a transit key name. An ARN or a key id is refused.",
+                  "minLength": 1,
+                  "not": {
+                    "anyOf": [
+                      {
+                        "pattern": "^arn:"
+                      },
+                      {
+                        "pattern": "^(?i:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$"
+                      },
+                      {
+                        "pattern": "^(?i:mrk-[0-9a-f]{32})$"
+                      }
+                    ]
+                  },
+                  "pattern": "^[^\\s]+$",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "key"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "seal": {
+          "description": "Sealing the audit trail.",
+          "oneOf": [
+            {
+              "description": "An alias such as alias/audit-seal (kms) or a transit key name. An ARN or a key id is refused.",
+              "minLength": 1,
+              "not": {
+                "anyOf": [
+                  {
+                    "pattern": "^arn:"
+                  },
+                  {
+                    "pattern": "^(?i:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$"
+                  },
+                  {
+                    "pattern": "^(?i:mrk-[0-9a-f]{32})$"
+                  }
+                ]
+              },
+              "pattern": "^[^\\s]+$",
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "context": {
+                  "description": "The encryption context: \"default\" sends {instance, purpose}; \"off\" sends none; an object is sent as is.",
+                  "oneOf": [
+                    {
+                      "enum": [
+                        "default",
+                        "off"
+                      ]
+                    },
+                    {
+                      "additionalProperties": {
+                        "type": "string"
+                      },
+                      "minProperties": 1,
+                      "type": "object"
+                    }
+                  ]
+                },
+                "key": {
+                  "description": "An alias such as alias/audit-seal (kms) or a transit key name. An ARN or a key id is refused.",
+                  "minLength": 1,
+                  "not": {
+                    "anyOf": [
+                      {
+                        "pattern": "^arn:"
+                      },
+                      {
+                        "pattern": "^(?i:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$"
+                      },
+                      {
+                        "pattern": "^(?i:mrk-[0-9a-f]{32})$"
+                      }
+                    ]
+                  },
+                  "pattern": "^[^\\s]+$",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "key"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "sign": {
+          "description": "Token signing: the symmetric key that wraps a locally generated signing ring, or an asymmetric key that signs directly (deprecated).",
+          "oneOf": [
+            {
+              "description": "An alias such as alias/audit-seal (kms) or a transit key name. An ARN or a key id is refused.",
+              "minLength": 1,
+              "not": {
+                "anyOf": [
+                  {
+                    "pattern": "^arn:"
+                  },
+                  {
+                    "pattern": "^(?i:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$"
+                  },
+                  {
+                    "pattern": "^(?i:mrk-[0-9a-f]{32})$"
+                  }
+                ]
+              },
+              "pattern": "^[^\\s]+$",
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "context": {
+                  "description": "The encryption context: \"default\" sends {instance, purpose}; \"off\" sends none; an object is sent as is.",
+                  "oneOf": [
+                    {
+                      "enum": [
+                        "default",
+                        "off"
+                      ]
+                    },
+                    {
+                      "additionalProperties": {
+                        "type": "string"
+                      },
+                      "minProperties": 1,
+                      "type": "object"
+                    }
+                  ]
+                },
+                "key": {
+                  "description": "An alias such as alias/audit-seal (kms) or a transit key name. An ARN or a key id is refused.",
+                  "minLength": 1,
+                  "not": {
+                    "anyOf": [
+                      {
+                        "pattern": "^arn:"
+                      },
+                      {
+                        "pattern": "^(?i:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$"
+                      },
+                      {
+                        "pattern": "^(?i:mrk-[0-9a-f]{32})$"
+                      }
+                    ]
+                  },
+                  "pattern": "^[^\\s]+$",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "key"
+              ],
+              "type": "object"
+            }
+          ]
+        }
+      },
+      "required": [
+        "adapter"
+      ],
+      "title": "keys",
+      "type": "object"
+    },
+    "log": {
+      "$ref": "https://github.com/truvity/policy/schemas/fragments/log.json"
+    },
+    "platform": {
+      "additionalProperties": false,
+      "description": "What this installation has to build on. The answers pick a preset (the decision tree in docs/concepts/sluis/ports.md), and start refuses an adapter that needs an answer that is no. Absent, the `ports` keys decide and nothing is checked against the platform.",
+      "properties": {
+        "aws": {
+          "description": "AWS is available: its credentials, DynamoDB, S3, SSM, KMS, SQS and EventBridge.",
+          "type": "boolean"
+        },
+        "kubernetes": {
+          "description": "A Kubernetes cluster is available.",
+          "type": "boolean"
+        },
+        "openbao": {
+          "description": "An OpenBao is available.",
+          "type": "boolean"
+        },
+        "replicas": {
+          "default": 1,
+          "description": "How many replicas share this installation's state. Above 1 start refuses an adapter that keeps its data in the process (`memory`).",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "runtime": {
+          "description": "Where sluis itself runs. Absent: `kubernetes` with a cluster, else `lambda` on AWS, else `process`.",
+          "enum": [
+            "kubernetes",
+            "lambda",
+            "process"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "ports": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "adapter": {
+                "const": "dynamodb"
+              }
+            },
+            "required": [
+              "adapter"
+            ]
+          },
+          "then": {
+            "required": [
+              "dynamodb"
+            ]
+          }
+        }
+      ],
+      "description": "The adapters behind the storage ports (docs/concepts/sluis/ports.md).",
+      "properties": {
+        "adapter": {
+          "default": "legacy",
+          "description": "`legacy` is deprecated in v1.74.0 and removed in v1.75: migrate with `sluis migrate`. It keeps state where it has always been kept: the namespace's ConfigMaps and Secrets and, when `valkey` is set, Valkey. `memory` keeps all of it in this process, which a restart loses: for a local run and the demonstration, and not with `store: kubernetes` or `valkey`.  `dynamodb` keeps the same in one DynamoDB table (`ports.dynamodb`), with the platform's credentials, and takes its Blob from `legacy` unless `ports.blob` names its own.",
+          "enum": [
+            "legacy",
+            "memory",
+            "dynamodb"
+          ]
+        },
+        "blob": {
+          "additionalProperties": false,
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "adapter": {
+                    "const": "s3"
+                  }
+                }
+              },
+              "then": {
+                "required": [
+                  "s3"
+                ]
+              }
+            }
+          ],
+          "description": "Replaces the Blob port (status reports, directory snapshots) with an adapter of its own, whatever `ports.adapter` is. Absent, the Blob is `ports.adapter`'s.",
+          "properties": {
+            "adapter": {
+              "description": "`s3` keeps the blobs in an S3 bucket.",
+              "enum": [
+                "s3"
+              ]
+            },
+            "s3": {
+              "additionalProperties": false,
+              "dependentRequired": {
+                "credentials": [
+                  "endpoint"
+                ],
+                "credentialsRef": [
+                  "endpoint"
+                ]
+              },
+              "description": "Where the S3 adapter keeps its objects. Credentials are the platform's (EKS Pod Identity, IRSA, a Lambda role) and are never configured here.",
+              "not": {
+                "required": [
+                  "credentialsRef",
+                  "credentials"
+                ]
+              },
+              "properties": {
+                "bucket": {
+                  "description": "The bucket. It must exist, with public access blocked.",
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "credentials": {
+                  "additionalProperties": false,
+                  "description": "Instead of a static document, sluis mints its own R2 credentials from a Cloudflare preset: the account's minter credential clones the preset's prototype, the credentials are renewed with a third of their lifetime left and minted again once after a 403. Exclusive with `credentialsRef`. Needs `endpoint`, the ssm secrets source, and the `cloudflare` section.",
+                  "properties": {
+                    "preset": {
+                      "description": "A key of `cloudflare.presets` that has an `endpoint` (an R2 preset).",
+                      "pattern": "^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "preset"
+                  ],
+                  "type": "object"
+                },
+                "credentialsRef": {
+                  "description": "The internal address, `internal/<kind>/<id>`, of the `s3-credentials/v1` document (`access_key_id`, `secret_access_key`) that holds the static credentials for `endpoint`, in the installation's secrets store (the ssm secrets source). Read at start and again after an answer of 403, at most once a minute. Needs `endpoint`; `region` defaults to `auto` with it. Any other address is refused. This static document is the simple way and needs nothing else: no `cloudflare` section is involved.",
+                  "pattern": "^internal/[a-z0-9][a-z0-9-]{0,30}/[a-z0-9][a-z0-9._-]{0,62}$",
+                  "type": "string"
+                },
+                "endpoint": {
+                  "$ref": "#/$defs/url",
+                  "description": "Overrides the S3 address: LocalStack or an S3-compatible store (Cloudflare R2, MinIO)."
+                },
+                "kmsKey": {
+                  "description": "A KMS key id, ARN or alias for server-side encryption (SSE-KMS) of every write. Absent, the bucket's default encryption applies.",
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "pathStyle": {
+                  "description": "Addresses the bucket in the path and not the host name, which LocalStack and most S3-compatible stores need.",
+                  "type": "boolean"
+                },
+                "prefix": {
+                  "description": "A key prefix inside the bucket, for an installation that shares it. Names are `<prefix>/reports/<target>` and `<prefix>/snapshots/<directory>`.",
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "region": {
+                  "description": "The bucket's region. Absent, the SDK's own resolution (`AWS_REGION`).",
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "bucket"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "adapter"
+          ],
+          "type": "object"
+        },
+        "dynamodb": {
+          "additionalProperties": false,
+          "description": "The DynamoDB table of the `dynamodb` adapter: layout v4 keeps everything in one table (`table`), layout v5 one table per module (`tables`, with `secrets.layout: v5`). Each has a string partition key `pk`, a string sort key `sk` and the TTL attribute `expires`. Credentials are the platform's (EKS Pod Identity, IRSA, a Lambda role) and are never configured here; an S3-compatible `endpoint` with no such identity names a credentials document by address (`credentialsRef`), never by value.",
+          "oneOf": [
+            {
+              "required": [
+                "table"
+              ]
+            },
+            {
+              "required": [
+                "tables"
+              ]
+            }
+          ],
+          "properties": {
+            "create": {
+              "default": false,
+              "description": "Create the table (on-demand, TTL on `expires`) at start when it is not there, for a test or a development installation. Off, the table must exist: production uses the one the infrastructure code made, and the role needs `dynamodb:DescribeTable` on it (layout v5: the readiness probe asks, not the start).",
+              "type": "boolean"
+            },
+            "endpoint": {
+              "$ref": "#/$defs/url",
+              "description": "Overrides the DynamoDB address: LocalStack or DynamoDB Local."
+            },
+            "region": {
+              "description": "The table's region. Absent, the SDK's own resolution (`AWS_REGION`).",
+              "minLength": 1,
+              "type": "string"
+            },
+            "table": {
+              "description": "Layout v4: the one table's name.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "tables": {
+              "additionalProperties": false,
+              "description": "Layout v5 (docs/decisions/0072-storage-layout-v5-module-first.md): the table of each module, by module name. A process names its own module's table and the tables of the peers it reads; a module it does not name is not opened. Needs `secrets.layout: v5`; exclusive with `table`.",
+              "minProperties": 1,
+              "properties": {
+                "backup": {
+                  "description": "The name of the backup module's table. The library default is `sluis-<instance>-backup`.",
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "cloudflare": {
+                  "description": "The name of the cloudflare module's table. The library default is `sluis-<instance>-cloudflare`.",
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "github": {
+                  "description": "The name of the github module's table. The library default is `sluis-<instance>-github`.",
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "google": {
+                  "description": "The name of the google module's table. The library default is `sluis-<instance>-google`.",
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "oidc": {
+                  "description": "The name of the oidc module's table. The library default is `sluis-<instance>-oidc`.",
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "slack": {
+                  "description": "The name of the slack module's table. The library default is `sluis-<instance>-slack`.",
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "preset": {
+      "description": "The adapters of a whole platform, one per concern: `server` (no AWS, no Kubernetes), `k8s-minimal`, `k8s-openbao`, `aws-serverless`, `aws-hybrid` (sluis on Lambda, a cluster for the workloads), `k8s-aws` (sluis as a pod on Kubernetes with AWS storage: DynamoDB, S3, KMS-wrapped signing; SSM secrets, or OpenBao with `adapters.secrets`). `aws-eks` is the deprecated name of `k8s-aws`. Absent, the preset the `platform` answers lead to; with neither, the `ports` keys decide. `adapters` and the `ports` keys override single concerns.",
+      "enum": [
+        "server",
+        "k8s-minimal",
+        "k8s-openbao",
+        "aws-serverless",
+        "aws-hybrid",
+        "k8s-aws",
+        "aws-eks"
+      ]
+    },
+    "secrets": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "source": {
+                "enum": [
+                  "file",
+                  "ssm"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "root"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "source": {
+                "enum": [
+                  "env",
+                  "file"
+                ]
+              }
+            }
+          },
+          "then": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "kmsKeyId"
+                  ]
+                },
+                {
+                  "required": [
+                    "layout"
+                  ]
+                },
+                {
+                  "required": [
+                    "grace"
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "description": "How the secrets this document names are delivered (truvity/policy config.md section 5). Absent is `env`.",
+      "properties": {
+        "endpoint": {
+          "$ref": "#/$defs/url",
+          "description": "`ssm`: overrides the SSM address, for LocalStack."
+        },
+        "grace": {
+          "$ref": "#/$defs/duration",
+          "default": "24h",
+          "description": "`ssm`: how long the previous value of a rotated client secret is still accepted: the document's previous revision, while the current one is younger than this (docs/decisions/0039-the-issuer-generates-confidential-client-secrets.md, the overlap)."
+        },
+        "kmsKeyId": {
+          "description": "`ssm`: the id, ARN or alias of the customer-managed KMS key the parameters the service itself writes (its credentials) are encrypted with. Unset, the AWS-managed `alias/aws/ssm`. The `ssm` secrets adapter's `kmsKeyId` setting; naming another there is refused.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "layout": {
+          "default": "v4",
+          "description": "`ssm`: the storage layout of the installation's secrets. `v4`, the default, keeps them under `<root>/internal/config`, `<root>/internal/credentials` and `<root>/external/<kind>` (docs/decisions/0041-the-secret-contract.md). `v5` puts the module first, `<root>/internal/<module>/` and `<root>/external/<module>/` (docs/decisions/0072-storage-layout-v5-module-first.md), and needs `ports.dynamodb.tables`; the two do not mix. Layouts v3 and `transition` are gone; an installation still on one runs v1.74.x first.",
+          "enum": [
+            "v4",
+            "v5"
+          ]
+        },
+        "refresh": {
+          "$ref": "#/$defs/duration",
+          "default": "1m",
+          "description": "`ssm`: how old a secret's copy may be before it is read again: a rotated secret reaches every instance within it."
+        },
+        "region": {
+          "description": "`ssm`: the region. Unset follows the AWS SDK's own resolution.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "root": {
+          "description": "`file`: the directory the secrets are mounted under. `ssm`: the installation's root, /sluis/<instance>.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "source": {
+          "default": "env",
+          "description": "`env`: the variable SLUIS_SECRET_<NAME> (the name upper-cased, every other character an underscore), for a local run. `file`: the file <root>/<name>, read on every use, so a rotated mount takes effect without a restart. `ssm`: the SecureString <root>/internal/config/<name> in AWS SSM Parameter Store, every one under the prefix read at once and again after `refresh` (root /sluis/<instance>).",
+          "enum": [
+            "env",
+            "file",
+            "ssm"
+          ]
+        }
+      },
+      "required": [
+        "source"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "apiVersion",
+    "backup"
+  ],
+  "title": "sluis backup",
+  "type": "object"
+}

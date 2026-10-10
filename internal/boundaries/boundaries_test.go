@@ -66,7 +66,8 @@ func TestModuleBoundaries(t *testing.T) {
 	github := []string{"internal/githubroster", "internal/githubapp"}
 	slack := []string{"internal/slackroster", "internal/slackapp"}
 	cloudflare := []string{"internal/cloudflare"}
-	modules := []string{"internal/module/github", "internal/module/slack", "internal/module/issuer", "internal/module/cloudflare"}
+	backupDirs := []string{"internal/backup", "internal/module/backup"}
+	modules := []string{"internal/module/github", "internal/module/slack", "internal/module/issuer", "internal/module/cloudflare", "internal/module/backup"}
 	front := []string{"internal/issuer", "internal/issuerapp", "internal/hub", "internal/hublocal", "internal/server",
 		"internal/rosterapp", "internal/lambdaapp"}
 
@@ -113,10 +114,18 @@ func TestModuleBoundaries(t *testing.T) {
 			sees:   "internal/cloudflare/app",
 		},
 		{
+			// The backup role reads everything through the ports and holds no
+			// provider's credential: it imports no front end and no provider.
+			name:   "the backup module imports neither the front end nor a provider",
+			from:   backupDirs,
+			forbid: slices.Concat(front, github, slack, cloudflare),
+			sees:   "internal/backup/app",
+		},
+		{
 			// The contract every role implements: it knows no role.
 			name:   "the module contract imports no role",
 			from:   []string{"internal/module"},
-			except: []string{"internal/module/issuer", "internal/module/github", "internal/module/slack", "internal/module/cloudflare"},
+			except: []string{"internal/module/issuer", "internal/module/github", "internal/module/slack", "internal/module/cloudflare", "internal/module/backup"},
 			forbid: slices.Concat(front, github, slack, cloudflare, modules),
 			sees:   "internal/module",
 		},

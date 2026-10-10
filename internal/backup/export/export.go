@@ -100,8 +100,13 @@ func (u unit) String() string {
 func units(mods []port.Module) []unit {
 	var out []unit
 	for _, m := range mods {
-		for _, p := range port.StatePrefixes5(m) {
-			out = append(out, unit{m, unitState, p})
+		// The backup module's State is the status of its own runs and the last
+		// retention pass: a restore must not roll the record of the backups
+		// back, so a backup does not carry it.
+		if m != port.ModuleBackup {
+			for _, p := range port.StatePrefixes5(m) {
+				out = append(out, unit{m, unitState, p})
+			}
 		}
 		for _, p := range port.SetPrefixes5(m) {
 			out = append(out, unit{m, unitIndex, p})

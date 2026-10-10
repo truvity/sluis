@@ -1,0 +1,40 @@
+apiVersion: sluis.truvity.github.io/sluis-backup/v1
+instance: example
+log: {level: info}
+keys:
+  adapter: kms
+  archive: alias/example-archive
+secrets:
+  source: ssm
+  root: /sluis/example
+  region: eu-west-1
+  layout: v5
+ports:
+  adapter: dynamodb
+  dynamodb:
+    tables:
+      oidc: sluis-example-oidc
+      github: sluis-example-github
+      slack: sluis-example-slack
+      cloudflare: sluis-example-cloudflare
+      google: sluis-example-google
+      backup: sluis-example-backup
+    region: eu-west-1
+  blob:
+    adapter: s3
+    s3: {bucket: example-state, region: eu-west-1}
+platform: {aws: true, runtime: lambda}
+preset: aws-serverless
+adapters:
+  audit: {adapter: sqs, settings: {queue: "https://sqs.eu-west-1.amazonaws.com/000000000000/audit"}}
+audit: {writer: "http://audit.example.svc:8080", tokenFile: /var/run/audit/token}
+backup:
+  region: eu-west-1
+  target:
+    bucket: example-backups
+    prefix: archive
+    region: eu-west-1
+    kmsKey: alias/example-archive-bucket
+  retention:
+    keep: 14
+    maxAge: 720h

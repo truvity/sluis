@@ -46,6 +46,9 @@ type HTTP struct {
 	// check proves the declared secrets are in SSM (the {"kind":"check"} event);
 	// nil in a function with no document to check.
 	check func(context.Context) (deploycheck.Report, error)
+	// backup runs the backup (the {"kind":"backup"} event); nil in a function
+	// that is not the backup module's.
+	backup func(ctx context.Context, resume bool) (BackupResult, error)
 	// controllers run a controller pass per {"kind":"tick"|"run"} event, by the
 	// kind of the event's target; kindOf says which kind a target is.
 	controllers map[string]*Controller
@@ -106,6 +109,9 @@ func (h *HTTP) Handle(ctx context.Context, payload json.RawMessage) (any, error)
 		}
 		if peek.Kind == KindTick || peek.Kind == KindRun {
 			return h.controller(ctx, payload)
+		}
+		if peek.Kind == KindBackup {
+			return h.tickBackup(ctx, payload)
 		}
 		return h.scheduled(ctx, peek.Kind)
 	}

@@ -1,0 +1,57 @@
+{
+  "module": "backup",
+  "method": "run",
+  "caller": "admin",
+  "request": {
+    "v": 2,
+    "kind": "rpc",
+    "module": "backup",
+    "method": "run",
+    "payload": {
+      "resume": true
+    },
+    "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+    "deadline": 4102444800000
+  },
+  "request_v1": {
+    "kind": "rpc",
+    "module": "backup",
+    "method": "run",
+    "payload": {
+      "resume": true
+    }
+  },
+  "response": {
+    "v": 2,
+    "result": {
+      "outcome": "paused",
+      "id": "20261010T020000Z-a1b2c3",
+      "run": {
+        "id": "20261010T020000Z-a1b2c3",
+        "state": "paused",
+        "trigger": "run",
+        "creator": "",
+        "started": "2026-10-10T02:00:00Z",
+        "updated": "2026-10-10T02:00:00Z",
+        "units": 40,
+        "done": 3
+      }
+    }
+  },
+  "response_v1": {
+    "result": {
+      "outcome": "paused",
+      "id": "20261010T020000Z-a1b2c3",
+      "run": {
+        "id": "20261010T020000Z-a1b2c3",
+        "state": "paused",
+        "trigger": "run",
+        "creator": "",
+        "started": "2026-10-10T02:00:00Z",
+        "updated": "2026-10-10T02:00:00Z",
+        "units": 40,
+        "done": 3
+      }
+    }
+  }
+}
