@@ -41,8 +41,20 @@ func (s *GitHubOrgs) Put(ctx context.Context, record connection.Record, credenti
 	if record.Org != credential.Org {
 		return fmt.Errorf("a record for %s with a credential for %s", record.Org, credential.Org)
 	}
-	if f := s.b.declared.AppRef; f != nil && s.b.v5 != nil && record.AppRef == "" {
-		record.AppRef = f(record.Org)
+	if s.b.v5 != nil && record.AppRef == "" {
+		// The configuration's entry overrides; without one the organisation
+		// keeps the App its stored record names, so that an organisation the
+		// migration left naming its App needs no entry.
+		if f := s.b.declared.AppRef; f != nil {
+			record.AppRef = f(record.Org)
+		}
+		if record.AppRef == "" {
+			stored, err := s.storedAppRef(ctx, record.Org)
+			if err != nil {
+				return err
+			}
+			record.AppRef = stored
+		}
 	}
 	rawRecord, err := connection.EncodeRecord(record)
 	if err != nil {
@@ -73,6 +85,19 @@ func (s *GitHubOrgs) Put(ctx context.Context, record connection.Record, credenti
 	return s.b.editItem(ctx, key, 0, func(*item) (*item, error) {
 		return &item{Record: json.RawMessage(rawRecord), Secret: ref}, nil
 	})
+}
+
+// storedAppRef is the App the organisation's stored record names, if any.
+func (s *GitHubOrgs) storedAppRef(ctx context.Context, org string) (string, error) {
+	it, err := s.b.getItem(ctx, ghOrgKey(org))
+	if err != nil || it == nil || len(it.Record) == 0 {
+		return "", err
+	}
+	record, err := connection.DecodeRecord(string(it.Record))
+	if err != nil {
+		return "", nil //nolint:nilerr // a record that does not decode names no App; the write replaces it
+	}
+	return record.AppRef, nil
 }
 
 // SetOwner changes one organisation's recorded owner and nothing else, under

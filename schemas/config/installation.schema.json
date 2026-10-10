@@ -1622,6 +1622,17 @@
           "additionalProperties": false,
           "description": "The GitHub controller: makes each GitHub organisation's teams match the policy's github table.",
           "properties": {
+            "appRefs": {
+              "additionalProperties": {
+                "pattern": "^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$",
+                "type": "string"
+              },
+              "description": "Optional. For an organisation `access.github` binds, the id of the catalogue App (in `apps.github.apps`, created under that organisation) whose key its record refers to (the policy document's `controllers.github.appRefs`). An organisation connected with an App of its own keeps naming it without an entry; an entry names another App, or declares an organisation anew.",
+              "propertyNames": {
+                "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9]|-[A-Za-z0-9])*$"
+              },
+              "type": "object"
+            },
             "appsDir": {
               "default": "/var/run/github-roster/apps",
               "description": "One file per connected organisation: its App's credentials. Read only with `ports.adapter: legacy`; with another adapter they are on the State port.",

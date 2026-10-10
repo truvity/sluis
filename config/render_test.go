@@ -482,3 +482,39 @@ func TestRenderAcceptsBothSpellingsOfTheHubsGroups(t *testing.T) {
 		}
 	}
 }
+
+// The App an organisation uses is optional in the installation: an entry
+// reaches the policy document's `controllers.github.appRefs`, held to the
+// catalogue Apps like the policy document's own.
+func TestRenderCarriesTheAppRefsOfTheGitHubController(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("testdata", "example.installation.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := strings.Replace(string(raw), "      - {purpose: runner, tier: stable}\n",
+		"      - {purpose: runner, tier: stable}\n      - {id: roster, purpose: catalogue, org: example-org, permissions: {contents: read}}\n", 1)
+	text = strings.Replace(text, "    enabledOrgs: [example-org]\n", "    enabledOrgs: [example-org]\n    appRefs: {example-org: roster}\n", 1)
+	file := filepath.Join(t.TempDir(), "installation.yaml")
+	if err = os.WriteFile(file, []byte(text), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	in, err := config.LoadInstallation(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service, policy, err := config.Render(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(policy), "appRefs:\n      example-org: roster") {
+		t.Errorf("the policy document lost the App reference:\n%s", policy)
+	}
+	if strings.Contains(string(service), "appRefs") {
+		t.Errorf("the service document carries the App reference:\n%s", service)
+	}
+
+	in.Controllers.GitHub.AppRefs = map[string]string{"example-org": "ghost"}
+	if _, _, err = config.Render(in); err == nil || !strings.Contains(err.Error(), "ghost") {
+		t.Errorf("a reference to an App nobody declares was rendered: %v", err)
+	}
+}

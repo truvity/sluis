@@ -150,8 +150,9 @@ type (
 		// by the policy's github table.
 		EnabledOrgs []string `yaml:"enabledOrgs,omitempty"`
 		// AppRefs names, by organisation, the catalogue App whose key the
-		// organisation's record refers to (`app_ref`). On storage layout v5 an
-		// organisation must refer to an App.
+		// organisation's record refers to (`app_ref`). Optional: a record that
+		// already names an App keeps it, and an entry overrides it or declares
+		// an organisation anew.
 		AppRefs map[string]string `yaml:"appRefs,omitempty"`
 	}
 

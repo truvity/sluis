@@ -279,7 +279,7 @@ func policyControllersSchema() m {
 	return obj("What each controller may CHANGE. Everything else the policy binds is derived every pass and shown with what would happen, and left alone: an organisation or workspace is born disabled.", m{
 		"github": obj("The GitHub controller.", m{
 			"enabledOrgs": list("The organisations it changes. Each must be bound by the github table.", m{"type": "string", "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9]|-[A-Za-z0-9])*$"}),
-			"appRefs":     m{"type": "object", "propertyNames": m{"pattern": "^[A-Za-z0-9](?:[A-Za-z0-9]|-[A-Za-z0-9])*$"}, "additionalProperties": m{"type": "string", "pattern": "^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$"}, "description": "For an organisation the github table binds, the id of the catalogue App (in `apps.github.apps`, created under that organisation) whose key its record refers to, `app_ref`. On storage layout v5 an organisation must refer to an App."},
+			"appRefs":     m{"type": "object", "propertyNames": m{"pattern": "^[A-Za-z0-9](?:[A-Za-z0-9]|-[A-Za-z0-9])*$"}, "additionalProperties": m{"type": "string", "pattern": "^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$"}, "description": "For an organisation the github table binds, the id of the catalogue App (in `apps.github.apps`, created under that organisation) whose key its record refers to, `app_ref`. Optional: an organisation whose record already names an App keeps it, so an entry only overrides it or declares an organisation anew."},
 		}),
 		"slack": obj("The Slack controller.", m{
 			"enabledWorkspaces": list("The workspaces it changes, by key. Each must be declared by the slack table.", m{"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$"}),
