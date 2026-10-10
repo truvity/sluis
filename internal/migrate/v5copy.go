@@ -164,6 +164,14 @@ func CopyV5(ctx context.Context, from, to Side, opt V5Options) (*PlanReport, err
 			report.Verify = &VerifyResult{PlanCounts: verified.Totals, Problems: problems(verified), OK: verr == nil}
 		}
 		err = verr
+		if live && errors.Is(verr, ErrMismatch) {
+			// The source kept changing; the final pass carries what moved.
+			n := verified.Totals.Missing + verified.Totals.Different
+			report.Verify.OK = false
+			report.Notes = append(report.Notes, fmt.Sprintf(
+				"%d items changed on the live source since the copy; the final pass with --overwrite --i-have-stopped-writers carries them", n))
+			err = nil
+		}
 	}
 	if err != nil {
 		report.Error = err.Error()

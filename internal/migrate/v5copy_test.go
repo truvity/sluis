@@ -2,6 +2,7 @@ package migrate_test
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -355,5 +356,54 @@ func TestLiveFirstPassSkippingTheIssuerNeedsNoFlag(t *testing.T) {
 	final.Overwrite = true
 	if report, err = migrate.CopyV5(ctx, side("v4.yaml", src.st), side("v5.yaml", dst.st), final); err != nil || report.Live {
 		t.Fatalf("the final pass = %v, live=%v", err, report.Live)
+	}
+}
+
+// changingBlob changes the source once, after the first write to the destination.
+type changingBlob struct {
+	port.Blob
+	change func()
+	done   bool
+}
+
+func (c *changingBlob) Write(ctx context.Context, n string, b []byte) (string, error) {
+	v, err := c.Blob.Write(ctx, n, b)
+	if !c.done {
+		c.done = true
+		c.change()
+	}
+	return v, err
+}
+
+func TestLivePassReportsWhatChangedInsteadOfFailing(t *testing.T) {
+	for _, live := range []bool{true, false} {
+		src, dst := newV4Installation(t), newV5Installation(t)
+		src.seedFull(t)
+		to := *dst.st
+		to.Ports.Blob = &changingBlob{Blob: dst.st.Ports.Blob, change: func() {
+			src.env[sluissecrets.EnvName("recovery/password")] = "CHANGED-WHILE-LIVE"
+		}}
+		opt := copyOptions()
+		if live {
+			opt.Skip, opt.WritersStopped = []string{migrate.DomainIssuer}, false
+		} else {
+			opt.Skip = []string{migrate.DomainIssuer}
+		}
+		report, err := migrate.CopyV5(ctx, side("v4.yaml", src.st), side("v5.yaml", &to), opt)
+		if !live {
+			if !errors.Is(err, migrate.ErrMismatch) {
+				t.Errorf("a non-live copy whose source changed = %v, want ErrMismatch", err)
+			}
+			continue
+		}
+		if err != nil || !report.OK || !report.Live {
+			t.Fatalf("a live pass = %v\n%s", err, report.JSON())
+		}
+		if v := report.Verify; v == nil || v.OK || v.Missing+v.Different == 0 {
+			t.Errorf("the verify section does not show the change: %+v", v)
+		}
+		if !strings.Contains(strings.Join(report.Notes, "\n"), "changed on the live source") {
+			t.Errorf("no note about the change: %v", report.Notes)
+		}
 	}
 }
