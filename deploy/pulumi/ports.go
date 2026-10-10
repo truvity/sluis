@@ -36,6 +36,12 @@ type PortsArgs struct {
 	// TableName is the State table (State's TableName). Required with the
 	// "dynamodb" adapter.
 	TableName string
+
+	// Tables are the per-module tables (States.Grant() names them; ModuleSet.TableName
+	// is the default): `ports.dynamodb.tables`, layout v5. Exclusive with TableName,
+	// and it needs `secrets.layout: v5` in the document. The block is only valid
+	// with that layout, so render it when the layout is switched, not before.
+	Tables map[Module]string
 }
 
 // RenderPorts renders the `ports:` block as a map: the value under the `ports`
@@ -55,14 +61,25 @@ func RenderPorts(p PortsArgs) (map[string]any, error) {
 		errs = append(errs, errors.New("BucketName is required"))
 	}
 	adapter := p.Adapter
-	if adapter == "" && p.TableName != "" {
+	if adapter == "" && (p.TableName != "" || len(p.Tables) > 0) {
 		adapter = "dynamodb"
 	}
 	switch adapter {
 	case "":
 	case "dynamodb":
-		if p.TableName == "" {
-			errs = append(errs, errors.New("the dynamodb adapter needs TableName"))
+		switch {
+		case p.TableName != "" && len(p.Tables) > 0:
+			errs = append(errs, errors.New("TableName and Tables are both set: layout v4 and v5 do not mix"))
+		case p.TableName == "" && len(p.Tables) == 0:
+			errs = append(errs, errors.New("the dynamodb adapter needs TableName or Tables"))
+		}
+		for m, n := range p.Tables {
+			if !validModule(m) {
+				errs = append(errs, fmt.Errorf("Tables names unknown module %q", m))
+			}
+			if n == "" {
+				errs = append(errs, fmt.Errorf("Tables: the table of module %q has no name", m))
+			}
 		}
 	default:
 		errs = append(errs, fmt.Errorf("adapter %q is not rendered here: only dynamodb is (a NATS block belongs to the identity stack)", adapter))
@@ -86,7 +103,15 @@ func RenderPorts(p PortsArgs) (map[string]any, error) {
 	}
 	if adapter == "dynamodb" {
 		ports["adapter"] = "dynamodb"
-		ports["dynamodb"] = withRegion(map[string]any{"table": p.TableName})
+		if len(p.Tables) > 0 {
+			tables := map[string]any{}
+			for m, n := range p.Tables {
+				tables[string(m)] = n
+			}
+			ports["dynamodb"] = withRegion(map[string]any{"tables": tables})
+		} else {
+			ports["dynamodb"] = withRegion(map[string]any{"table": p.TableName})
+		}
 	}
 	return map[string]any{"ports": ports}, nil
 }

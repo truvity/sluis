@@ -85,14 +85,18 @@ func storageStatements(bucketArn string) []statement {
 // probe make. keyArn, when not empty, is the customer-managed key the table is
 // encrypted with: the caller's principal needs it for the table's reads and
 // writes, and only through DynamoDB.
-func stateStatements(tableArn, keyArn string) []statement {
-	out := []statement{{
-		"Sid":      sidState,
-		"Effect":   "Allow",
-		"Action":   []string{ddbGetItem, ddbPutItem, ddbUpdateItem, ddbDeleteItem, ddbQuery, ddbScan, ddbDescribeTable},
-		"Resource": tableArn,
-	}}
-	if keyArn != "" {
+func stateStatements(tableArn, keyArn string, tables map[Module]string, cloudflare bool) []statement {
+	var out []statement
+	if tableArn != "" {
+		out = append(out, statement{
+			"Sid":      sidState,
+			"Effect":   "Allow",
+			"Action":   []string{ddbGetItem, ddbPutItem, ddbUpdateItem, ddbDeleteItem, ddbQuery, ddbScan, ddbDescribeTable},
+			"Resource": tableArn,
+		})
+	}
+	out = append(out, moduleTableStatements(tables, cloudflare)...)
+	if keyArn != "" && (tableArn != "" || len(tables) > 0) {
 		out = append(out, statement{
 			"Sid":      sidKey,
 			"Effect":   "Allow",
@@ -102,6 +106,34 @@ func stateStatements(tableArn, keyArn string) []statement {
 				"StringLike": map[string]any{"kms:ViaService": "dynamodb.*.amazonaws.com"},
 			},
 		})
+	}
+	return out
+}
+
+// moduleTableStatements grants the tables of layout v5 to the one role that
+// hosts the issuer's modules (and the minter's, with cloudflare): the same
+// split ModuleRoleStatements makes, so the table of a module the role does not
+// host is never named. The backup table is read for the maintenance item only.
+// Until the layout switch the grants are unused.
+func moduleTableStatements(tables map[Module]string, cloudflare bool) []statement {
+	var out []statement
+	for _, m := range Modules() {
+		arn := tables[m]
+		if arn == "" {
+			continue
+		}
+		switch {
+		case m == ModuleBackup:
+			out = append(out, statement{
+				"Sid": "SluisMaintenance", "Effect": "Allow", "Action": ddbGetItem, "Resource": arn,
+				"Condition": map[string]any{
+					"ForAllValues:StringEquals": map[string]any{"dynamodb:LeadingKeys": []string{MaintenancePartition}},
+				},
+			})
+		case m == ModuleCloudflare && !cloudflare:
+		default:
+			out = append(out, tableStatement("SluisTable"+capitalize(m), arn, ddbWriteActions))
+		}
 	}
 	return out
 }
@@ -316,11 +348,13 @@ type functionPolicyIn struct {
 	bucketArn          string
 	external           *ExternalBlobs // set: no S3 grant, only the credentials' read
 	tableArn, tableKey string
-	queueArn           string
-	signingKeyArns     []string
-	wrappedKeyArn      string
-	keys               *keyGrants
-	webIdentityAud     string
+	// moduleTables are the ARNs of the per-module tables, by module.
+	moduleTables   map[Module]string
+	queueArn       string
+	signingKeyArns []string
+	wrappedKeyArn  string
+	keys           *keyGrants
+	webIdentityAud string
 	// webIdentityExtra are audiences after webIdentityAud; used only with it.
 	webIdentityExtra   []string
 	parameterKeyArn    string
@@ -407,7 +441,7 @@ func functionPolicy(in functionPolicyIn) (string, error) {
 	} else {
 		st = append(st, credentialsStatements(in.external, in.region, in.account, in.instance, in.parameterKeyArn)...)
 	}
-	st = append(st, stateStatements(in.tableArn, in.tableKey)...)
+	st = append(st, stateStatements(in.tableArn, in.tableKey, in.moduleTables, in.cloudflare)...)
 	st = append(st, ssmStatements(in.region, in.account, in.instance, in.parameterKeyArn, in.cloudflare)...)
 	if in.queueArn != "" {
 		// No queue (audit off): the function may send to none.

@@ -729,7 +729,7 @@ func (a *LambdaArgs) validate() (LambdaArgs, error) {
 	}
 	for k, nilIn := range map[string]bool{
 		"AuditQueueArn": out.AuditQueueArn == nil,
-		"Storage":       out.Storage == nil || (out.Storage.BucketArn == nil && out.Storage.External == nil), "State": out.State == nil || out.State.TableArn == nil,
+		"Storage":       out.Storage == nil || (out.Storage.BucketArn == nil && out.Storage.External == nil), "State": out.State == nil || (out.State.TableArn == nil && len(out.State.Tables) == 0),
 	} {
 		if nilIn {
 			missing = append(missing, k)
@@ -1426,7 +1426,7 @@ func newFunctionRole(ctx *pulumi.Context, name, fnName string, a *LambdaArgs, si
 	if bucketArn == nil {
 		bucketArn = pulumi.String("")
 	}
-	inputs := []any{bucketArn, a.State.TableArn, stateKey, a.AuditQueueArn, logGroupArn, wrapped, signKeyArn, secretsKeyArn}
+	inputs := []any{bucketArn, tableArnOf(a.State), stateKey, a.AuditQueueArn, logGroupArn, wrapped, signKeyArn, secretsKeyArn, moduleTableArns(a.State)}
 	for _, k := range signingKeyArns {
 		inputs = append(inputs, k)
 	}
@@ -1434,7 +1434,7 @@ func newFunctionRole(ctx *pulumi.Context, name, fnName string, a *LambdaArgs, si
 		return functionPolicy(functionPolicyIn{
 			region: a.Region, account: a.AccountID,
 			bucketArn: v[0].(string), external: a.Storage.External, tableArn: v[1].(string), tableKey: v[2].(string),
-			queueArn: v[3].(string), logGroupArn: v[4].(string), wrappedKeyArn: v[5].(string), signingKeyArns: stringsOf(v[8:]),
+			queueArn: v[3].(string), logGroupArn: v[4].(string), wrappedKeyArn: v[5].(string), signingKeyArns: stringsOf(v[9:]), moduleTables: moduleTablesOf(v[8]),
 			keys:            grantsOf(a.Keys, v[6].(string), v[7].(string)),
 			parameterKeyArn: a.ParameterKeyArn, instance: a.Instance,
 			invokeFunctionArns: []string{selfArn},
