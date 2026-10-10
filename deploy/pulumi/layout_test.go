@@ -6,10 +6,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 	"go.yaml.in/yaml/v3"
 
 	sluisconfig "github.com/truvity/sluis/config"
+	"github.com/truvity/sluis/storage/state"
 
 	arp "github.com/truvity/sluis/deploy/pulumi"
 )
@@ -268,7 +270,9 @@ func TestTheV5ParametersAreTheSameValuesAtTheOIDCAddresses(t *testing.T) {
 		if a.Name == "" || b.Name == "" {
 			t.Fatalf("parameters at %s and %s: %v", v4, v5, slices.Collect(mapKeys(byPath)))
 		}
-		if !prop(a, "value").DeepEquals(prop(b, "value")) {
+		// The v5 copy is the same text in the secret store's document, which is
+		// what the issuer reads there; the v4 one is the text itself.
+		if got := textOfV5Document(t, prop(b, "value")); got != secretText(t, prop(a, "value")) {
 			t.Errorf("%s and %s hold different values", v4, v5)
 		}
 		if prop(b, "type").StringValue() != "SecureString" || !prop(b, "overwrite").BoolValue() {
@@ -516,5 +520,60 @@ func TestTheMaintenanceDenyCoversTheTablesOfEveryLayout(t *testing.T) {
 				t.Errorf("%s: no write on %s", l, w)
 			}
 		}
+	}
+}
+
+func secretText(t *testing.T, v resource.PropertyValue) string {
+	t.Helper()
+	for v.IsSecret() {
+		v = v.SecretValue().Element
+	}
+	if !v.IsString() {
+		t.Fatalf("not a string: %v", v)
+	}
+	return v.StringValue()
+}
+
+// textOfV5Document reads a layout v5 parameter's value the way the issuer does:
+// through the secret store's byte codec (a raw value is refused there).
+func textOfV5Document(t *testing.T, v resource.PropertyValue) string {
+	t.Helper()
+	raw, err := state.Raw().Unmarshal([]byte(secretText(t, v)))
+	if err != nil {
+		t.Fatalf("the layout v5 parameter is not the secret store's document: %v", err)
+	}
+	return string(raw)
+}
+
+// The credentials ref of external blobs is a layout v4 address, internal/blobs/r2,
+// that layout v5 does not have: the library refuses it there and names the one to
+// use, and leaves it alone where the document is v4.
+func TestALayoutV4BlobCredentialsRefIsRefusedOnV5(t *testing.T) {
+	blobs := func(ref string) func(*arp.LambdaArgs) {
+		return func(a *arp.LambdaArgs) {
+			noDomain(a)
+			e := r2()
+			e.CredentialsRef = ref
+			a.Storage = &arp.StorageGrant{External: e}
+		}
+	}
+	_, _, err := buildLambda(t, withLayout(arp.LayoutV5, blobs("internal/blobs/r2")))
+	if err == nil || !strings.Contains(err.Error(), `"internal/google/blobs-r2"`) {
+		t.Fatalf("v5 with internal/blobs/r2: %v, want a refusal naming internal/google/blobs-r2", err)
+	}
+	for name, e := range map[string]estate{
+		"v5, v5 ref": withLayout(arp.LayoutV5, blobs("internal/google/blobs-r2")),
+		"v4+v5":      withLayout(arp.LayoutV4V5, blobs("internal/blobs/r2")),
+		"v4":         withLayout(arp.LayoutV4, blobs("internal/blobs/r2")),
+	} {
+		if _, _, err := buildLambda(t, e); err != nil {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	if got := arp.V5CredentialsRef("internal/blobs/r2"); got != "internal/google/blobs-r2" {
+		t.Errorf("V5CredentialsRef = %s", got)
+	}
+	if got := arp.V5CredentialsRef("internal/google/blobs-r2"); got != "internal/google/blobs-r2" {
+		t.Errorf("V5CredentialsRef of a v5 ref = %s", got)
 	}
 }

@@ -24,6 +24,7 @@ import (
 	auditpulumi "github.com/truvity/sluis/audit/deploy/pulumi"
 	"github.com/truvity/sluis/audit/deploy/pulumi/artifact"
 	sluisconfig "github.com/truvity/sluis/config"
+	"github.com/truvity/sluis/storage/state"
 )
 
 // LiveAlias is the alias of the function that every caller uses.
@@ -58,9 +59,19 @@ func RecoveryPasswordParameterName(instance string) string {
 	return ConfigParameterPrefix(instance) + "/" + recoveryPasswordName
 }
 
+// secretDocument is a secret's text as layout v5 stores it: the document of
+// the secret store's byte codec (storage/state.Raw), which is what the issuer
+// reads at `internal/oidc/state-secret` and `internal/oidc/recovery-password`.
+// A raw value there fails the issuer's start.
+func secretDocument(text string) (string, error) {
+	doc, err := state.Raw().Marshal([]byte(text))
+	return string(doc), err
+}
+
 // StateSecretParameterNameV5 is the state secret's address on layout v5,
 // `/sluis/<instance>/internal/oidc/state-secret`: the same value as
-// StateSecretParameterName, written beside it while the layouts coexist.
+// StateSecretParameterName, written beside it while the layouts coexist, as the
+// secret store's document (`{"value":"<base64>"}`) that layout v5 reads.
 func StateSecretParameterNameV5(instance string) string {
 	return ConfigParameterPrefixV5(instance) + "/state-secret"
 }
@@ -1386,6 +1397,11 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 		return ssm.NewParameter(ctx, logical, pargs, child)
 	}
 	stateValue := pulumi.ToSecret(stateSecret.Base64).(pulumi.StringOutput)
+	// Layout v5 reads these two parameters through the secret store's byte
+	// codec, which is a document, `{"value":"<base64>"}`; layout v4 reads the
+	// parameter as the text itself. The v5 copy carries the same text, in that
+	// document.
+	stateValueV5 := stateValue.ApplyT(secretDocument).(pulumi.StringOutput)
 	if !dropV4 {
 		stateParam, err := newSecretParam(name+"-state-secret-internal", StateSecretParameterName(a.Instance), stateValue)
 		if err != nil {
@@ -1394,7 +1410,7 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 		params, stateName = append(params, stateParam), stateParam.Name
 	}
 	if a.Layout.has5() {
-		stateParamV5, err := newSecretParam(name+"-state-secret-v5", StateSecretParameterNameV5(a.Instance), stateValue)
+		stateParamV5, err := newSecretParam(name+"-state-secret-v5", StateSecretParameterNameV5(a.Instance), stateValueV5)
 		if err != nil {
 			return nil, fmt.Errorf("sluis state secret parameter (v5): %w", err)
 		}
@@ -1426,7 +1442,7 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 		params, recoveryName = append(params, recoveryParam), recoveryParam.Name
 	}
 	if a.Layout.has5() {
-		recoveryParamV5, err := newSecretParam(name+"-recovery-password-v5", RecoveryPasswordParameterNameV5(a.Instance), recoveryValue)
+		recoveryParamV5, err := newSecretParam(name+"-recovery-password-v5", RecoveryPasswordParameterNameV5(a.Instance), recoveryValue.ApplyT(secretDocument).(pulumi.StringOutput))
 		if err != nil {
 			return nil, fmt.Errorf("sluis recovery password parameter (v5): %w", err)
 		}
