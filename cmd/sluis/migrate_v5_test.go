@@ -7,6 +7,8 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/truvity/sluis/internal/migrate"
 )
 
 func TestMigrateV5TakesTheMigrateFlagsAndAPlanSubcommand(t *testing.T) {
@@ -43,5 +45,16 @@ func TestMigrateV5TakesTheMigrateFlagsAndAPlanSubcommand(t *testing.T) {
 	out.Reset()
 	if err := run([]string{"migrate", "--help"}, &out); err != nil || !strings.Contains(out.String(), "migrate v5 plan") {
 		t.Errorf("migrate --help = %v, %q", err, out.String())
+	}
+}
+
+func TestThePlanReportIsOnStdoutAndTheSummaryOnStderr(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	emitPlanReport(&stdout, &stderr, &migrate.PlanReport{From: "a.yaml", To: "b.yaml", OK: true})
+	if !strings.HasPrefix(strings.TrimSpace(stdout.String()), "{") || strings.Contains(stdout.String(), "migrate v5 plan") {
+		t.Errorf("stdout = %q, want the JSON report alone", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "migrate v5 plan a.yaml -> b.yaml") || strings.Contains(stderr.String(), `"modules"`) {
+		t.Errorf("stderr = %q, want the summary alone", stderr.String())
 	}
 }

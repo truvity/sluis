@@ -707,6 +707,10 @@ func (p *planner) secret(ctx context.Context, from string, t SecretTarget, expli
 	switch {
 	case err != nil:
 		out.Status, out.Reason = PlanRefused, "the destination cannot be read: "+err.Error()
+		if t.Config {
+			out.Reason += " (layout v5 stores a secret as the secret store's document, {\"value\":\"<base64>\"}; " +
+				"a plain value there was written by a sluispulumi before v1.75.0, apply the stack with this release to rewrite it)"
+		}
 	case !dst.found:
 		out.Status = PlanNew
 	case sameSecret(dst.value, src.value):

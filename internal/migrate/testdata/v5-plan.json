@@ -4,7 +4,7 @@
   "modules": [
     {
       "module": "oidc",
-      "new": 19,
+      "new": 20,
       "same": 0,
       "different": 0,
       "refused": 0,
@@ -97,6 +97,14 @@
           "kind": "sessions-of",
           "from": "issuer:sessions-of:*",
           "to": "oidc/sessions-of",
+          "status": "new",
+          "count": 1
+        },
+        {
+          "concern": "state",
+          "kind": "sso-of",
+          "from": "issuer:sso-of:*",
+          "to": "oidc/sso-of",
           "status": "new",
           "count": 1
         },
@@ -416,7 +424,7 @@
     }
   ],
   "totals": {
-    "new": 44,
+    "new": 45,
     "same": 0,
     "different": 0,
     "refused": 0

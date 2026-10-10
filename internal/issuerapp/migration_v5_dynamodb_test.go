@@ -254,6 +254,22 @@ func ringKeys(t *testing.T, st *store.Stores) []string {
 	return out
 }
 
+// planStatus is the status of the one item of a concern and kind in a report.
+func planStatus(r *migrate.PlanReport, concern, kind string) migrate.PlanStatus {
+	var found []migrate.PlanStatus
+	for _, m := range r.Modules {
+		for _, it := range m.Items {
+			if it.Concern == concern && it.Kind == kind {
+				found = append(found, it.Status)
+			}
+		}
+	}
+	if len(found) != 1 {
+		return migrate.PlanStatus("rows:" + strings.Repeat("x", len(found)))
+	}
+	return found[0]
+}
+
 func e2ePlanOptions() migrate.PlanOptions {
 	return migrate.PlanOptions{
 		Sessions:          true,
@@ -282,6 +298,8 @@ func TestV5MigrationEndToEndOnDynamoDB(t *testing.T) {
 	// secret as an operator input, a connected workspace and its credential, an
 	// issuer with a wrapped ring and two people's sessions.
 	site.putSSM(t, "/internal/config/issuer/state-secret", stateSecret)
+	const recoveryPassword = "EXAMPLE-RECOVERY-PASSWORD"
+	site.putSSM(t, "/internal/config/recovery/password", recoveryPassword)
 	v4 := site.open(t, false, "")
 	if v4.V4 == nil || v4.V5 != nil {
 		t.Fatalf("the source is not on layout v4: V4=%v V5=%v", v4.V4 != nil, v4.V5 != nil)
@@ -326,6 +344,12 @@ func TestV5MigrationEndToEndOnDynamoDB(t *testing.T) {
 	}
 	open(srcApp, "ada@north.example", "refresh-spent-0")
 	open(srcApp, "grace@north.example", "refresh-live-0")
+	// A person's single sign-ins are an Index set of their own, which layout v5
+	// once had no address for: `migrate v5 plan` refused it on a real estate.
+	const ssoOf = "issuer:sso-of:ada@north.example"
+	if err = v4.Ports.Index.Add(ctx, ssoOf, "sso-ada-1", time.Hour); err != nil {
+		t.Fatal(err)
+	}
 	// Ada's token is used once, before the copy: the token she holds now is the
 	// next, and "refresh-spent-0" is spent.
 	code, ada1 := refresh(t, srcApp, "refresh-spent-0")
@@ -340,13 +364,31 @@ func TestV5MigrationEndToEndOnDynamoDB(t *testing.T) {
 	// 2. plan, copy and verify through the Router, the way `sluis migrate v5` does.
 	dstSite := newE2ESite(t, endpoint, "dst")
 	dstSite.root = site.root // the v5 paths are beside the v4 names under one root
+	// The state secret and the recovery password are the two secrets the Pulumi
+	// library generates and writes on layout v5 itself, before the copy: as the
+	// secret store's document ({"value": base64 of the text}), which is what the
+	// issuer reads there. Written here by hand, not through the store's codec, so
+	// that the format is pinned by this test and not by the code under test.
+	pulumiDocument := func(text string) string {
+		return `{"value":"` + base64.StdEncoding.EncodeToString([]byte(text)) + `"}`
+	}
+	dstSite.putSSM(t, "/internal/oidc/state-secret", pulumiDocument(stateSecret))
+	dstSite.putSSM(t, "/internal/oidc/recovery-password", pulumiDocument(recoveryPassword))
 	v5all := dstSite.open(t, true, "")
 	opt := e2ePlanOptions()
 	from, to := migrate.Side{Name: "v4", Stores: v4}, migrate.Side{Name: "v5", Stores: v5all}
 
 	plan, err := migrate.Plan(ctx, from, to, opt)
-	if err != nil || plan.Totals.Refused != 0 || plan.Totals.New == 0 || plan.Totals.Same != 0 {
+	if err != nil || plan.Totals.Refused != 0 || plan.Totals.New == 0 || plan.Totals.Same != 2 {
 		t.Fatalf("Plan = %v\n%s", err, plan.JSON())
+	}
+	for _, kind := range []string{"state-secret", "recovery-password"} {
+		if st := planStatus(plan, "secret", kind); st != migrate.PlanSame {
+			t.Errorf("the plan says the %s is %q, want same: equal values compare by hash", kind, st)
+		}
+	}
+	if st := planStatus(plan, "state", "sso-of"); st != migrate.PlanNew {
+		t.Errorf("the plan says the sso-of set is %q, want new", st)
 	}
 	if _, err = migrate.CopyV5(ctx, from, to, migrate.V5Options{PlanOptions: opt, DryRun: true}); err != nil {
 		t.Fatalf("a dry run: %v", err)
@@ -383,6 +425,17 @@ func TestV5MigrationEndToEndOnDynamoDB(t *testing.T) {
 	if strings.Contains(string(report.JSON()), orgKey) {
 		t.Error("the copy's report holds the organisation's key")
 	}
+	for _, kind := range []string{"state-secret", "recovery-password"} {
+		if st := planStatus(verified, "secret", kind); st != migrate.PlanSame {
+			t.Errorf("the verify says the %s is %q, want same", kind, st)
+		}
+	}
+	if st := planStatus(verified, "state", "sso-of"); st != migrate.PlanSame {
+		t.Errorf("the verify says the sso-of set is %q, want same", st)
+	}
+	if members, err := v5all.Ports.Index.Members(ctx, ssoOf); err != nil || !slices.Equal(members, []string{"sso-ada-1"}) {
+		t.Errorf("the sso-of set on the destination = %v, %v", members, err)
+	}
 	again, err := migrate.CopyV5(ctx, from, to, migrate.V5Options{PlanOptions: opt, WritersStopped: true})
 	if err != nil || again.Totals.Copied != 0 || again.Totals.New != 0 {
 		t.Fatalf("a second copy = %v\n%s", err, again.JSON())
@@ -417,7 +470,13 @@ func TestV5MigrationEndToEndOnDynamoDB(t *testing.T) {
 	if v5.V5 == nil || v5.V4 != nil {
 		t.Fatalf("the destination is not on layout v5: V4=%v V5=%v", v5.V4 != nil, v5.V5 != nil)
 	}
+	// The recovery password is read the way the hub reads it on layout v5, and is
+	// the text the source held: what the document Pulumi wrote carries.
+	if got, _, err := v5.V5.OIDC().RecoveryPassword().Get(ctx); err != nil || string(got) != recoveryPassword {
+		t.Errorf("the recovery password on layout v5: equal %v, %v", string(got) == recoveryPassword, err)
+	}
 	_, openedBefore := kms.counts()
+	// The issuer starts on layout v5 with the state secret as Pulumi wrote it.
 	dstApp := e2eIssuer(t, v5, kms)
 	sealedAfter, openedAfter := kms.counts()
 	if sealedAfter != sealedAtSource {

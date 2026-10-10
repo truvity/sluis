@@ -96,6 +96,9 @@ func (v *v4Installation) seedFull(t *testing.T) {
 	if err = v.st.Ports.Index.Add(ctx, "issuer:keyring:index:ES384", "kid2", time.Hour); err != nil {
 		t.Fatal(err)
 	}
+	if err = v.st.Ports.Index.Add(ctx, "issuer:sso-of:ada@north.example", "sso1", time.Hour); err != nil {
+		t.Fatal(err)
+	}
 	if _, err = v.st.Ports.Blob.Write(ctx, "reports/github/acme", []byte(`{"report":1}`)); err != nil {
 		t.Fatal(err)
 	}
@@ -519,5 +522,42 @@ func TestPlanWithoutSessionsPlansTheRingOnly(t *testing.T) {
 				t.Errorf("a session was planned without sessions: %+v", it)
 			}
 		}
+	}
+}
+
+// A plain value at the destination's state secret, which a sluispulumi before
+// v1.75.0 wrote at the v5 address, is refused with the way out, and its value is
+// not in the report.
+func TestAPlainDestinationSecretIsRefusedWithAHint(t *testing.T) {
+	src := newV4Installation(t)
+	src.seedFull(t)
+	dst := newV5Installation(t)
+	if _, err := dst.v5.InternalStore(secretstore.ModuleOIDC).Put(ctx, "state-secret", []byte(`{"value":5,"x":"PLAIN-VALUE-AT-V5"}`), ""); err != nil {
+		t.Fatal(err)
+	}
+	report, err := migrate.Plan(ctx, side("v4.yaml", src.st), side("v5.yaml", dst.st), planOptions())
+	// A refused item is an error of the plan, with the report beside it.
+	if err == nil || report == nil {
+		t.Fatalf("Plan = %v, %v, want the report and an error", report, err)
+	}
+	if strings.Contains(err.Error(), "PLAIN-VALUE-AT-V5") {
+		t.Error("the error holds the destination's value")
+	}
+	found := false
+	for _, m := range report.Modules {
+		for _, it := range m.Items {
+			if it.Concern == "secret" && it.Kind == "state-secret" {
+				found = true
+				if it.Status != migrate.PlanRefused || !strings.Contains(it.Reason, "secret store's document") {
+					t.Errorf("state secret = %+v, want refused with a hint", it)
+				}
+			}
+		}
+	}
+	if !found {
+		t.Error("no state secret row")
+	}
+	if bytes.Contains(report.JSON(), []byte(`{"value":5,"x":"PLAIN-VALUE-AT-V5"}`)) {
+		t.Error("the plan holds the destination's value")
 	}
 }
