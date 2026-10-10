@@ -121,13 +121,13 @@ type targetFlags struct {
 
 func (t *targetFlags) register(flags *flag.FlagSet, restoreCommand bool) {
 	if restoreCommand {
-		flags.StringVar(&t.restoreFunction, "function", "", "the restore function's name or ARN (else $"+envRestoreFunction+", else restoreFunction: under backup: in config.yaml)")
+		flags.StringVar(&t.restoreFunction, "function", "", "the restore function's name or ARN (else $"+envRestoreFunction+", else backup.restoreFunction in config.yaml)")
 	} else {
-		flags.StringVar(&t.function, "function", "", "the backup function's name or ARN (else $"+envBackupFunction+", else function: under backup: in config.yaml)")
+		flags.StringVar(&t.function, "function", "", "the backup function's name or ARN (else $"+envBackupFunction+", else backup.function in config.yaml)")
 	}
 	flags.StringVar(&t.as, "as", classAdmin, "the caller class, admin or breakglass: the function's live-<class> alias")
 	flags.StringVar(&t.profile, "profile", "", "the AWS profile (else the SDK's default chain)")
-	flags.StringVar(&t.region, "region", "", "the AWS region (else the configuration's, else region: under backup: in config.yaml)")
+	flags.StringVar(&t.region, "region", "", "the AWS region (else the configuration's, else backup.region in config.yaml)")
 	flags.BoolVar(&t.asJSON, "json", false, "print JSON")
 }
 

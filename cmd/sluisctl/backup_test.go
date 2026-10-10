@@ -157,7 +157,7 @@ func TestRestoreStartSendsTheEventAsyncAsTheCallerAndPrintsTheRunID(t *testing.T
 	}
 	withFake(t, f)
 	savedSleep := pollSleep
-	pollSleep = func(ctx context.Context, d time.Duration) error { started = true; return savedSleep(ctx, 0) }
+	pollSleep = func(ctx context.Context, _ time.Duration) error { started = true; return savedSleep(ctx, 0) }
 	discoverWindow = time.Hour
 	savedNow := nowFunc
 	t.Cleanup(func() { nowFunc = savedNow })
