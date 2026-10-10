@@ -293,6 +293,7 @@ To adopt an existing audit stack, import it under the new component ([resource n
 | `Secrets` (optional) | The same actions through SSM only (`kms:ViaService` `ssm.<region>.amazonaws.com`), for the installation's parameters (`kms:EncryptionContext:PARAMETER_ARN` StringLike `…:parameter/sluis/<instance>/*`). Written as `secrets.kmsKeyId`; exclusive with `ParameterKeyArn` |
 | Alias form | `alias/<name>` of a customer key. An ARN, a key id or `alias/aws/…` is refused. Re-pointing an alias moves the function at the next apply |
 | `LegacySigningContext` (nil is true) | Also keeps `GenerateDataKeyPair` and `Decrypt` on `Sign` under `purpose=sluis-signing` for older ring entries (`WrappedKeyPolicyStatements` belongs in the key policy). Set false after the ring rotates |
+| `SluisKeyPolicyStatements(KeyPolicyArgs)` | The statements of the shared key's policy, each `SluisKey…` Sid: a statement per function role (its hosted modules' parameters, through SSM), backup read-all and restore write-all, `external/*` for the External Secrets readers, admin seeds and reads, breakglass, and `{instance, purpose: sign}` for the roles that host `oidc` with three denies that hold the purpose to them. No catch-all deny and no key administration. Concatenate your own statements and pass the lists to `KeyPolicyDocument`, which refuses a repeated Sid and a policy over 32 KiB |
 
 ### The edge modules
 
