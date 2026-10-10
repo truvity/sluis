@@ -30,6 +30,8 @@ type recorder struct {
 	// unversioned makes the artifacts bucket answer an upload with no version id;
 	// wrongCode makes Lambda report other code than the function was given.
 	unversioned, wrongCode bool
+	// noPITR makes the table lookup report point-in-time recovery off.
+	noPITR bool
 }
 
 // mockSetup, when set by a test, configures the next mock before the program runs.
@@ -129,6 +131,7 @@ func (r *recorder) Call(a pulumi.MockCallArgs) (resource.PropertyMap, error) {
 	if a.Token == "aws:dynamodb/getTable:getTable" {
 		out := a.Args.Copy()
 		out["arn"] = resource.NewStringProperty(arnp + "dynamodb:eu-west-1:" + account + ":table/" + a.Args["name"].StringValue())
+		out["pointInTimeRecovery"] = resource.NewObjectProperty(resource.PropertyMap{"enabled": resource.NewBoolProperty(!r.noPITR)})
 		return out, nil
 	}
 	if a.Token == "aws:s3/getObject:getObject" {
