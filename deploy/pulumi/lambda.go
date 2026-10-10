@@ -729,7 +729,8 @@ func (a *LambdaArgs) validate() (LambdaArgs, error) {
 	}
 	for k, nilIn := range map[string]bool{
 		"AuditQueueArn": out.AuditQueueArn == nil,
-		"Storage":       out.Storage == nil || (out.Storage.BucketArn == nil && out.Storage.External == nil), "State": out.State == nil || (out.State.TableArn == nil && len(out.State.Tables) == 0),
+		"Storage":       out.Storage == nil || (out.Storage.BucketArn == nil && out.Storage.External == nil),
+		"State":         out.State == nil || (out.State.TableArn == nil && len(out.State.Tables) == 0),
 	} {
 		if nilIn {
 			missing = append(missing, k)
