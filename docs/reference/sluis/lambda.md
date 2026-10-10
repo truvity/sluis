@@ -30,6 +30,7 @@ See [sluis on AWS Lambda](../../concepts/sluis/lambda.md) and [the Pulumi librar
 | `{"kind":"tick","target":"<id>"}` | One pass of one target | EventBridge Scheduler, one schedule per target |
 | `{"kind":"run","target":"<id>"}` | The same pass, "run now" | The console, through the `invoke` trigger adapter (`InvocationType: Event`) |
 | `{"kind":"refresh"}` | One directory refresh under the refresh lease (`DirectoryRefresh.Rate`, 15 minutes) | EventBridge Scheduler |
+| `{"kind":"check"}` | Each declared secret is read; a missing one fails it | A deploy |
 
 A target is a GitHub organisation, `github:links` or a Slack workspace. A pass holds its DynamoDB lease and returns `{"kind":"tick","target":"acme","outcome":"ran"}`.
 

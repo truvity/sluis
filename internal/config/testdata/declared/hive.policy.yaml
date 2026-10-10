@@ -1,0 +1,26 @@
+apiVersion: sluis.truvity.github.io/policy/v2
+vocabulary:
+  scopes:
+    all: {}
+  things:
+    console:
+      scopes: [all]
+      roles:
+        viewer: []
+groups:
+  all:console:viewer:
+    matchers:
+      - email_domain: example.com
+clients:
+  grafana:
+    kind: confidential
+    secret: clients/grafana/secret
+    redirects: [https://grafana.example/login/generic_oauth]
+    requires: [all:console:viewer]
+    groups: all
+  zot:
+    kind: confidential
+    secret: clients/zot/secret
+    redirects: [https://zot.example/zot/auth/callback/oidc]
+    requires: [all:console:viewer]
+    groups: all

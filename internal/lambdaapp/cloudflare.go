@@ -38,7 +38,7 @@ func openCloudflare(ctx context.Context, file string) (*Function, error) {
 	}
 	notFound := http.NotFoundHandler()
 	return &Function{
-		Handler: NewHTTP(notFound, nil, log).WithRPC(a.RPC()),
+		Handler: NewHTTP(notFound, nil, log).WithRPC(a.RPC()).WithCheck(checkFunc(file, config.SecretMinter)),
 		Flush: func(ctx context.Context) {
 			fctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 			defer cancel()

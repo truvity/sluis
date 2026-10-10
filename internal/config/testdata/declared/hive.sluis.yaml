@@ -1,0 +1,30 @@
+# A Kubernetes installation: a file signer (no state secret), the Google
+# client's id in the document, a Cloudflare minter and R2 credentials.
+apiVersion: sluis.truvity.github.io/sluis/v3
+issuerURL: https://access.example
+policy: {file: testdata/declared/hive.policy.yaml}
+secrets: {source: ssm, root: /sluis/example}
+oauthClient: {id: example.apps.example.com, provider: example}
+signingKey: {file: /var/run/sluis/signing-key/tls.key}
+cloudflare:
+  accounts:
+    main:
+      id: 0123456789abcdef0123456789abcdef
+      minter: internal/cloudflare/main/minter
+    edge:
+      id: fedcba9876543210fedcba9876543210
+      minter: internal/cloudflare/edge/minter
+  presets:
+    dns-example:
+      account: main
+      prototype: 9d3b1c7a5e2f4b8a9c0d1e2f3a4b5c6d
+      description: DNS edits for the release job
+      lifetime: 15m
+      rotation: 5m
+ports:
+  blob:
+    adapter: s3
+    s3:
+      bucket: sluis-example
+      endpoint: https://0123456789abcdef0123456789abcdef.r2.cloudflarestorage.com
+      credentialsRef: internal/blobs/r2

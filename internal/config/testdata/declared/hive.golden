@@ -1,0 +1,6 @@
+blob-credentials	subject=	ref=internal/blobs/r2
+client-secret	subject=grafana	name=clients/grafana/secret
+client-secret	subject=zot	name=clients/zot/secret
+cloudflare-minter	subject=edge	ref=internal/cloudflare/edge/minter
+cloudflare-minter	subject=main	ref=internal/cloudflare/main/minter
+signin-client-secret	subject=example	name=providers/google/example/client-secret

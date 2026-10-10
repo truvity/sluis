@@ -1,0 +1,17 @@
+# A Lambda installation: KMS-wrapped signing, a Google sign-in client, a
+# declared workspace, a recovery password; secrets in SSM.
+apiVersion: sluis.truvity.github.io/sluis/v3
+issuerURL: https://access.example
+policy: {file: testdata/declared/kernel.policy.yaml}
+secrets: {source: ssm, root: /sluis/prod, region: eu-west-1, layout: v5}
+recovery: {enabled: true, serviceAccount: sluis-recovery, audience: sluis-recovery, passwordSecret: recovery/password}
+oauthClient: {provider: prod}
+signingKey:
+  kmsWrapped: {keyId: alias/sluis-prod, stateSecret: issuer/state-secret}
+directory:
+  workspaces:
+    - {id: C0example, backend: google, admin: admin@example.com, keySecret: directory/C0example/key}
+ports:
+  blob:
+    adapter: s3
+    s3: {bucket: sluis-prod}

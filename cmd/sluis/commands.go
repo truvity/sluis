@@ -8,6 +8,8 @@ import (
 
 	"github.com/urfave/cli/v3"
 
+	"github.com/truvity/sluis/internal/config"
+	"github.com/truvity/sluis/internal/deploycheck"
 	"github.com/truvity/sluis/internal/module"
 	"github.com/truvity/sluis/internal/module/cloudflare"
 	"github.com/truvity/sluis/internal/module/github"
@@ -97,6 +99,7 @@ func newApp(out io.Writer) *cli.Command {
 			legacy("serve", "the one process: the issuer, the directory hub and the console, and the controllers the document names", serveRun, out),
 			legacy("controller", "(deprecated) a controller alone: github or slack", controllerCmd, out),
 			legacy("tick", "one tick, once: github or slack, then the target", tickCmd, out),
+			legacy("check", "verify that every secret the document and its policy declare is in SSM: names and versions, never values", checkCmd, out),
 			legacy("migrate", "copy the State from one storage to another: --from <config> --to <config>", migrateCmd, out),
 			{
 				Name:  "version",
@@ -116,6 +119,26 @@ func newApp(out io.Writer) *cli.Command {
 		},
 	}
 	return app
+}
+
+// checkCmd is `sluis check --config <file>`: one read of each declared secret
+// from the SSM the document's `secrets` section names, and a verdict per name.
+// It prints addresses and versions and nothing else, and exits non-zero when
+// one is missing, empty or (the state secret) malformed. A deploy runs it
+// before the first request would find out (docs/reference/sluis/secrets.md).
+func checkCmd(out io.Writer, args []string) error {
+	return start(out, "sluis check", "sluis", args, func(ctx context.Context, file string) error {
+		c, err := config.LoadConfig[config.Sluis](file, nil)
+		if err != nil {
+			return err
+		}
+		rep, err := deploycheck.Check(ctx, &c.Service.Serve, c.Policy)
+		if err != nil {
+			return err
+		}
+		rep.Write(out)
+		return rep.Err()
+	})
 }
 
 func controllerCmd(out io.Writer, args []string) error {

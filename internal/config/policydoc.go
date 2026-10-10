@@ -2,6 +2,7 @@ package config
 
 import (
 	"bytes"
+	"cmp"
 	"errors"
 	"fmt"
 	"net/url"
@@ -520,4 +521,119 @@ func requireHTTPS(field, raw string) error {
 // counted as consumers.
 func (d *PolicyDocument) Unconsumed() []string {
 	return d.Policy.Unconsumed(d.GitHubCatalogue().GrantGroups()...)
+}
+
+// The kinds of a [DeclaredSecret].
+const (
+	// SecretRecoveryPassword is the password of the recovery sign-in.
+	SecretRecoveryPassword = "recovery-password"
+	// SecretStateSecret is the sign-in state's secret of a KMS-signed issuer.
+	SecretStateSecret = "state-secret"
+	// SecretSignInClientID is the Google sign-in client's id.
+	SecretSignInClientID = "signin-client-id"
+	// SecretSignInClientSecret is the Google sign-in client's secret.
+	SecretSignInClientSecret = "signin-client-secret"
+	// SecretClient is a seeded confidential client's secret.
+	SecretClient = "client-secret"
+	// SecretWorkspaceKey is a declared workspace's service-account key.
+	SecretWorkspaceKey = "workspace-key"
+	// SecretMinter is a Cloudflare account's minter credential.
+	SecretMinter = "cloudflare-minter"
+	// SecretBlobCredentials is the S3-compatible blob store's credential document.
+	SecretBlobCredentials = "blob-credentials"
+)
+
+// DeclaredSecret is one secret a service document and its policy declare, and
+// the installation must therefore hold: it is read at the first request that
+// needs it, so a missing or mistyped one is found by a check at deploy time or
+// by a person at the first sign-in.
+//
+// Only what a document DECLARES is here. What sluis creates at run time (the
+// console's session key, a GitHub or Slack App's credential, which the console
+// writes when an operator makes the App) is not: no document names it before
+// it exists.
+type DeclaredSecret struct {
+	// Kind is one of the Secret* constants.
+	Kind string
+	// Subject is what the secret belongs to: a Google provider, a client id, a
+	// workspace id, a Cloudflare account; empty when there is one of the kind.
+	Subject string
+	// Name is where layout v4 keeps it. For a Ref it is the internal address
+	// (`internal/<module>/<name>`) the document gives, the same in every
+	// layout; otherwise it is the secret's name below `internal/config/`.
+	Name string
+	// Ref says Name is an address and not a name.
+	Ref bool
+}
+
+// DeclaredSecrets is the set of secrets doc and pol declare, sorted by kind,
+// subject and name, without repeats. pol may be nil. It reads nothing, and no
+// value is ever in it.
+//
+// The rules:
+//
+//   - the recovery password, when `recovery.passwordSecret` names it and
+//     `recovery.enabled` is not false;
+//   - the state secret, when `signingKey.kms` or `signingKey.kmsWrapped` is
+//     set (a file signer has none);
+//   - the Google sign-in client: its secret, and its id unless
+//     `oauthClient.id` gives it;
+//   - the secret of every confidential client of the policy that names one (a
+//     generated secret is the issuer's to make);
+//   - the key of every declared workspace;
+//   - the minter of every Cloudflare account, and the S3 credentials document
+//     `ports.blob.s3.credentialsRef` names.
+func DeclaredSecrets(doc *Serve, pol *PolicyDocument) []DeclaredSecret {
+	var out []DeclaredSecret
+	if doc != nil {
+		out = append(out, declaredFromService(doc)...)
+	}
+	if pol != nil {
+		for id, c := range pol.Policy.Clients {
+			if c.Kind == policy.KindConfidential && c.SecretName() != "" && !c.SecretGenerated() {
+				// The layout's name for a client secret, whatever the policy calls it
+				// (internal/secrets.ClientSecret).
+				out = append(out, DeclaredSecret{Kind: SecretClient, Subject: id, Name: "clients/" + id + "/secret"})
+			}
+		}
+	}
+	slices.SortFunc(out, func(a, b DeclaredSecret) int {
+		return cmp.Or(strings.Compare(a.Kind, b.Kind), strings.Compare(a.Subject, b.Subject), strings.Compare(a.Name, b.Name))
+	})
+	return slices.Compact(out)
+}
+
+func declaredFromService(doc *Serve) []DeclaredSecret {
+	var out []DeclaredSecret
+	if r := doc.Recovery; r != nil && r.LoginSecret != "" && (r.Enabled == nil || *r.Enabled) {
+		out = append(out, DeclaredSecret{Kind: SecretRecoveryPassword, Name: r.LoginSecret})
+	}
+	if k := doc.SigningKey; k != nil {
+		if k.KMS != nil {
+			out = append(out, DeclaredSecret{Kind: SecretStateSecret, Name: k.KMS.StateSecret})
+		}
+		if k.KMSWrapped != nil {
+			out = append(out, DeclaredSecret{Kind: SecretStateSecret, Name: k.KMSWrapped.StateSecret})
+		}
+	}
+	if o := doc.OAuthClient; o != nil && o.Provider != "" {
+		if o.ID == "" {
+			out = append(out, DeclaredSecret{Kind: SecretSignInClientID, Subject: o.Provider, Name: "providers/google/" + o.Provider + "/client-id"})
+		}
+		out = append(out, DeclaredSecret{Kind: SecretSignInClientSecret, Subject: o.Provider, Name: "providers/google/" + o.Provider + "/client-secret"})
+	}
+	if doc.Directory != nil {
+		for _, w := range doc.Directory.Workspaces {
+			out = append(out, DeclaredSecret{Kind: SecretWorkspaceKey, Subject: w.ID, Name: w.KeySecret})
+		}
+	}
+	if cf := doc.Cloudflare; cf != nil && cf.Remote == nil {
+		for account, a := range cf.Accounts {
+			out = append(out, DeclaredSecret{Kind: SecretMinter, Subject: account, Name: a.Minter, Ref: true})
+		}
+	}
+	if s3 := doc.blobS3(); s3 != nil && s3.CredentialsRef != "" {
+		out = append(out, DeclaredSecret{Kind: SecretBlobCredentials, Name: s3.CredentialsRef, Ref: true})
+	}
+	return out
 }

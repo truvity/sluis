@@ -13,6 +13,7 @@ import (
 
 	"github.com/truvity/sluis/storage/logtest"
 
+	"github.com/truvity/sluis/internal/deploycheck"
 	"github.com/truvity/sluis/internal/lambdaapp"
 	"github.com/truvity/sluis/internal/port/memory"
 	"github.com/truvity/sluis/internal/rails"
@@ -268,5 +269,39 @@ func TestTheRetiredExportsEventIsRefused(t *testing.T) {
 	h := lambdaapp.NewHTTP(http.NotFoundHandler(), nil, nil)
 	if _, err := h.Handle(context.Background(), json.RawMessage(`{"kind":"exports"}`)); err == nil {
 		t.Error("the retired exports event was accepted")
+	}
+}
+
+// A check event answers with the report of the declared secrets, and a missing
+// one is an error of the invocation that names the address and nothing else.
+func TestACheckEventFailsTheInvocationForAMissingSecret(t *testing.T) {
+	const value = "SENTINEL-VALUE-1b7e"
+	present := deploycheck.Report{Layout: "v5", Root: "/sluis/prod", OK: true,
+		Results: []deploycheck.Result{{Kind: "recovery-password", Address: "/sluis/prod/internal/oidc/recovery-password", Version: 3, OK: true}}}
+	missing := deploycheck.Report{Layout: "v5", Root: "/sluis/prod", OK: false,
+		Results: []deploycheck.Result{{Kind: "state-secret", Address: "/sluis/prod/internal/oidc/state-secret", Problem: "missing"}}}
+	h := lambdaapp.NewHTTP(http.NotFoundHandler(), nil, nil)
+
+	if _, err := h.Handle(t.Context(), json.RawMessage(`{"kind":"check"}`)); err == nil {
+		t.Fatal("a function with no document answered a check")
+	}
+	h.WithCheck(func(context.Context) (deploycheck.Report, error) { return present, nil })
+	out, err := h.Handle(t.Context(), json.RawMessage(`{"kind":"check"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep, ok := out.(deploycheck.Report); !ok || !rep.OK {
+		t.Fatalf("%#v", out)
+	}
+	h.WithCheck(func(context.Context) (deploycheck.Report, error) { return missing, nil })
+	_, err = h.Handle(t.Context(), json.RawMessage(`{"kind":"check"}`))
+	if err == nil || !strings.Contains(err.Error(), "/sluis/prod/internal/oidc/state-secret: missing") || strings.Contains(err.Error(), value) {
+		t.Fatalf("%v", err)
+	}
+	h.WithCheck(func(context.Context) (deploycheck.Report, error) {
+		return deploycheck.Report{}, errors.New("secrets.source is not ssm")
+	})
+	if _, err = h.Handle(t.Context(), json.RawMessage(`{"kind":"check"}`)); err == nil {
+		t.Fatal("a check that could not run passed")
 	}
 }
