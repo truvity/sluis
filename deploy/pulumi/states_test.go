@@ -205,7 +205,7 @@ func TestTheFunctionRoleIsGrantedTheModuleTablesAndTheLegacyOne(t *testing.T) {
 			t.Errorf("%s: %v", m, acts)
 		}
 	}
-	if got := byResource[tableArn("sluis-staging-backup")]; !reflect.DeepEqual(got, []string{"dynamodb:GetItem"}) {
+	if got := byResource[tableArn("sluis-staging-backup")]; len(got) != 0 {
 		t.Errorf("backup: %v", got)
 	}
 	if got := byResource[tableArn("sluis-staging-cloudflare")]; len(got) != 0 {

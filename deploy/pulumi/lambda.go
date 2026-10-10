@@ -707,13 +707,13 @@ func (a *LambdaArgs) validateLayout() error {
 	}
 	if a.Layout.has5() && a.State != nil {
 		var missing []string
-		for _, m := range append(hostedModules(a.cloudflare()), ModuleBackup) {
+		for _, m := range hostedModules(a.cloudflare()) {
 			if a.State.Tables[m] == nil {
 				missing = append(missing, string(m))
 			}
 		}
 		if len(missing) > 0 {
-			return fmt.Errorf("sluispulumi: LambdaArgs.Layout %q needs the tables of the modules the function hosts and the backup table "+
+			return fmt.Errorf("sluispulumi: LambdaArgs.Layout %q needs the tables of the modules the function hosts "+
 				"in State.Tables (States.Grant()); missing %v", a.Layout, missing)
 		}
 	}
