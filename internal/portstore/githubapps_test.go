@@ -337,3 +337,55 @@ func TestTheConfigurationSetsLabelsAndTheAppRef(t *testing.T) {
 		}
 	})
 }
+
+// An organisation whose stored record names an App needs no entry in the
+// configuration: it is written again, and mints from the App's key, without one;
+// an entry overrides.
+func TestAnOrganisationKeepsTheAppItsStoredRecordNames(t *testing.T) {
+	each(t, func(t *testing.T, e env) {
+		set := e.open(t)
+		stores := secretstore.FromStoreV5(memory.New(), "")
+		plain := portstore.New(set).WithV5(stores)
+		crec := catalogueapp.Record{ID: "example-access", Org: "acme", AppID: 8, AppSlug: "example-access", InstallationID: 11, ConnectedAt: appsAt}
+		if err := portstore.NewGitHubCatalogueApps(plain).Put(ctx, crec, "CAT-KEY"); err != nil {
+			t.Fatal(err)
+		}
+		other := catalogueapp.Record{ID: "other", Org: "acme", AppID: 9, AppSlug: "other", InstallationID: 12, ConnectedAt: appsAt}
+		if err := portstore.NewGitHubCatalogueApps(plain).Put(ctx, other, "OTHER-KEY"); err != nil {
+			t.Fatal(err)
+		}
+		rec := connection.Record{Org: "acme", AppID: 8, AppSlug: "example-access", InstallationID: 11, ConnectedAt: appsAt, AppRef: "example-access"}
+		if err := portstore.NewGitHubOrgs(plain).Put(ctx, rec, connection.Credential{Org: "acme"}); err != nil {
+			t.Fatal(err)
+		}
+
+		// A process configured with no entry for the organisation.
+		b := portstore.New(set).WithV5(stores).DeclareGitHubApps(portstore.DeclaredGitHubApps{AppRef: func(string) string { return "" }})
+		orgs := portstore.NewGitHubOrgs(b)
+		cred, ok, err := orgs.Credential(ctx, "acme")
+		if err != nil || !ok || cred.PrivateKey != "CAT-KEY" || cred.AppID != 8 || cred.InstallationID != 11 {
+			t.Fatalf("Credential = %+v, %v, %v", cred, ok, err)
+		}
+		again := rec
+		again.AppRef = ""
+		if err = orgs.Put(ctx, again, connection.Credential{Org: "acme"}); err != nil {
+			t.Fatalf("a record written again without an App was refused though the stored one names it: %v", err)
+		}
+		if list, err := orgs.List(ctx); err != nil || len(list) != 1 || list[0].AppRef != "example-access" {
+			t.Fatalf("List = %+v, %v", list, err)
+		}
+		// An organisation nobody stored is still refused.
+		if err = orgs.Put(ctx, connection.Record{Org: "new", AppID: 8, AppSlug: "s"}, connection.Credential{Org: "new"}); err == nil {
+			t.Error("an organisation with no App was kept on layout v5")
+		}
+
+		// An entry overrides what is stored.
+		o := portstore.New(set).WithV5(stores).DeclareGitHubApps(portstore.DeclaredGitHubApps{AppRef: func(string) string { return "other" }})
+		if err = portstore.NewGitHubOrgs(o).Put(ctx, again, connection.Credential{Org: "acme"}); err != nil {
+			t.Fatal(err)
+		}
+		if cred, _, err = orgs.Credential(ctx, "acme"); err != nil || cred.PrivateKey != "OTHER-KEY" {
+			t.Errorf("the entry did not override: %v", err)
+		}
+	})
+}

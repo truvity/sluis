@@ -43,6 +43,7 @@ func installationSchema() m {
 	githubProps, _ := github["properties"].(m)
 	slackProps, _ := slack["properties"].(m)
 	githubProps["enabledOrgs"] = list("The organisations the controller may CHANGE (the policy document's `controllers.github.enabledOrgs`). Each must be bound by `access.github`. The rest are derived every pass and left alone.", m{"type": "string", "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9]|-[A-Za-z0-9])*$"})
+	githubProps["appRefs"] = m{"type": "object", "propertyNames": m{"pattern": "^[A-Za-z0-9](?:[A-Za-z0-9]|-[A-Za-z0-9])*$"}, "additionalProperties": m{"type": "string", "pattern": "^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$"}, "description": "Optional. For an organisation `access.github` binds, the id of the catalogue App (in `apps.github.apps`, created under that organisation) whose key its record refers to (the policy document's `controllers.github.appRefs`). An organisation connected with an App of its own keeps naming it without an entry; an entry names another App, or declares an organisation anew."}
 	slackProps["enabledWorkspaces"] = list("The workspaces the controller may CHANGE (the policy document's `controllers.slack.enabledWorkspaces`), by the key of `access.slack.workspaces`.", m{"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$"})
 	controllers["description"] = "The controllers this installation runs, each in its own loop; an absent one is off. A section's own keys go to the service document's `controllers`; `enabledOrgs` and `enabledWorkspaces` go to the policy document's."
 

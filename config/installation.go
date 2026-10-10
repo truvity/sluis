@@ -244,6 +244,11 @@ type Controllers struct {
 type GitHubController struct {
 	internal.GitHubController
 	EnabledOrgs []string `json:"enabledOrgs,omitempty"`
+	// AppRefs names, by organisation, the catalogue App whose key the
+	// organisation's record refers to. Optional: an organisation that was
+	// connected with an App of its own keeps naming it, so an entry is
+	// needed only to name another App or to declare an organisation anew.
+	AppRefs map[string]string `json:"appRefs,omitempty"`
 }
 
 // SlackController is [GitHubController] for Slack.

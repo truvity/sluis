@@ -733,7 +733,7 @@
                     "pattern": "^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$",
                     "type": "string"
                   },
-                  "description": "For an organisation the github table binds, the id of the catalogue App (in `apps.github.apps`, created under that organisation) whose key its record refers to, `app_ref`. On storage layout v5 an organisation must refer to an App.",
+                  "description": "For an organisation the github table binds, the id of the catalogue App (in `apps.github.apps`, created under that organisation) whose key its record refers to, `app_ref`. Optional: an organisation whose record already names an App keeps it, so an entry only overrides it or declares an organisation anew.",
                   "propertyNames": {
                     "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9]|-[A-Za-z0-9])*$"
                   },
