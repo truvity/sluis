@@ -206,6 +206,7 @@ var rules5 = []rule5{
 var setRules5 = []rule5{
 	r5(ModuleOIDC, "keyring-index", "issuer:keyring:index:", convID),
 	r5(ModuleOIDC, "sso-clients", "issuer:sso-clients:", convID),
+	r5(ModuleOIDC, "sso-of", "issuer:sso-of:", convID),
 	r5(ModuleOIDC, "sessions-of", "issuer:sessions-of:", convID),
 	r5(ModuleOIDC, "sessions-for", "issuer:sessions-for:", convID),
 	r5exact(ModuleOIDC, "sso-index", "issuer:sso", "all"),
