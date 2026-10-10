@@ -69,6 +69,13 @@ const (
 var regenerated = map[string]bool{"lease": true, "notify": true, "gate": true, "cache": true, "dedupe": true,
 	"maintenance": true}
 
+// ownRecord reports whether the key is one of the backup module's own run
+// records or its retention marker: they describe the installation that was
+// backed up, not the one restored into, and the module writes them afresh.
+func ownRecord(a port.Address5) bool {
+	return a.Module == port.ModuleBackup && (a.Kind == "run" || a.Kind == "retention")
+}
+
 // Preview verifies the archive and reports what Apply would do. It writes
 // nothing.
 func Preview(ctx context.Context, r *backup.Reader, t Target, opt Options) (*Report, error) {
@@ -283,7 +290,7 @@ func (p *run) state(ctx context.Context, mod port.Module, r export.State) error 
 	if err != nil {
 		return fmt.Errorf("%w: key %q", ErrArchive, r.Key)
 	}
-	if regenerated[a.Kind] {
+	if regenerated[a.Kind] || ownRecord(a) {
 		p.note(Regenerated, TypeState, r.Key, "")
 		return nil
 	}
