@@ -118,6 +118,10 @@ func TestTokensAndReuseAreCounted(t *testing.T) {
 	if got := counted(t, "access_issuer.tokens.issued", issued...); got < issuedBefore+1 {
 		t.Errorf("tokens issued for a declared client = %d, want at least %d", got, issuedBefore+1)
 	}
+	// The same count under the name that replaces it.
+	if got, old := counted(t, "sluis.tokens.issued", issued...), counted(t, "access_issuer.tokens.issued", issued...); got != old {
+		t.Errorf("sluis.tokens.issued = %d, access_issuer.tokens.issued = %d, want them equal", got, old)
+	}
 
 	if err = storage.DeleteAuthRequest(ctx, request); err != nil {
 		t.Fatalf("DeleteAuthRequest: %v", err)

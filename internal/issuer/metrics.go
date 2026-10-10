@@ -11,6 +11,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/truvity/sluis/gen/accessissuer/v1/accessissuerv1connect"
+	"github.com/truvity/sluis/internal/telemetry"
 )
 
 // What the issuer counts, beyond the signing keys (keyring_metrics.go) and the
@@ -22,12 +23,12 @@ import (
 // every client, [clientLabel] refuses an id it does not, and a deployment has
 // tens of clients, not thousands.
 type issuerInstruments struct {
-	tokens   metric.Int64Counter
-	failures metric.Int64Counter
-	logins   metric.Int64Counter
-	reuse    metric.Int64Counter
-	ahead    metric.Int64Counter
-	dead     metric.Int64Counter
+	tokens   telemetry.Int64Counter
+	failures telemetry.Int64Counter
+	logins   telemetry.Int64Counter
+	reuse    telemetry.Int64Counter
+	ahead    telemetry.Int64Counter
+	dead     telemetry.Int64Counter
 }
 
 // meterName is the instrumentation scope of the issuer's instruments, the
@@ -40,19 +41,19 @@ func newIssuerInstruments() issuerInstruments {
 	meter := otel.Meter(meterName)
 	// Instrument creation fails only on an invalid name, which these are not;
 	// a failed one is a no-op instrument, never a stopped issuer.
-	tokens, _ := meter.Int64Counter("access_issuer.tokens.issued",
+	tokens := telemetry.NewInt64Counter(meter, "access_issuer.tokens.issued",
 		metric.WithDescription("Access tokens signed, by client id (declared clients only; anything else is `other`) and grant type."))
-	failures, _ := meter.Int64Counter("access_issuer.login.failures",
+	failures := telemetry.NewInt64Counter(meter, "access_issuer.login.failures",
 		metric.WithDescription("Sign-ins that did not complete, by reason: a fixed set, see docs/reference/sluis/telemetry.md."))
-	logins, _ := meter.Int64Counter("access_issuer.login.successes",
+	logins := telemetry.NewInt64Counter(meter, "access_issuer.login.successes",
 		metric.WithDescription("Sign-ins that completed, by how the person was proved: a directory's kind, `recovery` or `browser_session`."))
-	reuse, _ := meter.Int64Counter("access_issuer.reuse_detected",
+	reuse := telemetry.NewInt64Counter(meter, "access_issuer.reuse_detected",
 		metric.WithDescription("A credential presented that was already spent, by kind: an authorization code (its session is ended) "+
 			"or a refresh token outside the grace window (spent in a live session, which is then ended; or unknown)."))
-	ahead, _ := meter.Int64Counter("access_issuer.spent_mark_ahead",
+	ahead := telemetry.NewInt64Counter(meter, "access_issuer.spent_mark_ahead",
 		metric.WithDescription("Spent refresh token marks read that are dated more than 2 s ahead of this replica's clock: "+
 			"the replicas' clocks disagree, which moves the 30-second grace window."))
-	dead, _ := meter.Int64Counter("access_issuer.dead_refresh_token_hits",
+	dead := telemetry.NewInt64Counter(meter, "access_issuer.dead_refresh_token_hits",
 		metric.WithDescription("Refresh tokens refused from the issuer's in-process negative cache: a token already refused "+
 			"as naming no live session, presented again within 5 minutes, and refused with no State read."))
 	return issuerInstruments{tokens, failures, logins, reuse, ahead, dead}
