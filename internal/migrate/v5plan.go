@@ -776,7 +776,9 @@ func (p *planner) issuer(ctx context.Context) error {
 	} else {
 		p.note("the destination's State cannot list the issuer's records, so they are all counted as new")
 	}
+	sourceGuard := false
 	err := srcEx.ExportState(ctx, issuerPrefix, func(x port.Exported) error {
+		sourceGuard = sourceGuard || x.Key == guardKey
 		g := issuerGroup{module: "oidc", from: issuerFamily(x.Key)}
 		t, terr := StateTarget(x.Key)
 		switch {
@@ -796,6 +798,9 @@ func (p *planner) issuer(ctx context.Context) error {
 	})
 	if err != nil {
 		return fmt.Errorf("read the source's issuer records: %w", err)
+	}
+	if !sourceGuard {
+		p.strayGuard(dstState, groups, writes)
 	}
 	if err = p.indexes(ctx, groups, writes); err != nil {
 		return err
@@ -820,6 +825,29 @@ func (p *planner) issuer(ctx context.Context) error {
 		p.add(g.module, it)
 	}
 	return nil
+}
+
+// guardKey is the record a KMS-signed issuer keeps of its state secret's
+// fingerprint.
+const guardKey = "issuer:kms:state-secret-fingerprint"
+
+// strayGuard plans the destination's fingerprint when the source has none (its
+// issuer never signed anyone in). The destination takes the source's state
+// secret, so a fingerprint of its own secret left behind would fail its first
+// sign-in: it is a different item, and --overwrite deletes it so that the
+// destination's guard matches the source's, absence included.
+func (p *planner) strayGuard(dst map[string]port.Exported, groups map[issuerGroup]int, writes map[issuerGroup][]issuerWrite) {
+	if _, ok := dst[guardKey]; !ok {
+		return
+	}
+	g := issuerGroup{module: "oidc", kind: "guard", from: issuerFamily(guardKey), status: PlanDifferent,
+		reason: "the source has no fingerprint of the state secret and the destination holds one; --overwrite deletes it"}
+	if p.collect {
+		writes[g] = append(writes[g], func(ctx context.Context, _ time.Duration) (bool, error) {
+			return false, p.to.Stores.Ports.State.Delete(ctx, guardKey)
+		})
+	}
+	groups[g]++
 }
 
 // issuerWrite is one issuer record, or one Index set, to write: it is told how

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/truvity/sluis/internal/migrate"
+	"github.com/truvity/sluis/internal/port"
 	sluissecrets "github.com/truvity/sluis/internal/secrets"
 	"github.com/truvity/sluis/internal/secretstore"
 	"github.com/truvity/sluis/internal/secretstore/secretrec"
@@ -298,4 +299,40 @@ func TestTwoPassCopy(t *testing.T) {
 	}
 	noPlanSecrets(t, r1.JSON())
 	noPlanSecrets(t, r2.JSON())
+}
+
+// A destination whose issuer recorded a fingerprint of its own state secret,
+// beside a source that never recorded one: the destination's guard is to match
+// the source's, absence included.
+func TestOverwriteDeletesADestinationFingerprintTheSourceLacks(t *testing.T) {
+	src, dst := copied(t)
+	const key = "issuer:kms:state-secret-fingerprint"
+	if err := src.st.Ports.State.Delete(ctx, key); err != nil {
+		t.Fatal(err)
+	}
+	from, to := side("v4.yaml", src.st), side("v5.yaml", dst.st)
+
+	verified, err := migrate.VerifyV5(ctx, from, to, planOptions())
+	if !errors.Is(err, migrate.ErrMismatch) || verified.Totals.Different != 1 {
+		t.Fatalf("VerifyV5 = %v, %+v, want one different item (the stray fingerprint)", err, verified.Totals)
+	}
+	report, err := migrate.CopyV5(ctx, from, to, copyOptions())
+	if !errors.Is(err, migrate.ErrConflict) || report.Totals.Different != 1 {
+		t.Fatalf("CopyV5 = %v, %+v, want ErrConflict", err, report.Totals)
+	}
+	if _, err = dst.st.Ports.State.Get(ctx, key); err != nil {
+		t.Fatalf("a refused copy removed the fingerprint: %v", err)
+	}
+
+	opt := copyOptions()
+	opt.Overwrite = true
+	if report, err = migrate.CopyV5(ctx, from, to, opt); err != nil || report.Totals.Copied != 1 {
+		t.Fatalf("CopyV5 --overwrite = %v, %+v\n%s", err, report.Totals, report.JSON())
+	}
+	if _, err = dst.st.Ports.State.Get(ctx, key); !errors.Is(err, port.ErrNotFound) {
+		t.Errorf("the destination's fingerprint after --overwrite: %v, want ErrNotFound", err)
+	}
+	if verified, err = migrate.VerifyV5(ctx, from, to, planOptions()); err != nil {
+		t.Fatalf("VerifyV5 after --overwrite = %v\n%s", err, verified.JSON())
+	}
 }
