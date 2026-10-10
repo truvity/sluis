@@ -11,12 +11,15 @@ Self-hosted runners register with one GitHub App per tier. The console creates i
 
 ## The policy snippet
 
-The tiers are values of the chart; the policy gets them as `apps.github.runnerTiers`:
+The tiers are runner entries of the policy's `apps.github.apps`:
 
 ```yaml
-config:
-  github:
-    runnerTiers: [preview, stable]
+policy:
+  apps:
+    github:
+      apps:
+        - {purpose: runner, tier: preview}
+        - {purpose: runner, tier: stable}
 ```
 
 ## The exchange / command
@@ -37,4 +40,4 @@ copy in the runners' namespace.
 Full recipe: [Runner Apps](../../runner-apps.md). Why a runner App is per tier:
 [connect a GitHub organisation](../github-organisation.md#5-add-runner-apps).
 
-Snippet source: `tests/golden/sluis/full.yaml` carries `runnerTiers`; the snippet is accepted by the chart's values schema.
+Snippet source: `tests/golden/sluis/full.yaml` carries these entries; the snippet is accepted by the chart's values schema.

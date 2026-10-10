@@ -193,7 +193,7 @@ func openSide(ctx context.Context, file string, log *slog.Logger, kc func(string
 			slog.String("error", err.Error()))
 		return side, nil, nil
 	}
-	return side, pol.GitHubCatalogue().Exported, nil
+	return side, pol.GitHubAppExported, nil
 }
 
 // printSummary says, per concern, what the run found, for the operator who reads

@@ -12,6 +12,7 @@ import (
 	yaml "go.yaml.in/yaml/v3"
 
 	"github.com/truvity/sluis/internal/githubapp/catalogue"
+	"github.com/truvity/sluis/internal/githubroster/appid"
 	slackcatalogue "github.com/truvity/sluis/internal/slackapp/catalogue"
 	"github.com/truvity/sluis/policy"
 )
@@ -114,10 +115,15 @@ type (
 
 	// AppsGitHub is the GitHub Apps an operator may make.
 	AppsGitHub struct {
-		// RunnerTiers are the tiers an operator may create a runner App for.
+		// Apps is every GitHub App the installation declares, of every purpose:
+		// the link App, the catalogue Apps an operator creates and installs from
+		// the console, and the runner tiers an operator may create an App for.
+		Apps []GitHubApp `yaml:"apps,omitempty"`
+		// RunnerTiers is DEPRECATED, read for one release: each tier is a
+		// runner entry of Apps.
 		RunnerTiers []string `yaml:"runnerTiers,omitempty"`
-		// Catalogue is every catalogue App, created and installed from the
-		// console.
+		// Catalogue is DEPRECATED, read for one release: each App is a catalogue
+		// entry of Apps.
 		Catalogue []catalogue.App `yaml:"catalogue,omitempty"`
 	}
 
@@ -139,6 +145,10 @@ type (
 		// EnabledOrgs are the organisations it changes. Each must be bound
 		// by the policy's github table.
 		EnabledOrgs []string `yaml:"enabledOrgs,omitempty"`
+		// AppRefs names, by organisation, the catalogue App whose key the
+		// organisation's record refers to (`app_ref`). On storage layout v5 an
+		// organisation must refer to an App.
+		AppRefs map[string]string `yaml:"appRefs,omitempty"`
 	}
 
 	// ControllersSlack is what the Slack controller may change.
@@ -212,6 +222,7 @@ func decodePolicyDocument(raw []byte) (*PolicyDocument, error) {
 	if err := dec.Decode(&s); err != nil {
 		return nil, fmt.Errorf("parse the policy document: %w", err)
 	}
+	foldLegacyApps(s.Apps, "the policy document")
 	return &PolicyDocument{
 		APIVersion: APIVersion("policy"), Policy: p,
 		Exchange: s.Exchange, Apps: s.Apps, Controllers: s.Controllers, CloudflareGrants: s.Cloudflare,
@@ -301,20 +312,27 @@ func (d *PolicyDocument) GitHubOwners() []string {
 	return d.Exchange.GitHub.Owners
 }
 
-// RunnerTiers are the tiers an operator may create a runner App for.
+// RunnerTiers are the tiers an operator may create a runner App for: those of
+// the runner entries, each once.
 func (d *PolicyDocument) RunnerTiers() []string {
-	if d == nil || d.Apps == nil || d.Apps.GitHub == nil {
-		return nil
+	var out []string
+	for _, a := range d.GitHubApps() {
+		if a.Purpose == appid.Runner && !slices.Contains(out, a.Tier) {
+			out = append(out, a.Tier)
+		}
 	}
-	return d.Apps.GitHub.RunnerTiers
+	return out
 }
 
-// GitHubCatalogue is the GitHub App catalogue, never nil.
+// GitHubCatalogue is the catalogue Apps of the list, never nil.
 func (d *PolicyDocument) GitHubCatalogue() *catalogue.Catalogue {
-	if d == nil || d.Apps == nil || d.Apps.GitHub == nil {
-		return &catalogue.Catalogue{}
+	c := &catalogue.Catalogue{}
+	for _, a := range d.GitHubApps() {
+		if a.Purpose == appid.Catalogue {
+			c.Apps = append(c.Apps, a.Catalogue())
+		}
 	}
-	return &catalogue.Catalogue{Apps: d.Apps.GitHub.Catalogue}
+	return c
 }
 
 // SlackCatalogue is the Slack App catalogue, never nil.
@@ -385,23 +403,7 @@ func (d *PolicyDocument) Validate() error {
 
 func (d *PolicyDocument) validateApps() []error {
 	var errs []error
-	tiers := map[string]bool{}
-	for _, tier := range d.RunnerTiers() {
-		if tiers[tier] {
-			errs = append(errs, fmt.Errorf("apps.github.runnerTiers: %q is listed twice", tier))
-		}
-		tiers[tier] = true
-	}
-	github := d.GitHubCatalogue()
-	if err := github.Validate(); err != nil {
-		errs = append(errs, fmt.Errorf("apps.github.catalogue: %w", err))
-	}
-	// A grant naming a group the policy does not declare would read as though
-	// somebody may ask for a token, and nobody could.
-	if undeclared := github.UndeclaredGroups(func(g string) bool { _, ok := d.Policy.Groups[g]; return ok }); len(undeclared) > 0 {
-		errs = append(errs, fmt.Errorf("apps.github.catalogue: grants name groups the policy does not declare: %s",
-			strings.Join(undeclared, "; ")))
-	}
+	errs = append(errs, d.validateGitHubApps()...)
 	slack := d.SlackCatalogue()
 	if err := slack.Validate(); err != nil {
 		errs = append(errs, fmt.Errorf("apps.slack.catalogue: %w", err))
@@ -421,6 +423,7 @@ func (d *PolicyDocument) validateControllers() []error {
 			errs = append(errs, fmt.Errorf("controllers.github.enabledOrgs names %s, which the policy's github table does not bind", org))
 		}
 	}
+	errs = append(errs, d.validateAppRefs()...)
 	for _, ws := range d.EnabledWorkspaces() {
 		if _, declared := d.Policy.Slack.Workspaces[ws]; !declared {
 			errs = append(errs, fmt.Errorf("controllers.slack.enabledWorkspaces names %s, which the policy's slack table does not declare", ws))

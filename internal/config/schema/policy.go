@@ -182,6 +182,33 @@ func catalogueAppSchema() m {
 	}, "id", "org", "permissions")
 }
 
+// githubAppSchema is one entry of `apps.github.apps`: a catalogue App's
+// declaration, a runner tier or the link App, told apart by `purpose`.
+func githubAppSchema() m {
+	app := catalogueAppSchema()
+	props := app["properties"].(m)
+	props["id"] = m{"type": "string", "pattern": "^[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?$", "description": "The App's key in storage, unique, never changes. `link` for the link App; for a catalogue App [a-z0-9-], at most 32, not beginning `runner-`; a runner entry may leave it out (`runner-<tier>`, and `runner-<tier>-<org>` with an `org`)."}
+	props["purpose"] = m{"enum": []string{"link", "catalogue", "runner"}, "description": "What the App is for: `link` is the App that links a person's GitHub account, `catalogue` an App an operator creates and installs from the console, `runner` the tier an operator may create a runner App for."}
+	props["labels"] = m{"type": "object", "maxProperties": 16, "propertyNames": m{"pattern": "^[a-z0-9]([a-z0-9._-]{0,61}[a-z0-9])?$"}, "additionalProperties": m{"type": "string", "pattern": "^([a-z0-9]([a-z0-9._-]{0,61}[a-z0-9])?)?$"}, "description": "At most 16 short lower-case labels, key to value, kept on the App's record for a reader that selects Apps by them."}
+	props["tier"] = m{"type": "string", "pattern": "^[a-z0-9]([a-z0-9-]{0,14}[a-z0-9])?$", "description": "A runner entry's tier: lower-case letters, digits and dashes, at most 16."}
+	props["org"] = m{"type": "string", "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9]|-[A-Za-z0-9]){0,38}$", "description": "The organisation a catalogue App is created under (required for it), or the only organisation of a runner entry (no `org` offers the tier in every organisation). The link App's owner."}
+	props["export"] = boolean("Place the installed App's key at `external/github/<id>` for a consumer to read. Unset keeps it internal. A runner App is always exported.")
+	app["description"] = "One App. A `catalogue` entry needs `org` and `permissions`; a `runner` entry needs `tier` and declares nothing of a catalogue App's; the `link` entry has the id `link`."
+	app["required"] = []string{"purpose"}
+	app["allOf"] = []any{
+		m{"if": m{"properties": m{"purpose": m{"const": "catalogue"}}, "required": []string{"purpose"}}, "then": m{"required": []string{"id", "org", "permissions"}}},
+		m{"if": m{"properties": m{"purpose": m{"const": "runner"}}, "required": []string{"purpose"}}, "then": m{"required": []string{"tier"}}},
+		m{"if": m{"properties": m{"purpose": m{"const": "link"}}, "required": []string{"purpose"}}, "then": m{"required": []string{"id"}, "properties": m{"id": m{"const": "link"}}}},
+	}
+	return app
+}
+
+// deprecated marks a schema node deprecated.
+func deprecated(node m) m {
+	node["deprecated"] = true
+	return node
+}
+
 // catalogueWebhookSchema is where a catalogue App's events are delivered: one
 // URL, or a Kargo receiver.
 func catalogueWebhookSchema() m {
@@ -238,8 +265,9 @@ func policyExchangeSchema() m {
 func policyAppsSchema() m {
 	return obj("What an operator may make on the console.", m{
 		"github": obj("GitHub Apps.", m{
-			"runnerTiers": m{"type": "array", "uniqueItems": true, "items": m{"type": "string", "pattern": "^[a-z0-9]([a-z0-9-]{0,14}[a-z0-9])?$"}, "description": "The tiers an operator may create a runner App for: lower-case letters, digits and dashes, at most 16, each once."},
-			"catalogue":   list("Every GitHub App the installation declares (docs/guides/sluis/connect/github-apps-catalogue.md). A grant naming an undeclared group stops the service.", catalogueAppSchema()),
+			"apps":        list("Every GitHub App the installation declares, of every purpose: the link App, the catalogue Apps and the runner tiers (docs/guides/sluis/connect/github-apps-catalogue.md). A grant naming an undeclared group stops the service.", githubAppSchema()),
+			"runnerTiers": m{"deprecated": true, "type": "array", "uniqueItems": true, "items": m{"type": "string", "pattern": "^[a-z0-9]([a-z0-9-]{0,14}[a-z0-9])?$"}, "description": "DEPRECATED, removed in v1.77: declare a `purpose: runner` entry in `apps` for each tier. Read as those entries, with a warning."},
+			"catalogue":   deprecated(list("DEPRECATED, removed in v1.77: declare each as a `purpose: catalogue` entry in `apps`. Read as those entries, with a warning.", catalogueAppSchema())),
 		}),
 		"slack": obj("Slack Apps.", m{
 			"catalogue": list("Every Slack App the installation declares (docs/guides/sluis/connect/slack-apps-catalogue.md). One for a workspace the policy does not declare stops the service.", slackAppSchema()),
@@ -251,6 +279,7 @@ func policyControllersSchema() m {
 	return obj("What each controller may CHANGE. Everything else the policy binds is derived every pass and shown with what would happen, and left alone: an organisation or workspace is born disabled.", m{
 		"github": obj("The GitHub controller.", m{
 			"enabledOrgs": list("The organisations it changes. Each must be bound by the github table.", m{"type": "string", "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9]|-[A-Za-z0-9])*$"}),
+			"appRefs":     m{"type": "object", "propertyNames": m{"pattern": "^[A-Za-z0-9](?:[A-Za-z0-9]|-[A-Za-z0-9])*$"}, "additionalProperties": m{"type": "string", "pattern": "^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$"}, "description": "For an organisation the github table binds, the id of the catalogue App (in `apps.github.apps`, created under that organisation) whose key its record refers to, `app_ref`. On storage layout v5 an organisation must refer to an App."},
 		}),
 		"slack": obj("The Slack controller.", m{
 			"enabledWorkspaces": list("The workspaces it changes, by key. Each must be declared by the slack table.", m{"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$"}),

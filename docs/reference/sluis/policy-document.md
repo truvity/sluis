@@ -7,10 +7,11 @@ The policy document is the one file a process loads, named by the service docume
 | `exchange.clusters[]` | `{name, issuer, jwksUri}` per federated cluster |
 | `exchange.aws` | `audience`, `maxAge` and `accounts[]` (`{account, name, issuer, jwksUri, orgId, algs}`) |
 | `exchange.github.owners[]` | organisations whose CI tokens are verified; none verifies none |
-| `apps.github.runnerTiers[]` | tiers an operator may create a runner App for |
-| `apps.github.catalogue[]` | the GitHub App catalogue ([GitHub Apps catalogue](../../guides/sluis/connect/github-apps-catalogue.md)) |
+| `apps.github.apps[]` | every GitHub App: `{id, purpose, labels, export, org, tier}` and, for `catalogue`, the App's declaration ([GitHub Apps catalogue](../../guides/sluis/connect/github-apps-catalogue.md)) |
+| `apps.github.runnerTiers[]`, `apps.github.catalogue[]` | deprecated, removed in v1.77: read as entries of `apps.github.apps`, with a warning |
 | `apps.slack.catalogue[]` | the Slack App catalogue ([Slack Apps catalogue](../../guides/sluis/connect/slack-apps-catalogue.md)) |
 | `controllers.github.enabledOrgs[]` | organisations the GitHub controller changes; other bound organisations are a dry run |
+| `controllers.github.appRefs` | `{org: App id}`: the App an organisation uses (`app_ref`) |
 | `controllers.slack.enabledWorkspaces[]` | workspaces the Slack controller changes |
 
 No section holds a secret: every row is a name and a URL.
@@ -32,7 +33,10 @@ exchange:
       - {account: "111122223333", name: apps, issuer: "https://example-id.tokens.sts.global.api.aws"}
   github: {owners: [example-org]}
 apps:
-  github: {runnerTiers: [preview, stable]}
+  github:
+    apps:
+      - {purpose: runner, tier: preview}
+      - {purpose: runner, tier: stable}
 controllers:
   github: {enabledOrgs: [example-org]}
 ```
@@ -42,6 +46,8 @@ The document checks run wherever it is loaded: the binary, `sluisctl policy rend
 | Refused |
 |---|
 | a catalogue grant naming an undeclared group |
+| an App with no `purpose`, a second `link` App, a runner entry without a `tier` |
+| an `appRefs` entry for an unbound organisation, an undeclared App or one created under another organisation |
 | a Slack App for an undeclared workspace |
 | an enabled organisation or workspace the policy does not bind |
 | two clusters for one issuer |

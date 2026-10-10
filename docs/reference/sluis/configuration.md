@@ -324,7 +324,7 @@ A retired variable that is still set stops the process, naming its replacement k
 | `EXCHANGE_AUDIENCE`, `CLUSTERS_FILE`, `AWS_FEDERATION_FILE` | `exchange.audience`; and, in the policy document, `exchange.clusters` and `exchange.aws`, the rows themselves |
 | `VALKEY_ADDRESS`, `VALKEY_TLS`, `VALKEY_CLUSTER` | `valkey.address`, `.tls`, `.cluster` |
 | `VALKEY_PASSWORD` | `valkey.passwordSecret`, which names the secret (`valkey/password`) |
-| `GITHUB_OWNERS`, `GITHUB_RUNNER_TIERS`, `GITHUB_APPS_CATALOGUE_FILE` | the policy document's `exchange.github.owners`, `apps.github.runnerTiers`, `apps.github.catalogue` |
+| `GITHUB_OWNERS`, `GITHUB_RUNNER_TIERS`, `GITHUB_APPS_CATALOGUE_FILE` | the policy document's `exchange.github.owners`, `apps.github.apps` |
 | `SLACK_APPS_CATALOGUE_FILE` | the policy document's `apps.slack.catalogue` |
 | `AUDIT_WRITER_URL`, `AUDIT_TOKEN_FILE` | `audit.writer`, `audit.tokenFile` |
 | `AUDIT_QUERY_URL`, `AUDIT_AUDIENCE`, `AUDIT_FORWARDED_FOR_TRUSTED_HOPS` | `audit.queryURL`, `.audience`, `.forwardedForTrustedHops` |
@@ -346,7 +346,7 @@ A retired variable that is still set stops the process, naming its replacement k
 | `INTERVAL` | `interval` | `interval` |
 | `ENABLED_ORGS` | the policy document's `controllers.github.enabledOrgs` | none |
 | `ENABLED_WORKSPACES` | none | the policy document's `controllers.slack.enabledWorkspaces` |
-| `GITHUB_APPS_CATALOGUE_FILE` | none: the catalogue is the policy document's `apps.github.catalogue` | none |
+| `GITHUB_APPS_CATALOGUE_FILE` | none: the catalogue is the policy document's `apps.github.apps` | none |
 | `AUDIT_WRITER_URL`, `AUDIT_TOKEN_FILE` | `audit.writer`, `audit.tokenFile` | `audit.writer`, `audit.tokenFile` |
 | `LOG_LEVEL` | `log.level` | `log.level` |
 
@@ -371,7 +371,7 @@ A v2 document that names a retired key is refused with where it went. A v1 docum
 | `serve` | `overlayFile` | `directory.workspaces`, in the document |
 | `serve` | `api` (`api.audience`, `api.consumersFile`) | removed: `sluis serve` serves no directory API listener |
 | `serve` | `github.owners` | policy `exchange.github.owners` |
-| `serve` | `github.runnerTiers`, `github.catalogueFile` | policy `apps.github.runnerTiers`, `apps.github.catalogue` |
+| `serve` | `github.runnerTiers`, `github.catalogueFile` | policy `apps.github.apps` |
 | `serve` | `slack.catalogueFile` | policy `apps.slack.catalogue` |
 | `serve` | `exports`, `ports.export` | retired (ADR 0041): a consumer reads the typed document at `external/<kind>/<id>`, see [exports](exports.md) |
 | `serve` | `exchange.clustersFile`, `exchange.awsFile` | policy `exchange.clusters`, `exchange.aws`, the rows themselves |
@@ -381,7 +381,7 @@ A v2 document that names a retired key is refused with where it went. A v1 docum
 | `serve` | `clientSecretsDir` | none: `clients/<client-id>/secret`, delivered by `secrets` |
 | `serve` | `signingKey.kms.stateSecretFile`, `signingKey.kmsWrapped.stateSecretFile` | `stateSecret` (`issuer/state-secret`); the `kms` and `kms-wrapped` adapters' setting is `stateSecret` too |
 | the v1 overlay file | `directory.workspaces[].keyFile` | `keySecret` (`directory/<id>/key`) |
-| `controller-github` | `policyDir`, `catalogueFile`, `enabledOrgs` | `policy.file`; the policy's `apps.github.catalogue`; the policy's `controllers.github.enabledOrgs` |
+| `controller-github` | `policyDir`, `catalogueFile`, `enabledOrgs` | `policy.file`; the policy's `apps.github.apps`; the policy's `controllers.github.enabledOrgs` |
 | `controller-slack` | `policyDir`, `enabledWorkspaces` | `policy.file`; the policy's `controllers.slack.enabledWorkspaces` |
 | `policy` | `version: 1` | `apiVersion: sluis.truvity.github.io/policy/v2` |
 | `policy` | `access`, `overlay` | an access document is a layer, not a policy document: `sluisctl policy render` reshapes it into one |

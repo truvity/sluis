@@ -157,9 +157,9 @@ policy:
         - globex
   apps:
     github:
-      runnerTiers:
-        - preview
-        - stable
+      apps:
+        - {purpose: runner, tier: preview}
+        - {purpose: runner, tier: stable}
   controllers:
     github:
       enabledOrgs:

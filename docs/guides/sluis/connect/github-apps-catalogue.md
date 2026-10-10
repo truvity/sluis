@@ -1,6 +1,6 @@
 # A catalogue of GitHub Apps
 
-Declare GitHub Apps in values and create them from the console. See [Mint a GitHub App token](github-app-tokens.md), [Keep and back up a GitHub App's key](github-app-keys.md) and the [catalogue reference](../../../reference/sluis/github-apps.md).
+Declare Apps in values, create them from the console. See [Mint a GitHub App token](github-app-tokens.md), [Keep and back up a GitHub App's key](github-app-keys.md) and the [catalogue reference](../../../reference/sluis/github-apps.md).
 
 ## Before you start
 
@@ -52,7 +52,7 @@ githubApps:
 | `grants` | Who may mint a token: [Mint a GitHub App token](github-app-tokens.md) |
 | `push` | Optional: [project the key to a store](github-app-keys.md#4-project-one-app-to-a-consumer-deprecated) |
 
-The chart renders this into `ConfigMap <release>-github-apps-catalogue`, read once at start. Copy the default set from `charts/sluis/examples/github-apps.yaml` and add `grants` and the [`push` block for `iac`](infrastructure-as-code.md).
+The chart renders each entry as `purpose: catalogue` in the policy's `apps.github.apps`. Copy the default set from `charts/sluis/examples/github-apps.yaml` and add `grants` and the [`push` block for `iac`](infrastructure-as-code.md).
 
 ## 2. Create and install
 

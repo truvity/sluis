@@ -289,3 +289,51 @@ func TestAnOrganisationReferencesAnApp(t *testing.T) {
 		}
 	})
 }
+
+// The configuration sets the labels of an App and the App an organisation
+// uses: a declared label replaces the record's, an App it says nothing of keeps
+// its own, and the App an organisation uses is filled in on layout v5 only.
+func TestTheConfigurationSetsLabelsAndTheAppRef(t *testing.T) {
+	declared := portstore.DeclaredGitHubApps{
+		Labels: func(id string) map[string]string {
+			switch id {
+			case "renovate":
+				return map[string]string{"team": "infra"}
+			case appid.LinkID:
+				return map[string]string{"role": "login"}
+			}
+			return nil
+		},
+		RunnerLabels: func(tier, org string) map[string]string { return map[string]string{"pool": tier + "-" + org} },
+		AppRef:       func(org string) string { return map[string]string{"acme": "renovate"}[org] },
+	}
+	each(t, func(t *testing.T, e env) {
+		set := e.open(t)
+		b := portstore.New(set).WithV5(secretstore.FromStoreV5(memory.New(), "")).DeclareGitHubApps(declared)
+		putAllThreeKinds(t, b) // the record says team=platform; the configuration says infra
+
+		all, err := portstore.NewGitHubApps(b).List(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		labels := map[string]map[string]string{}
+		for _, a := range all {
+			labels[a.ID] = a.Labels
+		}
+		if labels["renovate"]["team"] != "infra" || labels["link"]["role"] != "login" || labels["runner-stable-acme"]["pool"] != "stable-acme" {
+			t.Errorf("labels = %v", labels)
+		}
+
+		orgs := portstore.NewGitHubOrgs(b)
+		rec := connection.Record{Org: "acme", AppID: 8, AppSlug: "acme-renovate", InstallationID: 11, ConnectedAt: appsAt}
+		if err := orgs.Put(ctx, rec, connection.Credential{Org: "acme"}); err != nil {
+			t.Fatalf("an organisation the configuration gives an App: %v", err)
+		}
+		if list, err := orgs.List(ctx); err != nil || len(list) != 1 || list[0].AppRef != "renovate" {
+			t.Errorf("List = %+v, %v", list, err)
+		}
+		if err := orgs.Put(ctx, connection.Record{Org: "other", AppID: 9, AppSlug: "s"}, connection.Credential{Org: "other"}); err == nil {
+			t.Error("an organisation the configuration gives no App was kept on layout v5")
+		}
+	})
+}

@@ -71,9 +71,12 @@ Every 30 seconds the controller checks the `<release>-github-apps` Secret and `<
 A runner App is what a self-hosted runner scale set registers with, one per organisation per tier:
 
 ```yaml
-config:
-  github:
-    runnerTiers: [preview, stable]
+policy:
+  apps:
+    github:
+      apps:
+        - {purpose: runner, tier: preview}
+        - {purpose: runner, tier: stable}
 ```
 
 The *Runners* tab shows a row per bound organisation per tier. Create then install each as in step 2. The App asks only for `organization_self_hosted_runners: write`.

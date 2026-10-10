@@ -126,10 +126,10 @@ type Config struct {
 	holdWindow                   time.Duration
 	logLevel                     slog.Level
 	// githubRunnerTiers are the tiers an operator may create a runner App
-	// for, from the policy's apps.github.runnerTiers. Empty keeps none.
+	// for, from the runner entries of the policy's apps.github.apps. Empty keeps none.
 	githubRunnerTiers []string
 	// githubCatalogue is every GitHub App the deployment declares, the
-	// policy's apps.github.catalogue. Empty declares none.
+	// catalogue entries of the policy's apps.github.apps. Empty declares none.
 	githubCatalogue *catalogue.Catalogue
 	// slackCatalogue is every Slack App the deployment declares, the
 	// policy's apps.slack.catalogue. Empty declares none.
@@ -475,7 +475,12 @@ func openStores(ctx context.Context, cfg Config, st *store.Stores, log *slog.Log
 // is still the cluster's: the token review, and the declared OAuth client
 // a deployment mounts, which is an input and not a record this service writes.
 func openPortStores(ctx context.Context, cfg Config, st *store.Stores, log *slog.Logger) (stores, error) {
-	base := portstore.New(st.Ports).WithV4(st.V4).ExportGitHubApps(cfg.githubCatalogue.Exported)
+	// What the policy document's apps.github.apps declares: which Apps are
+	// exported, their labels, and the App an organisation uses.
+	exported := func(id string) bool { return cfg.policy.GitHubAppExported(id) || cfg.githubCatalogue.Exported(id) }
+	base := portstore.New(st.Ports).WithV4(st.V4).ExportGitHubApps(exported).DeclareGitHubApps(portstore.DeclaredGitHubApps{
+		Labels: cfg.policy.GitHubAppLabels, RunnerLabels: cfg.policy.RunnerLabels, AppRef: cfg.policy.AppRef,
+	})
 	// The session key's read is the proof that Secrets answers.
 	if err := base.RequireSecrets(); err != nil {
 		return stores{}, fmt.Errorf("store: ports.adapter %s: %w", st.Adapter, err)

@@ -4,7 +4,7 @@ Create the GitHub App each self-hosted runner tier registers with, and hand its 
 
 ## Before you start
 
-- Declare the tiers: `config.github.runnerTiers: [preview, stable]` (the policy's `apps.github.runnerTiers`). The GitHub page's *Runners* tab shows a row per bound organisation per tier.
+- Declare the tiers: one `{purpose: runner, tier: preview}` entry in the policy's `apps.github.apps` for each. The GitHub page's *Runners* tab shows a row per bound organisation per tier.
 
 - Be an owner of the organisation, for the install click.
 
