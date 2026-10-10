@@ -14,6 +14,7 @@ import (
 
 	"github.com/aws/smithy-go"
 
+	"github.com/truvity/sluis/internal/githubroster/appid"
 	"github.com/truvity/sluis/storage/state"
 )
 
@@ -176,6 +177,44 @@ func (p *planner) cover(out *PlanItem, row stateRow, it item) {
 	p.cov.names = append(p.cov.names, fam)
 }
 
+// coverOrgs notes the credential of an organisation whose key layout v5 holds:
+// the record is equal on the destination, it names an App (its own, made a
+// catalogue App, or the source's) that is equal there too, and the App's key is
+// the organisation's, compared by hash. The key is never shown.
+func (p *planner) coverOrgs(all []readKind) {
+	keys := map[string]string{}
+	for _, rk := range all {
+		if rk.k.domain != "github" {
+			continue
+		}
+		for _, e := range rk.src {
+			if !p.sameIDs[rk.k.name+"/"+e.id] {
+				continue
+			}
+			switch doc := e.val.(type) {
+			case catalogueDoc:
+				keys[doc.Record.ID] = doc.PrivateKey
+			case runnerDoc:
+				keys[appid.RunnerID(doc.Record.Tier, doc.Record.Org)] = doc.PrivateKey
+			}
+		}
+	}
+	for _, rk := range all {
+		if rk.k.domain != "github" || rk.k.name != "organisations" {
+			continue
+		}
+		for _, e := range rk.src {
+			doc, ok := e.val.(orgDoc)
+			if !ok || !p.sameIDs[rk.k.name+"/"+e.id] || doc.Credential.PrivateKey == "" {
+				continue
+			}
+			if key, ok := keys[p.appRefOf(doc)]; ok && sameSecret([]byte(key), []byte(doc.Credential.PrivateKey)) {
+				p.cov.families = append(p.cov.families, "internal/credentials/github-org/"+seg(e.id)+"/")
+			}
+		}
+	}
+}
+
 func (c covered) has(name string) bool {
 	if slices.Contains(c.names, name) {
 		return true
@@ -294,6 +333,13 @@ func keptReason(name string, cov covered, sameRoot bool, s3Ref string) (reason, 
 		}
 	}
 	switch {
+	case errors.Is(err, ErrNotMigrated) && strings.HasPrefix(name, "internal/credentials/github-org/"):
+		// The organisation's key is the App's on layout v5: deleted once the App
+		// holds the same key there, and kept as unverified until it does.
+		if cov.has(name) {
+			return "", ""
+		}
+		return "the organisation's key was not found equal to its App's key on the destination", KeptUnverified
 	case errors.Is(err, ErrNotMigrated):
 		return strings.TrimPrefix(err.Error(), ErrNotMigrated.Error()+": "), KeptNotMigrated
 	case err != nil:
