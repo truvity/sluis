@@ -397,18 +397,26 @@ func (r *run) steps(from, to Side) []step {
 }
 
 func (r *run) copyBlobs(from, to Side) bool {
-	switch r.opt.Blobs {
+	ok, why := blobsCopied(r.opt.Blobs, from, to)
+	if why != "" {
+		r.note("%s", why)
+	}
+	return ok
+}
+
+// blobsCopied says whether a run copies the controllers' reports under the
+// mode, and, when it does not, why.
+func blobsCopied(mode BlobMode, from, to Side) (copied bool, why string) {
+	switch mode {
 	case BlobsSkip:
-		r.note("the controllers' reports are not copied (--blobs skip)")
-		return false
+		return false, "the controllers' reports are not copied (--blobs skip)"
 	case BlobsCopy:
-		return true
+		return true, ""
 	}
 	if from.BlobID != "" && from.BlobID == to.BlobID {
-		r.note("the controllers' reports are in the same place on both sides, so they are not copied")
-		return false
+		return false, "the controllers' reports are in the same place on both sides, so they are not copied"
 	}
-	return true
+	return true, ""
 }
 
 func (r *run) note(format string, args ...any) {

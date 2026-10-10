@@ -40,6 +40,7 @@ type migrateFlags struct {
 
 func migrateUsage(out io.Writer, fs *flag.FlagSet) {
 	_, _ = fmt.Fprint(out, `Usage: sluis migrate --from <config> --to <config> [flags]
+       sluis migrate v5 plan --from <v4 config> --to <v5 config> [flags]
 
 Copies the State of one installation's storage to another's, through the domain
 stores and the ports (docs/decisions/0031, docs/guides/sluis/migrate/migrate-state.md). Each side is
@@ -115,6 +116,9 @@ func parseMigrate(args []string, out io.Writer) (migrateFlags, bool, error) {
 
 // migrateCmd is `sluis migrate`.
 func migrateCmd(out io.Writer, args []string) error {
+	if len(args) > 0 && args[0] == "v5" {
+		return migrateV5Cmd(out, args[1:])
+	}
 	f, done, err := parseMigrate(args, out)
 	if err != nil || done {
 		return err

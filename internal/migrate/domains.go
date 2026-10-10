@@ -141,8 +141,17 @@ func OpenDomains(ctx context.Context, st *store.Stores, create bool) (*Domains, 
 // a Slack App's bot token is external/slack/<app> (ADR 0041). exported may be
 // nil (no catalogue App is exported). A side without v4 stores changes nothing.
 func OpenDomainsExporting(ctx context.Context, st *store.Stores, create bool, exported func(id string) bool) (*Domains, error) {
+	return OpenDomainsFor(ctx, st, create, exported, portstore.DeclaredGitHubApps{})
+}
+
+// OpenDomainsFor is [OpenDomainsExporting] for a side that also declares what
+// the configuration says of the GitHub Apps. On layout v5 an organisation is
+// written naming its App, which the declaration (AppRef) supplies.
+func OpenDomainsFor(ctx context.Context, st *store.Stores, create bool, exported func(id string) bool,
+	declared portstore.DeclaredGitHubApps,
+) (*Domains, error) {
 	if st.Adapter != store.AdapterLegacy {
-		base := portstore.New(st.Ports).WithV4(st.V4).ExportGitHubApps(exported)
+		base := portstore.New(st.Ports).WithV4(st.V4).WithV5(st.V5).ExportGitHubApps(exported).DeclareGitHubApps(declared)
 		if err := base.CheckSecrets(ctx); err != nil {
 			return nil, fmt.Errorf("ports.adapter %s: %w", st.Adapter, err)
 		}
