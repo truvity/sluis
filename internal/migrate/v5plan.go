@@ -14,6 +14,7 @@ import (
 
 	"github.com/truvity/sluis/internal/githubroster/link"
 	"github.com/truvity/sluis/internal/port"
+	"github.com/truvity/sluis/internal/portstore"
 	"github.com/truvity/sluis/internal/secrets"
 	"github.com/truvity/sluis/internal/secretstore"
 	"github.com/truvity/sluis/storage/state"
@@ -38,6 +39,11 @@ const (
 	// PlanRefused is an item that cannot be carried: layout v5 has no address
 	// for it, the destination would refuse it, or the source cannot read it.
 	PlanRefused PlanStatus = "refused"
+	// PlanCopied is an item a copy wrote (it was new, or different with
+	// --overwrite).
+	PlanCopied PlanStatus = "copied"
+	// PlanMissing is an item a verify did not find on the destination.
+	PlanMissing PlanStatus = "missing"
 )
 
 // PlanItem is one thing the plan found, or, for the issuer's records whose
@@ -70,6 +76,11 @@ type PlanItem struct {
 	// Reason says why an item is refused, or Note what the operator must know.
 	Reason string `json:"reason,omitempty"`
 	Note   string `json:"note,omitempty"`
+
+	// do writes the item to the destination; set only when a copy collects
+	// writes. rank orders them: the Apps an organisation names go first.
+	do   func(ctx context.Context) error
+	rank int
 }
 
 func (i PlanItem) count() int { return max(i.Count, 1) }
@@ -80,6 +91,9 @@ type PlanCounts struct {
 	Same      int `json:"same"`
 	Different int `json:"different"`
 	Refused   int `json:"refused"`
+	// Copied and Missing are what a copy wrote and a verify did not find.
+	Copied  int `json:"copied,omitempty"`
+	Missing int `json:"missing,omitempty"`
 }
 
 func (c *PlanCounts) add(s PlanStatus, n int) {
@@ -92,6 +106,10 @@ func (c *PlanCounts) add(s PlanStatus, n int) {
 		c.Different += n
 	case PlanRefused:
 		c.Refused += n
+	case PlanCopied:
+		c.Copied += n
+	case PlanMissing:
+		c.Missing += n
 	}
 }
 
@@ -110,8 +128,13 @@ type PlanReport struct {
 	Modules []ModulePlan `json:"modules"`
 	Totals  PlanCounts   `json:"totals"`
 	Notes   []string     `json:"notes,omitempty"`
-	OK      bool         `json:"ok"`
-	Error   string       `json:"error,omitempty"`
+	// Mode is "copy" or "verify" for those commands; a plan leaves it out.
+	Mode   string `json:"mode,omitempty"`
+	DryRun bool   `json:"dryRun,omitempty"`
+	// Verify is what a copy found when it read both sides again afterwards.
+	Verify *VerifyResult `json:"verify,omitempty"`
+	OK     bool          `json:"ok"`
+	Error  string        `json:"error,omitempty"`
 }
 
 // JSON renders the plan, indented.
@@ -157,6 +180,11 @@ type planner struct {
 	report   *PlanReport
 	mods     map[string]*ModulePlan
 	notes    []string
+	// collect makes the planner keep a write for every item a copy would
+	// make; noIssuer leaves the issuer's records to the code that carries them.
+	collect, noIssuer bool
+	// carried are the v5 secret names that a record carries with it.
+	carried map[string]bool
 }
 
 // Plan reads a layout v4 installation (from) and a layout v5 one (to) and
@@ -165,6 +193,18 @@ type planner struct {
 // The report is returned with ErrRefused or ErrUnreadable when anything is
 // refused, so that a caller can still show it.
 func Plan(ctx context.Context, from, to Side, opt PlanOptions) (*PlanReport, error) {
+	p, err := newPlanner(ctx, from, to, opt, false, false)
+	if err != nil {
+		return nil, err
+	}
+	if err = p.readAll(ctx); err != nil {
+		return nil, err
+	}
+	return p.finish()
+}
+
+// newPlanner checks the two sides and opens their stores.
+func newPlanner(ctx context.Context, from, to Side, opt PlanOptions, collect, noIssuer bool) (*planner, error) {
 	switch {
 	case from.Stores == nil || to.Stores == nil:
 		return nil, errors.New("migrate: a plan needs both sides")
@@ -191,36 +231,44 @@ func Plan(ctx context.Context, from, to Side, opt PlanOptions) (*PlanReport, err
 	if err != nil {
 		return nil, fmt.Errorf("source: %w", err)
 	}
-	dstDomains, err := OpenDomainsExporting(ctx, to.Stores, false, opt.ExportedGitHubApp)
+	// The destination writes an organisation naming its App: the declaration
+	// supplies it.
+	dstDomains, err := OpenDomainsFor(ctx, to.Stores, false, opt.ExportedGitHubApp, portstore.DeclaredGitHubApps{AppRef: opt.AppRef})
 	if err != nil {
 		return nil, fmt.Errorf("destination: %w", err)
 	}
-	p := &planner{
-		opt: opt, from: from, to: to,
-		src:    kit{d: srcDomains, ports: from.Stores.Ports},
-		dst:    kit{d: dstDomains, ports: to.Stores.Ports},
-		report: &PlanReport{From: from.Name, To: to.Name},
-		mods:   map[string]*ModulePlan{},
+	return &planner{
+		opt: opt, from: from, to: to, collect: collect, noIssuer: noIssuer,
+		src:     kit{d: srcDomains, ports: from.Stores.Ports},
+		dst:     kit{d: dstDomains, ports: to.Stores.Ports},
+		report:  &PlanReport{From: from.Name, To: to.Name},
+		mods:    map[string]*ModulePlan{},
+		carried: map[string]bool{},
+	}, nil
+}
+
+// readAll reads both sides and fills the report.
+func (p *planner) readAll(ctx context.Context) error {
+	if err := p.records(ctx); err != nil {
+		return err
 	}
-	if err = p.records(ctx); err != nil {
-		return nil, err
+	if err := p.secrets(ctx); err != nil {
+		return err
 	}
-	if err = p.secrets(ctx); err != nil {
-		return nil, err
-	}
-	if !contains(opt.Skip, DomainIssuer) {
-		if err = p.issuer(ctx); err != nil {
-			return nil, err
-		}
-	} else {
+	switch {
+	case contains(p.opt.Skip, DomainIssuer):
 		p.note("the issuer is skipped (--skip)")
-	}
-	if !contains(opt.Skip, DomainBlobs) {
-		if err = p.blobs(ctx); err != nil {
-			return nil, err
+	case p.noIssuer:
+		p.note("the issuer's key ring, sessions, refresh tokens and codes in flight are not carried by this command yet")
+	default:
+		if err := p.issuer(ctx); err != nil {
+			return err
 		}
 	}
-	return p.finish()
+	if !contains(p.opt.Skip, DomainBlobs) {
+		return p.blobs(ctx)
+	}
+	return nil
 }
 
 func (p *planner) note(format string, args ...any) {
@@ -407,6 +455,10 @@ func (p *planner) kind(rk readKind, appIDs map[string]int64, runners map[string]
 			out.Status, out.Reason = PlanRefused, kerr.Error()
 		default:
 			p.checkItem(&out, s, e, row, it, have[e.id], appIDs, runners)
+			p.collectWrite(&out, s, e, have[e.id])
+			if out.ToSecret != "" && out.Status != PlanRefused {
+				p.carried[out.ToSecret] = true
+			}
 		}
 		p.add(module, out)
 	}
@@ -444,7 +496,7 @@ func (p *planner) checkItem(out *PlanItem, s step, e entry, row stateRow, it ite
 	switch {
 	case old == nil:
 		out.Status = PlanNew
-	case old.unreadable == "" && bytes.Equal(planCanon(s.domain, s.name, *old), planCanon(s.domain, s.name, e)):
+	case old.unreadable == "" && bytes.Equal(planCanon(s.domain, s.name, *old), planCanon(s.domain, s.name, e)) && p.sameAppRef(e, *old):
 		out.Status = PlanSame
 	default:
 		out.Status = PlanDifferent
@@ -561,6 +613,10 @@ func (p *planner) secrets(ctx context.Context) error {
 			p.add("oidc", PlanItem{Concern: "secret", Kind: "unmapped", From: n.name, Status: PlanRefused, Reason: err.Error()})
 			continue
 		}
+		if p.carried[t.V5] {
+			p.note("%s is at %s, where the record that holds the key writes it: it is carried with the record", n.name, t.V5)
+			continue
+		}
 		p.secret(ctx, n.name, t, n.explicit)
 	}
 	if p.opt.S3Ref != "" {
@@ -611,10 +667,13 @@ func (p *planner) secret(ctx context.Context, from string, t SecretTarget, expli
 		out.Status, out.Reason = PlanRefused, "the destination cannot be read: "+err.Error()
 	case !dst.found:
 		out.Status = PlanNew
-	case bytes.Equal(dst.value, src.value):
+	case sameSecret(dst.value, src.value):
 		out.Status, out.ToVersion = PlanSame, dst.version
 	default:
 		out.Status, out.ToVersion = PlanDifferent, dst.version
+	}
+	if out.Status == PlanNew || out.Status == PlanDifferent {
+		p.collectSecret(&out, t, src.value, dst.version)
 	}
 	p.add(t.Module, out)
 }
@@ -847,6 +906,7 @@ func (p *planner) blobs(ctx context.Context) error {
 		default:
 			out.Status = PlanDifferent
 		}
+		p.collectWrite(&out, s, e, nil)
 		p.add(module, out)
 	}
 	return nil
@@ -854,6 +914,13 @@ func (p *planner) blobs(ctx context.Context) error {
 
 // String is a one-line summary per module, for a terminal.
 func (c PlanCounts) String() string {
-	return "new " + strconv.Itoa(c.New) + ", same " + strconv.Itoa(c.Same) +
+	out := "new " + strconv.Itoa(c.New) + ", same " + strconv.Itoa(c.Same) +
 		", different " + strconv.Itoa(c.Different) + ", refused " + strconv.Itoa(c.Refused)
+	if c.Copied > 0 {
+		out += ", copied " + strconv.Itoa(c.Copied)
+	}
+	if c.Missing > 0 {
+		out += ", missing " + strconv.Itoa(c.Missing)
+	}
+	return out
 }
