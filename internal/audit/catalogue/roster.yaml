@@ -19,7 +19,7 @@
 # A change to what an action carries is a new version. The installation keeps
 # every version it was sent, so records already written keep their meaning.
 source: roster
-version: "1.14.0"
+version: "1.15.0"
 locales: [en]
 
 actor_kinds:
@@ -67,6 +67,8 @@ target_types:
     description: A Slack App, by its id.
   cloudflare_preset:
     description: A Cloudflare preset (cloudflare.presets), by name.
+  installation:
+    description: An installation of sluis, by its instance name.
   backup:
     description: A backup of the installation, by its id (the timestamp of its start and a random suffix).
   directory_group:
@@ -240,6 +242,17 @@ actions:
     data_schema: https://schemas.example/access-roster/v1/restore.json
     message:
       en: "the restore from backup {targets_0_id} failed: {outcome_reason}"
+
+  roster.maintenance.changed:
+    summary: An operator set or lifted the migration freeze (`sluis maintenance on` or `off`). While it is set the installation refuses every write of state, answers 503 with Retry-After, and still serves discovery, the key set and a read-only token exchange. Lifting a restore's flag is `forced`.
+    operation: modify
+    categories: [configuration_change, privileged_access]
+    category: security
+    target_types: [installation]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/maintenance.json
+    message:
+      en: "{data_state, select, migration {{actor} froze {targets_0_id} for a migration} other {{actor} lifted the maintenance flag of {targets_0_id}}}"
 
   # -------------------------------------------------------------- sessions
 

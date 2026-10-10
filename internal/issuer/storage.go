@@ -21,6 +21,7 @@ import (
 	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/audit"
 	"github.com/truvity/sluis/internal/clientcreds"
+	"github.com/truvity/sluis/internal/maintenance"
 	"github.com/truvity/sluis/internal/signer"
 	"github.com/truvity/sluis/policy"
 	"github.com/truvity/sluis/storage/logattr"
@@ -806,6 +807,14 @@ func (s *Storage) AuthRequestByCode(ctx context.Context, code string) (op.AuthRe
 // errSignInEnded refuses a code whose request was completed under a
 // browser sign-in that has ended since. A fresh error each time: the
 // library's errors are pointers it may annotate.
+// errFrozen is the answer to a request that would write while the State is
+// frozen for a migration (`sluis maintenance on`). A server error, which a
+// client retries, never an invalid grant, which it takes as the end of a
+// session.
+func errFrozen() error {
+	return oidc.ErrServerError().WithDescription("sluis is frozen for a migration; try again shortly")
+}
+
 func errSignInEnded() error {
 	return oidc.ErrInvalidGrant().WithDescription("the sign-in this code was issued under has ended")
 }
@@ -1217,6 +1226,10 @@ func (s *Storage) CreateAccessAndRefreshTokens(
 	// A spent token past its grace window, presented by the session's own
 	// client: the session ends here, before anything is resolved or minted.
 	if req, isRefresh := request.(*refreshRequest); isRefresh && req.presented.reused != "" {
+		if maintenance.ReadOnly(ctx) {
+			// Ending the session is a write; it waits for the freeze to end.
+			return "", "", time.Time{}, errFrozen()
+		}
 		return "", "", time.Time{}, s.endReuse(ctx, req.presented)
 	}
 
@@ -1232,6 +1245,23 @@ func (s *Storage) CreateAccessAndRefreshTokens(
 	issued, err := s.issue(ctx, request)
 	if err != nil {
 		return "", "", time.Time{}, err
+	}
+	if maintenance.ReadOnly(ctx) {
+		// A migration freeze renews an access token and rotates nothing: the
+		// refresh token the caller holds is returned as it is, so it is still
+		// the one the copy carries. Anything that is not a refresh opens a
+		// session, which is a write.
+		req, isRefresh := request.(*refreshRequest)
+		if !isRefresh || currentRefreshToken == "" {
+			return "", "", time.Time{}, errFrozen()
+		}
+		next := currentRefreshToken
+		if req.presented.successor != "" {
+			// A replay inside the grace window: the answer is the token the
+			// winning refresh produced, as it is outside a freeze.
+			next = req.presented.successor
+		}
+		return issued.ID, next, issued.Expires, nil
 	}
 	refresh := uuid.NewString()
 
@@ -1420,7 +1450,7 @@ func (s *Storage) SetUserinfoFromRequest(
 	// tell each of them. The session index cannot say: a client that
 	// asked for `openid` alone holds no refresh token and has no session
 	// there, yet it signed somebody in all the same.
-	if sso := ssoOf(request); sso != "" && s.iss.SSO() != nil && !involvedAhead(request) {
+	if sso := ssoOf(request); sso != "" && s.iss.SSO() != nil && !involvedAhead(request) && !maintenance.ReadOnly(ctx) {
 		if err = s.iss.SSO().Involve(ctx, sso, request.GetClientID()); err != nil {
 			return err
 		}
@@ -1721,6 +1751,14 @@ func (s *Storage) tokenLimit(request op.TokenRequest, agent bool) time.Time {
 // keep records an access token [Storage.issue] decided, which is what
 // `userinfo` and revocation answer from.
 func (s *Storage) keep(ctx context.Context, request op.TokenRequest, issued *token) error {
+	if maintenance.ReadOnly(ctx) {
+		// A migration freeze: the State is being copied, and a record written
+		// now would be one the copy missed. The token is a signed JWT that
+		// verifies by the key set; only its userinfo and introspection, and
+		// a sign-in exchange of it, wait for the freeze to end.
+		s.recordToken(ctx, request)
+		return nil
+	}
 	// Kept only until it expires: an access token past its lifetime
 	// answers nothing, and a store that has to be swept is a store that
 	// grows when the sweeper stops.
@@ -1774,6 +1812,10 @@ func (s *Storage) claimsFor(
 // and answers the refresh that found out, with the reason in the log and
 // the audit record rather than the generic "not live".
 func (s *Storage) refuseAtAbsoluteLimit(ctx context.Context, ended Session) error {
+	if maintenance.ReadOnly(ctx) {
+		// Revoking the session is a write; the refusal is the same.
+		return oidc.ErrInvalidGrant().WithDescription("the refresh token is not live")
+	}
 	if revokeErr := s.iss.Sessions().deleteSession(ctx, ended); revokeErr != nil {
 		s.logger().WarnContext(ctx, "a session past the absolute limit could not be revoked",
 			slog.Any("error", revokeErr))
@@ -2005,6 +2047,10 @@ func (s *Storage) refusalOf(ctx context.Context, request op.TokenRequest) error 
 	case !isRefresh:
 		return nil
 	case req.notLive:
+		if maintenance.ReadOnly(ctx) {
+			// Ending the session is a write; the refusal is the same.
+			return oidc.ErrInvalidGrant().WithDescription("the refresh token is not live")
+		}
 		return s.refuseNotLive(ctx, req.presented)
 	default:
 		return req.refusal

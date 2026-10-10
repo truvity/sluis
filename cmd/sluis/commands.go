@@ -103,6 +103,7 @@ func newApp(out io.Writer) *cli.Command {
 			legacy("controller", "(deprecated) a controller alone: github or slack", controllerCmd, out),
 			legacy("tick", "one tick, once: github or slack, then the target", tickCmd, out),
 			legacy("check", "verify that every secret the document and its policy declare is in SSM: names and versions, never values", checkCmd, out),
+			legacy("maintenance", "freeze the installation for a migration without taking it offline: on, off or status (sluis maintenance --help)", maintenanceCmd, out),
 			legacy("migrate", "copy the State from one storage to another: --from <config> --to <config>", migrateCmd, out),
 			{
 				Name:  "version",

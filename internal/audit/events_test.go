@@ -89,6 +89,8 @@ func every() []*record.Record {
 		audit.RestoreStarted(person, "20261010T020000Z-a1b2c3", audit.Restore{Installation: "example"}),
 		audit.RestoreCompleted(person, "20261010T020000Z-a1b2c3", audit.Restore{Installation: "example", Modules: 6}),
 		audit.RestoreFailed(person, "20261010T020000Z-a1b2c3", audit.Restore{Installation: "example", Reason: "verify"}, "a record differs after the write"),
+		audit.MaintenanceChanged(person, audit.Maintenance{Installation: "example", State: "migration", Modules: 6, Reason: "layout v5 move"}),
+		audit.MaintenanceChanged(person, audit.Maintenance{Installation: "example", State: audit.MaintenanceCleared, Modules: 1, Forced: true}),
 		audit.WorkspaceConnected(person, "ws-1", "google", "consent"),
 		audit.WorkspaceReconnected(person, "ws-1", "google", "consent"),
 		audit.WorkspaceDisconnected(person, "ws-1"),

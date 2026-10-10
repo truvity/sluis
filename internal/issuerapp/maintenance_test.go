@@ -103,3 +103,74 @@ func TestTheIssuerServesAgainWhenTheFlagIsCleared(t *testing.T) {
 		t.Fatalf("no flag, and the sign-in page refused with 503")
 	}
 }
+
+// A migration freeze refuses every write the same way, and still serves
+// discovery, the key set, userinfo and the two token grants that change nothing.
+func TestAMigrationFreezeServesReadsAndTheReadOnlyGrants(t *testing.T) {
+	state := memory.New()
+	if err := maintenance.Write(t.Context(), state, maintenance.Flag{State: maintenance.StateMigration, By: "operator"}); err != nil {
+		t.Fatal(err)
+	}
+	h := issuerOverState(t, state)
+	post := func(path, form string) *httptest.ResponseRecorder {
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodPost, path, strings.NewReader(form))
+		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		h.ServeHTTP(w, r)
+		return w
+	}
+	for _, c := range []struct{ method, path string }{
+		{http.MethodGet, "/authorize?client_id=console"},
+		{http.MethodPost, "/revoke"},
+		{http.MethodGet, "/end_session"},
+		{http.MethodGet, "/login"},
+		{http.MethodPost, "/login/recovery"},
+		{http.MethodPost, "/logout"},
+		{http.MethodPost, "/.access/client-secrets/console"},
+		{http.MethodPost, "/device_authorization"},
+	} {
+		w := status(h, c.method, c.path)
+		if w.Code != http.StatusServiceUnavailable || w.Header().Get("Retry-After") == "" {
+			t.Errorf("%s %s frozen = %d (Retry-After %q), want 503 with Retry-After", c.method, c.path, w.Code, w.Header().Get("Retry-After"))
+		}
+	}
+	for _, form := range []string{
+		"grant_type=authorization_code&code=x",
+		"grant_type=client_credentials",
+		"grant_type=urn:ietf:params:oauth:grant-type:device_code&device_code=x",
+		"",
+	} {
+		if w := post("/oauth/token", form); w.Code != http.StatusServiceUnavailable || w.Header().Get("Retry-After") == "" {
+			t.Errorf("token %q frozen = %d, want 503 with Retry-After", form, w.Code)
+		}
+	}
+	for _, form := range []string{
+		"grant_type=urn:ietf:params:oauth:grant-type:token-exchange&subject_token=x",
+		"grant_type=refresh_token&refresh_token=x&client_id=console",
+	} {
+		if w := post("/oauth/token", form); strings.Contains(w.Body.String(), `"error":"maintenance"`) {
+			t.Errorf("token %q was refused by the freeze: %s", form, w.Body.String())
+		}
+	}
+	for _, path := range []string{"/.well-known/openid-configuration", "/keys"} {
+		if w := status(h, http.MethodGet, path); w.Code != http.StatusOK {
+			t.Errorf("GET %s frozen = %d, want 200", path, w.Code)
+		}
+	}
+}
+
+// A restore's flag serves neither token grant: only a freeze does.
+func TestARestoreFlagRefusesEveryTokenGrant(t *testing.T) {
+	state := memory.New()
+	if err := maintenance.Write(t.Context(), state, maintenance.Flag{State: maintenance.StateRestoring}); err != nil {
+		t.Fatal(err)
+	}
+	h := issuerOverState(t, state)
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/oauth/token", strings.NewReader("grant_type=urn:ietf:params:oauth:grant-type:token-exchange"))
+	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	h.ServeHTTP(w, r)
+	if w.Code != http.StatusServiceUnavailable {
+		t.Errorf("token exchange under a restore = %d, want 503", w.Code)
+	}
+}

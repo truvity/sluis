@@ -116,6 +116,12 @@ func mintSessionToken(ctx context.Context, cfg Config, session Session) (tokens.
 	defer func() { _ = response.Body.Close() }()
 
 	body, _ := io.ReadAll(io.LimitReader(response.Body, 1<<20))
+	if response.StatusCode >= http.StatusInternalServerError {
+		// The issuer is down, or frozen for a migration (503 with Retry-After):
+		// the session is not ended, and the refresh token is kept as it is.
+		return tokens.Token{}, fmt.Errorf("%w: the issuer answered %s to the refresh; the session is kept, try again shortly",
+			errUnreachable, response.Status)
+	}
 	if response.StatusCode != http.StatusOK {
 		// A refused refresh means the session ended: revoked, expired,
 		// or the account suspended. Signing in again is the only answer,

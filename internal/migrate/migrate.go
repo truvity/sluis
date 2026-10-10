@@ -86,7 +86,7 @@ const (
 var (
 	// ErrWritersRunning is a run that was not told the source is quiet.
 	ErrWritersRunning = errors.New("migrate: refusing to copy while the source can still change: " +
-		"stop every writer first (scale the issuer, the console and both controllers to 0) and pass --i-have-stopped-writers; " +
+		"freeze the source with `sluis maintenance on` (the issuer keeps answering reads and token exchange), or stop every writer and pass --i-have-stopped-writers; " +
 		"--dry-run reads and writes nothing and needs neither")
 	// ErrConflict is a destination that already holds a different value.
 	ErrConflict = errors.New("migrate: the destination already holds a different value")

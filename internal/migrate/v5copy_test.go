@@ -6,7 +6,9 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/truvity/sluis/internal/maintenance"
 	"github.com/truvity/sluis/internal/migrate"
 	"github.com/truvity/sluis/internal/port"
 	sluissecrets "github.com/truvity/sluis/internal/secrets"
@@ -406,5 +408,79 @@ func TestLivePassReportsWhatChangedInsteadOfFailing(t *testing.T) {
 		if !strings.Contains(strings.Join(report.Notes, "\n"), "changed on the live source") {
 			t.Errorf("no note about the change: %v", report.Notes)
 		}
+	}
+}
+
+// A source in maintenance is proof of a stopped writer: the copy needs no
+// --i-have-stopped-writers, waits for the replicas to see the flag, and does
+// not carry the flag to the destination.
+func TestCopyAcceptsAFrozenSourceAsStopped(t *testing.T) {
+	src, dst := newV4Installation(t), newV5Installation(t)
+	src.seedFull(t)
+	if err := maintenance.Write(ctx, src.st.Ports.State, maintenance.Flag{State: maintenance.StateMigration, Since: time.Now().UTC()}); err != nil {
+		t.Fatal(err)
+	}
+	opt := copyOptions()
+	opt.WritersStopped = false
+	var waited time.Duration
+	opt.Wait = func(_ context.Context, d time.Duration) { waited = d }
+	report, err := migrate.CopyV5(ctx, side("v4.yaml", src.st), side("v5.yaml", dst.st), opt)
+	if err != nil {
+		t.Fatalf("CopyV5 = %v\n%s", err, report.JSON())
+	}
+	if waited <= 0 {
+		t.Error("the copy did not wait for the replicas to see a flag set a moment ago")
+	}
+	tables, err := dst.st.FlagTables()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tb := range tables {
+		if f, err := maintenance.Read(ctx, tb.State); err != nil || f.Active() {
+			t.Errorf("the destination's flag in %q = %+v, %v: it must start out of maintenance", tb.Module, f, err)
+		}
+	}
+}
+
+// A flag that is not a freeze (a restore's) is not proof, and neither is none.
+func TestCopyDoesNotTakeARestoreFlagAsProof(t *testing.T) {
+	src, dst := newV4Installation(t), newV5Installation(t)
+	src.seedFull(t)
+	if err := maintenance.Write(ctx, src.st.Ports.State, maintenance.Flag{State: maintenance.StateRestoring}); err != nil {
+		t.Fatal(err)
+	}
+	opt := copyOptions()
+	opt.WritersStopped = false
+	if _, err := migrate.CopyV5(ctx, side("v4.yaml", src.st), side("v5.yaml", dst.st), opt); !errors.Is(err, migrate.ErrWritersRunning) {
+		t.Errorf("CopyV5 = %v, want ErrWritersRunning", err)
+	}
+}
+
+// --i-have-stopped-writers without the flag still works, and says so.
+func TestCopyWarnsWhenStoppedWritersAreOnlyTakenOnTrust(t *testing.T) {
+	src, dst := newV4Installation(t), newV5Installation(t)
+	src.seedFull(t)
+	report, err := migrate.CopyV5(ctx, side("v4.yaml", src.st), side("v5.yaml", dst.st), copyOptions())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(strings.Join(report.Notes, "\n"), "not in maintenance") {
+		t.Errorf("no warning in the notes: %v", report.Notes)
+	}
+}
+
+// A destination that holds a flag would start frozen: refused.
+func TestCopyRefusesADestinationInMaintenance(t *testing.T) {
+	src, dst := newV4Installation(t), newV5Installation(t)
+	src.seedFull(t)
+	tables, err := dst.st.FlagTables()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := maintenance.Write(ctx, tables[len(tables)-1].State, maintenance.Flag{State: maintenance.StateMigration}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := migrate.CopyV5(ctx, side("v4.yaml", src.st), side("v5.yaml", dst.st), copyOptions()); !errors.Is(err, migrate.ErrDestinationMaintenance) {
+		t.Errorf("CopyV5 = %v, want ErrDestinationMaintenance", err)
 	}
 }

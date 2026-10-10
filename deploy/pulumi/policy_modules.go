@@ -301,3 +301,39 @@ func parameterKeyStatementsCross(env ModuleEnv, actions, arns []string) []statem
 	}
 	return out
 }
+
+// MaintenanceOperatorStatements are the statements of the principal that runs
+// `sluis maintenance on|off|status`: an operator's role, never a function's.
+// It reads, writes and deletes the one maintenance item of each table
+// (partition [MaintenancePartition]) and nothing else of them, so that it can
+// set and lift the migration freeze and cannot read or change a session, a
+// record or a secret. The function roles keep their [sidMaintenanceDeny];
+// this is the other half of that deny.
+//
+// tables are the table ARNs: the legacy table on layout v4, and the module
+// tables on v5 (env.TableArns, in module order). The table key is used only
+// through DynamoDB.
+func MaintenanceOperatorStatements(tables []string, tableKeyArn string) ([]map[string]any, error) {
+	if len(tables) == 0 {
+		return nil, fmt.Errorf("sluispulumi: MaintenanceOperatorStatements: no table")
+	}
+	st := []statement{{
+		"Sid": "SluisMaintenanceOperator", "Effect": "Allow",
+		"Action":   []string{ddbGetItem, ddbPutItem, ddbDeleteItem},
+		"Resource": tablesOf(tables),
+		"Condition": map[string]any{
+			"ForAllValues:StringEquals": map[string]any{"dynamodb:LeadingKeys": []string{MaintenancePartition}},
+		},
+	}}
+	if tableKeyArn != "" {
+		st = append(st, statement{
+			"Sid": "SluisMaintenanceOperatorKey", "Effect": "Allow",
+			"Action":   []string{kmsEncrypt, kmsDecrypt, "kms:GenerateDataKey", "kms:DescribeKey"},
+			"Resource": tableKeyArn,
+			"Condition": map[string]any{
+				"StringLike": map[string]any{"kms:ViaService": "dynamodb.*.amazonaws.com"},
+			},
+		})
+	}
+	return st, nil
+}

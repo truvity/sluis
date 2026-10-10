@@ -2,9 +2,11 @@
 // gate every module reads before it writes (docs/decisions/0072, decision 9).
 //
 // The flag is one record in each module's OWN table, [Key], so a module needs
-// no grant on another module's table to read it. Only the restore function
-// writes it: the Pulumi library denies every other role a write of the
-// `maintenance` partition of its own table. A module reads it through a [Gate],
+// no grant on another module's table to read it. Only the restore function and
+// an operator (`sluis maintenance`, with the grant of the Pulumi library's
+// MaintenanceOperatorStatements) write it: the library denies every function role
+// a write of the `maintenance` partition of its own table. A migration freeze
+// ([StateMigration]) also serves a read-only token path ([Gate.MiddlewareFrozen]). A module reads it through a [Gate],
 // which caches the answer for a short time (a Lambda function reads it at most
 // every [DefaultTTL] however many requests it serves) and refuses writes while
 // it is set. Reads of what was already issued keep working.
@@ -43,6 +45,10 @@ const (
 	// StateRestoring is a restore in progress, or one that failed and left the
 	// module closed until an operator looks.
 	StateRestoring = "restoring"
+	// StateMigration is a migration freeze, set by `sluis maintenance on`: the
+	// installation refuses every write of state, and still answers what deploy
+	// tooling and verification read ([Gate.MiddlewareFrozen], [ReadOnly]).
+	StateMigration = "migration"
 )
 
 // Code is the name a refusal has where a caller answers it by name.
@@ -58,6 +64,26 @@ type Flag struct {
 
 // Active reports whether the flag is set.
 func (f Flag) Active() bool { return f.State != "" }
+
+// Frozen reports whether the flag is a migration freeze, the one state in which
+// a read-only token path is served.
+func (f Flag) Frozen() bool { return f.State == StateMigration }
+
+// readOnlyKey marks the context of a request served during a migration freeze.
+type readOnlyKey struct{}
+
+// WithReadOnly marks ctx as the context of a request that must change no
+// state: a store that would record a token, rotate a refresh token or note a
+// client among a sign-in's clients leaves that out.
+func WithReadOnly(ctx context.Context) context.Context {
+	return context.WithValue(ctx, readOnlyKey{}, true)
+}
+
+// ReadOnly reports whether ctx was marked by [WithReadOnly].
+func ReadOnly(ctx context.Context) bool {
+	v, _ := ctx.Value(readOnlyKey{}).(bool)
+	return v
+}
 
 // ErrMaintenance is a module that is under maintenance.
 var ErrMaintenance = errors.New("maintenance: the service is under maintenance")
@@ -274,4 +300,66 @@ func (g *Gate) Middleware(serves func(*http.Request) bool, next http.Handler) ht
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// MiddlewareFrozen is [Gate.Middleware] with a second list. While the flag is a
+// migration freeze, a request that frozen names is served too, with its context
+// marked [WithReadOnly] and a Retry-After on any 5xx it answers: it is a
+// request that reads (the token exchange, a refresh that is not rotated). While
+// the flag is any other state, frozen is not asked.
+func (g *Gate) MiddlewareFrozen(serves, frozen func(*http.Request) bool, next http.Handler) http.Handler {
+	if g == nil {
+		return next
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if serves(r) {
+			next.ServeHTTP(w, r)
+			return
+		}
+		f, err := g.Flag(r.Context())
+		switch {
+		case err != nil:
+			Refuse(w, r, &Error{Err: err})
+		case !f.Active():
+			next.ServeHTTP(w, r)
+		case f.Frozen() && frozen(r):
+			next.ServeHTTP(&retryAfter{ResponseWriter: w}, r.WithContext(WithReadOnly(r.Context())))
+		default:
+			Refuse(w, r, &Error{Flag: f})
+		}
+	})
+}
+
+// retryAfter adds the Retry-After header to a server error, so that a client
+// refused by a read-only path retries as it does when it is refused outright.
+type retryAfter struct{ http.ResponseWriter }
+
+func (w *retryAfter) WriteHeader(code int) {
+	if code >= 500 {
+		w.Header().Set("Retry-After", strconv.Itoa(RetryAfter))
+		w.Header().Set("Cache-Control", "no-store")
+	}
+	w.ResponseWriter.WriteHeader(code)
+}
+
+// Unwrap lets http.ResponseController reach the underlying writer.
+func (w *retryAfter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
+
+// Settle is how long after a flag is written every reader has seen it: a gate
+// trusts what it read for [DefaultTTL], and this adds a margin.
+const Settle = DefaultTTL + 5*time.Second
+
+// Quiet reports how much longer a caller must wait before it can treat the
+// writers of a module as stopped: zero once the flag has been set for [Settle].
+func (f Flag) Quiet(now time.Time) time.Duration {
+	if left := f.Since.Add(Settle).Sub(now); left > 0 {
+		return left
+	}
+	return 0
+}
+
+// Read is the flag in st as it is now, with no cache. A read that fails is an
+// error, since an operator asking must not be told "off" by a failure.
+func Read(ctx context.Context, st port.StateReader) (Flag, error) {
+	return New(st, WithTTL(time.Nanosecond)).fetch(ctx)
 }
