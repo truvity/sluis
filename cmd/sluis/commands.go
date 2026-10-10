@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 
 	"github.com/urfave/cli/v3"
@@ -178,5 +179,35 @@ func run(args []string, out io.Writer) error {
 	if len(args) > 0 && args[0] == "-version" {
 		args = []string{"--version"}
 	}
+	if err := checkPin(version.Pinned(), args); err != nil {
+		return fmt.Errorf("%w: %v", errUsage, err)
+	}
 	return newApp(out).Run(context.Background(), append([]string{"sluis"}, args...))
+}
+
+// pinnedCommands is what a module image's binary runs: the image of
+// ghcr.io/truvity/sluis/sluis-<module> is this binary built with
+// `-ldflags -X .../internal/version.Module=sluis-module=<module>`, and a pinned
+// build refuses every command that is another module's, as a Lambda zip refuses
+// to start as another module. An unpinned build (the sluis image) runs them all.
+var pinnedCommands = map[string][]string{
+	"issuer":     {"issuer", "serve", "github", "slack", "google", "controller", "tick", "check", "migrate"},
+	"backup":     {"backup", "restore"},
+	"cloudflare": {"cloudflare"},
+}
+
+// checkPin refuses a command line whose command is not the pinned module's.
+// Flags (--help, --version) and the `version` command are every build's.
+func checkPin(pinned string, args []string) error {
+	if pinned == "" || len(args) == 0 || strings.HasPrefix(args[0], "-") || args[0] == "version" {
+		return nil
+	}
+	allowed, ok := pinnedCommands[pinned]
+	if !ok {
+		return fmt.Errorf("this build is pinned to the unknown module %q", pinned)
+	}
+	if !slices.Contains(allowed, args[0]) {
+		return fmt.Errorf("this build is pinned to the %q module and cannot run `sluis %s` (its commands: %s)", pinned, args[0], strings.Join(allowed, ", "))
+	}
+	return nil
 }

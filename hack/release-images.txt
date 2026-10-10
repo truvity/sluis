@@ -4,6 +4,9 @@
 # SBOM attestations by digest; a chart gets a signature and provenance.
 # Add a new image or chart here, and nowhere else.
 image ghcr.io/truvity/sluis/sluis
+image ghcr.io/truvity/sluis/sluis-issuer
+image ghcr.io/truvity/sluis/sluis-cloudflare
+image ghcr.io/truvity/sluis/sluis-backup
 image ghcr.io/truvity/sluis/resource-proxy
 image ghcr.io/truvity/audit/audit
 image ghcr.io/truvity/audit/audit-query
