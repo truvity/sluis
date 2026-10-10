@@ -218,8 +218,8 @@ func printPlanSummary(w io.Writer, r *migrate.PlanReport) {
 	}
 	_, _ = fmt.Fprintf(w, "  %-10s %s\n", "all", r.Totals)
 	for _, m := range r.Modules {
-		for _, it := range m.Items {
-			if it.Status == migrate.PlanRefused {
+		for i := range m.Items {
+			if it := &m.Items[i]; it.Status == migrate.PlanRefused {
 				_, _ = fmt.Fprintf(w, "  REFUSED %s %s %s: %s\n", m.Module, it.Concern, it.From, it.Reason)
 			}
 		}
