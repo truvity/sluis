@@ -593,7 +593,10 @@ func TestListingNamesClientsAndResources(t *testing.T) {
 
 	opened := []issuer.Opened{
 		{Identity: "ada@north.example", ClientID: "argocd", Token: "t-1"},
-		{Identity: "ada@north.example", ClientID: "https://clients.example/meta", Resource: "https://mcp.example/v1", Token: "t-2", Scopes: []string{"openid", "email"}},
+		{
+			Identity: "ada@north.example", ClientID: "https://clients.example/meta", Resource: "https://mcp.example/v1",
+			Token: "t-2", Scopes: []string{"openid", "email"},
+		},
 		{Identity: "ada@north.example", ClientID: "https://clients.example/meta", Resource: "https://other.example/x", Token: "t-3"},
 	}
 	for _, o := range opened {
