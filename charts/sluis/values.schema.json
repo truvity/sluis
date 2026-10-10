@@ -1698,6 +1698,41 @@
               "minLength": 1,
               "type": "string"
             },
+            "backup": {
+              "additionalProperties": false,
+              "description": "Connects the console's Backups page to the backup module and the restore function (docs/decisions/0071). The console only reads from them, as the caller class `console`. Unset has no page.",
+              "properties": {
+                "audience": {
+                  "description": "The audience of the projected token. Each module's name when unset.",
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "function": {
+                  "description": "The backup module's Lambda function, name or ARN, invoked through its `live-console` alias. Set exactly one of `function` and `url`.",
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "restoreFunction": {
+                  "description": "The restore function, name or ARN, invoked through its `live-console` alias. At most one of it and `restoreURL`; without either the page says there is none.",
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "restoreURL": {
+                  "$ref": "#/definitions/config-sluis.url",
+                  "description": "The restore function's Kubernetes Service."
+                },
+                "tokenFile": {
+                  "description": "Where the projected token is mounted. `/var/run/secrets/sluis/backup/token` when unset.",
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "url": {
+                  "$ref": "#/definitions/config-sluis.url",
+                  "description": "The backup module's Kubernetes Service. A call carries the pod's projected ServiceAccount token."
+                }
+              },
+              "type": "object"
+            },
             "client": {
               "description": "The client id the console signs in as.",
               "minLength": 1,

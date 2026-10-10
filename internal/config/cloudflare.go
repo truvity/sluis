@@ -358,6 +358,9 @@ func (c *Cloudflare) PresetOf(name string) (CloudflarePreset, bool) {
 // static credentials of `ports.blob.s3.credentialsRef` need no section.
 func (s *Serve) ValidateCloudflare() error {
 	errs := []error{s.Cloudflare.Validate()}
+	if s.Console != nil {
+		errs = append(errs, s.Console.Backup.Validate())
+	}
 	if b := s.blobS3(); b != nil && b.Credentials != nil {
 		if b.CredentialsRef != "" {
 			errs = append(errs, errors.New("ports.blob.s3: credentialsRef and credentials are exclusive"))
@@ -378,4 +381,28 @@ func (s *Serve) blobS3() *PortsBlobS3 {
 		return nil
 	}
 	return s.Ports.Blob.S3
+}
+
+// Validate holds `console.backup` to what its schema cannot say. A nil section
+// is valid: the console has no Backups page.
+func (b *ConsoleBackup) Validate() error {
+	if b == nil {
+		return nil
+	}
+	var errs []error
+	if (b.Function == "") == (b.URL == "") {
+		errs = append(errs, errors.New("console.backup: set exactly one of function and url"))
+	}
+	if b.RestoreFunction != "" && b.RestoreURL != "" {
+		errs = append(errs, errors.New("console.backup: set at most one of restoreFunction and restoreURL"))
+	}
+	for key, v := range map[string]string{"url": b.URL, "restoreURL": b.RestoreURL} {
+		if v == "" {
+			continue
+		}
+		if u, err := url.Parse(v); err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
+			errs = append(errs, fmt.Errorf("console.backup.%s: %q is not an http(s) URL", key, v))
+		}
+	}
+	return errors.Join(errs...)
 }

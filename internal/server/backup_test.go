@@ -3,6 +3,10 @@ package server
 import (
 	"context"
 	"errors"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -190,5 +194,32 @@ func TestThereIsNoRestoreRouteInTheBackupService(t *testing.T) {
 		if !got[name] {
 			t.Errorf("missing %s", name)
 		}
+	}
+}
+
+func TestWhoamiSaysWhetherTheConsoleHasABackupsPage(t *testing.T) {
+	t.Parallel()
+	for _, on := range []bool{false, true} {
+		console := backupConsole(nil)
+		if on {
+			console.deps.Backup = newFakeBackup()
+		}
+		s := &ConsoleServer{console: console, log: slog.New(slog.DiscardHandler)}
+		r := httptest.NewRequest(http.MethodGet, "/.access/whoami", nil).WithContext(asRole(access.RoleViewer))
+		w := httptest.NewRecorder()
+		s.whoami(w, r)
+		if got := strings.Contains(w.Body.String(), `"backup":true`); got != on {
+			t.Errorf("backups page = %v with the module %v: %s", got, on, w.Body.String())
+		}
+	}
+}
+
+// UseBackup is what the document's console.backup turns on.
+func TestUseBackupConnectsThePage(t *testing.T) {
+	t.Parallel()
+	s := &ConsoleServer{console: backupConsole(nil)}
+	s.UseBackup(newFakeBackup())
+	if s.console.deps.Backup == nil {
+		t.Error("UseBackup connected nothing")
 	}
 }
