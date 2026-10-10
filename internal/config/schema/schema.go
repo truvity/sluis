@@ -664,7 +664,7 @@ func sluisBackupSchema() m {
 			e["description"] = "The key that seals each backup's data key (purpose `archive`): an alias, or {key, context}. The same as `keys.archive`; give one of them. The adapter is `keys.adapter`, or kms."
 			return e
 		}(),
-		"role": enum("Which function this document configures: `backup` (the scheduled export, the default) or `restore` (the restore function, which only an administrator or the break-glass role may invoke and whose role may write every module's table). The zip is the same; the document picks the role, and `sluis restore` selects it on the command line.", "backup", "backup", "restore"),
+		"role":   enum("Which function this document configures: `backup` (the scheduled export, the default) or `restore` (the restore function, which only an administrator or the break-glass role may invoke and whose role may write every module's table). The zip is the same; the document picks the role, and `sluis restore` selects it on the command line.", "backup", "backup", "restore"),
 		"region": str("The region of the key service, for adapter kms. Unset follows the AWS SDK's own resolution."),
 		"target": obj("The S3 bucket of the archive. For an AWS bucket with Object Lock, enable versioning and a default retention no longer than `retention`; credentials are the function role's and are never configured here.", m{
 			"bucket":    str("The bucket. It must exist."),

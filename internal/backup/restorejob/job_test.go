@@ -428,7 +428,6 @@ func TestOverwriteHappensOnlyWhenAsked(t *testing.T) {
 		t.Fatalf("the destination was overwritten without being asked: %s", rec.Value)
 	}
 	// Asking again with overwrite starts a new restore, which completes.
-	r.job().Start(ctx, restorejob.Request{BackupID: "b1", Actor: admin})
 	res, err := r.job(func(c *restorejob.Config) { c.Suffix = func() string { return "bbbbbb" } }).
 		Start(ctx, restorejob.Request{BackupID: "b1", Overwrite: true, Actor: admin})
 	if err != nil || res.Outcome != restorejob.OutcomeCompleted || !res.Run.Overwrite || res.Run.Overwritten == 0 {
