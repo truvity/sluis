@@ -9,13 +9,21 @@
 #   audit/, charts/audit/             the audit jobs (and nothing of sluis's)
 #   docs/, *.md                       docs-check
 #   ts/, frontend/, package.json ...  ts, console
-#   storage/                          storage-test and the S3 tier
-#   deploy/                           pulumi-test, release-chain
+#   storage/                          storage-test, lint and the S3 tier
+#   deploy/                           pulumi-test, lint, release-chain
 #   Justfile, devbox, .github/, hack/, .goreleaser.yaml, go.mod/go.sum
 #                                     everything: they are shared by all
 #   anything else (Go, charts, proto, config ...)   every sluis recipe
 #
+# storage/ and deploy/ are modules of their own that the root build, test and
+# lint never see, so `lint` (which runs golangci-lint in each of them) is in
+# their plan: a pull request that touches only deploy/pulumi has to be linted
+# (2026-10-10: #508 and #532 put findings on master that way). hack/test-ci-plan.sh
+# holds this table, and that every go.mod outside audit/ is linted by `lint`.
+#
 # leak-canary reads the whole tree and always runs.
+#
+# CI_PLAN_FILES (newline-separated paths) replaces the git diff: for the test.
 set -euo pipefail
 
 full='"build","test","lint","chart-lint","telemetry","archive-check","docs-check","audit-catalogue","ts","console","pulumi-test","release-chain","storage-test","test-race"'
@@ -34,7 +42,7 @@ else
       Justfile | devbox.* | .github/* | hack/* | .goreleaser.yaml | go.mod | go.sum | lefthook.yml) sluis=true audit=true ;;
       *) sluis=true ;;
     esac
-  done < <(git diff --name-only "${BASE:?}" HEAD)
+  done < <(if [ -n "${CI_PLAN_FILES+x}" ]; then printf '%s\n' "$CI_PLAN_FILES"; else git diff --name-only "${BASE:?}" HEAD; fi)
 fi
 
 if [ "$sluis" = true ]; then
@@ -45,6 +53,8 @@ else
   [ "$web" = true ] && recipes="$recipes,\"ts\",\"console\""
   [ "$storage" = true ] && recipes="$recipes,\"storage-test\""
   [ "$pulumi" = true ] && recipes="$recipes,\"pulumi-test\",\"release-chain\""
+  # one lint, however many modules ask for it
+  if [ "$storage" = true ] || [ "$pulumi" = true ]; then recipes="$recipes,\"lint\""; fi
 fi
 # the whole list already carries leak-canary on master
 [ "$sluis" = true ] && recipes="$recipes,\"leak-canary\""

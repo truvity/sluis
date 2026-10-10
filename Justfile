@@ -135,6 +135,7 @@ test-openbao:
 lint: console
     golangci-lint config verify
     golangci-lint run ./...
+    cd storage && GOWORK=off golangci-lint run ./...
     cd deploy/pulumi && GOWORK=off golangci-lint run ./...
     cd deploy/pulumi/edge/cloudflare && GOWORK=off golangci-lint run ./...
     # A `;` inside a mermaid sequenceDiagram is a STATEMENT SEPARATOR, not
@@ -169,6 +170,7 @@ release-chain:
     hack/test-release-pin.sh
     hack/modules.py check v9.9.9 > /dev/null
     hack/test-release-verify.sh
+    hack/test-ci-plan.sh
 
 # Test the storage module (storage/). Like deploy/pulumi it is a module of its
 # own that the root build, test and lint never see, so this recipe is its gate.
