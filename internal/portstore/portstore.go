@@ -350,7 +350,7 @@ func (b *Base) editItem(ctx context.Context, key string, ttl time.Duration, chan
 		// A fixed-ref credential (a Google Workspace's key) is replaced in place,
 		// so a lost write cannot take it back: nothing is fresh.
 		landed = next.Secret
-		if cred, v5 := b.v5CredOfKey(key); landed != "" && landed != prev && !(v5 && cred.fixed != "") {
+		if cred, v5 := b.v5CredOfKey(key); landed != "" && landed != prev && (!v5 || cred.fixed == "") {
 			fresh[landed] = true
 		}
 		return encodeItem(next), true, nil
