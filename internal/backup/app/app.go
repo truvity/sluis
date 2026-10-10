@@ -16,10 +16,13 @@ import (
 	"github.com/truvity/sluis/internal/backup"
 	"github.com/truvity/sluis/internal/backup/export"
 	"github.com/truvity/sluis/internal/backup/job"
+	"github.com/truvity/sluis/internal/backup/restore"
+	"github.com/truvity/sluis/internal/backup/restorejob"
 	"github.com/truvity/sluis/internal/backup/rpc"
 	"github.com/truvity/sluis/internal/config"
 	"github.com/truvity/sluis/internal/modcall"
 	"github.com/truvity/sluis/internal/port"
+	dynamoport "github.com/truvity/sluis/internal/port/dynamodb"
 	"github.com/truvity/sluis/internal/port/s3blob"
 	"github.com/truvity/sluis/internal/secrets"
 	"github.com/truvity/sluis/internal/signer"
@@ -35,6 +38,8 @@ type Config struct {
 	audit    audit.Config
 	keys     keys.Config
 	logLevel slog.Level
+	// role is the function the zip acts as: the document's, or the command's.
+	role string
 
 	// Test seams: an archive and a key backend in place of the S3 bucket and
 	// KMS the document names.
@@ -44,6 +49,16 @@ type Config struct {
 
 // LogLevel is the level the process should log at.
 func (c Config) LogLevel() slog.Level { return c.logLevel }
+
+// Role is [config.BackupRoleBackup] or [config.BackupRoleRestore].
+func (c Config) Role() string { return c.role }
+
+// AsRole is the configuration acting as role: the command line's `sluis restore`
+// is the restore role whatever the document says.
+func (c Config) AsRole(role string) Config {
+	c.role = role
+	return c
+}
 
 // Load reads the module's document and builds the settings. Opening connects to
 // nothing.
@@ -77,7 +92,7 @@ func FromDocument(doc *config.SluisBackup) (Config, error) {
 	if stores.Secrets, err = secrets.Open(context.Background(), serve); err != nil {
 		return Config{}, err
 	}
-	c := Config{doc: doc, stores: stores, keys: kc, audit: audit.Config{Version: version.String()}}
+	c := Config{doc: doc, stores: stores, keys: kc, role: doc.RoleOf(), audit: audit.Config{Version: version.String()}}
 	// The audit instance is the pod, which is its hostname in a cluster.
 	c.audit.Instance, _ = os.Hostname()
 	if a := doc.Audit; a != nil {
@@ -99,11 +114,13 @@ func Creator() string { return "sluis-backup " + version.String() }
 
 // App is the assembled module.
 type App struct {
-	job    *job.Job
-	rpc    *modcall.Server
-	log    *slog.Logger
-	stores *store.Stores
-	trail  *audit.Trail
+	role    string
+	job     *job.Job
+	restore *restorejob.Job
+	rpc     *modcall.Server
+	log     *slog.Logger
+	stores  *store.Stores
+	trail   *audit.Trail
 }
 
 // New assembles the module: the ports, the archive, the key, the audit trail.
@@ -122,18 +139,6 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 	if stores.V5 == nil || stores.Tables == nil {
 		return fail(errors.New("the backup module reads layout v5: secrets.layout: v5 on the ssm source, and ports.dynamodb.tables"))
 	}
-	src := export.Source{Secrets: stores.V5, Blob: stores.Ports.Blob}
-	var ok bool
-	if src.State, ok = stores.Ports.State.(port.StateExporter); !ok {
-		return fail(errors.New("the State adapter cannot export its records"))
-	}
-	if src.Index, ok = stores.Ports.Index.(port.IndexExporter); !ok {
-		return fail(errors.New("the Index adapter cannot export its sets"))
-	}
-	if src.Blob == nil {
-		return fail(errors.New("ports.blob: the module backs up the reports kept in the blob store, so it needs the installation's"))
-	}
-
 	archive := cfg.archive
 	if archive == nil {
 		t := cfg.doc.Backup.Target
@@ -156,12 +161,42 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 	if err != nil {
 		return fail(err)
 	}
+	a := &App{role: cfg.role, log: log, stores: stores, trail: trail}
+	if cfg.role == config.BackupRoleRestore {
+		if err := a.openRestore(cfg, archive, key); err != nil {
+			_ = trail.Close()
+			return fail(err)
+		}
+		return a, nil
+	}
+	if err := a.openBackup(cfg, archive, key); err != nil {
+		_ = trail.Close()
+		return fail(err)
+	}
+	return a, nil
+}
+
+// openBackup assembles the scheduled export.
+func (a *App) openBackup(cfg Config, archive port.Blob, key backup.Key) error {
+	stores := a.stores
+	src := export.Source{Secrets: stores.V5, Blob: stores.Ports.Blob}
+	var ok bool
+	if src.State, ok = stores.Ports.State.(port.StateExporter); !ok {
+		return errors.New("the State adapter cannot export its records")
+	}
+	if src.Index, ok = stores.Ports.Index.(port.IndexExporter); !ok {
+		return errors.New("the Index adapter cannot export its sets")
+	}
+	if src.Blob == nil {
+		return errors.New("ports.blob: the module backs up the reports kept in the blob store, so it needs the installation's")
+	}
+
 	keep, maxAge := cfg.doc.Backup.Retention.Rule()
 	state := stores.Ports.State
 	jc := job.Config{
 		Installation: cfg.doc.Name(), Creator: Creator(),
 		State: state, Source: src, Archive: archive, Key: key,
-		Keep: keep, MaxAge: maxAge, Audit: trail, Log: log,
+		Keep: keep, MaxAge: maxAge, Audit: a.trail, Log: a.log,
 	}
 	// The backup module's own table holds the flag the restore sets; the gate
 	// reads that table, not the router's guess at where a module-less key lives.
@@ -170,12 +205,50 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 	}
 	j, err := job.New(jc)
 	if err != nil {
-		_ = trail.Close()
-		return fail(err)
+		return err
 	}
-	a := &App{job: j, log: log, stores: stores, trail: trail, rpc: modcall.NewServer(rpc.Module)}
+	a.job, a.rpc = j, modcall.NewServer(rpc.Module)
 	rpc.Register(a.rpc, a)
-	return a, nil
+	return nil
+}
+
+// openRestore assembles the restore function: the same binary, selected by
+// `backup.role` (or by `sluis restore`), whose role may write every module's
+// table. It writes the maintenance flag in each table itself.
+func (a *App) openRestore(cfg Config, archive port.Blob, key backup.Key) error {
+	stores := a.stores
+	if stores.Ports.Blob == nil {
+		return errors.New("ports.blob: the restore writes the reports kept in the blob store back, so it needs the installation's")
+	}
+	mods := stores.Tables.Modules()
+	tables := func(m port.Module) (*dynamoport.Store, error) {
+		t, ok := stores.Tables.Store(m)
+		if !ok {
+			return nil, fmt.Errorf("ports.dynamodb.tables: the restore needs the table of module %s", m)
+		}
+		return t, nil
+	}
+	for _, m := range port.Modules() {
+		if _, err := tables(m); err != nil {
+			return err
+		}
+	}
+	j, err := restorejob.New(restorejob.Config{
+		Installation: cfg.doc.Name(), State: stores.Ports.State,
+		Modules: mods,
+		Flags:   func(m port.Module) port.State { t, _ := tables(m); return t },
+		Target: restore.Target{
+			Table:   func(m port.Module) restore.Table { t, _ := tables(m); return t },
+			Secrets: stores.V5, Blob: stores.Ports.Blob,
+		},
+		Archive: archive, Key: key, Audit: a.trail, Log: a.log,
+	})
+	if err != nil {
+		return err
+	}
+	a.restore, a.rpc = j, modcall.NewServer(rpc.RestoreModule)
+	rpc.RegisterRestore(a.rpc, a)
+	return nil
 }
 
 // openKey opens the archive key (purpose archive) of the configured adapter.
@@ -202,17 +275,65 @@ func (a *App) RPC() *modcall.Server { return a.rpc }
 
 // Run runs one backup (or continues one), see [job.Job.Run].
 func (a *App) Run(ctx context.Context, req job.Request) (job.Result, error) {
+	if a.job == nil {
+		return job.Result{}, errNotBackup
+	}
 	return a.job.Run(ctx, req)
 }
 
+// Role is the function the app acts as: backup or restore.
+func (a *App) Role() string { return a.role }
+
+// Restore starts a restore or continues the unfinished one, see
+// [restorejob.Job.Start]. Only the restore role has one.
+func (a *App) Restore(ctx context.Context, req restorejob.Request) (restorejob.Result, error) {
+	if a.restore == nil {
+		return restorejob.Result{}, errNotRestore
+	}
+	return a.restore.Start(ctx, req)
+}
+
+// PreviewRestore reports what restoring a backup would do and writes nothing.
+func (a *App) PreviewRestore(ctx context.Context, backupID string) (*restore.Report, error) {
+	if a.restore == nil {
+		return nil, errNotRestore
+	}
+	return a.restore.Preview(ctx, backupID)
+}
+
+// RestoreStatus is the latest restores and the maintenance flags.
+func (a *App) RestoreStatus(ctx context.Context) (restorejob.Status, error) {
+	if a.restore == nil {
+		return restorejob.Status{}, errNotRestore
+	}
+	return a.restore.Status(ctx)
+}
+
+var errNotRestore = errors.New("this is the backup role: the restore function is the same zip with backup.role: restore (or `sluis restore`)")
+
+var errNotBackup = errors.New("this is the restore role: it runs no backup")
+
 // Status is the latest records.
-func (a *App) Status(ctx context.Context) (job.Status, error) { return a.job.Status(ctx) }
+func (a *App) Status(ctx context.Context) (job.Status, error) {
+	if a.job == nil {
+		return job.Status{}, errNotBackup
+	}
+	return a.job.Status(ctx)
+}
 
 // List is the backups in the archive, newest first.
-func (a *App) List(ctx context.Context) ([]job.Info, error) { return a.job.List(ctx) }
+func (a *App) List(ctx context.Context) ([]job.Info, error) {
+	if a.job == nil {
+		return nil, errNotBackup
+	}
+	return a.job.List(ctx)
+}
 
 // Prune applies the retention rule.
 func (a *App) Prune(ctx context.Context, actor audit.Actor, dryRun bool) (job.Pass, string, error) {
+	if a.job == nil {
+		return job.Pass{}, "", errNotBackup
+	}
 	return a.job.Prune(ctx, actor, dryRun)
 }
 

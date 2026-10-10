@@ -35,8 +35,20 @@ type SluisBackup struct {
 	Backup   Backup                   `json:"backup"`
 }
 
+// The roles of the backup module's zip. The binary is one; the document picks
+// the function it is deployed as (docs/decisions/0072, point 10).
+const (
+	// BackupRoleBackup is the scheduled export, the default.
+	BackupRoleBackup = "backup"
+	// BackupRoleRestore is the restore function, which only an administrator or
+	// the break-glass role may invoke.
+	BackupRoleRestore = "restore"
+)
+
 // Backup is `backup`.
 type Backup struct {
+	// Role is [BackupRoleBackup] (the default) or [BackupRoleRestore].
+	Role string `json:"role,omitempty"`
 	// Key is the key that seals each backup's data key (purpose `archive`): an
 	// alias, or {key, context}. It is the same as `keys.archive`; give one.
 	Key *keys.Entry `json:"key,omitempty"`
@@ -93,6 +105,14 @@ func (r *BackupRetention) Rule() (keep int, maxAge time.Duration) {
 	return keep, maxAge
 }
 
+// RoleOf is the role the document is deployed as: `backup.role`, else backup.
+func (s *SluisBackup) RoleOf() string {
+	if s.Backup.Role == "" {
+		return BackupRoleBackup
+	}
+	return s.Backup.Role
+}
+
 // Name is the installation's name: `instance`, else "sluis".
 func (s *SluisBackup) Name() string {
 	if s.Instance != "" {
@@ -103,6 +123,11 @@ func (s *SluisBackup) Name() string {
 
 // Validate refuses what the schema cannot say.
 func (s *SluisBackup) Validate() error {
+	switch s.Backup.Role {
+	case "", BackupRoleBackup, BackupRoleRestore:
+	default:
+		return fmt.Errorf("backup.role: %q is not %s or %s", s.Backup.Role, BackupRoleBackup, BackupRoleRestore)
+	}
 	if s.Backup.Target.Bucket == "" {
 		return errors.New("backup.target.bucket: required")
 	}
