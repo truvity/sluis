@@ -445,17 +445,23 @@ func TestAssemblerRefusesDamage(t *testing.T) {
 		t.Errorf("a part with no first: %v", err)
 	}
 	a = export.Assembler{}
-	a.Add(mk(0, "ab"))
+	if _, _, _, err := a.Add(mk(0, "ab")); err != nil {
+		t.Fatal(err)
+	}
 	if _, _, _, err := a.Add(mk(0, "ab")); !errors.Is(err, export.ErrRecord) {
 		t.Errorf("a repeated first part: %v", err)
 	}
 	a = export.Assembler{}
-	a.Add(mk(0, "ab"))
+	if _, _, _, err := a.Add(mk(0, "ab")); err != nil {
+		t.Fatal(err)
+	}
 	if _, _, _, err := a.Add(mk(1, "xx")); !errors.Is(err, export.ErrRecord) {
 		t.Errorf("a changed part: %v", err)
 	}
 	a = export.Assembler{}
-	a.Add(mk(0, "ab"))
+	if _, _, _, err := a.Add(mk(0, "ab")); err != nil {
+		t.Fatal(err)
+	}
 	if _, b, done, err := a.Add(mk(1, "cd")); err != nil || !done || string(b) != "abcd" {
 		t.Errorf("good parts: %q %v %v", b, done, err)
 	}
