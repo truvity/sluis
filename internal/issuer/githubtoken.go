@@ -16,6 +16,7 @@ import (
 	"github.com/truvity/sluis/internal/audit"
 	"github.com/truvity/sluis/internal/githubapp"
 	"github.com/truvity/sluis/internal/githubapp/catalogue"
+	"github.com/truvity/sluis/internal/githubapp/githubtokens"
 	"github.com/truvity/sluis/internal/githubapp/mints"
 	"github.com/truvity/sluis/internal/githubroster/catalogueapp"
 )
@@ -38,6 +39,11 @@ type GitHubApps struct {
 	HTTP *http.Client
 	// Now is the clock the App's JWT is signed against. Nil is time.Now.
 	Now func() time.Time
+	// Minter asks GitHub for the token once the grant is decided. Nil is the
+	// in-process minter over Store, HTTP and Now: the issuer's own process holds
+	// the keys. Set it to a [githubtokens.Client] when the GitHub module is
+	// another function.
+	Minter githubtokens.Minter
 	// Recent is where the last requests of each App are kept, for the
 	// console's page for that App to read without querying the trail.
 	// Nil keeps none, and the page then says so; the audit trail is the
@@ -76,7 +82,7 @@ var (
 	// ErrGitHubAppUnavailable is an App that cannot mint: not declared,
 	// declared and not created, created and not installed, or uninstalled
 	// on GitHub since. `invalid_target`.
-	ErrGitHubAppUnavailable = errors.New("that GitHub App cannot mint a token")
+	ErrGitHubAppUnavailable = githubtokens.ErrUnavailable
 	// ErrNoGitHubGrant is a caller whose groups no grant of the App names.
 	// `invalid_target`, as an ordinary exchange's refusal is: the audience
 	// is the decision.
@@ -84,10 +90,10 @@ var (
 	// ErrGitHubScope is a request wider than any one grant the caller's
 	// groups hold: a repository outside them, a permission above them, or
 	// no repositories named where no grant covers every one. `invalid_scope`.
-	ErrGitHubScope = errors.New("the request is wider than any grant this proof holds")
+	ErrGitHubScope = githubtokens.ErrScope
 	// ErrGitHubUpstream is GitHub failing, or the App's key failing.
 	// `server_error`.
-	ErrGitHubUpstream = errors.New("GitHub did not mint the token")
+	ErrGitHubUpstream = githubtokens.ErrUpstream
 )
 
 // DecideGitHubGrant picks the grant a request is minted under, and the
@@ -205,45 +211,18 @@ func (i *Issuer) MintGitHubToken(ctx context.Context, groups []string, request G
 		return out, err
 	}
 
-	if apps.Store == nil {
-		return out, fmt.Errorf("%w: this deployment keeps no catalogue Apps", ErrGitHubAppUnavailable)
+	var minter githubtokens.Minter = apps.Minter
+	if minter == nil {
+		minter = githubtokens.InProcess{Store: apps.Store, HTTP: apps.HTTP, Now: apps.Now}
 	}
-	record, key, found, err := apps.Store.Get(ctx, app.ID)
-	switch {
-	case err != nil:
-		return out, fmt.Errorf("%w: read App %q: %w", ErrGitHubUpstream, app.ID, err)
-	case !found:
-		return out, fmt.Errorf("%w: App %q is declared and has not been created", ErrGitHubAppUnavailable, app.ID)
-	case !record.Installed() || key == "":
-		return out, fmt.Errorf("%w: App %q is created and not installed", ErrGitHubAppUnavailable, app.ID)
-	}
-	out.Installation = record.InstallationID
-
-	now := time.Now
-	if apps.Now != nil {
-		now = apps.Now
-	}
-	appToken, err := githubapp.AppToken(record.AppID, key, now())
+	minted, err := minter.MintInstallation(ctx, githubtokens.Request{
+		App: app.ID, Repositories: narrowing.Repositories, Permissions: narrowing.Permissions,
+	})
+	out.Installation = minted.Installation
 	if err != nil {
-		return out, fmt.Errorf("%w: %w", ErrGitHubUpstream, err)
+		return out, err
 	}
-	client := apps.HTTP
-	if client == nil {
-		client = &http.Client{Timeout: 30 * time.Second}
-	}
-	minted, err := githubapp.InstallationTokenFor(ctx, client, appToken, record.InstallationID, narrowing)
-	var status *githubapp.StatusError
-	switch {
-	case errors.As(err, &status) && status.Code == http.StatusNotFound:
-		return out, fmt.Errorf("%w: GitHub no longer knows App %q's installation: %w", ErrGitHubAppUnavailable, app.ID, err)
-	case errors.As(err, &status) && status.Code == http.StatusUnprocessableEntity:
-		// Inside the grant and outside the installation: a repository the
-		// installer did not select, or a permission they have not accepted.
-		return out, fmt.Errorf("%w: %w", ErrGitHubScope, err)
-	case err != nil:
-		return out, fmt.Errorf("%w: %w", ErrGitHubUpstream, err)
-	}
-	out.MintedToken = minted
+	out.MintedToken = minted.Granted()
 	return out, nil
 }
 
