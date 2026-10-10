@@ -2,6 +2,7 @@ package backup
 
 import (
 	"bytes"
+	"context"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/hkdf"
@@ -12,7 +13,6 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"context"
 	"github.com/truvity/sluis/storage/keys"
 )
 
