@@ -38,12 +38,12 @@ func (f *fakeAPI) has(table, pk, sk string) bool {
 }
 
 func TestTableNamesAreSluisInstanceModule(t *testing.T) {
-	got := DefaultTables("hive")
+	got := DefaultTables("prod")
 	if len(got) != len(port.Modules()) {
 		t.Fatalf("%d names for %d modules", len(got), len(port.Modules()))
 	}
 	for _, m := range port.Modules() {
-		if want := "sluis-hive-" + string(m); got[m] != want {
+		if want := "sluis-prod-" + string(m); got[m] != want {
 			t.Errorf("%s: %q, want %q", m, got[m], want)
 		}
 	}
