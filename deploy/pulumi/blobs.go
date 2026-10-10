@@ -72,6 +72,31 @@ func (b *ExternalBlobs) validate() error {
 	return nil
 }
 
+// V5CredentialsRef is the address a layout v4 CredentialsRef has on layout v5:
+// refs there are `internal/<module>/<name>`, and the credential of a blob store
+// belongs to the module that owns the blob prefix, google, so
+// `internal/blobs/r2` is `internal/google/blobs-r2` (the address `sluis migrate
+// v5` copies it to). A ref that already begins with a module is returned as it
+// is.
+func V5CredentialsRef(ref string) string {
+	rest, ok := strings.CutPrefix(ref, "internal/")
+	first, second, _ := strings.Cut(rest, "/")
+	if !ok || validModule(Module(first)) {
+		return ref
+	}
+	return "internal/" + string(ModuleGoogle) + "/" + first + "-" + second
+}
+
+// checkLayoutV5 refuses a layout v4 credentials ref where the layout is v5: the
+// function would read an address the v5 secrets layout does not have.
+func (b *ExternalBlobs) checkLayoutV5() error {
+	if want := V5CredentialsRef(b.CredentialsRef); want != b.CredentialsRef {
+		return fmt.Errorf("sluispulumi: StorageArgs.Blobs.CredentialsRef %q is a layout v4 address and Layout is v5, where it is "+
+			"internal/<module>/<name>: set it to %q (`sluis migrate v5` copies the secret there)", b.CredentialsRef, want)
+	}
+	return nil
+}
+
 func (b *ExternalBlobs) region() string {
 	if b.Region == "" {
 		return "auto"

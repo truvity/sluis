@@ -216,6 +216,11 @@ func ownRuntime(doc map[string]any, a *LambdaArgs) (bool, error) {
 		added = true
 	}
 	if b := a.Storage.External; b != nil {
+		if a.Layout == LayoutV5 {
+			if err := b.checkLayoutV5(); err != nil {
+				return false, err
+			}
+		}
 		ports, err := child(doc, "Config", "ports")
 		if err != nil {
 			return false, err
