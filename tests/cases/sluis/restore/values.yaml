@@ -33,4 +33,4 @@ restore:
   ttlSecondsAfterFinished: 86400
   serviceAccount:
     awsIdentity: irsa
-    awsRoleArn: arn:aws:iam::111111111111:role/sluis-restore
+    awsRoleArn: arn:example:iam::acct:role/sluis-restore

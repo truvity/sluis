@@ -37,7 +37,7 @@ backup:
     - {name: OTEL_EXPORTER_OTLP_HEADERS, secretName: sluis-backup-inputs, key: otlp-headers}
   serviceAccount:
     awsIdentity: irsa
-    awsRoleArn: arn:aws:iam::111111111111:role/sluis-backup
+    awsRoleArn: arn:example:iam::acct:role/sluis-backup
   config:
     instance: sluis
     preset: k8s-aws
