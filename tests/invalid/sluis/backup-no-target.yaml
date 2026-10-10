@@ -1,0 +1,13 @@
+# The archive is where a backup goes: it has to be named.
+# error: backup.config.backup.target.bucket is required
+config:
+  issuerURL: https://issuer.example
+backup:
+  enabled: true
+  config:
+    instance: sluis
+    secrets: {source: ssm, root: /sluis, layout: v5}
+    ports:
+      dynamodb: {region: eu-west-1, tables: {backup: sluis-backup}}
+      blob: {adapter: s3, s3: {bucket: b}}
+    keys: {adapter: kms, archive: alias/a}

@@ -161,6 +161,7 @@ sluis.checks: everything the service's config must agree with.
 {{- if ne (join "," ($signing.additionalFiles | default list)) $additional -}}
 {{- fail (printf "config.signingKey.additionalFiles must be [%s], one file per signingKey.additional entry in the order they are declared (got [%s])" $additional (join ", " ($signing.additionalFiles | default list))) -}}
 {{- end -}}
+{{- include "sluis.layoutChecks" . -}}
 {{- if or (include "sluis.secretFiles" .) (and (include "sluis.documentsMode" .) (eq (dig "secrets" "source" "env" $c) "file")) -}}
 {{- $secrets := dig "secrets" dict $c -}}
 {{- if or (ne ($secrets.source | default "env") "file") (ne ($secrets.root | default "") "/var/run/sluis/secrets") -}}
@@ -194,6 +195,7 @@ sluis.checks: everything the service's config must agree with.
 {{- end -}}
 {{- include "sluis.expectAudit" (dict "key" "config.audit.tokenFile" "cfg" $c) -}}
 {{- include "sluis.controllersChecks" . -}}
+{{- include "sluis.backupChecks" . -}}
 {{- /*
   The OpenBao Secrets adapter (adapters.secrets: openbao) logs in with the same
   projected token and trusts the CA bundle the chart mounts: one
@@ -339,6 +341,76 @@ never the endpoint, which has a value of its own so that one place sets it.
 {{- end -}}
 {{- if not (hasPrefix "OTEL_" $name) -}}
 {{- fail (printf "telemetry.otlp.extraEnv holds OpenTelemetry SDK variables only: %q does not start with OTEL_ (a secret reaches a pod through secretEnv, the rest through config)" $name) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+sluis.layoutChecks: layout v5 and its tables go together (docs/decisions/0072),
+and its secrets are in SSM: a Secret the chart would project is never read.
+*/}}
+{{- define "sluis.layoutChecks" -}}
+{{- $c := .Values.config -}}
+{{- $layout := dig "secrets" "layout" "v4" $c -}}
+{{- $tables := dig "ports" "dynamodb" "tables" dict $c -}}
+{{- if and (eq $layout "v5") (not $tables) (not (dig "adapters" "state" "adapter" "" $c)) -}}
+{{- fail "config.secrets.layout is v5 and config.ports.dynamodb.tables is not set: layout v5 keeps one DynamoDB table per module, so name them (the library default is sluis-<instance>-<module>), or remove layout" -}}
+{{- end -}}
+{{- if and $tables (ne $layout "v5") -}}
+{{- fail (printf "config.ports.dynamodb.tables is set and config.secrets.layout is %q: tables are layout v5's, so set `secrets: {source: ssm, root: <root>, layout: v5}`, or name the one table with `table`" $layout) -}}
+{{- end -}}
+{{- if and (eq $layout "v5") .Values.secrets -}}
+{{- fail "config.secrets.layout is v5, which reads secrets from SSM, and `secrets` projects Secrets as files the service would never read: remove `secrets`" -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+sluis.backupChecks: what the backup module's document must agree with, once the
+CronJob or the restore Job is asked for. The module is layout v5 only; the
+document names where the archive goes; the role is the CronJob's or the Job's,
+never the document's, because a CronJob must not be able to restore.
+*/}}
+{{- define "sluis.backupChecks" -}}
+{{- $b := .Values.backup -}}
+{{- $r := .Values.restore -}}
+{{- if or $b.enabled $r.enabled -}}
+{{- $c := $b.config | default dict -}}
+{{- if not $c -}}
+{{- fail "backup.enabled or restore.enabled is set and backup.config is empty: it is the sluis-backup/v1 document (backup.target, backup.key, secrets, ports), see charts/sluis/examples/backup-v5.yaml" -}}
+{{- end -}}
+{{- if not (dig "backup" "target" "bucket" "" $c) -}}
+{{- fail "backup.config.backup.target.bucket is required: the archive bucket, which the backup writes to and the restore reads from" -}}
+{{- end -}}
+{{- if not (or (dig "backup" "key" "" $c) (dig "keys" "archive" "" $c)) -}}
+{{- fail "backup.config needs backup.key (or keys.archive): the alias that seals each backup's data key" -}}
+{{- end -}}
+{{- if ne (dig "backup" "role" "backup" $c) "backup" -}}
+{{- fail "backup.config.backup.role must be unset: the CronJob is the backup role and restore.enabled renders the restore Job, so a CronJob cannot restore" -}}
+{{- end -}}
+{{- if ne (dig "secrets" "layout" "" $c) "v5" -}}
+{{- fail "backup.config.secrets.layout must be v5 (with source: ssm and a root): the backup module reads layout v5 only" -}}
+{{- end -}}
+{{- if not (dig "ports" "dynamodb" "tables" dict $c) -}}
+{{- fail "backup.config.ports.dynamodb.tables is required: the backup reads every module's own table and writes its own" -}}
+{{- end -}}
+{{- include "sluis.expectAudit" (dict "key" "backup.config.audit.tokenFile" "cfg" $c) -}}
+{{- end -}}
+{{- if $r.enabled -}}
+{{- if and $r.backupId $r.resume -}}
+{{- fail "restore.backupId and restore.resume are both set: a restore either starts a backup or continues the one that paused" -}}
+{{- end -}}
+{{- if not (or $r.backupId $r.resume) -}}
+{{- fail "restore.enabled needs restore.backupId (see `sluis backup list`) or restore.resume: true" -}}
+{{- end -}}
+{{- if and $r.backupId (not (regexMatch "^[0-9]{8}T[0-9]{6}Z-[0-9a-f]+$" $r.backupId)) -}}
+{{- fail (printf "restore.backupId %q is not a backup id (20261010T020000Z-3fa9c1): `sluis backup list` prints them" $r.backupId) -}}
+{{- end -}}
+{{- if and $r.backupId (not $r.confirm) -}}
+{{- fail "restore.confirm is required: a restore overwrites a live installation, so write the installation's name (backup.config.instance)" -}}
+{{- end -}}
+{{- $instance := dig "instance" "" ($b.config | default dict) -}}
+{{- if and $r.confirm $instance (ne $r.confirm $instance) -}}
+{{- fail (printf "restore.confirm is %q and backup.config.instance is %q: the restore is for the installation named there" $r.confirm $instance) -}}
 {{- end -}}
 {{- end -}}
 {{- end -}}

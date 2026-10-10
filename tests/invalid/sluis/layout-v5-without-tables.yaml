@@ -1,0 +1,6 @@
+# Layout v5 is a table per module.
+# error: config.secrets.layout is v5 and config.ports.dynamodb.tables is not set
+config:
+  issuerURL: https://issuer.example
+  preset: k8s-aws
+  secrets: {source: ssm, root: /sluis, layout: v5}

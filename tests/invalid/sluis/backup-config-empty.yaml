@@ -1,0 +1,6 @@
+# Asked for, with no document.
+# error: backup.enabled or restore.enabled is set and backup.config is empty
+config:
+  issuerURL: https://issuer.example
+backup:
+  enabled: true

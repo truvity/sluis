@@ -1,0 +1,15 @@
+# Without the key nothing can be sealed.
+# error: backup.config needs backup.key
+config:
+  issuerURL: https://issuer.example
+backup:
+  enabled: true
+  config:
+    instance: sluis
+    secrets: {source: ssm, root: /sluis, layout: v5}
+    ports:
+      dynamodb: {region: eu-west-1, tables: {backup: sluis-backup}}
+      blob: {adapter: s3, s3: {bucket: b}}
+    backup:
+      retention: {keep: 7}
+      target: {bucket: archive}

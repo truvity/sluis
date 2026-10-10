@@ -1,0 +1,7 @@
+# Tables are layout v5's.
+# error: config.ports.dynamodb.tables is set and config.secrets.layout is "v4"
+config:
+  issuerURL: https://issuer.example
+  preset: k8s-aws
+  ports:
+    dynamodb: {region: eu-west-1, tables: {oidc: sluis-oidc}}

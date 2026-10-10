@@ -1,0 +1,15 @@
+# Layout v5 is a table per module.
+# error: backup.config.ports.dynamodb.tables is required
+config:
+  issuerURL: https://issuer.example
+backup:
+  enabled: true
+  config:
+    instance: sluis
+    secrets: {source: ssm, root: /sluis, layout: v5}
+    ports:
+      dynamodb: {region: eu-west-1, table: sluis}
+      blob: {adapter: s3, s3: {bucket: b}}
+    keys: {adapter: kms, archive: alias/a}
+    backup:
+      target: {bucket: archive}

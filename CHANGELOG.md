@@ -1,5 +1,10 @@
 ## Unreleased
 
+### Added
+
+- **The chart renders a layout v5 installation and the backup module.** `config.secrets.layout: v5` with `config.ports.dynamodb.tables` renders as it is written (the chart refuses one without the other, and refuses `secrets` beside v5, whose secrets are in SSM; with `secrets.source: ssm` it projects no Secret even for confidential clients). `backup.enabled` renders a CronJob for `sluis backup run` and one for `sluis backup prune` (`backup.prune`), with `backup.config` as the `sluis-backup/v1` document in the ConfigMap `<release>-backup-config`; the pods are labelled `<name>-backup`, so the service's Service and NetworkPolicy never select them, and they run as `<release>-backup` (`backup.serviceAccount`, IRSA or Pod Identity). The chart refuses a document without `backup.target`, a key, layout v5 or tables, and one with `backup.role: restore`. `restore.enabled` renders one Job, never a CronJob, as `<release>-restore`: `sluis restore start <backupId> --confirm <confirm>`, with `overwrite`, `by` and `note`, or `resume`; it is refused unless `confirm` is `backup.config.instance`. `telemetry.legacyMetrics`, `config.console.backup` and the maintenance flag need no chart value. `charts/sluis/examples/backup-v5.yaml` is a whole installation. Per-module Deployments stay out until the processes are split; the v4 layout renders as before.
+
+
 ## v1.75.0-rc.3
 
 ### Fixed

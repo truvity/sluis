@@ -1,0 +1,15 @@
+# The backup module reads layout v5 only.
+# error: backup.config.secrets.layout must be v5
+config:
+  issuerURL: https://issuer.example
+backup:
+  enabled: true
+  config:
+    instance: sluis
+    secrets: {source: ssm, root: /sluis}
+    ports:
+      dynamodb: {region: eu-west-1, tables: {backup: sluis-backup}}
+      blob: {adapter: s3, s3: {bucket: b}}
+    keys: {adapter: kms, archive: alias/a}
+    backup:
+      target: {bucket: archive}

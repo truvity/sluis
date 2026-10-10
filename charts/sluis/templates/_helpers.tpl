@@ -143,11 +143,11 @@ secret the same way. Returned as YAML, since a template returns a string.
 {{/*
 sluis.document: a document as the chart renders it, its apiVersion first:
 sluis.truvity.github.io/<kind>/v<N> (the service document, `sluis`, is v3;
-the policy is v2). Takes (dict "kind" "sluis" "doc" <its values>).
+the backup module's, `sluis-backup`, is v1; the policy is v2). Takes (dict "kind" "sluis" "doc" <its values>).
 */}}
 {{- define "sluis.document" -}}
 {{- $d := omit (.doc | default dict) "apiVersion" -}}
-apiVersion: sluis.truvity.github.io/{{ .kind }}/{{ if eq .kind "sluis" }}v3{{ else }}v2{{ end }}
+apiVersion: sluis.truvity.github.io/{{ .kind }}/{{ if eq .kind "sluis" }}v3{{ else if eq .kind "sluis-backup" }}v1{{ else }}v2{{ end }}
 {{- if $d }}
 {{ toYaml $d }}
 {{- end }}
@@ -225,12 +225,14 @@ both ways is refused: one place says it.
 {{/*
 Non-empty when any declared client carries a secret, which is what decides
 whether the client-secrets volume is rendered at all. A deployment whose
-clients are all public or exchange-only mounts nothing.
+clients are all public or exchange-only mounts nothing, and neither does one
+whose secrets are in SSM (`config.secrets.source: ssm`, the layout v5 way): the
+service reads them there.
 */}}
 {{- define "sluis.secretFiles" -}}
 {{- if include "sluis.documentsMode" . -}}
 {{- if and .Values.secrets (eq (dig "secrets" "source" "env" .Values.config) "file") }}yes{{ end -}}
-{{- else if or .Values.secrets (include "sluis.confidentialClients" .) }}yes{{ end }}
+{{- else if and (ne (dig "secrets" "source" "file" .Values.config) "ssm") (or .Values.secrets (include "sluis.confidentialClients" .)) }}yes{{ end }}
 {{- end }}
 
 {{- define "sluis.confidentialClients" -}}
