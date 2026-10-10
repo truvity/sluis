@@ -77,7 +77,7 @@ func (r *Report) Totals() SectionReport {
 	return t
 }
 
-func (s *SectionReport) add(a Action, it Item, max int) {
+func (s *SectionReport) add(a Action, it Item, limit int) {
 	switch a {
 	case Create:
 		s.Create++
@@ -91,7 +91,7 @@ func (s *SectionReport) add(a Action, it Item, max int) {
 	case Regenerated:
 		s.Regenerated++
 	}
-	if len(s.Items) < max {
+	if len(s.Items) < limit {
 		it.Action = a
 		s.Items = append(s.Items, it)
 	} else {
