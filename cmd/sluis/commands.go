@@ -19,7 +19,7 @@ import (
 )
 
 // errNotSplit is what a module command answers while the module has no process
-// of its own: the role still runs inside `sluis serve`.
+// of its own: the role still runs inside the issuer process.
 var errNotSplit = module.ErrNotSplit
 
 const usageText = `Each command but migrate takes --config <file> and nothing else but --version and --help (a tick also
@@ -71,7 +71,9 @@ func init() {
 }
 
 func newApp(out io.Writer) *cli.Command {
-	serveRun := func(o io.Writer, a []string) error { return start(o, "sluis serve", "sluis", a, issuer.Module{}.Run) }
+	serveRun := func(o io.Writer, a []string) error {
+		return start(o, "sluis serve", "sluis", a, issuer.Module{Deprecated: "sluis serve"}.Run)
+	}
 	app := &cli.Command{
 		Name:           "sluis",
 		Usage:          "sluis: one multi-call binary, one module per process",
@@ -88,8 +90,7 @@ func newApp(out io.Writer) *cli.Command {
 			// The modules (docs/decisions/0071). Until a module has a process of its
 			// own, the issuer role is the one process `serve` is; github and slack are
 			// the controllers' loops and cloudflare is the minter's rotation.
-			moduleCmd(issuer.Module{}, "sluis", "the issuer role: today the one process of `serve`", out),
-			moduleCmd(module.Unsplit("console"), "sluis", "the console (not yet split)", out),
+			moduleCmd(issuer.Module{}, "sluis", "the issuer module: the issuer, the signer and the console in one process", out),
 			moduleCmd(github.Module{}, "controller-github", "the GitHub module: the controller's loop, or `tick <target>` once", out),
 			moduleCmd(slack.Module{}, "controller-slack", "the Slack module: the controller's loop, or `tick <target>` once", out),
 			moduleCmd(cloudflare.Module{}, "sluis", "the Cloudflare module: the STS minter's rotation loop, or `tick <preset>` once", out),
@@ -97,7 +98,7 @@ func newApp(out io.Writer) *cli.Command {
 			legacy("backup", "the backup module: run, list, status or prune (sluis backup --help)", backupCmd, out),
 			legacy("restore", "the restore role of the backup zip: preview, start or status (sluis restore --help)", restoreCmd, out),
 			// Today's commands, unchanged.
-			legacy("serve", "the one process: the issuer, the directory hub and the console, and the controllers the document names", serveRun, out),
+			legacy("serve", "(deprecated, use issuer) the one process: the issuer, the signer, the directory hub and the console, and the controllers the document names", serveRun, out),
 			legacy("controller", "(deprecated) a controller alone: github or slack", controllerCmd, out),
 			legacy("tick", "one tick, once: github or slack, then the target", tickCmd, out),
 			legacy("check", "verify that every secret the document and its policy declare is in SSM: names and versions, never values", checkCmd, out),

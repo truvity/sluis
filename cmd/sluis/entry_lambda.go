@@ -2,7 +2,12 @@
 
 package main
 
-import "github.com/truvity/sluis/internal/lambdaapp"
+import (
+	"github.com/truvity/sluis/internal/lambdaapp"
+	_ "github.com/truvity/sluis/internal/lambdaapp/backupfn"
+	_ "github.com/truvity/sluis/internal/lambdaapp/cloudflarefn"
+	_ "github.com/truvity/sluis/internal/lambdaapp/issuerfn"
+)
 
 // platformEntry is the Lambda build's second entry (docs/decisions/0071): the
 // runtime starts `bootstrap` with no arguments and AWS_LAMBDA_RUNTIME_API set,

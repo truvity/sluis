@@ -1,6 +1,9 @@
-// Command sluis-lambda is sluis as ONE AWS Lambda function: one arm64
-// `bootstrap` binary in one zip, deployed as one function that serves API
-// Gateway events and runs the controllers' passes. See
+// Command sluis-lambda is the deprecated all-in-one Lambda function: one arm64
+// `bootstrap` binary in one zip that carries the issuer, the Cloudflare module
+// and the backup module, and runs the one the function's document is for. It is
+// published for one more release as `sluis-lambda_<version>_linux_arm64.zip`
+// so that a deployment that names it keeps working; the per-module zips
+// (`sluis-issuer_*`, `sluis-cloudflare_*`, `sluis-backup_*`) replace it. See
 // docs/reference/sluis/lambda.md.
 //
 // It is built with `-tags lambda,lambda.norpc`: the first leaves out the
@@ -9,7 +12,12 @@
 // a runtime that is not Go's RPC one.
 package main
 
-import "github.com/truvity/sluis/internal/lambdaapp"
+import (
+	"github.com/truvity/sluis/internal/lambdaapp"
+	_ "github.com/truvity/sluis/internal/lambdaapp/backupfn"
+	_ "github.com/truvity/sluis/internal/lambdaapp/cloudflarefn"
+	_ "github.com/truvity/sluis/internal/lambdaapp/issuerfn"
+)
 
 // The dispatch is lambdaapp.Start, shared with the lambda build of cmd/sluis.
 func main() { lambdaapp.Start() }

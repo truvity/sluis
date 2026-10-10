@@ -1,4 +1,4 @@
-package lambdaapp
+package backupfn
 
 import (
 	"context"
@@ -16,6 +16,7 @@ import (
 	backupapp "github.com/truvity/sluis/internal/backup/app"
 	"github.com/truvity/sluis/internal/backup/restore"
 	"github.com/truvity/sluis/internal/backup/restorejob"
+	"github.com/truvity/sluis/internal/lambdaapp"
 )
 
 // lambdaAPI is the part of the Lambda client the function uses to start its own
@@ -49,20 +50,20 @@ func reinvoke(ctx context.Context, api lambdaAPI) error {
 
 // restoreEvent runs one {"kind":"restore"} event on a. api starts the next
 // slice when this one paused; nil only reports it.
-func restoreEvent(ctx context.Context, a restorer, api lambdaAPI, log *slog.Logger, ev RestoreEvent) (RestoreResult, error) {
+func restoreEvent(ctx context.Context, a restorer, api lambdaAPI, log *slog.Logger, ev lambdaapp.RestoreEvent) (lambdaapp.RestoreResult, error) {
 	if ev.Preview {
 		rep, err := a.PreviewRestore(ctx, ev.Backup)
 		if err != nil {
-			return RestoreResult{Outcome: restorejob.OutcomeRefused, Backup: ev.Backup, Error: err.Error()}, nil
+			return lambdaapp.RestoreResult{Outcome: restorejob.OutcomeRefused, Backup: ev.Backup, Error: err.Error()}, nil
 		}
-		return RestoreResult{Outcome: "preview", Backup: ev.Backup, Report: rep}, nil
+		return lambdaapp.RestoreResult{Outcome: "preview", Backup: ev.Backup, Report: rep}, nil
 	}
 	res, err := a.Restore(ctx, restorejob.Request{BackupID: ev.Backup, Overwrite: ev.Overwrite, Actor: audit.Workload("lambda:restore"),
 		By: ev.By, Note: ev.Note})
 	if err != nil {
-		return RestoreResult{}, err
+		return lambdaapp.RestoreResult{}, err
 	}
-	out := RestoreResult{Outcome: res.Outcome, ID: res.ID, Reason: res.Reason, Error: res.Error}
+	out := lambdaapp.RestoreResult{Outcome: res.Outcome, ID: res.ID, Reason: res.Reason, Error: res.Error}
 	if r := res.Run; r != nil {
 		out.Backup, out.State, out.Maintenance = r.BackupID, r.State, r.Maintenance
 		out.Reason, out.Error = r.Reason, r.Error

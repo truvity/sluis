@@ -47,8 +47,16 @@ func TestSubcommandsNeedTheirFile(t *testing.T) {
 	}
 }
 
+// The console is part of the issuer's process; it is not a command of its own.
+func TestTheConsoleIsNotACommand(t *testing.T) {
+	var out bytes.Buffer
+	if err := run([]string{"console"}, &out); !errors.Is(err, errUsage) {
+		t.Errorf("sluis console: %v", err)
+	}
+}
+
 func TestAModuleWithoutAProcessSaysNotYetSplit(t *testing.T) {
-	for _, module := range []string{"console", "google"} {
+	for _, module := range []string{"google"} {
 		var out bytes.Buffer
 		err := run([]string{module}, &out)
 		if !errors.Is(err, errNotSplit) {
