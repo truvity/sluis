@@ -379,7 +379,7 @@
     },
     {
       "module": "google",
-      "new": 4,
+      "new": 3,
       "same": 0,
       "different": 0,
       "refused": 0,
@@ -411,25 +411,18 @@
           "to": "internal/google/blobs-r2",
           "status": "new",
           "fromVersion": "1"
-        },
-        {
-          "concern": "secret",
-          "kind": "workspace-key",
-          "id": "C01",
-          "from": "internal/config/directory/C01/key",
-          "to": "internal/google/workspaces/C01/key",
-          "status": "new"
         }
       ]
     }
   ],
   "totals": {
-    "new": 45,
+    "new": 44,
     "same": 0,
     "different": 0,
     "refused": 0
   },
   "notes": [
+    "internal/config/directory/C01/key is at internal/google/workspaces/C01/key, where the record that holds the key writes it: it is carried with the record",
     "leases, notifications, caches, dedupe records, Slack Connect shares and user caches, and the hub's blob snapshots are not copied: they start fresh",
     "internal/config/valkey/password is delivered to the cluster only and is not carried"
   ],

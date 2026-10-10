@@ -23,16 +23,49 @@ import (
 
 const migrateV5Command = "sluis migrate v5"
 
-// migrateV5Flags are the flags of `migrate v5 plan`: the source and destination
-// files, which parts to plan, and where a layout v4 source on Kubernetes is. A
-// plan writes nothing, so it has none of the flags that allow a write.
+// migrateV5Flags are the flags of `migrate v5 plan`, `copy` and `verify`: the
+// source and destination files, which parts to plan, and where a layout v4
+// source on Kubernetes is. Only copy has the flags that allow a write.
 type migrateV5Flags struct {
 	from, to, skip, blobs, sessions    string
 	kubeconfig, kubeContext, namespace string
 	version                            bool
+	dryRun, overwrite, writersStopped  bool
 }
 
-func migrateV5Usage(out io.Writer, fs *flag.FlagSet) {
+func migrateV5Usage(out io.Writer, sub string, fs *flag.FlagSet) {
+	if sub != "plan" {
+		_, _ = fmt.Fprintf(out, `Usage: sluis migrate v5 %s --from <v4 config> --to <v5 config> [flags]
+
+`, sub)
+		switch sub {
+		case "copy":
+			_, _ = fmt.Fprint(out, `Copies a layout v4 installation to a layout v5 one, then reads both sides again and
+verifies. It is idempotent: what the destination already holds equal is not
+written, so a run that failed is re-run as it was. It stops before any write when
+an item is refused or the destination holds a different value (--overwrite
+replaces it). It never deletes anything from the source. It needs
+--i-have-stopped-writers: stop the issuer, the console and both controllers first.
+
+Two passes keep the stop short: a first pass with --skip issuer while the source
+runs, then, with the writers stopped, a final pass with --overwrite for what
+changed meanwhile. The key ring and sessions are not carried by this build.
+
+The report is JSON on stdout (per module: copied, same, different, refused; no
+value) and a summary is on stderr.
+
+`)
+		default:
+			_, _ = fmt.Fprint(out, `Reads both sides and compares them, per module, writing nothing: secrets by a hash
+independent of their version, records by value, an organisation by its record and
+the App it names. The exit status is 0 only when every source item is on the
+destination, equal.
+
+`)
+		}
+		fs.PrintDefaults()
+		return
+	}
 	_, _ = fmt.Fprint(out, `Usage: sluis migrate v5 plan --from <v4 config> --to <v5 config> [flags]
 
 Reads a layout v4 installation (--from: one table, the old parameter names) and a
@@ -41,22 +74,30 @@ what a copy would find: new, same, different or refused (docs/decisions/0072). I
 prints names and versions and never a value, and writes nothing to either side.
 
 The report is JSON on stdout and a summary is on stderr. The exit status is 0 only
-when nothing is refused. copy and verify are the next steps of the migration and are
-not part of this build.
+when nothing is refused. copy and verify are the next steps of the migration.
 
 `)
 	fs.PrintDefaults()
 }
 
-func parseMigrateV5(args []string, out io.Writer) (migrateV5Flags, bool, error) {
+func parseMigrateV5(sub string, args []string, out io.Writer) (migrateV5Flags, bool, error) {
 	var f migrateV5Flags
-	fs := flag.NewFlagSet(migrateV5Command+" plan", flag.ContinueOnError)
+	fs := flag.NewFlagSet(migrateV5Command+" "+sub, flag.ContinueOnError)
 	fs.SetOutput(out)
-	fs.Usage = func() { migrateV5Usage(out, fs) }
+	fs.Usage = func() { migrateV5Usage(out, sub, fs) }
 	fs.StringVar(&f.from, "from", "", "the source: the configuration file of the layout v4 installation")
 	fs.StringVar(&f.to, "to", "", "the destination: the configuration file of the layout v5 installation")
-	fs.StringVar(&f.sessions, "sessions", "copy",
-		"the issuer's sessions, refresh tokens, codes in flight and Index sets: copy (plan them) or skip (plan the key ring only)")
+	f.sessions = "copy"
+	if sub == "plan" {
+		fs.StringVar(&f.sessions, "sessions", "copy",
+			"the issuer's sessions, refresh tokens, codes in flight and Index sets: copy (plan them) or skip (plan the key ring only)")
+	}
+	if sub == "copy" {
+		fs.BoolVar(&f.dryRun, "dry-run", false, "read both sides and report what would be copied; write nothing")
+		fs.BoolVar(&f.overwrite, "overwrite", false, "replace a value the destination holds that differs from the source's")
+		fs.BoolVar(&f.writersStopped, "i-have-stopped-writers", false,
+			"say that nothing writes to the source (the issuer, the console and both controllers are stopped); required unless --dry-run")
+	}
 	fs.StringVar(&f.skip, "skip", "", "domains to leave out, comma separated: "+strings.Join(migrate.AllDomains, ", "))
 	fs.StringVar(&f.blobs, "blobs", string(migrate.BlobsAuto),
 		"the controllers' reports: auto (plan them when the two sides keep them in different places), copy or skip")
@@ -75,7 +116,7 @@ func parseMigrateV5(args []string, out io.Writer) (migrateV5Flags, bool, error) 
 		_, _ = fmt.Fprintln(out, migrateV5Command, version.String())
 		return f, true, nil
 	case fs.NArg() > 0:
-		return f, false, fmt.Errorf("%s plan takes no arguments: only flags", migrateV5Command)
+		return f, false, fmt.Errorf("%s %s takes no arguments: only flags", migrateV5Command, sub)
 	case f.from == "" || f.to == "":
 		return f, false, fmt.Errorf("%w: give the source and the destination: --from <v4 config> --to <v5 config>", errUsage)
 	case f.from == f.to:
@@ -94,23 +135,21 @@ func parseMigrateV5(args []string, out io.Writer) (migrateV5Flags, bool, error) 
 // migrateV5Cmd is `sluis migrate v5`.
 func migrateV5Cmd(out io.Writer, args []string) error {
 	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
-		_, _ = fmt.Fprintf(out, "Usage: %s plan --from <v4 config> --to <v5 config> [flags]\n", migrateV5Command)
+		_, _ = fmt.Fprintf(out, "Usage: %s plan|copy|verify --from <v4 config> --to <v5 config> [flags]\n", migrateV5Command)
 		if len(args) > 0 && (args[0] == "-h" || args[0] == "-help" || args[0] == "--help") {
 			return nil
 		}
-		return fmt.Errorf("%w: %s takes a subcommand: plan", errUsage, migrateV5Command)
+		return fmt.Errorf("%w: %s takes a subcommand: plan, copy or verify", errUsage, migrateV5Command)
 	}
 	switch args[0] {
-	case "plan":
-		return migrateV5Plan(out, args[1:])
-	case "copy", "verify":
-		return fmt.Errorf("%w: %s %s is not part of this build; only plan is", errUsage, migrateV5Command, args[0])
+	case "plan", "copy", "verify":
+		return migrateV5Run(out, args[0], args[1:])
 	}
-	return fmt.Errorf("%w: %s has no subcommand %q (plan)", errUsage, migrateV5Command, args[0])
+	return fmt.Errorf("%w: %s has no subcommand %q (plan, copy, verify)", errUsage, migrateV5Command, args[0])
 }
 
-func migrateV5Plan(out io.Writer, args []string) error {
-	f, done, err := parseMigrateV5(args, out)
+func migrateV5Run(out io.Writer, sub string, args []string) error {
+	f, done, err := parseMigrateV5(sub, args, out)
 	if err != nil || done {
 		return err
 	}
@@ -152,14 +191,25 @@ func migrateV5Plan(out io.Writer, args []string) error {
 			skip = append(skip, s)
 		}
 	}
-	report, err := migrate.Plan(ctx, from, to, migrate.PlanOptions{
+	opt := migrate.PlanOptions{
 		Skip: skip, Sessions: f.sessions == "copy", Blobs: migrate.BlobMode(f.blobs),
 		// The destination's policy says which Apps an organisation uses; the
 		// source's which Apps are exported.
 		ExportedGitHubApp: src.exported, AppRef: dst.appRef,
 		ConfigNames: src.configNames, CloudflareAccounts: src.accounts,
 		S3Ref: src.s3Ref, S3RefTo: dst.s3Ref, Log: log,
-	})
+	}
+	var report *migrate.PlanReport
+	switch sub {
+	case "copy":
+		report, err = migrate.CopyV5(ctx, from, to, migrate.V5Options{
+			PlanOptions: opt, DryRun: f.dryRun, Overwrite: f.overwrite, WritersStopped: f.writersStopped,
+		})
+	case "verify":
+		report, err = migrate.VerifyV5(ctx, from, to, opt)
+	default:
+		report, err = migrate.Plan(ctx, from, to, opt)
+	}
 	if report != nil {
 		_, _ = out.Write(report.JSON())
 		printPlanSummary(os.Stderr, report)
@@ -212,20 +262,31 @@ func readPlanInfo(file string) (planInfo, error) {
 // printPlanSummary says per module what the plan found, for the operator who
 // reads the terminal and not the JSON.
 func printPlanSummary(w io.Writer, r *migrate.PlanReport) {
-	_, _ = fmt.Fprintf(w, "\nmigrate v5 plan %s -> %s (nothing was written)\n", r.From, r.To)
+	switch {
+	case r.Mode == "":
+		_, _ = fmt.Fprintf(w, "\nmigrate v5 plan %s -> %s (nothing was written)\n", r.From, r.To)
+	case r.Mode == "verify" || r.DryRun:
+		_, _ = fmt.Fprintf(w, "\nmigrate v5 %s %s -> %s (nothing was written)\n", r.Mode, r.From, r.To)
+	default:
+		_, _ = fmt.Fprintf(w, "\nmigrate v5 %s %s -> %s\n", r.Mode, r.From, r.To)
+	}
 	for _, m := range r.Modules {
 		_, _ = fmt.Fprintf(w, "  %-10s %s\n", m.Module, m.PlanCounts)
 	}
 	_, _ = fmt.Fprintf(w, "  %-10s %s\n", "all", r.Totals)
 	for _, m := range r.Modules {
 		for i := range m.Items {
-			if it := &m.Items[i]; it.Status == migrate.PlanRefused {
-				_, _ = fmt.Fprintf(w, "  REFUSED %s %s %s: %s\n", m.Module, it.Concern, it.From, it.Reason)
+			if it := &m.Items[i]; it.Status == migrate.PlanRefused || it.Status == migrate.PlanMissing ||
+				(r.Mode == "verify" && it.Status == migrate.PlanDifferent) {
+				_, _ = fmt.Fprintf(w, "  %s %s %s %s: %s\n", strings.ToUpper(string(it.Status)), m.Module, it.Concern, it.From, it.Reason)
 			}
 		}
 	}
 	for _, n := range r.Notes {
 		_, _ = fmt.Fprintf(w, "  note: %s\n", n)
+	}
+	if v := r.Verify; v != nil {
+		_, _ = fmt.Fprintf(w, "  verified afterwards: %s\n", v.PlanCounts)
 	}
 	status := "ok"
 	if !r.OK {

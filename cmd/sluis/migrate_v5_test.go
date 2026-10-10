@@ -13,7 +13,10 @@ func TestMigrateV5TakesTheMigrateFlagsAndAPlanSubcommand(t *testing.T) {
 	for name, args := range map[string][]string{
 		"no subcommand":  {"migrate", "v5"},
 		"unknown":        {"migrate", "v5", "apply"},
-		"copy not yet":   {"migrate", "v5", "copy", "--from", "a.yaml", "--to", "b.yaml"},
+		"copy no files":  {"migrate", "v5", "copy"},
+		"verify no to":   {"migrate", "v5", "verify", "--from", "a.yaml"},
+		"verify write":   {"migrate", "v5", "verify", "--from", "a.yaml", "--to", "b.yaml", "--overwrite"},
+		"plan dry run":   {"migrate", "v5", "plan", "--from", "a.yaml", "--to", "b.yaml", "--dry-run"},
 		"no files":       {"migrate", "v5", "plan"},
 		"no to":          {"migrate", "v5", "plan", "--from", "a.yaml"},
 		"the same":       {"migrate", "v5", "plan", "--from", "a.yaml", "--to", "a.yaml"},
@@ -24,13 +27,17 @@ func TestMigrateV5TakesTheMigrateFlagsAndAPlanSubcommand(t *testing.T) {
 	} {
 		var out bytes.Buffer
 		err := run(args, &out)
-		if err == nil || (name != "write flag" && name != "stray argument" && !errors.Is(err, errUsage)) {
+		if err == nil || (name != "write flag" && name != "stray argument" && name != "verify write" && name != "plan dry run" && !errors.Is(err, errUsage)) {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
 	var out bytes.Buffer
 	if err := run([]string{"migrate", "v5", "plan", "--help"}, &out); err != nil || !strings.Contains(out.String(), "-sessions string") {
 		t.Errorf("migrate v5 plan --help = %v, %q", err, out.String())
+	}
+	out.Reset()
+	if err := run([]string{"migrate", "v5", "copy", "--help"}, &out); err != nil || !strings.Contains(out.String(), "-i-have-stopped-writers") {
+		t.Errorf("migrate v5 copy --help = %v, %q", err, out.String())
 	}
 	// The old command is unchanged.
 	out.Reset()
