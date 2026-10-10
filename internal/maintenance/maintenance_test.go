@@ -171,3 +171,92 @@ func TestSetFindsTheModuleUnderMaintenance(t *testing.T) {
 		t.Fatalf("Any = %q, %v", m, on)
 	}
 }
+
+func TestFrozenMiddlewareServesTheReadOnlyListOnlyInAFreeze(t *testing.T) {
+	t.Parallel()
+	st := memory.New()
+	g := maintenance.New(st, maintenance.WithTTL(time.Nanosecond))
+	var sawReadOnly bool
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sawReadOnly = maintenance.ReadOnly(r.Context())
+		w.WriteHeader(http.StatusInternalServerError)
+	})
+	h := g.MiddlewareFrozen(
+		func(r *http.Request) bool { return r.URL.Path == "/keys" },
+		func(r *http.Request) bool { return r.URL.Path == "/token" }, next)
+	get := func(path string) *httptest.ResponseRecorder {
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, httptest.NewRequest(http.MethodPost, path, nil))
+		return w
+	}
+
+	if get("/token"); sawReadOnly {
+		t.Error("no flag: the request was marked read-only")
+	}
+	if err := maintenance.Write(t.Context(), st, maintenance.Flag{State: maintenance.StateMigration}); err != nil {
+		t.Fatal(err)
+	}
+	w := get("/token")
+	if !sawReadOnly {
+		t.Error("frozen: the token request was not marked read-only")
+	}
+	if w.Code != http.StatusInternalServerError || w.Header().Get("Retry-After") == "" {
+		t.Errorf("a 5xx of a read-only request = %d, Retry-After %q; want Retry-After", w.Code, w.Header().Get("Retry-After"))
+	}
+	if w := get("/other"); w.Code != http.StatusServiceUnavailable || w.Header().Get("Retry-After") == "" {
+		t.Errorf("a write frozen = %d, want 503 with Retry-After", w.Code)
+	}
+	if err := maintenance.Write(t.Context(), st, maintenance.Flag{State: maintenance.StateRestoring}); err != nil {
+		t.Fatal(err)
+	}
+	if w := get("/token"); w.Code != http.StatusServiceUnavailable {
+		t.Errorf("the read-only list under a restore = %d, want 503", w.Code)
+	}
+}
+
+func TestFreezeAndLift(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	a, b := memory.New(), memory.New()
+	tables := []maintenance.Table{{Name: "oidc", State: a}, {Name: "github", State: b}}
+	at := time.Unix(5_000, 0)
+
+	sts, err := maintenance.Freeze(ctx, tables, "op", "move", at)
+	if err != nil || len(sts) != 2 || !sts[0].Flag.Frozen() || sts[0].Flag.By != "op" {
+		t.Fatalf("Freeze = %+v, %v", sts, err)
+	}
+	// Again: the first freeze's time is kept.
+	sts, err = maintenance.Freeze(ctx, tables, "other", "again", at.Add(time.Hour))
+	if err != nil || !sts[0].Flag.Since.Equal(at) {
+		t.Fatalf("second Freeze = %+v, %v; want the first Since kept", sts, err)
+	}
+	if left := sts[0].Flag.Quiet(at.Add(time.Second)); left <= 0 {
+		t.Errorf("Quiet a second after = %v, want a wait", left)
+	}
+	if left := sts[0].Flag.Quiet(at.Add(time.Minute)); left != 0 {
+		t.Errorf("Quiet a minute after = %v, want 0", left)
+	}
+	if n, forced, err := maintenance.Lift(ctx, tables, false); err != nil || n != 2 || forced {
+		t.Fatalf("Lift = %d, %v, %v", n, forced, err)
+	}
+	if n, _, err := maintenance.Lift(ctx, tables, false); err != nil || n != 0 {
+		t.Fatalf("Lift of nothing = %d, %v", n, err)
+	}
+
+	// A restore's flag is neither overwritten by a freeze nor lifted without force.
+	if err := maintenance.Write(ctx, b, maintenance.Flag{State: maintenance.StateRestoring}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := maintenance.Freeze(ctx, tables, "op", "", at); !errors.Is(err, maintenance.ErrRestoring) {
+		t.Errorf("Freeze over a restore = %v", err)
+	}
+	if f, _ := maintenance.Read(ctx, a); f.Active() {
+		t.Error("the freeze wrote to a table before it had read them all")
+	}
+	if _, _, err := maintenance.Lift(ctx, tables, false); !errors.Is(err, maintenance.ErrRestoring) {
+		t.Errorf("Lift of a restore = %v", err)
+	}
+	if n, forced, err := maintenance.Lift(ctx, tables, true); err != nil || n != 1 || !forced {
+		t.Errorf("forced Lift = %d, %v, %v", n, forced, err)
+	}
+}

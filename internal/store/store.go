@@ -550,6 +550,35 @@ func (s *Stores) MaintenanceOf(m port.Module) *maintenance.Gate {
 	return maintenance.New(set.State)
 }
 
+// FlagTable is one State that holds a maintenance flag: a module's own table on
+// layout v5, or the one table of layout v4 (Module is then empty).
+type FlagTable struct {
+	// Module names the table's module; empty for the one table of layout v4.
+	Module port.Module
+	State  port.State
+}
+
+// FlagTables are the States that hold the maintenance flag of this installation:
+// one per module on layout v5, where each module reads the flag of its own
+// table, and one on layout v4. The legacy adapter holds no flag and has none.
+func (s *Stores) FlagTables() ([]FlagTable, error) {
+	if s == nil || !s.Usable || s.Adapter == AdapterLegacy || s.Ports.State == nil {
+		return nil, errors.New("this storage holds no maintenance flag: it needs the dynamodb or the memory adapter")
+	}
+	if s.Tables == nil && s.modules == nil {
+		return []FlagTable{{State: s.Ports.State}}, nil
+	}
+	var out []FlagTable
+	for _, m := range port.Modules() {
+		set, err := s.ForModule(m)
+		if err != nil {
+			return nil, fmt.Errorf("the table of %s: %w", m, err)
+		}
+		out = append(out, FlagTable{Module: m, State: set.State})
+	}
+	return out, nil
+}
+
 // ErrLocalLease is the refusal of a one-shot tick whose lease would not exclude
 // the running controller.
 var ErrLocalLease = errors.New("the tick leases are held in this process only, so a running controller " +

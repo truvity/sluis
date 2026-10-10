@@ -8,7 +8,9 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
+	"github.com/truvity/sluis/internal/maintenance"
 	"github.com/truvity/sluis/internal/secretstore"
 	"github.com/truvity/sluis/storage/state"
 )
@@ -45,6 +47,33 @@ type V5Options struct {
 	// WritersStopped is the operator's statement that nothing writes to the
 	// source. A run that writes refuses without it.
 	WritersStopped bool
+	// Wait pauses until the replicas have seen a freeze set a moment ago; nil
+	// waits on the clock. A test replaces it.
+	Wait func(ctx context.Context, d time.Duration)
+}
+
+// ErrDestinationMaintenance is a destination that holds a maintenance flag: it
+// would start frozen once the layout switch serves from it.
+var ErrDestinationMaintenance = errors.New("migrate: the destination holds a maintenance flag, so it would start frozen: " +
+	"lift it first with `sluis maintenance off --config <v5 config>`; a copy never carries the source's flag")
+
+// flagOf reads the maintenance flag of a side's State, with no cache. A side
+// whose storage holds none reads as off.
+func flagOf(ctx context.Context, side Side) (maintenance.Flag, error) {
+	tables, err := side.Stores.FlagTables()
+	if err != nil {
+		return maintenance.Flag{}, nil
+	}
+	for _, t := range tables {
+		f, err := maintenance.Read(ctx, t.State)
+		if err != nil {
+			return maintenance.Flag{}, err
+		}
+		if f.Active() {
+			return f, nil
+		}
+	}
+	return maintenance.Flag{}, nil
 }
 
 // sameSecret compares two secret values by their SHA-256, so that nothing
@@ -130,8 +159,50 @@ func CopyV5(ctx context.Context, from, to Side, opt V5Options) (*PlanReport, err
 	// data is the issuer's, and the final pass with --overwrite catches up the
 	// provider records this one copies.
 	live := !opt.DryRun && !opt.WritersStopped && contains(opt.Skip, DomainIssuer)
-	if !opt.DryRun && !opt.WritersStopped && !live {
-		return nil, ErrWritersRunning
+	var gateNotes []string
+	if !opt.DryRun && !live {
+		// A source in maintenance (`sluis maintenance on`) is proof of a stopped
+		// writer, once every replica has seen the flag; --i-have-stopped-writers
+		// is the other proof, and the flag then missing is said.
+		f, err := flagOf(ctx, from)
+		if err != nil {
+			return nil, fmt.Errorf("read the source's maintenance flag: %w", err)
+		}
+		switch {
+		case f.Frozen():
+			if d := f.Quiet(time.Now()); d > 0 {
+				wait := opt.Wait
+				if wait == nil {
+					wait = func(ctx context.Context, d time.Duration) {
+						select {
+						case <-ctx.Done():
+						case <-time.After(d):
+						}
+					}
+				}
+				wait(ctx, d)
+				if err := ctx.Err(); err != nil {
+					return nil, err
+				}
+			}
+		case f.Active():
+			return nil, fmt.Errorf("%w: the source is under %q, which is a restore's, not a freeze", ErrWritersRunning, f.State)
+		case opt.WritersStopped:
+			gateNotes = append(gateNotes, "the source is not in maintenance: --i-have-stopped-writers is taken on trust; "+
+				"`sluis maintenance on` makes the stop checkable and keeps deploy tooling signed in")
+		default:
+			return nil, ErrWritersRunning
+		}
+	}
+	if !opt.DryRun {
+		// Deliberate: the flag is not copied, so the destination starts out of
+		// maintenance. One it already holds is refused rather than carried into
+		// the switch.
+		if f, err := flagOf(ctx, to); err != nil {
+			return nil, fmt.Errorf("read the destination's maintenance flag: %w", err)
+		} else if f.Active() {
+			return nil, ErrDestinationMaintenance
+		}
 	}
 	p, err := newPlanner(ctx, from, to, opt.PlanOptions, true)
 	if err != nil {
@@ -142,6 +213,7 @@ func CopyV5(ctx context.Context, from, to Side, opt V5Options) (*PlanReport, err
 	}
 	report, err := p.finish()
 	report.Mode, report.DryRun = "copy", opt.DryRun
+	report.Notes = append(report.Notes, gateNotes...)
 	if live {
 		report.Live = true
 		report.Notes = append(report.Notes, "this pass ran while the source was live and left the issuer out: "+

@@ -431,7 +431,7 @@
   },
   "notes": [
     "internal/config/directory/C01/key is at internal/google/workspaces/C01/key, where the record that holds the key writes it: it is carried with the record",
-    "leases, notifications, the maintenance flag, caches, dedupe records, Slack Connect shares and user caches, and the hub's blob snapshots are not copied: they start fresh",
+    "leases, notifications, caches, dedupe records, Slack Connect shares and user caches, and the hub's blob snapshots are not copied: they start fresh. The maintenance flag is not copied either, on purpose: the destination starts out of maintenance",
     "internal/config/valkey/password is delivered to the cluster only and is not carried"
   ],
   "ok": true

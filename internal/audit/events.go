@@ -225,6 +225,33 @@ func RestoreFailed(actor Actor, backupID string, r Restore, detail string) *reco
 	return build("roster.restore.failed", actor, Failed(detail), subjectOf(actor), []*record.Target{targetBackup(backupID)}, r.data())
 }
 
+// ------------------------------------------------------------- maintenance
+
+// Maintenance is what a change of the maintenance flag carries.
+type Maintenance struct {
+	Installation string
+	// State is the state set (migration), or MaintenanceCleared when lifted.
+	State string
+	// Modules is how many tables carry the flag after (set) or before (lifted).
+	Modules int
+	Reason  string
+	// Forced is set when the flag lifted was a restore's.
+	Forced bool
+}
+
+// MaintenanceCleared is [Maintenance.State] of a flag that was lifted.
+const MaintenanceCleared = "cleared"
+
+// MaintenanceChanged is an operator setting or lifting the migration freeze.
+func MaintenanceChanged(actor Actor, m Maintenance) *record.Record {
+	d := data{"installation": m.Installation, "state": m.State, "modules": m.Modules, "reason": m.Reason}
+	if m.Forced {
+		d["forced"] = true
+	}
+	return build("roster.maintenance.changed", actor, Succeeded(), subjectOf(actor),
+		[]*record.Target{{Type: "installation", Id: m.Installation}}, d)
+}
+
 // ---------------------------------------------------------------- Cloudflare
 
 // The variants of a minted Cloudflare token.

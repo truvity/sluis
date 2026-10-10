@@ -183,3 +183,34 @@ func TestASplitOutRoleIsDeniedTheFlagToo(t *testing.T) {
 		t.Error("a split-out role cannot write its records")
 	}
 }
+
+// The operator's grant writes the maintenance item and nothing else of a table.
+func TestTheMaintenanceOperatorWritesTheFlagAndNothingElse(t *testing.T) {
+	env := testModuleEnv()
+	var tables []string
+	for _, m := range Modules() {
+		tables = append(tables, env.TableArns[m])
+	}
+	st, err := MaintenanceOperatorStatements(tables, "arn:aws:kms:eu-west-1:111122223333:key/k")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tbl := range tables {
+		for _, a := range []string{"dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:DeleteItem"} {
+			if !iamAllows(t, st, a, tbl, MaintenancePartition) {
+				t.Errorf("the operator cannot %s the flag in %s", a, tbl)
+			}
+			if iamAllows(t, st, a, tbl, "state") {
+				t.Errorf("the operator can %s a record other than the flag in %s", a, tbl)
+			}
+		}
+		for _, a := range []string{"dynamodb:Scan", "dynamodb:Query", "dynamodb:UpdateItem", "dynamodb:BatchWriteItem"} {
+			if iamAllows(t, st, a, tbl, MaintenancePartition) {
+				t.Errorf("the operator can %s in %s", a, tbl)
+			}
+		}
+	}
+	if _, err := MaintenanceOperatorStatements(nil, ""); err == nil {
+		t.Error("no table was accepted")
+	}
+}

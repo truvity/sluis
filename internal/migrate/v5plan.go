@@ -350,8 +350,8 @@ func (p *planner) finish() (*PlanReport, error) {
 		p.report.Modules = append(p.report.Modules, *m)
 	}
 	sort.Slice(p.report.Modules, func(i, j int) bool { return order[p.report.Modules[i].Module] < order[p.report.Modules[j].Module] })
-	p.note("leases, notifications, the maintenance flag, caches, dedupe records, Slack Connect shares and user caches, and the hub's blob snapshots " +
-		"are not copied: they start fresh")
+	p.note("leases, notifications, caches, dedupe records, Slack Connect shares and user caches, and the hub's blob snapshots " +
+		"are not copied: they start fresh. The maintenance flag is not copied either, on purpose: the destination starts out of maintenance")
 	p.note("internal/config/valkey/password is delivered to the cluster only and is not carried")
 	p.report.Notes = p.notes
 	var err error

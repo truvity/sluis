@@ -1,0 +1,37 @@
+{
+  "$id": "https://schemas.example/access-roster/v1/maintenance.json",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "installation": {
+      "type": "string",
+      "description": "The installation whose flag changed.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none"
+    },
+    "state": {
+      "type": "string",
+      "description": "The state the flag was set to: migration; or cleared when it was lifted.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none"
+    },
+    "modules": {
+      "type": "integer",
+      "description": "How many tables carry the flag now (set) or carried it (lifted).",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none"
+    },
+    "reason": {
+      "type": "string",
+      "description": "The operator's reason, if one was given.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none"
+    },
+    "forced": {
+      "type": "boolean",
+      "description": "True when the flag lifted was a restore's, which --force is needed for.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none"
+    }
+  }
+}

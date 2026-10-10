@@ -819,7 +819,10 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 	// While the restore function holds the oidc table's maintenance flag the
 	// issuer signs nobody in and issues nothing; what a relying party needs to
 	// verify the tokens it holds keeps answering.
-	handler = stores.Maintenance().Middleware(servesInMaintenance, handler)
+	// A migration freeze (`sluis maintenance on`) also serves the token exchange
+	// and a refresh that is not rotated, read-only: the deploy that ends the
+	// freeze signs in through this issuer.
+	handler = stores.Maintenance().MiddlewareFrozen(servesInMaintenance, servesInFreeze, handler)
 	if deps.Around != nil {
 		handler = deps.Around(handler)
 	}

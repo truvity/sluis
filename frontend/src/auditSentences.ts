@@ -3,7 +3,7 @@ import type { Sentences } from "@truvity/audit";
 
 export const roster: Sentences = {
   "source": "roster",
-  "version": "1.14.0",
+  "version": "1.15.0",
   "locales": [
     "en"
   ],
@@ -240,6 +240,12 @@ export const roster: Sentences = {
       "summary": "The App that links people's GitHub accounts was disconnected.",
       "message": {
         "en": "{actor} disconnected the account-linking App {targets_0_id}"
+      }
+    },
+    "roster.maintenance.changed": {
+      "summary": "An operator set or lifted the migration freeze (`sluis maintenance on` or `off`). While it is set the installation refuses every write of state, answers 503 with Retry-After, and still serves discovery, the key set and a read-only token exchange. Lifting a restore's flag is `forced`.",
+      "message": {
+        "en": "{data_state, select, migration {{actor} froze {targets_0_id} for a migration} other {{actor} lifted the maintenance flag of {targets_0_id}}}"
       }
     },
     "roster.person.signed_in": {
