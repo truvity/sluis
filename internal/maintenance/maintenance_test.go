@@ -157,7 +157,8 @@ func TestMiddlewareRefusesWhatIsNotServedWith503AndRetryAfter(t *testing.T) {
 func TestSetFindsTheModuleUnderMaintenance(t *testing.T) {
 	t.Parallel()
 	gh, slack := memory.New(), memory.New()
-	set := maintenance.Set{port.ModuleGitHub: maintenance.New(gh, maintenance.WithTTL(time.Nanosecond)), port.ModuleSlack: maintenance.New(slack, maintenance.WithTTL(time.Nanosecond))}
+	fast := maintenance.WithTTL(time.Nanosecond)
+	set := maintenance.Set{port.ModuleGitHub: maintenance.New(gh, fast), port.ModuleSlack: maintenance.New(slack, fast)}
 	if _, _, on := set.Any(t.Context()); on {
 		t.Fatal("nothing is set")
 	}

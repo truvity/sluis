@@ -124,7 +124,11 @@ func TestOnlyReadsAreServedUnderMaintenance(t *testing.T) {
 			t.Errorf("%s is a read", read)
 		}
 	}
-	for _, write := range []string{"RequestGitHubPass", "RequestSlackPass", "Refresh", "UploadKey", "RotateCloudflarePreset", "DisconnectSlackWorkspace", "ConfirmGitHubRemovals"} {
+	writes := []string{
+		"RequestGitHubPass", "RequestSlackPass", "Refresh", "UploadKey", "RotateCloudflarePreset",
+		"DisconnectSlackWorkspace", "ConfirmGitHubRemovals",
+	}
+	for _, write := range writes {
 		if rpcIsRead("/directoryroster.v1.X/" + write) {
 			t.Errorf("%s writes and must be refused under maintenance", write)
 		}
