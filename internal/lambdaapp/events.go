@@ -40,6 +40,9 @@ const (
 	// notification was sent to every controller because nobody knew which kind
 	// the target is, and the other one ends here, cleanly.
 	OutcomeUnknown = "unknown"
+	// OutcomeMaintenance is a pass that was skipped because the module is under
+	// maintenance. A target another runner holds is [OutcomeContended].
+	OutcomeMaintenance = "maintenance"
 	// OutcomeContended is a target another invocation holds the lease of: the
 	// pass is its, and this one ends cleanly. It is not a failure, so the
 	// platform neither retries it nor counts it as an error.
@@ -97,6 +100,9 @@ func (c *Controller) Handle(ctx context.Context, payload json.RawMessage) (any, 
 	// without the operator's opt-in a one-shot command needs for a lease held in
 	// its own memory: Pass refuses a State that is not shared.
 	ran, err := pass.Pass(ctx, event.Target, false)
+	// Asked before the pass is closed, which closes its stores.
+	p, canPause := pass.(interface{ Paused(context.Context) bool })
+	paused := !ran && err == nil && canPause && p.Paused(ctx)
 	if closeErr := pass.Close(); closeErr != nil {
 		log.WarnContext(ctx, "the audit emitter could not be closed cleanly; what its queue held is dropped", logattr.SafeError("error", closeErr))
 	}
@@ -111,6 +117,9 @@ func (c *Controller) Handle(ctx context.Context, payload json.RawMessage) (any, 
 	outcome := OutcomeRan
 	if !ran {
 		outcome = OutcomeContended
+		if paused {
+			outcome = OutcomeMaintenance
+		}
 	}
 	log.InfoContext(ctx, "invocation done", slog.String("controller", c.Name), logattr.SafeString("kind", event.Kind), slog.String("outcome", outcome))
 	return Result{Kind: event.Kind, Target: event.Target, Outcome: outcome}, nil

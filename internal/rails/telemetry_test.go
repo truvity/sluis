@@ -204,6 +204,11 @@ func TestATickIsSkippedUnderMaintenance(t *testing.T) {
 		t.Errorf("lease record after a skip: %v", err)
 	}
 
+	// Recorded under the current name too, beside the legacy one.
+	if got := value(t, "sluis.leases.skipped", kind("lease-maint")); got != before+1 {
+		t.Errorf("sluis.leases.skipped = %d, want %d", got, before+1)
+	}
+
 	l.Maintenance = refusing{nil}
 	ran = false
 	if r, err := l.Do(ctx, "lease-maint", "acme", func(context.Context) { ran = true }); !r || err != nil || !ran {

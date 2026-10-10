@@ -27,6 +27,7 @@ import (
 	"github.com/truvity/sluis/internal/config"
 	"github.com/truvity/sluis/internal/consoleauth"
 	"github.com/truvity/sluis/internal/health"
+	"github.com/truvity/sluis/internal/maintenance"
 	"github.com/truvity/sluis/internal/port"
 	"github.com/truvity/sluis/internal/portstore"
 	"github.com/truvity/sluis/internal/rails"
@@ -177,6 +178,8 @@ func orDefault(value, fallback string) string {
 
 // App is an assembled controller.
 type App struct {
+	// maint is the gate over the module's maintenance flag.
+	maint *maintenance.Gate
 	// targets are the targets the policy declares: a pass runs a target by the
 	// policy's own spelling of it, never by a string a caller made.
 	targets    []string
@@ -203,6 +206,10 @@ func (a *App) Tick(ctx context.Context, target string, unsafeLocal bool) error {
 	_, err := a.Pass(ctx, target, unsafeLocal)
 	return err
 }
+
+// Paused says the module is under maintenance, so a pass that did not run was
+// skipped for that and not for another runner's lease.
+func (a *App) Paused(ctx context.Context) bool { return a.maint.Writable(ctx) != nil }
 
 // Pass is [App.Tick] that says whether the pass ran: false, with no error, when
 // another runner holds the target's lease and the pass is left to it. It is what
@@ -324,6 +331,7 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 		targets:     slices.Collect(maps.Keys(declared.Slack.Workspaces)),
 		log:         log,
 		sharedLease: shared,
+		maint:       stores.Maintenance(),
 		ready:       health.NewGate("the controller"),
 		probes:      cfg.probes,
 		trail:       trail,
