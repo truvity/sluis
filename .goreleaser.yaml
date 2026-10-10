@@ -107,8 +107,11 @@ builds:
     ldflags:
       - -s -w -X github.com/truvity/sluis/internal/version.Version={{.Version}}
 
-  # sluis as AWS Lambda functions: ONE arm64 binary, deployed as three functions
-  # (http, github, slack) whose role is the SLUIS_ROLE variable. The runtime is
+  # DEPRECATED, kept for one release: the all-in-one Lambda zip (the issuer, the
+  # Cloudflare module and the backup module, unpinned, the document choosing
+  # which runs). A deployment that names `sluis-lambda_<version>_linux_arm64.zip`
+  # keeps working; the per-module zips below replace it. sluis as AWS Lambda
+  # functions: ONE arm64 binary whose role is the document's. The runtime is
   # provided.al2023, which runs the file named `bootstrap` at the zip's root, so
   # that is the binary's name. arm64 only: the functions are Graviton.
   #
@@ -128,6 +131,48 @@ builds:
     tags: [lambda, lambda.norpc]
     ldflags:
       - -s -w -X github.com/truvity/sluis/internal/version.Version={{.Version}}
+
+  # The per-module Lambda zips (docs/decisions/0072): one arm64 `bootstrap` per
+  # module that has an entry point of its own, each built with its module name
+  # pinned (`-X .../internal/version.Module=sluis-module=<name>`), so a zip refuses to start as
+  # another module and a document that is another module's. The providers (github,
+  # slack, google) run inside the issuer's process until each is released as a
+  # zip of its own, one per release from v1.76; they are added here as they exist.
+  # `sluis-backup` is deployed twice, as the backup function and as the restore
+  # function (`backup.role: restore`). There is no signer zip: the signer runs in
+  # `sluis-issuer`. The module list is held by internal/releasecheck.
+  - id: sluis-issuer
+    main: ./cmd/sluis-issuer
+    binary: bootstrap
+    env: [CGO_ENABLED=0]
+    goos: [linux]
+    goarch: [arm64]
+    flags: [-trimpath]
+    tags: [lambda, lambda.norpc]
+    ldflags:
+      - -s -w -X github.com/truvity/sluis/internal/version.Version={{.Version}} -X github.com/truvity/sluis/internal/version.Module=sluis-module=issuer
+
+  - id: sluis-cloudflare
+    main: ./cmd/sluis-cloudflare
+    binary: bootstrap
+    env: [CGO_ENABLED=0]
+    goos: [linux]
+    goarch: [arm64]
+    flags: [-trimpath]
+    tags: [lambda, lambda.norpc]
+    ldflags:
+      - -s -w -X github.com/truvity/sluis/internal/version.Version={{.Version}} -X github.com/truvity/sluis/internal/version.Module=sluis-module=cloudflare
+
+  - id: sluis-backup
+    main: ./cmd/sluis-backup
+    binary: bootstrap
+    env: [CGO_ENABLED=0]
+    goos: [linux]
+    goarch: [arm64]
+    flags: [-trimpath]
+    tags: [lambda, lambda.norpc]
+    ldflags:
+      - -s -w -X github.com/truvity/sluis/internal/version.Version={{.Version}} -X github.com/truvity/sluis/internal/version.Module=sluis-module=backup
 
 archives:
   # TWO archives, because sluisctl is the only thing built for Windows.
@@ -160,7 +205,7 @@ archives:
     formats: [tar.gz]
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
 
-  # The Lambda zip the three functions are deployed from, with `bootstrap` at
+  # DEPRECATED (one more release): the all-in-one Lambda zip, with `bootstrap` at
   # its root. The deploy tooling ADDS the estate's configuration files to it
   # (config/sluis.yaml and the catalogues), so that a change to them is a new
   # deployment: this archive holds nothing of the estate's.
@@ -172,6 +217,29 @@ archives:
     # LICENSE there is clutter in a function's code.
     files: ["none*"]
     name_template: "sluis-lambda_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+  # The per-module Lambda zips, each with `bootstrap` at its root and nothing
+  # else, like the all-in-one zip above. An estate pins one digest per zip.
+  - id: lambda-issuer
+    ids: [sluis-issuer]
+    formats: [zip]
+    wrap_in_directory: false
+    files: ["none*"]
+    name_template: "sluis-issuer_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+  - id: lambda-cloudflare
+    ids: [sluis-cloudflare]
+    formats: [zip]
+    wrap_in_directory: false
+    files: ["none*"]
+    name_template: "sluis-cloudflare_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+  - id: lambda-backup
+    ids: [sluis-backup]
+    formats: [zip]
+    wrap_in_directory: false
+    files: ["none*"]
+    name_template: "sluis-backup_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
 
   # The two documents' contracts, as release assets of their own. Meta
   # archives: no binary in them, so they are one file per release and not one
@@ -208,7 +276,7 @@ checksum:
   # Every archive above, the two bundles included.
   algorithm: sha256
 
-# A software bill of materials for every archive (the Lambda zip, the
+# A software bill of materials for every archive (the Lambda zips, the
 # binaries, the two bundles), SPDX JSON, by syft (devbox). Each is a release
 # asset beside its archive and is checksummed with it; the release workflow's
 # `attest` job binds it to the archive with `actions/attest-sbom`. The images'
@@ -291,8 +359,13 @@ release:
     `directory` are not built yet, and `docs/sdk/go/sluis.md` says
     so.
 
-    The Lambda zip `sluis-lambda_{{ .Version }}_linux_arm64.zip` holds `bootstrap`, the one
-    binary the issuer and both controllers run as on AWS Lambda
+    The Lambda zips are one per module, each holding `bootstrap` built for that module and
+    refusing to run as another: `sluis-issuer_{{ .Version }}_linux_arm64.zip` (the issuer, the
+    signer and the console, with the providers in-process),
+    `sluis-cloudflare_{{ .Version }}_linux_arm64.zip` and
+    `sluis-backup_{{ .Version }}_linux_arm64.zip` (deployed as the backup and the restore
+    function). `sluis-lambda_{{ .Version }}_linux_arm64.zip`, the one binary for all of them,
+    is deprecated and is published for this release only
     (`docs/reference/sluis/lambda.md`). The telemetry layer is
     `otlp-lambda-layer_<version>_linux_<arch>.zip` from `truvity/observability`;
     sluis ships none.

@@ -1,0 +1,13 @@
+# The Lambda zips a release publishes, one per line: `kind name`, as
+# sluis-<name>_<version>_linux_arm64.zip. The one list hack/check-zips.sh (and so
+# hack/release-verify.sh and the release workflow) and internal/releasecheck read,
+# against .goreleaser.yaml. Add a module here when its zip is added there.
+#
+# module: built for one module, with `-X .../internal/version.Module=sluis-module=<name>`.
+# A provider (github, slack, google) is added when it is released as a zip of
+# its own; until then it runs inside the issuer's process.
+# legacy: the deprecated all-in-one zip, unpinned, published for one more release.
+module issuer
+module cloudflare
+module backup
+legacy lambda

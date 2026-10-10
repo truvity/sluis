@@ -4,7 +4,7 @@
 // not in it.
 //
 // It is built with `-tags lambda,lambda.norpc` and, in a release, with
-// `-ldflags -X github.com/truvity/sluis/internal/version.Module=backup`.
+// `-ldflags -X github.com/truvity/sluis/internal/version.Module=sluis-module=backup`.
 package main
 
 import (

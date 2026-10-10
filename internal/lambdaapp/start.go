@@ -20,10 +20,10 @@ func Start() { serve(Open) }
 
 // StartModule is the entry of a zip built for one module (cmd/sluis-<module>).
 // It refuses to run when the build pins another module (the release builds each
-// zip with `-ldflags -X .../internal/version.Module=<module>`), and when the
+// zip with `-ldflags -X .../internal/version.Module=sluis-module=<module>`), and when the
 // document is another module's.
 func StartModule(module string) {
-	if err := CheckPin(version.Module, module); err != nil {
+	if err := CheckPin(version.Pinned(), module); err != nil {
 		fmt.Fprintln(os.Stderr, "sluis-"+module+":", err)
 		slog.New(slog.NewJSONHandler(os.Stdout, nil)).ErrorContext(context.Background(), "sluis could not start", slog.Any("error", err))
 		os.Exit(1)

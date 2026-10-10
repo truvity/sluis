@@ -5,7 +5,7 @@
 // is internal/signer, in this process.
 //
 // It is built with `-tags lambda,lambda.norpc` and, in a release, with
-// `-ldflags -X github.com/truvity/sluis/internal/version.Module=issuer`, so the
+// `-ldflags -X github.com/truvity/sluis/internal/version.Module=sluis-module=issuer`, so the
 // zip refuses to run as another module.
 package main
 

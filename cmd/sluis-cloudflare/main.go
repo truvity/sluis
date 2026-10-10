@@ -3,7 +3,7 @@
 // One arm64 `bootstrap` binary; the issuer is not in it.
 //
 // It is built with `-tags lambda,lambda.norpc` and, in a release, with
-// `-ldflags -X github.com/truvity/sluis/internal/version.Module=cloudflare`.
+// `-ldflags -X github.com/truvity/sluis/internal/version.Module=sluis-module=cloudflare`.
 package main
 
 import (

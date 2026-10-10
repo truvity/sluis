@@ -729,8 +729,9 @@ func clientEndpoint(path []string) bool {
 // SLUIS_ROLE). An older package does not start on what this library renders.
 const MinPackageVersion = "1.63"
 
-// The release zip's name: sluis-lambda_<version>_linux_<arch>.zip.
-var packageName = regexp.MustCompile(`^sluis-lambda_v?([0-9]+)\.([0-9]+)\.[0-9]+[^_]*_linux_[a-z0-9]+\.zip$`)
+// The release zip's name: sluis-lambda_<version>_linux_<arch>.zip (deprecated), or
+// sluis-<module>_<version>_linux_<arch>.zip for issuer, cloudflare and backup.
+var packageName = regexp.MustCompile(`^sluis-(?:lambda|issuer|cloudflare|backup)_v?([0-9]+)\.([0-9]+)\.[0-9]+[^_]*_linux_[a-z0-9]+\.zip$`)
 
 // checkVersion refuses a package older than this library: older than
 // MinPackageVersion, and older than this library's own minor when the build
@@ -768,7 +769,7 @@ func packageVersion(pkg, explicit string) (int, int, error) {
 	}
 	m := packageName.FindStringSubmatch(base)
 	if m == nil {
-		return 0, 0, fmt.Errorf("sluispulumi: the package %q is not named sluis-lambda_<version>_linux_<arch>.zip: "+
+		return 0, 0, fmt.Errorf("sluispulumi: the package %q is not named sluis-<module>_<version>_linux_<arch>.zip: "+
 			"set LambdaArgs.PackageVersion to the release it is", base)
 	}
 	major, _ := strconv.Atoi(m[1])

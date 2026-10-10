@@ -216,6 +216,11 @@ jobs:
           mkdir -p assets out
           gh release download "$GITHUB_REF_NAME" --dir assets
           ls -l assets
+      # Before anything is signed: each Lambda zip (hack/release-zips.txt) is
+      # there once, holds `bootstrap` alone, is pinned to its module and is in
+      # checksums.txt. A zip that could run as another module is not attested.
+      - name: Check the Lambda zips
+        run: hack/check-zips.sh assets
       - name: Sign checksums.txt (keyless)
         run: |
           set -euo pipefail

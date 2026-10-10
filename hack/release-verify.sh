@@ -10,6 +10,9 @@
 #      asset, and every other asset is named (an unlisted asset is only a
 #      warning: the audit checksums, the signature bundle and the Nix flakes
 #      are not in the combined file).
+#      The Lambda zips (hack/release-zips.txt) are held by hack/check-zips.sh:
+#      each module's zip exists once, holds `bootstrap` alone, is pinned to its
+#      module (so it refuses to start as another), and is in checksums.txt.
 #   2. The cosign bundle of checksums.txt, keyless: the certificate must be
 #      the one this repository's release workflow at a v* tag was issued, by
 #      GitHub's OIDC issuer. The signature and the certificate are recorded
@@ -27,6 +30,10 @@
 #   RELEASE_IMAGES_FILE           the list of images and charts (default: release-images.txt
 #                                 beside this script)
 #   RELEASE_VERIFY_SKIP_IMAGES=1  leave the images and charts out of check 3
+#   RELEASE_ZIPS_FILE             the list of Lambda zips (default: release-zips.txt
+#                                 beside this script)
+#   RELEASE_VERIFY_SKIP_ZIPS=1    leave the Lambda zips out of check 1 (a release
+#                                 from before the per-module zips)
 #
 # Needs: sha256sum; for the rest, gh (logged in) and cosign (both in devbox).
 set -euo pipefail
@@ -73,6 +80,11 @@ for f in *; do
   esac
   grep -q "  \*\?$f\$" checksums.txt || echo "release-verify: warning: $f is not in checksums.txt" >&2
 done
+
+# The Lambda zips: the same check the release workflow runs on the assets.
+if [ "${RELEASE_VERIFY_SKIP_ZIPS:-}" != 1 ]; then
+  "$(dirname "$0")/check-zips.sh" "$dir" || fail "the Lambda zips do not hold"
+fi
 
 if [ "${RELEASE_VERIFY_SKIP_SIGNATURES:-}" = 1 ]; then
   echo "release-verify: signatures and attestations SKIPPED (RELEASE_VERIFY_SKIP_SIGNATURES=1)" >&2

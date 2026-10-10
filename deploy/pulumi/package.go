@@ -45,7 +45,9 @@ type releasePackage struct {
 	Name, Version string
 }
 
-var releaseName = regexp.MustCompile(`^sluis-lambda_v?(.+)_linux_[a-z0-9]+\.zip$`)
+// releaseName matches the release zips: the all-in-one sluis-lambda_<version>
+// (deprecated) and the per-module sluis-<module>_<version> zips.
+var releaseName = regexp.MustCompile(`^sluis-(?:lambda|issuer|cloudflare|backup)_v?(.+)_linux_[a-z0-9]+\.zip$`)
 
 // packageRelease is the release a package is: the explicit version, else the one
 // in the file's name.

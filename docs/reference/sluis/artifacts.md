@@ -12,6 +12,9 @@ Release assets (the GitHub release of tag `vX.Y.Z`):
 | sluis | `accessctl_<version>_<os>_<arch>.tar.gz` | accessctl |
 | sluis | `sluis_<version>_<os>_<arch>.tar.gz` | sluis, resource-proxy, acceptance |
 | sluis | `sluis-lambda_<version>_<os>_<arch>.zip` | sluis-lambda |
+| sluis | `sluis-issuer_<version>_<os>_<arch>.zip` | sluis-issuer |
+| sluis | `sluis-cloudflare_<version>_<os>_<arch>.zip` | sluis-cloudflare |
+| sluis | `sluis-backup_<version>_<os>_<arch>.zip` | sluis-backup |
 | sluis | `sluis-config-schemas_<version>.tar.gz` | config-schemas (bundled files) |
 | sluis | `sluis-audit-catalogue_<version>.tar.gz` | audit-catalogue (bundled files) |
 | audit | `audit_<version>_<os>_<arch>.tar.gz` | audit |
