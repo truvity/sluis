@@ -218,9 +218,10 @@ func TestMemoryOnLayout5IsATablePerModule(t *testing.T) {
 func TestSecretsOnLayout5AreModuleFirst(t *testing.T) {
 	ctx := context.Background()
 	var prefix string
+	root := statememory.New()
 	open := func(_ context.Context, p string, _ ...state.Option) (state.Store, error) {
 		prefix = p
-		return statememory.New(), nil
+		return root, nil
 	}
 	c := Config{SecretsRoot: "/sluis/example", SecretsKMSKey: "alias/example", SecretsLayout: "v5", OpenState: open, v4: &v4Holder{}}
 	if err := c.overLayout5(ctx, c.SecretsRoot, c.SecretsKMSKey); err != nil {
@@ -236,9 +237,31 @@ func TestSecretsOnLayout5AreModuleFirst(t *testing.T) {
 	if _, err := secretstore.Open(ctx, &config.Secrets{Source: "ssm", Root: "/sluis/example", Layout: "v5"}, open); err == nil {
 		t.Error("secretstore.Open (layout v4) accepted v5")
 	}
-	// The blob's static credentials are v4 documents until their callers move.
-	c.Blob = &config.PortsBlob{Adapter: BlobS3, S3: &config.PortsBlobS3{Bucket: "b", Endpoint: "http://127.0.0.1:1", CredentialsRef: "internal/blobs/r2"}}
-	if _, err := c.s3Blob(ctx); err == nil || !strings.Contains(err.Error(), "layout v5") {
+	// The blob's static credentials are the module's document, internal/<module>/<name>.
+	c.Blob = &config.PortsBlob{Adapter: BlobS3, S3: &config.PortsBlobS3{Bucket: "b", Endpoint: "http://127.0.0.1:1", CredentialsRef: "internal/oidc/blobs-r2"}}
+	doc, err := c.v4.v5.S3Credentials("internal/oidc/blobs-r2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = doc.Put(ctx, secretstore.S3Credentialsv1{AccessKeyID: "k", SecretAccessKey: "s"}, ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = c.s3Blob(ctx); err != nil {
 		t.Errorf("s3Blob = %v", err)
+	}
+	if _, err = root.Child("internal").Child("oidc").Get(ctx, "blobs-r2"); err != nil {
+		t.Errorf("the document is not at internal/oidc/blobs-r2: %v", err)
+	}
+	// A v4 address (a kind that is no module) and another module's are refused.
+	for ref, want := range map[string]string{"internal/blobs/r2": "not internal/<module>/<name>", "internal/github/blobs-r2": "runs the oidc module"} {
+		c.Blob.S3.CredentialsRef = ref
+		c.Module = port.ModuleOIDC
+		if _, err = c.s3Blob(ctx); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("s3Blob(%s) = %v, want %q", ref, err, want)
+		}
+	}
+	c.Blob.S3.CredentialsRef = "internal/blobs/r2"
+	if err = c.validatePorts(); err == nil {
+		t.Error("validatePorts accepted a layout v4 address on layout v5")
 	}
 }

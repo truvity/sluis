@@ -175,9 +175,12 @@ var errNoSecrets = errors.New("portstore: no Secrets: a credential is never writ
 // winner's item names. That is what keeps a single-use refresh token from
 // being overwritten by a stale writer.
 func (b *Base) newSecret(ctx context.Context, key string, plaintext []byte) (string, error) {
-	app, v5 := b.appOfKey(key)
+	cred, v5 := b.v5CredOfKey(key)
 	if b.Secrets == nil && !v5 {
 		return "", errNoSecrets
+	}
+	if v5 && cred.fixed != "" {
+		return cred.fixed, b.replaceInPlace(ctx, cred.at(cred.fixed), plaintext)
 	}
 	var raw [12]byte
 	if _, err := rand.Read(raw[:]); err != nil {
@@ -185,7 +188,7 @@ func (b *Base) newSecret(ctx context.Context, key string, plaintext []byte) (str
 	}
 	ref := hex.EncodeToString(raw[:])
 	if v5 {
-		if _, err := b.v5.GitHub().AppCredential(app, ref).Put(ctx, plaintext, ""); err != nil {
+		if _, err := cred.at(ref).Put(ctx, plaintext, ""); err != nil {
 			return "", err
 		}
 		return ref, nil
@@ -196,10 +199,28 @@ func (b *Base) newSecret(ctx context.Context, key string, plaintext []byte) (str
 	return ref, nil
 }
 
+// replaceInPlace writes the secret over the one the value has, as the next
+// version under the store's history. It reads the revision it replaces, and
+// retries when a concurrent writer got in between.
+func (b *Base) replaceInPlace(ctx context.Context, v state.Value[[]byte], plaintext []byte) error {
+	for range attempts {
+		_, rev, err := v.Get(ctx)
+		if errors.Is(err, state.ErrNotFound) {
+			rev = ""
+		} else if err != nil {
+			return err
+		}
+		if _, err = v.Put(ctx, plaintext, rev); !errors.Is(err, state.ErrConflict) {
+			return err
+		}
+	}
+	return ErrBusy
+}
+
 // getSecret reads the credential an item names.
 func (b *Base) getSecret(ctx context.Context, key, ref string) ([]byte, error) {
-	if app, ok := b.appOfKey(key); ok {
-		val, _, err := b.v5.GitHub().AppCredential(app, ref).Get(ctx)
+	if cred, ok := b.v5CredOfKey(key); ok {
+		val, _, err := cred.at(ref).Get(ctx)
 		if errors.Is(err, state.ErrNotFound) {
 			return nil, port.ErrNotFound
 		}
@@ -219,7 +240,7 @@ func (b *Base) getSecret(ctx context.Context, key, ref string) ([]byte, error) {
 // and best effort: a secret that is left behind is unreachable, and the next
 // removal of the key's item does not know it, so a failure is not an error.
 func (b *Base) dropSecrets(ctx context.Context, key string, refs ...string) {
-	app, v5 := b.appOfKey(key)
+	cred, v5 := b.v5CredOfKey(key)
 	if b.Secrets == nil && !v5 {
 		return
 	}
@@ -227,7 +248,7 @@ func (b *Base) dropSecrets(ctx context.Context, key string, refs ...string) {
 		switch {
 		case ref == "":
 		case v5:
-			_ = b.v5.GitHub().DeleteAppCredential(ctx, app, ref)
+			_ = cred.drop(ctx, ref)
 		default:
 			_ = b.Secrets.Delete(ctx, secretPath(key, ref))
 		}
@@ -326,7 +347,10 @@ func (b *Base) editItem(ctx context.Context, key string, ttl time.Duration, chan
 			kept = errors.Is(err, errKeep)
 			return nil, false, err
 		}
-		if landed = next.Secret; landed != "" && landed != prev {
+		// A fixed-ref credential (a Google Workspace's key) is replaced in place,
+		// so a lost write cannot take it back: nothing is fresh.
+		landed = next.Secret
+		if cred, v5 := b.v5CredOfKey(key); landed != "" && landed != prev && !(v5 && cred.fixed != "") {
 			fresh[landed] = true
 		}
 		return encodeItem(next), true, nil

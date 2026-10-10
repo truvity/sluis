@@ -107,7 +107,7 @@ func (m *Minter) tick(ctx context.Context, preset string, p config.CloudflarePre
 	res := PresetResult{Preset: preset, Outcome: OutcomeFresh}
 	now := m.now()
 	meters.interval(ctx, preset, p.Rotation.D())
-	value := m.cfg.External.Cloudflare(preset)
+	value := m.stored(preset)
 	doc, rev, err := value.Get(ctx)
 	due := false
 	switch {
@@ -158,7 +158,7 @@ func (m *Minter) rotate(ctx context.Context, preset string, p config.CloudflareP
 		m.fail(ctx, actor, preset, audit.CloudflareStored, err)
 		return nil, err
 	}
-	if _, err = m.cfg.External.Cloudflare(preset).Put(ctx, minted.Document(), rev); err != nil {
+	if _, err = m.stored(preset).Put(ctx, minted.Document(), rev); err != nil {
 		err = &storeError{err: fmt.Errorf("write external/cloudflare/%s: %w", preset, err)}
 		m.dropUnstored(ctx, preset, p, minted)
 		m.fail(ctx, actor, preset, audit.CloudflareStored, err)
@@ -343,7 +343,7 @@ func (m *Minter) Revoke(ctx context.Context, preset, tokenID string, actor audit
 	}
 	// It was the schedule's token if the stored document is the one it expires
 	// with; mint the replacement now.
-	doc, rev, err := m.cfg.External.Cloudflare(preset).Get(ctx)
+	doc, rev, err := m.stored(preset).Get(ctx)
 	if err != nil {
 		return res, nil //nolint:nilerr // nothing stored to replace: the next tick mints
 	}

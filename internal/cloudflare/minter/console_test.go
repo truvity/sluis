@@ -97,7 +97,7 @@ func TestRotateNowMintsBeforeItIsDueAndAttributesIt(t *testing.T) {
 	if minted.TokenID != "tok002" {
 		t.Fatalf("minted %s, want a new token though the stored one was not due", minted.TokenID)
 	}
-	if doc, _, _ := e.stores.External.Cloudflare("dns").Get(ctx); doc.Token != "value-tok002" {
+	if doc, _, _ := e.external("dns").Get(ctx); doc.Token != "value-tok002" {
 		t.Errorf("stored = %+v", doc)
 	}
 	recs := e.rec.Find("roster.cloudflare.token.minted")

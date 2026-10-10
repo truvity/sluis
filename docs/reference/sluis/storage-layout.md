@@ -21,7 +21,7 @@ Layout v4 for SSM, and the AWS adapters' tables. A record has a kind and an id: 
 | `<root>/internal/credentials/github-app/<app-id>/<ref>` | a catalogue GitHub App's key, until it is installed or when it is not exported | sluis |
 | `<root>/internal/credentials/github-link/<github-user-id>/<ref>` | a person's GitHub token pair | sluis |
 | `<root>/internal/credentials/slack-workspace/<team>/<ref>` | a Slack workspace's client secret and bot token | sluis |
-| `<root>/internal/credentials/slack-app/<app-id>/<ref>` | a catalogue Slack App's client secret | sluis |
+| `<root>/internal/credentials/slack-app/<app-id>/<ref>` | a Slack App's client secret | sluis |
 | `<root>/external/oidc/<id>` | a generated or seeded client's secret, an `oidc/v1` document | sluis, or an operator |
 | `<root>/external/github/<id>` | an installed App's key: a catalogue App with `export: true`, or `runner-<tier>-<org>` for a runner App, a `github/v1` document | sluis |
 | `<root>/external/slack/<id>` | a catalogue Slack App's bot token, a `slack/v1` document | sluis |
@@ -166,6 +166,15 @@ The logical key maps to kind and credential path as follows.
 | a delivered client secret | `<root>/internal/config/clients/<id>/secret` | `<root>/internal/oidc/clients/<id>` |
 | a generated client's record | `<root>/external/oidc/<id>` | `<root>/external/oidc/<id>`, the same document |
 | the state secret's fingerprint (State, not a secret) | key `issuer:kms:state-secret-fingerprint` | the same key, in the `oidc` table |
+
+| Credential (layout v5) | Address below `<root>/` |
+|---|---|
+| a Google Workspace's key | `internal/google/workspaces/<id>/key`, replaced in place |
+| GitHub link tokens | `internal/github/links/<id>/<ref>` |
+| a Slack workspace's token | `internal/slack/workspaces/<team>/<ref>` |
+| a Slack App's client secret | `internal/slack/apps/<id>/<ref>` |
+| the Cloudflare minter, and its minted-token record | `internal/cloudflare/<account>/minter`, `internal/cloudflare/minted/<preset>` |
+| static S3 credentials (`credentialsRef`) | `internal/<module>/<name>`, its own module |
 
 ## S3 (the `s3` Blob adapter)
 

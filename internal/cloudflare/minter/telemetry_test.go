@@ -16,6 +16,9 @@ import (
 // the fixed label `unknown`: the name is the caller's to choose, so it must not
 // be able to mint a series.
 func TestAnUnknownPresetIsOneMetricLabel(t *testing.T) {
+	if useV5 {
+		t.Skip("the process takes its meter provider once; the layout does not touch the metric")
+	}
 	reader := sdkmetric.NewManualReader()
 	otel.SetMeterProvider(sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)))
 

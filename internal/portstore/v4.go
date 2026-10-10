@@ -31,6 +31,75 @@ func (b *Base) WithV5(v5 *secretstore.StoresV5) *Base {
 	return b
 }
 
+// v5Cred is where the credential of an item is kept on layout v5.
+type v5Cred struct {
+	// at is the credential's value for a ref.
+	at func(ref string) state.Value[[]byte]
+	// drop removes the credential for a ref.
+	drop func(ctx context.Context, ref string) error
+	// fixed is the one ref the credential has, for a kind that is replaced in
+	// place under the store's version history (a Google Workspace's key). Empty
+	// is a fresh random ref per write.
+	fixed string
+}
+
+// v5CredOfKey is where the credential of the item with the key lives when the
+// secrets are on layout v5 (ADR 0072): github/apps/<id>/<ref>,
+// github/links/<account>/<ref>, slack/workspaces/<team>/<ref>,
+// slack/apps/<id>/<ref> and google/workspaces/<id>/key. ok is false on layout
+// v4 and for a key that keeps no credential of its own (an organisation's key is
+// its App's).
+func (b *Base) v5CredOfKey(key string) (c v5Cred, ok bool) {
+	if b.v5 == nil {
+		return v5Cred{}, false
+	}
+	addr, err := port.Locate5(key)
+	if err != nil {
+		return v5Cred{}, false
+	}
+	switch {
+	case addr.Module == port.ModuleGitHub && addr.Kind == "app":
+		return v5Cred{
+			at: func(ref string) state.Value[[]byte] { return b.v5.GitHub().AppCredential(addr.ID, ref) },
+			drop: func(ctx context.Context, ref string) error {
+				return b.v5.GitHub().DeleteAppCredential(ctx, addr.ID, ref)
+			},
+		}, true
+	case addr.Module == port.ModuleGitHub && addr.Kind == "link":
+		return v5Cred{
+			at: func(ref string) state.Value[[]byte] { return b.v5.GitHub().LinkCredential(addr.ID, ref) },
+			drop: func(ctx context.Context, ref string) error {
+				return b.v5.GitHub().DeleteLinkCredential(ctx, addr.ID, ref)
+			},
+		}, true
+	case addr.Module == port.ModuleSlack && addr.Kind == "workspace":
+		return v5Cred{
+			at: func(ref string) state.Value[[]byte] { return b.v5.Slack().WorkspaceCredential(addr.ID, ref) },
+			drop: func(ctx context.Context, ref string) error {
+				return b.v5.Slack().DeleteWorkspaceCredential(ctx, addr.ID, ref)
+			},
+		}, true
+	case addr.Module == port.ModuleSlack && addr.Kind == "app":
+		return v5Cred{
+			at: func(ref string) state.Value[[]byte] { return b.v5.Slack().AppCredential(addr.ID, ref) },
+			drop: func(ctx context.Context, ref string) error {
+				return b.v5.Slack().DeleteAppCredential(ctx, addr.ID, ref)
+			},
+		}, true
+	case addr.Module == port.ModuleGoogle && addr.Kind == "workspace":
+		return v5Cred{
+			at:    func(string) state.Value[[]byte] { return b.v5.Google().WorkspaceKey(addr.ID) },
+			drop:  func(ctx context.Context, _ string) error { return b.v5.Google().DeleteWorkspaceKey(ctx, addr.ID) },
+			fixed: googleKeyRef,
+		}, true
+	}
+	return v5Cred{}, false
+}
+
+// googleKeyRef is the ref an item names a Google Workspace's key by: the key
+// has one address, google/workspaces/<id>/key.
+const googleKeyRef = "key"
+
 // appOfKey is the id of the GitHub App whose item key it is, when the
 // credentials of Apps are on layout v5. An organisation's key is not an App's.
 func (b *Base) appOfKey(key string) (id string, ok bool) {
@@ -171,8 +240,25 @@ func (b *Base) deleteExternal(ctx context.Context, st state.Store, key string) e
 	return nil
 }
 
+// externalSlackApp is the exported bot token of the Slack App: external/slack/<app>
+// wherever the layout keeps it, which is the same address on v4 and v5.
+func (b *Base) externalSlackApp(app string) state.Value[secretstore.Slackv1] {
+	if b.v5 != nil {
+		return b.v5.SlackExternal().App(app)
+	}
+	return b.v4.External.SlackApp(app)
+}
+
+// deleteExternalSlackApp removes the exported bot token of the Slack App.
+func (b *Base) deleteExternalSlackApp(ctx context.Context, app string) error {
+	if b.v5 != nil {
+		return b.v5.SlackExternal().DeleteApp(ctx, app)
+	}
+	return b.deleteExternal(ctx, b.v4.External.Store(), "slack/"+app)
+}
+
 func (b *Base) putSlack(ctx context.Context, app, token string) error {
-	value := b.v4.External.SlackApp(app)
+	value := b.externalSlackApp(app)
 	for range attempts {
 		cur, rev, err := value.Get(ctx)
 		switch {
@@ -194,7 +280,7 @@ func (b *Base) putSlack(ctx context.Context, app, token string) error {
 }
 
 func (b *Base) getSlack(ctx context.Context, app string) (string, bool, error) {
-	doc, _, err := b.v4.External.SlackApp(app).Get(ctx)
+	doc, _, err := b.externalSlackApp(app).Get(ctx)
 	switch {
 	case errors.Is(err, state.ErrNotFound):
 		return "", false, nil

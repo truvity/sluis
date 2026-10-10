@@ -36,7 +36,7 @@ func TestTheTickClonesThePrototypeAndStoresTheToken(t *testing.T) {
 	if e.api.gotMinter != "minter-secret" {
 		t.Errorf("the account was opened with %q", e.api.gotMinter)
 	}
-	doc, _, err := e.stores.External.Cloudflare("dns").Get(ctx)
+	doc, _, err := e.external("dns").Get(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -71,7 +71,7 @@ func TestAnR2PresetStoresAnAccessKeyAndTheHashOfTheValue(t *testing.T) {
 	if res := e.m.TickPreset(ctx, "r2"); res.Err != nil {
 		t.Fatal(res.Err)
 	}
-	doc, _, err := e.stores.External.Cloudflare("r2").Get(ctx)
+	doc, _, err := e.external("r2").Get(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,7 +96,7 @@ func TestATickOnlyRotatesWhenTheStoredTokenIsOlderThanRotation(t *testing.T) {
 	if res := e.m.TickPreset(ctx, "dns"); res.Outcome != minter.OutcomeRotated || e.api.creates != 2 {
 		t.Fatalf("due tick = %+v, creates %d", res, e.api.creates)
 	}
-	doc, _, _ := e.stores.External.Cloudflare("dns").Get(ctx)
+	doc, _, _ := e.external("dns").Get(ctx)
 	if doc.Token != "value-tok002" {
 		t.Errorf("stored = %+v", doc)
 	}
@@ -185,7 +185,7 @@ func TestAnActivePrototypeIsRefused(t *testing.T) {
 	if !ok || pe.Reason != cloudflare.ReasonPrototypeActive || e.api.creates != 0 {
 		t.Fatalf("tick = %+v, creates %d", res, e.api.creates)
 	}
-	if _, _, err := e.stores.External.Cloudflare("dns").Get(ctx); err == nil {
+	if _, _, err := e.external("dns").Get(ctx); err == nil {
 		t.Error("a document was stored")
 	}
 	if rec := e.rec.Find("roster.cloudflare.token.refused"); len(rec) != 1 {
@@ -230,10 +230,10 @@ func TestAMissingPrototypeAndAMissingMinterAreRefusedPlainly(t *testing.T) {
 		t.Fatalf("missing prototype: %v", pe)
 	}
 	e = setup(t)
-	if _, err := e.stores.Internal.Store().Child("cloudflare/main").Get(ctx, "minter"); err != nil {
+	if _, err := e.minterStore().Get(ctx, "minter"); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.stores.Internal.Store().Child("cloudflare/main").Delete(ctx, "minter"); err != nil {
+	if err := e.minterStore().Delete(ctx, "minter"); err != nil {
 		t.Fatal(err)
 	}
 	if res := e.m.TickPreset(ctx, "dns"); !errors.Is(res.Err, minter.ErrNoMinter) {
@@ -290,7 +290,7 @@ func TestOnDemandMintingChecksTheGrantsAndTheLifetime(t *testing.T) {
 		t.Errorf("refused records = %d", n)
 	}
 	// Nothing was stored for an on-demand mint, and no record carries a value.
-	if _, _, err = e.stores.External.Cloudflare("dns").Get(ctx); err == nil {
+	if _, _, err = e.external("dns").Get(ctx); err == nil {
 		t.Error("an on-demand mint wrote the stored document")
 	}
 	for _, r := range e.rec.Records() {
@@ -337,7 +337,7 @@ func TestRevokeDeletesOnlyOwnTokensAndReplacesTheStoredOne(t *testing.T) {
 	if _, ok := e.api.names()["tok001"]; ok {
 		t.Error("tok001 is still live")
 	}
-	if doc, _, _ := e.stores.External.Cloudflare("dns").Get(ctx); doc.Token != "value-tok002" {
+	if doc, _, _ := e.external("dns").Get(ctx); doc.Token != "value-tok002" {
 		t.Errorf("stored = %+v", doc)
 	}
 	if n := len(e.rec.Find("roster.cloudflare.token.revoked")); n != 1 {
@@ -360,7 +360,7 @@ func TestACreateFailureIsReportedAndNothingIsStored(t *testing.T) {
 	if res.Err == nil || res.Outcome != minter.OutcomeFailed {
 		t.Fatalf("tick = %+v", res)
 	}
-	if _, _, err := e.stores.External.Cloudflare("dns").Get(ctx); err == nil {
+	if _, _, err := e.external("dns").Get(ctx); err == nil {
 		t.Error("a document was stored")
 	}
 	if r := e.rec.Find("roster.cloudflare.token.refused"); len(r) != 1 {
@@ -391,8 +391,10 @@ func (busyLock) Do(context.Context, string, string, func(context.Context)) (bool
 
 func TestATickWhoseLeaseIsHeldElsewhereDoesNothing(t *testing.T) {
 	e := setup(t)
-	m2, err := minter.New(minter.Config{Instance: "example", Cloudflare: goodSection(), Internal: e.stores.Internal,
-		External: e.stores.External, Lock: busyLock{}, Dial: func(context.Context, string, string) (minter.API, error) { return e.api, nil }})
+	mc2 := minter.Config{Instance: "example", Cloudflare: goodSection(),
+		Lock: busyLock{}, Dial: func(context.Context, string, string) (minter.API, error) { return e.api, nil }}
+	e.secretsConfig(&mc2)
+	m2, err := minter.New(mc2)
 	if err != nil {
 		t.Fatal(err)
 	}

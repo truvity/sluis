@@ -165,3 +165,46 @@ func TestV5ViewsAreScopedToTheirModule(t *testing.T) {
 		t.Fatalf("an account named like the records directory: %v", err)
 	}
 }
+
+// The S3 credentials ref names its module, the minter ref must be the
+// cloudflare module's, and each kind's delete removes what the builder wrote.
+func TestV5RefsAndDeletes(t *testing.T) {
+	ctx := context.Background()
+	s := secretstore.FromStoreV5(memory.New(), "")
+	doc := secretstore.S3Credentialsv1{AccessKeyID: "k", SecretAccessKey: "s"}
+	v, err := s.S3Credentials("internal/oidc/blobs")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = v.Put(ctx, doc, ""); err != nil {
+		t.Fatal(err)
+	}
+	for _, ref := range []string{"internal/blobs/r2", "external/oidc/x", "internal/oidc", "internal/oidc/../github/x"} {
+		if _, err = s.S3Credentials(ref); !errors.Is(err, secretstore.ErrRef) {
+			t.Errorf("S3Credentials(%q) = %v", ref, err)
+		}
+	}
+	if _, err = s.Cloudflare().MinterAt("internal/github/main/minter"); !errors.Is(err, secretstore.ErrRef) {
+		t.Errorf("MinterAt of another module = %v", err)
+	}
+	if _, err = s.Cloudflare().MinterAt("internal/cloudflare/main/minter"); err != nil {
+		t.Errorf("MinterAt = %v", err)
+	}
+
+	put(t, s.GitHub().LinkCredential("7", "r1"))
+	put(t, s.Slack().WorkspaceCredential("T1", "r1"))
+	put(t, s.Slack().AppCredential("bot", "r1"))
+	put(t, s.Google().WorkspaceKey("ws"))
+	for _, del := range []error{
+		s.GitHub().DeleteLinkCredential(ctx, "7", "r1"), s.Slack().DeleteWorkspaceCredential(ctx, "T1", "r1"),
+		s.Slack().DeleteAppCredential(ctx, "bot", "r1"), s.Google().DeleteWorkspaceKey(ctx, "ws"),
+		s.GitHub().DeleteLinkCredential(ctx, "7", "r1"), // absent: not an error
+	} {
+		if del != nil {
+			t.Error(del)
+		}
+	}
+	if _, _, err = s.Google().WorkspaceKey("ws").Get(ctx); !errors.Is(err, state.ErrNotFound) {
+		t.Errorf("the key outlived its delete: %v", err)
+	}
+}

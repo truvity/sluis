@@ -22,7 +22,7 @@ const recordRetries = 6
 
 // update applies edit to the preset's record under a conditional write.
 func (m *Minter) updateRecord(ctx context.Context, preset string, edit func(*secretstore.CloudflareMinted)) error {
-	v := m.cfg.Internal.CloudflareMinted(preset)
+	v := m.mintedDoc(preset)
 	var err error
 	for range recordRetries {
 		doc, rev, gerr := v.Get(ctx)
@@ -58,7 +58,7 @@ func (m *Minter) untrack(ctx context.Context, preset string, ids ...string) erro
 
 // Recorded are the ids the preset has minted and not yet deleted.
 func (m *Minter) Recorded(ctx context.Context, preset string) ([]secretstore.CloudflareMintedToken, error) {
-	doc, _, err := m.cfg.Internal.CloudflareMinted(preset).Get(ctx)
+	doc, _, err := m.mintedDoc(preset).Get(ctx)
 	if errors.Is(err, state.ErrNotFound) {
 		return nil, nil
 	}

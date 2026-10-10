@@ -83,7 +83,7 @@ func (m *Minter) Stored(ctx context.Context, preset string) (StoredInfo, error) 
 	if !ok {
 		return StoredInfo{}, fmt.Errorf("%w: %q", ErrUnknownPreset, preset)
 	}
-	doc, _, err := m.cfg.External.Cloudflare(preset).Get(ctx)
+	doc, _, err := m.stored(preset).Get(ctx)
 	switch {
 	case errors.Is(err, state.ErrNotFound), errors.Is(err, secretstore.ErrSchema):
 		return StoredInfo{}, nil
@@ -129,7 +129,7 @@ func (m *Minter) RotateNow(ctx context.Context, preset string, actor audit.Actor
 }
 
 func (m *Minter) rotateNow(ctx context.Context, preset string, p config.CloudflarePreset, actor audit.Actor) (*Minted, error) {
-	_, rev, err := m.cfg.External.Cloudflare(preset).Get(ctx)
+	_, rev, err := m.stored(preset).Get(ctx)
 	if err != nil && !errors.Is(err, state.ErrNotFound) && !errors.Is(err, secretstore.ErrSchema) {
 		return nil, &storeError{err: fmt.Errorf("read external/cloudflare/%s: %w", preset, err)}
 	}
