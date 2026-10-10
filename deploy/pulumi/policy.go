@@ -113,6 +113,11 @@ func stateStatements(tableArn, keyArn string, tables map[Module]string, cloudfla
 			"Resource": tableArn,
 		})
 	}
+	if tableArn != "" {
+		// Layout v4 keeps the maintenance flag in this table too; only the restore
+		// role writes it.
+		out = append(out, maintenanceDeny([]string{tableArn}))
+	}
 	out = append(out, moduleTableStatements(tables, cloudflare)...)
 	if keyArn != "" && (tableArn != "" || len(tables) > 0) {
 		out = append(out, statement{
@@ -490,6 +495,7 @@ func functionPolicy(in functionPolicyIn) (string, error) {
 		if err != nil {
 			return "", err
 		}
+		st = mergeMaintenanceDeny(st, v5)
 		st = appendNew(st, v5...)
 	}
 	if in.queueArn != "" {
@@ -515,6 +521,45 @@ func functionPolicy(in functionPolicyIn) (string, error) {
 		"Resource": in.invokeFunctionArns,
 	}, webIdentityStatement(in.webIdentityAud, in.webIdentityExtra))
 	return document(st)
+}
+
+// maintenanceDeny denies the writes of the maintenance partition on tables.
+func maintenanceDeny(tables []string) statement {
+	return statement{
+		"Sid": sidMaintenanceDeny, "Effect": "Deny", "Action": ddbMaintenanceDenied, "Resource": tablesOf(tables),
+		"Condition": map[string]any{
+			"ForAnyValue:StringEquals": map[string]any{"dynamodb:LeadingKeys": []string{MaintenancePartition}},
+		},
+	}
+}
+
+// mergeMaintenanceDeny makes the one SluisMaintenanceDeny of a role on v4+v5
+// cover the legacy table (already in st) and the module tables (in more): the
+// deny in more is dropped and its tables join the one in st.
+func mergeMaintenanceDeny(st, more []statement) []statement {
+	var extra []string
+	for _, s := range more {
+		if s["Sid"] == sidMaintenanceDeny {
+			extra = append(extra, resourceList(s["Resource"])...)
+		}
+	}
+	for i, s := range st {
+		if s["Sid"] == sidMaintenanceDeny && len(extra) > 0 {
+			st[i] = maintenanceDeny(append(resourceList(s["Resource"]), extra...))
+		}
+	}
+	return st
+}
+
+// resourceList is a statement's Resource as a list.
+func resourceList(v any) []string {
+	switch x := v.(type) {
+	case string:
+		return []string{x}
+	case []string:
+		return x
+	}
+	return nil
 }
 
 // hostedModules are the modules the one function hosts until each is split out:
