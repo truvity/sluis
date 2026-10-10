@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"crypto/rand"
-	"crypto/sha256"
 	"crypto/subtle"
 	"errors"
 	"fmt"
@@ -212,11 +211,9 @@ type PasswordRecovery struct {
 	salt   []byte
 	digest []byte
 	// password, when set, is where a lazily opened recovery reads the password:
-	// on the first proof, and again after its time to live. seen is the
-	// SHA-256 of the password the digest was made from, so that a changed
-	// password is digested again and an unchanged one is not.
+	// on the first proof, and again after its time to live. A password that
+	// changed is digested again; one that did not keeps its salt and digest.
 	password *lazy.Value[string]
-	seen     [sha256.Size]byte
 
 	mu       sync.Mutex
 	failures int
@@ -262,13 +259,15 @@ func (p *PasswordRecovery) settle(ctx context.Context) error {
 	if password == "" {
 		return errors.New("recovery.passwordSecret: the password is empty")
 	}
-	sum := sha256.Sum256([]byte(password))
-	if p.digest != nil && sum == p.seen {
-		return nil
+	if p.digest != nil {
+		same := argon2.IDKey([]byte(password), p.salt, argonTime, argonMemory, argonThreads, argonLength)
+		if subtle.ConstantTimeCompare(same, p.digest) == 1 {
+			return nil
+		}
 	}
 	salt := make([]byte, 16)
 	_, _ = rand.Read(salt)
-	p.salt, p.seen = salt, sum
+	p.salt = salt
 	p.digest = argon2.IDKey([]byte(password), salt, argonTime, argonMemory, argonThreads, argonLength)
 	return nil
 }
