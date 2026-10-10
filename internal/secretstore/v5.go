@@ -71,6 +71,14 @@ func FromStoreV5(root state.Store, keyAlias string) *StoresV5 {
 	return &StoresV5{internal: root.Child("internal", opts...), external: root.Child("external", opts...)}
 }
 
+// InternalStore is the store rooted at internal/<module>, for a tool that reads
+// a module's names it does not know in advance (the migration's plan). A
+// module's own code uses its typed view.
+func (s *StoresV5) InternalStore(m Module) state.Store { return s.in(m) }
+
+// ExternalStore is the store rooted at external/<module>.
+func (s *StoresV5) ExternalStore(m Module) state.Store { return s.out(m) }
+
 func (s *StoresV5) in(m Module) state.Store  { return s.internal.Child(string(m)) }
 func (s *StoresV5) out(m Module) state.Store { return s.external.Child(string(m)) }
 

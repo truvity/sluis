@@ -1,0 +1,437 @@
+{
+  "from": "v4.yaml",
+  "to": "v5.yaml",
+  "modules": [
+    {
+      "module": "oidc",
+      "new": 19,
+      "same": 0,
+      "different": 0,
+      "refused": 0,
+      "items": [
+        {
+          "concern": "state",
+          "kind": "code",
+          "from": "issuer:code:*",
+          "to": "oidc/code",
+          "status": "new",
+          "count": 1
+        },
+        {
+          "concern": "state",
+          "kind": "console",
+          "id": "session-key",
+          "from": "rec.console.session-key",
+          "to": "oidc/console/session-key",
+          "status": "new",
+          "secrets": 1,
+          "fromSecret": "internal/credentials/console/session-key",
+          "toSecret": "internal/oidc/console-session-key"
+        },
+        {
+          "concern": "state",
+          "kind": "guard",
+          "from": "issuer:kms:*",
+          "to": "oidc/guard",
+          "status": "new",
+          "count": 1
+        },
+        {
+          "concern": "state",
+          "kind": "keyring",
+          "from": "issuer:keyring:*",
+          "to": "oidc/keyring",
+          "status": "new",
+          "count": 2
+        },
+        {
+          "concern": "state",
+          "kind": "keyring-index",
+          "from": "issuer:keyring:*",
+          "to": "oidc/keyring-index",
+          "status": "new",
+          "count": 1
+        },
+        {
+          "concern": "state",
+          "kind": "keyring-retired",
+          "from": "issuer:keyring:*",
+          "to": "oidc/keyring-retired",
+          "status": "new",
+          "count": 1
+        },
+        {
+          "concern": "state",
+          "kind": "session",
+          "from": "issuer:session:*",
+          "to": "oidc/session",
+          "status": "new",
+          "count": 1
+        },
+        {
+          "concern": "state",
+          "kind": "session-token",
+          "from": "issuer:session-token:*",
+          "to": "oidc/session-token",
+          "status": "new",
+          "count": 2
+        },
+        {
+          "concern": "state",
+          "kind": "sessions-for",
+          "from": "issuer:sessions-for:*",
+          "to": "oidc/sessions-for",
+          "status": "new",
+          "count": 1
+        },
+        {
+          "concern": "state",
+          "kind": "sessions-index",
+          "from": "issuer:sessions:*",
+          "to": "oidc/sessions-index",
+          "status": "new",
+          "count": 1
+        },
+        {
+          "concern": "state",
+          "kind": "sessions-of",
+          "from": "issuer:sessions-of:*",
+          "to": "oidc/sessions-of",
+          "status": "new",
+          "count": 1
+        },
+        {
+          "concern": "secret",
+          "kind": "client",
+          "id": "local-dev",
+          "from": "internal/config/clients/local-dev/secret",
+          "to": "internal/oidc/clients/local-dev",
+          "status": "new"
+        },
+        {
+          "concern": "secret",
+          "kind": "document",
+          "id": "local-dev",
+          "from": "external/oidc/local-dev",
+          "to": "external/oidc/local-dev",
+          "status": "new",
+          "fromVersion": "1"
+        },
+        {
+          "concern": "secret",
+          "kind": "recovery-password",
+          "from": "internal/config/recovery/password",
+          "to": "internal/oidc/recovery-password",
+          "status": "new"
+        },
+        {
+          "concern": "secret",
+          "kind": "signin",
+          "id": "main/client-id",
+          "from": "internal/config/providers/google/main/client-id",
+          "to": "internal/oidc/signin/main/client-id",
+          "status": "new"
+        },
+        {
+          "concern": "secret",
+          "kind": "signin",
+          "id": "main/client-secret",
+          "from": "internal/config/providers/google/main/client-secret",
+          "to": "internal/oidc/signin/main/client-secret",
+          "status": "new"
+        },
+        {
+          "concern": "secret",
+          "kind": "state-secret",
+          "from": "internal/config/issuer/state-secret",
+          "to": "internal/oidc/state-secret",
+          "status": "new"
+        }
+      ]
+    },
+    {
+      "module": "github",
+      "new": 10,
+      "same": 0,
+      "different": 0,
+      "refused": 0,
+      "items": [
+        {
+          "concern": "state",
+          "kind": "app",
+          "id": "link",
+          "from": "app.gh.link",
+          "to": "github/app/link",
+          "status": "new",
+          "secrets": 1,
+          "fromSecret": "internal/credentials/github-app/link/\u003cref\u003e",
+          "toSecret": "internal/github/apps/link/\u003cref\u003e"
+        },
+        {
+          "concern": "state",
+          "kind": "app",
+          "id": "renovate",
+          "from": "app.gh.cat.renovate",
+          "to": "github/app/renovate",
+          "status": "new",
+          "secrets": 1,
+          "external": "external/github/renovate"
+        },
+        {
+          "concern": "state",
+          "kind": "app",
+          "id": "roster",
+          "from": "app.gh.cat.roster",
+          "to": "github/app/roster",
+          "status": "new",
+          "secrets": 1,
+          "fromSecret": "internal/credentials/github-app/roster/\u003cref\u003e",
+          "toSecret": "internal/github/apps/roster/\u003cref\u003e"
+        },
+        {
+          "concern": "state",
+          "kind": "app",
+          "id": "runner-stable-acme",
+          "from": "app.gh.runner.stable.acme",
+          "to": "github/app/runner-stable-acme",
+          "status": "new",
+          "secrets": 1,
+          "external": "external/github/runner-stable-acme"
+        },
+        {
+          "concern": "state",
+          "kind": "gate",
+          "id": "acme/confirm",
+          "from": "gate.github.acme.confirm",
+          "to": "github/gate/acme/confirm",
+          "status": "new"
+        },
+        {
+          "concern": "state",
+          "kind": "gate",
+          "id": "acme/pass",
+          "from": "gate.github.acme.pass",
+          "to": "github/gate/acme/pass",
+          "status": "new"
+        },
+        {
+          "concern": "state",
+          "kind": "link",
+          "id": "101",
+          "from": "gh.link.101",
+          "to": "github/link/101",
+          "status": "new",
+          "secrets": 2,
+          "fromSecret": "internal/credentials/github-link/101/\u003cref\u003e",
+          "toSecret": "internal/github/links/101/\u003cref\u003e"
+        },
+        {
+          "concern": "state",
+          "kind": "link",
+          "id": "102",
+          "from": "gh.link.102",
+          "to": "github/link/102",
+          "status": "new"
+        },
+        {
+          "concern": "state",
+          "kind": "org",
+          "id": "acme",
+          "from": "gh.org.acme",
+          "to": "github/org/acme",
+          "status": "new",
+          "secrets": 1,
+          "fromSecret": "internal/credentials/github-org/acme/\u003cref\u003e",
+          "note": "internal/credentials/github-org/acme/\u003cref\u003e: on layout v5 an organisation has no key, it names the App whose key it uses (app_ref)"
+        },
+        {
+          "concern": "blob",
+          "kind": "report",
+          "id": "reports/github/acme",
+          "from": "reports/github/acme",
+          "to": "reports/github/acme",
+          "status": "new"
+        }
+      ]
+    },
+    {
+      "module": "slack",
+      "new": 9,
+      "same": 0,
+      "different": 0,
+      "refused": 0,
+      "items": [
+        {
+          "concern": "state",
+          "kind": "app",
+          "id": "notifier",
+          "from": "app.slack.cat.notifier",
+          "to": "slack/app/notifier",
+          "status": "new",
+          "secrets": 1,
+          "fromSecret": "internal/credentials/slack-app/notifier/\u003cref\u003e",
+          "toSecret": "internal/slack/apps/notifier/\u003cref\u003e"
+        },
+        {
+          "concern": "state",
+          "kind": "channel",
+          "id": "acme/dev",
+          "from": "rec.slack.channel.acme.dev",
+          "to": "slack/channel/acme/dev",
+          "status": "new"
+        },
+        {
+          "concern": "state",
+          "kind": "channel",
+          "id": "acme/ops",
+          "from": "rec.slack.channel.acme.ops",
+          "to": "slack/channel/acme/ops",
+          "status": "new"
+        },
+        {
+          "concern": "state",
+          "kind": "gate",
+          "id": "acme/confirm",
+          "from": "gate.slack.acme.confirm",
+          "to": "slack/gate/acme/confirm",
+          "status": "new"
+        },
+        {
+          "concern": "state",
+          "kind": "gate",
+          "id": "acme/confirm/ops",
+          "from": "gate.slack.acme.confirm.ops",
+          "to": "slack/gate/acme/confirm/ops",
+          "status": "new"
+        },
+        {
+          "concern": "state",
+          "kind": "gate",
+          "id": "acme/pass",
+          "from": "gate.slack.acme.pass",
+          "to": "slack/gate/acme/pass",
+          "status": "new"
+        },
+        {
+          "concern": "state",
+          "kind": "shared",
+          "id": "partners",
+          "from": "rec.slack.shared.partners",
+          "to": "slack/shared/partners",
+          "status": "new"
+        },
+        {
+          "concern": "state",
+          "kind": "workspace",
+          "id": "acme",
+          "from": "ws.slack.acme",
+          "to": "slack/workspace/acme",
+          "status": "new",
+          "secrets": 1,
+          "fromSecret": "internal/credentials/slack-workspace/acme/\u003cref\u003e",
+          "toSecret": "internal/slack/workspaces/acme/\u003cref\u003e"
+        },
+        {
+          "concern": "blob",
+          "kind": "report",
+          "id": "reports/slack/acme",
+          "from": "reports/slack/acme",
+          "to": "reports/slack/acme",
+          "status": "new"
+        }
+      ]
+    },
+    {
+      "module": "cloudflare",
+      "new": 3,
+      "same": 0,
+      "different": 0,
+      "refused": 0,
+      "items": [
+        {
+          "concern": "secret",
+          "kind": "document",
+          "id": "r2",
+          "from": "external/cloudflare/r2",
+          "to": "external/cloudflare/r2",
+          "status": "new",
+          "fromVersion": "1"
+        },
+        {
+          "concern": "secret",
+          "kind": "minted",
+          "id": "r2",
+          "from": "internal/cloudflare-minted/r2",
+          "to": "internal/cloudflare/minted/r2",
+          "status": "new",
+          "fromVersion": "1"
+        },
+        {
+          "concern": "secret",
+          "kind": "minter",
+          "id": "prod",
+          "from": "internal/cloudflare/prod/minter",
+          "to": "internal/cloudflare/prod/minter",
+          "status": "new",
+          "fromVersion": "1"
+        }
+      ]
+    },
+    {
+      "module": "google",
+      "new": 4,
+      "same": 0,
+      "different": 0,
+      "refused": 0,
+      "items": [
+        {
+          "concern": "state",
+          "kind": "workspace",
+          "id": "C01",
+          "from": "ws.dir.google.C01",
+          "to": "google/workspace/C01",
+          "status": "new",
+          "secrets": 1,
+          "fromSecret": "internal/credentials/directory/google/C01/\u003cref\u003e",
+          "toSecret": "internal/google/workspaces/C01/key"
+        },
+        {
+          "concern": "state",
+          "kind": "workspace",
+          "id": "C02",
+          "from": "ws.dir.google.C02",
+          "to": "google/workspace/C02",
+          "status": "new"
+        },
+        {
+          "concern": "secret",
+          "kind": "s3-credentials",
+          "id": "blobs-r2",
+          "from": "internal/blobs/r2",
+          "to": "internal/google/blobs-r2",
+          "status": "new",
+          "fromVersion": "1"
+        },
+        {
+          "concern": "secret",
+          "kind": "workspace-key",
+          "id": "C01",
+          "from": "internal/config/directory/C01/key",
+          "to": "internal/google/workspaces/C01/key",
+          "status": "new"
+        }
+      ]
+    }
+  ],
+  "totals": {
+    "new": 45,
+    "same": 0,
+    "different": 0,
+    "refused": 0
+  },
+  "notes": [
+    "leases, notifications, caches, dedupe records, Slack Connect shares and user caches, and the hub's blob snapshots are not copied: they start fresh",
+    "internal/config/valkey/password is delivered to the cluster only and is not carried"
+  ],
+  "ok": true
+}
