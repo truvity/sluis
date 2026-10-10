@@ -300,79 +300,15 @@ kos:
       org.opencontainers.image.version: "{{ .Version }}"
       org.opencontainers.image.source: https://github.com/truvity/sluis
 
-  # One image per module, for Kubernetes (U34c, docs/decisions/0072): the zip per
-  # module is for Lambda, and this is its container counterpart. Each is the
-  # multi-call `sluis` main built with its module name pinned
-  # (`-X .../internal/version.Module=sluis-module=<module>`), so a module image
-  # refuses another module's commands (cmd/sluis checkPin). The chart runs them
-  # with `image.perModule: true` and keeps the single `sluis` image by default.
-  # The repository is set per image, not by the cmd directory, since all three
-  # build ./cmd/sluis; the id IS the image name (the artifacts table reads it).
-  - id: sluis-issuer
-    main: ./cmd/sluis
-    repositories:
-      - "{{ .Env.KO_DOCKER_REPO }}/sluis-issuer"
-    env: [CGO_ENABLED=0]
-    flags: [-trimpath]
-    ldflags:
-      - -s -w -X github.com/truvity/sluis/internal/version.Version={{.Version}} -X github.com/truvity/sluis/internal/version.Module=sluis-module=issuer
-    tags:
-      - "{{ .Version }}"
-      - "{{ if not .IsSnapshot }}latest{{ end }}"
-    platforms: [linux/amd64, linux/arm64]
-    bare: true
-    preserve_import_paths: false
-    base_import_paths: false
-    base_image: gcr.io/distroless/static:nonroot
-    sbom: none  # attested on the digest instead (release.yaml, `attest`)
-    labels:
-      org.opencontainers.image.title: sluis-issuer
-      org.opencontainers.image.version: "{{ .Version }}"
-      org.opencontainers.image.source: https://github.com/truvity/sluis
-
-  - id: sluis-cloudflare
-    main: ./cmd/sluis
-    repositories:
-      - "{{ .Env.KO_DOCKER_REPO }}/sluis-cloudflare"
-    env: [CGO_ENABLED=0]
-    flags: [-trimpath]
-    ldflags:
-      - -s -w -X github.com/truvity/sluis/internal/version.Version={{.Version}} -X github.com/truvity/sluis/internal/version.Module=sluis-module=cloudflare
-    tags:
-      - "{{ .Version }}"
-      - "{{ if not .IsSnapshot }}latest{{ end }}"
-    platforms: [linux/amd64, linux/arm64]
-    bare: true
-    preserve_import_paths: false
-    base_import_paths: false
-    base_image: gcr.io/distroless/static:nonroot
-    sbom: none  # attested on the digest instead (release.yaml, `attest`)
-    labels:
-      org.opencontainers.image.title: sluis-cloudflare
-      org.opencontainers.image.version: "{{ .Version }}"
-      org.opencontainers.image.source: https://github.com/truvity/sluis
-
-  - id: sluis-backup
-    main: ./cmd/sluis
-    repositories:
-      - "{{ .Env.KO_DOCKER_REPO }}/sluis-backup"
-    env: [CGO_ENABLED=0]
-    flags: [-trimpath]
-    ldflags:
-      - -s -w -X github.com/truvity/sluis/internal/version.Version={{.Version}} -X github.com/truvity/sluis/internal/version.Module=sluis-module=backup
-    tags:
-      - "{{ .Version }}"
-      - "{{ if not .IsSnapshot }}latest{{ end }}"
-    platforms: [linux/amd64, linux/arm64]
-    bare: true
-    preserve_import_paths: false
-    base_import_paths: false
-    base_image: gcr.io/distroless/static:nonroot
-    sbom: none  # attested on the digest instead (release.yaml, `attest`)
-    labels:
-      org.opencontainers.image.title: sluis-backup
-      org.opencontainers.image.version: "{{ .Version }}"
-      org.opencontainers.image.source: https://github.com/truvity/sluis
+  # The per-module images (ghcr.io/truvity/sluis/sluis-<module>, U34c,
+  # docs/decisions/0072) are NOT kos entries. They are all one ./cmd/sluis main,
+  # so the cmd directory cannot name them, and goreleaser's ko pipe replaces
+  # every entry's `repositories` with $KO_DOCKER_REPO whenever that is set,
+  # which the shared release workflow always does: the three entries pushed to
+  # ghcr.io/truvity/sluis and the last one won (v1.75.0-rc.5). The release
+  # workflow's `module-images` job builds them with ko itself
+  # (hack/module-images.sh, hack/ko-modules/.ko.yaml); `just release-lint` pushes
+  # them to a throwaway registry and asserts the names.
 
 release:
   github:

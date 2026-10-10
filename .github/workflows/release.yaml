@@ -54,7 +54,8 @@ jobs:
       # Charts are published here, NOT by goreleaser, so this list is a second
       # place the set of shipped artifacts is written down.
       charts: '["sluis"]'
-      # ko names each artifact after its cmd dir: ghcr.io/truvity/sluis/sluis.
+      # ko names each artifact after its cmd dir: ghcr.io/truvity/sluis/sluis and
+      # .../resource-proxy. The per-module images are the module-images job.
       ko-docker-repo: ghcr.io/truvity/sluis
       # sluisctl as a Nix flake (sluisctl_<version>_nix-flake.tar.gz) that
       # another repository's devbox installs by URL. accessctl is the same
@@ -120,6 +121,37 @@ jobs:
           flakes: '["audit"]'
           flake-dir: ${{ runner.temp }}/nix-flakes
           token: ${{ secrets.GITHUB_TOKEN }}
+
+  # The container image of each module (hack/release-images.txt: sluis-issuer,
+  # sluis-cloudflare, sluis-backup), one `ko build` each. Not goreleaser's kos:
+  # they are all ./cmd/sluis, and goreleaser pushes every ko entry to
+  # $KO_DOCKER_REPO whatever its own repository says (hack/ko-modules/.ko.yaml).
+  # `just release-lint` runs the same script against a throwaway registry.
+  module-images:
+    needs: release
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: truvity/ci-actions/public-runners@598251d570fd99ba403b99bfa65ae4472ed25e73 # v1.8.0
+        with:
+          runners: ubuntu-latest
+          visibility: ${{ github.event.repository.visibility }}
+      - uses: truvity/ci-actions/setup-devbox@0fcf84dbeb8d406bce34d969e6cc32592af5cb5b # v1.15.0
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Log in to GHCR
+        run: echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$ACTOR" --password-stdin
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTOR: ${{ github.actor }}
+      - name: Build and push the module images
+        run: devbox run -- hack/module-images.sh publish "${GITHUB_REF_NAME#v}"
 
   # The TypeScript packages, to GitHub Packages, at the tag's version. Built
   # here rather than on install: a git dependency builds itself through
@@ -296,7 +328,7 @@ jobs:
   # signature and a build-provenance attestation, pushed to the registry
   # beside the artifact; an image also gets an SPDX SBOM attestation.
   attest-oci:
-    needs: [release, audit, oci-plan]
+    needs: [release, audit, module-images, oci-plan]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
