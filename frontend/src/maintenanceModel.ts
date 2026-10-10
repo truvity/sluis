@@ -19,6 +19,11 @@ const names: Record<string, string> = {
   backup: "backup",
 };
 
+/** A module's name as a person says it. */
+export function moduleName(module: string): string {
+  return names[module] ?? module;
+}
+
 /** The banner text, or undefined when nothing is under maintenance. */
 export function maintenanceText(m?: Maintenance): string | undefined {
   if (!m || !m.state) return undefined;

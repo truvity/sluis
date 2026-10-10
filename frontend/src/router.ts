@@ -139,6 +139,8 @@ export const paths = {
   // Cloudflare tokens and R2 credentials: what a person may ask for, and
   // what an operator watches, rotates and revokes.
   cloudflare: () => "/cloudflare",
+  // The backups of the installation and how a restore stands. Read-only.
+  backups: () => "/backups",
   // Every open session in the installation. Operator-only, and
   // only present at all once an issuer shares this console's origin.
   sessions: () => "/sessions",

@@ -1138,6 +1138,9 @@ type whoamiBody struct {
 	// Cloudflare says sluis mints Cloudflare credentials here, so the console
 	// shows its Cloudflare page. What the person may do on it is the grants'.
 	Cloudflare bool `json:"cloudflare,omitempty"`
+	// Backup says the backup module is connected, so the console shows its
+	// Backups page.
+	Backup bool `json:"backup,omitempty"`
 	// Maintenance is set while a module is being restored: the console shows a
 	// banner and every control that writes is refused until it is lifted.
 	Maintenance *maintenanceBody `json:"maintenance,omitempty"`
@@ -1161,6 +1164,7 @@ func (s *ConsoleServer) whoami(w http.ResponseWriter, r *http.Request) {
 			IssuerURL:   s.issuerOrigin(),
 			Audit:       s.auditQuery != nil,
 			Cloudflare:  s.console != nil && s.console.deps.Cloudflare != nil,
+			Backup:      s.console != nil && s.console.deps.Backup != nil,
 			Maintenance: s.maintenanceBody(r.Context()),
 		}
 	}
@@ -1241,6 +1245,7 @@ type rpcHandlers interface {
 	directoryrosterv1connect.SlackChannelServiceHandler
 	directoryrosterv1connect.SlackServiceHandler
 	directoryrosterv1connect.CloudflareServiceHandler
+	directoryrosterv1connect.BackupServiceHandler
 }
 
 // registerRPC serves the operator services on mux under both their names:
@@ -1262,4 +1267,5 @@ func registerRPC(mux *http.ServeMux, h rpcHandlers, extra ...connect.HandlerOpti
 	serve(directoryrosterv1connect.NewSlackChannelServiceHandler(h, options...))
 	serve(directoryrosterv1connect.NewSlackServiceHandler(h, options...))
 	serve(directoryrosterv1connect.NewCloudflareServiceHandler(h, options...))
+	serve(directoryrosterv1connect.NewBackupServiceHandler(h, options...))
 }

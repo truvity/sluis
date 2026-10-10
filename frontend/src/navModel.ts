@@ -11,7 +11,7 @@ export type NavCluster = { heading?: string; hint?: string; entries: NavEntry[] 
 /** What the rail may show to this caller. Sessions exist only once an
  *  issuer shares this console's origin and are operator-only; Audit only
  *  once an installation is connected. */
-export type NavOptions = { sessions: boolean; audit: boolean; cloudflare?: boolean };
+export type NavOptions = { sessions: boolean; audit: boolean; cloudflare?: boolean; backup?: boolean };
 
 /** The navigation is the model: Overview, then four clusters:
  *
@@ -21,7 +21,7 @@ export type NavOptions = { sessions: boolean; audit: boolean; cloudflare?: boole
  *    and the sessions that result.
  *  - Systems: what the roster keeps in step, one entry each (GitHub, Slack),
  *    each with tabs of its own rather than an entry per concept.
- *  - Admin: the trail and the settings.
+ *  - Admin: the trail, the backups and the settings.
  *
  *  The two sides are mirrored: both have groups, and the heading above is
  *  the adjective, so the labels say "Directory groups" and "Internal
@@ -60,7 +60,11 @@ export function clusters(options: NavOptions): NavCluster[] {
     },
     {
       heading: "Admin",
-      entries: [...(options.audit ? [{ value: "audit", label: "Audit", to: paths.audit() }] : []), { value: "settings", label: "Settings", to: paths.settings() }],
+      entries: [
+        ...(options.audit ? [{ value: "audit", label: "Audit", to: paths.audit() }] : []),
+        ...(options.backup ? [{ value: "backups", label: "Backups", to: paths.backups() }] : []),
+        { value: "settings", label: "Settings", to: paths.settings() },
+      ],
     },
   ];
 }
