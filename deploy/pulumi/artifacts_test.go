@@ -27,7 +27,7 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-const zipName = "sluis-lambda_1.63.0_linux_arm64.zip"
+const zipName = "sluis-issuer_1.63.0_linux_arm64.zip"
 
 func withArtifacts(a *arp.LambdaArgs) { a.Artifacts = &arp.ArtifactsArgs{Bucket: "acme-artifacts"} }
 

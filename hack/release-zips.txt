@@ -6,8 +6,7 @@
 # module: built for one module, with `-X .../internal/version.Module=sluis-module=<name>`.
 # A provider (github, slack, google) is added when it is released as a zip of
 # its own; until then it runs inside the issuer's process.
-# legacy: the deprecated all-in-one zip, unpinned, published for one more release.
+# (There is no all-in-one sluis-lambda zip since 1.75; `legacy <name>` would list an unpinned one.)
 module issuer
 module cloudflare
 module backup
-legacy lambda

@@ -2,8 +2,8 @@ package sluispulumi
 
 import "testing"
 
-// The release zips are named sluis-lambda_<version> (the deprecated all-in-one
-// zip, still the default) and sluis-<module>_<version> (one per module). The
+// The release zips are named sluis-lambda_<version> (before 1.75, the all-in-one
+// zip) and sluis-<module>_<version> (one per module). The
 // version is read from either, and the floor applies to both.
 func TestThePerModuleZipsAreNamedLikeTheAllInOneZip(t *testing.T) {
 	for _, name := range []string{

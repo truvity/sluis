@@ -39,7 +39,7 @@ cross:
     done
 
 # The Lambda bootstrap against a size budget, built the way .goreleaser.yaml
-# builds it (id sluis-lambda: keep the two equal). deploy/pulumi refuses a
+# builds it (ids sluis-<module>: keep them equal). deploy/pulumi refuses a
 # Package whose bootstrap is over artifact.MaxBytes (100 MiB) unzipped
 # (audit/deploy/pulumi/artifact), so a binary that grows past it builds,
 # releases, and is first refused by an estate's deploy. v1.74.0-rc.2 did:
@@ -54,8 +54,8 @@ lambda-size: console
     out="$(mktemp -d)"
     trap 'rm -rf "$out"' EXIT
     # Every Lambda zip's main, built the way .goreleaser.yaml builds it (ids
-    # sluis-lambda and sluis-<module>: keep them equal).
-    for main in sluis-lambda sluis-issuer sluis-cloudflare sluis-backup; do
+    # sluis-<module>: keep them equal).
+    for main in sluis-issuer sluis-cloudflare sluis-backup; do
         GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -tags lambda,lambda.norpc \
             -ldflags='-s -w' -o "$out/bootstrap" ./cmd/$main
         size="$(wc -c < "$out/bootstrap" | tr -d " ")"

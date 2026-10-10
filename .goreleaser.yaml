@@ -107,31 +107,6 @@ builds:
     ldflags:
       - -s -w -X github.com/truvity/sluis/internal/version.Version={{.Version}}
 
-  # DEPRECATED, kept for one release: the all-in-one Lambda zip (the issuer, the
-  # Cloudflare module and the backup module, unpinned, the document choosing
-  # which runs). A deployment that names `sluis-lambda_<version>_linux_arm64.zip`
-  # keeps working; the per-module zips below replace it. sluis as AWS Lambda
-  # functions: ONE arm64 binary whose role is the document's. The runtime is
-  # provided.al2023, which runs the file named `bootstrap` at the zip's root, so
-  # that is the binary's name. arm64 only: the functions are Graviton.
-  #
-  # `lambda` leaves the Kubernetes, NATS and Valkey storage out of the binary
-  # (internal/store/store_lambda.go; cmd/sluis-lambda/imports_test.go holds the
-  # line), and `lambda.norpc` is aws-lambda-go's own tag for a runtime that is
-  # not the old Go one. The console is embedded, so `just console` above has
-  # built it. The telemetry layer is truvity/observability's otlp-lambda, never
-  # ours.
-  - id: sluis-lambda
-    main: ./cmd/sluis-lambda
-    binary: bootstrap
-    env: [CGO_ENABLED=0]
-    goos: [linux]
-    goarch: [arm64]
-    flags: [-trimpath]
-    tags: [lambda, lambda.norpc]
-    ldflags:
-      - -s -w -X github.com/truvity/sluis/internal/version.Version={{.Version}}
-
   # The per-module Lambda zips (docs/decisions/0072): one arm64 `bootstrap` per
   # module that has an entry point of its own, each built with its module name
   # pinned (`-X .../internal/version.Module=sluis-module=<name>`), so a zip refuses to start as
@@ -205,21 +180,12 @@ archives:
     formats: [tar.gz]
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
 
-  # DEPRECATED (one more release): the all-in-one Lambda zip, with `bootstrap` at
-  # its root. The deploy tooling ADDS the estate's configuration files to it
-  # (config/sluis.yaml and the catalogues), so that a change to them is a new
-  # deployment: this archive holds nothing of the estate's.
-  - id: lambda
-    ids: [sluis-lambda]
-    formats: [zip]
-    wrap_in_directory: false
-    # Nothing but the binary: the zip root IS /var/task, and a README or
-    # LICENSE there is clutter in a function's code.
-    files: ["none*"]
-    name_template: "sluis-lambda_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
-
   # The per-module Lambda zips, each with `bootstrap` at its root and nothing
-  # else, like the all-in-one zip above. An estate pins one digest per zip.
+  # else. The deploy tooling ADDS the estate's configuration files to a zip
+  # (config/sluis.yaml and the catalogues), so that a change to them is a new
+  # deployment: this archive holds nothing of the estate's. The zip root IS
+  # /var/task, so a README or LICENSE there would be clutter. An estate pins one
+  # digest per zip. There is no all-in-one `sluis-lambda` zip since 1.75.
   - id: lambda-issuer
     ids: [sluis-issuer]
     formats: [zip]
@@ -364,8 +330,7 @@ release:
     signer and the console, with the providers in-process),
     `sluis-cloudflare_{{ .Version }}_linux_arm64.zip` and
     `sluis-backup_{{ .Version }}_linux_arm64.zip` (deployed as the backup and the restore
-    function). `sluis-lambda_{{ .Version }}_linux_arm64.zip`, the one binary for all of them,
-    is deprecated and is published for this release only
+    function). The single `sluis-lambda` zip is no longer published
     (`docs/reference/sluis/lambda.md`). The telemetry layer is
     `otlp-lambda-layer_<version>_linux_<arch>.zip` from `truvity/observability`;
     sluis ships none.

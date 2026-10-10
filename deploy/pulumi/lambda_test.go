@@ -54,7 +54,7 @@ func zipFile(t *testing.T, extra map[string]string) string {
 	if err := zw.Close(); err != nil {
 		t.Fatal(err)
 	}
-	p := filepath.Join(t.TempDir(), "sluis-lambda_1.63.0_linux_arm64.zip")
+	p := filepath.Join(t.TempDir(), "sluis-issuer_1.63.0_linux_arm64.zip")
 	if err := os.WriteFile(p, buf.Bytes(), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -739,7 +739,7 @@ func TestThePackageCanBeFetchedFromAnHTTPSURLAndItsDigestIsChecked(t *testing.T)
 	defer srv.Close()
 	// A loopback http URL stands in for the release's https URL.
 	sum := sha256.Sum256(raw)
-	url := srv.URL + "/sluis-lambda_1.63.0_linux_arm64.zip"
+	url := srv.URL + "/sluis-issuer_1.63.0_linux_arm64.zip"
 	rec, _ := mustLambda(t, estate{pkg: url, mutate: func(a *arp.LambdaArgs) { a.PackageSHA256 = hex.EncodeToString(sum[:]) }})
 	if got := must(os.ReadFile(packagePath(t, rec.one(t, fnType, "staging-http")))); !bytes.Equal(got, raw) {
 		t.Error("the fetched package is not the release, byte for byte")
@@ -759,7 +759,7 @@ func TestAPackageWithoutBootstrapIsRefused(t *testing.T) {
 	w, _ := zw.Create("other")
 	_, _ = w.Write([]byte("x"))
 	_ = zw.Close()
-	p := filepath.Join(t.TempDir(), "sluis-lambda_1.63.0_linux_arm64.zip")
+	p := filepath.Join(t.TempDir(), "sluis-issuer_1.63.0_linux_arm64.zip")
 	if err := os.WriteFile(p, buf.Bytes(), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -854,7 +854,7 @@ func TestAPackageEntryOutsideTheRootIsRefused(t *testing.T) {
 			_, _ = w.Write([]byte("x"))
 		}
 		_ = zw.Close()
-		p := filepath.Join(t.TempDir(), "sluis-lambda_1.63.0_linux_arm64.zip")
+		p := filepath.Join(t.TempDir(), "sluis-issuer_1.63.0_linux_arm64.zip")
 		if err := os.WriteFile(p, buf.Bytes(), 0o600); err != nil {
 			t.Fatal(err)
 		}

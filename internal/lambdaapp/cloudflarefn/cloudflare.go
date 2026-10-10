@@ -1,6 +1,6 @@
 // Package cloudflarefn is the Cloudflare module's Lambda function: it answers
 // other modules' calls and has no HTTP surface. It registers itself with
-// internal/lambdaapp; cmd/sluis-cloudflare and the deprecated cmd/sluis-lambda import it.
+// internal/lambdaapp; cmd/sluis-cloudflare and the lambda build of cmd/sluis import it.
 package cloudflarefn
 
 import (

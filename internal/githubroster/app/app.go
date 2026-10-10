@@ -388,7 +388,7 @@ func (a *App) Paused(ctx context.Context) bool { return a.maint.Writable(ctx) !=
 
 // Pass is [App.Tick] that says whether the pass ran: false, with no error, when
 // another runner holds the target's lease and the pass is left to it. It is what
-// a Lambda invocation runs (cmd/sluis-lambda), which reports a contended
+// a Lambda invocation runs (the cmd/sluis-<module> mains), which reports a contended
 // invocation as such and not as a success.
 func (a *App) Pass(ctx context.Context, target string, unsafeLocal bool) (ran bool, err error) {
 	if err := store.RequireSharedLease(a.sharedLease, unsafeLocal); err != nil {
