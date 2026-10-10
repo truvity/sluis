@@ -153,7 +153,8 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 	mc := minter.Config{
 		Instance: cfg.instance, Cloudflare: cfg.cloudflare, Grants: cfg.grants,
 		Dial: dial, Audit: trail, Log: log,
-		Lock: &rails.Leases{State: state, Holder: rails.NewHolder(), Log: log},
+		Lock:        &rails.Leases{State: state, Holder: rails.NewHolder(), Log: log, Maintenance: stores.Maintenance()},
+		Maintenance: stores.Maintenance(),
 	}
 	if stores.V5 != nil {
 		mc.V5 = stores.V5

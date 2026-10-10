@@ -50,6 +50,7 @@ import (
 	"github.com/truvity/sluis/internal/health"
 	"github.com/truvity/sluis/internal/hub"
 	"github.com/truvity/sluis/internal/lazy"
+	"github.com/truvity/sluis/internal/maintenance"
 	"github.com/truvity/sluis/internal/port"
 	"github.com/truvity/sluis/internal/portstore"
 	"github.com/truvity/sluis/internal/rails"
@@ -462,6 +463,9 @@ type stores struct {
 	slackReports server.SlackStatusReports
 	// slackWorkspaces is where Slack workspaces are connected.
 	slackWorkspaces server.SlackWorkspaces
+	// maintenance are the gates over each module's maintenance flag, in the
+	// module's own table. Nil outside the port stores.
+	maintenance maintenance.Set
 }
 
 // openStores builds them, and says plainly in the log which was chosen.
@@ -568,6 +572,13 @@ func openPortStores(ctx context.Context, cfg Config, st *store.Stores, log *slog
 		slackShared:         portstore.NewSlackShared(slack),
 		slackChannels:       portstore.NewSlackChannels(slack),
 		slackWorkspaces:     portstore.NewSlackWorkspaces(slack),
+	}
+	out.maintenance = maintenance.Set{
+		port.ModuleOIDC:       st.Maintenance(),
+		port.ModuleGoogle:     st.MaintenanceOf(port.ModuleGoogle),
+		port.ModuleGitHub:     st.MaintenanceOf(port.ModuleGitHub),
+		port.ModuleSlack:      st.MaintenanceOf(port.ModuleSlack),
+		port.ModuleCloudflare: st.MaintenanceOf(port.ModuleCloudflare),
 	}
 	useCluster(&out, cfg, st)
 	return out, nil
@@ -730,6 +741,10 @@ func New(ctx context.Context, cfg Config, st *store.Stores, log *slog.Logger) (*
 	if kept.credentials != nil {
 		directory.UseCredentials(kept.credentials)
 	}
+	if g := kept.maintenance.Of(port.ModuleGoogle); g != nil {
+		// The snapshots are the google module's: a restore is writing them.
+		directory.UseMaintenance(g)
+	}
 
 	if n := cfg.policy.LegacyAppEntries(); n > 0 {
 		log.WarnContext(ctx, "apps.github.runnerTiers and apps.github.catalogue are deprecated, read as apps.github.apps for this release and removed in v1.77",
@@ -886,13 +901,14 @@ func New(ctx context.Context, cfg Config, st *store.Stores, log *slog.Logger) (*
 	}
 
 	consoleServer := server.NewConsoleServer(server.ConsoleServerDeps{
-		Console:    console,
-		Authorizer: authorizer,
-		Sessions:   sessions,
-		State:      access.NewStateCodecWith(sessionKey, 10*time.Minute),
-		Connectors: connectors,
-		Hub:        directory,
-		Recovery:   recovery,
+		Console:     console,
+		Authorizer:  authorizer,
+		Sessions:    sessions,
+		State:       access.NewStateCodecWith(sessionKey, 10*time.Minute),
+		Connectors:  connectors,
+		Hub:         directory,
+		Recovery:    recovery,
+		Maintenance: kept.maintenance,
 		Forwarded: server.ForwardedIdentity{
 			Issuer:      cfg.forwardedIssuer,
 			Audience:    cfg.forwardedAudience,

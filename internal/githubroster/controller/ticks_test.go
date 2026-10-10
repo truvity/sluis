@@ -9,6 +9,7 @@ import (
 
 	"github.com/truvity/sluis/internal/githubroster/controller"
 	"github.com/truvity/sluis/internal/githubroster/status"
+	"github.com/truvity/sluis/internal/maintenance"
 	"github.com/truvity/sluis/internal/port/memory"
 	"github.com/truvity/sluis/internal/rails"
 	"github.com/truvity/sluis/policy"
@@ -191,5 +192,37 @@ func TestATargetAnotherRunnerHoldsIsLeftToIt(t *testing.T) {
 	// The lease was released with the tick.
 	if _, err = theirs.Acquire(context.Background(), "github-tick", "globex"); err != nil {
 		t.Errorf("a finished tick left its lease: %v", err)
+	}
+}
+
+// While the github module is under maintenance no organisation ticks: the pass
+// writes nothing, and the tick runs again once the flag is lifted.
+func TestNoOrganisationTicksUnderMaintenance(t *testing.T) {
+	r := newRig(t)
+	flags := memory.New()
+	gate := maintenance.New(flags, maintenance.WithTTL(time.Nanosecond))
+	c := r.tickers(twoOrgs, nil, &rails.Leases{State: memory.New(), Holder: "me", Maintenance: gate})
+
+	if err := maintenance.Write(context.Background(), flags, maintenance.Flag{State: maintenance.StateRestoring}); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(time.Millisecond)
+	c.Pass(context.Background())
+	if ran, _, err := c.RunTarget(context.Background(), "globex"); err != nil || ran {
+		t.Errorf("RunTarget under maintenance = %v, %v; want it skipped", ran, err)
+	}
+	if r.report.putsOf("acme") != 0 || r.report.putsOf("globex") != 0 {
+		t.Errorf("a report was written under maintenance (acme %d, globex %d)", r.report.putsOf("acme"), r.report.putsOf("globex"))
+	}
+
+	if err := maintenance.Clear(context.Background(), flags); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(time.Millisecond)
+	if ran, _, err := c.RunTarget(context.Background(), "globex"); err != nil || !ran {
+		t.Errorf("RunTarget after maintenance = %v, %v; want it to run", ran, err)
+	}
+	if r.report.putsOf("globex") == 0 {
+		t.Error("globex did not publish after the flag was lifted")
 	}
 }

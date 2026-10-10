@@ -161,6 +161,11 @@ func (e *env) secretsConfig(c *minter.Config) {
 func (e *env) advance(d time.Duration) { *e.clock = e.clock.Add(d) }
 
 func setup(t *testing.T, grants ...config.CloudflareGrant) *env {
+	return setupPaused(t, nil, grants...)
+}
+
+// setupPaused is setup with the maintenance gate the module reads.
+func setupPaused(t *testing.T, pause minter.Pause, grants ...config.CloudflareGrant) *env {
 	t.Helper()
 	clock := time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC)
 	e := &env{t: t, clock: &clock, rec: audittest.New(t)}
@@ -203,7 +208,7 @@ func setup(t *testing.T, grants ...config.CloudflareGrant) *env {
 			e.api.gotMinter = token
 			return e.api, nil
 		},
-		Audit: e.rec, Now: now, Propagation: -1,
+		Audit: e.rec, Now: now, Propagation: -1, Maintenance: pause,
 	}
 	e.secretsConfig(&mc)
 	e.m, err = minter.New(mc)

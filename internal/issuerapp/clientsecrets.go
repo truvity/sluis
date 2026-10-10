@@ -71,7 +71,7 @@ func newClientSecretManager(
 	set *policy.Set, st *store.Stores, creds *clientcreds.Resolver, log *slog.Logger,
 ) (*clientcreds.Manager, *rails.Leases) {
 	state, _ := st.LeaseState()
-	leases := &rails.Leases{State: state, Holder: rails.NewHolder(), Log: log}
+	leases := &rails.Leases{State: state, Holder: rails.NewHolder(), Log: log, Maintenance: st.Maintenance()}
 	return &clientcreds.Manager{
 		Store:    st.ClientSecretPort(),
 		Lock:     leases,

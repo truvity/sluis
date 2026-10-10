@@ -285,6 +285,8 @@ func cloudflareError(err error) error {
 		return connect.NewError(connect.CodePermissionDenied, err)
 	case errors.Is(err, minter.ErrLifetime):
 		return connect.NewError(connect.CodeInvalidArgument, err)
+	case errors.Is(err, minter.ErrMaintenance), errors.Is(err, minter.ErrMaintenanceUnknown):
+		return connect.NewError(connect.CodeUnavailable, err)
 	case errors.Is(err, minter.ErrNotOurs):
 		return connect.NewError(connect.CodeNotFound, err)
 	case errors.Is(err, minter.ErrContended):

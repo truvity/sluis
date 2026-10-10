@@ -124,6 +124,9 @@ type Hub struct {
 	// pending counts detached work in flight. Only Wait reads it.
 	pending sync.WaitGroup
 
+	// maintenance, when set, stops the refreshes that no operator asked for.
+	maintenance Pause
+
 	// requestRefresh, when positive, makes a request that finds the snapshot
 	// due refresh it: see [Hub.UseRequestRefresh].
 	requestRefresh time.Duration
@@ -204,6 +207,20 @@ func (h *Hub) Attach(ctx context.Context, workspaceID string, b backend.Backend)
 // leaves the stale snapshot served, as ever. Call it before serving.
 func (h *Hub) UseRequestRefresh(timeout time.Duration) { h.requestRefresh = timeout }
 
+// Pause says whether the module may write. *maintenance.Gate is one.
+type Pause interface {
+	Writable(ctx context.Context) error
+}
+
+// UseMaintenance makes the scheduled and the request-driven refreshes stand
+// still while p refuses: a refresh writes the module's snapshots, and a restore
+// is writing them. An operator's explicit Refresh is refused by the console.
+func (h *Hub) UseMaintenance(p Pause) { h.maintenance = p }
+
+func (h *Hub) paused(ctx context.Context) bool {
+	return h.maintenance != nil && h.maintenance.Writable(ctx) != nil
+}
+
 // SetClock replaces the hub's clock. For tests.
 func (h *Hub) SetClock(now func() time.Time) { h.now = now }
 
@@ -229,6 +246,9 @@ func (h *Hub) Wait() { h.pending.Wait() }
 // that its logs still carry the request's values — with the caller's
 // cancellation removed and a ceiling of its own.
 func (h *Hub) refreshSoon(ctx context.Context, workspaceID, why string) {
+	if h.paused(ctx) {
+		return
+	}
 	if _, already := h.refreshing.LoadOrStore(workspaceID, struct{}{}); already {
 		return
 	}
@@ -868,7 +888,7 @@ func (h *Hub) keepFresh(ctx context.Context, workspaceID string, snap *Snapshot)
 	rctx, cancel := context.WithTimeout(ctx, h.requestRefresh)
 	defer cancel()
 	outcome := h.refreshLeased(rctx, workspaceID)
-	if outcome == RefreshFailed {
+	if outcome == RefreshFailed || outcome == RefreshPaused {
 		return snap
 	}
 	// Ran, or another replica holds the lease and has probably just stored one.

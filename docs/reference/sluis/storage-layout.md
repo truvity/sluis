@@ -69,6 +69,7 @@ One table with string `pk` (hash) and string `sk` (range). `pk` is the kind, so 
 | `console` | `session-key` | (the key itself is in Secrets) |
 | `lease` | `<kind>/<target>` | a tick's lease: kinds `github-tick`, `github-links`, `slack-tick`, `refresh` |
 | `notify` | `<target>` | a notification (a minute) |
+| `maintenance` | `flag` | the maintenance flag, in every table: fields `state`, `since`, `by`, `reason`; while it exists the module refuses writes (503 with `Retry-After`) and keeps serving reads, discovery and the key set, cached for 10 s; only the restore role can write it |
 | `gate`, `cache`, `dedupe` | the rest of the key, `/`-separated | ledger entries, shared inputs, idempotency markers |
 | `keyring` | `<alg>/<kid>` | a signing key's schedule (`ES384/<kid>`) |
 | `keyring-retired` | `<alg>/<kid>` | the tombstone of a retired key |
@@ -124,6 +125,7 @@ The logical key maps to kind and credential path as follows.
 | `rec.console.session-key` | `console` / `session-key` | `credentials/console/session-key` |
 | `lease.<kind>:<target>` | `lease` / `<kind>/<target>` | none |
 | `notify.<target>` | `notify` / `<target>` | none |
+| `rec.maintenance` | `maintenance` / `flag` | none |
 | `issuer:request:<id>` | `issuer-request` / `<id>` | none |
 | `issuer:code:<id>`, `issuer:code-session:<id>` | `issuer-code`, `issuer-code-session` / `<id>` | none |
 | `issuer:token:<jti>` | `issuer-token` / `<jti>` | none |

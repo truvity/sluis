@@ -6,6 +6,7 @@ import { createClient } from "@connectrpc/connect";
 import { createConnectTransport } from "@connectrpc/connect-web";
 import { createQueryClient } from "@truvity/audit";
 
+import type { Maintenance } from "./maintenanceModel";
 import { WorkspaceService, Backend } from "./gen/sluis/v1/workspace_pb";
 import { SettingsService } from "./gen/sluis/v1/settings_pb";
 import { AccessService, Role } from "./gen/sluis/v1/access_pb";
@@ -105,6 +106,8 @@ export type Me = Identity & {
   /** sluis mints Cloudflare credentials here, so the console has a
    *  Cloudflare page; what a person may ask for on it is the grants'. */
   cloudflare?: boolean;
+  /** a module is being restored: writes are refused until it is lifted */
+  maintenance?: Maintenance;
 };
 
 /** Whether the issuer shares this page's origin.

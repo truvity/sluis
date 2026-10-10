@@ -20,12 +20,14 @@ import (
 
 	"github.com/truvity/sluis/audit/sdk/record"
 
+	"connectrpc.com/connect"
 	"github.com/truvity/sluis/gen/directoryroster/v1/directoryrosterv1connect"
 	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/audit"
 	"github.com/truvity/sluis/internal/connectalias"
 	"github.com/truvity/sluis/internal/emailaddr"
 	"github.com/truvity/sluis/internal/hub"
+	"github.com/truvity/sluis/internal/maintenance"
 	"github.com/truvity/sluis/internal/telemetry"
 	"github.com/truvity/sluis/internal/version"
 	"github.com/truvity/sluis/storage/logattr"
@@ -67,13 +69,15 @@ type ConsoleServer struct {
 	cheap      cheapRefusals
 	signIn     bool
 	signOutURL string
-	forwarded  ForwardedIdentity
-	bearer     *forwardedBearer
-	log        *slog.Logger
-	consoleUI  fs.FS
-	signedIn   func(http.ResponseWriter, *http.Request) (access.Principal, bool)
-	workloads  func(*http.Request) (access.Principal, bool)
-	entry      func() string
+	// maintenance are the gates of the modules whose records the console writes.
+	maintenance maintenance.Set
+	forwarded   ForwardedIdentity
+	bearer      *forwardedBearer
+	log         *slog.Logger
+	consoleUI   fs.FS
+	signedIn    func(http.ResponseWriter, *http.Request) (access.Principal, bool)
+	workloads   func(*http.Request) (access.Principal, bool)
+	entry       func() string
 	// issuerURL is the issuer this console shares an origin with, when
 	// the process serving it IS that issuer. Supplied rather than
 	// derived, like signedIn and entry above, and for the same reason:
@@ -135,7 +139,11 @@ type ConsoleServerDeps struct {
 	// cookie is what signed the person in. Behind a proxy it is the
 	// proxy's sign-out path.
 	SignOutURL string
-	Forwarded  ForwardedIdentity
+	// Maintenance are the gates over the maintenance flag of the modules whose
+	// records the console writes. A write of a module under maintenance is
+	// refused, a read is served, and whoami says so. Nil serves everything.
+	Maintenance maintenance.Set
+	Forwarded   ForwardedIdentity
 	// SignInEntry is where an unauthenticated browser is sent to GET a
 	// session: the issuer's authorization endpoint, with this console as
 	// the client.
@@ -187,22 +195,23 @@ func NewConsoleServer(deps ConsoleServerDeps) *ConsoleServer {
 		deps.Log = slog.Default()
 	}
 	s := &ConsoleServer{
-		console:    deps.Console,
-		authz:      deps.Authorizer,
-		sessions:   deps.Sessions,
-		state:      deps.State,
-		connectors: map[string]Connector{},
-		hub:        deps.Hub,
-		recovery:   deps.Recovery,
-		signIn:     deps.SignIn,
-		signOutURL: deps.SignOutURL,
-		forwarded:  deps.Forwarded,
-		bearer:     newForwardedBearer(deps.Forwarded, deps.Log),
-		log:        deps.Log,
-		consoleUI:  deps.UI,
-		mount:      strings.TrimSuffix(strings.TrimSpace(deps.Mount), "/"),
-		signedIn:   deps.SignedIn,
-		entry:      deps.SignInEntry,
+		console:     deps.Console,
+		authz:       deps.Authorizer,
+		sessions:    deps.Sessions,
+		state:       deps.State,
+		connectors:  map[string]Connector{},
+		hub:         deps.Hub,
+		recovery:    deps.Recovery,
+		signIn:      deps.SignIn,
+		signOutURL:  deps.SignOutURL,
+		maintenance: deps.Maintenance,
+		forwarded:   deps.Forwarded,
+		bearer:      newForwardedBearer(deps.Forwarded, deps.Log),
+		log:         deps.Log,
+		consoleUI:   deps.UI,
+		mount:       strings.TrimSuffix(strings.TrimSpace(deps.Mount), "/"),
+		signedIn:    deps.SignedIn,
+		entry:       deps.SignInEntry,
 
 		forwardedForTrustedHops: deps.ForwardedForTrustedHops,
 	}
@@ -287,7 +296,7 @@ func (s *ConsoleServer) wayIn() string {
 func (s *ConsoleServer) Handler() http.Handler {
 	mux := http.NewServeMux()
 
-	registerRPC(mux, s.console)
+	registerRPC(mux, s.console, maintenanceOptions(s.maintenance)...)
 
 	if s.consoleUI != nil {
 		mux.Handle("GET /assets/", http.FileServerFS(s.consoleUI))
@@ -324,7 +333,7 @@ func (s *ConsoleServer) Handler() http.Handler {
 	mux.HandleFunc("GET /.access/whoami", s.whoami)
 	mux.HandleFunc(auditQueryPrefix, s.audit)
 
-	return AuditRequests(s.forwardedForTrustedHops, s.withIdentity(mux))
+	return AuditRequests(s.forwardedForTrustedHops, s.withIdentity(s.withMaintenance(mux)))
 }
 
 // at turns a path of this console's into one a browser can follow. Every
@@ -1129,26 +1138,30 @@ type whoamiBody struct {
 	// Cloudflare says sluis mints Cloudflare credentials here, so the console
 	// shows its Cloudflare page. What the person may do on it is the grants'.
 	Cloudflare bool `json:"cloudflare,omitempty"`
+	// Maintenance is set while a module is being restored: the console shows a
+	// banner and every control that writes is refused until it is lifted.
+	Maintenance *maintenanceBody `json:"maintenance,omitempty"`
 }
 
 func (s *ConsoleServer) whoami(w http.ResponseWriter, r *http.Request) {
 	body := whoamiBody{Status: "signed-out", Version: version.String(), IssuerURL: s.issuerOrigin()}
 	if id, ok := IdentityFrom(r.Context()); ok {
 		body = whoamiBody{
-			Status:     "signed-in",
-			Email:      id.Email,
-			Name:       id.Name(),
-			GivenName:  id.GivenName,
-			FamilyName: id.FamilyName,
-			Roles:      rolesOf(id.Role),
-			Scopes:     scopesBody(id.Scopes),
-			Source:     string(id.Source),
-			Groups:     id.Groups,
-			Version:    version.String(),
-			SignOutURL: s.signOut(),
-			IssuerURL:  s.issuerOrigin(),
-			Audit:      s.auditQuery != nil,
-			Cloudflare: s.console != nil && s.console.deps.Cloudflare != nil,
+			Status:      "signed-in",
+			Email:       id.Email,
+			Name:        id.Name(),
+			GivenName:   id.GivenName,
+			FamilyName:  id.FamilyName,
+			Roles:       rolesOf(id.Role),
+			Scopes:      scopesBody(id.Scopes),
+			Source:      string(id.Source),
+			Groups:      id.Groups,
+			Version:     version.String(),
+			SignOutURL:  s.signOut(),
+			IssuerURL:   s.issuerOrigin(),
+			Audit:       s.auditQuery != nil,
+			Cloudflare:  s.console != nil && s.console.deps.Cloudflare != nil,
+			Maintenance: s.maintenanceBody(r.Context()),
 		}
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -1233,8 +1246,8 @@ type rpcHandlers interface {
 // registerRPC serves the operator services on mux under both their names:
 // sluis.v1.* and the legacy directoryroster.v1.* that older consoles and
 // controllers still call. Both reach the same handler (see connectalias).
-func registerRPC(mux *http.ServeMux, h rpcHandlers) {
-	options := telemetry.ConnectOptions()
+func registerRPC(mux *http.ServeMux, h rpcHandlers, extra ...connect.HandlerOption) {
+	options := append(telemetry.ConnectOptions(), extra...)
 	serve := func(path string, handler http.Handler) {
 		mux.Handle(path, handler)
 		legacy := strings.Trim(path, "/")

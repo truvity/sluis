@@ -335,7 +335,7 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 			Access:  directoryrosterv1connect.NewAccessServiceClient(web, cfg.console, console...),
 			Audit:   trail,
 			Status:  rails.NewBlobReports(stores.Ports.Blob, "reports/slack/"),
-			Leases:  &rails.Leases{State: leaseState, Holder: rails.NewHolder(), Log: log},
+			Leases:  &rails.Leases{State: leaseState, Holder: rails.NewHolder(), Log: log, Maintenance: stores.Maintenance()},
 			Trigger: stores.Ports.Trigger,
 			Policy:  declared,
 			Digest:  set.Digest(),

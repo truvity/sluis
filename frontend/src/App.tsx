@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -33,6 +33,7 @@ import RuleIcon from "@mui/icons-material/Rule";
 import CloudIcon from "@mui/icons-material/Cloud";
 
 import { issuerIsSameOrigin, mounted, personName, whoami, type Me } from "./api";
+import { maintenancePollMs, maintenanceText, type Maintenance } from "./maintenanceModel";
 import { useAsync } from "./hooks";
 import { clusters } from "./navModel";
 import { paths, useRoute } from "./router";
@@ -78,6 +79,16 @@ export function App() {
   const route = useRoute();
   const me = useAsync<Me>(whoami, []);
   const [banner, setBanner] = useState<string | undefined>();
+  // The flag is read again every half minute: a restore starts and ends while
+  // the page is open, and a banner that outlives it would refuse nothing.
+  const [maintenance, setMaintenance] = useState<Maintenance | undefined>();
+  useEffect(() => {
+    setMaintenance(me.value?.maintenance);
+    const timer = setInterval(() => {
+      whoami().then((m) => setMaintenance(m.maintenance)).catch(() => undefined);
+    }, maintenancePollMs);
+    return () => clearInterval(timer);
+  }, [me.value]);
   const [open, setOpen] = useState(false);
   const theme = useTheme();
   const wide = useMediaQuery(theme.breakpoints.up("md"));
@@ -251,6 +262,11 @@ export function App() {
               You are signed in as {identityInfo.email}, and no internal group grants you access. An operator
               can attach a provider group to one on either group's page; on a fresh installation, sign in with
               the break-glass admin account first.
+            </Alert>
+          ) : null}
+          {maintenanceText(maintenance) ? (
+            <Alert severity="warning" sx={{ mb: 2 }}>
+              {maintenanceText(maintenance)}
             </Alert>
           ) : null}
           {banner ? (

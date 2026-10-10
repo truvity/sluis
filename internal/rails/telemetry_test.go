@@ -2,6 +2,7 @@ package rails_test
 
 import (
 	"context"
+	"errors"
 	"maps"
 	"sync"
 	"testing"
@@ -14,6 +15,7 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
+	"github.com/truvity/sluis/internal/port"
 	"github.com/truvity/sluis/internal/port/memory"
 	"github.com/truvity/sluis/internal/rails"
 )
@@ -171,5 +173,40 @@ func TestLeasesAreCounted(t *testing.T) {
 	}
 	if got := value(t, "access_roster.leases.held", kind("lease-test")); got != 0 {
 		t.Errorf("held after the tick = %d, want 0", got)
+	}
+}
+
+type refusing struct{ err error }
+
+func (r refusing) Writable(context.Context) error { return r.err }
+
+// A tick of a module under maintenance does not start, takes no lease and is
+// counted as skipped.
+func TestATickIsSkippedUnderMaintenance(t *testing.T) {
+	value(t, "x")
+	ctx := context.Background()
+	store := memory.New()
+	l := &rails.Leases{State: store, Holder: "a", Maintenance: refusing{errors.New("maintenance")}}
+
+	before := value(t, "access_roster.leases.skipped", kind("lease-maint"))
+	acquired := value(t, "access_roster.leases.acquired", kind("lease-maint"))
+	ran, err := l.Do(ctx, "lease-maint", "acme", func(context.Context) { t.Error("the tick ran under maintenance") })
+	if ran || err != nil {
+		t.Fatalf("Do = %v, %v, want a quiet skip", ran, err)
+	}
+	if got := value(t, "access_roster.leases.skipped", kind("lease-maint")); got != before+1 {
+		t.Errorf("skipped = %d, want %d", got, before+1)
+	}
+	if got := value(t, "access_roster.leases.acquired", kind("lease-maint")); got != acquired {
+		t.Errorf("a skipped tick took a lease")
+	}
+	if _, err := store.Get(ctx, rails.Key("lease-maint", "acme")); !errors.Is(err, port.ErrNotFound) {
+		t.Errorf("lease record after a skip: %v", err)
+	}
+
+	l.Maintenance = refusing{nil}
+	ran = false
+	if r, err := l.Do(ctx, "lease-maint", "acme", func(context.Context) { ran = true }); !r || err != nil || !ran {
+		t.Fatalf("once cleared Do = %v, %v, ran %v", r, err, ran)
 	}
 }

@@ -816,6 +816,10 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 		log.WarnContext(ctx, "the issuer URL may be plaintext: every token this service signs is a "+
 			"bearer credential, and an issuer reached over http can be impersonated by anyone on the path")
 	}
+	// While the restore function holds the oidc table's maintenance flag the
+	// issuer signs nobody in and issues nothing; what a relying party needs to
+	// verify the tokens it holds keeps answering.
+	handler = stores.Maintenance().Middleware(servesInMaintenance, handler)
 	if deps.Around != nil {
 		handler = deps.Around(handler)
 	}
@@ -1732,7 +1736,7 @@ func wrappedSigningKeys(
 	if stores != nil && stores.Usable {
 		leaseState = stores.Ports.State
 	}
-	leases := &rails.Leases{State: leaseState, Holder: rails.NewHolder(), Log: log}
+	leases := &rails.Leases{State: leaseState, Holder: rails.NewHolder(), Log: log, Maintenance: stores.Maintenance()}
 	lease := func(ctx context.Context, alg jose.SignatureAlgorithm, fn func(context.Context) error) (bool, error) {
 		var inner error
 		ran, err := leases.Do(ctx, "signing-keygen", string(alg), func(lctx context.Context) { inner = fn(lctx) })

@@ -41,6 +41,7 @@ var stateRows = []struct{ key, kind, id string }{
 	{"lease.refresh:C01ipl6j0", "lease", "refresh/C01ipl6j0"},
 	{"lease.export:slack-app.alerts", "lease", "export/slack-app.alerts"},
 	{"notify.acme", "notify", "acme"},
+	{"rec.maintenance", "maintenance", "flag"},
 	{"ses.ada.s1", "session", "ada/s1"},
 	{"sid.s1", "session-pointer", "s1"},
 	{"req.r1", "issuer-request", "r1"},

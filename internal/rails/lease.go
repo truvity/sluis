@@ -46,6 +46,15 @@ type Leases struct {
 	// TTL is a lease's lifetime between renewals. Zero is [DefaultLeaseTTL].
 	TTL time.Duration
 	Log *slog.Logger
+	// Maintenance, when set, is asked before every tick: a tick is a write, so
+	// while it refuses (the module is being restored, or cannot say) the tick is
+	// skipped, counted and not logged. Nil never skips.
+	Maintenance Pause
+}
+
+// Pause says whether the module may write. *maintenance.Gate is one.
+type Pause interface {
+	Writable(ctx context.Context) error
 }
 
 // NewHolder is an identifier for one runner for as long as it lives: its host
@@ -127,11 +136,16 @@ func (x *Lease) Release(ctx context.Context) error {
 }
 
 // Do runs fn under the lease on a target of a kind, and says whether it ran:
-// false with no error when another runner holds the lease. The context fn
+// false with no error when another runner holds the lease or the module is
+// under maintenance. The context fn
 // gets ends when the lease is lost (or cannot be renewed for a whole
 // lifetime, which is as good as lost), so a tick stops before its next
 // external write. The lease is released when fn returns.
 func (l *Leases) Do(ctx context.Context, kind, target string, fn func(ctx context.Context)) (ran bool, err error) {
+	if l.Maintenance != nil && l.Maintenance.Writable(ctx) != nil {
+		meters.skipped.Add(ctx, 1, leaseAttr(kind))
+		return false, nil
+	}
 	lease, err := l.Acquire(ctx, kind, target)
 	if errors.Is(err, ErrHeld) {
 		meters.contended.Add(ctx, 1, leaseAttr(kind))

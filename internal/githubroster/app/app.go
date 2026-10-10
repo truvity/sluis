@@ -311,7 +311,7 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 			Console:  directoryrosterv1connect.NewGitHubServiceClient(web, cfg.console, console...),
 			Policy:   set.Digest(),
 			Status:   rails.NewBlobReports(stores.Ports.Blob, "reports/github/"),
-			Leases:   &rails.Leases{State: leaseState, Holder: rails.NewHolder(), Log: log},
+			Leases:   &rails.Leases{State: leaseState, Holder: rails.NewHolder(), Log: log, Maintenance: stores.Maintenance()},
 			Trigger:  stores.Ports.Trigger,
 			Links:    links,
 			Apps:     appSource,

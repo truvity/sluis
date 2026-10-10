@@ -18,6 +18,7 @@ import (
 	"github.com/truvity/sluis/internal/cloudflare/cfapi"
 	"github.com/truvity/sluis/internal/cloudflare/minter"
 	"github.com/truvity/sluis/internal/config"
+	"github.com/truvity/sluis/internal/maintenance"
 	"github.com/truvity/sluis/internal/port"
 	dynamoport "github.com/truvity/sluis/internal/port/dynamodb"
 	"github.com/truvity/sluis/internal/port/memory"
@@ -518,6 +519,31 @@ func (s *Stores) LeaseState() (state port.State, shared bool) {
 		return s.Ports.State, false
 	}
 	return memory.New().Set().State, false
+}
+
+// Maintenance is the gate over the maintenance flag in this process's own
+// State: the table of the module it serves, where the restore function sets
+// it. Nil, which never refuses, with no usable shared State, and with the legacy
+// adapter, which holds no such record.
+func (s *Stores) Maintenance() *maintenance.Gate {
+	if s == nil || !s.Usable || s.Adapter == AdapterLegacy || s.Ports.State == nil {
+		return nil
+	}
+	return maintenance.New(s.Ports.State)
+}
+
+// MaintenanceOf is the gate over module m's own table, for a process that hosts
+// several modules (the issuer's function). On layout v4 there is one table, so it
+// is [Stores.Maintenance].
+func (s *Stores) MaintenanceOf(m port.Module) *maintenance.Gate {
+	if s == nil || s.Ports.Module == "" {
+		return s.Maintenance()
+	}
+	set, err := s.ForModule(m)
+	if err != nil || !s.Usable || s.Adapter == AdapterLegacy || set.State == nil {
+		return nil
+	}
+	return maintenance.New(set.State)
 }
 
 // ErrLocalLease is the refusal of a one-shot tick whose lease would not exclude

@@ -41,6 +41,7 @@ var rows5 = []struct{ key, module, kind, id string }{
 	{"lease.export:github-app.x", "github", "lease", "export/github-app.x"},
 	{"lease.unknown:thing", "", "lease", "unknown/thing"},
 	{"notify.acme", "", "notify", "acme"},
+	{"rec.maintenance", "", "maintenance", "flag"},
 	{"ses.ada.s1", "oidc", "session", "ada/s1"},
 	{"sid.s1", "oidc", "session-pointer", "s1"},
 	{"req.r1", "oidc", "request", "r1"},
@@ -112,7 +113,7 @@ func TestEveryLayout4KeyHasAModuleOrIsShared(t *testing.T) {
 	if len(stateRows) < pinnedRules5 {
 		t.Fatalf("the layout 4 table has %d rows, want at least %d (an empty sweep proves nothing)", len(stateRows), pinnedRules5)
 	}
-	shared := []string{"gate", "cache", "dedupe", "lease", "notify", port.KindOther}
+	shared := []string{"gate", "cache", "dedupe", "lease", "notify", "maintenance", port.KindOther}
 	for _, r := range stateRows {
 		if r.kind == "directory" && r.id[:len("google/")] != "google/" {
 			if _, err := port.Locate5(r.key); !errors.Is(err, port.ErrUnsupported) {
@@ -309,7 +310,7 @@ func TestModules(t *testing.T) {
 		}
 	}
 	for _, k := range port.SharedKinds {
-		if got, _ := port.Locate5(map[string]string{"lease": "lease.github-tick:a", "notify": "notify.a"}[k]); got.Kind != k {
+		if got, _ := port.Locate5(map[string]string{"lease": "lease.github-tick:a", "notify": "notify.a", "maintenance": "rec.maintenance"}[k]); got.Kind != k {
 			t.Errorf("shared kind %q is not a kind of the layout", k)
 		}
 	}

@@ -342,3 +342,31 @@ func TestRefreshPassReportsWhatItDid(t *testing.T) {
 		t.Errorf("%+v", res)
 	}
 }
+
+type pauseFunc func(context.Context) error
+
+func (f pauseFunc) Writable(ctx context.Context) error { return f(ctx) }
+
+// While the module is under maintenance a scheduled pass takes no snapshot, and
+// when it is lifted the next one does.
+func TestRefreshPassStandsStillUnderMaintenance(t *testing.T) {
+	t.Parallel()
+	h, _, _, clock := requestRefreshHarness(t)
+	*clock = clock.Add(20 * time.Minute)
+	under := true
+	h.UseMaintenance(pauseFunc(func(context.Context) error {
+		if under {
+			return errors.New("maintenance")
+		}
+		return nil
+	}))
+
+	res, err := h.RefreshPass(context.Background())
+	if err != nil || res.Workspaces != 1 || res.Paused != 1 || res.Ran != 0 {
+		t.Fatalf("under maintenance: %+v, %v", res, err)
+	}
+	under = false
+	if res, err = h.RefreshPass(context.Background()); err != nil || res.Ran != 1 {
+		t.Fatalf("after maintenance: %+v, %v", res, err)
+	}
+}
