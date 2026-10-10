@@ -414,10 +414,10 @@ type TelemetryArgs struct {
 	// OTLPAudience is the exchange's audience and client id. Default "otlp".
 	OTLPAudience string
 	// OmitLegacyEnv leaves out the deprecated ACCESS_ROSTER_* names the extension
-	// has read so far. The functions get AUDIT_OTLP_ISSUER, AUDIT_OTLP_STS_AUDIENCE,
-	// AUDIT_OTLP_ENDPOINT and AUDIT_OTLP_AUDIENCE, and, until this is set, the old
-	// four with the same values: set it once the extension in use reads the new
-	// names. The aliases are removed after one minor.
+	// has read so far. The functions get SLUIS_ISSUER, SLUIS_AUDIENCE,
+	// SLUIS_OTLP_ENDPOINT and SLUIS_OTLP_AUDIENCE, and, until this is set, the old
+	// four with the same values: set it once the layer in use is v0.69.0 or later,
+	// which reads the new names. The aliases are removed in v1.76.
 	OmitLegacyEnv bool
 	// ExtraEnv is other OTEL_* variables, such as OTEL_TRACES_SAMPLER.
 	ExtraEnv map[string]string

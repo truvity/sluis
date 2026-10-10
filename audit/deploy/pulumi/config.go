@@ -155,21 +155,20 @@ func functionEnv(t *TelemetryArgs, service string, layerArn pulumi.StringInput) 
 // loopback proxy. No secret: the extension trades the function role's identity
 // for a token.
 //
-// The settings are named for what they are, AUDIT_OTLP_*. The names the extension
-// has read so far, ACCESS_ROSTER_*, are deprecated aliases: they are set beside
-// the new ones for one minor, so that an extension build that reads only them
-// keeps working, and Telemetry.OmitLegacyEnv drops them once the extension reads
-// the new names.
+// The settings are the layer's own, SLUIS_*. The names the layer read before
+// v0.69.0, ACCESS_ROSTER_*, are set beside them for one release, so that a function
+// that still runs an older layer keeps working, and Telemetry.OmitLegacyEnv drops
+// them. No layer reads the AUDIT_OTLP_* names this library used to set.
 func telemetryEnv(t *TelemetryArgs, service string) map[string]string {
 	if t == nil {
 		return nil
 	}
 	env := map[string]string{
-		"AUDIT_OTLP_ISSUER":       t.IssuerURL,
-		"AUDIT_OTLP_STS_AUDIENCE": t.STSAudience,
-		"AUDIT_OTLP_ENDPOINT":     t.OTLPEndpoint,
+		"SLUIS_ISSUER":        t.IssuerURL,
+		"SLUIS_AUDIENCE":      t.STSAudience,
+		"SLUIS_OTLP_ENDPOINT": t.OTLPEndpoint,
 		// The exchange's audience and client id.
-		"AUDIT_OTLP_AUDIENCE": t.OTLPAudience,
+		"SLUIS_OTLP_AUDIENCE": t.OTLPAudience,
 		// The SDK exports to the extension, which holds the credential.
 		"OTEL_EXPORTER_OTLP_ENDPOINT": extensionLoopback,
 		"OTEL_EXPORTER_OTLP_PROTOCOL": "http/protobuf",
@@ -186,11 +185,13 @@ func telemetryEnv(t *TelemetryArgs, service string) map[string]string {
 	return env
 }
 
-// legacyTelemetryEnv is each deprecated ACCESS_ROSTER_* name and the AUDIT_OTLP_*
-// name that replaces it.
+// legacyTelemetryEnv is each deprecated ACCESS_ROSTER_* name and the SLUIS_* name
+// that replaces it.
+//
+// TODO(v1.76): remove these ACCESS_ROSTER_* names, with Telemetry.OmitLegacyEnv.
 var legacyTelemetryEnv = map[string]string{
-	"ACCESS_ROSTER_ISSUER":        "AUDIT_OTLP_ISSUER",
-	"ACCESS_ROSTER_AUDIENCE":      "AUDIT_OTLP_STS_AUDIENCE",
-	"ACCESS_ROSTER_OTLP_ENDPOINT": "AUDIT_OTLP_ENDPOINT",
-	"ACCESS_ROSTER_OTLP_AUDIENCE": "AUDIT_OTLP_AUDIENCE",
+	"ACCESS_ROSTER_ISSUER":        "SLUIS_ISSUER",
+	"ACCESS_ROSTER_AUDIENCE":      "SLUIS_AUDIENCE",
+	"ACCESS_ROSTER_OTLP_ENDPOINT": "SLUIS_OTLP_ENDPOINT",
+	"ACCESS_ROSTER_OTLP_AUDIENCE": "SLUIS_OTLP_AUDIENCE",
 }

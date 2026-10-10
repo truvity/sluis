@@ -24,7 +24,7 @@ Have the writer and notary functions export OpenTelemetry with the function role
    OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318
    OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
    OTEL_SERVICE_NAME=audit-writer            # audit-notary for the notary
-   AUDIT_OTLP_ISSUER, AUDIT_OTLP_STS_AUDIENCE, AUDIT_OTLP_ENDPOINT, AUDIT_OTLP_AUDIENCE
+   SLUIS_ISSUER, SLUIS_AUDIENCE, SLUIS_OTLP_ENDPOINT, SLUIS_OTLP_AUDIENCE
    ```
 
    The functions gain the extension layer and these variables. The roles gain `sts:GetWebIdentityToken` limited to that audience, ES384 and 300 seconds.
@@ -41,7 +41,7 @@ Remove `Telemetry`. The layer, the variables and the statement go together.
 
 ## Legacy variables
 
-The library also sets the deprecated `ACCESS_ROSTER_*` spellings of the four extension settings (legacy identifier, renamed in v1.75–v1.76). Set `Telemetry.OmitLegacyEnv` to drop them once the extension reads the new names.
+The library also sets the deprecated `ACCESS_ROSTER_*` spellings of the four extension settings (legacy identifier, renamed in v1.75–v1.76), for a function that runs a layer older than v0.69.0. Set `Telemetry.OmitLegacyEnv` to drop them once the layer is v0.69.0 or later; they are removed in v1.76.
 
 ## See also
 
