@@ -272,3 +272,25 @@ func TestVerifyFindsAMissingSessionAndASkippedIssuerIsLeftAlone(t *testing.T) {
 		t.Fatalf("second pass = %v\n%s", err, report.JSON())
 	}
 }
+
+func TestTheMaintenanceFlagIsNeitherCopiedNorRefused(t *testing.T) {
+	src, dst := newV4Installation(t), newV5Installation(t)
+	src.seedFull(t)
+	// The source is in maintenance, as it is while writers are stopped.
+	if _, err := src.st.Ports.State.Put(ctx, "rec.maintenance", []byte(`{"on":true}`), 0); err != nil {
+		t.Fatal(err)
+	}
+	report, err := migrate.CopyV5(ctx, side("v4.yaml", src.st), side("v5.yaml", dst.st), copyOptions())
+	if err != nil || !report.OK || report.Totals.Refused != 0 {
+		t.Fatalf("CopyV5 = %v\n%s", err, report.JSON())
+	}
+	if bytes.Contains(report.JSON(), []byte("maintenance\",")) && bytes.Contains(report.JSON(), []byte(`"kind": "maintenance"`)) {
+		t.Error("the flag was planned")
+	}
+	if _, err = dst.st.Ports.State.Get(ctx, "rec.maintenance"); err == nil {
+		t.Error("the maintenance flag was carried: the destination must start clear")
+	}
+	if !strings.Contains(strings.Join(report.Notes, "\n"), "maintenance flag") {
+		t.Error("the report does not say the flag is not carried")
+	}
+}
