@@ -3,6 +3,7 @@ package migrate_test
 import (
 	"bytes"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/truvity/sluis/internal/migrate"
@@ -263,9 +264,9 @@ func TestTwoPassCopy(t *testing.T) {
 	src.seedFull(t)
 	// Pass one runs while the source is live, without the issuer.
 	first := copyOptions()
-	first.Skip = []string{migrate.DomainIssuer}
+	first.Skip, first.WritersStopped = []string{migrate.DomainIssuer}, false
 	r1, err := migrate.CopyV5(ctx, side("v4.yaml", src.st), side("v5.yaml", dst.st), first)
-	if err != nil || r1.Totals.Copied == 0 {
+	if err != nil || r1.Totals.Copied == 0 || !r1.Live {
 		t.Fatalf("first pass = %v, %+v", err, r1.Totals)
 	}
 	// The source changes while people still use it.
@@ -334,5 +335,25 @@ func TestOverwriteDeletesADestinationFingerprintTheSourceLacks(t *testing.T) {
 	}
 	if verified, err = migrate.VerifyV5(ctx, from, to, planOptions()); err != nil {
 		t.Fatalf("VerifyV5 after --overwrite = %v\n%s", err, verified.JSON())
+	}
+}
+
+func TestLiveFirstPassSkippingTheIssuerNeedsNoFlag(t *testing.T) {
+	src, dst := newV4Installation(t), newV5Installation(t)
+	src.seedFull(t)
+	opt := copyOptions()
+	opt.WritersStopped = false
+	opt.Skip = []string{"issuer"}
+	report, err := migrate.CopyV5(ctx, side("v4.yaml", src.st), side("v5.yaml", dst.st), opt)
+	if err != nil || !report.OK {
+		t.Fatalf("CopyV5 = %v", err)
+	}
+	if !report.Live || !strings.Contains(strings.Join(report.Notes, "\n"), "final pass") {
+		t.Errorf("the report does not say it ran live and a final pass is required: live=%v notes=%v", report.Live, report.Notes)
+	}
+	final := copyOptions()
+	final.Overwrite = true
+	if report, err = migrate.CopyV5(ctx, side("v4.yaml", src.st), side("v5.yaml", dst.st), final); err != nil || report.Live {
+		t.Fatalf("the final pass = %v, live=%v", err, report.Live)
 	}
 }
