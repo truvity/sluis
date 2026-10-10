@@ -689,6 +689,21 @@ type CompatArgs struct {
 	// back to Layout "v4" inside the rollback window finds them. It needs Layout
 	// "v5". An installation born on v5 sets it from the start and never has them.
 	DropV4 bool
+	// RetireLegacyTable ends the legacy table's life after the v4 parameters are
+	// gone. It needs Layout "v5" and DropV4, and the same Compat on StatesArgs,
+	// where it backs the table up and unprotects it (see StatesArgs.Compat). Here
+	// the migration role loses its read of the legacy table.
+	RetireLegacyTable bool
+}
+
+// validate refuses a Compat that retires the legacy table while the v4
+// parameters it is read through are still there.
+func (c *CompatArgs) validate() error {
+	if c != nil && c.RetireLegacyTable && !c.DropV4 {
+		return errors.New("sluispulumi: Compat.RetireLegacyTable needs Compat.DropV4: " +
+			"retire the legacy table after the v4 parameters are dropped, in a later apply")
+	}
+	return nil
 }
 
 var functionNamePattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
@@ -705,6 +720,12 @@ func (a *LambdaArgs) validateLayout() error {
 	}
 	if a.Compat != nil && a.Compat.DropV4 && a.Layout != LayoutV5 {
 		return errors.New("sluispulumi: Compat.DropV4 removes the v4 parameters and needs Layout \"v5\": a role on \"v4\" or \"v4+v5\" still reads them")
+	}
+	if err := a.Compat.validate(); err != nil {
+		return err
+	}
+	if a.Compat != nil && a.Compat.RetireLegacyTable && a.Layout != LayoutV5 {
+		return errors.New("sluispulumi: Compat.RetireLegacyTable retires the legacy table and needs Layout \"v5\": a role on \"v4\" or \"v4+v5\" still reads it")
 	}
 	for m := range a.TableNames {
 		if !validModule(m) {
@@ -1211,7 +1232,7 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 	if err != nil {
 		return nil, fmt.Errorf("sluis role: %w", err)
 	}
-	if a.MigrationRoleArn != "" {
+	if a.MigrationRoleArn != "" && !(a.Compat != nil && a.Compat.RetireLegacyTable) {
 		if err := newMigrationRead(ctx, name, &a, child); err != nil {
 			return nil, fmt.Errorf("sluis migration role: %w", err)
 		}
