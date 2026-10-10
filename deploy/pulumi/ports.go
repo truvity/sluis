@@ -75,10 +75,10 @@ func RenderPorts(p PortsArgs) (map[string]any, error) {
 		}
 		for m, n := range p.Tables {
 			if !validModule(m) {
-				errs = append(errs, fmt.Errorf("Tables names unknown module %q", m))
+				errs = append(errs, fmt.Errorf("the Tables name an unknown module %q", m))
 			}
 			if n == "" {
-				errs = append(errs, fmt.Errorf("Tables: the table of module %q has no name", m))
+				errs = append(errs, fmt.Errorf("the Tables entry of module %q has no name", m))
 			}
 		}
 	default:
