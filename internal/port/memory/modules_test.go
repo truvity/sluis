@@ -128,3 +128,45 @@ func TestOwnedKeepsOptionalCapabilities(t *testing.T) {
 		t.Error("StateExporter lost")
 	}
 }
+
+func TestTheStateFactoryTakesAModule(t *testing.T) {
+	ctx := context.Background()
+	d, ok := port.Default.Lookup(port.ConcernState, "memory")
+	if !ok {
+		t.Fatal("no memory state adapter")
+	}
+	built, err := d.Factory(ctx, port.Settings{"module": "github"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	st, ok := built.(port.State)
+	if !ok {
+		t.Fatalf("%T is not a State", built)
+	}
+	if _, err = st.Put(ctx, "gh.org.example", []byte("{}"), 0); err != nil {
+		t.Errorf("own key: %v", err)
+	}
+	if _, err = st.Put(ctx, "ws.dir.google.w1", []byte("{}"), 0); !errors.Is(err, port.ErrNotOwner) {
+		t.Errorf("another module's key = %v, want ErrNotOwner", err)
+	}
+	if _, err = d.Factory(ctx, port.Settings{"module": "nope"}); err == nil {
+		t.Error("an unknown module was accepted")
+	}
+	// No module: not split.
+	built, err = d.Factory(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = built.(port.State).Put(ctx, "ws.dir.google.w1", []byte("{}"), 0); err != nil {
+		t.Errorf("unsplit: %v", err)
+	}
+	for _, c := range []port.Concern{port.ConcernSecrets, port.ConcernBlobs, port.ConcernTrigger} {
+		d, _ := port.Default.Lookup(c, "memory")
+		if _, err := d.Factory(ctx, port.Settings{"module": "slack"}); err != nil {
+			t.Errorf("%s: %v", c, err)
+		}
+		if _, err := d.Factory(ctx, port.Settings{"module": "x"}); err == nil {
+			t.Errorf("%s: unknown module accepted", c)
+		}
+	}
+}

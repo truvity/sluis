@@ -154,6 +154,13 @@ func controllersOf(svc *config.Sluis, p *config.PolicyDocument) (*githubapp.Conf
 	return gh, sl, nil
 }
 
+// IssuerPeers are the modules whose tables the issuer reads: the cross-grants
+// of ADR 0072, read only. A peer is a table the role names, so the list is the
+// role's too (deploy/pulumi).
+func IssuerPeers() []port.Module {
+	return []port.Module{port.ModuleGoogle, port.ModuleGitHub, port.ModuleSlack}
+}
+
 // FromConfig builds both halves' settings from the documents already read.
 func FromConfig(f *config.Serve, p *config.PolicyDocument) (Config, error) {
 	directory, err := app.FromConfig(f, p)
@@ -168,7 +175,11 @@ func FromConfig(f *config.Serve, p *config.PolicyDocument) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	cfg := Config{Directory: directory, Issuer: issuer, Stores: stores}
+	// The issuer binary holds the oidc table (the issuer, the signer, the
+	// console) and reads the tables of the modules whose records it needs
+	// (ADR 0072, decision 1). A module that still runs in this process takes
+	// its own table through Stores.ForModule.
+	cfg := Config{Directory: directory, Issuer: issuer, Stores: stores.As(port.ModuleOIDC, IssuerPeers()...)}
 	if f.Cloudflare != nil || (p != nil && len(p.Cloudflare().Grants) > 0) {
 		// Grants for presets nobody declared would read as rights nobody can use.
 		if err = config.CheckCloudflare(f.Cloudflare, p); err != nil {

@@ -112,13 +112,15 @@ func call(ctx context.Context, portName, operation string) (context.Context, fun
 	}
 }
 
-// Set returns the ports with State, Index and Blob observed. Trigger and
+// Set returns the ports with State, Index and Blob observed, and each peer
+// view of State ([Peers]). Module and the peers' names are kept. Trigger and
 // Identity are not: a trigger is a hint, and the identity provider's own
 // latency is already in the issuer's request metrics.
 func Set(s port.Set) port.Set {
 	if s.State != nil {
 		s.State = State(s.State)
 	}
+	s.Peers = Peers(s.Peers)
 	if s.Index != nil {
 		s.Index = Index(s.Index)
 	}
@@ -126,6 +128,41 @@ func Set(s port.Set) port.Set {
 		s.Blob = Blob(s.Blob)
 	}
 	return s
+}
+
+// Peers observes the read-only views of other modules' tables. A peer read is
+// counted as the `peer_get` and `peer_list` operations of the state port, so a
+// dashboard tells a read of another module's table from the process's own. The
+// module is NOT a label: the set of peers is a deployment's and says nothing
+// the operation does not. A nil map stays nil.
+func Peers(in map[port.Module]port.StateReader) map[port.Module]port.StateReader {
+	if in == nil {
+		return nil
+	}
+	out := make(map[port.Module]port.StateReader, len(in))
+	for m, r := range in {
+		if r != nil {
+			r = peer{r}
+		}
+		out[m] = r
+	}
+	return out
+}
+
+type peer struct{ port.StateReader }
+
+func (p peer) Get(ctx context.Context, key string) (port.Record, error) {
+	ctx, done := call(ctx, PortState, "peer_get")
+	r, err := p.StateReader.Get(ctx, key)
+	done(err)
+	return r, err
+}
+
+func (p peer) List(ctx context.Context, prefix, page string, limit int) (port.Page, error) {
+	ctx, done := call(ctx, PortState, "peer_list")
+	r, err := p.StateReader.List(ctx, prefix, page, limit)
+	done(err)
+	return r, err
 }
 
 // State observes a [port.State]. Watch is passed through: it lives as long as

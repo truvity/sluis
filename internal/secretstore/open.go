@@ -30,11 +30,35 @@ var ErrNoStore = errors.New("secretstore: this secrets source is not a store")
 // key alias the stores encrypt with). Both namespaces are on the one backend
 // open returns, under <root>/internal and <root>/external.
 func Open(ctx context.Context, cfg *config.Secrets, open Opener) (*Stores, error) {
+	if cfg != nil {
+		if err := CheckLayout(cfg.Layout); err != nil {
+			return nil, err
+		}
+	}
+	base, err := openBase(ctx, cfg, open)
+	if err != nil {
+		return nil, err
+	}
+	return FromStore(base, cfg.KMSKeyID), nil
+}
+
+// OpenV5 is [Open] for layout v5 (ADR 0072): the `secrets` section must name
+// layout v5, and the result is module first. Opening it makes no request.
+func OpenV5(ctx context.Context, cfg *config.Secrets, open Opener) (*StoresV5, error) {
+	if cfg != nil && cfg.Layout != LayoutV5 {
+		return nil, fmt.Errorf("secrets.layout: %q is not %s", cfg.Layout, LayoutV5)
+	}
+	base, err := openBase(ctx, cfg, open)
+	if err != nil {
+		return nil, err
+	}
+	return FromStoreV5(base, cfg.KMSKeyID), nil
+}
+
+// openBase opens the backend at the section's root.
+func openBase(ctx context.Context, cfg *config.Secrets, open Opener) (state.Store, error) {
 	if cfg == nil || cfg.Source != "ssm" {
 		return nil, ErrNoStore
-	}
-	if err := CheckLayout(cfg.Layout); err != nil {
-		return nil, err
 	}
 	root := strings.TrimSuffix(cfg.Root, "/")
 	if root == "" || !strings.HasPrefix(root, "/") {
@@ -51,7 +75,7 @@ func Open(ctx context.Context, cfg *config.Secrets, open Opener) (*Stores, error
 	if err != nil {
 		return nil, fmt.Errorf("secrets: opening %s: %w", root, err)
 	}
-	return FromStore(base, cfg.KMSKeyID), nil
+	return base, nil
 }
 
 // FromStore splits a store rooted at <root> into the two namespaces. keyAlias,

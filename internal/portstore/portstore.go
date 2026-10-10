@@ -358,9 +358,55 @@ func keys(m map[string]bool) []string {
 	return out
 }
 
+// ErrNoPeer is a read of another module's record by a process that holds no
+// read-only view of that module's table: no cross-grant says it may.
+var ErrNoPeer = errors.New("portstore: the record belongs to a module this process has no read grant for")
+
+// readerFor is what reads a key: the process's own State, or the read-only view
+// of the peer module whose table holds it (ADR 0072, decision 1). A Base with
+// no Module is not split by module, and reads everything from State.
+func (b *Base) readerFor(key string) (port.StateReader, error) {
+	if b.Module == "" {
+		return b.State, nil
+	}
+	a, err := port.Locate5(key)
+	if err != nil {
+		return b.State, nil //nolint:nilerr // a key layout 5 cannot place is the State's to refuse
+	}
+	return b.readerOf(a.Module)
+}
+
+// readerForPrefix is [Base.readerFor] of a listing. A prefix that does not lie
+// in one module's family is the own State's.
+func (b *Base) readerForPrefix(prefix string) (port.StateReader, error) {
+	if b.Module == "" {
+		return b.State, nil
+	}
+	m, _, _, ok := port.LocatePrefix5(prefix)
+	if !ok {
+		return b.State, nil
+	}
+	return b.readerOf(m)
+}
+
+func (b *Base) readerOf(m port.Module) (port.StateReader, error) {
+	if m == "" || m == b.Module {
+		return b.State, nil
+	}
+	r, ok := b.Peer(m)
+	if !ok {
+		return nil, fmt.Errorf("%w (%s, from %s)", ErrNoPeer, m, b.Module)
+	}
+	return r, nil
+}
+
 // getItem reads one item.
 func (b *Base) getItem(ctx context.Context, key string) (*item, error) {
-	rec, err := b.State.Get(ctx, key)
+	r, err := b.readerFor(key)
+	if err != nil {
+		return nil, err
+	}
+	rec, err := r.Get(ctx, key)
 	if errors.Is(err, port.ErrNotFound) {
 		return nil, nil
 	}
@@ -372,10 +418,14 @@ func (b *Base) getItem(ctx context.Context, key string) (*item, error) {
 
 // listAll reads every live record under a prefix, a page at a time.
 func (b *Base) listAll(ctx context.Context, prefix string) ([]port.Record, error) {
+	r, err := b.readerForPrefix(prefix)
+	if err != nil {
+		return nil, err
+	}
 	var out []port.Record
 	page := ""
 	for {
-		p, err := b.State.List(ctx, prefix, page, 0)
+		p, err := r.List(ctx, prefix, page, 0)
 		if err != nil {
 			return nil, err
 		}

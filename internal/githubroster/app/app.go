@@ -27,6 +27,7 @@ import (
 	"github.com/truvity/sluis/internal/consoleauth"
 	"github.com/truvity/sluis/internal/githubroster/controller"
 	"github.com/truvity/sluis/internal/health"
+	"github.com/truvity/sluis/internal/port"
 	"github.com/truvity/sluis/internal/portstore"
 	"github.com/truvity/sluis/internal/rails"
 	"github.com/truvity/sluis/internal/store"
@@ -95,7 +96,7 @@ func Load(file string) (Config, error) {
 func FromConfig(f *config.ControllerGitHub, p *config.PolicyDocument) (Config, error) {
 	c := Config{
 		release:    orDefault(f.Release, "sluis"),
-		stores:     store.FromRoster(&f.Roster),
+		stores:     store.FromRoster(&f.Roster).As(port.ModuleGitHub),
 		policy:     p,
 		console:    strings.TrimSuffix(f.ConsoleURL, "/"),
 		tokenFile:  orDefault(f.TokenFile, "/var/run/secrets/github-roster/token"),
@@ -238,7 +239,7 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 		// Any adapter but `legacy` keeps the links, the organisations'
 		// credentials and the operators' requests on the State and Secrets ports,
 		// and the controller reads them there.
-		base := portstore.New(stores.Ports).WithV4(stores.V4)
+		base := portstore.New(stores.Ports).WithV4(stores.V4).WithV5(stores.V5)
 		if err = base.CheckSecrets(ctx); err != nil {
 			stores.Close()
 			return nil, fmt.Errorf("ports.adapter %s: %w", stores.Adapter, err)

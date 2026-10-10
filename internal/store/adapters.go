@@ -298,6 +298,9 @@ func (c Config) secretsOf(ctx context.Context) (port.Secrets, error) {
 		}
 		root, _ := settings["root"].(string)
 		key, _ := settings["kmsKeyId"].(string)
+		if c.SecretsLayout == config.SecretsLayoutV5 {
+			return nil, c.overLayout5(ctx, root, key)
+		}
 		return c.overLayout(ctx, root, key)
 	}
 	built, err := d.Factory(ctx, settings)
@@ -313,7 +316,10 @@ func (c Config) secretsOf(ctx context.Context) (port.Secrets, error) {
 
 // v4Holder carries the v4 stores out of [Config.secretsOf], which runs on a
 // copy of the Config.
-type v4Holder struct{ stores *secretstore.Stores }
+type v4Holder struct {
+	stores *secretstore.Stores
+	v5     *secretstore.StoresV5
+}
 
 // overLayout is the Secrets port over layout v4: callers keep their paths and
 // the port maps them (internal/secretstore).
@@ -336,6 +342,29 @@ func (c Config) overLayout(ctx context.Context, root, kmsKeyID string) (port.Sec
 		c.v4.stores = stores
 	}
 	return secretstore.NewSecrets(stores, c.SecretsGrace), nil
+}
+
+// overLayout5 opens the installation's secrets on layout v5 (ADR 0072), module
+// first, and leaves them in the holder for [Stores.V5]. There is no Secrets port
+// over it: a caller reads its module's names from the stores, so the port stays
+// nil and a caller that has not moved says so (portstore.errNoSecrets). Opening
+// makes no request.
+func (c Config) overLayout5(ctx context.Context, root, kmsKeyID string) error {
+	open := c.OpenState
+	if open == nil {
+		open = openSSMState
+	}
+	stores, err := secretstore.OpenV5(ctx, &config.Secrets{
+		Source: "ssm", Root: root, Region: c.SecretsRegion, Endpoint: c.SecretsEndpoint,
+		KMSKeyID: kmsKeyID, Layout: config.SecretsLayoutV5,
+	}, open)
+	if err != nil {
+		return err
+	}
+	if c.v4 != nil {
+		c.v4.v5 = stores
+	}
+	return nil
 }
 
 // decodeStrict reads a settings object into v, refusing a key v lacks.

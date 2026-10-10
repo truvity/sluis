@@ -299,7 +299,11 @@ func (s *GitHubOrgs) Digest(ctx context.Context) ([sha256.Size]byte, error) {
 	for _, rec := range records {
 		h.Write([]byte(rec.Key + "\x00" + string(rec.Revision) + "\x00"))
 	}
-	switch rec, err := s.b.State.Get(ctx, ghLinkAppKey); {
+	link, err := s.b.readerFor(ghLinkAppKey)
+	if err != nil {
+		return [sha256.Size]byte{}, err
+	}
+	switch rec, err := link.Get(ctx, ghLinkAppKey); {
 	case err == nil:
 		h.Write([]byte(rec.Key + "\x00" + string(rec.Revision) + "\x00"))
 	case !errors.Is(err, port.ErrNotFound):

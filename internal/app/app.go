@@ -49,6 +49,7 @@ import (
 	"github.com/truvity/sluis/internal/githubroster/runnerapp"
 	"github.com/truvity/sluis/internal/health"
 	"github.com/truvity/sluis/internal/hub"
+	"github.com/truvity/sluis/internal/port"
 	"github.com/truvity/sluis/internal/portstore"
 	"github.com/truvity/sluis/internal/rails"
 	"github.com/truvity/sluis/internal/secrets"
@@ -478,9 +479,39 @@ func openPortStores(ctx context.Context, cfg Config, st *store.Stores, log *slog
 	// What the policy document's apps.github.apps declares: which Apps are
 	// exported, their labels, and the App an organisation uses.
 	exported := func(id string) bool { return cfg.policy.GitHubAppExported(id) || cfg.githubCatalogue.Exported(id) }
-	base := portstore.New(st.Ports).WithV4(st.V4).ExportGitHubApps(exported).DeclareGitHubApps(portstore.DeclaredGitHubApps{
+	declared := portstore.DeclaredGitHubApps{
 		Labels: cfg.policy.GitHubAppLabels, RunnerLabels: cfg.policy.RunnerLabels, AppRef: cfg.policy.AppRef,
-	})
+	}
+	baseOf := func(set port.Set) *portstore.Base {
+		return portstore.New(set).WithV4(st.V4).WithV5(st.V5).ExportGitHubApps(exported).DeclareGitHubApps(declared)
+	}
+	base := baseOf(st.Ports)
+	// On layout v5 each module's records are in its own table, and this process
+	// holds the oidc one (and read-only views of the modules it reads): a module
+	// that still runs here writes through its own table (ADR 0072). On layout v4
+	// there is one table and the three are the one base.
+	forModule := func(m port.Module) (*portstore.Base, error) {
+		if st.Ports.Module == "" {
+			return base, nil
+		}
+		set, err := st.ForModule(m)
+		if err != nil {
+			return nil, fmt.Errorf("store: ports.adapter %s: %w", st.Adapter, err)
+		}
+		return baseOf(set), nil
+	}
+	google, err := forModule(port.ModuleGoogle)
+	if err != nil {
+		return stores{}, err
+	}
+	github, err := forModule(port.ModuleGitHub)
+	if err != nil {
+		return stores{}, err
+	}
+	slack, err := forModule(port.ModuleSlack)
+	if err != nil {
+		return stores{}, err
+	}
 	// The session key's read is the proof that Secrets answers.
 	if err := base.RequireSecrets(); err != nil {
 		return stores{}, fmt.Errorf("store: ports.adapter %s: %w", st.Adapter, err)
@@ -492,20 +523,20 @@ func openPortStores(ctx context.Context, cfg Config, st *store.Stores, log *slog
 	log.InfoContext(ctx, "keeping the domain records in the state port, credentials in Secrets",
 		slog.String("adapter", st.Adapter), slog.Bool("shared", st.Shared))
 	out := stores{
-		workspaces:          portstore.NewWorkspaces(base),
-		credentials:         portstore.NewCredentials(base),
+		workspaces:          portstore.NewWorkspaces(google),
+		credentials:         portstore.NewCredentials(google),
 		settings:            settings.NewMemory(cfg.oauthDeclared),
 		sessionKey:          key,
 		githubReports:       rails.NewBlobReports(st.Ports.Blob, "reports/github/"),
 		slackReports:        rails.NewBlobReports(st.Ports.Blob, "reports/slack/"),
-		githubOrgs:          portstore.NewGitHubOrgs(base),
-		githubLinks:         portstore.NewGitHubLinks(base),
-		githubRunnerApps:    portstore.NewGitHubRunnerApps(base),
-		githubCatalogueApps: portstore.NewGitHubCatalogueApps(base),
-		slackCatalogueApps:  portstore.NewSlackCatalogueApps(base),
-		slackShared:         portstore.NewSlackShared(base),
-		slackChannels:       portstore.NewSlackChannels(base),
-		slackWorkspaces:     portstore.NewSlackWorkspaces(base),
+		githubOrgs:          portstore.NewGitHubOrgs(github),
+		githubLinks:         portstore.NewGitHubLinks(github),
+		githubRunnerApps:    portstore.NewGitHubRunnerApps(github),
+		githubCatalogueApps: portstore.NewGitHubCatalogueApps(github),
+		slackCatalogueApps:  portstore.NewSlackCatalogueApps(slack),
+		slackShared:         portstore.NewSlackShared(slack),
+		slackChannels:       portstore.NewSlackChannels(slack),
+		slackWorkspaces:     portstore.NewSlackWorkspaces(slack),
 	}
 	useCluster(&out, cfg, st)
 	return out, nil

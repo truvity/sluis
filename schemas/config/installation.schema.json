@@ -2702,9 +2702,10 @@
         },
         "layout": {
           "default": "v4",
-          "description": "`ssm`: the storage layout of the installation's secrets: `v4`, the only one and the default. It keeps them under `<root>/internal/` and `<root>/external/` (docs/decisions/0041-the-secret-contract.md). Layouts v3 and `transition` are gone; an installation still on one runs v1.74.x and `sluis migrate secrets-layout` first.",
+          "description": "`ssm`: the storage layout of the installation's secrets. `v4`, the default, keeps them under `<root>/internal/config`, `<root>/internal/credentials` and `<root>/external/<kind>` (docs/decisions/0041-the-secret-contract.md). `v5` puts the module first, `<root>/internal/<module>/` and `<root>/external/<module>/` (docs/decisions/0072-storage-layout-v5-module-first.md), and needs `ports.dynamodb.tables`; the two do not mix. Layouts v3 and `transition` are gone; an installation still on one runs v1.74.x first.",
           "enum": [
-            "v4"
+            "v4",
+            "v5"
           ]
         },
         "refresh": {
