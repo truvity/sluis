@@ -85,6 +85,17 @@ func artifacts(root string) (string, error) {
 		repo := kodocker
 		fmt.Fprintf(&b, "| sluis | `%s/%s` |\n", repo, k.ID)
 	}
+	// The per-module images are built by hack/module-images.sh, not by goreleaser:
+	// they are the sluis-* lines of the list the release signs from.
+	list, err := os.ReadFile(filepath.Join(root, "hack/release-images.txt"))
+	if err != nil {
+		return "", err
+	}
+	for _, line := range strings.Split(string(list), "\n") {
+		if f := strings.Fields(line); len(f) == 2 && f[0] == "image" && strings.HasPrefix(f[1], kodocker+"/sluis-") {
+			fmt.Fprintf(&b, "| sluis | `%s` |\n", f[1])
+		}
+	}
 	for _, k := range au.Kos {
 		fmt.Fprintf(&b, "| audit | `%s/%s` |\n", strings.Join(k.Repositories, ","), k.ID)
 	}
