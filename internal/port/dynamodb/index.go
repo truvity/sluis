@@ -2,6 +2,7 @@ package dynamodb
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"time"
@@ -25,7 +26,7 @@ func (s *Store) indexKeys(set, member string) (pk, sk string, err error) {
 	if set == "" || member == "" {
 		return "", "", fmt.Errorf("%w: an index set and member are not empty", port.ErrUnsupported)
 	}
-	a, err := port.LocateSet(set)
+	a, err := s.locateSet(set)
 	if err != nil {
 		return "", "", err
 	}
@@ -34,6 +35,22 @@ func (s *Store) indexKeys(set, member string) (pk, sk string, err error) {
 		return "", "", fmt.Errorf("%w: a member of %d bytes is over DynamoDB's sort key limit", port.ErrUnsupported, len(sk))
 	}
 	return a.Kind, sk, nil
+}
+
+// locateSet is where an Index set lives. In a module's table a set of another
+// module is [port.ErrNotOwner]: every set belongs to the oidc module.
+func (s *Store) locateSet(set string) (port.Address, error) {
+	if !s.v5 {
+		return port.LocateSet(set)
+	}
+	a, err := port.LocateSet5(set)
+	if err != nil {
+		return port.Address{}, err
+	}
+	if a.Module != "" && a.Module != s.module {
+		return port.Address{}, fmt.Errorf("%w: the index %q is the %s module's, this table is %s", port.ErrNotOwner, set, a.Module, s.module)
+	}
+	return port.Address{Kind: a.Kind, ID: a.ID}, nil
 }
 
 // Add implements [port.Index].
@@ -54,6 +71,9 @@ func (s *Store) Add(ctx context.Context, key, member string, ttl time.Duration) 
 // Remove implements [port.Index].
 func (s *Store) Remove(ctx context.Context, key, member string) error {
 	pk, sk, err := s.indexKeys(key, member)
+	if errors.Is(err, port.ErrNotOwner) {
+		return err
+	}
 	if err != nil {
 		return nil // never written
 	}
@@ -66,7 +86,7 @@ func (s *Store) Remove(ctx context.Context, key, member string) error {
 }
 
 func (s *Store) members(ctx context.Context, set string) ([]item, error) {
-	a, err := port.LocateSet(set)
+	a, err := s.locateSet(set)
 	if err != nil {
 		return nil, nil
 	}

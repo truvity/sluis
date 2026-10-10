@@ -21,7 +21,14 @@ import (
 // partition. Any other names no one partition, so it is a Scan of the table,
 // sorted here.
 func (s *Store) iterate(ctx context.Context, prefix, after string, hint int, fn func(item) bool) error {
-	if pk, skPrefix, ok := port.LocatePrefix(prefix); ok {
+	if s.v5 {
+		if m, pk, skPrefix, ok := port.LocatePrefix5(prefix); ok {
+			if m != "" && m != s.module {
+				return nil // another module's family: nothing of it is in this table
+			}
+			return s.query(ctx, pk, skPrefix, prefix, after, hint, fn)
+		}
+	} else if pk, skPrefix, ok := port.LocatePrefix(prefix); ok {
 		return s.query(ctx, pk, skPrefix, prefix, after, hint, fn)
 	}
 	var all []item
@@ -91,7 +98,7 @@ func (s *Store) query(ctx context.Context, pk, skPrefix, prefix, after string, h
 		in.Limit = aws.Int32(int32(min(hint, 1000)))
 	}
 	if after != "" && after >= prefix {
-		if _, sk, err := locate(after); err == nil {
+		if _, sk, err := s.locate(after); err == nil {
 			in.ExclusiveStartKey = keyOf(pk, sk)
 		}
 	}
