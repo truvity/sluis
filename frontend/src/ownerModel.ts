@@ -1,4 +1,4 @@
-import type { DirectoryRef } from "./gen/directoryroster/v1/workspace_pb";
+import type { DirectoryRef } from "./gen/sluis/v1/workspace_pb";
 
 /** The owner of a Slack workspace or a GitHub organisation is the connected
  *  directory it belongs to. It is chosen when the thing is connected, and

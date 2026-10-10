@@ -10,7 +10,7 @@ import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 
 import { access, personName, workspaces } from "./api";
-import { AccountFilter, LinkFilter } from "./gen/directoryroster/v1/access_pb";
+import { AccountFilter, LinkFilter } from "./gen/sluis/v1/access_pb";
 import { githubCell, type GitHubCell } from "./githubModel";
 import { useAsync } from "./hooks";
 import { paths } from "./router";

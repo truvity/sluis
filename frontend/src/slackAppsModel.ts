@@ -1,4 +1,4 @@
-import type { SlackApp } from "./gen/directoryroster/v1/slack_apps_pb";
+import type { SlackApp } from "./gen/sluis/v1/slack_apps_pb";
 import type { StateKind } from "./ui";
 
 /** The one step an App is waiting for, in the order an operator takes

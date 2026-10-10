@@ -6,16 +6,17 @@ import { createClient } from "@connectrpc/connect";
 import { createConnectTransport } from "@connectrpc/connect-web";
 import { createQueryClient } from "@truvity/audit";
 
-import { WorkspaceService, Backend } from "./gen/directoryroster/v1/workspace_pb";
-import { SettingsService } from "./gen/directoryroster/v1/settings_pb";
-import { AccessService, Role } from "./gen/directoryroster/v1/access_pb";
-import { GitHubService } from "./gen/directoryroster/v1/github_pb";
-import { SlackAppService } from "./gen/directoryroster/v1/slack_apps_pb";
-import { SlackSharedChannelService } from "./gen/directoryroster/v1/slack_connect_pb";
-import { SlackChannelService } from "./gen/directoryroster/v1/slack_channels_pb";
-import { SlackService } from "./gen/directoryroster/v1/slack_pb";
-import { CloudflareService } from "./gen/directoryroster/v1/cloudflare_pb";
-import { SessionService, How } from "./gen/accessissuer/v1/session_pb";
+import { WorkspaceService, Backend } from "./gen/sluis/v1/workspace_pb";
+import { SettingsService } from "./gen/sluis/v1/settings_pb";
+import { AccessService, Role } from "./gen/sluis/v1/access_pb";
+import { GitHubService } from "./gen/sluis/v1/github_pb";
+import { SlackAppService } from "./gen/sluis/v1/slack_apps_pb";
+import { SlackSharedChannelService } from "./gen/sluis/v1/slack_connect_pb";
+import { SlackChannelService } from "./gen/sluis/v1/slack_channels_pb";
+import { SlackService } from "./gen/sluis/v1/slack_pb";
+import { CloudflareService } from "./gen/sluis/v1/cloudflare_pb";
+import { SessionService, How } from "./gen/sluis/v1/session_pb";
+import { withLegacyFallback } from "./legacyFallback";
 import { hubReason, issuerReason } from "./reasonModel";
 
 // The hub's own services, reached under wherever this console is
@@ -40,7 +41,12 @@ export function mounted(path: string): string {
   return new URL(path, window.location.href).href;
 }
 
-const transport = createConnectTransport({ baseUrl: mounted(".") });
+// Every call goes to the sluis.v1 path and, against a server that predates
+// it, is repeated at the legacy one (see legacyFallback.ts).
+const transport = createConnectTransport({
+  baseUrl: mounted("."),
+  fetch: withLegacyFallback((input, init) => globalThis.fetch(input, init)),
+});
 
 export const workspaces = createClient(WorkspaceService, transport);
 export const settings = createClient(SettingsService, transport);
@@ -68,7 +74,7 @@ export const audit = createQueryClient(
 // itself would read, so a call here needs no bearer and no CORS.
 const issuerTransport = createConnectTransport({
   baseUrl: "/",
-  fetch: (input, init) => globalThis.fetch(input, { ...init, credentials: "include" }),
+  fetch: withLegacyFallback((input, init) => globalThis.fetch(input, { ...init, credentials: "include" })),
 });
 
 export const sessions = createClient(SessionService, issuerTransport);

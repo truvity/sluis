@@ -18,7 +18,7 @@ import Typography from "@mui/material/Typography";
 
 import { Backend, access, ago, at, backendName, personName, reason, settings, workspaces } from "./api";
 import { useAsync, useWhile } from "./hooks";
-import type { Workspace } from "./gen/directoryroster/v1/workspace_pb";
+import type { Workspace } from "./gen/sluis/v1/workspace_pb";
 import { paths } from "./router";
 import { Authority, ConfirmDialog, Facet, Facets, Failure, Loading, Names, Nothing, Page, Ref, Rows, Section, State, authorityKind, stateLabel } from "./ui";
 

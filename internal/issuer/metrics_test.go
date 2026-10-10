@@ -166,6 +166,8 @@ func TestRouteIsAFixedSet(t *testing.T) {
 		{"GET", "/login/alice@example.com/start", "login_start"},
 		{"POST", "/login/recovery", "login_recovery"},
 		{"POST", "/accessissuer.v1.SessionService/ListSessions", "sessions_rpc"},
+		{"POST", "/sluis.v1.SessionService/ListSessions", "sessions_rpc"},
+		{"POST", "/console/sluis.v1.WorkspaceService/List", "console_rpc"},
 		{"POST", "/console/directoryroster.v1.WorkspaceService/List", "console_rpc"},
 		{"GET", "/console/assets/index-abc.js", "console_assets"},
 		{"GET", "/console/", "console"},

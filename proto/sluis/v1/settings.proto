@@ -1,0 +1,83 @@
+syntax = "proto3";
+
+package sluis.v1;
+
+import "sluis/v1/workspace.proto";
+import "google/protobuf/duration.proto";
+
+// SettingsService exposes the hub's configuration to the console. Only the
+// OAuth client is writable, and only when the deployment did not declare
+// it; the intervals and the cache backend are chart values, shown so an
+// operator can see what the hub is running with.
+service SettingsService {
+  // GetSettings returns the OAuth client's public half and the read-only
+  // knobs. Never the client secret. Viewer.
+  //
+  // There is no SetOAuthClient beside it any more: the client
+  // is a Secret, delivered the way every other credential in the estate
+  // is delivered, and a console that could write one was a second way to
+  // provision it.
+  rpc GetSettings(GetSettingsRequest) returns (GetSettingsResponse);
+}
+
+// ClientSource says where the OAuth client came from.
+enum ClientSource {
+  CLIENT_SOURCE_UNSPECIFIED = 0;
+  // a Secret named by the deployment; read-only in the console.
+  CLIENT_SOURCE_DECLARED = 1;
+  // stored by a console, which no installation does any more.
+  // The value stays so an older stored client still reads back as what
+  // it is rather than as "unspecified".
+  CLIENT_SOURCE_CONSOLE = 2;
+}
+
+message OAuthClient {
+  string client_id = 1;
+  // true when both id and secret are present.
+  bool configured = 2;
+  ClientSource source = 3;
+}
+
+message GetSettingsRequest {}
+message GetSettingsResponse {
+  OAuthClient oauth_client = 1;
+  // how often the background refresher takes a new snapshot per workspace.
+  google.protobuf.Duration refresh_interval = 2;
+  // how old a snapshot may be before its domains stop being authoritative.
+  google.protobuf.Duration freshness_window = 3;
+  // how often a workspace's credential is probed and its domains re-read.
+  google.protobuf.Duration probe_interval = 4;
+  // "valkey" or "memory".
+  string cache_backend = 5;
+  // the backends this deployment can connect a workspace with: the
+  // console offers one Connect button per entry, and none at all when a
+  // deployment has configured no OAuth client.
+  repeated Backend connectors = 6;
+  // key_connectors is the subset of connectors that also accept an
+  // uploaded service-account key, the second way to add a directory.
+  repeated Backend key_connectors = 8;
+  // the build this hub is running.
+  string version = 7;
+  // what an operator must register with a backend before a workspace can
+  // be connected. It is here rather than only in a runbook because the
+  // values are this installation's own: the redirect URI is its hostname,
+  // and a document can only describe it.
+  repeated ConnectorSetup setup = 9;
+}
+
+// ConnectorSetup is the one-time cloud-console step, as values to copy
+// rather than prose to translate.
+message ConnectorSetup {
+  Backend backend = 1;
+  reserved 2;
+  reserved "redirect_uri";
+  // the scopes this hub will ask for, all read-only.
+  repeated string scopes = 3;
+  // every redirect URI to register with the backend, exactly as written.
+  // There is more than one because consent and sign-in are answered by
+  // endpoints with opposite authorisation, so they return to different
+  // paths; a client missing one of them works until somebody tries the
+  // flow that uses it.
+  repeated string redirect_uris = 4;
+}
+

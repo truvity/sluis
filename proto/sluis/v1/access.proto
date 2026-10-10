@@ -1,0 +1,599 @@
+syntax = "proto3";
+
+package sluis.v1;
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+
+import "sluis/v1/github.proto";
+
+// AccessService is how the console learns who is signed in, what the
+// policy says, and what any identity would effectively get.
+//
+// The policy's five tables are declared by the deployment. Exactly one of
+// them is writable here — memberships, which directory groups populate an
+// internal group — because everything else shapes a token and belongs in
+// a reviewed commit. See docs/reference/sluis/policy.md.
+service AccessService {
+  // WhoAmI returns the caller's identity: who they are, how they were
+  // established, the role they hold and the internal groups behind it.
+  // Any signed-in identity.
+  rpc WhoAmI(WhoAmIRequest) returns (WhoAmIResponse);
+
+  // Explain answers "what does this proof effectively get, and why": the
+  // internal groups it lands in, what put it in each, the merged claims,
+  // the token lifetime, and which clients would admit it.
+  //
+  // A proof is a person (an address), a CI job or a workload, so the same
+  // call shows what a pipeline is entitled to as well as what a person
+  // is. With nothing set it explains the caller. Viewer: a viewer already
+  // sees every group's members and every client's requirements, so
+  // withholding the answer they could derive by hand protects nothing and
+  // blocks the auditor, who is read-only by definition.
+  rpc Explain(ExplainRequest) returns (ExplainResponse);
+
+  // ListHolders resolves an internal group, or a client, to the people who
+  // hold it right now. It is the question an auditor actually asks, and
+  // the one the policy file cannot answer on its own: the file says which
+  // directory groups count, and only the directory knows who is in them.
+  // Viewer.
+  rpc ListHolders(ListHoldersRequest) returns (ListHoldersResponse);
+
+  // SearchPeople finds accounts by address or name across every
+  // snapshotted workspace, so that a console can start from a name rather
+  // than from a navigation tree. Viewer.
+  rpc SearchPeople(SearchPeopleRequest) returns (SearchPeopleResponse);
+
+  // ListServedDomains returns, for every connected directory the caller
+  // may view, the domains the hub serves for it now. It is what a
+  // controller looks a person up by: a Slack workspace names no domains of
+  // its own, it is owned by a directory (recorded when it was connected)
+  // and its people are those with an address in that directory's served
+  // domains. Viewer, installation-wide or over the directory: a scoped
+  // viewer is told only of its own directories.
+  rpc ListServedDomains(ListServedDomainsRequest) returns (ListServedDomainsResponse);
+
+  // GetPolicy returns every internal group with its members and what each
+  // adds, the state of the break-glass admin, and the enabled sign-in
+  // sources. Viewer.
+  //
+  // There is no AddMembership or RemoveMembership beside it any more.
+  // Who is in which internal group is the policy, rendered
+  // from the installation's own access model and reviewed in git; a
+  // console that could disagree with git was a second source of truth
+  // and a merge to reconcile them.
+  rpc GetPolicy(GetPolicyRequest) returns (GetPolicyResponse);
+
+  // ListDirectoryGroups returns the groups the hub has snapshotted, so
+  // that a membership is a click rather than a typed address that may be
+  // a typo. Viewer.
+  rpc ListDirectoryGroups(ListDirectoryGroupsRequest) returns (ListDirectoryGroupsResponse);
+
+  // GetDirectoryGroup returns one snapshotted directory group as the
+  // console shows it: where it came from and whether that can be vouched
+  // for, its members straight from the directory, and the internal groups
+  // it feeds. It is the reverse of a membership — an admin who just
+  // changed a group in the directory wants to know its blast radius, and
+  // that direction is not derivable from the policy alone. Viewer, for
+  // the same reason as Explain.
+  rpc GetDirectoryGroup(GetDirectoryGroupRequest) returns (GetDirectoryGroupResponse);
+
+  // ResolveDirectoryGroups returns, for each directory group asked, who is
+  // in it with nested groups expanded, and which directory it comes from:
+  // the question a controller asks to feed a channel from directory groups
+  // (a console channel), where ListHolders asks it of an internal group.
+  // Viewer, installation-wide: a scoped viewer is told found=false of a
+  // group of a directory it may not view, so the answer never reveals a
+  // directory the caller cannot see. The answer carries the policy digest,
+  // like ListHolders, so a consumer checks it decided under the same policy.
+  rpc ResolveDirectoryGroups(ResolveDirectoryGroupsRequest) returns (ResolveDirectoryGroupsResponse);
+}
+
+// Role is what an identity may do in this console. Operator implies
+// viewer. A role is not granted directly: it is held by being in the
+// internal group the deployment declared for it.
+enum Role {
+  ROLE_UNSPECIFIED = 0;
+  ROLE_VIEWER = 1;
+  ROLE_OPERATOR = 2;
+}
+
+// IdentitySource says how a caller was established.
+enum IdentitySource {
+  IDENTITY_SOURCE_UNSPECIFIED = 0;
+  // signed in with a connected directory through the hub's own login.
+  IDENTITY_SOURCE_DIRECTORY = 1;
+  // signed in with an external OIDC issuer through the hub's own login.
+  IDENTITY_SOURCE_OIDC = 2;
+  // a bearer forwarded by an authenticating gateway in front of the hub.
+  IDENTITY_SOURCE_FORWARDED = 3;
+  // the recovery sign-in: proven cluster access, or the generated
+  // password an installation outside Kubernetes keeps.
+  IDENTITY_SOURCE_RECOVERY = 4;
+  // a workload in a declared cluster presenting its own ServiceAccount
+  // token, verified against that cluster's key set. What it may do is the
+  // policy's `service_account` matchers, never recovery's operator.
+  IDENTITY_SOURCE_WORKLOAD = 5;
+}
+
+message Identity {
+  string email = 1;
+  // the issuer's stable identifier, or "admin".
+  string subject = 2;
+  IdentitySource source = 3;
+  Role role = 4;
+  // the internal groups the identity is in.
+  repeated string groups = 5;
+  // given and family name as the directory supplies them; empty when it
+  // does not, so callers must tolerate that.
+  string given_name = 6;
+  string family_name = 7;
+  // roles held over ONE workspace each. `role` above is the
+  // installation-wide one and is not a list of these: an identity with a
+  // global role may act on every workspace and carries no scopes at all.
+  repeated WorkspaceScope scopes = 8;
+}
+
+// WorkspaceScope is a role held over one workspace: what an administrator
+// of one company gets, so that connecting a second company's directory
+// does not hand its administrator the first one.
+message WorkspaceScope {
+  string workspace_id = 1;
+  Role role = 2;
+}
+
+message WhoAmIRequest {}
+message WhoAmIResponse {
+  Identity identity = 1;
+  // the build this hub is running.
+  string version = 2;
+}
+
+// HeldGroup is one internal group an identity is in, and why: the
+// directory groups matched, or the matcher, rendered to be read.
+message HeldGroup {
+  string group = 1;
+  repeated string via = 2;
+  // granted_by_key is the Groups-table key that granted this entry: equal
+  // to group for an ordinary key, and different for a mapping wildcard —
+  // matching `*:k8s:admin` for `devel:k8s:admin` reports
+  // granted_by_key="*:k8s:admin". Empty when group was reached only
+  // through inheritance (implied_by is set instead).
+  string granted_by_key = 3;
+  // wildcard is whether granted_by_key is a mapping wildcard rather than
+  // the group's own name.
+  bool wildcard = 4;
+  // implied_by is the concrete group whose role implied this one, one hop
+  // at a time: holding `devel:k8s:admin` where admin implies operator
+  // implies viewer produces a `devel:k8s:viewer` HeldGroup with
+  // implied_by="devel:k8s:operator", not "…admin" — the direct parent, so
+  // a reader walks the chain one link at a time. Empty when group was
+  // held directly.
+  string implied_by = 5;
+}
+
+// GitHubProof is a CI identity token's claims, as the simulator supplies
+// them: what a real job would present.
+message GitHubProof {
+  string repository = 1;
+  string owner = 2;
+  string ref = 3;
+  string workflow = 4;
+  string environment = 5;
+  // the repository's visibility: public, private or internal.
+  string visibility = 6;
+}
+
+// ServiceAccountProof is a Kubernetes workload.
+message ServiceAccountProof {
+  string namespace = 1;
+  string name = 2;
+}
+
+message ExplainRequest {
+  // an address; empty with no other proof explains the caller.
+  string email = 1;
+  // a CI job instead of a person.
+  GitHubProof github = 2;
+  // a cluster workload instead of a person.
+  ServiceAccountProof service_account = 3;
+}
+message ExplainResponse {
+  Identity identity = 1;
+  // the directory's answer about the address, with the same semantics as
+  // DirectoryService: authoritative false makes the rest an opinion.
+  bool in_domain = 2;
+  bool found = 3;
+  bool suspended = 4;
+  bool authoritative = 5;
+  // the directory groups the hub reports for the address.
+  repeated string directory_groups = 6;
+  // the internal groups held, and why.
+  repeated HeldGroup held = 7;
+  // the claims a token would carry: the deep merge of the held groups'
+  // fragments.
+  google.protobuf.Struct claims = 8;
+  // how long a token would live: the shortest across the held groups.
+  google.protobuf.Duration lifetime = 9;
+  // every declared client, and whether this proof would be issued a token
+  // for it. The id is the audience the token would carry.
+  repeated ClientAdmission clients = 10;
+  // workspace_id is the directory that serves this address, when one
+  // does, so a page about a person can link to where they come from
+  // without a second call.
+  string workspace_id = 11;
+  // policy_digest names the policy this answer was computed under
+  // (policy.Set.Digest). A consumer that acts on `held` checks it against
+  // the policy it decided with: during a rollout the two can differ, and a
+  // group one policy binds is simply absent from an answer under the other.
+  string policy_digest = 12;
+}
+
+// ClientAdmission is one relying party, and whether a proof reaches it.
+message ClientAdmission {
+  // the client's id, which is the audience of the tokens issued for it.
+  string id = 1;
+  // public, confidential or exchange.
+  string kind = 2;
+  // the internal groups any one of which admits a caller.
+  repeated string requires = 3;
+  // whether this proof holds one of them.
+  bool admitted = 4;
+  // the lifetime this proof would get for this client: the groups'
+  // shortest, capped by the client.
+  google.protobuf.Duration lifetime = 5;
+}
+
+// GroupMember is one directory group inside an internal group.
+//
+// Field 2 was `layer`, saying whether the deployment declared it or an
+// operator added it in the console. There is one layer now.
+message GroupMember {
+  string address = 1;
+  reserved 2;
+  reserved "layer";
+}
+
+// PolicyGroup is one internal group as the console shows it.
+message PolicyGroup {
+  string name = 1;
+  repeated GroupMember members = 2;
+  // 3 was the matchers as prose; rules carry them structured instead.
+  reserved 3;
+  // rules are the matchers: the machine side's roster.
+  repeated PolicyMatcher rules = 6;
+  // what this group adds to a token.
+  google.protobuf.Struct claims = 4;
+  // how long a token lives for someone in this group alone.
+  google.protobuf.Duration lifetime = 5;
+  // the GitHub Apps this group may mint installation tokens of, from the
+  // deployment's catalogue: the reverse of an App's grants, which the
+  // group's own page needs and cannot derive. Empty where the deployment
+  // declares no catalogue.
+  repeated GitHubGroupGrant github_grants = 7;
+}
+
+// PolicyClient is one declared client as the console shows it. A
+// confidential client names the Secret holding its secret; the secret
+// itself never leaves the namespace.
+// PolicyMatcher is one declared rule that admits a proof by its shape
+// rather than through a directory. Always declared: never written here.
+message PolicyMatcher {
+  // kind is ci, workload or sign-in.
+  string kind = 1;
+  // rule is the pattern, in words: "repository example-org/platform, ref
+  // refs/heads/master", "identity-system/authorization-webhook".
+  string rule = 2;
+}
+
+message PolicyClient {
+  string id = 1;
+  string kind = 2;
+  repeated string requires = 3;
+  repeated string redirects = 4;
+  google.protobuf.Duration ttl_cap = 5;
+  string secret = 6;
+}
+
+message GetPolicyRequest {}
+message GetPolicyResponse {
+  repeated PolicyGroup groups = 1;
+  // a recovery sign-in exists (the way in when the ordinary one is
+  // broken). Whether it deserves a banner depends on recovery_kind.
+  bool recovery_enabled = 2;
+  // enabled sign-in sources, e.g. "directory", "oidc:<issuer>", "forwarded:<issuer>".
+  repeated string login_sources = 3;
+  reserved 4;
+  reserved "console_layer";
+  // the declared clients: who may reach what.
+  repeated PolicyClient clients = 5;
+  // how recovery is proved: "token" (access to the cluster, nothing
+  // stored) or "password" (a generated one, outside Kubernetes). Empty
+  // when there is no recovery path. Only "password" is a standing
+  // credential, so only it is worth telling an operator about.
+  string recovery_kind = 6;
+  // the GitHub team bindings: which internal groups feed which team, in
+  // which organisation. They grant nothing here and appear in no token —
+  // a controller makes the org match them — and they are served so that
+  // the Rules page can answer "who is in this team, and why" without
+  // anybody opening GitHub.
+  repeated PolicyTeam teams = 7;
+  // the organisation-level bindings: the internal groups whose holders
+  // belong in an organisation with or without a team. An organisation
+  // that binds only teams is absent.
+  repeated PolicyOrg orgs = 8;
+  // where this installation keeps its recovery password, as its secrets
+  // source names it: "ssm <parameter>", "env <variable>" or "file <path>".
+  // Empty when recovery_kind is not "password" or the password was
+  // generated at start. A location, never the password.
+  string recovery_password_location = 9;
+}
+
+// PolicyTeam is one GitHub team binding as the console shows it.
+message PolicyTeam {
+  string org = 1;
+  // the team's slug, which is what the API takes and what a rename
+  // leaves alone.
+  string team = 2;
+  // the internal groups whose holders belong in the team, read exactly
+  // like a client's `requires`. They were provider addresses until a
+  // team became a consumer of a group like anything else.
+  repeated string members = 3;
+  // the internal groups whose holders maintain it. GitHub has two team
+  // roles; a holder of both is a maintainer.
+  repeated string maintainers = 4;
+}
+
+// PolicyOrg is one organisation-level binding as the console shows it.
+message PolicyOrg {
+  string org = 1;
+  // the internal groups whose holders belong in the organisation itself.
+  // Being in a bound team implies membership, so this is the people who
+  // should be members without a team.
+  repeated string members = 2;
+}
+
+message ListHoldersRequest {
+  // exactly one of the two: an internal group, or a client id.
+  string group = 1;
+  string client = 2;
+  // how many to return; zero means a sensible default.
+  int32 limit = 3;
+}
+
+// Holder is one account that holds a group or reaches a client, and why.
+message Holder {
+  string email = 1;
+  string given_name = 2;
+  string family_name = 3;
+  // live is false for a suspended account, which still appears: seeing
+  // that a leaver is still counted somewhere is the point of looking.
+  bool live = 4;
+  // authoritative is false when the directory cannot be vouched for, and
+  // the row is then an opinion rather than a fact.
+  bool authoritative = 5;
+  // for a group: the directory groups that put them in it. For a client:
+  // the internal groups that admit them.
+  repeated string via = 6;
+  // for a client: how long their token would live.
+  google.protobuf.Duration lifetime = 7;
+}
+
+message ListHoldersResponse {
+  repeated Holder holders = 1;
+  // how many accounts were examined, so a truncated answer is honest.
+  int32 examined = 2;
+  // true when this is not every holder: the limit cut the list, or there
+  // were more accounts than one answer examines. Either way an account
+  // absent from `holders` may still hold the group.
+  //
+  // Absence is never evidence on its own, truncated or not: a workspace
+  // whose snapshot cannot be read contributes no accounts at all. A
+  // consumer that REMOVES access on absence must confirm each account
+  // with Explain, whose `authoritative` answers for that one account.
+  bool truncated = 3;
+  // policy_digest names the policy the holders were computed under, as on
+  // ExplainResponse. A group this policy does not define has no holders,
+  // which is not the same as nobody holding it under the asker's policy.
+  string policy_digest = 4;
+}
+
+message ListServedDomainsRequest {}
+
+message ListServedDomainsResponse {
+  repeated DirectoryDomains directories = 1;
+}
+
+// DirectoryDomains is one directory and what it serves.
+message DirectoryDomains {
+  // the backend's tenant identifier, which is what an owner is recorded as.
+  string workspace_id = 1;
+  // the domain people know the directory by; see DirectoryRef.
+  string primary_domain = 2;
+  // the domains the hub serves for it, lowercased and sorted: the
+  // discovered domains, narrowed by the deployment's serve list.
+  repeated string domains = 3;
+}
+
+message SearchPeopleRequest {
+  // matched against the address and the name, case-insensitively. Empty
+  // lists everyone, up to the limit.
+  string query = 1;
+  int32 limit = 2;
+  // workspace_id restricts the search to one tenant's accounts, which is
+  // what a tenant's page lists. Empty searches every tenant.
+  string workspace_id = 3;
+  // account restricts by state, so a review can list the suspended.
+  AccountFilter account = 4;
+  // domain restricts the answer to accounts whose address is in one
+  // domain. A tenant with several served domains is several companies
+  // to the person reviewing it, and the filter has to be server-side:
+  // narrowing a truncated page in the browser would say "nobody" while
+  // the snapshot holds hundreds.
+  string domain = 5;
+  // github restricts the answer to people who have, or have not, linked
+  // a GitHub account. Server-side for the same reason as domain: the
+  // answer must be the first N that match, not the matches among the
+  // first N.
+  LinkFilter github = 6;
+}
+
+enum AccountFilter {
+  ACCOUNT_FILTER_UNSPECIFIED = 0;
+  ACCOUNT_FILTER_LIVE = 1;
+  ACCOUNT_FILTER_SUSPENDED = 2;
+}
+
+// LinkFilter narrows by whether a person linked a GitHub account. It is
+// spelled without "GitHub" because the linter reads that name as two
+// words and would want GIT_HUB_ on every value; there is one kind of link
+// in this service, and it is that one.
+enum LinkFilter {
+  LINK_FILTER_UNSPECIFIED = 0;
+  LINK_FILTER_LINKED = 1;
+  LINK_FILTER_NOT_LINKED = 2;
+}
+
+// PersonSummary is one account as a search result shows it.
+message PersonSummary {
+  string email = 1;
+  string given_name = 2;
+  string family_name = 3;
+  string workspace_id = 4;
+  bool live = 5;
+  // github_login is the GitHub account linked to this address, empty
+  // where none is. It is the account's login, so it is also its page:
+  // github.com/<login>.
+  //
+  // It is not the whole GitHub report — which names members across every
+  // company and is why GetGitHubStatus demands an installation-wide
+  // viewer. This is one login, on a person the caller may already list,
+  // so it is no wider than the row it sits on.
+  string github_login = 6;
+}
+
+message SearchPeopleResponse {
+  repeated PersonSummary people = 1;
+  bool truncated = 2;
+  // total is how many matched before the limit, so a page can say
+  // "holding 1,204 accounts" while showing 200.
+  int32 total = 3;
+  // github_known says whether links could be read at all. False is a
+  // deployment where nobody can link an account, or a read that failed:
+  // every github_login is then empty because nothing is known, which is
+  // not the same answer as nobody having linked, and a console that
+  // showed the two alike would report a whole company as unlinked on a
+  // bad read.
+  bool github_known = 4;
+}
+
+message ListDirectoryGroupsRequest {
+  // empty lists the groups of every served domain.
+  string domain = 1;
+}
+message ListDirectoryGroupsResponse {
+  repeated DirectoryGroupSummary groups = 1;
+}
+
+// DirectoryGroupSummary is one group as the membership picker shows it.
+message DirectoryGroupSummary {
+  string email = 1;
+  string domain = 2;
+  string workspace_id = 3;
+  // members is the flat membership count at the last snapshot.
+  int32 members = 4;
+}
+
+message ResolveDirectoryGroupsRequest {
+  // group addresses, at most 200.
+  repeated string groups = 1;
+  // individual addresses, counted with groups against the same ceiling: each
+  // is answered in ResolveDirectoryGroupsResponse.users.
+  repeated string users = 2;
+}
+
+// ResolvedDirectoryGroup is one directory group as a consumer that feeds
+// something from it reads it.
+message ResolvedDirectoryGroup {
+  // the address asked, lowercased.
+  string email = 1;
+  // whether the hub has the group in a snapshot of a directory the caller
+  // may view.
+  bool found = 2;
+  // whether the snapshot can be vouched for; false makes members an
+  // opinion, which only ever adds.
+  bool authoritative = 3;
+  // the directory workspace the group belongs to; empty when not found.
+  string workspace_id = 4;
+  // everyone in it, nested groups expanded, each once. A member of a tenant
+  // the hub does not read has known=false and is not live.
+  repeated DirectoryGroupMember members = 5;
+  // the addresses of the nested groups the members came through, so that
+  // somebody who is in one of them is not mistaken for a leaver.
+  repeated string nested = 6;
+  // true when the expansion was cut short (depth or size): the members are
+  // then not whole, and nobody may be removed on their absence.
+  bool truncated = 7;
+}
+
+message ResolveDirectoryGroupsResponse {
+  // one per group asked, in order.
+  repeated ResolvedDirectoryGroup groups = 1;
+  // names the policy the answer was computed under, as on ListHolders.
+  string policy_digest = 2;
+  // one per user asked, in order.
+  repeated ResolvedDirectoryUser users = 3;
+}
+
+// ResolvedDirectoryUser is one address as a consumer that feeds something
+// from individually listed people reads it.
+message ResolvedDirectoryUser {
+  // the address asked, lowercased.
+  string email = 1;
+  // the directory workspace that serves the address's domain; empty when no
+  // connected directory the caller may view does.
+  string workspace_id = 2;
+  // whether that directory's snapshot holds the account.
+  bool found = 3;
+  // whether the account is active (found and not suspended).
+  bool live = 4;
+}
+
+message GetDirectoryGroupRequest {
+  string email = 1;
+}
+
+// DirectoryGroupMember is one member as the directory reports it. A member
+// from a tenant the hub does not read has an address and nothing else.
+message DirectoryGroupMember {
+  string email = 1;
+  string given_name = 2;
+  string family_name = 3;
+  // known is true when the account is in a snapshot, so live means
+  // something; a member the hub has never seen is neither live nor gone.
+  bool known = 4;
+  bool live = 5;
+}
+
+// DirectoryGroupFeed is one internal group this directory group is a
+// member of. Field 2 was the layer that put it there; there is one
+// layer now.
+message DirectoryGroupFeed {
+  string group = 1;
+  reserved 2;
+  reserved "layer";
+}
+
+message GetDirectoryGroupResponse {
+  string email = 1;
+  string domain = 2;
+  string workspace_id = 3;
+  // found is false when the domain is served but the snapshot has no such
+  // group: the address may be a typo, or the group may be gone.
+  bool found = 4;
+  bool authoritative = 5;
+  google.protobuf.Timestamp snapshot_at = 6;
+  repeated DirectoryGroupMember members = 7;
+  repeated DirectoryGroupFeed feeds = 8;
+}

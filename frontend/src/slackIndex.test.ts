@@ -1,9 +1,9 @@
 import { create } from "@bufbuild/protobuf";
 import { describe, expect, it } from "vitest";
 
-import { ListSlackChannelsResponseSchema } from "./gen/directoryroster/v1/slack_channels_pb";
-import { ListSlackSharedChannelsResponseSchema } from "./gen/directoryroster/v1/slack_connect_pb";
-import { GetSlackStatusResponseSchema } from "./gen/directoryroster/v1/slack_pb";
+import { ListSlackChannelsResponseSchema } from "./gen/sluis/v1/slack_channels_pb";
+import { ListSlackSharedChannelsResponseSchema } from "./gen/sluis/v1/slack_connect_pb";
+import { GetSlackStatusResponseSchema } from "./gen/sluis/v1/slack_pb";
 import { parse, paths } from "./router";
 import { channelFilterOf, filterChannels } from "./slackFilters";
 import { buildRows, findRow, groupPeople, memberSentence, peopleSentence, placesOfPerson, reachOfDirectoryGroup, rowPath, summaryLine } from "./slackIndex";

@@ -1,0 +1,250 @@
+syntax = "proto3";
+
+// Package sluis.v1 is the operator contract of the hub: the workspaces it
+// holds credentials for, its settings, and access to the hub itself; and,
+// in session.proto, what the issuer answers about itself. It carries the
+// messages and services of the legacy directoryroster.v1 and
+// accessissuer.v1 packages unchanged, which stay served beside it for one
+// release. The hub's part is served on the console listener only, behind the hub's
+// own session (a corporate sign-in, an external issuer, a forwarded
+// bearer, or the break-glass admin); the roles viewer and operator come
+// from the access rules (see access.proto).
+package sluis.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// WorkspaceService manages the directories the hub is connected to.
+service WorkspaceService {
+  // ListWorkspaces returns every workspace with its domains, health and
+  // snapshot age. Viewer.
+  rpc ListWorkspaces(ListWorkspacesRequest) returns (ListWorkspacesResponse);
+
+  // BeginConnect starts the admin-consent flow for a new workspace: it
+  // sets the state cookie on the response and returns the consent URL the
+  // browser navigates to. The callback is a plain HTTP route
+  // (`/connect/<backend>/callback`), authenticated by the gateway like any
+  // other page. Operator.
+  rpc BeginConnect(BeginConnectRequest) returns (BeginConnectResponse);
+
+  // Reconnect is BeginConnect bound to an existing workspace: the callback
+  // verifies the consenting tenant is the same and replaces the
+  // credential. Operator.
+  rpc Reconnect(ReconnectRequest) returns (ReconnectResponse);
+
+  // UploadKey connects (or re-credentials) a workspace with a
+  // service-account key and the admin to act as. Operator.
+  rpc UploadKey(UploadKeyRequest) returns (UploadKeyResponse);
+
+  // SetServedDomains narrows a workspace to a subset of its domains, or
+  // widens it back. An empty list serves every domain the tenant owns,
+  // which is the default. Only a domain discovery returns may be named:
+  // the ceiling is the tenant's own verified domains, so every setting is
+  // a subtraction from what the directory itself allows. A declared
+  // workspace refuses — the deployment states its list. Operator.
+  rpc SetServedDomains(SetServedDomainsRequest) returns (SetServedDomainsResponse);
+
+  // SetSyncedGroups narrows a workspace to a subset of its groups, or
+  // widens it back. An empty list keeps every group in the served
+  // domains, which is the default. Only a group the last read of the
+  // directory held may be named, so the ceiling is the tenant's own list.
+  // A declared workspace refuses. Operator.
+  rpc SetSyncedGroups(SetSyncedGroupsRequest) returns (SetSyncedGroupsResponse);
+
+  // Probe checks one workspace's credential now and re-reads its domain
+  // list. Operator.
+  rpc Probe(ProbeRequest) returns (ProbeResponse);
+
+  // Refresh takes a new snapshot of one workspace now — the operator's
+  // max_age=0. Operator.
+  rpc Refresh(RefreshRequest) returns (RefreshResponse);
+
+  // Disconnect revokes the credential at the backend, then deletes the
+  // workspace. A declared (overlay) workspace refuses: it is removed from
+  // the deployment instead. Operator.
+  rpc Disconnect(DisconnectRequest) returns (DisconnectResponse);
+}
+
+// Backend is the kind of directory behind a workspace.
+enum Backend {
+  BACKEND_UNSPECIFIED = 0;
+  BACKEND_GOOGLE = 1;
+  BACKEND_ENTRA = 2;
+  // A demonstration tenant held in memory: fixture accounts and groups,
+  // no credential, no network. It exists so that the use-cases can be
+  // walked through and tested without a real directory, and the console
+  // labels it plainly so that nobody mistakes one for a tenant.
+  BACKEND_DEMO = 3;
+}
+
+// CredentialType is how the hub authenticates to a workspace.
+enum CredentialType {
+  CREDENTIAL_TYPE_UNSPECIFIED = 0;
+  // minted by admin consent; acts as the consenting account.
+  CREDENTIAL_TYPE_OAUTH_REFRESH_TOKEN = 1;
+  // a key with domain-wide delegation, impersonating `admin`.
+  CREDENTIAL_TYPE_SERVICE_ACCOUNT_KEY = 2;
+}
+
+// Workspace is one directory tenant the hub holds a credential for.
+// DirectoryRef names a connected directory the way a person knows it: by
+// the domain it is known by, with its workspace id beside it for the
+// machine. It is how the console offers a directory as an owner.
+message DirectoryRef {
+  // the backend's tenant identifier (Google: the customer id).
+  string workspace_id = 1;
+  // the domain people know the directory by: the admin account's domain
+  // when the directory serves it, else the first domain it serves.
+  string primary_domain = 2;
+  // every domain the directory is AUTHORITATIVE for, lowercased and sorted:
+  // what an operator looks for when asking whether a domain is connected.
+  // Served domains that are not authoritative (contested, probe failed,
+  // first snapshot pending) are left out.
+  repeated string domains = 3;
+}
+
+message Workspace {
+  // the backend's tenant identifier (Google: the customer id).
+  string id = 1;
+  Backend backend = 2;
+  // discovered from the backend; re-read on every probe.
+  repeated WorkspaceDomain domains = 3;
+  // the account the credential acts as.
+  string admin = 4;
+  CredentialType credential = 5;
+  // console identity that connected it; empty for declared workspaces.
+  string connected_by = 6;
+  google.protobuf.Timestamp connected_at = 7;
+  Health health = 8;
+  // when the current snapshot was taken; unset before the first one.
+  google.protobuf.Timestamp snapshot_at = 9;
+  // true when the deployment declared it (overlay): read-only in the
+  // console, wins on conflict.
+  bool declared = 10;
+  // which of the tenant's groups this hub keeps. Empty is all of them in
+  // the served domains, which is the default.
+  repeated string sync_groups = 11;
+  // every group the last full read of this tenant held, synced or not:
+  // what a chooser offers. Empty before the first snapshot.
+  repeated string discovered_groups = 12;
+}
+
+// DomainReason says WHY a served domain is not authoritative.
+//
+// The consumer-facing contract is unchanged and is the `authoritative`
+// boolean alone (see directory.v1). This is for the operator looking at
+// the console, because "not authoritative" covers a workspace connected
+// ten seconds ago and one whose credential was revoked last week, and
+// telling an operator the wrong one of those reads as an alarm.
+enum DomainReason {
+  // authoritative, or not served at all — there is nothing to explain.
+  DOMAIN_REASON_UNSPECIFIED = 0;
+  // no snapshot has ever been taken. The ordinary state of a workspace
+  // connected moments ago; it clears by itself.
+  DOMAIN_REASON_FIRST_SNAPSHOT_PENDING = 1;
+  // there is a snapshot and it is older than the freshness window.
+  DOMAIN_REASON_SNAPSHOT_STALE = 2;
+  // the last probe of the credential failed.
+  DOMAIN_REASON_PROBE_FAILED = 3;
+  // another workspace serves the same domain.
+  DOMAIN_REASON_CONTESTED = 4;
+}
+
+// WorkspaceDomain is one domain a workspace holds, and its standing.
+message WorkspaceDomain {
+  string name = 1;
+  bool authoritative = 2;
+  // true when another workspace serves the same domain; neither is
+  // authoritative for it until the conflict clears. Only a domain both
+  // workspaces *serve* contests: owning one another tenant serves is not
+  // a conflict.
+  bool conflict = 3;
+  // true when the hub answers for this domain. False means the tenant
+  // owns it and this installation has chosen not to read it; the hub
+  // neither routes it nor keeps its accounts.
+  bool served = 4;
+  // true when the tenant still owns the domain. False appears only for a
+  // domain the served list names and discovery no longer returns — after
+  // a domain moves to another tenant, say. It routes nothing and should
+  // be dropped from the list.
+  bool owned = 5;
+  // why a served domain is not authoritative. Unspecified when it is, and
+  // for a domain this hub does not serve — an unserved domain is not a
+  // degraded answer, it is no answer.
+  DomainReason reason = 6;
+}
+
+// Health is the outcome of the last probe.
+message Health {
+  google.protobuf.Timestamp probed_at = 1;
+  bool ok = 2;
+  // the failure reason when ok=false.
+  string error = 3;
+}
+
+message ListWorkspacesRequest {}
+message ListWorkspacesResponse {
+  repeated Workspace workspaces = 1;
+}
+
+message BeginConnectRequest {
+  Backend backend = 1;
+}
+message BeginConnectResponse {
+  string consent_url = 1;
+}
+
+message ReconnectRequest {
+  string workspace_id = 1;
+}
+message ReconnectResponse {
+  string consent_url = 1;
+}
+
+message UploadKeyRequest {
+  Backend backend = 1;
+  // the key file as issued by the backend (Google: the JSON key).
+  bytes key = 2;
+  // the admin account to impersonate.
+  string admin = 3;
+}
+message UploadKeyResponse {
+  Workspace workspace = 1;
+}
+
+message ProbeRequest {
+  string workspace_id = 1;
+}
+message ProbeResponse {
+  Health health = 1;
+  repeated WorkspaceDomain domains = 2;
+}
+
+message RefreshRequest {
+  string workspace_id = 1;
+}
+message RefreshResponse {
+  google.protobuf.Timestamp snapshot_at = 1;
+}
+
+message SetServedDomainsRequest {
+  string workspace_id = 1;
+  // the domains to serve; empty serves every domain the tenant owns.
+  repeated string domains = 2;
+}
+message SetServedDomainsResponse {
+  Workspace workspace = 1;
+}
+
+message SetSyncedGroupsRequest {
+  string workspace_id = 1;
+  // the groups to keep; empty keeps every group in the served domains.
+  repeated string groups = 2;
+}
+message SetSyncedGroupsResponse {
+  Workspace workspace = 1;
+}
+
+message DisconnectRequest {
+  string workspace_id = 1;
+}
+message DisconnectResponse {}

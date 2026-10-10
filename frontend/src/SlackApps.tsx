@@ -18,7 +18,7 @@ import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 
 import { at, ago, reason, slackApps } from "./api";
-import type { SlackApp } from "./gen/directoryroster/v1/slack_apps_pb";
+import type { SlackApp } from "./gen/sluis/v1/slack_apps_pb";
 import { useAsync } from "./hooks";
 import { configurationTokenUrl, looksLikeConfigurationToken, nextStep, offersReinstall, stateView, summaryOf } from "./slackAppsModel";
 import { Failure, Loading, Mono, Nothing, Page, State } from "./ui";

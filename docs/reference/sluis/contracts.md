@@ -2,14 +2,14 @@
 
 Console services, roles, routes and errors. The proto files under [`proto/`](../../../proto) are the source of truth.
 
-Connect also speaks JSON over HTTP, so `curl` works. The proto packages `directoryroster.v1` and `accessissuer.v1` are a legacy identifier, renamed in v1.75–v1.76. Tables write `<package>` for the first.
+Connect also speaks JSON over HTTP, so `curl` works. The proto package is `sluis.v1`; the legacy `directoryroster.v1` and `accessissuer.v1` stay served until v1.76. Tables write `<package>` for either hub package.
 
 ## Services
 
 | Services | Reached by | Path prefix |
 |---|---|---|
 | `WorkspaceService`, `SettingsService`, `AccessService`, `GitHubService`, `SlackService`, `SlackChannelService`, `SlackSharedChannelService`, `SlackAppService`, `CloudflareService`, the SPA, and the audit `QueryService` forwarded under `/audit/` | the console, same origin under `console.mount`; a workload with its own ServiceAccount token | `/<package>.*/` |
-| `accessissuer.v1.SessionService` | a browser at the issuer's host (SSO cookie); any caller with a token from this issuer | `/accessissuer.v1.SessionService/` |
+| `sluis.v1.SessionService` | a browser at the issuer's host (SSO cookie); any caller with a token from this issuer | `/sluis.v1.SessionService/`, legacy `/accessissuer.v1.SessionService/` |
 | `/login/*`, `/connect/*`, `/.access/*` | the origin root: bootstrap surface and CLI endpoints | none |
 | `directory.v1.DirectoryService` | nothing: it has no listener and no chart value enables one | none |
 

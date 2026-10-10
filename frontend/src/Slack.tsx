@@ -18,7 +18,7 @@ import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 
 import { at, ago, reason, slack } from "./api";
-import type { SlackBreaker, SlackRemovalConfirmation, SlackWorkspaceStatus } from "./gen/directoryroster/v1/slack_pb";
+import type { SlackBreaker, SlackRemovalConfirmation, SlackWorkspaceStatus } from "./gen/sluis/v1/slack_pb";
 import { useAsync } from "./hooks";
 import { paths } from "./router";
 import { ChangeOwnerDialog, OwnerField } from "./Owner";

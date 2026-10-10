@@ -11,6 +11,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/truvity/sluis/gen/accessissuer/v1/accessissuerv1connect"
+	"github.com/truvity/sluis/gen/sluis/v1/sluisv1connect"
 	"github.com/truvity/sluis/internal/telemetry"
 )
 
@@ -201,7 +202,8 @@ func Route(r *http.Request) string {
 		return "login_start"
 	case strings.HasPrefix(path, "/login/") && strings.HasSuffix(path, "/callback"):
 		return "login_callback"
-	case strings.HasPrefix(path, "/"+accessissuerv1connect.SessionServiceName+"/"):
+	case strings.HasPrefix(path, "/"+accessissuerv1connect.SessionServiceName+"/"),
+		strings.HasPrefix(path, "/"+sluisv1connect.SessionServiceName+"/"):
 		return "sessions_rpc"
 	case strings.HasPrefix(path, "/connect/"):
 		return "connect_callback"

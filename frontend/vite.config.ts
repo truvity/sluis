@@ -35,6 +35,7 @@ export default defineConfig({
   build: { outDir: "dist", emptyOutDir: true },
   server: {
     proxy: {
+      "/sluis.v1.": "http://localhost:8081",
       "/directoryroster.v1.": "http://localhost:8081",
       "/.access": "http://localhost:8081",
       "/logout": "http://localhost:8081",

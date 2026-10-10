@@ -1,7 +1,7 @@
 import { create } from "@bufbuild/protobuf";
 import { describe, expect, it } from "vitest";
 
-import { DirectoryRefSchema } from "./gen/directoryroster/v1/workspace_pb";
+import { DirectoryRefSchema } from "./gen/sluis/v1/workspace_pb";
 import { initialOwner, offersChoice, ownerName, ownerSentence, ownerValid, type OwnerOffer } from "./ownerModel";
 
 const dir = (workspaceId: string, ...domains: string[]) => create(DirectoryRefSchema, { workspaceId, primaryDomain: domains[0] ?? "", domains });

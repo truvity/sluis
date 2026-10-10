@@ -7,8 +7,8 @@ import {
   AppOrigin as WireOrigin,
   AppPurpose as WirePurpose,
   AppState as WireState,
-} from "./gen/directoryroster/v1/github_pb";
-import type { GitHubApp, GitHubAppGrant, GitHubAppPermission, GitHubMember, GitHubOrganisation, GitHubTeamStatus } from "./gen/directoryroster/v1/github_pb";
+} from "./gen/sluis/v1/github_pb";
+import type { GitHubApp, GitHubAppGrant, GitHubAppPermission, GitHubMember, GitHubOrganisation, GitHubTeamStatus } from "./gen/sluis/v1/github_pb";
 
 /** What a row means to a reader: done or in hand, waiting on the person,
  *  or waiting on an operator. The controller's exact state stays in the

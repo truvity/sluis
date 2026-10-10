@@ -23,6 +23,7 @@ import (
 	"github.com/truvity/sluis/gen/directoryroster/v1/directoryrosterv1connect"
 	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/audit"
+	"github.com/truvity/sluis/internal/connectalias"
 	"github.com/truvity/sluis/internal/emailaddr"
 	"github.com/truvity/sluis/internal/hub"
 	"github.com/truvity/sluis/internal/telemetry"
@@ -286,15 +287,7 @@ func (s *ConsoleServer) wayIn() string {
 func (s *ConsoleServer) Handler() http.Handler {
 	mux := http.NewServeMux()
 
-	mux.Handle(directoryrosterv1connect.NewWorkspaceServiceHandler(s.console, telemetry.ConnectOptions()...))
-	mux.Handle(directoryrosterv1connect.NewSettingsServiceHandler(s.console, telemetry.ConnectOptions()...))
-	mux.Handle(directoryrosterv1connect.NewAccessServiceHandler(s.console, telemetry.ConnectOptions()...))
-	mux.Handle(directoryrosterv1connect.NewGitHubServiceHandler(s.console, telemetry.ConnectOptions()...))
-	mux.Handle(directoryrosterv1connect.NewSlackAppServiceHandler(s.console, telemetry.ConnectOptions()...))
-	mux.Handle(directoryrosterv1connect.NewSlackSharedChannelServiceHandler(s.console, telemetry.ConnectOptions()...))
-	mux.Handle(directoryrosterv1connect.NewSlackChannelServiceHandler(s.console, telemetry.ConnectOptions()...))
-	mux.Handle(directoryrosterv1connect.NewSlackServiceHandler(s.console, telemetry.ConnectOptions()...))
-	mux.Handle(directoryrosterv1connect.NewCloudflareServiceHandler(s.console, telemetry.ConnectOptions()...))
+	registerRPC(mux, s.console)
 
 	if s.consoleUI != nil {
 		mux.Handle("GET /assets/", http.FileServerFS(s.consoleUI))
@@ -1221,4 +1214,39 @@ func principalSubject(p access.Principal) slog.Attr {
 		return logattr.Pseudonym("subject", p.Subject)
 	}
 	return logattr.Pseudonym("subject", p.Email)
+}
+
+// rpcHandlers is every operator service the console serves. *Console is
+// one; a test supplies another.
+type rpcHandlers interface {
+	directoryrosterv1connect.WorkspaceServiceHandler
+	directoryrosterv1connect.SettingsServiceHandler
+	directoryrosterv1connect.AccessServiceHandler
+	directoryrosterv1connect.GitHubServiceHandler
+	directoryrosterv1connect.SlackAppServiceHandler
+	directoryrosterv1connect.SlackSharedChannelServiceHandler
+	directoryrosterv1connect.SlackChannelServiceHandler
+	directoryrosterv1connect.SlackServiceHandler
+	directoryrosterv1connect.CloudflareServiceHandler
+}
+
+// registerRPC serves the operator services on mux under both their names:
+// sluis.v1.* and the legacy directoryroster.v1.* that older consoles and
+// controllers still call. Both reach the same handler (see connectalias).
+func registerRPC(mux *http.ServeMux, h rpcHandlers) {
+	options := telemetry.ConnectOptions()
+	serve := func(path string, handler http.Handler) {
+		mux.Handle(path, handler)
+		legacy := strings.Trim(path, "/")
+		connectalias.Mount(mux, "sluis.v1."+strings.TrimPrefix(legacy, "directoryroster.v1."), legacy)
+	}
+	serve(directoryrosterv1connect.NewWorkspaceServiceHandler(h, options...))
+	serve(directoryrosterv1connect.NewSettingsServiceHandler(h, options...))
+	serve(directoryrosterv1connect.NewAccessServiceHandler(h, options...))
+	serve(directoryrosterv1connect.NewGitHubServiceHandler(h, options...))
+	serve(directoryrosterv1connect.NewSlackAppServiceHandler(h, options...))
+	serve(directoryrosterv1connect.NewSlackSharedChannelServiceHandler(h, options...))
+	serve(directoryrosterv1connect.NewSlackChannelServiceHandler(h, options...))
+	serve(directoryrosterv1connect.NewSlackServiceHandler(h, options...))
+	serve(directoryrosterv1connect.NewCloudflareServiceHandler(h, options...))
 }

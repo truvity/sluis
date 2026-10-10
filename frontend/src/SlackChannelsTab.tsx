@@ -12,9 +12,9 @@ import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
 
 import { slack, slackChannels, slackConnect } from "./api";
-import type { ListSlackChannelsResponse, SlackChannelRecord, SlackDiscoveredOrdinary } from "./gen/directoryroster/v1/slack_channels_pb";
-import type { ListSlackSharedChannelsResponse, SlackDiscoveredChannel, SlackSharedChannel } from "./gen/directoryroster/v1/slack_connect_pb";
-import type { GetSlackStatusResponse } from "./gen/directoryroster/v1/slack_pb";
+import type { ListSlackChannelsResponse, SlackChannelRecord, SlackDiscoveredOrdinary } from "./gen/sluis/v1/slack_channels_pb";
+import type { ListSlackSharedChannelsResponse, SlackDiscoveredChannel, SlackSharedChannel } from "./gen/sluis/v1/slack_connect_pb";
+import type { GetSlackStatusResponse } from "./gen/sluis/v1/slack_pb";
 import { useAsync, type Async } from "./hooks";
 import { go, paths, replace } from "./router";
 import { ChannelDeleteDialog, ChannelEditDialog, DiscoveredOrdinary } from "./SlackChannels";
