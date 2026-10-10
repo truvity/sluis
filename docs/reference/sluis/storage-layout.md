@@ -176,6 +176,13 @@ The logical key maps to kind and credential path as follows.
 | the Cloudflare minter, and its minted-token record | `internal/cloudflare/<account>/minter`, `internal/cloudflare/minted/<preset>` |
 | static S3 credentials (`credentialsRef`) | `internal/<module>/<name>`, its own module |
 
+## Backup archive
+
+| Object under `backup/<installation>/<id>/` | Content |
+|---|---|
+| `manifest.json` | Format version, wrapped data key, the manifest (installation, id, layout, creator, per-module counts, chunk sizes and SHA-256) and its HMAC |
+| `state/<module>/<n>`, `secrets/<module>/<n>`, `blobs/<module>/<n>` | Chunk `n` (from 0) of the module's records, sealed with AES-256-GCM under a key derived from the data key; names, section and position are authenticated |
+
 ## S3 (the `s3` Blob adapter)
 
 | Prefix | Content |

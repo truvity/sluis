@@ -1,0 +1,152 @@
+{
+  "format": 1,
+  "key": "AbsWjUbH8au2K1LX/CzbA+eKJvy1NDPYDEJbeqwWT9BgOAbWD4cKV7sqJ7ph44w1cJyErcKkzq9+yxPlAw==",
+  "manifest": {
+    "format": 1,
+    "installation": "example",
+    "id": "golden",
+    "layout": "v5",
+    "created": "2026-10-10T03:00:00Z",
+    "creator": "sluis-backup test",
+    "chunkBytes": 64,
+    "modules": [
+      {
+        "module": "oidc",
+        "state": {
+          "records": 7,
+          "chunks": [
+            {
+              "n": 0,
+              "records": 1,
+              "size": 68,
+              "sha256": "b09ce955301dbe18bcdd39bca23caa9e3ee4036d051f1353bd81c5d2c30faa7f"
+            },
+            {
+              "n": 1,
+              "records": 1,
+              "size": 68,
+              "sha256": "7ae5ddc1ead6e990fc9c38100c7b71e65163b1bc50bad32a02749de58f8b35ff"
+            },
+            {
+              "n": 2,
+              "records": 1,
+              "size": 68,
+              "sha256": "4218d3cb64f3a9a6c20c5879dbb95d19ee25f03133351b6ac576ca54cd5b1a8d"
+            },
+            {
+              "n": 3,
+              "records": 1,
+              "size": 68,
+              "sha256": "db733650b9c2736401bbaaa6ee49594790b571a647e283defbd02eaf7390b9eb"
+            },
+            {
+              "n": 4,
+              "records": 1,
+              "size": 68,
+              "sha256": "a72027b587000a35bc3f7b8ed77646975343cc03d7b44ccf05d599dd43577ee7"
+            },
+            {
+              "n": 5,
+              "records": 1,
+              "size": 68,
+              "sha256": "fa714deaea8828b1f7217682188ebe0603c3539d94c9595d71057a53e3a518ab"
+            },
+            {
+              "n": 6,
+              "records": 1,
+              "size": 68,
+              "sha256": "04f9ffde6eaa7c1cd42e74e0caf0e50d4beea7a8735ad9ad77af96ddef064161"
+            }
+          ]
+        },
+        "secrets": {
+          "records": 1,
+          "chunks": [
+            {
+              "n": 0,
+              "records": 1,
+              "size": 62,
+              "sha256": "ac593ccac3f254b0320ac23bc11f9b8899da52a357e8904e8fd29d5bca6eb7b2"
+            }
+          ]
+        },
+        "blobs": {
+          "records": 0
+        }
+      },
+      {
+        "module": "github",
+        "state": {
+          "records": 0
+        },
+        "secrets": {
+          "records": 1,
+          "chunks": [
+            {
+              "n": 0,
+              "records": 1,
+              "size": 61,
+              "sha256": "b8d0aab686bb25dc1932cc35aad971a456f53945e638461921d69271b6020207"
+            }
+          ]
+        },
+        "blobs": {
+          "records": 0
+        }
+      },
+      {
+        "module": "google",
+        "state": {
+          "records": 0
+        },
+        "secrets": {
+          "records": 0
+        },
+        "blobs": {
+          "records": 3,
+          "chunks": [
+            {
+              "n": 0,
+              "records": 1,
+              "size": 81,
+              "sha256": "ae805c7a03371c0dce066d27bc4fbf95928f1423ae448b8f199c68e17bf2207e"
+            },
+            {
+              "n": 1,
+              "records": 1,
+              "size": 81,
+              "sha256": "3ba16013fc75faa27d04d90c03f1dc2ecad31c63725aa11c363dcdf3ba18367e"
+            },
+            {
+              "n": 2,
+              "records": 1,
+              "size": 81,
+              "sha256": "f82e210411f1859f4e1174a6bf3c038c01f2f8200d3e602cbe12f9b8906e0570"
+            }
+          ]
+        }
+      },
+      {
+        "module": "backup",
+        "state": {
+          "records": 1,
+          "chunks": [
+            {
+              "n": 0,
+              "records": 1,
+              "size": 34,
+              "sha256": "ecaa9fd8f9947d3fb536b3656306e2a17b3aadbcb7c0504660881cc98aee5ec8"
+            }
+          ]
+        },
+        "secrets": {
+          "records": 0
+        },
+        "blobs": {
+          "records": 0
+        }
+      }
+    ]
+  },
+  "mac": "KngqkBox5suiUdXLsGytOluLLlHwMJdsLIpH96m9dzU="
+}
