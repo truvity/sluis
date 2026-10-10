@@ -3,8 +3,10 @@ package sluispulumi
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/dynamodb"
+	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/s3"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 )
 
@@ -73,12 +75,23 @@ func NewState(ctx *pulumi.Context, name string, args *StateArgs, opts ...pulumi.
 	if args.TableName == "" {
 		return nil, errors.New("sluispulumi: StateArgs.TableName is required")
 	}
+	return newState(ctx, name, args, nil, opts...)
+}
+
+// retiring is the legacy table on its way out: the apply that backs it up
+// unprotects it. unprotect resolves once the backup exists, so the table's update
+// waits for it.
+type retiring struct {
+	unprotect pulumi.BoolInput
+}
+
+func newState(ctx *pulumi.Context, name string, args *StateArgs, retire *retiring, opts ...pulumi.ResourceOption) (*State, error) {
 	out := &State{keyArn: args.KeyArn}
 	if err := ctx.RegisterComponentResource(StateType, name, out, opts...); err != nil {
 		return nil, err
 	}
 
-	table, err := newTable(ctx, name+"-table", args.TableName, args.KeyArn, args.Tags, pulumi.Parent(out))
+	table, err := newTable(ctx, name+"-table", args.TableName, args.KeyArn, args.Tags, retire, pulumi.Parent(out))
 	if err != nil {
 		return nil, fmt.Errorf("sluis state table: %w", err)
 	}
@@ -96,7 +109,7 @@ func NewState(ctx *pulumi.Context, name string, args *StateArgs, opts ...pulumi.
 // newTable declares one state table: the same shape for the legacy table and
 // every module's.
 func newTable(ctx *pulumi.Context, resName, tableName string, keyArn pulumi.StringInput,
-	tags map[string]string, opts ...pulumi.ResourceOption) (*dynamodb.Table, error) {
+	tags map[string]string, retire *retiring, opts ...pulumi.ResourceOption) (*dynamodb.Table, error) {
 	targs := &dynamodb.TableArgs{
 		Name:        pulumi.String(tableName),
 		BillingMode: pulumi.String("PAY_PER_REQUEST"),
@@ -119,6 +132,12 @@ func newTable(ctx *pulumi.Context, resName, tableName string, keyArn pulumi.Stri
 			Enabled:   pulumi.Bool(true),
 			KmsKeyArn: keyArn,
 		}
+	}
+	if retire != nil {
+		// Deletion protection off, and the resource unprotected in the state, so
+		// that removing it from the program later is a delete the engine allows.
+		targs.DeletionProtectionEnabled = retire.unprotect
+		return dynamodb.NewTable(ctx, resName, targs, append(opts, pulumi.Protect(false))...)
 	}
 	return dynamodb.NewTable(ctx, resName, targs, append(opts, pulumi.Protect(true))...)
 }
@@ -150,10 +169,20 @@ type StatesArgs struct {
 	// Legacy is the single table of layout v4, kept while the installation
 	// migrates. It is declared exactly as NewState would (same name, same
 	// arguments), so it stays one resource, protected, with DynamoDB's deletion
-	// protection. Leaving it out of the arguments later does not delete it: the
-	// resource is protected, so the update is refused until
-	// `pulumi state unprotect` is run on it. Nil: an installation born on v5.
+	// protection. Leaving it out of the arguments does not delete it: the
+	// resource is protected, so the engine refuses the update. Retire it with
+	// Compat.RetireLegacyTable, in two applies (see there). Nil: an installation
+	// born on v5, or one whose table is gone.
 	Legacy *LegacyStateArgs
+	// Compat is the same CompatArgs the function takes. With RetireLegacyTable
+	// (and DropV4) and Legacy set, this apply exports the legacy table to a
+	// bucket the library creates (kept 30 days), then turns off the table's
+	// deletion protection and unprotects it in the state; the stack output
+	// `legacyTableBackupArn` is the export's ARN. The apply after, Legacy is left
+	// out and the table is deleted. The engine cannot unprotect and delete one
+	// resource in one update, so these are two applies; an update that drops
+	// Legacy first is refused by the engine as a protected delete.
+	Compat *CompatArgs
 }
 
 // States is the component. Its fields are the outputs.
@@ -165,6 +194,9 @@ type States struct {
 	TableArns map[Module]pulumi.StringOutput
 	// Legacy is the adopted layout v4 table; nil without one.
 	Legacy *State
+	// LegacyBackupArn is the ARN of the export of the legacy table taken by the
+	// apply that retires it; empty in any other.
+	LegacyBackupArn pulumi.StringOutput
 
 	keyArn pulumi.StringInput
 }
@@ -193,6 +225,9 @@ func NewStates(ctx *pulumi.Context, name string, args *StatesArgs, opts ...pulum
 		return nil, errors.New("sluispulumi: StatesArgs is nil")
 	}
 	if err := args.Modules.validate(); err != nil {
+		return nil, err
+	}
+	if err := args.Compat.validate(); err != nil {
 		return nil, err
 	}
 	mods := args.Only
@@ -224,7 +259,18 @@ func NewStates(ctx *pulumi.Context, name string, args *StatesArgs, opts ...pulum
 	}
 	// The legacy table is not parented: its URN is what it was.
 	if l := args.Legacy; l != nil {
-		legacy, err := NewState(ctx, l.Name, &l.StateArgs, opts...)
+		var retire *retiring
+		if args.Compat != nil && args.Compat.RetireLegacyTable {
+			bk, err := newLegacyBackup(ctx, name, l, args.Tags, pulumi.Parent(out))
+			if err != nil {
+				return nil, fmt.Errorf("sluis legacy table backup: %w", err)
+			}
+			out.LegacyBackupArn = bk.Arn
+			// The table is unprotected once the export exists, and not before.
+			retire = &retiring{unprotect: bk.Arn.ApplyT(func(string) bool { return false }).(pulumi.BoolOutput)}
+			ctx.Export(LegacyBackupArnOutput, bk.Arn)
+		}
+		legacy, err := newState(ctx, l.Name, &l.StateArgs, retire, opts...)
 		if err != nil {
 			return nil, err
 		}
@@ -232,7 +278,7 @@ func NewStates(ctx *pulumi.Context, name string, args *StatesArgs, opts ...pulum
 	}
 	outputs := pulumi.Map{}
 	for _, m := range sortedModules(mods) {
-		t, err := newTable(ctx, name+"-"+string(m)+"-table", args.Modules.TableName(m), args.KeyArn, args.Tags, pulumi.Parent(out))
+		t, err := newTable(ctx, name+"-"+string(m)+"-table", args.Modules.TableName(m), args.KeyArn, args.Tags, nil, pulumi.Parent(out))
 		if err != nil {
 			return nil, fmt.Errorf("sluis state table of %s: %w", m, err)
 		}
@@ -243,6 +289,89 @@ func NewStates(ctx *pulumi.Context, name string, args *StatesArgs, opts ...pulum
 		return nil, err
 	}
 	return out, nil
+}
+
+// LegacyBackupArnOutput is the stack output that carries the ARN of the legacy
+// table's export (Compat.RetireLegacyTable).
+const LegacyBackupArnOutput = "legacyTableBackupArn"
+
+// LegacyBackupRetentionDays is how long the export of the legacy table is kept: the
+// bucket's lifecycle expires it after that, and nothing has to be deleted by hand.
+const LegacyBackupRetentionDays = 30
+
+// legacyBackupPrefix is the key prefix of the export, `pre-v5-retire-<table>-<date>/`.
+// The date is the day the library first ran the retirement: the prefix is ignored
+// on later applies, so a new day does not take a second export.
+func legacyBackupPrefix(table string, now time.Time) string {
+	return "pre-v5-retire-" + table + "-" + now.UTC().Format("2006-01-02") + "/"
+}
+
+// newLegacyBackup exports the legacy table to a bucket of its own, and expires
+// the export after LegacyBackupRetentionDays. DynamoDB has no on-demand backup
+// resource in the provider; the export is its point-in-time recovery written to
+// S3 (the table keeps PITR on), complete when the resource returns, and it can be
+// imported into a new table with `aws dynamodb import-table`. The bucket is
+// private, encrypted, and destroyed with the stack (ForceDestroy).
+func newLegacyBackup(ctx *pulumi.Context, name string, l *LegacyStateArgs, tags map[string]string,
+	opts ...pulumi.ResourceOption) (*dynamodb.TableExport, error) {
+	bucket, err := s3.NewBucket(ctx, name+"-legacy-backup", &s3.BucketArgs{
+		ForceDestroy: pulumi.Bool(true),
+		Tags:         tagMap(tags),
+	}, opts...)
+	if err != nil {
+		return nil, err
+	}
+	enc, err := s3.NewBucketServerSideEncryptionConfigurationV2(ctx, name+"-legacy-backup-encryption",
+		&s3.BucketServerSideEncryptionConfigurationV2Args{
+			Bucket: bucket.ID(),
+			Rules: s3.BucketServerSideEncryptionConfigurationV2RuleArray{
+				&s3.BucketServerSideEncryptionConfigurationV2RuleArgs{
+					ApplyServerSideEncryptionByDefault: &s3.BucketServerSideEncryptionConfigurationV2RuleApplyServerSideEncryptionByDefaultArgs{
+						SseAlgorithm: pulumi.String("AES256"),
+					},
+				},
+			},
+		}, opts...)
+	if err != nil {
+		return nil, err
+	}
+	block, err := s3.NewBucketPublicAccessBlock(ctx, name+"-legacy-backup-public-access", &s3.BucketPublicAccessBlockArgs{
+		Bucket:                bucket.ID(),
+		BlockPublicAcls:       pulumi.Bool(true),
+		BlockPublicPolicy:     pulumi.Bool(true),
+		IgnorePublicAcls:      pulumi.Bool(true),
+		RestrictPublicBuckets: pulumi.Bool(true),
+	}, opts...)
+	if err != nil {
+		return nil, err
+	}
+	life, err := s3.NewBucketLifecycleConfiguration(ctx, name+"-legacy-backup-lifecycle", &s3.BucketLifecycleConfigurationArgs{
+		Bucket: bucket.ID(),
+		Rules: s3.BucketLifecycleConfigurationRuleArray{
+			&s3.BucketLifecycleConfigurationRuleArgs{
+				Id: pulumi.String("expire-the-export"), Status: pulumi.String("Enabled"),
+				Filter:     &s3.BucketLifecycleConfigurationRuleFilterArgs{Prefix: pulumi.String("pre-v5-retire-")},
+				Expiration: &s3.BucketLifecycleConfigurationRuleExpirationArgs{Days: pulumi.Int(LegacyBackupRetentionDays)},
+				AbortIncompleteMultipartUpload: &s3.BucketLifecycleConfigurationRuleAbortIncompleteMultipartUploadArgs{
+					DaysAfterInitiation: pulumi.Int(7),
+				},
+			},
+		},
+	}, opts...)
+	if err != nil {
+		return nil, err
+	}
+	// The table is looked up, not read from the resource: the resource's update is
+	// what waits for this export.
+	tbl := dynamodb.LookupTableOutput(ctx, dynamodb.LookupTableOutputArgs{Name: pulumi.String(l.TableName)})
+	return dynamodb.NewTableExport(ctx, name+"-legacy-backup-export", &dynamodb.TableExportArgs{
+		TableArn:       tbl.Arn(),
+		S3Bucket:       bucket.Bucket,
+		S3Prefix:       pulumi.String(legacyBackupPrefix(l.TableName, time.Now())),
+		S3SseAlgorithm: pulumi.String("AES256"),
+		ExportFormat:   pulumi.String("DYNAMODB_JSON"),
+	}, append(opts, pulumi.IgnoreChanges([]string{"s3Prefix"}),
+		pulumi.DependsOn([]pulumi.Resource{enc, block, life}))...)
 }
 
 // tableArnOf is the legacy table's ARN, or an empty one.

@@ -126,6 +126,11 @@ func (r *recorder) Call(a pulumi.MockCallArgs) (resource.PropertyMap, error) {
 		out["arn"] = resource.NewStringProperty(arnp + "kms:eu-west-1:" + account + ":alias/" + name)
 		return out, nil
 	}
+	if a.Token == "aws:dynamodb/getTable:getTable" {
+		out := a.Args.Copy()
+		out["arn"] = resource.NewStringProperty(arnp + "dynamodb:eu-west-1:" + account + ":table/" + a.Args["name"].StringValue())
+		return out, nil
+	}
 	if a.Token == "aws:s3/getObject:getObject" {
 		// The audit library compares the catalogue with the archive's copy; a
 		// first deploy has none.

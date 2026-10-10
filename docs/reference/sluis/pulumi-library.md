@@ -76,12 +76,13 @@ The table of the [DynamoDB adapter](storage-layout.md#dynamodb-the-dynamodb-stat
 | `Only` | Every module | The modules that get a table |
 | `KeyArn`, `Tags` | None | On every table |
 | `Legacy` | None | `LegacyStateArgs`: the `Name` and arguments `NewState` had; same URN, protected |
+| `Compat` | None | The function's `CompatArgs`. With `DropV4` and `RetireLegacyTable` and `Legacy` set: exports the legacy table to a private bucket that expires it after 30 days (output `legacyTableBackupArn`), turns off its deletion protection and unprotects it |
 
 | Detail | Behavior |
 |---|---|
-| Outputs | `Tables`, `TableArns` (by module), `Legacy`, `Grant()` |
+| Outputs | `Tables`, `TableArns` (by module), `Legacy`, `LegacyBackupArn`, `Grant()` |
 | Grant | `TableArn` is the legacy table, `Tables` the others; a role gets the tables of the modules it hosts |
-| Dropping `Legacy` | The engine refuses: the table is protected. Run `pulumi state unprotect` first |
+| Dropping `Legacy` | The engine refuses: the table is protected. Apply `Compat.RetireLegacyTable` first (it unprotects), then drop `Legacy` in the next apply |
 | Ports | `PortsArgs.Tables` renders `ports.dynamodb.tables`; exclusive with `TableName` and valid with `secrets.layout: v5` |
 
 ## Kubernetes identity
@@ -247,6 +248,7 @@ l, _ := sluispulumi.NewLambda(ctx, "access", &sluispulumi.LambdaArgs{
 | `Layout` | `v4` | `v4`, `v5` or `v4+v5`: which grants the role carries and which layout the document names ([layouts](#layouts)) |
 | `TableNames` | `sluis-<instance>-<module>` | Table name per module in `ports.dynamodb.tables`; the same map as `StatesArgs.Modules.Tables` |
 | `Compat.DropV4` | false | Removes the v4 state secret and recovery password parameters. Needs `Layout: v5` |
+| `Compat.RetireLegacyTable` | false | Takes the migration role's read of the legacy table. Needs `Layout: v5` and `DropV4`; the same `Compat` on `StatesArgs` exports and unprotects the table |
 | `MigrationRoleArn` | None | Role that runs `sluis migrate v5`: an inline policy lets it read the legacy table (`State.TableArn`) and nothing else |
 | `Artifacts`, `Release` | Unset | [Artifacts bucket](#artifacts-bucket) |
 | `Audit` | Install | [Audit](#audit). Needs `Installation` |
