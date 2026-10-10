@@ -16,6 +16,7 @@ import (
 	"github.com/truvity/sluis/internal/port"
 	dynamoport "github.com/truvity/sluis/internal/port/dynamodb"
 	"github.com/truvity/sluis/internal/port/porttest"
+	"github.com/truvity/sluis/internal/port/porttest/grantcost"
 )
 
 // EnvURL names a LocalStack (or DynamoDB Local) endpoint the conformance run
@@ -124,4 +125,63 @@ func TestTheTableHasTTLOnExpires(t *testing.T) {
 	if d == nil || aws.ToString(d.AttributeName) != "expires" || (d.TimeToLiveStatus != "ENABLED" && d.TimeToLiveStatus != "ENABLING") {
 		t.Fatalf("TTL = %+v, want ENABLED on `expires`", d)
 	}
+}
+
+// tables opens a fresh table for every module, made by the adapter itself, and
+// deletes them afterwards. calls counts the requests, when asked.
+func tables(t *testing.T, url string, api *countingAPI) *dynamoport.Tables {
+	t.Helper()
+	ctx := context.Background()
+	awsCfg, err := awsconfig.LoadDefaultConfig(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := ddb.NewFromConfig(awsCfg, func(o *ddb.Options) { o.BaseEndpoint = aws.String(url) })
+	var a dynamoport.API = client
+	if api != nil {
+		api.API = client
+		a = api
+	}
+	cfg := dynamoport.Config{Tables: dynamoport.DefaultTables("ar-" + randomName(t)), Endpoint: url, Create: true}
+	tt, err := dynamoport.NewTables(ctx, a, cfg, dynamoport.WithPollInterval(100*time.Millisecond))
+	if err != nil {
+		t.Fatalf("opening the tables: %v", err)
+	}
+	t.Cleanup(func() {
+		for _, name := range tt.TableNames() {
+			_, _ = client.DeleteTable(ctx, &ddb.DeleteTableInput{TableName: aws.String(name)})
+		}
+	})
+	if err = tt.Ping(ctx); err != nil {
+		t.Fatalf("the readiness probe: %v", err)
+	}
+	return tt
+}
+
+// TestConformanceOfEveryModulesTableOnDynamoDB is the suite against the real
+// engine's API on the table of each module, every assertion on tables of its
+// own.
+func TestConformanceOfEveryModulesTableOnDynamoDB(t *testing.T) {
+	url := localstack(t)
+	for _, m := range port.Modules() {
+		t.Run(string(m), func(t *testing.T) {
+			porttest.Run(t, func(t *testing.T) porttest.Env {
+				s, _ := tables(t, url, nil).Store(m)
+				fam := dynamoport.ConformanceFamilies[m]
+				return porttest.Env{Set: s.Set(), Advance: s.Advance, Skips: otherPorts, RecordPrefix: fam[0], PermanentPrefix: fam[1]}
+			})
+		})
+	}
+}
+
+// TestGrantCostOverTablesOnDynamoDB holds a grant over the tables to the same
+// budget as over one table: the split adds no request.
+func TestGrantCostOverTablesOnDynamoDB(t *testing.T) {
+	url := localstack(t)
+	grantcost.Run(t, func(t *testing.T) grantcost.Env {
+		api := &countingAPI{calls: map[string]int{}}
+		tt := tables(t, url, api)
+		r := tt.Router()
+		return grantcost.Env{Set: port.Set{State: r, Index: r}, Advance: tt.Advance, Calls: api.snapshot}
+	})
 }

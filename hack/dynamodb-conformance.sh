@@ -17,7 +17,7 @@ trap 'rm -f "$out"' EXIT
 go test -count=1 -v ./internal/port/dynamodb/ ./internal/migrate/ ./internal/store/ -run 'TestConformance$|TestAMissingTable|TestCreatingAnExistingTable|TestTheTableHasTTL|DynamoDB' 2>&1 | tee "$out"
 
 # The only skips allowed are the ports a DynamoDB table does not hold; each says so.
-if grep -- '--- SKIP' "$out" | grep -v -E 'TestConformance/(blob|identity)/'; then
+if grep -- '--- SKIP' "$out" | grep -v -E 'TestConformance[A-Za-z]*/([a-z]+/)?(blob|identity)/'; then
     echo "FAIL: a test skipped although ACCESS_ROSTER_DYNAMODB_URL is set (only the other ports' assertions may):" >&2
     exit 1
 fi
@@ -49,6 +49,8 @@ required=(
     'TestConformance/index/members'
     'TestConformance/trigger/notify'
     'TestGrantCostOnDynamoDB'
+    'TestGrantCostOverTablesOnDynamoDB'
+    'TestConformanceOfEveryModulesTableOnDynamoDB'
     'TestReuseCostOnDynamoDB'
     'TestSSOCookieOnDynamoDB'
     'TestAMissingTableIsUnavailableNotNotFound'

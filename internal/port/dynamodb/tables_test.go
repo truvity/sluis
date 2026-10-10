@@ -10,6 +10,7 @@ import (
 
 	"github.com/truvity/sluis/internal/port"
 	"github.com/truvity/sluis/internal/port/porttest"
+	"github.com/truvity/sluis/internal/port/porttest/grantcost"
 )
 
 // newTables opens the table of every module over one fake, made by Create.
@@ -358,5 +359,45 @@ func TestTheConfigurationIsChecked(t *testing.T) {
 	// A layout 4 table with tables set is refused by New too.
 	if _, err := New(ctx(), f, Config{Table: "a", Tables: map[port.Module]string{port.ModuleOIDC: "b"}}); err == nil {
 		t.Error("New accepted both")
+	}
+}
+
+// What one grant costs over the tables, through the router: the same budget as
+// one table, so the split does not add a request.
+func TestGrantCostOverTheTables(t *testing.T) {
+	grantcost.Run(t, func(t *testing.T) grantcost.Env {
+		f := newFake()
+		tt := newTables(t, f)
+		r := tt.Router()
+		return grantcost.Env{
+			Set:     port.Set{State: r, Index: r},
+			Advance: tt.Advance,
+			Calls:   f.count,
+		}
+	})
+}
+
+func TestTheRouterSendsAKeyToItsModulesTable(t *testing.T) {
+	f := newFake()
+	tt := newTables(t, f)
+	r := tt.Router()
+	for key, mod := range map[string]port.Module{
+		"gh.org.acme": port.ModuleGitHub, "ws.slack.T01": port.ModuleSlack, "ws.dir.google.w1": port.ModuleGoogle,
+		"tok.x": port.ModuleOIDC, "gate.y.z": port.ModuleOIDC, "lease.slack-tick:a": port.ModuleSlack,
+	} {
+		if _, err := r.Put(ctx(), key, []byte("v"), time.Hour); err != nil {
+			t.Fatalf("%s: %v", key, err)
+		}
+		a, _ := port.Locate5(key)
+		s, _ := tt.Store(mod)
+		if !f.has(s.Table(), a.Kind, a.ID) {
+			t.Errorf("%s is not in the %s table", key, mod)
+		}
+		if _, err := r.Get(ctx(), key); err != nil {
+			t.Errorf("%s: Get: %v", key, err)
+		}
+	}
+	if _, err := r.List(ctx(), "ws.", "", 0); !errors.Is(err, port.ErrUnsupported) {
+		t.Errorf("a prefix of two modules: %v", err)
 	}
 }

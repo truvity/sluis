@@ -187,3 +187,158 @@ func (t *Tables) TableNames() []string {
 	sort.Strings(out)
 	return out
 }
+
+// Router is one State and one Index over all the tables, for what crosses
+// modules by design: the migration and the backup read and write every
+// module's records, and a test measures a whole flow. A key goes to the table
+// of its module (a key of no module to the oidc table); a listing or a watch
+// must lie in one module's family ([port.LocatePrefix5]), and any other prefix
+// is [port.ErrUnsupported]. A process of one module does not use it: it uses
+// [Tables.Set], which cannot write another module's key.
+func (t *Tables) Router() *Router { return &Router{t: t} }
+
+// Router is the State and Index over all the tables of a [Tables].
+type Router struct{ t *Tables }
+
+var (
+	_ port.State = (*Router)(nil)
+	_ port.Index = (*Router)(nil)
+)
+
+func (r *Router) store(m port.Module) (*Store, error) {
+	if m == "" {
+		m = port.ModuleOIDC
+	}
+	s, ok := r.t.stores[m]
+	if !ok {
+		return nil, fmt.Errorf("dynamodb: no table for the %s module", m)
+	}
+	return s, nil
+}
+
+func (r *Router) forKey(key string) (*Store, error) {
+	a, err := port.Locate5(key)
+	if err != nil {
+		return nil, err
+	}
+	return r.store(a.Module)
+}
+
+func (r *Router) forPrefix(prefix string) (*Store, error) {
+	m, _, _, ok := port.LocatePrefix5(prefix)
+	if !ok {
+		return nil, fmt.Errorf("%w: the prefix %q lies in no one module's family", port.ErrUnsupported, prefix)
+	}
+	return r.store(m)
+}
+
+// Get implements [port.State].
+func (r *Router) Get(ctx context.Context, key string) (port.Record, error) {
+	s, err := r.forKey(key)
+	if err != nil {
+		return port.Record{}, port.ErrNotFound
+	}
+	return s.Get(ctx, key)
+}
+
+// Put implements [port.State].
+func (r *Router) Put(ctx context.Context, key string, value []byte, ttl time.Duration) (port.Revision, error) {
+	s, err := r.forKey(key)
+	if err != nil {
+		return "", err
+	}
+	return s.Put(ctx, key, value, ttl)
+}
+
+// Create implements [port.State].
+func (r *Router) Create(ctx context.Context, key string, value []byte, ttl time.Duration) (port.Revision, error) {
+	s, err := r.forKey(key)
+	if err != nil {
+		return "", err
+	}
+	return s.Create(ctx, key, value, ttl)
+}
+
+// Update implements [port.State].
+func (r *Router) Update(ctx context.Context, key string, value []byte, ttl time.Duration, rev port.Revision) (port.Revision, error) {
+	s, err := r.forKey(key)
+	if err != nil {
+		return "", err
+	}
+	return s.Update(ctx, key, value, ttl, rev)
+}
+
+// Delete implements [port.State].
+func (r *Router) Delete(ctx context.Context, key string) error {
+	s, err := r.forKey(key)
+	if err != nil {
+		return err
+	}
+	return s.Delete(ctx, key)
+}
+
+// DeleteIfRevision implements [port.State].
+func (r *Router) DeleteIfRevision(ctx context.Context, key string, rev port.Revision) error {
+	s, err := r.forKey(key)
+	if err != nil {
+		return err
+	}
+	return s.DeleteIfRevision(ctx, key, rev)
+}
+
+// List implements [port.State].
+func (r *Router) List(ctx context.Context, prefix, page string, limit int) (port.Page, error) {
+	s, err := r.forPrefix(prefix)
+	if err != nil {
+		return port.Page{}, err
+	}
+	return s.List(ctx, prefix, page, limit)
+}
+
+// Watch implements [port.State].
+func (r *Router) Watch(ctx context.Context, prefix string) (<-chan port.Event, error) {
+	s, err := r.forPrefix(prefix)
+	if err != nil {
+		return nil, err
+	}
+	return s.Watch(ctx, prefix)
+}
+
+// PeekRevision implements [port.RevisionPeeker].
+func (r *Router) PeekRevision(ctx context.Context, key string) (port.Revision, error) {
+	s, err := r.forKey(key)
+	if err != nil {
+		return "", port.ErrNotFound
+	}
+	return s.PeekRevision(ctx, key)
+}
+
+// Index sets are all the oidc module's.
+func (r *Router) index() (*Store, error) { return r.store(port.ModuleOIDC) }
+
+// Add implements [port.Index].
+func (r *Router) Add(ctx context.Context, key, member string, ttl time.Duration) error {
+	s, err := r.index()
+	if err != nil {
+		return err
+	}
+	return s.Add(ctx, key, member, ttl)
+}
+
+// Remove implements [port.Index].
+func (r *Router) Remove(ctx context.Context, key, member string) error {
+	s, err := r.index()
+	if err != nil {
+		return err
+	}
+	return s.Remove(ctx, key, member)
+}
+
+// Members implements [port.Index].
+func (r *Router) Members(ctx context.Context, key string) ([]string, error) {
+	s, err := r.index()
+	if err != nil {
+		return nil, err
+	}
+	return s.Members(ctx, key)
+}
