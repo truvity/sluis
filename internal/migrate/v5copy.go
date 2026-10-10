@@ -129,7 +129,11 @@ func (r *PlanReport) recount() {
 // report is returned with every error that is not a failure to start, so that a
 // caller can still show it.
 func CopyV5(ctx context.Context, from, to Side, opt V5Options) (*PlanReport, error) {
-	if !opt.DryRun && !opt.WritersStopped {
+	// A copy that leaves the issuer out is the live first pass: the fast-changing
+	// data is the issuer's, and the final pass with --overwrite catches up the
+	// provider records this one copies.
+	live := !opt.DryRun && !opt.WritersStopped && contains(opt.Skip, DomainIssuer)
+	if !opt.DryRun && !opt.WritersStopped && !live {
 		return nil, ErrWritersRunning
 	}
 	p, err := newPlanner(ctx, from, to, opt.PlanOptions, true)
@@ -141,6 +145,10 @@ func CopyV5(ctx context.Context, from, to Side, opt V5Options) (*PlanReport, err
 	}
 	report, err := p.finish()
 	report.Mode, report.DryRun = "copy", opt.DryRun
+	if live {
+		report.Live = true
+		report.Notes = append(report.Notes, "this pass ran while the source was live and left the issuer out: a final pass with --overwrite and --i-have-stopped-writers is required")
+	}
 	if err == nil && report.Totals.Different > 0 && !opt.Overwrite {
 		first := firstWith(report, PlanDifferent)
 		err = fmt.Errorf("%w: %d items, the first %s: nothing was written; look at them, then give --overwrite to replace the destination's values",

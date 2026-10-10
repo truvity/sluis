@@ -144,6 +144,9 @@ type PlanReport struct {
 	// Mode is "copy" or "verify" for those commands; a plan leaves it out.
 	Mode   string `json:"mode,omitempty"`
 	DryRun bool   `json:"dryRun,omitempty"`
+	// Live is a copy that ran without the writers stopped: the first pass, which
+	// leaves the issuer out. A final pass is still required.
+	Live bool `json:"live,omitempty"`
 	// Verify is what a copy found when it read both sides again afterwards.
 	Verify *VerifyResult `json:"verify,omitempty"`
 	OK     bool          `json:"ok"`

@@ -44,12 +44,13 @@ func migrateV5Usage(out io.Writer, sub string, fs *flag.FlagSet) {
 verifies. It is idempotent: what the destination already holds equal is not
 written, so a run that failed is re-run as it was. It stops before any write when
 an item is refused or the destination holds a different value (--overwrite
-replaces it). It never deletes anything from the source. It needs
---i-have-stopped-writers: stop the issuer, the console and both controllers first.
+replaces it). It never deletes anything from the source. A copy that includes the
+issuer needs --i-have-stopped-writers: stop the issuer, the console and both
+controllers first.
 
-Two passes keep the stop short: a first pass with --skip issuer while the source
-runs, then, with the writers stopped, a final pass with --overwrite for what
-changed meanwhile. The final pass carries the issuer: the key ring (the wrapped
+Two passes keep the stop short: a first pass with --skip issuer, which needs no
+flag and runs while the source is live, then, with the writers stopped, a final pass
+with --overwrite --i-have-stopped-writers for what changed meanwhile. The final pass carries the issuer: the key ring (the wrapped
 entries byte for byte, never wrapped again), the sessions, the refresh tokens with
 the markers of the spent ones, single sign-on records, codes in flight, requests,
 the Index sets and the state secret's fingerprint, each with the lifetime it has
@@ -99,7 +100,7 @@ func parseMigrateV5(sub string, args []string, out io.Writer) (migrateV5Flags, b
 		fs.BoolVar(&f.dryRun, "dry-run", false, "read both sides and report what would be copied; write nothing")
 		fs.BoolVar(&f.overwrite, "overwrite", false, "replace a value the destination holds that differs from the source's")
 		fs.BoolVar(&f.writersStopped, "i-have-stopped-writers", false,
-			"say that nothing writes to the source (the issuer, the console and both controllers are stopped); required unless --dry-run")
+			"say that nothing writes to the source (the issuer, the console and both controllers are stopped); required unless --dry-run or --skip issuer (the live first pass)")
 	}
 	fs.StringVar(&f.skip, "skip", "", "domains to leave out, comma separated: "+strings.Join(migrate.AllDomains, ", "))
 	fs.StringVar(&f.blobs, "blobs", string(migrate.BlobsAuto),
