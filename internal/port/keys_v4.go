@@ -105,6 +105,10 @@ var keyRules = []keyRule{
 	{prefix: "notify.", kind: "notify"},
 	// The maintenance flag: one record in every table (internal/maintenance).
 	{prefix: "rec.maintenance", kind: "maintenance", exact: "flag"},
+	// The backup module's own records (internal/backup/job): one status record
+	// per run and the outcome of the last retention pass.
+	{prefix: "rec.backup.run.", kind: "backup-run"},
+	{prefix: "rec.backup.retention", kind: "backup-retention", exact: "last"},
 
 	// The issuer's records, in the layout's dotted form ...
 	{prefix: "ses.", kind: "session", conv: convDots},

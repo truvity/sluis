@@ -341,3 +341,37 @@ func TestATickSkippedUnderMaintenanceIsNotContended(t *testing.T) {
 		t.Errorf("after maintenance: %+v, %v", res, err)
 	}
 }
+
+// A backup event runs the backup the function was given, carries `resume` to it
+// and answers its outcome; a run that failed is an error of the invocation, so
+// the schedule sees it, and a function with no backup refuses the event.
+func TestABackupEvent(t *testing.T) {
+	h := lambdaapp.NewHTTP(http.NotFoundHandler(), nil, nil)
+	if _, err := h.Handle(t.Context(), json.RawMessage(`{"kind":"backup"}`)); err == nil {
+		t.Fatal("a function with no backup answered the event")
+	}
+	var resumed []bool
+	h.WithBackup(func(_ context.Context, resume bool) (lambdaapp.BackupResult, error) {
+		resumed = append(resumed, resume)
+		if len(resumed) == 3 {
+			return lambdaapp.BackupResult{Outcome: "failed", ID: "x"}, errors.New("the archive refused the write")
+		}
+		return lambdaapp.BackupResult{Outcome: "paused", ID: "20261010T020000Z-a1b2c3", Done: 3, Units: 40}, nil
+	})
+	out, err := h.Handle(t.Context(), json.RawMessage(`{"kind":"backup"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := out, (lambdaapp.BackupResult{Kind: "backup", Outcome: "paused", ID: "20261010T020000Z-a1b2c3", Done: 3, Units: 40}); got != want {
+		t.Errorf("got %+v, want %+v", got, want)
+	}
+	if _, err = h.Handle(t.Context(), json.RawMessage(`{"kind":"backup","resume":true}`)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = h.Handle(t.Context(), json.RawMessage(`{"kind":"backup"}`)); err == nil {
+		t.Error("a failed backup was not an error of the invocation")
+	}
+	if len(resumed) != 3 || resumed[0] || !resumed[1] {
+		t.Errorf("resume reached the run as %v", resumed)
+	}
+}

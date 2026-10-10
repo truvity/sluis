@@ -228,8 +228,8 @@ func (h *HTTP) scheduled(ctx context.Context, kind string) (any, error) {
 	if kind == KindCheck {
 		return h.checkDeclared(ctx)
 	}
-	return nil, fmt.Errorf("the event's kind is %q: the function takes API Gateway events and {\"kind\":%q|%q|%q|%q}",
-		oneLine(kind), KindTick, KindRun, KindRefresh, KindCheck)
+	return nil, fmt.Errorf("the event's kind is %q: the function takes API Gateway events and {\"kind\":%q|%q|%q|%q|%q}",
+		oneLine(kind), KindTick, KindRun, KindRefresh, KindCheck, KindBackup)
 }
 
 // refreshDirectory runs one directory refresh pass.
@@ -330,4 +330,55 @@ func invokedAlias(ctx context.Context) string {
 		return parts[7]
 	}
 	return ""
+}
+
+// KindBackup is the event an EventBridge Scheduler schedule sends the backup
+// function: {"kind":"backup"} writes a backup, or continues one that paused for
+// want of time; {"kind":"backup","resume":true} only continues a paused one and
+// costs one read of the State when there is none, which is the schedule to run
+// every few minutes beside the daily one so a large installation finishes.
+const KindBackup = "backup"
+
+// BackupResult is what a backup invocation returns.
+type BackupResult struct {
+	Kind string `json:"kind"`
+	// Outcome is completed, paused, idle, contended or maintenance.
+	Outcome string `json:"outcome"`
+	ID      string `json:"id,omitempty"`
+	// Done and Units are the export's progress of a paused run.
+	Done  int `json:"done,omitempty"`
+	Units int `json:"units,omitempty"`
+}
+
+// WithBackup makes the function answer {"kind":"backup"} events with run; resume
+// is the event's `resume`. A run that failed is an error of the invocation, so
+// the schedule sees it; a run that paused, found the lease held, or was skipped
+// for maintenance is not.
+func (h *HTTP) WithBackup(run func(ctx context.Context, resume bool) (BackupResult, error)) *HTTP {
+	h.backup = run
+	return h
+}
+
+func (h *HTTP) tickBackup(ctx context.Context, payload json.RawMessage) (any, error) {
+	if h.backup == nil {
+		return nil, errors.New("this function runs no backup")
+	}
+	var event struct {
+		Resume bool `json:"resume"`
+	}
+	if err := json.Unmarshal(payload, &event); err != nil {
+		return nil, fmt.Errorf("the event is not {\"kind\":\"backup\",\"resume\":true|false}: %w", err)
+	}
+	defer func() {
+		if h.settle != nil {
+			h.settle()
+		}
+	}()
+	res, err := h.backup(ctx, event.Resume)
+	if err != nil {
+		return nil, err
+	}
+	res.Kind = KindBackup
+	h.log.InfoContext(ctx, "invocation done", slog.String("controller", KindBackup), slog.String("outcome", res.Outcome))
+	return res, nil
 }

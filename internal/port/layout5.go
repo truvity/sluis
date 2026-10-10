@@ -117,6 +117,8 @@ func leaseModule(rest string) Module {
 		return ModuleCloudflare
 	case kind == "refresh":
 		return ModuleGoogle
+	case kind == "backup", kind == "restore":
+		return ModuleBackup
 	}
 	return ""
 }
@@ -155,6 +157,11 @@ var rules5 = []rule5{
 	{keyRule: keyRule{prefix: "app.gh.runner.", kind: "app", conv: convDashes, idPrefix: "runner-"}, module: ModuleGitHub},
 	r5(ModuleGitHub, "claim", "gate.github-claim.", convID),
 	r5(ModuleGitHub, "gate", "gate.github.", convDots),
+
+	// backup: the status of each run and the last retention pass. A backup does
+	// not carry them: a restore must not roll back the record of its own runs.
+	r5(ModuleBackup, "run", "rec.backup.run.", convID),
+	r5exact(ModuleBackup, "retention", "rec.backup.retention", "last"),
 
 	// oidc: the issuer's records and the console's session key.
 	r5exact(ModuleOIDC, "console", "rec.console.session-key", "session-key"),

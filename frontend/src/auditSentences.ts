@@ -3,11 +3,29 @@ import type { Sentences } from "@truvity/audit";
 
 export const roster: Sentences = {
   "source": "roster",
-  "version": "1.13.0",
+  "version": "1.14.0",
   "locales": [
     "en"
   ],
   "actions": {
+    "roster.backup.completed": {
+      "summary": "A backup of the installation was written to the archive bucket and its manifest sealed. Counts only.",
+      "message": {
+        "en": "backup {targets_0_id} was written: {data_records, plural, one {# record} other {# records}} of {data_modules, plural, one {# module} other {# modules}}"
+      }
+    },
+    "roster.backup.failed": {
+      "summary": "A backup could not be completed. The records already written stay in the bucket and are not a backup; the next run starts again, and a prune removes them.",
+      "message": {
+        "en": "backup {targets_0_id} failed: {outcome_reason}"
+      }
+    },
+    "roster.backup.pruned": {
+      "summary": "Backups beyond the retention rule were deleted from the archive bucket (or, with `orphans`, the objects of runs that never wrote a manifest).",
+      "message": {
+        "en": "{data_removed, plural, one {# backup} other {# backups}} beyond the retention rule {data_removed, plural, one {was} other {were}} deleted, {data_kept} kept"
+      }
+    },
     "roster.catalogue_app.created": {
       "summary": "A catalogued GitHub App was created.",
       "message": {
@@ -234,6 +252,24 @@ export const roster: Sentences = {
       "summary": "Somebody signed in with the recovery identity, which bypasses the directory.",
       "message": {
         "en": "{outcome, select, success {{actor} signed in to {targets_0_id} by recovery} other {a recovery sign-in to {targets_0_id} did not complete}}"
+      }
+    },
+    "roster.restore.completed": {
+      "summary": "A restore verified against its backup and lifted the maintenance flag.",
+      "message": {
+        "en": "the restore from backup {targets_0_id} completed"
+      }
+    },
+    "roster.restore.failed": {
+      "summary": "A restore did not complete or did not verify. The maintenance flag stays set until an operator looks.",
+      "message": {
+        "en": "the restore from backup {targets_0_id} failed: {outcome_reason}"
+      }
+    },
+    "roster.restore.started": {
+      "summary": "A restore of an installation from a backup began. The module is under maintenance until it completes.",
+      "message": {
+        "en": "{actor} began restoring from backup {targets_0_id}"
       }
     },
     "roster.runner_app.created": {

@@ -1,0 +1,49 @@
+{
+  "$id": "https://schemas.example/access-roster/v1/backup-run.json",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "installation": {
+      "type": "string",
+      "description": "The installation the backup is of, as its path in the archive bucket names it.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none"
+    },
+    "trigger": {
+      "type": "string",
+      "description": "What started the run: schedule, run (a person or workload asked) or cli.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none"
+    },
+    "modules": {
+      "type": "integer",
+      "description": "How many modules the backup holds.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none"
+    },
+    "records": {
+      "type": "integer",
+      "description": "How many records the backup holds, in all sections.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none"
+    },
+    "chunks": {
+      "type": "integer",
+      "description": "How many sealed chunks the backup holds.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none"
+    },
+    "resumed": {
+      "type": "boolean",
+      "description": "Whether the run continued one that had been interrupted.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none"
+    },
+    "reason": {
+      "type": "string",
+      "description": "A short word for why a run failed (export, archive, key, maintenance, canceled); absent on success.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none"
+    }
+  }
+}

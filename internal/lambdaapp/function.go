@@ -11,7 +11,9 @@
 //   - {"kind":"cloudflare"}: the rotation of the Cloudflare credentials that are
 //     due (the `cloudflare` section), which has no loop to run in on Lambda;
 //   - {"kind":"refresh"}: the directory refresh, which has no loop to run in on
-//     Lambda.
+//     Lambda;
+//   - {"kind":"backup"}: the backup module's function (a document of apiVersion
+//     sluis-backup/v1), which takes this event and `rpc` events and nothing else.
 //
 // This package assembles the function from the same pieces the Kubernetes
 // process is assembled from (internal/rosterapp and the controllers' apps), and
@@ -73,6 +75,11 @@ func Open(ctx context.Context, getenv func(string) string) (*Function, error) {
 	// configuring something.
 	if err := config.RefuseRetired("sluis", os.Environ()); err != nil {
 		return nil, err
+	}
+	// The backup module has a document of its own, which none of the others
+	// reads: its apiVersion says the function is the backup's.
+	if config.IsBackup(file) {
+		return openBackup(ctx, file)
 	}
 	// Which module the function runs is the document's: one that sets
 	// cloudflare.serve is the Cloudflare module's function, and answers `rpc`

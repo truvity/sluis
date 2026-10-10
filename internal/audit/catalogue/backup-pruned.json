@@ -1,0 +1,41 @@
+{
+  "$id": "https://schemas.example/access-roster/v1/backup-pruned.json",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "removed": {
+      "type": "array",
+      "description": "The ids of the backups deleted.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none",
+      "items": {
+        "type": "string",
+        "x-audit-class": "shared",
+        "x-audit-pii": "none"
+      }
+    },
+    "orphans": {
+      "type": "array",
+      "description": "The ids of runs that left chunks and no manifest and were cleaned up.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none",
+      "items": {
+        "type": "string",
+        "x-audit-class": "shared",
+        "x-audit-pii": "none"
+      }
+    },
+    "kept": {
+      "type": "integer",
+      "description": "How many backups the archive holds after the prune.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none"
+    },
+    "rule": {
+      "type": "string",
+      "description": "The retention rule applied, as keep and maximum age.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none"
+    }
+  }
+}
