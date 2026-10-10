@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/truvity/sluis/internal/githubroster/link"
 	"github.com/truvity/sluis/internal/port"
@@ -44,6 +45,10 @@ const (
 	PlanCopied PlanStatus = "copied"
 	// PlanMissing is an item a verify did not find on the destination.
 	PlanMissing PlanStatus = "missing"
+	// PlanExpired is an issuer record whose lifetime ran out between the
+	// moment it was read and the moment a copy came to write it. It is skipped:
+	// the source drops it too.
+	PlanExpired PlanStatus = "expired"
 )
 
 // PlanItem is one thing the plan found, or, for the issuer's records whose
@@ -79,8 +84,11 @@ type PlanItem struct {
 
 	// do writes the item to the destination; set only when a copy collects
 	// writes. rank orders them: the Apps an organisation names go first.
-	do   func(ctx context.Context) error
+	do   func(ctx context.Context, it *PlanItem) error
 	rank int
+	// expired is how many of the records a row stands for the write found
+	// out of time.
+	expired int
 }
 
 func (i PlanItem) count() int { return max(i.Count, 1) }
@@ -94,6 +102,9 @@ type PlanCounts struct {
 	// Copied and Missing are what a copy wrote and a verify did not find.
 	Copied  int `json:"copied,omitempty"`
 	Missing int `json:"missing,omitempty"`
+	// Expired is the issuer's records that ran out of lifetime before they were
+	// written, and so were skipped.
+	Expired int `json:"expired,omitempty"`
 }
 
 func (c *PlanCounts) add(s PlanStatus, n int) {
@@ -110,6 +121,8 @@ func (c *PlanCounts) add(s PlanStatus, n int) {
 		c.Copied += n
 	case PlanMissing:
 		c.Missing += n
+	case PlanExpired:
+		c.Expired += n
 	}
 }
 
@@ -170,6 +183,9 @@ type PlanOptions struct {
 	S3Ref, S3RefTo string
 	// Log receives progress. Nil is silent.
 	Log *slog.Logger
+	// Now is the clock the remaining lifetime of an issuer record is counted
+	// by. Nil is [time.Now].
+	Now func() time.Time
 }
 
 // planner is one plan in progress.
@@ -180,9 +196,11 @@ type planner struct {
 	report   *PlanReport
 	mods     map[string]*ModulePlan
 	notes    []string
-	// collect makes the planner keep a write for every item a copy would
-	// make; noIssuer leaves the issuer's records to the code that carries them.
-	collect, noIssuer bool
+	// collect makes the planner keep a write for every item a copy would make.
+	collect bool
+	// readAt is when the issuer's records were read: a record is written with
+	// what it had left then, less what has passed since.
+	readAt time.Time
 	// carried are the v5 secret names that a record carries with it.
 	carried map[string]bool
 }
@@ -193,7 +211,7 @@ type planner struct {
 // The report is returned with ErrRefused or ErrUnreadable when anything is
 // refused, so that a caller can still show it.
 func Plan(ctx context.Context, from, to Side, opt PlanOptions) (*PlanReport, error) {
-	p, err := newPlanner(ctx, from, to, opt, false, false)
+	p, err := newPlanner(ctx, from, to, opt, false)
 	if err != nil {
 		return nil, err
 	}
@@ -204,7 +222,7 @@ func Plan(ctx context.Context, from, to Side, opt PlanOptions) (*PlanReport, err
 }
 
 // newPlanner checks the two sides and opens their stores.
-func newPlanner(ctx context.Context, from, to Side, opt PlanOptions, collect, noIssuer bool) (*planner, error) {
+func newPlanner(ctx context.Context, from, to Side, opt PlanOptions, collect bool) (*planner, error) {
 	switch {
 	case from.Stores == nil || to.Stores == nil:
 		return nil, errors.New("migrate: a plan needs both sides")
@@ -238,7 +256,7 @@ func newPlanner(ctx context.Context, from, to Side, opt PlanOptions, collect, no
 		return nil, fmt.Errorf("destination: %w", err)
 	}
 	return &planner{
-		opt: opt, from: from, to: to, collect: collect, noIssuer: noIssuer,
+		opt: opt, from: from, to: to, collect: collect,
 		src:     kit{d: srcDomains, ports: from.Stores.Ports},
 		dst:     kit{d: dstDomains, ports: to.Stores.Ports},
 		report:  &PlanReport{From: from.Name, To: to.Name},
@@ -258,8 +276,6 @@ func (p *planner) readAll(ctx context.Context) error {
 	switch {
 	case contains(p.opt.Skip, DomainIssuer):
 		p.note("the issuer is skipped (--skip)")
-	case p.noIssuer:
-		p.note("the issuer's key ring, sessions, refresh tokens and codes in flight are not carried by this command yet")
 	default:
 		if err := p.issuer(ctx); err != nil {
 			return err
@@ -269,6 +285,13 @@ func (p *planner) readAll(ctx context.Context) error {
 		return p.blobs(ctx)
 	}
 	return nil
+}
+
+func (p *planner) now() time.Time {
+	if p.opt.Now != nil {
+		return p.opt.Now()
+	}
+	return time.Now()
 }
 
 func (p *planner) note(format string, args ...any) {
@@ -742,6 +765,8 @@ func (p *planner) issuer(ctx context.Context) error {
 		return nil
 	}
 	groups := map[issuerGroup]int{}
+	writes := map[issuerGroup][]issuerWrite{}
+	p.readAt = p.now()
 	var dstState map[string]port.Exported
 	if dstEx, ok := p.dst.ports.State.(port.StateExporter); ok {
 		dstState = map[string]port.Exported{}
@@ -762,6 +787,9 @@ func (p *planner) issuer(ctx context.Context) error {
 		default:
 			g.kind = t.Kind
 			g.status, g.reason = statusOf(x, dstState, x.TTL <= 0)
+			if p.collect && (g.status == PlanNew || g.status == PlanDifferent) {
+				writes[g] = append(writes[g], p.stateWrite(x))
+			}
 		}
 		groups[g]++
 		return nil
@@ -769,12 +797,12 @@ func (p *planner) issuer(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("read the source's issuer records: %w", err)
 	}
-	if err = p.indexes(ctx, groups); err != nil {
+	if err = p.indexes(ctx, groups, writes); err != nil {
 		return err
 	}
 	if !p.opt.Sessions {
-		p.note("the issuer's sessions, refresh tokens, single sign-on records and codes in flight are not planned (--sessions skip): " +
-			"people would sign in again; the key ring and the state secret's fingerprint are")
+		p.note("the issuer's sessions, refresh tokens, single sign-on records and codes in flight are left out (--sessions skip): " +
+			"people would sign in again; the key ring and the state secret's fingerprint are carried")
 	}
 	keys := make([]issuerGroup, 0, len(groups))
 	for g := range groups {
@@ -785,16 +813,91 @@ func (p *planner) issuer(ctx context.Context) error {
 		return a.kind+"|"+string(a.status)+"|"+a.from < b.kind+"|"+string(b.status)+"|"+b.from
 	})
 	for _, g := range keys {
-		p.add(g.module, PlanItem{Concern: "state", Kind: g.kind, From: g.from, To: g.module + "/" + g.kind, Status: g.status, Count: groups[g], Reason: g.reason})
+		it := PlanItem{Concern: "state", Kind: g.kind, From: g.from, To: g.module + "/" + g.kind, Status: g.status, Count: groups[g], Reason: g.reason}
+		if ws := writes[g]; len(ws) > 0 {
+			it.do = p.issuerWrite(ws)
+		}
+		p.add(g.module, it)
 	}
 	return nil
+}
+
+// issuerWrite is one issuer record, or one Index set, to write: it is told how
+// long ago the records were read and says whether the lifetime ran out.
+type issuerWrite func(ctx context.Context, elapsed time.Duration) (expired bool, err error)
+
+// issuerWrite writes a row's records, each with what it had left when it was
+// read less what has passed since. A record with none left is skipped and
+// counted: the source drops it at the same moment.
+func (p *planner) issuerWrite(ws []issuerWrite) func(ctx context.Context, it *PlanItem) error {
+	return func(ctx context.Context, it *PlanItem) error {
+		for _, w := range ws {
+			gone, err := w(ctx, p.now().Sub(p.readAt))
+			if err != nil {
+				return err
+			}
+			if gone {
+				it.expired++
+			}
+		}
+		return nil
+	}
+}
+
+// minLifetime is the least a record can be written with: a store counts
+// lifetimes in whole seconds.
+const minLifetime = time.Second
+
+// stateWrite copies one record byte for byte, with the lifetime it has left.
+// That is the whole of what the key ring needs: its entries are wrapped by the
+// KMS under a context that layout v5 keeps unchanged, so they are never opened
+// or wrapped again.
+func (p *planner) stateWrite(x port.Exported) issuerWrite {
+	return func(ctx context.Context, elapsed time.Duration) (bool, error) {
+		left := x.TTL - elapsed
+		if left < minLifetime {
+			return true, nil
+		}
+		_, err := p.to.Stores.Ports.State.Put(ctx, x.Key, x.Value, left)
+		return false, err
+	}
+}
+
+// indexWrite makes the destination's set equal to the source's: what it holds
+// beyond the source's is taken out, and every member is added with the set's
+// remaining lifetime (a set that had none gets a day, as a set must expire).
+func (p *planner) indexWrite(x port.Exported, have []string) issuerWrite {
+	return func(ctx context.Context, elapsed time.Duration) (bool, error) {
+		left := x.TTL
+		if left > 0 {
+			if left -= elapsed; left < minLifetime {
+				return true, nil
+			}
+		} else {
+			left = ttlOrDay(0)
+		}
+		idx := p.to.Stores.Ports.Index
+		for _, m := range have {
+			if !slices.Contains(x.Members, m) {
+				if err := idx.Remove(ctx, x.Key, m); err != nil {
+					return false, err
+				}
+			}
+		}
+		for _, m := range x.Members {
+			if err := idx.Add(ctx, x.Key, m, left); err != nil {
+				return false, err
+			}
+		}
+		return false, nil
+	}
 }
 
 func (p *planner) wanted(kind string) bool {
 	return p.opt.Sessions || slices.Contains(issuerRing, kind)
 }
 
-func (p *planner) indexes(ctx context.Context, groups map[issuerGroup]int) error {
+func (p *planner) indexes(ctx context.Context, groups map[issuerGroup]int, writes map[issuerGroup][]issuerWrite) error {
 	srcEx, ok := p.src.ports.Index.(port.IndexExporter)
 	if !ok {
 		return nil
@@ -819,13 +922,17 @@ func (p *planner) indexes(ctx context.Context, groups map[issuerGroup]int) error
 			return nil
 		default:
 			g.kind = t.Kind
-			switch got, ok := have[x.Key]; {
+			got, ok := have[x.Key]
+			switch {
 			case !ok:
 				g.status = PlanNew
 			case slices.Equal(got, sortedMembers(x.Members)):
 				g.status = PlanSame
 			default:
 				g.status = PlanDifferent
+			}
+			if p.collect && (g.status == PlanNew || g.status == PlanDifferent) {
+				writes[g] = append(writes[g], p.indexWrite(x, got))
 			}
 		}
 		groups[g]++
@@ -921,6 +1028,9 @@ func (c PlanCounts) String() string {
 	}
 	if c.Missing > 0 {
 		out += ", missing " + strconv.Itoa(c.Missing)
+	}
+	if c.Expired > 0 {
+		out += ", expired " + strconv.Itoa(c.Expired)
 	}
 	return out
 }

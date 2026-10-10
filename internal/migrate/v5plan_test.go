@@ -44,11 +44,11 @@ type v4Installation struct {
 	env map[string]string
 }
 
-func newV4Installation(t *testing.T) *v4Installation {
+func newV4Installation(t *testing.T, opts ...memory.Option) *v4Installation {
 	t.Helper()
 	rec := secretrec.New()
 	v4 := secretstore.FromStore(rec, "alias/example")
-	mem := memory.New()
+	mem := memory.New(opts...)
 	set := mem.Set()
 	set.Secrets = secretstore.NewSecrets(v4, 0)
 	st := portSide(set, store.AdapterDynamoDB)
@@ -136,11 +136,11 @@ type v5Installation struct {
 	mem *memory.Store
 }
 
-func newV5Installation(t *testing.T) *v5Installation {
+func newV5Installation(t *testing.T, opts ...memory.Option) *v5Installation {
 	t.Helper()
 	rec := secretrec.New()
 	v5 := secretstore.FromStoreV5(rec, "alias/example")
-	mem := memory.New()
+	mem := memory.New(opts...)
 	set := mem.Set()
 	set.Secrets = nil
 	st := portSide(set, store.AdapterDynamoDB)

@@ -20,7 +20,10 @@ import (
 // again to verify; a verify only reads. Neither prints a value, and neither
 // deletes anything from the source.
 //
-// The issuer's key ring, sessions and refresh tokens are not carried here.
+// The issuer's records are carried too (issuer.go): the key ring with its wrapped
+// entries byte for byte, then, unless --sessions skip, the sessions, refresh
+// tokens and the markers of the spent ones, single sign-on records, codes in
+// flight, requests and the Index sets, each with what is left of its lifetime.
 
 // VerifyResult is what a copy found when it read both sides again after writing.
 type VerifyResult struct {
@@ -75,7 +78,7 @@ func (p *planner) collectWrite(out *PlanItem, s step, e entry, old *entry) {
 	if !p.collect || (out.Status != PlanNew && out.Status != PlanDifferent) {
 		return
 	}
-	out.do = func(ctx context.Context) error { return s.write(ctx, p.dst, e, old) }
+	out.do = func(ctx context.Context, _ *PlanItem) error { return s.write(ctx, p.dst, e, old) }
 	if s.domain == "github" && s.name == "organisations" {
 		// An organisation is written naming an App whose key must be there.
 		out.rank = 1
@@ -87,7 +90,7 @@ func (p *planner) collectSecret(out *PlanItem, t SecretTarget, value []byte, rev
 	if !p.collect {
 		return
 	}
-	out.do = func(ctx context.Context) error { return p.writeV5(ctx, t, value, state.Rev(rev)) }
+	out.do = func(ctx context.Context, _ *PlanItem) error { return p.writeV5(ctx, t, value, state.Rev(rev)) }
 }
 
 // writeV5 puts a secret at its v5 address, under the revision the plan saw
@@ -129,7 +132,7 @@ func CopyV5(ctx context.Context, from, to Side, opt V5Options) (*PlanReport, err
 	if !opt.DryRun && !opt.WritersStopped {
 		return nil, ErrWritersRunning
 	}
-	p, err := newPlanner(ctx, from, to, opt.PlanOptions, true, true)
+	p, err := newPlanner(ctx, from, to, opt.PlanOptions, true)
 	if err != nil {
 		return nil, err
 	}
@@ -202,11 +205,24 @@ func (p *planner) write(ctx context.Context, report *PlanReport, overwrite bool)
 	var err error
 	for _, r := range todo {
 		it := at(r)
-		if err = it.do(ctx); err != nil {
+		if err = it.do(ctx, it); err != nil {
 			err = fmt.Errorf("copy %s %s: %w", report.Modules[r.m].Module, it.From, err)
 			break
 		}
 		it.Status = PlanCopied
+		if it.expired > 0 {
+			// Records whose lifetime ran out first are skipped and counted on
+			// a row of their own.
+			skipped := *it
+			skipped.do, skipped.Status, skipped.Count, skipped.expired = nil, PlanExpired, it.expired, 0
+			skipped.Reason = "the lifetime ran out before the record was written"
+			if it.expired >= it.count() {
+				*it = skipped
+			} else {
+				it.Count = it.count() - it.expired
+				report.Modules[r.m].Items = append(report.Modules[r.m].Items, skipped)
+			}
+		}
 	}
 	report.recount()
 	return err
@@ -219,7 +235,7 @@ func (p *planner) write(ctx context.Context, report *PlanReport, overwrite bool)
 // is missing, and one it holds with another value is different; either ends the
 // run with ErrMismatch.
 func VerifyV5(ctx context.Context, from, to Side, opt PlanOptions) (*PlanReport, error) {
-	p, err := newPlanner(ctx, from, to, opt, false, true)
+	p, err := newPlanner(ctx, from, to, opt, false)
 	if err != nil {
 		return nil, err
 	}

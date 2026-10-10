@@ -401,3 +401,49 @@ func TestTheRouterSendsAKeyToItsModulesTable(t *testing.T) {
 		t.Errorf("a prefix of two modules: %v", err)
 	}
 }
+
+func TestTheRouterExportsStateAndIndex(t *testing.T) {
+	tt := newTables(t, newFake())
+	r := tt.Router()
+	for key, ttl := range map[string]time.Duration{
+		"issuer:session-token:abc": time.Hour, "issuer:keyring:entry:ES384:k1": 24 * time.Hour,
+		"issuer:kms:state-secret-fingerprint": 48 * time.Hour, "gh.org.acme": 0, "ws.slack.T01": 0,
+	} {
+		if _, err := r.Put(ctx(), key, []byte("v:"+key), ttl); err != nil {
+			t.Fatalf("%s: %v", key, err)
+		}
+	}
+	if err := r.Add(ctx(), "issuer:sessions-of:ada", "s1", time.Hour); err != nil {
+		t.Fatal(err)
+	}
+
+	// The issuer's prefix spans several kinds and lies in the oidc table alone.
+	got := map[string]port.Exported{}
+	if err := r.ExportState(ctx(), "issuer:", func(x port.Exported) error { got[x.Key] = x; return nil }); err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 3 {
+		t.Fatalf("exported %d issuer records, want 3: %v", len(got), got)
+	}
+	if x := got["issuer:keyring:entry:ES384:k1"]; string(x.Value) != "v:issuer:keyring:entry:ES384:k1" || x.TTL <= 23*time.Hour || x.TTL > 24*time.Hour+2*time.Second {
+		t.Errorf("ring entry = %q, %v", x.Value, x.TTL)
+	}
+	// One module's family is read from its table, and a prefix in none from all.
+	var keys []string
+	collect := func(x port.Exported) error { keys = append(keys, x.Key); return nil }
+	if err := r.ExportState(ctx(), "gh.org.", collect); err != nil || len(keys) != 1 || keys[0] != "gh.org.acme" {
+		t.Errorf("gh.org. = %v, %v", keys, err)
+	}
+	keys = nil
+	if err := r.ExportState(ctx(), "", collect); err != nil || len(keys) != 5 {
+		t.Errorf("everything = %v, %v", keys, err)
+	}
+
+	sets := map[string]port.Exported{}
+	if err := r.ExportIndex(ctx(), "issuer:", func(x port.Exported) error { sets[x.Key] = x; return nil }); err != nil {
+		t.Fatal(err)
+	}
+	if x := sets["issuer:sessions-of:ada"]; len(sets) != 1 || len(x.Members) != 1 || x.Members[0] != "s1" || x.TTL <= 0 {
+		t.Errorf("sets = %v", sets)
+	}
+}

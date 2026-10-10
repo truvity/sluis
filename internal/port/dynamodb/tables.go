@@ -201,8 +201,10 @@ func (t *Tables) Router() *Router { return &Router{t: t} }
 type Router struct{ t *Tables }
 
 var (
-	_ port.State = (*Router)(nil)
-	_ port.Index = (*Router)(nil)
+	_ port.State         = (*Router)(nil)
+	_ port.Index         = (*Router)(nil)
+	_ port.StateExporter = (*Router)(nil)
+	_ port.IndexExporter = (*Router)(nil)
 )
 
 func (r *Router) store(m port.Module) (*Store, error) {
@@ -341,4 +343,38 @@ func (r *Router) Members(ctx context.Context, key string) ([]string, error) {
 		return nil, err
 	}
 	return s.Members(ctx, key)
+}
+
+// ExportState implements [port.StateExporter]: the live records under the
+// prefix, with what is left of each lifetime. A prefix that lies in one module's
+// family is read from that module's table; any other is read from every table
+// in the order of [port.Modules], each table's own `lease` and `notify`
+// included, so an empty prefix is the whole estate.
+func (r *Router) ExportState(ctx context.Context, prefix string, fn func(port.Exported) error) error {
+	if s, err := r.forPrefix(prefix); err == nil {
+		return s.ExportState(ctx, prefix, fn)
+	}
+	if m, ok := port.LocateModule5(prefix); ok {
+		s, err := r.store(m)
+		if err != nil {
+			return err
+		}
+		return s.ExportState(ctx, prefix, fn)
+	}
+	for _, m := range r.t.Modules() {
+		if err := r.t.stores[m].ExportState(ctx, prefix, fn); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ExportIndex implements [port.IndexExporter]: the Index lives in the oidc
+// table alone.
+func (r *Router) ExportIndex(ctx context.Context, prefix string, fn func(port.Exported) error) error {
+	s, err := r.index()
+	if err != nil {
+		return err
+	}
+	return s.ExportIndex(ctx, prefix, fn)
 }

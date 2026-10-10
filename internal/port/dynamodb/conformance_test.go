@@ -185,3 +185,35 @@ func TestGrantCostOverTablesOnDynamoDB(t *testing.T) {
 		return grantcost.Env{Set: port.Set{State: r, Index: r}, Advance: tt.Advance, Calls: api.snapshot}
 	})
 }
+
+// TestRouterExportsOnDynamoDB lists the issuer's records and Index sets over
+// the tables on the real engine, with the lifetime each has left: what
+// `sluis migrate v5` reads a destination (and a source) with.
+func TestRouterExportsOnDynamoDB(t *testing.T) {
+	url := localstack(t)
+	ctx := context.Background()
+	r := tables(t, url, nil).Router()
+	if _, err := r.Put(ctx, "issuer:session-token:abc", []byte("v"), time.Hour); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.Put(ctx, "gh.org.acme", []byte("o"), 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Add(ctx, "issuer:sessions-of:ada", "s1", time.Hour); err != nil {
+		t.Fatal(err)
+	}
+	var got []port.Exported
+	if err := r.ExportState(ctx, "issuer:", func(x port.Exported) error { got = append(got, x); return nil }); err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].Key != "issuer:session-token:abc" || string(got[0].Value) != "v" || got[0].TTL <= 0 || got[0].TTL > time.Hour+2*time.Second {
+		t.Fatalf("exported state = %+v", got)
+	}
+	got = nil
+	if err := r.ExportIndex(ctx, "issuer:", func(x port.Exported) error { got = append(got, x); return nil }); err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].Key != "issuer:sessions-of:ada" || len(got[0].Members) != 1 || got[0].TTL <= 0 {
+		t.Fatalf("exported sets = %+v", got)
+	}
+}
