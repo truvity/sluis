@@ -110,15 +110,31 @@ clients:
 	}
 }
 
-func TestAGeneratedClientHasItsSecretAtStart(t *testing.T) {
+// Assembling the issuer settles nothing; Run does, before it serves, so a
+// first deploy has its secrets as soon as it serves.
+func TestAGeneratedClientHasItsSecretOnceRunHasStarted(t *testing.T) {
 	mem := memory.NewSecrets()
 	app, err := tryBoot(t, issuerapp.Deps{Directory: nobody{}, Stores: withSecrets(mem, "memory")}, replacePolicy(t, generatingPolicy))
 	if err != nil {
 		t.Fatal(err)
 	}
-	rec, err := mem.Get(context.Background(), clientcreds.Path("grafana"))
+	if _, err = mem.Get(context.Background(), clientcreds.Path("grafana")); !errors.Is(err, port.ErrNotFound) {
+		t.Fatalf("a record exists before Run: %v", err)
+	}
+	ctx, stop := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- app.Run(ctx) }()
+	var rec port.Secret
+	for range 200 {
+		if rec, err = mem.Get(context.Background(), clientcreds.Path("grafana")); err == nil {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	stop()
+	<-done
 	if err != nil {
-		t.Fatalf("no record after start: %v", err)
+		t.Fatalf("no record after Run started: %v", err)
 	}
 	if _, err = clientcreds.DecodeRecord(rec.Value); err != nil {
 		t.Errorf("the record: %v", err)
@@ -164,8 +180,12 @@ func TestAClientWhoseSecretCannotBeSettledDoesNotStopTheIssuerAndIsRetried(t *te
 	if err != nil {
 		t.Fatalf("a failed reconcile stopped the start: %v", err)
 	}
+	if flaky.puts != 0 {
+		t.Errorf("start tried %d times, want 0", flaky.puts)
+	}
+	app.StartPassForTest(context.Background())
 	if flaky.puts != 1 {
-		t.Errorf("start tried %d times, want 1", flaky.puts)
+		t.Errorf("the start pass tried %d times, want 1", flaky.puts)
 	}
 	res := app.ReconcileClientSecrets(context.Background())
 	if res.Outcomes["grafana"] != clientcreds.OutcomeFailed || res.Failed() != 1 {

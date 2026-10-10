@@ -32,7 +32,7 @@ var ErrNoSession = errors.New("access: no session")
 // gateway's job in an installation that has one, and the reason the
 // lifetime is short in one that does not.
 type Sessions struct {
-	key      []byte
+	key      KeyFunc
 	lifetime time.Duration
 	secure   bool
 	now      func() time.Time
@@ -48,7 +48,18 @@ func NewSessions(key []byte, lifetime time.Duration, secure bool) (*Sessions, er
 	if lifetime <= 0 {
 		lifetime = 12 * time.Hour
 	}
-	return &Sessions{key: key, lifetime: lifetime, secure: secure, now: time.Now}, nil
+	return &Sessions{key: StaticKey(key), lifetime: lifetime, secure: secure, now: time.Now}, nil
+}
+
+// NewSessionsWith is [NewSessions] over a key that is read when a cookie is
+// first signed or checked, and read again as the function decides, so that
+// opening the codec reads no secret. The function's key must be
+// [SessionKeyBytes] long.
+func NewSessionsWith(key KeyFunc, lifetime time.Duration, secure bool) *Sessions {
+	if lifetime <= 0 {
+		lifetime = 12 * time.Hour
+	}
+	return &Sessions{key: checked(key), lifetime: lifetime, secure: secure, now: time.Now}
 }
 
 // NewSessionKey returns a fresh random session key.
@@ -88,9 +99,13 @@ func (s *Sessions) Issue(w http.ResponseWriter, p Principal) error {
 		return fmt.Errorf("access: encode session: %w", err)
 	}
 	encoded := base64.RawURLEncoding.EncodeToString(body)
+	signature, err := s.sign(encoded)
+	if err != nil {
+		return err
+	}
 	SetCookie(w, &http.Cookie{
 		Name:     CookieNameFor(CookieName, s.secure),
-		Value:    encoded + "." + s.sign(encoded),
+		Value:    encoded + "." + signature,
 		Path:     "/",
 		Expires:  expires,
 		HttpOnly: true,
@@ -110,7 +125,11 @@ func (s *Sessions) Read(r *http.Request) (Principal, error) {
 	if !ok {
 		return Principal{}, ErrNoSession
 	}
-	if subtle.ConstantTimeCompare([]byte(signature), []byte(s.sign(encoded))) != 1 {
+	want, err := s.sign(encoded)
+	if err != nil {
+		return Principal{}, err
+	}
+	if subtle.ConstantTimeCompare([]byte(signature), []byte(want)) != 1 {
 		return Principal{}, fmt.Errorf("%w: signature", ErrNoSession)
 	}
 	body, err := base64.RawURLEncoding.DecodeString(encoded)
@@ -153,8 +172,38 @@ func (s *Sessions) Secure() bool { return s.secure }
 // Lifetime is how long an issued session lasts.
 func (s *Sessions) Lifetime() time.Duration { return s.lifetime }
 
-func (s *Sessions) sign(encoded string) string {
-	mac := hmac.New(sha256.New, s.key)
-	mac.Write([]byte(encoded))
-	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+func (s *Sessions) sign(encoded string) (string, error) {
+	return sign(s.key, encoded)
+}
+
+// KeyFunc yields the key a codec signs with. It is called for every signature,
+// so a function over a secret caches it (see internal/lazy).
+type KeyFunc func() ([]byte, error)
+
+// StaticKey is a key that is already in hand.
+func StaticKey(key []byte) KeyFunc { return func() ([]byte, error) { return key, nil } }
+
+// checked refuses a key of the wrong length where the codec uses it, which is
+// where NewSessions refuses one for a key in hand.
+func checked(key KeyFunc) KeyFunc {
+	return func() ([]byte, error) {
+		k, err := key()
+		if err != nil {
+			return nil, fmt.Errorf("access: read the session key: %w", err)
+		}
+		if len(k) != SessionKeyBytes {
+			return nil, fmt.Errorf("access: session key must be %d bytes, got %d", SessionKeyBytes, len(k))
+		}
+		return k, nil
+	}
+}
+
+func sign(key KeyFunc, text string) (string, error) {
+	k, err := key()
+	if err != nil {
+		return "", err
+	}
+	mac := hmac.New(sha256.New, k)
+	mac.Write([]byte(text))
+	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil)), nil
 }

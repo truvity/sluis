@@ -38,6 +38,23 @@ type SignIn interface {
 	Identify(ctx context.Context, code string) (string, error)
 }
 
+// ContextSignIn is a [SignIn] whose address is built under the request's
+// context, because forming it reads a secret: the issuer calls URLContext in
+// place of URL.
+type ContextSignIn interface {
+	SignIn
+	URLContext(ctx context.Context, state string) (string, error)
+}
+
+// signInURL is where to send the browser for provider, under the request's
+// context where the provider takes one.
+func signInURL(ctx context.Context, provider SignIn, state string) (string, error) {
+	if p, ok := provider.(ContextSignIn); ok {
+		return p.URLContext(ctx, state)
+	}
+	return provider.URL(state)
+}
+
 // Authenticated is who a sign-in established, and when.
 //
 // The "when" is separate from "now" on purpose: a request completed
@@ -464,7 +481,7 @@ func (s *signIn) start(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	where, err := provider.URL(state)
+	where, err := signInURL(r.Context(), provider, state)
 	if err != nil {
 		recordLoginFailure(r.Context(), LoginProviderFailed)
 		http.Error(w, err.Error(), http.StatusFailedDependency)

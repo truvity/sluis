@@ -138,7 +138,7 @@ func (a *App) reconcile(ctx context.Context, orphans bool) clientcreds.Result {
 	return res
 }
 
-// reconcileGenerated is the pass at start: the generated clients' secrets, so
+// reconcileGenerated is the pass at the start of [App.Run]: the generated clients' secrets, so
 // a first deploy has them as soon as it serves, and not the look for orphans,
 // which lists every record and is the tick's. A cold start is the one read
 // every new Lambda environment makes, and a herd of them is what SSM throttles:

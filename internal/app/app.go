@@ -49,6 +49,7 @@ import (
 	"github.com/truvity/sluis/internal/githubroster/runnerapp"
 	"github.com/truvity/sluis/internal/health"
 	"github.com/truvity/sluis/internal/hub"
+	"github.com/truvity/sluis/internal/lazy"
 	"github.com/truvity/sluis/internal/port"
 	"github.com/truvity/sluis/internal/portstore"
 	"github.com/truvity/sluis/internal/rails"
@@ -110,11 +111,12 @@ type Config struct {
 	oauthSecretName string
 	oauthIDKey      string
 	oauthSecretKey  string
-	// oauthDeclared is the client declared by file, value or variable: set
-	// off-cluster, where there is no Secret to read it from.
-	oauthDeclared settings.OAuthClient
-	// oauthClient is the client the document declares, read at New through
-	// the secrets source.
+	// oauthDeclared serves the client the document declares: set off-cluster,
+	// where there is no Secret to read it from. It reads its secrets when a
+	// request first asks for the client.
+	oauthDeclared settings.Store
+	// oauthClient is the client the document declares, served by
+	// oauthDeclared through the secrets source.
 	oauthClient *config.OAuthClient
 	// audit is the audit installation this service connects to, if any.
 	audit audit.Config
@@ -352,32 +354,34 @@ func openRecovery(
 		return nil, nil //nolint:nilnil // no recovery is a configuration, not a failure
 	}
 	if kept.reviewToken == nil {
-		password, where := "", ""
+		where := ""
+		var load func(context.Context) (string, error)
 		if cfg.recoveryLogin != "" {
-			var err error
+			// The password is read when the first proof arrives, and again after
+			// its time to live: opening the recovery reads no secret.
 			if v5 != nil {
 				// Layout v5: the password is at one fixed address, whatever the
 				// document names it.
-				raw, _, gerr := v5.OIDC().RecoveryPassword().Get(ctx)
-				if gerr != nil {
-					return nil, fmt.Errorf("recovery.passwordSecret: %w", gerr)
+				where = v5.OIDC().Prefix() + "/recovery-password"
+				load = func(ctx context.Context) (string, error) {
+					raw, _, err := v5.OIDC().RecoveryPassword().Get(ctx)
+					return string(raw), err
 				}
-				if len(raw) == 0 {
-					return nil, errors.New("recovery.passwordSecret: the password is empty")
-				}
-				password, where = string(raw), v5.OIDC().Prefix()+"/recovery-password"
 			} else {
 				if src == nil {
 					return nil, errors.New("recovery.passwordSecret: no secrets source is configured")
 				}
-				if password, err = src.Get(ctx, cfg.recoveryLogin); err != nil {
-					return nil, fmt.Errorf("recovery.passwordSecret: %w", err)
-				}
 				where = src.Describe(cfg.recoveryLogin)
+				load = func(ctx context.Context) (string, error) { return src.Get(ctx, cfg.recoveryLogin) }
 			}
 			log.InfoContext(ctx, "recovery sign-in is by the secret the configuration names", slog.String("secret", where))
 		}
-		if password == "" && os.Getenv("AWS_LAMBDA_FUNCTION_NAME") != "" {
+		if load != nil {
+			r := server.NewLazyPasswordRecovery(lazy.TTL, load)
+			r.Where = where
+			return r, nil
+		}
+		if os.Getenv("AWS_LAMBDA_FUNCTION_NAME") != "" {
 			// A function instance would generate a password nobody can read except
 			// from its own log, and print it there. Fail closed instead: no recovery,
 			// and no secret in any line.
@@ -386,17 +390,12 @@ func openRecovery(
 				"Set the password, or set recovery.enabled: false to silence this")
 			return nil, nil //nolint:nilnil // no recovery is a configuration, not a failure
 		}
-		if password == "" {
-			generated, err := generatedPassword()
-			if err != nil {
-				return nil, err
-			}
-			password, where = generated, ""
-			announceRecoveryPassword(password)
+		generated, err := generatedPassword()
+		if err != nil {
+			return nil, err
 		}
-		r := server.NewPasswordRecovery(password)
-		r.Where = where
-		return r, nil
+		announceRecoveryPassword(generated)
+		return server.NewPasswordRecovery(generated), nil
 	}
 
 	subject := access.ServiceAccountSubject(kept.namespace, cfg.recoveryAccount)
@@ -418,12 +417,19 @@ type githubOrgStore interface {
 	server.GitHubConfirmations
 }
 
+// secretReadTimeout bounds a lazy read of a secret that has no request to run
+// under.
+const secretReadTimeout = 15 * time.Second
+
 // stores is everything the hub writes down, and where.
 type stores struct {
 	workspaces  hub.Store
 	credentials hub.CredentialStore
 	settings    settings.Store
-	sessionKey  []byte
+	// sessionKey is read when a session or a sign-in state is first signed
+	// or checked, and again after [lazy.TTL]: opening the stores reads no
+	// secret.
+	sessionKey access.KeyFunc
 	// reviewToken asks the cluster's API server who a token
 	// authenticates. Nil outside a cluster, which is what selects the
 	// password shape of recovery.
@@ -478,8 +484,8 @@ func openStores(ctx context.Context, cfg Config, st *store.Stores, log *slog.Log
 			"the memberships added here and every session", slog.String("store", storeMemory))
 		return stores{
 			workspaces: hub.NewMemoryStore(),
-			settings:   settings.NewMemory(cfg.oauthDeclared),
-			sessionKey: key,
+			settings:   cfg.oauthDeclared,
+			sessionKey: access.StaticKey(key),
 		}, nil
 	}
 
@@ -528,21 +534,30 @@ func openPortStores(ctx context.Context, cfg Config, st *store.Stores, log *slog
 	if err != nil {
 		return stores{}, err
 	}
-	// The session key's read is the proof that Secrets answers.
+	// That Secrets is configured is checked now; the session key is read, or
+	// created the first time, when a session or a state is first signed.
 	if err := base.RequireSecrets(); err != nil {
 		return stores{}, fmt.Errorf("store: ports.adapter %s: %w", st.Adapter, err)
 	}
-	key, err := base.SessionKey(ctx, access.NewSessionKey)
-	if err != nil {
-		return stores{}, fmt.Errorf("store: ports.adapter %s: the Secrets port does not answer: %w", st.Adapter, err)
-	}
+	sessionKey := lazy.New(lazy.TTL, func(ctx context.Context) ([]byte, error) {
+		key, err := base.SessionKey(ctx, access.NewSessionKey)
+		if err != nil {
+			return nil, fmt.Errorf("the Secrets port does not answer: %w", err)
+		}
+		return key, nil
+	})
 	log.InfoContext(ctx, "keeping the domain records in the state port, credentials in Secrets",
 		slog.String("adapter", st.Adapter), slog.Bool("shared", st.Shared))
 	out := stores{
-		workspaces:          portstore.NewWorkspaces(google),
-		credentials:         portstore.NewCredentials(google),
-		settings:            settings.NewMemory(cfg.oauthDeclared),
-		sessionKey:          key,
+		workspaces:  portstore.NewWorkspaces(google),
+		credentials: portstore.NewCredentials(google),
+		settings:    cfg.oauthDeclared,
+		sessionKey: func() ([]byte, error) {
+			// Signing has no request context to read under; the read is bounded.
+			ctx, cancel := context.WithTimeout(context.Background(), secretReadTimeout)
+			defer cancel()
+			return sessionKey.Get(ctx)
+		},
 		githubReports:       rails.NewBlobReports(st.Ports.Blob, "reports/github/"),
 		slackReports:        rails.NewBlobReports(st.Ports.Blob, "reports/slack/"),
 		githubOrgs:          portstore.NewGitHubOrgs(github),
@@ -673,7 +688,7 @@ func New(ctx context.Context, cfg Config, st *store.Stores, log *slog.Logger) (*
 	if log == nil {
 		log = slog.Default()
 	}
-	oauthDeclared, err := declaredOAuthClient(ctx, cfg.oauthClient, st.Secrets)
+	oauthDeclared, err := declaredOAuthSettings(cfg.oauthClient, st.Secrets)
 	if err != nil {
 		return nil, fmt.Errorf("oauthClient: %w", err)
 	}
@@ -745,10 +760,7 @@ func New(ctx context.Context, cfg Config, st *store.Stores, log *slog.Logger) (*
 	authorizer := access.NewAuthorizer(set, directory, cfg.holdWindow)
 
 	sessionKey := kept.sessionKey
-	sessions, err := access.NewSessions(sessionKey, cappedSessionLifetime(cfg.sessionLifetime, cfg.absoluteLifetime), cfg.secureCookies)
-	if err != nil {
-		return nil, err
-	}
+	sessions := access.NewSessionsWith(sessionKey, cappedSessionLifetime(cfg.sessionLifetime, cfg.absoluteLifetime), cfg.secureCookies)
 
 	recovery, err := openRecovery(ctx, cfg, kept, st.Secrets, st.V5, log)
 	if err != nil {
@@ -756,7 +768,10 @@ func New(ctx context.Context, cfg Config, st *store.Stores, log *slog.Logger) (*
 	}
 
 	oauthClient := func() (google.OAuthClient, error) {
-		stored, err := kept.settings.OAuthClient(context.Background())
+		// The client is read when /connect first needs it; the read is bounded.
+		rctx, cancel := context.WithTimeout(context.Background(), secretReadTimeout)
+		defer cancel()
+		stored, err := kept.settings.OAuthClient(rctx)
 		if err != nil {
 			return google.OAuthClient{}, err
 		}
@@ -776,7 +791,7 @@ func New(ctx context.Context, cfg Config, st *store.Stores, log *slog.Logger) (*
 		log.InfoContext(ctx, "the hub's own sign-in is off: the ways in are a gateway that "+
 			"forwards an identity, and recovery. Connecting a directory is unaffected")
 	}
-	adopted, err := adoptDeclared(ctx, directory, cfg.workspaces, st.Secrets, log)
+	adopted, err := adoptDeclared(ctx, directory, kept.workspaces, cfg.workspaces, st.Secrets, log)
 	if err != nil {
 		return nil, err
 	}
@@ -836,7 +851,7 @@ func New(ctx context.Context, cfg Config, st *store.Stores, log *slog.Logger) (*
 		Hub:          directory,
 		Authorizer:   authorizer,
 		Settings:     kept.settings,
-		State:        access.NewStateCodec(sessionKey, 10*time.Minute),
+		State:        access.NewStateCodecWith(sessionKey, 10*time.Minute),
 		Connectors:   connectors,
 		Recovery:     recovery,
 		LoginSources: loginSources,
@@ -874,7 +889,7 @@ func New(ctx context.Context, cfg Config, st *store.Stores, log *slog.Logger) (*
 		Console:    console,
 		Authorizer: authorizer,
 		Sessions:   sessions,
-		State:      access.NewStateCodec(sessionKey, 10*time.Minute),
+		State:      access.NewStateCodecWith(sessionKey, 10*time.Minute),
 		Connectors: connectors,
 		Hub:        directory,
 		Recovery:   recovery,
@@ -1025,14 +1040,37 @@ func FallbackPolicy(demonstration bool) (policy.Policy, error) {
 // which reads to a consumer exactly like a tenant that was removed. A
 // hub that refuses to start is visible in one place; a hub that quietly
 // serves less than it was configured to is visible nowhere.
+//
+// A workspace the store already holds exactly as declared is attached without
+// reading its key: the key is read, through [lazyBackend], when the workspace
+// is first used, and the probe loop checks it. Only a workspace the store lacks,
+// or holds differently, is adopted now, and that reads its key once.
 func adoptDeclared(
-	ctx context.Context, directory *hub.Hub, workspaces []config.DirectoryWorkspace, src secrets.Source, log *slog.Logger,
+	ctx context.Context, directory *hub.Hub, store hub.Store, workspaces []config.DirectoryWorkspace,
+	src secrets.Source, log *slog.Logger,
 ) (map[string]bool, error) {
 	adopted := map[string]bool{}
+	var stored []hub.Workspace
+	if len(workspaces) > 0 && store != nil {
+		var err error
+		if stored, err = store.List(ctx); err != nil {
+			return nil, fmt.Errorf("read the stored workspaces: %w", err)
+		}
+	}
 	for i := range workspaces {
 		w := &workspaces[i]
 		if src == nil {
 			return nil, fmt.Errorf("declared workspace %q: no secrets source is configured", w.Backend+"/"+w.Admin)
+		}
+		if ws, ok := storedAsDeclared(stored, w); ok {
+			lazyReader := newLazyBackend(hub.Declared{ID: w.ID, Backend: w.Backend, Admin: w.Admin, Serve: w.Serve, SyncGroups: w.SyncGroups}, src, w.KeySecret)
+			if err := directory.Attach(ctx, ws.ID, lazyReader); err != nil {
+				return nil, fmt.Errorf("attach declared workspace %q: %w", w.Backend+"/"+w.Admin, err)
+			}
+			adopted[ws.ID] = true
+			log.InfoContext(ctx, "declared workspace attached; its key is read when it is first used",
+				slog.String("workspace", ws.ID), slog.String("backend", ws.Backend), slog.String("admin", ws.Admin))
+			continue
 		}
 		key, err := src.Get(ctx, w.KeySecret)
 		if err != nil {
@@ -1063,6 +1101,34 @@ func adoptDeclared(
 			slog.String("admin", ws.Admin), slog.Any("domains", ws.Domains), slog.Any("served", ws.Served()))
 	}
 	return adopted, nil
+}
+
+// storedAsDeclared finds the stored record of a declared workspace when it
+// holds what the declaration says, so that nothing needs adopting again.
+func storedAsDeclared(stored []hub.Workspace, w *config.DirectoryWorkspace) (hub.Workspace, bool) {
+	serve := make([]string, 0, len(w.Serve))
+	for _, d := range w.Serve {
+		if d = strings.ToLower(strings.TrimSpace(d)); d != "" {
+			serve = append(serve, d)
+		}
+	}
+	slices.Sort(serve)
+	serve = slices.Compact(serve)
+	for i := range stored {
+		ws := &stored[i]
+		if !ws.Declared || ws.Backend != w.Backend || !strings.EqualFold(ws.Admin, w.Admin) {
+			continue
+		}
+		if w.ID != "" && !strings.EqualFold(ws.ID, w.ID) {
+			continue
+		}
+		if slices.Equal(ws.Serve, serve) || (len(ws.Serve) == 0 && len(serve) == 0) {
+			if slices.Equal(ws.SyncGroups, w.SyncGroups) || (len(ws.SyncGroups) == 0 && len(w.SyncGroups) == 0) {
+				return *ws, true
+			}
+		}
+	}
+	return hub.Workspace{}, false
 }
 
 // reopenStored brings back what a console added before the last restart.

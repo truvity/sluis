@@ -38,17 +38,25 @@ func TestTheRecoveryPasswordOnLayoutV5IsReadFromTheOIDCModule(t *testing.T) {
 		t.Errorf("read %v", got)
 	}
 
-	// An absent or empty password is refused naming the key, as on layout v4.
+	// An absent or empty password is refused naming the key, as on layout v4:
+	// by the first proof, since opening reads nothing.
 	empty := secretstore.FromStoreV5(secretrec.New(), "")
-	if _, err = openRecovery(ctx, Config{recoveryEnabled: true, recoveryLogin: "recovery/password"}, stores{}, nil, empty, log); err == nil ||
-		!strings.Contains(err.Error(), "recovery.passwordSecret") {
+	open := func() interface {
+		Verify(context.Context, string) (string, error)
+	} {
+		r, err := openRecovery(ctx, Config{recoveryEnabled: true, recoveryLogin: "recovery/password"}, stores{}, nil, empty, log)
+		if err != nil || r == nil {
+			t.Fatalf("opening read the password: %v, %v", r, err)
+		}
+		return r
+	}
+	if _, err = open().Verify(ctx, "x"); err == nil || !strings.Contains(err.Error(), "recovery.passwordSecret") {
 		t.Errorf("an absent password = %v", err)
 	}
 	if _, err = empty.OIDC().RecoveryPassword().Put(ctx, []byte{}, ""); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = openRecovery(ctx, Config{recoveryEnabled: true, recoveryLogin: "recovery/password"}, stores{}, nil, empty, log); err == nil ||
-		!strings.Contains(err.Error(), "empty") {
+	if _, err = open().Verify(ctx, "x"); err == nil || !strings.Contains(err.Error(), "empty") {
 		t.Errorf("an empty password = %v", err)
 	}
 }

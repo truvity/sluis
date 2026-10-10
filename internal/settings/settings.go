@@ -11,6 +11,9 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"time"
+
+	"github.com/truvity/sluis/internal/lazy"
 )
 
 // ErrDeclared is returned when the deployment owns what is being changed.
@@ -61,4 +64,25 @@ func (m *Memory) OAuthClient(_ context.Context) (OAuthClient, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.client, nil
+}
+
+// Lazy is a Store over a client read from the secrets the deployment names:
+// on the first request that asks for it, and again once ttl has passed, so
+// that opening the store reads no secret and a rotated secret takes effect
+// without a restart. A read that fails is an error to that request and is tried
+// again by the next.
+type Lazy struct {
+	client *lazy.Value[OAuthClient]
+}
+
+var _ Store = (*Lazy)(nil)
+
+// NewLazy returns a store that calls read when the client is first wanted.
+func NewLazy(ttl time.Duration, read func(context.Context) (OAuthClient, error)) *Lazy {
+	return &Lazy{client: lazy.New(ttl, read)}
+}
+
+// OAuthClient implements [Store].
+func (l *Lazy) OAuthClient(ctx context.Context) (OAuthClient, error) {
+	return l.client.Get(ctx)
 }

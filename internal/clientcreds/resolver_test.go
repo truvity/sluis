@@ -519,3 +519,25 @@ func TestRereadSeesARotationTheCacheMissed(t *testing.T) {
 		t.Fatalf("Reread = %+v, %v", got, ok)
 	}
 }
+
+// An input secret is read when its client first authenticates, reused for the
+// TTL whatever the source does, and read again by the request after it: a
+// source that does not cache (layout v5's) is not read on every request.
+func TestResolveAnInputIsReadOnceThenAgainAfterTheTTL(t *testing.T) {
+	t.Parallel()
+	in := &inputs{values: map[string]string{secrets.ClientSecret("plain"): "one"}}
+	r, clk := newResolver(memory.NewSecrets(), in)
+
+	if got, _ := r.Resolve(ctx0, "plain"); got.Current != "one" {
+		t.Fatalf("first = %+v", got)
+	}
+	in.values[secrets.ClientSecret("plain")] = "two"
+	clk.t = t0.Add(CacheTTL - time.Nanosecond)
+	if got, _ := r.Resolve(ctx0, "plain"); got.Current != "one" {
+		t.Errorf("inside the TTL the input was read again: %+v", got)
+	}
+	clk.t = t0.Add(CacheTTL)
+	if got, _ := r.Resolve(ctx0, "plain"); got.Current != "two" {
+		t.Errorf("at the TTL the input was not read again: %+v", got)
+	}
+}

@@ -39,6 +39,10 @@ func auditedBoot(t *testing.T, mem port.Secrets, input secrets.Source, policyBod
 	stores := withSecrets(mem, "memory")
 	stores.Secrets = input
 	app, err := tryBoot(t, issuerapp.Deps{Directory: nobody{}, Stores: stores, Audit: trail}, replacePolicy(t, policyBody))
+	if err == nil {
+		// What Run does before it serves; New settles nothing.
+		app.StartPassForTest(context.Background())
+	}
 	return app, trail, err
 }
 

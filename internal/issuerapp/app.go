@@ -35,6 +35,7 @@ import (
 	"github.com/truvity/sluis/internal/config"
 	"github.com/truvity/sluis/internal/health"
 	"github.com/truvity/sluis/internal/issuer"
+	"github.com/truvity/sluis/internal/lazy"
 	"github.com/truvity/sluis/internal/port"
 	"github.com/truvity/sluis/internal/port/memory"
 	"github.com/truvity/sluis/internal/rails"
@@ -62,11 +63,10 @@ type Config struct {
 	// own; the merged service hands its halves one [policy.Set] instead.
 	policy *config.PolicyDocument
 
-	inCluster         bool
-	release           string
-	oauthClientID     string
-	oauthClientSecret string
-	secureCookies     bool
+	inCluster     bool
+	release       string
+	oauthClientID string
+	secureCookies bool
 	// oauthProvider names the OAuth client's secrets:
 	// providers/google/<provider>/client-id and .../client-secret.
 	oauthProvider    string
@@ -416,13 +416,6 @@ type Deps struct {
 	// had no issuer and hid its sessions pages on the deployment where
 	// they work best.
 	UseIssuerURL func(string)
-	// SkipStartSecretsPass leaves the generated clients' secrets to the
-	// scheduled pass ([App.ReconcileClientSecrets]) instead of settling them
-	// as the process starts. A Lambda sets it: every new environment of a
-	// herd of cold starts would otherwise read one SSM record per generated
-	// client, and SSM throttles a herd. The token endpoint reads a client's
-	// record when the client first authenticates.
-	SkipStartSecretsPass bool
 	// Ready are dependencies the caller's half of the process needs
 	// answering for, added to this one's on /readyz. The merged service
 	// has one readiness endpoint and two stores behind it.
@@ -607,11 +600,6 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 	if err != nil {
 		return nil, err
 	}
-	if kmsRefs != nil {
-		if err = checkStateSecret(ctx, shared, kmsRefs[0].Seed); err != nil {
-			return nil, err
-		}
-	}
 	additionalKeys, err := additionalSigningKeys(ctx, cfg, log)
 	if err != nil {
 		return nil, err
@@ -625,9 +613,6 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 	// Each KMS algorithm's newest key is its ring's primary, beside any files
 	// (a file and a KMS key for the same algorithm clash, as two files do).
 	additionalKeys = append(additionalKeys, kmsMore...)
-	if err = readClient(ctx, &cfg); err != nil {
-		return nil, err
-	}
 	verifiers, clusters, err := openVerifiers(ctx, cfg, log)
 	if err != nil {
 		return nil, err
@@ -696,6 +681,19 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 	signIn, err := openSignIn(ctx, cfg, log)
 	if err != nil {
 		return nil, err
+	}
+	// The state secret's fingerprint is checked at the first sign-in, not as
+	// the process starts. (Its value is still read at start, as the seed the
+	// KMS-backed keys are built over.)
+	var stateSeed []byte
+	switch {
+	case wrapped != nil:
+		stateSeed = key.Seed()
+	case kmsRefs != nil:
+		stateSeed = kmsRefs[0].Seed
+	}
+	if stateSeed != nil {
+		signIn = gateSignIns(signIn, newStateSecretGate(shared, stateSeed, leases))
 	}
 	signInDeps := issuer.SignInDeps{
 		Providers:     signIn,
@@ -784,12 +782,6 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 	app := &App{handler: handler, health: healthMux, issuer: core, storage: storage, keys: keys,
 		cfg: cfg, log: log, kms: kmsRefs, wrapped: wrapped != nil, state: shared,
 		generated: generated, creds: creds, credStore: stores.ClientSecretPort(), leases: leases}
-	// At start, and not only on the tick, so a first deploy has its secrets as
-	// soon as it serves. A client that fails here does not stop the issuer: it
-	// is logged and tried again, and the input secret serves it meanwhile.
-	if !deps.SkipStartSecretsPass {
-		app.reconcileGenerated(ctx)
-	}
 	return app, nil
 }
 
@@ -865,6 +857,12 @@ func mount(issuerHandler, console http.Handler) http.Handler {
 // Run serves the two listeners until the context is done, alongside the
 // background poll that lets the signing key rotate without a restart.
 func (a *App) Run(ctx context.Context) error {
+	// Settled as the listeners start, and not in New, so that assembling the
+	// issuer reads no secret (a Lambda assembles it and never runs it: its
+	// schedule settles them). A first deploy has its secrets as soon as it
+	// serves; a client that fails here does not stop the issuer: it is logged
+	// and tried again, and the input secret serves it meanwhile.
+	a.reconcileGenerated(ctx)
 	group, gctx := errgroup.WithContext(ctx)
 	group.Go(func() error { return serve(gctx, a.cfg.port, a.handler, "issuer", a.log) })
 	group.Go(func() error { return serve(gctx, a.cfg.healthPort, a.health, "health", a.log) })
@@ -950,32 +948,71 @@ const signInWindow = 10 * time.Minute
 // A deployment with none issues tokens to machines and to nobody else,
 // which is a real posture — a cluster's workload exchange with no human
 // login — and says so rather than serving a chooser with no buttons.
+//
+// The Google client's id and secret are not read here. They are read when a
+// browser is first sent to Google (`/authorize` reaching the sign-in) or comes
+// back, and again after [lazy.TTL], so a start reads no secret and a rotated
+// client takes effect without one.
 func openSignIn(ctx context.Context, cfg Config, log *slog.Logger) ([]issuer.SignIn, error) {
-	if cfg.oauthClientID == "" || cfg.oauthClientSecret == "" {
+	if cfg.oauthProvider == "" {
 		log.WarnContext(ctx, "nobody can sign in: no OAuth client is configured, so this issuer "+
 			"serves token exchange and nothing else")
 		return nil, nil
 	}
-	client := google.OAuthClient{
-		ID:      cfg.oauthClientID,
-		Secret:  cfg.oauthClientSecret,
-		BaseURL: cfg.issuerURL,
+	if cfg.secrets == nil {
+		return nil, errors.New("oauthClient.provider: no secrets source is configured")
 	}
-	log.InfoContext(ctx, "people sign in with Google", slog.String("redirect", client.SignInRedirect()))
+	client := lazy.New(lazy.TTL, func(ctx context.Context) (google.OAuthClient, error) {
+		out := google.OAuthClient{ID: cfg.oauthClientID, BaseURL: cfg.issuerURL}
+		var err error
+		if out.ID == "" {
+			if out.ID, err = cfg.secrets.Get(ctx, secrets.ProviderClientID(cfg.oauthProvider)); err != nil {
+				return google.OAuthClient{}, fmt.Errorf("read the OAuth client id: %w", err)
+			}
+		}
+		if out.Secret, err = cfg.secrets.Get(ctx, secrets.ProviderClientSecret(cfg.oauthProvider)); err != nil {
+			return google.OAuthClient{}, fmt.Errorf("read the OAuth client secret: %w", err)
+		}
+		if out.ID == "" || out.Secret == "" {
+			return google.OAuthClient{}, errors.New("the OAuth client id and secret must not be empty")
+		}
+		return out, nil
+	})
+	log.InfoContext(ctx, "people sign in with Google; the client is read at the first sign-in",
+		slog.String("redirect", google.OAuthClient{BaseURL: cfg.issuerURL}.SignInRedirect()))
 	return []issuer.SignIn{&googleSignIn{client: client}}, nil
 }
 
 // googleSignIn adapts the backend's client to what the issuer's pages
 // need. It is three lines because the issuer's half of a login is three
 // things: where to send them, what came back, and nothing else.
-type googleSignIn struct{ client google.OAuthClient }
+type googleSignIn struct {
+	client *lazy.Value[google.OAuthClient]
+}
 
 func (g *googleSignIn) Kind() string { return "google" }
 
-func (g *googleSignIn) URL(state string) (string, error) { return g.client.SignInURL(state), nil }
+func (g *googleSignIn) URL(state string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	return g.URLContext(ctx, state)
+}
+
+// URLContext implements [issuer.ContextSignIn].
+func (g *googleSignIn) URLContext(ctx context.Context, state string) (string, error) {
+	client, err := g.client.Get(ctx)
+	if err != nil {
+		return "", err
+	}
+	return client.SignInURL(state), nil
+}
 
 func (g *googleSignIn) Identify(ctx context.Context, code string) (string, error) {
-	return google.Identify(ctx, g.client, code)
+	client, err := g.client.Get(ctx)
+	if err != nil {
+		return "", err
+	}
+	return google.Identify(ctx, client, code)
 }
 
 // signingKey reads the key this installation was given.
@@ -1119,31 +1156,6 @@ func nonEmpty(paths []string) []string {
 		}
 	}
 	return out
-}
-
-// readClient takes the OAuth client from the secrets the document names, by
-// its provider: providers/google/<provider>/client-id (unless `id` gives it,
-// which is not a secret: every browser sent to the provider carries it) and
-// providers/google/<provider>/client-secret. Both halves come from one place,
-// so the hub and this service read the client the same way and a client is
-// never half rotated.
-func readClient(ctx context.Context, cfg *Config) error {
-	if cfg.oauthProvider == "" {
-		return nil
-	}
-	if cfg.secrets == nil {
-		return errors.New("oauthClient.provider: no secrets source is configured")
-	}
-	var err error
-	if cfg.oauthClientID == "" {
-		if cfg.oauthClientID, err = cfg.secrets.Get(ctx, secrets.ProviderClientID(cfg.oauthProvider)); err != nil {
-			return fmt.Errorf("read the OAuth client id: %w", err)
-		}
-	}
-	if cfg.oauthClientSecret, err = cfg.secrets.Get(ctx, secrets.ProviderClientSecret(cfg.oauthProvider)); err != nil {
-		return fmt.Errorf("read the OAuth client secret: %w", err)
-	}
-	return nil
 }
 
 // readStateSecret reads the sign-in state's secret the document names, and
@@ -1618,9 +1630,6 @@ func wrappedSigningKeys(
 	}
 	seed, err := readStateSecret(ctx, cfg, cfg.kmsWrapped.StateSecret, "signingKey.kmsWrapped.stateSecret")
 	if err != nil {
-		return nil, nil, nil, err
-	}
-	if err = checkStateSecret(ctx, state, seed); err != nil {
 		return nil, nil, nil, err
 	}
 	key, err := signKey(ctx, cfg, deps, log)

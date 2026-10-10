@@ -62,3 +62,56 @@ func TestTheConsoleStartsOnLayoutV5ByTheOIDCModulesPaths(t *testing.T) {
 		t.Errorf("wrote %v, want only the session key", got)
 	}
 }
+
+// Opening the console's stores reads no secret: the session key is read, and
+// created the first time, when a session or a state is first signed, and the
+// declared Google client when a request first asks for it. Neither is read
+// again within the cache.
+func TestOpeningTheConsoleStoresReadsNoSecretOnLayoutV5(t *testing.T) {
+	ctx := context.Background()
+	rec := secretrec.New()
+	v5 := secretstore.FromStoreV5(rec, "")
+	if _, err := v5.OIDC().SignInClientID("google").Put(ctx, []byte("client-id.example"), ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := v5.OIDC().SignInClientSecret("google").Put(ctx, []byte("client-secret-value"), ""); err != nil {
+		t.Fatal(err)
+	}
+	rec.Reset()
+	set := portstoretest.Envs(t)[0].Open(t)
+	set.Secrets = nil
+	st := &store.Stores{
+		Ports: set, Adapter: store.AdapterDynamoDB, Shared: true, Usable: true,
+		V5: v5, Secrets: secretstore.NewSourceV5(v5, nil),
+	}
+	cfg := serveConfig(t, func(f *config.Serve) { f.OAuthClient = &config.OAuthClient{Provider: "google"} })
+	kept, err := app.OpenStoresLazyForTest(ctx, cfg, st, quiet)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := rec.Addresses("get"); len(got) != 0 {
+		t.Fatalf("opening read %v", got)
+	}
+	key, err := kept.SessionKey()
+	if err != nil || len(key) == 0 {
+		t.Fatalf("the session key = %d bytes, %v", len(key), err)
+	}
+	again, err := kept.SessionKey()
+	if err != nil || !bytes.Equal(key, again) {
+		t.Errorf("the session key changed within the cache: %v", err)
+	}
+	for range 2 {
+		client, err := kept.OAuthClient(ctx)
+		if err != nil || client.ID != "client-id.example" || !client.Configured() || !client.Declared {
+			t.Fatalf("the declared client = %+v, %v", client, err)
+		}
+	}
+	want := []string{
+		"internal/oidc/console-session-key",
+		"internal/oidc/signin/google/client-id",
+		"internal/oidc/signin/google/client-secret",
+	}
+	if got := rec.Addresses("get"); !slices.Equal(got, want) {
+		t.Errorf("read %v, want each once: %v", got, want)
+	}
+}
