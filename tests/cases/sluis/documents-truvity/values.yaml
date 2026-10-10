@@ -321,12 +321,15 @@ documents:
           - example-org
     apps:
       github:
-        runnerTiers:
-          - canary
-          - large
-          - stable
-        catalogue:
+        apps:
+          - purpose: runner
+            tier: stable
+          - purpose: runner
+            tier: large
+          - purpose: runner
+            tier: canary
           - id: release
+            purpose: catalogue
             org: example-org
             permissions:
               contents: write
