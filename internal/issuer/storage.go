@@ -624,7 +624,8 @@ func (s *Storage) GetClientByClientID(ctx context.Context, clientID string) (op.
 			logattr.SafeString("client", clientID), logattr.SafeString("name", resolved.DisplayName))
 		return &client{id: clientID, declared: resolved, lifetime: s.tokenLifetime(resolved), signing: signing}, nil
 	case errors.Is(err, errNotADocumentClient):
-		return nil, fmt.Errorf("%w: %q", ErrUnknownTarget, clientID)
+		// Return invalid_client error for unknown client, per RFC 6749 §5.2.
+		return nil, oidc.ErrInvalidClient().WithDescription("unknown client: %q", clientID).WithParent(fmt.Errorf("%w: %q", ErrUnknownTarget, clientID))
 	default:
 		noteClientRefusal(ctx, err)
 		return nil, err
@@ -656,7 +657,11 @@ func (s *Storage) AuthorizeClientIDSecret(ctx context.Context, clientID, secret 
 		if target, err := documentURL(clientID); err == nil && s.documents.allow.Permits(target) {
 			return errors.New("a client that registers itself by document is public and presents no secret")
 		}
-		return fmt.Errorf("%w: %q", ErrUnknownTarget, clientID)
+		// Return invalid_client error for unknown client, per RFC 6749 §5.2.
+		// The library will convert this to the appropriate HTTP status: 401
+		// when client authentication was attempted over Authorization header,
+		// 400 otherwise.
+		return oidc.ErrInvalidClient().WithDescription("unknown client: %q", clientID).WithParent(fmt.Errorf("%w: %q", ErrUnknownTarget, clientID))
 	}
 	// A public client holds no secret, and the library asks all the same,
 	// including for a token exchange. That is the right question with the
