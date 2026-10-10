@@ -90,6 +90,22 @@ message Session {
   // the policy and configuration stand now. Unset for a chain with no such
   // limit (an exchange's). expires_at is the sliding end beside it.
   google.protobuf.Timestamp deadline = 10;
+  // What the client calls itself, for a person to read: the policy's
+  // display name for a declared client, the `client_name` of its metadata
+  // document for one that identifies itself by URL, else the host of that
+  // URL. Empty from an issuer that predates the field. client_id stays
+  // the exact value.
+  string client_name = 11;
+  // The protected resource its tokens are FOR (RFC 8707), as asked for at
+  // sign-in, such as an MCP server URL. Empty means the client itself,
+  // and every session recorded before resources existed.
+  string resource = 12;
+  // The policy's display name for that resource, or its host when the
+  // policy names none. Empty when resource is.
+  string resource_name = 13;
+  // What the session was granted at sign-in. Empty for a session recorded
+  // before scopes were kept.
+  repeated string scopes = 14;
 }
 
 message ListSessionsRequest {

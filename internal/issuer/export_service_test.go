@@ -12,6 +12,7 @@ import (
 	"github.com/zitadel/oidc/v3/pkg/oidc"
 
 	"github.com/truvity/sluis/internal/access"
+	"github.com/truvity/sluis/policy"
 )
 
 // consentTestKey signs the acceptances [Storage.CompleteAcceptedForTest]
@@ -53,6 +54,17 @@ func NewSessionsServiceForTest(
 	verify func(ctx context.Context, bearer string) (string, []string, error),
 ) *SessionsService {
 	return &SessionsService{sessions: sessions, verify: verify}
+}
+
+// NewSessionsServiceWithPolicyForTest is the contract over a policy that
+// names clients and resources, so a listing can be checked for the names
+// it gives them.
+func NewSessionsServiceWithPolicyForTest(
+	sessions *Sessions,
+	set *policy.Set,
+	verify func(ctx context.Context, bearer string) (string, []string, error),
+) *SessionsService {
+	return &SessionsService{sessions: sessions, policy: func() *policy.Set { return set }, verify: verify}
 }
 
 // NewSessionsServiceWithSSOForTest is the same with the sign-in store

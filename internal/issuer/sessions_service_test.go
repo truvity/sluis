@@ -563,3 +563,85 @@ func TestRevokingBySubstringIsRefused(t *testing.T) {
 		t.Errorf("%d sessions left after a refused revoke, want 1", len(left))
 	}
 }
+
+// A listing names what a person cannot read from an id: the client by its
+// display name (or the host of its URL), and the resource by the policy's
+// name for it (or its host). The ids stay as they were, and a session
+// recorded without a resource says so by saying nothing.
+func TestListingNamesClientsAndResources(t *testing.T) {
+	t.Parallel()
+
+	declared, err := policy.Parse([]byte("version: 1\n" +
+		"groups: { a: { members: [g@h.example] } }\n" +
+		"clients:\n" +
+		"  argocd: { kind: public, display_name: Argo CD, redirects: ['https://argo.example/cb'], requires: [a] }\n" +
+		"resources:\n" +
+		"  'https://mcp.example/v1': { display_name: Example MCP, requires: [a] }\n"))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+
+	set, err := policy.NewSet(declared)
+	if err != nil {
+		t.Fatalf("set: %v", err)
+	}
+
+	ctx := context.Background()
+	state := issuer.NewMemoryState()
+	sessions := issuer.NewSessions(state, time.Hour, 0)
+	svc := issuer.NewSessionsServiceWithPolicyForTest(sessions, set, verifier())
+
+	opened := []issuer.Opened{
+		{Identity: "ada@north.example", ClientID: "argocd", Token: "t-1"},
+		{Identity: "ada@north.example", ClientID: "https://clients.example/meta", Resource: "https://mcp.example/v1", Token: "t-2", Scopes: []string{"openid", "email"}},
+		{Identity: "ada@north.example", ClientID: "https://clients.example/meta", Resource: "https://other.example/x", Token: "t-3"},
+	}
+	for _, o := range opened {
+		if _, err := sessions.Record(ctx, o); err != nil {
+			t.Fatalf("record: %v", err)
+		}
+	}
+
+	got, err := list(t, svc, "ada@north.example|", &accessissuerv1.ListSessionsRequest{Identity: "ada@north.example"})
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+
+	type shown struct{ client, resource, resourceName string }
+
+	have := map[string]shown{}
+	scopes := map[string][]string{}
+
+	for _, s := range got.GetSessions() {
+		key := s.GetClientId() + "|" + s.GetResource()
+		have[key] = shown{s.GetClientName(), s.GetResource(), s.GetResourceName()}
+		scopes[key] = s.GetScopes()
+	}
+
+	want := map[string]shown{
+		"argocd|": {"Argo CD", "", ""},
+		"https://clients.example/meta|https://mcp.example/v1":  {"clients.example", "https://mcp.example/v1", "Example MCP"},
+		"https://clients.example/meta|https://other.example/x": {"clients.example", "https://other.example/x", "other.example"},
+	}
+	for key, w := range want {
+		if have[key] != w {
+			t.Errorf("%s shown as %+v, want %+v", key, have[key], w)
+		}
+	}
+
+	for needle, count := range map[string]int{"argo cd": 1, "example mcp": 1, "clients.example": 2, "other.example": 1, "nothing": 0} {
+		found, err := list(t, svc, "ops@north.example|"+policy.GroupOperators,
+			&accessissuerv1.ListSessionsRequest{Identity: "ada", ClientId: needle, Contains: true})
+		if err != nil {
+			t.Fatalf("list %q: %v", needle, err)
+		}
+
+		if len(found.GetSessions()) != count {
+			t.Errorf("client contains %q found %d sessions, want %d", needle, len(found.GetSessions()), count)
+		}
+	}
+
+	if s := scopes["https://clients.example/meta|https://mcp.example/v1"]; len(s) != 2 || s[0] != "openid" {
+		t.Errorf("scopes = %v, want openid and email", s)
+	}
+}

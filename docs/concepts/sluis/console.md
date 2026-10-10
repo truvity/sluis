@@ -51,6 +51,8 @@ Your own page has three buttons: *Sign out all browsers and apps*, *Disconnect a
 
 A client's page lists its sessions across people. An operator can press *End for everybody*, which sets `every_identity` on `RevokeSessions` and audits `roster.session.revoked` with scope `client_every_identity`.
 
+The operator's Sessions page groups by person, client and resource, with a count that opens to each session. Sessions older than five minutes and never refreshed read *never used*.
+
 ## The issuer's own pages
 
 Four pages run before anyone can be authorized, so none can be a console page.

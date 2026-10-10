@@ -245,7 +245,23 @@ type Session struct {
 	// auth_time plus the absolute limit its class and resource allow, as
 	// the policy and configuration stand now. Unset for a chain with no such
 	// limit (an exchange's). expires_at is the sliding end beside it.
-	Deadline      *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=deadline,proto3" json:"deadline,omitempty"`
+	Deadline *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=deadline,proto3" json:"deadline,omitempty"`
+	// What the client calls itself, for a person to read: the policy's
+	// display name for a declared client, the `client_name` of its metadata
+	// document for one that identifies itself by URL, else the host of that
+	// URL. Empty from an issuer that predates the field. client_id stays
+	// the exact value.
+	ClientName string `protobuf:"bytes,11,opt,name=client_name,json=clientName,proto3" json:"client_name,omitempty"`
+	// The protected resource its tokens are FOR (RFC 8707), as asked for at
+	// sign-in, such as an MCP server URL. Empty means the client itself,
+	// and every session recorded before resources existed.
+	Resource string `protobuf:"bytes,12,opt,name=resource,proto3" json:"resource,omitempty"`
+	// The policy's display name for that resource, or its host when the
+	// policy names none. Empty when resource is.
+	ResourceName string `protobuf:"bytes,13,opt,name=resource_name,json=resourceName,proto3" json:"resource_name,omitempty"`
+	// What the session was granted at sign-in. Empty for a session recorded
+	// before scopes were kept.
+	Scopes        []string `protobuf:"bytes,14,rep,name=scopes,proto3" json:"scopes,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -346,6 +362,34 @@ func (x *Session) GetSessionClass() SessionClass {
 func (x *Session) GetDeadline() *timestamppb.Timestamp {
 	if x != nil {
 		return x.Deadline
+	}
+	return nil
+}
+
+func (x *Session) GetClientName() string {
+	if x != nil {
+		return x.ClientName
+	}
+	return ""
+}
+
+func (x *Session) GetResource() string {
+	if x != nil {
+		return x.Resource
+	}
+	return ""
+}
+
+func (x *Session) GetResourceName() string {
+	if x != nil {
+		return x.ResourceName
+	}
+	return ""
+}
+
+func (x *Session) GetScopes() []string {
+	if x != nil {
+		return x.Scopes
 	}
 	return nil
 }
@@ -763,7 +807,7 @@ var File_sluis_v1_session_proto protoreflect.FileDescriptor
 
 const file_sluis_v1_session_proto_rawDesc = "" +
 	"\n" +
-	"\x16sluis/v1/session.proto\x12\bsluis.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xb1\x03\n" +
+	"\x16sluis/v1/session.proto\x12\bsluis.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xab\x04\n" +
 	"\aSession\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1a\n" +
 	"\bidentity\x18\x02 \x01(\tR\bidentity\x12\x1b\n" +
@@ -776,7 +820,12 @@ const file_sluis_v1_session_proto_rawDesc = "" +
 	"\x03sso\x18\b \x01(\tR\x03sso\x12;\n" +
 	"\rsession_class\x18\t \x01(\x0e2\x16.sluis.v1.SessionClassR\fsessionClass\x126\n" +
 	"\bdeadline\x18\n" +
-	" \x01(\v2\x1a.google.protobuf.TimestampR\bdeadline\"\xa6\x01\n" +
+	" \x01(\v2\x1a.google.protobuf.TimestampR\bdeadline\x12\x1f\n" +
+	"\vclient_name\x18\v \x01(\tR\n" +
+	"clientName\x12\x1a\n" +
+	"\bresource\x18\f \x01(\tR\bresource\x12#\n" +
+	"\rresource_name\x18\r \x01(\tR\fresourceName\x12\x16\n" +
+	"\x06scopes\x18\x0e \x03(\tR\x06scopes\"\xa6\x01\n" +
 	"\x13ListSessionsRequest\x12\x1a\n" +
 	"\bidentity\x18\x01 \x01(\tR\bidentity\x12\x1b\n" +
 	"\tclient_id\x18\x02 \x01(\tR\bclientId\x12\x1b\n" +

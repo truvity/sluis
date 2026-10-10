@@ -208,6 +208,9 @@ func HandlerWithSignIn(iss *Issuer, storage op.Storage, signIn SignInDeps) (http
 	)
 	sessionsService := NewSessionsService(iss, verifier, signIn.Secure)
 	sessionsService.announce = signIn.Announce
+	if concrete, ok := storage.(*Storage); ok {
+		sessionsService.documents = concrete.documents
+	}
 
 	mountSessions(mux, sessionsService, signIn.ConsoleOrigin)
 
