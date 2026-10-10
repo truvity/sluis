@@ -1,12 +1,12 @@
 package sluispulumi
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -1355,14 +1355,16 @@ const checkEvent = `{"kind":"check"}`
 // the names only: no value is in the trigger, the state or the preview.
 func newCheck(ctx *pulumi.Context, name string, live *lambda.Alias, fnName pulumi.StringOutput,
 	declared []string, after []pulumi.Resource, parent pulumi.ResourceOption) error {
-	sum := sha256.Sum256([]byte(strings.Join(declared, "\n")))
+	// A change detector over names, not a secret: a short non-cryptographic hash.
+	h := fnv.New64a()
+	_, _ = h.Write([]byte(strings.Join(declared, "\n")))
 	if _, err := lambda.NewInvocation(ctx, name+"-check", &lambda.InvocationArgs{
 		FunctionName: fnName,
 		Qualifier:    live.Name,
 		Input:        pulumi.String(checkEvent),
 		Triggers: pulumi.StringMap{
 			"version":  live.FunctionVersion,
-			"declared": pulumi.String(hex.EncodeToString(sum[:])),
+			"declared": pulumi.String(strconv.FormatUint(h.Sum64(), 16)),
 		},
 	}, parent, pulumi.DependsOn(after)); err != nil {
 		return fmt.Errorf("sluis check: %w", err)

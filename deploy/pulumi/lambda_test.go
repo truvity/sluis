@@ -1698,8 +1698,8 @@ func TestThePostDeployCheckInvokesTheLiveAliasWithTheCheckEvent(t *testing.T) {
 	if got := trig["version"].StringValue(); got != "7" {
 		t.Errorf("version trigger %q, want the function's version", got)
 	}
-	if got := trig["declared"].StringValue(); len(got) != 64 || strings.Trim(got, "0123456789abcdef") != "" {
-		t.Errorf("declared trigger %q is not a sha256", got)
+	if got := trig["declared"].StringValue(); got == "" || strings.Trim(got, "0123456789abcdef") != "" {
+		t.Errorf("declared trigger %q is not a hex hash", got)
 	}
 	if len(trig) != 2 {
 		t.Errorf("triggers %v: the version and the hash of the names, nothing else", trig)
