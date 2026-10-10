@@ -1442,7 +1442,8 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 		params, recoveryName = append(params, recoveryParam), recoveryParam.Name
 	}
 	if a.Layout.has5() {
-		recoveryParamV5, err := newSecretParam(name+"-recovery-password-v5", RecoveryPasswordParameterNameV5(a.Instance), recoveryValue.ApplyT(secretDocument).(pulumi.StringOutput))
+		recoveryValueV5 := recoveryValue.ApplyT(secretDocument).(pulumi.StringOutput)
+		recoveryParamV5, err := newSecretParam(name+"-recovery-password-v5", RecoveryPasswordParameterNameV5(a.Instance), recoveryValueV5)
 		if err != nil {
 			return nil, fmt.Errorf("sluis recovery password parameter (v5): %w", err)
 		}
