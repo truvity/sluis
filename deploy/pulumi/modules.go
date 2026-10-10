@@ -60,6 +60,9 @@ func (s ModuleSet) InternalPrefix(m Module) string {
 	return InternalParameterPrefix(s.Instance) + "/" + string(m)
 }
 
+// rootOf is the installation's SSM root, `/sluis/<instance>`.
+func (s ModuleSet) rootOf() string { return SSMRoot(s.Instance) }
+
 // ExternalPrefix is the typed documents the module publishes:
 // `/sluis/<instance>/external/<module>`.
 func (s ModuleSet) ExternalPrefix(m Module) string {

@@ -196,3 +196,30 @@ func TestGoogleRoleNamesGoogleInStorageAndPaths(t *testing.T) {
 		}
 	}
 }
+
+// credentials.preset: a role that does not host the Cloudflare module reads the
+// minter's parameter and nothing else of it; the module's own role has it
+// already and gets no extra statement.
+func TestModuleRoleMinterCrossGrant(t *testing.T) {
+	env := testModuleEnv()
+	env.MinterRefs = []string{"internal/cloudflare/main/minter"}
+	issuer, err := ModuleRolePolicy(env, testRoles()[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"SluisCrossCloudflareMinter", "/sluis/i1/internal/cloudflare/main/minter", "SluisParameterKeyCross"} {
+		if !strings.Contains(issuer, want) {
+			t.Errorf("missing %q in %s", want, issuer)
+		}
+	}
+	if strings.Contains(issuer, "internal/cloudflare/*") {
+		t.Errorf("more of the module than the minter: %s", issuer)
+	}
+	own, err := ModuleRolePolicy(env, testRoles()[1])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(own, "SluisCrossCloudflareMinter") {
+		t.Errorf("the module's own role gets a cross-grant: %s", own)
+	}
+}

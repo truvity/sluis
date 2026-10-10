@@ -179,13 +179,15 @@ func TestTheGrantCarriesTheLegacyArnAndEachModulesTable(t *testing.T) {
 }
 
 // The role gets the tables of the modules it hosts, written; the backup table
-// for the maintenance item only; the minter's only with the minter.
+// for the maintenance item only; the minter's only with the minter. (Layout
+// v4+v5: on v4 the module tables are not granted, see layout_test.go.)
 func TestTheFunctionRoleIsGrantedTheModuleTablesAndTheLegacyOne(t *testing.T) {
 	tbl := map[arp.Module]pulumi.StringInput{}
 	for _, m := range arp.Modules() {
 		tbl[m] = pulumi.String(tableArn("sluis-staging-" + string(m)))
 	}
 	rec, _ := mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) {
+		a.Layout = arp.LayoutV4V5
 		a.State.Tables = tbl
 		a.State.KeyArn = pulumi.String(arnp + "kms:" + region + ":" + account + ":key/tables")
 	}})

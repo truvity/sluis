@@ -59,6 +59,24 @@ const (
 
 type statement = map[string]any
 
+// Layout is the storage layout a function's role and documents follow
+// (docs/decisions/0072): LayoutV4 keeps the v4 grants, LayoutV5 gets only the
+// v5 grants, and LayoutV4V5 both, for the migration window.
+type Layout string
+
+// The values of LambdaArgs.Layout.
+const (
+	LayoutV4   Layout = "v4"
+	LayoutV5   Layout = "v5"
+	LayoutV4V5 Layout = "v4+v5"
+)
+
+func (l Layout) valid() bool { return l == "" || l == LayoutV4 || l == LayoutV5 || l == LayoutV4V5 }
+
+// has4 and has5 say which grants the layout carries; the empty layout is v4.
+func (l Layout) has4() bool { return l != LayoutV5 }
+func (l Layout) has5() bool { return l == LayoutV5 || l == LayoutV4V5 }
+
 // storageStatements is what a process that keeps sluis's blobs off the cluster
 // is allowed: get, put and delete objects of the one bucket, and list it (a read
 // of an absent key is a 404 only with s3:ListBucket, and a 403 without it).
@@ -296,6 +314,13 @@ func ConfigParameterPrefix(instance string) string {
 	return InternalParameterPrefix(instance) + "/config"
 }
 
+// ConfigParameterPrefixV5 is the v5 home of what ConfigParameterPrefix holds on
+// layout v4: the issuer's module, `internal/oidc` (`oidc/state-secret`,
+// `oidc/recovery-password`, `oidc/signin/...`, `oidc/clients/<id>`).
+func ConfigParameterPrefixV5(instance string) string {
+	return InternalParameterPrefix(instance) + "/" + string(ModuleOIDC)
+}
+
 // InternalParameterPrefix is where sluis keeps its own secrets.
 func InternalParameterPrefix(instance string) string { return SSMRoot(instance) + "/internal" }
 
@@ -363,6 +388,14 @@ type functionPolicyIn struct {
 	invokeFunctionArns []string
 	// cloudflare adds the grants of the Cloudflare minter (see ssmStatements).
 	cloudflare bool
+
+	// layout says which grants the role carries; the empty one is v4.
+	layout Layout
+	// modules names the instance and the tables, for the v5 grants.
+	modules ModuleSet
+	// minterRefs are the minter parameters (internal addresses, a `*` allowed) the
+	// role reads without hosting the Cloudflare module (credentials.preset).
+	minterRefs []string
 }
 
 // ssmStatements is the grant on /sluis/<instance> that both the Lambda role and
@@ -436,16 +469,32 @@ func functionPolicy(in functionPolicyIn) (string, error) {
 		"Action":   []string{logsCreateStream, logsPutEvents},
 		"Resource": in.logGroupArn + ":*",
 	}}
-	if in.external == nil {
-		st = append(st, storageStatements(in.bucketArn)...)
-	} else {
+	switch {
+	case in.external != nil:
 		st = append(st, credentialsStatements(in.external, in.region, in.account, in.instance, in.parameterKeyArn)...)
+	case in.layout.has4():
+		st = append(st, storageStatements(in.bucketArn)...)
 	}
-	st = append(st, stateStatements(in.tableArn, in.tableKey, in.moduleTables, in.cloudflare)...)
-	st = append(st, ssmStatements(in.region, in.account, in.instance, in.parameterKeyArn, in.cloudflare)...)
+	if in.layout.has4() {
+		// Layout v4: the one table and the v4 paths. The module tables are v5's.
+		st = append(st, stateStatements(in.tableArn, in.tableKey, nil, false)...)
+		st = append(st, ssmStatements(in.region, in.account, in.instance, in.parameterKeyArn, in.cloudflare)...)
+	}
+	if in.layout.has5() {
+		// Layout v5: what ModuleRoleStatements renders for the modules this one
+		// function hosts. A statement the v4 grants already carry (the logs, the
+		// audit queue, the table key and the parameter key, which v4 grants for
+		// all of internal/ and external/) is not written twice: a Sid is unique
+		// in a policy.
+		v5, err := in.moduleStatements()
+		if err != nil {
+			return "", err
+		}
+		st = appendNew(st, v5...)
+	}
 	if in.queueArn != "" {
 		// No queue (audit off): the function may send to none.
-		st = append(st, statement{
+		st = appendNew(st, statement{
 			"Sid":      sidAudit,
 			"Effect":   "Allow",
 			"Action":   sqsSendMessage,
@@ -466,6 +515,50 @@ func functionPolicy(in functionPolicyIn) (string, error) {
 		"Resource": in.invokeFunctionArns,
 	}, webIdentityStatement(in.webIdentityAud, in.webIdentityExtra))
 	return document(st)
+}
+
+// hostedModules are the modules the one function hosts until each is split out:
+// the issuer's, with github, slack and google, and the Cloudflare minter when
+// the installation declares presets.
+func hostedModules(cloudflare bool) []Module {
+	hosts := []Module{ModuleOIDC, ModuleGitHub, ModuleSlack, ModuleGoogle}
+	if cloudflare {
+		hosts = append(hosts, ModuleCloudflare)
+	}
+	return hosts
+}
+
+// moduleStatements is the v5 grants of the function's role: ModuleRoleStatements
+// of the role that hosts hostedModules.
+func (in functionPolicyIn) moduleStatements() ([]statement, error) {
+	role := Role{Name: RoleIssuer, Hosts: hostedModules(in.cloudflare)}
+	env := ModuleEnv{
+		Region: in.region, Account: in.account, Modules: in.modules,
+		BucketArn: in.bucketArn, TableArns: in.moduleTables, TableKeyArn: in.tableKey,
+		ParameterKeyArn: in.parameterKeyArn, QueueArn: in.queueArn,
+		LogGroupArns: map[string]string{RoleIssuer: in.logGroupArn},
+		MinterRefs:   in.minterRefs,
+		Roles:        []Role{role},
+	}
+	if in.external != nil {
+		env.BucketArn = ""
+	}
+	return ModuleRoleStatements(env, role)
+}
+
+// appendNew appends the statements whose Sid is not in st yet.
+func appendNew(st []statement, more ...statement) []statement {
+	seen := map[any]bool{}
+	for _, s := range st {
+		seen[s["Sid"]] = true
+	}
+	for _, s := range more {
+		if !seen[s["Sid"]] {
+			seen[s["Sid"]] = true
+			st = append(st, s)
+		}
+	}
+	return st
 }
 
 // webIdentityStatement lets the controllers ask STS for the role's outbound web

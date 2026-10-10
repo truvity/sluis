@@ -28,6 +28,10 @@ const (
 const (
 	stateSecretName      = "issuer/state-secret"
 	recoveryPasswordName = "recovery/password"
+	// The v5 addresses of the same two secrets, below internal/: the document
+	// keeps naming the v4 spellings, and a process on layout v5 reads these.
+	stateSecretNameV5      = "oidc/state-secret"
+	recoveryPasswordNameV5 = "oidc/recovery-password"
 )
 
 // renderDocuments renders the two documents the configuration layer holds and
@@ -126,6 +130,10 @@ func declaredParameters(docs map[string]string) ([]string, error) {
 		switch {
 		case d.Ref:
 			names = append(names, d.Name)
+		case !v4 && d.Kind == "state-secret":
+			names = append(names, "internal/"+stateSecretNameV5)
+		case !v4 && d.Kind == "recovery-password":
+			names = append(names, "internal/"+recoveryPasswordNameV5)
 		case v4 && d.Name != "":
 			names = append(names, "internal/config/"+d.Name)
 		case d.Subject != "":
@@ -138,6 +146,36 @@ func declaredParameters(docs map[string]string) ([]string, error) {
 	return slices.Compact(names), nil
 }
 
+// minterRefsOf is the Cloudflare minter parameters (internal addresses) a
+// process that mints its blob credentials from a preset
+// (`ports.blob.s3.credentials.preset`) reads: the minter of each account the
+// document declares, or every account's when it declares none (the minter is
+// then remote and its accounts are not in this document). Nil when no preset is
+// used. The role of a function that hosts the Cloudflare module has them
+// already; any other role needs this one cross-grant on layout v5, because the
+// minter's parameter is in the Cloudflare module's prefix.
+func minterRefsOf(docs map[string]string) ([]string, error) {
+	svc, pol, err := loadDocuments(docs)
+	if err != nil {
+		return nil, err
+	}
+	p := svc.Ports
+	if p == nil || p.Blob == nil || p.Blob.S3 == nil || p.Blob.S3.Credentials == nil || p.Blob.S3.Credentials.Preset == "" {
+		return nil, nil
+	}
+	var refs []string
+	for _, d := range sluisconfig.DeclaredSecrets(svc, pol) {
+		if d.Ref && strings.HasPrefix(d.Name, "internal/cloudflare/") && strings.HasSuffix(d.Name, "/minter") {
+			refs = append(refs, d.Name)
+		}
+	}
+	if len(refs) == 0 {
+		refs = []string{"internal/cloudflare/*/minter"}
+	}
+	slices.Sort(refs)
+	return slices.Compact(refs), nil
+}
+
 // ownRuntime writes what the estate supplies and the runtime reads, beyond what
 // the renderer knows: `instance` and the `keys:` block (LambdaArgs.Keys), and
 // `ports.blob` for external blobs (StorageArgs.Blobs). It reports whether it
@@ -147,6 +185,12 @@ func declaredParameters(docs map[string]string) ([]string, error) {
 // without AllowEndpoints.
 func ownRuntime(doc map[string]any, a *LambdaArgs) (bool, error) {
 	added := false
+	if a.Layout == LayoutV5 {
+		if err := ownLayoutV5(doc, a); err != nil {
+			return false, err
+		}
+		added = true
+	}
 	if a.Keys != nil {
 		// A document rendered from an Installation already carries the library's
 		// own block (withKeys), and that alone may be there.
@@ -220,6 +264,20 @@ func (a LambdaArgs) withInstallation() (LambdaArgs, error) {
 	case sluisconfig.ShapeLambda:
 	default:
 		errs = append(errs, fmt.Errorf("sluispulumi: LambdaArgs.Installation.Shape is %q: the library deploys shape lambda", in.Shape))
+	}
+	if a.Layout == LayoutV5 && aws.Table != "" {
+		errs = append(errs, errors.New("sluispulumi: LambdaArgs.Installation.AWS.Table is the layout v4 table and Layout is v5: "+
+			"leave it out, the library renders ports.dynamodb.tables from the State grant"))
+	}
+	if in.Secrets != nil && in.Secrets.Layout != "" {
+		want := string(LayoutV4)
+		if a.Layout == LayoutV5 {
+			want = string(LayoutV5)
+		}
+		if in.Secrets.Layout != want {
+			errs = append(errs, fmt.Errorf("sluispulumi: LambdaArgs.Layout is %q and the installation's secrets.layout is %q: say it once "+
+				"(the library writes secrets.layout: v5 for Layout v5 and leaves v4 for v4 and v4+v5)", a.Layout, in.Secrets.Layout))
+		}
 	}
 	fill("Instance", in.Instance, a.Instance, func(v string) { in.Instance = v })
 	fill("Region", aws.Region, a.Region, func(v string) { aws.Region = v })
@@ -393,6 +451,62 @@ func ownServe(doc map[string]any, a *LambdaArgs, root string) error {
 					return err
 				}
 			}
+		}
+	}
+	return nil
+}
+
+// ownLayoutV5 writes what layout v5 asks of the service document: `secrets.layout:
+// v5` and `ports.dynamodb.tables` (the tables of the modules the State grant
+// names), which the schema takes only together. The layout v4 table
+// (`ports.dynamodb.table`, or `adapters.state` with one) is refused, not
+// dropped: the layouts do not mix. Only layout v5 writes them: on v4 and v4+v5
+// the document is v4's, and the flip is this layout change.
+func ownLayoutV5(doc map[string]any, a *LambdaArgs) error {
+	secrets, err := child(doc, "Config", "secrets")
+	if err != nil {
+		return err
+	}
+	if err = own(secrets, "Config: secrets", "layout", string(LayoutV5)); err != nil {
+		return err
+	}
+	ports, err := child(doc, "Config", "ports")
+	if err != nil {
+		return err
+	}
+	if err = own(ports, "Config: ports", "adapter", "dynamodb"); err != nil {
+		return err
+	}
+	dyn, err := child(ports, "Config: ports", "dynamodb")
+	if err != nil {
+		return err
+	}
+	if _, set := dyn["table"]; set {
+		return errors.New("sluispulumi: LambdaArgs.Config: ports.dynamodb.table is layout v4 and Layout is v5: leave it out, " +
+			"the library writes ports.dynamodb.tables from the State grant")
+	}
+	if ad, ok := doc["adapters"].(map[string]any); ok {
+		if st, ok := ad["state"].(map[string]any); ok {
+			if _, set := st["settings"]; set {
+				return errors.New("sluispulumi: LambdaArgs.Config: adapters.state.settings names the layout v4 table and Layout is v5: " +
+					"leave it out (an Installation: leave aws.table empty)")
+			}
+		}
+	}
+	tables := map[string]any{}
+	set := ModuleSet{Instance: a.Instance, Tables: a.TableNames}
+	for _, m := range Modules() {
+		if _, ok := a.State.Tables[m]; ok {
+			tables[string(m)] = set.TableName(m)
+		}
+	}
+	if cur, set := dyn["tables"]; set && !reflect.DeepEqual(cur, tables) {
+		return fmt.Errorf("sluispulumi: LambdaArgs.Config: ports.dynamodb.tables is %v, and the library writes %v: leave it out", cur, tables)
+	}
+	dyn["tables"] = tables
+	if a.Region != "" {
+		if err = own(dyn, "Config: ports.dynamodb", "region", a.Region); err != nil {
+			return err
 		}
 	}
 	return nil
