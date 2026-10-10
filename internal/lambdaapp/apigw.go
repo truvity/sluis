@@ -15,6 +15,7 @@ import (
 
 	"github.com/aws/aws-lambda-go/events"
 
+	"github.com/truvity/sluis/internal/deploycheck"
 	"github.com/truvity/sluis/internal/modcall"
 	"github.com/truvity/sluis/storage/logattr"
 )
@@ -42,6 +43,9 @@ type HTTP struct {
 	// {"kind":"cloudflare"} event); nil when the function has no such section.
 	// It returns the number of presets that failed and a one-line summary.
 	cloudflare func(context.Context) (failed int, summary string, err error)
+	// check proves the declared secrets are in SSM (the {"kind":"check"} event);
+	// nil in a function with no document to check.
+	check func(context.Context) (deploycheck.Report, error)
 	// controllers run a controller pass per {"kind":"tick"|"run"} event, by the
 	// kind of the event's target; kindOf says which kind a target is.
 	controllers map[string]*Controller

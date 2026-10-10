@@ -1,0 +1,6 @@
+client-secret	subject=console	name=clients/console/secret
+recovery-password	subject=	name=recovery/password
+signin-client-id	subject=prod	name=providers/google/prod/client-id
+signin-client-secret	subject=prod	name=providers/google/prod/client-secret
+state-secret	subject=	name=issuer/state-secret
+workspace-key	subject=C0example	name=directory/C0example/key

@@ -35,6 +35,7 @@ import (
 	"go.opentelemetry.io/otel"
 
 	"github.com/truvity/sluis/internal/config"
+	"github.com/truvity/sluis/internal/deploycheck"
 	githubapp "github.com/truvity/sluis/internal/githubroster/app"
 	githubcontroller "github.com/truvity/sluis/internal/githubroster/controller"
 	"github.com/truvity/sluis/internal/hub"
@@ -178,6 +179,20 @@ func (f *flusher) Flush(ctx context.Context) {
 	f.skipTill = f.clock().Add(wait)
 }
 
+// checkFunc is the {"kind":"check"} event's body: the declared secrets of the
+// document in file (and the policy it names), read from SSM. only keeps the
+// kinds the function's module reads; none keeps them all. The document is read
+// again when asked, which is once per deploy.
+func checkFunc(file string, only ...string) func(context.Context) (deploycheck.Report, error) {
+	return func(ctx context.Context) (deploycheck.Report, error) {
+		c, err := config.LoadConfig[config.Sluis](file, nil)
+		if err != nil {
+			return deploycheck.Report{}, err
+		}
+		return deploycheck.Check(ctx, &c.Service.Serve, c.Policy, only...)
+	}
+}
+
 func open(ctx context.Context, file string) (*Function, error) {
 	// The KMS signer's state secret (signingKey.kms.stateSecret) is a secret
 	// like any other: the document names it, and its `secrets` source (ssm)
@@ -253,7 +268,7 @@ func open(ctx context.Context, file string) (*Function, error) {
 	// request that finds one due refreshes it, and a schedule does so between
 	// requests ({"kind":"refresh"}).
 	service.UseRequestRefresh(hub.DefaultRequestRefreshTimeout)
-	http := NewHTTP(service.Handler(), service.Settle, log).WithControllers(kindOf, controllers)
+	http := NewHTTP(service.Handler(), service.Settle, log).WithControllers(kindOf, controllers).WithCheck(checkFunc(file))
 	if service.Cloudflare() != nil {
 		http.WithCloudflare(func(ctx context.Context) (int, string, error) {
 			res, err := service.TickCloudflare(ctx)

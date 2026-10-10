@@ -11,6 +11,7 @@ import (
 
 	"github.com/aws/aws-lambda-go/lambdacontext"
 
+	"github.com/truvity/sluis/internal/deploycheck"
 	"github.com/truvity/sluis/internal/modcall/lambdacall"
 	"github.com/truvity/sluis/internal/port/invoke"
 	"github.com/truvity/sluis/storage/logattr"
@@ -176,6 +177,37 @@ type CloudflareResult struct {
 	Failed  int    `json:"failed"`
 }
 
+// KindCheck is the event a deploy sends the function after it exists, to prove
+// that every secret the function's document and policy declare is in SSM:
+// {"kind":"check"}. It reads no state and writes nothing; the answer is the
+// deploycheck report (addresses and versions, never a value), and a missing or
+// empty secret is an error of the invocation, naming the addresses, so the
+// deploy fails.
+const KindCheck = "check"
+
+// WithCheck makes the function answer {"kind":"check"} events with run.
+func (h *HTTP) WithCheck(run func(context.Context) (deploycheck.Report, error)) *HTTP {
+	h.check = run
+	return h
+}
+
+// checkDeclared runs the check.
+func (h *HTTP) checkDeclared(ctx context.Context) (any, error) {
+	if h.check == nil {
+		return nil, errors.New("this function has no document to check")
+	}
+	rep, err := h.check(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("check: %w", err)
+	}
+	if err := rep.Err(); err != nil {
+		h.log.ErrorContext(ctx, "declared secrets are missing or invalid", logattr.SafeString("summary", oneLine(rep.Describe())))
+		return nil, fmt.Errorf("check: %w", err)
+	}
+	h.log.InfoContext(ctx, "declared secrets present", logattr.SafeString("summary", rep.Describe()))
+	return rep, nil
+}
+
 // scheduled handles an event of the http function that is not a request.
 func (h *HTTP) scheduled(ctx context.Context, kind string) (any, error) {
 	if kind == KindRefresh {
@@ -184,8 +216,11 @@ func (h *HTTP) scheduled(ctx context.Context, kind string) (any, error) {
 	if kind == KindCloudflare {
 		return h.tickCloudflare(ctx)
 	}
-	return nil, fmt.Errorf("the event's kind is %q: the function takes API Gateway events and {\"kind\":%q|%q|%q}",
-		oneLine(kind), KindTick, KindRun, KindRefresh)
+	if kind == KindCheck {
+		return h.checkDeclared(ctx)
+	}
+	return nil, fmt.Errorf("the event's kind is %q: the function takes API Gateway events and {\"kind\":%q|%q|%q|%q}",
+		oneLine(kind), KindTick, KindRun, KindRefresh, KindCheck)
 }
 
 // refreshDirectory runs one directory refresh pass.

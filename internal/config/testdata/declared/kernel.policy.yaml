@@ -1,0 +1,31 @@
+apiVersion: sluis.truvity.github.io/policy/v2
+vocabulary:
+  scopes:
+    all: {}
+  things:
+    console:
+      scopes: [all]
+      roles:
+        viewer: []
+groups:
+  all:console:viewer:
+    matchers:
+      - email_domain: example.com
+clients:
+  console:
+    kind: confidential
+    secret: clients/console/secret
+    redirects: [https://access.example/console/callback]
+    requires: [all:console:viewer]
+    groups: all
+  argo:
+    kind: confidential
+    secret: {generate: true}
+    redirects: [https://argo.example/auth/callback]
+    requires: [all:console:viewer]
+    groups: all
+  cli:
+    kind: public
+    redirects: [http://localhost:8085/callback]
+    requires: [all:console:viewer]
+    groups: all

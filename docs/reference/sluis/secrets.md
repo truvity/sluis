@@ -24,7 +24,7 @@ secrets:
 | `ssm` | the SecureString `<root>/internal/config/<name>` of AWS SSM Parameter Store | that one parameter, decrypted, on first use and again once `refresh` (`1m`) has passed. Nothing is read at start |
 
 
-An undelivered name stops the start and appears in the error, never its value. Kubernetes defaults to `file`, Lambda to `ssm`. See [OpenBao](openbao-secrets-adapter.md).
+An undelivered name fails the request that reads it, with the name in the error and never its value. `sluis check --config <file>` finds it first. Kubernetes defaults to `file`, Lambda to `ssm`. See [OpenBao](openbao-secrets-adapter.md).
 
 ## The names
 
