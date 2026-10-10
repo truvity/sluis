@@ -165,6 +165,23 @@ func (s *store) List(ctx context.Context) ([]string, error) {
 	return out, nil
 }
 
+// Walk implements [state.Walker].
+func (s *store) Walk(ctx context.Context) ([]string, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	s.t.mu.Lock()
+	defer s.t.mu.Unlock()
+	out := []string{}
+	for k, e := range s.t.entries {
+		if len(e.versions) > 0 && strings.HasPrefix(k, s.prefix) && len(k) > len(s.prefix) {
+			out = append(out, k[len(s.prefix):])
+		}
+	}
+	sort.Strings(out)
+	return out, nil
+}
+
 func clone(it state.Item) state.Item {
 	it.Value = append([]byte(nil), it.Value...)
 	return it

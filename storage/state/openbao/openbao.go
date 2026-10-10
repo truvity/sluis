@@ -265,9 +265,52 @@ func (s *store) Delete(ctx context.Context, key string) error {
 }
 
 func (s *store) List(ctx context.Context) ([]string, error) {
-	resp, err := s.c.Request(ctx, "LIST", s.metaURL(s.prefix), nil)
+	keys, err := s.listAt(ctx, s.prefix)
+	if err != nil {
+		return nil, err
+	}
+	names := []string{}
+	for _, k := range keys {
+		if !strings.HasSuffix(k, "/") { // a folder: keys nested deeper are not listed
+			names = append(names, k)
+		}
+	}
+	sort.Strings(names)
+	return names, nil
+}
+
+// Walk implements [state.Walker]: it lists each folder below the prefix in turn.
+func (s *store) Walk(ctx context.Context) ([]string, error) {
+	names := []string{}
+	var walk func(rel string) error
+	walk = func(rel string) error {
+		keys, err := s.listAt(ctx, s.prefix+rel)
+		if err != nil {
+			return err
+		}
+		for _, k := range keys {
+			if strings.HasSuffix(k, "/") {
+				if err := walk(rel + k); err != nil {
+					return err
+				}
+				continue
+			}
+			names = append(names, rel+k)
+		}
+		return nil
+	}
+	if err := walk(""); err != nil {
+		return nil, err
+	}
+	sort.Strings(names)
+	return names, nil
+}
+
+// listAt is the entries of one folder, folders with a trailing slash.
+func (s *store) listAt(ctx context.Context, p string) ([]string, error) {
+	resp, err := s.c.Request(ctx, "LIST", s.metaURL(p), nil)
 	if openbao.Status(err) == http.StatusNotFound {
-		return []string{}, nil
+		return nil, nil
 	}
 	if err != nil {
 		return nil, err
@@ -276,14 +319,7 @@ func (s *store) List(ctx context.Context) ([]string, error) {
 		Keys []string `json:"keys"`
 	}
 	if err := json.Unmarshal(resp.Data, &out); err != nil {
-		return nil, fmt.Errorf("openbao: list %s: %w", s.prefix, err)
+		return nil, fmt.Errorf("openbao: list %s: %w", p, err)
 	}
-	names := []string{}
-	for _, k := range out.Keys {
-		if !strings.HasSuffix(k, "/") { // a folder: keys nested deeper are not listed
-			names = append(names, k)
-		}
-	}
-	sort.Strings(names)
-	return names, nil
+	return out.Keys, nil
 }

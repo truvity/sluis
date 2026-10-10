@@ -131,6 +131,20 @@ func testList(t *testing.T, s state.Store) {
 	if want := []string{"c"}; !sameSet(got, want) {
 		t.Fatalf("Child(dir).List = %v, want %v", got, want)
 	}
+	all, err := state.ListAll(ctx(t), s)
+	if err != nil {
+		t.Fatalf("ListAll: %v", err)
+	}
+	if want := []string{"a", "b", "dir/c", "dir/sub/d"}; !sameSet(all, want) {
+		t.Fatalf("ListAll = %v, want %v (every key at any depth)", all, want)
+	}
+	all, err = state.ListAll(ctx(t), s.Child("dir"))
+	if err != nil {
+		t.Fatalf("Child(dir) ListAll: %v", err)
+	}
+	if want := []string{"c", "sub/d"}; !sameSet(all, want) {
+		t.Fatalf("Child(dir) ListAll = %v, want %v", all, want)
+	}
 }
 
 func testChild(t *testing.T, s state.Store) {

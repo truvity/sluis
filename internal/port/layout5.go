@@ -343,3 +343,32 @@ func LocateModule5(prefix string) (Module, bool) {
 	}
 	return found, found != ""
 }
+
+// StatePrefixes5 are the State key prefixes whose records module m owns: one
+// per family of the layout, the shortest that covers it, sorted. A family of no
+// one module (leases, notifications, gates, caches, dedupe records and the
+// maintenance flag) is in none. An export of a module reads these and keeps
+// only a key that [Locate5] puts in the module.
+func StatePrefixes5(m Module) []string { return prefixes5(rules5, m) }
+
+// SetPrefixes5 are the Index set prefixes module m owns (all are oidc's), as
+// [StatePrefixes5] is for State.
+func SetPrefixes5(m Module) []string { return prefixes5(setRules5, m) }
+
+func prefixes5(rules []rule5, m Module) []string {
+	var all []string
+	for i := range rules {
+		if rules[i].module == m && m != "" && rules[i].moduleOf == nil {
+			all = append(all, rules[i].prefix)
+		}
+	}
+	sort.Strings(all)
+	var out []string
+	for _, p := range all {
+		if len(out) > 0 && strings.HasPrefix(p, out[len(out)-1]) {
+			continue
+		}
+		out = append(out, p)
+	}
+	return out
+}

@@ -385,8 +385,16 @@ func (s *store) Delete(ctx context.Context, key string) error {
 	return nil
 }
 
-func (s *store) List(ctx context.Context) ([]string, error) {
-	in := &awss3.ListObjectsV2Input{Bucket: aws.String(s.cfg.Bucket), Prefix: aws.String(s.prefix), Delimiter: aws.String("/")}
+func (s *store) List(ctx context.Context) ([]string, error) { return s.list(ctx, true) }
+
+// Walk implements [state.Walker].
+func (s *store) Walk(ctx context.Context) ([]string, error) { return s.list(ctx, false) }
+
+func (s *store) list(ctx context.Context, oneLevel bool) ([]string, error) {
+	in := &awss3.ListObjectsV2Input{Bucket: aws.String(s.cfg.Bucket), Prefix: aws.String(s.prefix)}
+	if oneLevel {
+		in.Delimiter = aws.String("/")
+	}
 	out := []string{}
 	for {
 		page, err := s.api.ListObjectsV2(ctx, in)

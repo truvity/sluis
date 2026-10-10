@@ -63,6 +63,29 @@ type Store interface {
 	Child(prefix string, opts ...Option) Store
 }
 
+// Walker is an optional Store capability: the names of every key under the
+// store's prefix at any depth, sorted, as slash-separated paths below it (a key
+// nested as `apps/x/y` is listed as `apps/x/y`). [Store.List] stops at one
+// level, so a tool that must find every key (a backup) needs this. Every
+// backend in this module implements it.
+type Walker interface {
+	Walk(ctx context.Context) ([]string, error)
+}
+
+// ErrNoWalk reports a Store that cannot list its keys at any depth.
+var ErrNoWalk = errors.New("state: the store cannot list nested keys")
+
+// ListAll names every key under the store's prefix at any depth. A store that
+// is not a [Walker] is [ErrNoWalk]: a one-level listing would silently miss
+// the nested keys.
+func ListAll(ctx context.Context, s Store) ([]string, error) {
+	w, ok := s.(Walker)
+	if !ok {
+		return nil, ErrNoWalk
+	}
+	return w.Walk(ctx)
+}
+
 // Options is what the [Option]s given to [Store.Child] resolve to. A backend
 // calls [ResolveOptions]; no other code needs it.
 type Options struct {

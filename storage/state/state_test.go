@@ -25,3 +25,11 @@ func TestValidateKey(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+type listOnly struct{ state.Store }
+
+func TestListAllNeedsAWalker(t *testing.T) {
+	if _, err := state.ListAll(t.Context(), listOnly{}); !errors.Is(err, state.ErrNoWalk) {
+		t.Fatalf("a store that cannot walk: %v", err)
+	}
+}
