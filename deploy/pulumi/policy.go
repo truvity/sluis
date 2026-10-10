@@ -627,3 +627,38 @@ func webIdentityStatement(audience string, extra []string) statement {
 	}
 	return st
 }
+
+// maxKeyPolicyBytes is KMS's limit on a key policy document.
+const maxKeyPolicyBytes = 32768
+
+// KeyPolicyDocument renders an estate's key policy from the statement lists it
+// concatenates: SluisKeyPolicyStatements and its own (key administration, other
+// usages). It refuses a Sid that appears twice, a statement without one, and a
+// document over KMS's 32 KiB limit, so the estate learns at preview and not at
+// the apply. The same input renders the same text.
+func KeyPolicyDocument(id string, groups ...[]map[string]any) (string, error) {
+	var all []statement
+	for _, g := range groups {
+		all = append(all, g...)
+	}
+	for i, s := range all {
+		if sid, _ := s["Sid"].(string); sid == "" {
+			return "", fmt.Errorf("sluispulumi: key policy statement %d has no Sid", i)
+		}
+	}
+	if err := uniqueSids(all); err != nil {
+		return "", err
+	}
+	doc := map[string]any{"Version": polVersion, "Statement": all}
+	if id != "" {
+		doc["Id"] = id
+	}
+	raw, err := json.Marshal(doc)
+	if err != nil {
+		return "", fmt.Errorf("render key policy: %w", err)
+	}
+	if len(raw) > maxKeyPolicyBytes {
+		return "", fmt.Errorf("sluispulumi: the key policy is %d bytes, KMS takes %d at most", len(raw), maxKeyPolicyBytes)
+	}
+	return string(raw), nil
+}

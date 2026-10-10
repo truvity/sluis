@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/kms"
@@ -165,4 +166,347 @@ func grantsOf(k *KeysArgs, signArn, secretsArn string) *keyGrants {
 		return nil
 	}
 	return &keyGrants{signArn: signArn, secretsArn: secretsArn, legacy: k.legacy()}
+}
+
+// KeyRole is one function's role as the shared key's policy names it: the role
+// (its name and the modules it hosts) and the ARN the policy admits. The policy
+// compares aws:PrincipalArn, so the role need not exist when the key is made.
+type KeyRole struct {
+	Role Role
+	// Arn is the role's ARN, `arn:aws:iam::<account>:role/[path/]<name>`.
+	Arn string
+	// MinterRefs are the minter parameters (`internal/cloudflare/<account>/minter`,
+	// as in ModuleEnv.MinterRefs) the role reads for `credentials.preset` without
+	// hosting the Cloudflare module: Decrypt on exactly those, through SSM.
+	MinterRefs []string
+}
+
+// KeyPolicyArgs is what SluisKeyPolicyStatements renders the statements of the
+// shared key from.
+type KeyPolicyArgs struct {
+	Region, Account string
+	// Modules names the installation (its Instance is the context's `instance`
+	// and the SSM root).
+	Modules ModuleSet
+	// Layout says which parameter addresses the roles use; empty is v4. v4 gives
+	// the role that hosts oidc the whole of internal/ and external/ (as its IAM
+	// grant does); v5 gives each role its hosted modules only.
+	Layout Layout
+	// Roles are the functions' roles, one per function: the issuer, Cloudflare,
+	// backup, restore. Backup and restore also get the cross-grants of
+	// CrossGrants (read-all, write-all).
+	Roles []KeyRole
+	// ExternalReaders are the ARNs of the roles that read the exported documents
+	// (the External Secrets readers). They decrypt `external/*` and nothing else.
+	ExternalReaders []string
+	// Admins are the operator's roles, as ARN patterns (`*` allowed, so an SSO
+	// role with a hash suffix is a pattern). They seed parameters and read the two
+	// the stack manages (the state secret and the recovery password).
+	Admins []string
+	// Breakglass are the emergency roles, as ARN patterns: the function's
+	// operations on every parameter, through SSM.
+	Breakglass []string
+	// DenyOtherActions adds the deny that holds each sign role to the key's three
+	// calls and DescribeKey. Off by default: it is a statement about the sluis
+	// roles only, but a role an estate shares with another usage would lose it.
+	DenyOtherActions bool
+}
+
+// The Sids of the statements SluisKeyPolicyStatements returns. All start with
+// `SluisKey`; the role names are camel-cased into the Sid.
+const (
+	sidKeyRolePrefix       = "SluisKeyRole"
+	sidKeyReadPrefix       = "SluisKeyReadAll"
+	sidKeyWritePrefix      = "SluisKeyWriteAll"
+	sidKeyMinterPrefix     = "SluisKeyMinter"
+	sidKeyExternalReaders  = "SluisKeyExternalReaders"
+	sidKeyAdminSeeds       = "SluisKeyAdminSeeds"
+	sidKeyAdminReads       = "SluisKeyAdminReads"
+	sidKeyBreakglass       = "SluisKeyBreakglass"
+	sidKeySignAllow        = "SluisKeySign"
+	sidKeySignReserved     = "SluisKeySignContextReserved"
+	sidKeySignPurposeOnly  = "SluisKeySignDirectPurposeOnly"
+	sidKeySignContextOnly  = "SluisKeySignDirectContextKeysOnly"
+	sidKeyRolesNothingElse = "SluisKeyRolesNothingElse"
+	kmsDescribe            = "kms:DescribeKey"
+	condPrincipalArn       = "aws:PrincipalArn"
+	condViaService         = "kms:ViaService"
+	condParameterArn       = "kms:EncryptionContext:PARAMETER_ARN"
+	condContextKeys        = "kms:EncryptionContextKeys"
+	condContextPurpose     = "kms:EncryptionContext:purpose"
+	condContextInstance    = "kms:EncryptionContext:instance"
+	condArnEquals          = "ArnEquals"
+	condArnLike            = "ArnLike"
+	condStringEquals       = "StringEquals"
+	condStringLike         = "StringLike"
+)
+
+// SluisKeyPolicyStatements are the statements sluis needs in the key policy of
+// the estate's ONE shared symmetric key (the key behind `Keys.Sign` and
+// `Keys.Secrets`). Each is an Allow for the account root narrowed by
+// aws:PrincipalArn, so a role that does not exist yet is a condition value and
+// the key can be made first; each still needs the role's own IAM policy, which
+// the library writes (the key policy is a ceiling, not a grant).
+//
+//   - SluisKeyRole<Role>: the role's own parameters (its hosted modules'
+//     `internal/<module>/*` and `external/<module>/*`), Encrypt, Decrypt,
+//     GenerateDataKey and DescribeKey, through SSM only;
+//   - SluisKeyReadAll<Role> (backup): Decrypt of every `internal/*` and
+//     `external/*` parameter, through SSM; SluisKeyWriteAll<Role> (restore): the
+//     same parameters, Encrypt, Decrypt and GenerateDataKey;
+//   - SluisKeyMinter<Role>: Decrypt of the minter parameters a role without the
+//     Cloudflare module reads;
+//   - SluisKeyExternalReaders: Decrypt of `external/*` only, through SSM;
+//   - SluisKeyAdminSeeds: Encrypt and GenerateDataKey through SSM (seed
+//     parameters); SluisKeyAdminReads: Decrypt of the state secret and the
+//     recovery password, which the stack reads back on every refresh;
+//   - SluisKeyBreakglass: the function's operations through SSM;
+//   - SluisKeySign: the roles that host oidc, directly (no service), Encrypt,
+//     Decrypt and GenerateDataKey under exactly {instance, purpose: sign}
+//     (decision D8), and three denies that hold the sign purpose to them:
+//     SluisKeySignContextReserved (nobody else uses purpose=sign),
+//     SluisKeySignDirectPurposeOnly and SluisKeySignDirectContextKeysOnly (their
+//     direct calls carry that context and no other key). With DenyOtherActions,
+//     SluisKeyRolesNothingElse too.
+//
+// Composition. The statements are about sluis's principals and the sign
+// purpose; none is a catch-all (no Deny on a principal other than a sluis role,
+// no NotPrincipal, no Deny without a sluis condition), so an estate's other
+// usages of the same key (a seal, Pulumi secrets, sops, a state bucket) keep
+// working. The estate concatenates its own statements with these and passes the
+// lists to KeyPolicyDocument, which refuses a repeated Sid and a policy over
+// KMS's size limit. The estate keeps what is its own: key administration, its
+// other usages, and a "nothing else" deny over its own principals, which must
+// name the sluis roles among the principals it lets through.
+func SluisKeyPolicyStatements(a KeyPolicyArgs) ([]map[string]any, error) {
+	if err := a.validate(); err != nil {
+		return nil, err
+	}
+	root := map[string]any{"AWS": arnPrefix + "iam::" + a.Account + ":root"}
+	viaSSM := map[string]any{condViaService: "ssm." + a.Region + ".amazonaws.com"}
+	arns := func(prefixes ...string) []string { return parameterArnsUnder(a.Region, a.Account, prefixes...) }
+	internalAll, externalAll := InternalParameterPrefix(a.Modules.Instance), ExternalParameterPrefix(a.Modules.Instance)
+	use := []string{kmsEncrypt, kmsDecrypt, kmsGenerateDK, kmsDescribe}
+
+	allow := func(sid string, actions []string, cond map[string]any) statement {
+		return statement{"Sid": sid, "Effect": "Allow", "Principal": root, "Action": actions, "Resource": "*", "Condition": cond}
+	}
+	deny := func(sid string, cond map[string]any) statement {
+		return statement{"Sid": sid, "Effect": "Deny", "Principal": map[string]any{"AWS": "*"}, "Resource": "*", "Condition": cond}
+	}
+
+	var st []statement
+	var signRoles []string
+	for _, r := range sortedKeyRoles(a.Roles) {
+		name := sidName(r.Role.Name)
+		var own []string
+		if a.Layout.has4() && r.Role.hosts(ModuleOIDC) {
+			own = append(own, arns(internalAll, externalAll)...)
+		}
+		if a.Layout.has5() || !r.Role.hosts(ModuleOIDC) {
+			for _, m := range sortedModules(r.Role.Hosts) {
+				own = append(own, arns(a.Modules.InternalPrefix(m), a.Modules.ExternalPrefix(m))...)
+			}
+		}
+		st = append(st, allow(sidKeyRolePrefix+name, use, map[string]any{
+			condArnEquals:    map[string]any{condPrincipalArn: r.Arn},
+			condStringEquals: viaSSM,
+			condStringLike:   map[string]any{condParameterArn: dedupe(own)},
+		}))
+		for _, g := range CrossGrants {
+			if g.Role != r.Role.Name || (g.Verb != CrossReadAll && g.Verb != CrossWriteAll) {
+				continue
+			}
+			sid, actions := sidKeyReadPrefix+name, []string{kmsDecrypt, kmsDescribe}
+			if g.Verb == CrossWriteAll {
+				sid, actions = sidKeyWritePrefix+name, use
+			}
+			st = append(st, allow(sid, actions, map[string]any{
+				condArnEquals:    map[string]any{condPrincipalArn: r.Arn},
+				condStringEquals: viaSSM,
+				condStringLike:   map[string]any{condParameterArn: arns(internalAll, externalAll)},
+			}))
+		}
+		if len(r.MinterRefs) > 0 && !r.Role.hosts(ModuleCloudflare) {
+			var refs []string
+			for _, ref := range sortedStrings(r.MinterRefs) {
+				refs = append(refs, arnPrefix+"ssm:"+a.Region+":"+a.Account+":parameter"+a.Modules.rootOf()+"/"+ref)
+			}
+			st = append(st, allow(sidKeyMinterPrefix+name, []string{kmsDecrypt, kmsDescribe}, map[string]any{
+				condArnEquals:    map[string]any{condPrincipalArn: r.Arn},
+				condStringEquals: viaSSM,
+				condStringLike:   map[string]any{condParameterArn: refs},
+			}))
+		}
+		if r.Role.hosts(ModuleOIDC) {
+			signRoles = append(signRoles, r.Arn)
+		}
+	}
+
+	if len(a.ExternalReaders) > 0 {
+		st = append(st, allow(sidKeyExternalReaders, []string{kmsDecrypt}, map[string]any{
+			condArnEquals:    map[string]any{condPrincipalArn: sortedStrings(a.ExternalReaders)},
+			condStringEquals: viaSSM,
+			condStringLike:   map[string]any{condParameterArn: arns(externalAll)},
+		}))
+	}
+	if len(a.Admins) > 0 {
+		admins := map[string]any{condPrincipalArn: sortedStrings(a.Admins)}
+		own := []string{StateSecretParameterNameV5(a.Modules.Instance), RecoveryPasswordParameterNameV5(a.Modules.Instance)}
+		if a.Layout.has4() {
+			own = append(own, StateSecretParameterName(a.Modules.Instance), RecoveryPasswordParameterName(a.Modules.Instance))
+		}
+		var own2 []string
+		for _, n := range own {
+			own2 = append(own2, arnPrefix+"ssm:"+a.Region+":"+a.Account+":parameter"+n)
+		}
+		st = append(st,
+			allow(sidKeyAdminSeeds, []string{kmsEncrypt, kmsGenerateDK, kmsDescribe}, map[string]any{
+				condArnLike: admins, condStringEquals: viaSSM,
+			}),
+			allow(sidKeyAdminReads, []string{kmsDecrypt}, map[string]any{
+				condArnLike: admins, condStringEquals: viaSSM,
+				condStringLike: map[string]any{condParameterArn: own2},
+			}),
+		)
+	}
+	if len(a.Breakglass) > 0 {
+		st = append(st, allow(sidKeyBreakglass, use, map[string]any{
+			condArnLike:      map[string]any{condPrincipalArn: sortedStrings(a.Breakglass)},
+			condStringEquals: viaSSM,
+		}))
+	}
+
+	if len(signRoles) > 0 {
+		signRoles = sortedStrings(signRoles)
+		actions := []string{kmsEncrypt, kmsDecrypt, kmsGenerateDK}
+		keys := []string{"instance", "purpose"}
+		direct := map[string]any{condViaService: "true"}
+		st = append(st,
+			allow(sidKeySignAllow, actions, map[string]any{
+				condArnEquals: map[string]any{condPrincipalArn: signRoles},
+				condStringEquals: map[string]any{
+					condContextInstance: a.Modules.Instance,
+					condContextPurpose:  SignPurpose,
+				},
+				"ForAllValues:StringEquals": map[string]any{condContextKeys: keys},
+			}),
+			deny(sidKeySignReserved, map[string]any{
+				condStringEquals: map[string]any{condContextPurpose: SignPurpose},
+				"ArnNotEquals":   map[string]any{condPrincipalArn: signRoles},
+			}),
+			deny(sidKeySignPurposeOnly, map[string]any{
+				condArnEquals:     map[string]any{condPrincipalArn: signRoles},
+				"Null":            direct,
+				"StringNotEquals": map[string]any{condContextPurpose: SignPurpose},
+			}),
+			deny(sidKeySignContextOnly, map[string]any{
+				condArnEquals:                 map[string]any{condPrincipalArn: signRoles},
+				"Null":                        direct,
+				"ForAnyValue:StringNotEquals": map[string]any{condContextKeys: keys},
+			}),
+		)
+		st[len(st)-3]["Action"] = []string{kmsDecrypt, kmsEncrypt, "kms:ReEncrypt*", "kms:GenerateDataKey*", "kms:CreateGrant"}
+		st[len(st)-2]["Action"] = actions
+		st[len(st)-1]["Action"] = actions
+		if a.DenyOtherActions {
+			d := deny(sidKeyRolesNothingElse, map[string]any{condArnEquals: map[string]any{condPrincipalArn: signRoles}})
+			d["NotAction"] = append(append([]string(nil), actions...), kmsDescribe)
+			st = append(st, d)
+		}
+	}
+	if err := uniqueSids(st); err != nil {
+		return nil, err
+	}
+	return st, nil
+}
+
+func (a KeyPolicyArgs) validate() error {
+	if err := a.Modules.validate(); err != nil {
+		return err
+	}
+	if !a.Layout.valid() {
+		return fmt.Errorf("sluispulumi: KeyPolicyArgs.Layout %q is not v4, v5 or v4+v5", a.Layout)
+	}
+	if a.Region == "" || a.Account == "" {
+		return errors.New("sluispulumi: KeyPolicyArgs.Region and Account are required")
+	}
+	if len(a.Roles) == 0 {
+		return errors.New("sluispulumi: KeyPolicyArgs.Roles is empty: the key would admit no function")
+	}
+	seen := map[string]bool{}
+	for _, r := range a.Roles {
+		switch {
+		case !roleNamePattern.MatchString(r.Role.Name):
+			return fmt.Errorf("sluispulumi: KeyPolicyArgs role name %q is not lower-case letters, digits and '-'", r.Role.Name)
+		case seen[r.Role.Name]:
+			return fmt.Errorf("sluispulumi: KeyPolicyArgs names role %q twice", r.Role.Name)
+		case len(r.Role.Hosts) == 0:
+			return fmt.Errorf("sluispulumi: KeyPolicyArgs role %q hosts no module", r.Role.Name)
+		case !strings.HasPrefix(r.Arn, "arn:") || strings.ContainsAny(r.Arn, "*?"):
+			return fmt.Errorf("sluispulumi: KeyPolicyArgs role %q needs an exact role ARN, got %q", r.Role.Name, r.Arn)
+		}
+		seen[r.Role.Name] = true
+		for _, m := range r.Role.Hosts {
+			if !validModule(m) {
+				return fmt.Errorf("sluispulumi: KeyPolicyArgs role %q hosts unknown module %q", r.Role.Name, m)
+			}
+		}
+	}
+	for _, list := range [][]string{a.ExternalReaders, a.Admins, a.Breakglass} {
+		for _, v := range list {
+			if !strings.HasPrefix(v, "arn:") {
+				return fmt.Errorf("sluispulumi: KeyPolicyArgs names %q, which is not an ARN", v)
+			}
+		}
+	}
+	for _, v := range a.ExternalReaders {
+		if strings.ContainsAny(v, "*?") {
+			return fmt.Errorf("sluispulumi: KeyPolicyArgs.ExternalReaders needs exact role ARNs, got %q", v)
+		}
+	}
+	return nil
+}
+
+var roleNamePattern = regexp.MustCompile(`^[a-z][a-z0-9-]{0,40}$`)
+
+// sidName camel-cases a role name for a Sid (`my-role` is `MyRole`).
+func sidName(name string) string {
+	var b strings.Builder
+	for _, p := range strings.Split(name, "-") {
+		if p != "" {
+			b.WriteString(strings.ToUpper(p[:1]) + p[1:])
+		}
+	}
+	return b.String()
+}
+
+func sortedKeyRoles(in []KeyRole) []KeyRole {
+	out := append([]KeyRole(nil), in...)
+	sort.Slice(out, func(i, j int) bool { return out[i].Role.Name < out[j].Role.Name })
+	return out
+}
+
+func dedupe(in []string) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, s := range in {
+		if !seen[s] {
+			seen[s] = true
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+func uniqueSids(st []statement) error {
+	seen := map[string]bool{}
+	for _, s := range st {
+		sid, _ := s["Sid"].(string)
+		if seen[sid] {
+			return fmt.Errorf("sluispulumi: the key policy repeats Sid %q", sid)
+		}
+		seen[sid] = true
+	}
+	return nil
 }
