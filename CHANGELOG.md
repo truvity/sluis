@@ -1,5 +1,9 @@
 ## Unreleased
 
+### Added
+
+- **The Pulumi library deploys the backup function: `NewBackup`.** The release zip becomes the backup function with a `sluis-backup/v1` document in its configuration layer (`secrets.layout: v5`, `ports.dynamodb.tables` for the six modules, `ports.blob`, `backup.target`, `backup.key`, `backup.retention`), a 900 second timeout and the aliases `live`, `live-console`, `live-admin` and `live-breakglass`, so a module call carries its caller class. Its role is `ModuleRoleStatements` for the `backup` role (read of every module, write of the backup table, the maintenance flag read and never written) plus the archive: put, list, get and delete under `<prefix>backup/<instance>/`, and `kms:Decrypt` and `kms:GenerateDataKey` on the archive key under the context `{instance, purpose=archive}`. `Archive.Create` makes the bucket (versioned, Object Lock with a default retention that may not exceed `retention.maxAge`, 720h by default); a bucket in another account gets the `ArchiveBucketPolicy` output for its owner. EventBridge Scheduler sends `{"kind":"backup"}` daily and `{"kind":"backup","resume":true}` every five minutes, with a dead-letter queue, and three alarms watch for no completed backup in 36 hours, a failed run and an undelivered event. `BackupRoleStatements` and `ArchiveBucketPolicyStatements` render the policies for an estate that builds its own.
+
 ## v1.75.0-rc.2
 
 ### Changed
