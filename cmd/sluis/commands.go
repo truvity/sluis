@@ -95,6 +95,7 @@ func newApp(out io.Writer) *cli.Command {
 			moduleCmd(cloudflare.Module{}, "sluis", "the Cloudflare module: the STS minter's rotation loop, or `tick <preset>` once", out),
 			moduleCmd(module.Unsplit("google"), "sluis", "the Google directory module (not yet split)", out),
 			legacy("backup", "the backup module: run, list, status or prune (sluis backup --help)", backupCmd, out),
+			legacy("restore", "the restore role of the backup zip: preview, start or status (sluis restore --help)", restoreCmd, out),
 			// Today's commands, unchanged.
 			legacy("serve", "the one process: the issuer, the directory hub and the console, and the controllers the document names", serveRun, out),
 			legacy("controller", "(deprecated) a controller alone: github or slack", controllerCmd, out),

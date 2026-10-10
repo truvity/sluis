@@ -382,3 +382,87 @@ func (h *HTTP) tickBackup(ctx context.Context, payload json.RawMessage) (any, er
 	h.log.InfoContext(ctx, "invocation done", slog.String("controller", KindBackup), slog.String("outcome", res.Outcome))
 	return res, nil
 }
+
+// KindRestore is the event that drives the restore function (the backup zip with
+// `backup.role: restore`, docs/decisions/0072): only an administrator or the
+// break-glass role may invoke that function, by IAM. Invoked asynchronously (the
+// platform's `Event` invocation type) it starts a restore and returns at once;
+// the work goes on in this invocation and, when time runs out, in the next, which
+// the function starts itself:
+//
+//	{"kind":"restore","backup":"<id>"}                    start a restore of the backup
+//	{"kind":"restore","backup":"<id>","overwrite":true}   ... replacing different data in the destination
+//	{"kind":"restore","backup":"<id>","preview":true}     what it would do; writes nothing (invoke it synchronously)
+//	{"kind":"restore","resume":true}                      continue a restore that paused
+//
+// "by" and "note" are the caller's own words for the status record. A restore
+// that fails is not an error of the invocation, which the platform would retry:
+// the outcome, `restore.status` and the audit trail say so, and every module
+// stays under maintenance until a restore completes.
+const KindRestore = "restore"
+
+// RestoreEvent is the {"kind":"restore"} event.
+type RestoreEvent struct {
+	Kind      string `json:"kind"`
+	Backup    string `json:"backup,omitempty"`
+	Overwrite bool   `json:"overwrite,omitempty"`
+	Preview   bool   `json:"preview,omitempty"`
+	Resume    bool   `json:"resume,omitempty"`
+	By        string `json:"by,omitempty"`
+	Note      string `json:"note,omitempty"`
+}
+
+// RestoreResult is what a restore invocation returns.
+type RestoreResult struct {
+	Kind string `json:"kind"`
+	// Outcome is started work's completed, paused, failed, contended or idle; a
+	// start that changed nothing is refused; a preview is preview.
+	Outcome string `json:"outcome"`
+	ID      string `json:"id,omitempty"`
+	Backup  string `json:"backup,omitempty"`
+	// State and Maintenance are the run's, Reason and Error say why it failed,
+	// paused or was refused.
+	State       string `json:"state,omitempty"`
+	Maintenance string `json:"maintenance,omitempty"`
+	Reason      string `json:"reason,omitempty"`
+	Error       string `json:"error,omitempty"`
+	// Continued is whether the function started its own next invocation.
+	Continued bool `json:"continued,omitempty"`
+	// Report is a preview's: per module the counts and the names, never a value.
+	Report any `json:"report,omitempty"`
+}
+
+// WithRestore makes the function answer {"kind":"restore"} events with run.
+func (h *HTTP) WithRestore(run func(ctx context.Context, ev RestoreEvent) (RestoreResult, error)) *HTTP {
+	h.restore = run
+	return h
+}
+
+func (h *HTTP) tickRestore(ctx context.Context, payload json.RawMessage) (any, error) {
+	if h.restore == nil {
+		return nil, errors.New("this function runs no restore")
+	}
+	var ev RestoreEvent
+	if err := json.Unmarshal(payload, &ev); err != nil {
+		return nil, fmt.Errorf("the event is not {\"kind\":\"restore\",\"backup\":\"<id>\",\"overwrite\":true|false,\"preview\":true|false,\"resume\":true|false}: %w", err)
+	}
+	defer func() {
+		if h.settle != nil {
+			h.settle()
+		}
+	}()
+	var res RestoreResult
+	switch {
+	case ev.Preview && ev.Backup == "", !ev.Resume && ev.Backup == "", ev.Resume && ev.Backup != "", ev.Resume && ev.Preview:
+		// Nothing was changed, and an error would be retried by the platform.
+		res = RestoreResult{Outcome: "refused", Error: "the event needs a backup to start or preview, or resume without one"}
+	default:
+		var err error
+		if res, err = h.restore(ctx, ev); err != nil {
+			return nil, err
+		}
+	}
+	res.Kind = KindRestore
+	h.log.InfoContext(ctx, "invocation done", slog.String("controller", KindRestore), slog.String("outcome", res.Outcome))
+	return res, nil
+}

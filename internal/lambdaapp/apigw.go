@@ -49,6 +49,9 @@ type HTTP struct {
 	// backup runs the backup (the {"kind":"backup"} event); nil in a function
 	// that is not the backup module's.
 	backup func(ctx context.Context, resume bool) (BackupResult, error)
+	// restore runs the restore (the {"kind":"restore"} event); nil in a function
+	// that is not the restore function.
+	restore func(ctx context.Context, ev RestoreEvent) (RestoreResult, error)
 	// controllers run a controller pass per {"kind":"tick"|"run"} event, by the
 	// kind of the event's target; kindOf says which kind a target is.
 	controllers map[string]*Controller
@@ -112,6 +115,9 @@ func (h *HTTP) Handle(ctx context.Context, payload json.RawMessage) (any, error)
 		}
 		if peek.Kind == KindBackup {
 			return h.tickBackup(ctx, payload)
+		}
+		if peek.Kind == KindRestore {
+			return h.tickRestore(ctx, payload)
 		}
 		return h.scheduled(ctx, peek.Kind)
 	}
