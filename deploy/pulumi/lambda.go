@@ -1232,7 +1232,7 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 	if err != nil {
 		return nil, fmt.Errorf("sluis role: %w", err)
 	}
-	if a.MigrationRoleArn != "" && !(a.Compat != nil && a.Compat.RetireLegacyTable) {
+	if a.MigrationRoleArn != "" && (a.Compat == nil || !a.Compat.RetireLegacyTable) {
 		if err := newMigrationRead(ctx, name, &a, child); err != nil {
 			return nil, fmt.Errorf("sluis migration role: %w", err)
 		}
