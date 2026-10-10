@@ -158,6 +158,7 @@ func buildLambda(t *testing.T, e estate) (*recorder, map[string]string, error) {
 		collect("stateSecretParameter", l.StateSecretParameter)
 		collect("recoveryPasswordParameter", l.RecoveryPasswordParameter)
 		collect("configLayerArn", l.ConfigLayerArn)
+		collect("declaredParameters", l.DeclaredParameters.ApplyT(func(v []string) string { return strings.Join(v, ",") }).(pulumi.StringOutput))
 		collect("auditQueueUrl", l.AuditQueueURL)
 		collect("auditQueueArn", l.AuditQueueArn)
 		if l.Audit != nil {
@@ -1670,5 +1671,69 @@ func TestTheGeneratedParametersAdoptAnExistingV4Copy(t *testing.T) {
 		if rec.has("aws:ssm/parameter:Parameter", old) {
 			t.Errorf("a parameter is still registered as %s: the old resource would be replaced, not removed", old)
 		}
+	}
+}
+
+const invocationType = "aws:lambda/invocation:Invocation"
+
+// The post-deploy check is one invocation of the live alias with the check
+// event, on by default, triggered by the function's version and a hash of the
+// declared names.
+func TestThePostDeployCheckInvokesTheLiveAliasWithTheCheckEvent(t *testing.T) {
+	rec, out := mustLambda(t, estate{})
+	if n := len(rec.ofType(invocationType)); n != 1 {
+		t.Fatalf("%d invocations, want the one check: %v", n, rec.names())
+	}
+	inv := rec.one(t, invocationType, "staging-check")
+	if got := prop(inv, "input").StringValue(); got != `{"kind":"check"}` {
+		t.Errorf("input %q", got)
+	}
+	if got := prop(inv, "qualifier").StringValue(); got != arp.LiveAlias {
+		t.Errorf("qualifier %q, want the live alias", got)
+	}
+	if got := prop(inv, "functionName").StringValue(); got != "sluis" {
+		t.Errorf("function %q", got)
+	}
+	trig := prop(inv, "triggers").ObjectValue()
+	if got := trig["version"].StringValue(); got != "7" {
+		t.Errorf("version trigger %q, want the function's version", got)
+	}
+	if got := trig["declared"].StringValue(); len(got) != 64 || strings.Trim(got, "0123456789abcdef") != "" {
+		t.Errorf("declared trigger %q is not a sha256", got)
+	}
+	if len(trig) != 2 {
+		t.Errorf("triggers %v: the version and the hash of the names, nothing else", trig)
+	}
+	// The names the hash is over are the output, and they are names only.
+	if got := out["declaredParameters"]; got != "internal/config/recovery/password" {
+		t.Errorf("declaredParameters %q, want the recovery password this estate declares", got)
+	}
+}
+
+// A change of the declared names moves the trigger; the same names do not.
+func TestThePostDeployCheckRunsAgainWhenTheDeclaredNamesChange(t *testing.T) {
+	hash := func(e estate) string {
+		rec, _ := mustLambda(t, e)
+		return prop(rec.one(t, invocationType, "staging-check"), "triggers").ObjectValue()["declared"].StringValue()
+	}
+	if a, b := hash(estate{}), hash(estate{}); a != b {
+		t.Errorf("the same declaration hashes %s and %s", a, b)
+	}
+	off := false
+	if hash(estate{}) == hash(estate{mutate: func(a *arp.LambdaArgs) { a.Recovery = &arp.RecoveryArgs{Enabled: &off} }}) {
+		t.Error("a declaration without the recovery password hashes as the one with it")
+	}
+}
+
+// Check: false leaves the invocation out and keeps the list of names, for an
+// estate that checks in a CI step.
+func TestThePostDeployCheckIsAbsentWhenOff(t *testing.T) {
+	off := false
+	rec, out := mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) { a.Check = &off }})
+	if n := len(rec.ofType(invocationType)); n != 0 {
+		t.Errorf("%d invocations with Check: false", n)
+	}
+	if out["declaredParameters"] != "internal/config/recovery/password" {
+		t.Errorf("declaredParameters %q with Check: false", out["declaredParameters"])
 	}
 }

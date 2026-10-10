@@ -1,5 +1,9 @@
 ## Unreleased
 
+### Added
+
+- **The Pulumi library checks the declared secrets after the deploy.** `NewLambda` adds an `aws.lambda.Invocation` of the function's live alias with `{"kind":"check"}`, which depends on the alias, the role's policy and the parameters the stack writes, so it runs once they exist. A secret the documents declare that is missing, empty or malformed fails `pulumi up` with the function's error, `check: N of M declared secrets are missing or invalid`, and the addresses. It is triggered by the function's version and a hash of the declared names, so it runs again on every new version and when a declaration changes. It is on by default; `LambdaArgs.Check` set to false leaves it out. The new output `DeclaredParameters` lists the declared names (`internal/config/<name>` on layout v4) whether or not the check is on, for an estate that checks in a CI step. `config.DeclaredSecrets` is the set the check and the output use.
+
 ### Changed
 
 - **The audit Pulumi library sets the telemetry layer's settings under `SLUIS_*`.** The functions get `SLUIS_ISSUER`, `SLUIS_AUDIENCE`, `SLUIS_OTLP_ENDPOINT` and `SLUIS_OTLP_AUDIENCE`, which the `otlp-lambda` layer reads first, and still get the four `ACCESS_ROSTER_*` names with the same values for a function that runs a layer older than the one that reads `SLUIS_*`; they are removed in v1.76, and `Telemetry.OmitLegacyEnv` drops them earlier. The `AUDIT_OTLP_*` names the library set until now are gone: no layer ever read them. Functions are updated in place on the next apply.

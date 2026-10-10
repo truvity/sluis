@@ -1,6 +1,8 @@
 package sluispulumi
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -251,6 +253,19 @@ type LambdaArgs struct {
 	// that are due (`{"kind":"cloudflare"}`). It exists only when the
 	// Installation declares `cloudflare` presets; Disabled leaves it out.
 	CloudflareRotation CloudflareRotationArgs
+	// Check is the post-deploy check: an `aws.lambda.Invocation` of the live
+	// alias with `{"kind":"check"}`, after the function, its alias, its role's
+	// policy and the parameters the library writes exist. The function reads
+	// every secret its documents declare (the state secret, the recovery
+	// password, the Google sign-in client, the clients' delivered secrets, the
+	// workspaces' keys, the Cloudflare minters, the S3 credentials document) and
+	// answers with an error naming each one that is missing, empty or not the
+	// stored shape, which fails `pulumi up`. It runs again when the function's
+	// version or the declared names change. Default (nil): on. Set it to false
+	// for an estate that checks in a CI step instead (`sluis check`, or
+	// DeclaredParameters with the same event); DeclaredParameters is exported
+	// either way.
+	Check *bool
 	// WebIdentityAudience restricts the audience of the outbound web identity
 	// token the function's role may ask STS for (`sts:IdentityTokenAudience`),
 	// normally the console's URL. Empty allows any audience. The role holds
@@ -550,6 +565,14 @@ type Lambda struct {
 	// CodeDeploy come later; today the alias moves to each new version at once.
 	LiveAliasArn, LiveVersion pulumi.StringOutput
 	RoleArn, RoleName         pulumi.StringOutput
+
+	// DeclaredParameters are the SSM parameters the documents declare, as names
+	// below the installation's root (`internal/config/<name>` on layout v4;
+	// `internal/<module>/<name>` for a minter or the S3 credentials document),
+	// sorted. It is what the post-deploy check looks for, and is exported
+	// whether or not Check is on: an estate that checks in a CI step reads the
+	// list from here. Names only, never a value.
+	DeclaredParameters pulumi.StringArrayOutput
 
 	// APIID, APIStageName and APIURL are the HTTP API, its stage and its default
 	// endpoint (which answers only with API.KeepDefaultEndpoint). A front door
@@ -896,6 +919,10 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 	if err != nil {
 		return nil, err
 	}
+	declaredNames, err := declaredParameters(docs)
+	if err != nil {
+		return nil, err
+	}
 	out := &Lambda{}
 	if err := ctx.RegisterComponentResource(LambdaType, name, out, opts...); err != nil {
 		return nil, err
@@ -1058,7 +1085,7 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 	if err != nil {
 		return nil, fmt.Errorf("sluis log group: %w", err)
 	}
-	role, err := newFunctionRole(ctx, name, fnName, &a, signingArns, wrappedArn, signKeyArn, secretsKeyArn, logs.Arn, fnArn+":"+LiveAlias, tags, child)
+	role, rolePolicy, err := newFunctionRole(ctx, name, fnName, &a, signingArns, wrappedArn, signKeyArn, secretsKeyArn, logs.Arn, fnArn+":"+LiveAlias, tags, child)
 	if err != nil {
 		return nil, fmt.Errorf("sluis role: %w", err)
 	}
@@ -1265,6 +1292,17 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 		return nil, fmt.Errorf("sluis recovery password parameter: %w", err)
 	}
 
+	// ---- the post-deploy check: after the function, its alias, its role's
+	// policy and the parameters this stack writes exist. The other declared
+	// parameters (a client's secret, a workspace's key) are the operator's and
+	// are not in this stack: the check is what finds one that is missing.
+	if a.Check == nil || *a.Check {
+		if err := newCheck(ctx, name, live, fn.Name, declaredNames,
+			[]pulumi.Resource{live, rolePolicy, stateParam, recoveryParam}, child); err != nil {
+			return nil, err
+		}
+	}
+	out.DeclaredParameters = pulumi.ToStringArray(declaredNames).ToStringArrayOutput()
 	out.SigningKeyArn, out.SigningKeyID, out.SigningKeyAlias = sgArn, sgID, sgAlias
 	out.WrappedSigningKeyArn, out.WrappedSigningKeyAlias = wrappedKeyArn, wrappedAlias
 	out.SigningKeyRS256Arn, out.SigningKeyRS256ID, out.SigningKeyRS256Alias = rsArn, rsID, rsAlias
@@ -1285,7 +1323,7 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 		"wrappedSigningKeyArn": out.WrappedSigningKeyArn, "wrappedSigningKeyAlias": out.WrappedSigningKeyAlias,
 		"signingKeyRs256Arn": out.SigningKeyRS256Arn, "signingKeyRs256Id": out.SigningKeyRS256ID, "signingKeyRs256Alias": out.SigningKeyRS256Alias,
 		"functionArn": out.FunctionArn, "functionName": out.FunctionName, "codeSha256Matches": out.CodeSha256Matches,
-		"liveAliasArn": out.LiveAliasArn, "liveVersion": out.LiveVersion, "roleArn": out.RoleArn, "roleName": out.RoleName,
+		"declaredParameters": out.DeclaredParameters, "liveAliasArn": out.LiveAliasArn, "liveVersion": out.LiveVersion, "roleArn": out.RoleArn, "roleName": out.RoleName,
 		"apiId": out.APIID, "apiStageName": out.APIStageName, "apiUrl": out.APIURL, "accessLogGroupName": out.AccessLogGroupName,
 		"domainTarget": out.DomainTarget, "domainHostedZoneId": out.DomainHostedZoneID,
 		"truststoreBucketName": out.TruststoreBucketName, "truststoreUri": out.TruststoreURI,
@@ -1297,6 +1335,38 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 		return nil, err
 	}
 	return out, nil
+}
+
+// checkEvent is the event the post-deploy check sends: the function reads each
+// secret its documents declare and fails naming those that are missing.
+const checkEvent = `{"kind":"check"}`
+
+// newCheck is the post-deploy check: one invocation of the live alias.
+//
+// Its triggers are the function's version and a hash of the declared names. The
+// version moves on every change of the code or of a document (the documents are
+// in the configuration layer, so a changed declaration is a new version), which
+// is exactly when what the function reads may have changed; the hash is there
+// for a declaration that moves while the version does not (a layer swapped for
+// an identical one) and shows in the preview as the reason the check runs. A
+// document hash alone would miss a new release of the code that reads the
+// parameters differently, which is the case the check is for. The hash is over
+// the names only: no value is in the trigger, the state or the preview.
+func newCheck(ctx *pulumi.Context, name string, live *lambda.Alias, fnName pulumi.StringOutput,
+	declared []string, after []pulumi.Resource, parent pulumi.ResourceOption) error {
+	sum := sha256.Sum256([]byte(strings.Join(declared, "\n")))
+	if _, err := lambda.NewInvocation(ctx, name+"-check", &lambda.InvocationArgs{
+		FunctionName: fnName,
+		Qualifier:    live.Name,
+		Input:        pulumi.String(checkEvent),
+		Triggers: pulumi.StringMap{
+			"version":  live.FunctionVersion,
+			"declared": pulumi.String(hex.EncodeToString(sum[:])),
+		},
+	}, parent, pulumi.DependsOn(after)); err != nil {
+		return fmt.Errorf("sluis check: %w", err)
+	}
+	return nil
 }
 
 // recoveryPasswordLength is the generated recovery password's length.
@@ -1332,14 +1402,14 @@ func lambdaTrust() string {
 // cycle.
 func newFunctionRole(ctx *pulumi.Context, name, fnName string, a *LambdaArgs, signingKeyArns []pulumi.StringInput,
 	wrappedKeyArn, signKeyArn, secretsKeyArn, logGroupArn pulumi.StringInput,
-	selfArn string, tags pulumi.StringMapInput, opts ...pulumi.ResourceOption) (*iam.Role, error) {
+	selfArn string, tags pulumi.StringMapInput, opts ...pulumi.ResourceOption) (*iam.Role, *iam.RolePolicy, error) {
 	rargs := &iam.RoleArgs{Name: pulumi.String(fnName), AssumeRolePolicy: pulumi.String(lambdaTrust()), Tags: tags}
 	if a.PermissionsBoundaryArn != "" {
 		rargs.PermissionsBoundary = pulumi.String(a.PermissionsBoundaryArn)
 	}
 	r, err := iam.NewRole(ctx, name+"-http-role", rargs, opts...)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	stateKey := pulumi.StringInput(pulumi.String(""))
 	if a.State.KeyArn != nil {
@@ -1370,12 +1440,13 @@ func newFunctionRole(ctx *pulumi.Context, name, fnName string, a *LambdaArgs, si
 			cloudflare:         a.cloudflare(),
 		})
 	}).(pulumi.StringOutput)
-	if _, err := iam.NewRolePolicy(ctx, name+"-http-policy", &iam.RolePolicyArgs{
+	rp, err := iam.NewRolePolicy(ctx, name+"-http-policy", &iam.RolePolicyArgs{
 		Name: pulumi.String(fnName), Role: r.Name, Policy: doc,
-	}, opts...); err != nil {
-		return nil, err
+	}, opts...)
+	if err != nil {
+		return nil, nil, err
 	}
-	return r, nil
+	return r, rp, nil
 }
 
 const truststoreKey = "truststore/client-ca.pem"
