@@ -34,7 +34,7 @@ func (m Module) Run(ctx context.Context, file string) error {
 	}
 	defer flush()
 	if m.Deprecated != "" {
-		log.WarnContext(ctx, "`"+m.Deprecated+"` is deprecated and goes in the next release: the command is `sluis issuer`, with the same --config",
+		log.WarnContext(ctx, "this command is deprecated and goes in the next release: the command is `sluis issuer`, with the same --config",
 			slog.String("command", m.Deprecated))
 	}
 

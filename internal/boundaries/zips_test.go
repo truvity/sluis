@@ -46,19 +46,22 @@ var zips = []struct {
 		// The signer and the console are in this process: the issuer is the one
 		// zip that holds them. It holds neither the backup module's function nor
 		// the Cloudflare module's.
-		forbidden: []string{mod + "internal/backup/app", mod + "internal/cloudflare/app", mod + "internal/lambdaapp/backupfn", mod + "internal/lambdaapp/cloudflarefn"},
+		forbidden: []string{mod + "internal/backup/app", mod + "internal/cloudflare/app",
+			mod + "internal/lambdaapp/backupfn", mod + "internal/lambdaapp/cloudflarefn"},
 		required: []string{mod + "internal/signer", mod + "internal/server", mod + "frontend", mod + "internal/issuer",
 			mod + "internal/lambdaapp/issuerfn", mod + "internal/port/dynamodb", mod + "storage/keys/kms"},
 	},
 	{
-		module:    "cloudflare",
-		forbidden: slices.Concat(frontEnd, providerApps, []string{mod + "internal/backup/app", mod + "internal/lambdaapp/issuerfn", mod + "internal/lambdaapp/backupfn"}),
-		required:  []string{mod + "internal/cloudflare/app", mod + "internal/cloudflare/minter", mod + "internal/lambdaapp/cloudflarefn"},
+		module: "cloudflare",
+		forbidden: slices.Concat(frontEnd, providerApps,
+			[]string{mod + "internal/backup/app", mod + "internal/lambdaapp/issuerfn", mod + "internal/lambdaapp/backupfn"}),
+		required: []string{mod + "internal/cloudflare/app", mod + "internal/cloudflare/minter", mod + "internal/lambdaapp/cloudflarefn"},
 	},
 	{
-		module:    "backup",
-		forbidden: slices.Concat(frontEnd, providerApps, []string{mod + "internal/cloudflare/app", mod + "internal/lambdaapp/issuerfn", mod + "internal/lambdaapp/cloudflarefn"}),
-		required:  []string{mod + "internal/backup/app", mod + "internal/backup/restorejob", mod + "internal/lambdaapp/backupfn"},
+		module: "backup",
+		forbidden: slices.Concat(frontEnd, providerApps,
+			[]string{mod + "internal/cloudflare/app", mod + "internal/lambdaapp/issuerfn", mod + "internal/lambdaapp/cloudflarefn"}),
+		required: []string{mod + "internal/backup/app", mod + "internal/backup/restorejob", mod + "internal/lambdaapp/backupfn"},
 	},
 }
 

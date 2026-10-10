@@ -91,7 +91,8 @@ func TestOnlyAPausedRestoreContinues(t *testing.T) {
 }
 
 func TestAFailedContinuationIsSaidAndNotAnError(t *testing.T) {
-	out, err := restoreEvent(lambdaCtx(), &fakeRestorer{res: paused()}, &fakeLambda{err: errors.New("access denied")}, slog.Default(), lambdaapp.RestoreEvent{Resume: true})
+	denied := &fakeLambda{err: errors.New("access denied")}
+	out, err := restoreEvent(lambdaCtx(), &fakeRestorer{res: paused()}, denied, slog.Default(), lambdaapp.RestoreEvent{Resume: true})
 	if err != nil || out.Continued || out.Error == "" || out.Outcome != "paused" {
 		t.Errorf("%+v, %v", out, err)
 	}
@@ -103,7 +104,8 @@ func TestAPreviewWritesNothingAndStartsNothing(t *testing.T) {
 	if err != nil || out.Outcome != "preview" || out.Report == nil || len(f.got) != 0 || len(api.in) != 0 {
 		t.Errorf("%+v, %v", out, err)
 	}
-	if out, err = restoreEvent(lambdaCtx(), f, api, slog.Default(), lambdaapp.RestoreEvent{Backup: "nope", Preview: true}); err != nil || out.Outcome != "refused" {
+	ev := lambdaapp.RestoreEvent{Backup: "nope", Preview: true}
+	if out, err = restoreEvent(lambdaCtx(), f, api, slog.Default(), ev); err != nil || out.Outcome != "refused" {
 		t.Errorf("%+v, %v", out, err)
 	}
 }

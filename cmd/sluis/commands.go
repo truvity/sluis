@@ -98,7 +98,7 @@ func newApp(out io.Writer) *cli.Command {
 			legacy("backup", "the backup module: run, list, status or prune (sluis backup --help)", backupCmd, out),
 			legacy("restore", "the restore role of the backup zip: preview, start or status (sluis restore --help)", restoreCmd, out),
 			// Today's commands, unchanged.
-			legacy("serve", "(deprecated, use issuer) the one process: the issuer, the signer, the directory hub and the console, and the controllers the document names", serveRun, out),
+			legacy("serve", "(deprecated, use issuer) the one process: issuer, signer, hub, console and the controllers the document names", serveRun, out),
 			legacy("controller", "(deprecated) a controller alone: github or slack", controllerCmd, out),
 			legacy("tick", "one tick, once: github or slack, then the target", tickCmd, out),
 			legacy("check", "verify that every secret the document and its policy declare is in SSM: names and versions, never values", checkCmd, out),
