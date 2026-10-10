@@ -290,9 +290,9 @@ func concernOrder(c string) int {
 
 func (p *planner) firstRefused() PlanItem {
 	for i := range p.report.Modules {
-		for _, it := range p.report.Modules[i].Items {
-			if it.Status == PlanRefused {
-				return it
+		for j := range p.report.Modules[i].Items {
+			if it := &p.report.Modules[i].Items[j]; it.Status == PlanRefused {
+				return *it
 			}
 		}
 	}
@@ -301,8 +301,7 @@ func (p *planner) firstRefused() PlanItem {
 
 // domainModule is the module a domain's records belong to.
 func domainModule(domain string) string {
-	switch domain {
-	case DomainConsole:
+	if domain == DomainConsole {
 		return "oidc"
 	}
 	return domain
