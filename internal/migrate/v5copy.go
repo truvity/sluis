@@ -147,7 +147,8 @@ func CopyV5(ctx context.Context, from, to Side, opt V5Options) (*PlanReport, err
 	report.Mode, report.DryRun = "copy", opt.DryRun
 	if live {
 		report.Live = true
-		report.Notes = append(report.Notes, "this pass ran while the source was live and left the issuer out: a final pass with --overwrite and --i-have-stopped-writers is required")
+		report.Notes = append(report.Notes, "this pass ran while the source was live and left the issuer out: "+
+			"a final pass with --overwrite and --i-have-stopped-writers is required")
 	}
 	if err == nil && report.Totals.Different > 0 && !opt.Overwrite {
 		first := firstWith(report, PlanDifferent)

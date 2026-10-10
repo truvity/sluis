@@ -100,7 +100,8 @@ func parseMigrateV5(sub string, args []string, out io.Writer) (migrateV5Flags, b
 		fs.BoolVar(&f.dryRun, "dry-run", false, "read both sides and report what would be copied; write nothing")
 		fs.BoolVar(&f.overwrite, "overwrite", false, "replace a value the destination holds that differs from the source's")
 		fs.BoolVar(&f.writersStopped, "i-have-stopped-writers", false,
-			"say that nothing writes to the source (the issuer, the console and both controllers are stopped); required unless --dry-run or --skip issuer (the live first pass)")
+			"say that nothing writes to the source (the issuer, the console and both controllers are stopped); "+
+				"required unless --dry-run or --skip issuer (the live first pass)")
 	}
 	fs.StringVar(&f.skip, "skip", "", "domains to leave out, comma separated: "+strings.Join(migrate.AllDomains, ", "))
 	fs.StringVar(&f.blobs, "blobs", string(migrate.BlobsAuto),
