@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"strings"
 	"testing"
@@ -131,7 +130,7 @@ func (r *rig) job(mutate ...func(*job.Config)) *job.Job {
 		State:   r.mods.Store(port.ModuleBackup),
 		Source:  export.Source{State: fanout{r.mods}, Index: fanout{r.mods}, Secrets: secrets, Blob: memory.New().Blobs()},
 		Archive: r.archive, Key: r.key, Keep: 2, MaxAge: 48 * time.Hour,
-		Audit: r.audit, Now: r.clk.now, Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Holder: fmt.Sprintf("runner-%d", r.n),
+		Audit: r.audit, Now: r.clk.now, Log: slog.New(slog.DiscardHandler), Holder: fmt.Sprintf("runner-%d", r.n),
 		Suffix: func() string { return fmt.Sprintf("%06x", r.n*1000+int(r.clk.now().Unix()%1000)) },
 	}
 	for _, m := range mutate {
@@ -304,8 +303,10 @@ func TestAFailedRunIsRecordedAndTheNextOneStartsAgain(t *testing.T) {
 func TestAnInterruptedRunWithoutACheckpointIsClosedAsAbandoned(t *testing.T) {
 	r := newRig(t)
 	j := r.job()
-	stale := `{"id":"20261009T020000Z-aaaaaa","state":"running","trigger":"schedule","creator":"x","started":"2026-10-09T02:00:00Z","updated":"2026-10-09T02:00:00Z"}`
-	if _, err := r.mods.Store(port.ModuleBackup).Put(ctx, job.RunPrefix+"20261009T020000Z-aaaaaa", []byte(stale), 0); err != nil {
+	stale := `{"id":"20261009T020000Z-aaaaaa","state":"running","trigger":"schedule","creator":"x",` +
+		`"started":"2026-10-09T02:00:00Z","updated":"2026-10-09T02:00:00Z"}`
+	key := job.RunPrefix + "20261009T020000Z-aaaaaa"
+	if _, err := r.mods.Store(port.ModuleBackup).Put(ctx, key, []byte(stale), 0); err != nil {
 		t.Fatal(err)
 	}
 	res := r.run(j)

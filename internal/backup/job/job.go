@@ -314,7 +314,7 @@ func (j *Job) pickup(ctx context.Context, req Request) (*Run, port.Revision, boo
 	if err != nil {
 		return nil, "", false, err
 	}
-	var open []recorded
+	var open []*recorded
 	for _, r := range runs {
 		if r.run.State == StateRunning || r.run.State == StatePaused {
 			open = append(open, r)
@@ -511,8 +511,8 @@ func (j *Job) update(ctx context.Context, run Run, rev port.Revision) (port.Revi
 }
 
 // records are the status records, oldest first (an id sorts by its time).
-func (j *Job) records(ctx context.Context) ([]recorded, error) {
-	var out []recorded
+func (j *Job) records(ctx context.Context) ([]*recorded, error) {
+	var out []*recorded
 	page := ""
 	for {
 		p, err := j.c.State.List(ctx, RunPrefix, page, 0)
@@ -524,7 +524,7 @@ func (j *Job) records(ctx context.Context) ([]recorded, error) {
 			if json.Unmarshal(rec.Value, &r) != nil || r.ID == "" {
 				continue
 			}
-			out = append(out, recorded{r, rec.Revision})
+			out = append(out, &recorded{r, rec.Revision})
 		}
 		if p.Next == "" {
 			break
