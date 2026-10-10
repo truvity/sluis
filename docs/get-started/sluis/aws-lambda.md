@@ -55,15 +55,15 @@ console: {client: access-console}
 
 access:
   groups:
-    all:access-roster:operator:
+    all:sluis:operator:
       members: [admin@example.test]
-    all:access-roster:viewer:
+    all:sluis:viewer:
       matchers: [{email_domain: example.test}]
   clients:
     access-console:
       kind: public
       redirects: [https://access.example.test/console/callback]
-      requires: [all:access-roster:viewer]
+      requires: [all:sluis:viewer]
 ```
 
 `instance` names the installation, and its SSM root is `/sluis/demo`. `table` and `bucket` are the names the library creates in step 4.

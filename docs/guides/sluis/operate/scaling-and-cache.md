@@ -17,7 +17,7 @@ Choose the replica count and size the directory snapshot cache.
 
 ## Verify
 
-Read the object sizes in the bucket. After raising the count, watch `access_roster.leases.contended` and `AccessRosterLeaseLost` ([telemetry](../../../reference/sluis/telemetry.md)).
+Read the object sizes in the bucket. After raising the count, watch `sluis.leases.contended` and `SluisLeaseLost` ([telemetry](../../../reference/sluis/telemetry.md)).
 
 ## Roll back
 

@@ -45,8 +45,8 @@ ADRs under `docs/decisions/` hold the why. Every other page links to them and do
 5. Present tense, second person, active voice. "The chart refuses the value", not "the value is refused".
 6. Condition before instruction. "To run two replicas, set `adapters.state: dynamodb`."
 7. History goes to the CHANGELOG or an ADR. A page describes what ships now.
-8. A legacy identifier is named once, with the words "legacy identifier, renamed in v1.75–v1.76". The nineteen that still exist are listed in `hack/docs-hygiene-allow.tsv`.
-9. The old product names appear nowhere else: `access-roster`, `access-issuer`, `github-roster`, `slack-roster`, `githubroster`, `slackroster`, `directoryroster`, `accessctl`, `access-proxy`. Exceptions: CHANGELOG, ADRs, `internal/audit/catalogue/testdata/released/`.
+8. An old spelling that is still accepted is named once, as "the old spelling `X`, accepted until v1.76"; a wire value that only exists under its old name, as "legacy identifier, renamed in v1.75–v1.76". `hack/docs-hygiene-allow.tsv` lists each, with its reason.
+9. The old product names appear nowhere else: `access-roster`, `access-issuer`, `github-roster`, `slack-roster`, `githubroster`, `slackroster`, `directoryroster`, `accessctl`, `access-proxy`. Exceptions: CHANGELOG, ADRs, released fixtures (`testdata/released/`).
 
 ## Banned
 

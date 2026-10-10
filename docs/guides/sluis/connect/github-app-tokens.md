@@ -56,7 +56,7 @@ curl --fail-with-body -sS -u 'github-app%3Apublisher:' \
   --data-urlencode grant_type=urn:ietf:params:oauth:grant-type:token-exchange \
   --data-urlencode "subject_token=${JOB_ID_TOKEN}" \
   --data-urlencode subject_token_type=urn:ietf:params:oauth:token-type:jwt \
-  --data-urlencode requested_token_type=urn:access-roster:params:oauth:token-type:github-installation-token \
+  --data-urlencode requested_token_type=urn:sluis:params:oauth:token-type:github-installation-token \
   --data-urlencode audience=github-app:publisher \
   --data-urlencode 'repositories=app lib-core' \
   --data-urlencode 'scope=contents:write pull_requests:write' \

@@ -31,9 +31,9 @@ groups:                        # internal groups, the vocabulary, named <scope>:
   ci:platform:deployer:
     matchers:                                           # matched, not listed
       - github: { repository: acme/platform, ref: refs/heads/master }
-  all:access-roster:viewer:
+  all:sluis:viewer:
     matchers: [{ email_domain: a.example }]              # the escape hatch
-  all:access-roster:operator:
+  all:sluis:operator:
     members: [directory-admins@a.example]
 
 claims:                        # what a group adds beyond its own name: sparse, usually empty

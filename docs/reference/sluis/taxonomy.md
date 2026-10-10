@@ -59,16 +59,14 @@ A wildcard that expands to nothing fails the load:
 | Name | Reads as |
 |---|---|
 | `prod:k8s:admin` | admin of prod's Kubernetes |
-| `all:access-roster:operator` | operator of sluis, installation-wide |
-| `C0north:access-roster:viewer` | viewer of one directory only |
-| `C0north:access-roster:operator` | operator of one directory and the GitHub organisations and Slack workspaces it owns |
+| `all:sluis:operator` | operator of sluis, installation-wide |
+| `C0north:sluis:viewer` | viewer of one directory only |
+| `C0north:sluis:operator` | operator of one directory and the GitHub organisations and Slack workspaces it owns |
 | `*:k8s:admin` (`groups` key only) | admin of every non-sensitive environment's Kubernetes |
 | `devel:*:viewer` (`groups` key only) | viewer of everything devel has with a viewer role |
 | `devel:ssh:user` | user of devel's ssh, a role scoped to `devel` |
 | `rung:sre` | a session lifetime, not a grant |
 | `emp:alice` | a person, not a grant |
-
-The thing segment of the sluis groups is a legacy identifier, renamed in v1.75–v1.76.
 
 ## Anti-patterns
 

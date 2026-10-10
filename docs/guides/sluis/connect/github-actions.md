@@ -92,8 +92,8 @@ jobs:
   tag:
     uses: example-org/shared-workflows/.github/workflows/auto-release.yaml@<commit-sha>   # vX.Y.Z
     with:
-      token-source: access-roster
-      access-roster-issuer: https://access.example
+      token-source: sluis
+      sluis-issuer: https://access.example
       github-app: ci-automation          # the catalogue id
 ```
 
@@ -102,7 +102,7 @@ jobs:
 - id: access
   uses: truvity/sluis@<commit-sha>   # vX.Y.Z
   with:
-    issuer: ${{ inputs.access-roster-issuer }}
+    issuer: ${{ inputs.sluis-issuer }}
     github-app: ${{ inputs.github-app }}
     repositories: ${{ github.event.repository.name }}
     permissions: contents:write

@@ -84,17 +84,17 @@ console: {client: access-console}
 
 access:
   groups:
-    all:access-roster:operator:
+    all:sluis:operator:
       members: [admin@example.test]
       matchers:
         - service_account: {namespace: sluis, name: sluis-recovery}   # how the first operator gets in
-    all:access-roster:viewer:
+    all:sluis:viewer:
       matchers: [{email_domain: example.test}]
   clients:
     access-console:
       kind: public
       redirects: [https://access.example.test/console/callback]
-      requires: [all:access-roster:viewer]
+      requires: [all:sluis:viewer]
 ```
 
 ```sh
