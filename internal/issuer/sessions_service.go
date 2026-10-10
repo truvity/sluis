@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -54,6 +56,11 @@ type SessionsService struct {
 	// announce tells clients their sign-in ended (Back-Channel Logout).
 	// It is the announcer the sign-out path uses; nil tells nobody.
 	announce func(context.Context, []Session)
+	// policy is what names a declared client or resource; nil names none.
+	policy func() *policy.Set
+	// documents resolves a client that identifies itself by URL, through
+	// the cache the authorize path already fills; nil resolves none.
+	documents *documentClients
 }
 
 var _ accessissuerv1connect.SessionServiceHandler = (*SessionsService)(nil)
@@ -65,6 +72,7 @@ func NewSessionsService(iss *Issuer, verifier *op.AccessTokenVerifier, secure bo
 		sessions: iss.Sessions(),
 		record:   iss.record,
 		sso:      iss.SSO(),
+		policy:   iss.Policy,
 		signedIn: func(ctx context.Context, cookie string) (caller, bool) {
 			if iss.SSO() == nil {
 				return caller{}, false
@@ -281,9 +289,24 @@ func (s *SessionsService) ListSessions(
 			errors.New("that is somebody else's session"))
 	}
 
-	found, err := s.sessions.List(ctx, Query{Identity: identity, ClientID: clientID, Contains: contains})
+	names := s.namer(ctx)
+	query := Query{Identity: identity, ClientID: clientID, Contains: contains}
+
+	// A client substring matches what a person reads -- the client's name
+	// and the resource -- as well as its id, so the index (which knows only
+	// ids) is asked for the identity's sessions and the match is made here.
+	byName := contains && clientID != ""
+	if byName {
+		query.ClientID = ""
+	}
+
+	found, err := s.sessions.List(ctx, query)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+
+	if byName {
+		found = slices.DeleteFunc(found, func(held Session) bool { return !names.matches(held, clientID) })
 	}
 
 	page, nextToken := paginate(found, int(req.Msg.GetPageSize()), strings.TrimSpace(req.Msg.GetPageToken()))
@@ -294,7 +317,10 @@ func (s *SessionsService) ListSessions(
 	}
 
 	for i := range page {
-		out.Sessions = append(out.Sessions, described(page[i], s.sessions.DeadlineOf(page[i])))
+		row := described(page[i], s.sessions.DeadlineOf(page[i]))
+		row.ClientName = names.client(page[i].ClientID)
+		row.ResourceName = names.resource(page[i].Resource)
+		out.Sessions = append(out.Sessions, row)
 	}
 
 	// The sign-ins behind them, on the FIRST page only: they are not
@@ -756,6 +782,8 @@ func described(s Session, deadline time.Time) *accessissuerv1.Session {
 		ExpiresAt:    timestamppb.New(s.ExpiresAt),
 		Sso:          s.SSO,
 		SessionClass: accessissuerv1.SessionClass_SESSION_CLASS_INTERACTIVE,
+		Resource:     s.Resource,
+		Scopes:       slices.Clone(s.Scopes),
 	}
 
 	if s.Agent() {
@@ -784,4 +812,110 @@ func howOf(how How) accessissuerv1.How {
 	default:
 		return accessissuerv1.How_HOW_UNSPECIFIED
 	}
+}
+
+// sessionNamer turns the ids a listing carries into names a person can
+// read. It remembers each answer for the one listing, so a page of a dozen
+// sessions of one client asks once.
+type sessionNamer struct {
+	ctx       context.Context
+	policy    *policy.Set
+	documents *documentClients
+	clients   map[string]string
+}
+
+func (s *SessionsService) namer(ctx context.Context) *sessionNamer {
+	n := &sessionNamer{ctx: ctx, documents: s.documents, clients: map[string]string{}}
+	if s.policy != nil {
+		n.policy = s.policy()
+	}
+
+	return n
+}
+
+// client is the client's display name: the policy's for a declared
+// client, the metadata document's `client_name` for one that is a URL
+// (through the issuer's own cache and allow-list), otherwise the host of
+// that URL, otherwise the id.
+func (n *sessionNamer) client(id string) string {
+	if id == "" {
+		return ""
+	}
+
+	if name, ok := n.clients[id]; ok {
+		return name
+	}
+
+	name := id
+
+	switch declared, ok := n.lookupClient(id); {
+	case ok:
+		name = declared.Title(id)
+	case n.documents != nil:
+		if resolved, err := n.documents.Resolve(n.ctx, id); err == nil {
+			name = resolved.Title(id)
+		} else if host := hostOf(id); host != "" {
+			name = host
+		}
+	default:
+		if host := hostOf(id); host != "" {
+			name = host
+		}
+	}
+
+	n.clients[id] = name
+
+	return name
+}
+
+func (n *sessionNamer) lookupClient(id string) (policy.Client, bool) {
+	if n.policy == nil {
+		return policy.Client{}, false
+	}
+
+	return n.policy.Client(id)
+}
+
+// resource is the policy's display name for a resource, or its host.
+func (n *sessionNamer) resource(id string) string {
+	if id == "" {
+		return ""
+	}
+
+	if n.policy != nil {
+		if declared, ok := n.policy.Resource(id); ok {
+			return declared.Title(id)
+		}
+	}
+
+	if host := hostOf(id); host != "" {
+		return host
+	}
+
+	return id
+}
+
+// hostOf is the host of an https URL, empty for anything else.
+func hostOf(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		return ""
+	}
+
+	return u.Host
+}
+
+// matches reports whether a session answers a client filter: the needle
+// is a case-insensitive substring of its client id, the client's name, its
+// resource, or the resource's name.
+func (n *sessionNamer) matches(held Session, needle string) bool {
+	needle = strings.ToLower(needle)
+
+	for _, text := range []string{held.ClientID, n.client(held.ClientID), held.Resource, n.resource(held.Resource)} {
+		if strings.Contains(strings.ToLower(text), needle) {
+			return true
+		}
+	}
+
+	return false
 }

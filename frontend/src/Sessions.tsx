@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
+import Chip from "@mui/material/Chip";
+import Collapse from "@mui/material/Collapse";
 import Divider from "@mui/material/Divider";
+import IconButton from "@mui/material/IconButton";
 import List from "@mui/material/List";
 import ListItem from "@mui/material/ListItem";
 import ListItemText from "@mui/material/ListItemText";
@@ -13,6 +16,8 @@ import TableCell from "@mui/material/TableCell";
 import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
+import ExpandLess from "@mui/icons-material/ExpandLess";
+import ExpandMore from "@mui/icons-material/ExpandMore";
 import TextField from "@mui/material/TextField";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
@@ -32,6 +37,13 @@ import {
 } from "./gen/sluis/v1/session_pb";
 import { useDebouncedCommit } from "./hooks";
 import { paths } from "./router";
+import {
+    clientLabel,
+    groupSessions,
+    neverUsed,
+    resourceLabel,
+    type SessionGroup,
+} from "./sessionsModel";
 import { Facet, Facets, Failure, InfoTip, Loading, Nothing, Page, Ref } from "./ui";
 
 /** Sessions live in the issuer (docs/concepts/sluis/sessions.md, "Where
@@ -227,17 +239,28 @@ export function SessionsPanel({
                                                 primary={
                                                     <>
                                                         {showClient ? (
-                                                            <Ref
-                                                                to={paths.client(
-                                                                    session.clientId,
-                                                                )}
-                                                                mono
-                                                            >
-                                                                {
+                                                            <Tooltip
+                                                                title={
                                                                     session.clientId
                                                                 }
-                                                            </Ref>
+                                                            >
+                                                                <span>
+                                                                    <Ref
+                                                                        to={paths.client(
+                                                                            session.clientId,
+                                                                        )}
+                                                                    >
+                                                                        {clientLabel(
+                                                                            session,
+                                                                        )}
+                                                                    </Ref>
+                                                                </span>
+                                                            </Tooltip>
                                                         ) : null}
+                                                        {showClient &&
+                                                        session.resource
+                                                            ? ` → ${resourceLabel(session)}`
+                                                            : null}
                                                         {!showClient &&
                                                         !showIdentity
                                                             ? session.id.slice(
@@ -263,7 +286,11 @@ export function SessionsPanel({
                                                                       session.lastRefreshed,
                                                                   ),
                                                               )
-                                                            : "never"}{" "}
+                                                            : neverUsed(
+                                                                    session,
+                                                                )
+                                                              ? "never (abandoned?)"
+                                                              : "never"}{" "}
                                                         · expires{" "}
                                                         {until(
                                                             at(
@@ -430,6 +457,173 @@ function SignIns({
     );
 }
 
+/** Sessions of one person on one client for one resource, as one row with
+ *  a count; the row opens to the individual sessions, each with its own
+ *  Revoke, its scopes and its browser. */
+function GroupRow({
+    group,
+    onRevoke,
+    onSignOutBrowser,
+    revoking,
+}: {
+    group: SessionGroup<Session>;
+    onRevoke: (session: Session) => void;
+    onSignOutBrowser: (session: Session) => void;
+    revoking?: string;
+}) {
+    const [open, setOpen] = useState(false);
+    const first = group.sessions[0];
+    const ways = [...new Set(group.sessions.map((s) => howName(s.how)))].join(", ");
+    return (
+        <>
+            <TableRow hover onClick={() => setOpen(!open)} sx={{ cursor: "pointer" }}>
+                <TableCell padding="checkbox">
+                    <IconButton
+                        size="small"
+                        aria-label={open ? "Hide sessions" : "Show sessions"}
+                        aria-expanded={open}
+                    >
+                        {open ? <ExpandLess fontSize="small" /> : <ExpandMore fontSize="small" />}
+                    </IconButton>
+                </TableCell>
+                <TableCell>
+                    <Tooltip title={group.clientId}>
+                        <span>
+                            <Ref to={paths.client(group.clientId)}>{clientLabel(first)}</Ref>
+                        </span>
+                    </Tooltip>
+                </TableCell>
+                <TableCell>
+                    <Tooltip
+                        title={
+                            group.resource ||
+                            "No resource was recorded: the client itself, or a session opened before resources were kept."
+                        }
+                    >
+                        <Typography
+                            variant="body2"
+                            color={group.resource ? undefined : "text.secondary"}
+                        >
+                            {resourceLabel(first)}
+                        </Typography>
+                    </Tooltip>
+                </TableCell>
+                <TableCell align="right">
+                    {group.sessions.length}
+                    {group.unused > 0 ? (
+                        <Chip
+                            size="small"
+                            color="warning"
+                            variant="outlined"
+                            label={
+                                group.unused === group.sessions.length
+                                    ? "never used"
+                                    : `${group.unused} never used`
+                            }
+                            sx={{ ml: 1 }}
+                        />
+                    ) : null}
+                </TableCell>
+                <TableCell>
+                    <Typography variant="body2" color="text.secondary">
+                        {ways}
+                    </Typography>
+                </TableCell>
+                <TableCell>
+                    {group.lastUsed === undefined ? "never" : ago(new Date(group.lastUsed))}
+                </TableCell>
+                <TableCell align="right" onClick={(e) => e.stopPropagation()}>
+                    {group.sessions.length === 1 ? (
+                        <Button
+                            size="small"
+                            color="warning"
+                            disabled={revoking === first.id}
+                            onClick={() => onRevoke(first)}
+                        >
+                            Revoke
+                        </Button>
+                    ) : null}
+                </TableCell>
+            </TableRow>
+            <TableRow>
+                <TableCell colSpan={7} sx={{ py: 0, borderBottom: open ? undefined : "none" }}>
+                    <Collapse in={open} unmountOnExit>
+                        <Table size="small" sx={{ my: 1 }}>
+                            <TableHead>
+                                <TableRow>
+                                    <TableCell>Opened</TableCell>
+                                    <TableCell>Last used</TableCell>
+                                    <TableCell>Expires</TableCell>
+                                    <TableCell>Class</TableCell>
+                                    <TableCell>Scopes</TableCell>
+                                    <TableCell>Browser</TableCell>
+                                    <TableCell align="right" />
+                                </TableRow>
+                            </TableHead>
+                            <TableBody>
+                                {group.sessions.map((session) => (
+                                    <TableRow key={session.id}>
+                                        <TableCell>{ago(at(session.issuedAt))}</TableCell>
+                                        <TableCell>
+                                            {session.lastRefreshed ? (
+                                                ago(at(session.lastRefreshed))
+                                            ) : neverUsed(session) ? (
+                                                <Chip size="small" color="warning" variant="outlined" label="never used" />
+                                            ) : (
+                                                "not yet"
+                                            )}
+                                        </TableCell>
+                                        <TableCell>{until(at(session.expiresAt))}</TableCell>
+                                        <TableCell>{lifetime(session)}</TableCell>
+                                        <TableCell>
+                                            {session.scopes.length === 0 ? (
+                                                <Typography variant="caption" color="text.secondary">
+                                                    none recorded
+                                                </Typography>
+                                            ) : (
+                                                session.scopes.map((scope) => (
+                                                    <Chip key={scope} size="small" label={scope} sx={{ mr: 0.5 }} />
+                                                ))
+                                            )}
+                                        </TableCell>
+                                        <TableCell>
+                                            {session.sso ? (
+                                                <Tooltip title="End this browser's sign-in and every session under it. Revoking the rows one by one leaves the sign-in standing, and the next visit is admitted with no password.">
+                                                    <Button
+                                                        size="small"
+                                                        color="warning"
+                                                        disabled={revoking === session.sso}
+                                                        onClick={() => onSignOutBrowser(session)}
+                                                        sx={{ textTransform: "none", minWidth: 0, px: 1 }}
+                                                    >
+                                                        Sign out browser
+                                                    </Button>
+                                                </Tooltip>
+                                            ) : null}
+                                        </TableCell>
+                                        <TableCell align="right">
+                                            <Button
+                                                size="small"
+                                                color="warning"
+                                                disabled={revoking === session.id}
+                                                onClick={() => onRevoke(session)}
+                                            >
+                                                Revoke
+                                            </Button>
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </Collapse>
+                </TableCell>
+            </TableRow>
+        </>
+    );
+}
+
+/** The installation-wide listing: a heading per person, and under it one row
+ *  per client and resource, with the count of identical sessions. */
 function SessionsTable({
     sessions,
     onRevoke,
@@ -444,149 +638,48 @@ function SessionsTable({
     if (sessions.length === 0)
         return <Nothing>No open session matches the filter.</Nothing>;
 
-    // A short, stable mark per browser session, numbered in the order they
-    // appear. The `sso` itself is an opaque id: printing it would be noise
-    // nobody can act on, where "A" beside "A" is the whole message.
-    const marks = new Map<string, string>();
-    for (const session of sessions) {
-        if (session.sso && !marks.has(session.sso)) {
-            marks.set(session.sso, String.fromCharCode(65 + (marks.size % 26)));
-        }
-    }
-    // A browser with only one session here needs no mark: the column exists
-    // to say "these two are the same one".
-    const counts = new Map<string, number>();
-    for (const session of sessions) {
-        if (session.sso)
-            counts.set(session.sso, (counts.get(session.sso) ?? 0) + 1);
-    }
+    const people = groupSessions(sessions);
 
     return (
-        <TableContainer
-            component={Paper}
-            variant="outlined"
-            sx={{ overflowX: "auto" }}
-        >
+        <TableContainer component={Paper} variant="outlined" sx={{ overflowX: "auto" }}>
             <Table size="small">
                 <TableHead>
                     <TableRow>
-                        <TableCell>Person</TableCell>
+                        <TableCell padding="checkbox" />
                         <TableCell>Client</TableCell>
+                        <TableCell>
+                            Resource
+                            <InfoTip label="About the Resource column">
+                                What the tokens are for (RFC 8707), such as an MCP server. Named by the policy where it names one, otherwise the host. Unknown: none was recorded, which is also how a client that names none looks.
+                            </InfoTip>
+                        </TableCell>
+                        <TableCell align="right">Sessions</TableCell>
                         <TableCell>Way in</TableCell>
-                        <TableCell>
-                            Browser
-                            <InfoTip label="About the Browser column">
-                                Sessions with the same mark came from one browser. Signing the browser out ends its sign-in too, which revoking the rows does not. Blank is a session with no browser behind it — a token exchange.
-                            </InfoTip>
-                        </TableCell>
-                        <TableCell>
-                            Class
-                            <InfoTip label="About the Class column">
-                                Agent: software that keeps its own refresh token and works in the background. A browser sign-out keeps it; a revoke or its deadline ends it.
-                            </InfoTip>
-                        </TableCell>
-                        <TableCell>Opened</TableCell>
                         <TableCell>Last used</TableCell>
-                        <TableCell>Expires</TableCell>
-                        <TableCell>
-                            Deadline
-                            <InfoTip label="About the Deadline column">
-                                The latest it may live, however often it is refreshed.
-                            </InfoTip>
-                        </TableCell>
                         <TableCell align="right" />
                     </TableRow>
                 </TableHead>
-                <TableBody>
-                    {sessions.map((session) => (
-                        <TableRow key={session.id} hover>
-                            <TableCell>
-                                <Ref to={paths.person(session.identity)}>
-                                    {session.identity}
-                                </Ref>
-                            </TableCell>
-                            <TableCell>
-                                <Ref to={paths.client(session.clientId)} mono>
-                                    {session.clientId}
-                                </Ref>
-                            </TableCell>
-                            <TableCell>
-                                <Typography
-                                    variant="body2"
-                                    color="text.secondary"
-                                >
-                                    {howName(session.how)}
-                                </Typography>
-                            </TableCell>
-                            <TableCell>
-                                {session.sso ? (
-                                    <Tooltip title="End this browser's sign-in and every session under it. Revoking the rows one by one leaves the sign-in standing, and the next visit is admitted with no password.">
-                                        <Button
-                                            size="small"
-                                            color="warning"
-                                            disabled={revoking === session.sso}
-                                            onClick={() =>
-                                                onSignOutBrowser(session)
-                                            }
-                                            sx={{
-                                                textTransform: "none",
-                                                minWidth: 0,
-                                                px: 1,
-                                            }}
-                                        >
-                                            {(counts.get(session.sso) ?? 0) > 1
-                                                ? `Sign out ${marks.get(session.sso)}`
-                                                : "Sign out"}
-                                        </Button>
-                                    </Tooltip>
-                                ) : null}
-                            </TableCell>
-                            <TableCell>
-                                <Typography
-                                    variant="body2"
-                                    color={
-                                        isAgent(session)
-                                            ? undefined
-                                            : "text.secondary"
-                                    }
-                                >
-                                    {isAgent(session) ? "agent" : "interactive"}
-                                </Typography>
-                            </TableCell>
-                            <TableCell>{ago(at(session.issuedAt))}</TableCell>
-                            <TableCell>
-                                <Typography
-                                    variant="body2"
-                                    color={
-                                        session.lastRefreshed
-                                            ? undefined
-                                            : "text.secondary"
-                                    }
-                                >
-                                    {session.lastRefreshed
-                                        ? ago(at(session.lastRefreshed))
-                                        : "never"}
-                                </Typography>
-                            </TableCell>
-                            <TableCell>
-                                {until(at(session.expiresAt))}
-                            </TableCell>
-                            <TableCell>
-                                {until(at(session.deadline))}
-                            </TableCell>
-                            <TableCell align="right">
-                                <Button
-                                    size="small"
-                                    color="warning"
-                                    disabled={revoking === session.id}
-                                    onClick={() => onRevoke(session)}
-                                >
-                                    Revoke
-                                </Button>
+                {people.map((person) => (
+                    <TableBody key={person.identity}>
+                        <TableRow sx={{ bgcolor: "action.hover" }}>
+                            <TableCell colSpan={7}>
+                                <Ref to={paths.person(person.identity)}>{person.identity}</Ref>{" "}
+                                <Box component="span" sx={{ color: "text.secondary" }}>
+                                    · {person.total} session{person.total === 1 ? "" : "s"}
+                                </Box>
                             </TableCell>
                         </TableRow>
-                    ))}
-                </TableBody>
+                        {person.groups.map((group) => (
+                            <GroupRow
+                                key={group.key}
+                                group={group}
+                                onRevoke={onRevoke}
+                                onSignOutBrowser={onSignOutBrowser}
+                                revoking={revoking}
+                            />
+                        ))}
+                    </TableBody>
+                ))}
             </Table>
         </TableContainer>
     );
@@ -766,7 +859,7 @@ export function SessionsPage({ operator }: { operator: boolean }) {
                 <TextField
                     size="small"
                     label="Client contains"
-                    placeholder="argo"
+                    placeholder="argo, claude, mcp.example"
                     value={draft.clientId}
                     onChange={(e) => setDraft({ ...draft, clientId: e.target.value.trim() })}
                     onKeyDown={(e) => e.key === "Enter" && applyDraft()}
