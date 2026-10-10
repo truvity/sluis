@@ -22,6 +22,7 @@ import (
 
 	"github.com/truvity/sluis/internal/config"
 	"github.com/truvity/sluis/internal/lambdaapp"
+	_ "github.com/truvity/sluis/internal/lambdaapp/issuerfn"
 )
 
 // ssmFake is SSM Parameter Store over its own wire protocol (JSON 1.1, the

@@ -3,19 +3,47 @@ package lambdaapp
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"os"
 
 	"github.com/aws/aws-lambda-go/lambda"
+
+	"github.com/truvity/sluis/internal/version"
 )
 
-// Start is the Lambda entry of the service: it opens the function from the
-// environment and serves API Gateway events and scheduler ticks until the
-// runtime stops it. Both mains that ship as `bootstrap` call it
-// (cmd/sluis-lambda and the lambda build of cmd/sluis), so there is one
-// dispatch.
-func Start() {
-	fn, err := Open(context.Background(), os.Getenv)
+// Start is the Lambda entry of the deprecated all-in-one zip (cmd/sluis-lambda
+// and the lambda build of cmd/sluis): it opens the function from the
+// environment, whichever module the document is for, and serves API Gateway
+// events and scheduler ticks until the runtime stops it.
+func Start() { serve(Open) }
+
+// StartModule is the entry of a zip built for one module (cmd/sluis-<module>).
+// It refuses to run when the build pins another module (the release builds each
+// zip with `-ldflags -X .../internal/version.Module=<module>`), and when the
+// document is another module's.
+func StartModule(module string) {
+	if err := CheckPin(version.Module, module); err != nil {
+		fmt.Fprintln(os.Stderr, "sluis-"+module+":", err)
+		slog.New(slog.NewJSONHandler(os.Stdout, nil)).ErrorContext(context.Background(), "sluis could not start", slog.Any("error", err))
+		os.Exit(1)
+	}
+	serve(func(ctx context.Context, getenv func(string) string) (*Function, error) {
+		return OpenModule(ctx, getenv, module)
+	})
+}
+
+// CheckPin refuses a binary whose pinned module (the build's, empty for an
+// unpinned development build) is not the module its main is for.
+func CheckPin(pinned, module string) error {
+	if pinned != "" && pinned != module {
+		return fmt.Errorf("this build is pinned to the %q module and cannot run as %q", pinned, module)
+	}
+	return nil
+}
+
+func serve(open func(context.Context, func(string) string) (*Function, error)) {
+	fn, err := open(context.Background(), os.Getenv)
 	if err != nil {
 		// A failure at cold start is the platform's "Init error": the function
 		// does not take an invocation, and the message is in the log.

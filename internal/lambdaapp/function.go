@@ -40,13 +40,6 @@ import (
 
 	"github.com/truvity/sluis/internal/config"
 	"github.com/truvity/sluis/internal/deploycheck"
-	githubapp "github.com/truvity/sluis/internal/githubroster/app"
-	githubcontroller "github.com/truvity/sluis/internal/githubroster/controller"
-	"github.com/truvity/sluis/internal/hub"
-	"github.com/truvity/sluis/internal/port/invoke"
-	"github.com/truvity/sluis/internal/rosterapp"
-	slackapp "github.com/truvity/sluis/internal/slackroster/app"
-	slackcontroller "github.com/truvity/sluis/internal/slackroster/controller"
 	"github.com/truvity/sluis/internal/telemetry"
 )
 
@@ -67,8 +60,60 @@ type Function struct {
 	Close func()
 }
 
-// Open assembles the function. getenv is the process's.
+// Module names: the role a function runs as. A zip is built for exactly one of
+// them (cmd/sluis-<module>), and its document must be that module's.
+const (
+	ModuleIssuer     = "issuer"
+	ModuleCloudflare = "cloudflare"
+	ModuleBackup     = "backup"
+)
+
+// OpenFunc assembles the function of one module from its document.
+type OpenFunc func(ctx context.Context, file string) (*Function, error)
+
+var (
+	openersMu sync.Mutex
+	openers   = map[string]OpenFunc{}
+)
+
+// Register links a module's function into the binary. Each module's package
+// (internal/lambdaapp/issuerfn, backupfn, cloudflarefn) registers itself in its
+// init, and a main imports the ones it carries: a zip holds the code of its
+// module and of no other.
+func Register(module string, open OpenFunc) {
+	openersMu.Lock()
+	defer openersMu.Unlock()
+	openers[module] = open
+}
+
+// ModuleOf is the module a service document is for: one whose apiVersion is the
+// backup's is the backup module's; one that sets cloudflare.serve is the
+// Cloudflare module's; any other is the issuer's.
+func ModuleOf(file string) (string, error) {
+	if config.IsBackup(file) {
+		return ModuleBackup, nil
+	}
+	svc, err := config.Load[config.Sluis](file)
+	if err != nil {
+		return "", err
+	}
+	if svc.Cloudflare != nil && svc.Cloudflare.Serve != nil {
+		return ModuleCloudflare, nil
+	}
+	return ModuleIssuer, nil
+}
+
+// Open assembles the function of whichever module the document is for, among
+// the modules linked into the binary (the deprecated `sluis-lambda` zip links
+// all of them).
 func Open(ctx context.Context, getenv func(string) string) (*Function, error) {
+	return OpenModule(ctx, getenv, "")
+}
+
+// OpenModule is [Open] for a zip built for module: a document that is another
+// module's is refused before anything is assembled, so a zip cannot run as a
+// module it was not built for. An empty module accepts any linked one.
+func OpenModule(ctx context.Context, getenv func(string) string, module string) (*Function, error) {
 	file := strings.TrimSpace(getenv(config.EnvConfig))
 	if file == "" {
 		return nil, fmt.Errorf("%s is unset: it names the service document, /opt/sluis/sluis.yaml in the configuration layer", config.EnvConfig)
@@ -78,18 +123,20 @@ func Open(ctx context.Context, getenv func(string) string) (*Function, error) {
 	if err := config.RefuseRetired("sluis", os.Environ()); err != nil {
 		return nil, err
 	}
-	// The backup module has a document of its own, which none of the others
-	// reads: its apiVersion says the function is the backup's.
-	if config.IsBackup(file) {
-		return openBackup(ctx, file)
-	}
-	// Which module the function runs is the document's: one that sets
-	// cloudflare.serve is the Cloudflare module's function, and answers `rpc`
-	// events and nothing else; any other is the issuer's, and refuses them.
-	if serves, err := servesCloudflare(file); err != nil {
+	// Which module the function runs is the document's, and the zip's module
+	// must be the same.
+	got, err := ModuleOf(file)
+	if err != nil {
 		return nil, err
-	} else if serves {
-		return openCloudflare(ctx, file)
+	}
+	if module != "" && got != module {
+		return nil, fmt.Errorf("this is the sluis-%s function and %s is a %s document: a zip runs the module it was built for and no other", module, file, got)
+	}
+	openersMu.Lock()
+	open := openers[got]
+	openersMu.Unlock()
+	if open == nil {
+		return nil, fmt.Errorf("%s is a %s document and this binary does not carry the %s module", file, got, got)
 	}
 	return open(ctx, file)
 }
@@ -99,9 +146,9 @@ func Open(ctx context.Context, getenv func(string) string) (*Function, error) {
 // beside the imports above) once they land, so that the aws-serverless preset
 // resolves in the Lambda binary.
 
-// logger is the JSON logger a function writes to stdout, which CloudWatch Logs
+// Logger is the JSON logger a function writes to stdout, which CloudWatch Logs
 // (and the OTLP layer's log pipeline) collects.
-func logger(ctx context.Context, service string, level slog.Level) (*slog.Logger, func(context.Context), error) {
+func Logger(ctx context.Context, service string, level slog.Level) (*slog.Logger, func(context.Context), error) {
 	log := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: level}))
 	slog.SetDefault(log)
 	// The shutdown is not kept: a function is never shut down in order, the
@@ -188,11 +235,11 @@ func (f *flusher) Flush(ctx context.Context) {
 	f.skipTill = f.clock().Add(wait)
 }
 
-// checkFunc is the {"kind":"check"} event's body: the declared secrets of the
+// CheckFunc is the {"kind":"check"} event's body: the declared secrets of the
 // document in file (and the policy it names), read from SSM. only keeps the
 // kinds the function's module reads; none keeps them all. The document is read
 // again when asked, which is once per deploy.
-func checkFunc(file string, only ...string) func(context.Context) (deploycheck.Report, error) {
+func CheckFunc(file string, only ...string) func(context.Context) (deploycheck.Report, error) {
 	return func(ctx context.Context) (deploycheck.Report, error) {
 		c, err := config.LoadConfig[config.Sluis](file, nil)
 		if err != nil {
@@ -200,111 +247,4 @@ func checkFunc(file string, only ...string) func(context.Context) (deploycheck.R
 		}
 		return deploycheck.Check(ctx, &c.Service.Serve, c.Policy, only...)
 	}
-}
-
-func open(ctx context.Context, file string) (*Function, error) {
-	// The KMS signer's state secret (signingKey.kms.stateSecret) is a secret
-	// like any other: the document names it, and its `secrets` source (ssm)
-	// reads /sluis/<instance>/internal/config/issuer/state-secret.
-	cfg, err := rosterapp.Load(file)
-	if err != nil {
-		return nil, err
-	}
-	log, flush, err := logger(ctx, "access-issuer", cfg.LogLevel())
-	if err != nil {
-		return nil, err
-	}
-	// The controllers do not loop on Lambda: each pass is an invocation, and
-	// the controller is assembled for it. Taken out of the settings before the
-	// service is assembled, whose New would run their loops.
-	github, slack := cfg.GitHub, cfg.Slack
-	cfg.GitHub, cfg.Slack = nil, nil
-	// The KMS signing modes read the state secret and call KMS to open their
-	// keys: the first request that needs a key does it, not the start.
-	cfg.Issuer.LazySigningKeys = true
-	// A start reads no secret: a herd of cold starts would read each of them in
-	// every new environment, and SSM throttles a herd. The secrets are read
-	// when the request that needs them arrives, and the schedule's refresh
-	// settles the generated clients' (WithRefresh below), as the service is
-	// assembled here and never run.
-	service, err := rosterapp.New(ctx, cfg, log)
-	if err != nil {
-		return nil, err
-	}
-	// "Run a pass now" reaches the controllers by invoking this function. The
-	// plan (adapters.trigger: invoke) built the trigger; it is told which kind a
-	// target is, from the policy that declares them.
-	set := service.Policy()
-	kindOf := func(target string) string {
-		if set.SlackWorkspaceDeclared(target) {
-			return invoke.KindSlack
-		}
-		if _, bound := set.Declared().GitHub[target]; bound || target == githubcontroller.LinksTarget {
-			return invoke.KindGitHub
-		}
-		return ""
-	}
-	if t, ok := service.Trigger().(*invoke.Trigger); ok {
-		t.SetKind(kindOf)
-	} else {
-		log.WarnContext(ctx, "run-now cannot reach the controllers: adapters.trigger is not invoke, so a console write "+
-			"is picked up at the controller's next scheduled tick")
-	}
-	controllers := map[string]*Controller{}
-	if github != nil {
-		controllers[invoke.KindGitHub] = &Controller{Name: "github", Log: log,
-			Unknown: func(err error) bool { return errors.Is(err, githubcontroller.ErrUnknownTarget) },
-			Open: func(ctx context.Context) (Pass, error) {
-				app, err := githubapp.New(ctx, *github, log)
-				if err != nil {
-					return nil, err
-				}
-				return app, nil
-			}}
-	}
-	if slack != nil {
-		controllers[invoke.KindSlack] = &Controller{Name: "slack", Log: log,
-			Unknown: func(err error) bool { return errors.Is(err, slackcontroller.ErrUnknownTarget) },
-			Open: func(ctx context.Context) (Pass, error) {
-				app, err := slackapp.New(ctx, *slack, log)
-				if err != nil {
-					return nil, err
-				}
-				return app, nil
-			}}
-	}
-	// There is no loop to keep the directory's snapshots fresh on Lambda: a
-	// request that finds one due refreshes it, and a schedule does so between
-	// requests ({"kind":"refresh"}).
-	service.UseRequestRefresh(hub.DefaultRequestRefreshTimeout)
-	http := NewHTTP(service.Handler(), service.Settle, log).WithControllers(kindOf, controllers).WithCheck(checkFunc(file))
-	if service.Cloudflare() != nil {
-		http.WithCloudflare(func(ctx context.Context) (int, string, error) {
-			res, err := service.TickCloudflare(ctx)
-			return res.Failed(), res.Summary(), err
-		})
-	}
-	return &Function{
-		Handler: http.
-			WithRefresh(func(ctx context.Context) (RefreshResult, error) {
-				// The issuer's generated client secrets are looked after on the
-				// same schedule: there is no loop on Lambda and no schedule of
-				// their own, and a failure is logged and counted, never this
-				// refresh's error (the next pass retries).
-				service.ReconcileClientSecrets(ctx)
-				res, err := service.RefreshDirectory(ctx)
-				return RefreshResult{Kind: KindRefresh, Workspaces: res.Workspaces, Ran: res.Ran, Contended: res.Contended, Failed: res.Failed}, err
-			}),
-		Flush: func(ctx context.Context) {
-			// Before the invocation returns: the records still queued for the audit
-			// sink would otherwise wait for the next one.
-			fctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-			defer cancel()
-			if err := service.FlushAudit(fctx); err != nil {
-				log.WarnContext(ctx, "audit records were not delivered before the response", slog.Any("error", err))
-			}
-			flush(ctx)
-		},
-		Close: service.Close,
-	}, nil
 }
