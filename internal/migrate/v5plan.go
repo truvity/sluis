@@ -219,6 +219,8 @@ type planner struct {
 	orgWhy  map[string]string
 	// cov collects the layout v4 secrets found equal on the destination.
 	cov covered
+	// sameIDs are the records found equal, by `<kind>/<id>`.
+	sameIDs map[string]bool
 }
 
 // Plan reads a layout v4 installation (from) and a layout v5 one (to) and
@@ -448,6 +450,7 @@ func (p *planner) records(ctx context.Context) error {
 	for _, rk := range all {
 		p.kind(rk, appIDs, runners)
 	}
+	p.coverOrgs(all)
 	return nil
 }
 
@@ -514,6 +517,10 @@ func (p *planner) kind(rk readKind, appIDs map[string]int64, runners map[string]
 			}
 			if out.Status == PlanSame {
 				p.cover(&out, row, it)
+				if p.sameIDs == nil {
+					p.sameIDs = map[string]bool{}
+				}
+				p.sameIDs[k.name+"/"+e.id] = true
 			}
 		}
 		p.add(module, out)

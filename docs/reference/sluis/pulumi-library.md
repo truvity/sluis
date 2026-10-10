@@ -288,7 +288,9 @@ l, _ := sluispulumi.NewLambda(ctx, "access", &sluispulumi.LambdaArgs{
 
 | Detail | Behavior |
 |---|---|
-| Preview, `v4` to `v4+v5` | 2 created (the v5 parameters), 0 deleted, 0 replaced |
+| Preview, `v4` to `v4+v5` | 2 created (the v5 parameters), 0 deleted, 0 replaced; the `NewStates` module tables, with the old table adopted as `LegacyState`; role updates |
+| The v5 parameters | Set `overwrite` and adopt the existing copies, with the same `RandomBytes` and `RandomPassword` values. Each holds a document, `{"value":"<base64>"}`; an older library wrote the plain value, which `migrate v5 plan` refuses |
+| The flip to `v5` | The service document carries `secrets.layout: v5` and `ports.dynamodb.tables`. `aws.table` and `ports.dynamodb.table` are refused. A blob `CredentialsRef` is `internal/google/blobs-<name>` |
 | Preview, `v4+v5` to `v5` | The role policy and the layer change; no parameter changes |
 | Preview, `Compat.DropV4` | 2 deleted (the v4 parameters), 0 created, 0 replaced |
 | `v5` and `credentials.preset` | A role that does not host `cloudflare` reads the minter parameters the document declares (`SluisCrossCloudflareMinter`), read only |

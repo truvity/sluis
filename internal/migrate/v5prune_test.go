@@ -83,12 +83,13 @@ func TestPruneDryRunListsWhatItWouldDeleteAndKeepsTheRest(t *testing.T) {
 			t.Errorf("%s is to be deleted", name)
 		}
 	}
-	// An organisation has no key of its own on layout v5: its parameter is kept.
+	// The fixture's organisation names the roster App, whose key is another one:
+	// the organisation's own key is not proven to be on v5, so it is kept.
 	orgKeys := 0
 	for _, k := range r.Kept {
 		if strings.HasPrefix(k.Name, "internal/credentials/github-org/") {
 			orgKeys++
-			if k.Class != migrate.KeptNotMigrated {
+			if k.Class != migrate.KeptUnverified {
 				t.Errorf("%s kept as %s", k.Name, k.Class)
 			}
 		}
@@ -303,4 +304,39 @@ func TestPruneKeepsASharedAddressWhenBothSidesShareARoot(t *testing.T) {
 	if !slices.Contains(r.Delete, "internal/cloudflare-minted/r2") {
 		t.Errorf("a v4-only name is not deleted: %v", r.Delete)
 	}
+}
+
+// An organisation without a source App of its own is made one, with its key:
+// that key is on layout v5, found equal by hash, and its v4 parameter goes.
+func TestPruneDeletesAnOrganisationsKeyOnceItsSynthesizedAppHoldsIt(t *testing.T) {
+	src, dst := newV4Installation(t), newV5Installation(t)
+	seed(t, src.st)
+	opt := planOptions()
+	opt.AppRef = nil
+	if _, err := migrate.CopyV5(ctx, side("v4.yaml", src.st), side("v5.yaml", dst.st),
+		migrate.V5Options{PlanOptions: opt, WritersStopped: true}); err != nil {
+		t.Fatal(err)
+	}
+	var waits []time.Duration
+	po := pruneOptions(&waits)
+	po.PlanOptions, po.DryRun = opt, true
+	r, err := migrate.PruneV5(ctx, side("v4.yaml", src.st), side("v5.yaml", dst.st), po)
+	if err != nil {
+		t.Fatalf("PruneV5 = %v", err)
+	}
+	var del, keptOrg int
+	for _, n := range r.Delete {
+		if strings.HasPrefix(n, "internal/credentials/github-org/") {
+			del++
+		}
+	}
+	for _, k := range r.Kept {
+		if strings.HasPrefix(k.Name, "internal/credentials/github-org/") {
+			keptOrg++
+		}
+	}
+	if del != 1 || keptOrg != 0 {
+		t.Errorf("organisation keys: %d to delete, %d kept\n%s", del, keptOrg, r.JSON())
+	}
+	noPlanSecrets(t, r.JSON())
 }
