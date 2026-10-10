@@ -323,10 +323,14 @@ const EnvConfig = "SLUIS_CONFIG"
 const Group = "sluis.truvity.github.io"
 
 // APIVersion is the apiVersion this build writes for one document: `sluis` (v3),
-// or `serve`, `controller-github`, `controller-slack` or `policy` (v2).
+// `sluis-backup` (v1), or `serve`, `controller-github`, `controller-slack` or
+// `policy` (v2).
 func APIVersion(document string) string {
-	if document == "sluis" {
+	switch document {
+	case "sluis":
 		return Group + "/sluis/v3"
+	case "sluis-backup":
+		return Group + "/sluis-backup/v1"
 	}
 	return Group + "/" + document + "/v2"
 }
