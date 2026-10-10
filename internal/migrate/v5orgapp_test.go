@@ -60,20 +60,20 @@ func orgApps(t *testing.T, dst *v5Installation) (map[string]string, map[string]s
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, o := range list {
-		orgs[o.Org] = o.AppRef
+	for i := range list {
+		orgs[list[i].Org] = list[i].AppRef
 	}
 	keys := map[string]string{}
 	apps, err := d.Catalogue.List(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, a := range apps {
-		_, key, _, err := d.Catalogue.Get(ctx, a.ID)
+	for i := range apps {
+		_, key, _, err := d.Catalogue.Get(ctx, apps[i].ID)
 		if err != nil {
 			t.Fatal(err)
 		}
-		keys[a.ID] = key
+		keys[apps[i].ID] = key
 	}
 	return orgs, keys
 }
@@ -81,9 +81,9 @@ func orgApps(t *testing.T, dst *v5Installation) (map[string]string, map[string]s
 // catalogueItems are the plan's catalogue-App rows, by id and status.
 func catalogueItems(r *migrate.PlanReport) map[string]migrate.PlanStatus {
 	out := map[string]migrate.PlanStatus{}
-	for _, m := range r.Modules {
-		for _, it := range m.Items {
-			if it.Concern == "state" && it.Kind == "app" {
+	for i := range r.Modules {
+		for j := range r.Modules[i].Items {
+			if it := &r.Modules[i].Items[j]; it.Concern == "state" && it.Kind == "app" {
 				out[it.ID] = it.Status
 			}
 		}
