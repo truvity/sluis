@@ -283,8 +283,8 @@ l, _ := sluispulumi.NewLambda(ctx, "access", &sluispulumi.LambdaArgs{
 | `Layout` | Role grants | Parameters written | Service document |
 |---|---|---|---|
 | `v4` | The legacy table (writes of the `maintenance` key denied); `internal/credentials`, `internal/config`, `external` (and the Cloudflare paths with presets); the whole bucket | `internal/config/issuer/state-secret`, `internal/config/recovery/password` | `ports.dynamodb.table` or the adapter, as the estate wrote it |
-| `v4+v5` | Both sets; a statement the sets share is written once | The v4 pair and `internal/oidc/state-secret`, `internal/oidc/recovery-password`, the same values from the same generators | The v4 document |
-| `v5` | `ModuleRoleStatements` of the hosted modules (`oidc`, `github`, `slack`, `google`, and `cloudflare` with presets): their tables, `internal/<module>`, `external/<module>`, `<module>/` blob prefixes; `SluisMaintenanceDeny` on their tables (and the legacy table on `v4+v5`) | The v5 pair; the v4 pair stays until `Compat.DropV4` | `secrets.layout: v5` and `ports.dynamodb.tables`; `aws.table` and `ports.dynamodb.table` are refused |
+| `v4+v5` | Both sets; a statement the sets share is written once | The v4 pair and `internal/oidc/state-secret`, `internal/oidc/recovery-password`: the same values from the same generators, the v5 pair as the secret store's document (`{"value":"<base64>"}`) | The v4 document |
+| `v5` | `ModuleRoleStatements` of the hosted modules (`oidc`, `github`, `slack`, `google`, and `cloudflare` with presets): their tables, `internal/<module>`, `external/<module>`, `<module>/` blob prefixes; `SluisMaintenanceDeny` on their tables (and the legacy table on `v4+v5`) | The v5 pair, as documents; the v4 pair stays until `Compat.DropV4` | `secrets.layout: v5` and `ports.dynamodb.tables`; `aws.table` and `ports.dynamodb.table` are refused |
 
 | Detail | Behavior |
 |---|---|
