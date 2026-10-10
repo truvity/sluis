@@ -126,3 +126,37 @@ func TestTheBackupCommand(t *testing.T) {
 		t.Error("backup list took --dry-run")
 	}
 }
+
+// The restore command is a tree of its own: a command is needed, `start` needs
+// a backup (or --resume, not both), `preview` needs one, and each asks for its
+// file like any other command.
+func TestTheRestoreCommand(t *testing.T) {
+	for _, args := range [][]string{
+		{"restore"}, {"restore", "--json"}, {"restore", "apply"}, {"restore", "preview"}, {"restore", "start"},
+		{"restore", "start", "b1", "--resume"}, {"restore", "status", "b1"}, {"restore", "start", "b1", "--confirm"},
+		{"restore", "start", "b1", "--overwrite=yes"},
+	} {
+		var out bytes.Buffer
+		if err := run(args, &out); !errors.Is(err, errUsage) {
+			t.Errorf("%v: %v", args, err)
+		}
+	}
+	for _, args := range [][]string{
+		{"restore", "status"}, {"restore", "preview", "b1"}, {"restore", "start", "b1", "--confirm", "x", "--overwrite"},
+		{"restore", "start", "--resume"},
+	} {
+		var out bytes.Buffer
+		if err := run(args, &out); err == nil || !strings.Contains(err.Error(), "--config") {
+			t.Errorf("%v: %v", args, err)
+		}
+	}
+	var out bytes.Buffer
+	if err := run([]string{"restore", "--help"}, &out); err != nil || !strings.Contains(out.String(), "--overwrite") {
+		t.Errorf("restore --help: %v, %q", err, out.String())
+	}
+	// A flag of another command is the configuration line's to refuse.
+	out.Reset()
+	if err := run([]string{"restore", "status", "--overwrite", "--config", "x"}, &out); err == nil {
+		t.Error("restore status took --overwrite")
+	}
+}

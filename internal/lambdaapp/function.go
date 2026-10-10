@@ -13,7 +13,9 @@
 //   - {"kind":"refresh"}: the directory refresh, which has no loop to run in on
 //     Lambda;
 //   - {"kind":"backup"}: the backup module's function (a document of apiVersion
-//     sluis-backup/v1), which takes this event and `rpc` events and nothing else.
+//     sluis-backup/v1), which takes this event and `rpc` events and nothing else;
+//   - {"kind":"restore"}: the same zip as the restore function (`backup.role:
+//     restore`), which takes this event and `rpc` events and nothing else.
 //
 // This package assembles the function from the same pieces the Kubernetes
 // process is assembled from (internal/rosterapp and the controllers' apps), and
