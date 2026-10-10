@@ -58,6 +58,20 @@ func RecoveryPasswordParameterName(instance string) string {
 	return ConfigParameterPrefix(instance) + "/" + recoveryPasswordName
 }
 
+// StateSecretParameterNameV5 is the state secret's address on layout v5,
+// `/sluis/<instance>/internal/oidc/state-secret`: the same value as
+// StateSecretParameterName, written beside it while the layouts coexist.
+func StateSecretParameterNameV5(instance string) string {
+	return ConfigParameterPrefixV5(instance) + "/state-secret"
+}
+
+// RecoveryPasswordParameterNameV5 is the recovery password's address on layout
+// v5, `/sluis/<instance>/internal/oidc/recovery-password`: the same value as
+// RecoveryPasswordParameterName.
+func RecoveryPasswordParameterNameV5(instance string) string {
+	return ConfigParameterPrefixV5(instance) + "/recovery-password"
+}
+
 // DefaultSchedule is the controllers' tick when LambdaArgs.Schedule.Rate is empty.
 const DefaultSchedule = "rate(5 minutes)"
 
@@ -144,6 +158,32 @@ type LambdaArgs struct {
 	// Deprecated: see Config. An Installation holds the policy as well.
 	Policy     string
 	PolicyPath string
+
+	// Layout is the storage layout the role and the documents follow
+	// (docs/decisions/0072-storage-layout-v5-module-first.md): "v4" (the default
+	// in v1.75.0) keeps the v4 grants and documents; "v5" gives the role only the
+	// v5 grants (the tables, parameters and blob prefixes of the modules the
+	// function hosts), writes `secrets.layout: v5` and `ports.dynamodb.tables`
+	// into the service document, and needs State from States.Grant(); "v4+v5"
+	// gives the role both sets of grants and writes the v4 document, for the
+	// migration window: the v5 parameters exist and the migration can copy, and the
+	// flip to "v5" is the next change. Both set the v5 parameters
+	// (`internal/oidc/state-secret`, `internal/oidc/recovery-password`) with the
+	// value of the v4 ones; the v4 parameters stay until Compat.DropV4.
+	Layout Layout
+	// TableNames overrides the table name of a module in the document
+	// (`ports.dynamodb.tables`), as ModuleSet.Tables does for States. Default
+	// `sluis-<instance>-<module>`. Use the same map as StatesArgs.Modules.Tables.
+	TableNames map[Module]string
+	// Compat is what the library keeps for the layouts that are going away.
+	Compat *CompatArgs
+	// MigrationRoleArn is the role `sluis migrate v5` runs as. It is granted a
+	// read of the legacy table (State.TableArn) and of the table key through
+	// DynamoDB, and nothing else: no other principal reads the legacy table once
+	// Layout is "v5". The library attaches an inline policy to that role, so it
+	// must be in the account and not managed elsewhere in a way that forbids it.
+	// Default none: nothing is attached.
+	MigrationRoleArn string
 
 	// Storage is the blob bucket (Storage.Grant()). Required.
 	Storage *StorageGrant
@@ -310,6 +350,9 @@ type LambdaArgs struct {
 
 	// audit is what Audit resolved to (planAudit), set once.
 	audit *auditPlan
+	// minterRefs are the minter parameters a role that does not host the
+	// Cloudflare module reads for blob credentials from a preset (layout v5).
+	minterRefs []string
 }
 
 // WrappedSigningArgs is the symmetric key of the `kms-wrapped` signing adapter.
@@ -627,10 +670,69 @@ type Lambda struct {
 	RecoveryPasswordParameter pulumi.StringOutput
 }
 
+// CompatArgs is what the library keeps for the layouts that are going away.
+type CompatArgs struct {
+	// DropV4 removes the v4 state secret and recovery password parameters
+	// (`internal/config/issuer/state-secret`, `internal/config/recovery/password`).
+	// They stay, with the v5 copies beside them, until it is set, so that a flip
+	// back to Layout "v4" inside the rollback window finds them. It needs Layout
+	// "v5". An installation born on v5 sets it from the start and never has them.
+	DropV4 bool
+}
+
 var functionNamePattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
 
 // A target is a login or a workspace key, or `github:links` (the link check).
 var targetID = regexp.MustCompile(`^[A-Za-z0-9_.:-]{1,40}$`)
+
+// validateLayout holds the layout and what goes with it to the arguments it
+// needs: v5 grants name the tables of the modules the function hosts, v4 grants
+// the one legacy table.
+func (a *LambdaArgs) validateLayout() error {
+	if !a.Layout.valid() {
+		return fmt.Errorf("sluispulumi: LambdaArgs.Layout %q must be %q, %q or %q", a.Layout, LayoutV4, LayoutV5, LayoutV4V5)
+	}
+	if a.Compat != nil && a.Compat.DropV4 && a.Layout != LayoutV5 {
+		return errors.New("sluispulumi: Compat.DropV4 removes the v4 parameters and needs Layout \"v5\": a role on \"v4\" or \"v4+v5\" still reads them")
+	}
+	for m := range a.TableNames {
+		if !validModule(m) {
+			return fmt.Errorf("sluispulumi: LambdaArgs.TableNames names unknown module %q", m)
+		}
+	}
+	if a.MigrationRoleArn != "" {
+		if _, err := roleNameOf(a.MigrationRoleArn); err != nil {
+			return err
+		}
+	}
+	if a.Layout.has5() && a.State != nil {
+		var missing []string
+		for _, m := range append(hostedModules(a.cloudflare()), ModuleBackup) {
+			if a.State.Tables[m] == nil {
+				missing = append(missing, string(m))
+			}
+		}
+		if len(missing) > 0 {
+			return fmt.Errorf("sluispulumi: LambdaArgs.Layout %q needs the tables of the modules the function hosts and the backup table "+
+				"in State.Tables (States.Grant()); missing %v", a.Layout, missing)
+		}
+	}
+	if a.Layout == LayoutV4V5 && a.State != nil && a.State.TableArn == nil {
+		return fmt.Errorf("sluispulumi: LambdaArgs.Layout %q keeps the v4 grants and needs the legacy table in State.TableArn "+
+			"(States.Grant() with Legacy)", a.Layout)
+	}
+	return nil
+}
+
+// roleNameOf is the name of the role an ARN names, `arn:aws:iam::<account>:role/[path/]<name>`.
+func roleNameOf(arn string) (string, error) {
+	parts := strings.SplitN(arn, ":role/", 2)
+	if len(parts) != 2 || !strings.HasPrefix(parts[0], arnPrefix+"iam::") || parts[1] == "" {
+		return "", fmt.Errorf("sluispulumi: LambdaArgs.MigrationRoleArn %q is not an IAM role ARN", arn)
+	}
+	n := parts[1]
+	return n[strings.LastIndex(n, "/")+1:], nil
+}
 
 // remoteSigning is whether the two asymmetric signing keys are created: always,
 // but with WrappedSigning, which replaces them.
@@ -683,6 +785,9 @@ func (a *LambdaArgs) validate() (LambdaArgs, error) {
 	if out.Keys != nil && (out.WrappedSigning != nil || out.SigningKeyAlias != "" || out.SigningKeyRS256Alias != "" || out.DisableSigningKeyRS256) {
 		return out, errors.New("sluispulumi: LambdaArgs.Keys supplies the keys: WrappedSigning, SigningKeyAlias, SigningKeyRS256Alias " +
 			"and DisableSigningKeyRS256 are of the keys the library creates, and are not set beside it")
+	}
+	if err := out.validateLayout(); err != nil {
+		return out, err
 	}
 	if out.audit == nil {
 		plan, err := out.planAudit()
@@ -924,6 +1029,11 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 	if err != nil {
 		return nil, err
 	}
+	if a.Layout.has5() {
+		if a.minterRefs, err = minterRefsOf(docs); err != nil {
+			return nil, err
+		}
+	}
 	out := &Lambda{}
 	if err := ctx.RegisterComponentResource(LambdaType, name, out, opts...); err != nil {
 		return nil, err
@@ -1090,6 +1200,11 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 	if err != nil {
 		return nil, fmt.Errorf("sluis role: %w", err)
 	}
+	if a.MigrationRoleArn != "" {
+		if err := newMigrationRead(ctx, name, &a, child); err != nil {
+			return nil, fmt.Errorf("sluis migration role: %w", err)
+		}
+	}
 	// ---- audit: installed here beside the function (its role is the one sender
 	// the queue accepts), or the queue of an installation that exists.
 	auditURL, auditArn := rsEmpty, rsEmpty
@@ -1250,19 +1365,43 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 	// the function is updated), not replaced, whatever the provider says about
 	// delete-before-replace. The value comes from the same RandomBytes, so it
 	// does not change.
-	pargs := &ssm.ParameterArgs{
-		Name:      pulumi.String(StateSecretParameterName(a.Instance)),
-		Type:      pulumi.String("SecureString"),
-		Value:     pulumi.ToSecret(stateSecret.Base64).(pulumi.StringOutput),
-		Overwrite: pulumi.Bool(true),
-		Tags:      tags,
+	//
+	// Layout v5 (and v4+v5) writes the same value at the v5 address as well, from
+	// the same generator, under a logical name of its own: it is a create, and the
+	// v4 parameter is neither replaced nor deleted until Compat.DropV4.
+	dropV4 := a.Compat != nil && a.Compat.DropV4
+	var params []pulumi.Resource
+	stateName, recoveryName := pulumi.StringOutput{}, pulumi.StringOutput{}
+	newSecretParam := func(logical, path string, value pulumi.StringInput) (*ssm.Parameter, error) {
+		pargs := &ssm.ParameterArgs{
+			Name:      pulumi.String(path),
+			Type:      pulumi.String("SecureString"),
+			Value:     value,
+			Overwrite: pulumi.Bool(true),
+			Tags:      tags,
+		}
+		if a.ParameterKeyArn != "" {
+			pargs.KeyId = pulumi.String(a.ParameterKeyArn)
+		}
+		return ssm.NewParameter(ctx, logical, pargs, child)
 	}
-	if a.ParameterKeyArn != "" {
-		pargs.KeyId = pulumi.String(a.ParameterKeyArn)
+	stateValue := pulumi.ToSecret(stateSecret.Base64).(pulumi.StringOutput)
+	if !dropV4 {
+		stateParam, err := newSecretParam(name+"-state-secret-internal", StateSecretParameterName(a.Instance), stateValue)
+		if err != nil {
+			return nil, fmt.Errorf("sluis state secret parameter: %w", err)
+		}
+		params, stateName = append(params, stateParam), stateParam.Name
 	}
-	stateParam, err := ssm.NewParameter(ctx, name+"-state-secret-internal", pargs, child)
-	if err != nil {
-		return nil, fmt.Errorf("sluis state secret parameter: %w", err)
+	if a.Layout.has5() {
+		stateParamV5, err := newSecretParam(name+"-state-secret-v5", StateSecretParameterNameV5(a.Instance), stateValue)
+		if err != nil {
+			return nil, fmt.Errorf("sluis state secret parameter (v5): %w", err)
+		}
+		params = append(params, stateParamV5)
+		if a.Layout == LayoutV5 {
+			stateName = stateParamV5.Name
+		}
 	}
 
 	// ---- the recovery password: generated once and kept (no keepers, so an apply
@@ -1278,19 +1417,23 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 	if err != nil {
 		return nil, fmt.Errorf("sluis recovery password: %w", err)
 	}
-	rargs := &ssm.ParameterArgs{
-		Name:      pulumi.String(RecoveryPasswordParameterName(a.Instance)),
-		Type:      pulumi.String("SecureString"),
-		Value:     pulumi.ToSecret(recoveryPassword.Result.ApplyT(unambiguous)).(pulumi.StringOutput),
-		Overwrite: pulumi.Bool(true),
-		Tags:      tags,
+	recoveryValue := pulumi.ToSecret(recoveryPassword.Result.ApplyT(unambiguous)).(pulumi.StringOutput)
+	if !dropV4 {
+		recoveryParam, err := newSecretParam(name+"-recovery-password-internal", RecoveryPasswordParameterName(a.Instance), recoveryValue)
+		if err != nil {
+			return nil, fmt.Errorf("sluis recovery password parameter: %w", err)
+		}
+		params, recoveryName = append(params, recoveryParam), recoveryParam.Name
 	}
-	if a.ParameterKeyArn != "" {
-		rargs.KeyId = pulumi.String(a.ParameterKeyArn)
-	}
-	recoveryParam, err := ssm.NewParameter(ctx, name+"-recovery-password-internal", rargs, child)
-	if err != nil {
-		return nil, fmt.Errorf("sluis recovery password parameter: %w", err)
+	if a.Layout.has5() {
+		recoveryParamV5, err := newSecretParam(name+"-recovery-password-v5", RecoveryPasswordParameterNameV5(a.Instance), recoveryValue)
+		if err != nil {
+			return nil, fmt.Errorf("sluis recovery password parameter (v5): %w", err)
+		}
+		params = append(params, recoveryParamV5)
+		if a.Layout == LayoutV5 {
+			recoveryName = recoveryParamV5.Name
+		}
 	}
 
 	// ---- the post-deploy check: after the function, its alias, its role's
@@ -1299,7 +1442,7 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 	// are not in this stack: the check is what finds one that is missing.
 	if a.Check == nil || *a.Check {
 		if err := newCheck(ctx, name, live, fn.Name, declaredNames,
-			[]pulumi.Resource{live, rolePolicy, stateParam, recoveryParam}, child); err != nil {
+			append([]pulumi.Resource{live, rolePolicy}, params...), child); err != nil {
 			return nil, err
 		}
 	}
@@ -1314,8 +1457,8 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 	out.APIID, out.APIURL = api.ID().ToStringOutput(), api.ApiEndpoint
 	out.APIStageName = stage.Name
 	out.SchedulerRoleArn = schedRole.Arn
-	out.StateSecretParameter = stateParam.Name
-	out.RecoveryPasswordParameter = recoveryParam.Name
+	out.StateSecretParameter = stateName
+	out.RecoveryPasswordParameter = recoveryName
 	out.ScheduleNames = schedNames
 	out.ConfigLayerArn = layer.Arn
 
@@ -1442,6 +1585,9 @@ func newFunctionRole(ctx *pulumi.Context, name, fnName string, a *LambdaArgs, si
 			webIdentityAud:     a.WebIdentityAudience,
 			webIdentityExtra:   a.AdditionalWebIdentityAudiences,
 			cloudflare:         a.cloudflare(),
+			layout:             a.Layout,
+			modules:            ModuleSet{Instance: a.Instance, Tables: a.TableNames},
+			minterRefs:         a.minterRefs,
 		})
 	}).(pulumi.StringOutput)
 	rp, err := iam.NewRolePolicy(ctx, name+"-http-policy", &iam.RolePolicyArgs{
@@ -1452,6 +1598,41 @@ func newFunctionRole(ctx *pulumi.Context, name, fnName string, a *LambdaArgs, si
 	}
 	return r, rp, nil
 }
+
+// newMigrationRead lets the migration role read the legacy table and nothing
+// else of it: no write, and no other principal once the function's role is v5's.
+// The statement is on the table of layout v4 and on its key through DynamoDB.
+func newMigrationRead(ctx *pulumi.Context, name string, a *LambdaArgs, opts ...pulumi.ResourceOption) error {
+	if a.State.TableArn == nil {
+		return errors.New("LambdaArgs.MigrationRoleArn reads the legacy table and State has none (State.TableArn)")
+	}
+	roleName, err := roleNameOf(a.MigrationRoleArn)
+	if err != nil {
+		return err
+	}
+	key := pulumi.StringInput(pulumi.String(""))
+	if a.State.KeyArn != nil {
+		key = a.State.KeyArn
+	}
+	doc := pulumi.All(a.State.TableArn, key).ApplyT(func(v []any) (string, error) {
+		st := []statement{tableStatement(sidLegacyRead, v[0].(string), ddbReadActions)}
+		if k := v[1].(string); k != "" {
+			st = append(st, statement{
+				"Sid": sidLegacyRead + "Key", "Effect": "Allow",
+				"Action": []string{kmsDecrypt, "kms:DescribeKey"}, "Resource": k,
+				"Condition": map[string]any{"StringLike": map[string]any{"kms:ViaService": "dynamodb.*.amazonaws.com"}},
+			})
+		}
+		return document(st)
+	}).(pulumi.StringOutput)
+	_, err = iam.NewRolePolicy(ctx, name+"-migration-legacy-read", &iam.RolePolicyArgs{
+		Name: pulumi.String(a.FunctionName + "-legacy-read"), Role: pulumi.String(roleName), Policy: doc,
+	}, opts...)
+	return err
+}
+
+// sidLegacyRead is the migration role's read of the legacy table.
+const sidLegacyRead = "SluisLegacyTableRead"
 
 const truststoreKey = "truststore/client-ca.pem"
 

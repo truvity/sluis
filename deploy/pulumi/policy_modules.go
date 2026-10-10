@@ -21,6 +21,12 @@ type ModuleEnv struct {
 	LogGroupArns map[string]string
 	// FunctionArns is each role's function ARN, by role name.
 	FunctionArns map[string]string
+	// MinterRefs are the Cloudflare minter parameters (internal addresses,
+	// `internal/cloudflare/<account>/minter`, a `*` allowed for the account) that
+	// a role reads for `ports.blob.s3.credentials.preset` without hosting the
+	// Cloudflare module: a read of exactly those parameters and nothing else of
+	// the module. A role that hosts the module has them already.
+	MinterRefs []string
 	// Roles is every role of the installation; it resolves which function hosts
 	// a module for an invoke grant.
 	Roles []Role
@@ -104,6 +110,18 @@ func ModuleRoleStatements(env ModuleEnv, role Role) ([]map[string]any, error) {
 	// Cross-grants.
 	keyActions := map[string]bool{}
 	var crossArns []string
+	if len(env.MinterRefs) > 0 && !own[ModuleCloudflare] {
+		// credentials.preset: the minter's credential, read and never written.
+		var refs []string
+		for _, r := range sortedStrings(env.MinterRefs) {
+			refs = append(refs, arnPrefix+"ssm:"+env.Region+":"+env.Account+":parameter"+env.Modules.rootOf()+"/"+r)
+		}
+		st = append(st, statement{
+			"Sid": "SluisCrossCloudflareMinter", "Effect": "Allow", "Action": ssmReadActions, "Resource": refs,
+		})
+		keyActions[kmsDecrypt] = true
+		crossArns = append(crossArns, refs...)
+	}
 	for _, g := range CrossGrants {
 		if g.Role != role.Name {
 			continue

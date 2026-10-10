@@ -167,6 +167,10 @@ l, _ := sluispulumi.NewLambda(ctx, "access", &sluispulumi.LambdaArgs{
 | `Config`, `Policy`, `PolicyPath` | Deprecated | Service document; policy or a layer directory (one of the last two). Removed after one minor; `NewLambda` warns |
 | `AllowEndpoints` | false | LocalStack tests only; an R2 preset's endpoint needs no flag |
 | `Storage`, `State` | Required | The grants |
+| `Layout` | `v4` | `v4`, `v5` or `v4+v5`: which grants the role carries and which layout the document names ([layouts](#layouts)) |
+| `TableNames` | `sluis-<instance>-<module>` | Table name per module in `ports.dynamodb.tables`; the same map as `StatesArgs.Modules.Tables` |
+| `Compat.DropV4` | false | Removes the v4 state secret and recovery password parameters. Needs `Layout: v5` |
+| `MigrationRoleArn` | None | Role that runs `sluis migrate v5`: an inline policy lets it read the legacy table (`State.TableArn`) and nothing else |
 | `Artifacts`, `Release` | Unset | [Artifacts bucket](#artifacts-bucket) |
 | `Audit` | Install | [Audit](#audit). Needs `Installation` |
 | `AuditQueueArn` | None | Deprecated; exclusive with `Audit`. Required with `Config` |
@@ -197,6 +201,22 @@ l, _ := sluispulumi.NewLambda(ctx, "access", &sluispulumi.LambdaArgs{
 | `Telemetry.LayerArn`, `.Env` | nil | The `otlp-lambda` layer; `Env` accepts `OTEL_*`, `OPENTELEMETRY_*`, the layer's `SLUIS_*` settings (`ACCESS_ROSTER_*` until v1.76), `AWS_LAMBDA_EXEC_WRAPPER` and nothing else. `OTEL_SERVICE_NAME` defaults to the function name. The layer's token comes from an issuer: one other than the function it observes keeps telemetry flowing while that function is saturated. The function drops what the layer refuses |
 | `Tags` | None | On everything that takes tags |
 
+### Layouts
+
+| `Layout` | Role grants | Parameters written | Service document |
+|---|---|---|---|
+| `v4` | The legacy table; `internal/credentials`, `internal/config`, `external` (and the Cloudflare paths with presets); the whole bucket | `internal/config/issuer/state-secret`, `internal/config/recovery/password` | `ports.dynamodb.table` or the adapter, as the estate wrote it |
+| `v4+v5` | Both sets; a statement the sets share is written once | The v4 pair and `internal/oidc/state-secret`, `internal/oidc/recovery-password`, the same values from the same generators | The v4 document |
+| `v5` | `ModuleRoleStatements` of the hosted modules (`oidc`, `github`, `slack`, `google`, and `cloudflare` with presets): their tables, `internal/<module>`, `external/<module>`, `<module>/` blob prefixes; the backup table for the maintenance item only | The v5 pair; the v4 pair stays until `Compat.DropV4` | `secrets.layout: v5` and `ports.dynamodb.tables`; `aws.table` and `ports.dynamodb.table` are refused |
+
+| Detail | Behavior |
+|---|---|
+| Preview, `v4` to `v4+v5` | 2 created (the v5 parameters), 0 deleted, 0 replaced |
+| Preview, `v4+v5` to `v5` | The role policy and the layer change; no parameter changes |
+| Preview, `Compat.DropV4` | 2 deleted (the v4 parameters), 0 created, 0 replaced |
+| `v5` and `credentials.preset` | A role that does not host `cloudflare` reads the minter parameters the document declares (`SluisCrossCloudflareMinter`), read only |
+| Needs | `v5` and `v4+v5`: `State.Tables` (`States.Grant()`) for the hosted modules and `backup`; `v4+v5` also `State.TableArn` |
+
 ### Outputs
 
 | Output | Meaning |
@@ -213,7 +233,7 @@ l, _ := sluispulumi.NewLambda(ctx, "access", &sluispulumi.LambdaArgs{
 | `LiveAliasArn`, `LiveVersion` | Alias `live` and its version |
 | `ConfigLayerArn` | Configuration layer version |
 | `DeclaredParameters` | SSM names the documents declare (layout v4: `internal/config/<name>`), sorted; set whether or not `Check` is on |
-| `StateSecretParameter` | SSM parameter of the OAuth-state secret |
+| `StateSecretParameter`, `RecoveryPasswordParameter` | SSM parameters of the OAuth-state secret and the recovery password; the v5 addresses under `Layout: v5` |
 | `Audit` | `*auditpulumi.Audit` the library installed; nil with `Use`, `Enabled: false` or `AuditQueueArn` |
 | `AuditQueueURL`, `AuditQueueArn` | The publish queue; empty when audit is off |
 
