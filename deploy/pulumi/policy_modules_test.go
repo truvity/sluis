@@ -60,14 +60,16 @@ func TestModuleRoleOwnPattern(t *testing.T) {
 	doc := rendered(t, Role{Name: RoleCloudflare, Hosts: []Module{ModuleCloudflare}})
 	for _, want := range []string{
 		"/sluis/i1/internal/cloudflare/*", "/sluis/i1/external/cloudflare/*",
-		"tbl:cloudflare", "bkt/cloudflare/*", "queue", "lg:cf:*", "SluisMaintenance", "tbl:backup", "dynamodb:LeadingKeys",
+		"tbl:cloudflare", "bkt/cloudflare/*", "queue", "lg:cf:*", sidMaintenanceDeny, "dynamodb:LeadingKeys",
 		"PARAMETER_ARN", "ssm.*.amazonaws.com",
 	} {
 		if !strings.Contains(doc, want) {
 			t.Errorf("missing %q in %s", want, doc)
 		}
 	}
-	for _, not := range []string{"internal/oidc", "tbl:google", "bkt/google", "fn:cf", "GetParametersByPath"} {
+	// The flag is in the module's own table: no grant on the backup table, or
+	// on any other, reaches it.
+	for _, not := range []string{"internal/oidc", "tbl:google", "tbl:backup", "bkt/google", "fn:cf", "GetParametersByPath"} {
 		if strings.Contains(doc, not) {
 			t.Errorf("unexpected %q in %s", not, doc)
 		}
@@ -157,9 +159,15 @@ func TestModuleRoleRefusals(t *testing.T) {
 	if _, err := ModuleRoleStatements(env, Role{Name: "x", Hosts: []Module{"nope"}}); err == nil {
 		t.Error("unknown module accepted")
 	}
+	// The flag is read from the module's own table, so the cloudflare role
+	// needs no table of the backup module.
 	delete(env.TableArns, ModuleBackup)
+	if _, err := ModuleRoleStatements(env, testRoles()[1]); err != nil {
+		t.Errorf("a role that does not host the backup module needs its table: %v", err)
+	}
+	delete(env.TableArns, ModuleCloudflare)
 	if _, err := ModuleRoleStatements(env, testRoles()[1]); err == nil {
-		t.Error("missing maintenance table accepted")
+		t.Error("a missing table of the role's own module was accepted")
 	}
 }
 

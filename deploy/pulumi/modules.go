@@ -24,8 +24,7 @@ const (
 	// ModuleGoogle is the Google workspaces. The Go interface that reads them is
 	// still called Directory; storage, paths and policies say google.
 	ModuleGoogle Module = "google"
-	// ModuleBackup holds the backup and restore state, and the maintenance item
-	// every other module reads.
+	// ModuleBackup holds the backup and restore state.
 	ModuleBackup Module = "backup"
 )
 
@@ -34,8 +33,9 @@ func Modules() []Module {
 	return []Module{ModuleOIDC, ModuleGitHub, ModuleSlack, ModuleCloudflare, ModuleGoogle, ModuleBackup}
 }
 
-// MaintenancePartition is the partition key of the maintenance item in the
-// backup module's table. Every module role may read it and nothing else there.
+// MaintenancePartition is the partition key of the maintenance item. Every
+// module's own table holds one; the module reads it through the grant on that
+// table, and only the restore role may write it.
 const MaintenancePartition = "maintenance"
 
 // ModuleSet names an installation's modules: the instance and, optionally, a
