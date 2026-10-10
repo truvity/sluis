@@ -3,7 +3,6 @@ package config
 import (
 	"errors"
 	"fmt"
-	"log/slog"
 	"maps"
 	"slices"
 	"strings"
@@ -50,7 +49,7 @@ type GitHubApp struct {
 }
 
 // Catalogue is the entry as a catalogue App.
-func (a GitHubApp) Catalogue() catalogue.App {
+func (a *GitHubApp) Catalogue() catalogue.App {
 	return catalogue.App{
 		ID: a.ID, Org: a.Org, Name: a.Name, Description: a.Description, Public: a.Public, Permissions: a.Permissions,
 		Events: a.Events, Webhook: a.Webhook, Installation: a.Installation, Export: a.Export, Grants: a.Grants,
@@ -58,7 +57,7 @@ func (a GitHubApp) Catalogue() catalogue.App {
 }
 
 // catalogueEntry is a catalogue App declared the old way, as an entry.
-func catalogueEntry(app catalogue.App) GitHubApp {
+func catalogueEntry(app *catalogue.App) GitHubApp {
 	return GitHubApp{
 		ID: app.ID, Purpose: appid.Catalogue, Org: app.Org, Name: app.Name, Description: app.Description, Public: app.Public,
 		Permissions: app.Permissions, Events: app.Events, Webhook: app.Webhook, Installation: app.Installation, Export: app.Export,
@@ -68,7 +67,7 @@ func catalogueEntry(app catalogue.App) GitHubApp {
 
 // runnerID is the id of a runner entry: `runner-<tier>`, and with an
 // organisation `runner-<tier>-<org>`.
-func (a GitHubApp) runnerID() string {
+func (a *GitHubApp) runnerID() string {
 	if a.Org == "" {
 		return appid.RunnerPrefix + a.Tier
 	}
@@ -86,26 +85,34 @@ func (a *AppsGitHub) foldLegacy() int {
 			n++
 		}
 	}
-	for _, app := range a.Catalogue {
-		a.Apps = append(a.Apps, catalogueEntry(app))
+	for i := range a.Catalogue {
+		a.Apps = append(a.Apps, catalogueEntry(&a.Catalogue[i]))
 		n++
 	}
 	a.RunnerTiers, a.Catalogue = nil, nil
+	a.legacy += n
 	return n
 }
 
-// foldLegacyApps folds the retired sections of a policy document and says so
-// once. The sections are read for one release (they are removed in v1.77, like
-// the layout they come with); the canonical document written by `sluisctl
-// policy render` carries the list only.
-func foldLegacyApps(a *PolicyApps, from string) {
-	if a == nil || a.GitHub == nil || (len(a.GitHub.RunnerTiers) == 0 && len(a.GitHub.Catalogue) == 0) {
-		return
+// FoldLegacy folds the retired sections of the GitHub Apps into the list. The
+// sections are read for one release (removed in v1.77, like the layout they come
+// with); the canonical document `sluisctl policy render` writes carries the list
+// only. How many entries it made is [PolicyDocument.LegacyAppEntries], for the
+// process to warn on.
+func (a *PolicyApps) FoldLegacy() {
+	if a != nil && a.GitHub != nil {
+		a.GitHub.foldLegacy()
 	}
-	n := a.GitHub.foldLegacy()
-	slog.Warn("apps.github.runnerTiers and apps.github.catalogue are deprecated: declare apps.github.apps (purpose runner, catalogue) instead; "+
-		"they are read as that list for this release and removed in v1.77",
-		slog.String("from", from), slog.Int("entries", n))
+}
+
+// LegacyAppEntries is how many entries of apps.github.apps came from the retired
+// runnerTiers and catalogue sections: nonzero means the document is to be moved
+// to the list.
+func (d *PolicyDocument) LegacyAppEntries() int {
+	if d == nil || d.Apps == nil || d.Apps.GitHub == nil {
+		return 0
+	}
+	return d.Apps.GitHub.legacy
 }
 
 // GitHubApps are the declared GitHub Apps of every purpose, in declaration
@@ -120,7 +127,9 @@ func (d *PolicyDocument) GitHubApps() []GitHubApp {
 // GitHubAppLabels are the labels declared for the link or catalogue App with
 // the id, or nil.
 func (d *PolicyDocument) GitHubAppLabels(id string) map[string]string {
-	for _, a := range d.GitHubApps() {
+	apps := d.GitHubApps()
+	for i := range apps {
+		a := &apps[i]
 		if a.Purpose != appid.Runner && a.ID == id {
 			return maps.Clone(a.Labels)
 		}
@@ -134,7 +143,9 @@ func (d *PolicyDocument) GitHubAppLabels(id string) map[string]string {
 func (d *PolicyDocument) RunnerLabels(tier, org string) map[string]string {
 	var out map[string]string
 	for _, pass := range []string{"", org} {
-		for _, a := range d.GitHubApps() {
+		apps := d.GitHubApps()
+		for i := range apps {
+			a := &apps[i]
 			if a.Purpose == appid.Runner && a.Tier == tier && a.Org == pass && len(a.Labels) > 0 {
 				if out == nil {
 					out = map[string]string{}
@@ -150,7 +161,9 @@ func (d *PolicyDocument) RunnerLabels(tier, org string) map[string]string {
 // declared `export: true`. A runner App is always exported and is not asked
 // here.
 func (d *PolicyDocument) GitHubAppExported(id string) bool {
-	for _, a := range d.GitHubApps() {
+	apps := d.GitHubApps()
+	for i := range apps {
+		a := &apps[i]
 		if a.Purpose != appid.Runner && a.ID == id {
 			return a.Export
 		}
@@ -242,7 +255,7 @@ func (d *PolicyDocument) validateGitHubApps() []error {
 
 // hasCatalogueFields reports whether the entry declares what only a catalogue
 // App has.
-func (a GitHubApp) hasCatalogueFields() bool {
+func (a *GitHubApp) hasCatalogueFields() bool {
 	return a.Name != "" || a.Description != "" || a.Public || len(a.Permissions) > 0 || len(a.Events) > 0 ||
 		a.Webhook != nil || a.Installation != "" || len(a.Grants) > 0
 }
@@ -260,9 +273,10 @@ func (d *PolicyDocument) validateAppRefs() []error {
 			errs = append(errs, fmt.Errorf("controllers.github.appRefs names %s, which the policy's github table does not bind", org))
 		}
 		var found *GitHubApp
-		for i, a := range d.GitHubApps() {
-			if a.Purpose == appid.Catalogue && a.ID == ref {
-				found = &d.Apps.GitHub.Apps[i]
+		apps := d.GitHubApps()
+		for i := range apps {
+			if apps[i].Purpose == appid.Catalogue && apps[i].ID == ref {
+				found = &apps[i]
 			}
 		}
 		switch {
