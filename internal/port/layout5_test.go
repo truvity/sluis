@@ -315,3 +315,18 @@ func TestModules(t *testing.T) {
 		}
 	}
 }
+
+func TestLocateModule5(t *testing.T) {
+	for prefix, want := range map[string]port.Module{
+		"issuer:": port.ModuleOIDC, "issuer:session-token:": port.ModuleOIDC, "gh.org.": port.ModuleGitHub, "ws.slack.": port.ModuleSlack,
+	} {
+		if got, ok := port.LocateModule5(prefix); !ok || got != want {
+			t.Errorf("LocateModule5(%q) = %q, %v, want %q", prefix, got, ok, want)
+		}
+	}
+	for _, prefix := range []string{"", "ws.", "lease.", "gate."} {
+		if got, ok := port.LocateModule5(prefix); ok {
+			t.Errorf("LocateModule5(%q) = %q, want none", prefix, got)
+		}
+	}
+}

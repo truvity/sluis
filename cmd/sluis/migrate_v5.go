@@ -49,7 +49,12 @@ replaces it). It never deletes anything from the source. It needs
 
 Two passes keep the stop short: a first pass with --skip issuer while the source
 runs, then, with the writers stopped, a final pass with --overwrite for what
-changed meanwhile. The key ring and sessions are not carried by this build.
+changed meanwhile. The final pass carries the issuer: the key ring (the wrapped
+entries byte for byte, never wrapped again), the sessions, the refresh tokens with
+the markers of the spent ones, single sign-on records, codes in flight, requests,
+the Index sets and the state secret's fingerprint, each with the lifetime it has
+left. A record whose lifetime runs out first is skipped and counted. --sessions skip
+carries the key ring and the fingerprint only, so people sign in again.
 
 The report is JSON on stdout (per module: copied, same, different, refused; no
 value) and a summary is on stderr.
@@ -87,11 +92,8 @@ func parseMigrateV5(sub string, args []string, out io.Writer) (migrateV5Flags, b
 	fs.Usage = func() { migrateV5Usage(out, sub, fs) }
 	fs.StringVar(&f.from, "from", "", "the source: the configuration file of the layout v4 installation")
 	fs.StringVar(&f.to, "to", "", "the destination: the configuration file of the layout v5 installation")
-	f.sessions = "copy"
-	if sub == "plan" {
-		fs.StringVar(&f.sessions, "sessions", "copy",
-			"the issuer's sessions, refresh tokens, codes in flight and Index sets: copy (plan them) or skip (plan the key ring only)")
-	}
+	fs.StringVar(&f.sessions, "sessions", "copy",
+		"the issuer's sessions, refresh tokens, single sign-on records, codes in flight and Index sets: copy or skip (the key ring and the state secret's fingerprint only)")
 	if sub == "copy" {
 		fs.BoolVar(&f.dryRun, "dry-run", false, "read both sides and report what would be copied; write nothing")
 		fs.BoolVar(&f.overwrite, "overwrite", false, "replace a value the destination holds that differs from the source's")

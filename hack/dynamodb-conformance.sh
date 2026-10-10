@@ -50,6 +50,7 @@ required=(
     'TestConformance/trigger/notify'
     'TestGrantCostOnDynamoDB'
     'TestGrantCostOverTablesOnDynamoDB'
+    'TestRouterExportsOnDynamoDB'
     'TestConformanceOfEveryModulesTableOnDynamoDB'
     'TestReuseCostOnDynamoDB'
     'TestSSOCookieOnDynamoDB'

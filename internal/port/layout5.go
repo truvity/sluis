@@ -321,3 +321,25 @@ func Kinds5() (state, sets []string) {
 	sort.Strings(sets)
 	return state, sets
 }
+
+// LocateModule5 is the one module every State key that begins with prefix
+// belongs to, even when the prefix spans several kinds (`issuer:` is all
+// oidc's). ok is false when two modules share the prefix, when a key of no
+// module (a lease, a gate) can begin with it, or when the prefix is empty.
+func LocateModule5(prefix string) (Module, bool) {
+	if prefix == "" {
+		return "", false
+	}
+	var found Module
+	for i := range rules5 {
+		r := &rules5[i]
+		if !strings.HasPrefix(r.prefix, prefix) && !strings.HasPrefix(prefix, r.prefix) {
+			continue
+		}
+		if r.moduleOf != nil || r.module == "" || (found != "" && found != r.module) {
+			return "", false
+		}
+		found = r.module
+	}
+	return found, found != ""
+}

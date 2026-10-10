@@ -285,8 +285,13 @@ func TestTwoPassCopy(t *testing.T) {
 	if err != nil || !r2.OK {
 		t.Fatalf("final pass = %v\n%s", err, r2.JSON())
 	}
-	if r2.Totals.Copied != 2 {
-		t.Errorf("final pass copied %d, first %d: want only what changed", r2.Totals.Copied, r1.Totals.Copied)
+	// What changed meanwhile, and the issuer: the frozen pass carries it.
+	issuerRows := len(exportAll(t, src.st.Ports)) + len(exportSets(t, src.st.Ports))
+	if got := len(exportAll(t, dst.st.Ports)); got != issuerRows-len(exportSets(t, src.st.Ports)) {
+		t.Errorf("the destination holds %d issuer records after the final pass, the source %d", got, issuerRows)
+	}
+	if r2.Totals.Copied != 2+issuerRows {
+		t.Errorf("final pass copied %d, first %d: want what changed and the issuer's %d", r2.Totals.Copied, r1.Totals.Copied, issuerRows)
 	}
 	if v := r2.Verify; v == nil || !v.OK {
 		t.Errorf("verify after the final pass = %+v", v)
