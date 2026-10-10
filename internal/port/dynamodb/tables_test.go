@@ -425,7 +425,9 @@ func TestTheRouterExportsStateAndIndex(t *testing.T) {
 	if len(got) != 3 {
 		t.Fatalf("exported %d issuer records, want 3: %v", len(got), got)
 	}
-	if x := got["issuer:keyring:entry:ES384:k1"]; string(x.Value) != "v:issuer:keyring:entry:ES384:k1" || x.TTL <= 23*time.Hour || x.TTL > 24*time.Hour+2*time.Second {
+	x := got["issuer:keyring:entry:ES384:k1"]
+	tooLong, tooShort := x.TTL > 24*time.Hour+2*time.Second, x.TTL <= 23*time.Hour
+	if string(x.Value) != "v:issuer:keyring:entry:ES384:k1" || tooLong || tooShort {
 		t.Errorf("ring entry = %q, %v", x.Value, x.TTL)
 	}
 	// One module's family is read from its table, and a prefix in none from all.

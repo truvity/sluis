@@ -93,7 +93,8 @@ func parseMigrateV5(sub string, args []string, out io.Writer) (migrateV5Flags, b
 	fs.StringVar(&f.from, "from", "", "the source: the configuration file of the layout v4 installation")
 	fs.StringVar(&f.to, "to", "", "the destination: the configuration file of the layout v5 installation")
 	fs.StringVar(&f.sessions, "sessions", "copy",
-		"the issuer's sessions, refresh tokens, single sign-on records, codes in flight and Index sets: copy or skip (the key ring and the state secret's fingerprint only)")
+		"the issuer's sessions, refresh tokens, single sign-on records, codes in flight and Index sets: "+
+			"copy, or skip (the key ring and the state secret's fingerprint only)")
 	if sub == "copy" {
 		fs.BoolVar(&f.dryRun, "dry-run", false, "read both sides and report what would be copied; write nothing")
 		fs.BoolVar(&f.overwrite, "overwrite", false, "replace a value the destination holds that differs from the source's")
