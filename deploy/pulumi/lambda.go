@@ -850,7 +850,8 @@ func (a *LambdaArgs) validate() (LambdaArgs, error) {
 		for k := range t.Env {
 			if !telemetryVariable(k) {
 				return out, fmt.Errorf("sluispulumi: Telemetry.Env: %s is not a telemetry setting: the environment holds OTEL_*, "+
-					"the telemetry layer's own (the SLUIS_* names it lists, or the deprecated ACCESS_ROSTER_*; OPENTELEMETRY_*) and AWS_LAMBDA_EXEC_WRAPPER, and nothing else", k)
+					"the telemetry layer's own (the SLUIS_* names it lists, or the deprecated ACCESS_ROSTER_*; "+
+					"OPENTELEMETRY_*) and AWS_LAMBDA_EXEC_WRAPPER, and nothing else", k)
 			}
 		}
 	}
