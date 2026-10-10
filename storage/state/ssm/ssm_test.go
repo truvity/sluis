@@ -74,3 +74,34 @@ func TestSizeTiers(t *testing.T) {
 		t.Fatalf("8193 bytes: %v, want ErrTooLarge", err)
 	}
 }
+
+func TestDeleteMany(t *testing.T) {
+	c, _ := client(t)
+	s := ssm.New(c, "/storage-test/delete-many")
+	bd, ok := s.(state.BatchDeleter)
+	if !ok {
+		t.Fatal("the SSM store is not a state.BatchDeleter")
+	}
+	var keys []string
+	for i := range state.MaxDeleteBatch {
+		k := "k" + string(rune('a'+i))
+		keys = append(keys, k)
+		if _, err := s.Put(t.Context(), k, []byte(`{}`), ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// A key that is not there is not an error and is not counted.
+	n, err := bd.DeleteMany(t.Context(), append(keys[:state.MaxDeleteBatch-1:state.MaxDeleteBatch-1], "missing"))
+	if err != nil || n != state.MaxDeleteBatch-1 {
+		t.Fatalf("DeleteMany = %d, %v, want %d", n, err, state.MaxDeleteBatch-1)
+	}
+	if _, err = s.Get(t.Context(), keys[0]); !errors.Is(err, state.ErrNotFound) {
+		t.Errorf("Get after DeleteMany = %v, want not found", err)
+	}
+	if _, err = s.Get(t.Context(), keys[state.MaxDeleteBatch-1]); err != nil {
+		t.Errorf("the key left out was deleted: %v", err)
+	}
+	if _, err = bd.DeleteMany(t.Context(), append(keys, "eleventh")); err == nil {
+		t.Error("DeleteMany took more than the limit")
+	}
+}

@@ -31,9 +31,39 @@ type migrateV5Flags struct {
 	kubeconfig, kubeContext, namespace string
 	version                            bool
 	dryRun, overwrite, writersStopped  bool
+	// confirmPlan and jsonOut belong to `prune`.
+	confirmPlan string
+	jsonOut     bool
 }
 
 func migrateV5Usage(out io.Writer, sub string, fs *flag.FlagSet) {
+	if sub == "prune" {
+		_, _ = fmt.Fprint(out, `Usage: sluis migrate v5 prune --from <v4 config> --to <v5 config> [--dry-run | --confirm-plan <hash>] [--json] [flags]
+
+Deletes the layout v4 parameters a migration has carried to layout v5, and nothing
+else. It runs the comparison of verify first and refuses unless every source item
+that has a layout v5 address is the same on the destination (no new, different,
+refused or missing item). It then deletes only the parameters whose layout v5 copy
+was found equal. It keeps, and lists, the ones the migration does not carry
+(internal/config/valkey/password, an organisation's key), the two the Pulumi
+library owns (Compat.DropV4 deletes them), and any it did not verify.
+
+  1. --dry-run prints what would be deleted and kept, and a plan hash.
+  2. Without --dry-run the run needs --confirm-plan <that hash>; a different
+     installation, or other flags, give another hash and need a new dry run.
+
+Parameters go ten to a request (DeleteParameters), half a second apart, and wait
+longer while SSM throttles. Each batch is an audit line on stderr (names and
+counts, never a value). The items of the legacy table are not deleted: the table
+retires as a whole (Compat.RetireLegacyTable), after a backup; the report counts
+them.
+
+--json prints the report on stdout; otherwise stdout is a readable summary.
+
+`)
+		fs.PrintDefaults()
+		return
+	}
 	if sub != "plan" {
 		_, _ = fmt.Fprintf(out, `Usage: sluis migrate v5 %s --from <v4 config> --to <v5 config> [flags]
 
@@ -103,6 +133,11 @@ func parseMigrateV5(sub string, args []string, out io.Writer) (migrateV5Flags, b
 			"say that nothing writes to the source (the issuer, the console and both controllers are stopped); "+
 				"required unless --dry-run or --skip issuer (the live first pass)")
 	}
+	if sub == "prune" {
+		fs.BoolVar(&f.dryRun, "dry-run", false, "read both sides and report what would be deleted and kept, with the plan hash; delete nothing")
+		fs.StringVar(&f.confirmPlan, "confirm-plan", "", "the plan hash a --dry-run printed; a real run needs it")
+		fs.BoolVar(&f.jsonOut, "json", false, "print the report as JSON on stdout")
+	}
 	fs.StringVar(&f.skip, "skip", "", "domains to leave out, comma separated: "+strings.Join(migrate.AllDomains, ", "))
 	fs.StringVar(&f.blobs, "blobs", string(migrate.BlobsAuto),
 		"the controllers' reports: auto (plan them when the two sides keep them in different places), copy or skip")
@@ -128,6 +163,8 @@ func parseMigrateV5(sub string, args []string, out io.Writer) (migrateV5Flags, b
 		return f, false, fmt.Errorf("%w: --from and --to are the same file", errUsage)
 	case f.sessions != "copy" && f.sessions != "skip":
 		return f, false, fmt.Errorf("%w: --sessions %q is none of copy, skip", errUsage, f.sessions)
+	case sub == "prune" && f.dryRun && f.confirmPlan != "":
+		return f, false, fmt.Errorf("%w: --dry-run deletes nothing and takes no --confirm-plan", errUsage)
 	}
 	switch migrate.BlobMode(f.blobs) {
 	case migrate.BlobsAuto, migrate.BlobsCopy, migrate.BlobsSkip:
@@ -140,17 +177,17 @@ func parseMigrateV5(sub string, args []string, out io.Writer) (migrateV5Flags, b
 // migrateV5Cmd is `sluis migrate v5`.
 func migrateV5Cmd(out io.Writer, args []string) error {
 	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
-		_, _ = fmt.Fprintf(out, "Usage: %s plan|copy|verify --from <v4 config> --to <v5 config> [flags]\n", migrateV5Command)
+		_, _ = fmt.Fprintf(out, "Usage: %s plan|copy|verify|prune --from <v4 config> --to <v5 config> [flags]\n", migrateV5Command)
 		if len(args) > 0 && (args[0] == "-h" || args[0] == "-help" || args[0] == "--help") {
 			return nil
 		}
-		return fmt.Errorf("%w: %s takes a subcommand: plan, copy or verify", errUsage, migrateV5Command)
+		return fmt.Errorf("%w: %s takes a subcommand: plan, copy, verify or prune", errUsage, migrateV5Command)
 	}
 	switch args[0] {
-	case "plan", "copy", "verify":
+	case "plan", "copy", "verify", "prune":
 		return migrateV5Run(out, args[0], args[1:])
 	}
-	return fmt.Errorf("%w: %s has no subcommand %q (plan, copy, verify)", errUsage, migrateV5Command, args[0])
+	return fmt.Errorf("%w: %s has no subcommand %q (plan, copy, verify, prune)", errUsage, migrateV5Command, args[0])
 }
 
 // emitPlanReport writes the JSON report to stdout and the summary to stderr.
@@ -212,6 +249,12 @@ func migrateV5Run(out io.Writer, sub string, args []string) error {
 		ConfigNames: src.configNames, CloudflareAccounts: src.accounts,
 		S3Ref: src.s3Ref, S3RefTo: dst.s3Ref, Log: log,
 	}
+	if sub == "prune" {
+		return migratePrune(ctx, os.Stdout, os.Stderr, from, to, f, migrate.PruneOptions{
+			PlanOptions: opt, DryRun: f.dryRun, Confirm: f.confirmPlan,
+			SameRoot: src.secretsKey != "" && src.secretsKey == dst.secretsKey,
+		})
+	}
 	var report *migrate.PlanReport
 	switch sub {
 	case "copy":
@@ -237,6 +280,9 @@ type planInfo struct {
 	configNames []string
 	accounts    []string
 	s3Ref       string
+	// secretsKey says where the parameters are: root, region, endpoint. Empty
+	// unless the secrets are an ssm source's.
+	secretsKey string
 }
 
 func readPlanInfo(file string) (planInfo, error) {
@@ -246,6 +292,9 @@ func readPlanInfo(file string) (planInfo, error) {
 	}
 	var pi planInfo
 	cfg := &one.Serve
+	if sec := cfg.Secrets; sec != nil && sec.Source == "ssm" {
+		pi.secretsKey = strings.TrimSuffix(sec.Root, "/") + "|" + sec.Region + "|" + sec.Endpoint
+	}
 	if cfg.Ports != nil && cfg.Ports.Blob != nil && cfg.Ports.Blob.S3 != nil {
 		pi.s3Ref = cfg.Ports.Blob.S3.CredentialsRef
 	}
@@ -305,4 +354,60 @@ func printPlanSummary(w io.Writer, r *migrate.PlanReport) {
 		status = "NOT ok: " + r.Error
 	}
 	_, _ = fmt.Fprintf(w, "  %s\n", status)
+}
+
+// migratePrune runs `prune` and prints its report: JSON on stdout with --json
+// and the summary on stderr, otherwise the summary on stdout.
+func migratePrune(ctx context.Context, stdout, stderr io.Writer, from, to migrate.Side, f migrateV5Flags, opt migrate.PruneOptions) error {
+	opt.Log = slog.New(slog.NewJSONHandler(stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	report, err := migrate.PruneV5(ctx, from, to, opt)
+	if report != nil {
+		if f.jsonOut {
+			_, _ = stdout.Write(report.JSON())
+			printPruneSummary(stderr, report)
+		} else {
+			printPruneSummary(stdout, report)
+		}
+	}
+	return err
+}
+
+// printPruneSummary says what prune found: names and counts, never a value.
+func printPruneSummary(w io.Writer, r *migrate.PruneReport) {
+	mode := "migrate v5 prune"
+	if r.DryRun {
+		mode += " --dry-run (nothing was deleted)"
+	}
+	_, _ = fmt.Fprintf(w, "\n%s %s -> %s\n  gate: %s\n", mode, r.From, r.To, r.Gate)
+	if r.Gate == "passed" {
+		_, _ = fmt.Fprintf(w, "  verified: %s\n", r.Verify)
+	}
+	verb := "to delete"
+	if !r.DryRun {
+		verb = "deleted"
+	}
+	if r.DryRun || r.OK {
+		_, _ = fmt.Fprintf(w, "  %s: %d parameters\n", verb, len(r.Delete))
+		for _, n := range r.Delete {
+			_, _ = fmt.Fprintf(w, "    %s\n", n)
+		}
+	}
+	if len(r.Kept) > 0 {
+		_, _ = fmt.Fprintf(w, "  kept, not migrated or not verified: %d parameters\n", len(r.Kept))
+		for _, k := range r.Kept {
+			_, _ = fmt.Fprintf(w, "    %s  [%s] %s\n", k.Name, k.Class, k.Reason)
+		}
+	}
+	if r.Gate == "passed" {
+		_, _ = fmt.Fprintf(w, "  legacy table: %d migrated records stay until the table retires\n", r.LegacyTableItems)
+	}
+	if r.DryRun && r.OK {
+		_, _ = fmt.Fprintf(w, "  plan hash: %s\n  to delete for real: add --confirm-plan %s (and drop --dry-run)\n", r.PlanHash, r.PlanHash)
+	}
+	if !r.DryRun && r.OK {
+		_, _ = fmt.Fprintf(w, "  %d deleted in %d requests\n", r.Deleted, r.Batches)
+	}
+	if !r.OK {
+		_, _ = fmt.Fprintf(w, "  NOT ok: %s\n", r.Error)
+	}
 }
