@@ -6,6 +6,7 @@ Source: `deploy/pulumi`. Identifiers: [Go packages](../../sdk/go/sluis.md). Deci
 |---|---|---|
 | `NewStorage` | `sluis:aws:Storage` | The blob bucket |
 | `NewState` | `sluis:aws:State` | The DynamoDB table |
+| `NewStates` | `sluis:aws:States` | One table per module ([ADR 0072](../../decisions/0072-storage-layout-v5-module-first.md)), and the legacy table adopted |
 | `NewLambda` | `sluis:aws:Lambda` | Function, role, HTTP API, signing key, schedules. The main path |
 | `NewKubernetesIdentity` | `sluis:aws:KubernetesIdentity` | The EKS Pod Identity role of the one pod |
 
@@ -64,6 +65,22 @@ The table of the [DynamoDB adapter](storage-layout.md#dynamodb-the-dynamodb-stat
 |---|---|
 | Outputs | `TableName`, `TableArn`, `Grant()` |
 | Table | Protected, on-demand, point-in-time recovery, TTL on `expires`; only `pk` and `sk` declared; no secondary index |
+
+### States
+
+| `StatesArgs` | Default | Meaning |
+|---|---|---|
+| `Modules` | Required | `ModuleSet`: `Instance`; `Tables` overrides a name (default `sluis-<instance>-<module>`) |
+| `Only` | Every module | The modules that get a table |
+| `KeyArn`, `Tags` | None | On every table |
+| `Legacy` | None | `LegacyStateArgs`: the `Name` and arguments `NewState` had; same URN, protected |
+
+| Detail | Behavior |
+|---|---|
+| Outputs | `Tables`, `TableArns` (by module), `Legacy`, `Grant()` |
+| Grant | `TableArn` is the legacy table, `Tables` the others; a role gets the tables of the modules it hosts |
+| Dropping `Legacy` | The engine refuses: the table is protected. Run `pulumi state unprotect` first |
+| Ports | `PortsArgs.Tables` renders `ports.dynamodb.tables`; exclusive with `TableName` and valid with `secrets.layout: v5` |
 
 ## Kubernetes identity
 
