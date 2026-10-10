@@ -72,6 +72,21 @@ type Walker interface {
 	Walk(ctx context.Context) ([]string, error)
 }
 
+// BatchDeleter is an optional Store capability: it removes up to MaxDeleteBatch
+// keys in one request. A key that is already gone is not an error. A tool that
+// deletes hundreds of keys (the layout v4 prune of `sluis migrate v5`) uses it
+// to stay under a backend's request limits, and falls back to [Store.Delete]
+// without it.
+type BatchDeleter interface {
+	// DeleteMany removes keys, at most MaxDeleteBatch, and returns how many of
+	// them existed.
+	DeleteMany(ctx context.Context, keys []string) (int, error)
+}
+
+// MaxDeleteBatch is the most keys one [BatchDeleter.DeleteMany] takes: the
+// limit of SSM's DeleteParameters.
+const MaxDeleteBatch = 10
+
 // ErrNoWalk reports a Store that cannot list its keys at any depth.
 var ErrNoWalk = errors.New("state: the store cannot list nested keys")
 

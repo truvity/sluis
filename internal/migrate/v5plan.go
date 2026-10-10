@@ -151,6 +151,11 @@ type PlanReport struct {
 	Verify *VerifyResult `json:"verify,omitempty"`
 	OK     bool          `json:"ok"`
 	Error  string        `json:"error,omitempty"`
+
+	// covered are the layout v4 secrets whose copy on the destination was found
+	// equal (the prune deletes only these): exact names, and the families of
+	// credentials with a random last segment, as prefixes ending in `/`.
+	covered covered
 }
 
 // JSON renders the plan, indented.
@@ -205,12 +210,15 @@ type planner struct {
 	// readAt is when the issuer's records were read: a record is written with
 	// what it had left then, less what has passed since.
 	readAt time.Time
-	// carried are the v5 secret names that a record carries with it.
-	carried map[string]bool
+	// carried are the v5 secret names that a record carries with it, and
+	// carriedSame those of them whose record the destination holds equal.
+	carried, carriedSame map[string]bool
 	// appRefs is the App each organisation of the source names on layout v5,
 	// and orgWhy the reason one has none (v5orgapp.go).
 	appRefs map[string]string
 	orgWhy  map[string]string
+	// cov collects the layout v4 secrets found equal on the destination.
+	cov covered
 }
 
 // Plan reads a layout v4 installation (from) and a layout v5 one (to) and
@@ -279,7 +287,7 @@ func newPlanner(ctx context.Context, from, to Side, opt PlanOptions, collect boo
 		dst:     kit{d: dstDomains, ports: to.Stores.Ports},
 		report:  &PlanReport{From: from.Name, To: to.Name},
 		mods:    map[string]*ModulePlan{},
-		carried: map[string]bool{},
+		carried: map[string]bool{}, carriedSame: map[string]bool{},
 	}, nil
 }
 
@@ -354,6 +362,7 @@ func (p *planner) finish() (*PlanReport, error) {
 		"are not copied: they start fresh. The maintenance flag is not copied either, on purpose: the destination starts out of maintenance")
 	p.note("internal/config/valkey/password is delivered to the cluster only and is not carried")
 	p.report.Notes = p.notes
+	p.report.covered = p.cov
 	var err error
 	if n := p.report.Totals.Refused; n > 0 {
 		first := p.firstRefused()
@@ -500,6 +509,11 @@ func (p *planner) kind(rk readKind, appIDs map[string]int64, runners map[string]
 			p.collectWrite(&out, s, e, have[e.id])
 			if out.ToSecret != "" && out.Status != PlanRefused {
 				p.carried[out.ToSecret] = true
+				prev, seen := p.carriedSame[out.ToSecret]
+				p.carriedSame[out.ToSecret] = (!seen || prev) && out.Status == PlanSame
+			}
+			if out.Status == PlanSame {
+				p.cover(&out, row, it)
 			}
 		}
 		p.add(module, out)
@@ -657,6 +671,9 @@ func (p *planner) secrets(ctx context.Context) error {
 		}
 		if p.carried[t.V5] {
 			p.note("%s is at %s, where the record that holds the key writes it: it is carried with the record", n.name, t.V5)
+			if p.carriedSame[t.V5] {
+				p.cov.names = append(p.cov.names, n.name)
+			}
 			continue
 		}
 		p.secret(ctx, n.name, t, n.explicit)
@@ -715,6 +732,7 @@ func (p *planner) secret(ctx context.Context, from string, t SecretTarget, expli
 		out.Status = PlanNew
 	case sameSecret(dst.value, src.value):
 		out.Status, out.ToVersion = PlanSame, dst.version
+		p.cov.names = append(p.cov.names, from)
 	default:
 		out.Status, out.ToVersion = PlanDifferent, dst.version
 	}

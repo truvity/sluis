@@ -53,6 +53,7 @@ type API interface {
 	GetParameter(ctx context.Context, in *awsssm.GetParameterInput, opts ...func(*awsssm.Options)) (*awsssm.GetParameterOutput, error)
 	PutParameter(ctx context.Context, in *awsssm.PutParameterInput, opts ...func(*awsssm.Options)) (*awsssm.PutParameterOutput, error)
 	DeleteParameter(ctx context.Context, in *awsssm.DeleteParameterInput, opts ...func(*awsssm.Options)) (*awsssm.DeleteParameterOutput, error)
+	DeleteParameters(ctx context.Context, in *awsssm.DeleteParametersInput, opts ...func(*awsssm.Options)) (*awsssm.DeleteParametersOutput, error)
 	GetParametersByPath(ctx context.Context, in *awsssm.GetParametersByPathInput, opts ...func(*awsssm.Options)) (*awsssm.GetParametersByPathOutput, error)
 }
 
@@ -224,6 +225,30 @@ func (s *store) Delete(ctx context.Context, key string) error {
 		return fmt.Errorf("ssm: delete %s: %w", name, err)
 	}
 	return nil
+}
+
+// DeleteMany implements [state.BatchDeleter]: one DeleteParameters request for
+// up to ten keys. A key that does not exist is not counted and is not an error.
+func (s *store) DeleteMany(ctx context.Context, keys []string) (int, error) {
+	if len(keys) == 0 {
+		return 0, nil
+	}
+	if len(keys) > state.MaxDeleteBatch {
+		return 0, fmt.Errorf("ssm: delete %d keys at once: the limit is %d", len(keys), state.MaxDeleteBatch)
+	}
+	names := make([]string, len(keys))
+	for i, k := range keys {
+		name, err := s.name(k)
+		if err != nil {
+			return 0, err
+		}
+		names[i] = name
+	}
+	out, err := s.api.DeleteParameters(ctx, &awsssm.DeleteParametersInput{Names: names})
+	if err != nil {
+		return 0, fmt.Errorf("ssm: delete %d parameters below %s: %w", len(names), s.prefix, err)
+	}
+	return len(out.DeletedParameters), nil
 }
 
 func (s *store) List(ctx context.Context) ([]string, error) { return s.list(ctx, false) }

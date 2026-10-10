@@ -5,6 +5,8 @@ package secretrec
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"slices"
 	"sync"
 
@@ -21,6 +23,11 @@ type Store struct {
 type log struct {
 	mu  sync.Mutex
 	ops []string
+	// batches are the sizes of the DeleteMany calls; fail is how many of the
+	// next calls fail with failWith before one goes through.
+	batches  []int
+	fail     int
+	failWith error
 }
 
 // New returns an empty recording store.
@@ -122,4 +129,68 @@ func (v *view) Delete(ctx context.Context, key string) error {
 func (v *view) List(ctx context.Context) ([]string, error) {
 	v.log.add("list", v.prefix)
 	return v.Store.List(ctx)
+}
+
+// Walk implements [state.Walker].
+func (s *Store) Walk(ctx context.Context) ([]string, error) {
+	s.log.add("list", "")
+	return state.ListAll(ctx, s.Store)
+}
+
+// Walk implements [state.Walker].
+func (v *view) Walk(ctx context.Context) ([]string, error) {
+	v.log.add("list", v.prefix)
+	return state.ListAll(ctx, v.Store)
+}
+
+// DeleteMany implements [state.BatchDeleter]: each key is recorded as a delete,
+// and the size of the call is kept for [Store.Batches].
+func (s *Store) DeleteMany(ctx context.Context, keys []string) (int, error) {
+	return s.log.deleteMany(ctx, "", s.Store, keys)
+}
+
+// DeleteMany implements [state.BatchDeleter].
+func (v *view) DeleteMany(ctx context.Context, keys []string) (int, error) {
+	return v.log.deleteMany(ctx, v.prefix, v.Store, keys)
+}
+
+func (l *log) deleteMany(ctx context.Context, prefix string, inner state.Store, keys []string) (int, error) {
+	l.mu.Lock()
+	if l.fail > 0 {
+		l.fail--
+		err := l.failWith
+		l.mu.Unlock()
+		return 0, err
+	}
+	l.batches = append(l.batches, len(keys))
+	l.mu.Unlock()
+	if len(keys) > state.MaxDeleteBatch {
+		return 0, fmt.Errorf("secretrec: %d keys in one batch", len(keys))
+	}
+	n := 0
+	for _, k := range keys {
+		l.add("delete", prefix+k)
+		switch err := inner.Delete(ctx, k); {
+		case err == nil:
+			n++
+		case errors.Is(err, state.ErrNotFound):
+		default:
+			return n, err
+		}
+	}
+	return n, nil
+}
+
+// Batches are the sizes of the DeleteMany calls that went through, in order.
+func (s *Store) Batches() []int {
+	s.log.mu.Lock()
+	defer s.log.mu.Unlock()
+	return slices.Clone(s.log.batches)
+}
+
+// FailBatches makes the next n DeleteMany calls fail with err.
+func (s *Store) FailBatches(n int, err error) {
+	s.log.mu.Lock()
+	s.log.fail, s.log.failWith = n, err
+	s.log.mu.Unlock()
 }
