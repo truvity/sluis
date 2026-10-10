@@ -1,4 +1,4 @@
-import type { SlackConnectWorkspace, SlackDiscoveredChannel, SlackDiscoveredSide, SlackSharedChannel, SlackSharedChannelDefinition } from "./gen/directoryroster/v1/slack_connect_pb";
+import type { SlackConnectWorkspace, SlackDiscoveredChannel, SlackDiscoveredSide, SlackSharedChannel, SlackSharedChannelDefinition } from "./gen/sluis/v1/slack_connect_pb";
 import { memberProblems, type AllowedDirectory } from "./slackMembersModel";
 import type { StateKind } from "./ui";
 

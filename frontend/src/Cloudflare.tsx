@@ -26,7 +26,7 @@ import type {
   CloudflarePreset,
   GetCloudflareCredentialResponse,
   MyCloudflarePreset,
-} from "./gen/directoryroster/v1/cloudflare_pb";
+} from "./gen/sluis/v1/cloudflare_pb";
 import { awsProfile, credentialProcess, freshness, freshnessNote, prototypeView, span, tokenCommand } from "./cloudflareModel";
 import { useAsync } from "./hooks";
 import { ConfirmDialog, Failure, Loading, Mono, Nothing, Page, Section, State } from "./ui";

@@ -29,7 +29,7 @@ import {
     SessionClass,
     type Session,
     type SignIn,
-} from "./gen/accessissuer/v1/session_pb";
+} from "./gen/sluis/v1/session_pb";
 import { useDebouncedCommit } from "./hooks";
 import { paths } from "./router";
 import { Facet, Facets, Failure, InfoTip, Loading, Nothing, Page, Ref } from "./ui";

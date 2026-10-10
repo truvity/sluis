@@ -26,7 +26,7 @@ import Typography from "@mui/material/Typography";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 
 import { ago, at, github, reason } from "./api";
-import type { GetGitHubStatusResponse, GitHubAppGrant, GitHubOrganisation, ListGitHubAppsResponse } from "./gen/directoryroster/v1/github_pb";
+import type { GetGitHubStatusResponse, GitHubAppGrant, GitHubOrganisation, ListGitHubAppsResponse } from "./gen/sluis/v1/github_pb";
 import {
   appsNeedingYou,
   appView,

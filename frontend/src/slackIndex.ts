@@ -1,6 +1,6 @@
-import type { SlackChannelRecord, ListSlackChannelsResponse } from "./gen/directoryroster/v1/slack_channels_pb";
-import type { ListSlackSharedChannelsResponse, SlackSharedChannel } from "./gen/directoryroster/v1/slack_connect_pb";
-import type { GetSlackStatusResponse, SlackChannelStatus, SlackMemberStatus } from "./gen/directoryroster/v1/slack_pb";
+import type { SlackChannelRecord, ListSlackChannelsResponse } from "./gen/sluis/v1/slack_channels_pb";
+import type { ListSlackSharedChannelsResponse, SlackSharedChannel } from "./gen/sluis/v1/slack_connect_pb";
+import type { GetSlackStatusResponse, SlackChannelStatus, SlackMemberStatus } from "./gen/sluis/v1/slack_pb";
 import { paths } from "./router";
 import { channelKind, memberKind } from "./slackModel";
 import { isVisibilityMismatch, stateView, type StateView } from "./slackConnectModel";

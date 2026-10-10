@@ -12,7 +12,7 @@ import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import RadioButtonUncheckedIcon from "@mui/icons-material/RadioButtonUnchecked";
 
 import { backendName } from "./api";
-import type { ConnectorSetup } from "./gen/directoryroster/v1/settings_pb";
+import type { ConnectorSetup } from "./gen/sluis/v1/settings_pb";
 import { paths } from "./router";
 import { Mono, Ref, Section } from "./ui";
 

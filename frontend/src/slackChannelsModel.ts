@@ -1,4 +1,4 @@
-import type { SlackChannelWorkspace, SlackDiscoveredOrdinary } from "./gen/directoryroster/v1/slack_channels_pb";
+import type { SlackChannelWorkspace, SlackDiscoveredOrdinary } from "./gen/sluis/v1/slack_channels_pb";
 import { memberProblems, type AllowedDirectory } from "./slackMembersModel";
 
 /** Ordinary Slack channels managed from the console: one workspace, members

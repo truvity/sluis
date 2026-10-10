@@ -1,7 +1,7 @@
 import { create, type MessageInitShape } from "@bufbuild/protobuf";
 import { describe, expect, it } from "vitest";
 
-import { SlackAppSchema } from "./gen/directoryroster/v1/slack_apps_pb";
+import { SlackAppSchema } from "./gen/sluis/v1/slack_apps_pb";
 import { looksLikeConfigurationToken, nextStep, offersReinstall, stateView, summaryOf } from "./slackAppsModel";
 
 const app = (init: MessageInitShape<typeof SlackAppSchema> = {}) =>

@@ -16,7 +16,7 @@ import Typography from "@mui/material/Typography";
 
 import { audit, reason, slack } from "./api";
 import { roster } from "./auditSentences";
-import type { SlackBreaker, SlackChannelStatus } from "./gen/directoryroster/v1/slack_pb";
+import type { SlackBreaker, SlackChannelStatus } from "./gen/sluis/v1/slack_pb";
 import { paths } from "./router";
 import { BreakerAlert } from "./Slack";
 import { modeLabel } from "./slackChannelsModel";

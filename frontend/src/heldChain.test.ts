@@ -1,7 +1,7 @@
 import { create } from "@bufbuild/protobuf";
 import { describe, expect, it } from "vitest";
 
-import { HeldGroupSchema } from "./gen/directoryroster/v1/access_pb";
+import { HeldGroupSchema } from "./gen/sluis/v1/access_pb";
 import { formatChain } from "./heldChain";
 
 describe("formatChain", () => {

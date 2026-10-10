@@ -1,4 +1,4 @@
-import type { SlackChannelStatus, SlackMemberStatus, SlackWorkspaceStatus } from "./gen/directoryroster/v1/slack_pb";
+import type { SlackChannelStatus, SlackMemberStatus, SlackWorkspaceStatus } from "./gen/sluis/v1/slack_pb";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import { timestampMs } from "@bufbuild/protobuf/wkt";
 

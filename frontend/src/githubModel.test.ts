@@ -10,7 +10,7 @@ import {
   GitHubAppSchema,
   GitHubOrganisationSchema,
   GitHubTeamStatusSchema,
-} from "./gen/directoryroster/v1/github_pb";
+} from "./gen/sluis/v1/github_pb";
 import {
   appView,
   atMost,

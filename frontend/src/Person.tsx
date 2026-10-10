@@ -13,8 +13,8 @@ import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
 
 import { access, forHowLong, github, issuerIsSameOrigin, issuerFailure, personName, roleName, sessions, sourceName, type Me } from "./api";
-import type { ExplainRequest, ExplainResponse } from "./gen/directoryroster/v1/access_pb";
-import { RevokeScope, type Session } from "./gen/accessissuer/v1/session_pb";
+import type { ExplainRequest, ExplainResponse } from "./gen/sluis/v1/access_pb";
+import { RevokeScope, type Session } from "./gen/sluis/v1/session_pb";
 import { formatChain } from "./heldChain";
 import { useAsync } from "./hooks";
 import { paths } from "./router";

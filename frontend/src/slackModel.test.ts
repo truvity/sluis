@@ -2,7 +2,7 @@ import { create, type MessageInitShape } from "@bufbuild/protobuf";
 import { timestampFromDate } from "@bufbuild/protobuf/wkt";
 import { describe, expect, it } from "vitest";
 
-import { SlackMemberStatusSchema, SlackWorkspaceStatusSchema } from "./gen/directoryroster/v1/slack_pb";
+import { SlackMemberStatusSchema, SlackWorkspaceStatusSchema } from "./gen/sluis/v1/slack_pb";
 import {
   awaitingFirstPass,
   awaitingText,

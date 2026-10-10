@@ -22,7 +22,7 @@ import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 
 import { reason, slackConnect } from "./api";
-import type { ListSlackSharedChannelsResponse, SlackDiscoveredChannel, SlackSharedChannel } from "./gen/directoryroster/v1/slack_connect_pb";
+import type { ListSlackSharedChannelsResponse, SlackDiscoveredChannel, SlackSharedChannel } from "./gen/sluis/v1/slack_connect_pb";
 import {
   definitionOf,
   discoveredForm,

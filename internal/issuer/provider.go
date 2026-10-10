@@ -19,6 +19,8 @@ import (
 	"github.com/zitadel/oidc/v3/pkg/op"
 
 	"github.com/truvity/sluis/gen/accessissuer/v1/accessissuerv1connect"
+	"github.com/truvity/sluis/gen/sluis/v1/sluisv1connect"
+	"github.com/truvity/sluis/internal/connectalias"
 	"github.com/truvity/sluis/internal/signer"
 	"github.com/truvity/sluis/internal/telemetry"
 )
@@ -207,12 +209,7 @@ func HandlerWithSignIn(iss *Issuer, storage op.Storage, signIn SignInDeps) (http
 	sessionsService := NewSessionsService(iss, verifier, signIn.Secure)
 	sessionsService.announce = signIn.Announce
 
-	path, sessions := accessissuerv1connect.NewSessionServiceHandler(sessionsService, telemetry.ConnectOptions()...)
-	if signIn.ConsoleOrigin != "" {
-		sessions = browserAllowed(signIn.ConsoleOrigin, sessions)
-	}
-
-	mux.Handle(path, sessions)
+	mountSessions(mux, sessionsService, signIn.ConsoleOrigin)
 
 	// What the caller's own groups open, for `sluisctl kubeconfig` and
 	// `aws-config`. The same verifier, so a bearer cannot mean one thing
@@ -907,4 +904,19 @@ func (c *challenged) Write(b []byte) (int, error) {
 	}
 
 	return c.ResponseWriter.Write(b)
+}
+
+// mountSessions serves the session service on mux under both its names,
+// sluis.v1.SessionService and the legacy accessissuer.v1.SessionService an
+// older console still calls. One handler answers both, so the CORS and the
+// checks in front of it are the same for each.
+func mountSessions(mux *http.ServeMux, service accessissuerv1connect.SessionServiceHandler, consoleOrigin string) {
+	path, sessions := accessissuerv1connect.NewSessionServiceHandler(service, telemetry.ConnectOptions()...)
+	if consoleOrigin != "" {
+		sessions = browserAllowed(consoleOrigin, sessions)
+	}
+
+	mux.Handle(path, sessions)
+	mux.Handle("/"+sluisv1connect.SessionServiceName+"/",
+		connectalias.Rewrite(sessions, sluisv1connect.SessionServiceName, accessissuerv1connect.SessionServiceName))
 }

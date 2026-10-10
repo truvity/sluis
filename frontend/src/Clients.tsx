@@ -11,7 +11,7 @@ import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
 
 import { access, forHowLong, matcherKind, people as peopleCount, issuerFailure, personName, sessions } from "./api";
-import type { Session } from "./gen/accessissuer/v1/session_pb";
+import type { Session } from "./gen/sluis/v1/session_pb";
 import { useAsync } from "./hooks";
 import { paths } from "./router";
 import { Failure, Loading, Mono, Names, Nothing, Page, Ref, Rows, Section, State } from "./ui";

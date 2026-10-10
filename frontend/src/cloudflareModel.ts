@@ -1,4 +1,4 @@
-import type { CloudflarePreset, CloudflarePrototype, CloudflareStored } from "./gen/directoryroster/v1/cloudflare_pb";
+import type { CloudflarePreset, CloudflarePrototype, CloudflareStored } from "./gen/sluis/v1/cloudflare_pb";
 import type { StateKind } from "./ui";
 
 /** What a prototype's chip shows: the shared chip's kind, a word after it,

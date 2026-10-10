@@ -1,5 +1,5 @@
-import type { SlackDiscoveredOrdinary } from "./gen/directoryroster/v1/slack_channels_pb";
-import type { SlackDiscoveredChannel } from "./gen/directoryroster/v1/slack_connect_pb";
+import type { SlackDiscoveredOrdinary } from "./gen/sluis/v1/slack_channels_pb";
+import type { SlackDiscoveredChannel } from "./gen/sluis/v1/slack_connect_pb";
 import type { ChannelRow } from "./slackIndex";
 
 /** The filters of the Slack tabs live in the address's query, so a link, a

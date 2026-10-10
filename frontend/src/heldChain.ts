@@ -1,4 +1,4 @@
-import type { HeldGroup } from "./gen/directoryroster/v1/access_pb";
+import type { HeldGroup } from "./gen/sluis/v1/access_pb";
 
 /** Renders the whole reason a group is held as one line, walking
  *  `impliedBy` one hop at a time until a directly-granted entry ends the

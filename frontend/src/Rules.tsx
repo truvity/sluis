@@ -15,7 +15,7 @@ import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Typography from "@mui/material/Typography";
 
 import { access, matcherKind } from "./api";
-import type { ExplainRequest, PolicyGroup } from "./gen/directoryroster/v1/access_pb";
+import type { ExplainRequest, PolicyGroup } from "./gen/sluis/v1/access_pb";
 import { useAsync } from "./hooks";
 import { Explanation } from "./Person";
 import { paths } from "./router";

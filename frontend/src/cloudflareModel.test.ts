@@ -1,7 +1,7 @@
 import { create } from "@bufbuild/protobuf";
 import { describe, expect, it } from "vitest";
 
-import { CloudflarePresetSchema, CloudflarePrototypeSchema, CloudflareStoredSchema } from "./gen/directoryroster/v1/cloudflare_pb";
+import { CloudflarePresetSchema, CloudflarePrototypeSchema, CloudflareStoredSchema } from "./gen/sluis/v1/cloudflare_pb";
 import { awsProfile, credentialProcess, freshness, freshnessNote, prototypeView, span, tokenCommand } from "./cloudflareModel";
 
 const now = new Date("2026-10-09T12:00:00Z");

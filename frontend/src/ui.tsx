@@ -10,7 +10,7 @@ import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 
 import { reason } from "./api";
 
-import { DomainReason } from "./gen/directoryroster/v1/workspace_pb";
+import { DomainReason } from "./gen/sluis/v1/workspace_pb";
 import Alert from "@mui/material/Alert";
 import Button from "@mui/material/Button";
 import Box from "@mui/material/Box";

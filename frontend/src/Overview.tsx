@@ -7,7 +7,7 @@ import { access, ago, at, settings, workspaces, type Me } from "./api";
 import { useAsync, useWhile } from "./hooks";
 import { paths } from "./router";
 import { incomplete, Setup, type Progress } from "./Setup";
-import { DomainReason } from "./gen/directoryroster/v1/workspace_pb";
+import { DomainReason } from "./gen/sluis/v1/workspace_pb";
 import { domainReason, Failure, Loading, Names, Nothing, Page, Ref, Section } from "./ui";
 
 /** The first question anyone has is whether something is broken. This
