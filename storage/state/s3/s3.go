@@ -51,7 +51,7 @@ import (
 	"github.com/truvity/sluis/storage/state"
 )
 
-// ErrUnversioned: the bucket returned no VersionId; enable versioning.
+// ErrUnversioned reports that the bucket returned no VersionId; enable versioning.
 var ErrUnversioned = errors.New("s3: the bucket is not versioned (no VersionId returned)")
 
 // API is the part of the S3 client the store uses; *s3.Client satisfies it.
@@ -204,14 +204,14 @@ func (s *store) read(ctx context.Context, key string, rev state.Rev) (state.Item
 		}
 		return state.Item{}, fmt.Errorf("s3: get %s: %w", ok, err)
 	}
-	defer out.Body.Close()
+	defer func() { _ = out.Body.Close() }()
 	var body io.Reader = out.Body
 	if aws.ToString(out.ContentEncoding) == "gzip" {
 		zr, err := gzip.NewReader(out.Body)
 		if err != nil {
 			return state.Item{}, fmt.Errorf("s3: get %s: %w", ok, err)
 		}
-		defer zr.Close()
+		defer func() { _ = zr.Close() }()
 		body = zr
 	}
 	b, err := io.ReadAll(body)
@@ -243,7 +243,8 @@ func (s *store) previous(ctx context.Context, ok string, rev state.Rev) (state.R
 		if err != nil {
 			return "", fmt.Errorf("s3: list versions of %s: %w", ok, err)
 		}
-		for _, v := range out.Versions {
+		for i := range out.Versions {
+			v := &out.Versions[i]
 			if aws.ToString(v.Key) != ok {
 				if seen {
 					return "", nil
@@ -346,7 +347,8 @@ func (s *store) Delete(ctx context.Context, key string) error {
 		if err != nil {
 			return fmt.Errorf("s3: list versions of %s: %w", ok, err)
 		}
-		for _, v := range out.Versions {
+		for i := range out.Versions {
+			v := &out.Versions[i]
 			if aws.ToString(v.Key) == ok {
 				live = true
 				ids = append(ids, types.ObjectIdentifier{Key: v.Key, VersionId: v.VersionId})

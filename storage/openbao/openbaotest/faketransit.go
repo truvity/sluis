@@ -140,17 +140,17 @@ func (f *FakeTransit) serve(w http.ResponseWriter, r *http.Request) {
 		k.minDecrypt, k.minEncrypt = num("min_decryption_version"), num("min_encryption_version")
 		reply(w, 200, nil)
 	case op == "keys" && k != nil && sub == "trim":
-		min := num("min_available_version")
-		if min > k.minDecrypt {
+		minAvail := num("min_available_version")
+		if minAvail > k.minDecrypt {
 			reply(w, 400, nil, "minimum available version cannot be greater than the minimum decryption version")
 			return
 		}
 		for v := range k.versions {
-			if v < min {
+			if v < minAvail {
 				delete(k.versions, v)
 			}
 		}
-		k.minAvail = min
+		k.minAvail = minAvail
 		reply(w, 200, nil)
 	case op == "encrypt":
 		if k == nil {

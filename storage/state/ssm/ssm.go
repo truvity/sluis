@@ -45,7 +45,7 @@ const (
 	advancedLimit = 8 * 1024
 )
 
-// ErrTooLarge: the value does not fit an advanced-tier parameter (8 KiB).
+// ErrTooLarge reports that the value does not fit an advanced-tier parameter (8 KiB).
 var ErrTooLarge = errors.New("ssm: value exceeds the 8 KiB parameter limit")
 
 // API is the part of the SSM client the store uses; *ssm.Client satisfies it.

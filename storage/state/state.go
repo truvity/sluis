@@ -28,13 +28,13 @@ type Item struct {
 }
 
 var (
-	// ErrNotFound: the key, or the requested version of it, does not exist.
+	// ErrNotFound reports that the key, or the requested version of it, does not exist.
 	ErrNotFound = errors.New("state: not found")
-	// ErrConflict: a conditional Put saw a version other than ifRev.
+	// ErrConflict reports that a conditional Put saw a version other than ifRev.
 	ErrConflict = errors.New("state: revision conflict")
-	// ErrNotObject: a value to store is not a JSON object.
+	// ErrNotObject reports that a value to store is not a JSON object.
 	ErrNotObject = errors.New("state: value is not a JSON object")
-	// ErrInvalidKey: a key or prefix is empty, absolute or has an empty,
+	// ErrInvalidKey reports that a key or prefix is empty, absolute or has an empty,
 	// "." or ".." segment.
 	ErrInvalidKey = errors.New("state: invalid key")
 )
