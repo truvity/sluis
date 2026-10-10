@@ -356,8 +356,11 @@ func TestV5MigrationEndToEndOnDynamoDB(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("the source refused a good refresh token: %d %s", code, ada1)
 	}
-	// The source is in maintenance, as it is while its writers are stopped.
-	if err = maintenance.Write(ctx, v4.Ports.State, maintenance.Flag{State: maintenance.StateRestoring, By: "migration", Reason: "layout v5"}); err != nil {
+	// The source is frozen, as `sluis maintenance on` leaves it: the copy takes
+	// that as the proof of a stopped writer. Set a minute ago, so that every
+	// replica has seen it and the copy does not wait.
+	if err = maintenance.Write(ctx, v4.Ports.State, maintenance.Flag{State: maintenance.StateMigration, By: "migration",
+		Reason: "layout v5", Since: time.Now().Add(-time.Minute)}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -399,7 +402,7 @@ func TestV5MigrationEndToEndOnDynamoDB(t *testing.T) {
 	if _, err = migrate.CopyV5(ctx, from, to, migrate.V5Options{PlanOptions: opt}); !errors.Is(err, migrate.ErrWritersRunning) {
 		t.Fatalf("a copy that was not told the writers are stopped = %v", err)
 	}
-	report, err := migrate.CopyV5(ctx, from, to, migrate.V5Options{PlanOptions: opt, WritersStopped: true})
+	report, err := migrate.CopyV5(ctx, from, to, migrate.V5Options{PlanOptions: opt})
 	if err != nil || !report.OK || report.Totals.Copied == 0 || report.Totals.Refused != 0 || report.Totals.Different != 0 {
 		t.Fatalf("CopyV5 = %v\n%s", err, report.JSON())
 	}
