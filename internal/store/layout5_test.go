@@ -46,9 +46,11 @@ func TestTheLayoutsDoNotMix(t *testing.T) {
 		"v5 tables, no ssm":    {Config{Adapter: AdapterDynamoDB, DynamoDB: dynamoport.Config{Tables: v5}}, ""},
 		"v5 tables, v4":        {Config{Adapter: AdapterDynamoDB, DynamoDB: dynamoport.Config{Tables: v5}, SecretsSSM: true, SecretsLayout: "v4"}, "secrets.layout"},
 		"v5 tables, default":   {Config{Adapter: AdapterDynamoDB, DynamoDB: dynamoport.Config{Tables: v5}, SecretsSSM: true}, "secrets.layout"},
-		"v4 table, v5":         {Config{Adapter: AdapterDynamoDB, DynamoDB: dynamoport.Config{Table: "t"}, SecretsSSM: true, SecretsLayout: "v5"}, "ports.dynamodb.tables"},
-		"both":                 {Config{Adapter: AdapterDynamoDB, DynamoDB: dynamoport.Config{Table: "t", Tables: v5}}, "both set"},
-		"tables, memory":       {Config{Adapter: AdapterMemory, DynamoDB: dynamoport.Config{Tables: v5}}, "dynamodb adapter's"},
+		"v4 table, v5": {
+			Config{Adapter: AdapterDynamoDB, DynamoDB: dynamoport.Config{Table: "t"}, SecretsSSM: true, SecretsLayout: "v5"}, "ports.dynamodb.tables",
+		},
+		"both":           {Config{Adapter: AdapterDynamoDB, DynamoDB: dynamoport.Config{Table: "t", Tables: v5}}, "both set"},
+		"tables, memory": {Config{Adapter: AdapterMemory, DynamoDB: dynamoport.Config{Tables: v5}}, "dynamodb adapter's"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, err := tc.cfg.layout5()

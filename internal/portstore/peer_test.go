@@ -39,10 +39,13 @@ func TestReadsOfPeerRecordsGoToThePeer(t *testing.T) {
 		set.Secrets = secrets
 		return portstore.New(set)
 	}
-	if err := portstore.NewWorkspaces(with(port.ModuleGoogle)).Put(ctx, hub.Workspace{ID: "w1", Backend: "google", Domains: []string{"example.test"}}); err != nil {
+	w1 := hub.Workspace{ID: "w1", Backend: "google", Domains: []string{"example.test"}}
+	if err := portstore.NewWorkspaces(with(port.ModuleGoogle)).Put(ctx, w1); err != nil {
 		t.Fatal(err)
 	}
-	crec := catalogueapp.Record{ID: "renovate", Org: "example", AppID: 8, AppSlug: "example-renovate", ConnectedAt: time.Now().UTC(), ConnectedBy: "ada@example.test"}
+	crec := catalogueapp.Record{
+		ID: "renovate", Org: "example", AppID: 8, AppSlug: "example-renovate", ConnectedAt: time.Now().UTC(), ConnectedBy: "ada@example.test",
+	}
 	if err := portstore.NewGitHubCatalogueApps(with(port.ModuleGitHub)).Put(ctx, crec, "CAT-KEY"); err != nil {
 		t.Fatal(err)
 	}

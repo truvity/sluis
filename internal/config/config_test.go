@@ -367,7 +367,8 @@ func TestThePortsAdapterIsOneOfTheTwo(t *testing.T) {
 		"secrets: {source: ssm, root: /sluis/prod, layout: v5}\n"
 	if f, err := config.Load[config.Serve](write(t, v2+v5File)); err != nil {
 		t.Errorf("layout v5 was refused: %v", err)
-	} else if d := f.Ports.DynamoDB; d == nil || d.Table != "" || d.Tables["oidc"] != "sluis-prod-oidc" || d.Tables["google"] != "sluis-prod-google" || f.Secrets.Layout != "v5" {
+	} else if d := f.Ports.DynamoDB; d == nil || d.Table != "" || d.Tables["oidc"] != "sluis-prod-oidc" ||
+		d.Tables["google"] != "sluis-prod-google" || f.Secrets.Layout != "v5" {
 		t.Errorf("layout v5 = %+v, %+v", d, f.Secrets)
 	}
 	if _, err := config.Load[config.Serve](write(t, v2+"secrets: {source: ssm, root: /sluis/prod, layout: v4}\n"+ddbFile)); err != nil {
