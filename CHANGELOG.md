@@ -1,5 +1,7 @@
 ## Unreleased
 
+## v1.75.0-rc.3
+
 ### Fixed
 
 - **`POST /token` answers an unknown `client_id` with 400 `invalid_client`, or 401 when the client authenticated with HTTP Basic, instead of 500 `server_error`.** This holds for the `refresh_token`, `authorization_code` and token-exchange grants, as RFC 6749 §5.2 asks. An unknown audience in a token exchange stays `invalid_target`.
