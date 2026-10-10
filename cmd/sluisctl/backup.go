@@ -121,9 +121,9 @@ type targetFlags struct {
 
 func (t *targetFlags) register(flags *flag.FlagSet, restoreCommand bool) {
 	if restoreCommand {
-		flags.StringVar(&t.restoreFunction, "function", "", "the restore function's name or ARN (else $"+envRestoreFunction+", else backup.restoreFunction in config.yaml)")
+		flags.StringVar(&t.restoreFunction, "function", "", "the restore function's name or ARN (else $"+envRestoreFunction+", else config.yaml)")
 	} else {
-		flags.StringVar(&t.function, "function", "", "the backup function's name or ARN (else $"+envBackupFunction+", else backup.function in config.yaml)")
+		flags.StringVar(&t.function, "function", "", "the backup function's name or ARN (else $"+envBackupFunction+", else config.yaml)")
 	}
 	flags.StringVar(&t.as, "as", classAdmin, "the caller class, admin or breakglass: the function's live-<class> alias")
 	flags.StringVar(&t.profile, "profile", "", "the AWS profile (else the SDK's default chain)")
