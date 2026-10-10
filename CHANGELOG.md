@@ -1,5 +1,7 @@
 ## Unreleased
 
+## v1.75.0-rc.2
+
 ### Changed
 
 - **`sluis migrate v5 copy --skip issuer` runs while the source is live and needs no `--i-have-stopped-writers`.** That is the first of the two passes: the issuer's sessions, tokens and key ring are the fast-changing data, and the final `copy --overwrite --i-have-stopped-writers` catches up the provider records this pass copies. A copy that includes the issuer still needs the flag and is refused without it. The live pass's report carries `"live": true` and a note, repeated on stderr, that a final pass is required. Its closing verify does not fail the copy: what changed on the live source meanwhile is reported in the `verify` section and in a note, and the exit status is 0.
