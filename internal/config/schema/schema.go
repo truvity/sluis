@@ -314,6 +314,14 @@ func serveSchema() m {
 			"origin":      str("The console's origin, when it is not the issuer's."),
 			"client":      str("The client id the console signs in as."),
 			"awsAudience": str("The audience an AWS role's web identity token must be minted for to be a bearer at the console (a Lambda controller). Its own, distinct from the AWS federation file's, so a token for token exchange is no proof here and the reverse. Default `<issuerURL>/console`."),
+			"backup": obj("Connects the console's Backups page to the backup module and the restore function (docs/decisions/0071). The console only reads from them, as the caller class `console`. Unset has no page.", m{
+				"function":        str("The backup module's Lambda function, name or ARN, invoked through its `live-console` alias. Set exactly one of `function` and `url`."),
+				"url":             url("The backup module's Kubernetes Service. A call carries the pod's projected ServiceAccount token."),
+				"restoreFunction": str("The restore function, name or ARN, invoked through its `live-console` alias. At most one of it and `restoreURL`; without either the page says there is none."),
+				"restoreURL":      url("The restore function's Kubernetes Service."),
+				"audience":        str("The audience of the projected token. Each module's name when unset."),
+				"tokenFile":       str("Where the projected token is mounted. `/var/run/secrets/sluis/backup/token` when unset."),
+			}),
 		}),
 		"oauthClient": obj("The OAuth client registered once with the directory backend: it drives both admin consent and operator sign-in.", m{
 			"id":         str("The client id, for a local run. Not a secret."),

@@ -31,6 +31,7 @@ import (
 
 	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/app"
+	backuprpc "github.com/truvity/sluis/internal/backup/rpc"
 	"github.com/truvity/sluis/internal/clientcreds"
 	"github.com/truvity/sluis/internal/cloudflare/minter"
 	cfrpc "github.com/truvity/sluis/internal/cloudflare/rpc"
@@ -70,6 +71,9 @@ type Config struct {
 	Cloudflare *config.Cloudflare
 	Grants     *config.PolicyCloudflare
 	Instance   string
+	// Backup is where the console reads the backup module and the restore
+	// function (`console.backup`); nil leaves the console without a Backups page.
+	Backup *config.ConsoleBackup
 	// CloudflareDial opens a Cloudflare account; nil is the real client.
 	CloudflareDial minter.Dialer
 }
@@ -175,6 +179,9 @@ func FromConfig(f *config.Serve, p *config.PolicyDocument) (Config, error) {
 	// (ADR 0072, decision 1). A module that still runs in this process takes
 	// its own table through Stores.ForModule.
 	cfg := Config{Directory: directory, Issuer: issuer, Stores: stores.As(port.ModuleOIDC, IssuerPeers()...)}
+	if f.Console != nil {
+		cfg.Backup = f.Console.Backup
+	}
 	if f.Cloudflare != nil || (p != nil && len(p.Cloudflare().Grants) > 0) {
 		// Grants for presets nobody declared would read as rights nobody can use.
 		if err = config.CheckCloudflare(f.Cloudflare, p); err != nil {
@@ -410,6 +417,15 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 			return nil, err
 		}
 		assembled.Issuer().UseCloudflare(remote)
+	}
+	if cfg.Backup != nil {
+		// The Backups page reads the two modules as the caller class `console`.
+		client, err := backuprpc.Dial(ctx, cfg.Backup)
+		if err != nil {
+			a.Close()
+			return nil, err
+		}
+		directory.ConsoleServer().UseBackup(client)
 	}
 	log.InfoContext(ctx, "sluis assembled as one service: a login makes no network "+
 		"call except to the corporate directory", slog.Int("controllers", len(a.consoles)))

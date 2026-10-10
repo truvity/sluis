@@ -123,6 +123,28 @@ type (
 		// minted for to be a bearer at the console: its OWN, distinct from
 		// `exchange`'s, so a token for one door is no proof at the other.
 		AWSAudience string `json:"awsAudience,omitempty"`
+		// Backup connects the console's Backups page to the backup module and
+		// the restore function (docs/decisions/0071). Unset has no page.
+		Backup *ConsoleBackup `json:"backup,omitempty"`
+	}
+
+	// ConsoleBackup is where the backup module and the restore function are
+	// when the console calls them as the caller class `console`: a Lambda
+	// function (through its `live-console` alias) or a Kubernetes Service each.
+	// The console only reads from them.
+	ConsoleBackup struct {
+		// Function and URL name the backup module: exactly one of the two.
+		Function string `json:"function,omitempty"`
+		URL      string `json:"url,omitempty"`
+		// RestoreFunction and RestoreURL name the restore function: at most one
+		// of the two. Without either the page says there is none.
+		RestoreFunction string `json:"restoreFunction,omitempty"`
+		RestoreURL      string `json:"restoreURL,omitempty"`
+		// Audience is the audience of the projected token a Service call
+		// carries; each module's name when unset.
+		Audience string `json:"audience,omitempty"`
+		// TokenFile is where that token is mounted.
+		TokenFile string `json:"tokenFile,omitempty"`
 	}
 
 	// OAuthClient is the client registered once with the directory backend.
