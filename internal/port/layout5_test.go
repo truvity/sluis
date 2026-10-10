@@ -78,6 +78,7 @@ var rows5 = []struct{ key, module, kind, id string }{
 var setRows5 = []struct{ set, module, kind, id string }{
 	{"issuer:keyring:index:ES384", "oidc", "keyring-index", "ES384"},
 	{"issuer:sso-clients:s1", "oidc", "sso-clients", "s1"},
+	{"issuer:sso-of:ada@acme.example", "oidc", "sso-of", "ada@acme.example"},
 	{"issuer:sessions-of:ada@acme.example", "oidc", "sessions-of", "ada@acme.example"},
 	{"issuer:sessions-for:console", "oidc", "sessions-for", "console"},
 	{"issuer:sessions-for:https://a/b", "oidc", "sessions-for", "https:~2F~2Fa~2Fb"},
@@ -89,7 +90,7 @@ var setRows5 = []struct{ set, module, kind, id string }{
 // pinnedRules5 is how many State rules layout 5 has. A sweep that finds fewer
 // has lost a family (or never ran), so the count is pinned here and moves with
 // a deliberate change.
-const pinnedRules5, pinnedSetRules5 = 50, 6
+const pinnedRules5, pinnedSetRules5 = 50, 7
 
 func TestEveryKeyHasItsLayout5Address(t *testing.T) {
 	if len(rows5) < pinnedRules5 {
