@@ -325,7 +325,7 @@ func (s *signIn) chooser(w http.ResponseWriter, r *http.Request) {
 		// accepted only from the browser that was served the form. In a
 		// cookie of its own, so that a provider button followed from this
 		// page, or any other sign-in page on this host, leaves it alone.
-		http.SetCookie(w, access.RecoveryCookie(recoveryState, s.deps.Secure, signInWindow))
+		access.SetCookie(w, access.RecoveryCookie(recoveryState, s.deps.Secure, signInWindow))
 	}
 	s.page(w, "Sign in", buttons.String())
 }
@@ -470,7 +470,7 @@ func (s *signIn) start(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusFailedDependency)
 		return
 	}
-	http.SetCookie(w, access.LoginCookie(state, s.deps.Secure, signInWindow))
+	access.SetCookie(w, access.LoginCookie(state, s.deps.Secure, signInWindow))
 	http.Redirect(w, r, where, http.StatusFound)
 }
 
@@ -608,7 +608,7 @@ func (s *signIn) recover(w http.ResponseWriter, r *http.Request) {
 	// Spent once a proof is accepted, as the callback spends it: the
 	// form is not one to post twice. A refused proof leaves it, so the
 	// person can correct a paste without reloading the page.
-	http.SetCookie(w, access.RecoveryCookie("", s.deps.Secure, 0))
+	access.SetCookie(w, access.RecoveryCookie("", s.deps.Secure, 0))
 
 	who, secret := s.established(w, r, subject, RecoveryHow)
 	if err = s.deps.Storage.Complete(r.Context(), request, who); err != nil {
@@ -662,7 +662,7 @@ func (s *signIn) callback(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "this sign-in is not valid any more; start again", http.StatusBadRequest)
 		return
 	}
-	http.SetCookie(w, access.LoginCookie("", s.deps.Secure, 0))
+	access.SetCookie(w, access.LoginCookie("", s.deps.Secure, 0))
 
 	email, err := provider.Identify(r.Context(), r.URL.Query().Get("code"))
 	if err != nil {
@@ -876,7 +876,7 @@ func signOut(deps SignInDeps, w http.ResponseWriter, r *http.Request, mode spari
 	// Cleared whatever the record said: a cookie naming a session that is
 	// already gone still makes the next request look signed in until it
 	// is checked, and clearing it costs nothing.
-	http.SetCookie(w, deps.SSO.Cookie("", deps.Secure))
+	access.SetCookie(w, deps.SSO.Cookie("", deps.Secure))
 
 	return nil
 }
@@ -1308,7 +1308,7 @@ func (s *signIn) established(w http.ResponseWriter, r *http.Request, identity, h
 		// And the browser must not keep the cookie it came with: that
 		// sign-in may be somebody else's, and the next console would
 		// complete silently as them right after this person signed in.
-		http.SetCookie(w, s.deps.SSO.Cookie("", s.deps.Secure))
+		access.SetCookie(w, s.deps.SSO.Cookie("", s.deps.Secure))
 
 		return who, ""
 	}
@@ -1335,7 +1335,7 @@ func (s *signIn) handOver(w http.ResponseWriter, r *http.Request, who Authentica
 	// The secret, not the id: the id is shown to operators and carried by
 	// every session opened under this sign-in, and must not sign anybody
 	// in.
-	http.SetCookie(w, s.deps.SSO.Cookie(cookie, s.deps.Secure))
+	access.SetCookie(w, s.deps.SSO.Cookie(cookie, s.deps.Secure))
 }
 
 // endPrevious ends the sign-in the request's cookie proves, unless it is

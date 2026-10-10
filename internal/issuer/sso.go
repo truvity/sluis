@@ -25,7 +25,7 @@ import (
 // is what makes the second console cost no login: the authorization
 // request it sends completes against this session instead of a round trip
 // to the corporate directory.
-const SSOCookieName = "access_issuer_sso"
+const SSOCookieName = access.SSOCookieName
 
 // SSOSession is that session, as a record.
 //
@@ -525,7 +525,7 @@ func (s *SSO) Cookie(value string, secure bool) *http.Cookie {
 //
 // secure must be the flag the cookie was set with: it decides the name.
 func SSOFromRequest(r *http.Request, secure bool) string {
-	cookie, err := r.Cookie(access.CookieNameFor(SSOCookieName, secure))
+	cookie, err := access.ReadCookie(r, SSOCookieName, secure)
 	if err != nil {
 		return ""
 	}

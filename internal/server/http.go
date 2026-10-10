@@ -525,7 +525,7 @@ func (s *ConsoleServer) loginPage(w http.ResponseWriter, r *http.Request) {
 		// (see [ConsoleServer.recoveryLogin]). A cookie of its own, so
 		// that a provider button followed from this page, or the issuer's
 		// sign-in page on the same host, leaves it alone.
-		http.SetCookie(w, access.RecoveryCookie(recoveryState, s.sessions.Secure(), signInWindow))
+		access.SetCookie(w, access.RecoveryCookie(recoveryState, s.sessions.Secure(), signInWindow))
 	}
 	// With no way in of its own, this page is otherwise a card with a
 	// heading and nothing under it — which is what somebody who has just
@@ -611,7 +611,7 @@ func (s *ConsoleServer) signInStart(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusFailedDependency)
 		return
 	}
-	http.SetCookie(w, access.LoginCookie(state, s.sessions.Secure(), signInWindow))
+	access.SetCookie(w, access.LoginCookie(state, s.sessions.Secure(), signInWindow))
 	http.Redirect(w, r, url, http.StatusFound)
 }
 
@@ -644,7 +644,7 @@ func (s *ConsoleServer) signInCallback(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	http.SetCookie(w, access.LoginCookie("", s.sessions.Secure(), 0))
+	access.SetCookie(w, access.LoginCookie("", s.sessions.Secure(), 0))
 
 	email, err := connector.Identify(r.Context(), r.URL.Query().Get("code"))
 	if err != nil {
@@ -822,7 +822,7 @@ func (s *ConsoleServer) recoveryLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	if fromForm {
 		// Spent, as the provider callback spends its own.
-		http.SetCookie(w, access.RecoveryCookie("", s.sessions.Secure(), 0))
+		access.SetCookie(w, access.RecoveryCookie("", s.sessions.Secure(), 0))
 	}
 	s.log.WarnContext(r.Context(), "recovery sign-in", logattr.SafeString("subject", subject), slog.String("kind", s.recovery.Kind()))
 	redirectOrOK(w, r, s.at("/"))
@@ -1001,7 +1001,7 @@ func (s *ConsoleServer) connectCallback(w http.ResponseWriter, r *http.Request) 
 	}
 
 	state := r.URL.Query().Get("state")
-	cookie, err := r.Cookie(access.CookieNameFor(access.ConnectCookieName, s.sessions.Secure()))
+	cookie, err := access.ReadCookie(r, access.ConnectCookieName, s.sessions.Secure())
 	if err != nil || cookie.Value == "" || subtle.ConstantTimeCompare([]byte(cookie.Value), []byte(state)) != 1 {
 		s.consentProblem(w, r, http.StatusBadRequest,
 			"This consent did not start in this browser.", "", []string{
@@ -1045,7 +1045,7 @@ func (s *ConsoleServer) connectCallback(w http.ResponseWriter, r *http.Request) 
 			"Connecting a directory needs the operator role.", "", nil)
 		return
 	}
-	http.SetCookie(w, access.ConnectCookie("", s.sessions.Secure(), 0))
+	access.SetCookie(w, access.ConnectCookie("", s.sessions.Secure(), 0))
 
 	ws, b, err := conn.Exchange(r.Context(), r.URL.Query().Get("code"), bind)
 	if err != nil {

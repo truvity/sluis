@@ -6,7 +6,7 @@ Three things are called a session. A proxy holds the browser session for one con
 
 The SSO session is an HttpOnly cookie at the issuer's host, backed by a record in the shared store. A live record completes `/authorize` silently and honours `prompt=login` and `max_age`. Each per-client session points at its parent sign-in, so one operation on the parent ends them all.
 
-The cookie `access_issuer_sso` (legacy identifier, renamed in v1.75–v1.76) holds 32 random bytes, base64url, with a `__Host-` prefix when cookies are secure. The store keeps only its hash. The sign-in id that listings show is a name and authenticates nobody.
+The cookie `sluis_sso` holds 32 random bytes, base64url, with a `__Host-` prefix when cookies are secure. The store keeps only its hash. The sign-in id that listings show is a name and authenticates nobody.
 
 Sign-out ends the sign-in and every session under it, through `/logout` or `end_session`. The order is fixed: end the sign-in, revoke its sessions, write the audit record, tell the clients last. The work survives a browser disconnect for 30 seconds, and each back-channel logout takes at most 5. See [back-channel logout](back-channel-logout.md).
 

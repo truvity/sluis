@@ -41,7 +41,7 @@ Connect also speaks JSON over HTTP, so `curl` works. The proto package is `sluis
 
 | Recovery form post | Result |
 |---|---|
-| no page `state` or no `__Host-access_roster_recovery` cookie | `400` |
+| no page `state` or no `__Host-sluis_recovery` cookie | `400` |
 | body over 16 KiB | `413` |
 | JSON without `Content-Type: application/json` | not read |
 | `curl -d proof=...` or proof in the query string | refused |

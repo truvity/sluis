@@ -77,7 +77,7 @@ func (s *signIn) askAgentConsent(w http.ResponseWriter, r *http.Request, err err
 		return true
 	}
 
-	http.SetCookie(w, access.AgentConsentCookie(token, s.deps.Secure, signInWindow))
+	access.SetCookie(w, access.AgentConsentCookie(token, s.deps.Secure, signInWindow))
 	noFraming(w)
 	// The page's one script is its own, by nonce; nothing else runs here.
 	w.Header().Set("Content-Security-Policy", "frame-ancestors 'none'; script-src 'nonce-"+nonce+"'")
@@ -259,7 +259,7 @@ func (s *signIn) acceptAgent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Spent: the page is not one to post twice.
-	http.SetCookie(w, access.AgentConsentCookie("", s.deps.Secure, 0))
+	access.SetCookie(w, access.AgentConsentCookie("", s.deps.Secure, 0))
 	recordLoginSuccess(r.Context(), "agent_consent")
 	s.deps.Log.InfoContext(r.Context(), "an agent connection was allowed",
 		logattr.SafeString("identity", session.Identity), logattr.SafeString("client", pending.ClientID))

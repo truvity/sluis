@@ -612,8 +612,9 @@ var authorizationServerFields = []string{
 
 // servedACRValues is every authentication context class a token from
 // here can carry, which is exactly two: the directory answered, or
-// recovery bypassed it.
-var servedACRValues = []string{ACRDirectory, ACRRecovery}
+// recovery bypassed it. For one release each is also listed in its old
+// spelling; a request in the old one is honoured, and answered in the new.
+var servedACRValues = []string{ACRDirectory, ACRRecovery, legacyACRDirectory, legacyACRRecovery}
 
 // servedResponseTypes is what this issuer will actually honour. Every
 // client declares `code` and nothing else: the implicit and hybrid flows

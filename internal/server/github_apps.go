@@ -1510,7 +1510,7 @@ func (s *ConsoleServer) githubCatalogueCallback(w http.ResponseWriter, r *http.R
 		s.githubProblem(w, r, http.StatusConflict, "The App was created; start Create again to install it.", err.Error(), nil)
 		return
 	}
-	http.SetCookie(w, access.ConnectCookie(state, s.sessions.Secure(), githubFlowWindow))
+	access.SetCookie(w, access.ConnectCookie(state, s.sessions.Secure(), githubFlowWindow))
 	http.Redirect(w, r, githubapp.InstallURL(registration.Slug, state), http.StatusFound)
 }
 
@@ -1561,7 +1561,7 @@ func (s *ConsoleServer) githubCatalogueSetup(w http.ResponseWriter, r *http.Requ
 	if !ok {
 		return
 	}
-	http.SetCookie(w, access.ConnectCookie("", s.sessions.Secure(), 0))
+	access.SetCookie(w, access.ConnectCookie("", s.sessions.Secure(), 0))
 	store := s.console.deps.GitHubCatalogueApps
 	record, key, created, err := store.Get(r.Context(), entry.ID)
 	if err != nil || !created || key == "" {
@@ -1845,7 +1845,7 @@ func (s *ConsoleServer) githubRunnerCallback(w http.ResponseWriter, r *http.Requ
 		s.githubProblem(w, r, http.StatusConflict, "The App was created; start Create again to install it.", err.Error(), nil)
 		return
 	}
-	http.SetCookie(w, access.ConnectCookie(state, s.sessions.Secure(), githubFlowWindow))
+	access.SetCookie(w, access.ConnectCookie(state, s.sessions.Secure(), githubFlowWindow))
 	http.Redirect(w, r, githubapp.InstallURL(registration.Slug, state), http.StatusFound)
 }
 
@@ -1857,7 +1857,7 @@ func (s *ConsoleServer) githubRunnerSetup(w http.ResponseWriter, r *http.Request
 	if !ok {
 		return
 	}
-	http.SetCookie(w, access.ConnectCookie("", s.sessions.Secure(), 0))
+	access.SetCookie(w, access.ConnectCookie("", s.sessions.Secure(), 0))
 	store := s.console.deps.GitHubRunnerApps
 	record, created, err := s.console.runnerApp(r.Context(), tier, org)
 	key, hasKey, keyErr := store.PrivateKey(r.Context(), tier, org)

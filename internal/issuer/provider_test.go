@@ -101,3 +101,34 @@ func TestATokenSaysHowThePersonWasProved(t *testing.T) {
 		})
 	}
 }
+
+func TestNormalizeACRReadsEitherSpelling(t *testing.T) {
+	t.Parallel()
+
+	for in, want := range map[string]string{
+		"urn:truvity:access-roster:acr:directory": ACRDirectory,
+		"urn:truvity:access-roster:acr:recovery":  ACRRecovery,
+		ACRDirectory:                              ACRDirectory,
+		"urn:other":                               "urn:other",
+	} {
+		if got := NormalizeACR(in); got != want {
+			t.Errorf("NormalizeACR(%q) = %q, want %q", in, got, want)
+		}
+	}
+
+	if ACRDirectory != "urn:truvity:sluis:acr:directory" || ACRRecovery != "urn:truvity:sluis:acr:recovery" {
+		t.Errorf("tokens carry %q and %q", ACRDirectory, ACRRecovery)
+	}
+
+	want := map[string]bool{
+		ACRDirectory: true, ACRRecovery: true,
+		"urn:truvity:access-roster:acr:directory": true, "urn:truvity:access-roster:acr:recovery": true,
+	}
+	for _, v := range servedACRValues {
+		delete(want, v)
+	}
+
+	if len(want) != 0 {
+		t.Errorf("discovery lacks %v", want)
+	}
+}

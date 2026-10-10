@@ -31,7 +31,7 @@ const (
 	OutcomeFailed = "failed"
 )
 
-const meterName = "github.com/truvity/access-roster/rails"
+const meterName = "github.com/truvity/sluis/rails"
 
 type instruments struct {
 	ticks       telemetry.Int64Counter

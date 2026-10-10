@@ -94,7 +94,7 @@ func keep(in []attribute.KeyValue) []attribute.KeyValue {
 
 // TracerName is the instrumentation scope of the spans this repository starts
 // itself.
-const TracerName = "github.com/truvity/access-roster"
+const TracerName = "github.com/truvity/sluis"
 
 // Tracer is the repository's tracer, on whatever provider is global: a no-op
 // until [Start] installs one.
@@ -147,7 +147,7 @@ func HTTPHandler(next http.Handler, service string, route func(*http.Request) st
 	)
 }
 
-const httpMeterName = "github.com/truvity/access-roster/http"
+const httpMeterName = "github.com/truvity/sluis/http"
 
 type httpInstruments struct {
 	requests Int64Counter

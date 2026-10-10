@@ -35,10 +35,10 @@ import (
 // callback, and the other way round. Its own name keeps each flow's state
 // in a cookie only that flow sets and reads.
 const (
-	ConnectCookieName  = "access_roster_connect"
-	LoginCookieName    = "access_roster_login"
-	LinkCookieName     = "access_roster_link"
-	RecoveryCookieName = "access_roster_recovery"
+	ConnectCookieName  = "sluis_connect"
+	LoginCookieName    = "sluis_login"
+	LinkCookieName     = "sluis_link"
+	RecoveryCookieName = "sluis_recovery"
 )
 
 // RecoveryPurpose is what a recovery form's state carries as its
@@ -124,7 +124,7 @@ func RecoveryStartedHere(r *http.Request, state string, secure bool) bool {
 // POST carry it. Compared in constant time, because the cookie is the half
 // of the pair an attacker does not have.
 func startedHere(r *http.Request, name, state string, secure bool) bool {
-	cookie, err := r.Cookie(CookieNameFor(name, secure))
+	cookie, err := ReadCookie(r, name, secure)
 
 	return err == nil && cookie.Value != "" && state != "" &&
 		subtle.ConstantTimeCompare([]byte(cookie.Value), []byte(state)) == 1

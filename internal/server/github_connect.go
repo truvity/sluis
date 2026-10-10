@@ -287,7 +287,7 @@ func (s *ConsoleServer) githubCallback(w http.ResponseWriter, r *http.Request) {
 		s.githubProblem(w, r, http.StatusConflict, "The App was created; start Connect again to install it.", err.Error(), nil)
 		return
 	}
-	http.SetCookie(w, access.ConnectCookie(state, s.sessions.Secure(), githubFlowWindow))
+	access.SetCookie(w, access.ConnectCookie(state, s.sessions.Secure(), githubFlowWindow))
 	http.Redirect(w, r, githubapp.InstallURL(registration.Slug, state), http.StatusFound)
 }
 
@@ -300,7 +300,7 @@ func (s *ConsoleServer) githubSetup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// The flow ends here whichever way it goes.
-	http.SetCookie(w, access.ConnectCookie("", s.sessions.Secure(), 0))
+	access.SetCookie(w, access.ConnectCookie("", s.sessions.Secure(), 0))
 	store := s.console.deps.GitHubOrgs
 	if store == nil {
 		s.githubProblem(w, r, http.StatusConflict, "This deployment keeps no connected organisations.", "", nil)
@@ -382,7 +382,7 @@ func (s *ConsoleServer) githubFlowFor(w http.ResponseWriter, r *http.Request, pr
 // the owner the flow was begun to record.
 func (s *ConsoleServer) githubBound(w http.ResponseWriter, r *http.Request) (bind, actor, owner string, ok bool) {
 	state := r.URL.Query().Get("state")
-	cookie, err := r.Cookie(access.CookieNameFor(access.ConnectCookieName, s.sessions.Secure()))
+	cookie, err := access.ReadCookie(r, access.ConnectCookieName, s.sessions.Secure())
 	if err != nil || cookie.Value == "" || subtle.ConstantTimeCompare([]byte(cookie.Value), []byte(state)) != 1 {
 		s.githubProblem(w, r, http.StatusBadRequest, "This connect did not start in this browser.", "", []string{
 			"It was started in another browser, profile or private window.",

@@ -15,7 +15,7 @@ import (
 // form's state carry the same authorization request, and neither may be
 // presented where an acceptance is asked for (docs/decisions/0040-agent-class-sessions.md,
 // decision 6).
-const AgentConsentCookieName = "access_roster_agent_consent"
+const AgentConsentCookieName = "sluis_agent_consent"
 
 // AgentConsentPurpose is what an acceptance token carries as its
 // [Binding.Owner]. A provider round trip's state carries none, a legacy
@@ -74,7 +74,7 @@ type AgentConsent struct {
 // form posted, and the acceptance cookie the browser sent with it.
 func AgentConsentPresented(r *http.Request, state string, secure bool) AgentConsent {
 	consent := AgentConsent{state: state}
-	if cookie, err := r.Cookie(CookieNameFor(AgentConsentCookieName, secure)); err == nil {
+	if cookie, err := ReadCookie(r, AgentConsentCookieName, secure); err == nil {
 		consent.cookie = cookie.Value
 	}
 
