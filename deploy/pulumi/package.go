@@ -45,8 +45,8 @@ type releasePackage struct {
 	Name, Version string
 }
 
-// releaseName matches the release zips: the all-in-one sluis-lambda_<version>
-// (deprecated) and the per-module sluis-<module>_<version> zips.
+// releaseName matches the release zips: the per-module sluis-<module>_<version>
+// zips, and the sluis-lambda_<version> zip of releases before 1.75.
 var releaseName = regexp.MustCompile(`^sluis-(?:lambda|issuer|cloudflare|backup)_v?(.+)_linux_[a-z0-9]+\.zip$`)
 
 // packageRelease is the release a package is: the explicit version, else the one
@@ -146,7 +146,7 @@ func readZip(raw []byte) (map[string]zipEntry, error) {
 		out[name] = zipEntry{mode: f.Mode().Perm(), body: body}
 	}
 	if e, ok := out["bootstrap"]; !ok || len(e.body) == 0 {
-		return nil, errors.New("sluispulumi: Package has no `bootstrap` at its root: pass the release's sluis-lambda_<version>_linux_arm64.zip")
+		return nil, errors.New("sluispulumi: Package has no `bootstrap` at its root: pass the release's sluis-<module>_<version>_linux_arm64.zip")
 	}
 	return out, nil
 }

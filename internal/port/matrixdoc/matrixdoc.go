@@ -18,7 +18,7 @@ import (
 
 	// Adapters that only another binary imports. The matrix must see every
 	// adapter ANY binary registers, or it marks a built one as planned (the
-	// invoke trigger is imported by cmd/sluis-lambda alone, and the matrix
+	// invoke trigger is imported by the Lambda mains alone, and the matrix
 	// said "on request" for it). TestEveryRegisteringPackageIsInTheMatrix
 	// fails when a package that registers an adapter is missing from here.
 	_ "github.com/truvity/sluis/internal/port/invoke"

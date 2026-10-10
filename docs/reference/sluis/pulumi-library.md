@@ -214,7 +214,7 @@ See [AWS Lambda](lambda.md) and [the concept](../../concepts/sluis/lambda.md).
 l, _ := sluispulumi.NewLambda(ctx, "access", &sluispulumi.LambdaArgs{
 	Region: "eu-central-1", AccountID: accountID,
 	Instance:      "acme",    // the SSM root /sluis/acme
-	Package:       "dist/sluis-lambda_1.63.0_linux_arm64.zip", // or an https URL
+	Package:       "dist/sluis-issuer_1.75.0_linux_arm64.zip", // or an https URL
 	PackageSHA256: "<the release's digest, pinned here>",
 	Installation:  installation, // *sluisconfig.Installation: the library renders both documents from it
 	Storage:       store.Grant(),
@@ -328,7 +328,7 @@ l, _ := sluispulumi.NewLambda(ctx, "access", &sluispulumi.LambdaArgs{
 
 | Behavior | Rule |
 |---|---|
-| `Package` empty | Deploys the library's own release from `<BaseURL>/v<version>/sluis-lambda_<version>_linux_arm64.zip`. A pinned digest wins. `(devel)`, pseudo-versions and replaced modules are refused |
+| `Package` empty | Deploys the library's own release from `<BaseURL>/v<version>/sluis-issuer_<version>_linux_arm64.zip` (`NewBackup` and `NewRestore`: `sluis-backup_<version>_linux_arm64.zip`). A library at version X expects release X's per-module zips; the single `sluis-lambda` zip is no longer published. A pinned digest wins. `(devel)`, pseudo-versions and replaced modules are refused |
 | Cache | `os.UserCacheDir()/sluis/artifacts`; `GITHUB_TOKEN` goes to github.com |
 
 ### Audit

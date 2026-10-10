@@ -1,6 +1,6 @@
 // Package backupfn is the backup module's Lambda function, and the restore
 // function of the same zip (`backup.role: restore`). It registers itself with
-// internal/lambdaapp; cmd/sluis-backup and the deprecated cmd/sluis-lambda import it.
+// internal/lambdaapp; cmd/sluis-backup and the lambda build of cmd/sluis import it.
 package backupfn
 
 import (

@@ -33,7 +33,7 @@ func releaseZips(t *testing.T) []zipEntry {
 		}
 		out = append(out, zipEntry{fields[0], fields[1]})
 	}
-	if len(out) < 4 {
+	if len(out) < 3 {
 		t.Fatalf("release-zips.txt lists %d zips: it read the wrong thing", len(out))
 	}
 	return out

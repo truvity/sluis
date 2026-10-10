@@ -1,7 +1,7 @@
 // Package issuerfn is the issuer module's Lambda function: the issuer, the
 // signer and the console in one process (docs/decisions/0072), assembled from
 // the same pieces the Kubernetes process is. It registers itself with
-// internal/lambdaapp; cmd/sluis-issuer and the deprecated cmd/sluis-lambda
+// internal/lambdaapp; cmd/sluis-issuer and the lambda build of cmd/sluis
 // import it.
 package issuerfn
 

@@ -96,7 +96,7 @@ func deps(t *testing.T, pkg string) map[string]bool {
 // TestEveryRegisteringPackageIsInTheMatrix fails when a package that
 // registers an adapter is not linked into the generator. The generator sees
 // only what its own binary imports, so an adapter that only another binary
-// imports (invoke, only in cmd/sluis-lambda) was documented as planned.
+// imports (invoke, only in the Lambda mains) was documented as planned.
 func TestEveryRegisteringPackageIsInTheMatrix(t *testing.T) {
 	regs := registrants(t)
 	if len(regs) < 5 {

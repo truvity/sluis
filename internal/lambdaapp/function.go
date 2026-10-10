@@ -23,7 +23,7 @@
 // reading secrets from SSM at cold start. The controllers named in the service
 // document (`controllers`) do not run their loops here: each is assembled per
 // invocation that needs it. It names no cluster, NATS or Valkey client, and
-// cmd/sluis-lambda's import guard keeps it so.
+// cmd/sluis's lambda-build import guard and internal/boundaries keep it so.
 package lambdaapp
 
 import (

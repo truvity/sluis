@@ -12,9 +12,8 @@ import (
 	"github.com/truvity/sluis/internal/version"
 )
 
-// Start is the Lambda entry of the deprecated all-in-one zip (cmd/sluis-lambda
-// and the lambda build of cmd/sluis): it opens the function from the
-// environment, whichever module the document is for, and serves API Gateway
+// Start is the Lambda entry of the lambda build of cmd/sluis: it opens the function from the
+// environment, whichever linked module the document is for, and serves API Gateway
 // events and scheduler ticks until the runtime stops it.
 func Start() { serve(Open) }
 

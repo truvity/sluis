@@ -101,7 +101,7 @@ type LambdaArgs struct {
 	// Lower-case letters, digits and dashes. Required.
 	Instance string
 
-	// Package is the released zip, `sluis-lambda_<version>_linux_arm64.zip`, with
+	// Package is the released zip, `sluis-issuer_<version>_linux_arm64.zip`, with
 	// `bootstrap` at its root: a path on disk or an https URL, read when the
 	// stack is evaluated. It is the functions' code byte for byte: nothing is
 	// added to it. Left empty, it is the release of this library itself: the
@@ -825,7 +825,7 @@ func (a *LambdaArgs) validate() (LambdaArgs, error) {
 		if out.Release != nil {
 			base = out.Release.BaseURL
 		}
-		out.Package = artifact.AssetURL(base, v, "sluis-lambda_"+v+"_linux_arm64.zip")
+		out.Package = artifact.AssetURL(base, v, "sluis-issuer_"+v+"_linux_arm64.zip")
 		if out.PackageVersion == "" {
 			out.PackageVersion = v
 		}

@@ -400,7 +400,7 @@ func resolvePackage(c *BackupCommon) error {
 	if c.Release != nil {
 		base = c.Release.BaseURL
 	}
-	c.Package = artifact.AssetURL(base, v, "sluis-lambda_"+v+"_linux_arm64.zip")
+	c.Package = artifact.AssetURL(base, v, "sluis-backup_"+v+"_linux_arm64.zip")
 	if c.PackageVersion == "" {
 		c.PackageVersion = v
 	}

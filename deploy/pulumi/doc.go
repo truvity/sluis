@@ -23,7 +23,7 @@
 //	}, pulumi.Providers(aws))
 //	l, err := sluispulumi.NewLambda(ctx, "access", &sluispulumi.LambdaArgs{
 //		Region: "eu-central-1", AccountID: accountID, Instance: "acme",
-//		Package:        "sluis-lambda_1.63.0_linux_arm64.zip", // a path or an https URL
+//		Package:        "sluis-issuer_1.75.0_linux_arm64.zip", // a path or an https URL
 //		PackageSHA256:  releaseSHA256,                         // from the release's checksums
 //		Config:         sluisYAML, // the v3 service document, controllers included
 //		PolicyPath:     "policy/", // or Policy: a rendered document

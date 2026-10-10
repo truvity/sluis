@@ -729,8 +729,8 @@ func clientEndpoint(path []string) bool {
 // SLUIS_ROLE). An older package does not start on what this library renders.
 const MinPackageVersion = "1.63"
 
-// The release zip's name: sluis-lambda_<version>_linux_<arch>.zip (deprecated), or
-// sluis-<module>_<version>_linux_<arch>.zip for issuer, cloudflare and backup.
+// The release zip's name: sluis-<module>_<version>_linux_<arch>.zip for issuer, cloudflare and
+// backup, or sluis-lambda_<version>_linux_<arch>.zip for a release before 1.75.
 var packageName = regexp.MustCompile(`^sluis-(?:lambda|issuer|cloudflare|backup)_v?([0-9]+)\.([0-9]+)\.[0-9]+[^_]*_linux_[a-z0-9]+\.zip$`)
 
 // checkVersion refuses a package older than this library: older than

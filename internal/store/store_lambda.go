@@ -4,7 +4,7 @@ package store
 
 // The Lambda build's storage: the memory adapter (tests) and DynamoDB, with S3
 // for blobs and KMS for the sealer. There is no cluster, no Valkey and no NATS,
-// and none of their clients is linked in: cmd/sluis-lambda's import guard holds
+// and none of their clients is linked in: internal/boundaries' zip guard holds
 // the binary to it.
 
 import (

@@ -30,7 +30,6 @@ fixture() {
   zipof issuer 'ELF sluis-module=issuer ELF'
   zipof cloudflare 'ELF sluis-module=cloudflare ELF'
   zipof backup 'ELF sluis-module=backup ELF'
-  zipof lambda 'ELF unpinned ELF'
   sums
 }
 fixture
@@ -48,15 +47,12 @@ printf 'tampered\n' >> "$dir/sluis_1.0.0_linux_amd64.tar.gz"
 expect_failure "tampered asset" "SHA-256"
 printf 'one\n' > "$dir/sluis_1.0.0_linux_amd64.tar.gz"
 
-# A module zip that is not pinned, or pinned to another module, or a legacy
-# zip that carries a pin, would run as a module it was not built for.
+# A module zip that is not pinned, or pinned to another module, would run as
+# a module it was not built for.
 zipof issuer 'ELF no pin ELF'; sums
 expect_failure "an unpinned module zip" "is not pinned to its module"
 zipof issuer 'ELF sluis-module=issuer sluis-module=backup ELF'; sums
 expect_failure "a zip with another module's pin" "carries the pin of module backup"
-fixture
-zipof lambda 'ELF sluis-module=issuer ELF'; sums
-expect_failure "a pinned legacy zip" "carries the pin of module issuer"
 fixture
 
 # Every zip is in checksums.txt, or the pin is not a pin.
@@ -69,7 +65,7 @@ sums
 expect_failure "a module with no zip" "exactly one sluis-backup"
 fixture
 
-rm "$dir/sluis-lambda_1.0.0_linux_arm64.zip"
+rm "$dir/sluis-cloudflare_1.0.0_linux_arm64.zip"
 # The zip is listed in checksums.txt and no longer an asset.
 expect_failure "missing asset" "not an asset"
 fixture
