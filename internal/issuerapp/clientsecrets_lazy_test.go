@@ -37,16 +37,15 @@ func (c *countingSecrets) reads() int {
 	return c.gets
 }
 
-// A Lambda start reads no generated client's record: a herd of cold starts
+// A start reads no generated client's record: a herd of cold starts
 // would read one per client each, and SSM throttles a herd. The scheduled pass
 // settles them, and the token endpoint reads a record once when its client
 // first authenticates, then reuses it within the resolver's cache.
-func TestAStartThatSkipsTheSecretsPassReadsNoRecordAndTheTickSettlesThem(t *testing.T) {
+func TestAStartReadsNoRecordAndTheTickSettlesThem(t *testing.T) {
 	counted := &countingSecrets{Secrets: memory.NewSecrets()}
 	app, err := tryBoot(t, issuerapp.Deps{
-		Directory:            nobody{},
-		Stores:               withSecrets(counted, "memory"),
-		SkipStartSecretsPass: true,
+		Directory: nobody{},
+		Stores:    withSecrets(counted, "memory"),
 	}, replacePolicy(t, generatingPolicy))
 	if err != nil {
 		t.Fatal(err)
@@ -55,7 +54,7 @@ func TestAStartThatSkipsTheSecretsPassReadsNoRecordAndTheTickSettlesThem(t *test
 		t.Fatalf("start made %d secrets reads, want 0", n)
 	}
 	if _, err = counted.Secrets.Get(context.Background(), clientcreds.Path("grafana")); err == nil {
-		t.Fatal("a record exists after a start that skipped the pass")
+		t.Fatal("a record exists after a start")
 	}
 
 	res := app.ReconcileClientSecrets(context.Background())
@@ -78,9 +77,8 @@ func TestTheFirstTokenRequestOfAClientReadsItsRecordOnceAndTheNextReadsNothing(t
 	}
 	counted := &countingSecrets{Secrets: mem}
 	app, err := tryBoot(t, issuerapp.Deps{
-		Directory:            nobody{},
-		Stores:               withSecrets(counted, "memory"),
-		SkipStartSecretsPass: true,
+		Directory: nobody{},
+		Stores:    withSecrets(counted, "memory"),
 	}, replacePolicy(t, generatingPolicy))
 	if err != nil {
 		t.Fatal(err)

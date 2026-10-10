@@ -53,8 +53,11 @@ func TestReconcileClientSecretsIsTheIssuersPass(t *testing.T) {
 	app := bootWithPolicy(t, `  grafana: { kind: confidential, secret: { generate: true }, requires: [all:access-roster:operator] }
   argocd:  { kind: confidential, secret: argocd-oidc, requires: [all:access-roster:operator] }
 `)
-	// New made the record once; a scheduled pass finds it, for the generated
-	// client only.
+	// New makes no record; the first scheduled pass makes it and the next finds
+	// it, for the generated client only.
+	if res := app.ReconcileClientSecrets(context.Background()); res.Outcomes["grafana"] != clientcreds.OutcomeCreated {
+		t.Fatalf("first pass = %+v", res)
+	}
 	res := app.ReconcileClientSecrets(context.Background())
 	if len(res.Outcomes) != 1 || res.Outcomes["grafana"] != clientcreds.OutcomeExisting || res.Failed() != 0 {
 		t.Errorf("res = %+v", res)
@@ -105,6 +108,9 @@ func TestAGeneratedClientStartsWithMemorySecretsBesideANonSharedState(t *testing
 		t.Fatalf("New: %v", err)
 	}
 	t.Cleanup(app.Close)
+	if res := app.ReconcileClientSecrets(context.Background()); res.Outcomes["grafana"] != clientcreds.OutcomeCreated {
+		t.Fatalf("first pass = %+v", res)
+	}
 	res := app.ReconcileClientSecrets(context.Background())
 	if len(res.Outcomes) != 1 || res.Outcomes["grafana"] != clientcreds.OutcomeExisting {
 		t.Errorf("res = %+v", res)

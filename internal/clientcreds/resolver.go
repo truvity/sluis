@@ -58,6 +58,14 @@ type Resolver struct {
 
 	mu    sync.Mutex
 	cache map[string]cached
+	// inputs are the input secrets read, for [CacheTTL]: a source that does
+	// not cache (layout v5's) would otherwise be read on every request.
+	inputs map[string]inputRead
+}
+
+type inputRead struct {
+	secrets Secrets
+	at      time.Time
 }
 
 type cached struct {
@@ -83,7 +91,7 @@ func NewResolver(store port.Secrets, input Input, log *slog.Logger) *Resolver {
 	if log == nil {
 		log = slog.Default()
 	}
-	return &Resolver{store: store, input: input, log: log, now: time.Now, cache: map[string]cached{}}
+	return &Resolver{store: store, input: input, log: log, now: time.Now, cache: map[string]cached{}, inputs: map[string]inputRead{}}
 }
 
 // Forget drops what is cached for a client, so the next [Resolver.Resolve]
@@ -91,6 +99,7 @@ func NewResolver(store port.Secrets, input Input, log *slog.Logger) *Resolver {
 func (r *Resolver) Forget(clientID string) {
 	r.mu.Lock()
 	delete(r.cache, clientID)
+	delete(r.inputs, clientID)
 	r.mu.Unlock()
 }
 
@@ -108,6 +117,9 @@ func (r *Resolver) Reread(ctx context.Context, clientID string) (Secrets, bool) 
 	fresh := ok && !c.unavailable && r.now().Sub(c.good) < RereadFloor
 	if !fresh {
 		delete(r.cache, clientID)
+	}
+	if in, read := r.inputs[clientID]; read && r.now().Sub(in.at) >= RereadFloor {
+		delete(r.inputs, clientID)
 	}
 	r.mu.Unlock()
 	return r.Resolve(ctx, clientID)
@@ -145,6 +157,13 @@ func (r *Resolver) fromInput(ctx context.Context, clientID string) (Secrets, boo
 	if secrets.Check(name) != nil {
 		return Secrets{}, false
 	}
+	now := r.now()
+	r.mu.Lock()
+	in, read := r.inputs[clientID]
+	r.mu.Unlock()
+	if read && now.Sub(in.at) < CacheTTL {
+		return in.secrets, true
+	}
 	value, err := r.input.Get(ctx, name)
 	if err != nil {
 		if !errors.Is(err, secrets.ErrNotFound) {
@@ -153,7 +172,11 @@ func (r *Resolver) fromInput(ctx context.Context, clientID string) (Secrets, boo
 		}
 		return Secrets{}, false
 	}
-	return Secrets{Current: value}, true
+	out := Secrets{Current: value}
+	r.mu.Lock()
+	r.inputs[clientID] = inputRead{secrets: out, at: now}
+	r.mu.Unlock()
+	return out, true
 }
 
 type recordState int

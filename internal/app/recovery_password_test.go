@@ -54,15 +54,19 @@ func TestTheRecoveryPasswordIsReadFromItsSecret(t *testing.T) {
 		t.Errorf("turning recovery off touched the password file: %v", err)
 	}
 
+	// Opening reads nothing, so a password that is empty or absent is refused
+	// by the first proof, naming the key.
 	if err = os.WriteFile(filepath.Join(dir, "recovery", "empty"), []byte(" \n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = openRecovery(ctx, Config{recoveryEnabled: true, recoveryLogin: "recovery/empty"}, stores{}, src, nil, log); err == nil ||
-		!strings.Contains(err.Error(), "recovery.passwordSecret") {
-		t.Errorf("an empty password = %v, want a refusal naming the key", err)
-	}
-	if _, err = openRecovery(ctx, Config{recoveryEnabled: true, recoveryLogin: "recovery/absent"}, stores{}, src, nil, log); err == nil {
-		t.Error("a missing password was not refused")
+	for _, name := range []string{"recovery/empty", "recovery/absent"} {
+		r, err := openRecovery(ctx, Config{recoveryEnabled: true, recoveryLogin: name}, stores{}, src, nil, log)
+		if err != nil || r == nil {
+			t.Fatalf("%s: opening read the password: %v, %v", name, r, err)
+		}
+		if _, err = r.Verify(ctx, "anything"); err == nil || !strings.Contains(err.Error(), "recovery.passwordSecret") {
+			t.Errorf("%s: a proof = %v, want a refusal naming the key", name, err)
+		}
 	}
 }
 

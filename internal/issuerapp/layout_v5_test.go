@@ -101,9 +101,10 @@ func TestBareSigningAdaptersOnLayoutV5(t *testing.T) {
 	})
 }
 
-// The state secret's fingerprint is kept in the oidc module's shared State, and
-// a replica with another secret is refused, as on layout v4.
-func TestTheStateSecretFingerprintOnLayoutV5(t *testing.T) {
+// Assembling the issuer neither writes nor checks the state secret's
+// fingerprint, whatever secret the replica holds: the check is made at the
+// first sign-in (see TestTheStateSecretIsCheckedAtTheFirstSignIn).
+func TestAssemblingTheIssuerChecksNoStateSecretFingerprint(t *testing.T) {
 	ctx := context.Background()
 	shared, err := store.Open(ctx, store.Config{
 		Adapter: store.AdapterMemory, Module: port.ModuleOIDC, SecretsSSM: true, SecretsLayout: config.SecretsLayoutV5,
@@ -121,53 +122,37 @@ func TestTheStateSecretFingerprintOnLayoutV5(t *testing.T) {
 			replacePolicy(t, plainPolicy), wrappedConfig(t, &config.SigningKeyKMSWrapped{Algorithms: []string{"ES384"}}))
 		return err
 	}
-	_, _, a := v5Stores(nil)
-	seedStateSecret(t, a)
-	if err = boot(a); err != nil {
-		t.Fatal(err)
+	for range 2 {
+		_, _, v5 := v5Stores(nil)
+		seedStateSecret(t, v5)
+		if err = boot(v5); err != nil {
+			t.Fatalf("a start with another secret: %v", err)
+		}
 	}
-	if _, err = shared.Ports.State.Get(ctx, "issuer:kms:state-secret-fingerprint"); err != nil {
-		t.Errorf("the fingerprint is not in the oidc table: %v", err)
-	}
-	if err = boot(a); err != nil {
-		t.Errorf("a replica with the same secret: %v", err)
-	}
-	_, _, other := v5Stores(nil)
-	seedStateSecret(t, other)
-	if err = boot(other); err == nil || !strings.Contains(err.Error(), "fingerprint mismatch") {
-		t.Errorf("a replica with another secret = %v", err)
+	if _, err = shared.Ports.State.Get(ctx, "issuer:kms:state-secret-fingerprint"); err == nil {
+		t.Error("a start wrote the fingerprint")
 	}
 }
 
-// The Google sign-in client is internal/oidc/signin/google/client-id and
-// client-secret.
-func TestTheSignInClientOnLayoutV5(t *testing.T) {
-	ctx := context.Background()
-	st, rec, v5 := v5Stores(nil)
-	if _, err := v5.OIDC().SignInClientID("google").Put(ctx, []byte("client-id.example"), ""); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := v5.OIDC().SignInClientSecret("google").Put(ctx, []byte("client-secret-value"), ""); err != nil {
-		t.Fatal(err)
-	}
+// Assembling the issuer reads no sign-in client, on a source that has one or
+// not: the client is read when a browser is first sent to Google (see
+// TestTheSignInClientIsReadAtTheFirstSignIn).
+func TestAssemblingTheIssuerReadsNoSignInClient(t *testing.T) {
+	st, rec, _ := v5Stores(nil)
 	rec.Reset()
-	app := bootDeps(t, issuerapp.Deps{Directory: nobody{}, Stores: st}, func(f *config.Serve) {
+	if app := bootDeps(t, issuerapp.Deps{Directory: nobody{}, Stores: st}, func(f *config.Serve) {
 		f.OAuthClient = &config.OAuthClient{Provider: "google"}
-	})
-	if app == nil {
+	}); app == nil {
 		t.Fatal("no app")
 	}
-	want := []string{"internal/oidc/signin/google/client-id", "internal/oidc/signin/google/client-secret"}
-	if got := rec.Addresses("get"); !slices.Equal(got, want) {
-		t.Errorf("read %v, want %v", got, want)
+	if got := rec.Addresses("get"); len(got) != 0 {
+		t.Errorf("assembling read %v, want nothing", got)
 	}
-
 	missing, _, _ := v5Stores(nil)
-	_, err := tryBoot(t, issuerapp.Deps{Directory: nobody{}, Stores: missing}, replacePolicy(t, plainPolicy), func(f *config.Serve) {
+	if _, err := tryBoot(t, issuerapp.Deps{Directory: nobody{}, Stores: missing}, replacePolicy(t, plainPolicy), func(f *config.Serve) {
 		f.OAuthClient = &config.OAuthClient{Provider: "google"}
-	})
-	if err == nil || !strings.Contains(err.Error(), "internal/oidc/signin/google/client-id") {
-		t.Errorf("a missing client = %v, want a refusal that names the address", err)
+	}); err != nil {
+		t.Errorf("a missing client stopped the start: %v", err)
 	}
 }
 
@@ -187,6 +172,7 @@ func TestGeneratedClientSecretsOnLayoutV5(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	app.StartPassForTest(ctx) // what Run does before it serves
 	doc, _, err := v5.OIDCExternal().Client("grafana").Get(ctx)
 	if err != nil || doc.ClientID != "grafana" || doc.ClientSecret != "delivered-secret" {
 		t.Fatalf("external/oidc/grafana = %+v, %v (the delivered input is adopted)", doc, err)

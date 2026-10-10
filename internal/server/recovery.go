@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/subtle"
 	"errors"
 	"fmt"
@@ -12,6 +13,8 @@ import (
 	"time"
 
 	"golang.org/x/crypto/argon2"
+
+	"github.com/truvity/sluis/internal/lazy"
 )
 
 // Recovery is the way in when the ordinary one is broken: nobody is in the
@@ -208,6 +211,12 @@ type PasswordRecovery struct {
 
 	salt   []byte
 	digest []byte
+	// password, when set, is where a lazily opened recovery reads the password:
+	// on the first proof, and again after its time to live. seen is the
+	// SHA-256 of the password the digest was made from, so that a changed
+	// password is digested again and an unchanged one is not.
+	password *lazy.Value[string]
+	seen     [sha256.Size]byte
 
 	mu       sync.Mutex
 	failures int
@@ -231,6 +240,39 @@ func NewPasswordRecovery(password string) *PasswordRecovery {
 	}
 }
 
+// NewLazyPasswordRecovery returns the password shape over a password that is
+// read when the first proof arrives, and read again after ttl, so that opening
+// it reads no secret and a rotated password takes effect without a restart. A
+// password that cannot be read, or is empty, refuses every proof.
+func NewLazyPasswordRecovery(ttl time.Duration, load func(context.Context) (string, error)) *PasswordRecovery {
+	p := &PasswordRecovery{password: lazy.New(ttl, load), now: time.Now}
+	p.password.SetClock(func() time.Time { return p.now() })
+	return p
+}
+
+// settle reads the password and digests it when it is new. The caller holds mu.
+func (p *PasswordRecovery) settle(ctx context.Context) error {
+	if p.password == nil {
+		return nil
+	}
+	password, err := p.password.Get(ctx)
+	if err != nil {
+		return fmt.Errorf("recovery.passwordSecret: %w", err)
+	}
+	if password == "" {
+		return errors.New("recovery.passwordSecret: the password is empty")
+	}
+	sum := sha256.Sum256([]byte(password))
+	if p.digest != nil && sum == p.seen {
+		return nil
+	}
+	salt := make([]byte, 16)
+	_, _ = rand.Read(salt)
+	p.salt, p.seen = salt, sum
+	p.digest = argon2.IDKey([]byte(password), salt, argonTime, argonMemory, argonThreads, argonLength)
+	return nil
+}
+
 // Kind implements [Recovery].
 func (p *PasswordRecovery) Kind() string { return "password" }
 
@@ -244,13 +286,16 @@ func (p *PasswordRecovery) Prompt() Prompt {
 }
 
 // Verify implements [Recovery].
-func (p *PasswordRecovery) Verify(_ context.Context, proof string) (string, error) {
+func (p *PasswordRecovery) Verify(ctx context.Context, proof string) (string, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
 	now := p.now()
 	if now.Before(p.blocked) {
 		return "", ErrRecoveryThrottled
+	}
+	if err := p.settle(ctx); err != nil {
+		return "", err
 	}
 	got := argon2.IDKey([]byte(proof), p.salt, argonTime, argonMemory, argonThreads, argonLength)
 	if subtle.ConstantTimeCompare(got, p.digest) != 1 {

@@ -1,9 +1,7 @@
 package access
 
 import (
-	"crypto/hmac"
 	"crypto/rand"
-	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base64"
 	"errors"
@@ -150,13 +148,22 @@ func flowCookie(name, value string, secure bool, ttl time.Duration) *http.Cookie
 // nothing: the state is its own record, and the cookie beside it is what
 // makes the callback the same browser's.
 type StateCodec struct {
-	key []byte
+	key KeyFunc
 	ttl time.Duration
 	now func() time.Time
 }
 
 // NewStateCodec returns a codec over the hub's session key.
 func NewStateCodec(key []byte, ttl time.Duration) *StateCodec {
+	if ttl <= 0 {
+		ttl = 10 * time.Minute
+	}
+	return &StateCodec{key: StaticKey(key), ttl: ttl, now: time.Now}
+}
+
+// NewStateCodecWith is [NewStateCodec] over a key read when a state is first
+// signed or checked, so that opening the codec reads no secret.
+func NewStateCodecWith(key KeyFunc, ttl time.Duration) *StateCodec {
 	if ttl <= 0 {
 		ttl = 10 * time.Minute
 	}
@@ -211,7 +218,11 @@ func (c *StateCodec) IssueAs(b Binding) (string, error) {
 		base64.RawURLEncoding.EncodeToString([]byte(b.Owner)),
 		strconv.FormatInt(c.now().Add(c.ttl).Unix(), 10),
 	}, ":")
-	return body + "." + c.sign(body), nil
+	signature, err := sign(c.key, body)
+	if err != nil {
+		return "", err
+	}
+	return body + "." + signature, nil
 }
 
 // Verify checks a state and returns what it was bound to.
@@ -226,17 +237,18 @@ func (c *StateCodec) VerifyBinding(state string) (Binding, error) {
 	if !ok {
 		return Binding{}, ErrBadState
 	}
-	if subtle.ConstantTimeCompare([]byte(signature), []byte(c.sign(body))) != 1 {
+	want, err := sign(c.key, body)
+	if err != nil {
+		return Binding{}, err
+	}
+	if subtle.ConstantTimeCompare([]byte(signature), []byte(want)) != 1 {
 		return Binding{}, fmt.Errorf("%w: signature", ErrBadState)
 	}
 	parts := strings.Split(body, ":")
 	// A state issued before an owner was carried has four parts: nonce,
 	// binding, actor, expiry. It lives ten minutes, so a rollout must not
 	// strand a flow begun just before it.
-	var (
-		owner []byte
-		err   error
-	)
+	var owner []byte
 	switch len(parts) {
 	case 4:
 		parts = []string{parts[0], parts[1], parts[2], "", parts[3]}
@@ -263,10 +275,4 @@ func (c *StateCodec) VerifyBinding(state string) (Binding, error) {
 		return Binding{}, fmt.Errorf("%w: actor", ErrBadState)
 	}
 	return Binding{Bind: string(bind), Actor: string(actor), Owner: string(owner)}, nil
-}
-
-func (c *StateCodec) sign(body string) string {
-	mac := hmac.New(sha256.New, c.key)
-	mac.Write([]byte(body))
-	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 }

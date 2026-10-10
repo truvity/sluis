@@ -44,10 +44,31 @@ type KeptForTest struct {
 	OAuthClient settings.OAuthClient
 }
 
+// LazyKeptForTest is what the stores hold, with the secrets not yet read.
+type LazyKeptForTest struct {
+	SessionKey  func() ([]byte, error)
+	OAuthClient func(context.Context) (settings.OAuthClient, error)
+}
+
+// OpenStoresLazyForTest opens the stores and reads no secret: the session key
+// and the declared OAuth client are read by the functions it returns.
+func OpenStoresLazyForTest(ctx context.Context, cfg Config, st *store.Stores, log *slog.Logger) (LazyKeptForTest, error) {
+	declared, err := declaredOAuthSettings(cfg.oauthClient, st.Secrets)
+	if err != nil {
+		return LazyKeptForTest{}, err
+	}
+	cfg.oauthDeclared = declared
+	kept, err := openStores(ctx, cfg, st, log)
+	if err != nil {
+		return LazyKeptForTest{}, err
+	}
+	return LazyKeptForTest{SessionKey: kept.sessionKey, OAuthClient: kept.settings.OAuthClient}, nil
+}
+
 // OpenStoresForTest runs the one switch between the kube-backed domain stores
 // and the port-backed ones.
 func OpenStoresForTest(ctx context.Context, cfg Config, st *store.Stores, log *slog.Logger) (KeptForTest, error) {
-	declared, err := declaredOAuthClient(ctx, cfg.oauthClient, st.Secrets)
+	declared, err := declaredOAuthSettings(cfg.oauthClient, st.Secrets)
 	if err != nil {
 		return KeptForTest{}, err
 	}
@@ -60,9 +81,13 @@ func OpenStoresForTest(ctx context.Context, cfg Config, st *store.Stores, log *s
 	if err != nil {
 		return KeptForTest{}, err
 	}
+	sessionKey, err := kept.sessionKey()
+	if err != nil {
+		return KeptForTest{}, err
+	}
 	return KeptForTest{
 		OAuthClient: client,
 		Workspaces:  kept.workspaces, Credentials: kept.credentials, GitHubOrgs: kept.githubOrgs != nil,
-		GitHubLinks: kept.githubLinks != nil, SlackShared: kept.slackShared != nil, SessionKey: kept.sessionKey,
+		GitHubLinks: kept.githubLinks != nil, SlackShared: kept.slackShared != nil, SessionKey: sessionKey,
 	}, nil
 }
