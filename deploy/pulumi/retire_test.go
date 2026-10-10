@@ -154,3 +154,20 @@ func TestRetiringTakesTheMigrationRolesReadOfTheLegacyTable(t *testing.T) {
 		}
 	}
 }
+
+// The export reads point-in-time recovery: a live legacy table without it is
+// refused, naming the setting, before anything is exported.
+func TestRetiringIsRefusedWhileTheLegacyTableHasNoPointInTimeRecovery(t *testing.T) {
+	mockSetup = func(r *recorder) { r.noPITR = true }
+	defer func() { mockSetup = nil }()
+	rec, _, err := run(t, func(ctx *pulumi.Context, _ func(string, pulumi.StringInput)) error {
+		_, err := arp.NewStates(ctx, "access", retireArgs(legacy(), &arp.CompatArgs{DropV4: true, RetireLegacyTable: true}))
+		return err
+	})
+	if err == nil || !strings.Contains(err.Error(), "point-in-time recovery") {
+		t.Fatalf("NewStates = %v, want a refusal naming point-in-time recovery", err)
+	}
+	if len(rec.ofType(exportType)) != 0 {
+		t.Error("an export was declared")
+	}
+}

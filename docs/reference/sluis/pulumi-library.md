@@ -76,7 +76,7 @@ The table of the [DynamoDB adapter](storage-layout.md#dynamodb-the-dynamodb-stat
 | `Only` | Every module | The modules that get a table |
 | `KeyArn`, `Tags` | None | On every table |
 | `Legacy` | None | `LegacyStateArgs`: the `Name` and arguments `NewState` had; same URN, protected |
-| `Compat` | None | The function's `CompatArgs`. With `DropV4` and `RetireLegacyTable` and `Legacy` set: exports the legacy table to a private bucket that expires it after 30 days (output `legacyTableBackupArn`), turns off its deletion protection and unprotects it |
+| `Compat` | None | The function's `CompatArgs`. With `DropV4` and `RetireLegacyTable` and `Legacy` set: exports the legacy table to a private bucket that expires it after 30 days (output `legacyTableBackupArn`; refused while the live table has point-in-time recovery off), turns off its deletion protection and unprotects it |
 
 | Detail | Behavior |
 |---|---|

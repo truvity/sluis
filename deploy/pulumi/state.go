@@ -363,9 +363,20 @@ func newLegacyBackup(ctx *pulumi.Context, name string, l *LegacyStateArgs, tags 
 	}
 	// The table is looked up, not read from the resource: the resource's update is
 	// what waits for this export.
+	// The export reads point-in-time recovery, so it is refused, naming the
+	// setting, while the live table has none. The table is declared with it on
+	// (newTable), so an earlier apply of this library has turned it on.
 	tbl := dynamodb.LookupTableOutput(ctx, dynamodb.LookupTableOutputArgs{Name: pulumi.String(l.TableName)})
+	arn := pulumi.All(tbl.Arn(), tbl.PointInTimeRecovery().Enabled()).ApplyT(func(v []any) (string, error) {
+		if on, _ := v[1].(bool); !on {
+			return "", fmt.Errorf("sluispulumi: Compat.RetireLegacyTable exports the legacy table %q from point-in-time recovery, "+
+				"and the live table has it off: apply once without RetireLegacyTable (the table is declared with "+
+				"pointInTimeRecovery enabled), wait until it is enabled, then retire", l.TableName)
+		}
+		return v[0].(string), nil
+	}).(pulumi.StringOutput)
 	return dynamodb.NewTableExport(ctx, name+"-legacy-backup-export", &dynamodb.TableExportArgs{
-		TableArn:       tbl.Arn(),
+		TableArn:       arn,
 		S3Bucket:       bucket.Bucket,
 		S3Prefix:       pulumi.String(legacyBackupPrefix(l.TableName, time.Now())),
 		S3SseAlgorithm: pulumi.String("AES256"),
