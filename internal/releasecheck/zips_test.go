@@ -20,7 +20,7 @@ func releaseZips(t *testing.T) []zipEntry {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	var out []zipEntry
 	sc := bufio.NewScanner(f)
 	for sc.Scan() {
@@ -151,7 +151,8 @@ func TestTheLambdaZipsAreOnePerModuleEachPinnedToItsModule(t *testing.T) {
 		t.Fatal(err)
 	}
 	if string(want) != golden.String() {
-		t.Errorf("the Lambda zips changed; review and run UPDATE_GOLDEN=1 go test ./internal/releasecheck\n--- golden\n%s--- built from .goreleaser.yaml\n%s", want, golden.String())
+		t.Errorf("the Lambda zips changed; review and run UPDATE_GOLDEN=1 go test ./internal/releasecheck\n"+
+			"--- golden\n%s--- built from .goreleaser.yaml\n%s", want, golden.String())
 	}
 }
 
