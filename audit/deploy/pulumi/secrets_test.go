@@ -36,7 +36,7 @@ func TestNoSecretIsInAnyFunctionEnvironment(t *testing.T) {
 	for _, f := range fns {
 		for k, v := range variables(t, f) {
 			ok := k == "AUDIT_CONFIG" || k == "AUDIT_CONFIG_LAYER"
-			for _, prefix := range []string{"ACCESS_ROSTER_", "AUDIT_OTLP_", "OTEL_"} {
+			for _, prefix := range []string{"ACCESS_ROSTER_", "SLUIS_", "OTEL_"} {
 				ok = ok || strings.HasPrefix(k, prefix)
 			}
 			if !ok || keyLooksSecret.MatchString(k) || valueLooksSecret.MatchString(v) {

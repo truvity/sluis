@@ -351,11 +351,11 @@ func TestTheFunctionsRunOutsideAVPCOnArm64WithTheExtensionLayer(t *testing.T) {
 			"OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:4318",
 			"OTEL_EXPORTER_OTLP_PROTOCOL": "http/protobuf",
 			"OTEL_SERVICE_NAME":           "audit-" + strings.TrimPrefix(name, "audit-"),
-			"AUDIT_OTLP_STS_AUDIENCE":     "otlp",
-			"AUDIT_OTLP_AUDIENCE":         "otlp",
-			"AUDIT_OTLP_ISSUER":           "https://access.example.test",
-			"AUDIT_OTLP_ENDPOINT":         "https://otlp.example.test",
-			// The deprecated names, with the same values, for one minor.
+			"SLUIS_AUDIENCE":              "otlp",
+			"SLUIS_OTLP_AUDIENCE":         "otlp",
+			"SLUIS_ISSUER":                "https://access.example.test",
+			"SLUIS_OTLP_ENDPOINT":         "https://otlp.example.test",
+			// The deprecated names, with the same values, until v1.76.
 			"ACCESS_ROSTER_AUDIENCE":      "otlp",
 			"ACCESS_ROSTER_OTLP_AUDIENCE": "otlp",
 			"ACCESS_ROSTER_ISSUER":        "https://access.example.test",
@@ -381,7 +381,7 @@ func TestWithoutTelemetryThereIsNoExtensionNoEnvironmentAndNoWebIdentity(t *test
 	f := rec.one(t, "aws:lambda/function:Function", "audit-writer")
 	env := prop(f, "environment").ObjectValue()["variables"].ObjectValue()
 	for k := range env {
-		if strings.HasPrefix(string(k), "OTEL_") || strings.HasPrefix(string(k), "AUDIT_OTLP_") || strings.HasPrefix(string(k), "ACCESS_ROSTER_") {
+		if strings.HasPrefix(string(k), "OTEL_") || strings.HasPrefix(string(k), "SLUIS_") || strings.HasPrefix(string(k), "ACCESS_ROSTER_") {
 			t.Errorf("telemetry left behind: %s in %v", k, env)
 		}
 	}
@@ -506,8 +506,8 @@ func TestTheAudienceIsAParameter(t *testing.T) {
 		t.Fatal(err)
 	}
 	f := rec.one(t, "aws:lambda/function:Function", "audit-notary")
-	if v := prop(f, "environment").ObjectValue()["variables"].ObjectValue()["AUDIT_OTLP_STS_AUDIENCE"].StringValue(); v != "https://access.example.test" {
-		t.Errorf("AUDIT_OTLP_STS_AUDIENCE = %q", v)
+	if v := prop(f, "environment").ObjectValue()["variables"].ObjectValue()["SLUIS_AUDIENCE"].StringValue(); v != "https://access.example.test" {
+		t.Errorf("SLUIS_AUDIENCE = %q", v)
 	}
 	if !strings.Contains(prop(rec.one(t, "aws:iam/rolePolicy:RolePolicy", "audit-writer"), "policy").StringValue(), `"https://access.example.test"`) {
 		t.Error("the role policy does not pin the audience the function asks for")
@@ -966,11 +966,11 @@ func TestTheLegacyTelemetryNamesCanBeOmitted(t *testing.T) {
 		t.Fatal(err)
 	}
 	env := prop(rec.one(t, "aws:lambda/function:Function", "audit-writer"), "environment").ObjectValue()["variables"].ObjectValue()
-	if env["AUDIT_OTLP_ENDPOINT"].StringValue() != "https://otlp.example.test" {
+	if env["SLUIS_OTLP_ENDPOINT"].StringValue() != "https://otlp.example.test" {
 		t.Errorf("the new names are missing: %v", env)
 	}
 	for k := range env {
-		if strings.HasPrefix(string(k), "ACCESS_ROSTER_") {
+		if strings.HasPrefix(string(k), "ACCESS_ROSTER_") || strings.HasPrefix(string(k), "AUDIT_OTLP_") {
 			t.Errorf("%s is set with OmitLegacyEnv", k)
 		}
 	}

@@ -102,7 +102,7 @@ a, err := auditpulumi.New(ctx, "audit", args, pulumi.Provider(prov)) // or pulum
 | `Notary.MemoryMB`, `.TimeoutSeconds` | 256, 900 | |
 | `Telemetry` | nil | nil gives the functions no extension, no `OTEL_*` and no `sts:GetWebIdentityToken` |
 | `Telemetry.ExtensionLayerArn` | **required** with `Telemetry` | the OTLP extension, published as a layer in the account and region (by convention `audit-otlp`) |
-| `Telemetry.OmitLegacyEnv` | false | leave out the deprecated `ACCESS_ROSTER_*` names of the extension's settings, which are set beside the `AUDIT_OTLP_*` ones for one minor |
+| `Telemetry.OmitLegacyEnv` | false | leave out the deprecated `ACCESS_ROSTER_*` names of the extension's settings, which are set beside the `SLUIS_*` ones until v1.76 |
 | `Telemetry.IssuerURL`, `.OTLPEndpoint` | **required** with `Telemetry` | the issuer's base URL, and the OTLP/HTTP base URL (https) |
 | `Telemetry.STSAudience`, `.OTLPAudience` | `otlp` | the audience asked of STS, which the roles' policies pin, and the exchange's audience |
 | `Telemetry.ExtraEnv` | none | other `OTEL_*` variables |
