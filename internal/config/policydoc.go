@@ -589,7 +589,8 @@ func DeclaredSecrets(doc *Serve, pol *PolicyDocument) []DeclaredSecret {
 		out = append(out, declaredFromService(doc)...)
 	}
 	if pol != nil {
-		for id, c := range pol.Policy.Clients {
+		for id := range pol.Policy.Clients {
+			c := pol.Policy.Clients[id]
 			if c.Kind == policy.KindConfidential && c.SecretName() != "" && !c.SecretGenerated() {
 				// The layout's name for a client secret, whatever the policy calls it
 				// (internal/secrets.ClientSecret).

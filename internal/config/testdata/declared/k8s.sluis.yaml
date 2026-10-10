@@ -2,7 +2,7 @@
 # client's id in the document, a Cloudflare minter and R2 credentials.
 apiVersion: sluis.truvity.github.io/sluis/v3
 issuerURL: https://access.example
-policy: {file: testdata/declared/hive.policy.yaml}
+policy: {file: testdata/declared/k8s.policy.yaml}
 secrets: {source: ssm, root: /sluis/example}
 oauthClient: {id: example.apps.example.com, provider: example}
 signingKey: {file: /var/run/sluis/signing-key/tls.key}

@@ -34,10 +34,10 @@ func declaredFixture(t *testing.T, name string) string {
 }
 
 // The set a document and its policy declare is held to a golden for a
-// kernel-like and a hive-like installation: a rule that grows or shrinks it
+// Lambda-like and a Kubernetes-like installation: a rule that grows or shrinks it
 // is a diff here, reviewed.
 func TestTheDeclaredSetMatchesTheGolden(t *testing.T) {
-	for _, name := range []string{"kernel", "hive"} {
+	for _, name := range []string{"lambda", "k8s"} {
 		t.Run(name, func(t *testing.T) {
 			got := declaredFixture(t, name)
 			golden := filepath.Join("testdata", "declared", name+".golden")
