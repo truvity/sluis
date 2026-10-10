@@ -392,12 +392,15 @@ data:
           - example-org
     apps:
       github:
-        runnerTiers:
-          - canary
-          - large
-          - stable
-        catalogue:
+        apps:
+          - purpose: runner
+            tier: stable
+          - purpose: runner
+            tier: large
+          - purpose: runner
+            tier: canary
           - id: release
+            purpose: catalogue
             org: example-org
             permissions:
               contents: write
@@ -598,7 +601,7 @@ spec:
         # checksum per document this process reads: the service document (the
         # controllers' sections are in it) and the policy.
         checksum/config: c299c586cc9fc34a4523e44c96f2c9072a56227554fdc1d28a6c344698708a0a
-        checksum/policy: 6f89444cb6466f1e298af5e6a84ed94e91b4e91228d283041b1e26eba32ad325
+        checksum/policy: 264a1aa58a2c2090b55ab756166be63b6f0027f8aac4406a0fbc6a4525656c0a
         checksum/verify-keys: 18ec558ab1c2237d4c0fb00f26dfabc2e1a44002e46a9029553e8a19605e08cd
     spec:
       serviceAccountName: sluis

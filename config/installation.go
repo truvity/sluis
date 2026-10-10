@@ -220,14 +220,13 @@ type ExchangeGitHub struct {
 // `apps`, under the same keys.
 type Apps struct{ internal.PolicyApps }
 
-// UnmarshalJSON reads the section as the policy document does.
-// The retired `runnerTiers` and `catalogue` of the GitHub section are read as
+// UnmarshalJSON reads the section as the policy document does. The retired `runnerTiers` and `catalogue` of the GitHub section are read as
 // entries of its `apps` list, with a warning.
 func (a *Apps) UnmarshalJSON(raw []byte) error {
 	if err := decodeYAMLStrict(raw, &a.PolicyApps); err != nil {
 		return err
 	}
-	a.PolicyApps.FoldLegacy()
+	a.FoldLegacy()
 	return nil
 }
 
