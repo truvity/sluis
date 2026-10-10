@@ -350,6 +350,78 @@ secrets: []
 #       key: password
 secretEnv: []
 
+# The backup module (docs/reference/sluis/backup.md), for an installation on
+# layout v5 (`config.secrets.layout: v5`, `config.ports.dynamodb.tables`). Off.
+# A CronJob runs `sluis backup run` and a second one `sluis backup prune`, as
+# an account of their own (`serviceAccount`): the backup role reads every
+# module and writes the archive, and is not the service's. The pods carry
+# their own labels, so the service's Service and NetworkPolicy never select
+# them. Per-module Deployments are not in the chart: the process is still one.
+#
+#   backup:
+#     enabled: true
+#     serviceAccount: {awsIdentity: irsa, awsRoleArn: arn:aws:iam::<account>:role/<backup role>}
+#     config:
+#       instance: sluis
+#       preset: k8s-aws
+#       secrets: {source: ssm, root: /sluis, layout: v5}
+#       ports:
+#         dynamodb: {region: eu-west-1, tables: {backup: sluis-backup, oidc: sluis-oidc}}
+#         blob: {adapter: s3, s3: {bucket: sluis-blobs}}
+#       keys: {adapter: kms, archive: alias/sluis-archive}
+#       backup:
+#         target: {bucket: sluis-archive, region: eu-west-1}
+#
+# See charts/sluis/examples/backup-v5.yaml for a whole one.
+backup:
+  enabled: false
+  schedule: "17 2 * * *"
+  suspend: false
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  activeDeadlineSeconds: 0
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  prune:
+    enabled: true
+    schedule: "47 3 * * *"
+  serviceAccount: {}
+  secretEnv: []
+  resources: {}
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations: []
+  # The `sluis-backup/v1` document, rendered as it stands (schemas/config/
+  # sluis-backup.schema.json). `backup.target` is required once `enabled` or
+  # `restore.enabled` is set, and `backup.role` is left unset: the CronJob is
+  # the backup role and the restore Job the restore one.
+  config: {}
+
+# The restore Job, for an administrator: off, one Job and never a CronJob. A
+# restore overwrites an installation, so the Job is refused unless `confirm`
+# is the installation's name (`backup.config.instance`) and either `backupId`
+# or `resume` says what to do. It reads the document of `backup.config`, with an
+# account of its own (`serviceAccount`) whose role may write every module's
+# table. The modules stay under maintenance until a restore completes. Delete
+# the Job before running the same restore again.
+#
+#   restore: {enabled: true, backupId: 20261010T020000Z-3fa9c1, confirm: sluis, by: <who>, note: <why>}
+restore:
+  enabled: false
+  backupId: ""
+  resume: false
+  confirm: ""
+  overwrite: false
+  by: ""
+  note: ""
+  ttlSecondsAfterFinished: 0
+  activeDeadlineSeconds: 0
+  serviceAccount: {}
+  resources: {}
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations: []
+
 # Telemetry is the OpenTelemetry SDK's own environment (ADR 0006), never the
 # config file (ADR 0032). With `otlp.endpoint` set, every pod of `renders: app`
 # gets OTEL_EXPORTER_OTLP_ENDPOINT, OTEL_EXPORTER_OTLP_PROTOCOL and an

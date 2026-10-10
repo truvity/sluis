@@ -20,13 +20,17 @@ import (
 // What each ConfigMap is named for: where its config lives in the values, and
 // which schema its binary validates it against.
 //
-// There is one: the one process's service document, controllers' sections
-// included.
+// The one process's service document, controllers' sections included, always;
+// and the backup module's, which the chart renders only when it is asked for
+// (`backup.enabled` or `restore.enabled`), for the backup CronJob and the
+// restore Job alike.
 var components = map[string]struct {
-	path   []string
-	schema string
+	path     []string
+	schema   string
+	optional bool
 }{
-	"serve": {[]string{"config"}, "sluis"},
+	"serve":  {[]string{"config"}, "sluis", false},
+	"backup": {[]string{"backup", "config"}, "sluis-backup", true},
 }
 
 func helm(t *testing.T) string {
@@ -188,8 +192,8 @@ func TestTheRenderedConfigurationIsTheValuesConfiguration(t *testing.T) {
 			}
 
 			// The other way: the service document always reaches a ConfigMap.
-			for component := range components {
-				if !rendered[component] {
+			for component, c := range components {
+				if !rendered[component] && !c.optional {
 					t.Errorf("%s is configured and the chart rendered no ConfigMap for it", component)
 				}
 			}
@@ -220,6 +224,11 @@ func TestEveryShippedExampleConfigurationIsAccepted(t *testing.T) {
 		}
 		if err := config.Validate("sluis", merge(map[string]any{"apiVersion": config.APIVersion("sluis")}, cfg.(map[string]any))); err != nil {
 			t.Errorf("%s: %v", example, err)
+		}
+		if doc, _ := dig(values, "backup", "config"); doc != nil && len(doc.(map[string]any)) > 0 {
+			if err := config.Validate("sluis-backup", merge(map[string]any{"apiVersion": config.APIVersion("sluis-backup")}, doc.(map[string]any))); err != nil {
+				t.Errorf("%s: backup.config: %v", example, err)
+			}
 		}
 	}
 	if len(examples) == 0 {

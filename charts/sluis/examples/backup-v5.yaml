@@ -1,0 +1,68 @@
+# A Kubernetes estate on storage layout v5 with the backup module: the service
+# keeps its state in one DynamoDB table per module, its secrets in SSM, and a
+# CronJob writes the sealed archive to S3 as an account of its own. Copy it into
+# your values; the roles, tables, bucket and keys are yours to make (the Pulumi
+# library makes them: docs/reference/sluis/pulumi-library.md).
+#
+# The restore is not here on purpose: it is a Job for an administrator
+# (`restore.enabled`, with a backup id and the installation's name), and a
+# `values` file that always carries one would restore on every upgrade.
+config:
+  issuerURL: https://access.example
+  preset: k8s-aws
+  signingKey:
+    file: null
+    kmsWrapped:
+      keyId: alias/sluis-signing
+      region: eu-west-1
+      stateSecret: internal/oidc/state-secret
+  secrets:
+    source: ssm
+    root: /sluis
+    layout: v5
+  ports:
+    dynamodb:
+      region: eu-west-1
+      tables:
+        oidc: sluis-oidc
+        github: sluis-github
+        slack: sluis-slack
+        google: sluis-google
+        cloudflare: sluis-cloudflare
+        backup: sluis-backup
+    blob:
+      adapter: s3
+      s3: {bucket: sluis-blobs, region: eu-west-1}
+serviceAccount:
+  awsIdentity: pod-identity
+backup:
+  enabled: true
+  serviceAccount:
+    awsIdentity: irsa
+    awsRoleArn: arn:aws:iam::111111111111:role/sluis-backup
+  config:
+    instance: sluis
+    preset: k8s-aws
+    secrets:
+      source: ssm
+      root: /sluis
+      layout: v5
+    ports:
+      dynamodb:
+        region: eu-west-1
+        tables:
+          oidc: sluis-oidc
+          github: sluis-github
+          slack: sluis-slack
+          google: sluis-google
+          cloudflare: sluis-cloudflare
+          backup: sluis-backup
+      blob:
+        adapter: s3
+        s3: {bucket: sluis-blobs, region: eu-west-1}
+    keys:
+      adapter: kms
+      archive: alias/sluis-archive
+    backup:
+      target: {bucket: sluis-archive, prefix: sluis, region: eu-west-1}
+      retention: {keep: 7, maxAge: 720h}

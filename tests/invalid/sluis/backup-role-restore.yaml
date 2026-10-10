@@ -1,0 +1,16 @@
+# A CronJob must not be able to restore: the Job is the restore role.
+# error: backup.config.backup.role must be unset
+config:
+  issuerURL: https://issuer.example
+backup:
+  enabled: true
+  config:
+    instance: sluis
+    secrets: {source: ssm, root: /sluis, layout: v5}
+    ports:
+      dynamodb: {region: eu-west-1, tables: {backup: sluis-backup}}
+      blob: {adapter: s3, s3: {bucket: b}}
+    keys: {adapter: kms, archive: alias/a}
+    backup:
+      role: restore
+      target: {bucket: archive}

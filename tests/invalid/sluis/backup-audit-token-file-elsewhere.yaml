@@ -1,0 +1,16 @@
+# The chart mounts the audit token at one path.
+# error: backup.config.audit.tokenFile must be /var/run/audit/token
+config:
+  issuerURL: https://issuer.example
+backup:
+  enabled: true
+  config:
+    instance: sluis
+    audit: {writer: "https://audit.example:8443", tokenFile: /tmp/token}
+    secrets: {source: ssm, root: /sluis, layout: v5}
+    ports:
+      dynamodb: {region: eu-west-1, tables: {backup: sluis-backup}}
+      blob: {adapter: s3, s3: {bucket: b}}
+    keys: {adapter: kms, archive: alias/a}
+    backup:
+      target: {bucket: archive}

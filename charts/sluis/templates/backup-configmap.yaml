@@ -1,0 +1,18 @@
+{{- include "sluis.prepare" . -}}
+{{- if and (eq .Values.renders "app") (or .Values.backup.enabled .Values.restore.enabled) -}}
+{{- include "sluis.checks" . }}
+# What `sluis backup` and `sluis restore --config` read: `backup.config`, as the
+# values give it, with the apiVersion the chart writes. The binary validates it
+# against schemas/config/sluis-backup.schema.json at start, and values.schema.json
+# holds the values to the same schema before this renders. The restore Job reads
+# this very document: its role comes from the command, not from the document.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "sluis.fullname" . }}-backup-config
+  labels:
+    {{- include "sluis.moduleLabels" (dict "root" . "component" "backup") | nindent 4 }}
+data:
+  config.yaml: |
+    {{- include "sluis.document" (dict "kind" "sluis-backup" "doc" .Values.backup.config) | nindent 4 }}
+{{ end -}}

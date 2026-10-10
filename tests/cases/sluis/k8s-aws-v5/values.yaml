@@ -1,0 +1,35 @@
+# The service on storage layout v5 (ADR 0072): one DynamoDB table per module,
+# secrets in SSM, and no Secret projected. Nothing else of the module's is on.
+replicaCount: 2
+config:
+  issuerURL: https://access.example
+  preset: k8s-aws
+  signingKey:
+    file: null
+    kmsWrapped:
+      keyId: alias/sluis-signing
+      region: eu-west-1
+      stateSecret: internal/oidc/state-secret
+  secrets:
+    source: ssm
+    root: /sluis
+    layout: v5
+  ports:
+    dynamodb:
+      region: eu-west-1
+      tables:
+        oidc: sluis-oidc
+        backup: sluis-backup
+    blob:
+      adapter: s3
+      s3: {bucket: sluis-blobs, region: eu-west-1}
+  console:
+    backup:
+      url: https://backup.example/
+      audience: sluis-backup
+serviceAccount:
+  awsIdentity: pod-identity
+telemetry:
+  legacyMetrics: false
+  otlp:
+    endpoint: http://gateway.observability.svc:4318

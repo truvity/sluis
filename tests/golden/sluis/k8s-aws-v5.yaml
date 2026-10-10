@@ -1,0 +1,326 @@
+---
+# Source: sluis/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sluis
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+
+---
+# Source: sluis/templates/serviceaccount.yaml
+# The account a recovery token is minted for. Deliberately bound to
+# NOTHING: it needs no permissions, because the token is a proof of
+# identity and not a way to act. Granting `create` on
+# `serviceaccounts/token` for this account is how an installation says who
+# may recover, and that grant is the whole of the access control.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: access-issuer-recovery
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+
+---
+# Source: sluis/templates/configmap.yaml
+# What `sluis serve --config` reads: `config`, as the values give it, with
+# nothing added, renamed or dropped but the apiVersion the chart writes. The
+# binary validates it against schemas/config/sluis.schema.json at start, and
+# values.schema.json holds the values to the same schema before this renders.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sluis-config
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: serve
+data:
+  config.yaml: |
+    apiVersion: sluis.truvity.github.io/sluis/v3
+    audit:
+      tokenFile: /var/run/audit/token
+    console:
+      backup:
+        audience: sluis-backup
+        url: https://backup.example/
+    inCluster: true
+    issuerURL: https://access.example
+    lifetimes:
+      absolute: 24h
+      hold: 4h
+      refresh: 12h
+      token: 1h
+    listen:
+      address: :8080
+    policy:
+      file: /var/run/access-issuer/policy/policy.yaml
+    ports:
+      blob:
+        adapter: s3
+        s3:
+          bucket: sluis-blobs
+          region: eu-west-1
+      dynamodb:
+        region: eu-west-1
+        tables:
+          backup: sluis-backup
+          oidc: sluis-oidc
+    preset: k8s-aws
+    probes:
+      address: :7070
+    recovery:
+      audience: access-issuer-recovery
+      enabled: true
+      serviceAccount: access-issuer-recovery
+    secrets:
+      layout: v5
+      root: /sluis
+      source: ssm
+    signingKey:
+      activationDelay: 15m
+      kmsWrapped:
+        keyId: alias/sluis-signing
+        region: eu-west-1
+        stateSecret: internal/oidc/state-secret
+      pollInterval: 30s
+    store: kubernetes
+
+---
+# Source: sluis/templates/policy-configmap.yaml
+# The policy document (schemas/config/policy.schema.json): what every process
+# of this installation decides by, read once at start. Mounted as a directory
+# by the service and both controllers, so a change rolls all three.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sluis-policy
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+data:
+  policy.yaml: |
+    apiVersion: sluis.truvity.github.io/policy/v2
+
+---
+# Source: sluis/templates/serviceaccount.yaml
+# The one cluster-scoped permission this service ever needs, and the one
+# thing left that asks the API server anything: creating TokenReviews, so
+# that recovery can check a token proving cluster access. It reads
+# nothing.
+#
+# Workloads used to need it too. They do not any more: a
+# ServiceAccount token is verified against the key set its own cluster
+# publishes, so this service holds no access to any cluster including its
+# own. Recovery keeps it because on the day everything else is broken it
+# should depend on nothing but the cluster.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: sluis-default-tokenreview
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+rules:
+  - apiGroups: ["authentication.k8s.io"]
+    resources: ["tokenreviews"]
+    verbs: ["create"]
+
+---
+# Source: sluis/templates/serviceaccount.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: sluis-default-tokenreview
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: sluis-default-tokenreview
+subjects:
+  - kind: ServiceAccount
+    name: sluis
+    namespace: default
+
+---
+# Source: sluis/templates/serviceaccount.yaml
+# The directory store is plain Kubernetes objects in THIS namespace:
+# workspace records (ConfigMaps) and their credentials (Secrets), written
+# by this service itself. A namespaced Role and never a ClusterRole —
+# which is why this service gets a namespace of its own.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: sluis
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+rules:
+  - apiGroups: [""]
+    resources: ["secrets", "configmaps"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+---
+# Source: sluis/templates/serviceaccount.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: sluis
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: sluis
+subjects:
+  - kind: ServiceAccount
+    name: sluis
+    namespace: default
+
+---
+# Source: sluis/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: sluis
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selector:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+  ports:
+    - name: issuer
+      port: 8080
+      targetPort: issuer
+
+---
+# Source: sluis/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sluis
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sluis
+      app.kubernetes.io/instance: sluis
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: sluis
+        app.kubernetes.io/instance: sluis
+      annotations:
+        # Configuration and policy are immutable for an instance: each document
+        # is read once, at start, so a change to either is a rollout. One
+        # checksum per document this process reads: the service document (the
+        # controllers' sections are in it) and the policy.
+        checksum/config: d0c3a19f665389ffa65d65492ec845ae6e3e749e9c4e7b968b95bd5ac3f781fd
+        checksum/policy: d8fee78c7b9f81d2a4c598c3b432515f29384a0f4a1fe3e4ccda3db4f307843b
+    spec:
+      serviceAccountName: sluis
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: serve
+          image: "ghcr.io/truvity/sluis/sluis:0.0.0"
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          ports:
+            - name: issuer
+              containerPort: 8080
+            - name: health
+              containerPort: 7070
+          # The whole of the configuration is the service document, `config`
+          # rendered as it stands, and the policy document it names. The
+          # environment carries only the secrets the document names.
+          args:
+            - serve
+            - --config=/etc/sluis/config.yaml
+          env:
+            
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://gateway.observability.svc:4318"
+            - name: OTEL_EXPORTER_OTLP_PROTOCOL
+              value: "http/protobuf"
+            - name: OTEL_SERVICE_NAME
+              value: "sluis"
+            - name: SLUIS_LEGACY_METRICS
+              value: "false"
+          volumeMounts:
+            # Read once, at start: a subPath is enough, since a change replaces
+            # the pod (checksum/*). The policy keeps its directory.
+            - name: config
+              mountPath: /etc/sluis/config.yaml
+              subPath: config.yaml
+              readOnly: true
+            - name: policy
+              mountPath: /var/run/access-issuer/policy
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+            
+          livenessProbe:
+            httpGet: { path: /healthz, port: health }
+          readinessProbe:
+            # Readiness follows the shared store; liveness deliberately
+            # does not. A replica that cannot reach it leaves the
+            # rotation, and the gateway answers fast instead of hanging;
+            # nothing is restarted, so one blip cannot restart the fleet.
+            #
+            # timeoutSeconds exceeds the service's own 2s check so the
+            # answer is the reason ("the session store does not answer:
+            # i/o timeout") rather than the kubelet's timeout. Three
+            # failures at ten seconds is thirty seconds of trouble before
+            # a replica leaves, which a reconnect comfortably beats.
+            httpGet: { path: /readyz, port: health }
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+      volumes:
+        - name: config
+          configMap:
+            name: sluis-config
+        - name: policy
+          configMap:
+            name: sluis-policy
+        # The root filesystem is read-only, and the directory backends
+        # want somewhere to write.
+        - name: tmp
+          emptyDir: {}

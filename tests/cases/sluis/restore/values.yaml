@@ -1,0 +1,36 @@
+# The restore Job of an administrator, with the account of its own, on top of a
+# backup that is not scheduled (backup.enabled is off: only the document and
+# the restore are rendered).
+config:
+  issuerURL: https://access.example
+backup:
+  config:
+    instance: sluis
+    preset: k8s-aws
+    secrets:
+      source: ssm
+      root: /sluis
+      layout: v5
+    ports:
+      dynamodb:
+        region: eu-west-1
+        tables: {oidc: sluis-oidc, backup: sluis-backup}
+      blob:
+        adapter: s3
+        s3: {bucket: sluis-blobs, region: eu-west-1}
+    keys:
+      adapter: kms
+      archive: alias/sluis-archive
+    backup:
+      target: {bucket: sluis-archive, region: eu-west-1}
+restore:
+  enabled: true
+  backupId: 20261010T020000Z-3fa9c1
+  confirm: sluis
+  overwrite: true
+  by: an-administrator
+  note: "restore after a bad deploy"
+  ttlSecondsAfterFinished: 86400
+  serviceAccount:
+    awsIdentity: irsa
+    awsRoleArn: arn:aws:iam::111111111111:role/sluis-restore

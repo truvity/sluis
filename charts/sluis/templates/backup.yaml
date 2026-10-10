@@ -1,0 +1,98 @@
+{{- include "sluis.prepare" . -}}
+{{- if eq .Values.renders "app" -}}
+{{- include "sluis.checks" . }}
+{{- if .Values.backup.enabled }}
+{{ include "sluis.moduleServiceAccount" (dict "root" . "component" "backup") }}
+---
+# The backup: `sluis backup run` takes the lease, exports the installation and
+# seals it into the archive bucket. A run that finds the lease held, or a module
+# under maintenance, says so and exits 0. Forbid by default, because the second
+# run would only wait on the lease.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "sluis.fullname" . }}-backup
+  labels:
+    {{- include "sluis.moduleLabels" (dict "root" . "component" "backup") | nindent 4 }}
+spec:
+  schedule: {{ .Values.backup.schedule | quote }}
+  {{- with .Values.backup.timeZone }}
+  timeZone: {{ . | quote }}
+  {{- end }}
+  suspend: {{ .Values.backup.suspend }}
+  concurrencyPolicy: {{ .Values.backup.concurrencyPolicy }}
+  startingDeadlineSeconds: {{ .Values.backup.startingDeadlineSeconds }}
+  successfulJobsHistoryLimit: {{ .Values.backup.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ .Values.backup.failedJobsHistoryLimit }}
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      {{- if .Values.backup.activeDeadlineSeconds }}
+      activeDeadlineSeconds: {{ .Values.backup.activeDeadlineSeconds }}
+      {{- end }}
+      template:
+        {{- include "sluis.modulePod" (dict "root" . "component" "backup" "args" (list "backup" "run" "--config=/etc/sluis-backup/config.yaml")) | nindent 8 }}
+{{- if .Values.backup.prune.enabled }}
+---
+# The retention rule: the newest `backup.config.backup.retention.keep` backups stay, any other
+# goes when older than `maxAge`. Under its own lease, so it can overlap a run.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "sluis.fullname" . }}-backup-prune
+  labels:
+    {{- include "sluis.moduleLabels" (dict "root" . "component" "backup") | nindent 4 }}
+spec:
+  schedule: {{ .Values.backup.prune.schedule | quote }}
+  {{- with .Values.backup.timeZone }}
+  timeZone: {{ . | quote }}
+  {{- end }}
+  suspend: {{ .Values.backup.suspend }}
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: {{ .Values.backup.startingDeadlineSeconds }}
+  successfulJobsHistoryLimit: {{ .Values.backup.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ .Values.backup.failedJobsHistoryLimit }}
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      template:
+        {{- include "sluis.modulePod" (dict "root" . "component" "backup" "args" (list "backup" "prune" "--config=/etc/sluis-backup/config.yaml")) | nindent 8 }}
+{{- end }}
+{{- end }}
+{{- if .Values.restore.enabled }}
+{{- $r := .Values.restore }}
+{{- $args := list "restore" "start" }}
+{{- if $r.resume }}
+{{- $args = append $args "--resume" }}
+{{- else }}
+{{- $args = concat $args (list $r.backupId "--confirm" $r.confirm) }}
+{{- end }}
+{{- if $r.overwrite }}{{- $args = append $args "--overwrite" }}{{- end }}
+{{- with $r.by }}{{- $args = concat $args (list "--by" .) }}{{- end }}
+{{- with $r.note }}{{- $args = concat $args (list "--note" .) }}{{- end }}
+{{- $args = append $args "--config=/etc/sluis-backup/config.yaml" }}
+---
+{{ include "sluis.moduleServiceAccount" (dict "root" . "component" "restore") }}
+---
+# An administrator's Job, never a CronJob. A restore sets every module under
+# maintenance, writes, reads everything back and lifts the flag only when it
+# matches; one that fails leaves the modules closed, and running it again
+# retries. One restore at a time, under `lease.restore:run`.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ printf "%s-restore-%s" (include "sluis.fullname" .) ($r.backupId | default "resume" | lower) | trunc 63 | trimSuffix "-" }}
+  labels:
+    {{- include "sluis.moduleLabels" (dict "root" . "component" "restore") | nindent 4 }}
+spec:
+  backoffLimit: 0
+  {{- if $r.activeDeadlineSeconds }}
+  activeDeadlineSeconds: {{ $r.activeDeadlineSeconds }}
+  {{- end }}
+  {{- if $r.ttlSecondsAfterFinished }}
+  ttlSecondsAfterFinished: {{ $r.ttlSecondsAfterFinished }}
+  {{- end }}
+  template:
+    {{- include "sluis.modulePod" (dict "root" . "component" "restore" "args" $args) | nindent 4 }}
+{{- end }}
+{{ end -}}

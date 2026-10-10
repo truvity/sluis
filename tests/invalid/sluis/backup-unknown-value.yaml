@@ -1,0 +1,16 @@
+# The module has its own values.
+# error: at '/backup': additional properties 'bogusKey' not allowed
+config:
+  issuerURL: https://issuer.example
+backup:
+  enabled: true
+  bogusKey: 1
+  config:
+    instance: sluis
+    secrets: {source: ssm, root: /sluis, layout: v5}
+    ports:
+      dynamodb: {region: eu-west-1, tables: {backup: sluis-backup}}
+      blob: {adapter: s3, s3: {bucket: b}}
+    keys: {adapter: kms, archive: alias/a}
+    backup:
+      target: {bucket: archive}

@@ -67,3 +67,13 @@ The backup module writes the installation, encrypted, to S3 ([ADR 0071](../../de
 | `backup.list` | console, admin, breakglass | `backups`, newest first; `limit` |
 | `backup.run` | admin, breakglass | A run's result; `resume` only continues |
 | Audit | `roster.backup.completed`, `.failed`, `.pruned` ([audit actions](audit-actions.md)) | Counts and a reason, never a value |
+
+## On Kubernetes
+
+| Value | Does |
+|---|---|
+| `backup.enabled` | A CronJob for `sluis backup run` (`backup.schedule`, `concurrencyPolicy: Forbid`) and one for `sluis backup prune` (`backup.prune`), as their own account (`backup.serviceAccount`) |
+| `backup.config` | The `sluis-backup/v1` document of this page, rendered as it stands. The chart refuses a missing `backup.target`, a missing key, `backup.role: restore`, a layout other than v5 and a missing `ports.dynamodb.tables` |
+| `restore.enabled` | One Job, `sluis restore start <backupId> --confirm <confirm>` or `--resume`, as an account of its own. Never a CronJob. `confirm` must be `backup.config.instance` |
+| Example | `charts/sluis/examples/backup-v5.yaml`. The chart has one Deployment, not one per module |
+| `config.secrets.layout: v5` | The service on layout v5 needs `config.ports.dynamodb.tables`, and the chart then projects no Secret: its secrets are in SSM |
