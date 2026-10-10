@@ -247,10 +247,12 @@ archive-check:
 # The release machinery that a tag alone would otherwise exercise: both
 # goreleaser configs (SBOMs, checksums) validated, every workflow linted
 # (actionlint, with shellcheck on the run steps), and release-verify shown to
-# fail on a tampered asset. Part of `check`.
+# fail on a tampered asset, and the per-module images pushed to a throwaway
+# registry under the names hack/release-images.txt signs. Part of `check`.
 release-lint:
     KO_DOCKER_REPO=ghcr.io/truvity/sluis goreleaser check
     cd audit && goreleaser check
+    hack/module-images.sh check
     actionlint
     hack/test-release-verify.sh
 

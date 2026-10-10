@@ -1,0 +1,23 @@
+# ko's config for the per-module container images (hack/module-images.sh).
+#
+# Every module image is the one ./cmd/sluis main with its module name pinned,
+# so they cannot be separate goreleaser `kos`: goreleaser's ko pipe replaces
+# every entry's repository with $KO_DOCKER_REPO whenever that is set (the
+# shared release workflow always sets it), so the three entries pushed to the
+# same repository and the last one won. One `ko build` per module, with its
+# own $KO_DOCKER_REPO, names each image exactly.
+defaultBaseImage: gcr.io/distroless/static:nonroot
+defaultPlatforms:
+  - linux/amd64
+  - linux/arm64
+builds:
+  - id: sluis-module
+    main: ./cmd/sluis
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X github.com/truvity/sluis/internal/version.Version={{ .Env.SLUIS_VERSION }}
+      - -X github.com/truvity/sluis/internal/version.Module=sluis-module={{ .Env.SLUIS_MODULE }}
