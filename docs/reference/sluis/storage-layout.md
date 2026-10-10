@@ -126,7 +126,7 @@ The logical key maps to kind and credential path as follows.
 | `lease.<kind>:<target>` | `lease` / `<kind>/<target>` | none |
 | `notify.<target>` | `notify` / `<target>` | none |
 | `rec.maintenance` | `maintenance` / `flag` | none |
-| `rec.backup.run.<id>`, `rec.backup.retention` | `backup-run` / `<id>`, `backup-retention` / `last` | none |
+| `rec.backup.run.<id>`, `rec.backup.restore.<id>`, `rec.backup.retention` | `backup-run` / `<id>`, `backup-restore` / `<id>`, `backup-retention` / `last` | none |
 | `issuer:request:<id>` | `issuer-request` / `<id>` | none |
 | `issuer:code:<id>`, `issuer:code-session:<id>` | `issuer-code`, `issuer-code-session` / `<id>` | none |
 | `issuer:token:<jti>` | `issuer-token` / `<jti>` | none |

@@ -30,6 +30,7 @@ No access pattern needs a secondary index. Sessions are listed per person under 
 | `rec.console.session-key` | the key the console signs its sessions with, in Secrets (`credentials/console/session-key`); created by the first replica that starts | console | permanent |
 | `rec.maintenance` | the maintenance flag: present while the module's table is being restored; the module refuses writes until it is gone | restore function | permanent |
 | `rec.backup.run.<id>` | one backup run: its state, counts and, while unfinished, the checkpoint a resume needs; the backup module's table only, never in a backup | backup | permanent |
+| `rec.backup.restore.<id>` | one restore: its state, the backup it restores from, the counts of the last slice and whether the maintenance flag is still set; the backup module's table only, never in a backup | restore | permanent |
 | `rec.backup.retention` | the last retention pass: what it kept and removed | backup | permanent |
 | `lease.<target>` | the holder of a target's tick, by id | ticks | seconds, renewed |
 | `gate.<target>.<name>` | a held-once ledger entry, a breaker, a fingerprint. Written today: `gate.github.<org>.confirm` and `.pass`, `gate.slack.<workspace>.confirm[.<channel>]` and `.pass` (an operator's confirmation of a removal set, 24 h; a request for a pass now, 24 h), `gate.github-claim.<account>` (the marker of a link claim, below) | ticks, console | by gate |

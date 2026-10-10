@@ -7,6 +7,7 @@ The backup module writes the installation, encrypted, to S3 ([ADR 0071](../../de
 | Key | Meaning |
 |---|---|
 | `apiVersion` | `sluis.truvity.github.io/sluis-backup/v1`, schema `schemas/config/sluis-backup.schema.json`. Layout v5 only: `secrets.layout: v5`, `ports.dynamodb.tables`, the installation's `ports.blob` |
+| `backup.role` | `backup` (default) or `restore`: which function the zip is. The restore function's role may write every module's table |
 | `backup.key` | The alias that seals each backup's data key; the same as `keys.archive`, give one. The adapter is `keys.adapter`, default `kms` |
 | `backup.target` | The archive bucket: `bucket`, `prefix`, `region`, `kmsKey`, `endpoint`, `pathStyle`. Credentials are the role's. Object Lock retention must not exceed `retention.maxAge` |
 | `backup.retention` | The `keep` newest backups (default 7) always stay. Another goes when older than `maxAge` (default 720h) |
@@ -21,6 +22,32 @@ The backup module writes the installation, encrypted, to S3 ([ADR 0071](../../de
 | `sluis backup list` | The backups in the archive, newest first, from their unverified manifests |
 | `sluis backup status` | The latest runs and the last prune |
 | `sluis backup prune [--dry-run]` | Applies the retention rule: manifest first, then chunks, then those of runs with no manifest after 7 days. A refused delete is counted, not retried |
+
+## Restore
+
+| Command | Does |
+|---|---|
+| all | The restore role of this zip; on Lambda it is `backup.role: restore`. Take `--config <file>` and `--json`. Only an administrator or the break-glass role may invoke it |
+| `sluis restore preview <id>` | Per module and section: records to create, overwrite, leave, skip. Names, never values. Writes nothing, takes no lease |
+| `sluis restore start <id> --confirm <instance> [--overwrite] [--by] [--note]` | Restores. A destination that holds different data is refused unless `--overwrite` |
+| `sluis restore start --resume` | Continues a restore that paused |
+| `sluis restore status` | The latest restores and the modules still under maintenance |
+
+| Step of a restore | Detail |
+|---|---|
+| Lease | `lease.restore:run`: one restore at a time. The record is `rec.backup.restore.<id>` (`running`, `paused`, `completed`, `failed`) |
+| Maintenance | The flag is set in every module's own table, then 15 seconds pass for the modules' cache |
+| Write | Verify the archive, write, read every record back. A pause starts the next invocation itself |
+| Lift | Only after a clean read-back |
+| Failure | The flag stays. Reasons: `not-empty`, `verify`, `archive`, `integrity`, `key`, `maintenance`, `clear`. Run again to retry |
+
+| Event or method | Callers | Answers |
+|---|---|---|
+| `{"kind":"restore","backup":"<id>","overwrite":false}` | admin, breakglass; invoke asynchronously | `completed`, `paused`, `failed`, `contended` or `refused`. A failed restore does not fail the invocation |
+| `{"kind":"restore","resume":true}` | the function itself, admin, breakglass | Continues the unfinished restore; `idle` when none |
+| `{"kind":"restore","backup":"<id>","preview":true}` | admin, breakglass; invoke synchronously | The preview report |
+| `restore.status` | console, admin, breakglass | `latest`, `unfinished`, `lastCompleted`, `maintenance` |
+| Audit | `roster.restore.started`, `.completed`, `.failed` | Counts and a reason, never a value |
 
 ## Runs
 
