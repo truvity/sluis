@@ -43,6 +43,7 @@ var stateRows = []struct{ key, kind, id string }{
 	{"notify.acme", "notify", "acme"},
 	{"rec.maintenance", "maintenance", "flag"},
 	{"rec.backup.run.20261010T020000Z-a1b2c3", "backup-run", "20261010T020000Z-a1b2c3"},
+	{"rec.backup.restore.20261010T030000Z-d4e5f6", "backup-restore", "20261010T030000Z-d4e5f6"},
 	{"rec.backup.retention", "backup-retention", "last"},
 	{"lease.backup:run", "lease", "backup/run"},
 	{"ses.ada.s1", "session", "ada/s1"},
