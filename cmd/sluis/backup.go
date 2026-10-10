@@ -69,7 +69,7 @@ func runBackup(ctx context.Context, sub, file string, asJSON, resume, dryRun boo
 		return err
 	}
 	defer closeApp()
-	print := func(v any, text func(w io.Writer)) error {
+	show := func(v any, text func(w io.Writer)) error {
 		if asJSON {
 			enc := json.NewEncoder(backupOut)
 			enc.SetIndent("", "  ")
@@ -82,7 +82,7 @@ func runBackup(ctx context.Context, sub, file string, asJSON, resume, dryRun boo
 	case "run":
 		res, err := a.Run(ctx, job.Request{Trigger: job.TriggerCLI, Actor: audit.System(), ResumeOnly: resume})
 		// A failed run still has a record to show.
-		if perr := print(res, func(w io.Writer) { writeResult(w, res) }); perr != nil && err == nil {
+		if perr := show(res, func(w io.Writer) { writeResult(w, res) }); perr != nil && err == nil {
 			err = perr
 		}
 		return err
@@ -91,19 +91,19 @@ func runBackup(ctx context.Context, sub, file string, asJSON, resume, dryRun boo
 		if err != nil {
 			return err
 		}
-		return print(infos, func(w io.Writer) { writeList(w, infos) })
+		return show(infos, func(w io.Writer) { writeList(w, infos) })
 	case "status":
 		st, err := a.Status(ctx)
 		if err != nil {
 			return err
 		}
-		return print(st, func(w io.Writer) { writeStatus(w, st) })
+		return show(st, func(w io.Writer) { writeStatus(w, st) })
 	}
 	pass, outcome, err := a.Prune(ctx, audit.System(), dryRun)
 	if err != nil {
 		return err
 	}
-	return print(struct {
+	return show(struct {
 		Outcome string `json:"outcome"`
 		job.Pass
 		DryRun bool `json:"dryRun,omitempty"`

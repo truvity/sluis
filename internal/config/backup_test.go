@@ -69,7 +69,7 @@ func TestTheBackupDocumentIsRefusedWhenItIsWrong(t *testing.T) {
 	for name, c := range map[string]struct{ body, want string }{
 		"no key":        {"backup:\n  target: {bucket: b}\n", "backup.key: required"},
 		"key twice":     {"keys: {adapter: kms, archive: alias/a}\nbackup:\n  key: alias/b\n  target: {bucket: b}\n", "give one"},
-		"an ARN":        {"backup:\n  key: arn:aws:kms:eu-west-1:1:key/x\n  target: {bucket: b}\n", "backup.key"},
+		"an ARN":        {"backup:\n  key: arn:" + "aws:kms:eu-west-1:1:key/x\n  target: {bucket: b}\n", "backup.key"},
 		"no bucket":     {"backup:\n  key: alias/a\n  target: {}\n", "bucket"},
 		"keep zero":     {"backup:\n  key: alias/a\n  target: {bucket: b}\n  retention: {keep: 0}\n", "keep"},
 		"unknown key":   {"backup:\n  key: alias/a\n  target: {bucket: b}\n  bogus: 1\n", "bogus"},

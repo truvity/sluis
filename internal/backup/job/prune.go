@@ -226,12 +226,12 @@ func (j *Job) delete(ctx context.Context, id string) error {
 
 // trimRuns deletes the records of the backups just removed and the oldest
 // finished records beyond [KeepRuns].
-func (j *Job) trimRuns(ctx context.Context, runs []recorded, removed, orphans []string) error {
+func (j *Job) trimRuns(ctx context.Context, runs []*recorded, removed, orphans []string) error {
 	gone := map[string]bool{}
 	for _, id := range append(append([]string{}, removed...), orphans...) {
 		gone[id] = true
 	}
-	var finished []recorded
+	var finished []*recorded
 	for _, r := range runs {
 		if r.run.State == StateCompleted || r.run.State == StateFailed {
 			finished = append(finished, r)

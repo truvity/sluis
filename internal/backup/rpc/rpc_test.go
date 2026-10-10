@@ -29,8 +29,10 @@ func (f *fake) Status(context.Context) (job.Status, error) {
 
 func (f *fake) List(context.Context) ([]job.Info, error) {
 	return []job.Info{
-		{ID: "20261010T020000Z-a1b2c3", Created: at, Creator: "sluis-backup 1.75.0", Format: 1, Layout: "v5", Modules: 5, Records: 120, Chunks: 9},
-		{ID: "20261009T020000Z-d4e5f6", Created: at.Add(-24 * time.Hour), Creator: "sluis-backup 1.75.0", Format: 1, Layout: "v5", Modules: 5, Records: 118, Chunks: 9},
+		{ID: "20261010T020000Z-a1b2c3", Created: at, Creator: "sluis-backup 1.75.0", Format: 1, Layout: "v5",
+			Modules: 5, Records: 120, Chunks: 9},
+		{ID: "20261009T020000Z-d4e5f6", Created: at.Add(-24 * time.Hour), Creator: "sluis-backup 1.75.0", Format: 1, Layout: "v5",
+			Modules: 5, Records: 118, Chunks: 9},
 	}, nil
 }
 
@@ -47,7 +49,8 @@ func server(f *fake) *modcall.Server {
 }
 
 func call(s *modcall.Server, caller, method, payload string) modcall.Response {
-	return s.Dispatch(modcall.WithCaller(context.Background(), caller), modcall.Request{V: 2, Kind: modcall.Kind, Module: rpc.Module, Method: method, Payload: json.RawMessage(payload)})
+	req := modcall.Request{V: 2, Kind: modcall.Kind, Module: rpc.Module, Method: method, Payload: json.RawMessage(payload)}
+	return s.Dispatch(modcall.WithCaller(context.Background(), caller), req)
 }
 
 func TestWhoMayCallWhat(t *testing.T) {
