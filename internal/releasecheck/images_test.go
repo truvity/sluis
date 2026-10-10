@@ -77,7 +77,8 @@ func TestTheModuleImagesAreOnePerModuleEachPinnedToItsModule(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(ko.Builds) != 1 || ko.Builds[0].Main != "./cmd/sluis" {
-		t.Fatalf("hack/ko-modules/.ko.yaml: want one build of ./cmd/sluis (the k8s main; the cmd/sluis-<module> mains are Lambda-only), got %+v", ko.Builds)
+		t.Fatalf("hack/ko-modules/.ko.yaml: want one build of ./cmd/sluis (the k8s main; "+
+			"the cmd/sluis-<module> mains are Lambda-only), got %+v", ko.Builds)
 	}
 	if ko.BaseImage != "gcr.io/distroless/static:nonroot" || strings.Join(ko.Platforms, ",") != "linux/amd64,linux/arm64" {
 		t.Errorf("hack/ko-modules/.ko.yaml: base %q platforms %v differ from the sluis image's", ko.BaseImage, ko.Platforms)
