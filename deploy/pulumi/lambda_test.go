@@ -333,7 +333,7 @@ func shape(t *testing.T, rec *recorder, out map[string]string, domain string) {
 	}
 	// The one role signs, so nothing denies it the key ring.
 	for _, s := range statements(t, prop(rec.one(t, policyType, "staging-http-policy"), "policy").StringValue()) {
-		if s["Effect"] == "Deny" {
+		if s["Effect"] == "Deny" && s["Sid"] != "SluisMaintenanceDeny" {
 			t.Errorf("the one role has a denial: %v", s)
 		}
 	}
@@ -1244,7 +1244,7 @@ func TestThePodIdentityRoleIsNotDeniedTheKeyRing(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, s := range statements(t, prop(rec.one(t, "aws:iam/policy:Policy", "staging-sluis-policy"), "policy").StringValue()) {
-		if s["Effect"] == "Deny" {
+		if s["Effect"] == "Deny" && s["Sid"] != "SluisMaintenanceDeny" {
 			t.Errorf("the one role signs and is denied: %v", s)
 		}
 	}

@@ -469,35 +469,52 @@ func TestTheMigrationRoleReadsTheLegacyTableAndNothingElse(t *testing.T) {
 	}
 }
 
-// The maintenance partition is denied for writes on the module tables the role
-// holds, in one statement, on v5 and v4+v5. Layout v4 has no module tables and
-// is what it was.
-func TestTheMaintenanceDenyCoversTheModuleTables(t *testing.T) {
-	var want []string
+// The maintenance partition is denied for writes in one statement: on the legacy
+// table (v4, and v4+v5 beside the module tables) and the module tables (v5), and
+// the role still writes its other records.
+func TestTheMaintenanceDenyCoversTheTablesOfEveryLayout(t *testing.T) {
+	var mods []string
 	for _, m := range []string{"oidc", "github", "slack", "google"} {
-		want = append(want, tableArn("sluis-staging-"+m))
+		mods = append(mods, tableArn("sluis-staging-"+m))
 	}
-	slices.Sort(want)
-	for _, l := range []arp.Layout{arp.LayoutV4, arp.LayoutV5, arp.LayoutV4V5} {
+	for l, want := range map[arp.Layout][]string{
+		arp.LayoutV4:   {legacyArn},
+		arp.LayoutV5:   mods,
+		arp.LayoutV4V5: append([]string{legacyArn}, mods...),
+	} {
+		st := policyOf(t, withLayout(l))
 		var denies []map[string]any
-		for _, s := range policyOf(t, withLayout(l)) {
-			if s["Sid"] == "SluisMaintenanceDeny" {
+		for _, s := range st {
+			if s["Effect"] == "Deny" {
 				denies = append(denies, s)
 			}
 		}
-		if l == arp.LayoutV4 {
-			if len(denies) != 0 {
-				t.Errorf("v4: %v", denies)
-			}
-			continue
-		}
-		if len(denies) != 1 || denies[0]["Effect"] != "Deny" {
+		if len(denies) != 1 || denies[0]["Sid"] != "SluisMaintenanceDeny" {
 			t.Fatalf("%s: %v", l, denies)
 		}
 		got := strs(denies[0]["Resource"])
 		slices.Sort(got)
+		slices.Sort(want)
 		if !slices.Equal(got, want) {
 			t.Errorf("%s: deny on %v, want %v", l, got, want)
+		}
+		cond := denies[0]["Condition"].(map[string]any)["ForAnyValue:StringEquals"].(map[string]any)
+		if k := strs(cond["dynamodb:LeadingKeys"]); !slices.Equal(k, []string{"maintenance"}) {
+			t.Errorf("%s: deny on keys %v", l, k)
+		}
+		// The other records are still written: an allow of PutItem on each table.
+		allowed := map[string]bool{}
+		for _, s := range st {
+			if s["Effect"] == "Allow" && slices.Contains(strs(s["Action"]), "dynamodb:PutItem") {
+				for _, r := range strs(s["Resource"]) {
+					allowed[r] = true
+				}
+			}
+		}
+		for _, w := range want {
+			if !allowed[w] {
+				t.Errorf("%s: no write on %s", l, w)
+			}
 		}
 	}
 }
