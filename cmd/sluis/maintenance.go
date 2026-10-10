@@ -205,10 +205,12 @@ func maintenanceRun(ctx context.Context, w io.Writer, sub string, tables []maint
 		if err != nil {
 			return err
 		}
-		rec.Record(ctx, audit.MaintenanceChanged(actor, audit.Maintenance{Installation: instance, State: maintenance.StateMigration, Modules: len(sts), Reason: reason}))
+		rec.Record(ctx, audit.MaintenanceChanged(actor, audit.Maintenance{
+			Installation: instance, State: maintenance.StateMigration, Modules: len(sts), Reason: reason}))
 		since := sts[0].Flag.Since
 		if wait := sts[0].Flag.Quiet(time.Now()); wait > 0 && !noWait {
-			_, _ = fmt.Fprintf(w, "frozen since %s on %d table(s); waiting %s for every replica to see it\n", since.Format(time.RFC3339), len(sts), wait.Round(time.Second))
+			_, _ = fmt.Fprintf(w, "frozen since %s on %d table(s); waiting %s for every replica to see it\n",
+				since.Format(time.RFC3339), len(sts), wait.Round(time.Second))
 			maintenanceSleep(ctx, wait)
 		}
 		_, _ = fmt.Fprintf(w, "maintenance on (migration): writes are refused, reads and token exchange are served; lift with `sluis maintenance off`\n")
