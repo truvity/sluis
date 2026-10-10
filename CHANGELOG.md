@@ -1,5 +1,7 @@
 ## Unreleased
 
+## v1.75.0-rc.5
+
 ### Changed
 
 - **A process on layout v5 reads the blob credential from the blob owner's address, `internal/google/<name>`, whichever module it runs.** `ports.blob.s3.credentialsRef` was refused unless it was in the process's own module, so the issuer (the oidc module, which also hosts the hub and the console) stopped at start with `internal/google/blobs-r2 is the google module's, and this process runs the oidc module`, while the library and `sluis migrate v5` required that very address: an estate with its blobs on an S3-compatible store (R2) could not run on layout v5. The blob port is shared (the directory snapshots, the controllers' reports, the backup), so its credential has the one home the blob prefix has, the google module's, and the runtime now reads that address from any module's process. A credential in another module's prefix is still refused, and the role of each function still names that one parameter and no other. Nothing moves: an estate that ran `sluis migrate v5` has the credential at `internal/google/blobs-<name>` already and needs no new copy, and the library's `V5CredentialsRef` and `sluis migrate v5`'s mapping are unchanged. A test renders the library's v5 document for an estate with external blobs and runs the runtime's start checks over it.
