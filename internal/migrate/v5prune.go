@@ -213,8 +213,8 @@ func PruneV5(ctx context.Context, from, to Side, opt PruneOptions) (*PruneReport
 	}
 	out.Gate = "passed"
 	for i := range verified.Modules {
-		for _, it := range verified.Modules[i].Items {
-			if it.Concern == "state" && it.Status == PlanSame {
+		for j := range verified.Modules[i].Items {
+			if it := &verified.Modules[i].Items[j]; it.Concern == "state" && it.Status == PlanSame {
 				out.LegacyTableItems += it.count()
 			}
 		}
@@ -231,8 +231,9 @@ func PruneV5(ctx context.Context, from, to Side, opt PruneOptions) (*PruneReport
 		}
 	}
 	out.PlanHash = planHash(out)
-	out.Notes = append(out.Notes,
-		fmt.Sprintf("%d records of the legacy table are not deleted here: the table retires as a whole (Compat.RetireLegacyTable), after a backup", out.LegacyTableItems))
+	out.Notes = append(out.Notes, fmt.Sprintf(
+		"%d records of the legacy table are not deleted here: the table retires as a whole (Compat.RetireLegacyTable), after a backup",
+		out.LegacyTableItems))
 	if opt.DryRun {
 		out.OK = true
 		return out, nil
@@ -249,8 +250,8 @@ func PruneV5(ctx context.Context, from, to Side, opt PruneOptions) (*PruneReport
 
 func firstNotSame(r *PlanReport) PlanItem {
 	for i := range r.Modules {
-		for _, it := range r.Modules[i].Items {
-			if it.Status != PlanSame {
+		for j := range r.Modules[i].Items {
+			if it := r.Modules[i].Items[j]; it.Status != PlanSame {
 				return it
 			}
 		}
