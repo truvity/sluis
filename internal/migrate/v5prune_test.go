@@ -120,7 +120,7 @@ func TestPruneDryRunListsWhatItWouldDeleteAndKeepsTheRest(t *testing.T) {
 
 func TestPruneRefusesUnlessTheDestinationHoldsEverythingEqual(t *testing.T) {
 	for name, change := range map[string]func(*testing.T, *v4Installation, *v5Installation){
-		"different": func(t *testing.T, src *v4Installation, _ *v5Installation) {
+		"different": func(_ *testing.T, src *v4Installation, _ *v5Installation) {
 			src.env[sluissecrets.EnvName("recovery/password")] = "CHANGED-PW"
 		},
 		"new": func(t *testing.T, src *v4Installation, _ *v5Installation) {
@@ -275,7 +275,9 @@ func TestPruneBacksOffWhenThrottledAndStopsOnAnyOtherError(t *testing.T) {
 	// Another error stops the run without trying again.
 	src2, dst2 := copied(t)
 	waits = nil
-	plan, _ = migrate.PruneV5(ctx, side("v4.yaml", src2.st), side("v5.yaml", dst2.st), func() migrate.PruneOptions { o := opt; o.DryRun, o.Confirm = true, ""; return o }())
+	dry := opt
+	dry.DryRun, dry.Confirm = true, ""
+	plan, _ = migrate.PruneV5(ctx, side("v4.yaml", src2.st), side("v5.yaml", dst2.st), dry)
 	opt.Confirm = plan.PlanHash
 	src2.rec.FailBatches(1, errors.New("access denied"))
 	r, err = migrate.PruneV5(ctx, side("v4.yaml", src2.st), side("v5.yaml", dst2.st), opt)

@@ -33,7 +33,10 @@ func TestMigrateV5TakesTheMigrateFlagsAndAPlanSubcommand(t *testing.T) {
 	} {
 		var out bytes.Buffer
 		err := run(args, &out)
-		if err == nil || (name != "write flag" && name != "stray argument" && name != "verify write" && name != "plan dry run" && name != "prune write" && name != "copy confirm" && !errors.Is(err, errUsage)) {
+		notUsage := map[string]bool{
+			"write flag": true, "stray argument": true, "verify write": true, "plan dry run": true, "prune write": true, "copy confirm": true,
+		}
+		if err == nil || (!notUsage[name] && !errors.Is(err, errUsage)) {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
@@ -75,7 +78,8 @@ func TestThePruneSummaryNamesWhatItDeletesAndKeepsAndTheHash(t *testing.T) {
 		Delete: []string{"external/oidc/x"},
 		Kept:   []migrate.KeptParam{{Name: "internal/config/valkey/password", Class: migrate.KeptNotMigrated, Reason: "delivered to the cluster only"}},
 	})
-	for _, want := range []string{"external/oidc/x", "internal/config/valkey/password", "[not-migrated]", "--confirm-plan 0123456789abcdef", "7 migrated records"} {
+	wants := []string{"external/oidc/x", "internal/config/valkey/password", "[not-migrated]", "--confirm-plan 0123456789abcdef", "7 migrated records"}
+	for _, want := range wants {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("the summary lacks %q:\n%s", want, out.String())
 		}
