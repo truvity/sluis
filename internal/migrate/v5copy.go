@@ -161,10 +161,10 @@ func CopyV5(ctx context.Context, from, to Side, opt V5Options) (*PlanReport, err
 }
 
 func firstWith(r *PlanReport, status PlanStatus) PlanItem {
-	for _, m := range r.Modules {
-		for _, it := range m.Items {
-			if it.Status == status {
-				return it
+	for i := range r.Modules {
+		for j := range r.Modules[i].Items {
+			if it := &r.Modules[i].Items[j]; it.Status == status {
+				return *it
 			}
 		}
 	}
@@ -173,10 +173,10 @@ func firstWith(r *PlanReport, status PlanStatus) PlanItem {
 
 func problems(r *PlanReport) []PlanItem {
 	var out []PlanItem
-	for _, m := range r.Modules {
-		for _, it := range m.Items {
-			if it.Status != PlanSame {
-				out = append(out, it)
+	for i := range r.Modules {
+		for j := range r.Modules[i].Items {
+			if it := &r.Modules[i].Items[j]; it.Status != PlanSame {
+				out = append(out, *it)
 			}
 		}
 	}
