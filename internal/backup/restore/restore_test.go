@@ -639,3 +639,38 @@ func TestRecordOfAnotherModuleRefused(t *testing.T) {
 		t.Error("a write happened")
 	}
 }
+
+func TestBackupModuleRunRecordsAreRegenerated(t *testing.T) {
+	store := memory.New().Blobs()
+	key := archiveKey(t)
+	w, err := backup.NewWriter(ctx, store, key, backup.Params{Installation: "example", ID: "y", Layout: backup.LayoutV5,
+		Creator: "t", Now: func() time.Time { return epoch }, ChunkBytes: 4096})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, k := range []string{"rec.backup.run.r1", "rec.backup.retention"} {
+		rec, _ := json.Marshal(export.State{V: export.RecordVersion, T: export.TypeState, Key: k, Value: []byte(`{}`)})
+		if err := w.Add(ctx, backup.State, port.ModuleBackup, rec); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := w.Close(ctx); err != nil {
+		t.Fatal(err)
+	}
+	r, err := backup.Open(ctx, store, key, "example", "y")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	d := newDest(epoch)
+	rep, err := restore.Apply(ctx, r, d.target, d.opts())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tot := rep.Totals(); tot.Regenerated != 2 || tot.Create != 0 {
+		t.Errorf("totals %+v", tot)
+	}
+	if d.rec.count() != 0 {
+		t.Error("a write happened")
+	}
+}
