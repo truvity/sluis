@@ -1,6 +1,6 @@
 # GitHub catalogue reference
 
-States, drift checks and the objects a catalogue App leaves behind. Setup: [A catalogue of GitHub Apps](../../guides/sluis/connect/github-apps-catalogue.md).
+States, drift checks and the objects a catalogue App leaves behind. Declared in `apps.github.apps` of the [policy document](policy-document.md). Setup: [A catalogue of GitHub Apps](../../guides/sluis/connect/github-apps-catalogue.md).
 
 ## State
 
@@ -31,7 +31,7 @@ GitHub has no API to change an App's permissions, events or name. To fix drift, 
 
 | Object | Holds | Written by |
 |---|---|---|
-| ConfigMap `<release>-github-apps-catalogue` | The declaration, `catalogue.yaml` | The chart, when `githubApps.catalogue` is not empty |
+| ConfigMap `<release>-policy` | The declaration, `apps.github.apps` | The chart, when `githubApps.catalogue` is not empty |
 | Secret `<release>-github-catalogue-apps` | Every catalogue App's keys and record | The service, on Create and Install; created empty at start |
 | PushSecret `<release>-github-app-<id>` | The copy instruction for one App's three property keys | The chart, for each entry carrying `push` |
 

@@ -81,9 +81,14 @@ exchange:
     owners: [example-org]
 apps:
   github:
-    runnerTiers: [small, large]
-    catalogue:
+    apps:
+      - {id: link, purpose: link, labels: {team: platform}}
+      - {purpose: runner, tier: small}
+      - {purpose: runner, tier: large, org: example-org, labels: {pool: ci}}
       - id: renovate
+        purpose: catalogue
+        labels: {team: platform}
+        export: true
         org: example-org
         name: example-org-renovate
         description: Dependency updates
@@ -97,7 +102,7 @@ apps:
     catalogue:
       - {id: alerts, workspace: example, name: example-alerts, description: Alerts, botScopes: ["chat:write"]}
 controllers:
-  github: {enabledOrgs: [example-org]}
+  github: {enabledOrgs: [example-org], appRefs: {example-org: renovate}}
   slack: {enabledWorkspaces: [example]}
 cloudflare:
   grants:

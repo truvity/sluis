@@ -1,0 +1,11 @@
+# An entry of the GitHub Apps list says what it is for.
+# error: at '/policy/apps/github/apps/0': missing property 'purpose'
+config:
+  issuerURL: https://issuer.example
+policy:
+  apps:
+    github:
+      apps:
+      - id: renovate
+        org: example-org
+        permissions: {contents: read}

@@ -875,8 +875,255 @@
           "additionalProperties": false,
           "description": "GitHub Apps.",
           "properties": {
+            "apps": {
+              "description": "Every GitHub App the installation declares, of every purpose: the link App, the catalogue Apps and the runner tiers (docs/guides/sluis/connect/github-apps-catalogue.md). A grant naming an undeclared group stops the service.",
+              "items": {
+                "additionalProperties": false,
+                "allOf": [
+                  {
+                    "if": {
+                      "properties": {
+                        "purpose": {
+                          "const": "catalogue"
+                        }
+                      },
+                      "required": [
+                        "purpose"
+                      ]
+                    },
+                    "then": {
+                      "required": [
+                        "id",
+                        "org",
+                        "permissions"
+                      ]
+                    }
+                  },
+                  {
+                    "if": {
+                      "properties": {
+                        "purpose": {
+                          "const": "runner"
+                        }
+                      },
+                      "required": [
+                        "purpose"
+                      ]
+                    },
+                    "then": {
+                      "required": [
+                        "tier"
+                      ]
+                    }
+                  },
+                  {
+                    "if": {
+                      "properties": {
+                        "purpose": {
+                          "const": "link"
+                        }
+                      },
+                      "required": [
+                        "purpose"
+                      ]
+                    },
+                    "then": {
+                      "properties": {
+                        "id": {
+                          "const": "link"
+                        }
+                      },
+                      "required": [
+                        "id"
+                      ]
+                    }
+                  }
+                ],
+                "description": "One App. A `catalogue` entry needs `org` and `permissions`; a `runner` entry needs `tier` and declares nothing of a catalogue App's; the `link` entry has the id `link`.",
+                "properties": {
+                  "description": {
+                    "description": "What it is for.",
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "events": {
+                    "description": "Webhook events the App subscribes to. They are delivered only to an App that declares a `webhook`.",
+                    "items": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "export": {
+                    "description": "Place the installed App's key at `external/github/<id>` for a consumer to read. Unset keeps it internal. A runner App is always exported.",
+                    "type": "boolean"
+                  },
+                  "grants": {
+                    "description": "Who may ask for tokens of it, and for how much.",
+                    "items": {
+                      "additionalProperties": false,
+                      "description": "A grant.",
+                      "properties": {
+                        "group": {
+                          "description": "The internal group.",
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "permissions": {
+                          "additionalProperties": {
+                            "enum": [
+                              "read",
+                              "write",
+                              "admin"
+                            ]
+                          },
+                          "description": "Permission name to level: read, write or admin.",
+                          "minProperties": 1,
+                          "type": "object"
+                        },
+                        "repositories": {
+                          "description": "Repository globs.",
+                          "items": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "minItems": 1,
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "group",
+                        "repositories",
+                        "permissions"
+                      ],
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
+                  "id": {
+                    "description": "The App's key in storage, unique, never changes. `link` for the link App; for a catalogue App [a-z0-9-], at most 32, not beginning `runner-`; a runner entry may leave it out (`runner-<tier>`, and `runner-<tier>-<org>` with an `org`).",
+                    "pattern": "^[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?$",
+                    "type": "string"
+                  },
+                  "installation": {
+                    "description": "all or selected (default).",
+                    "enum": [
+                      "all",
+                      "selected"
+                    ]
+                  },
+                  "labels": {
+                    "additionalProperties": {
+                      "pattern": "^([a-z0-9]([a-z0-9._-]{0,61}[a-z0-9])?)?$",
+                      "type": "string"
+                    },
+                    "description": "At most 16 short lower-case labels, key to value, kept on the App's record for a reader that selects Apps by them.",
+                    "maxProperties": 16,
+                    "propertyNames": {
+                      "pattern": "^[a-z0-9]([a-z0-9._-]{0,61}[a-z0-9])?$"
+                    },
+                    "type": "object"
+                  },
+                  "name": {
+                    "description": "Default <org>-<id>.",
+                    "maxLength": 34,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "org": {
+                    "description": "The organisation a catalogue App is created under (required for it), or the only organisation of a runner entry (no `org` offers the tier in every organisation). The link App's owner.",
+                    "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9]|-[A-Za-z0-9]){0,38}$",
+                    "type": "string"
+                  },
+                  "permissions": {
+                    "additionalProperties": {
+                      "enum": [
+                        "read",
+                        "write",
+                        "admin"
+                      ]
+                    },
+                    "description": "Permission name to level: read, write or admin.",
+                    "minProperties": 1,
+                    "type": "object"
+                  },
+                  "public": {
+                    "description": "Installable by other organisations.",
+                    "type": "boolean"
+                  },
+                  "purpose": {
+                    "description": "What the App is for: `link` is the App that links a person's GitHub account, `catalogue` an App an operator creates and installs from the console, `runner` the tier an operator may create a runner App for.",
+                    "enum": [
+                      "link",
+                      "catalogue",
+                      "runner"
+                    ]
+                  },
+                  "tier": {
+                    "description": "A runner entry's tier: lower-case letters, digits and dashes, at most 16.",
+                    "pattern": "^[a-z0-9]([a-z0-9-]{0,14}[a-z0-9])?$",
+                    "type": "string"
+                  },
+                  "webhook": {
+                    "additionalProperties": false,
+                    "description": "Where GitHub delivers the App's events: exactly one of `url` and `kargo`. Needs non-empty `events`; set `export: true` so a consumer can read the secret. The secret is generated by this service, set on GitHub right after the App is created, and kept at `external/github/<id>` as `webhook_secret`; it is rotated from the console, without overlap (docs/decisions/0041). An App created before this is declared cannot be switched to a webhook: GitHub has no API for that, so disconnect it and create it again.",
+                    "oneOf": [
+                      {
+                        "required": [
+                          "url"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "kargo"
+                        ]
+                      }
+                    ],
+                    "properties": {
+                      "kargo": {
+                        "additionalProperties": false,
+                        "description": "A Kargo GitHub receiver. Kargo derives the receiver's path from its secret (`/github/<hex sha256(project + receiver + secret)>`), so the URL moves whenever the secret does.",
+                        "properties": {
+                          "base": {
+                            "description": "Where Kargo's receivers are served.",
+                            "pattern": "^https://[^/@\\s]+(/.*)?$",
+                            "type": "string"
+                          },
+                          "project": {
+                            "description": "The Kargo project; empty for a cluster-scoped receiver.",
+                            "type": "string"
+                          },
+                          "receiver": {
+                            "description": "The receiver's name in the Kargo project.",
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "base",
+                          "receiver"
+                        ],
+                        "type": "object"
+                      },
+                      "url": {
+                        "description": "The endpoint every delivery is POSTed to, e.g. Argo CD's `https://argocd.example/api/webhook`.",
+                        "pattern": "^https://[^/@\\s]+(/.*)?$",
+                        "type": "string"
+                      }
+                    },
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "purpose"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            },
             "catalogue": {
-              "description": "Every GitHub App the installation declares (docs/guides/sluis/connect/github-apps-catalogue.md). A grant naming an undeclared group stops the service.",
+              "deprecated": true,
+              "description": "DEPRECATED, removed in v1.77: declare each as a `purpose: catalogue` entry in `apps`. Read as those entries, with a warning.",
               "items": {
                 "additionalProperties": false,
                 "description": "One App: created under `org` from the console, and installed there.",
@@ -1039,7 +1286,8 @@
               "type": "array"
             },
             "runnerTiers": {
-              "description": "The tiers an operator may create a runner App for: lower-case letters, digits and dashes, at most 16, each once.",
+              "deprecated": true,
+              "description": "DEPRECATED, removed in v1.77: declare a `purpose: runner` entry in `apps` for each tier. Read as those entries, with a warning.",
               "items": {
                 "pattern": "^[a-z0-9]([a-z0-9-]{0,14}[a-z0-9])?$",
                 "type": "string"

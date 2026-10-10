@@ -33,6 +33,9 @@ func runnerKey(tier, org string) string { return ghRunnerPrefix + seg(tier) + ".
 
 // Put writes one App, replacing what was kept for its tier and organisation.
 func (s *GitHubRunnerApps) Put(ctx context.Context, record runnerapp.Record, privateKey string) error {
+	if f := s.b.declared.RunnerLabels; f != nil {
+		record.Labels = labelsFor(f(record.Tier, record.Org), record.Labels)
+	}
 	keys, err := runnerapp.Encode(record, privateKey)
 	if err != nil {
 		return err
@@ -142,6 +145,9 @@ func ghCatalogueKey(id string) string { return ghCataloguePfx + seg(id) }
 
 // Put writes one App, replacing what was kept for its id.
 func (s *GitHubCatalogueApps) Put(ctx context.Context, record catalogueapp.Record, privateKey string) error {
+	if f := s.b.declared.Labels; f != nil {
+		record.Labels = labelsFor(f(record.ID), record.Labels)
+	}
 	keys, err := catalogueapp.Encode(record, privateKey)
 	if err != nil {
 		return err

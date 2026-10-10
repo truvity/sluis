@@ -51,6 +51,38 @@ func (b *Base) ExportGitHubApps(exported func(id string) bool) *Base {
 	return b
 }
 
+// DeclaredGitHubApps is what the configuration's `apps.github.apps` says of the
+// Apps, so that a record is written the way the configuration declares it. A
+// nil func declares nothing.
+type DeclaredGitHubApps struct {
+	// Labels are the labels of the link or catalogue App with the id.
+	Labels func(id string) map[string]string
+	// RunnerLabels are the labels of the runner App of a tier in an organisation.
+	RunnerLabels func(tier, org string) map[string]string
+	// AppRef is the id of the App an organisation uses. It applies on layout v5
+	// only, where an organisation must refer to an App.
+	AppRef func(org string) string
+}
+
+// DeclareGitHubApps sets what the configuration declares. The labels it gives
+// replace those of the record being written (the configuration is where they
+// are set, so a change of it reaches the next write); an App it declares none
+// for keeps the record's own. The App an organisation uses is filled in when
+// the record names none.
+func (b *Base) DeclareGitHubApps(d DeclaredGitHubApps) *Base {
+	b.declared = d
+	return b
+}
+
+// labelsFor are the labels a record is written with: the declared ones when
+// there are any, and otherwise its own.
+func labelsFor(declared, own map[string]string) map[string]string {
+	if len(declared) > 0 {
+		return declared
+	}
+	return own
+}
+
 // v4Writes is whether a credential also goes to layout v4: whenever the
 // installation has v4 stores.
 func (b *Base) v4Writes() bool { return b.v4 != nil || b.v5 != nil }

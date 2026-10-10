@@ -324,7 +324,7 @@ config:
   # (sluis.truvity.github.io/sluis/v3, .../policy/v2), so
   # neither `config` nor `policy` carries one. Whose CI tokens are verified
   # (`policy.exchange.github.owners`), the runner tiers
-  # (`policy.apps.github.runnerTiers`) are the policy document's.
+  # (`policy.apps.github.apps`, entries of purpose runner) are the policy document's.
 
 # The secrets the config names, each one key of a Secret projected as the
 # file <config.secrets.root>/<name>: `valkey.passwordSecret`,
@@ -787,7 +787,7 @@ serviceAccount:
 # Runner Apps: the GitHub App a self-hosted runner scale set in one tier
 # registers with, one per organisation per tier, created by an operator on
 # the console's GitHub page (Apps). The tiers an operator may create one for
-# are the policy document's (`policy.apps.github.runnerTiers`, e.g. [preview, stable]);
+# are the policy document's (`policy.apps.github.apps`, an entry `{purpose: runner, tier: preview}` for each);
 # empty creates none. The service keeps every App in the Secret
 # `<release>-github-runner-apps`, an installed App as three keys named as
 # gha-runner-scale-set's githubConfigSecret names them --

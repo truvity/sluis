@@ -78,6 +78,10 @@ type Base struct {
 	v4        *secretstore.Stores
 	exportApp func(id string) bool
 
+	// declared is what the configuration says of the GitHub Apps (see
+	// [Base.DeclareGitHubApps]).
+	declared DeclaredGitHubApps
+
 	// v5 puts the GitHub Apps' credentials and exports on layout v5 (see
 	// [Base.WithV5]).
 	v5 *secretstore.StoresV5

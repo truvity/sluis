@@ -197,7 +197,11 @@ data:
     apiVersion: sluis.truvity.github.io/policy/v2
     apps:
       github:
-        catalogue:
+        apps:
+        - purpose: runner
+          tier: preview
+        - purpose: runner
+          tier: stable
         - description: Dependency updates
           events:
           - pull_request
@@ -215,9 +219,7 @@ data:
             contents: write
             pull_requests: write
           public: false
-        runnerTiers:
-        - preview
-        - stable
+          purpose: catalogue
     clients:
       access-console:
         kind: confidential
@@ -482,7 +484,7 @@ spec:
         # checksum per document this process reads: the service document (the
         # controllers' sections are in it) and the policy.
         checksum/config: 0e1af74de96b6301847facdefce17161de8252e2ca9f085516b0423d6a4ad3d1
-        checksum/policy: 271a7354dcbf9b192a831177ce3df1c573b2140a01b1dd43592be78af812ef00
+        checksum/policy: 164a6383e1a8a507459fac193139e235f56b49d8d6e02c883e65b490101c88b6
         example.com/scrape: "false"
     spec:
       serviceAccountName: issuer

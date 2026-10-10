@@ -93,7 +93,7 @@ data:
     apiVersion: sluis.truvity.github.io/policy/v2
     apps:
       github:
-        catalogue:
+        apps:
         - description: The program that manages the organisation
           id: iac
           installation: all
@@ -104,16 +104,19 @@ data:
             members: write
             metadata: read
             organization_administration: write
+          purpose: catalogue
         - id: renovate-public
           org: example-org
           permissions:
             contents: write
             pull_requests: write
+          purpose: catalogue
         - id: ci-automation
           org: example-org
           permissions:
             contents: write
             pull_requests: write
+          purpose: catalogue
 
 ---
 # Source: sluis/templates/serviceaccount.yaml
@@ -249,7 +252,7 @@ spec:
         # checksum per document this process reads: the service document (the
         # controllers' sections are in it) and the policy.
         checksum/config: 5098c25441fa9aff3a1ab58af97ec933ac6efcb61a6ed23852299e062f5bac00
-        checksum/policy: d4584ccaf8f69752ad19f5769d8d66cf454b38f44df9ea0da40f2f960321d2be
+        checksum/policy: 5545d7970657e83682bf3770bb4c542752b7624f48d6161fe06a7d455f474cca
     spec:
       serviceAccountName: sluis
       securityContext:

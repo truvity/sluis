@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/truvity/sluis/internal/githubroster/appid"
 	"github.com/truvity/sluis/internal/githubroster/connection"
 	"github.com/truvity/sluis/internal/githubroster/link"
 	"github.com/truvity/sluis/internal/port"
@@ -39,6 +40,9 @@ func NewGitHubOrgs(b *Base) *GitHubOrgs { return &GitHubOrgs{b: b} }
 func (s *GitHubOrgs) Put(ctx context.Context, record connection.Record, credential connection.Credential) error {
 	if record.Org != credential.Org {
 		return fmt.Errorf("a record for %s with a credential for %s", record.Org, credential.Org)
+	}
+	if f := s.b.declared.AppRef; f != nil && s.b.v5 != nil && record.AppRef == "" {
+		record.AppRef = f(record.Org)
 	}
 	rawRecord, err := connection.EncodeRecord(record)
 	if err != nil {
@@ -170,6 +174,9 @@ func (s *GitHubOrgs) Delete(ctx context.Context, org string) error {
 
 // PutLinkApp keeps the connected link App: record in State, credential in Secrets.
 func (s *GitHubOrgs) PutLinkApp(ctx context.Context, record link.App, credential link.AppCredential) error {
+	if f := s.b.declared.Labels; f != nil {
+		record.Labels = labelsFor(f(appid.LinkID), record.Labels)
+	}
 	rawRecord, err := link.EncodeApp(record)
 	if err != nil {
 		return err

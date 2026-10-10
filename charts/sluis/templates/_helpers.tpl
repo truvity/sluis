@@ -157,7 +157,7 @@ apiVersion: sluis.truvity.github.io/{{ .kind }}/{{ if eq .kind "sluis" }}v3{{ el
 sluis.policyDocument: the policy document. `policy` as the values give it,
 with the sections the chart's own values fill: `exchange.clusters` and
 `exchange.aws` from `exchange`, the catalogues from `githubApps.catalogue`
-and `slackApps` (each entry without its `push`, which is a chart-side
+(entries of `apps.github.apps`, purpose catalogue) and `slackApps` (each entry without its `push`, which is a chart-side
 instruction to External Secrets and not part of an App). A section written
 both ways is refused: one place says it.
 */}}
@@ -197,11 +197,11 @@ both ways is refused: one place says it.
 {{- if hasKey $github "catalogue" -}}
 {{- fail "githubApps.catalogue and policy.apps.github.catalogue are both set: declare the Apps once, in one of them" -}}
 {{- end -}}
-{{- $list := list -}}
+{{- $list := deepCopy ($github.apps | default (list)) -}}
 {{- range .Values.githubApps.catalogue -}}
-{{- $list = append $list (omit . "push") -}}
+{{- $list = append $list (merge (dict "purpose" "catalogue") (omit . "push")) -}}
 {{- end -}}
-{{- $_ := set $github "catalogue" $list -}}
+{{- $_ := set $github "apps" $list -}}
 {{- $_ := set $apps "github" $github -}}
 {{- end -}}
 {{- if .Values.slackApps -}}

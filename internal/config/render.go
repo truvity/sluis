@@ -115,8 +115,7 @@ func (d *PolicyDocument) merge(layer *PolicyDocument, from string) error {
 			if d.Apps.GitHub == nil {
 				d.Apps.GitHub = &AppsGitHub{}
 			}
-			d.Apps.GitHub.RunnerTiers = union(d.Apps.GitHub.RunnerTiers, a.GitHub.RunnerTiers)
-			d.Apps.GitHub.Catalogue = append(d.Apps.GitHub.Catalogue, a.GitHub.Catalogue...)
+			d.Apps.GitHub.Apps = append(d.Apps.GitHub.Apps, a.GitHub.Apps...)
 		}
 		if a.Slack != nil {
 			if d.Apps.Slack == nil {
@@ -134,6 +133,15 @@ func (d *PolicyDocument) merge(layer *PolicyDocument, from string) error {
 				d.Controllers.GitHub = &ControllersGitHub{}
 			}
 			d.Controllers.GitHub.EnabledOrgs = union(d.Controllers.GitHub.EnabledOrgs, c.GitHub.EnabledOrgs)
+			for org, ref := range c.GitHub.AppRefs {
+				if other, clash := d.Controllers.GitHub.AppRefs[org]; clash && other != ref {
+					return fmt.Errorf("%s: controllers.github.appRefs: %s is declared twice across merged files", from, org)
+				}
+				if d.Controllers.GitHub.AppRefs == nil {
+					d.Controllers.GitHub.AppRefs = map[string]string{}
+				}
+				d.Controllers.GitHub.AppRefs[org] = ref
+			}
 		}
 		if c.Slack != nil {
 			if d.Controllers.Slack == nil {
