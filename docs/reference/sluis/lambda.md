@@ -4,23 +4,13 @@ See [sluis on AWS Lambda](../../concepts/sluis/lambda.md) and [the Pulumi librar
 
 ## Package
 
-One zip per module. Each holds one file, `bootstrap`, an arm64 Linux binary for `provided.al2023`, built with its module name pinned (`-X github.com/truvity/sluis/internal/version.Module=sluis-module=<module>`), so a zip refuses to start as another module and refuses a document that is another module's. The library checks `PackageSHA256` and deploys the zip unchanged.
-
-| Asset | Module | Notes |
-|---|---|---|
-| `sluis-issuer_<version>_linux_arm64.zip` | issuer | The issuer, the signer (`internal/signer`) and the console in one process, with the providers' controllers in-process until each has a zip of its own. There is no signer zip |
-| `sluis-cloudflare_<version>_linux_arm64.zip` | cloudflare | The Cloudflare module's function (`cloudflare.serve`) |
-| `sluis-backup_<version>_linux_arm64.zip` | backup | Deployed twice: as the backup function, and as the restore function with `backup.role: restore` |
-
-| Item | Value |
+| Asset | Content |
 |---|---|
-| Size | About 50 MB for the issuer's, about 14 MB zipped; `just lambda-size` holds every zip's `bootstrap` to a budget |
-| Build | `GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -tags lambda,lambda.norpc -ldflags '-s -w -X github.com/truvity/sluis/internal/version.Module=sluis-module=issuer' -o bootstrap ./cmd/sluis-issuer` |
-| Minimum | `MinPackageVersion` 1.63; binary and library share a minor ([v1.63](../../guides/sluis/upgrade/v1.63.md)) |
-| Import guards | `internal/boundaries/zips_test.go` holds each zip's imports to its module and fails on `k8s.io/`, the controller runtime and key-value-store clients; `cmd/sluis/imports_test.go` does the same for the lambda build of the multi-call binary |
-| Release check | `hack/check-zips.sh` (run by the release workflow and by `hack/release-verify.sh`) holds each zip to `hack/release-zips.txt`: present once, `bootstrap` alone, pinned, in `checksums.txt` |
-
-The providers (GitHub, Slack, Google) get a zip each from v1.76, one per release; until then they run inside the issuer's process.
+| `sluis-issuer_<version>_linux_arm64.zip` | Issuer, signer, console, providers |
+| `sluis-cloudflare_<version>_linux_arm64.zip` | Cloudflare |
+| `sluis-backup_<version>_linux_arm64.zip` | Backup, and restore (`backup.role`) |
+| Build | `bootstrap` pinned to its module: a zip refuses another's document |
+| Minimum | `MinPackageVersion` 1.63; binary and library share a minor |
 
 ## Events
 

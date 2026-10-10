@@ -328,7 +328,7 @@ l, _ := sluispulumi.NewLambda(ctx, "access", &sluispulumi.LambdaArgs{
 
 | Behavior | Rule |
 |---|---|
-| `Package` empty | Deploys the library's own release from `<BaseURL>/v<version>/sluis-issuer_<version>_linux_arm64.zip` (`NewBackup` and `NewRestore`: `sluis-backup_<version>_linux_arm64.zip`). A library at version X expects release X's per-module zips; the single `sluis-lambda` zip is no longer published. A pinned digest wins. `(devel)`, pseudo-versions and replaced modules are refused |
+| `Package` empty | Deploys the library's own release from `<BaseURL>/v<version>/sluis-issuer_<version>_linux_arm64.zip` (`NewBackup` and `NewRestore`: `sluis-backup_<version>_linux_arm64.zip`). A library at version X expects release X's zips. A pinned digest wins. `(devel)`, pseudo-versions and replaced modules are refused |
 | Cache | `os.UserCacheDir()/sluis/artifacts`; `GITHUB_TOKEN` goes to github.com |
 
 ### Audit
