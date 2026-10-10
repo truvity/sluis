@@ -162,7 +162,7 @@ func TestSluisKeyPolicySignContext(t *testing.T) {
 }
 
 func TestSluisKeyPolicyParameterScopes(t *testing.T) {
-	root := "arn:aws:ssm:" + kpRegion + ":" + kpAccount + ":parameter/sluis/" + kpInst
+	root := arnPrefix + "ssm:" + kpRegion + ":" + kpAccount + ":parameter/sluis/" + kpInst
 	arns := func(sid string, st []map[string]any) []string {
 		c := kpBySid(t, st, sid)["Condition"].(map[string]any)["StringLike"].(map[string]any)["kms:EncryptionContext:PARAMETER_ARN"]
 		return c.([]string)
@@ -207,7 +207,8 @@ func TestSluisKeyPolicyParameterScopes(t *testing.T) {
 		t.Errorf("issuer v4: %v", got)
 	}
 	// The admin and breakglass statements are about the principals they name.
-	if c := kpBySid(t, st, "SluisKeyAdminSeeds")["Condition"].(map[string]any); !reflect.DeepEqual(c["ArnLike"], map[string]any{"aws:PrincipalArn": []string{kpAdmin}}) {
+	c := kpBySid(t, st, "SluisKeyAdminSeeds")["Condition"].(map[string]any)
+	if !reflect.DeepEqual(c["ArnLike"], map[string]any{"aws:PrincipalArn": []string{kpAdmin}}) {
 		t.Errorf("admin: %v", c)
 	}
 	if got := kpBySid(t, st, "SluisKeyAdminSeeds")["Action"]; !reflect.DeepEqual(got, []string{"kms:Encrypt", "kms:GenerateDataKey", "kms:DescribeKey"}) {
@@ -252,11 +253,10 @@ func TestSluisKeyPolicyHasNoCatchAll(t *testing.T) {
 // actions, every condition the estate's statement has, with the same value) and
 // the test lists what it adds: a new check on the sluis role, or a wider list.
 type legacy struct {
-	sid     string
-	st      map[string]any
-	helper  string
-	extras  []string
-	comment string
+	sid    string
+	st     map[string]any
+	helper string
+	extras []string
 }
 
 func kpLegacyKernel(function string) []legacy {
@@ -312,7 +312,7 @@ func kpLegacyKernel(function string) []legacy {
 				"ArnEquals":    map[string]any{"aws:PrincipalArn": []string{kpReader2, kpReader1}},
 				"StringEquals": map[string]any{"kms:ViaService": "ssm." + kpRegion + ".amazonaws.com"},
 				"StringLike": map[string]any{"kms:EncryptionContext:PARAMETER_ARN": []string{
-					"arn:aws:ssm:" + kpRegion + ":" + kpAccount + ":parameter/sluis/" + kpInst + "/external/*"}},
+					arnPrefix + "ssm:" + kpRegion + ":" + kpAccount + ":parameter/sluis/" + kpInst + "/external/*"}},
 			}}},
 		{sid: "OperatorSeedsTheParameters", helper: "SluisKeyAdminSeeds", st: map[string]any{
 			"Effect": "Allow", "Principal": map[string]any{"AWS": kpRoot},
@@ -327,8 +327,8 @@ func kpLegacyKernel(function string) []legacy {
 				"ArnLike":      map[string]any{"aws:PrincipalArn": []string{kpAdmin}},
 				"StringEquals": map[string]any{"kms:ViaService": "ssm." + kpRegion + ".amazonaws.com"},
 				"StringLike": map[string]any{"kms:EncryptionContext:PARAMETER_ARN": []string{
-					"arn:aws:ssm:" + kpRegion + ":" + kpAccount + ":parameter/sluis/" + kpInst + "/internal/config/issuer/state-secret",
-					"arn:aws:ssm:" + kpRegion + ":" + kpAccount + ":parameter/sluis/" + kpInst + "/internal/config/recovery/password",
+					arnPrefix + "ssm:" + kpRegion + ":" + kpAccount + ":parameter/sluis/" + kpInst + "/internal/config/issuer/state-secret",
+					arnPrefix + "ssm:" + kpRegion + ":" + kpAccount + ":parameter/sluis/" + kpInst + "/internal/config/recovery/password",
 				}},
 			}},
 			extras: []string{"StringLike/kms:EncryptionContext:PARAMETER_ARN (adds the v5 names)"}},
@@ -492,21 +492,22 @@ func TestSluisKeyPolicyComposesWithEstateStatements(t *testing.T) {
 		{"Sid": "OperatorSecrets", "Effect": "Allow", "Principal": map[string]any{"AWS": opRole}, "Action": []string{"kms:Decrypt"}, "Resource": "*",
 			"Condition": map[string]any{"StringEquals": map[string]any{"kms:EncryptionContext:purpose": "ops"}}},
 		{"Sid": "CryptoOnlyNamedRoles", "Effect": "Deny", "Principal": map[string]any{"AWS": "*"}, "Action": []string{"kms:Decrypt"}, "Resource": "*",
-			"Condition": map[string]any{"ArnNotEquals": map[string]any{"aws:PrincipalArn": []string{sealRole, opRole, kpIssuer, kpCF, kpBackup, kpRestore, kpReader1, kpReader2}}}},
+			"Condition": map[string]any{"ArnNotEquals": map[string]any{
+				"aws:PrincipalArn": []string{sealRole, opRole, kpIssuer, kpCF, kpBackup, kpRestore, kpReader1, kpReader2}}}},
 	}
 	doc, err := KeyPolicyDocument("shared-key", estate, sluis)
 	if err != nil {
 		t.Fatal(err)
 	}
 	var parsed struct {
-		Id        string
+		ID        string `json:"Id"`
 		Version   string
 		Statement []map[string]any
 	}
 	if err := json.Unmarshal([]byte(doc), &parsed); err != nil {
 		t.Fatal(err)
 	}
-	if parsed.Version != "2012-10-17" || parsed.Id != "shared-key" || len(parsed.Statement) != len(estate)+len(sluis) {
+	if parsed.Version != "2012-10-17" || parsed.ID != "shared-key" || len(parsed.Statement) != len(estate)+len(sluis) {
 		t.Errorf("document: %s", doc[:200])
 	}
 	// The same Sid in both lists is refused.
