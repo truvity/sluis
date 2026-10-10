@@ -247,7 +247,8 @@ func TestCopyWritesNothingWhenSomethingIsRefused(t *testing.T) {
 	src.seedFull(t)
 	var writes tally
 	opt := copyOptions()
-	opt.AppRef = func(string) string { return "" }
+	// An organisation whose App slug cannot be an App id, and so has no App.
+	putOrg(t, src.st, "initech", 99, "Not An Id", "INITECH-KEY")
 	report, err := migrate.CopyV5(ctx, side("v4.yaml", src.st), side("v5.yaml", counted(dst.st, &writes)), opt)
 	if !errors.Is(err, migrate.ErrRefused) || report.OK || report.Totals.Refused == 0 {
 		t.Fatalf("CopyV5 = %v, want ErrRefused", err)

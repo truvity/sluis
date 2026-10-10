@@ -24,6 +24,7 @@ import (
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 
 	"github.com/truvity/sluis/internal/config"
+	ghconn "github.com/truvity/sluis/internal/githubroster/connection"
 	"github.com/truvity/sluis/internal/hub"
 	"github.com/truvity/sluis/internal/issuer"
 	"github.com/truvity/sluis/internal/issuerapp"
@@ -294,6 +295,16 @@ func TestV5MigrationEndToEndOnDynamoDB(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// An organisation connected with an App of its own, the shape of a real
+	// estate: its key is the organisation's credential on layout v4. No
+	// appRefs entry names it (e2ePlanOptions has none).
+	const orgKey = "EXAMPLE-ORG-KEY"
+	if err = domains.Orgs.Put(ctx,
+		ghconn.Record{Org: "example", AppID: 31, AppSlug: "example-access", InstallationID: 41, ConnectedAt: time.Now().UTC(), ConnectedBy: "ada@acme.example"},
+		ghconn.Credential{Org: "example", AppID: 31, InstallationID: 41, PrivateKey: orgKey}); err != nil {
+		t.Fatal(err)
+	}
+
 	srcApp := e2eIssuer(t, v4, kms)
 	kidsBefore := kidSet(t, srcApp)
 	if len(kidsBefore) == 0 {
@@ -356,6 +367,21 @@ func TestV5MigrationEndToEndOnDynamoDB(t *testing.T) {
 	verified, err := migrate.VerifyV5(ctx, from, to, opt)
 	if err != nil || !verified.OK || verified.Totals.Same == 0 {
 		t.Fatalf("VerifyV5 = %v\n%s", err, verified.JSON())
+	}
+	// The organisation names an App made of its own credential, which holds the
+	// key once; the report holds no key.
+	dstDomains, err := migrate.OpenDomains(ctx, v5all, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if orgs, err := dstDomains.Orgs.List(ctx); err != nil || len(orgs) != 1 || orgs[0].AppRef != "example-access" {
+		t.Fatalf("the destination's organisations = %+v, %v", orgs, err)
+	}
+	if _, key, found, err := dstDomains.Catalogue.Get(ctx, "example-access"); err != nil || !found || key != orgKey {
+		t.Fatalf("the App made of the organisation's credential = found %v, key equal %v, %v", found, key == orgKey, err)
+	}
+	if strings.Contains(string(report.JSON()), orgKey) {
+		t.Error("the copy's report holds the organisation's key")
 	}
 	again, err := migrate.CopyV5(ctx, from, to, migrate.V5Options{PlanOptions: opt, WritersStopped: true})
 	if err != nil || again.Totals.Copied != 0 || again.Totals.New != 0 {

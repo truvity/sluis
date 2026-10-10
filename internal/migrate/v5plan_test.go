@@ -272,8 +272,8 @@ func TestPlanRefusesWhatLayoutV5CannotCarry(t *testing.T) {
 	src, dst := newV4Installation(t), newV5Installation(t)
 	src.seedFull(t)
 	opt := planOptions()
-	// No App for acme, and a catalogue id the runner Apps' prefix owns.
-	opt.AppRef = func(string) string { return "" }
+	// An organisation whose App slug cannot be an App id has no App.
+	putOrg(t, src.st, "initech", 99, "Not An Id", "INITECH-KEY")
 	report, err := migrate.Plan(ctx, side("v4.yaml", src.st), side("v5.yaml", dst.st), opt)
 	if !errors.Is(err, migrate.ErrRefused) || report.OK {
 		t.Fatalf("Plan = %v, want ErrRefused", err)
