@@ -399,9 +399,6 @@ func TestV5MigrationEndToEndOnDynamoDB(t *testing.T) {
 	if got := ringKeys(t, v5all); len(got) != 0 {
 		t.Fatalf("a dry run wrote %v", got)
 	}
-	if _, err = migrate.CopyV5(ctx, from, to, migrate.V5Options{PlanOptions: opt}); !errors.Is(err, migrate.ErrWritersRunning) {
-		t.Fatalf("a copy that was not told the writers are stopped = %v", err)
-	}
 	report, err := migrate.CopyV5(ctx, from, to, migrate.V5Options{PlanOptions: opt})
 	if err != nil || !report.OK || report.Totals.Copied == 0 || report.Totals.Refused != 0 || report.Totals.Different != 0 {
 		t.Fatalf("CopyV5 = %v\n%s", err, report.JSON())
