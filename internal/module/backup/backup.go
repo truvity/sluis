@@ -3,6 +3,10 @@
 // its own. It has no loop and no listener. `sluis backup run` is the Kubernetes
 // CronJob's command and the operator's; on Lambda the function takes the
 // schedule's {"kind":"backup"} event (internal/lambdaapp).
+//
+// The same zip is the restore role (`backup.role: restore`, or `sluis restore`
+// on the command line): one restore at a time, asynchronous, with every module
+// under maintenance while it writes (internal/backup/restorejob).
 package backup
 
 import (
@@ -41,9 +45,20 @@ func (Module) Name() string { return "backup" }
 // Open assembles the module from file. The returned function releases it and
 // flushes the telemetry.
 func (m Module) Open(ctx context.Context, file string) (*app.App, *slog.Logger, func(), error) {
+	return m.OpenRole(ctx, file, "")
+}
+
+// OpenRole is [Module.Open] acting as role (config.BackupRoleBackup or
+// config.BackupRoleRestore) whatever `backup.role` says; empty keeps the
+// document's. It is how `sluis restore` selects the restore function of the
+// same zip.
+func (m Module) OpenRole(ctx context.Context, file, role string) (*app.App, *slog.Logger, func(), error) {
 	cfg, err := app.Load(file)
 	if err != nil {
 		return nil, nil, nil, err
+	}
+	if role != "" {
+		cfg = cfg.AsRole(role)
 	}
 	w := m.Log
 	if w == nil {

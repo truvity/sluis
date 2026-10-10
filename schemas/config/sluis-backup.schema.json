@@ -304,6 +304,14 @@
           },
           "type": "object"
         },
+        "role": {
+          "default": "backup",
+          "description": "Which function this document configures: `backup` (the scheduled export, the default) or `restore` (the restore function, which only an administrator or the break-glass role may invoke and whose role may write every module's table). The zip is the same; the document picks the role, and `sluis restore` selects it on the command line.",
+          "enum": [
+            "backup",
+            "restore"
+          ]
+        },
         "target": {
           "additionalProperties": false,
           "description": "The S3 bucket of the archive. For an AWS bucket with Object Lock, enable versioning and a default retention no longer than `retention`; credentials are the function role's and are never configured here.",
