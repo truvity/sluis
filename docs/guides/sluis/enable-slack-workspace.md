@@ -6,7 +6,7 @@ Switch the Slack controller from dry run to acting in one workspace.
 
 - Declare the workspace under `slack.workspaces.<key>` ([bindings](../../reference/sluis/policy-bindings.md#slack-channels)). Connect and install it from the console ([connect a Slack workspace](connect/slack-workspace.md)).
 
-- Put the release's ServiceAccount in `all:access-roster:viewer` and set `config.controllers.slack`.
+- Put the release's ServiceAccount in `all:sluis:viewer` and set `config.controllers.slack`.
 
 - Let the controller reach `slack.com:443`. The chart does not open that egress.
 

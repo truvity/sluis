@@ -1,6 +1,6 @@
 # Install sluis with Helm
 
-Install `oci://ghcr.io/truvity/charts/sluis` and sign in. One Deployment runs, configured by two documents from `sluisctl render`. To move from the `access-issuer` chart, see [its migration](../migrate/migrate-from-the-access-issuer-chart.md).
+Install `oci://ghcr.io/truvity/charts/sluis` and sign in. One Deployment runs, configured by two documents from `sluisctl render`. To move from the previous chart, see [its migration](../migrate/migrate-from-the-access-issuer-chart.md).
 
 ## Before you start
 
@@ -41,18 +41,18 @@ console: {client: access-console}
 oauthClient: {provider: default}
 access:
   groups:
-    all:access-roster:operator:
+    all:sluis:operator:
       members: [platform-admins@example.com]
       matchers:
         - service_account: {namespace: sluis, name: sluis-recovery}   # how the first operator gets in
-    all:access-roster:viewer:
+    all:sluis:viewer:
       matchers: [{email_domain: example.com}]
   clients:
     access-console:
       kind: public
       display_name: sluis
       redirects: [https://access.example.com/console/]
-      requires: [all:access-roster:operator, all:access-roster:viewer]
+      requires: [all:sluis:operator, all:sluis:viewer]
 ```
 
 ```sh

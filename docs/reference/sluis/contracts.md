@@ -17,8 +17,8 @@ Connect also speaks JSON over HTTP, so `curl` works. The proto packages `directo
 
 | Caller | Proof | Roles | Failure |
 |---|---|---|---|
-| Workload | ServiceAccount token as bearer, audience `config.exchange.audience`, verified against the `exchange.clusters` key sets, never by TokenReview | policy `service_account` matchers put it in groups; the console reads `all:access-roster:viewer` and `all:access-roster:operator` | `401` with `WWW-Authenticate` |
-| Person | session cookie (HttpOnly, signed with the session key) from a login route, or minted from a forwarded bearer behind a gateway | viewers group reads, operators group writes; `<directory-workspace-id>:access-roster:viewer` and `:operator` scope the same roles to one directory | `unauthenticated`, `permission_denied` |
+| Workload | ServiceAccount token as bearer, audience `config.exchange.audience`, verified against the `exchange.clusters` key sets, never by TokenReview | policy `service_account` matchers put it in groups; the console reads `all:sluis:viewer` and `all:sluis:operator` | `401` with `WWW-Authenticate` |
+| Person | session cookie (HttpOnly, signed with the session key) from a login route, or minted from a forwarded bearer behind a gateway | viewers group reads, operators group writes; `<directory-workspace-id>:sluis:viewer` and `:operator` scope the same roles to one directory | `unauthenticated`, `permission_denied` |
 
 | Rule | Fact |
 |---|---|
@@ -274,7 +274,7 @@ Served by the issuer. It only removes.
 | Caller | Allowed |
 |---|---|
 | Own identity | SSO cookie or a token this issuer minted |
-| Other identity or whole installation | `all:access-roster:operator` |
+| Other identity or whole installation | `all:sluis:operator` |
 
 | RPC | Auth | Request | Response | Notes |
 |---|---|---|---|---|
@@ -333,7 +333,7 @@ RFC 8693 exchange on `/token`. It applies when `requested_token_type` is the typ
 | Parameter | Value |
 |---|---|
 | `grant_type` | `urn:ietf:params:oauth:grant-type:token-exchange` |
-| `requested_token_type` | `urn:sluis:params:oauth:token-type:github-installation-token` (Go: `tokens.TypeSluisGitHubInstallationToken`); the deprecated `urn:access-roster:params:oauth:token-type:github-installation-token` (`tokens.TypeGitHubInstallationToken`) is accepted until v1.76. The response's `issued_token_type` repeats the one asked |
+| `requested_token_type` | `urn:sluis:params:oauth:token-type:github-installation-token` (Go: `tokens.TypeSluisGitHubInstallationToken`); the old spelling `urn:access-roster:params:oauth:token-type:github-installation-token` (`tokens.TypeGitHubInstallationToken`) is accepted until v1.76. The response's `issued_token_type` repeats the one asked |
 | `audience` | `github-app:<catalogue id>`, one |
 | `subject_token` | GitHub Actions token for the issuer URL, federated ServiceAccount token, or sign-in access token |
 | `subject_token_type` | `urn:ietf:params:oauth:token-type:jwt` (first two), `urn:ietf:params:oauth:token-type:access_token` (sign-in) |
@@ -352,7 +352,7 @@ The response is `200` with `Cache-Control: no-store`:
 ```json
 {
   "access_token": "ghs_…",
-  "issued_token_type": "urn:access-roster:params:oauth:token-type:github-installation-token",
+  "issued_token_type": "urn:sluis:params:oauth:token-type:github-installation-token",
   "token_type": "N_A",
   "expires_in": 3599,
   "repositories": ["app", "lib-core"],
@@ -394,7 +394,7 @@ Each request is one `roster.github_token.minted` record ([fields](slack.md#audit
   "roles": ["operator", "viewer"],
   "scopes": ["C0north"],
   "source": "session",
-  "groups": ["prod:k8s:viewer", "all:access-roster:operator"],
+  "groups": ["prod:k8s:viewer", "all:sluis:operator"],
   "version": "v1.8.0",
   "signOutUrl": "/logout",
   "issuerUrl": "https://access.example"

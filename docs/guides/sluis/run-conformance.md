@@ -32,13 +32,13 @@ conformance:       # and conformance-2
   kind: confidential
   redirects: [https://conformance.example.com/test/a/access-issuer/callback]
   signed_out: [https://conformance.example.com/test/a/access-issuer/post_logout_redirect]
-  requires: [all:access-roster:operator, all:access-roster:viewer]
+  requires: [all:sluis:operator, all:sluis:viewer]
 conformance-bc:    # and conformance-bc-2
   kind: confidential
   redirects: [https://conformance.example.com/test/a/access-issuer/callback]
   signed_out: [https://conformance.example.com/test/a/access-issuer/post_logout_redirect]
   backchannel_logout_uri: https://conformance.example.com/test/a/access-issuer/backchannel_logout
-  requires: [all:access-roster:operator, all:access-roster:viewer]
+  requires: [all:sluis:operator, all:sluis:viewer]
 ```
 
 `requires` must name a group the recovery ServiceAccount holds: `operator`, not `viewer`. The Back-Channel plan needs its own pair ([client fields](../../reference/sluis/policy-clients.md)).

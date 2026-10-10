@@ -47,13 +47,13 @@ signingKey:
 | Signal | Behavior |
 |---|---|
 | Issuer log | A failing rotation keeps the old key signing. ERROR at most hourly once the active key is 1.5 times `rotateEvery` old |
-| Metric | `access_issuer_signing_key_active_since_timestamp_seconds`; alert past `rotateEvery + prepublish + margin` (26h by default) |
+| Metric | `sluis_signing_key_active_since_timestamp_seconds`; alert past `rotateEvery + prepublish + margin` (26h by default) |
 | Chart rule | `AccessRosterSigningKeyRotationStalled`. Unset `alerts.rules.signingKeyRotationStalled.maxAgeSeconds` derives `rotateEvery` plus 2h from `config.signingKey` (`93600` for 24h), else 350 days |
 | Lambda | No chart: load the rule below into vmalert or a PrometheusRule |
 
 ```yaml
 - alert: SluisWrappedSigningKeyRotationStalled
-  expr: time() - max by (algorithm) (access_issuer_signing_key_active_since_timestamp_seconds) > 93600
+  expr: time() - max by (algorithm) (sluis_signing_key_active_since_timestamp_seconds) > 93600
   for: 15m
   labels: {severity: warning}
   annotations:

@@ -49,7 +49,7 @@ Run `sluis serve` at two or more replicas so a node loss or a rollout stops neit
 
 ## Verify
 
-`kubectl get pdb` shows `ALLOWED DISRUPTIONS` of 1, and draining a node in a test cluster leaves one replica Ready. Both pods log `keeping state in DynamoDB`. `access_roster.leases.contended` is non-zero while `AccessRosterLeaseLost` stays quiet ([telemetry](../../../reference/sluis/telemetry.md)).
+`kubectl get pdb` shows `ALLOWED DISRUPTIONS` of 1, and draining a node in a test cluster leaves one replica Ready. Both pods log `keeping state in DynamoDB`. `sluis.leases.contended` is non-zero while `SluisLeaseLost` stays quiet ([telemetry](../../../reference/sluis/telemetry.md)).
 
 `/healthz` is liveness and checks nothing outside the process. `/readyz` follows the State: `periodSeconds: 10`, `timeoutSeconds: 3`, `failureThreshold: 3`. A replica leaves rotation within about thirty seconds.
 

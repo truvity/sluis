@@ -69,8 +69,8 @@ seconds. One replica takes the lease and the rest log "leased to another runner"
 The installation-token cache, the profile-miss cache, the held-row ledger and the last-report memory are per replica. A
 held row can reach the audit trail once per replica. A change to GitHub or Slack is never duplicated.
 
-A target is ticked about twice as often. The counter `access_roster.leases.contended` counts sweeps that found a target
-taken, which is normal. The alert `AccessRosterLeaseLost` should stay quiet. Both are legacy identifiers, renamed in v1.75–v1.76.
+A target is ticked about twice as often. The counter `sluis.leases.contended` counts sweeps that found a target
+taken, which is normal. The alert `SluisLeaseLost` should stay quiet.
 
 A rollout or node loss of the only replica pauses reconciling until the new pod starts. Every pass recomputes from the
 console and the target system, so nothing is missed. A console outage never empties a channel or a team, because

@@ -19,11 +19,11 @@ No section holds a secret: every row is a name and a URL.
 ```yaml
 apiVersion: sluis.truvity.github.io/policy/v2
 groups:
-  all:access-roster:operator: { members: [platform-admins@example.com] }
-  all:access-roster:viewer:   { members: [all@example.com] }
+  all:sluis:operator: { members: [platform-admins@example.com] }
+  all:sluis:viewer:   { members: [all@example.com] }
 lifetimes: { default: 12h }
 github:
-  example-org: { members: [all:access-roster:viewer] }
+  example-org: { members: [all:sluis:viewer] }
 exchange:
   clusters:
     - {name: devel, issuer: "https://kubernetes.default.svc", jwksUri: "https://devel.example/openid/v1/jwks"}

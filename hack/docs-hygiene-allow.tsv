@@ -2,23 +2,26 @@
 # `allow` rows are permanent: identifiers that deliberately keep an old name (docs/decisions/0035-renamed-to-sluis.md).
 # `baseline` rows are a RATCHET over prose that a docs restructure rewrites: lower the count as pages are fixed, delete the row at 0.
 
-allow	*	:access-roster:	group names `<scope>:access-roster:operator|viewer` are the installation's own role names (ADR 0035: kept, changing them re-keys every grant)
-allow	*	token-source[:-] ?`?access-roster|access-roster-issuer	the GitHub Action's `token-source: access-roster` and the shared workflow's `access-roster-issuer` input (ADR 0035: kept as contract names)
-allow	*	access-roster\.truvity\.github\.io	Kubernetes label and annotation keys access-roster.truvity.github.io/* (ADR 0035: kept)
-allow	*	urn:(truvity:)?access-roster	token-exchange URNs, protocol constants in clients' configuration (ADR 0035: kept)
-allow	*	schemas\.example/access-roster	data_schema URLs inside the audit catalogue document, part of a document an installation holds (ADR 0035: kept)
-allow	*	@truvity/access-roster	the deprecated npm alias, still published (release.yaml npm job)
-allow	*	`access-roster` grants preset	the grants preset name (ADR 0035: kept)
-allow	*	access-roster-overview|access-roster overview	the dashboard's file name, uid and title, not renamed yet: renaming one re-creates it in every Grafana
-allow	*	kernel-access-issuer-audit	an existing AWS role of the estate (decision N9a), retired by its own runbook step
-allow	README.md	NATS, OpenBao and PostgreSQL	audit's in-cluster services (the audit shape), not the retired sluis state adapter
-allow	*	migrating-from-the-access-issuer-chart|migrating from the access-issuer chart|from the `access-issuer` chart|`access-issuer` chart until|the `access-issuer` chart	the migration guide is named for the chart it migrates from
-allow	*	/var/run/access-issuer/	the chart's real mount paths for the mounted documents (Deployment template; changing them is a chart change)
-allow	*	access-issuer-recovery	the chart's default recovery ServiceAccount name and audience (kept; renaming re-keys the recovery grant)
-allow	*	migrate-from-the-access-issuer-chart|migrate from the access-issuer chart	the migration guide is named for the chart it migrates from
+allow	*	urn:(truvity:)?access-roster	the token-exchange URN spellings `urn:access-roster:params:oauth:...`, still accepted in v1.75 (tokens.TypeGitHubInstallationToken, TypeCloudflareToken), removed in v1.76
+allow	docs/reference/sluis/telemetry.md	(access_issuer|access_roster)[.\w<>*]*	the old metric and span-attribute names, still recorded beside the sluis.* ones (SLUIS_LEGACY_METRICS, on in v1.75, removed in v1.76)
+allow	docs/reference/sluis/chart-values.md	access_(issuer|roster)\.\*	telemetry.legacyMetrics' description (generated from values.schema.json) names the old metric families
+allow	*	(github|slack)_roster	the metric names github_roster.* and slack_roster.*, which keep their names in v1.75 (telemetry.CurrentName leaves them as they are)
+allow	*	ACCESS_ROSTER_\w*	the ACCESS_ROSTER_* environment fallback and the ACCESS_ROSTER_ISSUER repository variable of the release workflow, still read in v1.75
+allow	*	(__Host-)?access_(roster_recovery|issuer_sso)	the cookies `access_issuer_sso` and `__Host-access_roster_recovery`, wire values in v1.75
+allow	docs/reference/sluis/contracts.md	directoryroster\.v1	the proto package, still served in v1.75 (gen/directoryroster/v1)
+allow	docs/reference/sluis/policy-ownership.md	all:access-roster:(operator|viewer)	the old group spelling the service still reads in v1.75 beside `sluis`, removed in v1.76
+allow	*	access-roster\.truvity\.github\.io/	the Kubernetes label and annotation keys the service still writes in v1.75 (internal/kube)
+allow	*	/var/run/(secrets/)?(access-issuer|github-roster|slack-roster)/	the chart's mount paths, still rendered in v1.75 (tests/golden/sluis)
+allow	*	migrate-from-the-access-issuer-chart\.md	the migration guide's file name, which stays so that links to it hold (the guide is named for the chart it migrates from)
 allow	docs/guides/sluis/migrate/migrate-from-the-access-issuer-chart.md	access-issuer	the guide is about the chart `access-issuer` (nameOverride, old object names)
 allow	docs/guides/sluis/run-conformance.md	access-issuer	hack/conformance-plans.sh and conformance_drive.py hard-code the namespace, ServiceAccount, Secret and plan alias `access-issuer`
-allow	docs/reference/sluis/chart-values.md	access-issuer	generated from values.schema.json, whose nameOverride description names the chart a migration comes from
+allow	*	`access-roster` grants preset|grants preset `access-roster`|name: access-roster	the grants preset's name, the only value of the audit configuration's preset enum (audit/schemas/config/audit-grants.schema.json), still read in v1.75
+allow	docs/reference/sluis/chart-values.md	access-issuer	the page is generated from values.schema.json, whose nameOverride and fullnameOverride descriptions name the chart a migration comes from
+allow	docs/reference/sluis/artifacts.md	accessctl	the release archive and package names the release still publishes (.goreleaser.yaml)
+allow	docs/reference/sluis/sluisctl-wrappers.md	known_hosts\.d/accessctl	the managed known-hosts file name sluisctl still writes
+allow	docs/reference/sluis/sluisctl.md	(?i:accessctl)	the alias binary, default client id, ACCESSCTL_* variables and config directory sluisctl still reads
+allow	*	decisions/0003-deprecate-access-proxy\.md	ADR 0003's file name keeps the chart it retired: ADR file names never change, so links to it stay
+allow	docs/reference/sluis/endpoints.md	`accessctl`	the client id the client-secrets endpoint accepts (internal/issuer/clientsecrets_http.go ClientSecretsAudiences)
 link	CHANGELOG.md	docs/concepts/sluis/ports.md#the-nats-adapter	history: the heading went with the NATS adapter
 link	CHANGELOG.md	docs/concepts/sluis/ports.md#the-s3-blob-and-the-kms-sealer	history: the heading went with the KMS sealer
 link	CHANGELOG.md	docs/guides/sluis/connect/github-apps-catalogue.md#delivering-events	history: the heading moved in the docs reduction pass
@@ -27,10 +30,3 @@ link	CHANGELOG.md	docs/guides/sluis/connect/github-apps-catalogue.md#a-default-s
 link	CHANGELOG.md	docs/guides/sluis/migrate/cutover.md#moving-a-stack-from-the-core-librarys-domain-to-the-edge-module	history: the procedure moved to move-the-domain-to-the-edge-module.md
 link	audit/CHANGELOG.md	../docs/guides/audit/operate/prepare-the-bucket.md#the-attested-tier	history: the heading went with the docs reduction pass
 link	CHANGELOG.md	docs/reference/sluis/lambda.md#platform-logs	history: the section went with the docs reduction pass
-allow	docs/reference/sluis/artifacts.md	accessctl	the release archive and package names the release still publishes (.goreleaser.yaml)
-allow	docs/reference/sluis/configuration.md	/var/run/(secrets/)?(github|slack)-roster/	the chart's real mount paths for the controller credentials (chart _checks.tpl; changing them is a chart change)
-allow	docs/reference/sluis/contracts.md	directoryroster	proto packages that still exist (gen/directoryroster/v1)
-allow	docs/reference/sluis/sluisctl-wrappers.md	known_hosts\.d/accessctl	the managed known-hosts file name sluisctl still writes
-allow	docs/reference/sluis/sluisctl.md	(?i:accessctl)	the alias binary, default client id, ACCESSCTL_* variables and config directory sluisctl still reads
-allow	*	decisions/0003-deprecate-access-proxy\.md	ADR 0003's file name keeps the chart it retired: ADR file names never change, so links to it stay
-allow	docs/reference/sluis/endpoints.md	`accessctl`	the client id the client-secrets endpoint accepts (internal/issuer/clientsecrets_http.go ClientSecretsAudiences)

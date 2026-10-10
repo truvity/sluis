@@ -32,7 +32,7 @@ A service for local workloads needs only the cluster anchor, and one for people 
 
 Whichever anchor proved the caller, a service acts on one thing: a list of internal group names. The issuer puts them in the flat `groups` claim. A `service_account` matcher gives a ServiceAccount the same names. Every relying party binds on those strings and none re-maps them.
 
-The claim shape is `groups` only. Kubernetes reads a flat string array, ArgoCD reads `groups`, and AWS trust policies read `aud`. A fact about where a grant came from travels inside the string, for example `C0north:access-roster:viewer`. The `claims` fragment table covers a claim that is not a group, such as cloud session tags.
+The claim shape is `groups` only. Kubernetes reads a flat string array, ArgoCD reads `groups`, and AWS trust policies read `aud`. A fact about where a grant came from travels inside the string, for example `C0north:sluis:viewer`. The `claims` fragment table covers a claim that is not a group, such as cloud session tags.
 
 ### Naming
 
@@ -44,7 +44,7 @@ Every grant is `<scope>:<thing>:<role>`: three lowercase segments joined by `:`.
 | `thing` | What the role is on. | `k8s`, `shop`, `argocd` |
 | `role` | A role from that thing's own ladder. | `admin`, `viewer`, `deployer`, `operator` |
 
-Examples: `prod:k8s:admin`, `prod:shop:deployer`, `all:access-roster:operator`. A role scoped to a workspace id also gates the GitHub organisations and Slack workspaces connected under that directory.
+Examples: `prod:k8s:admin`, `prod:shop:deployer`, `all:sluis:operator`. A role scoped to a workspace id also gates the GitHub organisations and Slack workspaces connected under that directory.
 
 Two-segment names are not grants. `rung:<name>` carries a session lifetime and `emp:<slug>` is a person. A cluster-scoped consumer binds `<env>:k8s:<role>` by default and owns a `thing` of its own only when its role ladder diverges.
 
@@ -55,8 +55,6 @@ sub  email  name  given_name  family_name  preferred_username  sid  auth_time
 ```
 
 A person's `sub` is their email. A ServiceAccount's is `<cluster>:k8s:<namespace>:<name>`, so the same account on two clusters is two subjects.
-
-The `:access-roster:` segment of the console role names is a legacy identifier, renamed in v1.75–v1.76. Installations keep it, because changing it re-keys every grant.
 
 ## Recovery is the root, not a back door
 

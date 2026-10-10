@@ -39,6 +39,6 @@ At start the service warns about a group declared in `groups` that none of these
 | a Slack channel's `from` binding |
 | a `groups:` override on a client, a resource or `client_documents` ([ADR 0006](../../decisions/0006-groups-claim-scoped-per-audience.md)) |
 | a GitHub App catalogue grant's group |
-| the service's own roles `<scope>:access-roster:operator` and `<scope>:access-roster:viewer` |
+| the service's own roles `<scope>:sluis:operator` and `<scope>:sluis:viewer` |
 
 A group referenced only by `claims` or `lifetimes` does not count. `rung:` and `emp:` groups are never reported.

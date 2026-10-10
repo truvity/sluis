@@ -4,7 +4,7 @@ End somebody's access now: one session, one browser, one person, or one client f
 
 ## Before you start
 
-- A person revokes their own sessions from their page in the console. An operator (`all:access-roster:operator`, see [console roles](../../../reference/sluis/console-roles.md)) revokes anyone's. A viewer lists only their own.
+- A person revokes their own sessions from their page in the console. An operator (`all:sluis:operator`, see [console roles](../../../reference/sluis/console-roles.md)) revokes anyone's. A viewer lists only their own.
 
 - Access tokens already issued are JWTs and stay valid until they expire. For an agent that is at most `lifetimes.agent.access` (30 minutes by default).
 

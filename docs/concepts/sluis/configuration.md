@@ -56,7 +56,7 @@ Each credential carries a copy of its record, so [a restore from the Secrets alo
 
 The service has no directory API listener. The issuer reads the directory by function call.
 
-The GitHub controller asks the console's API (`Explain`, `ListHolders`) with its own ServiceAccount token, verified against its cluster's published key set. The policy's `service_account` matchers put it in `all:access-roster:viewer`, a legacy identifier, renamed in v1.75–v1.76, that remains the role name.
+The GitHub controller asks the console's API (`Explain`, `ListHolders`) with its own ServiceAccount token, verified against its cluster's published key set. The policy's `service_account` matchers put it in `all:sluis:viewer`.
 
 A service that needs to know who somebody is verifies the issuer's token and reads the `groups` claim ([service to service](../../guides/sluis/connect/service-to-service.md)).
 

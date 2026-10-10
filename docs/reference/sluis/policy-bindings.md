@@ -134,7 +134,7 @@ access:
   resources: [{id: "https://mcp.example.com", requires: [env:ssh:admin]}]
 overlay:
   groups:
-    all:access-roster:operator:
+    all:sluis:operator:
       matchers: [{service_account: {namespace: sluis, name: sluis-recovery}}]
   clients:
     probe: {kind: exchange, requires: [env:ssh:admin]}

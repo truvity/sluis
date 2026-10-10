@@ -4,17 +4,17 @@ The groups sluis reads for itself, how a workspace id narrows them, and how a Gi
 
 ## The service's own two groups
 
-`all:access-roster:operator` and `all:access-roster:viewer` are the only group names the service reads for itself. They are legacy identifiers, renamed in v1.75–v1.76 but kept: [ADR 0035](../../decisions/0035-renamed-to-sluis.md). The service also reads `sluis` in place of the thing: `all:sluis:operator`, `all:sluis:viewer` and the scoped forms. Both confer the same roles, and `sluisctl render` carries either. A policy that names both holds the union. The old spelling is deprecated and goes in v1.76. An identity is an operator because the policy puts it in the operators group.
+`all:sluis:operator` and `all:sluis:viewer` are the only group names the service reads for itself, with the scoped forms `<id>:sluis:operator` and `<id>:sluis:viewer`. It still reads the old spelling `all:access-roster:operator` (and `:viewer`, and the scoped forms), accepted until v1.76 ([ADR 0035](../../decisions/0035-renamed-to-sluis.md)). Both confer the same roles, and `sluisctl render` carries either. A policy that names both holds the union. An identity is an operator because the policy puts it in the operators group.
 
 A workspace id in the scope position scopes the role to that tenant:
 
 ```yaml
 groups:
-  all:access-roster:operator:                     # the whole installation
+  all:sluis:operator:                     # the whole installation
     members: [platform-admins@a.example]
-  C0northern:access-roster:operator:              # one directory only
+  C0northern:sluis:operator:              # one directory only
     members: [it-admins@north.example]
-  C0northern:access-roster:viewer:
+  C0northern:sluis:viewer:
     matchers: [{ email_domain: north.example }]
 ```
 
@@ -41,8 +41,8 @@ The same rule applies to a Slack workspace.
 
 | Caller connecting an unconnected organisation | Owner recorded |
 |---|---|
-| installation-wide operator (`all:access-roster:operator`) | chosen on the connect form: any connected directory, or none |
-| operator of one connected directory (`<id>:access-roster:operator`) | that directory, unasked |
+| installation-wide operator (`all:sluis:operator`) | chosen on the connect form: any connected directory, or none |
+| operator of one connected directory (`<id>:sluis:operator`) | that directory, unasked |
 | operator of several connected directories | chosen among them; required |
 | operator of an unconnected directory, a viewer, anyone else | refused |
 
@@ -53,8 +53,8 @@ The same rule applies to a Slack workspace.
 
 | An organisation... | may be operated by |
 |---|---|
-| connected with an owner | `<owner>:access-roster:operator` or `all:access-roster:operator` |
-| connected with none, or from before owners were recorded | `all:access-roster:operator` alone |
+| connected with an owner | `<owner>:sluis:operator` or `all:sluis:operator` |
+| connected with none, or from before owners were recorded | `all:sluis:operator` alone |
 | not connected | connecting: installation-wide operator, or an operator of a directory |
 
 | Rule | Value |
@@ -90,6 +90,6 @@ The policy knows a workspace by its key and bound channels. Three facts come fro
 
 | A Slack workspace... | may be operated by |
 |---|---|
-| connected with an owner | `<owner>:access-roster:operator` or `all:access-roster:operator` |
-| connected with none | `all:access-roster:operator` alone |
+| connected with an owner | `<owner>:sluis:operator` or `all:sluis:operator` |
+| connected with none | `all:sluis:operator` alone |
 | not connected | connecting: installation-wide operator, or an operator of a directory |

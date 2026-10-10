@@ -14,7 +14,7 @@ Keep the issuer's signing key in AWS KMS so the master key is never in a pod, a 
 
 - `signingKey.kms` excludes `signingKey.file`. In the chart write `config.signingKey.file: null` and remove `signingKey.existingSecret` and `signingKey.additional`.
 
-- A key of another spec or usage stops the start. Without `kms:GetPublicKey` the start fails naming the permission. Without `kms:Sign` it starts and fails every token, counted in `access_issuer.kms_signatures{result="error"}`.
+- A key of another spec or usage stops the start. Without `kms:GetPublicKey` the start fails naming the permission. Without `kms:Sign` it starts and fails every token, counted in `sluis.kms_signatures{result="error"}`.
 
 - Grant on the key, not the alias, or use a `kms:ResourceAliases` condition. Each token is one `kms:Sign` call, so the account's request quota bounds throughput.
 
@@ -48,7 +48,7 @@ Keep the issuer's signing key in AWS KMS so the master key is never in a pod, a 
 
 ## Verify
 
-`aws kms get-public-key --key-id <key>` as the role succeeds. `curl -s https://<issuer>/keys | jq -r '.keys[].kid'` lists the key, a sign-in succeeds and `access_issuer.kms_signatures{result="ok"}` rises. Alert on `result="error"` and `result="throttled"` ([telemetry](../../../reference/sluis/telemetry.md#alerts)).
+`aws kms get-public-key --key-id <key>` as the role succeeds. `curl -s https://<issuer>/keys | jq -r '.keys[].kid'` lists the key, a sign-in succeeds and `sluis.kms_signatures{result="ok"}` rises. Alert on `result="error"` and `result="throttled"` ([telemetry](../../../reference/sluis/telemetry.md#alerts)).
 
 ## Roll back
 

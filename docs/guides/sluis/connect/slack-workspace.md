@@ -39,7 +39,7 @@ exchange:
 
 ```yaml
 groups:
-  all:access-roster:viewer:
+  all:sluis:viewer:
     matchers:
       - service_account: { cluster: prod, namespace: access, name: sluis }   # the controller runs as the release's ServiceAccount
 ```
