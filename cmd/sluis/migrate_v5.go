@@ -153,6 +153,14 @@ func migrateV5Cmd(out io.Writer, args []string) error {
 	return fmt.Errorf("%w: %s has no subcommand %q (plan, copy, verify)", errUsage, migrateV5Command, args[0])
 }
 
+// emitPlanReport writes the JSON report to stdout and the summary to stderr.
+// run's own writer is stderr (with the usage and the version), so the report
+// does not go there: `> report.json` has to hold the JSON and nothing else.
+func emitPlanReport(stdout, stderr io.Writer, report *migrate.PlanReport) {
+	_, _ = stdout.Write(report.JSON())
+	printPlanSummary(stderr, report)
+}
+
 func migrateV5Run(out io.Writer, sub string, args []string) error {
 	f, done, err := parseMigrateV5(sub, args, out)
 	if err != nil || done {
@@ -216,8 +224,7 @@ func migrateV5Run(out io.Writer, sub string, args []string) error {
 		report, err = migrate.Plan(ctx, from, to, opt)
 	}
 	if report != nil {
-		_, _ = out.Write(report.JSON())
-		printPlanSummary(os.Stderr, report)
+		emitPlanReport(os.Stdout, os.Stderr, report)
 	}
 	return err
 }
