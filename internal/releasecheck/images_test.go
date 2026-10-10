@@ -90,7 +90,8 @@ func TestTheModuleImagesAreOnePerModuleEachPinnedToItsModule(t *testing.T) {
 		}
 	}
 	if !pinned {
-		t.Errorf("hack/ko-modules/.ko.yaml does not pin the module with -X .../version.Module=sluis-module={{ .Env.SLUIS_MODULE }}: an image would run as another module")
+		t.Errorf("hack/ko-modules/.ko.yaml does not pin the module with " +
+			"-X .../version.Module=sluis-module={{ .Env.SLUIS_MODULE }}: an image would run as another module")
 	}
 
 	// hack/release-images.txt: the images it lists. hack/module-images.sh builds
