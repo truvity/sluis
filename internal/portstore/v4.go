@@ -100,19 +100,6 @@ func (b *Base) v5CredOfKey(key string) (c v5Cred, ok bool) {
 // has one address, google/workspaces/<id>/key.
 const googleKeyRef = "key"
 
-// appOfKey is the id of the GitHub App whose item key it is, when the
-// credentials of Apps are on layout v5. An organisation's key is not an App's.
-func (b *Base) appOfKey(key string) (id string, ok bool) {
-	if b.v5 == nil {
-		return "", false
-	}
-	addr, err := port.Locate5(key)
-	if err != nil || addr.Module != port.ModuleGitHub || addr.Kind != "app" {
-		return "", false
-	}
-	return addr.ID, true
-}
-
 // ExportGitHubApps says which catalogue GitHub Apps have `export: true`. Unset
 // exports none; a runner App is always exported.
 func (b *Base) ExportGitHubApps(exported func(id string) bool) *Base {
