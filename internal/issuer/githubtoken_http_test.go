@@ -25,9 +25,11 @@ import (
 	"github.com/truvity/sluis/internal/githubapp"
 	"github.com/truvity/sluis/internal/githubapp/catalogue"
 	"github.com/truvity/sluis/internal/githubapp/githubfake"
+	"github.com/truvity/sluis/internal/githubapp/githubtokens"
 	"github.com/truvity/sluis/internal/githubapp/mints"
 	"github.com/truvity/sluis/internal/githubroster/catalogueapp"
 	"github.com/truvity/sluis/internal/issuer"
+	"github.com/truvity/sluis/internal/modcall"
 	"github.com/truvity/sluis/policy"
 	"github.com/truvity/sluis/tokens"
 )
@@ -119,7 +121,11 @@ type githubTokenIssuer struct {
 
 // serveGitHubTokens must not run in parallel: the fake GitHub moves the
 // client's base URL for the test's duration.
-func serveGitHubTokens(t *testing.T) githubTokenIssuer {
+func serveGitHubTokens(t *testing.T) githubTokenIssuer { return serveGitHubTokensVia(t, nil) }
+
+// serveGitHubTokensVia is [serveGitHubTokens] with the minter handed to wrap
+// before the issuer uses it; nil keeps the in-process default.
+func serveGitHubTokensVia(t *testing.T, wrap func(githubtokens.Minter) githubtokens.Minter) githubTokenIssuer {
 	t.Helper()
 	declared, err := policy.Parse([]byte(githubTokenPolicy))
 	if err != nil {
@@ -140,16 +146,16 @@ func serveGitHubTokens(t *testing.T) githubTokenIssuer {
 	trail := audittest.New(t)
 	iss.UseAudit(trail)
 	recent := mints.New(0, time.Now())
-	iss.UseGitHubApps(issuer.GitHubApps{
-		Catalogue: listed,
-		Recent:    recent,
-		Store: catalogueStore{
-			"publisher":   {ID: "publisher", Org: "example-org", AppID: 7, AppSlug: "publisher", InstallationID: 42},
-			"pending":     {ID: "pending", Org: "example-org", AppID: 8, AppSlug: "pending"},
-			"uninstalled": {ID: "uninstalled", Org: "example-org", AppID: 9, AppSlug: "uninstalled", InstallationID: 44},
-		},
-		HTTP: github.Client(),
-	})
+	store := catalogueStore{
+		"publisher":   {ID: "publisher", Org: "example-org", AppID: 7, AppSlug: "publisher", InstallationID: 42},
+		"pending":     {ID: "pending", Org: "example-org", AppID: 8, AppSlug: "pending"},
+		"uninstalled": {ID: "uninstalled", Org: "example-org", AppID: 9, AppSlug: "uninstalled", InstallationID: 44},
+	}
+	apps := issuer.GitHubApps{Catalogue: listed, Recent: recent, Store: store, HTTP: github.Client()}
+	if wrap != nil {
+		apps.Minter = wrap(githubtokens.InProcess{Store: store, HTTP: apps.HTTP})
+	}
+	iss.UseGitHubApps(apps)
 	storage, err := issuer.NewTestStorage(iss, workflowVerifier{}, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("storage: %v", err)
@@ -574,4 +580,44 @@ func TestBothSpellingsOfTheInstallationTokenTypeAreAnswered(t *testing.T) {
 			}
 		})
 	}
+}
+
+// viaModcall hands the issuer a minter that reaches the in-process one through
+// the GitHub module's method over modcall.Local, as the issuer: the call the
+// split makes across a function boundary, made inside this process.
+func viaModcall(inner githubtokens.Minter) githubtokens.Minter {
+	s := modcall.NewServer(githubtokens.Module)
+	githubtokens.Register(s, inner)
+	return githubtokens.NewClient(modcall.Local{githubtokens.Module: s}.As(githubtokens.CallerIssuer))
+}
+
+// The issuer answers the same whether its minter is in its process or behind
+// the module boundary: the token, the installation in the trail, and each
+// refusal as the same RFC 6749 error.
+func TestTheIssuerMintsThroughTheModuleBoundaryAsItDoesInProcess(t *testing.T) {
+	g := serveGitHubTokensVia(t, viaModcall)
+
+	status, body, _ := g.ask(t, "github-app:publisher", url.Values{
+		"subject_token": {"job:release.yml"}, "audience": {"github-app:publisher"},
+		"repositories": {"app lib-core"}, "scope": {"contents:read"},
+	})
+	if status != http.StatusOK || body["access_token"] != g.github.Token {
+		t.Fatalf("mint = %d %v", status, body)
+	}
+	if got, _ := json.Marshal(body["repositories"]); string(got) != `["app","lib-core"]` {
+		t.Errorf("repositories = %s", got)
+	}
+	if events := g.minted(); len(events) != 1 || field(events[0], "installation") != "42" {
+		t.Errorf("events = %+v", events)
+	}
+
+	for _, app := range []string{"uncreated", "pending", "uninstalled"} {
+		status, body, _ = g.ask(t, "", url.Values{
+			"subject_token": {"job:release.yml"}, "audience": {"github-app:" + app}, "repositories": {"app"},
+		})
+		if status != http.StatusBadRequest || body["error"] != "invalid_target" {
+			t.Errorf("%s = %d %v, want invalid_target", app, status, body)
+		}
+	}
+	g.assertTokenNotAudited(t)
 }

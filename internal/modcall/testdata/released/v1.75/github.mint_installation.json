@@ -1,0 +1,63 @@
+{
+  "module": "github",
+  "method": "mint_installation",
+  "caller": "issuer",
+  "request": {
+    "v": 2,
+    "kind": "rpc",
+    "module": "github",
+    "method": "mint_installation",
+    "payload": {
+      "app": "publisher",
+      "repositories": [
+        "app"
+      ],
+      "permissions": {
+        "contents": "read"
+      }
+    },
+    "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+    "deadline": 4102444800000
+  },
+  "request_v1": {
+    "kind": "rpc",
+    "module": "github",
+    "method": "mint_installation",
+    "payload": {
+      "app": "publisher",
+      "repositories": [
+        "app"
+      ],
+      "permissions": {
+        "contents": "read"
+      }
+    }
+  },
+  "response": {
+    "v": 2,
+    "result": {
+      "token": "example-installation-token",
+      "expires_at": "2026-10-09T13:00:00Z",
+      "repositories": [
+        "app"
+      ],
+      "permissions": {
+        "contents": "read"
+      },
+      "installation": 42
+    }
+  },
+  "response_v1": {
+    "result": {
+      "token": "example-installation-token",
+      "expires_at": "2026-10-09T13:00:00Z",
+      "repositories": [
+        "app"
+      ],
+      "permissions": {
+        "contents": "read"
+      },
+      "installation": 42
+    }
+  }
+}
