@@ -8,9 +8,10 @@ Source: `deploy/pulumi`. Identifiers: [Go packages](../../sdk/go/sluis.md). Deci
 | `NewState` | `sluis:aws:State` | The DynamoDB table |
 | `NewStates` | `sluis:aws:States` | One table per module ([ADR 0072](../../decisions/0072-storage-layout-v5-module-first.md)), and the legacy table adopted |
 | `NewLambda` | `sluis:aws:Lambda` | Function, role, HTTP API, signing key, schedules. The main path |
+| `NewBackup` | `sluis:aws:Backup` | The [backup function](#backup), its role, aliases, schedules and alarms; optionally the archive bucket |
 | `NewKubernetesIdentity` | `sluis:aws:KubernetesIdentity` | The EKS Pod Identity role of the one pod |
 
-Pass the provider with `pulumi.Providers(p)`. `RenderPorts` and `RenderPortsYAML` render the `ports:` block.
+Pass the provider with `pulumi.Providers(p)`. `RenderPorts` and `RenderPortsYAML` render `ports:`.
 
 ```go
 store, _ := sluispulumi.NewStorage(ctx, "acme", &sluispulumi.StorageArgs{BucketName: "acme-prod-sluis"}, pulumi.Providers(awsProvider))
@@ -111,6 +112,55 @@ The role trusts `pods.eks.amazonaws.com` for this cluster and ServiceAccount.
 | `SluisWrappedSigning` | `kms:GenerateDataKeyPairWithoutPlaintext`, `kms:Decrypt` | Symmetric key; only with `kms:EncryptionContext:purpose` = `sluis-signing` and no context keys besides `purpose`, `alg`, `kid` |
 | `SluisState` | `dynamodb:GetItem`, `PutItem`, `UpdateItem`, `DeleteItem`, `Query`, `Scan`, `DescribeTable` | The table |
 | `SluisStateKey` | `kms:Encrypt`, `Decrypt`, `GenerateDataKey`, `DescribeKey` | The table key, only through DynamoDB (`kms:ViaService`) |
+
+## Backup
+
+| `BackupArgs` (`BackupCommon`) | Default | Meaning |
+|---|---|---|
+| Function | n/a | The release zip as the [backup function](backup.md) on layout v5 ([ADR 0072](../../decisions/0072-storage-layout-v5-module-first.md)); the configuration layer holds one `sluis-backup/v1` document |
+| `Region`, `AccountID`, `Instance` | Required | Name the resources; the archive path is `backup/<instance>/` |
+| `Package`, `PackageSHA256`, `PackageVersion`, `Artifacts`, `Release` | As `LambdaArgs` | The release zip, byte for byte |
+| `Storage`, `BlobBucketName`, `BlobPrefix` | Required | The blob store: `ports.blob`. `BlobBucketName` is not needed with `Storage.External` |
+| `State`, `TableNames` | Required | `States.Grant()` with all six tables; `ports.dynamodb.tables` |
+| `ParameterKeyArn`, `MinterRefs` | None | `secrets.kmsKeyId`; the Cloudflare minter parameters for `credentials.preset`, read only |
+| `ArchiveKeyAlias` | Required | `backup.key`, `alias/<name>`; purpose `archive` |
+| `Archive` | Required | `Bucket`, `Prefix`, `Region`, `AccountID`, `Versioned` (true), `SSEKeyArn`, `RestoreRoleArn`, `Create` |
+| `Archive.Create` | nil | `ArchiveBucketArgs`: `Mode` (`GOVERNANCE`; `COMPLIANCE` needs `AcknowledgeCompliance`), `RetentionDays` (`Retention.MaxAge` in days), `Tags` |
+| `Retention` | 7; 720h | `Keep`, `MaxAge`: `backup.retention`. An Object Lock longer than `MaxAge` is refused |
+| `AuditQueueURL` | None | `adapters.audit` sqs; without it the `log` adapter |
+| `FunctionName`, `Function`, `LogRetentionDays` | `sluis-<instance>-backup`; 512 MB, 900 s; 30 | `Function.TimeoutSeconds` is 60 to 900 |
+| `Schedule` | `cron(0 2 * * ? *)`; `rate(5 minutes)`; false | `Daily`, `ResumeRate`, `Paused` |
+| `AlarmActionArns`, `PermissionsBoundaryArn`, `Tags` | None | Notified by the alarms; boundary of the roles |
+
+| Output | Meaning |
+|---|---|
+| `FunctionArn`, `FunctionName`, `RoleArn`, `RoleName`, `ConfigLayerArn` | Function, role and layer |
+| `LiveAliasArn`, `AliasArns` | `live`, which the schedules invoke, and `live-console`, `live-admin`, `live-breakglass`; the alias is the caller class of a [module call](backup.md#calls) |
+| `SchedulerRoleArn`, `ScheduleNames`, `ScheduleDLQArn` | `<function>-daily` sends `{"kind":"backup"}`, `<function>-resume` sends `{"kind":"backup","resume":true}`; undelivered events go to the queue |
+| `ArchiveBucketName`, `ArchiveBucketArn`, `ArchiveKeyArn` | The archive and its key |
+| `ArchiveBucketPolicy` | The policy a bucket owner in another account applies, from `ArchiveBucketPolicyStatements` |
+| `AlarmNames` | The three alarms below |
+
+| Alarm | Fires when |
+|---|---|
+| `<function>-no-backup-36h` | The log line `a backup was written` is absent for 36 hourly periods; missing data counts |
+| `<function>-failed-run` | The function's `Errors` is at least 1 in five minutes |
+| `<function>-schedule-dlq` | The dead-letter queue holds a message |
+
+| Backup role grant | Actions | Resource |
+|---|---|---|
+| `SluisTableBackup` | `GetItem`, `PutItem`, `UpdateItem`, `DeleteItem`, `Query`, `Scan`, `DescribeTable` | The backup table |
+| `SluisCross<Module>Table`, `…Parameters`, `…Blobs` | Read: `GetItem`, `Query`, `Scan`; `ssm:GetParameter`; `s3:GetObject` and the prefix's `ListBucket` | The other five modules' tables, `internal/<module>/*`, `external/<module>/*`, `<module>/` |
+| `SluisMaintenanceDeny` | Deny `PutItem`, `UpdateItem`, `DeleteItem`, `BatchWriteItem`, `TransactWriteItems` | Every table, when the first key is `maintenance`. The role reads the flag and never writes it |
+| `SluisArchiveObjects` | `s3:GetObject`, `PutObject`, `DeleteObject`, and `GetObjectVersion` on a versioned bucket | `<bucket>/<prefix>backup/<instance>/*` |
+| `SluisArchiveList` | `s3:ListBucket`, and `ListBucketVersions` on a versioned bucket | The bucket, `s3:prefix` `<prefix>backup/<instance>/*` |
+| `SluisArchiveKey` | `kms:Decrypt`, `GenerateDataKey` | The archive key, context `{instance, purpose=archive}` and no other key |
+| `SluisArchiveSSEKey` | `kms:Decrypt`, `GenerateDataKey` | `SSEKeyArn`, through S3 only |
+
+| Helper | Renders |
+|---|---|
+| `BackupRoleStatements(env, ArchiveGrant)` | The role above, for an estate that builds its own |
+| `ArchiveBucketPolicyStatements(grant, backupRoleArn, restoreRoleArn)` | The bucket policy for a bucket in another account; its owner also names the roles in the bucket key's policy |
 
 ## Ports configuration
 
