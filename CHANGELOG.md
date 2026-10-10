@@ -1,5 +1,7 @@
 ## Unreleased
 
+## v1.75.0-rc.5
+
 ### Added
 
 - **The release publishes a container image per module: `ghcr.io/truvity/sluis/sluis-issuer`, `sluis-cloudflare` and `sluis-backup`, and the chart can run them with `image.perModule: true`.** Each is the `sluis` binary built with its module name pinned (`-X .../internal/version.Module=sluis-module=<module>`), multi-arch (amd64, arm64) on the same base image as `sluis`, and refuses another module's commands. They are in `hack/release-images.txt`, so the release workflow's `attest-oci` signs them and attaches provenance and an SBOM by digest, `hack/release-verify.sh` checks them, and `internal/releasecheck` holds the set to the Lambda zips. With `image.perModule: true` the issuer Deployment runs `sluis-issuer` and the backup CronJobs and the restore Job run `sluis-backup`, at the same tag; the default stays the one `sluis` image and every existing render is unchanged. The Cloudflare image has no chart object yet.
