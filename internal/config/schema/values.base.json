@@ -877,6 +877,162 @@
     "secretMounts": {
       "$ref": "#/definitions/secretMounts"
     },
+    "backup": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The backup module (docs/reference/sluis/backup.md): a CronJob that runs `sluis backup run`, an optional CronJob that prunes by the retention rule, and the document they read. Layout v5 only. Off by default. The restore Job (`restore`) reads the same document.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Render the backup CronJob, its ServiceAccount and the document's ConfigMap. Refused unless `config` names `backup.target` and layout v5."
+        },
+        "schedule": {
+          "type": "string",
+          "minLength": 1,
+          "default": "17 2 * * *",
+          "description": "Cron schedule of the backup run."
+        },
+        "timeZone": {
+          "type": "string",
+          "description": "IANA time zone of the schedule. Empty: the controller manager's."
+        },
+        "suspend": {
+          "type": "boolean",
+          "default": false,
+          "description": "Suspend the CronJobs without removing them."
+        },
+        "concurrencyPolicy": {
+          "enum": ["Forbid", "Replace", "Allow"],
+          "default": "Forbid",
+          "description": "The run takes a lease, so two at once would only wait on it: Forbid."
+        },
+        "startingDeadlineSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 3600
+        },
+        "activeDeadlineSeconds": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0,
+          "description": "Stops a run after this many seconds. 0: no limit."
+        },
+        "successfulJobsHistoryLimit": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 3
+        },
+        "failedJobsHistoryLimit": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 3
+        },
+        "prune": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "A second CronJob that applies the retention rule (`sluis backup prune`).",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "description": "Render it with the backup CronJob."
+            },
+            "schedule": {
+              "type": "string",
+              "minLength": 1,
+              "default": "47 3 * * *",
+              "description": "Cron schedule of the prune."
+            }
+          }
+        },
+        "serviceAccount": {
+          "$ref": "#/definitions/moduleServiceAccount",
+          "description": "The backup role's own account: it reads every module and writes the archive, so it is never the service's. Name empty: <release>-backup."
+        },
+        "secretEnv": {
+          "$ref": "#/definitions/secretEnv"
+        },
+        "resources": {
+          "type": "object"
+        },
+        "podAnnotations": {
+          "type": "object"
+        },
+        "nodeSelector": {
+          "type": "object"
+        },
+        "tolerations": {
+          "type": "array"
+        }
+      }
+    },
+    "restore": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The restore Job: for an administrator, off by default. Never a CronJob. It reads the document of `backup.config` and runs `sluis restore start`, with an account of its own, whose role may write every module's table.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Render one Job, named from `backupId`. Delete it before running the same restore again."
+        },
+        "backupId": {
+          "type": "string",
+          "description": "The backup to restore (`sluis backup list`). Exactly one of this and `resume`."
+        },
+        "resume": {
+          "type": "boolean",
+          "default": false,
+          "description": "Continue a restore that paused (`sluis restore start --resume`). No `backupId`."
+        },
+        "confirm": {
+          "type": "string",
+          "description": "The installation's name, `backup.config.instance`: a restore overwrites a live installation, and the Job is refused unless this says which one."
+        },
+        "overwrite": {
+          "type": "boolean",
+          "default": false,
+          "description": "Overwrite a destination that holds different data. Without it a non-empty destination is refused."
+        },
+        "by": {
+          "type": "string",
+          "description": "Who asked, for the audit record."
+        },
+        "note": {
+          "type": "string",
+          "description": "Why, for the audit record."
+        },
+        "ttlSecondsAfterFinished": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0,
+          "description": "Remove the finished Job after this many seconds. 0: keep it."
+        },
+        "activeDeadlineSeconds": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0,
+          "description": "Stops the Job after this many seconds. 0: no limit."
+        },
+        "serviceAccount": {
+          "$ref": "#/definitions/moduleServiceAccount",
+          "description": "The restore role's own account. Name empty: <release>-restore."
+        },
+        "resources": {
+          "type": "object"
+        },
+        "podAnnotations": {
+          "type": "object"
+        },
+        "nodeSelector": {
+          "type": "object"
+        },
+        "tolerations": {
+          "type": "array"
+        }
+      }
+    },
     "telemetry": {
       "type": "object",
       "additionalProperties": false,
@@ -1401,6 +1557,31 @@
     "duration": {
       "type": "string",
       "pattern": "^[0-9]+(ns|us|µs|ms|s|m|h)([0-9]+(ns|us|µs|ms|s|m|h))*$"
+    },
+    "moduleServiceAccount": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "annotations": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "awsIdentity": {
+          "type": "string",
+          "enum": ["pod-identity", "irsa"],
+          "description": "How the pod gets its AWS role (as `serviceAccount.awsIdentity`)."
+        },
+        "awsRoleArn": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The role's ARN, for `awsIdentity: irsa`."
+        }
+      }
     },
     "secretEnv": {
       "type": "array",
