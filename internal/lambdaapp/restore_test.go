@@ -45,7 +45,7 @@ func (f *fakeLambda) Invoke(_ context.Context, in *awslambda.InvokeInput, _ ...f
 	return &awslambda.InvokeOutput{}, f.err
 }
 
-const arn = "arn:aws:lambda:eu-west-1:000000000000:function:sluis-restore:live"
+const arn = "arn:aws:lambda:eu-west-1:111122223333:function:sluis-restore:live"
 
 func lambdaCtx() context.Context {
 	return lambdacontext.NewContext(context.Background(), &lambdacontext.LambdaContext{InvokedFunctionArn: arn})
@@ -113,7 +113,9 @@ func TestTheRestoreEventIsCheckedAndOnlyTheRestoreFunctionTakesIt(t *testing.T) 
 		t.Fatal("a function with no restore answered the event")
 	}
 	f := &fakeRestorer{res: restorejob.Result{Outcome: restorejob.OutcomeCompleted, ID: "r1", Run: &restorejob.Run{ID: "r1", BackupID: "b1", State: "completed"}}}
-	h.WithRestore(func(ctx context.Context, ev RestoreEvent) (RestoreResult, error) { return restoreEvent(ctx, f, nil, slog.Default(), ev) })
+	h.WithRestore(func(ctx context.Context, ev RestoreEvent) (RestoreResult, error) {
+		return restoreEvent(ctx, f, nil, slog.Default(), ev)
+	})
 	for _, bad := range []string{`{"kind":"restore"}`, `{"kind":"restore","preview":true}`, `{"kind":"restore","backup":"b1","resume":true}`,
 		`{"kind":"restore","resume":true,"preview":true}`} {
 		out, err := h.Handle(context.Background(), json.RawMessage(bad))

@@ -72,9 +72,10 @@ const (
 const (
 	// RunPrefix is the prefix of the status records; the id follows.
 	RunPrefix = "rec.backup.restore."
-	// LeaseKind and LeaseTarget are the lease a restore holds:
-	// `lease.restore:run`, in the backup module's table.
-	LeaseKind   = "restore"
+	// LeaseKind is the kind of the lease a restore holds, `lease.restore:run`,
+	// in the backup module's table.
+	LeaseKind = "restore"
+	// LeaseTarget is the target of that lease.
 	LeaseTarget = "run"
 
 	// Margin is how much of an invocation's deadline is kept back from Apply for

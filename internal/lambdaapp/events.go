@@ -444,7 +444,7 @@ func (h *HTTP) tickRestore(ctx context.Context, payload json.RawMessage) (any, e
 	}
 	var ev RestoreEvent
 	if err := json.Unmarshal(payload, &ev); err != nil {
-		return nil, fmt.Errorf("the event is not {\"kind\":\"restore\",\"backup\":\"<id>\",\"overwrite\":true|false,\"preview\":true|false,\"resume\":true|false}: %w", err)
+		return nil, fmt.Errorf("the event is not {\"kind\":\"restore\",\"backup\":\"<id>\",\"overwrite\":...,\"preview\":...,\"resume\":...}: %w", err)
 	}
 	defer func() {
 		if h.settle != nil {
