@@ -882,6 +882,11 @@
       "additionalProperties": false,
       "description": "The OpenTelemetry SDK environment on every pod of `renders: app` (ADR 0006). Nothing is rendered without `otlp.endpoint`.",
       "properties": {
+        "legacyMetrics": {
+          "type": "boolean",
+          "default": true,
+          "description": "Also publish the metrics under their old `access_issuer.*` and `access_roster.*` names (SLUIS_LEGACY_METRICS). On in v1.75; the old names and this key are removed in v1.76."
+        },
         "otlp": {
           "type": "object",
           "additionalProperties": false,

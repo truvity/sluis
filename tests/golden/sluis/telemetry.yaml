@@ -330,7 +330,9 @@ spec:
             - name: OTEL_EXPORTER_OTLP_PROTOCOL
               value: "http/protobuf"
             - name: OTEL_SERVICE_NAME
-              value: "access-issuer"
+              value: "sluis"
+            - name: SLUIS_LEGACY_METRICS
+              value: "true"
             - name: OTEL_TRACES_SAMPLER
               value: "parentbased_traceidratio"
             - name: OTEL_TRACES_SAMPLER_ARG

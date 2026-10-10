@@ -4,7 +4,7 @@
 # test through vmalert-tool, the engine of the estate's own ruler, against the
 # rules the chart renders into rules.yaml.
 #
-# Every rule has a test that fires it, with its labels and text, and at least
+# Every rule, under each of its two names, has a test that fires it, with its labels and text, and at least
 # one that must NOT fire: a rule is proven by the series that leave it silent
 # as much as by the one that wakes it. alerts_test.go refuses a rule without
 # both. Series are what the issuer and the controllers publish over OTLP, named
@@ -478,4 +478,471 @@ tests:
     alert_rule_test:
       - eval_time: 25m
         alertname: AccessRosterPortErrors
+        exp_alerts: []
+
+  # ---------------------------------------------------------------- the same rules over the sluis_ series
+  # v1.75 publishes every series under both names and every rule exists under
+  # both names. The cases above prove the old names; these are the same cases
+  # written over the sluis_ series, which the Sluis... rules (and the old-named
+  # ones) must answer in the same way.
+  # ---------------------------------------------------------------- no signing key
+  - name: sluis names, no published key fires, per algorithm
+    interval: 1m
+    input_series:
+      - series: 'sluis_signing_keys_published{namespace="sluis",k8s_cluster_name="example",algorithm="ES384"}'
+        values: '1 1 0x20'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: SluisNoSigningKeyPublished
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              team: platform
+              k8s_cluster_name: example
+              namespace: sluis
+              algorithm: ES384
+            exp_annotations:
+              summary: 'The access-roster issuer in sluis publishes no ES384 signing key'
+              description: >-
+                The issuer's key ring holds no key to publish for this algorithm, so its JWKS
+                is empty and no relying party can verify a token. Look at the signing key
+                Secret the chart mounts (cert-manager's Certificate, or the existing Secret
+                named in signingKey.existingSecret) and the issuer's log for why it could not
+                be read.
+              runbook_url: https://github.com/truvity/sluis/blob/master/docs/reference/sluis/telemetry.md#sluisnosigningkeypublished
+
+  - name: sluis names, a published key, and another namespace with none, do not fire
+    interval: 1m
+    input_series:
+      - series: 'sluis_signing_keys_published{namespace="sluis",k8s_cluster_name="example",algorithm="ES384"}'
+        values: '1x30'
+      - series: 'sluis_signing_keys_published{namespace="other",k8s_cluster_name="example",algorithm="ES384"}'
+        values: '0x30'
+      - series: 'sluis_signing_keys_published{namespace="sluis",k8s_cluster_name="example",algorithm="RS256"}'
+        values: '2x30'
+    alert_rule_test:
+      - eval_time: 25m
+        alertname: SluisNoSigningKeyPublished
+        exp_alerts: []
+
+  - name: sluis names, a key that was gone for less than the grace period does not fire
+    interval: 1m
+    input_series:
+      - series: 'sluis_signing_keys_published{namespace="sluis",k8s_cluster_name="example",algorithm="ES384"}'
+        values: '1x5 0x3 1x30'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: SluisNoSigningKeyPublished
+        exp_alerts: []
+
+  # ---------------------------------------------------------------- signing key rotation stalled (the test values set maxAgeSeconds 3600 and for 10m)
+  - name: sluis names, a key active since the start of the series, two hours on, is stalled
+    interval: 1m
+    input_series:
+      - series: 'sluis_signing_key_active_since_timestamp_seconds{namespace="sluis",k8s_cluster_name="example",algorithm="ES384"}'
+        values: '946684800x150'
+    alert_rule_test:
+      - eval_time: 2h
+        alertname: SluisSigningKeyRotationStalled
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              team: platform
+              k8s_cluster_name: example
+              namespace: sluis
+              algorithm: ES384
+            exp_annotations:
+              summary: 'The ES384 signing key in sluis has been active for 2h 0m 0s'
+              description: >-
+                The active signing key is older than 3600s
+                and has not rotated. With cert-manager keys, check the Certificate for the key
+                (kubectl describe certificate), its issuer, and whether the issuer's
+                signingKey.pollInterval is reading the mounted file. With kms-wrapped keys,
+                check the issuer's log for why it cannot generate or wrap a key pair (the
+                pod's AWS role, the KMS key's policy).
+              runbook_url: https://github.com/truvity/sluis/blob/master/docs/reference/sluis/telemetry.md#sluissigningkeyrotationstalled
+
+  - name: sluis names, a key activated just now, and one still under the limit, do not fire
+    interval: 1m
+    input_series:
+      - series: 'sluis_signing_key_active_since_timestamp_seconds{namespace="sluis",k8s_cluster_name="example",algorithm="ES384"}'
+        values: '946684800+60x150'
+      - series: 'sluis_signing_key_active_since_timestamp_seconds{namespace="sluis",k8s_cluster_name="example",algorithm="RS256"}'
+        values: '946684800x150'
+    alert_rule_test:
+      - eval_time: 50m
+        alertname: SluisSigningKeyRotationStalled
+        exp_alerts: []
+
+  # ---------------------------------------------------------------- issuer 5xx
+  - name: sluis names, a tenth of the requests failing on the server fires
+    interval: 1m
+    input_series:
+      - series: 'sluis_http_requests_total{namespace="sluis",k8s_cluster_name="example",route="token",status_class="5xx"}'
+        values: '0+10x40'
+      - series: 'sluis_http_requests_total{namespace="sluis",k8s_cluster_name="example",route="token",status_class="2xx"}'
+        values: '0+90x40'
+    alert_rule_test:
+      - eval_time: 25m
+        alertname: SluisIssuer5xx
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              team: platform
+              k8s_cluster_name: example
+              namespace: sluis
+            exp_annotations:
+              summary: 'The access-roster issuer in sluis answers 10% of requests with a 5xx'
+              description: >-
+                More than 5% of the requests in the last 10 minutes
+                failed on the server side. The dashboard's request panel names the route; the
+                issuer's log has the error. A store that is down (see AccessRosterPortErrors)
+                and a directory that cannot be reached are the usual causes.
+              runbook_url: https://github.com/truvity/sluis/blob/master/docs/reference/sluis/telemetry.md#sluisissuer5xx
+
+  - name: sluis names, one percent 5xx, and one stray error among a few requests, do not fire
+    interval: 1m
+    input_series:
+      - series: 'sluis_http_requests_total{namespace="sluis",k8s_cluster_name="example",route="token",status_class="5xx"}'
+        values: '0+1x40'
+      - series: 'sluis_http_requests_total{namespace="sluis",k8s_cluster_name="example",route="token",status_class="2xx"}'
+        values: '0+99x40'
+      - series: 'sluis_http_requests_total{namespace="quiet",k8s_cluster_name="example",route="authorize",status_class="5xx"}'
+        values: '0 0 0 1 1 1 1 1 1 1x30'
+      - series: 'sluis_http_requests_total{namespace="quiet",k8s_cluster_name="example",route="authorize",status_class="2xx"}'
+        values: '0 0 0 2 3 3 3 3 3 3x30'
+    alert_rule_test:
+      - eval_time: 25m
+        alertname: SluisIssuer5xx
+        exp_alerts: []
+
+  - name: sluis names, 4xx refusals, however many, do not fire
+    interval: 1m
+    input_series:
+      - series: 'sluis_http_requests_total{namespace="sluis",k8s_cluster_name="example",route="token",status_class="4xx"}'
+        values: '0+90x40'
+      - series: 'sluis_http_requests_total{namespace="sluis",k8s_cluster_name="example",route="token",status_class="2xx"}'
+        values: '0+10x40'
+    alert_rule_test:
+      - eval_time: 25m
+        alertname: SluisIssuer5xx
+        exp_alerts: []
+
+  # ---------------------------------------------------------------- token endpoint latency
+  - name: sluis names, a token endpoint answering in seconds fires on its p99
+    interval: 1m
+    input_series:
+      - series: 'sluis_http_request_duration_seconds_bucket{namespace="sluis",k8s_cluster_name="example",route="token",le="0.5"}'
+        values: '0x40'
+      - series: 'sluis_http_request_duration_seconds_bucket{namespace="sluis",k8s_cluster_name="example",route="token",le="5"}'
+        values: '0+10x40'
+      - series: 'sluis_http_request_duration_seconds_bucket{namespace="sluis",k8s_cluster_name="example",route="token",le="+Inf"}'
+        values: '0+10x40'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: SluisTokenEndpointSlow
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              team: platform
+              k8s_cluster_name: example
+              namespace: sluis
+            exp_annotations:
+              summary: 'The access-roster token endpoint in sluis has a p99 of 4.955s'
+              description: >-
+                Token requests are taking longer than 2s at the
+                99th percentile. The store (see the port latency panel), the policy's size and
+                the directory are what a token waits on.
+              runbook_url: https://github.com/truvity/sluis/blob/master/docs/reference/sluis/telemetry.md#sluistokenendpointslow
+
+  - name: sluis names, a fast token endpoint beside a slow authorize route does not fire
+    interval: 1m
+    input_series:
+      - series: 'sluis_http_request_duration_seconds_bucket{namespace="sluis",k8s_cluster_name="example",route="token",le="0.05"}'
+        values: '0+10x40'
+      - series: 'sluis_http_request_duration_seconds_bucket{namespace="sluis",k8s_cluster_name="example",route="token",le="+Inf"}'
+        values: '0+10x40'
+      - series: 'sluis_http_request_duration_seconds_bucket{namespace="sluis",k8s_cluster_name="example",route="authorize",le="0.5"}'
+        values: '0x40'
+      - series: 'sluis_http_request_duration_seconds_bucket{namespace="sluis",k8s_cluster_name="example",route="authorize",le="+Inf"}'
+        values: '0+10x40'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: SluisTokenEndpointSlow
+        exp_alerts: []
+
+  # ---------------------------------------------------------------- ticks failing
+  - name: sluis names, three failed ticks of one target in 45 minutes fire, naming kind and target
+    interval: 1m
+    input_series:
+      - series: 'sluis_ticks_total{namespace="sluis",k8s_cluster_name="example",kind="github-tick",target="truvity",outcome="failed"}'
+        values: '0x10 1x15 2x15 3x15 3x10'
+    alert_rule_test:
+      - eval_time: 55m
+        alertname: SluisTickFailing
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              team: platform
+              k8s_cluster_name: example
+              namespace: sluis
+              kind: github-tick
+              target: truvity
+            exp_annotations:
+              summary: 'The github-tick of truvity has failed 3 times'
+              description: >-
+                The controller's tick of this target failed 3 or more
+                times within 45m. Its report (the controller's page in the
+                console, and the log's "a pass over an organisation failed" or the Slack
+                equivalent) names the error.
+              runbook_url: https://github.com/truvity/sluis/blob/master/docs/reference/sluis/telemetry.md#sluistickfailing
+
+  - name: sluis names, two failures, and failures spread over an hour, do not fire
+    interval: 1m
+    input_series:
+      - series: 'sluis_ticks_total{namespace="sluis",k8s_cluster_name="example",kind="github-tick",target="truvity",outcome="failed"}'
+        values: '0x10 1x15 2x30'
+      - series: 'sluis_ticks_total{namespace="sluis",k8s_cluster_name="example",kind="slack-tick",target="acme",outcome="failed"}'
+        values: '0+1x5 5x80'
+      - series: 'sluis_ticks_total{namespace="sluis",k8s_cluster_name="example",kind="github-tick",target="truvity",outcome="ok"}'
+        values: '0+1x80'
+    alert_rule_test:
+      - eval_time: 55m
+        alertname: SluisTickFailing
+        exp_alerts: []
+
+  # ---------------------------------------------------------------- no successful tick (absence)
+  - name: sluis names, a target whose last ok tick is two hours old fires
+    interval: 1m
+    input_series:
+      - series: 'sluis_tick_last_success_timestamp_seconds{namespace="sluis",k8s_cluster_name="example",kind="slack-tick",target="acme"}'
+        values: '946684800 _x200'
+    alert_rule_test:
+      - eval_time: 2h
+        alertname: SluisTickStale
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              team: platform
+              k8s_cluster_name: example
+              namespace: sluis
+              kind: slack-tick
+              target: acme
+            exp_annotations:
+              summary: 'No successful slack-tick of acme for 2h 0m 0s'
+              description: >-
+                This target has not completed a tick for longer than 3600s.
+                Check that the controller's Deployment is running, that its leases are not held
+                by a runner that is gone (AccessRosterLeaseLost), and the log for the failures.
+              runbook_url: https://github.com/truvity/sluis/blob/master/docs/reference/sluis/telemetry.md#sluistickstale
+
+  - name: sluis names, targets that tick, one of which ticks only every quarter hour, do not fire
+    interval: 1m
+    input_series:
+      - series: 'sluis_tick_last_success_timestamp_seconds{namespace="sluis",k8s_cluster_name="example",kind="slack-tick",target="acme"}'
+        values: '946684800+60x200'
+      - series: 'sluis_tick_last_success_timestamp_seconds{namespace="sluis",k8s_cluster_name="example",kind="github-tick",target="truvity"}'
+        values: '946684800x15 946685700x15 946686600x15 946687500x15 946688400x15 946689300x15 946690200x15 946691100x15 946692000x15'
+    alert_rule_test:
+      - eval_time: 2h
+        alertname: SluisTickStale
+        exp_alerts: []
+
+  # ---------------------------------------------------------------- lease lost
+  - name: sluis names, three lost leases of one kind in an hour fire
+    interval: 1m
+    input_series:
+      - series: 'sluis_leases_lost_total{namespace="sluis",k8s_cluster_name="example",kind="github-tick"}'
+        values: '0x10 1x10 2x10 3x20'
+    alert_rule_test:
+      - eval_time: 45m
+        alertname: SluisLeaseLost
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              team: platform
+              k8s_cluster_name: example
+              namespace: sluis
+              kind: github-tick
+            exp_annotations:
+              summary: 'Tick leases of github-tick in sluis were lost 3 times'
+              description: >-
+                Controllers lost their lease on a target 3 or more times
+                within 1h. Look for a second runner (a tick Job beside the
+                Deployment, a replica count over one on a State that is not shared) and for
+                port errors on the State.
+              runbook_url: https://github.com/truvity/sluis/blob/master/docs/reference/sluis/telemetry.md#sluisleaselost
+
+  - name: sluis names, one lost lease, and leases contended or acquired, do not fire
+    interval: 1m
+    input_series:
+      - series: 'sluis_leases_lost_total{namespace="sluis",k8s_cluster_name="example",kind="github-tick"}'
+        values: '0x10 1x40'
+      - series: 'sluis_leases_contended_total{namespace="sluis",k8s_cluster_name="example",kind="github-tick"}'
+        values: '0+5x50'
+      - series: 'sluis_leases_acquired_total{namespace="sluis",k8s_cluster_name="example",kind="github-tick"}'
+        values: '0+5x50'
+    alert_rule_test:
+      - eval_time: 45m
+        alertname: SluisLeaseLost
+        exp_alerts: []
+
+  # ---------------------------------------------------------------- Cloudflare rotation
+  - name: sluis names, a credential not rotated for twice its rotation fires, per preset
+    interval: 1m
+    input_series:
+      - series: 'sluis_cloudflare_rotation_last_timestamp_seconds{namespace="sluis",k8s_cluster_name="example",preset="dns"}'
+        values: '946684800x40'
+      - series: 'sluis_cloudflare_rotation_interval_seconds{namespace="sluis",k8s_cluster_name="example",preset="dns"}'
+        values: '300x40'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: SluisCloudflareRotationStale
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              team: platform
+              k8s_cluster_name: example
+              namespace: sluis
+              preset: dns
+            exp_annotations:
+              summary: 'The Cloudflare credential of preset dns was last rotated 20m 0s ago, past its allowance'
+              description: >-
+                The stored credential of this preset is older than 2 times
+                its rotation. Look at the log for "a Cloudflare token was not minted" (its
+                reason says whether the prototype was refused, the minter credential is
+                missing or Cloudflare answered an error), at the scheduled invocation on
+                Lambda, and at the preset's prototype in Cloudflare.
+              runbook_url: https://github.com/truvity/sluis/blob/master/docs/reference/sluis/telemetry.md#sluiscloudflarerotationstale
+
+  - name: sluis names, a credential rotated every five minutes, and a preset with no series, do not fire
+    interval: 1m
+    input_series:
+      - series: 'sluis_cloudflare_rotation_last_timestamp_seconds{namespace="sluis",k8s_cluster_name="example",preset="dns"}'
+        values: '946684800+300x10'
+      - series: 'sluis_cloudflare_rotation_interval_seconds{namespace="sluis",k8s_cluster_name="example",preset="dns"}'
+        values: '300x40'
+      - series: 'sluis_cloudflare_rotation_interval_seconds{namespace="sluis",k8s_cluster_name="example",preset="other"}'
+        values: '300x40'
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: SluisCloudflareRotationStale
+        exp_alerts: []
+
+  # ---------------------------------------------------------------- GitHub rate limit
+  - name: sluis names, a budget under a hundred for the whole half hour fires
+    interval: 1m
+    input_series:
+      - series: 'github_roster_rate_limit_remaining{namespace="sluis",k8s_cluster_name="example",resource="core"}'
+        values: '4000x5 50x60'
+    alert_rule_test:
+      - eval_time: 45m
+        alertname: SluisGitHubRateLimitLow
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              team: platform
+              k8s_cluster_name: example
+              namespace: sluis
+              resource: core
+            exp_annotations:
+              summary: 'GitHub rate limit (core) is down to 50 requests'
+              description: >-
+                The GitHub budget for this resource has been under 100
+                requests for 30m. github_roster_rate_limited_total says how
+                often a call already waited. Lengthen the controller's interval, or look for
+                a caller spending the App's budget outside this controller.
+              runbook_url: https://github.com/truvity/sluis/blob/master/docs/reference/sluis/telemetry.md#sluisgithubratelimitlow
+
+  - name: sluis names, a dip that recovers within the half hour, and a healthy budget, do not fire
+    interval: 1m
+    input_series:
+      - series: 'github_roster_rate_limit_remaining{namespace="sluis",k8s_cluster_name="example",resource="core"}'
+        values: '4000x5 50x10 4000x60'
+      - series: 'github_roster_rate_limit_remaining{namespace="sluis",k8s_cluster_name="example",resource="graphql"}'
+        values: '5000x80'
+    alert_rule_test:
+      - eval_time: 45m
+        alertname: SluisGitHubRateLimitLow
+        exp_alerts: []
+
+  # ---------------------------------------------------------------- seats short
+  - name: sluis names, an organisation short of seats for the half hour fires
+    interval: 1m
+    input_series:
+      - series: 'github_roster_seats_short{namespace="sluis",k8s_cluster_name="example",org="truvity"}'
+        values: '0x5 2x60'
+    alert_rule_test:
+      - eval_time: 45m
+        alertname: SluisSeatsShort
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              team: platform
+              k8s_cluster_name: example
+              namespace: sluis
+              org: truvity
+            exp_annotations:
+              summary: 'GitHub organisation truvity is 2 seat(s) short'
+              description: >-
+                The controller could not invite everyone the policy admits to this organisation
+                because it has no free seats. Buy seats, or remove members that no longer
+                belong, and the next pass sends the invitations.
+              runbook_url: https://github.com/truvity/sluis/blob/master/docs/reference/sluis/telemetry.md#sluisseatsshort
+
+  - name: sluis names, no seats short, and a shortage that clears, do not fire
+    interval: 1m
+    input_series:
+      - series: 'github_roster_seats_short{namespace="sluis",k8s_cluster_name="example",org="truvity"}'
+        values: '0x80'
+      - series: 'github_roster_seats_short{namespace="sluis",k8s_cluster_name="example",org="acme"}'
+        values: '3x10 0x70'
+    alert_rule_test:
+      - eval_time: 45m
+        alertname: SluisSeatsShort
+        exp_alerts: []
+
+  # ---------------------------------------------------------------- port errors
+  - name: sluis names, a tenth of the state calls failing fires, naming the port
+    interval: 1m
+    input_series:
+      - series: 'sluis_port_operation_duration_seconds_count{namespace="sluis",k8s_cluster_name="example",port="state",operation="get",outcome="unavailable"}'
+        values: '0+10x30'
+      - series: 'sluis_port_operation_duration_seconds_count{namespace="sluis",k8s_cluster_name="example",port="state",operation="get",outcome="ok"}'
+        values: '0+90x30'
+    alert_rule_test:
+      - eval_time: 25m
+        alertname: SluisPortErrors
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              team: platform
+              k8s_cluster_name: example
+              namespace: sluis
+              port: state
+            exp_annotations:
+              summary: 'The state store of access-roster in sluis is failing 10% of calls'
+              description: >-
+                More than 5% of the calls to this storage port failed in the
+                last 5 minutes. State and index are Valkey (or the namespace's ConfigMaps and
+                Secrets); blobs are the reports' ConfigMaps. Check that store's own health and
+                the NetworkPolicy to it.
+              runbook_url: https://github.com/truvity/sluis/blob/master/docs/reference/sluis/telemetry.md#sluisporterrors
+
+  - name: sluis names, compare-and-swap conflicts, missing keys and a trickle of errors do not fire
+    interval: 1m
+    input_series:
+      - series: 'sluis_port_operation_duration_seconds_count{namespace="sluis",k8s_cluster_name="example",port="state",operation="update",outcome="conflict"}'
+        values: '0+50x30'
+      - series: 'sluis_port_operation_duration_seconds_count{namespace="sluis",k8s_cluster_name="example",port="state",operation="get",outcome="not_found"}'
+        values: '0+50x30'
+      - series: 'sluis_port_operation_duration_seconds_count{namespace="sluis",k8s_cluster_name="example",port="state",operation="get",outcome="ok"}'
+        values: '0+50x30'
+      - series: 'sluis_port_operation_duration_seconds_count{namespace="sluis",k8s_cluster_name="example",port="blob",operation="read",outcome="error"}'
+        values: '0 0 0 1 1 1x30'
+      - series: 'sluis_port_operation_duration_seconds_count{namespace="sluis",k8s_cluster_name="example",port="blob",operation="read",outcome="ok"}'
+        values: '0+20x33'
+    alert_rule_test:
+      - eval_time: 25m
+        alertname: SluisPortErrors
         exp_alerts: []

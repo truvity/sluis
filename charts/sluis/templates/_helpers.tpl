@@ -519,6 +519,18 @@ migration.
 {{- if .Values.secretManagers }}{{ fail "secretManagers was removed in v1.30.0: delete this key from your values. To sign in to OpenBAO, use its own OIDC login (see docs/guides/sluis/connect/openbao.md)." }}{{ end -}}
 {{- end -}}
 
+{{- /* Alert mode, v1.75 dual-name window. Takes an expression written over the
+old series (`access_issuer_*`, `access_roster_*`) and returns it accepting both
+names: `(<sluis_ names>) or (<old names>)`. Each side is a whole expression, so a
+threshold or a ratio is judged on one name's series and never on a mix, and the
+same series under both names (legacyMetrics on) is one result, not two. An
+expression that names no old series is returned as it is. v1.76 drops the old
+side and this helper. */ -}}
+{{- define "sluis.dual" -}}
+{{- $new := regexReplaceAll "access_(issuer|roster)_" . "sluis_" -}}
+{{- if eq $new . }}{{ . }}{{ else }}({{ $new }}) or ({{ . }}){{ end -}}
+{{- end -}}
+
 {{- /* Alert mode. A rule's labels: the routing labels the caller sets for every
 rule, then the rule's own severity, then anything the rule's `labels` adds. */ -}}
 {{- define "sluis.ruleLabels" -}}
@@ -548,6 +560,8 @@ endpoint (sluis.validateTelemetry).
   value: {{ $o.protocol | default "http/protobuf" | quote }}
 - name: OTEL_SERVICE_NAME
   value: {{ .service | quote }}
+- name: SLUIS_LEGACY_METRICS
+  value: {{ $t.legacyMetrics | default (not (hasKey $t "legacyMetrics")) | toString | quote }}
 {{- range $name := keys ($o.extraEnv | default dict) | sortAlpha }}
 - name: {{ $name }}
   value: {{ get $o.extraEnv $name | toString | quote }}

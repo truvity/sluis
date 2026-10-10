@@ -398,8 +398,9 @@ chart-lint:
 
 # The chart's alert rules and dashboard, held to what the estate holds them to.
 #
-# The dashboard is generated (hack/dashboards/access-roster-overview.py) and the
-# committed JSON is held to the generator. `dashboardlint`, from
+# The dashboards are generated (hack/dashboards/access-roster-overview.py, which
+# writes sluis-overview too when given `sluis`) and the committed JSON is held to
+# the generator. `dashboardlint`, from
 # truvity/observability at the version pinned above, judges it against that
 # repository's dashboard contract (docs/dashboards.md): a datasource variable
 # every panel uses, a cluster variable, `$cluster` in the title and every
@@ -413,6 +414,7 @@ telemetry:
     #!/usr/bin/env bash
     set -euo pipefail
     python3 hack/dashboards/access-roster-overview.py | diff - charts/sluis/dashboards/access-roster-overview.json
+    python3 hack/dashboards/access-roster-overview.py sluis | diff - charts/sluis/dashboards/sluis-overview.json
 
     tools=$(mktemp -d); trap 'rm -rf "$tools"' EXIT
     GOBIN="$tools" go install github.com/truvity/observability/cmd/dashboardlint@{{observability_version}}

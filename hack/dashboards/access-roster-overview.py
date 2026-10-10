@@ -22,6 +22,37 @@ client id is one the policy declares, and both are bounded by that
 declaration.
 """
 import json
+import re
+import sys
+
+# `sluis` writes the dashboard that replaces this one in the v1.75 dual-name
+# window (sluis-overview): the same panels, each query over the `sluis_` series
+# OR the old `access_issuer_` / `access_roster_` ones. The release publishes
+# both names while telemetry.legacyMetrics is on, with the same labels, so the
+# `or` keeps the new series and fills what only the old ones hold (history, and
+# a replica that still runs the previous release). v1.76 drops the old side.
+DUAL = sys.argv[1:] == ["sluis"]
+if sys.argv[1:] not in ([], ["sluis"]):
+    sys.exit("usage: access-roster-overview.py [sluis]")
+OLD_SERIES = re.compile(r"access_(issuer|roster)_")
+
+
+def dual(expr):
+    """The expression over both names. One that names no old series is unchanged."""
+    if not DUAL:
+        return expr
+    new = OLD_SERIES.sub("sluis_", expr)
+    if new == expr:
+        return expr
+    tail = ""
+    if expr.endswith(" or vector(0)"):
+        expr, new, tail = expr[:-len(" or vector(0)")], new[:-len(" or vector(0)")], " or vector(0)"
+    return "((%s) or (%s))%s" % (new, expr, tail)
+
+
+def words(text):
+    return text.replace("AccessRoster", "Sluis") if DUAL else text
+
 
 DS = {"type": "prometheus", "uid": "${datasource}"}
 K = 'k8s_cluster_name=~"$cluster"'
@@ -38,7 +69,7 @@ def nid():
 
 
 def target(expr, legend="", ref="A", instant=False):
-    return {"datasource": DS, "editorMode": "code", "expr": expr, "legendFormat": legend,
+    return {"datasource": DS, "editorMode": "code", "expr": dual(expr), "legendFormat": legend,
             "range": not instant, "instant": instant, "refId": ref}
 
 
@@ -50,7 +81,7 @@ def row(title, y):
 def stat(title, desc, expr, x, y, unit="short", w=4, steps=None, no_value="no data", decimals=0):
     steps = steps or [(None, GREEN), (1, RED)]
     panels.append({
-        "id": nid(), "type": "stat", "title": title, "description": desc, "datasource": DS,
+        "id": nid(), "type": "stat", "title": title, "description": words(desc), "datasource": DS,
         "gridPos": {"h": 4, "w": w, "x": x, "y": y},
         "targets": [target(expr, instant=True)],
         "fieldConfig": {"defaults": {
@@ -65,7 +96,7 @@ def stat(title, desc, expr, x, y, unit="short", w=4, steps=None, no_value="no da
 
 def series(title, desc, targets, x, y, w, unit, h=8, stack=False):
     panels.append({
-        "id": nid(), "type": "timeseries", "title": title, "description": desc, "datasource": DS,
+        "id": nid(), "type": "timeseries", "title": title, "description": words(desc), "datasource": DS,
         "gridPos": {"h": h, "w": w, "x": x, "y": y},
         "targets": [target(e, legend=l, ref=chr(65 + i)) for i, (e, l) in enumerate(targets)],
         "fieldConfig": {"defaults": {
@@ -254,6 +285,8 @@ def var_ds():
 
 def var_cluster():
     q = "label_values(access_issuer_http_requests_total, k8s_cluster_name)"
+    if DUAL:
+        q = 'label_values({__name__=~"sluis_http_requests_total|access_issuer_http_requests_total"}, k8s_cluster_name)'
     return {"name": "cluster", "label": "cluster", "type": "query", "datasource": DS, "definition": q,
             "query": {"query": q, "refId": "cluster-Variable-Query"}, "current": {}, "hide": 0,
             "includeAll": False, "multi": False, "options": [], "refresh": 2, "regex": "",
@@ -262,20 +295,22 @@ def var_cluster():
 
 def var_namespace():
     q = "label_values(access_issuer_http_requests_total{%s}, namespace)" % K
-    return {"name": "namespace", "label": "access-roster namespace", "type": "query", "datasource": DS,
+    if DUAL:
+        q = 'label_values({__name__=~"sluis_http_requests_total|access_issuer_http_requests_total",%s}, namespace)' % K
+    return {"name": "namespace", "label": "sluis namespace" if DUAL else "access-roster namespace", "type": "query", "datasource": DS,
             "definition": q, "query": {"query": q, "refId": "namespace-Variable-Query"}, "current": {},
             "hide": 0, "includeAll": True, "allValue": ".*", "multi": True, "options": [],
             "refresh": 2, "regex": "", "skipUrlSync": False, "sort": 1}
 
 
 dashboard = {
-    "uid": "access-roster-overview",
-    "title": "access-roster overview - $cluster",
+    "uid": "sluis-overview" if DUAL else "access-roster-overview",
+    "title": "sluis overview - $cluster" if DUAL else "access-roster overview - $cluster",
     "description": "The token service and its controllers: the issuer's requests, errors and latency, tokens and sign-ins, signing keys, "
                    "the controllers' ticks and leases, the storage ports, and GitHub rate limits and seats.",
     "editable": False, "graphTooltip": 1, "refresh": "1m", "schemaVersion": 39,
     "time": {"from": "now-6h", "to": "now"}, "timezone": "", "annotations": {"list": []},
-    "links": [], "tags": ["access-roster"],
+    "links": [], "tags": ["sluis"] if DUAL else ["access-roster"],
     "templating": {"list": [var_ds(), var_cluster(), var_namespace()]},
     "panels": panels,
 }
