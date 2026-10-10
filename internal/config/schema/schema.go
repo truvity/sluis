@@ -238,7 +238,7 @@ func secretsSchema() m {
 		"endpoint": url("`ssm`: overrides the SSM address, for LocalStack."),
 		"refresh":  duration("`ssm`: how old a secret's copy may be before it is read again: a rotated secret reaches every instance within it.", "1m"),
 		"kmsKeyId": str("`ssm`: the id, ARN or alias of the customer-managed KMS key the parameters the service itself writes (its credentials) are encrypted with. Unset, the AWS-managed `alias/aws/ssm`. The `ssm` secrets adapter's `kmsKeyId` setting; naming another there is refused."),
-		"layout":   enum("`ssm`: the storage layout of the installation's secrets: `v4`, the only one and the default. It keeps them under `<root>/internal/` and `<root>/external/` (docs/decisions/0041-the-secret-contract.md). Layouts v3 and `transition` are gone; an installation still on one runs v1.74.x and `sluis migrate secrets-layout` first.", "v4", "v4"),
+		"layout":   enum("`ssm`: the storage layout of the installation's secrets. `v4`, the default, keeps them under `<root>/internal/config`, `<root>/internal/credentials` and `<root>/external/<kind>` (docs/decisions/0041-the-secret-contract.md). `v5` puts the module first, `<root>/internal/<module>/` and `<root>/external/<module>/` (docs/decisions/0072-storage-layout-v5-module-first.md), and needs `ports.dynamodb.tables`; the two do not mix. Layouts v3 and `transition` are gone; an installation still on one runs v1.74.x first.", "v4", "v4", "v5"),
 		"grace":    duration("`ssm`: how long the previous value of a rotated client secret is still accepted: the document's previous revision, while the current one is younger than this (docs/decisions/0039-the-issuer-generates-confidential-client-secrets.md, the overlap).", "24h"),
 	}, "source")
 	s["allOf"] = []any{
@@ -440,12 +440,22 @@ func portsSchema() m {
 
 // portsDynamoDBSchema is `ports.dynamodb`: the table of the `dynamodb` adapter.
 func portsDynamoDBSchema() m {
-	return obj("The DynamoDB table of the `dynamodb` adapter: one table with a string partition key `pk`, a string sort key `sk` and the TTL attribute `expires`. Credentials are the platform's (EKS Pod Identity, IRSA, a Lambda role) and are never configured here; an S3-compatible `endpoint` with no such identity names a credentials document by address (`credentialsRef`), never by value.", m{
-		"table":    str("The table's name."),
+	tables := m{}
+	for _, mod := range []string{"oidc", "github", "slack", "cloudflare", "google", "backup"} {
+		tables[mod] = str("The name of the " + mod + " module's table. The library default is `sluis-<instance>-" + mod + "`.")
+	}
+	named := obj("Layout v5 (docs/decisions/0072-storage-layout-v5-module-first.md): the table of each module, by module name. A process names its own module's table and the tables of the peers it reads; a module it does not name is not opened. Needs `secrets.layout: v5`; exclusive with `table`.",
+		tables)
+	named["minProperties"] = 1
+	o := obj("The DynamoDB table of the `dynamodb` adapter: layout v4 keeps everything in one table (`table`), layout v5 one table per module (`tables`, with `secrets.layout: v5`). Each has a string partition key `pk`, a string sort key `sk` and the TTL attribute `expires`. Credentials are the platform's (EKS Pod Identity, IRSA, a Lambda role) and are never configured here; an S3-compatible `endpoint` with no such identity names a credentials document by address (`credentialsRef`), never by value.", m{
+		"table":    str("Layout v4: the one table's name."),
+		"tables":   named,
 		"region":   str("The table's region. Absent, the SDK's own resolution (`AWS_REGION`)."),
 		"endpoint": url("Overrides the DynamoDB address: LocalStack or DynamoDB Local."),
-		"create":   boolDefault("Create the table (on-demand, TTL on `expires`) at start when it is not there, for a test or a development installation. Off, the table must exist: production uses the one the infrastructure code made, and the role needs `dynamodb:DescribeTable` on it.", false),
-	}, "table")
+		"create":   boolDefault("Create the table (on-demand, TTL on `expires`) at start when it is not there, for a test or a development installation. Off, the table must exist: production uses the one the infrastructure code made, and the role needs `dynamodb:DescribeTable` on it (layout v5: the readiness probe asks, not the start).", false),
+	})
+	o["oneOf"] = []any{m{"required": []string{"table"}}, m{"required": []string{"tables"}}}
+	return o
 }
 
 // portsBlobSchema is `ports.blob`: the Blob port's own adapter, which

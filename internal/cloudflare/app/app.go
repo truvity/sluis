@@ -21,6 +21,7 @@ import (
 	"github.com/truvity/sluis/internal/cloudflare/rpc"
 	"github.com/truvity/sluis/internal/config"
 	"github.com/truvity/sluis/internal/modcall"
+	"github.com/truvity/sluis/internal/port"
 	"github.com/truvity/sluis/internal/rails"
 	"github.com/truvity/sluis/internal/secrets"
 	"github.com/truvity/sluis/internal/store"
@@ -82,7 +83,7 @@ func FromService(f *config.Serve, p *config.PolicyDocument) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	c := Config{stores: stores, cloudflare: f.Cloudflare, grants: p.Cloudflare(), instance: f.Instance,
+	c := Config{stores: stores.As(port.ModuleCloudflare), cloudflare: f.Cloudflare, grants: p.Cloudflare(), instance: f.Instance,
 		audit: audit.Config{Version: version.String()}}
 	if c.instance == "" {
 		c.instance = f.Release

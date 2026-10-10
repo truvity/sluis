@@ -13,11 +13,11 @@ A port is a small Go interface, a set of semantics every adapter shares and a co
 
 ## What is a port?
 
-Business code names a port and never an adapter, and an adapter holds no business rule. The test
-`internal/port/guard_test.go` fails if business code imports `internal/kube`, `internal/valkey` or the legacy adapter.
-Only the adapters, the factory `internal/store`, the apps that assemble a process, the migration and the commands may.
+Business code names a port and never an adapter, and an adapter holds no business rule. The test `internal/port/guard_test.go`
+fails on a business import of `internal/kube`, `internal/valkey` or the legacy adapter. Only the adapters, the factory
+`internal/store`, the apps that assemble a process, the migration and the commands may.
 
-Two platforms are supported permanently, so every port has an adapter for each:
+Every port has an adapter for each permanent platform:
 
 | Port | What it is for | Kubernetes | AWS Lambda |
 |---|---|---|---|
@@ -29,39 +29,48 @@ Two platforms are supported permanently, so every port has an adapter for each:
 | Identity | proves a workload to the issuer, and the service to the cloud | ServiceAccount token, AWS federation | the same |
 | Audit sink | records what the service did | `connect`, `log` | `sqs` |
 
-[Adapters](../../reference/sluis/adapters.md) is the registry's own table and wins on a difference.
+[Adapters](../../reference/sluis/adapters.md) is generated from the registry (`port.Default.Matrix()`) and wins on a difference.
 
 ## What do the ports promise?
 
-State is single-key with a lifetime. A flow over
-several keys is a sequence of idempotent steps with a recovery marker. Every record expires unless the layout says it is
-permanent. A revision is opaque and changes on every write.
+State is single-key with a lifetime. A flow over several keys is a sequence of idempotent steps with a recovery
+marker. Every record expires unless the layout says it is permanent. A revision is opaque and changes on every write.
 
-Reads filter on expiry themselves, because DynamoDB removes expired items late. A credential is never written to State.
-The domain stores put it in Secrets under `credentials/<kind>/<id>/<ref>` and leave a marker in the record.
+Reads filter on expiry because DynamoDB removes items late. A credential is never written to State. The
+domain stores put it in Secrets and leave a marker in the record.
 
-DynamoDB has no cheap change feed, so `Watch` and the Trigger poll the prefix. A notification is a hint. The lease and
+## Who owns a record, and who may read it?
+
+On layout v5 each module owns one table ([ADR 0072](../../decisions/0072-storage-layout-v5-module-first.md)): `oidc`,
+`github`, `slack`, `cloudflare`, `google` and `backup`. A process writes its own module's table, and another module's
+key fails with `ErrNotOwner` before any request.
+
+A peer is a read-only view of another module's table. The issuer holds `google`, `github` and `slack`.
+Any other module's read fails.
+
+A listing across modules, such as `ws.`, is `ErrUnsupported` on the router: list `ws.dir.`. Layout v5 pairs
+`secrets.layout: v5` with `ports.dynamodb.tables`, and start refuses a mix.
+
+DynamoDB has no cheap change feed, so `Watch` and the Trigger poll the prefix. A notification is a hint, and the lease and
 the backstop schedule make a duplicate or lost one harmless.
 
-The `legacy` adapter wraps ConfigMaps, Secrets and Valkey. It is deprecated and goes when the
+The `legacy` adapter wraps ConfigMaps, Secrets and Valkey, and goes when the
 [migration](../../decisions/0031-a-generic-migration-tool.md) has run. One conformance suite gates every adapter and the
-migration tool ([run it](../../guides/sluis/run-conformance.md); [what it asserts](../../reference/sluis/ports.md#conformance)).
+migration tool ([run it](../../guides/sluis/run-conformance.md); [assertions](../../reference/sluis/ports.md#conformance)).
 
 ## Adapters, presets and the platform
 
-You choose an adapter by name per concern: `state`, `secrets`, `blobs`, `signing`, `trigger`, `schedule` and `audit`.
+You choose an adapter per concern: `state`, `secrets`, `blobs`, `signing`, `trigger`, `schedule` and `audit`.
 Each adapter registers a descriptor in `internal/port` (`port.Register`) with its name, concern, needs, runtimes
-(`kubernetes`, `lambda`, `process`), status (`implemented` or `on-request`) and a factory.
-
-`port.Default.Matrix()` joins the registry and `port.Catalogue`, the planned adapters. [Adapters](../../reference/sluis/adapters.md) is generated from it.
+(`kubernetes`, `lambda`, `process`), status (`implemented`, `on-request`) and factory.
 
 The `aws-hybrid` preset runs sluis on Lambda with DynamoDB state, SSM secrets, KMS token signing, S3 blobs, SQS audit,
-EventBridge ticks and an asynchronous invoke for "run a pass now". Every other adapter is on request. It is in the
-matrix and start refuses it.
+EventBridge ticks and an asynchronous invoke for "run a pass now". Every other adapter is on request: in the matrix and
+refused at start.
 
 ### How do you choose a preset?
 
-Answer four questions in this order:
+Answer four questions in order:
 
 ```text
 AWS?        no  -> Kubernetes?   no  -> server
@@ -72,40 +81,36 @@ AWS?        no  -> Kubernetes?   no  -> server
                                                           no  -> k8s-aws
 ```
 
-The answers are the `platform` block (`aws`, `kubernetes`, `openbao`, `runtime`, `replicas`). `preset` names one outright.
+The answers are the `platform` block (`aws`, `kubernetes`, `openbao`, `runtime`, `replicas`), or `preset` names one.
 A modifier overrides one concern: `adapters.secrets: {adapter: openbao, settings: {...}}` replaces the SSM secrets of
-`k8s-aws` with OpenBao, and needs no `platform.openbao`.
+`k8s-aws` with OpenBao, with no `platform.openbao`.
 
-`aws-serverless`, `aws-hybrid` and `k8s-aws` are available. `aws-eks` is the deprecated name of `k8s-aws` and logs a
-warning. `server`, `k8s-minimal` and `k8s-openbao` are unavailable. Loading one fails and names the missing adapters.
-Per-preset adapters are in [adapters](../../reference/sluis/adapters.md#presets).
+Available presets: `aws-serverless`, `aws-hybrid` and `k8s-aws` (`aws-eks` is its deprecated name). Loading
+`server`, `k8s-minimal` or `k8s-openbao` fails and names the missing adapters. The
+[adapters](../../reference/sluis/adapters.md#presets) page lists each preset's adapters.
 
 ### What wins when settings disagree?
 
-An explicit override beats the preset, and the preset beats what `platform` derives. The order is `adapters.<concern>`
-with its `settings`, then the legacy keys beside a preset (`ports.adapter`, `ports.blob`), then `preset`, then the
-preset `platform` leads to.
+From first to last: `adapters.<concern>` with its `settings`, the legacy keys beside a preset (`ports.adapter`,
+`ports.blob`), `preset`, then the preset `platform` leads to.
 
-With none of `platform`, `preset` and `adapters`, the `ports` keys decide. The defaults are `ports.adapter: legacy`,
-signing `file` and schedule `ticker`. Audit is `connect` when `audit.writer` is set and `log` otherwise.
+With none of `platform`, `preset` and `adapters`, the `ports` keys decide: `ports.adapter: legacy`, signing `file`,
+schedule `ticker`, and audit `connect` when `audit.writer` is set, else `log`.
 
 ### What does start refuse?
 
-Start fails and names every problem when an adapter needs a platform answer that is false. That check runs only when
-`platform` or `preset` is given. It also fails for an adapter that cannot run on the runtime, such as `legacy` on `lambda`.
+When `platform` or `preset` is given, start fails and names every problem. It refuses an adapter that needs a false
+platform answer or cannot run on the runtime (`legacy` on `lambda`). It also refuses `memory` above one replica, a
+secrets adapter that is not a secret store while the platform has one, and an unknown or planned adapter.
 
-It fails for `memory` while `platform.replicas` is above 1, and for a secrets adapter that is not a secret store while the
-platform has one. It fails for an unknown or planned adapter.
-
-The runtime is `platform.runtime`, the preset's, or `lambda` when `AWS_LAMBDA_FUNCTION_NAME` is set. Start logs the resolved
-table once (`adapters resolved`) and exposes the gauge `sluis_adapter_info{concern,adapter} 1`.
+The runtime is `platform.runtime`, the preset's, or `lambda` when `AWS_LAMBDA_FUNCTION_NAME` is set. Start logs the
+resolved table and exposes the gauge `sluis_adapter_info{concern,adapter} 1`.
 
 ## Which signing keys can you publish without signing?
 
-The `signing` concern chooses `file`, `kms` or `kms-wrapped`. `signingKey.verifyOnly` lists public keys that are
-published and never signed with. Each has an optional `kid` and `alg` and a required `until`. They keep tokens from old
-file keys verifying across a cutover to `kmsWrapped`. A private key there stops the start. The keys are in
-[configuration](../../reference/sluis/configuration.md).
+The `signing` concern chooses `file`, `kms` or `kms-wrapped`. The list `signingKey.verifyOnly` holds public keys that are
+published and never signed with, so tokens from old file keys verify across a cutover to `kmsWrapped`. A private key
+there stops the start. The keys are in [configuration](../../reference/sluis/configuration.md).
 
 ## Decided in
 

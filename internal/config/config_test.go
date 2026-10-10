@@ -359,6 +359,32 @@ func TestThePortsAdapterIsOneOfTheTwo(t *testing.T) {
 	} else if d := f.Ports.DynamoDB; d == nil || d.Table != "sluis" || d.Region != "eu-west-1" || !d.Create || d.Endpoint == "" {
 		t.Errorf("ports.dynamodb = %+v", d)
 	}
+	// Layout v5 (ADR 0072): a table per module, named by module, beside
+	// secrets.layout: v5; layout v4 stays valid. The layouts do not mix: the
+	// store refuses a mixed pair, and the schema refuses both tables at once.
+	v2 := "apiVersion: " + config.APIVersion("serve") + "\n" + minimalIssuer
+	v5File := "ports:\n  adapter: dynamodb\n  dynamodb:\n    tables: {oidc: sluis-prod-oidc, google: sluis-prod-google}\n    region: eu-west-1\n" +
+		"secrets: {source: ssm, root: /sluis/prod, layout: v5}\n"
+	if f, err := config.Load[config.Serve](write(t, v2+v5File)); err != nil {
+		t.Errorf("layout v5 was refused: %v", err)
+	} else if d := f.Ports.DynamoDB; d == nil || d.Table != "" || d.Tables["oidc"] != "sluis-prod-oidc" || d.Tables["google"] != "sluis-prod-google" || f.Secrets.Layout != "v5" {
+		t.Errorf("layout v5 = %+v, %+v", d, f.Secrets)
+	}
+	if _, err := config.Load[config.Serve](write(t, v2+"secrets: {source: ssm, root: /sluis/prod, layout: v4}\n"+ddbFile)); err != nil {
+		t.Errorf("layout v4 was refused: %v", err)
+	}
+	for name, doc := range map[string]string{
+		"both tables":      "ports: {adapter: dynamodb, dynamodb: {table: t, tables: {oidc: o}}}\n",
+		"not a module":     "ports: {adapter: dynamodb, dynamodb: {tables: {nope: o}}}\n",
+		"an empty name":    "ports: {adapter: dynamodb, dynamodb: {tables: {oidc: ''}}}\n",
+		"no table at all":  "ports: {adapter: dynamodb, dynamodb: {tables: {}}}\n",
+		"layout v6":        "secrets: {source: ssm, root: /sluis/prod, layout: v6}\n",
+		"layout on a file": "secrets: {source: file, root: /run/s, layout: v5}\n",
+	} {
+		if _, err := config.Load[config.Serve](write(t, v2+doc)); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
 	if _, err := config.Load[config.Serve](write(t, minimalIssuer+"ports: {adapter: dynamodb, dynamodb: {table: t, accessKey: x}}\n")); err == nil {
 		t.Error("a dynamodb credential in the file was accepted")
 	}

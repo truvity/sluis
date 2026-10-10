@@ -2,6 +2,7 @@ package observe_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -106,6 +107,43 @@ func TestCallsAreCountedByOutcome(t *testing.T) {
 		if got[want] == 0 {
 			t.Errorf("no %s in %v", want, got)
 		}
+	}
+}
+
+// The observed set keeps its module, observes its peers' reads under their own
+// operation names, and still cannot be written through a peer or across modules.
+func TestAModuleSetStaysAModuleSet(t *testing.T) {
+	collect(t)
+	ctx := context.Background()
+	mods := memory.NewModules()
+	if _, err := mods.Store(port.ModuleGoogle).Put(ctx, "ws.dir.google.w1", []byte("{}"), 0); err != nil {
+		t.Fatal(err)
+	}
+	set := observe.Set(mods.Set(port.ModuleOIDC, port.ModuleGoogle))
+	if set.Module != port.ModuleOIDC {
+		t.Errorf("Module = %q", set.Module)
+	}
+	peer, ok := set.Peer(port.ModuleGoogle)
+	if !ok {
+		t.Fatal("the peer is gone")
+	}
+	if _, err := peer.Get(ctx, "ws.dir.google.w1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := peer.List(ctx, "ws.dir.google.", "", 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := set.State.Put(ctx, "ws.dir.google.w2", []byte("{}"), 0); !errors.Is(err, port.ErrNotOwner) {
+		t.Errorf("a foreign write = %v, want ErrNotOwner", err)
+	}
+	got := collect(t)
+	for _, want := range []string{"state/peer_get/ok", "state/peer_list/ok"} {
+		if got[want] == 0 {
+			t.Errorf("no %s in %v", want, got)
+		}
+	}
+	if observe.Peers(nil) != nil {
+		t.Error("nil peers became non-nil")
 	}
 }
 

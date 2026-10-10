@@ -4,12 +4,14 @@ package rosterapp
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"time"
 
 	"github.com/truvity/sluis/internal/audit"
 	"github.com/truvity/sluis/internal/cloudflare/cfapi"
 	"github.com/truvity/sluis/internal/cloudflare/minter"
+	"github.com/truvity/sluis/internal/port"
 	"github.com/truvity/sluis/internal/rails"
 	"github.com/truvity/sluis/internal/store"
 )
@@ -29,6 +31,14 @@ func newCloudflare(cfg Config, stores *store.Stores, rec audit.Recorder, log *sl
 		dial = cfapi.Dial()
 	}
 	state, _ := stores.LeaseState()
+	if stores.Ports.Module != "" {
+		// A lease of the minter is the cloudflare module's, in its own table.
+		own, err := stores.ForModule(port.ModuleCloudflare)
+		if err != nil {
+			return nil, fmt.Errorf("cloudflare: %w", err)
+		}
+		state = own.State
+	}
 	return minter.New(minter.Config{
 		Instance: cfg.Instance, Cloudflare: cfg.Cloudflare, Grants: cfg.Grants,
 		Internal: stores.V4.Internal, External: stores.V4.External,

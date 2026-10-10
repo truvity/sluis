@@ -259,10 +259,13 @@ type (
 	// Index and the Trigger: one table. Credentials are the platform's (Pod
 	// Identity, IRSA, a Lambda role), never configured.
 	DynamoDB struct {
-		Table    string `json:"table,omitempty"`
-		Region   string `json:"region,omitempty"`
-		Endpoint string `json:"endpoint,omitempty"`
-		Create   bool   `json:"create,omitempty"`
+		Table string `json:"table,omitempty"`
+		// Tables is layout v5: the table of each module, by module name
+		// (`secrets.layout: v5`). Exclusive with Table.
+		Tables   map[string]string `json:"tables,omitempty"`
+		Region   string            `json:"region,omitempty"`
+		Endpoint string            `json:"endpoint,omitempty"`
+		Create   bool              `json:"create,omitempty"`
 	}
 
 	// PortsBlob names the adapter behind the Blob port.
@@ -315,7 +318,7 @@ type (
 		// service writes (credentials, exports). Unset is the AWS-managed key.
 		KMSKeyID string `json:"kmsKeyId,omitempty"`
 		// Layout is the storage layout of an `ssm` installation: `v4` (ADR
-		// 0041), the only one and the default.
+		// 0041), the default, or `v5` (ADR 0072), module first.
 		Layout string `json:"layout,omitempty"`
 		// Grace is how long a rotated client secret's previous value is still
 		// accepted (default 24h). It is the overlap of a
@@ -580,5 +583,8 @@ func (s *Sluis) SlackController() *ControllerSlack {
 	return &ControllerSlack{Roster: r, CredentialsDir: g.CredentialsDir}
 }
 
-// SecretsLayoutV4 is the one value of [Secrets].Layout.
-const SecretsLayoutV4 = "v4"
+// The values of [Secrets].Layout.
+const (
+	SecretsLayoutV4 = "v4"
+	SecretsLayoutV5 = "v5"
+)
