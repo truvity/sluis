@@ -21,7 +21,7 @@ runner) and a `directory` kind that the Google module owns add names that say ho
    signer's ring and the console, which stay together), `github`, `slack`, `cloudflare`, `google` and `backup`. The
    default name is `sluis-<instance>-<module>`, which matches the SSM root `/sluis/<instance>` and the key aliases
    `alias/sluis-<instance>-...` and makes the IAM resource pattern greppable. An installation may name each table
-   itself; the library default is a default, not a rule. Every table carries its own `lease` and `notify` kinds. A
+   itself; the library default is a default, not a rule. Every table carries its own `lease`, `notify` and `maintenance` kinds. A
    process opens its own module's table for writing, and a named peer's table for reading where a cross-grant says so
    (the issuer reads the `google`, `github` and `slack` tables); writing a key of another module is a typed error.
 2. **Kinds lose their module prefix.** The table already says the module, so `github-org` is `org`, `slack-workspace`

@@ -103,6 +103,8 @@ var keyRules = []keyRule{
 	// kinds `github-tick`, `github-links`, `slack-tick`, and the hub's `refresh`.
 	{prefix: "lease.", kind: "lease", conv: convLease},
 	{prefix: "notify.", kind: "notify"},
+	// The maintenance flag: one record in every table (internal/maintenance).
+	{prefix: "rec.maintenance", kind: "maintenance", exact: "flag"},
 
 	// The issuer's records, in the layout's dotted form ...
 	{prefix: "ses.", kind: "session", conv: convDots},

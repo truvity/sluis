@@ -17,6 +17,7 @@ import (
 	"github.com/zitadel/oidc/v3/pkg/op"
 
 	cfrpc "github.com/truvity/sluis/internal/cloudflare/rpc"
+	"github.com/truvity/sluis/internal/maintenance"
 	"github.com/truvity/sluis/tokens"
 )
 
@@ -183,6 +184,12 @@ func serveCloudflareToken(
 
 	minted, err := cf.MintFor(ctx, preset, CloudflareCaller(proof, result.Groups), lifetime)
 	if err != nil {
+		if errors.Is(err, cfrpc.ErrMaintenance) || errors.Is(err, maintenance.ErrUnknown) {
+			// The minter's module is being restored: 503 with Retry-After, in
+			// the named code "maintenance", not a grant error.
+			maintenance.Refuse(w, r, err)
+			return
+		}
 		refuse(cloudflareTokenError(err))
 		return
 	}

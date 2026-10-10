@@ -16,6 +16,7 @@ import (
 	"github.com/truvity/sluis/internal/audit"
 	"github.com/truvity/sluis/internal/cloudflare"
 	"github.com/truvity/sluis/internal/config"
+	"github.com/truvity/sluis/internal/maintenance"
 	"github.com/truvity/sluis/internal/secretstore"
 	"github.com/truvity/sluis/storage/state"
 )
@@ -32,6 +33,12 @@ var (
 	ErrLifetime = errors.New("cloudflare: the requested lifetime is outside the preset's")
 	// ErrNotOurs is a token id that is not one sluis minted for the preset.
 	ErrNotOurs = errors.New("cloudflare: the token was not minted by sluis for this preset")
+	// ErrMaintenance is a call refused because the module is under maintenance:
+	// the restore function has set its flag. It crosses the module boundary
+	// under the code "maintenance".
+	ErrMaintenance = maintenance.ErrMaintenance
+	// ErrMaintenanceUnknown is a call refused because the flag could not be read.
+	ErrMaintenanceUnknown = maintenance.ErrUnknown
 	// ErrNoMinter is an account whose minter credential is not in the store.
 	ErrNoMinter = errors.New("cloudflare: the account's minter credential is not in the secrets store")
 )
@@ -56,6 +63,11 @@ type Recorder interface {
 // holds it.
 type Lock interface {
 	Do(ctx context.Context, kind, target string, fn func(ctx context.Context)) (ran bool, err error)
+}
+
+// Pause says whether the module may write. *maintenance.Gate is one.
+type Pause interface {
+	Writable(ctx context.Context) error
 }
 
 // Config is what a [Minter] is made of.
@@ -84,7 +96,12 @@ type Config struct {
 	Audit Recorder
 	// Lock serialises ticks; nil runs them unserialised.
 	Lock Lock
-	Log  *slog.Logger
+	// Maintenance, when set, is asked before anything that mints, rotates,
+	// revokes or sweeps: while it refuses (the module is being restored, or
+	// cannot say) the call returns the refusal, which is [ErrMaintenance] or
+	// [ErrMaintenanceUnknown]. Nil never refuses.
+	Maintenance Pause
+	Log         *slog.Logger
 	// Propagation is how long a [Provider] waits after minting R2 credentials
 	// before handing them out: Cloudflare accepts a derived credential about
 	// five seconds after the token is created and refuses it (403) before.
@@ -247,6 +264,10 @@ func (m *Minter) MintFor(ctx context.Context, preset string, caller Caller, life
 		m.refused(ctx, caller.Actor, preset, audit.CloudflareOnDemand, "not_granted", "", true)
 		return nil, fmt.Errorf("%w: %s", ErrNotGranted, preset)
 	}
+	if err := m.writable(ctx); err != nil {
+		meters.mint(ctx, preset, audit.CloudflareOnDemand, "maintenance")
+		return nil, err
+	}
 	if lifetime == 0 {
 		lifetime = p.Lifetime.D()
 	}
@@ -274,6 +295,14 @@ func (m *Minter) MintFor(ctx context.Context, preset string, caller Caller, life
 		}
 	}
 	return out, nil
+}
+
+// writable is nil when the module may mint, rotate, revoke and sweep.
+func (m *Minter) writable(ctx context.Context) error {
+	if m.cfg.Maintenance == nil {
+		return nil
+	}
+	return m.cfg.Maintenance.Writable(ctx)
 }
 
 // mint clones the preset's prototype into a new token and returns the value.

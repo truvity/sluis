@@ -15,8 +15,10 @@ import (
 	"github.com/zitadel/oidc/v3/pkg/oidc"
 
 	"github.com/truvity/sluis/internal/cloudflare/minter"
+	cfrpc "github.com/truvity/sluis/internal/cloudflare/rpc"
 	"github.com/truvity/sluis/internal/config"
 	"github.com/truvity/sluis/internal/issuer"
+	"github.com/truvity/sluis/internal/maintenance"
 	"github.com/truvity/sluis/policy"
 	"github.com/truvity/sluis/tokens"
 )
@@ -340,5 +342,17 @@ func TestBothSpellingsOfTheCloudflareTokenTypeAreAnswered(t *testing.T) {
 				t.Fatalf("mint = %d %v, want 200 with issued_token_type %q", status, body, asked)
 			}
 		})
+	}
+}
+
+// A Cloudflare module under maintenance is a 503 with Retry-After in its own
+// name, not a grant the caller lacks.
+func TestACloudflareModuleUnderMaintenanceIsAServiceUnavailable(t *testing.T) {
+	c := serveCloudflare(t, true)
+	c.minter.err = cfrpc.ErrMaintenance
+
+	status, body, header := c.ask(t, "", url.Values{"subject_token": {"job:release.yml"}, "audience": {"cloudflare:dns"}})
+	if status != http.StatusServiceUnavailable || body["error"] != maintenance.Code || header.Get("Retry-After") == "" {
+		t.Errorf("mint under maintenance = %d %v (Retry-After %q), want 503 %q with Retry-After", status, body, header.Get("Retry-After"), maintenance.Code)
 	}
 }

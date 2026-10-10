@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/truvity/sluis/internal/maintenance"
 	"github.com/truvity/sluis/internal/port/memory"
 	"github.com/truvity/sluis/internal/rails"
 	"github.com/truvity/sluis/internal/slackroster/connection"
@@ -319,4 +320,34 @@ func (r *rig) writeShared(name, host string, with ...string) {
 		r.t.Fatal(err)
 	}
 	r.writeRecord(connection.SharedKey(name), raw)
+}
+
+// While the slack module is under maintenance no workspace ticks, and each does
+// again once the flag is lifted.
+func TestNoWorkspaceTicksUnderMaintenance(t *testing.T) {
+	r := newRig(t)
+	flags := memory.New()
+	r.leases = &rails.Leases{State: memory.New(), Holder: "me", TTL: time.Minute,
+		Maintenance: maintenance.New(flags, maintenance.WithTTL(time.Nanosecond))}
+	c := r.controller()
+
+	if err := maintenance.Write(context.Background(), flags, maintenance.Flag{State: maintenance.StateRestoring}); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(time.Millisecond)
+	c.Pass(context.Background())
+	if ran, _, err := c.RunTarget(context.Background(), "acme"); err != nil || ran {
+		t.Errorf("RunTarget under maintenance = %v, %v; want it skipped", ran, err)
+	}
+	if r.reports.putsOf("acme") != 0 || r.reports.putsOf("globex") != 0 {
+		t.Error("a report was written under maintenance")
+	}
+
+	if err := maintenance.Clear(context.Background(), flags); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(time.Millisecond)
+	if ran, _, err := c.RunTarget(context.Background(), "acme"); err != nil || !ran {
+		t.Errorf("RunTarget after maintenance = %v, %v; want it to run", ran, err)
+	}
 }

@@ -26,6 +26,9 @@ const (
 	OutcomeRotated = "rotated"
 	// OutcomeContended is a tick another runner holds the lease of.
 	OutcomeContended = "contended"
+	// OutcomeMaintenance is a tick not started because the module is under
+	// maintenance. It is not a failure.
+	OutcomeMaintenance = "maintenance"
 	// OutcomeFailed is a rotation that was due and did not complete.
 	OutcomeFailed = "failed"
 )
@@ -86,6 +89,10 @@ func (m *Minter) TickPreset(ctx context.Context, preset string) PresetResult {
 	p, ok := m.cfg.Cloudflare.Presets[preset]
 	if !ok {
 		res.Outcome, res.Err = OutcomeFailed, fmt.Errorf("%w: %q", ErrUnknownPreset, preset)
+		return res
+	}
+	if m.writable(ctx) != nil {
+		res.Outcome = OutcomeMaintenance
 		return res
 	}
 	run := func(ctx context.Context) { res = m.tick(ctx, preset, p) }
@@ -190,6 +197,9 @@ func (m *Minter) dropUnstored(ctx context.Context, preset string, p config.Cloud
 // sluis/<instance>/<preset>/ is ever deleted; nothing else in the account is,
 // whatever its state.
 func (m *Minter) Sweep(ctx context.Context, preset string) ([]string, error) {
+	if err := m.writable(ctx); err != nil {
+		return nil, err
+	}
 	p, ok := m.cfg.Cloudflare.Presets[preset]
 	if !ok {
 		return nil, fmt.Errorf("%w: %q", ErrUnknownPreset, preset)
@@ -311,6 +321,9 @@ type RevokeResult struct {
 // it was the stored token, the next credential is minted now rather than at the
 // next rotation.
 func (m *Minter) Revoke(ctx context.Context, preset, tokenID string, actor audit.Actor) (RevokeResult, error) {
+	if err := m.writable(ctx); err != nil {
+		return RevokeResult{}, err
+	}
 	p, ok := m.cfg.Cloudflare.Presets[preset]
 	if !ok {
 		return RevokeResult{}, fmt.Errorf("%w: %q", ErrUnknownPreset, preset)

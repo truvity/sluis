@@ -125,6 +125,7 @@ Source: `internal/clientcreds/telemetry.go`.
 | `access_roster.tick.last_success_timestamp` | gauge, `s` | `kind`, `target` | When a target's last ok tick ended (Unix seconds). |
 | `access_roster.leases.acquired` | counter | `kind` | Leases taken by this runner. |
 | `access_roster.leases.contended` | counter | `kind` | Leases asked for and held by another runner. |
+| `access_roster.leases.skipped` | counter | `kind` | Ticks not started because the module is under maintenance. |
 | `access_roster.leases.lost` | counter | `kind` | Leases held and lost: taken over, or not renewable for a whole lifetime. The tick stopped before its next write. |
 | `access_roster.leases.held` | up-down counter | `kind` | Leases this runner holds now. |
 

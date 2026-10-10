@@ -178,6 +178,8 @@ const (
 	RefreshRan RefreshOutcome = "ran"
 	// RefreshContended found the lease held: another replica has the pass.
 	RefreshContended RefreshOutcome = "contended"
+	// RefreshPaused did nothing: the module is under maintenance.
+	RefreshPaused RefreshOutcome = "paused"
 	// RefreshFailed could not take one; the snapshot it had is untouched.
 	RefreshFailed RefreshOutcome = "failed"
 )
@@ -185,6 +187,8 @@ const (
 // RefreshResult is what [Hub.RefreshPass] did.
 type RefreshResult struct {
 	Workspaces, Ran, Contended, Failed int
+	// Paused are the workspaces left alone because the module is under maintenance.
+	Paused int
 }
 
 // RefreshPass runs one scheduled refresh pass over every workspace, under the
@@ -202,6 +206,8 @@ func (h *Hub) RefreshPass(ctx context.Context) (RefreshResult, error) {
 			res.Ran++
 		case RefreshContended:
 			res.Contended++
+		case RefreshPaused:
+			res.Paused++
 		default:
 			res.Failed++
 		}
@@ -212,6 +218,9 @@ func (h *Hub) RefreshPass(ctx context.Context) (RefreshResult, error) {
 // refreshLeased refreshes a workspace unless another replica has already
 // done it this interval.
 func (h *Hub) refreshLeased(ctx context.Context, id string) RefreshOutcome {
+	if h.paused(ctx) {
+		return RefreshPaused
+	}
 	var release func(context.Context)
 	if locker, shared := h.snapshots.(Locker); shared {
 		taken, acquired, err := locker.Lock(ctx, "refresh:"+id, leaseFor(h.cfg.RefreshInterval))

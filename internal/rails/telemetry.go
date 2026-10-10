@@ -40,6 +40,7 @@ type instruments struct {
 
 	acquired  telemetry.Int64Counter
 	contended telemetry.Int64Counter
+	skipped   telemetry.Int64Counter
 	lost      telemetry.Int64Counter
 	held      telemetry.Int64UpDownCounter
 }
@@ -63,12 +64,14 @@ func newInstruments() instruments {
 		metric.WithDescription("Tick leases taken by this runner, by target kind."))
 	contended := telemetry.NewInt64Counter(meter, "access_roster.leases.contended",
 		metric.WithDescription("Tick leases this runner asked for and another held, by target kind."))
+	skipped := telemetry.NewInt64Counter(meter, "access_roster.leases.skipped",
+		metric.WithDescription("Ticks this runner did not start because its module is under maintenance, by target kind."))
 	lost := telemetry.NewInt64Counter(meter, "access_roster.leases.lost",
 		metric.WithDescription("Tick leases this runner held and lost, taken over or not renewable for a whole lifetime, "+
 			"by target kind. The tick stopped before its next write."))
 	held := telemetry.NewInt64UpDownCounter(meter, "access_roster.leases.held",
 		metric.WithDescription("Tick leases this runner holds now, by target kind."))
-	return instruments{ticks, tickTime, lastSuccess, acquired, contended, lost, held}
+	return instruments{ticks, tickTime, lastSuccess, acquired, contended, skipped, lost, held}
 }
 
 // StartTick opens the span and the clock of one tick of a target of a kind, and

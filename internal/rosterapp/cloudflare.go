@@ -31,6 +31,8 @@ func newCloudflare(cfg Config, stores *store.Stores, rec audit.Recorder, log *sl
 		dial = cfapi.Dial()
 	}
 	state, _ := stores.LeaseState()
+	// The minter reads the flag of its own table: the cloudflare module's.
+	gate := stores.MaintenanceOf(port.ModuleCloudflare)
 	if stores.Ports.Module != "" {
 		// A lease of the minter is the cloudflare module's, in its own table.
 		own, err := stores.ForModule(port.ModuleCloudflare)
@@ -42,7 +44,8 @@ func newCloudflare(cfg Config, stores *store.Stores, rec audit.Recorder, log *sl
 	mc := minter.Config{
 		Instance: cfg.Instance, Cloudflare: cfg.Cloudflare, Grants: cfg.Grants,
 		Dial: dial, Audit: rec, Log: log,
-		Lock: &rails.Leases{State: state, Holder: rails.NewHolder(), Log: log},
+		Lock:        &rails.Leases{State: state, Holder: rails.NewHolder(), Log: log, Maintenance: gate},
+		Maintenance: gate,
 	}
 	if stores.V5 != nil {
 		mc.V5 = stores.V5

@@ -105,6 +105,9 @@ var ErrContended = errors.New("cloudflare: another runner is rotating this prese
 // the actor of the audit record. It runs under the same lease as the tick, so
 // it never races one.
 func (m *Minter) RotateNow(ctx context.Context, preset string, actor audit.Actor) (*Minted, error) {
+	if err := m.writable(ctx); err != nil {
+		return nil, err
+	}
 	p, ok := m.cfg.Cloudflare.Presets[preset]
 	if !ok {
 		return nil, fmt.Errorf("%w: %q", ErrUnknownPreset, preset)

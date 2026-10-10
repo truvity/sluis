@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/truvity/sluis/internal/cloudflare/minter"
+	"github.com/truvity/sluis/internal/maintenance"
 	"github.com/truvity/sluis/internal/modcall"
 )
 
@@ -37,6 +38,9 @@ var (
 	ErrNotGranted = minter.ErrNotGranted
 	// ErrLifetime is a lifetime outside the preset's.
 	ErrLifetime = minter.ErrLifetime
+	// ErrMaintenance is the module being restored: it mints nothing until the
+	// restore has finished.
+	ErrMaintenance = minter.ErrMaintenance
 )
 
 // Minting is what the on-demand exchange needs of the minter: the grants
@@ -67,6 +71,7 @@ const (
 	codeUnknownPreset = "unknown_preset"
 	codeNotGranted    = "not_granted"
 	codeLifetime      = "lifetime"
+	codeMaintenance   = maintenance.Code
 )
 
 type mintRequest struct {
@@ -107,6 +112,8 @@ func codeOf(err error) error {
 		return modcall.Coded(codeNotGranted, "")
 	case errors.Is(err, ErrLifetime):
 		return modcall.Coded(codeLifetime, "")
+	case errors.Is(err, minter.ErrMaintenance), errors.Is(err, minter.ErrMaintenanceUnknown):
+		return modcall.Coded(codeMaintenance, "")
 	}
 	return err
 }
@@ -164,6 +171,8 @@ func errOf(err error) error {
 		return ErrNotGranted
 	case codeLifetime:
 		return ErrLifetime
+	case codeMaintenance:
+		return ErrMaintenance
 	}
 	return err
 }

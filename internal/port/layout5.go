@@ -65,7 +65,7 @@ func ParseModule(s string) (Module, error) {
 }
 
 // SharedKinds are the kinds every module's table holds.
-var SharedKinds = []string{"lease", "notify"}
+var SharedKinds = []string{"lease", "notify", "maintenance"}
 
 // Address5 is where a key lives in layout 5. Module is empty for a key of no
 // one module (see the file comment).
@@ -190,6 +190,7 @@ var rules5 = []rule5{
 	r5("", "dedupe", "dedupe.", convID),
 	{keyRule: keyRule{prefix: "lease.", kind: "lease", conv: convLease}, moduleOf: leaseModule},
 	r5("", "notify", "notify.", convID),
+	r5exact("", "maintenance", "rec.maintenance", "flag"),
 }
 
 // setRules5 are the Index sets of layout 5; all are the oidc module's.

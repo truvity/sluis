@@ -9,6 +9,7 @@ import (
 	"github.com/truvity/sluis/internal/audit"
 	"github.com/truvity/sluis/internal/cloudflare/rpc"
 	"github.com/truvity/sluis/internal/config"
+	"github.com/truvity/sluis/internal/maintenance"
 	"github.com/truvity/sluis/internal/modcall"
 )
 
@@ -63,6 +64,19 @@ func TestTheThreeRefusalsComeBackAsTheMintersErrors(t *testing.T) {
 		if !errors.Is(err, want) {
 			t.Errorf("%v: got %v", want, err)
 		}
+	}
+}
+
+// A module under maintenance answers under its own code, so the issuer can tell
+// 503 from a grant it does not give, whether the flag was set or unreadable.
+func TestMaintenanceCrossesTheBoundaryUnderItsOwnName(t *testing.T) {
+	_, err := client(&fake{err: &maintenance.Error{Flag: maintenance.Flag{State: maintenance.StateRestoring}}}).MintFor(context.Background(), "x", rpc.Caller{}, 0)
+	if !errors.Is(err, rpc.ErrMaintenance) {
+		t.Errorf("a flag that is set: got %v", err)
+	}
+	_, err = client(&fake{err: &maintenance.Error{Err: errors.New("store down")}}).MintFor(context.Background(), "x", rpc.Caller{}, 0)
+	if !errors.Is(err, rpc.ErrMaintenance) {
+		t.Errorf("an unreadable flag: got %v", err)
 	}
 }
 
