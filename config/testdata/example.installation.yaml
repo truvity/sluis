@@ -48,7 +48,8 @@ exchange:
 
 apps:
   github:
-    runnerTiers: [stable]
+    apps:
+      - {purpose: runner, tier: stable}
 
 controllers:
   github:

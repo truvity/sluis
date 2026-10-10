@@ -669,6 +669,10 @@ func New(ctx context.Context, cfg Config, st *store.Stores, log *slog.Logger) (*
 		directory.UseCredentials(kept.credentials)
 	}
 
+	if n := cfg.policy.LegacyAppEntries(); n > 0 {
+		log.WarnContext(ctx, "apps.github.runnerTiers and apps.github.catalogue are deprecated, read as apps.github.apps for this release and removed in v1.77",
+			slog.Int("entries", n))
+	}
 	declared, err := declaredPolicy(cfg.policy, cfg.demo)
 	if err != nil {
 		return nil, err

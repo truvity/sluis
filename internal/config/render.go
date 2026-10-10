@@ -116,6 +116,7 @@ func (d *PolicyDocument) merge(layer *PolicyDocument, from string) error {
 				d.Apps.GitHub = &AppsGitHub{}
 			}
 			d.Apps.GitHub.Apps = append(d.Apps.GitHub.Apps, a.GitHub.Apps...)
+			d.Apps.GitHub.legacy += a.GitHub.legacy
 		}
 		if a.Slack != nil {
 			if d.Apps.Slack == nil {

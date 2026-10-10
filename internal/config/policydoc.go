@@ -125,6 +125,9 @@ type (
 		// Catalogue is DEPRECATED, read for one release: each App is a catalogue
 		// entry of Apps.
 		Catalogue []catalogue.App `yaml:"catalogue,omitempty"`
+
+		// legacy counts the entries of Apps made from the two above.
+		legacy int
 	}
 
 	// AppsSlack is the Slack Apps an operator may make.
@@ -222,7 +225,7 @@ func decodePolicyDocument(raw []byte) (*PolicyDocument, error) {
 	if err := dec.Decode(&s); err != nil {
 		return nil, fmt.Errorf("parse the policy document: %w", err)
 	}
-	foldLegacyApps(s.Apps, "the policy document")
+	s.Apps.FoldLegacy()
 	return &PolicyDocument{
 		APIVersion: APIVersion("policy"), Policy: p,
 		Exchange: s.Exchange, Apps: s.Apps, Controllers: s.Controllers, CloudflareGrants: s.Cloudflare,
@@ -316,7 +319,9 @@ func (d *PolicyDocument) GitHubOwners() []string {
 // the runner entries, each once.
 func (d *PolicyDocument) RunnerTiers() []string {
 	var out []string
-	for _, a := range d.GitHubApps() {
+	apps := d.GitHubApps()
+	for i := range apps {
+		a := &apps[i]
 		if a.Purpose == appid.Runner && !slices.Contains(out, a.Tier) {
 			out = append(out, a.Tier)
 		}
@@ -327,7 +332,9 @@ func (d *PolicyDocument) RunnerTiers() []string {
 // GitHubCatalogue is the catalogue Apps of the list, never nil.
 func (d *PolicyDocument) GitHubCatalogue() *catalogue.Catalogue {
 	c := &catalogue.Catalogue{}
-	for _, a := range d.GitHubApps() {
+	apps := d.GitHubApps()
+	for i := range apps {
+		a := &apps[i]
 		if a.Purpose == appid.Catalogue {
 			c.Apps = append(c.Apps, a.Catalogue())
 		}

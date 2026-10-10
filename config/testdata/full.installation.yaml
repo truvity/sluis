@@ -64,9 +64,9 @@ exchange:
     owners: [example-org]
 apps:
   github:
-    runnerTiers: [stable]
-    catalogue:
-      - {id: release, org: example-org, permissions: {contents: write}}
+    apps:
+      - {purpose: runner, tier: stable}
+      - {id: release, purpose: catalogue, org: example-org, permissions: {contents: write}}
   slack:
     catalogue:
       - {id: alerts, workspace: example, botScopes: [chat:write]}

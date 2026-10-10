@@ -81,9 +81,12 @@ exchange:
 
 apps:
   github:
-    runnerTiers: [stable, large, canary]
-    catalogue:
+    apps:
+      - {purpose: runner, tier: stable}
+      - {purpose: runner, tier: large}
+      - {purpose: runner, tier: canary}
       - id: release
+        purpose: catalogue
         org: example-org
         permissions: {contents: write, pull_requests: read}
         grants:

@@ -292,7 +292,7 @@ func (l *legacyPolicy) document(fallback *policy.Policy) (*PolicyDocument, error
 		apps.Slack = &AppsSlack{Catalogue: c.Apps}
 	}
 	if apps.GitHub != nil || apps.Slack != nil {
-		foldLegacyApps(&apps, "the v1 service document")
+		apps.FoldLegacy()
 		d.Apps = &apps
 	}
 	var controllers PolicyControllers
