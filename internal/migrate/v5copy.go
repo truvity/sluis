@@ -56,10 +56,7 @@ func sameSecret(a, b []byte) bool {
 
 // wantedAppRef is the App an organisation names on layout v5.
 func (p *planner) wantedAppRef(doc orgDoc) string {
-	if doc.Record.AppRef != "" || p.opt.AppRef == nil {
-		return doc.Record.AppRef
-	}
-	return p.opt.AppRef(doc.Record.Org)
+	return p.appRefOf(doc)
 }
 
 // sameAppRef is true unless the destination holds an organisation that names

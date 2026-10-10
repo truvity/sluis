@@ -172,8 +172,9 @@ type PlanOptions struct {
 	// ExportedGitHubApp says which catalogue GitHub Apps have `export: true`.
 	ExportedGitHubApp func(id string) bool
 	// AppRef is the App each GitHub organisation uses on layout v5
-	// (`controllers.github.appRefs`). Layout v5 gives an organisation no key of
-	// its own, so an organisation without one is refused.
+	// (`controllers.github.appRefs`), an override and optional: an organisation
+	// without one uses the source's App that installs it, or an App made of the
+	// organisation's own (v5orgapp.go).
 	AppRef func(org string) string
 	// ConfigNames are the secrets the documents declare below internal/config
 	// beyond the fixed ones: `providers/google/<provider>/client-id`,
@@ -206,6 +207,10 @@ type planner struct {
 	readAt time.Time
 	// carried are the v5 secret names that a record carries with it.
 	carried map[string]bool
+	// appRefs is the App each organisation of the source names on layout v5,
+	// and orgWhy the reason one has none (v5orgapp.go).
+	appRefs map[string]string
+	orgWhy  map[string]string
 }
 
 // Plan reads a layout v4 installation (from) and a layout v5 one (to) and
@@ -253,13 +258,23 @@ func newPlanner(ctx context.Context, from, to Side, opt PlanOptions, collect boo
 		return nil, fmt.Errorf("source: %w", err)
 	}
 	// The destination writes an organisation naming its App: the declaration
-	// supplies it.
-	dstDomains, err := OpenDomainsFor(ctx, to.Stores, false, opt.ExportedGitHubApp, portstore.DeclaredGitHubApps{AppRef: opt.AppRef})
+	// supplies it, from what the plan decides for each organisation.
+	refs := map[string]string{}
+	dstDomains, err := OpenDomainsFor(ctx, to.Stores, false, opt.ExportedGitHubApp, portstore.DeclaredGitHubApps{AppRef: func(org string) string {
+		if ref, ok := refs[org]; ok {
+			return ref
+		}
+		if opt.AppRef != nil {
+			return opt.AppRef(org)
+		}
+		return ""
+	}})
 	if err != nil {
 		return nil, fmt.Errorf("destination: %w", err)
 	}
 	return &planner{
 		opt: opt, from: from, to: to, collect: collect,
+		appRefs: refs, orgWhy: map[string]string{},
 		src:     kit{d: srcDomains, ports: from.Stores.Ports},
 		dst:     kit{d: dstDomains, ports: to.Stores.Ports},
 		report:  &PlanReport{From: from.Name, To: to.Name},
@@ -419,6 +434,7 @@ func (p *planner) records(ctx context.Context) error {
 		collectApps(k, src, appIDs)
 		collectApps(k, dst, appIDs)
 	}
+	p.resolveOrgApps(all, appIDs)
 	runners := map[string]string{}
 	for _, rk := range all {
 		p.kind(rk, appIDs, runners)
@@ -562,10 +578,10 @@ func (p *planner) appRefusal(s step, e entry, appIDs map[string]int64, runners m
 }
 
 func (p *planner) orgRefusal(doc orgDoc, appIDs map[string]int64) string {
-	ref := doc.Record.AppRef
-	if ref == "" && p.opt.AppRef != nil {
-		ref = p.opt.AppRef(doc.Record.Org)
+	if why := p.orgWhy[doc.Record.Org]; why != "" {
+		return why
 	}
+	ref := p.appRefOf(doc)
 	if ref == "" {
 		return "layout v5 gives an organisation no key of its own: name the App it uses (controllers.github.appRefs)"
 	}
