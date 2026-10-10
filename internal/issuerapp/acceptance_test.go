@@ -44,6 +44,12 @@ func bootWith(t *testing.T, directory issuer.Directory, change ...func(*config.S
 // which the race detector reports as soon as two Apps are built or served at once.
 func bootDeps(t *testing.T, deps issuerapp.Deps, change ...func(*config.Serve)) *issuerapp.App {
 	t.Helper()
+	return bootConfigured(t, deps, nil, change...)
+}
+
+// bootConfigured is [bootDeps] with a say over the assembled settings.
+func bootConfigured(t *testing.T, deps issuerapp.Deps, tune func(*issuerapp.Config), change ...func(*config.Serve)) *issuerapp.App {
+	t.Helper()
 	policyDir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(policyDir, "policy.yaml"), []byte(`
 version: 1
@@ -72,6 +78,9 @@ clients:
 	}
 	if deps.Stores == nil {
 		deps.Stores = &store.Stores{Secrets: testSecrets}
+	}
+	if tune != nil {
+		tune(&cfg)
 	}
 	app, err := issuerapp.New(context.Background(), cfg,
 		deps, slog.New(slog.DiscardHandler))

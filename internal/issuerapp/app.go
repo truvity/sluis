@@ -53,6 +53,15 @@ import (
 // Config is what a deployment decides. It is built from the configuration
 // file, which is what the chart renders.
 type Config struct {
+	// LazySigningKeys opens the KMS signing modes (signingKey.kms and
+	// signingKey.kmsWrapped) when something first needs a key, and not as the
+	// issuer is assembled: opening reads the state secret and calls KMS, which
+	// a function that starts in many environments at once must not do in each.
+	// Unset, the keys are open when New returns and a fault in them stops the
+	// start, which is what a service that serves for long wants. See
+	// [deferredSigning] for which request pays.
+	LazySigningKeys bool
+
 	port       string
 	healthPort string
 
@@ -457,9 +466,17 @@ type App struct {
 	issuer  *issuer.Issuer
 	storage *issuer.Storage
 	// keys are the signer's rings: rotation is fed to them, not to the issuer.
+	// Nil until the keys are open, which [App.Run] sees to.
 	keys *signer.KeyRings
-	cfg  Config
-	log  *slog.Logger
+	// lazyKeys, where the KMS keys are opened on first use.
+	lazyKeys *deferredSigning
+	cfg      Config
+	log      *slog.Logger
+}
+
+// useKeys keeps what Run drives of the open keys.
+func (a *App) useKeys(set *signingSet) {
+	a.keys, a.kms, a.wrapped = set.rings, set.kmsRefs, set.wrapped != nil
 }
 
 // MintFor signs a short-lived access token for a person signed in to this
@@ -579,40 +596,94 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 	if err := applySigningPlan(ctx, &cfg, stores.Plan); err != nil {
 		return nil, err
 	}
-	var (
-		key     *signer.SigningKey
-		kmsRefs []*signer.KMSKeyRefs
-		kmsRest []*signer.SigningKey
-		kmsMore []*signer.SigningKey
-	)
-	var wrapped *signer.WrappedSigning
-	switch {
-	case cfg.kmsWrapped != nil:
-		wrapped, key, kmsMore, err = wrappedSigningKeys(ctx, cfg, deps, stores, shared, log)
-	case len(cfg.kmsKeys) > 0:
-		log.WarnContext(ctx, "signingKey.kms (direct asymmetric KMS signing) is deprecated and goes in a later release: "+
-			"move to the wrapped ring (signingKey.kmsWrapped with keys.sign), keeping the old public keys under "+
-			"signingKey.verifyOnly for the overlap (docs/concepts/sluis/signing-on-aws.md)")
-		kmsRefs, kmsRest, key, kmsMore, err = kmsSigningKeys(ctx, cfg, deps.KMS, log)
-	default:
-		key, err = signingKey(ctx, cfg, log)
-	}
-	if err != nil {
-		return nil, err
-	}
 	additionalKeys, err := additionalSigningKeys(ctx, cfg, log)
 	if err != nil {
 		return nil, err
 	}
-	if len(kmsRefs) > 0 {
+	kmsMode := cfg.kmsWrapped != nil || len(cfg.kmsKeys) > 0
+	if cfg.kmsWrapped == nil && len(cfg.kmsKeys) > 0 {
+		log.WarnContext(ctx, "signingKey.kms (direct asymmetric KMS signing) is deprecated and goes in a later release: "+
+			"move to the wrapped ring (signingKey.kmsWrapped with keys.sign), keeping the old public keys under "+
+			"signingKey.verifyOnly for the overlap (docs/concepts/sluis/signing-on-aws.md)")
 		for _, f := range additionalKeys {
 			log.WarnContext(ctx, "signingKey.kms is set but this algorithm is still signed by a file key",
 				slog.Any("algorithm", f.SignatureAlgorithm()), slog.String("kid", f.ID()))
 		}
 	}
-	// Each KMS algorithm's newest key is its ring's primary, beside any files
-	// (a file and a KMS key for the same algorithm clash, as two files do).
-	additionalKeys = append(additionalKeys, kmsMore...)
+	// build opens the signing keys: the primary key, the rings over it and its
+	// neighbours, and the rotation each mode runs. The KMS modes read the state
+	// secret here and call KMS.
+	build := func(ctx context.Context) (*signingSet, error) {
+		var (
+			key     *signer.SigningKey
+			kmsRefs []*signer.KMSKeyRefs
+			kmsRest []*signer.SigningKey
+			kmsMore []*signer.SigningKey
+			wrapped *signer.WrappedSigning
+			err     error
+		)
+		switch {
+		case cfg.kmsWrapped != nil:
+			wrapped, key, kmsMore, err = wrappedSigningKeys(ctx, cfg, deps, stores, shared, log)
+		case len(cfg.kmsKeys) > 0:
+			kmsRefs, kmsRest, key, kmsMore, err = kmsSigningKeys(ctx, cfg, deps.KMS, log)
+		default:
+			key, err = signingKey(ctx, cfg, log)
+		}
+		if err != nil {
+			return nil, err
+		}
+		// Each KMS algorithm's newest key is its ring's primary, beside any files
+		// (a file and a KMS key for the same algorithm clash, as two files do).
+		rings, err := signer.NewKeyRings(key, slices.Concat(additionalKeys, kmsMore), shared, signer.KeyRingConfig{}, nil)
+		if err != nil {
+			return nil, fmt.Errorf("adopt the signing keys: %w", err)
+		}
+		// The delays a deployment named, or their defaults: NewKeyRings seeded the
+		// ring before either was known, so this is applied before the poller in
+		// Run starts feeding it anything more.
+		rings.Configure(signer.KeyRingConfig{
+			ActivationDelay: cfg.keyActivationDelay,
+			Overlap:         cfg.keyOverlap,
+		})
+		if wrapped != nil {
+			// The wrapped schedule's own pre-publish and retention, which default to
+			// the two settings above.
+			wc, wcErr := cfg.wrappedConfig()
+			if wcErr != nil {
+				return nil, wcErr
+			}
+			rings.Configure(signer.KeyRingConfig{ActivationDelay: wc.Prepublish, Overlap: wc.Retain})
+			rings.UseWrapped(wrapped)
+		}
+		// The earlier KMS keys, in order: refreshed if the installation knows
+		// them, never newly adopted.
+		for _, extra := range kmsRest {
+			if err = rings.RotateKnown(ctx, extra); err != nil {
+				return nil, fmt.Errorf("adopt a KMS signing key: %w", err)
+			}
+		}
+		return newSigningSet(key, rings, kmsRefs, wrapped), nil
+	}
+	var (
+		opened   *signingSet      // the open keys; nil while they are opened on first use
+		lazyKeys *deferredSigning // set instead, when they are
+		ring     signer.Ring
+		dir      signer.Directory
+	)
+	if kmsMode && cfg.LazySigningKeys {
+		algs, algErr := configuredKMSAlgorithms(cfg, additionalKeys)
+		if algErr != nil {
+			return nil, algErr
+		}
+		lazyKeys = newDeferredSigning(algs, build, log)
+		ring, dir = lazyKeys, lazyKeys
+	} else {
+		if opened, err = build(ctx); err != nil {
+			return nil, err
+		}
+		ring, dir = opened.rings, opened.rings
+	}
 	verifiers, clusters, err := openVerifiers(ctx, cfg, log)
 	if err != nil {
 		return nil, err
@@ -636,12 +707,8 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 	if stores.ClientSecretPort() != nil {
 		core.UseClientSecrets(secretsAdmin)
 	}
-	keys, err := signer.NewKeyRings(key, additionalKeys, shared, signer.KeyRingConfig{}, nil)
-	if err != nil {
-		return nil, fmt.Errorf("adopt the signing keys: %w", err)
-	}
 	storage, err := issuer.NewStorage(core, verifiers, creds,
-		signer.New(keys, signer.LimitsFor(core.Config().TokenLifetime)), keys, shared)
+		signer.New(ring, signer.LimitsFor(core.Config().TokenLifetime)), dir, shared)
 	if err != nil {
 		return nil, err
 	}
@@ -654,51 +721,29 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 	// groups-scoping report -- carry this deployment's level and
 	// attributes rather than depending on [slog.SetDefault] alone.
 	storage.UseLog(log)
-	// The delays a deployment named, or their defaults: NewStorage seeded
-	// the ring before either was known, so this is applied before the
-	// poller in Run starts feeding it anything more.
-	keys.Configure(signer.KeyRingConfig{
-		ActivationDelay: cfg.keyActivationDelay,
-		Overlap:         cfg.keyOverlap,
-	})
-	if wrapped != nil {
-		// The wrapped schedule's own pre-publish and retention, which default to
-		// the two settings above.
-		wc, wcErr := cfg.wrappedConfig()
-		if wcErr != nil {
-			return nil, wcErr
-		}
-		keys.Configure(signer.KeyRingConfig{ActivationDelay: wc.Prepublish, Overlap: wc.Retain})
-		keys.UseWrapped(wrapped)
-	}
-	// The earlier KMS keys, in order: refreshed if the installation knows
-	// them, never newly adopted.
-	for _, extra := range kmsRest {
-		if err = keys.RotateKnown(ctx, extra); err != nil {
-			return nil, fmt.Errorf("adopt a KMS signing key: %w", err)
-		}
-	}
 	signIn, err := openSignIn(ctx, cfg, log)
 	if err != nil {
 		return nil, err
 	}
 	// The state secret's fingerprint is checked at the first sign-in, not as
-	// the process starts. (Its value is still read at start, as the seed the
-	// KMS-backed keys are built over.)
-	var stateSeed []byte
-	switch {
-	case wrapped != nil:
-		stateSeed = key.Seed()
-	case kmsRefs != nil:
-		stateSeed = kmsRefs[0].Seed
-	}
-	if stateSeed != nil {
-		signIn = gateSignIns(signIn, newStateSecretGate(shared, stateSeed, leases))
+	// the process starts. Where the keys are opened on first use the secret is
+	// read then too, with the keys it seeds.
+	var stateKey access.KeyFunc
+	if lazyKeys != nil {
+		stateKey = lazyKeys.stateKey
+		if kmsMode {
+			signIn = gateSignIns(signIn, newLazyStateSecretGate(shared, lazyKeys.stateSeed, leases))
+		}
+	} else {
+		stateKey = access.StaticKey(opened.stateKey)
+		if kmsMode {
+			signIn = gateSignIns(signIn, newStateSecretGate(shared, opened.seed, leases))
+		}
 	}
 	signInDeps := issuer.SignInDeps{
 		Providers:     signIn,
 		Recovery:      openRecovery(ctx, cfg, stores, log),
-		State:         access.NewStateCodec(key.Derive("sluis/sign-in-state"), signInWindow),
+		State:         access.NewStateCodecWith(stateKey, signInWindow),
 		ConsoleOrigin: cfg.consoleOrigin,
 		// Where an old /account bookmark is sent. Empty when this
 		// deployment serves no console, and then the route is not served
@@ -779,9 +824,12 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 	// the request metrics see the status the client got. The route is a fixed
 	// set of names (issuer.Route), never the path.
 	handler = telemetry.HTTPHandler(handler, "access-issuer", issuer.Route)
-	app := &App{handler: handler, health: healthMux, issuer: core, storage: storage, keys: keys,
-		cfg: cfg, log: log, kms: kmsRefs, wrapped: wrapped != nil, state: shared,
+	app := &App{handler: handler, health: healthMux, issuer: core, storage: storage,
+		cfg: cfg, log: log, state: shared, lazyKeys: lazyKeys,
 		generated: generated, creds: creds, credStore: stores.ClientSecretPort(), leases: leases}
+	if opened != nil {
+		app.useKeys(opened)
+	}
 	return app, nil
 }
 
@@ -863,6 +911,15 @@ func (a *App) Run(ctx context.Context) error {
 	// serves; a client that fails here does not stop the issuer: it is logged
 	// and tried again, and the input secret serves it meanwhile.
 	a.reconcileGenerated(ctx)
+	// A service that serves for long opens its keys before it serves, so that a
+	// fault in them stops the start, and rotation has rings to drive.
+	if a.lazyKeys != nil {
+		set, err := a.lazyKeys.get(ctx)
+		if err != nil {
+			return err
+		}
+		a.useKeys(set)
+	}
 	group, gctx := errgroup.WithContext(ctx)
 	group.Go(func() error { return serve(gctx, a.cfg.port, a.handler, "issuer", a.log) })
 	group.Go(func() error { return serve(gctx, a.cfg.healthPort, a.health, "health", a.log) })
@@ -1325,6 +1382,40 @@ func serve(ctx context.Context, addr string, handler http.Handler, name string, 
 		return fmt.Errorf("%s listener: %w", name, err)
 	}
 	return nil
+}
+
+// configuredKMSAlgorithms are the algorithms the KMS modes sign with, the first
+// the installation's default, known from the configuration alone so that the
+// keys need not be open to answer discovery. A clash between two keys of one
+// algorithm is refused here, at assembly, as it is when the rings are built.
+func configuredKMSAlgorithms(cfg Config, files []*signer.SigningKey) ([]jose.SignatureAlgorithm, error) {
+	var algs []jose.SignatureAlgorithm
+	if cfg.kmsWrapped != nil {
+		wcfg, err := cfg.wrappedConfig()
+		if err != nil {
+			return nil, err
+		}
+		algs = slices.Clone(wcfg.Algorithms)
+	} else {
+		algs = []jose.SignatureAlgorithm{jose.ES384}
+		for _, a := range cfg.kmsAdditional {
+			if jose.SignatureAlgorithm(a.Alg) != jose.RS256 || len(a.Keys) == 0 {
+				return nil, fmt.Errorf("signingKey.kms.additional: %q needs alg RS256 and keys", a.Alg)
+			}
+			algs = append(algs, jose.SignatureAlgorithm(a.Alg))
+		}
+	}
+	for _, f := range files {
+		algs = append(algs, f.SignatureAlgorithm())
+	}
+	seen := map[jose.SignatureAlgorithm]bool{}
+	for _, alg := range algs {
+		if seen[alg] {
+			return nil, fmt.Errorf("issuer: two signing keys both sign %s; each configured algorithm needs exactly one key", alg)
+		}
+		seen[alg] = true
+	}
+	return algs, nil
 }
 
 // kmsSigningKeys reads every KMS key in signingKey.kms at start, in order.

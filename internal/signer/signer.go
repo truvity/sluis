@@ -147,6 +147,20 @@ type Ring interface {
 	Published() []PublicKey
 }
 
+// Opener is implemented by a [Ring] or a [Directory] whose keys are opened on
+// first use and not as the process starts (the KMS signing modes read the
+// state secret, and call KMS, only when something first needs a key).
+//
+// Open returns once the keys are open, and returns at once afterwards. It is
+// single-flight: callers that arrive together share one open, and a failed one
+// is not remembered, so the next call tries again. Opened reports whether the
+// keys are open now, without opening them, so a caller that can answer without
+// them (discovery, which lists configured algorithms) does not pay for them.
+type Opener interface {
+	Open(ctx context.Context) error
+	Opened() bool
+}
+
 // Limits are the per-call checks. A purpose absent from MaxLifetime is
 // unknown and refused. A maximum of zero means the payload may carry no exp.
 type Limits struct {
@@ -194,6 +208,11 @@ func (s *inProcess) Sign(ctx context.Context, req Request) (Signed, error) {
 	if err := s.check(req); err != nil {
 		return Signed{}, err
 	}
+	if o, ok := s.ring.(Opener); ok {
+		if err := o.Open(ctx); err != nil {
+			return Signed{}, err
+		}
+	}
 	s.ring.Maintain(ctx)
 	alg := req.Algorithm
 	if alg == "" {
@@ -223,6 +242,11 @@ func (s *inProcess) Sign(ctx context.Context, req Request) (Signed, error) {
 
 // PublicKeys implements [Signer].
 func (s *inProcess) PublicKeys(ctx context.Context) ([]PublicKey, error) {
+	if o, ok := s.ring.(Opener); ok {
+		if err := o.Open(ctx); err != nil {
+			return nil, err
+		}
+	}
 	s.ring.Maintain(ctx)
 	return s.ring.Published(), nil
 }

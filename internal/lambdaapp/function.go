@@ -195,6 +195,9 @@ func open(ctx context.Context, file string) (*Function, error) {
 	// service is assembled, whose New would run their loops.
 	github, slack := cfg.GitHub, cfg.Slack
 	cfg.GitHub, cfg.Slack = nil, nil
+	// The KMS signing modes read the state secret and call KMS to open their
+	// keys: the first request that needs a key does it, not the start.
+	cfg.Issuer.LazySigningKeys = true
 	// A start reads no secret: a herd of cold starts would read each of them in
 	// every new environment, and SSM throttles a herd. The secrets are read
 	// when the request that needs them arrives, and the schedule's refresh
