@@ -305,3 +305,39 @@ func TestACheckEventFailsTheInvocationForAMissingSecret(t *testing.T) {
 		t.Fatal("a check that could not run passed")
 	}
 }
+
+// pausedPass is a pass over the real lease code whose module is under
+// maintenance when under is set.
+type pausedPass struct {
+	leasePass
+	under *bool
+}
+
+func (p *pausedPass) Paused(context.Context) bool { return *p.under }
+
+type pauseFlag struct{ under *bool }
+
+func (f pauseFlag) Writable(context.Context) error {
+	if *f.under {
+		return errors.New("maintenance")
+	}
+	return nil
+}
+
+// A pass the maintenance gate skipped ends cleanly as `maintenance`, not as a
+// lease clash; once lifted the same target runs.
+func TestATickSkippedUnderMaintenanceIsNotContended(t *testing.T) {
+	under := true
+	leases := &rails.Leases{State: memory.New().Set().State, Holder: rails.NewHolder(), TTL: time.Minute, Maintenance: pauseFlag{&under}}
+	p := &pausedPass{leasePass: leasePass{leases: leases}, under: &under}
+	c := &lambdaapp.Controller{Name: "github", Open: func(context.Context) (lambdaapp.Pass, error) { return p, nil }}
+
+	res, err := handle(t, c, `{"kind":"tick","target":"acme"}`)
+	if err != nil || res.Outcome != lambdaapp.OutcomeMaintenance {
+		t.Fatalf("under maintenance: %+v, %v, want outcome maintenance", res, err)
+	}
+	under = false
+	if res, err = handle(t, c, `{"kind":"tick","target":"acme"}`); err != nil || res.Outcome != lambdaapp.OutcomeRan {
+		t.Errorf("after maintenance: %+v, %v", res, err)
+	}
+}
