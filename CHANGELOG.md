@@ -1,5 +1,7 @@
 ## Unreleased
 
+## v1.75.0-rc.4
+
 ### Changed
 
 - **`sluis serve` is a deprecated alias of `sluis issuer`.** It runs the same module and says in the log that the command is `sluis issuer`; it goes in the next release. `sluis console` (a "not yet split" stub) is removed: the console is part of the issuer's process.
