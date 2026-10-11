@@ -422,7 +422,7 @@
                   "type": "boolean"
                 },
                 "prefix": {
-                  "description": "A key prefix inside the bucket, for an installation that shares it. Names are `<prefix>/reports/<target>` and `<prefix>/snapshots/<directory>`.",
+                  "description": "A key prefix inside the bucket, for an installation that shares it.",
                   "minLength": 1,
                   "type": "string"
                 },
