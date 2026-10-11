@@ -13,6 +13,7 @@ import (
 	"github.com/truvity/sluis/internal/config"
 	"github.com/truvity/sluis/internal/config/schema"
 	"github.com/truvity/sluis/internal/modcall"
+	"github.com/truvity/sluis/internal/modcall/dial"
 )
 
 func TestCallsRouterTable(t *testing.T) {
@@ -58,7 +59,7 @@ func TestCallsRouterTable(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			got, err := tc.calls.ModCall(nil)
+			got, err := dial.FromConfig(tc.calls, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -75,13 +76,13 @@ func TestTheDeprecatedCloudflareRemoteRendersTheSameModcallConfig(t *testing.T) 
 		"url":      {URL: "http://cloudflare.sluis.svc:8080", Audience: "cloudflare", TokenFile: "/var/run/secrets/sluis/cloudflare/token"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			old, err := (*config.Calls)(nil).ModCall(&config.Cloudflare{Remote: &remote})
+			old, err := dial.FromConfig(nil, &config.Cloudflare{Remote: &remote})
 			if err != nil {
 				t.Fatal(err)
 			}
-			now, err := (&config.Calls{Modules: map[string]config.CallTarget{
+			now, err := dial.FromConfig(&config.Calls{Modules: map[string]config.CallTarget{
 				"cloudflare": {Function: remote.Function, URL: remote.URL, Audience: remote.Audience, TokenFile: remote.TokenFile},
-			}}).ModCall(nil)
+			}}, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -89,7 +90,7 @@ func TestTheDeprecatedCloudflareRemoteRendersTheSameModcallConfig(t *testing.T) 
 				t.Errorf("cloudflare.remote renders %+v, calls.modules.cloudflare renders %+v", old, now)
 			}
 			// The v2 serve document reads the deprecated form to the same result.
-			if v2, err := (&config.Serve{Cloudflare: &config.Cloudflare{Remote: &remote}}).ModCall(); err != nil || !reflect.DeepEqual(v2, old) {
+			if v2, err := (&config.Serve{Cloudflare: &config.Cloudflare{Remote: &remote}}).Targets(); err != nil || !reflect.DeepEqual(dial.FromTargets(v2), old) {
 				t.Errorf("serve renders %+v, %v", v2, err)
 			}
 		})
