@@ -401,7 +401,7 @@ func (a *LambdaArgs) modulePolicy(role string, roles []Role) func(pulumi.StringO
 				BucketArn: v[0].(string), TableKeyArn: v[1].(string), ParameterKeyArn: a.ParameterKeyArn, QueueArn: v[2].(string),
 				TableArns:    moduleTablesOf(v[4]),
 				LogGroupArns: map[string]string{role: v[3].(string)},
-				FunctionArns: a.moduleFunctionArns(), MinterRefs: a.minterRefs, Roles: roles,
+				FunctionArns: a.moduleFunctionArns(), Roles: roles,
 			}
 			if a.Storage != nil && a.Storage.External != nil {
 				env.BucketArn = ""
