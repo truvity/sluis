@@ -496,8 +496,11 @@ type Roster struct {
 	Preset   string                   `json:"preset,omitempty"`
 	Adapters map[string]AdapterChoice `json:"adapters,omitempty"`
 	Audit    *RosterAudit             `json:"audit,omitempty"`
-	// Calls is how the controller reaches the modules that are not in its process.
-	Calls *Calls `json:"calls,omitempty"`
+	// GitHub, Slack and Google say where those modules are when they are not
+	// in the controller's process.
+	GitHub *ModuleRoute `json:"github,omitempty"`
+	Slack  *ModuleRoute `json:"slack,omitempty"`
+	Google *ModuleRoute `json:"google,omitempty"`
 	// Probes is where /healthz and /readyz answer.
 	Probes *Address `json:"probes,omitempty"`
 
@@ -531,8 +534,11 @@ type ControllerSlack struct {
 // absent is a controller that is off.
 type Sluis struct {
 	Serve
-	// Calls is how this process reaches the modules that are not in it.
-	Calls       *Calls       `json:"calls,omitempty"`
+	// GitHub, Slack and Google say where those modules are when they are not in
+	// this process: `<module>.remote`, shaped as `cloudflare.remote`.
+	GitHub      *ModuleRoute `json:"github,omitempty"`
+	Slack       *ModuleRoute `json:"slack,omitempty"`
+	Google      *ModuleRoute `json:"google,omitempty"`
 	Controllers *Controllers `json:"controllers,omitempty"`
 }
 
@@ -574,7 +580,7 @@ func (s *Sluis) roster(c *ControllerCommon) Roster {
 		ConsoleURL: c.ConsoleURL, TokenFile: c.TokenFile, Console: c.Console,
 		RecordsDir: c.RecordsDir, Interval: c.Interval, Log: s.Log, Ports: s.Ports,
 		Platform: s.Platform, Preset: s.Preset, Adapters: s.Adapters,
-		Calls:  s.Calls,
+		GitHub: s.GitHub, Slack: s.Slack, Google: s.Google,
 		legacy: s.legacy,
 	}
 	if r.ConsoleURL == "" {

@@ -112,11 +112,16 @@ cloudflare:
       endpoint: https://0123456789abcdef0123456789abcdef.r2.cloudflarestorage.com
       lifetime: 15m
       rotation: 5m
-calls:
-  modules:
-    github:
-      url: http://github.sluis.svc:8080
-      audience: github
-      tokenFile: /var/run/secrets/sluis/github/token
-    google:
-      function: sluis-acme-google
+github:
+  remote:
+    url: http://github.sluis.svc:8080
+    audience: github
+    tokenFile: /var/run/secrets/sluis/github/token
+google:
+  remote:
+    function: sluis-acme-google
+slack:
+  remote:
+    url: http://slack.sluis.svc:8080
+    audience: slack
+    tokenFile: /var/run/secrets/sluis/slack/token
