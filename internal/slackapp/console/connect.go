@@ -1,4 +1,4 @@
-package server
+package console
 
 import (
 	"context"
@@ -13,7 +13,9 @@ import (
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
 	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/audit"
-	slackconsole "github.com/truvity/sluis/internal/slackapp/console"
+	"github.com/truvity/sluis/internal/consoleauthz"
+	"github.com/truvity/sluis/internal/consolecall"
+	"github.com/truvity/sluis/internal/port"
 	"github.com/truvity/sluis/internal/slackroster/connection"
 	"github.com/truvity/sluis/internal/slackroster/reconcile"
 	"github.com/truvity/sluis/internal/slackroster/status"
@@ -37,26 +39,26 @@ func errSharedImmutable(what, was, got string) error {
 			"and delete this record if the old channel should no longer be managed", what, was, got, what))
 }
 
-func (c *Console) slackSharedStore() (SlackSharedRecords, error) {
-	if c.deps.SlackShared == nil {
+func (c *Service) slackSharedStore() (SharedRecords, error) {
+	if c.d().SlackShared == nil {
 		return nil, connect.NewError(connect.CodeFailedPrecondition,
 			errors.New("this deployment keeps no state in Kubernetes, so a shared channel's record would not survive a restart"))
 	}
-	return c.deps.SlackShared, nil
+	return c.d().SlackShared, nil
 }
 
 // ListSlackSharedChannels is every record the caller may see, with where
 // the controller has each.
-func (c *Console) ListSlackSharedChannels(
-	ctx context.Context, _ *connect.Request[directoryrosterv1.ListSlackSharedChannelsRequest],
-) (*connect.Response[directoryrosterv1.ListSlackSharedChannelsResponse], error) {
-	id, book, err := c.requireAnySlack(ctx, access.RoleViewer)
+func (c *Service) ListSlackSharedChannels(
+	ctx context.Context, caller consolecall.Caller, _ *directoryrosterv1.ListSlackSharedChannelsRequest,
+) (*directoryrosterv1.ListSlackSharedChannelsResponse, error) {
+	id, book, err := c.requireAnySlack(ctx, caller, access.RoleViewer)
 	if err != nil {
 		return nil, err
 	}
-	set := c.deps.Authorizer.Policy()
+	set := c.d().Authorizer.Policy()
 	p := set.Declared()
-	out := &directoryrosterv1.ListSlackSharedChannelsResponse{Available: c.deps.SlackShared != nil}
+	out := &directoryrosterv1.ListSlackSharedChannelsResponse{Available: c.d().SlackShared != nil}
 	anyOperate := false
 	for _, key := range set.SlackWorkspaceKeys() {
 		if !book.May(id, access.RoleViewer, key) {
@@ -69,12 +71,12 @@ func (c *Console) ListSlackSharedChannels(
 	if anyOperate {
 		// Any connected directory's groups: a Slack Connect channel is not
 		// bound to one directory.
-		out.SourceDirectories, out.SourceDirectoriesError = c.slackSvc().SourceDirectories(ctx)
+		out.SourceDirectories, out.SourceDirectoriesError = c.sourceDirectories(ctx)
 	}
-	if c.deps.SlackShared == nil {
-		return connect.NewResponse(out), nil
+	if c.d().SlackShared == nil {
+		return out, nil
 	}
-	records, err := c.deps.SlackShared.List(ctx)
+	records, err := c.d().SlackShared.List(ctx)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeUnavailable, err)
 	}
@@ -105,13 +107,13 @@ func (c *Console) ListSlackSharedChannels(
 		view.CanOperate = book.MayAct(id, rec.Channel.Host)
 		out.Channels = append(out.Channels, view)
 	}
-	out.Discovered = slackconsole.DiscoveredChannels(id, book, p, reports, records, true)
-	return connect.NewResponse(out), nil
+	out.Discovered = discoveredChannels(id, book, p, reports, records, true)
+	return out, nil
 }
 
 // maySeeShared is whether the caller may view the host workspace or any
 // workspace the channel is shared with.
-func maySeeShared(id access.Identity, book slackBook, ch reconcile.SharedChannel) bool {
+func maySeeShared(id access.Identity, book Book, ch reconcile.SharedChannel) bool {
 	return slices.ContainsFunc(append([]string{ch.Host}, ch.With...), func(w string) bool {
 		return book.May(id, access.RoleViewer, w)
 	})
@@ -119,12 +121,12 @@ func maySeeShared(id access.Identity, book slackBook, ch reconcile.SharedChannel
 
 // slackReports are the controller's documents by workspace. Unreadable or
 // absent is an empty answer: the list then says "not reported".
-func (c *Console) slackReports(ctx context.Context) map[string]status.Workspace {
+func (c *Service) slackReports(ctx context.Context) map[string]status.Workspace {
 	out := map[string]status.Workspace{}
-	if c.deps.SlackStatus == nil {
+	if c.d().SlackStatus == nil {
 		return out
 	}
-	raw, err := c.deps.SlackStatus.Reports(ctx)
+	raw, err := c.d().SlackStatus.Reports(ctx)
 	if err != nil {
 		return out
 	}
@@ -143,11 +145,11 @@ func (c *Console) slackReports(ctx context.Context) map[string]status.Workspace 
 // slackReport is one workspace's latest report, and whether there is one that
 // reads: unlike slackReports, an absent or unreadable report is told apart, for
 // a caller that must refuse on it.
-func (c *Console) slackReport(ctx context.Context, workspace string) (status.Workspace, bool) {
-	if c.deps.SlackStatus == nil {
+func (c *Service) slackReport(ctx context.Context, workspace string) (status.Workspace, bool) {
+	if c.d().SlackStatus == nil {
 		return status.Workspace{}, false
 	}
-	raw, err := c.deps.SlackStatus.Reports(ctx)
+	raw, err := c.d().SlackStatus.Reports(ctx)
 	if err != nil {
 		return status.Workspace{}, false
 	}
@@ -268,10 +270,10 @@ func sharedError(err error) error {
 
 // CreateSlackSharedChannel defines a channel: operator of the host
 // workspace's owner, or of the installation.
-func (c *Console) CreateSlackSharedChannel(
-	ctx context.Context, req *connect.Request[directoryrosterv1.CreateSlackSharedChannelRequest],
-) (*connect.Response[directoryrosterv1.CreateSlackSharedChannelResponse], error) {
-	id, err := requireAnywhere(ctx, access.RoleOperator)
+func (c *Service) CreateSlackSharedChannel(
+	ctx context.Context, caller consolecall.Caller, req *directoryrosterv1.CreateSlackSharedChannelRequest,
+) (*directoryrosterv1.CreateSlackSharedChannelResponse, error) {
+	id, err := consoleauthz.RequireAnywhere(caller, access.RoleOperator)
 	if err != nil {
 		return nil, err
 	}
@@ -279,14 +281,14 @@ func (c *Console) CreateSlackSharedChannel(
 	if err != nil {
 		return nil, err
 	}
-	want := sharedOf(req.Msg.GetChannel())
-	if _, err = c.requireSlack(ctx, access.RoleOperator, want.Host); err != nil {
+	want := sharedOf(req.GetChannel())
+	if _, err = c.requireSlack(ctx, caller, access.RoleOperator, want.Host); err != nil {
 		return nil, err
 	}
-	if err = want.Validate(c.deps.Authorizer.Policy().Declared()); err != nil {
+	if err = want.Validate(c.d().Authorizer.Policy().Declared()); err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	if err = c.slackSvc().CheckSources(ctx, want.Sources, want.Members, "", false); err != nil {
+	if err = c.checkSources(ctx, want.Sources, want.Members, "", false); err != nil {
 		return nil, err
 	}
 	if err = c.sharedClashesWithConsole(ctx, want); err != nil {
@@ -294,7 +296,7 @@ func (c *Console) CreateSlackSharedChannel(
 	}
 	if want.ChannelID != "" {
 		reports := c.slackReports(ctx)
-		seen, found := slackconsole.DiscoveredIn(reports, want.Host, want.ChannelID)
+		seen, found := discoveredIn(reports, want.Host, want.ChannelID)
 		switch {
 		case !found:
 			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
@@ -308,7 +310,7 @@ func (c *Console) CreateSlackSharedChannel(
 	err = store.Apply(ctx, want.Name, func(current *reconcile.SharedChannel) (*reconcile.SharedChannel, error) {
 		if current != nil {
 			// Another host's record is named to a caller only when the caller may see it.
-			if book, berr := c.slackBook(ctx); berr == nil && maySeeShared(id, book, *current) {
+			if book, berr := c.book(ctx); berr == nil && maySeeShared(id, book, *current) {
 				return nil, connect.NewError(connect.CodeAlreadyExists, fmt.Errorf(
 					"a shared channel named %s already exists, hosted by %s: edit it, or pick another name", want.Name, current.Host))
 			}
@@ -319,20 +321,20 @@ func (c *Console) CreateSlackSharedChannel(
 	if err != nil {
 		return nil, sharedError(err)
 	}
-	c.record(ctx, audit.SlackSharedChannelCreated(actorOf(ctx), auditShared(want)))
+	c.record(ctx, audit.SlackSharedChannelCreated(consoleauthz.ActorOf(caller), auditShared(want)))
 	c.notifyShared(ctx, want)
 	view := sharedView(want)
-	view.State, view.Reason = sharedState(want, c.deps.Authorizer.Policy().Declared(), c.slackReports(ctx))
+	view.State, view.Reason = sharedState(want, c.d().Authorizer.Policy().Declared(), c.slackReports(ctx))
 	view.CanOperate = true
-	return connect.NewResponse(&directoryrosterv1.CreateSlackSharedChannelResponse{Channel: view}), nil
+	return &directoryrosterv1.CreateSlackSharedChannelResponse{Channel: view}, nil
 }
 
 // UpdateSlackSharedChannel changes with, from (directory groups) and private. The caller's
 // role is asked about the STORED host, which a request cannot change.
-func (c *Console) UpdateSlackSharedChannel(
-	ctx context.Context, req *connect.Request[directoryrosterv1.UpdateSlackSharedChannelRequest],
-) (*connect.Response[directoryrosterv1.UpdateSlackSharedChannelResponse], error) {
-	id, err := requireAnywhere(ctx, access.RoleOperator)
+func (c *Service) UpdateSlackSharedChannel(
+	ctx context.Context, caller consolecall.Caller, req *directoryrosterv1.UpdateSlackSharedChannelRequest,
+) (*directoryrosterv1.UpdateSlackSharedChannelResponse, error) {
+	id, err := consoleauthz.RequireAnywhere(caller, access.RoleOperator)
 	if err != nil {
 		return nil, err
 	}
@@ -340,10 +342,10 @@ func (c *Console) UpdateSlackSharedChannel(
 	if err != nil {
 		return nil, err
 	}
-	want := sharedOf(req.Msg.GetChannel())
+	want := sharedOf(req.GetChannel())
 	var changes string
 	err = store.Apply(ctx, want.Name, func(current *reconcile.SharedChannel) (*reconcile.SharedChannel, error) {
-		if err := c.requireStoredShared(ctx, id, want.Name, current); err != nil {
+		if err := c.requireStoredShared(ctx, caller, id, want.Name, current); err != nil {
 			return nil, err
 		}
 		if want.Host != current.Host {
@@ -352,10 +354,10 @@ func (c *Console) UpdateSlackSharedChannel(
 		if want.ChannelID != current.ChannelID {
 			return nil, errSharedImmutable("channel id", current.ChannelID, want.ChannelID)
 		}
-		if err := want.Validate(c.deps.Authorizer.Policy().Declared()); err != nil {
+		if err := want.Validate(c.d().Authorizer.Policy().Declared()); err != nil {
 			return nil, connect.NewError(connect.CodeInvalidArgument, err)
 		}
-		if err := c.slackSvc().CheckSources(ctx, want.Sources, want.Members, "", false); err != nil {
+		if err := c.checkSources(ctx, want.Sources, want.Members, "", false); err != nil {
 			return nil, err
 		}
 		changes = sharedChanges(*current, want)
@@ -365,13 +367,13 @@ func (c *Console) UpdateSlackSharedChannel(
 		return nil, sharedError(err)
 	}
 	if changes != "" {
-		c.record(ctx, audit.SlackSharedChannelUpdated(actorOf(ctx), auditShared(want), changes))
+		c.record(ctx, audit.SlackSharedChannelUpdated(consoleauthz.ActorOf(caller), auditShared(want), changes))
 		c.notifyShared(ctx, want)
 	}
 	view := sharedView(want)
-	view.State, view.Reason = sharedState(want, c.deps.Authorizer.Policy().Declared(), c.slackReports(ctx))
+	view.State, view.Reason = sharedState(want, c.d().Authorizer.Policy().Declared(), c.slackReports(ctx))
 	view.CanOperate = true
-	return connect.NewResponse(&directoryrosterv1.UpdateSlackSharedChannelResponse{Channel: view}), nil
+	return &directoryrosterv1.UpdateSlackSharedChannelResponse{Channel: view}, nil
 }
 
 // requireStoredShared is the gate on changing a stored record: the role over
@@ -380,19 +382,19 @@ func (c *Console) UpdateSlackSharedChannel(
 // is answered "no such channel", exactly as for a name nobody holds, so the
 // answer cannot be used to find out which names another directory's workspace
 // hosts. A caller who may see it but may not operate it is refused plainly.
-func (c *Console) requireStoredShared(ctx context.Context, id access.Identity, name string, current *reconcile.SharedChannel) error {
+func (c *Service) requireStoredShared(ctx context.Context, caller consolecall.Caller, id access.Identity, name string, current *reconcile.SharedChannel) error {
 	notFound := connect.NewError(connect.CodeNotFound, fmt.Errorf("there is no shared channel named %s", name))
 	if current == nil {
 		return notFound
 	}
-	book, err := c.slackBook(ctx)
+	book, err := c.book(ctx)
 	if err != nil {
 		return err
 	}
 	if !maySeeShared(id, book, *current) {
 		return notFound
 	}
-	_, err = c.requireSlack(ctx, access.RoleOperator, current.Host)
+	_, err = c.requireSlack(ctx, caller, access.RoleOperator, current.Host)
 	return err
 }
 
@@ -471,10 +473,10 @@ func sharedChanges(before, after reconcile.SharedChannel) string {
 }
 
 // DeleteSlackSharedChannel forgets the record. The channel stays in Slack.
-func (c *Console) DeleteSlackSharedChannel(
-	ctx context.Context, req *connect.Request[directoryrosterv1.DeleteSlackSharedChannelRequest],
-) (*connect.Response[directoryrosterv1.DeleteSlackSharedChannelResponse], error) {
-	id, err := requireAnywhere(ctx, access.RoleOperator)
+func (c *Service) DeleteSlackSharedChannel(
+	ctx context.Context, caller consolecall.Caller, req *directoryrosterv1.DeleteSlackSharedChannelRequest,
+) (*directoryrosterv1.DeleteSlackSharedChannelResponse, error) {
+	id, err := consoleauthz.RequireAnywhere(caller, access.RoleOperator)
 	if err != nil {
 		return nil, err
 	}
@@ -482,10 +484,10 @@ func (c *Console) DeleteSlackSharedChannel(
 	if err != nil {
 		return nil, err
 	}
-	name := strings.TrimSpace(req.Msg.GetName())
+	name := strings.TrimSpace(req.GetName())
 	var gone reconcile.SharedChannel
 	err = store.Apply(ctx, name, func(current *reconcile.SharedChannel) (*reconcile.SharedChannel, error) {
-		if err := c.requireStoredShared(ctx, id, name, current); err != nil {
+		if err := c.requireStoredShared(ctx, caller, id, name, current); err != nil {
 			return nil, err
 		}
 		gone = *current
@@ -494,9 +496,18 @@ func (c *Console) DeleteSlackSharedChannel(
 	if err != nil {
 		return nil, sharedError(err)
 	}
-	c.record(ctx, audit.SlackSharedChannelDeleted(actorOf(ctx), auditShared(gone)))
+	c.record(ctx, audit.SlackSharedChannelDeleted(consoleauthz.ActorOf(caller), auditShared(gone)))
 	c.notifyShared(ctx, gone)
-	return connect.NewResponse(&directoryrosterv1.DeleteSlackSharedChannelResponse{Note: fmt.Sprintf(
+	return &directoryrosterv1.DeleteSlackSharedChannelResponse{Note: fmt.Sprintf(
 		"The record of %s is deleted. The channel itself stays in Slack, archived by nobody, and the reconciler no longer manages its members: "+
-			"people who were added stay until someone removes them in Slack.", name)}), nil
+			"people who were added stay until someone removes them in Slack.", name)}, nil
+}
+
+// notifyShared notifies every workspace a shared channel's record names: the
+// host, which invites, and each guest, which accepts.
+func (c *Service) notifyShared(ctx context.Context, ch reconcile.SharedChannel) {
+	c.notify(ctx, port.ControllerSlack, ch.Host)
+	for _, guest := range ch.With {
+		c.notify(ctx, port.ControllerSlack, guest)
+	}
 }

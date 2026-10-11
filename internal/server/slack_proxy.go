@@ -383,3 +383,133 @@ func (c *Console) InstallSlackApp(
 	c.pinFlow(out.Header(), state)
 	return out, nil
 }
+
+// ------------------------------------------- SlackChannelService, SlackSharedChannelService
+
+// ListSlackChannels is every record the caller may see, the channels the bots see that nothing manages, and the choices a form offers.
+func (c *Console) ListSlackChannels(
+	ctx context.Context, req *connect.Request[directoryrosterv1.ListSlackChannelsRequest],
+) (*connect.Response[directoryrosterv1.ListSlackChannelsResponse], error) {
+	id, err := slackIdentity(ctx)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := slackProxy[*directoryrosterv1.ListSlackChannelsRequest, *directoryrosterv1.ListSlackChannelsResponse](
+		ctx, c, id, slackconsole.MethodListChannels, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(resp), nil
+}
+
+// CreateSlackChannel puts a channel under management.
+func (c *Console) CreateSlackChannel(
+	ctx context.Context, req *connect.Request[directoryrosterv1.CreateSlackChannelRequest],
+) (*connect.Response[directoryrosterv1.CreateSlackChannelResponse], error) {
+	id, err := slackIdentity(ctx)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := slackProxy[*directoryrosterv1.CreateSlackChannelRequest, *directoryrosterv1.CreateSlackChannelResponse](
+		ctx, c, id, slackconsole.MethodCreateChannel, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(resp), nil
+}
+
+// UpdateSlackChannel changes a console channel's mode, ignore list and sources.
+func (c *Console) UpdateSlackChannel(
+	ctx context.Context, req *connect.Request[directoryrosterv1.UpdateSlackChannelRequest],
+) (*connect.Response[directoryrosterv1.UpdateSlackChannelResponse], error) {
+	id, err := slackIdentity(ctx)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := slackProxy[*directoryrosterv1.UpdateSlackChannelRequest, *directoryrosterv1.UpdateSlackChannelResponse](
+		ctx, c, id, slackconsole.MethodUpdateChannel, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(resp), nil
+}
+
+// DeleteSlackChannel forgets a console channel's record, and archives the channel when asked.
+func (c *Console) DeleteSlackChannel(
+	ctx context.Context, req *connect.Request[directoryrosterv1.DeleteSlackChannelRequest],
+) (*connect.Response[directoryrosterv1.DeleteSlackChannelResponse], error) {
+	id, err := slackIdentity(ctx)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := slackProxy[*directoryrosterv1.DeleteSlackChannelRequest, *directoryrosterv1.DeleteSlackChannelResponse](
+		ctx, c, id, slackconsole.MethodDeleteChannel, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(resp), nil
+}
+
+// ListSlackSharedChannels is every Slack Connect record the caller may see, with where the controller has each.
+func (c *Console) ListSlackSharedChannels(
+	ctx context.Context, req *connect.Request[directoryrosterv1.ListSlackSharedChannelsRequest],
+) (*connect.Response[directoryrosterv1.ListSlackSharedChannelsResponse], error) {
+	id, err := slackIdentity(ctx)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := slackProxy[*directoryrosterv1.ListSlackSharedChannelsRequest, *directoryrosterv1.ListSlackSharedChannelsResponse](
+		ctx, c, id, slackconsole.MethodListSharedChannels, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(resp), nil
+}
+
+// CreateSlackSharedChannel defines a Slack Connect channel.
+func (c *Console) CreateSlackSharedChannel(
+	ctx context.Context, req *connect.Request[directoryrosterv1.CreateSlackSharedChannelRequest],
+) (*connect.Response[directoryrosterv1.CreateSlackSharedChannelResponse], error) {
+	id, err := slackIdentity(ctx)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := slackProxy[*directoryrosterv1.CreateSlackSharedChannelRequest, *directoryrosterv1.CreateSlackSharedChannelResponse](
+		ctx, c, id, slackconsole.MethodCreateSharedChannel, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(resp), nil
+}
+
+// UpdateSlackSharedChannel changes a Slack Connect channel's guests, sources and visibility.
+func (c *Console) UpdateSlackSharedChannel(
+	ctx context.Context, req *connect.Request[directoryrosterv1.UpdateSlackSharedChannelRequest],
+) (*connect.Response[directoryrosterv1.UpdateSlackSharedChannelResponse], error) {
+	id, err := slackIdentity(ctx)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := slackProxy[*directoryrosterv1.UpdateSlackSharedChannelRequest, *directoryrosterv1.UpdateSlackSharedChannelResponse](
+		ctx, c, id, slackconsole.MethodUpdateSharedChannel, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(resp), nil
+}
+
+// DeleteSlackSharedChannel forgets a Slack Connect channel's record.
+func (c *Console) DeleteSlackSharedChannel(
+	ctx context.Context, req *connect.Request[directoryrosterv1.DeleteSlackSharedChannelRequest],
+) (*connect.Response[directoryrosterv1.DeleteSlackSharedChannelResponse], error) {
+	id, err := slackIdentity(ctx)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := slackProxy[*directoryrosterv1.DeleteSlackSharedChannelRequest, *directoryrosterv1.DeleteSlackSharedChannelResponse](
+		ctx, c, id, slackconsole.MethodDeleteSharedChannel, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(resp), nil
+}

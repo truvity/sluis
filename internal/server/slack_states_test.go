@@ -14,3 +14,13 @@ const (
 	slackAppInstalled     = "installed"
 	slackAppScopesMissing = "scopes_missing"
 )
+
+// The states a channel and a Slack Connect channel are shown in.
+const (
+	sharedNotReported = "not_reported"
+	sharedPending     = "pending"
+	sharedWaiting     = "waiting"
+	sharedActive      = "active"
+	sharedHeld        = "held"
+	sharedInvalid     = "invalid"
+)

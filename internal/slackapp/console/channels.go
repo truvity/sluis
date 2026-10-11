@@ -1,4 +1,4 @@
-package server
+package console
 
 import (
 	"context"
@@ -15,6 +15,8 @@ import (
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
 	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/audit"
+	"github.com/truvity/sluis/internal/consoleauthz"
+	"github.com/truvity/sluis/internal/consolecall"
 	"github.com/truvity/sluis/internal/port"
 	"github.com/truvity/sluis/internal/slackapp"
 	"github.com/truvity/sluis/internal/slackroster/connection"
@@ -23,18 +25,12 @@ import (
 	"github.com/truvity/sluis/policy"
 )
 
-// The words for a channel's visibility.
-const (
-	privacyPublic  = "public"
-	privacyPrivate = "private"
-)
-
-func (c *Console) slackChannelStore() (SlackChannelRecords, error) {
-	if c.deps.SlackChannels == nil {
+func (c *Service) slackChannelStore() (ChannelRecords, error) {
+	if c.d().SlackChannels == nil {
 		return nil, connect.NewError(connect.CodeFailedPrecondition,
 			errors.New("this deployment keeps no state in Kubernetes, so a channel's record would not survive a restart"))
 	}
-	return c.deps.SlackChannels, nil
+	return c.d().SlackChannels, nil
 }
 
 // channelError is a store's failure as the caller sees it.
@@ -129,17 +125,17 @@ func consoleState(ch reconcile.ConsoleChannel, p policy.Policy, reports map[stri
 
 // ListSlackChannels is every record the caller may see, the channels the
 // bots see that nothing manages, and the choices a form offers.
-func (c *Console) ListSlackChannels(
-	ctx context.Context, _ *connect.Request[directoryrosterv1.ListSlackChannelsRequest],
-) (*connect.Response[directoryrosterv1.ListSlackChannelsResponse], error) {
-	id, book, err := c.requireAnySlack(ctx, access.RoleViewer)
+func (c *Service) ListSlackChannels(
+	ctx context.Context, caller consolecall.Caller, _ *directoryrosterv1.ListSlackChannelsRequest,
+) (*directoryrosterv1.ListSlackChannelsResponse, error) {
+	id, book, err := c.requireAnySlack(ctx, caller, access.RoleViewer)
 	if err != nil {
 		return nil, err
 	}
-	set := c.deps.Authorizer.Policy()
+	set := c.d().Authorizer.Policy()
 	p := set.Declared()
 	reports := c.slackReports(ctx)
-	out := &directoryrosterv1.ListSlackChannelsResponse{Available: c.deps.SlackChannels != nil}
+	out := &directoryrosterv1.ListSlackChannelsResponse{Available: c.d().SlackChannels != nil}
 	var owners []string
 	for _, key := range set.SlackWorkspaceKeys() {
 		if !book.May(id, access.RoleViewer, key) {
@@ -155,11 +151,11 @@ func (c *Console) ListSlackChannels(
 		})
 	}
 	if len(owners) > 0 {
-		out.SourceDirectories, out.SourceDirectoriesError = c.slackSvc().SourceDirectories(ctx, owners...)
+		out.SourceDirectories, out.SourceDirectoriesError = c.sourceDirectories(ctx, owners...)
 	}
 	var records []connection.ChannelRecord
-	if c.deps.SlackChannels != nil {
-		if records, err = c.deps.SlackChannels.List(ctx); err != nil {
+	if c.d().SlackChannels != nil {
+		if records, err = c.d().SlackChannels.List(ctx); err != nil {
 			return nil, connect.NewError(connect.CodeUnavailable, err)
 		}
 	}
@@ -194,11 +190,11 @@ func (c *Console) ListSlackChannels(
 			}
 			out.Discovered = append(out.Discovered, &directoryrosterv1.SlackDiscoveredOrdinary{
 				Workspace: key, ChannelId: d.ID, Name: d.Name, Private: d.Private, Members: int32(d.Members), //nolint:gosec // a member count
-				CanManage: c.deps.SlackChannels != nil && book.MayAct(id, key),
+				CanManage: c.d().SlackChannels != nil && book.MayAct(id, key),
 			})
 		}
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
 // managedOrdinary reports whether a record already covers a discovered
@@ -219,11 +215,11 @@ func managedOrdinary(records []connection.ChannelRecord, workspace string, d sta
 // sharedClashesWithConsole refuses a Slack Connect record for a channel the
 // host workspace already manages as a console channel: one channel is
 // managed one way.
-func (c *Console) sharedClashesWithConsole(ctx context.Context, want reconcile.SharedChannel) error {
-	if c.deps.SlackChannels == nil {
+func (c *Service) sharedClashesWithConsole(ctx context.Context, want reconcile.SharedChannel) error {
+	if c.d().SlackChannels == nil {
 		return nil
 	}
-	records, err := c.deps.SlackChannels.List(ctx)
+	records, err := c.d().SlackChannels.List(ctx)
 	if err != nil {
 		return connect.NewError(connect.CodeUnavailable, err)
 	}
@@ -242,11 +238,11 @@ func (c *Console) sharedClashesWithConsole(ctx context.Context, want reconcile.S
 
 // consoleClashesWithShared is the other direction: an ordinary record for a
 // channel a Slack Connect record of the same workspace already manages.
-func (c *Console) consoleClashesWithShared(ctx context.Context, want reconcile.ConsoleChannel) error {
-	if c.deps.SlackShared == nil {
+func (c *Service) consoleClashesWithShared(ctx context.Context, want reconcile.ConsoleChannel) error {
+	if c.d().SlackShared == nil {
 		return nil
 	}
-	records, err := c.deps.SlackShared.List(ctx)
+	records, err := c.d().SlackShared.List(ctx)
 	if err != nil {
 		return connect.NewError(connect.CodeUnavailable, err)
 	}
@@ -265,30 +261,30 @@ func (c *Console) consoleClashesWithShared(ctx context.Context, want reconcile.C
 
 // validateConsole is every check a record must pass before it is written,
 // the same the controller makes at each pass.
-func (c *Console) validateConsole(ctx context.Context, want reconcile.ConsoleChannel, book slackBook) error {
-	if err := want.Validate(c.deps.Authorizer.Policy().Declared()); err != nil {
+func (c *Service) validateConsole(ctx context.Context, want reconcile.ConsoleChannel, book Book) error {
+	if err := want.Validate(c.d().Authorizer.Policy().Declared()); err != nil {
 		return connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	return c.slackSvc().CheckSources(ctx, want.Sources, want.Members, book.Owner(want.Workspace), true)
+	return c.checkSources(ctx, want.Sources, want.Members, book.Owner(want.Workspace), true)
 }
 
 // CreateSlackChannel puts a channel under management: operator of the
 // workspace's owner, or of the installation.
-func (c *Console) CreateSlackChannel(
-	ctx context.Context, req *connect.Request[directoryrosterv1.CreateSlackChannelRequest],
-) (*connect.Response[directoryrosterv1.CreateSlackChannelResponse], error) {
-	if _, err := requireAnywhere(ctx, access.RoleOperator); err != nil {
+func (c *Service) CreateSlackChannel(
+	ctx context.Context, caller consolecall.Caller, req *directoryrosterv1.CreateSlackChannelRequest,
+) (*directoryrosterv1.CreateSlackChannelResponse, error) {
+	if _, err := consoleauthz.RequireAnywhere(caller, access.RoleOperator); err != nil {
 		return nil, err
 	}
 	store, err := c.slackChannelStore()
 	if err != nil {
 		return nil, err
 	}
-	want := consoleOf(req.Msg.GetChannel())
-	if _, err = c.requireSlack(ctx, access.RoleOperator, want.Workspace); err != nil {
+	want := consoleOf(req.GetChannel())
+	if _, err = c.requireSlack(ctx, caller, access.RoleOperator, want.Workspace); err != nil {
 		return nil, err
 	}
-	book, err := c.slackBook(ctx)
+	book, err := c.book(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -312,7 +308,7 @@ func (c *Console) CreateSlackChannel(
 				want.ChannelID, visibilityWord(seen.Private), visibilityWord(want.Private)))
 		}
 	}
-	actor := identityName(ctx)
+	actor := caller.Actor
 	now := time.Now().UTC()
 	want.CreatedBy, want.CreatedAt, want.UpdatedBy, want.UpdatedAt = actor, now, actor, now
 	err = store.Apply(ctx, want.Workspace, want.Name, func(current *reconcile.ConsoleChannel, all []connection.ChannelRecord) (*reconcile.ConsoleChannel, error) {
@@ -331,12 +327,12 @@ func (c *Console) CreateSlackChannel(
 	if err != nil {
 		return nil, channelError(err)
 	}
-	c.record(ctx, audit.SlackConsoleChannelCreated(actorOf(ctx), auditConsole(want)))
+	c.record(ctx, audit.SlackConsoleChannelCreated(consoleauthz.ActorOf(caller), auditConsole(want)))
 	c.notify(ctx, port.ControllerSlack, want.Workspace)
 	view := consoleView(want)
-	view.State, view.Reason = consoleState(want, c.deps.Authorizer.Policy().Declared(), reports)
+	view.State, view.Reason = consoleState(want, c.d().Authorizer.Policy().Declared(), reports)
 	view.CanOperate = true
-	return connect.NewResponse(&directoryrosterv1.CreateSlackChannelResponse{Channel: view}), nil
+	return &directoryrosterv1.CreateSlackChannelResponse{Channel: view}, nil
 }
 
 func visibilityWord(private bool) string {
@@ -344,19 +340,6 @@ func visibilityWord(private bool) string {
 		return privacyPrivate
 	}
 	return privacyPublic
-}
-
-// identityName is who the caller is, for the page: the address, else the
-// subject.
-func identityName(ctx context.Context) string {
-	id, ok := IdentityFrom(ctx)
-	switch {
-	case !ok:
-		return ""
-	case id.Email != "":
-		return id.Email
-	}
-	return id.Subject
 }
 
 // discoveredOrdinaryIn is the workspace's own sighting of a channel id.
@@ -379,21 +362,21 @@ func errConsoleImmutable(what, was, got string) error {
 
 // UpdateSlackChannel changes mode, ignore and sources. The caller's role is
 // asked about the STORED workspace, which a request cannot change.
-func (c *Console) UpdateSlackChannel(
-	ctx context.Context, req *connect.Request[directoryrosterv1.UpdateSlackChannelRequest],
-) (*connect.Response[directoryrosterv1.UpdateSlackChannelResponse], error) {
-	if _, err := requireAnywhere(ctx, access.RoleOperator); err != nil {
+func (c *Service) UpdateSlackChannel(
+	ctx context.Context, caller consolecall.Caller, req *directoryrosterv1.UpdateSlackChannelRequest,
+) (*directoryrosterv1.UpdateSlackChannelResponse, error) {
+	if _, err := consoleauthz.RequireAnywhere(caller, access.RoleOperator); err != nil {
 		return nil, err
 	}
 	store, err := c.slackChannelStore()
 	if err != nil {
 		return nil, err
 	}
-	want := consoleOf(req.Msg.GetChannel())
-	if _, err = c.requireSlack(ctx, access.RoleOperator, want.Workspace); err != nil {
+	want := consoleOf(req.GetChannel())
+	if _, err = c.requireSlack(ctx, caller, access.RoleOperator, want.Workspace); err != nil {
 		return nil, err
 	}
-	book, err := c.slackBook(ctx)
+	book, err := c.book(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -418,7 +401,7 @@ func (c *Console) UpdateSlackChannel(
 			written = *current
 			return current, nil
 		}
-		want.UpdatedBy, want.UpdatedAt = identityName(ctx), time.Now().UTC()
+		want.UpdatedBy, want.UpdatedAt = caller.Actor, time.Now().UTC()
 		written = want
 		return &want, nil
 	})
@@ -426,13 +409,13 @@ func (c *Console) UpdateSlackChannel(
 		return nil, channelError(err)
 	}
 	if changes != "" {
-		c.record(ctx, audit.SlackConsoleChannelUpdated(actorOf(ctx), auditConsole(written), changes))
+		c.record(ctx, audit.SlackConsoleChannelUpdated(consoleauthz.ActorOf(caller), auditConsole(written), changes))
 		c.notify(ctx, port.ControllerSlack, written.Workspace)
 	}
 	view := consoleView(written)
-	view.State, view.Reason = consoleState(written, c.deps.Authorizer.Policy().Declared(), c.slackReports(ctx))
+	view.State, view.Reason = consoleState(written, c.d().Authorizer.Policy().Declared(), c.slackReports(ctx))
 	view.CanOperate = true
-	return connect.NewResponse(&directoryrosterv1.UpdateSlackChannelResponse{Channel: view}), nil
+	return &directoryrosterv1.UpdateSlackChannelResponse{Channel: view}, nil
 }
 
 // consoleChanges says what an edit changed, as 'field: before -> after'
@@ -464,22 +447,22 @@ func modeWord(mode string) string {
 
 // DeleteSlackChannel forgets the record. The channel stays in Slack, unless
 // the request asks for it to be archived too.
-func (c *Console) DeleteSlackChannel(
-	ctx context.Context, req *connect.Request[directoryrosterv1.DeleteSlackChannelRequest],
-) (*connect.Response[directoryrosterv1.DeleteSlackChannelResponse], error) {
-	if _, err := requireAnywhere(ctx, access.RoleOperator); err != nil {
+func (c *Service) DeleteSlackChannel(
+	ctx context.Context, caller consolecall.Caller, req *directoryrosterv1.DeleteSlackChannelRequest,
+) (*directoryrosterv1.DeleteSlackChannelResponse, error) {
+	if _, err := consoleauthz.RequireAnywhere(caller, access.RoleOperator); err != nil {
 		return nil, err
 	}
 	store, err := c.slackChannelStore()
 	if err != nil {
 		return nil, err
 	}
-	workspace, name := strings.TrimSpace(req.Msg.GetWorkspace()), strings.TrimSpace(req.Msg.GetName())
-	if _, err = c.requireSlack(ctx, access.RoleOperator, workspace); err != nil {
+	workspace, name := strings.TrimSpace(req.GetWorkspace()), strings.TrimSpace(req.GetName())
+	if _, err = c.requireSlack(ctx, caller, access.RoleOperator, workspace); err != nil {
 		return nil, err
 	}
 	var target archiveTarget
-	if req.Msg.GetArchive() {
+	if req.GetArchive() {
 		// Every check comes before anything is changed: a refusal leaves the
 		// record where it was.
 		if target, err = c.checkArchive(ctx, store, workspace, name); err != nil {
@@ -497,15 +480,15 @@ func (c *Console) DeleteSlackChannel(
 	if err != nil {
 		return nil, channelError(err)
 	}
-	c.record(ctx, audit.SlackConsoleChannelDeleted(actorOf(ctx), auditConsole(gone)))
+	c.record(ctx, audit.SlackConsoleChannelDeleted(consoleauthz.ActorOf(caller), auditConsole(gone)))
 	c.notify(ctx, port.ControllerSlack, gone.Workspace)
-	if req.Msg.GetArchive() {
-		archived, note := c.archiveForgotten(ctx, gone, target)
-		return connect.NewResponse(&directoryrosterv1.DeleteSlackChannelResponse{Note: note, Archived: archived}), nil
+	if req.GetArchive() {
+		archived, note := c.archiveForgotten(ctx, caller, gone, target)
+		return &directoryrosterv1.DeleteSlackChannelResponse{Note: note, Archived: archived}, nil
 	}
-	return connect.NewResponse(&directoryrosterv1.DeleteSlackChannelResponse{Note: fmt.Sprintf(
+	return &directoryrosterv1.DeleteSlackChannelResponse{Note: fmt.Sprintf(
 		"The record of %s in %s is deleted. The channel itself stays in Slack, and the reconciler no longer manages its members: "+
-			"people who were added stay until someone removes them in Slack.", gone.Name, gone.Workspace)}), nil
+			"people who were added stay until someone removes them in Slack.", gone.Name, gone.Workspace)}, nil
 }
 
 // archiveTarget is what checkArchive resolved: the channel's Slack id and the
@@ -536,7 +519,7 @@ func slackShared(ch slackapp.Channel, own string) bool {
 // asked, not the report), and the bot can see it. Only an ordinary channel is
 // archived from here: archiving a Slack Connect channel closes it for every
 // organisation in it.
-func (c *Console) checkArchive(ctx context.Context, store SlackChannelRecords, workspace, name string) (archiveTarget, error) {
+func (c *Service) checkArchive(ctx context.Context, store ChannelRecords, workspace, name string) (archiveTarget, error) {
 	report, ok := c.slackReport(ctx, workspace)
 	if !ok || !report.Enabled {
 		return archiveTarget{}, byHand("the workspace is a dry run (or has no report yet): archive %s in Slack by hand", name)
@@ -579,7 +562,7 @@ func (c *Console) checkArchive(ctx context.Context, store SlackChannelRecords, w
 	}
 	callCtx, cancel := context.WithTimeout(ctx, slackTimeout)
 	defer cancel()
-	info, err := slackapp.New(credential.BotToken, c.deps.SlackAPI...).ChannelInfo(callCtx, id)
+	info, err := slackapp.New(credential.BotToken, c.d().SlackAPI...).ChannelInfo(callCtx, id)
 	switch {
 	case errors.Is(err, slackapp.ErrChannelNotFound), errors.Is(err, slackapp.ErrNotInChannel):
 		return archiveTarget{}, byHand("the bot cannot see %s (a private channel it is not in): archive it in Slack by hand", name)
@@ -596,7 +579,7 @@ func (c *Console) checkArchive(ctx context.Context, store SlackChannelRecords, w
 // forgotten, and says plainly what happened. checkArchive has already asked
 // Slack that the channel is ordinary and visible; when the archive itself
 // still fails the record is gone and the note says to archive it by hand.
-func (c *Console) archiveForgotten(ctx context.Context, gone reconcile.ConsoleChannel, to archiveTarget) (archived bool, note string) {
+func (c *Service) archiveForgotten(ctx context.Context, caller consolecall.Caller, gone reconcile.ConsoleChannel, to archiveTarget) (archived bool, note string) {
 	kept := fmt.Sprintf("The record of %s in %s is deleted and the reconciler no longer manages its members.", gone.Name, gone.Workspace)
 	by := func(why string) string {
 		return kept + " It was not archived: " + why + ". Archive it in Slack by hand."
@@ -604,13 +587,13 @@ func (c *Console) archiveForgotten(ctx context.Context, gone reconcile.ConsoleCh
 	id := to.id
 	callCtx, cancel := context.WithTimeout(ctx, slackTimeout)
 	defer cancel()
-	err := slackapp.New(to.token, c.deps.SlackAPI...).Archive(callCtx, id)
+	err := slackapp.New(to.token, c.d().SlackAPI...).Archive(callCtx, id)
 	target := audit.SlackChannel{Workspace: gone.Workspace, Name: gone.Name, ID: id, Private: gone.Private}
 	if err != nil {
-		c.record(ctx, audit.SlackChannelArchived(actorOf(ctx), target, audit.Failed(slackErrorWord(err))))
+		c.record(ctx, audit.SlackChannelArchived(consoleauthz.ActorOf(caller), target, audit.Failed(slackErrorWord(err))))
 		return false, by(slackErrorWord(err))
 	}
-	c.record(ctx, audit.SlackChannelArchived(actorOf(ctx), target, audit.Succeeded()))
+	c.record(ctx, audit.SlackChannelArchived(consoleauthz.ActorOf(caller), target, audit.Succeeded()))
 	return true, fmt.Sprintf("The record of %s in %s is deleted and the channel is archived in Slack.", gone.Name, gone.Workspace)
 }
 
