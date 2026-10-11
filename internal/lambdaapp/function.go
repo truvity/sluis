@@ -73,17 +73,7 @@ const (
 	ModuleGitHub     = "github"
 	ModuleSlack      = "slack"
 	ModuleGoogle     = "google"
-	// ModuleGitHubMint is the GitHub module's mint-only function: the zip
-	// cmd/sluis-github-mint. It reads the GitHub module's document (a zip is
-	// told from the controller's by its build, not by the document) and serves
-	// `mint_installation` and nothing else.
-	ModuleGitHubMint = "github-mint"
 )
-
-// zipDocuments maps a zip's module to the module whose document it reads, for
-// the zips that share a document with another: the mint-only function is built
-// from the same GitHub document as the controller function.
-var zipDocuments = map[string]string{ModuleGitHubMint: ModuleGitHub}
 
 // documentModules maps the apiVersion of a module's own document to the module.
 // The issuer and the Cloudflare module share `sluis/v3`, and the document's
@@ -174,11 +164,7 @@ func OpenModule(ctx context.Context, getenv func(string) string, module string) 
 	if err != nil {
 		return nil, err
 	}
-	want := module
-	if doc, shared := zipDocuments[module]; shared {
-		want = doc
-	}
-	if module != "" && got != want {
+	if module != "" && got != module {
 		return nil, fmt.Errorf("this is the sluis-%s function and %s is a %s document: a zip runs the module it was built for and no other", module, file, got)
 	}
 	key := got

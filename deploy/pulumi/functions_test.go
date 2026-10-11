@@ -12,11 +12,11 @@ import (
 	arp "github.com/truvity/sluis/deploy/pulumi"
 )
 
-var moduleRoles = []string{"cloudflare", "github", "github-mint", "google", "slack"}
+var moduleRoles = []string{"cloudflare", "github", "google", "slack"}
 
 func v5Estate(more ...func(*arp.LambdaArgs)) estate { return withLayout(arp.LayoutV5, more...) }
 
-// NewLambda always makes the five module functions beside the issuer's: there is
+// NewLambda always makes the four module functions beside the issuer's: there is
 // no switch that leaves a module in the issuer.
 func TestNewLambdaMakesAFunctionAndARolePerModule(t *testing.T) {
 	rec, _ := mustLambda(t, v5Estate())
@@ -37,10 +37,10 @@ func TestNewLambdaMakesAFunctionAndARolePerModule(t *testing.T) {
 		for _, al := range []string{"live", "live-issuer"} {
 			rec.one(t, "aws:lambda/alias:Alias", "staging-"+m+"-alias-"+al)
 		}
-		// A run that failed is the next pass's, except the mint, which a caller waits for.
-		retries := rec.has("aws:lambda/functionEventInvokeConfig:FunctionEventInvokeConfig", "staging-"+m+"-async-live")
-		if retries == (m == "github-mint") {
-			t.Errorf("%s: no-retry config = %v", m, retries)
+		// A run that failed is the next pass's: no platform retry of an event. A
+		// synchronous call (the github mint) is not an event and is unaffected.
+		if !rec.has("aws:lambda/functionEventInvokeConfig:FunctionEventInvokeConfig", "staging-"+m+"-async-live") {
+			t.Errorf("%s: no no-retry config", m)
 		}
 	}
 	// The issuer's function is named for its module like the others (V13).
@@ -55,14 +55,9 @@ func TestTheModuleFunctionsRunTheirOwnZips(t *testing.T) {
 	rec, _ := mustLambda(t, e)
 	for _, m := range moduleRoles {
 		got := packagePath(t, rec.one(t, fnType, "staging-"+m+"-fn"))
-		// The mint-only function runs the github zip.
-		want := m
-		if m == "github-mint" {
-			want = "github"
-		}
-		sib := filepath.Join(filepath.Dir(e.pkg), "sluis-"+want+"_1.63.0_linux_arm64.zip")
+		sib := filepath.Join(filepath.Dir(e.pkg), "sluis-"+m+"_1.63.0_linux_arm64.zip")
 		if !strings.Contains(got, sha(t, sib)) {
-			t.Errorf("%s runs %s, not the %s zip", m, got, want)
+			t.Errorf("%s runs %s, not the %s zip", m, got, m)
 		}
 	}
 }
@@ -71,8 +66,7 @@ func TestModulesConfigureMemoryConcurrencyAndName(t *testing.T) {
 	one := 3
 	rec, _ := mustLambda(t, v5Estate(func(a *arp.LambdaArgs) {
 		a.Modules = map[string]arp.ModuleArgs{
-			"slack":       {MemoryMB: 1024, TimeoutSeconds: 60, ReservedConcurrency: &one, FunctionName: "acme-slack"},
-			"github-mint": {},
+			"slack": {MemoryMB: 1024, TimeoutSeconds: 60, ReservedConcurrency: &one, FunctionName: "acme-slack"},
 		}
 	}))
 	f := rec.one(t, fnType, "staging-slack-fn")
@@ -86,10 +80,6 @@ func TestModulesConfigureMemoryConcurrencyAndName(t *testing.T) {
 	g := rec.one(t, fnType, "staging-github-fn")
 	if prop(g, "memorySize").NumberValue() != 512 || prop(g, "timeout").NumberValue() != 300 || prop(g, "reservedConcurrentExecutions").HasValue() {
 		t.Errorf("github defaults: %v", g.Inputs)
-	}
-	m := rec.one(t, fnType, "staging-github-mint-fn")
-	if prop(m, "memorySize").NumberValue() != arp.DefaultMintMemoryMB || prop(m, "timeout").NumberValue() != arp.DefaultMintTimeoutSeconds {
-		t.Errorf("mint defaults: %v", m.Inputs)
 	}
 	// The issuer's role invokes the overridden name.
 	issuer := resourcesOf(statements(t, prop(rec.one(t, policyType, "staging-issuer-policy"), "policy").StringValue()))
@@ -181,7 +171,7 @@ func TestTheIssuerCanInvokeOnlyTheAliasesItNeeds(t *testing.T) {
 	want := []string{
 		fnArn("sluis-staging-issuer") + ":live",
 		fnArn("sluis-staging-cloudflare") + ":live-issuer", fnArn("sluis-staging-github") + ":live-issuer",
-		fnArn("sluis-staging-github-mint") + ":live-issuer", fnArn("sluis-staging-google") + ":live-issuer",
+		fnArn("sluis-staging-google") + ":live-issuer",
 		fnArn("sluis-staging-slack") + ":live-issuer", fnArn("sluis-staging-backup") + ":live-console",
 	}
 	slices.Sort(invokes)
@@ -209,6 +199,27 @@ func TestTheAuditQueueNamesTheModuleRolesToo(t *testing.T) {
 		}
 		if !sends {
 			t.Errorf("%s cannot send to the audit queue", m)
+		}
+	}
+}
+
+// The github function serves the mint too (D-v176-7 a): no `github-mint`
+// function, role, policy, alias, log group or check exists, and the issuer's
+// invoke grant on the github function is the `live-issuer` alias.
+func TestThereIsNoGitHubMintResource(t *testing.T) {
+	rec, _ := mustLambda(t, v5Estate())
+	for _, n := range rec.names() {
+		if strings.Contains(n, "github-mint") {
+			t.Errorf("a github-mint resource is declared: %s", n)
+		}
+	}
+	issuer := resourcesOf(statements(t, prop(rec.one(t, policyType, "staging-http-policy"), "policy").StringValue()))
+	if !slices.Contains(issuer, fnArn("sluis-staging-github")+":live-issuer") {
+		t.Errorf("the issuer cannot mint through the github function's live-issuer alias: %v", issuer)
+	}
+	for _, r := range issuer {
+		if strings.Contains(r, "github-mint") {
+			t.Errorf("the issuer's policy names a github-mint resource: %s", r)
 		}
 	}
 }

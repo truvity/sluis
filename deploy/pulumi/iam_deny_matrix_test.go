@@ -33,7 +33,7 @@ const (
 // mxRows is the fewest rows the matrix may have. It is pinned so that a sweep
 // that silently shrinks (a role dropped, Modules() emptied, a group skipped)
 // fails instead of passing. Raise it when roles or groups are added; never lower it.
-const mxRows = 2678
+const mxRows = 2281
 
 // roleSpec is what a role is for in v1.76.
 type roleSpec struct {
@@ -65,7 +65,7 @@ func mxParam(prefix string, m string, leaf string) string {
 	return arnPrefix + "ssm:" + mxRegion + ":" + mxAccount + ":parameter/sluis/" + mxInst + "/" + prefix + "/" + m + "/" + leaf
 }
 
-var mxFunctions = []string{"issuer", "cloudflare", "backup", "restore", "github", "github-mint", "slack", "google"}
+var mxFunctions = []string{"issuer", "cloudflare", "backup", "restore", "github", "slack", "google"}
 
 func mxSpecs() []roleSpec {
 	return []roleSpec{
@@ -73,7 +73,7 @@ func mxSpecs() []roleSpec {
 			readTables: []Module{ModuleGoogle, ModuleGitHub, ModuleSlack}, readBlobs: []Module{ModuleGoogle},
 			invokes: []string{
 				mxFn("issuer") + ":live",
-				mxFn("github") + ":live-issuer", mxFn("github-mint") + ":live-issuer", mxFn("slack") + ":live-issuer",
+				mxFn("github") + ":live-issuer", mxFn("slack") + ":live-issuer",
 				mxFn("google") + ":live-issuer", mxFn("cloudflare") + ":live-issuer", mxFn("backup") + ":live-console",
 			}},
 		{name: "backup", hosts: []Module{ModuleBackup}, readAll: true},
@@ -82,9 +82,6 @@ func mxSpecs() []roleSpec {
 		{name: "github", hosts: []Module{ModuleGitHub}},
 		{name: "slack", hosts: []Module{ModuleSlack}},
 		{name: "google", hosts: []Module{ModuleGoogle}},
-		// The mint-only function reads the github module and nothing else; the shared
-		// key's policy admits it to the github parameters alone (KeyRole.ReadModules).
-		{name: "github-mint", readModule: []Module{ModuleGitHub}},
 	}
 }
 
@@ -466,7 +463,7 @@ func TestCrossInvokeGrantsTheQualifiedAlias(t *testing.T) {
 		}
 		return d.Allowed
 	}
-	for _, f := range []string{"github", "github-mint", "slack", "google", "cloudflare"} {
+	for _, f := range []string{"github", "slack", "google", "cloudflare"} {
 		fn := mxFn(f)
 		if !call(fn + ":live-issuer") {
 			t.Errorf("CrossInvoke does not grant %s:live-issuer, the ARN a modcall invokes", fn)

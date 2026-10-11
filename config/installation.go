@@ -151,9 +151,9 @@ type AWS struct {
 	// Unset is `sluis-<instance>-issuer`. Prefer Functions["issuer"]; this one is kept for
 	// estates that already set it.
 	FunctionName string `json:"functionName,omitempty"`
-	// Functions name the functions by module (issuer, github, github-mint,
-	// slack, google, cloudflare, backup) when [RenderModules] is the renderer.
-	// Unset is `sluis-<instance>-<module>`. The issuer's call to each names it
+	// Functions name the functions by module (issuer, github, slack, google,
+	// cloudflare, backup) when [RenderModules] is the renderer. Unset is
+	// `sluis-<instance>-<module>`. The issuer's call to each names it
 	// (`<module>.remote`).
 	Functions map[string]string `json:"functions,omitempty"`
 	// Table is the DynamoDB table of the `dynamodb` state adapter.

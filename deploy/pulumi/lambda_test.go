@@ -173,9 +173,6 @@ func (e estate) args(t *testing.T) *arp.LambdaArgs {
 		for _, m := range arp.ModuleFunctions() {
 			ma := a.Modules[m]
 			zipName := m
-			if m == "github-mint" {
-				zipName = "github"
-			}
 			if sib := filepath.Join(filepath.Dir(e.pkg), "sluis-"+zipName+"_1.63.0_linux_arm64.zip"); ma.PackageSHA256 == "" && ma.Package == "" {
 				if _, err := os.Stat(sib); err == nil {
 					ma.PackageSHA256 = sha(t, sib)

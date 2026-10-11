@@ -6,7 +6,6 @@
 image ghcr.io/truvity/sluis/sluis
 image ghcr.io/truvity/sluis/sluis-issuer
 image ghcr.io/truvity/sluis/sluis-github
-image ghcr.io/truvity/sluis/sluis-github-mint
 image ghcr.io/truvity/sluis/sluis-slack
 image ghcr.io/truvity/sluis/sluis-google
 image ghcr.io/truvity/sluis/sluis-cloudflare

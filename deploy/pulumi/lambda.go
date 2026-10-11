@@ -282,7 +282,7 @@ type LambdaArgs struct {
 	// Function tunes the function.
 	Function FunctionArgs
 	// Modules configures the function of each module besides the issuer, keyed
-	// by [ModuleFunctions]: cloudflare, github, github-mint, google and slack.
+	// by [ModuleFunctions]: cloudflare, github, google and slack.
 	// Every one of them exists whatever is set here (there is no switch that
 	// leaves a module in the issuer): the settings are memory, timeout,
 	// reserved concurrency, the name, the zip and the document, all optional.
@@ -671,7 +671,7 @@ type Lambda struct {
 	RoleArn, RoleName         pulumi.StringOutput
 	// Functions, RoleArns and AliasArns are the functions, their roles and their
 	// aliases by role: `issuer` and every [ModuleFunctions] (cloudflare, github,
-	// github-mint, google, slack). Functions holds the unqualified function ARNs
+	// google, slack). Functions holds the unqualified function ARNs
 	// and AliasArns, per role, the ARN of each alias by alias name (`live`,
 	// `live-issuer`): a call goes through an alias. The maps hold the issuer
 	// alone on a layout without the per-module tables.
