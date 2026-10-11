@@ -282,9 +282,10 @@ func TestModuleRoleMinterCrossGrant(t *testing.T) {
 // A listing is authorised against the bare path ARN, so a role lists exactly
 // its own modules' two paths: not `/*`, not a sibling, not the root.
 func TestModuleRoleListsOnlyItsOwnBarePaths(t *testing.T) {
-	base := arnPrefix + "ssm:r1:000000000000:parameter/sluis/i1/"
+	env := testModuleEnv()
+	base := arnPrefix + "ssm:" + env.Region + ":" + env.Account + ":parameter/sluis/i1/"
 	for _, role := range testRoles() {
-		st, err := ModuleRoleStatements(testModuleEnv(), role)
+		st, err := ModuleRoleStatements(env, role)
 		if err != nil {
 			t.Fatal(err)
 		}
