@@ -120,7 +120,7 @@ func TestOneLegacyRunnerTicksATarget(t *testing.T) {
 func TestATickRewritesOnlyItsOwnReportEntry(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	reports := rails.NewBlobReports(f.ports.Blob, "reports/slack/")
+	reports := rails.NewBlobReports(f.ports.Blob, "slack/reports/")
 	if err := reports.Replace(ctx, map[string]string{"acme.json": `{"a":1}`, "globex.json": `{"g":1}`}); err != nil {
 		t.Fatal(err)
 	}
@@ -129,7 +129,7 @@ func TestATickRewritesOnlyItsOwnReportEntry(t *testing.T) {
 		updates.Add(1)
 		return false, nil, nil
 	})
-	before, _ := f.ports.Blob.Read(ctx, "reports/slack/globex.json")
+	before, _ := f.ports.Blob.Read(ctx, "slack/reports/globex.json")
 
 	if err := reports.Put(ctx, "acme.json", `{"a":2}`); err != nil {
 		t.Fatal(err)
@@ -137,7 +137,7 @@ func TestATickRewritesOnlyItsOwnReportEntry(t *testing.T) {
 	if got := updates.Load(); got != 1 {
 		t.Errorf("one tick's report took %d ConfigMap updates, want 1", got)
 	}
-	after, _ := f.ports.Blob.Read(ctx, "reports/slack/globex.json")
+	after, _ := f.ports.Blob.Read(ctx, "slack/reports/globex.json")
 	if string(after.Body) != string(before.Body) || after.Version != before.Version {
 		t.Errorf("globex's entry changed under acme's tick: %q -> %q", before.Body, after.Body)
 	}

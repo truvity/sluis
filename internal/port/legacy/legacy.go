@@ -20,9 +20,9 @@
 //	State, ConfigMap families
 //	  gh.org.<org>    entry <org>.json of the <release>-github-orgs ConfigMap
 //	Blob
-//	  google/<ws>             {<ws>}:snapshot in Valkey (the same gzip bytes)
-//	  reports/github/<key>    entry <key> of the <release>-github-status ConfigMap
-//	  reports/slack/<key>     entry <key> of the <release>-slack-status ConfigMap
+//	  google/cache/<ws>       {<ws>}:snapshot in Valkey (the same gzip bytes)
+//	  github/reports/<key>    entry <key> of the <release>-github-status ConfigMap
+//	  slack/reports/<key>     entry <key> of the <release>-slack-status ConfigMap
 //
 // Every other key of the layout (ses., sid., ws., gh.link., app., gate.,
 // share., cache., dedupe., notify.) has no object of its own today and is
@@ -47,7 +47,7 @@
 //     permanent writes the layout allows, and a lifetime there is
 //     [port.ErrUnsupported].
 //   - Report and App-key entries are text: a ConfigMap cannot hold arbitrary
-//     bytes, so a Blob write of invalid UTF-8 to reports/ is
+//     bytes, so a Blob write of invalid UTF-8 to a reports/ prefix is
 //     [port.ErrUnsupported].
 //   - gh.org.<org> is the record only. The organisation's credential is a
 //     separate Secret the domain store writes, so the layout's "record with its

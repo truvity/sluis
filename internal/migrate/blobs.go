@@ -4,15 +4,18 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
+	"github.com/truvity/sluis/blobprefix"
 	"github.com/truvity/sluis/internal/port"
 	"github.com/truvity/sluis/internal/store"
 )
 
-// reportPrefixes are the blobs a copy keeps: what each controller last reported.
-// The hub's snapshots are a cache it rewrites on its first refresh, and are not
-// copied.
-var reportPrefixes = []string{"reports/github/", "reports/slack/"}
+// reportPrefixes are the blobs a copy keeps: what each controller last reported,
+// under the module's prefix (blobprefix). A store that still has them at the
+// root of the bucket, where layout v4 kept them, is read from there too, and
+// they are written to the module's prefix.
+var reportPrefixes = []string{blobprefix.GitHubReports, blobprefix.SlackReports}
 
 func blobSteps() []step {
 	return []step{{
@@ -22,20 +25,46 @@ func blobSteps() []step {
 				return nil, fmt.Errorf("%w: there is no Blob port", port.ErrUnsupported)
 			}
 			var out []entry
+			seen := map[string]bool{}
+			read := func(name, id string) error {
+				if seen[id] {
+					return nil
+				}
+				obj, err := k.ports.Blob.Read(ctx, name)
+				if errors.Is(err, port.ErrNotFound) {
+					return nil // gone between the listing and the read
+				}
+				if err != nil {
+					return err
+				}
+				seen[id] = true
+				out = append(out, entry{id: id, canon: obj.Body})
+				return nil
+			}
 			for _, prefix := range reportPrefixes {
 				names, err := k.ports.Blob.List(ctx, prefix)
 				if err != nil {
 					return nil, err
 				}
 				for _, name := range names {
-					obj, err := k.ports.Blob.Read(ctx, name)
-					if errors.Is(err, port.ErrNotFound) {
-						continue // gone between the listing and the read
-					}
-					if err != nil {
+					if err := read(name, name); err != nil {
 						return nil, err
 					}
-					out = append(out, entry{id: name, canon: obj.Body})
+				}
+				// The layout v4 location. A store that has no such family
+				// (the ConfigMaps keep theirs under the new names) says so.
+				old := blobprefix.Legacy(prefix)
+				names, err = k.ports.Blob.List(ctx, old)
+				if errors.Is(err, port.ErrUnsupported) {
+					continue
+				}
+				if err != nil {
+					return nil, err
+				}
+				for _, name := range names {
+					if err := read(name, prefix+strings.TrimPrefix(name, old)); err != nil {
+						return nil, err
+					}
 				}
 			}
 			return out, nil

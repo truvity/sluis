@@ -22,6 +22,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/truvity/sluis/blobprefix"
 	"github.com/truvity/sluis/gen/directoryroster/v1/directoryrosterv1connect"
 	"github.com/truvity/sluis/internal/audit"
 	"github.com/truvity/sluis/internal/config"
@@ -342,7 +343,7 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 			Log:     log,
 			Access:  directoryrosterv1connect.NewAccessServiceClient(web, cfg.console, console...),
 			Audit:   trail,
-			Status:  rails.NewBlobReports(stores.Ports.Blob, "reports/slack/"),
+			Status:  rails.NewBlobReports(stores.Ports.Blob, blobprefix.SlackReports),
 			Leases:  &rails.Leases{State: leaseState, Holder: rails.NewHolder(), Log: log, Maintenance: stores.Maintenance()},
 			Trigger: stores.Ports.Trigger,
 			Policy:  declared,

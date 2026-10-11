@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"github.com/truvity/sluis/blobprefix"
 )
 
 // Module is one of the parts of a sluis installation that keeps its own
@@ -70,7 +72,7 @@ func (s ModuleSet) ExternalPrefix(m Module) string {
 }
 
 // BlobPrefix is the module's key prefix in the blob bucket, with the trailing slash.
-func BlobPrefix(m Module) string { return string(m) + "/" }
+func BlobPrefix(m Module) string { return blobprefix.Root(string(m)) }
 
 func (s ModuleSet) validate() error {
 	if s.Instance == "" {

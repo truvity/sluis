@@ -7,6 +7,7 @@ import (
 	"errors"
 	"log/slog"
 
+	"github.com/truvity/sluis/blobprefix"
 	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/kube"
 	"github.com/truvity/sluis/internal/rails"
@@ -146,8 +147,8 @@ func openKubeStores(ctx context.Context, cfg Config, st *store.Stores, log *slog
 	return stores{
 		// The controllers' reports are read through the blob port, which is
 		// the same two ConfigMaps in this adapter.
-		githubReports: rails.NewBlobReports(st.Ports.Blob, "reports/github/"),
-		slackReports:  rails.NewBlobReports(st.Ports.Blob, "reports/slack/"),
+		githubReports: rails.NewBlobReports(st.Ports.Blob, blobprefix.GitHubReports),
+		slackReports:  rails.NewBlobReports(st.Ports.Blob, blobprefix.SlackReports),
 		githubOrgs:    githubOrgs,
 		githubLinks:   githubLinks,
 		// runner Apps are created only for declared tiers, but the store

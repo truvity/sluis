@@ -475,7 +475,7 @@ func TestReportsAreCopiedOnlyWhenTheBlobsAreInDifferentPlaces(t *testing.T) {
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			a, b := memory.New(), memory.New()
-			if _, err := a.Blobs().Write(ctx, "reports/github/acme.json", []byte(`{"pass":1}`)); err != nil {
+			if _, err := a.Blobs().Write(ctx, "github/reports/acme.json", []byte(`{"pass":1}`)); err != nil {
 				t.Fatal(err)
 			}
 			from, to := portSide(a.Set(), store.AdapterMemory), portSide(b.Set(), store.AdapterMemory)
@@ -484,7 +484,7 @@ func TestReportsAreCopiedOnlyWhenTheBlobsAreInDifferentPlaces(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Run = %v\n%s", err, report.JSON())
 			}
-			_, rerr := b.Blobs().Read(ctx, "reports/github/acme.json")
+			_, rerr := b.Blobs().Read(ctx, "github/reports/acme.json")
 			if (rerr == nil) != c.copied {
 				t.Errorf("the report was copied = %v, want %v", rerr == nil, c.copied)
 			}

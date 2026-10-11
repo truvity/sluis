@@ -231,9 +231,9 @@ func newInstall(t *testing.T) *install {
 			in.count(m, backup.Blobs, max(1, (len(body)+export.BlobPart-1)/export.BlobPart))
 		}
 	}
-	blob(port.ModuleGitHub, "reports/github/acme", []byte(`{"status":"ok"}`))
-	blob(port.ModuleGitHub, "reports/github/empty", nil)
-	blob(port.ModuleSlack, "reports/slack/acme", []byte(`{"status":"ok"}`))
+	blob(port.ModuleGitHub, "github/reports/acme", []byte(`{"status":"ok"}`))
+	blob(port.ModuleGitHub, "github/reports/empty", nil)
+	blob(port.ModuleSlack, "slack/reports/acme", []byte(`{"status":"ok"}`))
 	blob("", "google/C01ipl6j0", []byte("snapshot"))
 	return in
 }
@@ -397,7 +397,7 @@ func TestLargeBlobIsSplitAndReassembled(t *testing.T) {
 	for i := range body {
 		body[i] = byte(i*31 + i>>7)
 	}
-	if _, err := in.blob.Write(ctx, "reports/slack/big", body); err != nil {
+	if _, err := in.blob.Write(ctx, "slack/reports/big", body); err != nil {
 		t.Fatal(err)
 	}
 	in.count(port.ModuleSlack, backup.Blobs, 3)
@@ -430,7 +430,7 @@ func TestLargeBlobIsSplitAndReassembled(t *testing.T) {
 	if a.Pending() || parts != in.want["slack/blobs"] || parts != 4 {
 		t.Errorf("parts %d (want 4), pending %v", parts, a.Pending())
 	}
-	if !bytes.Equal(got["reports/slack/big"], body) || string(got["reports/slack/acme"]) != `{"status":"ok"}` {
+	if !bytes.Equal(got["slack/reports/big"], body) || string(got["slack/reports/acme"]) != `{"status":"ok"}` {
 		t.Error("the blob did not come back whole")
 	}
 }

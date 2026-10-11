@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/truvity/sluis/blobprefix"
 	"github.com/truvity/sluis/internal/githubroster/link"
 	"github.com/truvity/sluis/internal/port"
 	"github.com/truvity/sluis/internal/portstore"
@@ -1074,7 +1075,7 @@ func (p *planner) blobs(ctx context.Context) error {
 	}
 	for _, e := range src {
 		module := "github"
-		if strings.HasPrefix(e.id, "reports/slack/") {
+		if strings.HasPrefix(e.id, blobprefix.SlackReports) {
 			module = "slack"
 		}
 		out := PlanItem{Concern: "blob", Kind: "report", ID: e.id, From: e.id, To: e.id}
