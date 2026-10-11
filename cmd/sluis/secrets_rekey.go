@@ -10,19 +10,15 @@ import (
 	"io"
 	"log/slog"
 	"os"
-	"os/user"
-	"regexp"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	awsssm "github.com/aws/aws-sdk-go-v2/service/ssm"
 
-	"github.com/truvity/sluis/audit/sdk/record"
 	"github.com/truvity/sluis/internal/audit"
 	"github.com/truvity/sluis/internal/awsretry"
 	"github.com/truvity/sluis/internal/config"
-	"github.com/truvity/sluis/internal/port"
 	"github.com/truvity/sluis/internal/rekey"
 	"github.com/truvity/sluis/internal/secrets"
 	"github.com/truvity/sluis/internal/store"
@@ -139,7 +135,7 @@ func runRekey(ctx context.Context, out io.Writer, file string, f rekeyFlags) err
 	if sec.Grace != nil {
 		opt.Grace = sec.Grace.D()
 	}
-	var au *rekeyAudit
+	var au *operatorAudit
 	if !f.dryRun {
 		sc, serr := store.FromServe(cfg)
 		if serr != nil {
@@ -154,21 +150,19 @@ func runRekey(ctx context.Context, out io.Writer, file string, f rekeyFlags) err
 		}
 		defer st.Close()
 		var closeAudit func()
-		if au, closeAudit, serr = openRekeyAudit(ctx, cfg, st.Plan, f.noAudit, os.Stderr, log); serr != nil {
+		host, _ := os.Hostname()
+		if au, closeAudit, serr = openOperatorAudit(ctx, cfg, st.Plan, "sluis secrets rekey", host, f.noAudit, os.Stderr, log); serr != nil {
 			return serr
 		}
 		defer closeAudit()
 	}
-	actor := audit.Workload("cli:secrets")
-	if by := rekeyBy(f.by); by != "" {
-		actor = audit.Person(by)
-	}
+	actor := operatorActor(f.by, "cli:secrets")
 	return rekeyRun(ctx, out, instance, api, opt, au, actor, f.asJSON)
 }
 
 // rekeyRun is the command over the SSM it was given: the re-key, with its
 // record kept before the first write and again when it ends.
-func rekeyRun(ctx context.Context, out io.Writer, instance string, api rekey.API, opt rekey.Options, au *rekeyAudit,
+func rekeyRun(ctx context.Context, out io.Writer, instance string, api rekey.API, opt rekey.Options, au *operatorAudit,
 	actor audit.Actor, asJSON bool) error {
 	started := false
 	entry := func(r *rekey.Report, phase string) audit.SecretsRekey {
@@ -202,16 +196,6 @@ func rekeyRun(ctx context.Context, out io.Writer, instance string, api rekey.API
 		}
 	}
 	return err
-}
-
-func rekeyBy(by string) string {
-	if by != "" {
-		return by
-	}
-	if u, err := user.Current(); err == nil {
-		return u.Username
-	}
-	return ""
 }
 
 func openRekeySSM(ctx context.Context, sec *config.Secrets) (rekey.API, error) {
@@ -270,86 +254,4 @@ func printRekey(w io.Writer, r *rekey.Report, asJSON bool) {
 	if !r.OK {
 		_, _ = fmt.Fprintf(w, "  NOT ok: %s\n", r.Error)
 	}
-}
-
-// rekeyAudit delivers the records of a re-key: synchronously, or the command
-// refuses. With noAudit it prints the record to stderr and goes on.
-type rekeyAudit struct {
-	rec     audit.Recorder
-	dest    string
-	noAudit bool
-	stderr  io.Writer
-	warned  bool
-}
-
-func openRekeyAudit(ctx context.Context, cfg *config.Serve, plan port.Table, noAudit bool, stderr io.Writer, log *slog.Logger) (*rekeyAudit, func(), error) {
-	host, _ := os.Hostname()
-	ac := audit.Config{Version: "sluis secrets rekey", Instance: host, Log: log}
-	if noAudit {
-		trail, err := audit.Open(ctx, ac)
-		if err != nil {
-			return nil, nil, err
-		}
-		return &rekeyAudit{rec: trail, noAudit: true, stderr: stderr, dest: "nowhere (--no-audit)"}, func() { _ = trail.Close() }, nil
-	}
-	if a := cfg.Audit; a != nil {
-		ac.Writer, ac.TokenFile = a.Writer, a.TokenFile
-	}
-	ac, err := audit.FromPlan(ac, plan)
-	if err != nil {
-		return nil, nil, err
-	}
-	trail, err := audit.Open(ctx, ac)
-	if err != nil {
-		return nil, nil, err
-	}
-	dest := "the audit log (no installation is connected)"
-	switch {
-	case ac.SQS != nil:
-		dest = "queue " + ac.SQS.QueueURL
-	case ac.Writer != "":
-		dest = "writer " + ac.Writer
-	}
-	return &rekeyAudit{rec: trail, dest: dest, stderr: stderr}, func() { _ = trail.Close() }, nil
-}
-
-var deniedPrincipalRekey = regexp.MustCompile(`User: (\S+) is not authorized`)
-
-func (a *rekeyAudit) keep(ctx context.Context, what string, r *record.Record) error {
-	if a.noAudit {
-		return a.printLocal(ctx, what, r)
-	}
-	err := a.rec.RecordDurable(ctx, r)
-	if err == nil {
-		return nil
-	}
-	who := "the caller"
-	if m := deniedPrincipalRekey.FindStringSubmatch(err.Error()); m != nil {
-		who = m[1] + " (denied)"
-	}
-	return fmt.Errorf("sluis secrets rekey: refusing to %s: the audit record could not be delivered to %s by %s: %v; "+
-		"nothing was written. Fix the operator role's access to the destination, or, as break-glass, repeat with --no-audit "+
-		"(the record is then printed to stderr and the command goes ahead unaudited)", what, a.dest, who, err)
-}
-
-func (a *rekeyAudit) keepAfter(ctx context.Context, what string, r *record.Record) error {
-	if err := a.keep(ctx, what, r); err != nil {
-		return fmt.Errorf("%s already happened, and its closing record was not kept: %w", what, err)
-	}
-	return nil
-}
-
-func (a *rekeyAudit) printLocal(ctx context.Context, what string, r *record.Record) error {
-	if !a.warned {
-		a.warned = true
-		_, _ = fmt.Fprintf(a.stderr, "WARNING: --no-audit: %s proceeds WITHOUT its audit record reaching the installation. "+
-			"The record is printed below; keep it and report it.\n", what)
-	}
-	a.rec.Record(ctx, r)
-	line, err := record.Canonical(r)
-	if err != nil {
-		return fmt.Errorf("--no-audit: the record cannot be printed: %w", err)
-	}
-	_, _ = fmt.Fprintf(a.stderr, "%s\n", line)
-	return nil
 }
