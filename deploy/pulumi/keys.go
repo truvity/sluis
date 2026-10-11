@@ -190,6 +190,27 @@ type KeyRole struct {
 	// as in ModuleEnv.MinterRefs) the role reads for `credentials.preset` without
 	// hosting the Cloudflare module: Decrypt on exactly those, through SSM.
 	MinterRefs []string
+	// ReadModules are the modules the role reads whole without hosting them
+	// (the mint-only github function): Decrypt and DescribeKey of those modules'
+	// `internal/<module>/*` and `external/<module>/*` parameters, through SSM,
+	// and of no other module's. A role may host nothing and read modules.
+	ReadModules []Module
+	// AlsoArns are further exact role ARNs of the same role: the old name kept
+	// during a rename (TransitionRoles). They are admitted exactly as Arn is,
+	// the sign context included.
+	AlsoArns []string
+}
+
+// arns are the role's ARNs: Arn, then AlsoArns.
+func (r KeyRole) arns() []string { return append([]string{r.Arn}, r.AlsoArns...) }
+
+// principalCond is the aws:PrincipalArn condition value of the role: the ARN
+// as a string for one, a sorted list for a role with a transition name.
+func (r KeyRole) principalCond() any {
+	if len(r.AlsoArns) == 0 {
+		return r.Arn
+	}
+	return sortedStrings(r.arns())
 }
 
 // KeyPolicyArgs is what SluisKeyPolicyStatements renders the statements of the
@@ -230,6 +251,8 @@ const (
 	sidKeyReadPrefix       = "SluisKeyReadAll"
 	sidKeyWritePrefix      = "SluisKeyWriteAll"
 	sidKeyMinterPrefix     = "SluisKeyMinter"
+	sidKeyReadModulePrefix = "SluisKeyReadModule"
+	sidKeyExtReaderPrefix  = "SluisKeyExternalReader"
 	sidKeyExternalReaders  = "SluisKeyExternalReaders"
 	sidKeyAdminSeeds       = "SluisKeyAdminSeeds"
 	sidKeyAdminReads       = "SluisKeyAdminReads"
@@ -265,6 +288,8 @@ const (
 //   - SluisKeyReadAll<Role> (backup): Decrypt of every `internal/*` and
 //     `external/*` parameter, through SSM; SluisKeyWriteAll<Role> (restore): the
 //     same parameters, Encrypt, Decrypt and GenerateDataKey;
+//   - SluisKeyReadModule<Role> (the mint-only github function): Decrypt of the
+//     parameters of the modules it reads (KeyRole.ReadModules) and of no other;
 //   - SluisKeyMinter<Role>: Decrypt of the minter parameters a role without the
 //     Cloudflare module reads;
 //   - SluisKeyExternalReaders: Decrypt of `external/*` only, through SSM;
@@ -319,11 +344,24 @@ func SluisKeyPolicyStatements(a KeyPolicyArgs) ([]map[string]any, error) {
 				own = append(own, arns(a.Modules.InternalPrefix(m), a.Modules.ExternalPrefix(m))...)
 			}
 		}
-		st = append(st, allow(sidKeyRolePrefix+name, use, map[string]any{
-			condArnEquals:    map[string]any{condPrincipalArn: r.Arn},
-			condStringEquals: viaSSM,
-			condStringLike:   map[string]any{condParameterArn: dedupe(own)},
-		}))
+		if len(own) > 0 {
+			st = append(st, allow(sidKeyRolePrefix+name, use, map[string]any{
+				condArnEquals:    map[string]any{condPrincipalArn: r.principalCond()},
+				condStringEquals: viaSSM,
+				condStringLike:   map[string]any{condParameterArn: dedupe(own)},
+			}))
+		}
+		if len(r.ReadModules) > 0 {
+			var read []string
+			for _, m := range sortedModules(r.ReadModules) {
+				read = append(read, arns(a.Modules.InternalPrefix(m), a.Modules.ExternalPrefix(m))...)
+			}
+			st = append(st, allow(sidKeyReadModulePrefix+name, []string{kmsDecrypt, kmsDescribe}, map[string]any{
+				condArnEquals:    map[string]any{condPrincipalArn: r.principalCond()},
+				condStringEquals: viaSSM,
+				condStringLike:   map[string]any{condParameterArn: dedupe(read)},
+			}))
+		}
 		for _, g := range CrossGrants {
 			if g.Role != r.Role.Name || (g.Verb != CrossReadAll && g.Verb != CrossWriteAll) {
 				continue
@@ -333,7 +371,7 @@ func SluisKeyPolicyStatements(a KeyPolicyArgs) ([]map[string]any, error) {
 				sid, actions = sidKeyWritePrefix+name, use
 			}
 			st = append(st, allow(sid, actions, map[string]any{
-				condArnEquals:    map[string]any{condPrincipalArn: r.Arn},
+				condArnEquals:    map[string]any{condPrincipalArn: r.principalCond()},
 				condStringEquals: viaSSM,
 				condStringLike:   map[string]any{condParameterArn: arns(internalAll, externalAll)},
 			}))
@@ -344,13 +382,13 @@ func SluisKeyPolicyStatements(a KeyPolicyArgs) ([]map[string]any, error) {
 				refs = append(refs, arnPrefix+"ssm:"+a.Region+":"+a.Account+":parameter"+a.Modules.rootOf()+"/"+ref)
 			}
 			st = append(st, allow(sidKeyMinterPrefix+name, []string{kmsDecrypt, kmsDescribe}, map[string]any{
-				condArnEquals:    map[string]any{condPrincipalArn: r.Arn},
+				condArnEquals:    map[string]any{condPrincipalArn: r.principalCond()},
 				condStringEquals: viaSSM,
 				condStringLike:   map[string]any{condParameterArn: refs},
 			}))
 		}
 		if r.Role.hosts(ModuleOIDC) {
-			signRoles = append(signRoles, r.Arn)
+			signRoles = append(signRoles, r.arns()...)
 		}
 	}
 
@@ -452,12 +490,20 @@ func (a KeyPolicyArgs) validate() error {
 			return fmt.Errorf("sluispulumi: KeyPolicyArgs role name %q is not lower-case letters, digits and '-'", r.Role.Name)
 		case seen[r.Role.Name]:
 			return fmt.Errorf("sluispulumi: KeyPolicyArgs names role %q twice", r.Role.Name)
-		case len(r.Role.Hosts) == 0:
-			return fmt.Errorf("sluispulumi: KeyPolicyArgs role %q hosts no module", r.Role.Name)
-		case !strings.HasPrefix(r.Arn, "arn:") || strings.ContainsAny(r.Arn, "*?"):
-			return fmt.Errorf("sluispulumi: KeyPolicyArgs role %q needs an exact role ARN, got %q", r.Role.Name, r.Arn)
+		case len(r.Role.Hosts) == 0 && len(r.ReadModules) == 0:
+			return fmt.Errorf("sluispulumi: KeyPolicyArgs role %q hosts and reads no module", r.Role.Name)
+		}
+		for _, arn := range r.arns() {
+			if !strings.HasPrefix(arn, "arn:") || strings.ContainsAny(arn, "*?") {
+				return fmt.Errorf("sluispulumi: KeyPolicyArgs role %q needs an exact role ARN, got %q", r.Role.Name, arn)
+			}
 		}
 		seen[r.Role.Name] = true
+		for _, m := range r.ReadModules {
+			if !validModule(m) {
+				return fmt.Errorf("sluispulumi: KeyPolicyArgs role %q reads unknown module %q", r.Role.Name, m)
+			}
+		}
 		for _, m := range r.Role.Hosts {
 			if !validModule(m) {
 				return fmt.Errorf("sluispulumi: KeyPolicyArgs role %q hosts unknown module %q", r.Role.Name, m)

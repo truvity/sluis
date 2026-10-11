@@ -310,14 +310,17 @@ func issuerFunctionArns(a *LambdaArgs) map[string]string {
 // moduleSenders are the module functions' roles, by their ARNs: the audit queue
 // admits each of them, and a role it does not name has its records refused.
 func (a *LambdaArgs) moduleSenders() []pulumi.StringInput {
-	if !a.hasModuleFunctions() {
-		return nil
-	}
 	var out []pulumi.StringInput
-	for _, r := range ModuleFunctions() {
-		if a.hostsModule(r) {
-			out = append(out, pulumi.String(a.roleArnOf(a.moduleFunctionName(r))))
+	if a.hasModuleFunctions() {
+		for _, r := range ModuleFunctions() {
+			if a.hostsModule(r) {
+				out = append(out, pulumi.String(a.roleArnOf(a.moduleFunctionName(r))))
+			}
 		}
+	}
+	// The old names of renamed roles stay senders while the switch is made.
+	for _, t := range a.TransitionRoles {
+		out = append(out, pulumi.String(a.roleArnOf(t.OldName)))
 	}
 	return out
 }
