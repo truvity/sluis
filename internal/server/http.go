@@ -22,12 +22,14 @@ import (
 	"github.com/truvity/sluis/audit/sdk/record"
 
 	"connectrpc.com/connect"
+
 	"github.com/truvity/sluis/gen/directoryroster/v1/directoryrosterv1connect"
 	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/audit"
 	"github.com/truvity/sluis/internal/connectalias"
 	"github.com/truvity/sluis/internal/consolecall"
 	"github.com/truvity/sluis/internal/emailaddr"
+	"github.com/truvity/sluis/internal/githubroster/consolewire"
 	"github.com/truvity/sluis/internal/hub"
 	"github.com/truvity/sluis/internal/maintenance"
 	"github.com/truvity/sluis/internal/modcall"
@@ -72,6 +74,8 @@ type ConsoleServer struct {
 	hub        *hub.Hub
 	recovery   Recovery
 	cheap      cheapRefusals
+	// linkLimits is the allowance of each address on the link routes.
+	linkLimits linkLimits
 	signIn     bool
 	signOutURL string
 	// maintenance are the gates of the modules whose records the console writes.
@@ -319,22 +323,22 @@ func (s *ConsoleServer) Handler() http.Handler {
 	mux.HandleFunc("GET /connect/{backend}/callback", s.connectCallback)
 	// GitHub's two, more specific than the pattern above and so chosen
 	// over it: after Create, and after Install.
-	mux.HandleFunc("GET "+githubCallbackPath, s.githubCallback)
-	mux.HandleFunc("GET "+githubSetupPath, s.githubSetup)
+	mux.HandleFunc("GET "+consolewire.CallbackPath, s.githubCallback)
+	mux.HandleFunc("GET "+consolewire.SetupPath, s.githubSetup)
 	// A runner App's two: after Create, and after Install.
-	mux.HandleFunc("GET "+githubRunnerCallbackPath, s.githubRunnerCallback)
-	mux.HandleFunc("GET "+githubRunnerSetupPath, s.githubRunnerSetup)
+	mux.HandleFunc("GET "+consolewire.RunnerCallbackPath, s.githubRunnerCallback)
+	mux.HandleFunc("GET "+consolewire.RunnerSetupPath, s.githubRunnerSetup)
 	// A catalogue App's two, likewise.
-	mux.HandleFunc("GET "+githubCatalogueCallbackPath, s.githubCatalogueCallback)
-	mux.HandleFunc("GET "+githubCatalogueSetupPath, s.githubCatalogueSetup)
+	mux.HandleFunc("GET "+consolewire.CatalogueCallbackPath, s.githubCatalogueCallback)
+	mux.HandleFunc("GET "+consolewire.CatalogueSetupPath, s.githubCatalogueSetup)
 	// A catalogue Slack App's: after an owner installs it.
 	mux.HandleFunc("GET "+slackconsole.CatalogueCallbackPath, s.slackCatalogueCallback)
 	// A Slack workspace's own App: after an owner installs it.
 	mux.HandleFunc("GET "+slackconsole.WorkspaceCallbackPath, s.slackWorkspaceCallback)
 	// Creating the link App, and a person linking an account with it.
-	mux.HandleFunc("GET "+githubLinkAppCallbackPath, s.githubLinkAppCallback)
-	mux.HandleFunc("GET "+githubLinkPath, s.githubLinkPage)
-	mux.HandleFunc("GET "+githubLinkCallbackPath, s.githubLinkCallback)
+	mux.HandleFunc("GET "+consolewire.LinkAppCallbackPath, s.githubLinkAppCallback)
+	mux.HandleFunc("GET "+consolewire.LinkPath, s.githubLinkPage)
+	mux.HandleFunc("GET "+consolewire.LinkCallbackPath, s.githubLinkCallback)
 	mux.HandleFunc("GET /.access/whoami", s.whoami)
 	mux.HandleFunc(auditQueryPrefix, s.audit)
 
