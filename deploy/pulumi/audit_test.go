@@ -212,6 +212,25 @@ func TestTheFunctionsRoleIsTheQueuesOnlySender(t *testing.T) {
 	}
 }
 
+// With the module functions the queue admits their roles too: a record from a
+// role the queue does not name is refused, and the audit trail would silently lack it.
+func TestTheQueueNamesTheModuleFunctionsRolesToo(t *testing.T) {
+	in := exampleInstallation(t)
+	in.AWS.AuditQueueURL = ""
+	in.AWS.Table = ""
+	rec, _ := mustLambda(t, withInstallation(in, func(a *arp.LambdaArgs) {
+		a.AuditQueueArn = nil
+		a.Audit = installAudit(t)
+		withLayout(arp.LayoutV5).mutate(a)
+	}))
+	qp := prop(rec.one(t, "aws:sqs/queuePolicy:QueuePolicy", "audit-example-ingest"), "policy").StringValue()
+	for _, m := range []string{"cloudflare", "github", "github-mint", "google", "slack"} {
+		if !strings.Contains(qp, arnp+"iam::"+account+":role/sluis-example-"+m) {
+			t.Errorf("the queue policy does not name the %s function's role:\n%s", m, qp)
+		}
+	}
+}
+
 // The audit archive on an S3-compatible store: no bucket, the endpoint in the
 // writer's configuration, the credentials at the installation's own address.
 func TestAuditArchiveOnAnS3CompatibleStore(t *testing.T) {

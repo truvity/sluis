@@ -391,6 +391,9 @@ type functionPolicyIn struct {
 	instance           string
 	logGroupArn        string
 	invokeFunctionArns []string
+	// functionArns are the unqualified ARNs of the functions the role invokes
+	// through a cross-grant, by role (layout v5).
+	functionArns map[string]string
 	// cloudflare adds the grants of the Cloudflare minter (see ssmStatements).
 	cloudflare bool
 
@@ -562,26 +565,16 @@ func resourceList(v any) []string {
 	return nil
 }
 
-// hostedModules are the modules the one function hosts until each is split out:
-// the issuer's, with github, slack and google, and the Cloudflare minter when
-// the installation declares presets.
-func hostedModules(cloudflare bool) []Module {
-	hosts := []Module{ModuleOIDC, ModuleGitHub, ModuleSlack, ModuleGoogle}
-	if cloudflare {
-		hosts = append(hosts, ModuleCloudflare)
-	}
-	return hosts
-}
-
-// moduleStatements is the v5 grants of the function's role: ModuleRoleStatements
-// of the role that hosts hostedModules.
+// moduleStatements is the v5 grants of the issuer's role: ModuleRoleStatements
+// of the role that hosts the oidc module and holds the others by CrossGrants.
 func (in functionPolicyIn) moduleStatements() ([]statement, error) {
-	role := Role{Name: RoleIssuer, Hosts: hostedModules(in.cloudflare)}
+	role := moduleRole(RoleIssuer)
 	env := ModuleEnv{
 		Region: in.region, Account: in.account, Modules: in.modules,
 		BucketArn: in.bucketArn, TableArns: in.moduleTables, TableKeyArn: in.tableKey,
 		ParameterKeyArn: in.parameterKeyArn, QueueArn: in.queueArn,
 		LogGroupArns: map[string]string{RoleIssuer: in.logGroupArn},
+		FunctionArns: in.functionArns,
 		MinterRefs:   in.minterRefs,
 		Roles:        []Role{role},
 	}

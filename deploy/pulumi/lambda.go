@@ -276,6 +276,18 @@ type LambdaArgs struct {
 	FunctionName string
 	// Function tunes the function.
 	Function FunctionArgs
+	// Modules configures the function of each module besides the issuer, keyed
+	// by [ModuleFunctions]: cloudflare, github, github-mint, google and slack.
+	// Every one of them exists whatever is set here (there is no switch that
+	// leaves a module in the issuer): the settings are memory, timeout,
+	// reserved concurrency, the name, the zip and the document, all optional.
+	// Their names are `sluis-<instance>-<module>`. They need the per-module
+	// tables: Layout "v5" or "v4+v5".
+	Modules map[string]ModuleArgs
+	// BackupFunctionName is the name of the Backup component's function, which
+	// the issuer's role may invoke through the alias `live-console`. Default
+	// `sluis-<instance>-backup`, the Backup component's own default.
+	BackupFunctionName string
 
 	// LogRetentionDays is the log group's retention. Default 30.
 	LogRetentionDays int
@@ -613,6 +625,14 @@ type Lambda struct {
 	// CodeDeploy come later; today the alias moves to each new version at once.
 	LiveAliasArn, LiveVersion pulumi.StringOutput
 	RoleArn, RoleName         pulumi.StringOutput
+	// Functions, RoleArns and AliasArns are the functions, their roles and their
+	// aliases by role: `issuer` and every [ModuleFunctions] (cloudflare, github,
+	// github-mint, google, slack). Functions holds the unqualified function ARNs
+	// and AliasArns, per role, the ARN of each alias by alias name (`live`,
+	// `live-issuer`): a call goes through an alias. The maps hold the issuer
+	// alone on a layout without the per-module tables.
+	Functions, RoleArns pulumi.StringMapOutput
+	AliasArns           pulumi.StringMapMapOutput
 
 	// DeclaredParameters are the SSM parameters the documents declare, as names
 	// below the installation's root (`internal/config/<name>` on layout v4;
@@ -733,13 +753,13 @@ func (a *LambdaArgs) validateLayout() error {
 	}
 	if a.Layout.has5() && a.State != nil {
 		var missing []string
-		for _, m := range hostedModules(a.cloudflare()) {
+		for _, m := range tablesNeeded() {
 			if a.State.Tables[m] == nil {
 				missing = append(missing, string(m))
 			}
 		}
 		if len(missing) > 0 {
-			return fmt.Errorf("sluispulumi: LambdaArgs.Layout %q needs the tables of the modules the function hosts "+
+			return fmt.Errorf("sluispulumi: LambdaArgs.Layout %q needs the tables of the modules the functions host "+
 				"in State.Tables (States.Grant()); missing %v", a.Layout, missing)
 		}
 	}
@@ -1011,6 +1031,9 @@ func (a *LambdaArgs) validate() (LambdaArgs, error) {
 			}
 		}
 	}
+	if err := out.validateModules(); err != nil {
+		return out, err
+	}
 	return out, nil
 }
 
@@ -1237,7 +1260,7 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 	auditURL, auditArn := rsEmpty, rsEmpty
 	switch a.audit.mode {
 	case auditInstall:
-		aargs, err := a.auditInstallArgs(a.audit, role.Arn)
+		aargs, err := a.auditInstallArgs(a.audit, role.Arn, a.moduleSenders()...)
 		if err != nil {
 			return nil, err
 		}
@@ -1321,6 +1344,14 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 		FunctionName: fn.Name, Qualifier: live.Name, MaximumRetryAttempts: pulumi.Int(0),
 	}, child); err != nil {
 		return nil, fmt.Errorf("sluis invoke config: %w", err)
+	}
+
+	// ---- the module functions: one per module, each with the role of its own.
+	var mods *moduleFunctions
+	if a.hasModuleFunctions() {
+		if mods, err = newModuleFunctions(ctx, name, &a, child); err != nil {
+			return nil, err
+		}
 	}
 
 	// ---- the API
@@ -1494,11 +1525,17 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 	out.RecoveryPasswordParameter = recoveryName
 	out.ScheduleNames = schedNames
 	out.ConfigLayerArn = layer.Arn
+	issuerAliases := pulumi.StringMap{LiveAlias: live.Arn}
+	if mods == nil {
+		mods = &moduleFunctions{}
+	}
+	out.Functions, out.RoleArns, out.AliasArns = mods.outputs(fn.Arn, role.Arn, issuerAliases)
 
 	if err := ctx.RegisterResourceOutputs(out, pulumi.Map{
 		"signingKeyArn": out.SigningKeyArn, "signingKeyId": out.SigningKeyID, "signingKeyAlias": out.SigningKeyAlias,
 		"wrappedSigningKeyArn": out.WrappedSigningKeyArn, "wrappedSigningKeyAlias": out.WrappedSigningKeyAlias,
 		"signingKeyRs256Arn": out.SigningKeyRS256Arn, "signingKeyRs256Id": out.SigningKeyRS256ID, "signingKeyRs256Alias": out.SigningKeyRS256Alias,
+		"functions": out.Functions, "roleArns": out.RoleArns, "aliasArns": out.AliasArns,
 		"functionArn": out.FunctionArn, "functionName": out.FunctionName, "codeSha256Matches": out.CodeSha256Matches,
 		"declaredParameters": out.DeclaredParameters,
 		"liveAliasArn":       out.LiveAliasArn, "liveVersion": out.LiveVersion, "roleArn": out.RoleArn, "roleName": out.RoleName,
@@ -1621,6 +1658,7 @@ func newFunctionRole(ctx *pulumi.Context, name, fnName string, a *LambdaArgs, si
 			layout:             a.Layout,
 			modules:            ModuleSet{Instance: a.Instance, Tables: a.TableNames},
 			minterRefs:         a.minterRefs,
+			functionArns:       issuerFunctionArns(a),
 		})
 	}).(pulumi.StringOutput)
 	rp, err := iam.NewRolePolicy(ctx, name+"-http-policy", &iam.RolePolicyArgs{

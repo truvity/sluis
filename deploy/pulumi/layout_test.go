@@ -80,15 +80,19 @@ func TestLayoutV4KeepsTheV4GrantsOnly(t *testing.T) {
 	}
 }
 
-// Layout v5 is the v5 grants only: the modules the one function hosts, each its
-// own table, parameters and blob prefix; no legacy table, no v4 path.
+// Layout v5 is the v5 grants only: the issuer hosts the oidc module (its own
+// table, parameters and blob prefix), reads the providers' tables and the Google
+// snapshots, and invokes their functions; no legacy table, no v4 path.
 func TestLayoutV5GetsOnlyTheV5Grants(t *testing.T) {
 	st := policyOf(t, withLayout(arp.LayoutV5))
 	res := resourcesOf(st)
 	for _, want := range []string{
 		tableArn("sluis-staging-oidc"), tableArn("sluis-staging-github"), tableArn("sluis-staging-slack"), tableArn("sluis-staging-google"),
-		paramRoot + "/internal/oidc/*", paramRoot + "/external/oidc/*", paramRoot + "/internal/google/*", paramRoot + "/internal/github/*",
-		paramRoot + "/internal/slack/*", arnp + "s3:::" + bucket + "/oidc/*", arnp + "s3:::" + bucket + "/google/*",
+		paramRoot + "/internal/oidc/*", paramRoot + "/external/oidc/*",
+		arnp + "s3:::" + bucket + "/oidc/*", arnp + "s3:::" + bucket + "/google/*",
+		fnArn("sluis-staging-github") + ":live-issuer", fnArn("sluis-staging-github-mint") + ":live-issuer",
+		fnArn("sluis-staging-slack") + ":live-issuer", fnArn("sluis-staging-google") + ":live-issuer",
+		fnArn("sluis-staging-cloudflare") + ":live-issuer", fnArn("sluis-staging-backup") + ":live-console",
 	} {
 		if !slices.Contains(res, want) {
 			t.Errorf("v5: no grant on %s", want)
@@ -98,7 +102,12 @@ func TestLayoutV5GetsOnlyTheV5Grants(t *testing.T) {
 		switch {
 		case r == legacyArn, strings.HasPrefix(r, paramRoot+"/internal/config"), strings.HasPrefix(r, paramRoot+"/internal/credentials"),
 			r == paramRoot+"/external/*", r == arnp+"s3:::"+bucket+"/*", r == paramRoot+"/internal/*",
-			strings.Contains(r, "sluis-staging-cloudflare"), strings.Contains(r, "/internal/cloudflare"):
+			strings.Contains(r, "table/sluis-staging-cloudflare"), strings.Contains(r, "/internal/cloudflare"),
+			// The providers' secrets are theirs, not the issuer's.
+			strings.HasPrefix(r, paramRoot+"/internal/google"), strings.HasPrefix(r, paramRoot+"/internal/github"),
+			strings.HasPrefix(r, paramRoot+"/internal/slack"), strings.HasPrefix(r, paramRoot+"/external/google"),
+			// Every invoke is of an alias, never the function.
+			strings.Contains(r, ":function:") && !strings.Contains(r[strings.Index(r, ":function:")+1:], ":live"):
 			t.Errorf("v5: a v4 or an unhosted resource is granted: %s", r)
 		}
 	}
@@ -148,22 +157,32 @@ func TestLayoutV4V5GetsBothAndNoSidTwice(t *testing.T) {
 	}
 }
 
-// The Cloudflare minter's module is hosted when the installation declares
-// presets; the v5 role then has its table and its parameters, and not before.
+// The Cloudflare minter's module is hosted by the cloudflare function whatever
+// the installation declares; with presets the issuer's role reads the minter's
+// parameters for the blob credentials and never the table.
 func TestLayoutV5HostsTheCloudflareModuleWithPresets(t *testing.T) {
 	in := exampleInstallation(t)
 	withCloudflare(in)
 	in.AWS.Table = ""
-	st := policyOf(t, withInstallation(in, func(a *arp.LambdaArgs) {
+	rec, _ := mustLambda(t, withInstallation(in, func(a *arp.LambdaArgs) {
 		withLayout(arp.LayoutV5).mutate(a)
 	}))
-	res := resourcesOf(st)
-	if !slices.Contains(res, tableArn("sluis-staging-cloudflare")) {
-		t.Errorf("no table for the minter: %v", res)
+	cf := resourcesOf(statements(t, prop(rec.one(t, policyType, "staging-cloudflare-policy"), "policy").StringValue()))
+	if !slices.Contains(cf, tableArn("sluis-staging-cloudflare")) {
+		t.Errorf("no table for the minter: %v", cf)
 	}
-	if !slices.Contains(res, arnp+"ssm:"+region+":"+account+":parameter/sluis/example/internal/cloudflare/*") {
-		t.Errorf("no parameters for the minter: %v", res)
+	if !slices.Contains(cf, arnp+"ssm:"+region+":"+account+":parameter/sluis/example/internal/cloudflare/*") {
+		t.Errorf("no parameters for the minter: %v", cf)
 	}
+	for _, r := range resourcesOf(statements(t, prop(rec.one(t, policyType, "staging-http-policy"), "policy").StringValue())) {
+		if r == tableArn("sluis-staging-cloudflare") || r == arnp+"ssm:"+region+":"+account+":parameter/sluis/example/internal/cloudflare/*" {
+			t.Errorf("the issuer holds the minter's state: %s", r)
+		}
+	}
+}
+
+func fnArn(name string) string {
+	return arnp + "lambda:" + region + ":" + account + ":function:" + name
 }
 
 func TestTheLayoutIsValidated(t *testing.T) {
@@ -381,12 +400,25 @@ func TestThePreviewShapeAcrossTheLayouts(t *testing.T) {
 	if !slices.Equal(got.deleted, []string{"staging-recovery-password-internal", "staging-state-secret-internal"}) {
 		t.Errorf("deleted: %v", got.deleted)
 	}
-	// Nothing else of the stack is created, deleted or replaced by a layout change,
-	// bar the configuration layer's new version and the check's re-run.
-	for _, typ := range []string{fnType, policyType, "aws:iam/role:Role", "aws:dynamodb/table:Table"} {
-		if s := previewShape(v4, window, typ); len(s.created)+len(s.deleted)+len(s.replaced) != 0 {
+	// The v4 layout has no module functions: the flip to a layout with the
+	// per-module tables creates the five (a function, a role and a policy each)
+	// and replaces and deletes nothing of the issuer's.
+	for _, typ := range []string{fnType, policyType, "aws:iam/role:Role"} {
+		s := previewShape(v4, window, typ)
+		if len(s.created) != 5 || len(s.deleted)+len(s.replaced) != 0 {
 			t.Errorf("%s: %s", typ, s)
 		}
+		for _, n := range s.created {
+			if strings.HasPrefix(n, "staging-http") {
+				t.Errorf("%s: the issuer's %s is created", typ, n)
+			}
+		}
+		if s := previewShape(window, flipped, typ); len(s.created)+len(s.deleted)+len(s.replaced) != 0 {
+			t.Errorf("%s: v4+v5 -> v5: %s", typ, s)
+		}
+	}
+	if s := previewShape(v4, window, "aws:dynamodb/table:Table"); len(s.created)+len(s.deleted)+len(s.replaced) != 0 {
+		t.Errorf("tables: %s", s)
 	}
 	// A born-on-v5 estate has no v4 parameters at all.
 	if n := len(dropped.ofType(ssmParameterType)); n != 2 {
@@ -518,9 +550,12 @@ func TestTheMaintenanceDenyCoversTheTablesOfEveryLayout(t *testing.T) {
 				}
 			}
 		}
+		// The issuer writes its own (oidc) table and the legacy one, and reads the
+		// providers': it is denied the flag on those too, and written no record.
 		for _, w := range want {
-			if !allowed[w] {
-				t.Errorf("%s: no write on %s", l, w)
+			provider := slices.Contains([]string{tableArn("sluis-staging-github"), tableArn("sluis-staging-slack"), tableArn("sluis-staging-google")}, w)
+			if allowed[w] == provider {
+				t.Errorf("%s: write on %s = %v", l, w, allowed[w])
 			}
 		}
 	}

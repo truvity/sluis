@@ -1,0 +1,205 @@
+{
+  "Statement": [
+    {
+      "Action": [
+        "logs:CreateLogStream",
+        "logs:PutLogEvents"
+      ],
+      "Effect": "Allow",
+      "Resource": "arn:aws:logs:r1:000000000000:log-group:/aws/lambda/issuer:*",
+      "Sid": "SluisLogs"
+    },
+    {
+      "Action": "sqs:SendMessage",
+      "Effect": "Allow",
+      "Resource": "arn:aws:sqs:r1:000000000000:acme-audit",
+      "Sid": "SluisAuditIngest"
+    },
+    {
+      "Action": [
+        "ssm:GetParameter",
+        "ssm:GetParameters",
+        "ssm:GetParameterHistory",
+        "ssm:PutParameter",
+        "ssm:DeleteParameter"
+      ],
+      "Effect": "Allow",
+      "Resource": [
+        "arn:aws:ssm:r1:000000000000:parameter/sluis/i1/internal/oidc/*",
+        "arn:aws:ssm:r1:000000000000:parameter/sluis/i1/external/oidc/*"
+      ],
+      "Sid": "SluisParametersOidc"
+    },
+    {
+      "Action": [
+        "kms:Encrypt",
+        "kms:Decrypt",
+        "kms:GenerateDataKey"
+      ],
+      "Condition": {
+        "StringLike": {
+          "kms:EncryptionContext:PARAMETER_ARN": [
+            "arn:aws:ssm:r1:000000000000:parameter/sluis/i1/internal/oidc/*",
+            "arn:aws:ssm:r1:000000000000:parameter/sluis/i1/external/oidc/*"
+          ],
+          "kms:ViaService": "ssm.*.amazonaws.com"
+        }
+      },
+      "Effect": "Allow",
+      "Resource": "arn:aws:kms:r1:000000000000:key/shared",
+      "Sid": "SluisParameterKey"
+    },
+    {
+      "Action": [
+        "dynamodb:GetItem",
+        "dynamodb:PutItem",
+        "dynamodb:UpdateItem",
+        "dynamodb:DeleteItem",
+        "dynamodb:Query",
+        "dynamodb:Scan",
+        "dynamodb:DescribeTable"
+      ],
+      "Effect": "Allow",
+      "Resource": "arn:aws:dynamodb:r1:000000000000:table/sluis-i1-oidc",
+      "Sid": "SluisTableOidc"
+    },
+    {
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject",
+        "s3:DeleteObject"
+      ],
+      "Effect": "Allow",
+      "Resource": "arn:aws:s3:::acme-blobs/oidc/*",
+      "Sid": "SluisOidcBlobs"
+    },
+    {
+      "Action": "s3:ListBucket",
+      "Condition": {
+        "StringLike": {
+          "s3:prefix": [
+            "oidc/*"
+          ]
+        }
+      },
+      "Effect": "Allow",
+      "Resource": "arn:aws:s3:::acme-blobs",
+      "Sid": "SluisOidcBlobList"
+    },
+    {
+      "Action": [
+        "dynamodb:GetItem",
+        "dynamodb:Query",
+        "dynamodb:Scan",
+        "dynamodb:DescribeTable"
+      ],
+      "Effect": "Allow",
+      "Resource": "arn:aws:dynamodb:r1:000000000000:table/sluis-i1-github",
+      "Sid": "SluisCrossGithubTable"
+    },
+    {
+      "Action": [
+        "dynamodb:GetItem",
+        "dynamodb:Query",
+        "dynamodb:Scan",
+        "dynamodb:DescribeTable"
+      ],
+      "Effect": "Allow",
+      "Resource": "arn:aws:dynamodb:r1:000000000000:table/sluis-i1-google",
+      "Sid": "SluisCrossGoogleTable"
+    },
+    {
+      "Action": [
+        "dynamodb:GetItem",
+        "dynamodb:Query",
+        "dynamodb:Scan",
+        "dynamodb:DescribeTable"
+      ],
+      "Effect": "Allow",
+      "Resource": "arn:aws:dynamodb:r1:000000000000:table/sluis-i1-slack",
+      "Sid": "SluisCrossSlackTable"
+    },
+    {
+      "Action": "lambda:InvokeFunction",
+      "Effect": "Allow",
+      "Resource": [
+        "arn:aws:lambda:r1:000000000000:function:sluis-i1-cloudflare:live-issuer",
+        "arn:aws:lambda:r1:000000000000:function:sluis-i1-github-mint:live-issuer",
+        "arn:aws:lambda:r1:000000000000:function:sluis-i1-github:live-issuer",
+        "arn:aws:lambda:r1:000000000000:function:sluis-i1-google:live-issuer",
+        "arn:aws:lambda:r1:000000000000:function:sluis-i1-slack:live-issuer"
+      ],
+      "Sid": "SluisCrossInvokeIssuer"
+    },
+    {
+      "Action": "lambda:InvokeFunction",
+      "Effect": "Allow",
+      "Resource": [
+        "arn:aws:lambda:r1:000000000000:function:sluis-i1-backup:live-console"
+      ],
+      "Sid": "SluisCrossInvokeConsole"
+    },
+    {
+      "Action": [
+        "s3:GetObject"
+      ],
+      "Effect": "Allow",
+      "Resource": "arn:aws:s3:::acme-blobs/google/*",
+      "Sid": "SluisCrossGoogleBlobs"
+    },
+    {
+      "Action": "s3:ListBucket",
+      "Condition": {
+        "StringLike": {
+          "s3:prefix": [
+            "google/*"
+          ]
+        }
+      },
+      "Effect": "Allow",
+      "Resource": "arn:aws:s3:::acme-blobs",
+      "Sid": "SluisCrossGoogleBlobList"
+    },
+    {
+      "Action": [
+        "dynamodb:PutItem",
+        "dynamodb:UpdateItem",
+        "dynamodb:DeleteItem",
+        "dynamodb:BatchWriteItem",
+        "dynamodb:TransactWriteItems"
+      ],
+      "Condition": {
+        "ForAnyValue:StringEquals": {
+          "dynamodb:LeadingKeys": [
+            "maintenance"
+          ]
+        }
+      },
+      "Effect": "Deny",
+      "Resource": [
+        "arn:aws:dynamodb:r1:000000000000:table/sluis-i1-github",
+        "arn:aws:dynamodb:r1:000000000000:table/sluis-i1-google",
+        "arn:aws:dynamodb:r1:000000000000:table/sluis-i1-oidc",
+        "arn:aws:dynamodb:r1:000000000000:table/sluis-i1-slack"
+      ],
+      "Sid": "SluisMaintenanceDeny"
+    },
+    {
+      "Action": [
+        "kms:Encrypt",
+        "kms:Decrypt",
+        "kms:GenerateDataKey",
+        "kms:DescribeKey"
+      ],
+      "Condition": {
+        "StringLike": {
+          "kms:ViaService": "dynamodb.*.amazonaws.com"
+        }
+      },
+      "Effect": "Allow",
+      "Resource": "arn:aws:kms:r1:000000000000:key/tables",
+      "Sid": "SluisStateKey"
+    }
+  ],
+  "Version": "2012-10-17"
+}
