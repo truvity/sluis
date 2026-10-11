@@ -21,6 +21,7 @@ import (
 	"github.com/truvity/sluis/gen/accessissuer/v1/accessissuerv1connect"
 	"github.com/truvity/sluis/gen/sluis/v1/sluisv1connect"
 	"github.com/truvity/sluis/internal/connectalias"
+	"github.com/truvity/sluis/internal/refusal"
 	"github.com/truvity/sluis/internal/signer"
 	"github.com/truvity/sluis/internal/telemetry"
 )
@@ -256,7 +257,7 @@ func HandlerWithSignIn(iss *Issuer, storage op.Storage, signIn SignInDeps) (http
 	}
 	mux.Handle("/", neverCached(protocol))
 
-	return withSigningAudience(withOneResolution(authorizationResponseIssuer(iss.Config().URL, mux))), nil
+	return refusal.Middleware(withSigningAudience(withOneResolution(authorizationResponseIssuer(iss.Config().URL, mux)))), nil
 }
 
 // withSigningAudience installs a fresh [signingAudience] carrier on every

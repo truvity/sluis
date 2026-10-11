@@ -9,6 +9,8 @@ import (
 	"github.com/truvity/sluis/audit/sdk/emit"
 	"github.com/truvity/sluis/audit/sdk/record"
 
+	"github.com/truvity/sluis/internal/refusal"
+
 	"github.com/truvity/sluis/storage/logattr"
 )
 
@@ -36,14 +38,14 @@ const (
 // X-Forwarded-For in front of the service; zero takes the peer and ignores
 // the header. See [clientAddress].
 func AuditRequests(trustedHops int, next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return refusal.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if emit.RequestContext(r.Context()) != nil {
 			next.ServeHTTP(w, r)
 			return
 		}
 		request := auditRequest(r, trustedHops)
 		next.ServeHTTP(w, r.WithContext(emit.WithRequest(r.Context(), request)))
-	})
+	}))
 }
 
 // auditRequest is the one reading of a request for the audit trail. Every
@@ -58,6 +60,11 @@ func auditRequest(r *http.Request, trustedHops int) *record.Context {
 	c.ClientAddresses = []string{clientAddress(r.Header, r.RemoteAddr, trustedHops)}
 	c.UserAgent = bounded(r.Header.Get("User-Agent"), maxUserAgent)
 	c.RequestId = bounded(r.Header.Get("X-Request-Id"), maxRequestID)
+	// The id the service answered with, when it gave one, is the one the
+	// record carries: it is what the caller was told to quote.
+	if id := emit.RequestID(r.Context()); id != "" {
+		c.RequestId = bounded(id, maxRequestID)
+	}
 	return c
 }
 

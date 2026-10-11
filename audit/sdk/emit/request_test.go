@@ -181,3 +181,16 @@ func TestACallerMayProvideItsOwnProvenance(t *testing.T) {
 		t.Fatalf("client = %q, want the caller's own value", got)
 	}
 }
+
+func TestFromRequestPrefersTheIDAServiceGave(t *testing.T) {
+	t.Parallel()
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	r.Header.Set("X-Request-Id", "from-the-caller")
+	if got := emit.FromRequest(r, 0).GetRequestId(); got != "from-the-caller" {
+		t.Fatalf("with no id given, the header is read: got %q", got)
+	}
+	r = r.WithContext(emit.WithRequestID(r.Context(), "from-the-service"))
+	if got := emit.FromRequest(r, 0).GetRequestId(); got != "from-the-service" {
+		t.Errorf("the id the service gave wins: got %q", got)
+	}
+}
