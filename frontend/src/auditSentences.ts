@@ -3,11 +3,17 @@ import type { Sentences } from "@truvity/audit";
 
 export const roster: Sentences = {
   "source": "roster",
-  "version": "1.18.0",
+  "version": "1.19.0",
   "locales": [
     "en"
   ],
   "actions": {
+    "roster.access.explained": {
+      "summary": "An operator looked up what a person, CI job or workload would effectively be granted, or a caller who may not was refused. The record carries counts only.",
+      "message": {
+        "en": "{outcome, select, success {{actor} looked up the access of {subject}} other {{actor} was refused a look-up of the access of {subject}}}"
+      }
+    },
     "roster.backup.completed": {
       "summary": "A backup of the installation was written to the archive bucket and its manifest sealed. Counts only.",
       "message": {

@@ -1,0 +1,33 @@
+{
+  "$id": "https://schemas.example/access-roster/v1/access-explained.json",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "proof": {
+      "type": "string",
+      "enum": ["person", "ci", "workload"],
+      "description": "What was looked up: a person by address, a CI job, or a cluster workload.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none",
+      "x-audit-facet": true
+    },
+    "groups": {
+      "type": "integer",
+      "description": "How many internal groups the proof holds. Never their names.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none"
+    },
+    "clients": {
+      "type": "integer",
+      "description": "How many declared clients (audiences) the policy has.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none"
+    },
+    "admitted": {
+      "type": "integer",
+      "description": "How many of those clients the proof would be issued a token for.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none"
+    }
+  }
+}
