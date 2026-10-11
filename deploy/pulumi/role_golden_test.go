@@ -15,7 +15,7 @@ import (
 func TestEveryRolesPolicyIsItsGolden(t *testing.T) {
 	env := mxEnv(moduleRoles())
 	arch := ArchiveGrant{BucketArn: "arn:aws:s3:::acme-archive", Prefix: "pre/", Instance: mxInst,
-		KeyArn: "arn:aws:kms:r1:000000000000:key/archive", Versioned: true}
+		KeyArn: "arn:aws:kms:r1:111122223333:key/archive", Versioned: true}
 	docs := map[string]any{}
 	for _, r := range append([]string{RoleIssuer}, ModuleFunctions()...) {
 		st, err := ModuleRoleStatements(env, moduleRole(r))

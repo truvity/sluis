@@ -16,7 +16,7 @@ func testModuleEnv() ModuleEnv {
 		logs[r.Name], fns[r.Name] = "lg:"+r.Name, "fn:"+r.Name
 	}
 	return ModuleEnv{
-		Region: "r1", Account: "000000000000",
+		Region: "r1", Account: "111122223333",
 		Modules:         ModuleSet{Instance: "i1"},
 		BucketArn:       "bkt",
 		TableArns:       tables,

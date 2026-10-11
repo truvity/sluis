@@ -20,12 +20,12 @@ import (
 
 const (
 	mxRegion   = "r1"
-	mxAccount  = "000000000000"
+	mxAccount  = "111122223333"
 	mxInst     = "i1"
 	mxBucket   = arnPrefix + "s3:::acme-blobs"
-	mxKey      = arnPrefix + "kms:r1:000000000000:key/shared"
-	mxTableKey = arnPrefix + "kms:r1:000000000000:key/tables"
-	mxQueue    = arnPrefix + "sqs:r1:000000000000:acme-audit"
+	mxKey      = arnPrefix + "kms:r1:111122223333:key/shared"
+	mxTableKey = arnPrefix + "kms:r1:111122223333:key/tables"
+	mxQueue    = arnPrefix + "sqs:r1:111122223333:acme-audit"
 	mxSsmVia   = "ssm.r1.amazonaws.com"
 	mxMinter   = "internal/cloudflare/main/minter"
 )
@@ -149,7 +149,7 @@ func mxPolicies(t *testing.T) (identity map[string]iameval.Policy, key iameval.P
 	parse("issuer", doc, err)
 
 	arch := ArchiveGrant{BucketArn: arnPrefix + "s3:::acme-archive", Prefix: "pre/", Instance: mxInst,
-		KeyArn: arnPrefix + "kms:r1:000000000000:key/archive", Versioned: true}
+		KeyArn: arnPrefix + "kms:r1:111122223333:key/archive", Versioned: true}
 	st, err := BackupRoleStatements(env, arch)
 	parse("backup", st, err)
 	st, err = RestoreRoleStatements(env, arch, []string{mxFn("restore") + ":live-console"})

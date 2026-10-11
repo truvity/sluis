@@ -6,13 +6,13 @@
         "logs:PutLogEvents"
       ],
       "Effect": "Allow",
-      "Resource": "arn:aws:logs:r1:000000000000:log-group:/aws/lambda/backup:*",
+      "Resource": "arn:aws:logs:r1:111122223333:log-group:/aws/lambda/backup:*",
       "Sid": "SluisLogs"
     },
     {
       "Action": "sqs:SendMessage",
       "Effect": "Allow",
-      "Resource": "arn:aws:sqs:r1:000000000000:acme-audit",
+      "Resource": "arn:aws:sqs:r1:111122223333:acme-audit",
       "Sid": "SluisAuditIngest"
     },
     {
@@ -25,8 +25,8 @@
       ],
       "Effect": "Allow",
       "Resource": [
-        "arn:aws:ssm:r1:000000000000:parameter/sluis/i1/internal/backup/*",
-        "arn:aws:ssm:r1:000000000000:parameter/sluis/i1/external/backup/*"
+        "arn:aws:ssm:r1:111122223333:parameter/sluis/i1/internal/backup/*",
+        "arn:aws:ssm:r1:111122223333:parameter/sluis/i1/external/backup/*"
       ],
       "Sid": "SluisParametersBackup"
     },
@@ -39,14 +39,14 @@
       "Condition": {
         "StringLike": {
           "kms:EncryptionContext:PARAMETER_ARN": [
-            "arn:aws:ssm:r1:000000000000:parameter/sluis/i1/internal/backup/*",
-            "arn:aws:ssm:r1:000000000000:parameter/sluis/i1/external/backup/*"
+            "arn:aws:ssm:r1:111122223333:parameter/sluis/i1/internal/backup/*",
+            "arn:aws:ssm:r1:111122223333:parameter/sluis/i1/external/backup/*"
           ],
           "kms:ViaService": "ssm.*.amazonaws.com"
         }
       },
       "Effect": "Allow",
-      "Resource": "arn:aws:kms:r1:000000000000:key/shared",
+      "Resource": "arn:aws:kms:r1:111122223333:key/shared",
       "Sid": "SluisParameterKey"
     },
     {
@@ -60,7 +60,7 @@
         "dynamodb:DescribeTable"
       ],
       "Effect": "Allow",
-      "Resource": "arn:aws:dynamodb:r1:000000000000:table/sluis-i1-backup",
+      "Resource": "arn:aws:dynamodb:r1:111122223333:table/sluis-i1-backup",
       "Sid": "SluisTableBackup"
     },
     {
@@ -94,7 +94,7 @@
         "dynamodb:DescribeTable"
       ],
       "Effect": "Allow",
-      "Resource": "arn:aws:dynamodb:r1:000000000000:table/sluis-i1-cloudflare",
+      "Resource": "arn:aws:dynamodb:r1:111122223333:table/sluis-i1-cloudflare",
       "Sid": "SluisCrossCloudflareTable"
     },
     {
@@ -104,8 +104,8 @@
       ],
       "Effect": "Allow",
       "Resource": [
-        "arn:aws:ssm:r1:000000000000:parameter/sluis/i1/internal/cloudflare/*",
-        "arn:aws:ssm:r1:000000000000:parameter/sluis/i1/external/cloudflare/*"
+        "arn:aws:ssm:r1:111122223333:parameter/sluis/i1/internal/cloudflare/*",
+        "arn:aws:ssm:r1:111122223333:parameter/sluis/i1/external/cloudflare/*"
       ],
       "Sid": "SluisCrossCloudflareParameters"
     },
@@ -138,7 +138,7 @@
         "dynamodb:DescribeTable"
       ],
       "Effect": "Allow",
-      "Resource": "arn:aws:dynamodb:r1:000000000000:table/sluis-i1-github",
+      "Resource": "arn:aws:dynamodb:r1:111122223333:table/sluis-i1-github",
       "Sid": "SluisCrossGithubTable"
     },
     {
@@ -148,8 +148,8 @@
       ],
       "Effect": "Allow",
       "Resource": [
-        "arn:aws:ssm:r1:000000000000:parameter/sluis/i1/internal/github/*",
-        "arn:aws:ssm:r1:000000000000:parameter/sluis/i1/external/github/*"
+        "arn:aws:ssm:r1:111122223333:parameter/sluis/i1/internal/github/*",
+        "arn:aws:ssm:r1:111122223333:parameter/sluis/i1/external/github/*"
       ],
       "Sid": "SluisCrossGithubParameters"
     },
@@ -182,7 +182,7 @@
         "dynamodb:DescribeTable"
       ],
       "Effect": "Allow",
-      "Resource": "arn:aws:dynamodb:r1:000000000000:table/sluis-i1-google",
+      "Resource": "arn:aws:dynamodb:r1:111122223333:table/sluis-i1-google",
       "Sid": "SluisCrossGoogleTable"
     },
     {
@@ -192,8 +192,8 @@
       ],
       "Effect": "Allow",
       "Resource": [
-        "arn:aws:ssm:r1:000000000000:parameter/sluis/i1/internal/google/*",
-        "arn:aws:ssm:r1:000000000000:parameter/sluis/i1/external/google/*"
+        "arn:aws:ssm:r1:111122223333:parameter/sluis/i1/internal/google/*",
+        "arn:aws:ssm:r1:111122223333:parameter/sluis/i1/external/google/*"
       ],
       "Sid": "SluisCrossGoogleParameters"
     },
@@ -226,7 +226,7 @@
         "dynamodb:DescribeTable"
       ],
       "Effect": "Allow",
-      "Resource": "arn:aws:dynamodb:r1:000000000000:table/sluis-i1-oidc",
+      "Resource": "arn:aws:dynamodb:r1:111122223333:table/sluis-i1-oidc",
       "Sid": "SluisCrossOidcTable"
     },
     {
@@ -236,8 +236,8 @@
       ],
       "Effect": "Allow",
       "Resource": [
-        "arn:aws:ssm:r1:000000000000:parameter/sluis/i1/internal/oidc/*",
-        "arn:aws:ssm:r1:000000000000:parameter/sluis/i1/external/oidc/*"
+        "arn:aws:ssm:r1:111122223333:parameter/sluis/i1/internal/oidc/*",
+        "arn:aws:ssm:r1:111122223333:parameter/sluis/i1/external/oidc/*"
       ],
       "Sid": "SluisCrossOidcParameters"
     },
@@ -270,7 +270,7 @@
         "dynamodb:DescribeTable"
       ],
       "Effect": "Allow",
-      "Resource": "arn:aws:dynamodb:r1:000000000000:table/sluis-i1-slack",
+      "Resource": "arn:aws:dynamodb:r1:111122223333:table/sluis-i1-slack",
       "Sid": "SluisCrossSlackTable"
     },
     {
@@ -280,8 +280,8 @@
       ],
       "Effect": "Allow",
       "Resource": [
-        "arn:aws:ssm:r1:000000000000:parameter/sluis/i1/internal/slack/*",
-        "arn:aws:ssm:r1:000000000000:parameter/sluis/i1/external/slack/*"
+        "arn:aws:ssm:r1:111122223333:parameter/sluis/i1/internal/slack/*",
+        "arn:aws:ssm:r1:111122223333:parameter/sluis/i1/external/slack/*"
       ],
       "Sid": "SluisCrossSlackParameters"
     },
@@ -323,12 +323,12 @@
       },
       "Effect": "Deny",
       "Resource": [
-        "arn:aws:dynamodb:r1:000000000000:table/sluis-i1-backup",
-        "arn:aws:dynamodb:r1:000000000000:table/sluis-i1-cloudflare",
-        "arn:aws:dynamodb:r1:000000000000:table/sluis-i1-github",
-        "arn:aws:dynamodb:r1:000000000000:table/sluis-i1-google",
-        "arn:aws:dynamodb:r1:000000000000:table/sluis-i1-oidc",
-        "arn:aws:dynamodb:r1:000000000000:table/sluis-i1-slack"
+        "arn:aws:dynamodb:r1:111122223333:table/sluis-i1-backup",
+        "arn:aws:dynamodb:r1:111122223333:table/sluis-i1-cloudflare",
+        "arn:aws:dynamodb:r1:111122223333:table/sluis-i1-github",
+        "arn:aws:dynamodb:r1:111122223333:table/sluis-i1-google",
+        "arn:aws:dynamodb:r1:111122223333:table/sluis-i1-oidc",
+        "arn:aws:dynamodb:r1:111122223333:table/sluis-i1-slack"
       ],
       "Sid": "SluisMaintenanceDeny"
     },
@@ -339,22 +339,22 @@
       "Condition": {
         "StringLike": {
           "kms:EncryptionContext:PARAMETER_ARN": [
-            "arn:aws:ssm:r1:000000000000:parameter/sluis/i1/internal/cloudflare/*",
-            "arn:aws:ssm:r1:000000000000:parameter/sluis/i1/external/cloudflare/*",
-            "arn:aws:ssm:r1:000000000000:parameter/sluis/i1/internal/github/*",
-            "arn:aws:ssm:r1:000000000000:parameter/sluis/i1/external/github/*",
-            "arn:aws:ssm:r1:000000000000:parameter/sluis/i1/internal/google/*",
-            "arn:aws:ssm:r1:000000000000:parameter/sluis/i1/external/google/*",
-            "arn:aws:ssm:r1:000000000000:parameter/sluis/i1/internal/oidc/*",
-            "arn:aws:ssm:r1:000000000000:parameter/sluis/i1/external/oidc/*",
-            "arn:aws:ssm:r1:000000000000:parameter/sluis/i1/internal/slack/*",
-            "arn:aws:ssm:r1:000000000000:parameter/sluis/i1/external/slack/*"
+            "arn:aws:ssm:r1:111122223333:parameter/sluis/i1/internal/cloudflare/*",
+            "arn:aws:ssm:r1:111122223333:parameter/sluis/i1/external/cloudflare/*",
+            "arn:aws:ssm:r1:111122223333:parameter/sluis/i1/internal/github/*",
+            "arn:aws:ssm:r1:111122223333:parameter/sluis/i1/external/github/*",
+            "arn:aws:ssm:r1:111122223333:parameter/sluis/i1/internal/google/*",
+            "arn:aws:ssm:r1:111122223333:parameter/sluis/i1/external/google/*",
+            "arn:aws:ssm:r1:111122223333:parameter/sluis/i1/internal/oidc/*",
+            "arn:aws:ssm:r1:111122223333:parameter/sluis/i1/external/oidc/*",
+            "arn:aws:ssm:r1:111122223333:parameter/sluis/i1/internal/slack/*",
+            "arn:aws:ssm:r1:111122223333:parameter/sluis/i1/external/slack/*"
           ],
           "kms:ViaService": "ssm.*.amazonaws.com"
         }
       },
       "Effect": "Allow",
-      "Resource": "arn:aws:kms:r1:000000000000:key/shared",
+      "Resource": "arn:aws:kms:r1:111122223333:key/shared",
       "Sid": "SluisParameterKeyCross"
     },
     {
@@ -370,7 +370,7 @@
         }
       },
       "Effect": "Allow",
-      "Resource": "arn:aws:kms:r1:000000000000:key/tables",
+      "Resource": "arn:aws:kms:r1:111122223333:key/tables",
       "Sid": "SluisStateKey"
     },
     {
@@ -418,7 +418,7 @@
         }
       },
       "Effect": "Allow",
-      "Resource": "arn:aws:kms:r1:000000000000:key/archive",
+      "Resource": "arn:aws:kms:r1:111122223333:key/archive",
       "Sid": "SluisArchiveKey"
     }
   ],
