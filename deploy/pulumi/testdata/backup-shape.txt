@@ -29,6 +29,5 @@ name aws:lambda/alias:Alias/staging-backup-alias-live-breakglass name=live-break
 name aws:lambda/alias:Alias/staging-backup-alias-live-console functionName=sluis-staging-backup
 name aws:lambda/alias:Alias/staging-backup-alias-live-console name=live-console
 name aws:lambda/function:Function/staging-backup-fn name=sluis-staging-backup
-name aws:lambda/function:Function/staging-backup-fn role=arn:aws:iam::111111111111:role/sluis-staging-backup
 name aws:lambda/layerVersion:LayerVersion/staging-backup-config layerName=sluis-staging-backup-config
 sluis:aws:Backup/staging-backup
