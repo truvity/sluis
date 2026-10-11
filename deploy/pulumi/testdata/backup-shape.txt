@@ -1,0 +1,34 @@
+aws:cloudwatch/logGroup:LogGroup/staging-backup-logs
+aws:cloudwatch/logMetricFilter:LogMetricFilter/staging-backup-completed-filter
+aws:cloudwatch/metricAlarm:MetricAlarm/staging-backup-alarm-dlq
+aws:cloudwatch/metricAlarm:MetricAlarm/staging-backup-alarm-failed
+aws:cloudwatch/metricAlarm:MetricAlarm/staging-backup-alarm-no-backup
+aws:iam/role:Role/staging-backup-role
+aws:iam/role:Role/staging-backup-scheduler-role
+aws:iam/rolePolicy:RolePolicy/staging-backup-policy
+aws:iam/rolePolicy:RolePolicy/staging-backup-scheduler-policy
+aws:lambda/alias:Alias/staging-backup-alias-live
+aws:lambda/alias:Alias/staging-backup-alias-live-admin
+aws:lambda/alias:Alias/staging-backup-alias-live-breakglass
+aws:lambda/alias:Alias/staging-backup-alias-live-console
+aws:lambda/function:Function/staging-backup-fn
+aws:lambda/functionEventInvokeConfig:FunctionEventInvokeConfig/staging-backup-async-live
+aws:lambda/layerVersion:LayerVersion/staging-backup-config
+aws:scheduler/schedule:Schedule/staging-backup-daily
+aws:scheduler/schedule:Schedule/staging-backup-resume
+aws:sqs/queue:Queue/staging-backup-schedule-dlq
+name aws:cloudwatch/logGroup:LogGroup/staging-backup-logs name=/aws/lambda/sluis-staging-backup
+name aws:iam/role:Role/staging-backup-role name=sluis-staging-backup
+name aws:iam/role:Role/staging-backup-scheduler-role name=sluis-staging-backup-scheduler
+name aws:lambda/alias:Alias/staging-backup-alias-live functionName=sluis-staging-backup
+name aws:lambda/alias:Alias/staging-backup-alias-live name=live
+name aws:lambda/alias:Alias/staging-backup-alias-live-admin functionName=sluis-staging-backup
+name aws:lambda/alias:Alias/staging-backup-alias-live-admin name=live-admin
+name aws:lambda/alias:Alias/staging-backup-alias-live-breakglass functionName=sluis-staging-backup
+name aws:lambda/alias:Alias/staging-backup-alias-live-breakglass name=live-breakglass
+name aws:lambda/alias:Alias/staging-backup-alias-live-console functionName=sluis-staging-backup
+name aws:lambda/alias:Alias/staging-backup-alias-live-console name=live-console
+name aws:lambda/function:Function/staging-backup-fn name=sluis-staging-backup
+name aws:lambda/function:Function/staging-backup-fn role=arn:aws:iam::111111111111:role/sluis-staging-backup
+name aws:lambda/layerVersion:LayerVersion/staging-backup-config layerName=sluis-staging-backup-config
+sluis:aws:Backup/staging-backup
