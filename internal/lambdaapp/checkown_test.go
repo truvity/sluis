@@ -7,7 +7,6 @@ import (
 	"github.com/truvity/sluis/internal/deploycheck"
 	"github.com/truvity/sluis/internal/lambdaapp"
 	"github.com/truvity/sluis/internal/lambdaapp/githubfn"
-	"github.com/truvity/sluis/internal/lambdaapp/githubmintfn"
 	"github.com/truvity/sluis/internal/lambdaapp/slackfn"
 	"github.com/truvity/sluis/policy"
 )
@@ -34,7 +33,7 @@ func TestAProviderFunctionsCheckReportsOnlyItsOwnKinds(t *testing.T) {
 	if len(declared) != 1 || declared[0].Kind != config.SecretClient {
 		t.Fatalf("the fixture declares %+v: it does not test the filter", declared)
 	}
-	for name, kinds := range map[string][]string{"github": githubfn.Kinds, "github-mint": githubmintfn.Kinds, "slack": slackfn.Kinds} {
+	for name, kinds := range map[string][]string{"github": githubfn.Kinds, "slack": slackfn.Kinds} {
 		if got := deploycheck.Own(declared, kinds...); len(got) != 0 {
 			t.Errorf("%s reads %+v", name, got)
 		}

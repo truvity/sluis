@@ -1,8 +1,10 @@
-// Package githubfn is the GitHub module's controller function: the
-// organisations' team passes and the links pass, on a schedule (`tick`) or when
-// the console asks (`run`). It has no HTTP surface and serves no module call:
-// the installation-token mint is another function (internal/lambdaapp/githubmintfn),
-// so a controller pass and a mint never share a role or a concurrency limit.
+// Package githubfn is the GitHub module's function: the organisations' team
+// passes and the links pass, on a schedule (`tick`) or when the console asks
+// (`run`), and the installation-token mint, the `github` module's
+// `mint_installation` method, which the issuer calls over modcall through its
+// `live-issuer` alias and no other class may (D-v176-7 a: one function serves
+// both, with the concurrency limit and the mint deadline of the one). It has no
+// HTTP surface.
 // It registers itself with internal/lambdaapp; cmd/sluis-github and the lambda
 // build of cmd/sluis import it.
 package githubfn
@@ -18,6 +20,7 @@ import (
 	githubapp "github.com/truvity/sluis/internal/githubroster/app"
 	githubcontroller "github.com/truvity/sluis/internal/githubroster/controller"
 	"github.com/truvity/sluis/internal/lambdaapp"
+	"github.com/truvity/sluis/internal/modcall"
 	"github.com/truvity/sluis/internal/port/invoke"
 )
 
@@ -30,9 +33,10 @@ var Kinds []string
 
 // Handler is the function's entry: tick and run events for the targets
 // declared says are the policy's, opening one pass per invocation; check is
-// the {"kind":"check"} answer. It answers no module call and no HTTP request.
+// the {"kind":"check"} answer; rpc answers the module calls (the mint), or is
+// nil for a function that serves none. It answers no HTTP request.
 func Handler(log *slog.Logger, declared func(target string) bool, open func(context.Context) (lambdaapp.Pass, error),
-	check func(context.Context) (deploycheck.Report, error)) *lambdaapp.HTTP {
+	rpc *modcall.Server, check func(context.Context) (deploycheck.Report, error)) *lambdaapp.HTTP {
 	kindsOf := func(target string) []string {
 		if declared(target) {
 			return []string{invoke.KindGitHub}
@@ -43,7 +47,11 @@ func Handler(log *slog.Logger, declared func(target string) bool, open func(cont
 		invoke.KindGitHub: {Name: "github", Log: log, Open: open,
 			Unknown: func(err error) bool { return errors.Is(err, githubcontroller.ErrUnknownTarget) }},
 	}
-	return lambdaapp.NewHTTP(http.NotFoundHandler(), nil, log).WithControllers(kindsOf, controllers).WithCheck(check)
+	h := lambdaapp.NewHTTP(http.NotFoundHandler(), nil, log).WithControllers(kindsOf, controllers).WithCheck(check)
+	if rpc != nil {
+		h = h.WithRPC(rpc)
+	}
+	return h
 }
 
 func open(ctx context.Context, file string) (*lambdaapp.Function, error) {
@@ -59,6 +67,12 @@ func open(ctx context.Context, file string) (*lambdaapp.Function, error) {
 	if err != nil {
 		return nil, err
 	}
+	// The mint holds its ports for the life of the function; a pass opens its own.
+	minter, err := githubapp.NewMinter(ctx, cfg, log)
+	if err != nil {
+		flush(ctx)
+		return nil, err
+	}
 	return &lambdaapp.Function{
 		Handler: Handler(log, cfg.Declares, func(ctx context.Context) (lambdaapp.Pass, error) {
 			// Assembled per invocation and closed at its end (lambdaapp.Controller):
@@ -68,8 +82,8 @@ func open(ctx context.Context, file string) (*lambdaapp.Function, error) {
 				return nil, err
 			}
 			return app, nil
-		}, lambdaapp.CheckOwn(doc.Service.Secrets, doc.Policy, Kinds...)),
+		}, minter.RPC(), lambdaapp.CheckOwn(doc.Service.Secrets, doc.Policy, Kinds...)),
 		Flush: flush,
-		Close: func() {},
+		Close: minter.Close,
 	}, nil
 }

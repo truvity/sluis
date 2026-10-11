@@ -94,7 +94,7 @@ func TestModuleRoleIssuerCrossGrants(t *testing.T) {
 	// functions are invoked through the alias of the issuer class, the backup
 	// through the console's, and the minter's state is not reached.
 	for _, want := range []string{"tbl:oidc", "tbl:google", "tbl:github", "tbl:slack",
-		"fn:cloudflare:live-issuer", "fn:github:live-issuer", "fn:github-mint:live-issuer", "fn:google:live-issuer",
+		"fn:cloudflare:live-issuer", "fn:github:live-issuer", "fn:google:live-issuer",
 		"fn:slack:live-issuer", "fn:backup:live-console", "bkt/google/*"} {
 		if !strings.Contains(doc, want) {
 			t.Errorf("missing %q", want)
@@ -125,34 +125,30 @@ func TestModuleRoleIssuerCrossGrants(t *testing.T) {
 	}
 }
 
-func TestModuleRoleMintOnlyGitHubReadsTheModuleAndWritesNothing(t *testing.T) {
-	doc := rendered(t, testRole(RoleGitHubMint))
-	for _, want := range []string{"tbl:github", "internal/github", "bkt/github/*", "lg:github-mint:*"} {
+// The github function serves the mint too (D-v176-7 a), and the mint reads the
+// App keys under the github module's own parameters: the role has nothing
+// beyond hosting github, no other module, and invokes no peer.
+func TestModuleRoleGitHubServesTheMintWithNothingBeyondItsOwnModule(t *testing.T) {
+	doc := rendered(t, testRole(RoleGitHub))
+	for _, want := range []string{"tbl:github", "internal/github", "bkt/github/*", "lg:github:*"} {
 		if !strings.Contains(doc, want) {
 			t.Errorf("missing %q", want)
 		}
 	}
-	st, err := ModuleRoleStatements(testModuleEnv(), testRole(RoleGitHubMint))
+	for _, not := range []string{"tbl:oidc", "tbl:slack", "tbl:google", "internal/slack", "internal/google", "github-mint"} {
+		if strings.Contains(doc, not) {
+			t.Errorf("the github function reaches %q: %s", not, doc)
+		}
+	}
+	st, err := ModuleRoleStatements(testModuleEnv(), testRole(RoleGitHub))
 	if err != nil {
 		t.Fatal(err)
 	}
-	writes := map[string]bool{"ssm:PutParameter": true, "ssm:DeleteParameter": true, "dynamodb:PutItem": true, "dynamodb:UpdateItem": true,
-		"dynamodb:DeleteItem": true, "s3:PutObject": true, "s3:DeleteObject": true, "kms:Encrypt": true, "kms:GenerateDataKey": true,
-		"lambda:InvokeFunction": true}
 	for _, s := range st {
-		// The table key is used only through DynamoDB, by a role with no write on a table.
-		if s["Effect"] != "Allow" || s["Sid"] == sidKey {
-			continue
-		}
 		for _, a := range actionsOf(s["Action"]) {
-			if writes[a] {
-				t.Errorf("the mint-only function is allowed %s by %v", a, s["Sid"])
+			if a == "lambda:InvokeFunction" {
+				t.Errorf("the github function invokes a peer: %v", s["Sid"])
 			}
-		}
-	}
-	for _, not := range []string{"tbl:oidc", "tbl:slack", "internal/slack"} {
-		if strings.Contains(doc, not) {
-			t.Errorf("the mint-only function reaches %q: %s", not, doc)
 		}
 	}
 }

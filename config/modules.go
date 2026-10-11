@@ -19,7 +19,6 @@ import (
 // [ModuleDocuments.Issuer].
 const (
 	ModuleGitHub     = "github"
-	ModuleGitHubMint = "github-mint"
 	ModuleSlack      = "slack"
 	ModuleGoogle     = "google"
 	ModuleCloudflare = "cloudflare"
@@ -30,7 +29,7 @@ const (
 
 // Modules are the module functions, in a fixed order.
 func Modules() []string {
-	return []string{ModuleCloudflare, ModuleGitHub, ModuleGitHubMint, ModuleGoogle, ModuleSlack}
+	return []string{ModuleCloudflare, ModuleGitHub, ModuleGoogle, ModuleSlack}
 }
 
 // FunctionNameOf is the name of a module's function: `aws.functions.<module>`,
@@ -42,15 +41,6 @@ func FunctionNameOf(in *Installation, module string) string {
 		}
 	}
 	return "sluis-" + in.Instance + "-" + module
-}
-
-// moduleTable is the table of the module a function reads: the mint-only
-// function reads the GitHub module's.
-func moduleTable(module string) string {
-	if module == ModuleGitHubMint {
-		return ModuleGitHub
-	}
-	return module
 }
 
 // ModuleOptions say what an installation cannot: the names the infrastructure
@@ -74,9 +64,7 @@ type ModuleDocuments struct {
 	// it reads from the same file.
 	Policy []byte
 	// Modules are the service documents of the module functions, by
-	// [Modules]: controller-github/v2 (github, and the mint-only function,
-	// which reads the same document), controller-slack/v2, sluis-google/v1 and
-	// sluis/v3 with `cloudflare.serve`. The Cloudflare module has one only when
+	// [Modules]: controller-github/v2, controller-slack/v2, sluis-google/v1 and sluis/v3 with `cloudflare.serve`. The Cloudflare module has one only when
 	// the installation declares a preset: a module with nothing to do has no
 	// function.
 	Modules map[string][]byte
@@ -217,8 +205,8 @@ type moduleBuilder struct {
 // nothing to do.
 func (b moduleBuilder) document(module string) (any, error) {
 	switch module {
-	case ModuleGitHub, ModuleGitHubMint:
-		return b.github(module)
+	case ModuleGitHub:
+		return b.github()
 	case ModuleSlack:
 		return b.slack()
 	case ModuleGoogle:
@@ -241,7 +229,7 @@ func (b moduleBuilder) secrets() (*internal.Secrets, error) {
 
 // ports open the module's own table and no other.
 func (b moduleBuilder) ports(module string) *internal.Ports {
-	table := moduleTable(module)
+	table := module
 	name := b.opts.Tables[table]
 	if name == "" {
 		name = "sluis-" + b.in.Instance + "-" + table
@@ -304,7 +292,7 @@ func (b moduleBuilder) shared() *internal.Sluis {
 	return &t
 }
 
-func (b moduleBuilder) github(module string) (any, error) {
+func (b moduleBuilder) github() (any, error) {
 	t := b.shared()
 	g := internal.GitHubController{}
 	if c := b.in.Controllers; c != nil && c.GitHub != nil {
@@ -312,11 +300,10 @@ func (b moduleBuilder) github(module string) (any, error) {
 	}
 	t.Controllers = &internal.Controllers{GitHub: &g}
 	doc := t.GitHubController()
-	// The mint-only function asks nothing of the console.
-	if err := b.rosterOf(&doc.Roster, module == ModuleGitHub); err != nil {
+	if err := b.rosterOf(&doc.Roster, true); err != nil {
 		return nil, err
 	}
-	doc.Ports = b.ports(module)
+	doc.Ports = b.ports(ModuleGitHub)
 	return doc, nil
 }
 
@@ -418,7 +405,7 @@ func verifyModules(d *ModuleDocuments) error {
 func ValidateModule(module string, doc, policy []byte) error {
 	err := withFiles(map[string][]byte{"sluis": doc, "policy": policy}, func(f map[string]string) error {
 		switch module {
-		case ModuleGitHub, ModuleGitHubMint:
+		case ModuleGitHub:
 			_, err := internal.Load[internal.ControllerGitHub](f["sluis"])
 			return err
 		case ModuleSlack:
@@ -477,7 +464,7 @@ func ModuleSecrets(module string, doc, policy []byte) ([]DeclaredSecret, error) 
 				return err
 			}
 			out = internal.DeclaredSecrets(&svc.Serve, pol)
-		case ModuleGitHub, ModuleGitHubMint, ModuleSlack:
+		case ModuleGitHub, ModuleSlack:
 			// An App's credential is made at run time and no document names it.
 		case ModuleGoogle:
 			g, err := internal.LoadGoogle(f["sluis"])

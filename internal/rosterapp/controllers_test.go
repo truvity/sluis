@@ -138,7 +138,7 @@ func TestAModuleWithARemoteIsNotHosted(t *testing.T) {
 	cfg := oneProcess(t, `controllers:
   github: {consoleURL: "http://127.0.0.1:1/console"}
   slack: {consoleURL: "http://127.0.0.1:1/console"}
-github: {remote: {function: sluis-example-github-mint}}
+github: {remote: {function: sluis-example-github}}
 `)
 	if cfg.GitHub != nil {
 		t.Error("the GitHub controller is assembled although github.remote is set")

@@ -114,7 +114,7 @@ func TestEachModuleFunctionReadsItsRenderedDocuments(t *testing.T) {
 func TestModuleFunctionNamesAreSaidOnce(t *testing.T) {
 	in := moduleInstallation(t, "modules-full")
 	rec, _ := mustLambda(t, moduleEstate(t, in))
-	for m, want := range map[string]string{"github": "sluis-staging-github", "slack": "sluis-staging-chat", "github-mint": "sluis-staging-token-mint"} {
+	for m, want := range map[string]string{"github": "sluis-staging-github", "slack": "sluis-staging-chat"} {
 		if got := prop(rec.one(t, fnType, "staging-"+m+"-fn"), "name").StringValue(); got != want {
 			t.Errorf("%s is named %q, want %q", m, got, want)
 		}
