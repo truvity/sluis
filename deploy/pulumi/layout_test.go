@@ -90,7 +90,7 @@ func TestLayoutV5GetsOnlyTheV5Grants(t *testing.T) {
 		tableArn("sluis-staging-oidc"), tableArn("sluis-staging-github"), tableArn("sluis-staging-slack"), tableArn("sluis-staging-google"),
 		paramRoot + "/internal/oidc/*", paramRoot + "/external/oidc/*",
 		arnp + "s3:::" + bucket + "/oidc/*", arnp + "s3:::" + bucket + "/google/*",
-		fnArn("sluis-staging-github") + ":live-issuer", fnArn("sluis-staging-github-mint") + ":live-issuer",
+		fnArn("sluis-staging-github") + ":live-issuer",
 		fnArn("sluis-staging-slack") + ":live-issuer", fnArn("sluis-staging-google") + ":live-issuer",
 		fnArn("sluis-staging-cloudflare") + ":live-issuer", fnArn("sluis-staging-backup") + ":live-console",
 	} {
@@ -401,11 +401,11 @@ func TestThePreviewShapeAcrossTheLayouts(t *testing.T) {
 		t.Errorf("deleted: %v", got.deleted)
 	}
 	// The v4 layout has no module functions: the flip to a layout with the
-	// per-module tables creates the five (a function, a role and a policy each)
+	// per-module tables creates the four (a function, a role and a policy each)
 	// and replaces and deletes nothing of the issuer's.
 	for _, typ := range []string{fnType, policyType, "aws:iam/role:Role"} {
 		s := previewShape(v4, window, typ)
-		if len(s.created) != 5 || len(s.deleted)+len(s.replaced) != 0 {
+		if len(s.created) != 4 || len(s.deleted)+len(s.replaced) != 0 {
 			t.Errorf("%s: %s", typ, s)
 		}
 		for _, n := range s.created {

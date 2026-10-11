@@ -54,7 +54,6 @@ lambda_budget := "83886080"
 # prints the sizes). Keep the names equal to hack/release-zips.txt.
 budget_issuer := lambda_budget
 budget_github := lambda_budget
-budget_github_mint := lambda_budget
 budget_slack := lambda_budget
 budget_google := lambda_budget
 budget_cloudflare := lambda_budget
@@ -70,7 +69,6 @@ lambda-size: console
     mains=(
         "sluis-issuer:{{budget_issuer}}"
         "sluis-github:{{budget_github}}"
-        "sluis-github-mint:{{budget_github_mint}}"
         "sluis-slack:{{budget_slack}}"
         "sluis-google:{{budget_google}}"
         "sluis-cloudflare:{{budget_cloudflare}}"
@@ -80,14 +78,14 @@ lambda-size: console
     for entry in "${mains[@]}"; do
         main="${entry%%:*}"
         budget="${entry##*:}"
-        # The github, github-mint, slack and google mains arrive on the v1.76
+        # The github, slack and google mains arrive on the v1.76
         # train (cmd/sluis-github and -slack, -google). Until they exist the
         # budget cannot be measured; .goreleaser.yaml already names them, so the
         # release build fails without them. The issuer, cloudflare and backup
         # mains are required.
         if [ ! -d "cmd/$main" ]; then
             case "$main" in
-                sluis-github|sluis-github-mint|sluis-slack|sluis-google)
+                sluis-github|sluis-slack|sluis-google)
                     echo "lambda-size: cmd/$main does not exist yet, skipped" >&2
                     continue ;;
             esac

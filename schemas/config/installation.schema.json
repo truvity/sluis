@@ -1416,12 +1416,11 @@
             "pattern": "^[A-Za-z0-9_-]{1,64}$",
             "type": "string"
           },
-          "description": "The names of the module functions (shape `lambda`, rendered by RenderModules), by module: `github`, `github-mint`, `slack`, `google` or `cloudflare`. A module not named is `sluis-<instance>-<module>`. The issuer's document calls each by its name (`<module>.remote`).",
+          "description": "The names of the module functions (shape `lambda`, rendered by RenderModules), by module: `github`, `slack`, `google` or `cloudflare`. A module not named is `sluis-<instance>-<module>`. The issuer's document calls each by its name (`<module>.remote`).",
           "propertyNames": {
             "enum": [
               "cloudflare",
               "github",
-              "github-mint",
               "google",
               "slack"
             ]

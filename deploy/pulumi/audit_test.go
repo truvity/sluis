@@ -226,7 +226,7 @@ func TestTheQueueNamesTheModuleFunctionsRolesToo(t *testing.T) {
 	qp := prop(rec.one(t, "aws:sqs/queuePolicy:QueuePolicy", "audit-example-ingest"), "policy").StringValue()
 	// The installation declares no Cloudflare preset, so that module has no
 	// function and no role (TestTheCloudflareFunctionExistsOnlyWithPresets).
-	for _, m := range []string{"github", "github-mint", "google", "slack"} {
+	for _, m := range []string{"github", "google", "slack"} {
 		if !strings.Contains(qp, arnp+"iam::"+account+":role/sluis-example-"+m) {
 			t.Errorf("the queue policy does not name the %s function's role:\n%s", m, qp)
 		}
