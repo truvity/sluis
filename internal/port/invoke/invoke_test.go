@@ -150,3 +150,36 @@ func TestNotifyOfANameBothControllersDeclareInvokesEachWithItsController(t *test
 		t.Errorf("events %+v, want %+v", got, want)
 	}
 }
+
+func TestNotifyControllerSendsOnlyThatControllersEvent(t *testing.T) {
+	api := &fake{status: 202}
+	trigger, _ := invoke.New(api, invoke.Config{GitHub: "sluis", Slack: "sluis"})
+	// No SetKinds: a controller's own trigger does not know the policy.
+	if err := port.NotifyController(context.Background(), trigger, port.ControllerSlack, "acme"); err != nil {
+		t.Fatal(err)
+	}
+	if len(api.calls) != 1 {
+		t.Fatalf("%d invocations, want 1", len(api.calls))
+	}
+	var event invoke.Event
+	if err := json.Unmarshal(api.calls[0].Payload, &event); err != nil {
+		t.Fatal(err)
+	}
+	if event != (invoke.Event{Kind: "run", Controller: "slack", Target: "acme"}) {
+		t.Errorf("payload %s", api.calls[0].Payload)
+	}
+}
+
+func TestNotifyWithoutKindsStillNamesEveryController(t *testing.T) {
+	api := &fake{status: 202}
+	trigger, _ := invoke.New(api, invoke.Config{GitHub: "sluis", Slack: "sluis"})
+	if err := trigger.Notify(context.Background(), "acme"); err != nil {
+		t.Fatal(err)
+	}
+	for _, call := range api.calls {
+		var event invoke.Event
+		if err := json.Unmarshal(call.Payload, &event); err != nil || event.Controller == "" {
+			t.Errorf("payload %s names no controller (%v)", call.Payload, err)
+		}
+	}
+}

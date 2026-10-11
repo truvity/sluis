@@ -282,21 +282,23 @@ func NewConsole(_ context.Context, deps ConsoleDeps) (*Console, error) {
 // notify asks for the tick of a target (a GitHub organisation's login or a
 // Slack workspace's key) after a write that concerns it. A notification is a
 // hint: failing to send one is logged, never the request's failure.
-func (c *Console) notify(ctx context.Context, target string) {
+func (c *Console) notify(ctx context.Context, controller, target string) {
 	if c.deps.Trigger == nil || target == "" {
 		return
 	}
-	if err := c.deps.Trigger.Notify(ctx, target); err != nil {
-		c.log().WarnContext(ctx, "a tick could not be requested", logattr.SafeString("target", target), logattr.SafeError("error", err))
+	if err := port.NotifyController(ctx, c.deps.Trigger, controller, target); err != nil {
+		c.log().WarnContext(ctx, "a tick could not be requested",
+			logattr.SafeString("controller", controller), logattr.SafeString("target", target),
+			logattr.SafeError("error", err))
 	}
 }
 
 // notifyShared notifies every workspace a shared channel's record names: the
 // host, which invites, and each guest, which accepts.
 func (c *Console) notifyShared(ctx context.Context, ch reconcile.SharedChannel) {
-	c.notify(ctx, ch.Host)
+	c.notify(ctx, port.ControllerSlack, ch.Host)
 	for _, guest := range ch.With {
-		c.notify(ctx, guest)
+		c.notify(ctx, port.ControllerSlack, guest)
 	}
 }
 

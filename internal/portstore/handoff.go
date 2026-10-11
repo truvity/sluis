@@ -52,7 +52,7 @@ func (h *Handoff) Offer(ctx context.Context, host, channel, channelID, guest, in
 	}
 	if h.trigger != nil {
 		// A hint: whether it arrives changes when the guest ticks, not whether.
-		_ = h.trigger.Notify(ctx, guest)
+		_ = port.NotifyController(ctx, h.trigger, port.ControllerSlack, guest)
 	}
 	return nil
 }

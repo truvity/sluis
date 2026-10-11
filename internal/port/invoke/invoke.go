@@ -15,6 +15,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"sync"
 
@@ -143,10 +144,6 @@ func (t *Trigger) Notify(ctx context.Context, target string) error {
 	t.mu.RLock()
 	kinds := t.kinds
 	t.mu.RUnlock()
-	type call struct {
-		function string
-		event    Event
-	}
 	var calls []call
 	if kinds != nil {
 		for _, kind := range kinds(target) {
@@ -156,16 +153,33 @@ func (t *Trigger) Notify(ctx context.Context, target string) error {
 		}
 	}
 	if calls == nil {
-		var names []string
-		for _, fn := range t.functions {
-			names = append(names, fn)
-		}
-		slices.Sort(names)
-		// One function may run both kinds: it is invoked once.
-		for _, fn := range slices.Compact(names) {
-			calls = append(calls, call{fn, Event{Kind: KindRun, Target: target}})
+		// A target nobody is known to declare: every configured controller is
+		// asked, each by name, so that no event is ambiguous.
+		for _, kind := range slices.Sorted(maps.Keys(t.functions)) {
+			calls = append(calls, call{t.functions[kind], Event{Kind: KindRun, Controller: kind, Target: target}})
 		}
 	}
+	return t.send(ctx, calls)
+}
+
+// NotifyController implements [port.ControllerTrigger]: an asynchronous invoke
+// of the one controller's function, for a sender that knows which controller
+// the target is for (a controller's own watch, a console write to one kind).
+func (t *Trigger) NotifyController(ctx context.Context, controller, target string) error {
+	fn, ok := t.functions[controller]
+	if !ok {
+		// As in Notify, a kind with no function is never invoked.
+		return nil
+	}
+	return t.send(ctx, []call{{fn, Event{Kind: KindRun, Controller: controller, Target: target}}})
+}
+
+type call struct {
+	function string
+	event    Event
+}
+
+func (t *Trigger) send(ctx context.Context, calls []call) error {
 	var errs []error
 	for _, c := range calls {
 		payload, err := json.Marshal(c.event)

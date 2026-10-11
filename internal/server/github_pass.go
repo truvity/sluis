@@ -14,6 +14,7 @@ import (
 	"github.com/truvity/sluis/internal/audit"
 	"github.com/truvity/sluis/internal/githubroster/connection"
 	"github.com/truvity/sluis/internal/githubroster/status"
+	"github.com/truvity/sluis/internal/port"
 	"github.com/truvity/sluis/storage/logattr"
 )
 
@@ -57,7 +58,7 @@ func (c *Console) RequestGitHubPass(
 			org, now.Sub(last).Round(time.Second)))
 	}
 	c.record(ctx, audit.GitHubPassRequested(identityActor(who), org))
-	c.notify(ctx, org)
+	c.notify(ctx, port.ControllerGitHub, org)
 	c.log().InfoContext(ctx, "a GitHub pass was requested", logattr.SafeString("org", org), logattr.SafeString("by", who.Who()))
 	return connect.NewResponse(&directoryrosterv1.RequestGitHubPassResponse{RequestedAt: timestampOf(now)}), nil
 }

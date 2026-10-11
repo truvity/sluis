@@ -15,6 +15,7 @@ import (
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
 	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/audit"
+	"github.com/truvity/sluis/internal/port"
 	"github.com/truvity/sluis/internal/slackapp"
 	"github.com/truvity/sluis/internal/slackroster/connection"
 	"github.com/truvity/sluis/internal/slackroster/reconcile"
@@ -336,7 +337,7 @@ func (c *Console) CreateSlackChannel(
 		return nil, channelError(err)
 	}
 	c.record(ctx, audit.SlackConsoleChannelCreated(actorOf(ctx), auditConsole(want)))
-	c.notify(ctx, want.Workspace)
+	c.notify(ctx, port.ControllerSlack, want.Workspace)
 	view := consoleView(want)
 	view.State, view.Reason = consoleState(want, c.deps.Authorizer.Policy().Declared(), reports)
 	view.CanOperate = true
@@ -431,7 +432,7 @@ func (c *Console) UpdateSlackChannel(
 	}
 	if changes != "" {
 		c.record(ctx, audit.SlackConsoleChannelUpdated(actorOf(ctx), auditConsole(written), changes))
-		c.notify(ctx, written.Workspace)
+		c.notify(ctx, port.ControllerSlack, written.Workspace)
 	}
 	view := consoleView(written)
 	view.State, view.Reason = consoleState(written, c.deps.Authorizer.Policy().Declared(), c.slackReports(ctx))
@@ -502,7 +503,7 @@ func (c *Console) DeleteSlackChannel(
 		return nil, channelError(err)
 	}
 	c.record(ctx, audit.SlackConsoleChannelDeleted(actorOf(ctx), auditConsole(gone)))
-	c.notify(ctx, gone.Workspace)
+	c.notify(ctx, port.ControllerSlack, gone.Workspace)
 	if req.Msg.GetArchive() {
 		archived, note := c.archiveForgotten(ctx, gone, target)
 		return connect.NewResponse(&directoryrosterv1.DeleteSlackChannelResponse{Note: note, Archived: archived}), nil

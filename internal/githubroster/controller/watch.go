@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/truvity/sluis/internal/githubroster/connection"
+	"github.com/truvity/sluis/internal/port"
 	"github.com/truvity/sluis/internal/rails"
 )
 
@@ -74,7 +75,7 @@ func (c *Controller) watchCredentials(ctx context.Context, wake chan<- struct{})
 			},
 			Changed: "an organisation's credentials changed",
 			OnRequest: func(org string) {
-				if err := c.deps.Trigger.Notify(ctx, org); err != nil {
+				if err := port.NotifyController(ctx, c.deps.Trigger, port.ControllerGitHub, org); err != nil {
 					c.deps.Log.WarnContext(ctx, "a requested pass could not be handed to the trigger", slog.String("org", org), slog.Any("error", err))
 				}
 			},
@@ -89,7 +90,7 @@ func (c *Controller) watchCredentials(ctx context.Context, wake chan<- struct{})
 		Requests: c.passRequests,
 		Changed:  "an organisation's credentials changed",
 		OnRequest: func(org string) {
-			if err := c.deps.Trigger.Notify(ctx, org); err != nil {
+			if err := port.NotifyController(ctx, c.deps.Trigger, port.ControllerGitHub, org); err != nil {
 				c.deps.Log.WarnContext(ctx, "a requested pass could not be handed to the trigger", slog.String("org", org), slog.Any("error", err))
 			}
 		},
