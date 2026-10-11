@@ -19,6 +19,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/truvity/sluis/audit/deploy/pulumi/artifact"
+	sluisconfig "github.com/truvity/sluis/config"
 )
 
 // LayerRoot is where the configuration layer is mounted in a function: Lambda
@@ -47,7 +48,10 @@ type releasePackage struct {
 
 // releaseName matches the release zips: the per-module sluis-<module>_<version>
 // zips, and the sluis-lambda_<version> zip of releases before 1.75.
-var releaseName = regexp.MustCompile(`^sluis-(?:lambda|issuer|cloudflare|backup|github|slack|google)_v?(.+)_linux_[a-z0-9]+\.zip$`)
+var releaseName = regexp.MustCompile(`^sluis-(?:lambda|` + zipModulesAlt() + `)_v?(.+)_linux_[a-z0-9]+\.zip$`)
+
+// zipModulesAlt is the regexp alternation of the modules that have a release zip.
+func zipModulesAlt() string { return strings.Join(sluisconfig.ZipModules(), "|") }
 
 // packageRelease is the release a package is: the explicit version, else the one
 // in the file's name.
