@@ -19,6 +19,11 @@ const (
 	MethodRequestPass           = "console.request_pass"
 	MethodGetStatus             = "console.get_status"
 	MethodConfirmRemovals       = "console.confirm_removals"
+
+	MethodListApps          = "console.list_apps"
+	MethodCreateApp         = "console.create_app"
+	MethodInstallApp        = "console.install_app"
+	MethodCompleteCatalogue = "console.complete_catalogue"
 )
 
 // Register puts the console methods on the module's server.
@@ -30,6 +35,11 @@ func Register(s *modcall.Server, c *Service) {
 	handle(c, s, MethodRequestPass, c.RequestSlackPass)
 	handle(c, s, MethodGetStatus, c.GetSlackStatus, consolecall.List())
 	handle(c, s, MethodConfirmRemovals, c.ConfirmSlackRemovals)
+
+	handle(c, s, MethodListApps, c.ListSlackApps, consolecall.List())
+	handle(c, s, MethodCreateApp, c.CreateSlackApp)
+	handle(c, s, MethodInstallApp, c.InstallSlackApp)
+	handleJSON(c, s, MethodCompleteCatalogue, c.CompleteCatalogue)
 }
 
 // NewServer is the module's server with the console methods on it: what a

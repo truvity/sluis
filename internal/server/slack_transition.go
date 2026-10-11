@@ -2,10 +2,7 @@ package server
 
 import (
 	"context"
-	"errors"
-	"strings"
-
-	"connectrpc.com/connect"
+	"time"
 
 	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/consolecall"
@@ -41,21 +38,5 @@ func (c *Console) requireAnySlack(ctx context.Context, want access.Role) (access
 	return got, book, slackError(err)
 }
 
-func connectMessage(err error) string {
-	var cerr *connect.Error
-	if errors.As(err, &cerr) {
-		return cerr.Message()
-	}
-	return err.Error()
-}
-
-// slackWorkspaceOfBind is the Slack workspace a catalogue flow's signed state
-// binds, so its callback can ask the role question again, now.
-func (c *Console) slackWorkspaceOfBind(bind string) string {
-	id, ok := strings.CutPrefix(bind, slackconsole.CatalogueBind)
-	if !ok || c.deps.SlackCatalogue == nil {
-		return ""
-	}
-	entry, _ := c.deps.SlackCatalogue.Get(id)
-	return entry.Workspace
-}
+// slackTimeout bounds one call to Slack.
+const slackTimeout = 15 * time.Second

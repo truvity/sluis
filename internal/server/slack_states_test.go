@@ -6,3 +6,11 @@ const (
 	slackCreated      = "created"
 	slackInstalled    = "installed"
 )
+
+// The states a catalogue Slack App is shown in.
+const (
+	slackAppDeclared      = "declared"
+	slackAppCreated       = "created"
+	slackAppInstalled     = "installed"
+	slackAppScopesMissing = "scopes_missing"
+)

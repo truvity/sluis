@@ -23,6 +23,12 @@ import (
 	"github.com/truvity/sluis/policy"
 )
 
+// The words for a channel's visibility.
+const (
+	privacyPublic  = "public"
+	privacyPrivate = "private"
+)
+
 func (c *Console) slackChannelStore() (SlackChannelRecords, error) {
 	if c.deps.SlackChannels == nil {
 		return nil, connect.NewError(connect.CodeFailedPrecondition,
@@ -149,7 +155,7 @@ func (c *Console) ListSlackChannels(
 		})
 	}
 	if len(owners) > 0 {
-		out.SourceDirectories, out.SourceDirectoriesError = c.sourceDirectories(ctx, owners...)
+		out.SourceDirectories, out.SourceDirectoriesError = c.slackSvc().SourceDirectories(ctx, owners...)
 	}
 	var records []connection.ChannelRecord
 	if c.deps.SlackChannels != nil {
@@ -263,7 +269,7 @@ func (c *Console) validateConsole(ctx context.Context, want reconcile.ConsoleCha
 	if err := want.Validate(c.deps.Authorizer.Policy().Declared()); err != nil {
 		return connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	return c.checkSources(ctx, want.Sources, want.Members, book.Owner(want.Workspace), true)
+	return c.slackSvc().CheckSources(ctx, want.Sources, want.Members, book.Owner(want.Workspace), true)
 }
 
 // CreateSlackChannel puts a channel under management: operator of the
