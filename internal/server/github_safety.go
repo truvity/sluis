@@ -16,6 +16,7 @@ import (
 	"github.com/truvity/sluis/internal/githubroster/connection"
 	"github.com/truvity/sluis/internal/githubroster/link"
 	"github.com/truvity/sluis/internal/githubroster/status"
+	"github.com/truvity/sluis/internal/port"
 )
 
 // GitHubConfirmations is where operators' confirmations of removal sets
@@ -66,7 +67,7 @@ func (c *Console) ConfirmGitHubRemovals(
 	}
 	c.record(ctx, audit.GitHubRemovalsConfirmed(identityActor(id), org, fingerprint,
 		report.Breaker.Affected, report.Breaker.Members))
-	c.notify(ctx, org)
+	c.notify(ctx, port.ControllerGitHub, org)
 	return connect.NewResponse(&directoryrosterv1.ConfirmGitHubRemovalsResponse{}), nil
 }
 

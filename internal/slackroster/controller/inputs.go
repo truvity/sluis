@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/truvity/sluis/internal/port"
 	"github.com/truvity/sluis/internal/rails"
 	"github.com/truvity/sluis/internal/slackroster/apply"
 	"github.com/truvity/sluis/internal/slackroster/reconcile"
@@ -230,7 +231,7 @@ func (c *Controller) wake(ctx context.Context, host, guest string) {
 	if _, declared := c.deps.Policy.Slack.Workspaces[guest]; !declared {
 		return
 	}
-	if err := c.deps.Trigger.Notify(ctx, guest); err != nil {
+	if err := port.NotifyController(ctx, c.deps.Trigger, port.ControllerSlack, guest); err != nil {
 		c.deps.Log.WarnContext(ctx, "a guest could not be asked to tick", logattr.SafeString("host", host),
 			logattr.SafeString("guest", guest), logattr.SafeError("error", err))
 	}
