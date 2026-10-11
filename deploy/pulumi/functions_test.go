@@ -213,7 +213,7 @@ func TestThereIsNoGitHubMintResource(t *testing.T) {
 			t.Errorf("a github-mint resource is declared: %s", n)
 		}
 	}
-	issuer := resourcesOf(statements(t, prop(rec.one(t, policyType, "staging-http-policy"), "policy").StringValue()))
+	issuer := resourcesOf(statements(t, prop(rec.one(t, policyType, "staging-issuer-policy"), "policy").StringValue()))
 	if !slices.Contains(issuer, fnArn("sluis-staging-github")+":live-issuer") {
 		t.Errorf("the issuer cannot mint through the github function's live-issuer alias: %v", issuer)
 	}
