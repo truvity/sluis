@@ -176,12 +176,12 @@ func TestTheModulesAreBudgetedScaledAndFenced(t *testing.T) {
 		if c, _ := dig(pdb, "spec", "selector", "matchLabels", "app.kubernetes.io/component"); c != m {
 			t.Errorf("the %s budget selects component %v", m, c)
 		}
-		_, min := dig(pdb, "spec", "minAvailable")
-		_, max := dig(pdb, "spec", "maxUnavailable")
-		if m == "github" && !(min && !max) {
+		_, hasMin := dig(pdb, "spec", "minAvailable")
+		_, hasMax := dig(pdb, "spec", "maxUnavailable")
+		if m == "github" && (!hasMin || hasMax) {
 			t.Errorf("github asked for minAvailable: %v", pdb["spec"])
 		}
-		if m != "github" && !(max && !min) {
+		if m != "github" && (!hasMax || hasMin) {
 			t.Errorf("%s takes the default maxUnavailable: %v", m, pdb["spec"])
 		}
 	}

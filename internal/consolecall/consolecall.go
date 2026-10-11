@@ -181,7 +181,9 @@ func Proxy[Req, Resp proto.Message](ctx context.Context, c modcall.Caller, modul
 // [modcall.Allow] among them is overridden. A *[Problem] the function returns
 // is told to the console as the reply's Problem; any other error is the
 // transport's, with no detail.
-func Handle[Req, Resp proto.Message](s *modcall.Server, method string, fn func(ctx context.Context, caller Caller, req Req) (Resp, error), opts ...modcall.Option) {
+func Handle[Req, Resp proto.Message](
+	s *modcall.Server, method string, fn func(ctx context.Context, caller Caller, req Req) (Resp, error), opts ...modcall.Option,
+) {
 	if !strings.HasPrefix(method, MethodPrefix) {
 		panic("consolecall: " + s.Module() + "." + method + " is a console method and must start with " + MethodPrefix)
 	}

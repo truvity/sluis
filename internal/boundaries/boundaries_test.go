@@ -129,17 +129,21 @@ func TestModuleBoundaries(t *testing.T) {
 		},
 		{
 			// The contract every role implements: it knows no role.
-			name:   "the module contract imports no role",
-			from:   []string{"internal/module"},
-			except: []string{"internal/module/issuer", "internal/module/github", "internal/module/slack", "internal/module/cloudflare", "internal/module/backup", "internal/module/google"},
+			name: "the module contract imports no role",
+			from: []string{"internal/module"},
+			except: []string{
+				"internal/module/issuer", "internal/module/github", "internal/module/slack",
+				"internal/module/cloudflare", "internal/module/backup", "internal/module/google",
+			},
 			forbid: slices.Concat(front, github, slack, cloudflare, modules),
 			sees:   "internal/module",
 		},
 		{
-			name:   "the GitHub module wraps only the GitHub role",
-			from:   []string{"internal/module/github"},
-			forbid: slices.Concat(front, slack, cloudflare, google, []string{"internal/module/slack", "internal/module/issuer", "internal/module/cloudflare", "internal/module/google"}),
-			sees:   "internal/module/github",
+			name: "the GitHub module wraps only the GitHub role",
+			from: []string{"internal/module/github"},
+			forbid: slices.Concat(front, slack, cloudflare, google,
+				[]string{"internal/module/slack", "internal/module/issuer", "internal/module/cloudflare", "internal/module/google"}),
+			sees: "internal/module/github",
 		},
 		{
 			name:   "the Slack module wraps only the Slack role",

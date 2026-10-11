@@ -123,7 +123,7 @@ func open(ctx context.Context, file string) (*lambdaapp.Function, error) {
 	// never this event's error (the next pass retries).
 	clients := func(ctx context.Context) (lambdaapp.RefreshResult, error) {
 		service.ReconcileClientSecrets(ctx)
-		return lambdaapp.RefreshResult{Kind: lambdaapp.KindClients}, nil
+		return lambdaapp.RefreshResult{Kind: lambdaapp.KindClients}, nil //nolint:staticcheck // the issuer's own event; the deprecation is of the old refresh alias
 	}
 	http.WithClients(clients)
 	// {"kind":"refresh"} is the name before "clients", accepted for one release.
