@@ -485,13 +485,13 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 		// The minter is another module's: the on-demand exchange and the grants
 		// listing at the issuer call it as `issuer`, and the console's Cloudflare
 		// page as `console`. This process holds no minter credential reference.
-		remote, err := cfrpc.Dial(ctx, cfg.Cloudflare.Remote, log)
+		remote, err := dialCloudflare(ctx, cfg, cfrpc.CallerIssuer, log)
 		if err != nil {
 			a.Close()
 			return nil, err
 		}
 		assembled.Issuer().UseCloudflare(remote)
-		console, err := cfrpc.DialAs(ctx, cfg.Cloudflare.Remote, cfrpc.CallerConsole, log)
+		console, err := dialCloudflare(ctx, cfg, cfrpc.CallerConsole, log)
 		if err != nil {
 			a.Close()
 			return nil, err
