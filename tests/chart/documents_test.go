@@ -67,10 +67,12 @@ func TestTheChartPutsTheRenderedDocumentsIntoItsConfigMapsUnchanged(t *testing.T
 			policy = data.(string)
 		}
 	}
-	if service != read(t, truvityService) {
+	// A document that is not the last of its file loses its final newline in the
+	// split of the rendered stream, so the comparison ignores it.
+	if strings.TrimSuffix(service, "\n") != strings.TrimSuffix(read(t, truvityService), "\n") {
 		t.Errorf("the service ConfigMap is not the rendered document:\n%s", service)
 	}
-	if policy != read(t, truvityPolicy) {
+	if strings.TrimSuffix(policy, "\n") != strings.TrimSuffix(read(t, truvityPolicy), "\n") {
 		t.Errorf("the policy ConfigMap is not the rendered document:\n%s", policy)
 	}
 }
