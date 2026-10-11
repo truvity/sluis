@@ -55,7 +55,7 @@ func TestTheChartRendersAWorkloadPerModule(t *testing.T) {
 	}
 	// /rpc is answered by the modules that are called, and the release's
 	// Service stays on the issuer.
-	if got, want := names("Service", nil), []string{"sluis", "sluis-cloudflare", "sluis-github", "sluis-google"}; !reflect.DeepEqual(got, want) {
+	if got, want := names("Service", nil), []string{"sluis", "sluis-cloudflare", "sluis-github", "sluis-google", "sluis-slack"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("Services %v, want %v", got, want)
 	}
 	for _, d := range byKind["Service"] {
@@ -91,7 +91,7 @@ func TestTheChartRendersAWorkloadPerModule(t *testing.T) {
 		}
 	}
 	sort.Strings(delegated)
-	if want := []string{"sluis-cloudflare", "sluis-github", "sluis-google"}; !reflect.DeepEqual(delegated, want) {
+	if want := []string{"sluis-cloudflare", "sluis-github", "sluis-google", "sluis-slack"}; !reflect.DeepEqual(delegated, want) {
 		t.Errorf("system:auth-delegator is bound to %v, want %v", delegated, want)
 	}
 	// The issuer's document: no controllers, and a call target and an
@@ -108,7 +108,7 @@ func TestTheChartRendersAWorkloadPerModule(t *testing.T) {
 		if _, ok := doc["controllers"]; ok {
 			t.Error("the issuer's document carries controllers")
 		}
-		for _, m := range []string{"github", "google", "cloudflare"} {
+		for _, m := range []string{"github", "slack", "google", "cloudflare"} {
 			url, _ := dig(doc, m, "remote", "url")
 			aud, _ := dig(doc, m, "remote", "audience")
 			file, _ := dig(doc, m, "remote", "tokenFile")
@@ -118,9 +118,6 @@ func TestTheChartRendersAWorkloadPerModule(t *testing.T) {
 		}
 		if _, ok := doc["calls"]; ok {
 			t.Error("the issuer's document carries calls: routing is one `<module>.remote` per module")
-		}
-		if _, ok := dig(doc, "slack", "remote"); ok {
-			t.Error("the issuer's document routes to slack, which answers no calls")
 		}
 	}
 }
@@ -198,9 +195,8 @@ func TestTheModulesAreBudgetedScaledAndFenced(t *testing.T) {
 	if r, _ := dig(byKind["Deployment"]["sluis-github"], "spec", "replicas"); r != float64(2) {
 		t.Errorf("the github Deployment runs %v replicas, want 2", r)
 	}
-	// /rpc comes from the issuer's pods and nowhere else; a module that is not
-	// called takes nothing.
-	for _, m := range []string{"cloudflare", "github", "google"} {
+	// /rpc comes from the issuer's pods and nowhere else.
+	for _, m := range []string{"cloudflare", "github", "google", "slack"} {
 		np := byKind["NetworkPolicy"]["sluis-"+m]
 		ingress, _ := dig(np, "spec", "ingress")
 		rules, _ := ingress.([]any)
@@ -225,10 +221,6 @@ func TestTheModulesAreBudgetedScaledAndFenced(t *testing.T) {
 			t.Errorf("%s takes /rpc on %v, want 8081 alone", m, ports)
 		}
 	}
-	slack, _ := dig(byKind["NetworkPolicy"]["sluis-slack"], "spec", "ingress")
-	if rules, ok := slack.([]any); !ok || len(rules) != 0 {
-		t.Errorf("slack answers no calls and takes ingress %v", slack)
-	}
 	// Egress is per module: the issuer reaches the modules it calls, the
 	// controllers the issuer's console, and nobody else a peer.
 	peers := func(m string) []string {
@@ -246,7 +238,7 @@ func TestTheModulesAreBudgetedScaledAndFenced(t *testing.T) {
 		return out
 	}
 	for m, want := range map[string][]string{
-		"issuer":     {"cloudflare", "github", "google"},
+		"issuer":     {"cloudflare", "github", "google", "slack"},
 		"github":     {"issuer"},
 		"slack":      {"issuer"},
 		"google":     nil,
@@ -254,6 +246,73 @@ func TestTheModulesAreBudgetedScaledAndFenced(t *testing.T) {
 	} {
 		if got := peers(m); !reflect.DeepEqual(got, want) {
 			t.Errorf("%s reaches the pods of %v, want %v", m, got, want)
+		}
+	}
+}
+
+// The github and slack modules listen on /rpc for the issuer and nobody else:
+// the document names the listener and the one account let in, the Deployment
+// opens the port, the Service reaches it, and the issuer's pod presents a token
+// minted for each module's audience.
+func TestTheGitHubAndSlackModulesServeTheIssuerOnRPC(t *testing.T) {
+	docs := render(t, filepath.Join("..", "cases", "sluis", "all-modules", "values.yaml"), "default")
+	byName := map[string]map[string]any{}
+	for _, d := range docs {
+		k, _ := d["kind"].(string)
+		n, _ := dig(d, "metadata", "name")
+		byName[k+"/"+n.(string)] = d
+	}
+	document := func(module string) map[string]any {
+		raw, _ := dig(byName["ConfigMap/sluis-"+module+"-config"], "data", "config.yaml")
+		var doc map[string]any
+		if err := yaml.Unmarshal([]byte(raw.(string)), &doc); err != nil {
+			t.Fatal(err)
+		}
+		return doc
+	}
+	for _, m := range []string{"github", "slack"} {
+		doc := document(m)
+		if got, _ := dig(doc, m, "serve", "address"); got != ":8081" {
+			t.Errorf("%s.serve.address is %v", m, got)
+		}
+		if got, _ := dig(doc, m, "serve", "audience"); got != m {
+			t.Errorf("%s.serve.audience is %v", m, got)
+		}
+		issuers, _ := dig(doc, m, "serve", "issuers")
+		if !reflect.DeepEqual(issuers, []any{"system:serviceaccount:default:sluis-issuer"}) {
+			t.Errorf("%s.serve.issuers is %v, want the issuer's account alone", m, issuers)
+		}
+		if _, ok := dig(doc, m, "remote"); ok {
+			t.Errorf("the %s module's own document routes it to itself", m)
+		}
+		// The Deployment opens the port, the Service reaches it, and the policy
+		// lets the issuer's pods in.
+		ports, _ := dig(byName["Deployment/sluis-"+m], "spec", "template", "spec", "containers")
+		var rpc bool
+		for _, p := range ports.([]any)[0].(map[string]any)["ports"].([]any) {
+			rpc = rpc || p.(map[string]any)["name"] == "rpc"
+		}
+		if !rpc {
+			t.Errorf("the %s container has no rpc port", m)
+		}
+		if port, _ := dig(byName["Service/sluis-"+m], "spec", "ports"); port.([]any)[0].(map[string]any)["port"] != float64(8081) {
+			t.Errorf("the %s Service ports are %v", m, port)
+		}
+	}
+	// The issuer's pod projects a token for each audience it calls.
+	volumes, _ := dig(byName["Deployment/sluis-issuer"], "spec", "template", "spec", "volumes")
+	audiences := map[string]string{}
+	for _, v := range volumes.([]any) {
+		vol := v.(map[string]any)
+		if aud, ok := dig(vol, "projected", "sources"); ok {
+			if a, ok := dig(aud.([]any)[0].(map[string]any), "serviceAccountToken", "audience"); ok {
+				audiences[vol["name"].(string)] = a.(string)
+			}
+		}
+	}
+	for _, m := range []string{"github", "slack"} {
+		if audiences["call-"+m] != m {
+			t.Errorf("the issuer projects %q for %s, want %q", audiences["call-"+m], m, m)
 		}
 	}
 }

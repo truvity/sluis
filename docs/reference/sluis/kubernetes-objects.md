@@ -54,3 +54,14 @@ Back up and restore: [Back up and restore](../../guides/sluis/operate/back-up-an
 ## Controller access
 
 The release's ServiceAccount has `get`, `update` and `patch` on ConfigMaps `<release>-github-status` and `<release>-slack-status`, and `get` and `update` on Secret `<release>-github-links`. Keys and records are volumes, so it can read no other Secret or ConfigMap. The policy's `exchange` must admit the ServiceAccount, and the audit installation's `workloadIdentity` must name it.
+
+## Module calls on /rpc
+
+| Item | Value |
+|---|---|
+| Modules that serve | `github` (`mint_installation`, `github.console.*`) and `slack` (`slack.console.*`), when `modules.<module>.enabled` |
+| Listener | `<module>.serve.address` in the module's document, `:8081`; `GET /healthz` needs no credential |
+| Caller | Only the issuer's ServiceAccount, `<module>.serve.issuers`: it holds both the `issuer` and the `console` class |
+| Credential | A projected token minted for `<module>.serve.audience` (the module's name), checked with a TokenReview |
+| Refused | No bearer, another audience or another subject is a 401 before any method; the class never comes from the payload |
+| Chart writes | A Service and `rpc` port, `<module>.serve`, the issuer's `<module>.remote` and token, `system:auth-delegator`, and with `networkPolicy.enabled` a policy taking `/rpc` from the issuer's pods |

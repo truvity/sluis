@@ -163,3 +163,36 @@ func TestServeSchemaHasNoModuleSections(t *testing.T) {
 		}
 	}
 }
+
+// A module's `serve` names the issuer that may call it, and only the module's
+// own document carries it.
+func TestModuleServeIsHeldToTheIssuerThatMayCallIt(t *testing.T) {
+	good := &config.ModuleServe{Issuers: []string{"system:serviceaccount:sluis:sluis-issuer"}}
+	for name, tc := range map[string]struct {
+		route *config.ModuleRoute
+		err   string
+	}{
+		"ok":                 {route: &config.ModuleRoute{Serve: good}},
+		"no issuer":          {route: &config.ModuleRoute{Serve: &config.ModuleServe{}}, err: "slack.serve.issuers: name the issuer"},
+		"not a service acct": {route: &config.ModuleRoute{Serve: &config.ModuleServe{Issuers: []string{"issuer"}}}, err: "is not system:serviceaccount"},
+		"no name":            {route: &config.ModuleRoute{Serve: &config.ModuleServe{Issuers: []string{"system:serviceaccount:sluis:"}}}, err: "is not system:serviceaccount"},
+		"serve and remote":   {route: &config.ModuleRoute{Serve: good, Remote: &config.ModuleRemote{URL: "http://s"}}, err: "remote and serve are both set"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			err := (&config.Roster{Slack: tc.route}).ValidateRoutes()
+			if tc.err == "" {
+				if err != nil {
+					t.Fatal(err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tc.err) {
+				t.Fatalf("want %q, got %v", tc.err, err)
+			}
+		})
+	}
+	// The issuer's document does not serve a module.
+	if err := (&config.Sluis{GitHub: &config.ModuleRoute{Serve: good}}).ValidateRoutes(); err == nil || !strings.Contains(err.Error(), "github.serve") {
+		t.Errorf("the issuer's document served a module: %v", err)
+	}
+}

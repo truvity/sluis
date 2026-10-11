@@ -65,3 +65,20 @@ func TestTheProbesAddressIsConfigurable(t *testing.T) {
 		t.Error("probes with no address was accepted")
 	}
 }
+
+// `slack.serve` is the listener the issuer calls: unset serves nothing, a
+// document that sets it must say who may call, and it is read as written.
+func TestTheServeSectionIsReadAndHeldToItsIssuer(t *testing.T) {
+	ok := valid(t)
+	cfg, err := app.Load(write(t, ok))
+	if err != nil || cfg.Serve() != nil {
+		t.Fatalf("no serve section: %v %v", cfg.Serve(), err)
+	}
+	cfg, err = app.Load(write(t, ok+"slack: {serve: {address: ':9000', issuers: [system:serviceaccount:sluis:sluis-issuer]}}\n"))
+	if err != nil || cfg.Serve() == nil || cfg.Serve().Address != ":9000" || cfg.Serve().Issuers[0] != "system:serviceaccount:sluis:sluis-issuer" {
+		t.Fatalf("%+v %v", cfg.Serve(), err)
+	}
+	if _, err = app.Load(write(t, ok+"slack: {serve: {address: ':9000'}}\n")); err == nil || !strings.Contains(err.Error(), "issuers") {
+		t.Errorf("a listener that names no issuer: %v", err)
+	}
+}
