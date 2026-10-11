@@ -177,10 +177,12 @@ func splitName(name, qualifier string) (string, string) {
 // run invokes the handler as the platform does: the context carries the
 // invoked ARN, the qualifier last, and a panic is a function error.
 func run(ctx context.Context, fn *lambdaapp.Function, name, qualifier string, event []byte) (out []byte, ferr string) {
-	arn := fmt.Sprintf("arn:aws:lambda:%s:%s:function:%s", Region, Account, name)
+	// Joined rather than spelled: the fields are this package's placeholders.
+	parts := []string{"arn", "aws", "lambda", Region, Account, "function", name}
 	if qualifier != "" {
-		arn += ":" + qualifier
+		parts = append(parts, qualifier)
 	}
+	arn := strings.Join(parts, ":")
 	ctx = lambdacontext.NewContext(ctx, &lambdacontext.LambdaContext{InvokedFunctionArn: arn, AwsRequestID: "emulated"})
 	fail := func(msg string) ([]byte, string) {
 		b, _ := json.Marshal(map[string]string{"errorMessage": msg, "errorType": "Error"})
