@@ -29,6 +29,13 @@ func Register(s *modcall.Server, svc *Service) {
 	handleProto(svc, s, consolewire.DisconnectOrganisation, svc.DisconnectGitHubOrganisation)
 	handleProto(svc, s, consolewire.ChangeOrganisationOwner, svc.ChangeGitHubOrganisationOwner)
 	handleProto(svc, s, consolewire.RequestPass, svc.RequestGitHubPass)
+	handleProto(svc, s, consolewire.ListApps, svc.ListGitHubApps, consolecall.List())
+	handleProto(svc, s, consolewire.GetApp, svc.GetGitHubApp)
+	handleProto(svc, s, consolewire.ListAppTokens, svc.ListGitHubAppTokens, consolecall.List())
+	handleProto(svc, s, consolewire.CheckApp, svc.CheckGitHubApp)
+	handleProto(svc, s, consolewire.RotateAppWebhook, svc.RotateGitHubAppWebhook)
+	handleProto(svc, s, consolewire.GetStatus, svc.GetGitHubStatus, consolecall.List())
+	handleProto(svc, s, consolewire.CheckCatalogueApp, svc.CheckGitHubCatalogueApp)
 }
 
 // begin adapts a handler of plain values: the snapshot goes in the context, and
@@ -74,11 +81,18 @@ func (c *Service) told(ctx context.Context, err error) error {
 		return p
 	}
 	var ce *connect.Error
-	if errors.As(err, &ce) {
+	if !errors.As(err, &ce) {
+		ce = nil
+	}
+	if ce != nil {
 		switch ce.Code() {
 		case connect.CodeInvalidArgument, connect.CodeNotFound, connect.CodeFailedPrecondition, connect.CodePermissionDenied,
 			connect.CodeResourceExhausted, connect.CodeAlreadyExists, connect.CodeUnauthenticated, connect.CodeAborted,
-			connect.CodeOutOfRange:
+			connect.CodeOutOfRange,
+			// A failure of the records or of GitHub keeps its code and its
+			// words, as the handlers have always told it: it is the operator's
+			// to act on, and nothing in it is a secret.
+			connect.CodeUnavailable, connect.CodeDeadlineExceeded:
 			return &consolecall.Problem{Summary: ce.Message(), Code: ce.Code().String()}
 		}
 	}

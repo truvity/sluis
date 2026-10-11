@@ -52,12 +52,12 @@ github:
 	if err != nil {
 		t.Fatalf("NewSet: %v", err)
 	}
-	return withGitHubModule(&Console{deps: ConsoleDeps{Authorizer: access.NewAuthorizer(set, nil, 0), GitHub: store}})
+	return &Console{deps: ConsoleDeps{Authorizer: access.NewAuthorizer(set, nil, 0), GitHub: store}}
 }
 
 func githubStatus(t *testing.T, console *Console, role access.Role) (*directoryrosterv1.GetGitHubStatusResponse, error) {
 	t.Helper()
-	ctx := WithIdentity(context.Background(), access.Identity{Role: role})
+	ctx := WithIdentity(context.Background(), access.Identity{Email: "someone@example.test", Role: role})
 	response, err := console.GetGitHubStatus(ctx, connect.NewRequest(&directoryrosterv1.GetGitHubStatusRequest{}))
 	if err != nil {
 		return nil, err
@@ -214,6 +214,7 @@ func TestTheGitHubPageNeedsAnInstallationWideViewer(t *testing.T) {
 		t.Errorf("no role = %v, want permission denied", err)
 	}
 	scoped := WithIdentity(context.Background(), access.Identity{
+		Email:  "viewer@example.test",
 		Role:   access.RoleNone,
 		Scopes: map[string]access.Role{"C0north": access.RoleViewer},
 	})
