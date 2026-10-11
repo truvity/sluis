@@ -399,7 +399,7 @@ func TestAReplayAt29SecondsIsAnsweredTheBandTo32SecondsEndsNothingAndAReuseAt33S
 func TestAReuseIsAuditedLoggedCountedAndKillsTheSessionsTokens(t *testing.T) {
 	r := newReuseRig(t, 0)
 	reuse := []attribute.KeyValue{attribute.String("kind", "refresh_token")}
-	before := counted(t, "access_issuer.reuse_detected", reuse...)
+	before := counted(t, "sluis.reuse_detected", reuse...)
 
 	access0, t0 := r.grant()
 	access1, t1, err := r.refresh(t0)
@@ -466,7 +466,7 @@ func TestAReuseIsAuditedLoggedCountedAndKillsTheSessionsTokens(t *testing.T) {
 		})
 	}
 	r.logs.mu.Unlock()
-	if got := counted(t, "access_issuer.reuse_detected", reuse...); got < before+1 {
+	if got := counted(t, "sluis.reuse_detected", reuse...); got < before+1 {
 		t.Errorf("reuse metric = %d, want at least %d", got, before+1)
 	}
 

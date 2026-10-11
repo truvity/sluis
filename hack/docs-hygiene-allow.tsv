@@ -3,8 +3,7 @@
 # `baseline` rows are a RATCHET over prose that a docs restructure rewrites: lower the count as pages are fixed, delete the row at 0.
 
 allow	*	urn:(truvity:)?access-roster	the token-exchange URN spellings `urn:access-roster:params:oauth:...`, still accepted in v1.75 (tokens.TypeGitHubInstallationToken, TypeCloudflareToken), removed in v1.76
-allow	docs/reference/sluis/telemetry.md	(access_issuer|access_roster)[.\w<>*]*	the old metric and span-attribute names, still recorded beside the sluis.* ones (SLUIS_LEGACY_METRICS, on in v1.75, removed in v1.76)
-allow	docs/reference/sluis/chart-values.md	access_(issuer|roster)\.\*	telemetry.legacyMetrics' description (generated from values.schema.json) names the old metric families
+allow	docs/reference/sluis/telemetry.md	(access_issuer|access_roster)[.\w<>*]*	the span-attribute names (access_roster.target.kind and the others), and the note that the old metric names were removed in v1.76
 allow	*	(github|slack)_roster	the metric names github_roster.* and slack_roster.*, which keep their names in v1.75 (telemetry.CurrentName leaves them as they are)
 allow	*	ACCESS_ROSTER_\w*	the ACCESS_ROSTER_* environment fallback and the ACCESS_ROSTER_ISSUER repository variable of the release workflow, still read in v1.75
 allow	*	(__Host-)?access_(roster_recovery|issuer_sso)	the cookies `access_issuer_sso` and `__Host-access_roster_recovery`, wire values in v1.75

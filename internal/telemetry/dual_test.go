@@ -55,9 +55,7 @@ func collect(t *testing.T, reader *sdkmetric.ManualReader) map[string][]attribut
 	return out
 }
 
-func TestEveryInstrumentRecordsUnderBothNamesWhileLegacyIsOn(t *testing.T) {
-	prev := telemetry.SetLegacyMetrics(true)
-	t.Cleanup(func() { telemetry.SetLegacyMetrics(prev) })
+func TestEveryInstrumentRecordsUnderTheSluisNameOnly(t *testing.T) {
 	reader := sdkmetric.NewManualReader()
 	meter := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test")
 	ctx := context.Background()
@@ -69,7 +67,7 @@ func TestEveryInstrumentRecordsUnderBothNamesWhileLegacyIsOn(t *testing.T) {
 	telemetry.NewFloat64Histogram(meter, "access_roster.h", metric.WithUnit("s")).Record(ctx, 0.5, at)
 
 	got := collect(t, reader)
-	for _, name := range []string{"access_issuer.c", "sluis.c", "access_roster.u", "sluis.u", "access_roster.g", "sluis.g", "access_roster.h", "sluis.h"} {
+	for _, name := range []string{"sluis.c", "sluis.u", "sluis.g", "sluis.h"} {
 		sets := got[name]
 		if len(sets) != 1 {
 			t.Fatalf("%s: %d series, want 1 (all: %v)", name, len(sets), got)
@@ -78,20 +76,9 @@ func TestEveryInstrumentRecordsUnderBothNamesWhileLegacyIsOn(t *testing.T) {
 			t.Errorf("%s: attributes %v, want kind=k only", name, sets[0])
 		}
 	}
-}
-
-func TestLegacyOffRecordsOnlyTheSluisNames(t *testing.T) {
-	prev := telemetry.SetLegacyMetrics(false)
-	t.Cleanup(func() { telemetry.SetLegacyMetrics(prev) })
-	reader := sdkmetric.NewManualReader()
-	meter := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test")
-	telemetry.NewInt64Counter(meter, "access_issuer.c").Add(context.Background(), 1)
-
-	got := collect(t, reader)
-	if len(got["sluis.c"]) != 1 {
-		t.Errorf("sluis.c: %v", got)
-	}
-	if _, old := got["access_issuer.c"]; old {
-		t.Errorf("the old name is recorded with legacy off: %v", got)
+	for _, old := range []string{"access_issuer.c", "access_roster.u", "access_roster.g", "access_roster.h"} {
+		if _, ok := got[old]; ok {
+			t.Errorf("the old name %s is recorded: %v", old, got)
+		}
 	}
 }

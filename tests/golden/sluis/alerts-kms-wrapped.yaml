@@ -23,7 +23,7 @@ spec:
         # series that is absent (no issuer running) is not this alert's to say.
         - alert: AccessRosterNoSigningKeyPublished
           expr: >-
-            (min by (k8s_cluster_name, namespace, algorithm) (sluis_signing_keys_published{namespace="sluis"}) < 1) or (min by (k8s_cluster_name, namespace, algorithm) (access_issuer_signing_keys_published{namespace="sluis"}) < 1)
+            min by (k8s_cluster_name, namespace, algorithm) (sluis_signing_keys_published{namespace="sluis"}) < 1
           for: 5m
           labels:
             severity: critical
@@ -43,7 +43,7 @@ spec:
         # series that is absent (no issuer running) is not this alert's to say.
         - alert: SluisNoSigningKeyPublished
           expr: >-
-            (min by (k8s_cluster_name, namespace, algorithm) (sluis_signing_keys_published{namespace="sluis"}) < 1) or (min by (k8s_cluster_name, namespace, algorithm) (access_issuer_signing_keys_published{namespace="sluis"}) < 1)
+            min by (k8s_cluster_name, namespace, algorithm) (sluis_signing_keys_published{namespace="sluis"}) < 1
           for: 5m
           labels:
             severity: critical
@@ -66,7 +66,7 @@ spec:
         # newest timestamp across replicas is used, so a lagging replica does not fire it.
         - alert: AccessRosterSigningKeyRotationStalled
           expr: >-
-            (time() - max by (k8s_cluster_name, namespace, algorithm) (sluis_signing_key_active_since_timestamp_seconds{namespace="sluis"}) > 50400) or (time() - max by (k8s_cluster_name, namespace, algorithm) (access_issuer_signing_key_active_since_timestamp_seconds{namespace="sluis"}) > 50400)
+            time() - max by (k8s_cluster_name, namespace, algorithm) (sluis_signing_key_active_since_timestamp_seconds{namespace="sluis"}) > 50400
           for: 1h
           labels:
             severity: warning
@@ -90,7 +90,7 @@ spec:
         # newest timestamp across replicas is used, so a lagging replica does not fire it.
         - alert: SluisSigningKeyRotationStalled
           expr: >-
-            (time() - max by (k8s_cluster_name, namespace, algorithm) (sluis_signing_key_active_since_timestamp_seconds{namespace="sluis"}) > 50400) or (time() - max by (k8s_cluster_name, namespace, algorithm) (access_issuer_signing_key_active_since_timestamp_seconds{namespace="sluis"}) > 50400)
+            time() - max by (k8s_cluster_name, namespace, algorithm) (sluis_signing_key_active_since_timestamp_seconds{namespace="sluis"}) > 50400
           for: 1h
           labels:
             severity: warning
@@ -112,7 +112,7 @@ spec:
         # the same outage to the people behind them.
         - alert: AccessRosterIssuer5xx
           expr: >-
-            (( sum by (k8s_cluster_name, namespace) (increase(sluis_http_requests_total{namespace="sluis",status_class="5xx"}[10m])) / sum by (k8s_cluster_name, namespace) (increase(sluis_http_requests_total{namespace="sluis"}[10m])) ) > 0.05 and sum by (k8s_cluster_name, namespace) (increase(sluis_http_requests_total{namespace="sluis",status_class="5xx"}[10m])) >= 5) or (( sum by (k8s_cluster_name, namespace) (increase(access_issuer_http_requests_total{namespace="sluis",status_class="5xx"}[10m])) / sum by (k8s_cluster_name, namespace) (increase(access_issuer_http_requests_total{namespace="sluis"}[10m])) ) > 0.05 and sum by (k8s_cluster_name, namespace) (increase(access_issuer_http_requests_total{namespace="sluis",status_class="5xx"}[10m])) >= 5)
+            ( sum by (k8s_cluster_name, namespace) (increase(sluis_http_requests_total{namespace="sluis",status_class="5xx"}[10m])) / sum by (k8s_cluster_name, namespace) (increase(sluis_http_requests_total{namespace="sluis"}[10m])) ) > 0.05 and sum by (k8s_cluster_name, namespace) (increase(sluis_http_requests_total{namespace="sluis",status_class="5xx"}[10m])) >= 5
           for: 10m
           labels:
             severity: critical
@@ -132,7 +132,7 @@ spec:
         # the same outage to the people behind them.
         - alert: SluisIssuer5xx
           expr: >-
-            (( sum by (k8s_cluster_name, namespace) (increase(sluis_http_requests_total{namespace="sluis",status_class="5xx"}[10m])) / sum by (k8s_cluster_name, namespace) (increase(sluis_http_requests_total{namespace="sluis"}[10m])) ) > 0.05 and sum by (k8s_cluster_name, namespace) (increase(sluis_http_requests_total{namespace="sluis",status_class="5xx"}[10m])) >= 5) or (( sum by (k8s_cluster_name, namespace) (increase(access_issuer_http_requests_total{namespace="sluis",status_class="5xx"}[10m])) / sum by (k8s_cluster_name, namespace) (increase(access_issuer_http_requests_total{namespace="sluis"}[10m])) ) > 0.05 and sum by (k8s_cluster_name, namespace) (increase(access_issuer_http_requests_total{namespace="sluis",status_class="5xx"}[10m])) >= 5)
+            ( sum by (k8s_cluster_name, namespace) (increase(sluis_http_requests_total{namespace="sluis",status_class="5xx"}[10m])) / sum by (k8s_cluster_name, namespace) (increase(sluis_http_requests_total{namespace="sluis"}[10m])) ) > 0.05 and sum by (k8s_cluster_name, namespace) (increase(sluis_http_requests_total{namespace="sluis",status_class="5xx"}[10m])) >= 5
           for: 10m
           labels:
             severity: critical
@@ -152,7 +152,7 @@ spec:
         # client sees.
         - alert: AccessRosterTokenEndpointSlow
           expr: >-
-            (histogram_quantile(0.99, sum by (k8s_cluster_name, namespace, le) (rate(sluis_http_request_duration_seconds_bucket{namespace="sluis",route="token"}[10m]))) > 2) or (histogram_quantile(0.99, sum by (k8s_cluster_name, namespace, le) (rate(access_issuer_http_request_duration_seconds_bucket{namespace="sluis",route="token"}[10m]))) > 2)
+            histogram_quantile(0.99, sum by (k8s_cluster_name, namespace, le) (rate(sluis_http_request_duration_seconds_bucket{namespace="sluis",route="token"}[10m]))) > 2
           for: 15m
           labels:
             severity: warning
@@ -171,7 +171,7 @@ spec:
         # client sees.
         - alert: SluisTokenEndpointSlow
           expr: >-
-            (histogram_quantile(0.99, sum by (k8s_cluster_name, namespace, le) (rate(sluis_http_request_duration_seconds_bucket{namespace="sluis",route="token"}[10m]))) > 2) or (histogram_quantile(0.99, sum by (k8s_cluster_name, namespace, le) (rate(access_issuer_http_request_duration_seconds_bucket{namespace="sluis",route="token"}[10m]))) > 2)
+            histogram_quantile(0.99, sum by (k8s_cluster_name, namespace, le) (rate(sluis_http_request_duration_seconds_bucket{namespace="sluis",route="token"}[10m]))) > 2
           for: 15m
           labels:
             severity: warning
@@ -190,7 +190,7 @@ spec:
         # uninstalled) is not another's outage.
         - alert: AccessRosterTickFailing
           expr: >-
-            (sum by (k8s_cluster_name, namespace, kind, target) (increase(sluis_ticks_total{namespace="sluis",outcome="failed"}[45m])) >= 3) or (sum by (k8s_cluster_name, namespace, kind, target) (increase(access_roster_ticks_total{namespace="sluis",outcome="failed"}[45m])) >= 3)
+            sum by (k8s_cluster_name, namespace, kind, target) (increase(sluis_ticks_total{namespace="sluis",outcome="failed"}[45m])) >= 3
           for: 0m
           labels:
             severity: warning
@@ -210,7 +210,7 @@ spec:
         # uninstalled) is not another's outage.
         - alert: SluisTickFailing
           expr: >-
-            (sum by (k8s_cluster_name, namespace, kind, target) (increase(sluis_ticks_total{namespace="sluis",outcome="failed"}[45m])) >= 3) or (sum by (k8s_cluster_name, namespace, kind, target) (increase(access_roster_ticks_total{namespace="sluis",outcome="failed"}[45m])) >= 3)
+            sum by (k8s_cluster_name, namespace, kind, target) (increase(sluis_ticks_total{namespace="sluis",outcome="failed"}[45m])) >= 3
           for: 0m
           labels:
             severity: warning
@@ -231,7 +231,7 @@ spec:
         # for at most a day and then leaves.
         - alert: AccessRosterTickStale
           expr: >-
-            (time() - max by (k8s_cluster_name, namespace, kind, target) (last_over_time(sluis_tick_last_success_timestamp_seconds{namespace="sluis"}[1d])) > 3600) or (time() - max by (k8s_cluster_name, namespace, kind, target) (last_over_time(access_roster_tick_last_success_timestamp_seconds{namespace="sluis"}[1d])) > 3600)
+            time() - max by (k8s_cluster_name, namespace, kind, target) (last_over_time(sluis_tick_last_success_timestamp_seconds{namespace="sluis"}[1d])) > 3600
           for: 10m
           labels:
             severity: critical
@@ -251,7 +251,7 @@ spec:
         # for at most a day and then leaves.
         - alert: SluisTickStale
           expr: >-
-            (time() - max by (k8s_cluster_name, namespace, kind, target) (last_over_time(sluis_tick_last_success_timestamp_seconds{namespace="sluis"}[1d])) > 3600) or (time() - max by (k8s_cluster_name, namespace, kind, target) (last_over_time(access_roster_tick_last_success_timestamp_seconds{namespace="sluis"}[1d])) > 3600)
+            time() - max by (k8s_cluster_name, namespace, kind, target) (last_over_time(sluis_tick_last_success_timestamp_seconds{namespace="sluis"}[1d])) > 3600
           for: 10m
           labels:
             severity: critical
@@ -270,7 +270,7 @@ spec:
         # drained.
         - alert: AccessRosterLeaseLost
           expr: >-
-            (sum by (k8s_cluster_name, namespace, kind) (increase(sluis_leases_lost_total{namespace="sluis"}[1h])) >= 3) or (sum by (k8s_cluster_name, namespace, kind) (increase(access_roster_leases_lost_total{namespace="sluis"}[1h])) >= 3)
+            sum by (k8s_cluster_name, namespace, kind) (increase(sluis_leases_lost_total{namespace="sluis"}[1h])) >= 3
           for: 0m
           labels:
             severity: warning
@@ -290,7 +290,7 @@ spec:
         # drained.
         - alert: SluisLeaseLost
           expr: >-
-            (sum by (k8s_cluster_name, namespace, kind) (increase(sluis_leases_lost_total{namespace="sluis"}[1h])) >= 3) or (sum by (k8s_cluster_name, namespace, kind) (increase(access_roster_leases_lost_total{namespace="sluis"}[1h])) >= 3)
+            sum by (k8s_cluster_name, namespace, kind) (increase(sluis_leases_lost_total{namespace="sluis"}[1h])) >= 3
           for: 0m
           labels:
             severity: warning
@@ -436,7 +436,7 @@ spec:
         # `minErrors` keeps a single failed call from being a page.
         - alert: AccessRosterPortErrors
           expr: >-
-            (( sum by (k8s_cluster_name, namespace, port) (increase(sluis_port_operation_duration_seconds_count{namespace="sluis",outcome=~"unavailable|error"}[5m])) / sum by (k8s_cluster_name, namespace, port) (increase(sluis_port_operation_duration_seconds_count{namespace="sluis"}[5m])) ) > 0.05 and sum by (k8s_cluster_name, namespace, port) (increase(sluis_port_operation_duration_seconds_count{namespace="sluis",outcome=~"unavailable|error"}[5m])) >= 5) or (( sum by (k8s_cluster_name, namespace, port) (increase(access_roster_port_operation_duration_seconds_count{namespace="sluis",outcome=~"unavailable|error"}[5m])) / sum by (k8s_cluster_name, namespace, port) (increase(access_roster_port_operation_duration_seconds_count{namespace="sluis"}[5m])) ) > 0.05 and sum by (k8s_cluster_name, namespace, port) (increase(access_roster_port_operation_duration_seconds_count{namespace="sluis",outcome=~"unavailable|error"}[5m])) >= 5)
+            ( sum by (k8s_cluster_name, namespace, port) (increase(sluis_port_operation_duration_seconds_count{namespace="sluis",outcome=~"unavailable|error"}[5m])) / sum by (k8s_cluster_name, namespace, port) (increase(sluis_port_operation_duration_seconds_count{namespace="sluis"}[5m])) ) > 0.05 and sum by (k8s_cluster_name, namespace, port) (increase(sluis_port_operation_duration_seconds_count{namespace="sluis",outcome=~"unavailable|error"}[5m])) >= 5
           for: 10m
           labels:
             severity: critical
@@ -456,7 +456,7 @@ spec:
         # `minErrors` keeps a single failed call from being a page.
         - alert: SluisPortErrors
           expr: >-
-            (( sum by (k8s_cluster_name, namespace, port) (increase(sluis_port_operation_duration_seconds_count{namespace="sluis",outcome=~"unavailable|error"}[5m])) / sum by (k8s_cluster_name, namespace, port) (increase(sluis_port_operation_duration_seconds_count{namespace="sluis"}[5m])) ) > 0.05 and sum by (k8s_cluster_name, namespace, port) (increase(sluis_port_operation_duration_seconds_count{namespace="sluis",outcome=~"unavailable|error"}[5m])) >= 5) or (( sum by (k8s_cluster_name, namespace, port) (increase(access_roster_port_operation_duration_seconds_count{namespace="sluis",outcome=~"unavailable|error"}[5m])) / sum by (k8s_cluster_name, namespace, port) (increase(access_roster_port_operation_duration_seconds_count{namespace="sluis"}[5m])) ) > 0.05 and sum by (k8s_cluster_name, namespace, port) (increase(access_roster_port_operation_duration_seconds_count{namespace="sluis",outcome=~"unavailable|error"}[5m])) >= 5)
+            ( sum by (k8s_cluster_name, namespace, port) (increase(sluis_port_operation_duration_seconds_count{namespace="sluis",outcome=~"unavailable|error"}[5m])) / sum by (k8s_cluster_name, namespace, port) (increase(sluis_port_operation_duration_seconds_count{namespace="sluis"}[5m])) ) > 0.05 and sum by (k8s_cluster_name, namespace, port) (increase(sluis_port_operation_duration_seconds_count{namespace="sluis",outcome=~"unavailable|error"}[5m])) >= 5
           for: 10m
           labels:
             severity: critical

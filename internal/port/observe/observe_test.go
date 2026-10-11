@@ -61,7 +61,7 @@ func collect(t *testing.T) map[string]uint64 {
 	for _, scope := range rm.ScopeMetrics {
 		for _, m := range scope.Metrics {
 			h, ok := m.Data.(metricdata.Histogram[float64])
-			if !ok || m.Name != "access_roster.port.operation.duration" {
+			if !ok || m.Name != "sluis.port.operation.duration" {
 				continue
 			}
 			for _, p := range h.DataPoints {

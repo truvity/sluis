@@ -14,11 +14,10 @@ become labels from the resource, so every other label below (`route`,
 GitHub organisation or a Slack workspace the policy declares, which is why it
 may be a label; a person, a group or an address never is.
 
-v1.75 publishes every `access_issuer_*` and `access_roster_*` series also as
-`sluis_*`, and every rule is written over both: an expression is
-`(<sluis_ names>) or (<old names>)` (sluis.dual), and a rule exists under its
-old name (`AccessRoster...`) and its new one (`Sluis...`), so a route or a
-silence on either keeps working. v1.76 removes the old names.
+Every expression is written over the `sluis_*` series; v1.76 stopped
+publishing the `access_issuer_*` and `access_roster_*` ones. A rule still exists
+under its old name (`AccessRoster...`) and its new one (`Sluis...`), so a route
+or a silence on either keeps working.
 
 Every threshold carries its reason in a comment above the rule, and every
 `by (...)` keeps the cluster label: one store holds many clusters and an
@@ -64,7 +63,7 @@ spec:
         # series that is absent (no issuer running) is not this alert's to say.
         - alert: {{ $alert }}
           expr: >-
-            {{- include "sluis.dual" (printf "min by (%s, namespace, algorithm) (access_issuer_signing_keys_published{%s}) < 1" $c $w) | nindent 12 }}
+            {{- printf "min by (%s, namespace, algorithm) (sluis_signing_keys_published{%s}) < 1" $c $w | nindent 12 }}
           for: {{ $r.noSigningKey.for }}
           labels:
             {{- include "sluis.ruleLabels" (dict "root" $ "cfg" $r.noSigningKey) | nindent 12 }}
@@ -104,7 +103,7 @@ spec:
         # newest timestamp across replicas is used, so a lagging replica does not fire it.
         - alert: {{ $alert }}
           expr: >-
-            {{- include "sluis.dual" (printf "time() - max by (%s, namespace, algorithm) (access_issuer_signing_key_active_since_timestamp_seconds{%s}) > %d" $c $w ($maxAge | int64)) | nindent 12 }}
+            {{- printf "time() - max by (%s, namespace, algorithm) (sluis_signing_key_active_since_timestamp_seconds{%s}) > %d" $c $w ($maxAge | int64) | nindent 12 }}
           for: {{ $r.signingKeyRotationStalled.for }}
           labels:
             {{- include "sluis.ruleLabels" (dict "root" $ "cfg" $r.signingKeyRotationStalled) | nindent 12 }}
@@ -130,7 +129,7 @@ spec:
         # the same outage to the people behind them.
         - alert: {{ $alert }}
           expr: >-
-            {{- include "sluis.dual" (printf "( sum by (%[1]s, namespace) (increase(access_issuer_http_requests_total{%[2]s,status_class=\"5xx\"}[10m])) / sum by (%[1]s, namespace) (increase(access_issuer_http_requests_total{%[2]s}[10m])) ) > %[3]v and sum by (%[1]s, namespace) (increase(access_issuer_http_requests_total{%[2]s,status_class=\"5xx\"}[10m])) >= %[4]v" $c $w $r.issuer5xx.ratio $r.issuer5xx.minErrors) | nindent 12 }}
+            {{- printf "( sum by (%[1]s, namespace) (increase(sluis_http_requests_total{%[2]s,status_class=\"5xx\"}[10m])) / sum by (%[1]s, namespace) (increase(sluis_http_requests_total{%[2]s}[10m])) ) > %[3]v and sum by (%[1]s, namespace) (increase(sluis_http_requests_total{%[2]s,status_class=\"5xx\"}[10m])) >= %[4]v" $c $w $r.issuer5xx.ratio $r.issuer5xx.minErrors | nindent 12 }}
           for: {{ $r.issuer5xx.for }}
           labels:
             {{- include "sluis.ruleLabels" (dict "root" $ "cfg" $r.issuer5xx) | nindent 12 }}
@@ -154,7 +153,7 @@ spec:
         # client sees.
         - alert: {{ $alert }}
           expr: >-
-            {{- include "sluis.dual" (printf "histogram_quantile(0.99, sum by (%s, namespace, le) (rate(access_issuer_http_request_duration_seconds_bucket{%s,route=\"token\"}[10m]))) > %v" $c $w $r.tokenLatency.thresholdSeconds) | nindent 12 }}
+            {{- printf "histogram_quantile(0.99, sum by (%s, namespace, le) (rate(sluis_http_request_duration_seconds_bucket{%s,route=\"token\"}[10m]))) > %v" $c $w $r.tokenLatency.thresholdSeconds | nindent 12 }}
           for: {{ $r.tokenLatency.for }}
           labels:
             {{- include "sluis.ruleLabels" (dict "root" $ "cfg" $r.tokenLatency) | nindent 12 }}
@@ -177,7 +176,7 @@ spec:
         # uninstalled) is not another's outage.
         - alert: {{ $alert }}
           expr: >-
-            {{- include "sluis.dual" (printf "sum by (%s, namespace, kind, target) (increase(access_roster_ticks_total{%s,outcome=\"failed\"}[%s])) >= %v" $c $w $r.tickFailing.window $r.tickFailing.failures) | nindent 12 }}
+            {{- printf "sum by (%s, namespace, kind, target) (increase(sluis_ticks_total{%s,outcome=\"failed\"}[%s])) >= %v" $c $w $r.tickFailing.window $r.tickFailing.failures | nindent 12 }}
           for: {{ $r.tickFailing.for }}
           labels:
             {{- include "sluis.ruleLabels" (dict "root" $ "cfg" $r.tickFailing) | nindent 12 }}
@@ -202,7 +201,7 @@ spec:
         # for at most a day and then leaves.
         - alert: {{ $alert }}
           expr: >-
-            {{- include "sluis.dual" (printf "time() - max by (%s, namespace, kind, target) (last_over_time(access_roster_tick_last_success_timestamp_seconds{%s}[1d])) > %d" $c $w ($r.tickStale.maxAgeSeconds | int64)) | nindent 12 }}
+            {{- printf "time() - max by (%s, namespace, kind, target) (last_over_time(sluis_tick_last_success_timestamp_seconds{%s}[1d])) > %d" $c $w ($r.tickStale.maxAgeSeconds | int64) | nindent 12 }}
           for: {{ $r.tickStale.for }}
           labels:
             {{- include "sluis.ruleLabels" (dict "root" $ "cfg" $r.tickStale) | nindent 12 }}
@@ -225,7 +224,7 @@ spec:
         # drained.
         - alert: {{ $alert }}
           expr: >-
-            {{- include "sluis.dual" (printf "sum by (%s, namespace, kind) (increase(access_roster_leases_lost_total{%s}[%s])) >= %v" $c $w $r.leaseLost.window $r.leaseLost.losses) | nindent 12 }}
+            {{- printf "sum by (%s, namespace, kind) (increase(sluis_leases_lost_total{%s}[%s])) >= %v" $c $w $r.leaseLost.window $r.leaseLost.losses | nindent 12 }}
           for: {{ $r.leaseLost.for }}
           labels:
             {{- include "sluis.ruleLabels" (dict "root" $ "cfg" $r.leaseLost) | nindent 12 }}
@@ -324,7 +323,7 @@ spec:
         # `minErrors` keeps a single failed call from being a page.
         - alert: {{ $alert }}
           expr: >-
-            {{- include "sluis.dual" (printf "( sum by (%[1]s, namespace, port) (increase(access_roster_port_operation_duration_seconds_count{%[2]s,outcome=~\"unavailable|error\"}[5m])) / sum by (%[1]s, namespace, port) (increase(access_roster_port_operation_duration_seconds_count{%[2]s}[5m])) ) > %[3]v and sum by (%[1]s, namespace, port) (increase(access_roster_port_operation_duration_seconds_count{%[2]s,outcome=~\"unavailable|error\"}[5m])) >= %[4]v" $c $w $r.portErrors.ratio $r.portErrors.minErrors) | nindent 12 }}
+            {{- printf "( sum by (%[1]s, namespace, port) (increase(sluis_port_operation_duration_seconds_count{%[2]s,outcome=~\"unavailable|error\"}[5m])) / sum by (%[1]s, namespace, port) (increase(sluis_port_operation_duration_seconds_count{%[2]s}[5m])) ) > %[3]v and sum by (%[1]s, namespace, port) (increase(sluis_port_operation_duration_seconds_count{%[2]s,outcome=~\"unavailable|error\"}[5m])) >= %[4]v" $c $w $r.portErrors.ratio $r.portErrors.minErrors | nindent 12 }}
           for: {{ $r.portErrors.for }}
           labels:
             {{- include "sluis.ruleLabels" (dict "root" $ "cfg" $r.portErrors) | nindent 12 }}

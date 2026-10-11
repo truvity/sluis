@@ -30,6 +30,5 @@ config:
 serviceAccount:
   awsIdentity: pod-identity
 telemetry:
-  legacyMetrics: false
   otlp:
     endpoint: http://gateway.observability.svc:4318
