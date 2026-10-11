@@ -214,3 +214,19 @@ func TestTheMaintenanceOperatorWritesTheFlagAndNothingElse(t *testing.T) {
 		t.Error("no table was accepted")
 	}
 }
+
+// The operator's audit grant is a send on the audit queue and nothing else.
+func TestOperatorAuditStatementsAreASendOnTheQueue(t *testing.T) {
+	const queue = "arn:aws:sqs:eu-west-1:111111111111:audit-ingest"
+	st, err := OperatorAuditStatements(queue)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(st) != 1 || st[0]["Effect"] != "Allow" || !slices.Equal(strs(st[0]["Action"]), []string{"sqs:SendMessage"}) ||
+		!slices.Equal(strs(st[0]["Resource"]), []string{queue}) {
+		t.Fatalf("statements = %v", st)
+	}
+	if _, err = OperatorAuditStatements(""); err == nil {
+		t.Error("a grant on no queue was rendered")
+	}
+}

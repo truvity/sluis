@@ -337,3 +337,19 @@ func MaintenanceOperatorStatements(tables []string, tableKeyArn string) ([]map[s
 	}
 	return st, nil
 }
+
+// OperatorAuditStatements are the statements that let the principal that runs
+// an audited operator command (`sluis maintenance on|off`, `sluis migrate v5
+// copy|prune`) deliver the command's audit record. Those commands refuse when
+// the record cannot be delivered, so the operator's role needs what the
+// function roles have: sqs:SendMessage on the audit queue, and nothing more.
+// If the queue is encrypted with a customer-managed key, the operator also
+// needs kms:GenerateDataKey and kms:Decrypt on it through SQS.
+func OperatorAuditStatements(queueArn string) ([]map[string]any, error) {
+	if queueArn == "" {
+		return nil, fmt.Errorf("sluispulumi: OperatorAuditStatements: no queue ARN")
+	}
+	return []map[string]any{{
+		"Sid": "SluisOperatorAudit", "Effect": "Allow", "Action": []string{sqsSendMessage}, "Resource": queueArn,
+	}}, nil
+}

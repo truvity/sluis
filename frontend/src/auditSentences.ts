@@ -3,7 +3,7 @@ import type { Sentences } from "@truvity/audit";
 
 export const roster: Sentences = {
   "source": "roster",
-  "version": "1.15.0",
+  "version": "1.16.0",
   "locales": [
     "en"
   ],
@@ -245,7 +245,13 @@ export const roster: Sentences = {
     "roster.maintenance.changed": {
       "summary": "An operator set or lifted the migration freeze (`sluis maintenance on` or `off`). While it is set the installation refuses every write of state, answers 503 with Retry-After, and still serves discovery, the key set and a read-only token exchange. Lifting a restore's flag is `forced`.",
       "message": {
-        "en": "{data_state, select, migration {{actor} froze {targets_0_id} for a migration} other {{actor} lifted the maintenance flag of {targets_0_id}}}"
+        "en": "{outcome, select, success {{data_state, select, migration {{actor} froze {targets_0_id} for a migration} other {{actor} lifted the maintenance flag of {targets_0_id}}}} other {{actor} could not change the maintenance flag of {targets_0_id}}}"
+      }
+    },
+    "roster.migration.copied": {
+      "summary": "An operator ran `sluis migrate v5 copy` for real and it had something to write. A record with `phase` started is kept before the first write and counts what will be written and which differing destination values `overwrite` replaces (by name); the record with `phase` completed (or a failed outcome) says how it ended. Names and counts only, never a value.",
+      "message": {
+        "en": "{outcome, select, success {{data_phase, select, started {{actor} is copying {data_written, plural, one {# item} other {# items}} into {targets_0_id}} other {{actor} copied {data_written, plural, one {# item} other {# items}} into {targets_0_id}}}} other {{actor} could not finish copying into {targets_0_id}}}"
       }
     },
     "roster.person.signed_in": {
@@ -294,6 +300,12 @@ export const roster: Sentences = {
       "summary": "A GitHub App for self-hosted runners was installed.",
       "message": {
         "en": "{actor} installed runner App {targets_0_id} on {targets_1_id}"
+      }
+    },
+    "roster.secrets.pruned": {
+      "summary": "An operator ran `sluis migrate v5 prune` for real. A record with `phase` started is kept before the first delete and names the layout v4 parameters about to be deleted; the record with `phase` completed (or a failed outcome) says how many were. Names and counts only, never a value.",
+      "message": {
+        "en": "{outcome, select, success {{data_phase, select, started {{actor} is pruning {data_planned, plural, one {# layout v4 parameter} other {# layout v4 parameters}} of {targets_0_id}} other {{actor} pruned {data_deleted, plural, one {# layout v4 parameter} other {# layout v4 parameters}} of {targets_0_id}}}} other {{actor} could not finish pruning the layout v4 parameters of {targets_0_id}}}"
       }
     },
     "roster.session.ended": {

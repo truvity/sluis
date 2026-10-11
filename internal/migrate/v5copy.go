@@ -47,6 +47,10 @@ type V5Options struct {
 	// WritersStopped is the operator's statement that nothing writes to the
 	// source. A run that writes refuses without it.
 	WritersStopped bool
+	// Before is called once, after the plan is read and every check passed and
+	// before the first write, when there is something to write. The command
+	// records its intent there; an error stops the run before it writes.
+	Before func(ctx context.Context, w Writes) error
 	// Wait pauses until the replicas have seen a freeze set a moment ago; nil
 	// waits on the clock. A test replaces it.
 	Wait func(ctx context.Context, d time.Duration)
@@ -224,6 +228,13 @@ func CopyV5(ctx context.Context, from, to Side, opt V5Options) (*PlanReport, err
 		err = fmt.Errorf("%w: %d items, the first %s: nothing was written; look at them, then give --overwrite to replace the destination's values",
 			ErrConflict, report.Totals.Different, first.From)
 	}
+	if err == nil && !opt.DryRun && opt.Before != nil {
+		if w := report.writes(opt.Overwrite); w.Items > 0 {
+			if err = opt.Before(ctx, w); err != nil {
+				err = fmt.Errorf("%w: %w", ErrNotStarted, err)
+			}
+		}
+	}
 	if err == nil && !opt.DryRun {
 		err = p.write(ctx, report, opt.Overwrite)
 	}
@@ -247,6 +258,41 @@ func CopyV5(ctx context.Context, from, to Side, opt V5Options) (*PlanReport, err
 	}
 	report.OK = err == nil
 	return report, err
+}
+
+// ErrNotStarted marks a run stopped by its Before hook: nothing was written.
+var ErrNotStarted = errors.New("migrate: nothing was written")
+
+// Writes is what a copy is about to write: counts and names, never a value.
+type Writes struct {
+	// Items is how many items are written, New of them absent on the
+	// destination and Replaced replacing a value that differs.
+	Items, New, Replaced int
+	// ReplacedNames are the replaced items, as module/concern/name.
+	ReplacedNames []string
+}
+
+// writes counts what write would do with overwrite as given.
+func (r *PlanReport) writes(overwrite bool) Writes {
+	var w Writes
+	for mi := range r.Modules {
+		for i := range r.Modules[mi].Items {
+			it := &r.Modules[mi].Items[i]
+			if it.do == nil {
+				continue
+			}
+			switch {
+			case it.Status == PlanNew:
+				w.Items++
+				w.New++
+			case it.Status == PlanDifferent && overwrite:
+				w.Items++
+				w.Replaced++
+				w.ReplacedNames = append(w.ReplacedNames, fmt.Sprintf("%s/%s/%s", r.Modules[mi].Module, it.Concern, it.From))
+			}
+		}
+	}
+	return w
 }
 
 func firstWith(r *PlanReport, status PlanStatus) PlanItem {

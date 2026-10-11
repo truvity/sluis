@@ -252,6 +252,69 @@ func MaintenanceChanged(actor Actor, m Maintenance) *record.Record {
 		[]*record.Target{{Type: "installation", Id: m.Installation}}, d)
 }
 
+// MaintenanceFailed is a change of the maintenance flag that was recorded and
+// then did not happen, or did not complete.
+func MaintenanceFailed(actor Actor, m Maintenance, detail string) *record.Record {
+	d := data{"installation": m.Installation, "state": m.State, "modules": m.Modules, "reason": m.Reason}
+	return build("roster.maintenance.changed", actor, Failed(detail), subjectOf(actor),
+		[]*record.Target{{Type: "installation", Id: m.Installation}}, d)
+}
+
+// ------------------------------------------------------- operator migration
+
+// The phases of a record an operator's command keeps twice.
+const (
+	// PhaseStarted is kept before the command's first write.
+	PhaseStarted = "started"
+	// PhaseCompleted is kept after its last one.
+	PhaseCompleted = "completed"
+)
+
+// SecretsPrune is what `sluis migrate v5 prune` records: names and counts,
+// never a value.
+type SecretsPrune struct {
+	// Installation is the layout v5 side, From the layout v4 one.
+	Installation, From string
+	Phase              string
+	// Plan is the confirmed plan hash.
+	Plan string
+	// Planned, Deleted and Kept are counts of parameters.
+	Planned, Deleted, Kept int
+	// Names are the parameters to delete.
+	Names []string
+}
+
+// SecretsPruned is an operator deleting the layout v4 parameters a migration
+// carried. The catalogue declares it block: the started record is kept before
+// the first delete.
+func SecretsPruned(actor Actor, p SecretsPrune, o Outcome) *record.Record {
+	return build("roster.secrets.pruned", actor, o, subjectOf(actor),
+		[]*record.Target{{Type: "installation", Id: p.Installation}},
+		data{"installation": p.Installation, "from": p.From, "phase": p.Phase, "plan": p.Plan,
+			"planned": p.Planned, "deleted": p.Deleted, "kept": p.Kept, "names": p.Names})
+}
+
+// MigrationCopy is what `sluis migrate v5 copy` records: counts and names.
+type MigrationCopy struct {
+	// Installation is the layout v5 side, From the layout v4 one.
+	Installation, From string
+	Phase              string
+	Overwrite          bool
+	// Written counts the items written, Replaced those of them that replace a
+	// destination value that differed, ReplacedNames their names.
+	Written, Replaced int
+	ReplacedNames     []string
+}
+
+// MigrationCopied is an operator copying a layout v4 installation into a
+// layout v5 one. The catalogue declares it block.
+func MigrationCopied(actor Actor, c MigrationCopy, o Outcome) *record.Record {
+	return build("roster.migration.copied", actor, o, subjectOf(actor),
+		[]*record.Target{{Type: "installation", Id: c.Installation}},
+		data{"installation": c.Installation, "from": c.From, "phase": c.Phase, "overwrite": c.Overwrite,
+			"written": c.Written, "replaced": c.Replaced, "replaced_names": c.ReplacedNames})
+}
+
 // ---------------------------------------------------------------- Cloudflare
 
 // The variants of a minted Cloudflare token.
