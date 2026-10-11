@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	slackconsole "github.com/truvity/sluis/internal/slackapp/console"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -154,7 +155,7 @@ func TestASlackInstallIsFinishedOnlyByAnOperatorOfTheWorkspaceNow(t *testing.T) 
 		}
 		cookie, state := cookieFrom(t, begun.Header()), mustQuery(t, begun.Msg.GetUrl(), "state")
 		code := h.slack.Install(app.GetAppId(), acmeTeam)
-		request := httptest.NewRequest(http.MethodGet, slackCatalogueCallbackPath+"?"+url.Values{"code": {code}, "state": {state}}.Encode(), nil)
+		request := httptest.NewRequest(http.MethodGet, slackconsole.CatalogueCallbackPath+"?"+url.Values{"code": {code}, "state": {state}}.Encode(), nil)
 		request.AddCookie(&http.Cookie{Name: access.ConnectCookieName, Value: cookie})
 		request = request.WithContext(asSlackIdentity(c.who))
 		recorder := httptest.NewRecorder()

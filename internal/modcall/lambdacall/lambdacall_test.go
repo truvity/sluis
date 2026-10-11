@@ -23,10 +23,17 @@ type fn struct {
 	server *modcall.Server
 	got    *awslambda.InvokeInput
 	crash  string
+	// attempts is the retry bound the client was told to use, 0 for its default.
+	attempts int
 }
 
-func (f *fn) Invoke(ctx context.Context, in *awslambda.InvokeInput, _ ...func(*awslambda.Options)) (*awslambda.InvokeOutput, error) {
+func (f *fn) Invoke(ctx context.Context, in *awslambda.InvokeInput, opts ...func(*awslambda.Options)) (*awslambda.InvokeOutput, error) {
 	f.got = in
+	var o awslambda.Options
+	for _, set := range opts {
+		set(&o)
+	}
+	f.attempts = o.RetryMaxAttempts
 	if f.crash != "" {
 		return &awslambda.InvokeOutput{StatusCode: 200, FunctionError: &f.crash, Payload: []byte(`{"errorMessage":"x"}`)}, nil
 	}
@@ -183,5 +190,15 @@ func TestAV1EventIsAnsweredInV1(t *testing.T) {
 		[]byte(`{"kind":"rpc","module":"calc","method":"double","payload":{"N":2}}`), "live-issuer")
 	if err != nil || strings.Contains(string(out), `"v"`) || !strings.Contains(string(out), `"N":4`) {
 		t.Fatalf("%s %v", out, err)
+	}
+}
+
+func TestACallMarkedWithoutRetryIsSentOnceByTheClient(t *testing.T) {
+	f, c := setup()
+	if _, err := modcall.Do[req, res](context.Background(), c, "calc", "double", req{N: 1}); err != nil || f.attempts != 0 {
+		t.Fatalf("an ordinary call: %d attempts bound, %v", f.attempts, err)
+	}
+	if _, err := modcall.Do[req, res](modcall.WithoutRetry(context.Background()), c, "calc", "double", req{N: 1}); err != nil || f.attempts != 1 {
+		t.Fatalf("a call without retry: %d attempts bound, %v", f.attempts, err)
 	}
 }

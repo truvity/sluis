@@ -23,17 +23,6 @@ import (
 	"github.com/truvity/sluis/policy"
 )
 
-// SlackChannelRecords is where console channels' records are kept: the
-// records the Slack controller reads.
-type SlackChannelRecords interface {
-	List(ctx context.Context) ([]connection.ChannelRecord, error)
-	// Apply reads one record (nil when there is none), asks decide what it
-	// becomes (nil deletes it) and writes that under the object's version.
-	// decide is given every record as read, for a check across records.
-	Apply(ctx context.Context, workspace, name string,
-		decide func(current *reconcile.ConsoleChannel, all []connection.ChannelRecord) (*reconcile.ConsoleChannel, error)) error
-}
-
 func (c *Console) slackChannelStore() (SlackChannelRecords, error) {
 	if c.deps.SlackChannels == nil {
 		return nil, connect.NewError(connect.CodeFailedPrecondition,
@@ -147,15 +136,15 @@ func (c *Console) ListSlackChannels(
 	out := &directoryrosterv1.ListSlackChannelsResponse{Available: c.deps.SlackChannels != nil}
 	var owners []string
 	for _, key := range set.SlackWorkspaceKeys() {
-		if !book.may(id, access.RoleViewer, key) {
+		if !book.May(id, access.RoleViewer, key) {
 			continue
 		}
-		operate := book.mayAct(id, key)
-		if operate && book.owner(key) != "" {
-			owners = append(owners, book.owner(key))
+		operate := book.MayAct(id, key)
+		if operate && book.Owner(key) != "" {
+			owners = append(owners, book.Owner(key))
 		}
 		out.Workspaces = append(out.Workspaces, &directoryrosterv1.SlackChannelWorkspace{
-			Key: key, CanOperate: operate, Owner: book.owner(key), DiscoveredMore: int32(reports[key].DiscoveredMore), //nolint:gosec // a count
+			Key: key, CanOperate: operate, Owner: book.Owner(key), DiscoveredMore: int32(reports[key].DiscoveredMore), //nolint:gosec // a count
 			Acting: reports[key].Enabled,
 		})
 	}
@@ -181,16 +170,16 @@ func (c *Console) ListSlackChannels(
 			}
 			continue
 		}
-		if !book.may(id, access.RoleViewer, rec.Workspace) {
+		if !book.May(id, access.RoleViewer, rec.Workspace) {
 			continue
 		}
 		view := consoleView(rec.Channel)
 		view.State, view.Reason = consoleState(rec.Channel, p, reports)
-		view.CanOperate = book.mayAct(id, rec.Workspace)
+		view.CanOperate = book.MayAct(id, rec.Workspace)
 		out.Channels = append(out.Channels, view)
 	}
 	for _, key := range slices.Sorted(maps.Keys(reports)) {
-		if _, declared := p.Slack.Workspaces[key]; !declared || !book.may(id, access.RoleViewer, key) {
+		if _, declared := p.Slack.Workspaces[key]; !declared || !book.May(id, access.RoleViewer, key) {
 			continue
 		}
 		for _, d := range reports[key].Discovered {
@@ -199,7 +188,7 @@ func (c *Console) ListSlackChannels(
 			}
 			out.Discovered = append(out.Discovered, &directoryrosterv1.SlackDiscoveredOrdinary{
 				Workspace: key, ChannelId: d.ID, Name: d.Name, Private: d.Private, Members: int32(d.Members), //nolint:gosec // a member count
-				CanManage: c.deps.SlackChannels != nil && book.mayAct(id, key),
+				CanManage: c.deps.SlackChannels != nil && book.MayAct(id, key),
 			})
 		}
 	}
@@ -274,7 +263,7 @@ func (c *Console) validateConsole(ctx context.Context, want reconcile.ConsoleCha
 	if err := want.Validate(c.deps.Authorizer.Policy().Declared()); err != nil {
 		return connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	return c.checkSources(ctx, want.Sources, want.Members, book.owner(want.Workspace), true)
+	return c.checkSources(ctx, want.Sources, want.Members, book.Owner(want.Workspace), true)
 }
 
 // CreateSlackChannel puts a channel under management: operator of the

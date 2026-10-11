@@ -66,6 +66,7 @@ func New(api API, cfg modcall.Config) *Caller {
 	for name, t := range cfg.Modules {
 		if t.Function != "" {
 			c.Functions[name] = t.Function
+			c.MaxBytes = max(c.MaxBytes, t.MaxBytes)
 		}
 	}
 	return c
@@ -96,10 +97,14 @@ func (c *Caller) invoke(ctx context.Context, fn string, req modcall.Request, p *
 	if err != nil {
 		return nil, err
 	}
+	var opts []func(*awslambda.Options)
+	if !modcall.Retryable(ctx) {
+		opts = append(opts, func(o *awslambda.Options) { o.RetryMaxAttempts = 1 })
+	}
 	out, err := c.API.Invoke(ctx, &awslambda.InvokeInput{
 		FunctionName: aws.String(fn), Qualifier: aws.String(AliasOf(c.Class)),
 		InvocationType: types.InvocationTypeRequestResponse, Payload: body,
-	})
+	}, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("%w: invoke %s: %w", modcall.ErrTransport, fn, err)
 	}

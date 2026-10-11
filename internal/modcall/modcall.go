@@ -409,6 +409,21 @@ func Result(r Response) ([]byte, error) {
 
 type callerKey struct{}
 
+type noRetryKey struct{}
+
+// WithoutRetry marks a call that must reach the callee at most once: a callback
+// that spends a single-use provider code. A transport that retries on its own
+// (the Lambda client does, on a throttle or a lost connection) sends it once.
+func WithoutRetry(ctx context.Context) context.Context {
+	return context.WithValue(ctx, noRetryKey{}, true)
+}
+
+// Retryable reports whether a transport may send the call again on its own.
+func Retryable(ctx context.Context) bool {
+	no, _ := ctx.Value(noRetryKey{}).(bool)
+	return !no
+}
+
 // WithCaller records the caller class the transport authenticated the call as.
 // Only a transport calls it; a request's payload cannot.
 func WithCaller(ctx context.Context, class string) context.Context {

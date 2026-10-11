@@ -31,6 +31,7 @@ import (
 	"github.com/truvity/sluis/internal/settings"
 	"github.com/truvity/sluis/internal/slackapp"
 	slackcatalogue "github.com/truvity/sluis/internal/slackapp/catalogue"
+	slackconsole "github.com/truvity/sluis/internal/slackapp/console"
 	"github.com/truvity/sluis/internal/slackroster/reconcile"
 	"github.com/truvity/sluis/internal/version"
 	"github.com/truvity/sluis/storage/logattr"
@@ -238,7 +239,12 @@ type ConsoleDeps struct {
 // Console serves WorkspaceService, SettingsService and AccessService on
 // the console listener.
 type Console struct {
-	deps       ConsoleDeps
+	deps ConsoleDeps
+	// slack is the Slack module in this process, and slackLocal the way to call it
+	// as the console, for a deployment that has not split it out.
+	slackOnce  sync.Once
+	slack      *slackconsole.Service
+	slackLocal modcall.Caller
 	connectors map[string]Connector
 	// githubSeen is what GitHub last said of each GitHub App.
 	githubSeen githubObservations

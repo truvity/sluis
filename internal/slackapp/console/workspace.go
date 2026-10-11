@@ -1,4 +1,4 @@
-package server
+package console
 
 import (
 	"context"
@@ -14,6 +14,8 @@ import (
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
 	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/audit"
+	"github.com/truvity/sluis/internal/consoleauthz"
+	"github.com/truvity/sluis/internal/consolecall"
 	"github.com/truvity/sluis/internal/port"
 	"github.com/truvity/sluis/internal/slackapp"
 	slackcatalogue "github.com/truvity/sluis/internal/slackapp/catalogue"
@@ -22,11 +24,11 @@ import (
 	"github.com/truvity/sluis/storage/logattr"
 )
 
-// SlackWorkspaces is where connected Slack workspaces are kept: each one's
+// Workspaces is where connected Slack workspaces are kept: each one's
 // record, which the console shows, and credential, which only the Slack
 // controller acts with. It also keeps the operators' confirmations of
 // removal sets.
-type SlackWorkspaces interface {
+type Workspaces interface {
 	// Put writes a record and its credential.
 	Put(ctx context.Context, record connection.Record, credential connection.Credential) error
 	List(ctx context.Context) ([]connection.Record, error)
@@ -48,14 +50,13 @@ type SlackWorkspaces interface {
 	Confirmations(ctx context.Context) (map[string]connection.Confirmation, error)
 }
 
-// Where Slack sends the browser back to after an owner installs the
-// roster's App into a workspace.
-const slackWorkspaceCallbackPath = "/connect/slack/workspace/callback"
+// WorkspaceCallbackPath is where Slack sends the browser back to after an owner
+// installs the roster's App into a workspace: a route of the console.
+const WorkspaceCallbackPath = "/connect/slack/workspace/callback"
 
-// slackWorkspaceBind prefixes the workspace key in a workspace connect's
-// signed state, so no other flow's state can finish it, and the other way
-// round.
-const slackWorkspaceBind = "slack-workspace:"
+// WorkspaceBind prefixes the workspace key in a workspace connect's signed
+// state, so no other flow's state can finish it, and the other way round.
+const WorkspaceBind = "slack-workspace:"
 
 // The states a workspace's connection is shown in.
 const (
@@ -66,18 +67,22 @@ const (
 
 // slackWorkspaceRedirect is where Slack sends the owner after installing
 // the roster's App.
-func (c *Console) slackWorkspaceRedirect() string {
-	return c.githubRoot() + slackWorkspaceCallbackPath
+func (c *Service) slackWorkspaceRedirect(caller consolecall.Caller) string {
+	return caller.Origin + WorkspaceCallbackPath
 }
 
 // slackWorkspaceStore refuses where the deployment keeps no state in
 // Kubernetes.
-func (c *Console) slackWorkspaceStore() (SlackWorkspaces, error) {
-	if c.deps.SlackWorkspaces == nil {
+// WorkspaceStore is where connected workspaces are kept, or the refusal where the
+// deployment keeps none.
+func (c *Service) WorkspaceStore() (Workspaces, error) { return c.slackWorkspaceStore() }
+
+func (c *Service) slackWorkspaceStore() (Workspaces, error) {
+	if c.d().SlackWorkspaces == nil {
 		return nil, connect.NewError(connect.CodeFailedPrecondition,
 			errors.New("this deployment keeps no state in Kubernetes, so a Slack bot token would not survive a restart"))
 	}
-	return c.deps.SlackWorkspaces, nil
+	return c.d().SlackWorkspaces, nil
 }
 
 // slackWorkspaceApp is the App the roster is created as in a workspace,
@@ -105,10 +110,10 @@ const tokenHint = "that is not an app configuration token: generate one at api.s
 // for one call, and dropped: it is not written to the Secret or a record,
 // not put into the signed state, not in any log line or audit record, and
 // not in any error returned (errors from Slack never carry it).
-func (c *Console) BeginSlackWorkspaceConnect(
-	ctx context.Context, req *connect.Request[directoryrosterv1.BeginSlackWorkspaceConnectRequest],
-) (*connect.Response[directoryrosterv1.BeginSlackWorkspaceConnectResponse], error) {
-	who, err := requireAnywhere(ctx, access.RoleOperator)
+func (c *Service) BeginSlackWorkspaceConnect(
+	ctx context.Context, caller consolecall.Caller, req *directoryrosterv1.BeginSlackWorkspaceConnectRequest,
+) (*directoryrosterv1.BeginSlackWorkspaceConnectResponse, error) {
+	who, err := consoleauthz.RequireAnywhere(caller, access.RoleOperator)
 	if err != nil {
 		return nil, err
 	}
@@ -116,7 +121,7 @@ func (c *Console) BeginSlackWorkspaceConnect(
 	if err != nil {
 		return nil, err
 	}
-	workspace := strings.TrimSpace(req.Msg.GetWorkspace())
+	workspace := strings.TrimSpace(req.GetWorkspace())
 	if !status.ValidWorkspace(workspace) {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("%q is not a workspace key", workspace))
 	}
@@ -130,10 +135,10 @@ func (c *Console) BeginSlackWorkspaceConnect(
 	// Who may connect depends on whether there is anything to own it yet.
 	// A workspace already created belongs to its recorded owner (and to the
 	// installation-wide operator); one not yet created is connectable by
-	// either, and [resolveOwner] says who then owns it.
+	// either, and [consoleauthz.ResolveOwner] says who then owns it.
 	var owner string
 	if found {
-		if who, err = c.requireSlack(ctx, access.RoleOperator, workspace); err != nil {
+		if who, err = c.requireSlack(ctx, caller, access.RoleOperator, workspace); err != nil {
 			return nil, err
 		}
 		owner = record.Owner
@@ -142,16 +147,16 @@ func (c *Console) BeginSlackWorkspaceConnect(
 		if err != nil {
 			return nil, err
 		}
-		if owner, err = resolveOwner(who, req.Msg.GetOwner(), dirs); err != nil {
+		if owner, err = consoleauthz.ResolveOwner(who, req.GetOwner(), dirs); err != nil {
 			return nil, err
 		}
 	}
-	configToken := strings.TrimSpace(req.Msg.GetConfigurationToken())
+	configToken := strings.TrimSpace(req.GetConfigurationToken())
 	if configToken != "" && !plausibleConfigurationToken(configToken) {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New(tokenHint))
 	}
 	app := slackWorkspaceApp(workspace)
-	manifest, err := slackcatalogue.Manifest(app, c.slackWorkspaceRedirect())
+	manifest, err := slackcatalogue.Manifest(app, c.slackWorkspaceRedirect(caller))
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -178,7 +183,7 @@ func (c *Console) BeginSlackWorkspaceConnect(
 		if err = store.Put(ctx, record, credential); err != nil {
 			return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf(
 				"slack created the App and it could not be saved here: delete it at %s and connect again: %w",
-				slackAppSettingsURL(created.AppID), err))
+				AppSettingsURL(created.AppID), err))
 		}
 	case configToken != "":
 		// Scopes the roster asks for now reach an App created earlier only
@@ -197,44 +202,39 @@ func (c *Console) BeginSlackWorkspaceConnect(
 				"or a reinstall would grant nothing new", workspace))
 	}
 
-	state, err := c.deps.State.IssueAs(access.Binding{Bind: slackWorkspaceBind + workspace, Actor: who.Who()})
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
-	}
 	// The team is preselected once it is known; the first install has none
-	// to offer, and the team Slack reports back becomes the recorded one.
-	target, err := slackAuthorizeURL(record.AuthorizeURL, state, c.slackWorkspaceRedirect(), record.TeamID, connection.BotScopes)
+	// to offer, and the team Slack reports back becomes the recorded one. The
+	// state is the console's to add: it signs, and pins the browser.
+	target, err := slackAuthorizeURL(record.AuthorizeURL, c.slackWorkspaceRedirect(caller), record.TeamID, connection.BotScopes)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	response := connect.NewResponse(&directoryrosterv1.BeginSlackWorkspaceConnectResponse{Url: target})
-	c.pinFlow(response.Header(), state)
-	return response, nil
+	return &directoryrosterv1.BeginSlackWorkspaceConnectResponse{Url: target}, nil
 }
 
 // RequestSlackPass asks the Slack controller to pass over a workspace now.
 // The request is a marker the controller notices within its poll (see the
 // controller's watch); a second one under a minute after the first is
 // refused, so the button cannot be leaned on.
-func (c *Console) RequestSlackPass(
-	ctx context.Context, req *connect.Request[directoryrosterv1.RequestSlackPassRequest],
-) (*connect.Response[directoryrosterv1.RequestSlackPassResponse], error) {
-	if _, err := requireAnywhere(ctx, access.RoleOperator); err != nil {
+func (c *Service) RequestSlackPass(
+	ctx context.Context, caller consolecall.Caller, req *directoryrosterv1.RequestSlackPassRequest,
+) (*directoryrosterv1.RequestSlackPassResponse, error) {
+	if _, err := consoleauthz.RequireAnywhere(caller, access.RoleOperator); err != nil {
 		return nil, err
 	}
 	store, err := c.slackWorkspaceStore()
 	if err != nil {
 		return nil, err
 	}
-	workspace := strings.TrimSpace(req.Msg.GetWorkspace())
+	workspace := strings.TrimSpace(req.GetWorkspace())
 	if !status.ValidWorkspace(workspace) {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("%q is not a workspace key", workspace))
 	}
-	who, err := c.requireSlack(ctx, access.RoleOperator, workspace)
+	who, err := c.requireSlack(ctx, caller, access.RoleOperator, workspace)
 	if err != nil {
 		return nil, err
 	}
-	book, err := c.slackBook(ctx)
+	book, err := c.book(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -254,26 +254,26 @@ func (c *Console) RequestSlackPass(
 	}
 	c.notify(ctx, port.ControllerSlack, workspace)
 	c.log().InfoContext(ctx, "a Slack pass was requested", logattr.SafeString("workspace", workspace), logattr.SafeString("by", who.Who()))
-	return connect.NewResponse(&directoryrosterv1.RequestSlackPassResponse{RequestedAt: timestampOf(now)}), nil
+	return &directoryrosterv1.RequestSlackPassResponse{RequestedAt: timestampOf(now)}, nil
 }
 
 // DisconnectSlackWorkspace revokes the bot token and forgets the
 // connection.
-func (c *Console) DisconnectSlackWorkspace(
-	ctx context.Context, req *connect.Request[directoryrosterv1.DisconnectSlackWorkspaceRequest],
-) (*connect.Response[directoryrosterv1.DisconnectSlackWorkspaceResponse], error) {
-	if _, err := requireAnywhere(ctx, access.RoleOperator); err != nil {
+func (c *Service) DisconnectSlackWorkspace(
+	ctx context.Context, caller consolecall.Caller, req *directoryrosterv1.DisconnectSlackWorkspaceRequest,
+) (*directoryrosterv1.DisconnectSlackWorkspaceResponse, error) {
+	if _, err := consoleauthz.RequireAnywhere(caller, access.RoleOperator); err != nil {
 		return nil, err
 	}
 	store, err := c.slackWorkspaceStore()
 	if err != nil {
 		return nil, err
 	}
-	workspace := strings.TrimSpace(req.Msg.GetWorkspace())
+	workspace := strings.TrimSpace(req.GetWorkspace())
 	if !status.ValidWorkspace(workspace) {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("%q is not a workspace key", workspace))
 	}
-	who, err := c.requireSlack(ctx, access.RoleOperator, workspace)
+	who, err := c.requireSlack(ctx, caller, access.RoleOperator, workspace)
 	if err != nil {
 		return nil, err
 	}
@@ -288,7 +288,7 @@ func (c *Console) DisconnectSlackWorkspace(
 	revoked, reason := false, ""
 	if credential.BotToken != "" {
 		if err = c.slackRevoke(ctx, credential.BotToken); err != nil {
-			if !req.Msg.GetForgetAnyway() {
+			if !req.GetForgetAnyway() {
 				return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf(
 					"slack would not revoke the bot token, so the connection was kept: try again, or forget it anyway and remove the App in Slack: %w", err))
 			}
@@ -300,77 +300,61 @@ func (c *Console) DisconnectSlackWorkspace(
 	if err = store.Delete(ctx, workspace); err != nil {
 		return nil, connect.NewError(connect.CodeUnavailable, err)
 	}
-	c.record(ctx, audit.SlackWorkspaceDisconnected(identityActor(who),
+	c.record(ctx, audit.SlackWorkspaceDisconnected(consoleauthz.Actor(who),
 		audit.SlackWorkspace{Key: workspace, Team: record.TeamID, App: record.AppID, Owner: record.Owner}, revoked, reason))
-	return connect.NewResponse(&directoryrosterv1.DisconnectSlackWorkspaceResponse{Revoked: revoked}), nil
+	return &directoryrosterv1.DisconnectSlackWorkspaceResponse{Revoked: revoked}, nil
 }
 
-// slackWorkspaceCallback is where Slack sends the owner after installing
-// the roster's App, with a one-time code for the bot token.
+// CompleteWorkspace finishes a workspace's install: the console has verified
+// where Slack sent the owner after installing the roster's App, and forwards the
+// one-time code for the bot token.
 //
 // The first install records which Slack team the workspace is. Every later
 // install must belong to the same team; a token for any other is revoked and
 // dropped without being stored, and the refusal is recorded.
-func (s *ConsoleServer) slackWorkspaceCallback(w http.ResponseWriter, r *http.Request) {
-	flow := slackWorkspaceFlow
-	console := s.console
+func (c *Service) CompleteWorkspace(ctx context.Context, caller consolecall.Caller, req CompleteRequest) (Completion, error) {
 	subject := audit.SlackWorkspace{Key: "unknown", App: "unknown"}
-	actor := ""
-	refuse := func(code int, summary, detail, reason string, causes []string) {
-		s.slackRefused(flow, r, actor, reason)
-		console.record(r.Context(), audit.SlackWorkspaceConnectRefused(audit.Identified(actor), subject, reason))
-		s.slackProblem(flow, w, r, code, summary, detail, causes)
+	actor := caller.Actor
+	refuse := func(code int, summary, detail, reason string, causes []string) (Completion, error) {
+		c.record(ctx, audit.SlackWorkspaceConnectRefused(audit.Identified(actor), subject, reason))
+		return refused(code, summary, detail, reason, causes), nil
 	}
-	learn := func(bind, who string) {
-		actor = who
-		if key, ok := strings.CutPrefix(bind, slackWorkspaceBind); ok && status.ValidWorkspace(key) {
-			subject.Key = key
-		}
+	if key, ok := strings.CutPrefix(req.Bind, WorkspaceBind); ok && status.ValidWorkspace(key) {
+		subject.Key = key
 	}
-	bind, actor, ok := s.slackBound(r, refuse, learn)
-	if !ok {
-		return
+	if r := c.recheck(ctx, caller, req); r != nil {
+		return refuse(r.Status, r.Summary, r.Detail, r.Reason, r.Causes)
 	}
-	// The flow ends here, whichever way it goes.
-	access.SetCookie(w, access.ConnectCookie("", s.sessions.Secure(), 0))
-	workspace, isWorkspace := strings.CutPrefix(bind, slackWorkspaceBind)
+	if actor == "" {
+		return refuse(http.StatusForbidden, "Installing a Slack App needs the operator role.", "", "the state names no operator", nil)
+	}
+	workspace, isWorkspace := strings.CutPrefix(req.Bind, WorkspaceBind)
 	if !isWorkspace || !status.ValidWorkspace(workspace) {
-		refuse(http.StatusBadRequest, "This is not a Slack workspace's connect.", "", "the state is for another flow", nil)
-		return
+		return refuse(http.StatusBadRequest, "This is not a Slack workspace's connect.", "", "the state is for another flow", nil)
 	}
-	if console.deps.SlackWorkspaces == nil {
-		refuse(http.StatusConflict, "This deployment keeps no Slack connections.", "", "no store for Slack connections", nil)
-		return
+	if c.d().SlackWorkspaces == nil {
+		return refuse(http.StatusConflict, "This deployment keeps no Slack connections.", "", "no store for Slack connections", nil)
 	}
-	if denied := r.URL.Query().Get("error"); denied != "" {
-		refuse(http.StatusBadRequest, "The installation was not approved in Slack.", denied, "the install was not approved in Slack: "+denied, nil)
-		return
+	if req.Denied != "" {
+		return refuse(http.StatusBadRequest, "The installation was not approved in Slack.", req.Denied, "the install was not approved in Slack: "+req.Denied, nil)
 	}
-	if err := console.requireDeclaredSlack(workspace); err != nil {
-		refuse(http.StatusConflict, "The policy no longer names this workspace.", err.Error(), "the policy no longer names the workspace", nil)
-		return
+	if err := c.requireDeclaredSlack(workspace); err != nil {
+		return refuse(http.StatusConflict, "The policy no longer names this workspace.", said(err), "the policy no longer names the workspace", nil)
 	}
-	store := console.deps.SlackWorkspaces
-	record, credential, found, err := store.Get(r.Context(), workspace)
+	store := c.d().SlackWorkspaces
+	record, credential, found, err := store.Get(ctx, workspace)
 	if err != nil || !found {
-		refuse(http.StatusConflict, fmt.Sprintf("There is no App for %s to finish installing. Connect it first.", workspace), errString(err),
+		return refuse(http.StatusConflict, fmt.Sprintf("There is no App for %s to finish installing. Connect it first.", workspace), errString(err),
 			"the workspace has no App to finish installing", nil)
-		return
 	}
 	subject.App, subject.Owner = record.AppID, record.Owner
 
-	callCtx, cancel := context.WithTimeout(r.Context(), slackTimeout)
+	callCtx, cancel := context.WithTimeout(ctx, slackTimeout)
 	defer cancel()
-	installed, err := console.slackSetup().OAuthAccess(callCtx, credential.ClientID, credential.ClientSecret,
-		r.URL.Query().Get("code"), console.slackWorkspaceRedirect())
+	installed, err := c.slackSetup().OAuthAccess(callCtx, credential.ClientID, credential.ClientSecret, req.Code, c.slackWorkspaceRedirect(caller))
 	if err != nil {
-		refuse(http.StatusConflict, "Slack accepted the install, and then would not hand over the bot token.", err.Error(),
-			"slack's oauth.v2.access refused: "+logattr.Error(err), []string{
-				"The page was reloaded: the code Slack returns can be exchanged once.",
-				"More than ten minutes passed between approving and returning here.",
-				"This service cannot reach slack.com: the cluster's egress policy has to allow it.",
-			})
-		return
+		return refuse(http.StatusConflict, "Slack accepted the install, and then would not hand over the bot token.", err.Error(),
+			"slack's oauth.v2.access refused: "+logattr.Error(err), exchangeCauses)
 	}
 	subject.Team = installed.TeamID
 	team := record.TeamID
@@ -378,60 +362,56 @@ func (s *ConsoleServer) slackWorkspaceCallback(w http.ResponseWriter, r *http.Re
 		// The first install: the team Slack reports is the one recorded, as
 		// long as no other workspace key already is that team, which would
 		// make an install ambiguous.
-		book, bookErr := console.slackBook(r.Context())
+		book, bookErr := c.book(ctx)
 		if bookErr != nil {
-			revokeErr := console.slackRevoke(r.Context(), installed.BotToken)
-			refuse(http.StatusConflict, "The connection records could not be read.", bookErr.Error(),
+			revokeErr := c.slackRevoke(ctx, installed.BotToken)
+			return refuse(http.StatusConflict, "The connection records could not be read.", said(bookErr),
 				"the connection records could not be read: "+logattr.Error(bookErr)+"; "+revokedWords(revokeErr), nil)
-			return
 		}
 		for other := range book {
 			if other != workspace && book[other].TeamID == installed.TeamID {
-				revokeErr := console.slackRevoke(r.Context(), installed.BotToken)
-				refuse(http.StatusConflict, fmt.Sprintf(
+				revokeErr := c.slackRevoke(ctx, installed.BotToken)
+				return refuse(http.StatusConflict, fmt.Sprintf(
 					"The App was installed into workspace %s (%s), which is already connected as %q. %s",
 					installed.TeamID, installed.TeamName, other, refusedToken(revokeErr)), "",
 					fmt.Sprintf("team %s is already connected as %s; %s", installed.TeamID, other, revokedWords(revokeErr)), nil)
-				return
 			}
 		}
 		team = installed.TeamID
 	}
 	if installed.TeamID != team {
-		revokeErr := console.slackRevoke(r.Context(), installed.BotToken)
-		refuse(http.StatusConflict, fmt.Sprintf(
+		revokeErr := c.slackRevoke(ctx, installed.BotToken)
+		return refuse(http.StatusConflict, fmt.Sprintf(
 			"The App was installed into workspace %s (%s), and %q was first installed as %s. %s "+
 				"Install again from the right workspace.",
 			installed.TeamID, installed.TeamName, workspace, team, refusedToken(revokeErr)), "",
 			fmt.Sprintf("installed into team %s, and the workspace was first installed as %s; %s", installed.TeamID, team, revokedWords(revokeErr)), nil)
-		return
 	}
 
 	record.TeamID, record.BotUserID = installed.TeamID, installed.BotUserID
 	record.Scopes, record.ConnectedAt, record.ConnectedBy = scopeList(installed.Scope), time.Now().UTC(), actor
 	credential.BotToken = installed.BotToken
-	if err = store.Put(r.Context(), record, credential); err != nil {
+	if err = store.Put(ctx, record, credential); err != nil {
 		// A token nobody keeps is one nobody can revoke later.
-		revokeErr := console.slackRevoke(r.Context(), installed.BotToken)
-		refuse(http.StatusConflict, "The App is installed and its token could not be saved here. Install it again.", err.Error(),
+		revokeErr := c.slackRevoke(ctx, installed.BotToken)
+		return refuse(http.StatusConflict, "The App is installed and its token could not be saved here. Install it again.", err.Error(),
 			"the token could not be kept: "+logattr.Error(err)+"; "+revokedWords(revokeErr), nil)
-		return
 	}
-	s.log.InfoContext(r.Context(), "a Slack workspace was connected", logattr.SafeString("workspace", workspace),
+	c.log().InfoContext(ctx, "a Slack workspace was connected", logattr.SafeString("workspace", workspace),
 		logattr.SafeString("team", installed.TeamID),
 		logattr.SafeString("scopes", strings.Join(record.Scopes, ",")), logattr.SafeString("by", actor))
-	console.record(r.Context(), audit.SlackWorkspaceConnected(audit.Identified(actor), subject))
-	http.Redirect(w, r, s.at("/#/slack"), http.StatusFound)
+	c.record(ctx, audit.SlackWorkspaceConnected(audit.Identified(actor), subject))
+	return Completion{}, nil
 }
 
 // requireDeclaredSlack refuses a workspace key the policy does not name. The
 // policy knows a workspace by its key alone (and the channels bound in it);
 // everything else about it is recorded when it is connected.
-func (c *Console) requireDeclaredSlack(workspace string) error {
-	if c.deps.Authorizer == nil {
+func (c *Service) requireDeclaredSlack(workspace string) error {
+	if c.d().Authorizer == nil {
 		return connect.NewError(connect.CodeFailedPrecondition, errors.New("no policy is loaded"))
 	}
-	if !c.deps.Authorizer.Policy().SlackWorkspaceDeclared(workspace) {
+	if !c.d().Authorizer.Policy().SlackWorkspaceDeclared(workspace) {
 		return connect.NewError(connect.CodeFailedPrecondition,
 			fmt.Errorf("the policy's slack.workspaces does not name workspace %q", workspace))
 	}
@@ -442,11 +422,11 @@ func (c *Console) requireDeclaredSlack(workspace string) error {
 // workspace's owner, or removes it. The installation-wide operator alone: an
 // owner that could hand its workspace to another, or take one, would make
 // "who may operate this" a thing its operators decide.
-func (c *Console) ChangeSlackWorkspaceOwner(
-	ctx context.Context, req *connect.Request[directoryrosterv1.ChangeSlackWorkspaceOwnerRequest],
-) (*connect.Response[directoryrosterv1.ChangeSlackWorkspaceOwnerResponse], error) {
-	workspace, owner := strings.TrimSpace(req.Msg.GetWorkspace()), strings.TrimSpace(req.Msg.GetOwner())
-	who, err := c.requireOwnerChange(ctx, owner)
+func (c *Service) ChangeSlackWorkspaceOwner(
+	ctx context.Context, caller consolecall.Caller, req *directoryrosterv1.ChangeSlackWorkspaceOwnerRequest,
+) (*directoryrosterv1.ChangeSlackWorkspaceOwnerResponse, error) {
+	workspace, owner := strings.TrimSpace(req.GetWorkspace()), strings.TrimSpace(req.GetOwner())
+	who, err := consoleauthz.RequireOwnerChange(caller, owner, func() ([]consoleauthz.Directory, error) { return c.directories(ctx) })
 	if err != nil {
 		return nil, err
 	}
@@ -466,8 +446,8 @@ func (c *Console) ChangeSlackWorkspaceOwner(
 			fmt.Errorf("slack workspace %s is not connected: its owner is chosen when it is connected", workspace))
 	}
 	if previous == owner {
-		return connect.NewResponse(&directoryrosterv1.ChangeSlackWorkspaceOwnerResponse{}), nil
+		return &directoryrosterv1.ChangeSlackWorkspaceOwnerResponse{}, nil
 	}
-	c.record(ctx, audit.SlackWorkspaceOwnerChanged(identityActor(who), workspace, previous, owner))
-	return connect.NewResponse(&directoryrosterv1.ChangeSlackWorkspaceOwnerResponse{}), nil
+	c.record(ctx, audit.SlackWorkspaceOwnerChanged(consoleauthz.Actor(who), workspace, previous, owner))
+	return &directoryrosterv1.ChangeSlackWorkspaceOwnerResponse{}, nil
 }
