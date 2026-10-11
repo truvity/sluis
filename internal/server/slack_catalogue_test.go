@@ -4,13 +4,14 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	slackconsole "github.com/truvity/sluis/internal/slackapp/console"
 	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
 	"testing"
 	"time"
+
+	slackconsole "github.com/truvity/sluis/internal/slackapp/console"
 
 	"connectrpc.com/connect"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -458,8 +459,9 @@ func TestASlackInstallIsFinishedOnlyByTheBrowserThatStartedIt(t *testing.T) {
 	other, _ := h.server.state.IssueAs(access.Binding{Bind: "github-catalogue:sync", Actor: "ada@north.example"})
 	noActor, _ := h.server.state.IssueAs(access.Binding{Bind: slackconsole.CatalogueBind + "sync"})
 	for name, got := range map[string]int{
-		"no cookie":                       redirect(h.server.slackCatalogueCallback, slackconsole.CatalogueCallbackPath, query(state), "").Code,
-		"another browser's cookie":        redirect(h.server.slackCatalogueCallback, slackconsole.CatalogueCallbackPath, query(state), "a-cookie-from-elsewhere").Code,
+		"no cookie": redirect(h.server.slackCatalogueCallback, slackconsole.CatalogueCallbackPath, query(state), "").Code,
+		"another browser's cookie": redirect(h.server.slackCatalogueCallback, slackconsole.CatalogueCallbackPath, query(state),
+			"a-cookie-from-elsewhere").Code,
 		"a tampered state":                redirect(h.server.slackCatalogueCallback, slackconsole.CatalogueCallbackPath, query(state+"x"), cookie).Code,
 		"no state":                        redirect(h.server.slackCatalogueCallback, slackconsole.CatalogueCallbackPath, url.Values{"code": {code}}, cookie).Code,
 		"another flow's state and cookie": redirect(h.server.slackCatalogueCallback, slackconsole.CatalogueCallbackPath, query(other), other).Code,

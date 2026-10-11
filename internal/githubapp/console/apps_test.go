@@ -50,7 +50,8 @@ func TestWhoMayOperateWhichApp(t *testing.T) {
 // Reading an App through the module is refused to a caller who owns none of the
 // organisations, and a snapshot of nobody is unauthenticated.
 func TestListingAppsNeedsAnOrganisationToSee(t *testing.T) {
-	declared, err := policy.Parse([]byte("version: 1\ngroups:\n  all:g:e: { matchers: [{ email_domain: g.example }] }\ngithub:\n  globex:\n    members: [all:g:e]\n"))
+	declared, err := policy.Parse([]byte("version: 1\ngroups:\n  all:g:e: { matchers: [{ email_domain: g.example }] }\n" +
+		"github:\n  globex:\n    members: [all:g:e]\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,7 +65,9 @@ func TestListingAppsNeedsAnOrganisationToSee(t *testing.T) {
 		_, err := svc.ListGitHubApps(ctx, connect.NewRequest(&directoryrosterv1.ListGitHubAppsRequest{}))
 		return err
 	}
-	if err := list(WithCaller(context.Background(), consolecall.Caller{Actor: "x@y.test", Workspaces: map[string]string{"C0south": "viewer"}})); connect.CodeOf(err) != connect.CodePermissionDenied {
+	if err := list(
+		WithCaller(context.Background(), consolecall.Caller{Actor: "x@y.test", Workspaces: map[string]string{"C0south": "viewer"}}),
+	); connect.CodeOf(err) != connect.CodePermissionDenied {
 		t.Errorf("a viewer of a directory that owns nothing = %v, want permission denied", err)
 	}
 	if err := list(context.Background()); connect.CodeOf(err) != connect.CodeUnauthenticated {
@@ -83,8 +86,8 @@ type memConn struct {
 
 func (m *memConn) List(context.Context) ([]connection.Record, error) {
 	out := make([]connection.Record, 0, len(m.records))
-	for _, r := range m.records {
-		out = append(out, r)
+	for k := range m.records {
+		out = append(out, m.records[k])
 	}
 	return out, nil
 }

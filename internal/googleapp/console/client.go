@@ -61,7 +61,9 @@ func (c *Client) CompleteConsent(ctx context.Context, caller consolecall.Caller,
 // UploadKey forwards a service-account key. The key is in memory for the length
 // of the call and is not written anywhere here; more than [MaxKeyBytes] is
 // refused before it is sent.
-func (c *Client) UploadKey(ctx context.Context, caller consolecall.Caller, req *directoryrosterv1.UploadKeyRequest) (*directoryrosterv1.UploadKeyResponse, error) {
+func (c *Client) UploadKey(
+	ctx context.Context, caller consolecall.Caller, req *directoryrosterv1.UploadKeyRequest,
+) (*directoryrosterv1.UploadKeyResponse, error) {
 	if len(req.GetKey()) > MaxKeyBytes {
 		return nil, modcall.Coded(CodeInvalidArgument, fmt.Sprintf("a key is at most %d KB", MaxKeyBytes>>10))
 	}
@@ -70,13 +72,17 @@ func (c *Client) UploadKey(ctx context.Context, caller consolecall.Caller, req *
 }
 
 // SetServedDomains implements the console's call of the same name.
-func (c *Client) SetServedDomains(ctx context.Context, caller consolecall.Caller, req *directoryrosterv1.SetServedDomainsRequest) (*directoryrosterv1.SetServedDomainsResponse, error) {
+func (c *Client) SetServedDomains(
+	ctx context.Context, caller consolecall.Caller, req *directoryrosterv1.SetServedDomainsRequest,
+) (*directoryrosterv1.SetServedDomainsResponse, error) {
 	return consolecall.Proxy[*directoryrosterv1.SetServedDomainsRequest, *directoryrosterv1.SetServedDomainsResponse](
 		ctx, c.c, Module, MethodSetServedDomains, caller, req)
 }
 
 // SetSyncedGroups implements the console's call of the same name.
-func (c *Client) SetSyncedGroups(ctx context.Context, caller consolecall.Caller, req *directoryrosterv1.SetSyncedGroupsRequest) (*directoryrosterv1.SetSyncedGroupsResponse, error) {
+func (c *Client) SetSyncedGroups(
+	ctx context.Context, caller consolecall.Caller, req *directoryrosterv1.SetSyncedGroupsRequest,
+) (*directoryrosterv1.SetSyncedGroupsResponse, error) {
 	return consolecall.Proxy[*directoryrosterv1.SetSyncedGroupsRequest, *directoryrosterv1.SetSyncedGroupsResponse](
 		ctx, c.c, Module, MethodSetSyncedGroups, caller, req)
 }
@@ -94,7 +100,9 @@ func (c *Client) Refresh(ctx context.Context, caller consolecall.Caller, req *di
 }
 
 // Disconnect implements the console's call of the same name.
-func (c *Client) Disconnect(ctx context.Context, caller consolecall.Caller, req *directoryrosterv1.DisconnectRequest) (*directoryrosterv1.DisconnectResponse, error) {
+func (c *Client) Disconnect(
+	ctx context.Context, caller consolecall.Caller, req *directoryrosterv1.DisconnectRequest,
+) (*directoryrosterv1.DisconnectResponse, error) {
 	return consolecall.Proxy[*directoryrosterv1.DisconnectRequest, *directoryrosterv1.DisconnectResponse](
 		ctx, c.c, Module, MethodDisconnect, caller, req)
 }

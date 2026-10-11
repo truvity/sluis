@@ -24,7 +24,9 @@ import (
 // moduleOver is the GitHub module's server over the stores the console under
 // test holds, for a test that reaches it through a transport.
 func moduleOver(c *Console) *modcall.Server {
-	deps := ghconsole.Deps{Orgs: c.deps.GitHubOrgs, Catalogue: c.deps.GitHubCatalogue, PublicURL: c.deps.PublicURL, RootURL: c.deps.RootURL, HTTP: c.deps.GitHubHTTP}
+	deps := ghconsole.Deps{
+		Orgs: c.deps.GitHubOrgs, Catalogue: c.deps.GitHubCatalogue, PublicURL: c.deps.PublicURL, RootURL: c.deps.RootURL, HTTP: c.deps.GitHubHTTP,
+	}
 	if c.deps.Authorizer != nil {
 		deps.Policy = c.deps.Authorizer.Policy
 	}

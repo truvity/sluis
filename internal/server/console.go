@@ -29,7 +29,6 @@ import (
 	"github.com/truvity/sluis/internal/settings"
 	slackconsole "github.com/truvity/sluis/internal/slackapp/console"
 	"github.com/truvity/sluis/internal/version"
-	"github.com/truvity/sluis/storage/logattr"
 )
 
 // The connector seams live with the Google module, which owns the OAuth client
@@ -242,20 +241,6 @@ func NewConsole(_ context.Context, deps ConsoleDeps) (*Console, error) {
 		c.connectors[conn.Kind()] = conn
 	}
 	return c, nil
-}
-
-// notify asks for the tick of a target (a GitHub organisation's login or a
-// Slack workspace's key) after a write that concerns it. A notification is a
-// hint: failing to send one is logged, never the request's failure.
-func (c *Console) notify(ctx context.Context, controller, target string) {
-	if c.deps.Trigger == nil || target == "" {
-		return
-	}
-	if err := port.NotifyController(ctx, c.deps.Trigger, controller, target); err != nil {
-		c.log().WarnContext(ctx, "a tick could not be requested",
-			logattr.SafeString("controller", controller), logattr.SafeString("target", target),
-			logattr.SafeError("error", err))
-	}
 }
 
 // log is the console's logger: the one it was given, or the default.

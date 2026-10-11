@@ -26,7 +26,9 @@ func TestANewConsoleCallsTheSlackModuleInItsOwnProcess(t *testing.T) {
 	if len(got.Msg.GetWorkspaces()) != 3 || !got.Msg.GetConnectingAvailable() {
 		t.Errorf("the page = %v", got.Msg)
 	}
-	if _, err = console.GetSlackStatus(context.Background(), connect.NewRequest(&directoryrosterv1.GetSlackStatusRequest{})); connect.CodeOf(err) != connect.CodeUnauthenticated {
+	if _, err = console.GetSlackStatus(
+		context.Background(), connect.NewRequest(&directoryrosterv1.GetSlackStatusRequest{}),
+	); connect.CodeOf(err) != connect.CodeUnauthenticated {
 		t.Errorf("an anonymous page = %v", err)
 	}
 }

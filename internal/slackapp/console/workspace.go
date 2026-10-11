@@ -71,8 +71,6 @@ func (c *Service) slackWorkspaceRedirect(caller consolecall.Caller) string {
 	return caller.Origin + WorkspaceCallbackPath
 }
 
-// slackWorkspaceStore refuses where the deployment keeps no state in
-// Kubernetes.
 // WorkspaceStore is where connected workspaces are kept, or the refusal where the
 // deployment keeps none.
 func (c *Service) WorkspaceStore() (Workspaces, error) { return c.slackWorkspaceStore() }

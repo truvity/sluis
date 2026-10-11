@@ -157,7 +157,9 @@ func (s *Service) Reconnect(ctx context.Context, c consolecall.Caller, req Begin
 	return s.begin(ctx, MethodReconnect, c, kind, req.Bind, req.State)
 }
 
-func (s *Service) begin(ctx context.Context, method string, c consolecall.Caller, kind, bind, state string) (BeginResponse, error) {
+func (s *Service) begin(
+	ctx context.Context, method string, c consolecall.Caller, kind, _, state string,
+) (BeginResponse, error) {
 	if _, err := consoleauthz.RequireRole(c, access.RoleOperator); err != nil {
 		return BeginResponse{}, s.gate(ctx, method, c, err)
 	}
@@ -430,7 +432,9 @@ func RegisterLazy(s *modcall.Server, log *slog.Logger, open func(context.Context
 		return svc, nil
 	}
 	// proto registers a method of the contract's messages.
-	consolecall.Handle(s, MethodListWorkspaces, func(ctx context.Context, c consolecall.Caller, r *directoryrosterv1.ListWorkspacesRequest) (*directoryrosterv1.ListWorkspacesResponse, error) {
+	consolecall.Handle(s, MethodListWorkspaces, func(
+		ctx context.Context, c consolecall.Caller, r *directoryrosterv1.ListWorkspacesRequest,
+	) (*directoryrosterv1.ListWorkspacesResponse, error) {
 		svc, err := get(ctx)
 		if err != nil {
 			return nil, err
@@ -460,42 +464,54 @@ func RegisterLazy(s *modcall.Server, log *slog.Logger, open func(context.Context
 		}
 		return svc.CompleteConsent(ctx, c, r)
 	})
-	consolecall.Handle(s, MethodUploadKey, func(ctx context.Context, c consolecall.Caller, r *directoryrosterv1.UploadKeyRequest) (*directoryrosterv1.UploadKeyResponse, error) {
+	consolecall.Handle(s, MethodUploadKey, func(
+		ctx context.Context, c consolecall.Caller, r *directoryrosterv1.UploadKeyRequest,
+	) (*directoryrosterv1.UploadKeyResponse, error) {
 		svc, err := get(ctx)
 		if err != nil {
 			return nil, err
 		}
 		return svc.UploadKey(ctx, c, r)
 	})
-	consolecall.Handle(s, MethodSetServedDomains, func(ctx context.Context, c consolecall.Caller, r *directoryrosterv1.SetServedDomainsRequest) (*directoryrosterv1.SetServedDomainsResponse, error) {
+	consolecall.Handle(s, MethodSetServedDomains, func(
+		ctx context.Context, c consolecall.Caller, r *directoryrosterv1.SetServedDomainsRequest,
+	) (*directoryrosterv1.SetServedDomainsResponse, error) {
 		svc, err := get(ctx)
 		if err != nil {
 			return nil, err
 		}
 		return svc.SetServedDomains(ctx, c, r)
 	})
-	consolecall.Handle(s, MethodSetSyncedGroups, func(ctx context.Context, c consolecall.Caller, r *directoryrosterv1.SetSyncedGroupsRequest) (*directoryrosterv1.SetSyncedGroupsResponse, error) {
+	consolecall.Handle(s, MethodSetSyncedGroups, func(
+		ctx context.Context, c consolecall.Caller, r *directoryrosterv1.SetSyncedGroupsRequest,
+	) (*directoryrosterv1.SetSyncedGroupsResponse, error) {
 		svc, err := get(ctx)
 		if err != nil {
 			return nil, err
 		}
 		return svc.SetSyncedGroups(ctx, c, r)
 	})
-	consolecall.Handle(s, MethodProbe, func(ctx context.Context, c consolecall.Caller, r *directoryrosterv1.ProbeRequest) (*directoryrosterv1.ProbeResponse, error) {
+	consolecall.Handle(s, MethodProbe, func(
+		ctx context.Context, c consolecall.Caller, r *directoryrosterv1.ProbeRequest,
+	) (*directoryrosterv1.ProbeResponse, error) {
 		svc, err := get(ctx)
 		if err != nil {
 			return nil, err
 		}
 		return svc.Probe(ctx, c, r)
 	})
-	consolecall.Handle(s, MethodRefresh, func(ctx context.Context, c consolecall.Caller, r *directoryrosterv1.RefreshRequest) (*directoryrosterv1.RefreshResponse, error) {
+	consolecall.Handle(s, MethodRefresh, func(
+		ctx context.Context, c consolecall.Caller, r *directoryrosterv1.RefreshRequest,
+	) (*directoryrosterv1.RefreshResponse, error) {
 		svc, err := get(ctx)
 		if err != nil {
 			return nil, err
 		}
 		return svc.Refresh(ctx, c, r)
 	})
-	consolecall.Handle(s, MethodDisconnect, func(ctx context.Context, c consolecall.Caller, r *directoryrosterv1.DisconnectRequest) (*directoryrosterv1.DisconnectResponse, error) {
+	consolecall.Handle(s, MethodDisconnect, func(
+		ctx context.Context, c consolecall.Caller, r *directoryrosterv1.DisconnectRequest,
+	) (*directoryrosterv1.DisconnectResponse, error) {
 		svc, err := get(ctx)
 		if err != nil {
 			return nil, err

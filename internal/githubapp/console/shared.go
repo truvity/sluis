@@ -10,9 +10,6 @@ import (
 	"github.com/truvity/sluis/policy"
 )
 
-// githubFlowWindow is how long an owner has for each of the two clicks.
-const githubFlowWindow = 10 * time.Minute
-
 // githubTimeout bounds one call to GitHub on a request path.
 const githubTimeout = 15 * time.Second
 
