@@ -561,12 +561,49 @@ type Held struct {
 	Person, Email string
 	// Change is the kind of change held: create, adopt, invite, remove,
 	// share-invite.
-	Change, Reason string
+	Change string
+	// Code names why, in a few stable words (the Code constants), and is
+	// what the hold is identified by. Reason is the sentence for a person: it
+	// may carry counts or names that move while the hold stays the same hold.
+	Code, Reason string
 }
 
-// Key identifies a hold for a [rails.Ledger].
+// Hold reason codes. A hold is audited again when its code changes, never when
+// only its sentence does.
+const (
+	CodeVisibilityDiffers     = "visibility-differs"
+	CodeBotNotInPrivate       = "bot-not-in-private-channel"
+	CodeBotNotIn              = "bot-not-in-channel"
+	CodeAdoptInvisible        = "adopt-invisible"
+	CodeRecordedInvisible     = "recorded-channel-invisible"
+	CodeIsSharedChannel       = "is-slack-connect-channel"
+	CodeArchived              = "archived"
+	CodeNameTaken             = "name-taken"
+	CodeNotTheSharedChannel   = "not-the-shared-channel"
+	CodeGuestBotUnknown       = "guest-bot-unknown"
+	CodeNoSlackAccount        = "no-slack-account"
+	CodeAccountDeactivated    = "account-deactivated"
+	CodeAddressIsBot          = "address-is-bot"
+	CodeOtherWorkspace        = "account-in-other-workspace"
+	CodeNoPath                = "no-account-path"
+	CodeNoOwner               = "no-owning-directory"
+	CodeNoPathAnywhere        = "no-account-path-in-shared-channel"
+	CodeRemovalLimitChannel   = "removal-limit-channel"
+	CodeRemovalLimitWorkspace = "removal-limit-workspace"
+	// CodeNameTakenUnseen is a channel that could not be created because
+	// Slack says its name is taken by one the bot cannot see.
+	CodeNameTakenUnseen = "name-taken-unseen"
+)
+
+// Key identifies a hold for a [rails.Ledger]: where, who, what and the stable
+// code of why. A hold without a code is identified by its sentence, which is
+// only as stable as the sentence.
 func (h Held) Key() string {
-	return strings.Join([]string{h.Channel, h.Person, h.Change, h.Reason}, "|")
+	why := h.Code
+	if why == "" {
+		why = h.Reason
+	}
+	return strings.Join([]string{h.Channel, h.Person, h.Change, why}, "|")
 }
 
 // Decision is one workspace's pass, decided.
@@ -615,8 +652,8 @@ type slot struct {
 	person person
 	// addr is where they are looked up here; empty when they have no path.
 	addr string
-	// reason says why there is no path, when there is none.
-	reason string
+	// reason says why there is no path, when there is none; code names it.
+	reason, code string
 }
 
 // layoutChannel is one channel as the inputs alone lay it out.
@@ -781,11 +818,11 @@ const (
 
 // noPathIn is why nobody can be looked up in a workspace: it has no owner,
 // or its owner's domains hold none of the person's addresses.
-func (r resolver) noPathIn(workspace string) string {
+func (r resolver) noPathIn(workspace string) (reason, code string) {
 	if r.in.Facts[workspace].Owner == "" {
-		return NoOwner
+		return NoOwner, CodeNoOwner
 	}
-	return noPath
+	return noPath, CodeNoPath
 }
 
 // layout lays out every channel this workspace manages or takes part in.
@@ -832,7 +869,7 @@ func (r resolver) layout() []layoutChannel {
 			case owner == ws:
 				lc.slots = append(lc.slots, slot{person: p, addr: addr})
 			case owner == "" && ws == s.Host:
-				lc.slots = append(lc.slots, slot{person: p, reason: "no account path in any workspace of this shared channel"})
+				lc.slots = append(lc.slots, slot{person: p, code: CodeNoPathAnywhere, reason: "no account path in any workspace of this shared channel"})
 			}
 		}
 		out = append(out, lc)
@@ -849,7 +886,7 @@ func (r resolver) slotsOwn(lc *layoutChannel) {
 		if addr, ok := r.path(ws, p); ok {
 			s.addr = addr
 		} else {
-			s.reason = r.noPathIn(ws)
+			s.reason, s.code = r.noPathIn(ws)
 		}
 		lc.slots = append(lc.slots, s)
 	}
