@@ -56,6 +56,7 @@ import (
 	"github.com/truvity/sluis/internal/port"
 	"github.com/truvity/sluis/internal/portstore"
 	"github.com/truvity/sluis/internal/rails"
+	"github.com/truvity/sluis/internal/refusal"
 	"github.com/truvity/sluis/internal/secrets"
 	"github.com/truvity/sluis/internal/secretstore"
 	"github.com/truvity/sluis/internal/server"
@@ -1006,7 +1007,7 @@ func (a *App) Run(ctx context.Context) error {
 func serve(ctx context.Context, port int, handler http.Handler, name string, log *slog.Logger) error {
 	srv := &http.Server{
 		Addr:              fmt.Sprintf(":%d", port),
-		Handler:           handler,
+		Handler:           refusal.Middleware(handler),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	go func() {
