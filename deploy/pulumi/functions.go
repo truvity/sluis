@@ -319,7 +319,7 @@ func (a *LambdaArgs) hostsModule(role string) bool {
 
 // newModuleFunctions makes the function of each module of [ModuleFunctions] on
 // newModuleFunction, with the role ModuleRoleStatements renders for it and the
-// aliases `live` and `live-issuer` (and, for google and slack, `live-console`): the one the schedules and the issuer's runs
+// aliases `live` and `live-issuer` (and, for google, slack and github, `live-console`): the one the schedules and the issuer's runs
 // invoke and the one its calls go through. Nothing is shared with the issuer's
 // function but the account.
 func newModuleFunctions(ctx *pulumi.Context, name string, a *LambdaArgs, child pulumi.ResourceOption) (*moduleFunctions, error) {
@@ -332,7 +332,7 @@ func newModuleFunctions(ctx *pulumi.Context, name string, a *LambdaArgs, child p
 	for _, p := range plans {
 		p := p
 		callers := []string{ClassIssuer}
-		if p.role == RoleGoogle || p.role == RoleSlack {
+		if p.role == RoleGoogle || p.role == RoleSlack || p.role == RoleGitHub {
 			// The console's pages are these modules' (D-v176-1 b): their alias for
 			// the class `console` is the one the issuer's console calls through.
 			callers = append(callers, ClassConsole)
