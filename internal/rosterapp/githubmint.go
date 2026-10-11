@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/truvity/sluis/internal/config"
+	"github.com/truvity/sluis/internal/consolecall"
 	"github.com/truvity/sluis/internal/githubapp/githubtokens"
 	"github.com/truvity/sluis/internal/modcall"
 	"github.com/truvity/sluis/internal/modcall/dial"
@@ -44,4 +45,22 @@ func (w withDeadline) Call(ctx context.Context, module, method string, payload [
 	ctx, cancel := context.WithTimeout(ctx, w.d)
 	defer cancel()
 	return w.Caller.Call(ctx, module, method, payload)
+}
+
+// dialConsole is the GitHub module as the console calls it: as the caller class
+// `console`, so the module answers the console's methods and nothing else. The
+// calls carry their own deadlines.
+func dialConsole(ctx context.Context, cfg Config, r config.ModuleRemote) (modcall.Caller, error) {
+	routing := dial.FromTargets(map[string]config.ModuleRemote{githubtokens.Module: r})
+	var caller modcall.Caller
+	var err error
+	if cfg.Dial != nil {
+		caller, err = cfg.Dial(ctx, routing, consolecall.Class)
+	} else {
+		caller, err = dial.Dial(ctx, routing, consolecall.Class, nil)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("github.remote: %w", err)
+	}
+	return caller, nil
 }

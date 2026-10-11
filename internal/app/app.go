@@ -41,11 +41,14 @@ import (
 	"github.com/truvity/sluis/internal/audit"
 	"github.com/truvity/sluis/internal/config"
 	"github.com/truvity/sluis/internal/connector"
+	"github.com/truvity/sluis/internal/consolecall"
 	"github.com/truvity/sluis/internal/demo"
 	"github.com/truvity/sluis/internal/githubapp/catalogue"
+	ghconsole "github.com/truvity/sluis/internal/githubapp/console"
 	"github.com/truvity/sluis/internal/githubapp/mints"
 	"github.com/truvity/sluis/internal/githubroster/catalogueapp"
 	"github.com/truvity/sluis/internal/githubroster/connection"
+	"github.com/truvity/sluis/internal/githubroster/consolewire"
 	"github.com/truvity/sluis/internal/githubroster/link"
 	"github.com/truvity/sluis/internal/githubroster/runnerapp"
 	"github.com/truvity/sluis/internal/health"
@@ -53,6 +56,7 @@ import (
 	"github.com/truvity/sluis/internal/hubwire"
 	"github.com/truvity/sluis/internal/lazy"
 	"github.com/truvity/sluis/internal/maintenance"
+	"github.com/truvity/sluis/internal/modcall"
 	"github.com/truvity/sluis/internal/port"
 	"github.com/truvity/sluis/internal/portstore"
 	"github.com/truvity/sluis/internal/rails"
@@ -882,7 +886,25 @@ func New(ctx context.Context, cfg Config, st *store.Stores, log *slog.Logger) (*
 		}
 	}
 
+	// The console's GitHub operations are the GitHub module's. Here it is
+	// served in this process, as the caller class `console`; a deployment that
+	// split the module out replaces the caller (server.ConsoleServer.UseGitHub).
+	githubModule := modcall.NewServer(consolewire.Module)
+	ghconsole.Register(githubModule, ghconsole.New(ghconsole.Deps{
+		Log:        log,
+		Audit:      recorder,
+		Trigger:    st.Ports.Trigger,
+		Policy:     authorizer.Policy,
+		PublicURL:  cfg.publicURL,
+		RootURL:    cfg.publicRootURL,
+		Orgs:       githubConnections(kept.githubOrgs, cfg.demo, demoAppKey),
+		OrgAppName: cfg.policy.OrganisationAppName,
+		Catalogue:  cfg.githubCatalogue,
+		HTTP:       demoGitHub(cfg.demo && kept.githubCatalogueApps == nil),
+	}))
+
 	console, err := server.NewConsole(ctx, server.ConsoleDeps{
+		Modules:      consolecall.Callers{GitHub: modcall.Local{consolewire.Module: githubModule}.As(consolecall.Class)},
 		Trigger:      st.Ports.Trigger,
 		Log:          log,
 		Hub:          directory,
