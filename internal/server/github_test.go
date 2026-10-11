@@ -52,7 +52,7 @@ github:
 	if err != nil {
 		t.Fatalf("NewSet: %v", err)
 	}
-	return &Console{deps: ConsoleDeps{Authorizer: access.NewAuthorizer(set, nil, 0), GitHub: store}}
+	return withGitHubModule(&Console{deps: ConsoleDeps{Authorizer: access.NewAuthorizer(set, nil, 0), GitHub: store}})
 }
 
 func githubStatus(t *testing.T, console *Console, role access.Role) (*directoryrosterv1.GetGitHubStatusResponse, error) {

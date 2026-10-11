@@ -1013,7 +1013,6 @@ const (
 // githubCatalogueBind prefixes the App's id in a catalogue flow's signed
 // state, so no other GitHub flow's state can finish it, and the other way
 // round.
-const githubCatalogueBind = "github-catalogue:"
 
 // The states a catalogue App is shown in.
 const (
@@ -1645,7 +1644,6 @@ const (
 // githubRunnerBind prefixes `<tier>:<org>` in a runner flow's signed state,
 // so an organisation connect's state can never finish a runner App's flow,
 // and the other way round.
-const githubRunnerBind = "github-runner:"
 
 // runnerTier checks a tier against the ones the deployment declares.
 func (c *Console) runnerTier(tier string) error {
