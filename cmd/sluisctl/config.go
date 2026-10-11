@@ -43,15 +43,24 @@ type Config struct {
 	// `sluisctl backup` and `sluisctl restore` (see backup.go). Addresses
 	// only; those commands use the caller's AWS credentials.
 	Backup BackupConfig `yaml:"backup,omitempty"`
+
+	// ClientDefaulted is set when nothing named the client (no --client and
+	// no clientId: in config.yaml), so ClientID is DefaultClientID or what the
+	// session was minted for. Only then may `login` fall back to the legacy id.
+	ClientDefaulted bool `yaml:"-"`
 }
 
 // Session is the cached login: the refresh token, and enough about the
 // person to answer `whoami` without a round trip.
 type Session struct {
-	RefreshToken string    `json:"refresh_token"`
-	Subject      string    `json:"sub,omitempty"`
-	Email        string    `json:"email,omitempty"`
-	Expires      time.Time `json:"expires,omitempty"`
+	RefreshToken string `json:"refresh_token"`
+	// Client is the client id the login ran as, kept when it was not named
+	// by a flag or by config.yaml, so that a refresh uses the client the
+	// refresh token belongs to.
+	Client  string    `json:"client,omitempty"`
+	Subject string    `json:"sub,omitempty"`
+	Email   string    `json:"email,omitempty"`
+	Expires time.Time `json:"expires,omitempty"`
 	// AccessToken is the issuer's own token from the last refresh, and
 	// AccessExpires is when it stops being accepted. Kept so that the next
 	// command can present it instead of SPENDING the refresh token for one
@@ -77,8 +86,7 @@ type Session struct {
 // sits beside every other tool's and is covered by whatever already
 // backs that up or excludes it.
 //
-// The directory was called accessctl before the rename to sluis, and the
-// deprecated accessctl name of the binary uses this same one. The first
+// The directory was called accessctl before the rename to sluis. The first
 // call that finds the new directory without state while the old one has
 // some copies it across; see migrateLegacyConfigDir.
 func configDir() (string, error) {
@@ -423,7 +431,15 @@ func resolveConfig(issuer, clientID string, forLogin bool) (Config, error) {
 		return cfg, badUsage("no issuer: pass --issuer, set $%s, or run `sluisctl login --issuer ...` once", envIssuer)
 	}
 	if cfg.ClientID == "" {
-		cfg.ClientID = DefaultClientID
+		cfg.ClientID, cfg.ClientDefaulted = DefaultClientID, true
+		// A login that fell back to the legacy id recorded it in its
+		// session: refreshing and exchanging must use the client the
+		// refresh token belongs to.
+		if !forLogin {
+			if held, loadErr := loadSession(cfg.Issuer); loadErr == nil && held.Client != "" {
+				cfg.ClientID = held.Client
+			}
+		}
 	}
 	return cfg, nil
 }
@@ -474,7 +490,12 @@ func liveSessionIssuers() []string {
 // DefaultClientID is what a laptop signs in as when nothing says
 // otherwise. It has to be declared in the policy with a loopback
 // redirect; the reference names the same string.
-const DefaultClientID = "accessctl"
+const DefaultClientID = "sluisctl"
+
+// LegacyClientID is the default before the rename (ADR 0035). `login` falls
+// back to it once, when the issuer does not know DefaultClientID, until the
+// estates have retired it.
+const LegacyClientID = "accessctl"
 
 // saveConfig writes what login learned.
 func saveConfig(cfg Config) error {

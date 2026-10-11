@@ -209,6 +209,12 @@ policy:
         - http://127.0.0.1/callback
       requires:
         - all:platform:engineer
+    sluisctl:
+      kind: public
+      redirects:
+        - http://127.0.0.1/callback
+      requires:
+        - all:platform:engineer
 
 route:
   host: access.example

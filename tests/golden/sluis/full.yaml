@@ -495,6 +495,12 @@ data:
         requires:
         - all:platform:engineer
         secret: reports-client
+      sluisctl:
+        kind: public
+        redirects:
+        - http://127.0.0.1/callback
+        requires:
+        - all:platform:engineer
     controllers:
       github:
         enabledOrgs:
@@ -790,7 +796,7 @@ spec:
         # Each document is read once, at start: a change to it, or to the
         # policy, is a rollout.
         checksum/config: 3535ce9eab5a564188cbc088ffbc9dbbe8bbb85a8483a51aa4ba835049285fa0
-        checksum/policy: 164a6383e1a8a507459fac193139e235f56b49d8d6e02c883e65b490101c88b6
+        checksum/policy: 2c846a6716d710dcf04ffdd5a8e6fc35df2f5b64c71965da33336a6c45e5d4db
         example.com/scrape: "false"
     spec:
       serviceAccountName: issuer
@@ -960,7 +966,7 @@ spec:
         # Each document is read once, at start: a change to it, or to the
         # policy, is a rollout.
         checksum/config: 78a472877d79a54d75ba990858c7f2f3aa5c386a741cc5af3c4c214330a5be92
-        checksum/policy: 164a6383e1a8a507459fac193139e235f56b49d8d6e02c883e65b490101c88b6
+        checksum/policy: 2c846a6716d710dcf04ffdd5a8e6fc35df2f5b64c71965da33336a6c45e5d4db
         example.com/scrape: "false"
     spec:
       serviceAccountName: sluis-github
@@ -1137,7 +1143,7 @@ spec:
         # Each document is read once, at start: a change to it, or to the
         # policy, is a rollout.
         checksum/config: 7c113a3402b5a21c006836ce7786b0ab6631c8ba77cbe9477fdd5f8e7b133fee
-        checksum/policy: 164a6383e1a8a507459fac193139e235f56b49d8d6e02c883e65b490101c88b6
+        checksum/policy: 2c846a6716d710dcf04ffdd5a8e6fc35df2f5b64c71965da33336a6c45e5d4db
         example.com/scrape: "false"
     spec:
       serviceAccountName: sluis-slack
