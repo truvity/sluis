@@ -97,6 +97,9 @@ stdout of a credential helper is parsed by its caller). The alias ships for one
 or two releases and is then removed: delete the `accessctl` build, archive and
 `nix-flakes` entry in `.goreleaser.yaml` and `release.yaml`.
 
+**Update 2026-10-11 (D301 a):** the alias is removed in v1.76. The build, the
+archive, the Nix flake and the name check are gone; use `sluisctl`.
+
 ### The npm package
 
 The package is renamed to **`@truvity/sluis`**. GitHub Packages cannot

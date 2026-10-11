@@ -1,5 +1,9 @@
 ## Unreleased
 
+### Removed
+
+- **The `accessctl` alias binary is no longer shipped; use `sluisctl`.** The `accessctl` build, the `accessctl_*` archive and the `accessctl` Nix flake are gone from the release, and `sluisctl` no longer prints the deprecation notice for the old name. Point devbox packages, download URLs and Nix flake inputs at `sluisctl_*`. The OIDC client id, the kubeconfig user name and the known_hosts file keep the old name for now.
+
 ## v1.75.0-rc.11
 
 ### Added

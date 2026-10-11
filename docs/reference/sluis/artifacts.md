@@ -9,7 +9,6 @@ Release assets (the GitHub release of tag `vX.Y.Z`):
 | Product | Asset | Contents |
 |---|---|---|
 | sluis | `sluisctl_<version>_<os>_<arch>.tar.gz` | sluisctl |
-| sluis | `accessctl_<version>_<os>_<arch>.tar.gz` | accessctl |
 | sluis | `sluis_<version>_<os>_<arch>.tar.gz` | sluis, resource-proxy, acceptance |
 | sluis | `sluis-issuer_<version>_<os>_<arch>.zip` | sluis-issuer |
 | sluis | `sluis-cloudflare_<version>_<os>_<arch>.zip` | sluis-cloudflare |
@@ -42,7 +41,6 @@ Helm charts and Nix flakes:
 | chart | `oci://ghcr.io/truvity/charts/sluis` |
 | chart | `oci://ghcr.io/truvity/charts/audit` |
 | Nix flake | `sluisctl_<version>_nix-flake.tar.gz` |
-| Nix flake | `accessctl_<version>_nix-flake.tar.gz` |
 | Nix flake | `audit_<version>_nix-flake.tar.gz` |
 
 Go modules, each tagged `<dir>/vX.Y.Z` beside the root tag `vX.Y.Z`:
