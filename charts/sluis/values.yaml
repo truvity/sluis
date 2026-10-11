@@ -1075,6 +1075,82 @@ podAnnotations: {}
 nodeSelector: {}
 tolerations: []
 
+# One workload per module (ADR 0071 and the v1.76 split). `split: false`, the
+# default in this release, keeps today's single Deployment, which runs the
+# issuer and the controllers `config.controllers` names, and renders nothing
+# from `modules`. DEPRECATED: `split: false` goes in v1.77 (decision D-v176-9).
+#
+# `split: true` renders, for each module that is enabled, a Deployment, a
+# ServiceAccount named <full name>-<module> and a ConfigMap with the module's
+# own document; github, google and cloudflare get a Service on /rpc as well.
+# The issuer keeps the release's own Service, so the routes are unchanged.
+#   * The controllers' Role is bound to the github and slack accounts only.
+#   * The accounts of the modules other modules call (github, google,
+#     cloudflare) are bound to system:auth-delegator, for the TokenReview that
+#     checks a caller's projected ServiceAccount token.
+#   * The issuer's document is `config` without `controllers`, plus
+#     `calls.modules.<module>` ({url, audience, tokenFile}) for each enabled
+#     module that answers calls, and the issuer pod projects one token per
+#     audience. A module's audience is its own name unless `audience` says
+#     otherwise.
+#   * A controller's section stays in `config.controllers.<kind>` (it still
+#     feeds the Apps' pushes and the checks); the module's document is that
+#     section with `modules.<kind>.config` over it. Naming a controller there
+#     while its module is off is refused.
+# `documents.service` is not supported with `split` yet: the chart has to write
+# `calls` into the issuer's document.
+split: false
+modules:
+  issuer:
+    enabled: true
+    # null: replicaCount.
+    replicas: null
+    resources: {}
+    # repository and tag override the chart's image for this module; unset
+    # takes `image` (and `image.perModule`) as the single Deployment does.
+    image: {}
+    serviceAccount: {}
+  github:
+    enabled: false
+    replicas: null
+    resources: {}
+    image: {}
+    rpcPort: 8081
+    # The audience of the tokens that call this module. Default: github.
+    audience: ""
+    serviceAccount: {}
+    # The module's document (controller-github), over config.controllers.github.
+    config: {}
+  slack:
+    enabled: false
+    replicas: null
+    resources: {}
+    image: {}
+    serviceAccount: {}
+    # The module's document (controller-slack), over config.controllers.slack.
+    config: {}
+  google:
+    enabled: false
+    replicas: null
+    resources: {}
+    image: {}
+    rpcPort: 8081
+    audience: ""
+    serviceAccount: {}
+    # The module's document (sluis-google).
+    config: {}
+  cloudflare:
+    enabled: false
+    replicas: null
+    resources: {}
+    image: {}
+    rpcPort: 8081
+    audience: ""
+    serviceAccount: {}
+    # The module's document: a sluis document with `cloudflare.presets`. The
+    # chart fills `cloudflare.serve` ({address, audience}) when it is unset.
+    config: {}
+
 # The console that shows this issuer's sessions.
 console:
   # Where the console is mounted on this issuer's origin.

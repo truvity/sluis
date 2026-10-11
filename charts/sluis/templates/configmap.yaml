@@ -1,5 +1,5 @@
 {{- include "sluis.prepare" . -}}
-{{- if eq .Values.renders "app" -}}
+{{- if and (eq .Values.renders "app") (not (include "sluis.split" .)) -}}
 {{- /* With `documents.service` the document is rendered verbatim: no apiVersion added, nothing renamed or dropped. */ -}}
 # What `sluis serve --config` reads: `config`, as the values give it, with
 # nothing added, renamed or dropped but the apiVersion the chart writes. The
