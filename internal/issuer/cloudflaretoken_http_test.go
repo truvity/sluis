@@ -210,19 +210,25 @@ func TestAGrantedJobIsMintedACloudflareToken(t *testing.T) {
 }
 
 // Another workflow of the same repository is not the granted job, and a
-// refusal does not say whether the preset exists.
+// refusal does not say whether the preset exists: the answers are the same
+// apart from the request id, and the log under each id says which it was.
 func TestAnotherJobAndAnUnknownPresetAreInvalidTarget(t *testing.T) {
 	c := serveCloudflare(t, true)
-	var descriptions []string
-	for _, tc := range []struct{ token, preset string }{{"job:test.yml", "dns"}, {"job:release.yml", "no-such"}, {"job:test.yml", "no-such"}} {
-		status, body, _ := c.ask(t, "", url.Values{"subject_token": {tc.token}, "audience": {"cloudflare:" + tc.preset}})
+	var answers []string
+	for _, tc := range []struct{ token, preset, reason string }{
+		{"job:test.yml", "dns", "not granted this preset"},
+		{"job:release.yml", "no-such", "no such preset"},
+		{"job:test.yml", "no-such", "no such preset"},
+	} {
+		status, body, header := c.ask(t, "", url.Values{"subject_token": {tc.token}, "audience": {"cloudflare:" + tc.preset}})
 		if status != http.StatusBadRequest || body["error"] != "invalid_target" {
 			t.Errorf("%s for %s = %d %v, want invalid_target", tc.token, tc.preset, status, body)
 		}
-		descriptions = append(descriptions, fmt.Sprint(body["error_description"]))
+		wantRefusedAs(t, header, fmt.Sprint(body["error_description"]), "not authorised", tc.reason)
+		answers = append(answers, withoutID(fmt.Sprint(body), requestIDOf(t, header)))
 	}
-	if descriptions[0] != descriptions[1] || descriptions[1] != descriptions[2] {
-		t.Errorf("the refusals tell presets apart: %q", descriptions)
+	if answers[0] != answers[1] || answers[1] != answers[2] {
+		t.Errorf("the refusals tell presets apart: %q", answers)
 	}
 }
 

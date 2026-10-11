@@ -3,8 +3,10 @@ package issuer
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
@@ -14,7 +16,9 @@ import (
 	"github.com/zitadel/oidc/v3/pkg/oidc"
 	"github.com/zitadel/oidc/v3/pkg/op"
 
+	"github.com/truvity/sluis/internal/refusal"
 	"github.com/truvity/sluis/policy"
+	"github.com/truvity/sluis/storage/logattr"
 )
 
 // The `resource` parameter, claimed in front of the library.
@@ -144,14 +148,20 @@ func validateIndicator(raw string) error {
 // then: a redirect to an address nobody registered is an open redirector,
 // so with no client, or a `redirect_uri` that is not the client's, the
 // person is shown the page as before.
-func refuseTarget(w http.ResponseWriter, r *http.Request, clients clientLookup, description string) {
+//
+// Why is for the log: which resource was named, and what is wrong with
+// it, is not for the caller to be told by an installation they may not
+// know anything about.
+func refuseTarget(w http.ResponseWriter, r *http.Request, clients clientLookup, why string) {
+	logRefusal(r.Context(), http.StatusBadRequest, why, nil,
+		[]any{slog.String("error", string(oidc.InvalidTarget)), logattr.SafeString("resource", r.Form.Get("resource"))})
 	if r.URL.Path == authorizePath && clients != nil {
-		if to, ok := targetRedirect(r, clients, description); ok {
+		if to, ok := targetRedirect(r, clients, refusal.Text(r.Context(), refusal.NotAuthorised)); ok {
 			http.Redirect(w, r, to, http.StatusFound)
 			return
 		}
 	}
-	refuseWith(w, r, string(oidc.InvalidTarget), description)
+	writeRefusal(w, r, string(oidc.InvalidTarget), refusal.NotAuthorised)
 }
 
 // clientLookup finds a client by id, as the storage does.
@@ -237,15 +247,19 @@ func registeredTarget(registered []string, requested string) (*url.URL, bool) {
 }
 
 // refuseRequest answers an authorization request that is malformed with
-// `invalid_request`, in the same two forms.
-func refuseRequest(w http.ResponseWriter, r *http.Request, description string) {
-	refuseWith(w, r, string(oidc.InvalidRequest), description)
+// `invalid_request`, in the same two forms, and the reason in the log.
+func refuseRequest(w http.ResponseWriter, r *http.Request, why string) {
+	logRefusal(r.Context(), http.StatusBadRequest, why, nil, []any{slog.String("error", string(oidc.InvalidRequest))})
+	writeRefusal(w, r, string(oidc.InvalidRequest), refusal.InvalidRequest)
 }
 
-func refuseWith(w http.ResponseWriter, r *http.Request, code string, description string) {
+// writeRefusal is a refusal in the form the caller reads: a page for a
+// browser, the OAuth error for a program. Fixed words and the request id
+// either way.
+func writeRefusal(w http.ResponseWriter, r *http.Request, code, phrase string) {
 	if wantsHTML(r) {
-		_ = writePage(w, http.StatusBadRequest, "That sign-in request was not valid",
-			`<p>`+html.EscapeString(description)+`</p>
+		_ = writePage(w, http.StatusBadRequest, capital(phrase),
+			`<p>`+html.EscapeString(pageText(r.Context(), phrase))+`</p>
 	<p class="note">Nothing was signed in, and this is not something you can fix from here.
 	Whoever runs the application that sent you will need to correct how it asks.</p>`)
 		return
@@ -255,7 +269,7 @@ func refuseWith(w http.ResponseWriter, r *http.Request, code string, description
 	w.WriteHeader(http.StatusBadRequest)
 	_ = json.NewEncoder(w).Encode(map[string]string{
 		"error":             code,
-		"error_description": description,
+		"error_description": refusal.Text(r.Context(), phrase),
 	})
 }
 
@@ -299,10 +313,9 @@ func resourceWithinGrant(ctx context.Context, request op.TokenRequest) error {
 		return nil
 	}
 	if granted := resourceOf(request); asked != granted {
-		return &oidc.Error{
-			ErrorType:   oidc.InvalidTarget,
-			Description: "`resource` is not within the resource this grant was authorized for",
-		}
+		return deny(ctx, oidc.ErrInvalidTarget,
+			errors.New("`resource` is not within the resource this grant was authorized for"),
+			logattr.SafeString("asked", asked), logattr.SafeString("granted", granted))
 	}
 	return nil
 }

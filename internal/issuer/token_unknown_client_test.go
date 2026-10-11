@@ -124,7 +124,7 @@ func TestTokenEndpointUnknownAudience(t *testing.T) {
 	if got, _ := body["error"].(string); got != "invalid_target" {
 		t.Errorf("error = %q, want invalid_target", got)
 	}
-	if desc, _ := body["error_description"].(string); !strings.Contains(desc, "unknown-audience") {
-		t.Errorf("description should mention the unknown audience: %q", desc)
-	}
+	// The audience the caller named is theirs already; what the answer must
+	// not do is say whether it exists. The log does.
+	wantRefusedBody(t, body, "not authorised", "unknown-audience")
 }

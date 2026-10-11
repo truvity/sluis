@@ -116,24 +116,24 @@ func serveCloudflareToken(
 	ctx := op.ContextWithIssuer(r.Context(), iss.Config().URL)
 	audience := form.Get("audience")
 	preset := strings.TrimPrefix(audience, tokens.CloudflareAudiencePrefix)
-	refuse := func(err *oidc.Error) { op.RequestError(w, r, err, nil) }
+	refuse := func(err *oidc.Error) { writeOAuthError(w, r, err) }
 
 	cf := iss.cloudflareMinter()
 	switch {
 	case form.Get("actor_token") != "" || form.Get("actor_token_type") != "":
-		refuse(oidc.ErrInvalidRequest().WithDescription("actor_token: acting for another party is not served by this issuer"))
+		refuse(malformed(ctx, errors.New("actor_token: acting for another party is not served by this issuer")))
 		return
 	case len(form["audience"]) != 1:
-		refuse(oidc.ErrInvalidTarget().WithDescription("name exactly one audience: cloudflare:<preset>"))
+		refuse(deny(ctx, oidc.ErrInvalidTarget, errors.New("name exactly one audience: cloudflare:<preset>")))
 		return
 	case form.Get("subject_token") == "" || form.Get("subject_token_type") == "":
-		refuse(oidc.ErrInvalidRequest().WithDescription("subject_token and subject_token_type are required"))
+		refuse(malformed(ctx, errors.New("subject_token and subject_token_type are required")))
 		return
 	case !oidc.TokenType(form.Get("subject_token_type")).IsSupported():
-		refuse(oidc.ErrInvalidRequest().WithDescription("subject_token_type is not supported"))
+		refuse(malformed(ctx, errors.New("subject_token_type is not supported")))
 		return
 	case cf == nil:
-		refuse(oidc.ErrInvalidTarget().WithDescription("this service mints no Cloudflare credentials"))
+		refuse(deny(ctx, oidc.ErrInvalidTarget, errors.New("this service mints no Cloudflare credentials")))
 		return
 	}
 
@@ -141,7 +141,7 @@ func serveCloudflareToken(
 	if s := strings.TrimSpace(form.Get("lifetime")); s != "" {
 		seconds, err := strconv.ParseInt(s, 10, 64)
 		if err != nil || seconds < 1 {
-			refuse(oidc.ErrInvalidRequest().WithDescription("lifetime: want a number of seconds"))
+			refuse(malformed(ctx, errors.New("lifetime: want a number of seconds")))
 			return
 		}
 		lifetime = time.Duration(seconds) * time.Second
@@ -155,12 +155,12 @@ func serveCloudflareToken(
 		secret, err = url.QueryUnescape(secret)
 	}
 	if err != nil {
-		refuse(oidc.ErrInvalidClient().WithDescription("invalid basic auth header"))
+		refuse(deny(ctx, oidc.ErrInvalidClient, errors.New("invalid basic auth header")))
 		return
 	}
 	if clientID != "" && clientID != audience {
 		if err = storage.AuthorizeClientIDSecret(ctx, clientID, secret); err != nil {
-			refuse(oidc.ErrInvalidClient().WithDescription("invalid client_id / client_secret"))
+			refuse(asOIDCError(ctx, err, oidc.ErrInvalidClient))
 			return
 		}
 	}
@@ -168,17 +168,17 @@ func serveCloudflareToken(
 	subjectType := oidc.TokenType(form.Get("subject_token_type"))
 	id, _, claims, ok := op.GetTokenIDAndSubjectFromToken(ctx, provider, form.Get("subject_token"), subjectType, false)
 	if !ok {
-		refuse(oidc.ErrInvalidGrant().WithDescription("subject_token is invalid"))
+		refuse(deny(ctx, oidc.ErrInvalidGrant, errors.New("subject_token is invalid")))
 		return
 	}
 	proof, err := storage.proofOf(ctx, verifiedSubject{id: id, kind: subjectType, claims: claims, client: clientID})
 	if err != nil {
-		refuse(asOIDCError(err, oidc.ErrInvalidGrant))
+		refuse(asOIDCError(ctx, err, oidc.ErrInvalidGrant))
 		return
 	}
 	result, _, err := iss.evaluate(ctx, proof)
 	if err != nil {
-		refuse(oidc.ErrInvalidGrant().WithDescription("%s", err))
+		refuse(evaluationRefusal(ctx, err))
 		return
 	}
 
@@ -190,7 +190,7 @@ func serveCloudflareToken(
 			maintenance.Refuse(w, r, err)
 			return
 		}
-		refuse(cloudflareTokenError(err))
+		refuse(cloudflareTokenError(ctx, err))
 		return
 	}
 
@@ -213,16 +213,17 @@ func serveCloudflareToken(
 
 // cloudflareTokenError is a minting refusal as RFC 6749 spells it. What went
 // wrong at Cloudflare is the audit trail's and the log's, not the caller's.
-func cloudflareTokenError(err error) *oidc.Error {
+func cloudflareTokenError(ctx context.Context, err error) *oidc.Error {
 	switch {
 	case errors.Is(err, cfrpc.ErrUnknownPreset), errors.Is(err, cfrpc.ErrNotGranted):
 		// The same answer for both: whether a preset exists is not for
 		// someone it is not granted to to learn.
-		return oidc.ErrInvalidTarget().WithDescription("no Cloudflare preset of that name is granted to this proof")
+		return deny(ctx, oidc.ErrInvalidTarget, err)
 	case errors.Is(err, cfrpc.ErrLifetime):
-		return oidc.ErrInvalidRequest().WithDescription("%s", err)
+		return malformed(ctx, err)
 	default:
-		return oidc.ErrServerError().WithDescription("the Cloudflare credential could not be minted; see the audit trail")
+		// What went wrong is in the audit trail and the log under this request.
+		return fault(ctx, err)
 	}
 }
 

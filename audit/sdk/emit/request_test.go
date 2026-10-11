@@ -194,3 +194,25 @@ func TestFromRequestPrefersTheIDAServiceGave(t *testing.T) {
 		t.Errorf("the id the service gave wins: got %q", got)
 	}
 }
+
+// A service that names its requests but has read nothing else of them still
+// gives the record the id its caller was told, and that id wins over the one
+// a request context carries from a header.
+func TestARecordCarriesTheIDAServiceGave(t *testing.T) {
+	store := &sink.Memory{}
+	e := emitter(t, store, emit.Hooks{})
+
+	bare := emit.WithRequestID(context.Background(), "from-the-service")
+	fromHeader := emit.WithRequestID(emit.WithRequest(context.Background(), emit.FromRequest(
+		request("10.0.0.5:8080", map[string]string{"X-Request-Id": "from-the-caller"}), 0)), "from-the-service")
+	for _, ctx := range []context.Context{bare, fromHeader} {
+		if err := e.Record(ctx, placed()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for i, r := range store.Records() {
+		if got := r.GetContext().GetRequestId(); got != "from-the-service" {
+			t.Errorf("record %d carries request id %q, want the service's", i, got)
+		}
+	}
+}
