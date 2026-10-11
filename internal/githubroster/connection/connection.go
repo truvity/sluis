@@ -13,6 +13,7 @@
 package connection
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -232,4 +233,21 @@ func DecodePassRequest(raw string) (PassRequest, error) {
 		return PassRequest{}, fmt.Errorf("%w: %d", ErrVersion, r.Version)
 	}
 	return r, nil
+}
+
+// Store is where connected organisations are kept: a record
+// the console shows, a credential only the controller acts with.
+type Store interface {
+	Put(ctx context.Context, record Record, credential Credential) error
+	List(ctx context.Context) ([]Record, error)
+	Credential(ctx context.Context, org string) (Credential, bool, error)
+	// SetOwner changes only a record's owner, under the object's version;
+	// found is false when the organisation has no record.
+	SetOwner(ctx context.Context, org, owner string) (previous string, found bool, err error)
+	Delete(ctx context.Context, org string) error
+	// RequestPass keeps an operator's request for a pass now; kept is false,
+	// with when the last one was, if that is under PassGap old.
+	RequestPass(ctx context.Context, r PassRequest) (kept bool, last time.Time, err error)
+	// PassRequests reads every organisation's last request for a pass.
+	PassRequests(ctx context.Context) (map[string]PassRequest, error)
 }

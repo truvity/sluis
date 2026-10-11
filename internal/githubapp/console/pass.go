@@ -1,4 +1,4 @@
-package server
+package console
 
 import (
 	"context"
@@ -22,7 +22,7 @@ import (
 // is a marker the controller notices within its poll (see the controller's
 // watch); a second one under a minute after the first is refused, so the
 // button cannot be leaned on. It is recorded as a configuration change.
-func (c *Console) RequestGitHubPass(
+func (c *Service) RequestGitHubPass(
 	ctx context.Context, req *connect.Request[directoryrosterv1.RequestGitHubPassRequest],
 ) (*connect.Response[directoryrosterv1.RequestGitHubPassResponse], error) {
 	if _, err := requireAnywhere(ctx, access.RoleOperator); err != nil {
@@ -32,14 +32,14 @@ func (c *Console) RequestGitHubPass(
 	if !status.ValidOrg(org) {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("%q is not an organisation login", org))
 	}
-	if c.deps.GitHubOrgs == nil {
+	if c.deps.Orgs == nil {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("this deployment keeps no state in Kubernetes, so there is no controller to ask"))
 	}
 	who, err := c.requireOrg(ctx, access.RoleOperator, org)
 	if err != nil {
 		return nil, err
 	}
-	records, err := c.deps.GitHubOrgs.List(ctx)
+	records, err := c.deps.Orgs.List(ctx)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeUnavailable, err)
 	}
@@ -48,7 +48,7 @@ func (c *Console) RequestGitHubPass(
 			fmt.Errorf("GitHub organisation %s is not installed: there is nothing for a pass to act with", org))
 	}
 	now := time.Now().UTC()
-	kept, last, err := c.deps.GitHubOrgs.RequestPass(ctx, connection.PassRequest{Org: org, At: now, By: who.Who()})
+	kept, last, err := c.deps.Orgs.RequestPass(ctx, connection.PassRequest{Org: org, At: now, By: who.Who()})
 	if err != nil {
 		return nil, connect.NewError(connect.CodeUnavailable, err)
 	}

@@ -196,10 +196,12 @@ type Console struct {
 	deps ConsoleDeps
 	// slack is the Slack module in this process, and slackLocal the way to call it
 	// as the console, for a deployment that has not split it out.
-	slackOnce  sync.Once
-	slack      *slackconsole.Service
-	slackLocal modcall.Caller
-	connectors map[string]Connector
+	githubOnce  sync.Once
+	githubLocal modcall.Caller
+	slackOnce   sync.Once
+	slack       *slackconsole.Service
+	slackLocal  modcall.Caller
+	connectors  map[string]Connector
 	// githubSeen is what GitHub last said of each GitHub App.
 	githubSeen githubObservations
 	// rotating is the Apps whose webhook secret is being rotated now: two
