@@ -20,6 +20,7 @@
 package catalogueapp
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -178,4 +179,21 @@ func DecodeRecord(raw []byte) (Record, error) {
 	}
 	r.Purpose = appid.Catalogue
 	return r, nil
+}
+
+// Store is where catalogue Apps are kept: every App's record
+// and key, by its catalogue id.
+type Store interface {
+	Put(ctx context.Context, record Record, privateKey string) error
+	List(ctx context.Context) ([]Record, error)
+	// Get is one App's record and its key, installed or pending.
+	Get(ctx context.Context, id string) (Record, string, bool, error)
+	Delete(ctx context.Context, id string) error
+	// PutWebhookSecret keeps the secret GitHub signs one App's webhook with,
+	// beside its key and surviving every later Put of the App. The App must
+	// have been Put. Where the App is exported the secret is in its document
+	// (`webhook_secret`), which is where a consumer reads it.
+	PutWebhookSecret(ctx context.Context, id, secret string) error
+	// WebhookSecret reads it back; false is an App with none.
+	WebhookSecret(ctx context.Context, id string) (string, bool, error)
 }

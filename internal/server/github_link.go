@@ -23,24 +23,6 @@ import (
 	"github.com/truvity/sluis/storage/logattr"
 )
 
-// GitHubLinkApp is where the link App is kept: its record, which the
-// console shows, and its credential, which redeems a person's
-// authorization.
-type GitHubLinkApp interface {
-	PutLinkApp(ctx context.Context, record link.App, credential link.AppCredential) error
-	LinkApp(ctx context.Context) (link.App, bool, error)
-	LinkAppCredential(ctx context.Context) (link.AppCredential, bool, error)
-	DeleteLinkApp(ctx context.Context) error
-}
-
-// GitHubLinks is where people's links are kept.
-type GitHubLinks interface {
-	List(ctx context.Context) ([]link.Link, error)
-	Claim(ctx context.Context, claimed link.Link, now time.Time) ([]link.Link, error)
-	Adopt(ctx context.Context, candidates []link.Link) ([]link.Link, map[int64]string, error)
-	Invalidate(ctx context.Context, reason string, now time.Time) (int, error)
-}
-
 // The link flows' paths, at the origin ROOT with the other GitHub
 // callbacks. The page is there too, and not in the console: the people who
 // link are every employee and every partner's engineer, and the console

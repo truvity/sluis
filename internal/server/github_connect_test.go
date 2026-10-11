@@ -396,7 +396,7 @@ func TestOnlyAnOperatorConnectsOnlyABoundOrganisation(t *testing.T) {
 		_, err := console.BeginGitHubConnect(ctx, connect.NewRequest(&directoryrosterv1.BeginGitHubConnectRequest{Org: org}))
 		return err
 	}
-	viewer := WithIdentity(context.Background(), access.Identity{Role: access.RoleViewer})
+	viewer := WithIdentity(context.Background(), access.Identity{Email: "viewer@example.test", Role: access.RoleViewer})
 	if err := begin(viewer, "globex"); connect.CodeOf(err) != connect.CodePermissionDenied {
 		t.Errorf("a viewer = %v, want permission denied", err)
 	}

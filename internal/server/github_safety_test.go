@@ -54,7 +54,7 @@ func TestConfirmingRemovalsIsForTheSetTheReportShows(t *testing.T) {
 		return err
 	}
 
-	viewer := WithIdentity(context.Background(), access.Identity{Role: access.RoleViewer})
+	viewer := WithIdentity(context.Background(), access.Identity{Email: "viewer@example.test", Role: access.RoleViewer})
 	if err := confirm(viewer, "abc123"); connect.CodeOf(err) != connect.CodePermissionDenied {
 		t.Errorf("a viewer confirming = %v, want permission denied", err)
 	}

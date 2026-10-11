@@ -251,3 +251,10 @@ type Store interface {
 	// PassRequests reads every organisation's last request for a pass.
 	PassRequests(ctx context.Context) (map[string]PassRequest, error)
 }
+
+// ConfirmationStore is where operators' confirmations of removal sets
+// are kept.
+type ConfirmationStore interface {
+	PutConfirmation(ctx context.Context, confirmation Confirmation) error
+	Confirmations(ctx context.Context) (map[string]Confirmation, error)
+}
