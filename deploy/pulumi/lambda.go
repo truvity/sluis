@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -304,6 +305,10 @@ type LambdaArgs struct {
 	Schedule ScheduleArgs
 	// DirectoryRefresh is the schedule that refreshes the directory's snapshots.
 	DirectoryRefresh DirectoryRefreshArgs
+	// IssuerClients is the schedule that settles the clients' generated secrets
+	// (`{"kind":"clients"}`, the issuer's `live` alias). It exists only with the
+	// module functions (Layout "v5" or "v4+v5"); Disabled leaves it out.
+	IssuerClients IssuerClientsArgs
 	// CloudflareRotation is the schedule that rotates the Cloudflare credentials
 	// that are due (`{"kind":"cloudflare"}`). It exists only when the
 	// Installation declares `cloudflare` presets; Disabled leaves it out.
@@ -452,6 +457,23 @@ type CloudflareRotationArgs struct {
 	// Rate is the schedule expression. Default DefaultCloudflareRotationSchedule.
 	Rate string
 }
+
+// IssuerClientsArgs is the issuer's clients schedule: one EventBridge schedule
+// invoking the issuer with `{"kind":"clients"}`, the pass that settles the
+// clients' generated secrets.
+type IssuerClientsArgs struct {
+	// Disabled leaves the schedule out.
+	Disabled bool
+	// Paused declares the schedule DISABLED and keeps everything else.
+	// Exclusive with Disabled.
+	Paused bool
+	// Rate is the schedule expression. Default DefaultIssuerClientsSchedule.
+	Rate string
+}
+
+// DefaultIssuerClientsSchedule is the clients pass's tick when
+// IssuerClientsArgs.Rate is empty.
+const DefaultIssuerClientsSchedule = "rate(15 minutes)"
 
 // DefaultCloudflareRotationSchedule is the rotation's tick when
 // CloudflareRotationArgs.Rate is empty: EventBridge Scheduler's finest.
@@ -669,7 +691,8 @@ type Lambda struct {
 
 	// SchedulerRoleArn is the role EventBridge Scheduler assumes.
 	SchedulerRoleArn pulumi.StringOutput
-	// ScheduleNames are the schedules, in the order GitHub then Slack targets.
+	// ScheduleNames are the schedules: the GitHub then the Slack targets, the
+	// directory refresh, the Cloudflare rotation, the issuer's clients pass.
 	ScheduleNames pulumi.StringArrayOutput
 
 	// ConfigLayerArn is the configuration layer's version ARN: the service
@@ -999,6 +1022,15 @@ func (a *LambdaArgs) validate() (LambdaArgs, error) {
 	}
 	if r := out.CloudflareRotation.Rate; !strings.HasPrefix(r, "rate(") && !strings.HasPrefix(r, "cron(") {
 		return out, fmt.Errorf("sluispulumi: CloudflareRotation.Rate %q is not an EventBridge Scheduler expression", r)
+	}
+	if out.IssuerClients.Disabled && out.IssuerClients.Paused {
+		return out, errors.New("sluispulumi: IssuerClients: Disabled leaves the schedule out and Paused declares it disabled: set one")
+	}
+	if out.IssuerClients.Rate == "" {
+		out.IssuerClients.Rate = DefaultIssuerClientsSchedule
+	}
+	if r := out.IssuerClients.Rate; !strings.HasPrefix(r, "rate(") && !strings.HasPrefix(r, "cron(") {
+		return out, fmt.Errorf("sluispulumi: IssuerClients.Rate %q is not an EventBridge Scheduler expression", r)
 	}
 	if out.DirectoryRefresh.Rate == "" {
 		out.DirectoryRefresh.Rate = DefaultDirectoryRefreshSchedule
@@ -1406,7 +1438,7 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 	}
 
 	// ---- the schedules
-	schedRole, schedNames, err := newSchedules(ctx, name, &a, live, tags, child)
+	schedRole, schedNames, err := newSchedules(ctx, name, &a, live, mods, tags, child)
 	if err != nil {
 		return nil, err
 	}
@@ -1855,10 +1887,13 @@ func newLegacyDomain(ctx *pulumi.Context, name string, a *LambdaArgs, api *apiga
 	return domain, bucket, nil
 }
 
-// newSchedules is the scheduler's role, which may invoke the function and
-// nothing else, and one schedule per target and one for the
-// directory refresh.
-func newSchedules(ctx *pulumi.Context, name string, a *LambdaArgs, live *lambda.Alias,
+// newSchedules is the scheduler's role and one schedule per target, one for the
+// directory refresh, one for the Cloudflare rotation and, with the module
+// functions, one for the issuer's clients pass. Each targets the `live` alias of
+// the function that runs it (github, slack, google, cloudflare, the issuer); the
+// role's one policy holds exactly the aliases the schedules invoke. Without the
+// module functions every schedule targets the issuer's alias.
+func newSchedules(ctx *pulumi.Context, name string, a *LambdaArgs, live *lambda.Alias, mods *moduleFunctions,
 	tags pulumi.StringMapInput, opts ...pulumi.ResourceOption) (*iam.Role, pulumi.StringArrayOutput, error) {
 	var none pulumi.StringArrayOutput
 	trust, _ := json.Marshal(map[string]any{
@@ -1876,94 +1911,131 @@ func newSchedules(ctx *pulumi.Context, name string, a *LambdaArgs, live *lambda.
 	if err != nil {
 		return nil, none, err
 	}
-	if _, err := iam.NewRolePolicy(ctx, name+"-scheduler-policy", &iam.RolePolicyArgs{
-		Name: pulumi.String(a.FunctionNamePrefix + "-scheduler"), Role: role.Name,
-		Policy: live.Arn.ApplyT(func(arn string) (string, error) {
-			return document([]statement{{
-				"Sid": "SluisTick", "Effect": "Allow", "Action": lambdaInvokeFunction,
-				"Resource": []string{arn},
-			}})
-		}).(pulumi.StringOutput),
-	}, opts...); err != nil {
-		return nil, none, err
+
+	var invoked pulumi.StringArray
+	// use is the alias a module's schedule invokes, recorded for the policy.
+	use := func(module string) (pulumi.StringInput, error) {
+		if mods == nil {
+			invoked = append(invoked, live.Arn)
+			return live.Arn, nil
+		}
+		fn, ok := mods.fns[module]
+		if !ok || fn.aliases[LiveAlias] == nil {
+			return nil, fmt.Errorf("sluispulumi: the %s function has no live alias for its schedule", module)
+		}
+		invoked = append(invoked, fn.aliases[LiveAlias].Arn)
+		return fn.aliases[LiveAlias].Arn, nil
 	}
+	mk := func(logical, sname, desc, rate string, paused bool, arn pulumi.StringInput, input string) error {
+		if len(sname) > 64 {
+			return fmt.Errorf("sluispulumi: the schedule name %q is longer than 64 characters", sname)
+		}
+		if _, err := scheduler.NewSchedule(ctx, logical, &scheduler.ScheduleArgs{
+			Name:                       pulumi.String(sname),
+			Description:                pulumi.String(desc),
+			ScheduleExpression:         pulumi.String(rate),
+			ScheduleExpressionTimezone: pulumi.String("UTC"),
+			State:                      scheduleState(paused),
+			FlexibleTimeWindow:         &scheduler.ScheduleFlexibleTimeWindowArgs{Mode: pulumi.String("OFF")},
+			Target: &scheduler.ScheduleTargetArgs{
+				Arn: arn, RoleArn: role.Arn, Input: pulumi.String(input),
+				RetryPolicy: &scheduler.ScheduleTargetRetryPolicyArgs{
+					MaximumRetryAttempts: pulumi.Int(0), MaximumEventAgeInSeconds: pulumi.Int(3600),
+				},
+			},
+		}, opts...); err != nil {
+			return fmt.Errorf("sluis schedule %s: %w", sname, err)
+		}
+		return nil
+	}
+
 	var names pulumi.StringArray
-	type target struct{ kind, id string }
-	var targets []target
+	type tgt struct{ kind, id string }
+	var targets []tgt
 	for _, id := range a.Schedule.GitHubOrgs {
-		targets = append(targets, target{"github", id})
+		targets = append(targets, tgt{RoleGitHub, id})
 	}
 	for _, id := range a.Schedule.SlackWorkspaces {
-		targets = append(targets, target{"slack", id})
+		targets = append(targets, tgt{RoleSlack, id})
 	}
 	for _, t := range targets {
 		payload, err := json.Marshal(map[string]string{"kind": "tick", "controller": t.kind, "target": t.id})
 		if err != nil {
 			return nil, none, err
 		}
-		sname := a.FunctionNamePrefix + "-" + t.kind + "-" + strings.ReplaceAll(t.id, ":", "-")
-		if len(sname) > 64 {
-			return nil, none, fmt.Errorf("sluispulumi: the schedule name %q is longer than 64 characters", sname)
+		arn, err := use(t.kind)
+		if err != nil {
+			return nil, none, err
 		}
-		if _, err := scheduler.NewSchedule(ctx, name+"-"+t.kind+"-"+strings.ReplaceAll(t.id, ":", "-"), &scheduler.ScheduleArgs{
-			Name:                       pulumi.String(sname),
-			Description:                pulumi.Sprintf("Ticks the %s controller for %s.", t.kind, t.id),
-			ScheduleExpression:         pulumi.String(a.Schedule.Rate),
-			ScheduleExpressionTimezone: pulumi.String("UTC"),
-			State:                      scheduleState(a.Schedule.Paused),
-			FlexibleTimeWindow:         &scheduler.ScheduleFlexibleTimeWindowArgs{Mode: pulumi.String("OFF")},
-			Target: &scheduler.ScheduleTargetArgs{
-				Arn:     live.Arn,
-				RoleArn: role.Arn,
-				Input:   pulumi.String(string(payload)),
-				RetryPolicy: &scheduler.ScheduleTargetRetryPolicyArgs{
-					MaximumRetryAttempts: pulumi.Int(0), MaximumEventAgeInSeconds: pulumi.Int(3600),
-				},
-			},
-		}, opts...); err != nil {
-			return nil, none, fmt.Errorf("sluis schedule %s: %w", sname, err)
+		id := strings.ReplaceAll(t.id, ":", "-")
+		sname := a.FunctionNamePrefix + "-" + t.kind + "-" + id
+		if err := mk(name+"-"+t.kind+"-"+id, sname, fmt.Sprintf("Ticks the %s controller for %s.", t.kind, t.id),
+			a.Schedule.Rate, a.Schedule.Paused, arn, string(payload)); err != nil {
+			return nil, none, err
 		}
 		names = append(names, pulumi.String(sname))
 	}
 	if !a.DirectoryRefresh.Disabled {
+		arn, err := use(RoleGoogle)
+		if err != nil {
+			return nil, none, err
+		}
 		rname := a.FunctionNamePrefix + "-directory-refresh"
-		if _, err := scheduler.NewSchedule(ctx, name+"-directory-refresh", &scheduler.ScheduleArgs{
-			Name:                       pulumi.String(rname),
-			Description:                pulumi.String("Refreshes the directory snapshots."),
-			ScheduleExpression:         pulumi.String(a.DirectoryRefresh.Rate),
-			ScheduleExpressionTimezone: pulumi.String("UTC"),
-			State:                      scheduleState(a.DirectoryRefresh.Paused),
-			FlexibleTimeWindow:         &scheduler.ScheduleFlexibleTimeWindowArgs{Mode: pulumi.String("OFF")},
-			Target: &scheduler.ScheduleTargetArgs{
-				Arn: live.Arn, RoleArn: role.Arn, Input: pulumi.String(`{"kind":"refresh"}`),
-				RetryPolicy: &scheduler.ScheduleTargetRetryPolicyArgs{
-					MaximumRetryAttempts: pulumi.Int(0), MaximumEventAgeInSeconds: pulumi.Int(3600),
-				},
-			},
-		}, opts...); err != nil {
-			return nil, none, fmt.Errorf("sluis directory refresh schedule: %w", err)
+		if err := mk(name+"-directory-refresh", rname, "Refreshes the directory snapshots.",
+			a.DirectoryRefresh.Rate, a.DirectoryRefresh.Paused, arn, `{"kind":"refresh"}`); err != nil {
+			return nil, none, err
 		}
 		names = append(names, pulumi.String(rname))
 	}
 	if a.cloudflare() && !a.CloudflareRotation.Disabled {
+		arn, err := use(RoleCloudflare)
+		if err != nil {
+			return nil, none, err
+		}
 		cname := a.FunctionNamePrefix + "-cloudflare-rotation"
-		if _, err := scheduler.NewSchedule(ctx, name+"-cloudflare-rotation", &scheduler.ScheduleArgs{
-			Name:                       pulumi.String(cname),
-			Description:                pulumi.String("Rotates the Cloudflare credentials that are due."),
-			ScheduleExpression:         pulumi.String(a.CloudflareRotation.Rate),
-			ScheduleExpressionTimezone: pulumi.String("UTC"),
-			State:                      scheduleState(a.CloudflareRotation.Paused),
-			FlexibleTimeWindow:         &scheduler.ScheduleFlexibleTimeWindowArgs{Mode: pulumi.String("OFF")},
-			Target: &scheduler.ScheduleTargetArgs{
-				Arn: live.Arn, RoleArn: role.Arn, Input: pulumi.String(`{"kind":"cloudflare"}`),
-				RetryPolicy: &scheduler.ScheduleTargetRetryPolicyArgs{
-					MaximumRetryAttempts: pulumi.Int(0), MaximumEventAgeInSeconds: pulumi.Int(3600),
-				},
-			},
-		}, opts...); err != nil {
-			return nil, none, fmt.Errorf("sluis cloudflare rotation schedule: %w", err)
+		if err := mk(name+"-cloudflare-rotation", cname, "Rotates the Cloudflare credentials that are due.",
+			a.CloudflareRotation.Rate, a.CloudflareRotation.Paused, arn, `{"kind":"cloudflare"}`); err != nil {
+			return nil, none, err
 		}
 		names = append(names, pulumi.String(cname))
+	}
+	if mods != nil && !a.IssuerClients.Disabled {
+		invoked = append(invoked, live.Arn)
+		kname := a.FunctionNamePrefix + "-issuer-clients"
+		if err := mk(name+"-issuer-clients", kname, "Settles the clients' generated secrets.",
+			a.IssuerClients.Rate, a.IssuerClients.Paused, live.Arn, `{"kind":"clients"}`); err != nil {
+			return nil, none, err
+		}
+		names = append(names, pulumi.String(kname))
+	}
+
+	// The role may invoke the aliases its schedules target and nothing else.
+	// Without the module functions it always holds the issuer's alias, as it
+	// did; with them, a role with no schedule holds no policy.
+	if mods == nil && len(invoked) == 0 {
+		invoked = pulumi.StringArray{live.Arn}
+	}
+	if len(invoked) > 0 {
+		if _, err := iam.NewRolePolicy(ctx, name+"-scheduler-policy", &iam.RolePolicyArgs{
+			Name: pulumi.String(a.FunctionNamePrefix + "-scheduler"), Role: role.Name,
+			Policy: invoked.ToStringArrayOutput().ApplyT(func(arns []string) (string, error) {
+				set := map[string]bool{}
+				var res []string
+				for _, x := range arns {
+					if !set[x] {
+						set[x] = true
+						res = append(res, x)
+					}
+				}
+				sort.Strings(res)
+				return document([]statement{{
+					"Sid": "SluisTick", "Effect": "Allow", "Action": lambdaInvokeFunction,
+					"Resource": res,
+				}})
+			}).(pulumi.StringOutput),
+		}, opts...); err != nil {
+			return nil, none, err
+		}
 	}
 	return role, names.ToStringArrayOutput(), nil
 }
