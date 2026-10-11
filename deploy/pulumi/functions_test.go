@@ -83,7 +83,7 @@ func TestModulesConfigureMemoryConcurrencyAndName(t *testing.T) {
 	}
 	// The issuer's role invokes the overridden name.
 	issuer := resourcesOf(statements(t, prop(rec.one(t, policyType, "staging-issuer-policy"), "policy").StringValue()))
-	if !slices.Contains(issuer, fnArn("acme-slack")+":live-issuer") {
+	if !slices.Contains(issuer, fnArn("acme-slack")+":live-console") {
 		t.Errorf("the issuer does not invoke the renamed slack function: %v", issuer)
 	}
 }
@@ -170,9 +170,10 @@ func TestTheIssuerCanInvokeOnlyTheAliasesItNeeds(t *testing.T) {
 	}
 	want := []string{
 		fnArn("sluis-staging-issuer") + ":live",
-		fnArn("sluis-staging-cloudflare") + ":live-issuer", fnArn("sluis-staging-github") + ":live-issuer",
+		fnArn("sluis-staging-cloudflare") + ":live-issuer", fnArn("sluis-staging-cloudflare") + ":live-console",
+		fnArn("sluis-staging-github") + ":live-issuer", fnArn("sluis-staging-github") + ":live-console",
 		fnArn("sluis-staging-google") + ":live-issuer", fnArn("sluis-staging-google") + ":live-console",
-		fnArn("sluis-staging-slack") + ":live-issuer", fnArn("sluis-staging-slack") + ":live-console", fnArn("sluis-staging-github") + ":live-console",
+		fnArn("sluis-staging-slack") + ":live-console",
 		fnArn("sluis-staging-backup") + ":live-console",
 	}
 	slices.Sort(invokes)

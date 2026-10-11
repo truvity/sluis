@@ -97,3 +97,36 @@ func TestADemonstrationKeepsItsFixedStores(t *testing.T) {
 		t.Error("a demonstration had domain stores on the ports")
 	}
 }
+
+// A provider module that is another function's (`<module>.remote`) has none of
+// its stores opened in the issuer's process: the issuer's role holds no grant on
+// them, and every operation on them is asked of the module. A hub that only
+// reads the Google snapshots holds no workspace credential either. The module
+// in this process keeps all of them, as the demonstration and the tests have it.
+func TestARemoteModuleHasNoStoreInTheIssuersProcess(t *testing.T) {
+	portstoretest.Each(t, func(t *testing.T, e portstoretest.Env) {
+		open := func(change func(*app.Config)) app.KeptForTest {
+			cfg := serveConfig(t)
+			change(&cfg)
+			st := &store.Stores{Ports: e.Open(t), Adapter: store.AdapterDynamoDB, Shared: true, Usable: true}
+			kept, err := app.OpenStoresForTest(context.Background(), cfg, st, quiet)
+			if err != nil {
+				t.Fatal(err)
+			}
+			return kept
+		}
+		local := open(func(*app.Config) {})
+		if !local.GitHubOrgs || !local.GitHubLinks || !local.SlackShared || local.Credentials == nil {
+			t.Fatalf("the modules in this process kept %+v, want every domain store", local)
+		}
+		remote := open(func(c *app.Config) {
+			c.GitHubRemote, c.SlackRemote, c.CloudflareRemote, c.Reader = true, true, true, true
+		})
+		if remote.GitHubOrgs || remote.GitHubLinks || remote.SlackShared || remote.Credentials != nil {
+			t.Errorf("remote modules left stores in the issuer's process: %+v", remote)
+		}
+		if remote.Workspaces == nil || len(remote.SessionKey) == 0 {
+			t.Errorf("the snapshot reader lost the workspace records or the session key: %+v", remote)
+		}
+	})
+}

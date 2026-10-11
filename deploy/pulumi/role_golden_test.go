@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -60,6 +61,34 @@ func TestEveryRolesPolicyIsItsGolden(t *testing.T) {
 		}
 		if !bytes.Equal(pretty.Bytes(), want) {
 			t.Errorf("the policy of the %s role is not its golden %s:\n%s", name, path, pretty.String())
+		}
+	}
+}
+
+// The issuer's golden holds none of what v1.76 E-FIN removed: no github or slack
+// table, no provider parameter or parameter-key statement, no minter reference,
+// no unqualified or issuer-class invoke of slack, and a Google table read that
+// is by key only.
+func TestTheIssuerGoldenHoldsNoProviderAccessBeyondTheGoogleSnapshot(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("testdata", "role-issuer.policy.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	golden := string(raw)
+	for _, not := range []string{
+		"SluisCrossGithub", "SluisCrossSlack", "SluisCrossCloudflareMinter", "SluisCrossGoogleParameters", "SluisParameterKeyCross",
+		"table/sluis-i1-github", "table/sluis-i1-slack", "table/sluis-i1-cloudflare",
+		"parameter/sluis/i1/internal/github", "parameter/sluis/i1/internal/slack", "parameter/sluis/i1/internal/google",
+		"parameter/sluis/i1/internal/cloudflare", "parameter/sluis/i1/external/github", "parameter/sluis/i1/external/google",
+		"sluis-i1-slack:live-issuer", "/github/", "/slack/",
+	} {
+		if strings.Contains(golden, not) {
+			t.Errorf("the issuer's golden holds %q", not)
+		}
+	}
+	for _, want := range []string{"SluisCrossGoogleTable", "SluisCrossGoogleBlobs", "sluis-i1-cloudflare:live-console"} {
+		if !strings.Contains(golden, want) {
+			t.Errorf("the issuer's golden lacks %q", want)
 		}
 	}
 }

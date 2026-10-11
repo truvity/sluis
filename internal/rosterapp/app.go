@@ -142,6 +142,9 @@ func Load(file string) (Config, error) {
 			cfg.Remote[module] = r
 		}
 	}
+	cfg.Directory.GitHubRemote = !cfg.Hosted(moduleGitHub)
+	cfg.Directory.SlackRemote = !cfg.Hosted(moduleSlack)
+	cfg.Directory.CloudflareRemote = svc.Cloudflare != nil && svc.Cloudflare.Remote != nil
 	if !cfg.Hosted(moduleGitHub) {
 		cfg.GitHub = nil
 	}
