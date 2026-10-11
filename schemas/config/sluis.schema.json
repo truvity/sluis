@@ -655,6 +655,72 @@
       },
       "type": "object"
     },
+    "github": {
+      "additionalProperties": false,
+      "description": "The GitHub module's routing (docs/decisions/0071). Unset keeps the module in this process.",
+      "properties": {
+        "remote": {
+          "additionalProperties": false,
+          "description": "Where the GitHub module is when it is not this process: the calls to it go there. Set exactly one of `function` and `url`. Unset keeps the module in this process.",
+          "properties": {
+            "audience": {
+              "description": "The audience of that token. The module's name, `github`, when unset.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "function": {
+              "description": "The module's Lambda function, name or ARN. It is invoked through the `live-<class>` alias of this process's caller class.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "tokenFile": {
+              "description": "Where the projected token is mounted. `/var/run/secrets/sluis/github/token` when unset.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "url": {
+              "$ref": "#/$defs/url",
+              "description": "The module's Kubernetes Service. A call carries the pod's projected ServiceAccount token."
+            }
+          },
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "google": {
+      "additionalProperties": false,
+      "description": "The Google module's routing (docs/decisions/0071). Unset keeps the module in this process.",
+      "properties": {
+        "remote": {
+          "additionalProperties": false,
+          "description": "Where the Google module is when it is not this process: the calls to it go there. Set exactly one of `function` and `url`. Unset keeps the module in this process.",
+          "properties": {
+            "audience": {
+              "description": "The audience of that token. The module's name, `google`, when unset.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "function": {
+              "description": "The module's Lambda function, name or ARN. It is invoked through the `live-<class>` alias of this process's caller class.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "tokenFile": {
+              "description": "Where the projected token is mounted. `/var/run/secrets/sluis/google/token` when unset.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "url": {
+              "$ref": "#/$defs/url",
+              "description": "The module's Kubernetes Service. A call carries the pod's projected ServiceAccount token."
+            }
+          },
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
     "groupsScoping": {
       "default": "report",
       "description": "How far this installation has moved toward per-audience `groups` scoping: `off`, `report` or `enforce`.",
@@ -1816,6 +1882,39 @@
             "type": "object"
           },
           "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "slack": {
+      "additionalProperties": false,
+      "description": "The Slack module's routing (docs/decisions/0071). Unset keeps the module in this process.",
+      "properties": {
+        "remote": {
+          "additionalProperties": false,
+          "description": "Where the Slack module is when it is not this process: the calls to it go there. Set exactly one of `function` and `url`. Unset keeps the module in this process.",
+          "properties": {
+            "audience": {
+              "description": "The audience of that token. The module's name, `slack`, when unset.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "function": {
+              "description": "The module's Lambda function, name or ARN. It is invoked through the `live-<class>` alias of this process's caller class.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "tokenFile": {
+              "description": "Where the projected token is mounted. `/var/run/secrets/sluis/slack/token` when unset.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "url": {
+              "$ref": "#/$defs/url",
+              "description": "The module's Kubernetes Service. A call carries the pod's projected ServiceAccount token."
+            }
+          },
+          "type": "object"
         }
       },
       "type": "object"

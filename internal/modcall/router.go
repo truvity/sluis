@@ -12,6 +12,15 @@ type Target struct {
 	Function string `json:"function,omitempty"`
 	URL      string `json:"url,omitempty"`
 	Audience string `json:"audience,omitempty"`
+	// TokenFile is where the pod's projected token for a URL target is mounted;
+	// [DefaultTokenFile] when unset.
+	TokenFile string `json:"tokenFile,omitempty"`
+}
+
+// DefaultTokenFile is where the projected token for a module's Service is
+// mounted when the configuration does not say.
+func DefaultTokenFile(module string) string {
+	return "/var/run/secrets/sluis/" + module + "/token"
 }
 
 // Config says how each module is reached.
