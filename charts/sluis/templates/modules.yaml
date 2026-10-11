@@ -1,0 +1,64 @@
+{{- include "sluis.prepare" . -}}
+{{- if and (eq .Values.renders "app") (include "sluis.split" .) -}}
+{{- include "sluis.checks" . }}
+{{- include "sluis.splitChecks" . }}
+{{- range $mod := list "issuer" "github" "slack" "google" "cloudflare" }}
+{{- if include "sluis.moduleOn" (dict "root" $ "module" $mod) }}
+{{- $args := dict "root" $ "module" $mod }}
+---
+{{ include "sluis.moduleServiceAccountObject" $args }}
+---
+# The {{ $mod }} module's document, read once at start.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "sluis.moduleFullname" $args }}-config
+  labels:
+    {{- include "sluis.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: {{ $mod }}
+data:
+  config.yaml: |
+    {{- include "sluis.moduleDocument" $args | nindent 4 }}
+---
+{{ include "sluis.moduleDeployment" $args }}
+{{- if include "sluis.isCallee" $args }}
+---
+# Calls to the {{ $mod }} module, on /rpc. A call carries a projected ServiceAccount
+# token minted for the module's audience, which the module checks with a TokenReview.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "sluis.moduleFullname" $args }}
+  labels:
+    {{- include "sluis.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: {{ $mod }}
+spec:
+  selector:
+    {{- include "sluis.selectorLabels" $ | nindent 4 }}
+    app.kubernetes.io/component: {{ $mod }}
+  ports:
+    - name: rpc
+      port: {{ include "sluis.moduleRPCPort" $args }}
+      targetPort: rpc
+---
+# The module checks its callers' tokens with a TokenReview, which is the one
+# thing system:auth-delegator allows (and a SubjectAccessReview).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "sluis.fullname" $ }}-{{ $.Release.Namespace }}-{{ $mod }}-auth-delegator
+  labels:
+    {{- include "sluis.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: {{ $mod }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:auth-delegator
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "sluis.moduleAccountName" $args }}
+    namespace: {{ $.Release.Namespace }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{ end -}}

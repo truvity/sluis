@@ -318,8 +318,18 @@ that reads as a failure). Only `ports.adapter: dynamodb` shares them.
 {{- end -}}
 {{- end -}}
 {{- $adapter := include "sluis.stateAdapter" $root -}}
-{{- if and $any (gt (int $root.Values.replicaCount) 1) (not (has $adapter (list "dynamodb"))) -}}
-{{- fail (printf "replicaCount is %d and config.controllers runs a controller in every replica, which needs the tick leases in a State every replica shares: set config.ports.adapter (or adapters.state, or preset k8s-aws) to dynamodb (it is %q, which keeps the leases in each pod's own memory, so every replica would act on every target and make each change twice). Keep replicaCount at 1 otherwise" (int $root.Values.replicaCount) $adapter) -}}
+{{- /* With `split` the controllers' replicas are their modules', not the issuer's. */ -}}
+{{- $replicas := int $root.Values.replicaCount -}}
+{{- $what := "replicaCount" -}}
+{{- if include "sluis.split" $root -}}
+{{- $replicas = 1 -}}
+{{- $what = "modules.<controller>.replicas" -}}
+{{- range $kind := list "github" "slack" -}}
+{{- $replicas = max $replicas (int (dig "replicas" 1 (get $root.Values.modules $kind) | default 1)) -}}
+{{- end -}}
+{{- end -}}
+{{- if and $any (gt $replicas 1) (not (has $adapter (list "dynamodb"))) -}}
+{{- fail (printf "%s is %d and config.controllers runs a controller in every replica, which needs the tick leases in a State every replica shares: set config.ports.adapter (or adapters.state, or preset k8s-aws) to dynamodb (it is %q, which keeps the leases in each pod's own memory, so every replica would act on every target and make each change twice). Keep it at 1 otherwise" $what $replicas $adapter) -}}
 {{- end -}}
 {{- end -}}
 
