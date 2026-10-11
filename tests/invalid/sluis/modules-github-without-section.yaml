@@ -1,0 +1,12 @@
+# The github module with neither config.controllers.github nor modules.github.config would start with nothing to do.
+# error: the module has no document section
+config:
+  issuerURL: https://issuer.example
+exchange:
+  clusters:
+    - name: example-cluster
+      issuer: https://oidc.eu-example-1.example/id/EXAMPLE
+      jwksUri: https://oidc.eu-example-1.example/id/EXAMPLE/keys
+modules:
+  github:
+    enabled: true

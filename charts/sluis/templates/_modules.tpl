@@ -1,15 +1,26 @@
 {{/*
-The per-module workloads of `split: true` (ADR 0071, the v1.76 split). Nothing
-here renders with `split: false`.
+The per-module workloads (ADR 0071, the v1.76 split, decision D-v176-9): the
+chart renders one Deployment, ServiceAccount, ConfigMap, PodDisruptionBudget
+and NetworkPolicy per module, and never a single Deployment that runs them all.
+The issuer is always there; another module is there when `modules.<m>.enabled`.
 */}}
 
-{{- define "sluis.split" -}}
-{{- if .Values.split }}yes{{ end -}}
+{{/* "true" when the module is rendered: the issuer always, another when enabled. Takes (dict "root" $ "module" "github"). */}}
+{{- define "sluis.moduleOn" -}}
+{{- if or (eq .module "issuer") (dig "enabled" false (get .root.Values.modules .module)) }}true{{ end -}}
 {{- end }}
 
-{{/* "true" when the module is enabled. Takes (dict "root" $ "module" "github"). */}}
-{{- define "sluis.moduleOn" -}}
-{{- if dig "enabled" false (get .root.Values.modules .module) }}true{{ end -}}
+{{/*
+"true" when the module's pod runs the controller `kind`: the github module the
+GitHub controller, the slack module the Slack one. In documents mode the
+documents are rendered as they stand, so the issuer's document still names the
+controllers it runs and its pod carries their mounts. Takes (dict "root" $
+"module" "issuer" "kind" "github").
+*/}}
+{{- define "sluis.hosts" -}}
+{{- if eq .module .kind }}true
+{{- else if and (eq .module "issuer") (include "sluis.documentsMode" .root) (include "sluis.controllerOn" (dict "root" .root "kind" .kind)) }}true
+{{- end -}}
 {{- end }}
 
 {{/* <full name>-<module>: the Deployment, the Service, the document's ConfigMap (with -config) and the default account. */}}
@@ -17,8 +28,13 @@ here renders with `split: false`.
 {{- printf "%s-%s" (include "sluis.fullname" .root) .module | trunc 63 | trimSuffix "-" -}}
 {{- end }}
 
+{{/* The module's account: its own `serviceAccount.name`; the issuer's falls back to the release's `serviceAccount.name`. */}}
 {{- define "sluis.moduleAccountName" -}}
-{{- dig "serviceAccount" "name" "" (get .root.Values.modules .module) | default (include "sluis.moduleFullname" .) -}}
+{{- $own := dig "serviceAccount" "name" "" (get .root.Values.modules .module) -}}
+{{- if and (not $own) (eq .module "issuer") -}}
+{{- $own = .root.Values.serviceAccount.name -}}
+{{- end -}}
+{{- $own | default (include "sluis.moduleFullname" .) -}}
 {{- end }}
 
 {{/* The modules other modules call, and which therefore answer on /rpc. */}}
@@ -71,8 +87,10 @@ cloudflare
 {{/*
 The module's document as a map, as YAML, before its apiVersion. Takes
 (dict "root" $ "module" "github").
-  issuer      `config` without `controllers`, and `calls.modules.<m>` for each
-              enabled module that answers calls
+  issuer      `config` without `controllers`, and for each enabled module that
+              answers calls its own `<module>.remote` ({url, audience,
+              tokenFile}), which is how the issuer routes to it. In documents
+              mode the document as it stands (see sluis.moduleDocument).
   github      config.controllers.github, with modules.github.config over it
   slack       likewise
   google      modules.google.config
@@ -84,19 +102,15 @@ The module's document as a map, as YAML, before its apiVersion. Takes
 {{- $doc := dict -}}
 {{- if eq .module "issuer" -}}
 {{- $doc = omit (deepCopy $root.Values.config) "controllers" -}}
-{{- $mods := dict -}}
 {{- range $callee := splitList "\n" (include "sluis.callees" $root) -}}
 {{- if include "sluis.moduleOn" (dict "root" $root "module" $callee) -}}
-{{- $_ := set $mods $callee (dict
-      "url" (printf "http://%s.%s.svc:%d" (include "sluis.moduleFullname" (dict "root" $root "module" $callee)) $root.Release.Namespace (int (include "sluis.moduleRPCPort" (dict "root" $root "module" $callee))))
-      "audience" (include "sluis.moduleAudience" (dict "root" $root "module" $callee))
-      "tokenFile" (include "sluis.callTokenFile" (dict "module" $callee))) -}}
+{{- $args := dict "root" $root "module" $callee -}}
+{{- $remote := dict
+      "url" (printf "http://%s.%s.svc:%d" (include "sluis.moduleFullname" $args) $root.Release.Namespace (int (include "sluis.moduleRPCPort" $args)))
+      "audience" (include "sluis.moduleAudience" $args)
+      "tokenFile" (include "sluis.callTokenFile" $args) -}}
+{{- $_ := set $doc $callee (mergeOverwrite (deepCopy (dig $callee dict $doc)) (dict "remote" $remote)) -}}
 {{- end -}}
-{{- end -}}
-{{- if $mods -}}
-{{- $calls := deepCopy (dig "calls" dict $doc) -}}
-{{- $_ := set $calls "modules" (mergeOverwrite (deepCopy (dig "modules" dict $calls)) $mods) -}}
-{{- $_ := set $doc "calls" $calls -}}
 {{- end -}}
 {{- else if or (eq .module "github") (eq .module "slack") -}}
 {{- $doc = deepCopy (dig "controllers" .module dict $root.Values.config) -}}
@@ -116,26 +130,101 @@ The module's document as a map, as YAML, before its apiVersion. Takes
 {{- toYaml $doc -}}
 {{- end }}
 
-{{/* The document with its apiVersion. */}}
+{{/* The document with its apiVersion; in documents mode the issuer's is `documents.service`, byte for byte. */}}
 {{- define "sluis.moduleDocument" -}}
+{{- if and (eq .module "issuer") (include "sluis.documentsMode" .root) -}}
+{{- .root.Values.documents.service | trimSuffix "\n" -}}
+{{- else -}}
 {{- $kind := dict "issuer" "sluis" "github" "controller-github" "slack" "controller-slack" "google" "sluis-google" "cloudflare" "sluis" -}}
 {{- include "sluis.document" (dict "kind" (get $kind .module) "doc" (fromYaml (include "sluis.moduleDocumentBody" .))) -}}
+{{- end -}}
+{{- end }}
+
+{{/* "true" when the module gets a PodDisruptionBudget: on unless `podDisruptionBudget.enabled` says false. */}}
+{{- define "sluis.modulePDBOn" -}}
+{{- if dig "podDisruptionBudget" "enabled" true (get .root.Values.modules .module) }}true{{ end -}}
 {{- end }}
 
 {{/*
-What `split` refuses. Takes the root.
+What the per-module model refuses. Takes the root.
 */}}
-{{- define "sluis.splitChecks" -}}
-{{- if include "sluis.split" . -}}
-{{- if include "sluis.documentsMode" . -}}
-{{- fail "split is true and documents.service is set: the chart writes `calls` into the issuer's document, which it cannot do to a rendered one. Use config, or keep split: false" -}}
+{{- define "sluis.moduleChecks" -}}
+{{- $root := . -}}
+{{- $docs := include "sluis.documentsMode" . -}}
+{{- range $mod := list "github" "slack" "google" "cloudflare" -}}
+{{- if and $docs (include "sluis.moduleOn" (dict "root" $root "module" $mod)) -}}
+{{- fail (printf "modules.%s.enabled is true and documents.service is set: the chart writes `%s.remote` into the issuer's document, which it cannot do to a rendered one. Put the remote in the document, or use config" $mod $mod) -}}
 {{- end -}}
+{{- end -}}
+{{- if not $docs -}}
 {{- range $kind := list "github" "slack" -}}
-{{- if and (include "sluis.controllerOn" (dict "root" $ "kind" $kind)) (not (include "sluis.moduleOn" (dict "root" $ "module" $kind))) -}}
-{{- fail (printf "split is true and config.controllers.%s is set, and modules.%s.enabled is not: the issuer no longer runs the controller, so nothing would. Enable the module, or remove the section" $kind $kind) -}}
+{{- $own := dig "config" dict (get $root.Values.modules $kind) -}}
+{{- $section := include "sluis.controllerOn" (dict "root" $root "kind" $kind) -}}
+{{- if and $section (not (include "sluis.moduleOn" (dict "root" $root "module" $kind))) -}}
+{{- fail (printf "config.controllers.%s is set, and modules.%s.enabled is not: the issuer does not run controllers, so nothing would. Enable the module, or remove the section" $kind $kind) -}}
+{{- end -}}
+{{- if and (include "sluis.moduleOn" (dict "root" $root "module" $kind)) (not $section) (not $own) -}}
+{{- fail (printf "modules.%s.enabled is true and the module has no document section: set config.controllers.%s (an empty `{}` takes the defaults) or modules.%s.config. Without one the %s module would start with nothing to do" $kind $kind $kind $kind) -}}
+{{- end -}}
+{{- end -}}
+{{- range $mod := list "google" "cloudflare" -}}
+{{- if and (include "sluis.moduleOn" (dict "root" $root "module" $mod)) (not (dig "config" dict (get $root.Values.modules $mod))) -}}
+{{- fail (printf "modules.%s.enabled is true and modules.%s.config is empty: the module reads its own document and has no other source, so write it there" $mod $mod) -}}
+{{- end -}}
+{{- end -}}
+{{- range $callee := splitList "\n" (include "sluis.callees" $root) -}}
+{{- if include "sluis.moduleOn" (dict "root" $root "module" $callee) -}}
+{{- if dig $callee "remote" "" $root.Values.config -}}
+{{- fail (printf "config.%s.remote is set and modules.%s.enabled is true: the chart writes the issuer's route to the module (url, audience and tokenFile), so say it once, by enabling the module" $callee $callee) -}}
 {{- end -}}
 {{- end -}}
 {{- end -}}
+{{- if and (include "sluis.moduleOn" (dict "root" $root "module" "cloudflare")) (dig "cloudflare" dict $root.Values.config) -}}
+{{- fail "config.cloudflare is set and modules.cloudflare.enabled is true: the issuer's document then holds only `cloudflare.remote`, which the chart writes. The accounts and presets belong in modules.cloudflare.config.cloudflare" -}}
+{{- end -}}
+{{- end -}}
+{{- range $mod := list "issuer" "github" "slack" "google" "cloudflare" -}}
+{{- if include "sluis.moduleOn" (dict "root" $root "module" $mod) -}}
+{{- $m := get $root.Values.modules $mod -}}
+{{- $pdb := dig "podDisruptionBudget" dict $m -}}
+{{- if and (not (kindIs "invalid" $pdb.minAvailable)) (not (kindIs "invalid" $pdb.maxUnavailable)) -}}
+{{- fail (printf "modules.%s.podDisruptionBudget sets minAvailable and maxUnavailable: a budget says one of them" $mod) -}}
+{{- end -}}
+{{- $replicas := int (include "sluis.moduleReplicas" (dict "root" $root "module" $mod)) -}}
+{{- if and (include "sluis.modulePDBOn" (dict "root" $root "module" $mod)) (not (include "sluis.moduleAutoscaled" (dict "root" $root "module" $mod))) (or (kindIs "float64" $pdb.minAvailable) (kindIs "int64" $pdb.minAvailable)) (ge (int $pdb.minAvailable) $replicas) -}}
+{{- fail (printf "modules.%s.podDisruptionBudget.minAvailable is %v and the module runs %d replicas: no pod could ever be evicted, and a node drain would hang. Keep minAvailable below the replicas, or use maxUnavailable" $mod $pdb.minAvailable $replicas) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- $hpa := dig "autoscaling" dict $root.Values.modules.issuer -}}
+{{- if $hpa.enabled -}}
+{{- if $root.Values.modules.issuer.replicas -}}
+{{- fail "modules.issuer.autoscaling.enabled is true and modules.issuer.replicas is set: the HorizontalPodAutoscaler owns the replica count, so say the bounds in autoscaling.minReplicas and maxReplicas" -}}
+{{- end -}}
+{{- if lt (int $hpa.maxReplicas) (int $hpa.minReplicas) -}}
+{{- fail (printf "modules.issuer.autoscaling.maxReplicas (%v) is below minReplicas (%v)" $hpa.maxReplicas $hpa.minReplicas) -}}
+{{- end -}}
+{{- if not (or $hpa.targetCPUUtilizationPercentage $hpa.targetMemoryUtilizationPercentage) -}}
+{{- fail "modules.issuer.autoscaling.enabled is true and neither targetCPUUtilizationPercentage nor targetMemoryUtilizationPercentage is set: the autoscaler would have nothing to follow" -}}
+{{- end -}}
+{{- $requests := dig "requests" dict ($root.Values.modules.issuer.resources | default $root.Values.resources | default dict) -}}
+{{- if and $hpa.targetCPUUtilizationPercentage (not $requests.cpu) -}}
+{{- fail "modules.issuer.autoscaling.targetCPUUtilizationPercentage is a share of the CPU request, and resources.requests.cpu is not set (modules.issuer.resources, or resources)" -}}
+{{- end -}}
+{{- if and $hpa.targetMemoryUtilizationPercentage (not $requests.memory) -}}
+{{- fail "modules.issuer.autoscaling.targetMemoryUtilizationPercentage is a share of the memory request, and resources.requests.memory is not set (modules.issuer.resources, or resources)" -}}
+{{- end -}}
+{{- end -}}
+{{- end }}
+
+{{/* Replicas: `modules.<m>.replicas`; unset, `replicaCount` for the issuer and 1 for another module. */}}
+{{- define "sluis.moduleReplicas" -}}
+{{- (get .root.Values.modules .module).replicas | default (ternary .root.Values.replicaCount 1 (eq .module "issuer")) -}}
+{{- end }}
+
+{{/* "true" when an HorizontalPodAutoscaler scales the module: the issuer's only. */}}
+{{- define "sluis.moduleAutoscaled" -}}
+{{- if and (eq .module "issuer") (dig "autoscaling" "enabled" false .root.Values.modules.issuer) }}true{{ end -}}
 {{- end }}
 
 {{/*
@@ -148,7 +237,7 @@ One module's Deployment. Takes (dict "root" $ "module" "github").
 {{- $full := include "sluis.moduleFullname" . -}}
 {{- $health := include "sluis.moduleHealthPort" . -}}
 {{- $callee := include "sluis.isCallee" (dict "root" $root "module" $mod) -}}
-{{- $replicas := $m.replicas | default (ternary $root.Values.replicaCount 1 (eq $mod "issuer")) -}}
+{{- $replicas := include "sluis.moduleReplicas" . -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -157,7 +246,10 @@ metadata:
     {{- include "sluis.labels" $root | nindent 4 }}
     app.kubernetes.io/component: {{ $mod }}
 spec:
+  {{- /* An HPA owns the replica count: a replicas field here would reset it on every upgrade. */}}
+  {{- if not (include "sluis.moduleAutoscaled" .) }}
   replicas: {{ $replicas }}
+  {{- end }}
   selector:
     matchLabels:
       {{- include "sluis.selectorLabels" $root | nindent 6 }}
@@ -266,7 +358,7 @@ spec:
             {{- end }}
             {{- end }}
             {{- end }}
-            {{- if eq $mod "github" }}
+            {{- if include "sluis.hosts" (dict "root" $root "module" $mod "kind" "github") }}
             - name: github-token
               mountPath: /var/run/secrets/github-roster
               readOnly: true
@@ -277,7 +369,7 @@ spec:
               mountPath: /var/run/github-roster/records
               readOnly: true
             {{- end }}
-            {{- if eq $mod "slack" }}
+            {{- if include "sluis.hosts" (dict "root" $root "module" $mod "kind" "slack") }}
             - name: slack-token
               mountPath: /var/run/secrets/slack-roster
               readOnly: true
@@ -308,7 +400,7 @@ spec:
             periodSeconds: 10
             timeoutSeconds: 3
             failureThreshold: 3
-          {{- with $m.resources }}
+          {{- with ($m.resources | default $root.Values.resources) }}
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
@@ -351,7 +443,7 @@ spec:
         {{- end }}
         {{- end }}
         {{- end }}
-        {{- if eq $mod "github" }}
+        {{- if include "sluis.hosts" (dict "root" $root "module" $mod "kind" "github") }}
         - name: github-token
           projected:
             sources:
@@ -368,7 +460,7 @@ spec:
             name: {{ include "sluis.fullname" $root }}-github-orgs
             optional: true
         {{- end }}
-        {{- if eq $mod "slack" }}
+        {{- if include "sluis.hosts" (dict "root" $root "module" $mod "kind" "slack") }}
         - name: slack-token
           projected:
             sources:
@@ -400,6 +492,7 @@ spec:
                     - key: {{ .key | quote }}
                       path: {{ .name | quote }}
               {{- end }}
+              {{- if not (include "sluis.documentsMode" $root) }}
               {{- range $id, $client := (include "sluis.declaredClients" $root | fromYaml) }}
               {{- if $client.secret }}
               - secret:
@@ -407,6 +500,7 @@ spec:
                   items:
                     - key: {{ $client.secretKey | default "client-secret" }}
                       path: clients/{{ $id }}/secret
+              {{- end }}
               {{- end }}
               {{- end }}
         {{- end }}
@@ -426,24 +520,32 @@ spec:
 {{- end }}
 
 {{/*
-One module's ServiceAccount, as `serviceAccount` is for the single Deployment:
+One module's ServiceAccount, from the release's `serviceAccount` and the module's own:
 the same AWS identity, with the module's own role under irsa. Takes
 (dict "root" $ "module" "github").
 */}}
 {{- define "sluis.moduleServiceAccountObject" -}}
 {{- $root := .root -}}
+{{- /* The issuer is the release's own account that was: unless its module says otherwise, the messages name `serviceAccount`. */ -}}
 {{- $key := printf "modules.%s.serviceAccount" .module -}}
-{{- $sa := dig "serviceAccount" dict (get $root.Values.modules .module) -}}
+{{- if and (eq .module "issuer") (not (or (dig "serviceAccount" "awsIdentity" "" $root.Values.modules.issuer) (dig "serviceAccount" "awsRoleArn" "" $root.Values.modules.issuer))) -}}
+{{- $key = "serviceAccount" -}}
+{{- end -}}
+{{- $sa := deepCopy (dig "serviceAccount" dict (get $root.Values.modules .module)) -}}
+{{- /* The issuer is the release's own account that was: it takes the release's role unless it names one. */ -}}
+{{- if eq .module "issuer" -}}
+{{- $_ := set $sa "awsRoleArn" ($sa.awsRoleArn | default $root.Values.serviceAccount.awsRoleArn) -}}
+{{- end -}}
 {{- $identity := $sa.awsIdentity | default $root.Values.serviceAccount.awsIdentity | default "pod-identity" -}}
 {{- $annotations := deepCopy (mergeOverwrite (deepCopy ($root.Values.serviceAccount.annotations | default dict)) ($sa.annotations | default dict)) -}}
 {{- if eq $identity "irsa" -}}
-{{- $_ := required (printf "%s.awsIdentity is irsa, which annotates the account with the role: set %s.awsRoleArn (each module has its own role)" $key $key) $sa.awsRoleArn -}}
+{{- $_ := required (printf "%s.awsIdentity is irsa, which annotates the account with the role: set %s.awsRoleArn (each module but the issuer has its own role)" $key $key) $sa.awsRoleArn -}}
 {{- if hasKey $annotations "eks.amazonaws.com/role-arn" -}}
 {{- fail (printf "%s.annotations names eks.amazonaws.com/role-arn and the identity is irsa: say the role once, in %s.awsRoleArn" $key $key) -}}
 {{- end -}}
 {{- $_ := set $annotations "eks.amazonaws.com/role-arn" $sa.awsRoleArn -}}
 {{- else if $sa.awsRoleArn -}}
-{{- fail (printf "%s.awsRoleArn is set and the identity is not irsa: EKS Pod Identity annotates nothing, so the ARN would be ignored. Set %s.awsIdentity: irsa, or remove awsRoleArn" $key $key) -}}
+{{- fail (printf "%s.awsRoleArn is set and %s.awsIdentity is not irsa: EKS Pod Identity annotates nothing, so the ARN would be ignored. Set awsIdentity: irsa, or remove awsRoleArn" $key $key) -}}
 {{- end -}}
 apiVersion: v1
 kind: ServiceAccount
@@ -456,13 +558,4 @@ metadata:
   annotations:
     {{- toYaml . | nindent 4 }}
   {{- end }}
-{{- end }}
-
-{{/* The account the issuer runs as: the release's own, or with `split` the issuer module's. */}}
-{{- define "sluis.issuerAccount" -}}
-{{- if include "sluis.split" . -}}
-{{- include "sluis.moduleAccountName" (dict "root" . "module" "issuer") -}}
-{{- else -}}
-{{- include "sluis.serviceAccountName" . -}}
-{{- end -}}
 {{- end }}

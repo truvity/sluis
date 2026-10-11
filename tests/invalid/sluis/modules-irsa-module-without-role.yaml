@@ -1,0 +1,21 @@
+# Under irsa each module but the issuer has its own role: the release's awsRoleArn is the issuer's alone.
+# error: modules.github.serviceAccount.awsRoleArn
+config:
+  issuerURL: https://issuer.example
+  controllers:
+    github:
+      consoleURL: http://sluis.default.svc:8080/console
+serviceAccount:
+  awsIdentity: irsa
+  awsRoleArn: arn:example:iam::acct:role/sluis
+modules:
+  issuer:
+    serviceAccount:
+      awsRoleArn: arn:example:iam::acct:role/sluis-issuer
+  github:
+    enabled: true
+exchange:
+  clusters:
+    - name: example-cluster
+      issuer: https://oidc.eu-example-1.example/id/EXAMPLE
+      jwksUri: https://oidc.eu-example-1.example/id/EXAMPLE/keys

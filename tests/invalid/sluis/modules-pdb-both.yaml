@@ -1,0 +1,14 @@
+# A budget says minAvailable or maxUnavailable, not both.
+# error: sets minAvailable and maxUnavailable
+config:
+  issuerURL: https://issuer.example
+exchange:
+  clusters:
+    - name: example-cluster
+      issuer: https://oidc.eu-example-1.example/id/EXAMPLE
+      jwksUri: https://oidc.eu-example-1.example/id/EXAMPLE/keys
+modules:
+  issuer:
+    podDisruptionBudget:
+      minAvailable: 1
+      maxUnavailable: 1

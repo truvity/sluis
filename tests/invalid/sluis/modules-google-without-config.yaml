@@ -1,0 +1,12 @@
+# A module that is enabled reads its own document, and google has no other source for it.
+# error: modules.google.config is empty
+config:
+  issuerURL: https://issuer.example
+exchange:
+  clusters:
+    - name: example-cluster
+      issuer: https://oidc.eu-example-1.example/id/EXAMPLE
+      jwksUri: https://oidc.eu-example-1.example/id/EXAMPLE/keys
+modules:
+  google:
+    enabled: true

@@ -1,14 +1,37 @@
 ---
-# Source: sluis/templates/serviceaccount.yaml
-apiVersion: v1
-kind: ServiceAccount
+# Source: sluis/templates/modules.yaml
+# Voluntary disruptions (a node drain) may take down only as many of the
+# issuer module's pods as this allows.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
 metadata:
-  name: sluis
+  name: sluis-issuer
   labels:
     app.kubernetes.io/name: sluis
     app.kubernetes.io/instance: sluis
     app.kubernetes.io/version: "0.0.0"
     app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: issuer
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sluis
+      app.kubernetes.io/instance: sluis
+      app.kubernetes.io/component: issuer
+
+---
+# Source: sluis/templates/modules.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sluis-issuer
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: issuer
 
 ---
 # Source: sluis/templates/serviceaccount.yaml
@@ -28,21 +51,18 @@ metadata:
     app.kubernetes.io/managed-by: Helm
 
 ---
-# Source: sluis/templates/configmap.yaml
-# What `sluis serve --config` reads: `config`, as the values give it, with
-# nothing added, renamed or dropped but the apiVersion the chart writes. The
-# binary validates it against schemas/config/sluis.schema.json at start, and
-# values.schema.json holds the values to the same schema before this renders.
+# Source: sluis/templates/modules.yaml
+# The issuer module's document, read once at start.
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: sluis-config
+  name: sluis-issuer-config
   labels:
     app.kubernetes.io/name: sluis
     app.kubernetes.io/instance: sluis
     app.kubernetes.io/version: "0.0.0"
     app.kubernetes.io/managed-by: Helm
-    app.kubernetes.io/component: serve
+    app.kubernetes.io/component: issuer
 data:
   config.yaml: |
     apiVersion: sluis.truvity.github.io/sluis/v3
@@ -497,13 +517,13 @@ roleRef:
   name: sluis-sluis-tokenreview
 subjects:
   - kind: ServiceAccount
-    name: sluis
+    name: sluis-issuer
     namespace: sluis
 
 ---
 # Source: sluis/templates/controllers.yaml
 # What the controllers in this process may do to the cluster, bound to the
-# service's own account (there is one account and one pod). Update, by name,
+# accounts of the pods that run them (the github and slack modules'). Update, by name,
 # the ConfigMaps they report into, and the one Secret people's linked GitHub
 # accounts are kept in: each link's token pair rotates every time it is renewed,
 # and the renewed pair has to be written back. The service creates those
@@ -550,7 +570,7 @@ roleRef:
   name: sluis-controllers
 subjects:
   - kind: ServiceAccount
-    name: sluis
+    name: sluis-issuer
     namespace: sluis
 
 ---
@@ -568,49 +588,51 @@ spec:
   selector:
     app.kubernetes.io/name: sluis
     app.kubernetes.io/instance: sluis
+    app.kubernetes.io/component: issuer
   ports:
     - name: issuer
       port: 8080
       targetPort: issuer
 
 ---
-# Source: sluis/templates/deployment.yaml
+# Source: sluis/templates/modules.yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: sluis
+  name: sluis-issuer
   labels:
     app.kubernetes.io/name: sluis
     app.kubernetes.io/instance: sluis
     app.kubernetes.io/version: "0.0.0"
     app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: issuer
 spec:
   replicas: 2
   selector:
     matchLabels:
       app.kubernetes.io/name: sluis
       app.kubernetes.io/instance: sluis
+      app.kubernetes.io/component: issuer
   template:
     metadata:
       labels:
         app.kubernetes.io/name: sluis
         app.kubernetes.io/instance: sluis
+        app.kubernetes.io/component: issuer
       annotations:
-        # Configuration and policy are immutable for an instance: each document
-        # is read once, at start, so a change to either is a rollout. One
-        # checksum per document this process reads: the service document (the
-        # controllers' sections are in it) and the policy.
-        checksum/config: c299c586cc9fc34a4523e44c96f2c9072a56227554fdc1d28a6c344698708a0a
+        # Each document is read once, at start: a change to it, or to the
+        # policy, is a rollout.
+        checksum/config: 3f84da1be6d5867927fe187f1c304cbee364cc4c955cb31b1946fe5091ecc333
         checksum/policy: 264a1aa58a2c2090b55ab756166be63b6f0027f8aac4406a0fbc6a4525656c0a
         checksum/verify-keys: 18ec558ab1c2237d4c0fb00f26dfabc2e1a44002e46a9029553e8a19605e08cd
     spec:
-      serviceAccountName: sluis
+      serviceAccountName: sluis-issuer
       securityContext:
         runAsNonRoot: true
         seccompProfile:
           type: RuntimeDefault
       containers:
-        - name: serve
+        - name: issuer
           image: "ghcr.io/truvity/sluis/sluis:0.0.0"
           imagePullPolicy: IfNotPresent
           securityContext:
@@ -623,15 +645,10 @@ spec:
               containerPort: 8080
             - name: health
               containerPort: 7070
-          # The whole of the configuration is the service document, `config`
-          # rendered as it stands, and the policy document it names. The
-          # environment carries only the secrets the document names.
           args:
-            - serve
+            - issuer
             - --config=/etc/sluis/config.yaml
           volumeMounts:
-            # Read once, at start: a subPath is enough, since a change replaces
-            # the pod (checksum/*). The policy keeps its directory.
             - name: config
               mountPath: /etc/sluis/config.yaml
               subPath: config.yaml
@@ -639,17 +656,15 @@ spec:
             - name: policy
               mountPath: /var/run/access-issuer/policy
               readOnly: true
-            - name: verify-keys
-              mountPath: /var/run/access-issuer/verify-keys
-              readOnly: true
             - name: tmp
               mountPath: /tmp
             
             - name: audit-token
               mountPath: /var/run/audit
               readOnly: true
-            # The GitHub controller's: the token the console verifies for it, the
-            # Apps' credentials and the console's records.
+            - name: verify-keys
+              mountPath: /var/run/access-issuer/verify-keys
+              readOnly: true
             - name: github-token
               mountPath: /var/run/secrets/github-roster
               readOnly: true
@@ -659,7 +674,6 @@ spec:
             - name: github-records
               mountPath: /var/run/github-roster/records
               readOnly: true
-            # The Slack controller's, likewise.
             - name: slack-token
               mountPath: /var/run/secrets/slack-roster
               readOnly: true
@@ -679,16 +693,6 @@ spec:
           livenessProbe:
             httpGet: { path: /healthz, port: health }
           readinessProbe:
-            # Readiness follows the shared store; liveness deliberately
-            # does not. A replica that cannot reach it leaves the
-            # rotation, and the gateway answers fast instead of hanging;
-            # nothing is restarted, so one blip cannot restart the fleet.
-            #
-            # timeoutSeconds exceeds the service's own 2s check so the
-            # answer is the reason ("the session store does not answer:
-            # i/o timeout") rather than the kubelet's timeout. Three
-            # failures at ten seconds is thirty seconds of trouble before
-            # a replica leaves, which a reconnect comfortably beats.
             httpGet: { path: /readyz, port: health }
             periodSeconds: 10
             timeoutSeconds: 3
@@ -696,15 +700,10 @@ spec:
       volumes:
         - name: config
           configMap:
-            name: sluis-config
-        - name: verify-keys
-          configMap:
-            name: sluis-verify-keys
+            name: sluis-issuer-config
         - name: policy
           configMap:
             name: sluis-policy
-        # The root filesystem is read-only, and the directory backends
-        # want somewhere to write.
         - name: tmp
           emptyDir: {}
         
@@ -715,9 +714,9 @@ spec:
                   audience: "audit"
                   expirationSeconds: 3600
                   path: token
-        # The token the console verifies, for the audience it accepts a
-        # workload's token for. Rotated by the kubelet; the controller reads
-        # the file on every call.
+        - name: verify-keys
+          configMap:
+            name: sluis-verify-keys
         - name: github-token
           projected:
             sources:
@@ -725,16 +724,10 @@ spec:
                   audience: sluis
                   expirationSeconds: 3600
                   path: token
-        # One file per connected organisation. Optional: before anything is
-        # connected there may be nothing, and the controller reports each
-        # bound organisation as not connected rather than failing to start.
         - name: github-apps
           secret:
             secretName: sluis-github-apps
             optional: true
-        # The console's records beside them: each organisation's record, the
-        # operators' confirmations and their requests for a pass now. Optional
-        # for the same reason.
         - name: github-records
           configMap:
             name: sluis-github-orgs
@@ -746,14 +739,10 @@ spec:
                   audience: sluis
                   expirationSeconds: 3600
                   path: token
-        # One file per connected workspace: the app's credentials and its bot
-        # token. Optional: before anything is connected there may be nothing.
         - name: slack-credentials
           secret:
             secretName: sluis-slack-credentials
             optional: true
-        # The console's records beside them: each workspace's record, the
-        # shared channels' definitions and the operators' confirmations.
         - name: slack-workspaces
           configMap:
             name: sluis-slack-workspaces

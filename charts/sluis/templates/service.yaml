@@ -9,9 +9,7 @@ metadata:
 spec:
   selector:
     {{- include "sluis.selectorLabels" . | nindent 4 }}
-    {{- if include "sluis.split" . }}
     app.kubernetes.io/component: issuer
-    {{- end }}
   ports:
     - name: issuer
       port: {{ include "sluis.port" . }}
