@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"net/url"
 	"regexp"
-
-	"github.com/truvity/sluis/internal/modcall"
 )
 
 // cloudflareModule is the module name `cloudflare.remote` stands for.
@@ -62,28 +60,33 @@ func (c *Calls) Validate() error {
 	return errors.Join(errs...)
 }
 
-// ModCall is the routing the document says, for [modcall.Dial]. cf is the
-// deprecated `cloudflare.remote`, which is read as `calls.modules.cloudflare`;
-// naming the module in both is refused, since two places would disagree.
-func (c *Calls) ModCall(cf *Cloudflare) (modcall.Config, error) {
-	out := modcall.Config{}
+// Targets are the modules this process reaches elsewhere, by name: `calls`
+// plus the deprecated `cf.Remote`, read as the Cloudflare module's entry.
+// Naming the Cloudflare module in both is refused, since two places would
+// disagree. internal/modcall/dial.FromConfig turns them into a routing.
+func (c *Calls) Targets(cf *Cloudflare) (map[string]CallTarget, error) {
+	var out map[string]CallTarget
 	if c != nil {
-		out.Modules = make(map[string]modcall.Target, len(c.Modules)+1)
+		out = make(map[string]CallTarget, len(c.Modules)+1)
 		for name, t := range c.Modules {
-			out.Modules[name] = modcall.Target{Function: t.Function, URL: t.URL, Audience: t.Audience, TokenFile: t.TokenFile}
+			out[name] = t
 		}
 	}
 	if cf != nil && cf.Remote != nil {
-		if _, dup := out.Modules[cloudflareModule]; dup {
-			return modcall.Config{}, errors.New("cloudflare.remote and calls.modules.cloudflare both name the Cloudflare module: drop the deprecated cloudflare.remote")
+		if _, dup := out[cloudflareModule]; dup {
+			return nil, errors.New("cloudflare.remote and calls.modules.cloudflare both name the Cloudflare module: drop the deprecated cloudflare.remote")
 		}
-		if out.Modules == nil {
-			out.Modules = map[string]modcall.Target{}
+		if out == nil {
+			out = map[string]CallTarget{}
 		}
-		r := cf.Remote
-		out.Modules[cloudflareModule] = modcall.Target{Function: r.Function, URL: r.URL, Audience: r.Audience, TokenFile: r.TokenFile}
+		out[cloudflareModule] = cf.Remote.Target()
 	}
 	return out, nil
+}
+
+// Target is the module's entry in `calls.modules` that says the same.
+func (r *CloudflareRemote) Target() CallTarget {
+	return CallTarget{Function: r.Function, URL: r.URL, Audience: r.Audience, TokenFile: r.TokenFile}
 }
 
 // ValidateCalls holds `calls` to what the schema cannot say, and refuses the
@@ -92,17 +95,17 @@ func (s *Sluis) ValidateCalls() error {
 	if err := s.Calls.Validate(); err != nil {
 		return err
 	}
-	_, err := s.ModCall()
+	_, err := s.Targets()
 	return err
 }
 
-// ModCall is the routing the document says: `calls`, plus the deprecated
+// Targets is [Calls.Targets] for the document: `calls`, plus the deprecated
 // `cloudflare.remote` as the Cloudflare module's entry.
-func (s *Sluis) ModCall() (modcall.Config, error) { return s.Calls.ModCall(s.Cloudflare) }
+func (s *Sluis) Targets() (map[string]CallTarget, error) { return s.Calls.Targets(s.Cloudflare) }
 
-// ModCall is the routing a v2 `serve` document says: `cloudflare.remote` alone,
+// Targets is the routing a v2 `serve` document says: `cloudflare.remote` alone,
 // since the section `calls` came with v3.
-func (s *Serve) ModCall() (modcall.Config, error) { return (*Calls)(nil).ModCall(s.Cloudflare) }
+func (s *Serve) Targets() (map[string]CallTarget, error) { return (*Calls)(nil).Targets(s.Cloudflare) }
 
-// ModCall is the routing a controller document says.
-func (r *Roster) ModCall() (modcall.Config, error) { return r.Calls.ModCall(nil) }
+// Targets is the routing a controller document says.
+func (r *Roster) Targets() (map[string]CallTarget, error) { return r.Calls.Targets(nil) }

@@ -10,8 +10,8 @@ package dial
 import (
 	"context"
 	"fmt"
-	"sort"
 
+	"github.com/truvity/sluis/internal/config"
 	"github.com/truvity/sluis/internal/consoleauth"
 	"github.com/truvity/sluis/internal/modcall"
 )
@@ -25,8 +25,8 @@ import (
 // transport.
 func Dial(ctx context.Context, cfg modcall.Config, class string, local modcall.Caller) (*modcall.Router, error) {
 	var lambda, http modcall.Caller
-	var err error
 	if hasFunction(cfg) {
+		var err error
 		if lambda, err = lambdaCaller(ctx, cfg, class); err != nil {
 			return nil, err
 		}
@@ -87,14 +87,28 @@ func (b byModule) Call(ctx context.Context, module, method string, payload []byt
 	return c.Call(ctx, module, method, payload)
 }
 
-// Functions is the sorted names of the modules cfg reaches by Lambda function.
-func Functions(cfg modcall.Config) []string {
-	var out []string
-	for name, t := range cfg.Modules {
-		if t.Function != "" {
-			out = append(out, name)
-		}
+// FromConfig is the routing a document's `calls` says, with the deprecated
+// `cloudflare.remote` (cf, nil when the document has none) read as the
+// Cloudflare module's entry. It is here and not in internal/config so that the
+// configuration, which the Pulumi library imports, carries no module-call
+// transport.
+func FromConfig(calls *config.Calls, cf *config.Cloudflare) (modcall.Config, error) {
+	targets, err := calls.Targets(cf)
+	if err != nil {
+		return modcall.Config{}, err
 	}
-	sort.Strings(out)
+	return FromTargets(targets), nil
+}
+
+// FromTargets is the routing for the targets [config.Calls.Targets] returns.
+func FromTargets(targets map[string]config.CallTarget) modcall.Config {
+	out := modcall.Config{}
+	if targets == nil {
+		return out
+	}
+	out.Modules = make(map[string]modcall.Target, len(targets))
+	for name, t := range targets {
+		out.Modules[name] = modcall.Target{Function: t.Function, URL: t.URL, Audience: t.Audience, TokenFile: t.TokenFile}
+	}
 	return out
 }
