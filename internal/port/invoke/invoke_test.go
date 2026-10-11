@@ -48,6 +48,9 @@ func TestNotifyInvokesTheFunctionAsynchronouslyWithARunEvent(t *testing.T) {
 	if call.InvocationType != types.InvocationTypeEvent {
 		t.Errorf("invocation type %q: a synchronous invoke would hold the console's request until the pass ends", call.InvocationType)
 	}
+	if aws.ToString(call.Qualifier) != "live-console" {
+		t.Errorf("qualifier %q, want the live-console alias: a run-now targets the controller function's console alias", aws.ToString(call.Qualifier))
+	}
 	var event invoke.Event
 	if err = json.Unmarshal(call.Payload, &event); err != nil {
 		t.Fatal(err)

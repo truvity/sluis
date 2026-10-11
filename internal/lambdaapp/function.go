@@ -10,8 +10,11 @@
 //     schedule sends, `run` what a console request sends (internal/port/invoke);
 //   - {"kind":"cloudflare"}: the rotation of the Cloudflare credentials that are
 //     due (the `cloudflare` section), which has no loop to run in on Lambda;
-//   - {"kind":"refresh"}: the directory refresh, which has no loop to run in on
-//     Lambda;
+//   - {"kind":"clients"}: the reconcile of the generated client secrets, which
+//     has no loop to run in on Lambda;
+//   - {"kind":"refresh"}: the same reconcile and, where the directory is hosted
+//     in the process, its refresh; the name before "clients", accepted for one
+//     release;
 //   - {"kind":"backup"}: the backup module's function (a document of apiVersion
 //     sluis-backup/v1), which takes this event and `rpc` events and nothing else;
 //   - {"kind":"restore"}: the same zip as the restore function (`backup.role:
