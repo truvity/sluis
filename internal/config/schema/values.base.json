@@ -655,6 +655,272 @@
     "tolerations": {
       "type": "array"
     },
+    "split": {
+      "type": "boolean",
+      "default": false,
+      "description": "Render one workload per module (`modules`) instead of the single Deployment. DEPRECATED when false: the single Deployment goes in v1.77. Not with `documents.service`."
+    },
+    "modules": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The per-module workloads of `split: true`. Nothing renders from it with `split: false`.",
+      "properties": {
+        "issuer": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "The issuer: OIDC, the signer and the console. Its document is `config` without `controllers`, plus `calls.modules.<module>` for each enabled module that answers calls. It owns the release's Service and the routes.",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": false,
+              "description": "Render this module's Deployment, ServiceAccount and ConfigMap (and, for a module that answers calls, its Service)."
+            },
+            "replicas": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 1,
+              "description": "Replicas. Unset: `replicaCount` for the issuer, 1 for another module. More than one controller replica needs the tick leases in a State they share."
+            },
+            "resources": {
+              "type": "object"
+            },
+            "image": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Overrides the chart's image for this module. Unset takes `image` (and `image.perModule`).",
+              "properties": {
+                "repository": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "tag": {
+                  "type": "string"
+                }
+              }
+            },
+            "serviceAccount": {
+              "$ref": "#/definitions/moduleServiceAccount",
+              "description": "This module's own account. Name empty: <release>-<module>. With irsa, each module has its own `awsRoleArn`."
+            }
+          }
+        },
+        "github": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "The GitHub module (the controller), with a Service on /rpc.",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": false,
+              "description": "Render this module's Deployment, ServiceAccount and ConfigMap (and, for a module that answers calls, its Service)."
+            },
+            "replicas": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 1,
+              "description": "Replicas. Unset: `replicaCount` for the issuer, 1 for another module. More than one controller replica needs the tick leases in a State they share."
+            },
+            "resources": {
+              "type": "object"
+            },
+            "image": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Overrides the chart's image for this module. Unset takes `image` (and `image.perModule`).",
+              "properties": {
+                "repository": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "tag": {
+                  "type": "string"
+                }
+              }
+            },
+            "serviceAccount": {
+              "$ref": "#/definitions/moduleServiceAccount",
+              "description": "This module's own account. Name empty: <release>-<module>. With irsa, each module has its own `awsRoleArn`."
+            },
+            "rpcPort": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65535,
+              "default": 8081,
+              "description": "The port of the module's Service on /rpc, and of its listener."
+            },
+            "audience": {
+              "type": "string",
+              "description": "The audience a call to this module carries: the module's name when empty."
+            },
+            "config": {
+              "type": "object",
+              "description": "The module's document, without its apiVersion."
+            }
+          }
+        },
+        "slack": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "The Slack module (the controller).",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": false,
+              "description": "Render this module's Deployment, ServiceAccount and ConfigMap (and, for a module that answers calls, its Service)."
+            },
+            "replicas": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 1,
+              "description": "Replicas. Unset: `replicaCount` for the issuer, 1 for another module. More than one controller replica needs the tick leases in a State they share."
+            },
+            "resources": {
+              "type": "object"
+            },
+            "image": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Overrides the chart's image for this module. Unset takes `image` (and `image.perModule`).",
+              "properties": {
+                "repository": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "tag": {
+                  "type": "string"
+                }
+              }
+            },
+            "serviceAccount": {
+              "$ref": "#/definitions/moduleServiceAccount",
+              "description": "This module's own account. Name empty: <release>-<module>. With irsa, each module has its own `awsRoleArn`."
+            },
+            "config": {
+              "type": "object",
+              "description": "The module's document, without its apiVersion."
+            }
+          }
+        },
+        "google": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "The Google directory module, with a Service on /rpc.",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": false,
+              "description": "Render this module's Deployment, ServiceAccount and ConfigMap (and, for a module that answers calls, its Service)."
+            },
+            "replicas": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 1,
+              "description": "Replicas. Unset: `replicaCount` for the issuer, 1 for another module. More than one controller replica needs the tick leases in a State they share."
+            },
+            "resources": {
+              "type": "object"
+            },
+            "image": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Overrides the chart's image for this module. Unset takes `image` (and `image.perModule`).",
+              "properties": {
+                "repository": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "tag": {
+                  "type": "string"
+                }
+              }
+            },
+            "serviceAccount": {
+              "$ref": "#/definitions/moduleServiceAccount",
+              "description": "This module's own account. Name empty: <release>-<module>. With irsa, each module has its own `awsRoleArn`."
+            },
+            "rpcPort": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65535,
+              "default": 8081,
+              "description": "The port of the module's Service on /rpc, and of its listener."
+            },
+            "audience": {
+              "type": "string",
+              "description": "The audience a call to this module carries: the module's name when empty."
+            },
+            "config": {
+              "type": "object",
+              "description": "The module's document, without its apiVersion."
+            }
+          }
+        },
+        "cloudflare": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "The Cloudflare module (the STS minter's rotation), with a Service on /rpc.",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": false,
+              "description": "Render this module's Deployment, ServiceAccount and ConfigMap (and, for a module that answers calls, its Service)."
+            },
+            "replicas": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 1,
+              "description": "Replicas. Unset: `replicaCount` for the issuer, 1 for another module. More than one controller replica needs the tick leases in a State they share."
+            },
+            "resources": {
+              "type": "object"
+            },
+            "image": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Overrides the chart's image for this module. Unset takes `image` (and `image.perModule`).",
+              "properties": {
+                "repository": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "tag": {
+                  "type": "string"
+                }
+              }
+            },
+            "serviceAccount": {
+              "$ref": "#/definitions/moduleServiceAccount",
+              "description": "This module's own account. Name empty: <release>-<module>. With irsa, each module has its own `awsRoleArn`."
+            },
+            "rpcPort": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65535,
+              "default": 8081,
+              "description": "The port of the module's Service on /rpc, and of its listener."
+            },
+            "audience": {
+              "type": "string",
+              "description": "The audience a call to this module carries: the module's name when empty."
+            },
+            "config": {
+              "type": "object",
+              "description": "The module's document, without its apiVersion."
+            }
+          }
+        }
+      }
+    },
     "console": {
       "type": "object",
       "additionalProperties": false,

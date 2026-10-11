@@ -1,5 +1,9 @@
 ## Unreleased
 
+### Added
+
+- **The chart renders one workload per module with `split: true`.** New values `split` (default `false`, which keeps today's single Deployment and leaves every existing render unchanged) and `modules.<m>.{enabled,replicas,resources,image,serviceAccount,config}` for `issuer`, `github`, `slack`, `google` and `cloudflare` (`rpcPort` and `audience` for the three that answer calls). Each enabled module gets a Deployment, a ServiceAccount `<full name>-<module>` and a ConfigMap `<full name>-<module>-config` holding its own document; github, google and cloudflare get a Service on `/rpc`. The controllers' Role is bound to the github and slack accounts only, and the three callees' accounts are bound to `system:auth-delegator` for the TokenReview of a caller's projected token. The issuer's document is `config` without `controllers`, plus `calls.modules.<module>` (`url`, `audience`, `tokenFile`) for each enabled callee, and the issuer pod projects one token per audience. The release's Service and routes stay on the issuer. `split` is refused with `documents.service`, and with a `config.controllers` section whose module is off. `split: false` is deprecated and goes in v1.77. See `charts/sluis/values.yaml` and the `split-minimal` golden case.
+
 ## v1.75.0-rc.10
 
 ### Added

@@ -1,7 +1,9 @@
 {{- include "sluis.prepare" . -}}
 {{- if eq .Values.renders "app" -}}
-{{- $github := include "sluis.controllerOn" (dict "root" . "kind" "github") -}}
-{{- $slack := include "sluis.controllerOn" (dict "root" . "kind" "slack") -}}
+{{- /* With `split` a controller is on when its module is, and the Role is bound to the module's own account. */}}
+{{- $split := include "sluis.split" . -}}
+{{- $github := ternary (include "sluis.moduleOn" (dict "root" . "module" "github")) (include "sluis.controllerOn" (dict "root" . "kind" "github")) (ne $split "") -}}
+{{- $slack := ternary (include "sluis.moduleOn" (dict "root" . "module" "slack")) (include "sluis.controllerOn" (dict "root" . "kind" "slack")) (ne $split "") -}}
 {{- if or $github $slack }}
 ---
 # What the controllers in this process may do to the cluster, bound to the
@@ -49,8 +51,21 @@ roleRef:
   kind: Role
   name: {{ include "sluis.fullname" . }}-controllers
 subjects:
+  {{- if $split }}
+  {{- if $github }}
+  - kind: ServiceAccount
+    name: {{ include "sluis.moduleAccountName" (dict "root" . "module" "github") }}
+    namespace: {{ .Release.Namespace }}
+  {{- end }}
+  {{- if $slack }}
+  - kind: ServiceAccount
+    name: {{ include "sluis.moduleAccountName" (dict "root" . "module" "slack") }}
+    namespace: {{ .Release.Namespace }}
+  {{- end }}
+  {{- else }}
   - kind: ServiceAccount
     name: {{ include "sluis.serviceAccountName" . }}
     namespace: {{ .Release.Namespace }}
+  {{- end }}
 {{- end }}
 {{ end -}}

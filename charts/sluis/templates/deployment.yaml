@@ -1,5 +1,5 @@
 {{- include "sluis.prepare" . -}}
-{{- if eq .Values.renders "app" -}}
+{{- if and (eq .Values.renders "app") (not (include "sluis.split" .)) -}}
 {{- include "sluis.checks" . }}
 apiVersion: apps/v1
 kind: Deployment
