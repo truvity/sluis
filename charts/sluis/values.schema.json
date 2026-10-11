@@ -6688,7 +6688,7 @@
     },
     "modules": {
       "additionalProperties": false,
-      "description": "The per-module workloads of `split: true`. Nothing renders from it with `split: false`.",
+      "description": "The per-module workloads (decision D-v176-9): the chart renders no single Deployment. The issuer is always rendered, another module when it is enabled.",
       "properties": {
         "cloudflare": {
           "additionalProperties": false,
@@ -6699,7 +6699,7 @@
               "type": "string"
             },
             "config": {
-              "description": "The module's document, without its apiVersion.",
+              "description": "The module's document, without its apiVersion. Required once the module is enabled.",
               "type": "object"
             },
             "enabled": {
@@ -6717,6 +6717,32 @@
                 },
                 "tag": {
                   "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "podDisruptionBudget": {
+              "additionalProperties": false,
+              "description": "The module's PodDisruptionBudget: maxUnavailable 1 unless minAvailable is given (one of the two; a number at or above the replicas is refused).",
+              "properties": {
+                "enabled": {
+                  "default": true,
+                  "type": "boolean"
+                },
+                "maxUnavailable": {
+                  "default": 1,
+                  "description": "A number of pods, or a percentage such as 50%.",
+                  "type": [
+                    "integer",
+                    "string"
+                  ]
+                },
+                "minAvailable": {
+                  "description": "A number of pods, or a percentage such as 50%.",
+                  "type": [
+                    "integer",
+                    "string"
+                  ]
                 }
               },
               "type": "object"
@@ -6741,7 +6767,7 @@
             },
             "serviceAccount": {
               "$ref": "#/definitions/moduleServiceAccount",
-              "description": "This module's own account. Name empty: <release>-<module>. With irsa, each module has its own `awsRoleArn`."
+              "description": "This module's own account. Name empty: <release>-<module> (the issuer's: the release's `serviceAccount.name` when that is set). With irsa, each module but the issuer has its own `awsRoleArn`; the issuer takes the release's."
             }
           },
           "type": "object"
@@ -6756,7 +6782,7 @@
             },
             "config": {
               "$ref": "#/definitions/config-controller-github",
-              "description": "The GitHub module's document (`split: true`), without its apiVersion, over `config.controllers.github`. Its schema is schemas/config/controller-github.schema.json."
+              "description": "The GitHub module's document, without its apiVersion, over `config.controllers.github`. Its schema is schemas/config/controller-github.schema.json."
             },
             "enabled": {
               "default": false,
@@ -6773,6 +6799,32 @@
                 },
                 "tag": {
                   "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "podDisruptionBudget": {
+              "additionalProperties": false,
+              "description": "The module's PodDisruptionBudget: maxUnavailable 1 unless minAvailable is given (one of the two; a number at or above the replicas is refused).",
+              "properties": {
+                "enabled": {
+                  "default": true,
+                  "type": "boolean"
+                },
+                "maxUnavailable": {
+                  "default": 1,
+                  "description": "A number of pods, or a percentage such as 50%.",
+                  "type": [
+                    "integer",
+                    "string"
+                  ]
+                },
+                "minAvailable": {
+                  "description": "A number of pods, or a percentage such as 50%.",
+                  "type": [
+                    "integer",
+                    "string"
+                  ]
                 }
               },
               "type": "object"
@@ -6797,7 +6849,7 @@
             },
             "serviceAccount": {
               "$ref": "#/definitions/moduleServiceAccount",
-              "description": "This module's own account. Name empty: <release>-<module>. With irsa, each module has its own `awsRoleArn`."
+              "description": "This module's own account. Name empty: <release>-<module> (the issuer's: the release's `serviceAccount.name` when that is set). With irsa, each module but the issuer has its own `awsRoleArn`; the issuer takes the release's."
             }
           },
           "type": "object"
@@ -6811,7 +6863,7 @@
               "type": "string"
             },
             "config": {
-              "description": "The module's document, without its apiVersion.",
+              "description": "The module's document, without its apiVersion. Required once the module is enabled.",
               "type": "object"
             },
             "enabled": {
@@ -6829,6 +6881,32 @@
                 },
                 "tag": {
                   "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "podDisruptionBudget": {
+              "additionalProperties": false,
+              "description": "The module's PodDisruptionBudget: maxUnavailable 1 unless minAvailable is given (one of the two; a number at or above the replicas is refused).",
+              "properties": {
+                "enabled": {
+                  "default": true,
+                  "type": "boolean"
+                },
+                "maxUnavailable": {
+                  "default": 1,
+                  "description": "A number of pods, or a percentage such as 50%.",
+                  "type": [
+                    "integer",
+                    "string"
+                  ]
+                },
+                "minAvailable": {
+                  "description": "A number of pods, or a percentage such as 50%.",
+                  "type": [
+                    "integer",
+                    "string"
+                  ]
                 }
               },
               "type": "object"
@@ -6853,19 +6931,50 @@
             },
             "serviceAccount": {
               "$ref": "#/definitions/moduleServiceAccount",
-              "description": "This module's own account. Name empty: <release>-<module>. With irsa, each module has its own `awsRoleArn`."
+              "description": "This module's own account. Name empty: <release>-<module> (the issuer's: the release's `serviceAccount.name` when that is set). With irsa, each module but the issuer has its own `awsRoleArn`; the issuer takes the release's."
             }
           },
           "type": "object"
         },
         "issuer": {
           "additionalProperties": false,
-          "description": "The issuer: OIDC, the signer and the console. Its document is `config` without `controllers`, plus `calls.modules.<module>` for each enabled module that answers calls. It owns the release's Service and the routes.",
+          "description": "The issuer: OIDC, the signer and the console. Always rendered. Its document is `config` without `controllers`, plus a `<module>.remote` ({url, audience, tokenFile}) for each enabled module that answers calls. It owns the release's Service and the routes.",
           "properties": {
-            "enabled": {
-              "default": false,
-              "description": "Render this module's Deployment, ServiceAccount and ConfigMap (and, for a module that answers calls, its Service).",
-              "type": "boolean"
+            "autoscaling": {
+              "additionalProperties": false,
+              "description": "A HorizontalPodAutoscaler (autoscaling/v2) for the issuer, the one module that scales: a controller runs one pass at a time under a lease. It owns the replica count, so `replicas` stays unset. A utilisation target is a share of `resources.requests`, which it requires.",
+              "properties": {
+                "enabled": {
+                  "default": false,
+                  "type": "boolean"
+                },
+                "maxReplicas": {
+                  "default": 4,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "minReplicas": {
+                  "default": 2,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "targetCPUUtilizationPercentage": {
+                  "default": 80,
+                  "minimum": 1,
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "targetMemoryUtilizationPercentage": {
+                  "minimum": 1,
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                }
+              },
+              "type": "object"
             },
             "image": {
               "additionalProperties": false,
@@ -6877,6 +6986,32 @@
                 },
                 "tag": {
                   "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "podDisruptionBudget": {
+              "additionalProperties": false,
+              "description": "The module's PodDisruptionBudget: maxUnavailable 1 unless minAvailable is given (one of the two; a number at or above the replicas is refused).",
+              "properties": {
+                "enabled": {
+                  "default": true,
+                  "type": "boolean"
+                },
+                "maxUnavailable": {
+                  "default": 1,
+                  "description": "A number of pods, or a percentage such as 50%.",
+                  "type": [
+                    "integer",
+                    "string"
+                  ]
+                },
+                "minAvailable": {
+                  "description": "A number of pods, or a percentage such as 50%.",
+                  "type": [
+                    "integer",
+                    "string"
+                  ]
                 }
               },
               "type": "object"
@@ -6894,7 +7029,7 @@
             },
             "serviceAccount": {
               "$ref": "#/definitions/moduleServiceAccount",
-              "description": "This module's own account. Name empty: <release>-<module>. With irsa, each module has its own `awsRoleArn`."
+              "description": "This module's own account. Name empty: <release>-<module> (the issuer's: the release's `serviceAccount.name` when that is set). With irsa, each module but the issuer has its own `awsRoleArn`; the issuer takes the release's."
             }
           },
           "type": "object"
@@ -6905,7 +7040,7 @@
           "properties": {
             "config": {
               "$ref": "#/definitions/config-controller-slack",
-              "description": "The Slack module's document (`split: true`), without its apiVersion, over `config.controllers.slack`. Its schema is schemas/config/controller-slack.schema.json."
+              "description": "The Slack module's document, without its apiVersion, over `config.controllers.slack`. Its schema is schemas/config/controller-slack.schema.json."
             },
             "enabled": {
               "default": false,
@@ -6926,6 +7061,32 @@
               },
               "type": "object"
             },
+            "podDisruptionBudget": {
+              "additionalProperties": false,
+              "description": "The module's PodDisruptionBudget: maxUnavailable 1 unless minAvailable is given (one of the two; a number at or above the replicas is refused).",
+              "properties": {
+                "enabled": {
+                  "default": true,
+                  "type": "boolean"
+                },
+                "maxUnavailable": {
+                  "default": 1,
+                  "description": "A number of pods, or a percentage such as 50%.",
+                  "type": [
+                    "integer",
+                    "string"
+                  ]
+                },
+                "minAvailable": {
+                  "description": "A number of pods, or a percentage such as 50%.",
+                  "type": [
+                    "integer",
+                    "string"
+                  ]
+                }
+              },
+              "type": "object"
+            },
             "replicas": {
               "description": "Replicas. Unset: `replicaCount` for the issuer, 1 for another module. More than one controller replica needs the tick leases in a State they share.",
               "minimum": 1,
@@ -6939,7 +7100,7 @@
             },
             "serviceAccount": {
               "$ref": "#/definitions/moduleServiceAccount",
-              "description": "This module's own account. Name empty: <release>-<module>. With irsa, each module has its own `awsRoleArn`."
+              "description": "This module's own account. Name empty: <release>-<module> (the issuer's: the release's `serviceAccount.name` when that is set). With irsa, each module but the issuer has its own `awsRoleArn`; the issuer takes the release's."
             }
           },
           "type": "object"
@@ -6959,6 +7120,84 @@
             "type": "string"
           },
           "type": "array"
+        },
+        "egress": {
+          "additionalProperties": false,
+          "description": "Each module's egress: DNS, its peers, HTTPS and `extra`. A NetworkPolicy cannot name a host, so the providers, the cloud APIs and the API server are one HTTPS rule.",
+          "properties": {
+            "dnsNamespace": {
+              "default": "kube-system",
+              "description": "The namespace the cluster's DNS runs in.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "enabled": {
+              "default": true,
+              "description": "false renders ingress-only policies and leaves egress unrestricted.",
+              "type": "boolean"
+            },
+            "extra": {
+              "additionalProperties": false,
+              "description": "Rules appended to a module's egress, as NetworkPolicyEgressRule: the audit receiver, a collector, a secret store.",
+              "properties": {
+                "cloudflare": {
+                  "items": {
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                "github": {
+                  "items": {
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                "google": {
+                  "items": {
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                "issuer": {
+                  "items": {
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                "slack": {
+                  "items": {
+                    "type": "object"
+                  },
+                  "type": "array"
+                }
+              },
+              "type": "object"
+            },
+            "https": {
+              "additionalProperties": false,
+              "properties": {
+                "cidrs": {
+                  "description": "Where HTTPS may go. Empty renders no such rule.",
+                  "items": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "ports": {
+                  "items": {
+                    "maximum": 65535,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "minItems": 1,
+                  "type": "array"
+                }
+              },
+              "type": "object"
+            }
+          },
+          "type": "object"
         },
         "enabled": {
           "type": "boolean"
@@ -7464,11 +7703,6 @@
         }
       },
       "type": "object"
-    },
-    "split": {
-      "default": false,
-      "description": "Render one workload per module (`modules`) instead of the single Deployment. DEPRECATED when false: the single Deployment goes in v1.77. Not with `documents.service`.",
-      "type": "boolean"
     },
     "telemetry": {
       "additionalProperties": false,

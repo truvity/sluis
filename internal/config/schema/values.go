@@ -25,8 +25,8 @@ var configAt = []struct {
 }{
 	{[]string{"config"}, "sluis", ""},
 	{[]string{"backup", "config"}, "sluis-backup", "The backup module's document (`backup.role` `backup`; the restore Job runs the same document in the restore role), without its apiVersion, which the chart writes: rendered as it stands into the ConfigMap <release>-backup-config. Its schema is schemas/config/sluis-backup.schema.json. Layout v5 only."},
-	{[]string{"modules", "github", "config"}, "controller-github", "The GitHub module's document (`split: true`), without its apiVersion, over `config.controllers.github`. Its schema is schemas/config/controller-github.schema.json."},
-	{[]string{"modules", "slack", "config"}, "controller-slack", "The Slack module's document (`split: true`), without its apiVersion, over `config.controllers.slack`. Its schema is schemas/config/controller-slack.schema.json."},
+	{[]string{"modules", "github", "config"}, "controller-github", "The GitHub module's document, without its apiVersion, over `config.controllers.github`. Its schema is schemas/config/controller-github.schema.json."},
+	{[]string{"modules", "slack", "config"}, "controller-slack", "The Slack module's document, without its apiVersion, over `config.controllers.slack`. Its schema is schemas/config/controller-slack.schema.json."},
 	{[]string{"policy"}, "policy", "The policy document, without its apiVersion, which the chart writes: rendered into the ConfigMap <release>-policy beside the sections the chart's own values fill (exchange.clusters and exchange.aws from `exchange`, the catalogues from `githubApps.catalogue` and `slackApps`). Its schema is schemas/config/policy.schema.json. An access document or a directory of layers is rendered first: `sluisctl policy render`."},
 }
 

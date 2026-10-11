@@ -1,5 +1,115 @@
 ---
 # Source: sluis/templates/modules.yaml
+# Voluntary disruptions (a node drain) may take down only as many of the
+# issuer module's pods as this allows.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: sluis-issuer
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: issuer
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sluis
+      app.kubernetes.io/instance: sluis
+      app.kubernetes.io/component: issuer
+
+---
+# Source: sluis/templates/modules.yaml
+# Voluntary disruptions (a node drain) may take down only as many of the
+# github module's pods as this allows.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: sluis-github
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: github
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sluis
+      app.kubernetes.io/instance: sluis
+      app.kubernetes.io/component: github
+
+---
+# Source: sluis/templates/modules.yaml
+# Voluntary disruptions (a node drain) may take down only as many of the
+# slack module's pods as this allows.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: sluis-slack
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: slack
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sluis
+      app.kubernetes.io/instance: sluis
+      app.kubernetes.io/component: slack
+
+---
+# Source: sluis/templates/modules.yaml
+# Voluntary disruptions (a node drain) may take down only as many of the
+# google module's pods as this allows.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: sluis-google
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: google
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sluis
+      app.kubernetes.io/instance: sluis
+      app.kubernetes.io/component: google
+
+---
+# Source: sluis/templates/modules.yaml
+# Voluntary disruptions (a node drain) may take down only as many of the
+# cloudflare module's pods as this allows.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: sluis-cloudflare
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: cloudflare
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sluis
+      app.kubernetes.io/instance: sluis
+      app.kubernetes.io/component: cloudflare
+
+---
+# Source: sluis/templates/modules.yaml
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -98,20 +208,21 @@ data:
     apiVersion: sluis.truvity.github.io/sluis/v3
     audit:
       tokenFile: /var/run/audit/token
-    calls:
-      modules:
-        cloudflare:
-          audience: cloudflare
-          tokenFile: /var/run/secrets/sluis/cloudflare/token
-          url: http://sluis-cloudflare.default.svc:8081
-        github:
-          audience: github
-          tokenFile: /var/run/secrets/sluis/github/token
-          url: http://sluis-github.default.svc:8081
-        google:
-          audience: google
-          tokenFile: /var/run/secrets/sluis/google/token
-          url: http://sluis-google.default.svc:8081
+    cloudflare:
+      remote:
+        audience: cloudflare
+        tokenFile: /var/run/secrets/sluis/cloudflare/token
+        url: http://sluis-cloudflare.default.svc:8081
+    github:
+      remote:
+        audience: github
+        tokenFile: /var/run/secrets/sluis/github/token
+        url: http://sluis-github.default.svc:8081
+    google:
+      remote:
+        audience: google
+        tokenFile: /var/run/secrets/sluis/google/token
+        url: http://sluis-google.default.svc:8081
     inCluster: true
     issuerURL: https://issuer.example
     lifetimes:
@@ -355,7 +466,7 @@ subjects:
 ---
 # Source: sluis/templates/controllers.yaml
 # What the controllers in this process may do to the cluster, bound to the
-# service's own account (there is one account and one pod). Update, by name,
+# accounts of the pods that run them (the github and slack modules'). Update, by name,
 # the ConfigMaps they report into, and the one Secret people's linked GitHub
 # accounts are kept in: each link's token pair rotates every time it is renewed,
 # and the renewed pair has to be written back. The service creates those
@@ -569,7 +680,7 @@ spec:
       annotations:
         # Each document is read once, at start: a change to it, or to the
         # policy, is a rollout.
-        checksum/config: 7b03fe29e57bcf3cd52724ce2e200e390f6136f82ed2abfb1119cc9da5ba8401
+        checksum/config: 7a6216e67a71dcb4cc9c01898c3a7ea2a13357d5a1188bb164a702c9bd4ea858
         checksum/policy: 9909eca423d3080cb9a8538d9e143b48ef12798afd703ad5562657bc38b316e5
     spec:
       serviceAccountName: sluis-issuer

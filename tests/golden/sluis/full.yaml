@@ -1,31 +1,30 @@
 ---
 # Source: sluis/templates/networkpolicy.yaml
-# Ingress only. Everything with a browser arrives through the gateway;
-# these are the in-cluster callers — the proxies verifying tokens and the
-# workloads exchanging them.
-#
-# No egress rules: this service has to reach the API server, the hub and
-# whichever directory a person signs in with, and a chart that guessed at
-# that list would be a chart that breaks a login the day a provider adds
-# a hostname. The fleet's own egress policy is where that belongs: a
-# Kubernetes NetworkPolicy cannot name a host, and the Slack controller
-# (config.controllers.slack) needs slack.com:443 to be allowed there, as the
-# GitHub controller needs api.github.com:443.
+# The issuer. Ingress: the gateway and the namespaces that call it (the proxies
+# verifying tokens, the workloads exchanging them), and the controllers, which
+# read the console's API through the release's own Service.
+# Egress is DNS, the module's own peers, and HTTPS to `networkPolicy.egress.https`
+# (the providers' hosts, the cloud APIs and the API server cannot be named in a
+# NetworkPolicy), and what `networkPolicy.egress.extra.issuer` adds.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: sluis
+  name: sluis-issuer
   labels:
     app.kubernetes.io/name: sluis
     app.kubernetes.io/instance: sluis
     app.kubernetes.io/version: "0.0.0"
     app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: issuer
 spec:
   podSelector:
     matchLabels:
       app.kubernetes.io/name: sluis
       app.kubernetes.io/instance: sluis
-  policyTypes: [Ingress]
+      app.kubernetes.io/component: issuer
+  policyTypes:
+    - Ingress
+    - Egress
   ingress:
     - from:
         - namespaceSelector:
@@ -39,19 +38,214 @@ spec:
               kubernetes.io/metadata.name: proxies
       ports:
         - port: 8443
-    # The controllers in this process read the console's API through this
-    # release's own Service, which may route the call to another replica of
-    # the pod: so the pods admit one another on the issuer's port.
     - from:
         - podSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/component
+                operator: In
+                values: ["github","slack"]
             matchLabels:
               app.kubernetes.io/name: sluis
               app.kubernetes.io/instance: sluis
       ports:
         - port: 8443
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - { port: 53, protocol: UDP }
+        - { port: 53, protocol: TCP }
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: sluis
+              app.kubernetes.io/instance: sluis
+              app.kubernetes.io/component: github
+      ports:
+        - port: 8081
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - { port: 443, protocol: TCP }
 
 ---
-# Source: sluis/templates/serviceaccount.yaml
+# Source: sluis/templates/networkpolicy.yaml
+# The github module answers /rpc, and only the issuer's pods may call it: the
+# module checks the caller's token too, and this is the second lock.
+# Egress is DNS, the module's own peers, and HTTPS to `networkPolicy.egress.https`
+# (the providers' hosts, the cloud APIs and the API server cannot be named in a
+# NetworkPolicy), and what `networkPolicy.egress.extra.github` adds.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: sluis-github
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: github
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: sluis
+      app.kubernetes.io/instance: sluis
+      app.kubernetes.io/component: github
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: sluis
+              app.kubernetes.io/instance: sluis
+              app.kubernetes.io/component: issuer
+      ports:
+        - port: 8081
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - { port: 53, protocol: UDP }
+        - { port: 53, protocol: TCP }
+    # The console's API, through the release's Service.
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: sluis
+              app.kubernetes.io/instance: sluis
+              app.kubernetes.io/component: issuer
+      ports:
+        - port: 8443
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - { port: 443, protocol: TCP }
+
+---
+# Source: sluis/templates/networkpolicy.yaml
+# The slack module answers no calls: nothing may connect to it.
+# Egress is DNS, the module's own peers, and HTTPS to `networkPolicy.egress.https`
+# (the providers' hosts, the cloud APIs and the API server cannot be named in a
+# NetworkPolicy), and what `networkPolicy.egress.extra.slack` adds.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: sluis-slack
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: slack
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: sluis
+      app.kubernetes.io/instance: sluis
+      app.kubernetes.io/component: slack
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress: []
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - { port: 53, protocol: UDP }
+        - { port: 53, protocol: TCP }
+    # The console's API, through the release's Service.
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: sluis
+              app.kubernetes.io/instance: sluis
+              app.kubernetes.io/component: issuer
+      ports:
+        - port: 8443
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - { port: 443, protocol: TCP }
+
+---
+# Source: sluis/templates/modules.yaml
+# Voluntary disruptions (a node drain) may take down only as many of the
+# issuer module's pods as this allows.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: sluis-issuer
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: issuer
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sluis
+      app.kubernetes.io/instance: sluis
+      app.kubernetes.io/component: issuer
+
+---
+# Source: sluis/templates/modules.yaml
+# Voluntary disruptions (a node drain) may take down only as many of the
+# github module's pods as this allows.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: sluis-github
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: github
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sluis
+      app.kubernetes.io/instance: sluis
+      app.kubernetes.io/component: github
+
+---
+# Source: sluis/templates/modules.yaml
+# Voluntary disruptions (a node drain) may take down only as many of the
+# slack module's pods as this allows.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: sluis-slack
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: slack
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sluis
+      app.kubernetes.io/instance: sluis
+      app.kubernetes.io/component: slack
+
+---
+# Source: sluis/templates/modules.yaml
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -61,6 +255,33 @@ metadata:
     app.kubernetes.io/instance: sluis
     app.kubernetes.io/version: "0.0.0"
     app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: issuer
+
+---
+# Source: sluis/templates/modules.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sluis-github
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: github
+
+---
+# Source: sluis/templates/modules.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sluis-slack
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: slack
 
 ---
 # Source: sluis/templates/serviceaccount.yaml
@@ -80,21 +301,18 @@ metadata:
     app.kubernetes.io/managed-by: Helm
 
 ---
-# Source: sluis/templates/configmap.yaml
-# What `sluis serve --config` reads: `config`, as the values give it, with
-# nothing added, renamed or dropped but the apiVersion the chart writes. The
-# binary validates it against schemas/config/sluis.schema.json at start, and
-# values.schema.json holds the values to the same schema before this renders.
+# Source: sluis/templates/modules.yaml
+# The issuer module's document, read once at start.
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: sluis-config
+  name: sluis-issuer-config
   labels:
     app.kubernetes.io/name: sluis
     app.kubernetes.io/instance: sluis
     app.kubernetes.io/version: "0.0.0"
     app.kubernetes.io/managed-by: Helm
-    app.kubernetes.io/component: serve
+    app.kubernetes.io/component: issuer
 data:
   config.yaml: |
     apiVersion: sluis.truvity.github.io/sluis/v3
@@ -108,13 +326,6 @@ data:
     console:
       client: access-console
       origin: https://access.example
-    controllers:
-      github:
-        consoleURL: http://sluis.identity.svc:8443/console
-        interval: 5m
-      slack:
-        consoleURL: http://sluis.identity.svc:8443/console
-        interval: 5m
     directory:
       workspaces:
       - admin: admin@acme.example
@@ -134,6 +345,11 @@ data:
       freshnessWindow: 20m
       probeInterval: 2m
       refreshInterval: 10m
+    github:
+      remote:
+        audience: github
+        tokenFile: /var/run/secrets/sluis/github/token
+        url: http://sluis-github.identity.svc:8081
     inCluster: true
     issuerURL: https://access.example
     lifetimes:
@@ -177,6 +393,44 @@ data:
       cluster: true
       passwordSecret: valkey/password
       tls: true
+
+---
+# Source: sluis/templates/modules.yaml
+# The github module's document, read once at start.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sluis-github-config
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: github
+data:
+  config.yaml: |
+    apiVersion: sluis.truvity.github.io/controller-github/v2
+    consoleURL: http://sluis.identity.svc:8443/console
+    interval: 5m
+
+---
+# Source: sluis/templates/modules.yaml
+# The slack module's document, read once at start.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sluis-slack-config
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: slack
+data:
+  config.yaml: |
+    apiVersion: sluis.truvity.github.io/controller-slack/v2
+    consoleURL: http://sluis.identity.svc:8443/console
+    interval: 5m
 
 ---
 # Source: sluis/templates/policy-configmap.yaml
@@ -324,6 +578,29 @@ rules:
     verbs: ["create"]
 
 ---
+# Source: sluis/templates/modules.yaml
+# The module checks its callers' tokens with a TokenReview, which is the one
+# thing system:auth-delegator allows (and a SubjectAccessReview).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: sluis-identity-github-auth-delegator
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: github
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:auth-delegator
+subjects:
+  - kind: ServiceAccount
+    name: sluis-github
+    namespace: identity
+
+---
 # Source: sluis/templates/serviceaccount.yaml
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -346,7 +623,7 @@ subjects:
 ---
 # Source: sluis/templates/controllers.yaml
 # What the controllers in this process may do to the cluster, bound to the
-# service's own account (there is one account and one pod). Update, by name,
+# accounts of the pods that run them (the github and slack modules'). Update, by name,
 # the ConfigMaps they report into, and the one Secret people's linked GitHub
 # accounts are kept in: each link's token pair rotates every time it is renewed,
 # and the renewed pair has to be written back. The service creates those
@@ -413,7 +690,10 @@ roleRef:
   name: sluis-controllers
 subjects:
   - kind: ServiceAccount
-    name: issuer
+    name: sluis-github
+    namespace: identity
+  - kind: ServiceAccount
+    name: sluis-slack
     namespace: identity
 
 ---
@@ -437,6 +717,30 @@ subjects:
     namespace: identity
 
 ---
+# Source: sluis/templates/modules.yaml
+# Calls to the github module, on /rpc. A call carries a projected ServiceAccount
+# token minted for the module's audience, which the module checks with a TokenReview.
+apiVersion: v1
+kind: Service
+metadata:
+  name: sluis-github
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: github
+spec:
+  selector:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/component: github
+  ports:
+    - name: rpc
+      port: 8081
+      targetPort: rpc
+
+---
 # Source: sluis/templates/service.yaml
 apiVersion: v1
 kind: Service
@@ -451,54 +755,54 @@ spec:
   selector:
     app.kubernetes.io/name: sluis
     app.kubernetes.io/instance: sluis
+    app.kubernetes.io/component: issuer
   ports:
     - name: issuer
       port: 8443
       targetPort: issuer
 
 ---
-# Source: sluis/templates/deployment.yaml
+# Source: sluis/templates/modules.yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: sluis
+  name: sluis-issuer
   labels:
     app.kubernetes.io/name: sluis
     app.kubernetes.io/instance: sluis
     app.kubernetes.io/version: "0.0.0"
     app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: issuer
 spec:
   replicas: 1
   selector:
     matchLabels:
       app.kubernetes.io/name: sluis
       app.kubernetes.io/instance: sluis
+      app.kubernetes.io/component: issuer
   template:
     metadata:
       labels:
         app.kubernetes.io/name: sluis
         app.kubernetes.io/instance: sluis
+        app.kubernetes.io/component: issuer
       annotations:
-        # Configuration and policy are immutable for an instance: each document
-        # is read once, at start, so a change to either is a rollout. One
-        # checksum per document this process reads: the service document (the
-        # controllers' sections are in it) and the policy.
-        checksum/config: 0e1af74de96b6301847facdefce17161de8252e2ca9f085516b0423d6a4ad3d1
+        # Each document is read once, at start: a change to it, or to the
+        # policy, is a rollout.
+        checksum/config: 3535ce9eab5a564188cbc088ffbc9dbbe8bbb85a8483a51aa4ba835049285fa0
         checksum/policy: 164a6383e1a8a507459fac193139e235f56b49d8d6e02c883e65b490101c88b6
         example.com/scrape: "false"
     spec:
       serviceAccountName: issuer
       securityContext:
         runAsNonRoot: true
-        # The projected secrets are mode 0440: readable by this group, whatever
-        # user the image runs as.
         runAsUser: 65532
         runAsGroup: 65532
         fsGroup: 65532
         seccompProfile:
           type: RuntimeDefault
       containers:
-        - name: serve
+        - name: issuer
           image: "registry.example/sluis/sluis:v1.2.3"
           imagePullPolicy: Always
           securityContext:
@@ -511,11 +815,8 @@ spec:
               containerPort: 8443
             - name: health
               containerPort: 9090
-          # The whole of the configuration is the service document, `config`
-          # rendered as it stands, and the policy document it names. The
-          # environment carries only the secrets the document names.
           args:
-            - serve
+            - issuer
             - --config=/etc/sluis/config.yaml
           env:
             - name: SLUIS_EXTRA
@@ -524,8 +825,6 @@ spec:
                   name: extra
                   key: value
           volumeMounts:
-            # Read once, at start: a subPath is enough, since a change replaces
-            # the pod (checksum/*). The policy keeps its directory.
             - name: config
               mountPath: /etc/sluis/config.yaml
               subPath: config.yaml
@@ -533,38 +832,19 @@ spec:
             - name: policy
               mountPath: /var/run/access-issuer/policy
               readOnly: true
-            - name: signing-key
-              mountPath: /var/run/access-issuer/signing-key
-              readOnly: true
             - name: tmp
               mountPath: /tmp
             
             - name: audit-token
               mountPath: /var/run/audit
               readOnly: true
-            # The GitHub controller's: the token the console verifies for it, the
-            # Apps' credentials and the console's records.
-            - name: github-token
-              mountPath: /var/run/secrets/github-roster
+            - name: signing-key
+              mountPath: /var/run/access-issuer/signing-key
               readOnly: true
-            - name: github-apps
-              mountPath: /var/run/github-roster/apps
+            # The token a call to github carries, minted for its audience.
+            - name: call-github
+              mountPath: /var/run/secrets/sluis/github
               readOnly: true
-            - name: github-records
-              mountPath: /var/run/github-roster/records
-              readOnly: true
-            # The Slack controller's, likewise.
-            - name: slack-token
-              mountPath: /var/run/secrets/slack-roster
-              readOnly: true
-            - name: slack-credentials
-              mountPath: /var/run/slack-roster/credentials
-              readOnly: true
-            - name: slack-workspaces
-              mountPath: /var/run/slack-roster/workspaces
-              readOnly: true
-            # A directory, not a subPath: a secret is read on every use, so a
-            # rotated Secret reaches the running process.
             - name: secrets
               mountPath: /var/run/sluis/secrets
               readOnly: true
@@ -574,16 +854,6 @@ spec:
           livenessProbe:
             httpGet: { path: /healthz, port: health }
           readinessProbe:
-            # Readiness follows the shared store; liveness deliberately
-            # does not. A replica that cannot reach it leaves the
-            # rotation, and the gateway answers fast instead of hanging;
-            # nothing is restarted, so one blip cannot restart the fleet.
-            #
-            # timeoutSeconds exceeds the service's own 2s check so the
-            # answer is the reason ("the session store does not answer:
-            # i/o timeout") rather than the kubelet's timeout. Three
-            # failures at ten seconds is thirty seconds of trouble before
-            # a replica leaves, which a reconnect comfortably beats.
             httpGet: { path: /readyz, port: health }
             periodSeconds: 10
             timeoutSeconds: 3
@@ -597,15 +867,10 @@ spec:
       volumes:
         - name: config
           configMap:
-            name: sluis-config
-        - name: signing-key
-          secret:
-            secretName: sluis-signing-key
+            name: sluis-issuer-config
         - name: policy
           configMap:
             name: sluis-policy
-        # The root filesystem is read-only, and the directory backends
-        # want somewhere to write.
         - name: tmp
           emptyDir: {}
         
@@ -616,9 +881,178 @@ spec:
                   audience: "audit"
                   expirationSeconds: 1800
                   path: token
-        # The token the console verifies, for the audience it accepts a
-        # workload's token for. Rotated by the kubelet; the controller reads
-        # the file on every call.
+        - name: signing-key
+          secret:
+            secretName: sluis-signing-key
+        - name: call-github
+          projected:
+            sources:
+              - serviceAccountToken:
+                  audience: github
+                  expirationSeconds: 3600
+                  path: token
+        - name: secrets
+          projected:
+            defaultMode: 0440
+            sources:
+              - secret:
+                  name: "valkey-password"
+                  items:
+                    - key: "secret"
+                      path: "valkey/password"
+              - secret:
+                  name: "acme-directory-key"
+                  items:
+                    - key: "service-account.json"
+                      path: "directory/C0acme/key"
+              - secret:
+                  name: "globex-directory-key"
+                  items:
+                    - key: "key.json"
+                      path: "directory/globex/key"
+              - secret:
+                  name: access-console-client
+                  items:
+                    - key: client-secret
+                      path: clients/access-console/secret
+              - secret:
+                  name: reports-client
+                  items:
+                    - key: oidc-secret
+                      path: clients/reports/secret
+        - name: secret-sign-in-client
+          secret:
+            secretName: sign-in-client
+      nodeSelector:
+        kubernetes.io/os: linux
+      tolerations:
+        - effect: NoSchedule
+          key: dedicated
+          operator: Equal
+          value: identity
+
+---
+# Source: sluis/templates/modules.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sluis-github
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: github
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sluis
+      app.kubernetes.io/instance: sluis
+      app.kubernetes.io/component: github
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: sluis
+        app.kubernetes.io/instance: sluis
+        app.kubernetes.io/component: github
+      annotations:
+        # Each document is read once, at start: a change to it, or to the
+        # policy, is a rollout.
+        checksum/config: 78a472877d79a54d75ba990858c7f2f3aa5c386a741cc5af3c4c214330a5be92
+        checksum/policy: 164a6383e1a8a507459fac193139e235f56b49d8d6e02c883e65b490101c88b6
+        example.com/scrape: "false"
+    spec:
+      serviceAccountName: sluis-github
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: github
+          image: "registry.example/sluis/sluis:v1.2.3"
+          imagePullPolicy: Always
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          ports:
+            - name: rpc
+              containerPort: 8081
+            - name: health
+              containerPort: 7070
+          args:
+            - github
+            - --config=/etc/sluis/config.yaml
+          env:
+            - name: SLUIS_EXTRA
+              valueFrom:
+                secretKeyRef:
+                  name: extra
+                  key: value
+          volumeMounts:
+            - name: config
+              mountPath: /etc/sluis/config.yaml
+              subPath: config.yaml
+              readOnly: true
+            - name: policy
+              mountPath: /var/run/access-issuer/policy
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+            
+            - name: audit-token
+              mountPath: /var/run/audit
+              readOnly: true
+            - name: github-token
+              mountPath: /var/run/secrets/github-roster
+              readOnly: true
+            - name: github-apps
+              mountPath: /var/run/github-roster/apps
+              readOnly: true
+            - name: github-records
+              mountPath: /var/run/github-roster/records
+              readOnly: true
+            - name: secrets
+              mountPath: /var/run/sluis/secrets
+              readOnly: true
+            - name: secret-sign-in-client
+              mountPath: /var/run/access-issuer/oauth-client
+              readOnly: true
+          livenessProbe:
+            httpGet: { path: /healthz, port: health }
+          readinessProbe:
+            httpGet: { path: /readyz, port: health }
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            limits:
+              memory: 256Mi
+            requests:
+              cpu: 50m
+              memory: 64Mi
+      volumes:
+        - name: config
+          configMap:
+            name: sluis-github-config
+        - name: policy
+          configMap:
+            name: sluis-policy
+        - name: tmp
+          emptyDir: {}
+        
+        - name: audit-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  audience: "audit"
+                  expirationSeconds: 1800
+                  path: token
         - name: github-token
           projected:
             sources:
@@ -626,20 +1060,174 @@ spec:
                   audience: access-exchange
                   expirationSeconds: 3600
                   path: token
-        # One file per connected organisation. Optional: before anything is
-        # connected there may be nothing, and the controller reports each
-        # bound organisation as not connected rather than failing to start.
         - name: github-apps
           secret:
             secretName: sluis-github-apps
             optional: true
-        # The console's records beside them: each organisation's record, the
-        # operators' confirmations and their requests for a pass now. Optional
-        # for the same reason.
         - name: github-records
           configMap:
             name: sluis-github-orgs
             optional: true
+        - name: secrets
+          projected:
+            defaultMode: 0440
+            sources:
+              - secret:
+                  name: "valkey-password"
+                  items:
+                    - key: "secret"
+                      path: "valkey/password"
+              - secret:
+                  name: "acme-directory-key"
+                  items:
+                    - key: "service-account.json"
+                      path: "directory/C0acme/key"
+              - secret:
+                  name: "globex-directory-key"
+                  items:
+                    - key: "key.json"
+                      path: "directory/globex/key"
+              - secret:
+                  name: access-console-client
+                  items:
+                    - key: client-secret
+                      path: clients/access-console/secret
+              - secret:
+                  name: reports-client
+                  items:
+                    - key: oidc-secret
+                      path: clients/reports/secret
+        - name: secret-sign-in-client
+          secret:
+            secretName: sign-in-client
+      nodeSelector:
+        kubernetes.io/os: linux
+      tolerations:
+        - effect: NoSchedule
+          key: dedicated
+          operator: Equal
+          value: identity
+
+---
+# Source: sluis/templates/modules.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sluis-slack
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: slack
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sluis
+      app.kubernetes.io/instance: sluis
+      app.kubernetes.io/component: slack
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: sluis
+        app.kubernetes.io/instance: sluis
+        app.kubernetes.io/component: slack
+      annotations:
+        # Each document is read once, at start: a change to it, or to the
+        # policy, is a rollout.
+        checksum/config: 7c113a3402b5a21c006836ce7786b0ab6631c8ba77cbe9477fdd5f8e7b133fee
+        checksum/policy: 164a6383e1a8a507459fac193139e235f56b49d8d6e02c883e65b490101c88b6
+        example.com/scrape: "false"
+    spec:
+      serviceAccountName: sluis-slack
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: slack
+          image: "registry.example/sluis/sluis:v1.2.3"
+          imagePullPolicy: Always
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          ports:
+            - name: health
+              containerPort: 7070
+          args:
+            - slack
+            - --config=/etc/sluis/config.yaml
+          env:
+            - name: SLUIS_EXTRA
+              valueFrom:
+                secretKeyRef:
+                  name: extra
+                  key: value
+          volumeMounts:
+            - name: config
+              mountPath: /etc/sluis/config.yaml
+              subPath: config.yaml
+              readOnly: true
+            - name: policy
+              mountPath: /var/run/access-issuer/policy
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+            
+            - name: audit-token
+              mountPath: /var/run/audit
+              readOnly: true
+            - name: slack-token
+              mountPath: /var/run/secrets/slack-roster
+              readOnly: true
+            - name: slack-credentials
+              mountPath: /var/run/slack-roster/credentials
+              readOnly: true
+            - name: slack-workspaces
+              mountPath: /var/run/slack-roster/workspaces
+              readOnly: true
+            - name: secrets
+              mountPath: /var/run/sluis/secrets
+              readOnly: true
+            - name: secret-sign-in-client
+              mountPath: /var/run/access-issuer/oauth-client
+              readOnly: true
+          livenessProbe:
+            httpGet: { path: /healthz, port: health }
+          readinessProbe:
+            httpGet: { path: /readyz, port: health }
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            limits:
+              memory: 256Mi
+            requests:
+              cpu: 50m
+              memory: 64Mi
+      volumes:
+        - name: config
+          configMap:
+            name: sluis-slack-config
+        - name: policy
+          configMap:
+            name: sluis-policy
+        - name: tmp
+          emptyDir: {}
+        
+        - name: audit-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  audience: "audit"
+                  expirationSeconds: 1800
+                  path: token
         - name: slack-token
           projected:
             sources:
@@ -647,23 +1235,14 @@ spec:
                   audience: access-exchange
                   expirationSeconds: 3600
                   path: token
-        # One file per connected workspace: the app's credentials and its bot
-        # token. Optional: before anything is connected there may be nothing.
         - name: slack-credentials
           secret:
             secretName: sluis-slack-credentials
             optional: true
-        # The console's records beside them: each workspace's record, the
-        # shared channels' definitions and the operators' confirmations.
         - name: slack-workspaces
           configMap:
             name: sluis-slack-workspaces
             optional: true
-        # Every secret the config names, as the file <root>/<name>, so the
-        # service resolves a secret by reading a path and never by holding
-        # RBAC to read Secrets -- the same reason the signing key is a file.
-        # A confidential client's is clients/<client-id>/secret, from the
-        # Secret its policy entry names.
         - name: secrets
           projected:
             defaultMode: 0440

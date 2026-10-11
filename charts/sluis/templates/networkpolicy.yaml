@@ -1,55 +1,137 @@
 {{- include "sluis.prepare" . -}}
-{{- if eq .Values.renders "app" -}}
-{{- if .Values.networkPolicy.enabled }}
-# Ingress only. Everything with a browser arrives through the gateway;
-# these are the in-cluster callers — the proxies verifying tokens and the
-# workloads exchanging them.
-#
-# No egress rules: this service has to reach the API server, the hub and
-# whichever directory a person signs in with, and a chart that guessed at
-# that list would be a chart that breaks a login the day a provider adds
-# a hostname. The fleet's own egress policy is where that belongs: a
-# Kubernetes NetworkPolicy cannot name a host, and the Slack controller
-# (config.controllers.slack) needs slack.com:443 to be allowed there, as the
-# GitHub controller needs api.github.com:443.
+{{- if and (eq .Values.renders "app") .Values.networkPolicy.enabled -}}
+{{- /* One policy per module, on that module's pods (the component label). */ -}}
+{{- range $mod := list "issuer" "github" "slack" "google" "cloudflare" }}
+{{- if include "sluis.moduleOn" (dict "root" $ "module" $mod) }}
+{{- $args := dict "root" $ "module" $mod }}
+{{- $callee := include "sluis.isCallee" $args }}
+{{- $egress := $.Values.networkPolicy.egress }}
+---
+{{- if eq $mod "issuer" }}
+# The issuer. Ingress: the gateway and the namespaces that call it (the proxies
+# verifying tokens, the workloads exchanging them), and the controllers, which
+# read the console's API through the release's own Service.
+{{- else if $callee }}
+# The {{ $mod }} module answers /rpc, and only the issuer's pods may call it: the
+# module checks the caller's token too, and this is the second lock.
+{{- else }}
+# The {{ $mod }} module answers no calls: nothing may connect to it.
+{{- end }}
+{{- if $egress.enabled }}
+# Egress is DNS, the module's own peers, and HTTPS to `networkPolicy.egress.https`
+# (the providers' hosts, the cloud APIs and the API server cannot be named in a
+# NetworkPolicy), and what `networkPolicy.egress.extra.{{ $mod }}` adds.
+{{- end }}
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: {{ include "sluis.fullname" . }}
+  name: {{ include "sluis.moduleFullname" $args }}
   labels:
-    {{- include "sluis.labels" . | nindent 4 }}
+    {{- include "sluis.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: {{ $mod }}
 spec:
   podSelector:
     matchLabels:
-      {{- include "sluis.selectorLabels" . | nindent 6 }}
-      {{- if include "sluis.split" . }}
-      app.kubernetes.io/component: issuer
-      {{- end }}
-  policyTypes: [Ingress]
+      {{- include "sluis.selectorLabels" $ | nindent 6 }}
+      app.kubernetes.io/component: {{ $mod }}
+  policyTypes:
+    - Ingress
+    {{- if $egress.enabled }}
+    - Egress
+    {{- end }}
+  {{- if eq $mod "issuer" }}
   ingress:
     - from:
-        {{- if .Values.networkPolicy.gatewayNamespace }}
+        {{- if $.Values.networkPolicy.gatewayNamespace }}
         - namespaceSelector:
             matchLabels:
-              kubernetes.io/metadata.name: {{ .Values.networkPolicy.gatewayNamespace }}
+              kubernetes.io/metadata.name: {{ $.Values.networkPolicy.gatewayNamespace }}
         {{- end }}
-        {{- range .Values.networkPolicy.clients }}
+        {{- range $.Values.networkPolicy.clients }}
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: {{ . }}
         {{- end }}
       ports:
-        - port: {{ include "sluis.port" . }}
-    {{- if or (include "sluis.controllerOn" (dict "root" . "kind" "github")) (include "sluis.controllerOn" (dict "root" . "kind" "slack")) }}
-    # The controllers in this process read the console's API through this
-    # release's own Service, which may route the call to another replica of
-    # the pod: so the pods admit one another on the issuer's port.
+        - port: {{ include "sluis.port" $ }}
+    {{- $callers := list }}
+    {{- range $kind := list "github" "slack" }}
+    {{- if or (include "sluis.moduleOn" (dict "root" $ "module" $kind)) (include "sluis.hosts" (dict "root" $ "module" "issuer" "kind" $kind)) }}
+    {{- $callers = append $callers (ternary $kind "issuer" (ne (include "sluis.moduleOn" (dict "root" $ "module" $kind)) "")) }}
+    {{- end }}
+    {{- end }}
+    {{- if $callers }}
+    - from:
+        - podSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/component
+                operator: In
+                values: {{ $callers | uniq | toJson }}
+            matchLabels:
+              {{- include "sluis.selectorLabels" $ | nindent 14 }}
+      ports:
+        - port: {{ include "sluis.port" $ }}
+    {{- end }}
+  {{- else if $callee }}
+  ingress:
     - from:
         - podSelector:
             matchLabels:
-              {{- include "sluis.selectorLabels" . | nindent 14 }}
+              {{- include "sluis.selectorLabels" $ | nindent 14 }}
+              app.kubernetes.io/component: issuer
       ports:
-        - port: {{ include "sluis.port" . }}
+        - port: {{ include "sluis.moduleRPCPort" $args }}
+  {{- else }}
+  ingress: []
+  {{- end }}
+  {{- if $egress.enabled }}
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $egress.dnsNamespace }}
+      ports:
+        - { port: 53, protocol: UDP }
+        - { port: 53, protocol: TCP }
+    {{- if eq $mod "issuer" }}
+    {{- range $to := splitList "\n" (include "sluis.callees" $) }}
+    {{- if include "sluis.moduleOn" (dict "root" $ "module" $to) }}
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "sluis.selectorLabels" $ | nindent 14 }}
+              app.kubernetes.io/component: {{ $to }}
+      ports:
+        - port: {{ include "sluis.moduleRPCPort" (dict "root" $ "module" $to) }}
     {{- end }}
+    {{- end }}
+    {{- else if or (eq $mod "github") (eq $mod "slack") }}
+    # The console's API, through the release's Service.
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "sluis.selectorLabels" $ | nindent 14 }}
+              app.kubernetes.io/component: issuer
+      ports:
+        - port: {{ include "sluis.port" $ }}
+    {{- end }}
+    {{- with $egress.https }}
+    {{- if .cidrs }}
+    - to:
+        {{- range .cidrs }}
+        - ipBlock:
+            cidr: {{ . }}
+        {{- end }}
+      ports:
+        {{- range .ports }}
+        - { port: {{ . }}, protocol: TCP }
+        {{- end }}
+    {{- end }}
+    {{- end }}
+    {{- with (get $egress.extra $mod) }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- end }}
+{{- end }}
 {{- end }}
 {{ end -}}

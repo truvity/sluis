@@ -1,7 +1,7 @@
 {{- include "sluis.prepare" . -}}
-{{- if and (eq .Values.renders "app") (include "sluis.split" .) -}}
+{{- if eq .Values.renders "app" -}}
 {{- include "sluis.checks" . }}
-{{- include "sluis.splitChecks" . }}
+{{- include "sluis.moduleChecks" . }}
 {{- range $mod := list "issuer" "github" "slack" "google" "cloudflare" }}
 {{- if include "sluis.moduleOn" (dict "root" $ "module" $mod) }}
 {{- $args := dict "root" $ "module" $mod }}
@@ -21,6 +21,66 @@ data:
     {{- include "sluis.moduleDocument" $args | nindent 4 }}
 ---
 {{ include "sluis.moduleDeployment" $args }}
+{{- if include "sluis.modulePDBOn" $args }}
+---
+# Voluntary disruptions (a node drain) may take down only as many of the
+# {{ $mod }} module's pods as this allows.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "sluis.moduleFullname" $args }}
+  labels:
+    {{- include "sluis.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: {{ $mod }}
+spec:
+  {{- $pdb := dig "podDisruptionBudget" dict (get $.Values.modules $mod) }}
+  {{- if not (kindIs "invalid" $pdb.minAvailable) }}
+  minAvailable: {{ $pdb.minAvailable }}
+  {{- else }}
+  maxUnavailable: {{ ternary $pdb.maxUnavailable 1 (not (kindIs "invalid" $pdb.maxUnavailable)) }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "sluis.selectorLabels" $ | nindent 6 }}
+      app.kubernetes.io/component: {{ $mod }}
+{{- end }}
+{{- if include "sluis.moduleAutoscaled" $args }}
+---
+# The issuer's replicas follow its load; no other module scales: a controller
+# runs one pass at a time under a lease, and a module's work is not request-bound.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "sluis.moduleFullname" $args }}
+  labels:
+    {{- include "sluis.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: {{ $mod }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "sluis.moduleFullname" $args }}
+  {{- $hpa := $.Values.modules.issuer.autoscaling }}
+  minReplicas: {{ $hpa.minReplicas }}
+  maxReplicas: {{ $hpa.maxReplicas }}
+  metrics:
+    {{- if $hpa.targetCPUUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ $hpa.targetCPUUtilizationPercentage }}
+    {{- end }}
+    {{- if $hpa.targetMemoryUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: {{ $hpa.targetMemoryUtilizationPercentage }}
+    {{- end }}
+{{- end }}
 {{- if include "sluis.isCallee" $args }}
 ---
 # Calls to the {{ $mod }} module, on /rpc. A call carries a projected ServiceAccount
