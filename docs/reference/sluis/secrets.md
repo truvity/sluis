@@ -12,7 +12,7 @@ secrets:
   root: /sluis/example    # file: a directory; ssm: the installation's root
   region: eu-west-1    # ssm only
   refresh: 1m          # ssm only
-  kmsKeyId: alias/example   # ssm only: the key the service's own writes are encrypted with
+  kmsKeyId: alias/example   # ssm only: the key every PutParameter the service makes is encrypted with
   layout: v4           # ssm only: v4 (the only value and the default), see "SSM layout"
   grace: 24h           # ssm only: how long a rotated client secret's previous value is accepted
 ```
@@ -50,6 +50,20 @@ Layout v4 ([ADR 0041](../../decisions/0041-the-secret-contract.md)) keeps each v
 Only sluis reads `internal/`. `external/` is granted per consumer on exact addresses. The `ssm` Secrets adapter takes the same root; another is refused. `private`, `export`, `internal` and `external` are reserved names.
 
 IAM per function: [AWS Lambda](lambda.md#iam-one-role).
+
+### One key
+
+`secrets.kmsKeyId` is the `KeyId` of every `PutParameter` the service makes.
+
+`sluis secrets rekey --config <file> [--dry-run] [--json] [--include-recent] [--no-audit]` moves every other SecureString below `secrets.root` to that key.
+
+| It | Detail |
+|---|---|
+| Reads and writes | `DescribeParameters`, then ten at a time `GetParameters` with decryption and `PutParameter` with overwrite and `KeyId`. Name, value, tier and description stay. It waits between batches, doubles the wait on throttling, and never prints a value |
+| Makes | A new version with the same value. Earlier versions keep their old key until SSM drops them (it keeps 100). Rotate a secret that must leave the old key |
+| Leaves | A parameter modified within `secrets.grace`: its previous version is a rotated client secret's overlap. `--include-recent` writes it anyway |
+| Races | A parameter that changes during the run is skipped, or reported with both versions. Run it while nothing writes secrets; a second run finishes the rest |
+| Audits | A real run records `roster.secrets.rekeyed` before the first write and refuses if it cannot. `--no-audit` warns and prints the record to stderr |
 
 `secrets.layout` (`ssm` only) is `v4`, which is also the default. Layouts v3 (`private/` and `export/`) and `transition` were removed in v1.75: an installation still on one runs v1.74.x and `sluis migrate secrets-layout` first, then upgrades.
 

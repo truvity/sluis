@@ -86,6 +86,10 @@ func every() []*record.Record {
 		audit.BackupCompleted(audit.System(), "20261010T020000Z-a1b2c3", audit.BackupRun{Installation: "example", Trigger: "schedule", Modules: 6, Records: 120, Chunks: 9, Resumed: true}),
 		audit.BackupFailed(audit.System(), "20261010T020000Z-a1b2c3", audit.BackupRun{Installation: "example", Trigger: "schedule", Reason: "archive"}, "the archive bucket refused a write"),
 		audit.BackupPruned(audit.System(), []string{"20260901T020000Z-aaaaaa"}, []string{"20260902T020000Z-bbbbbb"}, 7, "keep 7, 30d"),
+		audit.SecretsRekeyed(person, audit.SecretsRekey{Installation: "example", Key: "alias/example-secrets", Phase: audit.RekeyStarted,
+			Considered: 9, Planned: 2, Deferred: 1, Names: []string{"/sluis/example/internal/oidc/a", "/sluis/example/external/oidc/b"}}, audit.Succeeded()),
+		audit.SecretsRekeyed(person, audit.SecretsRekey{Installation: "example", Key: "alias/example-secrets", Phase: audit.RekeyCompleted,
+			Considered: 9, Planned: 2, Rekeyed: 1}, audit.Failed("write refused")),
 		audit.RestoreStarted(person, "20261010T020000Z-a1b2c3", audit.Restore{Installation: "example"}),
 		audit.RestoreCompleted(person, "20261010T020000Z-a1b2c3", audit.Restore{Installation: "example", Modules: 6}),
 		audit.RestoreFailed(person, "20261010T020000Z-a1b2c3", audit.Restore{Installation: "example", Reason: "verify"}, "a record differs after the write"),
@@ -351,6 +355,22 @@ func TestAPruneRecordHoldsEveryNameAndNoValue(t *testing.T) {
 	if err := rec.RecordDurable(context.Background(), audit.MigrationCopied(audit.Person("oleg@example.com"),
 		audit.MigrationCopy{Installation: "example", From: "v4", Phase: audit.PhaseStarted, Overwrite: true, Written: 2, Replaced: 1,
 			ReplacedNames: []string{"oidc/secret/recovery/password"}}, audit.Succeeded())); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A re-key is kept before it writes: the catalogue declares it a block action.
+func TestARekeyIsABlockAction(t *testing.T) {
+	c, _, err := audit.Catalogue()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a, ok := c.Action("roster.secrets.rekeyed"); !ok || a.Delivery != "block" {
+		t.Errorf("roster.secrets.rekeyed = %+v (declared %v), want delivery block", a.Delivery, ok)
+	}
+	rec := audittest.New(t)
+	if err := rec.RecordDurable(context.Background(), audit.SecretsRekeyed(audit.Person("oleg@example.com"),
+		audit.SecretsRekey{Installation: "example", Key: "alias/k", Phase: audit.RekeyStarted, Planned: 1, Names: []string{"/sluis/example/a"}}, audit.Succeeded())); err != nil {
 		t.Fatal(err)
 	}
 }

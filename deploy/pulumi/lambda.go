@@ -1412,8 +1412,8 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 			Overwrite: pulumi.Bool(true),
 			Tags:      tags,
 		}
-		if a.ParameterKeyArn != "" {
-			pargs.KeyId = pulumi.String(a.ParameterKeyArn)
+		if k := parameterKeyID(&a); k != "" {
+			pargs.KeyId = pulumi.String(k)
 		}
 		return ssm.NewParameter(ctx, logical, pargs, child)
 	}
