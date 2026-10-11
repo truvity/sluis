@@ -66,16 +66,14 @@ type Policy struct {
 func (p Policy) Len() int { return len(p.statements) }
 
 type statement struct {
-	sid         string
-	allow       bool
-	principals  *principals
-	actions     []string
-	notActions  []string
-	resources   []string
-	notRes      []string
-	conditions  []condition
-	hasActions  bool
-	hasResource bool
+	sid        string
+	allow      bool
+	principals *principals
+	actions    []string
+	notActions []string
+	resources  []string
+	notRes     []string
+	conditions []condition
 }
 
 type principals struct {
@@ -185,7 +183,7 @@ func convert(r rawStatement) (statement, error) {
 		s.allow = true
 	case "Deny":
 	default:
-		return s, fmt.Errorf("Effect %q is neither Allow nor Deny", r.Effect)
+		return s, fmt.Errorf("effect %q is neither Allow nor Deny", r.Effect)
 	}
 	if len(r.NotPrincipal) > 0 {
 		return s, errors.New("NotPrincipal is not evaluated")
@@ -242,13 +240,13 @@ func parsePrincipals(raw json.RawMessage) (*principals, error) {
 	var star string
 	if err := json.Unmarshal(raw, &star); err == nil {
 		if star != "*" {
-			return nil, fmt.Errorf("Principal %q is not *", star)
+			return nil, fmt.Errorf("principal %q is not *", star)
 		}
 		return &principals{any: true}, nil
 	}
 	var obj map[string]stringList
 	if err := json.Unmarshal(raw, &obj); err != nil {
-		return nil, fmt.Errorf("Principal: %w", err)
+		return nil, fmt.Errorf("principal: %w", err)
 	}
 	p := &principals{}
 	for kind, vals := range obj {
@@ -263,7 +261,7 @@ func parsePrincipals(raw json.RawMessage) (*principals, error) {
 		case "Service", "Federated", "CanonicalUser":
 			// Never an IAM role calling with its own credentials.
 		default:
-			return nil, fmt.Errorf("Principal type %q is not evaluated", kind)
+			return nil, fmt.Errorf("principal type %q is not evaluated", kind)
 		}
 	}
 	return p, nil
@@ -288,8 +286,9 @@ func Evaluate(req Request, identity, key Policy) (Decision, error) {
 		pol  Policy
 		key  bool
 	}{{"identity", identity, false}, {"key", key, true}} {
-		for _, s := range side.pol.statements {
-			if s.principals != nil == !side.key {
+		for i := range side.pol.statements {
+			s := side.pol.statements[i]
+			if (s.principals != nil) == !side.key {
 				return Decision{}, fmt.Errorf("iameval: %s policy statement %q: a Principal belongs in a key policy only", side.name, s.sid)
 			}
 			ok, delegated, err := s.matches(req, ctx, side.key)
@@ -383,11 +382,21 @@ func (p *principals) matches(caller string) (direct, root bool) {
 		switch {
 		case a == caller:
 			direct = true
-		case a == "arn:aws:iam::"+accountOf(caller)+":root" || a == accountOf(caller):
+		case isRootOf(a, accountOf(caller)):
 			root = true
 		}
 	}
 	return direct, root
+}
+
+// isRootOf reports whether p is the root principal of the account: the account
+// id itself, or `arn:<partition>:iam::<account>:root`.
+func isRootOf(p, account string) bool {
+	if account == "" {
+		return false
+	}
+	parts := strings.SplitN(p, ":", 6)
+	return p == account || (len(parts) == 6 && parts[0] == "arn" && parts[2] == "iam" && parts[4] == account && parts[5] == "root")
 }
 
 func accountOf(arn string) string {
@@ -502,7 +511,7 @@ func (c condition) holds(ctx map[string][]string) (bool, error) {
 			continue
 		}
 		if set == "" && len(have) > 1 {
-			return false, fmt.Errorf("key %s has %d values and %s has no ForAnyValue: or ForAllValues:", key, len(have), c.op)
+			return false, fmt.Errorf("key %s has %d values and %s has no set prefix (ForAnyValue or ForAllValues)", key, len(have), c.op)
 		}
 		count := 0
 		for _, h := range have {
