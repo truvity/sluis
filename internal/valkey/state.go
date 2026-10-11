@@ -2,7 +2,7 @@ package valkey
 
 import (
 	"context"
-	"crypto/sha1" //nolint:gosec // see Revision
+	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -184,32 +184,57 @@ func (s *State) Ping(ctx context.Context) error {
 	return s.client.Ping(ctx).Err()
 }
 
-// Revision is what [State] calls a value's version: the SHA-1 of its bytes,
-// as Valkey's own Lua computes it. It is a content tag, not a counter, and
-// not a security measure -- Valkey keeps no version of a key, and adding one
-// would change what is written.
+// Revision is what [State] calls a value's version: the SHA-256 of its
+// bytes. It is a content tag, not a counter -- Valkey keeps no version of a
+// key, and adding one would change what is written -- and it lives only in
+// the process that read the value, between that read and the conditional
+// write that follows: it is never stored. The comparison with the live value
+// is made in Go, and the script then re-checks the bytes themselves.
 func Revision(value []byte) string {
-	sum := sha1.Sum(value) //nolint:gosec // a content tag compared by equality, not a hash anyone trusts
+	sum := sha256.Sum256(value)
 	return hex.EncodeToString(sum[:])
 }
 
-// The two compare-and-swap scripts. Both answer -1 when the key is gone
-// (absent or expired), 0 when its bytes are not the ones expected and 1
-// when they acted.
+// The two compare-and-swap scripts. ARGV[1] is the exact bytes the caller's
+// revision was checked against, so no hash is computed in Lua. Both answer -1
+// when the key is gone (absent or expired), 0 when its bytes are not those
+// and 1 when they acted.
 var (
 	swapScript = redis.NewScript(`
 local cur = redis.call("get", KEYS[1])
 if not cur then return -1 end
-if redis.sha1hex(cur) ~= ARGV[1] then return 0 end
+if cur ~= ARGV[1] then return 0 end
 redis.call("set", KEYS[1], ARGV[2], "PX", ARGV[3])
 return 1`)
 	dropScript = redis.NewScript(`
 local cur = redis.call("get", KEYS[1])
 if not cur then return -1 end
-if redis.sha1hex(cur) ~= ARGV[1] then return 0 end
+if cur ~= ARGV[1] then return 0 end
 redis.call("del", KEYS[1])
 return 1`)
 )
+
+// current reads the live bytes at key and checks them against the expected
+// revision. It answers Gone for a missing key and Moved for another revision;
+// Done means cur is the bytes the revision names.
+func (s *State) current(ctx context.Context, op, key, expected string) (cur []byte, out Outcome, err error) {
+	err = s.retry(ctx, op, key, false, func() error {
+		var e error
+		cur, e = s.client.Get(ctx, s.key(key)).Bytes()
+		if errors.Is(e, redis.Nil) {
+			cur, out = nil, Gone
+			return nil
+		}
+		return e
+	})
+	if err != nil || out == Gone {
+		return nil, out, err
+	}
+	if Revision(cur) != expected {
+		return nil, Moved, nil
+	}
+	return cur, Done, nil
+}
 
 // Outcome is what a conditional write did.
 type Outcome int
@@ -231,9 +256,16 @@ func (s *State) Swap(ctx context.Context, key, expected string, value []byte, tt
 	if ttl <= 0 {
 		return Moved, fmt.Errorf("valkey: %s was stored with no lifetime", key)
 	}
+	cur, pre, err := s.current(ctx, "swap", key, expected)
+	if err != nil {
+		return Moved, fmt.Errorf("valkey: swap %s: %w", key, err)
+	}
+	if pre != Done {
+		return pre, nil
+	}
 	var out int64
-	err := s.retry(ctx, "swap", key, false, func() (err error) {
-		out, err = swapScript.Run(ctx, s.client, []string{s.key(key)}, expected, value, ttl.Milliseconds()).Int64()
+	err = s.retry(ctx, "swap", key, false, func() (err error) {
+		out, err = swapScript.Run(ctx, s.client, []string{s.key(key)}, cur, value, ttl.Milliseconds()).Int64()
 		return err
 	})
 	if err != nil {
@@ -244,9 +276,16 @@ func (s *State) Swap(ctx context.Context, key, expected string, value []byte, tt
 
 // DropIf deletes the value at key only if its [Revision] is expected.
 func (s *State) DropIf(ctx context.Context, key, expected string) (Outcome, error) {
+	cur, pre, err := s.current(ctx, "dropif", key, expected)
+	if err != nil {
+		return Moved, fmt.Errorf("valkey: delete %s if unchanged: %w", key, err)
+	}
+	if pre != Done {
+		return pre, nil
+	}
 	var out int64
-	err := s.retry(ctx, "dropif", key, false, func() (err error) {
-		out, err = dropScript.Run(ctx, s.client, []string{s.key(key)}, expected).Int64()
+	err = s.retry(ctx, "dropif", key, false, func() (err error) {
+		out, err = dropScript.Run(ctx, s.client, []string{s.key(key)}, cur).Int64()
 		return err
 	})
 	if err != nil {
