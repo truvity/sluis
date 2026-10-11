@@ -2,7 +2,9 @@ package console_test
 
 import (
 	"context"
+	"errors"
 	"maps"
+	"net/http"
 	"slices"
 	"strings"
 	"sync"
@@ -260,5 +262,40 @@ func TestEveryConsoleMethodAnswersTheConsoleOnly(t *testing.T) {
 	}
 	if len(srv.Methods()) < 6 {
 		t.Errorf("only %d methods registered", len(srv.Methods()))
+	}
+}
+
+func statusOf(t *testing.T, err error) int {
+	t.Helper()
+	var p *consolecall.Problem
+	if !errors.As(err, &p) {
+		t.Fatalf("err = %v, want a Problem", err)
+	}
+	return p.Status
+}
+
+// A hand-over that is not a runner flow, or that no runner store backs, is a
+// 4xx page; one a foreign operator tries to finish is a 403, before the module
+// touches GitHub.
+func TestAFlowHandOverIsCheckedBeforeGitHubIsAsked(t *testing.T) {
+	store := newMemoryConnections()
+	seed(t, store)
+	svc := service(t, store)
+	flow := consolewire.Flow{Bind: consolewire.BindRunner + "standard:globex", Actor: "ada@example.test", Code: "c"}
+
+	if _, err := svc.CompleteGitHubRunnerCreate(as("", nil, nil), consolewire.Flow{Bind: "github:globex"}); statusOf(t, err) != http.StatusBadRequest {
+		t.Errorf("a bind that is not a runner's = %v, want 400", err)
+	}
+	if _, err := svc.CompleteGitHubRunnerCreate(as("", nil, nil), flow); statusOf(t, err) != http.StatusConflict {
+		t.Errorf("a deployment with no runner store = %v, want 409", err)
+	}
+	if _, err := svc.CompleteGitHubRunnerCreate(southOp(), flow); statusOf(t, err) != http.StatusForbidden {
+		t.Errorf("a foreign operator finishing globex's flow = %v, want 403", err)
+	}
+	if _, err := svc.CompleteGitHubCatalogueCreate(as("", nil, nil), consolewire.Flow{Bind: consolewire.BindCatalogue + "renovate"}); statusOf(t, err) != http.StatusForbidden {
+		t.Errorf("a flow nobody operates = %v, want 403", err)
+	}
+	if _, err := svc.BeginGitHubRunnerAppConnect(everywhere(), "globex", "standard"); connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Errorf("a deployment declaring no tiers = %v, want failed precondition", err)
 	}
 }

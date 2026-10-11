@@ -11,8 +11,8 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/truvity/sluis/internal/access"
-	"github.com/truvity/sluis/internal/githubroster/consolewire"
 	"github.com/truvity/sluis/internal/consoleauthz"
+	"github.com/truvity/sluis/internal/githubroster/consolewire"
 )
 
 // githubOwners are the connected organisations, by login, with the owner

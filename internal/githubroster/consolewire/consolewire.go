@@ -29,6 +29,16 @@ const (
 	// The GitHub page, and the per-kind Check that the Apps view replaced.
 	GetStatus         = "console.get_status"
 	CheckCatalogueApp = "console.check_catalogue_app"
+
+	// G3: the catalogue and runner Apps.
+	BeginCatalogueConnect   = "console.begin_catalogue_connect"
+	CompleteCatalogueCreate = "console.complete_catalogue_create"
+	CompleteCatalogueSetup  = "console.complete_catalogue_setup"
+	DisconnectCatalogueApp  = "console.disconnect_catalogue_app"
+	BeginRunnerConnect      = "console.begin_runner_connect"
+	CompleteRunnerCreate    = "console.complete_runner_create"
+	CompleteRunnerSetup     = "console.complete_runner_setup"
+	DisconnectRunnerApp     = "console.disconnect_runner_app"
 )
 
 // The two places GitHub sends the browser back to, at the origin root beside a
@@ -37,6 +47,15 @@ const (
 const (
 	CallbackPath = "/connect/github/callback"
 	SetupPath    = "/connect/github/setup"
+)
+
+// Where GitHub sends the browser back to while a catalogue App or a runner App
+// is created: after Create, and after Install.
+const (
+	CatalogueCallbackPath = "/connect/github/catalogue/callback"
+	CatalogueSetupPath    = "/connect/github/catalogue/setup"
+	RunnerCallbackPath    = "/connect/github/runner/callback"
+	RunnerSetupPath       = "/connect/github/runner/setup"
 )
 
 // The link flows' paths, at the origin ROOT with the other GitHub callbacks.
@@ -81,6 +100,17 @@ type Begun struct {
 type BeginConnectRequest struct {
 	Org            string `json:"org"`
 	OwnerDirectory string `json:"owner_directory,omitempty"`
+}
+
+// BeginCatalogueConnectRequest starts connecting a catalogue App.
+type BeginCatalogueConnectRequest struct {
+	ID string `json:"id"`
+}
+
+// BeginRunnerConnectRequest starts connecting a runner App.
+type BeginRunnerConnectRequest struct {
+	Org  string `json:"org"`
+	Tier string `json:"tier"`
 }
 
 // Flow is what the issuer hands the module after it verified a provider's

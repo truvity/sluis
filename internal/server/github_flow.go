@@ -227,3 +227,56 @@ func errString(err error) string {
 	}
 	return err.Error()
 }
+
+// githubCatalogueCallback is where GitHub sends the owner after creating a
+// catalogue App, with a one-time code for its key.
+func (s *ConsoleServer) githubCatalogueCallback(w http.ResponseWriter, r *http.Request) {
+	s.githubCreated(w, r, consolewire.CompleteCatalogueCreate)
+}
+
+// githubCatalogueSetup is where GitHub sends the owner after installing a
+// catalogue App.
+func (s *ConsoleServer) githubCatalogueSetup(w http.ResponseWriter, r *http.Request) {
+	s.githubInstalled(w, r, consolewire.CompleteCatalogueSetup, "/#/github/apps/catalogue")
+}
+
+// githubRunnerCallback is where GitHub sends the owner after creating a runner
+// App, with a one-time code for its key.
+func (s *ConsoleServer) githubRunnerCallback(w http.ResponseWriter, r *http.Request) {
+	s.githubCreated(w, r, consolewire.CompleteRunnerCreate)
+}
+
+// githubRunnerSetup is where GitHub sends the owner after installing a runner
+// App.
+func (s *ConsoleServer) githubRunnerSetup(w http.ResponseWriter, r *http.Request) {
+	s.githubInstalled(w, r, consolewire.CompleteRunnerSetup, "/#/github/apps")
+}
+
+// githubCreated finishes the first redirect of a flow in the module, which
+// keeps the key, and sends the owner on to Install under a fresh state.
+func (s *ConsoleServer) githubCreated(w http.ResponseWriter, r *http.Request, method string) {
+	flow, caller, ok := s.githubVerified(w, r)
+	if !ok {
+		return
+	}
+	next, ok := githubForward[consolewire.Continued](s, w, r, method, flow, caller)
+	if !ok {
+		return
+	}
+	s.githubNext(w, r, next)
+}
+
+// githubInstalled finishes the last redirect of a flow in the module, which
+// records where GitHub says the App is installed.
+func (s *ConsoleServer) githubInstalled(w http.ResponseWriter, r *http.Request, method, landing string) {
+	flow, caller, ok := s.githubVerified(w, r)
+	if !ok {
+		return
+	}
+	// The flow ends here whichever way it goes.
+	access.SetCookie(w, access.ConnectCookie("", s.sessions.Secure(), 0))
+	if _, ok = githubForward[consolewire.Done](s, w, r, method, flow, caller); !ok {
+		return
+	}
+	http.Redirect(w, r, s.at(landing), http.StatusFound)
+}
