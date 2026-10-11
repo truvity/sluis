@@ -111,7 +111,8 @@ func TestEveryTokenRefusalIsUniform(t *testing.T) {
 		{"a wrong secret", deployer, "argocd", "wrong", 401, "invalid_client", "not authorised", true, []string{"does not match", "argocd"}},
 		{"an unknown client in the form", url.Values{"grant_type": {"refresh_token"}, "refresh_token": {"x"}, "client_id": {"nobody"}},
 			"", "", 400, "invalid_client", "not authorised", false, []string{"nobody"}},
-		{"a public client sending a secret", deployer, "local-dev", "secret", 401, "invalid_client", "not authorised", true, []string{"public client presents no secret"}},
+		{"a public client sending a secret", deployer, "local-dev", "secret", 401, "invalid_client", "not authorised", true,
+			[]string{"public client presents no secret"}},
 		{"a code that was never issued", url.Values{
 			"grant_type": {"authorization_code"}, "code": {"never"}, "client_id": {"local-dev"},
 			"redirect_uri": {"http://localhost:8000/callback"}, "code_verifier": {strings.Repeat("a", 43)},
@@ -311,10 +312,12 @@ func TestEveryAuthorizeRefusalIsUniform(t *testing.T) {
 	}{
 		{"a public client without PKCE", noPKCE, "invalid_request", "invalid request", []string{"code_challenge"}},
 		{"a plain challenge method", authorizeQuery(url.Values{"code_challenge_method": {"plain"}}), "invalid_request", "invalid request", []string{"S256"}},
-		{"a resource nobody declared", authorizeQuery(url.Values{"resource": {"https://mcp.elsewhere.example/"}}), "invalid_target", "not authorised", []string{"mcp.elsewhere.example", "declares"}},
+		{"a resource nobody declared", authorizeQuery(url.Values{"resource": {"https://mcp.elsewhere.example/"}}), "invalid_target", "not authorised",
+			[]string{"mcp.elsewhere.example", "declares"}},
 		{"a resource that is not a URI", authorizeQuery(url.Values{"resource": {"/mcp"}}), "invalid_target", "not authorised", []string{"absolute URI"}},
 		{"a response type the client lacks", authorizeQuery(url.Values{"response_type": {"token"}}), "unauthorized_client", "not authorised", nil},
-		{"a client nobody declared", "/authorize?response_type=code&scope=openid&client_id=nobody&redirect_uri=" + url.QueryEscape("http://localhost:8000/callback"), "", "invalid request", []string{"nobody"}},
+		{"a client nobody declared", "/authorize?response_type=code&scope=openid&client_id=nobody&redirect_uri=" + url.QueryEscape("http://localhost:8000/callback"),
+			"", "invalid request", []string{"nobody"}},
 	} {
 		t.Run(tc.name+" as JSON", func(t *testing.T) {
 			status, header, body := get(t, server, tc.path, "application/json")

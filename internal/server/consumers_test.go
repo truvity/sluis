@@ -156,7 +156,8 @@ func TestTheListenerRefusesInFixedWords(t *testing.T) {
 	}{
 		{"no token", "", "/directory.v1.DirectoryService/Describe", http.StatusUnauthorized, []string{"no ServiceAccount token", "directory-roster"}},
 		{"a token the cluster rejects", "Bearer forged", "/directory.v1.DirectoryService/Describe", http.StatusUnauthorized, []string{"the token is expired"}},
-		{"a workload that is not a consumer", "Bearer somebody-else", "/directory.v1.DirectoryService/Describe", http.StatusUnauthorized, []string{"not a consumer", "business:web"}},
+		{"a workload that is not a consumer", "Bearer somebody-else", "/directory.v1.DirectoryService/Describe", http.StatusUnauthorized,
+			[]string{"not a consumer", "business:web"}},
 		{"a path that is not a procedure", "Bearer the-mapper", "/elsewhere", http.StatusForbidden, []string{"not a procedure"}},
 	} {
 		request := httptest.NewRequest(http.MethodPost, tc.path, nil)

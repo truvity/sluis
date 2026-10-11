@@ -18,7 +18,7 @@ type seen struct{ ctxID, auditID string }
 func serve(t *testing.T, inbound string) (*httptest.ResponseRecorder, seen) {
 	t.Helper()
 	var got seen
-	h := refusal.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	h := refusal.Middleware(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		got.ctxID = refusal.ID(r.Context())
 		got.auditID = emit.FromRequest(r, 0).GetRequestId()
 	}))
@@ -79,7 +79,7 @@ func TestMiddlewareGeneratesADifferentIDPerRequest(t *testing.T) {
 func TestMiddlewareIsIdempotentWhenNested(t *testing.T) {
 	t.Parallel()
 	var inner string
-	h := refusal.Middleware(refusal.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	h := refusal.Middleware(refusal.Middleware(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		inner = refusal.ID(r.Context())
 	})))
 	rec := httptest.NewRecorder()
@@ -96,7 +96,7 @@ func TestLogHandlerNamesTheRequestOnEveryLine(t *testing.T) {
 	ctx := refusal.WithID(context.Background(), "req-0123456789")
 	log.WarnContext(ctx, "refused", slog.String("why", "the secret does not match"))
 	log.WarnContext(ctx, "named", slog.String(refusal.LogKey, "req-0123456789"))
-	log.Warn("outside a request")
+	log.WarnContext(context.Background(), "outside a request")
 	lines := strings.Split(strings.TrimSpace(out.String()), "\n")
 	if len(lines) != 3 {
 		t.Fatalf("lines = %d: %s", len(lines), out.String())
