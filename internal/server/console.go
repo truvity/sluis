@@ -23,9 +23,7 @@ import (
 	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/audit"
 	"github.com/truvity/sluis/internal/consolecall"
-	"github.com/truvity/sluis/internal/githubapp/catalogue"
 	ghconsole "github.com/truvity/sluis/internal/githubapp/console"
-	"github.com/truvity/sluis/internal/githubapp/mints"
 	"github.com/truvity/sluis/internal/hub"
 	"github.com/truvity/sluis/internal/modcall"
 	"github.com/truvity/sluis/internal/port"
@@ -169,7 +167,7 @@ type ConsoleDeps struct {
 	GitHubRunnerTiers []string
 	// GitHubCatalogue is every App the deployment declares. Nil declares
 	// none.
-	GitHubCatalogue *catalogue.Catalogue
+	GitHubCatalogue *ghconsole.Catalogue
 	// GitHubCatalogueApps is where catalogue Apps are kept. Nil is a
 	// deployment keeping no state in Kubernetes, which can create none.
 	GitHubCatalogueApps GitHubCatalogueApps
@@ -199,7 +197,7 @@ type ConsoleDeps struct {
 	// by the half of this service that mints them. Nil is a deployment
 	// that mints none, or one whose issuer is another process; an App's
 	// page then says it keeps none rather than showing an empty table.
-	GitHubMints *mints.Ring
+	GitHubMints *ghconsole.MintRing
 	// GitHubHTTP makes the calls to GitHub that connecting and
 	// disconnecting need. Nil is a client with a short timeout.
 	GitHubHTTP *http.Client

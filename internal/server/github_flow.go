@@ -3,17 +3,18 @@ package server
 import (
 	"context"
 	"crypto/subtle"
+	"errors"
 	"fmt"
 	"html"
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/consolecall"
 	"github.com/truvity/sluis/internal/githubroster/consolewire"
-	"github.com/truvity/sluis/internal/githubroster/status"
 	"github.com/truvity/sluis/internal/refusal"
 	"github.com/truvity/sluis/storage/logattr"
 )
@@ -144,62 +145,6 @@ func (s *ConsoleServer) githubSetup(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, s.at("/#/github"), http.StatusFound)
 }
 
-// githubFlowFor checks what a flow that is still the console's must carry: the
-// state this browser was given, signed by this service, naming a GitHub
-// organisation and the operator who started the flow.
-func (s *ConsoleServer) githubFlowFor(w http.ResponseWriter, r *http.Request, prefix string) (org, actor, owner string, ok bool) {
-	bind, actor, owner, ok := s.githubBound(w, r)
-	if !ok {
-		return "", "", "", false
-	}
-	org, isGitHub := strings.CutPrefix(bind, prefix)
-	if !isGitHub || !status.ValidOrg(org) {
-		s.githubProblem(w, r, http.StatusBadRequest, "This is not a GitHub connect.", "", nil)
-		return "", "", "", false
-	}
-	return org, actor, owner, true
-}
-
-// githubBound checks the state this browser was given, signed by this
-// service, and returns what it binds, the operator who started the flow and
-// the owner the flow was begun to record.
-func (s *ConsoleServer) githubBound(w http.ResponseWriter, r *http.Request) (bind, actor, owner string, ok bool) {
-	state := r.URL.Query().Get("state")
-	cookie, err := access.ReadCookie(r, access.ConnectCookieName, s.sessions.Secure())
-	if err != nil || cookie.Value == "" || subtle.ConstantTimeCompare([]byte(cookie.Value), []byte(state)) != 1 {
-		s.githubNotThisBrowser(w, r)
-		return "", "", "", false
-	}
-	binding, err := s.state.VerifyBinding(state)
-	if err != nil {
-		s.githubProblem(w, r, http.StatusBadRequest, "This connect cannot be finished.", err.Error(), nil)
-		return "", "", "", false
-	}
-	actor = binding.Actor
-	// The state binds who began the flow, and that was checked then. It is
-	// asked again here, about whoever is signed in NOW, by the same rule as
-	// the call that began it: a flow begun by an operator of one company's
-	// directory must not finish in another's organisation, nor after the
-	// role was taken away.
-	if id, signedIn := IdentityFrom(r.Context()); signedIn {
-		bound, subject, ownerErr := s.console.ownerOfBind(r.Context(), binding)
-		if ownerErr != nil {
-			s.githubProblem(w, r, http.StatusConflict, "The connection records could not be read.", ownerErr.Error(), nil)
-			return "", "", "", false
-		}
-		if _, err = requireOwner(r.Context(), access.RoleOperator, bound, subject); err != nil {
-			s.githubProblem(w, r, http.StatusForbidden, err.Error()+".", "", nil)
-			return "", "", "", false
-		}
-		actor = id.Who()
-	}
-	if actor == "" {
-		s.githubProblem(w, r, http.StatusForbidden, "Connecting a GitHub organisation needs the operator role.", "", nil)
-		return "", "", "", false
-	}
-	return binding.Bind, actor, binding.Owner, true
-}
-
 // githubProblem is the page a GitHub redirect lands on when it cannot
 // finish: a 4xx, never a 5xx, which a CDN in front would replace with a
 // page of its own and lose GitHub's words.
@@ -279,4 +224,190 @@ func (s *ConsoleServer) githubInstalled(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 	http.Redirect(w, r, s.at(landing), http.StatusFound)
+}
+
+// The link flows' windows and limits. The page and its callback have no session:
+// anyone with a browser reaches them, so each address gets a small allowance,
+// and the module has a bound of its own on the links it finishes.
+const (
+	githubLinkWindow  = 15 * time.Minute
+	linkAllowance     = 20
+	linkAllowanceSpan = time.Minute
+)
+
+// linkLimits counts, per client address, the requests the link routes took in
+// the current window.
+type linkLimits struct {
+	mu     sync.Mutex
+	window time.Time
+	seen   map[string]int
+}
+
+// allow reports whether the address may make another request in this window.
+func (l *linkLimits) allow(now time.Time, address string) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.seen == nil || now.Sub(l.window) >= linkAllowanceSpan {
+		l.window, l.seen = now, map[string]int{}
+	}
+	if l.seen[address] >= linkAllowance {
+		return false
+	}
+	l.seen[address]++
+	return true
+}
+
+// linkAllowed refuses a link request over its address's allowance with a 429
+// page, and logs it.
+func (s *ConsoleServer) linkAllowed(w http.ResponseWriter, r *http.Request) bool {
+	address := clientAddress(r.Header, r.RemoteAddr, s.forwardedForTrustedHops)
+	if s.linkLimits.allow(time.Now(), address) {
+		return true
+	}
+	s.log.WarnContext(r.Context(), "a link request was refused: too many from one address", logattr.SafeString("remote", address))
+	s.linkProblem(w, r, http.StatusTooManyRequests, "Too many tries from this address. Wait a minute and start again.", "")
+	return false
+}
+
+// githubLinkAppCallback is where GitHub sends the owner after creating the link
+// App. There is nothing to install: the App is used by being authorized, never
+// by being installed.
+func (s *ConsoleServer) githubLinkAppCallback(w http.ResponseWriter, r *http.Request) {
+	flow, caller, ok := s.githubVerified(w, r)
+	if !ok {
+		return
+	}
+	access.SetCookie(w, access.ConnectCookie("", s.sessions.Secure(), 0))
+	if _, ok = githubForward[consolewire.Done](s, w, r, consolewire.CompleteLinkApp, flow, caller); !ok {
+		return
+	}
+	http.Redirect(w, r, s.at("/#/github"), http.StatusFound)
+}
+
+// githubLinkPage is where a person starts linking: what linking does, and the
+// button that sends them to GitHub.
+func (s *ConsoleServer) githubLinkPage(w http.ResponseWriter, r *http.Request) {
+	if !s.linkAllowed(w, r) {
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), githubCallTimeout)
+	defer cancel()
+	page, err := consolecall.ProxyJSON[struct{}, consolewire.LinkPage](ctx, s.console.githubModule(), consolewire.Module,
+		consolewire.LinkPageOf, consolecall.Caller{Origin: s.console.githubRoot()}, struct{}{})
+	if err != nil {
+		s.linkFailed(w, r, err)
+		return
+	}
+	state, err := s.state.IssueAs(access.Binding{Bind: consolewire.BindLink})
+	if err != nil {
+		s.linkProblem(w, r, http.StatusConflict, "Linking could not be started. Reload the page.", err.Error())
+		return
+	}
+	access.SetCookie(w, access.LinkCookie(state, s.sessions.Secure(), githubLinkWindow))
+	authorize := withState(page.AuthorizeURL, state)
+	body := `<h1>Link your GitHub account</h1>` +
+		`<p>Your GitHub account is added to your organisations and teams by the work address you verified on it. ` +
+		`GitHub will ask you to authorize the link: it lets this service read the email addresses on your account, and nothing else.</p>` +
+		`<p class="note">Before you continue, add your work address on <a href="https://github.com/settings/emails">GitHub's email settings</a> ` +
+		`and verify it. A personal address counts for nothing here.</p>` +
+		`<p class="note">The link is checked again every few minutes. If you remove your work address from the account, ` +
+		`or revoke the authorization on GitHub, the account leaves the organisations at once.</p>` +
+		`<p><a class="btn" href="` + html.EscapeString(authorize) + `">Continue to GitHub</a></p>`
+	s.writePage(w, r, http.StatusOK, "Link your GitHub account", body)
+}
+
+// githubLinkCallback finishes a link: the state and cookie are checked here,
+// GitHub's word on who the account is and the directory's word on its
+// addresses in the module.
+func (s *ConsoleServer) githubLinkCallback(w http.ResponseWriter, r *http.Request) {
+	if !s.linkAllowed(w, r) {
+		return
+	}
+	state := r.URL.Query().Get("state")
+	cookie, err := access.ReadCookie(r, access.LinkCookieName, s.sessions.Secure())
+	if err != nil || cookie.Value == "" || subtle.ConstantTimeCompare([]byte(cookie.Value), []byte(state)) != 1 {
+		s.linkProblem(w, r, http.StatusBadRequest,
+			"This link did not start in this browser, or took longer than fifteen minutes. Start again.", "")
+		return
+	}
+	if binding, err := s.state.VerifyBinding(state); err != nil || binding.Bind != consolewire.BindLink {
+		s.linkProblem(w, r, http.StatusBadRequest, "This link cannot be finished. Start again.", errString(err))
+		return
+	}
+	access.SetCookie(w, access.LinkCookie("", s.sessions.Secure(), 0))
+	q := r.URL.Query()
+	ctx, cancel := context.WithTimeout(r.Context(), githubFlowDeadline)
+	defer cancel()
+	done, err := consolecall.ProxyJSON[consolewire.LinkComplete, consolewire.Linked](ctx, s.console.githubModule(), consolewire.Module,
+		consolewire.LinkCompleteOf, consolecall.Caller{Origin: s.console.githubRoot()}, consolewire.LinkComplete{
+			Code: q.Get("code"), GitHubError: q.Get("error"), GitHubErrorDescription: q.Get("error_description"),
+		})
+	if err != nil {
+		s.linkFailed(w, r, err)
+		return
+	}
+
+	if len(done.Accepted) == 0 {
+		var body strings.Builder
+		fmt.Fprintf(&body, `<h1>@%s could not be linked</h1>`, html.EscapeString(done.Login))
+		if len(done.Refused) == 0 {
+			body.WriteString(`<p>None of the addresses GitHub verified on this account is a work address this service knows.</p>`)
+		} else {
+			body.WriteString(`<p>No verified address on this account could be linked:</p><ul>`)
+			for _, reason := range done.Refused {
+				fmt.Fprintf(&body, `<li>%s</li>`, html.EscapeString(reason))
+			}
+			body.WriteString(`</ul>`)
+		}
+		body.WriteString(`<p class="note">Add your work address on <a href="https://github.com/settings/emails">GitHub's email settings</a>, ` +
+			`verify it, and <a href="` + html.EscapeString(s.console.githubRoot()+consolewire.LinkPath) + `">link again</a>.</p>`)
+		s.writePage(w, r, http.StatusConflict, "GitHub account not linked", body.String())
+		return
+	}
+	var body strings.Builder
+	fmt.Fprintf(&body, `<h1>@%s is linked</h1><p>Linked to:</p><ul>`, html.EscapeString(done.Login))
+	for _, email := range done.Accepted {
+		fmt.Fprintf(&body, `<li>%s</li>`, html.EscapeString(email))
+	}
+	body.WriteString(`</ul><p>Within a few minutes the account is invited to the organisations your teams are in, ` +
+		`or added to those teams. Accept GitHub's invitation when it arrives.</p>`)
+	if len(done.Refused) > 0 {
+		body.WriteString(`<p class="note">Not linked:</p><ul>`)
+		for _, reason := range done.Refused {
+			fmt.Fprintf(&body, `<li class="note">%s</li>`, html.EscapeString(reason))
+		}
+		body.WriteString(`</ul>`)
+	}
+	body.WriteString(`<p class="note">If you remove a linked address from this account, or revoke the authorization on GitHub, ` +
+		`the account leaves the organisations at once.</p>`)
+	s.writePage(w, r, http.StatusOK, "GitHub account linked", body.String())
+}
+
+// linkFailed is the page for a call to the module that did not succeed: its
+// refusal if it told one, else fixed words and the reason in the log.
+func (s *ConsoleServer) linkFailed(w http.ResponseWriter, r *http.Request, err error) {
+	var p *consolecall.Problem
+	if errors.As(err, &p) {
+		status := p.Status
+		if status == 0 {
+			status = http.StatusConflict
+		}
+		s.linkProblem(w, r, status, p.Summary, p.Detail)
+		return
+	}
+	s.log.WarnContext(r.Context(), "a link could not be finished by the module", logattr.SafeError("error", err))
+	s.linkProblem(w, r, http.StatusConflict, refusal.Text(r.Context(), refusal.ServerError)+": linking is not available just now. Try again in a minute.", "")
+}
+
+// linkProblem is the page a link lands on when it cannot finish. A 4xx, for the
+// reason githubProblem is.
+func (s *ConsoleServer) linkProblem(w http.ResponseWriter, r *http.Request, code int, summary, detail string) {
+	var body strings.Builder
+	body.WriteString(`<h1>The GitHub account could not be linked</h1>`)
+	fmt.Fprintf(&body, `<p>%s</p>`, html.EscapeString(summary))
+	if detail != "" {
+		fmt.Fprintf(&body, `<p class="note">What went wrong:</p><pre>%s</pre>`, html.EscapeString(detail))
+	}
+	body.WriteString(`<p><a class="btn" href="` + html.EscapeString(s.console.githubRoot()+consolewire.LinkPath) + `">Start again</a></p>`)
+	s.writePage(w, r, code, "GitHub", body.String())
 }

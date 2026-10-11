@@ -122,24 +122,6 @@ func (c *Console) BeginGitHubConnect(
 	return response, nil
 }
 
-// beginOrganisationConnect asks the module to begin an organisation's connect
-// and signs the state it names, as id.
-func (c *Console) beginOrganisationConnect(ctx context.Context, id access.Identity, org, owner string) (githubBegin, error) {
-	ctx, cancel := context.WithTimeout(ctx, githubCallTimeout)
-	defer cancel()
-	caller, _, err := c.snapshot(ctx, id)
-	if err != nil {
-		return githubBegin{}, err
-	}
-	begun, err := consolecall.ProxyJSON[consolewire.BeginConnectRequest, consolewire.Begun](ctx, c.githubModule(),
-		consolewire.Module, consolewire.BeginConnect, caller,
-		consolewire.BeginConnectRequest{Org: org, OwnerDirectory: owner})
-	if err != nil {
-		return githubBegin{}, githubError(err)
-	}
-	return c.signBegun(id, begun)
-}
-
 // signBegun signs the state a module's begin names and puts it in the URL.
 func (c *Console) signBegun(id access.Identity, begun consolewire.Begun) (githubBegin, error) {
 	state, err := c.deps.State.IssueAs(access.Binding{Bind: begun.Bind, Actor: id.Who(), Owner: begun.Owner})
@@ -154,18 +136,6 @@ func (c *Console) DisconnectGitHubOrganisation(
 	ctx context.Context, req *connect.Request[directoryrosterv1.DisconnectGitHubOrganisationRequest],
 ) (*connect.Response[directoryrosterv1.DisconnectGitHubOrganisationResponse], error) {
 	return githubProto[directoryrosterv1.DisconnectGitHubOrganisationRequest, directoryrosterv1.DisconnectGitHubOrganisationResponse](ctx, c, consolewire.DisconnectOrganisation, access.RoleOperator, req)
-}
-
-// disconnectOrganisation is the work of it, which [Console.DisconnectGitHubApp]
-// does too.
-func (c *Console) disconnectOrganisation(ctx context.Context, org string) (githubDisconnect, error) {
-	resp, err := c.DisconnectGitHubOrganisation(ctx, connect.NewRequest(&directoryrosterv1.DisconnectGitHubOrganisationRequest{Org: org}))
-	if err != nil {
-		return githubDisconnect{}, err
-	}
-	return githubDisconnect{
-		uninstalled: resp.Msg.GetUninstalled(), detail: resp.Msg.GetDetail(), settingsURL: resp.Msg.GetAppSettingsUrl(),
-	}, nil
 }
 
 // ChangeGitHubOrganisationOwner changes the directory recorded as a connected
@@ -235,6 +205,17 @@ func (c *Console) githubDeps() ghconsole.Deps {
 	}
 	if c.deps.Authorizer != nil {
 		deps.Policy = c.deps.Authorizer.Policy
+		// The module reads no directory: it asks, and in this process the answer is
+		// the authorizer's.
+		deps.Directory = func(ctx context.Context, email string) (ghconsole.Facts, error) {
+			explained, err := c.deps.Authorizer.Explain(ctx, access.Proof{Email: email})
+			if err != nil {
+				return ghconsole.Facts{}, err
+			}
+			return ghconsole.Facts{
+				InDomain: explained.InDomain, Authoritative: explained.Authoritative, Found: explained.Found, Suspended: explained.Suspended,
+			}, nil
+		}
 	}
 	return deps
 }
@@ -291,23 +272,6 @@ func (c *Console) CheckGitHubCatalogueApp(
 	return githubProto[directoryrosterv1.CheckGitHubCatalogueAppRequest, directoryrosterv1.CheckGitHubCatalogueAppResponse](ctx, c, consolewire.CheckCatalogueApp, access.RoleOperator, req)
 }
 
-// operableApp is the App an id names, as the module shows it to the caller,
-// with whether the caller may operate it: the console's way to know which kind
-// of App a Begin or a Disconnect is about without holding its record.
-func (c *Console) operableApp(ctx context.Context, id string) (*directoryrosterv1.GitHubApp, error) {
-	if _, err := requireAnywhere(ctx, access.RoleOperator); err != nil {
-		return nil, err
-	}
-	got, err := c.GetGitHubApp(ctx, connect.NewRequest(&directoryrosterv1.GetGitHubAppRequest{Id: id}))
-	if err != nil {
-		return nil, err
-	}
-	if !got.Msg.GetApp().GetCanOperate() {
-		return nil, connect.NewError(connect.CodePermissionDenied, errors.New("this needs the operator role over this App"))
-	}
-	return got.Msg.GetApp(), nil
-}
-
 // beginVia asks the module to begin a flow with request and signs the state it
 // names as the caller.
 func beginVia[Req any](ctx context.Context, c *Console, method string, req Req) (githubBegin, error) {
@@ -358,14 +322,6 @@ func (c *Console) DisconnectGitHubCatalogueApp(
 		ctx, c, consolewire.DisconnectCatalogueApp, access.RoleOperator, req)
 }
 
-func (c *Console) disconnectCatalogueApp(ctx context.Context, id string) (githubDisconnect, error) {
-	resp, err := c.DisconnectGitHubCatalogueApp(ctx, connect.NewRequest(&directoryrosterv1.DisconnectGitHubCatalogueAppRequest{Id: id}))
-	if err != nil {
-		return githubDisconnect{}, err
-	}
-	return githubDisconnect{uninstalled: resp.Msg.GetUninstalled(), detail: resp.Msg.GetDetail(), settingsURL: resp.Msg.GetAppSettingsUrl()}, nil
-}
-
 // BeginGitHubRunnerAppConnect starts creating a runner App, or finishing
 // installing one created before.
 func (c *Console) BeginGitHubRunnerAppConnect(
@@ -392,10 +348,70 @@ func (c *Console) DisconnectGitHubRunnerApp(
 		ctx, c, consolewire.DisconnectRunnerApp, access.RoleOperator, req)
 }
 
-func (c *Console) disconnectRunnerApp(ctx context.Context, org, tier string) (githubDisconnect, error) {
-	resp, err := c.DisconnectGitHubRunnerApp(ctx, connect.NewRequest(&directoryrosterv1.DisconnectGitHubRunnerAppRequest{Org: org, Tier: tier}))
+// BeginGitHubAppConnect starts creating any App, or finishing installing one
+// created before. The module knows which kind an id is, and who may operate it.
+func (c *Console) BeginGitHubAppConnect(
+	ctx context.Context, req *connect.Request[directoryrosterv1.BeginGitHubAppConnectRequest],
+) (*connect.Response[directoryrosterv1.BeginGitHubAppConnectResponse], error) {
+	begun, err := beginVia(ctx, c, consolewire.BeginAppConnect, consolewire.BeginAppConnectRequest{
+		ID: req.Msg.GetId(), Owner: req.Msg.GetOwner(), OwnerDirectory: req.Msg.GetOwnerDirectory(),
+	})
 	if err != nil {
-		return githubDisconnect{}, err
+		return nil, err
 	}
-	return githubDisconnect{uninstalled: resp.Msg.GetUninstalled(), detail: resp.Msg.GetDetail(), settingsURL: resp.Msg.GetAppSettingsUrl()}, nil
+	response := connect.NewResponse(&directoryrosterv1.BeginGitHubAppConnectResponse{Url: begun.url, Manifest: begun.manifest})
+	c.pinFlow(response.Header(), begun.state)
+	return response, nil
+}
+
+// DisconnectGitHubApp uninstalls any App, then forgets it.
+func (c *Console) DisconnectGitHubApp(
+	ctx context.Context, req *connect.Request[directoryrosterv1.DisconnectGitHubAppRequest],
+) (*connect.Response[directoryrosterv1.DisconnectGitHubAppResponse], error) {
+	return githubProto[directoryrosterv1.DisconnectGitHubAppRequest, directoryrosterv1.DisconnectGitHubAppResponse](
+		ctx, c, consolewire.DisconnectApp, access.RoleOperator, req)
+}
+
+// BeginGitHubLinkAppConnect starts creating the link App.
+func (c *Console) BeginGitHubLinkAppConnect(
+	ctx context.Context, req *connect.Request[directoryrosterv1.BeginGitHubLinkAppConnectRequest],
+) (*connect.Response[directoryrosterv1.BeginGitHubLinkAppConnectResponse], error) {
+	begun, err := beginVia(ctx, c, consolewire.BeginLinkAppConnect, consolewire.BeginLinkAppConnectRequest{Owner: req.Msg.GetOwner()})
+	if err != nil {
+		return nil, err
+	}
+	response := connect.NewResponse(&directoryrosterv1.BeginGitHubLinkAppConnectResponse{Url: begun.url, Manifest: begun.manifest})
+	c.pinFlow(response.Header(), begun.state)
+	return response, nil
+}
+
+// DisconnectGitHubLinkApp forgets the link App and makes every link made with it
+// unverifiable.
+func (c *Console) DisconnectGitHubLinkApp(
+	ctx context.Context, req *connect.Request[directoryrosterv1.DisconnectGitHubLinkAppRequest],
+) (*connect.Response[directoryrosterv1.DisconnectGitHubLinkAppResponse], error) {
+	return githubProto[directoryrosterv1.DisconnectGitHubLinkAppRequest, directoryrosterv1.DisconnectGitHubLinkAppResponse](
+		ctx, c, consolewire.DisconnectLinkApp, access.RoleOperator, req)
+}
+
+// ConfirmGitHubRemovals lets exactly the removal set the operator saw go ahead.
+func (c *Console) ConfirmGitHubRemovals(
+	ctx context.Context, req *connect.Request[directoryrosterv1.ConfirmGitHubRemovalsRequest],
+) (*connect.Response[directoryrosterv1.ConfirmGitHubRemovalsResponse], error) {
+	return githubProto[directoryrosterv1.ConfirmGitHubRemovalsRequest, directoryrosterv1.ConfirmGitHubRemovalsResponse](
+		ctx, c, consolewire.ConfirmRemovals, access.RoleOperator, req)
+}
+
+// ImportGitHubLinks adopts approved pairings as links.
+func (c *Console) ImportGitHubLinks(
+	ctx context.Context, req *connect.Request[directoryrosterv1.ImportGitHubLinksRequest],
+) (*connect.Response[directoryrosterv1.ImportGitHubLinksResponse], error) {
+	return githubProto[directoryrosterv1.ImportGitHubLinksRequest, directoryrosterv1.ImportGitHubLinksResponse](
+		ctx, c, consolewire.ImportLinks, access.RoleOperator, req)
+}
+
+// beginOrganisationConnect asks the module to begin an organisation's connect
+// and signs the state it names, as id.
+func (c *Console) beginOrganisationConnect(ctx context.Context, id access.Identity, org, owner string) (githubBegin, error) {
+	return beginAs(ctx, c, id, consolewire.BeginConnect, consolewire.BeginConnectRequest{Org: org, OwnerDirectory: owner})
 }

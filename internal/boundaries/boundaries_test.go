@@ -379,9 +379,11 @@ func TestTheIssuerNamesNoRingInternals(t *testing.T) {
 // may import: the module's console surface (method names, request types, the
 // stores' interfaces). The rest of the provider's packages hold its credentials.
 //
-// TODO(v1.76 E-units): add internal/githubapp and backend/google as G1-G4 and
-// Y1 move the last of their operations, and delete this note.
-var consoleDoor = map[string]string{}
+// TODO(v1.76 E-units): add backend/google as Y1 moves the last of its
+// operations, and delete this note.
+var consoleDoor = map[string]string{
+	"internal/githubapp": "internal/githubapp/console",
+}
 
 // The console reaches a provider only through a module call: the shared
 // server imports none of a moved provider's packages beyond its console door,

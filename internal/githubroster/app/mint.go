@@ -7,12 +7,21 @@ import (
 	"net/http"
 	"time"
 
+	"connectrpc.com/connect"
+
+	"github.com/truvity/sluis/blobprefix"
+	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
+	"github.com/truvity/sluis/gen/directoryroster/v1/directoryrosterv1connect"
+
 	"github.com/truvity/sluis/internal/audit"
+	"github.com/truvity/sluis/internal/consoleauth"
 	ghconsole "github.com/truvity/sluis/internal/githubapp/console"
 	"github.com/truvity/sluis/internal/githubapp/githubtokens"
 	"github.com/truvity/sluis/internal/modcall"
 	"github.com/truvity/sluis/internal/portstore"
+	"github.com/truvity/sluis/internal/rails"
 	"github.com/truvity/sluis/internal/store"
+	"github.com/truvity/sluis/internal/telemetry"
 	"github.com/truvity/sluis/policy"
 )
 
@@ -75,6 +84,10 @@ func (m *Minter) ServeConsole(ctx context.Context, cfg Config, log *slog.Logger)
 	if m.trail, err = audit.Open(ctx, cfg.audit); err != nil {
 		return err
 	}
+	directory, err := consoleDirectory(ctx, cfg)
+	if err != nil {
+		return err
+	}
 	ghconsole.Register(m.rpc, ghconsole.New(ghconsole.Deps{
 		Log:        log,
 		Audit:      m.trail,
@@ -84,8 +97,48 @@ func (m *Minter) ServeConsole(ctx context.Context, cfg Config, log *slog.Logger)
 		Orgs:       portstore.NewGitHubOrgs(m.base),
 		OrgAppName: cfg.policy.OrganisationAppName,
 		HTTP:       &http.Client{Timeout: 30 * time.Second},
+		Directory:  directory,
+		// And what a link may be made of: the module reads the records of
+		// the connections, the Apps and the links it keeps, and asks the console
+		// what the directory knows.
+		Reports:       rails.NewBlobReports(m.stores.Ports.Blob, blobprefix.GitHubReports),
+		Confirmations: portstore.NewGitHubOrgs(m.base),
+		LinkApp:       portstore.NewGitHubOrgs(m.base),
+		Links:         portstore.NewGitHubLinks(m.base),
+		RunnerApps:    portstore.NewGitHubRunnerApps(m.base),
+		RunnerTiers:   cfg.policy.RunnerTiers(),
+		CatalogueApps: portstore.NewGitHubCatalogueApps(m.base),
+		Catalogue:     cfg.policy.GitHubCatalogue(),
 	}))
 	return nil
+}
+
+// consoleDirectory is what the directory knows of an address, asked of the
+// console as this module's own identity (the roster controllers may explain): a
+// module reads no directory itself.
+func consoleDirectory(ctx context.Context, cfg Config) (func(context.Context, string) (ghconsole.Facts, error), error) {
+	if cfg.console == "" {
+		return nil, nil
+	}
+	var proof consoleauth.Source = consoleauth.File(cfg.tokenFile)
+	if cfg.consoleAWS != "" {
+		aws, err := consoleauth.NewAWS(ctx, cfg.consoleAWS)
+		if err != nil {
+			return nil, err
+		}
+		proof = aws
+	}
+	opts := append([]connect.ClientOption{consoleauth.Interceptor(proof)}, telemetry.ConnectClientOptions()...)
+	client := directoryrosterv1connect.NewAccessServiceClient(&http.Client{Timeout: 30 * time.Second}, cfg.console, opts...)
+	return func(ctx context.Context, email string) (ghconsole.Facts, error) {
+		resp, err := client.Explain(ctx, connect.NewRequest(&directoryrosterv1.ExplainRequest{Email: email}))
+		if err != nil {
+			return ghconsole.Facts{}, err
+		}
+		return ghconsole.Facts{
+			InDomain: resp.Msg.GetInDomain(), Authoritative: resp.Msg.GetAuthoritative(), Found: resp.Msg.GetFound(), Suspended: resp.Msg.GetSuspended(),
+		}, nil
+	}, nil
 }
 
 // MintServer is the `github` module's server with the mint over apps: it
