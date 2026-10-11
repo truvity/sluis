@@ -15,6 +15,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/truvity/sluis/internal/cloudflare"
 	"github.com/truvity/sluis/internal/cloudflare/minter"
 	"github.com/truvity/sluis/internal/maintenance"
 	"github.com/truvity/sluis/internal/modcall"
@@ -41,6 +42,12 @@ var (
 	// ErrMaintenance is the module being restored: it mints nothing until the
 	// restore has finished.
 	ErrMaintenance = minter.ErrMaintenance
+	// ErrNotOurs is a token sluis did not mint for the preset.
+	ErrNotOurs = minter.ErrNotOurs
+	// ErrContended is a preset another runner is rotating.
+	ErrContended = minter.ErrContended
+	// ErrNoMinter is an account whose minter credential is not in the store.
+	ErrNoMinter = minter.ErrNoMinter
 )
 
 // Minting is what the on-demand exchange needs of the minter: the grants
@@ -59,6 +66,18 @@ const (
 	MethodGranted = "granted"
 )
 
+// The methods the console calls (docs/decisions/0071 D93 a, v1.76 D-v176-1 b):
+// its Cloudflare page and the three things a person does there. They are
+// registered by [RegisterConsole] and answer the caller class `console` only.
+const (
+	MethodStatus      = "status"
+	MethodListPresets = "list_presets"
+	MethodAccounts    = "accounts"
+	MethodRotate      = "rotate_preset"
+	MethodRevoke      = "revoke_token"
+	MethodCredential  = "credential"
+)
+
 // Caller classes: who may call which method (docs/decisions/0071). The issuer
 // asks for the on-demand mint and the grants listing; the console lists grants.
 const (
@@ -72,6 +91,10 @@ const (
 	codeNotGranted    = "not_granted"
 	codeLifetime      = "lifetime"
 	codeMaintenance   = maintenance.Code
+	codeNotOurs       = "not_ours"
+	codeContended     = "contended"
+	codeNoMinter      = "no_minter"
+	codeRefused       = "prototype_refused"
 )
 
 type mintRequest struct {
@@ -114,6 +137,17 @@ func codeOf(err error) error {
 		return modcall.Coded(codeLifetime, "")
 	case errors.Is(err, minter.ErrMaintenance), errors.Is(err, minter.ErrMaintenanceUnknown):
 		return modcall.Coded(codeMaintenance, "")
+	case errors.Is(err, minter.ErrNotOurs):
+		return modcall.Coded(codeNotOurs, "")
+	case errors.Is(err, minter.ErrContended):
+		return modcall.Coded(codeContended, "")
+	case errors.Is(err, minter.ErrNoMinter):
+		return modcall.Coded(codeNoMinter, "")
+	}
+	// A refused prototype carries its detail: the page exists to show it, and
+	// it names a token id and a reason, never a value.
+	if pe, ok := cloudflare.IsPrototypeError(err); ok {
+		return modcall.Coded(codeRefused, pe.Detail)
 	}
 	return err
 }
@@ -173,6 +207,14 @@ func errOf(err error) error {
 		return ErrLifetime
 	case codeMaintenance:
 		return ErrMaintenance
+	case codeNotOurs:
+		return ErrNotOurs
+	case codeContended:
+		return ErrContended
+	case codeNoMinter:
+		return ErrNoMinter
+	case codeRefused:
+		return &RefusedError{Detail: e.Message}
 	}
 	return err
 }

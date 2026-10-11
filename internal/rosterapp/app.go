@@ -404,19 +404,26 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 			a.Close()
 			return nil, err
 		}
-		directory.ConsoleServer().UseCloudflare(a.cloudflare)
+		directory.ConsoleServer().UseCloudflare(cfrpc.NewLocal(a.cloudflare))
 		// The on-demand exchange and the grants listing at the issuer.
 		assembled.Issuer().UseCloudflare(a.cloudflare)
 	}
 	if cfg.Cloudflare != nil && cfg.Cloudflare.Remote != nil {
-		// The minter is another module's: only the on-demand exchange and the
-		// grants listing at the issuer call it.
+		// The minter is another module's: the on-demand exchange and the grants
+		// listing at the issuer call it as `issuer`, and the console's Cloudflare
+		// page as `console`. This process holds no minter credential reference.
 		remote, err := cfrpc.Dial(ctx, cfg.Cloudflare.Remote, log)
 		if err != nil {
 			a.Close()
 			return nil, err
 		}
 		assembled.Issuer().UseCloudflare(remote)
+		console, err := cfrpc.DialAs(ctx, cfg.Cloudflare.Remote, cfrpc.CallerConsole, log)
+		if err != nil {
+			a.Close()
+			return nil, err
+		}
+		directory.ConsoleServer().UseCloudflare(console)
 	}
 	if cfg.Backup != nil {
 		// The Backups page reads the two modules as the caller class `console`.
