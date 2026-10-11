@@ -1112,3 +1112,17 @@ func SlackLeaverReported(workspace, person, user, reason string) *record.Record 
 	return build("roster.slack_leaver.reported", System(), withReason(reason), personParty(person),
 		[]*record.Target{targetSlackWorkspace(workspace), targetSlackUser(user)}, data{"change": "remove"})
 }
+
+// AccessExplained is a look-up of what a proof would effectively be
+// granted: an operator's, which succeeds, or a refused caller's, which is
+// denied. The subject is the proof looked up (kind person, ci or workload);
+// groups, clients and admitted are counts and never names. A refused look-up
+// carries zero counts.
+func AccessExplained(actor Actor, o Outcome, subjectKind, subjectID string, groups, clients, admitted int) *record.Record {
+	var subject *record.Party
+	if subjectID != "" {
+		subject = &record.Party{Kind: subjectKind, Id: strings.ToLower(subjectID)}
+	}
+	return build("roster.access.explained", actor, o, subject, nil,
+		data{"proof": subjectKind, "groups": groups, "clients": clients, "admitted": admitted})
+}

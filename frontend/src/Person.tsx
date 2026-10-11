@@ -15,6 +15,7 @@ import Typography from "@mui/material/Typography";
 import { access, forHowLong, github, issuerIsSameOrigin, issuerFailure, personName, roleName, sessions, sourceName, type Me } from "./api";
 import type { ExplainRequest, ExplainResponse } from "./gen/sluis/v1/access_pb";
 import { RevokeScope, type Session } from "./gen/sluis/v1/session_pb";
+import { explainPanels } from "./explainModel";
 import { formatChain } from "./heldChain";
 import { useAsync } from "./hooks";
 import { paths } from "./router";
@@ -39,7 +40,11 @@ export function Person({
   operator?: boolean;
   onDone?: (message: string) => void;
 }) {
-  const explained = useAsync(() => access.explain({ email } as ExplainRequest), [email]);
+  const panels = explainPanels(Boolean(operator));
+  const explained = useAsync(
+    () => (panels.person ? access.explain({ email } as ExplainRequest) : Promise.resolve(undefined)),
+    [email, panels.person],
+  );
   const self = me?.status === "signed-in" && me.email?.toLowerCase() === email.toLowerCase();
 
   if (!email) {
@@ -59,8 +64,9 @@ export function Person({
           onDone={onDone}
         />
       ) : null}
-      {explained.value ? <GitHubSection email={email} self={self} /> : null}
-      {explained.value ? <PersonSlack email={email} /> : null}
+      {!panels.person ? <Nothing>What a person effectively reaches is shown to operators.</Nothing> : null}
+      {explained.value || !panels.person ? <GitHubSection email={email} self={self} /> : null}
+      {explained.value || !panels.person ? <PersonSlack email={email} /> : null}
     </Box>
   );
 }
