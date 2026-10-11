@@ -159,7 +159,7 @@ func (c *Console) beginOrganisationConnect(
 		return out, nil
 	}
 	root := c.githubRoot()
-	manifest, err := json.Marshal(githubapp.NewManifest(org, c.deps.PublicURL, root+githubCallbackPath, root+githubSetupPath))
+	manifest, err := json.Marshal(githubapp.NewManifestNamed(org, c.orgAppName(org), c.deps.PublicURL, root+githubCallbackPath, root+githubSetupPath))
 	if err != nil {
 		return githubBegin{}, connect.NewError(connect.CodeInternal, err)
 	}

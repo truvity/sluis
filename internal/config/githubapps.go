@@ -21,7 +21,8 @@ import (
 // declares a tier an operator may make a runner App for, in one organisation
 // (`org`) or in any (no `org`), and its Apps are `runner-<tier>-<org>`. The
 // `link` entry is the App that links a person's GitHub account; it has the id
-// `link` and declares only its labels and whether it is exported.
+// `link` and declares its labels, whether it is exported, the owner `org` and a
+// `name` for the App it is created as.
 type GitHubApp struct {
 	// ID is the App's key in storage: `link`, a catalogue App's own id, or
 	// `runner-<tier>` (`runner-<tier>-<org>` with an `org`), which a runner entry
@@ -37,8 +38,12 @@ type GitHubApp struct {
 	Org  string `yaml:"org,omitempty"`
 	Tier string `yaml:"tier,omitempty"`
 
+	// Name is the App's name on GitHub, at most 34 characters: a catalogue
+	// App's (default <org>-<id>) or the link App's (default
+	// <org>-access-roster-link).
+	Name string `yaml:"name,omitempty"`
+
 	// The rest is a catalogue App's alone.
-	Name         string             `yaml:"name,omitempty"`
 	Description  string             `yaml:"description,omitempty"`
 	Public       bool               `yaml:"public,omitempty"`
 	Permissions  map[string]string  `yaml:"permissions,omitempty"`
@@ -203,7 +208,10 @@ func (d *PolicyDocument) validateGitHubApps() []error {
 				fail("the link App's id is %q", appid.LinkID)
 			}
 			if app.Tier != "" || app.hasCatalogueFields() {
-				fail("the link App declares only labels, export and org")
+				fail("the link App declares only labels, export, org and name")
+			}
+			if err := checkAppName(app.Name); err != nil {
+				fail("%w", err)
 			}
 		case appid.Runner:
 			if !runnerapp.ValidTier(app.Tier) {
@@ -215,7 +223,7 @@ func (d *PolicyDocument) validateGitHubApps() []error {
 			if app.ID != "" && app.ID != app.runnerID() {
 				fail("a runner entry's id is %q", app.runnerID())
 			}
-			if app.hasCatalogueFields() {
+			if app.Name != "" || app.hasCatalogueFields() {
 				fail("a runner entry declares only tier, org, labels and export: a runner App is always exported")
 			}
 		case appid.Catalogue:
@@ -256,8 +264,62 @@ func (d *PolicyDocument) validateGitHubApps() []error {
 // hasCatalogueFields reports whether the entry declares what only a catalogue
 // App has.
 func (a *GitHubApp) hasCatalogueFields() bool {
-	return a.Name != "" || a.Description != "" || a.Public || len(a.Permissions) > 0 || len(a.Events) > 0 ||
+	return a.Description != "" || a.Public || len(a.Permissions) > 0 || len(a.Events) > 0 ||
 		a.Webhook != nil || a.Installation != "" || len(a.Grants) > 0
+}
+
+// checkAppName holds a declared App name to GitHub's limit. Empty is the
+// default and passes.
+func checkAppName(name string) error {
+	if name == "" {
+		return nil
+	}
+	if strings.TrimSpace(name) == "" || len(name) > catalogue.NameLimit {
+		return fmt.Errorf("name %q does not fit GitHub's %d characters", name, catalogue.NameLimit)
+	}
+	return nil
+}
+
+// LinkAppName is the name the link App is created with, or empty for the
+// default (<owner>-access-roster-link).
+func (d *PolicyDocument) LinkAppName() string {
+	apps := d.GitHubApps()
+	for i := range apps {
+		if apps[i].Purpose == appid.Link {
+			return apps[i].Name
+		}
+	}
+	return ""
+}
+
+// OrganisationAppName is the name the organisation's App is created with
+// (`controllers.github.appNames`), or empty for the default
+// (<org>-access-roster).
+func (d *PolicyDocument) OrganisationAppName(org string) string {
+	if d == nil || d.Controllers == nil || d.Controllers.GitHub == nil {
+		return ""
+	}
+	return d.Controllers.GitHub.AppNames[org]
+}
+
+// validateAppNames holds `controllers.github.appNames` to the organisations
+// the policy binds and to GitHub's name limit.
+func (d *PolicyDocument) validateAppNames() []error {
+	if d.Controllers == nil || d.Controllers.GitHub == nil {
+		return nil
+	}
+	var errs []error
+	for _, org := range slices.Sorted(maps.Keys(d.Controllers.GitHub.AppNames)) {
+		if _, bound := d.Policy.GitHub[org]; !bound {
+			errs = append(errs, fmt.Errorf("controllers.github.appNames names %s, which the policy's github table does not bind", org))
+		}
+		if name := d.Controllers.GitHub.AppNames[org]; name == "" {
+			errs = append(errs, fmt.Errorf("controllers.github.appNames: %s has an empty name: leave the entry out for the default", org))
+		} else if err := checkAppName(name); err != nil {
+			errs = append(errs, fmt.Errorf("controllers.github.appNames: %s: %w", org, err))
+		}
+	}
+	return errs
 }
 
 // validateAppRefs holds `controllers.github.appRefs` to the list: an

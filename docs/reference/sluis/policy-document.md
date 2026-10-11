@@ -7,11 +7,12 @@ The policy document is the one file a process loads, named by the service docume
 | `exchange.clusters[]` | `{name, issuer, jwksUri}` per federated cluster |
 | `exchange.aws` | `audience`, `maxAge` and `accounts[]` (`{account, name, issuer, jwksUri, orgId, algs}`) |
 | `exchange.github.owners[]` | organisations whose CI tokens are verified; none verifies none |
-| `apps.github.apps[]` | every GitHub App: `{id, purpose, labels, export, org, tier}` and, for `catalogue`, the App's declaration ([GitHub Apps catalogue](../../guides/sluis/connect/github-apps-catalogue.md)) |
+| `apps.github.apps[]` | every GitHub App: `{id, purpose, labels, export, org, tier, name}` (`name`: the `link` App's or a catalogue App's name on GitHub, at most 34) and, for `catalogue`, the App's declaration ([GitHub Apps catalogue](../../guides/sluis/connect/github-apps-catalogue.md)) |
 | `apps.github.runnerTiers[]`, `apps.github.catalogue[]` | deprecated, removed in v1.77: read as entries of `apps.github.apps`, with a warning |
 | `apps.slack.catalogue[]` | the Slack App catalogue ([Slack Apps catalogue](../../guides/sluis/connect/slack-apps-catalogue.md)) |
 | `controllers.github.enabledOrgs[]` | organisations the GitHub controller changes; other bound organisations are a dry run |
 | `controllers.github.appRefs` | `{org: App id}`: the App an organisation uses (`app_ref`) |
+| `controllers.github.appNames` | `{org: name}`: the name an organisation's App is created with, at most 34; the default is built in |
 | `controllers.slack.enabledWorkspaces[]` | workspaces the Slack controller changes |
 
 No section holds a secret: every row is a name and a URL.
@@ -47,6 +48,7 @@ The document checks run wherever it is loaded: the binary, `sluisctl policy rend
 |---|
 | a catalogue grant naming an undeclared group |
 | an App with no `purpose`, a second `link` App, a runner entry without a `tier` |
+| an `appNames` entry for an unbound organisation or a name over 34 characters, a `link` or catalogue `name` over 34 |
 | an `appRefs` entry for an unbound organisation, an undeclared App or one created under another organisation |
 | a Slack App for an undeclared workspace |
 | an enabled organisation or workspace the policy does not bind |

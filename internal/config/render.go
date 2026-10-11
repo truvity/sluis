@@ -143,6 +143,15 @@ func (d *PolicyDocument) merge(layer *PolicyDocument, from string) error {
 				}
 				d.Controllers.GitHub.AppRefs[org] = ref
 			}
+			for org, name := range c.GitHub.AppNames {
+				if other, clash := d.Controllers.GitHub.AppNames[org]; clash && other != name {
+					return fmt.Errorf("%s: controllers.github.appNames: %s is declared twice across merged files", from, org)
+				}
+				if d.Controllers.GitHub.AppNames == nil {
+					d.Controllers.GitHub.AppNames = map[string]string{}
+				}
+				d.Controllers.GitHub.AppNames[org] = name
+			}
 		}
 		if c.Slack != nil {
 			if d.Controllers.Slack == nil {

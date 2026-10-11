@@ -460,6 +460,14 @@ func (c *Console) githubAppSpecs(ctx context.Context) ([]githubAppSpec, githubAp
 	return specs, facts, nil
 }
 
+// orgAppName is the configured name of an organisation's App, or empty.
+func (c *Console) orgAppName(org string) string {
+	if c.deps.GitHubOrgAppName == nil {
+		return ""
+	}
+	return c.deps.GitHubOrgAppName(org)
+}
+
 // presetID is the id a preset App takes, unless a catalogue id already
 // has it.
 func presetID(base string, taken map[string]bool) string {
@@ -493,10 +501,13 @@ func (c *Console) linkAppSpecs(ctx context.Context, taken map[string]bool) ([]gi
 		secret:  secretNameOf(c.deps.GitHubLinkApp), secretKeys: []string{link.AppKey},
 	}
 	if connected {
-		spec.org, spec.entry = record.Owner, githubapp.LinkApp(record.Owner)
+		spec.org, spec.entry = record.Owner, githubapp.LinkAppNamed(record.Owner, c.deps.GitHubLinkAppName)
 		spec.created, spec.installed = true, true
 		spec.appID, spec.appSlug, spec.htmlURL = record.AppID, record.AppSlug, record.HTMLURL
 		spec.connectedAt, spec.connectedBy = record.ConnectedAt, record.ConnectedBy
+	} else if name := c.deps.GitHubLinkAppName; name != "" {
+		// Not created yet: the configured name is what it will be created as.
+		spec.entry = catalogue.App{Name: name}
 	}
 	all, err := links.List(ctx)
 	if err != nil {
@@ -554,7 +565,7 @@ func (c *Console) controllerAppSpecs(ctx context.Context, bound map[string]*bind
 			secret: secretNameOf(c.deps.GitHubOrgs), secretKeys: []string{connection.Key(org)},
 		}
 		if isBound {
-			spec.entry = githubapp.OrganisationApp(org)
+			spec.entry = githubapp.OrganisationAppNamed(org, c.orgAppName(org))
 		}
 		if created {
 			spec.created, spec.installed = true, record.Installed()
@@ -822,12 +833,15 @@ func (s *githubAppSpec) declarer() string {
 // is created under.
 func (s *githubAppSpec) declaredName() string {
 	switch {
+	case s.appSlug != "":
+		// Once an App exists its slug is its name: the owner may have renamed
+		// it on GitHub's create page, and nothing declared can say so. For an
+		// App nothing declares any more it is the only name there is.
+		return s.appSlug
 	case s.entry.Org != "":
 		return s.entry.DisplayName()
-	case s.appSlug != "":
-		// Nothing declares it any more: what it was created as is the only
-		// name there is.
-		return s.appSlug
+	case s.purpose == appLink && s.entry.Name != "":
+		return s.entry.Name
 	case s.purpose == appLink:
 		return "link App"
 	default:

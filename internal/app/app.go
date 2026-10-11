@@ -884,6 +884,8 @@ func New(ctx context.Context, cfg Config, st *store.Stores, log *slog.Logger) (*
 		GitHubConfirmations: githubConfirmations(kept.githubOrgs),
 		GitHubRunnerApps:    githubRunnerApps(kept.githubRunnerApps, cfg.demo, demoAppKey),
 		GitHubRunnerTiers:   cfg.githubRunnerTiers,
+		GitHubOrgAppName:    cfg.policy.OrganisationAppName,
+		GitHubLinkAppName:   cfg.policy.LinkAppName(),
 		GitHubCatalogue:     cfg.githubCatalogue,
 		GitHubCatalogueApps: githubCatalogueApps(kept.githubCatalogueApps, cfg.demo, demoAppKey),
 		GitHubMints:         githubMints,
