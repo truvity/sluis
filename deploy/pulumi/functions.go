@@ -10,13 +10,8 @@ import (
 	sluisconfig "github.com/truvity/sluis/config"
 )
 
-// The defaults of a module function. The mint-only function answers a call that
-// waits for it, so its ceiling is low; the others run a pass.
+// The limits of a module function's settings.
 const (
-	// DefaultMintMemoryMB and DefaultMintTimeoutSeconds are the mint-only
-	// function's: a token mint is one signed call to the provider.
-	DefaultMintMemoryMB         = 256
-	DefaultMintTimeoutSeconds   = 30
 	moduleFunctionMaxMemoryMB   = 10240
 	moduleFunctionMinMemoryMB   = 128
 	moduleFunctionMaxTimeoutSec = 900
@@ -26,19 +21,16 @@ const (
 // keyed by [ModuleFunctions]. Every field is optional.
 type ModuleArgs struct {
 	// FunctionName overrides the name of the function, its role, its policy, its
-	// log group and its configuration layer. Default `sluis-<instance>-<module>`
-	// (`sluis-<instance>-github-mint` for the mint-only function).
+	// log group and its configuration layer. Default `sluis-<instance>-<module>`.
 	FunctionName string
 	// Package and PackageSHA256 are the module's release zip. Left empty, the zip
 	// is the one beside LambdaArgs.Package with the module's name in place of
 	// `issuer` (`sluis-slack_<version>_linux_arm64.zip`), with the digest from the
-	// release's checksums.txt (LambdaArgs.Release). The mint-only function runs
-	// the github zip: it is the same code with a role that reads and a document
-	// that serves the mint.
+	// release's checksums.txt (LambdaArgs.Release).
 	Package       string
 	PackageSHA256 string
-	// MemoryMB defaults to LambdaArgs.Function.MemoryMB (256 for the mint-only
-	// function), TimeoutSeconds to LambdaArgs.Function.TimeoutSeconds (30).
+	// MemoryMB defaults to LambdaArgs.Function.MemoryMB and
+	// TimeoutSeconds to LambdaArgs.Function.TimeoutSeconds.
 	MemoryMB       int
 	TimeoutSeconds int
 	// ReservedConcurrency is the function's reserved concurrency. Nil is unreserved.
@@ -173,14 +165,6 @@ func (a *LambdaArgs) planModules() ([]moduleFunctionPlan, error) {
 		m := a.Modules[r]
 		p := moduleFunctionPlan{role: r, name: a.moduleFunctionName(r), pkg: m.Package, pkgSHA: m.PackageSHA256,
 			memory: m.MemoryMB, time: m.TimeoutSeconds, reserved: m.ReservedConcurrency, document: m.Document}
-		if p.pkg == "" && r == RoleGitHubMint {
-			// The same zip as the github function, whatever that one is.
-			for _, q := range out {
-				if q.role == RoleGitHub {
-					p.pkg, p.pkgSHA = q.pkg, q.pkgSHA
-				}
-			}
-		}
 		if p.pkg == "" {
 			var err error
 			if p.pkg, err = modulePackage(a.Package, r); err != nil {
@@ -189,15 +173,9 @@ func (a *LambdaArgs) planModules() ([]moduleFunctionPlan, error) {
 		}
 		if p.memory == 0 {
 			p.memory = a.Function.MemoryMB
-			if r == RoleGitHubMint {
-				p.memory = DefaultMintMemoryMB
-			}
 		}
 		if p.time == 0 {
 			p.time = a.Function.TimeoutSeconds
-			if r == RoleGitHubMint {
-				p.time = DefaultMintTimeoutSeconds
-			}
 		}
 		if p.document == "" {
 			p.document = a.moduleDocs[r]
@@ -215,11 +193,11 @@ func (a *LambdaArgs) planModules() ([]moduleFunctionPlan, error) {
 }
 
 // moduleDocumentVersion is the apiVersion, without the group, of the document a
-// module function reads: the GitHub module and its mint-only function read the
+// module function reads: the GitHub module reads the
 // controller's, the Cloudflare module the service document with `cloudflare.serve`.
 func moduleDocumentVersion(role string) string {
 	switch role {
-	case RoleGitHub, RoleGitHubMint:
+	case RoleGitHub:
 		return "controller-github/v2"
 	case RoleSlack:
 		return "controller-slack/v2"
@@ -276,8 +254,7 @@ func (m *moduleFunctions) outputs(
 }
 
 // tablesNeeded are the modules whose tables the roles of NewLambda are granted:
-// those the functions host, and those the issuer and the mint-only function
-// read.
+// those the functions host, and those the issuer reads.
 func tablesNeeded() []Module {
 	seen := map[Module]bool{}
 	var out []Module
@@ -364,10 +341,8 @@ func newModuleFunctions(ctx *pulumi.Context, name string, a *LambdaArgs, child p
 			Callers: []string{ClassIssuer},
 			Policy:  a.modulePolicy(p.role, roles),
 		}
-		if p.role != RoleGitHubMint {
-			// A pass that failed is the next one's: no retry by the platform.
-			fa.NoRetry = []string{LiveAlias, CallerAlias(ClassIssuer)}
-		}
+		// A pass that failed is the next one's: no retry by the platform.
+		fa.NoRetry = []string{LiveAlias, CallerAlias(ClassIssuer)}
 		if a.Check == nil || *a.Check {
 			fa.Check = &ModuleCheck{}
 			if p.fromInstallation {
@@ -429,7 +404,7 @@ func (a *LambdaArgs) modulePolicy(role string, roles []Role) func(pulumi.StringO
 			if err != nil {
 				return "", err
 			}
-			if role != RoleGitHubMint && a.Storage != nil {
+			if a.Storage != nil {
 				st = appendNew(st, credentialsStatements(a.Storage.External, a.Region, a.AccountID, a.Instance, a.ParameterKeyArn)...)
 			}
 			return document(st)

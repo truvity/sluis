@@ -168,20 +168,17 @@ func TestProviderModulesImportNeitherIssuerappNorSigner(t *testing.T) {
 	}
 }
 
-// The GitHub module is two zips (D-v176-7 b): the controller function and the
-// mint-only function. Each main links its own function package and not the
-// other's, so the controller zip cannot answer the issuer's mint and the mint
-// zip registers no controller. (The mint still links the controller's library
-// packages through its settings loader; what it runs is its function's.)
-func TestTheGitHubZipsLinkOnlyTheirOwnFunction(t *testing.T) {
+// Each provider main links its own function package and not the others': the
+// github zip serves the passes and the issuer's mint, and registers no other
+// module's function.
+func TestTheProviderZipsLinkOnlyTheirOwnFunction(t *testing.T) {
 	const fn = "github.com/truvity/sluis/internal/lambdaapp/"
 	for _, c := range []struct {
 		main, own string
 		other     []string
 	}{
-		{"sluis-github", "githubfn", []string{"githubmintfn", "slackfn", "issuerfn", "cloudflarefn", "backupfn"}},
-		{"sluis-github-mint", "githubmintfn", []string{"githubfn", "slackfn", "issuerfn", "cloudflarefn", "backupfn"}},
-		{"sluis-slack", "slackfn", []string{"githubfn", "githubmintfn", "issuerfn", "cloudflarefn", "backupfn"}},
+		{"sluis-github", "githubfn", []string{"slackfn", "issuerfn", "cloudflarefn", "backupfn"}},
+		{"sluis-slack", "slackfn", []string{"githubfn", "issuerfn", "cloudflarefn", "backupfn"}},
 	} {
 		t.Run(c.main, func(t *testing.T) {
 			list := exec.Command("go", "list", "-tags", "lambda,lambda.norpc", "-deps", "-f", "{{.ImportPath}}", "./cmd/"+c.main)

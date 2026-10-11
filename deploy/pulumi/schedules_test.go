@@ -51,7 +51,7 @@ func TestSchedulesTargetTheirModulesLiveAlias(t *testing.T) {
 			t.Errorf("clients rate: %v", s.Inputs)
 		}
 	}
-	if n := len(rec.ofType("aws:iam/role:Role")); n != 7 { // the issuer's, the five module functions', the scheduler's
+	if n := len(rec.ofType("aws:iam/role:Role")); n != 6 { // the issuer's, the four module functions', the scheduler's
 		t.Errorf("%d roles, want one scheduler role beside the functions'", n)
 	}
 	pol := grants(statements(t, prop(rec.one(t, policyType, "staging-scheduler-policy"), "policy").StringValue()))

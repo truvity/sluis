@@ -86,7 +86,7 @@ func TestRenderModulesMatchesTheGoldenDocuments(t *testing.T) {
 // function loads it.
 func TestEveryModuleDocumentValidatesAgainstItsSchema(t *testing.T) {
 	kinds := map[string]string{
-		config.ModuleIssuer: "sluis", config.ModuleGitHub: "controller-github", config.ModuleGitHubMint: "controller-github",
+		config.ModuleIssuer: "sluis", config.ModuleGitHub: "controller-github",
 		config.ModuleSlack: "controller-slack", config.ModuleGoogle: "sluis-google", config.ModuleCloudflare: "sluis",
 	}
 	for _, name := range moduleFixtures {
@@ -126,7 +126,7 @@ func TestTheCloudflareModuleHasADocumentOnlyWithPresets(t *testing.T) {
 	if strings.Contains(string(small.Issuer), "cloudflare") {
 		t.Errorf("the issuer calls a Cloudflare module that does not exist:\n%s", small.Issuer)
 	}
-	for _, m := range []string{config.ModuleGitHub, config.ModuleGitHubMint, config.ModuleSlack, config.ModuleGoogle} {
+	for _, m := range []string{config.ModuleGitHub, config.ModuleSlack, config.ModuleGoogle} {
 		if _, has := small.Modules[m]; !has {
 			t.Errorf("no document for %s", m)
 		}
@@ -158,9 +158,6 @@ func TestTheIssuerCallsEachModuleByItsFunction(t *testing.T) {
 			t.Errorf("%s: FunctionNameOf %q, want %q", m, n, f)
 		}
 	}
-	if n := config.FunctionNameOf(in, "github-mint"); n != "sluis-staging-token-mint" {
-		t.Errorf("github-mint: %q", n)
-	}
 	// What the modules own is not in the issuer's document.
 	for _, key := range []string{"\ncontrollers:", "\ndirectory:", "accounts:", "presets:"} {
 		if strings.Contains(string(docs.Issuer), key) {
@@ -186,8 +183,8 @@ func TestAModuleDocumentOpensItsOwnTableAndReadsLayoutV5(t *testing.T) {
 		t.Fatal(err)
 	}
 	wantTable := map[string]string{
-		config.ModuleGitHub: "github:sluis-staging-github", config.ModuleGitHubMint: "github:sluis-staging-github",
-		config.ModuleSlack: "slack:chat-table", config.ModuleGoogle: "google:sluis-staging-google",
+		config.ModuleGitHub: "github:sluis-staging-github",
+		config.ModuleSlack:  "slack:chat-table", config.ModuleGoogle: "google:sluis-staging-google",
 		config.ModuleCloudflare: "cloudflare:sluis-staging-cloudflare",
 	}
 	issuer := load[internalconfig.Sluis](t, docs.Issuer)
@@ -225,9 +222,8 @@ func TestAModuleDocumentOpensItsOwnTableAndReadsLayoutV5(t *testing.T) {
 			}
 		}
 	}
-	// The mint-only function asks nothing of the console and so holds no proof.
-	if strings.Contains(string(docs.Modules[config.ModuleGitHubMint]), "console:") || !strings.Contains(string(docs.Modules[config.ModuleGitHub]), "console:") {
-		t.Error("the console proof is the controller function's and not the mint's")
+	if !strings.Contains(string(docs.Modules[config.ModuleGitHub]), "console:") {
+		t.Error("the github function holds the console proof")
 	}
 }
 
@@ -263,7 +259,7 @@ func TestTheDeclaredSecretsOfTheModulesAreDisjoint(t *testing.T) {
 	if count[config.ModuleGoogle] != 1 || count[config.ModuleCloudflare] != 1 {
 		t.Errorf("google declares %d, cloudflare %d: a workspace key and a minter each", count[config.ModuleGoogle], count[config.ModuleCloudflare])
 	}
-	if count[config.ModuleGitHub]+count[config.ModuleGitHubMint]+count[config.ModuleSlack] != 0 {
+	if count[config.ModuleGitHub]+count[config.ModuleSlack] != 0 {
 		t.Errorf("a controller declares a secret: %v", count)
 	}
 	// The issuer's are the rest: no workspace key and no minter.

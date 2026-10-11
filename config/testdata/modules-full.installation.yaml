@@ -24,7 +24,6 @@ aws:
   functionName: sluis-staging-issuer
   functions:
     slack: sluis-staging-chat
-    github-mint: sluis-staging-token-mint
   bucket: example-sluis-111122223333
   auditQueueURL: https://sqs.eu-central-1.amazonaws.com/111122223333/example-audit-ingest
 
