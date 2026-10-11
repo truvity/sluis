@@ -92,8 +92,16 @@ func TestAMalformedCatalogueIsRefusedNamingWhatIsWrong(t *testing.T) {
 			"declared twice",
 		},
 		{"an event that is not one", app("    permissions: {contents: read}\n    events: [Pull Request]\n"), "not an event name"},
-		{"the legacy package event", app("    permissions: {packages: read}\n    events: [package]\n"), "cannot subscribe to the legacy `package` event; use `registry_package` (permission packages: read)"},
-		{"registry_package without packages", app("    permissions: {contents: read}\n    events: [registry_package]\n"), `event "registry_package" needs permission packages: read`},
+		{
+			"the legacy package event",
+			app("    permissions: {packages: read}\n    events: [package]\n"),
+			"cannot subscribe to the legacy `package` event; use `registry_package` (permission packages: read)",
+		},
+		{
+			"registry_package without packages",
+			app("    permissions: {contents: read}\n    events: [registry_package]\n"),
+			`event "registry_package" needs permission packages: read`,
+		},
 		{"push without contents", app("    permissions: {issues: read}\n    events: [push]\n"), `event "push" needs permission contents: read`},
 		{"a grant with no group", grant("{repositories: ['*'], permissions: {contents: read}}"), "group is empty"},
 		{"a grant with no repositories", grant("{group: g, permissions: {contents: read}}"), "repositories"},
