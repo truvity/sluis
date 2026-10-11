@@ -1,6 +1,8 @@
 package audit
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"slices"
 	"strings"
 
@@ -71,10 +73,32 @@ func directoryGroupTargets(groups []string) []*record.Target {
 
 // directoryUserTargets are the individually listed people of a channel, as
 // targets, in address order without repeats.
+//
+// A directory_user is a person, and a deployment that declares external
+// identifiers opaque refuses a person target that reads as something typed: an
+// address does. The target is therefore a minted identifier, [DirectoryUserID],
+// the same for the same address in every record, and the address stays in the
+// channel's definition where the operator wrote it.
 func directoryUserTargets(members []string) []*record.Target {
-	out := make([]*record.Target, 0, len(members))
-	for _, m := range slices.Compact(slices.Sorted(slices.Values(members))) {
-		out = append(out, &record.Target{Type: "directory_user", Id: strings.ToLower(strings.TrimSpace(m))})
+	addresses := make([]string, 0, len(members))
+	for _, m := range members {
+		if m = strings.ToLower(strings.TrimSpace(m)); m != "" {
+			addresses = append(addresses, m)
+		}
+	}
+	out := make([]*record.Target, 0, len(addresses))
+	for _, m := range slices.Compact(slices.Sorted(slices.Values(addresses))) {
+		out = append(out, &record.Target{Type: "directory_user", Id: DirectoryUserID(m)})
 	}
 	return out
+}
+
+// DirectoryUserID is the identifier a record uses for a person of a directory
+// who has no other one (no login, no Slack user id): "du_" and the first 128
+// bits of the SHA-256 of the lower-cased address. It names nobody without the
+// directory, holds no "@" or space, and is stable, so records about one person
+// can be found together.
+func DirectoryUserID(address string) string {
+	sum := sha256.Sum256([]byte("directory_user\x00" + strings.ToLower(strings.TrimSpace(address))))
+	return "du_" + hex.EncodeToString(sum[:16])
 }
