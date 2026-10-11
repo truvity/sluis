@@ -36,7 +36,7 @@ func serviceFor(t *testing.T, module string) *httptest.Server {
 		if bearer != "tok-"+module {
 			return "", errors.New("bad bearer")
 		}
-		return "system:serviceaccount:ns:issuer", nil
+		return "issuer", nil
 	}))
 	t.Cleanup(srv.Close)
 	return srv

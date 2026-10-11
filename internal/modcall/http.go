@@ -39,8 +39,9 @@ type handlerConfig struct {
 	only    bool
 }
 
-// WithClasses maps verified subjects to caller classes, for a subject whose
-// ServiceAccount is not named for its class.
+// WithClasses maps verified subjects to caller classes. A subject it does not
+// map is its own class, as a test transport names it; on Kubernetes use
+// [WithSubjectClasses], which refuses what it does not list.
 func WithClasses(classes map[string]string) HandlerOption {
 	return func(c *handlerConfig) { c.classes = classes }
 }
@@ -54,21 +55,9 @@ func WithSubjectClasses(holds map[string][]string) HandlerOption {
 	return func(c *handlerConfig) { c.holds, c.only = holds, true }
 }
 
-// ClassOfSubject is the caller class of a verified subject: the ServiceAccount's
-// name for `system:serviceaccount:<namespace>:<name>`, the subject itself
-// otherwise.
-func ClassOfSubject(subject string) string {
-	if rest, ok := strings.CutPrefix(subject, "system:serviceaccount:"); ok {
-		if _, name, found := strings.Cut(rest, ":"); found && name != "" {
-			return name
-		}
-	}
-	return subject
-}
-
 // Handler serves the module's calls at [RPCPath]. A call with no bearer, or one
 // verify refuses, is a 401 and reaches no method. The caller class is the
-// verified subject's ([ClassOfSubject], or [WithClasses]); the request body
+// verified subject's ([WithClasses], else the subject itself); the request body
 // has no say in it.
 func (s *Server) Handler(verify Verifier, opts ...HandlerOption) http.Handler {
 	var hc handlerConfig
@@ -108,7 +97,7 @@ func (s *Server) Handler(verify Verifier, opts ...HandlerOption) http.Handler {
 		}
 		class, mapped := hc.classes[subject]
 		if !mapped {
-			class = ClassOfSubject(subject)
+			class = subject
 		}
 		writeJSON(w, s.Dispatch(WithCaller(r.Context(), class), req))
 	})
