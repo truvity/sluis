@@ -16,6 +16,7 @@
 package link
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -372,4 +373,22 @@ func Adopt(existing, candidates []Link) (adopted []Link, skipped map[int64]strin
 		}
 	}
 	return adopted, skipped
+}
+
+// AppStore is where the link App is kept: its record, which the
+// console shows, and its credential, which redeems a person's
+// authorization.
+type AppStore interface {
+	PutLinkApp(ctx context.Context, record App, credential AppCredential) error
+	LinkApp(ctx context.Context) (App, bool, error)
+	LinkAppCredential(ctx context.Context) (AppCredential, bool, error)
+	DeleteLinkApp(ctx context.Context) error
+}
+
+// Links is where people's links are kept.
+type Links interface {
+	List(ctx context.Context) ([]Link, error)
+	Claim(ctx context.Context, claimed Link, now time.Time) ([]Link, error)
+	Adopt(ctx context.Context, candidates []Link) ([]Link, map[int64]string, error)
+	Invalidate(ctx context.Context, reason string, now time.Time) (int, error)
 }

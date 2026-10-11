@@ -101,8 +101,4 @@ func TestAnOrganisationRowShowsTheRecordedSlugOnceThereIsOne(t *testing.T) {
 	if got := apps["acme-controller"].GetName(); got != "acme-members" {
 		t.Errorf("an App not created yet is %q, want the configured name", got)
 	}
-	spec := githubAppSpec{purpose: appController, appSlug: "people-of-globex", entry: githubapp.OrganisationApp("globex")}
-	if got := spec.declaredName(); got != "people-of-globex" {
-		t.Errorf("declaredName = %q", got)
-	}
 }

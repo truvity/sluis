@@ -94,10 +94,10 @@ func TestListServedDomainsIsScopedLikeEveryOtherRead(t *testing.T) {
 func TestAnOwnerIsLabelledByEveryAuthoritativeDomain(t *testing.T) {
 	dirs := []connectedDirectory{
 		{
-			ID: "C0north", Primary: "globex.example", Served: []string{"alpha.example", "contested.example", "globex.example"},
-			Authoritative: []string{"alpha.example", "globex.example"},
+			id: "C0north", primary: "globex.example", served: []string{"alpha.example", "contested.example", "globex.example"},
+			authoritative: []string{"alpha.example", "globex.example"},
 		},
-		{ID: "C0bare", Primary: "C0bare"},
+		{id: "C0bare", primary: "C0bare"},
 	}
 	if got := ownerDomains(dirs); got["C0north"] != "alpha.example, globex.example" || got["C0bare"] != "" {
 		t.Errorf("ownerDomains = %v", got)

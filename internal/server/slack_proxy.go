@@ -125,7 +125,7 @@ func (c *Console) slackDirectoriesInto(ctx context.Context, facts *consolecall.D
 			break
 		}
 		facts.Directories = append(facts.Directories, consolecall.Directory{
-			ID: dirs[i].ID, Primary: dirs[i].Primary, Served: dirs[i].Served, Authoritative: dirs[i].Authoritative,
+			ID: dirs[i].id, Primary: dirs[i].primary, Served: dirs[i].served, Authoritative: dirs[i].authoritative,
 		})
 	}
 }

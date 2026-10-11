@@ -40,11 +40,16 @@ func (c *Console) githubCaller(ctx context.Context, want access.Role) (consoleca
 // knows, which the module chooses an owner among and may not read itself.
 func (c *Console) snapshot(ctx context.Context, id access.Identity) (consolecall.Caller, access.Identity, error) {
 	caller := consolecall.Snapshot(id)
+	caller.Origin = c.githubRoot()
 	dirs, err := c.directories(ctx)
 	if err != nil {
 		return consolecall.Caller{}, id, err
 	}
-	caller.Directories = dirs
+	for i := range dirs {
+		caller.Directories = append(caller.Directories, consolecall.Directory{
+			ID: dirs[i].id, Primary: dirs[i].primary, Served: dirs[i].served, Authoritative: dirs[i].authoritative,
+		})
+	}
 	return caller, id, nil
 }
 
@@ -125,7 +130,7 @@ func (c *Console) beginOrganisationConnect(ctx context.Context, id access.Identi
 	if err != nil {
 		return githubBegin{}, err
 	}
-	begun, err := consolecall.ProxyJSON[consolewire.BeginConnectRequest, consolewire.Begun](ctx, c.deps.Modules.GitHub,
+	begun, err := consolecall.ProxyJSON[consolewire.BeginConnectRequest, consolewire.Begun](ctx, c.githubModule(),
 		consolewire.Module, consolewire.BeginConnect, caller,
 		consolewire.BeginConnectRequest{Org: org, OwnerDirectory: owner})
 	if err != nil {
@@ -178,33 +183,126 @@ func (c *Console) RequestGitHubPass(
 	return githubProto[directoryrosterv1.RequestGitHubPassRequest, directoryrosterv1.RequestGitHubPassResponse](ctx, c, consolewire.RequestPass, access.RoleOperator, req)
 }
 
-// githubModule is how the console calls the module: the one in another process
-// when [ConsoleServer.UseGitHub] named it, else the one in this, built over the
-// stores this console holds when the first call asks.
-func (c *Console) githubModule() modcall.Caller {
-	if m := c.deps.Modules.GitHub; m != nil {
-		return m
-	}
-	c.githubOnce.Do(func() {
-		d := ghconsole.Deps{
-			Log: c.deps.Log, Audit: c.deps.Audit, Trigger: c.deps.Trigger,
-			PublicURL: c.deps.PublicURL, RootURL: c.deps.RootURL,
-			Orgs: c.deps.GitHubOrgs, OrgAppName: c.deps.GitHubOrgAppName,
-			Catalogue: c.deps.GitHubCatalogue, HTTP: c.deps.GitHubHTTP,
-		}
-		if c.deps.Authorizer != nil {
-			d.Policy = c.deps.Authorizer.Policy
-		}
-		srv := modcall.NewServer(consolewire.Module)
-		ghconsole.Register(srv, ghconsole.New(d))
-		c.githubLocal = modcall.Local{consolewire.Module: srv}.As(consolecall.Class)
-	})
-	return c.githubLocal
-}
-
 // UseGitHub connects the console's GitHub operations to the module in another
 // process, with the same timing as [ConsoleServer.UseCloudflare]. Without it
 // the module is served in this process.
 func (s *ConsoleServer) UseGitHub(c modcall.Caller) {
 	s.console.deps.Modules.GitHub = c
+}
+
+// githubModule is the caller of the GitHub module: the other process the
+// deployment dialled, else the module in this one, built over the console's own
+// stores when first asked.
+func (c *Console) githubModule() modcall.Caller {
+	if c.deps.Modules.GitHub != nil {
+		return c.deps.Modules.GitHub
+	}
+	c.githubOnce.Do(func() {
+		c.github = ghconsole.New(c.githubDeps())
+		srv := modcall.NewServer(consolewire.Module)
+		ghconsole.Register(srv, c.github)
+		c.githubLocal = modcall.Local{consolewire.Module: srv}.As(consolecall.Class)
+	})
+	return c.githubLocal
+}
+
+// githubDeps is what the module in this process acts on: the console's stores.
+func (c *Console) githubDeps() ghconsole.Deps {
+	deps := ghconsole.Deps{
+		Log:        c.deps.Log,
+		Audit:      c.deps.Audit,
+		Trigger:    c.deps.Trigger,
+		PublicURL:  c.deps.PublicURL,
+		RootURL:    c.deps.RootURL,
+		Orgs:       c.deps.GitHubOrgs,
+		OrgAppName: c.deps.GitHubOrgAppName,
+		Catalogue:  c.deps.GitHubCatalogue,
+		HTTP:       c.deps.GitHubHTTP,
+
+		Reports:           c.deps.GitHub,
+		Confirmations:     c.deps.GitHubConfirmations,
+		LinkApp:           c.deps.GitHubLinkApp,
+		Links:             c.deps.GitHubLinks,
+		LinkAppName:       c.deps.GitHubLinkAppName,
+		RunnerApps:        c.deps.GitHubRunnerApps,
+		RunnerTiers:       c.deps.GitHubRunnerTiers,
+		CatalogueApps:     c.deps.GitHubCatalogueApps,
+		Mints:             c.deps.GitHubMints,
+		WebhookHTTP:       c.deps.WebhookHTTP,
+		WebhookPingWindow: c.deps.WebhookPingWindow,
+		WebhookPingEvery:  c.deps.WebhookPingEvery,
+	}
+	if c.deps.Authorizer != nil {
+		deps.Policy = c.deps.Authorizer.Policy
+	}
+	return deps
+}
+
+// The Apps view, an App's webhook and the GitHub page are the module's too: it
+// holds the keys, the webhook secrets and the connection records they read.
+
+// ListGitHubApps lists every App in one shape.
+func (c *Console) ListGitHubApps(
+	ctx context.Context, req *connect.Request[directoryrosterv1.ListGitHubAppsRequest],
+) (*connect.Response[directoryrosterv1.ListGitHubAppsResponse], error) {
+	return githubProto[directoryrosterv1.ListGitHubAppsRequest, directoryrosterv1.ListGitHubAppsResponse](ctx, c, consolewire.ListApps, access.RoleViewer, req)
+}
+
+// GetGitHubApp reads one App.
+func (c *Console) GetGitHubApp(
+	ctx context.Context, req *connect.Request[directoryrosterv1.GetGitHubAppRequest],
+) (*connect.Response[directoryrosterv1.GetGitHubAppResponse], error) {
+	return githubProto[directoryrosterv1.GetGitHubAppRequest, directoryrosterv1.GetGitHubAppResponse](ctx, c, consolewire.GetApp, access.RoleViewer, req)
+}
+
+// ListGitHubAppTokens lists the last installation tokens asked of an App.
+func (c *Console) ListGitHubAppTokens(
+	ctx context.Context, req *connect.Request[directoryrosterv1.ListGitHubAppTokensRequest],
+) (*connect.Response[directoryrosterv1.ListGitHubAppTokensResponse], error) {
+	return githubProto[directoryrosterv1.ListGitHubAppTokensRequest, directoryrosterv1.ListGitHubAppTokensResponse](ctx, c, consolewire.ListAppTokens, access.RoleOperator, req)
+}
+
+// CheckGitHubApp asks GitHub again about one App, whichever kind it is.
+func (c *Console) CheckGitHubApp(
+	ctx context.Context, req *connect.Request[directoryrosterv1.CheckGitHubAppRequest],
+) (*connect.Response[directoryrosterv1.CheckGitHubAppResponse], error) {
+	return githubProto[directoryrosterv1.CheckGitHubAppRequest, directoryrosterv1.CheckGitHubAppResponse](ctx, c, consolewire.CheckApp, access.RoleOperator, req)
+}
+
+// RotateGitHubAppWebhook gives an App's webhook a new secret.
+func (c *Console) RotateGitHubAppWebhook(
+	ctx context.Context, req *connect.Request[directoryrosterv1.RotateGitHubAppWebhookRequest],
+) (*connect.Response[directoryrosterv1.RotateGitHubAppWebhookResponse], error) {
+	return githubProto[directoryrosterv1.RotateGitHubAppWebhookRequest, directoryrosterv1.RotateGitHubAppWebhookResponse](ctx, c, consolewire.RotateAppWebhook, access.RoleOperator, req)
+}
+
+// GetGitHubStatus implements the GitHub page.
+func (c *Console) GetGitHubStatus(
+	ctx context.Context, req *connect.Request[directoryrosterv1.GetGitHubStatusRequest],
+) (*connect.Response[directoryrosterv1.GetGitHubStatusResponse], error) {
+	return githubProto[directoryrosterv1.GetGitHubStatusRequest, directoryrosterv1.GetGitHubStatusResponse](ctx, c, consolewire.GetStatus, access.RoleViewer, req)
+}
+
+// CheckGitHubCatalogueApp asks GitHub again about one catalogue App.
+func (c *Console) CheckGitHubCatalogueApp(
+	ctx context.Context, req *connect.Request[directoryrosterv1.CheckGitHubCatalogueAppRequest],
+) (*connect.Response[directoryrosterv1.CheckGitHubCatalogueAppResponse], error) {
+	return githubProto[directoryrosterv1.CheckGitHubCatalogueAppRequest, directoryrosterv1.CheckGitHubCatalogueAppResponse](ctx, c, consolewire.CheckCatalogueApp, access.RoleOperator, req)
+}
+
+// operableApp is the App an id names, as the module shows it to the caller,
+// with whether the caller may operate it: the console's way to know which kind
+// of App a Begin or a Disconnect is about without holding its record.
+func (c *Console) operableApp(ctx context.Context, id string) (*directoryrosterv1.GitHubApp, error) {
+	if _, err := requireAnywhere(ctx, access.RoleOperator); err != nil {
+		return nil, err
+	}
+	got, err := c.GetGitHubApp(ctx, connect.NewRequest(&directoryrosterv1.GetGitHubAppRequest{Id: id}))
+	if err != nil {
+		return nil, err
+	}
+	if !got.Msg.GetApp().GetCanOperate() {
+		return nil, connect.NewError(connect.CodePermissionDenied, errors.New("this needs the operator role over this App"))
+	}
+	return got.Msg.GetApp(), nil
 }

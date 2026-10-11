@@ -46,6 +46,8 @@ func connectErr(err error) error {
 		return nil
 	case errors.As(err, &e) && e.Code == consoleauthz.CodeUnauthenticated:
 		return connect.NewError(connect.CodeUnauthenticated, errors.New(e.Message))
+	case errors.As(err, &e) && e.Code == modcall.CodeBadRequest:
+		return connect.NewError(connect.CodeInvalidArgument, errors.New(e.Message))
 	case errors.As(err, &e) && e.Code == modcall.CodeForbidden:
 		return connect.NewError(connect.CodePermissionDenied, errors.New(e.Message))
 	}

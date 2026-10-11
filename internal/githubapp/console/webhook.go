@@ -1,4 +1,4 @@
-package server
+package console
 
 import (
 	"context"
@@ -37,7 +37,7 @@ const (
 // GitHub, the secret and a Kargo receiver's derived URL in one call. A
 // failure before that restores the old secret, so deliveries go on exactly
 // as they were.
-func (c *Console) RotateGitHubAppWebhook(
+func (c *Service) RotateGitHubAppWebhook(
 	ctx context.Context, req *connect.Request[directoryrosterv1.RotateGitHubAppWebhookRequest],
 ) (*connect.Response[directoryrosterv1.RotateGitHubAppWebhookResponse], error) {
 	if _, err := requireAnywhere(ctx, access.RoleOperator); err != nil {
@@ -67,7 +67,7 @@ func (c *Console) RotateGitHubAppWebhook(
 	return connect.NewResponse(&directoryrosterv1.RotateGitHubAppWebhookResponse{App: app}), nil
 }
 
-func (c *Console) rotateWebhook(ctx context.Context, actor string, spec githubAppSpec) error {
+func (c *Service) rotateWebhook(ctx context.Context, actor string, spec githubAppSpec) error {
 	entry := spec.entry
 	if spec.origin != appCatalogue || !spec.declared || entry.Webhook == nil {
 		return connect.NewError(connect.CodeFailedPrecondition,
@@ -156,7 +156,7 @@ func (c *Console) rotateWebhook(ctx context.Context, actor string, spec githubAp
 		return connect.NewError(connect.CodeUnavailable, fmt.Errorf(
 			"the webhook of %s was rotated on GitHub and the console could not record it: %w", spec.id, err))
 	}
-	c.githubSeen.forget(spec.id)
+	c.seen.forget(spec.id)
 	step(audit.WebhookRotated, audit.Succeeded())
 	return nil
 }
@@ -164,7 +164,7 @@ func (c *Console) rotateWebhook(ctx context.Context, actor string, spec githubAp
 // awaitPing sends the signed ping until the target answers 2xx, or the
 // window ends. It is bounded: a consumer that never reloads is an error the
 // operator reads, not a rotation that hangs.
-func (c *Console) awaitPing(ctx context.Context, target, secret string) error {
+func (c *Service) awaitPing(ctx context.Context, target, secret string) error {
 	window, every := c.deps.WebhookPingWindow, c.deps.WebhookPingEvery
 	if window <= 0 {
 		window = webhookPingWindow
@@ -201,7 +201,7 @@ func (c *Console) awaitPing(ctx context.Context, target, secret string) error {
 	}
 }
 
-func (c *Console) beginRotation(id string) bool {
+func (c *Service) beginRotation(id string) bool {
 	c.rotatingMu.Lock()
 	defer c.rotatingMu.Unlock()
 	if c.rotating[id] {
@@ -214,7 +214,7 @@ func (c *Console) beginRotation(id string) bool {
 	return true
 }
 
-func (c *Console) endRotation(id string) {
+func (c *Service) endRotation(id string) {
 	c.rotatingMu.Lock()
 	defer c.rotatingMu.Unlock()
 	delete(c.rotating, id)

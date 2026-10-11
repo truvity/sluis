@@ -22,6 +22,7 @@ import (
 	"github.com/truvity/sluis/internal/audit"
 	"github.com/truvity/sluis/internal/consolecall"
 	"github.com/truvity/sluis/internal/githubapp/catalogue"
+	ghconsole "github.com/truvity/sluis/internal/githubapp/console"
 	"github.com/truvity/sluis/internal/githubapp/mints"
 	googleconsole "github.com/truvity/sluis/internal/googleapp/console"
 	"github.com/truvity/sluis/internal/hub"
@@ -194,21 +195,16 @@ type ConsoleDeps struct {
 // the console listener.
 type Console struct {
 	deps ConsoleDeps
-	// slack is the Slack module in this process, and slackLocal the way to call it
-	// as the console, for a deployment that has not split it out.
+	// github, slack and google are the provider modules in this process, built
+	// over the console's own stores when the first page asks, and the way to call
+	// each as the console, for a deployment that has not split it out.
 	githubOnce  sync.Once
+	github      *ghconsole.Service
 	githubLocal modcall.Caller
 	slackOnce   sync.Once
 	slack       *slackconsole.Service
 	slackLocal  modcall.Caller
 	connectors  map[string]Connector
-	// githubSeen is what GitHub last said of each GitHub App.
-	githubSeen githubObservations
-	// rotating is the Apps whose webhook secret is being rotated now: two
-	// rotations at once would leave GitHub and the consumers with different
-	// secrets.
-	rotating   map[string]bool
-	rotatingMu sync.Mutex
 	// googleOnce makes googleClient: the module's calls, remote or in process.
 	googleOnce   sync.Once
 	googleClient *googleconsole.Client
@@ -236,12 +232,13 @@ var (
 // reviewed in git. A console that could disagree with git was a second
 // source of truth and a merge to reconcile them.
 func NewConsole(_ context.Context, deps ConsoleDeps) (*Console, error) {
-	// The Google and Slack modules in this process are built over the console's own
-	// stores when the first page asks ([Console.google], [Console.slackModule]), so
-	// they are left unset here, not replaced by an empty one.
-	google, slack := deps.Modules.Google, deps.Modules.Slack
+	// The GitHub, Slack and Google modules in this process are built over the
+	// console's own stores when the first page asks ([Console.githubModule],
+	// [Console.slackModule], [Console.google]), so they are left unset here, not
+	// replaced by an empty one.
+	github, google, slack := deps.Modules.GitHub, deps.Modules.Google, deps.Modules.Slack
 	deps.Modules = deps.Modules.OrLocal(modcall.Local{})
-	deps.Modules.Google, deps.Modules.Slack = google, slack
+	deps.Modules.GitHub, deps.Modules.Google, deps.Modules.Slack = github, google, slack
 	c := &Console{deps: deps, connectors: map[string]Connector{}}
 	for _, conn := range deps.Connectors {
 		c.connectors[conn.Kind()] = conn

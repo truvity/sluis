@@ -382,7 +382,9 @@ func TestTheIssuerNamesNoRingInternals(t *testing.T) {
 // TODO(v1.76 E-units): add internal/githubapp and backend/google as G1-G4 and
 // Y1 move the last of their operations, and delete this note.
 var consoleDoor = map[string]string{
-	"internal/slackapp": "internal/slackapp/console",
+	"internal/githubapp": "internal/githubapp/console",
+	"internal/slackapp":  "internal/slackapp/console",
+	"backend/google":     "internal/googleapp/console",
 }
 
 // The console reaches a provider only through a module call: the shared

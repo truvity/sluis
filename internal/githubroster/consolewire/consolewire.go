@@ -19,6 +19,16 @@ const (
 	DisconnectOrganisation  = "console.disconnect_organisation"
 	ChangeOrganisationOwner = "console.change_organisation_owner"
 	RequestPass             = "console.request_pass"
+
+	// G2: the Apps view and the webhook.
+	ListApps         = "console.list_apps"
+	GetApp           = "console.get_app"
+	ListAppTokens    = "console.list_app_tokens"
+	CheckApp         = "console.check_app"
+	RotateAppWebhook = "console.rotate_app_webhook"
+	// The GitHub page, and the per-kind Check that the Apps view replaced.
+	GetStatus         = "console.get_status"
+	CheckCatalogueApp = "console.check_catalogue_app"
 )
 
 // The two places GitHub sends the browser back to, at the origin root beside a
@@ -27,6 +37,16 @@ const (
 const (
 	CallbackPath = "/connect/github/callback"
 	SetupPath    = "/connect/github/setup"
+)
+
+// The link flows' paths, at the origin ROOT with the other GitHub callbacks.
+// The page is there too, and not in the console: the people who link are every
+// employee and every partner's engineer, and the console admits only its
+// operators and viewers.
+const (
+	LinkAppCallbackPath = "/connect/github/link-app/callback"
+	LinkPath            = "/connect/github/link"
+	LinkCallbackPath    = "/connect/github/link/callback"
 )
 
 // What a flow's signed state binds, so a state of one flow can never finish

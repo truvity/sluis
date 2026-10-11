@@ -1,4 +1,4 @@
-package server
+package console
 
 import (
 	"context"
@@ -12,16 +12,11 @@ import (
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
 	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/githubroster/connection"
+	"github.com/truvity/sluis/internal/githubroster/consolewire"
 	"github.com/truvity/sluis/internal/githubroster/link"
+	"github.com/truvity/sluis/internal/githubroster/runnerapp"
 	"github.com/truvity/sluis/internal/githubroster/status"
-	"github.com/truvity/sluis/policy"
 )
-
-// GitHubReports is where the console reads what the GitHub controller
-// last reported: the documents of the status contract, keyed as written.
-type GitHubReports interface {
-	Reports(ctx context.Context) (map[string]string, error)
-}
 
 // GetGitHubStatus implements the GitHub page: every organisation the
 // policy binds or the controller reports on, its bindings beside its
@@ -40,7 +35,7 @@ type GitHubReports interface {
 // is more than a scoped viewer may see of another company. The link App
 // and every link are people's across all organisations, so they are the
 // installation-wide viewer's alone.
-func (c *Console) GetGitHubStatus(
+func (c *Service) GetGitHubStatus(
 	ctx context.Context, _ *connect.Request[directoryrosterv1.GetGitHubStatusRequest],
 ) (*connect.Response[directoryrosterv1.GetGitHubStatusResponse], error) {
 	id, err := c.requireAnyOrg(ctx, access.RoleViewer)
@@ -48,13 +43,13 @@ func (c *Console) GetGitHubStatus(
 		return nil, err
 	}
 	out := &directoryrosterv1.GetGitHubStatusResponse{
-		ReportsAvailable:    c.deps.GitHub != nil,
-		ConnectingAvailable: c.deps.GitHubOrgs != nil,
+		ReportsAvailable:    c.deps.Reports != nil,
+		ConnectingAvailable: c.deps.Orgs != nil,
 	}
 
 	reports := map[string]string{}
-	if c.deps.GitHub != nil {
-		read, err := c.deps.GitHub.Reports(ctx)
+	if c.deps.Reports != nil {
+		read, err := c.deps.Reports.Reports(ctx)
 		if err != nil {
 			return nil, connect.NewError(connect.CodeUnavailable, err)
 		}
@@ -66,8 +61,8 @@ func (c *Console) GetGitHubStatus(
 	}
 
 	connections := map[string]connection.Record{}
-	if c.deps.GitHubOrgs != nil {
-		records, err := c.deps.GitHubOrgs.List(ctx)
+	if c.deps.Orgs != nil {
+		records, err := c.deps.Orgs.List(ctx)
 		if err != nil {
 			return nil, connect.NewError(connect.CodeUnavailable, err)
 		}
@@ -77,8 +72,8 @@ func (c *Console) GetGitHubStatus(
 	}
 
 	passes := map[string]connection.PassRequest{}
-	if c.deps.GitHubOrgs != nil {
-		read, err := c.deps.GitHubOrgs.PassRequests(ctx)
+	if c.deps.Orgs != nil {
+		read, err := c.deps.Orgs.PassRequests(ctx)
 		if err != nil {
 			return nil, connect.NewError(connect.CodeUnavailable, err)
 		}
@@ -86,15 +81,15 @@ func (c *Console) GetGitHubStatus(
 	}
 
 	confirmations := map[string]connection.Confirmation{}
-	if c.deps.GitHubConfirmations != nil {
-		read, err := c.deps.GitHubConfirmations.Confirmations(ctx)
+	if c.deps.Confirmations != nil {
+		read, err := c.deps.Confirmations.Confirmations(ctx)
 		if err != nil {
 			return nil, connect.NewError(connect.CodeUnavailable, err)
 		}
 		confirmations = read
 	}
 
-	set := c.deps.Authorizer.Policy()
+	set := c.deps.Policy()
 	bound := boundOrganisations(set)
 	seen := map[string]bool{}
 	for org := range bound {
@@ -151,13 +146,13 @@ func (c *Console) GetGitHubStatus(
 }
 
 // linkStatus adds the link App and every link, never with a token.
-func (c *Console) linkStatus(ctx context.Context, out *directoryrosterv1.GetGitHubStatusResponse) error {
-	if c.deps.GitHubLinkApp == nil || c.deps.GitHubLinks == nil {
+func (c *Service) linkStatus(ctx context.Context, out *directoryrosterv1.GetGitHubStatusResponse) error {
+	if c.deps.LinkApp == nil || c.deps.Links == nil {
 		return nil
 	}
 	out.LinkingAvailable = true
-	out.LinkUrl = c.githubRoot() + githubLinkPath
-	app, connected, err := c.deps.GitHubLinkApp.LinkApp(ctx)
+	out.LinkUrl = c.githubRoot(ctx) + consolewire.LinkPath
+	app, connected, err := c.deps.LinkApp.LinkApp(ctx)
 	if err != nil {
 		return err
 	}
@@ -169,7 +164,7 @@ func (c *Console) linkStatus(ctx context.Context, out *directoryrosterv1.GetGitH
 			out.LinkApp.ConnectedAt = timestamppb.New(app.ConnectedAt)
 		}
 	}
-	links, err := c.deps.GitHubLinks.List(ctx)
+	links, err := c.deps.Links.List(ctx)
 	if err != nil {
 		return err
 	}
@@ -194,14 +189,6 @@ func linkProto(l *link.Link) *directoryrosterv1.GitHubLink {
 	}
 }
 
-// timestampOf is a time for the page, absent when it never happened.
-func timestampOf(at time.Time) *timestamppb.Timestamp {
-	if at.IsZero() {
-		return nil
-	}
-	return timestamppb.New(at)
-}
-
 // connectionProto is a record as the page shows it: never the key, which
 // is not in a record to begin with.
 func connectionProto(record connection.Record) *directoryrosterv1.GitHubConnection {
@@ -214,34 +201,6 @@ func connectionProto(record connection.Record) *directoryrosterv1.GitHubConnecti
 	}
 	if !record.ConnectedAt.IsZero() {
 		out.ConnectedAt = timestamppb.New(record.ConnectedAt)
-	}
-	return out
-}
-
-// binding is one organisation's side of the policy.
-type binding struct {
-	members []string
-	ignore  []string
-	teams   map[string]policy.TeamView
-}
-
-// boundOrganisations collects the policy's GitHub table by organisation.
-// An organisation binding only teams has no org-level row, so both views
-// are read.
-func boundOrganisations(set *policy.Set) map[string]*binding {
-	out := map[string]*binding{}
-	get := func(org string) *binding {
-		if out[org] == nil {
-			out[org] = &binding{teams: map[string]policy.TeamView{}}
-		}
-		return out[org]
-	}
-	for _, team := range set.GitHubTeams() {
-		get(team.Org).teams[team.Team] = team
-	}
-	for _, org := range set.GitHubOrgs() {
-		get(org.Org).members = org.Members
-		get(org.Org).ignore = org.Ignore
 	}
 	return out
 }
@@ -346,4 +305,97 @@ func membersProto(members []status.Member) []*directoryrosterv1.GitHubMember {
 		})
 	}
 	return out
+}
+
+// The states a catalogue App is shown in.
+const (
+	catalogueNotCreated = "not_created"
+	catalogueCreated    = "created"
+	catalogueInstalled  = "installed"
+	catalogueDrifted    = "drifted"
+)
+
+// catalogueStatus adds every declared App and every App created from an
+// entry no longer declared, never with a key.
+//
+// The Apps themselves are [Console.githubAppView]'s, turned back into the
+// shape GetGitHubStatus has always carried: one reading of an App, two
+// ways of saying it, for as long as both calls are served.
+func (c *Service) catalogueStatus(ctx context.Context, out *directoryrosterv1.GetGitHubStatusResponse) error {
+	if c.deps.CatalogueApps == nil {
+		return nil
+	}
+	out.CatalogueAvailable = true
+	specs, err := c.catalogueAppSpecs(ctx, map[string]bool{})
+	if err != nil {
+		return err
+	}
+	views := c.githubAppViews(ctx, specs)
+	for i := range specs {
+		out.CatalogueApps = append(out.CatalogueApps, legacyCatalogueApp(specs[i], views[i]))
+	}
+	return nil
+}
+
+// legacyCatalogueApp is one App in the shape GetGitHubStatus and
+// CheckGitHubCatalogueApp answer in.
+func legacyCatalogueApp(spec githubAppSpec, app *directoryrosterv1.GitHubApp) *directoryrosterv1.GitHubCatalogueApp {
+	return &directoryrosterv1.GitHubCatalogueApp{
+		Id: app.GetId(), Org: app.GetOrg(), Name: spec.declaredName(), Description: app.GetDescription(), Public: app.GetPublic(),
+		Installation: app.GetInstallation(), Permissions: app.GetPermissions(), Events: app.GetEvents(), Grants: app.GetGrants(),
+		State: legacyState(app.GetState()), HtmlUrl: app.GetHtmlUrl(), Drift: app.GetDrift(), Reason: app.GetReason(),
+		AppId: app.GetAppId(), AppSlug: app.GetAppSlug(), InstallationId: app.GetInstallationId(),
+		ConnectedAt: app.GetConnectedAt(), ConnectedBy: app.GetConnectedBy(), CheckedAt: app.GetCheckedAt(),
+		RepositorySelection: app.GetRepositorySelection(), Declared: app.GetDeclared(),
+	}
+}
+
+func legacyState(state directoryrosterv1.AppState) string {
+	switch state {
+	case appCreated:
+		return catalogueCreated
+	case appInstalled:
+		return catalogueInstalled
+	case appDrifted:
+		return catalogueDrifted
+	default:
+		return catalogueNotCreated
+	}
+}
+
+// runnerApp finds one runner App's record.
+func (c *Service) runnerApp(ctx context.Context, tier, org string) (runnerapp.Record, bool, error) {
+	records, err := c.deps.RunnerApps.List(ctx)
+	if err != nil {
+		return runnerapp.Record{}, false, err
+	}
+	for i := range records {
+		if records[i].Tier == tier && records[i].Org == org {
+			return records[i], true, nil
+		}
+	}
+	return runnerapp.Record{}, false, nil
+}
+
+// runnerStatus adds the declared tiers and every runner App, never a key.
+// An App whose tier the deployment no longer declares is still listed, so
+// it can be disconnected.
+func (c *Service) runnerStatus(ctx context.Context, out *directoryrosterv1.GetGitHubStatusResponse) error {
+	if c.deps.RunnerApps == nil {
+		return nil
+	}
+	out.RunnerTiers = slices.Clone(c.deps.RunnerTiers)
+	records, err := c.deps.RunnerApps.List(ctx)
+	if err != nil {
+		return err
+	}
+	for i := range records {
+		record := &records[i]
+		out.RunnerApps = append(out.RunnerApps, &directoryrosterv1.GitHubRunnerApp{
+			Org: record.Org, Tier: record.Tier, AppId: record.AppID, AppSlug: record.AppSlug,
+			Installed: record.Installed(), HtmlUrl: record.HTMLURL,
+			ConnectedAt: timestampOf(record.ConnectedAt), ConnectedBy: record.ConnectedBy,
+		})
+	}
+	return nil
 }
