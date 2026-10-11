@@ -170,8 +170,8 @@ func (r *recorder) transform(ctx *pulumi.Context) error {
 		}
 		o := declaredOptions{}
 		if err == nil {
-			for _, al := range ro.Aliases {
-				if str, ok := al.Name.(pulumi.String); ok {
+			for i := range ro.Aliases {
+				if str, ok := ro.Aliases[i].Name.(pulumi.String); ok {
 					o.AliasNames = append(o.AliasNames, string(str))
 				}
 			}

@@ -498,12 +498,13 @@ func TestTheTruvityShapeIsExpressible(t *testing.T) {
 	})
 	shape(t, rec, out, "access.one.example.test")
 
+	issuerLive := arnp + "lambda:eu-west-1:" + account + ":function:sluis-staging-issuer:live"
 	want := map[string]string{
-		"sluis-github-truvity":      `{"controller":"github","kind":"tick","target":"truvity"} ` + arnp + "lambda:eu-west-1:" + account + ":function:sluis-staging-issuer:live",
-		"sluis-github-trust-form":   `{"controller":"github","kind":"tick","target":"trust-form"} ` + arnp + "lambda:eu-west-1:" + account + ":function:sluis-staging-issuer:live",
-		"sluis-github-github-links": `{"controller":"github","kind":"tick","target":"github:links"} ` + arnp + "lambda:eu-west-1:" + account + ":function:sluis-staging-issuer:live",
-		"sluis-slack-T0TRUVITY":     `{"controller":"slack","kind":"tick","target":"T0TRUVITY"} ` + arnp + "lambda:eu-west-1:" + account + ":function:sluis-staging-issuer:live",
-		"sluis-directory-refresh":   `{"kind":"refresh"} ` + arnp + "lambda:eu-west-1:" + account + ":function:sluis-staging-issuer:live",
+		"sluis-github-truvity":      `{"controller":"github","kind":"tick","target":"truvity"} ` + issuerLive,
+		"sluis-github-trust-form":   `{"controller":"github","kind":"tick","target":"trust-form"} ` + issuerLive,
+		"sluis-github-github-links": `{"controller":"github","kind":"tick","target":"github:links"} ` + issuerLive,
+		"sluis-slack-T0TRUVITY":     `{"controller":"slack","kind":"tick","target":"T0TRUVITY"} ` + issuerLive,
+		"sluis-directory-refresh":   `{"kind":"refresh"} ` + issuerLive,
 	}
 	if got := schedules(t, rec); !reflect.DeepEqual(got, want) {
 		t.Errorf("schedules:\n got %v\nwant %v", got, want)
