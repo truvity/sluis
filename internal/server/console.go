@@ -750,9 +750,16 @@ func (c *Console) WhoAmI(
 	}), nil
 }
 
-// Explain implements the operator contract. An empty address explains the
-// caller, which anyone signed in may ask; explaining somebody else
-// discloses their access, so that needs operator.
+// errNotAuthorised is the one refusal text of Explain, the same for every
+// reason, so a refusal tells a caller nothing about the access it asked of.
+var errNotAuthorised = errors.New("not authorised")
+
+// Explain implements the operator contract. It discloses what a proof
+// would effectively get, so it is for two callers only: an operator, whose
+// every look-up is recorded, and the roster controllers, which are
+// workloads (a ServiceAccount or an AWS role) holding at least the viewer
+// role and ask in bulk. Anybody else, a person asking about themselves
+// included, is refused with a fixed text and the refusal is recorded.
 func (c *Console) Explain(
 	ctx context.Context, req *connect.Request[directoryrosterv1.ExplainRequest],
 ) (*connect.Response[directoryrosterv1.ExplainResponse], error) {
@@ -761,22 +768,42 @@ func (c *Console) Explain(
 		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("sign in first"))
 	}
 	proof := proofFromRequest(req.Msg)
-	self := proof.IsPerson() && (proof.Email == "" || strings.EqualFold(proof.Email, caller.Email))
-	if self {
-		proof.Email = caller.Email
-	} else if _, err := requireRole(ctx, access.RoleViewer); err != nil {
-		// A viewer already sees every group's members and every client's
-		// requirements, so the derived answer is not a secret from them.
-		return nil, err
+	kind, subject := proofSubject(proof)
+	controller := caller.Source == access.SourceWorkload && caller.Can(access.RoleViewer)
+	if !controller && !caller.Can(access.RoleOperator) {
+		c.record(ctx, audit.AccessExplained(actorOf(ctx), audit.Denied("not authorised"), kind, subject, 0, 0, 0))
+		return nil, connect.NewError(connect.CodePermissionDenied, errNotAuthorised)
 	}
 
 	explained, err := c.deps.Authorizer.Explain(ctx, proof)
 	if err != nil {
 		return nil, rpcError(err)
 	}
-	out := explanationProto(explained, caller, self)
+	out := explanationProto(explained, caller, false)
 	out.PolicyDigest = c.deps.Authorizer.Policy().Digest()
+	if !controller {
+		admitted := 0
+		for _, client := range out.GetClients() {
+			if client.GetAdmitted() {
+				admitted++
+			}
+		}
+		c.record(ctx, audit.AccessExplained(actorOf(ctx), audit.Succeeded(), kind, subject,
+			len(out.GetHeld()), len(out.GetClients()), admitted))
+	}
 	return connect.NewResponse(out), nil
+}
+
+// proofSubject names what a look-up is about, as the record keeps it.
+func proofSubject(p access.Proof) (kind, subject string) {
+	switch {
+	case p.GitHub != nil:
+		return "ci", "github:" + p.GitHub.Repository
+	case p.ServiceAccount != nil:
+		return "workload", "system:serviceaccount:" + p.ServiceAccount.Namespace + ":" + p.ServiceAccount.Name
+	default:
+		return "person", p.Email
+	}
 }
 
 // GetPolicy implements the operator contract.

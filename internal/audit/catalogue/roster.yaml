@@ -19,7 +19,7 @@
 # A change to what an action carries is a new version. The installation keeps
 # every version it was sent, so records already written keep their meaning.
 source: roster
-version: "1.18.0"
+version: "1.19.0"
 locales: [en]
 
 actor_kinds:
@@ -103,6 +103,17 @@ actions:
     data_schema: https://schemas.example/access-roster/v1/sign-in.json
     message:
       en: "{outcome, select, success {{actor} signed in to {targets_0_id} by recovery} other {a recovery sign-in to {targets_0_id} did not complete}}"
+
+  roster.access.explained:
+    summary: An operator looked up what a person, CI job or workload would effectively be granted, or a caller who may not was refused. The record carries counts only.
+    operation: access
+    categories: [privileged_access, authorization_decision]
+    category: security
+    target_types: [client]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/access-explained.json
+    message:
+      en: "{outcome, select, success {{actor} looked up the access of {subject}} other {{actor} was refused a look-up of the access of {subject}}}"
 
   roster.token.exchanged:
     summary: A token was exchanged for one another client accepts, or the exchange was refused.
