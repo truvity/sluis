@@ -37,6 +37,7 @@ import (
 	"time"
 
 	"go.opentelemetry.io/otel"
+	"sigs.k8s.io/yaml"
 
 	"github.com/truvity/sluis/internal/config"
 	"github.com/truvity/sluis/internal/deploycheck"
@@ -66,7 +67,36 @@ const (
 	ModuleIssuer     = "issuer"
 	ModuleCloudflare = "cloudflare"
 	ModuleBackup     = "backup"
+	ModuleGitHub     = "github"
+	ModuleSlack      = "slack"
+	ModuleGoogle     = "google"
 )
+
+// documentModules maps the apiVersion of a module's own document to the module.
+// The issuer and the Cloudflare module share `sluis/v3`, and the document's
+// content tells them apart (see [ModuleOf]).
+var documentModules = map[string]string{
+	config.APIVersion("sluis-backup"):      ModuleBackup,
+	config.APIVersion("controller-github"): ModuleGitHub,
+	config.APIVersion("controller-slack"):  ModuleSlack,
+	config.Group + "/sluis-google/v1":      ModuleGoogle,
+}
+
+// apiVersionOf is the apiVersion of the document in file, or "" for a file
+// that cannot be read or has none: the loader reports what is wrong with it.
+func apiVersionOf(file string) string {
+	raw, err := os.ReadFile(file) //nolint:gosec // the path is the process's own configuration
+	if err != nil {
+		return ""
+	}
+	var doc struct {
+		APIVersion string `json:"apiVersion"`
+	}
+	if err = yaml.Unmarshal(raw, &doc); err != nil {
+		return ""
+	}
+	return doc.APIVersion
+}
 
 // OpenFunc assembles the function of one module from its document.
 type OpenFunc func(ctx context.Context, file string) (*Function, error)
@@ -86,12 +116,14 @@ func Register(module string, open OpenFunc) {
 	openers[module] = open
 }
 
-// ModuleOf is the module a service document is for: one whose apiVersion is the
-// backup's is the backup module's; one that sets cloudflare.serve is the
-// Cloudflare module's; any other is the issuer's.
+// ModuleOf is the module a service document is for, by its apiVersion:
+// controller-github/v2 is the GitHub module's, controller-slack/v2 the Slack
+// module's, sluis-google/v1 the Google module's and sluis-backup/v1 the
+// backup module's. A sluis/v3 document that sets cloudflare.serve is the
+// Cloudflare module's; any other document is the issuer's.
 func ModuleOf(file string) (string, error) {
-	if config.IsBackup(file) {
-		return ModuleBackup, nil
+	if m, ok := documentModules[apiVersionOf(file)]; ok {
+		return m, nil
 	}
 	svc, err := config.Load[config.Sluis](file)
 	if err != nil {
