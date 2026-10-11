@@ -63,7 +63,7 @@ func TestTheInClusterExampleReplacesSQSDynamoDBAndSSM(t *testing.T) {
 		t.Fatalf("examples/in-cluster-services.yaml: %v\n%s", err, stderr)
 	}
 	assertNone(t, out, awsServices)
-	for _, want := range []string{"nats://nats.nats.svc:4222", "adapter: kms", "key_alias: alias/audit-archive"} {
+	for _, want := range []string{"nats://nats.nats.svc:4222", "adapter: kms", "key_alias: alias/sluis-example-audit-archive"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("the render lacks %q", want)
 		}
