@@ -11,6 +11,7 @@
 #   - a `module` zip's bootstrap carries the pin `sluis-module=<name>` and no
 #     other module's, so it refuses to start as another module; a `legacy` zip
 #     carries none;
+#   - no other sluis-*_linux_arm64.zip is there (an orphan: github-mint, accessctl);
 #   - checksums.txt lists the zip with its SHA-256, when DIR has a checksums.txt
 #     (a zip missing from it is an error: a pin that is not checksummed is not a pin).
 #
@@ -30,6 +31,18 @@ while read -r kind name; do
   case "$kind" in ''|'#'*) continue ;; module) modules+=("$name") ;; esac
 done < "$list"
 [ "${#modules[@]}" -gt 0 ] || fail "$list names no module"
+
+# No orphan: every sluis-*_linux_arm64.zip in DIR is a listed zip (a removed
+# artifact such as github-mint or accessctl must not be published).
+listed=" "
+while read -r kind name; do
+  case "$kind" in ''|'#'*) continue ;; esac
+  listed="$listed$name "
+done < "$list"
+for z in "$dir"/sluis-*_linux_arm64.zip; do
+  b="$(basename "$z")"; m="${b#sluis-}"; m="${m%%_*}"
+  case "$listed" in *" $m "*) ;; *) fail "$b is an orphan: $m is not in $list" ;; esac
+done
 
 n=0
 while read -r kind name; do

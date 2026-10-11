@@ -151,11 +151,11 @@ func modulePackage(issuer, role string) (string, error) {
 	zip := ModuleOfFunction(role)
 	i := strings.LastIndex(issuer, "/") + 1
 	base := issuer[i:]
-	if !strings.HasPrefix(base, "sluis-issuer_") {
+	if !strings.HasPrefix(base, sluisconfig.ZipPrefix(sluisconfig.ModuleIssuer)) {
 		return "", fmt.Errorf("sluispulumi: LambdaArgs.Modules[%s].Package is required: the package %q is not named sluis-issuer_<version>_..., "+
 			"so the module's zip cannot be found beside it", role, base)
 	}
-	return issuer[:i] + "sluis-" + string(zip) + "_" + strings.TrimPrefix(base, "sluis-issuer_"), nil
+	return issuer[:i] + sluisconfig.ZipPrefix(string(zip)) + strings.TrimPrefix(base, sluisconfig.ZipPrefix(sluisconfig.ModuleIssuer)), nil
 }
 
 // planModules resolves every module function's settings.

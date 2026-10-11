@@ -67,6 +67,14 @@ fixture
 expect_failure "a zip missing from checksums.txt" "is not in checksums.txt"
 fixture
 
+# A zip of a removed artifact is an orphan, even with a pin and a checksum.
+for orphan in github-mint accessctl; do
+  zipof "$orphan" "ELF sluis-module=$orphan ELF"; sums
+  expect_failure "an orphan $orphan zip" "is an orphan"
+  rm "$dir/sluis-${orphan}_1.0.0_linux_arm64.zip"
+done
+fixture
+
 rm "$dir/sluis-backup_1.0.0_linux_arm64.zip"
 sums
 expect_failure "a module with no zip" "exactly one sluis-backup"
