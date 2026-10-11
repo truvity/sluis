@@ -1,0 +1,37 @@
+apiVersion: sluis.truvity.github.io/sluis-google/v1
+google:
+  freshnessWindow: 30m
+  probeInterval: 5m
+  refreshInterval: 15m
+  workspaces:
+    - admin: admin@example.test
+      backend: google
+      id: tenant
+      keySecret: directory/tenant/key
+      serve:
+        - example.test
+      syncGroups:
+        - staff@example.test
+instance: staging
+log:
+  level: info
+platform:
+  aws: true
+  runtime: lambda
+ports:
+  adapter: dynamodb
+  blob:
+    adapter: s3
+    s3:
+      bucket: example-sluis-111122223333
+      region: eu-central-1
+  dynamodb:
+    region: eu-central-1
+    tables:
+      google: sluis-staging-google
+preset: aws-hybrid
+secrets:
+  layout: v5
+  region: eu-central-1
+  root: /sluis/staging
+  source: ssm
