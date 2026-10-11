@@ -234,7 +234,7 @@ Expect JSON whose `issuer` is `https://access.example.test`. A TLS failure means
 aws logs tail /aws/lambda/sluis --since 15m
 ```
 
-The log group is `/aws/lambda/<function name>`, `sluis` unless the installation sets `aws.functionName`. A document the loader refuses stops the cold start and is named there.
+The log group is `/aws/lambda/<function name>`, `sluis-<instance>-issuer` unless the installation sets `aws.functions.issuer` (or `aws.functionName`). A document the loader refuses stops the cold start and is named there.
 
 ## 7. Sign in
 

@@ -43,8 +43,8 @@ func TestNewLambdaMakesAFunctionAndARolePerModule(t *testing.T) {
 			t.Errorf("%s: no-retry config = %v", m, retries)
 		}
 	}
-	// The issuer's function is as it was: not renamed here (V13).
-	if prop(rec.one(t, fnType, "staging-http"), "name").StringValue() != "sluis" {
+	// The issuer's function is named for its module like the others (V13).
+	if prop(rec.one(t, fnType, "staging-issuer"), "name").StringValue() != "sluis-staging-issuer" {
 		t.Error("the issuer's function was renamed")
 	}
 }
@@ -92,7 +92,7 @@ func TestModulesConfigureMemoryConcurrencyAndName(t *testing.T) {
 		t.Errorf("mint defaults: %v", m.Inputs)
 	}
 	// The issuer's role invokes the overridden name.
-	issuer := resourcesOf(statements(t, prop(rec.one(t, policyType, "staging-http-policy"), "policy").StringValue()))
+	issuer := resourcesOf(statements(t, prop(rec.one(t, policyType, "staging-issuer-policy"), "policy").StringValue()))
 	if !slices.Contains(issuer, fnArn("acme-slack")+":live-issuer") {
 		t.Errorf("the issuer does not invoke the renamed slack function: %v", issuer)
 	}
@@ -108,7 +108,9 @@ func TestModulesAreRefusedWhenWrong(t *testing.T) {
 		"a name taken twice": v5Estate(func(a *arp.LambdaArgs) {
 			a.Modules = map[string]arp.ModuleArgs{"slack": {FunctionName: "sluis-staging-github"}}
 		}),
-		"the issuer's name taken": v5Estate(func(a *arp.LambdaArgs) { a.Modules = map[string]arp.ModuleArgs{"google": {FunctionName: "sluis"}} }),
+		"the issuer's name taken": v5Estate(func(a *arp.LambdaArgs) {
+			a.Modules = map[string]arp.ModuleArgs{"google": {FunctionName: "sluis-staging-issuer"}}
+		}),
 		"modules on layout v4": {mutate: func(a *arp.LambdaArgs) {
 			a.Modules = map[string]arp.ModuleArgs{"slack": {ReservedConcurrency: &one}}
 		}},
@@ -171,13 +173,13 @@ func TestTheOutputsAreKeyedByModule(t *testing.T) {
 func TestTheIssuerCanInvokeOnlyTheAliasesItNeeds(t *testing.T) {
 	rec, _ := mustLambda(t, v5Estate())
 	var invokes []string
-	for _, s := range statements(t, prop(rec.one(t, policyType, "staging-http-policy"), "policy").StringValue()) {
+	for _, s := range statements(t, prop(rec.one(t, policyType, "staging-issuer-policy"), "policy").StringValue()) {
 		if slices.Contains(strs(s["Action"]), "lambda:InvokeFunction") {
 			invokes = append(invokes, strs(s["Resource"])...)
 		}
 	}
 	want := []string{
-		fnArn("sluis") + ":live",
+		fnArn("sluis-staging-issuer") + ":live",
 		fnArn("sluis-staging-cloudflare") + ":live-issuer", fnArn("sluis-staging-github") + ":live-issuer",
 		fnArn("sluis-staging-github-mint") + ":live-issuer", fnArn("sluis-staging-google") + ":live-issuer",
 		fnArn("sluis-staging-slack") + ":live-issuer", fnArn("sluis-staging-backup") + ":live-console",

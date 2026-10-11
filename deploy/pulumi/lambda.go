@@ -265,15 +265,19 @@ type LambdaArgs struct {
 	// (`<prefix>-<kind>-<target>`, `<prefix>-directory-
 	// refresh`) and the scheduler's role. Default "sluis".
 	FunctionNamePrefix string
-	// FunctionName is the function's name, and the name of its role, its role
-	// policy and its log group (`/aws/lambda/<name>`). Default FunctionNamePrefix:
-	// ONE function, `sluis`. An installation that ran the three functions of
-	// v1.62 and wants this one to be the function it already has, with its role,
-	// log group and API integration kept in place and nothing replaced, sets it to
-	// `<prefix>-http` (the resources keep their logical names, so Pulumi's state
-	// carries over). Left at the default, the function, its role and its log group
-	// are replaced under the new name (the new ones are created before the old are
-	// deleted) and the old log group's events go with it.
+	// FunctionName is the issuer's function name, and the name of its role, its
+	// role policy and its log group (`/aws/lambda/<name>`). Default
+	// `sluis-<Instance>-<issuer>`, like every module's function (v1.75 and before:
+	// FunctionNamePrefix, `sluis`). An estate that wants the function it already
+	// has, with its role, log group and API integration kept in place and nothing
+	// replaced, sets it to the name it has (`sluis` or `sluis-http`): the
+	// resources keep their identity through [pulumi.Aliases] either way. Left at
+	// the default on an estate that ran another name, the function, its role, its
+	// role policy and its log group are replaced under the new name, the new ones
+	// created before the old are deleted (the API integration, the schedules and
+	// the grants move to the new function first). The old log group is not
+	// deleted by that: it leaves the stack's state and stays in the account with
+	// its events, until its retention expires them or the operator deletes it.
 	FunctionName string
 	// Function tunes the function.
 	Function FunctionArgs
@@ -993,7 +997,12 @@ func (a *LambdaArgs) validate() (LambdaArgs, error) {
 		out.FunctionNamePrefix = "sluis"
 	}
 	if out.FunctionName == "" {
+		// `sluis-<instance>-issuer`, like every module's function; the prefix
+		// alone only where there is no instance to name.
 		out.FunctionName = out.FunctionNamePrefix
+		if out.Instance != "" {
+			out.FunctionName = "sluis-" + out.Instance + "-" + RoleIssuer
+		}
 	}
 	if !functionNamePattern.MatchString(out.FunctionName) {
 		return out, fmt.Errorf("sluispulumi: LambdaArgs.FunctionName %q is letters, digits, - and _, at most 64", out.FunctionName)
@@ -1291,11 +1300,11 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 	// nothing is replaced.
 	fnName := a.FunctionName
 	fnArn := arnPrefix + "lambda:" + a.Region + ":" + a.AccountID + ":function:" + fnName
-	logs, err := cloudwatch.NewLogGroup(ctx, name+"-http", &cloudwatch.LogGroupArgs{
+	logs, err := cloudwatch.NewLogGroup(ctx, name+"-issuer", &cloudwatch.LogGroupArgs{
 		Name:            pulumi.String("/aws/lambda/" + fnName),
 		RetentionInDays: pulumi.Int(a.LogRetentionDays),
 		Tags:            tags,
-	}, child)
+	}, child, issuerAlias(name, ""), pulumi.RetainOnDelete(true))
 	if err != nil {
 		return nil, fmt.Errorf("sluis log group: %w", err)
 	}
@@ -1374,7 +1383,7 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 	} else {
 		fnArgs.Code = pulumi.NewFileArchive(pkg.Path)
 	}
-	fn, err := lambda.NewFunction(ctx, name+"-http", fnArgs, child, pulumi.DependsOn([]pulumi.Resource{logs}))
+	fn, err := lambda.NewFunction(ctx, name+"-issuer", fnArgs, child, issuerAlias(name, ""), pulumi.DependsOn([]pulumi.Resource{logs}))
 	if err != nil {
 		return nil, fmt.Errorf("sluis function: %w", err)
 	}
@@ -1393,9 +1402,9 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 	// A pass that failed is the next tick's: no retry, so that "run a pass now"
 	// and a tick never run twice because of a transient error. Asynchronous
 	// invokes are configured per qualifier, and the callers use the alias.
-	if _, err := lambda.NewFunctionEventInvokeConfig(ctx, name+"-http", &lambda.FunctionEventInvokeConfigArgs{
+	if _, err := lambda.NewFunctionEventInvokeConfig(ctx, name+"-issuer", &lambda.FunctionEventInvokeConfigArgs{
 		FunctionName: fn.Name, Qualifier: live.Name, MaximumRetryAttempts: pulumi.Int(0),
-	}, child); err != nil {
+	}, child, issuerAlias(name, "")); err != nil {
 		return nil, fmt.Errorf("sluis invoke config: %w", err)
 	}
 
@@ -1670,6 +1679,14 @@ func lambdaTrust() string {
 // after the function. The function's own ARN is computed from its name (it
 // may invoke itself for a run-now), which is what keeps the grant from being a
 // cycle.
+// issuerAlias maps the logical name an issuer resource had before the function
+// was named for its module (`<name>-http<suffix>`) to the one it has now
+// (`<name>-issuer<suffix>`), so that Pulumi's state carries the resource over
+// and the rename of the function is a replacement of the same resource.
+func issuerAlias(name, suffix string) pulumi.ResourceOption {
+	return pulumi.Aliases([]pulumi.Alias{{Name: pulumi.String(name + "-http" + suffix)}})
+}
+
 func newFunctionRole(ctx *pulumi.Context, name, fnName string, a *LambdaArgs, signingKeyArns []pulumi.StringInput,
 	wrappedKeyArn, signKeyArn, secretsKeyArn, logGroupArn pulumi.StringInput,
 	selfArn string, tags pulumi.StringMapInput, opts ...pulumi.ResourceOption) (*iam.Role, *iam.RolePolicy, error) {
@@ -1677,7 +1694,7 @@ func newFunctionRole(ctx *pulumi.Context, name, fnName string, a *LambdaArgs, si
 	if a.PermissionsBoundaryArn != "" {
 		rargs.PermissionsBoundary = pulumi.String(a.PermissionsBoundaryArn)
 	}
-	r, err := iam.NewRole(ctx, name+"-http-role", rargs, opts...)
+	r, err := iam.NewRole(ctx, name+"-issuer-role", rargs, append(opts, issuerAlias(name, "-role"))...)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -1714,9 +1731,9 @@ func newFunctionRole(ctx *pulumi.Context, name, fnName string, a *LambdaArgs, si
 			functionArns:       issuerFunctionArns(a),
 		})
 	}).(pulumi.StringOutput)
-	rp, err := iam.NewRolePolicy(ctx, name+"-http-policy", &iam.RolePolicyArgs{
+	rp, err := iam.NewRolePolicy(ctx, name+"-issuer-policy", &iam.RolePolicyArgs{
 		Name: pulumi.String(fnName), Role: r.Name, Policy: doc,
-	}, opts...)
+	}, append(opts, issuerAlias(name, "-policy"))...)
 	if err != nil {
 		return nil, nil, err
 	}

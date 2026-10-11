@@ -3,6 +3,7 @@ package sluispulumi_test
 import (
 	"encoding/json"
 	"errors"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -27,6 +28,9 @@ type recorder struct {
 	mu        sync.Mutex
 	resources []declared
 	protected map[string]bool
+	// options are each resource's declared aliases (their old logical names),
+	// create-before-delete setting and retain-on-delete, by type/name.
+	options map[string]declaredOptions
 	// unversioned makes the artifacts bucket answer an upload with no version id;
 	// wrongCode makes Lambda report other code than the function was given.
 	unversioned, wrongCode bool
@@ -36,6 +40,15 @@ type recorder struct {
 
 // mockSetup, when set by a test, configures the next mock before the program runs.
 var mockSetup func(*recorder)
+
+// declaredOptions are the options a rename depends on.
+type declaredOptions struct {
+	// AliasNames are the old logical names the resource answers to.
+	AliasNames []string
+	// DeleteBeforeReplace is true only when the program asked for delete-before-replace.
+	DeleteBeforeReplace bool
+	RetainOnDelete      bool
+}
 
 type declared struct {
 	Type, Name string
@@ -152,8 +165,28 @@ func (r *recorder) transform(ctx *pulumi.Context) error {
 		}
 		ro, err := pulumi.NewResourceOptions(a.Opts...)
 		r.protected[a.Type+"/"+a.Name] = err == nil && ro.Protect
+		if r.options == nil {
+			r.options = map[string]declaredOptions{}
+		}
+		o := declaredOptions{}
+		if err == nil {
+			for _, al := range ro.Aliases {
+				if str, ok := al.Name.(pulumi.String); ok {
+					o.AliasNames = append(o.AliasNames, string(str))
+				}
+			}
+			o.DeleteBeforeReplace = ro.DeleteBeforeReplace
+			o.RetainOnDelete = ro.RetainOnDelete
+		}
+		r.options[a.Type+"/"+a.Name] = o
 		return nil
 	})
+}
+
+func (r *recorder) optionsOf(typ, name string) declaredOptions {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.options[typ+"/"+name]
 }
 
 func (r *recorder) isProtected(typ, name string) bool {
@@ -274,4 +307,10 @@ func grants(st []map[string]any) map[string][]string {
 		}
 	}
 	return out
+}
+
+func (r *recorder) allDeclared() []declared {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return slices.Clone(r.resources)
 }

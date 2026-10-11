@@ -58,7 +58,7 @@ func TestTheArtifactsBucketHoldsTheReleaseZipAsItIsAndTheFunctionIsMadeFromIt(t 
 	if src := prop(obj, "source"); !src.IsAsset() || src.IsArchive() {
 		t.Errorf("the source must be a file asset and not an archive: %v", src)
 	}
-	fn := rec.one(t, "aws:lambda/function:Function", "staging-http")
+	fn := rec.one(t, "aws:lambda/function:Function", "staging-issuer")
 	if _, has := fn.Inputs["code"]; has {
 		t.Errorf("the function carries its code: %v", fn.Inputs["code"])
 	}
@@ -86,7 +86,7 @@ func TestWithoutArtifactsTheCodeIsUploadedWithTheFunction(t *testing.T) {
 	if rec.has(objType, "staging-code") || rec.has(objType, "staging-config-code") {
 		t.Error("an artifact was uploaded without Artifacts")
 	}
-	fn := rec.one(t, "aws:lambda/function:Function", "staging-http")
+	fn := rec.one(t, "aws:lambda/function:Function", "staging-issuer")
 	if !fn.Inputs["code"].IsArchive() {
 		t.Errorf("fallback code %v", fn.Inputs["code"])
 	}
@@ -292,15 +292,15 @@ func TestTheFunctionPublishesAVersionAndCallersUseTheLiveAlias(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	fn := rec.one(t, "aws:lambda/function:Function", "staging-http")
+	fn := rec.one(t, "aws:lambda/function:Function", "staging-issuer")
 	if !prop(fn, "publish").IsBool() || !prop(fn, "publish").BoolValue() {
 		t.Errorf("the function does not publish a version: %v", fn.Inputs)
 	}
 	al := rec.one(t, aliasType, "staging-live")
-	if strIn(t, al, "name") != "live" || strIn(t, al, "functionName") != "sluis" || strIn(t, al, "functionVersion") != "7" {
+	if strIn(t, al, "name") != "live" || strIn(t, al, "functionName") != "sluis-staging-issuer" || strIn(t, al, "functionVersion") != "7" {
 		t.Errorf("alias %v", al.Inputs)
 	}
-	live := arnp + "lambda:eu-west-1:" + account + ":function:sluis:live"
+	live := arnp + "lambda:eu-west-1:" + account + ":function:sluis-staging-issuer:live"
 	if out["liveAliasArn"] != live || out["liveVersion"] != "7" {
 		t.Errorf("outputs %v", out)
 	}
@@ -309,7 +309,7 @@ func TestTheFunctionPublishesAVersionAndCallersUseTheLiveAlias(t *testing.T) {
 		t.Errorf("integration %q", got)
 	}
 	perm := rec.one(t, "aws:lambda/permission:Permission", "staging-api-invoke")
-	if strIn(t, perm, "qualifier") != "live" || strIn(t, perm, "function") != "sluis" {
+	if strIn(t, perm, "qualifier") != "live" || strIn(t, perm, "function") != "sluis-staging-issuer" {
 		t.Errorf("api permission %v", perm.Inputs)
 	}
 	n := 0
@@ -326,11 +326,11 @@ func TestTheFunctionPublishesAVersionAndCallersUseTheLiveAlias(t *testing.T) {
 	if got := sp["lambda:InvokeFunction"]; len(got) != 1 || got[0] != live {
 		t.Errorf("scheduler grant %v, want exactly the alias", got)
 	}
-	fp := grants(statements(t, prop(rec.one(t, policyType, "staging-http-policy"), "policy").StringValue()))
-	if got := fp["lambda:InvokeFunction"]; len(got) != 1 || got[0] != arnp+"lambda:"+region+":"+account+":function:sluis:live" {
+	fp := grants(statements(t, prop(rec.one(t, policyType, "staging-issuer-policy"), "policy").StringValue()))
+	if got := fp["lambda:InvokeFunction"]; len(got) != 1 || got[0] != arnp+"lambda:"+region+":"+account+":function:sluis-staging-issuer:live" {
 		t.Errorf("self grant %v", got)
 	}
-	cfg := rec.one(t, "aws:lambda/functionEventInvokeConfig:FunctionEventInvokeConfig", "staging-http")
+	cfg := rec.one(t, "aws:lambda/functionEventInvokeConfig:FunctionEventInvokeConfig", "staging-issuer")
 	if strIn(t, cfg, "qualifier") != "live" {
 		t.Errorf("async config %v", cfg.Inputs)
 	}
@@ -348,7 +348,7 @@ func TestTheAliasLeavesTheAPIDomainAndMappingAlone(t *testing.T) {
 		"aws:apigatewayv2/apiMapping:ApiMapping", "aws:apigatewayv2/route:Route"} {
 		for _, d := range rec.ofType(typ) {
 			for k, v := range d.Inputs {
-				if s := v.String(); strings.Contains(s, ":live") || strings.Contains(s, "function:sluis") {
+				if s := v.String(); strings.Contains(s, ":live") || strings.Contains(s, "function:sluis-staging-issuer") {
 					t.Errorf("%s %s names the function in %s: %s", typ, d.Name, k, s)
 				}
 			}
@@ -360,8 +360,8 @@ func TestTheAliasLeavesTheAPIDomainAndMappingAlone(t *testing.T) {
 }
 
 func TestARunNowInvokesTheAlias(t *testing.T) {
-	rec, _ := mustLambda(t, estate{config: "issuerURL: https://x.example\nadapters: {trigger: {adapter: invoke, settings: {github: sluis:live}}}\n"})
-	if doc := layerFiles(t, rec)["sluis/sluis.yaml"]; !strings.Contains(doc, "github: sluis:live\n") || !strings.Contains(doc, "slack: sluis:live\n") {
+	rec, _ := mustLambda(t, estate{config: "issuerURL: https://x.example\nadapters: {trigger: {adapter: invoke, settings: {github: sluis-staging-issuer:live}}}\n"})
+	if doc := layerFiles(t, rec)["sluis/sluis.yaml"]; !strings.Contains(doc, "github: sluis-staging-issuer:live\n") || !strings.Contains(doc, "slack: sluis-staging-issuer:live\n") {
 		t.Errorf("trigger:\n%s", doc)
 	}
 }

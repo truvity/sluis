@@ -63,7 +63,7 @@ func TestAnInstallationIsRenderedIntoTheLayerByTheRootRenderer(t *testing.T) {
 	if !strings.Contains(files["sluis/sluis.yaml"], "github: sluis-http") {
 		t.Errorf("the trigger does not invoke the installation's function:\n%s", files["sluis/sluis.yaml"])
 	}
-	f := rec.one(t, fnType, "staging-http")
+	f := rec.one(t, fnType, "staging-issuer")
 	if prop(f, "name").StringValue() != "sluis-http" {
 		t.Errorf("the function is named %v, the installation's is sluis-http", prop(f, "name"))
 	}
@@ -136,7 +136,7 @@ func TestRecoveryIsSaidOnceAcrossTheArgumentsAndTheInstallation(t *testing.T) {
 func TestTheWebIdentityAudienceIsTheConsolesWhenAnInstallationIsGiven(t *testing.T) {
 	in := exampleInstallation(t)
 	rec, _ := mustLambda(t, withInstallation(in, nil))
-	if !strings.Contains(prop(rec.one(t, policyType, "staging-http-policy"), "policy").StringValue(), "https://access.example.test/console") {
+	if !strings.Contains(prop(rec.one(t, policyType, "staging-issuer-policy"), "policy").StringValue(), "https://access.example.test/console") {
 		t.Error("the role's web identity grant does not carry the console audience")
 	}
 	if _, _, err := buildLambda(t, withInstallation(in, func(a *arp.LambdaArgs) { a.WebIdentityAudience = "https://other.example.test" })); err == nil ||

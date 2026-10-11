@@ -38,7 +38,7 @@ func TestSchedulesTargetTheirModulesLiveAlias(t *testing.T) {
 		"sluis-github-github-links": `{"controller":"github","kind":"tick","target":"github:links"} ` + live("sluis-staging-github"),
 		"sluis-slack-T1":            `{"controller":"slack","kind":"tick","target":"T1"} ` + live("sluis-staging-slack"),
 		"sluis-directory-refresh":   `{"kind":"refresh"} ` + live("sluis-staging-google"),
-		"sluis-issuer-clients":      `{"kind":"clients"} ` + live("sluis"),
+		"sluis-issuer-clients":      `{"kind":"clients"} ` + live("sluis-staging-issuer"),
 	}
 	if got := targetsOf(t, rec); fmtMap(got) != fmtMap(want) {
 		t.Errorf("schedules:\n got %v\nwant %v", got, want)
@@ -55,7 +55,7 @@ func TestSchedulesTargetTheirModulesLiveAlias(t *testing.T) {
 		t.Errorf("%d roles, want one scheduler role beside the functions'", n)
 	}
 	pol := grants(statements(t, prop(rec.one(t, policyType, "staging-scheduler-policy"), "policy").StringValue()))
-	wantARNs := []string{live("sluis-staging-github"), live("sluis-staging-google"), live("sluis-staging-slack"), live("sluis")}
+	wantARNs := []string{live("sluis-staging-github"), live("sluis-staging-google"), live("sluis-staging-issuer"), live("sluis-staging-slack")}
 	if len(pol) != 1 || !slices.Equal(pol["lambda:InvokeFunction"], wantARNs) {
 		t.Errorf("scheduler grants %v, want exactly %v", pol, wantARNs)
 	}
@@ -134,7 +134,7 @@ func TestThePreviewShapeOfTheSchedules(t *testing.T) {
 	}
 	// The v4 layout has no clients schedule and its role holds the one alias.
 	pol := grants(statements(t, prop(before.one(t, policyType, "staging-scheduler-policy"), "policy").StringValue()))
-	if got := pol["lambda:InvokeFunction"]; len(got) != 1 || got[0] != liveOf("sluis") {
+	if got := pol["lambda:InvokeFunction"]; len(got) != 1 || got[0] != liveOf("sluis-staging-issuer") {
 		t.Errorf("v4 scheduler grants %v", got)
 	}
 }
@@ -151,7 +151,7 @@ func TestIssuerClientsScheduleIsConfigurable(t *testing.T) {
 		t.Error("Disabled left the clients schedule in")
 	}
 	policy := prop(rec.one(t, policyType, "staging-scheduler-policy"), "policy").StringValue()
-	if got := grants(statements(t, policy))["lambda:InvokeFunction"]; slices.Contains(got, liveOf("sluis")) {
+	if got := grants(statements(t, policy))["lambda:InvokeFunction"]; slices.Contains(got, liveOf("sluis-staging-issuer")) {
 		t.Errorf("the scheduler still holds the issuer's alias: %v", got)
 	}
 

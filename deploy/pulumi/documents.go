@@ -304,14 +304,13 @@ func (a LambdaArgs) withInstallation() (LambdaArgs, error) {
 	fill("Instance", in.Instance, a.Instance, func(v string) { in.Instance = v })
 	fill("Region", aws.Region, a.Region, func(v string) { aws.Region = v })
 	fill("AccountID", aws.Account, a.AccountID, func(v string) { aws.Account = v })
-	fn := a.FunctionName
-	if fn == "" {
-		fn = a.FunctionNamePrefix
+	// The issuer's name: the installation's `aws.functions.issuer`, else its
+	// `aws.functionName`, else `sluis-<instance>-issuer`.
+	issuer := aws.Functions[sluisconfig.ModuleIssuer]
+	if issuer == "" {
+		issuer = aws.FunctionName
 	}
-	if fn == "" {
-		fn = sluisconfig.DefaultFunctionName
-	}
-	fill("FunctionName", aws.FunctionName, a.FunctionName, func(string) { aws.FunctionName = fn })
+	fill("FunctionName", issuer, a.FunctionName, func(string) { aws.FunctionName = a.FunctionName })
 	if err := errors.Join(errs...); err != nil {
 		return a, err
 	}
@@ -325,7 +324,7 @@ func (a LambdaArgs) withInstallation() (LambdaArgs, error) {
 		a.AccountID = aws.Account
 	}
 	if a.FunctionName == "" {
-		a.FunctionName = aws.FunctionName
+		a.FunctionName = sluisconfig.FunctionNameOf(&in, sluisconfig.ModuleIssuer)
 	}
 	if r := a.Recovery; r != nil && r.Enabled != nil {
 		rec := sluisconfig.Recovery{}
@@ -442,10 +441,23 @@ func (a *LambdaArgs) withFunctionNames(in *sluisconfig.Installation) error {
 				role, arg, role, inst))
 		}
 	}
+	// The backup function is not a module function; its name is stated once too.
+	switch inst, arg := fns[sluisconfig.ModuleBackup], a.BackupFunctionName; {
+	case arg == "":
+		a.BackupFunctionName = inst
+	case inst == "":
+		fns[sluisconfig.ModuleBackup] = arg
+	case inst != arg:
+		errs = append(errs, fmt.Errorf(
+			"sluispulumi: LambdaArgs.BackupFunctionName is %q and the installation's aws.functions.backup is %q: say it once", arg, inst))
+	}
 	if err := errors.Join(errs...); err != nil {
 		return err
 	}
 	for role, n := range fns {
+		if !slices.Contains(ModuleFunctions(), role) {
+			continue
+		}
 		if n != "" {
 			m := mods[role]
 			m.FunctionName = n

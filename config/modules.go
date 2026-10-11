@@ -26,6 +26,9 @@ const (
 	// ModuleIssuer names the issuer for [ModuleSecrets]; it has no entry in
 	// [ModuleDocuments.Modules].
 	ModuleIssuer = "issuer"
+	// ModuleBackup names the backup function for [FunctionNameOf]; it has no
+	// entry in [ModuleDocuments.Modules].
+	ModuleBackup = "backup"
 )
 
 // Modules are the module functions, in a fixed order.
@@ -33,13 +36,22 @@ func Modules() []string {
 	return []string{ModuleCloudflare, ModuleGitHub, ModuleGitHubMint, ModuleGoogle, ModuleSlack}
 }
 
-// FunctionNameOf is the name of a module's function: `aws.functions.<module>`,
-// else `sluis-<instance>-<module>`.
+// FunctionNameOf is the name of a function: `aws.functions.<module>`, else
+// `sluis-<instance>-<module>`. The module is one of [Modules], [ModuleIssuer]
+// (the issuer, whose name `aws.functionName` also sets, as it did before the
+// default was `sluis-<instance>-issuer`; an installation with no instance is
+// `sluis`, [DefaultFunctionName]) or [ModuleBackup].
 func FunctionNameOf(in *Installation, module string) string {
 	if in.AWS != nil {
 		if n := in.AWS.Functions[module]; n != "" {
 			return n
 		}
+		if module == ModuleIssuer && in.AWS.FunctionName != "" {
+			return in.AWS.FunctionName
+		}
+	}
+	if module == ModuleIssuer && in.Instance == "" {
+		return DefaultFunctionName
 	}
 	return "sluis-" + in.Instance + "-" + module
 }
@@ -162,16 +174,17 @@ func (in *Installation) checkModules() error {
 		return errors.Join(errs...)
 	}
 	names := map[string]string{in.functionName(): ModuleIssuer}
+	known := append([]string{ModuleIssuer, ModuleBackup}, Modules()...)
 	for _, m := range slices.Sorted(maps.Keys(in.AWS.Functions)) {
-		if !slices.Contains(Modules(), m) {
-			errs = append(errs, fmt.Errorf("aws.functions names %q, which is not a module function (%s)", m, strings.Join(Modules(), ", ")))
+		if !slices.Contains(known, m) {
+			errs = append(errs, fmt.Errorf("aws.functions names %q, which is not a function (%s)", m, strings.Join(known, ", ")))
 			continue
 		}
 		if n := in.AWS.Functions[m]; !functionNamePattern.MatchString(n) {
 			errs = append(errs, fmt.Errorf("aws.functions.%s %q is letters, digits, - and _, at most 64", m, n))
 		}
 	}
-	for _, m := range Modules() {
+	for _, m := range append([]string{ModuleBackup}, Modules()...) {
 		n := FunctionNameOf(in, m)
 		if other, dup := names[n]; dup {
 			errs = append(errs, fmt.Errorf("the function name %q is both the %s function's and the %s function's", n, other, m))

@@ -39,7 +39,7 @@ func withLayout(l arp.Layout, more ...func(*arp.LambdaArgs)) estate {
 func policyOf(t *testing.T, e estate) []map[string]any {
 	t.Helper()
 	rec, _ := mustLambda(t, e)
-	return statements(t, prop(rec.one(t, policyType, "staging-http-policy"), "policy").StringValue())
+	return statements(t, prop(rec.one(t, policyType, "staging-issuer-policy"), "policy").StringValue())
 }
 
 func resourcesOf(st []map[string]any) []string {
@@ -73,7 +73,7 @@ func TestLayoutV4KeepsTheV4GrantsOnly(t *testing.T) {
 			t.Errorf("%q: the v4 grants are missing: %v", l, res)
 		}
 		for _, r := range res {
-			if strings.Contains(r, "sluis-staging-") || strings.Contains(r, "/internal/oidc") || strings.Contains(r, "/external/oidc") {
+			if (strings.Contains(r, "sluis-staging-") && !strings.Contains(r, "sluis-staging-issuer")) || strings.Contains(r, "/internal/oidc") || strings.Contains(r, "/external/oidc") {
 				t.Errorf("%q: a v5 resource on layout v4: %s", l, r)
 			}
 		}
@@ -174,7 +174,7 @@ func TestLayoutV5HostsTheCloudflareModuleWithPresets(t *testing.T) {
 	if !slices.Contains(cf, arnp+"ssm:"+region+":"+account+":parameter/sluis/example/internal/cloudflare/*") {
 		t.Errorf("no parameters for the minter: %v", cf)
 	}
-	for _, r := range resourcesOf(statements(t, prop(rec.one(t, policyType, "staging-http-policy"), "policy").StringValue())) {
+	for _, r := range resourcesOf(statements(t, prop(rec.one(t, policyType, "staging-issuer-policy"), "policy").StringValue())) {
 		if r == tableArn("sluis-staging-cloudflare") || r == arnp+"ssm:"+region+":"+account+":parameter/sluis/example/internal/cloudflare/*" {
 			t.Errorf("the issuer holds the minter's state: %s", r)
 		}
@@ -409,7 +409,7 @@ func TestThePreviewShapeAcrossTheLayouts(t *testing.T) {
 			t.Errorf("%s: %s", typ, s)
 		}
 		for _, n := range s.created {
-			if strings.HasPrefix(n, "staging-http") {
+			if strings.HasPrefix(n, "staging-issuer") {
 				t.Errorf("%s: the issuer's %s is created", typ, n)
 			}
 		}
