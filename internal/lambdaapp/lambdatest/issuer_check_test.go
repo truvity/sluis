@@ -71,7 +71,8 @@ func TestTheQualifierIsTheCallerClassAndAnUnknownFunctionIsRefused(t *testing.T)
 	if c := h.Emulator.Calls(); len(c) != 1 || c[0].Class != "console" {
 		t.Errorf("calls = %+v, want the console class", c)
 	}
-	if _, err := h.Emulator.Invoke(context.Background(), "sluis-acme-nothing", "live", []byte(`{}`)); err == nil || !strings.Contains(err.Error(), "ResourceNotFoundException") {
+	_, err := h.Emulator.Invoke(context.Background(), "sluis-acme-nothing", "live", []byte(`{}`))
+	if err == nil || !strings.Contains(err.Error(), "ResourceNotFoundException") {
 		t.Errorf("an unknown function: %v", err)
 	}
 }
