@@ -1,0 +1,46 @@
+apiVersion: sluis.truvity.github.io/sluis/v3
+adapters:
+  audit:
+    adapter: sqs
+    settings:
+      queueURL: https://sqs.eu-central-1.amazonaws.com/111122223333/example-audit-ingest
+      region: eu-central-1
+  trigger:
+    adapter: memory
+cloudflare:
+  accounts:
+    main:
+      id: 0123456789abcdef0123456789abcdef
+      minter: internal/cloudflare/main/minter
+  forbiddenPermissionGroups:
+    - Workers Scripts Write
+  presets:
+    dns-example:
+      account: main
+      description: DNS edits on example.com for the release job
+      lifetime: 15m
+      prototype: 9d3b1c7a5e2f4b8a9c0d1e2f3a4b5c6d
+      rotation: 5m
+  serve: {}
+instance: staging
+issuerURL: https://access.example.test
+log:
+  level: info
+platform:
+  aws: true
+  runtime: lambda
+policy:
+  file: /opt/sluis/policy.yaml
+ports:
+  adapter: dynamodb
+  dynamodb:
+    region: eu-central-1
+    tables:
+      cloudflare: sluis-staging-cloudflare
+preset: aws-hybrid
+release: access-issuer
+secrets:
+  layout: v5
+  region: eu-central-1
+  root: /sluis/staging
+  source: ssm
