@@ -3,14 +3,10 @@ package sluispulumi
 import (
 	"errors"
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 
-	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/cloudwatch"
-	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/iam"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/kms"
-	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/lambda"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 	yaml "go.yaml.in/yaml/v3"
 
@@ -520,175 +516,66 @@ func (p *backupPlan) grant(r backupRefs) ArchiveGrant {
 	return g
 }
 
-// backupFn is what the shared builder makes of one function.
-type backupFn struct {
-	fn         *lambda.Function
-	role       *iam.Role
-	rolePolicy *iam.RolePolicy
-	logs       *cloudwatch.LogGroup
-	layer      *lambda.LayerVersion
-	aliases    map[string]*lambda.Alias
-	archiveKey pulumi.StringOutput
-	archiveARN pulumi.StringInput
-	names      []string
-}
-
 // statementsFor renders the role's statements from the resolved references.
 type statementsFor func(env ModuleEnv, g ArchiveGrant) ([]map[string]any, error)
 
-// buildFunction makes the function of the role from the release zip: the
-// configuration layer with the document, the log group, the role with the
-// statements, the function and one alias per name in aliasNames.
-func buildFunction(ctx *pulumi.Context, name string, p *backupPlan, archiveBucketArn pulumi.StringInput,
-	aliasNames []string, retries0 []string, statements statementsFor, owner pulumi.Resource) (*backupFn, error) {
-	parent := pulumi.Parent(owner)
-	pkg, err := loadPackage(p.Package, p.PackageSHA256, packageRelease(p.Package, p.PackageVersion), p.Release)
-	if err != nil {
-		return nil, err
+// moduleFunctionArgs maps the plan onto the generic builder. The role's policy
+// is the statements rendered from the resolved references.
+func (p *backupPlan) moduleFunctionArgs(name, doc string, archiveKey, archiveBucketArn pulumi.StringInput,
+	callers, noRetry []string, omitLive bool, statements statementsFor) *ModuleFunctionArgs {
+	return &ModuleFunctionArgs{
+		Name: name, FunctionName: p.FunctionName,
+		Package: p.Package, PackageSHA256: p.PackageSHA256, PackageVersion: p.PackageVersion, Release: p.Release,
+		Artifacts:       p.Artifacts,
+		Documents:       map[string]string{docSluis: doc},
+		DocumentVersion: backupDocumentVersion,
+		MemoryMB:        p.Function.MemoryMB, TimeoutSeconds: p.Function.TimeoutSeconds,
+		LogRetentionDays: p.LogRetentionDays, PermissionsBoundaryArn: p.PermissionsBoundaryArn, Tags: p.Tags,
+		Callers: callers, NoRetry: noRetry, OmitLive: omitLive,
+		Policy: func(logGroup pulumi.StringOutput) pulumi.StringInput {
+			bucket := p.Storage.BucketArn
+			if bucket == nil {
+				bucket = pulumi.String("")
+			}
+			tableKey := pulumi.StringInput(pulumi.String(""))
+			if p.State.KeyArn != nil {
+				tableKey = p.State.KeyArn
+			}
+			queue := pulumi.String(p.auditArn)
+			return pulumi.All(bucket, tableKey, logGroup, queue, archiveKey, archiveBucketArn, moduleTableArns(p.State)).ApplyT(func(v []any) (string, error) {
+				r := backupRefs{
+					bucketArn: v[0].(string), tableKey: v[1].(string), logGroup: v[2].(string), queueArn: v[3].(string),
+					archiveKey: v[4].(string), archiveBucket: v[5].(string), tables: moduleTablesOf(v[6]),
+				}
+				st, err := statements(p.env(r), p.grant(r))
+				if err != nil {
+					return "", err
+				}
+				return document(st)
+			}).(pulumi.StringOutput)
+		},
 	}
+}
+
+// buildFunction makes the function of the role on the generic builder.
+func buildFunction(ctx *pulumi.Context, name string, p *backupPlan, archiveBucketArn pulumi.StringInput,
+	callers, noRetry []string, omitLive bool, statements statementsFor, owner pulumi.Resource) (*backupFn, error) {
 	doc, err := p.document()
 	if err != nil {
 		return nil, err
 	}
-	tags := tagMap(p.Tags)
-	out := &backupFn{aliases: map[string]*lambda.Alias{}, archiveARN: archiveBucketArn}
-
-	// ---- the configuration layer: the one document.
-	files := map[string][]byte{"sluis/" + docSluis + ".yaml": []byte(doc)}
-	layerArgs := &lambda.LayerVersionArgs{
-		LayerName:               pulumi.String(p.FunctionName + "-config"),
-		Description:             pulumi.String(p.FunctionName + " configuration: the " + backupDocumentVersion + " document, at " + LayerRoot),
-		CompatibleRuntimes:      pulumi.StringArray{pulumi.String("provided.al2023")},
-		CompatibleArchitectures: pulumi.StringArray{pulumi.String("arm64")},
-		SkipDestroy:             pulumi.Bool(true),
+	key := kms.LookupAliasOutput(ctx, kms.LookupAliasOutputArgs{Name: pulumi.String(p.ArchiveKeyAlias)}, pulumi.Parent(owner)).TargetKeyArn()
+	fn, err := newModuleFunction(ctx, p.moduleFunctionArgs(name, doc, key, archiveBucketArn, callers, noRetry, omitLive, statements), pulumi.Parent(owner))
+	if err != nil {
+		return nil, err
 	}
-	var code *artifact.Object
-	if p.Artifacts != nil {
-		if code, err = uploadArtifact(ctx, name+"-code", p.Artifacts, pkg, parent); err != nil {
-			return nil, fmt.Errorf("sluis artifacts: %w", err)
-		}
-		layerZip, err := artifact.Zip(files)
-		if err != nil {
-			return nil, fmt.Errorf("sluis configuration layer: %w", err)
-		}
-		sum := artifact.Sum(layerZip)
-		local, err := artifact.WriteTemp("sluis-layer-", "config.zip", layerZip)
-		if err != nil {
-			return nil, fmt.Errorf("sluis configuration layer: %w", err)
-		}
-		obj, err := artifact.Upload(ctx, name+"-config-code", *p.Artifacts, p.Artifacts.Key(pkg.Version, sum, p.FunctionName+"-config.zip"), local, sum, parent)
-		if err != nil {
-			return nil, fmt.Errorf("sluis artifacts: %w", err)
-		}
-		layerArgs.S3Bucket, layerArgs.S3Key, layerArgs.S3ObjectVersion = pulumi.String(obj.Bucket), pulumi.String(obj.Key), obj.VersionID
-		layerArgs.SourceCodeHash = pulumi.String(obj.CodeSHA256)
-	} else {
-		layerArgs.Code = pulumi.NewAssetArchive(map[string]any{"sluis/" + docSluis + ".yaml": pulumi.NewStringAsset(doc)})
-	}
-	if out.layer, err = lambda.NewLayerVersion(ctx, name+"-config", layerArgs, parent); err != nil {
-		return nil, fmt.Errorf("sluis configuration layer: %w", err)
-	}
-
-	// ---- the log group and the role
-	if out.logs, err = cloudwatch.NewLogGroup(ctx, name+"-logs", &cloudwatch.LogGroupArgs{
-		Name: pulumi.String("/aws/lambda/" + p.FunctionName), RetentionInDays: pulumi.Int(p.LogRetentionDays), Tags: tags,
-	}, parent); err != nil {
-		return nil, fmt.Errorf("sluis log group: %w", err)
-	}
-	rargs := &iam.RoleArgs{Name: pulumi.String(p.FunctionName), AssumeRolePolicy: pulumi.String(lambdaTrust()), Tags: tags}
-	if p.PermissionsBoundaryArn != "" {
-		rargs.PermissionsBoundary = pulumi.String(p.PermissionsBoundaryArn)
-	}
-	if out.role, err = iam.NewRole(ctx, name+"-role", rargs, parent); err != nil {
-		return nil, fmt.Errorf("sluis role: %w", err)
-	}
-	bucket := p.Storage.BucketArn
-	if bucket == nil {
-		bucket = pulumi.String("")
-	}
-	tableKey := pulumi.StringInput(pulumi.String(""))
-	if p.State.KeyArn != nil {
-		tableKey = p.State.KeyArn
-	}
-	out.archiveKey = kms.LookupAliasOutput(ctx, kms.LookupAliasOutputArgs{Name: pulumi.String(p.ArchiveKeyAlias)}, pulumi.Parent(owner)).TargetKeyArn()
-	queue := pulumi.String(p.auditArn)
-	policy := pulumi.All(bucket, tableKey, out.logs.Arn, queue, out.archiveKey, archiveBucketArn, moduleTableArns(p.State)).ApplyT(func(v []any) (string, error) {
-		r := backupRefs{
-			bucketArn: v[0].(string), tableKey: v[1].(string), logGroup: v[2].(string), queueArn: v[3].(string),
-			archiveKey: v[4].(string), archiveBucket: v[5].(string), tables: moduleTablesOf(v[6]),
-		}
-		st, err := statements(p.env(r), p.grant(r))
-		if err != nil {
-			return "", err
-		}
-		return document(st)
-	}).(pulumi.StringOutput)
-	if out.rolePolicy, err = iam.NewRolePolicy(ctx, name+"-policy", &iam.RolePolicyArgs{
-		Name: pulumi.String(p.FunctionName), Role: out.role.Name, Policy: policy,
-	}, parent); err != nil {
-		return nil, fmt.Errorf("sluis role policy: %w", err)
-	}
-
-	// ---- the function. The layer is the only one: no telemetry layer here.
-	fnArgs := &lambda.FunctionArgs{
-		Publish:       pulumi.Bool(true),
-		Name:          pulumi.String(p.FunctionName),
-		Role:          out.role.Arn,
-		Runtime:       pulumi.String("provided.al2023"),
-		Handler:       pulumi.String("bootstrap"),
-		Architectures: pulumi.StringArray{pulumi.String("arm64")},
-		MemorySize:    pulumi.Int(p.Function.MemoryMB),
-		Timeout:       pulumi.Int(p.Function.TimeoutSeconds),
-		Layers:        pulumi.StringArray{out.layer.Arn},
-		Environment: &lambda.FunctionEnvironmentArgs{Variables: pulumi.StringMap{
-			sluisconfig.EnvConfig: pulumi.String(DocumentPath(docSluis)),
-		}},
-		LoggingConfig: &lambda.FunctionLoggingConfigArgs{LogFormat: pulumi.String("Text"), LogGroup: out.logs.Name},
-		Tags:          tags,
-	}
-	if code != nil {
-		fnArgs.S3Bucket, fnArgs.S3Key, fnArgs.S3ObjectVersion = pulumi.String(code.Bucket), pulumi.String(code.Key), code.VersionID
-		fnArgs.SourceCodeHash = pulumi.String(code.CodeSHA256)
-	} else {
-		fnArgs.Code = pulumi.NewFileArchive(pkg.Path)
-	}
-	if out.fn, err = lambda.NewFunction(ctx, name+"-fn", fnArgs, parent,
-		pulumi.DependsOn([]pulumi.Resource{out.logs, out.rolePolicy})); err != nil {
-		return nil, fmt.Errorf("sluis function: %w", err)
-	}
-
-	// ---- the aliases: all follow the version just published. A call carries
-	// its caller class in the alias it invokes through.
-	sort.Strings(aliasNames)
-	for _, an := range aliasNames {
-		al, err := lambda.NewAlias(ctx, name+"-alias-"+an, &lambda.AliasArgs{
-			Name: pulumi.String(an), Description: pulumi.String("The version " + an + " callers invoke."),
-			FunctionName: out.fn.Name, FunctionVersion: out.fn.Version,
-		}, parent)
-		if err != nil {
-			return nil, fmt.Errorf("sluis alias %s: %w", an, err)
-		}
-		out.aliases[an] = al
-		out.names = append(out.names, an)
-	}
-	// A run that failed is the next one's: no retry by the platform.
-	for _, an := range retries0 {
-		if _, err := lambda.NewFunctionEventInvokeConfig(ctx, name+"-async-"+an, &lambda.FunctionEventInvokeConfigArgs{
-			FunctionName: out.fn.Name, Qualifier: out.aliases[an].Name, MaximumRetryAttempts: pulumi.Int(0),
-		}, parent); err != nil {
-			return nil, fmt.Errorf("sluis invoke config %s: %w", an, err)
-		}
-	}
-	return out, nil
+	return &backupFn{moduleFunction: fn, archiveKey: key}, nil
 }
 
-// aliasArns is the alias ARNs by alias name.
-func (b *backupFn) aliasArns() pulumi.StringMapOutput {
-	m := pulumi.StringMap{}
-	for k, a := range b.aliases {
-		m[k] = a.Arn
-	}
-	return m.ToStringMapOutput()
+// backupFn is a module function with the archive key its role names.
+type backupFn struct {
+	*moduleFunction
+	archiveKey pulumi.StringOutput
 }
 
 // NewBackup creates the backup function: the release zip with a `sluis-backup/v1`
@@ -734,9 +621,7 @@ func NewBackup(ctx *pulumi.Context, name string, args *BackupArgs, opts ...pulum
 	}
 	out.ArchiveBucketName, out.ArchiveBucketArn = bucketName, bucketArn.ToStringOutput()
 
-	classes := []string{CallerAlias(ClassConsole), CallerAlias(ClassAdmin), CallerAlias(ClassBreakglass)}
-	aliasNames := append([]string{LiveAlias}, classes...)
-	fn, err := buildFunction(ctx, name, p, bucketArn, aliasNames, []string{LiveAlias},
+	fn, err := buildFunction(ctx, name, p, bucketArn, []string{ClassConsole, ClassAdmin, ClassBreakglass}, []string{LiveAlias}, false,
 		BackupRoleStatements, out)
 	if err != nil {
 		return nil, err
