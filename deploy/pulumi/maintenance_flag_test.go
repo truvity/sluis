@@ -217,7 +217,7 @@ func TestTheMaintenanceOperatorWritesTheFlagAndNothingElse(t *testing.T) {
 
 // The operator's audit grant is a send on the audit queue and nothing else.
 func TestOperatorAuditStatementsAreASendOnTheQueue(t *testing.T) {
-	const queue = "arn:aws:sqs:eu-west-1:111111111111:audit-ingest"
+	const queue = "arn:aws:sqs:eu-west-1:111122223333:audit-ingest"
 	st, err := OperatorAuditStatements(queue)
 	if err != nil {
 		t.Fatal(err)

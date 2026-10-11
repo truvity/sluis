@@ -19,7 +19,7 @@ import (
 	"github.com/truvity/sluis/internal/port/memory"
 )
 
-const testQueue = "https://sqs.eu-west-1.amazonaws.com/111111111111/audit-ingest"
+const testQueue = "https://sqs.eu-west-1.amazonaws.com/111122223333/audit-ingest"
 
 // queue is the audit-ingest queue. denied makes it answer as AWS does to a
 // principal that may not send; onSend runs as a message arrives.
@@ -35,7 +35,7 @@ func (q *queue) SendMessageBatch(_ context.Context, in *sqs.SendMessageBatchInpu
 	defer q.mu.Unlock()
 	if q.denied {
 		return nil, errors.New("operation error SQS: SendMessageBatch, https response error StatusCode: 403, AccessDenied: " +
-			"User: arn:aws:sts::111111111111:assumed-role/operator/oleg is not authorized to perform: sqs:SendMessage on resource: " + testQueue)
+			"User: arn:aws:sts::111122223333:assumed-role/operator/oleg is not authorized to perform: sqs:SendMessage on resource: " + testQueue)
 	}
 	if q.onSend != nil {
 		q.onSend()
@@ -91,7 +91,7 @@ func TestMaintenanceOnRefusesWhenTheAuditSendIsDenied(t *testing.T) {
 	if !errors.Is(err, ErrAuditRefused) {
 		t.Fatalf("on with a denied queue = %v, want ErrAuditRefused", err)
 	}
-	for _, want := range []string{testQueue, "arn:aws:sts::111111111111:assumed-role/operator/oleg", "--no-audit"} {
+	for _, want := range []string{testQueue, "arn:aws:sts::111122223333:assumed-role/operator/oleg", "--no-audit"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("the refusal does not say %q: %v", want, err)
 		}
