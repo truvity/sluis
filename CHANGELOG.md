@@ -1,5 +1,9 @@
 ## Unreleased
 
+### Added
+
+- **A container-free Lambda end-to-end harness, `internal/lambdaapp/lambdatest` (tests only).** An httptest server speaks the Lambda Invoke API and routes `FunctionName` plus `Qualifier` to in-process `lambdaapp.Function` handlers; the qualifier reaches the function as the invoked ARN's alias, so the caller class (`live-<class>`) is derived as on the platform. State is the in-memory port, secrets a small SSM fake, GitHub `githubfake`. One scenario runs on today's code (the issuer's `check` event); the v1.76 scenarios are listed as TODOs in the test file. Nothing in a release artifact changes.
+
 ## v1.75.0-rc.10
 
 ### Added
