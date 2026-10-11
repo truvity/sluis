@@ -40,6 +40,7 @@ controllers it runs and its pod carries their mounts. Takes (dict "root" $
 {{/* The modules other modules call, and which therefore answer on /rpc. */}}
 {{- define "sluis.callees" -}}
 github
+slack
 google
 cloudflare
 {{- end }}
@@ -91,8 +92,9 @@ The module's document as a map, as YAML, before its apiVersion. Takes
               answers calls its own `<module>.remote` ({url, audience,
               tokenFile}), which is how the issuer routes to it. In documents
               mode the document as it stands (see sluis.moduleDocument).
-  github      config.controllers.github, with modules.github.config over it
-  slack       likewise
+  github      config.controllers.github, with modules.github.config over it, and
+              github.serve ({address, audience, issuers}) when unset
+  slack       likewise, with slack.serve
   google      modules.google.config
   cloudflare  modules.cloudflare.config, and cloudflare.serve when unset
 */}}
@@ -116,6 +118,15 @@ The module's document as a map, as YAML, before its apiVersion. Takes
 {{- $doc = deepCopy (dig "controllers" .module dict $root.Values.config) -}}
 {{- $_ := set $doc "consoleURL" (printf "http://%s.%s.svc:%s%s" (include "sluis.fullname" $root) $root.Release.Namespace (include "sluis.port" $root) $root.Values.console.mount) -}}
 {{- $doc = mergeOverwrite $doc (deepCopy ($m.config | default dict)) -}}
+{{- /* The module answers the issuer on /rpc: the listener, the audience of the token, and the one account let in. */ -}}
+{{- $args := dict "root" $root "module" .module -}}
+{{- $route := deepCopy (dig .module dict $doc) -}}
+{{- $serve := deepCopy (dig "serve" dict $route) -}}
+{{- $_ := set $serve "address" ($serve.address | default (printf ":%s" (include "sluis.moduleRPCPort" $args))) -}}
+{{- $_ := set $serve "audience" ($serve.audience | default (include "sluis.moduleAudience" $args)) -}}
+{{- $_ := set $serve "issuers" ($serve.issuers | default (list (printf "system:serviceaccount:%s:%s" $root.Release.Namespace (include "sluis.moduleAccountName" (dict "root" $root "module" "issuer"))))) -}}
+{{- $_ := set $route "serve" $serve -}}
+{{- $_ := set $doc .module $route -}}
 {{- else -}}
 {{- $doc = deepCopy ($m.config | default dict) -}}
 {{- if eq .module "cloudflare" -}}

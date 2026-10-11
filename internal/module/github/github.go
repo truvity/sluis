@@ -6,7 +6,10 @@ import (
 	"log/slog"
 	"os"
 
+	"golang.org/x/sync/errgroup"
+
 	app "github.com/truvity/sluis/internal/githubroster/app"
+	"github.com/truvity/sluis/internal/modserve"
 	"github.com/truvity/sluis/internal/module"
 )
 
@@ -39,7 +42,33 @@ func (m Module) Run(ctx context.Context, file string) error {
 		return err
 	}
 	defer module.CloseEmitter(log, controller)
-	return controller.Run(ctx)
+	if cfg.Serve() == nil {
+		return controller.Run(ctx)
+	}
+	return serve(ctx, cfg, log, controller)
+}
+
+// serve runs the controller and, beside it, the listener the issuer calls: the
+// installation-token mint and the console's GitHub operations, behind a
+// TokenReview (docs/decisions/0071). Either ending stops the process, which the
+// platform restarts.
+func serve(ctx context.Context, cfg app.Config, log *slog.Logger, controller *app.App) error {
+	verify, err := modserve.NewVerifier(modserve.Audience("github", cfg.Serve()))
+	if err != nil {
+		return err
+	}
+	minter, err := app.NewMinter(ctx, cfg, log)
+	if err != nil {
+		return err
+	}
+	defer minter.Close()
+	if err = minter.ServeConsole(ctx, cfg, log); err != nil {
+		return err
+	}
+	g, gctx := errgroup.WithContext(ctx)
+	g.Go(func() error { return controller.Run(gctx) })
+	g.Go(func() error { return modserve.Serve(gctx, cfg.Serve(), minter.RPC(), verify, log) })
+	return g.Wait()
 }
 
 // Tick implements [module.Module]: one GitHub target, once, under its lease.

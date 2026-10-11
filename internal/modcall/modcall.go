@@ -31,6 +31,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"sync"
 	"time"
@@ -275,7 +276,7 @@ func (s *Server) dispatch(ctx context.Context, v int, req Request) Response {
 }
 
 func (s *Server) run(ctx context.Context, v int, h *handler, req Request) Response {
-	if h.allow != nil && !h.allow[CallerOf(ctx)] {
+	if h.allow != nil && !h.allows(ctx) {
 		return Response{Error: &Error{Code: CodeForbidden}}
 	}
 	if len(req.Payload) > h.max {
@@ -407,7 +408,40 @@ func Result(r Response) ([]byte, error) {
 	return r.Result, nil
 }
 
+// allows says whether the caller the transport named is a class the method
+// answers: its class, or any of the classes it holds ([WithCallerClasses]).
+func (h *handler) allows(ctx context.Context) bool {
+	if h.allow[CallerOf(ctx)] {
+		return true
+	}
+	for _, c := range callerClasses(ctx) {
+		if h.allow[c] {
+			return true
+		}
+	}
+	return false
+}
+
 type callerKey struct{}
+
+type callerClassesKey struct{}
+
+// WithCallerClasses records that the caller the transport authenticated holds
+// every one of classes. On Kubernetes one ServiceAccount is the issuer's pod,
+// which is both the issuer and the console; on Lambda those are two aliases.
+// Only a transport calls it. [CallerOf] is the first class.
+func WithCallerClasses(ctx context.Context, classes ...string) context.Context {
+	if len(classes) == 0 {
+		return ctx
+	}
+	ctx = context.WithValue(ctx, callerClassesKey{}, slices.Clone(classes))
+	return WithCaller(ctx, classes[0])
+}
+
+func callerClasses(ctx context.Context) []string {
+	c, _ := ctx.Value(callerClassesKey{}).([]string)
+	return c
+}
 
 // WithCaller records the caller class the transport authenticated the call as.
 // Only a transport calls it; a request's payload cannot.
