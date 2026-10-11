@@ -106,6 +106,14 @@ func (c Config) legacyTable() port.Table {
 	return t
 }
 
+// Plan is the adapter table [Open] would build the ports from, resolved and
+// validated, with nothing opened: a document's adapter choices can be checked
+// without reaching the stores they name.
+func (c Config) Plan(ctx context.Context, log *slog.Logger) (port.Table, error) {
+	_, table, err := c.plan(ctx, log)
+	return table, err
+}
+
 // plan resolves and validates the adapters, applies the choices this build
 // wires, and announces the table. It returns the Config the adapters are then
 // opened with.
