@@ -10,8 +10,7 @@ import (
 	"github.com/truvity/sluis/internal/config"
 	"github.com/truvity/sluis/internal/githubapp/githubfake"
 	"github.com/truvity/sluis/internal/lambdaapp"
-	// The issuer module registers itself; the scenarios open it by document.
-	_ "github.com/truvity/sluis/internal/lambdaapp/issuerfn"
+	_ "github.com/truvity/sluis/internal/lambdaapp/issuerfn" // registers the issuer module; the scenarios open it by document
 )
 
 // Instance is the instance name the fixture's SSM root and functions carry.
