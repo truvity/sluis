@@ -90,6 +90,12 @@ const (
 var (
 	GroupOperators = ScopedGroup(ScopeAll, RoleOperator)
 	GroupViewers   = ScopedGroup(ScopeAll, RoleViewer)
+	// GroupRosterControllers holds the GitHub and Slack roster controllers'
+	// own identities, and nobody else's. It grants no role: the console
+	// reads it to serve those two, unrecorded, the one call (Explain) that
+	// is otherwise an operator's. The policy's `service_account` or `aws`
+	// matchers for the controllers put them in it.
+	GroupRosterControllers = ScopedGroupOf(ThingSluis, ScopeAll, "roster-controller")
 	// GroupReporters was the workloads that could report audit events
 	// through this service.
 	//
