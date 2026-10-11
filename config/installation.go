@@ -249,6 +249,10 @@ type GitHubController struct {
 	// connected with an App of its own keeps naming it, so an entry is
 	// needed only to name another App or to declare an organisation anew.
 	AppRefs map[string]string `json:"appRefs,omitempty"`
+	// AppNames names, by organisation, the App created for an organisation
+	// the github table binds (at most 34 characters). Optional: an
+	// organisation with no entry gets the built-in default.
+	AppNames map[string]string `json:"appNames,omitempty"`
 }
 
 // SlackController is [GitHubController] for Slack.
