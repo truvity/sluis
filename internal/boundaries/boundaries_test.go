@@ -162,6 +162,14 @@ func TestModuleBoundaries(t *testing.T) {
 			sees:   "internal/modcall/lambdacall",
 		},
 		{
+			// The console plumbing is what a module and the console share: it
+			// knows no front end, provider or module.
+			name:   "the console plumbing imports no role",
+			from:   []string{"internal/consolecall", "internal/consoleauthz"},
+			forbid: slices.Concat(front, github, slack, cloudflare, modules, []string{"internal/module", "internal/server", "backend/google"}),
+			sees:   "internal/consolecall",
+		},
+		{
 			// A role is assembled by its module and the main, never the reverse.
 			name:   "no role imports the module packages that wrap it",
 			from:   append(append(append([]string{}, front...), github...), append(slack, cloudflare...)...),
@@ -341,5 +349,42 @@ func TestTheIssuerNamesNoRingInternals(t *testing.T) {
 	}
 	if seen == 0 {
 		t.Error("the issuer references nothing of the signer: the rule checked nothing")
+	}
+}
+
+// consoleMoves is whether the console's provider operations have moved into
+// the modules (v1.76 D-v176-1 b). Until they have, internal/server still
+// assembles the GitHub and Slack Apps and the Google backend itself, so the
+// rule below would fail; the change that moves the last operation sets this
+// true and deletes the skip.
+//
+// TODO(v1.76 E-units): set true when internal/server stops importing
+// githubapp, slackapp and backend/google.
+const consoleMoves = false
+
+// The console reaches a provider only through a module call: the shared
+// server imports neither the GitHub and Slack App packages nor the Google
+// backend, since each is the only holder of its provider's credentials.
+func TestTheConsoleImportsNoProvider(t *testing.T) {
+	if !consoleMoves {
+		t.Skip("the console's provider operations have not moved into the modules yet (TODO v1.76 E-units)")
+	}
+	pkgs := imports(t)
+	var seen bool
+	for pkg, deps := range pkgs {
+		rel := strings.TrimPrefix(pkg, mod)
+		if !under(rel, "internal/server") {
+			continue
+		}
+		seen = true
+		for _, d := range deps {
+			drel := strings.TrimPrefix(d, mod)
+			if anyUnder(drel, []string{"internal/githubapp", "internal/slackapp", "backend/google"}) {
+				t.Errorf("%s imports %s: the console calls the module instead", rel, drel)
+			}
+		}
+	}
+	if !seen {
+		t.Error("the rule found no package under internal/server: it checked nothing")
 	}
 }

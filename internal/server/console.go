@@ -22,9 +22,11 @@ import (
 	"github.com/truvity/sluis/gen/directoryroster/v1/directoryrosterv1connect"
 	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/audit"
+	"github.com/truvity/sluis/internal/consolecall"
 	"github.com/truvity/sluis/internal/githubapp/catalogue"
 	"github.com/truvity/sluis/internal/githubapp/mints"
 	"github.com/truvity/sluis/internal/hub"
+	"github.com/truvity/sluis/internal/modcall"
 	"github.com/truvity/sluis/internal/port"
 	"github.com/truvity/sluis/internal/settings"
 	"github.com/truvity/sluis/internal/slackapp"
@@ -226,6 +228,11 @@ type ConsoleDeps struct {
 	// write through the records it mounts (see docs/concepts/sluis/ports.md). Nil
 	// notifies nobody.
 	Trigger port.Trigger
+	// Modules is how the console reaches the provider modules for the
+	// operations that move into them (docs/decisions/0071, v1.76 D-v176-1 b),
+	// each as the caller class `console`. A nil caller is the in-process
+	// servers, [modcall.Local]; the wiring sets one per module it split out.
+	Modules consolecall.Callers
 }
 
 // Console serves WorkspaceService, SettingsService and AccessService on
@@ -264,6 +271,7 @@ var (
 // reviewed in git. A console that could disagree with git was a second
 // source of truth and a merge to reconcile them.
 func NewConsole(_ context.Context, deps ConsoleDeps) (*Console, error) {
+	deps.Modules = deps.Modules.OrLocal(modcall.Local{})
 	c := &Console{deps: deps, connectors: map[string]Connector{}}
 	for _, conn := range deps.Connectors {
 		c.connectors[conn.Kind()] = conn
