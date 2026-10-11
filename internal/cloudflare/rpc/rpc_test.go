@@ -163,7 +163,8 @@ func TestTheConsoleMethodsAnswerTheConsoleAndNoOtherClass(t *testing.T) {
 	ctx := context.Background()
 	actor := audit.Person("ops@example.com")
 	c := consoleClient(&fake{}, rpc.CallerConsole)
-	if st, err := c.Status(ctx); err != nil || len(st.Presets) != 1 || st.Accounts[0].IDLast4 != "cdef" || st.Presets[0].Live[0].ID != "tok1" || st.Presets[0].Stored.ExpiresOn.Hour() != 13 {
+	if st, err := c.Status(ctx); err != nil || len(st.Presets) != 1 || st.Accounts[0].IDLast4 != "cdef" ||
+		st.Presets[0].Live[0].ID != "tok1" || st.Presets[0].Stored.ExpiresOn.Hour() != 13 {
 		t.Errorf("status %+v %v", st, err)
 	}
 	if p, err := c.Presets(ctx); err != nil || len(p) != 1 {

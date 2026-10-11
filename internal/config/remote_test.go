@@ -33,9 +33,12 @@ func TestModuleRemoteTable(t *testing.T) {
 			want: map[string]modcall.Target{"github": {URL: "https://github.sluis.svc", Audience: "gh", TokenFile: "/t"}},
 		},
 		"no remote stays local": {doc: config.Sluis{Slack: &config.ModuleRoute{}}},
-		"both":                  {doc: config.Sluis{Slack: remote(config.ModuleRemote{Function: "f", URL: "http://s"})}, err: "slack.remote: set exactly one of function and url"},
-		"neither":               {doc: config.Sluis{Slack: remote(config.ModuleRemote{Audience: "a"})}, err: "slack.remote: set exactly one of function and url"},
-		"not a URL":             {doc: config.Sluis{Google: remote(config.ModuleRemote{URL: "ftp://s"})}, err: "google.remote.url"},
+		"both": {
+			doc: config.Sluis{Slack: remote(config.ModuleRemote{Function: "f", URL: "http://s"})},
+			err: "slack.remote: set exactly one of function and url",
+		},
+		"neither":   {doc: config.Sluis{Slack: remote(config.ModuleRemote{Audience: "a"})}, err: "slack.remote: set exactly one of function and url"},
+		"not a URL": {doc: config.Sluis{Google: remote(config.ModuleRemote{URL: "ftp://s"})}, err: "google.remote.url"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			err := tc.doc.ValidateRoutes()
@@ -70,7 +73,8 @@ func TestCloudflareRemoteIsRoutedBesideTheModuleSections(t *testing.T) {
 	if got := dial.FromTargets(s.Targets()); !reflect.DeepEqual(got.Modules, want) {
 		t.Errorf("sluis routes %+v, want %+v", got.Modules, want)
 	}
-	if got := dial.FromTargets((&config.Serve{Cloudflare: cf}).Targets()); !reflect.DeepEqual(got.Modules, map[string]modcall.Target{"cloudflare": want["cloudflare"]}) {
+	got := dial.FromTargets((&config.Serve{Cloudflare: cf}).Targets())
+	if !reflect.DeepEqual(got.Modules, map[string]modcall.Target{"cloudflare": want["cloudflare"]}) {
 		t.Errorf("serve routes %+v", got.Modules)
 	}
 }

@@ -127,7 +127,8 @@ func TestThePreviewShapeOfTheSchedules(t *testing.T) {
 		t.Errorf("%d schedules retargeted, want 4 (github x2, slack, google)", moved)
 	}
 	for _, typ := range []string{"aws:iam/role:Role", policyType} {
-		if s := previewShape(before, after, typ); slices.ContainsFunc(append(s.deleted, s.replaced...), func(n string) bool { return strings.Contains(n, "scheduler") }) {
+		if s := previewShape(before, after, typ); slices.ContainsFunc(append(s.deleted, s.replaced...),
+			func(n string) bool { return strings.Contains(n, "scheduler") }) {
 			t.Errorf("%s: %s touches the scheduler", typ, s)
 		}
 	}
@@ -149,7 +150,8 @@ func TestIssuerClientsScheduleIsConfigurable(t *testing.T) {
 	if rec.has(schedType, "staging-issuer-clients") {
 		t.Error("Disabled left the clients schedule in")
 	}
-	if got := grants(statements(t, prop(rec.one(t, policyType, "staging-scheduler-policy"), "policy").StringValue()))["lambda:InvokeFunction"]; slices.Contains(got, liveOf("sluis")) {
+	policy := prop(rec.one(t, policyType, "staging-scheduler-policy"), "policy").StringValue()
+	if got := grants(statements(t, policy))["lambda:InvokeFunction"]; slices.Contains(got, liveOf("sluis")) {
 		t.Errorf("the scheduler still holds the issuer's alias: %v", got)
 	}
 

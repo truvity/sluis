@@ -122,7 +122,8 @@ func TestTheFunctionTakesOnlyRefreshAndCheck(t *testing.T) {
 	}
 	// A run-now is sent to every controller, and one that runs no target ends it
 	// cleanly with nothing done.
-	if out, err := h.Handle(context.Background(), json.RawMessage(`{"kind":"run","target":"C0123abcd"}`)); err != nil || out.(lambdaapp.Result).Outcome != lambdaapp.OutcomeUnknown {
+	if out, err := h.Handle(context.Background(), json.RawMessage(`{"kind":"run","target":"C0123abcd"}`)); err != nil ||
+		out.(lambdaapp.Result).Outcome != lambdaapp.OutcomeUnknown {
 		t.Errorf("run: %v, %v", out, err)
 	}
 	raw, _ := json.Marshal(modcall.Request{Kind: modcall.Kind, Module: "google", Method: "identify", Payload: json.RawMessage(`{}`)})

@@ -333,7 +333,9 @@ func SluisKeyPolicyStatements(a KeyPolicyArgs) ([]map[string]any, error) {
 
 	var st []statement
 	var signRoles []string
-	for _, r := range sortedKeyRoles(a.Roles) {
+	sorted := sortedKeyRoles(a.Roles)
+	for i := range sorted {
+		r := &sorted[i]
 		name := sidName(r.Role.Name)
 		var own []string
 		if a.Layout.has4() && r.Role.hosts(ModuleOIDC) {
@@ -484,7 +486,8 @@ func (a KeyPolicyArgs) validate() error {
 		return errors.New("sluispulumi: KeyPolicyArgs.Roles is empty: the key would admit no function")
 	}
 	seen := map[string]bool{}
-	for _, r := range a.Roles {
+	for i := range a.Roles {
+		r := &a.Roles[i]
 		switch {
 		case !roleNamePattern.MatchString(r.Role.Name):
 			return fmt.Errorf("sluispulumi: KeyPolicyArgs role name %q is not lower-case letters, digits and '-'", r.Role.Name)
