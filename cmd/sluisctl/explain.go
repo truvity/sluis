@@ -13,22 +13,36 @@ import (
 	"github.com/truvity/sluis/policy"
 )
 
+// explainLivePath is the issuer's operator endpoint for the live form.
+const explainLivePath = "/.access/policy/explain"
+
 const explainUsage = `Usage: sluisctl explain --policy <policy.yaml> --audience <client>
                         (--email <addr> | --subject <workload subject>)
                         [--directory-group <email>]... [--format yaml|json]
+       sluisctl explain --live [--issuer <url>] [--client <id>] --audience <client>
+                        (--email <addr> | --subject <workload subject>)
+                        [--format yaml|json]
 
-Says what a token for one client would carry for one caller, from a rendered
-policy document, offline: no session, no network. It loads the document the
-way the issuer does, evaluates the caller, narrows the groups to the audience
-(token scoping as enforced) and prints the groups kept, the groups dropped with
-the reason, and the claim fragments the kept groups add.
-Secrets and registered claims (iss, sub, aud, exp...) are never printed.
+Says what a token for one client would carry for one caller: the groups kept,
+the groups dropped with the reason, the claim fragments the kept groups add,
+how long the token would live and which of the client's required groups admits
+the caller. Secrets and registered claims (iss, sub, aud, exp...) are never
+printed, and no token is minted.
 
---email is a person; give the directory groups the directory would report for
-them with --directory-group (an address each, repeatable). --subject is a
-workload: a ServiceAccount (<cluster>:k8s:<namespace>:<name>) or an AWS role
-(aws:<account>:role/<path><name>). An audience that is not a declared client is
-refused.
+Offline (--policy) it loads a rendered policy document the way the issuer does
+and needs no session or network. --email is a person; give the directory groups
+the directory would report for them with --directory-group (an address each,
+repeatable).
+
+Live (--live) it asks the issuer, as you, against the policy in force and the
+directory snapshots the issuer already holds; it never makes the issuer read the
+directory. It needs your sluisctl login to be an operator's, and the ask is
+audited. --directory-group does not apply: the directory facts are the issuer's.
+The output has the same shape as offline.
+
+--subject is a workload: a ServiceAccount (<cluster>:k8s:<namespace>:<name>) or
+an AWS role (aws:<account>:role/<path><name>). An audience that is not a
+declared client is refused.
 `
 
 // multiFlag collects a repeatable flag.
@@ -44,6 +58,9 @@ func explainCommand(args []string) error {
 	flags.SetOutput(os.Stderr)
 	flags.Usage = func() { _, _ = fmt.Fprint(os.Stderr, explainUsage) }
 	file := flags.String("policy", "", "the rendered policy document")
+	live := flags.Bool("live", false, "ask the issuer, against its live policy and directory snapshots")
+	issuer := flags.String("issuer", "", "the issuer, with --live, when not configured")
+	client := flags.String("client", "", "the client to present, with --live")
 	audience := flags.String("audience", "", "the client the token is for")
 	email := flags.String("email", "", "a person's address")
 	subject := flags.String("subject", "", "a workload's subject")
@@ -56,14 +73,25 @@ func explainCommand(args []string) error {
 	switch {
 	case flags.NArg() != 0:
 		return badUsage("sluisctl explain takes flags only")
-	case *file == "" || *audience == "":
-		return badUsage("sluisctl explain needs --policy and --audience")
+	case *live && *file != "":
+		return badUsage("--policy and --live are exclusive: offline reads a policy file, live asks the issuer")
+	case !*live && *file == "":
+		return badUsage("sluisctl explain needs --policy (offline) or --live")
+	case !*live && (*issuer != "" || *client != ""):
+		return badUsage("--issuer and --client go with --live")
+	case *live && len(groups) > 0:
+		return badUsage("--directory-group goes with --policy: live uses the issuer's own directory facts")
+	case *audience == "":
+		return badUsage("sluisctl explain needs --audience")
 	case (*email == "") == (*subject == ""):
 		return badUsage("sluisctl explain needs exactly one of --email and --subject")
 	case *format != "yaml" && *format != "json":
 		return badUsage("--format is yaml or json")
 	case *subject != "" && len(groups) > 0:
 		return badUsage("--directory-group goes with --email")
+	}
+	if *live {
+		return explainLive(*issuer, *client, *audience, strings.TrimSpace(*email), strings.TrimSpace(*subject), *format)
 	}
 	var in policy.Input
 	if *email != "" {
@@ -83,6 +111,22 @@ func explainCommand(args []string) error {
 		return badUsage("%v", err)
 	}
 	return writeExplanation(explained, *format)
+}
+
+// explainLive asks the issuer, as the signed-in person, what a token for
+// audience would carry for an address or a workload.
+func explainLive(issuer, client, audience, email, subject, format string) error {
+	body := map[string]string{"audience": audience}
+	if email != "" {
+		body["email"] = email
+	} else {
+		body["subject"] = subject
+	}
+	var explained policy.Explanation
+	if err := operatorCall(issuer, client, explainLivePath, body, &explained); err != nil {
+		return err
+	}
+	return writeExplanation(explained, format)
 }
 
 func writeExplanation(e policy.Explanation, format string) error {

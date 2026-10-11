@@ -19,7 +19,7 @@
 # A change to what an action carries is a new version. The installation keeps
 # every version it was sent, so records already written keep their meaning.
 source: roster
-version: "1.18.0"
+version: "1.19.0"
 locales: [en]
 
 actor_kinds:
@@ -393,6 +393,17 @@ actions:
     data_schema: https://schemas.example/access-roster/v1/client-secret.json
     message:
       en: "{actor} was refused {data_action} on a client secret: {outcome_reason}"
+
+  roster.policy.explained:
+    summary: An operator asked what a token for a client would carry for a person or a workload, against the live policy and the directory snapshots; no token was minted. Counts only, never the groups.
+    operation: access
+    categories: [privileged_access, authorization_decision]
+    category: security
+    target_types: [client]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/policy-explained.json
+    message:
+      en: "{outcome, select, success {{actor} explained a token for {targets_0_id} for {subject}} denied {{actor} was refused an explanation of a token: {outcome_reason}} other {{actor} could not explain a token: {outcome_reason}}}"
 
   # ------------------------------------------------------------ directories
 

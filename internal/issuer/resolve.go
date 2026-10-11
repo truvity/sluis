@@ -3,6 +3,7 @@ package issuer
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -21,6 +22,17 @@ import (
 type Directory interface {
 	ResolveUser(ctx context.Context, email string) (Standing, error)
 }
+
+// SnapshotDirectory is a [Directory] that can also answer from what the hub
+// already holds, and only that: no directory read, no refresh, no write. The
+// operator's explain asks it, so that explaining a token is never the cause of
+// a call to the directory.
+type SnapshotDirectory interface {
+	SnapshotUser(ctx context.Context, email string) (Standing, error)
+}
+
+// ErrNoSnapshots is a directory that cannot answer from snapshots alone.
+var ErrNoSnapshots = errors.New("issuer: this directory cannot answer from snapshots alone")
 
 // Standing is the hub's answer about one address.
 type Standing struct {
@@ -186,6 +198,40 @@ func (r *Resolver) resolve(ctx context.Context, email string) (Resolution, error
 	// act on what was last known, or on nothing.
 	known, ok := r.recall(ctx, email)
 	if !ok || now.Sub(known.at) > r.window {
+		if err != nil {
+			return Resolution{}, err
+		}
+		return Resolution{}, &Refused{Reason: "the directory cannot be vouched for and this identity has no recent answer"}
+	}
+	return Resolution{Groups: known.groups, Held: true}, nil
+}
+
+// Snapshot decides what groups an address would be evaluated with, as
+// [Resolver.Resolve] does, for an operator explaining a token. It differs in
+// what it does not do: it asks the hub's stored snapshot alone (never the
+// directory, so nothing is refreshed or patched), and it neither remembers nor
+// forgets a last-known answer, so explaining somebody changes nothing about
+// them.
+//
+// The rules are Resolve's: a suspended or unknown account the snapshot vouches
+// for is refused; a vouched answer is taken; an answer the snapshot cannot
+// vouch for falls back to the last-known groups inside the hold window, and
+// otherwise is refused. The hold window is only read.
+func (r *Resolver) Snapshot(ctx context.Context, email string) (Resolution, error) {
+	dir, ok := r.dir.(SnapshotDirectory)
+	if !ok {
+		return Resolution{}, ErrNoSnapshots
+	}
+	email = strings.ToLower(strings.TrimSpace(email))
+	standing, err := dir.SnapshotUser(ctx, email)
+	if err == nil && standing.Authoritative {
+		if !standing.Found || standing.Suspended {
+			return Resolution{}, &Refused{Reason: "the directory says this account is not live", Authoritative: true}
+		}
+		return Resolution{Groups: standing.Groups, GivenName: standing.GivenName, FamilyName: standing.FamilyName}, nil
+	}
+	known, ok := r.recall(ctx, email)
+	if !ok || r.clock().Sub(known.at) > r.window {
 		if err != nil {
 			return Resolution{}, err
 		}

@@ -8,6 +8,7 @@ import (
 
 	"github.com/truvity/sluis/internal/hub"
 	"github.com/truvity/sluis/internal/hublocal"
+	"github.com/truvity/sluis/internal/issuer"
 )
 
 // fake stands in for the hub and records what freshness it was asked for.
@@ -75,5 +76,40 @@ func TestAFailureIsAnErrorAndNotAnEmptyAnswer(t *testing.T) {
 	f := &fake{err: errors.New("valkey is unreachable")}
 	if _, err := hublocal.New(f, 0).ResolveUser(context.Background(), "alice@one.example"); err == nil {
 		t.Fatal("want an error when the hub cannot answer")
+	}
+}
+
+// snapshotFake is a hub that can answer from snapshots alone, and fails the
+// test on any other read.
+type snapshotFake struct {
+	fake
+	t *testing.T
+}
+
+func (s *snapshotFake) ResolveUser(context.Context, string, *time.Duration) (hub.UserResult, error) {
+	s.t.Error("the snapshot-only read went through ResolveUser, which may refresh")
+	return hub.UserResult{}, nil
+}
+
+func (s *snapshotFake) SnapshotUser(context.Context, string) (hub.UserResult, error) {
+	return hub.UserResult{InDomain: true, Found: true, Authoritative: true, Groups: []string{"platform@one.example"}}, nil
+}
+
+func TestSnapshotUserNeverTakesTheRefreshingPath(t *testing.T) {
+	t.Parallel()
+	standing, err := hublocal.New(&snapshotFake{t: t}, 0).SnapshotUser(context.Background(), "alice@one.example")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !standing.Found || !standing.Authoritative || len(standing.Groups) != 1 {
+		t.Errorf("standing = %+v", standing)
+	}
+}
+
+func TestSnapshotUserWithAHubThatHasNoSnapshotReadIsRefused(t *testing.T) {
+	t.Parallel()
+	_, err := hublocal.New(&fake{}, 0).SnapshotUser(context.Background(), "alice@one.example")
+	if !errors.Is(err, issuer.ErrNoSnapshots) {
+		t.Errorf("err = %v, want ErrNoSnapshots", err)
 	}
 }

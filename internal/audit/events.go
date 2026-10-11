@@ -537,6 +537,49 @@ func ClientSecretDenied(actor Actor, client, action, reason string, overlap *int
 	return build("roster.client.secret.denied", actor, Denied(reason), subjectOf(actor), targets, d)
 }
 
+// PolicyExplain is what an explanation of a token found, in counts: never the
+// groups, the claims or the lifetime, which the caller was told and the trail
+// has no need to repeat.
+type PolicyExplain struct {
+	// Held is how many groups the subject holds, Kept how many a token for
+	// the audience would carry.
+	Held, Kept int
+	// Admitted is whether the subject holds a group the audience requires.
+	Admitted bool
+}
+
+// PolicyExplained is an operator asking what a token for audience would carry
+// for subject, against the policy in force and the directory snapshots the
+// issuer holds: no token was minted. The answer discloses the subject's group
+// memberships, so every ask is kept, the refused ones included.
+//
+// proof is "person" for an address and "workload" for a ServiceAccount or AWS
+// role subject, and says how subject is read. result is nil where nothing was
+// found: a refusal before the subject was looked up. subject and audience are
+// empty where the refusal came before the body was read.
+func PolicyExplained(actor Actor, subject, proof, audience string, result *PolicyExplain, o Outcome) *record.Record {
+	var party *record.Party
+	switch proof {
+	case "person":
+		party = personParty(subject)
+	case "workload":
+		if subject = strings.TrimSpace(subject); subject != "" {
+			party = &record.Party{Kind: "workload", Id: subject}
+		}
+	}
+	var targets []*record.Target
+	if audience != "" {
+		targets = []*record.Target{targetClient(audience)}
+	}
+	d := data{"proof": proof}
+	if result != nil {
+		d["held"] = result.Held
+		d["kept"] = result.Kept
+		d["admitted"] = result.Admitted
+	}
+	return build("roster.policy.explained", actor, o, party, targets, d)
+}
+
 // --------------------------------------------------------------- directories
 
 // WorkspaceConnected is a directory connected, by consent or by key.

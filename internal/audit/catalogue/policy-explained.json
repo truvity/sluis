@@ -1,0 +1,36 @@
+{
+  "$id": "https://schemas.example/access-roster/v1/policy-explained.json",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "proof": {
+      "type": "string",
+      "description": "How the subject was read: an address (person) or a ServiceAccount or AWS role subject (workload).",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none",
+      "x-audit-facet": true,
+      "enum": [
+        "person",
+        "workload"
+      ]
+    },
+    "held": {
+      "type": "integer",
+      "description": "How many groups the subject holds. Never the groups.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none"
+    },
+    "kept": {
+      "type": "integer",
+      "description": "How many of them a token for the client would carry.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none"
+    },
+    "admitted": {
+      "type": "boolean",
+      "description": "Whether the subject holds a group the client requires, so a token would be issued.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none"
+    }
+  }
+}

@@ -13,16 +13,30 @@ type DroppedGroup struct {
 }
 
 // Explanation is what a token for one client would carry for one caller: the
-// groups kept and dropped by [Policy.ScopeGroups] and the claim fragments of
-// the groups kept ([Policy.ClaimsFor]). It holds no
+// groups kept and dropped by [Policy.ScopeGroups], the claim fragments of
+// the groups kept ([Policy.ClaimsFor]), how long the token would live and
+// which `requires` group of the client admits the caller. It holds no
 // secret and no registered claim (`iss`, `sub`, `aud`, `exp`...): only what the
 // policy decides.
+//
+// The offline command and the issuer's live action print this one value, so
+// the two cannot disagree about its shape.
 type Explanation struct {
 	Audience string         `json:"audience" yaml:"audience"`
 	Held     []string       `json:"held" yaml:"held"`
 	Kept     []string       `json:"groups_kept" yaml:"groups_kept"`
 	Dropped  []DroppedGroup `json:"groups_dropped" yaml:"groups_dropped"`
 	Claims   map[string]any `json:"claims" yaml:"claims"`
+	// Lifetime is how long the token would live: the shortest lifetime across
+	// the held groups, capped by the client's `ttl_cap`. Empty when neither
+	// declares one.
+	Lifetime string `json:"lifetime" yaml:"lifetime"`
+	// Admitted says whether the caller holds a group the client requires; a
+	// caller who does not would be refused a token.
+	Admitted bool `json:"admitted" yaml:"admitted"`
+	// AdmittedBy is the first group of the client's `requires`, in the order
+	// the policy declares them, that the caller holds. Empty when not admitted.
+	AdmittedBy string `json:"admitted_by" yaml:"admitted_by"`
 }
 
 // registeredClaims are never part of an explanation: the issuer sets them.
@@ -33,7 +47,8 @@ var registeredClaims = []string{"iss", "sub", "aud", "exp", "nbf", "iat", "jti",
 // ScopeGroups(audience), ClaimsFor(kept). An audience that is not a declared
 // client is an error, not an empty answer.
 func (p Policy) Explain(audience string, in Input) (Explanation, error) {
-	if _, ok := p.Clients[audience]; !ok {
+	client, ok := p.Clients[audience]
+	if !ok {
 		return Explanation{}, fmt.Errorf("%q is not a declared client", audience)
 	}
 	result := p.Evaluate(in)
@@ -43,6 +58,15 @@ func (p Policy) Explain(audience string, in Input) (Explanation, error) {
 		Held:     result.Groups,
 		Kept:     kept,
 		Dropped:  []DroppedGroup{},
+	}
+	if lifetime := client.Cap(result.Lifetime); lifetime > 0 {
+		out.Lifetime = lifetime.String()
+	}
+	for _, name := range client.Requires {
+		if result.Has(name) {
+			out.Admitted, out.AdmittedBy = true, name
+			break
+		}
 	}
 	for _, name := range dropped {
 		out.Dropped = append(out.Dropped, DroppedGroup{

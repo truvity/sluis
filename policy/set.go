@@ -117,6 +117,14 @@ func (s *Set) ClaimsFor(groups []string) map[string]any {
 	return s.declared.ClaimsFor(groups)
 }
 
+// Explain answers what a token for audience would carry for in, against the
+// policy in force -- see [Policy.Explain]. Nothing is minted or signed.
+func (s *Set) Explain(audience string, in Input) (Explanation, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.declared.Explain(audience, in)
+}
+
 // Client returns a declared client.
 func (s *Set) Client(id string) (Client, bool) {
 	s.mu.RLock()

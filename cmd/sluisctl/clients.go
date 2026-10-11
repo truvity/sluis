@@ -162,9 +162,17 @@ func clientsPurge(args []string) error {
 	return nil
 }
 
-// clientsCall posts to the issuer's operator endpoint as the signed-in person.
+// clientsCall posts to the issuer's client-secrets endpoint as the signed-in person.
 func clientsCall(f clientsFlags, action string, body any, into any) error {
-	cfg, err := loadConfig(f.issuer, f.client)
+	return operatorCall(f.issuer, f.client, "/.access/client-secrets/"+action, body, into)
+}
+
+// operatorCall posts body to an operator endpoint of the issuer, at path, as
+// the signed-in person, with their own sluisctl login, and decodes the JSON
+// answer into into. The issuer decides: the operators group, from the token,
+// admits it.
+func operatorCall(issuer, client, path string, body any, into any) error {
+	cfg, err := loadConfig(issuer, client)
 	if err != nil {
 		return err
 	}
@@ -178,7 +186,7 @@ func clientsCall(f clientsFlags, action string, body any, into any) error {
 		return fmt.Errorf("build the request: %w", err)
 	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		strings.TrimRight(cfg.Issuer, "/")+"/.access/client-secrets/"+action, bytes.NewReader(payload))
+		strings.TrimRight(cfg.Issuer, "/")+path, bytes.NewReader(payload))
 	if err != nil {
 		return fmt.Errorf("build the request: %w", err)
 	}

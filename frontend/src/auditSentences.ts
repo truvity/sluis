@@ -3,7 +3,7 @@ import type { Sentences } from "@truvity/audit";
 
 export const roster: Sentences = {
   "source": "roster",
-  "version": "1.18.0",
+  "version": "1.19.0",
   "locales": [
     "en"
   ],
@@ -258,6 +258,12 @@ export const roster: Sentences = {
       "summary": "A person signed in to a client, or was refused; at the issuer, with the class of the session it opens (interactive or agent) and that session's deadline.",
       "message": {
         "en": "{outcome, select, success {{actor} signed in to {targets_0_id}} denied {{actor} was refused sign-in to {targets_0_id}} other {{actor} could not sign in to {targets_0_id}}}"
+      }
+    },
+    "roster.policy.explained": {
+      "summary": "An operator asked what a token for a client would carry for a person or a workload, against the live policy and the directory snapshots; no token was minted. Counts only, never the groups.",
+      "message": {
+        "en": "{outcome, select, success {{actor} explained a token for {targets_0_id} for {subject}} denied {{actor} was refused an explanation of a token: {outcome_reason}} other {{actor} could not explain a token: {outcome_reason}}}"
       }
     },
     "roster.recovery.signed_in": {

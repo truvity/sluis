@@ -688,6 +688,53 @@ func (h *Hub) ResolveUser(ctx context.Context, email string, maxAge *time.Durati
 	}, nil
 }
 
+// SnapshotUser answers like [Hub.ResolveUser] from the stored snapshot alone:
+// it never reads the directory, never refreshes a snapshot and never patches
+// one, whatever the snapshot's age. It is for a reader that asks what the
+// hub already holds -- an operator explaining a token -- and must not be the
+// cause of a directory call or of a write.
+//
+// An address the snapshot does not hold, and a snapshot older than the
+// freshness window, are reported as Authoritative false: the answer is then
+// an opinion, as it is for [Hub.ResolveUser] when its live read fails.
+func (h *Hub) SnapshotUser(ctx context.Context, email string) (UserResult, error) {
+	domain, ok := emailaddr.Domain(email)
+	if !ok {
+		return UserResult{}, fmt.Errorf("%w: %q", ErrInvalidAddress, email)
+	}
+	v, err := h.view(ctx)
+	if err != nil {
+		return UserResult{}, err
+	}
+	out := UserResult{Email: email}
+	res, routed := v.routing[domain]
+	if !routed {
+		return out, nil
+	}
+	ws := v.workspaces[res.workspace]
+	out.Workspace, out.InDomain = res.workspace, true
+	snap, err := h.snapshots.Get(ctx, ws.ID)
+	if err != nil {
+		h.log.WarnContext(ctx, "snapshot unreadable", slog.String("workspace", ws.ID), slog.Any("error", err))
+	}
+	if snap == nil {
+		return out, nil
+	}
+	lower := strings.ToLower(strings.TrimSpace(email))
+	out.SnapshotAt = snap.TakenAt
+	out.Authoritative = h.authoritative(ws, res, snap)
+	account, found := snap.Accounts[lower]
+	if !found {
+		// Absent from the snapshot: an account created since is not "gone".
+		out.Authoritative = out.Authoritative && snap.isGroup(lower)
+		return out, nil
+	}
+	out.Found, out.Suspended = true, !account.Live
+	out.GivenName, out.FamilyName = account.GivenName, account.FamilyName
+	out.Groups = snap.GroupsOf(lower)
+	return out, nil
+}
+
 // Account answers one address's standing.
 func (h *Hub) Account(ctx context.Context, email string, maxAge *time.Duration) (AccountResult, error) {
 	if _, ok := emailaddr.Domain(email); !ok {

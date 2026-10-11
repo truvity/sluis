@@ -12,7 +12,7 @@ The actions sluis records, from the catalogue [`internal/audit/catalogue/roster.
 
 <!-- generated: audit-actions -->
 
-Catalogue version 1.18.0, 83 actions.
+Catalogue version 1.19.0, 84 actions.
 
 | Action | Operation | Targets | Delivery | Summary |
 |---|---|---|---|---|
@@ -43,6 +43,7 @@ Catalogue version 1.18.0, 83 actions.
 | `roster.client.secret.orphaned` | access | client | async | A stored client secret was found with no generated client of that id in the policy. |
 | `roster.client.secret.deleted` | remove | client | async | The stored secret of a client no longer in the policy was deleted. |
 | `roster.client.secret.denied` | access | client | async | A signed-in caller was refused when managing the secret of a generated client. |
+| `roster.policy.explained` | access | client | async | An operator asked what a token for a client would carry for a person or a workload, against the live policy and the directory snapshots; no token was minted. Counts only, never the groups. |
 | `roster.workspace.connected` | create | workspace | async | A directory was connected. |
 | `roster.workspace.reconnected` | modify | workspace | async | A connected directory was given a new consent. |
 | `roster.workspace.disconnected` | remove | workspace | async | A directory was disconnected. |

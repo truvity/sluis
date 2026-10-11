@@ -27,9 +27,17 @@ type Resolver interface {
 	ResolveUser(ctx context.Context, email string, maxAge *time.Duration) (hub.UserResult, error)
 }
 
+// Snapshotter is the part of the hub that answers from its stored snapshots
+// alone, without a directory read, a refresh or a write.
+type Snapshotter interface {
+	SnapshotUser(ctx context.Context, email string) (hub.UserResult, error)
+}
+
 // Directory answers the issuer's question from the hub in this process.
 type Directory struct {
 	hub Resolver
+	// snapshots is the hub's snapshot-only read, when the hub offers one.
+	snapshots Snapshotter
 	// maxAge is passed on every read. Nil means "whatever the hub has",
 	// which is what a login wants: the hub's own freshness policy is
 	// better informed than a guess from here, and a login that forced a
@@ -38,7 +46,10 @@ type Directory struct {
 	maxAge *time.Duration
 }
 
-var _ issuer.Directory = (*Directory)(nil)
+var (
+	_ issuer.Directory         = (*Directory)(nil)
+	_ issuer.SnapshotDirectory = (*Directory)(nil)
+)
 
 // New returns a directory over the hub. A zero maxAge leaves freshness
 // to the hub.
@@ -48,6 +59,9 @@ func New(h Resolver, maxAge time.Duration) *Directory {
 	// the same person, and the second question costs nothing. Everywhere
 	// else it passes straight through.
 	d := &Directory{hub: hub.OneAnswerPerRequest(h)}
+	if s, ok := h.(Snapshotter); ok {
+		d.snapshots = s
+	}
 	if maxAge > 0 {
 		d.maxAge = &maxAge
 	}
@@ -69,6 +83,26 @@ func (d *Directory) ResolveUser(ctx context.Context, email string) (issuer.Stand
 	// the hub denies: it is a domain nobody here answers for. The issuer
 	// treats it as not found, which its own rules turn into "no groups",
 	// and never as a reason to remove anything.
+	return issuer.Standing{
+		Found:         got.InDomain && got.Found,
+		Suspended:     got.Suspended,
+		Groups:        got.Groups,
+		Authoritative: got.Authoritative,
+		GivenName:     got.GivenName,
+		FamilyName:    got.FamilyName,
+	}, nil
+}
+
+// SnapshotUser implements [issuer.SnapshotDirectory]: the hub's stored
+// snapshot, never a directory read and never a refresh.
+func (d *Directory) SnapshotUser(ctx context.Context, email string) (issuer.Standing, error) {
+	if d.snapshots == nil {
+		return issuer.Standing{}, issuer.ErrNoSnapshots
+	}
+	got, err := d.snapshots.SnapshotUser(ctx, email)
+	if err != nil {
+		return issuer.Standing{}, fmt.Errorf("read the directory snapshot for %s: %w", logattr.Safe(email), err)
+	}
 	return issuer.Standing{
 		Found:         got.InDomain && got.Found,
 		Suspended:     got.Suspended,
