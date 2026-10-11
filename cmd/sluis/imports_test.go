@@ -1,7 +1,9 @@
 package main
 
 import (
+	"os"
 	"os/exec"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -97,5 +99,71 @@ func TestEachPlatformBuilds(t *testing.T) {
 		if out, err := exec.Command("go", "build", "-tags", p.tags, "-o", "/dev/null", ".").CombinedOutput(); err != nil {
 			t.Errorf("%s: go build: %v\n%s", p.name, err, out)
 		}
+	}
+}
+
+// The provider modules (github, slack, google) are processes of their own
+// (docs/decisions/0071): none of their packages may import the issuer's
+// assembly (internal/issuerapp) or the signer. A package that does not exist
+// yet (the Google module lands in its own change) is skipped, not passed: the
+// sweep must still find the others.
+//
+// Two levels are held. A direct import of either is refused in every package
+// of the roles. The transitive set is held to no issuerapp; the signer is not
+// held transitively yet, because internal/store reaches internal/issuer through
+// internal/valkey (issuer.State), and internal/issuer imports the signer.
+func TestProviderModulesImportNeitherIssuerappNorSigner(t *testing.T) {
+	const mod = "github.com/truvity/sluis/"
+	roles := map[string][]string{
+		"github": {"internal/module/github", "internal/githubroster", "internal/githubapp", "internal/lambdaapp/githubfn"},
+		"slack":  {"internal/module/slack", "internal/slackroster", "internal/slackapp", "internal/lambdaapp/slackfn"},
+		"google": {"internal/module/google", "internal/googledir", "internal/lambdaapp/googlefn"},
+	}
+	forbidden := []string{mod + "internal/issuerapp", mod + "internal/signer"}
+	for role, dirs := range roles {
+		t.Run(role, func(t *testing.T) {
+			var patterns []string
+			for _, d := range dirs {
+				if _, err := os.Stat(filepath.Join("..", "..", d)); err == nil {
+					patterns = append(patterns, "./"+d+"/...")
+				}
+			}
+			if len(patterns) == 0 {
+				t.Skipf("the %s module has no package yet", role)
+			}
+			// Direct imports of every package of the role, tests excluded.
+			list := exec.Command("go", append([]string{"list", "-f", "{{.ImportPath}} {{join .Imports \" \"}}"}, patterns...)...)
+			list.Dir = "../.."
+			out, err := list.CombinedOutput()
+			if err != nil {
+				t.Fatalf("go list: %v\n%s", err, out)
+			}
+			lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+			if len(lines) < 1 || lines[0] == "" {
+				t.Fatalf("the sweep of %v found no package: it listed the wrong thing", patterns)
+			}
+			for _, line := range lines {
+				f := strings.Fields(line)
+				for _, imp := range f[1:] {
+					if slices.Contains(forbidden, imp) {
+						t.Errorf("%s imports %s: a provider module hosts no issuer and no signer", f[0], imp)
+					}
+				}
+			}
+			// The whole closure of the role holds no issuerapp.
+			deps := exec.Command("go", append([]string{"list", "-deps", "-f", "{{.ImportPath}}"}, patterns...)...)
+			deps.Dir = "../.."
+			out, err = deps.CombinedOutput()
+			if err != nil {
+				t.Fatalf("go list -deps: %v\n%s", err, out)
+			}
+			closure := strings.Fields(string(out))
+			if !slices.Contains(closure, mod+"internal/config") {
+				t.Fatalf("the sweep of %d packages did not contain internal/config: it listed the wrong thing", len(closure))
+			}
+			if slices.Contains(closure, mod+"internal/issuerapp") {
+				t.Errorf("the %s module's closure holds internal/issuerapp: find who with `go list -deps -f '{{.ImportPath}}: {{.Imports}}' %v`", role, patterns)
+			}
+		})
 	}
 }
