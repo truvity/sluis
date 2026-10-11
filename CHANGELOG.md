@@ -1,5 +1,9 @@
 ## Unreleased
 
+### Changed
+
+- **The Cloudflare rotation ticks every 15 minutes, and the tick is a setting.** `CloudflareRotation.Interval` (whole minutes, default 15m; `Rate` stays for a cron expression, exclusive with it) replaces the `rate(1 minute)` default, cutting the lease writes and credential reads of an idle pass fifteenfold. The rotation logic never assumed a minute (a preset is due once `rotation` has passed since it was minted), so a credential rotates up to one tick late. The library now refuses, at load, a preset where `rotation + tick + 5m` (`CloudflareConsumerSyncMargin`) is not under `lifetime`, for `Interval` and `rate(...)` schedules, so a credential cannot expire before its replacement is synced. Presets with a short lifetime (the old 15m/5m example) need a shorter `Interval` or a longer lifetime; the worst-case remaining lifetime at hand-over is `lifetime - rotation - tick`.
+
 ### Removed
 
 - **The old `access_issuer_*` and `access_roster_*` metric names are no longer published.** Every metric is recorded under its `sluis_*` name only: `access_issuer_http_requests_total` is `sluis_http_requests_total`, `access_roster_ticks_total` is `sluis_ticks_total`, and so on for the port, HTTP duration, lease, tick (including `tick_last_success_timestamp_seconds`), token, login (including `login_successes_total`), `reuse_detected_total` and signing-key families. **Consumers must read `sluis_*`:** move dashboards and rules before upgrading. The chart's alerts, both dashboards and the golden renders select `sluis_*` only (the `sluis.dual` helper is gone). `telemetry.legacyMetrics` and `SLUIS_LEGACY_METRICS` are removed: delete the key from your values. The cookies `access_issuer_sso` and `__Host-access_roster_recovery` are wire values and keep their names.
