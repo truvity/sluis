@@ -1,10 +1,18 @@
 // Package googlefn is the Google module's function: the directory refresh, on
 // a schedule ({"kind":"refresh"}, every workspace) or for one workspace
-// ({"kind":"refresh","workspace":"<id>"}), and the check of its own secrets. It
-// has no HTTP surface and serves no module call: the issuer reads the snapshot
-// the refresh writes (D-v176-6 a) and calls nothing here. It registers itself
-// with internal/lambdaapp; cmd/sluis-google and the lambda build of cmd/sluis
-// import it.
+// ({"kind":"refresh","workspace":"<id>"}), the check of its own secrets, and the
+// module's calls: the console's Workspace service (`console.*`, caller class
+// `console`) and the sign-in (`identify`, `sign_in_url`, caller class
+// `issuer`). It has no HTTP surface. The issuer reads the snapshot the refresh
+// writes (D-v176-6 a) and calls the module for everything else.
+//
+// The sign-in is a call to this function on every login. It has no provisioned
+// concurrency (D-v176-11 a), so the first sign-in after the function has been
+// idle pays its cold start: the function opens its storage, its secrets and
+// every workspace's reader before it answers. That cost is accepted and
+// documented (docs/reference/lambda.md); the issuer shows a clear page when the
+// call does not finish. It registers itself with internal/lambdaapp;
+// cmd/sluis-google and the lambda build of cmd/sluis import it.
 package googlefn
 
 import (
@@ -12,12 +20,16 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"sync"
+	"time"
 
 	"github.com/truvity/sluis/internal/config"
 	"github.com/truvity/sluis/internal/deploycheck"
+	googleconsole "github.com/truvity/sluis/internal/googleapp/console"
 	googleapp "github.com/truvity/sluis/internal/googleroster/app"
 	"github.com/truvity/sluis/internal/hub"
 	"github.com/truvity/sluis/internal/lambdaapp"
+	"github.com/truvity/sluis/internal/modcall"
 )
 
 func init() { lambdaapp.Register(lambdaapp.ModuleGoogle, open) }
@@ -38,6 +50,68 @@ func Handler(log *slog.Logger, refresh func(ctx context.Context, workspace strin
 		WithRefresh(func(ctx context.Context) (lambdaapp.RefreshResult, error) { return refresh(ctx, "") }).
 		WithRefreshWorkspace(refresh).
 		WithCheck(check)
+}
+
+// WithCalls adds the module's calls to a handler: the server answers
+// `google.console.*` to the class `console` and `google.identify` and
+// `google.sign_in_url` to `issuer`.
+func WithCalls(h *lambdaapp.HTTP, s *modcall.Server) *lambdaapp.HTTP { return h.WithRPC(s) }
+
+// calls is the service the module's calls run, assembled by the first call of a
+// container and kept for the rest of its life. It is assembled lazily: a
+// scheduled refresh opens its own, per invocation, and needs none of this.
+type calls struct {
+	cfg googleapp.Config
+	log *slog.Logger
+
+	mu  sync.Mutex
+	app *googleapp.App
+}
+
+// service is the console's service, opening the module on the first call. A
+// failure is not kept: the next call tries again.
+func (c *calls) service(ctx context.Context) (*googleconsole.Service, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.app == nil {
+		app, err := googleapp.New(ctx, c.cfg, c.log)
+		if err != nil {
+			return nil, err
+		}
+		c.app = app
+	}
+	return c.app.Console(), nil
+}
+
+// flush delivers the audit records the calls queued.
+func (c *calls) flush(ctx context.Context) {
+	c.mu.Lock()
+	app := c.app
+	c.mu.Unlock()
+	if app == nil {
+		return
+	}
+	fctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	if err := app.Flush(fctx); err != nil {
+		c.log.WarnContext(ctx, "audit records were not delivered before the response", slog.Any("error", err))
+	}
+}
+
+func (c *calls) close() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.app != nil {
+		_ = c.app.Close()
+		c.app = nil
+	}
+}
+
+// Server is the server of the module's calls over the service open assembles.
+func Server(log *slog.Logger, open func(context.Context) (*googleconsole.Service, error)) *modcall.Server {
+	s := modcall.NewServer(googleconsole.Module)
+	googleconsole.RegisterLazy(s, log, open)
+	return s
 }
 
 // Check is the {"kind":"check"} answer for the document: the secrets it
@@ -64,8 +138,9 @@ func open(ctx context.Context, file string) (*lambdaapp.Function, error) {
 	if err != nil {
 		return nil, err
 	}
+	served := &calls{cfg: cfg, log: log}
 	return &lambdaapp.Function{
-		Handler: Handler(log, func(ctx context.Context, workspace string) (lambdaapp.RefreshResult, error) {
+		Handler: WithCalls(Handler(log, func(ctx context.Context, workspace string) (lambdaapp.RefreshResult, error) {
 			// Assembled per invocation and closed at its end: nothing is left
 			// running in a frozen process.
 			app, err := googleapp.New(ctx, cfg, log)
@@ -74,9 +149,12 @@ func open(ctx context.Context, file string) (*lambdaapp.Function, error) {
 			}
 			defer func() { _ = app.Close() }()
 			return Refresh(ctx, app, workspace)
-		}, Check(doc)),
-		Flush: flush,
-		Close: func() {},
+		}, Check(doc)), Server(log, served.service)),
+		Flush: func(ctx context.Context) {
+			served.flush(ctx)
+			flush(ctx)
+		},
+		Close: served.close,
 	}, nil
 }
 

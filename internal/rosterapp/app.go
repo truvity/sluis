@@ -345,6 +345,14 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
+	if r, ok := cfg.Remote[moduleGoogle]; ok {
+		// The OAuth client, the keys and the workspaces are the Google module's:
+		// the sign-in and the console's Workspace pages are asked of its function.
+		if cfg.Directory.GoogleIssuer, cfg.Directory.GoogleConsole, err = dialGoogle(ctx, cfg, r); err != nil {
+			stores.Close()
+			return nil, err
+		}
+	}
 	directory, err := app.New(ctx, cfg.Directory, stores, log)
 	if err != nil {
 		stores.Close()

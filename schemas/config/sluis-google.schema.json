@@ -175,6 +175,22 @@
       "const": "sluis.truvity.github.io/sluis-google/v1",
       "description": "Which version of which document this is: the Google module's own document (docs/decisions/0071)."
     },
+    "audit": {
+      "additionalProperties": false,
+      "description": "The audit installation the module records to, as its own workload: the connections it makes and the changes it makes to them. Unset only logs what it did.",
+      "properties": {
+        "tokenFile": {
+          "description": "This workload's projected service-account token.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "writer": {
+          "$ref": "#/$defs/url",
+          "description": "The installation's receiver."
+        }
+      },
+      "type": "object"
+    },
     "google": {
       "additionalProperties": false,
       "description": "What the Google module reads and how often it refreshes. The module is the only writer of the directory snapshots (the hub cache in the blob store); the issuer only reads them.",
@@ -205,6 +221,10 @@
           "$ref": "#/$defs/duration",
           "default": "5m",
           "description": "How often the loop probes each workspace's credential (the loop only: a scheduled function does not probe)."
+        },
+        "publicURL": {
+          "$ref": "#/$defs/url",
+          "description": "Where a browser reaches the issuer, including its mount. The consent and sign-in redirect URIs are built from it, so it is the issuer's own `publicURL`. Needed to start a consent or a sign-in; a module that only refreshes does not read it."
         },
         "refreshInterval": {
           "$ref": "#/$defs/duration",

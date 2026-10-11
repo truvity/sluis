@@ -16,8 +16,6 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"github.com/truvity/sluis/backend"
-	"github.com/truvity/sluis/backend/google"
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
 	"github.com/truvity/sluis/gen/directoryroster/v1/directoryrosterv1connect"
 	"github.com/truvity/sluis/internal/access"
@@ -25,6 +23,7 @@ import (
 	"github.com/truvity/sluis/internal/consolecall"
 	"github.com/truvity/sluis/internal/githubapp/catalogue"
 	"github.com/truvity/sluis/internal/githubapp/mints"
+	googleconsole "github.com/truvity/sluis/internal/googleapp/console"
 	"github.com/truvity/sluis/internal/hub"
 	"github.com/truvity/sluis/internal/modcall"
 	"github.com/truvity/sluis/internal/port"
@@ -36,65 +35,23 @@ import (
 	"github.com/truvity/sluis/storage/logattr"
 )
 
-// Connector starts and finishes an admin-consent flow for one backend.
-// The browser is in the middle of it, which is why the callback is a plain
-// HTTP route rather than an RPC.
-type Connector interface {
-	// Kind names the backend, matching backend.Backend.Kind.
-	Kind() string
-	// AuthURL is where the browser goes to consent. It fails when this
-	// deployment cannot start a consent yet — most often because nobody
-	// has registered an OAuth client — because a button that navigates
-	// nowhere is worse than one that says why.
-	AuthURL(state string) (string, error)
-	// Exchange turns the callback's code into a workspace and the backend
-	// that reads it. Bind carries the workspace being reconnected, or is
-	// empty for a new connection.
-	Exchange(ctx context.Context, code, bind string) (hub.Workspace, backend.Backend, error)
-}
-
-// ClientVerifier is a connector that can say whether this installation's
-// registered client would be accepted, without a person. A connector that
-// cannot simply does not implement it, and the flow starts unchecked.
-type ClientVerifier interface {
-	VerifyClient(ctx context.Context) error
-}
-
-// KeyConnector is the second way in: a service-account key uploaded
-// instead of a consent flow. A connector that cannot do it simply does not
-// implement this.
-type KeyConnector interface {
-	FromKey(ctx context.Context, key []byte, admin string) (hub.Workspace, backend.Backend, error)
-}
-
-// CredentialReopener is a connector that can turn a stored credential back
-// into a reader -- the counterpart of Exchange and FromKey for a process
-// that starts already holding the secret, rather than mid-flow with a
-// browser. A connector that cannot simply does not implement it, and a
-// kind with no such connector is refused by name after a restart, the
-// same as it would be refused at the console.
-type CredentialReopener interface {
-	OpenStored(ctx context.Context, cred backend.Credential) (backend.Backend, error)
-}
-
-// SignInConnector is a connector that can also say who somebody is.
-//
-// It is a different flow from [Connector], not a parameter of it: consent
-// is an administrator granting this hub read access to a company, and
-// asks for the directory scopes; sign-in is a person proving who they
-// are, and asks for nothing but their address. They return to different
-// endpoints because the two endpoints have opposite authorisation — one
-// adopts a workspace and demands an operator, the other is how a person
-// becomes anyone at all.
-type SignInConnector interface {
-	Connector
-	// SignInURL is where the browser goes to prove who somebody is.
-	SignInURL(state string) (string, error)
-	// Identify turns the callback's code into the address that
-	// authenticated. Nothing else is taken from it: what that address may
-	// do is decided by the directory and the policy.
-	Identify(ctx context.Context, code string) (string, error)
-}
+// The connector seams live with the Google module, which owns the OAuth client
+// and the keys (internal/googleapp/console); the console names them here.
+type (
+	// Connector starts and finishes an admin-consent flow for one backend.
+	Connector = googleconsole.Connector
+	// ClientVerifier is a connector that can say whether the registered client
+	// would be accepted, without a person.
+	ClientVerifier = googleconsole.ClientVerifier
+	// KeyConnector is a connector that takes a service-account key instead of
+	// a consent flow.
+	KeyConnector = googleconsole.KeyConnector
+	// CredentialReopener is a connector that can turn a stored credential back
+	// into a reader.
+	CredentialReopener = googleconsole.CredentialReopener
+	// SignInConnector is a connector that can also say who somebody is.
+	SignInConnector = googleconsole.SignInConnector
+)
 
 // ConsoleDeps is everything the operator services need.
 type ConsoleDeps struct {
@@ -247,6 +204,9 @@ type Console struct {
 	// secrets.
 	rotating   map[string]bool
 	rotatingMu sync.Mutex
+	// googleOnce makes googleClient: the module's calls, remote or in process.
+	googleOnce   sync.Once
+	googleClient *googleconsole.Client
 }
 
 var (
@@ -271,7 +231,11 @@ var (
 // reviewed in git. A console that could disagree with git was a second
 // source of truth and a merge to reconcile them.
 func NewConsole(_ context.Context, deps ConsoleDeps) (*Console, error) {
+	google := deps.Modules.Google
 	deps.Modules = deps.Modules.OrLocal(modcall.Local{})
+	// Unset is the in-process Google module (see [Console.google]), not an
+	// empty one.
+	deps.Modules.Google = google
 	c := &Console{deps: deps, connectors: map[string]Connector{}}
 	for _, conn := range deps.Connectors {
 		c.connectors[conn.Kind()] = conn
@@ -312,6 +276,28 @@ func (c *Console) log() *slog.Logger {
 
 // ------------------------------------------------------- WorkspaceService
 
+// The Workspace service is the Google module's (internal/googleapp/console).
+// The console authenticates the person, takes the coarse gate (the role needed
+// anywhere), and asks the module as that snapshot; the module checks the
+// workspace and does the work. A person's refusal reaches them in the module's
+// fixed words.
+
+// google is the console's calls to the Google module. When the document sets
+// no `google.remote` the module is this process: its service runs over the
+// hub and the connectors this console holds, through the same JSON as a
+// remote one.
+func (c *Console) google() *googleconsole.Client {
+	c.googleOnce.Do(func() {
+		caller := c.deps.Modules.Google
+		if caller == nil {
+			svc := googleconsole.NewService(c.deps.Hub, slices.Collect(maps.Values(c.connectors)), c.deps.Audit, c.log())
+			caller = modcall.Local{googleconsole.Module: svc.Server()}.As(consolecall.Class)
+		}
+		c.googleClient = googleconsole.NewClient(caller)
+	})
+	return c.googleClient
+}
+
 // ListWorkspaces implements the operator contract.
 func (c *Console) ListWorkspaces(
 	ctx context.Context, _ *connect.Request[directoryrosterv1.ListWorkspacesRequest],
@@ -320,21 +306,9 @@ func (c *Console) ListWorkspaces(
 	if err != nil {
 		return nil, err
 	}
-	views, err := c.deps.Hub.WorkspaceViews(ctx)
+	out, err := c.google().ListWorkspaces(ctx, consolecall.Snapshot(id))
 	if err != nil {
-		return nil, rpcError(err)
-	}
-	visible := id.Workspaces(access.RoleViewer)
-	out := &directoryrosterv1.ListWorkspacesResponse{
-		Workspaces: make([]*directoryrosterv1.Workspace, 0, len(views)),
-	}
-	for i := range views {
-		// A nil list is every workspace: an installation-wide role is not
-		// a list of tenants and must not be turned into one.
-		if visible != nil && !slices.Contains(visible, views[i].Workspace.ID) {
-			continue
-		}
-		out.Workspaces = append(out.Workspaces, workspaceProto(&views[i]))
+		return nil, googleconsole.ConnectError(err)
 	}
 	return connect.NewResponse(out), nil
 }
@@ -362,20 +336,7 @@ func (c *Console) Reconnect(
 	if _, err := requireWorkspace(ctx, access.RoleOperator, id); err != nil {
 		return nil, err
 	}
-	views, err := c.deps.Hub.WorkspaceViews(ctx)
-	if err != nil {
-		return nil, rpcError(err)
-	}
-	kind := ""
-	for i := range views {
-		if views[i].Workspace.ID == id {
-			kind = views[i].Workspace.Backend
-		}
-	}
-	if kind == "" {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("%w: %s", hub.ErrNotFound, id))
-	}
-	url, cookie, err := c.beginFlow(ctx, backendEnum(kind), id)
+	url, cookie, err := c.beginFlow(ctx, directoryrosterv1.Backend_BACKEND_UNSPECIFIED, id)
 	if err != nil {
 		return nil, err
 	}
@@ -384,31 +345,15 @@ func (c *Console) Reconnect(
 	return resp, nil
 }
 
+// beginFlow starts a consent. The state carries who asked and is signed here:
+// the session key stays with the console, the module only puts the state in
+// the address it builds.
 func (c *Console) beginFlow(
 	ctx context.Context, want directoryrosterv1.Backend, bind string,
 ) (consentURL, setCookie string, err error) {
 	id, err := requireRole(ctx, access.RoleOperator)
 	if err != nil {
 		return "", "", err
-	}
-	conn, ok := c.connectors[backendKind(want)]
-	if !ok {
-		return "", "", connect.NewError(connect.CodeFailedPrecondition,
-			errors.New("no connector for that backend: configure the OAuth client in Settings first"))
-	}
-	// Check the client before sending anyone to consent with it. A wrong
-	// secret fails at the exchange, which is the step AFTER the consent
-	// screen — so without this a real Super Admin grants a real
-	// credential to an installation that cannot collect it, and has to be
-	// asked to do it again. The check refuses only when the provider
-	// names the client as the problem; anything inconclusive proceeds.
-	if verifier, checkable := conn.(ClientVerifier); checkable {
-		checking, done := context.WithTimeout(ctx, clientCheckTimeout)
-		err = verifier.VerifyClient(checking)
-		done()
-		if err != nil {
-			return "", "", connect.NewError(connect.CodeFailedPrecondition, err)
-		}
 	}
 	// The state carries who asked. This request is the one the gateway
 	// authenticates; the callback is a redirect from Google that need not
@@ -418,69 +363,42 @@ func (c *Console) beginFlow(
 		return "", "", connect.NewError(connect.CodeInternal, err)
 	}
 	cookie := access.ConnectCookie(state, c.deps.SecureCookie, 10*time.Minute)
-	url, err := conn.AuthURL(state)
-	if err != nil {
-		return "", "", connect.NewError(connect.CodeFailedPrecondition, err)
+	if bind != "" {
+		consentURL, err = c.google().Reconnect(ctx, consolecall.Snapshot(id), bind, state)
+	} else {
+		consentURL, err = c.google().BeginConnect(ctx, consolecall.Snapshot(id), backendKind(want), state)
 	}
-	return url, cookie.String(), nil
+	if err != nil {
+		return "", "", googleconsole.ConnectError(err)
+	}
+	return consentURL, cookie.String(), nil
 }
 
-// clientCheckTimeout bounds the pre-flight check. It is on the operator's
-// request path, so it is short: an answer that has not arrived by now is
-// inconclusive, and inconclusive proceeds.
-const clientCheckTimeout = 5 * time.Second
+// completeConsent forwards the callback's code to the module. The code is
+// single-use and the call is never retried.
+func (c *Console) completeConsent(ctx context.Context, caller consolecall.Caller, kind, code, bind string) (googleconsole.CompleteResponse, error) {
+	return c.google().CompleteConsent(ctx, caller, googleconsole.CompleteRequest{Backend: kind, Code: code, Bind: bind})
+}
 
-// UploadKey implements the operator contract.
+// UploadKey implements the operator contract. The key passes through this
+// handler in memory on its way to the module, which is the only holder of it: it
+// is bounded here at 64 KB, and no log line or error carries it.
 func (c *Console) UploadKey(
 	ctx context.Context, req *connect.Request[directoryrosterv1.UploadKeyRequest],
 ) (*connect.Response[directoryrosterv1.UploadKeyResponse], error) {
-	if _, err := requireRole(ctx, access.RoleOperator); err != nil {
-		return nil, err
-	}
-	conn, ok := c.connectors[backendKind(req.Msg.GetBackend())]
-	if !ok {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("no connector for that backend"))
-	}
-	keyed, ok := conn.(KeyConnector)
-	if !ok {
-		return nil, connect.NewError(connect.CodeUnimplemented,
-			fmt.Errorf("the %s backend takes no uploaded key", conn.Kind()))
-	}
-	admin := strings.TrimSpace(req.Msg.GetAdmin())
-	if admin == "" || len(req.Msg.GetKey()) == 0 {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("both the key and the admin are required"))
-	}
-	ws, b, err := keyed.FromKey(ctx, req.Msg.GetKey(), admin)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
-	}
-	adopted, err := c.adopt(ctx, ws, b)
+	id, err := requireRole(ctx, access.RoleOperator)
 	if err != nil {
 		return nil, err
 	}
-	c.record(ctx, audit.WorkspaceConnected(actorOf(ctx), ws.ID, b.Kind(), "key"))
-	return connect.NewResponse(&directoryrosterv1.UploadKeyResponse{Workspace: adopted}), nil
-}
-
-// adopt registers a connected workspace and returns it as the console
-// shows it.
-func (c *Console) adopt(ctx context.Context, ws hub.Workspace, b backend.Backend) (*directoryrosterv1.Workspace, error) {
-	if id, ok := IdentityFrom(ctx); ok && ws.ConnectedBy == "" {
-		ws.ConnectedBy = id.Email
+	if len(req.Msg.GetKey()) > googleconsole.MaxKeyBytes {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("a key is at most %d KB", googleconsole.MaxKeyBytes>>10))
 	}
-	if _, err := c.deps.Hub.Adopt(ctx, ws, b); err != nil {
-		return nil, rpcError(err)
-	}
-	views, err := c.deps.Hub.WorkspaceViews(ctx)
+	out, err := c.google().UploadKey(ctx, consolecall.Snapshot(id), req.Msg)
 	if err != nil {
-		return nil, rpcError(err)
+		return nil, googleconsole.ConnectError(err)
 	}
-	for i := range views {
-		if views[i].Workspace.ID == ws.ID {
-			return workspaceProto(&views[i]), nil
-		}
-	}
-	return nil, connect.NewError(connect.CodeInternal, errors.New("the workspace vanished after being adopted"))
+	return connect.NewResponse(out), nil
 }
 
 // SetServedDomains implements the operator contract: which of a tenant's
@@ -488,26 +406,15 @@ func (c *Console) adopt(ctx context.Context, ws hub.Workspace, b backend.Backend
 func (c *Console) SetServedDomains(
 	ctx context.Context, req *connect.Request[directoryrosterv1.SetServedDomainsRequest],
 ) (*connect.Response[directoryrosterv1.SetServedDomainsResponse], error) {
-	id := req.Msg.GetWorkspaceId()
-	if _, err := requireWorkspace(ctx, access.RoleOperator, id); err != nil {
+	id, err := requireWorkspace(ctx, access.RoleOperator, req.Msg.GetWorkspaceId())
+	if err != nil {
 		return nil, err
 	}
-	if _, err := c.deps.Hub.SetServed(ctx, id, req.Msg.GetDomains()); err != nil {
-		return nil, rpcError(err)
-	}
-	c.record(ctx, audit.WorkspaceDomainsChanged(actorOf(ctx), id, req.Msg.GetDomains()))
-	views, err := c.deps.Hub.WorkspaceViews(ctx)
+	out, err := c.google().SetServedDomains(ctx, consolecall.Snapshot(id), req.Msg)
 	if err != nil {
-		return nil, rpcError(err)
+		return nil, googleconsole.ConnectError(err)
 	}
-	for i := range views {
-		if views[i].Workspace.ID == id {
-			return connect.NewResponse(&directoryrosterv1.SetServedDomainsResponse{
-				Workspace: workspaceProto(&views[i]),
-			}), nil
-		}
-	}
-	return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("%w: %s", hub.ErrNotFound, id))
+	return connect.NewResponse(out), nil
 }
 
 // SetSyncedGroups implements the operator contract: which of a tenant's
@@ -515,56 +422,28 @@ func (c *Console) SetServedDomains(
 func (c *Console) SetSyncedGroups(
 	ctx context.Context, req *connect.Request[directoryrosterv1.SetSyncedGroupsRequest],
 ) (*connect.Response[directoryrosterv1.SetSyncedGroupsResponse], error) {
-	id := req.Msg.GetWorkspaceId()
-	if _, err := requireWorkspace(ctx, access.RoleOperator, id); err != nil {
+	id, err := requireWorkspace(ctx, access.RoleOperator, req.Msg.GetWorkspaceId())
+	if err != nil {
 		return nil, err
 	}
-	if _, err := c.deps.Hub.SetSynced(ctx, id, req.Msg.GetGroups()); err != nil {
-		return nil, rpcError(err)
-	}
-	c.record(ctx, audit.WorkspaceGroupsChanged(actorOf(ctx), id, len(req.Msg.GetGroups())))
-	views, err := c.deps.Hub.WorkspaceViews(ctx)
+	out, err := c.google().SetSyncedGroups(ctx, consolecall.Snapshot(id), req.Msg)
 	if err != nil {
-		return nil, rpcError(err)
+		return nil, googleconsole.ConnectError(err)
 	}
-	for i := range views {
-		if views[i].Workspace.ID == id {
-			return connect.NewResponse(&directoryrosterv1.SetSyncedGroupsResponse{
-				Workspace: workspaceProto(&views[i]),
-			}), nil
-		}
-	}
-	return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("%w: %s", hub.ErrNotFound, id))
+	return connect.NewResponse(out), nil
 }
 
 // Probe implements the operator contract.
 func (c *Console) Probe(
 	ctx context.Context, req *connect.Request[directoryrosterv1.ProbeRequest],
 ) (*connect.Response[directoryrosterv1.ProbeResponse], error) {
-	id := req.Msg.GetWorkspaceId()
-	if _, err := requireWorkspace(ctx, access.RoleOperator, id); err != nil {
+	id, err := requireWorkspace(ctx, access.RoleOperator, req.Msg.GetWorkspaceId())
+	if err != nil {
 		return nil, err
 	}
-	healths, err := c.deps.Hub.Probe(ctx, id)
+	out, err := c.google().Probe(ctx, consolecall.Snapshot(id), req.Msg)
 	if err != nil {
-		return nil, rpcError(err)
-	}
-	out := &directoryrosterv1.ProbeResponse{}
-	if len(healths) > 0 {
-		out.Health = &directoryrosterv1.Health{
-			ProbedAt: stamp(healths[0].ProbedAt),
-			Ok:       healths[0].OK,
-			Error:    healths[0].Detail,
-		}
-	}
-	views, err := c.deps.Hub.WorkspaceViews(ctx)
-	if err != nil {
-		return nil, rpcError(err)
-	}
-	for i := range views {
-		if views[i].Workspace.ID == id {
-			out.Domains = domainsProto(views[i].Domains)
-		}
+		return nil, googleconsole.ConnectError(err)
 	}
 	return connect.NewResponse(out), nil
 }
@@ -573,28 +452,30 @@ func (c *Console) Probe(
 func (c *Console) Refresh(
 	ctx context.Context, req *connect.Request[directoryrosterv1.RefreshRequest],
 ) (*connect.Response[directoryrosterv1.RefreshResponse], error) {
-	if _, err := requireWorkspace(ctx, access.RoleOperator, req.Msg.GetWorkspaceId()); err != nil {
+	id, err := requireWorkspace(ctx, access.RoleOperator, req.Msg.GetWorkspaceId())
+	if err != nil {
 		return nil, err
 	}
-	at, err := c.deps.Hub.Refresh(ctx, req.Msg.GetWorkspaceId())
+	out, err := c.google().Refresh(ctx, consolecall.Snapshot(id), req.Msg)
 	if err != nil {
-		return nil, rpcError(err)
+		return nil, googleconsole.ConnectError(err)
 	}
-	return connect.NewResponse(&directoryrosterv1.RefreshResponse{SnapshotAt: stamp(at)}), nil
+	return connect.NewResponse(out), nil
 }
 
 // Disconnect implements the operator contract.
 func (c *Console) Disconnect(
 	ctx context.Context, req *connect.Request[directoryrosterv1.DisconnectRequest],
 ) (*connect.Response[directoryrosterv1.DisconnectResponse], error) {
-	if _, err := requireWorkspace(ctx, access.RoleOperator, req.Msg.GetWorkspaceId()); err != nil {
+	id, err := requireWorkspace(ctx, access.RoleOperator, req.Msg.GetWorkspaceId())
+	if err != nil {
 		return nil, err
 	}
-	if err := c.deps.Hub.Disconnect(ctx, req.Msg.GetWorkspaceId()); err != nil {
-		return nil, rpcError(err)
+	out, err := c.google().Disconnect(ctx, consolecall.Snapshot(id), req.Msg)
+	if err != nil {
+		return nil, googleconsole.ConnectError(err)
 	}
-	c.record(ctx, audit.WorkspaceDisconnected(actorOf(ctx), req.Msg.GetWorkspaceId()))
-	return connect.NewResponse(&directoryrosterv1.DisconnectResponse{}), nil
+	return connect.NewResponse(out), nil
 }
 
 // -------------------------------------------------------- SettingsService
@@ -644,42 +525,14 @@ func (c *Console) connectorKinds() []directoryrosterv1.Backend {
 	return out
 }
 
-// consentRedirects is where a backend's CONSENT flow comes back: always
-// this console, because connecting a directory is this console's job --
-// but at the HOST ROOT (RootURL), never under route.pathPrefix.
-// /connect is a bootstrap path, served on its own HTTPRoute precisely so
-// the operator connecting the FIRST directory -- who by definition no
-// directory can vouch for yet -- is not sent through whatever gates the
-// console's own path. A redirect URI registered under the prefix would be
-// one Google never returns to.
-//
-// Read from the backend for the same reason the scopes are: a copy here
-// would drift, and the drift surfaces in a cloud console's own words,
-// much later, naming nothing useful.
-var consentRedirects = map[string]string{
-	"google": google.CallbackPath,
-}
-
-// signInRedirects is where a backend's SIGN-IN flow comes back, which is
-// a different service. With one shared OAuth client — one client for the
-// hub and the issuer, so there is one secret to rotate — the sign-in
-// redirect belongs to the ISSUER's hostname, not this one. Showing this
-// console's own host there is how an operator registers a URI nothing
-// ever returns to, and finds out from Google, later, in Google's words.
-var signInRedirects = map[string]string{
-	"google": google.SignInCallbackPath,
-}
-
-// backendScopes is what each backend is asked for, all read-only.
-//
-// It reads the list from the backend rather than repeating it. A copy
-// would drift, and the drift is invisible: the console would tell an
-// operator to grant one set while the hub asked for another, and the
-// mismatch would surface much later as a 403 at the first read, naming
-// nothing useful. The connect runbook documents the same four.
-var backendScopes = map[string][]string{
-	"google": google.Scopes,
-}
+// consentRedirects, signInRedirects and backendScopes are the Google module's:
+// what each flow returns to and what it asks for is read from the backend by
+// that package, so there is one copy to drift.
+var (
+	consentRedirects = googleconsole.ConsentRedirects
+	signInRedirects  = googleconsole.SignInRedirects
+	backendScopes    = googleconsole.Scopes
+)
 
 // setupGuidance is what must be registered with a backend before a
 // workspace can be connected, with this installation's own values filled

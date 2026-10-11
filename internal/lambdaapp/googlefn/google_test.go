@@ -4,13 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"os"
 	"slices"
 	"strings"
 	"testing"
 
+	"github.com/aws/aws-lambda-go/lambdacontext"
+
 	"github.com/truvity/sluis/internal/config"
 	"github.com/truvity/sluis/internal/deploycheck"
+	googleconsole "github.com/truvity/sluis/internal/googleapp/console"
 	googleapp "github.com/truvity/sluis/internal/googleroster/app"
 	"github.com/truvity/sluis/internal/hub"
 	"github.com/truvity/sluis/internal/lambdaapp"
@@ -206,3 +210,64 @@ func TestTheGoogleZipRefusesAnotherModulesDocument(t *testing.T) {
 }
 
 func writeFile(path, body string) error { return os.WriteFile(path, []byte(body), 0o600) }
+
+// The module answers the console's calls and the sign-in's through the alias it
+// was invoked by, and assembles its service only when one arrives: a scheduled
+// refresh never pays for it.
+func TestTheModulesCallsOpenTheServiceOnTheFirstCallAndAnswerByAlias(t *testing.T) {
+	var opened int
+	var openErr error
+	open := func(context.Context) (*googleconsole.Service, error) {
+		opened++
+		if openErr != nil {
+			return nil, openErr
+		}
+		return googleconsole.NewService(hub.New(hub.NewMemoryStore(), hub.NewMemorySnapshots(), hub.Config{}, slog.New(slog.DiscardHandler)),
+			nil, nil, slog.New(slog.DiscardHandler)), nil
+	}
+	p := &puller{all: hub.RefreshResult{Workspaces: 1, Ran: 1}}
+	h := googlefn.WithCalls(handler(p), googlefn.Server(nil, open))
+
+	if _, err := handle(t, h, `{"kind":"refresh"}`); err != nil || opened != 0 {
+		t.Fatalf("a refresh opened the service %d times: %v", opened, err)
+	}
+
+	call := func(alias, method string, msg string) (string, error) {
+		t.Helper()
+		ctx := lambdacontext.NewContext(context.Background(), &lambdacontext.LambdaContext{
+			InvokedFunctionArn: "arn:aws:lambda:eu-west-1:111111111111:function:sluis-x-google:" + alias})
+		payload, _ := json.Marshal(modcall.Request{Kind: modcall.Kind, Module: "google", Method: method,
+			Payload: json.RawMessage(`{"caller":{"actor":"ada@north.example","roles":["operator"]}` + msg + `}`)})
+		out, err := h.Handle(ctx, payload)
+		if err != nil {
+			t.Fatal(err)
+		}
+		raw, _ := json.Marshal(out)
+		var res modcall.Response
+		if err = json.Unmarshal(raw, &res); err != nil {
+			t.Fatal(err)
+		}
+		body, err := modcall.Result(res)
+		return string(body), err
+	}
+
+	// The service cannot be opened: unavailable, and the next call tries again.
+	openErr = errors.New("secrets store unreachable")
+	if _, err := call("live-console", "console.list_workspaces", ""); err == nil || !strings.Contains(err.Error(), modcall.CodeUnavailable) {
+		t.Fatalf("a call with the service down = %v, want unavailable", err)
+	}
+	openErr = nil
+	if body, err := call("live-console", "console.list_workspaces", ""); err != nil || !strings.Contains(body, `"msg"`) {
+		t.Fatalf("the console's list: %q, %v", body, err)
+	}
+	// A console method as the issuer, and the sign-in as the console: refused.
+	if _, err := call("live-issuer", "console.list_workspaces", ""); !errors.Is(err, modcall.Coded(modcall.CodeForbidden, "")) {
+		t.Errorf("a console method as the issuer = %v, want forbidden", err)
+	}
+	if _, err := call("live-console", "identify", `,"code":"x"`); !errors.Is(err, modcall.Coded(modcall.CodeForbidden, "")) {
+		t.Errorf("identify as the console = %v, want forbidden", err)
+	}
+	if opened != 2 {
+		t.Errorf("the service was opened %d times, want one failed and one that worked", opened)
+	}
+}
