@@ -87,7 +87,7 @@ func rekeyOptions() rekey.Options {
 		Sleep: func(context.Context, time.Duration) error { return nil }}
 }
 
-func sqsRekeyAudit(t *testing.T, q *rekeyQueue, stderr *bytes.Buffer) *rekeyAudit {
+func sqsRekeyAudit(t *testing.T, q *rekeyQueue, stderr *bytes.Buffer) *operatorAudit {
 	t.Helper()
 	trail, err := audit.Open(context.Background(), audit.Config{
 		SQS: &audit.SQSConfig{QueueURL: rekeyQueueURL, Timeout: time.Second}, SQSClient: q,
@@ -96,7 +96,7 @@ func sqsRekeyAudit(t *testing.T, q *rekeyQueue, stderr *bytes.Buffer) *rekeyAudi
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = trail.Close() })
-	return &rekeyAudit{rec: trail, dest: "queue " + rekeyQueueURL, stderr: stderr}
+	return &operatorAudit{rec: trail, dest: "queue " + rekeyQueueURL, stderr: stderr}
 }
 
 // A denied send refuses the re-key, names the queue and the principal AWS
@@ -109,7 +109,7 @@ func TestRekeyRefusesWhenTheAuditSendIsDenied(t *testing.T) {
 	if err == nil {
 		t.Fatal("the re-key went ahead without its record")
 	}
-	for _, want := range []string{rekeyQueueURL, "arn:aws:sts::111122223333:assumed-role/operator/oleg", "--no-audit", "nothing was written"} {
+	for _, want := range []string{rekeyQueueURL, "arn:aws:sts::111122223333:assumed-role/operator/oleg", "--no-audit", "nothing was changed"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("the refusal does not say %q: %v", want, err)
 		}
@@ -171,7 +171,7 @@ func TestRekeyNoAuditProceedsWarnsAndPrintsTheRecord(t *testing.T) {
 	}
 	defer func() { _ = trail.Close() }()
 	var stderr bytes.Buffer
-	au := &rekeyAudit{rec: trail, noAudit: true, stderr: &stderr}
+	au := &operatorAudit{rec: trail, noAudit: true, stderr: &stderr}
 	if err = rekeyRun(context.Background(), &bytes.Buffer{}, "example", p, rekeyOptions(), au, audit.Person("oleg@example.com"), false); err != nil {
 		t.Fatal(err)
 	}
