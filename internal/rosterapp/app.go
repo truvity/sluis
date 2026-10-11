@@ -484,6 +484,16 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 		}
 		directory.ConsoleServer().UseCloudflare(console)
 	}
+	if r, ok := cfg.Remote[moduleSlack]; ok {
+		// The Slack pages run in the Slack module's function: the console calls it
+		// as `console`, and holds neither a workspace's token nor an App's secret.
+		caller, err := dialConsole(ctx, cfg, moduleSlack, r)
+		if err != nil {
+			a.Close()
+			return nil, err
+		}
+		directory.ConsoleServer().UseSlack(caller)
+	}
 	if cfg.Backup != nil {
 		// The Backups page reads the two modules as the caller class `console`.
 		client, err := backuprpc.Dial(ctx, cfg.Backup)

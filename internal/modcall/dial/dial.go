@@ -72,6 +72,7 @@ func httpCaller(cfg modcall.Config) modcall.Caller {
 			URLs:      map[string]string{name: t.URL},
 			Audiences: map[string]string{name: t.Audience},
 			Token:     func(ctx context.Context, _ string) (string, error) { return src.Token(ctx) },
+			MaxBytes:  t.MaxBytes,
 		}
 	}
 	return by

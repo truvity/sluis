@@ -19,21 +19,6 @@ import (
 	"github.com/truvity/sluis/policy"
 )
 
-// SlackSharedRecords is where Slack Connect channel definitions are kept:
-// the records the Slack controller reads.
-type SlackSharedRecords interface {
-	List(ctx context.Context) ([]connection.SharedRecord, error)
-	// Apply reads one record (nil when there is none), asks decide what it
-	// becomes (nil deletes it) and writes that under the object's version.
-	Apply(ctx context.Context, name string, decide func(current *reconcile.SharedChannel) (*reconcile.SharedChannel, error)) error
-}
-
-// SlackStatusReports is what the Slack controller last reported, one
-// document per workspace.
-type SlackStatusReports interface {
-	Reports(ctx context.Context) (map[string]string, error)
-}
-
 // The states a shared channel is shown in.
 const (
 	sharedNotReported = "not_reported"
@@ -73,12 +58,12 @@ func (c *Console) ListSlackSharedChannels(
 	out := &directoryrosterv1.ListSlackSharedChannelsResponse{Available: c.deps.SlackShared != nil}
 	anyOperate := false
 	for _, key := range set.SlackWorkspaceKeys() {
-		if !book.may(id, access.RoleViewer, key) {
+		if !book.May(id, access.RoleViewer, key) {
 			continue
 		}
-		operate := book.mayAct(id, key)
+		operate := book.MayAct(id, key)
 		anyOperate = anyOperate || operate
-		out.Workspaces = append(out.Workspaces, &directoryrosterv1.SlackConnectWorkspace{Key: key, CanOperate: operate, Owner: book.owner(key)})
+		out.Workspaces = append(out.Workspaces, &directoryrosterv1.SlackConnectWorkspace{Key: key, CanOperate: operate, Owner: book.Owner(key)})
 	}
 	if anyOperate {
 		// Any connected directory's groups: a Slack Connect channel is not
@@ -116,7 +101,7 @@ func (c *Console) ListSlackSharedChannels(
 			// is, so it is shown to them and can be edited, and acts on nothing.
 			view.State, view.Reason = sharedInvalid, rec.Err.Error()
 		}
-		view.CanOperate = book.mayAct(id, rec.Channel.Host)
+		view.CanOperate = book.MayAct(id, rec.Channel.Host)
 		out.Channels = append(out.Channels, view)
 	}
 	out.Discovered = discoveredChannels(id, book, p, reports, records, true)
@@ -127,7 +112,7 @@ func (c *Console) ListSlackSharedChannels(
 // workspace the channel is shared with.
 func maySeeShared(id access.Identity, book slackBook, ch reconcile.SharedChannel) bool {
 	return slices.ContainsFunc(append([]string{ch.Host}, ch.With...), func(w string) bool {
-		return book.may(id, access.RoleViewer, w)
+		return book.May(id, access.RoleViewer, w)
 	})
 }
 

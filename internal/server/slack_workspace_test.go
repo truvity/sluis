@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	slackconsole "github.com/truvity/sluis/internal/slackapp/console"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -115,7 +116,7 @@ func (h *wsHarness) finish(
 		t.Fatalf("no credential for %s: %v", workspace, err)
 	}
 	code := h.slack.Install(credential.AppID, installIn)
-	got := redirect(h.server.slackWorkspaceCallback, slackWorkspaceCallbackPath, url.Values{"code": {code}, "state": {state}}, cookie)
+	got := redirect(h.server.slackWorkspaceCallback, slackconsole.WorkspaceCallbackPath, url.Values{"code": {code}, "state": {state}}, cookie)
 	return &httpResult{Code: got.Code, Location: got.Header().Get("Location"), Body: got.Body.String()}
 }
 
@@ -181,11 +182,11 @@ func TestAWorkspaceIsConnectedRecordedRefusedForAnotherTeamUpgradedAndDisconnect
 		created = app
 	}
 	if !slices.Equal(created.Scopes, connection.BotScopes) ||
-		!strings.Contains(created.Manifest, "https://access.example"+slackWorkspaceCallbackPath) ||
+		!strings.Contains(created.Manifest, "https://access.example"+slackconsole.WorkspaceCallbackPath) ||
 		!strings.Contains(created.Manifest, `"name":"sluis-acme"`) {
 		t.Errorf("manifest = %s, scopes = %v", created.Manifest, created.Scopes)
 	}
-	if u := begun.Msg.GetUrl(); mustQuery(t, u, "redirect_uri") != "https://access.example"+slackWorkspaceCallbackPath ||
+	if u := begun.Msg.GetUrl(); mustQuery(t, u, "redirect_uri") != "https://access.example"+slackconsole.WorkspaceCallbackPath ||
 		mustQuery(t, u, "scope") != strings.Join(connection.BotScopes, ",") {
 		t.Errorf("authorize URL = %s", u)
 	}
@@ -722,7 +723,7 @@ func TestAWorkspaceInstallIsFinishedOnlyByTheBrowserThatStartedIt(t *testing.T) 
 	code := h.slack.Install(credential.AppID, acmeTeam)
 	query := func(state string) url.Values { return url.Values{"code": {code}, "state": {state}} }
 	callbackQuery := func(q url.Values, cookie string) int {
-		return redirect(h.server.slackWorkspaceCallback, slackWorkspaceCallbackPath, q, cookie).Code
+		return redirect(h.server.slackWorkspaceCallback, slackconsole.WorkspaceCallbackPath, q, cookie).Code
 	}
 	callback := func(state, cookie string) int { return callbackQuery(query(state), cookie) }
 
@@ -730,10 +731,10 @@ func TestAWorkspaceInstallIsFinishedOnlyByTheBrowserThatStartedIt(t *testing.T) 
 	if !strings.Contains(set, "HttpOnly") || !strings.Contains(set, "Max-Age=600") {
 		t.Errorf("flow cookie = %s", set)
 	}
-	catalogue, _ := h.server.state.IssueAs(access.Binding{Bind: slackCatalogueBind + "sync", Actor: "ada@north.example"})
+	catalogue, _ := h.server.state.IssueAs(access.Binding{Bind: slackconsole.CatalogueBind + "sync", Actor: "ada@north.example"})
 	github, _ := h.server.state.IssueAs(access.Binding{Bind: "github-catalogue:sync", Actor: "ada@north.example"})
-	noActor, _ := h.server.state.IssueAs(access.Binding{Bind: slackWorkspaceBind + "acme"})
-	unknown, _ := h.server.state.IssueAs(access.Binding{Bind: slackWorkspaceBind + "nowhere", Actor: "ada@north.example"})
+	noActor, _ := h.server.state.IssueAs(access.Binding{Bind: slackconsole.WorkspaceBind + "acme"})
+	unknown, _ := h.server.state.IssueAs(access.Binding{Bind: slackconsole.WorkspaceBind + "nowhere", Actor: "ada@north.example"})
 	for name, c := range map[string]struct{ got, want int }{
 		"no cookie":                        {callback(state, ""), http.StatusBadRequest},
 		"another browser's cookie":         {callback(state, "a-cookie-from-elsewhere"), http.StatusBadRequest},
@@ -749,7 +750,7 @@ func TestAWorkspaceInstallIsFinishedOnlyByTheBrowserThatStartedIt(t *testing.T) 
 		}
 	}
 	// The catalogue's callback refuses a workspace flow's state likewise.
-	if got := redirect(h.server.slackCatalogueCallback, slackCatalogueCallbackPath, query(state), cookie).Code; got != http.StatusBadRequest {
+	if got := redirect(h.server.slackCatalogueCallback, slackconsole.CatalogueCallbackPath, query(state), cookie).Code; got != http.StatusBadRequest {
 		t.Errorf("a workspace state at the catalogue's callback = %d, want 400", got)
 	}
 	if h.slack.Count("oauth.v2.access") != 0 {
@@ -760,7 +761,7 @@ func TestAWorkspaceInstallIsFinishedOnlyByTheBrowserThatStartedIt(t *testing.T) 
 	}
 
 	declined := url.Values{"error": {"access_denied"}, "state": {state}}
-	if got := redirect(h.server.slackWorkspaceCallback, slackWorkspaceCallbackPath, declined, cookie); got.Code != http.StatusBadRequest ||
+	if got := redirect(h.server.slackWorkspaceCallback, slackconsole.WorkspaceCallbackPath, declined, cookie); got.Code != http.StatusBadRequest ||
 		!strings.Contains(got.Body.String(), "not approved") {
 		t.Errorf("a declined install = %d:\n%s", got.Code, got.Body)
 	}
@@ -769,7 +770,7 @@ func TestAWorkspaceInstallIsFinishedOnlyByTheBrowserThatStartedIt(t *testing.T) 
 	// away: a flow begun by an operator does not finish in another's
 	// workspace.
 	foreign := WithIdentity(context.Background(), southOp)
-	request := httptest.NewRequest(http.MethodGet, slackWorkspaceCallbackPath+"?"+query(state).Encode(), nil).WithContext(foreign)
+	request := httptest.NewRequest(http.MethodGet, slackconsole.WorkspaceCallbackPath+"?"+query(state).Encode(), nil).WithContext(foreign)
 	request.AddCookie(&http.Cookie{Name: access.ConnectCookieName, Value: cookie})
 	foreignGot := httptest.NewRecorder()
 	h.server.slackWorkspaceCallback(foreignGot, request)
@@ -799,10 +800,10 @@ func TestEveryRefusedSlackCallbackIsLoggedAndAuditedWithItsReason(t *testing.T) 
 	_, credential, _, _ := h.workspaces.Get(context.Background(), "acme")
 	code := h.slack.Install(credential.AppID, acmeTeam)
 	call := func(q url.Values, cookie string) int {
-		return redirect(h.server.slackWorkspaceCallback, slackWorkspaceCallbackPath, q, cookie).Code
+		return redirect(h.server.slackWorkspaceCallback, slackconsole.WorkspaceCallbackPath, q, cookie).Code
 	}
 	github, _ := h.server.state.IssueAs(access.Binding{Bind: "github-catalogue:sync", Actor: "ada@north.example"})
-	noActor, _ := h.server.state.IssueAs(access.Binding{Bind: slackWorkspaceBind + "acme"})
+	noActor, _ := h.server.state.IssueAs(access.Binding{Bind: slackconsole.WorkspaceBind + "acme"})
 	for name, c := range map[string]struct {
 		got    int
 		reason string

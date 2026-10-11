@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	slackconsole "github.com/truvity/sluis/internal/slackapp/console"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -181,7 +182,7 @@ func (h *slackHarness) install(
 	app := h.app(t, id)
 	code := h.slack.Install(app.GetAppId(), installIn)
 	return begun, func() (int, string, string) {
-		got := redirect(h.server.slackCatalogueCallback, slackCatalogueCallbackPath, url.Values{"code": {code}, "state": {state}}, cookie)
+		got := redirect(h.server.slackCatalogueCallback, slackconsole.CatalogueCallbackPath, url.Values{"code": {code}, "state": {state}}, cookie)
 		return got.Code, got.Header().Get("Location"), got.Body.String()
 	}
 }
@@ -455,14 +456,14 @@ func TestASlackInstallIsFinishedOnlyByTheBrowserThatStartedIt(t *testing.T) {
 	}
 
 	other, _ := h.server.state.IssueAs(access.Binding{Bind: "github-catalogue:sync", Actor: "ada@north.example"})
-	noActor, _ := h.server.state.IssueAs(access.Binding{Bind: slackCatalogueBind + "sync"})
+	noActor, _ := h.server.state.IssueAs(access.Binding{Bind: slackconsole.CatalogueBind + "sync"})
 	for name, got := range map[string]int{
-		"no cookie":                       redirect(h.server.slackCatalogueCallback, slackCatalogueCallbackPath, query(state), "").Code,
-		"another browser's cookie":        redirect(h.server.slackCatalogueCallback, slackCatalogueCallbackPath, query(state), "a-cookie-from-elsewhere").Code,
-		"a tampered state":                redirect(h.server.slackCatalogueCallback, slackCatalogueCallbackPath, query(state+"x"), cookie).Code,
-		"no state":                        redirect(h.server.slackCatalogueCallback, slackCatalogueCallbackPath, url.Values{"code": {code}}, cookie).Code,
-		"another flow's state and cookie": redirect(h.server.slackCatalogueCallback, slackCatalogueCallbackPath, query(other), other).Code,
-		"a state with no operator":        redirect(h.server.slackCatalogueCallback, slackCatalogueCallbackPath, query(noActor), noActor).Code,
+		"no cookie":                       redirect(h.server.slackCatalogueCallback, slackconsole.CatalogueCallbackPath, query(state), "").Code,
+		"another browser's cookie":        redirect(h.server.slackCatalogueCallback, slackconsole.CatalogueCallbackPath, query(state), "a-cookie-from-elsewhere").Code,
+		"a tampered state":                redirect(h.server.slackCatalogueCallback, slackconsole.CatalogueCallbackPath, query(state+"x"), cookie).Code,
+		"no state":                        redirect(h.server.slackCatalogueCallback, slackconsole.CatalogueCallbackPath, url.Values{"code": {code}}, cookie).Code,
+		"another flow's state and cookie": redirect(h.server.slackCatalogueCallback, slackconsole.CatalogueCallbackPath, query(other), other).Code,
+		"a state with no operator":        redirect(h.server.slackCatalogueCallback, slackconsole.CatalogueCallbackPath, query(noActor), noActor).Code,
 	} {
 		want := http.StatusBadRequest
 		if name == "a state with no operator" {
@@ -481,13 +482,13 @@ func TestASlackInstallIsFinishedOnlyByTheBrowserThatStartedIt(t *testing.T) {
 
 	// Declined in Slack: said, not a failure of this service.
 	declined := url.Values{"error": {"access_denied"}, "state": {state}}
-	if got := redirect(h.server.slackCatalogueCallback, slackCatalogueCallbackPath, declined, cookie); got.Code != http.StatusBadRequest ||
+	if got := redirect(h.server.slackCatalogueCallback, slackconsole.CatalogueCallbackPath, declined, cookie); got.Code != http.StatusBadRequest ||
 		!strings.Contains(got.Body.String(), "not approved") {
 		t.Errorf("a declined install = %d:\n%s", got.Code, got.Body)
 	}
 
 	// The one browser that started it finishes it.
-	if got := redirect(h.server.slackCatalogueCallback, slackCatalogueCallbackPath, query(state), cookie); got.Code != http.StatusFound {
+	if got := redirect(h.server.slackCatalogueCallback, slackconsole.CatalogueCallbackPath, query(state), cookie); got.Code != http.StatusFound {
 		t.Fatalf("the right browser = %d:\n%s", got.Code, got.Body)
 	}
 	// And the page it lands on says nothing a log should not: no token.
@@ -509,7 +510,7 @@ func TestARefusedSlackAppInstallIsLoggedAndAuditedWithItsReason(t *testing.T) {
 	}
 	cookie, state := cookieFrom(t, begun.Header()), mustQuery(t, begun.Msg.GetUrl(), "state")
 	call := func(q url.Values, cookie string) int {
-		return redirect(h.server.slackCatalogueCallback, slackCatalogueCallbackPath, q, cookie).Code
+		return redirect(h.server.slackCatalogueCallback, slackconsole.CatalogueCallbackPath, q, cookie).Code
 	}
 	for name, c := range map[string]struct {
 		got    int

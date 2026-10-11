@@ -32,6 +32,7 @@ import (
 	"github.com/truvity/sluis/internal/maintenance"
 	"github.com/truvity/sluis/internal/modcall"
 	"github.com/truvity/sluis/internal/refusal"
+	slackconsole "github.com/truvity/sluis/internal/slackapp/console"
 	"github.com/truvity/sluis/internal/telemetry"
 	"github.com/truvity/sluis/internal/version"
 	"github.com/truvity/sluis/storage/logattr"
@@ -327,9 +328,9 @@ func (s *ConsoleServer) Handler() http.Handler {
 	mux.HandleFunc("GET "+githubCatalogueCallbackPath, s.githubCatalogueCallback)
 	mux.HandleFunc("GET "+githubCatalogueSetupPath, s.githubCatalogueSetup)
 	// A catalogue Slack App's: after an owner installs it.
-	mux.HandleFunc("GET "+slackCatalogueCallbackPath, s.slackCatalogueCallback)
+	mux.HandleFunc("GET "+slackconsole.CatalogueCallbackPath, s.slackCatalogueCallback)
 	// A Slack workspace's own App: after an owner installs it.
-	mux.HandleFunc("GET "+slackWorkspaceCallbackPath, s.slackWorkspaceCallback)
+	mux.HandleFunc("GET "+slackconsole.WorkspaceCallbackPath, s.slackWorkspaceCallback)
 	// Creating the link App, and a person linking an account with it.
 	mux.HandleFunc("GET "+githubLinkAppCallbackPath, s.githubLinkAppCallback)
 	mux.HandleFunc("GET "+githubLinkPath, s.githubLinkPage)
