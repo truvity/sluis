@@ -175,10 +175,12 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 }
 
 // serve is the module's methods for the other modules: the on-demand mint and
-// the grants listing.
+// the grants listing for the issuer, and the console's page and the three
+// things a person does there.
 func serve(m *minter.Minter) *modcall.Server {
 	s := modcall.NewServer(rpc.Module)
 	rpc.Register(s, m)
+	rpc.RegisterConsole(s, m)
 	return s
 }
 
