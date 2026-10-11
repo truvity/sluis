@@ -24,7 +24,7 @@ const explainUsage = `Usage: sluisctl explain --policy <policy.yaml> --audience 
                         [--format yaml|json]
 
 Says what a token for one client would carry for one caller: the groups kept,
-the groups dropped with the reason, the claim fragments the kept groups add,
+the groups dropped with the reason, the claim fragments of every held group,
 how long the token would live and which of the client's required groups admits
 the caller. Secrets and registered claims (iss, sub, aud, exp...) are never
 printed, and no token is minted.

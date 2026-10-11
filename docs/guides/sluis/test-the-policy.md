@@ -26,15 +26,7 @@ sluisctl explain --policy policy.yaml --audience logs \
     --email ana@example.test --directory-group dms-team@example.test
 ```
 
-The output is the groups the token keeps for that client, the groups scoping drops with the reason, the claims the kept groups add, the lifetime and the required group that admits the caller. Use `--subject` for a workload. Verify: a client that is not declared is refused.
-
-As an operator you can ask the running issuer instead: use `--live` in place of `--policy`, and leave out `--directory-group`.
-
-```sh
-sluisctl explain --live --audience logs --email ana@example.test
-```
-
-It answers from the directory snapshots the issuer holds, so a group joined a minute ago may not show yet. The ask is audited. Verify: the output matches the offline one for the same groups.
+The output lists the groups kept and dropped, the claims, the lifetime and the admitting group. Use `--subject` for a workload, or `--live` instead of `--policy` to ask the issuer as an operator. Verify: an undeclared client is refused.
 
 ## 4. Ask the live console
 

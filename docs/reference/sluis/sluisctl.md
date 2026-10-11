@@ -135,9 +135,7 @@ sluisctl explain --live [--issuer <url>] [--client <id>] --audience <client> \
     (--email <addr> | --subject <workload subject>) [--format yaml|json]
 ```
 
-`explain` answers "what will this caller's token for this client carry?" offline, from a rendered policy document (the four top-level keys `apiVersion`, `exchange`, `apps` and `controllers` are read as the issuer reads them). It evaluates the caller, narrows the groups to the audience as token scoping does when enforced, and merges the kept groups' claim fragments. It needs no session, network or secret.
-
-`--live` asks the issuer instead, with your own `sluisctl login`. It answers from the policy in force and the directory snapshots the issuer holds, never the directory. The output is the offline output for the same facts. Only an operator may ask, because the answer lists another person's groups; each ask is audited as `roster.policy.explained`.
+`explain` answers "what will this caller's token for this client carry?" from a rendered policy document, offline, with no session or network. `--live` asks the issuer instead, as you, from its snapshots; it never reads the directory. The output is the same for the same facts. Only an operator may ask, and each ask is audited as `roster.policy.explained`.
 
 | Flag | Meaning |
 |---|---|
@@ -149,7 +147,7 @@ sluisctl explain --live [--issuer <url>] [--client <id>] --audience <client> \
 | `--subject` | A workload: `<cluster>:k8s:<namespace>:<name>` (or the older spellings) or `aws:<account>:role/<path><name>` |
 | `--format` | `yaml` (default) or `json` |
 
-The output lists `held` (before scoping), `groups_kept`, `groups_dropped` (each with its reason) and `claims`: only the fragments the kept groups add. It also gives the `lifetime`, capped by the client's `ttl_cap`, and `admitted_by`, the first of the client's `requires` that the caller holds. The `groups` claim is `groups_kept`; registered claims (`iss`, `sub`, `aud`, `exp`) and secrets are never printed. A policy with token scoping not yet enforced still mints the unscoped set; `explain` shows what enforcing gives.
+The output lists `held`, `groups_kept`, `groups_dropped` (each with its reason), the `claims` of every held group, the `lifetime` and `admitted_by`. Registered claims and secrets are never printed. Without enforced scoping a token still carries every held group; `explain` shows what enforcing gives.
 
 ## Where things are kept
 

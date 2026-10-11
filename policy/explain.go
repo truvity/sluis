@@ -14,7 +14,7 @@ type DroppedGroup struct {
 
 // Explanation is what a token for one client would carry for one caller: the
 // groups kept and dropped by [Policy.ScopeGroups], the claim fragments of
-// the groups kept ([Policy.ClaimsFor]), how long the token would live and
+// every group held ([Policy.Evaluate]: scoping narrows only `groups`), how long the token would live and
 // which `requires` group of the client admits the caller. It holds no
 // secret and no registered claim (`iss`, `sub`, `aud`, `exp`...): only what the
 // policy decides.
@@ -44,7 +44,8 @@ var registeredClaims = []string{"iss", "sub", "aud", "exp", "nbf", "iat", "jti",
 
 // Explain answers "what would a token for audience carry for this caller",
 // with the same steps the issuer takes with token scoping enforced: Evaluate,
-// ScopeGroups(audience), ClaimsFor(kept). An audience that is not a declared
+// ScopeGroups(audience); the claims are
+// the evaluated ones, every held group's fragments, as a token carries them. An audience that is not a declared
 // client is an error, not an empty answer.
 func (p Policy) Explain(audience string, in Input) (Explanation, error) {
 	client, ok := p.Clients[audience]
@@ -74,7 +75,7 @@ func (p Policy) Explain(audience string, in Input) (Explanation, error) {
 			Reason: "outside the audience's scope: not named by the client's requires, and not kept by a groups override",
 		})
 	}
-	claims, _ := Plain(p.ClaimsFor(kept)).(map[string]any)
+	claims, _ := Plain(result.Claims).(map[string]any)
 	if claims == nil {
 		claims = map[string]any{}
 	}
