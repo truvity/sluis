@@ -319,7 +319,7 @@ func (a *LambdaArgs) hostsModule(role string) bool {
 
 // newModuleFunctions makes the function of each module of [ModuleFunctions] on
 // newModuleFunction, with the role ModuleRoleStatements renders for it and the
-// aliases `live` and `live-issuer`: the one the schedules and the issuer's runs
+// aliases `live` and `live-issuer` (and, for google, `live-console`): the one the schedules and the issuer's runs
 // invoke and the one its calls go through. Nothing is shared with the issuer's
 // function but the account.
 func newModuleFunctions(ctx *pulumi.Context, name string, a *LambdaArgs, child pulumi.ResourceOption) (*moduleFunctions, error) {
@@ -331,6 +331,13 @@ func newModuleFunctions(ctx *pulumi.Context, name string, a *LambdaArgs, child p
 	out := &moduleFunctions{fns: map[string]*moduleFunction{}}
 	for _, p := range plans {
 		p := p
+		callers := []string{ClassIssuer}
+		if p.role == RoleGoogle {
+			// The console's Workspace pages and consent are the Google module's
+			// (D-v176-1 b): its alias for the class `console` is the one the
+			// issuer's console calls through.
+			callers = append(callers, ClassConsole)
+		}
 		fa := &ModuleFunctionArgs{
 			Name: name + "-" + p.role, FunctionName: p.name,
 			Package: p.pkg, PackageSHA256: p.pkgSHA, PackageVersion: a.PackageVersion, Release: a.Release, Artifacts: a.Artifacts,
@@ -338,7 +345,7 @@ func newModuleFunctions(ctx *pulumi.Context, name string, a *LambdaArgs, child p
 			DocumentVersion: moduleDocumentVersion(p.role),
 			MemoryMB:        p.memory, TimeoutSeconds: p.time, ReservedConcurrency: p.reserved,
 			LogRetentionDays: a.LogRetentionDays, PermissionsBoundaryArn: a.PermissionsBoundaryArn, Tags: a.Tags,
-			Callers: []string{ClassIssuer},
+			Callers: callers,
 			Policy:  a.modulePolicy(p.role, roles),
 		}
 		// A pass that failed is the next one's: no retry by the platform.
