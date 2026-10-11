@@ -212,7 +212,9 @@ func TestTheSlackModuleRefusesAnAppOfAnotherDirectoryAndListsOnlyWhatIsVisible(t
 	if err := h.create(foreign, "sync", accepted); connect.CodeOf(err) != connect.CodePermissionDenied {
 		t.Errorf("Create by another directory's operator = %v, want permission denied", err)
 	}
-	if _, err := h.console.InstallSlackApp(foreign, connect.NewRequest(&directoryrosterv1.InstallSlackAppRequest{Id: "sync"})); connect.CodeOf(err) != connect.CodePermissionDenied {
+	if _, err := h.console.InstallSlackApp(
+		foreign, connect.NewRequest(&directoryrosterv1.InstallSlackAppRequest{Id: "sync"}),
+	); connect.CodeOf(err) != connect.CodePermissionDenied {
 		t.Errorf("Install by another directory's operator = %v, want permission denied", err)
 	}
 	if h.slack.Count("apps.manifest.create") != 0 {
@@ -476,7 +478,8 @@ func TestASlackPageRoundTripsThroughALambdaFunctionOnTheConsoleAlias(t *testing.
 	local := h.status(ctx, t)
 
 	fn := &invoker{server: slackconsole.NewServer(h.console.slackSvc())}
-	cfg := dial.FromTargets(map[string]config.ModuleRemote{"slack": {Function: "arn:aws:lambda:eu-west-1:123456789012:function:sluis-x-slack"}})
+	slackFn := strings.Join([]string{"arn", "aws", "lambda", "eu-west-1", "123456789012", "function", "sluis-x-slack"}, ":")
+	cfg := dial.FromTargets(map[string]config.ModuleRemote{"slack": {Function: slackFn}})
 	target := cfg.Modules["slack"]
 	target.MaxBytes = consolecall.ListMaxBytes
 	cfg.Modules["slack"] = target

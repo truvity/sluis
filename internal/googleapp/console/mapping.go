@@ -76,6 +76,7 @@ func reasonEnum(r hub.DomainReason) directoryrosterv1.DomainReason {
 	}
 }
 
+// DomainsProto is a workspace's domains as the contract tells them.
 func DomainsProto(domains []hub.DomainStanding) []*directoryrosterv1.WorkspaceDomain {
 	out := make([]*directoryrosterv1.WorkspaceDomain, 0, len(domains))
 	for _, d := range domains {
@@ -91,6 +92,7 @@ func DomainsProto(domains []hub.DomainStanding) []*directoryrosterv1.WorkspaceDo
 	return out
 }
 
+// WorkspaceProto is a connected workspace as the contract tells it.
 func WorkspaceProto(v *hub.WorkspaceView) *directoryrosterv1.Workspace {
 	ws := v.Workspace
 	return &directoryrosterv1.Workspace{

@@ -9,7 +9,10 @@ import (
 
 func TestASealedLinkStateOpensOnlyWithTheSecretWithinTheWindow(t *testing.T) {
 	now := time.Now()
-	st := linkState{Expires: now.Add(linkContinueWindow), Tokens: githubapp.UserTokens{AccessToken: "tok"}, UserID: 7, Login: "ada-gh", Verified: []string{"ada@globex.example"}}
+	st := linkState{
+		Expires: now.Add(linkContinueWindow), Tokens: githubapp.UserTokens{AccessToken: "tok"}, UserID: 7, Login: "ada-gh",
+		Verified: []string{"ada@globex.example"},
+	}
 	sealed, err := sealLinkState("secret", st)
 	if err != nil {
 		t.Fatal(err)

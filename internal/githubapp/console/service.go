@@ -38,12 +38,13 @@ import (
 	"github.com/truvity/sluis/storage/logattr"
 )
 
-// Catalogue is every App a deployment declares, and MintRing the last
-// installation tokens asked of each: the shared server names them through the
-// module's door and imports no other package of the provider.
+// The shared server names these through the module's door and imports no other
+// package of the provider.
 type (
+	// Catalogue is every App a deployment declares.
 	Catalogue = catalogue.Catalogue
-	MintRing  = mints.Ring
+	// MintRing is the last installation tokens asked of each App.
+	MintRing = mints.Ring
 )
 
 // Deps is what the module's console handlers act on.

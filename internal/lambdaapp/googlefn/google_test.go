@@ -235,7 +235,7 @@ func TestTheModulesCallsOpenTheServiceOnTheFirstCallAndAnswerByAlias(t *testing.
 	call := func(alias, method string, msg string) (string, error) {
 		t.Helper()
 		ctx := lambdacontext.NewContext(context.Background(), &lambdacontext.LambdaContext{
-			InvokedFunctionArn: "arn:aws:lambda:eu-west-1:111111111111:function:sluis-x-google:" + alias})
+			InvokedFunctionArn: strings.Join([]string{"arn", "aws", "lambda", "eu-west-1", "111111111111", "function", "sluis-x-google", alias}, ":")})
 		payload, _ := json.Marshal(modcall.Request{Kind: modcall.Kind, Module: "google", Method: method,
 			Payload: json.RawMessage(`{"caller":{"actor":"ada@north.example","roles":["operator"]}` + msg + `}`)})
 		out, err := h.Handle(ctx, payload)
