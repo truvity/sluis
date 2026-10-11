@@ -59,7 +59,7 @@ The release's ServiceAccount has `get`, `update` and `patch` on ConfigMaps `<rel
 
 | Item | Value |
 |---|---|
-| Modules that serve | `github` (`mint_installation`, `github.console.*`) and `slack` (`slack.console.*`), when `modules.<module>.enabled` |
+| Modules that serve | `github` (`mint_installation`, `github.console.*`), `slack` (`slack.console.*`) and `cloudflare` (`mint`, `granted`), when `modules.<module>.enabled` |
 | Listener | `<module>.serve.address` in the module's document, `:8081`; `GET /healthz` needs no credential |
 | Caller | Only the issuer's ServiceAccount, `<module>.serve.issuers`: it holds both the `issuer` and the `console` class |
 | Credential | A projected token minted for `<module>.serve.audience` (the module's name), checked with a TokenReview |

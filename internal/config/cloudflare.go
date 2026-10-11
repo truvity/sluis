@@ -46,6 +46,11 @@ type CloudflareServe struct {
 	// Audience is the audience a caller's projected token must have been
 	// minted for; the module's name when unset.
 	Audience string `json:"audience,omitempty"`
+	// Issuers are the subjects of the issuer's ServiceAccount
+	// (`system:serviceaccount:<namespace>:<name>`) that may call the listener
+	// on Kubernetes; each is both the issuer class (the mint) and the console
+	// class. Required by the listener; Lambda ignores it.
+	Issuers []string `json:"issuers,omitempty"`
 }
 
 // CloudflareRemote is the Cloudflare module in another process: a Lambda
@@ -152,6 +157,9 @@ func (c *Cloudflare) Validate() error {
 		}
 		if _, _, err := net.SplitHostPort(sv.Address); sv.Address != "" && err != nil {
 			errs = append(errs, fmt.Errorf("cloudflare.serve.address: %q is not host:port", sv.Address))
+		}
+		if err := validateIssuers("cloudflare.serve.issuers", sv.Issuers); err != nil {
+			errs = append(errs, err)
 		}
 	}
 	for i, g := range c.ForbiddenPermissionGroups {

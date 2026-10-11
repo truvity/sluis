@@ -270,7 +270,7 @@ func TestTheGitHubAndSlackModulesServeTheIssuerOnRPC(t *testing.T) {
 		}
 		return doc
 	}
-	for _, m := range []string{"github", "slack"} {
+	for _, m := range []string{"github", "slack", "cloudflare"} {
 		doc := document(m)
 		if got, _ := dig(doc, m, "serve", "address"); got != ":8081" {
 			t.Errorf("%s.serve.address is %v", m, got)

@@ -134,6 +134,7 @@ The module's document as a map, as YAML, before its apiVersion. Takes
 {{- $serve := deepCopy (dig "serve" dict $cf) -}}
 {{- $_ := set $serve "address" ($serve.address | default (printf ":%s" (include "sluis.moduleRPCPort" (dict "root" $root "module" "cloudflare")))) -}}
 {{- $_ := set $serve "audience" ($serve.audience | default (include "sluis.moduleAudience" (dict "root" $root "module" "cloudflare"))) -}}
+{{- $_ := set $serve "issuers" ($serve.issuers | default (list (printf "system:serviceaccount:%s:%s" $root.Release.Namespace (include "sluis.moduleAccountName" (dict "root" $root "module" "issuer"))))) -}}
 {{- $_ := set $cf "serve" $serve -}}
 {{- $_ := set $doc "cloudflare" $cf -}}
 {{- end -}}

@@ -55,11 +55,16 @@ func (s *ModuleServe) Validate(at string) error {
 	if len(s.Issuers) == 0 {
 		return fmt.Errorf("%s.issuers: name the issuer's ServiceAccount (system:serviceaccount:<namespace>:<name>); without it no caller could be let in", at)
 	}
-	for _, sub := range s.Issuers {
+	return validateIssuers(at+".issuers", s.Issuers)
+}
+
+// validateIssuers holds each subject to the form of a ServiceAccount.
+func validateIssuers(at string, issuers []string) error {
+	for _, sub := range issuers {
 		rest, ok := strings.CutPrefix(sub, "system:serviceaccount:")
 		namespace, name, found := strings.Cut(rest, ":")
 		if !ok || !found || namespace == "" || name == "" || strings.Contains(name, ":") {
-			return fmt.Errorf("%s.issuers: %q is not system:serviceaccount:<namespace>:<name>", at, sub)
+			return fmt.Errorf("%s: %q is not system:serviceaccount:<namespace>:<name>", at, sub)
 		}
 	}
 	return nil
