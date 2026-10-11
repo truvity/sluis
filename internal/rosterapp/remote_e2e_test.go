@@ -70,8 +70,6 @@ const (
 	e2eLinkUser  = "platform@north.example"
 )
 
-var e2eModules = []string{"github", "slack", "google", "cloudflare"}
-
 func e2eFunction(module string) string { return "sluis-" + lambdatest.Instance + "-" + module }
 
 // e2ePEM is an App's private key.
