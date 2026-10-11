@@ -3,6 +3,9 @@ package console
 import (
 	"context"
 
+	"github.com/truvity/sluis/internal/slackapp"
+	slackcatalogue "github.com/truvity/sluis/internal/slackapp/catalogue"
+
 	"github.com/truvity/sluis/internal/slackapp/catalogueapp"
 	"github.com/truvity/sluis/internal/slackroster/connection"
 	"github.com/truvity/sluis/internal/slackroster/reconcile"
@@ -42,3 +45,15 @@ type SharedRecords interface {
 type StatusReports interface {
 	Reports(ctx context.Context) (map[string]string, error)
 }
+
+// The types the console's configuration names without importing the Slack
+// module's packages.
+type (
+	// APIOption configures the calls to Slack: a test points them at a fake.
+	APIOption = slackapp.Option
+	// Catalogue is every Slack App a deployment declares.
+	Catalogue = slackcatalogue.Catalogue
+)
+
+// ValidAppID reports whether id is a catalogue App's id.
+func ValidAppID(id string) bool { return slackcatalogue.ValidID(id) }

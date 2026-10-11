@@ -24,6 +24,15 @@ const (
 	MethodCreateApp         = "console.create_app"
 	MethodInstallApp        = "console.install_app"
 	MethodCompleteCatalogue = "console.complete_catalogue"
+
+	MethodListChannels        = "console.list_channels"
+	MethodCreateChannel       = "console.create_channel"
+	MethodUpdateChannel       = "console.update_channel"
+	MethodDeleteChannel       = "console.delete_channel"
+	MethodListSharedChannels  = "console.list_shared_channels"
+	MethodCreateSharedChannel = "console.create_shared_channel"
+	MethodUpdateSharedChannel = "console.update_shared_channel"
+	MethodDeleteSharedChannel = "console.delete_shared_channel"
 )
 
 // Register puts the console methods on the module's server.
@@ -40,6 +49,15 @@ func Register(s *modcall.Server, c *Service) {
 	handle(c, s, MethodCreateApp, c.CreateSlackApp)
 	handle(c, s, MethodInstallApp, c.InstallSlackApp)
 	handleJSON(c, s, MethodCompleteCatalogue, c.CompleteCatalogue)
+
+	handle(c, s, MethodListChannels, c.ListSlackChannels, consolecall.List())
+	handle(c, s, MethodCreateChannel, c.CreateSlackChannel)
+	handle(c, s, MethodUpdateChannel, c.UpdateSlackChannel)
+	handle(c, s, MethodDeleteChannel, c.DeleteSlackChannel)
+	handle(c, s, MethodListSharedChannels, c.ListSlackSharedChannels, consolecall.List())
+	handle(c, s, MethodCreateSharedChannel, c.CreateSlackSharedChannel)
+	handle(c, s, MethodUpdateSharedChannel, c.UpdateSlackSharedChannel)
+	handle(c, s, MethodDeleteSharedChannel, c.DeleteSlackSharedChannel)
 }
 
 // NewServer is the module's server with the console methods on it: what a
