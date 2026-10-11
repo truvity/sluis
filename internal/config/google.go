@@ -2,8 +2,10 @@
 package config
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -130,4 +132,28 @@ func LoadGoogle(file string) (*SluisGoogle, error) {
 		return nil, &policyconfig.Error{File: file, Err: err}
 	}
 	return &out, nil
+}
+
+// DeclaredSecrets are the secrets the document declares the module reads: the
+// key of every declared workspace and the OAuth client that reopens one
+// connected by consent (its id too, unless the document gives it). Every one is
+// of a kind the Google module owns; the policy's client secrets and the
+// issuer's keys are not named here because the module has no policy and no
+// signer.
+func (s *SluisGoogle) DeclaredSecrets() []DeclaredSecret {
+	var out []DeclaredSecret
+	for i := range s.Google.Workspaces {
+		w := &s.Google.Workspaces[i]
+		out = append(out, DeclaredSecret{Kind: SecretWorkspaceKey, Subject: w.ID, Name: w.KeySecret})
+	}
+	if o := s.Google.OAuthClient; o != nil && o.Provider != "" {
+		if o.ID == "" {
+			out = append(out, DeclaredSecret{Kind: SecretSignInClientID, Subject: o.Provider, Name: "providers/google/" + o.Provider + "/client-id"})
+		}
+		out = append(out, DeclaredSecret{Kind: SecretSignInClientSecret, Subject: o.Provider, Name: "providers/google/" + o.Provider + "/client-secret"})
+	}
+	slices.SortFunc(out, func(a, b DeclaredSecret) int {
+		return cmp.Or(strings.Compare(a.Kind, b.Kind), strings.Compare(a.Subject, b.Subject), strings.Compare(a.Name, b.Name))
+	})
+	return slices.Compact(out)
 }

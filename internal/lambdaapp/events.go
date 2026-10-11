@@ -177,6 +177,8 @@ type RefreshResult struct {
 	Ran        int    `json:"ran"`
 	Contended  int    `json:"contended"`
 	Failed     int    `json:"failed"`
+	// Paused are the workspaces left alone because the module is under maintenance.
+	Paused int `json:"paused,omitempty"`
 }
 
 // KindCloudflare is the event an EventBridge Scheduler schedule sends the `http`
@@ -226,7 +228,7 @@ func (h *HTTP) checkDeclared(ctx context.Context) (any, error) {
 // scheduled handles an event of the http function that is not a request.
 func (h *HTTP) scheduled(ctx context.Context, kind string) (any, error) {
 	if kind == KindRefresh {
-		return h.refreshDirectory(ctx)
+		return h.refreshDirectory(ctx, nil)
 	}
 	if kind == KindCloudflare {
 		return h.tickCloudflare(ctx)
@@ -238,17 +240,38 @@ func (h *HTTP) scheduled(ctx context.Context, kind string) (any, error) {
 		oneLine(kind), KindTick, KindRun, KindRefresh, KindCheck, KindBackup)
 }
 
-// refreshDirectory runs one directory refresh pass.
-func (h *HTTP) refreshDirectory(ctx context.Context) (any, error) {
+// refreshDirectory runs one directory refresh pass: over every workspace, or
+// over the one the event names ({"kind":"refresh","workspace":"<id>"}) in a
+// function that can refresh a single one. A nil payload is every workspace.
+func (h *HTTP) refreshDirectory(ctx context.Context, payload json.RawMessage) (any, error) {
 	if h.refresh == nil {
 		return nil, errors.New("this function has no directory to refresh")
+	}
+	run := h.refresh
+	if len(payload) > 0 {
+		var event struct {
+			Workspace string `json:"workspace"`
+		}
+		if err := json.Unmarshal(payload, &event); err != nil {
+			return nil, fmt.Errorf("the event is not {\"kind\":\"refresh\",\"workspace\":...}: %w", err)
+		}
+		if event.Workspace != "" {
+			if h.refreshWorkspace == nil {
+				return nil, errors.New("this function refreshes every workspace and none alone: the event names a workspace")
+			}
+			if !targetPattern.MatchString(event.Workspace) || strings.Contains(event.Workspace, "..") {
+				return nil, errors.New("the event's workspace is too long or has a character a workspace id has not")
+			}
+			workspace := event.Workspace
+			run = func(ctx context.Context) (RefreshResult, error) { return h.refreshWorkspace(ctx, workspace) }
+		}
 	}
 	defer func() {
 		if h.settle != nil {
 			h.settle()
 		}
 	}()
-	res, err := h.refresh(ctx)
+	res, err := run(ctx)
 	if err != nil {
 		return nil, err
 	}
