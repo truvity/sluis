@@ -44,7 +44,7 @@ func discoveredChannels(
 	// install, else what its own report says.
 	workspaceOfTeam := map[string]string{}
 	for key := range p.Slack.Workspaces {
-		if team := book.team(key); team != "" {
+		if team := book.Team(key); team != "" {
 			workspaceOfTeam[team] = key
 		}
 		// The report's own team names the workspace too, so a team recorded
@@ -73,7 +73,7 @@ func discoveredChannels(
 	}
 	rows := map[string]*discoveredRow{}
 	for _, key := range slices.Sorted(maps.Keys(sightings)) {
-		if _, declared := p.Slack.Workspaces[key]; !declared || !book.may(id, access.RoleViewer, key) {
+		if _, declared := p.Slack.Workspaces[key]; !declared || !book.May(id, access.RoleViewer, key) {
 			continue
 		}
 		for _, d := range sightings[key] {
@@ -132,7 +132,7 @@ func discoveredChannels(
 		// the rest.
 		for _, key := range slices.Sorted(maps.Keys(p.Slack.Workspaces)) {
 			present := slices.ContainsFunc(view.Sides, func(s *directoryrosterv1.SlackDiscoveredSide) bool { return s.Workspace == key })
-			if book.may(id, access.RoleViewer, key) && !present {
+			if book.May(id, access.RoleViewer, key) && !present {
 				view.Sides = append(view.Sides, &directoryrosterv1.SlackDiscoveredSide{Workspace: key, Privacy: privacyUnknown})
 			}
 		}
@@ -152,7 +152,7 @@ func discoveredChannels(
 		})
 		view.ManagedAs = managedAs(records, channelID, host, hostName(view, host))
 		view.Managed = row.managed || view.ManagedAs != ""
-		view.CanManage = available && !view.Managed && host != "" && book.mayAct(id, host)
+		view.CanManage = available && !view.Managed && host != "" && book.MayAct(id, host)
 		out = append(out, view)
 	}
 	return out

@@ -15,6 +15,10 @@ type Target struct {
 	// TokenFile is where the pod's projected token for a URL target is mounted;
 	// [DefaultTokenFile] when unset.
 	TokenFile string `json:"tokenFile,omitempty"`
+	// MaxBytes bounds a request payload and a result to this module in bytes,
+	// above [DefaultMaxBytes] for a module whose methods list ([MaxBytes]); zero
+	// is the default.
+	MaxBytes int `json:"maxBytes,omitempty"`
 }
 
 // DefaultTokenFile is where the projected token for a module's Service is

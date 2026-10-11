@@ -60,11 +60,34 @@ type Caller struct {
 	Roles []string `json:"roles,omitempty"`
 	// Workspaces are the roles held over one directory workspace each.
 	Workspaces map[string]string `json:"workspaces,omitempty"`
+	// Source says how the actor was established, so the trail names a workload
+	// or a recovery as what it is: "person" for an address, "workload", or
+	// "recovery"; empty for anyone else.
+	Source string `json:"source,omitempty"`
+	// Origin is the console's own address, where the provider sends the browser
+	// back (the redirect of an install). The console asserts it like the rest
+	// of the snapshot; a method that needs none ignores it.
+	Origin string `json:"origin,omitempty"`
 }
+
+// The values of [Caller.Source].
+const (
+	SourcePerson   = "person"
+	SourceWorkload = "workload"
+	SourceRecovery = "recovery"
+)
 
 // Snapshot takes the caller of an authorized identity.
 func Snapshot(id access.Identity) Caller {
 	c := Caller{Actor: id.Who()}
+	switch {
+	case id.Source == access.SourceWorkload:
+		c.Source = SourceWorkload
+	case id.Source == access.SourceRecovery:
+		c.Source = SourceRecovery
+	case id.Email != "":
+		c.Source = SourcePerson
+	}
 	if id.Role != access.RoleNone {
 		c.Roles = []string{string(id.Role)}
 	}
@@ -83,6 +106,12 @@ func Snapshot(id access.Identity) Caller {
 // the strongest installation-wide role in Roles, and Workspaces as scopes.
 func (c Caller) Identity() access.Identity {
 	id := access.Identity{Email: c.Actor}
+	switch c.Source {
+	case SourceWorkload:
+		id = access.Identity{Subject: c.Actor, Source: access.SourceWorkload}
+	case SourceRecovery:
+		id = access.Identity{Subject: c.Actor, Source: access.SourceRecovery}
+	}
 	for _, r := range c.Roles {
 		if role := access.Role(r); role.Implies(id.Role) && role.Implies(access.RoleViewer) {
 			id.Role = role
@@ -106,6 +135,9 @@ type Envelope struct {
 
 // Problem is a refusal or a failure a person should read, told as data.
 type Problem struct {
+	// Code is the Connect code the console answers with, by its name
+	// ("failed_precondition"); empty is a failed precondition.
+	Code string `json:"code,omitempty"`
 	// Summary is one line.
 	Summary string `json:"summary"`
 	// Detail is what went wrong, safe to show the signed-in person.
