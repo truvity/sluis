@@ -4,7 +4,7 @@ Move a stack whose `NewLambda` created its signing keys to keys you supply with 
 
 ## Before you start
 
-- `Keys.Sign` is a symmetric key's alias. To keep an existing key, use the wrapped-signing alias, `alias/sluis-signing-wrapped` unless you changed it. Asymmetric keys of remote signing do not fit.
+- `Keys.Sign` is a symmetric key's alias. To keep an existing key, use the alias you set as `WrappedSigning.KeyAlias` (`alias/sluis-signing-wrapped` if you kept the old default). Asymmetric keys of remote signing do not fit.
 - The key policy admits the function's role. While `LegacySigningContext` is true, it carries `WrappedKeyPolicyStatements` for the older ring entries.
 
 ## Steps
