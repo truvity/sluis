@@ -29,7 +29,7 @@ GitHub has no API to change an App's permissions, events or name. To fix drift, 
 
 ## Events
 
-The load refuses `package` (use `registry_package`) and `ping`, and an event whose permission is not declared at read or above:
+`package` is refused; use `registry_package`. Each event needs its permission:
 
 | Event | Permission |
 |---|---|
@@ -39,7 +39,8 @@ The load refuses `package` (use `registry_package`) and `ping`, and an event who
 | `workflow_run`, `workflow_job` | `actions` |
 | `issues` | `issues` |
 | `check_run`, `check_suite` | `checks` |
-| `deployment`, `status` | `deployments`, `statuses` |
+| `deployment` | `deployments` |
+| `status` | `statuses` |
 
 ## Objects
 
