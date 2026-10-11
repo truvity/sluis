@@ -29,7 +29,7 @@ func every() []*record.Record {
 		Sources: []string{"engineers@acme.example"}, Members: []string{"a.person@example.com"},
 		PerSide: map[string]bool{"acme": true, "globex": false, "initech": true}}
 	consoleChannel := audit.SlackConsoleChannel{Workspace: "acme", Name: "platform", Private: true, Mode: "strict",
-		Sources: []string{"engineers@acme.example", "ops@acme.example"}}
+		Sources: []string{"engineers@acme.example", "ops@acme.example"}, Members: []string{"A.Person@Example.com"}}
 	sa := audit.SlackCatalogueApp{ID: "sync", App: "A0123", Workspace: "acme", Team: "T0123", Scopes: []string{"channels:read", "users:read"}}
 	return []*record.Record{
 		audit.SlackWorkspaceConnected(person, sw),
@@ -374,5 +374,57 @@ func TestARekeyIsABlockAction(t *testing.T) {
 	if err := rec.RecordDurable(context.Background(), audit.SecretsRekeyed(audit.Person("oleg@example.com"),
 		audit.SecretsRekey{Installation: "example", Key: "alias/k", Phase: audit.RekeyStarted, Planned: 1, Names: []string{"/sluis/example/a"}}, audit.Succeeded())); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// The writer of a deployment that declares external identifiers opaque refuses
+// a batch holding a person target that reads as something typed: an address,
+// or anything with whitespace (audit/internal/writer, looksDirect). The rule is
+// restated here because audit/ is a module of its own that sluis cannot import
+// from; this holds every record of every action to it.
+func TestNoPersonTargetReadsAsAnAddress(t *testing.T) {
+	c, _, err := audit.Catalogue()
+	if err != nil {
+		t.Fatal(err)
+	}
+	checked := 0
+	for _, r := range every() {
+		for i, tg := range r.GetTargets() {
+			if !c.TargetTypes[tg.GetType()].IsPerson {
+				continue
+			}
+			checked++
+			if strings.ContainsAny(tg.GetId(), "@ \t\n") {
+				t.Errorf("%s: targets[%d] %s %q reads as an address: the writer refuses it when identifiers are opaque",
+					r.GetAction(), i, tg.GetType(), tg.GetId())
+			}
+		}
+	}
+	if checked == 0 {
+		t.Fatal("no person target found: the check looks at nothing")
+	}
+}
+
+// Every Slack record, console channels included, is held to the same rule, and
+// the member of a channel is the same identifier in each.
+func TestSlackConsoleChannelMembersAreMintedIdentifiers(t *testing.T) {
+	ch := audit.SlackConsoleChannel{Workspace: "acme", Name: "platform", Members: []string{" A.Person@Example.com ", "a.person@example.com", "b@example.com"}}
+	for _, r := range []*record.Record{
+		audit.SlackConsoleChannelCreated(audit.System(), ch),
+		audit.SlackConsoleChannelUpdated(audit.System(), ch, "members: 1 -> 2"),
+		audit.SlackConsoleChannelDeleted(audit.System(), ch),
+	} {
+		var users []string
+		for _, tg := range r.GetTargets() {
+			if tg.GetType() == "directory_user" {
+				users = append(users, tg.GetId())
+			}
+		}
+		if len(users) != 2 || users[0] == users[1] || strings.ContainsAny(strings.Join(users, ""), "@ ") {
+			t.Errorf("%s: directory users %v, want two minted identifiers", r.GetAction(), users)
+		}
+		if !slices.Contains(users, audit.DirectoryUserID("a.person@example.com")) {
+			t.Errorf("%s: %v lacks the identifier of the first member", r.GetAction(), users)
+		}
 	}
 }
