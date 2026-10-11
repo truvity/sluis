@@ -15,19 +15,11 @@ const DefaultTokenFile = "/var/run/secrets/sluis/cloudflare/token"
 
 // Dial is the [Minting] in the module the document's `cloudflare.remote` names:
 // its Lambda function (the `live-issuer` alias) or its Kubernetes Service.
-//
-// Deprecated: `cloudflare.remote` is read as `calls.modules.cloudflare`
-// (removed in v1.78); a caller with a [config.Calls] uses the document's routing
-// and [dial.Dial] directly.
 func Dial(ctx context.Context, r *config.CloudflareRemote, log *slog.Logger) (*Client, error) {
 	if r == nil {
 		return nil, errors.New("cloudflare.remote is not set")
 	}
-	cfg, err := dial.FromConfig(nil, &config.Cloudflare{Remote: r})
-	if err != nil {
-		return nil, err
-	}
-	router, err := dial.Dial(ctx, cfg, CallerIssuer, nil)
+	router, err := dial.Dial(ctx, dial.FromTargets(map[string]config.ModuleRemote{Module: r.Target()}), CallerIssuer, nil)
 	if err != nil {
 		return nil, err
 	}
