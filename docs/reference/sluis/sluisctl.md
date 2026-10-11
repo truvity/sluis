@@ -33,7 +33,7 @@ sluisctl restore start 20261010T020000Z-3fa9c1 --confirm example --wait
 
 sluisctl render --installation installation.yaml --out rendered/   # the service and policy documents
 sluisctl policy render policy/ -o policy.yaml   # the one policy document an installation reads
-sluisctl explain --policy policy.yaml --audience logs --email ana@example.test   # what that token would carry
+sluisctl explain --policy policy.yaml --audience logs --email ana@example.test
 ```
 
 ## Commands
@@ -57,7 +57,7 @@ sluisctl explain --policy policy.yaml --audience logs --email ana@example.test  
 | `backup run\|status\|list`, `restore preview\|start\|resume\|status` | invoke the backup and restore functions | [backup](#backup-and-restore) |
 | `render` | an installation in, the service and policy documents out | [render](#render-an-installation-in-the-two-documents-out) |
 | `policy render` | the one policy document an installation reads, from its layers | [policy render](#policy-render-the-one-policy-document) |
-| `explain` | what a token for an audience would carry for a caller, from a policy document | [explain](#explain-what-a-token-would-carry) |
+| `explain` | what a token would carry | [explain](#explain) |
 
 | Detail | Behavior |
 |---|---|
@@ -124,7 +124,7 @@ sluisctl policy render [-o <file>] <file or directory>
 
 The result passes every check the service runs at start. Exit codes as `render`.
 
-## `explain`: what a token would carry
+## `explain`
 
 ```sh
 sluisctl explain --policy <policy.yaml> --audience <client> \
@@ -132,17 +132,12 @@ sluisctl explain --policy <policy.yaml> --audience <client> \
     [--directory-group <email>]... [--format yaml|json]
 ```
 
-`explain` answers "what will this caller's token for this client carry?" offline, from a rendered policy document (the four top-level keys `apiVersion`, `exchange`, `apps` and `controllers` are read as the issuer reads them). It evaluates the caller, narrows the groups to the audience as token scoping does when enforced, and merges the kept groups' claim fragments, `claim_merge` included. It needs no session, network or secret.
-
 | Flag | Meaning |
 |---|---|
-| `--policy` | The rendered policy document |
-| `--audience` | The client. One that is not declared is refused (exit `2`) |
-| `--email` | A person. The directory is not asked: give their directory groups with `--directory-group` |
-| `--subject` | A workload: `<cluster>:k8s:<namespace>:<name>` (or the older spellings) or `aws:<account>:role/<path><name>` |
-| `--format` | `yaml` (default) or `json` |
-
-The output lists `held` (before scoping), `groups_kept`, `groups_dropped` (each with its reason) and `claims`: only the fragments the kept groups add. The `groups` claim is `groups_kept`; registered claims (`iss`, `sub`, `aud`, `exp`) and secrets are never printed. A policy with token scoping not yet enforced still mints the unscoped set; `explain` shows what enforcing gives.
+| `--policy` | The policy document |
+| `--audience` | The client |
+| `--email` | A person |
+| `--subject` | A workload |
 
 ## Where things are kept
 
