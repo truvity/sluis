@@ -19,6 +19,7 @@ type SSM struct {
 
 	mu     sync.Mutex
 	params map[string]string
+	reads  []string
 }
 
 // NewSSM starts a fake holding params.
@@ -35,6 +36,15 @@ func NewSSM(t testing.TB, params map[string]string) *SSM {
 
 // URL is the endpoint to put in a document's `secrets.endpoint`.
 func (f *SSM) URL() string { return f.srv.URL }
+
+// Reads are the parameters and paths asked for so far, in order, by whatever
+// reached this fake: a test that gives each function its own fake can say what
+// that function never read.
+func (f *SSM) Reads() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.reads...)
+}
 
 // Put sets a parameter.
 func (f *SSM) Put(name, value string) {
@@ -61,6 +71,13 @@ func (f *SSM) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	_ = json.Unmarshal(body, &in)
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if in.Name != "" {
+		f.reads = append(f.reads, in.Name)
+	}
+	f.reads = append(f.reads, in.Names...)
+	if in.Path != "" {
+		f.reads = append(f.reads, in.Path)
+	}
 	reply := func(status int, v any) {
 		w.Header().Set("Content-Type", "application/x-amz-json-1.1")
 		w.WriteHeader(status)
