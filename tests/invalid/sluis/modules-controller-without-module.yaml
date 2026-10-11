@@ -1,6 +1,5 @@
-# split moves the controllers into their modules: a controller section whose module is off would run nowhere.
-# error: the issuer no longer runs the controller, so nothing would
-split: true
+# Controllers run in their modules: a controller section whose module is off would run nowhere.
+# error: the issuer does not run controllers, so nothing would
 config:
   issuerURL: https://issuer.example
   controllers:

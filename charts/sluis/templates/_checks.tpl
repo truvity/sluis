@@ -318,12 +318,13 @@ that reads as a failure). Only `ports.adapter: dynamodb` shares them.
 {{- end -}}
 {{- end -}}
 {{- $adapter := include "sluis.stateAdapter" $root -}}
-{{- /* With `split` the controllers' replicas are their modules', not the issuer's. */ -}}
-{{- $replicas := int $root.Values.replicaCount -}}
-{{- $what := "replicaCount" -}}
-{{- if include "sluis.split" $root -}}
-{{- $replicas = 1 -}}
-{{- $what = "modules.<controller>.replicas" -}}
+{{- /* A controller's replicas are its module's, not the issuer's; in documents mode the issuer runs them. */ -}}
+{{- $replicas := 1 -}}
+{{- $what := "modules.<controller>.replicas" -}}
+{{- if include "sluis.documentsMode" $root -}}
+{{- $replicas = int $root.Values.replicaCount -}}
+{{- $what = "replicaCount" -}}
+{{- else -}}
 {{- range $kind := list "github" "slack" -}}
 {{- $replicas = max $replicas (int (dig "replicas" 1 (get $root.Values.modules $kind) | default 1)) -}}
 {{- end -}}

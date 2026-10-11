@@ -1,0 +1,18 @@
+# maxReplicas under minReplicas is a bound that cannot be met.
+# error: is below minReplicas
+config:
+  issuerURL: https://issuer.example
+exchange:
+  clusters:
+    - name: example-cluster
+      issuer: https://oidc.eu-example-1.example/id/EXAMPLE
+      jwksUri: https://oidc.eu-example-1.example/id/EXAMPLE/keys
+modules:
+  issuer:
+    resources:
+      requests:
+        cpu: 100m
+    autoscaling:
+      enabled: true
+      minReplicas: 4
+      maxReplicas: 2

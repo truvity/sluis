@@ -363,7 +363,7 @@ secretEnv: []
 # an account of their own (`serviceAccount`): the backup role reads every
 # module and writes the archive, and is not the service's. The pods carry
 # their own labels, so the service's Service and NetworkPolicy never select
-# them. Per-module Deployments are not in the chart: the process is still one.
+# them.
 #
 #   backup:
 #     enabled: true
@@ -432,8 +432,8 @@ restore:
 # Telemetry is the OpenTelemetry SDK's own environment (ADR 0006), never the
 # config file (ADR 0032). With `otlp.endpoint` set, every pod of `renders: app`
 # gets OTEL_EXPORTER_OTLP_ENDPOINT, OTEL_EXPORTER_OTLP_PROTOCOL and an
-# OTEL_SERVICE_NAME of `sluis` (the one process's name: the controllers
-# report under it), SLUIS_LEGACY_METRICS from `legacyMetrics`, then each
+# OTEL_SERVICE_NAME of `sluis-<module>` (each module reports under its own
+# name), SLUIS_LEGACY_METRICS from `legacyMetrics`, then each
 # `extraEnv` entry. Unset, nothing is rendered and the pods export nothing.
 # How to wire it: docs/reference/sluis/telemetry.md.
 telemetry:
@@ -845,6 +845,11 @@ route:
   #     namespace: gateway-system
   parentRefs: []
 
+# One NetworkPolicy per module, when enabled.
+#   * Ingress: the issuer takes the gateway and the namespaces that call it,
+#     and the controllers' pods; github, google and cloudflare take /rpc from
+#     the issuer's pods only; slack takes nothing.
+#   * Egress (below): DNS, the module's peers, HTTPS and what `extra` adds.
 networkPolicy:
   enabled: false
   # Namespaces allowed to reach the issuer. Everything with a browser
@@ -852,6 +857,25 @@ networkPolicy:
   # the proxies verifying tokens and the workloads exchanging them.
   clients: []
   gatewayNamespace: ""
+  # With `egress.enabled: false` the pods keep unrestricted egress (and the policies are
+  # then ingress-only). A NetworkPolicy cannot name a host, so the providers
+  # (api.github.com, slack.com, Google, Cloudflare), the cloud APIs and the API
+  # server are one HTTPS rule: narrow `https.cidrs` to what the fleet allows.
+  egress:
+    enabled: true
+    # Where the cluster's DNS runs.
+    dnsNamespace: kube-system
+    https:
+      cidrs: [0.0.0.0/0]
+      ports: [443]
+    # Rules appended to a module's egress, as NetworkPolicyEgressRule: the
+    # audit receiver, a collector, a secret store, an API server on 6443.
+    extra:
+      issuer: []
+      github: []
+      slack: []
+      google: []
+      cloudflare: []
 
 serviceAccount:
   name: ""
@@ -1070,46 +1094,60 @@ adapters:
       audience: ""
       expirationSeconds: 3600
 
+# The default resources of every module; a module's own `modules.<m>.resources` replaces them.
 resources: {}
 podAnnotations: {}
 nodeSelector: {}
 tolerations: []
 
-# One workload per module (ADR 0071 and the v1.76 split). `split: false`, the
-# default in this release, keeps today's single Deployment, which runs the
-# issuer and the controllers `config.controllers` names, and renders nothing
-# from `modules`. DEPRECATED: `split: false` goes in v1.77 (decision D-v176-9).
-#
-# `split: true` renders, for each module that is enabled, a Deployment, a
-# ServiceAccount named <full name>-<module> and a ConfigMap with the module's
-# own document; github, google and cloudflare get a Service on /rpc as well.
-# The issuer keeps the release's own Service, so the routes are unchanged.
+# One workload per module (ADR 0071, the v1.76 split; decision D-v176-9). The
+# chart renders no single Deployment that runs everything: the issuer is always
+# rendered, and each other module when it is enabled. For each module:
+# a Deployment, a ServiceAccount named <full name>-<module>, a ConfigMap with
+# the module's own document, a PodDisruptionBudget and, with
+# `networkPolicy.enabled`, a NetworkPolicy. github, google and cloudflare get a
+# Service on /rpc as well. The issuer keeps the release's own Service, so the
+# routes are unchanged. The issuer, and only the issuer, may scale with an HPA.
 #   * The controllers' Role is bound to the github and slack accounts only.
 #   * The accounts of the modules other modules call (github, google,
 #     cloudflare) are bound to system:auth-delegator, for the TokenReview that
 #     checks a caller's projected ServiceAccount token.
-#   * The issuer's document is `config` without `controllers`, plus
-#     `calls.modules.<module>` ({url, audience, tokenFile}) for each enabled
-#     module that answers calls, and the issuer pod projects one token per
-#     audience. A module's audience is its own name unless `audience` says
-#     otherwise.
+#   * The issuer's document is `config` without `controllers`, plus a
+#     `<module>.remote` ({url, audience, tokenFile}) for each enabled module
+#     that answers calls: that is how the issuer routes to it. The issuer pod
+#     projects one token per audience. A module's audience is its own name
+#     unless `audience` says otherwise.
 #   * A controller's section stays in `config.controllers.<kind>` (it still
 #     feeds the Apps' pushes and the checks); the module's document is that
 #     section with `modules.<kind>.config` over it. Naming a controller there
-#     while its module is off is refused.
-# `documents.service` is not supported with `split` yet: the chart has to write
-# `calls` into the issuer's document.
-split: false
+#     while its module is off is refused, and so is enabling a module with no
+#     section for it.
+#   * With `documents.service` the issuer's document is rendered verbatim, and
+#     its pod runs what that document names. No other module can be enabled,
+#     because the chart cannot write the remotes into a rendered document.
 modules:
   issuer:
-    enabled: true
-    # null: replicaCount.
+    # null: replicaCount. Not with autoscaling.
     replicas: null
     resources: {}
     # repository and tag override the chart's image for this module; unset
-    # takes `image` (and `image.perModule`) as the single Deployment does.
+    # takes `image` (and `image.perModule`).
     image: {}
+    # The account is the release's own `serviceAccount.name` when that is set,
+    # and takes the release's `serviceAccount.awsRoleArn` under irsa.
     serviceAccount: {}
+    # maxUnavailable 1 unless minAvailable is given (say one of the two).
+    podDisruptionBudget:
+      enabled: true
+    # A HorizontalPodAutoscaler for the issuer (autoscaling/v2), which then owns
+    # the replica count. A utilisation target is a share of the module's
+    # resources.requests, which it requires.
+    autoscaling:
+      enabled: false
+      minReplicas: 2
+      maxReplicas: 4
+      targetCPUUtilizationPercentage: 80
+      targetMemoryUtilizationPercentage: null
   github:
     enabled: false
     replicas: null
@@ -1119,6 +1157,8 @@ modules:
     # The audience of the tokens that call this module. Default: github.
     audience: ""
     serviceAccount: {}
+    podDisruptionBudget:
+      enabled: true
     # The module's document (controller-github), over config.controllers.github.
     config: {}
   slack:
@@ -1127,6 +1167,8 @@ modules:
     resources: {}
     image: {}
     serviceAccount: {}
+    podDisruptionBudget:
+      enabled: true
     # The module's document (controller-slack), over config.controllers.slack.
     config: {}
   google:
@@ -1137,7 +1179,9 @@ modules:
     rpcPort: 8081
     audience: ""
     serviceAccount: {}
-    # The module's document (sluis-google).
+    podDisruptionBudget:
+      enabled: true
+    # The module's document (sluis-google). Required once the module is enabled.
     config: {}
   cloudflare:
     enabled: false
@@ -1147,8 +1191,12 @@ modules:
     rpcPort: 8081
     audience: ""
     serviceAccount: {}
+    podDisruptionBudget:
+      enabled: true
     # The module's document: a sluis document with `cloudflare.presets`. The
     # chart fills `cloudflare.serve` ({address, audience}) when it is unset.
+    # Required once the module is enabled; the issuer's own document then holds
+    # only `cloudflare.remote`.
     config: {}
 
 # The console that shows this issuer's sessions.

@@ -1,0 +1,14 @@
+# minAvailable at the replicas allows no eviction, so a node drain would hang.
+# error: no pod could ever be evicted
+config:
+  issuerURL: https://issuer.example
+replicaCount: 2
+exchange:
+  clusters:
+    - name: example-cluster
+      issuer: https://oidc.eu-example-1.example/id/EXAMPLE
+      jwksUri: https://oidc.eu-example-1.example/id/EXAMPLE/keys
+modules:
+  issuer:
+    podDisruptionBudget:
+      minAvailable: 2

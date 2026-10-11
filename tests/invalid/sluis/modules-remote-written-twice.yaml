@@ -1,0 +1,18 @@
+# The chart writes the issuer's route to an enabled module: a remote in config would be overwritten.
+# error: config.cloudflare.remote is set and modules.cloudflare.enabled is true
+config:
+  issuerURL: https://issuer.example
+  cloudflare:
+    remote:
+      url: http://elsewhere.example:8081
+exchange:
+  clusters:
+    - name: example-cluster
+      issuer: https://oidc.eu-example-1.example/id/EXAMPLE
+      jwksUri: https://oidc.eu-example-1.example/id/EXAMPLE/keys
+modules:
+  cloudflare:
+    enabled: true
+    config:
+      cloudflare:
+        presets: {}

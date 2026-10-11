@@ -1,7 +1,7 @@
 # sluis chart
 
-The chart deploys `sluis serve` as one Deployment from the image `ghcr.io/truvity/sluis/sluis`.
-The process holds the issuer, the console and the GitHub and Slack controllers.
+The chart deploys one workload per module from the image `ghcr.io/truvity/sluis/sluis`: the issuer (OIDC, the signer and the console), always, and the GitHub, Slack, Google and Cloudflare modules when `modules.<module>.enabled`.
+Each has its own Deployment, ServiceAccount, document (a ConfigMap) and PodDisruptionBudget, and with `networkPolicy.enabled` its own NetworkPolicy; the modules the issuer calls answer on `/rpc` only to its pods. The issuer alone may scale with an HPA.
 
 The chart is published to `oci://ghcr.io/truvity/charts/sluis` on every `v*` tag. The tag is the chart version.
 

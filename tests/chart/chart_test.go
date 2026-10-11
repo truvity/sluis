@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"sort"
 	"strings"
 	"testing"
 
@@ -20,8 +21,8 @@ import (
 // What each ConfigMap is named for: where its config lives in the values, and
 // which schema its binary validates it against.
 //
-// The one process's service document, controllers' sections included, always;
-// and the backup module's, which the chart renders only when it is asked for
+// The issuer's service document, always; the other modules' documents are
+// derived from the values and held by modules_test.go; and the backup module's, which the chart renders only when it is asked for
 // (`backup.enabled` or `restore.enabled`), for the backup CronJob and the
 // restore Job alike.
 var components = map[string]struct {
@@ -29,7 +30,7 @@ var components = map[string]struct {
 	schema   string
 	optional bool
 }{
-	"serve":  {[]string{"config"}, "sluis", false},
+	"issuer": {[]string{"config"}, "sluis", false},
 	"backup": {[]string{"backup", "config"}, "sluis-backup", true},
 }
 
@@ -117,10 +118,25 @@ func load(t *testing.T, path string) map[string]any {
 	return out
 }
 
-// The chart passes `config` through: the ConfigMap it renders for a component
+// moduleDocuments are the modules' ConfigMaps, which the issuer's is not: each
+// is derived from the values (modules_test.go holds what), and the two
+// controllers' are files their binaries accept.
+var moduleDocuments = map[string]string{
+	"github":     "controller-github",
+	"slack":      "controller-slack",
+	"google":     "",
+	"cloudflare": "",
+}
+
+// callees are the modules the issuer routes to: the chart writes each one's
+// `<module>.remote` into the issuer's document.
+var callees = []string{"github", "google", "cloudflare"}
+
+// The chart passes `config` through: the ConfigMap it renders for the issuer
 // holds exactly the block the values gave, with nothing added but the
-// apiVersion the chart writes, renamed or dropped, and that block is a file
-// its binary accepts.
+// apiVersion the chart writes, the `<module>.remote` of each enabled module,
+// and without the controllers, which run in their own modules; and that block
+// is a file its binary accepts.
 func TestTheRenderedConfigurationIsTheValuesConfiguration(t *testing.T) {
 	defaults := load(t, filepath.Join("..", "..", "charts", "sluis", "values.yaml"))
 	cases, err := filepath.Glob(filepath.Join("..", "cases", "sluis", "*", "values.yaml"))
@@ -135,11 +151,6 @@ func TestTheRenderedConfigurationIsTheValuesConfiguration(t *testing.T) {
 				namespace = strings.TrimSpace(string(raw))
 			}
 			values := merge(defaults, load(t, shape))
-
-			// A split release renders one ConfigMap per module, held by split_test.go.
-			if split, _ := values["split"].(bool); split {
-				return
-			}
 
 			// A release given the rendered documents is held by documents_test.go:
 			// its ConfigMaps are those documents, not the values' `config`.
@@ -170,6 +181,19 @@ func TestTheRenderedConfigurationIsTheValuesConfiguration(t *testing.T) {
 				if !ok || !hasData || !strings.HasSuffix(name.(string), "-config") {
 					continue
 				}
+				if schema, isModule := moduleDocuments[component.(string)]; isModule {
+					seen[component.(string)]++
+					if schema != "" {
+						var doc any
+						if err := yaml.Unmarshal([]byte(data.(string)), &doc); err != nil {
+							t.Fatalf("%s: not YAML: %v", name, err)
+						}
+						if err := config.Validate(schema, doc); err != nil {
+							t.Errorf("%s is not a file %s accepts: %v", name, schema, err)
+						}
+					}
+					continue
+				}
 				c, known := components[component.(string)]
 				if !known {
 					t.Errorf("%s: a configuration for a component this test does not know", name)
@@ -187,6 +211,10 @@ func TestTheRenderedConfigurationIsTheValuesConfiguration(t *testing.T) {
 					t.Errorf("%s is rendered and the values have no %s", name, strings.Join(c.path, "."))
 					continue
 				}
+				given = withoutControllers(component.(string), given.(map[string]any))
+				// The issuer's routes to its modules are the chart's, held by modules_test.go;
+				// the document is compared, and validated, without them.
+				got = withoutRemotes(component.(string), got)
 				want := merge(map[string]any{"apiVersion": config.APIVersion(c.schema)}, given.(map[string]any))
 				if !reflect.DeepEqual(got, want) {
 					t.Errorf("%s is not %s of the values:\n got %v\nwant %v", name, strings.Join(c.path, "."), got, want)
@@ -196,7 +224,7 @@ func TestTheRenderedConfigurationIsTheValuesConfiguration(t *testing.T) {
 				}
 			}
 
-			// The other way: the service document always reaches a ConfigMap.
+			// The other way: the issuer's document always reaches a ConfigMap.
 			for component, c := range components {
 				if !rendered[component] && !c.optional {
 					t.Errorf("%s is configured and the chart rendered no ConfigMap for it", component)
@@ -212,6 +240,40 @@ func TestTheRenderedConfigurationIsTheValuesConfiguration(t *testing.T) {
 			}
 		}
 	}
+}
+
+// withoutControllers is the issuer's block as the chart writes it: the
+// controllers run in their modules, and their sections are not in its document.
+// In documents mode the document is the given one, which is not edited.
+func withoutControllers(component string, given map[string]any) map[string]any {
+	if component != "issuer" {
+		return given
+	}
+	out := map[string]any{}
+	for k, v := range given {
+		if k != "controllers" {
+			out[k] = v
+		}
+	}
+	return out
+}
+
+// withoutRemotes drops the `<module>.remote` the chart wrote into the issuer's
+// document, and the section it leaves empty.
+func withoutRemotes(component string, got any) any {
+	doc, ok := got.(map[string]any)
+	if !ok || component != "issuer" {
+		return got
+	}
+	for _, m := range callees {
+		if section, ok := doc[m].(map[string]any); ok {
+			delete(section, "remote")
+			if len(section) == 0 {
+				delete(doc, m)
+			}
+		}
+	}
+	return doc
 }
 
 // Every example the chart ships is a values file somebody copies: its config,
@@ -286,12 +348,13 @@ func TestTheRenderedPolicyDocumentLoads(t *testing.T) {
 	}
 }
 
-// The controllers are not Deployments of their own: whatever the values name,
-// the chart renders ONE Deployment, running `sluis serve`, and every volume it
-// mounts is one it defines. A controller the document names has its token, its
-// credentials and its records mounted where the binary's defaults look, and one
-// it does not name has none of them.
-func TestTheControllersRunInTheOneDeployment(t *testing.T) {
+// A Deployment per module (decision D-v176-9): the issuer always, every other
+// module when it is enabled, and never one that runs them all. Each runs its
+// own command, every volume it mounts is one it defines, and a controller's
+// token, credentials and records are mounted in the pod that runs it (its
+// module's, or in documents mode the issuer's, whose document names it) and
+// in no other.
+func TestEachModuleRunsItsOwnCommandInItsOwnDeployment(t *testing.T) {
 	cases, _ := filepath.Glob(filepath.Join("..", "cases", "sluis", "*", "values.yaml"))
 	defaults := load(t, filepath.Join("..", "..", "charts", "sluis", "values.yaml"))
 	checked := map[string]bool{}
@@ -300,71 +363,86 @@ func TestTheControllersRunInTheOneDeployment(t *testing.T) {
 		if mode, _ := values["renders"].(string); mode != "app" {
 			continue
 		}
-		// A split release has a Deployment per module: split_test.go.
-		if split, _ := values["split"].(bool); split {
-			continue
-		}
 		namespace := "default"
 		if raw, err := os.ReadFile(filepath.Join(filepath.Dir(shape), "namespace")); err == nil {
 			namespace = strings.TrimSpace(string(raw))
 		}
-		var deployments []map[string]any
-		for _, doc := range render(t, shape, namespace) {
-			if doc["kind"] == "Deployment" {
-				deployments = append(deployments, doc)
-			}
-		}
-		if len(deployments) != 1 {
-			t.Errorf("%s: %d Deployments, want one", shape, len(deployments))
-			continue
-		}
-		spec, _ := dig(deployments[0], "spec", "template", "spec")
-		pod, _ := spec.(map[string]any)
-		containers, _ := pod["containers"].([]any)
-		if len(containers) != 1 {
-			t.Errorf("%s: %d containers, want one", shape, len(containers))
-			continue
-		}
-		container := containers[0].(map[string]any)
-		if args, _ := container["args"].([]any); len(args) == 0 || args[0] != "serve" {
-			t.Errorf("%s: the container runs %v, want `serve`", shape, args)
-		}
-		volumes := map[string]bool{}
-		for _, v := range pod["volumes"].([]any) {
-			volumes[v.(map[string]any)["name"].(string)] = true
-		}
-		mounted := map[string]string{}
-		for _, m := range container["volumeMounts"].([]any) {
-			mount := m.(map[string]any)
-			name := mount["name"].(string)
-			if !volumes[name] {
-				t.Errorf("%s: the container mounts %s, which the pod does not define", shape, name)
-			}
-			mounted[name] = mount["mountPath"].(string)
-		}
+
+		// Which controllers run where.
 		controllers, _ := dig(values, "config", "controllers")
+		documents := false
 		if doc, _ := dig(values, "documents", "service"); doc != nil && doc != "" {
-			// The release is given the rendered service document: the controllers
-			// it names are the ones that run.
+			documents = true
 			var parsed map[string]any
 			if err := yaml.Unmarshal([]byte(doc.(string)), &parsed); err != nil {
 				t.Fatalf("%s: documents.service: %v", shape, err)
 			}
 			controllers = parsed["controllers"]
 		}
-		on, _ := controllers.(map[string]any)
-		for kind, want := range map[string][]string{
-			"github": {"github-token", "github-apps", "github-records"},
-			"slack":  {"slack-token", "slack-credentials", "slack-workspaces"},
-		} {
-			_, named := on[kind]
-			for _, name := range want {
-				if _, has := mounted[name]; has != named {
-					t.Errorf("%s: controllers.%s named is %v and %s mounted is %v", shape, kind, named, name, has)
-				}
+		named, _ := controllers.(map[string]any)
+		wantOn := map[string]bool{"issuer": true}
+		for _, m := range []string{"github", "slack", "google", "cloudflare"} {
+			if on, _ := dig(values, "modules", m, "enabled"); on == true {
+				wantOn[m] = true
 			}
-			if named {
-				checked[kind] = true
+		}
+
+		deployments := map[string]map[string]any{}
+		for _, doc := range render(t, shape, namespace) {
+			if doc["kind"] != "Deployment" {
+				continue
+			}
+			component, _ := dig(doc, "metadata", "labels", "app.kubernetes.io/component")
+			deployments[component.(string)] = doc
+		}
+		if len(deployments) != len(wantOn) {
+			t.Errorf("%s: Deployments for %v, want %v", shape, keysOf(deployments), keysOf(wantOn))
+			continue
+		}
+		for component := range wantOn {
+			deployment, ok := deployments[component]
+			if !ok {
+				t.Errorf("%s: no Deployment for the %s module", shape, component)
+				continue
+			}
+			spec, _ := dig(deployment, "spec", "template", "spec")
+			pod, _ := spec.(map[string]any)
+			containers, _ := pod["containers"].([]any)
+			if len(containers) != 1 {
+				t.Errorf("%s: %s: %d containers, want one", shape, component, len(containers))
+				continue
+			}
+			container := containers[0].(map[string]any)
+			if args, _ := container["args"].([]any); len(args) == 0 || args[0] != component {
+				t.Errorf("%s: the %s container runs %v, want `%s`", shape, component, args, component)
+			}
+			volumes := map[string]bool{}
+			for _, v := range pod["volumes"].([]any) {
+				volumes[v.(map[string]any)["name"].(string)] = true
+			}
+			mounted := map[string]string{}
+			for _, m := range container["volumeMounts"].([]any) {
+				mount := m.(map[string]any)
+				name := mount["name"].(string)
+				if !volumes[name] {
+					t.Errorf("%s: the %s container mounts %s, which the pod does not define", shape, component, name)
+				}
+				mounted[name] = mount["mountPath"].(string)
+			}
+			for kind, want := range map[string][]string{
+				"github": {"github-token", "github-apps", "github-records"},
+				"slack":  {"slack-token", "slack-credentials", "slack-workspaces"},
+			} {
+				_, named := named[kind]
+				runs := component == kind || (documents && component == "issuer" && named)
+				for _, name := range want {
+					if _, has := mounted[name]; has != runs {
+						t.Errorf("%s: the %s pod runs the %s controller is %v and mounts %s is %v", shape, component, kind, runs, name, has)
+					}
+				}
+				if runs {
+					checked[kind] = true
+				}
 			}
 		}
 	}
@@ -373,4 +451,13 @@ func TestTheControllersRunInTheOneDeployment(t *testing.T) {
 			t.Errorf("no case runs the %s controller: the sweep proved nothing", kind)
 		}
 	}
+}
+
+func keysOf[V any](m map[string]V) []string {
+	var out []string
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }

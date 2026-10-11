@@ -1,0 +1,65 @@
+# Every module on, with the controls around them: a NetworkPolicy per module
+# (/rpc ingress only from the issuer's pods, egress per module), a
+# PodDisruptionBudget per Deployment, and a HorizontalPodAutoscaler for the issuer.
+networkPolicy:
+  enabled: true
+  gatewayNamespace: gateway-system
+  clients: [proxies]
+  egress:
+    https:
+      cidrs: [10.0.0.0/8, 192.0.2.0/24]
+      ports: [443, 6443]
+    extra:
+      github:
+        - to:
+            - namespaceSelector:
+                matchLabels:
+                  kubernetes.io/metadata.name: audit
+          ports:
+            - {port: 8080, protocol: TCP}
+config:
+  issuerURL: https://issuer.example
+  # Two controller replicas need the leases in a shared State.
+  ports:
+    adapter: dynamodb
+    dynamodb:
+      table: sluis
+      region: eu-west-1
+  controllers:
+    github:
+      consoleURL: http://sluis.default.svc:8080/console
+    slack:
+      consoleURL: http://sluis.default.svc:8080/console
+modules:
+  issuer:
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+    autoscaling:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 6
+      targetCPUUtilizationPercentage: null
+      targetMemoryUtilizationPercentage: 75
+  github:
+    enabled: true
+    replicas: 2
+    podDisruptionBudget:
+      minAvailable: 1
+  slack:
+    enabled: true
+  google:
+    enabled: true
+    config:
+      instance: acme
+  cloudflare:
+    enabled: true
+    config:
+      cloudflare:
+        presets: {}
+exchange:
+  clusters:
+    - name: example-cluster
+      issuer: https://oidc.eu-example-1.example/id/EXAMPLE
+      jwksUri: https://oidc.eu-example-1.example/id/EXAMPLE/keys

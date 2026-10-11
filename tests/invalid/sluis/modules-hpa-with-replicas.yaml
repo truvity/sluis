@@ -1,0 +1,17 @@
+# The HPA owns the replica count.
+# error: the HorizontalPodAutoscaler owns the replica count
+config:
+  issuerURL: https://issuer.example
+exchange:
+  clusters:
+    - name: example-cluster
+      issuer: https://oidc.eu-example-1.example/id/EXAMPLE
+      jwksUri: https://oidc.eu-example-1.example/id/EXAMPLE/keys
+modules:
+  issuer:
+    replicas: 2
+    resources:
+      requests:
+        cpu: 100m
+    autoscaling:
+      enabled: true
