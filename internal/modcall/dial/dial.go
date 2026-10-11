@@ -87,21 +87,11 @@ func (b byModule) Call(ctx context.Context, module, method string, payload []byt
 	return c.Call(ctx, module, method, payload)
 }
 
-// FromConfig is the routing a document's `calls` says, with the deprecated
-// `cloudflare.remote` (cf, nil when the document has none) read as the
-// Cloudflare module's entry. It is here and not in internal/config so that the
-// configuration, which the Pulumi library imports, carries no module-call
-// transport.
-func FromConfig(calls *config.Calls, cf *config.Cloudflare) (modcall.Config, error) {
-	targets, err := calls.Targets(cf)
-	if err != nil {
-		return modcall.Config{}, err
-	}
-	return FromTargets(targets), nil
-}
-
-// FromTargets is the routing for the targets [config.Calls.Targets] returns.
-func FromTargets(targets map[string]config.CallTarget) modcall.Config {
+// FromTargets is the routing for the modules a document's [config.Sluis.Targets]
+// (or the controller's, or the v2 serve document's) returns. It is here and not
+// in internal/config so that the configuration, which the Pulumi library
+// imports, carries no module-call transport.
+func FromTargets(targets map[string]config.ModuleRemote) modcall.Config {
 	out := modcall.Config{}
 	if targets == nil {
 		return out
