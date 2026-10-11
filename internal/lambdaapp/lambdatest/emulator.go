@@ -33,8 +33,8 @@ import (
 
 // Region and Account are what the emulator's ARNs carry.
 const (
-	Region  = "eu-central-1"
-	Account = "000000000000"
+	Region  = "test-region-1"
+	Account = "111122223333"
 )
 
 // Call is one invocation the emulator served.
@@ -142,8 +142,7 @@ func (e *Emulator) serve(w http.ResponseWriter, r *http.Request) {
 	e.calls = append(e.calls, Call{Function: name, Qualifier: qualifier, Class: lambdacall.ClassOf(qualifier), Payload: body})
 	e.mu.Unlock()
 
-	switch r.Header.Get("X-Amz-Invocation-Type") {
-	case "DryRun":
+	if r.Header.Get("X-Amz-Invocation-Type") == "DryRun" {
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
