@@ -3,16 +3,10 @@ package rpc
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 
-	awsconfig "github.com/aws/aws-sdk-go-v2/config"
-	awslambda "github.com/aws/aws-sdk-go-v2/service/lambda"
-
 	"github.com/truvity/sluis/internal/config"
-	"github.com/truvity/sluis/internal/consoleauth"
-	"github.com/truvity/sluis/internal/modcall"
-	"github.com/truvity/sluis/internal/modcall/lambdacall"
+	"github.com/truvity/sluis/internal/modcall/dial"
 )
 
 // DefaultTokenFile is where the pod's projected token for the Cloudflare module
@@ -25,28 +19,7 @@ func Dial(ctx context.Context, r *config.CloudflareRemote, log *slog.Logger) (*C
 	if r == nil {
 		return nil, errors.New("cloudflare.remote is not set")
 	}
-	cfg := modcall.Config{Modules: map[string]modcall.Target{Module: {Function: r.Function, URL: r.URL, Audience: r.Audience}}}
-	var lambda, http modcall.Caller
-	switch {
-	case r.Function != "":
-		awsCfg, err := awsconfig.LoadDefaultConfig(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("cloudflare.remote: %w", err)
-		}
-		lambda = lambdacall.New(awslambda.NewFromConfig(awsCfg, func(*awslambda.Options) {}), cfg).As(CallerIssuer)
-	case r.URL != "":
-		file := r.TokenFile
-		if file == "" {
-			file = DefaultTokenFile
-		}
-		src := consoleauth.File(file)
-		http = &modcall.HTTPCaller{
-			URLs:      map[string]string{Module: r.URL},
-			Audiences: map[string]string{Module: r.Audience},
-			Token:     func(ctx context.Context, _ string) (string, error) { return src.Token(ctx) },
-		}
-	}
-	router, err := modcall.NewRouter(cfg, nil, lambda, http)
+	router, err := dial.Dial(ctx, dial.FromTargets(map[string]config.ModuleRemote{Module: r.Target()}), CallerIssuer, nil)
 	if err != nil {
 		return nil, err
 	}
