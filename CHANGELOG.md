@@ -1,5 +1,7 @@
 ## Unreleased
 
+## v1.75.0
+
 ### Changed
 
 - **A function's role may list its own modules' parameter paths, so the hourly look for orphaned client secrets no longer fails on AWS.** `ModuleRoleStatements` granted a module's parameters as `.../external/<module>/*` and `.../internal/<module>/*`, but SSM authorises `GetParametersByPath` against the bare path ARN (`.../external/<module>`), which `/*` does not match. The issuer role was therefore refused the listing of `external/oidc` on every tick (CloudTrail, kernel estate: 4 an hour), `Secrets.List` returned the error, and `clientcreds.ReconcileOrphans` logged "the stored client secrets could not be listed, so orphans are not looked for" at WARN and returned: a stored client secret whose client had left the policy was neither marked `orphaned` nor reported (`client_secret.orphaned` audit record and its metric), so nothing told the operator to purge it. Creating and rotating the generated clients' secrets was unaffected. Each hosted module now carries a `SluisParametersList<Module>` statement allowing `ssm:GetParametersByPath` on exactly its own two bare path ARNs (`internal/<module>`, `external/<module>`) and nothing else; the get, put and delete grants keep `/*`. Cross-grants (`read-all`, `write-all`) are unchanged. An estate takes it by bumping the library and redeploying.
