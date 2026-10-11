@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -13,6 +14,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
+	"github.com/truvity/sluis/internal/audit"
 	"github.com/truvity/sluis/internal/consolecall"
 	"github.com/truvity/sluis/internal/modcall"
 	slackconsole "github.com/truvity/sluis/internal/slackapp/console"
@@ -242,5 +244,125 @@ func TestACatalogueCallbackTheModuleCannotAnswerIsRefusedOnceAndNeverRepeated(t 
 	h.server.UseSlack(nil)
 	if got := h.app(t, "sync"); got.GetState() != slackAppCreated {
 		t.Errorf("an install nobody answered left the App %s", got.GetState())
+	}
+}
+
+// controllerTrigger notes who is asked for a tick, and by which controller.
+type controllerTrigger struct {
+	mu   sync.Mutex
+	asks []string
+}
+
+func (c *controllerTrigger) Notify(_ context.Context, target string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.asks = append(c.asks, "plain:"+target)
+	return nil
+}
+
+func (c *controllerTrigger) NotifyController(_ context.Context, controller, target string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.asks = append(c.asks, controller+":"+target)
+	return nil
+}
+
+func (*controllerTrigger) Subscribe(func(string)) func() { return func() {} }
+
+// The channel pages answer the same through the module in this process and
+// through the module behind an HTTP Service; a write is the module's own tick
+// request, naming the Slack controller; and the trail names each listed person
+// by a minted identifier, never by address.
+func TestTheSlackChannelPagesWorkOverTheTransportTickTheModuleAndMintTheTrail(t *testing.T) {
+	h := newConnectHarness(t)
+	ticks := &controllerTrigger{}
+	h.console.deps.Trigger = ticks
+	ctx := as(northOp)
+
+	module := slackconsole.NewServer(h.console.slackSvc())
+	ts := httptest.NewServer(module.Handler(func(_ context.Context, bearer string) (string, error) { return bearer, nil }))
+	defer ts.Close()
+	h.console.deps.Modules.Slack = &modcall.HTTPCaller{
+		URLs:     map[string]string{"slack": ts.URL},
+		Token:    func(context.Context, string) (string, error) { return consolecall.Class, nil },
+		MaxBytes: consolecall.ListMaxBytes,
+	}
+
+	if err := h.createChannel(ctx, withMembers(chdef("acme", "eng", "partners@north.example"), "cy@north.example")); err != nil {
+		t.Fatalf("create over the transport: %v", err)
+	}
+	shared := def("partners", "acme", []string{"globex"}, []string{"partners@north.example"})
+	shared.Members = []string{"cy@north.example"}
+	if err := h.create(ctx, shared); err != nil {
+		t.Fatalf("create a shared channel over the transport: %v", err)
+	}
+	if listed := h.listChannels(ctx, t); len(listed.GetChannels()) != 1 || listed.GetChannels()[0].GetChannel().GetName() != "eng" {
+		t.Errorf("listed over the transport = %v", listed.GetChannels())
+	}
+	if got := h.list(ctx, t); len(got.GetChannels()) != 1 || got.GetChannels()[0].GetChannel().GetName() != "partners" {
+		t.Errorf("listed shared channels over the transport = %v", got.GetChannels())
+	}
+
+	// The module asked for the tick itself, naming the controller: the host
+	// and the guest of the shared channel, and the channel's workspace.
+	ticks.mu.Lock()
+	asks := slices.Clone(ticks.asks)
+	ticks.mu.Unlock()
+	for _, want := range []string{"slack:acme", "slack:globex"} {
+		if !slices.Contains(asks, want) {
+			t.Errorf("no tick was asked for as %q: %v", want, asks)
+		}
+	}
+	for _, ask := range asks {
+		if strings.HasPrefix(ask, "plain:") {
+			t.Errorf("a tick was asked for without naming the controller: %v", asks)
+		}
+	}
+
+	// The trail names the listed person by the minted identifier, and the
+	// address is nowhere in the record.
+	minted := audit.DirectoryUserID("cy@north.example")
+	for _, action := range []string{"roster.slack_console_channel.created", "roster.slack_shared_channel.created"} {
+		found := h.recorded.Find(action)
+		if len(found) != 1 {
+			t.Fatalf("%s: %d records", action, len(found))
+		}
+		var users []string
+		for _, tg := range found[0].GetTargets() {
+			if tg.GetType() == "directory_user" {
+				users = append(users, tg.GetId())
+			}
+		}
+		if !slices.Equal(users, []string{minted}) {
+			t.Errorf("%s: directory_user targets %v, want the minted %s", action, users, minted)
+		}
+		if strings.Contains(found[0].String(), "cy@north.example") {
+			t.Errorf("%s: the record carries the address: %v", action, found[0])
+		}
+	}
+}
+
+// The module asks the owner question of the channel's workspace on the snapshot:
+// an operator of another directory is refused a channel and a shared channel in
+// a workspace it does not own, though it is the console class that asks.
+func TestTheSlackModuleRefusesAChannelOfAWorkspaceTheCallerDoesNotOwn(t *testing.T) {
+	h := newConnectHarness(t)
+	module := h.console.slackModule()
+	south := consolecall.Caller{Actor: "sam@south.example", Workspaces: map[string]string{"C0south": "operator"}}
+	_, err := consolecall.Proxy[*directoryrosterv1.CreateSlackChannelRequest, *directoryrosterv1.CreateSlackChannelResponse](
+		context.Background(), module, slackconsole.Module, slackconsole.MethodCreateChannel, south,
+		&directoryrosterv1.CreateSlackChannelRequest{Channel: chdef("acme", "eng", "partners@north.example")})
+	var coded *modcall.Error
+	if !errors.As(err, &coded) || coded.Code != modcall.CodeForbidden {
+		t.Errorf("a channel in another directory's workspace = %v, want forbidden", err)
+	}
+	_, err = consolecall.Proxy[*directoryrosterv1.CreateSlackSharedChannelRequest, *directoryrosterv1.CreateSlackSharedChannelResponse](
+		context.Background(), module, slackconsole.Module, slackconsole.MethodCreateSharedChannel, south,
+		&directoryrosterv1.CreateSlackSharedChannelRequest{Channel: def("partners", "acme", []string{"globex"}, nil)})
+	if !errors.As(err, &coded) || coded.Code != modcall.CodeForbidden {
+		t.Errorf("a shared channel hosted in another directory's workspace = %v, want forbidden", err)
+	}
+	if len(h.storedChannels(t)) != 0 {
+		t.Error("a refused call wrote a record")
 	}
 }

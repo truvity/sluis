@@ -28,10 +28,7 @@ import (
 	"github.com/truvity/sluis/internal/modcall"
 	"github.com/truvity/sluis/internal/port"
 	"github.com/truvity/sluis/internal/settings"
-	"github.com/truvity/sluis/internal/slackapp"
-	slackcatalogue "github.com/truvity/sluis/internal/slackapp/catalogue"
 	slackconsole "github.com/truvity/sluis/internal/slackapp/console"
-	"github.com/truvity/sluis/internal/slackroster/reconcile"
 	"github.com/truvity/sluis/internal/version"
 	"github.com/truvity/sluis/storage/logattr"
 )
@@ -132,7 +129,7 @@ type ConsoleDeps struct {
 	GitHubCatalogueApps GitHubCatalogueApps
 	// SlackCatalogue is every Slack App the deployment declares. Nil
 	// declares none.
-	SlackCatalogue *slackcatalogue.Catalogue
+	SlackCatalogue *slackconsole.Catalogue
 	// SlackCatalogueApps is where catalogue Slack Apps are kept. Nil is a
 	// deployment keeping no state in Kubernetes, which can create none.
 	SlackCatalogueApps SlackCatalogueApps
@@ -151,7 +148,7 @@ type ConsoleDeps struct {
 	SlackWorkspaces SlackWorkspaces
 	// SlackAPI configures the calls to Slack that creating and installing
 	// an App make: a test points them at a fake. Nil is Slack.
-	SlackAPI []slackapp.Option
+	SlackAPI []slackconsole.APIOption
 	// GitHubMints is the last installation tokens asked of each App, kept
 	// by the half of this service that mints them. Nil is a deployment
 	// that mints none, or one whose issuer is another process; an App's
@@ -237,11 +234,12 @@ var (
 // reviewed in git. A console that could disagree with git was a second
 // source of truth and a merge to reconcile them.
 func NewConsole(_ context.Context, deps ConsoleDeps) (*Console, error) {
-	google := deps.Modules.Google
+	// The Google and Slack modules in this process are built over the console's own
+	// stores when the first page asks ([Console.google], [Console.slackModule]), so
+	// they are left unset here, not replaced by an empty one.
+	google, slack := deps.Modules.Google, deps.Modules.Slack
 	deps.Modules = deps.Modules.OrLocal(modcall.Local{})
-	// Unset is the in-process Google module (see [Console.google]), not an
-	// empty one.
-	deps.Modules.Google = google
+	deps.Modules.Google, deps.Modules.Slack = google, slack
 	c := &Console{deps: deps, connectors: map[string]Connector{}}
 	for _, conn := range deps.Connectors {
 		c.connectors[conn.Kind()] = conn
@@ -260,15 +258,6 @@ func (c *Console) notify(ctx context.Context, controller, target string) {
 		c.log().WarnContext(ctx, "a tick could not be requested",
 			logattr.SafeString("controller", controller), logattr.SafeString("target", target),
 			logattr.SafeError("error", err))
-	}
-}
-
-// notifyShared notifies every workspace a shared channel's record names: the
-// host, which invites, and each guest, which accepts.
-func (c *Console) notifyShared(ctx context.Context, ch reconcile.SharedChannel) {
-	c.notify(ctx, port.ControllerSlack, ch.Host)
-	for _, guest := range ch.With {
-		c.notify(ctx, port.ControllerSlack, guest)
 	}
 }
 

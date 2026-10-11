@@ -13,7 +13,6 @@ import (
 	"github.com/truvity/sluis/internal/audit"
 	"github.com/truvity/sluis/internal/consolecall"
 	"github.com/truvity/sluis/internal/modcall"
-	slackcatalogue "github.com/truvity/sluis/internal/slackapp/catalogue"
 	slackconsole "github.com/truvity/sluis/internal/slackapp/console"
 	"github.com/truvity/sluis/internal/slackroster/status"
 	"github.com/truvity/sluis/storage/logattr"
@@ -193,7 +192,7 @@ func (s *ConsoleServer) slackCatalogueCallback(w http.ResponseWriter, r *http.Re
 	}
 	learn := func(bind, who string) {
 		actor = who
-		if id, ok := strings.CutPrefix(bind, slackconsole.CatalogueBind); ok && slackcatalogue.ValidID(id) {
+		if id, ok := strings.CutPrefix(bind, slackconsole.CatalogueBind); ok && slackconsole.ValidAppID(id) {
 			app.ID = id
 		}
 	}
