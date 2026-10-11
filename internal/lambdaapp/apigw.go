@@ -39,6 +39,10 @@ type HTTP struct {
 	// refresh runs one pass of the directory refresh (the {"kind":"refresh"}
 	// event); nil when this function has no directory.
 	refresh func(context.Context) (RefreshResult, error)
+	// refreshWorkspace runs one pass for the one workspace the event names
+	// ({"kind":"refresh","workspace":"<id>"}); nil in a function that can only
+	// refresh every one, which refuses an event that names a workspace.
+	refreshWorkspace func(ctx context.Context, workspace string) (RefreshResult, error)
 	// cloudflare runs one pass over the Cloudflare presets (the
 	// {"kind":"cloudflare"} event); nil when the function has no such section.
 	// It returns the number of presets that failed and a one-line summary.
@@ -78,6 +82,13 @@ func (h *HTTP) WithRefresh(run func(context.Context) (RefreshResult, error)) *HT
 	return h
 }
 
+// WithRefreshWorkspace makes the function answer {"kind":"refresh","workspace":"<id>"}
+// events with run, for the one workspace the event names.
+func (h *HTTP) WithRefreshWorkspace(run func(ctx context.Context, workspace string) (RefreshResult, error)) *HTTP {
+	h.refreshWorkspace = run
+	return h
+}
+
 // WithCloudflare makes the function answer {"kind":"cloudflare"} events with run.
 func (h *HTTP) WithCloudflare(run func(context.Context) (failed int, summary string, err error)) *HTTP {
 	h.cloudflare = run
@@ -112,6 +123,9 @@ func (h *HTTP) Handle(ctx context.Context, payload json.RawMessage) (any, error)
 		}
 		if peek.Kind == KindTick || peek.Kind == KindRun {
 			return h.controller(ctx, payload)
+		}
+		if peek.Kind == KindRefresh {
+			return h.refreshDirectory(ctx, payload)
 		}
 		if peek.Kind == KindBackup {
 			return h.tickBackup(ctx, payload)
