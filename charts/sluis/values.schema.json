@@ -202,6 +202,72 @@
           "$ref": "#/definitions/config-controller-github.url",
           "description": "The console's API, which answers who holds a group."
         },
+        "github": {
+          "additionalProperties": false,
+          "description": "The GitHub module's routing (docs/decisions/0071). Unset keeps the module in this process.",
+          "properties": {
+            "remote": {
+              "additionalProperties": false,
+              "description": "Where the GitHub module is when it is not this process: the calls to it go there. Set exactly one of `function` and `url`. Unset keeps the module in this process.",
+              "properties": {
+                "audience": {
+                  "description": "The audience of that token. The module's name, `github`, when unset.",
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "function": {
+                  "description": "The module's Lambda function, name or ARN. It is invoked through the `live-<class>` alias of this process's caller class.",
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "tokenFile": {
+                  "description": "Where the projected token is mounted. `/var/run/secrets/sluis/github/token` when unset.",
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "url": {
+                  "$ref": "#/definitions/config-controller-github.url",
+                  "description": "The module's Kubernetes Service. A call carries the pod's projected ServiceAccount token."
+                }
+              },
+              "type": "object"
+            }
+          },
+          "type": "object"
+        },
+        "google": {
+          "additionalProperties": false,
+          "description": "The Google module's routing (docs/decisions/0071). Unset keeps the module in this process.",
+          "properties": {
+            "remote": {
+              "additionalProperties": false,
+              "description": "Where the Google module is when it is not this process: the calls to it go there. Set exactly one of `function` and `url`. Unset keeps the module in this process.",
+              "properties": {
+                "audience": {
+                  "description": "The audience of that token. The module's name, `google`, when unset.",
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "function": {
+                  "description": "The module's Lambda function, name or ARN. It is invoked through the `live-<class>` alias of this process's caller class.",
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "tokenFile": {
+                  "description": "Where the projected token is mounted. `/var/run/secrets/sluis/google/token` when unset.",
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "url": {
+                  "$ref": "#/definitions/config-controller-github.url",
+                  "description": "The module's Kubernetes Service. A call carries the pod's projected ServiceAccount token."
+                }
+              },
+              "type": "object"
+            }
+          },
+          "type": "object"
+        },
         "interval": {
           "$ref": "#/definitions/config-controller-github.duration",
           "default": "15m",
@@ -387,7 +453,7 @@
                       "type": "boolean"
                     },
                     "prefix": {
-                      "description": "A key prefix inside the bucket, for an installation that shares it. Names are `<prefix>/reports/<target>` and `<prefix>/snapshots/<directory>`.",
+                      "description": "A key prefix inside the bucket, for an installation that shares it.",
                       "minLength": 1,
                       "type": "string"
                     },
@@ -528,6 +594,147 @@
           "description": "The name the installation's objects carry. It must be the release's full name: the controller reads the report and the records the service writes under it.",
           "minLength": 1,
           "type": "string"
+        },
+        "secrets": {
+          "additionalProperties": false,
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "source": {
+                    "enum": [
+                      "file",
+                      "ssm"
+                    ]
+                  }
+                }
+              },
+              "then": {
+                "required": [
+                  "root"
+                ]
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "source": {
+                    "enum": [
+                      "env",
+                      "file"
+                    ]
+                  }
+                }
+              },
+              "then": {
+                "not": {
+                  "anyOf": [
+                    {
+                      "required": [
+                        "kmsKeyId"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "layout"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "grace"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          ],
+          "description": "How the secrets this document names are delivered (truvity/policy config.md section 5). Absent is `env`.",
+          "properties": {
+            "endpoint": {
+              "$ref": "#/definitions/config-controller-github.url",
+              "description": "`ssm`: overrides the SSM address, for LocalStack."
+            },
+            "grace": {
+              "$ref": "#/definitions/config-controller-github.duration",
+              "default": "24h",
+              "description": "`ssm`: how long the previous value of a rotated client secret is still accepted: the document's previous revision, while the current one is younger than this (docs/decisions/0039-the-issuer-generates-confidential-client-secrets.md, the overlap)."
+            },
+            "kmsKeyId": {
+              "description": "`ssm`: the id, ARN or alias of the customer-managed KMS key the parameters the service itself writes (its credentials) are encrypted with. Unset, the AWS-managed `alias/aws/ssm`. The `ssm` secrets adapter's `kmsKeyId` setting; naming another there is refused.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "layout": {
+              "default": "v4",
+              "description": "`ssm`: the storage layout of the installation's secrets. `v4`, the default, keeps them under `<root>/internal/config`, `<root>/internal/credentials` and `<root>/external/<kind>` (docs/decisions/0041-the-secret-contract.md). `v5` puts the module first, `<root>/internal/<module>/` and `<root>/external/<module>/` (docs/decisions/0072-storage-layout-v5-module-first.md), and needs `ports.dynamodb.tables`; the two do not mix. Layouts v3 and `transition` are gone; an installation still on one runs v1.74.x first.",
+              "enum": [
+                "v4",
+                "v5"
+              ]
+            },
+            "refresh": {
+              "$ref": "#/definitions/config-controller-github.duration",
+              "default": "1m",
+              "description": "`ssm`: how old a secret's copy may be before it is read again: a rotated secret reaches every instance within it."
+            },
+            "region": {
+              "description": "`ssm`: the region. Unset follows the AWS SDK's own resolution.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "root": {
+              "description": "`file`: the directory the secrets are mounted under. `ssm`: the installation's root, /sluis/<instance>.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "source": {
+              "default": "env",
+              "description": "`env`: the variable SLUIS_SECRET_<NAME> (the name upper-cased, every other character an underscore), for a local run. `file`: the file <root>/<name>, read on every use, so a rotated mount takes effect without a restart. `ssm`: the SecureString <root>/internal/config/<name> in AWS SSM Parameter Store, every one under the prefix read at once and again after `refresh` (root /sluis/<instance>).",
+              "enum": [
+                "env",
+                "file",
+                "ssm"
+              ]
+            }
+          },
+          "required": [
+            "source"
+          ],
+          "type": "object"
+        },
+        "slack": {
+          "additionalProperties": false,
+          "description": "The Slack module's routing (docs/decisions/0071). Unset keeps the module in this process.",
+          "properties": {
+            "remote": {
+              "additionalProperties": false,
+              "description": "Where the Slack module is when it is not this process: the calls to it go there. Set exactly one of `function` and `url`. Unset keeps the module in this process.",
+              "properties": {
+                "audience": {
+                  "description": "The audience of that token. The module's name, `slack`, when unset.",
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "function": {
+                  "description": "The module's Lambda function, name or ARN. It is invoked through the `live-<class>` alias of this process's caller class.",
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "tokenFile": {
+                  "description": "Where the projected token is mounted. `/var/run/secrets/sluis/slack/token` when unset.",
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "url": {
+                  "$ref": "#/definitions/config-controller-github.url",
+                  "description": "The module's Kubernetes Service. A call carries the pod's projected ServiceAccount token."
+                }
+              },
+              "type": "object"
+            }
+          },
+          "type": "object"
         },
         "tokenFile": {
           "default": "/var/run/secrets/github-roster/token",
@@ -758,6 +965,72 @@
           "minLength": 1,
           "type": "string"
         },
+        "github": {
+          "additionalProperties": false,
+          "description": "The GitHub module's routing (docs/decisions/0071). Unset keeps the module in this process.",
+          "properties": {
+            "remote": {
+              "additionalProperties": false,
+              "description": "Where the GitHub module is when it is not this process: the calls to it go there. Set exactly one of `function` and `url`. Unset keeps the module in this process.",
+              "properties": {
+                "audience": {
+                  "description": "The audience of that token. The module's name, `github`, when unset.",
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "function": {
+                  "description": "The module's Lambda function, name or ARN. It is invoked through the `live-<class>` alias of this process's caller class.",
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "tokenFile": {
+                  "description": "Where the projected token is mounted. `/var/run/secrets/sluis/github/token` when unset.",
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "url": {
+                  "$ref": "#/definitions/config-controller-slack.url",
+                  "description": "The module's Kubernetes Service. A call carries the pod's projected ServiceAccount token."
+                }
+              },
+              "type": "object"
+            }
+          },
+          "type": "object"
+        },
+        "google": {
+          "additionalProperties": false,
+          "description": "The Google module's routing (docs/decisions/0071). Unset keeps the module in this process.",
+          "properties": {
+            "remote": {
+              "additionalProperties": false,
+              "description": "Where the Google module is when it is not this process: the calls to it go there. Set exactly one of `function` and `url`. Unset keeps the module in this process.",
+              "properties": {
+                "audience": {
+                  "description": "The audience of that token. The module's name, `google`, when unset.",
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "function": {
+                  "description": "The module's Lambda function, name or ARN. It is invoked through the `live-<class>` alias of this process's caller class.",
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "tokenFile": {
+                  "description": "Where the projected token is mounted. `/var/run/secrets/sluis/google/token` when unset.",
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "url": {
+                  "$ref": "#/definitions/config-controller-slack.url",
+                  "description": "The module's Kubernetes Service. A call carries the pod's projected ServiceAccount token."
+                }
+              },
+              "type": "object"
+            }
+          },
+          "type": "object"
+        },
         "interval": {
           "$ref": "#/definitions/config-controller-slack.duration",
           "default": "15m",
@@ -943,7 +1216,7 @@
                       "type": "boolean"
                     },
                     "prefix": {
-                      "description": "A key prefix inside the bucket, for an installation that shares it. Names are `<prefix>/reports/<target>` and `<prefix>/snapshots/<directory>`.",
+                      "description": "A key prefix inside the bucket, for an installation that shares it.",
                       "minLength": 1,
                       "type": "string"
                     },
@@ -1084,6 +1357,147 @@
           "description": "The name the installation's objects carry. It must be the release's full name: the controller reads the report and the records the service writes under it.",
           "minLength": 1,
           "type": "string"
+        },
+        "secrets": {
+          "additionalProperties": false,
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "source": {
+                    "enum": [
+                      "file",
+                      "ssm"
+                    ]
+                  }
+                }
+              },
+              "then": {
+                "required": [
+                  "root"
+                ]
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "source": {
+                    "enum": [
+                      "env",
+                      "file"
+                    ]
+                  }
+                }
+              },
+              "then": {
+                "not": {
+                  "anyOf": [
+                    {
+                      "required": [
+                        "kmsKeyId"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "layout"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "grace"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          ],
+          "description": "How the secrets this document names are delivered (truvity/policy config.md section 5). Absent is `env`.",
+          "properties": {
+            "endpoint": {
+              "$ref": "#/definitions/config-controller-slack.url",
+              "description": "`ssm`: overrides the SSM address, for LocalStack."
+            },
+            "grace": {
+              "$ref": "#/definitions/config-controller-slack.duration",
+              "default": "24h",
+              "description": "`ssm`: how long the previous value of a rotated client secret is still accepted: the document's previous revision, while the current one is younger than this (docs/decisions/0039-the-issuer-generates-confidential-client-secrets.md, the overlap)."
+            },
+            "kmsKeyId": {
+              "description": "`ssm`: the id, ARN or alias of the customer-managed KMS key the parameters the service itself writes (its credentials) are encrypted with. Unset, the AWS-managed `alias/aws/ssm`. The `ssm` secrets adapter's `kmsKeyId` setting; naming another there is refused.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "layout": {
+              "default": "v4",
+              "description": "`ssm`: the storage layout of the installation's secrets. `v4`, the default, keeps them under `<root>/internal/config`, `<root>/internal/credentials` and `<root>/external/<kind>` (docs/decisions/0041-the-secret-contract.md). `v5` puts the module first, `<root>/internal/<module>/` and `<root>/external/<module>/` (docs/decisions/0072-storage-layout-v5-module-first.md), and needs `ports.dynamodb.tables`; the two do not mix. Layouts v3 and `transition` are gone; an installation still on one runs v1.74.x first.",
+              "enum": [
+                "v4",
+                "v5"
+              ]
+            },
+            "refresh": {
+              "$ref": "#/definitions/config-controller-slack.duration",
+              "default": "1m",
+              "description": "`ssm`: how old a secret's copy may be before it is read again: a rotated secret reaches every instance within it."
+            },
+            "region": {
+              "description": "`ssm`: the region. Unset follows the AWS SDK's own resolution.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "root": {
+              "description": "`file`: the directory the secrets are mounted under. `ssm`: the installation's root, /sluis/<instance>.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "source": {
+              "default": "env",
+              "description": "`env`: the variable SLUIS_SECRET_<NAME> (the name upper-cased, every other character an underscore), for a local run. `file`: the file <root>/<name>, read on every use, so a rotated mount takes effect without a restart. `ssm`: the SecureString <root>/internal/config/<name> in AWS SSM Parameter Store, every one under the prefix read at once and again after `refresh` (root /sluis/<instance>).",
+              "enum": [
+                "env",
+                "file",
+                "ssm"
+              ]
+            }
+          },
+          "required": [
+            "source"
+          ],
+          "type": "object"
+        },
+        "slack": {
+          "additionalProperties": false,
+          "description": "The Slack module's routing (docs/decisions/0071). Unset keeps the module in this process.",
+          "properties": {
+            "remote": {
+              "additionalProperties": false,
+              "description": "Where the Slack module is when it is not this process: the calls to it go there. Set exactly one of `function` and `url`. Unset keeps the module in this process.",
+              "properties": {
+                "audience": {
+                  "description": "The audience of that token. The module's name, `slack`, when unset.",
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "function": {
+                  "description": "The module's Lambda function, name or ARN. It is invoked through the `live-<class>` alias of this process's caller class.",
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "tokenFile": {
+                  "description": "Where the projected token is mounted. `/var/run/secrets/sluis/slack/token` when unset.",
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "url": {
+                  "$ref": "#/definitions/config-controller-slack.url",
+                  "description": "The module's Kubernetes Service. A call carries the pod's projected ServiceAccount token."
+                }
+              },
+              "type": "object"
+            }
+          },
+          "type": "object"
         },
         "tokenFile": {
           "default": "/var/run/secrets/slack-roster/token",
