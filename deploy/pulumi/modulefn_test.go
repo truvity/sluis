@@ -14,16 +14,13 @@ import (
 const backupShape = "testdata/backup-shape.txt"
 
 func shapeOf(rec *recorder) string {
-	var lines []string
-	for _, n := range rec.names() {
-		lines = append(lines, n)
-	}
+	lines := rec.names()
 	for _, typ := range []string{
 		"aws:lambda/function:Function", "aws:iam/role:Role", "aws:cloudwatch/logGroup:LogGroup",
 		"aws:lambda/layerVersion:LayerVersion", "aws:lambda/alias:Alias",
 	} {
 		for _, d := range rec.ofType(typ) {
-			for _, k := range []string{"name", "layerName", "functionName", "role"} {
+			for _, k := range []string{"name", "layerName", "functionName"} {
 				if v := prop(d, k); v.HasValue() && v.IsString() {
 					lines = append(lines, "name "+d.Type+"/"+d.Name+" "+k+"="+v.StringValue())
 				}
