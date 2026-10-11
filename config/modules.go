@@ -35,6 +35,30 @@ func Modules() []string {
 	return []string{ModuleCloudflare, ModuleGitHub, ModuleGoogle, ModuleSlack}
 }
 
+// ZipModules are the modules a release publishes a Lambda zip for, in a fixed
+// order: the issuer, the module functions of [Modules] and backup (which is
+// deployed twice, as the backup and the restore function). It is the one list
+// the goreleaser configuration, the release lists and the Pulumi library's
+// default package names are held to. There is no zip for the signer, the mint
+// (the github function serves it) or restore.
+func ZipModules() []string {
+	return append([]string{ModuleIssuer}, append(Modules(), ModuleBackup)...)
+}
+
+// ZipNameTemplate is the file name of a module's Lambda zip, `%s` being the
+// module and the version following it: `sluis-<module>_<version>_linux_arm64.zip`.
+// An estate pins one digest per zip, found in the release's checksums.txt
+// under this name.
+const ZipNameTemplate = "sluis-%s_%s_linux_arm64.zip"
+
+// ZipPrefix is what a module's zip name starts with, up to the version.
+func ZipPrefix(module string) string { return "sluis-" + module + "_" }
+
+// ZipName is the file name of the Lambda zip of module at version (no `v`).
+func ZipName(module, version string) string {
+	return fmt.Sprintf(ZipNameTemplate, module, version)
+}
+
 // FunctionNameOf is the name of a function: `aws.functions.<module>`, else
 // `sluis-<instance>-<module>`. The module is one of [Modules], [ModuleIssuer]
 // (the issuer, whose name `aws.functionName` also sets, as it did before the

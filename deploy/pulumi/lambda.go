@@ -905,7 +905,7 @@ func (a *LambdaArgs) validate() (LambdaArgs, error) {
 		if out.Release != nil {
 			base = out.Release.BaseURL
 		}
-		out.Package = artifact.AssetURL(base, v, "sluis-issuer_"+v+"_linux_arm64.zip")
+		out.Package = artifact.AssetURL(base, v, sluisconfig.ZipName(sluisconfig.ModuleIssuer, v))
 		if out.PackageVersion == "" {
 			out.PackageVersion = v
 		}

@@ -870,7 +870,7 @@ const MinPackageVersion = "1.63"
 // The release zip's name: sluis-<module>_<version>_linux_<arch>.zip for issuer, cloudflare, backup,
 // github, slack and google, or sluis-lambda_<version>_linux_<arch>.zip for a release before 1.75.
 var packageName = regexp.MustCompile(
-	`^sluis-(?:lambda|issuer|cloudflare|backup|github|slack|google)_v?([0-9]+)\.([0-9]+)\.[0-9]+[^_]*_linux_[a-z0-9]+\.zip$`)
+	`^sluis-(?:lambda|` + zipModulesAlt() + `)_v?([0-9]+)\.([0-9]+)\.[0-9]+[^_]*_linux_[a-z0-9]+\.zip$`)
 
 // checkVersion refuses a package older than this library: older than
 // MinPackageVersion, and older than this library's own minor when the build
