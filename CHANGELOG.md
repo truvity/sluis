@@ -1,5 +1,7 @@
 ## Unreleased
 
+## v1.76.0-rc.1
+
 **Upgrading from v1.75: follow the [v1.76 upgrade guide](docs/guides/sluis/upgrade/v1.76.md).**
 
 ### Added
