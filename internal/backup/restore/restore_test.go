@@ -153,10 +153,10 @@ func seed(t *testing.T, s *side) {
 
 	big := bytes.Repeat([]byte("B"), bigBlob)
 	for name, body := range map[string][]byte{
-		"reports/github/acme":  []byte(`{"status":"ok"}`),
-		"reports/github/big":   big,
-		"reports/github/empty": nil,
-		"reports/slack/acme":   []byte(`{"status":"ok"}`),
+		"github/reports/acme":  []byte(`{"status":"ok"}`),
+		"github/reports/big":   big,
+		"github/reports/empty": nil,
+		"slack/reports/acme":   []byte(`{"status":"ok"}`),
 	} {
 		if _, err := s.blob.Write(ctx, name, body); err != nil {
 			t.Fatal(err)

@@ -255,9 +255,9 @@
         {
           "concern": "blob",
           "kind": "report",
-          "id": "reports/github/acme",
-          "from": "reports/github/acme",
-          "to": "reports/github/acme",
+          "id": "github/reports/acme",
+          "from": "github/reports/acme",
+          "to": "github/reports/acme",
           "status": "new"
         }
       ]
@@ -342,9 +342,9 @@
         {
           "concern": "blob",
           "kind": "report",
-          "id": "reports/slack/acme",
-          "from": "reports/slack/acme",
-          "to": "reports/slack/acme",
+          "id": "slack/reports/acme",
+          "from": "slack/reports/acme",
+          "to": "slack/reports/acme",
           "status": "new"
         }
       ]

@@ -8,6 +8,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/truvity/sluis/blobprefix"
 	"github.com/truvity/sluis/internal/kube"
 	"github.com/truvity/sluis/internal/port"
 	"github.com/truvity/sluis/internal/valkey"
@@ -15,9 +16,9 @@ import (
 
 // Blob name families.
 const (
-	googleBlobPrefix   = "google/"
-	githubReportPrefix = "reports/github/"
-	slackReportPrefix  = "reports/slack/"
+	googleBlobPrefix   = blobprefix.GoogleCache
+	githubReportPrefix = blobprefix.GitHubReports
+	slackReportPrefix  = blobprefix.SlackReports
 )
 
 // Blob is [port.Blob] over the hub's snapshots in Valkey and the

@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/truvity/sluis/backend"
+	"github.com/truvity/sluis/blobprefix"
 	"github.com/truvity/sluis/internal/port"
 )
 
@@ -23,7 +24,7 @@ import (
 // port and `lease.<kind>:<workspace>` in the state port
 // (docs/concepts/sluis/ports.md).
 const (
-	SnapshotBlobPrefix  = "google/"
+	SnapshotBlobPrefix  = blobprefix.GoogleCache
 	SnapshotLeasePrefix = "lease."
 )
 

@@ -1,5 +1,9 @@
 ## Unreleased
 
+### Changed
+
+- **Blobs sit under their module's prefix, so a module's role is granted all it uses.** On layout v5 the Pulumi library grants a function role `<module>/*` of the bucket, but the GitHub and Slack controllers' reports were at `reports/github/` and `reports/slack/` and the hub's cache at `google/`, so on an S3 bucket every controller pass logged "the last report could not be read" (403) and the console's GitHub page could not list its reports. The reports are now `github/reports/<target>` and `slack/reports/<target>` and the cache `google/cache/<workspace>`, all defined once in package `blobprefix` and taken from there by the code, the backup export and restore, the migration and the IAM policy; a test fails on a blob prefix spelled anywhere else and on one the rendered roles (the module's host, backup, restore) do not cover. Nothing is copied: the controllers write the reports again on the next pass, and `sluis migrate v5` copies a source's `reports/github/` and `reports/slack/` to the new prefixes. The old root-level `reports/github/`, `reports/slack/` and `snapshots/` objects can be deleted (see [Upgrade to v1.75](docs/guides/sluis/upgrade/v1.75.md)). An R2 store with a bucket-wide token was not affected. The policy needed no change: the module prefix was already granted, so the function needs the new release.
+
 ## v1.75.0-rc.10
 
 ### Added

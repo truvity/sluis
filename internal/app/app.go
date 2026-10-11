@@ -35,6 +35,7 @@ import (
 
 	"github.com/truvity/sluis/backend"
 	"github.com/truvity/sluis/backend/google"
+	"github.com/truvity/sluis/blobprefix"
 	"github.com/truvity/sluis/frontend"
 	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/audit"
@@ -562,8 +563,8 @@ func openPortStores(ctx context.Context, cfg Config, st *store.Stores, log *slog
 			defer cancel()
 			return sessionKey.Get(ctx)
 		},
-		githubReports:       rails.NewBlobReports(st.Ports.Blob, "reports/github/"),
-		slackReports:        rails.NewBlobReports(st.Ports.Blob, "reports/slack/"),
+		githubReports:       rails.NewBlobReports(st.Ports.Blob, blobprefix.GitHubReports),
+		slackReports:        rails.NewBlobReports(st.Ports.Blob, blobprefix.SlackReports),
 		githubOrgs:          portstore.NewGitHubOrgs(github),
 		githubLinks:         portstore.NewGitHubLinks(github),
 		githubRunnerApps:    portstore.NewGitHubRunnerApps(github),

@@ -275,7 +275,7 @@ func TestTwoPassCopy(t *testing.T) {
 	}
 	// The source changes while people still use it.
 	src.env[sluissecrets.EnvName("recovery/password")] = "CHANGED-PW"
-	if _, err = src.st.Ports.Blob.Write(ctx, "reports/github/acme", []byte(`{"report":3}`)); err != nil {
+	if _, err = src.st.Ports.Blob.Write(ctx, "github/reports/acme", []byte(`{"report":3}`)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -550,5 +550,25 @@ func TestCopyHookNamesWhatAnOverwriteReplaces(t *testing.T) {
 		if strings.Contains(n, "CHANGED") {
 			t.Errorf("a name holds a value: %s", n)
 		}
+	}
+}
+
+// A source that keeps its reports at the root of the bucket, where layout v4
+// had them, is copied to the module's prefix on the destination.
+func TestCopyMovesRootLevelReportsUnderTheModulesPrefix(t *testing.T) {
+	src, dst := newV4Installation(t), newV5Installation(t)
+	src.seedFull(t)
+	if _, err := src.st.Ports.Blob.Write(ctx, "reports/slack/old", []byte(`{"report":9}`)); err != nil {
+		t.Fatal(err)
+	}
+	if r, err := migrate.CopyV5(ctx, side("v4.yaml", src.st), side("v5.yaml", dst.st), copyOptions()); err != nil || !r.OK {
+		t.Fatalf("CopyV5 = %v", err)
+	}
+	obj, err := dst.st.Ports.Blob.Read(ctx, "slack/reports/old")
+	if err != nil || string(obj.Body) != `{"report":9}` {
+		t.Fatalf("the report at slack/reports/old = %q, %v", obj.Body, err)
+	}
+	if _, err = dst.st.Ports.Blob.Read(ctx, "reports/slack/old"); err == nil {
+		t.Error("the destination has the report at the root of the bucket")
 	}
 }
