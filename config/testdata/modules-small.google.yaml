@@ -1,7 +1,10 @@
 apiVersion: sluis.truvity.github.io/sluis-google/v1
 google:
   freshnessWindow: 30m
+  oauthClient:
+    provider: default
   probeInterval: 5m
+  publicURL: https://access.example.test/console
   refreshInterval: 15m
 instance: example
 log:

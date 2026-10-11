@@ -337,9 +337,12 @@ func (b moduleBuilder) slack() (any, error) {
 
 // google is the Google module's document: the workspaces the installation
 // declares, the intervals of its `freshness`, the table of its own and the
-// bucket the snapshots are kept in. The OAuth client that reopens a workspace
-// connected by consent is not written: the issuer's sign-in client is the
-// issuer's, and the module declares no secret of the issuer's.
+// bucket the snapshots are kept in. The module holds the OAuth client: the
+// consent, the sign-in and the reopening of a workspace connected by consent all
+// use its secret, so the installation's `oauthClient` (the provider that names
+// the client's secrets, and the id when it is not one) and the `publicURL` its
+// redirect addresses are built from are written here, and the issuer's document
+// of a split installation carries neither secret.
 func (b moduleBuilder) google() (any, error) {
 	doc := &internal.SluisGoogle{APIVersion: internal.GoogleAPIVersion, Instance: b.in.Instance, Log: copyOf(b.svc.Log),
 		Platform: lambdaPlatform(), Preset: b.svc.Preset}
@@ -353,6 +356,13 @@ func (b moduleBuilder) google() (any, error) {
 	}
 	if d := b.in.Directory; d != nil {
 		doc.Google.Workspaces = slices.Clone(d.Workspaces)
+	}
+	if o := b.svc.OAuthClient; o != nil && o.Provider != "" {
+		doc.Google.OAuthClient = &internal.GoogleOAuthClient{ID: o.ID, Provider: o.Provider}
+	}
+	doc.Google.PublicURL = b.svc.PublicURL
+	if a := b.svc.Audit; a != nil && (a.Writer != "" || a.TokenFile != "") {
+		doc.Audit = &internal.RosterAudit{Writer: a.Writer, TokenFile: a.TokenFile}
 	}
 	if f := b.in.Freshness; f != nil {
 		doc.Google.RefreshInterval = copyOf(f.RefreshInterval)
