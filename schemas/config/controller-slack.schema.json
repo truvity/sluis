@@ -186,6 +186,52 @@
       },
       "type": "object"
     },
+    "calls": {
+      "additionalProperties": false,
+      "description": "How this process reaches the modules that are not in it (docs/decisions/0071). A module with no entry is called in this process. It replaces `cloudflare.remote`, which is deprecated and still read.",
+      "properties": {
+        "modules": {
+          "additionalProperties": {
+            "additionalProperties": false,
+            "description": "How one module is reached. Set at most one of `function` and `url`; neither keeps the module in this process.",
+            "not": {
+              "required": [
+                "function",
+                "url"
+              ]
+            },
+            "properties": {
+              "audience": {
+                "description": "The audience of that token. The module's name when unset.",
+                "minLength": 1,
+                "type": "string"
+              },
+              "function": {
+                "description": "The module's Lambda function, name or ARN. It is invoked through the `live-<class>` alias of this process's caller class.",
+                "minLength": 1,
+                "type": "string"
+              },
+              "tokenFile": {
+                "description": "Where the projected token is mounted. `/var/run/secrets/sluis/<module>/token` when unset.",
+                "minLength": 1,
+                "type": "string"
+              },
+              "url": {
+                "$ref": "#/$defs/url",
+                "description": "The module's Kubernetes Service. A call carries the pod's projected ServiceAccount token."
+              }
+            },
+            "type": "object"
+          },
+          "description": "The modules this process calls, by module name (`github`, `slack`, `google`, `cloudflare`, `backup`).",
+          "propertyNames": {
+            "pattern": "^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$"
+          },
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
     "console": {
       "additionalProperties": false,
       "description": "How the controller proves itself to the console, when the pod's `tokenFile` is not the way.",

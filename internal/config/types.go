@@ -500,6 +500,8 @@ type Roster struct {
 	// module that runs as a function of its own (the one service document's
 	// `secrets` is what a controller inside it uses).
 	Secrets *Secrets `json:"secrets,omitempty"`
+	// Calls is how the controller reaches the modules that are not in its process.
+	Calls *Calls `json:"calls,omitempty"`
 	// Probes is where /healthz and /readyz answer.
 	Probes *Address `json:"probes,omitempty"`
 
@@ -533,6 +535,8 @@ type ControllerSlack struct {
 // absent is a controller that is off.
 type Sluis struct {
 	Serve
+	// Calls is how this process reaches the modules that are not in it.
+	Calls       *Calls       `json:"calls,omitempty"`
 	Controllers *Controllers `json:"controllers,omitempty"`
 }
 
@@ -574,6 +578,7 @@ func (s *Sluis) roster(c *ControllerCommon) Roster {
 		ConsoleURL: c.ConsoleURL, TokenFile: c.TokenFile, Console: c.Console,
 		RecordsDir: c.RecordsDir, Interval: c.Interval, Log: s.Log, Ports: s.Ports,
 		Platform: s.Platform, Preset: s.Preset, Adapters: s.Adapters,
+		Calls:  s.Calls,
 		legacy: s.legacy,
 	}
 	if r.ConsoleURL == "" {

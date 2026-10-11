@@ -26,3 +26,11 @@ console:
     aws:
       audience: https://sluis.example/console
 secrets: {source: ssm, root: /sluis/example, layout: v5, region: eu-west-1}
+calls:
+  modules:
+    github:
+      function: sluis-acme-github
+    slack:
+      url: http://slack.sluis.svc:8080
+      audience: slack
+      tokenFile: /var/run/secrets/sluis/slack/token
