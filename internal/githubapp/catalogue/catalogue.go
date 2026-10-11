@@ -206,7 +206,6 @@ type Catalogue struct {
 // The value is the message.
 var legacyEvents = map[string]string{
 	"package": "GitHub Apps cannot subscribe to the legacy `package` event; use `registry_package` (permission packages: read)",
-	"ping":    "GitHub Apps cannot subscribe to `ping`; GitHub sends it on its own when a webhook is set up",
 }
 
 // eventPermission is the permission an event needs, at read or above: GitHub
