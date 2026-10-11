@@ -1,5 +1,7 @@
 ## Unreleased
 
+## v1.75.0-rc.6
+
 ### Added
 
 - **The per-module container images are built by `hack/module-images.sh` (ko), and `just release-lint` pushes them to a throwaway registry and asserts the names.** v1.75.0-rc.5 published none of `ghcr.io/truvity/sluis/sluis-issuer`, `sluis-cloudflare` and `sluis-backup`: goreleaser's ko pipe replaces the `repositories` of every entry with `$KO_DOCKER_REPO` whenever that is set (the shared release workflow always sets it), so the three entries, all built from `./cmd/sluis`, pushed to `ghcr.io/truvity/sluis` and the last one won, the tag and `latest` included; `attest-oci` then found no `sluis-*` package to sign. They are now a `module-images` job of the release workflow, one `ko build --bare` each with its own repository and its module pinned (`hack/ko-modules/.ko.yaml`), from the `sluis-*` lines of `hack/release-images.txt`, so a pushed image is a signed image. The check fails on a missing tag, on a repository other than the listed ones, and on two modules with one digest. The images no longer carry the `org.opencontainers.image.*` labels goreleaser set; GHCR links each package to this repository by the push from this workflow.
