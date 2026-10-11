@@ -134,8 +134,6 @@ func run(args []string) error {
 		return clientsCommand(args[1:])
 	case "policy":
 		return policyCommand(args[1:])
-	case "explain":
-		return explainCommand(args[1:])
 	case "backup":
 		return backupCommand(args[1:])
 	case "restore":
@@ -180,7 +178,6 @@ func usage(to *os.File) {
   restore       preview, start, resume, status: the restore function (start needs --confirm)
   render        an installation in, the service and policy documents out
   policy render the one policy document an installation reads, from its layers
-  explain       what a token for an audience would carry for a caller, from a policy document
 
 sluisctl's own flags on bao go BEFORE the bao subcommand; bao's own
 (including -namespace) go after it, exactly where bao has always
