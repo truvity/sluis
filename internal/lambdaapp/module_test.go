@@ -67,6 +67,7 @@ func TestABuiltZipPinnedToAnotherModuleRefusesToStart(t *testing.T) {
 	}
 	for _, c := range []struct{ main, pin string }{
 		{"sluis-issuer", "backup"}, {"sluis-backup", "cloudflare"}, {"sluis-cloudflare", "issuer"},
+		{"sluis-google", "issuer"}, {"sluis-issuer", "google"},
 	} {
 		bin := filepath.Join(t.TempDir(), "bootstrap")
 		build := exec.Command("go", "build", "-tags", "lambda,lambda.norpc",

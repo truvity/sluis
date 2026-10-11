@@ -6,6 +6,7 @@ import (
 	"github.com/truvity/sluis/internal/lambdaapp"
 	_ "github.com/truvity/sluis/internal/lambdaapp/backupfn"
 	_ "github.com/truvity/sluis/internal/lambdaapp/cloudflarefn"
+	_ "github.com/truvity/sluis/internal/lambdaapp/googlefn"
 	_ "github.com/truvity/sluis/internal/lambdaapp/issuerfn"
 )
 
