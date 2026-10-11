@@ -198,11 +198,17 @@ func TestTheFunctionRoleIsGrantedTheModuleTablesAndTheLegacyOne(t *testing.T) {
 			byResource[r] = append(byResource[r], strs(s["Action"])...)
 		}
 	}
-	for _, m := range []arp.Module{arp.ModuleOIDC, arp.ModuleGitHub, arp.ModuleSlack, arp.ModuleGoogle} {
+	for _, m := range []arp.Module{arp.ModuleOIDC, arp.ModuleGoogle} {
 		acts := byResource[tableArn("sluis-staging-"+string(m))]
 		sort.Strings(acts)
 		if !contains(acts, "dynamodb:PutItem") || !contains(acts, "dynamodb:GetItem") {
 			t.Errorf("%s: %v", m, acts)
+		}
+	}
+	// The providers' tables are theirs: the issuer holds no grant on them.
+	for _, m := range []arp.Module{arp.ModuleGitHub, arp.ModuleSlack} {
+		if got := byResource[tableArn("sluis-staging-"+string(m))]; len(got) != 0 {
+			t.Errorf("%s: the issuer is granted %v", m, got)
 		}
 	}
 	if got := byResource[tableArn("sluis-staging-backup")]; len(got) != 0 {

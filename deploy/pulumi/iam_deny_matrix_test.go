@@ -70,11 +70,12 @@ var mxFunctions = []string{"issuer", "cloudflare", "backup", "restore", "github"
 func mxSpecs() []roleSpec {
 	return []roleSpec{
 		{name: "issuer", hosts: []Module{ModuleOIDC}, signs: true,
-			readTables: []Module{ModuleGoogle, ModuleGitHub, ModuleSlack}, readBlobs: []Module{ModuleGoogle},
+			readTables: []Module{ModuleGoogle}, readBlobs: []Module{ModuleGoogle},
 			invokes: []string{
 				mxFn("issuer") + ":live",
-				mxFn("github") + ":live-issuer", mxFn("slack") + ":live-issuer", mxFn("slack") + ":live-console", mxFn("github") + ":live-console",
-				mxFn("google") + ":live-issuer", mxFn("google") + ":live-console", mxFn("cloudflare") + ":live-issuer",
+				mxFn("github") + ":live-issuer", mxFn("slack") + ":live-console", mxFn("github") + ":live-console",
+				mxFn("google") + ":live-issuer", mxFn("google") + ":live-console",
+				mxFn("cloudflare") + ":live-issuer", mxFn("cloudflare") + ":live-console",
 				mxFn("backup") + ":live-console",
 			}},
 		{name: "backup", hosts: []Module{ModuleBackup}, readAll: true},
@@ -163,9 +164,6 @@ func mxPolicies(t *testing.T) (identity map[string]iameval.Policy, key iameval.P
 	for i := range specs {
 		s := &specs[i]
 		kr := KeyRole{Role: Role{Name: s.name, Hosts: s.hosts}, Arn: mxRoleArn(s.name), ReadModules: s.readModule}
-		if s.name == "issuer" {
-			kr.MinterRefs = []string{mxMinter}
-		}
 		kroles = append(kroles, kr)
 	}
 	kst, err := SluisKeyPolicyStatements(KeyPolicyArgs{
@@ -256,6 +254,9 @@ func mxBuildRows(specs []roleSpec) []mxRow {
 				add("maintenance", ms+" "+a, a, tbl, false, leading(MaintenancePartition))
 				add("ddb-write", ms+" "+a+" (granted to no role)", a, tbl, false, leading("rec.k"))
 			}
+			// A table is read by key only: a role that is granted the Google snapshot
+			// (the issuer) cannot scan it, and no other role's grant names Scan.
+			add("ddb-read", ms+" dynamodb:Scan", "dynamodb:Scan", tbl, s.reads(m), nil)
 			add("maintenance", ms+" read the flag", "dynamodb:GetItem", tbl, s.tableReads(m), leading(MaintenancePartition))
 
 			// S3: the module's blob prefix.
@@ -272,9 +273,9 @@ func mxBuildRows(specs []roleSpec) []mxRow {
 		add("s3", "list without a prefix", "s3:ListBucket", mxBucket, false, nil)
 		add("s3", "list everything", "s3:ListBucket", mxBucket, false, prefix(""))
 
-		// The Cloudflare minter parameter: read by the issuer without hosting the module.
+		// The Cloudflare minter parameter: the issuer does not read it; the cloudflare function mints.
 		minter := arnPrefix + "ssm:" + mxRegion + ":" + mxAccount + ":parameter/sluis/" + mxInst + "/" + mxMinter
-		wantMinter := s.hostsModule(ModuleCloudflare) || s.readAll || s.writeAll || s.name == "issuer"
+		wantMinter := s.hostsModule(ModuleCloudflare) || s.readAll || s.writeAll
 		add("minter", "minter read", "ssm:GetParameter", minter, wantMinter, nil)
 		add("minter", "minter write", "ssm:PutParameter", minter, s.hostsModule(ModuleCloudflare) || s.writeAll, nil)
 		kmsAdd("minter decrypt", "kms:Decrypt", minter, wantMinter)
@@ -464,24 +465,22 @@ func TestCrossInvokeGrantsTheQualifiedAlias(t *testing.T) {
 		}
 		return d.Allowed
 	}
+	// issuerClass are the functions the issuer calls as the class issuer (github
+	// mint, google identify, cloudflare mint); every function behind a console
+	// page is called as the class console. Nothing else, and no other alias.
+	issuerClass := map[string]bool{"github": true, "google": true, "cloudflare": true}
 	for _, f := range []string{"github", "slack", "google", "cloudflare"} {
 		fn := mxFn(f)
-		if !call(fn + ":live-issuer") {
-			t.Errorf("CrossInvoke does not grant %s:live-issuer, the ARN a modcall invokes", fn)
+		if got := call(fn + ":live-issuer"); got != issuerClass[f] {
+			t.Errorf("%s:live-issuer: granted %v, want %v", fn, got, issuerClass[f])
 		}
-		for _, bad := range []string{fn, fn + ":$LATEST", fn + ":live", fn + ":live-console", fn + ":1"} {
-			if (f == "google" || f == "slack" || f == "github") && bad == fn+":live-console" {
-				// The Workspace, Slack and GitHub pages (D-v176-1 b).
-				continue
-			}
+		if !call(fn + ":live-console") {
+			t.Errorf("CrossInvoke does not grant %s:live-console, the ARN a console page invokes", fn)
+		}
+		for _, bad := range []string{fn, fn + ":$LATEST", fn + ":live", fn + ":live-backup", fn + ":live-cloudflare", fn + ":1"} {
 			if call(bad) {
 				t.Errorf("CrossInvoke grants %s", bad)
 			}
-		}
-	}
-	for _, m := range []string{"google", "slack", "github"} {
-		if !call(mxFn(m)+":live-console") || call(mxFn(m)+":live-cloudflare") {
-			t.Errorf("the issuer's console calls to the %s module are not on live-console alone", m)
 		}
 	}
 	if !call(mxFn("backup")+":live-console") || call(mxFn("backup")+":live-issuer") || call(mxFn("backup")) {

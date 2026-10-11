@@ -184,7 +184,7 @@ The role trusts `pods.eks.amazonaws.com` for this cluster and ServiceAccount.
 |---|---|---|
 | `SluisTableBackup` | Table read and write | The backup table: `rec.backup.restore.*`, `lease.restore:*` and the `maintenance` flag |
 | `SluisCross<Module>Table`, `…Parameters`, `…Blobs` | Table read and write; `ssm:GetParameter`, `PutParameter`, `DeleteParameter`; `s3:GetObject`, `PutObject`, `DeleteObject` | The other five modules' tables, `internal/<module>/*`, `external/<module>/*`, `<module>/` prefixes, and the key through SSM |
-| `SluisCrossCloudflareMinter` | `ssm:GetParameter` | The `MinterRefs` parameters, with `credentials.preset` |
+| `SluisCrossCloudflareMinter` | `ssm:GetParameter` | The `MinterRefs` parameters, with `credentials.preset`; never the issuer (it asks the cloudflare function to mint) |
 | `SluisArchiveObjects`, `SluisArchiveList` | `s3:GetObject`, `GetObjectVersion`; `ListBucket`, `ListBucketVersions` | `<bucket>/<prefix>backup/<instance>/*`. No put, no delete |
 | `SluisArchiveKey` | `kms:Decrypt` | The archive key, context `{instance, purpose=archive}`. No `GenerateDataKey` |
 | `SluisRestoreSelf` | `lambda:InvokeFunction` | Its own two aliases: a paused restore continues through the ARN it was invoked through |
@@ -296,7 +296,7 @@ l, _ := sluispulumi.NewLambda(ctx, "access", &sluispulumi.LambdaArgs{
 | The flip to `v5` | The service document carries `secrets.layout: v5` and `ports.dynamodb.tables`. `aws.table` and `ports.dynamodb.table` are refused. A blob `CredentialsRef` is `internal/google/blobs-<name>` |
 | Preview, `v4+v5` to `v5` | The role policy and the layer change; no parameter changes |
 | Preview, `Compat.DropV4` | 2 deleted (the v4 parameters), 0 created, 0 replaced |
-| `v5` and `credentials.preset` | A role that does not host `cloudflare` reads the minter parameters the document declares (`SluisCrossCloudflareMinter`), read only |
+| `v5` and `credentials.preset` | A role other than the issuer that does not host `cloudflare` reads the minter parameters the document declares (`SluisCrossCloudflareMinter`), read only |
 | Needs | `v5` and `v4+v5`: `State.Tables` (`States.Grant()`) for the hosted modules; `v4+v5` also `State.TableArn` |
 
 ### Outputs
