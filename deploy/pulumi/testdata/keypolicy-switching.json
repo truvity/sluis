@@ -10,21 +10,21 @@
       ],
       "Condition": {
         "ArnEquals": {
-          "aws:PrincipalArn": "arn:aws:iam::111111111111:role/sluis-staging-backup"
+          "aws:PrincipalArn": "arn:aws:iam::111122223333:role/sluis-staging-backup"
         },
         "StringEquals": {
           "kms:ViaService": "ssm.eu-central-1.amazonaws.com"
         },
         "StringLike": {
           "kms:EncryptionContext:PARAMETER_ARN": [
-            "arn:aws:ssm:eu-central-1:111111111111:parameter/sluis/staging/internal/backup/*",
-            "arn:aws:ssm:eu-central-1:111111111111:parameter/sluis/staging/external/backup/*"
+            "arn:aws:ssm:eu-central-1:111122223333:parameter/sluis/staging/internal/backup/*",
+            "arn:aws:ssm:eu-central-1:111122223333:parameter/sluis/staging/external/backup/*"
           ]
         }
       },
       "Effect": "Allow",
       "Principal": {
-        "AWS": "arn:aws:iam::111111111111:root"
+        "AWS": "arn:aws:iam::111122223333:root"
       },
       "Resource": "*",
       "Sid": "SluisKeyRoleBackup"
@@ -36,21 +36,21 @@
       ],
       "Condition": {
         "ArnEquals": {
-          "aws:PrincipalArn": "arn:aws:iam::111111111111:role/sluis-staging-backup"
+          "aws:PrincipalArn": "arn:aws:iam::111122223333:role/sluis-staging-backup"
         },
         "StringEquals": {
           "kms:ViaService": "ssm.eu-central-1.amazonaws.com"
         },
         "StringLike": {
           "kms:EncryptionContext:PARAMETER_ARN": [
-            "arn:aws:ssm:eu-central-1:111111111111:parameter/sluis/staging/internal/*",
-            "arn:aws:ssm:eu-central-1:111111111111:parameter/sluis/staging/external/*"
+            "arn:aws:ssm:eu-central-1:111122223333:parameter/sluis/staging/internal/*",
+            "arn:aws:ssm:eu-central-1:111122223333:parameter/sluis/staging/external/*"
           ]
         }
       },
       "Effect": "Allow",
       "Principal": {
-        "AWS": "arn:aws:iam::111111111111:root"
+        "AWS": "arn:aws:iam::111122223333:root"
       },
       "Resource": "*",
       "Sid": "SluisKeyReadAllBackup"
@@ -64,21 +64,21 @@
       ],
       "Condition": {
         "ArnEquals": {
-          "aws:PrincipalArn": "arn:aws:iam::111111111111:role/sluis-staging-cloudflare"
+          "aws:PrincipalArn": "arn:aws:iam::111122223333:role/sluis-staging-cloudflare"
         },
         "StringEquals": {
           "kms:ViaService": "ssm.eu-central-1.amazonaws.com"
         },
         "StringLike": {
           "kms:EncryptionContext:PARAMETER_ARN": [
-            "arn:aws:ssm:eu-central-1:111111111111:parameter/sluis/staging/internal/cloudflare/*",
-            "arn:aws:ssm:eu-central-1:111111111111:parameter/sluis/staging/external/cloudflare/*"
+            "arn:aws:ssm:eu-central-1:111122223333:parameter/sluis/staging/internal/cloudflare/*",
+            "arn:aws:ssm:eu-central-1:111122223333:parameter/sluis/staging/external/cloudflare/*"
           ]
         }
       },
       "Effect": "Allow",
       "Principal": {
-        "AWS": "arn:aws:iam::111111111111:root"
+        "AWS": "arn:aws:iam::111122223333:root"
       },
       "Resource": "*",
       "Sid": "SluisKeyRoleCloudflare"
@@ -92,21 +92,21 @@
       ],
       "Condition": {
         "ArnEquals": {
-          "aws:PrincipalArn": "arn:aws:iam::111111111111:role/sluis-staging-github"
+          "aws:PrincipalArn": "arn:aws:iam::111122223333:role/sluis-staging-github"
         },
         "StringEquals": {
           "kms:ViaService": "ssm.eu-central-1.amazonaws.com"
         },
         "StringLike": {
           "kms:EncryptionContext:PARAMETER_ARN": [
-            "arn:aws:ssm:eu-central-1:111111111111:parameter/sluis/staging/internal/github/*",
-            "arn:aws:ssm:eu-central-1:111111111111:parameter/sluis/staging/external/github/*"
+            "arn:aws:ssm:eu-central-1:111122223333:parameter/sluis/staging/internal/github/*",
+            "arn:aws:ssm:eu-central-1:111122223333:parameter/sluis/staging/external/github/*"
           ]
         }
       },
       "Effect": "Allow",
       "Principal": {
-        "AWS": "arn:aws:iam::111111111111:root"
+        "AWS": "arn:aws:iam::111122223333:root"
       },
       "Resource": "*",
       "Sid": "SluisKeyRoleGithub"
@@ -118,21 +118,21 @@
       ],
       "Condition": {
         "ArnEquals": {
-          "aws:PrincipalArn": "arn:aws:iam::111111111111:role/sluis-staging-github-mint"
+          "aws:PrincipalArn": "arn:aws:iam::111122223333:role/sluis-staging-github-mint"
         },
         "StringEquals": {
           "kms:ViaService": "ssm.eu-central-1.amazonaws.com"
         },
         "StringLike": {
           "kms:EncryptionContext:PARAMETER_ARN": [
-            "arn:aws:ssm:eu-central-1:111111111111:parameter/sluis/staging/internal/github/*",
-            "arn:aws:ssm:eu-central-1:111111111111:parameter/sluis/staging/external/github/*"
+            "arn:aws:ssm:eu-central-1:111122223333:parameter/sluis/staging/internal/github/*",
+            "arn:aws:ssm:eu-central-1:111122223333:parameter/sluis/staging/external/github/*"
           ]
         }
       },
       "Effect": "Allow",
       "Principal": {
-        "AWS": "arn:aws:iam::111111111111:root"
+        "AWS": "arn:aws:iam::111122223333:root"
       },
       "Resource": "*",
       "Sid": "SluisKeyReadModuleGithubMint"
@@ -146,21 +146,21 @@
       ],
       "Condition": {
         "ArnEquals": {
-          "aws:PrincipalArn": "arn:aws:iam::111111111111:role/sluis-staging-google"
+          "aws:PrincipalArn": "arn:aws:iam::111122223333:role/sluis-staging-google"
         },
         "StringEquals": {
           "kms:ViaService": "ssm.eu-central-1.amazonaws.com"
         },
         "StringLike": {
           "kms:EncryptionContext:PARAMETER_ARN": [
-            "arn:aws:ssm:eu-central-1:111111111111:parameter/sluis/staging/internal/google/*",
-            "arn:aws:ssm:eu-central-1:111111111111:parameter/sluis/staging/external/google/*"
+            "arn:aws:ssm:eu-central-1:111122223333:parameter/sluis/staging/internal/google/*",
+            "arn:aws:ssm:eu-central-1:111122223333:parameter/sluis/staging/external/google/*"
           ]
         }
       },
       "Effect": "Allow",
       "Principal": {
-        "AWS": "arn:aws:iam::111111111111:root"
+        "AWS": "arn:aws:iam::111122223333:root"
       },
       "Resource": "*",
       "Sid": "SluisKeyRoleGoogle"
@@ -175,8 +175,8 @@
       "Condition": {
         "ArnEquals": {
           "aws:PrincipalArn": [
-            "arn:aws:iam::111111111111:role/sluis",
-            "arn:aws:iam::111111111111:role/sluis-old"
+            "arn:aws:iam::111122223333:role/sluis",
+            "arn:aws:iam::111122223333:role/sluis-old"
           ]
         },
         "StringEquals": {
@@ -184,14 +184,14 @@
         },
         "StringLike": {
           "kms:EncryptionContext:PARAMETER_ARN": [
-            "arn:aws:ssm:eu-central-1:111111111111:parameter/sluis/staging/internal/oidc/*",
-            "arn:aws:ssm:eu-central-1:111111111111:parameter/sluis/staging/external/oidc/*"
+            "arn:aws:ssm:eu-central-1:111122223333:parameter/sluis/staging/internal/oidc/*",
+            "arn:aws:ssm:eu-central-1:111122223333:parameter/sluis/staging/external/oidc/*"
           ]
         }
       },
       "Effect": "Allow",
       "Principal": {
-        "AWS": "arn:aws:iam::111111111111:root"
+        "AWS": "arn:aws:iam::111122223333:root"
       },
       "Resource": "*",
       "Sid": "SluisKeyRoleIssuer"
@@ -205,21 +205,21 @@
       ],
       "Condition": {
         "ArnEquals": {
-          "aws:PrincipalArn": "arn:aws:iam::111111111111:role/sluis-staging-restore"
+          "aws:PrincipalArn": "arn:aws:iam::111122223333:role/sluis-staging-restore"
         },
         "StringEquals": {
           "kms:ViaService": "ssm.eu-central-1.amazonaws.com"
         },
         "StringLike": {
           "kms:EncryptionContext:PARAMETER_ARN": [
-            "arn:aws:ssm:eu-central-1:111111111111:parameter/sluis/staging/internal/backup/*",
-            "arn:aws:ssm:eu-central-1:111111111111:parameter/sluis/staging/external/backup/*"
+            "arn:aws:ssm:eu-central-1:111122223333:parameter/sluis/staging/internal/backup/*",
+            "arn:aws:ssm:eu-central-1:111122223333:parameter/sluis/staging/external/backup/*"
           ]
         }
       },
       "Effect": "Allow",
       "Principal": {
-        "AWS": "arn:aws:iam::111111111111:root"
+        "AWS": "arn:aws:iam::111122223333:root"
       },
       "Resource": "*",
       "Sid": "SluisKeyRoleRestore"
@@ -233,21 +233,21 @@
       ],
       "Condition": {
         "ArnEquals": {
-          "aws:PrincipalArn": "arn:aws:iam::111111111111:role/sluis-staging-restore"
+          "aws:PrincipalArn": "arn:aws:iam::111122223333:role/sluis-staging-restore"
         },
         "StringEquals": {
           "kms:ViaService": "ssm.eu-central-1.amazonaws.com"
         },
         "StringLike": {
           "kms:EncryptionContext:PARAMETER_ARN": [
-            "arn:aws:ssm:eu-central-1:111111111111:parameter/sluis/staging/internal/*",
-            "arn:aws:ssm:eu-central-1:111111111111:parameter/sluis/staging/external/*"
+            "arn:aws:ssm:eu-central-1:111122223333:parameter/sluis/staging/internal/*",
+            "arn:aws:ssm:eu-central-1:111122223333:parameter/sluis/staging/external/*"
           ]
         }
       },
       "Effect": "Allow",
       "Principal": {
-        "AWS": "arn:aws:iam::111111111111:root"
+        "AWS": "arn:aws:iam::111122223333:root"
       },
       "Resource": "*",
       "Sid": "SluisKeyWriteAllRestore"
@@ -261,21 +261,21 @@
       ],
       "Condition": {
         "ArnEquals": {
-          "aws:PrincipalArn": "arn:aws:iam::111111111111:role/sluis-staging-slack"
+          "aws:PrincipalArn": "arn:aws:iam::111122223333:role/sluis-staging-slack"
         },
         "StringEquals": {
           "kms:ViaService": "ssm.eu-central-1.amazonaws.com"
         },
         "StringLike": {
           "kms:EncryptionContext:PARAMETER_ARN": [
-            "arn:aws:ssm:eu-central-1:111111111111:parameter/sluis/staging/internal/slack/*",
-            "arn:aws:ssm:eu-central-1:111111111111:parameter/sluis/staging/external/slack/*"
+            "arn:aws:ssm:eu-central-1:111122223333:parameter/sluis/staging/internal/slack/*",
+            "arn:aws:ssm:eu-central-1:111122223333:parameter/sluis/staging/external/slack/*"
           ]
         }
       },
       "Effect": "Allow",
       "Principal": {
-        "AWS": "arn:aws:iam::111111111111:root"
+        "AWS": "arn:aws:iam::111122223333:root"
       },
       "Resource": "*",
       "Sid": "SluisKeyRoleSlack"
@@ -287,8 +287,8 @@
       "Condition": {
         "ArnEquals": {
           "aws:PrincipalArn": [
-            "arn:aws:iam::111111111111:role/cluster-a-reader",
-            "arn:aws:iam::111111111111:role/cluster-b-reader"
+            "arn:aws:iam::111122223333:role/cluster-a-reader",
+            "arn:aws:iam::111122223333:role/cluster-b-reader"
           ]
         },
         "StringEquals": {
@@ -296,13 +296,13 @@
         },
         "StringLike": {
           "kms:EncryptionContext:PARAMETER_ARN": [
-            "arn:aws:ssm:eu-central-1:111111111111:parameter/sluis/staging/external/*"
+            "arn:aws:ssm:eu-central-1:111122223333:parameter/sluis/staging/external/*"
           ]
         }
       },
       "Effect": "Allow",
       "Principal": {
-        "AWS": "arn:aws:iam::111111111111:root"
+        "AWS": "arn:aws:iam::111122223333:root"
       },
       "Resource": "*",
       "Sid": "SluisKeyExternalReaders"
@@ -316,7 +316,7 @@
       "Condition": {
         "ArnLike": {
           "aws:PrincipalArn": [
-            "arn:aws:iam::111111111111:role/aws-reserved/sso.example/*Admin_*"
+            "arn:aws:iam::111122223333:role/aws-reserved/sso.example/*Admin_*"
           ]
         },
         "StringEquals": {
@@ -325,7 +325,7 @@
       },
       "Effect": "Allow",
       "Principal": {
-        "AWS": "arn:aws:iam::111111111111:root"
+        "AWS": "arn:aws:iam::111122223333:root"
       },
       "Resource": "*",
       "Sid": "SluisKeyAdminSeeds"
@@ -337,7 +337,7 @@
       "Condition": {
         "ArnLike": {
           "aws:PrincipalArn": [
-            "arn:aws:iam::111111111111:role/aws-reserved/sso.example/*Admin_*"
+            "arn:aws:iam::111122223333:role/aws-reserved/sso.example/*Admin_*"
           ]
         },
         "StringEquals": {
@@ -345,14 +345,14 @@
         },
         "StringLike": {
           "kms:EncryptionContext:PARAMETER_ARN": [
-            "arn:aws:ssm:eu-central-1:111111111111:parameter/sluis/staging/internal/oidc/state-secret",
-            "arn:aws:ssm:eu-central-1:111111111111:parameter/sluis/staging/internal/oidc/recovery-password"
+            "arn:aws:ssm:eu-central-1:111122223333:parameter/sluis/staging/internal/oidc/state-secret",
+            "arn:aws:ssm:eu-central-1:111122223333:parameter/sluis/staging/internal/oidc/recovery-password"
           ]
         }
       },
       "Effect": "Allow",
       "Principal": {
-        "AWS": "arn:aws:iam::111111111111:root"
+        "AWS": "arn:aws:iam::111122223333:root"
       },
       "Resource": "*",
       "Sid": "SluisKeyAdminReads"
@@ -367,7 +367,7 @@
       "Condition": {
         "ArnLike": {
           "aws:PrincipalArn": [
-            "arn:aws:iam::111111111111:role/aws-reserved/sso.example/*Glass_*"
+            "arn:aws:iam::111122223333:role/aws-reserved/sso.example/*Glass_*"
           ]
         },
         "StringEquals": {
@@ -376,7 +376,7 @@
       },
       "Effect": "Allow",
       "Principal": {
-        "AWS": "arn:aws:iam::111111111111:root"
+        "AWS": "arn:aws:iam::111122223333:root"
       },
       "Resource": "*",
       "Sid": "SluisKeyBreakglass"
@@ -390,8 +390,8 @@
       "Condition": {
         "ArnEquals": {
           "aws:PrincipalArn": [
-            "arn:aws:iam::111111111111:role/sluis",
-            "arn:aws:iam::111111111111:role/sluis-old"
+            "arn:aws:iam::111122223333:role/sluis",
+            "arn:aws:iam::111122223333:role/sluis-old"
           ]
         },
         "ForAllValues:StringEquals": {
@@ -407,7 +407,7 @@
       },
       "Effect": "Allow",
       "Principal": {
-        "AWS": "arn:aws:iam::111111111111:root"
+        "AWS": "arn:aws:iam::111122223333:root"
       },
       "Resource": "*",
       "Sid": "SluisKeySign"
@@ -423,8 +423,8 @@
       "Condition": {
         "ArnNotEquals": {
           "aws:PrincipalArn": [
-            "arn:aws:iam::111111111111:role/sluis",
-            "arn:aws:iam::111111111111:role/sluis-old"
+            "arn:aws:iam::111122223333:role/sluis",
+            "arn:aws:iam::111122223333:role/sluis-old"
           ]
         },
         "StringEquals": {
@@ -447,8 +447,8 @@
       "Condition": {
         "ArnEquals": {
           "aws:PrincipalArn": [
-            "arn:aws:iam::111111111111:role/sluis",
-            "arn:aws:iam::111111111111:role/sluis-old"
+            "arn:aws:iam::111122223333:role/sluis",
+            "arn:aws:iam::111122223333:role/sluis-old"
           ]
         },
         "Null": {
@@ -474,8 +474,8 @@
       "Condition": {
         "ArnEquals": {
           "aws:PrincipalArn": [
-            "arn:aws:iam::111111111111:role/sluis",
-            "arn:aws:iam::111111111111:role/sluis-old"
+            "arn:aws:iam::111122223333:role/sluis",
+            "arn:aws:iam::111122223333:role/sluis-old"
           ]
         },
         "ForAnyValue:StringNotEquals": {
@@ -499,8 +499,8 @@
       "Condition": {
         "ArnEquals": {
           "aws:PrincipalArn": [
-            "arn:aws:iam::111111111111:role/sluis",
-            "arn:aws:iam::111111111111:role/sluis-old"
+            "arn:aws:iam::111122223333:role/sluis",
+            "arn:aws:iam::111122223333:role/sluis-old"
           ]
         }
       },

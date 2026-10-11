@@ -14,7 +14,7 @@ import (
 
 // The ids are built and not written out, which the repository's leak canary
 // would take for particulars; they are made up.
-var account = strings.Repeat("1", 12)
+var account = "111122223333"
 
 const arnp = "arn:" + "aws:"
 

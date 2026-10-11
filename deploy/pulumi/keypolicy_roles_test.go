@@ -238,7 +238,7 @@ func TestSendersRolesAndViewersFollowTheNames(t *testing.T) {
 func TestTransitionRolesAreRefusedWhenWrong(t *testing.T) {
 	for name, tr := range map[string][]arp.TransitionRole{
 		"unknown role": {{Role: "nope", OldName: "x"}},
-		"bad name":     {{Role: arp.RoleIssuer, OldName: "arn:aws:iam::1:role/x"}},
+		"bad name":     {{Role: arp.RoleIssuer, OldName: "arn:aws:iam::111122223333:role/x"}},
 		"twice":        {{Role: arp.RoleIssuer, OldName: "x"}, {Role: arp.RoleBackup, OldName: "x"}},
 	} {
 		if _, err := kpLambdaArgs(t, func(a *arp.LambdaArgs) { a.TransitionRoles = tr }).Senders(); err == nil {
