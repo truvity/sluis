@@ -1780,7 +1780,8 @@ func TestTheRS256KeyRequiresItsAlias(t *testing.T) {
 		t.Fatalf("want an error naming LambdaArgs.SigningKeyRS256Alias, got %v", err)
 	}
 	// Leaving the RS256 key out needs no alias for it.
-	if _, _, err := buildLambda(t, estate{orgs: []string{"acme"}, noRS256Alias: true, mutate: func(a *arp.LambdaArgs) { a.DisableSigningKeyRS256 = true }}); err != nil {
+	off := func(a *arp.LambdaArgs) { a.DisableSigningKeyRS256 = true }
+	if _, _, err := buildLambda(t, estate{orgs: []string{"acme"}, noRS256Alias: true, mutate: off}); err != nil {
 		t.Fatalf("DisableSigningKeyRS256 still asks for an alias: %v", err)
 	}
 }
