@@ -896,7 +896,7 @@
         "slack": {
           "type": "object",
           "additionalProperties": false,
-          "description": "The Slack module (the controller).",
+          "description": "The Slack module (the controller), with a Service on /rpc for the issuer's console calls.",
           "properties": {
             "enabled": {
               "type": "boolean",
@@ -957,6 +957,17 @@
                   "description": "A number of pods, or a percentage such as 50%."
                 }
               }
+            },
+            "rpcPort": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65535,
+              "default": 8081,
+              "description": "The port of the module's Service on /rpc, and of its listener."
+            },
+            "audience": {
+              "type": "string",
+              "description": "The audience a call to this module carries: the module's name when empty."
             },
             "config": {
               "type": "object",

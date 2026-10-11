@@ -60,10 +60,17 @@ type Config struct {
 	logLevel   slog.Level
 	// probes is where /healthz and /readyz answer.
 	probes string
+	// serve is where the module answers the issuer's calls on Kubernetes; nil
+	// serves nothing.
+	serve *config.ModuleServe
 	// audit is the audit installation the controller records to, with its
 	// own identity; without one it only logs what it did.
 	audit audit.Config
 }
+
+// Serve is where the module answers the issuer's calls on Kubernetes
+// (`github.serve`); nil when the document sets none.
+func (c Config) Serve() *config.ModuleServe { return c.serve }
 
 // LogLevel is the level the process should log at.
 func (c Config) LogLevel() slog.Level { return c.logLevel }
@@ -116,6 +123,9 @@ func FromConfig(f *config.ControllerGitHub, p *config.PolicyDocument) (Config, e
 	}
 	if f.Probes != nil && f.Probes.Address != "" {
 		c.probes = f.Probes.Address
+	}
+	if f.GitHub != nil {
+		c.serve = f.GitHub.Serve
 	}
 	c.audit.Instance, _ = os.Hostname()
 	c.stores.SetSecrets(f.Secrets)

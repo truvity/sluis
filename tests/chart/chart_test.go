@@ -130,7 +130,7 @@ var moduleDocuments = map[string]string{
 
 // callees are the modules the issuer routes to: the chart writes each one's
 // `<module>.remote` into the issuer's document.
-var callees = []string{"github", "google", "cloudflare"}
+var callees = []string{"github", "slack", "google", "cloudflare"}
 
 // The chart passes `config` through: the ConfigMap it renders for the issuer
 // holds exactly the block the values gave, with nothing added but the

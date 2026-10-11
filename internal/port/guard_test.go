@@ -40,6 +40,8 @@ var wiring = []string{
 	"internal/slackroster/app",
 	// The Cloudflare module checks a caller's token with the cluster.
 	"internal/module/cloudflare",
+	// So do the GitHub and Slack modules' listeners (internal/modserve).
+	"internal/modserve",
 	// The migration reads one storage and writes another, so it must name both.
 	"internal/migrate",
 	"cmd",

@@ -3,9 +3,13 @@ package slack
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"os"
 
+	"golang.org/x/sync/errgroup"
+
+	"github.com/truvity/sluis/internal/modserve"
 	"github.com/truvity/sluis/internal/module"
 	app "github.com/truvity/sluis/internal/slackroster/app"
 )
@@ -39,7 +43,28 @@ func (m Module) Run(ctx context.Context, file string) error {
 		return err
 	}
 	defer module.CloseEmitter(log, controller)
-	return controller.Run(ctx)
+	if cfg.Serve() == nil {
+		return controller.Run(ctx)
+	}
+	return serve(ctx, cfg, log, controller)
+}
+
+// serve runs the controller and, beside it, the listener the issuer calls: the
+// console's Slack pages, behind a TokenReview (docs/decisions/0071). Either
+// ending stops the process, which the platform restarts.
+func serve(ctx context.Context, cfg app.Config, log *slog.Logger, controller *app.App) error {
+	rpc := controller.RPC()
+	if rpc == nil {
+		return errors.New("slack.serve: this adapter keeps no records for a console, so there is nothing to serve")
+	}
+	verify, err := modserve.NewVerifier(modserve.Audience("slack", cfg.Serve()))
+	if err != nil {
+		return err
+	}
+	g, gctx := errgroup.WithContext(ctx)
+	g.Go(func() error { return controller.Run(gctx) })
+	g.Go(func() error { return modserve.Serve(gctx, cfg.Serve(), rpc, verify, log) })
+	return g.Wait()
 }
 
 // Tick implements [module.Module]: one Slack target, once, under its lease.
