@@ -1,5 +1,9 @@
 ## Unreleased
 
+### Added
+
+- **The module registry knows the GitHub, Slack and Google modules.** `lambdaapp.ModuleOf` now selects a module by the document's apiVersion: `controller-github/v2` is the GitHub module's, `controller-slack/v2` the Slack module's, `sluis-google/v1` the Google module's and `sluis-backup/v1` the backup module's; `sluis/v3` with `cloudflare.serve` stays the Cloudflare module's, and any other document is the issuer's. A zip built for one module refuses every other module's document, and a build pinned to `github`, `slack` or `google` runs only that module's command. No function for the three modules is built yet.
+
 ## v1.75.0-rc.10
 
 ### Added
