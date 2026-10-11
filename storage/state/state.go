@@ -279,3 +279,33 @@ func (v Value[T]) Rotating(ctx context.Context, grace time.Duration) (current T,
 	}
 	return current, &p, nil
 }
+
+type freshKey struct{}
+
+// WithFreshRead returns a context whose reads a caching Store (the read cache
+// of internal/secretstore) answers from the backend, and whose result it keeps
+// in place of the cached copy. A caller whose credential a peer refused uses it
+// to learn whether the document has been rotated since it was read.
+func WithFreshRead(ctx context.Context) context.Context {
+	return context.WithValue(ctx, freshKey{}, true)
+}
+
+// FreshRead reports whether [WithFreshRead] marked ctx.
+func FreshRead(ctx context.Context) bool {
+	fresh, _ := ctx.Value(freshKey{}).(bool)
+	return fresh
+}
+
+// Invalidator is an optional Store capability: a store that keeps copies of
+// what it read (the read cache of internal/secretstore) drops the copies of key,
+// so the next read is made from the backend.
+type Invalidator interface {
+	Invalidate(key string)
+}
+
+// Invalidate drops s's cached copies of key, if s keeps any.
+func Invalidate(s Store, key string) {
+	if i, ok := s.(Invalidator); ok {
+		i.Invalidate(key)
+	}
+}

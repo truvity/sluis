@@ -11,6 +11,8 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+
+	"github.com/truvity/sluis/storage/state"
 )
 
 // Credentials are an access key pair.
@@ -40,6 +42,10 @@ type credentials struct {
 	mu   sync.Mutex
 	cur  Credentials
 	last time.Time
+	// fresh makes the next read bypass the process's read cache
+	// (state.WithFreshRead): the pair was refused, so a copy of the document
+	// is the first suspect.
+	fresh bool
 }
 
 func newCredentials(ctx context.Context, read CredentialsFunc, now func() time.Time) (*credentials, error) {
@@ -54,6 +60,13 @@ func newCredentials(ctx context.Context, read CredentialsFunc, now func() time.T
 // retrieve reads the document. The cache calls it on the first use and after
 // an Invalidate; the credentials never expire by themselves.
 func (c *credentials) retrieve(ctx context.Context) (aws.Credentials, error) {
+	c.mu.Lock()
+	fresh := c.fresh
+	c.fresh = false
+	c.mu.Unlock()
+	if fresh {
+		ctx = state.WithFreshRead(ctx)
+	}
 	got, err := c.read(ctx)
 	if err != nil {
 		return aws.Credentials{}, err
@@ -75,6 +88,9 @@ func (c *credentials) retrieve(ctx context.Context) (aws.Credentials, error) {
 func (c *credentials) refresh() bool {
 	c.mu.Lock()
 	recent := c.now().Sub(c.last) < RefreshInterval
+	if !recent {
+		c.fresh = true
+	}
 	c.mu.Unlock()
 	if recent {
 		return false

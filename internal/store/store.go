@@ -103,6 +103,8 @@ type Config struct {
 	SecretsRegion   string
 	SecretsEndpoint string
 	SecretsGrace    time.Duration
+	// SecretsReadCache is `secrets.readCache`; nil is not set.
+	SecretsReadCache *time.Duration
 	// OpenState opens the backend of the v4 stores (storage/state/ssm over the
 	// service's retryer, openSSMState).
 	// Nil is that backend.
@@ -379,6 +381,10 @@ func (c *Config) SetSecrets(s *config.Secrets) {
 	c.SecretsEndpoint = s.Endpoint
 	if s.Grace != nil {
 		c.SecretsGrace = s.Grace.D()
+	}
+	if s.ReadCache != nil {
+		d := s.ReadCache.D()
+		c.SecretsReadCache = &d
 	}
 }
 

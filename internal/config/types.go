@@ -347,6 +347,12 @@ type (
 		// rotation: the previous revision of the document, while the current
 		// one is younger than this.
 		Grace *Duration `json:"grace,omitempty"`
+		// ReadCache is how long one process keeps a decrypted document it read
+		// from the `ssm` store (default 5m; 0s turns the cache off). A write
+		// through the process drops the copy at once; a document that carries
+		// its own expiry is not kept past it. SLUIS_SECRETS_READ_CACHE_TTL
+		// overrides it.
+		ReadCache *Duration `json:"readCache,omitempty"`
 	}
 
 	// PolicyRef names the one policy document a process decides by: the

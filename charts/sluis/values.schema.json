@@ -673,6 +673,11 @@
                       "required": [
                         "grace"
                       ]
+                    },
+                    {
+                      "required": [
+                        "readCache"
+                      ]
                     }
                   ]
                 }
@@ -702,6 +707,11 @@
                 "v4",
                 "v5"
               ]
+            },
+            "readCache": {
+              "$ref": "#/definitions/config-controller-github.duration",
+              "default": "5m",
+              "description": "`ssm`: how long a process keeps a document it read; a write drops it. `0s` is off. SLUIS_SECRETS_READ_CACHE_TTL overrides."
             },
             "refresh": {
               "$ref": "#/definitions/config-controller-github.duration",
@@ -1496,6 +1506,11 @@
                       "required": [
                         "grace"
                       ]
+                    },
+                    {
+                      "required": [
+                        "readCache"
+                      ]
                     }
                   ]
                 }
@@ -1525,6 +1540,11 @@
                 "v4",
                 "v5"
               ]
+            },
+            "readCache": {
+              "$ref": "#/definitions/config-controller-slack.duration",
+              "default": "5m",
+              "description": "`ssm`: how long a process keeps a document it read; a write drops it. `0s` is off. SLUIS_SECRETS_READ_CACHE_TTL overrides."
             },
             "refresh": {
               "$ref": "#/definitions/config-controller-slack.duration",
@@ -4671,6 +4691,11 @@
                       "required": [
                         "grace"
                       ]
+                    },
+                    {
+                      "required": [
+                        "readCache"
+                      ]
                     }
                   ]
                 }
@@ -4700,6 +4725,11 @@
                 "v4",
                 "v5"
               ]
+            },
+            "readCache": {
+              "$ref": "#/definitions/config-sluis.duration",
+              "default": "5m",
+              "description": "`ssm`: how long a process keeps a document it read; a write drops it. `0s` is off. SLUIS_SECRETS_READ_CACHE_TTL overrides."
             },
             "refresh": {
               "$ref": "#/definitions/config-sluis.duration",
@@ -6076,6 +6106,11 @@
                       "required": [
                         "grace"
                       ]
+                    },
+                    {
+                      "required": [
+                        "readCache"
+                      ]
                     }
                   ]
                 }
@@ -6105,6 +6140,11 @@
                 "v4",
                 "v5"
               ]
+            },
+            "readCache": {
+              "$ref": "#/definitions/config-sluis-backup.duration",
+              "default": "5m",
+              "description": "`ssm`: how long a process keeps a document it read; a write drops it. `0s` is off. SLUIS_SECRETS_READ_CACHE_TTL overrides."
             },
             "refresh": {
               "$ref": "#/definitions/config-sluis-backup.duration",
