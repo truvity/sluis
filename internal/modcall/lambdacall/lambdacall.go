@@ -47,6 +47,10 @@ type API interface {
 	Invoke(ctx context.Context, in *awslambda.InvokeInput, opts ...func(*awslambda.Options)) (*awslambda.InvokeOutput, error)
 }
 
+// WithoutRetries is the client option of a call that must be sent once: the SDK
+// sends it again on a throttle or a reset otherwise.
+func WithoutRetries(o *awslambda.Options) { o.Retryer = aws.NopRetryer{} }
+
 // Caller invokes module functions by name.
 type Caller struct {
 	API API
@@ -96,10 +100,14 @@ func (c *Caller) invoke(ctx context.Context, fn string, req modcall.Request, p *
 	if err != nil {
 		return nil, err
 	}
+	var opts []func(*awslambda.Options)
+	if modcall.NoRetry(ctx) {
+		opts = append(opts, WithoutRetries)
+	}
 	out, err := c.API.Invoke(ctx, &awslambda.InvokeInput{
 		FunctionName: aws.String(fn), Qualifier: aws.String(AliasOf(c.Class)),
 		InvocationType: types.InvocationTypeRequestResponse, Payload: body,
-	})
+	}, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("%w: invoke %s: %w", modcall.ErrTransport, fn, err)
 	}

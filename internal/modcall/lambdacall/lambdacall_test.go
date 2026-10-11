@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	awslambda "github.com/aws/aws-sdk-go-v2/service/lambda"
 	"github.com/aws/aws-sdk-go-v2/service/lambda/types"
 	"go.opentelemetry.io/otel"
@@ -23,10 +24,18 @@ type fn struct {
 	server *modcall.Server
 	got    *awslambda.InvokeInput
 	crash  string
+	// retryer is what the call's options set: nil leaves the client's own.
+	retryer aws.Retryer
 }
 
-func (f *fn) Invoke(ctx context.Context, in *awslambda.InvokeInput, _ ...func(*awslambda.Options)) (*awslambda.InvokeOutput, error) {
+func (f *fn) Invoke(ctx context.Context, in *awslambda.InvokeInput, opts ...func(*awslambda.Options)) (*awslambda.InvokeOutput, error) {
 	f.got = in
+	f.retryer = nil
+	var o awslambda.Options
+	for _, apply := range opts {
+		apply(&o)
+	}
+	f.retryer = o.Retryer
 	if f.crash != "" {
 		return &awslambda.InvokeOutput{StatusCode: 200, FunctionError: &f.crash, Payload: []byte(`{"errorMessage":"x"}`)}, nil
 	}
@@ -183,5 +192,21 @@ func TestAV1EventIsAnsweredInV1(t *testing.T) {
 		[]byte(`{"kind":"rpc","module":"calc","method":"double","payload":{"N":2}}`), "live-issuer")
 	if err != nil || strings.Contains(string(out), `"v"`) || !strings.Contains(string(out), `"N":4`) {
 		t.Fatalf("%s %v", out, err)
+	}
+}
+
+func TestACallMarkedWithoutRetryIsSentOnce(t *testing.T) {
+	f, c := setup()
+	if _, err := modcall.Do[req, res](context.Background(), c, "calc", "double", req{N: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if f.retryer != nil {
+		t.Fatalf("an ordinary call set a retryer: %T", f.retryer)
+	}
+	if _, err := modcall.Do[req, res](modcall.WithoutRetry(context.Background()), c, "calc", "double", req{N: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := f.retryer.(aws.NopRetryer); !ok {
+		t.Fatalf("a call marked WithoutRetry kept the client's retryer: %T", f.retryer)
 	}
 }
