@@ -1,5 +1,9 @@
 ## Unreleased
 
+### Added
+
+- **An IAM deny matrix for the Pulumi library's roles, and the evaluator it runs on.** `deploy/pulumi/internal/iameval` is a small test-only evaluator of AWS policy documents: Allow and Deny, action and ARN globs, `StringEquals`, `StringLike`, `ArnEquals`, `ArnLike` and `Null` (with `ForAnyValue:` and `ForAllValues:`), `dynamodb:LeadingKeys`, `kms:ViaService` and `kms:EncryptionContext:*`, qualified and unqualified Lambda ARNs, and an identity policy and a key policy evaluated together; it refuses an operator or construct it does not model instead of guessing. `TestEveryRoleIsRefusedWhatItIsNotGranted` renders every v1.75 role (the issuer with and without the Cloudflare minter, backup, restore, and the module-pattern roles) and checks, for each of `Modules()`, that it is refused another module's `internal/<m>/` and `external/<m>/` parameters, writes to another module's table, another module's blob prefix, `kms:Decrypt` for another module's `PARAMETER_ARN`, the sign context (unless it hosts oidc), any function or alias it is not granted, and every write to the maintenance partition, beside the matching allow rows. The matrix fails if it has fewer rows than a pinned count. `TestCrossInvokeGrantsTheQualifiedAlias` records a finding and is skipped (TODO V11a): `CrossInvoke` grants the unqualified function ARN while every module call invokes the `live-<class>` alias. No library behaviour changes.
+
 ## v1.75.0-rc.10
 
 ### Added
