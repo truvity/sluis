@@ -21,6 +21,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/truvity/sluis/blobprefix"
 	"github.com/truvity/sluis/gen/directoryroster/v1/directoryrosterv1connect"
 	"github.com/truvity/sluis/internal/audit"
 	"github.com/truvity/sluis/internal/config"
@@ -314,7 +315,7 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 			Audit:    trail,
 			Console:  directoryrosterv1connect.NewGitHubServiceClient(web, cfg.console, console...),
 			Policy:   set.Digest(),
-			Status:   rails.NewBlobReports(stores.Ports.Blob, "reports/github/"),
+			Status:   rails.NewBlobReports(stores.Ports.Blob, blobprefix.GitHubReports),
 			Leases:   &rails.Leases{State: leaseState, Holder: rails.NewHolder(), Log: log, Maintenance: stores.Maintenance()},
 			Trigger:  stores.Ports.Trigger,
 			Links:    links,

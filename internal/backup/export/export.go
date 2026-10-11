@@ -12,6 +12,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/truvity/sluis/blobprefix"
 	"github.com/truvity/sluis/internal/backup"
 	"github.com/truvity/sluis/internal/port"
 	"github.com/truvity/sluis/internal/secretstore"
@@ -22,8 +23,8 @@ import (
 // each controller last reported. The hub's directory snapshots (`google/`) are
 // a cache that the module rewrites on its next refresh and are not kept.
 var BlobPrefixes = map[port.Module][]string{
-	port.ModuleGitHub: {"reports/github/"},
-	port.ModuleSlack:  {"reports/slack/"},
+	port.ModuleGitHub: {blobprefix.GitHubReports},
+	port.ModuleSlack:  {blobprefix.SlackReports},
 }
 
 // Source is what an export reads. All four are required.

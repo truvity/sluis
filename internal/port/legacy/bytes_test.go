@@ -181,17 +181,17 @@ func TestAReportIsTheSameConfigMapThroughThePortAndTheDomainStore(t *testing.T) 
 	if err := domain.Replace(ctx, map[string]string{"acme.json": `{"a":1}`, "globex.json": `{"g":1}`}); err != nil {
 		t.Fatal(err)
 	}
-	names, err := f.ports.Blob.List(ctx, "reports/github/")
-	if err != nil || !slices.Equal(names, []string{"reports/github/acme.json", "reports/github/globex.json"}) {
+	names, err := f.ports.Blob.List(ctx, "github/reports/")
+	if err != nil || !slices.Equal(names, []string{"github/reports/acme.json", "github/reports/globex.json"}) {
 		t.Fatalf("List = %v, %v", names, err)
 	}
-	object, err := f.ports.Blob.Read(ctx, "reports/github/acme.json")
+	object, err := f.ports.Blob.Read(ctx, "github/reports/acme.json")
 	if err != nil || string(object.Body) != `{"a":1}` {
 		t.Fatalf("Read = %q, %v", object.Body, err)
 	}
 
 	f.api.ClearActions()
-	if err = f.ports.Blob.(port.Replacer).Replace(ctx, "reports/github/", map[string][]byte{"acme.json": []byte(`{"a":2}`)}); err != nil {
+	if err = f.ports.Blob.(port.Replacer).Replace(ctx, "github/reports/", map[string][]byte{"acme.json": []byte(`{"a":2}`)}); err != nil {
 		t.Fatal(err)
 	}
 	updates := 0
@@ -212,7 +212,7 @@ func TestAReportIsTheSameConfigMapThroughThePortAndTheDomainStore(t *testing.T) 
 func TestAReportEntryIsText(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
-	if _, err := f.ports.Blob.Write(context.Background(), "reports/github/x.json", []byte{0xff, 0xfe}); !errors.Is(err, port.ErrUnsupported) {
+	if _, err := f.ports.Blob.Write(context.Background(), "github/reports/x.json", []byte{0xff, 0xfe}); !errors.Is(err, port.ErrUnsupported) {
 		t.Fatalf("Write of invalid UTF-8 = %v, want ErrUnsupported", err)
 	}
 }
@@ -224,10 +224,10 @@ func TestAWriteToAReportTheServiceHasNotCreatedIsUnavailable(t *testing.T) {
 	if err := f.client.API().CoreV1().ConfigMaps("ns").Delete(ctx, "rel-github-status", metav1.DeleteOptions{}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.ports.Blob.Write(ctx, "reports/github/x.json", []byte("{}")); !errors.Is(err, port.ErrUnavailable) {
+	if _, err := f.ports.Blob.Write(ctx, "github/reports/x.json", []byte("{}")); !errors.Is(err, port.ErrUnavailable) {
 		t.Fatalf("Write = %v, want ErrUnavailable", err)
 	}
-	if _, err := f.ports.Blob.Read(ctx, "reports/github/x.json"); !errors.Is(err, port.ErrNotFound) {
+	if _, err := f.ports.Blob.Read(ctx, "github/reports/x.json"); !errors.Is(err, port.ErrNotFound) {
 		t.Fatalf("Read = %v, want ErrNotFound: not yet written", err)
 	}
 }
@@ -393,7 +393,7 @@ func TestAnAbsentBackendIsUnsupported(t *testing.T) {
 	if _, err := ports.State.Get(ctx, "gh.org.acme"); !errors.Is(err, port.ErrUnsupported) {
 		t.Errorf("no cluster: Get = %v", err)
 	}
-	if _, err := ports.Blob.Read(ctx, "reports/github/x"); !errors.Is(err, port.ErrUnsupported) {
+	if _, err := ports.Blob.Read(ctx, "github/reports/x"); !errors.Is(err, port.ErrUnsupported) {
 		t.Errorf("no cluster: Read = %v", err)
 	}
 	if _, err := ports.Identity.Verify(ctx, "t", []string{"a"}); !errors.Is(err, port.ErrUnsupported) {

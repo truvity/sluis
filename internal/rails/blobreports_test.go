@@ -25,8 +25,8 @@ func TestReportsAreReplacedAsAWholeAndReadBack(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			ctx := context.Background()
-			reports := rails.NewBlobReports(blob, "reports/github/")
-			other := rails.NewBlobReports(blob, "reports/slack/")
+			reports := rails.NewBlobReports(blob, "github/reports/")
+			other := rails.NewBlobReports(blob, "slack/reports/")
 
 			if got, err := reports.Reports(ctx); err != nil || len(got) != 0 {
 				t.Fatalf("no reports yet = %v, %v", got, err)
@@ -66,18 +66,18 @@ func TestPutWritesOneReportAndLeavesTheOthersUntouched(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			ctx := context.Background()
-			reports := rails.NewBlobReports(blob, "reports/slack/")
+			reports := rails.NewBlobReports(blob, "slack/reports/")
 			if err := reports.Replace(ctx, map[string]string{"acme.json": `{"a":1}`, "globex.json": `{"g":1}`}); err != nil {
 				t.Fatal(err)
 			}
-			before, err := blob.Read(ctx, "reports/slack/globex.json")
+			before, err := blob.Read(ctx, "slack/reports/globex.json")
 			if err != nil {
 				t.Fatal(err)
 			}
 			if err = reports.Put(ctx, "acme.json", `{"a":2}`); err != nil {
 				t.Fatal(err)
 			}
-			after, err := blob.Read(ctx, "reports/slack/globex.json")
+			after, err := blob.Read(ctx, "slack/reports/globex.json")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -97,7 +97,7 @@ func TestPruneRemovesOnlyRetiredTargets(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	blob := memory.New().Blobs()
-	reports := rails.NewBlobReports(blob, "reports/slack/")
+	reports := rails.NewBlobReports(blob, "slack/reports/")
 	if err := reports.Replace(ctx, map[string]string{"acme.json": "a", "gone.json": "g"}); err != nil {
 		t.Fatal(err)
 	}

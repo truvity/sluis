@@ -99,10 +99,10 @@ func (v *v4Installation) seedFull(t *testing.T) {
 	if err = v.st.Ports.Index.Add(ctx, "issuer:sso-of:ada@north.example", "sso1", time.Hour); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = v.st.Ports.Blob.Write(ctx, "reports/github/acme", []byte(`{"report":1}`)); err != nil {
+	if _, err = v.st.Ports.Blob.Write(ctx, "github/reports/acme", []byte(`{"report":1}`)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = v.st.Ports.Blob.Write(ctx, "reports/slack/acme", []byte(`{"report":2}`)); err != nil {
+	if _, err = v.st.Ports.Blob.Write(ctx, "slack/reports/acme", []byte(`{"report":2}`)); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = v.st.Ports.Blob.Write(ctx, "google/C01", []byte(`a cache`)); err != nil {
