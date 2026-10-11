@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
+
+	sluisconfig "github.com/truvity/sluis/config"
 )
 
 // The defaults of a module function. The mint-only function answers a call that
@@ -15,7 +17,6 @@ const (
 	// function's: a token mint is one signed call to the provider.
 	DefaultMintMemoryMB         = 256
 	DefaultMintTimeoutSeconds   = 30
-	moduleDocumentVersionTmpl   = "sluis-%s/v1"
 	moduleFunctionMaxMemoryMB   = 10240
 	moduleFunctionMinMemoryMB   = 128
 	moduleFunctionMaxTimeoutSec = 900
@@ -56,6 +57,9 @@ type moduleFunctionPlan struct {
 	memory, time int
 	reserved     *int
 	document     string
+	// fromInstallation says the document is the one rendered from the
+	// installation, which names the policy file it reads.
+	fromInstallation bool
 }
 
 // functionNameOf is the function's name: the override or `sluis-<instance>-<role>`.
@@ -196,6 +200,13 @@ func (a *LambdaArgs) planModules() ([]moduleFunctionPlan, error) {
 			}
 		}
 		if p.document == "" {
+			p.document = a.moduleDocs[r]
+			p.fromInstallation = p.document != ""
+		}
+		if p.document == "" {
+			if !a.hostsModule(r) {
+				continue
+			}
 			p.document = moduleDocument(r)
 		}
 		out = append(out, p)
@@ -203,12 +214,33 @@ func (a *LambdaArgs) planModules() ([]moduleFunctionPlan, error) {
 	return out, nil
 }
 
-// moduleDocument is the service document of a module function written by the
-// library: its apiVersion. The module's own settings come with the per-module
-// documents of the installation.
-func moduleDocument(role string) string {
-	return "apiVersion: " + fmt.Sprintf(moduleDocumentVersionTmpl, ModuleOfFunction(role)) + "\n"
+// moduleDocumentVersion is the apiVersion, without the group, of the document a
+// module function reads: the GitHub module and its mint-only function read the
+// controller's, the Cloudflare module the service document with `cloudflare.serve`.
+func moduleDocumentVersion(role string) string {
+	switch role {
+	case RoleGitHub, RoleGitHubMint:
+		return "controller-github/v2"
+	case RoleSlack:
+		return "controller-slack/v2"
+	case RoleGoogle:
+		return "sluis-google/v1"
+	}
+	return "sluis/v3"
 }
+
+// moduleDocument is what a module function reads when the library has no
+// installation to render its document from (the deprecated Config and Policy):
+// its apiVersion alone, which the function refuses to start on. The module's
+// own settings come from LambdaArgs.Installation or ModuleArgs.Document.
+func moduleDocument(role string) string {
+	return "apiVersion: " + sluisconfig.Group + "/" + moduleDocumentVersion(role) + "\n"
+}
+
+// readsPolicy is whether the module's function reads the policy document: the
+// controllers decide by it and the Cloudflare module holds the grants to its
+// presets. The Google module reads none.
+func readsPolicy(role string) bool { return role != RoleGoogle }
 
 // moduleRole is the role of a module function, for the policies that name it.
 func moduleRole(role string) Role {
@@ -283,9 +315,24 @@ func (a *LambdaArgs) moduleSenders() []pulumi.StringInput {
 	}
 	var out []pulumi.StringInput
 	for _, r := range ModuleFunctions() {
-		out = append(out, pulumi.String(a.roleArnOf(a.moduleFunctionName(r))))
+		if a.hostsModule(r) {
+			out = append(out, pulumi.String(a.roleArnOf(a.moduleFunctionName(r))))
+		}
 	}
 	return out
+}
+
+// hostsModule is whether NewLambda makes the module's function. It makes all
+// five, but for the module the installation rendered no document for: it has
+// nothing to do (the Cloudflare module of an installation with no preset), and a
+// function that could not start would fail the deploy's check. A role that does
+// not exist is not a sender the audit queue can name.
+func (a *LambdaArgs) hostsModule(role string) bool {
+	if a.moduleDocs == nil || a.Modules[role].Document != "" {
+		return true
+	}
+	_, ok := a.moduleDocs[role]
+	return ok
 }
 
 // newModuleFunctions makes the function of each module of [ModuleFunctions] on
@@ -305,8 +352,8 @@ func newModuleFunctions(ctx *pulumi.Context, name string, a *LambdaArgs, child p
 		fa := &ModuleFunctionArgs{
 			Name: name + "-" + p.role, FunctionName: p.name,
 			Package: p.pkg, PackageSHA256: p.pkgSHA, PackageVersion: a.PackageVersion, Release: a.Release, Artifacts: a.Artifacts,
-			Documents:       map[string]string{docSluis: p.document},
-			DocumentVersion: fmt.Sprintf(moduleDocumentVersionTmpl, ModuleOfFunction(p.role)),
+			Documents:       a.moduleLayerDocuments(&p),
+			DocumentVersion: moduleDocumentVersion(p.role),
 			MemoryMB:        p.memory, TimeoutSeconds: p.time, ReservedConcurrency: p.reserved,
 			LogRetentionDays: a.LogRetentionDays, PermissionsBoundaryArn: a.PermissionsBoundaryArn, Tags: a.Tags,
 			Callers: []string{ClassIssuer},
@@ -318,6 +365,12 @@ func newModuleFunctions(ctx *pulumi.Context, name string, a *LambdaArgs, child p
 		}
 		if a.Check == nil || *a.Check {
 			fa.Check = &ModuleCheck{}
+			if p.fromInstallation {
+				// The check re-runs when what the function declares changes.
+				if fa.Check.Declared, err = moduleParameters(p.role, p.document, a.Policy); err != nil {
+					return nil, err
+				}
+			}
 		}
 		fn, err := newModuleFunction(ctx, fa, child)
 		if err != nil {
@@ -326,6 +379,17 @@ func newModuleFunctions(ctx *pulumi.Context, name string, a *LambdaArgs, child p
 		out.fns[p.role] = fn
 	}
 	return out, nil
+}
+
+// moduleLayerDocuments are the files of a module function's configuration layer:
+// its service document and, where the function decides by it, the policy
+// document its service document names (the same file as the issuer's).
+func (a *LambdaArgs) moduleLayerDocuments(p *moduleFunctionPlan) map[string]string {
+	docs := map[string]string{docSluis: p.document}
+	if p.fromInstallation && readsPolicy(p.role) && strings.TrimSpace(a.Policy) != "" {
+		docs[docPolicy] = a.Policy
+	}
+	return docs
 }
 
 // modulePolicy is the policy of a module function's role: ModuleRoleStatements

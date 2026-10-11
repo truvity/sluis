@@ -124,9 +124,26 @@ func declaredParameters(docs map[string]string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	v4 := svc.Secrets == nil || svc.Secrets.Layout == "" || svc.Secrets.Layout == "v4"
+	return parameterNames(svc.Secrets, sluisconfig.DeclaredSecrets(svc, pol)), nil
+}
+
+// moduleParameters is declaredParameters for a module function's own document:
+// the secrets the function declares and checks (sluisconfig.ModuleSecrets), as
+// names below the installation's root.
+func moduleParameters(module, doc, policy string) ([]string, error) {
+	declared, err := sluisconfig.ModuleSecrets(module, []byte(doc), []byte(policy))
+	if err != nil {
+		return nil, fmt.Errorf("sluispulumi: the %s document: %w", module, err)
+	}
+	return parameterNames(&sluisconfig.Secrets{Layout: string(LayoutV5)}, declared), nil
+}
+
+// parameterNames are the declared secrets as names below the root, sorted, for
+// the layout the document's `secrets` section selects.
+func parameterNames(secrets *sluisconfig.Secrets, declared []sluisconfig.DeclaredSecret) []string {
+	v4 := secrets == nil || secrets.Layout == "" || secrets.Layout == "v4"
 	names := []string{}
-	for _, d := range sluisconfig.DeclaredSecrets(svc, pol) {
+	for _, d := range declared {
 		switch {
 		case d.Ref:
 			names = append(names, d.Name)
@@ -143,7 +160,7 @@ func declaredParameters(docs map[string]string) ([]string, error) {
 		}
 	}
 	slices.Sort(names)
-	return slices.Compact(names), nil
+	return slices.Compact(names)
 }
 
 // minterRefsOf is the Cloudflare minter parameters (internal addresses) a
@@ -369,12 +386,108 @@ func (a LambdaArgs) withInstallation() (LambdaArgs, error) {
 	if err := withAudit(&in, plan); err != nil {
 		return a, err
 	}
+	if a.hasModuleFunctions() {
+		// A function per module: the issuer's document calls them and each has a
+		// document of its own.
+		if err := a.withFunctionNames(&in); err != nil {
+			return a, err
+		}
+		set := ModuleSet{Instance: a.Instance, Tables: a.TableNames}
+		tables := map[string]string{}
+		for _, m := range Modules() {
+			tables[string(m)] = set.TableName(m)
+		}
+		docs, err := sluisconfig.RenderModules(&in, sluisconfig.ModuleOptions{Tables: tables})
+		if err != nil {
+			return a, fmt.Errorf("sluispulumi: LambdaArgs.Installation: %w", err)
+		}
+		a.Config, a.Policy = string(docs.Issuer), string(docs.Policy)
+		if a.moduleDocs, err = a.ownModuleDocuments(docs.Modules); err != nil {
+			return a, err
+		}
+		return a, nil
+	}
 	service, policy, err := sluisconfig.Render(&in)
 	if err != nil {
 		return a, fmt.Errorf("sluispulumi: LambdaArgs.Installation: %w", err)
 	}
 	a.Config, a.Policy = string(service), string(policy)
 	return a, nil
+}
+
+// withFunctionNames makes the module functions' names one fact stated once:
+// `aws.functions` and LambdaArgs.Modules[<module>].FunctionName agree or one is
+// unset. The installation ends up with the names the functions are made with,
+// and the arguments (copied, not changed) with the installation's.
+func (a *LambdaArgs) withFunctionNames(in *sluisconfig.Installation) error {
+	aws := *in.AWS
+	fns := map[string]string{}
+	for m, n := range aws.Functions {
+		fns[m] = n
+	}
+	mods := map[string]ModuleArgs{}
+	for m, v := range a.Modules {
+		mods[m] = v
+	}
+	var errs []error
+	for _, role := range ModuleFunctions() {
+		inst, arg := fns[role], mods[role].FunctionName
+		switch {
+		case arg == "":
+		case inst == "":
+			fns[role] = arg
+		case inst != arg:
+			errs = append(errs, fmt.Errorf("sluispulumi: LambdaArgs.Modules[%s].FunctionName is %q and the installation's aws.functions.%s is %q: say it once", role, arg, role, inst))
+		}
+	}
+	if err := errors.Join(errs...); err != nil {
+		return err
+	}
+	for role, n := range fns {
+		if n != "" {
+			m := mods[role]
+			m.FunctionName = n
+			mods[role] = m
+		}
+	}
+	if len(fns) > 0 {
+		aws.Functions = fns
+	}
+	in.AWS = &aws
+	a.Modules = mods
+	return nil
+}
+
+// ownModuleDocuments adds to the module documents what the infrastructure
+// supplies and the renderer cannot know: the blobs an external store keeps
+// (ports.blob of the Google module, which keeps the directory snapshots in them,
+// as the issuer's document does) and holds the result to the module's loader.
+func (a *LambdaArgs) ownModuleDocuments(docs map[string][]byte) (map[string]string, error) {
+	out := map[string]string{}
+	for module, raw := range docs {
+		body := string(raw)
+		if b := a.Storage.External; b != nil && module == sluisconfig.ModuleGoogle {
+			doc, err := yamlMap(body, "Installation")
+			if err != nil {
+				return nil, err
+			}
+			ports, err := child(doc, "Installation", "ports")
+			if err != nil {
+				return nil, err
+			}
+			ports["blob"] = b.portsBlob()
+			patched, err := yaml.Marshal(doc)
+			if err != nil {
+				return nil, err
+			}
+			body = string(patched)
+		}
+		if err := sluisconfig.ValidateModule(module, []byte(body), []byte(a.Policy)); err != nil {
+			return nil, fmt.Errorf("sluispulumi: %w", err)
+		}
+		out[module] = body
+	}
+	return out, nil
 }
 
 // withKeys makes the installation carry exactly the keys the library supplies
@@ -561,6 +674,17 @@ func ownTrigger(doc map[string]any, a *LambdaArgs) error {
 	// installation does) or the alias; anything else is another function.
 	live := a.FunctionName + ":" + LiveAlias
 	for _, kind := range []string{"github", "slack"} {
+		if a.moduleDocs != nil {
+			// A run-now starts the controller's own function, which the issuer
+			// invokes through the alias it is granted (`live-console`), never
+			// through one named here.
+			fn := a.moduleFunctionName(kind)
+			if v, set := settings[kind]; set && v != fn {
+				return fmt.Errorf("sluispulumi: LambdaArgs.Config: adapters.trigger.settings.%s is %v, and the library writes %s: leave it out", kind, v, fn)
+			}
+			settings[kind] = fn
+			continue
+		}
 		if v, set := settings[kind]; set && v != a.FunctionName && v != live {
 			return fmt.Errorf("sluispulumi: LambdaArgs.Config: adapters.trigger.settings.%s is %v, and the library writes %s: leave it out", kind, v, live)
 		}
