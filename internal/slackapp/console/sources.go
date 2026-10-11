@@ -1,4 +1,4 @@
-package server
+package console
 
 import (
 	"context"
@@ -20,8 +20,8 @@ import (
 // Slack Connect channel takes groups and users of any connected directory.
 // The controller asks the same again at every pass, because a directory can
 // be disconnected and an owner changed after the record is written.
-func (c *Console) checkSources(ctx context.Context, sources, members []string, owner string, ordinary bool) error {
-	if c.deps.Hub == nil {
+func (c *Service) checkSources(ctx context.Context, sources, members []string, owner string, ordinary bool) error {
+	if c.d().Directory == nil {
 		return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("this deployment reads no directory, so no source can be checked"))
 	}
 	if ordinary && owner == "" {
@@ -29,7 +29,7 @@ func (c *Console) checkSources(ctx context.Context, sources, members []string, o
 			errors.New(reconcile.NoOwner))
 	}
 	for _, source := range sources {
-		group, err := c.deps.Hub.DirectoryGroup(ctx, source)
+		group, err := c.d().Directory.Group(ctx, source)
 		if err != nil {
 			return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("source %q is not a group address: %w", source, err))
 		}
@@ -50,18 +50,18 @@ func (c *Console) checkSources(ctx context.Context, sources, members []string, o
 }
 
 // isDirectoryUser reports whether an address is an account the hub holds.
-func (c *Console) isDirectoryUser(ctx context.Context, address string) bool {
-	got, err := c.deps.Hub.ResolveUser(ctx, address, nil)
+func (c *Service) isDirectoryUser(ctx context.Context, address string) bool {
+	got, err := c.d().Directory.User(ctx, address)
 	return err == nil && got.Workspace != "" && got.Found
 }
 
 // checkMembers is the rule on individual addresses: each is an active user
 // of the directory that owns the workspace (an ordinary channel) or of any
 // connected directory (a Slack Connect channel), and none is a group.
-func (c *Console) checkMembers(ctx context.Context, members []string, owner string, ordinary bool) error {
+func (c *Service) checkMembers(ctx context.Context, members []string, owner string, ordinary bool) error {
 	const where = "individual addresses come from the directories this channel draws from"
 	for _, member := range members {
-		group, err := c.deps.Hub.DirectoryGroup(ctx, member)
+		group, err := c.d().Directory.Group(ctx, member)
 		if err != nil {
 			return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("member %q is not an email address: %w", member, err))
 		}
@@ -69,7 +69,7 @@ func (c *Console) checkMembers(ctx context.Context, members []string, owner stri
 			return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
 				"%s is a group, not a person: enter it under Directory groups", member))
 		}
-		user, err := c.deps.Hub.ResolveUser(ctx, member, nil)
+		user, err := c.d().Directory.User(ctx, member)
 		if err != nil {
 			return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("member %q is not an email address: %w", member, err))
 		}
@@ -95,11 +95,11 @@ func (c *Console) checkMembers(ctx context.Context, members []string, owner stri
 // picker lists them, sorted. only, when set, keeps the one directory. When the
 // groups cannot be read the second result says so, so that the picker shows
 // the failure rather than an empty list that reads as "no group exists".
-func (c *Console) sourceDirectories(ctx context.Context, only ...string) ([]*directoryrosterv1.SlackSourceDirectory, string) {
-	if c.deps.Hub == nil {
+func (c *Service) sourceDirectories(ctx context.Context, only ...string) ([]*directoryrosterv1.SlackSourceDirectory, string) {
+	if c.d().Directory == nil {
 		return nil, ""
 	}
-	groups, served, err := c.deps.Hub.ListGroups(ctx, "", nil)
+	groups, served, err := c.d().Directory.Groups(ctx)
 	if err != nil {
 		return nil, "the directories' groups could not be read just now: reload to try again"
 	}
@@ -122,7 +122,7 @@ func (c *Console) sourceDirectories(ctx context.Context, only ...string) ([]*dir
 			dir = &directoryrosterv1.SlackSourceDirectory{WorkspaceId: ws, Domains: slices.Sorted(slices.Values(domains[ws]))}
 			dirs[ws] = dir
 		}
-		dir.Groups = append(dir.Groups, &directoryrosterv1.SlackSourceGroup{Email: g.Email, Members: int32(len(g.Members))}) //nolint:gosec // a membership count
+		dir.Groups = append(dir.Groups, &directoryrosterv1.SlackSourceGroup{Email: g.Email, Members: int32(g.Members)}) //nolint:gosec // a membership count
 	}
 	out := make([]*directoryrosterv1.SlackSourceDirectory, 0, len(dirs))
 	for _, ws := range slices.Sorted(maps.Keys(dirs)) {

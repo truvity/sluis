@@ -163,3 +163,84 @@ func TestACallbackTheModuleCannotAnswerIsRefusedOnceAndNeverRepeated(t *testing.
 		t.Errorf("the refusal left no log line: %s", h.logs.String())
 	}
 }
+
+// The catalogue pages answer the same through the module in this process and
+// through the module behind an HTTP Service, and the install's authorize URL
+// comes back carrying the console's state either way.
+func TestTheSlackCataloguePagesAnswerTheSameLocallyAndOverTheTransport(t *testing.T) {
+	h := newSlackHarness(t)
+	ctx := operator()
+	local := h.app(t, "sync")
+
+	module := slackconsole.NewServer(h.console.slackSvc())
+	ts := httptest.NewServer(module.Handler(func(_ context.Context, bearer string) (string, error) { return bearer, nil }))
+	defer ts.Close()
+	h.server.UseSlack(&modcall.HTTPCaller{
+		URLs:     map[string]string{"slack": ts.URL},
+		Token:    func(context.Context, string) (string, error) { return consolecall.Class, nil },
+		MaxBytes: consolecall.ListMaxBytes,
+	})
+	if remote := h.app(t, "sync"); !proto.Equal(local, remote) {
+		t.Errorf("the App differs over the transport:\nlocal  %v\nremote %v", local, remote)
+	}
+	if err := h.create(ctx, "sync", accepted); err != nil {
+		t.Fatalf("Create over the transport: %v", err)
+	}
+	begun, done := h.install(t, "sync", "", acmeTeam)
+	if mustQuery(t, begun.Msg.GetUrl(), "state") == "" || mustQuery(t, begun.Msg.GetUrl(), "scope") != "channels:read,users:read" {
+		t.Errorf("authorize URL = %s", begun.Msg.GetUrl())
+	}
+	if code, location, body := done(); code != 302 || !strings.HasSuffix(location, "/#/slack-apps") {
+		t.Errorf("callback over the transport = %d %s %s", code, location, body)
+	}
+	if got := h.app(t, "sync"); got.GetState() != slackAppInstalled {
+		t.Errorf("after the install over the transport = %+v", got)
+	}
+}
+
+// An operator of one directory may neither create nor install an App in a
+// workspace another directory owns: the module refuses on its own records.
+func TestTheSlackModuleRefusesAnAppOfAnotherDirectoryAndListsOnlyWhatIsVisible(t *testing.T) {
+	h := newSlackHarness(t)
+	foreign := asSlackIdentity(southOp)
+	if err := h.create(foreign, "sync", accepted); connect.CodeOf(err) != connect.CodePermissionDenied {
+		t.Errorf("Create by another directory's operator = %v, want permission denied", err)
+	}
+	if _, err := h.console.InstallSlackApp(foreign, connect.NewRequest(&directoryrosterv1.InstallSlackAppRequest{Id: "sync"})); connect.CodeOf(err) != connect.CodePermissionDenied {
+		t.Errorf("Install by another directory's operator = %v, want permission denied", err)
+	}
+	if h.slack.Count("apps.manifest.create") != 0 {
+		t.Error("a refused create reached Slack")
+	}
+	listed, err := h.console.ListSlackApps(foreign, connect.NewRequest(&directoryrosterv1.ListSlackAppsRequest{}))
+	if err == nil {
+		for _, app := range listed.Msg.GetApps() {
+			if app.GetWorkspace() == "acme" {
+				t.Errorf("another directory sees %+v", app)
+			}
+		}
+	}
+}
+
+// A catalogue callback the module cannot answer is refused once, in words, and
+// the call is marked as one the transport must not repeat.
+func TestACatalogueCallbackTheModuleCannotAnswerIsRefusedOnceAndNeverRepeated(t *testing.T) {
+	h := newSlackHarness(t)
+	if err := h.create(operator(), "sync", accepted); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	_, done := h.install(t, "sync", "", acmeTeam)
+	lost := &failing{returned: modcall.ErrTransport}
+	h.server.UseSlack(lost)
+	code, _, body := done()
+	if code < 400 || code >= 500 || !strings.Contains(body, "did not answer") {
+		t.Errorf("callback = %d %s", code, body)
+	}
+	if lost.calls != 1 || lost.retried {
+		t.Errorf("the module was called %d times, retryable %v; want once and not retryable", lost.calls, lost.retried)
+	}
+	h.server.UseSlack(nil)
+	if got := h.app(t, "sync"); got.GetState() != slackAppCreated {
+		t.Errorf("an install nobody answered left the App %s", got.GetState())
+	}
+}

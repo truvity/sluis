@@ -1,4 +1,4 @@
-package server
+package console
 
 import (
 	"maps"
@@ -38,7 +38,7 @@ type discoveredRow struct {
 // may view. A team that is not a connected workspace is counted, never
 // named, and a channel it hosts cannot be managed.
 func discoveredChannels(
-	id access.Identity, book slackBook, p policy.Policy, reports map[string]status.Workspace, records []connection.SharedRecord, available bool,
+	id access.Identity, book Book, p policy.Policy, reports map[string]status.Workspace, records []connection.SharedRecord, available bool,
 ) []*directoryrosterv1.SlackDiscoveredChannel {
 	// Which connected workspace a team id is: what was recorded at its first
 	// install, else what its own report says.
