@@ -134,6 +134,14 @@ type Identity struct {
 	Scopes map[string]Role
 }
 
+// IsRosterController reports whether the identity is one of the roster
+// controllers' own: a workload the policy placed in
+// [policy.GroupRosterControllers]. A workload holding viewer, or operator,
+// is not one unless it is in that group.
+func (i Identity) IsRosterController() bool {
+	return i.Source == SourceWorkload && slices.Contains(i.Groups, policy.GroupRosterControllers)
+}
+
 // Can reports whether the identity holds at least the given role over the
 // whole installation. Scopes do not count: they are about one workspace,
 // and everything that asks this is about all of them — the policy, the

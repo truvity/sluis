@@ -1679,8 +1679,8 @@ export const AccessService: GenService<{
    *
    * A proof is a person (an address), a CI job or a workload, so the same
    * call shows what a pipeline is entitled to as well as what a person
-   * is. Operator only, and the roster controllers (workloads holding
-   * viewer): anyone else, a person asking about themselves included, is
+   * is. Operator only, and the roster controllers (workloads in
+   * the policy's roster-controller group): anyone else, a person asking about themselves included, is
    * refused with "not authorised". An operator's look-up is recorded.
    *
    * @generated from rpc sluis.v1.AccessService.Explain

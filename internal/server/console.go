@@ -759,8 +759,10 @@ var errNotAuthorised = errors.New("not authorised")
 // Explain implements the operator contract. It discloses what a proof
 // would effectively get, so it is for two callers only: an operator, whose
 // every look-up is recorded, and the roster controllers, which are
-// workloads (a ServiceAccount or an AWS role) holding at least the viewer
-// role and ask in bulk. Anybody else, a person asking about themselves
+// workloads (a ServiceAccount or an AWS role) the policy places in
+// policy.GroupRosterControllers, which ask in bulk and are not recorded.
+// Any other workload, whatever role it holds, is treated as a person: an
+// operator is served and recorded. Anybody else, a person asking about themselves
 // included, is refused with a fixed text and the refusal is recorded.
 func (c *Console) Explain(
 	ctx context.Context, req *connect.Request[directoryrosterv1.ExplainRequest],
@@ -771,7 +773,7 @@ func (c *Console) Explain(
 	}
 	proof := proofFromRequest(req.Msg)
 	kind, subject := proofSubject(proof)
-	controller := caller.Source == access.SourceWorkload && caller.Can(access.RoleViewer)
+	controller := caller.IsRosterController()
 	if !controller && !caller.Can(access.RoleOperator) {
 		c.record(ctx, audit.AccessExplained(actorOf(ctx), audit.Denied("not authorised"), kind, subject, 0, 0, 0))
 		return nil, connect.NewError(connect.CodePermissionDenied, errNotAuthorised)
