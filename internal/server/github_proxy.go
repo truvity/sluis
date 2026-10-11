@@ -306,3 +306,95 @@ func (c *Console) operableApp(ctx context.Context, id string) (*directoryrosterv
 	}
 	return got.Msg.GetApp(), nil
 }
+
+// beginVia asks the module to begin a flow with request and signs the state it
+// names as the caller.
+func beginVia[Req any](ctx context.Context, c *Console, method string, req Req) (githubBegin, error) {
+	_, id, err := c.githubCaller(ctx, access.RoleOperator)
+	if err != nil {
+		return githubBegin{}, err
+	}
+	return beginAs(ctx, c, id, method, req)
+}
+
+func beginAs[Req any](ctx context.Context, c *Console, id access.Identity, method string, req Req) (githubBegin, error) {
+	ctx, cancel := context.WithTimeout(ctx, githubCallTimeout)
+	defer cancel()
+	caller, _, err := c.snapshot(ctx, id)
+	if err != nil {
+		return githubBegin{}, err
+	}
+	begun, err := consolecall.ProxyJSON[Req, consolewire.Begun](ctx, c.githubModule(), consolewire.Module, method, caller, req)
+	if err != nil {
+		return githubBegin{}, githubError(err)
+	}
+	return c.signBegun(id, begun)
+}
+
+// BeginGitHubCatalogueAppConnect starts creating a catalogue App, or finishing
+// installing one created before.
+func (c *Console) BeginGitHubCatalogueAppConnect(
+	ctx context.Context, req *connect.Request[directoryrosterv1.BeginGitHubCatalogueAppConnectRequest],
+) (*connect.Response[directoryrosterv1.BeginGitHubCatalogueAppConnectResponse], error) {
+	begun, err := c.beginCatalogueAppConnect(ctx, req.Msg.GetId())
+	if err != nil {
+		return nil, err
+	}
+	response := connect.NewResponse(&directoryrosterv1.BeginGitHubCatalogueAppConnectResponse{Url: begun.url, Manifest: begun.manifest})
+	c.pinFlow(response.Header(), begun.state)
+	return response, nil
+}
+
+func (c *Console) beginCatalogueAppConnect(ctx context.Context, id string) (githubBegin, error) {
+	return beginVia(ctx, c, consolewire.BeginCatalogueConnect, consolewire.BeginCatalogueConnectRequest{ID: id})
+}
+
+// DisconnectGitHubCatalogueApp uninstalls a catalogue App, then forgets it.
+func (c *Console) DisconnectGitHubCatalogueApp(
+	ctx context.Context, req *connect.Request[directoryrosterv1.DisconnectGitHubCatalogueAppRequest],
+) (*connect.Response[directoryrosterv1.DisconnectGitHubCatalogueAppResponse], error) {
+	return githubProto[directoryrosterv1.DisconnectGitHubCatalogueAppRequest, directoryrosterv1.DisconnectGitHubCatalogueAppResponse](
+		ctx, c, consolewire.DisconnectCatalogueApp, access.RoleOperator, req)
+}
+
+func (c *Console) disconnectCatalogueApp(ctx context.Context, id string) (githubDisconnect, error) {
+	resp, err := c.DisconnectGitHubCatalogueApp(ctx, connect.NewRequest(&directoryrosterv1.DisconnectGitHubCatalogueAppRequest{Id: id}))
+	if err != nil {
+		return githubDisconnect{}, err
+	}
+	return githubDisconnect{uninstalled: resp.Msg.GetUninstalled(), detail: resp.Msg.GetDetail(), settingsURL: resp.Msg.GetAppSettingsUrl()}, nil
+}
+
+// BeginGitHubRunnerAppConnect starts creating a runner App, or finishing
+// installing one created before.
+func (c *Console) BeginGitHubRunnerAppConnect(
+	ctx context.Context, req *connect.Request[directoryrosterv1.BeginGitHubRunnerAppConnectRequest],
+) (*connect.Response[directoryrosterv1.BeginGitHubRunnerAppConnectResponse], error) {
+	begun, err := c.beginRunnerAppConnect(ctx, req.Msg.GetOrg(), req.Msg.GetTier())
+	if err != nil {
+		return nil, err
+	}
+	response := connect.NewResponse(&directoryrosterv1.BeginGitHubRunnerAppConnectResponse{Url: begun.url, Manifest: begun.manifest})
+	c.pinFlow(response.Header(), begun.state)
+	return response, nil
+}
+
+func (c *Console) beginRunnerAppConnect(ctx context.Context, org, tier string) (githubBegin, error) {
+	return beginVia(ctx, c, consolewire.BeginRunnerConnect, consolewire.BeginRunnerConnectRequest{Org: org, Tier: tier})
+}
+
+// DisconnectGitHubRunnerApp uninstalls a runner App, then forgets it.
+func (c *Console) DisconnectGitHubRunnerApp(
+	ctx context.Context, req *connect.Request[directoryrosterv1.DisconnectGitHubRunnerAppRequest],
+) (*connect.Response[directoryrosterv1.DisconnectGitHubRunnerAppResponse], error) {
+	return githubProto[directoryrosterv1.DisconnectGitHubRunnerAppRequest, directoryrosterv1.DisconnectGitHubRunnerAppResponse](
+		ctx, c, consolewire.DisconnectRunnerApp, access.RoleOperator, req)
+}
+
+func (c *Console) disconnectRunnerApp(ctx context.Context, org, tier string) (githubDisconnect, error) {
+	resp, err := c.DisconnectGitHubRunnerApp(ctx, connect.NewRequest(&directoryrosterv1.DisconnectGitHubRunnerAppRequest{Org: org, Tier: tier}))
+	if err != nil {
+		return githubDisconnect{}, err
+	}
+	return githubDisconnect{uninstalled: resp.Msg.GetUninstalled(), detail: resp.Msg.GetDetail(), settingsURL: resp.Msg.GetAppSettingsUrl()}, nil
+}
