@@ -15,6 +15,7 @@
 package status
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -298,4 +299,10 @@ func sortedMembers(members []Member) []Member {
 		return out[i].Login < out[j].Login
 	})
 	return out
+}
+
+// ReportReader is where the console reads what the GitHub controller
+// last reported: the documents of the status contract, keyed as written.
+type ReportReader interface {
+	Reports(ctx context.Context) (map[string]string, error)
 }

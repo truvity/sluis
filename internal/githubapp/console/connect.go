@@ -37,9 +37,16 @@ func (c *Service) githubHTTP() *http.Client {
 }
 
 // githubRoot is the origin the callbacks are at.
-func (c *Service) githubRoot() string {
-	if c.deps.RootURL != "" {
+//
+// The console says it in the snapshot of the call (its own address), so a module
+// in another process needs no copy of it in its document; a configured one
+// wins.
+func (c *Service) githubRoot(ctx context.Context) string {
+	switch {
+	case c.deps.RootURL != "":
 		return strings.TrimSuffix(c.deps.RootURL, "/")
+	case callerOf(ctx).Origin != "":
+		return strings.TrimSuffix(callerOf(ctx).Origin, "/")
 	}
 	return strings.TrimSuffix(c.deps.PublicURL, "/")
 }
@@ -123,8 +130,8 @@ func (c *Service) beginOrganisationConnect(
 		out.url = githubapp.InstallURL(existing.AppSlug, state)
 		return out, nil
 	}
-	root := c.githubRoot()
-	manifest, err := json.Marshal(githubapp.NewManifestNamed(org, c.orgAppName(org), c.deps.PublicURL, root+consolewire.CallbackPath, root+consolewire.SetupPath))
+	root := c.githubRoot(ctx)
+	manifest, err := json.Marshal(githubapp.NewManifestNamed(org, c.orgAppName(org), c.publicURL(ctx), root+consolewire.CallbackPath, root+consolewire.SetupPath))
 	if err != nil {
 		return githubBegin{}, connect.NewError(connect.CodeInternal, err)
 	}
@@ -227,4 +234,13 @@ func (c *Service) ChangeGitHubOrganisationOwner(
 	}
 	c.record(ctx, audit.GitHubOrgOwnerChanged(identityActor(who), org, previous, owner))
 	return connect.NewResponse(&directoryrosterv1.ChangeGitHubOrganisationOwnerResponse{}), nil
+}
+
+// publicURL is where a browser reaches the console: configured, else the
+// address the console gave in the call.
+func (c *Service) publicURL(ctx context.Context) string {
+	if c.deps.PublicURL != "" {
+		return c.deps.PublicURL
+	}
+	return callerOf(ctx).Origin
 }

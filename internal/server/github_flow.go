@@ -76,7 +76,7 @@ func githubForward[Resp any](
 ) (Resp, bool) {
 	ctx, cancel := context.WithTimeout(r.Context(), githubFlowDeadline)
 	defer cancel()
-	out, err := consolecall.ProxyJSON[consolewire.Flow, Resp](ctx, s.console.deps.Modules.GitHub, consolewire.Module, method, caller, flow)
+	out, err := consolecall.ProxyJSON[consolewire.Flow, Resp](ctx, s.console.githubModule(), consolewire.Module, method, caller, flow)
 	if err == nil {
 		return out, true
 	}

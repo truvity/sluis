@@ -227,7 +227,7 @@ func TestAnAppsListWithoutStoresStillNamesWhatThePolicyAsksFor(t *testing.T) {
 		t.Errorf("a controller App with nowhere to keep its key = %+v", app)
 	}
 
-	viewer := WithIdentity(context.Background(), access.Identity{Role: access.RoleNone})
+	viewer := WithIdentity(context.Background(), access.Identity{Email: "viewer@example.test", Role: access.RoleNone})
 	if _, err = console.ListGitHubApps(viewer,
 		connect.NewRequest(&directoryrosterv1.ListGitHubAppsRequest{})); connect.CodeOf(err) != connect.CodePermissionDenied {
 		t.Errorf("a caller with no role = %v, want permission denied", err)
@@ -438,7 +438,7 @@ func TestTheGenericBeginStartsTheSameFlowAsThePerKindOne(t *testing.T) {
 	}
 
 	// Only an operator, and only an App there is.
-	viewer := WithIdentity(context.Background(), access.Identity{Role: access.RoleViewer})
+	viewer := WithIdentity(context.Background(), access.Identity{Email: "viewer@example.test", Role: access.RoleViewer})
 	if _, err = rig.console.BeginGitHubAppConnect(viewer,
 		connect.NewRequest(&directoryrosterv1.BeginGitHubAppConnectRequest{Id: "renovate"})); connect.CodeOf(err) != connect.CodePermissionDenied {
 		t.Errorf("a viewer's Begin = %v, want permission denied", err)
@@ -852,7 +852,7 @@ func TestACatalogueAppIsCreatedInstalledCheckedForDriftAndDisconnected(t *testin
 func TestACatalogueAppIsOnlyWhatTheCatalogueDeclares(t *testing.T) {
 	github := startFakeGitHub(t)
 	server, console, client, _ := catalogueServer(t)
-	viewer := WithIdentity(context.Background(), access.Identity{Role: access.RoleViewer})
+	viewer := WithIdentity(context.Background(), access.Identity{Email: "viewer@example.test", Role: access.RoleViewer})
 	for _, c := range []struct {
 		name string
 		ctx  context.Context
@@ -909,7 +909,7 @@ func TestWhatGitHubSaysOfACatalogueAppIsCachedBriefly(t *testing.T) {
 	github := startFakeGitHub(t)
 	_, console, _, _ := catalogueServer(t)
 	now := time.Date(2026, 9, 17, 12, 0, 0, 0, time.UTC)
-	console.githubSeen.clock = func() time.Time { return now }
+	githubModuleOf(console).SetClock(func() time.Time { return now })
 	github.app = map[string]string{"contents": "write"}
 	github.installed = map[string]string{"contents": "write"}
 	if err := console.deps.GitHubCatalogueApps.Put(context.Background(), catalogueapp.Record{
@@ -944,6 +944,7 @@ func TestWhatGitHubSaysOfACatalogueAppIsCachedBriefly(t *testing.T) {
 
 	// GitHub unreachable: the status still answers, the App says why.
 	console.deps.GitHubCatalogueApps = brokenKeys{console.deps.GitHubCatalogueApps}
+	refreshGitHubModule(console)
 	now = now.Add(2 * time.Minute)
 	app := catalogueApp(t, console, "releases")
 	if app.GetState() != catalogueInstalled || !strings.Contains(app.GetReason(), "key") {
@@ -1089,7 +1090,7 @@ func TestARunnerAppNeedsADeclaredTierABoundOrganisationAndAnOperator(t *testing.
 		_, err := console.BeginGitHubRunnerAppConnect(ctx, connect.NewRequest(&directoryrosterv1.BeginGitHubRunnerAppConnectRequest{Org: org, Tier: tier}))
 		return err
 	}
-	viewer := WithIdentity(context.Background(), access.Identity{Role: access.RoleViewer})
+	viewer := WithIdentity(context.Background(), access.Identity{Email: "viewer@example.test", Role: access.RoleViewer})
 	for _, c := range []struct {
 		name      string
 		ctx       context.Context

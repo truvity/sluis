@@ -374,39 +374,40 @@ func TestTheIssuerNamesNoRingInternals(t *testing.T) {
 	}
 }
 
-// consoleMoves is whether the console's provider operations have moved into
-// the modules (v1.76 D-v176-1 b). Until they have, internal/server still
-// assembles the GitHub and Slack Apps and the Google backend itself, so the
-// rule below would fail; the change that moves the last operation sets this
-// true and deletes the skip.
+// consoleDoor names, for each provider whose console operations have moved into
+// its module (v1.76 D-v176-1 b), the one package of the module the shared server
+// may import: the module's console surface (method names, request types, the
+// stores' interfaces). The rest of the provider's packages hold its credentials.
 //
-// TODO(v1.76 E-units): set true when internal/server stops importing
-// githubapp, slackapp and backend/google.
-const consoleMoves = false
+// TODO(v1.76 E-units): add internal/githubapp and backend/google as G1-G4 and
+// Y1 move the last of their operations, and delete this note.
+var consoleDoor = map[string]string{}
 
 // The console reaches a provider only through a module call: the shared
-// server imports neither the GitHub and Slack App packages nor the Google
-// backend, since each is the only holder of its provider's credentials.
+// server imports none of a moved provider's packages beyond its console door,
+// since each module is the only holder of its provider's credentials.
 func TestTheConsoleImportsNoProvider(t *testing.T) {
-	if !consoleMoves {
-		t.Skip("the console's provider operations have not moved into the modules yet (TODO v1.76 E-units)")
-	}
 	pkgs := imports(t)
-	var seen bool
-	for pkg, deps := range pkgs {
-		rel := strings.TrimPrefix(pkg, mod)
-		if !under(rel, "internal/server") {
-			continue
-		}
-		seen = true
-		for _, d := range deps {
-			drel := strings.TrimPrefix(d, mod)
-			if anyUnder(drel, []string{"internal/githubapp", "internal/slackapp", "backend/google"}) {
-				t.Errorf("%s imports %s: the console calls the module instead", rel, drel)
+	for provider, door := range consoleDoor {
+		var seen, usesDoor bool
+		for pkg, deps := range pkgs {
+			rel := strings.TrimPrefix(pkg, mod)
+			if !under(rel, "internal/server") {
+				continue
+			}
+			seen = true
+			for _, d := range deps {
+				drel := strings.TrimPrefix(d, mod)
+				switch {
+				case drel == door:
+					usesDoor = true
+				case under(drel, provider):
+					t.Errorf("%s imports %s: the console calls the module through %s", rel, drel, door)
+				}
 			}
 		}
-	}
-	if !seen {
-		t.Error("the rule found no package under internal/server: it checked nothing")
+		if !seen || !usesDoor {
+			t.Errorf("the rule for %s found the server's packages (%v) or its door (%v): it checked nothing", provider, seen, usesDoor)
+		}
 	}
 }

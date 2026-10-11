@@ -19,13 +19,6 @@ import (
 	"github.com/truvity/sluis/internal/port"
 )
 
-// GitHubConfirmations is where operators' confirmations of removal sets
-// are kept.
-type GitHubConfirmations interface {
-	PutConfirmation(ctx context.Context, confirmation connection.Confirmation) error
-	Confirmations(ctx context.Context) (map[string]connection.Confirmation, error)
-}
-
 // importLimit bounds one import. The records this exists for number in the
 // tens.
 const importLimit = 500

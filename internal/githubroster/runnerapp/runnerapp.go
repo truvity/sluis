@@ -21,6 +21,7 @@
 package runnerapp
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -174,4 +175,13 @@ func DecodeRecord(raw []byte) (Record, error) {
 	}
 	r.Purpose = appid.Runner
 	return r, nil
+}
+
+// Store is where runner Apps are kept: every App's record and
+// key, which the deployment hands to its runners.
+type Store interface {
+	Put(ctx context.Context, record Record, privateKey string) error
+	List(ctx context.Context) ([]Record, error)
+	PrivateKey(ctx context.Context, tier, org string) (string, bool, error)
+	Delete(ctx context.Context, tier, org string) error
 }

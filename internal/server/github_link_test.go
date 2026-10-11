@@ -327,7 +327,7 @@ func TestCreatingTheLinkAppKeepsItsClientCredentials(t *testing.T) {
 		connect.NewRequest(&directoryrosterv1.BeginGitHubLinkAppConnectRequest{Owner: "globex"})); connect.CodeOf(err) != connect.CodeFailedPrecondition {
 		t.Errorf("creating a second link App = %v, want failed precondition", err)
 	}
-	viewer := WithIdentity(context.Background(), access.Identity{Role: access.RoleViewer})
+	viewer := WithIdentity(context.Background(), access.Identity{Email: "viewer@example.test", Role: access.RoleViewer})
 	if _, err = console.DisconnectGitHubLinkApp(viewer,
 		connect.NewRequest(&directoryrosterv1.DisconnectGitHubLinkAppRequest{})); connect.CodeOf(err) != connect.CodePermissionDenied {
 		t.Errorf("a viewer disconnecting = %v, want permission denied", err)

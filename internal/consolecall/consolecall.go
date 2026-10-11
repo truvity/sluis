@@ -16,7 +16,6 @@
 package consolecall
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -56,14 +55,19 @@ const ListMaxBytes = 2 << 20
 type Caller struct {
 	// Actor is who to write down: the address, else the subject.
 	Actor string `json:"actor"`
-	// Source is how the console established the actor ("workload" and
-	// "recovery" are written down as such; empty is a person).
-	Source string `json:"source,omitempty"`
 	// Roles are the installation-wide roles held (the role and the roles it
 	// implies are not expanded: [access.Role.Implies] does that).
 	Roles []string `json:"roles,omitempty"`
 	// Workspaces are the roles held over one directory workspace each.
 	Workspaces map[string]string `json:"workspaces,omitempty"`
+	// Source says how the actor was established, so the trail names a workload
+	// or a recovery as what it is: "person" for an address, "workload", or
+	// "recovery"; empty for anyone else.
+	Source string `json:"source,omitempty"`
+	// Origin is the console's own address, where the provider sends the browser
+	// back (the redirect of an install). The console asserts it like the rest
+	// of the snapshot; a method that needs none ignores it.
+	Origin string `json:"origin,omitempty"`
 	// Directories are the connected directories as the console's snapshot has
 	// them, for a module that chooses an owner among them and may not read the
 	// directory's records itself. Nil when the console attached none.
@@ -80,11 +84,23 @@ type Directory struct {
 	Authoritative []string `json:"authoritative,omitempty"`
 }
 
+// The values of [Caller.Source].
+const (
+	SourcePerson   = "person"
+	SourceWorkload = "workload"
+	SourceRecovery = "recovery"
+)
+
 // Snapshot takes the caller of an authorized identity.
 func Snapshot(id access.Identity) Caller {
 	c := Caller{Actor: id.Who()}
-	if id.Source == access.SourceWorkload || id.Source == access.SourceRecovery {
-		c.Source = string(id.Source)
+	switch {
+	case id.Source == access.SourceWorkload:
+		c.Source = SourceWorkload
+	case id.Source == access.SourceRecovery:
+		c.Source = SourceRecovery
+	case id.Email != "":
+		c.Source = SourcePerson
 	}
 	if id.Role != access.RoleNone {
 		c.Roles = []string{string(id.Role)}
@@ -104,8 +120,11 @@ func Snapshot(id access.Identity) Caller {
 // the strongest installation-wide role in Roles, and Workspaces as scopes.
 func (c Caller) Identity() access.Identity {
 	id := access.Identity{Email: c.Actor}
-	if src := access.Source(c.Source); src == access.SourceWorkload || src == access.SourceRecovery {
-		id.Email, id.Subject, id.Source = "", c.Actor, src
+	switch c.Source {
+	case SourceWorkload:
+		id = access.Identity{Subject: c.Actor, Source: access.SourceWorkload}
+	case SourceRecovery:
+		id = access.Identity{Subject: c.Actor, Source: access.SourceRecovery}
 	}
 	for _, r := range c.Roles {
 		if role := access.Role(r); role.Implies(id.Role) && role.Implies(access.RoleViewer) {
@@ -130,19 +149,18 @@ type Envelope struct {
 
 // Problem is a refusal or a failure a person should read, told as data.
 type Problem struct {
+	// Code is the Connect code the console answers with, by its name
+	// ("failed_precondition"); empty is a failed precondition.
+	Code string `json:"code,omitempty"`
+	// Status is the HTTP status of the page the console renders for a provider
+	// callback that cannot finish. Zero is 409.
+	Status int `json:"status,omitempty"`
 	// Summary is one line.
 	Summary string `json:"summary"`
 	// Detail is what went wrong, safe to show the signed-in person.
 	Detail string `json:"detail,omitempty"`
 	// Hints are what to try.
 	Hints []string `json:"hints,omitempty"`
-	// Code is the Connect code the console answers its own caller with (the
-	// code's name, "invalid_argument"), so a refusal keeps its meaning across
-	// the hop. Empty is failed_precondition.
-	Code string `json:"code,omitempty"`
-	// Status is the HTTP status of the page the console renders for a provider
-	// callback that cannot finish. Zero is 409.
-	Status int `json:"status,omitempty"`
 }
 
 // Error implements error, so a handler can return a Problem.
@@ -242,65 +260,6 @@ func Handle[Req, Resp proto.Message](
 		}
 		return Reply{Msg: raw}, nil
 	}, opts...)
-}
-
-// HandleJSON is [Handle] for a method whose request and reply are plain Go
-// values, encoded as JSON, rather than protobuf messages: a flow's hand-over
-// that carries more than the console's protobuf contract does. It registers
-// under the same rule: the class [Class] and no other.
-func HandleJSON[Req, Resp any](
-	s *modcall.Server, method string, fn func(ctx context.Context, caller Caller, req Req) (Resp, error), opts ...modcall.Option,
-) {
-	if !strings.HasPrefix(method, MethodPrefix) {
-		panic("consolecall: " + s.Module() + "." + method + " is a console method and must start with " + MethodPrefix)
-	}
-	opts = append(slices.Clone(opts), modcall.Allow(Class))
-	modcall.Handle(s, method, func(ctx context.Context, env Envelope) (Reply, error) {
-		var req Req
-		if len(env.Msg) > 0 {
-			dec := json.NewDecoder(bytes.NewReader(env.Msg))
-			dec.DisallowUnknownFields()
-			if err := dec.Decode(&req); err != nil {
-				return Reply{}, modcall.Coded(modcall.CodeBadRequest, "the request is not valid")
-			}
-		}
-		resp, err := fn(ctx, env.Caller, req)
-		var p *Problem
-		if errors.As(err, &p) {
-			return Reply{Problem: p}, nil
-		}
-		if err != nil {
-			return Reply{}, err
-		}
-		raw, err := json.Marshal(resp)
-		if err != nil {
-			return Reply{}, modcall.Coded(modcall.CodeInternal, "")
-		}
-		return Reply{Msg: raw}, nil
-	}, opts...)
-}
-
-// ProxyJSON is [Proxy] for a method registered with [HandleJSON].
-func ProxyJSON[Req, Resp any](ctx context.Context, c modcall.Caller, module, method string, caller Caller, req Req) (Resp, error) {
-	var zero Resp
-	raw, err := json.Marshal(req)
-	if err != nil {
-		return zero, fmt.Errorf("console call: the request cannot be encoded: %w", err)
-	}
-	reply, err := modcall.Do[Envelope, Reply](ctx, c, module, method, Envelope{Caller: caller, Msg: raw})
-	if err != nil {
-		return zero, err
-	}
-	if reply.Problem != nil {
-		return zero, reply.Problem
-	}
-	var out Resp
-	if len(reply.Msg) > 0 {
-		if err := json.Unmarshal(reply.Msg, &out); err != nil {
-			return zero, fmt.Errorf("console call %s.%s: the response is not valid: %w", module, method, err)
-		}
-	}
-	return out, nil
 }
 
 // List is the option of a method that lists: its bound is [ListMaxBytes].

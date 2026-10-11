@@ -24,6 +24,7 @@ import (
 	"github.com/truvity/sluis/internal/audit"
 	"github.com/truvity/sluis/internal/consolecall"
 	"github.com/truvity/sluis/internal/githubapp/catalogue"
+	ghconsole "github.com/truvity/sluis/internal/githubapp/console"
 	"github.com/truvity/sluis/internal/githubapp/mints"
 	"github.com/truvity/sluis/internal/hub"
 	"github.com/truvity/sluis/internal/modcall"
@@ -240,13 +241,11 @@ type ConsoleDeps struct {
 type Console struct {
 	deps       ConsoleDeps
 	connectors map[string]Connector
-	// githubSeen is what GitHub last said of each GitHub App.
-	githubSeen githubObservations
-	// rotating is the Apps whose webhook secret is being rotated now: two
-	// rotations at once would leave GitHub and the consumers with different
-	// secrets.
-	rotating   map[string]bool
-	rotatingMu sync.Mutex
+	// github is the GitHub module in this process, and githubLocal the way to
+	// call it as the console, for a deployment that has not split it out.
+	githubOnce  sync.Once
+	github      *ghconsole.Service
+	githubLocal modcall.Caller
 }
 
 var (
@@ -271,7 +270,12 @@ var (
 // reviewed in git. A console that could disagree with git was a second
 // source of truth and a merge to reconcile them.
 func NewConsole(_ context.Context, deps ConsoleDeps) (*Console, error) {
+	// The GitHub module in this process is built over the console's own stores
+	// when the first GitHub page asks ([Console.githubModule]), so it is left
+	// unset here.
+	github := deps.Modules.GitHub
 	deps.Modules = deps.Modules.OrLocal(modcall.Local{})
+	deps.Modules.GitHub = github
 	c := &Console{deps: deps, connectors: map[string]Connector{}}
 	for _, conn := range deps.Connectors {
 		c.connectors[conn.Kind()] = conn

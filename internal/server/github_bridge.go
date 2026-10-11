@@ -9,10 +9,6 @@ import (
 	"github.com/truvity/sluis/internal/githubroster/consolewire"
 )
 
-// GitHubConnections is where connected organisations are kept: a record the
-// console shows, a credential only the controller acts with.
-type GitHubConnections = connection.Store
-
 // The paths GitHub sends the browser back to, and what a flow's state binds,
 // are the module's and the console's together.
 const (
