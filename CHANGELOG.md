@@ -1,5 +1,7 @@
 ## Unreleased
 
+## v1.75.0-rc.13
+
 ### Changed
 
 - **Every run-now event names its controller, including the ones a controller's own watch sends.** On v1.75.0-rc.12 the GitHub and Slack controller functions still handed a requested pass (a catalogue App created or installed in the console, which asks the organisation for a pass) to the trigger with no policy loaded, and that trigger sent `{"kind":"run","target":"<name>"}` with no `controller`; for a name that is both a Slack workspace and a GitHub organisation the function refused it (ERROR "an event names no controller and its target is declared for more than one") and the two controllers contended for one lease. The senders now name the controller they concern through `port.NotifyController` (the controllers' watches, the Slack Connect hand-off, and each console write to a GitHub organisation or a Slack workspace send one event, to that controller only), and the trigger's fallback for a target it cannot classify names each configured controller instead of none. `TestEveryEventNamesItsController` and `TestNoControllerlessNotify` fail on any `invoke.Event` literal without `Controller` and any controllerless `Notify` call outside the trigger adapters.
