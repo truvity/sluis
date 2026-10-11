@@ -487,6 +487,10 @@ func ModuleSecrets(module string, doc, policy []byte) ([]DeclaredSecret, error) 
 			for _, w := range g.Google.Workspaces {
 				out = append(out, DeclaredSecret{Kind: internal.SecretWorkspaceKey, Subject: w.ID, Name: w.KeySecret})
 			}
+			// The snapshots are kept in the blob store, whose credential the issuer reads too.
+			if p := g.Ports; p != nil && p.Blob != nil && p.Blob.S3 != nil && p.Blob.S3.CredentialsRef != "" {
+				out = append(out, DeclaredSecret{Kind: internal.SecretBlobCredentials, Name: p.Blob.S3.CredentialsRef, Ref: true})
+			}
 		case ModuleCloudflare:
 			svc, err := internal.Load[internal.Sluis](f["sluis"])
 			if err != nil {

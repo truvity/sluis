@@ -368,6 +368,9 @@ type LambdaArgs struct {
 	// minterRefs are the minter parameters a role that does not host the
 	// Cloudflare module reads for blob credentials from a preset (layout v5).
 	minterRefs []string
+	// moduleDocs are the module functions' documents, by module, rendered from
+	// the Installation. Nil with the deprecated Config and Policy.
+	moduleDocs map[string]string
 }
 
 // WrappedSigningArgs is the symmetric key of the `kms-wrapped` signing adapter.
