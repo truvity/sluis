@@ -86,7 +86,3 @@ const (
 	// so no other flow's state can finish it, and the other way round.
 	CatalogueBind = "slack-catalogue:"
 )
-
-// slackAppScopesMissing is the state of an installation that was granted fewer
-// scopes than are declared.
-const slackAppScopesMissing = "scopes_missing"

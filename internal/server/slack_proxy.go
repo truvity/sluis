@@ -320,3 +320,66 @@ func (c *Console) ConfirmSlackRemovals(
 	}
 	return connect.NewResponse(resp), nil
 }
+
+// ---------------------------------------------------------- SlackAppService
+
+// ListSlackApps is every declared App, and every App created from an entry no
+// longer declared, with where each stands.
+func (c *Console) ListSlackApps(
+	ctx context.Context, req *connect.Request[directoryrosterv1.ListSlackAppsRequest],
+) (*connect.Response[directoryrosterv1.ListSlackAppsResponse], error) {
+	id, err := slackIdentity(ctx)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := slackProxy[*directoryrosterv1.ListSlackAppsRequest, *directoryrosterv1.ListSlackAppsResponse](
+		ctx, c, id, slackconsole.MethodListApps, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(resp), nil
+}
+
+// CreateSlackApp creates a catalogue App in Slack.
+func (c *Console) CreateSlackApp(
+	ctx context.Context, req *connect.Request[directoryrosterv1.CreateSlackAppRequest],
+) (*connect.Response[directoryrosterv1.CreateSlackAppResponse], error) {
+	id, err := slackIdentity(ctx)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := slackProxy[*directoryrosterv1.CreateSlackAppRequest, *directoryrosterv1.CreateSlackAppResponse](
+		ctx, c, id, slackconsole.MethodCreateApp, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(resp), nil
+}
+
+// InstallSlackApp starts installing, or reinstalling, a created App: the
+// response is Slack's authorize URL carrying signed state, and the header pins
+// the flow to this browser.
+func (c *Console) InstallSlackApp(
+	ctx context.Context, req *connect.Request[directoryrosterv1.InstallSlackAppRequest],
+) (*connect.Response[directoryrosterv1.InstallSlackAppResponse], error) {
+	id, err := slackIdentity(ctx)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := slackProxy[*directoryrosterv1.InstallSlackAppRequest, *directoryrosterv1.InstallSlackAppResponse](
+		ctx, c, id, slackconsole.MethodInstallApp, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	state, err := c.deps.State.IssueAs(access.Binding{Bind: slackconsole.CatalogueBind + strings.TrimSpace(req.Msg.GetId()), Actor: id.Who()})
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	target, err := withState(resp.GetUrl(), state)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	out := connect.NewResponse(&directoryrosterv1.InstallSlackAppResponse{Url: target})
+	c.pinFlow(out.Header(), state)
+	return out, nil
+}

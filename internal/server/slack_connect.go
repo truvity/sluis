@@ -13,6 +13,7 @@ import (
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
 	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/audit"
+	slackconsole "github.com/truvity/sluis/internal/slackapp/console"
 	"github.com/truvity/sluis/internal/slackroster/connection"
 	"github.com/truvity/sluis/internal/slackroster/reconcile"
 	"github.com/truvity/sluis/internal/slackroster/status"
@@ -68,7 +69,7 @@ func (c *Console) ListSlackSharedChannels(
 	if anyOperate {
 		// Any connected directory's groups: a Slack Connect channel is not
 		// bound to one directory.
-		out.SourceDirectories, out.SourceDirectoriesError = c.sourceDirectories(ctx)
+		out.SourceDirectories, out.SourceDirectoriesError = c.slackSvc().SourceDirectories(ctx)
 	}
 	if c.deps.SlackShared == nil {
 		return connect.NewResponse(out), nil
@@ -104,7 +105,7 @@ func (c *Console) ListSlackSharedChannels(
 		view.CanOperate = book.MayAct(id, rec.Channel.Host)
 		out.Channels = append(out.Channels, view)
 	}
-	out.Discovered = discoveredChannels(id, book, p, reports, records, true)
+	out.Discovered = slackconsole.DiscoveredChannels(id, book, p, reports, records, true)
 	return connect.NewResponse(out), nil
 }
 
@@ -285,7 +286,7 @@ func (c *Console) CreateSlackSharedChannel(
 	if err = want.Validate(c.deps.Authorizer.Policy().Declared()); err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	if err = c.checkSources(ctx, want.Sources, want.Members, "", false); err != nil {
+	if err = c.slackSvc().CheckSources(ctx, want.Sources, want.Members, "", false); err != nil {
 		return nil, err
 	}
 	if err = c.sharedClashesWithConsole(ctx, want); err != nil {
@@ -293,7 +294,7 @@ func (c *Console) CreateSlackSharedChannel(
 	}
 	if want.ChannelID != "" {
 		reports := c.slackReports(ctx)
-		seen, found := discoveredIn(reports, want.Host, want.ChannelID)
+		seen, found := slackconsole.DiscoveredIn(reports, want.Host, want.ChannelID)
 		switch {
 		case !found:
 			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
@@ -354,7 +355,7 @@ func (c *Console) UpdateSlackSharedChannel(
 		if err := want.Validate(c.deps.Authorizer.Policy().Declared()); err != nil {
 			return nil, connect.NewError(connect.CodeInvalidArgument, err)
 		}
-		if err := c.checkSources(ctx, want.Sources, want.Members, "", false); err != nil {
+		if err := c.slackSvc().CheckSources(ctx, want.Sources, want.Members, "", false); err != nil {
 			return nil, err
 		}
 		changes = sharedChanges(*current, want)
