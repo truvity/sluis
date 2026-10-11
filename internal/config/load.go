@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path"
@@ -68,16 +69,20 @@ func Load[T Document](file string) (*T, error) {
 		err = loadPolicyDocument(file, v)
 	case *Sluis:
 		if err = loadSluis(file, v); err == nil {
-			err = checked(file, v.ValidateCloudflare())
+			err = checked(file, errors.Join(v.ValidateCloudflare(), v.ValidateRoutes()))
 		}
 	case *Serve:
 		if err = loadService(file, "serve", v, func(l *legacyPolicy) { v.legacy = l }); err == nil {
 			err = checked(file, v.ValidateCloudflare())
 		}
 	case *ControllerGitHub:
-		err = loadService(file, "controller-github", v, func(l *legacyPolicy) { v.legacy = l })
+		if err = loadService(file, "controller-github", v, func(l *legacyPolicy) { v.legacy = l }); err == nil {
+			err = checked(file, v.ValidateRoutes())
+		}
 	case *ControllerSlack:
-		err = loadService(file, "controller-slack", v, func(l *legacyPolicy) { v.legacy = l })
+		if err = loadService(file, "controller-slack", v, func(l *legacyPolicy) { v.legacy = l }); err == nil {
+			err = checked(file, v.ValidateRoutes())
+		}
 	}
 	if err != nil {
 		return nil, err

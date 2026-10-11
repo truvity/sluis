@@ -25,3 +25,14 @@ console:
   auth:
     aws:
       audience: https://sluis.example/console
+github:
+  remote:
+    function: sluis-acme-github
+slack:
+  remote:
+    url: http://slack.sluis.svc:8080
+    audience: slack
+    tokenFile: /var/run/secrets/sluis/slack/token
+google:
+  remote:
+    function: sluis-acme-google
