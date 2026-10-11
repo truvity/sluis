@@ -110,9 +110,12 @@ builds:
   # The per-module Lambda zips (docs/decisions/0072): one arm64 `bootstrap` per
   # module that has an entry point of its own, each built with its module name
   # pinned (`-X .../internal/version.Module=sluis-module=<name>`), so a zip refuses to start as
-  # another module and a document that is another module's. The providers (github,
-  # slack, google) run inside the issuer's process until each is released as a
-  # zip of its own, one per release from v1.76; they are added here as they exist.
+  # another module and a document that is another module's. From v1.76 the
+  # providers are zips of their own: `sluis-github`, `sluis-slack`, `sluis-google`,
+  # and `sluis-github-mint`, the mint-only deployment of the github code (its own
+  # function, so token mints do not share capacity with the controller ticks).
+  # These mains (cmd/sluis-github, -github-mint, -slack, -google) come with the
+  # units that create them: the release build needs them on the train.
   # `sluis-backup` is deployed twice, as the backup function and as the restore
   # function (`backup.role: restore`). There is no signer zip: the signer runs in
   # `sluis-issuer`. The module list is held by internal/releasecheck.
@@ -148,6 +151,50 @@ builds:
     tags: [lambda, lambda.norpc]
     ldflags:
       - -s -w -X github.com/truvity/sluis/internal/version.Version={{.Version}} -X github.com/truvity/sluis/internal/version.Module=sluis-module=backup
+
+  - id: sluis-github
+    main: ./cmd/sluis-github
+    binary: bootstrap
+    env: [CGO_ENABLED=0]
+    goos: [linux]
+    goarch: [arm64]
+    flags: [-trimpath]
+    tags: [lambda, lambda.norpc]
+    ldflags:
+      - -s -w -X github.com/truvity/sluis/internal/version.Version={{.Version}} -X github.com/truvity/sluis/internal/version.Module=sluis-module=github
+
+  - id: sluis-github-mint
+    main: ./cmd/sluis-github-mint
+    binary: bootstrap
+    env: [CGO_ENABLED=0]
+    goos: [linux]
+    goarch: [arm64]
+    flags: [-trimpath]
+    tags: [lambda, lambda.norpc]
+    ldflags:
+      - -s -w -X github.com/truvity/sluis/internal/version.Version={{.Version}} -X github.com/truvity/sluis/internal/version.Module=sluis-module=github-mint
+
+  - id: sluis-slack
+    main: ./cmd/sluis-slack
+    binary: bootstrap
+    env: [CGO_ENABLED=0]
+    goos: [linux]
+    goarch: [arm64]
+    flags: [-trimpath]
+    tags: [lambda, lambda.norpc]
+    ldflags:
+      - -s -w -X github.com/truvity/sluis/internal/version.Version={{.Version}} -X github.com/truvity/sluis/internal/version.Module=sluis-module=slack
+
+  - id: sluis-google
+    main: ./cmd/sluis-google
+    binary: bootstrap
+    env: [CGO_ENABLED=0]
+    goos: [linux]
+    goarch: [arm64]
+    flags: [-trimpath]
+    tags: [lambda, lambda.norpc]
+    ldflags:
+      - -s -w -X github.com/truvity/sluis/internal/version.Version={{.Version}} -X github.com/truvity/sluis/internal/version.Module=sluis-module=google
 
 archives:
   # TWO archives, because sluisctl is the only thing built for Windows.
@@ -206,6 +253,34 @@ archives:
     wrap_in_directory: false
     files: ["none*"]
     name_template: "sluis-backup_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+  - id: lambda-github
+    ids: [sluis-github]
+    formats: [zip]
+    wrap_in_directory: false
+    files: ["none*"]
+    name_template: "sluis-github_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+  - id: lambda-github-mint
+    ids: [sluis-github-mint]
+    formats: [zip]
+    wrap_in_directory: false
+    files: ["none*"]
+    name_template: "sluis-github-mint_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+  - id: lambda-slack
+    ids: [sluis-slack]
+    formats: [zip]
+    wrap_in_directory: false
+    files: ["none*"]
+    name_template: "sluis-slack_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+  - id: lambda-google
+    ids: [sluis-google]
+    formats: [zip]
+    wrap_in_directory: false
+    files: ["none*"]
+    name_template: "sluis-google_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
 
   # The two documents' contracts, as release assets of their own. Meta
   # archives: no binary in them, so they are one file per release and not one
@@ -324,7 +399,7 @@ release:
     |---|---|
     | Image | `ghcr.io/truvity/sluis/sluis:{{ .Version }}` |
     | Sidecar image | `ghcr.io/truvity/sluis/resource-proxy:{{ .Version }}` |
-    | Module images | `ghcr.io/truvity/sluis/sluis-{issuer,cloudflare,backup}:{{ .Version }}` |
+    | Module images | `ghcr.io/truvity/sluis/sluis-{issuer,github,github-mint,slack,google,cloudflare,backup}:{{ .Version }}` |
     | Chart | `oci://ghcr.io/truvity/charts/sluis:{{ .Version }}` |
     | TypeScript | `@truvity/sluis@{{ .Version }}` on GitHub Packages |
     | Go | `go get github.com/truvity/sluis@{{ .Tag }}` |
@@ -338,7 +413,10 @@ release:
 
     The Lambda zips are one per module, each holding `bootstrap` built for that module and
     refusing to run as another: `sluis-issuer_{{ .Version }}_linux_arm64.zip` (the issuer, the
-    signer and the console, with the providers in-process),
+    signer and the console),
+    `sluis-github_{{ .Version }}_linux_arm64.zip`,
+    `sluis-github-mint_{{ .Version }}_linux_arm64.zip` (the mint-only github function),
+    `sluis-slack_{{ .Version }}_linux_arm64.zip`, `sluis-google_{{ .Version }}_linux_arm64.zip`,
     `sluis-cloudflare_{{ .Version }}_linux_arm64.zip` and
     `sluis-backup_{{ .Version }}_linux_arm64.zip` (deployed as the backup and the restore
     function). The single `sluis-lambda` zip is no longer published
