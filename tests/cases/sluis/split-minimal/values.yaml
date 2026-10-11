@@ -1,0 +1,34 @@
+# split: one workload per module. The issuer and the modules it calls (github,
+# google, cloudflare) and the two controllers (github, slack): each has a
+# Deployment, a ServiceAccount and a ConfigMap with its own document; github,
+# google and cloudflare have a Service on /rpc and an auth-delegator binding;
+# the controllers' Role is bound to the github and slack accounts only.
+split: true
+config:
+  issuerURL: https://issuer.example
+  controllers:
+    github:
+      consoleURL: http://sluis.default.svc:8080/console
+    slack:
+      consoleURL: http://sluis.default.svc:8080/console
+modules:
+  issuer:
+    replicas: 2
+  github:
+    enabled: true
+  slack:
+    enabled: true
+  google:
+    enabled: true
+    config:
+      instance: acme
+  cloudflare:
+    enabled: true
+    config:
+      cloudflare:
+        presets: {}
+exchange:
+  clusters:
+    - name: example-cluster
+      issuer: https://oidc.eu-example-1.example/id/EXAMPLE
+      jwksUri: https://oidc.eu-example-1.example/id/EXAMPLE/keys

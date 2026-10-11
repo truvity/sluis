@@ -136,6 +136,11 @@ func TestTheRenderedConfigurationIsTheValuesConfiguration(t *testing.T) {
 			}
 			values := merge(defaults, load(t, shape))
 
+			// A split release renders one ConfigMap per module, held by split_test.go.
+			if split, _ := values["split"].(bool); split {
+				return
+			}
+
 			// A release given the rendered documents is held by documents_test.go:
 			// its ConfigMaps are those documents, not the values' `config`.
 			if doc, _ := dig(values, "documents", "service"); doc != nil && doc != "" {
@@ -293,6 +298,10 @@ func TestTheControllersRunInTheOneDeployment(t *testing.T) {
 	for _, shape := range cases {
 		values := merge(defaults, load(t, shape))
 		if mode, _ := values["renders"].(string); mode != "app" {
+			continue
+		}
+		// A split release has a Deployment per module: split_test.go.
+		if split, _ := values["split"].(bool); split {
 			continue
 		}
 		namespace := "default"
