@@ -141,6 +141,31 @@
     },
     {
       "Action": [
+        "kms:Decrypt",
+        "kms:DescribeKey"
+      ],
+      "Condition": {
+        "ArnEquals": {
+          "aws:PrincipalArn": "arn:aws:iam::111122223333:role/sluis-staging-google"
+        },
+        "StringEquals": {
+          "kms:ViaService": "ssm.eu-central-1.amazonaws.com"
+        },
+        "StringLike": {
+          "kms:EncryptionContext:PARAMETER_ARN": [
+            "arn:aws:ssm:eu-central-1:111122223333:parameter/sluis/staging/internal/oidc/signin/*"
+          ]
+        }
+      },
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "arn:aws:iam::111122223333:root"
+      },
+      "Resource": "*",
+      "Sid": "SluisKeySignInClientGoogle"
+    },
+    {
+      "Action": [
         "kms:Encrypt",
         "kms:Decrypt",
         "kms:GenerateDataKey",

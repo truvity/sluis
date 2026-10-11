@@ -124,6 +124,18 @@ func ModuleRoleStatements(env ModuleEnv, role Role) ([]map[string]any, error) {
 	// Cross-grants.
 	keyActions := map[string]bool{}
 	var crossArns []string
+	if own[ModuleGoogle] {
+		// The Google module holds the OAuth client (consent, sign-in, reopening a
+		// workspace), whose secrets layout v5 keeps in the issuer's namespace
+		// (`internal/oidc/signin/<provider>/...`): the module reads those, and
+		// nothing else of oidc.
+		refs := parameterArnsUnder(env.Region, env.Account, signInClientPrefix(env.Modules))
+		st = append(st, statement{
+			"Sid": "SluisSignInClient", "Effect": "Allow", "Action": ssmReadActions, "Resource": refs,
+		})
+		keyActions[kmsDecrypt] = true
+		crossArns = append(crossArns, refs...)
+	}
 	if len(env.MinterRefs) > 0 && own[ModuleBackup] {
 		// credentials.preset: the minter's credential, read and never written. The
 		// issuer has none: it asks the cloudflare function to mint (v1.76 E-FIN), and the
@@ -406,3 +418,7 @@ func OperatorAuditStatements(queueArn string) ([]map[string]any, error) {
 		"Sid": "SluisOperatorAudit", "Effect": "Allow", "Action": []string{sqsSendMessage}, "Resource": queueArn,
 	}}, nil
 }
+
+// signInClientPrefix is the path of the sign-in client's secrets, below which
+// the Google module reads (`internal/oidc/signin`).
+func signInClientPrefix(m ModuleSet) string { return m.InternalPrefix(ModuleOIDC) + "/signin" }

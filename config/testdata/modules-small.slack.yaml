@@ -21,6 +21,11 @@ policy:
   file: /opt/sluis/policy.yaml
 ports:
   adapter: dynamodb
+  blob:
+    adapter: s3
+    s3:
+      bucket: example-sluis-111122223333
+      region: eu-central-1
   dynamodb:
     region: eu-central-1
     tables:

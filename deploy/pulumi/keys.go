@@ -364,6 +364,14 @@ func SluisKeyPolicyStatements(a KeyPolicyArgs) ([]map[string]any, error) {
 				condStringLike:   map[string]any{condParameterArn: dedupe(read)},
 			}))
 		}
+		if r.Role.Name == RoleGoogle {
+			// The OAuth client's secrets, kept in the issuer's namespace.
+			st = append(st, allow("SluisKeySignInClient"+name, []string{kmsDecrypt, kmsDescribe}, map[string]any{
+				condArnEquals:    map[string]any{condPrincipalArn: r.principalCond()},
+				condStringEquals: viaSSM,
+				condStringLike:   map[string]any{condParameterArn: arns(signInClientPrefix(a.Modules))},
+			}))
+		}
 		for _, g := range CrossGrants {
 			if g.Role != r.Role.Name || (g.Verb != CrossReadAll && g.Verb != CrossWriteAll) {
 				continue
