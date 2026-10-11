@@ -241,6 +241,12 @@ data:
         requires:
         - all:platform:engineer
         secret: reports-client
+      sluisctl:
+        kind: public
+        redirects:
+        - http://127.0.0.1/callback
+        requires:
+        - all:platform:engineer
     controllers:
       github:
         enabledOrgs:
@@ -484,7 +490,7 @@ spec:
         # checksum per document this process reads: the service document (the
         # controllers' sections are in it) and the policy.
         checksum/config: 0e1af74de96b6301847facdefce17161de8252e2ca9f085516b0423d6a4ad3d1
-        checksum/policy: 164a6383e1a8a507459fac193139e235f56b49d8d6e02c883e65b490101c88b6
+        checksum/policy: 2c846a6716d710dcf04ffdd5a8e6fc35df2f5b64c71965da33336a6c45e5d4db
         example.com/scrape: "false"
     spec:
       serviceAccountName: issuer

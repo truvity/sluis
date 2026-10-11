@@ -112,7 +112,7 @@ func firstEnv(names ...string) string {
 
 // settingEnv reads one of this tool's own SLUISCTL_* variables, and falls back to
 // the ACCESSCTL_* name it had before the rename to sluis: both work, SLUISCTL_
-// wins. The old names are read for as long as the `accessctl` alias ships.
+// wins. The old names are read until a later release retires them.
 func settingEnv(name string) string {
 	if value := firstEnv(name); value != "" {
 		return value

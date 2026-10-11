@@ -1,8 +1,14 @@
 ## Unreleased
 
+### Changed
+
+- **`sluisctl` signs in as the client `sluisctl` by default, and falls back to `accessctl` once.** With no `--client` and no `clientId:` in `config.yaml`, `login` asks the issuer's token endpoint whether it knows `sluisctl`; if it answers `invalid_client`, `login` signs in as `accessctl` and says on stderr that this is deprecated. An explicit id never falls back. The session records the client it ran as, so refreshes and exchanges keep using it, and `login` no longer writes a defaulted id into `config.yaml`. **Before upgrading workstations, each estate registers a `sluisctl` client** (`kind: public`, the loopback redirect, the same `requires`) beside `accessctl` in its policy; `accessctl` is retired one release later. A `clientId: accessctl` line written by an older `login` counts as explicit: delete it to move to `sluisctl`. The `full` chart case declares both.
+- **`sluisctl kubeconfig` writes `sluisctl:<cluster>` users and renames old ones.** An existing `accessctl:<cluster>` user that runs `kube-token` is rewritten as `sluisctl:<cluster>` (keeping its audience and issuer, pointing at the running binary), every context that named it is pointed at the new user, and the old user is removed. Running it again changes nothing.
+- **The managed SSH known-hosts file is `~/.ssh/known_hosts.d/sluisctl`.** When only `known_hosts.d/accessctl` exists, the default path is copied once (the old file stays, `.migrated-from-accessctl` is written beside the new one). `sluisctl ssh known-hosts` says to change an `~/.ssh/config` that still names the old file. `--file` is unchanged.
+
 ### Removed
 
-- **The `accessctl` alias binary is no longer shipped; use `sluisctl`.** The `accessctl` build, the `accessctl_*` archive and the `accessctl` Nix flake are gone from the release, and `sluisctl` no longer prints the deprecation notice for the old name. Point devbox packages, download URLs and Nix flake inputs at `sluisctl_*`. The OIDC client id, the kubeconfig user name and the known_hosts file keep the old name for now.
+- **The `accessctl` alias binary is no longer shipped; use `sluisctl`.** The `accessctl` build, the `accessctl_*` archive and the `accessctl` Nix flake are gone from the release, and `sluisctl` no longer prints the deprecation notice for the old name. Point devbox packages, download URLs and Nix flake inputs at `sluisctl_*`.
 
 ## v1.75.0-rc.11
 
