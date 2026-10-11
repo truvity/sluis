@@ -1,5 +1,7 @@
 ## Unreleased
 
+## v1.76.0-rc.2
+
 ### Added
 
 - **A warm Lambda instance keeps the secrets it read.** The stores every module reads its documents from (`internal/secretstore`, over `storage/state/ssm`) read through an in-memory cache, per process and bounded to 512 documents, for `secrets.readCache` (default 5 minutes; `0s` is off; `SLUIS_SECRETS_READ_CACHE_TTL` overrides it). A write, failed or not, drops the key's copy; a copy is not kept past the `expires_on`, `access_expires` or `refresh_expires` the document states; a 403 on an R2 credential read from a document re-reads it from SSM before the retry. The aim is under 1.5k `kms:Decrypt` a day where it was about 9k. `sluis_secret_reads_total{result="hit|miss"}` counts the reads. See `secrets.readCache` in the [configuration reference](docs/reference/sluis/configuration.md).
