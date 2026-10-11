@@ -87,4 +87,4 @@ For other Apps, see [A catalogue of GitHub Apps](github-apps-catalogue.md).
 
 ## Roll back
 
-**Disconnect** uninstalls the App, then forgets its record and key, even if the uninstall fails. Its owner deletes the registration on GitHub. Nobody is removed. Disconnecting a runner App stops its runners getting jobs.
+**Disconnect** uninstalls the App, then forgets its record and key, even if the uninstall fails. On storage layout v5 the key is the App's: connecting keeps the new App as a catalogue App under its GitHub slug and the organisation's record names it (`app_ref`), and Disconnect deletes that App with the record, unless another organisation or `controllers.github.appRefs` names it, so you can connect again. Its owner deletes the registration on GitHub. Nobody is removed. Disconnecting a runner App stops its runners getting jobs.

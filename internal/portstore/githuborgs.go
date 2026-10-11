@@ -10,7 +10,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/truvity/sluis/internal/githubapp/catalogue"
 	"github.com/truvity/sluis/internal/githubroster/appid"
+	"github.com/truvity/sluis/internal/githubroster/catalogueapp"
 	"github.com/truvity/sluis/internal/githubroster/connection"
 	"github.com/truvity/sluis/internal/githubroster/link"
 	"github.com/truvity/sluis/internal/port"
@@ -56,6 +58,15 @@ func (s *GitHubOrgs) Put(ctx context.Context, record connection.Record, credenti
 			record.AppRef = stored
 		}
 	}
+	if s.b.v5 != nil && record.AppRef == "" {
+		// An organisation connected here has no App of the catalogue yet: its
+		// own is made one, as the migration makes it, and the record names it.
+		ref, err := s.keepOwnApp(ctx, record, credential)
+		if err != nil {
+			return err
+		}
+		record.AppRef = ref
+	}
 	rawRecord, err := connection.EncodeRecord(record)
 	if err != nil {
 		return err
@@ -64,6 +75,11 @@ func (s *GitHubOrgs) Put(ctx context.Context, record connection.Record, credenti
 		// The key is the App's, kept once: the item holds the record only.
 		if _, err = NewGitHubApps(s.b).requireKey(ctx, record.AppRef); err != nil {
 			return err
+		}
+		if s.b.v5 != nil {
+			if err = s.followInstallation(ctx, record); err != nil {
+				return err
+			}
 		}
 		return s.b.editItem(ctx, ghOrgKey(record.Org), 0, func(*item) (*item, error) {
 			return &item{Record: json.RawMessage(rawRecord)}, nil
@@ -85,6 +101,101 @@ func (s *GitHubOrgs) Put(ctx context.Context, record connection.Record, credenti
 	return s.b.editItem(ctx, key, 0, func(*item) (*item, error) {
 		return &item{Record: json.RawMessage(rawRecord), Secret: ref}, nil
 	})
+}
+
+// ownAppID is the catalogue id the App created for an organisation is kept
+// under on layout v5: the App's slug, as the migration names it, and when the
+// slug cannot be an id (too long), `<org>-access-roster`, the name the App is
+// asked for on GitHub.
+func ownAppID(record connection.Record) (string, error) {
+	for _, id := range []string{record.AppSlug, record.Org + "-access-roster"} {
+		if id != "" && catalogue.ValidID(id) && appid.CheckCatalogueID(id) == nil {
+			return id, nil
+		}
+	}
+	return "", fmt.Errorf("portstore: the App of %s (slug %q) cannot be a catalogue App id; name an App in controllers.github.appRefs", record.Org, record.AppSlug)
+}
+
+// keepOwnApp keeps the App an organisation was connected with as a catalogue
+// App, key and record, and returns its id. The App is written first: an
+// organisation record never names an App that is not there. A failure after
+// it leaves the App and no organisation; connecting again writes the same
+// id over it.
+func (s *GitHubOrgs) keepOwnApp(ctx context.Context, record connection.Record, credential connection.Credential) (string, error) {
+	if credential.PrivateKey == "" || record.AppID == 0 {
+		return "", fmt.Errorf("portstore: on layout v5 the key is the App's, not %s's; name the App in app_ref", record.Org)
+	}
+	id, err := ownAppID(record)
+	if err != nil {
+		return "", err
+	}
+	apps := NewGitHubCatalogueApps(s.b)
+	if prior, _, ok, err := apps.Get(ctx, id); err != nil {
+		return "", err
+	} else if ok && prior.Org != record.Org {
+		return "", fmt.Errorf("portstore: the App id %s is %s's; name the App of %s in controllers.github.appRefs", id, prior.Org, record.Org)
+	}
+	err = apps.Put(ctx, catalogueapp.Record{
+		Version: catalogueapp.Version, ID: id, Org: record.Org, AppID: record.AppID, AppSlug: record.AppSlug, Purpose: appid.Catalogue,
+		InstallationID: record.InstallationID, HTMLURL: record.HTMLURL, ConnectedAt: record.ConnectedAt, ConnectedBy: record.ConnectedBy,
+	}, credential.PrivateKey)
+	return id, err
+}
+
+// followInstallation carries the installation the organisation's record holds
+// to the catalogue App it names, when that App is the organisation's own (its
+// organisation and its GitHub App id): the install step writes the record, and
+// the App would otherwise stay pending. Any other App is not this write's.
+func (s *GitHubOrgs) followInstallation(ctx context.Context, record connection.Record) error {
+	if record.InstallationID == 0 {
+		return nil
+	}
+	apps := NewGitHubCatalogueApps(s.b)
+	app, key, ok, err := apps.Get(ctx, record.AppRef)
+	if err != nil || !ok || app.Org != record.Org || app.AppID != record.AppID || app.InstallationID == record.InstallationID {
+		return err
+	}
+	app.InstallationID = record.InstallationID
+	return apps.Put(ctx, app, key)
+}
+
+// ownAppOf is the id of the catalogue App an organisation's record names, when
+// it is the organisation's own and goes with it: its id is the one [ownAppID]
+// gives, it has the organisation and GitHub App id of the record, no other
+// organisation's record names it, and the configuration does not name it for
+// the organisation. A shared or declared App is the operator's to remove.
+func (s *GitHubOrgs) ownAppOf(ctx context.Context, org string) (string, error) {
+	it, err := s.b.getItem(ctx, ghOrgKey(org))
+	if err != nil || it == nil || len(it.Record) == 0 {
+		return "", err
+	}
+	record, err := connection.DecodeRecord(string(it.Record))
+	if err != nil || record.AppRef == "" {
+		return "", nil //nolint:nilerr // a record that does not decode names no App
+	}
+	if f := s.b.declared.AppRef; f != nil && f(org) == record.AppRef {
+		return "", nil
+	}
+	// Only an App under the id connecting makes (or the migration made) for
+	// this organisation: a catalogue App that merely has its organisation and
+	// GitHub App id is declared by someone, and others may use it.
+	if own, idErr := ownAppID(record); idErr != nil || own != record.AppRef {
+		return "", nil
+	}
+	app, _, ok, err := NewGitHubCatalogueApps(s.b).Get(ctx, record.AppRef)
+	if err != nil || !ok || app.Org != org || app.AppID != record.AppID {
+		return "", err
+	}
+	others, err := s.List(ctx)
+	if err != nil {
+		return "", err
+	}
+	for i := range others {
+		if others[i].Org != org && others[i].AppRef == record.AppRef {
+			return "", nil
+		}
+	}
+	return record.AppRef, nil
 }
 
 // storedAppRef is the App the organisation's stored record names, if any.
@@ -185,7 +296,19 @@ func (s *GitHubOrgs) appCredential(ctx context.Context, record connection.Record
 }
 
 // Delete forgets one organisation, its pass request and its confirmation.
+//
+// On layout v5 the organisation's own App goes with it (see ownAppOf), so
+// that connecting the organisation again starts clean. The App is deleted
+// after the record: a failure between leaves an App nobody names, which
+// connecting again overwrites.
 func (s *GitHubOrgs) Delete(ctx context.Context, org string) error {
+	var ownApp string
+	if s.b.v5 != nil {
+		var err error
+		if ownApp, err = s.ownAppOf(ctx, org); err != nil {
+			return err
+		}
+	}
 	if err := s.b.deleteItem(ctx, ghOrgKey(org)); err != nil {
 		return err
 	}
@@ -193,6 +316,9 @@ func (s *GitHubOrgs) Delete(ctx context.Context, org string) error {
 		if err := s.b.State.Delete(ctx, key); err != nil {
 			return err
 		}
+	}
+	if ownApp != "" {
+		return NewGitHubCatalogueApps(s.b).Delete(ctx, ownApp)
 	}
 	return nil
 }

@@ -257,8 +257,8 @@ func TestAnOrganisationReferencesAnApp(t *testing.T) {
 		if err := orgs.Put(ctx, rec, cred); err == nil {
 			t.Fatal("an organisation named an App nobody has")
 		}
-		if err := orgs.Put(ctx, connection.Record{Org: "acme", AppID: 8, AppSlug: "s"}, connection.Credential{Org: "acme", PrivateKey: "ORG-KEY"}); err == nil {
-			t.Fatal("layout v5 kept a key under an organisation")
+		if err := orgs.Put(ctx, connection.Record{Org: "acme", AppID: 8, AppSlug: "s"}, connection.Credential{Org: "acme"}); err == nil {
+			t.Fatal("layout v5 kept an organisation with neither an App nor a key")
 		}
 		crec := catalogueapp.Record{ID: "renovate", Org: "acme", AppID: 8, AppSlug: "acme-renovate", InstallationID: 11, ConnectedAt: appsAt}
 		if err := portstore.NewGitHubCatalogueApps(b).Put(ctx, crec, "CAT-KEY"); err != nil {
