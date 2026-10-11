@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"html"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -243,10 +244,11 @@ func HandlerWithSignIn(iss *Issuer, storage op.Storage, signIn SignInDeps) (http
 	// Everything not ours is the protocol's. A catch-all rather than a
 	// list, so that a library endpoint added by an upgrade keeps working
 	// instead of turning into a 404 nobody expected.
-	protocol := challenges(refusedAuthorize(namedClientRefusal(defaultScope(resourceIndicators(
+	protocol := challenges(refusedAuthorize(defaultScope(resourceIndicators(
 		iss.Policy().Resource, storage.GetClientByClientID, requirePKCE(iss.Policy, presentedClients(
 			endSession(signIn, truthfulDiscovery(
-				iss.Config().URL, func() bool { return iss.Policy().ClientDocuments().Enabled() }, provider)))))))))
+				iss.Config().URL, func() bool { return iss.Policy().ClientDocuments().Enabled() },
+				refusalFilter(provider)))))))))
 	// An installation token for a catalogue App is claimed in front of the
 	// library, which can only mint tokens this issuer signs. The storage
 	// is the concrete one wherever a deployment runs; a test's stand-in
@@ -465,11 +467,12 @@ func refusedAuthorize(next http.Handler) http.Handler {
 			return
 		}
 
-		// The library's own sentence, which already says what is wrong
-		// and is written for the person rather than for a program.
+		// The words the library's answer was given by [refusalFilter], with
+		// the reason it carried already in the log under this request's id.
 		w.Header().Del("Content-Length")
-		_ = writePage(w, held.status, "That sign-in request was not valid",
-			`<p>`+html.EscapeString(strings.TrimSpace(held.body.String()))+`</p>
+		phrase := phraseIn(held.body.String())
+		_ = writePage(w, held.status, capital(phrase),
+			`<p>`+html.EscapeString(pageText(r.Context(), phrase))+`</p>
 	<p class="note">Nothing was signed in, and this is not something you can fix from here.
 	Whoever runs the application that sent you will need to correct how it asks.</p>`)
 	})
@@ -487,20 +490,27 @@ func wantsHTML(r *http.Request) bool {
 // only after the library has accepted the request -- and the page says
 // so, because a person who asked to sign out needs to know they still
 // have not.
-func endSessionRefusal(w http.ResponseWriter, r *http.Request, status int, description string) {
+func endSessionRefusal(w http.ResponseWriter, r *http.Request, status int, why string) {
+	logRefusal(r.Context(), status, why, nil, []any{slog.String("error", string(oidc.InvalidRequest))})
+	endSessionPage(w, r, status, string(oidc.InvalidRequest), refusal.InvalidRequest)
+}
+
+// endSessionPage is the refusal in the form the caller reads, with fixed
+// words and the request id and nothing about why.
+func endSessionPage(w http.ResponseWriter, r *http.Request, status int, code, phrase string) {
 	if !wantsHTML(r) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store")
 		w.WriteHeader(status)
 		_ = json.NewEncoder(w).Encode(map[string]string{
-			"error":             "invalid_request",
-			"error_description": description,
+			"error":             code,
+			"error_description": refusal.Text(r.Context(), phrase),
 		})
 		return
 	}
 
-	_ = writePage(w, status, "That sign-out request was not valid",
-		`<p>`+html.EscapeString(description)+`</p>
+	_ = writePage(w, status, capital(phrase),
+		`<p>`+html.EscapeString(pageText(r.Context(), phrase))+`</p>
 	<p class="note">You are still signed in — this request was refused, so nothing ended.
 	The button below signs out anyway; it needs none of what was wrong here.</p>
 	<p><a class="btn" href="/logout">Sign out</a></p>`)
@@ -544,21 +554,20 @@ func (h *heldResponse) release(r *http.Request) {
 		return
 	}
 
-	// The description, not the whole body: `error_description` is the
-	// sentence the library wrote for a person, and `error` is a code
-	// from a specification that tells them nothing.
+	// The words, not the whole body: what the library refused with was
+	// replaced by [refusalFilter], which logged it under this request's id.
 	var oauth struct {
-		Description string `json:"error_description"`
+		Error string `json:"error"`
 	}
-	description := strings.TrimSpace(h.body.String())
-	if err := json.Unmarshal(h.body.Bytes(), &oauth); err == nil && oauth.Description != "" {
-		description = oauth.Description
+	_ = json.Unmarshal(h.body.Bytes(), &oauth)
+	if oauth.Error == "" {
+		oauth.Error = codeForStatus(h.status)
 	}
 
 	// Nothing has reached the real writer yet -- that is the point of
 	// holding it -- so the page is the whole response, not an addition.
 	h.ResponseWriter.Header().Del("Content-Length")
-	endSessionRefusal(h.ResponseWriter, r, h.status, description)
+	endSessionPage(h.ResponseWriter, r, h.status, oauth.Error, phraseOf(oauth.Error))
 }
 
 // discoveryPath is where a relying party looks first.

@@ -586,8 +586,9 @@ func TestASignInHeldByAnAgentSessionIsNotAProof(t *testing.T) {
 		if status != tc.status {
 			t.Errorf("a %s session's sign-in exchanged with %d %v, want %d", tc.class, status, body, tc.status)
 		}
-		if tc.class == issuer.ClassAgent && !strings.Contains(body["error_description"].(string), "agent-class") {
-			t.Errorf("the refusal says %v, want it to name the agent class", body["error_description"])
+		if tc.class == issuer.ClassAgent {
+			// The class is the reason, and the reason is in the log.
+			wantRefusedBody(t, body, "not authorised", "agent-class")
 		}
 	}
 }

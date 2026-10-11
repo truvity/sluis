@@ -146,7 +146,17 @@ func applyRequestContext(ctx context.Context, r *record.Record) {
 	if r.GetContext() != nil {
 		return
 	}
+	id := RequestID(ctx)
 	if c := RequestContext(ctx); c != nil {
 		r.Context = proto.Clone(c).(*record.Context)
+		if id != "" {
+			r.Context.RequestId = id
+		}
+		return
+	}
+	// A service that names its requests but has not read where they came
+	// from still gives the record the id its caller was told.
+	if id != "" {
+		r.Context = &record.Context{RequestId: id}
 	}
 }

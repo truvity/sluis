@@ -1,7 +1,6 @@
 package issuer
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -409,61 +408,4 @@ func documentName(name string, target *url.URL) string {
 		return name[:documentNameMax]
 	}
 	return name
-}
-
-// refusalHolder carries, from the storage back to the handler that
-// installed it, why a client document could not be used.
-type refusalHolder struct{ err error }
-
-type refusalHolderKey struct{}
-
-// noteClientRefusal records why the client lookup failed, if a handler is
-// waiting to hear it.
-func noteClientRefusal(ctx context.Context, err error) {
-	if holder, ok := ctx.Value(refusalHolderKey{}).(*refusalHolder); ok {
-		holder.err = err
-	}
-}
-
-// libraryClientRefusal is the sentence the library answers with when the
-// storage cannot return a client; it drops the storage's reason.
-const libraryClientRefusal = "unable to retrieve client by id"
-
-// namedClientRefusal puts the reason a client document was refused into
-// the answer to `/authorize`, after the library's "unable to retrieve
-// client by id", which drops it.
-//
-// The storage notes the reason on the request's context and the library's
-// answer is amended on the way out, whichever form it takes (the page the
-// person sees, or the OAuth error a program reads). Nothing is looked up
-// here, so a request the library never resolves costs no fetch.
-func namedClientRefusal(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != authorizePath {
-			next.ServeHTTP(w, r)
-			return
-		}
-
-		holder := &refusalHolder{}
-		recorder := &captured{header: http.Header{}}
-		next.ServeHTTP(recorder, r.WithContext(context.WithValue(r.Context(), refusalHolderKey{}, holder)))
-
-		body := recorder.body.Bytes()
-		if holder.err != nil && recorder.status >= http.StatusBadRequest && bytes.Contains(body, []byte(libraryClientRefusal)) {
-			reason := holder.err.Error()
-			if strings.Contains(recorder.header.Get("Content-Type"), "json") {
-				encoded, _ := json.Marshal(reason)
-				reason = string(encoded[1 : len(encoded)-1])
-			}
-			body = bytes.Replace(body, []byte(libraryClientRefusal), []byte(libraryClientRefusal+": "+reason), 1)
-			recorder.header.Del("Content-Length")
-		}
-
-		copyHeader(w.Header(), recorder.header)
-		if recorder.status == 0 {
-			recorder.status = http.StatusOK
-		}
-		w.WriteHeader(recorder.status)
-		_, _ = w.Write(body)
-	})
 }

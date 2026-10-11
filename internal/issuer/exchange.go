@@ -87,6 +87,7 @@ func (i *Issuer) Exchange(ctx context.Context, proof Proof, audience string) (Gr
 	}
 	client, ok := i.set.Client(audience)
 	if !ok {
+		i.record(ctx, exchangeEvent(proof, audience, audit.Denied("the requested audience is not a declared client")))
 		return Grant{}, fmt.Errorf("%w: %q", ErrUnknownTarget, audience)
 	}
 

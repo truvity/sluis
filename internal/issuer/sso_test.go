@@ -468,8 +468,11 @@ func TestEndSessionRefusesAnUnattributableRedirectURI(t *testing.T) {
 		t.Fatalf("end_session = %d, want 400", status)
 	}
 
-	if !strings.Contains(body, "post_logout_redirect_uri") {
-		t.Errorf("the page does not say what was wrong: %q", body)
+	// The page says it was refused and quotes a reference; what was wrong is
+	// in the log under it.
+	wantRefusedPage(t, body, "invalid request", "post_logout_redirect_uri")
+	if strings.Contains(body, "post_logout_redirect_uri") {
+		t.Errorf("the page says what was wrong: %q", body)
 	}
 
 	// And the refusal left the sign-in alone, which is what the page

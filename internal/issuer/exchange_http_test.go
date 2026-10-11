@@ -278,15 +278,27 @@ func TestTokenExchangeRefusesAnUngatedAudience(t *testing.T) {
 	if got, _ := body["error"].(string); got != "invalid_target" {
 		t.Errorf("error = %q, want invalid_target", got)
 	}
-	if desc, _ := body["error_description"].(string); !strings.Contains(desc, "all:gitops:deployer") {
-		t.Errorf("error_description = %q, want it to name what would have admitted the job", desc)
+	// The caller is told nothing about what would have admitted the job:
+	// the groups are in the log, under the id the answer quotes.
+	wantRefusedBody(t, body, "not authorised", "all:gitops:deployer")
+	if desc, _ := body["error_description"].(string); strings.Contains(desc, "all:gitops") {
+		t.Errorf("error_description = %q names a group", desc)
 	}
+	notAdmitted := body
 
-	// An audience that does not exist is a different answer from one the
-	// caller may not have, and neither leaks the other.
+	// An audience that does not exist is the SAME answer as one the caller
+	// may not have -- one code, one body, apart from the request id -- and
+	// the log says which it was.
 	status, body = exchange(t, server, "github:example-org/gitops@refs/heads/master", "aws:9999:nobody")
 	if status == http.StatusOK {
 		t.Fatalf("an undeclared audience was minted: %v", body)
+	}
+	wantRefusedBody(t, body, "not authorised", "aws:9999:nobody")
+	if body["error"] != "invalid_target" || notAdmitted["error"] != "invalid_target" {
+		t.Errorf("codes %v and %v, want both invalid_target", notAdmitted["error"], body["error"])
+	}
+	if a, b := withoutRequest(notAdmitted), withoutRequest(body); a != b {
+		t.Errorf("an unknown audience and a refused one differ:\n%s\n%s", a, b)
 	}
 
 	// A token no verifier recognises is refused before policy is ever
