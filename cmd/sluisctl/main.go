@@ -183,7 +183,7 @@ func usage(to *os.File) {
   kubeconfig    a context per cluster you are granted
   aws-config    a profile per cloud role you are granted
 
-  token         a token for one audience, on stdout (OpenBAO's login, scripts)
+  token         a token for one audience, on stdout (--show: its claims)
   github-token  a GitHub App installation token, under the catalogue's grants
   kube-token    a Kubernetes exec credential      (run by kubectl)
   aws           an AWS credential process answer  (run by the AWS SDKs)
