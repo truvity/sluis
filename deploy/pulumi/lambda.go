@@ -914,7 +914,8 @@ func (a *LambdaArgs) validate() (LambdaArgs, error) {
 				"it has no default, set it to an alias such as \"alias/sluis-<instance>-sign\", or supply the keys with Keys")
 		}
 		if !out.DisableSigningKeyRS256 && out.SigningKeyRS256Alias == "" {
-			return out, errors.New("sluispulumi: LambdaArgs.SigningKeyRS256Alias is required when the library creates the RS256 signing key (Keys and WrappedSigning unset, DisableSigningKeyRS256 false): " +
+			return out, errors.New("sluispulumi: LambdaArgs.SigningKeyRS256Alias is required when the library creates the RS256 key " +
+				"(Keys and WrappedSigning unset, DisableSigningKeyRS256 false): " +
 				"it has no default, set it to an alias such as \"alias/sluis-<instance>-sign-rs256\", or set DisableSigningKeyRS256")
 		}
 		if !out.DisableSigningKeyRS256 && (!strings.HasPrefix(out.SigningKeyRS256Alias, "alias/") || len(out.SigningKeyRS256Alias) == len("alias/")) {
