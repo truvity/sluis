@@ -1,5 +1,9 @@
 ## Unreleased
 
+### Added
+
+- **The Pulumi library has a generic module-function builder.** `newModuleFunction` makes one module's function from the release zip: a configuration layer with the module's own documents, a log group, a role whose policy the caller renders (from `ModuleRoleStatements`), a published function, the aliases `live` and `live-<class>` per caller class, an asynchronous invoke config with no retries, and, when asked for, the post-deploy check. `NewBackup` and `NewRestore` now build on it in place of `buildFunction`, with no resource change: the logical and physical names are the ones they had, and `TestBackupOnTheModuleFunctionBuilderChangesNoResource` holds the backup's resource shape (0 to create, 0 to replace in a preview). Nothing is deployed differently by this change; it is the base for a function per module.
+
 ## v1.75.0-rc.10
 
 ### Added
