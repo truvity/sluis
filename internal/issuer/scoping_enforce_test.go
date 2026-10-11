@@ -323,3 +323,124 @@ func TestGroupsScopingEnforceLeavesTheGateAndLifetimeUnaffected(t *testing.T) {
 		t.Errorf("expires_in = %v, want ~4h (rung:platform's cap), not the 24h default", expiresIn)
 	}
 }
+
+// fragmentScopingPolicy: a job on master holds three groups, each with a
+// claims fragment. grafana requires the vm pair, so it keeps the viewer
+// and the editor (a list `tiers` each, to be unioned); dms requires the
+// dms pair, so it keeps only the group that names it.
+const fragmentScopingPolicy = `
+version: 1
+groups:
+  devel:vm:viewer:
+    matchers:
+      - github: { repository: example-org/gitops, ref: refs/heads/master }
+  devel:vm:editor:
+    matchers:
+      - github: { repository: example-org/gitops, ref: refs/heads/master }
+  devel:dms:admin:
+    matchers:
+      - github: { repository: example-org/gitops, ref: refs/heads/master }
+claims:
+  devel:vm:viewer: { vm_access: { tiers: [read] } }
+  devel:vm:editor: { vm_access: { tiers: [write] } }
+  devel:dms:admin: { dms_access: { level: full } }
+clients:
+  grafana: { kind: exchange, requires: [devel:vm:viewer] }
+  dms: { kind: exchange, requires: [devel:dms:admin] }
+  local-dev: { kind: public, requires: [devel:vm:viewer] }
+`
+
+func exchangedClaims(t *testing.T, server *httptest.Server, audience string) map[string]any {
+	t.Helper()
+	status, body := exchange(t, server, "github:example-org/gitops@refs/heads/master", audience)
+	if status != http.StatusOK {
+		t.Fatalf("exchange for %s: %d %v", audience, status, body)
+	}
+	raw, _ := body["access_token"].(string)
+	if raw == "" {
+		t.Fatalf("no access token in %v", body)
+	}
+	return claimsOf(t, server, raw)
+}
+
+// Under enforce an exchanged token carries the fragments of the groups it
+// KEEPS and none of the others', and the kept groups' list fragments are
+// still unioned.
+func TestGroupsScopingEnforceScopesFragmentsOnExchange(t *testing.T) {
+	t.Parallel()
+	server, _, _ := serveScoping(t, &fakeDirectory{}, issuer.GroupsScopingEnforce, fragmentScopingPolicy)
+
+	grafana := exchangedClaims(t, server, "grafana")
+	if got := groupsOf(t, grafana); !slices.Equal(got, []string{"devel:vm:editor", "devel:vm:viewer"}) {
+		t.Errorf("grafana groups = %v", got)
+	}
+	vm, _ := grafana["vm_access"].(map[string]any)
+	if tiers, _ := vm["tiers"].([]any); len(tiers) != 2 || tiers[0] != "read" || tiers[1] != "write" {
+		t.Errorf("grafana vm_access = %v, want tiers [read write] unioned", grafana["vm_access"])
+	}
+	if _, present := grafana["dms_access"]; present {
+		t.Errorf("grafana token carries dms_access: %v", grafana["dms_access"])
+	}
+
+	dms := exchangedClaims(t, server, "dms")
+	if got := groupsOf(t, dms); !slices.Equal(got, []string{"devel:dms:admin"}) {
+		t.Errorf("dms groups = %v", got)
+	}
+	if _, present := dms["vm_access"]; present {
+		t.Errorf("dms token carries vm_access: %v", dms["vm_access"])
+	}
+	if dms["dms_access"] == nil {
+		t.Error("dms token lost its own dms_access")
+	}
+}
+
+// Report mode keeps every fragment on the token, as today.
+func TestGroupsScopingReportKeepsEveryFragmentOnExchange(t *testing.T) {
+	t.Parallel()
+	server, _, _ := serveScoping(t, &fakeDirectory{}, issuer.GroupsScopingReport, fragmentScopingPolicy)
+
+	dms := exchangedClaims(t, server, "dms")
+	if dms["vm_access"] == nil || dms["dms_access"] == nil {
+		t.Errorf("report mode dropped a fragment: %v", dms)
+	}
+}
+
+// The sign-in path (id token, access token, /userinfo's stored copy)
+// narrows fragments too: under the demonstration policy Ada holds
+// mgmt:k8s:admin (tailnet tiers vpc and service), which local-dev drops,
+// and devel:k8s:viewer (tier vpc), which it keeps.
+func TestGroupsScopingEnforceScopesFragmentsOnSignIn(t *testing.T) {
+	t.Parallel()
+
+	tiersOf := func(claims map[string]any) []any {
+		tailnet, _ := claims["tailnet"].(map[string]any)
+		tiers, _ := tailnet["tiers"].([]any)
+		return tiers
+	}
+
+	for _, tc := range []struct {
+		mode issuer.GroupsScopingMode
+		want int
+	}{
+		{issuer.GroupsScopingEnforce, 1},
+		{issuer.GroupsScopingReport, 2},
+	} {
+		t.Run(string(tc.mode), func(t *testing.T) {
+			t.Parallel()
+			server, iss, _ := serveScoping(t, adaDirectory(), tc.mode, "")
+			body := signedInTokens(t, server, iss, "local-dev")
+			idToken, _ := body["id_token"].(string)
+			accessToken, _ := body["access_token"].(string)
+
+			if got := tiersOf(payloadOf(t, idToken)); len(got) != tc.want {
+				t.Errorf("id token tailnet tiers = %v, want %d", got, tc.want)
+			}
+			if got := tiersOf(claimsOf(t, server, accessToken)); len(got) != tc.want {
+				t.Errorf("access token tailnet tiers = %v, want %d", got, tc.want)
+			}
+			if got := tiersOf(userinfoOf(t, server, accessToken)); len(got) != tc.want {
+				t.Errorf("userinfo tailnet tiers = %v, want %d", got, tc.want)
+			}
+		})
+	}
+}
