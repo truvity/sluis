@@ -91,6 +91,14 @@ func ModuleRoleStatements(env ModuleEnv, role Role) ([]map[string]any, error) {
 			"Sid": "SluisParameters" + capitalize(m), "Effect": "Allow", "Action": ssmOwnActions,
 			"Resource": parameterArnsUnder(env.Region, env.Account, internal, external),
 		})
+		// A listing is authorised against the bare path ARN, not against the
+		// parameters under it, so `/*` above never covers it. The module lists
+		// its own two paths and nothing wider: no sibling module, no root.
+		st = append(st, statement{
+			"Sid": "SluisParametersList" + capitalize(m), "Effect": "Allow",
+			"Action":   []string{ssmGetParametersByPath},
+			"Resource": parameterBareArns(env.Region, env.Account, internal, external),
+		})
 		arns = append(arns, parameterArnsUnder(env.Region, env.Account, internal, external)...)
 	}
 	if len(arns) > 0 {

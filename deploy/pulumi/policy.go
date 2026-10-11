@@ -372,6 +372,16 @@ func parameterArnsUnder(region, account string, prefixes ...string) []string {
 	return out
 }
 
+// parameterBareArns is the ARN of each path itself, without the `/*`: what
+// GetParametersByPath is authorised against.
+func parameterBareArns(region, account string, prefixes ...string) []string {
+	out := make([]string, 0, len(prefixes))
+	for _, p := range prefixes {
+		out = append(out, arnPrefix+"ssm:"+region+":"+account+":parameter"+p)
+	}
+	return out
+}
+
 // functionPolicyIn is what the function's role is rendered from.
 type functionPolicyIn struct {
 	region, account    string
