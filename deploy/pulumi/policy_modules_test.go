@@ -82,7 +82,7 @@ func TestModuleRoleOwnPattern(t *testing.T) {
 	}
 	// The flag is in the module's own table: no grant on the backup table, or
 	// on any other, reaches it.
-	for _, not := range []string{"internal/oidc", "tbl:google", "tbl:backup", "bkt/google", "fn:cf", "GetParametersByPath"} {
+	for _, not := range []string{"internal/oidc", "tbl:google", "tbl:backup", "bkt/google", "fn:cf"} {
 		if strings.Contains(doc, not) {
 			t.Errorf("unexpected %q in %s", not, doc)
 		}
@@ -276,5 +276,49 @@ func TestModuleRoleMinterCrossGrant(t *testing.T) {
 	}
 	if strings.Contains(own, "SluisCrossCloudflareMinter") {
 		t.Errorf("the module's own role gets a cross-grant: %s", own)
+	}
+}
+
+// A listing is authorised against the bare path ARN, so a role lists exactly
+// its own modules' two paths: not `/*`, not a sibling, not the root.
+func TestModuleRoleListsOnlyItsOwnBarePaths(t *testing.T) {
+	env := testModuleEnv()
+	base := arnPrefix + "ssm:" + env.Region + ":" + env.Account + ":parameter/sluis/i1/"
+	for _, role := range testRoles() {
+		st, err := ModuleRoleStatements(env, role)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := map[string]bool{}
+		for _, m := range role.Hosts {
+			want[base+"internal/"+string(m)] = true
+			want[base+"external/"+string(m)] = true
+		}
+		got := map[string]bool{}
+		for _, s := range st {
+			b, _ := json.Marshal(s)
+			if !strings.Contains(string(b), ssmGetParametersByPath) {
+				continue
+			}
+			acts, _ := s["Action"].([]string)
+			if len(acts) != 1 || acts[0] != ssmGetParametersByPath || s["Effect"] != "Allow" {
+				t.Errorf("%s: list statement carries more than the list: %s", role.Name, b)
+			}
+			res, _ := s["Resource"].([]string)
+			for _, r := range res {
+				if strings.HasSuffix(r, "*") {
+					t.Errorf("%s: list resource %q is wider than a bare path", role.Name, r)
+				}
+				got[r] = true
+			}
+		}
+		if len(got) != len(want) {
+			t.Errorf("%s: list resources %v, want %v", role.Name, got, want)
+		}
+		for r := range want {
+			if !got[r] {
+				t.Errorf("%s: no list on %s", role.Name, r)
+			}
+		}
 	}
 }
