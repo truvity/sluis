@@ -279,7 +279,9 @@ func (c *Console) notify(ctx context.Context, controller, target string) {
 		return
 	}
 	if err := port.NotifyController(ctx, c.deps.Trigger, controller, target); err != nil {
-		c.log().WarnContext(ctx, "a tick could not be requested", logattr.SafeString("controller", controller), logattr.SafeString("target", target), logattr.SafeError("error", err))
+		c.log().WarnContext(ctx, "a tick could not be requested",
+			logattr.SafeString("controller", controller), logattr.SafeString("target", target),
+			logattr.SafeError("error", err))
 	}
 }
 
