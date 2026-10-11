@@ -73,7 +73,8 @@ func TestLayoutV4KeepsTheV4GrantsOnly(t *testing.T) {
 			t.Errorf("%q: the v4 grants are missing: %v", l, res)
 		}
 		for _, r := range res {
-			if (strings.Contains(r, "sluis-staging-") && !strings.Contains(r, "sluis-staging-issuer")) || strings.Contains(r, "/internal/oidc") || strings.Contains(r, "/external/oidc") {
+			v5 := strings.Contains(r, "sluis-staging-") && !strings.Contains(r, "sluis-staging-issuer")
+			if v5 || strings.Contains(r, "/internal/oidc") || strings.Contains(r, "/external/oidc") {
 				t.Errorf("%q: a v5 resource on layout v4: %s", l, r)
 			}
 		}
