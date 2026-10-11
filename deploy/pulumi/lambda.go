@@ -33,14 +33,6 @@ const LiveAlias = sluisconfig.LiveAlias
 // LambdaType is the Pulumi type token of the Lambda component.
 const LambdaType = "sluis:aws:Lambda"
 
-// DefaultSigningKeyRS256Alias is the RSA signing key's alias when
-// LambdaArgs.SigningKeyRS256Alias is empty.
-const DefaultSigningKeyRS256Alias = "alias/sluis-signing-rs256"
-
-// DefaultWrappedSigningKeyAlias is the symmetric key's alias when
-// WrappedSigningArgs.KeyAlias is empty and the library creates the key.
-const DefaultWrappedSigningKeyAlias = "alias/sluis-signing-wrapped"
-
 // StateSecretParameterName is the SSM parameter of the issuer's state secret,
 // `/sluis/<instance>/internal/config/issuer/state-secret`.
 func StateSecretParameterName(instance string) string {
@@ -235,8 +227,10 @@ type LambdaArgs struct {
 	SigningKeyAlias string
 	// SigningKeyRS256Alias is the alias of the second signing key, `RSA_3072`
 	// and `SIGN_VERIFY`, which both estates sign RS256 tokens with beside the
-	// ES384 key. Default DefaultSigningKeyRS256Alias. It must start with
-	// "alias/". DisableSigningKeyRS256 leaves the key out (default: created).
+	// ES384 key. Required while the library creates the signing key and
+	// DisableSigningKeyRS256 is false, with no default: a purpose-named alias
+	// such as "alias/sluis-<instance>-sign-rs256". It must start with "alias/".
+	// DisableSigningKeyRS256 leaves the key out (default: created).
 	//
 	// Deprecated: see SigningKeyAlias.
 	SigningKeyRS256Alias   string
@@ -386,8 +380,10 @@ type WrappedSigningArgs struct {
 	// KubernetesIdentityArgs.WrappedSigningKeyArn names this key. Ignored with
 	// KeyArn.
 	AdditionalSigningRoleArns []string
-	// KeyAlias is the created key's alias. Default DefaultWrappedSigningKeyAlias.
-	// It must start with "alias/". Ignored with KeyArn.
+	// KeyAlias is the created key's alias. Required when the library creates the
+	// key (KeyArn unset), with no default: a purpose-named alias such as
+	// "alias/sluis-<instance>-wrapped". It must start with "alias/". Ignored
+	// with KeyArn.
 	KeyAlias string
 }
 
@@ -905,15 +901,10 @@ func (a *LambdaArgs) validate() (LambdaArgs, error) {
 		}
 		out.Artifacts = &norm
 	}
-	if out.SigningKeyRS256Alias == "" {
-		out.SigningKeyRS256Alias = DefaultSigningKeyRS256Alias
-	}
 	if w := out.WrappedSigning; w != nil {
-		if w.KeyAlias == "" {
-			cp := *w
-			cp.KeyAlias = DefaultWrappedSigningKeyAlias
-			out.WrappedSigning = &cp
-			w = &cp
+		if w.KeyArn == nil && w.KeyAlias == "" {
+			return out, errors.New("sluispulumi: LambdaArgs.WrappedSigning.KeyAlias is required when the library creates the wrapping key (KeyArn unset): " +
+				"it has no default, set it to an alias such as \"alias/sluis-<instance>-wrapped\", or set KeyArn")
 		}
 		if w.KeyArn == nil && (!strings.HasPrefix(w.KeyAlias, "alias/") || len(w.KeyAlias) == len("alias/")) {
 			return out, fmt.Errorf("sluispulumi: LambdaArgs.WrappedSigning.KeyAlias %q must start with \"alias/\"", w.KeyAlias)
@@ -923,6 +914,10 @@ func (a *LambdaArgs) validate() (LambdaArgs, error) {
 		if out.SigningKeyAlias == "" {
 			return out, errors.New("sluispulumi: LambdaArgs.SigningKeyAlias is required when the library creates the signing key (Keys and WrappedSigning unset): " +
 				"it has no default, set it to an alias such as \"alias/sluis-<instance>-sign\", or supply the keys with Keys")
+		}
+		if !out.DisableSigningKeyRS256 && out.SigningKeyRS256Alias == "" {
+			return out, errors.New("sluispulumi: LambdaArgs.SigningKeyRS256Alias is required when the library creates the RS256 signing key (Keys and WrappedSigning unset, DisableSigningKeyRS256 false): " +
+				"it has no default, set it to an alias such as \"alias/sluis-<instance>-sign-rs256\", or set DisableSigningKeyRS256")
 		}
 		if !out.DisableSigningKeyRS256 && (!strings.HasPrefix(out.SigningKeyRS256Alias, "alias/") || len(out.SigningKeyRS256Alias) == len("alias/")) {
 			return out, fmt.Errorf("sluispulumi: LambdaArgs.SigningKeyRS256Alias %q must start with \"alias/\"", out.SigningKeyRS256Alias)
