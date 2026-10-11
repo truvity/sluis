@@ -19,7 +19,7 @@
 # A change to what an action carries is a new version. The installation keeps
 # every version it was sent, so records already written keep their meaning.
 source: roster
-version: "1.16.0"
+version: "1.17.0"
 locales: [en]
 
 actor_kinds:
@@ -278,6 +278,18 @@ actions:
     data_schema: https://schemas.example/access-roster/v1/migration-copied.json
     message:
       en: "{outcome, select, success {{data_phase, select, started {{actor} is copying {data_written, plural, one {# item} other {# items}} into {targets_0_id}} other {{actor} copied {data_written, plural, one {# item} other {# items}} into {targets_0_id}}}} other {{actor} could not finish copying into {targets_0_id}}}"
+
+  roster.secrets.rekeyed:
+    summary: An operator ran `sluis secrets rekey` for real, re-writing the installation's SSM SecureString parameters under the key `secrets.kmsKeyId` names. A record with `phase` started is kept before the first write and names the parameters about to be re-written; the record with `phase` completed (or a failed outcome) says how many were. Names and counts only, never a value.
+    operation: modify
+    categories: [data_change, privileged_access]
+    category: security
+    target_types: [installation]
+    # Recorded before the first write, and refused when it cannot be.
+    delivery: block
+    data_schema: https://schemas.example/access-roster/v1/secrets-rekeyed.json
+    message:
+      en: "{outcome, select, success {{data_phase, select, started {{actor} is re-keying {data_planned, plural, one {# parameter} other {# parameters}} of {targets_0_id}} other {{actor} re-keyed {data_rekeyed, plural, one {# parameter} other {# parameters}} of {targets_0_id}}}} other {{actor} could not finish re-keying the parameters of {targets_0_id}}}"
 
   # -------------------------------------------------------------- sessions
 

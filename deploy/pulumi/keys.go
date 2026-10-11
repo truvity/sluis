@@ -74,6 +74,17 @@ func (k *KeysArgs) validate() error {
 	return errors.Join(check("Sign", k.Sign, true), check("Secrets", k.Secrets, false))
 }
 
+// parameterKeyID is the key the parameters the library creates are encrypted
+// with, as SSM takes it in KeyId: the alias of Keys.Secrets, else ParameterKeyArn,
+// else "" (the AWS-managed key). It is the same key the function's own writes use
+// (the document's `secrets.kmsKeyId`), so one estate key covers both.
+func parameterKeyID(a *LambdaArgs) string {
+	if a.Keys != nil && a.Keys.Secrets != "" {
+		return a.Keys.Secrets
+	}
+	return a.ParameterKeyArn
+}
+
 func (k *KeysArgs) legacy() bool { return k.LegacySigningContext == nil || *k.LegacySigningContext }
 
 // contextKeys are the encryption context's keys the grants admit, and only they.

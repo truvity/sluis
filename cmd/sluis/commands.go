@@ -104,6 +104,7 @@ func newApp(out io.Writer) *cli.Command {
 			legacy("tick", "one tick, once: github or slack, then the target", tickCmd, out),
 			legacy("check", "verify that every secret the document and its policy declare is in SSM: names and versions, never values", checkCmd, out),
 			legacy("maintenance", "freeze for a migration, issuer still up: on, off or status (sluis maintenance --help)", maintenanceCmd, out),
+			legacy("secrets", "re-key the installation's SSM parameters under the estate key: rekey (sluis secrets --help)", secretsCmd, out),
 			legacy("migrate", "copy the State from one storage to another: --from <config> --to <config>", migrateCmd, out),
 			{
 				Name:  "version",
@@ -192,7 +193,7 @@ func run(args []string, out io.Writer) error {
 // build refuses every command that is another module's, as a Lambda zip refuses
 // to start as another module. An unpinned build (the sluis image) runs them all.
 var pinnedCommands = map[string][]string{
-	"issuer":     {"issuer", "serve", "github", "slack", "google", "controller", "tick", "check", "migrate"},
+	"issuer":     {"issuer", "serve", "github", "slack", "google", "controller", "tick", "check", "migrate", "secrets"},
 	"backup":     {"backup", "restore"},
 	"cloudflare": {"cloudflare"},
 }

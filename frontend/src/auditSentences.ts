@@ -3,7 +3,7 @@ import type { Sentences } from "@truvity/audit";
 
 export const roster: Sentences = {
   "source": "roster",
-  "version": "1.16.0",
+  "version": "1.17.0",
   "locales": [
     "en"
   ],
@@ -306,6 +306,12 @@ export const roster: Sentences = {
       "summary": "An operator ran `sluis migrate v5 prune` for real. A record with `phase` started is kept before the first delete and names the layout v4 parameters about to be deleted; the record with `phase` completed (or a failed outcome) says how many were. Names and counts only, never a value.",
       "message": {
         "en": "{outcome, select, success {{data_phase, select, started {{actor} is pruning {data_planned, plural, one {# layout v4 parameter} other {# layout v4 parameters}} of {targets_0_id}} other {{actor} pruned {data_deleted, plural, one {# layout v4 parameter} other {# layout v4 parameters}} of {targets_0_id}}}} other {{actor} could not finish pruning the layout v4 parameters of {targets_0_id}}}"
+      }
+    },
+    "roster.secrets.rekeyed": {
+      "summary": "An operator ran `sluis secrets rekey` for real, re-writing the installation's SSM SecureString parameters under the key `secrets.kmsKeyId` names. A record with `phase` started is kept before the first write and names the parameters about to be re-written; the record with `phase` completed (or a failed outcome) says how many were. Names and counts only, never a value.",
+      "message": {
+        "en": "{outcome, select, success {{data_phase, select, started {{actor} is re-keying {data_planned, plural, one {# parameter} other {# parameters}} of {targets_0_id}} other {{actor} re-keyed {data_rekeyed, plural, one {# parameter} other {# parameters}} of {targets_0_id}}}} other {{actor} could not finish re-keying the parameters of {targets_0_id}}}"
       }
     },
     "roster.session.ended": {
