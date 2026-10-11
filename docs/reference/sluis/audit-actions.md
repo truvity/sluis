@@ -12,7 +12,7 @@ The actions sluis records, from the catalogue [`internal/audit/catalogue/roster.
 
 <!-- generated: audit-actions -->
 
-Catalogue version 1.18.0, 83 actions.
+Catalogue version 1.19.0, 83 actions.
 
 | Action | Operation | Targets | Delivery | Summary |
 |---|---|---|---|---|

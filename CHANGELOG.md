@@ -1,5 +1,9 @@
 ## Unreleased
 
+### Security
+
+- **A refused caller is told "not authorised" and a request id, and nothing about why.** Every refusal from the issuer's OAuth endpoints, its sign-in and sign-out pages, the console's sign-in, the operator calls, the ConnectRPC services and the directory listener now says `not authorised (request <id>)` (`invalid request` for a malformed request, `server error` for a fault of ours; `Not authorised. Reference: <id>` on a page). It no longer names the client, audience, group or address, quotes a raw error, or reveals that recovery is turned off. Every response carries `X-Request-Id`: a well-formed one from the caller (8 to 64 letters, digits and `.` `_` `:` `-`) is kept, and otherwise one is generated. An operator finds the reason in the log (`request_id`) and in the audit trail (`context.request_id`) under that id. An unknown client and a wrong secret are one answer, and so are an unknown audience and one the proof is refused (`invalid_target`); `invalid_client` is `401` with `WWW-Authenticate` when the client sent an `Authorization` header and `400` when it did not (it was `401` for both). A subject token the library cannot verify is `invalid_grant` (it was `invalid_request`). Clients that matched on a description (`unknown client`, `the refresh token is not live`) must match on `error`. The audit catalogue is 1.19.0: a refused token exchange or sign-in (`roster.token.exchanged`, `roster.person.signed_in`, `roster.recovery.signed_in`) records `reason_code`, `audience`, `missing_requires`, `held_groups`, `admitted`, `admitted_by` and `directory`. A refused exchange now always leaves one record, including an unknown audience and a subject token the issuer would not accept, which left none. `AccessService.Explain` still names the groups behind its answer to a caller who may ask; that is decided separately.
+
 ## v1.75.0-rc.11
 
 ### Added
