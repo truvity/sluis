@@ -13,6 +13,7 @@ import (
 
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
 	"github.com/truvity/sluis/internal/access"
+	"github.com/truvity/sluis/internal/consolecall"
 	slackcatalogue "github.com/truvity/sluis/internal/slackapp/catalogue"
 )
 
@@ -197,7 +198,8 @@ func TestAConnectedWorkspaceWithNoOwnerIsInvisibleToScopedRoles(t *testing.T) {
 			}
 		}
 	}
-	if _, err := h.console.requireSlack(asSlackIdentity(northOp), access.RoleViewer, "initech"); connect.CodeOf(err) != connect.CodePermissionDenied {
+	scopedOp, _ := IdentityFrom(asSlackIdentity(northOp))
+	if _, err := h.console.slackSvc().RequireSlack(context.Background(), consolecall.Snapshot(scopedOp), access.RoleViewer, "initech"); connect.CodeOf(slackError(err)) != connect.CodePermissionDenied {
 		t.Errorf("a scoped operator on an ownerless workspace = %v, want permission denied", err)
 	}
 	for name, who := range map[string]context.Context{"an operator": operator(), "a viewer": viewer()} {
