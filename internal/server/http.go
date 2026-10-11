@@ -28,6 +28,7 @@ import (
 	"github.com/truvity/sluis/internal/emailaddr"
 	"github.com/truvity/sluis/internal/hub"
 	"github.com/truvity/sluis/internal/maintenance"
+	"github.com/truvity/sluis/internal/refusal"
 	"github.com/truvity/sluis/internal/telemetry"
 	"github.com/truvity/sluis/internal/version"
 	"github.com/truvity/sluis/storage/logattr"
@@ -1247,7 +1248,7 @@ type rpcHandlers interface {
 // sluis.v1.* and the legacy directoryroster.v1.* that older consoles and
 // controllers still call. Both reach the same handler (see connectalias).
 func registerRPC(mux *http.ServeMux, h rpcHandlers, extra ...connect.HandlerOption) {
-	options := append(telemetry.ConnectOptions(), extra...)
+	options := append(append(telemetry.ConnectOptions(), refusal.ConnectOptions(nil)...), extra...)
 	serve := func(path string, handler http.Handler) {
 		mux.Handle(path, handler)
 		legacy := strings.Trim(path, "/")

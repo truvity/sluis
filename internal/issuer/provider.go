@@ -925,7 +925,7 @@ func (c *challenged) Write(b []byte) (int, error) {
 // older console still calls. One handler answers both, so the CORS and the
 // checks in front of it are the same for each.
 func mountSessions(mux *http.ServeMux, service accessissuerv1connect.SessionServiceHandler, consoleOrigin string) {
-	path, sessions := accessissuerv1connect.NewSessionServiceHandler(service, telemetry.ConnectOptions()...)
+	path, sessions := accessissuerv1connect.NewSessionServiceHandler(service, append(telemetry.ConnectOptions(), refusal.ConnectOptions(nil)...)...)
 	if consoleOrigin != "" {
 		sessions = browserAllowed(consoleOrigin, sessions)
 	}
