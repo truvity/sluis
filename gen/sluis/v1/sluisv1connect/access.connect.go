@@ -71,8 +71,8 @@ type AccessServiceClient interface {
 	//
 	// A proof is a person (an address), a CI job or a workload, so the same
 	// call shows what a pipeline is entitled to as well as what a person
-	// is. Operator only, and the roster controllers (workloads holding
-	// viewer): anyone else, a person asking about themselves included, is
+	// is. Operator only, and the roster controllers (workloads in
+	// the policy's roster-controller group): anyone else, a person asking about themselves included, is
 	// refused with "not authorised". An operator's look-up is recorded.
 	Explain(context.Context, *connect.Request[v1.ExplainRequest]) (*connect.Response[v1.ExplainResponse], error)
 	// ListHolders resolves an internal group, or a client, to the people who
@@ -263,8 +263,8 @@ type AccessServiceHandler interface {
 	//
 	// A proof is a person (an address), a CI job or a workload, so the same
 	// call shows what a pipeline is entitled to as well as what a person
-	// is. Operator only, and the roster controllers (workloads holding
-	// viewer): anyone else, a person asking about themselves included, is
+	// is. Operator only, and the roster controllers (workloads in
+	// the policy's roster-controller group): anyone else, a person asking about themselves included, is
 	// refused with "not authorised". An operator's look-up is recorded.
 	Explain(context.Context, *connect.Request[v1.ExplainRequest]) (*connect.Response[v1.ExplainResponse], error)
 	// ListHolders resolves an internal group, or a client, to the people who

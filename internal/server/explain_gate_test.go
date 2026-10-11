@@ -41,7 +41,8 @@ func explainAs(console *Console, id access.Identity, email string) error {
 func TestExplainAllowsAControllerWithoutARecord(t *testing.T) {
 	t.Parallel()
 	console, trail := explainConsole(t)
-	controller := access.Identity{Source: access.SourceWorkload, Subject: "system:serviceaccount:sluis:github", Role: access.RoleViewer}
+	controller := access.Identity{Source: access.SourceWorkload, Subject: "system:serviceaccount:sluis:github", Role: access.RoleViewer,
+		Groups: []string{policy.GroupRosterControllers}}
 	if err := explainAs(console, controller, "alice@example.com"); err != nil {
 		t.Fatalf("a controller was refused: %v", err)
 	}
@@ -94,5 +95,30 @@ func TestExplainRefusesAViewerAndSelfExplainAndRecordsTheDenial(t *testing.T) {
 				t.Errorf("recorded %v, want one denied record", got)
 			}
 		})
+	}
+}
+
+// Holding viewer is not being a controller: another workload with viewer is
+// refused and recorded as denied, and one with operator is served and
+// recorded, as a person would be.
+func TestExplainTreatsAnyOtherWorkloadAsAPerson(t *testing.T) {
+	t.Parallel()
+	console, trail := explainConsole(t)
+	other := access.Identity{Source: access.SourceWorkload, Subject: "system:serviceaccount:team:tool", Role: access.RoleViewer}
+	err := explainAs(console, other, "alice@example.com")
+	if connect.CodeOf(err) != connect.CodePermissionDenied {
+		t.Fatalf("a viewer workload: err = %v, want permission denied", err)
+	}
+	if got := trail.Records(); len(got) != 1 || got[0].GetOutcome().GetResult() != auditv1.Outcome_RESULT_DENIED {
+		t.Errorf("recorded %v, want one denied record", got)
+	}
+
+	other.Role = access.RoleOperator
+	if err := explainAs(console, other, "alice@example.com"); err != nil {
+		t.Fatalf("an operator workload was refused: %v", err)
+	}
+	got := trail.Records()
+	if len(got) != 2 || got[1].GetOutcome().GetResult() != auditv1.Outcome_RESULT_SUCCESS || got[1].GetActor().GetKind() != "workload" {
+		t.Errorf("recorded %v, want a success by the workload", got)
 	}
 }
