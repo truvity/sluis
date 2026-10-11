@@ -123,7 +123,7 @@ A client names a resource with `resource` (RFC 8707). The caller meets both `req
 | `report` | all held groups; logs what `enforce` would drop |
 | `enforce` | held groups whose `<scope>:<thing>` pair is in the audience's `requires`, plus the `groups:` override (`all`, a list of things, `rung`, `emp`) |
 
-`requires` and lifetimes read the full set. See [override](policy-clients.md#groups-override), [rule](../../concepts/sluis/groups-in-a-token.md), [read the report](../../guides/sluis/read-the-groups-scoping-report.md), [turn enforce on](../../guides/sluis/turn-enforce-on.md).
+Under `enforce` a token also carries only the claims fragments (`claims.<group>`) of the groups it keeps; the fragments of a dropped group are left out. `requires` and lifetimes read the full set. See [override](policy-clients.md#groups-override), [rule](../../concepts/sluis/groups-in-a-token.md), [read the report](../../guides/sluis/read-the-groups-scoping-report.md), [turn enforce on](../../guides/sluis/turn-enforce-on.md).
 
 ## Groups delimiter (per audience, opkssh interop)
 
