@@ -82,13 +82,9 @@ func mxSpecs() []roleSpec {
 		{name: "github", hosts: []Module{ModuleGitHub}},
 		{name: "slack", hosts: []Module{ModuleSlack}},
 		{name: "google", hosts: []Module{ModuleGoogle}},
-		// The mint-only function reads the github module and nothing else. The shared
-		// key's policy does not admit it yet (KeyPolicyArgs has no read-module role):
-		// the key refuses it the github parameters until V14 names it.
-		{name: "github-mint", readModule: []Module{ModuleGitHub},
-			known: map[string]string{
-				"internal/github decrypt": "V14", "external/github decrypt": "V14",
-			}},
+		// The mint-only function reads the github module and nothing else; the shared
+		// key's policy admits it to the github parameters alone (KeyRole.ReadModules).
+		{name: "github-mint", readModule: []Module{ModuleGitHub}},
 	}
 }
 
@@ -166,10 +162,7 @@ func mxPolicies(t *testing.T) (identity map[string]iameval.Policy, key iameval.P
 
 	var kroles []KeyRole
 	for _, s := range mxSpecs() {
-		if len(s.hosts) == 0 {
-			continue // the mint-only function: named by V14
-		}
-		kr := KeyRole{Role: Role{Name: s.name, Hosts: s.hosts}, Arn: mxRoleArn(s.name)}
+		kr := KeyRole{Role: Role{Name: s.name, Hosts: s.hosts}, Arn: mxRoleArn(s.name), ReadModules: s.readModule}
 		if s.name == "issuer" {
 			kr.MinterRefs = []string{mxMinter}
 		}

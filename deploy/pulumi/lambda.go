@@ -294,6 +294,15 @@ type LambdaArgs struct {
 	// the issuer's role may invoke through the alias `live-console`. Default
 	// `sluis-<instance>-backup`, the Backup component's own default.
 	BackupFunctionName string
+	// RestoreFunctionName is the name of the Backup component's restore
+	// function, which is named in the key policy. Default
+	// `sluis-<instance>-restore`.
+	RestoreFunctionName string
+	// TransitionRoles are the old IAM role names of functions renamed in this
+	// release, kept as further principals of the same role while the switch is
+	// made (the key policy admits them, the audit queue accepts their records);
+	// remove the entry once nothing runs under the old name. See TransitionRole.
+	TransitionRoles []TransitionRole
 
 	// LogRetentionDays is the log group's retention. Default 30.
 	LogRetentionDays int
@@ -602,6 +611,10 @@ type TelemetryArgs struct {
 // Lambda is the component. Its fields are the outputs.
 type Lambda struct {
 	pulumi.ResourceState
+
+	// resolved is the validated, defaulted LambdaArgs: Senders, Roles,
+	// ViewerRoles and KeyPolicyStatements are read from it.
+	resolved LambdaArgs
 
 	// SigningKeyArn, SigningKeyID and SigningKeyAlias are the token-signing key.
 	SigningKeyArn   pulumi.StringOutput
@@ -1035,6 +1048,9 @@ func (a *LambdaArgs) validate() (LambdaArgs, error) {
 			}
 		}
 	}
+	if err := out.validateTransitionRoles(); err != nil {
+		return out, err
+	}
 	if err := out.validateModules(); err != nil {
 		return out, err
 	}
@@ -1088,7 +1104,7 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 			return nil, err
 		}
 	}
-	out := &Lambda{}
+	out := &Lambda{resolved: a}
 	if err := ctx.RegisterComponentResource(LambdaType, name, out, opts...); err != nil {
 		return nil, err
 	}

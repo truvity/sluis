@@ -1,0 +1,468 @@
+{
+  "Id": "sluis",
+  "Statement": [
+    {
+      "Action": [
+        "kms:Encrypt",
+        "kms:Decrypt",
+        "kms:GenerateDataKey",
+        "kms:DescribeKey"
+      ],
+      "Condition": {
+        "ArnEquals": {
+          "aws:PrincipalArn": "arn:aws:iam::111111111111:role/sluis-staging-backup"
+        },
+        "StringEquals": {
+          "kms:ViaService": "ssm.eu-central-1.amazonaws.com"
+        },
+        "StringLike": {
+          "kms:EncryptionContext:PARAMETER_ARN": [
+            "arn:aws:ssm:eu-central-1:111111111111:parameter/sluis/staging/internal/backup/*",
+            "arn:aws:ssm:eu-central-1:111111111111:parameter/sluis/staging/external/backup/*"
+          ]
+        }
+      },
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "arn:aws:iam::111111111111:root"
+      },
+      "Resource": "*",
+      "Sid": "SluisKeyRoleBackup"
+    },
+    {
+      "Action": [
+        "kms:Decrypt",
+        "kms:DescribeKey"
+      ],
+      "Condition": {
+        "ArnEquals": {
+          "aws:PrincipalArn": "arn:aws:iam::111111111111:role/sluis-staging-backup"
+        },
+        "StringEquals": {
+          "kms:ViaService": "ssm.eu-central-1.amazonaws.com"
+        },
+        "StringLike": {
+          "kms:EncryptionContext:PARAMETER_ARN": [
+            "arn:aws:ssm:eu-central-1:111111111111:parameter/sluis/staging/internal/*",
+            "arn:aws:ssm:eu-central-1:111111111111:parameter/sluis/staging/external/*"
+          ]
+        }
+      },
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "arn:aws:iam::111111111111:root"
+      },
+      "Resource": "*",
+      "Sid": "SluisKeyReadAllBackup"
+    },
+    {
+      "Action": [
+        "kms:Encrypt",
+        "kms:Decrypt",
+        "kms:GenerateDataKey",
+        "kms:DescribeKey"
+      ],
+      "Condition": {
+        "ArnEquals": {
+          "aws:PrincipalArn": "arn:aws:iam::111111111111:role/sluis-staging-cloudflare"
+        },
+        "StringEquals": {
+          "kms:ViaService": "ssm.eu-central-1.amazonaws.com"
+        },
+        "StringLike": {
+          "kms:EncryptionContext:PARAMETER_ARN": [
+            "arn:aws:ssm:eu-central-1:111111111111:parameter/sluis/staging/internal/cloudflare/*",
+            "arn:aws:ssm:eu-central-1:111111111111:parameter/sluis/staging/external/cloudflare/*"
+          ]
+        }
+      },
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "arn:aws:iam::111111111111:root"
+      },
+      "Resource": "*",
+      "Sid": "SluisKeyRoleCloudflare"
+    },
+    {
+      "Action": [
+        "kms:Encrypt",
+        "kms:Decrypt",
+        "kms:GenerateDataKey",
+        "kms:DescribeKey"
+      ],
+      "Condition": {
+        "ArnEquals": {
+          "aws:PrincipalArn": "arn:aws:iam::111111111111:role/sluis-staging-github"
+        },
+        "StringEquals": {
+          "kms:ViaService": "ssm.eu-central-1.amazonaws.com"
+        },
+        "StringLike": {
+          "kms:EncryptionContext:PARAMETER_ARN": [
+            "arn:aws:ssm:eu-central-1:111111111111:parameter/sluis/staging/internal/github/*",
+            "arn:aws:ssm:eu-central-1:111111111111:parameter/sluis/staging/external/github/*"
+          ]
+        }
+      },
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "arn:aws:iam::111111111111:root"
+      },
+      "Resource": "*",
+      "Sid": "SluisKeyRoleGithub"
+    },
+    {
+      "Action": [
+        "kms:Decrypt",
+        "kms:DescribeKey"
+      ],
+      "Condition": {
+        "ArnEquals": {
+          "aws:PrincipalArn": "arn:aws:iam::111111111111:role/sluis-staging-github-mint"
+        },
+        "StringEquals": {
+          "kms:ViaService": "ssm.eu-central-1.amazonaws.com"
+        },
+        "StringLike": {
+          "kms:EncryptionContext:PARAMETER_ARN": [
+            "arn:aws:ssm:eu-central-1:111111111111:parameter/sluis/staging/internal/github/*",
+            "arn:aws:ssm:eu-central-1:111111111111:parameter/sluis/staging/external/github/*"
+          ]
+        }
+      },
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "arn:aws:iam::111111111111:root"
+      },
+      "Resource": "*",
+      "Sid": "SluisKeyReadModuleGithubMint"
+    },
+    {
+      "Action": [
+        "kms:Encrypt",
+        "kms:Decrypt",
+        "kms:GenerateDataKey",
+        "kms:DescribeKey"
+      ],
+      "Condition": {
+        "ArnEquals": {
+          "aws:PrincipalArn": "arn:aws:iam::111111111111:role/sluis-staging-google"
+        },
+        "StringEquals": {
+          "kms:ViaService": "ssm.eu-central-1.amazonaws.com"
+        },
+        "StringLike": {
+          "kms:EncryptionContext:PARAMETER_ARN": [
+            "arn:aws:ssm:eu-central-1:111111111111:parameter/sluis/staging/internal/google/*",
+            "arn:aws:ssm:eu-central-1:111111111111:parameter/sluis/staging/external/google/*"
+          ]
+        }
+      },
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "arn:aws:iam::111111111111:root"
+      },
+      "Resource": "*",
+      "Sid": "SluisKeyRoleGoogle"
+    },
+    {
+      "Action": [
+        "kms:Encrypt",
+        "kms:Decrypt",
+        "kms:GenerateDataKey",
+        "kms:DescribeKey"
+      ],
+      "Condition": {
+        "ArnEquals": {
+          "aws:PrincipalArn": "arn:aws:iam::111111111111:role/sluis"
+        },
+        "StringEquals": {
+          "kms:ViaService": "ssm.eu-central-1.amazonaws.com"
+        },
+        "StringLike": {
+          "kms:EncryptionContext:PARAMETER_ARN": [
+            "arn:aws:ssm:eu-central-1:111111111111:parameter/sluis/staging/internal/oidc/*",
+            "arn:aws:ssm:eu-central-1:111111111111:parameter/sluis/staging/external/oidc/*"
+          ]
+        }
+      },
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "arn:aws:iam::111111111111:root"
+      },
+      "Resource": "*",
+      "Sid": "SluisKeyRoleIssuer"
+    },
+    {
+      "Action": [
+        "kms:Encrypt",
+        "kms:Decrypt",
+        "kms:GenerateDataKey",
+        "kms:DescribeKey"
+      ],
+      "Condition": {
+        "ArnEquals": {
+          "aws:PrincipalArn": "arn:aws:iam::111111111111:role/sluis-staging-restore"
+        },
+        "StringEquals": {
+          "kms:ViaService": "ssm.eu-central-1.amazonaws.com"
+        },
+        "StringLike": {
+          "kms:EncryptionContext:PARAMETER_ARN": [
+            "arn:aws:ssm:eu-central-1:111111111111:parameter/sluis/staging/internal/backup/*",
+            "arn:aws:ssm:eu-central-1:111111111111:parameter/sluis/staging/external/backup/*"
+          ]
+        }
+      },
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "arn:aws:iam::111111111111:root"
+      },
+      "Resource": "*",
+      "Sid": "SluisKeyRoleRestore"
+    },
+    {
+      "Action": [
+        "kms:Encrypt",
+        "kms:Decrypt",
+        "kms:GenerateDataKey",
+        "kms:DescribeKey"
+      ],
+      "Condition": {
+        "ArnEquals": {
+          "aws:PrincipalArn": "arn:aws:iam::111111111111:role/sluis-staging-restore"
+        },
+        "StringEquals": {
+          "kms:ViaService": "ssm.eu-central-1.amazonaws.com"
+        },
+        "StringLike": {
+          "kms:EncryptionContext:PARAMETER_ARN": [
+            "arn:aws:ssm:eu-central-1:111111111111:parameter/sluis/staging/internal/*",
+            "arn:aws:ssm:eu-central-1:111111111111:parameter/sluis/staging/external/*"
+          ]
+        }
+      },
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "arn:aws:iam::111111111111:root"
+      },
+      "Resource": "*",
+      "Sid": "SluisKeyWriteAllRestore"
+    },
+    {
+      "Action": [
+        "kms:Encrypt",
+        "kms:Decrypt",
+        "kms:GenerateDataKey",
+        "kms:DescribeKey"
+      ],
+      "Condition": {
+        "ArnEquals": {
+          "aws:PrincipalArn": "arn:aws:iam::111111111111:role/sluis-staging-slack"
+        },
+        "StringEquals": {
+          "kms:ViaService": "ssm.eu-central-1.amazonaws.com"
+        },
+        "StringLike": {
+          "kms:EncryptionContext:PARAMETER_ARN": [
+            "arn:aws:ssm:eu-central-1:111111111111:parameter/sluis/staging/internal/slack/*",
+            "arn:aws:ssm:eu-central-1:111111111111:parameter/sluis/staging/external/slack/*"
+          ]
+        }
+      },
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "arn:aws:iam::111111111111:root"
+      },
+      "Resource": "*",
+      "Sid": "SluisKeyRoleSlack"
+    },
+    {
+      "Action": [
+        "kms:Decrypt"
+      ],
+      "Condition": {
+        "ArnEquals": {
+          "aws:PrincipalArn": [
+            "arn:aws:iam::111111111111:role/cluster-a-reader"
+          ]
+        },
+        "StringEquals": {
+          "kms:ViaService": "ssm.eu-central-1.amazonaws.com"
+        },
+        "StringLike": {
+          "kms:EncryptionContext:PARAMETER_ARN": [
+            "arn:aws:ssm:eu-central-1:111111111111:parameter/sluis/staging/external/*"
+          ]
+        }
+      },
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "arn:aws:iam::111111111111:root"
+      },
+      "Resource": "*",
+      "Sid": "SluisKeyExternalReaders"
+    },
+    {
+      "Action": [
+        "kms:Encrypt",
+        "kms:GenerateDataKey",
+        "kms:DescribeKey"
+      ],
+      "Condition": {
+        "ArnLike": {
+          "aws:PrincipalArn": [
+            "arn:aws:iam::111111111111:role/aws-reserved/sso.example/*Admin_*"
+          ]
+        },
+        "StringEquals": {
+          "kms:ViaService": "ssm.eu-central-1.amazonaws.com"
+        }
+      },
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "arn:aws:iam::111111111111:root"
+      },
+      "Resource": "*",
+      "Sid": "SluisKeyAdminSeeds"
+    },
+    {
+      "Action": [
+        "kms:Decrypt"
+      ],
+      "Condition": {
+        "ArnLike": {
+          "aws:PrincipalArn": [
+            "arn:aws:iam::111111111111:role/aws-reserved/sso.example/*Admin_*"
+          ]
+        },
+        "StringEquals": {
+          "kms:ViaService": "ssm.eu-central-1.amazonaws.com"
+        },
+        "StringLike": {
+          "kms:EncryptionContext:PARAMETER_ARN": [
+            "arn:aws:ssm:eu-central-1:111111111111:parameter/sluis/staging/internal/oidc/state-secret",
+            "arn:aws:ssm:eu-central-1:111111111111:parameter/sluis/staging/internal/oidc/recovery-password"
+          ]
+        }
+      },
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "arn:aws:iam::111111111111:root"
+      },
+      "Resource": "*",
+      "Sid": "SluisKeyAdminReads"
+    },
+    {
+      "Action": [
+        "kms:Encrypt",
+        "kms:Decrypt",
+        "kms:GenerateDataKey"
+      ],
+      "Condition": {
+        "ArnEquals": {
+          "aws:PrincipalArn": [
+            "arn:aws:iam::111111111111:role/sluis"
+          ]
+        },
+        "ForAllValues:StringEquals": {
+          "kms:EncryptionContextKeys": [
+            "instance",
+            "purpose"
+          ]
+        },
+        "StringEquals": {
+          "kms:EncryptionContext:instance": "staging",
+          "kms:EncryptionContext:purpose": "sign"
+        }
+      },
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "arn:aws:iam::111111111111:root"
+      },
+      "Resource": "*",
+      "Sid": "SluisKeySign"
+    },
+    {
+      "Action": [
+        "kms:Decrypt",
+        "kms:Encrypt",
+        "kms:ReEncrypt*",
+        "kms:GenerateDataKey*",
+        "kms:CreateGrant"
+      ],
+      "Condition": {
+        "ArnNotEquals": {
+          "aws:PrincipalArn": [
+            "arn:aws:iam::111111111111:role/sluis"
+          ]
+        },
+        "StringEquals": {
+          "kms:EncryptionContext:purpose": "sign"
+        }
+      },
+      "Effect": "Deny",
+      "Principal": {
+        "AWS": "*"
+      },
+      "Resource": "*",
+      "Sid": "SluisKeySignContextReserved"
+    },
+    {
+      "Action": [
+        "kms:Encrypt",
+        "kms:Decrypt",
+        "kms:GenerateDataKey"
+      ],
+      "Condition": {
+        "ArnEquals": {
+          "aws:PrincipalArn": [
+            "arn:aws:iam::111111111111:role/sluis"
+          ]
+        },
+        "Null": {
+          "kms:ViaService": "true"
+        },
+        "StringNotEquals": {
+          "kms:EncryptionContext:purpose": "sign"
+        }
+      },
+      "Effect": "Deny",
+      "Principal": {
+        "AWS": "*"
+      },
+      "Resource": "*",
+      "Sid": "SluisKeySignDirectPurposeOnly"
+    },
+    {
+      "Action": [
+        "kms:Encrypt",
+        "kms:Decrypt",
+        "kms:GenerateDataKey"
+      ],
+      "Condition": {
+        "ArnEquals": {
+          "aws:PrincipalArn": [
+            "arn:aws:iam::111111111111:role/sluis"
+          ]
+        },
+        "ForAnyValue:StringNotEquals": {
+          "kms:EncryptionContextKeys": [
+            "instance",
+            "purpose"
+          ]
+        },
+        "Null": {
+          "kms:ViaService": "true"
+        }
+      },
+      "Effect": "Deny",
+      "Principal": {
+        "AWS": "*"
+      },
+      "Resource": "*",
+      "Sid": "SluisKeySignDirectContextKeysOnly"
+    }
+  ],
+  "Version": "2012-10-17"
+}
