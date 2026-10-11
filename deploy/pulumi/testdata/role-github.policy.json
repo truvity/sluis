@@ -1,0 +1,126 @@
+{
+  "Statement": [
+    {
+      "Action": [
+        "logs:CreateLogStream",
+        "logs:PutLogEvents"
+      ],
+      "Effect": "Allow",
+      "Resource": "arn:aws:logs:r1:000000000000:log-group:/aws/lambda/github:*",
+      "Sid": "SluisLogs"
+    },
+    {
+      "Action": "sqs:SendMessage",
+      "Effect": "Allow",
+      "Resource": "arn:aws:sqs:r1:000000000000:acme-audit",
+      "Sid": "SluisAuditIngest"
+    },
+    {
+      "Action": [
+        "ssm:GetParameter",
+        "ssm:GetParameters",
+        "ssm:GetParameterHistory",
+        "ssm:PutParameter",
+        "ssm:DeleteParameter"
+      ],
+      "Effect": "Allow",
+      "Resource": [
+        "arn:aws:ssm:r1:000000000000:parameter/sluis/i1/internal/github/*",
+        "arn:aws:ssm:r1:000000000000:parameter/sluis/i1/external/github/*"
+      ],
+      "Sid": "SluisParametersGithub"
+    },
+    {
+      "Action": [
+        "kms:Encrypt",
+        "kms:Decrypt",
+        "kms:GenerateDataKey"
+      ],
+      "Condition": {
+        "StringLike": {
+          "kms:EncryptionContext:PARAMETER_ARN": [
+            "arn:aws:ssm:r1:000000000000:parameter/sluis/i1/internal/github/*",
+            "arn:aws:ssm:r1:000000000000:parameter/sluis/i1/external/github/*"
+          ],
+          "kms:ViaService": "ssm.*.amazonaws.com"
+        }
+      },
+      "Effect": "Allow",
+      "Resource": "arn:aws:kms:r1:000000000000:key/shared",
+      "Sid": "SluisParameterKey"
+    },
+    {
+      "Action": [
+        "dynamodb:GetItem",
+        "dynamodb:PutItem",
+        "dynamodb:UpdateItem",
+        "dynamodb:DeleteItem",
+        "dynamodb:Query",
+        "dynamodb:Scan",
+        "dynamodb:DescribeTable"
+      ],
+      "Effect": "Allow",
+      "Resource": "arn:aws:dynamodb:r1:000000000000:table/sluis-i1-github",
+      "Sid": "SluisTableGithub"
+    },
+    {
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject",
+        "s3:DeleteObject"
+      ],
+      "Effect": "Allow",
+      "Resource": "arn:aws:s3:::acme-blobs/github/*",
+      "Sid": "SluisGithubBlobs"
+    },
+    {
+      "Action": "s3:ListBucket",
+      "Condition": {
+        "StringLike": {
+          "s3:prefix": [
+            "github/*"
+          ]
+        }
+      },
+      "Effect": "Allow",
+      "Resource": "arn:aws:s3:::acme-blobs",
+      "Sid": "SluisGithubBlobList"
+    },
+    {
+      "Action": [
+        "dynamodb:PutItem",
+        "dynamodb:UpdateItem",
+        "dynamodb:DeleteItem",
+        "dynamodb:BatchWriteItem",
+        "dynamodb:TransactWriteItems"
+      ],
+      "Condition": {
+        "ForAnyValue:StringEquals": {
+          "dynamodb:LeadingKeys": [
+            "maintenance"
+          ]
+        }
+      },
+      "Effect": "Deny",
+      "Resource": "arn:aws:dynamodb:r1:000000000000:table/sluis-i1-github",
+      "Sid": "SluisMaintenanceDeny"
+    },
+    {
+      "Action": [
+        "kms:Encrypt",
+        "kms:Decrypt",
+        "kms:GenerateDataKey",
+        "kms:DescribeKey"
+      ],
+      "Condition": {
+        "StringLike": {
+          "kms:ViaService": "dynamodb.*.amazonaws.com"
+        }
+      },
+      "Effect": "Allow",
+      "Resource": "arn:aws:kms:r1:000000000000:key/tables",
+      "Sid": "SluisStateKey"
+    }
+  ],
+  "Version": "2012-10-17"
+}

@@ -11,6 +11,10 @@ func testModuleEnv() ModuleEnv {
 	for _, m := range Modules() {
 		tables[m] = "tbl:" + string(m)
 	}
+	logs, fns := map[string]string{}, map[string]string{}
+	for _, r := range testRoles() {
+		logs[r.Name], fns[r.Name] = "lg:"+r.Name, "fn:"+r.Name
+	}
 	return ModuleEnv{
 		Region: "r1", Account: "000000000000",
 		Modules:         ModuleSet{Instance: "i1"},
@@ -19,19 +23,27 @@ func testModuleEnv() ModuleEnv {
 		ParameterKeyArn: "pkey",
 		TableKeyArn:     "tkey",
 		QueueArn:        "queue",
-		LogGroupArns:    map[string]string{RoleIssuer: "lg:issuer", RoleCloudflare: "lg:cf", RoleBackup: "lg:bk", RoleRestore: "lg:rs"},
-		FunctionArns:    map[string]string{RoleIssuer: "fn:issuer", RoleCloudflare: "fn:cf"},
+		LogGroupArns:    logs,
+		FunctionArns:    fns,
 		Roles:           testRoles(),
 	}
 }
 
 func testRoles() []Role {
-	return []Role{
-		{Name: RoleIssuer, Hosts: []Module{ModuleOIDC, ModuleGitHub, ModuleSlack, ModuleGoogle}},
-		{Name: RoleCloudflare, Hosts: []Module{ModuleCloudflare}},
-		{Name: RoleBackup, Hosts: []Module{ModuleBackup}},
-		{Name: RoleRestore, Hosts: []Module{ModuleBackup}},
+	return append(moduleRoles(),
+		Role{Name: RoleBackup, Hosts: []Module{ModuleBackup}},
+		Role{Name: RoleRestore, Hosts: []Module{ModuleBackup}},
+	)
+}
+
+// testRole is the role of the name among testRoles.
+func testRole(name string) Role {
+	for _, r := range testRoles() {
+		if r.Name == name {
+			return r
+		}
 	}
+	panic("no test role " + name)
 }
 
 func rendered(t *testing.T, role Role) string {
@@ -60,7 +72,7 @@ func TestModuleRoleOwnPattern(t *testing.T) {
 	doc := rendered(t, Role{Name: RoleCloudflare, Hosts: []Module{ModuleCloudflare}})
 	for _, want := range []string{
 		"/sluis/i1/internal/cloudflare/*", "/sluis/i1/external/cloudflare/*",
-		"tbl:cloudflare", "bkt/cloudflare/*", "queue", "lg:cf:*", sidMaintenanceDeny, "dynamodb:LeadingKeys",
+		"tbl:cloudflare", "bkt/cloudflare/*", "queue", "lg:cloudflare:*", sidMaintenanceDeny, "dynamodb:LeadingKeys",
 		"PARAMETER_ARN", "ssm.*.amazonaws.com",
 	} {
 		if !strings.Contains(doc, want) {
@@ -77,40 +89,86 @@ func TestModuleRoleOwnPattern(t *testing.T) {
 }
 
 func TestModuleRoleIssuerCrossGrants(t *testing.T) {
-	doc := rendered(t, testRoles()[0])
-	// The issuer hosts google, github and slack here, so they are its own; the
-	// minter is invoked, never read.
-	for _, want := range []string{"fn:cf", "tbl:oidc", "tbl:google"} {
+	doc := rendered(t, testRole(RoleIssuer))
+	// The issuer hosts oidc alone: the providers' tables are read, their
+	// functions are invoked through the alias of the issuer class, the backup
+	// through the console's, and the minter's state is not reached.
+	for _, want := range []string{"tbl:oidc", "tbl:google", "tbl:github", "tbl:slack",
+		"fn:cloudflare:live-issuer", "fn:github:live-issuer", "fn:github-mint:live-issuer", "fn:google:live-issuer",
+		"fn:slack:live-issuer", "fn:backup:live-console", "bkt/google/*"} {
 		if !strings.Contains(doc, want) {
 			t.Errorf("missing %q", want)
 		}
 	}
-	if strings.Contains(doc, "tbl:cloudflare") || strings.Contains(doc, "internal/cloudflare") {
-		t.Errorf("issuer reaches into the minter's state: %s", doc)
+	for _, not := range []string{"tbl:cloudflare", "internal/cloudflare", "internal/google", "internal/github", "internal/slack",
+		"external/google", "bkt/github", "bkt/slack", "fn:issuer"} {
+		if strings.Contains(doc, not) {
+			t.Errorf("issuer reaches %q: %s", not, doc)
+		}
 	}
-	// Split google out: the issuer then reads its table and invokes its function.
-	env := testModuleEnv()
-	env.Roles = []Role{
-		{Name: RoleIssuer, Hosts: []Module{ModuleOIDC, ModuleGitHub, ModuleSlack}},
-		{Name: "google", Hosts: []Module{ModuleGoogle}},
-		testRoles()[1],
-	}
-	env.FunctionArns["google"] = "fn:google"
-	d, err := ModuleRolePolicy(env, env.Roles[0])
+	// The issuer reads the providers' tables and writes none of them.
+	st, err := ModuleRoleStatements(testModuleEnv(), testRole(RoleIssuer))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(d, "tbl:google") || !strings.Contains(d, "fn:google") {
-		t.Errorf("split issuer: %s", d)
+	for _, s := range st {
+		sid := s["Sid"].(string)
+		if strings.HasPrefix(sid, "SluisCross") && strings.HasSuffix(sid, "Table") && len(s["Action"].([]string)) != len(ddbReadActions) {
+			t.Errorf("%s is not read-only: %v", sid, s)
+		}
 	}
-	if strings.Contains(d, "internal/google") || strings.Contains(d, "bkt/google") {
-		t.Errorf("split issuer reaches google's secrets or blobs: %s", d)
+	// A function without an ARN is an error, never a grant on nothing.
+	env := testModuleEnv()
+	delete(env.FunctionArns, RoleSlack)
+	if _, err := ModuleRoleStatements(env, testRole(RoleIssuer)); err == nil {
+		t.Error("an invoke grant on a function with no ARN was rendered")
 	}
 }
 
+func TestModuleRoleMintOnlyGitHubReadsTheModuleAndWritesNothing(t *testing.T) {
+	doc := rendered(t, testRole(RoleGitHubMint))
+	for _, want := range []string{"tbl:github", "internal/github", "bkt/github/*", "lg:github-mint:*"} {
+		if !strings.Contains(doc, want) {
+			t.Errorf("missing %q", want)
+		}
+	}
+	st, err := ModuleRoleStatements(testModuleEnv(), testRole(RoleGitHubMint))
+	if err != nil {
+		t.Fatal(err)
+	}
+	writes := map[string]bool{"ssm:PutParameter": true, "ssm:DeleteParameter": true, "dynamodb:PutItem": true, "dynamodb:UpdateItem": true,
+		"dynamodb:DeleteItem": true, "s3:PutObject": true, "s3:DeleteObject": true, "kms:Encrypt": true, "kms:GenerateDataKey": true,
+		"lambda:InvokeFunction": true}
+	for _, s := range st {
+		// The table key is used only through DynamoDB, by a role with no write on a table.
+		if s["Effect"] != "Allow" || s["Sid"] == sidKey {
+			continue
+		}
+		for _, a := range actionsOf(s["Action"]) {
+			if writes[a] {
+				t.Errorf("the mint-only function is allowed %s by %v", a, s["Sid"])
+			}
+		}
+	}
+	for _, not := range []string{"tbl:oidc", "tbl:slack", "internal/slack"} {
+		if strings.Contains(doc, not) {
+			t.Errorf("the mint-only function reaches %q: %s", not, doc)
+		}
+	}
+}
+
+func actionsOf(v any) []string {
+	switch x := v.(type) {
+	case string:
+		return []string{x}
+	case []string:
+		return x
+	}
+	return nil
+}
+
 func TestModuleRoleBackupAndRestore(t *testing.T) {
-	roles := testRoles()
-	bk, rs := rendered(t, roles[2]), rendered(t, roles[3])
+	bk, rs := rendered(t, testRole(RoleBackup)), rendered(t, testRole(RoleRestore))
 	for _, m := range Modules() {
 		if m == ModuleBackup {
 			continue
@@ -162,11 +220,11 @@ func TestModuleRoleRefusals(t *testing.T) {
 	// The flag is read from the module's own table, so the cloudflare role
 	// needs no table of the backup module.
 	delete(env.TableArns, ModuleBackup)
-	if _, err := ModuleRoleStatements(env, testRoles()[1]); err != nil {
+	if _, err := ModuleRoleStatements(env, testRole(RoleCloudflare)); err != nil {
 		t.Errorf("a role that does not host the backup module needs its table: %v", err)
 	}
 	delete(env.TableArns, ModuleCloudflare)
-	if _, err := ModuleRoleStatements(env, testRoles()[1]); err == nil {
+	if _, err := ModuleRoleStatements(env, testRole(RoleCloudflare)); err == nil {
 		t.Error("a missing table of the role's own module was accepted")
 	}
 }
@@ -215,7 +273,7 @@ func TestModuleRoleMinterCrossGrant(t *testing.T) {
 	if strings.Contains(issuer, "internal/cloudflare/*") {
 		t.Errorf("more of the module than the minter: %s", issuer)
 	}
-	own, err := ModuleRolePolicy(env, testRoles()[1])
+	own, err := ModuleRolePolicy(env, testRole(RoleCloudflare))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -52,9 +52,11 @@ type ModuleFunctionArgs struct {
 	DocumentVersion string
 
 	MemoryMB, TimeoutSeconds int
-	LogRetentionDays         int
-	PermissionsBoundaryArn   string
-	Tags                     map[string]string
+	// ReservedConcurrency is the function's reserved concurrency; nil is unreserved.
+	ReservedConcurrency    *int
+	LogRetentionDays       int
+	PermissionsBoundaryArn string
+	Tags                   map[string]string
 
 	// Policy is the role's policy document, from the log group's ARN. Most
 	// callers render it with [ModuleRolePolicy].
@@ -183,6 +185,9 @@ func newModuleFunction(ctx *pulumi.Context, a *ModuleFunctionArgs, parent pulumi
 		}},
 		LoggingConfig: &lambda.FunctionLoggingConfigArgs{LogFormat: pulumi.String("Text"), LogGroup: out.logs.Name},
 		Tags:          tags,
+	}
+	if a.ReservedConcurrency != nil {
+		fnArgs.ReservedConcurrentExecutions = pulumi.Int(*a.ReservedConcurrency)
 	}
 	if code != nil {
 		fnArgs.S3Bucket, fnArgs.S3Key, fnArgs.S3ObjectVersion = pulumi.String(code.Bucket), pulumi.String(code.Key), code.VersionID

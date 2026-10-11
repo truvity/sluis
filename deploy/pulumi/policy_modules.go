@@ -19,7 +19,9 @@ type ModuleEnv struct {
 	QueueArn string
 	// LogGroupArns is each role's log group, by role name.
 	LogGroupArns map[string]string
-	// FunctionArns is each role's function ARN, by role name.
+	// FunctionArns is each role's function ARN, unqualified, by role name. A
+	// CrossInvoke grant is rendered on the alias of its caller class under this
+	// ARN, never on the ARN itself.
 	FunctionArns map[string]string
 	// MinterRefs are the Cloudflare minter parameters (internal addresses,
 	// `internal/cloudflare/<account>/minter`, a `*` allowed for the account) that
@@ -27,8 +29,7 @@ type ModuleEnv struct {
 	// Cloudflare module: a read of exactly those parameters and nothing else of
 	// the module. A role that hosts the module has them already.
 	MinterRefs []string
-	// Roles is every role of the installation; it resolves which function hosts
-	// a module for an invoke grant.
+	// Roles is every role of the installation.
 	Roles []Role
 }
 
@@ -59,8 +60,8 @@ func ModuleRoleStatements(env ModuleEnv, role Role) ([]map[string]any, error) {
 	if err := env.Modules.validate(); err != nil {
 		return nil, err
 	}
-	if role.Name == "" || len(role.Hosts) == 0 {
-		return nil, fmt.Errorf("sluispulumi: a role needs a name and at least one module")
+	if role.Name == "" || (len(role.Hosts) == 0 && !role.hasCrossGrants()) {
+		return nil, fmt.Errorf("sluispulumi: a role needs a name and at least one module, or a cross-grant")
 	}
 	for _, m := range role.Hosts {
 		if !validModule(m) {
@@ -98,8 +99,11 @@ func ModuleRoleStatements(env ModuleEnv, role Role) ([]map[string]any, error) {
 		})
 		arns = append(arns, parameterArnsUnder(env.Region, env.Account, internal, external)...)
 	}
-	st = append(st, parameterKeyStatements(env.ParameterKeyArn,
-		[]string{kmsEncrypt, kmsDecrypt, "kms:GenerateDataKey"}, arns)...)
+	if len(arns) > 0 {
+		// A role that hosts no module has no parameter of its own to use the key on.
+		st = append(st, parameterKeyStatements(env.ParameterKeyArn,
+			[]string{kmsEncrypt, kmsDecrypt, "kms:GenerateDataKey"}, arns)...)
+	}
 
 	// Tables and blobs of the hosted modules.
 	own := map[Module]bool{}
@@ -134,6 +138,14 @@ func ModuleRoleStatements(env ModuleEnv, role Role) ([]map[string]any, error) {
 		if g.Role != role.Name {
 			continue
 		}
+		if g.Verb == CrossInvoke {
+			sts, err := env.invokeStatements(g)
+			if err != nil {
+				return nil, err
+			}
+			st = append(st, sts...)
+			continue
+		}
 		for _, m := range sortedModules(g.Modules) {
 			if own[m] {
 				continue
@@ -143,7 +155,7 @@ func ModuleRoleStatements(env ModuleEnv, role Role) ([]map[string]any, error) {
 				return nil, err
 			}
 			st = append(st, sts...)
-			if g.Verb != CrossInvoke {
+			if g.Verb != CrossReadBlobs {
 				arn, err := env.tableArn(m)
 				if err != nil {
 					return nil, err
@@ -153,7 +165,7 @@ func ModuleRoleStatements(env ModuleEnv, role Role) ([]map[string]any, error) {
 			for _, a := range key {
 				keyActions[a] = true
 			}
-			if g.Verb == CrossReadAll || g.Verb == CrossWriteAll {
+			if g.Verb == CrossReadAll || g.Verb == CrossReadModule || g.Verb == CrossWriteAll {
 				crossArns = append(crossArns, parameterArnsUnder(env.Region, env.Account,
 					env.Modules.InternalPrefix(m), env.Modules.ExternalPrefix(m))...)
 			}
@@ -267,18 +279,9 @@ func (env ModuleEnv) crossStatements(v CrossVerb, m Module) ([]statement, []stri
 			return nil, nil, err
 		}
 		return []statement{tableStatement(sid+"Table", arn, ddbReadActions)}, nil, nil
-	case CrossInvoke:
-		for _, r := range env.Roles {
-			if r.hosts(m) {
-				arn := env.FunctionArns[r.Name]
-				if arn == "" {
-					return nil, nil, fmt.Errorf("sluispulumi: no function ARN for role %q", r.Name)
-				}
-				return []statement{{"Sid": sid + "Invoke", "Effect": "Allow", "Action": lambdaInvokeFunction, "Resource": arn}}, nil, nil
-			}
-		}
-		return nil, nil, nil
-	case CrossReadAll, CrossWriteAll:
+	case CrossReadBlobs:
+		return env.blobStatements(m, sid, []string{s3GetObject}), nil, nil
+	case CrossReadAll, CrossReadModule, CrossWriteAll:
 		arn, err := env.tableArn(m)
 		if err != nil {
 			return nil, nil, err
@@ -298,6 +301,37 @@ func (env ModuleEnv) crossStatements(v CrossVerb, m Module) ([]statement, []stri
 		return out, kact, nil
 	}
 	return nil, nil, fmt.Errorf("sluispulumi: unknown cross verb %q", v)
+}
+
+// invokeStatements renders a [CrossInvoke] grant: one statement, on the alias
+// `live-<class>` of each function, which is the ARN a module call invokes. The
+// unqualified ARN would let the role run $LATEST, and a version no alias names.
+func (env ModuleEnv) invokeStatements(g CrossGrant) ([]statement, error) {
+	if g.Class == "" || len(g.Functions) == 0 {
+		return nil, fmt.Errorf("sluispulumi: the invoke grant of %q needs a caller class and a function", g.Role)
+	}
+	var arns []string
+	for _, f := range g.Functions {
+		arn := env.FunctionArns[f]
+		if arn == "" {
+			return nil, fmt.Errorf("sluispulumi: no function ARN for role %q, which %q invokes", f, g.Role)
+		}
+		arns = append(arns, arn+":"+CallerAlias(g.Class))
+	}
+	return []statement{{
+		"Sid": "SluisCrossInvoke" + capitalize(Module(g.Class)), "Effect": "Allow",
+		"Action": lambdaInvokeFunction, "Resource": sortedStrings(arns),
+	}}, nil
+}
+
+// hasCrossGrants reports whether the role has a data grant beyond its own modules.
+func (r Role) hasCrossGrants() bool {
+	for _, g := range CrossGrants {
+		if g.Role == r.Name && g.Verb != CrossInvoke {
+			return true
+		}
+	}
+	return false
 }
 
 // parameterKeyStatementsCross is the key statement of the cross-grants, beside
