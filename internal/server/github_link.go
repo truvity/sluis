@@ -100,7 +100,7 @@ func (c *Console) beginLinkAppConnect(ctx context.Context, actor, owner string) 
 		return githubBegin{}, connect.NewError(connect.CodeInternal, err)
 	}
 	root := c.githubRoot()
-	manifest, err := json.Marshal(githubapp.NewLinkManifest(owner, c.deps.PublicURL, root+githubLinkAppCallbackPath, root+githubLinkCallbackPath))
+	manifest, err := json.Marshal(githubapp.NewLinkManifestNamed(owner, c.deps.GitHubLinkAppName, c.deps.PublicURL, root+githubLinkAppCallbackPath, root+githubLinkCallbackPath))
 	if err != nil {
 		return githubBegin{}, connect.NewError(connect.CodeInternal, err)
 	}

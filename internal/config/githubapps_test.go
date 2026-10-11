@@ -125,3 +125,39 @@ func TestTheListIsHeldToItsRules(t *testing.T) {
 		})
 	}
 }
+
+func TestTheAppNamesAreSettingsAndHeldToGitHubsLimit(t *testing.T) {
+	d, err := policyWith(t, `apps:
+  github:
+    apps:
+      - {id: link, purpose: link, name: example-sign-in}
+controllers:
+  github: {appNames: {example-org: example-members}}
+`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.LinkAppName() != "example-sign-in" || d.OrganisationAppName("example-org") != "example-members" || d.OrganisationAppName("other") != "" {
+		t.Errorf("names: link %q, organisation %q", d.LinkAppName(), d.OrganisationAppName("example-org"))
+	}
+	if d, err = policyWith(t, ""); err != nil || d.LinkAppName() != "" || d.OrganisationAppName("example-org") != "" {
+		t.Errorf("the default is no name: %v", err)
+	}
+
+	long := strings.Repeat("a", 35)
+	for name, sections := range map[string]string{
+		"a link name over the limit":    "apps:\n  github:\n    apps:\n      - {id: link, purpose: link, name: " + long + "}\n",
+		"an organisation name over":     "controllers:\n  github: {appNames: {example-org: " + long + "}}\n",
+		"an empty organisation name":    "controllers:\n  github: {appNames: {example-org: \"\"}}\n",
+		"an unbound organisation":       "controllers:\n  github: {appNames: {other-org: example-members}}\n",
+		"a name on a runner entry":      "apps:\n  github:\n    apps:\n      - {purpose: runner, tier: small, name: example-runners}\n",
+		"a catalogue field on the link": "apps:\n  github:\n    apps:\n      - {id: link, purpose: link, name: ok, public: true}\n",
+	} {
+		if _, err := policyWith(t, sections); err == nil {
+			t.Errorf("%s was accepted", name)
+		}
+	}
+	if _, err := policyWith(t, "controllers:\n  github: {appNames: {example-org: "+strings.Repeat("a", 34)+"}}\n"); err != nil {
+		t.Errorf("a name of exactly the limit was refused: %v", err)
+	}
+}

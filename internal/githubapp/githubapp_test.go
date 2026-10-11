@@ -220,3 +220,22 @@ func TestTheRunnerManifestAsksOnlyForRunnersAndKeepsItsTier(t *testing.T) {
 		t.Errorf("long name = %q (%d)", long.Name, len(long.Name))
 	}
 }
+
+// A configured name is the App's name as given, for the organisation's App
+// and the link App alike; empty is the default.
+func TestAConfiguredNameReplacesTheDefaultInTheManifest(t *testing.T) {
+	org := githubapp.NewManifestNamed("globex", "globex-people", "h", "r", "s")
+	if org.Name != "globex-people" || org.Public {
+		t.Errorf("organisation manifest = %+v", org)
+	}
+	link := githubapp.NewLinkManifestNamed("globex", "globex-sign-in", "h", "r", "c")
+	if link.Name != "globex-sign-in" || !link.Public || len(link.CallbackURLs) != 1 {
+		t.Errorf("link manifest = %+v", link)
+	}
+	if got := githubapp.NewManifestNamed("globex", "", "h", "r", "s").Name; got != "globex-access-roster" {
+		t.Errorf("empty organisation name = %q, want the default", got)
+	}
+	if got := githubapp.NewLinkManifestNamed("globex", "", "h", "r", "c").Name; got != "globex-access-roster-link" {
+		t.Errorf("empty link name = %q, want the default", got)
+	}
+}
