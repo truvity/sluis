@@ -87,7 +87,7 @@
                         "type": "string"
                       },
                       "events": {
-                        "description": "Webhook events the App subscribes to. They are delivered only to an App that declares a `webhook`. `package` and an event without its permission are refused.",
+                        "description": "Webhook events the App subscribes to. They are delivered only to an App that declares a `webhook`.",
                         "items": {
                           "minLength": 1,
                           "type": "string"
@@ -274,7 +274,7 @@
                         "type": "string"
                       },
                       "events": {
-                        "description": "Webhook events the App subscribes to. They are delivered only to an App that declares a `webhook`. `package` and an event without its permission are refused.",
+                        "description": "Webhook events the App subscribes to. They are delivered only to an App that declares a `webhook`.",
                         "items": {
                           "minLength": 1,
                           "type": "string"
