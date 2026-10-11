@@ -124,7 +124,6 @@
       "Effect": "Allow",
       "Resource": [
         "arn:aws:lambda:r1:111122223333:function:sluis-i1-cloudflare:live-issuer",
-        "arn:aws:lambda:r1:111122223333:function:sluis-i1-github-mint:live-issuer",
         "arn:aws:lambda:r1:111122223333:function:sluis-i1-github:live-issuer",
         "arn:aws:lambda:r1:111122223333:function:sluis-i1-google:live-issuer",
         "arn:aws:lambda:r1:111122223333:function:sluis-i1-slack:live-issuer"

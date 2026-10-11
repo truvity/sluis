@@ -2,15 +2,24 @@ package githubfn_test
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/aws/aws-lambda-go/lambdacontext"
+
 	"github.com/truvity/sluis/internal/deploycheck"
+	"github.com/truvity/sluis/internal/githubapp/githubfake"
+	"github.com/truvity/sluis/internal/githubapp/githubtokens"
 	githubapp "github.com/truvity/sluis/internal/githubroster/app"
+	"github.com/truvity/sluis/internal/githubroster/catalogueapp"
 	githubcontroller "github.com/truvity/sluis/internal/githubroster/controller"
 	"github.com/truvity/sluis/internal/lambdaapp"
 	"github.com/truvity/sluis/internal/lambdaapp/githubfn"
@@ -52,7 +61,7 @@ func handler(t *testing.T, p *pass, opened *int) *lambdaapp.HTTP {
 	return githubfn.Handler(nil, declares(t), func(context.Context) (lambdaapp.Pass, error) {
 		*opened++
 		return p, nil
-	}, func(context.Context) (deploycheck.Report, error) { return deploycheck.Report{OK: true}, nil })
+	}, nil, func(context.Context) (deploycheck.Report, error) { return deploycheck.Report{OK: true}, nil })
 }
 
 func result(t *testing.T, h *lambdaapp.HTTP, payload string) (lambdaapp.Result, error) {
@@ -112,8 +121,8 @@ func TestATargetThePolicyDoesNotDeclareAssemblesNothing(t *testing.T) {
 	}
 }
 
-// The controller function does not serve the mint, from any caller class.
-func TestTheControllerFunctionRefusesTheMintRPC(t *testing.T) {
+// A function that serves no module call (rpc nil) refuses the mint from every class.
+func TestAFunctionWithoutAModuleServerRefusesTheMintRPC(t *testing.T) {
 	opened := 0
 	h := handler(t, &pass{ran: true}, &opened)
 	raw, _ := json.Marshal(modcall.Request{Kind: modcall.Kind, Module: "github", Method: "mint_installation", Payload: json.RawMessage(`{"app":"publisher"}`)})
@@ -122,5 +131,83 @@ func TestTheControllerFunctionRefusesTheMintRPC(t *testing.T) {
 	}
 	if opened != 0 {
 		t.Error("a controller was assembled for a module call")
+	}
+}
+
+type apps map[string]catalogueapp.Record
+
+var appKey = func() string {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		panic(err)
+	}
+	return string(pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)}))
+}()
+
+func (s apps) Get(_ context.Context, id string) (catalogueapp.Record, string, bool, error) {
+	r, ok := s[id]
+	return r, appKey, ok, nil
+}
+
+// invokedAs is a context whose function ARN carries the alias the caller used.
+func invokedAs(alias string) context.Context {
+	return lambdacontext.NewContext(context.Background(), &lambdacontext.LambdaContext{
+		InvokedFunctionArn: strings.Join([]string{"arn", "aws", "lambda", "eu-west-1", "123456789012", "function", "sluis-example-github", alias}, ":")})
+}
+
+func mintCall(t *testing.T, h *lambdaapp.HTTP, alias string) ([]byte, error) {
+	t.Helper()
+	payload, _ := json.Marshal(githubtokens.Request{App: "publisher", Repositories: []string{"app"}, Permissions: map[string]string{"contents": "read"}})
+	raw, err := json.Marshal(modcall.Request{Kind: modcall.Kind, Module: githubtokens.Module, Method: githubtokens.MethodMintInstallation, Payload: payload})
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := h.Handle(invokedAs(alias), raw)
+	if err != nil {
+		t.Fatalf("the invocation failed: %v", err)
+	}
+	b, _ := json.Marshal(out)
+	var res modcall.Response
+	if err = json.Unmarshal(b, &res); err != nil {
+		t.Fatal(err)
+	}
+	return modcall.Result(res)
+}
+
+// One function serves the passes and the mint: the mint answers the issuer's
+// class and refuses the console (and every other class), and GitHub is never
+// reached for a refused caller. A pass still runs on the same handler.
+func TestTheMintAnswersTheIssuerClassAndRefusesTheConsole(t *testing.T) {
+	github := githubfake.Start(t, "example-org")
+	store := apps{"publisher": {ID: "publisher", Org: "example-org", AppID: 7, AppSlug: "publisher", InstallationID: 42}}
+	opened := 0
+	h := githubfn.Handler(nil, declares(t), func(context.Context) (lambdaapp.Pass, error) {
+		opened++
+		return &pass{ran: true}, nil
+	}, githubapp.MintServer(store, github.Client()), func(context.Context) (deploycheck.Report, error) { return deploycheck.Report{OK: true}, nil })
+
+	body, err := mintCall(t, h, "live-issuer")
+	if err != nil {
+		t.Fatalf("the issuer was refused: %v", err)
+	}
+	var minted githubtokens.Minted
+	if err = json.Unmarshal(body, &minted); err != nil {
+		t.Fatal(err)
+	}
+	if minted.Token != github.Token || minted.Installation != 42 {
+		t.Errorf("minted = installation %d, token matches %v", minted.Installation, minted.Token == github.Token)
+	}
+	for _, alias := range []string{"live-console", "live-cloudflare", "live-github", "live", ""} {
+		_, err = mintCall(t, h, alias)
+		var e *modcall.Error
+		if !errors.As(err, &e) || e.Code != modcall.CodeForbidden {
+			t.Errorf("as %q: the call was not refused as forbidden: %v", alias, err)
+		}
+	}
+	if len(github.TokenRequests) != 1 {
+		t.Errorf("GitHub was asked %d times, want 1: %+v", len(github.TokenRequests), github.TokenRequests)
+	}
+	if res, err := result(t, h, `{"kind":"tick","target":"acme"}`); err != nil || res.Outcome != lambdaapp.OutcomeRan || opened != 1 {
+		t.Errorf("a pass on the same handler: %+v, %v, opened %d", res, err, opened)
 	}
 }

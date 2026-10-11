@@ -67,7 +67,7 @@ func TestABuiltZipPinnedToAnotherModuleRefusesToStart(t *testing.T) {
 	}
 	for _, c := range []struct{ main, pin string }{
 		{"sluis-issuer", "backup"}, {"sluis-backup", "cloudflare"}, {"sluis-cloudflare", "issuer"},
-		{"sluis-github", "github-mint"}, {"sluis-github-mint", "github"}, {"sluis-slack", "github"},
+		{"sluis-github", "slack"}, {"sluis-slack", "github"},
 		{"sluis-google", "issuer"}, {"sluis-issuer", "google"},
 	} {
 		bin := filepath.Join(t.TempDir(), "bootstrap")
@@ -180,37 +180,5 @@ func TestEveryModulePinRefusesEveryForeignDocument(t *testing.T) {
 				t.Errorf("sluis-%s with a %s document: %v", pin, doc, err)
 			}
 		}
-	}
-}
-
-// The mint-only zip reads the GitHub module's document, and only that: the
-// document is checked before anything is assembled. The GitHub document passes
-// that check (the mint's own loader then finds this one has no consoleURL, which
-// is past it), and any other module's document is refused as a foreign one.
-func TestTheMintZipReadsTheGitHubDocumentAndNoOther(t *testing.T) {
-	open := func(body string) error {
-		file := writeDocument(t, body)
-		_, err := lambdaapp.OpenModule(context.Background(), func(k string) string {
-			if k == config.EnvConfig {
-				return file
-			}
-			return ""
-		}, lambdaapp.ModuleGitHubMint)
-		return err
-	}
-	if err := open(documents[lambdaapp.ModuleGitHub]); err == nil || strings.Contains(err.Error(), "a zip runs the module it was built for") {
-		t.Errorf("the github document was refused as a foreign one: %v", err)
-	}
-	for doc, body := range documents {
-		if doc == lambdaapp.ModuleGitHub {
-			continue
-		}
-		if err := open(body); err == nil || !strings.Contains(err.Error(), "sluis-github-mint function") || !strings.Contains(err.Error(), doc+" document") {
-			t.Errorf("a %s document: %v", doc, err)
-		}
-	}
-	// The controller's zip does not become the mint by being given the same document.
-	if err := lambdaapp.CheckPin("github", lambdaapp.ModuleGitHubMint); err == nil {
-		t.Error("a zip pinned to github ran as the mint")
 	}
 }

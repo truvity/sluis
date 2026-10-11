@@ -7,7 +7,6 @@ import (
 	_ "github.com/truvity/sluis/internal/lambdaapp/backupfn"
 	_ "github.com/truvity/sluis/internal/lambdaapp/cloudflarefn"
 	_ "github.com/truvity/sluis/internal/lambdaapp/githubfn"
-	_ "github.com/truvity/sluis/internal/lambdaapp/githubmintfn"
 	_ "github.com/truvity/sluis/internal/lambdaapp/googlefn"
 	_ "github.com/truvity/sluis/internal/lambdaapp/issuerfn"
 	_ "github.com/truvity/sluis/internal/lambdaapp/slackfn"

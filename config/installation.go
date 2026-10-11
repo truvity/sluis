@@ -150,7 +150,7 @@ type AWS struct {
 	// FunctionName is the Lambda function the `invoke` trigger names (through its `live` alias). Unset is
 	// `sluis`.
 	FunctionName string `json:"functionName,omitempty"`
-	// Functions name the module functions by module (github, github-mint,
+	// Functions name the module functions by module (github,
 	// slack, google, cloudflare) when [RenderModules] is the renderer. Unset is
 	// `sluis-<instance>-<module>`. The issuer's call to each names it
 	// (`<module>.remote`).

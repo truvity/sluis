@@ -111,18 +111,15 @@ func (r Role) hosts(m Module) bool {
 }
 
 // The roles of v1.76: one per function. The issuer hosts the oidc module alone;
-// each of the other modules is hosted by a function of its own, and the github
-// module has a second, mint-only one (D-v176-7 b).
+// each of the other modules is hosted by a function of its own. The github
+// function also serves the issuer's token mint (D-v176-7 a), so there is no
+// second, mint-only github role.
 const (
 	RoleIssuer     = "issuer"
 	RoleCloudflare = "cloudflare"
 	RoleBackup     = "backup"
 	RoleRestore    = "restore"
 	RoleGitHub     = "github"
-	// RoleGitHubMint is the mint-only deployment of the github code. It hosts
-	// no module: it reads the github module (the App keys and the records) and
-	// writes none of it.
-	RoleGitHubMint = "github-mint"
 	RoleSlack      = "slack"
 	RoleGoogle     = "google"
 )
@@ -131,27 +128,19 @@ const (
 // issuer, in a fixed order. Each is the key of [LambdaArgs.Modules] and of the
 // outputs Functions, RoleArns and AliasArns.
 func ModuleFunctions() []string {
-	return []string{RoleCloudflare, RoleGitHub, RoleGitHubMint, RoleGoogle, RoleSlack}
+	return []string{RoleCloudflare, RoleGitHub, RoleGoogle, RoleSlack}
 }
 
-// ModuleOfFunction is the module a function of [ModuleFunctions] serves: the
-// mint-only function serves github.
+// ModuleOfFunction is the module a function of [ModuleFunctions] serves.
 func ModuleOfFunction(role string) Module {
-	if role == RoleGitHubMint {
-		return ModuleGitHub
-	}
 	return Module(role)
 }
 
-// FunctionHosts is the modules a role of NewLambda hosts: the issuer's oidc, a
-// module function's own module, and nothing for the mint-only function, which
-// holds the github module by a read cross-grant ([CrossGrants]).
+// FunctionHosts is the modules a role of NewLambda hosts: the issuer's oidc, and
+// a module function's own module.
 func FunctionHosts(role string) []Module {
-	switch role {
-	case RoleIssuer:
+	if role == RoleIssuer {
 		return []Module{ModuleOIDC}
-	case RoleGitHubMint:
-		return nil
 	}
 	return []Module{ModuleOfFunction(role)}
 }
@@ -201,18 +190,16 @@ type CrossGrant struct {
 //     sign-in and its console pages show; the providers' modules write them), the
 //     google snapshots (blobs), and
 //     invokes, as the class issuer, the functions that serve the providers (the
-//     github one for a run, the mint-only one for a token, slack, google,
-//     cloudflare), and, as the class console, the backup function;
-//   - the mint-only github function reads the github module and nothing more;
+//     github one for a run and for a token mint, `<github>:live-issuer`, slack,
+//     google, cloudflare), and, as the class console, the backup function;
 //   - the backup role reads everything; the restore role writes everything and
 //     is invokable only by the administrators the stack names (RestoreInvokeStatement).
 var CrossGrants = []CrossGrant{
 	{Role: RoleIssuer, Verb: CrossReadTable, Modules: []Module{ModuleGoogle, ModuleGitHub, ModuleSlack}},
 	{Role: RoleIssuer, Verb: CrossInvoke, Class: ClassIssuer,
-		Functions: []string{RoleCloudflare, RoleGitHub, RoleGitHubMint, RoleGoogle, RoleSlack}},
+		Functions: []string{RoleCloudflare, RoleGitHub, RoleGoogle, RoleSlack}},
 	{Role: RoleIssuer, Verb: CrossInvoke, Class: ClassConsole, Functions: []string{RoleBackup}},
 	{Role: RoleIssuer, Verb: CrossReadBlobs, Modules: []Module{ModuleGoogle}},
-	{Role: RoleGitHubMint, Verb: CrossReadModule, Modules: []Module{ModuleGitHub}},
 	{Role: RoleBackup, Verb: CrossReadAll, Modules: Modules()},
 	{Role: RoleRestore, Verb: CrossWriteAll, Modules: Modules()},
 }

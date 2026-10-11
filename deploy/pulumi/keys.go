@@ -191,7 +191,7 @@ type KeyRole struct {
 	// hosting the Cloudflare module: Decrypt on exactly those, through SSM.
 	MinterRefs []string
 	// ReadModules are the modules the role reads whole without hosting them
-	// (the mint-only github function): Decrypt and DescribeKey of those modules'
+	// (a generic read grant, none today): Decrypt and DescribeKey of those modules'
 	// `internal/<module>/*` and `external/<module>/*` parameters, through SSM,
 	// and of no other module's. A role may host nothing and read modules.
 	ReadModules []Module
@@ -288,7 +288,7 @@ const (
 //   - SluisKeyReadAll<Role> (backup): Decrypt of every `internal/*` and
 //     `external/*` parameter, through SSM; SluisKeyWriteAll<Role> (restore): the
 //     same parameters, Encrypt, Decrypt and GenerateDataKey;
-//   - SluisKeyReadModule<Role> (the mint-only github function): Decrypt of the
+//   - SluisKeyReadModule<Role> (a generic read grant, none today): Decrypt of the
 //     parameters of the modules it reads (KeyRole.ReadModules) and of no other;
 //   - SluisKeyMinter<Role>: Decrypt of the minter parameters a role without the
 //     Cloudflare module reads;
