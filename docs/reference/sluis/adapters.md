@@ -69,7 +69,7 @@ One adapter can cover several hosts: the `valkey` adapter is ElastiCache, Memory
 
 | Adapter | Status | AWS | Kubernetes | OpenBao | kubernetes | lambda | process | What it is |
 |---|---|---|---|---|---|---|---|---|
-| `eventbridge` | ✅ implemented | needs | - | - | - | ✅ | - | One EventBridge Scheduler schedule per target invokes the controller function with {"kind":"tick","target":"<id>"}. |
+| `eventbridge` | ✅ implemented | needs | - | - | - | ✅ | - | One EventBridge Scheduler schedule per target invokes the controller function with {"kind":"tick","controller":"<kind>","target":"<id>"}. |
 | `ticker` | ✅ implemented | - | - | - | ✅ | - | ✅ | An in-process interval timer. |
 
 ## audit

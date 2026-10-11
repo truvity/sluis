@@ -1,6 +1,6 @@
 // Package invoke is the Trigger of a deployment that runs as AWS Lambda
 // functions: "this target has work" is an asynchronous invoke of the function
-// that runs the target's pass, with the payload {"kind":"run","target":"<id>"}
+// that runs the target's pass, with the payload {"kind":"run","controller":"<kind>","target":"<id>"}
 // (docs/reference/sluis/lambda.md).
 //
 // There is no process to deliver a notification to on Lambda, so Subscribe is
@@ -32,9 +32,16 @@ const KindRun = "run"
 
 // Event is the payload of an invocation of a controller function: what the
 // schedule sends (kind "tick") and what this adapter sends (kind "run").
+//
+// Controller says which controller runs the pass ("github" or "slack"). A GitHub
+// organisation's login and a Slack workspace's key can be the same name, so the
+// target alone does not say; an event without it (a schedule an older library
+// rendered) is routed by the policy only when the target is declared for one
+// controller.
 type Event struct {
-	Kind   string `json:"kind"`
-	Target string `json:"target"`
+	Kind       string `json:"kind"`
+	Controller string `json:"controller,omitempty"`
+	Target     string `json:"target"`
 }
 
 // Config names the functions a notification invokes: one runs the GitHub
@@ -66,8 +73,8 @@ type Trigger struct {
 	api       API
 	functions map[string]string
 
-	mu   sync.RWMutex
-	kind func(target string) string
+	mu    sync.RWMutex
+	kinds func(target string) []string
 }
 
 var _ port.Trigger = (*Trigger)(nil)
@@ -107,46 +114,57 @@ func New(api API, cfg Config) (*Trigger, error) {
 	return t, nil
 }
 
-// SetKind tells the trigger which kind a target is, so that only that kind's
-// function is invoked: a GitHub organisation's login and a Slack workspace's
-// key are not told apart by their spelling, but by the policy that declares
-// them. An empty answer is a target nobody declares. Until it is set, or for a
-// target it does not know, every configured function is invoked, and one that
-// does not know the target ends cleanly.
-func (t *Trigger) SetKind(kind func(target string) string) {
+// SetKinds tells the trigger which kinds a target is declared for, so that only
+// those kinds' functions are invoked, each with an event that names its
+// controller: a GitHub organisation's login and a Slack workspace's key are not
+// told apart by their spelling, but by the policy that declares them, and one
+// name may be both. An empty answer is a target nobody declares. Until it is
+// set, or for a target it does not know, every configured function is invoked
+// with an event that names no controller, and one that does not know the target
+// ends cleanly.
+func (t *Trigger) SetKinds(kinds func(target string) []string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	t.kind = kind
+	t.kinds = kinds
 }
 
 // Notify implements [port.Trigger]: an asynchronous invoke. The platform queues
 // the event and runs it, so the call returns as soon as the event is accepted,
 // which is what a console request wants.
 func (t *Trigger) Notify(ctx context.Context, target string) error {
-	payload, err := json.Marshal(Event{Kind: KindRun, Target: target})
-	if err != nil {
-		return err
-	}
 	t.mu.RLock()
-	kind := t.kind
+	kinds := t.kinds
 	t.mu.RUnlock()
-	var names []string
-	if kind != nil {
-		if fn, ok := t.functions[kind(target)]; ok {
-			names = []string{fn}
+	type call struct {
+		function string
+		event    Event
+	}
+	var calls []call
+	if kinds != nil {
+		for _, kind := range kinds(target) {
+			if fn, ok := t.functions[kind]; ok {
+				calls = append(calls, call{fn, Event{Kind: KindRun, Controller: kind, Target: target}})
+			}
 		}
 	}
-	if names == nil {
+	if calls == nil {
+		var names []string
 		for _, fn := range t.functions {
 			names = append(names, fn)
 		}
 		slices.Sort(names)
 		// One function may run both kinds: it is invoked once.
-		names = slices.Compact(names)
+		for _, fn := range slices.Compact(names) {
+			calls = append(calls, call{fn, Event{Kind: KindRun, Target: target}})
+		}
 	}
 	var errs []error
-	for _, fn := range names {
-		errs = append(errs, t.invoke(ctx, fn, payload))
+	for _, c := range calls {
+		payload, err := json.Marshal(c.event)
+		if err != nil {
+			return err
+		}
+		errs = append(errs, t.invoke(ctx, c.function, payload))
 	}
 	return errors.Join(errs...)
 }

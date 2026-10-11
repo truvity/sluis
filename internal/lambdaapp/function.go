@@ -3,7 +3,7 @@
 //
 //   - API Gateway HTTP API events: the issuer and the console, the same mux the
 //     Kubernetes process serves on its listener;
-//   - {"kind":"tick"|"run","target":"<id>"}: one pass of one target under its
+//   - {"kind":"tick"|"run","controller":"github"|"slack","target":"<id>"}: one pass of one target under its
 //     lease, by the controller the policy says the target belongs to (the
 //     GitHub controller's organisations and `github:links`, the Slack
 //     controller's workspaces). `tick` is what an EventBridge Scheduler
