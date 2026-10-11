@@ -32,6 +32,17 @@
     },
     {
       "Action": [
+        "ssm:GetParametersByPath"
+      ],
+      "Effect": "Allow",
+      "Resource": [
+        "arn:aws:ssm:r1:111122223333:parameter/sluis/i1/internal/google",
+        "arn:aws:ssm:r1:111122223333:parameter/sluis/i1/external/google"
+      ],
+      "Sid": "SluisParametersListGoogle"
+    },
+    {
+      "Action": [
         "kms:Encrypt",
         "kms:Decrypt",
         "kms:GenerateDataKey"
