@@ -48,25 +48,63 @@ cross:
 # knowing what grew (`go tool nm -size -sort size` on a build without -s -w).
 lambda_budget := "83886080"
 
+# One budget per zip, so that a module that grows is named and a single
+# module's headroom is not spent by another's. Each starts at lambda_budget;
+# lower one only after measuring that module's bootstrap (`just lambda-size`
+# prints the sizes). Keep the names equal to hack/release-zips.txt.
+budget_issuer := lambda_budget
+budget_github := lambda_budget
+budget_github_mint := lambda_budget
+budget_slack := lambda_budget
+budget_google := lambda_budget
+budget_cloudflare := lambda_budget
+budget_backup := lambda_budget
+
 lambda-size: console
     #!/usr/bin/env bash
     set -euo pipefail
     out="$(mktemp -d)"
     trap 'rm -rf "$out"' EXIT
     # Every Lambda zip's main, built the way .goreleaser.yaml builds it (ids
-    # sluis-<module>: keep them equal).
-    for main in sluis-issuer sluis-cloudflare sluis-backup; do
+    # sluis-<module>: keep them equal). "main:budget" pairs.
+    mains=(
+        "sluis-issuer:{{budget_issuer}}"
+        "sluis-github:{{budget_github}}"
+        "sluis-github-mint:{{budget_github_mint}}"
+        "sluis-slack:{{budget_slack}}"
+        "sluis-google:{{budget_google}}"
+        "sluis-cloudflare:{{budget_cloudflare}}"
+        "sluis-backup:{{budget_backup}}"
+    )
+    built=0
+    for entry in "${mains[@]}"; do
+        main="${entry%%:*}"
+        budget="${entry##*:}"
+        # The github, github-mint, slack and google mains arrive on the v1.76
+        # train (cmd/sluis-github and -slack, -google). Until they exist the
+        # budget cannot be measured; .goreleaser.yaml already names them, so the
+        # release build fails without them. The issuer, cloudflare and backup
+        # mains are required.
+        if [ ! -d "cmd/$main" ]; then
+            case "$main" in
+                sluis-github|sluis-github-mint|sluis-slack|sluis-google)
+                    echo "lambda-size: cmd/$main does not exist yet, skipped" >&2
+                    continue ;;
+            esac
+        fi
         GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -tags lambda,lambda.norpc \
             -ldflags='-s -w' -o "$out/bootstrap" ./cmd/$main
         size="$(wc -c < "$out/bootstrap" | tr -d " ")"
-        if [ "$size" -gt {{lambda_budget}} ]; then
-            echo "lambda-size: the $main bootstrap is $size bytes, over the budget of {{lambda_budget}} ($(( {{lambda_budget}} / 1048576 )) MiB)." >&2
+        if [ "$size" -gt "$budget" ]; then
+            echo "lambda-size: the $main bootstrap is $size bytes, over its budget of $budget ($(( budget / 1048576 )) MiB)." >&2
             echo "deploy/pulumi refuses a bootstrap over 104857600 bytes (100 MiB) unzipped: artifact.MaxBytes in audit/deploy/pulumi/artifact." >&2
             echo "Find what grew: go tool nm -size -sort size on a build without -ldflags='-s -w'." >&2
             exit 1
         fi
-        echo "lambda-size: $main bootstrap is $size bytes (budget {{lambda_budget}}, deploy/pulumi limit 104857600)"
+        built=$((built + 1))
+        echo "lambda-size: $main bootstrap is $size bytes (budget $budget, deploy/pulumi limit 104857600)"
     done
+    [ "$built" -ge 3 ] || { echo "lambda-size: only $built mains built, want at least the issuer, cloudflare and backup" >&2; exit 1; }
 
 # Run unit tests
 # `console` first, and the same on every recipe that COMPILES Go: CI

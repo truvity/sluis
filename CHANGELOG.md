@@ -1,5 +1,9 @@
 ## Unreleased
 
+### Added
+
+- **The release builds and publishes the Lambda zips and module images of the github, github-mint, slack and google modules.** `.goreleaser.yaml` builds `sluis-github`, `sluis-github-mint` (the mint-only deployment of the github code), `sluis-slack` and `sluis-google` as arm64 `bootstrap` zips pinned to their module, beside the issuer, cloudflare and backup zips; `hack/release-zips.txt` and `hack/release-images.txt` list them, so each zip is checksummed and each image signed and attested. `just lambda-size` holds each bootstrap to a budget of its own. `hack/check-zips.sh` now matches a pin exactly, so the `github` zip is not taken for carrying the pin of `github-mint`. The release build needs `cmd/sluis-github`, `cmd/sluis-github-mint`, `cmd/sluis-slack` and `cmd/sluis-google`, which arrive with the units that split those modules.
+
 ## v1.75.0-rc.10
 
 ### Added
