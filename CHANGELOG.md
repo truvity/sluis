@@ -1,5 +1,7 @@
 ## Unreleased
 
+**Upgrading from v1.75: follow the [v1.76 upgrade guide](docs/guides/sluis/upgrade/v1.76.md).**
+
 ### Added
 
 - **The release matrix is held to the module registry.** Every module of `config.ZipModules()` (issuer, cloudflare, github, google, slack, backup) has exactly one arm64 Lambda zip with its module pinned, one module image and one `cmd/sluis-<module>`, and `checksums.txt` lists the zips; the `github-mint` and `accessctl` artifacts are gone. `internal/releasecheck` asserts the lists equal the registry and that only `sluisctl` is a Nix flake, and `hack/check-zips.sh` (so `release-verify`) now refuses an orphan `sluis-*_linux_arm64.zip`. The Pulumi library's default package names come from `config.ZipName`, the same constant, so a pin of `<version>` resolves every module zip.
