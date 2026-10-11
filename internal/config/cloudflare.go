@@ -32,6 +32,9 @@ type Cloudflare struct {
 	// Remote is where the minter is when it is not this process: the on-demand
 	// exchange then calls the Cloudflare module there, and this process holds no
 	// account and no preset.
+	//
+	// Deprecated: v1.76 reads it as `calls.modules.cloudflare` (see [Calls]);
+	// it is removed in v1.78.
 	Remote *CloudflareRemote `json:"remote,omitempty"`
 	// Serve makes the Cloudflare module answer other modules' calls: on
 	// Kubernetes a listener that verifies the caller's projected token, on

@@ -1,5 +1,13 @@
 ## Unreleased
 
+### Added
+
+- **`calls.modules.<m>` routes a call to any module.** The `sluis/v3`, `controller-github/v2` and `controller-slack/v2` documents take `calls.modules.<module>: {function|url, audience, tokenFile}`: a module named by `function` is invoked through its `live-<class>` Lambda alias, one named by `url` is called on its Kubernetes Service with the pod's projected token (`tokenFile`, default `/var/run/secrets/sluis/<module>/token`), and one with neither stays in the process. A module that names both is refused at load. The section is additive: a document without it behaves as before. `internal/modcall/dial.Dial(ctx, cfg, class, local)` builds the router from it; the Lambda client is compiled in only with the `lambda` build tag, so a Kubernetes build carries none.
+
+### Deprecated
+
+- **`cloudflare.remote` is deprecated in favour of `calls.modules.cloudflare`** and is removed in v1.78. It still works and is read as exactly that entry; a document that names the Cloudflare module in both places is refused.
+
 ## v1.75.0-rc.10
 
 ### Added
