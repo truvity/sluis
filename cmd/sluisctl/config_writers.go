@@ -2,10 +2,12 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -32,13 +34,19 @@ func kubeconfig(args []string) error {
 		binary = "sluisctl"
 	}
 
+	// A user left by a release that still called itself accessctl is
+	// renamed first, so that its contexts end up on the new name.
+	if err = renameLegacyKubeUsers(binary, cfg.Issuer); err != nil {
+		return err
+	}
+
 	written := 0
 	for _, one := range grants {
 		name, ok := strings.CutPrefix(one.Audience, "k8s:")
 		if !ok {
 			continue
 		}
-		user := "accessctl:" + name
+		user := kubeUserPrefix + name
 		// The exec plugin, which kubectl runs when it needs a token. The
 		// audience is the cluster's client id, so one plugin serves
 		// every cluster and nothing is duplicated per context.
@@ -104,11 +112,96 @@ func credentialArgs(binary, audience, issuer string) []string {
 	}
 }
 
-func kubectl(args ...string) error {
+// kubeUserPrefix starts the kubeconfig user name of a cluster, and
+// legacyKubeUserPrefix is what it started with before the rename (ADR 0035).
+const (
+	kubeUserPrefix       = "sluisctl:"
+	legacyKubeUserPrefix = "accessctl:"
+)
+
+// runKubectl runs kubectl and returns its stdout. A variable so that a test
+// can stand a kubeconfig in memory in its place.
+var runKubectl = func(args ...string) ([]byte, error) {
 	command := exec.Command("kubectl", args...) //nolint:gosec // arguments this tool built
 	command.Stderr = os.Stderr
-	if err := command.Run(); err != nil {
+	return command.Output()
+}
+
+func kubectl(args ...string) error {
+	if _, err := runKubectl(args...); err != nil {
 		return fmt.Errorf("kubectl %s: %w", strings.Join(args, " "), err)
+	}
+	return nil
+}
+
+// kubeView is the part of `kubectl config view --raw -o json` the rename reads.
+type kubeView struct {
+	Contexts []struct {
+		Name    string `json:"name"`
+		Context struct {
+			User string `json:"user"`
+		} `json:"context"`
+	} `json:"contexts"`
+	Users []struct {
+		Name string `json:"name"`
+		User struct {
+			Exec struct {
+				Args []string `json:"args"`
+			} `json:"exec"`
+		} `json:"user"`
+	} `json:"users"`
+}
+
+// renameLegacyKubeUsers renames every `accessctl:<cluster>` user in the target
+// kubeconfig (the one kubectl would write to) to `sluisctl:<cluster>`.
+//
+// kubectl cannot rename a user, so the new one is written first, with the
+// current binary and issuer, then each context that named the old user is
+// pointed at it, and only then is the old user removed: a failure part way
+// leaves every context on a user that exists. Only users that run `kube-token`
+// are touched. With none left to rename it does nothing, so it is safe to run
+// every time.
+func renameLegacyKubeUsers(binary, issuer string) error {
+	out, err := runKubectl("config", "view", "--raw", "-o", "json")
+	if err != nil {
+		return fmt.Errorf("kubectl config view: %w", err)
+	}
+	var view kubeView
+	if err = json.Unmarshal(out, &view); err != nil {
+		return fmt.Errorf("parse the kubeconfig: %w", err)
+	}
+	for _, user := range view.Users {
+		cluster, ok := strings.CutPrefix(user.Name, legacyKubeUserPrefix)
+		if !ok || cluster == "" || !slices.Contains(user.User.Exec.Args, "kube-token") {
+			continue
+		}
+		renamed := kubeUserPrefix + cluster
+		// What the user was set up for is kept; the command is the running one.
+		audience, userIssuer := "k8s:"+cluster, issuer
+		for _, arg := range user.User.Exec.Args {
+			if v, ok := strings.CutPrefix(arg, "--audience="); ok && v != "" {
+				audience = v
+			}
+			if v, ok := strings.CutPrefix(arg, "--issuer="); ok && v != "" {
+				userIssuer = v
+			}
+		}
+		if err = kubectl(append([]string{"config", "set-credentials", renamed},
+			credentialArgs(binary, audience, userIssuer)...)...); err != nil {
+			return err
+		}
+		for _, one := range view.Contexts {
+			if one.Context.User != user.Name {
+				continue
+			}
+			if err = kubectl("config", "set-context", one.Name, "--user="+renamed); err != nil {
+				return err
+			}
+		}
+		if err = kubectl("config", "unset", "users."+user.Name); err != nil {
+			return err
+		}
+		_, _ = fmt.Fprintf(os.Stderr, "sluisctl: renamed the kubeconfig user %s to %s\n", user.Name, renamed)
 	}
 	return nil
 }

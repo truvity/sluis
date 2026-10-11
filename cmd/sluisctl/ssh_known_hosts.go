@@ -17,7 +17,7 @@ import (
 )
 
 // sluisctl ssh known-hosts writes ONE file this tool owns,
-// ~/.ssh/known_hosts.d/accessctl by default: a `@cert-authority` line per
+// ~/.ssh/known_hosts.d/sluisctl by default: a `@cert-authority` line per
 // configured entry, so a laptop trusts a fleet's SSH host certificate
 // authorities before the first connection rather than being prompted for
 // one -- docs/guides/sluis/connect/ssh.md's "Hosts" section already documents the
@@ -342,7 +342,7 @@ func writeKnownHostsFile(path string, lines []string) error {
 func resolveKnownHostsPath(flagValue, home string) string {
 	trimmed := strings.TrimSpace(flagValue)
 	if trimmed == "" {
-		return filepath.Join(home, ".ssh", "known_hosts.d", "accessctl")
+		return filepath.Join(home, ".ssh", "known_hosts.d", knownHostsName)
 	}
 	if trimmed == "~" {
 		return home
@@ -397,8 +397,90 @@ func sshConfigHint(home, target string) string {
 	if sshConfigReferencesFile(string(raw), target, home) {
 		return ""
 	}
+	if legacy := filepath.Join(home, ".ssh", "known_hosts.d", legacyKnownHostsName); target != legacy &&
+		sshConfigReferencesFile(string(raw), legacy, home) {
+		return "\n~/.ssh/config still names the old file known_hosts.d/" + legacyKnownHostsName +
+			", which is no longer updated. Change it to:\n\n" +
+			"  UserKnownHostsFile ~/.ssh/known_hosts ~/.ssh/known_hosts.d/" + knownHostsName + "\n"
+	}
 	return "\nssh will not read this until ~/.ssh/config says so. Add:\n\n" +
-		"  UserKnownHostsFile ~/.ssh/known_hosts ~/.ssh/known_hosts.d/accessctl\n"
+		"  UserKnownHostsFile ~/.ssh/known_hosts ~/.ssh/known_hosts.d/" + knownHostsName + "\n"
+}
+
+// knownHostsName is the managed file's name under ~/.ssh/known_hosts.d, and
+// legacyKnownHostsName the one it had before the rename (ADR 0035).
+const (
+	knownHostsName       = "sluisctl"
+	legacyKnownHostsName = "accessctl"
+	// knownHostsMigratedMarker sits beside the new file once the old one has
+	// been copied, so that deleting the new file is not undone by copying the
+	// old one back. It is a dot-file: nothing globbing known_hosts.d reads it.
+	knownHostsMigratedMarker = ".migrated-from-accessctl"
+)
+
+// migrateLegacyKnownHosts copies ~/.ssh/known_hosts.d/accessctl to the new
+// default name, once, and says so on w. It acts only when the old file exists,
+// the new one does not and no marker records an earlier copy. The old file is
+// left in place (an ~/.ssh/config that names it keeps working until it is
+// changed) and a one-line marker is written beside the new one. A failure is
+// reported and not fatal: the command then writes the new file from its
+// configuration as a fresh laptop would.
+func migrateLegacyKnownHosts(home string, w io.Writer) {
+	dir := filepath.Join(home, ".ssh", "known_hosts.d")
+	oldPath, newPath := filepath.Join(dir, legacyKnownHostsName), filepath.Join(dir, knownHostsName)
+	marker := filepath.Join(dir, knownHostsMigratedMarker)
+	if _, err := os.Lstat(newPath); err == nil {
+		return
+	}
+	if _, err := os.Lstat(marker); err == nil {
+		return
+	}
+	info, err := os.Lstat(oldPath)
+	if err != nil || !info.Mode().IsRegular() {
+		return
+	}
+	body, err := os.ReadFile(oldPath) //nolint:gosec // a path this command owns
+	if err != nil {
+		_, _ = fmt.Fprintf(w, "sluisctl: could not read %s to migrate it: %v\n", oldPath, err)
+		return
+	}
+	if err = writeBytesAtomic(newPath, body); err != nil {
+		_, _ = fmt.Fprintf(w, "sluisctl: could not migrate %s to %s: %v\n", oldPath, newPath, err)
+		return
+	}
+	note := "copied from " + oldPath + " by sluisctl; the old file is left in place\n"
+	if err = os.WriteFile(marker, []byte(note), 0o644); err != nil { //nolint:gosec // beside a 0644 trust file
+		_, _ = fmt.Fprintf(w, "sluisctl: wrote %s but not its marker: %v\n", newPath, err)
+	}
+	_, _ = fmt.Fprintf(w, "sluisctl: copied %s to %s (the old file is left in place; point UserKnownHostsFile at the new one)\n",
+		oldPath, newPath)
+}
+
+// writeBytesAtomic writes body to path (0644) through a temporary file and a
+// rename, never replacing a file that appeared meanwhile.
+func writeBytesAtomic(path string, body []byte) error {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(dir, ".sluisctl-known-hosts-*.tmp")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = os.Remove(tmp.Name()) }()
+	if err = tmp.Chmod(0o644); err == nil {
+		_, err = tmp.Write(body)
+	}
+	if cerr := tmp.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		return err
+	}
+	if err = os.Link(tmp.Name(), path); err != nil { // fails if path exists
+		return err
+	}
+	return nil
 }
 
 // sshKnownHostsOptions is runSSHKnownHosts's whole input beyond the
@@ -432,6 +514,10 @@ func resolveSSHKnownHostsOptions(fileFlag, addressFlag, caCertFlag string) (sshK
 		address = firstEnv(envOpenBAOAddress, envVaultAddress)
 	}
 	address = strings.TrimSuffix(address, "/")
+
+	if strings.TrimSpace(fileFlag) == "" {
+		migrateLegacyKnownHosts(home, os.Stderr)
+	}
 
 	var roots *x509.CertPool
 	caCert := strings.TrimSpace(caCertFlag)
@@ -509,7 +595,7 @@ func sshCommand(args []string) error {
 // login's own hook (refreshKnownHostsAfterLogin, in login.go).
 func sshKnownHosts(args []string) error {
 	flags := flag.NewFlagSet("ssh known-hosts", flag.ContinueOnError)
-	file := flags.String("file", "", "the managed file to write (default: ~/.ssh/known_hosts.d/accessctl)")
+	file := flags.String("file", "", "the managed file to write (default: ~/.ssh/known_hosts.d/sluisctl)")
 	address := flags.String("address", "", "the OpenBAO API for openbao: entries, e.g. https://openbao.example:8200 "+
 		"(default: $"+envOpenBAOAddress+", then $"+envVaultAddress+")")
 	caCert := flags.String("ca-cert", "", "a PEM bundle to trust for these fetches, added to the system's roots "+

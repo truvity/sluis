@@ -149,11 +149,11 @@ sshKnownHosts:
 | Source | An entry names one of `url` or `openbao` |
 | Key type | Only `ssh-ed25519` is written; others are refused by name |
 | Fetch failure | Keeps the previous run's line for that pattern set with a warning, else skips it. The run does not fail |
-| File | Rewritten atomically each run, `0644` in a `0700` directory. `~/.ssh/config` is never edited; when no `UserKnownHostsFile` line names the managed file, the command prints `UserKnownHostsFile ~/.ssh/known_hosts ~/.ssh/known_hosts.d/accessctl` to add |
+| File | Rewritten atomically each run, `0644` in a `0700` directory. `~/.ssh/config` is never edited; when no `UserKnownHostsFile` line names the managed file, the command prints `UserKnownHostsFile ~/.ssh/known_hosts ~/.ssh/known_hosts.d/sluisctl` to add; when the line names the old `accessctl` file, it says to change it. A default file is copied once from `known_hosts.d/accessctl` if only that exists |
 
 | Flag | Default | Meaning |
 |---|---|---|
-| `--file` | `~/.ssh/known_hosts.d/accessctl` | Managed file (a legacy identifier, renamed in v1.75–v1.76) |
+| `--file` | `~/.ssh/known_hosts.d/sluisctl` | Managed file (`known_hosts.d/accessctl` before v1.76; the copy leaves it in place and writes `.migrated-from-accessctl` beside the new one) |
 | `--address` | `$BAO_ADDR`, then `$VAULT_ADDR` | OpenBAO API for `openbao:` entries |
 | `--ca-cert` | `$BAO_CACERT`, then `$VAULT_CACERT` | PEM bundle added to system roots |
 

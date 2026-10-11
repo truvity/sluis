@@ -140,3 +140,24 @@ replace.
   chart requires `config.release` to equal the release's full name, which for a
   chart named `sluis` installed as `sluis` is `sluis`, so an unset value would
   fail the render. An installation that depends on the old default pins it.
+
+## Update 2026-10-11: the laptop names move (D302 a)
+
+The contract names kept above for laptops move in v1.76, with a compatibility
+period:
+
+- The default OIDC client id becomes `sluisctl`. `sluisctl login` with no
+  explicit client asks the issuer whether it knows `sluisctl`; on
+  `invalid_client` it signs in once as `accessctl`, with a deprecation notice
+  on stderr. `--client` and `clientId:` always win. Every estate registers a
+  `sluisctl` client beside `accessctl` before its workstations upgrade, and
+  retires `accessctl` one release later.
+- `sluisctl kubeconfig` writes `sluisctl:<cluster>` users and renames an
+  existing `accessctl:<cluster>` user in place, contexts included.
+- The default known-hosts file becomes `~/.ssh/known_hosts.d/sluisctl`, copied
+  once from the old name (marker `.migrated-from-accessctl`).
+
+The configuration directory had already moved the same way. The "Renaming them
+would sign every person out" objection is met by the fallback and by keeping
+the client a session was minted for. The `accessctl` alias binary is removed
+by the D301 a update above.
