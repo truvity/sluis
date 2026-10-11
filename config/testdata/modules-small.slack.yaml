@@ -1,0 +1,34 @@
+apiVersion: sluis.truvity.github.io/controller-slack/v2
+adapters:
+  audit:
+    adapter: sqs
+    settings:
+      queueURL: https://sqs.eu-central-1.amazonaws.com/111122223333/example-audit-ingest
+      region: eu-central-1
+  trigger:
+    adapter: memory
+console:
+  auth:
+    aws:
+      audience: https://access.example.test/console
+consoleURL: https://access.example.test/console
+log:
+  level: info
+platform:
+  aws: true
+  runtime: lambda
+policy:
+  file: /opt/sluis/policy.yaml
+ports:
+  adapter: dynamodb
+  dynamodb:
+    region: eu-central-1
+    tables:
+      slack: sluis-example-slack
+preset: aws-hybrid
+release: access-issuer
+secrets:
+  layout: v5
+  region: eu-central-1
+  root: /sluis/example
+  source: ssm
