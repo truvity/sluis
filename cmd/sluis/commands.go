@@ -196,6 +196,9 @@ var pinnedCommands = map[string][]string{
 	"issuer":     {"issuer", "serve", "github", "slack", "google", "controller", "tick", "check", "migrate", "secrets"},
 	"backup":     {"backup", "restore"},
 	"cloudflare": {"cloudflare"},
+	"github":     {"github"},
+	"slack":      {"slack"},
+	"google":     {"google"},
 }
 
 // checkPin refuses a command line whose command is not the pinned module's.
