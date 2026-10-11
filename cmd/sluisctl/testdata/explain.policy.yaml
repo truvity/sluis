@@ -1,0 +1,59 @@
+apiVersion: sluis.truvity.github.io/policy/v2
+groups:
+  prod:grafana:admin:
+    members:
+      - grafana-admins@example.test
+  prod:logs:dms:
+    members:
+      - dms-team@example.test
+  prod:logs:kyc:
+    members:
+      - kyc-team@example.test
+  prod:workload:reader:
+    matchers:
+      - service_account:
+          namespace: acme-jobs
+          name: reader
+claims:
+  prod:logs:dms:
+    vm_access:
+      logs_extra_stream_filters:
+        - '"k8s.cluster.name"="prod","kubernetes.pod_namespace"="dms"'
+  prod:logs:kyc:
+    vm_access:
+      logs_extra_stream_filters:
+        - '"k8s.cluster.name"="prod","kubernetes.pod_namespace"="kyc"'
+claim_merge:
+  vm_access.logs_extra_stream_filters:
+    join: " or "
+    prefix: "_stream:{"
+    suffix: "}"
+    as: string
+clients:
+  logs:
+    kind: exchange
+    requires:
+      - prod:logs:dms
+      - prod:logs:kyc
+      - prod:workload:reader
+  grafana:
+    kind: exchange
+    requires:
+      - prod:grafana:admin
+github:
+  example-org:
+    members:
+      - prod:logs:dms
+exchange:
+  github:
+    owners:
+      - example-org
+apps:
+  github:
+    apps:
+      - purpose: runner
+        tier: stable
+controllers:
+  github:
+    enabledOrgs:
+      - example-org
