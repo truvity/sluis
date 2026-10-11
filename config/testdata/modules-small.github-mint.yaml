@@ -1,0 +1,31 @@
+apiVersion: sluis.truvity.github.io/controller-github/v2
+adapters:
+  audit:
+    adapter: sqs
+    settings:
+      queueURL: https://sqs.eu-central-1.amazonaws.com/111122223333/example-audit-ingest
+      region: eu-central-1
+  trigger:
+    adapter: memory
+consoleURL: https://access.example.test/console
+interval: 15m
+log:
+  level: info
+platform:
+  aws: true
+  runtime: lambda
+policy:
+  file: /opt/sluis/policy.yaml
+ports:
+  adapter: dynamodb
+  dynamodb:
+    region: eu-central-1
+    tables:
+      github: sluis-example-github
+preset: aws-hybrid
+release: access-issuer
+secrets:
+  layout: v5
+  region: eu-central-1
+  root: /sluis/example
+  source: ssm

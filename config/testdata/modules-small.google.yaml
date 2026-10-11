@@ -1,0 +1,28 @@
+apiVersion: sluis.truvity.github.io/sluis-google/v1
+google:
+  freshnessWindow: 30m
+  probeInterval: 5m
+  refreshInterval: 15m
+instance: example
+log:
+  level: info
+platform:
+  aws: true
+  runtime: lambda
+ports:
+  adapter: dynamodb
+  blob:
+    adapter: s3
+    s3:
+      bucket: example-sluis-111122223333
+      region: eu-central-1
+  dynamodb:
+    region: eu-central-1
+    tables:
+      google: sluis-example-google
+preset: aws-hybrid
+secrets:
+  layout: v5
+  region: eu-central-1
+  root: /sluis/example
+  source: ssm

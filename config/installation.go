@@ -150,6 +150,11 @@ type AWS struct {
 	// FunctionName is the Lambda function the `invoke` trigger names (through its `live` alias). Unset is
 	// `sluis`.
 	FunctionName string `json:"functionName,omitempty"`
+	// Functions name the module functions by module (github, github-mint,
+	// slack, google, cloudflare) when [RenderModules] is the renderer. Unset is
+	// `sluis-<instance>-<module>`. The issuer's call to each names it
+	// (`<module>.remote`).
+	Functions map[string]string `json:"functions,omitempty"`
 	// Table is the DynamoDB table of the `dynamodb` state adapter.
 	Table string `json:"table,omitempty"`
 	// Bucket is the S3 bucket of the `s3` blobs adapter.
