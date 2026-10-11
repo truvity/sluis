@@ -40,23 +40,23 @@ cloudflare:
       account: main
       prototype: <prototype token id>
       description: DNS edits on example.com for the release job
-      lifetime: 15m
-      rotation: 5m
+      lifetime: 1h
+      rotation: 20m
     r2-archive:
       account: main
       prototype: <R2 prototype token id>
       endpoint: https://<account-id>.r2.cloudflarestorage.com
-      lifetime: 15m
-      rotation: 5m
+      lifetime: 1h
+      rotation: 20m
 ```
 
 `endpoint` makes a preset an R2 preset. `lifetime` sets each token's `expires_on`. `rotation`, shorter than `lifetime`, sets how often the stored credential is replaced.
 
 | Limit or rule | Value |
 |---|---|
-| Pass | every minute per preset; a due rotation reads the prototype, creates a token and deletes the expired ones |
+| Pass | every 15 minutes per preset by default (`CloudflareRotation.Interval`); a credential rotates up to one tick after its `rotation` age, so `rotation` + tick + 5m must be under `lifetime`; a due rotation reads the prototype, creates a token and deletes the expired ones |
 | Cloudflare API | 1,200 requests per 5 minutes per user; past it Cloudflare blocks the API for 5 minutes |
-| Tokens per account | 500; a 15m `lifetime` with a 5m `rotation` keeps about three live per preset |
+| Tokens per account | 500; a 1h `lifetime` with a 20m `rotation` keeps about three live per preset |
 | Token names | `sluis/<instance>/<preset>/<time>`; on demand `sluis/<instance>/<preset>/<caller>/<time>` |
 | Sweep | deletes only expired tokens it recorded, under its own preset's prefix |
 

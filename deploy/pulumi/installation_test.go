@@ -210,7 +210,7 @@ func withCloudflare(in *sluisconfig.Installation) {
 			Accounts: map[string]sluisconfig.CloudflareAccount{"main": {ID: "0123456789abcdef0123456789abcdef", Minter: "internal/cloudflare/main/minter"}},
 			Presets: map[string]sluisconfig.CloudflarePreset{"dns": {
 				Account: "main", Prototype: "proto-dns-0001", Description: "DNS",
-				Lifetime: sluisconfig.Duration(15 * time.Minute), Rotation: sluisconfig.Duration(5 * time.Minute),
+				Lifetime: sluisconfig.Duration(time.Hour), Rotation: sluisconfig.Duration(20 * time.Minute),
 			}},
 		},
 		Grants: []sluisconfig.CloudflareGrant{{Group: "all:audit:security", Presets: []string{"dns"}}},
@@ -227,7 +227,7 @@ func TestAnR2PresetEndpointIsNotAnEndpointOfTheFunction(t *testing.T) {
 	withCloudflare(in)
 	in.Cloudflare.Presets["blobs"] = sluisconfig.CloudflarePreset{
 		Account: "main", Prototype: "proto-r2-0001", Description: "R2", Endpoint: r2,
-		Lifetime: sluisconfig.Duration(15 * time.Minute), Rotation: sluisconfig.Duration(5 * time.Minute),
+		Lifetime: sluisconfig.Duration(time.Hour), Rotation: sluisconfig.Duration(20 * time.Minute),
 	}
 	rec, _ := mustLambda(t, withInstallation(in, nil))
 	if doc := layerFiles(t, rec)["sluis/sluis.yaml"]; !strings.Contains(doc, r2) {
@@ -266,7 +266,7 @@ func TestCloudflarePresetsGetTheRotationScheduleAndTheGrants(t *testing.T) {
 
 	s := rec.one(t, "aws:scheduler/schedule:Schedule", "staging-cloudflare-rotation")
 	tgt := prop(s, "target").ObjectValue()
-	if prop(s, "scheduleExpression").StringValue() != "rate(1 minute)" || tgt["input"].StringValue() != `{"kind":"cloudflare"}` ||
+	if prop(s, "scheduleExpression").StringValue() != "rate(15 minutes)" || tgt["input"].StringValue() != `{"kind":"cloudflare"}` ||
 		!strings.HasSuffix(tgt["arn"].StringValue(), ":function:sluis-http:live") {
 		t.Errorf("rotation schedule: %v", s.Inputs)
 	}
@@ -311,5 +311,44 @@ func TestCloudflarePresetsGetTheRotationScheduleAndTheGrants(t *testing.T) {
 		a.CloudflareRotation = arp.CloudflareRotationArgs{Disabled: true, Paused: true}
 	})); err == nil {
 		t.Error("disabled and paused together were accepted")
+	}
+}
+
+func TestTheCloudflareTickIsConfigurableAndHeldToThePresets(t *testing.T) {
+	in := exampleInstallation(t)
+	withCloudflare(in) // lifetime 1h, rotation 20m
+	expr := func(t *testing.T, more func(*arp.LambdaArgs)) string {
+		t.Helper()
+		rec, _ := mustLambda(t, withInstallation(in, more))
+		return prop(rec.one(t, "aws:scheduler/schedule:Schedule", "staging-cloudflare-rotation"), "scheduleExpression").StringValue()
+	}
+	if got := expr(t, func(a *arp.LambdaArgs) { a.CloudflareRotation.Interval = 10 * time.Minute }); got != "rate(10 minutes)" {
+		t.Errorf("Interval 10m: %s", got)
+	}
+	if got := expr(t, func(a *arp.LambdaArgs) { a.CloudflareRotation.Interval = time.Minute }); got != "rate(1 minute)" {
+		t.Errorf("Interval 1m: %s", got)
+	}
+	// 20m + 35m + 5m = 60m is not under 1h; 20m + 34m + 5m is.
+	for name, set := range map[string]func(*arp.LambdaArgs){
+		"interval too long": func(a *arp.LambdaArgs) { a.CloudflareRotation.Interval = 35 * time.Minute },
+		"rate too long":     func(a *arp.LambdaArgs) { a.CloudflareRotation.Rate = "rate(1 hour)" },
+		"interval and rate": func(a *arp.LambdaArgs) {
+			a.CloudflareRotation.Interval, a.CloudflareRotation.Rate = time.Minute, "rate(5 minutes)"
+		},
+		"interval under 1m":   func(a *arp.LambdaArgs) { a.CloudflareRotation.Interval = 30 * time.Second },
+		"interval not minute": func(a *arp.LambdaArgs) { a.CloudflareRotation.Interval = 90 * time.Second },
+	} {
+		if _, _, err := buildLambda(t, withInstallation(in, set)); err == nil {
+			t.Errorf("%s was accepted", name)
+		}
+	}
+	if got := expr(t, func(a *arp.LambdaArgs) { a.CloudflareRotation.Interval = 34 * time.Minute }); got != "rate(34 minutes)" {
+		t.Errorf("Interval 34m: %s", got)
+	}
+	// A left-out schedule is not held to the margin.
+	if _, _, err := buildLambda(t, withInstallation(in, func(a *arp.LambdaArgs) {
+		a.CloudflareRotation = arp.CloudflareRotationArgs{Disabled: true, Interval: time.Hour}
+	})); err != nil {
+		t.Errorf("a disabled schedule was held to the margin: %v", err)
 	}
 }

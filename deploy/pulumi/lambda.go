@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"hash/fnv"
+	"maps"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -459,15 +461,23 @@ type DirectoryRefreshArgs struct {
 
 // CloudflareRotationArgs is the Cloudflare rotation schedule: one EventBridge
 // schedule invoking the function with `{"kind":"cloudflare"}`. A pass that finds
-// nothing due costs one read of the secrets store, so the schedule's granularity
-// (a minute) is the rotation's.
+// nothing due costs one read of the secrets store, so the schedule's tick is the
+// rotation's granularity: a credential rotates up to one tick after its
+// `rotation` age. A coarser tick costs fewer lease writes and reads, and is
+// held to the presets: rotation + tick + CloudflareConsumerSyncMargin must be
+// shorter than every preset's lifetime.
 type CloudflareRotationArgs struct {
 	// Disabled leaves the schedule out.
 	Disabled bool
 	// Paused declares the schedule DISABLED and keeps everything else.
 	// Exclusive with Disabled.
 	Paused bool
-	// Rate is the schedule expression. Default DefaultCloudflareRotationSchedule.
+	// Interval is the tick, a whole number of minutes of at least one. Default
+	// DefaultCloudflareRotationInterval. Exclusive with Rate.
+	Interval time.Duration
+	// Rate is the schedule expression, for a tick that is not a plain interval
+	// (a cron expression). The margin check of the presets needs the tick, so it
+	// is made only for a `rate(...)` expression. Exclusive with Interval.
 	Rate string
 }
 
@@ -488,9 +498,64 @@ type IssuerClientsArgs struct {
 // IssuerClientsArgs.Rate is empty.
 const DefaultIssuerClientsSchedule = "rate(15 minutes)"
 
-// DefaultCloudflareRotationSchedule is the rotation's tick when
-// CloudflareRotationArgs.Rate is empty: EventBridge Scheduler's finest.
-const DefaultCloudflareRotationSchedule = "rate(1 minute)"
+// DefaultCloudflareRotationInterval is the rotation's tick when neither
+// CloudflareRotationArgs.Interval nor Rate is set.
+const DefaultCloudflareRotationInterval = 15 * time.Minute
+
+// DefaultCloudflareRotationSchedule is the schedule expression of
+// DefaultCloudflareRotationInterval.
+const DefaultCloudflareRotationSchedule = "rate(15 minutes)"
+
+// CloudflareConsumerSyncMargin is the time a consumer is given, after a
+// rotation, to read the new stored credential before the old one expires
+// (External Secrets re-reads in a minute, a pod on change or on a refusal).
+const CloudflareConsumerSyncMargin = 5 * time.Minute
+
+// rateExpression spells a whole-minute interval as an EventBridge rate.
+func rateExpression(d time.Duration) string {
+	if m := int(d / time.Minute); m != 1 {
+		return fmt.Sprintf("rate(%d minutes)", m)
+	}
+	return "rate(1 minute)"
+}
+
+var rateUnits = regexp.MustCompile(`^rate\((\d+) (minute|minutes|hour|hours|day|days)\)$`)
+
+// rateTick is the tick of a rate(...) expression; false for any other.
+func rateTick(expr string) (time.Duration, bool) {
+	m := rateUnits.FindStringSubmatch(expr)
+	if m == nil {
+		return 0, false
+	}
+	n, err := strconv.Atoi(m[1])
+	if err != nil || n < 1 {
+		return 0, false
+	}
+	unit := time.Minute
+	switch m[2] {
+	case "hour", "hours":
+		unit = time.Hour
+	case "day", "days":
+		unit = 24 * time.Hour
+	}
+	return time.Duration(n) * unit, true
+}
+
+// checkCloudflareMargin refuses a tick under which a credential could expire
+// before its replacement is synced: the worst case is a rotation one tick late,
+// and the new credential then needs CloudflareConsumerSyncMargin.
+func checkCloudflareMargin(tick time.Duration, presets map[string]sluisconfig.CloudflarePreset) error {
+	var errs []error
+	for _, name := range slices.Sorted(maps.Keys(presets)) {
+		p := presets[name]
+		if need := p.Rotation.D() + tick + CloudflareConsumerSyncMargin; need >= p.Lifetime.D() {
+			errs = append(errs, fmt.Errorf("sluispulumi: CloudflareRotation: preset %q: "+
+				"rotation %s + tick %s + consumer sync margin %s = %s is not under its lifetime %s; "+
+				"shorten the rotation or the tick, or lengthen the lifetime", name, p.Rotation.D(), tick, CloudflareConsumerSyncMargin, need, p.Lifetime.D()))
+		}
+	}
+	return errors.Join(errs...)
+}
 
 // cloudflare reports whether the installation declares Cloudflare presets: the
 // schedule and the function's grants on the minter and the stored credentials
@@ -1039,8 +1104,22 @@ func (a *LambdaArgs) validate() (LambdaArgs, error) {
 	if out.CloudflareRotation.Disabled && out.CloudflareRotation.Paused {
 		return out, errors.New("sluispulumi: CloudflareRotation: Disabled leaves the schedule out and Paused declares it disabled: set one")
 	}
+	if iv := out.CloudflareRotation.Interval; iv != 0 {
+		if out.CloudflareRotation.Rate != "" {
+			return out, errors.New("sluispulumi: CloudflareRotation: Interval and Rate both set: set one")
+		}
+		if iv < time.Minute || iv%time.Minute != 0 {
+			return out, fmt.Errorf("sluispulumi: CloudflareRotation.Interval %s is not a whole number of minutes, at least one", iv)
+		}
+		out.CloudflareRotation.Rate = rateExpression(iv)
+	}
 	if out.CloudflareRotation.Rate == "" {
 		out.CloudflareRotation.Rate = DefaultCloudflareRotationSchedule
+	}
+	if tick, ok := rateTick(out.CloudflareRotation.Rate); ok && out.cloudflare() && !out.CloudflareRotation.Disabled {
+		if err := checkCloudflareMargin(tick, out.Installation.Cloudflare.Presets); err != nil {
+			return out, err
+		}
 	}
 	if r := out.CloudflareRotation.Rate; !strings.HasPrefix(r, "rate(") && !strings.HasPrefix(r, "cron(") {
 		return out, fmt.Errorf("sluispulumi: CloudflareRotation.Rate %q is not an EventBridge Scheduler expression", r)

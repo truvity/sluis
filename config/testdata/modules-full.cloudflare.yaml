@@ -18,9 +18,9 @@ cloudflare:
     dns-example:
       account: main
       description: DNS edits on example.com for the release job
-      lifetime: 15m
+      lifetime: 1h
       prototype: 9d3b1c7a5e2f4b8a9c0d1e2f3a4b5c6d
-      rotation: 5m
+      rotation: 20m
   serve: {}
 instance: staging
 issuerURL: https://access.example.test
