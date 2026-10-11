@@ -302,9 +302,6 @@ type Policy struct {
 	// Claims is what a group adds to a token. Sparse: a group that adds
 	// only its own name is absent here.
 	Claims map[string]Fragment `yaml:"claims,omitempty"`
-	// ClaimMerge declares, by dotted claim path, a claim whose fragment
-	// lists are JOINED into one string instead of unioned; see [ClaimJoin].
-	ClaimMerge map[string]ClaimJoin `yaml:"claim_merge,omitempty"`
 	// Lifetimes is how long a token lives, keyed by group, plus the
 	// "default" key. The shortest across a caller's groups wins.
 	Lifetimes map[string]Duration `yaml:"lifetimes,omitempty"`
@@ -858,9 +855,6 @@ func (p Policy) Validate() error {
 		if err := p.checkGrantName("claims", name); err != nil {
 			return err
 		}
-	}
-	if err := p.checkClaimMerge(); err != nil {
-		return err
 	}
 	for _, name := range slices.Sorted(maps.Keys(p.Lifetimes)) {
 		if name == LifetimeDefault {

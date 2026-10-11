@@ -83,25 +83,4 @@ The ID token carries all of them. The userinfo endpoint answers the same set.
 | scalars | two groups setting one key differently is a load-time error |
 | lifetime | shortest across the caller's groups, then client `ttl_cap`, then `lifetimes.default` |
 
-### Joined claims
-
-`claim_merge` joins a list claim into one string, for a filter that must OR where a list would AND.
-
-```yaml
-claim_merge:
-  vm_access.logs_extra_stream_filters:
-    join: " or "
-    prefix: "_stream:{"
-    suffix: "}"
-    as: list
-```
-
-| Key | Meaning |
-|---|---|
-| `join` | between the strings; required |
-| `prefix`, `suffix` | wrap the result |
-| `as` | `list` (default): one element; `string` |
-
-The groups a token carries are sorted, de-duplicated and joined; none leaves the key absent. Load refuses a malformed rule or a non-list fragment at the path.
-
 Conflicts are refused at policy load. A lifetime cannot depend on a pair such as group and client; use a new internal group.
