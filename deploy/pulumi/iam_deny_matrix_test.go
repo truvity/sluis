@@ -22,10 +22,10 @@ const (
 	mxRegion   = "r1"
 	mxAccount  = "000000000000"
 	mxInst     = "i1"
-	mxBucket   = "arn:aws:s3:::acme-blobs"
-	mxKey      = "arn:aws:kms:r1:000000000000:key/shared"
-	mxTableKey = "arn:aws:kms:r1:000000000000:key/tables"
-	mxQueue    = "arn:aws:sqs:r1:000000000000:acme-audit"
+	mxBucket   = arnPrefix + "s3:::acme-blobs"
+	mxKey      = arnPrefix + "kms:r1:000000000000:key/shared"
+	mxTableKey = arnPrefix + "kms:r1:000000000000:key/tables"
+	mxQueue    = arnPrefix + "sqs:r1:000000000000:acme-audit"
 	mxSsmVia   = "ssm.r1.amazonaws.com"
 	mxMinter   = "internal/cloudflare/main/minter"
 )
@@ -51,17 +51,17 @@ type roleSpec struct {
 }
 
 func mxFn(name string) string {
-	return "arn:aws:lambda:" + mxRegion + ":" + mxAccount + ":function:sluis-" + mxInst + "-" + name
+	return arnPrefix + "lambda:" + mxRegion + ":" + mxAccount + ":function:sluis-" + mxInst + "-" + name
 }
 
-func mxRoleArn(name string) string { return "arn:aws:iam::" + mxAccount + ":role/fn-" + name }
+func mxRoleArn(name string) string { return arnPrefix + "iam::" + mxAccount + ":role/fn-" + name }
 
 func mxTable(m Module) string {
-	return "arn:aws:dynamodb:" + mxRegion + ":" + mxAccount + ":table/sluis-" + mxInst + "-" + string(m)
+	return arnPrefix + "dynamodb:" + mxRegion + ":" + mxAccount + ":table/sluis-" + mxInst + "-" + string(m)
 }
 
 func mxParam(prefix string, m string, leaf string) string {
-	return "arn:aws:ssm:" + mxRegion + ":" + mxAccount + ":parameter/sluis/" + mxInst + "/" + prefix + "/" + m + "/" + leaf
+	return arnPrefix + "ssm:" + mxRegion + ":" + mxAccount + ":parameter/sluis/" + mxInst + "/" + prefix + "/" + m + "/" + leaf
 }
 
 var mxFunctions = []string{"issuer", "cloudflare", "backup", "restore", "github"}
@@ -99,7 +99,7 @@ func mxEnv(roles []Role) ModuleEnv {
 	logs := map[string]string{}
 	for _, f := range mxFunctions {
 		fns[f] = mxFn(f)
-		logs[f] = "arn:aws:logs:" + mxRegion + ":" + mxAccount + ":log-group:/aws/lambda/" + f
+		logs[f] = arnPrefix + "logs:" + mxRegion + ":" + mxAccount + ":log-group:/aws/lambda/" + f
 	}
 	return ModuleEnv{
 		Region: mxRegion, Account: mxAccount, Modules: ModuleSet{Instance: mxInst},
@@ -144,8 +144,8 @@ func mxPolicies(t *testing.T) (identity map[string]iameval.Policy, key iameval.P
 	doc, err = fp(true)
 	parse("issuer-cf", doc, err)
 
-	arch := ArchiveGrant{BucketArn: "arn:aws:s3:::acme-archive", Prefix: "pre/", Instance: mxInst,
-		KeyArn: "arn:aws:kms:r1:000000000000:key/archive", Versioned: true}
+	arch := ArchiveGrant{BucketArn: arnPrefix + "s3:::acme-archive", Prefix: "pre/", Instance: mxInst,
+		KeyArn: arnPrefix + "kms:r1:000000000000:key/archive", Versioned: true}
 	st, err := BackupRoleStatements(env, arch)
 	parse("backup", st, err)
 	st, err = RestoreRoleStatements(env, arch, []string{mxFn("restore") + ":live-console"})
@@ -190,7 +190,7 @@ type mxRow struct {
 	ceiling bool // evaluate with an identity policy that allows all of KMS: the key policy alone must refuse
 }
 
-func mxRows_(specs []roleSpec) []mxRow {
+func mxBuildRows(specs []roleSpec) []mxRow {
 	var rows []mxRow
 	for _, s := range specs {
 		add := func(group, name, action, resource string, want bool, ctx func(iameval.Request) iameval.Request) {
@@ -271,13 +271,13 @@ func mxRows_(specs []roleSpec) []mxRow {
 		add("s3", "list everything", "s3:ListBucket", mxBucket, false, prefix(""))
 
 		// The Cloudflare minter parameter: read by the issuer without hosting the module.
-		minter := "arn:aws:ssm:" + mxRegion + ":" + mxAccount + ":parameter/sluis/" + mxInst + "/" + mxMinter
+		minter := arnPrefix + "ssm:" + mxRegion + ":" + mxAccount + ":parameter/sluis/" + mxInst + "/" + mxMinter
 		wantMinter := s.hostsModule(ModuleCloudflare) || s.readAll || s.writeAll || s.name == "issuer"
 		add("minter", "minter read", "ssm:GetParameter", minter, wantMinter, nil)
 		add("minter", "minter write", "ssm:PutParameter", minter, s.hostsModule(ModuleCloudflare) || s.writeAll, nil)
 		kmsAdd("minter decrypt", "kms:Decrypt", minter, wantMinter)
 		add("minter", "another account's minter", "ssm:GetParameter",
-			"arn:aws:ssm:"+mxRegion+":"+mxAccount+":parameter/sluis/"+mxInst+"/internal/cloudflare/main/other",
+			arnPrefix+"ssm:"+mxRegion+":"+mxAccount+":parameter/sluis/"+mxInst+"/internal/cloudflare/main/other",
 			s.hostsModule(ModuleCloudflare) || s.readAll || s.writeAll, nil)
 
 		// The sign context: only the roles that host oidc, directly, under exactly {instance, purpose}.
@@ -337,7 +337,7 @@ func mxDecide(t *testing.T, r mxRow, identity iameval.Policy, key iameval.Policy
 func TestEveryRoleIsRefusedWhatItIsNotGranted(t *testing.T) {
 	identity, key := mxPolicies(t)
 	specs := mxSpecs()
-	rows := mxRows_(specs)
+	rows := mxBuildRows(specs)
 	if len(rows) < mxRows {
 		t.Fatalf("the matrix has %d rows, fewer than the %d it is pinned to: an empty or shrunk sweep proves nothing", len(rows), mxRows)
 	}
@@ -375,7 +375,7 @@ func TestEveryRoleIsRefusedWhatItIsNotGranted(t *testing.T) {
 }
 
 func TestTheMatrixCoversEveryRoleGroupAndModule(t *testing.T) {
-	rows := mxRows_(mxSpecs())
+	rows := mxBuildRows(mxSpecs())
 	type cell struct{ role, group string }
 	refuse, allow := map[cell]int{}, map[cell]int{}
 	modules := map[string]map[string]bool{}
