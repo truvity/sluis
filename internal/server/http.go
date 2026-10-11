@@ -604,12 +604,12 @@ func (s *ConsoleServer) writePage(w http.ResponseWriter, r *http.Request, status
 func (s *ConsoleServer) signInStart(w http.ResponseWriter, r *http.Request) {
 	connector, ok := s.signInConnector(r.PathValue("backend"))
 	if !ok {
-		http.Error(w, "this installation cannot sign in with that provider", http.StatusNotFound)
+		s.refusePage(w, r, http.StatusNotFound, "this installation cannot sign in with that provider", nil, logattr.SafeString("backend", r.PathValue("backend")))
 		return
 	}
 	state, err := s.state.Issue("")
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		s.refusePage(w, r, http.StatusInternalServerError, "the sign-in state could not be issued", err)
 		return
 	}
 	url, err := connector.SignInURL(state)
@@ -617,7 +617,8 @@ func (s *ConsoleServer) signInStart(w http.ResponseWriter, r *http.Request) {
 		// Almost always "no OAuth client is registered yet", which is a
 		// setup step rather than a fault, so it says so instead of
 		// failing with a stack of OAuth vocabulary.
-		http.Error(w, err.Error(), http.StatusFailedDependency)
+		s.refusePage(w, r, http.StatusFailedDependency, "the provider's sign-in address could not be built", err,
+			slog.String("backend", connector.Kind()))
 		return
 	}
 	access.SetCookie(w, access.LoginCookie(state, s.sessions.Secure(), signInWindow))
@@ -637,12 +638,12 @@ const signInWindow = 10 * time.Minute
 func (s *ConsoleServer) signInCallback(w http.ResponseWriter, r *http.Request) {
 	connector, ok := s.signInConnector(r.PathValue("backend"))
 	if !ok {
-		http.Error(w, "this installation cannot sign in with that provider", http.StatusNotFound)
+		s.refusePage(w, r, http.StatusNotFound, "this installation cannot sign in with that provider", nil, logattr.SafeString("backend", r.PathValue("backend")))
 		return
 	}
 	state := r.URL.Query().Get("state")
 	if !access.LoginStartedHere(r, state, s.sessions.Secure()) {
-		http.Error(w, "this sign-in did not start in this browser", http.StatusBadRequest)
+		s.refusePage(w, r, http.StatusBadRequest, "this sign-in did not start in this browser", nil)
 		return
 	}
 	// A provider round trip's state, never a recovery form's.
@@ -650,7 +651,7 @@ func (s *ConsoleServer) signInCallback(w http.ResponseWriter, r *http.Request) {
 		if err == nil {
 			err = access.ErrBadState
 		}
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		s.refusePage(w, r, http.StatusBadRequest, "the sign-in state is not valid", err)
 		return
 	}
 	access.SetCookie(w, access.LoginCookie("", s.sessions.Secure(), 0))
@@ -659,7 +660,7 @@ func (s *ConsoleServer) signInCallback(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		s.log.WarnContext(r.Context(), "sign-in exchange failed",
 			slog.String("backend", connector.Kind()), logattr.SafeError("error", err))
-		http.Error(w, "the sign-in could not be completed: "+err.Error(), http.StatusBadGateway)
+		s.refusePage(w, r, http.StatusBadGateway, "the sign-in could not be completed", err, slog.String("backend", connector.Kind()))
 		return
 	}
 
@@ -674,16 +675,13 @@ func (s *ConsoleServer) signInCallback(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case err != nil:
 		s.log.ErrorContext(r.Context(), "sign-in could not be resolved", logattr.Pseudonym("subject", email), logattr.SafeError("error", err))
-		http.Error(w, "signed in as "+email+", but the directory could not be read: "+err.Error(),
-			http.StatusServiceUnavailable)
+		s.refusePage(w, r, http.StatusServiceUnavailable, "the directory could not be read", err, logattr.Pseudonym("subject", email))
 		return
 	case !known.InDomain:
-		http.Error(w, "signed in as "+email+", but no connected provider serves that domain",
-			http.StatusForbidden)
+		s.refusePage(w, r, http.StatusForbidden, "no connected provider serves that domain", nil, logattr.Pseudonym("subject", email))
 		return
 	case !known.Found && known.Authoritative:
-		http.Error(w, "signed in as "+email+", but that account is not in the directory",
-			http.StatusForbidden)
+		s.refusePage(w, r, http.StatusForbidden, "that account is not in the directory", nil, logattr.Pseudonym("subject", email))
 		return
 	}
 
@@ -695,15 +693,14 @@ func (s *ConsoleServer) signInCallback(w http.ResponseWriter, r *http.Request) {
 		s.log.WarnContext(r.Context(), "sign-in refused", logattr.Pseudonym("subject", email), logattr.SafeError("error", err))
 		s.console.record(r.Context(), audit.SignedIn(audit.Person(email), "console", connector.Kind(),
 			audit.Denied("the directory says this account is not live")))
-		http.Error(w, "signed in as "+email+", but that address cannot be served: "+err.Error(),
-			http.StatusForbidden)
+		s.refusePage(w, r, http.StatusForbidden, "that address cannot be served", err, logattr.Pseudonym("subject", email))
 		return
 	}
 
 	if err = s.sessions.Issue(w, access.Principal{
 		Email: email, Subject: email, Source: access.SourceDirectory, Issuer: connector.Kind(),
 	}); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		s.refusePage(w, r, http.StatusInternalServerError, "the session could not be issued", err)
 		return
 	}
 	s.log.InfoContext(r.Context(), "signed in",
@@ -754,9 +751,8 @@ func (s *ConsoleServer) recoveryLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	if !recoveryEnabled(s.recovery) {
 		refuseCheap(reasonRecoveryOff)
-		http.Error(w, "recovery sign-in is turned off on this deployment (recovery.enabled is false). "+
-			"Whoever can change its configuration turns it back on; the recovery credential is kept, "+
-			"so nothing needs rotating.", http.StatusForbidden)
+		s.refusePage(w, r, http.StatusForbidden, "recovery sign-in is turned off on this deployment (recovery.enabled is false); "+
+			"whoever can change its configuration turns it back on, and the recovery credential is kept", nil)
 		return
 	}
 	// A proof is a few KiB at most. Bounded before anything is read, so
@@ -765,16 +761,16 @@ func (s *ConsoleServer) recoveryLogin(w http.ResponseWriter, r *http.Request) {
 	proof, fromForm, err := recoveryProof(r)
 	if err != nil {
 		if tooLarge := (*http.MaxBytesError)(nil); errors.As(err, &tooLarge) {
-			http.Error(w, "that form is too large", http.StatusRequestEntityTooLarge)
+			s.refusePage(w, r, http.StatusRequestEntityTooLarge, "that form is too large", nil)
 			return
 		}
-		http.Error(w, "that form could not be read", http.StatusBadRequest)
+		s.refusePage(w, r, http.StatusBadRequest, "that form could not be read", err)
 		return
 	}
 	if fromForm && !s.servedHere(r) {
 		// Not recorded: nothing about the proof was checked, and a
 		// forged post is anybody's to send in a loop.
-		http.Error(w, "this sign-in did not start in this browser; open the sign-in page again", http.StatusBadRequest)
+		s.refusePage(w, r, http.StatusBadRequest, "this sign-in did not start in this browser", nil)
 		return
 	}
 
@@ -783,12 +779,12 @@ func (s *ConsoleServer) recoveryLogin(w http.ResponseWriter, r *http.Request) {
 	case errors.Is(err, ErrRecoveryThrottled):
 		s.log.WarnContext(r.Context(), "recovery refused: too many attempts", logattr.SafeString("remote", r.RemoteAddr))
 		refuseCheap(reasonRecoveryThrottled)
-		http.Error(w, "too many attempts; wait a minute", http.StatusTooManyRequests)
+		s.refusePage(w, r, http.StatusTooManyRequests, "too many attempts", nil)
 		return
 	case errors.Is(err, ErrRecoveryRefused):
 		s.log.WarnContext(r.Context(), "recovery refused", logattr.SafeString("remote", r.RemoteAddr), logattr.SafeError("reason", err))
 		refuse(reasonRecoveryRefused)
-		http.Error(w, "that proof was not accepted", http.StatusUnauthorized)
+		s.refusePage(w, r, http.StatusUnauthorized, "that proof was not accepted", err)
 		return
 	case err != nil:
 		// The check did not happen — an unreachable API server, a hub
@@ -797,7 +793,7 @@ func (s *ConsoleServer) recoveryLogin(w http.ResponseWriter, r *http.Request) {
 		// possible day.
 		s.log.ErrorContext(r.Context(), "recovery could not be checked", logattr.SafeError("error", err))
 		s.console.record(r.Context(), audit.RecoverySignedIn(audit.Anonymous(), "console", how, audit.Failed(reasonRecoveryUnchecked)))
-		http.Error(w, "recovery could not be checked: "+err.Error(), http.StatusServiceUnavailable)
+		s.refusePage(w, r, http.StatusServiceUnavailable, "recovery could not be checked", err)
 		return
 	}
 
@@ -814,9 +810,8 @@ func (s *ConsoleServer) recoveryLogin(w http.ResponseWriter, r *http.Request) {
 		s.log.ErrorContext(r.Context(), "recovery refused: the audit trail could not be written",
 			logattr.SafeString("subject", subject), logattr.SafeError("error", err))
 		s.console.record(r.Context(), recovered(audit.Denied(reasonUnaudited)))
-		http.Error(w, "recovery is refused: the audit trail could not be written, and a recovery sign-in "+
-			"never happens without its record. Check that the audit installation's writer is up, then try again.",
-			http.StatusServiceUnavailable)
+		s.refusePage(w, r, http.StatusServiceUnavailable,
+			"recovery is refused: the audit trail could not be written, and a recovery sign-in never happens without its record", err)
 		return
 	}
 
@@ -826,7 +821,7 @@ func (s *ConsoleServer) recoveryLogin(w http.ResponseWriter, r *http.Request) {
 		Email: subject, Subject: subject, Source: access.SourceRecovery,
 	}); err != nil {
 		s.console.record(r.Context(), recovered(audit.Failed("the session could not be issued")))
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		s.refusePage(w, r, http.StatusInternalServerError, "the session could not be issued", err)
 		return
 	}
 	if fromForm {

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"html"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -66,7 +65,7 @@ func recoveryFormServerWith(t *testing.T, signIn *identifyingNobody) (http.Handl
 	codec := access.NewStateCodec(make([]byte, 32), time.Minute)
 	deps := ConsoleServerDeps{
 		Console: console, Authorizer: console.deps.Authorizer, Sessions: sessions, State: codec,
-		Recovery: oneRecovery{}, Log: slog.New(slog.DiscardHandler),
+		Recovery: oneRecovery{}, Log: capturedLogger(),
 	}
 	if signIn != nil {
 		deps.Connectors, deps.SignIn = []Connector{signIn}, true
@@ -155,9 +154,10 @@ func TestAConsoleRecoveryFormPostFromAnotherBrowserIsRefused(t *testing.T) {
 			contentType, body, cookies := forge(t, codec)
 
 			response := postRecoveryForm(handler, contentType, body, cookies...)
-			if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "did not start in this browser") {
-				t.Errorf("recovery = %d %q, want 400 saying it did not start here", response.Code, response.Body.String())
+			if response.Code != http.StatusBadRequest {
+				t.Errorf("recovery = %d, want 400", response.Code)
 			}
+			wantRefused(t, response, "Not authorised", []string{"browser"}, "did not start in this browser")
 			if c, ok := setCookie(response, sessionCookie); ok && c.Value != "" {
 				t.Error("a forged recovery post was handed a console session")
 			}

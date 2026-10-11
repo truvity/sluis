@@ -16,6 +16,7 @@ import (
 
 	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/issuer"
+	"github.com/truvity/sluis/internal/refusal"
 )
 
 // countingCompleter completes every request and counts how many it did.
@@ -100,7 +101,9 @@ func TestARecoveryPostFromAnotherBrowserIsRefused(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			handler, codec, storage, sso := recoveryDoor(t)
+			door, codec, storage, sso := recoveryDoor(t)
+			// What every listener puts in front: the request id the refusal quotes.
+			handler := refusal.Middleware(door)
 
 			state, err := codec.IssueAs(access.Binding{Bind: "req-victim", Owner: access.RecoveryPurpose})
 			if err != nil {
@@ -108,9 +111,11 @@ func TestARecoveryPostFromAnotherBrowserIsRefused(t *testing.T) {
 			}
 
 			response := postRecovery(handler, state, cookie(codec))
-			if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "did not start in this browser") {
-				t.Errorf("recovery = %d %q, want 400 saying it did not start here", response.Code, response.Body.String())
+			if response.Code != http.StatusBadRequest {
+				t.Errorf("recovery = %d, want 400", response.Code)
 			}
+			// The page does not say why; the log, under the reference, does.
+			wantRefusedPage(t, response.Body.String(), "not authorised", "did not start in this browser")
 
 			if n := storage.count(); n != 0 {
 				t.Errorf("%d requests were completed by a forged recovery", n)

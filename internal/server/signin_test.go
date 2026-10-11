@@ -46,6 +46,7 @@ func signInHarness(t *testing.T, email string) *ConsoleServer {
 	t.Helper()
 	ctx := context.Background()
 	quiet := slog.New(slog.DiscardHandler)
+	logger := capturedLogger()
 
 	directory := fake.New("C0north", "north.example").
 		WithAccount("ada@north.example", "Ada", "North").
@@ -89,7 +90,7 @@ lifetimes: { default: 12h }
 		state:      access.NewStateCodec(key, 10*time.Minute),
 		connectors: map[string]Connector{"demo": signInConnector{email: email}},
 		hub:        directoryHub,
-		log:        quiet,
+		log:        logger,
 	}
 }
 
@@ -170,15 +171,17 @@ func TestASignInCallbackMustBeTheBrowserThatStarted(t *testing.T) {
 }
 
 // An address the hub cannot serve is refused at the door. Issuing a
-// session and then showing empty pages is a worse answer than saying why.
+// session and then showing empty pages is a worse answer than refusing; and
+// the refusal says that it did and gives a reference, because the address,
+// its domain and what the directory knows of it are not for the screen.
 func TestASignInTheHubCannotServeIsRefusedAtTheDoor(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
-		name, email string
+		name, email, reason string
 	}{
-		{"suspended in the directory", "cleo@north.example"},
-		{"a domain this hub does not serve", "someone@elsewhere.example"},
+		{"suspended in the directory", "cleo@north.example", "cannot be served"},
+		{"a domain this hub does not serve", "someone@elsewhere.example", "serves that domain"},
 	} {
 		server := signInHarness(t, tc.email)
 		start := httptest.NewRecorder()
@@ -191,14 +194,15 @@ func TestASignInTheHubCannotServeIsRefusedAtTheDoor(t *testing.T) {
 		callback := httptest.NewRequest(http.MethodGet, "/login/demo/callback?code=x&state="+cookie.Value, nil)
 		callback.SetPathValue("backend", "demo")
 		callback.AddCookie(cookie)
-		server.signInCallback(done, callback)
+		servedWithID(server.signInCallback).ServeHTTP(done, callback)
 
 		if done.Code != http.StatusForbidden {
 			t.Errorf("%s = %d, want it refused", tc.name, done.Code)
 		}
-		if !strings.Contains(done.Body.String(), tc.email) {
-			t.Errorf("%s did not say which address was refused: %q", tc.name, done.Body.String())
-		}
+		// The page says it refused and gives a reference. Whose address it
+		// was, and which domain, is in the log under the reference.
+		wantRefused(t, done, "Not authorised", []string{tc.email, "north.example", "elsewhere.example", "directory", "domain"},
+			tc.reason)
 		for _, c := range done.Result().Cookies() { //nolint:bodyclose // a recorder's result has no body to close
 			if c.Name == access.CookieName && c.Value != "" {
 				t.Errorf("%s was given a session anyway", tc.name)
