@@ -180,7 +180,8 @@ func TestTheIssuerCanInvokeOnlyTheAliasesItNeeds(t *testing.T) {
 		fnArn("sluis") + ":live",
 		fnArn("sluis-staging-cloudflare") + ":live-issuer", fnArn("sluis-staging-github") + ":live-issuer",
 		fnArn("sluis-staging-github-mint") + ":live-issuer", fnArn("sluis-staging-google") + ":live-issuer",
-		fnArn("sluis-staging-slack") + ":live-issuer", fnArn("sluis-staging-backup") + ":live-console",
+		fnArn("sluis-staging-slack") + ":live-issuer", fnArn("sluis-staging-slack") + ":live-console",
+		fnArn("sluis-staging-backup") + ":live-console",
 	}
 	slices.Sort(invokes)
 	slices.Sort(want)

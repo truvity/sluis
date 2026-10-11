@@ -14,16 +14,9 @@ import (
 )
 
 // Directory is one connected directory as an owner is chosen and shown. The
-// console tells a module the directories it can see, because a module reads no
-// directory snapshot of its own.
-type Directory struct {
-	ID      string
-	Primary string
-	Served  []string
-	// Authoritative is the served domains the directory answers for with
-	// confidence, sorted: what an owner is labelled with.
-	Authoritative []string
-}
+// console tells a module the directories it can see ([consolecall.DirectoryFacts]),
+// because a module reads no directory snapshot of its own.
+type Directory = consolecall.Directory
 
 // Actor is an identity as the trail names it: a workload by its service
 // account, a recovery by the identity it completed as, and a person by their

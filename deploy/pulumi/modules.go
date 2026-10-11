@@ -202,7 +202,8 @@ type CrossGrant struct {
 //     google snapshots (blobs), and
 //     invokes, as the class issuer, the functions that serve the providers (the
 //     github one for a run, the mint-only one for a token, slack, google,
-//     cloudflare), and, as the class console, the backup function;
+//     cloudflare), and, as the class console, the backup function and the slack one (the
+//     Slack pages, v1.76 D-v176-1 b);
 //   - the mint-only github function reads the github module and nothing more;
 //   - the backup role reads everything; the restore role writes everything and
 //     is invokable only by the administrators the stack names (RestoreInvokeStatement).
@@ -210,7 +211,7 @@ var CrossGrants = []CrossGrant{
 	{Role: RoleIssuer, Verb: CrossReadTable, Modules: []Module{ModuleGoogle, ModuleGitHub, ModuleSlack}},
 	{Role: RoleIssuer, Verb: CrossInvoke, Class: ClassIssuer,
 		Functions: []string{RoleCloudflare, RoleGitHub, RoleGitHubMint, RoleGoogle, RoleSlack}},
-	{Role: RoleIssuer, Verb: CrossInvoke, Class: ClassConsole, Functions: []string{RoleBackup}},
+	{Role: RoleIssuer, Verb: CrossInvoke, Class: ClassConsole, Functions: []string{RoleBackup, RoleSlack}},
 	{Role: RoleIssuer, Verb: CrossReadBlobs, Modules: []Module{ModuleGoogle}},
 	{Role: RoleGitHubMint, Verb: CrossReadModule, Modules: []Module{ModuleGitHub}},
 	{Role: RoleBackup, Verb: CrossReadAll, Modules: Modules()},

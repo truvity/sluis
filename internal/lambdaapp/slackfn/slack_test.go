@@ -9,11 +9,15 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/aws/aws-lambda-go/lambdacontext"
+
 	"github.com/truvity/sluis/internal/deploycheck"
 	"github.com/truvity/sluis/internal/lambdaapp"
 	"github.com/truvity/sluis/internal/lambdaapp/slackfn"
 	"github.com/truvity/sluis/internal/modcall"
+	slackconsole "github.com/truvity/sluis/internal/slackapp/console"
 	slackapp "github.com/truvity/sluis/internal/slackroster/app"
+	"github.com/truvity/sluis/policy"
 )
 
 type pass struct {
@@ -117,3 +121,81 @@ func TestTheControllerFunctionRefusesTheMintRPC(t *testing.T) {
 		t.Error("a controller was assembled for a module call")
 	}
 }
+
+// invokedAs is a context whose function ARN carries the alias the caller used.
+func invokedAs(alias string) context.Context {
+	return lambdacontext.NewContext(context.Background(), &lambdacontext.LambdaContext{
+		InvokedFunctionArn: strings.Join([]string{"arn", "aws", "lambda", "eu-west-1", "123456789012", "function", "sluis-example-slack", alias}, ":")})
+}
+
+func consoleCall(t *testing.T, h *lambdaapp.HTTP, alias string) ([]byte, error) {
+	t.Helper()
+	caller, _ := json.Marshal(map[string]any{"caller": map[string]any{"actor": "ann@example.test", "roles": []string{"viewer"}}})
+	raw, _ := json.Marshal(modcall.Request{Kind: modcall.Kind, Module: slackconsole.Module, Method: slackconsole.MethodGetStatus, Payload: caller})
+	out, err := h.Handle(invokedAs(alias), raw)
+	if err != nil {
+		t.Fatalf("the invocation failed: %v", err)
+	}
+	b, _ := json.Marshal(out)
+	var res modcall.Response
+	if err = json.Unmarshal(b, &res); err != nil {
+		t.Fatal(err)
+	}
+	return modcall.Result(res)
+}
+
+// The function serves the console's Slack pages to the class `console` through
+// its live-console alias and to no other, opens the service on the first call
+// only, and answers unavailable, with no detail, when it cannot open it.
+func TestTheFunctionServesTheConsolePagesToTheConsoleClassOnly(t *testing.T) {
+	opened, failing := 0, false
+	set, err := policy.NewSet(policy.Policy{Version: 1, Slack: policy.Slack{Workspaces: map[string]policy.SlackWorkspace{"acme": {}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := slackconsole.Static(slackconsole.Deps{Authorizer: authorizer{set}})
+	rpc := slackfn.Server(nil, func(context.Context) (*slackconsole.Service, error) {
+		if failing {
+			return nil, errors.New("the store password is hunter2")
+		}
+		opened++
+		return service, nil
+	})
+	h := slackfn.WithCalls(handler(t, &pass{ran: true}, new(int)), rpc)
+
+	if opened != 0 {
+		t.Fatal("the service was opened before a call")
+	}
+	body, err := consoleCall(t, h, "live-console")
+	if err != nil {
+		t.Fatalf("the console was refused: %v", err)
+	}
+	if !strings.Contains(string(body), `"msg"`) {
+		t.Errorf("the page = %s", body)
+	}
+	if _, err = consoleCall(t, h, "live-console"); err != nil || opened != 2 {
+		// Static returns the same service; the opener runs per call, cheaply.
+		t.Errorf("second call: %v, opened %d", err, opened)
+	}
+	for _, alias := range []string{"live-issuer", "live-cloudflare", "live", ""} {
+		_, err = consoleCall(t, h, alias)
+		var e *modcall.Error
+		if !errors.As(err, &e) || e.Code != modcall.CodeForbidden {
+			t.Errorf("as %q: not refused as forbidden: %v", alias, err)
+		}
+	}
+	failing = true
+	_, err = consoleCall(t, h, "live-console")
+	var e *modcall.Error
+	if !errors.As(err, &e) || e.Code != modcall.CodeUnavailable || e.Message != "" || strings.Contains(err.Error(), "hunter2") {
+		t.Errorf("a service that cannot open = %v", err)
+	}
+	// A pass is unaffected on the same handler.
+	if res, err := result(t, h, `{"kind":"tick","target":"acme"}`); err != nil || res.Outcome != lambdaapp.OutcomeRan {
+		t.Errorf("a pass: %+v, %v", res, err)
+	}
+}
+
+type authorizer struct{ set *policy.Set }
+
+func (a authorizer) Policy() *policy.Set { return a.set }

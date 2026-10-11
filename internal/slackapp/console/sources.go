@@ -4,12 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"maps"
 	"slices"
 
 	"connectrpc.com/connect"
 
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
+	"github.com/truvity/sluis/internal/consolecall"
 	"github.com/truvity/sluis/internal/slackroster/reconcile"
 )
 
@@ -21,7 +21,8 @@ import (
 // The controller asks the same again at every pass, because a directory can
 // be disconnected and an owner changed after the record is written.
 func (c *Service) checkSources(ctx context.Context, sources, members []string, owner string, ordinary bool) error {
-	if c.d().Directory == nil {
+	facts := consolecall.FactsFrom(ctx)
+	if facts == nil {
 		return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("this deployment reads no directory, so no source can be checked"))
 	}
 	if ordinary && owner == "" {
@@ -29,12 +30,15 @@ func (c *Service) checkSources(ctx context.Context, sources, members []string, o
 			errors.New(reconcile.NoOwner))
 	}
 	for _, source := range sources {
-		group, err := c.d().Directory.Group(ctx, source)
-		if err != nil {
-			return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("source %q is not a group address: %w", source, err))
+		group, ok := facts.Groups[source]
+		if !ok {
+			return uncovered(source)
+		}
+		if group.Err != "" {
+			return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("source %q is not a group address: %s", source, group.Err))
 		}
 		switch {
-		case !group.Found && c.isDirectoryUser(ctx, source):
+		case !group.Found && facts.Users[source].Found && facts.Users[source].Err == "" && facts.Users[source].Workspace != "":
 			return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
 				"%s is a person's address, not a group: enter it under Individual addresses", source))
 		case !group.Found:
@@ -46,32 +50,39 @@ func (c *Service) checkSources(ctx context.Context, sources, members []string, o
 					"an ordinary channel is fed by its own directory's groups only; a Slack Connect channel takes any", source, owner))
 		}
 	}
-	return c.checkMembers(ctx, members, owner, ordinary)
+	return c.checkMembers(facts, members, owner, ordinary)
 }
 
-// isDirectoryUser reports whether an address is an account the hub holds.
-func (c *Service) isDirectoryUser(ctx context.Context, address string) bool {
-	got, err := c.d().Directory.User(ctx, address)
-	return err == nil && got.Workspace != "" && got.Found
+// uncovered is the refusal of an address the facts say nothing of: the console
+// sends a fact for every address of the call, so a field without one is not the
+// console's, and nothing is taken on trust.
+func uncovered(address string) error {
+	return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("the directory facts of this call do not cover %s", address))
 }
 
 // checkMembers is the rule on individual addresses: each is an active user
 // of the directory that owns the workspace (an ordinary channel) or of any
 // connected directory (a Slack Connect channel), and none is a group.
-func (c *Service) checkMembers(ctx context.Context, members []string, owner string, ordinary bool) error {
+func (c *Service) checkMembers(facts *consolecall.DirectoryFacts, members []string, owner string, ordinary bool) error {
 	const where = "individual addresses come from the directories this channel draws from"
 	for _, member := range members {
-		group, err := c.d().Directory.Group(ctx, member)
-		if err != nil {
-			return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("member %q is not an email address: %w", member, err))
+		group, ok := facts.Groups[member]
+		if !ok {
+			return uncovered(member)
+		}
+		if group.Err != "" {
+			return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("member %q is not an email address: %s", member, group.Err))
 		}
 		if group.Found {
 			return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
 				"%s is a group, not a person: enter it under Directory groups", member))
 		}
-		user, err := c.d().Directory.User(ctx, member)
-		if err != nil {
-			return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("member %q is not an email address: %w", member, err))
+		user, ok := facts.Users[member]
+		if !ok {
+			return uncovered(member)
+		}
+		if user.Err != "" {
+			return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("member %q is not an email address: %s", member, user.Err))
 		}
 		dir := "a connected directory"
 		if ordinary {
@@ -96,38 +107,28 @@ func (c *Service) checkMembers(ctx context.Context, members []string, owner stri
 // groups cannot be read the second result says so, so that the picker shows
 // the failure rather than an empty list that reads as "no group exists".
 func (c *Service) sourceDirectories(ctx context.Context, only ...string) ([]*directoryrosterv1.SlackSourceDirectory, string) {
-	if c.d().Directory == nil {
+	facts := consolecall.FactsFrom(ctx)
+	if facts == nil {
 		return nil, ""
 	}
-	groups, served, err := c.d().Directory.Groups(ctx)
-	if err != nil {
-		return nil, "the directories' groups could not be read just now: reload to try again"
+	if facts.SourcesError != "" {
+		return nil, facts.SourcesError
 	}
-	byDomain := map[string]string{}
-	domains := map[string][]string{}
-	for _, s := range served {
-		byDomain[s.Name] = s.Workspace
-		if s.Authoritative {
-			domains[s.Workspace] = append(domains[s.Workspace], s.Name)
-		}
-	}
-	dirs := map[string]*directoryrosterv1.SlackSourceDirectory{}
-	for _, g := range groups {
-		ws := byDomain[g.Domain]
-		if ws == "" || (len(only) > 0 && !slices.Contains(only, ws)) {
+	var out []*directoryrosterv1.SlackSourceDirectory
+	for i := range facts.Sources {
+		dir := &facts.Sources[i]
+		if len(only) > 0 && !slices.Contains(only, dir.Workspace) {
 			continue
 		}
-		dir := dirs[ws]
-		if dir == nil {
-			dir = &directoryrosterv1.SlackSourceDirectory{WorkspaceId: ws, Domains: slices.Sorted(slices.Values(domains[ws]))}
-			dirs[ws] = dir
+		view := &directoryrosterv1.SlackSourceDirectory{WorkspaceId: dir.Workspace, Domains: slices.Sorted(slices.Values(dir.Domains))}
+		for _, g := range dir.Groups {
+			view.Groups = append(view.Groups, &directoryrosterv1.SlackSourceGroup{Email: g.Email, Members: int32(g.Members)}) //nolint:gosec // a membership count
 		}
-		dir.Groups = append(dir.Groups, &directoryrosterv1.SlackSourceGroup{Email: g.Email, Members: int32(g.Members)}) //nolint:gosec // a membership count
+		slices.SortFunc(view.Groups, func(a, b *directoryrosterv1.SlackSourceGroup) int { return compareStrings(a.Email, b.Email) })
+		out = append(out, view)
 	}
-	out := make([]*directoryrosterv1.SlackSourceDirectory, 0, len(dirs))
-	for _, ws := range slices.Sorted(maps.Keys(dirs)) {
-		slices.SortFunc(dirs[ws].Groups, func(a, b *directoryrosterv1.SlackSourceGroup) int { return compareStrings(a.Email, b.Email) })
-		out = append(out, dirs[ws])
-	}
+	slices.SortFunc(out, func(a, b *directoryrosterv1.SlackSourceDirectory) int {
+		return compareStrings(a.WorkspaceId, b.WorkspaceId)
+	})
 	return out, ""
 }

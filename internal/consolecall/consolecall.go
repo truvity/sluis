@@ -131,6 +131,9 @@ func (c Caller) Identity() access.Identity {
 type Envelope struct {
 	Caller Caller          `json:"caller"`
 	Msg    json.RawMessage `json:"msg,omitempty"`
+	// Directory is what the console resolved of the connected directories for
+	// this call ([DirectoryFacts]); nil when the method needs none.
+	Directory *DirectoryFacts `json:"directory,omitempty"`
 }
 
 // Problem is a refusal or a failure a person should read, told as data.
@@ -189,6 +192,7 @@ func Proxy[Req, Resp proto.Message](ctx context.Context, c modcall.Caller, modul
 	if err != nil {
 		return zero, err
 	}
+	env.Directory = FactsFrom(ctx)
 	reply, err := modcall.Do[Envelope, Reply](ctx, c, module, method, env)
 	if err != nil {
 		return zero, err
@@ -229,7 +233,10 @@ func Handle[Req, Resp proto.Message](
 		if err := env.Unwrap(req); err != nil {
 			return Reply{}, modcall.Coded(modcall.CodeBadRequest, "the request is not valid")
 		}
-		resp, err := fn(ctx, env.Caller, req)
+		if err := env.Directory.Validate(); err != nil {
+			return Reply{}, modcall.Coded(modcall.CodeBadRequest, err.Error())
+		}
+		resp, err := fn(WithFacts(ctx, env.Directory), env.Caller, req)
 		var p *Problem
 		if errors.As(err, &p) {
 			return Reply{Problem: p}, nil

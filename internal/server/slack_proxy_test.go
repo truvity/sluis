@@ -11,12 +11,16 @@ import (
 	"testing"
 
 	"connectrpc.com/connect"
+	awslambda "github.com/aws/aws-sdk-go-v2/service/lambda"
 	"google.golang.org/protobuf/proto"
 
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
 	"github.com/truvity/sluis/internal/audit"
+	"github.com/truvity/sluis/internal/config"
 	"github.com/truvity/sluis/internal/consolecall"
 	"github.com/truvity/sluis/internal/modcall"
+	"github.com/truvity/sluis/internal/modcall/dial"
+	"github.com/truvity/sluis/internal/modcall/lambdacall"
 	slackconsole "github.com/truvity/sluis/internal/slackapp/console"
 )
 
@@ -364,5 +368,142 @@ func TestTheSlackModuleRefusesAChannelOfAWorkspaceTheCallerDoesNotOwn(t *testing
 	}
 	if len(h.storedChannels(t)) != 0 {
 		t.Error("a refused call wrote a record")
+	}
+}
+
+// A module with no directory of its own answers owner choices and source checks
+// from the facts the console sends in the envelope, and refuses a call whose
+// facts are forged, empty or silent on an address.
+func TestTheSlackModuleAnswersFromTheDirectoryFactsOfTheEnvelopeAndRefusesBadOnes(t *testing.T) {
+	h := newConnectHarness(t)
+	// A module of its own: the console's stores, no directory, no hub.
+	own := h.console.slackDeps()
+	module := modcall.Local{slackconsole.Module: slackconsole.NewServer(slackconsole.Static(own))}.As(consolecall.Class)
+	op := consolecall.Caller{Actor: "ann@north.example", Roles: []string{"operator"}}
+	create := func(ctx context.Context, def *directoryrosterv1.SlackChannelDefinition) error {
+		_, err := consolecall.Proxy[*directoryrosterv1.CreateSlackChannelRequest, *directoryrosterv1.CreateSlackChannelResponse](
+			ctx, module, slackconsole.Module, slackconsole.MethodCreateChannel, op, &directoryrosterv1.CreateSlackChannelRequest{Channel: def})
+		return err
+	}
+	good := &consolecall.DirectoryFacts{
+		Directories: []consolecall.Directory{{ID: "C0north", Primary: "north.example", Authoritative: []string{"north.example"}}},
+		Groups:      map[string]consolecall.GroupFact{"partners@north.example": {Found: true, Workspace: "C0north"}},
+		Users:       map[string]consolecall.UserFact{"partners@north.example": {}},
+	}
+	if err := create(consolecall.WithFacts(context.Background(), good), chdef("acme", "eng", "partners@north.example")); err != nil {
+		t.Fatalf("a source the facts say is a group of the owner = %v", err)
+	}
+
+	// The source of another directory, and one the facts call no group.
+	other := &consolecall.DirectoryFacts{
+		Directories: []consolecall.Directory{{ID: "C0north"}, {ID: "C0south"}},
+		Groups: map[string]consolecall.GroupFact{
+			"ops@south.example": {Found: true, Workspace: "C0south"}, "nobody@north.example": {},
+		},
+	}
+	for name, source := range map[string]string{"another directory's group": "ops@south.example", "not a group": "nobody@north.example"} {
+		err := create(consolecall.WithFacts(context.Background(), other), chdef("acme", "x"+strings.ToLower(name[:3]), source))
+		var problem *consolecall.Problem
+		if !errors.As(err, &problem) || slackconsole.CodeOf(problem) != connect.CodeInvalidArgument {
+			t.Errorf("%s = %v, want an invalid argument", name, err)
+		}
+	}
+
+	// Empty facts, and facts silent on the address, are refused, not taken as yes.
+	for name, ctx := range map[string]context.Context{
+		"no facts":           context.Background(),
+		"facts without them": consolecall.WithFacts(context.Background(), &consolecall.DirectoryFacts{Directories: good.Directories}),
+	} {
+		err := create(ctx, chdef("acme", "y", "partners@north.example"))
+		var problem *consolecall.Problem
+		if !errors.As(err, &problem) || slackconsole.CodeOf(problem) != connect.CodeFailedPrecondition {
+			t.Errorf("%s = %v, want a failed precondition", name, err)
+		}
+	}
+	// A forged field is refused before a method runs.
+	forged := map[string]*consolecall.DirectoryFacts{
+		"a group of a directory it does not list": {
+			Directories: good.Directories, Groups: map[string]consolecall.GroupFact{"a@x.example": {Found: true, Workspace: "C0evil"}},
+		},
+		"a directory twice":         {Directories: []consolecall.Directory{{ID: "C0north"}, {ID: "C0north"}}},
+		"a directory without an id": {Directories: []consolecall.Directory{{}}},
+		"too many directories":      {Directories: make([]consolecall.Directory, consolecall.MaxDirectories+1)},
+	}
+	for name, facts := range forged {
+		err := create(consolecall.WithFacts(context.Background(), facts), chdef("acme", "z", "partners@north.example"))
+		var coded *modcall.Error
+		if !errors.As(err, &coded) || coded.Code != modcall.CodeBadRequest {
+			t.Errorf("%s = %v, want bad request", name, err)
+		}
+	}
+	if len(h.storedChannels(t)) != 1 {
+		t.Errorf("%d records kept, want the one good one", len(h.storedChannels(t)))
+	}
+
+	// Owner choices come from the facts too.
+	status, err := consolecall.Proxy[*directoryrosterv1.GetSlackStatusRequest, *directoryrosterv1.GetSlackStatusResponse](
+		consolecall.WithFacts(context.Background(), other), module, slackconsole.Module, slackconsole.MethodGetStatus,
+		consolecall.Caller{Actor: "root@north.example", Roles: []string{"operator"}}, &directoryrosterv1.GetSlackStatusRequest{})
+	if err != nil || len(status.GetOwnerChoices()) != 2 {
+		t.Errorf("owner choices from the envelope = %v, %v", status.GetOwnerChoices(), err)
+	}
+}
+
+// invoker is the Lambda client of a fake platform: Invoke hands the event to the
+// function's server as the alias it was invoked through says.
+type invoker struct {
+	server    *modcall.Server
+	qualifier []string
+	attempts  []int
+}
+
+func (f *invoker) Invoke(ctx context.Context, in *awslambda.InvokeInput, opts ...func(*awslambda.Options)) (*awslambda.InvokeOutput, error) {
+	var o awslambda.Options
+	for _, set := range opts {
+		set(&o)
+	}
+	f.qualifier, f.attempts = append(f.qualifier, *in.Qualifier), append(f.attempts, o.RetryMaxAttempts)
+	out, err := lambdacall.Serve(ctx, f.server, in.Payload, *in.Qualifier)
+	return &awslambda.InvokeOutput{StatusCode: 200, Payload: out}, err
+}
+
+// With slack.remote set to a Lambda function, a console page round-trips through
+// the function's live-console alias, and a callback's call is sent with one
+// attempt.
+func TestASlackPageRoundTripsThroughALambdaFunctionOnTheConsoleAlias(t *testing.T) {
+	h := newWorkspaceHarness(t)
+	ctx := operator()
+	local := h.status(ctx, t)
+
+	fn := &invoker{server: slackconsole.NewServer(h.console.slackSvc())}
+	cfg := dial.FromTargets(map[string]config.ModuleRemote{"slack": {Function: "arn:aws:lambda:eu-west-1:123456789012:function:sluis-x-slack"}})
+	target := cfg.Modules["slack"]
+	target.MaxBytes = consolecall.ListMaxBytes
+	cfg.Modules["slack"] = target
+	h.server.UseSlack(lambdacall.New(fn, cfg).As(consolecall.Class))
+
+	if remote := h.status(ctx, t); !proto.Equal(local, remote) {
+		t.Errorf("the page differs through the function:\nlocal  %v\nremote %v", local, remote)
+	}
+	if len(fn.qualifier) == 0 || fn.qualifier[0] != "live-console" {
+		t.Fatalf("invoked as %v, want live-console", fn.qualifier)
+	}
+	begun, err := h.beginOwned(ctx, "acme", accepted, "C0north")
+	if err != nil {
+		t.Fatalf("connect through the function: %v", err)
+	}
+	if got := h.finish(t, begun, "acme", acmeTeam); got.Code != 302 {
+		t.Errorf("the callback through the function = %d %s", got.Code, got.Body)
+	}
+	if last := fn.attempts[len(fn.attempts)-1]; last != 1 {
+		t.Errorf("the callback's call was sent with retry bound %d, want one attempt", last)
+	}
+	if h.row(ctx, t, "acme").GetConnectionState() != slackInstalled {
+		t.Error("the install through the function did not finish")
+	}
+	for _, q := range fn.qualifier {
+		if q != "live-console" {
+			t.Errorf("a call went through %s", q)
+		}
 	}
 }

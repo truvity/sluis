@@ -73,7 +73,7 @@ func mxSpecs() []roleSpec {
 			readTables: []Module{ModuleGoogle, ModuleGitHub, ModuleSlack}, readBlobs: []Module{ModuleGoogle},
 			invokes: []string{
 				mxFn("issuer") + ":live",
-				mxFn("github") + ":live-issuer", mxFn("github-mint") + ":live-issuer", mxFn("slack") + ":live-issuer",
+				mxFn("github") + ":live-issuer", mxFn("github-mint") + ":live-issuer", mxFn("slack") + ":live-issuer", mxFn("slack") + ":live-console",
 				mxFn("google") + ":live-issuer", mxFn("cloudflare") + ":live-issuer", mxFn("backup") + ":live-console",
 			}},
 		{name: "backup", hosts: []Module{ModuleBackup}, readAll: true},
@@ -472,10 +472,17 @@ func TestCrossInvokeGrantsTheQualifiedAlias(t *testing.T) {
 			t.Errorf("CrossInvoke does not grant %s:live-issuer, the ARN a modcall invokes", fn)
 		}
 		for _, bad := range []string{fn, fn + ":$LATEST", fn + ":live", fn + ":live-console", fn + ":1"} {
+			if f == "slack" && bad == fn+":live-console" {
+				// The Slack pages (D-v176-1 b).
+				continue
+			}
 			if call(bad) {
 				t.Errorf("CrossInvoke grants %s", bad)
 			}
 		}
+	}
+	if !call(mxFn("slack")+":live-console") || call(mxFn("slack")+":live-cloudflare") {
+		t.Error("the issuer's console calls to the slack module are not on live-console alone")
 	}
 	if !call(mxFn("backup")+":live-console") || call(mxFn("backup")+":live-issuer") || call(mxFn("backup")) {
 		t.Error("the issuer's call to the backup is not on live-console alone")
