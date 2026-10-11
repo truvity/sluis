@@ -30,6 +30,10 @@ fixture() {
   zipof issuer 'ELF sluis-module=issuer ELF'
   zipof cloudflare 'ELF sluis-module=cloudflare ELF'
   zipof backup 'ELF sluis-module=backup ELF'
+  zipof github 'ELF sluis-module=github ELF'
+  zipof github-mint 'ELF sluis-module=github-mint ELF'
+  zipof slack 'ELF sluis-module=slack ELF'
+  zipof google 'ELF sluis-module=google ELF'
   sums
 }
 fixture
@@ -53,6 +57,11 @@ zipof issuer 'ELF no pin ELF'; sums
 expect_failure "an unpinned module zip" "is not pinned to its module"
 zipof issuer 'ELF sluis-module=issuer sluis-module=backup ELF'; sums
 expect_failure "a zip with another module's pin" "carries the pin of module backup"
+fixture
+# github-mint's pin starts with github's: the github zip must not pass as the
+# mint, nor the mint as github.
+zipof github 'ELF sluis-module=github-mint ELF'; sums
+expect_failure "the github zip pinned as the mint" "is not pinned to its module"
 fixture
 
 # Every zip is in checksums.txt, or the pin is not a pin.

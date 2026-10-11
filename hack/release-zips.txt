@@ -4,9 +4,13 @@
 # against .goreleaser.yaml. Add a module here when its zip is added there.
 #
 # module: built for one module, with `-X .../internal/version.Module=sluis-module=<name>`.
-# A provider (github, slack, google) is added when it is released as a zip of
-# its own; until then it runs inside the issuer's process.
+# From v1.76 the providers are zips of their own (github, slack, google), and
+# github-mint is the mint-only deployment of the github code (D-v176-7).
 # (There is no all-in-one sluis-lambda zip since 1.75; `legacy <name>` would list an unpinned one.)
 module issuer
 module cloudflare
 module backup
+module github
+module github-mint
+module slack
+module google

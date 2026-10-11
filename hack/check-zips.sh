@@ -20,6 +20,9 @@ set -euo pipefail
 dir="${1:?usage: check-zips.sh DIR}"
 list="${RELEASE_ZIPS_FILE:-$(dirname "$0")/release-zips.txt}"
 fail() { echo "check-zips: FAIL: $*" >&2; exit 1; }
+# haspin FILE NAME: FILE carries the pin sluis-module=NAME and not merely a longer
+# name that starts with it (sluis-module=github-mint is not the github pin).
+haspin() { grep -qaE "sluis-module=$2([^A-Za-z0-9_-]|\$)" "$1"; }
 
 shopt -s nullglob
 modules=()
@@ -41,14 +44,14 @@ while read -r kind name; do
   unzip -p "$zip" bootstrap > "$bin"
   case "$kind" in
     module)
-      grep -qa "sluis-module=$name" "$bin" || { rm -f "$bin"; fail "$base is not pinned to its module: no sluis-module=$name in bootstrap"; }
+      haspin "$bin" "$name" || { rm -f "$bin"; fail "$base is not pinned to its module: no sluis-module=$name in bootstrap"; }
       for other in "${modules[@]}"; do
         [ "$other" = "$name" ] && continue
-        ! grep -qa "sluis-module=$other" "$bin" || { rm -f "$bin"; fail "$base carries the pin of module $other"; }
+        ! haspin "$bin" "$other" || { rm -f "$bin"; fail "$base carries the pin of module $other"; }
       done ;;
     legacy)
       for any in "${modules[@]}"; do
-        ! grep -qa "sluis-module=$any" "$bin" || { rm -f "$bin"; fail "$base is the unpinned zip and carries the pin of module $any"; }
+        ! haspin "$bin" "$any" || { rm -f "$bin"; fail "$base is the unpinned zip and carries the pin of module $any"; }
       done ;;
     *) rm -f "$bin"; fail "$list: unknown kind $kind" ;;
   esac

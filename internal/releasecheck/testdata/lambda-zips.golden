@@ -2,3 +2,7 @@
 sluis-issuer_<version>_linux_arm64.zip | sluis-issuer | ./cmd/sluis-issuer | sluis-module=issuer | lambda-issuer
 sluis-cloudflare_<version>_linux_arm64.zip | sluis-cloudflare | ./cmd/sluis-cloudflare | sluis-module=cloudflare | lambda-cloudflare
 sluis-backup_<version>_linux_arm64.zip | sluis-backup | ./cmd/sluis-backup | sluis-module=backup | lambda-backup
+sluis-github_<version>_linux_arm64.zip | sluis-github | ./cmd/sluis-github | sluis-module=github | lambda-github
+sluis-github-mint_<version>_linux_arm64.zip | sluis-github-mint | ./cmd/sluis-github-mint | sluis-module=github-mint | lambda-github-mint
+sluis-slack_<version>_linux_arm64.zip | sluis-slack | ./cmd/sluis-slack | sluis-module=slack | lambda-slack
+sluis-google_<version>_linux_arm64.zip | sluis-google | ./cmd/sluis-google | sluis-module=google | lambda-google
