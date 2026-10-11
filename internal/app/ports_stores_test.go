@@ -3,6 +3,7 @@ package app_test
 import (
 	"bytes"
 	"context"
+	"errors"
 	"log/slog"
 	"strings"
 	"testing"
@@ -11,6 +12,8 @@ import (
 	"github.com/truvity/sluis/internal/app"
 	"github.com/truvity/sluis/internal/config"
 	"github.com/truvity/sluis/internal/hub"
+	"github.com/truvity/sluis/internal/port"
+	"github.com/truvity/sluis/internal/portstore"
 	"github.com/truvity/sluis/internal/portstore/portstoretest"
 	"github.com/truvity/sluis/internal/store"
 )
@@ -129,4 +132,52 @@ func TestARemoteModuleHasNoStoreInTheIssuersProcess(t *testing.T) {
 			t.Errorf("the snapshot reader lost the workspace records or the session key: %+v", remote)
 		}
 	})
+}
+
+// With `google.remote` the issuer's view of the Google module's records is read
+// only, even where its role would allow more; the module in this process keeps a
+// writable one (v1.76 E-IAM).
+func TestAReaderIssuersGoogleRecordsAreReadOnly(t *testing.T) {
+	ctx := context.Background()
+	open := func(reader bool) (app.KeptForTest, *store.Stores) {
+		t.Helper()
+		st, err := store.Open(ctx, store.Config{Adapter: store.AdapterMemory, SecretsLayout: config.SecretsLayoutV5}.
+			As(port.ModuleOIDC, port.ModuleGoogle), quiet)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(st.Close)
+		cfg := serveConfig(t)
+		cfg.Reader = reader
+		kept, err := app.OpenStoresForTest(ctx, cfg, st, quiet)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return kept, st
+	}
+	ws := hub.Workspace{ID: "north", Backend: "google", Domains: []string{"north.example"}}
+
+	local, _ := open(false)
+	if err := local.Workspaces.Put(ctx, ws); err != nil {
+		t.Fatalf("the module in this process could not write its record: %v", err)
+	}
+
+	remote, st := open(true)
+	if err := remote.Workspaces.Put(ctx, ws); err == nil || !errors.Is(err, port.ErrNotOwner) {
+		t.Errorf("a write through the reader's Google view: %v, want ErrNotOwner", err)
+	}
+	// What the module wrote is read through the view.
+	google, err := st.ForModule(port.ModuleGoogle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = portstore.NewWorkspaces(portstore.New(google)).Put(ctx, ws); err != nil {
+		t.Fatal(err)
+	}
+	if err = remote.Workspaces.Delete(ctx, "north"); err == nil {
+		t.Error("a delete through the reader's Google view succeeded")
+	}
+	if got, err := remote.Workspaces.Get(ctx, "north"); err != nil || got.ID != "north" {
+		t.Errorf("the reader's view of the module's record: %v, %v", got, err)
+	}
 }
