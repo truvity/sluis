@@ -23,7 +23,7 @@ func Dial(ctx context.Context, r *config.CloudflareRemote, log *slog.Logger) (*C
 	if r == nil {
 		return nil, errors.New("cloudflare.remote is not set")
 	}
-	cfg, err := (*config.Calls)(nil).ModCall(&config.Cloudflare{Remote: r})
+	cfg, err := dial.FromConfig(nil, &config.Cloudflare{Remote: r})
 	if err != nil {
 		return nil, err
 	}
