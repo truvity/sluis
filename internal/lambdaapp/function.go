@@ -89,7 +89,7 @@ var documentModules = map[string]string{
 	config.APIVersion("sluis-backup"):      ModuleBackup,
 	config.APIVersion("controller-github"): ModuleGitHub,
 	config.APIVersion("controller-slack"):  ModuleSlack,
-	config.Group + "/sluis-google/v1":      ModuleGoogle,
+	config.APIVersion("sluis-google"):      ModuleGoogle,
 }
 
 // apiVersionOf is the apiVersion of the document in file, or "" for a file

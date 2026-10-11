@@ -117,7 +117,7 @@ func TestProviderModulesImportNeitherIssuerappNorSigner(t *testing.T) {
 	roles := map[string][]string{
 		"github": {"internal/module/github", "internal/githubroster", "internal/githubapp", "internal/lambdaapp/githubfn", "internal/lambdaapp/githubmintfn"},
 		"slack":  {"internal/module/slack", "internal/slackroster", "internal/slackapp", "internal/lambdaapp/slackfn"},
-		"google": {"internal/module/google", "internal/googledir", "internal/lambdaapp/googlefn"},
+		"google": {"internal/module/google", "internal/googleroster", "internal/lambdaapp/googlefn"},
 	}
 	forbidden := []string{mod + "internal/issuerapp", mod + "internal/signer"}
 	for role, dirs := range roles {
