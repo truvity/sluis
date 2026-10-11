@@ -9,6 +9,7 @@ See [sluis on AWS Lambda](../../concepts/sluis/lambda.md) and [the Pulumi librar
 | `sluis-issuer_<version>_linux_arm64.zip` | Issuer, signer, console, providers |
 | `sluis-cloudflare_<version>_linux_arm64.zip` | Cloudflare |
 | `sluis-backup_<version>_linux_arm64.zip` | Backup, and restore (`backup.role`) |
+| `sluis-google_<version>_linux_arm64.zip` | The Google module: the directory refresh, the console's Workspace service and the sign-in |
 | Build | `bootstrap` pinned to its module: a zip refuses another's document |
 | Minimum | `MinPackageVersion` 1.63; binary and library share a minor |
 
@@ -48,6 +49,26 @@ A failed pass, or a `tick` for an unrun target, returns an error.
 | Request | `rawPath`, `rawQueryString`, method, `host`; headers lower-cased; `cookies` joined to `Cookie`; base64 body decoded; source IP is `RemoteAddr` |
 | Response | Header values comma-joined; `Set-Cookie` goes in `cookies`; non-UTF-8 or encoded bodies are base64 |
 | Failures | Panic 500, unreadable request 400, response over 6 MB 502 |
+
+## The Google module's calls
+
+| Method | Caller class (alias) | Does |
+|---|---|---|
+| `console.list_workspaces`, `begin_connect`, `reconnect`, `complete_consent`, `upload_key`, `set_served_domains`, `set_synced_groups`, `probe`, `refresh`, `disconnect` | `console` (`live-console`) | The Workspace pages: list, connect by consent or by service-account key, change a connected workspace |
+| `identify`, `sign_in_url` | `issuer` (`live-issuer`) | The Google sign-in |
+
+| Behavior | Value |
+|---|---|
+| Who may call | A console method refuses every class but `console`, the sign-in every class but `issuer`; the class is the alias, never the payload |
+| Refusal | `not authorised` in every case; the reason is in the module's log |
+| Module owns | The OAuth client secret, the service-account keys, the workspace records, the refresh writer; the issuer holds none and reads only the snapshot |
+| Document keys | `google.oauthClient`, `google.publicURL` (the address the redirects are built from), `audit` |
+| **Sign-in depends on the function** | Every Google sign-in calls `sign_in_url` and `identify`; there is no provisioned concurrency, so the first sign-in after idle waits for the cold start (storage, secrets, every workspace reader) |
+| Sign-in failure | Each call is bounded at 25 s; the issuer shows a "Sign-in unavailable" page with a retry. A throttled or removed function fails every Google sign-in; recovery and a gateway's forwarded identity do not use it |
+| Cold start | Provisioned concurrency of 1 on `live-issuer` removes it; the estate decides |
+| Consent callback | The issuer verifies the signed state and forwards the `code` to `complete_consent` once: no platform retry, deadline about 25 s, because a spent code cannot be used again |
+| Key upload | The key passes through the issuer in memory, at most 64 KB, never logged |
+| Residual | A compromised issuer can still call these methods (connect or disconnect a directory); it cannot read a key or a client secret |
 
 ## Environment
 
