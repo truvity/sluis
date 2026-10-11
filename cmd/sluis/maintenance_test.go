@@ -27,7 +27,8 @@ func TestMaintenanceOnStatusOffAndTheAuditTrail(t *testing.T) {
 	run := func(sub string, force bool) string {
 		t.Helper()
 		var out bytes.Buffer
-		if err := maintenanceRun(ctx, &out, sub, tables, "example", "oleg", "layout v5", false, force, false, &operatorAudit{rec: rec, stderr: io.Discard}); err != nil {
+		au := &operatorAudit{rec: rec, stderr: io.Discard}
+		if err := maintenanceRun(ctx, &out, sub, tables, "example", "oleg", "layout v5", false, force, false, au); err != nil {
 			t.Fatalf("%s: %v", sub, err)
 		}
 		return out.String()
