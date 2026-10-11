@@ -13,6 +13,7 @@ import (
 	"github.com/truvity/sluis/internal/audit"
 	"github.com/truvity/sluis/internal/consolecall"
 	"github.com/truvity/sluis/internal/modcall"
+	slackcatalogue "github.com/truvity/sluis/internal/slackapp/catalogue"
 	slackconsole "github.com/truvity/sluis/internal/slackapp/console"
 	"github.com/truvity/sluis/internal/slackroster/status"
 	"github.com/truvity/sluis/storage/logattr"
@@ -174,4 +175,39 @@ func (s *ConsoleServer) slackWorkspaceCallback(w http.ResponseWriter, r *http.Re
 		return
 	}
 	http.Redirect(w, r, s.at("/#/slack"), http.StatusFound)
+}
+
+// slackCatalogueCallback is where Slack sends the owner after installing a
+// catalogue App, with a one-time code for the bot token. The console checks the
+// state and the cookie; the module exchanges the code and keeps the token, only
+// if it belongs to the workspace the policy names for the App.
+func (s *ConsoleServer) slackCatalogueCallback(w http.ResponseWriter, r *http.Request) {
+	flow := slackCatalogueFlow
+	console := s.console
+	app := audit.SlackCatalogueApp{ID: "unknown", App: "unknown", Workspace: "unknown"}
+	actor := ""
+	refuse := func(code int, summary, detail, reason string, causes []string) {
+		s.slackRefused(flow, r, actor, reason)
+		console.record(r.Context(), audit.SlackCatalogueAppInstallRefused(audit.Identified(actor), app, reason))
+		s.slackProblem(flow, w, r, code, summary, detail, causes)
+	}
+	learn := func(bind, who string) {
+		actor = who
+		if id, ok := strings.CutPrefix(bind, slackconsole.CatalogueBind); ok && slackcatalogue.ValidID(id) {
+			app.ID = id
+		}
+	}
+	bind, actor, now, ok := s.slackBound(r, refuse, learn)
+	if !ok {
+		return
+	}
+	// The flow ends here, whichever way it goes.
+	access.SetCookie(w, access.ConnectCookie("", s.sessions.Secure(), 0))
+	_, refusal := s.slackComplete(r, slackconsole.MethodCompleteCatalogue, bind, actor, now, r.URL.Query().Get("error"))
+	if refusal != nil {
+		s.slackRefused(flow, r, actor, refusal.Reason)
+		s.slackProblem(flow, w, r, refusal.Status, refusal.Summary, refusal.Detail, refusal.Causes)
+		return
+	}
+	http.Redirect(w, r, s.at("/#/slack-apps"), http.StatusFound)
 }
