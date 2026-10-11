@@ -22,6 +22,7 @@ import (
 	"github.com/truvity/sluis/internal/connector"
 	"github.com/truvity/sluis/internal/health"
 	"github.com/truvity/sluis/internal/hub"
+	"github.com/truvity/sluis/internal/hubwire"
 	"github.com/truvity/sluis/internal/lazy"
 	"github.com/truvity/sluis/internal/maintenance"
 	"github.com/truvity/sluis/internal/port"
@@ -160,11 +161,11 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 	if declaredOpener == nil {
 		declaredOpener = openGoogle
 	}
-	adopted, err := adoptDeclared(ctx, directory, workspaces, cfg.doc.Google.Workspaces, stores.Secrets, declaredOpener, log)
+	adopted, err := hubwire.AdoptDeclared(ctx, directory, workspaces, cfg.doc.Google.Workspaces, stores.Secrets, declaredOpener, log)
 	if err != nil {
 		return fail(err)
 	}
-	if err = reopenStored(ctx, directory, workspaces, credentials, adopted, opener, log); err != nil {
+	if err = hubwire.ReopenStored(ctx, directory, workspaces, credentials, adopted, opener, log); err != nil {
 		return fail(err)
 	}
 

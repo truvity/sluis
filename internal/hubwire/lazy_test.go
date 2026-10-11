@@ -1,4 +1,4 @@
-package app
+package hubwire
 
 import (
 	"context"
@@ -51,11 +51,11 @@ func TestADeclaredWorkspacesKeyIsReadAtFirstUseAndAgainAfterTheTTL(t *testing.T)
 	ctx := context.Background()
 	src := &countingSource{values: map[string]string{"workspaces/acme/key": "key-1"}}
 	opened := 0
-	lb := newLazyBackend(hub.Declared{Backend: "google", Admin: "admin@acme.example"}, src, "workspaces/acme/key")
-	lb.opener = func(_ context.Context, d *hub.Declared) (backend.Backend, error) {
-		opened++
-		return &keyedBackend{key: string(d.Key)}, nil
-	}
+	lb := NewLazyBackend(hub.Declared{Backend: "google", Admin: "admin@acme.example"}, src, "workspaces/acme/key",
+		func(_ context.Context, d *hub.Declared) (backend.Backend, error) {
+			opened++
+			return &keyedBackend{key: string(d.Key)}, nil
+		})
 	now := time.Unix(1_000_000, 0)
 	lb.now = func() time.Time { return now }
 	if src.reads != 0 || lb.Kind() != "google" {
@@ -108,6 +108,9 @@ func TestADeclaredWorkspaceTheStoreHoldsIsAttachedWithoutReadingItsKey(t *testin
 		t.Fatal(err)
 	}
 	directory := hub.New(store, nil, hub.Config{}, log)
+	open := func(context.Context, *hub.Declared) (backend.Backend, error) {
+		return nil, errors.New("no directory in a test")
+	}
 	src := &countingSource{values: map[string]string{"workspaces/acme/key": "unparseable"}}
 	declared := func(serve ...string) []config.DirectoryWorkspace {
 		return []config.DirectoryWorkspace{{
@@ -116,16 +119,16 @@ func TestADeclaredWorkspaceTheStoreHoldsIsAttachedWithoutReadingItsKey(t *testin
 		}}
 	}
 
-	adopted, err := adoptDeclared(ctx, directory, store, declared("ACME.example"), src, log)
+	adopted, err := AdoptDeclared(ctx, directory, store, declared("ACME.example"), src, open, log)
 	if err != nil || !adopted["acme.example"] {
-		t.Fatalf("adoptDeclared = %v, %v", adopted, err)
+		t.Fatalf("AdoptDeclared = %v, %v", adopted, err)
 	}
 	if src.reads != 0 {
 		t.Errorf("attaching read the key %d times", src.reads)
 	}
 
 	// Declared differently: adopted, which needs the key.
-	if _, err = adoptDeclared(ctx, directory, store, declared("acme.example", "other.example"), src, log); err == nil {
+	if _, err = AdoptDeclared(ctx, directory, store, declared("acme.example", "other.example"), src, open, log); err == nil {
 		t.Error("a changed declaration was attached on the stored record")
 	}
 	if src.reads != 1 {

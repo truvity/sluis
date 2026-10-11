@@ -50,6 +50,7 @@ import (
 	"github.com/truvity/sluis/internal/githubroster/runnerapp"
 	"github.com/truvity/sluis/internal/health"
 	"github.com/truvity/sluis/internal/hub"
+	"github.com/truvity/sluis/internal/hubwire"
 	"github.com/truvity/sluis/internal/lazy"
 	"github.com/truvity/sluis/internal/maintenance"
 	"github.com/truvity/sluis/internal/port"
@@ -70,6 +71,13 @@ import (
 //
 // Built from the service's configuration file (see [FromConfig]).
 type Config struct {
+	// Reader makes the hub only read snapshots: the directory is another
+	// module's (`google.remote`), whose schedule refreshes them. No workspace is
+	// adopted, attached or reopened here, and no sign-in, request or loop
+	// refreshes or reads a directory. Unset keeps the hub that owns its
+	// directory, which is a local install with no remote.
+	Reader bool
+
 	consolePort int
 	healthPort  int
 
@@ -807,20 +815,32 @@ func New(ctx context.Context, cfg Config, st *store.Stores, log *slog.Logger) (*
 		log.InfoContext(ctx, "the hub's own sign-in is off: the ways in are a gateway that "+
 			"forwards an identity, and recovery. Connecting a directory is unaffected")
 	}
-	adopted, err := adoptDeclared(ctx, directory, kept.workspaces, cfg.workspaces, st.Secrets, log)
-	if err != nil {
-		return nil, err
+	if cfg.Reader {
+		// The workspaces, their readers and their credentials are the Google
+		// module's; the snapshots it writes are all this hub reads.
+		directory.UseReader()
+		log.InfoContext(ctx, "the directory is read from the Google module's snapshots; this hub refreshes nothing")
 	}
-	if err = reopenStored(ctx, directory, kept, adopted, connectors, log); err != nil {
-		return nil, err
-	}
-	// And from here the hub can open a workspace on its own. Reopening at
-	// start covers what existed at start; this covers a workspace another
-	// replica connected a minute ago, which start-up cannot know about.
-	if kept.credentials != nil {
-		directory.UseReopener(func(ctx context.Context, ws hub.Workspace, cred backend.Credential) (backend.Backend, error) {
-			return openStored(ctx, connectors, ws.Backend, cred)
-		})
+	if !cfg.Reader {
+		adopted, err := hubwire.AdoptDeclared(ctx, directory, kept.workspaces, cfg.workspaces, st.Secrets, openBackend, log)
+		if err != nil {
+			return nil, err
+		}
+		if kept.credentials != nil {
+			reopen := func(ctx context.Context, kind string, cred backend.Credential) (backend.Backend, error) {
+				return openStored(ctx, connectors, kind, cred)
+			}
+			if err = hubwire.ReopenStored(ctx, directory, kept.workspaces, kept.credentials, adopted, reopen, log); err != nil {
+				return nil, err
+			}
+			// And from here the hub can open a workspace on its own. Reopening
+			// at start covers what existed at start; this covers a workspace
+			// another replica connected a minute ago, which start-up cannot
+			// know about.
+			directory.UseReopener(func(ctx context.Context, ws hub.Workspace, cred backend.Credential) (backend.Backend, error) {
+				return openStored(ctx, connectors, ws.Backend, cred)
+			})
+		}
 	}
 	// Two forwarded paths, reported apart: an operator reading the start-up
 	// line should be able to tell a console that VERIFIES a gateway's token
@@ -1049,169 +1069,6 @@ func FallbackPolicy(demonstration bool) (policy.Policy, error) {
 		return policy.Parse([]byte(demo.Policy))
 	}
 	return policy.Parse([]byte(builtinPolicy))
-}
-
-// adoptDeclared brings up the workspaces the deployment owns.
-//
-// A declared workspace that cannot be adopted stops the process rather
-// than being skipped. The deployment asked for a directory; starting
-// without it means answering "no opinion" about every address in it,
-// which reads to a consumer exactly like a tenant that was removed. A
-// hub that refuses to start is visible in one place; a hub that quietly
-// serves less than it was configured to is visible nowhere.
-//
-// A workspace the store already holds exactly as declared is attached without
-// reading its key: the key is read, through [lazyBackend], when the workspace
-// is first used, and the probe loop checks it. Only a workspace the store lacks,
-// or holds differently, is adopted now, and that reads its key once.
-func adoptDeclared(
-	ctx context.Context, directory *hub.Hub, store hub.Store, workspaces []config.DirectoryWorkspace,
-	src secrets.Source, log *slog.Logger,
-) (map[string]bool, error) {
-	adopted := map[string]bool{}
-	var stored []hub.Workspace
-	if len(workspaces) > 0 && store != nil {
-		var err error
-		if stored, err = store.List(ctx); err != nil {
-			return nil, fmt.Errorf("read the stored workspaces: %w", err)
-		}
-	}
-	for i := range workspaces {
-		w := &workspaces[i]
-		if src == nil {
-			return nil, fmt.Errorf("declared workspace %q: no secrets source is configured", w.Backend+"/"+w.Admin)
-		}
-		if ws, ok := storedAsDeclared(stored, w); ok {
-			lazyReader := newLazyBackend(hub.Declared{ID: w.ID, Backend: w.Backend, Admin: w.Admin, Serve: w.Serve, SyncGroups: w.SyncGroups}, src, w.KeySecret)
-			if err := directory.Attach(ctx, ws.ID, lazyReader); err != nil {
-				return nil, fmt.Errorf("attach declared workspace %q: %w", w.Backend+"/"+w.Admin, err)
-			}
-			adopted[ws.ID] = true
-			log.InfoContext(ctx, "declared workspace attached; its key is read when it is first used",
-				slog.String("workspace", ws.ID), slog.String("backend", ws.Backend), slog.String("admin", ws.Admin))
-			continue
-		}
-		key, err := src.Get(ctx, w.KeySecret)
-		if err != nil {
-			return nil, fmt.Errorf("declared workspace %q: keySecret: %w", w.Backend+"/"+w.Admin, err)
-		}
-		declared := &hub.Declared{
-			ID: w.ID, Backend: w.Backend, Admin: w.Admin, Key: []byte(key),
-			Serve: w.Serve, SyncGroups: w.SyncGroups,
-		}
-		reader, err := openBackend(ctx, declared)
-		if err != nil {
-			return nil, fmt.Errorf("declared workspace %q: %w", declared.Backend+"/"+declared.Admin, err)
-		}
-		ws, err := directory.Adopt(ctx, hub.Workspace{
-			ID:         declared.ID,
-			Admin:      declared.Admin,
-			Credential: hub.CredentialServiceAccountKey,
-			Serve:      declared.Serve,
-			SyncGroups: declared.SyncGroups,
-			Declared:   true,
-		}, reader)
-		if err != nil {
-			return nil, fmt.Errorf("adopt declared workspace %q: %w", declared.Admin, err)
-		}
-		adopted[ws.ID] = true
-		log.InfoContext(ctx, "declared workspace adopted",
-			slog.String("workspace", ws.ID), slog.String("backend", ws.Backend),
-			slog.String("admin", ws.Admin), slog.Any("domains", ws.Domains), slog.Any("served", ws.Served()))
-	}
-	return adopted, nil
-}
-
-// storedAsDeclared finds the stored record of a declared workspace when it
-// holds what the declaration says, so that nothing needs adopting again.
-func storedAsDeclared(stored []hub.Workspace, w *config.DirectoryWorkspace) (hub.Workspace, bool) {
-	serve := make([]string, 0, len(w.Serve))
-	for _, d := range w.Serve {
-		if d = strings.ToLower(strings.TrimSpace(d)); d != "" {
-			serve = append(serve, d)
-		}
-	}
-	slices.Sort(serve)
-	serve = slices.Compact(serve)
-	for i := range stored {
-		ws := &stored[i]
-		if !ws.Declared || ws.Backend != w.Backend || !strings.EqualFold(ws.Admin, w.Admin) {
-			continue
-		}
-		if w.ID != "" && !strings.EqualFold(ws.ID, w.ID) {
-			continue
-		}
-		if slices.Equal(ws.Serve, serve) || (len(ws.Serve) == 0 && len(serve) == 0) {
-			if slices.Equal(ws.SyncGroups, w.SyncGroups) || (len(ws.SyncGroups) == 0 && len(w.SyncGroups) == 0) {
-				return *ws, true
-			}
-		}
-	}
-	return hub.Workspace{}, false
-}
-
-// reopenStored brings back what a console added before the last restart.
-//
-// Three cases, and the middle one is the reason this is not a loop over
-// the store. A workspace the deployment declares was already opened
-// above. A workspace that was declared when it was last written and is
-// not any more has been taken out of the values: its record is stale, and
-// leaving it would be a directory nobody could disconnect, so it is
-// deleted. Everything else was connected in the console and is opened
-// from the credential stored beside it.
-//
-// A credential that cannot be read does not stop the hub. The workspace
-// stays, with no reader, and the console shows it as unhealthy with the
-// reason — which is the same state as a directory that is refusing the
-// credential, and is already handled everywhere downstream. Refusing to
-// start would take every other directory down with it.
-func reopenStored(
-	ctx context.Context, directory *hub.Hub, kept stores, adopted map[string]bool,
-	connectors []server.Connector, log *slog.Logger,
-) error {
-	if kept.credentials == nil {
-		return nil
-	}
-	list, err := kept.workspaces.List(ctx)
-	if err != nil {
-		return fmt.Errorf("read the stored workspaces: %w", err)
-	}
-	for i := range list {
-		ws := &list[i]
-		if adopted[ws.ID] {
-			continue
-		}
-		if ws.Declared {
-			log.InfoContext(ctx, "forgetting a workspace the deployment no longer declares",
-				slog.String("workspace", ws.ID), slog.String("admin", ws.Admin))
-			if err = kept.workspaces.Delete(ctx, ws.ID); err != nil {
-				return fmt.Errorf("forget declared workspace %s: %w", ws.ID, err)
-			}
-			continue
-		}
-
-		cred, found, err := kept.credentials.Load(ctx, ws.ID)
-		if err != nil || !found {
-			log.WarnContext(ctx, "a connected workspace has no usable credential; "+
-				"it will answer for nothing until it is reconnected",
-				slog.String("workspace", ws.ID), slog.String("backend", ws.Backend), slog.Any("error", err))
-			continue
-		}
-		reader, err := openStored(ctx, connectors, ws.Backend, cred)
-		if err != nil {
-			log.WarnContext(ctx, "a connected workspace could not be reopened; "+
-				"it will answer for nothing until it is reconnected",
-				slog.String("workspace", ws.ID), slog.String("backend", ws.Backend), slog.Any("error", err))
-			continue
-		}
-		if err = directory.Attach(ctx, ws.ID, reader); err != nil {
-			return fmt.Errorf("attach workspace %s: %w", ws.ID, err)
-		}
-		log.InfoContext(ctx, "connected workspace reopened",
-			slog.String("workspace", ws.ID), slog.String("backend", ws.Backend), slog.String("credential", cred.Type),
-			slog.String("admin", cred.Admin), slog.Any("served", ws.Served()))
-	}
-	return nil
 }
 
 // openStored turns a stored credential back into a reader, by asking
