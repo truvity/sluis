@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/truvity/sluis/internal/port"
 	"github.com/truvity/sluis/internal/rails"
 	"github.com/truvity/sluis/internal/slackroster/connection"
 	"github.com/truvity/sluis/storage/logattr"
@@ -79,7 +80,7 @@ func (c *Controller) watchCredentials(ctx context.Context, wake chan<- struct{})
 			},
 			Changed: "a workspace's credentials changed",
 			OnRequest: func(workspace string) {
-				if err := c.deps.Trigger.Notify(ctx, workspace); err != nil {
+				if err := port.NotifyController(ctx, c.deps.Trigger, port.ControllerSlack, workspace); err != nil {
 					c.deps.Log.WarnContext(ctx, "a requested pass could not be handed to the trigger", logattr.SafeString("workspace", workspace),
 						logattr.SafeError("error", err))
 				}
@@ -95,7 +96,7 @@ func (c *Controller) watchCredentials(ctx context.Context, wake chan<- struct{})
 		Requests: c.passRequests,
 		Changed:  "a workspace's credentials changed",
 		OnRequest: func(workspace string) {
-			if err := c.deps.Trigger.Notify(ctx, workspace); err != nil {
+			if err := port.NotifyController(ctx, c.deps.Trigger, port.ControllerSlack, workspace); err != nil {
 				c.deps.Log.WarnContext(ctx, "a requested pass could not be handed to the trigger", logattr.SafeString("workspace", workspace),
 					logattr.SafeError("error", err))
 			}

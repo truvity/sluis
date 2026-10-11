@@ -14,6 +14,7 @@ import (
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
 	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/audit"
+	"github.com/truvity/sluis/internal/port"
 	"github.com/truvity/sluis/internal/slackapp"
 	"github.com/truvity/sluis/internal/slackroster/connection"
 	"github.com/truvity/sluis/internal/slackroster/status"
@@ -255,7 +256,7 @@ func (c *Console) ConfirmSlackRemovals(
 		return nil, connect.NewError(connect.CodeUnavailable, err)
 	}
 	c.record(ctx, audit.SlackRemovalsConfirmed(identityActor(id), workspace, channel, fingerprint, gate.Affected))
-	c.notify(ctx, workspace)
+	c.notify(ctx, port.ControllerSlack, workspace)
 	return connect.NewResponse(&directoryrosterv1.ConfirmSlackRemovalsResponse{}), nil
 }
 
