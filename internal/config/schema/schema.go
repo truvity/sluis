@@ -400,6 +400,7 @@ func sluisSchema() m {
 	s := serveSchema()
 	props, _ := s["properties"].(m)
 	props["apiVersion"] = apiVersionSluis()
+	props["calls"] = callsSchema()
 	props["controllers"] = obj("The controllers this process runs beside the issuer and the console, each in its own loop. A controller that is absent is off. Which organisations and workspaces a running controller may CHANGE is the policy document's `controllers.<kind>.enabledOrgs` and `enabledWorkspaces`, as before. A controller reads the console's API as a workload, so the policy's exchange must admit its proof (a ServiceAccount token on Kubernetes, the function role's web identity token on Lambda).", m{
 		"github": obj("The GitHub controller: makes each GitHub organisation's teams match the policy's github table.", controllerProps(
 			"/var/run/secrets/github-roster/token", "/var/run/github-roster/records",
@@ -515,6 +516,7 @@ func rosterProps(kind, mountDefault, recordsDefault string) m {
 		"preset":     presetSchema(),
 		"adapters":   adaptersSchema(),
 		"probes":     probes(":7070"),
+		"calls":      callsSchema(),
 		"audit": obj("The audit installation the controller records to, as its own workload. Unset only logs what it did.", m{
 			"writer":    url("The installation's receiver."),
 			"tokenFile": str("This workload's projected service-account token."),
