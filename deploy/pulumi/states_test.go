@@ -191,7 +191,7 @@ func TestTheFunctionRoleIsGrantedTheModuleTablesAndTheLegacyOne(t *testing.T) {
 		a.State.Tables = tbl
 		a.State.KeyArn = pulumi.String(arnp + "kms:" + region + ":" + account + ":key/tables")
 	}})
-	doc := statements(t, prop(rec.one(t, policyType, "staging-http-policy"), "policy").StringValue())
+	doc := statements(t, prop(rec.one(t, policyType, "staging-issuer-policy"), "policy").StringValue())
 	byResource := map[string][]string{}
 	for _, s := range doc {
 		for _, r := range strs(s["Resource"]) {

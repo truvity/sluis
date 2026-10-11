@@ -24,7 +24,7 @@ func secretsJSON(s map[string]any) string { return fmt.Sprint(s["Condition"]) }
 
 func statementBySid(t *testing.T, rec *recorder, sid string) map[string]any {
 	t.Helper()
-	for _, s := range statements(t, prop(rec.one(t, policyType, "staging-http-policy"), "policy").StringValue()) {
+	for _, s := range statements(t, prop(rec.one(t, policyType, "staging-issuer-policy"), "policy").StringValue()) {
 		if s["Sid"] == sid {
 			return s
 		}
@@ -167,7 +167,7 @@ func TestExternalBlobsOnAnS3CompatibleEndpoint(t *testing.T) {
 		}
 	}
 	// DynamoDB stays on AWS.
-	if len(statements(t, prop(rec.one(t, policyType, "staging-http-policy"), "policy").StringValue())) == 0 || rolePolicy(t, rec)["dynamodb:GetItem"] == nil {
+	if len(statements(t, prop(rec.one(t, policyType, "staging-issuer-policy"), "policy").StringValue())) == 0 || rolePolicy(t, rec)["dynamodb:GetItem"] == nil {
 		t.Error("the State grant is gone")
 	}
 }

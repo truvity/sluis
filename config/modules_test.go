@@ -299,7 +299,7 @@ func TestRenderModulesRefuses(t *testing.T) {
 		"a kubernetes installation": {func(in *config.Installation) { in.Shape = config.ShapeKubernetes }, "Lambda"},
 		"the layout v4 table":       {func(in *config.Installation) { in.AWS.Table = "t" }, "layout v4"},
 		"layout v4 secrets":         {func(in *config.Installation) { in.Secrets = &config.Secrets{Layout: "v4"} }, "layout v5"},
-		"a function for the issuer": {func(in *config.Installation) { in.AWS.Functions = map[string]string{"issuer": "x"} }, "not a module function"},
+		"a function that is none":   {func(in *config.Installation) { in.AWS.Functions = map[string]string{"nonesuch": "x"} }, "not a function"},
 		"a bad function name":       {func(in *config.Installation) { in.AWS.Functions = map[string]string{"slack": "a b"} }, "letters, digits"},
 		"a name taken twice": {func(in *config.Installation) {
 			in.AWS.Functions = map[string]string{"slack": "sluis-staging-github"}
