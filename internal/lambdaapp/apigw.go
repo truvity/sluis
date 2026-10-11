@@ -43,6 +43,9 @@ type HTTP struct {
 	// ({"kind":"refresh","workspace":"<id>"}); nil in a function that can only
 	// refresh every one, which refuses an event that names a workspace.
 	refreshWorkspace func(ctx context.Context, workspace string) (RefreshResult, error)
+	// clients runs one pass of the client-secret reconcile (the
+	// {"kind":"clients"} event); nil when this function generates none.
+	clients func(context.Context) (RefreshResult, error)
 	// cloudflare runs one pass over the Cloudflare presets (the
 	// {"kind":"cloudflare"} event); nil when the function has no such section.
 	// It returns the number of presets that failed and a one-line summary.
@@ -76,7 +79,15 @@ func (h *HTTP) WithControllers(kindOf func(target string) string, controllers ma
 	return h
 }
 
+// WithClients makes the function answer {"kind":"clients"} events with run:
+// the reconcile of the generated client secrets and nothing else.
+func (h *HTTP) WithClients(run func(context.Context) (RefreshResult, error)) *HTTP {
+	h.clients = run
+	return h
+}
+
 // WithRefresh makes the function answer {"kind":"refresh"} events with run.
+// "refresh" is the name before "clients" and is accepted for one release.
 func (h *HTTP) WithRefresh(run func(context.Context) (RefreshResult, error)) *HTTP {
 	h.refresh = run
 	return h

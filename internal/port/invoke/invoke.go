@@ -37,11 +37,19 @@ type Event struct {
 	Target string `json:"target"`
 }
 
+// Alias is the alias of a controller function the console invokes: the
+// `live-console` alias, whose version the function's own publish moves, as the
+// `live-<class>` aliases of the module calls (docs/decisions/0071). The
+// issuer's role may invoke that alias and no other, so a run-now never reaches
+// an unpublished version and the issuer itself is not a target.
+const Alias = "live-console"
+
 // Config names the functions a notification invokes: one runs the GitHub
 // controller's passes and one the Slack controller's.
 type Config struct {
-	// GitHub and Slack are each a function's name or ARN. A kind that has no
-	// function is never invoked.
+	// GitHub and Slack are each a function's name or ARN, without an alias:
+	// the invocation is qualified with [Alias]. A kind that has no function is
+	// never invoked.
 	GitHub string `json:"github,omitempty"`
 	Slack  string `json:"slack,omitempty"`
 	// Region overrides the platform's.
@@ -154,6 +162,7 @@ func (t *Trigger) Notify(ctx context.Context, target string) error {
 func (t *Trigger) invoke(ctx context.Context, function string, payload []byte) error {
 	out, err := t.api.Invoke(ctx, &awslambda.InvokeInput{
 		FunctionName:   aws.String(function),
+		Qualifier:      aws.String(Alias),
 		InvocationType: types.InvocationTypeEvent,
 		Payload:        payload,
 	})

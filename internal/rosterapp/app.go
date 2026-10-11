@@ -42,6 +42,7 @@ import (
 	"github.com/truvity/sluis/internal/hublocal"
 	"github.com/truvity/sluis/internal/issuer"
 	"github.com/truvity/sluis/internal/issuerapp"
+	"github.com/truvity/sluis/internal/modcall"
 	"github.com/truvity/sluis/internal/port"
 	"github.com/truvity/sluis/internal/secrets"
 	"github.com/truvity/sluis/internal/server"
@@ -74,8 +75,31 @@ type Config struct {
 	// Backup is where the console reads the backup module and the restore
 	// function (`console.backup`); nil leaves the console without a Backups page.
 	Backup *config.ConsoleBackup
+	// Remote are the modules this process reaches in another one, by module
+	// name (`github.remote`, `slack.remote`, `google.remote`; Cloudflare's has
+	// its own field). A module named here is not hosted: [Load] leaves its
+	// controller out, and the process only calls it. A module not named is
+	// hosted in this process, as the demonstration and the tests have it.
+	Remote map[string]config.ModuleRemote
+	// Dial turns the routing for a caller class into a Caller; nil is
+	// [dial.Dial]. It is the seam a test uses in place of the transports.
+	Dial func(ctx context.Context, cfg modcall.Config, class string) (modcall.Caller, error)
 	// CloudflareDial opens a Cloudflare account; nil is the real client.
 	CloudflareDial minter.Dialer
+}
+
+// The modules whose routing the issuer's document can name.
+const (
+	moduleGitHub = "github"
+	moduleSlack  = "slack"
+	moduleGoogle = "google"
+)
+
+// Hosted reports whether the module runs in this process: its section names no
+// remote.
+func (c Config) Hosted(module string) bool {
+	_, remote := c.Remote[module]
+	return !remote
 }
 
 // LogLevel is the level the process should log at. It is the issuer's,
@@ -110,6 +134,20 @@ func Load(file string) (Config, error) {
 	// With the Google module elsewhere the hub only reads its snapshots; the
 	// module's own schedule refreshes them (docs/decisions/0071, D-v176-6 a).
 	cfg.Directory.Reader = svc.Google != nil && svc.Google.Remote != nil
+	// A module that is another function's is not assembled here: its controller
+	// runs there, one pass per invocation, and this process only calls it.
+	cfg.Remote = map[string]config.ModuleRemote{}
+	for _, module := range []string{moduleGitHub, moduleSlack, moduleGoogle} {
+		if r, ok := svc.Targets()[module]; ok {
+			cfg.Remote[module] = r
+		}
+	}
+	if !cfg.Hosted(moduleGitHub) {
+		cfg.GitHub = nil
+	}
+	if !cfg.Hosted(moduleSlack) {
+		cfg.Slack = nil
+	}
 	// The secrets the document names are read through one source, opened
 	// here and handed to both halves with the storage ports. Opening connects
 	// to nothing: a secret is read when it is used.
@@ -381,6 +419,14 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 	apps := issuer.GitHubApps{Catalogue: directory.GitHubCatalogue(), Recent: directory.GitHubMints()}
 	if store := directory.GitHubCatalogueApps(); store != nil {
 		apps.Store = store
+	}
+	if r, ok := cfg.Remote[moduleGitHub]; ok {
+		// The keys are the GitHub module's: the mint is asked of its function
+		// as the issuer, and the issuer holds none.
+		if apps.Minter, err = dialMinter(ctx, cfg, r); err != nil {
+			a.Close()
+			return nil, err
+		}
 	}
 	deps.GitHubApps = &apps
 	assembled, err := issuerapp.New(ctx, cfg.Issuer, deps, log)

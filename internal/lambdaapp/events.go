@@ -164,7 +164,16 @@ func oneLine(s string) string {
 // authoritative after the freshness window, which sign-in refuses on.
 const KindRefresh = "refresh"
 
-// RefreshResult is what a refresh invocation returns.
+// KindClients is the event an EventBridge Scheduler schedule sends the issuer
+// function to look after the generated client secrets: {"kind":"clients"}. It
+// reconciles the clients' secrets and nothing else; the directory's snapshots
+// are the Google module's, refreshed by its own function.
+//
+// Deprecated: [KindRefresh] is the same schedule under its old name, still
+// accepted for one release.
+const KindClients = "clients"
+
+// RefreshResult is what a refresh or clients invocation returns.
 type RefreshResult struct {
 	Kind       string `json:"kind"`
 	Workspaces int    `json:"workspaces"`
@@ -221,6 +230,9 @@ func (h *HTTP) checkDeclared(ctx context.Context) (any, error) {
 
 // scheduled handles an event of the http function that is not a request.
 func (h *HTTP) scheduled(ctx context.Context, kind string) (any, error) {
+	if kind == KindClients {
+		return h.reconcileClients(ctx)
+	}
 	if kind == KindRefresh {
 		return h.refreshDirectory(ctx, nil)
 	}
@@ -230,8 +242,21 @@ func (h *HTTP) scheduled(ctx context.Context, kind string) (any, error) {
 	if kind == KindCheck {
 		return h.checkDeclared(ctx)
 	}
-	return nil, fmt.Errorf("the event's kind is %q: the function takes API Gateway events and {\"kind\":%q|%q|%q|%q|%q}",
-		oneLine(kind), KindTick, KindRun, KindRefresh, KindCheck, KindBackup)
+	return nil, fmt.Errorf("the event's kind is %q: the function takes API Gateway events and {\"kind\":%q|%q|%q|%q|%q|%q}",
+		oneLine(kind), KindTick, KindRun, KindClients, KindRefresh, KindCheck, KindBackup)
+}
+
+// reconcileClients runs one pass of the client-secret reconcile.
+func (h *HTTP) reconcileClients(ctx context.Context) (any, error) {
+	if h.clients == nil {
+		return nil, errors.New("this function generates no client secrets")
+	}
+	defer func() {
+		if h.settle != nil {
+			h.settle()
+		}
+	}()
+	return h.clients(ctx)
 }
 
 // refreshDirectory runs one directory refresh pass: over every workspace, or
