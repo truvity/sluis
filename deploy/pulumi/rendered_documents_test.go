@@ -93,7 +93,7 @@ func TestEveryRenderedDocumentLoadsInItsRuntime(t *testing.T) {
 					}
 				}
 				rec, _ := mustLambda(t, auditEstate(t, au, more))
-				write(t, "issuer", "audit-"+aname+" external-"+strings.ToLower(strings.Title(boolWord(ext)))+" tables-"+boolWord(tables), serviceDocument(t, rec))
+				write(t, "issuer", "audit-"+aname+" external-"+boolWord(ext)+" tables-"+boolWord(tables), serviceDocument(t, rec))
 			}
 		}
 	}
