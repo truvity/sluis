@@ -181,7 +181,8 @@ func (c *Console) signBegun(id access.Identity, begun consolewire.Begun) (github
 func (c *Console) DisconnectGitHubOrganisation(
 	ctx context.Context, req *connect.Request[directoryrosterv1.DisconnectGitHubOrganisationRequest],
 ) (*connect.Response[directoryrosterv1.DisconnectGitHubOrganisationResponse], error) {
-	return githubProto[directoryrosterv1.DisconnectGitHubOrganisationRequest, directoryrosterv1.DisconnectGitHubOrganisationResponse](ctx, c, consolewire.DisconnectOrganisation, access.RoleOperator, req)
+	return githubProto[directoryrosterv1.DisconnectGitHubOrganisationRequest, directoryrosterv1.DisconnectGitHubOrganisationResponse](
+		ctx, c, consolewire.DisconnectOrganisation, access.RoleOperator, req)
 }
 
 // ChangeGitHubOrganisationOwner changes the directory recorded as a connected
@@ -189,7 +190,8 @@ func (c *Console) DisconnectGitHubOrganisation(
 func (c *Console) ChangeGitHubOrganisationOwner(
 	ctx context.Context, req *connect.Request[directoryrosterv1.ChangeGitHubOrganisationOwnerRequest],
 ) (*connect.Response[directoryrosterv1.ChangeGitHubOrganisationOwnerResponse], error) {
-	return githubProto[directoryrosterv1.ChangeGitHubOrganisationOwnerRequest, directoryrosterv1.ChangeGitHubOrganisationOwnerResponse](ctx, c, consolewire.ChangeOrganisationOwner, access.RoleOperator, req)
+	return githubProto[directoryrosterv1.ChangeGitHubOrganisationOwnerRequest, directoryrosterv1.ChangeGitHubOrganisationOwnerResponse](
+		ctx, c, consolewire.ChangeOrganisationOwner, access.RoleOperator, req)
 }
 
 // RequestGitHubPass asks the GitHub controller to pass over now: in the module,
@@ -197,7 +199,8 @@ func (c *Console) ChangeGitHubOrganisationOwner(
 func (c *Console) RequestGitHubPass(
 	ctx context.Context, req *connect.Request[directoryrosterv1.RequestGitHubPassRequest],
 ) (*connect.Response[directoryrosterv1.RequestGitHubPassResponse], error) {
-	return githubProto[directoryrosterv1.RequestGitHubPassRequest, directoryrosterv1.RequestGitHubPassResponse](ctx, c, consolewire.RequestPass, access.RoleOperator, req)
+	return githubProto[directoryrosterv1.RequestGitHubPassRequest, directoryrosterv1.RequestGitHubPassResponse](
+		ctx, c, consolewire.RequestPass, access.RoleOperator, req)
 }
 
 // UseGitHub connects the console's GitHub operations to the module in another
@@ -276,7 +279,8 @@ func (c *Console) GetGitHubApp(
 func (c *Console) ListGitHubAppTokens(
 	ctx context.Context, req *connect.Request[directoryrosterv1.ListGitHubAppTokensRequest],
 ) (*connect.Response[directoryrosterv1.ListGitHubAppTokensResponse], error) {
-	return githubProto[directoryrosterv1.ListGitHubAppTokensRequest, directoryrosterv1.ListGitHubAppTokensResponse](ctx, c, consolewire.ListAppTokens, access.RoleOperator, req)
+	return githubProto[directoryrosterv1.ListGitHubAppTokensRequest, directoryrosterv1.ListGitHubAppTokensResponse](
+		ctx, c, consolewire.ListAppTokens, access.RoleOperator, req)
 }
 
 // CheckGitHubApp asks GitHub again about one App, whichever kind it is.
@@ -290,7 +294,8 @@ func (c *Console) CheckGitHubApp(
 func (c *Console) RotateGitHubAppWebhook(
 	ctx context.Context, req *connect.Request[directoryrosterv1.RotateGitHubAppWebhookRequest],
 ) (*connect.Response[directoryrosterv1.RotateGitHubAppWebhookResponse], error) {
-	return githubProto[directoryrosterv1.RotateGitHubAppWebhookRequest, directoryrosterv1.RotateGitHubAppWebhookResponse](ctx, c, consolewire.RotateAppWebhook, access.RoleOperator, req)
+	return githubProto[directoryrosterv1.RotateGitHubAppWebhookRequest, directoryrosterv1.RotateGitHubAppWebhookResponse](
+		ctx, c, consolewire.RotateAppWebhook, access.RoleOperator, req)
 }
 
 // GetGitHubStatus implements the GitHub page.
@@ -304,7 +309,8 @@ func (c *Console) GetGitHubStatus(
 func (c *Console) CheckGitHubCatalogueApp(
 	ctx context.Context, req *connect.Request[directoryrosterv1.CheckGitHubCatalogueAppRequest],
 ) (*connect.Response[directoryrosterv1.CheckGitHubCatalogueAppResponse], error) {
-	return githubProto[directoryrosterv1.CheckGitHubCatalogueAppRequest, directoryrosterv1.CheckGitHubCatalogueAppResponse](ctx, c, consolewire.CheckCatalogueApp, access.RoleOperator, req)
+	return githubProto[directoryrosterv1.CheckGitHubCatalogueAppRequest, directoryrosterv1.CheckGitHubCatalogueAppResponse](
+		ctx, c, consolewire.CheckCatalogueApp, access.RoleOperator, req)
 }
 
 // beginVia asks the module to begin a flow with request and signs the state it

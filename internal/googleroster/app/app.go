@@ -312,7 +312,8 @@ func (a *App) Close() error {
 func oauthClient(o *config.GoogleOAuthClient, publicURL string, src secrets.Source) func() (google.OAuthClient, error) {
 	if o == nil || o.Provider == "" {
 		return func() (google.OAuthClient, error) {
-			return google.OAuthClient{}, errors.New("the document declares no google.oauthClient: register one in the document to connect by consent, sign in, or reopen a workspace connected that way")
+			return google.OAuthClient{}, errors.New("the document declares no google.oauthClient: " +
+				"register one in the document to connect by consent, sign in, or reopen a workspace connected that way")
 		}
 	}
 	value := lazy.New(lazy.TTL, func(ctx context.Context) (google.OAuthClient, error) {

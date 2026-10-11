@@ -579,7 +579,9 @@ func (c *Service) checkArchive(ctx context.Context, store ChannelRecords, worksp
 // forgotten, and says plainly what happened. checkArchive has already asked
 // Slack that the channel is ordinary and visible; when the archive itself
 // still fails the record is gone and the note says to archive it by hand.
-func (c *Service) archiveForgotten(ctx context.Context, caller consolecall.Caller, gone reconcile.ConsoleChannel, to archiveTarget) (archived bool, note string) {
+func (c *Service) archiveForgotten(
+	ctx context.Context, caller consolecall.Caller, gone reconcile.ConsoleChannel, to archiveTarget,
+) (archived bool, note string) {
 	kept := fmt.Sprintf("The record of %s in %s is deleted and the reconciler no longer manages its members.", gone.Name, gone.Workspace)
 	by := func(why string) string {
 		return kept + " It was not archived: " + why + ". Archive it in Slack by hand."

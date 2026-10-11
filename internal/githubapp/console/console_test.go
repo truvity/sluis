@@ -293,7 +293,9 @@ func TestAFlowHandOverIsCheckedBeforeGitHubIsAsked(t *testing.T) {
 	if _, err := svc.CompleteGitHubRunnerCreate(southOp(), flow); statusOf(t, err) != http.StatusForbidden {
 		t.Errorf("a foreign operator finishing globex's flow = %v, want 403", err)
 	}
-	if _, err := svc.CompleteGitHubCatalogueCreate(as("", nil, nil), consolewire.Flow{Bind: consolewire.BindCatalogue + "renovate"}); statusOf(t, err) != http.StatusForbidden {
+	if _, err := svc.CompleteGitHubCatalogueCreate(
+		as("", nil, nil), consolewire.Flow{Bind: consolewire.BindCatalogue + "renovate"},
+	); statusOf(t, err) != http.StatusForbidden {
 		t.Errorf("a flow nobody operates = %v, want 403", err)
 	}
 	if _, err := svc.BeginGitHubRunnerAppConnect(everywhere(), "globex", "standard"); connect.CodeOf(err) != connect.CodeFailedPrecondition {

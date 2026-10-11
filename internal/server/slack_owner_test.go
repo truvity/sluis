@@ -2,12 +2,13 @@ package server
 
 import (
 	"context"
-	slackconsole "github.com/truvity/sluis/internal/slackapp/console"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
+
+	slackconsole "github.com/truvity/sluis/internal/slackapp/console"
 
 	"connectrpc.com/connect"
 
@@ -199,7 +200,9 @@ func TestAConnectedWorkspaceWithNoOwnerIsInvisibleToScopedRoles(t *testing.T) {
 		}
 	}
 	scopedOp, _ := IdentityFrom(asSlackIdentity(northOp))
-	if _, err := h.console.slackSvc().RequireSlack(context.Background(), consolecall.Snapshot(scopedOp), access.RoleViewer, "initech"); connect.CodeOf(slackError(err)) != connect.CodePermissionDenied {
+	if _, err := h.console.slackSvc().RequireSlack(
+		context.Background(), consolecall.Snapshot(scopedOp), access.RoleViewer, "initech",
+	); connect.CodeOf(slackError(err)) != connect.CodePermissionDenied {
 		t.Errorf("a scoped operator on an ownerless workspace = %v, want permission denied", err)
 	}
 	for name, who := range map[string]context.Context{"an operator": operator(), "a viewer": viewer()} {

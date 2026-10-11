@@ -2,8 +2,6 @@ package server
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"slices"
 	"strings"
 
@@ -21,20 +19,9 @@ import (
 // already knows which directories are connected and which domains each
 // serves, and a second copy in a file would only drift from the first.
 //
-// One rule decides who may connect something not yet connected and what
-// that records, for Slack workspaces and GitHub organisations alike
-// ([resolveOwner]); another decides who may change it afterwards
-// ([Console.requireOwnerChange]).
-
-// mayOwned reports whether an identity holds a role over a thing owned by
-// owner: the installation-wide role always does, and the same role held over
-// the owning directory. With no owner only the installation-wide role does.
-func mayOwned(id access.Identity, want access.Role, owner string) bool {
-	if owner != "" {
-		return id.CanFor(want, owner)
-	}
-	return id.Can(want)
-}
+// The rules for who may connect something not yet connected, what that
+// records, and who may change it afterwards are internal/consoleauthz's, applied
+// in each provider's module; the console only lists the directories.
 
 // connectedDirectory is one connected directory as an owner is chosen and shown.
 type connectedDirectory struct {
@@ -113,77 +100,6 @@ func ownerChoices(id access.Identity, dirs []connectedDirectory) (refs []*direct
 		refs = append(refs, &directoryrosterv1.DirectoryRef{WorkspaceId: dirs[i].id, PrimaryDomain: dirs[i].primary, Domains: slices.Clone(dirs[i].authoritative)})
 	}
 	return refs, mayNone
-}
-
-// resolveOwner is THE connect-time rule: who the owner of a thing about to
-// be connected is, given who is connecting it and what they asked for.
-//
-//   - The installation-wide operator chooses: any connected directory, or
-//     none (an empty request).
-//   - An operator scoped to exactly one connected directory is that
-//     directory's operator for this: the owner is it, whether they name it
-//     or leave the choice empty.
-//   - An operator scoped to several chooses among them, and must.
-//   - Anything else is refused: a directory the caller does not operate, or
-//     one that is not connected, is never recorded.
-func resolveOwner(id access.Identity, requested string, dirs []connectedDirectory) (string, error) {
-	connected := make([]string, 0, len(dirs))
-	for i := range dirs {
-		connected = append(connected, dirs[i].id)
-	}
-	requested = strings.TrimSpace(requested)
-	if id.Can(access.RoleOperator) {
-		if requested != "" && !slices.Contains(connected, requested) {
-			return "", connect.NewError(connect.CodeInvalidArgument,
-				fmt.Errorf("%q is not a connected directory, so it cannot own anything", requested))
-		}
-		return requested, nil
-	}
-	mine := slices.DeleteFunc(slices.Clone(id.Workspaces(access.RoleOperator)), func(w string) bool { return !slices.Contains(connected, w) })
-	switch {
-	case requested != "":
-		if !slices.Contains(mine, requested) {
-			return "", connect.NewError(connect.CodePermissionDenied,
-				fmt.Errorf("this needs the operator role over %s's directory, which names it as the owner", requested))
-		}
-		return requested, nil
-	case len(mine) == 1:
-		return mine[0], nil
-	case len(mine) == 0:
-		return "", connect.NewError(connect.CodePermissionDenied,
-			errors.New("this needs the installation-wide operator role, or the operator role over a connected directory that would own it"))
-	default:
-		return "", connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("you operate more than one directory: choose which of them owns it (%s)", strings.Join(mine, ", ")))
-	}
-}
-
-// requireOwnerChange is the gate on changing a recorded owner: the
-// installation-wide operator alone, and only to a connected directory or to
-// none.
-func (c *Console) requireOwnerChange(ctx context.Context, owner string) (access.Identity, error) {
-	id, err := requireRole(ctx, access.RoleOperator)
-	if connect.CodeOf(err) == connect.CodePermissionDenied {
-		return id, connect.NewError(connect.CodePermissionDenied,
-			errors.New("only the installation-wide operator changes an owner"))
-	}
-	if err != nil {
-		return id, err
-	}
-	if owner == "" {
-		return id, nil
-	}
-	dirs, err := c.directories(ctx)
-	if err != nil {
-		return id, err
-	}
-	for i := range dirs {
-		if dirs[i].id == owner {
-			return id, nil
-		}
-	}
-	return id, connect.NewError(connect.CodeInvalidArgument,
-		fmt.Errorf("%q is not a connected directory, so it cannot own anything", owner))
 }
 
 // ListServedDomains implements the controllers' read: for each connected

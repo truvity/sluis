@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	slackconsole "github.com/truvity/sluis/internal/slackapp/console"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -12,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	slackconsole "github.com/truvity/sluis/internal/slackapp/console"
 
 	"connectrpc.com/connect"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

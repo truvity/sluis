@@ -11,6 +11,7 @@ import (
 	"github.com/truvity/sluis/internal/consolecall"
 	"github.com/truvity/sluis/internal/githubroster/consolewire"
 	"github.com/truvity/sluis/internal/modcall"
+	"github.com/truvity/sluis/storage/logattr"
 )
 
 // FlowDeadline bounds a call that finishes a provider's flow. The code the
@@ -36,19 +37,25 @@ func Register(s *modcall.Server, svc *Service) {
 	handleProto(svc, s, consolewire.RotateAppWebhook, svc.RotateGitHubAppWebhook)
 	handleProto(svc, s, consolewire.GetStatus, svc.GetGitHubStatus, consolecall.List())
 	handleProto(svc, s, consolewire.CheckCatalogueApp, svc.CheckGitHubCatalogueApp)
-	consolecall.HandleJSON(s, consolewire.BeginCatalogueConnect, adapt(svc, func(ctx context.Context, r consolewire.BeginCatalogueConnectRequest) (consolewire.Begun, error) {
+	consolecall.HandleJSON(s, consolewire.BeginCatalogueConnect, adapt(svc, func(
+		ctx context.Context, r consolewire.BeginCatalogueConnectRequest,
+	) (consolewire.Begun, error) {
 		return svc.BeginGitHubCatalogueAppConnect(ctx, r.ID)
 	}))
 	consolecall.HandleJSON(s, consolewire.CompleteCatalogueCreate, adapt(svc, svc.CompleteGitHubCatalogueCreate))
 	consolecall.HandleJSON(s, consolewire.CompleteCatalogueSetup, adapt(svc, svc.CompleteGitHubCatalogueSetup))
 	handleProto(svc, s, consolewire.DisconnectCatalogueApp, svc.DisconnectGitHubCatalogueApp)
-	consolecall.HandleJSON(s, consolewire.BeginRunnerConnect, adapt(svc, func(ctx context.Context, r consolewire.BeginRunnerConnectRequest) (consolewire.Begun, error) {
+	consolecall.HandleJSON(s, consolewire.BeginRunnerConnect, adapt(svc, func(
+		ctx context.Context, r consolewire.BeginRunnerConnectRequest,
+	) (consolewire.Begun, error) {
 		return svc.BeginGitHubRunnerAppConnect(ctx, r.Org, r.Tier)
 	}))
 	consolecall.HandleJSON(s, consolewire.CompleteRunnerCreate, adapt(svc, svc.CompleteGitHubRunnerCreate))
 	consolecall.HandleJSON(s, consolewire.CompleteRunnerSetup, adapt(svc, svc.CompleteGitHubRunnerSetup))
 	handleProto(svc, s, consolewire.DisconnectRunnerApp, svc.DisconnectGitHubRunnerApp)
-	consolecall.HandleJSON(s, consolewire.BeginLinkAppConnect, adapt(svc, func(ctx context.Context, r consolewire.BeginLinkAppConnectRequest) (consolewire.Begun, error) {
+	consolecall.HandleJSON(s, consolewire.BeginLinkAppConnect, adapt(svc, func(
+		ctx context.Context, r consolewire.BeginLinkAppConnectRequest,
+	) (consolewire.Begun, error) {
 		return svc.BeginGitHubLinkAppConnect(ctx, r.Owner)
 	}))
 	consolecall.HandleJSON(s, consolewire.CompleteLinkApp, adapt(svc, svc.CompleteGitHubLinkApp))
@@ -121,6 +128,6 @@ func (c *Service) told(ctx context.Context, err error) error {
 			return &consolecall.Problem{Summary: ce.Message(), Code: ce.Code().String()}
 		}
 	}
-	c.log().ErrorContext(ctx, "a console operation failed in the GitHub module", "error", err)
+	c.log().ErrorContext(ctx, "a console operation failed in the GitHub module", logattr.SafeError("error", err))
 	return modcall.Coded(modcall.CodeInternal, "")
 }
