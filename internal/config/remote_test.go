@@ -175,8 +175,9 @@ func TestModuleServeIsHeldToTheIssuerThatMayCallIt(t *testing.T) {
 		"ok":                 {route: &config.ModuleRoute{Serve: good}},
 		"no issuer":          {route: &config.ModuleRoute{Serve: &config.ModuleServe{}}, err: "slack.serve.issuers: name the issuer"},
 		"not a service acct": {route: &config.ModuleRoute{Serve: &config.ModuleServe{Issuers: []string{"issuer"}}}, err: "is not system:serviceaccount"},
-		"no name":            {route: &config.ModuleRoute{Serve: &config.ModuleServe{Issuers: []string{"system:serviceaccount:sluis:"}}}, err: "is not system:serviceaccount"},
-		"serve and remote":   {route: &config.ModuleRoute{Serve: good, Remote: &config.ModuleRemote{URL: "http://s"}}, err: "remote and serve are both set"},
+		"no name": {route: &config.ModuleRoute{Serve: &config.ModuleServe{Issuers: []string{"system:serviceaccount:sluis:"}}},
+			err: "is not system:serviceaccount"},
+		"serve and remote": {route: &config.ModuleRoute{Serve: good, Remote: &config.ModuleRemote{URL: "http://s"}}, err: "remote and serve are both set"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			err := (&config.Roster{Slack: tc.route}).ValidateRoutes()
