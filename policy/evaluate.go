@@ -310,30 +310,11 @@ func (p Policy) Evaluate(in Input) Result {
 			claims["groups"] = asAny
 		}
 	}
-	p.joinClaims(claims)
 	if len(claims) > 0 {
 		out.Claims = claims
 	}
 	out.Lifetime = p.lifetimeOf(out.Groups)
 	return out
-}
-
-// ClaimsFor is the merge of the claims fragments of the given groups,
-// the same merge [Policy.Evaluate] makes over every held group: names in
-// sorted order, lists unioned, maps recursed, and a fragment that cannot
-// merge skipped. It carries no `groups` entry; the caller adds the names.
-//
-// Token scoping under enforce calls it with the groups a token KEEPS, so
-// a token carries only the fragments of the groups it names.
-func (p Policy) ClaimsFor(groups []string) map[string]any {
-	claims := map[string]any{}
-	for _, name := range slices.Sorted(slices.Values(groups)) {
-		if fragment, ok := p.Claims[name]; ok {
-			_ = mergeFragment(claims, fragment, "")
-		}
-	}
-	p.joinClaims(claims)
-	return claims
 }
 
 // effectiveMembers is a group's declared directory groups.

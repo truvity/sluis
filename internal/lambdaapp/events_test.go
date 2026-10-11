@@ -198,14 +198,14 @@ func TestOneFunctionDispatchesAnEventToTheControllerOfItsTarget(t *testing.T) {
 	controller := func(name string, p *fakePass) *lambdaapp.Controller {
 		return &lambdaapp.Controller{Name: name, Open: func(context.Context) (lambdaapp.Pass, error) { return p, nil }}
 	}
-	kindOf := func(target string) string {
+	kindOf := func(target string) []string {
 		switch target {
 		case "acme", "github:links":
-			return "github"
+			return []string{"github"}
 		case "T0SLACK":
-			return "slack"
+			return []string{"slack"}
 		}
-		return ""
+		return nil
 	}
 	h := lambdaapp.NewHTTP(http.NotFoundHandler(), nil, nil).
 		WithControllers(kindOf, map[string]*lambdaapp.Controller{"github": controller("github", gh), "slack": controller("slack", sl)})
@@ -373,5 +373,100 @@ func TestABackupEvent(t *testing.T) {
 	}
 	if len(resumed) != 3 || resumed[0] || !resumed[1] {
 		t.Errorf("resume reached the run as %v", resumed)
+	}
+}
+
+// routed builds a function whose policy declares "acme" as both a GitHub
+// organisation and a Slack workspace, "solo" as an organisation only and "T0SLACK"
+// as a workspace only.
+func routed(log *slog.Logger) (h *lambdaapp.HTTP, gh, sl *fakePass) {
+	gh, sl = &fakePass{ran: true}, &fakePass{ran: true}
+	controller := func(name string, p *fakePass) *lambdaapp.Controller {
+		return &lambdaapp.Controller{Name: name, Open: func(context.Context) (lambdaapp.Pass, error) { return p, nil }}
+	}
+	kindsOf := func(target string) []string {
+		switch target {
+		case "acme":
+			return []string{"github", "slack"}
+		case "solo":
+			return []string{"github"}
+		case "T0SLACK":
+			return []string{"slack"}
+		}
+		return nil
+	}
+	h = lambdaapp.NewHTTP(http.NotFoundHandler(), nil, log).
+		WithControllers(kindsOf, map[string]*lambdaapp.Controller{"github": controller("github", gh), "slack": controller("slack", sl)})
+	return h, gh, sl
+}
+
+func TestANameBothAGitHubOrgAndASlackWorkspaceRoutesByTheEventsController(t *testing.T) {
+	h, gh, sl := routed(nil)
+	for _, kind := range []string{"tick", "run"} {
+		for _, c := range []struct {
+			controller string
+			pass       *fakePass
+			other      *fakePass
+		}{{"github", gh, sl}, {"slack", sl, gh}} {
+			gh.targets, sl.targets = nil, nil
+			event := `{"kind":"` + kind + `","controller":"` + c.controller + `","target":"acme"}`
+			out, err := h.Handle(context.Background(), json.RawMessage(event))
+			if err != nil || out.(lambdaapp.Result).Outcome != "ran" {
+				t.Fatalf("%s: %v %+v", event, err, out)
+			}
+			if len(c.pass.targets) != 1 || len(c.other.targets) != 0 {
+				t.Errorf("%s: ran %v on its controller and %v on the other", event, c.pass.targets, c.other.targets)
+			}
+		}
+	}
+}
+
+func TestAnEventWithoutAControllerIsRoutedOnlyWhenOneControllerDeclaresTheTarget(t *testing.T) {
+	log, out := logtest.Logger()
+	h, gh, sl := routed(log)
+	for target, want := range map[string]*fakePass{"solo": gh, "T0SLACK": sl} {
+		gh.targets, sl.targets = nil, nil
+		if _, err := h.Handle(context.Background(), json.RawMessage(`{"kind":"tick","target":"`+target+`"}`)); err != nil {
+			t.Fatalf("%s: %v", target, err)
+		}
+		if len(want.targets) != 1 || len(gh.targets)+len(sl.targets) != 1 {
+			t.Errorf("%s: github ran %v, slack ran %v", target, gh.targets, sl.targets)
+		}
+	}
+	gh.targets, sl.targets = nil, nil
+	_, err := h.Handle(context.Background(), json.RawMessage(`{"kind":"tick","target":"acme"}`))
+	if err == nil || !strings.Contains(err.Error(), "github and slack") {
+		t.Fatalf("an ambiguous legacy event: %v, want a refusal naming both controllers", err)
+	}
+	if len(gh.targets)+len(sl.targets) != 0 {
+		t.Errorf("an ambiguous legacy event ran github %v, slack %v", gh.targets, sl.targets)
+	}
+	recs := out.Records()
+	if len(recs) != 1 || recs[0].Level != slog.LevelError || recs[0].String("controllers") != "github,slack" {
+		t.Errorf("the refusal was not logged at ERROR with both controllers: %+v", recs)
+	}
+}
+
+func TestAnUnknownControllerAndAnUndeclaredTargetAreRefused(t *testing.T) {
+	h, gh, sl := routed(nil)
+	for event, want := range map[string]string{
+		`{"kind":"tick","controller":"google","target":"acme"}`:   `"google"`,
+		`{"kind":"run","controller":"google","target":"acme"}`:    `"google"`,
+		`{"kind":"tick","controller":"slack","target":"solo"}`:    "not declared for the slack controller",
+		`{"kind":"run","controller":"github","target":"T0SLACK"}`: "not declared for the github controller",
+		`{"kind":"tick","controller":"github","target":"nobody"}`: "not declared for the github controller",
+	} {
+		_, err := h.Handle(context.Background(), json.RawMessage(event))
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%s: %v, want an error with %q", event, err, want)
+		}
+	}
+	if len(gh.targets)+len(sl.targets) != 0 {
+		t.Errorf("a refused event ran github %v, slack %v", gh.targets, sl.targets)
+	}
+	// A controller given an event for the other one refuses it too.
+	c := &lambdaapp.Controller{Name: "github", Open: func(context.Context) (lambdaapp.Pass, error) { return gh, nil }}
+	if _, err := handle(t, c, `{"kind":"tick","controller":"slack","target":"acme"}`); err == nil {
+		t.Error("the github controller ran an event for slack")
 	}
 }

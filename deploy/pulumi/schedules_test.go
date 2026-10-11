@@ -34,9 +34,9 @@ func TestSchedulesTargetTheirModulesLiveAlias(t *testing.T) {
 	rec, out := mustLambda(t, scheduled(v5Estate()))
 	live := liveOf
 	want := map[string]string{
-		"sluis-github-acme":         `{"kind":"tick","target":"acme"} ` + live("sluis-staging-github"),
-		"sluis-github-github-links": `{"kind":"tick","target":"github:links"} ` + live("sluis-staging-github"),
-		"sluis-slack-T1":            `{"kind":"tick","target":"T1"} ` + live("sluis-staging-slack"),
+		"sluis-github-acme":         `{"controller":"github","kind":"tick","target":"acme"} ` + live("sluis-staging-github"),
+		"sluis-github-github-links": `{"controller":"github","kind":"tick","target":"github:links"} ` + live("sluis-staging-github"),
+		"sluis-slack-T1":            `{"controller":"slack","kind":"tick","target":"T1"} ` + live("sluis-staging-slack"),
 		"sluis-directory-refresh":   `{"kind":"refresh"} ` + live("sluis-staging-google"),
 		"sluis-issuer-clients":      `{"kind":"clients"} ` + live("sluis"),
 	}

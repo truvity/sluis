@@ -59,17 +59,18 @@ func open(ctx context.Context, file string) (*lambdaapp.Function, error) {
 	// invoke) built the trigger; it is told which kind a target is, from the
 	// policy that declares them.
 	set := service.Policy()
-	kindOf := func(target string) string {
-		if set.SlackWorkspaceDeclared(target) {
-			return invoke.KindSlack
-		}
+	kindsOf := func(target string) []string {
+		var kinds []string
 		if _, bound := set.Declared().GitHub[target]; bound || target == githubcontroller.LinksTarget {
-			return invoke.KindGitHub
+			kinds = append(kinds, invoke.KindGitHub)
 		}
-		return ""
+		if set.SlackWorkspaceDeclared(target) {
+			kinds = append(kinds, invoke.KindSlack)
+		}
+		return kinds
 	}
 	if t, ok := service.Trigger().(*invoke.Trigger); ok {
-		t.SetKind(kindOf)
+		t.SetKinds(kindsOf)
 	} else {
 		log.WarnContext(ctx, "run-now cannot reach the controllers: adapters.trigger is not invoke, so a console write "+
 			"is picked up at the controller's next scheduled tick")
@@ -110,7 +111,7 @@ func open(ctx context.Context, file string) (*lambdaapp.Function, error) {
 		// snapshots and both are the Google module's.
 		service.UseRequestRefresh(hub.DefaultRequestRefreshTimeout)
 	}
-	http := lambdaapp.NewHTTP(service.Handler(), service.Settle, log).WithControllers(kindOf, controllers).WithCheck(lambdaapp.CheckFunc(file))
+	http := lambdaapp.NewHTTP(service.Handler(), service.Settle, log).WithControllers(kindsOf, controllers).WithCheck(lambdaapp.CheckFunc(file))
 	if service.Cloudflare() != nil && (cfg.Cloudflare == nil || cfg.Cloudflare.Remote == nil) {
 		http.WithCloudflare(func(ctx context.Context) (int, string, error) {
 			res, err := service.TickCloudflare(ctx)

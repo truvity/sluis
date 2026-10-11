@@ -201,6 +201,32 @@ type Catalogue struct {
 	Apps []App `yaml:"apps"`
 }
 
+// legacyEvents are webhook events GitHub's App manifest refuses in
+// default_events: they exist for organisation and repository webhooks only.
+// The value is the message.
+var legacyEvents = map[string]string{
+	"package": "GitHub Apps cannot subscribe to the legacy `package` event; use `registry_package` (permission packages: read)",
+}
+
+// eventPermission is the permission an event needs, at read or above: GitHub
+// refuses a manifest whose default_events are not covered by its permissions.
+// It lists the common events, not every one; an event not here is not checked.
+var eventPermission = map[string]string{
+	"push":             "contents",
+	"create":           "contents",
+	"delete":           "contents",
+	"release":          "contents",
+	"pull_request":     "pull_requests",
+	"registry_package": "packages",
+	"workflow_run":     "actions",
+	"workflow_job":     "actions",
+	"issues":           "issues",
+	"check_run":        "checks",
+	"check_suite":      "checks",
+	"deployment":       "deployments",
+	"status":           "statuses",
+}
+
 var (
 	idPattern         = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$`)
 	permissionPattern = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
@@ -345,6 +371,14 @@ func (a *App) Validate() error {
 	for _, event := range a.Events {
 		if !eventPattern.MatchString(event) {
 			fail("events: %q is not an event name", event)
+			continue
+		}
+		if msg, ok := legacyEvents[event]; ok {
+			fail("events: %s: %s", a.ID, msg)
+			continue
+		}
+		if perm, ok := eventPermission[event]; ok && !Covers(a.Permissions[perm], "read") {
+			fail("events: %s: event %q needs permission %s: read, which the App does not declare", a.ID, event, perm)
 		}
 	}
 	if a.Webhook != nil {

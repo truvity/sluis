@@ -26,8 +26,8 @@ See [sluis on AWS Lambda](../../concepts/sluis/lambda.md) and [the Pulumi librar
 | Event | Runs | Sent by |
 |---|---|---|
 | API Gateway HTTP API, payload 2.0 | Issuer and console mux. REST API and ALB shapes are refused | API Gateway |
-| `{"kind":"tick","target":"<id>"}` | One pass of one target | EventBridge Scheduler, one schedule per target |
-| `{"kind":"run","target":"<id>"}` | The same pass, "run now" | The console, through the `invoke` trigger adapter (`InvocationType: Event`) |
+| `{"kind":"tick","controller":"github"\|"slack","target":"<id>"}` | One pass of one target | EventBridge Scheduler, one schedule per target |
+| `{"kind":"run","controller":"github"\|"slack","target":"<id>"}` | The same pass, "run now" | The console, through the `invoke` trigger adapter (`InvocationType: Event`) |
 | `{"kind":"clients"}` | One reconcile of the generated client secrets, and nothing else | EventBridge Scheduler |
 | `{"kind":"refresh"}` | The name before `clients`, accepted for one release: the same reconcile, and one directory refresh under the refresh lease (`DirectoryRefresh.Rate`, 15 minutes) where the directory is hosted in the process, none where `google.remote` is set | EventBridge Scheduler |
 | `{"kind":"check"}` | Each declared secret is read; a missing one fails it | A deploy |

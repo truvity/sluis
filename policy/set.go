@@ -110,13 +110,6 @@ func (s *Set) ScopeGroups(audience string, held []string) (kept, dropped []strin
 	return s.declared.ScopeGroups(audience, held)
 }
 
-// ClaimsFor merges the claims fragments of groups -- see [Policy.ClaimsFor].
-func (s *Set) ClaimsFor(groups []string) map[string]any {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.declared.ClaimsFor(groups)
-}
-
 // Client returns a declared client.
 func (s *Set) Client(id string) (Client, bool) {
 	s.mu.RLock()
@@ -442,11 +435,6 @@ func (p *Policy) mergeLayer(other Policy, from string) error {
 	}
 	if err := mergeTable(&p.Claims, other.Claims, func(name string) error {
 		return fmt.Errorf("%s: claims for %q are declared twice", from, name)
-	}); err != nil {
-		return err
-	}
-	if err := mergeTable(&p.ClaimMerge, other.ClaimMerge, func(path string) error {
-		return fmt.Errorf("%s: claim_merge for %q is declared twice", from, path)
 	}); err != nil {
 		return err
 	}

@@ -6,7 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/aws/aws-lambda-go/lambdacontext"
@@ -82,11 +84,15 @@ type Controller struct {
 	Unknown func(error) bool
 }
 
-// Handle implements [Handler]: payload is {"kind":"tick"|"run","target":"<id>"}.
+// Handle implements [Handler]: payload is
+// {"kind":"tick"|"run","controller":"github"|"slack","target":"<id>"}.
 func (c *Controller) Handle(ctx context.Context, payload json.RawMessage) (any, error) {
 	event, err := ParseEvent(payload)
 	if err != nil {
 		return nil, err
+	}
+	if event.Controller != "" && c.Name != "" && event.Controller != c.Name {
+		return nil, fmt.Errorf("the event is for the %q controller, not %q", oneLine(event.Controller), c.Name)
 	}
 	log := c.Log
 	if log == nil {
@@ -303,22 +309,48 @@ func (h *HTTP) refreshDirectory(ctx context.Context, payload json.RawMessage) (a
 	return res, nil
 }
 
-// controller runs one pass of the event's target under the controller of its
-// kind. The kind of a target is the policy's to say (a GitHub organisation's
-// login and a Slack workspace's key are not told apart by their spelling), so a
-// target nobody declares has no controller: for a run-now, which any caller may
-// send, that ends cleanly; for a schedule, which names its target itself, it is
-// a failure the schedule sees.
+// controller runs one pass of the event's target under one controller.
+//
+// The kind of a target is the policy's to say (a GitHub organisation's login and
+// a Slack workspace's key are not told apart by their spelling, and one name may
+// be both), so an event names the controller it is for: the schedules and the
+// run-now trigger set `controller`, and it is followed strictly, refusing an
+// unknown controller and a target the controller does not declare. An event
+// without it is a schedule an older library rendered; it is routed only when
+// exactly one controller declares the target, and refused when both do, because
+// running the wrong one takes the other's lease and syncs nothing. A target
+// nobody declares has no controller: for a run-now, which any caller may send,
+// that ends cleanly; for a schedule, which names its target itself, it is a
+// failure the schedule sees.
 func (h *HTTP) controller(ctx context.Context, payload json.RawMessage) (any, error) {
 	event, err := ParseEvent(payload)
 	if err != nil {
 		return nil, err
 	}
-	kind := ""
-	if h.kindOf != nil {
-		kind = h.kindOf(event.Target)
+	var declared []string
+	if h.kindsOf != nil {
+		declared = h.kindsOf(event.Target)
 	}
-	c := h.controllers[kind]
+	name := event.Controller
+	switch {
+	case name != "":
+		if h.controllers[name] == nil {
+			return nil, fmt.Errorf("the event's controller is %q: this function runs %s", oneLine(name), h.controllerNames())
+		}
+		if !slices.Contains(declared, name) {
+			return nil, fmt.Errorf("the target %q is not declared for the %s controller", oneLine(event.Target), name)
+		}
+	case len(declared) == 1:
+		name = declared[0]
+	case len(declared) > 1:
+		h.log.ErrorContext(ctx, "an event names no controller and its target is declared for more than one: it is refused; "+
+			"redeploy the schedule so that it carries \"controller\"",
+			logattr.SafeString("kind", event.Kind), logattr.SafeString("target", event.Target),
+			slog.String("controllers", strings.Join(declared, ",")))
+		return nil, fmt.Errorf("the target %q is declared for both the %s controllers and the event names none: "+
+			"set \"controller\" in the event (a schedule of an older library does not)", oneLine(event.Target), strings.Join(declared, " and "))
+	}
+	c := h.controllers[name]
 	if c == nil {
 		if event.Kind == KindRun {
 			h.log.InfoContext(ctx, "a run-now for a target no controller of this function runs", logattr.SafeString("target", event.Target))
@@ -327,6 +359,15 @@ func (h *HTTP) controller(ctx context.Context, payload json.RawMessage) (any, er
 		return nil, fmt.Errorf("the target %q is declared by no controller this function runs", oneLine(event.Target))
 	}
 	return c.Handle(ctx, payload)
+}
+
+// controllerNames lists the controllers this function runs, for an error.
+func (h *HTTP) controllerNames() string {
+	names := slices.Sorted(maps.Keys(h.controllers))
+	if len(names) == 0 {
+		return "none"
+	}
+	return strings.Join(names, ", ")
 }
 
 // tickCloudflare runs one pass over the Cloudflare presets. A preset that did

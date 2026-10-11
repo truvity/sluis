@@ -58,42 +58,6 @@
       "additionalProperties": false,
       "description": "The access model's tables (docs/reference/sluis/policy.md): the groups, the clients, the resources, the GitHub and Slack bindings. They are the policy document's, unchanged.",
       "properties": {
-        "claim_merge": {
-          "additionalProperties": {
-            "additionalProperties": false,
-            "description": "A join rule.",
-            "properties": {
-              "as": {
-                "description": "`list` (default): a one-element list; `string`: the bare string.",
-                "enum": [
-                  "list",
-                  "string"
-                ]
-              },
-              "join": {
-                "description": "Goes between the strings (required, non-empty).",
-                "minLength": 1,
-                "type": "string"
-              },
-              "prefix": {
-                "description": "Before the joined string.",
-                "minLength": 1,
-                "type": "string"
-              },
-              "suffix": {
-                "description": "After the joined string.",
-                "minLength": 1,
-                "type": "string"
-              }
-            },
-            "required": [
-              "join"
-            ],
-            "type": "object"
-          },
-          "description": "Claims whose fragment lists are joined into one string, by dotted claim path (docs/reference/sluis/policy.md#claims).",
-          "type": "object"
-        },
         "claims": {
           "additionalProperties": {
             "description": "A claims fragment: merged into the token (docs/reference/sluis/policy.md#claims).",

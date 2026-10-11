@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"reflect"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -34,7 +35,7 @@ func TestNotifyInvokesTheFunctionAsynchronouslyWithARunEvent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	trigger.SetKind(func(string) string { return invoke.KindGitHub })
+	trigger.SetKinds(func(string) []string { return []string{invoke.KindGitHub} })
 	if err = trigger.Notify(context.Background(), "acme"); err != nil {
 		t.Fatalf("Notify: %v", err)
 	}
@@ -55,7 +56,7 @@ func TestNotifyInvokesTheFunctionAsynchronouslyWithARunEvent(t *testing.T) {
 	if err = json.Unmarshal(call.Payload, &event); err != nil {
 		t.Fatal(err)
 	}
-	if event != (invoke.Event{Kind: "run", Target: "acme"}) {
+	if event != (invoke.Event{Kind: "run", Controller: "github", Target: "acme"}) {
 		t.Errorf("payload %s", call.Payload)
 	}
 }
@@ -93,11 +94,11 @@ func TestNewRefusesNoFunction(t *testing.T) {
 func TestNotifyInvokesOnlyTheTargetsKind(t *testing.T) {
 	api := &fake{status: 202}
 	trigger, _ := invoke.New(api, invoke.Config{GitHub: "gh", Slack: "sl"})
-	trigger.SetKind(func(target string) string {
+	trigger.SetKinds(func(target string) []string {
 		if target == "T123" {
-			return invoke.KindSlack
+			return []string{invoke.KindSlack}
 		}
-		return invoke.KindGitHub
+		return []string{invoke.KindGitHub}
 	})
 	if err := trigger.Notify(context.Background(), "T123"); err != nil {
 		t.Fatal(err)
@@ -110,7 +111,7 @@ func TestNotifyInvokesOnlyTheTargetsKind(t *testing.T) {
 func TestNotifyOfAnUnknownTargetInvokesEveryFunction(t *testing.T) {
 	api := &fake{status: 202}
 	trigger, _ := invoke.New(api, invoke.Config{GitHub: "gh", Slack: "sl"})
-	trigger.SetKind(func(string) string { return "" })
+	trigger.SetKinds(func(string) []string { return nil })
 	if err := trigger.Notify(context.Background(), "who"); err != nil {
 		t.Fatal(err)
 	}
@@ -123,5 +124,29 @@ func TestTheAdapterIsRegisteredForTheTriggerConcernOnLambda(t *testing.T) {
 	d, ok := port.Default.Lookup(port.ConcernTrigger, "invoke")
 	if !ok || d.Factory == nil || !d.Works(port.RuntimeLambda) || d.Works(port.RuntimeKubernetes) {
 		t.Fatalf("descriptor %+v, registered %v", d, ok)
+	}
+}
+
+func TestNotifyOfANameBothControllersDeclareInvokesEachWithItsController(t *testing.T) {
+	api := &fake{status: 202}
+	trigger, err := invoke.New(api, invoke.Config{GitHub: "sluis", Slack: "sluis"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	trigger.SetKinds(func(string) []string { return []string{invoke.KindGitHub, invoke.KindSlack} })
+	if err = trigger.Notify(context.Background(), "acme"); err != nil {
+		t.Fatal(err)
+	}
+	var got []invoke.Event
+	for _, call := range api.calls {
+		var event invoke.Event
+		if err = json.Unmarshal(call.Payload, &event); err != nil {
+			t.Fatal(err)
+		}
+		got = append(got, event)
+	}
+	want := []invoke.Event{{Kind: "run", Controller: "github", Target: "acme"}, {Kind: "run", Controller: "slack", Target: "acme"}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("events %+v, want %+v", got, want)
 	}
 }
