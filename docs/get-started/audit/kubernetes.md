@@ -40,7 +40,7 @@ audit:
   mode: direct
   replicas: 2                              # writer.config.replicas must say the same
   presets:                                 # required: security needs the standard preset
-    standard: {bucket: audit-eu-example-1, region: eu-example-1, prefix: audit/app/, key_alias: alias/audit-archive}
+    standard: {bucket: audit-eu-example-1, region: eu-example-1, prefix: audit/app/, key_alias: alias/sluis-example-audit-archive}
   profiles:
     security:
       frameworks: [security]                  # each is a framework profile

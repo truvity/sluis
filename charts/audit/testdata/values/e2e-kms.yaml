@@ -26,10 +26,10 @@ writer:
       adapter: kms
       instance: audit-e2e
       pseudonym:
-        key: alias/audit-pseudonym
+        key: alias/sluis-example-audit-pseudonym
       # Who is behind a pseudonym is kept sealed under this key (resolve opens it).
       conceal:
-        key: alias/audit-conceal
+        key: alias/sluis-example-audit-conceal
       # No SSM: the wrapped secrets are rows in the database above.
       state:
         backend: database
@@ -66,7 +66,7 @@ jobs:
         # Names the installation in the encryption context; stable, not secret.
         instance: audit-e2e
         seal:
-          key: alias/audit-seal
+          key: alias/sluis-example-audit-seal
       sink:
         url: http://audit-e2e:8080
     secretEnv:

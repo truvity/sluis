@@ -48,7 +48,7 @@ audit:
     notary:
       enabled: true
       config:
-        keys: {adapter: kms, seal: {key: alias/audit-seal}}
+        keys: {adapter: kms, seal: {key: alias/sluis-example-audit-seal}}
     clockSync:
       enabled: true
       config:

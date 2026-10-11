@@ -225,7 +225,7 @@ func keyEntryDefs() m {
 				m{"pattern": "^(?i:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$"},
 				m{"pattern": "^(?i:mrk-[0-9a-f]{32})$"},
 			}},
-			"description": "An alias such as alias/audit-seal (kms) or a transit key name. An ARN or a key id is refused.",
+			"description": "An alias such as alias/sluis-<instance>-audit-seal (kms) or a transit key name. An ARN or a key id is refused.",
 		},
 		"context": m{
 			"description": "The encryption context: \"default\" sends {instance, purpose}; \"off\" sends none; an object is sent as is.",

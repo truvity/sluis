@@ -32,7 +32,7 @@ signingKey:
         -----BEGIN PUBLIC KEY-----
         ...
 config:
-  keys: {sign: alias/sluis-signing}
+  keys: {sign: alias/sluis-example-sign}
   signingKey:
     file: null
     kmsWrapped: {region: eu-west-1, stateSecret: issuer/state-secret}

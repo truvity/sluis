@@ -218,7 +218,7 @@ func (p *PortProvider) cipherErr(tenant string, purpose Purpose, err error) erro
 type PortSigner struct {
 	Key *skeys.Key
 	// Name is what KeyID answers, the adapter and alias of the key
-	// ("kms:alias/audit-seal").
+	// ("kms:alias/sluis-<instance>-audit-seal").
 	Name string
 }
 

@@ -215,7 +215,7 @@
           "description": "The key that seals each backup's data key (purpose `archive`): an alias, or {key, context}. The same as `keys.archive`; give one of them. The adapter is `keys.adapter`, or kms.",
           "oneOf": [
             {
-              "description": "An alias such as alias/audit-seal (kms) or a transit key name. An ARN or a key id is refused.",
+              "description": "An alias such as alias/sluis-<instance>-audit-seal (kms) or a transit key name. An ARN or a key id is refused.",
               "minLength": 1,
               "not": {
                 "anyOf": [
@@ -255,7 +255,7 @@
                   ]
                 },
                 "key": {
-                  "description": "An alias such as alias/audit-seal (kms) or a transit key name. An ARN or a key id is refused.",
+                  "description": "An alias such as alias/sluis-<instance>-audit-seal (kms) or a transit key name. An ARN or a key id is refused.",
                   "minLength": 1,
                   "not": {
                     "anyOf": [
@@ -378,7 +378,7 @@
           "description": "Long-term storage.",
           "oneOf": [
             {
-              "description": "An alias such as alias/audit-seal (kms) or a transit key name. An ARN or a key id is refused.",
+              "description": "An alias such as alias/sluis-<instance>-audit-seal (kms) or a transit key name. An ARN or a key id is refused.",
               "minLength": 1,
               "not": {
                 "anyOf": [
@@ -418,7 +418,7 @@
                   ]
                 },
                 "key": {
-                  "description": "An alias such as alias/audit-seal (kms) or a transit key name. An ARN or a key id is refused.",
+                  "description": "An alias such as alias/sluis-<instance>-audit-seal (kms) or a transit key name. An ARN or a key id is refused.",
                   "minLength": 1,
                   "not": {
                     "anyOf": [
@@ -448,7 +448,7 @@
           "description": "Values that must be recoverable.",
           "oneOf": [
             {
-              "description": "An alias such as alias/audit-seal (kms) or a transit key name. An ARN or a key id is refused.",
+              "description": "An alias such as alias/sluis-<instance>-audit-seal (kms) or a transit key name. An ARN or a key id is refused.",
               "minLength": 1,
               "not": {
                 "anyOf": [
@@ -488,7 +488,7 @@
                   ]
                 },
                 "key": {
-                  "description": "An alias such as alias/audit-seal (kms) or a transit key name. An ARN or a key id is refused.",
+                  "description": "An alias such as alias/sluis-<instance>-audit-seal (kms) or a transit key name. An ARN or a key id is refused.",
                   "minLength": 1,
                   "not": {
                     "anyOf": [
@@ -518,7 +518,7 @@
           "description": "Per-tenant pseudonyms.",
           "oneOf": [
             {
-              "description": "An alias such as alias/audit-seal (kms) or a transit key name. An ARN or a key id is refused.",
+              "description": "An alias such as alias/sluis-<instance>-audit-seal (kms) or a transit key name. An ARN or a key id is refused.",
               "minLength": 1,
               "not": {
                 "anyOf": [
@@ -558,7 +558,7 @@
                   ]
                 },
                 "key": {
-                  "description": "An alias such as alias/audit-seal (kms) or a transit key name. An ARN or a key id is refused.",
+                  "description": "An alias such as alias/sluis-<instance>-audit-seal (kms) or a transit key name. An ARN or a key id is refused.",
                   "minLength": 1,
                   "not": {
                     "anyOf": [
@@ -588,7 +588,7 @@
           "description": "Sealing the audit trail.",
           "oneOf": [
             {
-              "description": "An alias such as alias/audit-seal (kms) or a transit key name. An ARN or a key id is refused.",
+              "description": "An alias such as alias/sluis-<instance>-audit-seal (kms) or a transit key name. An ARN or a key id is refused.",
               "minLength": 1,
               "not": {
                 "anyOf": [
@@ -628,7 +628,7 @@
                   ]
                 },
                 "key": {
-                  "description": "An alias such as alias/audit-seal (kms) or a transit key name. An ARN or a key id is refused.",
+                  "description": "An alias such as alias/sluis-<instance>-audit-seal (kms) or a transit key name. An ARN or a key id is refused.",
                   "minLength": 1,
                   "not": {
                     "anyOf": [
@@ -658,7 +658,7 @@
           "description": "Token signing: the symmetric key that wraps a locally generated signing ring, or an asymmetric key that signs directly (deprecated).",
           "oneOf": [
             {
-              "description": "An alias such as alias/audit-seal (kms) or a transit key name. An ARN or a key id is refused.",
+              "description": "An alias such as alias/sluis-<instance>-audit-seal (kms) or a transit key name. An ARN or a key id is refused.",
               "minLength": 1,
               "not": {
                 "anyOf": [
@@ -698,7 +698,7 @@
                   ]
                 },
                 "key": {
-                  "description": "An alias such as alias/audit-seal (kms) or a transit key name. An ARN or a key id is refused.",
+                  "description": "An alias such as alias/sluis-<instance>-audit-seal (kms) or a transit key name. An ARN or a key id is refused.",
                   "minLength": 1,
                   "not": {
                     "anyOf": [

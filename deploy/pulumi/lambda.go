@@ -33,10 +33,6 @@ const LiveAlias = sluisconfig.LiveAlias
 // LambdaType is the Pulumi type token of the Lambda component.
 const LambdaType = "sluis:aws:Lambda"
 
-// DefaultSigningKeyAlias is the token-signing key's alias when
-// LambdaArgs.SigningKeyAlias is empty.
-const DefaultSigningKeyAlias = "alias/sluis-signing"
-
 // DefaultSigningKeyRS256Alias is the RSA signing key's alias when
 // LambdaArgs.SigningKeyRS256Alias is empty.
 const DefaultSigningKeyRS256Alias = "alias/sluis-signing-rs256"
@@ -230,8 +226,10 @@ type LambdaArgs struct {
 	// Exclusive with them.
 	Keys *KeysArgs
 
-	// SigningKeyAlias is the token-signing key's alias. Default
-	// DefaultSigningKeyAlias. It must start with "alias/".
+	// SigningKeyAlias is the token-signing key's alias. Required while the
+	// library creates the key (Keys nil and WrappedSigning nil), with no
+	// default: a purpose-named alias such as "alias/sluis-<instance>-sign".
+	// It must start with "alias/".
 	//
 	// Deprecated: supply the key with Keys; the library then creates none.
 	SigningKeyAlias string
@@ -905,9 +903,6 @@ func (a *LambdaArgs) validate() (LambdaArgs, error) {
 		}
 		out.Artifacts = &norm
 	}
-	if out.SigningKeyAlias == "" {
-		out.SigningKeyAlias = DefaultSigningKeyAlias
-	}
 	if out.SigningKeyRS256Alias == "" {
 		out.SigningKeyRS256Alias = DefaultSigningKeyRS256Alias
 	}
@@ -923,6 +918,10 @@ func (a *LambdaArgs) validate() (LambdaArgs, error) {
 		}
 	}
 	if out.remoteSigning() {
+		if out.SigningKeyAlias == "" {
+			return out, errors.New("sluispulumi: LambdaArgs.SigningKeyAlias is required when the library creates the signing key (Keys and WrappedSigning unset): " +
+				"it has no default, set it to an alias such as \"alias/sluis-<instance>-sign\", or supply the keys with Keys")
+		}
 		if !out.DisableSigningKeyRS256 && (!strings.HasPrefix(out.SigningKeyRS256Alias, "alias/") || len(out.SigningKeyRS256Alias) == len("alias/")) {
 			return out, fmt.Errorf("sluispulumi: LambdaArgs.SigningKeyRS256Alias %q must start with \"alias/\"", out.SigningKeyRS256Alias)
 		}

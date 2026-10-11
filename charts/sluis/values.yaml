@@ -269,7 +269,7 @@ config:
   #   signingKey:
   #     file: null
   #     kmsWrapped:
-  #       keyId: alias/sluis-signing
+  #       keyId: alias/sluis-example-sign
   #       region: eu-west-1
   #       stateSecret: signing/state   # a name in `secrets`
   #       rotateEvery: 24h

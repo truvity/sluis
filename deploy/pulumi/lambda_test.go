@@ -81,6 +81,7 @@ type estate struct {
 	orgs, workspaces    []string
 	rate                string
 	telemetry           bool
+	noSigningAlias      bool // leave SigningKeyAlias empty on the legacy path
 	keepDefaultEndpoint bool
 	mutate              func(*arp.LambdaArgs)
 }
@@ -124,6 +125,10 @@ func (e estate) args(t *testing.T) *arp.LambdaArgs {
 	}
 	if e.mutate != nil {
 		e.mutate(a)
+	}
+	// The library has no default alias: a legacy-path estate names its own.
+	if a.Keys == nil && a.WrappedSigning == nil && a.SigningKeyAlias == "" && !e.noSigningAlias {
+		a.SigningKeyAlias = "alias/sluis-staging-sign"
 	}
 	return a
 }
@@ -366,7 +371,7 @@ func shape(t *testing.T, rec *recorder, out map[string]string, domain string) {
 			t.Errorf("%s is not protected", name)
 		}
 	}
-	if out["signingKeyAlias"] != "alias/sluis-signing" || out["signingKeyRS256Alias"] != "alias/sluis-signing-rs256" || out["signingKeyRS256ID"] == "" {
+	if out["signingKeyAlias"] != "alias/sluis-staging-sign" || out["signingKeyRS256Alias"] != "alias/sluis-signing-rs256" || out["signingKeyRS256ID"] == "" {
 		t.Errorf("aliases %q %q", out["signingKeyAlias"], out["signingKeyRS256Alias"])
 	}
 	if rec.has("aws:kms/key:Key", "staging-sealer-key") || rec.has("aws:kms/alias:Alias", "staging-sealer-alias") {
@@ -480,7 +485,6 @@ func TestTheHiveShapeIsExpressible(t *testing.T) {
 		orgs: []string{"acme"}, keepDefaultEndpoint: false,
 		mutate: func(a *arp.LambdaArgs) {
 			a.API.DomainName = "access.two.example.test"
-			a.SigningKeyAlias = ""
 		},
 	})
 	shape(t, rec, out, "access.two.example.test")
@@ -789,7 +793,7 @@ func TestTheLambdaInputsAreRequiredAndChecked(t *testing.T) {
 		"no domain":           func(a *arp.LambdaArgs) { a.API.DomainName = "" },
 		"bad alias":           func(a *arp.LambdaArgs) { a.SigningKeyAlias = "signing" },
 		"bad rs256 alias":     func(a *arp.LambdaArgs) { a.SigningKeyRS256Alias = "signing" },
-		"same alias":          func(a *arp.LambdaArgs) { a.SigningKeyRS256Alias = arp.DefaultSigningKeyAlias },
+		"same alias":          func(a *arp.LambdaArgs) { a.SigningKeyRS256Alias = "alias/sluis-staging-sign" },
 		"bad rate":            func(a *arp.LambdaArgs) { a.Schedule.Rate = "5 minutes" },
 		"bad target":          func(a *arp.LambdaArgs) { a.Schedule.GitHubOrgs = []string{"a b"} },
 		"duplicate":           func(a *arp.LambdaArgs) { a.Schedule.SlackWorkspaces = []string{"T1", "T1"} },
@@ -1735,5 +1739,12 @@ func TestThePostDeployCheckIsAbsentWhenOff(t *testing.T) {
 	}
 	if out["declaredParameters"] != "internal/config/recovery/password" {
 		t.Errorf("declaredParameters %q with Check: false", out["declaredParameters"])
+	}
+}
+
+func TestLegacyKeyPathRequiresASigningKeyAlias(t *testing.T) {
+	_, _, err := buildLambda(t, estate{orgs: []string{"acme"}, noSigningAlias: true})
+	if err == nil || !strings.Contains(err.Error(), "LambdaArgs.SigningKeyAlias is required") {
+		t.Fatalf("want an error naming LambdaArgs.SigningKeyAlias, got %v", err)
 	}
 }

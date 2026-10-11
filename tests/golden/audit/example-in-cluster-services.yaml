@@ -119,7 +119,7 @@ data:
     presets:
       standard:
         bucket: audit-eu-example-1
-        key_alias: alias/audit-archive
+        key_alias: alias/sluis-example-audit-archive
         prefix: audit/
         region: eu-example-1
 
@@ -215,7 +215,7 @@ data:
       adapter: kms
       instance: audit
       seal:
-        key: alias/audit-seal
+        key: alias/sluis-example-audit-seal
     sink:
       url: http://audit:8080
 
@@ -356,7 +356,7 @@ spec:
         app.kubernetes.io/component: observe
       annotations:
         checksum/config: a5de0a49c39b323c6417db11f9f0a62eebf057f7bc9984ed4e31532ef35f88ae
-        checksum/deployment: 34229ed0d2c819ddb6d3e6e3acc8576565cae49d7dc16f9cf828a6e0a95d3e7c
+        checksum/deployment: fa612d72e6da8d4680769f7eb11c072a25c95e4576bdd37ddd9ad7665524b676
     spec:
       serviceAccountName: audit-observe
       
@@ -456,7 +456,7 @@ spec:
         checksum/config: 3b6ef20f19a37a2460451f4eef490b3d1f74e37e0884e353d40224ddfbc80cf2
         # Likewise a change to the profile document, hashed whole: it also holds
         # externalIdentifiersAreOpaque, which changes what a profile keeps.
-        checksum/deployment: 34229ed0d2c819ddb6d3e6e3acc8576565cae49d7dc16f9cf828a6e0a95d3e7c
+        checksum/deployment: fa612d72e6da8d4680769f7eb11c072a25c95e4576bdd37ddd9ad7665524b676
         # And who may write: a changed issuer or mapping must reach it.
         checksum/workloads: 274aa3accbe10dbf671359ace426a24af2c33648b7017d8008c24e9eb79c4d06
     spec:
@@ -570,7 +570,7 @@ spec:
         checksum/config: 12faa781670c0faa1ae729c64790d2cbdf0bd28f3cf6666f870067207ac90705
         # Likewise a change to the profile document, hashed whole: it also holds
         # externalIdentifiersAreOpaque, which changes what a profile keeps.
-        checksum/deployment: 34229ed0d2c819ddb6d3e6e3acc8576565cae49d7dc16f9cf828a6e0a95d3e7c
+        checksum/deployment: fa612d72e6da8d4680769f7eb11c072a25c95e4576bdd37ddd9ad7665524b676
         # And who may write: a changed issuer or mapping must reach it.
         checksum/workloads: 274aa3accbe10dbf671359ace426a24af2c33648b7017d8008c24e9eb79c4d06
     spec:
@@ -672,8 +672,8 @@ spec:
             app.kubernetes.io/name: audit
             app.kubernetes.io/instance: audit
           annotations:
-            checksum/config: fa2142a2591b39ec47df0135b863d0a500a7ea80a93b8c657fbec992385566a0
-            checksum/deployment: 34229ed0d2c819ddb6d3e6e3acc8576565cae49d7dc16f9cf828a6e0a95d3e7c
+            checksum/config: 8013ba7be47135d2a0e4dcec1700543736ef5cd9898a694f6d1e23bfe00947a9
+            checksum/deployment: fa612d72e6da8d4680769f7eb11c072a25c95e4576bdd37ddd9ad7665524b676
         spec:
           restartPolicy: OnFailure
           serviceAccountName: audit-notary
@@ -744,7 +744,7 @@ spec:
             app.kubernetes.io/instance: audit
           annotations:
             checksum/config: 5de5af53ee794bcf7195d9a0236dcd8aa74b76c3a6c97bcb6c14322059eaf109
-            checksum/deployment: 34229ed0d2c819ddb6d3e6e3acc8576565cae49d7dc16f9cf828a6e0a95d3e7c
+            checksum/deployment: fa612d72e6da8d4680769f7eb11c072a25c95e4576bdd37ddd9ad7665524b676
         spec:
           restartPolicy: OnFailure
           serviceAccountName: audit-verify

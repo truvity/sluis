@@ -74,7 +74,7 @@ presets:
     bucket: example-audit-main
     prefix: standard/
     region: eu-central-1
-    key_alias: alias/audit-archive                         # AWS S3 only; a name, never a key id or ARN
+    key_alias: alias/sluis-example-audit-archive                         # AWS S3 only; a name, never a key id or ARN
   attested:
     bucket: example-audit-locked
     prefix: attested/

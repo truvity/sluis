@@ -13,7 +13,7 @@ config:
   signingKey:
     file: null
     kmsWrapped:
-      keyId: alias/sluis-signing
+      keyId: alias/sluis-example-sign
       region: eu-west-1
       stateSecret: internal/oidc/state-secret
   secrets:

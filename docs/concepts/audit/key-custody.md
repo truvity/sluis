@@ -65,12 +65,12 @@ The notary (`audit-notary`) signs each hourly seal ES384 with a P-384 key. The w
 ```sh
 aws kms create-key --key-spec ECC_NIST_P384 --key-usage SIGN_VERIFY \
   --description "audit seals"
-aws kms create-alias --alias-name alias/audit-seal --target-key-id <key id>
+aws kms create-alias --alias-name alias/sluis-<instance>-audit-seal --target-key-id <key id>
 ```
 
 The notary signs a SHA-384 digest (`MessageType DIGEST`, `ECDSA_SHA_384`). A key of another spec is refused at start. CloudTrail `Sign` events record when the notary signed.
 
-`audit key public --kms-key alias/audit-seal --thumbprint` prints the RFC 7638 thumbprint a verifier pins. `--jwks` prints the JWK Set for `keys/roots.jwks`. The default is PEM.
+`audit key public --kms-key alias/sluis-<instance>-audit-seal --thumbprint` prints the RFC 7638 thumbprint a verifier pins. `--jwks` prints the JWK Set for `keys/roots.jwks`. The default is PEM.
 
 The notary writes `keys/roots.jwks` once if the bucket has none. It refuses to sign if the file omits its key.
 

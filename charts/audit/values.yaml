@@ -400,7 +400,7 @@ profiles: {}
 #     bucket: audit-eu-example-1
 #     prefix: standard/
 #     region: eu-example-1
-#     key_alias: alias/audit-archive
+#     key_alias: alias/sluis-example-audit-archive
 #
 # Mixed: standard copies in a bucket of their own, attested ones in a bucket
 # with Object Lock (the bucket's own setting, which the chart does not create).
