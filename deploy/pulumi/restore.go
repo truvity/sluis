@@ -130,7 +130,8 @@ func NewRestore(ctx *pulumi.Context, name string, args *RestoreArgs, opts ...pul
 	parent := pulumi.Parent(out)
 	self := p.restoreAliasArns()
 	classes := []string{ClassAdmin, ClassBreakglass}
-	fn, err := buildFunction(ctx, name, p, pulumi.String(arnPrefix+"s3:::"+p.Archive.Bucket), classes, []string{CallerAlias(ClassAdmin), CallerAlias(ClassBreakglass)}, true,
+	noRetry := []string{CallerAlias(ClassAdmin), CallerAlias(ClassBreakglass)}
+	fn, err := buildFunction(ctx, name, p, pulumi.String(arnPrefix+"s3:::"+p.Archive.Bucket), classes, noRetry, true,
 		func(env ModuleEnv, g ArchiveGrant) ([]map[string]any, error) {
 			return RestoreRoleStatements(env, g, self)
 		}, out)
