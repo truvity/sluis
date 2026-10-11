@@ -1,9 +1,8 @@
-# split: one workload per module. The issuer and the modules it calls (github,
+# Every module on: the issuer and the modules it calls (github,
 # google, cloudflare) and the two controllers (github, slack): each has a
 # Deployment, a ServiceAccount and a ConfigMap with its own document; github,
 # google and cloudflare have a Service on /rpc and an auth-delegator binding;
 # the controllers' Role is bound to the github and slack accounts only.
-split: true
 config:
   issuerURL: https://issuer.example
   controllers:

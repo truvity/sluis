@@ -1,13 +1,13 @@
 {{- include "sluis.prepare" . -}}
 {{- if eq .Values.renders "app" -}}
-{{- /* With `split` a controller is on when its module is, and the Role is bound to the module's own account. */}}
-{{- $split := include "sluis.split" . -}}
-{{- $github := ternary (include "sluis.moduleOn" (dict "root" . "module" "github")) (include "sluis.controllerOn" (dict "root" . "kind" "github")) (ne $split "") -}}
-{{- $slack := ternary (include "sluis.moduleOn" (dict "root" . "module" "slack")) (include "sluis.controllerOn" (dict "root" . "kind" "slack")) (ne $split "") -}}
+{{- /* A controller runs in its module's pod, which the Role is bound to; in documents mode the issuer's pod runs what its document names. */}}
+{{- $issuer := dict "root" . "module" "issuer" -}}
+{{- $github := or (include "sluis.moduleOn" (dict "root" . "module" "github")) (include "sluis.hosts" (merge (dict "kind" "github") $issuer)) -}}
+{{- $slack := or (include "sluis.moduleOn" (dict "root" . "module" "slack")) (include "sluis.hosts" (merge (dict "kind" "slack") $issuer)) -}}
 {{- if or $github $slack }}
 ---
 # What the controllers in this process may do to the cluster, bound to the
-# service's own account (there is one account and one pod). Update, by name,
+# accounts of the pods that run them (the github and slack modules'). Update, by name,
 # the ConfigMaps they report into, and the one Secret people's linked GitHub
 # accounts are kept in: each link's token pair rotates every time it is renewed,
 # and the renewed pair has to be written back. The service creates those
@@ -51,21 +51,18 @@ roleRef:
   kind: Role
   name: {{ include "sluis.fullname" . }}-controllers
 subjects:
-  {{- if $split }}
-  {{- if $github }}
+  {{- $accounts := list }}
+  {{- range $kind := list "github" "slack" }}
+  {{- $host := ternary $kind "issuer" (include "sluis.moduleOn" (dict "root" $ "module" $kind) | ne "" ) }}
+  {{- if or (include "sluis.moduleOn" (dict "root" $ "module" $kind)) (include "sluis.hosts" (dict "root" $ "module" "issuer" "kind" $kind)) }}
+  {{- $account := include "sluis.moduleAccountName" (dict "root" $ "module" $host) }}
+  {{- if not (has $account $accounts) }}
+  {{- $accounts = append $accounts $account }}
   - kind: ServiceAccount
-    name: {{ include "sluis.moduleAccountName" (dict "root" . "module" "github") }}
-    namespace: {{ .Release.Namespace }}
+    name: {{ $account }}
+    namespace: {{ $.Release.Namespace }}
   {{- end }}
-  {{- if $slack }}
-  - kind: ServiceAccount
-    name: {{ include "sluis.moduleAccountName" (dict "root" . "module" "slack") }}
-    namespace: {{ .Release.Namespace }}
   {{- end }}
-  {{- else }}
-  - kind: ServiceAccount
-    name: {{ include "sluis.serviceAccountName" . }}
-    namespace: {{ .Release.Namespace }}
   {{- end }}
 {{- end }}
 {{ end -}}

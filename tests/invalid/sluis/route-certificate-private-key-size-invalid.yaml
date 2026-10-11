@@ -2,9 +2,13 @@
 # error: route.certificate.privateKey: an ECDSA key takes size 256, 384 or 521
 config:
   issuerURL: https://issuer.example
+  publicRootURL: https://issuer.example
+  publicURL: https://issuer.example/console
 route:
   host: issuer.example
   certificate:
     privateKey:
       algorithm: ECDSA
       size: 4096
+console:
+  mount: /console

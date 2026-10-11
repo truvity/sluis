@@ -1,0 +1,17 @@
+# The accounts and presets belong in the cloudflare module's document: the issuer's holds only cloudflare.remote.
+# error: config.cloudflare is set and modules.cloudflare.enabled is true
+config:
+  issuerURL: https://issuer.example
+  cloudflare:
+    presets: {}
+exchange:
+  clusters:
+    - name: example-cluster
+      issuer: https://oidc.eu-example-1.example/id/EXAMPLE
+      jwksUri: https://oidc.eu-example-1.example/id/EXAMPLE/keys
+modules:
+  cloudflare:
+    enabled: true
+    config:
+      cloudflare:
+        presets: {}

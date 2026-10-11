@@ -1,14 +1,37 @@
 ---
-# Source: sluis/templates/serviceaccount.yaml
-apiVersion: v1
-kind: ServiceAccount
+# Source: sluis/templates/modules.yaml
+# Voluntary disruptions (a node drain) may take down only as many of the
+# issuer module's pods as this allows.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
 metadata:
-  name: sluis
+  name: sluis-issuer
   labels:
     app.kubernetes.io/name: sluis
     app.kubernetes.io/instance: sluis
     app.kubernetes.io/version: "0.0.0"
     app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: issuer
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sluis
+      app.kubernetes.io/instance: sluis
+      app.kubernetes.io/component: issuer
+
+---
+# Source: sluis/templates/modules.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sluis-issuer
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: issuer
 
 ---
 # Source: sluis/templates/serviceaccount.yaml
@@ -28,21 +51,18 @@ metadata:
     app.kubernetes.io/managed-by: Helm
 
 ---
-# Source: sluis/templates/configmap.yaml
-# What `sluis serve --config` reads: `config`, as the values give it, with
-# nothing added, renamed or dropped but the apiVersion the chart writes. The
-# binary validates it against schemas/config/sluis.schema.json at start, and
-# values.schema.json holds the values to the same schema before this renders.
+# Source: sluis/templates/modules.yaml
+# The issuer module's document, read once at start.
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: sluis-config
+  name: sluis-issuer-config
   labels:
     app.kubernetes.io/name: sluis
     app.kubernetes.io/instance: sluis
     app.kubernetes.io/version: "0.0.0"
     app.kubernetes.io/managed-by: Helm
-    app.kubernetes.io/component: serve
+    app.kubernetes.io/component: issuer
 data:
   config.yaml: |
     apiVersion: sluis.truvity.github.io/sluis/v3
@@ -137,7 +157,7 @@ roleRef:
   name: sluis-default-tokenreview
 subjects:
   - kind: ServiceAccount
-    name: sluis
+    name: sluis-issuer
     namespace: default
 
 ---
@@ -177,7 +197,7 @@ roleRef:
   name: sluis
 subjects:
   - kind: ServiceAccount
-    name: sluis
+    name: sluis-issuer
     namespace: default
 
 ---
@@ -195,48 +215,50 @@ spec:
   selector:
     app.kubernetes.io/name: sluis
     app.kubernetes.io/instance: sluis
+    app.kubernetes.io/component: issuer
   ports:
     - name: issuer
       port: 8080
       targetPort: issuer
 
 ---
-# Source: sluis/templates/deployment.yaml
+# Source: sluis/templates/modules.yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: sluis
+  name: sluis-issuer
   labels:
     app.kubernetes.io/name: sluis
     app.kubernetes.io/instance: sluis
     app.kubernetes.io/version: "0.0.0"
     app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: issuer
 spec:
   replicas: 2
   selector:
     matchLabels:
       app.kubernetes.io/name: sluis
       app.kubernetes.io/instance: sluis
+      app.kubernetes.io/component: issuer
   template:
     metadata:
       labels:
         app.kubernetes.io/name: sluis
         app.kubernetes.io/instance: sluis
+        app.kubernetes.io/component: issuer
       annotations:
-        # Configuration and policy are immutable for an instance: each document
-        # is read once, at start, so a change to either is a rollout. One
-        # checksum per document this process reads: the service document (the
-        # controllers' sections are in it) and the policy.
-        checksum/config: 97928ae62d39259a1335c46a3870030906f1163797b112262803112ac1250b7d
+        # Each document is read once, at start: a change to it, or to the
+        # policy, is a rollout.
+        checksum/config: e18c7d50a348b1216ec4e7438c8fd822000991d7c0686a4e1c4ad7cf12f5a29a
         checksum/policy: d8fee78c7b9f81d2a4c598c3b432515f29384a0f4a1fe3e4ccda3db4f307843b
     spec:
-      serviceAccountName: sluis
+      serviceAccountName: sluis-issuer
       securityContext:
         runAsNonRoot: true
         seccompProfile:
           type: RuntimeDefault
       containers:
-        - name: serve
+        - name: issuer
           image: "ghcr.io/truvity/sluis/sluis:0.0.0"
           imagePullPolicy: IfNotPresent
           securityContext:
@@ -249,15 +271,10 @@ spec:
               containerPort: 8080
             - name: health
               containerPort: 7070
-          # The whole of the configuration is the service document, `config`
-          # rendered as it stands, and the policy document it names. The
-          # environment carries only the secrets the document names.
           args:
-            - serve
+            - issuer
             - --config=/etc/sluis/config.yaml
           volumeMounts:
-            # Read once, at start: a subPath is enough, since a change replaces
-            # the pod (checksum/*). The policy keeps its directory.
             - name: config
               mountPath: /etc/sluis/config.yaml
               subPath: config.yaml
@@ -265,28 +282,18 @@ spec:
             - name: policy
               mountPath: /var/run/access-issuer/policy
               readOnly: true
+            - name: tmp
+              mountPath: /tmp
+            
             - name: signing-key
               mountPath: /var/run/access-issuer/signing-key
               readOnly: true
             - name: signing-key-rs256
               mountPath: /var/run/access-issuer/signing-key-rs256
               readOnly: true
-            - name: tmp
-              mountPath: /tmp
-            
           livenessProbe:
             httpGet: { path: /healthz, port: health }
           readinessProbe:
-            # Readiness follows the shared store; liveness deliberately
-            # does not. A replica that cannot reach it leaves the
-            # rotation, and the gateway answers fast instead of hanging;
-            # nothing is restarted, so one blip cannot restart the fleet.
-            #
-            # timeoutSeconds exceeds the service's own 2s check so the
-            # answer is the reason ("the session store does not answer:
-            # i/o timeout") rather than the kubelet's timeout. Three
-            # failures at ten seconds is thirty seconds of trouble before
-            # a replica leaves, which a reconnect comfortably beats.
             httpGet: { path: /readyz, port: health }
             periodSeconds: 10
             timeoutSeconds: 3
@@ -294,21 +301,19 @@ spec:
       volumes:
         - name: config
           configMap:
-            name: sluis-config
+            name: sluis-issuer-config
+        - name: policy
+          configMap:
+            name: sluis-policy
+        - name: tmp
+          emptyDir: {}
+        
         - name: signing-key
           secret:
             secretName: sluis-signing-key
         - name: signing-key-rs256
           secret:
             secretName: sluis-signing-key-rs256
-        - name: policy
-          configMap:
-            name: sluis-policy
-        # The root filesystem is read-only, and the directory backends
-        # want somewhere to write.
-        - name: tmp
-          emptyDir: {}
-        
 
 ---
 # Source: sluis/templates/signing-key.yaml

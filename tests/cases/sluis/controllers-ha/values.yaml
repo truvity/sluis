@@ -1,8 +1,8 @@
-# The controllers in the one process at two replicas: what makes a rollout
+# The controllers, each in its own module at two replicas: what makes a rollout
 # safe. Two replicas need the tick leases in a State they share, so the one
 # document names the shared adapter (DynamoDB); the rollout and the readiness
 # probe are the defaults: the new pod is Ready before the old one goes, and
-# Ready means the process, controllers included, finished starting.
+# Ready means the process finished starting.
 replicaCount: 2
 config:
   issuerURL: https://issuer.example
@@ -23,3 +23,11 @@ exchange:
       jwksUri: https://oidc.eu-example-1.example/id/EXAMPLE/keys
 console:
   mount: /console
+# The controllers run in their own modules, at two replicas each.
+modules:
+  github:
+    enabled: true
+    replicas: 2
+  slack:
+    enabled: true
+    replicas: 2

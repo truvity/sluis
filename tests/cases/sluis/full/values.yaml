@@ -281,3 +281,9 @@ tolerations:
 
 console:
   mount: /console
+# The controllers run in their own modules (decision D-v176-9).
+modules:
+  github:
+    enabled: true
+  slack:
+    enabled: true

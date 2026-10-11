@@ -27,3 +27,9 @@ telemetry:
     extraEnv:
       OTEL_TRACES_SAMPLER: parentbased_traceidratio
       OTEL_TRACES_SAMPLER_ARG: "0.1"
+# The controllers run in their own modules (decision D-v176-9).
+modules:
+  github:
+    enabled: true
+  slack:
+    enabled: true

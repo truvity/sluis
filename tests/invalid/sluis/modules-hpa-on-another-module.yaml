@@ -1,0 +1,14 @@
+# Only the issuer scales; a controller runs one pass at a time under a lease.
+# error: autoscaling
+config:
+  issuerURL: https://issuer.example
+exchange:
+  clusters:
+    - name: example-cluster
+      issuer: https://oidc.eu-example-1.example/id/EXAMPLE
+      jwksUri: https://oidc.eu-example-1.example/id/EXAMPLE/keys
+modules:
+  github:
+    enabled: true
+    autoscaling:
+      enabled: true
