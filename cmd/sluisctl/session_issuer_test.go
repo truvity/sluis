@@ -11,7 +11,7 @@ import (
 // issuer it could only hold one login at a time: signing in at the second
 // replaced the first one's refresh token, and `--issuer` then selected
 // the right endpoint and handed it the WRONG token. The issuer refuses
-// that with `subject_token is invalid` -- a message that reads as expiry
+// that with invalid_grant -- a refusal that reads as expiry
 // and is not, which sends people to re-run a login that already worked.
 func TestTwoIssuersDoNotClobberEachOther(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())

@@ -338,6 +338,8 @@ func TestARequestWiderThanTheGrantIsInvalidScope(t *testing.T) {
 		if status != http.StatusBadRequest || body["error"] != "invalid_scope" {
 			t.Errorf("%s = %d %v, want invalid_scope", name, status, body)
 		}
+		// What the grant allows is not for the caller to learn by asking too much.
+		wantRefusedBody(t, body, "not authorised")
 	}
 	if len(g.github.TokenRequests) != 0 {
 		t.Errorf("GitHub was asked: %+v", g.github.TokenRequests)
@@ -355,12 +357,22 @@ func TestARequestWiderThanTheGrantIsInvalidScope(t *testing.T) {
 func TestAnAppThatCannotMintIsInvalidTarget(t *testing.T) {
 	g := serveGitHubTokens(t)
 
+	var answers []string
 	for _, app := range []string{"undeclared", "uncreated", "pending", "uninstalled"} {
 		status, body, _ := g.ask(t, "", url.Values{
 			"subject_token": {"job:release.yml"}, "audience": {"github-app:" + app}, "repositories": {"app"},
 		})
 		if status != http.StatusBadRequest || body["error"] != "invalid_target" {
 			t.Errorf("%s = %d %v, want invalid_target", app, status, body)
+		}
+		// One answer for every way an App can fail to mint; the log tells them apart.
+		wantRefusedBody(t, body, "not authorised")
+		answers = append(answers, withoutRequest(body))
+	}
+	for _, answer := range answers[1:] {
+		if answer != answers[0] {
+			t.Errorf("the refusals tell Apps apart: %q", answers)
+			break
 		}
 	}
 	if len(g.github.TokenRequests) != 1 || g.github.TokenRequests[0].Installation != 44 {
@@ -422,6 +434,7 @@ func TestMalformedInstallationTokenRequestsAreInvalidRequest(t *testing.T) {
 		if status != http.StatusBadRequest || body["error"] != "invalid_request" {
 			t.Errorf("%s = %d %v, want invalid_request", name, status, body)
 		}
+		wantRefusedBody(t, body, "invalid request")
 	}
 	status, body, _ := g.ask(t, "", url.Values{"subject_token": {"not-a-proof"}, "audience": {"github-app:publisher"}, "repositories": {"app"}})
 	if status != http.StatusBadRequest || body["error"] != "invalid_grant" {

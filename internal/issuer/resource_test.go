@@ -135,8 +135,14 @@ func TestAResourceIsRefusedRatherThanIgnored(t *testing.T) {
 			if body.Error != string(oidc.InvalidTarget) {
 				t.Errorf("error = %q, want %q", body.Error, oidc.InvalidTarget)
 			}
-			if !strings.Contains(body.Description, tc.wants) {
-				t.Errorf("description %q does not mention %q", body.Description, tc.wants)
+			// Fixed words, whatever was wrong with the resource: why is in the
+			// log, and the end-to-end test that reads it is
+			// TestEveryAuthorizeRefusalIsUniform.
+			if body.Description != "not authorised" {
+				t.Errorf("description %q, want the fixed words", body.Description)
+			}
+			if strings.Contains(body.Description, tc.wants) {
+				t.Errorf("description %q gives the reason %q away", body.Description, tc.wants)
 			}
 		})
 	}

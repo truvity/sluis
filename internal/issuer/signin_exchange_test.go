@@ -281,9 +281,9 @@ func TestOnlyALiveCLISignInIsAProof(t *testing.T) {
 				t.Fatalf("exchanged: %v", body)
 			}
 
-			if got, _ := body["error_description"].(string); !strings.Contains(got, tc.want) {
-				t.Errorf("error_description = %q, want it to say %q", got, tc.want)
-			}
+			// The caller is told "not authorised" and a number; which rule
+			// refused the sign-in is in the log under that number.
+			wantRefusedBody(t, body, "not authorised", tc.want)
 		})
 	}
 }

@@ -25,7 +25,8 @@ import (
 // rather than a speed one. A refresh SPENDS the old token (see
 // internal/issuer/storage.go): the first process to finish rotates it, and
 // every other process is then holding a token the issuer will refuse with
-// "the refresh token is not live". The operator is signed out, and the AWS
+// invalid_grant ("not authorised (request <id>)": the reason, "the refresh
+// token is not live", is in the issuer's log under that id). The operator is signed out, and the AWS
 // SDK -- having got nothing from us -- falls through to the rest of its
 // chain, so the failure surfaces as somebody else's credentials being
 // wrong. Measured 2026-09-22 on a four-provider stack: every run, and the

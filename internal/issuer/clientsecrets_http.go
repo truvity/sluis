@@ -15,6 +15,7 @@ import (
 	"github.com/truvity/sluis/internal/audit"
 	"github.com/truvity/sluis/internal/clientcreds"
 	"github.com/truvity/sluis/policy"
+	"github.com/truvity/sluis/storage/logattr"
 )
 
 // ClientSecretsPath is where an operator manages the stored secrets of the
@@ -116,7 +117,7 @@ func clientSecretsHandler(
 			if !slices.ContainsFunc(audiences, func(a string) bool { return slices.Contains(ClientSecretsAudiences, a) }) {
 				clientcreds.CountAdminRefused(r.Context(), "wrong_audience")
 				iss.record(r.Context(), audit.ClientSecretDenied(audit.Identified(identity), "", name, "wrong_audience", nil))
-				http.Error(w, "this token was not issued for a client that manages secrets", http.StatusForbidden)
+				refusePlain(w, r, http.StatusForbidden, "this token was not issued for a client that manages secrets", logattr.Pseudonym("subject", identity))
 				return
 			}
 			operator := false
@@ -126,7 +127,7 @@ func clientSecretsHandler(
 			if !operator {
 				clientcreds.CountAdminRefused(r.Context(), "forbidden")
 				iss.record(r.Context(), audit.ClientSecretDenied(audit.Identified(identity), "", name, "forbidden", nil))
-				http.Error(w, "managing client secrets is an operator's", http.StatusForbidden)
+				refusePlain(w, r, http.StatusForbidden, "managing client secrets is an operator's", logattr.Pseudonym("subject", identity))
 				return
 			}
 			var req clientSecretRequest

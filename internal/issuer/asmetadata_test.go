@@ -175,9 +175,9 @@ func TestDiscoveryAdvertisesOnlyWhatIsServed(t *testing.T) {
 	}
 }
 
-// A client document URL that cannot be used is refused with the reason,
-// and not only the library's "unable to retrieve client by id".
-func TestAuthorizeNamesWhyAClientDocumentWasRefused(t *testing.T) {
+// A client document URL that cannot be used is refused in fixed words, and
+// the reason is in the log under the request id the answer quotes.
+func TestAuthorizeLogsWhyAClientDocumentWasRefused(t *testing.T) {
 	t.Parallel()
 
 	handler := asMetadataHandler(t, "http://issuer.example", true)
@@ -190,8 +190,12 @@ func TestAuthorizeNamesWhyAClientDocumentWasRefused(t *testing.T) {
 			"&code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM&code_challenge_method=S256" +
 			"&client_id=" + url.QueryEscape(tc.id)
 		rec := asGet(t, handler, http.MethodGet, query)
-		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), tc.want) {
-			t.Errorf("%s: /authorize = %d %s, want a 400 naming %q", name, rec.Code, rec.Body, tc.want)
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("%s: /authorize = %d %s, want a 400", name, rec.Code, rec.Body)
 		}
+		if strings.Contains(rec.Body.String(), tc.want) {
+			t.Errorf("%s: the answer gives the reason %q away: %s", name, tc.want, rec.Body)
+		}
+		wantRefusedAs(t, rec.Header(), strings.TrimSpace(rec.Body.String()), "invalid request", tc.want)
 	}
 }

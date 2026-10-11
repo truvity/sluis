@@ -266,16 +266,10 @@ func TestARefreshAtTheAbsoluteLimitIsRefusedAndAudited(t *testing.T) {
 	if got, _ := body["error"].(string); got != "invalid_grant" {
 		t.Errorf("error = %q, want invalid_grant", got)
 	}
-	// The library wraps whatever [Storage.TokenRequestByRefreshToken]
-	// returns into a fresh invalid_grant and keeps the original as a
-	// PARENT it never serialises (oidc.Error.Parent is `json:"-"`) -- so
-	// the clear description this code sets lands in the server's own log,
-	// not the wire response, exactly as the existing "no longer admitted"
-	// refusal already relies on. The audit record below is where a reason
-	// distinguishable from that one actually surfaces.
-	if _, has := body["error_description"]; has {
-		t.Errorf("error_description leaked to the client: %v; the library is not expected to forward it", body["error_description"])
-	}
+	// The caller is given the fixed words and the request id, whatever the
+	// library did to the error on the way out: the reason is in the log under
+	// that id, and in the audit record below.
+	wantRefusedBody(t, body, "not authorised", "absolute limit")
 
 	records := trail.Find("roster.session.refresh_refused")
 	if len(records) != 1 {
