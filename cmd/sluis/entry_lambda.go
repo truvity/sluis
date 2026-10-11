@@ -6,7 +6,10 @@ import (
 	"github.com/truvity/sluis/internal/lambdaapp"
 	_ "github.com/truvity/sluis/internal/lambdaapp/backupfn"
 	_ "github.com/truvity/sluis/internal/lambdaapp/cloudflarefn"
+	_ "github.com/truvity/sluis/internal/lambdaapp/githubfn"
+	_ "github.com/truvity/sluis/internal/lambdaapp/githubmintfn"
 	_ "github.com/truvity/sluis/internal/lambdaapp/issuerfn"
+	_ "github.com/truvity/sluis/internal/lambdaapp/slackfn"
 )
 
 // platformEntry is the Lambda build's second entry (docs/decisions/0071): the

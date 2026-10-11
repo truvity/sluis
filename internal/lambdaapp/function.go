@@ -70,7 +70,17 @@ const (
 	ModuleGitHub     = "github"
 	ModuleSlack      = "slack"
 	ModuleGoogle     = "google"
+	// ModuleGitHubMint is the GitHub module's mint-only function: the zip
+	// cmd/sluis-github-mint. It reads the GitHub module's document (a zip is
+	// told from the controller's by its build, not by the document) and serves
+	// `mint_installation` and nothing else.
+	ModuleGitHubMint = "github-mint"
 )
+
+// zipDocuments maps a zip's module to the module whose document it reads, for
+// the zips that share a document with another: the mint-only function is built
+// from the same GitHub document as the controller function.
+var zipDocuments = map[string]string{ModuleGitHubMint: ModuleGitHub}
 
 // documentModules maps the apiVersion of a module's own document to the module.
 // The issuer and the Cloudflare module share `sluis/v3`, and the document's
@@ -161,14 +171,22 @@ func OpenModule(ctx context.Context, getenv func(string) string, module string) 
 	if err != nil {
 		return nil, err
 	}
-	if module != "" && got != module {
+	want := module
+	if doc, shared := zipDocuments[module]; shared {
+		want = doc
+	}
+	if module != "" && got != want {
 		return nil, fmt.Errorf("this is the sluis-%s function and %s is a %s document: a zip runs the module it was built for and no other", module, file, got)
 	}
+	key := got
+	if module != "" {
+		key = module
+	}
 	openersMu.Lock()
-	open := openers[got]
+	open := openers[key]
 	openersMu.Unlock()
 	if open == nil {
-		return nil, fmt.Errorf("%s is a %s document and this binary does not carry the %s module", file, got, got)
+		return nil, fmt.Errorf("%s is a %s document and this binary does not carry the %s module", file, got, key)
 	}
 	return open(ctx, file)
 }
@@ -278,5 +296,17 @@ func CheckFunc(file string, only ...string) func(context.Context) (deploycheck.R
 			return deploycheck.Report{}, err
 		}
 		return deploycheck.Check(ctx, &c.Service.Serve, c.Policy, only...)
+	}
+}
+
+// CheckOwn is the {"kind":"check"} answer of a function whose module declares
+// the given kinds of secret (none, for the GitHub and Slack controllers: an
+// App's credential is made at run time and no document names it). It holds the
+// document's `secrets` section to the same rules as every function's, and reads
+// only what the module itself reads, never another module's paths: the policy's
+// client secrets are the issuer's, and a controller must not report them.
+func CheckOwn(s *config.Secrets, pol *config.PolicyDocument, kinds ...string) func(context.Context) (deploycheck.Report, error) {
+	return func(ctx context.Context) (deploycheck.Report, error) {
+		return deploycheck.CheckDeclared(ctx, s, deploycheck.Own(config.DeclaredSecrets(nil, pol), kinds...))
 	}
 }
