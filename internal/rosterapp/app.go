@@ -435,6 +435,14 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 			a.Close()
 			return nil, err
 		}
+		// And the console's GitHub operations are asked of it too, as the
+		// console: this process holds none of the records they act on.
+		console, err := dialConsole(ctx, cfg, moduleGitHub, r)
+		if err != nil {
+			a.Close()
+			return nil, err
+		}
+		directory.ConsoleServer().UseGitHub(console)
 	}
 	deps.GitHubApps = &apps
 	assembled, err := issuerapp.New(ctx, cfg.Issuer, deps, log)

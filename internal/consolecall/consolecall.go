@@ -68,6 +68,10 @@ type Caller struct {
 	// back (the redirect of an install). The console asserts it like the rest
 	// of the snapshot; a method that needs none ignores it.
 	Origin string `json:"origin,omitempty"`
+	// Directories are the connected directories as the console's snapshot has
+	// them, for a module that chooses an owner among them. Nil when the console
+	// attached none.
+	Directories []Directory `json:"directories,omitempty"`
 }
 
 // The values of [Caller.Source].
@@ -141,6 +145,9 @@ type Problem struct {
 	// Code is the Connect code the console answers with, by its name
 	// ("failed_precondition"); empty is a failed precondition.
 	Code string `json:"code,omitempty"`
+	// Status is the HTTP status of the page the console renders for a provider
+	// callback that cannot finish. Zero is 409.
+	Status int `json:"status,omitempty"`
 	// Summary is one line.
 	Summary string `json:"summary"`
 	// Detail is what went wrong, safe to show the signed-in person.

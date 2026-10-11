@@ -73,6 +73,12 @@ func open(ctx context.Context, file string) (*lambdaapp.Function, error) {
 		flush(ctx)
 		return nil, err
 	}
+	// And the console's GitHub operations, on the same server (the console class).
+	if err = minter.ServeConsole(ctx, cfg, log); err != nil {
+		minter.Close()
+		flush(ctx)
+		return nil, err
+	}
 	return &lambdaapp.Function{
 		Handler: Handler(log, cfg.Declares, func(ctx context.Context) (lambdaapp.Pass, error) {
 			// Assembled per invocation and closed at its end (lambdaapp.Controller):
