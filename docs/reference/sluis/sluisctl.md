@@ -33,7 +33,6 @@ sluisctl restore start 20261010T020000Z-3fa9c1 --confirm example --wait
 
 sluisctl render --installation installation.yaml --out rendered/   # the service and policy documents
 sluisctl policy render policy/ -o policy.yaml   # the one policy document an installation reads
-sluisctl explain --policy policy.yaml --audience logs --email ana@example.test
 ```
 
 ## Commands
@@ -57,7 +56,6 @@ sluisctl explain --policy policy.yaml --audience logs --email ana@example.test
 | `backup run\|status\|list`, `restore preview\|start\|resume\|status` | invoke the backup and restore functions | [backup](#backup-and-restore) |
 | `render` | an installation in, the service and policy documents out | [render](#render-an-installation-in-the-two-documents-out) |
 | `policy render` | the one policy document an installation reads, from its layers | [policy render](#policy-render-the-one-policy-document) |
-| `explain` | what a token would carry | [explain](#explain) |
 
 | Detail | Behavior |
 |---|---|
@@ -124,21 +122,6 @@ sluisctl policy render [-o <file>] <file or directory>
 | Scalars | Declared twice is an error |
 
 The result passes every check the service runs at start. Exit codes as `render`.
-
-## `explain`
-
-```sh
-sluisctl explain --policy <policy.yaml> --audience <client> \
-    (--email <addr> | --subject <workload subject>) \
-    [--directory-group <email>]... [--format yaml|json]
-```
-
-| Flag | Meaning |
-|---|---|
-| `--policy` | The policy document |
-| `--audience` | The client |
-| `--email` | A person |
-| `--subject` | A workload |
 
 ## Where things are kept
 
