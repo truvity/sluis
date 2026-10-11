@@ -154,7 +154,7 @@ func TestNoAuditProceedsWarnsAndPrintsTheRecord(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer trail.Close()
+	defer func() { _ = trail.Close() }()
 	var stderr bytes.Buffer
 	au := &operatorAudit{rec: trail, noAudit: true, stderr: &stderr}
 	if _, err = runMaint(t, "on", tables, au); err != nil {
