@@ -99,6 +99,17 @@
     },
     {
       "Action": [
+        "ssm:GetParameter",
+        "ssm:GetParameters"
+      ],
+      "Effect": "Allow",
+      "Resource": [
+        "arn:aws:ssm:r1:111122223333:parameter/sluis/i1/internal/oidc/signin/*"
+      ],
+      "Sid": "SluisSignInClient"
+    },
+    {
+      "Action": [
         "dynamodb:PutItem",
         "dynamodb:UpdateItem",
         "dynamodb:DeleteItem",
@@ -115,6 +126,22 @@
       "Effect": "Deny",
       "Resource": "arn:aws:dynamodb:r1:111122223333:table/sluis-i1-google",
       "Sid": "SluisMaintenanceDeny"
+    },
+    {
+      "Action": [
+        "kms:Decrypt"
+      ],
+      "Condition": {
+        "StringLike": {
+          "kms:EncryptionContext:PARAMETER_ARN": [
+            "arn:aws:ssm:r1:111122223333:parameter/sluis/i1/internal/oidc/signin/*"
+          ],
+          "kms:ViaService": "ssm.*.amazonaws.com"
+        }
+      },
+      "Effect": "Allow",
+      "Resource": "arn:aws:kms:r1:111122223333:key/shared",
+      "Sid": "SluisParameterKeyCross"
     },
     {
       "Action": [

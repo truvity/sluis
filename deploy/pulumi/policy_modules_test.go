@@ -248,7 +248,7 @@ func TestGoogleRoleNamesGoogleInStorageAndPaths(t *testing.T) {
 			t.Errorf("missing %q in %s", want, doc)
 		}
 	}
-	for _, not := range []string{"directory", "snapshots", "internal/oidc", "tbl:oidc", "bkt/oidc"} {
+	for _, not := range []string{"directory", "snapshots", "oidc/state-secret", "oidc/recovery", "oidc/clients", "tbl:oidc", "bkt/oidc"} {
 		if strings.Contains(doc, not) {
 			t.Errorf("unexpected %q in %s", not, doc)
 		}

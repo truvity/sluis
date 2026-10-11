@@ -474,13 +474,14 @@ func (a *LambdaArgs) withFunctionNames(in *sluisconfig.Installation) error {
 
 // ownModuleDocuments adds to the module documents what the infrastructure
 // supplies and the renderer cannot know: the blobs an external store keeps
-// (ports.blob of the Google module, which keeps the directory snapshots in them,
-// as the issuer's document does) and holds the result to the module's loader.
+// (ports.blob of every module: the blobs adapter is built by each function, and
+// without the store it refuses to start; the Google module keeps the directory
+// snapshots in them, as the issuer's document does) and holds the result to the module's loader.
 func (a *LambdaArgs) ownModuleDocuments(docs map[string][]byte) (map[string]string, error) {
 	out := map[string]string{}
 	for module, raw := range docs {
 		body := string(raw)
-		if b := a.Storage.External; b != nil && module == sluisconfig.ModuleGoogle {
+		if b := a.Storage.External; b != nil {
 			doc, err := yamlMap(body, "Installation")
 			if err != nil {
 				return nil, err

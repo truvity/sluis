@@ -275,7 +275,13 @@ func (b moduleBuilder) ports(module string) *internal.Ports {
 	if b.in.AWS != nil {
 		region = b.in.AWS.Region
 	}
-	return &internal.Ports{Adapter: "dynamodb", DynamoDB: &internal.DynamoDB{Tables: map[string]string{table: name}, Region: region}}
+	p := &internal.Ports{Adapter: "dynamodb", DynamoDB: &internal.DynamoDB{Tables: map[string]string{table: name}, Region: region}}
+	// Every function builds the blobs adapter, which refuses to start without
+	// its store; the installation's bucket is the one every module names.
+	if a := b.in.AWS; a != nil && a.Bucket != "" {
+		p.Blob = &internal.PortsBlob{Adapter: "s3", S3: &internal.PortsBlobS3{Bucket: a.Bucket, Region: a.Region}}
+	}
+	return p
 }
 
 func lambdaPlatform() *internal.Platform {
@@ -375,9 +381,6 @@ func (b moduleBuilder) google() (any, error) {
 		return nil, err
 	}
 	doc.Ports = b.ports(ModuleGoogle)
-	if a := b.in.AWS; a != nil && a.Bucket != "" {
-		doc.Ports.Blob = &internal.PortsBlob{Adapter: "s3", S3: &internal.PortsBlobS3{Bucket: a.Bucket, Region: a.Region}}
-	}
 	if d := b.in.Directory; d != nil {
 		doc.Google.Workspaces = slices.Clone(d.Workspaces)
 	}
