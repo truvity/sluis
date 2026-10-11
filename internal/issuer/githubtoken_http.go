@@ -2,6 +2,7 @@ package issuer
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"io"
 	"net/http"
@@ -102,38 +103,35 @@ func serveGitHubToken(
 	var proof Proof
 
 	refuse := func(failed bool, err *oidc.Error, minted GitHubToken) {
-		outcome := audit.Denied(err.Description)
+		// The audit record keeps the reason; the caller gets the fixed words.
+		outcome := audit.Denied(reasonOf(err))
 		if failed {
-			outcome = audit.Failed(err.Description)
+			outcome = audit.Failed(reasonOf(err))
 		}
 		iss.recordGitHubToken(ctx, proof, request, minted, outcome)
-		op.RequestError(w, r, err, nil)
+		writeOAuthError(w, r, err)
 	}
 
 	switch {
 	case form.Get("actor_token") != "" || form.Get("actor_token_type") != "":
 		// Delegation is a second principal in a request, and this design
 		// has exactly one: the subject.
-		refuse(false, oidc.ErrInvalidRequest().WithDescription(
-			"actor_token: acting for another party is not served by this issuer"), GitHubToken{})
+		refuse(false, malformed(ctx, errors.New("actor_token: acting for another party is not served by this issuer")), GitHubToken{})
 		return
 	case len(form["audience"]) != 1:
-		refuse(false, oidc.ErrInvalidTarget().WithDescription(
-			"name exactly one audience: github-app:<id>"), GitHubToken{})
+		refuse(false, deny(ctx, oidc.ErrInvalidTarget, errors.New("name exactly one audience: github-app:<id>")), GitHubToken{})
 		return
 	case form.Get("subject_token") == "" || form.Get("subject_token_type") == "":
-		refuse(false, oidc.ErrInvalidRequest().WithDescription(
-			"subject_token and subject_token_type are required"), GitHubToken{})
+		refuse(false, malformed(ctx, errors.New("subject_token and subject_token_type are required")), GitHubToken{})
 		return
 	case !oidc.TokenType(form.Get("subject_token_type")).IsSupported():
-		refuse(false, oidc.ErrInvalidRequest().WithDescription(
-			"subject_token_type is not supported"), GitHubToken{})
+		refuse(false, malformed(ctx, errors.New("subject_token_type is not supported")), GitHubToken{})
 		return
 	}
 
 	parsed, err := ParseGitHubTokenRequest(request.App, form.Get("repositories"), form.Get("scope"))
 	if err != nil {
-		refuse(false, oidc.ErrInvalidRequest().WithDescription("%s", err), GitHubToken{})
+		refuse(false, malformed(ctx, err), GitHubToken{})
 		return
 	}
 	request = parsed
@@ -148,12 +146,12 @@ func serveGitHubToken(
 		secret, err = url.QueryUnescape(secret)
 	}
 	if err != nil {
-		refuse(false, oidc.ErrInvalidClient().WithDescription("invalid basic auth header"), GitHubToken{})
+		refuse(false, deny(ctx, oidc.ErrInvalidClient, errors.New("invalid basic auth header")), GitHubToken{})
 		return
 	}
 	if clientID != "" && clientID != audience {
 		if err = storage.AuthorizeClientIDSecret(ctx, clientID, secret); err != nil {
-			refuse(false, oidc.ErrInvalidClient().WithDescription("invalid client_id / client_secret"), GitHubToken{})
+			refuse(false, asOIDCError(ctx, err, oidc.ErrInvalidClient), GitHubToken{})
 			return
 		}
 	}
@@ -161,24 +159,24 @@ func serveGitHubToken(
 	subjectType := oidc.TokenType(form.Get("subject_token_type"))
 	id, _, claims, ok := op.GetTokenIDAndSubjectFromToken(ctx, provider, form.Get("subject_token"), subjectType, false)
 	if !ok {
-		refuse(false, oidc.ErrInvalidGrant().WithDescription("subject_token is invalid"), GitHubToken{})
+		refuse(false, deny(ctx, oidc.ErrInvalidGrant, errors.New("subject_token is invalid")), GitHubToken{})
 		return
 	}
 	proof, err = storage.proofOf(ctx, verifiedSubject{id: id, kind: subjectType, claims: claims, client: clientID})
 	if err != nil {
-		refuse(false, asOIDCError(err, oidc.ErrInvalidGrant), GitHubToken{})
+		refuse(false, asOIDCError(ctx, err, oidc.ErrInvalidGrant), GitHubToken{})
 		return
 	}
 
 	result, _, err := iss.evaluate(ctx, proof)
 	if err != nil {
-		refuse(true, oidc.ErrInvalidGrant().WithDescription("%s", err), GitHubToken{})
+		refuse(true, evaluationRefusal(ctx, err), GitHubToken{})
 		return
 	}
 
 	minted, err := iss.MintGitHubToken(ctx, result.Groups, request)
 	if err != nil {
-		refuse(errors.Is(err, ErrGitHubUpstream), githubTokenError(err), minted)
+		refuse(errors.Is(err, ErrGitHubUpstream), githubTokenError(ctx, err), minted)
 		return
 	}
 	iss.recordGitHubToken(ctx, proof, request, minted, audit.Succeeded())
@@ -201,25 +199,37 @@ func serveGitHubToken(
 }
 
 // githubTokenError is a minting refusal as RFC 6749 spells it.
-func githubTokenError(err error) *oidc.Error {
+func githubTokenError(ctx context.Context, err error) *oidc.Error {
 	switch {
 	case errors.Is(err, ErrGitHubAppUnavailable), errors.Is(err, ErrNoGitHubGrant):
-		return oidc.ErrInvalidTarget().WithDescription("%s", err)
+		// An App that does not exist and an App this proof may not use are
+		// one answer.
+		return deny(ctx, oidc.ErrInvalidTarget, err)
 	case errors.Is(err, ErrGitHubScope):
-		return oidc.ErrInvalidScope().WithDescription("%s", err)
+		return deny(ctx, oidc.ErrInvalidScope, err)
 	default:
-		return oidc.ErrServerError().WithDescription("%s", err)
+		return fault(ctx, err)
 	}
 }
 
 // asOIDCError keeps an error the proof rules already spelled, and spells
 // any other with fallback.
-func asOIDCError(err error, fallback func() *oidc.Error) *oidc.Error {
+func asOIDCError(ctx context.Context, err error, fallback func() *oidc.Error) *oidc.Error {
 	var spelled *oidc.Error
 	if errors.As(err, &spelled) {
 		return spelled
 	}
-	return fallback().WithDescription("%s", err)
+	return deny(ctx, fallback, err)
+}
+
+// evaluationRefusal is why a proof could not be resolved to groups: the
+// directory refusing the person is a refusal, anything else is a fault of
+// ours.
+func evaluationRefusal(ctx context.Context, err error) *oidc.Error {
+	if errors.As(err, new(*Refused)) {
+		return deny(ctx, oidc.ErrInvalidGrant, err)
+	}
+	return fault(ctx, err)
 }
 
 // verifiedSubject is a subject token as the library verified it, read

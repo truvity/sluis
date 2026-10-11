@@ -1,6 +1,8 @@
 package refusal_test
 
 import (
+	"context"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -84,5 +86,28 @@ func TestMiddlewareIsIdempotentWhenNested(t *testing.T) {
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
 	if inner == "" || inner != rec.Header().Get(refusal.Header) {
 		t.Errorf("inner id %q, response %q: want one id", inner, rec.Header().Get(refusal.Header))
+	}
+}
+
+func TestLogHandlerNamesTheRequestOnEveryLine(t *testing.T) {
+	t.Parallel()
+	var out strings.Builder
+	log := slog.New(refusal.LogHandler(slog.NewJSONHandler(&out, nil)))
+	ctx := refusal.WithID(context.Background(), "req-0123456789")
+	log.WarnContext(ctx, "refused", slog.String("why", "the secret does not match"))
+	log.WarnContext(ctx, "named", slog.String(refusal.LogKey, "req-0123456789"))
+	log.Warn("outside a request")
+	lines := strings.Split(strings.TrimSpace(out.String()), "\n")
+	if len(lines) != 3 {
+		t.Fatalf("lines = %d: %s", len(lines), out.String())
+	}
+	if !strings.Contains(lines[0], `"request_id":"req-0123456789"`) {
+		t.Errorf("a line logged in a request must carry its id: %s", lines[0])
+	}
+	if strings.Count(lines[1], "request_id") != 1 {
+		t.Errorf("a line that names the id itself must not carry it twice: %s", lines[1])
+	}
+	if strings.Contains(lines[2], "request_id") {
+		t.Errorf("a line outside a request has no id: %s", lines[2])
 	}
 }

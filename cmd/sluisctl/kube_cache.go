@@ -19,7 +19,7 @@ import (
 // credential of its own, so each one asks the issuer. A refresh SPENDS the
 // refresh token (internal/issuer/storage.go): the first process to finish
 // rotates it, and every other one is left holding a token the issuer
-// refuses with "the refresh token is not live" -- which this command
+// refuses with invalid_grant -- which this command
 // reports as "not signed in". The session ends for EVERY audience at once,
 // not only for the caller that lost the race, and the operator is signed
 // out in the middle of a command they did not think was a sign-in.

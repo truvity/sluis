@@ -295,7 +295,7 @@ func legacySessionPath() (string, error) {
 //     session.json, signing in at the second issuer silently replaced the
 //     first one's refresh token. `--issuer` then selected the right
 //     endpoint and handed it the WRONG token, which the issuer refuses as
-//     `subject_token is invalid` -- a message that reads as expiry and is
+//     invalid_grant -- a refusal that reads as expiry and is
 //     not, and which sent more than one person to re-run a login that had
 //     already worked.
 //   - More than one process writes here, as saveSession's own note says:
@@ -541,7 +541,7 @@ func loadSession(issuer string) (Session, error) {
 	// The file says which installation it belongs to, and that is what
 	// decides -- not the name it was found under. A session from the
 	// wrong estate is the failure this whole split exists to prevent,
-	// and presenting it earns `subject_token is invalid` from the
+	// and presenting it earns invalid_grant from the
 	// issuer, which reads as expiry and sends people to re-run a login
 	// that already worked.
 	if session.Issuer != "" && session.Issuer != issuer {

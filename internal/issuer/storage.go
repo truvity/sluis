@@ -625,11 +625,15 @@ func (s *Storage) GetClientByClientID(ctx context.Context, clientID string) (op.
 			logattr.SafeString("client", clientID), logattr.SafeString("name", resolved.DisplayName))
 		return &client{id: clientID, declared: resolved, lifetime: s.tokenLifetime(resolved), signing: signing}, nil
 	case errors.Is(err, errNotADocumentClient):
-		// Return invalid_client error for unknown client, per RFC 6749 §5.2.
-		return nil, oidc.ErrInvalidClient().WithDescription("unknown client: %q", clientID).WithParent(fmt.Errorf("%w: %q", ErrUnknownTarget, clientID))
+		// invalid_client, per RFC 6749 §5.2, and the same answer as a wrong
+		// secret: the id is in the log, not in the response.
+		return nil, deny(ctx, oidc.ErrInvalidClient, fmt.Errorf("%w: %q", ErrUnknownTarget, clientID),
+			logattr.SafeString("client", clientID))
 	default:
-		noteClientRefusal(ctx, err)
-		return nil, err
+		// A client that describes itself and could not be used: why is in the
+		// log under the request id, and the caller is told what any refused
+		// client is told.
+		return nil, deny(ctx, oidc.ErrInvalidClient, err, logattr.SafeString("client", clientID))
 	}
 }
 
@@ -656,13 +660,16 @@ func (s *Storage) AuthorizeClientIDSecret(ctx context.Context, clientID, secret 
 		// secret -- and saying "unknown client" would send somebody
 		// looking for a typo in an id that is correct.
 		if target, err := documentURL(clientID); err == nil && s.documents.allow.Permits(target) {
-			return errors.New("a client that registers itself by document is public and presents no secret")
+			return deny(ctx, oidc.ErrInvalidClient,
+				errors.New("a client that registers itself by document is public and presents no secret"),
+				logattr.SafeString("client", clientID))
 		}
 		// Return invalid_client error for unknown client, per RFC 6749 §5.2.
 		// The library will convert this to the appropriate HTTP status: 401
 		// when client authentication was attempted over Authorization header,
 		// 400 otherwise.
-		return oidc.ErrInvalidClient().WithDescription("unknown client: %q", clientID).WithParent(fmt.Errorf("%w: %q", ErrUnknownTarget, clientID))
+		return deny(ctx, oidc.ErrInvalidClient, fmt.Errorf("%w: %q", ErrUnknownTarget, clientID),
+			logattr.SafeString("client", clientID))
 	}
 	// A public client holds no secret, and the library asks all the same,
 	// including for a token exchange. That is the right question with the
@@ -682,7 +689,8 @@ func (s *Storage) AuthorizeClientIDSecret(ctx context.Context, clientID, secret 
 	// ever been asked to do.
 	if declared.Kind == policy.KindPublic || declared.Kind == policy.KindExchange {
 		if secret != "" {
-			return errors.New("a public client presents no secret")
+			return deny(ctx, oidc.ErrInvalidClient, errors.New("a public client presents no secret"),
+				logattr.SafeString("client", clientID))
 		}
 
 		return nil
@@ -706,7 +714,8 @@ func (s *Storage) AuthorizeClientIDSecret(ctx context.Context, clientID, secret 
 		}
 	}
 	clientcreds.CountAuth(ctx, clientcreds.SlotNone)
-	return errors.New("the client secret does not match")
+	return deny(ctx, oidc.ErrInvalidClient, errors.New("the client secret does not match"),
+		logattr.SafeString("client", clientID))
 }
 
 // matchSecret says which slot of want the presented secret matches.
@@ -811,13 +820,22 @@ func (s *Storage) AuthRequestByCode(ctx context.Context, code string) (op.AuthRe
 // frozen for a migration (`sluis maintenance on`). A server error, which a
 // client retries, never an invalid grant, which it takes as the end of a
 // session.
-func errFrozen() error {
-	return oidc.ErrServerError().WithDescription("sluis is frozen for a migration; try again shortly")
+func errFrozen(ctx context.Context) error {
+	return fault(ctx, errFrozenForMigration)
 }
 
-func errSignInEnded() error {
-	return oidc.ErrInvalidGrant().WithDescription("the sign-in this code was issued under has ended")
+func errSignInEnded(ctx context.Context) error {
+	return deny(ctx, oidc.ErrInvalidGrant, errSignInEndedReason)
 }
+
+// The reasons a refusal is for, which go to the log and never to the caller.
+var (
+	errFrozenForMigration = errors.New("sluis is frozen for a migration")
+	errSignInEndedReason  = errors.New("the sign-in this code was issued under has ended")
+	errRefreshNotLive     = errors.New("the refresh token is not live")
+	errAbsoluteLimit      = errors.New("this session has reached its absolute limit and must sign in again")
+	errNotAdmitted        = errors.New("this identity is not admitted to this client")
+)
 
 // signInEnded reports whether the browser sign-in a code was completed
 // under has ended, read AFTER what the code opens has been written.
@@ -1177,7 +1195,7 @@ func (s *Storage) CreateAccessToken(ctx context.Context, request op.TokenRequest
 	// The library mints a refresh grant through CreateAccessAndRefreshTokens;
 	// a reused token must not mint here either, whatever path reaches it.
 	if req, isRefresh := request.(*refreshRequest); isRefresh && req.presented.reused != "" {
-		return "", time.Time{}, oidc.ErrInvalidGrant().WithDescription("the refresh token is not live")
+		return "", time.Time{}, deny(ctx, oidc.ErrInvalidGrant, errRefreshNotLive)
 	}
 	if err := s.refusalOf(ctx, request); err != nil {
 		return "", time.Time{}, err
@@ -1196,16 +1214,16 @@ func (s *Storage) CreateAccessToken(ctx context.Context, request op.TokenRequest
 	if opened, ok := request.(*authRequest); ok && opened.SSO != "" && s.iss.SSO() != nil {
 		involved, err := s.involveAhead(ctx, request, false)
 		if err != nil {
-			return "", time.Time{}, oidc.ErrServerError().WithDescription("%s", err)
+			return "", time.Time{}, fault(ctx, err)
 		}
 		opened.involved = involved
 
 		ended, err := s.signInEnded(ctx, opened.SSO, opened.Req.ClientID)
 		if err != nil {
-			return "", time.Time{}, oidc.ErrServerError().WithDescription("%s", err)
+			return "", time.Time{}, fault(ctx, err)
 		}
 		if ended {
-			return "", time.Time{}, errSignInEnded()
+			return "", time.Time{}, errSignInEnded(ctx)
 		}
 	}
 
@@ -1228,7 +1246,7 @@ func (s *Storage) CreateAccessAndRefreshTokens(
 	if req, isRefresh := request.(*refreshRequest); isRefresh && req.presented.reused != "" {
 		if maintenance.ReadOnly(ctx) {
 			// Ending the session is a write; it waits for the freeze to end.
-			return "", "", time.Time{}, errFrozen()
+			return "", "", time.Time{}, errFrozen(ctx)
 		}
 		return "", "", time.Time{}, s.endReuse(ctx, req.presented)
 	}
@@ -1253,7 +1271,7 @@ func (s *Storage) CreateAccessAndRefreshTokens(
 		// session, which is a write.
 		req, isRefresh := request.(*refreshRequest)
 		if !isRefresh || currentRefreshToken == "" {
-			return "", "", time.Time{}, errFrozen()
+			return "", "", time.Time{}, errFrozen(ctx)
 		}
 		next := currentRefreshToken
 		if req.presented.successor != "" {
@@ -1286,7 +1304,7 @@ func (s *Storage) CreateAccessAndRefreshTokens(
 		if req, isRefresh := request.(*refreshRequest); isRefresh && req.presented.token == currentRefreshToken {
 			p := req.presented
 			if req.involved, err = s.involveAhead(ctx, request, p.session.Involved); err != nil {
-				return "", "", time.Time{}, oidc.ErrServerError().WithDescription("%s", err)
+				return "", "", time.Time{}, fault(ctx, err)
 			}
 			p.session.Involved = p.session.Involved || req.involved
 			live, successor, ok, err = s.iss.Sessions().rotate(ctx, p, refresh)
@@ -1294,11 +1312,11 @@ func (s *Storage) CreateAccessAndRefreshTokens(
 			live, successor, ok, err = s.iss.Sessions().Refreshed(ctx, currentRefreshToken, refresh)
 		}
 		if err != nil {
-			return "", "", time.Time{}, oidc.ErrServerError().WithDescription("%s", err)
+			return "", "", time.Time{}, fault(ctx, err)
 		}
 
 		if !ok {
-			return "", "", time.Time{}, oidc.ErrInvalidGrant().WithDescription("the refresh token is not live")
+			return "", "", time.Time{}, deny(ctx, oidc.ErrInvalidGrant, errRefreshNotLive)
 		}
 
 		refresh = successor
@@ -1314,7 +1332,7 @@ func (s *Storage) CreateAccessAndRefreshTokens(
 		// again with it.
 		issued.Session = live.ID
 		if err = s.keep(ctx, request, issued); err != nil {
-			return "", "", time.Time{}, oidc.ErrServerError().WithDescription("%s", err)
+			return "", "", time.Time{}, fault(ctx, err)
 		}
 
 		return issued.ID, refresh, issued.Expires, nil
@@ -1326,7 +1344,7 @@ func (s *Storage) CreateAccessAndRefreshTokens(
 	}
 	involved, err := s.involveAhead(ctx, request, false)
 	if err != nil {
-		return "", "", time.Time{}, oidc.ErrServerError().WithDescription("%s", err)
+		return "", "", time.Time{}, fault(ctx, err)
 	}
 	if opened, ok := request.(*authRequest); ok {
 		opened.involved = involved
@@ -1346,7 +1364,7 @@ func (s *Storage) CreateAccessAndRefreshTokens(
 		Class: classOfRequest(request),
 	})
 	if err != nil {
-		return "", "", time.Time{}, oidc.ErrServerError().WithDescription("%s", err)
+		return "", "", time.Time{}, fault(ctx, err)
 	}
 
 	// The sign-in it was opened under, read once the session is filed
@@ -1359,9 +1377,9 @@ func (s *Storage) CreateAccessAndRefreshTokens(
 				logattr.SafeError("error", revokeErr))
 		}
 		if err != nil {
-			return "", "", time.Time{}, oidc.ErrServerError().WithDescription("%s", err)
+			return "", "", time.Time{}, fault(ctx, err)
 		}
-		return "", "", time.Time{}, errSignInEnded()
+		return "", "", time.Time{}, errSignInEnded(ctx)
 	}
 
 	// The ACCESS token names it too, so that revoking the session stops
@@ -1370,7 +1388,7 @@ func (s *Storage) CreateAccessAndRefreshTokens(
 	// only then, once.
 	issued.Session = session.ID
 	if err = s.keep(ctx, request, issued); err != nil {
-		return "", "", time.Time{}, oidc.ErrServerError().WithDescription("%s", err)
+		return "", "", time.Time{}, fault(ctx, err)
 	}
 
 	// The ID token minted a moment from now names this session. The
@@ -1467,7 +1485,7 @@ func (s *Storage) SetUserinfoFromRequest(
 				return err
 			}
 			if ended {
-				return errSignInEnded()
+				return errSignInEnded(ctx)
 			}
 		}
 	}
@@ -1814,7 +1832,7 @@ func (s *Storage) claimsFor(
 func (s *Storage) refuseAtAbsoluteLimit(ctx context.Context, ended Session) error {
 	if maintenance.ReadOnly(ctx) {
 		// Revoking the session is a write; the refusal is the same.
-		return oidc.ErrInvalidGrant().WithDescription("the refresh token is not live")
+		return deny(ctx, oidc.ErrInvalidGrant, errRefreshNotLive)
 	}
 	if revokeErr := s.iss.Sessions().deleteSession(ctx, ended); revokeErr != nil {
 		s.logger().WarnContext(ctx, "a session past the absolute limit could not be revoked",
@@ -1826,8 +1844,7 @@ func (s *Storage) refuseAtAbsoluteLimit(ctx context.Context, ended Session) erro
 	s.iss.record(ctx, audit.SessionRefreshRefused(ended.Identity, ended.ClientID,
 		"the absolute session limit was reached"))
 
-	return oidc.ErrInvalidGrant().WithDescription(
-		"this session has reached its absolute limit and must sign in again")
+	return deny(ctx, oidc.ErrInvalidGrant, errAbsoluteLimit, logattr.SafeString("client_id", ended.ClientID))
 }
 
 // endReuse answers a refresh token spent longer ago than the grace window:
@@ -1877,13 +1894,13 @@ func (s *Storage) endReuse(ctx context.Context, p presented) error {
 			s.logger().WarnContext(ctx, "a spent refresh token was reused and its session could not be ended",
 				logattr.SafeError("error", err))
 
-			return oidc.ErrServerError().WithDescription("%s", err)
+			return fault(ctx, err)
 		}
 
 		// Another presentation of the same token ended it, or this one's
 		// own delete did and was reported missing on a retry: ended,
 		// and not this call's to audit.
-		return oidc.ErrInvalidGrant().WithDescription("the refresh token is not live")
+		return deny(ctx, oidc.ErrInvalidGrant, errRefreshNotLive)
 	}
 
 	s.iss.record(ctx, audit.SessionReuseRevoked(session.Identity, session.ClientID))
@@ -1901,7 +1918,7 @@ func (s *Storage) endReuse(ctx context.Context, p presented) error {
 		logattr.SafeString("client_id", session.ClientID))
 	s.announceLogout(ctx, s.logger(), []Session{session})
 
-	return oidc.ErrInvalidGrant().WithDescription("the refresh token is not live")
+	return deny(ctx, oidc.ErrInvalidGrant, errRefreshNotLive)
 }
 
 // TokenRequestByRefreshToken implements [op.AuthStorage].
@@ -1933,7 +1950,7 @@ func (s *Storage) TokenRequestByRefreshToken(ctx context.Context, refreshToken s
 		// An outage, not an answer about the token: server_error on the
 		// wire, which the library would turn into invalid_grant if it were
 		// returned here ([refreshRequest.refusal]).
-		return refusedLater(ctx, oidc.ErrServerError().WithDescription("%s", err)), nil
+		return refusedLater(ctx, fault(ctx, err)), nil
 	}
 
 	session := presented.session
@@ -1998,7 +2015,7 @@ func (s *Storage) TokenRequestByRefreshToken(ctx context.Context, refreshToken s
 			s.iss.record(ctx, audit.SessionRefreshRefused(session.Identity, session.ClientID,
 				"no longer admitted to any group this client requires"))
 
-			return nil, oidc.ErrInvalidGrant().WithDescription("this identity is not admitted to this client")
+			return nil, deny(ctx, oidc.ErrInvalidGrant, errNotAdmitted, logattr.SafeString("client_id", session.ClientID))
 		}
 
 		// The directory said, and could vouch for it, that the person is
@@ -2020,7 +2037,7 @@ func (s *Storage) TokenRequestByRefreshToken(ctx context.Context, refreshToken s
 
 		return &refreshRequest{
 			session: session, presented: presented,
-			refusal: oidc.ErrServerError().WithDescription("%s", err),
+			refusal: fault(ctx, err),
 		}, nil
 	}
 
@@ -2049,7 +2066,7 @@ func (s *Storage) refusalOf(ctx context.Context, request op.TokenRequest) error 
 	case req.notLive:
 		if maintenance.ReadOnly(ctx) {
 			// Ending the session is a write; the refusal is the same.
-			return oidc.ErrInvalidGrant().WithDescription("the refresh token is not live")
+			return deny(ctx, oidc.ErrInvalidGrant, errRefreshNotLive)
 		}
 		return s.refuseNotLive(ctx, req.presented)
 	default:
@@ -2109,10 +2126,10 @@ func (s *Storage) refuseNotLive(ctx context.Context, p presented) error {
 			s.logger().WarnContext(ctx, "a session whose person the directory no longer has could not be ended",
 				logattr.SafeString("client_id", p.session.ClientID), logattr.SafeError("error", err))
 
-			return oidc.ErrServerError().WithDescription("%s", err)
+			return fault(ctx, err)
 		}
 
-		return oidc.ErrInvalidGrant().WithDescription("the refresh token is not live")
+		return deny(ctx, oidc.ErrInvalidGrant, errRefreshNotLive)
 	}
 
 	session := p.session
@@ -2142,7 +2159,7 @@ func (s *Storage) refuseNotLive(ctx context.Context, p presented) error {
 		"the directory says this account is not live"))
 	s.announceLogout(ctx, s.logger(), []Session{session})
 
-	return oidc.ErrInvalidGrant().WithDescription("the refresh token is not live")
+	return deny(ctx, oidc.ErrInvalidGrant, errRefreshNotLive)
 }
 
 // refreshRequest is a live session presented for renewal.
@@ -2219,7 +2236,7 @@ func (s *Storage) GetRefreshTokenInfo(ctx context.Context, _ string, tok string)
 	// session open, which is the wrong way for a revocation to fail.
 	session, ok, err := s.iss.Sessions().ByRefreshToken(ctx, tok)
 	if err != nil {
-		return "", "", oidc.ErrServerError().WithDescription("%s", err)
+		return "", "", fault(ctx, err)
 	}
 
 	if !ok {
@@ -2244,15 +2261,15 @@ func (s *Storage) RevokeToken(ctx context.Context, tokenOrTokenID, _, _ string) 
 	// at every replica. A security control that reports success and
 	// leaves access in place is worse than one that fails.
 	if _, err := s.iss.Sessions().RevokeToken(ctx, tokenOrTokenID); err != nil {
-		return oidc.ErrServerError().WithDescription("%s", err)
+		return fault(ctx, err)
 	}
 
 	if _, err := s.iss.Sessions().RevokeID(ctx, tokenOrTokenID); err != nil {
-		return oidc.ErrServerError().WithDescription("%s", err)
+		return fault(ctx, err)
 	}
 
 	if err := s.state.Delete(ctx, tokenKey(tokenOrTokenID)); err != nil {
-		return oidc.ErrServerError().WithDescription("%s", err)
+		return fault(ctx, err)
 	}
 	// A token that was already gone is a success: revocation is
 	// idempotent, and saying otherwise tells a caller whether a token
@@ -2674,7 +2691,8 @@ const verifiedKey = "access-roster:verified-proof"
 func (s *Storage) ValidateTokenExchangeRequest(ctx context.Context, request op.TokenExchangeRequest) error {
 	audiences := request.GetAudience()
 	if len(audiences) != 1 {
-		return oidc.ErrInvalidTarget().WithDescription("name exactly one audience: it is the decision")
+		return deny(ctx, oidc.ErrInvalidTarget, errors.New("an exchange names exactly one audience: it is the decision"),
+			slog.Int("audiences", len(audiences)))
 	}
 
 	proof, err := s.proofOf(ctx, request)
@@ -2684,12 +2702,16 @@ func (s *Storage) ValidateTokenExchangeRequest(ctx context.Context, request op.T
 
 	grant, err := s.iss.Exchange(ctx, proof, audiences[0])
 	switch {
-	case errors.Is(err, ErrUnknownTarget), errors.Is(err, ErrNoTarget):
-		return oidc.ErrInvalidTarget().WithDescription("%s", err)
-	case errors.Is(err, ErrRefused):
-		return oidc.ErrInvalidTarget().WithDescription("%s", err)
+	case errors.Is(err, ErrUnknownTarget), errors.Is(err, ErrNoTarget), errors.Is(err, ErrRefused):
+		// One code and one body for "there is no such audience" and "not
+		// for you" (RFC 8693 2.2.2, RFC 8707 2): telling them apart tells
+		// a caller which audiences exist. The difference is in the log, and
+		// in the audit record Exchange wrote.
+		return deny(ctx, oidc.ErrInvalidTarget, err, logattr.SafeString("proof", proof.Subject()))
+	case errors.As(err, new(*Refused)):
+		return deny(ctx, oidc.ErrInvalidGrant, err, logattr.SafeString("proof", proof.Subject()))
 	case err != nil:
-		return oidc.ErrInvalidGrant().WithDescription("%s", err)
+		return fault(ctx, err, logattr.SafeString("proof", proof.Subject()))
 	}
 
 	// The subject is the proof's, never the caller's, and the token is
@@ -2743,7 +2765,7 @@ type exchangeSubject interface {
 // or says which rule refused it.
 func (s *Storage) signInProof(ctx context.Context, request exchangeSubject) (Proof, error) {
 	refuse := func(format string, args ...any) (Proof, error) {
-		return Proof{}, oidc.ErrInvalidGrant().WithDescription("subject_token: "+format, args...)
+		return Proof{}, deny(ctx, oidc.ErrInvalidGrant, fmt.Errorf("subject_token: "+format, args...))
 	}
 
 	if request.GetExchangeSubjectTokenType() != oidc.AccessTokenType {
@@ -2753,7 +2775,7 @@ func (s *Storage) signInProof(ctx context.Context, request exchangeSubject) (Pro
 
 	issued, err := getJSON[token](ctx, s.state, tokenKey(request.GetExchangeSubjectTokenIDOrToken()))
 	if err != nil {
-		return Proof{}, oidc.ErrServerError().WithDescription("%s", err)
+		return Proof{}, fault(ctx, err)
 	}
 
 	if issued == nil {
@@ -2781,7 +2803,7 @@ func (s *Storage) signInProof(ctx context.Context, request exchangeSubject) (Pro
 
 	session, live, err := s.iss.Sessions().ByID(ctx, issued.Session)
 	if err != nil {
-		return Proof{}, oidc.ErrServerError().WithDescription("%s", err)
+		return Proof{}, fault(ctx, err)
 	}
 
 	if !live {
