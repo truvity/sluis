@@ -14,6 +14,7 @@ import (
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
 	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/audit"
+	"github.com/truvity/sluis/internal/port"
 	"github.com/truvity/sluis/internal/slackapp"
 	slackcatalogue "github.com/truvity/sluis/internal/slackapp/catalogue"
 	"github.com/truvity/sluis/internal/slackroster/connection"
@@ -251,7 +252,7 @@ func (c *Console) RequestSlackPass(
 			"a pass over %s was asked for %s ago: the controller notices a request within a minute, so wait for it",
 			workspace, now.Sub(last).Round(time.Second)))
 	}
-	c.notify(ctx, workspace)
+	c.notify(ctx, port.ControllerSlack, workspace)
 	c.log().InfoContext(ctx, "a Slack pass was requested", logattr.SafeString("workspace", workspace), logattr.SafeString("by", who.Who()))
 	return connect.NewResponse(&directoryrosterv1.RequestSlackPassResponse{RequestedAt: timestampOf(now)}), nil
 }

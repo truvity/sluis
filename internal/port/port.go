@@ -181,6 +181,29 @@ type Trigger interface {
 	Subscribe(handler func(target string)) (stop func())
 }
 
+// The controllers a notification can be for. A GitHub organisation's login and
+// a Slack workspace's key can be the same name, so a notification names the
+// controller it concerns whenever its sender knows it.
+const (
+	ControllerGitHub = "github"
+	ControllerSlack  = "slack"
+)
+
+// ControllerTrigger is a [Trigger] that routes a notification to one
+// controller. A trigger that does not implement it has one process for both.
+type ControllerTrigger interface {
+	NotifyController(ctx context.Context, controller, target string) error
+}
+
+// NotifyController asks for a tick of target by one controller: through the
+// trigger's own routing when it has one, else as a plain [Trigger.Notify].
+func NotifyController(ctx context.Context, t Trigger, controller, target string) error {
+	if ct, ok := t.(ControllerTrigger); ok {
+		return ct.NotifyController(ctx, controller, target)
+	}
+	return t.Notify(ctx, target)
+}
+
 // Identity proves a workload to the service: it verifies a bearer token
 // minted for one of the audiences and returns the subject it proves. It is
 // the seam over the existing verifiers (ServiceAccount TokenReview, the
