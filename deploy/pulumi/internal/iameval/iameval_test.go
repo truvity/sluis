@@ -8,9 +8,9 @@ import (
 )
 
 const (
-	role = "arn:aws:iam::111122223333:role/acme-fn"
-	root = "arn:aws:iam::111122223333:root"
-	key  = "arn:aws:kms:eu-west-1:111122223333:key/k1"
+	role = "arn:acme:iam::111122223333:role/acme-fn"
+	root = "arn:acme:iam::111122223333:root"
+	key  = "arn:acme:kms:eu-west-1:111122223333:key/k1"
 )
 
 func eval(t *testing.T, req iameval.Request, identity, keyPolicy string) iameval.Decision {
@@ -39,19 +39,19 @@ func TestGlobs(t *testing.T) {
 		}
 	}
 	// An ARN glob does not cross a colon in the early sections.
-	if iameval.ArnGlob("arn:aws:iam::*:role/x", "arn:aws:iam::1:2:role/x") {
+	if iameval.ArnGlob("arn:acme:iam::*:role/x", "arn:acme:iam::1:2:role/x") {
 		t.Error("a * crossed a colon")
 	}
-	if !iameval.ArnGlob("arn:aws:iam::*:role/x*", "arn:aws:iam::1:role/xyz") {
+	if !iameval.ArnGlob("arn:acme:iam::*:role/x*", "arn:acme:iam::1:role/xyz") {
 		t.Error("an ARN glob did not match")
 	}
 }
 
 func TestAllowDenyAndGlobs(t *testing.T) {
 	id := `[
-	  {"Sid":"A","Effect":"Allow","Action":"ssm:Get*","Resource":"arn:aws:ssm:r:1:parameter/p/*"},
+	  {"Sid":"A","Effect":"Allow","Action":"ssm:Get*","Resource":"arn:acme:ssm:r:1:parameter/p/*"},
 	  {"Sid":"D","Effect":"Deny","Action":["ssm:GetParameterHistory"],"Resource":"*"}]`
-	req := iameval.Request{Principal: role, Action: "ssm:GetParameter", Resource: "arn:aws:ssm:r:1:parameter/p/x"}
+	req := iameval.Request{Principal: role, Action: "ssm:GetParameter", Resource: "arn:acme:ssm:r:1:parameter/p/x"}
 	if d := eval(t, req, id, ""); !d.Allowed {
 		t.Errorf("get denied: %s", d.Reason)
 	}
@@ -63,19 +63,19 @@ func TestAllowDenyAndGlobs(t *testing.T) {
 	if d := eval(t, req, id, ""); d.Allowed || !strings.Contains(d.Reason, "explicit deny by identity D") {
 		t.Errorf("the deny lost: %+v", d)
 	}
-	req.Action, req.Resource = "ssm:GetParameter", "arn:aws:ssm:r:1:parameter/q/x"
+	req.Action, req.Resource = "ssm:GetParameter", "arn:acme:ssm:r:1:parameter/q/x"
 	if d := eval(t, req, id, ""); d.Allowed {
 		t.Error("another path allowed")
 	}
-	req.Action, req.Resource = "ssm:PutParameter", "arn:aws:ssm:r:1:parameter/p/x"
+	req.Action, req.Resource = "ssm:PutParameter", "arn:acme:ssm:r:1:parameter/p/x"
 	if d := eval(t, req, id, ""); d.Allowed {
 		t.Error("an action outside the glob allowed")
 	}
 }
 
 func TestNotActionAndNotResource(t *testing.T) {
-	id := `[{"Sid":"A","Effect":"Allow","NotAction":"s3:Delete*","NotResource":"arn:aws:s3:::b/secret/*"}]`
-	r := iameval.Request{Principal: role, Action: "s3:GetObject", Resource: "arn:aws:s3:::b/x"}
+	id := `[{"Sid":"A","Effect":"Allow","NotAction":"s3:Delete*","NotResource":"arn:acme:s3:::b/secret/*"}]`
+	r := iameval.Request{Principal: role, Action: "s3:GetObject", Resource: "arn:acme:s3:::b/x"}
 	if !eval(t, r, id, "").Allowed {
 		t.Error("NotAction/NotResource denied a plain get")
 	}
@@ -83,7 +83,7 @@ func TestNotActionAndNotResource(t *testing.T) {
 	if eval(t, r, id, "").Allowed {
 		t.Error("NotAction allowed a delete")
 	}
-	r.Action, r.Resource = "s3:GetObject", "arn:aws:s3:::b/secret/k"
+	r.Action, r.Resource = "s3:GetObject", "arn:acme:s3:::b/secret/k"
 	if eval(t, r, id, "").Allowed {
 		t.Error("NotResource allowed the excluded resource")
 	}
@@ -106,8 +106,8 @@ func TestConditionOperators(t *testing.T) {
 		{"StringLike", `{"StringLike":{"k:a":"ssm.*.amazonaws.com"}}`, base.WithContext("k:a", "ssm.r.amazonaws.com"), true},
 		{"StringLike miss", `{"StringLike":{"k:a":"ssm.*.amazonaws.com"}}`, base.WithContext("k:a", "dynamodb.r.amazonaws.com"), false},
 		{"StringNotLike", `{"StringNotLike":{"k:a":"p/*"}}`, base.WithContext("k:a", "q/x"), true},
-		{"ArnLike", `{"ArnLike":{"k:a":"arn:aws:iam::*:role/fn-*"}}`, base.WithContext("k:a", "arn:aws:iam::1:role/fn-x"), true},
-		{"ArnLike miss", `{"ArnLike":{"k:a":"arn:aws:iam::*:role/fn-*"}}`, base.WithContext("k:a", "arn:aws:iam::1:role/other"), false},
+		{"ArnLike", `{"ArnLike":{"k:a":"arn:acme:iam::*:role/fn-*"}}`, base.WithContext("k:a", "arn:acme:iam::1:role/fn-x"), true},
+		{"ArnLike miss", `{"ArnLike":{"k:a":"arn:acme:iam::*:role/fn-*"}}`, base.WithContext("k:a", "arn:acme:iam::1:role/other"), false},
 		{"ArnEquals principal", `{"ArnEquals":{"aws:PrincipalArn":["` + role + `"]}}`, base, true},
 		{"ArnNotEquals principal", `{"ArnNotEquals":{"aws:PrincipalArn":["` + role + `"]}}`, base, false},
 		{"Null absent", `{"Null":{"k:a":"true"}}`, base, true},
