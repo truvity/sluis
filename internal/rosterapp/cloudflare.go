@@ -11,6 +11,9 @@ import (
 	"github.com/truvity/sluis/internal/audit"
 	"github.com/truvity/sluis/internal/cloudflare/cfapi"
 	"github.com/truvity/sluis/internal/cloudflare/minter"
+	cfrpc "github.com/truvity/sluis/internal/cloudflare/rpc"
+	"github.com/truvity/sluis/internal/config"
+	"github.com/truvity/sluis/internal/modcall/dial"
 	"github.com/truvity/sluis/internal/port"
 	"github.com/truvity/sluis/internal/rails"
 	"github.com/truvity/sluis/internal/store"
@@ -91,4 +94,19 @@ func (a *App) runCloudflare(ctx context.Context) {
 		case <-t.C:
 		}
 	}
+}
+
+// dialCloudflare is the client of the Cloudflare module in another function,
+// calling as the class; Config.Dial is the seam a test replaces the transports
+// with, as it is for the other modules.
+func dialCloudflare(ctx context.Context, cfg Config, class string, log *slog.Logger) (*cfrpc.Client, error) {
+	if cfg.Dial == nil {
+		return cfrpc.DialAs(ctx, cfg.Cloudflare.Remote, class, log)
+	}
+	routing := dial.FromTargets(map[string]config.ModuleRemote{cfrpc.Module: cfg.Cloudflare.Remote.Target()})
+	caller, err := cfg.Dial(ctx, routing, class)
+	if err != nil {
+		return nil, fmt.Errorf("cloudflare.remote: %w", err)
+	}
+	return cfrpc.NewClient(caller, log), nil
 }
