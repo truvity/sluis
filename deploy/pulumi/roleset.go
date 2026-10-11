@@ -156,7 +156,7 @@ func (a *LambdaArgs) keyRoles() ([]KeyRole, error) {
 }
 
 // viewerRoles are the ARNs of the roles that read modules' records or blobs
-// without hosting them (the issuer's console pages, the mint-only function):
+// without hosting them (the issuer's console pages):
 // the roles an estate's viewer matchers name. Backup and restore read or write
 // everything and are not viewers.
 func (a *LambdaArgs) viewerRoles() ([]string, error) {

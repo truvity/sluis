@@ -155,34 +155,34 @@ func TestNoRoleButOIDCReachesTheSignContext(t *testing.T) {
 	}
 }
 
-func TestTheMintOnlyRoleDecryptsGitHubParametersAlone(t *testing.T) {
+// The mint is the github function's (D-v176-7 a): no role of its own is named
+// by the key policy, and the github role is admitted to the github parameters
+// alone through its own statement.
+func TestTheGitHubRoleDecryptsGitHubParametersAlone(t *testing.T) {
 	a := kpLambdaArgs(t, nil)
 	st, err := a.KeyPolicyStatements(arp.KeyPolicyOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	mint := arnp + "iam::" + account + ":role/sluis-staging-github-mint"
+	gh := arnp + "iam::" + account + ":role/sluis-staging-github"
 	var n int
 	for _, s := range st {
-		if !slices.Contains(principals(s), mint) {
+		raw, _ := json.Marshal(s)
+		if strings.Contains(string(raw), "github-mint") {
+			t.Errorf("%v names a mint role: %s", s["Sid"], raw)
+		}
+		if !slices.Contains(principals(s), gh) {
 			continue
 		}
 		n++
-		raw, _ := json.Marshal(s)
 		for _, other := range []string{"slack", "google", "cloudflare", "oidc", "backup"} {
-			if strings.Contains(string(raw), "/"+other+"/") {
+			if strings.Contains(string(raw), "/internal/"+other+"/") || strings.Contains(string(raw), "/external/"+other+"/") {
 				t.Errorf("%v names %s: %s", s["Sid"], other, raw)
 			}
 		}
-		if !strings.Contains(string(raw), "/internal/github/") || !strings.Contains(string(raw), "/external/github/") {
-			t.Errorf("%v does not name the github parameters: %s", s["Sid"], raw)
-		}
-		if fmt.Sprint(s["Action"]) != "[kms:Decrypt kms:DescribeKey]" {
-			t.Errorf("%v actions %v", s["Sid"], s["Action"])
-		}
 	}
-	if n != 1 {
-		t.Errorf("%d statements name the mint role, want 1", n)
+	if n == 0 {
+		t.Error("no statement admits the github role")
 	}
 }
 
@@ -195,7 +195,7 @@ func TestSendersRolesAndViewersFollowTheNames(t *testing.T) {
 		t.Fatal(err)
 	}
 	roleArn := func(n string) string { return arnp + "iam::" + account + ":role/" + n }
-	for _, n := range []string{"sluis-old", "sluis-staging-github-mint", "sluis-staging-backup", "sluis-staging-restore"} {
+	for _, n := range []string{"sluis-old", "sluis-staging-backup", "sluis-staging-restore"} {
 		if !slices.Contains(senders, roleArn(n)) {
 			t.Errorf("senders lack %s: %v", n, senders)
 		}
@@ -204,15 +204,15 @@ func TestSendersRolesAndViewersFollowTheNames(t *testing.T) {
 		t.Errorf("senders unsorted: %v", senders)
 	}
 	roles, err := a.Roles()
-	if err != nil || len(roles) != 8 {
+	if err != nil || len(roles) != 7 {
 		t.Fatalf("roles: %d %v", len(roles), err)
 	}
 	viewers, err := a.ViewerRoles()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Contains(viewers, roleArn("sluis-staging-github-mint")) {
-		t.Errorf("the mint role reads github without hosting it and is a viewer: %v", viewers)
+	if slices.Contains(viewers, roleArn("sluis-staging-github-mint")) {
+		t.Errorf("a mint role exists: %v", viewers)
 	}
 	if slices.Contains(viewers, roleArn("sluis-staging-backup")) || slices.Contains(viewers, roleArn("sluis-staging-slack")) {
 		t.Errorf("viewers include a role that hosts its module or backs up: %v", viewers)

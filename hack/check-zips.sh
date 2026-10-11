@@ -21,7 +21,7 @@ dir="${1:?usage: check-zips.sh DIR}"
 list="${RELEASE_ZIPS_FILE:-$(dirname "$0")/release-zips.txt}"
 fail() { echo "check-zips: FAIL: $*" >&2; exit 1; }
 # haspin FILE NAME: FILE carries the pin sluis-module=NAME and not merely a longer
-# name that starts with it (sluis-module=github-mint is not the github pin).
+# name that starts with it (sluis-module=github-x is not the github pin).
 haspin() { grep -qaE "sluis-module=$2([^A-Za-z0-9_-]|\$)" "$1"; }
 
 shopt -s nullglob
