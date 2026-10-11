@@ -667,8 +667,23 @@ func (c *Console) catalogueAppSpecs(ctx context.Context, taken map[string]bool) 
 		taken[spec.id] = true
 		out = append(out, spec)
 	}
+	// An App an organisation's record names (`app_ref`, layout v5) is that
+	// organisation's controller App: its row stands for it, and listing it
+	// again as a leftover would invite disconnecting the organisation's App.
+	named := map[string]bool{}
+	if c.deps.GitHubOrgs != nil {
+		orgs, err := c.deps.GitHubOrgs.List(ctx)
+		if err != nil {
+			return nil, err
+		}
+		for i := range orgs {
+			if orgs[i].AppRef != "" {
+				named[orgs[i].AppRef] = true
+			}
+		}
+	}
 	for i := range records {
-		if _, declared := c.deps.GitHubCatalogue.Get(records[i].ID); declared {
+		if _, declared := c.deps.GitHubCatalogue.Get(records[i].ID); declared || named[records[i].ID] {
 			continue
 		}
 		spec := c.catalogueAppSpec(ctx, records[i].ID, catalogue.App{}, records[i], true)

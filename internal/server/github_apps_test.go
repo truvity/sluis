@@ -365,6 +365,36 @@ func TestAnAppNothingDeclaresIsListedToBeDisconnected(t *testing.T) {
 	}
 }
 
+// On layout v5 an organisation names its App (`app_ref`) and the App is a
+// catalogue record nothing declares. The organisation's controller row stands
+// for it: it is not listed again as a leftover to disconnect.
+func TestAnAppAnOrganisationNamesIsNotListedAsALeftover(t *testing.T) {
+	rig := newAppsRig(t)
+	rig.catalogueApp(t, "globex-access-roster", rig.github.pem)
+	rig.catalogueApp(t, "stray", rig.github.pem)
+	err := rig.console.deps.GitHubOrgs.Put(context.Background(),
+		connection.Record{Org: "globex", AppID: 44, AppSlug: "globex-globex-access-roster", InstallationID: 7, AppRef: "globex-access-roster"},
+		connection.Credential{Org: "globex", AppID: 44, InstallationID: 7, PrivateKey: rig.github.pem})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	apps, _ := rig.list(t)
+	if app, listed := apps["globex-access-roster"]; listed {
+		t.Errorf("the organisation's own App is listed beside its controller row: %+v", app)
+	}
+	controller := apps["globex-controller"]
+	if controller == nil || controller.GetAppSlug() != "globex-globex-access-roster" {
+		t.Fatalf("the controller row = %+v", controller)
+	}
+	if strings.Contains(controller.GetStateDetail(), "no longer declares") {
+		t.Errorf("the controller row says the catalogue dropped it: %s", controller.GetStateDetail())
+	}
+	if stray := apps["stray"]; stray == nil || !strings.Contains(stray.GetStateDetail(), "no longer declare") {
+		t.Errorf("an App nobody names is no longer listed as a leftover: %+v", stray)
+	}
+}
+
 // The generic Begin starts the same flow the per-kind one does, under the
 // same signed state: a browser part-way through when the pod rolls
 // finishes at the callback it was always going to.
