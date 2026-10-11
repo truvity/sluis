@@ -71,6 +71,7 @@ func every() []*record.Record {
 		audit.SessionRevoked(person, "b.person@example.com", "grafana", "client", 1),
 		audit.SessionsRevokedByClass(person, "a.person@example.com", audit.ScopeEveryAgent, 2, "agent", "interactive"),
 		audit.SessionRevoked(person, "", "mcp-host", audit.ScopeClientEveryIdentity, 4),
+		audit.SessionReuseRevoked("a.person@example.com", "grafana"),
 		audit.SessionRefreshRefused("b.person@example.com", "grafana", "no longer admitted"),
 		audit.ClientSecretCreated("grafana", time.Date(2026, 10, 6, 12, 0, 0, 0, time.UTC)),
 		audit.ClientSecretAdopted("grafana", "input", time.Date(2026, 10, 6, 12, 0, 0, 0, time.UTC)),
@@ -137,6 +138,7 @@ func every() []*record.Record {
 		audit.GitHubMemberRemoved(audit.Member{Org: "example", Login: "gone"}, audit.Succeeded()),
 		audit.GitHubMemberHeld(member, "remove", "the directory cannot vouch for example.com"),
 		audit.GitHubOwnerReported(audit.Member{Org: "example", Login: "owner"}, "remove", "owners are reported, not removed"),
+		audit.GitHubOwnerReported(audit.Member{Org: "example", Team: "platform", Login: "owner"}, "remove", "owners are reported, not removed"),
 	}
 }
 

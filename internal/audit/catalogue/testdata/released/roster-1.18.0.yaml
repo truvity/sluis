@@ -1,0 +1,1014 @@
+# What sluis records: every action, what it carries, who it concerns,
+# which destination keeps it (its `category`), and how it reads as a sentence.
+#
+# This is the contract with the audit trail (github.com/truvity/sluis/audit). Every
+# action here is emitted by a constructor in internal/audit/events.go, and
+# `just audit-catalogue` holds the two together: an action emitted and not
+# declared, or declared and not emitted, fails the gate.
+#
+# Each action declares one `category`, which routes its records: `security`
+# for signing in, tokens, sessions, credentials and privileged changes;
+# `activity` for the directory and roster changes (connections, apps,
+# links, members, channels).
+#
+# Bump the version AND add the released fixture
+# (testdata/released/roster-<version>.yaml) when you change an action: an
+# installation refuses a different document under a version it already holds,
+# and TestAReleasedCatalogueVersionIsNeverChanged fails on it.
+#
+# A change to what an action carries is a new version. The installation keeps
+# every version it was sent, so records already written keep their meaning.
+source: roster
+version: "1.18.0"
+locales: [en]
+
+actor_kinds:
+  person:
+    category: internal
+    description: A member of the organisation, by the address the directory knows them by.
+  recovery:
+    category: internal
+    description: The recovery identity, for the day the directory is not there to sign in with.
+  ci:
+    category: machine
+    description: A CI job, by the repository it runs for (github:<owner>/<repo>).
+  workload:
+    category: machine
+    description: A cluster workload, by its service account (system:serviceaccount:<namespace>:<name>).
+  system:
+    category: machine
+    description: sluis acting on its own, with nobody asking.
+  anonymous:
+    category: external
+    description: A caller refused before it proved who it is; the request's address is in the record's context.
+
+target_types:
+  client:
+    description: An application that relies on the issuer, by client id; `console` is this service's own console.
+  workspace:
+    description: A connected directory, by workspace id.
+  organisation:
+    description: A GitHub organisation, by login.
+  team:
+    description: A GitHub team, as <organisation>/<team>.
+  github_account:
+    description: A person's GitHub account, by login.
+    is_person: true
+  github_app:
+    description: A GitHub App, by the id sluis catalogues it under, or its slug where it has none.
+  slack_workspace:
+    description: A Slack workspace, by the key the policy names it under.
+  slack_channel:
+    description: A Slack channel, as <workspace key>/<channel name>.
+  slack_user:
+    description: A person's Slack account, by Slack user id.
+    is_person: true
+  slack_app:
+    description: A Slack App, by its id.
+  cloudflare_preset:
+    description: A Cloudflare preset (cloudflare.presets), by name.
+  installation:
+    description: An installation of sluis, by its instance name.
+  backup:
+    description: A backup of the installation, by its id (the timestamp of its start and a random suffix).
+  directory_group:
+    description: A group of a connected directory, by its address.
+  directory_user:
+    description: A person of a connected directory listed individually on a Slack channel, by address.
+    is_person: true
+
+actions:
+  # ------------------------------------------------------------ signing in
+
+  roster.person.signed_in:
+    summary: A person signed in to a client, or was refused; at the issuer, with the class of the session it opens (interactive or agent) and that session's deadline.
+    operation: authentication
+    categories: [authentication]
+    category: security
+    target_types: [client]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/sign-in.json
+    message:
+      en: "{outcome, select, success {{actor} signed in to {targets_0_id}} denied {{actor} was refused sign-in to {targets_0_id}} other {{actor} could not sign in to {targets_0_id}}}"
+
+  roster.recovery.signed_in:
+    summary: Somebody signed in with the recovery identity, which bypasses the directory.
+    operation: authentication
+    categories: [authentication, privileged_access]
+    category: security
+    target_types: [client]
+    # Recorded before it succeeds, and refused when it cannot be: the way in
+    # that bypasses the directory must never be used off the record.
+    delivery: block
+    data_schema: https://schemas.example/access-roster/v1/sign-in.json
+    message:
+      en: "{outcome, select, success {{actor} signed in to {targets_0_id} by recovery} other {a recovery sign-in to {targets_0_id} did not complete}}"
+
+  roster.token.exchanged:
+    summary: A token was exchanged for one another client accepts, or the exchange was refused.
+    operation: authentication
+    categories: [authentication, authorization_decision]
+    category: security
+    target_types: [client]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/token-exchanged.json
+    message:
+      en: "{outcome, select, success {{actor} exchanged a token for {targets_0_id}} denied {{actor} was refused a token for {targets_0_id}} other {{actor} could not exchange a token for {targets_0_id}}}"
+
+  roster.github_token.minted:
+    summary: A GitHub App installation token was minted, or refused. Never the token.
+    operation: create
+    categories: [credential_lifecycle, authorization_decision]
+    category: security
+    target_types: [github_app]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/github-token.json
+    message:
+      en: "{outcome, select, success {{actor} was given a {targets_0_id} token for {data_org}} denied {{actor} was refused a {targets_0_id} token} other {{actor} could not be given a {targets_0_id} token}}"
+
+  # ------------------------------------------------------------ Cloudflare
+
+  roster.cloudflare.token.minted:
+    summary: A Cloudflare API token or R2 credential was minted from a preset's prototype, either stored for the preset (by sluis on its schedule) or on demand for a caller. Never the value.
+    operation: create
+    categories: [credential_lifecycle, authorization_decision]
+    category: security
+    target_types: [cloudflare_preset]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/cloudflare-token.json
+    message:
+      en: "{data_variant, select, on_demand {{actor} was given a {targets_0_id} Cloudflare token} other {a {targets_0_id} Cloudflare token was minted and stored}}"
+
+  roster.cloudflare.token.refused:
+    summary: A Cloudflare token was not minted, for a caller who was not granted the preset or because the preset's prototype or the account refused it.
+    operation: create
+    categories: [credential_lifecycle, authorization_decision]
+    category: security
+    target_types: [cloudflare_preset]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/cloudflare-token.json
+    message:
+      en: "{outcome, select, denied {{actor} was refused a {targets_0_id} Cloudflare token} other {a {targets_0_id} Cloudflare token could not be minted}}"
+
+  roster.cloudflare.tokens.swept:
+    summary: sluis deleted the expired Cloudflare tokens it had minted for a preset (only its own, by the ids it recorded).
+    operation: remove
+    categories: [credential_lifecycle]
+    category: security
+    target_types: [cloudflare_preset]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/cloudflare-token.json
+    message:
+      en: "expired {targets_0_id} Cloudflare tokens were deleted"
+
+  roster.cloudflare.token.revoked:
+    summary: Somebody deleted a live Cloudflare token that sluis had minted for a preset.
+    operation: remove
+    categories: [credential_lifecycle, privileged_access]
+    category: security
+    target_types: [cloudflare_preset]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/cloudflare-token.json
+    message:
+      en: "{actor} revoked a {targets_0_id} Cloudflare token"
+
+  # ---------------------------------------------------- backup and restore
+  # What the backup module and the restore function (docs/decisions/0071)
+  # record. None of these carries a value, a key or a chunk: the backup's id,
+  # counts, and a short reason.
+
+  roster.backup.completed:
+    summary: A backup of the installation was written to the archive bucket and its manifest sealed. Counts only.
+    operation: transfer
+    categories: [data_access]
+    category: activity
+    target_types: [backup]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/backup-run.json
+    message:
+      en: "backup {targets_0_id} was written: {data_records, plural, one {# record} other {# records}} of {data_modules, plural, one {# module} other {# modules}}"
+
+  roster.backup.failed:
+    summary: A backup could not be completed. The records already written stay in the bucket and are not a backup; the next run starts again, and a prune removes them.
+    operation: transfer
+    categories: [data_access]
+    category: activity
+    target_types: [backup]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/backup-run.json
+    message:
+      en: "backup {targets_0_id} failed: {outcome_reason}"
+
+  roster.backup.pruned:
+    summary: Backups beyond the retention rule were deleted from the archive bucket (or, with `orphans`, the objects of runs that never wrote a manifest).
+    operation: remove
+    categories: [data_change]
+    category: activity
+    target_types: [backup]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/backup-pruned.json
+    message:
+      en: "{data_removed, plural, one {# backup} other {# backups}} beyond the retention rule {data_removed, plural, one {was} other {were}} deleted, {data_kept} kept"
+
+  roster.restore.started:
+    summary: A restore of an installation from a backup began. The module is under maintenance until it completes.
+    operation: restore
+    categories: [data_change, privileged_access]
+    category: security
+    target_types: [backup]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/restore.json
+    message:
+      en: "{actor} began restoring from backup {targets_0_id}"
+
+  roster.restore.completed:
+    summary: A restore verified against its backup and lifted the maintenance flag.
+    operation: restore
+    categories: [data_change, privileged_access]
+    category: security
+    target_types: [backup]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/restore.json
+    message:
+      en: "the restore from backup {targets_0_id} completed"
+
+  roster.restore.failed:
+    summary: A restore did not complete or did not verify. The maintenance flag stays set until an operator looks.
+    operation: restore
+    categories: [data_change, privileged_access]
+    category: security
+    target_types: [backup]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/restore.json
+    message:
+      en: "the restore from backup {targets_0_id} failed: {outcome_reason}"
+
+  roster.maintenance.changed:
+    summary: An operator set or lifted the migration freeze (`sluis maintenance on` or `off`). While it is set the installation refuses every write of state, answers 503 with Retry-After, and still serves discovery, the key set and a read-only token exchange. Lifting a restore's flag is `forced`.
+    operation: modify
+    categories: [configuration_change, privileged_access]
+    category: security
+    target_types: [installation]
+    # Recorded before the flag changes, and refused when it cannot be: an
+    # operator's freeze must not happen off the record (`--no-audit` is the
+    # break-glass, and prints the record locally instead).
+    delivery: block
+    data_schema: https://schemas.example/access-roster/v1/maintenance.json
+    message:
+      en: "{outcome, select, success {{data_state, select, migration {{actor} froze {targets_0_id} for a migration} other {{actor} lifted the maintenance flag of {targets_0_id}}}} other {{actor} could not change the maintenance flag of {targets_0_id}}}"
+
+  roster.secrets.pruned:
+    summary: An operator ran `sluis migrate v5 prune` for real. A record with `phase` started is kept before the first delete and names the layout v4 parameters about to be deleted; the record with `phase` completed (or a failed outcome) says how many were. Names and counts only, never a value.
+    operation: remove
+    categories: [data_change, privileged_access]
+    category: security
+    target_types: [installation]
+    delivery: block
+    data_schema: https://schemas.example/access-roster/v1/secrets-pruned.json
+    message:
+      en: "{outcome, select, success {{data_phase, select, started {{actor} is pruning {data_planned, plural, one {# layout v4 parameter} other {# layout v4 parameters}} of {targets_0_id}} other {{actor} pruned {data_deleted, plural, one {# layout v4 parameter} other {# layout v4 parameters}} of {targets_0_id}}}} other {{actor} could not finish pruning the layout v4 parameters of {targets_0_id}}}"
+
+  roster.migration.copied:
+    summary: An operator ran `sluis migrate v5 copy` for real and it had something to write. A record with `phase` started is kept before the first write and counts what will be written and which differing destination values `overwrite` replaces (by name); the record with `phase` completed (or a failed outcome) says how it ended. Names and counts only, never a value.
+    operation: modify
+    categories: [data_change, privileged_access]
+    category: security
+    target_types: [installation]
+    delivery: block
+    data_schema: https://schemas.example/access-roster/v1/migration-copied.json
+    message:
+      en: "{outcome, select, success {{data_phase, select, started {{actor} is copying {data_written, plural, one {# item} other {# items}} into {targets_0_id}} other {{actor} copied {data_written, plural, one {# item} other {# items}} into {targets_0_id}}}} other {{actor} could not finish copying into {targets_0_id}}}"
+
+  roster.secrets.rekeyed:
+    summary: An operator ran `sluis secrets rekey` for real, re-writing the installation's SSM SecureString parameters under the key `secrets.kmsKeyId` names. A record with `phase` started is kept before the first write and names the parameters about to be re-written; the record with `phase` completed (or a failed outcome) says how many were. Names and counts only, never a value.
+    operation: modify
+    categories: [data_change, privileged_access]
+    category: security
+    target_types: [installation]
+    # Recorded before the first write, and refused when it cannot be.
+    delivery: block
+    data_schema: https://schemas.example/access-roster/v1/secrets-rekeyed.json
+    message:
+      en: "{outcome, select, success {{data_phase, select, started {{actor} is re-keying {data_planned, plural, one {# parameter} other {# parameters}} of {targets_0_id}} other {{actor} re-keyed {data_rekeyed, plural, one {# parameter} other {# parameters}} of {targets_0_id}}}} other {{actor} could not finish re-keying the parameters of {targets_0_id}}}"
+
+  # -------------------------------------------------------------- sessions
+
+  roster.session.ended:
+    summary: A person signed out, ending their sessions, except the agent-class sessions it spared (by client id in `spared`), which keep running until revoked or their own end.
+    operation: authentication
+    categories: [authentication]
+    category: security
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/sessions-ended.json
+    message:
+      en: "{actor} signed out, ending {data_ended, plural, one {# session} other {# sessions}}"
+
+  roster.session.revoked:
+    summary: A person's sessions were revoked, by somebody, or by the issuer (scope `refresh_token_reuse`) when a spent refresh token was presented again after its grace window, (scope `pre_upgrade_cookie`, by an anonymous actor) when a browser signed out with a sign-in cookie set before the cookie had a secret of its own, (scope `sign_in_replaced`, by the person signing in) when another person signed in in the same browser, by the person themselves for one class of their own (scope `every_browser_and_app` ends every browser sign-in and interactive session and keeps the agent sessions, scope `every_agent` ends every agent session and keeps the browsers, and `ended_class` and `kept_class` say which), or by an operator for one client and every person (scope `client_every_identity`, no subject).
+    operation: remove
+    categories: [authentication, account_lifecycle]
+    category: security
+    target_types: [client]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/session-revoked.json
+    message:
+      en: "{data_scope, select, every_browser_and_app {{actor} signed out of every browser and app, keeping agent connections, ending {data_ended, plural, one {# session} other {# sessions}}} every_agent {{actor} disconnected every agent, ending {data_ended, plural, one {# session} other {# sessions}}} client_every_identity {{actor} ended {targets_0_id}'s sessions for every person, ending {data_ended, plural, one {#} other {#}}} other {{actor} revoked {subject}'s sessions, ending {data_ended, plural, one {#} other {#}}}}"
+
+  roster.session.refresh_refused:
+    summary: A session was refused a refresh because its holder is no longer admitted to the client.
+    operation: authentication
+    categories: [authentication, authorization_decision]
+    category: security
+    target_types: [client]
+    delivery: async
+    message:
+      en: "{subject}'s session at {targets_0_id} was refused a refresh"
+
+  # ------------------------------------------------- client secrets
+  # What happens to the secret of a client declared `secret: {generate: true}`.
+  # None of these carries a value: the client, the times and the overlap.
+
+  roster.client.secret.created:
+    summary: The secret of a generated client was made.
+    operation: create
+    categories: [credential_lifecycle]
+    category: security
+    target_types: [client]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/client-secret.json
+    message:
+      en: "the secret of client {targets_0_id} was generated"
+
+  roster.client.secret.adopted:
+    summary: An existing secret of a generated client was taken as its stored secret, unchanged.
+    operation: create
+    categories: [credential_lifecycle]
+    category: security
+    target_types: [client]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/client-secret.json
+    message:
+      en: "the existing secret of client {targets_0_id} was adopted"
+
+  roster.client.secret.rotated:
+    summary: The secret of a generated client was replaced, the old one staying valid for an overlap.
+    operation: modify
+    categories: [credential_lifecycle, privileged_access]
+    category: security
+    target_types: [client]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/client-secret.json
+    message:
+      en: "{actor} rotated the secret of client {targets_0_id}"
+
+  roster.client.secret.orphaned:
+    summary: A stored client secret was found with no generated client of that id in the policy.
+    operation: access
+    categories: [credential_lifecycle]
+    category: security
+    target_types: [client]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/client-secret.json
+    message:
+      en: "the stored secret of client {targets_0_id} has no generated client in the policy"
+
+  roster.client.secret.deleted:
+    summary: The stored secret of a client no longer in the policy was deleted.
+    operation: remove
+    categories: [credential_lifecycle, privileged_access]
+    category: security
+    target_types: [client]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/client-secret.json
+    message:
+      en: "{actor} deleted the stored secret of client {targets_0_id}"
+
+  roster.client.secret.denied:
+    summary: A signed-in caller was refused when managing the secret of a generated client.
+    operation: access
+    categories: [credential_lifecycle, privileged_access]
+    category: security
+    target_types: [client]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/client-secret.json
+    message:
+      en: "{actor} was refused {data_action} on a client secret: {outcome_reason}"
+
+  # ------------------------------------------------------------ directories
+
+  roster.workspace.connected:
+    summary: A directory was connected.
+    operation: create
+    categories: [configuration_change]
+    category: activity
+    target_types: [workspace]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/workspace-connected.json
+    message:
+      en: "{actor} connected directory {targets_0_id}"
+
+  roster.workspace.reconnected:
+    summary: A connected directory was given a new consent.
+    operation: modify
+    categories: [configuration_change]
+    category: activity
+    target_types: [workspace]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/workspace-connected.json
+    message:
+      en: "{actor} reconnected directory {targets_0_id}"
+
+  roster.workspace.disconnected:
+    summary: A directory was disconnected.
+    operation: remove
+    categories: [configuration_change]
+    category: activity
+    target_types: [workspace]
+    delivery: async
+    message:
+      en: "{actor} disconnected directory {targets_0_id}"
+
+  roster.workspace.domains_changed:
+    summary: The domains a directory answers for changed.
+    operation: modify
+    categories: [configuration_change]
+    category: activity
+    target_types: [workspace]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/workspace-domains.json
+    message:
+      en: "{actor} changed the domains directory {targets_0_id} answers for"
+
+  roster.workspace.groups_changed:
+    summary: The groups served from a directory changed.
+    operation: modify
+    categories: [configuration_change]
+    category: activity
+    target_types: [workspace]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/workspace-groups.json
+    message:
+      en: "{actor} changed the groups served from directory {targets_0_id}, now {data_groups}"
+
+  # ------------------------------------------------- GitHub: organisations
+
+  roster.github_app.created:
+    summary: A GitHub App was created for an organisation.
+    operation: create
+    categories: [configuration_change]
+    category: activity
+    target_types: [github_app, organisation]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/app-created.json
+    message:
+      en: "{actor} created GitHub App {targets_0_id} for {targets_1_id}"
+
+  roster.github_org.connected:
+    summary: A GitHub organisation was connected by installing the App.
+    operation: create
+    categories: [configuration_change]
+    category: activity
+    target_types: [organisation]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/github-org-connected.json
+    message:
+      en: "{actor} connected GitHub organisation {targets_0_id}"
+
+  roster.github_org.pass_requested:
+    summary: An operator asked the GitHub controller to pass over an organisation now.
+    operation: modify
+    categories: [configuration_change]
+    category: activity
+    target_types: [organisation]
+    delivery: async
+    message:
+      en: "{actor} asked for a pass over GitHub organisation {targets_0_id} now"
+
+  roster.github_org.owner_changed:
+    summary: The directory that owns a GitHub organisation was changed by the installation-wide operator.
+    operation: modify
+    categories: [configuration_change]
+    category: activity
+    target_types: [organisation]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/owner-changed.json
+    message:
+      en: "{actor} changed the owner of GitHub organisation {targets_0_id} from {data_from} to {data_to}"
+
+  roster.github_org.disconnected:
+    summary: A GitHub organisation was disconnected.
+    operation: remove
+    categories: [configuration_change]
+    category: activity
+    target_types: [organisation]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/app-disconnected.json
+    message:
+      en: "{actor} disconnected GitHub organisation {targets_0_id}"
+
+  roster.github_removals.confirmed:
+    summary: An operator confirmed a set of removals the safety breaker had held.
+    operation: modify
+    categories: [privileged_access, account_lifecycle]
+    category: security
+    target_types: [organisation]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/removals-confirmed.json
+    message:
+      en: "{actor} confirmed the removal of {data_affected} of {data_members} members of {targets_0_id}"
+
+  # ----------------------------------------------- GitHub: the other Apps
+
+  roster.link_app.connected:
+    summary: The App that links people's GitHub accounts was connected.
+    operation: create
+    categories: [configuration_change]
+    category: activity
+    target_types: [github_app]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/link-app-connected.json
+    message:
+      en: "{actor} connected the account-linking App {targets_0_id}"
+
+  roster.link_app.disconnected:
+    summary: The App that links people's GitHub accounts was disconnected.
+    operation: remove
+    categories: [configuration_change]
+    category: activity
+    target_types: [github_app]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/link-app-disconnected.json
+    message:
+      en: "{actor} disconnected the account-linking App {targets_0_id}"
+
+  roster.catalogue_app.created:
+    summary: A catalogued GitHub App was created.
+    operation: create
+    categories: [configuration_change]
+    category: activity
+    target_types: [github_app, organisation]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/app-created.json
+    message:
+      en: "{actor} created GitHub App {targets_0_id} for {targets_1_id}"
+
+  roster.catalogue_app.installed:
+    summary: A catalogued GitHub App was installed.
+    operation: create
+    categories: [configuration_change]
+    category: activity
+    target_types: [github_app, organisation]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/app-installed.json
+    message:
+      en: "{actor} installed GitHub App {targets_0_id} on {targets_1_id}"
+
+  roster.catalogue_app.disconnected:
+    summary: A catalogued GitHub App was disconnected.
+    operation: remove
+    categories: [configuration_change]
+    category: activity
+    target_types: [github_app, organisation]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/app-disconnected.json
+    message:
+      en: "{actor} disconnected GitHub App {targets_0_id} from {targets_1_id}"
+
+  roster.catalogue_app.webhook_changed:
+    summary: A step of setting or rotating the secret of a catalogued GitHub App's webhook.
+    operation: modify
+    categories: [credential_lifecycle, configuration_change]
+    category: security
+    target_types: [github_app, organisation]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/app-webhook-changed.json
+    message:
+      en: "{outcome, select, success {{actor} {data_step, select, configured {set the webhook of} staged {kept a new webhook secret for} verified {confirmed the consumer holds the new webhook secret of} rotated {rotated the webhook secret of} restored {put back the previous webhook secret of} other {changed the webhook of}} GitHub App {targets_0_id}} other {{actor} could not finish the webhook of GitHub App {targets_0_id} at {data_step}: {outcome_reason}}}"
+
+  roster.runner_app.created:
+    summary: A GitHub App for self-hosted runners was created.
+    operation: create
+    categories: [configuration_change]
+    category: activity
+    target_types: [github_app, organisation]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/app-created.json
+    message:
+      en: "{actor} created runner App {targets_0_id} for {targets_1_id}"
+
+  roster.runner_app.installed:
+    summary: A GitHub App for self-hosted runners was installed.
+    operation: create
+    categories: [configuration_change]
+    category: activity
+    target_types: [github_app, organisation]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/app-installed.json
+    message:
+      en: "{actor} installed runner App {targets_0_id} on {targets_1_id}"
+
+  roster.runner_app.disconnected:
+    summary: A GitHub App for self-hosted runners was disconnected.
+    operation: remove
+    categories: [configuration_change]
+    category: activity
+    target_types: [github_app, organisation]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/app-disconnected.json
+    message:
+      en: "{actor} disconnected runner App {targets_0_id} from {targets_1_id}"
+
+  # ------------------------------------------------- GitHub: accounts
+
+  roster.github_link.created:
+    summary: A person linked their GitHub account.
+    operation: create
+    categories: [account_lifecycle]
+    category: activity
+    target_types: [github_account]
+    delivery: async
+    message:
+      en: "{actor} linked a GitHub account"
+
+  roster.github_link.matched:
+    summary: A GitHub account was linked to a person because its profile publishes their work address.
+    operation: create
+    categories: [account_lifecycle]
+    category: activity
+    target_types: [github_account]
+    delivery: async
+    message:
+      en: "a GitHub account was linked to {subject} by the address its profile publishes"
+
+  roster.github_link.imported:
+    summary: An operator imported a link between a GitHub account and a person.
+    operation: create
+    categories: [account_lifecycle, privileged_access]
+    category: security
+    target_types: [github_account]
+    delivery: async
+    message:
+      en: "{actor} linked a GitHub account to {subject}"
+
+  roster.github_link.moved:
+    summary: A link moved to another address of the same person.
+    operation: modify
+    categories: [account_lifecycle]
+    category: activity
+    target_types: [github_account]
+    delivery: async
+    message:
+      en: "{subject}'s GitHub link moved"
+
+  roster.github_link.narrowed:
+    summary: A link lost some of its addresses.
+    operation: modify
+    categories: [account_lifecycle]
+    category: activity
+    target_types: [github_account]
+    delivery: async
+    message:
+      en: "{subject}'s GitHub link was narrowed"
+
+  roster.github_link.unverifiable:
+    summary: A link could no longer be verified.
+    operation: modify
+    categories: [account_lifecycle]
+    category: activity
+    target_types: [github_account]
+    delivery: async
+    message:
+      en: "{subject}'s GitHub link can no longer be verified"
+
+  roster.github_link.lost:
+    summary: A link was lost.
+    operation: remove
+    categories: [account_lifecycle]
+    category: activity
+    target_types: [github_account]
+    delivery: async
+    message:
+      en: "{subject}'s GitHub link was lost"
+
+  # ------------------------------------------------- GitHub: members
+
+  roster.github_member.invited:
+    summary: A person was invited to a GitHub organisation or team.
+    operation: create
+    categories: [account_lifecycle]
+    category: activity
+    target_types: [organisation, team, github_account]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/member-changed.json
+    message:
+      en: "{outcome, select, success {{subject} was invited to {targets_0_id}} other {GitHub refused to invite {subject} to {targets_0_id}}}"
+
+  roster.github_member.added:
+    summary: A person was added to a GitHub team.
+    operation: create
+    categories: [account_lifecycle]
+    category: activity
+    target_types: [organisation, team, github_account]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/member-changed.json
+    message:
+      en: "{outcome, select, success {{subject} was added to {targets_0_id}} other {GitHub refused to add {subject} to {targets_0_id}}}"
+
+  roster.github_member.role_set:
+    summary: A person's role on a GitHub team changed.
+    operation: modify
+    categories: [account_lifecycle, privileged_access]
+    category: security
+    target_types: [organisation, team, github_account]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/member-changed.json
+    message:
+      en: "{outcome, select, success {{subject} became {data_role} of {targets_0_id}} other {GitHub refused to make {subject} {data_role} of {targets_0_id}}}"
+
+  roster.github_member.removed:
+    summary: A person was removed from a GitHub organisation or team.
+    operation: remove
+    categories: [account_lifecycle]
+    category: activity
+    target_types: [organisation, team, github_account]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/member-changed.json
+    message:
+      en: "{outcome, select, success {{subject} was removed from {targets_0_id}} other {GitHub refused to remove {subject} from {targets_0_id}}}"
+
+  roster.github_member.held:
+    summary: A change to a person's GitHub membership is held, and needs an operator.
+    operation: modify
+    categories: [account_lifecycle]
+    category: activity
+    target_types: [organisation, team, github_account]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/member-held.json
+    message:
+      en: "a change to {subject} on {targets_0_id} is held: {outcome_reason}"
+
+  roster.github_owner.reported:
+    summary: An organisation owner the directory does not vouch for was reported rather than removed.
+    operation: access
+    categories: [privileged_access]
+    category: security
+    target_types: [organisation, team, github_account]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/member-held.json
+    message:
+      en: "an owner of {targets_0_id} was reported: {outcome_reason}"
+
+  # ------------------------------------------------- Slack
+
+  roster.slack_workspace.connected:
+    summary: A Slack workspace was connected by installing the App.
+    operation: create
+    categories: [configuration_change]
+    category: activity
+    target_types: [slack_workspace, slack_app]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/slack-workspace-connected.json
+    message:
+      en: "{actor} connected Slack workspace {targets_0_id}"
+
+  roster.slack_workspace.owner_changed:
+    summary: The directory that owns a Slack workspace was changed by the installation-wide operator.
+    operation: modify
+    categories: [configuration_change]
+    category: activity
+    target_types: [slack_workspace]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/owner-changed.json
+    message:
+      en: "{actor} changed the owner of Slack workspace {targets_0_id} from {data_from} to {data_to}"
+
+  roster.slack_workspace.connect_refused:
+    summary: An install of the roster's Slack App was refused because it was made into a workspace other than the one first connected.
+    operation: create
+    categories: [configuration_change]
+    category: activity
+    target_types: [slack_workspace, slack_app]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/slack-workspace-connected.json
+    message:
+      en: "{actor}'s install of the roster's Slack App for workspace {targets_0_id} was refused: {outcome_reason}"
+
+  roster.slack_workspace.disconnected:
+    summary: A Slack workspace was disconnected.
+    operation: remove
+    categories: [configuration_change]
+    category: activity
+    target_types: [slack_workspace, slack_app]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/slack-workspace-disconnected.json
+    message:
+      en: "{actor} disconnected Slack workspace {targets_0_id}"
+
+  roster.slack_app.created:
+    summary: A catalogued Slack App was created.
+    operation: create
+    categories: [configuration_change]
+    category: activity
+    target_types: [slack_app, slack_workspace]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/slack-app-created.json
+    message:
+      en: "{actor} created Slack App {targets_0_id} for workspace {targets_1_id}"
+
+  roster.slack_app.installed:
+    summary: A catalogued Slack App was installed into its workspace.
+    operation: create
+    categories: [configuration_change]
+    category: activity
+    target_types: [slack_app, slack_workspace]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/slack-app-installed.json
+    message:
+      en: "{actor} installed Slack App {targets_0_id} into workspace {targets_1_id}"
+
+  roster.slack_app.install_refused:
+    summary: An install of a catalogued Slack App was refused because it was made into another workspace.
+    operation: create
+    categories: [configuration_change]
+    category: activity
+    target_types: [slack_app, slack_workspace]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/slack-app-installed.json
+    message:
+      en: "{actor}'s install of Slack App {targets_0_id} for workspace {targets_1_id} was refused: {outcome_reason}"
+
+  roster.slack_shared_channel.created:
+    summary: A Slack Connect channel was defined from the console.
+    operation: create
+    categories: [configuration_change, privileged_access]
+    category: security
+    target_types: [slack_workspace, slack_channel, directory_group, directory_user]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/slack-shared-channel.json
+    message:
+      en: "{actor} defined the Slack Connect channel {targets_1_id}, hosted by {targets_0_id}, shared with {data_with}, fed by {data_sources} directory groups and {data_members} individual addresses"
+
+  roster.slack_shared_channel.updated:
+    summary: A Slack Connect channel's definition was changed from the console.
+    operation: modify
+    categories: [configuration_change, privileged_access]
+    category: security
+    target_types: [slack_workspace, slack_channel, directory_group, directory_user]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/slack-shared-channel.json
+    message:
+      en: "{actor} changed the Slack Connect channel {targets_1_id}, hosted by {targets_0_id} ({data_changes})"
+
+  roster.slack_shared_channel.deleted:
+    summary: A Slack Connect channel's definition was deleted from the console; the channel stays in Slack.
+    operation: remove
+    categories: [configuration_change, privileged_access]
+    category: security
+    target_types: [slack_workspace, slack_channel, directory_group, directory_user]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/slack-shared-channel.json
+    message:
+      en: "{actor} deleted the definition of the Slack Connect channel {targets_1_id}, hosted by {targets_0_id}; the channel stays in Slack"
+
+  roster.slack_console_channel.created:
+    summary: An ordinary Slack channel was put under management from the console.
+    operation: create
+    categories: [configuration_change, privileged_access]
+    category: security
+    target_types: [slack_workspace, slack_channel, directory_group, directory_user]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/slack-console-channel.json
+    message:
+      en: "{actor} put the Slack channel {targets_1_id} in {targets_0_id} under management ({data_mode}, fed by {data_sources} directory groups and {data_members} individual addresses)"
+
+  roster.slack_console_channel.updated:
+    summary: A console-managed Slack channel's record was changed from the console.
+    operation: modify
+    categories: [configuration_change, privileged_access]
+    category: security
+    target_types: [slack_workspace, slack_channel, directory_group, directory_user]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/slack-console-channel.json
+    message:
+      en: "{actor} changed the managed Slack channel {targets_1_id} in {targets_0_id} ({data_changes})"
+
+  roster.slack_console_channel.deleted:
+    summary: A console-managed Slack channel's record was deleted from the console; the channel stays in Slack.
+    operation: remove
+    categories: [configuration_change, privileged_access]
+    category: security
+    target_types: [slack_workspace, slack_channel, directory_group, directory_user]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/slack-console-channel.json
+    message:
+      en: "{actor} stopped managing the Slack channel {targets_1_id} in {targets_0_id}; the channel stays in Slack"
+
+  roster.slack_channel.created:
+    summary: A Slack channel was created.
+    operation: create
+    categories: [configuration_change]
+    category: activity
+    target_types: [slack_workspace, slack_channel]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/slack-channel.json
+    message:
+      en: "{outcome, select, success {{targets_1_id} was created} other {Slack refused to create {targets_1_id}}}"
+
+  roster.slack_channel.adopted:
+    summary: An existing Slack channel was adopted into management, by name.
+    operation: modify
+    categories: [configuration_change]
+    category: activity
+    target_types: [slack_workspace, slack_channel]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/slack-channel.json
+    message:
+      en: "{outcome, select, success {{targets_1_id} was adopted} other {Slack refused to let {targets_1_id} be adopted}}"
+
+  roster.slack_channel.archived:
+    summary: An operator archived a Slack channel when forgetting its console record.
+    operation: modify
+    categories: [configuration_change]
+    category: activity
+    target_types: [slack_workspace, slack_channel]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/slack-channel.json
+    message:
+      en: "{outcome, select, success {{actor} archived {targets_1_id} in {targets_0_id}} other {Slack refused to archive {targets_1_id}; archive it in Slack by hand}}"
+
+  roster.slack_member.invited:
+    summary: A person was invited to a Slack channel.
+    operation: create
+    categories: [account_lifecycle]
+    category: activity
+    target_types: [slack_workspace, slack_channel, slack_user]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/slack-member-changed.json
+    message:
+      en: "{outcome, select, success {{subject} was invited to {targets_1_id}} other {Slack refused to invite {subject} to {targets_1_id}}}"
+
+  roster.slack_member.removed:
+    summary: A person was removed from a private Slack channel.
+    operation: remove
+    categories: [account_lifecycle]
+    category: activity
+    target_types: [slack_workspace, slack_channel, slack_user]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/slack-member-changed.json
+    message:
+      en: "{outcome, select, success {{subject} was removed from {targets_1_id}} other {Slack refused to remove {subject} from {targets_1_id}}}"
+
+  roster.slack_shared.invited:
+    summary: A workspace's bot was invited to a shared channel.
+    operation: create
+    categories: [account_lifecycle, privileged_access]
+    category: security
+    target_types: [slack_workspace, slack_workspace, slack_channel]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/slack-shared.json
+    message:
+      en: "a shared-channel invitation to {targets_1_id} for {targets_2_id} was sent by {targets_0_id}"
+
+  roster.slack_shared.accepted:
+    summary: A workspace accepted an invitation to a shared channel.
+    operation: modify
+    categories: [account_lifecycle, privileged_access]
+    category: security
+    target_types: [slack_workspace, slack_workspace, slack_channel]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/slack-shared.json
+    message:
+      en: "{outcome, select, success {{targets_1_id} accepted the shared channel {targets_2_id} from {targets_0_id}} other {{targets_1_id} could not accept the shared channel {targets_2_id} from {targets_0_id}}}"
+
+  roster.slack_action.held:
+    summary: A change to a Slack workspace or channel is held, and needs an operator.
+    operation: modify
+    categories: [account_lifecycle]
+    category: activity
+    target_types: [slack_workspace, slack_channel, slack_user]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/slack-action-held.json
+    message:
+      en: "a change to {targets_0_id} is held: {outcome_reason}"
+
+  roster.slack_removals.confirmed:
+    summary: An operator confirmed a set of Slack removals that were held.
+    operation: modify
+    categories: [privileged_access, account_lifecycle]
+    category: security
+    target_types: [slack_workspace, slack_channel]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/slack-removals-confirmed.json
+    message:
+      en: "{actor} confirmed the removal of {data_affected} members from {targets_0_id}"
+
+  roster.slack_leaver.reported:
+    summary: A person gone from the directory is still an active Slack member; reported rather than acted on.
+    operation: access
+    categories: [privileged_access]
+    category: security
+    target_types: [slack_workspace, slack_user]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/slack-action-held.json
+    message:
+      en: "a leaver in {targets_0_id} was reported: {outcome_reason}"
