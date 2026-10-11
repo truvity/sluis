@@ -82,6 +82,8 @@ type estate struct {
 	rate                string
 	telemetry           bool
 	noSigningAlias      bool // leave SigningKeyAlias empty on the legacy path
+	noRS256Alias        bool // leave SigningKeyRS256Alias empty on the legacy path
+	noWrappedAlias      bool // leave WrappedSigning.KeyAlias empty
 	keepDefaultEndpoint bool
 	mutate              func(*arp.LambdaArgs)
 }
@@ -129,6 +131,12 @@ func (e estate) args(t *testing.T) *arp.LambdaArgs {
 	// The library has no default alias: a legacy-path estate names its own.
 	if a.Keys == nil && a.WrappedSigning == nil && a.SigningKeyAlias == "" && !e.noSigningAlias {
 		a.SigningKeyAlias = "alias/sluis-staging-sign"
+	}
+	if a.Keys == nil && a.WrappedSigning == nil && a.SigningKeyRS256Alias == "" && !a.DisableSigningKeyRS256 && !e.noRS256Alias {
+		a.SigningKeyRS256Alias = "alias/sluis-staging-sign-rs256"
+	}
+	if w := a.WrappedSigning; w != nil && w.KeyArn == nil && w.KeyAlias == "" && !e.noWrappedAlias {
+		w.KeyAlias = "alias/sluis-staging-wrapped"
 	}
 	return a
 }
@@ -371,7 +379,7 @@ func shape(t *testing.T, rec *recorder, out map[string]string, domain string) {
 			t.Errorf("%s is not protected", name)
 		}
 	}
-	if out["signingKeyAlias"] != "alias/sluis-staging-sign" || out["signingKeyRS256Alias"] != "alias/sluis-signing-rs256" || out["signingKeyRS256ID"] == "" {
+	if out["signingKeyAlias"] != "alias/sluis-staging-sign" || out["signingKeyRS256Alias"] != "alias/sluis-staging-sign-rs256" || out["signingKeyRS256ID"] == "" {
 		t.Errorf("aliases %q %q", out["signingKeyAlias"], out["signingKeyRS256Alias"])
 	}
 	if rec.has("aws:kms/key:Key", "staging-sealer-key") || rec.has("aws:kms/alias:Alias", "staging-sealer-alias") {
@@ -1070,7 +1078,7 @@ func TestWrappedSigningReplacesTheAsymmetricKeysWithOneSymmetricKey(t *testing.T
 	if !rec.isProtected("aws:kms/key:Key", "staging-signing-key-wrapped") {
 		t.Error("the wrapped signing key is not protected")
 	}
-	if prop(rec.one(t, "aws:kms/alias:Alias", "staging-signing-alias-wrapped"), "name").StringValue() != "alias/sluis-signing-wrapped" {
+	if prop(rec.one(t, "aws:kms/alias:Alias", "staging-signing-alias-wrapped"), "name").StringValue() != "alias/sluis-staging-wrapped" {
 		t.Error("alias")
 	}
 	if out["signingKeyArn"] != "" || out["signingKeyRS256Arn"] != "" || out["wrappedSigningKeyArn"] == "" {
@@ -1763,5 +1771,24 @@ func TestTheTickPayloadsNameTheirControllerForASharedName(t *testing.T) {
 		if got[name] != payload+arn {
 			t.Errorf("%s: %q, want %q", name, got[name], payload+arn)
 		}
+	}
+}
+
+func TestTheRS256KeyRequiresItsAlias(t *testing.T) {
+	_, _, err := buildLambda(t, estate{orgs: []string{"acme"}, noRS256Alias: true})
+	if err == nil || !strings.Contains(err.Error(), "LambdaArgs.SigningKeyRS256Alias is required") {
+		t.Fatalf("want an error naming LambdaArgs.SigningKeyRS256Alias, got %v", err)
+	}
+	// Leaving the RS256 key out needs no alias for it.
+	if _, _, err := buildLambda(t, estate{orgs: []string{"acme"}, noRS256Alias: true, mutate: func(a *arp.LambdaArgs) { a.DisableSigningKeyRS256 = true }}); err != nil {
+		t.Fatalf("DisableSigningKeyRS256 still asks for an alias: %v", err)
+	}
+}
+
+func TestTheWrappedKeyRequiresItsAliasUnlessItIsSupplied(t *testing.T) {
+	_, _, err := buildLambda(t, estate{orgs: []string{"acme"}, noWrappedAlias: true,
+		mutate: func(a *arp.LambdaArgs) { a.WrappedSigning = &arp.WrappedSigningArgs{} }})
+	if err == nil || !strings.Contains(err.Error(), "WrappedSigning.KeyAlias is required") {
+		t.Fatalf("want an error naming WrappedSigning.KeyAlias, got %v", err)
 	}
 }

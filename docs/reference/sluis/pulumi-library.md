@@ -256,8 +256,8 @@ l, _ := sluispulumi.NewLambda(ctx, "access", &sluispulumi.LambdaArgs{
 | `ParameterKeyArn` | None | Customer key for SecureStrings, written as `secrets.kmsKeyId`; another is refused. The role may use it through SSM only |
 | `Keys` | nil | [Keys the estate supplies](#keys-the-estate-supplies). Exclusive with the four deprecated key inputs |
 | `SigningKeyAlias` | None, required unless `Keys` or `WrappedSigning` is set | Deprecated: ES384 key alias, such as `alias/sluis-<instance>-sign` |
-| `SigningKeyRS256Alias`, `DisableSigningKeyRS256` | `alias/sluis-signing-rs256`, false | Deprecated: RSA key alias; created unless disabled |
-| `WrappedSigning` | nil | Deprecated: `KeyArn` (unset creates one), `KeyAlias` (`alias/sluis-signing-wrapped`). The asymmetric keys are not declared; `signingKey.kms` beside it is refused |
+| `SigningKeyRS256Alias`, `DisableSigningKeyRS256` | None, required unless `Keys`, `WrappedSigning` or `DisableSigningKeyRS256` is set; false | Deprecated: RSA key alias, such as `alias/sluis-<instance>-sign-rs256`; created unless disabled |
+| `WrappedSigning` | nil | Deprecated: `KeyArn` (unset creates one), `KeyAlias` (none; required without `KeyArn`, such as `alias/sluis-<instance>-wrapped`). The asymmetric keys are not declared; `signingKey.kms` beside it is refused |
 | `VerifyOnly` | None | `[]VerifyOnlyKeyArgs` of an earlier signer: `PEM` (one public key or certificate, RSA or ECDSA), `KeyID` (default RFC 7638 thumbprint), `Alg`, `Until` (required). Written to `/opt/sluis/verify-keys/<index>.pem` and `signingKey.verifyOnly`. Private keys, duplicates, a mismatched `Alg` and zero `Until` are refused |
 | `Recovery` | Enabled | `RecoveryArgs.Enabled` (`*bool`) writes `recovery.enabled`; the password parameter exists either way ([recovery](../../guides/sluis/operate/recover-on-lambda.md)) |
 | `FunctionNamePrefix` | `sluis` | Names `<prefix>-scheduler`, `<prefix>-config` and the function default |
