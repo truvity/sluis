@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"io"
 	"log/slog"
 	"os"
 	"testing"
@@ -31,7 +30,7 @@ func TestTheRenderedBackupDocumentStartsTheModule(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	st, err := store.Open(context.Background(), cfg.stores, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	st, err := store.Open(context.Background(), cfg.stores, slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatalf("the module cannot start on the rendered document: %v", err)
 	}
