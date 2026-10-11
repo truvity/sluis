@@ -6,13 +6,13 @@
         "logs:PutLogEvents"
       ],
       "Effect": "Allow",
-      "Resource": "arn:aws:logs:r1:000000000000:log-group:/aws/lambda/github:*",
+      "Resource": "arn:aws:logs:r1:111122223333:log-group:/aws/lambda/github:*",
       "Sid": "SluisLogs"
     },
     {
       "Action": "sqs:SendMessage",
       "Effect": "Allow",
-      "Resource": "arn:aws:sqs:r1:000000000000:acme-audit",
+      "Resource": "arn:aws:sqs:r1:111122223333:acme-audit",
       "Sid": "SluisAuditIngest"
     },
     {
@@ -25,8 +25,8 @@
       ],
       "Effect": "Allow",
       "Resource": [
-        "arn:aws:ssm:r1:000000000000:parameter/sluis/i1/internal/github/*",
-        "arn:aws:ssm:r1:000000000000:parameter/sluis/i1/external/github/*"
+        "arn:aws:ssm:r1:111122223333:parameter/sluis/i1/internal/github/*",
+        "arn:aws:ssm:r1:111122223333:parameter/sluis/i1/external/github/*"
       ],
       "Sid": "SluisParametersGithub"
     },
@@ -39,14 +39,14 @@
       "Condition": {
         "StringLike": {
           "kms:EncryptionContext:PARAMETER_ARN": [
-            "arn:aws:ssm:r1:000000000000:parameter/sluis/i1/internal/github/*",
-            "arn:aws:ssm:r1:000000000000:parameter/sluis/i1/external/github/*"
+            "arn:aws:ssm:r1:111122223333:parameter/sluis/i1/internal/github/*",
+            "arn:aws:ssm:r1:111122223333:parameter/sluis/i1/external/github/*"
           ],
           "kms:ViaService": "ssm.*.amazonaws.com"
         }
       },
       "Effect": "Allow",
-      "Resource": "arn:aws:kms:r1:000000000000:key/shared",
+      "Resource": "arn:aws:kms:r1:111122223333:key/shared",
       "Sid": "SluisParameterKey"
     },
     {
@@ -60,7 +60,7 @@
         "dynamodb:DescribeTable"
       ],
       "Effect": "Allow",
-      "Resource": "arn:aws:dynamodb:r1:000000000000:table/sluis-i1-github",
+      "Resource": "arn:aws:dynamodb:r1:111122223333:table/sluis-i1-github",
       "Sid": "SluisTableGithub"
     },
     {
@@ -102,7 +102,7 @@
         }
       },
       "Effect": "Deny",
-      "Resource": "arn:aws:dynamodb:r1:000000000000:table/sluis-i1-github",
+      "Resource": "arn:aws:dynamodb:r1:111122223333:table/sluis-i1-github",
       "Sid": "SluisMaintenanceDeny"
     },
     {
@@ -118,7 +118,7 @@
         }
       },
       "Effect": "Allow",
-      "Resource": "arn:aws:kms:r1:000000000000:key/tables",
+      "Resource": "arn:aws:kms:r1:111122223333:key/tables",
       "Sid": "SluisStateKey"
     }
   ],

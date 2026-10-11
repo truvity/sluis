@@ -137,7 +137,7 @@ func TestBackupRoleReadsEveryModuleAndWritesOnlyItsOwnTable(t *testing.T) {
 		// Every module's SSM, internal and external, is read and not written (the backup
 		// module's own aside).
 		for _, kind := range []string{"internal", "external"} {
-			arn := arnPrefix + "ssm:r1:000000000000:parameter/sluis/i1/" + kind + "/" + string(m) + "/x"
+			arn := arnPrefix + "ssm:r1:111122223333:parameter/sluis/i1/" + kind + "/" + string(m) + "/x"
 			if !allowed(t, st, iamReq{action: "ssm:GetParameter", resource: arn}) {
 				t.Errorf("the backup role cannot read %s/%s", kind, m)
 			}
@@ -257,7 +257,7 @@ func TestMinterRefsReachTheBackupRoleAsReadOnly(t *testing.T) {
 		t.Fatal(err)
 	}
 	// The backup role reads all of cloudflare already: the minter is not a second grant.
-	arn := arnPrefix + "ssm:r1:000000000000:parameter/sluis/i1/internal/cloudflare/acct/minter"
+	arn := arnPrefix + "ssm:r1:111122223333:parameter/sluis/i1/internal/cloudflare/acct/minter"
 	if !allowed(t, st, iamReq{action: "ssm:GetParameter", resource: arn}) || allowed(t, st, iamReq{action: "ssm:PutParameter", resource: arn}) {
 		t.Error("the minter parameter is not read-only for the backup role")
 	}
@@ -324,7 +324,7 @@ func TestRestoreRoleWritesEveryModuleAndTheMaintenanceFlag(t *testing.T) {
 			}
 		}
 		for _, kind := range []string{"internal", "external"} {
-			arn := arnPrefix + "ssm:r1:000000000000:parameter/sluis/i1/" + kind + "/" + string(m) + "/x"
+			arn := arnPrefix + "ssm:r1:111122223333:parameter/sluis/i1/" + kind + "/" + string(m) + "/x"
 			for _, a := range []string{"ssm:GetParameter", "ssm:PutParameter", "ssm:DeleteParameter"} {
 				if !allowed(t, st, iamReq{action: a, resource: arn}) {
 					t.Errorf("the restore role cannot %s %s/%s", a, kind, m)
