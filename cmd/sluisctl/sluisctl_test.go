@@ -37,29 +37,6 @@ func TestASettingReadsTheOldNameAsAFallback(t *testing.T) {
 	}
 }
 
-// The alias is the same binary under its old name, and says so on stderr.
-func TestTheOldNameIsRecognisedHoweverItIsReached(t *testing.T) {
-	t.Parallel()
-
-	for arg0, want := range map[string]bool{
-		"accessctl":                true,
-		"/usr/local/bin/accessctl": true,
-		"accessctl.exe":            true,
-		"./AccessCtl":              true,
-		"sluisctl":                 false,
-		"/usr/local/bin/sluisctl":  false,
-		"accessctl-something-else": false,
-		"":                         false,
-	} {
-		if got := invokedAsDeprecatedName(arg0); got != want {
-			t.Errorf("invokedAsDeprecatedName(%q) = %v, want %v", arg0, got, want)
-		}
-	}
-	if !strings.Contains(deprecationNotice, "sluisctl") {
-		t.Errorf("the notice must name the new command: %q", deprecationNotice)
-	}
-}
-
 // The exit codes are a contract: a wrapper script should be able to tell
 // "sign in again" from "the issuer is down" without parsing English, and
 // should know not to retry a refusal.

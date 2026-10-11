@@ -68,7 +68,7 @@ sluisctl explain --policy policy.yaml --audience logs --email ana@example.test
 | `version` | `sluisctl <version>`, or `sluisctl dev` without release ldflags, with commit and date when stamped. `--json` prints `{"version","commit","date"}`. No network, config or `HOME` |
 | `github-token` | `--app <id>`, `--repository <name>` (repeatable; none needs an all-repositories grant), `--permission <name>=<level>` (repeatable; none asks for the grant), `--json` prints `{"token","expires_at","repositories","permissions"}`. See [GitHub App tokens](../../guides/sluis/connect/github-app-tokens.md) |
 | `credential ssh\|db\|client` | Removed in v1.34.0; the error names the replacement |
-| Legacy identifiers | Legacy identifiers, renamed in v1.75–v1.76: the alias `accessctl` (release archives, Nix flake, deprecation notice on stderr), default OIDC client id `accessctl`, env `ACCESSCTL_*` (`SLUISCTL_*` wins), config directory `accessctl` (copied once), kubeconfig user `accessctl:<cluster>`, `~/.ssh/known_hosts.d/accessctl`, AWS session-name fallback |
+| Legacy identifiers | Legacy identifiers, renamed in v1.75–v1.76: default OIDC client id `accessctl`, env `ACCESSCTL_*` (`SLUISCTL_*` wins), config directory `accessctl` (copied once), kubeconfig user `accessctl:<cluster>`, `~/.ssh/known_hosts.d/accessctl`, AWS session-name fallback |
 
 ## cloudflare token and cloudflare r2
 

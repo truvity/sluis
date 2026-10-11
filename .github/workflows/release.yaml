@@ -58,9 +58,8 @@ jobs:
       # .../resource-proxy. The per-module images are the module-images job.
       ko-docker-repo: ghcr.io/truvity/sluis
       # sluisctl as a Nix flake (sluisctl_<version>_nix-flake.tar.gz) that
-      # another repository's devbox installs by URL. accessctl is the same
-      # program under its old name, kept for a release or two.
-      nix-flakes: '["sluisctl", "accessctl"]'
+      # another repository's devbox installs by URL.
+      nix-flakes: '["sluisctl"]'
 
   audit:
     needs: release
