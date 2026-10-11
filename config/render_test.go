@@ -518,3 +518,36 @@ func TestRenderCarriesTheAppRefsOfTheGitHubController(t *testing.T) {
 		t.Errorf("a reference to an App nobody declares was rendered: %v", err)
 	}
 }
+
+// `appNames` set in the installation reaches the policy document, held to
+// GitHub's length limit and to the organisations the github table binds.
+func TestRenderCarriesTheAppNamesOfTheGitHubController(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("testdata", "example.installation.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := strings.Replace(string(raw), "    enabledOrgs: [example-org]\n", "    enabledOrgs: [example-org]\n    appNames: {example-org: example-roster}\n", 1)
+	file := filepath.Join(t.TempDir(), "installation.yaml")
+	if err = os.WriteFile(file, []byte(text), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	in, err := config.LoadInstallation(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service, policy, err := config.Render(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(policy), "appNames:\n      example-org: example-roster") {
+		t.Errorf("the policy document lost the App name:\n%s", policy)
+	}
+	if strings.Contains(string(service), "appNames") {
+		t.Errorf("the service document carries the App name:\n%s", service)
+	}
+
+	in.Controllers.GitHub.AppNames = map[string]string{"example-org": strings.Repeat("a", 35)}
+	if _, _, err = config.Render(in); err == nil || !strings.Contains(err.Error(), "appNames") {
+		t.Errorf("a too-long App name was rendered: %v", err)
+	}
+}

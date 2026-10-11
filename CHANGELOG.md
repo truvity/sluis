@@ -1,5 +1,9 @@
 ## Unreleased
 
+### Added
+
+- **The installation sets `controllers.github.appNames`.** The installation document's `controllers.github` takes `appNames` (`{org: name}`) next to `appRefs`, and rendering copies it into the policy document's `controllers.github.appNames`, where it is held to the same checks (at most 34 characters, bound organisations only). An estate that renders its policy from the installation (`sluisctl render`, `config.Render`, the Pulumi library) could not set the names before: the render refused `appNames` as an additional property.
+
 ## v1.75.0-rc.10
 
 ### Added
