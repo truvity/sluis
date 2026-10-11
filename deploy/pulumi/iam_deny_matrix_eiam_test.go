@@ -1,3 +1,4 @@
+//nolint:lll // fixtures and sentences of the isolation rows are one-line tables
 package sluispulumi
 
 import (
