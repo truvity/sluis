@@ -76,7 +76,10 @@ func dial(url, module, token string) modcall.Caller {
 func reached(err error) bool {
 	var p *consolecall.Problem
 	var coded *modcall.Error
-	return err == nil || errors.As(err, &p) || (errors.As(err, &coded) && !(coded.Code == modcall.CodeForbidden && coded.Message == ""))
+	if err == nil || errors.As(err, &p) {
+		return true
+	}
+	return errors.As(err, &coded) && (coded.Code != modcall.CodeForbidden || coded.Message != "")
 }
 
 func TestTheIssuerReachesTheSlackConsoleOverTheTransportAndNoOtherAccountDoes(t *testing.T) {
@@ -122,7 +125,8 @@ func TestTheIssuerReachesTheGitHubMintAndConsoleOverTheTransportAndNoOtherAccoun
 	}
 
 	for name, token := range map[string]string{"another account": "google", "the issuer's name in another namespace": "elsewhere", "a forged token": "forged"} {
-		if _, err = githubtokens.NewClient(dial(url, "github", token)).MintInstallation(context.Background(), githubtokens.Request{App: "ci"}); !errors.Is(err, modcall.ErrTransport) {
+		_, err = githubtokens.NewClient(dial(url, "github", token)).MintInstallation(context.Background(), githubtokens.Request{App: "ci"})
+		if !errors.Is(err, modcall.ErrTransport) {
 			t.Errorf("%s, the mint: %v, want a 401", name, err)
 		}
 		_, err = consolecall.Proxy[*directoryrosterv1.GetGitHubStatusRequest, *directoryrosterv1.GetGitHubStatusResponse](
