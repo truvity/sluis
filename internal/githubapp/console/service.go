@@ -25,6 +25,7 @@ import (
 	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/audit"
 	"github.com/truvity/sluis/internal/consoleauthz"
+	"github.com/truvity/sluis/internal/consolecall"
 	"github.com/truvity/sluis/internal/githubapp/catalogue"
 	"github.com/truvity/sluis/internal/githubapp/mints"
 	"github.com/truvity/sluis/internal/githubroster/catalogueapp"
@@ -100,33 +101,11 @@ type Deps struct {
 	// accept the new secret, and WebhookPingEvery how often it asks. Zero is
 	// two minutes and five seconds.
 	WebhookPingWindow, WebhookPingEvery time.Duration
-	// Directory answers what the directory knows of a work address, for a link:
-	// the module reads no directory itself. Nil knows nothing, so no address is
-	// linkable.
-	Directory func(ctx context.Context, email string) (Facts, error)
 	// Catalogue is every App the deployment declares. Nil declares none.
 	Catalogue *catalogue.Catalogue
 	// HTTP makes the calls to GitHub that connecting and disconnecting need.
 	// Nil is a client with a short timeout.
 	HTTP *http.Client
-}
-
-// Facts is what the directory knows of an address.
-type Facts struct {
-	// InDomain is whether the address is in a domain the directory serves.
-	InDomain bool
-	// Authoritative is whether the directory can vouch for the rest just now.
-	Authoritative bool
-	Found         bool
-	Suspended     bool
-}
-
-// explain asks the directory about an address.
-func (c *Service) explain(ctx context.Context, email string) (Facts, error) {
-	if c.deps.Directory == nil {
-		return Facts{}, nil
-	}
-	return c.deps.Directory(ctx, email)
 }
 
 // Service is the module's console handlers.
@@ -178,10 +157,14 @@ func (c *Service) notify(ctx context.Context, controller, target string) {
 	}
 }
 
-// directories are the connected directories as the console's snapshot of the
-// call has them: the module reads no directory record.
+// directories are the connected directories as the console sent them in the
+// call's directory facts: the module reads no directory record.
 func (c *Service) directories(ctx context.Context) ([]consoleauthz.Directory, error) {
-	return callerOf(ctx).Directories, nil
+	f := consolecall.FactsFrom(ctx)
+	if f == nil {
+		return nil, nil
+	}
+	return f.Directories, nil
 }
 
 // bindings are the policy's organisation bindings.

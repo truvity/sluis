@@ -16,6 +16,7 @@ import (
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
 	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/audit"
+	"github.com/truvity/sluis/internal/consolecall"
 	"github.com/truvity/sluis/internal/githubapp"
 	"github.com/truvity/sluis/internal/githubroster/consolewire"
 	"github.com/truvity/sluis/internal/githubroster/link"
@@ -120,19 +121,25 @@ func (c *Service) disconnectLinkApp(ctx context.Context) (githubDisconnect, erro
 // link may prove — an account the directory has, live, and can vouch for
 // — and a reason for each work address that is not. A personal address is
 // neither: it is nobody's business here, and is not repeated back. The
-// directory is asked through [Deps.Directory]: the module reads none itself.
+// directory is the console's word in the call's facts ([consolecall.FactsFrom]),
+// resolved before the call: the module reads none itself and asks nobody. An
+// address the facts say nothing of is not a work address the directory knows.
 func (c *Service) linkableAddresses(ctx context.Context, verified []string) (accepted, refused []string) {
+	facts := consolecall.FactsFrom(ctx)
 	for _, email := range link.Normalise(verified) {
-		explained, err := c.explain(ctx, email)
+		var u consolecall.UserFact
+		if facts != nil {
+			u = facts.Users[email]
+		}
 		switch {
-		case err != nil:
+		case u.Err != "":
 			refused = append(refused, email+": the directory could not be asked just now; try again in a minute")
-		case !explained.InDomain:
-		case !explained.Authoritative:
+		case !u.InDomain:
+		case !u.Authoritative:
 			refused = append(refused, email+": the directory cannot vouch for it just now; try again in a minute")
-		case !explained.Found:
+		case !u.Found:
 			refused = append(refused, email+": the directory has no such account")
-		case explained.Suspended:
+		case u.Suspended:
 			refused = append(refused, email+": the account is suspended")
 		default:
 			accepted = append(accepted, email)
@@ -242,18 +249,42 @@ func (c *Service) GitHubLinkComplete(ctx context.Context, r consolewire.LinkComp
 	}
 	web, now := c.githubHTTP(), time.Now().UTC()
 
-	tokens, err := githubapp.ExchangeCode(ctx, web, credential.ClientID, credential.ClientSecret,
-		r.Code, c.githubRoot(ctx)+consolewire.LinkCallbackPath, now)
-	if err != nil {
-		return consolewire.Linked{}, flowProblem(http.StatusConflict, "GitHub would not complete the link. Start again.", err.Error())
-	}
-	user, err := githubapp.CurrentUser(ctx, web, tokens.AccessToken)
-	if err != nil {
-		return consolewire.Linked{}, flowProblem(http.StatusConflict, "GitHub would not say which account this is. Start again.", err.Error())
-	}
-	verified, err := githubapp.VerifiedEmails(ctx, web, tokens.AccessToken)
-	if err != nil {
-		return consolewire.Linked{}, flowProblem(http.StatusConflict, "GitHub would not list the account's addresses. Start again.", err.Error())
+	var (
+		tokens   githubapp.UserTokens
+		user     githubapp.User
+		verified []string
+	)
+	if r.Continue != "" {
+		st, err := openLinkState(credential.ClientSecret, r.Continue, now)
+		if err != nil {
+			return consolewire.Linked{}, flowProblem(http.StatusBadRequest, "This link took too long to finish. Start again.", "")
+		}
+		tokens, user, verified = st.Tokens, githubapp.User{ID: st.UserID, Login: st.Login}, st.Verified
+	} else {
+		tokens, err = githubapp.ExchangeCode(ctx, web, credential.ClientID, credential.ClientSecret,
+			r.Code, c.githubRoot(ctx)+consolewire.LinkCallbackPath, now)
+		if err != nil {
+			return consolewire.Linked{}, flowProblem(http.StatusConflict, "GitHub would not complete the link. Start again.", err.Error())
+		}
+		user, err = githubapp.CurrentUser(ctx, web, tokens.AccessToken)
+		if err != nil {
+			return consolewire.Linked{}, flowProblem(http.StatusConflict, "GitHub would not say which account this is. Start again.", err.Error())
+		}
+		verified, err = githubapp.VerifiedEmails(ctx, web, tokens.AccessToken)
+		if err != nil {
+			return consolewire.Linked{}, flowProblem(http.StatusConflict, "GitHub would not list the account's addresses. Start again.", err.Error())
+		}
+		// The directory's word on these is the console's to give: ask for it
+		// before anything is decided, with the state to resume from.
+		if need := c.unresolved(ctx, verified); len(need) > 0 {
+			sealed, err := sealLinkState(credential.ClientSecret, linkState{
+				Expires: now.Add(linkContinueWindow), Tokens: tokens, UserID: user.ID, Login: user.Login, Verified: verified,
+			})
+			if err != nil {
+				return consolewire.Linked{}, flowProblem(http.StatusConflict, "The link could not be finished here. Try again in a minute.", err.Error())
+			}
+			return consolewire.Linked{Login: user.Login, Resolve: need, Continue: sealed}, nil
+		}
 	}
 
 	accepted, refused := c.linkableAddresses(ctx, verified)
@@ -282,6 +313,22 @@ func (c *Service) GitHubLinkComplete(ctx context.Context, r consolewire.LinkComp
 	c.log().InfoContext(ctx, "a GitHub account was linked", slog.Int64("account", user.ID), logattr.SafeString("login", user.Login),
 		logattr.SafeString("emails", strings.Join(accepted, ",")))
 	return consolewire.Linked{Login: user.Login, Accepted: accepted, Refused: refused}, nil
+}
+
+// unresolved are the verified addresses the call's facts say nothing of.
+func (c *Service) unresolved(ctx context.Context, verified []string) []string {
+	facts := consolecall.FactsFrom(ctx)
+	var need []string
+	for _, email := range link.Normalise(verified) {
+		if facts == nil {
+			need = append(need, email)
+			continue
+		}
+		if _, ok := facts.Users[email]; !ok {
+			need = append(need, email)
+		}
+	}
+	return need
 }
 
 func firstOf(values []string) string {

@@ -179,7 +179,11 @@ type LinkPage struct {
 // back from authorizing a link: the one-time code, or GitHub's refusal. The
 // issuer verified the signed state and the cookie it was pinned with.
 type LinkComplete struct {
-	Code                   string `json:"code,omitempty"`
+	Code string `json:"code,omitempty"`
+	// Continue is what the module handed back in [Linked.Continue], with the
+	// directory facts for the addresses it named: the code is spent, so the
+	// second call resumes where the first stopped.
+	Continue               string `json:"continue,omitempty"`
 	GitHubError            string `json:"github_error,omitempty"`
 	GitHubErrorDescription string `json:"github_error_description,omitempty"`
 }
@@ -191,4 +195,11 @@ type Linked struct {
 	Login    string   `json:"login"`
 	Accepted []string `json:"accepted,omitempty"`
 	Refused  []string `json:"refused,omitempty"`
+	// Resolve is the addresses the module needs the directory's word on before
+	// it can finish, and Continue the sealed state to call again with, with the
+	// facts for them. The module reads no directory, and it knows the addresses
+	// only once GitHub has said them. The state is opaque to the issuer and
+	// expires within minutes.
+	Resolve  []string `json:"resolve,omitempty"`
+	Continue string   `json:"continue,omitempty"`
 }
