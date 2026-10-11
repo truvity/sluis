@@ -37,6 +37,14 @@ import (
 	"github.com/truvity/sluis/storage/logattr"
 )
 
+// Catalogue is every App a deployment declares, and MintRing the last
+// installation tokens asked of each: the shared server names them through the
+// module's door and imports no other package of the provider.
+type (
+	Catalogue = catalogue.Catalogue
+	MintRing  = mints.Ring
+)
+
 // Deps is what the module's console handlers act on.
 type Deps struct {
 	// Log is where the module logs what is not an audit record; nil is the
@@ -92,6 +100,10 @@ type Deps struct {
 	// accept the new secret, and WebhookPingEvery how often it asks. Zero is
 	// two minutes and five seconds.
 	WebhookPingWindow, WebhookPingEvery time.Duration
+	// Directory answers what the directory knows of a work address, for a link:
+	// the module reads no directory itself. Nil knows nothing, so no address is
+	// linkable.
+	Directory func(ctx context.Context, email string) (Facts, error)
 	// Catalogue is every App the deployment declares. Nil declares none.
 	Catalogue *catalogue.Catalogue
 	// HTTP makes the calls to GitHub that connecting and disconnecting need.
@@ -99,9 +111,29 @@ type Deps struct {
 	HTTP *http.Client
 }
 
+// Facts is what the directory knows of an address.
+type Facts struct {
+	// InDomain is whether the address is in a domain the directory serves.
+	InDomain bool
+	// Authoritative is whether the directory can vouch for the rest just now.
+	Authoritative bool
+	Found         bool
+	Suspended     bool
+}
+
+// explain asks the directory about an address.
+func (c *Service) explain(ctx context.Context, email string) (Facts, error) {
+	if c.deps.Directory == nil {
+		return Facts{}, nil
+	}
+	return c.deps.Directory(ctx, email)
+}
+
 // Service is the module's console handlers.
 type Service struct {
-	deps Deps
+	// limit bounds the links finished in a minute.
+	limit limiter
+	deps  Deps
 	// seen is what GitHub last said of each GitHub App.
 	seen githubObservations
 	// rotating is the Apps whose webhook secret is being rotated now: two

@@ -4,6 +4,7 @@ import (
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
 
 	ghconsole "github.com/truvity/sluis/internal/githubapp/console"
+	"github.com/truvity/sluis/internal/githubroster/consolewire"
 )
 
 // githubModuleOf is the GitHub module in the process of a console under test,
@@ -35,4 +36,23 @@ const (
 	catalogueInstalled  = "installed"
 	catalogueDrifted    = "drifted"
 	appDrifted          = directoryrosterv1.AppState_APP_STATE_DRIFTED
+)
+
+const (
+	githubCatalogueCallbackPath = consolewire.CatalogueCallbackPath
+	githubCatalogueSetupPath    = consolewire.CatalogueSetupPath
+	githubRunnerCallbackPath    = consolewire.RunnerCallbackPath
+	githubRunnerSetupPath       = consolewire.RunnerSetupPath
+	githubCallbackPath          = consolewire.CallbackPath
+	githubSetupPath             = consolewire.SetupPath
+	githubBind                  = consolewire.BindOrg
+	appLink                     = directoryrosterv1.AppPurpose_APP_PURPOSE_LINK
+	appController               = directoryrosterv1.AppPurpose_APP_PURPOSE_CONTROLLER
+	appRunners                  = directoryrosterv1.AppPurpose_APP_PURPOSE_RUNNERS
+
+	githubLinkPath            = consolewire.LinkPath
+	githubLinkCallbackPath    = consolewire.LinkCallbackPath
+	githubLinkAppCallbackPath = consolewire.LinkAppCallbackPath
+	githubLinkAppBind         = consolewire.BindLinkApp
+	githubLinkBind            = consolewire.BindLink
 )

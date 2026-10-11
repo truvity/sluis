@@ -1,4 +1,4 @@
-package server
+package console
 
 import (
 	"context"
@@ -27,7 +27,7 @@ const importLimit = 500
 // ahead. The fingerprint must be the one the organisation's latest report
 // shows: confirming a set that has since changed would confirm people
 // nobody looked at.
-func (c *Console) ConfirmGitHubRemovals(
+func (c *Service) ConfirmGitHubRemovals(
 	ctx context.Context, req *connect.Request[directoryrosterv1.ConfirmGitHubRemovalsRequest],
 ) (*connect.Response[directoryrosterv1.ConfirmGitHubRemovalsResponse], error) {
 	org, fingerprint := strings.TrimSpace(req.Msg.GetOrg()), strings.TrimSpace(req.Msg.GetFingerprint())
@@ -38,10 +38,10 @@ func (c *Console) ConfirmGitHubRemovals(
 	switch {
 	case !status.ValidOrg(org) || fingerprint == "":
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("an organisation and a fingerprint are required"))
-	case c.deps.GitHub == nil || c.deps.GitHubConfirmations == nil:
+	case c.deps.Reports == nil || c.deps.Confirmations == nil:
 		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("this deployment keeps no reports or confirmations"))
 	}
-	reports, err := c.deps.GitHub.Reports(ctx)
+	reports, err := c.deps.Reports.Reports(ctx)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeUnavailable, err)
 	}
@@ -53,7 +53,7 @@ func (c *Console) ConfirmGitHubRemovals(
 		return nil, connect.NewError(connect.CodeFailedPrecondition,
 			fmt.Errorf("the removals in %s have changed since that page was loaded: reload and look again", org))
 	}
-	if err = c.deps.GitHubConfirmations.PutConfirmation(ctx, connection.Confirmation{
+	if err = c.deps.Confirmations.PutConfirmation(ctx, connection.Confirmation{
 		Org: org, Fingerprint: fingerprint, By: id.Who(), At: time.Now().UTC(),
 	}); err != nil {
 		return nil, connect.NewError(connect.CodeUnavailable, err)
@@ -68,7 +68,7 @@ func (c *Console) ConfirmGitHubRemovals(
 // each: somebody approved the pairing, an address is a live account the
 // directory vouches for, and the account is a member of a connected
 // organisation. A link the person made is never displaced.
-func (c *Console) ImportGitHubLinks(
+func (c *Service) ImportGitHubLinks(
 	ctx context.Context, req *connect.Request[directoryrosterv1.ImportGitHubLinksRequest],
 ) (*connect.Response[directoryrosterv1.ImportGitHubLinksResponse], error) {
 	// Links are people's, not an organisation's, so the call is open to an
@@ -86,7 +86,7 @@ func (c *Console) ImportGitHubLinks(
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("between 1 and %d records, please", importLimit))
 	case origin == "":
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("say where the records come from"))
-	case c.deps.GitHubOrgs == nil || c.deps.GitHubLinks == nil:
+	case c.deps.Orgs == nil || c.deps.Links == nil:
 		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("this deployment keeps no links"))
 	}
 	members, err := c.memberCheck(ctx, id)
@@ -143,7 +143,7 @@ func (c *Console) ImportGitHubLinks(
 	if len(candidates) == 0 {
 		return connect.NewResponse(out), nil
 	}
-	adopted, skipped, err := c.deps.GitHubLinks.Adopt(ctx, candidates)
+	adopted, skipped, err := c.deps.Links.Adopt(ctx, candidates)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeUnavailable, err)
 	}
@@ -161,8 +161,8 @@ func (c *Console) ImportGitHubLinks(
 // memberCheck returns a function answering whether a login is a member of
 // any connected organisation the caller may operate, with the canonical login and a token to
 // read the account with. Installation tokens are minted once per call.
-func (c *Console) memberCheck(ctx context.Context, id access.Identity) (func(context.Context, string) (string, string, bool, error), error) {
-	records, err := c.deps.GitHubOrgs.List(ctx)
+func (c *Service) memberCheck(ctx context.Context, id access.Identity) (func(context.Context, string) (string, string, bool, error), error) {
+	records, err := c.deps.Orgs.List(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -176,7 +176,7 @@ func (c *Console) memberCheck(ctx context.Context, id access.Identity) (func(con
 		if !record.Installed() || !mayOwned(id, access.RoleOperator, record.Owner) {
 			continue
 		}
-		credential, found, err := c.deps.GitHubOrgs.Credential(ctx, record.Org)
+		credential, found, err := c.deps.Orgs.Credential(ctx, record.Org)
 		if err != nil || !found {
 			continue
 		}
