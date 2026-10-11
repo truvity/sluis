@@ -122,7 +122,8 @@ func TestTheAppRefEntryWinsOverMakingAnApp(t *testing.T) {
 		stores := secretstore.FromStoreV5(memory.New(), "")
 		plain := portstore.New(set).WithV5(stores)
 		cat := portstore.NewGitHubCatalogueApps(plain)
-		if err := cat.Put(ctx, catalogueapp.Record{ID: "declared", Org: "acme", AppID: 8, AppSlug: "declared", InstallationID: 11, ConnectedAt: appsAt}, "DECL-KEY"); err != nil {
+		declaredApp := catalogueapp.Record{ID: "declared", Org: "acme", AppID: 8, AppSlug: "declared", InstallationID: 11, ConnectedAt: appsAt}
+		if err := cat.Put(ctx, declaredApp, "DECL-KEY"); err != nil {
 			t.Fatal(err)
 		}
 		b := portstore.New(set).WithV5(stores).DeclareGitHubApps(portstore.DeclaredGitHubApps{AppRef: func(string) string { return "declared" }})
