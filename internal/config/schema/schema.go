@@ -705,7 +705,8 @@ func sluisBackupSchema() m {
 // sluisGoogleSchema is the Google module's document: the keys of `serve` that
 // open the storage it reads and writes (its own table, the hub cache in the
 // blob store, the workspaces' keys), and `google`. The module has no issuer,
-// console, signer, policy or audit trail, so none of their keys are here.
+// console, signer or policy, so none of their keys are here; it keeps its own
+// audit trail (`audit`).
 func sluisGoogleSchema() m {
 	s := serveSchema()
 	all, _ := s["properties"].(m)
@@ -713,6 +714,10 @@ func sluisGoogleSchema() m {
 	for _, k := range []string{"instance", "log", "probes", "ports", "platform", "preset", "adapters", "secrets"} {
 		props[k] = all[k]
 	}
+	props["audit"] = obj("The audit installation the module records to, as its own workload: the connections it makes and the changes it makes to them. Unset only logs what it did.", m{
+		"writer":    url("The installation's receiver."),
+		"tokenFile": str("This workload's projected service-account token."),
+	})
 	oauth := all["oauthClient"].(m)["properties"].(m)
 	dir := directorySchema()["properties"].(m)["workspaces"].(m)
 	dir["description"] = "The workspaces this deployment declares: each adopted at start, and its service-account key read when it is first used. One that cannot be adopted stops the module. A workspace the console connects is kept in the module's table, with its credential in the secrets store, and is refreshed the same way."
@@ -722,6 +727,7 @@ func sluisGoogleSchema() m {
 			"id":       oauth["id"],
 			"provider": oauth["provider"],
 		}),
+		"publicURL":       url("Where a browser reaches the issuer, including its mount. The consent and sign-in redirect URIs are built from it, so it is the issuer's own `publicURL`. Needed to start a consent or a sign-in; a module that only refreshes does not read it."),
 		"refreshInterval": duration("How often a snapshot is refreshed: the schedule's period. A snapshot younger than three quarters of it is not read again, whatever runner asks.", "15m"),
 		"freshnessWindow": duration("How old a snapshot may be and still be answered from. The issuer reads it with the same window.", "30m"),
 		"probeInterval":   duration("How often the loop probes each workspace's credential (the loop only: a scheduled function does not probe).", "5m"),

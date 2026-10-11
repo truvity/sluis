@@ -25,6 +25,9 @@ platform: {aws: true, runtime: lambda}
 preset: aws-serverless
 adapters:
   schedule: {adapter: eventbridge}
+audit:
+  writer: https://audit.example.com
+  tokenFile: /var/run/secrets/audit/token
 google:
   workspaces:
     - id: C0123abcd
@@ -36,6 +39,7 @@ google:
   oauthClient:
     id: client-id.apps.example.com
     provider: main
+  publicURL: https://access.example.com
   refreshInterval: 15m
   freshnessWindow: 30m
   probeInterval: 5m

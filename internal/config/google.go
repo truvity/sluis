@@ -24,7 +24,11 @@ type SluisGoogle struct {
 	Log      *Log     `json:"log,omitempty"`
 	Probes   *Address `json:"probes,omitempty"`
 
-	Secrets  *Secrets                 `json:"secrets,omitempty"`
+	Secrets *Secrets `json:"secrets,omitempty"`
+	// Audit is the audit installation the module records to: the connections
+	// it makes and the changes it makes to them, as its own workload. Unset
+	// only logs what it did.
+	Audit    *RosterAudit             `json:"audit,omitempty"`
 	Ports    *Ports                   `json:"ports,omitempty"`
 	Platform *Platform                `json:"platform,omitempty"`
 	Preset   string                   `json:"preset,omitempty"`
@@ -36,8 +40,13 @@ type SluisGoogle struct {
 type Google struct {
 	// Workspaces are the workspaces the deployment declares.
 	Workspaces []DirectoryWorkspace `json:"workspaces,omitempty"`
-	// OAuthClient is the client that reopens a workspace connected by consent.
+	// OAuthClient is the client that reopens a workspace connected by consent,
+	// and the one the console's consent and the issuer's sign-in use.
 	OAuthClient *GoogleOAuthClient `json:"oauthClient,omitempty"`
+	// PublicURL is where a browser reaches the issuer, including its mount:
+	// the consent and sign-in redirect URIs are built from it. The same value
+	// as the issuer's `publicURL`.
+	PublicURL string `json:"publicURL,omitempty"`
 	// RefreshInterval, FreshnessWindow and ProbeInterval are the hub's knobs.
 	RefreshInterval *Duration `json:"refreshInterval,omitempty"`
 	FreshnessWindow *Duration `json:"freshnessWindow,omitempty"`
@@ -110,7 +119,16 @@ func (s *SluisGoogle) Serve() *Serve {
 	return &Serve{
 		APIVersion: APIVersion("serve"), Instance: s.Instance, Log: s.Log, Probes: s.Probes,
 		Secrets: s.Secrets, Ports: s.Ports, Platform: s.Platform, Preset: s.Preset, Adapters: s.Adapters,
+		Audit: s.auditOf(),
 	}
+}
+
+// auditOf is the audit installation as the shared builders read it.
+func (s *SluisGoogle) auditOf() *Audit {
+	if s.Audit == nil {
+		return nil
+	}
+	return &Audit{Writer: s.Audit.Writer, TokenFile: s.Audit.TokenFile}
 }
 
 // IsGoogle reports whether the file is the Google module's document, by its

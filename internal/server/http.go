@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
@@ -25,9 +26,11 @@ import (
 	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/audit"
 	"github.com/truvity/sluis/internal/connectalias"
+	"github.com/truvity/sluis/internal/consolecall"
 	"github.com/truvity/sluis/internal/emailaddr"
 	"github.com/truvity/sluis/internal/hub"
 	"github.com/truvity/sluis/internal/maintenance"
+	"github.com/truvity/sluis/internal/modcall"
 	"github.com/truvity/sluis/internal/refusal"
 	"github.com/truvity/sluis/internal/telemetry"
 	"github.com/truvity/sluis/internal/version"
@@ -614,6 +617,10 @@ func (s *ConsoleServer) signInStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	url, err := connector.SignInURL(state)
+	if err != nil && moduleUnavailable(err) {
+		s.signInUnavailable(w, r, connector.Kind(), err)
+		return
+	}
 	if err != nil {
 		// Almost always "no OAuth client is registered yet", which is a
 		// setup step rather than a fault, so it says so instead of
@@ -658,6 +665,10 @@ func (s *ConsoleServer) signInCallback(w http.ResponseWriter, r *http.Request) {
 	access.SetCookie(w, access.LoginCookie("", s.sessions.Secure(), 0))
 
 	email, err := connector.Identify(r.Context(), r.URL.Query().Get("code"))
+	if err != nil && moduleUnavailable(err) {
+		s.signInUnavailable(w, r, connector.Kind(), err)
+		return
+	}
 	if err != nil {
 		s.log.WarnContext(r.Context(), "sign-in exchange failed",
 			slog.String("backend", connector.Kind()), logattr.SafeError("error", err))
@@ -710,6 +721,45 @@ func (s *ConsoleServer) signInCallback(w http.ResponseWriter, r *http.Request) {
 	// installation signs people in here, and a sign-in is a sign-in.
 	s.console.record(r.Context(), audit.SignedIn(audit.Person(email), "console", connector.Kind(), audit.Succeeded()))
 	redirectOrOK(w, r, s.at("/"))
+}
+
+// moduleUnavailable says the error is the provider's module not answering (a
+// cold start that ran out of time, a throttle, a function that is gone), as
+// opposed to the provider refusing the person.
+func moduleUnavailable(err error) bool {
+	if errors.Is(err, modcall.ErrTransport) || errors.Is(err, modcall.ErrNoRoute) || errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	var coded *modcall.Error
+	if errors.As(err, &coded) {
+		switch coded.Code {
+		case modcall.CodeUnavailable, modcall.CodeDeadlineExceeded, modcall.CodeInternal, modcall.CodeNoSuchMethod:
+			return true
+		}
+	}
+	return false
+}
+
+// signInUnavailable is the page of a sign-in whose provider module did not
+// answer. The sign-in depends on that module (docs/reference/lambda.md): its
+// first call after a quiet period can be slow, and one that is throttled or
+// gone fails. The page says that, and what to do, in words that carry nothing
+// of the transport; the cause is the log's, under the reference.
+func (s *ConsoleServer) signInUnavailable(w http.ResponseWriter, r *http.Request, kind string, cause error) {
+	s.log.ErrorContext(r.Context(), "the sign-in module did not answer",
+		logattr.SafeString("backend", kind), logattr.SafeError("error", cause))
+	text := "The sign-in service did not answer. Try again in a moment: the first sign-in after a quiet period can take longer than usual."
+	if id := refusal.ID(r.Context()); id != "" {
+		text += " Reference: " + id
+	}
+	if !strings.Contains(r.Header.Get("Accept"), "text/html") {
+		w.Header().Set("Retry-After", "5")
+		http.Error(w, text, http.StatusServiceUnavailable)
+		return
+	}
+	w.Header().Set("Retry-After", "5")
+	s.writePage(w, r, http.StatusServiceUnavailable, "Sign-in unavailable",
+		`<h1>Sign-in unavailable</h1><p>`+html.EscapeString(text)+`</p><p><a class="btn" href="`+html.EscapeString(s.at("/"))+`">Back</a></p>`)
 }
 
 // signInConnector is the connector for a kind, if it can sign a person in
@@ -981,20 +1031,6 @@ func (s *ConsoleServer) consentProblem(
 	s.writePage(w, r, status, "Consent", body.String())
 }
 
-// consentCauses is what to check when a directory refuses the credential
-// its own consent screen has just granted. Ordered by how often each one
-// is the answer, because a list read top-down is a list whose order is a
-// claim about likelihood.
-var consentCauses = []string{
-	"The directory API is not enabled in the cloud project that owns this hub's OAuth client. " +
-		"The message above names the project and the page that enables it.",
-	"The API was enabled moments ago. Enabling propagates over a few minutes; try again.",
-	"The account that consented is not an administrator of the workspace, or lacks the " +
-		"privileges to read users and groups.",
-	"The consent was granted with a personal account, or with an account in a different " +
-		"workspace than the one intended. The account chooser remembers the last one used.",
-}
-
 // connectCallback finishes an admin-consent flow: it checks the state
 // against the cookie, exchanges the code, and adopts the workspace.
 func (s *ConsoleServer) connectCallback(w http.ResponseWriter, r *http.Request) {
@@ -1052,43 +1088,32 @@ func (s *ConsoleServer) connectCallback(w http.ResponseWriter, r *http.Request) 
 	}
 	access.SetCookie(w, access.ConnectCookie("", s.sessions.Secure(), 0))
 
-	ws, b, err := conn.Exchange(r.Context(), r.URL.Query().Get("code"), bind)
+	// The module does the exchange and adopts the workspace. The code is spent
+	// by it, so the call is not retried; a lost answer is a failed consent the
+	// operator starts again, as it was when the exchange ran here.
+	caller := consolecall.Caller{Actor: actor, Roles: []string{string(access.RoleOperator)}}
+	if id, ok := IdentityFrom(r.Context()); ok && id.Can(access.RoleOperator) {
+		caller = consolecall.Snapshot(id)
+	}
+	done, err := s.console.completeConsent(r.Context(), caller, conn.Kind(), r.URL.Query().Get("code"), bind)
 	if err != nil {
-		s.log.WarnContext(r.Context(), "consent exchange failed",
+		var told *consolecall.Problem
+		if errors.As(err, &told) {
+			s.consentProblem(w, r, http.StatusConflict, told.Summary, told.Detail, told.Hints)
+			return
+		}
+		s.log.WarnContext(r.Context(), "the consent could not be completed",
 			logattr.SafeString("backend", conn.Kind()), logattr.SafeError("error", err))
 		s.consentProblem(w, r, http.StatusConflict,
-			providerName(conn.Kind())+" granted the consent, and then refused the first read with it.",
-			err.Error(), consentCauses)
+			"The consent could not be completed.", "The Google module did not finish it. The consent is single-use, so start it again.",
+			[]string{"The module was starting and did not answer in time.", "The module could not be reached."})
 		return
 	}
-	if bind != "" && ws.ID != bind {
-		s.consentProblem(w, r, http.StatusConflict,
-			"That consent is for a different tenant than the workspace being reconnected.", "", []string{
-				"The account chooser offered the account last used rather than the one this " +
-					"workspace belongs to.",
-			})
-		return
-	}
-	ws.ConnectedBy = actor
-	if _, err = s.hub.Adopt(r.Context(), ws, b); err != nil {
-		s.log.ErrorContext(r.Context(), "the workspace could not be adopted",
-			logattr.SafeString("workspace", ws.ID), logattr.SafeError("error", err))
-		s.consentProblem(w, r, http.StatusConflict,
-			"The consent worked, but the workspace could not be saved.", err.Error(), nil)
-		return
-	}
-	connected := audit.WorkspaceConnected
-	if bind != "" {
-		connected = audit.WorkspaceReconnected
-	}
-	s.console.record(r.Context(), connected(audit.Identified(actor), ws.ID, b.Kind(), "consent"))
-	s.log.InfoContext(r.Context(), "workspace connected",
-		logattr.SafeString("workspace", ws.ID), logattr.SafeString("backend", b.Kind()), logattr.SafeString("by", actor))
 	// Straight to the question the connect leaves behind: which of this
 	// tenant's domains this hub should answer for. Asking here, once, is
 	// the difference between an operator choosing and an operator
 	// discovering afterwards what was chosen for them.
-	http.Redirect(w, r, "/#/directories/"+url.PathEscape(ws.ID)+"?choose=domains", http.StatusFound)
+	http.Redirect(w, r, "/#/directories/"+url.PathEscape(done.Workspace)+"?choose=domains", http.StatusFound)
 }
 
 // whoamiBody is the shape every adapter of the Go module serves, so that a
