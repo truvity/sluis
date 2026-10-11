@@ -2,8 +2,10 @@ package server
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -12,6 +14,7 @@ import (
 	"github.com/truvity/sluis/gen/directoryroster/v1/directoryrosterv1connect"
 	sluisv1 "github.com/truvity/sluis/gen/sluis/v1"
 	"github.com/truvity/sluis/gen/sluis/v1/sluisv1connect"
+	"github.com/truvity/sluis/internal/refusal"
 )
 
 // named is every operator service, answering ListHolders with a marker
@@ -98,6 +101,74 @@ func TestEveryLegacyServiceHasANewNameOnTheMux(t *testing.T) {
 			if pattern != "/"+name+"/" {
 				t.Errorf("%s is not on the mux (pattern %q)", name, pattern)
 			}
+		}
+	}
+}
+
+// refusing answers with the reasons a maintainer writes where a call is
+// refused: a role named, a store's error.
+type refusing struct{ named }
+
+func (refusing) ListHolders(
+	context.Context, *connect.Request[directoryrosterv1.ListHoldersRequest],
+) (*connect.Response[directoryrosterv1.ListHoldersResponse], error) {
+	return nil, connect.NewError(connect.CodePermissionDenied,
+		errors.New("this needs the operator role over acme's directory"))
+}
+
+func (refusing) ListWorkspaces(
+	context.Context, *connect.Request[directoryrosterv1.ListWorkspacesRequest],
+) (*connect.Response[directoryrosterv1.ListWorkspacesResponse], error) {
+	return nil, connect.NewError(connect.CodeInternal, errors.New("pq: connection to 10.1.2.3 refused"))
+}
+
+// Every operator service is behind the interceptor, under both names: what
+// a handler wrote as the reason is not what the caller reads.
+func TestTheOperatorServicesRefuseInFixedWords(t *testing.T) {
+	t.Parallel()
+
+	mux := http.NewServeMux()
+	registerRPC(mux, refusing{})
+	server := httptest.NewServer(refusal.Middleware(mux))
+	t.Cleanup(server.Close)
+
+	for name, clients := range map[string]struct {
+		denied   func() error
+		internal func() error
+	}{
+		"sluis.v1": {
+			func() error {
+				_, err := sluisv1connect.NewAccessServiceClient(server.Client(), server.URL).
+					ListHolders(t.Context(), connect.NewRequest(&sluisv1.ListHoldersRequest{Group: "g"}))
+				return err
+			},
+			func() error {
+				_, err := sluisv1connect.NewWorkspaceServiceClient(server.Client(), server.URL).
+					ListWorkspaces(t.Context(), connect.NewRequest(&sluisv1.ListWorkspacesRequest{}))
+				return err
+			},
+		},
+		"directoryroster.v1": {
+			func() error {
+				_, err := directoryrosterv1connect.NewAccessServiceClient(server.Client(), server.URL).
+					ListHolders(t.Context(), connect.NewRequest(&directoryrosterv1.ListHoldersRequest{Group: "g"}))
+				return err
+			},
+			func() error {
+				_, err := directoryrosterv1connect.NewWorkspaceServiceClient(server.Client(), server.URL).
+					ListWorkspaces(t.Context(), connect.NewRequest(&directoryrosterv1.ListWorkspacesRequest{}))
+				return err
+			},
+		},
+	} {
+		var denied, failed *connect.Error
+		if !errors.As(clients.denied(), &denied) || denied.Code() != connect.CodePermissionDenied ||
+			!strings.HasPrefix(denied.Message(), "not authorised (request ") || strings.Contains(denied.Message(), "acme") {
+			t.Errorf("%s: a denied call = %v, want permission_denied \"not authorised (request <id>)\"", name, denied)
+		}
+		if !errors.As(clients.internal(), &failed) || failed.Code() != connect.CodeInternal ||
+			!strings.HasPrefix(failed.Message(), "server error (request ") || strings.Contains(failed.Message(), "10.1.2.3") {
+			t.Errorf("%s: a failed call = %v, want internal \"server error (request <id>)\"", name, failed)
 		}
 	}
 }
