@@ -684,6 +684,36 @@
             }
           },
           "type": "object"
+        },
+        "serve": {
+          "additionalProperties": false,
+          "description": "Makes the GitHub module answer the issuer's calls on Kubernetes (docs/decisions/0071). Only the module's own document sets it. The module listens on `address` and accepts a call whose projected ServiceAccount token was minted for `audience`, checked with a TokenReview, and whose subject is one of `issuers`; any other call is a 401. On Lambda the function answers `rpc` events and IAM decides who may invoke it. Not with `remote`. Unset serves nothing.",
+          "properties": {
+            "address": {
+              "description": "The listener, `host:port`; it also answers `GET /healthz`. `:8081` when unset.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "audience": {
+              "description": "The audience a caller's token must be minted for. The module's name, `github`, when unset.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "issuers": {
+              "description": "The issuer's ServiceAccount, as `system:serviceaccount:<namespace>:<name>`. A call from it is both the issuer class (`mint_installation`) and the console class (the console methods); a token of any other subject is a 401.",
+              "items": {
+                "pattern": "^system:serviceaccount:[^:]+:[^:]+$",
+                "type": "string"
+              },
+              "minItems": 1,
+              "type": "array",
+              "uniqueItems": true
+            }
+          },
+          "required": [
+            "issuers"
+          ],
+          "type": "object"
         }
       },
       "type": "object"
@@ -1914,6 +1944,36 @@
               "description": "The module's Kubernetes Service. A call carries the pod's projected ServiceAccount token."
             }
           },
+          "type": "object"
+        },
+        "serve": {
+          "additionalProperties": false,
+          "description": "Makes the Slack module answer the issuer's calls on Kubernetes (docs/decisions/0071). Only the module's own document sets it. The module listens on `address` and accepts a call whose projected ServiceAccount token was minted for `audience`, checked with a TokenReview, and whose subject is one of `issuers`; any other call is a 401. On Lambda the function answers `rpc` events and IAM decides who may invoke it. Not with `remote`. Unset serves nothing.",
+          "properties": {
+            "address": {
+              "description": "The listener, `host:port`; it also answers `GET /healthz`. `:8081` when unset.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "audience": {
+              "description": "The audience a caller's token must be minted for. The module's name, `slack`, when unset.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "issuers": {
+              "description": "The issuer's ServiceAccount, as `system:serviceaccount:<namespace>:<name>`. A call from it is both the issuer class (`mint_installation`) and the console class (the console methods); a token of any other subject is a 401.",
+              "items": {
+                "pattern": "^system:serviceaccount:[^:]+:[^:]+$",
+                "type": "string"
+              },
+              "minItems": 1,
+              "type": "array",
+              "uniqueItems": true
+            }
+          },
+          "required": [
+            "issuers"
+          ],
           "type": "object"
         }
       },

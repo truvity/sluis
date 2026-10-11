@@ -33,12 +33,25 @@ type TokenSource func(ctx context.Context, audience string) (string, error)
 // HandlerOption configures [Server.Handler].
 type HandlerOption func(*handlerConfig)
 
-type handlerConfig struct{ classes map[string]string }
+type handlerConfig struct {
+	classes map[string]string
+	holds   map[string][]string
+	only    bool
+}
 
 // WithClasses maps verified subjects to caller classes, for a subject whose
 // ServiceAccount is not named for its class.
 func WithClasses(classes map[string]string) HandlerOption {
 	return func(c *handlerConfig) { c.classes = classes }
+}
+
+// WithSubjectClasses maps verified subjects to the caller classes each holds,
+// for a subject that is several (the issuer's pod is the issuer and the
+// console). A subject it does not list is refused with a 401 before it reaches
+// a method: the class is never guessed from a ServiceAccount's name, which any
+// namespace may reuse.
+func WithSubjectClasses(holds map[string][]string) HandlerOption {
+	return func(c *handlerConfig) { c.holds, c.only = holds, true }
 }
 
 // ClassOfSubject is the caller class of a verified subject: the ServiceAccount's
@@ -82,6 +95,15 @@ func (s *Server) Handler(verify Verifier, opts ...HandlerOption) http.Handler {
 				return
 			}
 			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		if hc.only {
+			classes := hc.holds[subject]
+			if len(classes) == 0 {
+				http.Error(w, "unauthenticated", http.StatusUnauthorized)
+				return
+			}
+			writeJSON(w, s.Dispatch(WithCallerClasses(r.Context(), classes...), req))
 			return
 		}
 		class, mapped := hc.classes[subject]

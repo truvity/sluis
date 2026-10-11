@@ -172,6 +172,11 @@ data:
       activationDelay: 15m
       file: /var/run/access-issuer/signing-key/tls.key
       pollInterval: 30s
+    slack:
+      remote:
+        audience: slack
+        tokenFile: /var/run/secrets/sluis/slack/token
+        url: http://sluis-slack.default.svc:8081
     store: kubernetes
 
 ---
@@ -191,6 +196,12 @@ data:
   config.yaml: |
     apiVersion: sluis.truvity.github.io/controller-github/v2
     consoleURL: http://sluis.default.svc:8080/console
+    github:
+      serve:
+        address: :8081
+        audience: github
+        issuers:
+        - system:serviceaccount:default:sluis-issuer
 
 ---
 # Source: sluis/templates/modules.yaml
@@ -209,6 +220,12 @@ data:
   config.yaml: |
     apiVersion: sluis.truvity.github.io/controller-slack/v2
     consoleURL: http://sluis.default.svc:8080/console
+    slack:
+      serve:
+        address: :8081
+        audience: slack
+        issuers:
+        - system:serviceaccount:default:sluis-issuer
 
 ---
 # Source: sluis/templates/policy-configmap.yaml
@@ -280,6 +297,29 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: sluis-github
+    namespace: default
+
+---
+# Source: sluis/templates/modules.yaml
+# The module checks its callers' tokens with a TokenReview, which is the one
+# thing system:auth-delegator allows (and a SubjectAccessReview).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: sluis-default-slack-auth-delegator
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: slack
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:auth-delegator
+subjects:
+  - kind: ServiceAccount
+    name: sluis-slack
     namespace: default
 
 ---
@@ -423,6 +463,30 @@ spec:
       targetPort: rpc
 
 ---
+# Source: sluis/templates/modules.yaml
+# Calls to the slack module, on /rpc. A call carries a projected ServiceAccount
+# token minted for the module's audience, which the module checks with a TokenReview.
+apiVersion: v1
+kind: Service
+metadata:
+  name: sluis-slack
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: slack
+spec:
+  selector:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/component: slack
+  ports:
+    - name: rpc
+      port: 8081
+      targetPort: rpc
+
+---
 # Source: sluis/templates/service.yaml
 apiVersion: v1
 kind: Service
@@ -471,7 +535,7 @@ spec:
       annotations:
         # Each document is read once, at start: a change to it, or to the
         # policy, is a rollout.
-        checksum/config: baf55c8035146c5cc447a92164ae89a8cb62c8e04f7ead4583122d3697ecb6bd
+        checksum/config: 4561ab7066fa30946a89e11d358c187cc4e75c28e267f12cf78dfbc5a8e11cf3
         checksum/policy: 9909eca423d3080cb9a8538d9e143b48ef12798afd703ad5562657bc38b316e5
     spec:
       serviceAccountName: sluis-issuer
@@ -514,6 +578,10 @@ spec:
             - name: call-github
               mountPath: /var/run/secrets/sluis/github
               readOnly: true
+            # The token a call to slack carries, minted for its audience.
+            - name: call-slack
+              mountPath: /var/run/secrets/sluis/slack
+              readOnly: true
           livenessProbe:
             httpGet: { path: /healthz, port: health }
           readinessProbe:
@@ -539,6 +607,13 @@ spec:
             sources:
               - serviceAccountToken:
                   audience: github
+                  expirationSeconds: 3600
+                  path: token
+        - name: call-slack
+          projected:
+            sources:
+              - serviceAccountToken:
+                  audience: slack
                   expirationSeconds: 3600
                   path: token
 
@@ -570,7 +645,7 @@ spec:
       annotations:
         # Each document is read once, at start: a change to it, or to the
         # policy, is a rollout.
-        checksum/config: 753db96794b17ea3cb3499de817957aa3e42719e1350bf62a1ef153cd3936d22
+        checksum/config: 5227b557748658d6e6b7be131f141020c46d07fb291d2ed4f982b70ae3fce4b0
         checksum/policy: 9909eca423d3080cb9a8538d9e143b48ef12798afd703ad5562657bc38b316e5
     spec:
       serviceAccountName: sluis-github
@@ -676,7 +751,7 @@ spec:
       annotations:
         # Each document is read once, at start: a change to it, or to the
         # policy, is a rollout.
-        checksum/config: c780d4fd68d76a0d9d181abca191acf4757c98b46d621ef3b9d889946d700d20
+        checksum/config: 6c9defe959d938dde24b26e7f54103f3e27f1430d1023fbc736e59b28e9ef8d1
         checksum/policy: 9909eca423d3080cb9a8538d9e143b48ef12798afd703ad5562657bc38b316e5
     spec:
       serviceAccountName: sluis-slack
@@ -694,6 +769,8 @@ spec:
             capabilities:
               drop: [ALL]
           ports:
+            - name: rpc
+              containerPort: 8081
             - name: health
               containerPort: 7070
           args:

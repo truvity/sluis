@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"strings"
 )
 
 // The modules a document can route to another process, besides Cloudflare
@@ -22,6 +23,44 @@ type ModuleRoute struct {
 	// Remote is where the module is when it is not this process. Unset keeps
 	// the module in this process.
 	Remote *ModuleRemote `json:"remote,omitempty"`
+	// Serve makes the module answer other modules' calls on Kubernetes: a
+	// listener that verifies the caller's projected ServiceAccount token. Only
+	// the module's own document sets it (`github.serve` for the GitHub
+	// module, `slack.serve` for the Slack one).
+	Serve *ModuleServe `json:"serve,omitempty"`
+}
+
+// ModuleServe is where the GitHub or Slack module answers the issuer on
+// Kubernetes (docs/decisions/0071): `POST /rpc` with a bearer that a
+// TokenReview accepts for Audience and that belongs to one of Issuers. Lambda
+// ignores it: the function answers `rpc` events and IAM decides who invokes it.
+type ModuleServe struct {
+	// Address is the listener: host:port. :8081 when unset.
+	Address string `json:"address,omitempty"`
+	// Audience is the audience a caller's projected token must have been minted
+	// for; the module's name when unset.
+	Audience string `json:"audience,omitempty"`
+	// Issuers are the subjects of the issuer's ServiceAccount
+	// (`system:serviceaccount:<namespace>:<name>`). Each is both the issuer
+	// class (`mint_installation`) and the console class (`*.console.*`); a
+	// token of any other subject is a 401. At least one is required.
+	Issuers []string `json:"issuers,omitempty"`
+}
+
+// Validate holds the listener to what its schema cannot say.
+func (s *ModuleServe) Validate(at string) error {
+	if s == nil {
+		return nil
+	}
+	if len(s.Issuers) == 0 {
+		return fmt.Errorf("%s.issuers: name the issuer's ServiceAccount (system:serviceaccount:<namespace>:<name>); without it no caller could be let in", at)
+	}
+	for _, sub := range s.Issuers {
+		if rest, ok := strings.CutPrefix(sub, "system:serviceaccount:"); !ok || strings.Count(rest, ":") != 1 || strings.HasPrefix(rest, ":") || strings.HasSuffix(rest, ":") {
+			return fmt.Errorf("%s.issuers: %q is not system:serviceaccount:<namespace>:<name>", at, sub)
+		}
+	}
+	return nil
 }
 
 // ModuleRemote is a module in another process: a Lambda function or a
@@ -43,7 +82,16 @@ type ModuleRemote struct {
 // Validate holds the section to what its schema cannot say. A nil section, or
 // one with no remote, keeps the module in this process.
 func (r *ModuleRoute) Validate(module string) error {
-	if r == nil || r.Remote == nil {
+	if r == nil {
+		return nil
+	}
+	if r.Remote != nil && r.Serve != nil {
+		return fmt.Errorf("%s: remote and serve are both set; a module that is somewhere else does not answer here", module)
+	}
+	if err := r.Serve.Validate(module + ".serve"); err != nil {
+		return err
+	}
+	if r.Remote == nil {
 		return nil
 	}
 	return validateRemote(module+".remote", r.Remote.Function, r.Remote.URL)
@@ -108,7 +156,15 @@ func (r *Roster) routes() map[string]*ModuleRoute {
 
 // ValidateRoutes holds `github.remote`, `slack.remote` and `google.remote` to
 // what the schema cannot say.
-func (s *Sluis) ValidateRoutes() error { return validateRoutes(s.routes()) }
+func (s *Sluis) ValidateRoutes() error {
+	errs := []error{validateRoutes(s.routes())}
+	for _, name := range sortedKeys(s.routes()) {
+		if r := s.routes()[name]; r != nil && r.Serve != nil {
+			errs = append(errs, fmt.Errorf("%s.serve: the issuer's document does not serve a module; it belongs in the %s module's own document", name, name))
+		}
+	}
+	return errors.Join(errs...)
+}
 
 // ValidateRoutes is [Sluis.ValidateRoutes] for a controller document.
 func (r *Roster) ValidateRoutes() error { return validateRoutes(r.routes()) }
