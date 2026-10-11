@@ -103,9 +103,10 @@ func NewExternalReaderRole(ctx *pulumi.Context, name string, args *ExternalReade
 		roleName = name
 	}
 	if (args.TrustPolicy == nil) == (args.TrustPrincipalArn == "") {
-		return nil, errors.New("sluispulumi: ExternalReaderRoleArgs: set exactly one of TrustPolicy and TrustPrincipalArn: who may assume the role is the caller's choice")
+		return nil, errors.New("sluispulumi: ExternalReaderRoleArgs: set exactly one of TrustPolicy and TrustPrincipalArn " +
+			"(who may assume the role is the caller's choice)")
 	}
-	var trust pulumi.StringInput = args.TrustPolicy
+	trust := args.TrustPolicy
 	if args.TrustPrincipalArn != "" {
 		doc, err := trustForPrincipal(args.TrustPrincipalArn)
 		if err != nil {

@@ -263,7 +263,9 @@ type moduleFunctions struct {
 
 // functions, roleArns and aliasArns are the maps NewLambda exports, keyed by
 // the role: `issuer` and every [ModuleFunctions].
-func (m *moduleFunctions) outputs(issuerFn, issuerRole pulumi.StringOutput, issuerAliases pulumi.StringMapInput) (fns, roles pulumi.StringMapOutput, aliases pulumi.StringMapMapOutput) {
+func (m *moduleFunctions) outputs(
+	issuerFn, issuerRole pulumi.StringOutput, issuerAliases pulumi.StringMapInput,
+) (fns, roles pulumi.StringMapOutput, aliases pulumi.StringMapMapOutput) {
 	f := pulumi.StringMap{RoleIssuer: issuerFn}
 	r := pulumi.StringMap{RoleIssuer: issuerRole}
 	al := pulumi.StringMapMap{RoleIssuer: issuerAliases.ToStringMapOutput()}

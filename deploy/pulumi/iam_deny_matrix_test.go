@@ -161,7 +161,9 @@ func mxPolicies(t *testing.T) (identity map[string]iameval.Policy, key iameval.P
 	}
 
 	var kroles []KeyRole
-	for _, s := range mxSpecs() {
+	specs := mxSpecs()
+	for i := range specs {
+		s := &specs[i]
 		kr := KeyRole{Role: Role{Name: s.name, Hosts: s.hosts}, Arn: mxRoleArn(s.name), ReadModules: s.readModule}
 		if s.name == "issuer" {
 			kr.MinterRefs = []string{mxMinter}
@@ -193,7 +195,8 @@ type mxRow struct {
 
 func mxBuildRows(specs []roleSpec) []mxRow {
 	var rows []mxRow
-	for _, s := range specs {
+	for i := range specs {
+		s := &specs[i]
 		add := func(group, name, action, resource string, want bool, ctx func(iameval.Request) iameval.Request) {
 			req := iameval.Request{Principal: mxRoleArn(s.name), Action: action, Resource: resource}
 			if ctx != nil {

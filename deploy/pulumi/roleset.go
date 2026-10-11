@@ -118,7 +118,8 @@ func (a *LambdaArgs) senders() ([]string, error) {
 		return nil, err
 	}
 	var out []string
-	for _, r := range rs {
+	for i := range rs {
+		r := &rs[i]
 		out = append(out, r.arn)
 		out = append(out, r.also...)
 	}
@@ -143,7 +144,8 @@ func (a *LambdaArgs) keyRoles() ([]KeyRole, error) {
 		}
 	}
 	var out []KeyRole
-	for _, r := range rs {
+	for i := range rs {
+		r := &rs[i]
 		kr := KeyRole{Role: r.role, Arn: r.arn, AlsoArns: r.also, ReadModules: r.readModule}
 		if r.role.Name == RoleIssuer {
 			kr.MinterRefs = refs
@@ -163,7 +165,8 @@ func (a *LambdaArgs) viewerRoles() ([]string, error) {
 		return nil, err
 	}
 	var out []string
-	for _, r := range rs {
+	for i := range rs {
+		r := &rs[i]
 		if r.readsOnly {
 			out = append(out, r.arn)
 			out = append(out, r.also...)
@@ -214,7 +217,7 @@ func resolvedOf[T any](a *LambdaArgs, f func(*LambdaArgs) (T, error)) (T, error)
 	return f(&r)
 }
 
-// Senders: see (*LambdaArgs).senders. It validates the args first, so the estate
+// Senders is (*LambdaArgs).senders. It validates the args first, so the estate
 // can call it before the component exists (the audit queue and the key are made first).
 func (a *LambdaArgs) Senders() ([]string, error) { return resolvedOf(a, (*LambdaArgs).senders) }
 
@@ -235,11 +238,16 @@ func (a *LambdaArgs) KeyPolicyStatements(o KeyPolicyOptions) ([]map[string]any, 
 	return resolvedOf(a, func(r *LambdaArgs) ([]map[string]any, error) { return r.keyPolicyStatements(o) })
 }
 
-// Senders, Roles, ViewerRoles and KeyPolicyStatements of the component are those
-// of the args it was made from.
-func (l *Lambda) Senders() ([]string, error)     { return l.resolved.senders() }
-func (l *Lambda) Roles() ([]KeyRole, error)      { return l.resolved.keyRoles() }
+// Senders is the component's audit senders: those of the args it was made from.
+func (l *Lambda) Senders() ([]string, error) { return l.resolved.senders() }
+
+// Roles is the component's key roles: those of the args it was made from.
+func (l *Lambda) Roles() ([]KeyRole, error) { return l.resolved.keyRoles() }
+
+// ViewerRoles is the component's viewer role ARNs: those of the args it was made from.
 func (l *Lambda) ViewerRoles() ([]string, error) { return l.resolved.viewerRoles() }
+
+// KeyPolicyStatements is the component's key policy statements: those of the args it was made from.
 func (l *Lambda) KeyPolicyStatements(o KeyPolicyOptions) ([]map[string]any, error) {
 	return l.resolved.keyPolicyStatements(o)
 }

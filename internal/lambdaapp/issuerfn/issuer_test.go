@@ -100,7 +100,7 @@ func TestWithoutARemoteTheIssuerHostsTheController(t *testing.T) {
 // release, and with the directory remote it does not refresh it either.
 func TestClientsAndTheDeprecatedRefreshEvent(t *testing.T) {
 	fn := open(t, everyRemote)
-	for _, kind := range []string{lambdaapp.KindClients, lambdaapp.KindRefresh} {
+	for _, kind := range []string{lambdaapp.KindClients, lambdaapp.KindRefresh} { //nolint:staticcheck // both kinds are under test
 		out, err := handle(fn, `{"kind":"`+kind+`"}`)
 		if err != nil {
 			t.Fatalf("%s: %v", kind, err)

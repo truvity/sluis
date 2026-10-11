@@ -77,7 +77,8 @@ func TestATickAndARunOfADeclaredTargetRunOnePass(t *testing.T) {
 	}
 	// The links pass is a target of its own.
 	p, opened := &pass{ran: true}, 0
-	if res, err := result(t, handler(t, p, &opened), `{"kind":"tick","target":"`+githubcontroller.LinksTarget+`"}`); err != nil || res.Outcome != lambdaapp.OutcomeRan {
+	links := `{"kind":"tick","target":"` + githubcontroller.LinksTarget + `"}`
+	if res, err := result(t, handler(t, p, &opened), links); err != nil || res.Outcome != lambdaapp.OutcomeRan {
 		t.Errorf("links: %+v, %v", res, err)
 	}
 }

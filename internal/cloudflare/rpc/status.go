@@ -138,7 +138,8 @@ func presetView(ctx context.Context, src Source, info PresetInfo) PresetView {
 			// The stored token is the live stored-named one that expires with the
 			// stored document; the others of that name are older ones awaiting
 			// their sweep, and are listed as revocable tokens.
-			if out.Stored.Present && out.Stored.TokenID == "" && !out.Stored.ExpiresOn.IsZero() && t.ExpiresOn.UTC().Truncate(time.Second).Equal(out.Stored.ExpiresOn.UTC()) {
+			if out.Stored.Present && out.Stored.TokenID == "" && !out.Stored.ExpiresOn.IsZero() &&
+				t.ExpiresOn.UTC().Truncate(time.Second).Equal(out.Stored.ExpiresOn.UTC()) {
 				out.Stored.TokenID = t.ID
 				continue
 			}

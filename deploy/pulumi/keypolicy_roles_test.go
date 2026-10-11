@@ -27,7 +27,7 @@ func kpShapes() map[string]struct {
 		args func(*arp.LambdaArgs)
 		opts arp.KeyPolicyOptions
 	}{
-		"plain": {args: func(a *arp.LambdaArgs) {}, opts: arp.KeyPolicyOptions{
+		"plain": {args: func(*arp.LambdaArgs) {}, opts: arp.KeyPolicyOptions{
 			ExternalReaders: []string{arnp + "iam::" + account + ":role/cluster-a-reader"},
 			Admins:          []string{kpEstateAdmin},
 		}},

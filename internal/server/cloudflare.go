@@ -76,8 +76,8 @@ func (c *Console) ListCloudflare(
 	for _, a := range st.Accounts {
 		out.Accounts = append(out.Accounts, &directoryrosterv1.CloudflareAccount{Name: a.Name, IdLast4: a.IDLast4})
 	}
-	for _, p := range st.Presets {
-		out.Presets = append(out.Presets, presetProto(p))
+	for i := range st.Presets {
+		out.Presets = append(out.Presets, presetProto(st.Presets[i]))
 	}
 	return connect.NewResponse(out), nil
 }
