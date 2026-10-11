@@ -86,7 +86,7 @@ func (a *LambdaArgs) functionRoles() []functionRole {
 			case CrossReadModule:
 				fr.readModule = append(fr.readModule, g.Modules...)
 				fr.readsOnly = true
-			case CrossReadTable, CrossReadBlobs:
+			case CrossReadTable, CrossReadSnapshot, CrossReadBlobs:
 				fr.readsOnly = true
 			}
 		}
@@ -132,24 +132,10 @@ func (a *LambdaArgs) keyRoles() ([]KeyRole, error) {
 	if err != nil {
 		return nil, err
 	}
-	refs := a.minterRefs
-	if refs == nil && a.Layout.has5() {
-		// Before the component exists: the refs come from the same documents it renders.
-		docs, err := renderDocuments(a)
-		if err != nil {
-			return nil, err
-		}
-		if refs, err = minterRefsOf(docs); err != nil {
-			return nil, err
-		}
-	}
 	var out []KeyRole
 	for i := range rs {
 		r := &rs[i]
 		kr := KeyRole{Role: r.role, Arn: r.arn, AlsoArns: r.also, ReadModules: r.readModule}
-		if r.role.Name == RoleIssuer {
-			kr.MinterRefs = refs
-		}
 		out = append(out, kr)
 	}
 	return out, nil

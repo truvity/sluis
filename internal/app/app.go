@@ -87,6 +87,13 @@ type Config struct {
 	// class `console`). Nil is the module in this process. They are set with
 	// Reader: a hub that holds no workspaces has no connector of its own.
 	GoogleIssuer, GoogleConsole modcall.Caller
+	// GitHubRemote, SlackRemote and CloudflareRemote say that the module runs as
+	// another function (`<module>.remote`). The hub then opens none of that
+	// module's stores, blobs, credentials or maintenance gate: every operation on
+	// them is the module's, asked over modcall, and this process holds no access
+	// to its data (v1.76 E-FIN). Unset is the module in this process, as the
+	// demonstration and the tests have it.
+	GitHubRemote, SlackRemote, CloudflareRemote bool
 
 	consolePort int
 	healthPort  int
@@ -549,13 +556,18 @@ func openPortStores(ctx context.Context, cfg Config, st *store.Stores, log *slog
 	if err != nil {
 		return stores{}, err
 	}
-	github, err := forModule(port.ModuleGitHub)
-	if err != nil {
-		return stores{}, err
+	// A module that is another function's is not opened here: its tables, blobs
+	// and credentials are its own, and the issuer's role holds no grant on them.
+	var github, slack *portstore.Base
+	if !cfg.GitHubRemote {
+		if github, err = forModule(port.ModuleGitHub); err != nil {
+			return stores{}, err
+		}
 	}
-	slack, err := forModule(port.ModuleSlack)
-	if err != nil {
-		return stores{}, err
+	if !cfg.SlackRemote {
+		if slack, err = forModule(port.ModuleSlack); err != nil {
+			return stores{}, err
+		}
 	}
 	// That Secrets is configured is checked now; the session key is read, or
 	// created the first time, when a session or a state is first signed.
@@ -572,32 +584,47 @@ func openPortStores(ctx context.Context, cfg Config, st *store.Stores, log *slog
 	log.InfoContext(ctx, "keeping the domain records in the state port, credentials in Secrets",
 		slog.String("adapter", st.Adapter), slog.Bool("shared", st.Shared))
 	out := stores{
-		workspaces:  portstore.NewWorkspaces(google),
-		credentials: portstore.NewCredentials(google),
-		settings:    cfg.oauthDeclared,
+		workspaces: portstore.NewWorkspaces(google),
+		settings:   cfg.oauthDeclared,
 		sessionKey: func() ([]byte, error) {
 			// Signing has no request context to read under; the read is bounded.
 			ctx, cancel := context.WithTimeout(context.Background(), secretReadTimeout)
 			defer cancel()
 			return sessionKey.Get(ctx)
 		},
-		githubReports:       rails.NewBlobReports(st.Ports.Blob, blobprefix.GitHubReports),
-		slackReports:        rails.NewBlobReports(st.Ports.Blob, blobprefix.SlackReports),
-		githubOrgs:          portstore.NewGitHubOrgs(github),
-		githubLinks:         portstore.NewGitHubLinks(github),
-		githubRunnerApps:    portstore.NewGitHubRunnerApps(github),
-		githubCatalogueApps: portstore.NewGitHubCatalogueApps(github),
-		slackCatalogueApps:  portstore.NewSlackCatalogueApps(slack),
-		slackShared:         portstore.NewSlackShared(slack),
-		slackChannels:       portstore.NewSlackChannels(slack),
-		slackWorkspaces:     portstore.NewSlackWorkspaces(slack),
 	}
+	if !cfg.Reader {
+		// The workspaces' credentials are the Google module's; a hub that only
+		// reads its snapshots holds none (`google.remote`).
+		out.credentials = portstore.NewCredentials(google)
+	}
+	if github != nil {
+		out.githubReports = rails.NewBlobReports(st.Ports.Blob, blobprefix.GitHubReports)
+		out.githubOrgs = portstore.NewGitHubOrgs(github)
+		out.githubLinks = portstore.NewGitHubLinks(github)
+		out.githubRunnerApps = portstore.NewGitHubRunnerApps(github)
+		out.githubCatalogueApps = portstore.NewGitHubCatalogueApps(github)
+	}
+	if slack != nil {
+		out.slackReports = rails.NewBlobReports(st.Ports.Blob, blobprefix.SlackReports)
+		out.slackCatalogueApps = portstore.NewSlackCatalogueApps(slack)
+		out.slackShared = portstore.NewSlackShared(slack)
+		out.slackChannels = portstore.NewSlackChannels(slack)
+		out.slackWorkspaces = portstore.NewSlackWorkspaces(slack)
+	}
+	// The flag of a module that is another function's is read by that module.
 	out.maintenance = maintenance.Set{
-		port.ModuleOIDC:       st.Maintenance(),
-		port.ModuleGoogle:     st.MaintenanceOf(port.ModuleGoogle),
-		port.ModuleGitHub:     st.MaintenanceOf(port.ModuleGitHub),
-		port.ModuleSlack:      st.MaintenanceOf(port.ModuleSlack),
-		port.ModuleCloudflare: st.MaintenanceOf(port.ModuleCloudflare),
+		port.ModuleOIDC:   st.Maintenance(),
+		port.ModuleGoogle: st.MaintenanceOf(port.ModuleGoogle),
+	}
+	if !cfg.GitHubRemote {
+		out.maintenance[port.ModuleGitHub] = st.MaintenanceOf(port.ModuleGitHub)
+	}
+	if !cfg.SlackRemote {
+		out.maintenance[port.ModuleSlack] = st.MaintenanceOf(port.ModuleSlack)
+	}
+	if !cfg.CloudflareRemote {
+		out.maintenance[port.ModuleCloudflare] = st.MaintenanceOf(port.ModuleCloudflare)
 	}
 	useCluster(&out, cfg, st)
 	return out, nil

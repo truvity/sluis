@@ -269,7 +269,7 @@ func tablesNeeded() []Module {
 	for _, r := range append([]string{RoleIssuer}, ModuleFunctions()...) {
 		add(FunctionHosts(r)...)
 		for _, g := range CrossGrants {
-			if g.Role == r && (g.Verb == CrossReadTable || g.Verb == CrossReadAll || g.Verb == CrossReadModule) {
+			if g.Role == r && (g.Verb == CrossReadTable || g.Verb == CrossReadSnapshot || g.Verb == CrossReadAll || g.Verb == CrossReadModule) {
 				add(g.Modules...)
 			}
 		}

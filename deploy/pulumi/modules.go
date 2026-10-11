@@ -151,6 +151,11 @@ type CrossVerb string
 const (
 	// CrossReadTable reads the module's table.
 	CrossReadTable CrossVerb = "read-table"
+	// CrossReadSnapshot reads the module's table by key (GetItem, Query) and
+	// nothing else of it: no Scan, no write, no parameter and no parameter key.
+	// With [CrossReadBlobs] it is the issuer's whole access to the google
+	// module, the snapshots it serves (v1.76 D-v176-6 a).
+	CrossReadSnapshot CrossVerb = "read-snapshot"
 	// CrossReadBlobs reads the module's blob prefix and lists exactly that prefix.
 	CrossReadBlobs CrossVerb = "read-blobs"
 	// CrossInvoke invokes the functions CrossGrant.Functions names, through the
@@ -186,20 +191,23 @@ type CrossGrant struct {
 
 // CrossGrants are the grants beyond a role's own modules.
 //
-//   - the issuer reads the google, github and slack tables (the records its
-//     sign-in and its console pages show; the providers' modules write them), the
-//     google snapshots (blobs), and
-//     invokes, as the class issuer, the functions that serve the providers (the
-//     github one for a run and for a token mint, `<github>:live-issuer`, slack,
-//     google, cloudflare), and, as the class console, the backup function and the google, slack and github
-//     ones (the Workspace pages and the consent, the Slack pages, the GitHub pages; v1.76 D-v176-1 b);
+//   - the issuer reads the google snapshots only (table GetItem and Query, the
+//     `google/` blobs): no github or slack table, no parameter and no parameter
+//     key of any module but its own. Everything else a provider owns is asked of
+//     its function. It invokes, as the class issuer, the functions that serve
+//     sign-in and the token endpoint (github for a mint, google for
+//     `identify`, cloudflare for a mint), and, as the class console, the
+//     functions behind the console pages (github, slack, google, cloudflare and
+//     backup; v1.76 D-v176-1 b). Every invoke is on the alias `live-<class>`,
+//     never the unqualified function;
 //   - the backup role reads everything; the restore role writes everything and
 //     is invokable only by the administrators the stack names (RestoreInvokeStatement).
 var CrossGrants = []CrossGrant{
-	{Role: RoleIssuer, Verb: CrossReadTable, Modules: []Module{ModuleGoogle, ModuleGitHub, ModuleSlack}},
+	{Role: RoleIssuer, Verb: CrossReadSnapshot, Modules: []Module{ModuleGoogle}},
 	{Role: RoleIssuer, Verb: CrossInvoke, Class: ClassIssuer,
-		Functions: []string{RoleCloudflare, RoleGitHub, RoleGoogle, RoleSlack}},
-	{Role: RoleIssuer, Verb: CrossInvoke, Class: ClassConsole, Functions: []string{RoleBackup, RoleGoogle, RoleSlack, RoleGitHub}},
+		Functions: []string{RoleCloudflare, RoleGitHub, RoleGoogle}},
+	{Role: RoleIssuer, Verb: CrossInvoke, Class: ClassConsole,
+		Functions: []string{RoleBackup, RoleCloudflare, RoleGoogle, RoleSlack, RoleGitHub}},
 	{Role: RoleIssuer, Verb: CrossReadBlobs, Modules: []Module{ModuleGoogle}},
 	{Role: RoleBackup, Verb: CrossReadAll, Modules: Modules()},
 	{Role: RoleRestore, Verb: CrossWriteAll, Modules: Modules()},
