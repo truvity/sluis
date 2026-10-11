@@ -1,5 +1,9 @@
 ## Unreleased
 
+### Removed
+
+- **The old `access_issuer_*` and `access_roster_*` metric names are no longer published.** Every metric is recorded under its `sluis_*` name only: `access_issuer_http_requests_total` is `sluis_http_requests_total`, `access_roster_ticks_total` is `sluis_ticks_total`, and so on for the port, HTTP duration, lease, tick (including `tick_last_success_timestamp_seconds`), token, login (including `login_successes_total`), `reuse_detected_total` and signing-key families. **Consumers must read `sluis_*`:** move dashboards and rules before upgrading. The chart's alerts, both dashboards and the golden renders select `sluis_*` only (the `sluis.dual` helper is gone). `telemetry.legacyMetrics` and `SLUIS_LEGACY_METRICS` are removed: delete the key from your values. The cookies `access_issuer_sso` and `__Host-access_roster_recovery` are wire values and keep their names.
+
 ## v1.76.0-rc.1
 
 **Upgrading from v1.75: follow the [v1.76 upgrade guide](docs/guides/sluis/upgrade/v1.76.md).**

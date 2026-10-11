@@ -132,7 +132,7 @@ func TestAMarkDatedAheadIsCountedAndKeepsItsGrace(t *testing.T) {
 		t.Fatalf("refresh: %d", status)
 	}
 
-	ahead := counted(t, "access_issuer.spent_mark_ahead", []attribute.KeyValue{}...)
+	ahead := counted(t, "sluis.spent_mark_ahead", []attribute.KeyValue{}...)
 	<-back
 	back <- -10 * time.Second // this replica now reads 10 s behind the one that wrote the mark
 
@@ -140,17 +140,17 @@ func TestAMarkDatedAheadIsCountedAndKeepsItsGrace(t *testing.T) {
 	if status != http.StatusOK || replayed != second {
 		t.Errorf("replay of a future-dated mark: %d %q, want 200 and %q", status, replayed, second)
 	}
-	if got := counted(t, "access_issuer.spent_mark_ahead"); got < ahead+1 {
+	if got := counted(t, "sluis.spent_mark_ahead"); got < ahead+1 {
 		t.Errorf("spent_mark_ahead = %d, want at least %d", got, ahead+1)
 	}
 	// Within the 2 s tolerance nothing is counted.
 	<-back
 	back <- -time.Second
-	quiet := counted(t, "access_issuer.spent_mark_ahead")
+	quiet := counted(t, "sluis.spent_mark_ahead")
 	if status, _, _ = refreshAt(t, server.URL, first); status != http.StatusOK {
 		t.Errorf("replay 1 s ahead: %d", status)
 	}
-	if got := counted(t, "access_issuer.spent_mark_ahead"); got != quiet {
+	if got := counted(t, "sluis.spent_mark_ahead"); got != quiet {
 		t.Errorf("a skew of 1 s was counted (%d -> %d)", quiet, got)
 	}
 }

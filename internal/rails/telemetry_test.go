@@ -83,24 +83,24 @@ func TestATickIsCountedTimedAndTraced(t *testing.T) {
 	defer otel.SetTracerProvider(previous)
 
 	target := attribute.String("target", "acme")
-	failedBefore := value(t, "access_roster.ticks", kind("test-tick"), target, attribute.String("outcome", "failed"))
+	failedBefore := value(t, "sluis.ticks", kind("test-tick"), target, attribute.String("outcome", "failed"))
 
 	_, done := rails.StartTick(context.Background(), "test-tick", "acme")
 	done(rails.OutcomeFailed)
-	if got := value(t, "access_roster.ticks", kind("test-tick"), target, attribute.String("outcome", "failed")); got != failedBefore+1 {
+	if got := value(t, "sluis.ticks", kind("test-tick"), target, attribute.String("outcome", "failed")); got != failedBefore+1 {
 		t.Errorf("failed ticks = %d, want %d", got, failedBefore+1)
 	}
-	if got := value(t, "access_roster.tick.last_success_timestamp", kind("test-tick"), target); got != 0 {
+	if got := value(t, "sluis.tick.last_success_timestamp", kind("test-tick"), target); got != 0 {
 		t.Errorf("a failed tick stamped a success: %d", got)
 	}
 
 	started := time.Now().Unix()
 	_, done = rails.StartTick(context.Background(), "test-tick", "acme")
 	done(rails.OutcomeOK)
-	if got := value(t, "access_roster.tick.last_success_timestamp", kind("test-tick"), target); got < started {
+	if got := value(t, "sluis.tick.last_success_timestamp", kind("test-tick"), target); got < started {
 		t.Errorf("last success = %d, want at least %d", got, started)
 	}
-	if got := value(t, "access_roster.tick.duration", kind("test-tick"), attribute.String("outcome", "ok")); got != 1 {
+	if got := value(t, "sluis.tick.duration", kind("test-tick"), attribute.String("outcome", "ok")); got != 1 {
 		t.Errorf("duration samples = %d, want 1", got)
 	}
 	// Each of the three is also recorded under the name that replaces it.
@@ -136,12 +136,12 @@ func TestLeasesAreCounted(t *testing.T) {
 	a := &rails.Leases{State: store, Holder: "a", TTL: 30 * time.Millisecond}
 	b := &rails.Leases{State: store, Holder: "b", TTL: time.Minute}
 
-	acquired := value(t, "access_roster.leases.acquired", kind("lease-test"))
-	contended := value(t, "access_roster.leases.contended", kind("lease-test"))
-	lost := value(t, "access_roster.leases.lost", kind("lease-test"))
+	acquired := value(t, "sluis.leases.acquired", kind("lease-test"))
+	contended := value(t, "sluis.leases.contended", kind("lease-test"))
+	lost := value(t, "sluis.leases.lost", kind("lease-test"))
 
 	ran, err := a.Do(ctx, "lease-test", "acme", func(ctx context.Context) {
-		if got := value(t, "access_roster.leases.held", kind("lease-test")); got != 1 {
+		if got := value(t, "sluis.leases.held", kind("lease-test")); got != 1 {
 			t.Errorf("held inside the tick = %d, want 1", got)
 		}
 		// Another runner is refused while a holds it.
@@ -163,15 +163,15 @@ func TestLeasesAreCounted(t *testing.T) {
 		t.Fatalf("Do = %v, %v", ran, err)
 	}
 	for name, c := range map[string]struct{ before int64 }{
-		"access_roster.leases.acquired":  {acquired},
-		"access_roster.leases.contended": {contended},
-		"access_roster.leases.lost":      {lost},
+		"sluis.leases.acquired":  {acquired},
+		"sluis.leases.contended": {contended},
+		"sluis.leases.lost":      {lost},
 	} {
 		if got := value(t, name, kind("lease-test")); got != c.before+1 {
 			t.Errorf("%s = %d, want %d", name, got, c.before+1)
 		}
 	}
-	if got := value(t, "access_roster.leases.held", kind("lease-test")); got != 0 {
+	if got := value(t, "sluis.leases.held", kind("lease-test")); got != 0 {
 		t.Errorf("held after the tick = %d, want 0", got)
 	}
 }
@@ -188,16 +188,16 @@ func TestATickIsSkippedUnderMaintenance(t *testing.T) {
 	store := memory.New()
 	l := &rails.Leases{State: store, Holder: "a", Maintenance: refusing{errors.New("maintenance")}}
 
-	before := value(t, "access_roster.leases.skipped", kind("lease-maint"))
-	acquired := value(t, "access_roster.leases.acquired", kind("lease-maint"))
+	before := value(t, "sluis.leases.skipped", kind("lease-maint"))
+	acquired := value(t, "sluis.leases.acquired", kind("lease-maint"))
 	ran, err := l.Do(ctx, "lease-maint", "acme", func(context.Context) { t.Error("the tick ran under maintenance") })
 	if ran || err != nil {
 		t.Fatalf("Do = %v, %v, want a quiet skip", ran, err)
 	}
-	if got := value(t, "access_roster.leases.skipped", kind("lease-maint")); got != before+1 {
+	if got := value(t, "sluis.leases.skipped", kind("lease-maint")); got != before+1 {
 		t.Errorf("skipped = %d, want %d", got, before+1)
 	}
-	if got := value(t, "access_roster.leases.acquired", kind("lease-maint")); got != acquired {
+	if got := value(t, "sluis.leases.acquired", kind("lease-maint")); got != acquired {
 		t.Errorf("a skipped tick took a lease")
 	}
 	if _, err := store.Get(ctx, rails.Key("lease-maint", "acme")); !errors.Is(err, port.ErrNotFound) {

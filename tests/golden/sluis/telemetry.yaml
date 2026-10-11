@@ -568,8 +568,6 @@ spec:
               value: "http/protobuf"
             - name: OTEL_SERVICE_NAME
               value: "sluis-issuer"
-            - name: SLUIS_LEGACY_METRICS
-              value: "true"
             - name: OTEL_TRACES_SAMPLER
               value: "parentbased_traceidratio"
             - name: OTEL_TRACES_SAMPLER_ARG
@@ -707,8 +705,6 @@ spec:
               value: "http/protobuf"
             - name: OTEL_SERVICE_NAME
               value: "sluis-github"
-            - name: SLUIS_LEGACY_METRICS
-              value: "true"
             - name: OTEL_TRACES_SAMPLER
               value: "parentbased_traceidratio"
             - name: OTEL_TRACES_SAMPLER_ARG
@@ -842,8 +838,6 @@ spec:
               value: "http/protobuf"
             - name: OTEL_SERVICE_NAME
               value: "sluis-slack"
-            - name: SLUIS_LEGACY_METRICS
-              value: "true"
             - name: OTEL_TRACES_SAMPLER
               value: "parentbased_traceidratio"
             - name: OTEL_TRACES_SAMPLER_ARG

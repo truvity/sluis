@@ -300,8 +300,6 @@ spec:
               value: "http/protobuf"
             - name: OTEL_SERVICE_NAME
               value: "sluis-issuer"
-            - name: SLUIS_LEGACY_METRICS
-              value: "false"
           volumeMounts:
             - name: config
               mountPath: /etc/sluis/config.yaml

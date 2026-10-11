@@ -256,9 +256,9 @@ func TestTheRulesFireOnWhatTheyShouldAndNotOnWhatTheyShouldNot(t *testing.T) {
 	}
 }
 
-// With a collector named, each module's pod reports as `sluis-<module>`, and the old metric names
-// are on in v1.75 and off when `telemetry.legacyMetrics` says so.
-func TestTelemetryEnvNamesSluisAndCarriesTheLegacySwitch(t *testing.T) {
+// With a collector named, each module's pod reports as `sluis-<module>`, and the retired
+// SLUIS_LEGACY_METRICS switch is not rendered.
+func TestTelemetryEnvNamesSluis(t *testing.T) {
 	env := func(args ...string) map[string]string {
 		out := map[string]string{}
 		for _, d := range renderArgs(t, append([]string{"-f", filepath.Join("..", "cases", "sluis", "telemetry", "values.yaml")}, args...)...) {
@@ -283,10 +283,10 @@ func TestTelemetryEnvNamesSluisAndCarriesTheLegacySwitch(t *testing.T) {
 		return out
 	}
 	got := env()
-	if got["OTEL_SERVICE_NAME"] != "sluis-issuer" || got["SLUIS_LEGACY_METRICS"] != "true" {
-		t.Errorf("default: OTEL_SERVICE_NAME=%q SLUIS_LEGACY_METRICS=%q, want sluis-issuer and true", got["OTEL_SERVICE_NAME"], got["SLUIS_LEGACY_METRICS"])
+	if got["OTEL_SERVICE_NAME"] != "sluis-issuer" {
+		t.Errorf("default: OTEL_SERVICE_NAME=%q, want sluis-issuer", got["OTEL_SERVICE_NAME"])
 	}
-	if got := env("--set", "telemetry.legacyMetrics=false"); got["SLUIS_LEGACY_METRICS"] != "false" {
-		t.Errorf("legacyMetrics=false: SLUIS_LEGACY_METRICS=%q, want false", got["SLUIS_LEGACY_METRICS"])
+	if _, ok := got["SLUIS_LEGACY_METRICS"]; ok {
+		t.Errorf("SLUIS_LEGACY_METRICS is rendered; the old metric names are gone")
 	}
 }

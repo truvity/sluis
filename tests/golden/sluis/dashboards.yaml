@@ -65,9 +65,9 @@ data:
               "type": "prometheus",
               "uid": "${datasource}"
             },
-            "definition": "label_values(access_issuer_http_requests_total, k8s_cluster_name)",
+            "definition": "label_values(sluis_http_requests_total, k8s_cluster_name)",
             "query": {
-              "query": "label_values(access_issuer_http_requests_total, k8s_cluster_name)",
+              "query": "label_values(sluis_http_requests_total, k8s_cluster_name)",
               "refId": "cluster-Variable-Query"
             },
             "current": {},
@@ -88,9 +88,9 @@ data:
               "type": "prometheus",
               "uid": "${datasource}"
             },
-            "definition": "label_values(access_issuer_http_requests_total{k8s_cluster_name=~\"$cluster\"}, namespace)",
+            "definition": "label_values(sluis_http_requests_total{k8s_cluster_name=~\"$cluster\"}, namespace)",
             "query": {
-              "query": "label_values(access_issuer_http_requests_total{k8s_cluster_name=~\"$cluster\"}, namespace)",
+              "query": "label_values(sluis_http_requests_total{k8s_cluster_name=~\"$cluster\"}, namespace)",
               "refId": "namespace-Variable-Query"
             },
             "current": {},
@@ -142,7 +142,7 @@ data:
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "min(access_issuer_signing_keys_published{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"})",
+              "expr": "min(sluis_signing_keys_published{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"})",
               "legendFormat": "",
               "range": false,
               "instant": true,
@@ -208,7 +208,7 @@ data:
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "sum(increase(access_issuer_http_requests_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\",status_class=\"5xx\"}[1h])) / sum(increase(access_issuer_http_requests_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[1h]))",
+              "expr": "sum(increase(sluis_http_requests_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\",status_class=\"5xx\"}[1h])) / sum(increase(sluis_http_requests_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[1h]))",
               "legendFormat": "",
               "range": false,
               "instant": true,
@@ -278,7 +278,7 @@ data:
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "sum(increase(access_issuer_login_failures_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[1h]))",
+              "expr": "sum(increase(sluis_login_failures_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[1h]))",
               "legendFormat": "",
               "range": false,
               "instant": true,
@@ -348,7 +348,7 @@ data:
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "sum(increase(access_issuer_reuse_detected_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[1h]))",
+              "expr": "sum(increase(sluis_reuse_detected_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[1h]))",
               "legendFormat": "",
               "range": false,
               "instant": true,
@@ -418,7 +418,7 @@ data:
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "count(time() - max by (k8s_cluster_name, namespace, kind, target) (last_over_time(access_roster_tick_last_success_timestamp_seconds{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[1d])) > 3600) or vector(0)",
+              "expr": "count(time() - max by (k8s_cluster_name, namespace, kind, target) (last_over_time(sluis_tick_last_success_timestamp_seconds{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[1d])) > 3600) or vector(0)",
               "legendFormat": "",
               "range": false,
               "instant": true,
@@ -484,7 +484,7 @@ data:
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "sum(increase(access_roster_port_operation_duration_seconds_count{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\",outcome=~\"unavailable|error\"}[1h]))",
+              "expr": "sum(increase(sluis_port_operation_duration_seconds_count{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\",outcome=~\"unavailable|error\"}[1h]))",
               "legendFormat": "",
               "range": false,
               "instant": true,
@@ -563,7 +563,7 @@ data:
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "sum by (route) (rate(access_issuer_http_requests_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval]))",
+              "expr": "sum by (route) (rate(sluis_http_requests_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval]))",
               "legendFormat": "{{route}}",
               "range": true,
               "instant": false,
@@ -631,7 +631,7 @@ data:
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "sum by (route) (rate(access_issuer_http_requests_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\",status_class=\"5xx\"}[$__rate_interval]))",
+              "expr": "sum by (route) (rate(sluis_http_requests_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\",status_class=\"5xx\"}[$__rate_interval]))",
               "legendFormat": "{{route}}",
               "range": true,
               "instant": false,
@@ -699,7 +699,7 @@ data:
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "histogram_quantile(0.99, sum by (le, route) (rate(access_issuer_http_request_duration_seconds_bucket{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval])))",
+              "expr": "histogram_quantile(0.99, sum by (le, route) (rate(sluis_http_request_duration_seconds_bucket{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval])))",
               "legendFormat": "{{route}}",
               "range": true,
               "instant": false,
@@ -767,7 +767,7 @@ data:
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "histogram_quantile(0.5, sum by (le) (rate(access_issuer_http_request_duration_seconds_bucket{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\",route=\"token\"}[$__rate_interval])))",
+              "expr": "histogram_quantile(0.5, sum by (le) (rate(sluis_http_request_duration_seconds_bucket{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\",route=\"token\"}[$__rate_interval])))",
               "legendFormat": "p50",
               "range": true,
               "instant": false,
@@ -779,7 +779,7 @@ data:
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "histogram_quantile(0.99, sum by (le) (rate(access_issuer_http_request_duration_seconds_bucket{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\",route=\"token\"}[$__rate_interval])))",
+              "expr": "histogram_quantile(0.99, sum by (le) (rate(sluis_http_request_duration_seconds_bucket{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\",route=\"token\"}[$__rate_interval])))",
               "legendFormat": "p99",
               "range": true,
               "instant": false,
@@ -860,7 +860,7 @@ data:
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "sum by (client_id) (rate(access_issuer_tokens_issued_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval]))",
+              "expr": "sum by (client_id) (rate(sluis_tokens_issued_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval]))",
               "legendFormat": "{{client_id}}",
               "range": true,
               "instant": false,
@@ -928,7 +928,7 @@ data:
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "sum by (grant_type) (rate(access_issuer_tokens_issued_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval]))",
+              "expr": "sum by (grant_type) (rate(sluis_tokens_issued_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval]))",
               "legendFormat": "{{grant_type}}",
               "range": true,
               "instant": false,
@@ -996,7 +996,7 @@ data:
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "sum by (reason) (rate(access_issuer_login_failures_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval]))",
+              "expr": "sum by (reason) (rate(sluis_login_failures_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval]))",
               "legendFormat": "{{reason}}",
               "range": true,
               "instant": false,
@@ -1064,7 +1064,7 @@ data:
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "sum by (method) (rate(access_issuer_login_successes_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval]))",
+              "expr": "sum by (method) (rate(sluis_login_successes_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval]))",
               "legendFormat": "{{method}}",
               "range": true,
               "instant": false,
@@ -1132,7 +1132,7 @@ data:
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "sum by (kind) (increase(access_issuer_reuse_detected_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval]))",
+              "expr": "sum by (kind) (increase(sluis_reuse_detected_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval]))",
               "legendFormat": "{{kind}}",
               "range": true,
               "instant": false,
@@ -1200,7 +1200,7 @@ data:
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "min by (algorithm) (access_issuer_signing_keys_published{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"})",
+              "expr": "min by (algorithm) (sluis_signing_keys_published{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"})",
               "legendFormat": "published {{algorithm}}",
               "range": true,
               "instant": false,
@@ -1212,7 +1212,7 @@ data:
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "time() - max by (algorithm) (access_issuer_signing_key_active_since_timestamp_seconds{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"})",
+              "expr": "time() - max by (algorithm) (sluis_signing_key_active_since_timestamp_seconds{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"})",
               "legendFormat": "age {{algorithm}}",
               "range": true,
               "instant": false,
@@ -1293,7 +1293,7 @@ data:
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "sum by (kind, outcome) (rate(access_roster_ticks_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval]))",
+              "expr": "sum by (kind, outcome) (rate(sluis_ticks_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval]))",
               "legendFormat": "{{kind}} {{outcome}}",
               "range": true,
               "instant": false,
@@ -1361,7 +1361,7 @@ data:
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "histogram_quantile(0.99, sum by (le, kind) (rate(access_roster_tick_duration_seconds_bucket{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval])))",
+              "expr": "histogram_quantile(0.99, sum by (le, kind) (rate(sluis_tick_duration_seconds_bucket{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval])))",
               "legendFormat": "{{kind}}",
               "range": true,
               "instant": false,
@@ -1429,7 +1429,7 @@ data:
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "time() - max by (kind, target) (last_over_time(access_roster_tick_last_success_timestamp_seconds{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[1d]))",
+              "expr": "time() - max by (kind, target) (last_over_time(sluis_tick_last_success_timestamp_seconds{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[1d]))",
               "legendFormat": "{{kind}} {{target}}",
               "range": true,
               "instant": false,
@@ -1497,7 +1497,7 @@ data:
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "sum by (kind, target) (increase(access_roster_ticks_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\",outcome=\"failed\"}[$__rate_interval]))",
+              "expr": "sum by (kind, target) (increase(sluis_ticks_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\",outcome=\"failed\"}[$__rate_interval]))",
               "legendFormat": "{{kind}} {{target}}",
               "range": true,
               "instant": false,
@@ -1565,7 +1565,7 @@ data:
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "sum by (kind) (access_roster_leases_held{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"})",
+              "expr": "sum by (kind) (sluis_leases_held{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"})",
               "legendFormat": "{{kind}}",
               "range": true,
               "instant": false,
@@ -1633,7 +1633,7 @@ data:
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "sum by (kind) (rate(access_roster_leases_acquired_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval]))",
+              "expr": "sum by (kind) (rate(sluis_leases_acquired_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval]))",
               "legendFormat": "acquired {{kind}}",
               "range": true,
               "instant": false,
@@ -1645,7 +1645,7 @@ data:
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "sum by (kind) (rate(access_roster_leases_contended_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval]))",
+              "expr": "sum by (kind) (rate(sluis_leases_contended_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval]))",
               "legendFormat": "contended {{kind}}",
               "range": true,
               "instant": false,
@@ -1657,7 +1657,7 @@ data:
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "sum by (kind) (rate(access_roster_leases_lost_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval]))",
+              "expr": "sum by (kind) (rate(sluis_leases_lost_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval]))",
               "legendFormat": "lost {{kind}}",
               "range": true,
               "instant": false,
@@ -1738,7 +1738,7 @@ data:
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "sum by (port, outcome) (rate(access_roster_port_operation_duration_seconds_count{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval]))",
+              "expr": "sum by (port, outcome) (rate(sluis_port_operation_duration_seconds_count{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval]))",
               "legendFormat": "{{port}} {{outcome}}",
               "range": true,
               "instant": false,
@@ -1806,7 +1806,7 @@ data:
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "sum by (port) (rate(access_roster_port_operation_duration_seconds_count{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\",outcome=~\"unavailable|error\"}[$__rate_interval])) / sum by (port) (rate(access_roster_port_operation_duration_seconds_count{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval]))",
+              "expr": "sum by (port) (rate(sluis_port_operation_duration_seconds_count{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\",outcome=~\"unavailable|error\"}[$__rate_interval])) / sum by (port) (rate(sluis_port_operation_duration_seconds_count{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval]))",
               "legendFormat": "{{port}}",
               "range": true,
               "instant": false,
@@ -1874,7 +1874,7 @@ data:
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "histogram_quantile(0.99, sum by (le, port, operation) (rate(access_roster_port_operation_duration_seconds_bucket{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval])))",
+              "expr": "histogram_quantile(0.99, sum by (le, port, operation) (rate(sluis_port_operation_duration_seconds_bucket{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval])))",
               "legendFormat": "{{port}} {{operation}}",
               "range": true,
               "instant": false,
@@ -1942,7 +1942,7 @@ data:
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "sum by (operation) (rate(access_roster_port_operation_duration_seconds_count{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\",outcome=\"conflict\"}[$__rate_interval]))",
+              "expr": "sum by (operation) (rate(sluis_port_operation_duration_seconds_count{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\",outcome=\"conflict\"}[$__rate_interval]))",
               "legendFormat": "{{operation}}",
               "range": true,
               "instant": false,
@@ -2344,9 +2344,9 @@ data:
               "type": "prometheus",
               "uid": "${datasource}"
             },
-            "definition": "label_values({__name__=~\"sluis_http_requests_total|access_issuer_http_requests_total\"}, k8s_cluster_name)",
+            "definition": "label_values(sluis_http_requests_total, k8s_cluster_name)",
             "query": {
-              "query": "label_values({__name__=~\"sluis_http_requests_total|access_issuer_http_requests_total\"}, k8s_cluster_name)",
+              "query": "label_values(sluis_http_requests_total, k8s_cluster_name)",
               "refId": "cluster-Variable-Query"
             },
             "current": {},
@@ -2367,9 +2367,9 @@ data:
               "type": "prometheus",
               "uid": "${datasource}"
             },
-            "definition": "label_values({__name__=~\"sluis_http_requests_total|access_issuer_http_requests_total\",k8s_cluster_name=~\"$cluster\"}, namespace)",
+            "definition": "label_values(sluis_http_requests_total{k8s_cluster_name=~\"$cluster\"}, namespace)",
             "query": {
-              "query": "label_values({__name__=~\"sluis_http_requests_total|access_issuer_http_requests_total\",k8s_cluster_name=~\"$cluster\"}, namespace)",
+              "query": "label_values(sluis_http_requests_total{k8s_cluster_name=~\"$cluster\"}, namespace)",
               "refId": "namespace-Variable-Query"
             },
             "current": {},
@@ -2421,7 +2421,7 @@ data:
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "((min(sluis_signing_keys_published{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"})) or (min(access_issuer_signing_keys_published{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"})))",
+              "expr": "min(sluis_signing_keys_published{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"})",
               "legendFormat": "",
               "range": false,
               "instant": true,
@@ -2487,7 +2487,7 @@ data:
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "((sum(increase(sluis_http_requests_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\",status_class=\"5xx\"}[1h])) / sum(increase(sluis_http_requests_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[1h]))) or (sum(increase(access_issuer_http_requests_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\",status_class=\"5xx\"}[1h])) / sum(increase(access_issuer_http_requests_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[1h]))))",
+              "expr": "sum(increase(sluis_http_requests_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\",status_class=\"5xx\"}[1h])) / sum(increase(sluis_http_requests_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[1h]))",
               "legendFormat": "",
               "range": false,
               "instant": true,
@@ -2557,7 +2557,7 @@ data:
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "((sum(increase(sluis_login_failures_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[1h]))) or (sum(increase(access_issuer_login_failures_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[1h]))))",
+              "expr": "sum(increase(sluis_login_failures_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[1h]))",
               "legendFormat": "",
               "range": false,
               "instant": true,
@@ -2627,7 +2627,7 @@ data:
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "((sum(increase(sluis_reuse_detected_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[1h]))) or (sum(increase(access_issuer_reuse_detected_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[1h]))))",
+              "expr": "sum(increase(sluis_reuse_detected_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[1h]))",
               "legendFormat": "",
               "range": false,
               "instant": true,
@@ -2697,7 +2697,7 @@ data:
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "((count(time() - max by (k8s_cluster_name, namespace, kind, target) (last_over_time(sluis_tick_last_success_timestamp_seconds{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[1d])) > 3600)) or (count(time() - max by (k8s_cluster_name, namespace, kind, target) (last_over_time(access_roster_tick_last_success_timestamp_seconds{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[1d])) > 3600))) or vector(0)",
+              "expr": "count(time() - max by (k8s_cluster_name, namespace, kind, target) (last_over_time(sluis_tick_last_success_timestamp_seconds{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[1d])) > 3600) or vector(0)",
               "legendFormat": "",
               "range": false,
               "instant": true,
@@ -2763,7 +2763,7 @@ data:
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "((sum(increase(sluis_port_operation_duration_seconds_count{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\",outcome=~\"unavailable|error\"}[1h]))) or (sum(increase(access_roster_port_operation_duration_seconds_count{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\",outcome=~\"unavailable|error\"}[1h]))))",
+              "expr": "sum(increase(sluis_port_operation_duration_seconds_count{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\",outcome=~\"unavailable|error\"}[1h]))",
               "legendFormat": "",
               "range": false,
               "instant": true,
@@ -2842,7 +2842,7 @@ data:
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "((sum by (route) (rate(sluis_http_requests_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval]))) or (sum by (route) (rate(access_issuer_http_requests_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval]))))",
+              "expr": "sum by (route) (rate(sluis_http_requests_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval]))",
               "legendFormat": "{{route}}",
               "range": true,
               "instant": false,
@@ -2910,7 +2910,7 @@ data:
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "((sum by (route) (rate(sluis_http_requests_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\",status_class=\"5xx\"}[$__rate_interval]))) or (sum by (route) (rate(access_issuer_http_requests_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\",status_class=\"5xx\"}[$__rate_interval]))))",
+              "expr": "sum by (route) (rate(sluis_http_requests_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\",status_class=\"5xx\"}[$__rate_interval]))",
               "legendFormat": "{{route}}",
               "range": true,
               "instant": false,
@@ -2978,7 +2978,7 @@ data:
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "((histogram_quantile(0.99, sum by (le, route) (rate(sluis_http_request_duration_seconds_bucket{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval])))) or (histogram_quantile(0.99, sum by (le, route) (rate(access_issuer_http_request_duration_seconds_bucket{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval])))))",
+              "expr": "histogram_quantile(0.99, sum by (le, route) (rate(sluis_http_request_duration_seconds_bucket{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval])))",
               "legendFormat": "{{route}}",
               "range": true,
               "instant": false,
@@ -3046,7 +3046,7 @@ data:
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "((histogram_quantile(0.5, sum by (le) (rate(sluis_http_request_duration_seconds_bucket{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\",route=\"token\"}[$__rate_interval])))) or (histogram_quantile(0.5, sum by (le) (rate(access_issuer_http_request_duration_seconds_bucket{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\",route=\"token\"}[$__rate_interval])))))",
+              "expr": "histogram_quantile(0.5, sum by (le) (rate(sluis_http_request_duration_seconds_bucket{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\",route=\"token\"}[$__rate_interval])))",
               "legendFormat": "p50",
               "range": true,
               "instant": false,
@@ -3058,7 +3058,7 @@ data:
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "((histogram_quantile(0.99, sum by (le) (rate(sluis_http_request_duration_seconds_bucket{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\",route=\"token\"}[$__rate_interval])))) or (histogram_quantile(0.99, sum by (le) (rate(access_issuer_http_request_duration_seconds_bucket{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\",route=\"token\"}[$__rate_interval])))))",
+              "expr": "histogram_quantile(0.99, sum by (le) (rate(sluis_http_request_duration_seconds_bucket{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\",route=\"token\"}[$__rate_interval])))",
               "legendFormat": "p99",
               "range": true,
               "instant": false,
@@ -3139,7 +3139,7 @@ data:
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "((sum by (client_id) (rate(sluis_tokens_issued_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval]))) or (sum by (client_id) (rate(access_issuer_tokens_issued_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval]))))",
+              "expr": "sum by (client_id) (rate(sluis_tokens_issued_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval]))",
               "legendFormat": "{{client_id}}",
               "range": true,
               "instant": false,
@@ -3207,7 +3207,7 @@ data:
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "((sum by (grant_type) (rate(sluis_tokens_issued_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval]))) or (sum by (grant_type) (rate(access_issuer_tokens_issued_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval]))))",
+              "expr": "sum by (grant_type) (rate(sluis_tokens_issued_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval]))",
               "legendFormat": "{{grant_type}}",
               "range": true,
               "instant": false,
@@ -3275,7 +3275,7 @@ data:
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "((sum by (reason) (rate(sluis_login_failures_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval]))) or (sum by (reason) (rate(access_issuer_login_failures_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval]))))",
+              "expr": "sum by (reason) (rate(sluis_login_failures_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval]))",
               "legendFormat": "{{reason}}",
               "range": true,
               "instant": false,
@@ -3343,7 +3343,7 @@ data:
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "((sum by (method) (rate(sluis_login_successes_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval]))) or (sum by (method) (rate(access_issuer_login_successes_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval]))))",
+              "expr": "sum by (method) (rate(sluis_login_successes_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval]))",
               "legendFormat": "{{method}}",
               "range": true,
               "instant": false,
@@ -3411,7 +3411,7 @@ data:
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "((sum by (kind) (increase(sluis_reuse_detected_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval]))) or (sum by (kind) (increase(access_issuer_reuse_detected_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval]))))",
+              "expr": "sum by (kind) (increase(sluis_reuse_detected_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval]))",
               "legendFormat": "{{kind}}",
               "range": true,
               "instant": false,
@@ -3479,7 +3479,7 @@ data:
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "((min by (algorithm) (sluis_signing_keys_published{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"})) or (min by (algorithm) (access_issuer_signing_keys_published{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"})))",
+              "expr": "min by (algorithm) (sluis_signing_keys_published{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"})",
               "legendFormat": "published {{algorithm}}",
               "range": true,
               "instant": false,
@@ -3491,7 +3491,7 @@ data:
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "((time() - max by (algorithm) (sluis_signing_key_active_since_timestamp_seconds{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"})) or (time() - max by (algorithm) (access_issuer_signing_key_active_since_timestamp_seconds{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"})))",
+              "expr": "time() - max by (algorithm) (sluis_signing_key_active_since_timestamp_seconds{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"})",
               "legendFormat": "age {{algorithm}}",
               "range": true,
               "instant": false,
@@ -3572,7 +3572,7 @@ data:
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "((sum by (kind, outcome) (rate(sluis_ticks_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval]))) or (sum by (kind, outcome) (rate(access_roster_ticks_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval]))))",
+              "expr": "sum by (kind, outcome) (rate(sluis_ticks_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval]))",
               "legendFormat": "{{kind}} {{outcome}}",
               "range": true,
               "instant": false,
@@ -3640,7 +3640,7 @@ data:
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "((histogram_quantile(0.99, sum by (le, kind) (rate(sluis_tick_duration_seconds_bucket{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval])))) or (histogram_quantile(0.99, sum by (le, kind) (rate(access_roster_tick_duration_seconds_bucket{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval])))))",
+              "expr": "histogram_quantile(0.99, sum by (le, kind) (rate(sluis_tick_duration_seconds_bucket{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval])))",
               "legendFormat": "{{kind}}",
               "range": true,
               "instant": false,
@@ -3708,7 +3708,7 @@ data:
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "((time() - max by (kind, target) (last_over_time(sluis_tick_last_success_timestamp_seconds{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[1d]))) or (time() - max by (kind, target) (last_over_time(access_roster_tick_last_success_timestamp_seconds{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[1d]))))",
+              "expr": "time() - max by (kind, target) (last_over_time(sluis_tick_last_success_timestamp_seconds{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[1d]))",
               "legendFormat": "{{kind}} {{target}}",
               "range": true,
               "instant": false,
@@ -3776,7 +3776,7 @@ data:
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "((sum by (kind, target) (increase(sluis_ticks_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\",outcome=\"failed\"}[$__rate_interval]))) or (sum by (kind, target) (increase(access_roster_ticks_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\",outcome=\"failed\"}[$__rate_interval]))))",
+              "expr": "sum by (kind, target) (increase(sluis_ticks_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\",outcome=\"failed\"}[$__rate_interval]))",
               "legendFormat": "{{kind}} {{target}}",
               "range": true,
               "instant": false,
@@ -3844,7 +3844,7 @@ data:
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "((sum by (kind) (sluis_leases_held{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"})) or (sum by (kind) (access_roster_leases_held{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"})))",
+              "expr": "sum by (kind) (sluis_leases_held{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"})",
               "legendFormat": "{{kind}}",
               "range": true,
               "instant": false,
@@ -3912,7 +3912,7 @@ data:
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "((sum by (kind) (rate(sluis_leases_acquired_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval]))) or (sum by (kind) (rate(access_roster_leases_acquired_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval]))))",
+              "expr": "sum by (kind) (rate(sluis_leases_acquired_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval]))",
               "legendFormat": "acquired {{kind}}",
               "range": true,
               "instant": false,
@@ -3924,7 +3924,7 @@ data:
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "((sum by (kind) (rate(sluis_leases_contended_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval]))) or (sum by (kind) (rate(access_roster_leases_contended_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval]))))",
+              "expr": "sum by (kind) (rate(sluis_leases_contended_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval]))",
               "legendFormat": "contended {{kind}}",
               "range": true,
               "instant": false,
@@ -3936,7 +3936,7 @@ data:
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "((sum by (kind) (rate(sluis_leases_lost_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval]))) or (sum by (kind) (rate(access_roster_leases_lost_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval]))))",
+              "expr": "sum by (kind) (rate(sluis_leases_lost_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval]))",
               "legendFormat": "lost {{kind}}",
               "range": true,
               "instant": false,
@@ -4017,7 +4017,7 @@ data:
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "((sum by (port, outcome) (rate(sluis_port_operation_duration_seconds_count{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval]))) or (sum by (port, outcome) (rate(access_roster_port_operation_duration_seconds_count{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval]))))",
+              "expr": "sum by (port, outcome) (rate(sluis_port_operation_duration_seconds_count{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval]))",
               "legendFormat": "{{port}} {{outcome}}",
               "range": true,
               "instant": false,
@@ -4085,7 +4085,7 @@ data:
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "((sum by (port) (rate(sluis_port_operation_duration_seconds_count{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\",outcome=~\"unavailable|error\"}[$__rate_interval])) / sum by (port) (rate(sluis_port_operation_duration_seconds_count{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval]))) or (sum by (port) (rate(access_roster_port_operation_duration_seconds_count{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\",outcome=~\"unavailable|error\"}[$__rate_interval])) / sum by (port) (rate(access_roster_port_operation_duration_seconds_count{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval]))))",
+              "expr": "sum by (port) (rate(sluis_port_operation_duration_seconds_count{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\",outcome=~\"unavailable|error\"}[$__rate_interval])) / sum by (port) (rate(sluis_port_operation_duration_seconds_count{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval]))",
               "legendFormat": "{{port}}",
               "range": true,
               "instant": false,
@@ -4153,7 +4153,7 @@ data:
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "((histogram_quantile(0.99, sum by (le, port, operation) (rate(sluis_port_operation_duration_seconds_bucket{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval])))) or (histogram_quantile(0.99, sum by (le, port, operation) (rate(access_roster_port_operation_duration_seconds_bucket{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval])))))",
+              "expr": "histogram_quantile(0.99, sum by (le, port, operation) (rate(sluis_port_operation_duration_seconds_bucket{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval])))",
               "legendFormat": "{{port}} {{operation}}",
               "range": true,
               "instant": false,
@@ -4221,7 +4221,7 @@ data:
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "((sum by (operation) (rate(sluis_port_operation_duration_seconds_count{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\",outcome=\"conflict\"}[$__rate_interval]))) or (sum by (operation) (rate(access_roster_port_operation_duration_seconds_count{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\",outcome=\"conflict\"}[$__rate_interval]))))",
+              "expr": "sum by (operation) (rate(sluis_port_operation_duration_seconds_count{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\",outcome=\"conflict\"}[$__rate_interval]))",
               "legendFormat": "{{operation}}",
               "range": true,
               "instant": false,

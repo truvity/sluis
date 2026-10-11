@@ -25,29 +25,20 @@ import json
 import re
 import sys
 
-# `sluis` writes the dashboard that replaces this one in the v1.75 dual-name
-# window (sluis-overview): the same panels, each query over the `sluis_` series
-# OR the old `access_issuer_` / `access_roster_` ones. The release publishes
-# both names while telemetry.legacyMetrics is on, with the same labels, so the
-# `or` keeps the new series and fills what only the old ones hold (history, and
-# a replica that still runs the previous release). v1.76 drops the old side.
+# `sluis` writes sluis-overview, the dashboard that replaces this one under its
+# new name (title, uid, tags and the AccessRoster alert names). Both read the
+# `sluis_` series only: the code below is written with the old prefix, and
+# `current()` rewrites it. v1.76 stopped publishing `access_issuer_` and
+# `access_roster_`.
 DUAL = sys.argv[1:] == ["sluis"]
 if sys.argv[1:] not in ([], ["sluis"]):
     sys.exit("usage: access-roster-overview.py [sluis]")
 OLD_SERIES = re.compile(r"access_(issuer|roster)_")
 
 
-def dual(expr):
-    """The expression over both names. One that names no old series is unchanged."""
-    if not DUAL:
-        return expr
-    new = OLD_SERIES.sub("sluis_", expr)
-    if new == expr:
-        return expr
-    tail = ""
-    if expr.endswith(" or vector(0)"):
-        expr, new, tail = expr[:-len(" or vector(0)")], new[:-len(" or vector(0)")], " or vector(0)"
-    return "((%s) or (%s))%s" % (new, expr, tail)
+def current(expr):
+    """The expression over the `sluis_` series."""
+    return OLD_SERIES.sub("sluis_", expr)
 
 
 def words(text):
@@ -69,7 +60,7 @@ def nid():
 
 
 def target(expr, legend="", ref="A", instant=False):
-    return {"datasource": DS, "editorMode": "code", "expr": dual(expr), "legendFormat": legend,
+    return {"datasource": DS, "editorMode": "code", "expr": current(expr), "legendFormat": legend,
             "range": not instant, "instant": instant, "refId": ref}
 
 
@@ -284,9 +275,7 @@ def var_ds():
 
 
 def var_cluster():
-    q = "label_values(access_issuer_http_requests_total, k8s_cluster_name)"
-    if DUAL:
-        q = 'label_values({__name__=~"sluis_http_requests_total|access_issuer_http_requests_total"}, k8s_cluster_name)'
+    q = "label_values(sluis_http_requests_total, k8s_cluster_name)"
     return {"name": "cluster", "label": "cluster", "type": "query", "datasource": DS, "definition": q,
             "query": {"query": q, "refId": "cluster-Variable-Query"}, "current": {}, "hide": 0,
             "includeAll": False, "multi": False, "options": [], "refresh": 2, "regex": "",
@@ -294,9 +283,7 @@ def var_cluster():
 
 
 def var_namespace():
-    q = "label_values(access_issuer_http_requests_total{%s}, namespace)" % K
-    if DUAL:
-        q = 'label_values({__name__=~"sluis_http_requests_total|access_issuer_http_requests_total",%s}, namespace)' % K
+    q = "label_values(sluis_http_requests_total{%s}, namespace)" % K
     return {"name": "namespace", "label": "sluis namespace" if DUAL else "access-roster namespace", "type": "query", "datasource": DS,
             "definition": q, "query": {"query": q, "refId": "namespace-Variable-Query"}, "current": {},
             "hide": 0, "includeAll": True, "allValue": ".*", "multi": True, "options": [],

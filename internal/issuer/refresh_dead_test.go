@@ -350,7 +350,7 @@ func TestAConfirmedDeadRefreshMakesNoStateCall(t *testing.T) {
 				t.Fatal("the confirming presentation read nothing")
 			}
 
-			hits := counted(t, "access_issuer.dead_refresh_token_hits")
+			hits := counted(t, "sluis.dead_refresh_token_hits")
 			for range 2 {
 				got, reads, writes := r.cost(token)
 				r.wantRefused(got, "a confirmed repeat")
@@ -358,8 +358,8 @@ func TestAConfirmedDeadRefreshMakesNoStateCall(t *testing.T) {
 					t.Errorf("a confirmed repeat made %d State reads and %d writes, want none", reads, writes)
 				}
 			}
-			if got := counted(t, "access_issuer.dead_refresh_token_hits") - hits; got < 2 {
-				t.Errorf("access_issuer.dead_refresh_token_hits rose by %d, want both hits counted", got)
+			if got := counted(t, "sluis.dead_refresh_token_hits") - hits; got < 2 {
+				t.Errorf("sluis.dead_refresh_token_hits rose by %d, want both hits counted", got)
 			}
 		})
 	}

@@ -98,8 +98,8 @@ func TestTokensAndReuseAreCounted(t *testing.T) {
 
 	issued := []attribute.KeyValue{attribute.String("client_id", "argocd"), attribute.String("grant_type", "authorization_code")}
 	reuse := []attribute.KeyValue{attribute.String("kind", "authorization_code")}
-	issuedBefore := counted(t, "access_issuer.tokens.issued", issued...)
-	reuseBefore := counted(t, "access_issuer.reuse_detected", reuse...)
+	issuedBefore := counted(t, "sluis.tokens.issued", issued...)
+	reuseBefore := counted(t, "sluis.reuse_detected", reuse...)
 
 	request, err := storage.CreateAuthRequestForTest(ctx, "ada@north.example", "argocd")
 	if err != nil {
@@ -115,12 +115,8 @@ func TestTokensAndReuseAreCounted(t *testing.T) {
 	if _, _, _, err = storage.CreateAccessAndRefreshTokens(ctx, found, ""); err != nil {
 		t.Fatalf("CreateAccessAndRefreshTokens: %v", err)
 	}
-	if got := counted(t, "access_issuer.tokens.issued", issued...); got < issuedBefore+1 {
+	if got := counted(t, "sluis.tokens.issued", issued...); got < issuedBefore+1 {
 		t.Errorf("tokens issued for a declared client = %d, want at least %d", got, issuedBefore+1)
-	}
-	// The same count under the name that replaces it.
-	if got, old := counted(t, "sluis.tokens.issued", issued...), counted(t, "access_issuer.tokens.issued", issued...); got != old {
-		t.Errorf("sluis.tokens.issued = %d, access_issuer.tokens.issued = %d, want them equal", got, old)
 	}
 
 	if err = storage.DeleteAuthRequest(ctx, request); err != nil {
@@ -129,7 +125,7 @@ func TestTokensAndReuseAreCounted(t *testing.T) {
 	if _, err = storage.AuthRequestByCode(ctx, "the-code"); err == nil {
 		t.Fatal("a reused code was accepted")
 	}
-	if got := counted(t, "access_issuer.reuse_detected", reuse...); got < reuseBefore+1 {
+	if got := counted(t, "sluis.reuse_detected", reuse...); got < reuseBefore+1 {
 		t.Errorf("reuse detected = %d, want at least %d", got, reuseBefore+1)
 	}
 }
@@ -138,7 +134,7 @@ func TestTokensAndReuseAreCounted(t *testing.T) {
 func TestALoginFailureIsCountedByReason(t *testing.T) {
 	metricsReader()
 	reason := []attribute.KeyValue{attribute.String("reason", "unknown_provider")}
-	before := counted(t, "access_issuer.login.failures", reason...)
+	before := counted(t, "sluis.login.failures", reason...)
 
 	mux := http.NewServeMux()
 	issuer.SignInRoutes(mux, issuer.SignInDeps{Log: slog.New(slog.DiscardHandler)})
@@ -147,7 +143,7 @@ func TestALoginFailureIsCountedByReason(t *testing.T) {
 	if recorder.Code != http.StatusNotFound {
 		t.Fatalf("status %d", recorder.Code)
 	}
-	if got := counted(t, "access_issuer.login.failures", reason...); got < before+1 {
+	if got := counted(t, "sluis.login.failures", reason...); got < before+1 {
 		t.Errorf("login failures = %d, want at least %d", got, before+1)
 	}
 }
@@ -200,10 +196,10 @@ func TestTheKeyRingReportsWhatItPublishesAndSinceWhen(t *testing.T) {
 		t.Fatal(err)
 	}
 	algorithm := attribute.String("algorithm", string(jose.ES384))
-	if got := counted(t, "access_issuer.signing_keys_published", algorithm); got != 1 {
+	if got := counted(t, "sluis.signing_keys_published", algorithm); got != 1 {
 		t.Errorf("published = %d, want 1", got)
 	}
-	if got := counted(t, "access_issuer.signing_key.active_since_timestamp", algorithm); got != at.Unix() {
+	if got := counted(t, "sluis.signing_key.active_since_timestamp", algorithm); got != at.Unix() {
 		t.Errorf("active since = %d, want %d", got, at.Unix())
 	}
 }
