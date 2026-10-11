@@ -66,10 +66,16 @@ func TestModuleBoundaries(t *testing.T) {
 	github := []string{"internal/githubroster", "internal/githubapp"}
 	slack := []string{"internal/slackroster", "internal/slackapp"}
 	cloudflare := []string{"internal/cloudflare"}
+	google := []string{"internal/googleroster"}
 	backupDirs := []string{"internal/backup", "internal/module/backup"}
-	modules := []string{"internal/module/github", "internal/module/slack", "internal/module/issuer", "internal/module/cloudflare", "internal/module/backup"}
+	modules := []string{"internal/module/github", "internal/module/slack", "internal/module/issuer", "internal/module/cloudflare", "internal/module/backup",
+		"internal/module/google"}
 	front := []string{"internal/issuer", "internal/issuerapp", "internal/hub", "internal/hublocal", "internal/server",
 		"internal/rosterapp", "internal/lambdaapp"}
+	// The Google module IS the hub's refresh writer, so the hub is its own and
+	// not the front end's; the issuer's process and everything it serves are.
+	issuerSide := []string{"internal/issuer", "internal/issuerapp", "internal/server", "internal/rosterapp", "internal/lambdaapp",
+		"internal/app", "internal/access", "internal/signer", "internal/hublocal"}
 
 	rules := []rule{
 		{
@@ -98,19 +104,19 @@ func TestModuleBoundaries(t *testing.T) {
 		{
 			name:   "the GitHub module imports neither the front end nor another provider",
 			from:   github,
-			forbid: append(append(append([]string{}, front...), slack...), cloudflare...),
+			forbid: slices.Concat(front, slack, cloudflare, google),
 			sees:   "internal/githubroster/app",
 		},
 		{
 			name:   "the Slack module imports neither the front end nor another provider",
 			from:   slack,
-			forbid: append(append(append([]string{}, front...), github...), cloudflare...),
+			forbid: slices.Concat(front, github, cloudflare, google),
 			sees:   "internal/slackroster/app",
 		},
 		{
 			name:   "the Cloudflare module imports neither the front end nor another provider",
 			from:   cloudflare,
-			forbid: append(append(append([]string{}, front...), github...), slack...),
+			forbid: slices.Concat(front, github, slack, google),
 			sees:   "internal/cloudflare/app",
 		},
 		{
@@ -125,14 +131,14 @@ func TestModuleBoundaries(t *testing.T) {
 			// The contract every role implements: it knows no role.
 			name:   "the module contract imports no role",
 			from:   []string{"internal/module"},
-			except: []string{"internal/module/issuer", "internal/module/github", "internal/module/slack", "internal/module/cloudflare", "internal/module/backup"},
+			except: []string{"internal/module/issuer", "internal/module/github", "internal/module/slack", "internal/module/cloudflare", "internal/module/backup", "internal/module/google"},
 			forbid: slices.Concat(front, github, slack, cloudflare, modules),
 			sees:   "internal/module",
 		},
 		{
 			name:   "the GitHub module wraps only the GitHub role",
 			from:   []string{"internal/module/github"},
-			forbid: slices.Concat(front, slack, cloudflare, []string{"internal/module/slack", "internal/module/issuer", "internal/module/cloudflare"}),
+			forbid: slices.Concat(front, slack, cloudflare, google, []string{"internal/module/slack", "internal/module/issuer", "internal/module/cloudflare", "internal/module/google"}),
 			sees:   "internal/module/github",
 		},
 		{
@@ -155,6 +161,19 @@ func TestModuleBoundaries(t *testing.T) {
 			sees:   "internal/module/cloudflare",
 		},
 		{
+			name:   "the Google module imports neither the issuer's process nor another provider",
+			from:   google,
+			forbid: slices.Concat(issuerSide, github, slack, cloudflare),
+			sees:   "internal/googleroster/app",
+		},
+		{
+			name: "the Google module wraps only the Google role",
+			from: []string{"internal/module/google"},
+			forbid: slices.Concat(issuerSide, github, slack, cloudflare,
+				[]string{"internal/module/github", "internal/module/slack", "internal/module/issuer", "internal/module/cloudflare"}),
+			sees: "internal/module/google",
+		},
+		{
 			// The transport between modules knows no module: it carries bytes.
 			name:   "the module-call transport imports no role",
 			from:   []string{"internal/modcall"},
@@ -164,7 +183,7 @@ func TestModuleBoundaries(t *testing.T) {
 		{
 			// A role is assembled by its module and the main, never the reverse.
 			name:   "no role imports the module packages that wrap it",
-			from:   append(append(append([]string{}, front...), github...), append(slack, cloudflare...)...),
+			from:   slices.Concat(front, github, slack, cloudflare, google),
 			forbid: []string{"internal/module"},
 			sees:   "internal/issuer",
 		},

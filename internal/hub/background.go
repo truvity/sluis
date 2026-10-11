@@ -248,3 +248,24 @@ func (h *Hub) refreshLeased(ctx context.Context, id string) RefreshOutcome {
 	}
 	return RefreshRan
 }
+
+// RefreshWorkspace runs one leased refresh of one workspace, under the same
+// lease as the background loop and the scheduled pass, and says what it did.
+// It is what a one-workspace tick runs. An id the store does not hold is
+// reported as [RefreshFailed].
+func (h *Hub) RefreshWorkspace(ctx context.Context, id string) RefreshOutcome {
+	return h.refreshLeased(ctx, id)
+}
+
+// Workspaces lists the ids of the workspaces the store holds.
+func (h *Hub) Workspaces(ctx context.Context) ([]string, error) {
+	list, err := h.store.List(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list workspaces: %w", err)
+	}
+	ids := make([]string, 0, len(list))
+	for i := range list {
+		ids = append(ids, list[i].ID)
+	}
+	return ids, nil
+}

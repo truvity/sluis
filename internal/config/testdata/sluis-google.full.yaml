@@ -1,0 +1,41 @@
+apiVersion: sluis.truvity.github.io/sluis-google/v1
+instance: example
+log: {level: info}
+probes: {address: ":7070"}
+secrets:
+  source: ssm
+  root: /sluis/example
+  region: eu-west-1
+  layout: v5
+ports:
+  adapter: dynamodb
+  dynamodb:
+    tables:
+      oidc: sluis-example-oidc
+      github: sluis-example-github
+      slack: sluis-example-slack
+      cloudflare: sluis-example-cloudflare
+      google: sluis-example-google
+      backup: sluis-example-backup
+    region: eu-west-1
+  blob:
+    adapter: s3
+    s3: {bucket: example-state, region: eu-west-1}
+platform: {aws: true, runtime: lambda}
+preset: aws-serverless
+adapters:
+  schedule: {adapter: eventbridge}
+google:
+  workspaces:
+    - id: C0123abcd
+      backend: google
+      admin: admin@example.com
+      keySecret: directory/example/key
+      serve: [example.com]
+      syncGroups: [staff@example.com]
+  oauthClient:
+    id: client-id.apps.example.com
+    provider: main
+  refreshInterval: 15m
+  freshnessWindow: 30m
+  probeInterval: 5m
