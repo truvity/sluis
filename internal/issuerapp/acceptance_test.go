@@ -414,8 +414,9 @@ func TestASuspendedPersonIsRefusedAtTheDoor(t *testing.T) {
 	if code != http.StatusForbidden {
 		t.Fatalf("a suspended person = %d, want it refused (%q)", code, body)
 	}
-	if !strings.Contains(body, "cleo@north.example") {
-		t.Errorf("the refusal does not say who was refused: %q", body)
+	// The page refuses and quotes a reference; who was refused is the log's.
+	if !strings.Contains(body, "Not authorised. Reference: ") || strings.Contains(body, "cleo@north.example") {
+		t.Errorf("the refusal must give a reference and name nobody: %q", body)
 	}
 	if directory.completed != "" {
 		t.Error("a refused sign-in completed the request anyway")

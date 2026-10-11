@@ -13,6 +13,7 @@ import (
 	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/issuer"
 	"github.com/truvity/sluis/internal/issuerapp"
+	"github.com/truvity/sluis/internal/refusal"
 	"github.com/truvity/sluis/internal/signer"
 )
 
@@ -91,7 +92,7 @@ func bootWithSignIn(t *testing.T, hub issuer.Directory, provider *stubProvider, 
 	})
 	mux.Handle("/", app.Handler())
 	_ = issuerURL
-	return &appWithSignIn{handler: mux}
+	return &appWithSignIn{handler: refusal.Middleware(mux)}
 }
 
 type appWithSignIn struct{ handler http.Handler }
