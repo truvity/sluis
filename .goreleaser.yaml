@@ -80,21 +80,6 @@ builds:
     ldflags:
       - -s -w -X github.com/truvity/sluis/internal/version.Version={{.Version}}
 
-  # The old name of the CLI, for one or two releases after the rename. The
-  # SAME program as sluisctl, built under its old name: the binary looks at
-  # the name it was started as and says on stderr that the name is
-  # deprecated (cmd/sluisctl/main.go). It is its own archive, accessctl_*,
-  # so that a download URL, a devbox package and a Nix flake that name it
-  # keep resolving while they are moved to sluisctl_*.
-  - id: accessctl
-    main: ./cmd/sluisctl
-    binary: accessctl
-    env: [CGO_ENABLED=0]
-    goos: [linux, darwin, windows]
-    goarch: [amd64, arm64]
-    ldflags:
-      - -s -w -X github.com/truvity/sluis/internal/version.Version={{.Version}}
-
   # Not an image: it is run by a person against a cluster they chose, and
   # a container that needs a kubeconfig and a namespace argument is a
   # worse way to hand somebody a command than a binary is.
@@ -210,15 +195,6 @@ archives:
       - goos: windows
         formats: [zip]
     name_template: "sluisctl_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
-
-  # The deprecated alias, alone, under the name it always had.
-  - id: accessctl
-    ids: [accessctl]
-    formats: [tar.gz]
-    format_overrides:
-      - goos: windows
-        formats: [zip]
-    name_template: "accessctl_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
 
   # The service and the acceptance runner: what an operator pulls to run
   # a build outside a container.
@@ -425,9 +401,7 @@ release:
     sluis ships none.
 
     `sluisctl` is its own archive, because it is the one thing here that
-    runs on somebody's own laptop. `accessctl_*` is the same program under
-    its old name, for one or two more releases: it says on stderr that the
-    name is deprecated, and does everything `sluisctl` does.
+    runs on somebody's own laptop.
 
 changelog:
   use: github

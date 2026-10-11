@@ -16,8 +16,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
-	"strings"
 )
 
 // Exit codes, which are a contract: a script reading them should be able
@@ -32,9 +30,6 @@ const (
 )
 
 func main() {
-	if invokedAsDeprecatedName(os.Args[0]) {
-		_, _ = fmt.Fprintln(os.Stderr, deprecationNotice)
-	}
 	err := run(os.Args[1:])
 	if err == nil {
 		return
@@ -47,24 +42,6 @@ func main() {
 		_, _ = fmt.Fprintln(os.Stderr, "sluisctl: "+err.Error())
 	}
 	os.Exit(codeFor(err))
-}
-
-// deprecationNotice is what the `accessctl` alias says on stderr. The alias is
-// this same binary under its old name (a second archive entry, or a symlink):
-// the product was renamed to sluis, and the old name is kept for one or two
-// releases so that a kubeconfig or an AWS profile that runs it keeps working
-// while it is rewritten. stdout is untouched, because a credential helper's
-// stdout is what the caller parses.
-const deprecationNotice = "accessctl: this command is now called sluisctl; the accessctl name is " +
-	"deprecated and will be removed in a later release (run `sluisctl kubeconfig` and " +
-	"`sluisctl aws-config` to rewrite what points at it)"
-
-// invokedAsDeprecatedName reports whether the binary was started under its old
-// name, however it was reached: a path, a symlink's name, a Windows .exe.
-func invokedAsDeprecatedName(arg0 string) bool {
-	name := strings.ToLower(filepath.Base(arg0))
-	name = strings.TrimSuffix(name, ".exe")
-	return name == "accessctl"
 }
 
 // usageError is a mistake in what was typed, rather than a failure of
