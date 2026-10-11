@@ -2,8 +2,10 @@ package issuer
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -12,6 +14,7 @@ import (
 	"github.com/truvity/sluis/gen/accessissuer/v1/accessissuerv1connect"
 	sluisv1 "github.com/truvity/sluis/gen/sluis/v1"
 	"github.com/truvity/sluis/gen/sluis/v1/sluisv1connect"
+	"github.com/truvity/sluis/internal/refusal"
 )
 
 type namedSessions struct {
@@ -75,5 +78,34 @@ func TestThePreflightIsAnsweredOnTheNewNameToo(t *testing.T) {
 			t.Errorf("preflight on %s = %d, allow-origin %q", name, recorder.Code,
 				recorder.Header().Get("Access-Control-Allow-Origin"))
 		}
+	}
+}
+
+type refusingSessions struct {
+	accessissuerv1connect.UnimplementedSessionServiceHandler
+}
+
+func (refusingSessions) ListSessions(
+	context.Context, *connect.Request[accessissuerv1.ListSessionsRequest],
+) (*connect.Response[accessissuerv1.ListSessionsResponse], error) {
+	return nil, connect.NewError(connect.CodePermissionDenied, errors.New("listing every session is an operator's"))
+}
+
+// The session service is behind the same interceptor as the console's: the
+// reason a handler wrote for a refusal is in the log, not in the answer.
+func TestTheSessionServiceRefusesInFixedWords(t *testing.T) {
+	t.Parallel()
+
+	mux := http.NewServeMux()
+	mountSessions(mux, refusingSessions{}, "")
+	server := httptest.NewServer(refusal.Middleware(mux))
+	t.Cleanup(server.Close)
+
+	_, err := sluisv1connect.NewSessionServiceClient(server.Client(), server.URL).
+		ListSessions(t.Context(), connect.NewRequest(&sluisv1.ListSessionsRequest{}))
+	var denied *connect.Error
+	if !errors.As(err, &denied) || denied.Code() != connect.CodePermissionDenied ||
+		!strings.HasPrefix(denied.Message(), "not authorised (request ") || strings.Contains(denied.Message(), "operator") {
+		t.Errorf("a refused listing = %v, want permission_denied \"not authorised (request <id>)\"", err)
 	}
 }
