@@ -169,7 +169,7 @@ func TestRekeyNoAuditProceedsWarnsAndPrintsTheRecord(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer trail.Close()
+	defer func() { _ = trail.Close() }()
 	var stderr bytes.Buffer
 	au := &rekeyAudit{rec: trail, noAudit: true, stderr: &stderr}
 	if err = rekeyRun(context.Background(), &bytes.Buffer{}, "example", p, rekeyOptions(), au, audit.Person("oleg@example.com"), false); err != nil {
