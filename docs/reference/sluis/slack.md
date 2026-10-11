@@ -13,7 +13,7 @@ Mechanics: [How a Slack pass decides](../../concepts/sluis/slack-pass.md). Setup
 | `ignored` | On the channel's `ignore` list |
 
 The console shows a row held only for a missing Slack account as *waiting for them*; every other hold is *needs you*.
-`roster.slack_action.held` is audited once, when the row becomes held, and not again after a restart.
+`roster.slack_action.held` is audited once, when the row becomes held, and not again after a restart. A hold is identified by its channel, person, change and a stable reason code: a reason whose wording moves (counts of members, for one) is the same hold, logged at info and not audited again, while a different code is a new hold and is audited.
 
 ## Bot scopes
 
