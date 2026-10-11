@@ -112,6 +112,18 @@ func FromDocument(doc *config.SluisBackup) (Config, error) {
 	return c, nil
 }
 
+// AuditConfig is the audit configuration the module runs with, from the adapter
+// table its document resolves to. It opens nothing; a document whose audit
+// adapter the build does not serve, or whose settings it does not decode, is
+// refused here as it is at start.
+func (c Config) AuditConfig(ctx context.Context, log *slog.Logger) (audit.Config, error) {
+	plan, err := c.stores.Plan(ctx, log)
+	if err != nil {
+		return audit.Config{}, err
+	}
+	return audit.FromPlan(c.audit, plan)
+}
+
 // Creator names this build in each manifest.
 func Creator() string { return "sluis-backup " + version.String() }
 
