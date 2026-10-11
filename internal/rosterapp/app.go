@@ -408,7 +408,9 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 		// The on-demand exchange and the grants listing at the issuer.
 		assembled.Issuer().UseCloudflare(a.cloudflare)
 	}
-	if cfg.Cloudflare != nil && cfg.Cloudflare.Remote != nil { //nolint:staticcheck // deprecated in v1.76 and still read until v1.78; the issuer is moved to calls.modules by the routing units
+	// cloudflare.remote is deprecated in v1.76 and read until v1.78; the routing
+	// units move the issuer to calls.modules.
+	if cfg.Cloudflare != nil && cfg.Cloudflare.Remote != nil { //nolint:staticcheck // deprecated, still read
 		// The minter is another module's: only the on-demand exchange and the
 		// grants listing at the issuer call it.
 		remote, err := cfrpc.Dial(ctx, cfg.Cloudflare.Remote, log) //nolint:staticcheck // as above
