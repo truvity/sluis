@@ -36,7 +36,7 @@ Keep the Blob port (status reports, directory snapshots) in a bucket of an S3-co
 
 ## Verify
 
-The start log has `blobs are kept in S3` with the bucket and prefix. After the first reconcile, `GET <endpoint>/<bucket>?list-type=2&prefix=<prefix>` shows `github/reports/` and `slack/reports/` objects.
+The start log has `blobs are kept in S3` with the bucket and prefix. After the first reconcile, `GET <endpoint>/<bucket>?list-type=2&prefix=<prefix>` shows `github/reports/` objects.
 
 ## Rotate the key
 

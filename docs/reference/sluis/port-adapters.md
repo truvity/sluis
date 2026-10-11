@@ -72,7 +72,7 @@ IAM for the sluis role, on the parameters of the root:
 
 `internal/port/s3blob`, chosen by `ports.blob`, which replaces the Blob of `ports.adapter`: State `legacy` or DynamoDB can pair with Blob S3. Credentials come from the platform. `ports.blob.s3.kmsKey` asks for SSE-KMS on every write.
 
-One bucket and prefix: `github/reports/<target>` is the object `<prefix>/github/reports/<target>`.
+One bucket and prefix: every name sits under `<prefix>/`.
 
 | Operation | S3 | Maps to |
 |---|---|---|
@@ -144,7 +144,7 @@ One bucket and prefix: `github/reports/<target>` is the object `<prefix>/github/
 | Revisions | SHA-1 of the stored bytes. Identical rewrites keep the revision (`revisions/change-on-identical-rewrite` is skipped). Swap is a Lua script in Valkey, or the ConfigMap `resourceVersion` |
 | `Watch` | Polls by listing, every 2 seconds. Expiry shows as a delete |
 | Lifetime | ConfigMap entries have none, so `gh.org.` accepts only permanent writes |
-| Reports | Text only; invalid UTF-8 under a `reports/` prefix is `ErrUnsupported` |
+| Reports | Text only; invalid UTF-8 under `reports/` is `ErrUnsupported` |
 | `Trigger` | In-process. Controllers see console writes in the mounted records, checked every 30 seconds |
 | Tick leases | Exclusive across processes only with Valkey. Controllers have none, so leases live in memory and the chart refuses more than one replica |
 | `List` | A scan (`SCAN` of every primary, or one ConfigMap `GET`); not for request paths |

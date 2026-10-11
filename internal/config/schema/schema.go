@@ -473,7 +473,7 @@ func portsBlobSchema() m {
 		"adapter": enum("`s3` keeps the blobs in an S3 bucket.", "", "s3"),
 		"s3": obj("Where the S3 adapter keeps its objects. Credentials are the platform's (EKS Pod Identity, IRSA, a Lambda role) and are never configured here.", m{
 			"bucket":    str("The bucket. It must exist, with public access blocked."),
-			"prefix":    str("A key prefix inside the bucket, for an installation that shares it. Names are `<prefix>/github/reports/<target>`, `<prefix>/slack/reports/<target>` and `<prefix>/google/cache/<workspace>`."),
+			"prefix":    str("A key prefix inside the bucket, for an installation that shares it."),
 			"region":    str("The bucket's region. Absent, the SDK's own resolution (`AWS_REGION`)."),
 			"kmsKey":    str("A KMS key id, ARN or alias for server-side encryption (SSE-KMS) of every write. Absent, the bucket's default encryption applies."),
 			"endpoint":  url("Overrides the S3 address: LocalStack or an S3-compatible store (Cloudflare R2, MinIO)."),
