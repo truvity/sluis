@@ -197,11 +197,14 @@ func controllersOf(svc *config.Sluis, p *config.PolicyDocument) (*githubapp.Conf
 	return gh, sl, nil
 }
 
-// IssuerPeers are the modules whose tables the issuer reads: the cross-grants
-// of ADR 0072, read only. A peer is a table the role names, so the list is the
-// role's too (deploy/pulumi).
+// IssuerPeers are the modules whose tables the issuer reads: the Google
+// snapshot alone (ADR 0072 as v1.76 E-FIN narrowed it), read only. A peer is a
+// table the role names, so the list is the role's too (deploy/pulumi). The
+// GitHub and Slack tables are their modules': a module that still runs in this
+// process opens its own through Stores.ForModule, and one that is another
+// function's is called, never read.
 func IssuerPeers() []port.Module {
-	return []port.Module{port.ModuleGoogle, port.ModuleGitHub, port.ModuleSlack}
+	return []port.Module{port.ModuleGoogle}
 }
 
 // FromConfig builds both halves' settings from the documents already read.
