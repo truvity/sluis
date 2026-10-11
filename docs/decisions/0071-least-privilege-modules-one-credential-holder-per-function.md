@@ -100,8 +100,8 @@ and schedule from one declaration, and one chart renders every Deployment.
 
 8. **State, secrets, keys and blobs are per module.**
    - **One DynamoDB table per module**, on demand. A module reads another module's data by calling it, or through a
-     named read-only cross-grant (the issuer reads the `google`, `github` and `slack` tables). The issuer's table
-     holds the key ring, sessions, refresh tokens and revocations. *Amended by 0072:* state is not started fresh;
+     named read-only cross-grant (the issuer reads the `google` snapshot and nothing of `github`, `slack` or
+     `cloudflare`). The issuer's table holds the key ring, sessions, refresh tokens and revocations. *Amended by 0072:* state is not started fresh;
      sessions, refresh tokens and the ring are copied by a one-time migration.
    - **Secrets layout v5.** `internal/<module>/<name>` is read and written only by that module, with no `config` or
      `credentials` level; `external/<module>/<name>` is written only by its owning module and granted to consumers by
@@ -118,7 +118,12 @@ and schedule from one declaration, and one chart renders every Deployment.
    - **Blobs:** one bucket with a prefix per module on AWS (object ARNs per prefix, `s3:prefix` on listing, a bucket
      policy that denies the other roles); a bucket per module on R2, whose credentials cannot be scoped to a prefix.
    - **Policy tests.** Every generated policy has a golden test and a deny-matrix test: module X is denied module Y's
-     table, prefix, secret path and key alias, for every pair, generated from the module list.
+     table, prefix, secret path and key alias, for every pair, generated from the module list. The matrix also holds
+     the issuer's rows (no write or read of a provider's table, blob or parameters, the Google snapshot read only,
+     invokes by `live-console` and `live-issuer` alone) and the converse rows (a provider's role invokes no peer and
+     reads no peer's table, blob or parameter). Only the cloudflare function holds the minter's parameter. A
+     code-level test holds every provider method to `console` or `issuer`; an end-to-end test runs the issuer with
+     every provider remote over the Lambda transport and checks that it holds none of their stores.
 
 9. **Backup and restore.** *Amended by [0072](0072-storage-layout-v5-module-first.md).* `backup` is a scheduled module
    (EventBridge on Lambda, a CronJob on Kubernetes) with read access to State, secrets and blobs, no inbound API,
