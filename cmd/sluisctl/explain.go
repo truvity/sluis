@@ -21,7 +21,7 @@ Says what a token for one client would carry for one caller, from a rendered
 policy document, offline: no session, no network. It loads the document the
 way the issuer does, evaluates the caller, narrows the groups to the audience
 (token scoping as enforced) and prints the groups kept, the groups dropped with
-the reason, and the claim fragments the kept groups add (claim_merge applied).
+the reason, and the claim fragments the kept groups add.
 Secrets and registered claims (iss, sub, aud, exp...) are never printed.
 
 --email is a person; give the directory groups the directory would report for

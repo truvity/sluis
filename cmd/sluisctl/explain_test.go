@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"reflect"
 	"slices"
 	"testing"
 )
@@ -70,9 +71,9 @@ func TestExplainNamespaceOnlyPersonGetsExactlyTheirFragment(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := `_stream:{"k8s.cluster.name"="prod","kubernetes.pod_namespace"="dms"}`
-	if got := filtersOf(t, out.Claims); got != want {
-		t.Errorf("filters = %v, want %s", got, want)
+	want := []any{`"k8s.cluster.name"="prod","kubernetes.pod_namespace"="dms"`}
+	if got := filtersOf(t, out.Claims); !reflect.DeepEqual(got, want) {
+		t.Errorf("filters = %v, want %v", got, want)
 	}
 	if !slices.Equal(out.Kept, []string{"prod:logs:dms"}) {
 		t.Errorf("kept = %v", out.Kept)
@@ -82,15 +83,18 @@ func TestExplainNamespaceOnlyPersonGetsExactlyTheirFragment(t *testing.T) {
 	}
 }
 
-func TestExplainTwoFragmentsAreJoined(t *testing.T) {
+func TestExplainTwoFragmentsAreConcatenated(t *testing.T) {
 	out, err := runExplain(t, "--audience", "logs", "--email", "a@example.test",
 		"--directory-group", "kyc-team@example.test", "--directory-group", "dms-team@example.test")
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := `_stream:{"k8s.cluster.name"="prod","kubernetes.pod_namespace"="dms" or "k8s.cluster.name"="prod","kubernetes.pod_namespace"="kyc"}`
-	if got := filtersOf(t, out.Claims); got != want {
-		t.Errorf("filters = %v, want %s", got, want)
+	want := []any{
+		`"k8s.cluster.name"="prod","kubernetes.pod_namespace"="dms"`,
+		`"k8s.cluster.name"="prod","kubernetes.pod_namespace"="kyc"`,
+	}
+	if got := filtersOf(t, out.Claims); !reflect.DeepEqual(got, want) {
+		t.Errorf("filters = %v, want %v", got, want)
 	}
 }
 

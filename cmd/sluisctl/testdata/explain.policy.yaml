@@ -23,12 +23,6 @@ claims:
     vm_access:
       logs_extra_stream_filters:
         - '"k8s.cluster.name"="prod","kubernetes.pod_namespace"="kyc"'
-claim_merge:
-  vm_access.logs_extra_stream_filters:
-    join: " or "
-    prefix: "_stream:{"
-    suffix: "}"
-    as: string
 clients:
   logs:
     kind: exchange

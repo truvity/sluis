@@ -132,7 +132,7 @@ sluisctl explain --policy <policy.yaml> --audience <client> \
     [--directory-group <email>]... [--format yaml|json]
 ```
 
-`explain` answers "what will this caller's token for this client carry?" offline, from a rendered policy document (the four top-level keys `apiVersion`, `exchange`, `apps` and `controllers` are read as the issuer reads them). It evaluates the caller, narrows the groups to the audience as token scoping does when enforced, and merges the kept groups' claim fragments, `claim_merge` included. It needs no session, network or secret.
+`explain` answers "what will this caller's token for this client carry?" offline, from a rendered policy document (the four top-level keys `apiVersion`, `exchange`, `apps` and `controllers` are read as the issuer reads them). It evaluates the caller, narrows the groups to the audience as token scoping does when enforced, and merges the kept groups' claim fragments. It needs no session, network or secret.
 
 | Flag | Meaning |
 |---|---|

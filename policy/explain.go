@@ -14,7 +14,7 @@ type DroppedGroup struct {
 
 // Explanation is what a token for one client would carry for one caller: the
 // groups kept and dropped by [Policy.ScopeGroups] and the claim fragments of
-// the groups kept ([Policy.ClaimsFor], including claim_merge). It holds no
+// the groups kept ([Policy.ClaimsFor]). It holds no
 // secret and no registered claim (`iss`, `sub`, `aud`, `exp`...): only what the
 // policy decides.
 type Explanation struct {

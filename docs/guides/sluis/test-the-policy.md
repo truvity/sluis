@@ -26,7 +26,7 @@ sluisctl explain --policy policy.yaml --audience logs \
     --email ana@example.test --directory-group dms-team@example.test
 ```
 
-The output is the groups the token keeps for that client, the groups scoping drops with the reason, and the claims the kept groups add, including a `claim_merge` join. Use `--subject` for a workload. Verify: a client that is not declared is refused.
+The output is the groups the token keeps for that client, the groups scoping drops with the reason, and the claims the kept groups add. Use `--subject` for a workload. Verify: a client that is not declared is refused.
 
 ## 4. Ask the live console
 

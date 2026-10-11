@@ -310,7 +310,6 @@ func (p Policy) Evaluate(in Input) Result {
 			claims["groups"] = asAny
 		}
 	}
-	p.joinClaims(claims)
 	if len(claims) > 0 {
 		out.Claims = claims
 	}
@@ -332,7 +331,6 @@ func (p Policy) ClaimsFor(groups []string) map[string]any {
 			_ = mergeFragment(claims, fragment, "")
 		}
 	}
-	p.joinClaims(claims)
 	return claims
 }
 
