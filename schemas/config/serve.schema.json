@@ -356,6 +356,15 @@
               "description": "The audience a caller's token must be minted for. The module's name, `cloudflare`, when unset.",
               "minLength": 1,
               "type": "string"
+            },
+            "issuers": {
+              "description": "The issuer's ServiceAccount, as `system:serviceaccount:<namespace>:<name>`, which may call the listener on Kubernetes. A call from it is both the issuer class (the mint) and the console class; a token of any other subject is a 401. The listener refuses to start with none. Unused on Lambda.",
+              "items": {
+                "pattern": "^system:serviceaccount:[^:]+:[^:]+$",
+                "type": "string"
+              },
+              "type": "array",
+              "uniqueItems": true
             }
           },
           "type": "object"

@@ -78,7 +78,7 @@ func verify(_ context.Context, bearer string) (string, error) {
 	if bearer != "good" {
 		return "", errors.New("no")
 	}
-	return "system:serviceaccount:ns:issuer", nil
+	return "issuer", nil
 }
 
 func TestHTTPCallerAuthenticatesAndTheServerNamesTheCaller(t *testing.T) {
@@ -180,7 +180,7 @@ func TestAllowRefusesEveryOtherCallerClassOnEveryTransport(t *testing.T) {
 	srv := httptest.NewServer(s.Handler(func(_ context.Context, b string) (string, error) { return b, nil }))
 	t.Cleanup(srv.Close)
 	for bearer, wantErr := range map[string]bool{
-		"system:serviceaccount:sluis:issuer": false, "system:serviceaccount:sluis:other": true, "console": false, "x": true,
+		"issuer": false, "system:serviceaccount:sluis:issuer": true, "console": false, "x": true,
 	} {
 		c := &modcall.HTTPCaller{URLs: map[string]string{"echo": srv.URL}, Token: func(context.Context, string) (string, error) { return bearer, nil }}
 		_, err := c.Call(context.Background(), "echo", "say", nil)
@@ -219,12 +219,22 @@ func TestAVersionNewerThanTheServerIsRefusedAndAnAbsentOneIsV1(t *testing.T) {
 	}
 }
 
-func TestClassOfSubject(t *testing.T) {
-	for in, want := range map[string]string{
-		"system:serviceaccount:ns:issuer": "issuer", "issuer": "issuer", "system:serviceaccount:ns:": "system:serviceaccount:ns:",
-	} {
-		if got := modcall.ClassOfSubject(in); got != want {
-			t.Errorf("%q: %q", in, got)
-		}
+// A ServiceAccount's name is not its class: a pod that names its account
+// "issuer" in any namespace is not the issuer.
+func TestAServiceAccountNameIsNotItsClass(t *testing.T) {
+	s := modcall.NewServer("echo")
+	modcall.Handle(s, "say", func(context.Context, struct{}) (string, error) { return "ok", nil }, modcall.Allow("issuer"))
+	call := func(subject string) error {
+		srv := httptest.NewServer(s.Handler(func(context.Context, string) (string, error) { return subject, nil }))
+		defer srv.Close()
+		c := &modcall.HTTPCaller{URLs: map[string]string{"echo": srv.URL}, Token: func(context.Context, string) (string, error) { return "t", nil }}
+		_, err := modcall.Do[struct{}, string](context.Background(), c, "echo", "say", struct{}{})
+		return err
+	}
+	if err := call("issuer"); err != nil {
+		t.Errorf("the class named by the transport: %v", err)
+	}
+	if err := call("system:serviceaccount:ns:issuer"); !errors.Is(err, &modcall.Error{Code: modcall.CodeForbidden}) {
+		t.Errorf("a ServiceAccount named issuer: %v", err)
 	}
 }
