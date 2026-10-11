@@ -1,8 +1,8 @@
 # HTTP endpoints
 
-What `sluis serve` answers on `listen.address` (default `:8080`): the issuer at the origin root and the console under `console.mount` (default `/console`). Request and response shapes: [contracts](contracts.md). Routes: [Configuration: the model](../../concepts/sluis/configuration.md#two-routes).
+`sluis serve` answers on `listen.address` (default `:8080`): the issuer at the origin root, the console under `console.mount` (default `/console`). Request and response shapes: [contracts](contracts.md). Routes: [Configuration: the model](../../concepts/sluis/configuration.md#two-routes).
 
-The issuer serves three grants, named in `grant_types_supported` (`authorization_code`, `refresh_token`, token exchange), and three endpoints that discovery advertises (userinfo, `end_session`, revocation).
+The issuer serves three grants (`authorization_code`, `refresh_token`, token exchange) and three endpoints that discovery advertises (userinfo, `end_session`, revocation).
 
 | Path | Standard | Purpose |
 |---|---|---|
@@ -22,9 +22,25 @@ The issuer serves three grants, named in `grant_types_supported` (`authorization
 | back-channel logout | OIDC Back-Channel Logout 1.0 | opt-in per client with `backchannel_logout_uri`: a signed `logout+jwt` POSTed to every such client that signed the person in, by the `sid` it saw, when the sign-in ends |
 | not served | RFC 8628 device flow, client credentials, RFC 7523 JWT bearer, RFC 7662 introspection, implicit and hybrid flows, session-management iframe, RFC 7591 dynamic client registration | the headless cases (a CI job, a workload) are token exchange; tokens are JWTs verified offline against the key set. Instead of RFC 7591, an origin named in `client_documents` is served by Client ID Metadata Documents: no endpoint, nothing stored |
 
+## Refusals
+
+A refusal is fixed words and a request id; the reason is kept under it.
+
+| Surface | A refused caller reads |
+|---|---|
+| `/token`, `/authorize`, `/end_session`, `/.access/*` | `error_description` is `not authorised (request <id>)`, `invalid request (request <id>)` for a malformed request, or `server error (request <id>)` for a fault of ours. Nothing names a client, audience, group or address |
+| Sign-in and sign-out pages | `Not authorised. Reference: <id>` (`Server error.` for a fault), and the way back. No address, domain or error text |
+| ConnectRPC: the console's services and `SessionService` | `permission_denied` is `not authorised (request <id>)`, `internal` is `server error (request <id>)`, `unauthenticated` is `sign in first`; other codes are unchanged |
+| The directory listener | `401` or `403` with `not authorised (request <id>)` |
+| `error` | the specification's: `invalid_client`, `invalid_grant` (a code, refresh token or subject token that does not match), `invalid_target`, `unauthorized_client`, `server_error` |
+| `invalid_client` | `401` with `WWW-Authenticate` when the client sent an `Authorization` header, else `400`. An unknown client and a wrong secret are one answer |
+| `invalid_target` at `/token` | an unknown audience and one the proof is refused are one answer |
+| `X-Request-Id` | on every response. The caller's own is kept when it is 8 to 64 letters, digits, `.`, `_`, `:` or `-`, and replaced otherwise |
+| Finding the reason | search the log for `request_id`, or the audit trail for `context.request_id`. A refused exchange or sign-in records `reason_code`, `audience`, `missing_requires`, `held_groups`, `admitted`, `admitted_by` and `directory` ([audit actions](audit-actions.md)) |
+
 ## Client secrets
 
-`POST /.access/client-secrets/rotate`, `/show` and `/purge` take `{"client": "<id>"}`; `rotate` also takes `overlap_seconds` (absent is 24h, `0` a hard cut, at most 604800). The caller sends a bearer token this issuer issued to `sluis-console` or `sluisctl`, or to `console` or `accessctl` (their older ids, still accepted), with the operators group in `groups`. Answers hold times and flags, never a secret. Without the feature the path answers `404`.
+`POST /.access/client-secrets/rotate`, `/show` and `/purge` take `{"client": "<id>"}`; `rotate` also takes `overlap_seconds` (absent is 24h, `0` a hard cut, at most 604800). The caller sends a bearer token this issuer issued to `sluis-console` or `sluisctl`, or to `console` or `accessctl` (their older ids, still accepted), with the operators group in `groups`. Without the feature it answers `404`.
 
 | Status | Means |
 |---|---|
