@@ -335,7 +335,7 @@ function PageFor({
     case "people":
       return id ? <Person email={id} me={me} operator={operator} onDone={onDone} /> : <People key={query.get("github") ?? ""} github={query.get("github") ?? ""} />;
     case "rules":
-      return <Rules />;
+      return <Rules operator={operator} />;
     case "groups":
       return id ? <Group name={id} /> : <Groups />;
     case "clients":

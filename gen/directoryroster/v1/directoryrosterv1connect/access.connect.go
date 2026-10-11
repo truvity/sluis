@@ -71,10 +71,9 @@ type AccessServiceClient interface {
 	//
 	// A proof is a person (an address), a CI job or a workload, so the same
 	// call shows what a pipeline is entitled to as well as what a person
-	// is. With nothing set it explains the caller. Viewer: a viewer already
-	// sees every group's members and every client's requirements, so
-	// withholding the answer they could derive by hand protects nothing and
-	// blocks the auditor, who is read-only by definition.
+	// is. Operator only, and the roster controllers (workloads holding
+	// viewer): anyone else, a person asking about themselves included, is
+	// refused with "not authorised". An operator's look-up is recorded.
 	Explain(context.Context, *connect.Request[v1.ExplainRequest]) (*connect.Response[v1.ExplainResponse], error)
 	// ListHolders resolves an internal group, or a client, to the people who
 	// hold it right now. It is the question an auditor actually asks, and
@@ -113,8 +112,7 @@ type AccessServiceClient interface {
 	// for, its members straight from the directory, and the internal groups
 	// it feeds. It is the reverse of a membership — an admin who just
 	// changed a group in the directory wants to know its blast radius, and
-	// that direction is not derivable from the policy alone. Viewer, for
-	// the same reason as Explain.
+	// that direction is not derivable from the policy alone. Viewer.
 	GetDirectoryGroup(context.Context, *connect.Request[v1.GetDirectoryGroupRequest]) (*connect.Response[v1.GetDirectoryGroupResponse], error)
 	// ResolveDirectoryGroups returns, for each directory group asked, who is
 	// in it with nested groups expanded, and which directory it comes from:
@@ -265,10 +263,9 @@ type AccessServiceHandler interface {
 	//
 	// A proof is a person (an address), a CI job or a workload, so the same
 	// call shows what a pipeline is entitled to as well as what a person
-	// is. With nothing set it explains the caller. Viewer: a viewer already
-	// sees every group's members and every client's requirements, so
-	// withholding the answer they could derive by hand protects nothing and
-	// blocks the auditor, who is read-only by definition.
+	// is. Operator only, and the roster controllers (workloads holding
+	// viewer): anyone else, a person asking about themselves included, is
+	// refused with "not authorised". An operator's look-up is recorded.
 	Explain(context.Context, *connect.Request[v1.ExplainRequest]) (*connect.Response[v1.ExplainResponse], error)
 	// ListHolders resolves an internal group, or a client, to the people who
 	// hold it right now. It is the question an auditor actually asks, and
@@ -307,8 +304,7 @@ type AccessServiceHandler interface {
 	// for, its members straight from the directory, and the internal groups
 	// it feeds. It is the reverse of a membership — an admin who just
 	// changed a group in the directory wants to know its blast radius, and
-	// that direction is not derivable from the policy alone. Viewer, for
-	// the same reason as Explain.
+	// that direction is not derivable from the policy alone. Viewer.
 	GetDirectoryGroup(context.Context, *connect.Request[v1.GetDirectoryGroupRequest]) (*connect.Response[v1.GetDirectoryGroupResponse], error)
 	// ResolveDirectoryGroups returns, for each directory group asked, who is
 	// in it with nested groups expanded, and which directory it comes from:

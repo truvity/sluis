@@ -12,12 +12,13 @@ The actions sluis records, from the catalogue [`internal/audit/catalogue/roster.
 
 <!-- generated: audit-actions -->
 
-Catalogue version 1.18.0, 83 actions.
+Catalogue version 1.19.0, 84 actions.
 
 | Action | Operation | Targets | Delivery | Summary |
 |---|---|---|---|---|
 | `roster.person.signed_in` | authentication | client | async | A person signed in to a client, or was refused; at the issuer, with the class of the session it opens (interactive or agent) and that session's deadline. |
 | `roster.recovery.signed_in` | authentication | client | block | Somebody signed in with the recovery identity, which bypasses the directory. |
+| `roster.access.explained` | access | client | async | An operator looked up what a person, CI job or workload would effectively be granted, or a caller who may not was refused. The record carries counts only. |
 | `roster.token.exchanged` | authentication | client | async | A token was exchanged for one another client accepts, or the exchange was refused. |
 | `roster.github_token.minted` | create | github_app | async | A GitHub App installation token was minted, or refused. Never the token. |
 | `roster.cloudflare.token.minted` | create | cloudflare_preset | async | A Cloudflare API token or R2 credential was minted from a preset's prototype, either stored for the preset (by sluis on its schedule) or on demand for a caller. Never the value. |

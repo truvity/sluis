@@ -16,6 +16,7 @@ import Typography from "@mui/material/Typography";
 
 import { access, matcherKind } from "./api";
 import type { ExplainRequest, PolicyGroup } from "./gen/sluis/v1/access_pb";
+import { explainPanels } from "./explainModel";
 import { useAsync } from "./hooks";
 import { Explanation } from "./Person";
 import { paths } from "./router";
@@ -97,7 +98,7 @@ function needsOf(groups: PolicyGroup[], name: string): keyof typeof dependsOn {
  *
  *  The complete set was already in the console one group at a time. This
  *  is the across-all-groups view that stopped dropping half of it. */
-export function Rules() {
+export function Rules({ operator }: { operator: boolean }) {
   const policy = useAsync(() => access.getPolicy({}), []);
   const [kind, setKind] = useState<Kind>("all");
   const [group, setGroup] = useState("");
@@ -236,9 +237,11 @@ export function Rules() {
         </TableContainer>
       )}
 
-      <Section title="Test a proof" hint="type what a real job or workload would present, and see which rules it falls into and what that opens">
-        <Simulator />
-      </Section>
+      {explainPanels(operator).simulator ? (
+        <Section title="Test a proof" hint="type what a real job or workload would present, and see which rules it falls into and what that opens">
+          <Simulator />
+        </Section>
+      ) : null}
     </Page>
   );
 }

@@ -72,6 +72,8 @@ func every() []*record.Record {
 		audit.SessionsRevokedByClass(person, "a.person@example.com", audit.ScopeEveryAgent, 2, "agent", "interactive"),
 		audit.SessionRevoked(person, "", "mcp-host", audit.ScopeClientEveryIdentity, 4),
 		audit.SessionReuseRevoked("a.person@example.com", "grafana"),
+		audit.AccessExplained(person, audit.Succeeded(), "person", "b.person@example.com", 3, 5, 2),
+		audit.AccessExplained(person, audit.Denied("not authorised"), "ci", "github:example/app", 0, 0, 0),
 		audit.SessionRefreshRefused("b.person@example.com", "grafana", "no longer admitted"),
 		audit.ClientSecretCreated("grafana", time.Date(2026, 10, 6, 12, 0, 0, 0, time.UTC)),
 		audit.ClientSecretAdopted("grafana", "input", time.Date(2026, 10, 6, 12, 0, 0, 0, time.UTC)),
