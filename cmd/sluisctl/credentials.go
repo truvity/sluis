@@ -24,11 +24,16 @@ func token(args []string) error {
 	audience := flags.String("audience", "", "the client the token is for, e.g. openbao")
 	issuer := flags.String("issuer", "", "the issuer, when not configured")
 	clientID := flags.String("client", "", "the client to present")
+	show := flags.Bool("show", false, "print the claims of the issued token, not the token")
+	format := flags.String("format", "yaml", "with --show: yaml or json")
 	if err := flags.Parse(args); err != nil {
 		return usageError{err}
 	}
 	if strings.TrimSpace(*audience) == "" {
 		return badUsage("--audience is required: a token for nothing in particular is what an audience prevents")
+	}
+	if *format != "yaml" && *format != "json" {
+		return badUsage("--format is yaml or json, not %q", *format)
 	}
 
 	cfg, err := loadConfig(*issuer, *clientID)
@@ -44,6 +49,9 @@ func token(args []string) error {
 		return err
 	}
 
+	if *show {
+		return showClaims(stdout, issued.AccessToken, *format)
+	}
 	_, _ = fmt.Fprintln(stdout, issued.AccessToken)
 	return nil
 }
