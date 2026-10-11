@@ -672,6 +672,12 @@ func TestTheIssuerRunsEndToEndWithEveryProviderRemote(t *testing.T) {
 		if len(keys) < 5 {
 			t.Errorf("only %d provider keys were probed", len(keys))
 		}
+		// The Google records the issuer's hub reads are still read (the write side is
+		// proved in internal/app).
+		h := r.app.Hub()
+		if views, err := h.WorkspaceViews(ctx); err != nil || len(views) != 1 || views[0].Workspace.ID != "north" {
+			t.Errorf("the issuer's hub reads the workspaces %v, %v, want north", views, err)
+		}
 		// The issuer never read a provider's parameter, internal or external: it read
 		// its own (the recovery password, the session key), and the Cloudflare
 		// function read the minter's, in a secrets store of its own.
