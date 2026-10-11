@@ -468,7 +468,7 @@ func (p *backupPlan) document() (string, error) {
 	}
 	audit := map[string]any{"adapter": "log"}
 	if p.AuditQueueURL != "" {
-		audit = map[string]any{"adapter": "sqs", "settings": map[string]any{"queue": p.AuditQueueURL}}
+		audit = map[string]any{"adapter": "sqs", "settings": map[string]any{"queueURL": p.AuditQueueURL, "region": p.Region}}
 	}
 	doc := map[string]any{
 		"apiVersion": sluisconfig.Group + "/" + backupDocumentVersion,

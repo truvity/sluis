@@ -1,5 +1,10 @@
 ## Unreleased
 
+### Added
+
+- **The backup and restore functions start when the audit records go to SQS: the library renders the queue under the name the runtime decodes.** On v1.75.0-rc.9 `NewBackup` and `NewRestore` wrote `adapters.audit` as `sqs` with `settings: {queue: <url>}`, but the `sqs` audit adapter's settings are `queueURL`, `region`, `endpoint` and `timeout` and are decoded strictly, so every invocation of an installation that sends audit over SQS stopped at start with `adapters.audit.settings: settings: json: unknown field "queue"` (`Runtime.ExitError`). The documents now carry `queueURL` and `region`, the same as the issuer's. Only the SQS case was affected; an installation with no `AuditQueueURL` renders the `log` adapter and started. Nothing the runtime accepts changed; an estate takes this by bumping the library and the release pin together.
+- **A test runs each runtime's loader over every document the library renders.** `TestEveryRenderedDocumentLoadsInItsRuntime` (`deploy/pulumi`) renders the issuer, backup and restore documents for each audit variant (sqs installed, sqs given, sqs named by the estate, log) and each blob (S3, external) and state (one table, a table per module) variant, and `internal/renderedcheck` loads each with its function's loader and applies the audit adapter to the audit configuration, opening no store. `store.Config.Plan` and `backup/app.Config.AuditConfig` expose the adapter plan and the audit configuration without opening anything.
+
 ## v1.75.0-rc.10
 
 ### Added
