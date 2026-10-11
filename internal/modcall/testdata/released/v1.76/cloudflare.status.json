@@ -1,0 +1,89 @@
+{
+  "module": "cloudflare",
+  "method": "status",
+  "caller": "console",
+  "request": {
+    "v": 2,
+    "kind": "rpc",
+    "module": "cloudflare",
+    "method": "status",
+    "payload": {},
+    "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+    "deadline": 4102444800000
+  },
+  "request_v1": {
+    "kind": "rpc",
+    "module": "cloudflare",
+    "method": "status",
+    "payload": {}
+  },
+  "response": {
+    "v": 2,
+    "result": {
+      "accounts": [
+        {
+          "name": "main",
+          "id_last4": "cdef"
+        }
+      ],
+      "presets": [
+        {
+          "name": "dns",
+          "account": "main",
+          "lifetime": 3600000000000,
+          "rotation": 1200000000000,
+          "prototype": {
+            "id": "proto1234",
+            "status": "ok"
+          },
+          "stored": {
+            "present": true,
+            "minted_at": "2026-10-09T12:00:00Z",
+            "expires_on": "2026-10-09T13:00:00Z"
+          },
+          "live": [
+            {
+              "id": "tok1",
+              "caller": "a@example.com",
+              "expires_on": "2026-10-09T12:30:00Z"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "response_v1": {
+    "result": {
+      "accounts": [
+        {
+          "name": "main",
+          "id_last4": "cdef"
+        }
+      ],
+      "presets": [
+        {
+          "name": "dns",
+          "account": "main",
+          "lifetime": 3600000000000,
+          "rotation": 1200000000000,
+          "prototype": {
+            "id": "proto1234",
+            "status": "ok"
+          },
+          "stored": {
+            "present": true,
+            "minted_at": "2026-10-09T12:00:00Z",
+            "expires_on": "2026-10-09T13:00:00Z"
+          },
+          "live": [
+            {
+              "id": "tok1",
+              "caller": "a@example.com",
+              "expires_on": "2026-10-09T12:30:00Z"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

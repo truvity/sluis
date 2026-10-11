@@ -41,6 +41,7 @@ func dispatch(t *testing.T, raw json.RawMessage, caller string) json.RawMessage 
 	}
 	s := modcall.NewServer(rpc.Module)
 	rpc.Register(s, &fake{})
+	rpc.RegisterConsole(s, &fake{})
 	out, err := json.Marshal(s.Dispatch(modcall.WithCaller(context.Background(), caller), req))
 	if err != nil {
 		t.Fatal(err)
@@ -86,7 +87,8 @@ func TestEveryReleasedEnvelopeStillDecodesAndIsAnsweredAsBefore(t *testing.T) {
 		sameJSON(t, f+" (v1)", dispatch(t, g.RequestV1, g.Caller), g.ResponseV1)
 	}
 	// A sweep that finds nothing proves nothing.
-	for _, m := range []string{rpc.MethodMint, rpc.MethodGranted} {
+	for _, m := range []string{rpc.MethodMint, rpc.MethodGranted, rpc.MethodStatus, rpc.MethodListPresets, rpc.MethodAccounts,
+		rpc.MethodRotate, rpc.MethodRevoke, rpc.MethodCredential} {
 		if seen[m] == 0 {
 			t.Errorf("no released golden for %s.%s under %s", rpc.Module, m, releasedDir)
 		}
@@ -109,10 +111,25 @@ func TestWriteMissingGoldens(t *testing.T) {
 	granted, _ := json.Marshal(struct {
 		Caller rpc.Caller `json:"caller"`
 	}{caller})
+	empty := []byte(`{}`)
+	rotate, _ := json.Marshal(struct {
+		Preset string      `json:"preset"`
+		Actor  audit.Actor `json:"actor"`
+	}{"dns", caller.Actor})
+	revoke, _ := json.Marshal(struct {
+		Preset  string      `json:"preset"`
+		TokenID string      `json:"token_id"`
+		Actor   audit.Actor `json:"actor"`
+	}{"dns", "tok1", caller.Actor})
 	for _, c := range []struct {
 		method, class string
 		payload       []byte
-	}{{rpc.MethodMint, rpc.CallerIssuer, mint}, {rpc.MethodGranted, rpc.CallerConsole, granted}} {
+	}{
+		{rpc.MethodMint, rpc.CallerIssuer, mint}, {rpc.MethodGranted, rpc.CallerConsole, granted},
+		{rpc.MethodStatus, rpc.CallerConsole, empty}, {rpc.MethodListPresets, rpc.CallerConsole, empty},
+		{rpc.MethodAccounts, rpc.CallerConsole, empty}, {rpc.MethodRotate, rpc.CallerConsole, rotate},
+		{rpc.MethodRevoke, rpc.CallerConsole, revoke}, {rpc.MethodCredential, rpc.CallerConsole, mint},
+	} {
 		path := filepath.Join(dir, rpc.Module+"."+c.method+".json")
 		if _, err := os.Stat(path); err == nil {
 			continue
