@@ -79,6 +79,12 @@ type Config struct {
 	Module port.Module
 	Peers  []port.Module
 
+	// NoTrigger is set by a module that never notifies a controller (the backup
+	// and the restore): the plan's `trigger` adapter is not built for it. The
+	// aws-serverless preset names `invoke`, which needs the controller functions
+	// only the issuer's document names, and would stop such a module at start.
+	NoTrigger bool
+
 	// Secrets delivers the secrets the document names (the Valkey password):
 	// the composition root sets it after FromServe. Nil delivers none.
 	Secrets secrets.Source
@@ -633,7 +639,7 @@ func Open(ctx context.Context, cfg Config, log *slog.Logger) (*Stores, error) {
 		st.Secrets = secretstore.NewSourceV5(st.V5, cfg.Secrets)
 		st.ClientSecrets = secretstore.NewSecretsV5(st.V5, cfg.SecretsGrace)
 	}
-	if err = st.applyTrigger(ctx, log); err != nil {
+	if err = st.applyTrigger(ctx, log, cfg.NoTrigger); err != nil {
 		st.Close()
 		return nil, err
 	}
@@ -644,7 +650,10 @@ func Open(ctx context.Context, cfg Config, log *slog.Logger) (*Stores, error) {
 // plan names, when that is an adapter of its own: `invoke`, which starts a
 // controller function. The state adapters' triggers (the table's, the in-process
 // one) are theirs and stay.
-func (s *Stores) applyTrigger(ctx context.Context, log *slog.Logger) error {
+func (s *Stores) applyTrigger(ctx context.Context, log *slog.Logger, noTrigger bool) error {
+	if noTrigger {
+		return nil
+	}
 	choice, ok := s.Plan[port.ConcernTrigger]
 	if !ok || choice.Adapter == "" || choice.Adapter == s.Adapter || choice.Adapter == "legacy" {
 		return nil

@@ -2,6 +2,9 @@ package sluispulumi_test
 
 import (
 	"encoding/json"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -498,5 +501,33 @@ func TestTheBackupFunctionFromTheArtifactsBucket(t *testing.T) {
 	layer := rec.one(t, "aws:lambda/layerVersion:LayerVersion", "staging-backup-config")
 	if prop(layer, "s3Bucket").StringValue() != "acme-artifacts" {
 		t.Errorf("layer code: %v", layer.Inputs)
+	}
+}
+
+// The documents the library renders for the backup and the restore function are
+// ones the module starts on. The runtime half is the module's own startup, run
+// over the rendered file: the library cannot import the runtime's internals.
+func TestTheRenderedBackupAndRestoreDocumentsStartTheModule(t *testing.T) {
+	bk, _ := mustBackup(t, nil)
+	rs, _ := mustRestore(t, nil)
+	for name, rec := range map[string]struct {
+		rec   *recorder
+		layer string
+	}{"backup": {bk, "staging-backup-config"}, "restore": {rs, "staging-restore-config"}} {
+		t.Run(name, func(t *testing.T) {
+			files := archiveFiles(t, rec.rec.one(t, layerType, rec.layer))
+			file := filepath.Join(t.TempDir(), "sluis.yaml")
+			if err := os.WriteFile(file, []byte(files["sluis/sluis.yaml"]), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			cmd := exec.Command("go", "test", "-count=1", "-run", "^TestTheRenderedBackupDocumentStartsTheModule$", "-v",
+				"./internal/backup/app")
+			cmd.Dir = filepath.Join("..", "..")
+			cmd.Env = append(os.Environ(), "SLUIS_RENDERED_BACKUP="+file)
+			out, err := cmd.CombinedOutput()
+			if err != nil || strings.Contains(string(out), "SKIP") {
+				t.Fatalf("the module's startup over the rendered %s document: %v\n%s", name, err, out)
+			}
+		})
 	}
 }

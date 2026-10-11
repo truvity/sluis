@@ -84,6 +84,9 @@ func FromDocument(doc *config.SluisBackup) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	// The module notifies no controller: the preset's `invoke` trigger has no
+	// function to invoke here and is not built.
+	stores.NoTrigger = true
 	// The whole-estate view: the router over every module's table, the
 	// secrets of layout v5.
 	if stores.SecretsLayout != config.SecretsLayoutV5 || len(stores.DynamoDB.Tables) == 0 {
