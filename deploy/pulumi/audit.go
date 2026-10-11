@@ -280,7 +280,7 @@ func deploymentDocument(profiles map[string][]string) (string, error) {
 // auditInstallArgs is the audit library's arguments for the plan: the function's
 // role is the one sender, the profiles and preset are passed through, and the
 // archive is the choice made.
-func (a *LambdaArgs) auditInstallArgs(p *auditPlan, role pulumi.StringInput) (*auditpulumi.Args, error) {
+func (a *LambdaArgs) auditInstallArgs(p *auditPlan, role pulumi.StringInput, more ...pulumi.StringInput) (*auditpulumi.Args, error) {
 	au := a.Audit
 	if au == nil {
 		au = &AuditArgs{}
@@ -350,7 +350,7 @@ func (a *LambdaArgs) auditInstallArgs(p *auditPlan, role pulumi.StringInput) (*a
 	if created && archive.Encryption == "" && au.Keys.Archive == "" {
 		archive.Encryption = auditpulumi.EncryptionS3
 	}
-	senders := []pulumi.StringInput{role}
+	senders := append([]pulumi.StringInput{role}, more...)
 	var artifacts *auditpulumi.ArtifactsArgs
 	if a.Artifacts != nil {
 		// The same bucket; the prefix is audit's own unless the estate chose one.

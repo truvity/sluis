@@ -21,6 +21,8 @@ const BackupType = "sluis:aws:Backup"
 // the alias `live-<class>`, and the class is the alias, never the payload
 // (internal/modcall/lambdacall).
 const (
+	// ClassIssuer is the issuer calling a module's function.
+	ClassIssuer     = "issuer"
 	ClassConsole    = "console"
 	ClassAdmin      = "admin"
 	ClassBreakglass = "breakglass"

@@ -108,14 +108,51 @@ func (r Role) hosts(m Module) bool {
 	return false
 }
 
-// The roles of v1.75. Until a module is split out, the issuer hosts github,
-// slack and google besides oidc; the Cloudflare minter is its own function.
+// The roles of v1.76: one per function. The issuer hosts the oidc module alone;
+// each of the other modules is hosted by a function of its own, and the github
+// module has a second, mint-only one (D-v176-7 b).
 const (
 	RoleIssuer     = "issuer"
 	RoleCloudflare = "cloudflare"
 	RoleBackup     = "backup"
 	RoleRestore    = "restore"
+	RoleGitHub     = "github"
+	// RoleGitHubMint is the mint-only deployment of the github code. It hosts
+	// no module: it reads the github module (the App keys and the records) and
+	// writes none of it.
+	RoleGitHubMint = "github-mint"
+	RoleSlack      = "slack"
+	RoleGoogle     = "google"
 )
+
+// ModuleFunctions are the roles NewLambda makes a function for besides the
+// issuer, in a fixed order. Each is the key of [LambdaArgs.Modules] and of the
+// outputs Functions, RoleArns and AliasArns.
+func ModuleFunctions() []string {
+	return []string{RoleCloudflare, RoleGitHub, RoleGitHubMint, RoleGoogle, RoleSlack}
+}
+
+// ModuleOfFunction is the module a function of [ModuleFunctions] serves: the
+// mint-only function serves github.
+func ModuleOfFunction(role string) Module {
+	if role == RoleGitHubMint {
+		return ModuleGitHub
+	}
+	return Module(role)
+}
+
+// FunctionHosts is the modules a role of NewLambda hosts: the issuer's oidc, a
+// module function's own module, and nothing for the mint-only function, which
+// holds the github module by a read cross-grant ([CrossGrants]).
+func FunctionHosts(role string) []Module {
+	switch role {
+	case RoleIssuer:
+		return []Module{ModuleOIDC}
+	case RoleGitHubMint:
+		return nil
+	}
+	return []Module{ModuleOfFunction(role)}
+}
 
 // CrossVerb is what one role may do to a module it does not host.
 type CrossVerb string
@@ -123,8 +160,18 @@ type CrossVerb string
 const (
 	// CrossReadTable reads the module's table.
 	CrossReadTable CrossVerb = "read-table"
-	// CrossInvoke invokes the function that hosts the module.
+	// CrossReadBlobs reads the module's blob prefix and lists exactly that prefix.
+	CrossReadBlobs CrossVerb = "read-blobs"
+	// CrossInvoke invokes the functions CrossGrant.Functions names, through the
+	// alias of the grant's caller class: `live-<class>`, never the function
+	// unqualified and never $LATEST.
 	CrossInvoke CrossVerb = "invoke"
+	// CrossReadModule reads the table, the blobs and the parameters of the named
+	// modules and nothing of the rest. It is [CrossReadAll] for a role that
+	// reads a module or two: the shared key's policy (KeyPolicyArgs) grants
+	// CrossReadAll roles every module's parameters and so does not know this
+	// verb; a role with it is admitted to the key by a statement of its own.
+	CrossReadModule CrossVerb = "read-module"
 	// CrossReadAll reads the table, the blobs and the parameters of the module.
 	CrossReadAll CrossVerb = "read-all"
 	// CrossWriteAll writes them too.
@@ -135,20 +182,35 @@ const (
 // It is data, so the docs and the tests read the same list the policies are
 // rendered from.
 type CrossGrant struct {
-	Role    string
-	Verb    CrossVerb
+	Role string
+	Verb CrossVerb
+	// Modules are the modules a table, read-all or write-all grant is on.
 	Modules []Module
+	// Functions are the roles whose functions a [CrossInvoke] grant invokes, and
+	// Class the caller class the invocation is made as: the grant is on the
+	// alias `live-<Class>` of each.
+	Functions []string
+	Class     string
 }
 
 // CrossGrants are the grants beyond a role's own modules.
 //
-//   - the issuer reads the google, github and slack tables (the console writes
-//     the records the issuer reads) and invokes the functions that host them;
+//   - the issuer reads the google, github and slack tables (the records its
+//     sign-in and its console pages show; the providers' modules write them), the
+//     google snapshots (blobs), and
+//     invokes, as the class issuer, the functions that serve the providers (the
+//     github one for a run, the mint-only one for a token, slack, google,
+//     cloudflare), and, as the class console, the backup function;
+//   - the mint-only github function reads the github module and nothing more;
 //   - the backup role reads everything; the restore role writes everything and
 //     is invokable only by the administrators the stack names (RestoreInvokeStatement).
 var CrossGrants = []CrossGrant{
 	{Role: RoleIssuer, Verb: CrossReadTable, Modules: []Module{ModuleGoogle, ModuleGitHub, ModuleSlack}},
-	{Role: RoleIssuer, Verb: CrossInvoke, Modules: []Module{ModuleGoogle, ModuleGitHub, ModuleSlack, ModuleCloudflare}},
+	{Role: RoleIssuer, Verb: CrossInvoke, Class: ClassIssuer,
+		Functions: []string{RoleCloudflare, RoleGitHub, RoleGitHubMint, RoleGoogle, RoleSlack}},
+	{Role: RoleIssuer, Verb: CrossInvoke, Class: ClassConsole, Functions: []string{RoleBackup}},
+	{Role: RoleIssuer, Verb: CrossReadBlobs, Modules: []Module{ModuleGoogle}},
+	{Role: RoleGitHubMint, Verb: CrossReadModule, Modules: []Module{ModuleGitHub}},
 	{Role: RoleBackup, Verb: CrossReadAll, Modules: Modules()},
 	{Role: RoleRestore, Verb: CrossWriteAll, Modules: Modules()},
 }
