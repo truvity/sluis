@@ -152,6 +152,12 @@ type ConsoleDeps struct {
 	// GitHubConfirmations is where operators confirm removal sets over the
 	// limit. Nil confirms nothing.
 	GitHubConfirmations GitHubConfirmations
+	// GitHubOrgAppName is the name the organisation's App is created with,
+	// empty for the default (<org>-access-roster). Nil is all defaults.
+	GitHubOrgAppName func(org string) string
+	// GitHubLinkAppName is the name the link App is created with, empty for
+	// the default (<owner>-access-roster-link).
+	GitHubLinkAppName string
 	// GitHubRunnerApps is where runner Apps are kept. Nil is a deployment
 	// that keeps none.
 	GitHubRunnerApps GitHubRunnerApps

@@ -133,12 +133,20 @@ func ManifestFor(app catalogue.App, homepage, redirect, setup string, callbacks 
 // repository. No webhook: the controller asks, so nothing needs to be
 // delivered to it and no endpoint of ours has to be reachable from
 // GitHub.
-func OrganisationApp(org string) catalogue.App {
-	name := org + "-access-roster"
-	if len(name) > nameLimit {
-		// GitHub refuses a longer name on the create page. Cut rather than
-		// let the owner meet that refusal: they can still rename it there.
-		name = strings.TrimRight(name[:nameLimit], "-")
+func OrganisationApp(org string) catalogue.App { return OrganisationAppNamed(org, "") }
+
+// OrganisationAppNamed is [OrganisationApp] under the name an operator
+// configured: used as given (the configuration holds it to GitHub's limit),
+// and empty is the default, <org>-access-roster cut to the limit.
+func OrganisationAppNamed(org, configured string) catalogue.App {
+	name := configured
+	if name == "" {
+		name = org + "-access-roster"
+		if len(name) > nameLimit {
+			// GitHub refuses a longer name on the create page. Cut rather than
+			// let the owner meet that refusal: they can still rename it there.
+			name = strings.TrimRight(name[:nameLimit], "-")
+		}
 	}
 	return catalogue.App{
 		ID:   "access-roster",
@@ -155,7 +163,13 @@ func OrganisationApp(org string) catalogue.App {
 // NewManifest is [OrganisationApp]'s manifest: redirect and setup are the
 // two callbacks, after Create and after Install.
 func NewManifest(org, homepage, redirect, setup string) Manifest {
-	return ManifestFor(OrganisationApp(org), homepage, redirect, setup, nil)
+	return NewManifestNamed(org, "", homepage, redirect, setup)
+}
+
+// NewManifestNamed is [NewManifest] with the configured name of the App
+// ([OrganisationAppNamed]).
+func NewManifestNamed(org, name, homepage, redirect, setup string) Manifest {
+	return ManifestFor(OrganisationAppNamed(org, name), homepage, redirect, setup, nil)
 }
 
 // CreateURL is where the owner is sent to create the App, by a form POST

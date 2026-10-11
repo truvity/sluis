@@ -154,6 +154,11 @@ type (
 		// already names an App keeps it, and an entry overrides it or declares
 		// an organisation anew.
 		AppRefs map[string]string `yaml:"appRefs,omitempty"`
+		// AppNames names, by organisation, the App this service creates for
+		// it when an operator connects it (the organisation App's name on
+		// GitHub). Optional: an organisation with no entry is created as
+		// <org>-access-roster. GitHub's limit is 34 characters.
+		AppNames map[string]string `yaml:"appNames,omitempty"`
 	}
 
 	// ControllersSlack is what the Slack controller may change.
@@ -433,6 +438,7 @@ func (d *PolicyDocument) validateControllers() []error {
 		}
 	}
 	errs = append(errs, d.validateAppRefs()...)
+	errs = append(errs, d.validateAppNames()...)
 	for _, ws := range d.EnabledWorkspaces() {
 		if _, declared := d.Policy.Slack.Workspaces[ws]; !declared {
 			errs = append(errs, fmt.Errorf("controllers.slack.enabledWorkspaces names %s, which the policy's slack table does not declare", ws))

@@ -1061,7 +1061,7 @@
                     "type": "object"
                   },
                   "name": {
-                    "description": "Default <org>-<id>.",
+                    "description": "The App's name on GitHub, at most 34. A catalogue App's default is <org>-<id>; the `link` App's and an organisation's have a built-in default, cut to the limit. A runner entry takes none.",
                     "maxLength": 34,
                     "minLength": 1,
                     "type": "string"

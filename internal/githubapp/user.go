@@ -32,10 +32,18 @@ const linkNameSuffix = "-access-roster-link"
 // yet, and a partner company's people who never will be, could not link.
 // Anybody may install a public App, and installing this one grants
 // nothing — it has no permission on any organisation or repository.
-func LinkApp(owner string) catalogue.App {
-	name := owner + linkNameSuffix
-	if len(name) > nameLimit {
-		name = strings.TrimRight(owner[:nameLimit-len(linkNameSuffix)], "-") + linkNameSuffix
+func LinkApp(owner string) catalogue.App { return LinkAppNamed(owner, "") }
+
+// LinkAppNamed is [LinkApp] under the name an operator configured: used as
+// given (the configuration holds it to GitHub's limit), and empty is the
+// default, <owner>-access-roster-link cut to the limit.
+func LinkAppNamed(owner, configured string) catalogue.App {
+	name := configured
+	if name == "" {
+		name = owner + linkNameSuffix
+		if len(name) > nameLimit {
+			name = strings.TrimRight(owner[:nameLimit-len(linkNameSuffix)], "-") + linkNameSuffix
+		}
 	}
 	return catalogue.App{
 		ID:          "access-roster-link",
@@ -50,7 +58,13 @@ func LinkApp(owner string) catalogue.App {
 // is installed nowhere, and the one callback a person's authorization
 // returns to.
 func NewLinkManifest(owner, homepage, redirect, callback string) Manifest {
-	return ManifestFor(LinkApp(owner), homepage, redirect, "", []string{callback})
+	return NewLinkManifestNamed(owner, "", homepage, redirect, callback)
+}
+
+// NewLinkManifestNamed is [NewLinkManifest] with the configured name of the
+// App ([LinkAppNamed]).
+func NewLinkManifestNamed(owner, name, homepage, redirect, callback string) Manifest {
+	return ManifestFor(LinkAppNamed(owner, name), homepage, redirect, "", []string{callback})
 }
 
 // AuthorizeURL is where a person is sent to authorize the link App.
