@@ -421,3 +421,20 @@ func CallerOf(ctx context.Context) string {
 	s, _ := ctx.Value(callerKey{}).(string)
 	return s
 }
+
+type noRetryKey struct{}
+
+// WithoutRetry marks a call that must not be sent twice: a transport that
+// retries a failed send on its own (the AWS client does, for a throttled or
+// reset invoke) does not, for a call with this context. A method that spends
+// something single-use, such as an OAuth code, is called this way, because a
+// retry after a lost answer would find the code spent.
+func WithoutRetry(ctx context.Context) context.Context {
+	return context.WithValue(ctx, noRetryKey{}, true)
+}
+
+// NoRetry reports whether ctx was marked by [WithoutRetry].
+func NoRetry(ctx context.Context) bool {
+	v, _ := ctx.Value(noRetryKey{}).(bool)
+	return v
+}
