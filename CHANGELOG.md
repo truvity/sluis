@@ -33,6 +33,10 @@
 
 - **Breaking for callers that relied on the defaults: the Pulumi library's `LambdaArgs.SigningKeyRS256Alias` and `LambdaArgs.WrappedSigning.KeyAlias` have no default.** They defaulted to `alias/sluis-signing-rs256` and `alias/sluis-signing-wrapped`. While the library creates the RS256 key (`Keys` and `WrappedSigning` unset, `DisableSigningKeyRS256` false), `NewLambda` refuses an empty `SigningKeyRS256Alias`; when it creates the wrapping key (`WrappedSigning` set, `KeyArn` unset) it refuses an empty `WrappedSigning.KeyAlias`. Each error names the field. Set them, for example to `alias/sluis-<instance>-sign-rs256` and `alias/sluis-<instance>-wrapped`, or supply the keys with `Keys` or `WrappedSigning.KeyArn`, which are unaffected. `DefaultSigningKeyRS256Alias` and `DefaultWrappedSigningKeyAlias` are removed. An existing estate that kept the defaults sets `SigningKeyRS256Alias: "alias/sluis-signing-rs256"` and `KeyAlias: "alias/sluis-signing-wrapped"` to keep its keys. The wrapped-signing path and the wrapped entries' encryption context (`purpose: sluis-signing`) are unchanged.
 
+### Removed
+
+- **The `accessctl` alias binary is no longer shipped; use `sluisctl`.** The `accessctl` build, the `accessctl_*` archive and the `accessctl` Nix flake are gone from the release, and `sluisctl` no longer prints the deprecation notice for the old name. Point devbox packages, download URLs and Nix flake inputs at `sluisctl_*`. The OIDC client id, the kubeconfig user name and the known_hosts file keep the old name for now.
+
 ## v1.75.0
 
 ### Changed
