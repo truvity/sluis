@@ -1042,6 +1042,11 @@
                   "required": [
                     "grace"
                   ]
+                },
+                {
+                  "required": [
+                    "readCache"
+                  ]
                 }
               ]
             }
@@ -1071,6 +1076,11 @@
             "v4",
             "v5"
           ]
+        },
+        "readCache": {
+          "$ref": "#/$defs/duration",
+          "default": "5m",
+          "description": "`ssm`: how long a process keeps a document it read; a write drops it. `0s` is off. SLUIS_SECRETS_READ_CACHE_TTL overrides."
         },
         "refresh": {
           "$ref": "#/$defs/duration",

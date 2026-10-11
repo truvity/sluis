@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
+	"time"
 
 	"github.com/truvity/sluis/internal/config"
 	"github.com/truvity/sluis/internal/port"
@@ -339,6 +341,7 @@ func (c Config) overLayout(ctx context.Context, root, kmsKeyID string) (port.Sec
 	if open == nil {
 		open = openSSMState
 	}
+	open = secretstore.CachedOpener(open, c.readCacheTTL())
 	stores, err := secretstore.Open(ctx, &config.Secrets{
 		Source: "ssm", Root: root, Region: c.SecretsRegion, Endpoint: c.SecretsEndpoint,
 		KMSKeyID: kmsKeyID, Layout: config.SecretsLayoutV4,
@@ -362,6 +365,7 @@ func (c Config) overLayout5(ctx context.Context, root, kmsKeyID string) error {
 	if open == nil {
 		open = openSSMState
 	}
+	open = secretstore.CachedOpener(open, c.readCacheTTL())
 	stores, err := secretstore.OpenV5(ctx, &config.Secrets{
 		Source: "ssm", Root: root, Region: c.SecretsRegion, Endpoint: c.SecretsEndpoint,
 		KMSKeyID: kmsKeyID, Layout: config.SecretsLayoutV5,
@@ -377,3 +381,21 @@ func (c Config) overLayout5(ctx context.Context, root, kmsKeyID string) error {
 
 // decodeStrict reads a settings object into v, refusing a key v lacks.
 func decodeStrict(s port.Settings, v any) error { return s.Decode(v) }
+
+// readCacheTTL is how long a process keeps a document it read: the
+// environment (secretstore.ReadCacheEnv), else `secrets.readCache`, else
+// secretstore.DefaultReadCacheTTL. An unreadable environment value is ignored.
+func (c Config) readCacheTTL() time.Duration {
+	if v, ok := os.LookupEnv(secretstore.ReadCacheEnv); ok {
+		if v = strings.TrimSpace(v); v == "0" {
+			return 0
+		}
+		if d, err := time.ParseDuration(v); err == nil {
+			return d
+		}
+	}
+	if c.SecretsReadCache != nil {
+		return *c.SecretsReadCache
+	}
+	return secretstore.DefaultReadCacheTTL
+}

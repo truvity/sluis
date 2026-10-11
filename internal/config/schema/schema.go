@@ -232,18 +232,19 @@ func secretField(description string) m {
 // secretsSchema is `secrets`: how the names the document gives are delivered.
 func secretsSchema() m {
 	s := obj("How the secrets this document names are delivered (truvity/policy config.md section 5). Absent is `env`.", m{
-		"source":   enum("`env`: the variable SLUIS_SECRET_<NAME> (the name upper-cased, every other character an underscore), for a local run. `file`: the file <root>/<name>, read on every use, so a rotated mount takes effect without a restart. `ssm`: the SecureString <root>/internal/config/<name> in AWS SSM Parameter Store, every one under the prefix read at once and again after `refresh` (root /sluis/<instance>).", "env", "env", "file", "ssm"),
-		"root":     str("`file`: the directory the secrets are mounted under. `ssm`: the installation's root, /sluis/<instance>."),
-		"region":   str("`ssm`: the region. Unset follows the AWS SDK's own resolution."),
-		"endpoint": url("`ssm`: overrides the SSM address, for LocalStack."),
-		"refresh":  duration("`ssm`: how old a secret's copy may be before it is read again: a rotated secret reaches every instance within it.", "1m"),
-		"kmsKeyId": str("`ssm`: the id, ARN or alias of the customer-managed KMS key the parameters the service itself writes (its credentials) are encrypted with. Unset, the AWS-managed `alias/aws/ssm`. The `ssm` secrets adapter's `kmsKeyId` setting; naming another there is refused."),
-		"layout":   enum("`ssm`: the storage layout of the installation's secrets. `v4`, the default, keeps them under `<root>/internal/config`, `<root>/internal/credentials` and `<root>/external/<kind>` (docs/decisions/0041-the-secret-contract.md). `v5` puts the module first, `<root>/internal/<module>/` and `<root>/external/<module>/` (docs/decisions/0072-storage-layout-v5-module-first.md), and needs `ports.dynamodb.tables`; the two do not mix. Layouts v3 and `transition` are gone; an installation still on one runs v1.74.x first.", "v4", "v4", "v5"),
-		"grace":    duration("`ssm`: how long the previous value of a rotated client secret is still accepted: the document's previous revision, while the current one is younger than this (docs/decisions/0039-the-issuer-generates-confidential-client-secrets.md, the overlap).", "24h"),
+		"source":    enum("`env`: the variable SLUIS_SECRET_<NAME> (the name upper-cased, every other character an underscore), for a local run. `file`: the file <root>/<name>, read on every use, so a rotated mount takes effect without a restart. `ssm`: the SecureString <root>/internal/config/<name> in AWS SSM Parameter Store, every one under the prefix read at once and again after `refresh` (root /sluis/<instance>).", "env", "env", "file", "ssm"),
+		"root":      str("`file`: the directory the secrets are mounted under. `ssm`: the installation's root, /sluis/<instance>."),
+		"region":    str("`ssm`: the region. Unset follows the AWS SDK's own resolution."),
+		"endpoint":  url("`ssm`: overrides the SSM address, for LocalStack."),
+		"refresh":   duration("`ssm`: how old a secret's copy may be before it is read again: a rotated secret reaches every instance within it.", "1m"),
+		"kmsKeyId":  str("`ssm`: the id, ARN or alias of the customer-managed KMS key the parameters the service itself writes (its credentials) are encrypted with. Unset, the AWS-managed `alias/aws/ssm`. The `ssm` secrets adapter's `kmsKeyId` setting; naming another there is refused."),
+		"layout":    enum("`ssm`: the storage layout of the installation's secrets. `v4`, the default, keeps them under `<root>/internal/config`, `<root>/internal/credentials` and `<root>/external/<kind>` (docs/decisions/0041-the-secret-contract.md). `v5` puts the module first, `<root>/internal/<module>/` and `<root>/external/<module>/` (docs/decisions/0072-storage-layout-v5-module-first.md), and needs `ports.dynamodb.tables`; the two do not mix. Layouts v3 and `transition` are gone; an installation still on one runs v1.74.x first.", "v4", "v4", "v5"),
+		"readCache": duration("`ssm`: how long a process keeps a document it read; a write drops it. `0s` is off. SLUIS_SECRETS_READ_CACHE_TTL overrides.", "5m"),
+		"grace":     duration("`ssm`: how long the previous value of a rotated client secret is still accepted: the document's previous revision, while the current one is younger than this (docs/decisions/0039-the-issuer-generates-confidential-client-secrets.md, the overlap).", "24h"),
 	}, "source")
 	s["allOf"] = []any{
 		m{"if": m{"properties": m{"source": m{"enum": []string{"file", "ssm"}}}}, "then": m{"required": []string{"root"}}},
-		m{"if": m{"properties": m{"source": m{"enum": []string{"env", "file"}}}}, "then": m{"not": m{"anyOf": []any{m{"required": []string{"kmsKeyId"}}, m{"required": []string{"layout"}}, m{"required": []string{"grace"}}}}}},
+		m{"if": m{"properties": m{"source": m{"enum": []string{"env", "file"}}}}, "then": m{"not": m{"anyOf": []any{m{"required": []string{"kmsKeyId"}}, m{"required": []string{"layout"}}, m{"required": []string{"grace"}}, m{"required": []string{"readCache"}}}}}},
 	}
 	return s
 }
