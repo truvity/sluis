@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"errors"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -118,7 +117,7 @@ func recoveryServer(t *testing.T, trail *audittest.Recorder, trustedHops int) ht
 	}
 	return NewConsoleServer(ConsoleServerDeps{
 		Console: console, Authorizer: console.deps.Authorizer, Sessions: sessions, Recovery: oneRecovery{},
-		ForwardedForTrustedHops: trustedHops, Log: slog.New(slog.DiscardHandler),
+		ForwardedForTrustedHops: trustedHops, Log: capturedLogger(),
 	}).Handler()
 }
 
@@ -128,7 +127,7 @@ func recoverThroughConsole(handler http.Handler) *httptest.ResponseRecorder {
 	request.Header.Set("Authorization", "Bearer the-proof")
 	request.Header.Set("X-Forwarded-For", "198.51.100.23, 10.0.0.1")
 	request.Header.Set("User-Agent", "curl/8.9")
-	request.Header.Set("X-Request-Id", "gw-7")
+	request.Header.Set("X-Request-Id", "gw-0000007")
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
 	return response
@@ -145,9 +144,12 @@ func TestARecoverySignInIsRefusedWithoutItsRecord(t *testing.T) {
 
 	trail.Fail = errors.New("the writer refused the record")
 	refused := recoverThroughConsole(handler)
-	if refused.Code != http.StatusServiceUnavailable || !strings.Contains(refused.Body.String(), "audit trail could not be written") {
-		t.Errorf("recovery while the trail cannot be written = %d %q, want 503 saying why", refused.Code, refused.Body.String())
+	if refused.Code != http.StatusServiceUnavailable {
+		t.Errorf("recovery while the trail cannot be written = %d %q, want 503", refused.Code, refused.Body.String())
 	}
+	// The operator is told by the log, under the reference: the page is the
+	// same for everyone who reaches it.
+	wantRefused(t, refused, "Server error", []string{"audit"}, "audit trail could not be written")
 	if cookie := refused.Header().Get("Set-Cookie"); cookie != "" {
 		t.Errorf("a refused recovery set a session: %s", cookie)
 	}
@@ -172,7 +174,7 @@ func TestARecoverySignInIsRefusedWithoutItsRecord(t *testing.T) {
 		t.Errorf("the recovery record = %v", got)
 	}
 	// Through the handler, so the request is read as a deployment reads it.
-	if c := got.GetContext(); emit.Client(c) != "198.51.100.23" || c.GetUserAgent() != "curl/8.9" || c.GetRequestId() != "gw-7" {
+	if c := got.GetContext(); emit.Client(c) != "198.51.100.23" || c.GetUserAgent() != "curl/8.9" || c.GetRequestId() != "gw-0000007" {
 		t.Errorf("request = %v, want the forwarded client, its agent and the gateway's id", c)
 	}
 }
@@ -228,7 +230,7 @@ func TestRecoveryTurnedOffRefusesWithAMessageAndARecord(t *testing.T) {
 	}
 	handler := NewConsoleServer(ConsoleServerDeps{
 		Console: console, Authorizer: console.deps.Authorizer, Sessions: sessions, Recovery: nil,
-		Log: slog.New(slog.DiscardHandler),
+		Log: capturedLogger(),
 	}).Handler()
 
 	request := httptest.NewRequest(http.MethodPost, "/login/recovery", nil)
@@ -236,9 +238,12 @@ func TestRecoveryTurnedOffRefusesWithAMessageAndARecord(t *testing.T) {
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
 	body := response.Body.String()
-	if response.Code != http.StatusForbidden || !strings.Contains(body, "turned off") || !strings.Contains(body, "recovery.enabled") {
-		t.Errorf("recovery turned off = %d %q, want 403 saying it is turned off", response.Code, body)
+	if response.Code != http.StatusForbidden {
+		t.Errorf("recovery turned off = %d %q, want 403", response.Code, body)
 	}
+	// A caller who is refused is not told which setting is off, nor that
+	// there is a setting; the operator finds it in the log by the reference.
+	wantRefused(t, response, "Not authorised", []string{"turned off", "recovery.enabled", "configuration"}, "recovery.enabled is false")
 	if response.Header().Get("Set-Cookie") != "" {
 		t.Error("a refused recovery set a session")
 	}
