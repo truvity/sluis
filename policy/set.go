@@ -110,13 +110,6 @@ func (s *Set) ScopeGroups(audience string, held []string) (kept, dropped []strin
 	return s.declared.ScopeGroups(audience, held)
 }
 
-// ClaimsFor merges the claims fragments of groups -- see [Policy.ClaimsFor].
-func (s *Set) ClaimsFor(groups []string) map[string]any {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.declared.ClaimsFor(groups)
-}
-
 // Explain answers what a token for audience would carry for in, against the
 // policy in force -- see [Policy.Explain]. Nothing is minted or signed.
 func (s *Set) Explain(audience string, in Input) (Explanation, error) {
