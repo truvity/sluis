@@ -119,7 +119,7 @@ func (d *Draft) Decide(vouches map[string]rails.Vouch, confirmed Confirmed) Deci
 		chBreaker[p.lc.name] = b
 		if b != nil && !b.Confirmed {
 			chBlocked[p.lc.name] = true
-			held = append(held, Held{Channel: p.lc.name, Change: "remove", Reason: fmt.Sprintf(
+			held = append(held, Held{Channel: p.lc.name, Change: "remove", Code: CodeRemovalLimitChannel, Reason: fmt.Sprintf(
 				"over the removal limit: %d of %d members of %s; an operator confirms this set", b.Affected, b.Total, p.lc.name)})
 		}
 	}
@@ -145,7 +145,7 @@ func (d *Draft) Decide(vouches map[string]rails.Vouch, confirmed Confirmed) Deci
 		wsBreaker = rails.CheckBreaker(distinct, lines, len(managed), confirmed.covers(rails.Fingerprint(lines)))
 		if wsBreaker != nil && !wsBreaker.Confirmed {
 			wsBlocked = true
-			held = append(held, Held{Change: "remove", Reason: fmt.Sprintf(
+			held = append(held, Held{Change: "remove", Code: CodeRemovalLimitWorkspace, Reason: fmt.Sprintf(
 				"over the removal limit: %d of %d managed members of the workspace; an operator confirms this set", wsBreaker.Affected, wsBreaker.Total)})
 		}
 	}

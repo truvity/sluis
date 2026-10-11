@@ -1,5 +1,9 @@
 ## Unreleased
 
+### Changed
+
+- **A Slack hold is audited once per transition into held, identified by a stable reason code, not by its sentence.** `roster.slack_action.held` was keyed by channel, person, change and the reason's free text, and some reasons carry counts that move while the hold stays the same hold (the removal limit's "4 of 7 members" becomes "5 of 8" as people come and go), so a hold that sat unchanged was audited again on every pass for as long as the counts kept moving. `reconcile.Held` now carries a `Code` (`reconcile.Code*`, such as `removal-limit-channel`, `no-slack-account`, `archived`) and its key is channel, person, change and code; the sentence stays in the audit record's reason. A hold whose code changes is audited again; a sentence that changes under the same code is logged at info and not audited. The keys the previous process persisted in the workspace report (`recorded`) carry the old sentences, so the first pass after the upgrade audits each current hold once more. The cold-start seed itself (the report's `recorded`, read back from the store) was sound and is now held by a test over cold-starting ticks. The GitHub roster is not affected: its held-row key is team, address, login, action and state, with no free text.
+
 ## v1.75.0-rc.13
 
 ### Changed
