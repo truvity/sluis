@@ -1,5 +1,9 @@
 ## Unreleased
 
+### Removed
+
+- **`claim_merge` is removed; a policy that declares it is refused.** Translating groups into a consumer's filters belongs to the consumer.
+
 ## v1.75.0-rc.11
 
 ### Added
@@ -31,7 +35,7 @@
 
 ### Added
 
-- **`claim_merge` joins named list claims into one string instead of unioning them.** Groups' fragments that each carry one conjunct of a filter, such as `vm_access.logs_extra_stream_filters`, were unioned into a list, which vmauth turns into repeated query args that VictoriaLogs ANDs, so two grants returned no rows. A policy now declares `claim_merge.<dotted path>` with `join`, optional `prefix` and `suffix`, and `as` (`list`, the default, or `string`); the strings of every merged group are sorted, de-duplicated, joined and wrapped, e.g. `_stream:{A or B}`. The join runs on the groups a token carries, so under `groupsScoping: enforce` it sees only the kept groups, on every token path; with no contributing group the key is absent. Load refuses an empty `join`, an unknown `as`, a malformed path, and a fragment that sets a declared path to anything but a list of strings. See [policy-groups.md](docs/reference/sluis/policy-groups.md#joined-claims).
+- **`claim_merge` joins named list claims into one string instead of unioning them.** Groups' fragments that each carry one conjunct of a filter, such as `vm_access.logs_extra_stream_filters`, were unioned into a list, which vmauth turns into repeated query args that VictoriaLogs ANDs, so two grants returned no rows. A policy now declares `claim_merge.<dotted path>` with `join`, optional `prefix` and `suffix`, and `as` (`list`, the default, or `string`); the strings of every merged group are sorted, de-duplicated, joined and wrapped, e.g. `_stream:{A or B}`. The join runs on the groups a token carries, so under `groupsScoping: enforce` it sees only the kept groups, on every token path; with no contributing group the key is absent. Load refuses an empty `join`, an unknown `as`, a malformed path, and a fragment that sets a declared path to anything but a list of strings.
 - **Connecting a GitHub organisation from the console works on layout v5.** The App GitHub creates is kept as a catalogue App (its key at `internal/github/apps/<id>/<ref>`) and the organisation's record names it (`app_ref`), the shape `sluis migrate v5` gives an organisation. Before, the create callback failed with "on layout v5 the key is the App's, not <org>'s; name the App in app_ref", so a fresh connect and a reconnect after Disconnect were impossible. The App's id is its GitHub slug (`<org>-access-roster` when the slug cannot be an id); a `controllers.github.appRefs` entry still wins and then nothing is made. The install step records the installation on that App. Disconnect on layout v5 now also deletes the organisation's own App and its key, not an App another organisation or `appRefs` names. Layout v4 and Kubernetes are unchanged. The Apps list no longer shows an App an organisation names as a leftover to disconnect; the organisation's controller row stands for it. A failed callback wrote nothing, so no cleanup is needed.
 
 ## v1.75.0-rc.8

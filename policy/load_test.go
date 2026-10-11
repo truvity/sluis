@@ -79,11 +79,6 @@ var policyFields = map[string]mergeRule{
 		declare: "version: 1\nclaims: { g: { tier: one } }\n",
 		twice:   clash,
 	},
-	"ClaimMerge": {
-		rule:    "per claim path; a path declared in two files is a clash",
-		declare: "version: 1\nclaim_merge: { a.b: { join: ' or ' } }\n",
-		twice:   clash,
-	},
 	"Lifetimes": {
 		rule:    "per key; a lifetime in two files is a clash",
 		declare: "version: 1\nlifetimes: { default: 1h }\n",
@@ -359,8 +354,6 @@ groups:
 `,
 		`claims:
   devel:k8s:admin: { tier: [vpc], vm: { f: [x] } }
-claim_merge:
-  vm.f: { join: ' or ', prefix: '{', suffix: '}', as: string }
 lifetimes:
   default: 12h
   devel:k8s:admin: 8h
