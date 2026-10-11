@@ -445,6 +445,11 @@ func (p *Policy) mergeLayer(other Policy, from string) error {
 	}); err != nil {
 		return err
 	}
+	if err := mergeTable(&p.ClaimMerge, other.ClaimMerge, func(path string) error {
+		return fmt.Errorf("%s: claim_merge for %q is declared twice", from, path)
+	}); err != nil {
+		return err
+	}
 	if err := mergeTable(&p.Lifetimes, other.Lifetimes, func(name string) error {
 		return fmt.Errorf("%s: lifetime for %q is declared twice", from, name)
 	}); err != nil {

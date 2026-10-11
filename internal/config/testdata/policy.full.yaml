@@ -33,7 +33,9 @@ groups:
     matchers:
       - email: ada@example.com
 claims:
-  prod:shop:deployer: {team: shop}
+  prod:shop:deployer: {team: shop, filters: [a]}
+claim_merge:
+  filters: {join: " or ", prefix: "{", suffix: "}", as: list}
 lifetimes:
   default: 4h
   prod:shop:deployer: 1h
