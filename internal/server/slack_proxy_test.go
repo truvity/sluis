@@ -454,7 +454,7 @@ func TestTheSlackModuleAnswersFromTheDirectoryFactsOfTheEnvelopeAndRefusesBadOne
 type invoker struct {
 	server    *modcall.Server
 	qualifier []string
-	attempts  []int
+	once      []bool
 }
 
 func (f *invoker) Invoke(ctx context.Context, in *awslambda.InvokeInput, opts ...func(*awslambda.Options)) (*awslambda.InvokeOutput, error) {
@@ -462,7 +462,7 @@ func (f *invoker) Invoke(ctx context.Context, in *awslambda.InvokeInput, opts ..
 	for _, set := range opts {
 		set(&o)
 	}
-	f.qualifier, f.attempts = append(f.qualifier, *in.Qualifier), append(f.attempts, o.RetryMaxAttempts)
+	f.qualifier, f.once = append(f.qualifier, *in.Qualifier), append(f.once, o.Retryer != nil)
 	out, err := lambdacall.Serve(ctx, f.server, in.Payload, *in.Qualifier)
 	return &awslambda.InvokeOutput{StatusCode: 200, Payload: out}, err
 }
@@ -495,8 +495,8 @@ func TestASlackPageRoundTripsThroughALambdaFunctionOnTheConsoleAlias(t *testing.
 	if got := h.finish(t, begun, "acme", acmeTeam); got.Code != 302 {
 		t.Errorf("the callback through the function = %d %s", got.Code, got.Body)
 	}
-	if last := fn.attempts[len(fn.attempts)-1]; last != 1 {
-		t.Errorf("the callback's call was sent with retry bound %d, want one attempt", last)
+	if !fn.once[len(fn.once)-1] {
+		t.Errorf("the callback's call was sent with the client's own retries, want one attempt")
 	}
 	if h.row(ctx, t, "acme").GetConnectionState() != slackInstalled {
 		t.Error("the install through the function did not finish")
