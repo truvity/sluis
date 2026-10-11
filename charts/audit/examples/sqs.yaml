@@ -18,7 +18,7 @@ presets:
     bucket: audit-eu-example-1
     region: eu-west-1
     prefix: audit/app/
-    key_alias: alias/audit-archive
+    key_alias: alias/sluis-example-audit-archive
 profiles:
   security:
     frameworks: [security]

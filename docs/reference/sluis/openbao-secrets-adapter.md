@@ -86,7 +86,7 @@ config:
   signingKey:
     file: null                      # no key file: KMS holds the keys
     kmsWrapped:
-      keyId: alias/sluis-signing
+      keyId: alias/sluis-example-sign
       region: eu-west-1
       stateSecret: issuer/state-secret      # a name in `secrets` below
       rotateEvery: 24h              # the rotation alert fires at 26h

@@ -25,7 +25,7 @@ presets:
     region: eu-example-1
     prefix: audit/
     # Objects are encrypted under this KMS key; the alias is a name, never an ARN.
-    key_alias: alias/audit-archive
+    key_alias: alias/sluis-example-audit-archive
   # The same preset on Cloudflare R2 instead (no KMS key, no Object Lock):
   #   standard:
   #     bucket: audit-archive
@@ -128,7 +128,7 @@ jobs:
         # Names the installation in the encryption context; stable, not secret.
         instance: audit
         seal:
-          key: alias/audit-seal
+          key: alias/sluis-example-audit-seal
       sink:
         url: http://audit:8080
     # OpenBAO transit instead of KMS, signing with a token from a Secret:

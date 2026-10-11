@@ -36,7 +36,7 @@ import auditpulumi "github.com/truvity/sluis/audit/deploy/pulumi"
 
 a, err := auditpulumi.New(ctx, "audit", &auditpulumi.Args{
 	// The estate's keys, by alias: the library looks them up and creates none.
-	Keys: auditpulumi.KeysArgs{Archive: "alias/audit-archive", Seal: "alias/audit-seal"},
+	Keys: auditpulumi.KeysArgs{Archive: "alias/sluis-example-audit-archive", Seal: "alias/sluis-example-audit-seal"},
 	// Required: the storage of each install preset. `security` needs `standard`.
 	Presets: map[string]auditpulumi.PresetStorage{
 		"standard": {Bucket: "acme-audit-trial", Create: true},

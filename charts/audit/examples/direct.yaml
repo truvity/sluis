@@ -24,7 +24,7 @@ presets:
     bucket: audit-eu-example-1
     region: eu-example-1
     prefix: audit/app/
-    key_alias: alias/audit-archive
+    key_alias: alias/sluis-example-audit-archive
 profiles:
   security:
     frameworks: [security]
@@ -149,7 +149,7 @@ jobs:
       apiVersion: audit.truvity.github.io/audit-notary/v2
       signer:
         kms:
-          key: alias/audit-seal
+          key: alias/sluis-example-audit-seal
       settle: 10m
       sink:
         url: http://audit:8080
@@ -163,7 +163,7 @@ jobs:
       apiVersion: audit.truvity.github.io/audit-verify/v2
       deployment: /etc/audit/deployment.yaml
       # The roots this check trusts, by thumbprint
-      # (`audit key public --kms-key alias/audit-seal --thumbprint`). Nothing else
+      # (`audit key public --kms-key alias/sluis-example-audit-seal --thumbprint`). Nothing else
       # in the bucket is believed.
       seals:
         roots: [4fVY0m1lq1mWnE7yOa0zYk0o1lq9n2h8bVd3sLQ4wXk]

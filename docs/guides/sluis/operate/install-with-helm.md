@@ -35,7 +35,7 @@ issuer:
   url: https://access.example.com # stable for the life of the installation
 aws: {region: eu-west-1, table: sluis, bucket: sluis-blobs}
 signingKey:
-  kmsWrapped: {keyId: alias/sluis-signing}
+  kmsWrapped: {keyId: alias/sluis-example-sign}
 recovery: {enabled: true, serviceAccount: sluis-recovery, audience: sluis-recovery}
 console: {client: access-console}
 oauthClient: {provider: default}

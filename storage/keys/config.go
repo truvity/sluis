@@ -135,8 +135,8 @@ func (e Entry) MarshalJSON() ([]byte, error) {
 //
 //	keys:
 //	  adapter: kms
-//	  sign: alias/sluis-signing
-//	  seal: {key: alias/audit-seal, context: off}
+//	  sign: alias/sluis-example-sign
+//	  seal: {key: alias/sluis-example-audit-seal, context: off}
 type Config struct {
 	Adapter string
 	Keys    map[Purpose]Entry

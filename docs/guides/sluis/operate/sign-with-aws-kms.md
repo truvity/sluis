@@ -6,7 +6,7 @@ Keep the issuer's signing key in AWS KMS so the master key is never in a pod, a 
 
 ## Before you start
 
-- Create one `ECC_NIST_P384` `SIGN_VERIFY` key with an alias such as `alias/sluis-signing`. For RS256 relying parties (Kargo, EKS's OIDC provider) add one `RSA_2048`, `RSA_3072` or `RSA_4096` `SIGN_VERIFY` key under `signingKey.kms.additional`.
+- Create one `ECC_NIST_P384` `SIGN_VERIFY` key with an alias such as `alias/sluis-<instance>-sign`. For RS256 relying parties (Kargo, EKS's OIDC provider) add one `RSA_2048`, `RSA_3072` or `RSA_4096` `SIGN_VERIFY` key under `signingKey.kms.additional`.
 
 - Give the pod an AWS identity: Pod Identity, or `serviceAccount.awsIdentity: irsa` ([chart values](../../../reference/sluis/chart-values.md)).
 
@@ -37,7 +37,7 @@ Keep the issuer's signing key in AWS KMS so the master key is never in a pod, a 
      signingKey:
        file: null
        kms:
-         keys: [alias/sluis-signing]
+         keys: [alias/sluis-<instance>-sign]
          region: eu-west-1
          stateSecret: issuer/state-secret
    ```

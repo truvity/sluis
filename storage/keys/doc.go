@@ -14,8 +14,8 @@
 //
 //	keys:
 //	  adapter: kms
-//	  sign: alias/sluis-signing
-//	  seal: {key: alias/audit-seal, context: default}
+//	  sign: alias/sluis-example-sign
+//	  seal: {key: alias/sluis-example-audit-seal, context: default}
 //	  conceal: {key: alias/audit-data, context: {app: audit}}
 //
 // A key is a string (its alias or transit name, default context) or
