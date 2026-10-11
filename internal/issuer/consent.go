@@ -64,7 +64,7 @@ func (s *signIn) askAgentConsent(w http.ResponseWriter, r *http.Request, err err
 	token, err := s.deps.State.IssueAgentConsent(request, access.AgentConsentActor(who.Subject, who.SSO))
 	if err != nil {
 		s.deps.log().ErrorContext(r.Context(), "an agent-consent token could not be minted", logattr.SafeError("error", err))
-		http.Error(w, "the sign-in could not be completed", http.StatusInternalServerError)
+		refusalPage(w, r, http.StatusInternalServerError, "the sign-in could not be completed", nil)
 
 		return true
 	}
@@ -72,7 +72,7 @@ func (s *signIn) askAgentConsent(w http.ResponseWriter, r *http.Request, err err
 	nonce, err := scriptNonce()
 	if err != nil {
 		s.deps.log().ErrorContext(r.Context(), "a consent page's script nonce could not be drawn", logattr.SafeError("error", err))
-		http.Error(w, "the sign-in could not be completed", http.StatusInternalServerError)
+		refusalPage(w, r, http.StatusInternalServerError, "the sign-in could not be completed", nil)
 
 		return true
 	}
@@ -187,7 +187,7 @@ func (s *signIn) acceptAgent(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, access.AgentConsentFormLimit)
 	if err := r.ParseForm(); err != nil {
 		recordLoginFailure(r.Context(), LoginBadRequest)
-		http.Error(w, "that form could not be read", http.StatusBadRequest)
+		refusalPage(w, r, http.StatusBadRequest, "that form could not be read", nil)
 
 		return
 	}
@@ -201,7 +201,7 @@ func (s *signIn) acceptAgent(w http.ResponseWriter, r *http.Request) {
 
 	if request == "" || s.deps.Storage == nil || s.deps.SSO == nil {
 		recordLoginFailure(r.Context(), LoginBadState)
-		http.Error(w, "this acceptance is not valid any more; start again from the application", http.StatusBadRequest)
+		refusalPage(w, r, http.StatusBadRequest, "this acceptance is not valid any more; start again from the application", nil)
 
 		return
 	}
@@ -209,7 +209,7 @@ func (s *signIn) acceptAgent(w http.ResponseWriter, r *http.Request) {
 	pending, err := s.deps.Storage.Pending(request)
 	if err != nil {
 		recordLoginFailure(r.Context(), LoginNotWaiting)
-		http.Error(w, "that sign-in is no longer waiting to be completed", http.StatusBadRequest)
+		refusalPage(w, r, http.StatusBadRequest, "that sign-in is no longer waiting to be completed", nil)
 
 		return
 	}
@@ -253,7 +253,7 @@ func (s *signIn) acceptAgent(w http.ResponseWriter, r *http.Request) {
 		}
 
 		recordLoginFailure(r.Context(), LoginNotWaiting)
-		http.Error(w, "that sign-in is no longer waiting to be completed", http.StatusBadRequest)
+		refusalPage(w, r, http.StatusBadRequest, "that sign-in is no longer waiting to be completed", nil)
 
 		return
 	}
