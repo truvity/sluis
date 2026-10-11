@@ -39,7 +39,7 @@ const policy = "https://github.com/truvity/policy/schemas/"
 // schemas/config/<name>.schema.json. The first three are the service documents,
 // one per process; `policy` is the one policy document they all name; `installation`
 // is what `sluisctl render` writes both from.
-var Names = []string{"sluis", "serve", "controller-github", "controller-slack", "sluis-backup", "policy", "installation"}
+var Names = []string{"sluis", "serve", "controller-github", "controller-slack", "sluis-backup", "sluis-google", "policy", "installation"}
 
 // Services are the service documents: the ones a process is started with.
 // `sluis` is the one document of the one process (v3): the serve settings and,
@@ -552,6 +552,8 @@ func Schema(name string) ([]byte, bool) {
 		s = controllerSlackSchema()
 	case "sluis-backup":
 		s = sluisBackupSchema()
+	case "sluis-google":
+		s = sluisGoogleSchema()
 	case "policy":
 		s = policySchema()
 	case "installation":
@@ -693,5 +695,38 @@ func sluisBackupSchema() m {
 	s["$id"] = ID("sluis-backup", apiVersionOf(props))
 	s["title"] = "sluis backup"
 	s["description"] = "The configuration of `sluis backup`, the backup module (docs/decisions/0071): a scheduled export of the installation, sealed with the archive key, into an S3 bucket." + secretsNote
+	return s
+}
+
+// sluisGoogleSchema is the Google module's document: the keys of `serve` that
+// open the storage it reads and writes (its own table, the hub cache in the
+// blob store, the workspaces' keys), and `google`. The module has no issuer,
+// console, signer, policy or audit trail, so none of their keys are here.
+func sluisGoogleSchema() m {
+	s := serveSchema()
+	all, _ := s["properties"].(m)
+	props := m{"apiVersion": m{"const": Group + "/sluis-google/v1", "description": "Which version of which document this is: the Google module's own document (docs/decisions/0071)."}}
+	for _, k := range []string{"instance", "log", "probes", "ports", "platform", "preset", "adapters", "secrets"} {
+		props[k] = all[k]
+	}
+	oauth := all["oauthClient"].(m)["properties"].(m)
+	dir := directorySchema()["properties"].(m)["workspaces"].(m)
+	dir["description"] = "The workspaces this deployment declares: each adopted at start, and its service-account key read when it is first used. One that cannot be adopted stops the module. A workspace the console connects is kept in the module's table, with its credential in the secrets store, and is refreshed the same way."
+	props["google"] = obj("What the Google module reads and how often it refreshes. The module is the only writer of the directory snapshots (the hub cache in the blob store); the issuer only reads them.", m{
+		"workspaces": dir,
+		"oauthClient": obj("The OAuth client registered once with Google: needed to reopen a workspace that was connected by consent (a stored refresh token). Not needed for service-account keys.", m{
+			"id":       oauth["id"],
+			"provider": oauth["provider"],
+		}),
+		"refreshInterval": duration("How often a snapshot is refreshed: the schedule's period. A snapshot younger than three quarters of it is not read again, whatever runner asks.", "15m"),
+		"freshnessWindow": duration("How old a snapshot may be and still be answered from. The issuer reads it with the same window.", "30m"),
+		"probeInterval":   duration("How often the loop probes each workspace's credential (the loop only: a scheduled function does not probe).", "5m"),
+	})
+	s["properties"] = props
+	s["required"] = []string{"apiVersion", "google"}
+	delete(s, "allOf")
+	s["$id"] = ID("sluis-google", apiVersionOf(props))
+	s["title"] = "sluis google"
+	s["description"] = "The configuration of `sluis google`, the Google module (docs/decisions/0071): the refresh of the Google Workspace directory snapshots, and the one holder of the workspaces' keys." + secretsNote
 	return s
 }

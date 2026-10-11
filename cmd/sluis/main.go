@@ -11,8 +11,7 @@
 //
 // The command line is a urfave/cli v3 tree (commands.go): one multi-call binary,
 // one module per process (docs/decisions/0071). The module commands (issuer, console, github, slack,
-// cloudflare, google, backup) run today's behaviour for their role where one exists, and answer "not yet
-// split" where it does not; the commands above stay as they are.
+// cloudflare, google, backup) each run their role; the commands above stay as they are.
 //
 // Each subcommand is configured by one file and reads nothing else (see
 // internal/config). Everything a subcommand decides is assembled in its own
