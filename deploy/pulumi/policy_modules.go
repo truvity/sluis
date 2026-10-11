@@ -34,8 +34,10 @@ type ModuleEnv struct {
 }
 
 var (
-	ddbReadActions  = []string{ddbGetItem, ddbQuery, ddbScan, ddbDescribeTable}
-	ddbWriteActions = []string{ddbGetItem, ddbPutItem, ddbUpdateItem, ddbDeleteItem, ddbQuery, ddbScan, ddbDescribeTable}
+	// ddbSnapshotActions are a read by key, for the issuer's view of a snapshot.
+	ddbSnapshotActions = []string{ddbGetItem, ddbQuery}
+	ddbReadActions     = []string{ddbGetItem, ddbQuery, ddbScan, ddbDescribeTable}
+	ddbWriteActions    = []string{ddbGetItem, ddbPutItem, ddbUpdateItem, ddbDeleteItem, ddbQuery, ddbScan, ddbDescribeTable}
 	// ddbMaintenanceDenied are the writes a role other than restore is denied on
 	// the maintenance partition. BatchWriteItem and TransactWriteItems are not
 	// granted to any role; they are named so that a grant added later does not
@@ -114,8 +116,9 @@ func ModuleRoleStatements(env ModuleEnv, role Role) ([]map[string]any, error) {
 	// Cross-grants.
 	keyActions := map[string]bool{}
 	var crossArns []string
-	if len(env.MinterRefs) > 0 && !own[ModuleCloudflare] {
-		// credentials.preset: the minter's credential, read and never written.
+	if len(env.MinterRefs) > 0 && !own[ModuleCloudflare] && role.Name != RoleIssuer {
+		// credentials.preset: the minter's credential, read and never written. The
+		// issuer has none: it asks the cloudflare function to mint (v1.76 E-FIN).
 		var refs []string
 		for _, r := range sortedStrings(env.MinterRefs) {
 			refs = append(refs, arnPrefix+"ssm:"+env.Region+":"+env.Account+":parameter"+env.Modules.rootOf()+"/"+r)
@@ -271,6 +274,12 @@ func (env ModuleEnv) crossStatements(v CrossVerb, m Module) ([]statement, []stri
 			return nil, nil, err
 		}
 		return []statement{tableStatement(sid+"Table", arn, ddbReadActions)}, nil, nil
+	case CrossReadSnapshot:
+		arn, err := env.tableArn(m)
+		if err != nil {
+			return nil, nil, err
+		}
+		return []statement{tableStatement(sid+"Table", arn, ddbSnapshotActions)}, nil, nil
 	case CrossReadBlobs:
 		return env.blobStatements(m, sid, []string{s3GetObject}), nil, nil
 	case CrossReadAll, CrossReadModule, CrossWriteAll:

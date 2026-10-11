@@ -89,35 +89,11 @@
     {
       "Action": [
         "dynamodb:GetItem",
-        "dynamodb:Query",
-        "dynamodb:Scan",
-        "dynamodb:DescribeTable"
-      ],
-      "Effect": "Allow",
-      "Resource": "arn:aws:dynamodb:r1:111122223333:table/sluis-i1-github",
-      "Sid": "SluisCrossGithubTable"
-    },
-    {
-      "Action": [
-        "dynamodb:GetItem",
-        "dynamodb:Query",
-        "dynamodb:Scan",
-        "dynamodb:DescribeTable"
+        "dynamodb:Query"
       ],
       "Effect": "Allow",
       "Resource": "arn:aws:dynamodb:r1:111122223333:table/sluis-i1-google",
       "Sid": "SluisCrossGoogleTable"
-    },
-    {
-      "Action": [
-        "dynamodb:GetItem",
-        "dynamodb:Query",
-        "dynamodb:Scan",
-        "dynamodb:DescribeTable"
-      ],
-      "Effect": "Allow",
-      "Resource": "arn:aws:dynamodb:r1:111122223333:table/sluis-i1-slack",
-      "Sid": "SluisCrossSlackTable"
     },
     {
       "Action": "lambda:InvokeFunction",
@@ -125,8 +101,7 @@
       "Resource": [
         "arn:aws:lambda:r1:111122223333:function:sluis-i1-cloudflare:live-issuer",
         "arn:aws:lambda:r1:111122223333:function:sluis-i1-github:live-issuer",
-        "arn:aws:lambda:r1:111122223333:function:sluis-i1-google:live-issuer",
-        "arn:aws:lambda:r1:111122223333:function:sluis-i1-slack:live-issuer"
+        "arn:aws:lambda:r1:111122223333:function:sluis-i1-google:live-issuer"
       ],
       "Sid": "SluisCrossInvokeIssuer"
     },
@@ -135,6 +110,7 @@
       "Effect": "Allow",
       "Resource": [
         "arn:aws:lambda:r1:111122223333:function:sluis-i1-backup:live-console",
+        "arn:aws:lambda:r1:111122223333:function:sluis-i1-cloudflare:live-console",
         "arn:aws:lambda:r1:111122223333:function:sluis-i1-github:live-console",
         "arn:aws:lambda:r1:111122223333:function:sluis-i1-google:live-console",
         "arn:aws:lambda:r1:111122223333:function:sluis-i1-slack:live-console"
@@ -179,10 +155,8 @@
       },
       "Effect": "Deny",
       "Resource": [
-        "arn:aws:dynamodb:r1:111122223333:table/sluis-i1-github",
         "arn:aws:dynamodb:r1:111122223333:table/sluis-i1-google",
-        "arn:aws:dynamodb:r1:111122223333:table/sluis-i1-oidc",
-        "arn:aws:dynamodb:r1:111122223333:table/sluis-i1-slack"
+        "arn:aws:dynamodb:r1:111122223333:table/sluis-i1-oidc"
       ],
       "Sid": "SluisMaintenanceDeny"
     },

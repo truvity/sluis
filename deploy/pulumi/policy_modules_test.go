@@ -2,6 +2,7 @@ package sluispulumi
 
 import (
 	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -90,17 +91,20 @@ func TestModuleRoleOwnPattern(t *testing.T) {
 
 func TestModuleRoleIssuerCrossGrants(t *testing.T) {
 	doc := rendered(t, testRole(RoleIssuer))
-	// The issuer hosts oidc alone: the providers' tables are read, their
-	// functions are invoked through the alias of the issuer class, the backup
-	// through the console's, and the minter's state is not reached.
-	for _, want := range []string{"tbl:oidc", "tbl:google", "tbl:github", "tbl:slack",
+	// The issuer hosts oidc alone: it reads the Google snapshot (table by key,
+	// blobs) and no other provider's table, invokes github, google and cloudflare
+	// as the class issuer, and the console's functions as the class console. No
+	// provider parameter, minter reference or provider table is reached.
+	for _, want := range []string{"tbl:oidc", "tbl:google",
 		"fn:cloudflare:live-issuer", "fn:github:live-issuer", "fn:google:live-issuer",
-		"fn:slack:live-issuer", "fn:backup:live-console", "bkt/google/*"} {
+		"fn:cloudflare:live-console", "fn:github:live-console", "fn:google:live-console", "fn:slack:live-console",
+		"fn:backup:live-console", "bkt/google/*"} {
 		if !strings.Contains(doc, want) {
 			t.Errorf("missing %q", want)
 		}
 	}
-	for _, not := range []string{"tbl:cloudflare", "internal/cloudflare", "internal/google", "internal/github", "internal/slack",
+	for _, not := range []string{"tbl:cloudflare", "tbl:github", "tbl:slack", "fn:slack:live-issuer", "SluisCrossCloudflareMinter",
+		"SluisCrossGithub", "SluisCrossSlack", "SluisCrossGoogleParameters", "internal/cloudflare", "internal/google", "internal/github", "internal/slack",
 		"external/google", "bkt/github", "bkt/slack", "fn:issuer"} {
 		if strings.Contains(doc, not) {
 			t.Errorf("issuer reaches %q: %s", not, doc)
@@ -113,8 +117,8 @@ func TestModuleRoleIssuerCrossGrants(t *testing.T) {
 	}
 	for _, s := range st {
 		sid := s["Sid"].(string)
-		if strings.HasPrefix(sid, "SluisCross") && strings.HasSuffix(sid, "Table") && len(s["Action"].([]string)) != len(ddbReadActions) {
-			t.Errorf("%s is not read-only: %v", sid, s)
+		if strings.HasPrefix(sid, "SluisCross") && strings.HasSuffix(sid, "Table") && !slices.Equal(s["Action"].([]string), ddbSnapshotActions) {
+			t.Errorf("%s is more than a read by key: %v", sid, s)
 		}
 	}
 	// A function without an ARN is an error, never a grant on nothing.
@@ -251,9 +255,9 @@ func TestGoogleRoleNamesGoogleInStorageAndPaths(t *testing.T) {
 	}
 }
 
-// credentials.preset: a role that does not host the Cloudflare module reads the
-// minter's parameter and nothing else of it; the module's own role has it
-// already and gets no extra statement.
+// credentials.preset: the issuer holds no reference to the minter's parameter
+// whatever the document declares (it asks the cloudflare function to mint, v1.76
+// E-FIN), and the module's own role has it already and gets no extra statement.
 func TestModuleRoleMinterCrossGrant(t *testing.T) {
 	env := testModuleEnv()
 	env.MinterRefs = []string{"internal/cloudflare/main/minter"}
@@ -261,13 +265,10 @@ func TestModuleRoleMinterCrossGrant(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"SluisCrossCloudflareMinter", "/sluis/i1/internal/cloudflare/main/minter", "SluisParameterKeyCross"} {
-		if !strings.Contains(issuer, want) {
-			t.Errorf("missing %q in %s", want, issuer)
+	for _, not := range []string{"SluisCrossCloudflareMinter", "internal/cloudflare", "SluisParameterKeyCross"} {
+		if strings.Contains(issuer, not) {
+			t.Errorf("the issuer carries %q: %s", not, issuer)
 		}
-	}
-	if strings.Contains(issuer, "internal/cloudflare/*") {
-		t.Errorf("more of the module than the minter: %s", issuer)
 	}
 	own, err := ModuleRolePolicy(env, testRole(RoleCloudflare))
 	if err != nil {

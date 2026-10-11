@@ -88,11 +88,11 @@ func TestLayoutV5GetsOnlyTheV5Grants(t *testing.T) {
 	st := policyOf(t, withLayout(arp.LayoutV5))
 	res := resourcesOf(st)
 	for _, want := range []string{
-		tableArn("sluis-staging-oidc"), tableArn("sluis-staging-github"), tableArn("sluis-staging-slack"), tableArn("sluis-staging-google"),
+		tableArn("sluis-staging-oidc"), tableArn("sluis-staging-google"),
 		paramRoot + "/internal/oidc/*", paramRoot + "/external/oidc/*",
 		arnp + "s3:::" + bucket + "/oidc/*", arnp + "s3:::" + bucket + "/google/*",
 		fnArn("sluis-staging-github") + ":live-issuer",
-		fnArn("sluis-staging-slack") + ":live-issuer", fnArn("sluis-staging-google") + ":live-issuer",
+		fnArn("sluis-staging-slack") + ":live-console", fnArn("sluis-staging-google") + ":live-issuer",
 		fnArn("sluis-staging-cloudflare") + ":live-issuer", fnArn("sluis-staging-backup") + ":live-console",
 	} {
 		if !slices.Contains(res, want) {
@@ -427,10 +427,9 @@ func TestThePreviewShapeAcrossTheLayouts(t *testing.T) {
 	}
 }
 
-// A process that mints its blob credentials from a Cloudflare preset reads the
-// minter's parameter, and only that one, when it does not host the module (the
-// document declares the preset and no installation says the function hosts it).
-func TestAPresetBlobCredentialReadsTheMinterParameterOnV5(t *testing.T) {
+// A process that mints its blob credentials from a Cloudflare preset still
+// reads no minter parameter when it is the issuer: the cloudflare function mints.
+func TestAPresetBlobCredentialLeavesTheIssuerWithoutTheMinterParameterOnV5(t *testing.T) {
 	const r2 = "https://0123456789abcdef0123456789abcdef.r2.cloudflarestorage.com"
 	cfg := "issuerURL: https://x.example\n" +
 		"cloudflare: {accounts: {main: {id: 0123456789abcdef0123456789abcdef, minter: internal/cloudflare/main/minter}}, " +
@@ -439,22 +438,16 @@ func TestAPresetBlobCredentialReadsTheMinterParameterOnV5(t *testing.T) {
 	e := withLayout(arp.LayoutV5, func(a *arp.LambdaArgs) { a.AllowEndpoints = true })
 	e.config = cfg
 	st := policyOf(t, e)
-	want := paramRoot + "/internal/cloudflare/main/minter"
-	var got map[string]any
-	for _, s := range st {
-		if s["Sid"] == "SluisCrossCloudflareMinter" {
-			got = s
+	// The issuer asks the cloudflare function to mint: it holds no reference to
+	// the minter's parameter, and no statement for one (v1.76 E-FIN).
+	for _, sid := range sids(st) {
+		if sid == "SluisCrossCloudflareMinter" {
+			t.Error("the issuer carries a minter cross-grant")
 		}
 	}
-	if got == nil || !slices.Equal(strs(got["Resource"]), []string{want}) {
-		t.Fatalf("minter grant: %v", got)
-	}
-	if a := strs(got["Action"]); slices.Contains(a, "ssm:PutParameter") || slices.Contains(a, "ssm:DeleteParameter") {
-		t.Errorf("the minter's credential is writable: %v", a)
-	}
 	for _, r := range resourcesOf(st) {
-		if strings.Contains(r, "/internal/cloudflare") && r != want {
-			t.Errorf("more of the Cloudflare module than the minter: %s", r)
+		if strings.Contains(r, "/internal/cloudflare") {
+			t.Errorf("the issuer reaches the Cloudflare module's parameters: %s", r)
 		}
 	}
 	// Without the preset, nothing of the module.
@@ -514,7 +507,7 @@ func TestTheMigrationRoleReadsTheLegacyTableAndNothingElse(t *testing.T) {
 // the role still writes its other records.
 func TestTheMaintenanceDenyCoversTheTablesOfEveryLayout(t *testing.T) {
 	var mods []string
-	for _, m := range []string{"oidc", "github", "slack", "google"} {
+	for _, m := range []string{"oidc", "google"} {
 		mods = append(mods, tableArn("sluis-staging-"+m))
 	}
 	for l, want := range map[arp.Layout][]string{
