@@ -55,20 +55,10 @@ func TestTheConsoleIsNotACommand(t *testing.T) {
 	}
 }
 
-func TestAModuleWithoutAProcessSaysNotYetSplit(t *testing.T) {
-	for _, module := range []string{"google"} {
-		var out bytes.Buffer
-		err := run([]string{module}, &out)
-		if !errors.Is(err, errNotSplit) {
-			t.Errorf("%s: %v", module, err)
-		}
-	}
-}
-
 // A module that has a role today runs that role's command: with no file it
 // refuses exactly as the command does.
 func TestAModuleWithARoleRunsTodaysCommand(t *testing.T) {
-	for _, module := range []string{"issuer", "github", "slack", "cloudflare"} {
+	for _, module := range []string{"issuer", "github", "slack", "cloudflare", "google"} {
 		var out bytes.Buffer
 		err := run([]string{module}, &out)
 		if err == nil || !strings.Contains(err.Error(), "--config") {

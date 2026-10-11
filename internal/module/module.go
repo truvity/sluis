@@ -3,7 +3,7 @@
 // one configuration file, runs until its context ends, and may tick once for a
 // target. The roles are issuer (which hosts the signer and the console in its
 // process), github, slack, cloudflare, google and backup; each has its own
-// subpackage once it has a process of its own, and [Unsplit] stands in until then.
+// subpackage.
 //
 // This package imports no role: a role's package imports it, and the
 // import-boundary test (internal/boundaries) holds the roles apart.
@@ -12,7 +12,6 @@ package module
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"time"
 
@@ -32,27 +31,9 @@ type Module interface {
 }
 
 var (
-	// ErrNotSplit is the answer of a module with no process of its own yet.
-	ErrNotSplit = errors.New("not yet split")
 	// ErrNoTick is the answer of a module that has no tick.
 	ErrNoTick = errors.New("has no tick")
 )
-
-// Unsplit is a module whose role still runs inside the issuer process.
-type Unsplit string
-
-// Name implements [Module].
-func (u Unsplit) Name() string { return string(u) }
-
-// Run implements [Module].
-func (u Unsplit) Run(context.Context, string) error { return u.err() }
-
-// Tick implements [Module].
-func (u Unsplit) Tick(context.Context, string, string, bool) error { return u.err() }
-
-func (u Unsplit) err() error {
-	return fmt.Errorf("sluis %s: %w: this module has no process of its own yet; its role still runs inside the issuer process (`sluis issuer`)", u, ErrNotSplit)
-}
 
 // Logger builds the process's JSON logger at the level its file chose, and
 // starts telemetry under service. The returned function flushes the last

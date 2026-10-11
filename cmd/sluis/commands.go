@@ -14,14 +14,11 @@ import (
 	"github.com/truvity/sluis/internal/module"
 	"github.com/truvity/sluis/internal/module/cloudflare"
 	"github.com/truvity/sluis/internal/module/github"
+	"github.com/truvity/sluis/internal/module/google"
 	"github.com/truvity/sluis/internal/module/issuer"
 	"github.com/truvity/sluis/internal/module/slack"
 	"github.com/truvity/sluis/internal/version"
 )
-
-// errNotSplit is what a module command answers while the module has no process
-// of its own: the role still runs inside the issuer process.
-var errNotSplit = module.ErrNotSplit
 
 const usageText = `Each command but migrate takes --config <file> and nothing else but --version and --help (a tick also
 takes its target, first); migrate takes --from and --to, each a configuration file, and its own flags
@@ -52,10 +49,6 @@ func legacy(name, usage string, body func(out io.Writer, args []string) error, o
 // it once. schema is the document the module reads.
 func moduleCmd(m module.Module, schema, usage string, out io.Writer) *cli.Command {
 	return legacy(m.Name(), usage, func(o io.Writer, args []string) error {
-		// A module with no process of its own refuses before it reads a file.
-		if u, ok := m.(module.Unsplit); ok {
-			return u.Run(context.Background(), "")
-		}
 		command := "sluis " + m.Name()
 		if len(args) > 0 && args[0] == "tick" {
 			return startTick(o, command+" tick", schema, args[1:], m.Tick)
@@ -95,7 +88,7 @@ func newApp(out io.Writer) *cli.Command {
 			moduleCmd(github.Module{}, "controller-github", "the GitHub module: the controller's loop, or `tick <target>` once", out),
 			moduleCmd(slack.Module{}, "controller-slack", "the Slack module: the controller's loop, or `tick <target>` once", out),
 			moduleCmd(cloudflare.Module{}, "sluis", "the Cloudflare module: the STS minter's rotation loop, or `tick <preset>` once", out),
-			moduleCmd(module.Unsplit("google"), "sluis", "the Google directory module (not yet split)", out),
+			moduleCmd(google.Module{}, "sluis-google", "the Google module: the hub's refresh loop, or `tick <workspace>` once", out),
 			legacy("backup", "the backup module: run, list, status or prune (sluis backup --help)", backupCmd, out),
 			legacy("restore", "the restore role of the backup zip: preview, start or status (sluis restore --help)", restoreCmd, out),
 			// Today's commands, unchanged.
