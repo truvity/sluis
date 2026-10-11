@@ -19,7 +19,7 @@
 # A change to what an action carries is a new version. The installation keeps
 # every version it was sent, so records already written keep their meaning.
 source: roster
-version: "1.17.0"
+version: "1.18.0"
 locales: [en]
 
 actor_kinds:
@@ -752,7 +752,7 @@ actions:
     operation: access
     categories: [privileged_access]
     category: security
-    target_types: [organisation, github_account]
+    target_types: [organisation, team, github_account]
     delivery: async
     data_schema: https://schemas.example/access-roster/v1/member-held.json
     message:

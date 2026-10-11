@@ -12,7 +12,7 @@ The actions sluis records, from the catalogue [`internal/audit/catalogue/roster.
 
 <!-- generated: audit-actions -->
 
-Catalogue version 1.17.0, 83 actions.
+Catalogue version 1.18.0, 83 actions.
 
 | Action | Operation | Targets | Delivery | Summary |
 |---|---|---|---|---|
@@ -75,7 +75,7 @@ Catalogue version 1.17.0, 83 actions.
 | `roster.github_member.role_set` | modify | organisation, team, github_account | async | A person's role on a GitHub team changed. |
 | `roster.github_member.removed` | remove | organisation, team, github_account | async | A person was removed from a GitHub organisation or team. |
 | `roster.github_member.held` | modify | organisation, team, github_account | async | A change to a person's GitHub membership is held, and needs an operator. |
-| `roster.github_owner.reported` | access | organisation, github_account | async | An organisation owner the directory does not vouch for was reported rather than removed. |
+| `roster.github_owner.reported` | access | organisation, team, github_account | async | An organisation owner the directory does not vouch for was reported rather than removed. |
 | `roster.slack_workspace.connected` | create | slack_workspace, slack_app | async | A Slack workspace was connected by installing the App. |
 | `roster.slack_workspace.owner_changed` | modify | slack_workspace | async | The directory that owns a Slack workspace was changed by the installation-wide operator. |
 | `roster.slack_workspace.connect_refused` | create | slack_workspace, slack_app | async | An install of the roster's Slack App was refused because it was made into a workspace other than the one first connected. |
