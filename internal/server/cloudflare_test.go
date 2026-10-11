@@ -19,6 +19,7 @@ import (
 	"github.com/truvity/sluis/internal/audit"
 	"github.com/truvity/sluis/internal/cloudflare"
 	"github.com/truvity/sluis/internal/cloudflare/minter"
+	cfrpc "github.com/truvity/sluis/internal/cloudflare/rpc"
 )
 
 const secretValue = "cf-secret-value-that-must-not-be-listed"
@@ -118,8 +119,13 @@ func (f *fakeSTS) MintFor(_ context.Context, preset string, c minter.Caller, lif
 	return &minter.Minted{Preset: preset, TokenID: "od1", ExpiresOn: f.expires, Token: secretValue}, nil
 }
 
-func cloudflareConsole(sts CloudflareSTS) *Console {
-	return &Console{deps: ConsoleDeps{Cloudflare: sts}}
+// cloudflareConsole is a console whose module is this process's minter, here
+// the fake.
+func cloudflareConsole(sts cfrpc.Source) *Console {
+	if sts == nil {
+		return &Console{}
+	}
+	return &Console{deps: ConsoleDeps{Cloudflare: cfrpc.NewLocal(sts)}}
 }
 
 func asRole(role access.Role, groups ...string) context.Context {
@@ -337,7 +343,7 @@ func TestWhoamiSaysWhetherTheConsoleHasACloudflarePage(t *testing.T) {
 	for _, on := range []bool{false, true} {
 		console := cloudflareConsole(nil)
 		if on {
-			console.deps.Cloudflare = newFakeSTS()
+			console.deps.Cloudflare = cfrpc.NewLocal(newFakeSTS())
 		}
 		s := &ConsoleServer{console: console, log: slog.New(slog.DiscardHandler)}
 		r := httptest.NewRequest(http.MethodGet, "/.access/whoami", nil).WithContext(asRole(access.RoleNone))

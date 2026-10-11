@@ -261,7 +261,6 @@ var minterPackages = []string{"internal/cloudflare/minter", "internal/cloudflare
 // D93 a); an entry nobody uses any more is an error, so the list only shrinks.
 var minterWiring = map[string]string{
 	"internal/rosterapp": "assembles the minter into the one process of `serve`",
-	"internal/server":    "the console's view of the minter (CloudflareSTS)",
 	"internal/store":     "the blob credentials of a preset (credentials.preset)",
 }
 

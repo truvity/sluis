@@ -6,100 +6,52 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"sort"
 	"time"
 
 	"connectrpc.com/connect"
 
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
 	"github.com/truvity/sluis/internal/access"
-	"github.com/truvity/sluis/internal/audit"
-	"github.com/truvity/sluis/internal/cloudflare"
-	"github.com/truvity/sluis/internal/cloudflare/minter"
+	cfrpc "github.com/truvity/sluis/internal/cloudflare/rpc"
 	"github.com/truvity/sluis/storage/logattr"
 )
 
-// CloudflareSTS is the minter of Cloudflare credentials, as the console uses
-// it (*minter.Minter). It is an interface so the handlers are tested with a
-// fake, and so the console never reaches Cloudflare itself.
+// CloudflareModule is the Cloudflare module as the console uses it: the
+// minter's own methods when this process holds one ([cfrpc.Local]), or the
+// module in another process ([cfrpc.Client]) when `cloudflare.remote` is set.
+// Either way the console reaches Cloudflare through the module and holds no
+// minter credential reference. An interface so the handlers are tested with a
+// fake module.
 //
 // On-demand minting shares its code path with the token exchange
-// (internal/issuer): both end at [minter.Minter.MintFor], which checks the
-// grant and the lifetime and audits. What differs is only how the caller is
+// (internal/issuer): both end at the minter's MintFor, which checks the grant
+// and the lifetime and audits. What differs is only how the caller is
 // established (a console session here, a verified proof there), which is why
-// each builds its own [minter.Caller].
-type CloudflareSTS interface {
-	Accounts() []minter.AccountInfo
-	Presets() []minter.PresetInfo
-	Granted(c minter.Caller) []minter.PresetInfo
-	PrototypeID(preset string) (string, bool)
-	CheckPreset(ctx context.Context, preset string) error
-	Stored(ctx context.Context, preset string) (minter.StoredInfo, error)
-	Live(ctx context.Context, preset string) ([]minter.LiveToken, error)
-	RotateNow(ctx context.Context, preset string, actor audit.Actor) (*minter.Minted, error)
-	Revoke(ctx context.Context, preset, tokenID string, actor audit.Actor) (minter.RevokeResult, error)
-	MintFor(ctx context.Context, preset string, caller minter.Caller, lifetime time.Duration) (*minter.Minted, error)
+// each builds its own [cfrpc.Caller].
+type CloudflareModule = cfrpc.Admin
+
+// UseCloudflare connects the Cloudflare page to the module, with the same
+// timing as [ConsoleServer.UseAuditQuery]: the module is reached after the
+// console is made. Without it the console has no Cloudflare page.
+func (s *ConsoleServer) UseCloudflare(m CloudflareModule) {
+	s.console.deps.Cloudflare = m
 }
 
-var _ CloudflareSTS = (*minter.Minter)(nil)
+// cloudflareCallTimeout bounds one call to the module: the page is one call, and
+// a cold start of the module must not hold the console.
+const cloudflareCallTimeout = 30 * time.Second
 
-// UseCloudflare connects the Cloudflare page to the minter, with the same
-// timing as [ConsoleServer.UseAuditQuery]: the minter is made after the
-// console. Without it the console has no Cloudflare page.
-func (s *ConsoleServer) UseCloudflare(sts CloudflareSTS) {
-	s.console.deps.Cloudflare = sts
-}
-
-// Prototype statuses, as the page shows them.
-const (
-	prototypeOK          = "ok"
-	prototypeActive      = "active"
-	prototypeForbidden   = "forbidden"
-	prototypeMissing     = "missing"
-	prototypeUnreachable = "unreachable"
-)
-
-func (c *Console) cloudflare() (CloudflareSTS, error) {
+func (c *Console) cloudflare() (CloudflareModule, error) {
 	if c.deps.Cloudflare == nil {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("this deployment has no cloudflare section"))
 	}
 	return c.deps.Cloudflare, nil
 }
 
-// last4 redacts an account id to its last four characters.
-func last4(id string) string {
-	if len(id) <= 4 {
-		return id
-	}
-	return id[len(id)-4:]
-}
-
-func prototypeOf(id string, err error) *directoryrosterv1.CloudflarePrototype {
-	out := &directoryrosterv1.CloudflarePrototype{Id: id, Status: prototypeOK}
-	if err == nil {
-		return out
-	}
-	if pe, ok := cloudflare.IsPrototypeError(err); ok {
-		out.Detail = pe.Detail
-		switch pe.Reason {
-		case cloudflare.ReasonPrototypeActive:
-			out.Status = prototypeActive
-		case cloudflare.ReasonPrototypeForbidden:
-			out.Status = prototypeForbidden
-		default:
-			out.Status = prototypeMissing
-		}
-		return out
-	}
-	out.Status = prototypeUnreachable
-	out.Detail = logattr.Error(err)
-	return out
-}
-
 // callerOf is who the signed-in person is to the minter: their address and the
 // groups the policy put them in, which the grants are read against.
-func callerOf(id access.Identity) minter.Caller {
-	return minter.Caller{Actor: identityActor(id), Groups: id.Groups}
+func callerOf(id access.Identity) cfrpc.Caller {
+	return cfrpc.Caller{Actor: identityActor(id), Groups: id.Groups}
 }
 
 // ListCloudflare implements the administrator's contract.
@@ -114,67 +66,39 @@ func (c *Console) ListCloudflare(
 	if c.deps.Cloudflare == nil {
 		return connect.NewResponse(out), nil
 	}
-	sts := c.deps.Cloudflare
-	out.Available = true
-	for _, a := range sts.Accounts() {
-		out.Accounts = append(out.Accounts, &directoryrosterv1.CloudflareAccount{Name: a.Name, IdLast4: last4(a.ID)})
+	ctx, cancel := context.WithTimeout(ctx, cloudflareCallTimeout)
+	defer cancel()
+	st, err := c.deps.Cloudflare.Status(ctx)
+	if err != nil {
+		return nil, cloudflareError(err)
 	}
-	for _, info := range sts.Presets() {
-		out.Presets = append(out.Presets, c.presetView(ctx, sts, info))
+	out.Available = true
+	for _, a := range st.Accounts {
+		out.Accounts = append(out.Accounts, &directoryrosterv1.CloudflareAccount{Name: a.Name, IdLast4: a.IDLast4})
+	}
+	for _, p := range st.Presets {
+		out.Presets = append(out.Presets, presetProto(p))
 	}
 	return connect.NewResponse(out), nil
 }
 
-// presetView reads one preset's live state. A failure to read one part is that
-// part's message, never the whole page's: a prototype that is refused is what
-// the page exists to show.
-func (c *Console) presetView(ctx context.Context, sts CloudflareSTS, info minter.PresetInfo) *directoryrosterv1.CloudflarePreset {
-	protoID, _ := sts.PrototypeID(info.Name)
+// presetProto is the module's view of a preset as the page's message.
+func presetProto(p cfrpc.PresetView) *directoryrosterv1.CloudflarePreset {
 	out := &directoryrosterv1.CloudflarePreset{
-		Name: info.Name, Description: info.Description, Account: info.Account, Endpoint: info.Endpoint,
-		LifetimeSeconds: int64(info.Lifetime / time.Second), RotationSeconds: int64(info.Rotation / time.Second),
-		Prototype: prototypeOf(protoID, sts.CheckPreset(ctx, info.Name)),
+		Name: p.Name, Description: p.Description, Account: p.Account, Endpoint: p.Endpoint,
+		LifetimeSeconds: int64(p.Lifetime / time.Second), RotationSeconds: int64(p.Rotation / time.Second),
+		Prototype: &directoryrosterv1.CloudflarePrototype{Id: p.Prototype.ID, Status: p.Prototype.Status, Detail: p.Prototype.Detail},
+		LiveError: p.LiveError,
+		Stored: &directoryrosterv1.CloudflareStored{
+			Present: p.Stored.Present, TokenId: p.Stored.TokenID, MintedAt: stamp(p.Stored.MintedAt), ExpiresOn: stamp(p.Stored.ExpiresOn),
+			Error: p.Stored.Error,
+		},
 	}
-	live, lerr := sts.Live(ctx, info.Name)
-	if lerr != nil {
-		out.LiveError = logattr.Error(lerr)
-	}
-	stored, serr := sts.Stored(ctx, info.Name)
-	switch {
-	case serr != nil:
-		out.Stored = &directoryrosterv1.CloudflareStored{Error: logattr.Error(serr)}
-	case stored.Present:
-		out.Stored = &directoryrosterv1.CloudflareStored{
-			Present: true, TokenId: stored.AccessKeyID, MintedAt: stamp(stored.MintedAt), ExpiresOn: stamp(stored.ExpiresOn),
-		}
-	default:
-		out.Stored = &directoryrosterv1.CloudflareStored{}
-	}
-	for _, t := range live {
-		if t.Stored {
-			// The stored token is the live stored-named one that expires with the
-			// stored document; the others of that name are older ones awaiting
-			// their sweep, and are listed as revocable tokens.
-			if out.Stored.Present && out.Stored.TokenId == "" && out.Stored.ExpiresOn != nil && t.ExpiresOn.UTC().Truncate(time.Second).Equal(out.Stored.ExpiresOn.AsTime()) {
-				out.Stored.TokenId = t.ID
-				continue
-			}
-		}
+	for _, t := range p.Live {
 		out.Live = append(out.Live, &directoryrosterv1.CloudflareLiveToken{
 			Id: t.ID, Caller: t.Caller, MintedAt: stamp(t.MintedAt), ExpiresOn: stamp(t.ExpiresOn), Stored: t.Stored,
 		})
 	}
-	if out.Stored.TokenId != "" {
-		// An R2 preset knows its stored token by the access key id; do not list it twice.
-		kept := out.Live[:0]
-		for _, t := range out.Live {
-			if t.Id != out.Stored.TokenId {
-				kept = append(kept, t)
-			}
-		}
-		out.Live = kept
-	}
-	sort.SliceStable(out.Live, func(i, j int) bool { return out.Live[i].ExpiresOn.AsTime().After(out.Live[j].ExpiresOn.AsTime()) })
 	return out
 }
 
@@ -190,7 +114,9 @@ func (c *Console) RotateCloudflarePreset(
 	if err != nil {
 		return nil, err
 	}
-	minted, err := sts.RotateNow(ctx, req.Msg.GetPreset(), identityActor(id))
+	ctx, cancel := context.WithTimeout(ctx, cloudflareCallTimeout)
+	defer cancel()
+	minted, err := sts.Rotate(ctx, req.Msg.GetPreset(), identityActor(id))
 	if err != nil {
 		return nil, cloudflareError(err)
 	}
@@ -212,6 +138,8 @@ func (c *Console) RevokeCloudflareToken(
 	if err != nil {
 		return nil, err
 	}
+	ctx, cancel := context.WithTimeout(ctx, cloudflareCallTimeout)
+	defer cancel()
 	res, err := sts.Revoke(ctx, req.Msg.GetPreset(), req.Msg.GetTokenId(), identityActor(id))
 	if err != nil {
 		return nil, cloudflareError(err)
@@ -257,7 +185,9 @@ func (c *Console) GetCloudflareCredential(
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("lifetime_seconds is negative"))
 	}
 	lifetime := time.Duration(req.Msg.GetLifetimeSeconds()) * time.Second
-	minted, err := sts.MintFor(ctx, req.Msg.GetPreset(), callerOf(id), lifetime)
+	ctx, cancel := context.WithTimeout(ctx, cloudflareCallTimeout)
+	defer cancel()
+	minted, err := sts.Credential(ctx, req.Msg.GetPreset(), callerOf(id), lifetime)
 	if err != nil {
 		return nil, cloudflareError(err)
 	}
@@ -277,23 +207,23 @@ func (c *Console) GetCloudflareCredential(
 // cloudflareError maps the minter's errors to RPC codes. Nothing in them is a
 // value; a Cloudflare or store failure is reported by kind only.
 func cloudflareError(err error) error {
-	var pe *cloudflare.PrototypeError
+	var re *cfrpc.RefusedError
 	switch {
-	case errors.Is(err, minter.ErrUnknownPreset):
+	case errors.Is(err, cfrpc.ErrUnknownPreset):
 		return connect.NewError(connect.CodeNotFound, err)
-	case errors.Is(err, minter.ErrNotGranted):
+	case errors.Is(err, cfrpc.ErrNotGranted):
 		return connect.NewError(connect.CodePermissionDenied, err)
-	case errors.Is(err, minter.ErrLifetime):
+	case errors.Is(err, cfrpc.ErrLifetime):
 		return connect.NewError(connect.CodeInvalidArgument, err)
-	case errors.Is(err, minter.ErrMaintenance), errors.Is(err, minter.ErrMaintenanceUnknown):
+	case errors.Is(err, cfrpc.ErrMaintenance):
 		return connect.NewError(connect.CodeUnavailable, err)
-	case errors.Is(err, minter.ErrNotOurs):
+	case errors.Is(err, cfrpc.ErrNotOurs):
 		return connect.NewError(connect.CodeNotFound, err)
-	case errors.Is(err, minter.ErrContended):
+	case errors.Is(err, cfrpc.ErrContended):
 		return connect.NewError(connect.CodeAborted, err)
-	case errors.As(err, &pe):
-		return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("the prototype is refused: %s", pe.Detail))
-	case errors.Is(err, minter.ErrNoMinter):
+	case errors.As(err, &re):
+		return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("the prototype is refused: %s", re.Detail))
+	case errors.Is(err, cfrpc.ErrNoMinter):
 		return connect.NewError(connect.CodeFailedPrecondition, err)
 	default:
 		return connect.NewError(connect.CodeInternal, errors.New("the call to Cloudflare or the secrets store did not complete; see the service log"))

@@ -203,7 +203,7 @@ type ConsoleDeps struct {
 	// Cloudflare is the minter of Cloudflare credentials. Nil is a
 	// deployment with no `cloudflare` section and no Cloudflare page; it is
 	// connected late, by [ConsoleServer.UseCloudflare].
-	Cloudflare CloudflareSTS
+	Cloudflare CloudflareModule
 	// Backup is the backup module and the restore function, read through
 	// modcall as the caller class `console`. Nil is a deployment with neither
 	// and no Backups page; it is connected late, by [ConsoleServer.UseBackup].

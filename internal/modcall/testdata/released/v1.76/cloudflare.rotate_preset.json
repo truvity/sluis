@@ -1,0 +1,45 @@
+{
+  "module": "cloudflare",
+  "method": "rotate_preset",
+  "caller": "console",
+  "request": {
+    "v": 2,
+    "kind": "rpc",
+    "module": "cloudflare",
+    "method": "rotate_preset",
+    "payload": {
+      "preset": "dns",
+      "actor": {
+        "Kind": "person",
+        "ID": "a@example.com"
+      }
+    },
+    "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+    "deadline": 4102444800000
+  },
+  "request_v1": {
+    "kind": "rpc",
+    "module": "cloudflare",
+    "method": "rotate_preset",
+    "payload": {
+      "preset": "dns",
+      "actor": {
+        "Kind": "person",
+        "ID": "a@example.com"
+      }
+    }
+  },
+  "response": {
+    "v": 2,
+    "result": {
+      "token_id": "new1",
+      "expires_on": "2026-10-09T13:00:00Z"
+    }
+  },
+  "response_v1": {
+    "result": {
+      "token_id": "new1",
+      "expires_on": "2026-10-09T13:00:00Z"
+    }
+  }
+}

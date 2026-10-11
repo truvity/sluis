@@ -1,0 +1,41 @@
+{
+  "module": "cloudflare",
+  "method": "accounts",
+  "caller": "console",
+  "request": {
+    "v": 2,
+    "kind": "rpc",
+    "module": "cloudflare",
+    "method": "accounts",
+    "payload": {},
+    "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+    "deadline": 4102444800000
+  },
+  "request_v1": {
+    "kind": "rpc",
+    "module": "cloudflare",
+    "method": "accounts",
+    "payload": {}
+  },
+  "response": {
+    "v": 2,
+    "result": {
+      "accounts": [
+        {
+          "Name": "main",
+          "ID": "0123456789abcdef0123456789abcdef"
+        }
+      ]
+    }
+  },
+  "response_v1": {
+    "result": {
+      "accounts": [
+        {
+          "Name": "main",
+          "ID": "0123456789abcdef0123456789abcdef"
+        }
+      ]
+    }
+  }
+}
