@@ -32,7 +32,10 @@ func HandleJSON[Req, Resp any](
 				return Reply{}, modcall.Coded(modcall.CodeBadRequest, "the request is not valid")
 			}
 		}
-		resp, err := fn(ctx, env.Caller, req)
+		if err := env.Directory.Validate(); err != nil {
+			return Reply{}, modcall.Coded(modcall.CodeBadRequest, err.Error())
+		}
+		resp, err := fn(WithFacts(ctx, env.Directory), env.Caller, req)
 		var p *Problem
 		if errors.As(err, &p) {
 			return Reply{Problem: p}, nil
@@ -55,7 +58,7 @@ func ProxyJSON[Req, Resp any](ctx context.Context, c modcall.Caller, module, met
 	if err != nil {
 		return zero, fmt.Errorf("console call %s.%s: the request cannot be encoded: %w", module, method, err)
 	}
-	reply, err := modcall.Do[Envelope, Reply](ctx, c, module, method, Envelope{Caller: caller, Msg: raw})
+	reply, err := modcall.Do[Envelope, Reply](ctx, c, module, method, Envelope{Caller: caller, Msg: raw, Directory: FactsFrom(ctx)})
 	if err != nil {
 		return zero, err
 	}

@@ -29,9 +29,11 @@ import (
 	"github.com/truvity/sluis/internal/consoleauth"
 	"github.com/truvity/sluis/internal/health"
 	"github.com/truvity/sluis/internal/maintenance"
+	"github.com/truvity/sluis/internal/modcall"
 	"github.com/truvity/sluis/internal/port"
 	"github.com/truvity/sluis/internal/portstore"
 	"github.com/truvity/sluis/internal/rails"
+	slackconsole "github.com/truvity/sluis/internal/slackapp/console"
 	"github.com/truvity/sluis/internal/slackroster/apply"
 	"github.com/truvity/sluis/internal/slackroster/controller"
 	"github.com/truvity/sluis/internal/store"
@@ -198,7 +200,24 @@ type App struct {
 	// fatal carries the one error that ends the process from outside a
 	// pass: the audit installation refusing the catalogue after the start.
 	fatal chan error
+	// console is the console's Slack service over the module's own stores, and rpc
+	// the server that answers it to the caller class `console`: nil with the
+	// legacy adapter, whose records are mounted files.
+	console *slackconsole.Service
+	rpc     *modcall.Server
 }
+
+// Console is the console's Slack service over the module's stores.
+func (a *App) Console() *slackconsole.Service { return a.console }
+
+// RPC is the module's server of the console's calls, what a transport of
+// internal/modcall serves; nil when the adapter keeps no records for a console.
+func (a *App) RPC() *modcall.Server { return a.rpc }
+
+// policyOf is the policy in force as the console service reads it.
+type policyOf struct{ set *policy.Set }
+
+func (p policyOf) Policy() *policy.Set { return p.set }
 
 // Tick runs one workspace's tick once, under its lease, and returns: the
 // workspace's key. It is what `sluis tick slack` runs, and the shape
@@ -238,6 +257,10 @@ func (a *App) Pass(ctx context.Context, target string, unsafeLocal bool) (ran bo
 // its timeout and drops the rest, saying so. Nothing survives the process.
 func (a *App) Close() error { return a.trail.Close() }
 
+// Flush delivers what the audit trail has queued, so a call that records is not
+// answered before its record is kept.
+func (a *App) Flush(ctx context.Context) error { return a.trail.Flush(ctx) }
+
 // The report store reads back what it wrote, so a restarted controller does
 // not record every hold and leaver again.
 var _ controller.StatusReader = (*rails.BlobReports)(nil)
@@ -269,9 +292,11 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 	// there, not from mounted files; the hand-off of a Slack Connect share and
 	// the cache of who a member is live there too.
 	var (
-		records controller.RecordSource
-		handoff controller.Handoff
-		members apply.MemberCache
+		records     controller.RecordSource
+		handoff     controller.Handoff
+		members     apply.MemberCache
+		consoleDeps slackconsole.Deps
+		hasCons     bool
 	)
 	if stores.Adapter != store.AdapterLegacy {
 		base := portstore.New(stores.Ports).WithV4(stores.V4).WithV5(stores.V5)
@@ -282,6 +307,13 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 		records = portstore.NewSlackSource(base)
 		handoff = portstore.NewHandoff(base, stores.Ports.Trigger)
 		members = portstore.NewUserCache(base)
+		consoleDeps = slackconsole.Deps{
+			Log: log, Authorizer: policyOf{set}, SlackCatalogue: cfg.policy.SlackCatalogue(),
+			SlackCatalogueApps: portstore.NewSlackCatalogueApps(base), SlackShared: portstore.NewSlackShared(base),
+			SlackChannels: portstore.NewSlackChannels(base), SlackWorkspaces: portstore.NewSlackWorkspaces(base),
+			SlackStatus: rails.NewBlobReports(stores.Ports.Blob, blobprefix.SlackReports), Trigger: stores.Ports.Trigger,
+		}
+		hasCons = true
 	}
 
 	// Every call to the console carries the controller's proof: this pod's own
@@ -329,7 +361,7 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 		log.InfoContext(ctx, "no shared state backs the tick leases, so they are held in this process: run one replica",
 			slog.String("adapter", stores.Adapter))
 	}
-	return &App{
+	app := &App{
 		targets:     slices.Collect(maps.Keys(declared.Slack.Workspaces)),
 		log:         log,
 		sharedLease: shared,
@@ -353,7 +385,13 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 			Handoff: handoff,
 			Members: members,
 		}),
-	}, nil
+	}
+	if hasCons {
+		consoleDeps.Audit = trail
+		app.console = slackconsole.Static(consoleDeps)
+		app.rpc = slackconsole.NewServer(app.console)
+	}
+	return app, nil
 }
 
 // Run passes until the context is done, or the audit installation refuses

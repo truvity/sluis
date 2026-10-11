@@ -2,11 +2,13 @@ package console
 
 import (
 	"context"
+	"log/slog"
 
 	"google.golang.org/protobuf/proto"
 
 	"github.com/truvity/sluis/internal/consolecall"
 	"github.com/truvity/sluis/internal/modcall"
+	"github.com/truvity/sluis/storage/logattr"
 )
 
 // The console methods of the Slack module, as `slack.<method>`. Each answers the
@@ -37,27 +39,36 @@ const (
 
 // Register puts the console methods on the module's server.
 func Register(s *modcall.Server, c *Service) {
-	handle(c, s, MethodBeginWorkspaceConnect, c.BeginSlackWorkspaceConnect)
-	handleJSON(c, s, MethodCompleteWorkspace, c.CompleteWorkspace)
-	handle(c, s, MethodDisconnectWorkspace, c.DisconnectSlackWorkspace)
-	handle(c, s, MethodChangeOwner, c.ChangeSlackWorkspaceOwner)
-	handle(c, s, MethodRequestPass, c.RequestSlackPass)
-	handle(c, s, MethodGetStatus, c.GetSlackStatus, consolecall.List())
-	handle(c, s, MethodConfirmRemovals, c.ConfirmSlackRemovals)
+	RegisterLazy(s, nil, func(context.Context) (*Service, error) { return c, nil })
+}
 
-	handle(c, s, MethodListApps, c.ListSlackApps, consolecall.List())
-	handle(c, s, MethodCreateApp, c.CreateSlackApp)
-	handle(c, s, MethodInstallApp, c.InstallSlackApp)
-	handleJSON(c, s, MethodCompleteCatalogue, c.CompleteCatalogue)
+// RegisterLazy puts the console methods on the server over a service that open
+// assembles on the first call of a container and returns again for the rest: a
+// scheduled pass needs none of it. A service that cannot be opened is a call the
+// transport answers unavailable, with no detail, and the next call tries again.
+func RegisterLazy(s *modcall.Server, log *slog.Logger, open func(context.Context) (*Service, error)) {
+	h := func(method string) *registrar { return &registrar{s: s, method: method, open: open, log: log} }
+	handle(h(MethodBeginWorkspaceConnect), (*Service).BeginSlackWorkspaceConnect)
+	handleJSON(h(MethodCompleteWorkspace), (*Service).CompleteWorkspace)
+	handle(h(MethodDisconnectWorkspace), (*Service).DisconnectSlackWorkspace)
+	handle(h(MethodChangeOwner), (*Service).ChangeSlackWorkspaceOwner)
+	handle(h(MethodRequestPass), (*Service).RequestSlackPass)
+	handle(h(MethodGetStatus), (*Service).GetSlackStatus, consolecall.List())
+	handle(h(MethodConfirmRemovals), (*Service).ConfirmSlackRemovals)
 
-	handle(c, s, MethodListChannels, c.ListSlackChannels, consolecall.List())
-	handle(c, s, MethodCreateChannel, c.CreateSlackChannel)
-	handle(c, s, MethodUpdateChannel, c.UpdateSlackChannel)
-	handle(c, s, MethodDeleteChannel, c.DeleteSlackChannel)
-	handle(c, s, MethodListSharedChannels, c.ListSlackSharedChannels, consolecall.List())
-	handle(c, s, MethodCreateSharedChannel, c.CreateSlackSharedChannel)
-	handle(c, s, MethodUpdateSharedChannel, c.UpdateSlackSharedChannel)
-	handle(c, s, MethodDeleteSharedChannel, c.DeleteSlackSharedChannel)
+	handle(h(MethodListApps), (*Service).ListSlackApps, consolecall.List())
+	handle(h(MethodCreateApp), (*Service).CreateSlackApp)
+	handle(h(MethodInstallApp), (*Service).InstallSlackApp)
+	handleJSON(h(MethodCompleteCatalogue), (*Service).CompleteCatalogue)
+
+	handle(h(MethodListChannels), (*Service).ListSlackChannels, consolecall.List())
+	handle(h(MethodCreateChannel), (*Service).CreateSlackChannel)
+	handle(h(MethodUpdateChannel), (*Service).UpdateSlackChannel)
+	handle(h(MethodDeleteChannel), (*Service).DeleteSlackChannel)
+	handle(h(MethodListSharedChannels), (*Service).ListSlackSharedChannels, consolecall.List())
+	handle(h(MethodCreateSharedChannel), (*Service).CreateSlackSharedChannel)
+	handle(h(MethodUpdateSharedChannel), (*Service).UpdateSlackSharedChannel)
+	handle(h(MethodDeleteSharedChannel), (*Service).DeleteSlackSharedChannel)
 }
 
 // NewServer is the module's server with the console methods on it: what a
@@ -68,20 +79,53 @@ func NewServer(c *Service) *modcall.Server {
 	return s
 }
 
+// registrar is one method's registration: where it goes and how its service is
+// opened.
+type registrar struct {
+	s      *modcall.Server
+	method string
+	open   func(context.Context) (*Service, error)
+	log    *slog.Logger
+}
+
+// service opens the module's service for a call, or says it is unavailable.
+func (r *registrar) service(ctx context.Context) (*Service, error) {
+	c, err := r.open(ctx)
+	if err != nil {
+		log := r.log
+		if log == nil {
+			log = slog.Default()
+		}
+		log.ErrorContext(ctx, "the console service could not be opened", slog.String("method", r.method), logattr.SafeError("error", err))
+		return nil, modcall.Coded(modcall.CodeUnavailable, "")
+	}
+	return c, nil
+}
+
 func handle[Req, Resp proto.Message](
-	c *Service, s *modcall.Server, method string, fn func(context.Context, consolecall.Caller, Req) (Resp, error), opts ...modcall.Option,
+	r *registrar, fn func(*Service, context.Context, consolecall.Caller, Req) (Resp, error), opts ...modcall.Option,
 ) {
-	consolecall.Handle(s, method, func(ctx context.Context, caller consolecall.Caller, req Req) (Resp, error) {
-		resp, err := fn(ctx, caller, req)
-		return resp, c.told(ctx, method, err)
+	consolecall.Handle(r.s, r.method, func(ctx context.Context, caller consolecall.Caller, req Req) (Resp, error) {
+		var zero Resp
+		c, err := r.service(ctx)
+		if err != nil {
+			return zero, err
+		}
+		resp, err := fn(c, ctx, caller, req)
+		return resp, c.told(ctx, r.method, err)
 	}, opts...)
 }
 
 func handleJSON[Req, Resp any](
-	c *Service, s *modcall.Server, method string, fn func(context.Context, consolecall.Caller, Req) (Resp, error), opts ...modcall.Option,
+	r *registrar, fn func(*Service, context.Context, consolecall.Caller, Req) (Resp, error), opts ...modcall.Option,
 ) {
-	consolecall.HandleJSON(s, method, func(ctx context.Context, caller consolecall.Caller, req Req) (Resp, error) {
-		resp, err := fn(ctx, caller, req)
-		return resp, c.told(ctx, method, err)
+	consolecall.HandleJSON(r.s, r.method, func(ctx context.Context, caller consolecall.Caller, req Req) (Resp, error) {
+		var zero Resp
+		c, err := r.service(ctx)
+		if err != nil {
+			return zero, err
+		}
+		resp, err := fn(c, ctx, caller, req)
+		return resp, c.told(ctx, r.method, err)
 	}, opts...)
 }

@@ -55,10 +55,6 @@ type Deps struct {
 	Log *slog.Logger
 	// Authorizer is the policy in force.
 	Authorizer Authorizer
-	// Directory reads the connected directories, which the module has no
-	// snapshot of: the console supplies them. Nil is a deployment that reads
-	// none, and a source or an owner cannot be checked.
-	Directory Directory
 	// SlackCatalogue is every Slack App the deployment declares. Nil declares
 	// none.
 	SlackCatalogue *slackcatalogue.Catalogue
@@ -125,60 +121,14 @@ func (c *Service) notify(ctx context.Context, controller, target string) {
 	}
 }
 
-// Directory is what the module asks of the connected directories: the console
-// answers from the hub it holds. The ids are the directory workspaces' own.
-type Directory interface {
-	// Directories are every connected directory, sorted by id.
-	Directories(ctx context.Context) ([]consoleauthz.Directory, error)
-	// Group is whether an address is a group of a connected directory, and of
-	// which.
-	Group(ctx context.Context, address string) (Group, error)
-	// User is whether an address is an account a connected directory holds.
-	User(ctx context.Context, address string) (User, error)
-	// Groups are every group of every connected directory, and the domains
-	// those directories serve.
-	Groups(ctx context.Context) ([]GroupEntry, []Domain, error)
-}
-
-// Group is a directory group's standing.
-type Group struct {
-	Found     bool
-	Workspace string
-}
-
-// User is a directory account's standing.
-type User struct {
-	Found     bool
-	Suspended bool
-	Workspace string
-}
-
-// GroupEntry is one group of a directory, with its size.
-type GroupEntry struct {
-	Email   string
-	Domain  string
-	Members int
-}
-
-// Domain is a domain a directory serves.
-type Domain struct {
-	Name          string
-	Workspace     string
-	Authoritative bool
-}
-
-// directories are the connected directories, none for a deployment that reads
-// none.
+// directories are the connected directories the console sent with the call, none
+// for a call that carries no facts.
 func (c *Service) directories(ctx context.Context) ([]consoleauthz.Directory, error) {
-	dir := c.d().Directory
-	if dir == nil {
+	facts := consolecall.FactsFrom(ctx)
+	if facts == nil {
 		return nil, nil
 	}
-	out, err := dir.Directories(ctx)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeUnavailable, err)
-	}
-	return out, nil
+	return facts.Directories, nil
 }
 
 // slackTimeout bounds one call to Slack.
