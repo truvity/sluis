@@ -120,8 +120,8 @@ type fakeKube struct {
 
 func (f *fakeKube) run(args ...string) ([]byte, error) {
 	f.calls = append(f.calls, strings.Join(args, " "))
-	switch {
-	case args[1] == "view":
+	switch args[1] {
+	case "view":
 		var users, contexts []map[string]any
 		for name, a := range f.users {
 			users = append(users, map[string]any{"name": name, "user": map[string]any{"exec": map[string]any{"args": a}}})
@@ -130,9 +130,9 @@ func (f *fakeKube) run(args ...string) ([]byte, error) {
 			contexts = append(contexts, map[string]any{"name": name, "context": map[string]any{"user": user}})
 		}
 		return json.Marshal(map[string]any{"users": users, "contexts": contexts})
-	case args[1] == "set-credentials":
+	case "set-credentials":
 		f.users[args[2]] = args[3:]
-	case args[1] == "set-context":
+	case "set-context":
 		if f.contexts == nil {
 			f.contexts = map[string]string{}
 		}
@@ -141,7 +141,7 @@ func (f *fakeKube) run(args ...string) ([]byte, error) {
 				f.contexts[args[2]] = u
 			}
 		}
-	case args[1] == "unset":
+	case "unset":
 		delete(f.users, strings.TrimPrefix(args[2], "users."))
 	}
 	return nil, nil
@@ -202,14 +202,14 @@ func TestTheLegacyKubeUserIsRenamedAndItsContextsFollow(t *testing.T) {
 
 // ---- known_hosts ----
 
-func knownHostsFixture(t *testing.T, old, new string) (dir string) {
+func knownHostsFixture(t *testing.T, old, current string) (dir string) {
 	t.Helper()
 	home := t.TempDir()
 	dir = filepath.Join(home, ".ssh", "known_hosts.d")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	for name, body := range map[string]string{"accessctl": old, "sluisctl": new} {
+	for name, body := range map[string]string{"accessctl": old, "sluisctl": current} {
 		if body != "" {
 			if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil { //nolint:gosec // test
 				t.Fatal(err)
