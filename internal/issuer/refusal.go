@@ -392,6 +392,16 @@ func (f *filtered) rewriteLocation(ctx context.Context, location string) string 
 	return to.String()
 }
 
+// reasonOfOIDC is the reason an error from [deny] carries, as text, or the
+// error's own text for any other.
+func reasonOfOIDC(err error) string {
+	var spelled *oidc.Error
+	if errors.As(err, &spelled) {
+		return reasonOf(spelled)
+	}
+	return err.Error()
+}
+
 // reasonOf is why an error from [deny] was given: the reason it carries
 // for the log, and for the audit record that names it.
 func reasonOf(e *oidc.Error) string {

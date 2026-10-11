@@ -14,6 +14,66 @@
         "ci",
         "workload"
       ]
+    },
+    "reason_code": {
+      "type": "string",
+      "description": "Why a refusal was given, as a code: unknown_audience, not_admitted, subject_token_refused, directory_unavailable and the like. Only on a refusal.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none",
+      "x-audit-facet": true
+    },
+    "audience": {
+      "type": "string",
+      "description": "The client or audience the caller asked for. Only on a refusal.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none",
+      "x-audit-facet": true
+    },
+    "missing_requires": {
+      "type": "array",
+      "description": "The groups the audience requires, any of which would have admitted the caller, that the caller does not hold. Only on a refusal.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none",
+      "items": {
+        "type": "string",
+        "x-audit-class": "shared",
+        "x-audit-pii": "none"
+      }
+    },
+    "held_groups": {
+      "type": "array",
+      "description": "The groups the policy evaluation gave the caller. Only on a refusal.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none",
+      "items": {
+        "type": "string",
+        "x-audit-class": "shared",
+        "x-audit-pii": "none"
+      }
+    },
+    "admitted": {
+      "type": "boolean",
+      "description": "Whether the evaluation admitted the caller to the audience. Only on a refusal.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none"
+    },
+    "admitted_by": {
+      "type": "array",
+      "description": "The required groups that admitted the caller, when one did. Only on a refusal.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none",
+      "items": {
+        "type": "string",
+        "x-audit-class": "shared",
+        "x-audit-pii": "none"
+      }
+    },
+    "directory": {
+      "type": "string",
+      "description": "The state of what the groups were read from: live, held (the last answer, while the directory is unreachable), unavailable, or not_applicable. Only on a refusal.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none",
+      "x-audit-facet": true
     }
   }
 }

@@ -959,8 +959,18 @@ func (s *Storage) Complete(ctx context.Context, id string, who Authenticated) er
 	// one a code can be issued for.
 	if err = s.entitled(ctx, req.Req.ClientID, req.Resource, who.Subject, who.How == RecoveryHow); err != nil {
 		if errors.Is(err, ErrNotEntitled) {
-			s.iss.record(ctx, signInEvent(who, req.Req.ClientID, "", time.Time{},
-				audit.Denied("signed in, and admitted to no group this client requires")))
+			recovery := who.How == RecoveryHow
+			why := s.signInRefusal(ctx, req.Req.ClientID, who.Subject, recovery, "not_admitted")
+			if why.Admitted {
+				// The client admitted them; the resource they asked a token for did not.
+				why.Code = "resource_not_admitted"
+			}
+			actor := audit.Identified(who.Subject)
+			if recovery {
+				actor = audit.RecoveryIdentity(who.Subject)
+			}
+			s.iss.record(ctx, audit.SignInRefused(actor, req.Req.ClientID, who.How, recovery,
+				audit.Denied("signed in, and admitted to no group this client requires"), why))
 		}
 		return err
 	}
@@ -2691,18 +2701,29 @@ const verifiedKey = "access-roster:verified-proof"
 func (s *Storage) ValidateTokenExchangeRequest(ctx context.Context, request op.TokenExchangeRequest) error {
 	audiences := request.GetAudience()
 	if len(audiences) != 1 {
-		return deny(ctx, oidc.ErrInvalidTarget, errors.New("an exchange names exactly one audience: it is the decision"),
-			slog.Int("audiences", len(audiences)))
+		reason := errors.New("an exchange names exactly one audience: it is the decision")
+		named := strings.Join(audiences, ",")
+		if named == "" {
+			named = "none"
+		}
+		s.iss.record(ctx, audit.TokenExchangeRefused(audit.Anonymous(), named, "", audit.Denied(reason.Error()),
+			audit.Refusal{Code: "audience_count", Audience: named, Directory: "not_applicable"}))
+		return deny(ctx, oidc.ErrInvalidTarget, reason, slog.Int("audiences", len(audiences)))
 	}
 
 	proof, err := s.proofOf(ctx, request)
 	if err != nil {
+		s.iss.record(ctx, audit.TokenExchangeRefused(audit.Anonymous(), audiences[0], "",
+			audit.Denied(reasonOfOIDC(err)), audit.Refusal{
+				Code: reasonCodeOf(err, "subject_token_refused"), Audience: audiences[0], Directory: "not_applicable",
+			}))
 		return err
 	}
 
 	grant, err := s.iss.Exchange(ctx, proof, audiences[0])
 	switch {
 	case errors.Is(err, ErrUnknownTarget), errors.Is(err, ErrNoTarget), errors.Is(err, ErrRefused):
+		// Exchange recorded this refusal with its evaluation.
 		// One code and one body for "there is no such audience" and "not
 		// for you" (RFC 8693 2.2.2, RFC 8707 2): telling them apart tells
 		// a caller which audiences exist. The difference is in the log, and
@@ -2764,12 +2785,13 @@ type exchangeSubject interface {
 // signInProof accepts one of this issuer's own tokens as a person's proof,
 // or says which rule refused it.
 func (s *Storage) signInProof(ctx context.Context, request exchangeSubject) (Proof, error) {
-	refuse := func(format string, args ...any) (Proof, error) {
-		return Proof{}, deny(ctx, oidc.ErrInvalidGrant, fmt.Errorf("subject_token: "+format, args...))
+	refuse := func(code, format string, args ...any) (Proof, error) {
+		return Proof{}, deny(ctx, oidc.ErrInvalidGrant,
+			&codedReason{code: code, err: fmt.Errorf("subject_token: "+format, args...)})
 	}
 
 	if request.GetExchangeSubjectTokenType() != oidc.AccessTokenType {
-		return refuse("a token this issuer signed is exchanged only as the access token of a sign-in, never as %s",
+		return refuse("wrong_token_type", "a token this issuer signed is exchanged only as the access token of a sign-in, never as %s",
 			request.GetExchangeSubjectTokenType())
 	}
 
@@ -2779,26 +2801,26 @@ func (s *Storage) signInProof(ctx context.Context, request exchangeSubject) (Pro
 	}
 
 	if issued == nil {
-		return refuse("this issuer holds no record of that access token")
+		return refuse("no_record_of_token", "this issuer holds no record of that access token")
 	}
 
 	declared, ok := s.iss.Policy().Client(issued.ClientID)
 	if !ok || !declared.SignInExchange {
-		return refuse("a sign-in to %q cannot be exchanged", issued.ClientID)
+		return refuse("sign_in_not_exchangeable", "a sign-in to %q cannot be exchanged", issued.ClientID)
 	}
 
 	// Presented by the client it was issued to: the CLI trading its own
 	// sign-in, not some other caller holding a copy of it.
 	if request.GetClientID() != issued.ClientID {
-		return refuse("a sign-in to %q is exchanged only by %q", issued.ClientID, issued.ClientID)
+		return refuse("presented_by_another_client", "a sign-in to %q is exchanged only by %q", issued.ClientID, issued.ClientID)
 	}
 
 	if !strings.Contains(issued.Subject, "@") {
-		return refuse("a sign-in exchange is a person's, and %q is not one", issued.Subject)
+		return refuse("not_a_person", "a sign-in exchange is a person's, and %q is not one", issued.Subject)
 	}
 
 	if issued.Session == "" {
-		return refuse("no session stands behind that access token")
+		return refuse("no_session", "no session stands behind that access token")
 	}
 
 	session, live, err := s.iss.Sessions().ByID(ctx, issued.Session)
@@ -2807,7 +2829,7 @@ func (s *Storage) signInProof(ctx context.Context, request exchangeSubject) (Pro
 	}
 
 	if !live {
-		return refuse("the session behind that access token has ended")
+		return refuse("session_ended", "the session behind that access token has ended")
 	}
 
 	// A sign-in exchange trades a person's CLI sign-in, and an agent chain
@@ -2815,7 +2837,7 @@ func (s *Storage) signInProof(ctx context.Context, request exchangeSubject) (Pro
 	// with `sign_in_exchange` is not enough on its own: a recorded class
 	// outlives a policy change, so the class of the session itself decides.
 	if session.Agent() {
-		return refuse("a sign-in held by an agent-class session cannot be exchanged")
+		return refuse("agent_session", "a sign-in held by an agent-class session cannot be exchanged")
 	}
 
 	return Proof{Email: issued.Subject}, nil

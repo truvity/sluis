@@ -87,16 +87,23 @@ func (i *Issuer) Exchange(ctx context.Context, proof Proof, audience string) (Gr
 	}
 	client, ok := i.set.Client(audience)
 	if !ok {
-		i.record(ctx, exchangeEvent(proof, audience, audit.Denied("the requested audience is not a declared client")))
+		i.record(ctx, exchangeRefused(proof, audience, audit.Denied("the requested audience is not a declared client"),
+			i.exchangeRefusal(ctx, proof, audience, "unknown_audience")))
 		return Grant{}, fmt.Errorf("%w: %q", ErrUnknownTarget, audience)
 	}
 
 	result, held, err := i.evaluate(ctx, proof)
 	if err != nil {
+		code, outcome := "directory_unavailable", audit.Failed("the proof's groups could not be resolved: "+err.Error())
+		if errors.As(err, new(*Refused)) {
+			code, outcome = "directory_refused", audit.Denied(err.Error())
+		}
+		i.record(ctx, exchangeRefused(proof, audience, outcome, i.exchangeRefusal(ctx, proof, audience, code)))
 		return Grant{}, err
 	}
 	if !client.Admits(result) {
-		i.record(ctx, exchangeEvent(proof, audience, audit.Denied("the proof holds no group this client requires")))
+		i.record(ctx, exchangeRefused(proof, audience, audit.Denied("the proof holds no group this client requires"),
+			i.exchangeRefusal(ctx, proof, audience, "not_admitted")))
 		return Grant{}, fmt.Errorf("%w: %q requires any of %v, this proof holds %v",
 			ErrRefused, audience, client.Requires, result.Groups)
 	}
@@ -154,6 +161,11 @@ func (i *Issuer) Lifetime(grant Grant) (out policy.Duration) {
 		return policy.Duration(grant.Result.Lifetime)
 	}
 	return policy.Duration(client.Cap(grant.Result.Lifetime))
+}
+
+// exchangeRefused is a refused exchange with the evaluation behind it.
+func exchangeRefused(proof Proof, audience string, o audit.Outcome, why audit.Refusal) *record.Record {
+	return audit.TokenExchangeRefused(proof.actor(), audience, proof.kind(), o, why)
 }
 
 // exchangeEvent is one token exchange, by the kind of proof it was: the
