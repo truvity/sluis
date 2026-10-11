@@ -2,11 +2,8 @@ package server
 
 import (
 	"context"
-	"crypto/subtle"
 	"errors"
 	"fmt"
-	"html"
-	"log/slog"
 	"maps"
 	"net/http"
 	"net/url"
@@ -23,25 +20,9 @@ import (
 	"github.com/truvity/sluis/internal/slackapp"
 	slackcatalogue "github.com/truvity/sluis/internal/slackapp/catalogue"
 	"github.com/truvity/sluis/internal/slackapp/catalogueapp"
+	slackconsole "github.com/truvity/sluis/internal/slackapp/console"
 	"github.com/truvity/sluis/storage/logattr"
 )
-
-// SlackCatalogueApps is where catalogue Slack Apps are kept: every App's
-// record, client credentials and bot token, by its catalogue id.
-type SlackCatalogueApps interface {
-	Put(ctx context.Context, record catalogueapp.Record, credentials catalogueapp.Credentials) error
-	List(ctx context.Context) ([]catalogueapp.Record, error)
-	// Get is one App's record and credentials, installed or not.
-	Get(ctx context.Context, id string) (catalogueapp.Record, catalogueapp.Credentials, bool, error)
-}
-
-// Where Slack sends the browser back to after an owner installs a
-// catalogue App.
-const slackCatalogueCallbackPath = "/connect/slack/catalogue/callback"
-
-// slackCatalogueBind prefixes the App's id in a catalogue flow's signed
-// state, so no other flow's state can finish it, and the other way round.
-const slackCatalogueBind = "slack-catalogue:"
 
 // The states a catalogue Slack App is shown in.
 const (
@@ -85,11 +66,11 @@ func (c *Console) connectedSlackTeam(ctx context.Context, workspace string) (str
 	if err != nil {
 		return "", nil, err
 	}
-	if book.team(workspace) == "" {
+	if book.Team(workspace) == "" {
 		return "", book, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
 			"connect the workspace first: %s has no connected Slack workspace yet, and a catalogue App is installed into the team recorded when it is", workspace))
 	}
-	return book.team(workspace), book, nil
+	return book.Team(workspace), book, nil
 }
 
 // ListSlackApps is every declared App, and every App created from an entry
@@ -132,13 +113,13 @@ func (c *Console) ListSlackApps(
 func appendVisible(
 	apps []*directoryrosterv1.SlackApp, id access.Identity, book slackBook, app *directoryrosterv1.SlackApp,
 ) []*directoryrosterv1.SlackApp {
-	if !book.may(id, access.RoleViewer, app.GetWorkspace()) {
+	if !book.May(id, access.RoleViewer, app.GetWorkspace()) {
 		return apps
 	}
 	// An App is operated once its workspace is connected, and not before:
 	// there is nobody yet whose directory it could be.
 	_, connected := book[app.GetWorkspace()]
-	app.CanOperate = connected && book.mayAct(id, app.GetWorkspace())
+	app.CanOperate = connected && book.MayAct(id, app.GetWorkspace())
 	return append(apps, app)
 }
 
@@ -163,18 +144,18 @@ func (c *Console) slackAppView(entry *slackcatalogue.App, record *catalogueapp.R
 		out.Id, out.Workspace, out.Name, out.Description = entry.ID, entry.Workspace, entry.DisplayName(), entry.Description
 		out.BotScopes = slices.Clone(entry.BotScopes)
 		declaredScopes = entry.BotScopes
-		out.TeamId = book.team(entry.Workspace)
+		out.TeamId = book.Team(entry.Workspace)
 	}
 	if record == nil {
 		return out
 	}
 	if entry == nil {
 		out.Id, out.Workspace, out.Name = record.ID, record.Workspace, record.ID
-		out.TeamId = book.team(record.Workspace)
+		out.TeamId = book.Team(record.Workspace)
 	}
 	out.State = slackAppCreated
 	out.AppId = record.AppID
-	out.AppSettingsUrl = slackAppSettingsURL(record.AppID)
+	out.AppSettingsUrl = slackconsole.AppSettingsURL(record.AppID)
 	out.CreatedAt, out.CreatedBy = timestamppb.New(record.CreatedAt), record.CreatedBy
 	out.NeedsConfigurationToken = len(slackapp.MissingScopes(strings.Join(record.ManifestScopes, ","), declaredScopes)) > 0
 	if !record.Installed() {
@@ -190,14 +171,6 @@ func (c *Console) slackAppView(entry *slackcatalogue.App, record *catalogueapp.R
 	return out
 }
 
-// slackAppSettingsURL is where an App is managed and deleted.
-func slackAppSettingsURL(appID string) string {
-	if appID == "" {
-		return ""
-	}
-	return "https://api.slack.com/apps/" + url.PathEscape(appID)
-}
-
 // declaredSlackApp is the entry the catalogue has under an id.
 func (c *Console) declaredSlackApp(id string) (slackcatalogue.App, error) {
 	entry, declared := c.deps.SlackCatalogue.Get(id)
@@ -209,7 +182,7 @@ func (c *Console) declaredSlackApp(id string) (slackcatalogue.App, error) {
 
 // slackRedirect is where Slack sends the owner after installing a
 // catalogue App.
-func (c *Console) slackRedirect() string { return c.githubRoot() + slackCatalogueCallbackPath }
+func (c *Console) slackRedirect() string { return c.githubRoot() + slackconsole.CatalogueCallbackPath }
 
 // slackRevoke takes back a bot token this service will not keep: one minted
 // for the wrong workspace, or one it is disconnecting. A token already dead
@@ -219,15 +192,6 @@ func (c *Console) slackRevoke(ctx context.Context, token string) error {
 	defer cancel()
 	return slackapp.New(token, c.deps.SlackAPI...).Revoke(callCtx)
 }
-
-// slackFlow is which install a redirect belongs to, for the page a failure
-// lands on.
-type slackFlow struct{ name, back, heading string }
-
-var (
-	slackCatalogueFlow = slackFlow{name: "catalogue", back: "/#/slack-apps", heading: "The Slack App could not be installed"}
-	slackWorkspaceFlow = slackFlow{name: "workspace", back: "/#/slack", heading: "The Slack workspace could not be connected"}
-)
 
 // revokedWords is what became of a refused token, for the audit record.
 func revokedWords(revokeErr error) string {
@@ -313,7 +277,7 @@ func (c *Console) CreateSlackApp(
 	}
 	if err = store.Put(ctx, record, catalogueapp.Credentials{ClientSecret: app.Credentials.ClientSecret}); err != nil {
 		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf(
-			"slack created the App and it could not be saved here: delete it at %s and create it again: %w", slackAppSettingsURL(app.AppID), err))
+			"slack created the App and it could not be saved here: delete it at %s and create it again: %w", slackconsole.AppSettingsURL(app.AppID), err))
 	}
 	c.record(ctx, audit.SlackCatalogueAppCreated(actorOf(ctx), audit.SlackCatalogueApp{ID: id, App: app.AppID, Workspace: entry.Workspace}))
 	return connect.NewResponse(&directoryrosterv1.CreateSlackAppResponse{App: c.slackAppView(&entry, &record, book)}), nil
@@ -387,7 +351,7 @@ func (c *Console) InstallSlackApp(
 				"or a reinstall would grant nothing new", id))
 	}
 
-	state, err := c.deps.State.IssueAs(access.Binding{Bind: slackCatalogueBind + id, Actor: who.Who()})
+	state, err := c.deps.State.IssueAs(access.Binding{Bind: slackconsole.CatalogueBind + id, Actor: who.Who()})
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -419,89 +383,6 @@ func slackAuthorizeURL(authorize, state, redirect, team string, scopes []string)
 	return u.String(), nil
 }
 
-// slackRefusal ends a Slack callback that cannot finish: it logs why, records
-// why, and answers with the page. reason is the short sentence the log and
-// the audit record carry; it may hold Slack's own words, so the log takes it
-// through logattr, and it never holds the code, a token or a secret.
-type slackRefusal func(code int, summary, detail, reason string, causes []string)
-
-// slackRefused is the log line every refused Slack callback leaves, whichever
-// of its reasons, so that nobody has to guess why an install did nothing.
-func (s *ConsoleServer) slackRefused(flow slackFlow, r *http.Request, actor, reason string) {
-	s.log.WarnContext(r.Context(), "a Slack install callback was refused", slog.String("flow", flow.name),
-		logattr.SafeString("reason", reason), logattr.SafeString("by", actor))
-}
-
-// slackBound checks a catalogue flow's redirect the way GitHub's is
-// checked: the cookie the flow was pinned with must equal the state, the
-// state must be one this service signed, and whoever it names must be an
-// operator. It returns the state's bind and the actor. learn is told what
-// the state names as soon as it is known, so a later refusal can say whose
-// install it was.
-func (s *ConsoleServer) slackBound(r *http.Request, refuse slackRefusal, learn func(bind, actor string)) (bind, actor string, ok bool) {
-	state := r.URL.Query().Get("state")
-	if state == "" {
-		refuse(http.StatusBadRequest, "This install did not start in this browser.", "", "no state in the redirect", nil)
-		return "", "", false
-	}
-	binding, err := s.state.VerifyBinding(state)
-	if err != nil {
-		refuse(http.StatusBadRequest, "This install cannot be finished.", err.Error(), "the state is not valid: "+err.Error(), nil)
-		return "", "", false
-	}
-	learn(binding.Bind, binding.Actor)
-	cookie, err := access.ReadCookie(r, access.ConnectCookieName, s.sessions.Secure())
-	if err != nil || cookie.Value == "" || subtle.ConstantTimeCompare([]byte(cookie.Value), []byte(state)) != 1 {
-		refuse(http.StatusBadRequest, "This install did not start in this browser.", "", "the flow cookie is missing or is not this state's", []string{
-			"It was started in another browser, profile or private window.",
-			"More than ten minutes passed on Slack's page before returning.",
-			"The browser is refusing the cookie this flow is pinned to.",
-		})
-		return "", "", false
-	}
-	actor = binding.Actor
-	// The state binds who began the flow, and that was checked then. It is
-	// asked again here, about whoever is signed in NOW, by the same rule as
-	// the call that began it: a flow begun by an operator of one company's
-	// directory must not finish in another's workspace, nor after the role
-	// was taken away.
-	if id, signedIn := IdentityFrom(r.Context()); signedIn {
-		workspace := s.console.slackWorkspaceOfBind(binding.Bind)
-		if _, err = s.console.requireSlack(r.Context(), access.RoleOperator, workspace); err != nil {
-			refuse(http.StatusForbidden, err.Error()+".", "", "the signed-in operator may not operate the workspace: "+err.Error(), nil)
-			return "", "", false
-		}
-		actor = id.Who()
-		learn(binding.Bind, actor)
-	}
-	if actor == "" {
-		refuse(http.StatusForbidden, "Installing a Slack App needs the operator role.", "", "the state names no operator", nil)
-		return "", "", false
-	}
-	return binding.Bind, actor, true
-}
-
-// slackProblem is the page a Slack redirect lands on when it cannot finish:
-// a 4xx, never a 5xx, which a CDN in front would replace with a page of its
-// own and lose Slack's words.
-func (s *ConsoleServer) slackProblem(flow slackFlow, w http.ResponseWriter, r *http.Request, code int, summary, detail string, causes []string) {
-	var body strings.Builder
-	fmt.Fprintf(&body, `<h1>%s</h1>`, html.EscapeString(flow.heading))
-	fmt.Fprintf(&body, `<p>%s</p>`, html.EscapeString(summary))
-	if detail != "" {
-		fmt.Fprintf(&body, `<p class="note">What Slack said:</p><pre>%s</pre>`, html.EscapeString(detail))
-	}
-	if len(causes) > 0 {
-		body.WriteString(`<p class="note">The usual causes, most common first:</p><ul>`)
-		for _, cause := range causes {
-			fmt.Fprintf(&body, `<li>%s</li>`, html.EscapeString(cause))
-		}
-		body.WriteString(`</ul>`)
-	}
-	body.WriteString(`<p><a class="btn" href="` + s.at(flow.back) + `">Back to the console</a></p>`)
-	s.writePage(w, r, code, "Slack", body.String())
-}
-
 // slackCatalogueCallback is where Slack sends the owner after installing a
 // catalogue App, with a one-time code for the bot token.
 //
@@ -520,17 +401,29 @@ func (s *ConsoleServer) slackCatalogueCallback(w http.ResponseWriter, r *http.Re
 	}
 	learn := func(bind, who string) {
 		actor = who
-		if id, ok := strings.CutPrefix(bind, slackCatalogueBind); ok && slackcatalogue.ValidID(id) {
+		if id, ok := strings.CutPrefix(bind, slackconsole.CatalogueBind); ok && slackcatalogue.ValidID(id) {
 			app.ID = id
 		}
 	}
-	bind, actor, ok := s.slackBound(r, refuse, learn)
+	bind, actor, current, ok := s.slackBound(r, refuse, learn)
 	if !ok {
+		return
+	}
+	if current != nil {
+		// The role question again, now, of the workspace the App is in.
+		if _, err := console.requireSlack(r.Context(), access.RoleOperator, console.slackWorkspaceOfBind(bind)); err != nil {
+			said := connectMessage(err)
+			refuse(http.StatusForbidden, said+".", "", "the signed-in operator may not operate the workspace: "+said, nil)
+			return
+		}
+	}
+	if actor == "" {
+		refuse(http.StatusForbidden, "Installing a Slack App needs the operator role.", "", "the state names no operator", nil)
 		return
 	}
 	// The flow ends here, whichever way it goes.
 	access.SetCookie(w, access.ConnectCookie("", s.sessions.Secure(), 0))
-	id, isCatalogue := strings.CutPrefix(bind, slackCatalogueBind)
+	id, isCatalogue := strings.CutPrefix(bind, slackconsole.CatalogueBind)
 	if !isCatalogue || !slackcatalogue.ValidID(id) {
 		refuse(http.StatusBadRequest, "This is not a catalogue Slack App's install.", "", "the state is for another flow", nil)
 		return

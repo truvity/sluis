@@ -1,4 +1,4 @@
-package server
+package console
 
 import (
 	"context"
@@ -14,6 +14,8 @@ import (
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
 	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/audit"
+	"github.com/truvity/sluis/internal/consoleauthz"
+	"github.com/truvity/sluis/internal/consolecall"
 	"github.com/truvity/sluis/internal/port"
 	"github.com/truvity/sluis/internal/slackapp"
 	"github.com/truvity/sluis/internal/slackroster/connection"
@@ -25,10 +27,10 @@ import (
 // exists for that it no longer does (which only the installation-wide role
 // sees, for want of an owner). A workspace's owner and team are the ones its
 // connection recorded.
-func (c *Console) GetSlackStatus(
-	ctx context.Context, _ *connect.Request[directoryrosterv1.GetSlackStatusRequest],
-) (*connect.Response[directoryrosterv1.GetSlackStatusResponse], error) {
-	id, book, err := c.requireAnySlack(ctx, access.RoleViewer)
+func (c *Service) GetSlackStatus(
+	ctx context.Context, caller consolecall.Caller, _ *directoryrosterv1.GetSlackStatusRequest,
+) (*directoryrosterv1.GetSlackStatusResponse, error) {
+	id, book, err := c.requireAnySlack(ctx, caller, access.RoleViewer)
 	if err != nil {
 		return nil, err
 	}
@@ -36,18 +38,18 @@ func (c *Console) GetSlackStatus(
 	if err != nil {
 		return nil, err
 	}
-	domains := ownerDomains(dirs)
+	domains := consoleauthz.OwnerDomains(dirs)
 	out := &directoryrosterv1.GetSlackStatusResponse{
-		ReportsAvailable:    c.deps.SlackStatus != nil,
-		ConnectingAvailable: c.deps.SlackWorkspaces != nil,
+		ReportsAvailable:    c.d().SlackStatus != nil,
+		ConnectingAvailable: c.d().SlackWorkspaces != nil,
 		BotScopes:           slices.Clone(connection.BotScopes),
-		RedirectUrl:         c.slackWorkspaceRedirect(),
+		RedirectUrl:         c.slackWorkspaceRedirect(caller),
 	}
-	out.OwnerChoices, out.MayConnectWithoutOwner = ownerChoices(id, dirs)
+	out.OwnerChoices, out.MayConnectWithoutOwner = consoleauthz.OwnerChoices(id, dirs)
 
 	reports := map[string]string{}
-	if c.deps.SlackStatus != nil {
-		read, err := c.deps.SlackStatus.Reports(ctx)
+	if c.d().SlackStatus != nil {
+		read, err := c.d().SlackStatus.Reports(ctx)
 		if err != nil {
 			return nil, connect.NewError(connect.CodeUnavailable, err)
 		}
@@ -59,21 +61,21 @@ func (c *Console) GetSlackStatus(
 	}
 	connections := map[string]connection.Record(book)
 	confirmations := map[string]connection.Confirmation{}
-	if c.deps.SlackWorkspaces != nil {
-		if confirmations, err = c.deps.SlackWorkspaces.Confirmations(ctx); err != nil {
+	if c.d().SlackWorkspaces != nil {
+		if confirmations, err = c.d().SlackWorkspaces.Confirmations(ctx); err != nil {
 			return nil, connect.NewError(connect.CodeUnavailable, err)
 		}
 	}
 
 	passes := map[string]connection.PassRequest{}
-	if c.deps.SlackWorkspaces != nil {
-		if passes, err = c.deps.SlackWorkspaces.PassRequests(ctx); err != nil {
+	if c.d().SlackWorkspaces != nil {
+		if passes, err = c.d().SlackWorkspaces.PassRequests(ctx); err != nil {
 			return nil, connect.NewError(connect.CodeUnavailable, err)
 		}
 	}
 
 	seen, declared := map[string]bool{}, map[string]bool{}
-	for _, workspace := range c.deps.Authorizer.Policy().SlackWorkspaceKeys() {
+	for _, workspace := range c.d().Authorizer.Policy().SlackWorkspaceKeys() {
 		seen[workspace], declared[workspace] = true, true
 	}
 	for workspace := range reports {
@@ -87,7 +89,7 @@ func (c *Console) GetSlackStatus(
 		// A key nothing declares and nothing is connected for (a stale
 		// report) is nobody's to connect: the installation-wide role sees it.
 		_, connected := connections[workspace]
-		mayView, mayOperate := book.may(id, access.RoleViewer, workspace), book.may(id, access.RoleOperator, workspace)
+		mayView, mayOperate := book.May(id, access.RoleViewer, workspace), book.May(id, access.RoleOperator, workspace)
 		if !connected && !declared[workspace] {
 			mayView, mayOperate = id.Can(access.RoleViewer), id.Can(access.RoleOperator)
 		}
@@ -106,14 +108,14 @@ func (c *Console) GetSlackStatus(
 		row.PassRequestedAt = timestampOf(passes[workspace].At)
 		out.Workspaces = append(out.Workspaces, row)
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
 // slackConnectionView says where a connection stands, from its record.
-func (c *Console) slackConnectionView(row *directoryrosterv1.SlackWorkspaceStatus, record connection.Record) {
+func (c *Service) slackConnectionView(row *directoryrosterv1.SlackWorkspaceStatus, record connection.Record) {
 	row.ConnectionState = slackCreated
 	row.Connection = &directoryrosterv1.SlackConnection{
-		AppId: record.AppID, AppSettingsUrl: slackAppSettingsURL(record.AppID),
+		AppId: record.AppID, AppSettingsUrl: AppSettingsURL(record.AppID),
 		ConnectedAt: timestampOf(record.ConnectedAt), ConnectedBy: record.ConnectedBy,
 	}
 	row.NeedsConfigurationToken = len(slackapp.MissingScopes(strings.Join(record.ManifestScopes, ","), connection.BotScopes)) > 0
@@ -132,7 +134,7 @@ func (c *Console) slackConnectionView(row *directoryrosterv1.SlackWorkspaceStatu
 // controller's report. A report that cannot be read is shown as a failed
 // pass with the reason, not as no report: a page that says nothing about a
 // workspace looks like one that has nothing to say.
-func (c *Console) slackWorkspaceView(
+func (c *Service) slackWorkspaceView(
 	workspace, document string, confirmations map[string]connection.Confirmation, now time.Time,
 ) *directoryrosterv1.SlackWorkspaceStatus {
 	row := &directoryrosterv1.SlackWorkspaceStatus{
@@ -161,7 +163,7 @@ func (c *Console) slackWorkspaceView(
 			Email: leaver.Email, UserId: leaver.UserID, Channels: slices.Clone(leaver.Channels), Reason: leaver.Reason,
 		})
 	}
-	bound := c.deps.Authorizer.Policy().Declared().Slack.Workspaces[workspace].Channels
+	bound := c.d().Authorizer.Policy().Declared().Slack.Workspaces[workspace].Channels
 	for i := range report.Channels {
 		ch := &report.Channels[i]
 		view := &directoryrosterv1.SlackChannelStatus{
@@ -210,25 +212,25 @@ func slackConfirmationView(
 // ahead. The fingerprint must be the one the latest report shows for that
 // gate — the workspace's, or the named channel's: confirming a set that has
 // since changed would confirm people nobody looked at.
-func (c *Console) ConfirmSlackRemovals(
-	ctx context.Context, req *connect.Request[directoryrosterv1.ConfirmSlackRemovalsRequest],
-) (*connect.Response[directoryrosterv1.ConfirmSlackRemovalsResponse], error) {
-	workspace, channel := strings.TrimSpace(req.Msg.GetWorkspace()), strings.TrimSpace(req.Msg.GetChannel())
-	fingerprint := strings.TrimSpace(req.Msg.GetFingerprint())
-	if _, err := requireAnywhere(ctx, access.RoleOperator); err != nil {
+func (c *Service) ConfirmSlackRemovals(
+	ctx context.Context, caller consolecall.Caller, req *directoryrosterv1.ConfirmSlackRemovalsRequest,
+) (*directoryrosterv1.ConfirmSlackRemovalsResponse, error) {
+	workspace, channel := strings.TrimSpace(req.GetWorkspace()), strings.TrimSpace(req.GetChannel())
+	fingerprint := strings.TrimSpace(req.GetFingerprint())
+	if _, err := consoleauthz.RequireAnywhere(caller, access.RoleOperator); err != nil {
 		return nil, err
 	}
-	id, err := c.requireSlack(ctx, access.RoleOperator, workspace)
+	id, err := c.requireSlack(ctx, caller, access.RoleOperator, workspace)
 	if err != nil {
 		return nil, err
 	}
 	switch {
 	case !status.ValidWorkspace(workspace) || fingerprint == "" || strings.Contains(channel, "."):
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("a workspace and a fingerprint are required, and a channel name has no dot"))
-	case c.deps.SlackStatus == nil || c.deps.SlackWorkspaces == nil:
+	case c.d().SlackStatus == nil || c.d().SlackWorkspaces == nil:
 		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("this deployment keeps no reports or confirmations"))
 	}
-	reports, err := c.deps.SlackStatus.Reports(ctx)
+	reports, err := c.d().SlackStatus.Reports(ctx)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeUnavailable, err)
 	}
@@ -250,14 +252,14 @@ func (c *Console) ConfirmSlackRemovals(
 		return nil, connect.NewError(connect.CodeFailedPrecondition,
 			fmt.Errorf("the removals in %s have changed since that page was loaded: reload and look again", slackGate(workspace, channel)))
 	}
-	if err = c.deps.SlackWorkspaces.PutConfirmation(ctx, connection.Confirmation{
+	if err = c.d().SlackWorkspaces.PutConfirmation(ctx, connection.Confirmation{
 		Workspace: workspace, Channel: channel, Fingerprint: fingerprint, By: id.Who(), At: time.Now().UTC(),
 	}); err != nil {
 		return nil, connect.NewError(connect.CodeUnavailable, err)
 	}
-	c.record(ctx, audit.SlackRemovalsConfirmed(identityActor(id), workspace, channel, fingerprint, gate.Affected))
+	c.record(ctx, audit.SlackRemovalsConfirmed(consoleauthz.Actor(id), workspace, channel, fingerprint, gate.Affected))
 	c.notify(ctx, port.ControllerSlack, workspace)
-	return connect.NewResponse(&directoryrosterv1.ConfirmSlackRemovalsResponse{}), nil
+	return &directoryrosterv1.ConfirmSlackRemovalsResponse{}, nil
 }
 
 func slackGate(workspace, channel string) string {
