@@ -4,6 +4,10 @@
 
 - **Behaviour change under `groupsScoping: enforce`: a token carries only the claims fragments of the groups it keeps.** The fragments (`claims.<group>`) of every held group were merged into the token before its audience was known, so a token scoped to one client still carried the grants of groups it had dropped from `groups`. `scopeClaims` now rebuilds the fragment claims from the kept groups' fragments alone, with the same merge (lists union, maps recurse), in the ID token, the access token, `/userinfo` and a token exchange. A relying party that read a claim set by a fragment of a group its `requires` and `groups:` override do not keep stops seeing it: add the group's pair to its `requires` or the thing to its `groups:` override before turning `enforce` on, or on upgrade for an estate already on it. `report` and `off` are unchanged. See [0006](docs/decisions/0006-groups-claim-scoped-per-audience.md).
 
+### Added
+
+- **`claim_merge` joins named list claims into one string instead of unioning them.** Groups' fragments that each carry one conjunct of a filter, such as `vm_access.logs_extra_stream_filters`, were unioned into a list, which vmauth turns into repeated query args that VictoriaLogs ANDs, so two grants returned no rows. A policy now declares `claim_merge.<dotted path>` with `join`, optional `prefix` and `suffix`, and `as` (`list`, the default, or `string`); the strings of every merged group are sorted, de-duplicated, joined and wrapped, e.g. `_stream:{A or B}`. The join runs on the groups a token carries, so under `groupsScoping: enforce` it sees only the kept groups, on every token path; with no contributing group the key is absent. Load refuses an empty `join`, an unknown `as`, a malformed path, and a fragment that sets a declared path to anything but a list of strings. See [policy-groups.md](docs/reference/sluis/policy-groups.md#joined-claims).
+
 ## v1.75.0-rc.8
 
 ### Added

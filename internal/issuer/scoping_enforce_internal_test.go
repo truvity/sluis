@@ -170,3 +170,65 @@ func TestScopeClaimsRebuildsFragmentsFromKeptGroups(t *testing.T) {
 		t.Error("the input map was mutated")
 	}
 }
+
+// A declared claim_merge join runs on the SCOPED set: an audience that
+// keeps only one of two granting groups gets that group's filter alone, and
+// one that keeps neither gets no key at all, not the full unscoped join.
+func TestScopeClaimsJoinsOnlyTheKeptGroupsFilters(t *testing.T) {
+	t.Parallel()
+
+	filter := func(s string) policy.Fragment {
+		return policy.Fragment{"vm_access": map[string]any{"logs_extra_stream_filters": []any{s}}}
+	}
+	set, err := policy.NewSet(policy.Policy{
+		Version: 1,
+		Groups: map[string]policy.Group{
+			"devel:vm:viewer": {},
+			"devel:dms:admin": {},
+			"devel:kyc:admin": {},
+		},
+		Claims: map[string]policy.Fragment{
+			"devel:dms:admin": filter(`ns="dms"`),
+			"devel:kyc:admin": filter(`ns="kyc"`),
+		},
+		ClaimMerge: map[string]policy.ClaimJoin{
+			"vm_access.logs_extra_stream_filters": {Join: " or ", Prefix: "_stream:{", Suffix: "}"},
+		},
+		Clients: map[string]policy.Client{
+			"both":  {Kind: "exchange", Requires: []string{"devel:vm:viewer"}, Groups: policy.GroupsOverride{Things: []string{"dms", "kyc"}}},
+			"dms":   {Kind: "exchange", Requires: []string{"devel:vm:viewer"}, Groups: policy.GroupsOverride{Things: []string{"dms"}}},
+			"nogrp": {Kind: "exchange", Requires: []string{"devel:vm:viewer"}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("policy set: %v", err)
+	}
+
+	held := []string{"devel:dms:admin", "devel:kyc:admin", "devel:vm:viewer"}
+	full := map[string]any(set.ClaimsFor(held))
+	full["groups"] = anyGroups(held...)
+
+	read := func(m map[string]any) (any, bool) {
+		va, ok := m["vm_access"].(map[string]any)
+		if !ok {
+			return nil, false
+		}
+		v, ok := va["logs_extra_stream_filters"]
+		return v, ok
+	}
+
+	if got, _ := read(full); !reflect.DeepEqual(got, []any{`_stream:{ns="dms" or ns="kyc"}`}) {
+		t.Fatalf("unscoped join = %#v", got)
+	}
+	got, _ := read(scopeClaims(GroupsScopingEnforce, set, full, "both", held))
+	if !reflect.DeepEqual(got, []any{`_stream:{ns="dms" or ns="kyc"}`}) {
+		t.Errorf("audience keeping both = %#v", got)
+	}
+	got, _ = read(scopeClaims(GroupsScopingEnforce, set, full, "dms", held))
+	if !reflect.DeepEqual(got, []any{`_stream:{ns="dms"}`}) {
+		t.Errorf("audience keeping one = %#v, want only its filter", got)
+	}
+	if _, present := read(scopeClaims(GroupsScopingEnforce, set, full, "nogrp", held)); present {
+		t.Error("an audience keeping neither granting group carries the key")
+	}
+}
