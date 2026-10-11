@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"testing"
 
+	"github.com/truvity/sluis/internal/modcall"
 	"github.com/truvity/sluis/internal/rosterapp"
 )
 
@@ -43,7 +44,10 @@ directory:
     - {id: acme.example, backend: google, admin: admin@acme.example, keySecret: workspaces/acme/key, serve: [acme.example]}
 `
 	start := func(doc string) error {
-		app, err := rosterapp.New(context.Background(), load(t, doc), slog.New(slog.DiscardHandler))
+		cfg := load(t, doc)
+		// The module's function is not called at start; there is no Lambda here.
+		cfg.Dial = func(context.Context, modcall.Config, string) (modcall.Caller, error) { return modcall.Local{}, nil }
+		app, err := rosterapp.New(context.Background(), cfg, slog.New(slog.DiscardHandler))
 		if err == nil {
 			app.Close()
 		}

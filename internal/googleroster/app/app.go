@@ -13,22 +13,27 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/truvity/sluis/backend"
 	"github.com/truvity/sluis/backend/google"
+	"github.com/truvity/sluis/internal/audit"
 	"github.com/truvity/sluis/internal/config"
 	"github.com/truvity/sluis/internal/connector"
+	googleconsole "github.com/truvity/sluis/internal/googleapp/console"
 	"github.com/truvity/sluis/internal/health"
 	"github.com/truvity/sluis/internal/hub"
 	"github.com/truvity/sluis/internal/hubwire"
 	"github.com/truvity/sluis/internal/lazy"
 	"github.com/truvity/sluis/internal/maintenance"
+	"github.com/truvity/sluis/internal/modcall"
 	"github.com/truvity/sluis/internal/port"
 	"github.com/truvity/sluis/internal/portstore"
 	"github.com/truvity/sluis/internal/secrets"
 	"github.com/truvity/sluis/internal/store"
+	"github.com/truvity/sluis/internal/version"
 	"github.com/truvity/sluis/storage/logattr"
 )
 
@@ -44,6 +49,7 @@ const secretReadTimeout = 15 * time.Second
 type Config struct {
 	doc      *config.SluisGoogle
 	stores   store.Config
+	audit    audit.Config
 	hub      hub.Config
 	logLevel slog.Level
 	probes   string
@@ -80,7 +86,13 @@ func FromDocument(doc *config.SluisGoogle) (Config, error) {
 	if stores.Secrets, err = secrets.Open(context.Background(), serve); err != nil {
 		return Config{}, err
 	}
-	c := Config{doc: doc, stores: stores, probes: ":7070"}
+	c := Config{doc: doc, stores: stores, probes: ":7070", audit: audit.Config{Version: version.String()}}
+	// The audit instance is the pod, which is its hostname in a cluster.
+	c.audit.Instance, _ = os.Hostname()
+	if a := doc.Audit; a != nil {
+		c.audit.Writer = a.Writer
+		c.audit.TokenFile = a.TokenFile
+	}
 	if doc.Probes != nil && doc.Probes.Address != "" {
 		c.probes = doc.Probes.Address
 	}
@@ -107,6 +119,11 @@ type App struct {
 	// sharedLease is whether the refresh lease is held in a State shared with
 	// every other runner.
 	sharedLease bool
+	// trail is where the module records what it did for a console; the console
+	// service and its server answer other modules' calls.
+	trail   *audit.Trail
+	console *googleconsole.Service
+	rpc     *modcall.Server
 }
 
 // New assembles the module: the ports, the hub over the module's own table and
@@ -120,6 +137,20 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 		return nil, err
 	}
 	fail := func(err error) (*App, error) {
+		stores.Close()
+		return nil, err
+	}
+	// A refusal found after the start is logged, and the next record says it again.
+	cfg.audit.Log = log
+	if cfg.audit, err = audit.FromPlan(cfg.audit, stores.Plan); err != nil {
+		return fail(err)
+	}
+	trail, err := audit.Open(ctx, cfg.audit)
+	if err != nil {
+		return fail(err)
+	}
+	fail = func(err error) (*App, error) {
+		_ = trail.Close()
 		stores.Close()
 		return nil, err
 	}
@@ -144,9 +175,12 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 		directory.UseMaintenance(maint)
 	}
 
+	// The one connector: it reopens a stored credential, finishes a consent,
+	// takes an uploaded key and signs somebody in, with the one OAuth client the
+	// module holds the secret of.
+	conn := connector.NewGoogle(oauthClient(cfg.doc.Google.OAuthClient, cfg.doc.Google.PublicURL, stores.Secrets))
 	opener := cfg.openStored
 	if opener == nil {
-		conn := connector.NewGoogle(oauthClient(cfg.doc.Google.OAuthClient, stores.Secrets))
 		opener = func(ctx context.Context, kind string, cred backend.Credential) (backend.Backend, error) {
 			if kind != "google" {
 				return nil, fmt.Errorf("unknown backend %q; this module reads google", kind)
@@ -174,9 +208,21 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 		log.InfoContext(ctx, "no shared state backs the refresh lease, so it is held in this process: run one replica",
 			slog.String("adapter", stores.Adapter))
 	}
+	svc := googleconsole.NewService(directory, []googleconsole.Connector{conn}, trail, log)
 	return &App{hub: directory, stores: stores, log: log, ready: health.NewGate("the Google module"),
-		probes: cfg.probes, maint: maint, sharedLease: shared}, nil
+		probes: cfg.probes, maint: maint, sharedLease: shared, trail: trail, console: svc, rpc: svc.Server()}, nil
 }
+
+// Console is the console's Workspace service over the module's hub.
+func (a *App) Console() *googleconsole.Service { return a.console }
+
+// RPC is the module's server: the console's methods, answered to the caller
+// class `console`, and the sign-in's, answered to `issuer`. What a transport of
+// internal/modcall serves.
+func (a *App) RPC() *modcall.Server { return a.rpc }
+
+// Flush delivers the audit records the module queued, within ctx.
+func (a *App) Flush(ctx context.Context) error { return a.trail.Flush(ctx) }
 
 // Hub is the module's hub, for a caller that drives it directly.
 func (a *App) Hub() *hub.Hub { return a.hub }
@@ -253,8 +299,9 @@ func (a *App) resolve(ctx context.Context, workspace string) (string, error) {
 
 // Close releases what New opened.
 func (a *App) Close() error {
+	err := a.trail.Close()
 	a.stores.Close()
-	return nil
+	return err
 }
 
 // oauthClient is the client that reopens a workspace connected by consent,
@@ -262,14 +309,14 @@ func (a *App) Close() error {
 // The module has no console, so the document is the only place the client is
 // declared; none declared is an error naming that, raised by the workspace that
 // needs it and by no other.
-func oauthClient(o *config.GoogleOAuthClient, src secrets.Source) func() (google.OAuthClient, error) {
+func oauthClient(o *config.GoogleOAuthClient, publicURL string, src secrets.Source) func() (google.OAuthClient, error) {
 	if o == nil || o.Provider == "" {
 		return func() (google.OAuthClient, error) {
-			return google.OAuthClient{}, errors.New("a workspace was connected by consent, and the document declares no google.oauthClient to reopen it")
+			return google.OAuthClient{}, errors.New("the document declares no google.oauthClient: register one in the document to connect by consent, sign in, or reopen a workspace connected that way")
 		}
 	}
 	value := lazy.New(lazy.TTL, func(ctx context.Context) (google.OAuthClient, error) {
-		c := google.OAuthClient{ID: o.ID}
+		c := google.OAuthClient{ID: o.ID, BaseURL: strings.TrimSuffix(publicURL, "/")}
 		var err error
 		if c.ID == "" {
 			if c.ID, err = src.Get(ctx, secrets.ProviderClientID(o.Provider)); err != nil {

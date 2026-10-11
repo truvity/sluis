@@ -49,6 +49,7 @@ func TestTheConsentCallbackTakesItsOperatorFromTheSignedState(t *testing.T) {
 		state:      codec,
 		sessions:   &access.Sessions{},
 		connectors: map[string]Connector{"google": stubConsent{}},
+		console:    &Console{connectors: map[string]Connector{"google": stubConsent{}}},
 		log:        slog.New(slog.DiscardHandler),
 	}
 
@@ -137,6 +138,7 @@ func TestTheConsentPageIsNeverA5xx(t *testing.T) {
 		state:      codec,
 		sessions:   &access.Sessions{},
 		connectors: map[string]Connector{"google": stubConsent{}},
+		console:    &Console{connectors: map[string]Connector{"google": stubConsent{}}},
 		log:        slog.New(slog.DiscardHandler),
 	}
 	operator, err := codec.IssueAs(access.Binding{Actor: "ada@north.example"})
