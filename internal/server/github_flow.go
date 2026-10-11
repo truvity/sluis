@@ -15,6 +15,7 @@ import (
 	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/consolecall"
 	"github.com/truvity/sluis/internal/githubroster/consolewire"
+	"github.com/truvity/sluis/internal/modcall"
 	"github.com/truvity/sluis/internal/refusal"
 	"github.com/truvity/sluis/storage/logattr"
 )
@@ -75,7 +76,7 @@ func (s *ConsoleServer) githubNotThisBrowser(w http.ResponseWriter, r *http.Requ
 func githubForward[Resp any](
 	s *ConsoleServer, w http.ResponseWriter, r *http.Request, method string, flow consolewire.Flow, caller consolecall.Caller,
 ) (Resp, bool) {
-	ctx, cancel := context.WithTimeout(r.Context(), githubFlowDeadline)
+	ctx, cancel := context.WithTimeout(modcall.WithoutRetry(r.Context()), githubFlowDeadline)
 	defer cancel()
 	out, err := consolecall.ProxyJSON[consolewire.Flow, Resp](ctx, s.console.githubModule(), consolewire.Module, method, caller, flow)
 	if err == nil {
@@ -336,12 +337,23 @@ func (s *ConsoleServer) githubLinkCallback(w http.ResponseWriter, r *http.Reques
 	}
 	access.SetCookie(w, access.LinkCookie("", s.sessions.Secure(), 0))
 	q := r.URL.Query()
-	ctx, cancel := context.WithTimeout(r.Context(), githubFlowDeadline)
+	ctx, cancel := context.WithTimeout(modcall.WithoutRetry(r.Context()), githubFlowDeadline)
 	defer cancel()
-	done, err := consolecall.ProxyJSON[consolewire.LinkComplete, consolewire.Linked](ctx, s.console.githubModule(), consolewire.Module,
-		consolewire.LinkCompleteOf, consolecall.Caller{Origin: s.console.githubRoot()}, consolewire.LinkComplete{
-			Code: q.Get("code"), GitHubError: q.Get("error"), GitHubErrorDescription: q.Get("error_description"),
-		})
+	complete := func(ctx context.Context, in consolewire.LinkComplete) (consolewire.Linked, error) {
+		return consolecall.ProxyJSON[consolewire.LinkComplete, consolewire.Linked](ctx, s.console.githubModule(), consolewire.Module,
+			consolewire.LinkCompleteOf, consolecall.Caller{Origin: s.console.githubRoot()}, in)
+	}
+	done, err := complete(ctx, consolewire.LinkComplete{
+		Code: q.Get("code"), GitHubError: q.Get("error"), GitHubErrorDescription: q.Get("error_description"),
+	})
+	if err == nil && done.Continue != "" {
+		// The module reads no directory and learns the account's addresses only
+		// from GitHub: it stopped to ask what the directory says of them, and
+		// resumes with the answer. Nothing but the sealed state and the facts
+		// cross this hop.
+		done, err = complete(consolecall.WithFacts(ctx, s.console.githubFacts(ctx, done.Resolve)),
+			consolewire.LinkComplete{Continue: done.Continue})
+	}
 	if err != nil {
 		s.linkFailed(w, r, err)
 		return

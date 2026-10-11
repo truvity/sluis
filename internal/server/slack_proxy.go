@@ -16,6 +16,7 @@ import (
 	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/consoleauthz"
 	"github.com/truvity/sluis/internal/consolecall"
+	"github.com/truvity/sluis/internal/hub"
 	"github.com/truvity/sluis/internal/modcall"
 	slackconsole "github.com/truvity/sluis/internal/slackapp/console"
 )
@@ -99,7 +100,7 @@ func (c *Console) slackFacts(ctx context.Context, id access.Identity, method str
 	facts := &consolecall.DirectoryFacts{}
 	switch method {
 	case slackconsole.MethodBeginWorkspaceConnect, slackconsole.MethodGetStatus, slackconsole.MethodChangeOwner:
-		c.slackDirectoriesInto(ctx, facts)
+		c.directoriesInto(ctx, facts)
 	case slackconsole.MethodListChannels, slackconsole.MethodListSharedChannels:
 		// The picker is for whoever may define a channel.
 		if id.CanAnywhere(access.RoleOperator) {
@@ -107,7 +108,7 @@ func (c *Console) slackFacts(ctx context.Context, id access.Identity, method str
 		}
 	case slackconsole.MethodCreateChannel, slackconsole.MethodUpdateChannel,
 		slackconsole.MethodCreateSharedChannel, slackconsole.MethodUpdateSharedChannel:
-		c.slackDirectoriesInto(ctx, facts)
+		c.directoriesInto(ctx, facts)
 		c.slackAddressesInto(ctx, facts, slackAddresses(req))
 	default:
 		return nil
@@ -115,7 +116,15 @@ func (c *Console) slackFacts(ctx context.Context, id access.Identity, method str
 	return facts
 }
 
-func (c *Console) slackDirectoriesInto(ctx context.Context, facts *consolecall.DirectoryFacts) {
+// userFact is what the module may know of a person's address.
+func userFact(user hub.UserResult) consolecall.UserFact {
+	return consolecall.UserFact{
+		InDomain: user.InDomain, Authoritative: user.Authoritative, Found: user.Found, Suspended: user.Suspended, Workspace: user.Workspace,
+	}
+}
+
+// directoriesInto adds the connected directories, as an owner is chosen among them.
+func (c *Console) directoriesInto(ctx context.Context, facts *consolecall.DirectoryFacts) {
 	dirs, err := c.directories(ctx)
 	if err != nil {
 		return
@@ -132,7 +141,7 @@ func (c *Console) slackDirectoriesInto(ctx context.Context, facts *consolecall.D
 
 // slackSourcesInto adds the directories and their groups as a picker lists them.
 func (c *Console) slackSourcesInto(ctx context.Context, facts *consolecall.DirectoryFacts) {
-	c.slackDirectoriesInto(ctx, facts)
+	c.directoriesInto(ctx, facts)
 	groups, served, err := c.deps.Hub.ListGroups(ctx, "", nil)
 	if err != nil {
 		facts.SourcesError = "the directories' groups could not be read just now: reload to try again"
@@ -190,7 +199,7 @@ func (c *Console) slackAddressesInto(ctx context.Context, facts *consolecall.Dir
 			facts.Users[address] = consolecall.UserFact{Err: err.Error()}
 			continue
 		}
-		facts.Users[address] = consolecall.UserFact{Found: user.Found, Suspended: user.Suspended, Workspace: user.Workspace}
+		facts.Users[address] = userFact(user)
 	}
 }
 

@@ -194,9 +194,9 @@ func TestOnlyTheInstallationWideOperatorChangesAnOwner(t *testing.T) {
 	if err := change(northOp(), "C0north"); !refused(err) {
 		t.Errorf("a scoped operator = %v, want permission denied", err)
 	}
-	listed := console.WithCaller(context.Background(), consolecall.Caller{
-		Actor: "ada@example.test", Roles: []string{"operator"}, Directories: []consolecall.Directory{{ID: "C0north"}},
-	})
+	listed := consolecall.WithFacts(console.WithCaller(context.Background(), consolecall.Caller{
+		Actor: "ada@example.test", Roles: []string{"operator"},
+	}), &consolecall.DirectoryFacts{Directories: []consolecall.Directory{{ID: "C0north"}}})
 	if err := change(listed, "C0nowhere"); connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Errorf("an unconnected directory = %v, want invalid argument", err)
 	}
