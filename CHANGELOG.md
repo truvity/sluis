@@ -1,5 +1,9 @@
 ## Unreleased
 
+### Added
+
+- **The audit catalogue declares `team` for `roster.github_owner.reported`, and a guard holds every constructor to the catalogue.** The GitHub controller reports an organisation owner it will not remove against the team the pass was working on, and that record carries a `team` target, which the catalogue (1.17.0) did not declare for the action: the audit emitter refused it (`targets[0]: action roster.github_owner.reported is not declared to act on "team"`) and the record was dropped, every pass. The catalogue is 1.18.0 and the action's target types are `organisation`, `team` and `github_account`, like the other GitHub member actions. The audit records are not retried: the dropped ones are not recoverable. Two tests now hold the code to the document: one reads the source for every exported constructor that returns a record and fails on one that `every()` does not exercise, and one runs each constructor that takes a `Member` over every shape of Member (with and without a team, with and without a login) against the catalogue.
+
 ## v1.75.0-rc.10
 
 ### Added
