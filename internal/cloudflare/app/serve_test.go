@@ -34,17 +34,26 @@ func (m *minting) Granted(rpc.Caller) []rpc.PresetInfo {
 
 // verify is the TokenReview: one token minted for the audience.
 func verify(_ context.Context, bearer string) (string, error) {
-	if bearer != "good" {
-		return "", errors.New("rejected")
+	switch bearer {
+	case "good":
+		return issuer, nil
+	case "other":
+		return "system:serviceaccount:sluis:sluis-google", nil
+	case "elsewhere":
+		return "system:serviceaccount:elsewhere:sluis-issuer", nil
 	}
-	return "system:serviceaccount:sluis:issuer", nil
+	return "", errors.New("rejected")
 }
+
+// issuer is the issuer's ServiceAccount as the chart names it, which is not
+// its class.
+const issuer = "system:serviceaccount:sluis:sluis-issuer"
 
 func listener(t *testing.T, m rpc.Minting) (url string) {
 	t.Helper()
 	s := modcall.NewServer(rpc.Module)
 	rpc.Register(s, m)
-	srv := httptest.NewServer(Mux(s, verify))
+	srv := httptest.NewServer(Mux(s, verify, []string{issuer}))
 	t.Cleanup(srv.Close)
 	return srv.URL
 }
@@ -120,5 +129,37 @@ func TestTheAudienceDefaultsToTheModulesName(t *testing.T) {
 	c := Config{cloudflare: &config.Cloudflare{Serve: &config.CloudflareServe{Audience: "x"}}}
 	if !c.Serves() || c.Audience() != "x" {
 		t.Error(c.Audience())
+	}
+}
+
+// The issuer's real ServiceAccount is the issuer class (the mint) and the
+// console class; any other subject is refused before a method.
+func TestOnlyTheIssuersAccountIsLetIn(t *testing.T) {
+	m := &minting{}
+	url := listener(t, m)
+	if _, err := dial(url, "good").MintFor(context.Background(), "dns", rpc.Caller{}, 0); err != nil {
+		t.Fatalf("the issuer's account, as the issuer: %v", err)
+	}
+	if m.calls != 1 {
+		t.Errorf("%d calls reached the minter", m.calls)
+	}
+	// The console class reaches the console methods: the same subject holds it.
+	s := modcall.NewServer(rpc.Module)
+	modcall.Handle(s, "console.ping", func(context.Context, struct{}) (string, error) { return "pong", nil }, modcall.Allow("console"))
+	srv := httptest.NewServer(Mux(s, verify, []string{issuer}))
+	t.Cleanup(srv.Close)
+	c := &modcall.HTTPCaller{URLs: map[string]string{rpc.Module: srv.URL},
+		Token: func(context.Context, string) (string, error) { return "good", nil }}
+	if got, err := modcall.Do[struct{}, string](context.Background(), c, rpc.Module, "console.ping", struct{}{}); err != nil || got != "pong" {
+		t.Errorf("the issuer's account, as the console: %q %v", got, err)
+	}
+	for _, token := range []string{"other", "elsewhere", "forged"} {
+		before := m.calls
+		if _, err := dial(url, token).MintFor(context.Background(), "dns", rpc.Caller{}, 0); !errors.Is(err, modcall.ErrTransport) {
+			t.Errorf("%s: %v, want a 401", token, err)
+		}
+		if m.calls != before {
+			t.Errorf("%s reached the minter", token)
+		}
 	}
 }
