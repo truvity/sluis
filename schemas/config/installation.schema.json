@@ -1693,6 +1693,18 @@
           "additionalProperties": false,
           "description": "The GitHub controller: makes each GitHub organisation's teams match the policy's github table.",
           "properties": {
+            "appNames": {
+              "additionalProperties": {
+                "maxLength": 34,
+                "minLength": 1,
+                "type": "string"
+              },
+              "description": "Optional. For an organisation `access.github` binds, the name its App is created with on GitHub (at most 34 characters; the policy document's `controllers.github.appNames`). An organisation with no entry gets the built-in default. An App already created keeps the name it has.",
+              "propertyNames": {
+                "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9]|-[A-Za-z0-9])*$"
+              },
+              "type": "object"
+            },
             "appRefs": {
               "additionalProperties": {
                 "pattern": "^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$",
