@@ -14,6 +14,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"os/exec"
 	"runtime"
 	"strings"
@@ -31,7 +32,7 @@ import (
 func login(args []string) error {
 	flags := flag.NewFlagSet("login", flag.ContinueOnError)
 	issuer := flags.String("issuer", "", "the sluis issuer, e.g. https://access.example")
-	clientID := flags.String("client", "", "the client to sign in as (default "+DefaultClientID+")")
+	clientID := flags.String("client", "", "the client to sign in as (default "+DefaultClientID+", else "+LegacyClientID+" if the issuer does not know it)")
 	if err := flags.Parse(args); err != nil {
 		return usageError{err}
 	}
@@ -39,6 +40,10 @@ func login(args []string) error {
 	cfg, err := loadLoginConfig(*issuer, *clientID)
 	if err != nil {
 		return err
+	}
+
+	if cfg.ClientDefaulted {
+		cfg.ClientID = chooseDefaultClient(context.Background(), cfg.Issuer, os.Stderr)
 	}
 
 	// Port zero: the kernel picks, so two laptops and two shells do not
@@ -84,7 +89,12 @@ func login(args []string) error {
 	if err != nil {
 		return err
 	}
-	saved.LastIssuer, saved.ClientID = cfg.Issuer, cfg.ClientID
+	saved.LastIssuer = cfg.Issuer
+	if !cfg.ClientDefaulted {
+		saved.ClientID = cfg.ClientID
+	} else {
+		session.Client = cfg.ClientID
+	}
 	if err = saveConfig(saved); err != nil {
 		return err
 	}
@@ -280,4 +290,54 @@ func random() string {
 func challenge(verifier string) string {
 	sum := sha256.Sum256([]byte(verifier))
 	return base64.RawURLEncoding.EncodeToString(sum[:])
+}
+
+// chooseDefaultClient picks the client id for a login that named none. It asks
+// the issuer's token endpoint whether DefaultClientID is registered: an
+// unknown client is answered `invalid_client` before the code is looked at,
+// and a known one `invalid_grant`. On `invalid_client` it says on w that the
+// legacy id is in use and returns LegacyClientID, once; any other answer, or
+// none, keeps DefaultClientID, and the sign-in itself reports what is wrong.
+// A client named by --client or config.yaml never comes here.
+func chooseDefaultClient(ctx context.Context, issuer string, w io.Writer) string {
+	if !clientRejected(ctx, issuer, DefaultClientID) {
+		return DefaultClientID
+	}
+	_, _ = fmt.Fprintf(w, "sluisctl: %s does not know the client %q; signing in as the deprecated %q instead. "+
+		"Ask whoever runs it to register a %q client beside it; %q will stop working in a later release.\n",
+		issuer, DefaultClientID, LegacyClientID, DefaultClientID, LegacyClientID)
+	return LegacyClientID
+}
+
+// clientRejected reports whether the issuer answers `invalid_client` to a
+// token request made as client. The request carries a code that cannot be
+// valid, so nothing is ever redeemed.
+func clientRejected(ctx context.Context, issuer, client string) bool {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	form := url.Values{
+		"grant_type":    {"authorization_code"},
+		"code":          {"probe"},
+		"redirect_uri":  {"http://127.0.0.1/callback"},
+		"client_id":     {client},
+		"code_verifier": {random()},
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, issuer+"/token", strings.NewReader(form.Encode()))
+	if err != nil {
+		return false
+	}
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		return false
+	}
+	defer func() { _ = response.Body.Close() }()
+	var refusal struct {
+		Error string `json:"error"`
+	}
+	body, _ := io.ReadAll(io.LimitReader(response.Body, 1<<16))
+	if json.Unmarshal(body, &refusal) != nil {
+		return false
+	}
+	return refusal.Error == "invalid_client"
 }

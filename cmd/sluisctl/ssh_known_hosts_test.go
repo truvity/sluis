@@ -303,7 +303,7 @@ func TestWriteKnownHostsFileIsAtomicAndModeCorrect(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	target := filepath.Join(dir, "known_hosts.d", "accessctl")
+	target := filepath.Join(dir, "known_hosts.d", "sluisctl")
 
 	if err := writeKnownHostsFile(target, []string{"@cert-authority *.devel.example " + fakeEd25519Key}); err != nil {
 		t.Fatalf("writeKnownHostsFile: %v", err)
@@ -379,7 +379,7 @@ func TestResolveKnownHostsPathExpandsHomeAndDefaults(t *testing.T) {
 
 	const home = "/home/ada"
 
-	if got, want := resolveKnownHostsPath("", home), filepath.Join(home, ".ssh", "known_hosts.d", "accessctl"); got != want {
+	if got, want := resolveKnownHostsPath("", home), filepath.Join(home, ".ssh", "known_hosts.d", "sluisctl"); got != want {
 		t.Errorf("default = %q, want %q", got, want)
 	}
 	if got, want := resolveKnownHostsPath("~/custom/khosts", home), filepath.Join(home, "custom/khosts"); got != want {
@@ -399,12 +399,12 @@ func TestSSHConfigReferencesFileDetectsTheTildeAndAbsoluteSpellings(t *testing.T
 	t.Parallel()
 
 	const home = "/home/ada"
-	target := filepath.Join(home, ".ssh", "known_hosts.d", "accessctl")
+	target := filepath.Join(home, ".ssh", "known_hosts.d", "sluisctl")
 
 	for name, config := range map[string]string{
-		"tilde form":       "Host *\n  UserKnownHostsFile ~/.ssh/known_hosts ~/.ssh/known_hosts.d/accessctl\n",
+		"tilde form":       "Host *\n  UserKnownHostsFile ~/.ssh/known_hosts ~/.ssh/known_hosts.d/sluisctl\n",
 		"absolute form":    "Host *\n  UserKnownHostsFile ~/.ssh/known_hosts " + target + "\n",
-		"case insensitive": "Host *\n  userknownhostsfile ~/.ssh/known_hosts ~/.ssh/known_hosts.d/accessctl\n",
+		"case insensitive": "Host *\n  userknownhostsfile ~/.ssh/known_hosts ~/.ssh/known_hosts.d/sluisctl\n",
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -418,7 +418,7 @@ func TestSSHConfigReferencesFileDetectsTheTildeAndAbsoluteSpellings(t *testing.T
 		t.Error("a config that does not mention the file was read as already referencing it")
 	}
 	// A commented-out line must not count: ssh itself never reads it.
-	if sshConfigReferencesFile("# UserKnownHostsFile ~/.ssh/known_hosts.d/accessctl\n", target, home) {
+	if sshConfigReferencesFile("# UserKnownHostsFile ~/.ssh/known_hosts.d/sluisctl\n", target, home) {
 		t.Error("a commented-out line was read as an active reference")
 	}
 }
@@ -430,11 +430,11 @@ func TestSSHConfigHintIsSilentWhenAlreadyWired(t *testing.T) {
 	t.Parallel()
 
 	home := t.TempDir()
-	target := filepath.Join(home, ".ssh", "known_hosts.d", "accessctl")
+	target := filepath.Join(home, ".ssh", "known_hosts.d", "sluisctl")
 	if err := os.MkdirAll(filepath.Join(home, ".ssh"), 0o700); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	config := "UserKnownHostsFile ~/.ssh/known_hosts ~/.ssh/known_hosts.d/accessctl\n"
+	config := "UserKnownHostsFile ~/.ssh/known_hosts ~/.ssh/known_hosts.d/sluisctl\n"
 	if err := os.WriteFile(filepath.Join(home, ".ssh", "config"), []byte(config), 0o600); err != nil {
 		t.Fatalf("write ~/.ssh/config: %v", err)
 	}
@@ -451,10 +451,10 @@ func TestSSHConfigHintNamesTheLineWhenMissing(t *testing.T) {
 	t.Parallel()
 
 	home := t.TempDir()
-	target := filepath.Join(home, ".ssh", "known_hosts.d", "accessctl")
+	target := filepath.Join(home, ".ssh", "known_hosts.d", "sluisctl")
 
 	hint := sshConfigHint(home, target)
-	if !strings.Contains(hint, "UserKnownHostsFile ~/.ssh/known_hosts ~/.ssh/known_hosts.d/accessctl") {
+	if !strings.Contains(hint, "UserKnownHostsFile ~/.ssh/known_hosts ~/.ssh/known_hosts.d/sluisctl") {
 		t.Errorf("hint = %q, want the exact line to add", hint)
 	}
 }
@@ -475,7 +475,7 @@ func TestRunSSHKnownHostsEndToEnd(t *testing.T) {
 	defer server.Close()
 
 	home := t.TempDir()
-	target := filepath.Join(home, ".ssh", "known_hosts.d", "accessctl")
+	target := filepath.Join(home, ".ssh", "known_hosts.d", "sluisctl")
 	entries := []sshKnownHostsEntry{{Patterns: []string{"*.devel.example"}, URL: server.URL}}
 
 	realStdout := stdout
@@ -639,7 +639,7 @@ func TestRefreshKnownHostsAfterLoginWritesTheFileWhenConfigured(t *testing.T) {
 	cfg := Config{SSHKnownHosts: []sshKnownHostsEntry{{Patterns: []string{"*.devel.example"}, URL: server.URL}}}
 	refreshKnownHostsAfterLogin(cfg)
 
-	target := filepath.Join(home, ".ssh", "known_hosts.d", "accessctl")
+	target := filepath.Join(home, ".ssh", "known_hosts.d", "sluisctl")
 	raw, err := os.ReadFile(target)
 	if err != nil {
 		t.Fatalf("the login hook did not write %s: %v", target, err)
