@@ -360,8 +360,11 @@ func TestTheAliasLeavesTheAPIDomainAndMappingAlone(t *testing.T) {
 }
 
 func TestARunNowInvokesTheAlias(t *testing.T) {
-	rec, _ := mustLambda(t, estate{config: "issuerURL: https://x.example\nadapters: {trigger: {adapter: invoke, settings: {github: sluis-staging-issuer:live}}}\n"})
-	if doc := layerFiles(t, rec)["sluis/sluis.yaml"]; !strings.Contains(doc, "github: sluis-staging-issuer:live\n") || !strings.Contains(doc, "slack: sluis-staging-issuer:live\n") {
+	rec, _ := mustLambda(t, estate{
+		config: "issuerURL: https://x.example\nadapters: {trigger: {adapter: invoke, settings: {github: sluis-staging-issuer:live}}}\n",
+	})
+	doc := layerFiles(t, rec)["sluis/sluis.yaml"]
+	if !strings.Contains(doc, "github: sluis-staging-issuer:live\n") || !strings.Contains(doc, "slack: sluis-staging-issuer:live\n") {
 		t.Errorf("trigger:\n%s", doc)
 	}
 }
