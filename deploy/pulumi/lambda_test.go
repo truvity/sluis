@@ -54,11 +54,48 @@ func zipFile(t *testing.T, extra map[string]string) string {
 	if err := zw.Close(); err != nil {
 		t.Fatal(err)
 	}
-	p := filepath.Join(t.TempDir(), "sluis-issuer_1.63.0_linux_arm64.zip")
+	dir := t.TempDir()
+	p := filepath.Join(dir, "sluis-issuer_1.63.0_linux_arm64.zip")
 	if err := os.WriteFile(p, buf.Bytes(), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	// The module functions' zips lie beside the issuer's, each its own bytes.
+	for _, m := range []string{"cloudflare", "github", "slack", "google"} {
+		zb := moduleZip(t, files, m)
+		if err := os.WriteFile(filepath.Join(dir, "sluis-"+m+"_1.63.0_linux_arm64.zip"), zb, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
 	return p
+}
+
+// moduleZip is a release zip of a module: the issuer's files and a marker.
+func moduleZip(t *testing.T, files map[string]string, module string) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	all := map[string]string{"MODULE": module}
+	for k, v := range files {
+		all[k] = v
+	}
+	names := make([]string, 0, len(all))
+	for k := range all {
+		names = append(names, k)
+	}
+	sort.Strings(names)
+	for _, n := range names {
+		w, err := zw.CreateHeader(&zip.FileHeader{Name: n, Method: zip.Deflate})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := w.Write([]byte(all[n])); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
 }
 
 // sha is a file's SHA-256, as the release's checksums give it.
@@ -127,6 +164,25 @@ func (e estate) args(t *testing.T) *arp.LambdaArgs {
 	}
 	if e.mutate != nil {
 		e.mutate(a)
+	}
+	if pkgSHA != "" && a.Layout != arp.LayoutV4 && a.Layout != "" {
+		// The module zips lie beside the issuer's, each with its digest.
+		if a.Modules == nil {
+			a.Modules = map[string]arp.ModuleArgs{}
+		}
+		for _, m := range arp.ModuleFunctions() {
+			ma := a.Modules[m]
+			zipName := m
+			if m == "github-mint" {
+				zipName = "github"
+			}
+			if sib := filepath.Join(filepath.Dir(e.pkg), "sluis-"+zipName+"_1.63.0_linux_arm64.zip"); ma.PackageSHA256 == "" && ma.Package == "" {
+				if _, err := os.Stat(sib); err == nil {
+					ma.PackageSHA256 = sha(t, sib)
+				}
+			}
+			a.Modules[m] = ma
+		}
 	}
 	// The library has no default alias: a legacy-path estate names its own.
 	if a.Keys == nil && a.WrappedSigning == nil && a.SigningKeyAlias == "" && !e.noSigningAlias {
