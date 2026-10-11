@@ -438,10 +438,10 @@ func TestTheTruvityShapeIsExpressible(t *testing.T) {
 	shape(t, rec, out, "access.one.example.test")
 
 	want := map[string]string{
-		"sluis-github-truvity":      `{"kind":"tick","target":"truvity"} ` + arnp + "lambda:eu-west-1:" + account + ":function:sluis:live",
-		"sluis-github-trust-form":   `{"kind":"tick","target":"trust-form"} ` + arnp + "lambda:eu-west-1:" + account + ":function:sluis:live",
-		"sluis-github-github-links": `{"kind":"tick","target":"github:links"} ` + arnp + "lambda:eu-west-1:" + account + ":function:sluis:live",
-		"sluis-slack-T0TRUVITY":     `{"kind":"tick","target":"T0TRUVITY"} ` + arnp + "lambda:eu-west-1:" + account + ":function:sluis:live",
+		"sluis-github-truvity":      `{"controller":"github","kind":"tick","target":"truvity"} ` + arnp + "lambda:eu-west-1:" + account + ":function:sluis:live",
+		"sluis-github-trust-form":   `{"controller":"github","kind":"tick","target":"trust-form"} ` + arnp + "lambda:eu-west-1:" + account + ":function:sluis:live",
+		"sluis-github-github-links": `{"controller":"github","kind":"tick","target":"github:links"} ` + arnp + "lambda:eu-west-1:" + account + ":function:sluis:live",
+		"sluis-slack-T0TRUVITY":     `{"controller":"slack","kind":"tick","target":"T0TRUVITY"} ` + arnp + "lambda:eu-west-1:" + account + ":function:sluis:live",
 		"sluis-directory-refresh":   `{"kind":"refresh"} ` + arnp + "lambda:eu-west-1:" + account + ":function:sluis:live",
 	}
 	if got := schedules(t, rec); !reflect.DeepEqual(got, want) {
@@ -1746,5 +1746,22 @@ func TestLegacyKeyPathRequiresASigningKeyAlias(t *testing.T) {
 	_, _, err := buildLambda(t, estate{orgs: []string{"acme"}, noSigningAlias: true})
 	if err == nil || !strings.Contains(err.Error(), "LambdaArgs.SigningKeyAlias is required") {
 		t.Fatalf("want an error naming LambdaArgs.SigningKeyAlias, got %v", err)
+	}
+}
+
+// A name that is both a GitHub organisation and a Slack workspace has two
+// schedules, and each payload names its controller, so the function does not
+// have to guess which one the tick is for.
+func TestTheTickPayloadsNameTheirControllerForASharedName(t *testing.T) {
+	rec, _ := mustLambda(t, estate{orgs: []string{"acme"}, workspaces: []string{"acme"}, rate: "rate(2 minutes)"})
+	got := schedules(t, rec)
+	arn := " " + arnp + "lambda:eu-west-1:" + account + ":function:sluis:live"
+	for name, payload := range map[string]string{
+		"sluis-github-acme": `{"controller":"github","kind":"tick","target":"acme"}`,
+		"sluis-slack-acme":  `{"controller":"slack","kind":"tick","target":"acme"}`,
+	} {
+		if got[name] != payload+arn {
+			t.Errorf("%s: %q, want %q", name, got[name], payload+arn)
+		}
 	}
 }

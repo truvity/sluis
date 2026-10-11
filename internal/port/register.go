@@ -93,7 +93,7 @@ func init() {
 	})
 	Register(Descriptor{
 		Name: "eventbridge", Concern: ConcernSchedule,
-		Summary:  "One EventBridge Scheduler schedule per target invokes the controller function with {\"kind\":\"tick\",\"target\":\"<id>\"}.",
+		Summary:  "One EventBridge Scheduler schedule per target invokes the controller function with {\"kind\":\"tick\",\"controller\":\"<kind>\",\"target\":\"<id>\"}.",
 		Requires: Requires{AWS: true},
 		Runtimes: []Runtime{RuntimeLambda},
 	})

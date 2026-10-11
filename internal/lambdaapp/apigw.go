@@ -53,22 +53,25 @@ type HTTP struct {
 	// that is not the restore function.
 	restore func(ctx context.Context, ev RestoreEvent) (RestoreResult, error)
 	// controllers run a controller pass per {"kind":"tick"|"run"} event, by the
-	// kind of the event's target; kindOf says which kind a target is.
+	// controller the event names, or, for an event that names none, the one
+	// controller its target is declared for; kindsOf says which controllers
+	// declare a target.
 	controllers map[string]*Controller
-	kindOf      func(target string) string
+	kindsOf     func(target string) []string
 	// rpc answers {"kind":"rpc"} events, other modules' calls; nil in a function
 	// that runs no module others call, which then refuses them.
 	rpc *modcall.Server
 	log *slog.Logger
 }
 
-// WithControllers makes the function answer {"kind":"tick"|"run","target":...}
-// events by running one pass of the target under the controller of its kind
-// (the controllers' names are the keys: "github", "slack"). kindOf says which
-// kind a target is, from the policy that declares it; an empty answer is a
-// target nobody declares.
-func (h *HTTP) WithControllers(kindOf func(target string) string, controllers map[string]*Controller) *HTTP {
-	h.controllers, h.kindOf = controllers, kindOf
+// WithControllers makes the function answer
+// {"kind":"tick"|"run","controller":...,"target":...} events by running one pass
+// of the target under the controller the event names (the controllers' names are
+// the keys: "github", "slack"). kindsOf says which controllers declare a target,
+// from the policy; an empty answer is a target nobody declares. An event that
+// names no controller is routed by it only when exactly one declares the target.
+func (h *HTTP) WithControllers(kindsOf func(target string) []string, controllers map[string]*Controller) *HTTP {
+	h.controllers, h.kindsOf = controllers, kindsOf
 	return h
 }
 

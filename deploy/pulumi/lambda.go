@@ -562,8 +562,10 @@ func (a *APIArgs) legacyDomain() bool {
 // ScheduleArgs is the controllers' ticks.
 type ScheduleArgs struct {
 	// GitHubOrgs and SlackWorkspaces are the targets: one schedule each, which
-	// invokes the function with `{"kind":"tick","target":"<id>"}`; the function
-	// runs the pass under the controller the policy says the target belongs to.
+	// invokes the function with
+	// `{"kind":"tick","controller":"github"|"slack","target":"<id>"}`; the function
+	// runs the pass under the controller the event names, which a name that is
+	// both a GitHub organisation and a Slack workspace needs to be told.
 	GitHubOrgs      []string
 	SlackWorkspaces []string
 	// Rate is the EventBridge Scheduler expression. Default DefaultSchedule.
@@ -1858,7 +1860,7 @@ func newSchedules(ctx *pulumi.Context, name string, a *LambdaArgs, live *lambda.
 		targets = append(targets, target{"slack", id})
 	}
 	for _, t := range targets {
-		payload, err := json.Marshal(map[string]string{"kind": "tick", "target": t.id})
+		payload, err := json.Marshal(map[string]string{"kind": "tick", "controller": t.kind, "target": t.id})
 		if err != nil {
 			return nil, none, err
 		}
