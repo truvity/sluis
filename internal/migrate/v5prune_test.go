@@ -340,3 +340,56 @@ func TestPruneDeletesAnOrganisationsKeyOnceItsSynthesizedAppHoldsIt(t *testing.T
 	}
 	noPlanSecrets(t, r.JSON())
 }
+
+// A prune whose intent cannot be recorded deletes nothing; one whose intent is
+// recorded sees the names it is about to delete, once, before the first delete.
+func TestPruneRecordsItsIntentBeforeTheFirstDelete(t *testing.T) {
+	src, dst := copied(t)
+	putRaw(t, src, "internal/config/valkey/password")
+	var waits []time.Duration
+	dry := pruneOptions(&waits)
+	dry.DryRun = true
+	plan, err := migrate.PruneV5(ctx, side("v4.yaml", src.st), side("v5.yaml", dst.st), dry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := names(t, src)
+
+	refused := errors.New("the queue refused the record")
+	opt := pruneOptions(&waits)
+	opt.Confirm = plan.PlanHash
+	opt.Before = func(context.Context, *migrate.PruneReport) error { return refused }
+	r, err := migrate.PruneV5(ctx, side("v4.yaml", src.st), side("v5.yaml", dst.st), opt)
+	if !errors.Is(err, refused) || !errors.Is(err, migrate.ErrNotStarted) || r.OK || r.Deleted != 0 {
+		t.Fatalf("PruneV5 with a refused record = %v", err)
+	}
+	if got := names(t, src); !slices.Equal(got, before) {
+		t.Errorf("a refused record still deleted: %v", got)
+	}
+
+	calls := 0
+	opt.Before = func(_ context.Context, r *migrate.PruneReport) error {
+		calls++
+		if r.Deleted != 0 || !slices.Equal(r.Delete, plan.Delete) || r.PlanHash != plan.PlanHash {
+			t.Errorf("the hook saw %d deleted, %d to delete", r.Deleted, len(r.Delete))
+		}
+		if got := names(t, src); !slices.Equal(got, before) {
+			t.Errorf("the hook ran after a delete: %v", got)
+		}
+		return nil
+	}
+	if r, err = migrate.PruneV5(ctx, side("v4.yaml", src.st), side("v5.yaml", dst.st), opt); err != nil || calls != 1 || r.Deleted != len(plan.Delete) {
+		t.Fatalf("PruneV5 = %v after %d calls\n%s", err, calls, r.JSON())
+	}
+}
+
+func TestPruneDryRunNeverCallsTheIntentHook(t *testing.T) {
+	src, dst := copied(t)
+	var waits []time.Duration
+	opt := pruneOptions(&waits)
+	opt.DryRun = true
+	opt.Before = func(context.Context, *migrate.PruneReport) error { t.Error("a dry run called the hook"); return nil }
+	if _, err := migrate.PruneV5(ctx, side("v4.yaml", src.st), side("v5.yaml", dst.st), opt); err != nil {
+		t.Fatal(err)
+	}
+}

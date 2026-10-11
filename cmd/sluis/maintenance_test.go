@@ -5,6 +5,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"io"
 	"strings"
 	"testing"
 	"time"
@@ -26,7 +27,7 @@ func TestMaintenanceOnStatusOffAndTheAuditTrail(t *testing.T) {
 	run := func(sub string, force bool) string {
 		t.Helper()
 		var out bytes.Buffer
-		if err := maintenanceRun(ctx, &out, sub, tables, "example", "oleg", "layout v5", false, force, false, rec); err != nil {
+		if err := maintenanceRun(ctx, &out, sub, tables, "example", "oleg", "layout v5", false, force, false, &operatorAudit{rec: rec, stderr: io.Discard}); err != nil {
 			t.Fatalf("%s: %v", sub, err)
 		}
 		return out.String()

@@ -91,6 +91,13 @@ func every() []*record.Record {
 		audit.RestoreFailed(person, "20261010T020000Z-a1b2c3", audit.Restore{Installation: "example", Reason: "verify"}, "a record differs after the write"),
 		audit.MaintenanceChanged(person, audit.Maintenance{Installation: "example", State: "migration", Modules: 6, Reason: "layout v5 move"}),
 		audit.MaintenanceChanged(person, audit.Maintenance{Installation: "example", State: audit.MaintenanceCleared, Modules: 1, Forced: true}),
+		audit.MaintenanceFailed(person, audit.Maintenance{Installation: "example", State: "migration", Modules: 6}, "a table refused the flag"),
+		audit.SecretsPruned(person, audit.SecretsPrune{Installation: "example", From: "example-v4", Phase: audit.PhaseStarted, Plan: "abc123",
+			Planned: 2, Kept: 3, Names: []string{"internal/config/a", "external/b"}}, audit.Succeeded()),
+		audit.SecretsPruned(person, audit.SecretsPrune{Installation: "example", From: "example-v4", Phase: audit.PhaseCompleted, Plan: "abc123",
+			Planned: 2, Deleted: 1, Kept: 3}, audit.Failed("delete refused")),
+		audit.MigrationCopied(person, audit.MigrationCopy{Installation: "example", From: "example-v4", Phase: audit.PhaseStarted, Overwrite: true,
+			Written: 5, Replaced: 1, ReplacedNames: []string{"oidc/secret/x"}}, audit.Succeeded()),
 		audit.WorkspaceConnected(person, "ws-1", "google", "consent"),
 		audit.WorkspaceReconnected(person, "ws-1", "google", "consent"),
 		audit.WorkspaceDisconnected(person, "ws-1"),
@@ -305,5 +312,45 @@ func TestChannelRecordsCountSourcesAndMembersAndWriteNoHistoricalField(t *testin
 		if _, written := fields[tc.historical]; written {
 			t.Errorf("%s: writes %s, which is historical", tc.name, tc.historical)
 		}
+	}
+}
+
+// An operator's action is kept before it happens: the catalogue declares it
+// `block`, which is what makes RecordDurable accept it and a failed delivery
+// refuse the command (D266).
+func TestOperatorActionsAreBlockActions(t *testing.T) {
+	c, _, err := audit.Catalogue()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"roster.maintenance.changed", "roster.secrets.pruned", "roster.migration.copied"} {
+		a, ok := c.Action(name)
+		if !ok || a.Delivery != "block" {
+			t.Errorf("%s = %+v (declared %v), want delivery block", name, a.Delivery, ok)
+		}
+	}
+}
+
+// A prune record carries names and counts, with room for a whole installation's
+// worth of names, and the recorder refuses a record the catalogue would.
+func TestAPruneRecordHoldsEveryNameAndNoValue(t *testing.T) {
+	var names []string
+	for i := range 300 {
+		names = append(names, "internal/config/provider/p"+strings.Repeat("x", 20)+string(rune('a'+i%26)))
+	}
+	rec := audittest.New(t)
+	r := audit.SecretsPruned(audit.Person("oleg@example.com"),
+		audit.SecretsPrune{Installation: "example", From: "v4", Phase: audit.PhaseStarted, Plan: "abc", Planned: 300, Names: names}, audit.Succeeded())
+	if err := rec.RecordDurable(context.Background(), r); err != nil {
+		t.Fatalf("a prune of 300 names: %v", err)
+	}
+	got := rec.Find("roster.secrets.pruned")
+	if len(got) != 1 || len(got[0].GetData().GetFields()["names"].GetListValue().GetValues()) != 300 {
+		t.Fatalf("records = %v", got)
+	}
+	if err := rec.RecordDurable(context.Background(), audit.MigrationCopied(audit.Person("oleg@example.com"),
+		audit.MigrationCopy{Installation: "example", From: "v4", Phase: audit.PhaseStarted, Overwrite: true, Written: 2, Replaced: 1,
+			ReplacedNames: []string{"oidc/secret/recovery/password"}}, audit.Succeeded())); err != nil {
+		t.Fatal(err)
 	}
 }

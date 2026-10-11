@@ -484,3 +484,71 @@ func TestCopyRefusesADestinationInMaintenance(t *testing.T) {
 		t.Errorf("CopyV5 = %v, want ErrDestinationMaintenance", err)
 	}
 }
+
+// A copy tells its hook what it will write before the first write, and a hook
+// that refuses stops it with nothing written. A copy with nothing to write, and
+// a dry run, never call it.
+func TestCopyCallsItsHookBeforeTheFirstWriteAndOnlyWhenItWrites(t *testing.T) {
+	src, dst := newV4Installation(t), newV5Installation(t)
+	src.seedFull(t)
+	refused := errors.New("the queue refused the record")
+	var writes tally
+	to := counted(dst.st, &writes)
+
+	opt := copyOptions()
+	opt.Before = func(context.Context, migrate.Writes) error { return refused }
+	report, err := migrate.CopyV5(ctx, side("v4.yaml", src.st), side("v5.yaml", to), opt)
+	if !errors.Is(err, refused) || !errors.Is(err, migrate.ErrNotStarted) || report.OK {
+		t.Fatalf("CopyV5 with a refused record = %v", err)
+	}
+	if n := writes.total(); n != 0 {
+		t.Errorf("a refused record still wrote: %v", writes.n)
+	}
+
+	var got migrate.Writes
+	calls := 0
+	opt.Before = func(_ context.Context, w migrate.Writes) error { calls++; got = w; return nil }
+	if _, err = migrate.CopyV5(ctx, side("v4.yaml", src.st), side("v5.yaml", dst.st), opt); err != nil || calls != 1 {
+		t.Fatalf("CopyV5 = %v after %d calls", err, calls)
+	}
+	if got.Items == 0 || got.New != got.Items || got.Replaced != 0 {
+		t.Errorf("the hook was told %+v, want only new items", got)
+	}
+
+	// Nothing left to write: no record.
+	opt.Before = func(context.Context, migrate.Writes) error {
+		t.Error("a copy with nothing to write called the hook")
+		return nil
+	}
+	if _, err = migrate.CopyV5(ctx, side("v4.yaml", src.st), side("v5.yaml", dst.st), opt); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// An overwrite names the destination items it replaces, never their values.
+func TestCopyHookNamesWhatAnOverwriteReplaces(t *testing.T) {
+	src, dst := copied(t)
+	src.env[sluissecrets.EnvName("recovery/password")] = "CHANGED-PW"
+	_, rev, err := src.v4.External.OIDC("local-dev").Get(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = src.v4.External.OIDC("local-dev").Put(ctx, secretstore.OIDCv1{ClientID: "local-dev", ClientSecret: "CHANGED-CLIENT"}, rev); err != nil {
+		t.Fatal(err)
+	}
+	opt := copyOptions()
+	opt.Overwrite = true
+	var got migrate.Writes
+	opt.Before = func(_ context.Context, w migrate.Writes) error { got = w; return nil }
+	if _, err = migrate.CopyV5(ctx, side("v4.yaml", src.st), side("v5.yaml", dst.st), opt); err != nil {
+		t.Fatal(err)
+	}
+	if got.Replaced != 2 || len(got.ReplacedNames) != 2 || got.Items != got.New+got.Replaced {
+		t.Fatalf("the hook was told %+v, want the two changed secrets replaced", got)
+	}
+	for _, n := range got.ReplacedNames {
+		if strings.Contains(n, "CHANGED") {
+			t.Errorf("a name holds a value: %s", n)
+		}
+	}
+}

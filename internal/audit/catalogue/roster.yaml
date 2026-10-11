@@ -19,7 +19,7 @@
 # A change to what an action carries is a new version. The installation keeps
 # every version it was sent, so records already written keep their meaning.
 source: roster
-version: "1.15.0"
+version: "1.16.0"
 locales: [en]
 
 actor_kinds:
@@ -249,10 +249,35 @@ actions:
     categories: [configuration_change, privileged_access]
     category: security
     target_types: [installation]
-    delivery: async
+    # Recorded before the flag changes, and refused when it cannot be: an
+    # operator's freeze must not happen off the record (`--no-audit` is the
+    # break-glass, and prints the record locally instead).
+    delivery: block
     data_schema: https://schemas.example/access-roster/v1/maintenance.json
     message:
-      en: "{data_state, select, migration {{actor} froze {targets_0_id} for a migration} other {{actor} lifted the maintenance flag of {targets_0_id}}}"
+      en: "{outcome, select, success {{data_state, select, migration {{actor} froze {targets_0_id} for a migration} other {{actor} lifted the maintenance flag of {targets_0_id}}}} other {{actor} could not change the maintenance flag of {targets_0_id}}}"
+
+  roster.secrets.pruned:
+    summary: An operator ran `sluis migrate v5 prune` for real. A record with `phase` started is kept before the first delete and names the layout v4 parameters about to be deleted; the record with `phase` completed (or a failed outcome) says how many were. Names and counts only, never a value.
+    operation: remove
+    categories: [data_change, privileged_access]
+    category: security
+    target_types: [installation]
+    delivery: block
+    data_schema: https://schemas.example/access-roster/v1/secrets-pruned.json
+    message:
+      en: "{outcome, select, success {{data_phase, select, started {{actor} is pruning {data_planned, plural, one {# layout v4 parameter} other {# layout v4 parameters}} of {targets_0_id}} other {{actor} pruned {data_deleted, plural, one {# layout v4 parameter} other {# layout v4 parameters}} of {targets_0_id}}}} other {{actor} could not finish pruning the layout v4 parameters of {targets_0_id}}}"
+
+  roster.migration.copied:
+    summary: An operator ran `sluis migrate v5 copy` for real and it had something to write. A record with `phase` started is kept before the first write and counts what will be written and which differing destination values `overwrite` replaces (by name); the record with `phase` completed (or a failed outcome) says how it ended. Names and counts only, never a value.
+    operation: modify
+    categories: [data_change, privileged_access]
+    category: security
+    target_types: [installation]
+    delivery: block
+    data_schema: https://schemas.example/access-roster/v1/migration-copied.json
+    message:
+      en: "{outcome, select, success {{data_phase, select, started {{actor} is copying {data_written, plural, one {# item} other {# items}} into {targets_0_id}} other {{actor} copied {data_written, plural, one {# item} other {# items}} into {targets_0_id}}}} other {{actor} could not finish copying into {targets_0_id}}}"
 
   # -------------------------------------------------------------- sessions
 

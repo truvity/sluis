@@ -24,16 +24,21 @@ import (
 
 const maintenanceUsage = `Usage: sluis maintenance <on|off|status> --config <file> [flags]
 
-  on [--by <name>] [--reason <text>] [--no-wait]
+  on [--by <name>] [--reason <text>] [--no-wait] [--no-audit]
         freeze the installation for a migration. Every write of state is refused with 503 and
         Retry-After (sessions, refresh rotation, codes, console changes, controller ticks);
         discovery, the key set, userinfo, introspection, a token exchange and a refresh that is
         not rotated keep answering, so deploy tooling still signs in. Returns once every
         replica has seen the flag, unless --no-wait.
-  off [--force]
+  off [--force] [--no-audit]
         lift it. A flag a restore holds is lifted only with --force.
   status [--json]
         the flag of each table.
+
+on and off are audited (roster.maintenance.changed) and the record is delivered to the audit
+destination BEFORE the flag changes: if it cannot be delivered the command refuses, naming the
+queue and the principal it refused. --no-audit is the break-glass: it goes ahead, warns, and
+prints the record to stderr as JSON. status writes nothing and records nothing.
 
 The credentials are the caller's: the roles of the functions cannot write the flag (see
 MaintenanceOperatorStatements in the Pulumi library).`
@@ -63,7 +68,7 @@ func maintenanceCmd(out io.Writer, args []string) error {
 	}
 	// Our flags are taken out; --config and the rest go to the configuration loader.
 	var by, reason string
-	var noWait, force, asJSON bool
+	var noWait, force, asJSON, noAudit bool
 	var remaining []string
 	for i := 0; i < len(rest); i++ {
 		a := rest[i]
@@ -88,6 +93,8 @@ func maintenanceCmd(out io.Writer, args []string) error {
 			noWait = true
 		case name == "force":
 			force = true
+		case name == noAuditFlag:
+			noAudit = true
 		case name == "json":
 			asJSON = true
 		default:
@@ -99,11 +106,11 @@ func maintenanceCmd(out io.Writer, args []string) error {
 		}
 	}
 	return start(out, "sluis maintenance "+sub, "sluis", remaining, func(ctx context.Context, file string) error {
-		return runMaintenance(ctx, file, sub, by, reason, noWait, force, asJSON)
+		return runMaintenance(ctx, file, sub, by, reason, noWait, force, asJSON, noAudit)
 	})
 }
 
-func runMaintenance(ctx context.Context, file, sub, by, reason string, noWait, force, asJSON bool) error {
+func runMaintenance(ctx context.Context, file, sub, by, reason string, noWait, force, asJSON, noAudit bool) error {
 	log := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn}))
 	one, err := config.Load[config.Sluis](file)
 	if err != nil {
@@ -139,24 +146,21 @@ func runMaintenance(ctx context.Context, file, sub, by, reason string, noWait, f
 			by = u.Username
 		}
 	}
-	var rec audit.Recorder
+	var au *operatorAudit
 	if sub != "status" {
-		ac := audit.Config{Version: "sluis maintenance", Log: log}
-		ac.Instance, _ = os.Hostname()
-		if a := cfg.Audit; a != nil {
-			ac.Writer, ac.TokenFile = a.Writer, a.TokenFile
-		}
-		if ac, err = audit.FromPlan(ac, st.Plan); err != nil {
+		var closeAudit func()
+		au, closeAudit, err = openOperatorAudit(ctx, cfg, st.Plan, "sluis maintenance", hostname(), noAudit, os.Stderr, log)
+		if err != nil {
 			return err
 		}
-		trail, terr := audit.Open(ctx, ac)
-		if terr != nil {
-			return terr
-		}
-		defer func() { _ = trail.Close() }()
-		rec = trail
+		defer closeAudit()
 	}
-	return maintenanceRun(ctx, maintenanceOut, sub, tables, instanceOf2(cfg, file), by, reason, noWait, force, asJSON, rec)
+	return maintenanceRun(ctx, maintenanceOut, sub, tables, instanceOf2(cfg, file), by, reason, noWait, force, asJSON, au)
+}
+
+func hostname() string {
+	h, _ := os.Hostname()
+	return h
 }
 
 func instanceOf2(cfg *config.Serve, file string) string {
@@ -168,7 +172,7 @@ func instanceOf2(cfg *config.Serve, file string) string {
 
 // maintenanceRun is the command over the tables it was given.
 func maintenanceRun(ctx context.Context, w io.Writer, sub string, tables []maintenance.Table, instance, by, reason string,
-	noWait, force, asJSON bool, rec audit.Recorder) error {
+	noWait, force, asJSON bool, au *operatorAudit) error {
 	actor := audit.Workload("cli:maintenance")
 	if by != "" {
 		actor = audit.Person(by)
@@ -201,12 +205,22 @@ func maintenanceRun(ctx context.Context, w io.Writer, sub string, tables []maint
 		}
 		return nil
 	case "on":
+		m := audit.Maintenance{Installation: instance, State: maintenance.StateMigration, Modules: len(tables), Reason: reason}
+		// The record is kept before the flag is set. When the flag cannot be set
+		// anyway (a table is unreadable, a restore holds it) nothing is recorded:
+		// nothing would change.
+		if planned := freezeWillWrite(ctx, tables); planned {
+			if err := au.keep(ctx, "freeze the installation", audit.MaintenanceChanged(actor, m)); err != nil {
+				return err
+			}
+		}
 		sts, err := maintenance.Freeze(ctx, tables, by, reason, time.Now())
 		if err != nil {
+			if planned := freezeWillWrite(ctx, tables); planned {
+				_ = au.keepAfter(ctx, "the freeze", audit.MaintenanceFailed(actor, m, err.Error()))
+			}
 			return err
 		}
-		rec.Record(ctx, audit.MaintenanceChanged(actor, audit.Maintenance{
-			Installation: instance, State: maintenance.StateMigration, Modules: len(sts), Reason: reason}))
 		since := sts[0].Flag.Since
 		if wait := sts[0].Flag.Quiet(time.Now()); wait > 0 && !noWait {
 			_, _ = fmt.Fprintf(w, "frozen since %s on %d table(s); waiting %s for every replica to see it\n",
@@ -216,14 +230,56 @@ func maintenanceRun(ctx context.Context, w io.Writer, sub string, tables []maint
 		_, _ = fmt.Fprintf(w, "maintenance on (migration): writes are refused, reads and token exchange are served; lift with `sluis maintenance off`\n")
 		return ctx.Err()
 	default:
-		n, forced, err := maintenance.Lift(ctx, tables, force)
+		n, forced := liftWillWrite(ctx, tables, force)
+		m := audit.Maintenance{Installation: instance, State: audit.MaintenanceCleared, Modules: n, Forced: forced}
+		if n > 0 {
+			if err := au.keep(ctx, "lift the maintenance flag", audit.MaintenanceChanged(actor, m)); err != nil {
+				return err
+			}
+		}
+		lifted, _, err := maintenance.Lift(ctx, tables, force)
 		if err != nil {
+			if n > 0 {
+				_ = au.keepAfter(ctx, "lifting the flag", audit.MaintenanceFailed(actor, m, err.Error()))
+			}
 			return err
 		}
-		if n > 0 {
-			rec.Record(ctx, audit.MaintenanceChanged(actor, audit.Maintenance{Installation: instance, State: audit.MaintenanceCleared, Modules: n, Forced: forced}))
-		}
-		_, _ = fmt.Fprintf(w, "maintenance off: %d table(s) lifted\n", n)
+		_, _ = fmt.Fprintf(w, "maintenance off: %d table(s) lifted\n", lifted)
 		return nil
 	}
+}
+
+// freezeWillWrite reports whether a freeze would change anything: every table
+// reads, and none is held by a restore. Such a freeze is recorded before it is
+// made.
+func freezeWillWrite(ctx context.Context, tables []maintenance.Table) bool {
+	if len(tables) == 0 {
+		return false
+	}
+	for _, s := range maintenance.Statuses(ctx, tables) {
+		if s.Err != "" || (s.Flag.Active() && !s.Flag.Frozen()) {
+			return false
+		}
+	}
+	return true
+}
+
+// liftWillWrite is how many tables a lift would clear, and whether one of them
+// is a restore's; zero when the lift would be refused or find nothing.
+func liftWillWrite(ctx context.Context, tables []maintenance.Table, force bool) (n int, forced bool) {
+	for _, s := range maintenance.Statuses(ctx, tables) {
+		switch {
+		case s.Err != "":
+			return 0, false
+		case s.Flag.Active() && !s.Flag.Frozen():
+			if !force {
+				return 0, false
+			}
+			forced = true
+		}
+		if s.On {
+			n++
+		}
+	}
+	return n, forced
 }

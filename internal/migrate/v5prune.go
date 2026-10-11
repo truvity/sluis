@@ -108,6 +108,10 @@ type PruneOptions struct {
 	// Pause is the wait between two requests (zero is [DefaultPrunePause]) and
 	// Backoff the first wait after a throttled one (zero is [DefaultPruneBackoff]).
 	Pause, Backoff time.Duration
+	// Before is called once, after the plan hash is confirmed and before the
+	// first delete. The command records its intent there; an error stops the run
+	// with nothing deleted.
+	Before func(ctx context.Context, r *PruneReport) error
 	// Sleep waits; nil is a context-aware time.Sleep.
 	Sleep func(ctx context.Context, d time.Duration) error
 }
@@ -279,6 +283,11 @@ func PruneV5(ctx context.Context, from, to Side, opt PruneOptions) (*PruneReport
 	}
 	if opt.Confirm == "" || opt.Confirm != out.PlanHash {
 		return fail(fmt.Errorf("%w: this plan is %s; run with --dry-run, read the lists, then give its hash", ErrPruneUnconfirmed, out.PlanHash))
+	}
+	if opt.Before != nil {
+		if err = opt.Before(ctx, out); err != nil {
+			return fail(fmt.Errorf("%w: %w", ErrNotStarted, err))
+		}
 	}
 	if err = deleteNames(ctx, from, out, opt); err != nil {
 		return fail(err)

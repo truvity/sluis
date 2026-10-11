@@ -45,4 +45,12 @@ It allows `GetItem`, `PutItem` and `DeleteItem` on the `maintenance` partition o
 
 ## Lifting it
 
-`sluis maintenance off` lifts the flag. Lift it on the source only once you will not roll back. A flag a restore holds needs `--force`, and only when the restore is abandoned. Each change records `roster.maintenance.changed` in the audit trail. `sluis maintenance status` shows the flag of each table, and the console banner shows it too.
+`sluis maintenance off` lifts the flag. Lift it on the source only once you will not roll back. A flag a restore holds needs `--force`, and only when the restore is abandoned. Each change records `roster.maintenance.changed` in the audit trail, and the record is delivered before the flag changes. `sluis maintenance status` shows the flag of each table, and the console banner shows it too.
+
+## Audited, or refused
+
+`on`, `off`, `sluis migrate v5 copy` and `sluis migrate v5 prune` change an installation from a workstation, so each is audited synchronously. The record is delivered to the audit destination before the change. If delivery fails, the command refuses and names the queue and the principal AWS denied. Nothing has changed.
+
+`--no-audit` is the break-glass. The command goes ahead, prints a warning, and writes the same record to stderr as JSON. Keep that line and report it.
+
+The operator's role needs `sqs:SendMessage` on the audit queue. The Pulumi library renders it with `OperatorAuditStatements(queueArn)`.

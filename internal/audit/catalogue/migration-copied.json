@@ -1,0 +1,54 @@
+{
+  "$id": "https://schemas.example/access-roster/v1/migration-copied.json",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "installation": {
+      "type": "string",
+      "description": "The layout v5 installation written to.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none"
+    },
+    "from": {
+      "type": "string",
+      "description": "The layout v4 installation read from.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none"
+    },
+    "phase": {
+      "type": "string",
+      "description": "started: kept before the first write; completed: kept after the last one.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none"
+    },
+    "overwrite": {
+      "type": "boolean",
+      "description": "True when the run may replace a destination value that differs from the source's.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none"
+    },
+    "written": {
+      "type": "integer",
+      "description": "How many items the run writes (started) or wrote (completed), new and replaced.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none"
+    },
+    "replaced": {
+      "type": "integer",
+      "description": "How many of those replace a destination value that differed.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none"
+    },
+    "replaced_names": {
+      "type": "array",
+      "description": "The destination items an overwrite replaces, as module and name. Names only, never a value.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none",
+      "items": {
+        "type": "string",
+        "x-audit-class": "shared",
+        "x-audit-pii": "none"
+      }
+    }
+  }
+}

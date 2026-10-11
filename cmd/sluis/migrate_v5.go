@@ -15,6 +15,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/truvity/sluis/internal/audit"
 	"github.com/truvity/sluis/internal/config"
 	"github.com/truvity/sluis/internal/kube"
 	"github.com/truvity/sluis/internal/migrate"
@@ -34,6 +35,8 @@ type migrateV5Flags struct {
 	// confirmPlan and jsonOut belong to `prune`.
 	confirmPlan string
 	jsonOut     bool
+	// noAudit is the break-glass of copy and prune: see noAuditUsage.
+	noAudit bool
 }
 
 func migrateV5Usage(out io.Writer, sub string, fs *flag.FlagSet) {
@@ -51,6 +54,10 @@ library owns (Compat.DropV4 deletes them), and any it did not verify.
   1. --dry-run prints what would be deleted and kept, and a plan hash.
   2. Without --dry-run the run needs --confirm-plan <that hash>; a different
      installation, or other flags, give another hash and need a new dry run.
+
+A real run is audited (roster.secrets.pruned: names and counts, never a value). The
+record is delivered to the destination's audit queue BEFORE the first delete; if it
+cannot be, the run refuses and deletes nothing. --no-audit is the break-glass.
 
 Parameters go ten to a request (DeleteParameters), half a second apart, and wait
 longer while SSM throttles. Each batch is an audit line on stderr (names and
@@ -74,7 +81,10 @@ them.
 verifies. It is idempotent: what the destination already holds equal is not
 written, so a run that failed is re-run as it was. It stops before any write when
 an item is refused or the destination holds a different value (--overwrite
-replaces it). It never deletes anything from the source. A copy that includes the
+replaces it). It never deletes anything from the source. A real run that has
+something to write is audited (roster.migration.copied): the record is delivered
+before the first write, and the run refuses if it cannot be (--no-audit is the
+break-glass). A copy that includes the
 issuer needs --i-have-stopped-writers: stop the issuer, the console and both
 controllers first.
 
@@ -129,6 +139,7 @@ func parseMigrateV5(sub string, args []string, out io.Writer) (migrateV5Flags, b
 	if sub == "copy" {
 		fs.BoolVar(&f.dryRun, "dry-run", false, "read both sides and report what would be copied; write nothing")
 		fs.BoolVar(&f.overwrite, "overwrite", false, "replace a value the destination holds that differs from the source's")
+		fs.BoolVar(&f.noAudit, noAuditFlag, false, noAuditUsage)
 		fs.BoolVar(&f.writersStopped, "i-have-stopped-writers", false,
 			"say that nothing writes to the source (the issuer, the console and both controllers are stopped); "+
 				"required unless --dry-run or --skip issuer (the live first pass)")
@@ -137,6 +148,7 @@ func parseMigrateV5(sub string, args []string, out io.Writer) (migrateV5Flags, b
 		fs.BoolVar(&f.dryRun, "dry-run", false, "read both sides and report what would be deleted and kept, with the plan hash; delete nothing")
 		fs.StringVar(&f.confirmPlan, "confirm-plan", "", "the plan hash a --dry-run printed; a real run needs it")
 		fs.BoolVar(&f.jsonOut, "json", false, "print the report as JSON on stdout")
+		fs.BoolVar(&f.noAudit, noAuditFlag, false, noAuditUsage)
 	}
 	fs.StringVar(&f.skip, "skip", "", "domains to leave out, comma separated: "+strings.Join(migrate.AllDomains, ", "))
 	fs.StringVar(&f.blobs, "blobs", string(migrate.BlobsAuto),
@@ -249,18 +261,35 @@ func migrateV5Run(out io.Writer, sub string, args []string) error {
 		ConfigNames: src.configNames, CloudflareAccounts: src.accounts,
 		S3Ref: src.s3Ref, S3RefTo: dst.s3Ref, Log: log,
 	}
+	// A real prune or copy is audited by the destination's audit configuration.
+	var au *operatorAudit
+	var actor audit.Actor
+	var installation string
+	if (sub == "prune" || sub == "copy") && !f.dryRun {
+		toCfg, lerr := config.Load[config.Sluis](f.to)
+		if lerr != nil {
+			return fmt.Errorf("--to %s: %w", f.to, lerr)
+		}
+		var closeAudit func()
+		au, closeAudit, err = openOperatorAudit(ctx, &toCfg.Serve, to.Stores.Plan, migrateV5Command, hostname(), f.noAudit, os.Stderr, log)
+		if err != nil {
+			return err
+		}
+		defer closeAudit()
+		actor, installation = operatorActor("", "cli:migrate"), instanceOf2(&toCfg.Serve, f.to)
+	}
 	if sub == "prune" {
 		return migratePrune(ctx, os.Stdout, os.Stderr, from, to, f, migrate.PruneOptions{
 			PlanOptions: opt, DryRun: f.dryRun, Confirm: f.confirmPlan,
 			SameRoot: src.secretsKey != "" && src.secretsKey == dst.secretsKey,
-		})
+		}, au, actor, installation)
 	}
 	var report *migrate.PlanReport
 	switch sub {
 	case "copy":
-		report, err = migrate.CopyV5(ctx, from, to, migrate.V5Options{
+		report, err = copyAudited(ctx, from, to, f, migrate.V5Options{
 			PlanOptions: opt, DryRun: f.dryRun, Overwrite: f.overwrite, WritersStopped: f.writersStopped,
-		})
+		}, au, actor, installation)
 	case "verify":
 		report, err = migrate.VerifyV5(ctx, from, to, opt)
 	default:
@@ -358,8 +387,30 @@ func printPlanSummary(w io.Writer, r *migrate.PlanReport) {
 
 // migratePrune runs `prune` and prints its report: JSON on stdout with --json
 // and the summary on stderr, otherwise the summary on stdout.
-func migratePrune(ctx context.Context, stdout, stderr io.Writer, from, to migrate.Side, f migrateV5Flags, opt migrate.PruneOptions) error {
+func migratePrune(ctx context.Context, stdout, stderr io.Writer, from, to migrate.Side, f migrateV5Flags, opt migrate.PruneOptions,
+	au *operatorAudit, actor audit.Actor, installation string) error {
 	opt.Log = slog.New(slog.NewJSONHandler(stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	started := false
+	record := func(r *migrate.PruneReport, phase string) audit.SecretsPrune {
+		p := audit.SecretsPrune{Installation: installation, From: from.Name, Phase: phase, Plan: r.PlanHash,
+			Planned: len(r.Delete), Deleted: r.Deleted, Kept: len(r.Kept)}
+		if phase == audit.PhaseStarted {
+			p.Names = r.Delete
+		}
+		return p
+	}
+	if au != nil {
+		// The record is kept before the first delete, and the run refuses
+		// (deleting nothing) when it cannot be.
+		opt.Before = func(ctx context.Context, r *migrate.PruneReport) error {
+			if err := au.keep(ctx, "delete layout v4 parameters",
+				audit.SecretsPruned(actor, record(r, audit.PhaseStarted), audit.Succeeded())); err != nil {
+				return err
+			}
+			started = true
+			return nil
+		}
+	}
 	report, err := migrate.PruneV5(ctx, from, to, opt)
 	if report != nil {
 		if f.jsonOut {
@@ -369,7 +420,48 @@ func migratePrune(ctx context.Context, stdout, stderr io.Writer, from, to migrat
 			printPruneSummary(stdout, report)
 		}
 	}
+	if started && report != nil {
+		o := audit.Succeeded()
+		if err != nil {
+			o = audit.Failed(err.Error())
+		}
+		if cerr := au.keepAfter(ctx, "the prune", audit.SecretsPruned(actor, record(report, audit.PhaseCompleted), o)); cerr != nil {
+			err = errors.Join(err, cerr)
+		}
+	}
 	return err
+}
+
+// copyAudited runs the copy. A real run that has something to write records
+// roster.migration.copied before its first write (and refuses if it cannot),
+// and again when it ends.
+func copyAudited(ctx context.Context, from, to migrate.Side, f migrateV5Flags, opt migrate.V5Options,
+	au *operatorAudit, actor audit.Actor, installation string) (*migrate.PlanReport, error) {
+	started := false
+	if au != nil {
+		opt.Before = func(ctx context.Context, w migrate.Writes) error {
+			c := audit.MigrationCopy{Installation: installation, From: from.Name, Phase: audit.PhaseStarted, Overwrite: f.overwrite,
+				Written: w.Items, Replaced: w.Replaced, ReplacedNames: w.ReplacedNames}
+			if err := au.keep(ctx, "write to the destination", audit.MigrationCopied(actor, c, audit.Succeeded())); err != nil {
+				return err
+			}
+			started = true
+			return nil
+		}
+	}
+	report, err := migrate.CopyV5(ctx, from, to, opt)
+	if started && report != nil {
+		o := audit.Succeeded()
+		if err != nil {
+			o = audit.Failed(err.Error())
+		}
+		c := audit.MigrationCopy{Installation: installation, From: from.Name, Phase: audit.PhaseCompleted, Overwrite: f.overwrite,
+			Written: report.Totals.Copied}
+		if cerr := au.keepAfter(ctx, "the copy", audit.MigrationCopied(actor, c, o)); cerr != nil {
+			err = errors.Join(err, cerr)
+		}
+	}
+	return report, err
 }
 
 // printPruneSummary says what prune found: names and counts, never a value.

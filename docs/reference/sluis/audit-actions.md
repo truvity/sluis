@@ -12,7 +12,7 @@ The actions sluis records, from the catalogue [`internal/audit/catalogue/roster.
 
 <!-- generated: audit-actions -->
 
-Catalogue version 1.15.0, 80 actions.
+Catalogue version 1.16.0, 82 actions.
 
 | Action | Operation | Targets | Delivery | Summary |
 |---|---|---|---|---|
@@ -30,7 +30,9 @@ Catalogue version 1.15.0, 80 actions.
 | `roster.restore.started` | restore | backup | async | A restore of an installation from a backup began. The module is under maintenance until it completes. |
 | `roster.restore.completed` | restore | backup | async | A restore verified against its backup and lifted the maintenance flag. |
 | `roster.restore.failed` | restore | backup | async | A restore did not complete or did not verify. The maintenance flag stays set until an operator looks. |
-| `roster.maintenance.changed` | modify | installation | async | An operator set or lifted the migration freeze (`sluis maintenance on` or `off`). While it is set the installation refuses every write of state, answers 503 with Retry-After, and still serves discovery, the key set and a read-only token exchange. Lifting a restore's flag is `forced`. |
+| `roster.maintenance.changed` | modify | installation | block | An operator set or lifted the migration freeze (`sluis maintenance on` or `off`). While it is set the installation refuses every write of state, answers 503 with Retry-After, and still serves discovery, the key set and a read-only token exchange. Lifting a restore's flag is `forced`. |
+| `roster.secrets.pruned` | remove | installation | block | An operator ran `sluis migrate v5 prune` for real. A record with `phase` started is kept before the first delete and names the layout v4 parameters about to be deleted; the record with `phase` completed (or a failed outcome) says how many were. Names and counts only, never a value. |
+| `roster.migration.copied` | modify | installation | block | An operator ran `sluis migrate v5 copy` for real and it had something to write. A record with `phase` started is kept before the first write and counts what will be written and which differing destination values `overwrite` replaces (by name); the record with `phase` completed (or a failed outcome) says how it ended. Names and counts only, never a value. |
 | `roster.session.ended` | authentication | — | async | A person signed out, ending their sessions, except the agent-class sessions it spared (by client id in `spared`), which keep running until revoked or their own end. |
 | `roster.session.revoked` | remove | client | async | A person's sessions were revoked, by somebody, or by the issuer (scope `refresh_token_reuse`) when a spent refresh token was presented again after its grace window, (scope `pre_upgrade_cookie`, by an anonymous actor) when a browser signed out with a sign-in cookie set before the cookie had a secret of its own, (scope `sign_in_replaced`, by the person signing in) when another person signed in in the same browser, by the person themselves for one class of their own (scope `every_browser_and_app` ends every browser sign-in and interactive session and keeps the agent sessions, scope `every_agent` ends every agent session and keeps the browsers, and `ended_class` and `kept_class` say which), or by an operator for one client and every person (scope `client_every_identity`, no subject). |
 | `roster.session.refresh_refused` | authentication | client | async | A session was refused a refresh because its holder is no longer admitted to the client. |
