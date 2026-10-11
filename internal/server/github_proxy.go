@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
+	"strings"
 	"time"
 
 	"connectrpc.com/connect"
@@ -33,24 +35,68 @@ func (c *Console) githubCaller(ctx context.Context, want access.Role) (consoleca
 	if err != nil {
 		return consolecall.Caller{}, id, err
 	}
-	return c.snapshot(ctx, id)
+	return c.snapshot(id), id, nil
 }
 
-// snapshot is the caller of id with the connected directories the console
-// knows, which the module chooses an owner among and may not read itself.
-func (c *Console) snapshot(ctx context.Context, id access.Identity) (consolecall.Caller, access.Identity, error) {
+// snapshot is the caller of id, and where the console is. The connected
+// directories the module chooses an owner among travel beside it, as the call's
+// directory facts ([Console.githubFacts]).
+func (c *Console) snapshot(id access.Identity) consolecall.Caller {
 	caller := consolecall.Snapshot(id)
 	caller.Origin = c.githubRoot()
-	dirs, err := c.directories(ctx)
-	if err != nil {
-		return consolecall.Caller{}, id, err
+	return caller
+}
+
+// githubFacts is what the console resolves of the directories for one call to
+// the GitHub module, which reads none: the connected directories, and for the
+// addresses the call names what the directory says of each. Only the console
+// resolves them, and only what the call asks. Nil is a deployment that reads no
+// directory.
+func (c *Console) githubFacts(ctx context.Context, addresses []string) *consolecall.DirectoryFacts {
+	if c.deps.Hub == nil && c.deps.Authorizer == nil {
+		return nil
 	}
-	for i := range dirs {
-		caller.Directories = append(caller.Directories, consolecall.Directory{
-			ID: dirs[i].id, Primary: dirs[i].primary, Served: dirs[i].served, Authoritative: dirs[i].authoritative,
-		})
+	facts := &consolecall.DirectoryFacts{}
+	c.directoriesInto(ctx, facts)
+	if len(addresses) > 0 && c.deps.Authorizer != nil {
+		facts.Users = map[string]consolecall.UserFact{}
+		for _, address := range addresses {
+			if len(facts.Users) >= consolecall.MaxAddressFacts {
+				break
+			}
+			if _, done := facts.Users[address]; done {
+				continue
+			}
+			// The authorizer's reading of the directory, as the console itself uses
+			// it. The module has no use for which directory holds the account.
+			explained, err := c.deps.Authorizer.Explain(ctx, access.Proof{Email: address})
+			if err != nil {
+				facts.Users[address] = consolecall.UserFact{Err: err.Error()}
+				continue
+			}
+			facts.Users[address] = consolecall.UserFact{
+				InDomain: explained.InDomain, Authoritative: explained.Authoritative, Found: explained.Found, Suspended: explained.Suspended,
+			}
+		}
 	}
-	return caller, id, nil
+	return facts
+}
+
+// githubImportAddresses are the addresses an import's records name, lowercased.
+func githubImportAddresses(req proto.Message) []string {
+	r, ok := req.(*directoryrosterv1.ImportGitHubLinksRequest)
+	if !ok {
+		return nil
+	}
+	var out []string
+	for _, record := range r.GetRecords() {
+		for _, a := range record.GetEmails() {
+			if a = strings.ToLower(strings.TrimSpace(a)); a != "" && !slices.Contains(out, a) {
+				out = append(out, a)
+			}
+		}
+	}
+	return out
 }
 
 // githubError is a failure of a call to the module as the contract tells it. A
@@ -95,6 +141,7 @@ func githubProto[Req, Resp any, PReq interface {
 	}
 	ctx, cancel := context.WithTimeout(ctx, githubCallTimeout)
 	defer cancel()
+	ctx = consolecall.WithFacts(ctx, c.githubFacts(ctx, githubImportAddresses(PReq(req.Msg))))
 	out, err := consolecall.Proxy[PReq, PResp](ctx, c.githubModule(), consolewire.Module, method, caller, PReq(req.Msg))
 	if err != nil {
 		return nil, githubError(err)
@@ -204,17 +251,6 @@ func (c *Console) githubDeps() ghconsole.Deps {
 	}
 	if c.deps.Authorizer != nil {
 		deps.Policy = c.deps.Authorizer.Policy
-		// The module reads no directory: it asks, and in this process the answer is
-		// the authorizer's.
-		deps.Directory = func(ctx context.Context, email string) (ghconsole.Facts, error) {
-			explained, err := c.deps.Authorizer.Explain(ctx, access.Proof{Email: email})
-			if err != nil {
-				return ghconsole.Facts{}, err
-			}
-			return ghconsole.Facts{
-				InDomain: explained.InDomain, Authoritative: explained.Authoritative, Found: explained.Found, Suspended: explained.Suspended,
-			}, nil
-		}
 	}
 	return deps
 }
@@ -284,10 +320,8 @@ func beginVia[Req any](ctx context.Context, c *Console, method string, req Req) 
 func beginAs[Req any](ctx context.Context, c *Console, id access.Identity, method string, req Req) (githubBegin, error) {
 	ctx, cancel := context.WithTimeout(ctx, githubCallTimeout)
 	defer cancel()
-	caller, _, err := c.snapshot(ctx, id)
-	if err != nil {
-		return githubBegin{}, err
-	}
+	caller := c.snapshot(id)
+	ctx = consolecall.WithFacts(ctx, c.githubFacts(ctx, nil))
 	begun, err := consolecall.ProxyJSON[Req, consolewire.Begun](ctx, c.githubModule(), consolewire.Module, method, caller, req)
 	if err != nil {
 		return githubBegin{}, githubError(err)

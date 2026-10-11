@@ -68,10 +68,6 @@ type Caller struct {
 	// back (the redirect of an install). The console asserts it like the rest
 	// of the snapshot; a method that needs none ignores it.
 	Origin string `json:"origin,omitempty"`
-	// Directories are the connected directories as the console's snapshot has
-	// them, for a module that chooses an owner among them. Nil when the console
-	// attached none.
-	Directories []Directory `json:"directories,omitempty"`
 }
 
 // The values of [Caller.Source].

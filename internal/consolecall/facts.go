@@ -14,7 +14,7 @@ import (
 // console's word, like the caller snapshot, and refuses a field that is not
 // well formed ([DirectoryFacts.Validate]).
 //
-// Only what the Slack methods ask is here, and each part is bounded.
+// Only what the methods ask is here, and each part is bounded.
 type DirectoryFacts struct {
 	// Directories are every connected directory: for choosing and showing an
 	// owner.
@@ -62,11 +62,16 @@ type GroupFact struct {
 }
 
 // UserFact is whether an address is an account a connected directory holds.
+// InDomain is whether the address is in a domain a connected directory serves
+// (Workspace says which), and Authoritative whether the directory can vouch for
+// the rest just now.
 type UserFact struct {
-	Found     bool   `json:"found,omitempty"`
-	Suspended bool   `json:"suspended,omitempty"`
-	Workspace string `json:"workspace,omitempty"`
-	Err       string `json:"err,omitempty"`
+	InDomain      bool   `json:"in_domain,omitempty"`
+	Authoritative bool   `json:"authoritative,omitempty"`
+	Found         bool   `json:"found,omitempty"`
+	Suspended     bool   `json:"suspended,omitempty"`
+	Workspace     string `json:"workspace,omitempty"`
+	Err           string `json:"err,omitempty"`
 }
 
 // The bounds of the facts of one call.
@@ -114,7 +119,7 @@ func (f *DirectoryFacts) Validate() error {
 		}
 	}
 	for addr, u := range f.Users {
-		if addr == "" || (u.Workspace != "" && !ids[u.Workspace]) || (u.Found && u.Workspace == "") {
+		if addr == "" || (u.Workspace != "" && !ids[u.Workspace]) || (u.Found && u.Workspace == "" && !u.InDomain) {
 			return fmt.Errorf("%w: a user of a directory that is not listed", ErrFacts)
 		}
 	}
