@@ -110,7 +110,7 @@ Each name under `internal/config/` is read when first used and every `secrets.re
 
 ## IAM: one role
 
-One role and inline policy named `<FunctionName>` serve issuer and controllers. `<root>` is `/sluis/<instance>`; `PermissionsBoundaryArn` sets a boundary.
+One role and inline policy named `<FunctionName>` (`sluis-<instance>-issuer`) serve the issuer. `<root>` is `/sluis/<instance>`; `PermissionsBoundaryArn` sets a boundary.
 
 | Grant | Scope |
 |---|---|
