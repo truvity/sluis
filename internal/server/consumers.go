@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/truvity/sluis/internal/refusal"
 	"github.com/truvity/sluis/storage/logattr"
 )
 
@@ -52,16 +53,18 @@ type Consumers struct {
 // company's directory to the cluster.
 func (c *Consumers) Middleware(next http.Handler) http.Handler {
 	if c == nil || c.Review == nil {
-		return next
+		return refusal.Middleware(next)
 	}
 	log := c.Log
 	if log == nil {
 		log = slog.Default()
 	}
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return refusal.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token := bearer(r)
 		if token == "" {
-			refuse(w, "this listener needs a ServiceAccount token with the audience "+c.Audience)
+			log.WarnContext(r.Context(), "API call refused: no ServiceAccount token",
+				logattr.SafeString("path", r.URL.Path), slog.String("audience", c.Audience))
+			refuse(w, r)
 			return
 		}
 		subject, err := c.Review(r.Context(), token, []string{c.Audience})
@@ -72,13 +75,13 @@ func (c *Consumers) Middleware(next http.Handler) http.Handler {
 			// it and a caller cannot.
 			log.WarnContext(r.Context(), "API call refused",
 				logattr.SafeString("path", r.URL.Path), logattr.SafeError("error", err))
-			refuse(w, "that token was not accepted")
+			refuse(w, r)
 			return
 		}
 		if !slices.Contains(c.Allowed, subject) {
 			log.WarnContext(r.Context(), "API call refused: not a consumer",
 				logattr.SafeString("path", r.URL.Path), logattr.SafeString("subject", subject))
-			refuse(w, subject+" is not a consumer of this hub")
+			refuse(w, r)
 			return
 		}
 		grant := c.Grants[subject]
@@ -90,14 +93,14 @@ func (c *Consumers) Middleware(next http.Handler) http.Handler {
 			// nobody has decided about.
 			log.WarnContext(r.Context(), "API call refused: not a procedure of this service",
 				logattr.SafeString("path", r.URL.Path), logattr.SafeString("subject", subject))
-			deny(w, "this listener serves directory.v1.DirectoryService and nothing else")
+			deny(w, r)
 			return
 		}
 		if !grant.Allows(read) {
 			log.WarnContext(r.Context(), "API call refused: outside the grant",
 				logattr.SafeString("path", r.URL.Path), logattr.SafeString("subject", subject),
 				slog.String("read", string(read)), slog.Any("granted", grantedReads(grant)))
-			deny(w, "this consumer may not "+string(read))
+			deny(w, r)
 			return
 		}
 		// One line per admitted call, naming the rule that let it
@@ -107,7 +110,7 @@ func (c *Consumers) Middleware(next http.Handler) http.Handler {
 			logattr.SafeString("path", r.URL.Path), logattr.SafeString("subject", subject),
 			slog.String("read", string(read)), slog.Bool("scoped", !grant.Everything()))
 		next.ServeHTTP(w, r.WithContext(WithGrant(r.Context(), grant)))
-	})
+	}))
 }
 
 // bearer reads the token from the Authorization header.
@@ -119,11 +122,15 @@ func bearer(r *http.Request) string {
 	return strings.TrimSpace(value[7:])
 }
 
-func refuse(w http.ResponseWriter, reason string) {
+// refuse answers a caller who is nobody yet: the fixed words and the
+// request id, and no reason. Why -- no token, a token the cluster would not
+// vouch for, a subject that is not a consumer -- is in the log line each
+// refusal writes, under the same id.
+func refuse(w http.ResponseWriter, r *http.Request) {
 	// WWW-Authenticate so that a client library reports "unauthenticated"
 	// rather than a bare transport failure.
 	w.Header().Set("WWW-Authenticate", `Bearer realm="directory-roster"`)
-	http.Error(w, reason, http.StatusUnauthorized)
+	http.Error(w, refusal.Text(r.Context(), refusal.NotAuthorised), http.StatusUnauthorized)
 }
 
 // deny refuses a call the caller is authenticated for and not permitted.
@@ -131,8 +138,8 @@ func refuse(w http.ResponseWriter, reason string) {
 // get a credential, and a consumer whose grant does not cover a read has
 // the right credential already — sending it back for another one is how a
 // permission problem gets diagnosed as an authentication one.
-func deny(w http.ResponseWriter, reason string) {
-	http.Error(w, reason, http.StatusForbidden)
+func deny(w http.ResponseWriter, r *http.Request) {
+	http.Error(w, refusal.Text(r.Context(), refusal.NotAuthorised), http.StatusForbidden)
 }
 
 // grantedReads names what a grant does allow, for the refusal's log line.
