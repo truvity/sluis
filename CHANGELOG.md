@@ -1,5 +1,7 @@
 ## Unreleased
 
+## v1.75.0-rc.9
+
 ### Changed
 
 - **Behaviour change under `groupsScoping: enforce`: a token carries only the claims fragments of the groups it keeps.** The fragments (`claims.<group>`) of every held group were merged into the token before its audience was known, so a token scoped to one client still carried the grants of groups it had dropped from `groups`. `scopeClaims` now rebuilds the fragment claims from the kept groups' fragments alone, with the same merge (lists union, maps recurse), in the ID token, the access token, `/userinfo` and a token exchange. A relying party that read a claim set by a fragment of a group its `requires` and `groups:` override do not keep stops seeing it: add the group's pair to its `requires` or the thing to its `groups:` override before turning `enforce` on, or on upgrade for an estate already on it. `report` and `off` are unchanged. See [0006](docs/decisions/0006-groups-claim-scoped-per-audience.md).
