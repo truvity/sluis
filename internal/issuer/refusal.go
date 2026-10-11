@@ -58,7 +58,7 @@ func deny(ctx context.Context, kind func() *oidc.Error, reason error, fields ...
 	if e.ErrorType == oidc.ServerError {
 		level = slog.LevelError
 	}
-	slog.Log(ctx, level, "refused", append(withID(ctx,
+	slog.Default().Log(ctx, level, "refused", append(withID(ctx,
 		slog.String("error", string(e.ErrorType)),
 		logattr.SafeError("reason", reason),
 	), fields...)...)
@@ -130,7 +130,7 @@ func logRefusal(ctx context.Context, status int, why string, cause error, fields
 	if cause != nil {
 		attrs = append(attrs, logattr.SafeError("error", cause))
 	}
-	slog.Log(ctx, level, "refused", append(attrs, fields...)...)
+	slog.Default().Log(ctx, level, "refused", append(attrs, fields...)...)
 }
 
 // refusalFilter is the net under [deny]: it makes every error the OpenID
@@ -230,7 +230,7 @@ func (f *filtered) finish() {
 		return
 	}
 	ctx := f.r.Context()
-	header := f.ResponseWriter.Header()
+	header := f.Header()
 	header.Del("Content-Length")
 
 	if f.status < http.StatusBadRequest {
@@ -331,7 +331,7 @@ func (f *filtered) note(ctx context.Context, code, was string) {
 	if code == string(oidc.ServerError) {
 		level = slog.LevelError
 	}
-	slog.Log(ctx, level, "refused", withID(ctx,
+	slog.Default().Log(ctx, level, "refused", withID(ctx,
 		slog.String("error", code), slog.Int("status", f.status), slog.String("path", logattr.Safe(f.r.URL.Path)),
 		logattr.SafeString("reason", was))...)
 }
