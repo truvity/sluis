@@ -5,7 +5,7 @@ Catch a policy the service would refuse, or one that reads correctly and behaves
 ## Before you start
 
 - A refused rollout keeps the previous pods serving the previous policy while everything reads Synced. Test before the merge.
-- `sluisctl explain` evaluates a caller against a rendered policy, offline. The Go package is the interface for a test.
+- `sluisctl explain` evaluates a caller offline. The Go package serves a test.
 
 ## 1. Load it in CI
 
@@ -19,14 +19,12 @@ Run it on every render of the policy. Exit 0 and the one document mean the loade
 
 Call `policy.Parse`, then `policy.NewSet`, then `Evaluate` with an `Input`: an account with its directory groups, a CI token's claims and a client id. The result is the groups, claims and lifetime a token would carry. Pin the expectation in a fixture, as the service's own tests do.
 
-## 3. Explain one token
+## 3. Explain
 
 ```sh
 sluisctl explain --policy policy.yaml --audience logs \
     --email ana@example.test --directory-group dms-team@example.test
 ```
-
-The output is the groups the token keeps for that client, the groups scoping drops with the reason, and the claims the kept groups add, including a `claim_merge` join. Use `--subject` for a workload. Verify: a client that is not declared is refused.
 
 ## 4. Ask the live console
 
