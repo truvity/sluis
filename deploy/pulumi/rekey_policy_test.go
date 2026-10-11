@@ -22,7 +22,8 @@ func TestRekeyOperatorStatements(t *testing.T) {
 	if len(st) != 3 || by["SluisRekeyList"] == nil || by["SluisRekeyParameters"] == nil || by["SluisRekeyKey"] == nil {
 		t.Fatalf("statements = %v", st)
 	}
-	if !slices.Equal(listOf(by["SluisRekeyList"]["Action"]), []string{"ssm:DescribeParameters"}) || !slices.Equal(listOf(by["SluisRekeyList"]["Resource"]), []string{"*"}) {
+	list := by["SluisRekeyList"]
+	if !slices.Equal(listOf(list["Action"]), []string{"ssm:DescribeParameters"}) || !slices.Equal(listOf(list["Resource"]), []string{"*"}) {
 		t.Errorf("list: %v", by["SluisRekeyList"])
 	}
 	params := by["SluisRekeyParameters"]
@@ -32,7 +33,8 @@ func TestRekeyOperatorStatements(t *testing.T) {
 	}
 	k := by["SluisRekeyKey"]
 	cond := k["Condition"].(map[string]any)
-	if !slices.Equal(listOf(k["Action"]), []string{"kms:Encrypt", "kms:Decrypt", "kms:GenerateDataKey"}) || !slices.Equal(listOf(k["Resource"]), []string{keyArn}) ||
+	actions := []string{"kms:Encrypt", "kms:Decrypt", "kms:GenerateDataKey"}
+	if !slices.Equal(listOf(k["Action"]), actions) || !slices.Equal(listOf(k["Resource"]), []string{keyArn}) ||
 		cond["StringEquals"].(map[string]any)["kms:ViaService"] != "ssm."+region+".amazonaws.com" ||
 		cond["StringLike"].(map[string]any)["kms:EncryptionContext:PARAMETER_ARN"] != arnp+"ssm:"+region+":"+account+":parameter/sluis/staging/*" {
 		t.Errorf("key: %v", k)

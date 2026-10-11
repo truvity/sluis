@@ -342,7 +342,8 @@ type afterList struct {
 	hook func()
 }
 
-func (a *afterList) DescribeParameters(ctx context.Context, in *awsssm.DescribeParametersInput, o ...func(*awsssm.Options)) (*awsssm.DescribeParametersOutput, error) {
+func (a *afterList) DescribeParameters(ctx context.Context, in *awsssm.DescribeParametersInput,
+	o ...func(*awsssm.Options)) (*awsssm.DescribeParametersOutput, error) {
 	out, err := a.ssm.DescribeParameters(ctx, in, o...)
 	if err == nil && a.hook != nil {
 		a.hook()

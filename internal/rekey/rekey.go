@@ -196,7 +196,8 @@ func Run(ctx context.Context, api API, opt Options) (*Report, error) {
 		if err != nil {
 			return fail(fmt.Errorf("rekey: list %s: %w", root, err))
 		}
-		for _, m := range page.Parameters {
+		for i := range page.Parameters {
+			m := &page.Parameters[i]
 			if m.Type != types.ParameterTypeSecureString {
 				continue
 			}
