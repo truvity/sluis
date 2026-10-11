@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -15,7 +16,6 @@ import (
 	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/consoleauthz"
 	"github.com/truvity/sluis/internal/consolecall"
-	"github.com/truvity/sluis/internal/hub"
 	"github.com/truvity/sluis/internal/modcall"
 	slackconsole "github.com/truvity/sluis/internal/slackapp/console"
 )
@@ -65,9 +65,6 @@ func (c *Console) slackDeps() slackconsole.Deps {
 	if c.deps.Authorizer != nil {
 		d.Authorizer = c.deps.Authorizer
 	}
-	if c.deps.Hub != nil {
-		d.Directory = hubDirectory{c.deps.Hub}
-	}
 	return d
 }
 
@@ -91,48 +88,133 @@ func (c *Console) slackModule() modcall.Caller {
 	return c.slackLocal
 }
 
-// hubDirectory is the connected directories as the Slack module asks of them,
-// answered from the hub.
-type hubDirectory struct{ hub *hub.Hub }
-
-var _ slackconsole.Directory = hubDirectory{}
-
-func (d hubDirectory) Directories(ctx context.Context) ([]consoleauthz.Directory, error) {
-	dirs, err := (&Console{deps: ConsoleDeps{Hub: d.hub}}).directories(ctx)
-	if err != nil {
-		return nil, err
+// slackFacts is what the console resolves of the connected directories for one
+// Slack call, from the hub it holds: the module reads no directory of its own.
+// Only what the method asks is resolved, and each part is bounded. Nil is a
+// deployment that reads no directory.
+func (c *Console) slackFacts(ctx context.Context, id access.Identity, method string, req proto.Message) *consolecall.DirectoryFacts {
+	if c.deps.Hub == nil {
+		return nil
 	}
-	out := make([]consoleauthz.Directory, 0, len(dirs))
+	facts := &consolecall.DirectoryFacts{}
+	switch method {
+	case slackconsole.MethodBeginWorkspaceConnect, slackconsole.MethodGetStatus, slackconsole.MethodChangeOwner:
+		c.slackDirectoriesInto(ctx, facts)
+	case slackconsole.MethodListChannels, slackconsole.MethodListSharedChannels:
+		// The picker is for whoever may define a channel.
+		if id.CanAnywhere(access.RoleOperator) {
+			c.slackSourcesInto(ctx, facts)
+		}
+	case slackconsole.MethodCreateChannel, slackconsole.MethodUpdateChannel,
+		slackconsole.MethodCreateSharedChannel, slackconsole.MethodUpdateSharedChannel:
+		c.slackDirectoriesInto(ctx, facts)
+		c.slackAddressesInto(ctx, facts, slackAddresses(req))
+	default:
+		return nil
+	}
+	return facts
+}
+
+func (c *Console) slackDirectoriesInto(ctx context.Context, facts *consolecall.DirectoryFacts) {
+	dirs, err := c.directories(ctx)
+	if err != nil {
+		return
+	}
 	for i := range dirs {
-		out = append(out, consoleauthz.Directory{ID: dirs[i].id, Primary: dirs[i].primary, Served: dirs[i].served, Authoritative: dirs[i].authoritative})
+		if len(facts.Directories) == consolecall.MaxDirectories {
+			break
+		}
+		facts.Directories = append(facts.Directories, consolecall.Directory{
+			ID: dirs[i].id, Primary: dirs[i].primary, Served: dirs[i].served, Authoritative: dirs[i].authoritative,
+		})
 	}
-	return out, nil
 }
 
-func (d hubDirectory) Group(ctx context.Context, address string) (slackconsole.Group, error) {
-	g, err := d.hub.DirectoryGroup(ctx, address)
-	return slackconsole.Group{Found: g.Found, Workspace: g.Workspace}, err
-}
-
-func (d hubDirectory) User(ctx context.Context, address string) (slackconsole.User, error) {
-	u, err := d.hub.ResolveUser(ctx, address, nil)
-	return slackconsole.User{Found: u.Found, Suspended: u.Suspended, Workspace: u.Workspace}, err
-}
-
-func (d hubDirectory) Groups(ctx context.Context) ([]slackconsole.GroupEntry, []slackconsole.Domain, error) {
-	groups, served, err := d.hub.ListGroups(ctx, "", nil)
+// slackSourcesInto adds the directories and their groups as a picker lists them.
+func (c *Console) slackSourcesInto(ctx context.Context, facts *consolecall.DirectoryFacts) {
+	c.slackDirectoriesInto(ctx, facts)
+	groups, served, err := c.deps.Hub.ListGroups(ctx, "", nil)
 	if err != nil {
-		return nil, nil, err
+		facts.SourcesError = "the directories' groups could not be read just now: reload to try again"
+		return
 	}
-	g := make([]slackconsole.GroupEntry, 0, len(groups))
-	for _, group := range groups {
-		g = append(g, slackconsole.GroupEntry{Email: group.Email, Domain: group.Domain, Members: len(group.Members)})
-	}
-	dom := make([]slackconsole.Domain, 0, len(served))
+	byDomain := map[string]string{}
+	domains := map[string][]string{}
 	for _, s := range served {
-		dom = append(dom, slackconsole.Domain{Name: s.Name, Workspace: s.Workspace, Authoritative: s.Authoritative})
+		byDomain[s.Name] = s.Workspace
+		if s.Authoritative {
+			domains[s.Workspace] = append(domains[s.Workspace], s.Name)
+		}
 	}
-	return g, dom, nil
+	known := map[string]bool{}
+	for i := range facts.Directories {
+		known[facts.Directories[i].ID] = true
+	}
+	by := map[string]*consolecall.SourceDirectory{}
+	total := 0
+	for _, g := range groups {
+		ws := byDomain[g.Domain]
+		if ws == "" || !known[ws] {
+			continue
+		}
+		if total == consolecall.MaxSourceGroups {
+			facts.SourcesError = "there are more groups than a picker lists: type the address of the one you want"
+			break
+		}
+		dir := by[ws]
+		if dir == nil {
+			facts.Sources = append(facts.Sources, consolecall.SourceDirectory{Workspace: ws, Domains: slices.Sorted(slices.Values(domains[ws]))})
+			dir = &facts.Sources[len(facts.Sources)-1]
+			by[ws] = dir
+		}
+		dir.Groups = append(dir.Groups, consolecall.SourceGroup{Email: g.Email, Members: len(g.Members)})
+		total++
+	}
+}
+
+// slackAddressesInto resolves each address of the call as a group and as a user.
+func (c *Console) slackAddressesInto(ctx context.Context, facts *consolecall.DirectoryFacts, addresses []string) {
+	facts.Groups, facts.Users = map[string]consolecall.GroupFact{}, map[string]consolecall.UserFact{}
+	for _, address := range addresses {
+		if len(facts.Groups) >= consolecall.MaxAddressFacts {
+			return
+		}
+		group, err := c.deps.Hub.DirectoryGroup(ctx, address)
+		if err != nil {
+			facts.Groups[address] = consolecall.GroupFact{Err: err.Error()}
+			continue
+		}
+		facts.Groups[address] = consolecall.GroupFact{Found: group.Found, Workspace: group.Workspace}
+		user, err := c.deps.Hub.ResolveUser(ctx, address, nil)
+		if err != nil {
+			facts.Users[address] = consolecall.UserFact{Err: err.Error()}
+			continue
+		}
+		facts.Users[address] = consolecall.UserFact{Found: user.Found, Suspended: user.Suspended, Workspace: user.Workspace}
+	}
+}
+
+// slackAddresses are the sources and individual addresses a channel request
+// names, as the module reads them: trimmed and lowercased.
+func slackAddresses(req proto.Message) []string {
+	var raw []string
+	switch r := req.(type) {
+	case *directoryrosterv1.CreateSlackChannelRequest:
+		raw = slices.Concat(r.GetChannel().GetSources(), r.GetChannel().GetMembers())
+	case *directoryrosterv1.UpdateSlackChannelRequest:
+		raw = slices.Concat(r.GetChannel().GetSources(), r.GetChannel().GetMembers())
+	case *directoryrosterv1.CreateSlackSharedChannelRequest:
+		raw = slices.Concat(r.GetChannel().GetFrom(), r.GetChannel().GetMembers())
+	case *directoryrosterv1.UpdateSlackSharedChannelRequest:
+		raw = slices.Concat(r.GetChannel().GetFrom(), r.GetChannel().GetMembers())
+	}
+	var out []string
+	for _, a := range raw {
+		if a = strings.ToLower(strings.TrimSpace(a)); a != "" && !slices.Contains(out, a) {
+			out = append(out, a)
+		}
+	}
+	return out
 }
 
 // slackCaller is who the person is to the module: the snapshot of the identity
@@ -155,7 +237,7 @@ func slackIdentity(ctx context.Context) (access.Identity, error) {
 
 // slackProxy calls one console method of the Slack module as the person.
 func slackProxy[Req, Resp proto.Message](ctx context.Context, c *Console, id access.Identity, method string, req Req) (Resp, error) {
-	ctx, cancel := context.WithTimeout(ctx, slackCallTimeout)
+	ctx, cancel := context.WithTimeout(consolecall.WithFacts(ctx, c.slackFacts(ctx, id, method, req)), slackCallTimeout)
 	defer cancel()
 	resp, err := consolecall.Proxy[Req, Resp](ctx, c.slackModule(), slackconsole.Module, method, c.slackCaller(id), req)
 	return resp, slackError(err)

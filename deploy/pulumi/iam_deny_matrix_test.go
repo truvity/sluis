@@ -73,7 +73,7 @@ func mxSpecs() []roleSpec {
 			readTables: []Module{ModuleGoogle, ModuleGitHub, ModuleSlack}, readBlobs: []Module{ModuleGoogle},
 			invokes: []string{
 				mxFn("issuer") + ":live",
-				mxFn("github") + ":live-issuer", mxFn("slack") + ":live-issuer",
+				mxFn("github") + ":live-issuer", mxFn("slack") + ":live-issuer", mxFn("slack") + ":live-console",
 				mxFn("google") + ":live-issuer", mxFn("google") + ":live-console", mxFn("cloudflare") + ":live-issuer",
 				mxFn("backup") + ":live-console",
 			}},
@@ -470,8 +470,8 @@ func TestCrossInvokeGrantsTheQualifiedAlias(t *testing.T) {
 			t.Errorf("CrossInvoke does not grant %s:live-issuer, the ARN a modcall invokes", fn)
 		}
 		for _, bad := range []string{fn, fn + ":$LATEST", fn + ":live", fn + ":live-console", fn + ":1"} {
-			if f == "google" && bad == fn+":live-console" {
-				// The Workspace pages and the consent (D-v176-1 b).
+			if (f == "google" || f == "slack") && bad == fn+":live-console" {
+				// The Workspace and Slack pages (D-v176-1 b).
 				continue
 			}
 			if call(bad) {
@@ -479,8 +479,10 @@ func TestCrossInvokeGrantsTheQualifiedAlias(t *testing.T) {
 			}
 		}
 	}
-	if !call(mxFn("google")+":live-console") || call(mxFn("google")+":live-cloudflare") {
-		t.Error("the issuer's console calls to the google module are not on live-console alone")
+	for _, m := range []string{"google", "slack"} {
+		if !call(mxFn(m)+":live-console") || call(mxFn(m)+":live-cloudflare") {
+			t.Errorf("the issuer's console calls to the %s module are not on live-console alone", m)
+		}
 	}
 	if !call(mxFn("backup")+":live-console") || call(mxFn("backup")+":live-issuer") || call(mxFn("backup")) {
 		t.Error("the issuer's call to the backup is not on live-console alone")
