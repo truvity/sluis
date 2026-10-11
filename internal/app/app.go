@@ -41,6 +41,7 @@ import (
 	"github.com/truvity/sluis/internal/audit"
 	"github.com/truvity/sluis/internal/config"
 	"github.com/truvity/sluis/internal/connector"
+	"github.com/truvity/sluis/internal/consolecall"
 	"github.com/truvity/sluis/internal/demo"
 	"github.com/truvity/sluis/internal/githubapp/catalogue"
 	"github.com/truvity/sluis/internal/githubapp/mints"
@@ -48,11 +49,13 @@ import (
 	"github.com/truvity/sluis/internal/githubroster/connection"
 	"github.com/truvity/sluis/internal/githubroster/link"
 	"github.com/truvity/sluis/internal/githubroster/runnerapp"
+	googleconsole "github.com/truvity/sluis/internal/googleapp/console"
 	"github.com/truvity/sluis/internal/health"
 	"github.com/truvity/sluis/internal/hub"
 	"github.com/truvity/sluis/internal/hubwire"
 	"github.com/truvity/sluis/internal/lazy"
 	"github.com/truvity/sluis/internal/maintenance"
+	"github.com/truvity/sluis/internal/modcall"
 	"github.com/truvity/sluis/internal/port"
 	"github.com/truvity/sluis/internal/portstore"
 	"github.com/truvity/sluis/internal/rails"
@@ -78,6 +81,12 @@ type Config struct {
 	// refreshes or reads a directory. Unset keeps the hub that owns its
 	// directory, which is a local install with no remote.
 	Reader bool
+	// GoogleIssuer and GoogleConsole reach the Google module when it is another
+	// function (`google.remote`): the first signs people in (`google.identify`,
+	// caller class `issuer`), the second asks it the console's questions (caller
+	// class `console`). Nil is the module in this process. They are set with
+	// Reader: a hub that holds no workspaces has no connector of its own.
+	GoogleIssuer, GoogleConsole modcall.Caller
 
 	consolePort int
 	healthPort  int
@@ -808,6 +817,11 @@ func New(ctx context.Context, cfg Config, st *store.Stores, log *slog.Logger) (*
 	}
 
 	connectors := []server.Connector{connector.NewGoogle(oauthClient)}
+	if cfg.GoogleIssuer != nil {
+		// The OAuth client and its secret are the Google module's: this hub
+		// offers the kind and signs people in through it.
+		connectors = []server.Connector{googleconsole.NewRemoteConnector(cfg.GoogleIssuer)}
+	}
 	loginSources := []string{}
 	if cfg.demo {
 		connectors = append(connectors, seedDemo(ctx, directory, cfg.publicURL, log))
@@ -890,6 +904,7 @@ func New(ctx context.Context, cfg Config, st *store.Stores, log *slog.Logger) (*
 		Settings:     kept.settings,
 		State:        access.NewStateCodecWith(sessionKey, 10*time.Minute),
 		Connectors:   connectors,
+		Modules:      consolecall.Callers{Google: cfg.GoogleConsole},
 		Recovery:     recovery,
 		LoginSources: loginSources,
 		CacheBackend: st.Name(),
