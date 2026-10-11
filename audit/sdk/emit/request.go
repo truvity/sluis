@@ -40,6 +40,22 @@ func WithRequest(ctx context.Context, c *record.Context) context.Context {
 	return context.WithValue(ctx, contextKey{}, c)
 }
 
+type requestIDKey struct{}
+
+// WithRequestID carries the id a service has given the request, so that every
+// record emitted while handling it names the same id the service answered
+// with. It wins over any id a header offers: the service's id is the one the
+// caller was told.
+func WithRequestID(ctx context.Context, id string) context.Context {
+	return context.WithValue(ctx, requestIDKey{}, id)
+}
+
+// RequestID is the id [WithRequestID] carried, or empty.
+func RequestID(ctx context.Context) string {
+	id, _ := ctx.Value(requestIDKey{}).(string)
+	return id
+}
+
 // RequestContext returns the provenance recorded for this request, or nil.
 func RequestContext(ctx context.Context) *record.Context {
 	c, _ := ctx.Value(contextKey{}).(*record.Context)
@@ -55,6 +71,9 @@ func FromRequest(r *http.Request, trustedHops int) *record.Context {
 		ClientAddresses: clientChain(r, trustedHops),
 		UserAgent:       r.Header.Get("User-Agent"),
 		RequestId:       firstHeader(r, "X-Request-Id", "X-Correlation-Id", "X-Amzn-Trace-Id"),
+	}
+	if id := RequestID(r.Context()); id != "" {
+		c.RequestId = id
 	}
 	c.TraceId, c.SpanId = traceParent(r.Header.Get("traceparent"))
 	return c

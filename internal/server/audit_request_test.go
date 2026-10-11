@@ -279,3 +279,29 @@ func TestCheapRecoveryRefusalsAreRecordedOncePerWindow(t *testing.T) {
 		t.Errorf("real checks recorded %d times, want 3", len(trail.Records()))
 	}
 }
+
+// The id the service answered with is the id the audit record carries, so a
+// caller who quotes it finds the record; an inbound id that is not fit to be
+// quoted never reaches the record.
+func TestAuditRequestsCarryTheServiceRequestID(t *testing.T) {
+	t.Parallel()
+	var recorded string
+	h := AuditRequests(0, http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		recorded = emit.RequestContext(r.Context()).GetRequestId()
+	}))
+	for _, inbound := range []string{"gateway-0123456789", "bad id\nforged=1", ""} {
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		if inbound != "" {
+			req.Header.Set("X-Request-Id", inbound)
+		}
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		answered := rec.Header().Get("X-Request-Id")
+		if answered == "" || recorded != answered {
+			t.Errorf("inbound %q: record carries %q, response %q: want one id", inbound, recorded, answered)
+		}
+		if inbound == "gateway-0123456789" && answered != inbound {
+			t.Errorf("a well-formed inbound id is adopted: got %q", answered)
+		}
+	}
+}
