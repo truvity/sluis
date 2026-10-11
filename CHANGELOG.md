@@ -1,5 +1,9 @@
 ## Unreleased
 
+### Added
+
+- **`sluisctl explain` says what a token would carry.** `sluisctl explain --policy policy.yaml --audience <client> (--email <addr> | --subject <workload>) [--directory-group <email>]... [--format yaml|json]` loads a rendered policy document as the issuer does (so `apiVersion`, `exchange`, `apps` and `controllers` are accepted), evaluates the caller, narrows the groups to the audience and prints the groups kept, the groups dropped with the reason, and the claim fragments the kept groups add, `claim_merge` applied. It needs no session or network, never prints a secret or a registered claim, and refuses an audience that is not a declared client. It answers what took a throwaway program over `policy.Parse`. The shared function is `policy.Policy.Explain`; `policy.WorkloadInput` reads a ServiceAccount or AWS role subject. The live form (the issuer's real directory facts, operator only) is not built.
+
 ## v1.75.0-rc.11
 
 ### Added
