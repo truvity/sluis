@@ -378,9 +378,6 @@ func TestTheIssuerNamesNoRingInternals(t *testing.T) {
 // its module (v1.76 D-v176-1 b), the one package of the module the shared server
 // may import: the module's console surface (method names, request types, the
 // stores' interfaces). The rest of the provider's packages hold its credentials.
-//
-// TODO(v1.76 E-units): add internal/githubapp and backend/google as G1-G4 and
-// Y1 move the last of their operations, and delete this note.
 var consoleDoor = map[string]string{
 	"internal/githubapp": "internal/githubapp/console",
 	"internal/slackapp":  "internal/slackapp/console",

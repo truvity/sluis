@@ -18,6 +18,7 @@ import (
 	"github.com/truvity/sluis/internal/githubapp/console"
 	"github.com/truvity/sluis/internal/githubroster/connection"
 	"github.com/truvity/sluis/internal/githubroster/consolewire"
+	"github.com/truvity/sluis/internal/githubroster/link"
 	"github.com/truvity/sluis/internal/modcall"
 	"github.com/truvity/sluis/policy"
 )
@@ -297,5 +298,60 @@ func TestAFlowHandOverIsCheckedBeforeGitHubIsAsked(t *testing.T) {
 	}
 	if _, err := svc.BeginGitHubRunnerAppConnect(everywhere(), "globex", "standard"); connect.CodeOf(err) != connect.CodeFailedPrecondition {
 		t.Errorf("a deployment declaring no tiers = %v, want failed precondition", err)
+	}
+}
+
+type fixedLinkApp struct{}
+
+func (fixedLinkApp) PutLinkApp(context.Context, link.App, link.AppCredential) error { return nil }
+func (fixedLinkApp) LinkApp(context.Context) (link.App, bool, error)                { return link.App{}, true, nil }
+func (fixedLinkApp) LinkAppCredential(context.Context) (link.AppCredential, bool, error) {
+	return link.AppCredential{AppID: 9, ClientID: "client"}, true, nil
+}
+func (fixedLinkApp) DeleteLinkApp(context.Context) error { return nil }
+
+type noLinks struct{ link.Links }
+
+// The link page needs no caller and no session; its URL leaves the state to the
+// issuer; and where no link App is kept it is a 404 page.
+func TestTheLinkPageNeedsNoCallerAndLeavesTheStateToTheIssuer(t *testing.T) {
+	svc := console.New(console.Deps{LinkApp: fixedLinkApp{}, Links: noLinks{}, PublicURL: "https://access.example"})
+	page, err := svc.GitHubLinkPage(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(page.AuthorizeURL, consolewire.StatePlaceholder) || !strings.Contains(page.AuthorizeURL, "client_id=client") {
+		t.Errorf("authorize = %s", page.AuthorizeURL)
+	}
+	if _, err = console.New(console.Deps{}).GitHubLinkPage(context.Background()); statusOf(t, err) != http.StatusNotFound {
+		t.Errorf("no link App kept = %v, want 404", err)
+	}
+}
+
+// Whoever asks, the module finishes at most a bounded number of links a
+// minute, and says so as a 429 before it asks GitHub anything.
+func TestLinksAreFinishedAtABoundedRate(t *testing.T) {
+	svc := console.New(console.Deps{LinkApp: fixedLinkApp{}, Links: noLinks{}})
+	var refused int
+	for i := 0; i < 100; i++ {
+		_, err := svc.GitHubLinkComplete(context.Background(), consolewire.LinkComplete{GitHubError: "access_denied"})
+		var p *consolecall.Problem
+		if errors.As(err, &p) && p.Status == http.StatusTooManyRequests {
+			refused++
+		}
+	}
+	if refused != 40 {
+		t.Errorf("%d of 100 refused as too many, want 40 (60 a minute)", refused)
+	}
+}
+
+// Confirming a removal set is the organisation's operator's, on the snapshot.
+func TestConfirmingRemovalsIsRefusedToAForeignOperator(t *testing.T) {
+	store := newMemoryConnections()
+	seed(t, store)
+	svc := service(t, store)
+	_, err := svc.ConfirmGitHubRemovals(southOp(), connect.NewRequest(&directoryrosterv1.ConfirmGitHubRemovalsRequest{Org: "globex", Fingerprint: "abc"}))
+	if !refused(err) {
+		t.Errorf("a foreign operator = %v, want permission denied", err)
 	}
 }

@@ -48,6 +48,19 @@ func Register(s *modcall.Server, svc *Service) {
 	consolecall.HandleJSON(s, consolewire.CompleteRunnerCreate, adapt(svc, svc.CompleteGitHubRunnerCreate))
 	consolecall.HandleJSON(s, consolewire.CompleteRunnerSetup, adapt(svc, svc.CompleteGitHubRunnerSetup))
 	handleProto(svc, s, consolewire.DisconnectRunnerApp, svc.DisconnectGitHubRunnerApp)
+	consolecall.HandleJSON(s, consolewire.BeginLinkAppConnect, adapt(svc, func(ctx context.Context, r consolewire.BeginLinkAppConnectRequest) (consolewire.Begun, error) {
+		return svc.BeginGitHubLinkAppConnect(ctx, r.Owner)
+	}))
+	consolecall.HandleJSON(s, consolewire.CompleteLinkApp, adapt(svc, svc.CompleteGitHubLinkApp))
+	handleProto(svc, s, consolewire.DisconnectLinkApp, svc.DisconnectGitHubLinkApp)
+	consolecall.HandleJSON(s, consolewire.LinkPageOf, adapt(svc, func(ctx context.Context, _ struct{}) (consolewire.LinkPage, error) {
+		return svc.GitHubLinkPage(ctx)
+	}))
+	consolecall.HandleJSON(s, consolewire.LinkCompleteOf, adapt(svc, svc.GitHubLinkComplete))
+	handleProto(svc, s, consolewire.ConfirmRemovals, svc.ConfirmGitHubRemovals)
+	handleProto(svc, s, consolewire.ImportLinks, svc.ImportGitHubLinks, consolecall.List())
+	consolecall.HandleJSON(s, consolewire.BeginAppConnect, adapt(svc, svc.BeginGitHubAppConnect))
+	handleProto(svc, s, consolewire.DisconnectApp, svc.DisconnectGitHubApp)
 }
 
 // begin adapts a handler of plain values: the snapshot goes in the context, and

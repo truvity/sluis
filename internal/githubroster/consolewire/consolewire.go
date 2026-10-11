@@ -39,6 +39,18 @@ const (
 	CompleteRunnerCreate    = "console.complete_runner_create"
 	CompleteRunnerSetup     = "console.complete_runner_setup"
 	DisconnectRunnerApp     = "console.disconnect_runner_app"
+
+	// G4: the link App and people's links; and the two calls that start and
+	// end any App by its id.
+	BeginLinkAppConnect = "console.begin_link_app_connect"
+	CompleteLinkApp     = "console.complete_link_app"
+	DisconnectLinkApp   = "console.disconnect_link_app"
+	LinkPageOf          = "console.link_page"
+	LinkCompleteOf      = "console.link_complete"
+	ConfirmRemovals     = "console.confirm_removals"
+	ImportLinks         = "console.import_links"
+	BeginAppConnect     = "console.begin_app_connect"
+	DisconnectApp       = "console.disconnect_app"
 )
 
 // The two places GitHub sends the browser back to, at the origin root beside a
@@ -75,6 +87,7 @@ const (
 	BindCatalogue = "github-catalogue:"
 	BindRunner    = "github-runner:"
 	BindLink      = "github-link"
+	BindLinkApp   = "github-link-app:"
 )
 
 // StatePlaceholder stands in a URL the module returns for the signed state the
@@ -141,3 +154,41 @@ type Continued struct {
 
 // Done is what a flow's last redirect returns.
 type Done struct{}
+
+// BeginAppConnectRequest starts connecting any App by the id the Apps list
+// gave it.
+type BeginAppConnectRequest struct {
+	ID             string `json:"id"`
+	Owner          string `json:"owner,omitempty"`
+	OwnerDirectory string `json:"owner_directory,omitempty"`
+}
+
+// BeginLinkAppConnectRequest starts creating the link App under an
+// organisation.
+type BeginLinkAppConnectRequest struct {
+	Owner string `json:"owner"`
+}
+
+// LinkPage is what the page where a person starts linking needs: where GitHub's
+// authorize page is, with [StatePlaceholder] where the state belongs.
+type LinkPage struct {
+	AuthorizeURL string `json:"authorize_url"`
+}
+
+// LinkComplete is what the issuer hands the module when GitHub sends a person
+// back from authorizing a link: the one-time code, or GitHub's refusal. The
+// issuer verified the signed state and the cookie it was pinned with.
+type LinkComplete struct {
+	Code                   string `json:"code,omitempty"`
+	GitHubError            string `json:"github_error,omitempty"`
+	GitHubErrorDescription string `json:"github_error_description,omitempty"`
+}
+
+// Linked is what finishing a link came to: the account, the addresses it was
+// linked to, and a reason for each work address that was not. No Accepted is a
+// link that was not made.
+type Linked struct {
+	Login    string   `json:"login"`
+	Accepted []string `json:"accepted,omitempty"`
+	Refused  []string `json:"refused,omitempty"`
+}

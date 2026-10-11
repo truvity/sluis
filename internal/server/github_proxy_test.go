@@ -181,3 +181,71 @@ func recordOwner(records []connection.Record, org string) string {
 	r, _ := recordOf(records, org)
 	return r.Owner
 }
+
+// The link routes have no session, so each address has a small allowance: over
+// it the page is a 429 and the module is not asked.
+func TestTheLinkRoutesRateLimitEachAddress(t *testing.T) {
+	r := newLinkRig(t, directory{})
+	counted := &countingCaller{err: errors.New("down")}
+	r.console.deps.Modules.GitHub = counted
+	ask := func(address string) int {
+		request := httptest.NewRequest(http.MethodGet, githubLinkPath, nil)
+		request.RemoteAddr = address
+		recorder := httptest.NewRecorder()
+		r.server.githubLinkPage(recorder, request)
+		return recorder.Code
+	}
+	for i := 0; i < linkAllowance; i++ {
+		if got := ask("192.0.2.1:1000"); got == http.StatusTooManyRequests {
+			t.Fatalf("request %d refused inside the allowance", i+1)
+		}
+	}
+	if got := ask("192.0.2.1:1001"); got != http.StatusTooManyRequests {
+		t.Errorf("over the allowance = %d, want 429", got)
+	}
+	if n := counted.calls.Load(); n != linkAllowance {
+		t.Errorf("the module was asked %d times, want %d: a refused request must not reach it", n, linkAllowance)
+	}
+	if got := ask("192.0.2.2:1000"); got == http.StatusTooManyRequests {
+		t.Error("another address shares the allowance")
+	}
+}
+
+// A link callback needs the state and the cookie it was pinned with, and a
+// module that fails is told in fixed words, once.
+func TestALinkCallbackNeedsItsStateAndIsNotRetried(t *testing.T) {
+	r := newLinkRig(t, directory{"ada@globex.example": {InDomain: true, Found: true, Authoritative: true}})
+	r.github.AddAccount("ada-gh", "ada@globex.example")
+	state, cookie := r.start(t)
+
+	counted := &countingCaller{err: errors.New("lambda: throttled secret-detail-5678")}
+	r.console.deps.Modules.GitHub = counted
+	if got := r.finish(t, "ada-gh", state, ""); got.Code != http.StatusBadRequest {
+		t.Errorf("no cookie = %d, want 400", got.Code)
+	}
+	if got := r.finish(t, "ada-gh", "forged", cookie); got.Code != http.StatusBadRequest {
+		t.Errorf("a forged state = %d, want 400", got.Code)
+	}
+	if n := counted.calls.Load(); n != 0 {
+		t.Fatalf("a refused callback reached the module %d times", n)
+	}
+	got := r.finish(t, "ada-gh", state, cookie)
+	if got.Code != http.StatusConflict || strings.Contains(got.Body.String(), "secret-detail-5678") {
+		t.Errorf("a module that fails = %d:\n%s", got.Code, got.Body)
+	}
+	if n := counted.calls.Load(); n != 1 {
+		t.Errorf("the module was asked %d times, want once", n)
+	}
+}
+
+// Importing links is an operator's, and the module asks the same question of
+// the caller snapshot.
+func TestImportingLinksIsRefusedToAViewer(t *testing.T) {
+	r := newLinkRig(t, directory{})
+	_, err := r.console.ImportGitHubLinks(viewer(), connect.NewRequest(&directoryrosterv1.ImportGitHubLinksRequest{
+		Origin: "spreadsheet", Records: []*directoryrosterv1.GitHubLinkRecord{{Login: "ada-gh", ApprovedBy: "ops"}},
+	}))
+	if connect.CodeOf(err) != connect.CodePermissionDenied {
+		t.Errorf("a viewer = %v, want permission denied", err)
+	}
+}
