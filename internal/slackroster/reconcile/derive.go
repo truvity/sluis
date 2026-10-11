@@ -23,6 +23,9 @@ const (
 type resolved struct {
 	kind   resKind
 	reason string
+	// code is the stable name of the reason, which is what a hold is
+	// identified by (see [Held.Key]).
+	code string
 	// adopted marks a bound channel that exists, was not made by the bot and
 	// is being managed: adopted by name or by `adopt`.
 	adopted bool
@@ -104,15 +107,16 @@ func (d *Draft) byName(name string) *Channel {
 func ready(ch *Channel, private bool, joinable bool) resolved {
 	switch {
 	case ch.Private != private:
-		return resolved{kind: resHeld, ch: ch, change: "adopt",
+		return resolved{kind: resHeld, ch: ch, change: "adopt", code: CodeVisibilityDiffers,
 			reason: fmt.Sprintf("the channel is %s in Slack but the policy says %s; change one of them, the roster never changes visibility",
 				visibility(ch.Private), visibility(private))}
 	case !ch.BotIn && ch.Private:
-		return resolved{kind: resHeld, ch: ch, change: "adopt", reason: "the bot is not in this private channel: invite the bot first"}
+		return resolved{kind: resHeld, ch: ch, change: "adopt", code: CodeBotNotInPrivate,
+			reason: "the bot is not in this private channel: invite the bot first"}
 	case !ch.BotIn && joinable:
 		return resolved{kind: resJoin, ch: ch}
 	case !ch.BotIn:
-		return resolved{kind: resHeld, ch: ch, change: "adopt", reason: "the bot is not in this channel"}
+		return resolved{kind: resHeld, ch: ch, change: "adopt", code: CodeBotNotIn, reason: "the bot is not in this channel"}
 	}
 	return resolved{kind: resOK, ch: ch}
 }
@@ -128,20 +132,20 @@ func (d *Draft) resolveBound(lc layoutChannel) resolved {
 		ch = d.byID(id)
 		switch {
 		case ch == nil:
-			return resolved{kind: resHeld, change: "adopt",
+			return resolved{kind: resHeld, change: "adopt", code: CodeAdoptInvisible,
 				reason: "adopt " + id + ": the bot cannot see that channel; if it is private, invite the bot first, otherwise check the id"}
 		case ch.Shared:
-			return resolved{kind: resHeld, ch: ch, change: "adopt",
+			return resolved{kind: resHeld, ch: ch, change: "adopt", code: CodeIsSharedChannel,
 				reason: "adopt " + id + " is a Slack Connect channel; it is managed as a shared channel, not bound here"}
 		}
 	} else if ch = d.byName(lc.name); ch == nil {
 		return resolved{kind: resCreate}
 	} else if ch.Shared {
-		return resolved{kind: resHeld, ch: ch, change: "adopt",
+		return resolved{kind: resHeld, ch: ch, change: "adopt", code: CodeIsSharedChannel,
 			reason: "a channel named " + lc.name + " (" + ch.ID + ") is a Slack Connect channel; it is managed as a shared channel, not bound here"}
 	}
 	if ch.Archived {
-		return resolved{kind: resHeld, ch: ch, change: "adopt",
+		return resolved{kind: resHeld, ch: ch, change: "adopt", code: CodeArchived,
 			reason: archivedReason(lc.name, ch.ID)}
 	}
 	res := ready(ch, lc.private, true)
@@ -163,7 +167,7 @@ func (d *Draft) resolveHost(lc layoutChannel) resolved {
 	var ch *Channel
 	if id := lc.shared.ChannelID; id != "" {
 		if ch = d.byID(id); ch == nil {
-			return resolved{kind: resHeld, change: "adopt",
+			return resolved{kind: resHeld, change: "adopt", code: CodeRecordedInvisible,
 				reason: "the recorded channel " + id + " is not visible to the bot; if it is private, invite the bot to it first, otherwise check the id"}
 		}
 	} else if ch = d.byName(lc.name); ch == nil {
@@ -172,11 +176,11 @@ func (d *Draft) resolveHost(lc layoutChannel) resolved {
 	if ch.Archived {
 		// Archived channels keep their name: never join, unarchive or
 		// create a second one beside it.
-		return resolved{kind: resHeld, ch: ch, change: "create", reason: archivedReason(lc.name, ch.ID)}
+		return resolved{kind: resHeld, ch: ch, change: "create", code: CodeArchived, reason: archivedReason(lc.name, ch.ID)}
 	}
 	madeHere := ch.Creator == d.in.Observed.BotUserID
 	if lc.shared.ChannelID == "" && !madeHere && !ch.Shared {
-		return resolved{kind: resHeld, ch: ch, change: "create",
+		return resolved{kind: resHeld, ch: ch, change: "create", code: CodeNameTaken,
 			reason: "a channel named " + lc.name + " already exists here (" + ch.ID + ") and this roster did not create it"}
 	}
 	res := ready(ch, lc.private, true)
@@ -199,10 +203,10 @@ func (d *Draft) resolveGuest(lc layoutChannel) resolved {
 	}
 	if ch != nil {
 		if ch.Archived {
-			return resolved{kind: resHeld, ch: ch, change: "share", reason: archivedReason(lc.name, ch.ID)}
+			return resolved{kind: resHeld, ch: ch, change: "share", code: CodeArchived, reason: archivedReason(lc.name, ch.ID)}
 		}
 		if !ch.Shared {
-			return resolved{kind: resHeld, ch: ch, change: "share",
+			return resolved{kind: resHeld, ch: ch, change: "share", code: CodeNotTheSharedChannel,
 				reason: "a channel named " + lc.name + " already exists here and is not the shared channel"}
 		}
 		res := ready(ch, lc.private, true)
@@ -267,7 +271,7 @@ func (d *Draft) derive(lc layoutChannel) (*plan, error) {
 		p.chanActs = append(p.chanActs, Action{Kind: status.ActionShareAccept, Channel: lc.name, Private: lc.private, Shared: true,
 			Host: lc.shared.Host, Guest: d.in.Workspace, InviteID: p.res.invite.ID, Reason: "the host invited this workspace"})
 	case resHeld:
-		p.held = append(p.held, Held{Channel: lc.name, Change: p.res.change, Reason: p.res.reason})
+		p.held = append(p.held, Held{Channel: lc.name, Change: p.res.change, Code: p.res.code, Reason: p.res.reason})
 	}
 
 	// The members of an existing channel must have been read whole.
@@ -345,7 +349,7 @@ func (d *Draft) shareActions(p *plan) {
 			reason := g + " is not connected: its bot user id is unknown, so it cannot be invited"
 			p.notes = append(p.notes, reason)
 			p.heldShare = true
-			p.held = append(p.held, Held{Channel: lc.name, Change: "share-invite", Reason: reason})
+			p.held = append(p.held, Held{Channel: lc.name, Change: "share-invite", Code: CodeGuestBotUnknown, Reason: reason})
 			continue
 		}
 		p.shareActs = append(p.shareActs, invite)
@@ -358,12 +362,12 @@ func (d *Draft) people(p *plan, exists bool) error {
 	obs := d.in.Observed
 	for _, s := range p.lc.slots {
 		row := status.Member{Person: s.person.key, Email: rowEmail(s)}
-		hold := func(reason string) {
+		hold := func(code, reason string) {
 			row.State, row.Reason = status.StateHeld, reason
-			p.held = append(p.held, Held{Channel: p.lc.name, Person: s.person.key, Email: row.Email, Change: "invite", Reason: reason})
+			p.held = append(p.held, Held{Channel: p.lc.name, Person: s.person.key, Email: row.Email, Change: "invite", Code: code, Reason: reason})
 		}
 		if s.addr == "" {
-			hold(s.reason)
+			hold(s.code, s.reason)
 			p.rows = append(p.rows, row)
 			continue
 		}
@@ -375,15 +379,15 @@ func (d *Draft) people(p *plan, exists bool) error {
 		switch {
 		case !acct.Found:
 			row.UserID = ""
-			hold("no Slack account yet")
+			hold(CodeNoSlackAccount, "no Slack account yet")
 		case acct.Deleted:
-			hold("the Slack account is deactivated")
+			hold(CodeAccountDeactivated, "the Slack account is deactivated")
 		case acct.Bot:
-			hold("that address belongs to a bot")
+			hold(CodeAddressIsBot, "that address belongs to a bot")
 		case acct.Guest:
 			row.State, row.Reason = status.StateReported, "a guest account: guests are never invited or removed"
 		case acct.TeamID != "" && obs.TeamID != "" && acct.TeamID != obs.TeamID:
-			hold("the account belongs to another workspace")
+			hold(CodeOtherWorkspace, "the account belongs to another workspace")
 		case exists && p.members[acct.ID]:
 			row.State = status.StateOK
 		default:

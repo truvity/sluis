@@ -178,6 +178,10 @@ type Controller struct {
 	// adopted is the same for the channels adopted, so that each is
 	// recorded once, when it is first managed, and not every pass.
 	adopted rails.Ledger
+	// holdText is the sentence each recorded hold last carried, by workspace
+	// and key: a hold is identified by its code, so a sentence that moves
+	// (counts, names) is logged, not audited again.
+	holdText sync.Map
 	// journal is each workspace's last report that was not a failure, so a
 	// failed pass can keep what was last known instead of blanking it, and
 	// the place the reports are written.
@@ -746,7 +750,8 @@ func (c *Controller) fold(ctx context.Context, workspace string, report *status.
 			if ch := channelOf(report, o.Action); ch != nil {
 				ch.State, ch.Reason = status.ChannelHeld, o.Held
 			}
-			found = append(found, reconcile.Held{Channel: o.Action.Channel, Change: "create", Reason: o.Held})
+			found = append(found, reconcile.Held{
+				Channel: o.Action.Channel, Change: "create", Code: reconcile.CodeNameTakenUnseen, Reason: o.Held})
 			report.Tick.Held++
 			continue
 		}
@@ -781,6 +786,7 @@ func (c *Controller) recordNew(
 	for _, h := range slices.Concat(decision.Held, found) {
 		holdKeys = append(holdKeys, h.Key())
 		holdEvents = append(holdEvents, apply.HeldRecord(workspace, h))
+		c.noteHoldText(ctx, workspace, h)
 	}
 	for _, a := range decision.Adopted {
 		adoptedKeys = append(adoptedKeys, a.Channel+"|"+a.ID)
@@ -815,6 +821,20 @@ func (c *Controller) recordNew(
 	}
 	for _, k := range leaverKeys {
 		report.Recorded = append(report.Recorded, leaverPrefix+k)
+	}
+}
+
+// noteHoldText logs, at info, a hold whose sentence changed while its code
+// did not: the same hold, so it is not audited again, but a person reading the
+// log can see what moved.
+func (c *Controller) noteHoldText(ctx context.Context, workspace string, h reconcile.Held) {
+	key := workspace + "|" + h.Key()
+	old, seen := c.holdText.Swap(key, h.Reason)
+	if seen && old != h.Reason {
+		c.deps.Log.InfoContext(ctx, "a hold's reason changed; it is the same hold and is not audited again",
+			logattr.SafeString("workspace", workspace), logattr.SafeString("channel", h.Channel),
+			logattr.SafeString("change", h.Change), logattr.SafeString("code", h.Code),
+			logattr.SafeString("reason", h.Reason))
 	}
 }
 

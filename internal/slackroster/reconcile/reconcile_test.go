@@ -1233,16 +1233,27 @@ func TestDecisionIsDeterministic(t *testing.T) {
 
 func TestHeldKeysDistinguishChannelPersonChangeAndReason(t *testing.T) {
 	t.Parallel()
-	a := reconcile.Held{Channel: "c", Person: "p", Change: "invite", Reason: "r"}
+	a := reconcile.Held{Channel: "c", Person: "p", Change: "invite", Code: "y", Reason: "r"}
 	for _, b := range []reconcile.Held{
-		{Channel: "d", Person: "p", Change: "invite", Reason: "r"},
-		{Channel: "c", Person: "q", Change: "invite", Reason: "r"},
-		{Channel: "c", Person: "p", Change: "remove", Reason: "r"},
-		{Channel: "c", Person: "p", Change: "invite", Reason: "s"},
+		{Channel: "d", Person: "p", Change: "invite", Code: "y", Reason: "r"},
+		{Channel: "c", Person: "q", Change: "invite", Code: "y", Reason: "r"},
+		{Channel: "c", Person: "p", Change: "remove", Code: "y", Reason: "r"},
+		{Channel: "c", Person: "p", Change: "invite", Code: "x", Reason: "s"},
 	} {
 		if a.Key() == b.Key() {
 			t.Errorf("%+v and %+v share a key", a, b)
 		}
+	}
+}
+
+// A hold is identified by its code: a sentence that moves is the same hold.
+func TestHeldKeyIgnoresTheSentenceWhenThereIsACode(t *testing.T) {
+	t.Parallel()
+	a := reconcile.Held{Channel: "c", Change: "remove", Code: reconcile.CodeRemovalLimitChannel, Reason: "over the removal limit: 4 of 7"}
+	b := a
+	b.Reason = "over the removal limit: 5 of 8"
+	if a.Key() != b.Key() {
+		t.Errorf("a changed sentence changed the key: %q vs %q", a.Key(), b.Key())
 	}
 }
 
