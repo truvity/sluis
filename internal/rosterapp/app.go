@@ -107,6 +107,9 @@ func Load(file string) (Config, error) {
 	if cfg.GitHub, cfg.Slack, err = controllersOf(svc, p); err != nil {
 		return Config{}, err
 	}
+	// With the Google module elsewhere the hub only reads its snapshots; the
+	// module's own schedule refreshes them (docs/decisions/0071, D-v176-6 a).
+	cfg.Directory.Reader = svc.Google != nil && svc.Google.Remote != nil
 	// The secrets the document names are read through one source, opened
 	// here and handed to both halves with the storage ports. Opening connects
 	// to nothing: a secret is read when it is used.
@@ -241,13 +244,15 @@ func (a *App) ReconcileClientSecrets(ctx context.Context) clientcreds.Result {
 
 // UseRequestRefresh makes the directory refresh a snapshot that is due from the
 // request that finds it, for a function that has no background loop. See
-// [hub.Hub.UseRequestRefresh].
+// [hub.Hub.UseRequestRefresh]. It does nothing when the hub only reads
+// snapshots (`google.remote`).
 func (a *App) UseRequestRefresh(timeout time.Duration) {
 	a.directory.Hub().UseRequestRefresh(timeout)
 }
 
 // RefreshDirectory runs one refresh pass over every connected workspace, under
-// the refresh lease. It is what a function runs on a schedule in place of the
+// the refresh lease; with `google.remote` it does nothing, since the Google
+// module refreshes. It is what a function runs on a schedule in place of the
 // loop [App.Run] starts.
 func (a *App) RefreshDirectory(ctx context.Context) (hub.RefreshResult, error) {
 	return a.directory.Hub().RefreshPass(ctx)

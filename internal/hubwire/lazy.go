@@ -1,4 +1,8 @@
-package app
+// Package hubwire is the wiring a hub needs for the workspaces a deployment
+// declares and the ones a console connected: bring the declared ones up with
+// their key read lazily, and reopen the stored ones. The Google module and the
+// in-process issuer share it.
+package hubwire
 
 import (
 	"context"
@@ -12,17 +16,17 @@ import (
 	"github.com/truvity/sluis/internal/secrets"
 )
 
-// lazyBackend reads a declared workspace through a service-account key that is
+// LazyBackend reads a declared workspace through a service-account key that is
 // read when the workspace is first used, and again after [lazy.TTL]: a start
 // that attached it reads no secret, and a rotated key is picked up by opening
 // the backend again. A key that cannot be read fails that call and is tried
 // again by the next.
-type lazyBackend struct {
+type LazyBackend struct {
 	declared hub.Declared
 	key      func(context.Context) (string, error)
 
-	// opener builds the backend from the key; openBackend unless a test says.
-	opener func(context.Context, *hub.Declared) (backend.Backend, error)
+	// opener builds the backend from the key.
+	opener Opener
 
 	mu    sync.Mutex
 	inner backend.Backend
@@ -31,20 +35,22 @@ type lazyBackend struct {
 	now   func() time.Time
 }
 
-var _ backend.Backend = (*lazyBackend)(nil)
+var _ backend.Backend = (*LazyBackend)(nil)
 
-func newLazyBackend(d hub.Declared, src secrets.Source, name string) *lazyBackend {
-	return &lazyBackend{
+// NewLazyBackend attaches nothing and reads nothing: the key named name is
+// read from src, and open builds the backend from it, at the first call.
+func NewLazyBackend(d hub.Declared, src secrets.Source, name string, open Opener) *LazyBackend {
+	return &LazyBackend{
 		declared: d,
 		key:      func(ctx context.Context) (string, error) { return src.Get(ctx, name) },
-		opener:   openBackend,
+		opener:   open,
 		now:      time.Now,
 	}
 }
 
 // open returns the backend, reading the key when there is none or it is older
 // than the time to live. The backend is opened again only when the key changed.
-func (l *lazyBackend) open(ctx context.Context) (backend.Backend, error) {
+func (l *LazyBackend) open(ctx context.Context) (backend.Backend, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.inner != nil && l.now().Sub(l.at) < lazy.TTL {
@@ -71,10 +77,10 @@ func (l *lazyBackend) open(ctx context.Context) (backend.Backend, error) {
 }
 
 // Kind implements [backend.Backend] without opening anything.
-func (l *lazyBackend) Kind() string { return l.declared.Backend }
+func (l *LazyBackend) Kind() string { return l.declared.Backend }
 
 // Tenant implements [backend.Backend].
-func (l *lazyBackend) Tenant(ctx context.Context) (backend.Tenant, error) {
+func (l *LazyBackend) Tenant(ctx context.Context) (backend.Tenant, error) {
 	b, err := l.open(ctx)
 	if err != nil {
 		return backend.Tenant{}, err
@@ -83,7 +89,7 @@ func (l *lazyBackend) Tenant(ctx context.Context) (backend.Tenant, error) {
 }
 
 // Probe implements [backend.Backend].
-func (l *lazyBackend) Probe(ctx context.Context) error {
+func (l *LazyBackend) Probe(ctx context.Context) error {
 	b, err := l.open(ctx)
 	if err != nil {
 		return err
@@ -92,7 +98,7 @@ func (l *lazyBackend) Probe(ctx context.Context) error {
 }
 
 // Accounts implements [backend.Backend].
-func (l *lazyBackend) Accounts(ctx context.Context) ([]backend.Account, error) {
+func (l *LazyBackend) Accounts(ctx context.Context) ([]backend.Account, error) {
 	b, err := l.open(ctx)
 	if err != nil {
 		return nil, err
@@ -101,7 +107,7 @@ func (l *lazyBackend) Accounts(ctx context.Context) ([]backend.Account, error) {
 }
 
 // Groups implements [backend.Backend].
-func (l *lazyBackend) Groups(ctx context.Context) ([]backend.Group, error) {
+func (l *LazyBackend) Groups(ctx context.Context) ([]backend.Group, error) {
 	b, err := l.open(ctx)
 	if err != nil {
 		return nil, err
@@ -110,7 +116,7 @@ func (l *lazyBackend) Groups(ctx context.Context) ([]backend.Group, error) {
 }
 
 // Account implements [backend.Backend].
-func (l *lazyBackend) Account(ctx context.Context, email string) (backend.Account, bool, error) {
+func (l *LazyBackend) Account(ctx context.Context, email string) (backend.Account, bool, error) {
 	b, err := l.open(ctx)
 	if err != nil {
 		return backend.Account{}, false, err
@@ -119,7 +125,7 @@ func (l *lazyBackend) Account(ctx context.Context, email string) (backend.Accoun
 }
 
 // GroupsOf implements [backend.Backend].
-func (l *lazyBackend) GroupsOf(ctx context.Context, email string) ([]string, error) {
+func (l *LazyBackend) GroupsOf(ctx context.Context, email string) ([]string, error) {
 	b, err := l.open(ctx)
 	if err != nil {
 		return nil, err
@@ -128,7 +134,7 @@ func (l *lazyBackend) GroupsOf(ctx context.Context, email string) ([]string, err
 }
 
 // Revoke implements [backend.Backend].
-func (l *lazyBackend) Revoke(ctx context.Context) error {
+func (l *LazyBackend) Revoke(ctx context.Context) error {
 	b, err := l.open(ctx)
 	if err != nil {
 		return err

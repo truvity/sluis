@@ -21,6 +21,11 @@ import (
 // Neither applies to a refresh somebody asked for. An operator pressing
 // Refresh, or a caller passing max_age=0, is asking for a read now.
 func (h *Hub) Run(ctx context.Context) error {
+	if h.readOnly {
+		// Nothing to drive: the directory module refreshes and probes.
+		<-ctx.Done()
+		return ctx.Err()
+	}
 	refresh := time.NewTicker(h.cfg.RefreshInterval)
 	defer refresh.Stop()
 	probe := time.NewTicker(h.cfg.ProbeInterval)
@@ -195,6 +200,9 @@ type RefreshResult struct {
 // same lease the background loop takes. It is what a function with no loop
 // runs on a schedule.
 func (h *Hub) RefreshPass(ctx context.Context) (RefreshResult, error) {
+	if h.readOnly {
+		return RefreshResult{}, nil
+	}
 	workspaces, err := h.store.List(ctx)
 	if err != nil {
 		return RefreshResult{}, fmt.Errorf("list workspaces: %w", err)

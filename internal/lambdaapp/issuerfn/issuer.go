@@ -96,7 +96,8 @@ func open(ctx context.Context, file string) (*lambdaapp.Function, error) {
 	}
 	// There is no loop to keep the directory's snapshots fresh on Lambda: a
 	// request that finds one due refreshes it, and a schedule does so between
-	// requests ({"kind":"refresh"}).
+	// requests ({"kind":"refresh"}). With google.remote the hub only reads the
+	// snapshots and both are the Google module's: this is then a no-op.
 	service.UseRequestRefresh(hub.DefaultRequestRefreshTimeout)
 	http := lambdaapp.NewHTTP(service.Handler(), service.Settle, log).WithControllers(kindOf, controllers).WithCheck(lambdaapp.CheckFunc(file))
 	if service.Cloudflare() != nil {

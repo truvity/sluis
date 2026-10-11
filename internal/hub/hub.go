@@ -131,6 +131,9 @@ type Hub struct {
 	// due refresh it: see [Hub.UseRequestRefresh].
 	requestRefresh time.Duration
 
+	// readOnly makes the hub only read snapshots: see [Hub.UseReader].
+	readOnly bool
+
 	// reopener opens a workspace this replica has no reader for yet.
 	reopener Reopener
 	// opens collapses concurrent misses on one workspace into one open.
@@ -205,7 +208,30 @@ func (h *Hub) Attach(ctx context.Context, workspaceID string, b backend.Backend)
 // take the same lease the scheduled pass takes, so concurrent instances read
 // a directory once between them. A refresh that fails or runs out of time
 // leaves the stale snapshot served, as ever. Call it before serving.
-func (h *Hub) UseRequestRefresh(timeout time.Duration) { h.requestRefresh = timeout }
+func (h *Hub) UseRequestRefresh(timeout time.Duration) {
+	if !h.readOnly {
+		h.requestRefresh = timeout
+	}
+}
+
+// ErrReader is returned by a refresh or a probe asked of a hub that only reads
+// snapshots: the module that owns the directory reads it, not this one.
+var ErrReader = errors.New("hub: this hub only reads snapshots; the directory module refreshes them")
+
+// UseReader makes the hub only READ snapshots, for a deployment whose
+// directory lives in another module (`google.remote`): the schedule of that
+// module refreshes, and no request, sign-in or loop here makes a call to the
+// directory or invokes anything to cause one. A snapshot that is due is served
+// as it is, and answers non-authoritatively once it is older than the
+// freshness window, as one a refresh failed to renew does. It supersedes
+// [Hub.UseRequestRefresh]. Call it before serving.
+func (h *Hub) UseReader() {
+	h.readOnly = true
+	h.requestRefresh = 0
+}
+
+// Reader reports whether the hub only reads snapshots: see [Hub.UseReader].
+func (h *Hub) Reader() bool { return h.readOnly }
 
 // Pause says whether the module may write. *maintenance.Gate is one.
 type Pause interface {
@@ -218,7 +244,7 @@ type Pause interface {
 func (h *Hub) UseMaintenance(p Pause) { h.maintenance = p }
 
 func (h *Hub) paused(ctx context.Context) bool {
-	return h.maintenance != nil && h.maintenance.Writable(ctx) != nil
+	return h.readOnly || h.maintenance != nil && h.maintenance.Writable(ctx) != nil
 }
 
 // SetClock replaces the hub's clock. For tests.
@@ -421,8 +447,12 @@ func snapshotAt(snap *Snapshot) time.Time {
 }
 
 // backendFor returns the backend reading a workspace, opening one from
-// the stored credential when this replica has none.
+// the stored credential when this replica has none. A hub that only reads
+// snapshots has no reader to give: nothing here reaches a directory.
 func (h *Hub) backendFor(ctx context.Context, id string) (backend.Backend, bool) {
+	if h.readOnly {
+		return nil, false
+	}
 	h.mu.RLock()
 	b, ok := h.backends[id]
 	h.mu.RUnlock()
@@ -843,6 +873,9 @@ func (h *Hub) ensureFresh(ctx context.Context, workspaceID string, maxAge *time.
 	// request open for a full tenant read. A refresh is started instead,
 	// so the first console page after a connect fills in by itself rather
 	// than waiting for the next scheduled pass.
+	if h.readOnly {
+		return snap
+	}
 	if maxAge == nil {
 		if snap == nil {
 			h.refreshSoon(ctx, workspaceID, "first snapshot failed")
@@ -919,6 +952,9 @@ func (h *Hub) refreshSoonLeased(ctx context.Context, workspaceID string) {
 // Refresh takes a new snapshot of one workspace now. Concurrent callers
 // share the one read in flight.
 func (h *Hub) Refresh(ctx context.Context, workspaceID string) (time.Time, error) {
+	if h.readOnly {
+		return time.Time{}, ErrReader
+	}
 	started := time.Now()
 	taken, err, _ := h.refreshes.Do(workspaceID, func() (any, error) {
 		b, ok := h.backendFor(ctx, workspaceID)
@@ -973,6 +1009,9 @@ func (h *Hub) Refresh(ctx context.Context, workspaceID string) (time.Time, error
 // list, so that a moved domain is followed. An empty id probes every
 // workspace.
 func (h *Hub) Probe(ctx context.Context, workspaceID string) ([]WorkspaceHealth, error) {
+	if h.readOnly {
+		return nil, ErrReader
+	}
 	var targets []Workspace
 	if workspaceID == "" {
 		list, err := h.store.List(ctx)
