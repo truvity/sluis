@@ -38,6 +38,7 @@ import (
 	"github.com/truvity/sluis/internal/port"
 	"github.com/truvity/sluis/internal/port/memory"
 	"github.com/truvity/sluis/internal/rails"
+	"github.com/truvity/sluis/internal/refusal"
 	"github.com/truvity/sluis/internal/secrets"
 	"github.com/truvity/sluis/internal/secretstore"
 	"github.com/truvity/sluis/internal/signer"
@@ -830,6 +831,10 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 	// the request metrics see the status the client got. The route is a fixed
 	// set of names (issuer.Route), never the path.
 	handler = telemetry.HTTPHandler(handler, "access-issuer", issuer.Route)
+	// Outside even that, so that every answer the listener gives -- a
+	// refusal above all -- names the request it answers, and the audit trail
+	// and the log record the same id.
+	handler = refusal.Middleware(handler)
 	app := &App{handler: handler, health: healthMux, issuer: core, storage: storage,
 		cfg: cfg, log: log, state: shared, lazyKeys: lazyKeys,
 		generated: generated, creds: creds, credStore: stores.ClientSecretPort(), leases: leases}
@@ -1372,7 +1377,7 @@ func openVerifiers(ctx context.Context, cfg Config, log *slog.Logger) (all, clus
 func serve(ctx context.Context, addr string, handler http.Handler, name string, log *slog.Logger) error {
 	srv := &http.Server{
 		Addr:              addr,
-		Handler:           handler,
+		Handler:           refusal.Middleware(handler),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	go func() {
