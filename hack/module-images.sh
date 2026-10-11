@@ -22,10 +22,17 @@ modules() {
   done < <(grep -v '^[[:space:]]*\(#\|$\)' "$list")
 }
 
+# cmd/sluis embeds the console bundle (frontend/embed.go: all:dist), which
+# is not in git. goreleaser builds it in its `before` hook; ko does not.
+ensure_console() {
+  if [ -z "$(ls -A frontend/dist 2>/dev/null)" ]; then just console >&2; fi
+}
+
 # push <registry> <version> <latest|none>: <registry>/sluis-<module>:<version>
 # for every module, and :latest when asked.
 push() {
   local registry=$1 version=$2 latest=$3 module tags
+  ensure_console
   while read -r module; do
     tags=$version
     if [ "$latest" = latest ]; then tags=$version,latest; fi
