@@ -36,6 +36,18 @@ func Register(s *modcall.Server, svc *Service) {
 	handleProto(svc, s, consolewire.RotateAppWebhook, svc.RotateGitHubAppWebhook)
 	handleProto(svc, s, consolewire.GetStatus, svc.GetGitHubStatus, consolecall.List())
 	handleProto(svc, s, consolewire.CheckCatalogueApp, svc.CheckGitHubCatalogueApp)
+	consolecall.HandleJSON(s, consolewire.BeginCatalogueConnect, adapt(svc, func(ctx context.Context, r consolewire.BeginCatalogueConnectRequest) (consolewire.Begun, error) {
+		return svc.BeginGitHubCatalogueAppConnect(ctx, r.ID)
+	}))
+	consolecall.HandleJSON(s, consolewire.CompleteCatalogueCreate, adapt(svc, svc.CompleteGitHubCatalogueCreate))
+	consolecall.HandleJSON(s, consolewire.CompleteCatalogueSetup, adapt(svc, svc.CompleteGitHubCatalogueSetup))
+	handleProto(svc, s, consolewire.DisconnectCatalogueApp, svc.DisconnectGitHubCatalogueApp)
+	consolecall.HandleJSON(s, consolewire.BeginRunnerConnect, adapt(svc, func(ctx context.Context, r consolewire.BeginRunnerConnectRequest) (consolewire.Begun, error) {
+		return svc.BeginGitHubRunnerAppConnect(ctx, r.Org, r.Tier)
+	}))
+	consolecall.HandleJSON(s, consolewire.CompleteRunnerCreate, adapt(svc, svc.CompleteGitHubRunnerCreate))
+	consolecall.HandleJSON(s, consolewire.CompleteRunnerSetup, adapt(svc, svc.CompleteGitHubRunnerSetup))
+	handleProto(svc, s, consolewire.DisconnectRunnerApp, svc.DisconnectGitHubRunnerApp)
 }
 
 // begin adapts a handler of plain values: the snapshot goes in the context, and
