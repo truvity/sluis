@@ -191,9 +191,7 @@ The logical key maps to kind and credential path as follows.
 | Prefix | Content |
 |---|---|
 | `github/reports/<target>`, `slack/reports/<target>` | What each controller last reported |
-| `google/cache/<workspace>` | The hub's cache, never migrated |
-
-Every prefix is below the root of the module that owns it (`github/`, `slack/`, `google/`), which is the prefix the module's function role is granted, so a role never needs a grant beyond its module's. The prefixes are defined once, in package `blobprefix`, and the code, the backup export and the IAM policy take them from there. Before v1.75 the reports were at `reports/github/` and `reports/slack/` and the cache at `snapshots/`, at the root of the bucket and outside every module's grant; the first controller pass writes them again under the new prefixes, and the old objects can be deleted (`aws s3 rm --recursive s3://<bucket>/<prefix>reports/` and `.../<prefix>snapshots/`).
+| `google/cache/<workspace>` | The hub cache, never migrated |
 
 ## Exports (retired)
 
