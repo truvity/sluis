@@ -131,3 +131,22 @@ func TestControllersNeedThePolicyFile(t *testing.T) {
 		t.Fatal("controllers with no policy.file were accepted")
 	}
 }
+
+// A module named by `<module>.remote` is another function's: its controller is
+// left out of this process, which only calls it. One not named stays here.
+func TestAModuleWithARemoteIsNotHosted(t *testing.T) {
+	cfg := oneProcess(t, `controllers:
+  github: {consoleURL: "http://127.0.0.1:1/console"}
+  slack: {consoleURL: "http://127.0.0.1:1/console"}
+github: {remote: {function: sluis-example-github-mint}}
+`)
+	if cfg.GitHub != nil {
+		t.Error("the GitHub controller is assembled although github.remote is set")
+	}
+	if cfg.Slack == nil {
+		t.Error("the Slack controller was dropped although slack.remote is not set")
+	}
+	if cfg.Hosted("github") || !cfg.Hosted("slack") || !cfg.Hosted("google") {
+		t.Errorf("Hosted: github %v slack %v google %v", cfg.Hosted("github"), cfg.Hosted("slack"), cfg.Hosted("google"))
+	}
+}

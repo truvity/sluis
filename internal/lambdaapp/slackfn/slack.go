@@ -31,17 +31,17 @@ var Kinds []string
 // the {"kind":"check"} answer. It answers no module call and no HTTP request.
 func Handler(log *slog.Logger, declared func(target string) bool, open func(context.Context) (lambdaapp.Pass, error),
 	check func(context.Context) (deploycheck.Report, error)) *lambdaapp.HTTP {
-	kindOf := func(target string) string {
+	kindsOf := func(target string) []string {
 		if declared(target) {
-			return invoke.KindSlack
+			return []string{invoke.KindSlack}
 		}
-		return ""
+		return nil
 	}
 	controllers := map[string]*lambdaapp.Controller{
 		invoke.KindSlack: {Name: "slack", Log: log, Open: open,
 			Unknown: func(err error) bool { return errors.Is(err, slackcontroller.ErrUnknownTarget) }},
 	}
-	return lambdaapp.NewHTTP(http.NotFoundHandler(), nil, log).WithControllers(kindOf, controllers).WithCheck(check)
+	return lambdaapp.NewHTTP(http.NotFoundHandler(), nil, log).WithControllers(kindsOf, controllers).WithCheck(check)
 }
 
 func open(ctx context.Context, file string) (*lambdaapp.Function, error) {
