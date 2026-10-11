@@ -92,6 +92,9 @@ func TestAMalformedCatalogueIsRefusedNamingWhatIsWrong(t *testing.T) {
 			"declared twice",
 		},
 		{"an event that is not one", app("    permissions: {contents: read}\n    events: [Pull Request]\n"), "not an event name"},
+		{"the legacy package event", app("    permissions: {packages: read}\n    events: [package]\n"), "cannot subscribe to the legacy `package` event; use `registry_package` (permission packages: read)"},
+		{"registry_package without packages", app("    permissions: {contents: read}\n    events: [registry_package]\n"), `event "registry_package" needs permission packages: read`},
+		{"push without contents", app("    permissions: {issues: read}\n    events: [push]\n"), `event "push" needs permission contents: read`},
 		{"a grant with no group", grant("{repositories: ['*'], permissions: {contents: read}}"), "group is empty"},
 		{"a grant with no repositories", grant("{group: g, permissions: {contents: read}}"), "repositories"},
 		{"a grant with no permissions", grant("{group: g, repositories: ['*']}"), "grants nothing"},
@@ -321,4 +324,14 @@ func TestAWebhookIsAURLOrAKargoReceiverAndNeedsEvents(t *testing.T) {
 func sha256hex(s string) string {
 	sum := sha256.Sum256([]byte(s))
 	return hex.EncodeToString(sum[:])
+}
+
+// Events GitHub's manifest accepts, with the permissions that cover them,
+// load; the guard refuses only what GitHub would.
+func TestEventsCoveredByPermissionsAreAccepted(t *testing.T) {
+	t.Parallel()
+	y := "apps:\n  - id: watcher\n    org: example-org\n    permissions: {packages: read, pull_requests: read}\n    events: [registry_package, pull_request]\n"
+	if _, err := catalogue.Parse([]byte(y)); err != nil {
+		t.Fatalf("a covered event list was refused: %v", err)
+	}
 }

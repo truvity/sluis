@@ -170,7 +170,7 @@ func catalogueAppSchema() m {
 		"description":  str("What it is for."),
 		"public":       boolean("Installable by other organisations."),
 		"permissions":  perms,
-		"events":       strList("Webhook events the App subscribes to. They are delivered only to an App that declares a `webhook`."),
+		"events":       strList("Webhook events the App subscribes to. They are delivered only to an App that declares a `webhook`. `package` and an event without its permission are refused."),
 		"webhook":      catalogueWebhookSchema(),
 		"installation": m{"enum": []string{"all", "selected"}, "description": "all or selected (default)."},
 		"export":       boolean("Place the installed App's key at `external/github/<id>` for a consumer to read. Unset keeps it internal. An id may not begin `runner-`."),

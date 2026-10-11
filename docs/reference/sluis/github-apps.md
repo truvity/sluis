@@ -27,6 +27,20 @@ A failure to ask, such as GitHub down or a damaged key, is shown as the App's re
 
 GitHub has no API to change an App's permissions, events or name. To fix drift, edit the App at `https://github.com/organizations/<org>/settings/apps/<slug>` or change the catalogue, approve the installation's request, and press *Re-check*.
 
+## Events
+
+The load refuses `package` (use `registry_package`) and `ping`, and an event whose permission is not declared at read or above:
+
+| Event | Permission |
+|---|---|
+| `push`, `create`, `delete`, `release` | `contents` |
+| `pull_request` | `pull_requests` |
+| `registry_package` | `packages` |
+| `workflow_run`, `workflow_job` | `actions` |
+| `issues` | `issues` |
+| `check_run`, `check_suite` | `checks` |
+| `deployment`, `status` | `deployments`, `statuses` |
+
 ## Objects
 
 | Object | Holds | Written by |
