@@ -62,6 +62,15 @@ func every() []*record.Record {
 		audit.SignedInSession(person, "grafana", "google", "interactive", time.Time{}, audit.Denied("not entitled")),
 		audit.RecoverySignedIn(audit.RecoveryIdentity("system:serviceaccount:access:recovery"), "console", "recovery", audit.Succeeded()),
 		audit.TokenExchanged(audit.CI("github:example/app"), "aws", "ci", audit.Denied("no group admits it")),
+		audit.TokenExchangeRefused(audit.Person("ada@north.example"), "aws:1111:power", "person", audit.Denied("the proof holds no group this client requires"),
+			audit.Refusal{
+				Code: "not_admitted", Audience: "aws:1111:power", Missing: []string{"mgmt:k8s:admin"}, Held: []string{"devel:k8s:viewer"},
+				Directory: "live",
+			}),
+		audit.SignInRefused(person, "grafana", "google", false, audit.Denied("not entitled"),
+			audit.Refusal{Code: "not_admitted", Audience: "grafana", Missing: []string{"a"}, Held: []string{"b"}, Directory: "held"}),
+		audit.SignInRefused(audit.RecoveryIdentity("ops"), "console", "recovery", true, audit.Denied("not entitled"),
+			audit.Refusal{Code: "not_admitted", Audience: "console", Directory: "not_applicable"}),
 		audit.GitHubTokenMinted(audit.Workload("system:serviceaccount:ci:runner"), "roster-example", audit.GitHubToken{
 			Proof: "workload", Org: "example", Grant: "all:github:ci", Repositories: []string{"app", "infra"},
 			Permissions: "contents:read", Installation: 7, ExpiresAt: time.Date(2026, 9, 18, 12, 0, 0, 0, time.UTC),

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"strings"
 	"testing"
 
@@ -381,9 +382,9 @@ func TestARefusedExchangeIsAuditedUnderTheCallersRequestID(t *testing.T) {
 	server := httptest.NewServer(h)
 	t.Cleanup(server.Close)
 
-	for name, tc := range map[string]struct{ audience, reason string }{
-		"an audience nobody declared":          {"aws:9999:nobody", "not a declared client"},
-		"an audience the proof is shut out of": {"aws:1111:power", "holds no group this client requires"},
+	for name, tc := range map[string]struct{ audience, reason, code string }{
+		"an audience nobody declared":          {"aws:9999:nobody", "not a declared client", "unknown_audience"},
+		"an audience the proof is shut out of": {"aws:1111:power", "holds no group this client requires", "not_admitted"},
 	} {
 		before := len(trail.Records())
 		got := postForm(t, server, "/token", exchangeForm("github:example-org/gitops@refs/heads/master", tc.audience),
@@ -402,6 +403,27 @@ func TestARefusedExchangeIsAuditedUnderTheCallersRequestID(t *testing.T) {
 		}
 		if strings.Contains(got.raw, tc.reason) {
 			t.Errorf("%s: the answer gives the reason away: %s", name, got.raw)
+		}
+		// The evaluation behind it, for the trail and nobody else.
+		data := r.GetData().AsMap()
+		if data["reason_code"] != tc.code || data["audience"] != tc.audience || data["directory"] != "not_applicable" {
+			t.Errorf("%s: data = %v, want reason_code %s, audience %s, a machine proof", name, data, tc.code, tc.audience)
+		}
+		held, _ := data["held_groups"].([]any)
+		if !slices.Contains(held, any("all:gitops:deployer")) {
+			t.Errorf("%s: held_groups = %v, want the groups the proof holds", name, held)
+		}
+		missing, _ := data["missing_requires"].([]any)
+		if (len(missing) != 0) != (tc.code == "not_admitted") || (tc.code == "not_admitted" && !slices.Contains(missing, any("mgmt:k8s:admin"))) {
+			t.Errorf("%s: missing_requires = %v", name, missing)
+		}
+		if admitted, present := data["admitted"]; !present || admitted != false {
+			t.Errorf("%s: admitted = %v, want false", name, admitted)
+		}
+		if tc.code == "not_admitted" {
+			if proof := data["proof"]; proof != "ci" {
+				t.Errorf("%s: proof = %v, want ci", name, proof)
+			}
 		}
 	}
 }

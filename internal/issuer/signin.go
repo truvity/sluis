@@ -690,6 +690,8 @@ func (s *signIn) callback(w http.ResponseWriter, r *http.Request) {
 		s.deps.Log.WarnContext(r.Context(), "sign-in exchange failed",
 			slog.String("provider", provider.Kind()), logattr.SafeError("error", err))
 		recordLoginFailure(r.Context(), LoginProviderFailed)
+		s.recordRefusal(r, request, audit.Anonymous(), provider.Kind(), audit.Failed("the provider could not say who signed in: "+err.Error()),
+			audit.Refusal{Code: "provider_failed", Directory: "not_applicable"})
 		refusalPage(w, r, http.StatusBadGateway, "the sign-in could not be completed", err, logattr.SafeString("provider", provider.Kind()))
 		return
 	}
@@ -707,11 +709,15 @@ func (s *signIn) callback(w http.ResponseWriter, r *http.Request) {
 		// they would simply find themselves admitted nowhere.
 		s.deps.Log.WarnContext(r.Context(), "sign-in refused", logattr.Pseudonym("subject", email), logattr.SafeString("reason", refused.Reason))
 		recordLoginFailure(r.Context(), LoginDirectoryRefused)
+		s.recordRefusal(r, request, audit.Identified(email), provider.Kind(), audit.Denied(refused.Reason),
+			audit.Refusal{Code: "directory_refused", Directory: directoryState(true, false, err)})
 		refusalPage(w, r, http.StatusForbidden, "the directory refused the sign-in: "+refused.Reason, nil, logattr.Pseudonym("subject", email))
 		return
 	case err != nil:
 		s.deps.Log.ErrorContext(r.Context(), "the hub could not be asked", logattr.Pseudonym("subject", email), logattr.SafeError("error", err))
 		recordLoginFailure(r.Context(), LoginDirectoryUnreachable)
+		s.recordRefusal(r, request, audit.Identified(email), provider.Kind(), audit.Failed("the directory could not be reached: "+err.Error()),
+			audit.Refusal{Code: "directory_unavailable", Directory: "unavailable"})
 		refusalPage(w, r, http.StatusServiceUnavailable, "the directory could not be reached", err, logattr.Pseudonym("subject", email))
 		return
 	}
@@ -1234,6 +1240,20 @@ func (s *signIn) silent(w http.ResponseWriter, r *http.Request, request string, 
 	http.Redirect(w, r, s.deps.Return(r.Context(), request), http.StatusFound)
 
 	return true
+}
+
+// recordRefusal writes the audit record of a sign-in refused before the
+// request could be completed, with the evaluation behind it. The client is
+// the one the pending request names, when there still is one.
+func (s *signIn) recordRefusal(r *http.Request, request string, actor audit.Actor, how string, o audit.Outcome, why audit.Refusal) {
+	client := "unknown"
+	if s.deps.Storage != nil && request != "" {
+		if pending, err := s.deps.Storage.Pending(request); err == nil && pending.ClientID != "" {
+			client = pending.ClientID
+		}
+	}
+	why.Audience = client
+	s.deps.Issuer.record(r.Context(), audit.SignInRefused(actor, client, how, false, o, why))
 }
 
 // refuseUnentitled tells somebody who signed in perfectly well that this

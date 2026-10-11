@@ -120,6 +120,61 @@ func TokenExchanged(actor Actor, audience, proof string, o Outcome) *record.Reco
 		subjectOf(actor), []*record.Target{targetClient(audience)}, data{"proof": proof})
 }
 
+// Refusal is the policy's evaluation behind a refused token exchange or
+// sign-in: why, for which audience, what was missing, what was held. The
+// caller is told "not authorised" and a request id; this is what the record
+// under that id keeps, and the trail is access-controlled where a response is
+// not.
+type Refusal struct {
+	// Code is the reason in a word an alert can match: unknown_audience,
+	// not_admitted, subject_token_refused, directory_unavailable, ...
+	Code string
+	// Audience is the client or audience the caller asked for.
+	Audience string
+	// Missing are the groups the audience requires, any of which would have
+	// admitted the caller, and which the caller does not hold.
+	Missing []string
+	// Held are the groups the evaluation gave the caller.
+	Held []string
+	// Admitted says whether the evaluation admitted the caller, and AdmittedBy
+	// by which of the required groups.
+	Admitted   bool
+	AdmittedBy []string
+	// Directory is the state of what the groups were read from: live, held
+	// (the last answer, kept while the directory is unreachable), unavailable,
+	// or not_applicable for a proof no directory is asked about.
+	Directory string
+}
+
+func (f Refusal) data(d data) data {
+	d["reason_code"] = f.Code
+	d["audience"] = f.Audience
+	d["missing_requires"] = f.Missing
+	d["held_groups"] = f.Held
+	d["admitted"] = f.Admitted
+	d["admitted_by"] = f.AdmittedBy
+	d["directory"] = f.Directory
+	return d
+}
+
+// TokenExchangeRefused is a refused token exchange with the evaluation behind
+// the refusal.
+func TokenExchangeRefused(actor Actor, audience, proof string, o Outcome, why Refusal) *record.Record {
+	return build("roster.token.exchanged", actor, o,
+		subjectOf(actor), []*record.Target{targetClient(audience)}, why.data(data{"proof": proof}))
+}
+
+// SignInRefused is a refused sign-in with the evaluation behind the refusal.
+// A recovery sign-in is its own action, as it is when it succeeds.
+func SignInRefused(actor Actor, client, how string, recovery bool, o Outcome, why Refusal) *record.Record {
+	action := "roster.person.signed_in"
+	if recovery {
+		action = "roster.recovery.signed_in"
+	}
+	return build(action, actor, o,
+		subjectOf(actor), []*record.Target{targetClient(client)}, why.data(data{"how": how}))
+}
+
 // GitHubToken is what an installation token request asked for, or was given.
 // Never the token.
 type GitHubToken struct {
