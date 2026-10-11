@@ -1,5 +1,7 @@
 ## Unreleased
 
+## v1.75.0-rc.8
+
 ### Added
 
 - **The backup and restore functions start from the document the Pulumi library renders: the module builds no trigger adapter, and the document names none that needs a function.** On v1.75.0-rc.6 and rc.7 `NewBackup` rendered the `sluis-backup/v1` document with `preset: aws-serverless` and no `adapters.trigger`, so the preset's `invoke` trigger (the issuer's run-now notification to the controller functions) was planned with no function to invoke, and every invocation, the daily run and the resume ticks, stopped at start with `adapters.trigger: invoke: invoke: no function: set github, slack or both`; `NewRestore` rendered the same document. The backup never notifies a controller. Now the library writes `adapters.trigger: memory` in both documents, and the runtime does not build the plan's trigger for the backup module (`store.Config.NoTrigger`), so a document without it starts too. A test renders both documents through `NewBackup` and `NewRestore` and runs the module's startup over them (`TestTheRenderedBackupAndRestoreDocumentsStartTheModule`, with `TestTheRenderedBackupDocumentStartsTheModule` in `internal/backup/app`). An estate takes this by bumping the library and the release pin together; nothing else changes.
