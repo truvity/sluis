@@ -25,3 +25,4 @@ console:
   auth:
     aws:
       audience: https://sluis.example/console
+secrets: {source: ssm, root: /sluis/example, layout: v5, region: eu-west-1}

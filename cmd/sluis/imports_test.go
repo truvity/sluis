@@ -115,7 +115,7 @@ func TestEachPlatformBuilds(t *testing.T) {
 func TestProviderModulesImportNeitherIssuerappNorSigner(t *testing.T) {
 	const mod = "github.com/truvity/sluis/"
 	roles := map[string][]string{
-		"github": {"internal/module/github", "internal/githubroster", "internal/githubapp", "internal/lambdaapp/githubfn"},
+		"github": {"internal/module/github", "internal/githubroster", "internal/githubapp", "internal/lambdaapp/githubfn", "internal/lambdaapp/githubmintfn"},
 		"slack":  {"internal/module/slack", "internal/slackroster", "internal/slackapp", "internal/lambdaapp/slackfn"},
 		"google": {"internal/module/google", "internal/googledir", "internal/lambdaapp/googlefn"},
 	}
@@ -163,6 +163,44 @@ func TestProviderModulesImportNeitherIssuerappNorSigner(t *testing.T) {
 			}
 			if slices.Contains(closure, mod+"internal/issuerapp") {
 				t.Errorf("the %s module's closure holds internal/issuerapp: find who with `go list -deps -f '{{.ImportPath}}: {{.Imports}}' %v`", role, patterns)
+			}
+		})
+	}
+}
+
+// The GitHub module is two zips (D-v176-7 b): the controller function and the
+// mint-only function. Each main links its own function package and not the
+// other's, so the controller zip cannot answer the issuer's mint and the mint
+// zip registers no controller. (The mint still links the controller's library
+// packages through its settings loader; what it runs is its function's.)
+func TestTheGitHubZipsLinkOnlyTheirOwnFunction(t *testing.T) {
+	const fn = "github.com/truvity/sluis/internal/lambdaapp/"
+	for _, c := range []struct {
+		main, own string
+		other     []string
+	}{
+		{"sluis-github", "githubfn", []string{"githubmintfn", "slackfn", "issuerfn", "cloudflarefn", "backupfn"}},
+		{"sluis-github-mint", "githubmintfn", []string{"githubfn", "slackfn", "issuerfn", "cloudflarefn", "backupfn"}},
+		{"sluis-slack", "slackfn", []string{"githubfn", "githubmintfn", "issuerfn", "cloudflarefn", "backupfn"}},
+	} {
+		t.Run(c.main, func(t *testing.T) {
+			list := exec.Command("go", "list", "-tags", "lambda,lambda.norpc", "-deps", "-f", "{{.ImportPath}}", "./cmd/"+c.main)
+			list.Dir = "../.."
+			out, err := list.CombinedOutput()
+			if err != nil {
+				t.Fatalf("go list: %v\n%s", err, out)
+			}
+			deps := strings.Fields(string(out))
+			if !slices.Contains(deps, fn+c.own) {
+				t.Fatalf("the sweep of %d packages did not contain %s: it listed the wrong thing", len(deps), c.own)
+			}
+			for _, other := range c.other {
+				if slices.Contains(deps, fn+other) {
+					t.Errorf("%s links %s", c.main, other)
+				}
+			}
+			if slices.Contains(deps, "github.com/truvity/sluis/internal/issuerapp") {
+				t.Errorf("%s links the issuer's assembly", c.main)
 			}
 		})
 	}

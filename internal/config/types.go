@@ -496,6 +496,10 @@ type Roster struct {
 	Preset   string                   `json:"preset,omitempty"`
 	Adapters map[string]AdapterChoice `json:"adapters,omitempty"`
 	Audit    *RosterAudit             `json:"audit,omitempty"`
+	// Secrets says how the secrets the module reads are delivered, for a
+	// module that runs as a function of its own (the one service document's
+	// `secrets` is what a controller inside it uses).
+	Secrets *Secrets `json:"secrets,omitempty"`
 	// Probes is where /healthz and /readyz answer.
 	Probes *Address `json:"probes,omitempty"`
 

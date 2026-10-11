@@ -119,6 +119,7 @@ func FromConfig(f *config.ControllerSlack, p *config.PolicyDocument) (Config, er
 		c.probes = f.Probes.Address
 	}
 	c.audit.Instance, _ = os.Hostname()
+	c.stores.SetSecrets(f.Secrets)
 	if a := f.Audit; a != nil {
 		c.audit.Writer = a.Writer
 		c.audit.TokenFile = a.TokenFile
@@ -401,4 +402,12 @@ func (a *App) RunLoop(ctx context.Context, ready func(context.Context)) error {
 	case err := <-done:
 		return err
 	}
+}
+
+// Declares says the policy names the workspace key. A function asks before it
+// assembles the controller, so a run-now of somebody else's target costs no
+// store.
+func (c Config) Declares(target string) bool {
+	_, declared := c.policy.Policy.Slack.Workspaces[target]
+	return declared
 }

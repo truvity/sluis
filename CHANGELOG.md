@@ -3,6 +3,8 @@
 ### Added
 
 - **The module registry knows the GitHub, Slack and Google modules.** `lambdaapp.ModuleOf` now selects a module by the document's apiVersion: `controller-github/v2` is the GitHub module's, `controller-slack/v2` the Slack module's, `sluis-google/v1` the Google module's and `sluis-backup/v1` the backup module's; `sluis/v3` with `cloudflare.serve` stays the Cloudflare module's, and any other document is the issuer's. A zip built for one module refuses every other module's document, and a build pinned to `github`, `slack` or `google` runs only that module's command. No function for the three modules is built yet.
+- **The GitHub and Slack modules are Lambda functions of their own.** `cmd/sluis-github` and `cmd/sluis-slack` run the controllers' `tick` and `run` passes (one target per invocation, under its lease), answer `check` for their own kinds of secret only (the two declare none, so a controller's check no longer reports the policy's client secrets), and serve no HTTP and no module call. A `run` for a target the policy does not declare ends cleanly without assembling a controller. A `controller-github/v2` or `controller-slack/v2` document takes a `secrets` section, which a function reads its secrets store from.
+- **The installation-token mint is a function apart from the GitHub controller.** `cmd/sluis-github-mint` (module name `github-mint`, built with `-ldflags -X .../internal/version.Module=sluis-module=github-mint`) serves only `mint_installation` to the issuer's class and refuses every other caller; it never runs a controller pass, and the controller function does not serve the mint. It reads the same `controller-github/v2` document as the controller function; the zip, not the document, tells them apart.
 
 ## v1.75.0-rc.10
 
