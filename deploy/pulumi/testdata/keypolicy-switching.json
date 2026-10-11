@@ -149,8 +149,8 @@
       "Condition": {
         "ArnEquals": {
           "aws:PrincipalArn": [
-            "arn:aws:iam::111122223333:role/sluis",
-            "arn:aws:iam::111122223333:role/sluis-old"
+            "arn:aws:iam::111122223333:role/sluis-old",
+            "arn:aws:iam::111122223333:role/sluis-staging-issuer"
           ]
         },
         "StringEquals": {
@@ -364,8 +364,8 @@
       "Condition": {
         "ArnEquals": {
           "aws:PrincipalArn": [
-            "arn:aws:iam::111122223333:role/sluis",
-            "arn:aws:iam::111122223333:role/sluis-old"
+            "arn:aws:iam::111122223333:role/sluis-old",
+            "arn:aws:iam::111122223333:role/sluis-staging-issuer"
           ]
         },
         "ForAllValues:StringEquals": {
@@ -397,8 +397,8 @@
       "Condition": {
         "ArnNotEquals": {
           "aws:PrincipalArn": [
-            "arn:aws:iam::111122223333:role/sluis",
-            "arn:aws:iam::111122223333:role/sluis-old"
+            "arn:aws:iam::111122223333:role/sluis-old",
+            "arn:aws:iam::111122223333:role/sluis-staging-issuer"
           ]
         },
         "StringEquals": {
@@ -421,8 +421,8 @@
       "Condition": {
         "ArnEquals": {
           "aws:PrincipalArn": [
-            "arn:aws:iam::111122223333:role/sluis",
-            "arn:aws:iam::111122223333:role/sluis-old"
+            "arn:aws:iam::111122223333:role/sluis-old",
+            "arn:aws:iam::111122223333:role/sluis-staging-issuer"
           ]
         },
         "Null": {
@@ -448,8 +448,8 @@
       "Condition": {
         "ArnEquals": {
           "aws:PrincipalArn": [
-            "arn:aws:iam::111122223333:role/sluis",
-            "arn:aws:iam::111122223333:role/sluis-old"
+            "arn:aws:iam::111122223333:role/sluis-old",
+            "arn:aws:iam::111122223333:role/sluis-staging-issuer"
           ]
         },
         "ForAnyValue:StringNotEquals": {
@@ -473,8 +473,8 @@
       "Condition": {
         "ArnEquals": {
           "aws:PrincipalArn": [
-            "arn:aws:iam::111122223333:role/sluis",
-            "arn:aws:iam::111122223333:role/sluis-old"
+            "arn:aws:iam::111122223333:role/sluis-old",
+            "arn:aws:iam::111122223333:role/sluis-staging-issuer"
           ]
         }
       },

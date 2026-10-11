@@ -35,7 +35,8 @@ const (
 )
 
 // DefaultFunctionName is the Lambda function an installation that names none
-// is rendered for.
+// and has no instance is rendered for. With an instance the default is
+// `sluis-<instance>-issuer`.
 const DefaultFunctionName = "sluis"
 
 // LiveAlias is the alias of the Lambda function that every caller uses: the API,
@@ -178,10 +179,7 @@ func (in *Installation) policyFile() string {
 }
 
 func (in *Installation) functionName() string {
-	if in.AWS != nil && in.AWS.FunctionName != "" {
-		return in.AWS.FunctionName
-	}
-	return DefaultFunctionName
+	return FunctionNameOf(in, ModuleIssuer)
 }
 
 // service is the service document the installation says.

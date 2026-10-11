@@ -44,7 +44,7 @@
 // Audit.Enabled false sends them nowhere (the service logs them). The older
 // AuditQueueArn names a queue the estate installed itself.
 //
-// The one function (`sluis`, or LambdaArgs.FunctionName) is the release zip's
+// The issuer function (`sluis-<instance>-issuer`, or LambdaArgs.FunctionName) is the release zip's
 // `bootstrap`, in no VPC, with one role: it serves the issuer and the console
 // behind the API, and runs the GitHub and Slack controllers' passes (one
 // invocation per target, from a schedule or a run-now) and the
