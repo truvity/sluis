@@ -124,9 +124,11 @@ func ModuleRoleStatements(env ModuleEnv, role Role) ([]map[string]any, error) {
 	// Cross-grants.
 	keyActions := map[string]bool{}
 	var crossArns []string
-	if len(env.MinterRefs) > 0 && !own[ModuleCloudflare] && role.Name != RoleIssuer {
+	if len(env.MinterRefs) > 0 && own[ModuleBackup] {
 		// credentials.preset: the minter's credential, read and never written. The
-		// issuer has none: it asks the cloudflare function to mint (v1.76 E-FIN).
+		// issuer has none: it asks the cloudflare function to mint (v1.76 E-FIN), and the
+		// github, slack and google functions have none either (v1.76 E-IAM): only the
+		// cloudflare function, which hosts the minter, and the backup role hold it.
 		var refs []string
 		for _, r := range sortedStrings(env.MinterRefs) {
 			refs = append(refs, arnPrefix+"ssm:"+env.Region+":"+env.Account+":parameter"+env.Modules.rootOf()+"/"+r)
