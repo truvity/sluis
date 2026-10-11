@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"html"
+	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/zitadel/oidc/v3/pkg/oidc"
@@ -173,8 +175,8 @@ func targetRedirect(r *http.Request, clients clientLookup, description string) (
 	if op.ValidateAuthReqRedirectURI(found, redirect, oidc.ResponseTypeCode) != nil {
 		return "", false
 	}
-	target, err := url.Parse(redirect)
-	if err != nil {
+	target, ok := registeredTarget(found.RedirectURIs(), redirect)
+	if !ok {
 		return "", false
 	}
 
@@ -194,6 +196,44 @@ func targetRedirect(r *http.Request, clients clientLookup, description string) (
 	target.RawQuery += result.Encode()
 
 	return target.String(), true
+}
+
+// registeredTarget returns the redirect URI to send the error to, built from
+// what the client registered and not from the request. An exact match is the
+// registered string itself. A loopback address on another port (the native
+// client rule the library applies) takes scheme, host, path and query from
+// the registered entry, and from the request only its port, and only when
+// that is a number.
+func registeredTarget(registered []string, requested string) (*url.URL, bool) {
+	for _, entry := range registered {
+		if entry == requested {
+			target, err := url.Parse(entry)
+			return target, err == nil
+		}
+	}
+	asked, err := url.Parse(requested)
+	if err != nil {
+		return nil, false
+	}
+	port, err := strconv.Atoi(asked.Port())
+	if err != nil || port < 1 || port > 65535 {
+		return nil, false
+	}
+	for _, entry := range registered {
+		reg, err := url.Parse(entry)
+		if err != nil || reg.Scheme != asked.Scheme || reg.Hostname() != asked.Hostname() ||
+			reg.Path != asked.Path || reg.RawQuery != asked.RawQuery {
+			continue
+		}
+		return &url.URL{
+			Scheme:   reg.Scheme,
+			Host:     net.JoinHostPort(reg.Hostname(), strconv.Itoa(port)),
+			Path:     reg.Path,
+			RawPath:  reg.RawPath,
+			RawQuery: reg.RawQuery,
+		}, true
+	}
+	return nil, false
 }
 
 // refuseRequest answers an authorization request that is malformed with
