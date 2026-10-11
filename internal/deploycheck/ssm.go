@@ -49,13 +49,32 @@ func (s SSM) Read(ctx context.Context, name string) (Entry, bool, error) {
 // the kinds a function's own module reads (a function checks its own paths and
 // no other module's).
 func Check(ctx context.Context, doc *config.Serve, pol *config.PolicyDocument, only ...string) (Report, error) {
-	layout, err := Layout(doc.Secrets)
+	declared := config.DeclaredSecrets(doc, pol)
+	if len(only) > 0 {
+		declared = Own(declared, only...)
+	}
+	return CheckDeclared(ctx, doc.Secrets, declared)
+}
+
+// Own keeps the declared secrets of the given kinds. Unlike Check's `only`,
+// no kinds is none: a module that declares no secret of its own checks none.
+func Own(declared []config.DeclaredSecret, kinds ...string) []config.DeclaredSecret {
+	return slices.DeleteFunc(slices.Clone(declared), func(d config.DeclaredSecret) bool { return !slices.Contains(kinds, d.Kind) })
+}
+
+// CheckDeclared reads each declared secret from the SSM the `secrets` section
+// names. The section is held to the same rules whatever is declared; with
+// nothing declared no read is made, and the report is empty and OK.
+func CheckDeclared(ctx context.Context, s *config.Secrets, declared []config.DeclaredSecret) (Report, error) {
+	layout, err := Layout(s)
 	if err != nil {
 		return Report{}, err
 	}
-	s := doc.Secrets
 	if err := secrets.CheckRoot(s.Root); err != nil {
 		return Report{}, fmt.Errorf("secrets.root: %w", err)
+	}
+	if len(declared) == 0 {
+		return Run(ctx, nil, s.Root, layout, nil), nil
 	}
 	var loaders []func(*awsconfig.LoadOptions) error
 	if s.Region != "" {
@@ -71,9 +90,5 @@ func Check(ctx context.Context, doc *config.Serve, pol *config.PolicyDocument, o
 			o.BaseEndpoint = aws.String(s.Endpoint)
 		}
 	})
-	declared := config.DeclaredSecrets(doc, pol)
-	if len(only) > 0 {
-		declared = slices.DeleteFunc(declared, func(d config.DeclaredSecret) bool { return !slices.Contains(only, d.Kind) })
-	}
 	return Run(ctx, SSM{API: client}, s.Root, layout, declared), nil
 }

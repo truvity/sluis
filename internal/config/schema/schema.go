@@ -516,6 +516,7 @@ func rosterProps(kind, mountDefault, recordsDefault string) m {
 		"preset":     presetSchema(),
 		"adapters":   adaptersSchema(),
 		"probes":     probes(":7070"),
+		"secrets":    secretsSchema(),
 		"audit": obj("The audit installation the controller records to, as its own workload. Unset only logs what it did.", m{
 			"writer":    url("The installation's receiver."),
 			"tokenFile": str("This workload's projected service-account token."),

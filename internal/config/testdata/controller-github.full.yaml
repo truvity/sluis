@@ -36,3 +36,4 @@ slack:
 google:
   remote:
     function: sluis-acme-google
+secrets: {source: ssm, root: /sluis/example, layout: v5, region: eu-west-1}

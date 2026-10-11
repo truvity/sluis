@@ -117,6 +117,7 @@ func FromConfig(f *config.ControllerGitHub, p *config.PolicyDocument) (Config, e
 		c.probes = f.Probes.Address
 	}
 	c.audit.Instance, _ = os.Hostname()
+	c.stores.SetSecrets(f.Secrets)
 	if a := f.Audit; a != nil {
 		c.audit.Writer = a.Writer
 		c.audit.TokenFile = a.TokenFile
@@ -413,4 +414,15 @@ func keys(m map[string]bool) []string {
 		out = append(out, key)
 	}
 	return out
+}
+
+// Declares says the policy names the target: an organisation it binds, or the
+// links target. A function asks before it assembles the controller, so a
+// run-now of somebody else's target costs no store.
+func (c Config) Declares(target string) bool {
+	if target == controller.LinksTarget {
+		return true
+	}
+	_, bound := c.policy.Policy.GitHub[target]
+	return bound
 }
