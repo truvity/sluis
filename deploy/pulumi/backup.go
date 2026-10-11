@@ -477,8 +477,10 @@ func (p *backupPlan) document() (string, error) {
 		"ports":      pb,
 		"platform":   map[string]any{"aws": true, "runtime": "lambda"},
 		"preset":     "aws-serverless",
-		"adapters":   map[string]any{"audit": audit},
-		"backup":     bk,
+		// The preset's trigger is `invoke`, which starts a controller function; the
+		// backup and the restore notify none and the document names no function.
+		"adapters": map[string]any{"audit": audit, "trigger": map[string]any{"adapter": "memory"}},
+		"backup":   bk,
 	}
 	raw, err := yaml.Marshal(doc)
 	if err != nil {
