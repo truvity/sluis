@@ -1,5 +1,11 @@
 ## Unreleased
 
+## v1.76.0-rc.3
+
+### Changed
+
+- **Every module function now carries the blobs port, and the Google module reads its sign-in client.** In rc.2 only the Google module document got `ports.blob`, so the GitHub, Slack and Cloudflare functions exited at start ("blobs adapter needs settings"); and the Google role and key policy did not grant `internal/oidc/signin/*`, which the module holds for sign-in and consent. Both are fixed; regenerate the key policy from this release.
+
 ## v1.76.0-rc.2
 
 ### Added
