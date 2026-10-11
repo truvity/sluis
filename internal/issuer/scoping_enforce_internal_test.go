@@ -131,3 +131,42 @@ func TestScopeClaimsNarrowsASelfDescribedAudience(t *testing.T) {
 		t.Errorf("groups = %v, want the key removed: not-allowed.example admits no gate", notAdmitted["groups"])
 	}
 }
+
+// Under enforce the fragment claims are rebuilt from the KEPT groups'
+// fragments; every other key is a fragment's, so nothing else survives
+// beyond `groups`.
+func TestScopeClaimsRebuildsFragmentsFromKeptGroups(t *testing.T) {
+	t.Parallel()
+
+	set, err := policy.NewSet(policy.Policy{
+		Version: 1,
+		Groups: map[string]policy.Group{
+			"devel:vm:viewer": {},
+			"devel:dms:admin": {},
+		},
+		Claims: map[string]policy.Fragment{
+			"devel:vm:viewer": {"vm_access": true},
+			"devel:dms:admin": {"dms_access": true},
+		},
+		Clients: map[string]policy.Client{
+			"grafana": {Kind: "exchange", Requires: []string{"devel:vm:viewer"}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("policy set: %v", err)
+	}
+
+	held := []string{"devel:dms:admin", "devel:vm:viewer"}
+	claims := map[string]any{"groups": anyGroups(held...), "vm_access": true, "dms_access": true}
+
+	got := scopeClaims(GroupsScopingEnforce, set, claims, "grafana", held)
+	if got["vm_access"] != true {
+		t.Errorf("vm_access = %v, want it kept", got["vm_access"])
+	}
+	if _, present := got["dms_access"]; present {
+		t.Error("dms_access survived: its group is dropped")
+	}
+	if _, present := claims["dms_access"]; !present {
+		t.Error("the input map was mutated")
+	}
+}

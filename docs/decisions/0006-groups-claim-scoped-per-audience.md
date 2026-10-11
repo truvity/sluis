@@ -66,6 +66,17 @@ authorization lives; nothing re-maps a group's name based on which
 audience receives it. A smaller token is a smaller version of the same
 fact, never a different one.
 
+## Note, 2026-10-11 — fragments follow the groups
+
+Under `enforce`, a token carries only the claims fragments of the groups
+it keeps. The fragments were merged from every held group before the
+audience was known, so a dropped group's grant (a `claims.<group>` entry)
+still reached the token even though its name did not. `scopeClaims` now
+rebuilds the fragment claims from the kept groups' fragments, with the
+same merge (lists union, maps recurse, a conflicting fragment skipped).
+`report` and `off` are unchanged. This is a behaviour change for
+installations already on `enforce`.
+
 ## Alternatives considered
 
 **Leave `groups` unscoped and let an installation shrink it by holding
