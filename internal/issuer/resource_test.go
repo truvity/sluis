@@ -342,7 +342,7 @@ func TestAnInvalidTargetIsRedirectedOnlyToARegisteredURI(t *testing.T) {
 		}
 		return &client{id: id, declared: policy.Client{
 			Kind:      policy.KindPublic,
-			Redirects: []string{"https://app.example/cb"},
+			Redirects: []string{"https://app.example/cb", "http://127.0.0.1/cb"},
 		}}, nil
 	}
 	bad := "&resource=" + url.QueryEscape("https://elsewhere.example/")
@@ -350,13 +350,19 @@ func TestAnInvalidTargetIsRedirectedOnlyToARegisteredURI(t *testing.T) {
 	for name, tc := range map[string]struct {
 		query    string
 		redirect bool
+		host     string // the host the redirect goes to; app.example when empty
 	}{
-		"registered":           {"client_id=an-editor&redirect_uri=https://app.example/cb&state=s1", true},
-		"registered, fragment": {"client_id=an-editor&redirect_uri=https://app.example/cb&state=s1&response_mode=fragment", true},
-		"unregistered":         {"client_id=an-editor&redirect_uri=https://evil.example/cb&state=s1", false},
-		"no redirect_uri":      {"client_id=an-editor&state=s1", false},
-		"unknown client":       {"client_id=nobody&redirect_uri=https://app.example/cb", false},
-		"no client":            {"redirect_uri=https://app.example/cb", false},
+		"registered":           {"client_id=an-editor&redirect_uri=https://app.example/cb&state=s1", true, ""},
+		"registered, fragment": {"client_id=an-editor&redirect_uri=https://app.example/cb&state=s1&response_mode=fragment", true, ""},
+		"unregistered":         {"client_id=an-editor&redirect_uri=https://evil.example/cb&state=s1", false, ""},
+		"no redirect_uri":      {"client_id=an-editor&state=s1", false, ""},
+		"unknown client":       {"client_id=nobody&redirect_uri=https://app.example/cb", false, ""},
+		"no client":            {"redirect_uri=https://app.example/cb", false, ""},
+		"loopback, registered": {"client_id=an-editor&redirect_uri=http://127.0.0.1/cb&state=s1", true, "127.0.0.1"},
+		"loopback, other port": {"client_id=an-editor&redirect_uri=http://127.0.0.1:5555/cb&state=s1", true, "127.0.0.1:5555"},
+		"loopback, other path": {"client_id=an-editor&redirect_uri=http://127.0.0.1:5555/other&state=s1", false, ""},
+		"loopback, bad port":   {"client_id=an-editor&redirect_uri=http://127.0.0.1:x/cb&state=s1", false, ""},
+		"other host, a port":   {"client_id=an-editor&redirect_uri=https://app.example:8443/cb&state=s1", false, ""},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -378,8 +384,12 @@ func TestAnInvalidTargetIsRedirectedOnlyToARegisteredURI(t *testing.T) {
 			if rec.Code != http.StatusFound {
 				t.Fatalf("status = %d, want a redirect", rec.Code)
 			}
+			wantHost := tc.host
+			if wantHost == "" {
+				wantHost = "app.example"
+			}
 			to, err := url.Parse(rec.Header().Get("Location"))
-			if err != nil || to.Host != "app.example" || to.Path != "/cb" {
+			if err != nil || to.Host != wantHost || to.Path != "/cb" {
 				t.Fatalf("Location = %q, want the client's redirect URI", rec.Header().Get("Location"))
 			}
 			params := to.Query()
