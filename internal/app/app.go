@@ -556,6 +556,16 @@ func openPortStores(ctx context.Context, cfg Config, st *store.Stores, log *slog
 	if err != nil {
 		return stores{}, err
 	}
+	if cfg.Reader && st.Ports.Module != "" {
+		// The Google module is another function's: this process reads its records
+		// and writes none, whatever its role would allow (v1.76 E-IAM).
+		set, err := st.ForModule(port.ModuleGoogle)
+		if err != nil {
+			return stores{}, fmt.Errorf("store: ports.adapter %s: %w", st.Adapter, err)
+		}
+		set.State, set.Blob, set.Secrets = port.ReadOnlyState(set.State), port.ReadOnlyBlob(set.Blob), nil
+		google = baseOf(set)
+	}
 	// A module that is another function's is not opened here: its tables, blobs
 	// and credentials are its own, and the issuer's role holds no grant on them.
 	var github, slack *portstore.Base
