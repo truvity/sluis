@@ -68,7 +68,7 @@ func walkGo(t *testing.T, visit func(path string, fset *token.FileSet, f *ast.Fi
 // Slack workspace is refused by the function when the event does not say which.
 func TestEveryEventNamesItsController(t *testing.T) {
 	found := 0
-	walkGo(t, func(path string, fset *token.FileSet, f *ast.File) {
+	walkGo(t, func(_ string, fset *token.FileSet, f *ast.File) {
 		ast.Inspect(f, func(n ast.Node) bool {
 			lit, ok := n.(*ast.CompositeLit)
 			if !ok || !isEventType(lit.Type, f.Name.Name == "invoke") {
