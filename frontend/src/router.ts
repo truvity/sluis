@@ -102,6 +102,7 @@ export const paths = {
   people: () => "/people",
   // People, narrowed to whether they linked a GitHub account.
   peopleGitHub: (linked: boolean) => `/people?github=${linked ? "linked" : "not-linked"}`,
+  peopleAtDomain: (domain: string) => `/people?domain=${encodeURIComponent(domain)}`,
   person: (email: string) => `/people/${encodeURIComponent(email)}`,
   rules: () => "/rules",
   // access
