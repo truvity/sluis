@@ -143,6 +143,19 @@ type AuditUse struct {
 	// QueueArn is the queue's ARN, which the function's role is granted
 	// sqs:SendMessage on. Default: the ARN the URL names.
 	QueueArn string
+	// DependsOn are the resources of the installation that must be updated BEFORE
+	// the sluis functions: its writer function, and the layer that holds its
+	// catalogue, when the installation is in this stack. A release whose audit
+	// catalogue moves emits records under the new version from its first
+	// invocation, and a writer that does not hold that catalogue dead-letters
+	// them, so the writer goes first (AUDIT WRITER FIRST). The library makes
+	// that order for the installation it installs itself; this is the same for one
+	// that exists. The issuer's function and every module function wait for these
+	// and nothing else does; no input of theirs changes, so a deploy that does not
+	// move the catalogue updates exactly what it did before. Pass the writer's
+	// resources as they are (pulumi.ResourceArray{pulumi.NewResourceInput(writer)}), or an output that
+	// carries them. Optional.
+	DependsOn pulumi.ResourceArrayInput
 }
 
 // DefaultAuditProfiles are the profiles installed when AuditArgs.Profiles and

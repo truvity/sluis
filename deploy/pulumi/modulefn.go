@@ -79,6 +79,9 @@ type ModuleFunctionArgs struct {
 	// validates it ([TelemetryArgs] validate) and grants the role's web identity
 	// token for the layer's audiences.
 	Telemetry *TelemetryArgs
+	// FunctionDependsOn are resources the function (and no other resource of the
+	// builder) waits for: the audit writer, which is updated first. Optional.
+	FunctionDependsOn pulumi.ResourceArrayInput
 }
 
 // moduleFunction is what newModuleFunction makes of one function.
@@ -205,8 +208,11 @@ func newModuleFunction(ctx *pulumi.Context, a *ModuleFunctionArgs, parent pulumi
 	} else {
 		fnArgs.Code = pulumi.NewFileArchive(pkg.Path)
 	}
-	if out.fn, err = lambda.NewFunction(ctx, name+"-fn", fnArgs, parent,
-		pulumi.DependsOn([]pulumi.Resource{out.logs, out.rolePolicy})); err != nil {
+	fnOpts := []pulumi.ResourceOption{parent, pulumi.DependsOn([]pulumi.Resource{out.logs, out.rolePolicy})}
+	if a.FunctionDependsOn != nil {
+		fnOpts = append(fnOpts, pulumi.DependsOnInputs(a.FunctionDependsOn))
+	}
+	if out.fn, err = lambda.NewFunction(ctx, name+"-fn", fnArgs, fnOpts...); err != nil {
 		return nil, fmt.Errorf("sluis function: %w", err)
 	}
 

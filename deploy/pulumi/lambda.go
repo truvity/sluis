@@ -1465,6 +1465,7 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 		auditArn = a.AuditQueueArn.ToStringOutput()
 	}
 	out.AuditQueueURL, out.AuditQueueArn = auditURL, auditArn
+	writerFirst := a.writerFirst(out.Audit)
 	env := a.Telemetry.env(fnName)
 	env[sluisconfig.EnvConfig] = pulumi.String(DocumentPath(docSluis))
 	layers := a.Telemetry.layers(layer.Arn)
@@ -1495,7 +1496,11 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 	} else {
 		fnArgs.Code = pulumi.NewFileArchive(pkg.Path)
 	}
-	fn, err := lambda.NewFunction(ctx, name+"-issuer", fnArgs, child, issuerAlias(name, ""), pulumi.DependsOn([]pulumi.Resource{logs}))
+	fnOpts := []pulumi.ResourceOption{child, issuerAlias(name, ""), pulumi.DependsOn([]pulumi.Resource{logs})}
+	if writerFirst != nil {
+		fnOpts = append(fnOpts, pulumi.DependsOnInputs(writerFirst))
+	}
+	fn, err := lambda.NewFunction(ctx, name+"-issuer", fnArgs, fnOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("sluis function: %w", err)
 	}
@@ -1523,7 +1528,7 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 	// ---- the module functions: one per module, each with the role of its own.
 	var mods *moduleFunctions
 	if a.hasModuleFunctions() {
-		if mods, err = newModuleFunctions(ctx, name, &a, secretsKeyArn, child); err != nil {
+		if mods, err = newModuleFunctions(ctx, name, &a, secretsKeyArn, writerFirst, child); err != nil {
 			return nil, err
 		}
 		resolveModuleRoles(mods)
