@@ -479,6 +479,9 @@ type Stores struct {
 	// Plan is the resolved adapter per concern, for the packages that wire a
 	// concern this package does not.
 	Plan port.Table
+	// SecretsRoot is the root the secrets are kept under when the source is
+	// ssm (/sluis/<instance>), and empty for another source.
+	SecretsRoot string
 	// Secrets delivers the secrets the document names, by name: what the
 	// composition root put in Config.Secrets. Nil delivers none.
 	Secrets secrets.Source
@@ -638,6 +641,7 @@ func Open(ctx context.Context, cfg Config, log *slog.Logger) (*Stores, error) {
 	}
 	st.V4, st.V5 = cfg.v4.stores, cfg.v4.v5
 	st.Plan = plan
+	st.SecretsRoot = cfg.SecretsRoot
 	st.Secrets = cfg.Secrets
 	if st.V5 != nil {
 		// The names the code asks for by a fixed spelling are read from their
@@ -861,4 +865,20 @@ func (s *Stores) ClientSecretPort() port.Secrets {
 		return s.ClientSecrets
 	}
 	return s.Ports.Secrets
+}
+
+// SecretsPlace is the secrets adapter and the root it keeps them under, for
+// a page that tells a person where a secret is: the adapter the plan resolved
+// and the `root` its settings name, or the serve document's `secrets.root`.
+// Both are empty where no secrets adapter was chosen.
+func (s *Stores) SecretsPlace() (adapter, root string) {
+	choice := s.Plan[port.ConcernSecrets]
+	if choice.Adapter == "legacy" {
+		return "", ""
+	}
+	root, _ = choice.Settings["root"].(string)
+	if root == "" {
+		root = s.SecretsRoot
+	}
+	return choice.Adapter, root
 }

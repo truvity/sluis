@@ -235,6 +235,9 @@ export type GitHubAppView = {
   /** Where its key is kept, for a deployment copying it. */
   secret: string;
   secretKeys: string[];
+  /** Which store keeps its key, and where in it. Empty adapter: not said. */
+  secretAdapter: string;
+  secretLocation: string;
   /** Accounts linked through it. The link App only. */
   linked: number;
 };
@@ -364,6 +367,8 @@ export function appView(app: GitHubApp): GitHubAppView {
     public: app.public,
     secret: app.secret,
     secretKeys: app.secretKeys,
+    secretAdapter: app.secretPlace?.adapter || (app.secret ? "kubernetes" : ""),
+    secretLocation: app.secretPlace?.location || app.secret,
     linked: app.linkedAccounts,
   };
 }
@@ -565,4 +570,27 @@ export function passRequested(org: Pick<GitHubOrganisation, "tick" | "passReques
   const asked = org.passRequestedAt;
   if (!asked) return false;
   return !org.tick?.at || timestampMs(org.tick.at) < timestampMs(asked);
+}
+
+/** How the page words the place a key is kept, by the store that keeps it. */
+export type KeyPlaceWords = {
+  /** The Facts label of the address. */
+  label: string;
+  /** Whether the keys within a Kubernetes Secret are worth listing. */
+  listsKeys: boolean;
+  /** What the Disclosure hint calls it. */
+  hint: string;
+};
+
+export function keyPlaceWords(adapter: string): KeyPlaceWords {
+  switch (adapter) {
+    case "kubernetes":
+      return { label: "Kubernetes Secret", listsKeys: true, hint: "the Kubernetes Secret its key is in, and its ids on GitHub" };
+    case "ssm":
+      return { label: "SSM parameter", listsKeys: false, hint: "the SSM parameters its key is in, and its ids on GitHub" };
+    case "openbao":
+      return { label: "OpenBao path", listsKeys: false, hint: "the OpenBao path its key is in, and its ids on GitHub" };
+    default:
+      return { label: "Secret store entry", listsKeys: false, hint: "the secret store entry its key is in, and its ids on GitHub" };
+  }
 }

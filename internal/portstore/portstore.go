@@ -85,6 +85,10 @@ type Base struct {
 	// v5 puts the GitHub Apps' credentials and exports on layout v5 (see
 	// [Base.WithV5]).
 	v5 *secretstore.StoresV5
+
+	// placeAdapter and placeRoot say where the secrets are kept (see
+	// [Base.WithPlace]).
+	placeAdapter, placeRoot string
 }
 
 // New returns the base over a set of ports.

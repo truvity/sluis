@@ -154,7 +154,7 @@ export function Client({
       facts={[
         { label: "Kind", value: client.kind },
         { label: "Token cap", value: client.ttlCap ? forHowLong(client.ttlCap) : "none" },
-        { label: "Secret, as a Kubernetes Secret name", value: client.secret ? <Mono>{client.secret}</Mono> : undefined },
+        { label: "Secret name", value: client.secret ? <Mono>{client.secret}</Mono> : undefined },
       ]}
       aside={
         <>
