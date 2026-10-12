@@ -1,5 +1,9 @@
 ## Unreleased
 
+### Changed
+
+- **The audit writer no longer puts an object into an hour that is already sealed.** A seal is never rewritten and the notary never revisits an hour, so an object that landed in a sealed hour (writer clock behind the notary's, a put that finished after settle, a restore) was covered by no seal and showed only as a count/root mismatch in `audit verify`. Before each put the writer now looks for the hour's seal and, if there is one, puts the object into the first later hour without one (logging `sealed_hour_redirect`); the key's hour is ingest time, so readers and `verify` are unaffected, and if the seal cannot be probed the object is written where the clock says (`seal_probe_failed`). The writer's role gains `s3:GetObject` on `seals/` (read only): an estate that renders its own writer policy must add it, otherwise the guard logs `seal_probe_failed` and does nothing. Decision in ADR 0061.
+
 ## v1.76.0-rc.5
 
 ### Changed

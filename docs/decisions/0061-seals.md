@@ -54,6 +54,33 @@ hour after it, so the chain stops where the notary cannot vouch; and the payload
 writes every field (a count of zero is `"0"`, an empty `prev` is `""`), so a
 reader that does not know the proto defaults reads what the seal says.
 
+**2026-10-12, a sealed hour takes no more objects.** A seal is never
+rewritten (a conditional put), and the notary never goes back to an hour it
+has sealed, so an object that landed in a sealed hour (a writer clock behind
+the notary's, a put begun before the hour closed and finished after settle, a
+restore) was covered by nothing and showed only as a count and root mismatch
+in `audit verify`. Closed in the writer, by **prevention**: before it puts an
+object it looks for the seal of the hour its clock names
+(`seals/<profile>/<tenant>/<hour>.jws`, a HEAD) and, if there is one, puts the
+object into the first later hour that has none; the ULID is made for the start
+of that hour, so the key's hour and the ULID still agree, and the generator
+keeps the writer out of the sealed hour afterwards. Nothing else changes: the
+key's hour is ingest time, the record's `occurred_at` and `recorded_at` are in
+the record, and readers and `audit verify` see an ordinary object in an
+ordinary hour, so no seal format, chain or verifier change is needed. The
+writer logs `sealed_hour_redirect`. If the seal cannot be probed the object is
+put where the clock says and `seal_probe_failed` is logged: the guard is not
+allowed to stop the trail. The writer's role needs `s3:GetObject` on `seals/`
+(read only; it still cannot write seals or keys or sign).
+
+Roads not taken: a supplementary seal (`<hh>.<n>.jws`) chained after the latest
+seal would need the layout, the chain rule and the verifier to learn a second
+kind of seal, and would still leave the object outside the original root;
+detection in the notary alone leaves the gap open and only reports it.
+Residual: a put that is already in flight when the seal is written is not
+caught by a check made before it; that window is the length of one put, and
+the settle time exists to cover it.
+
 **Trust anchors are pinned.** `keys/roots.jwks` lists root public keys, and
 **observe's configuration pins them by thumbprint** (RFC 7638). The file in
 the bucket is a convenience for distribution; a root that is not pinned by

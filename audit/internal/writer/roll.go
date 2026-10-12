@@ -53,6 +53,15 @@ type Roller struct {
 	Now func() time.Time
 	// OnPut is called after each object is written.
 	OnPut func(key string, records int)
+	// OnRedirect is called when an object's hour was already sealed and the
+	// object was put into a later, open hour instead: from is the hour the
+	// clock named, to the hour used.
+	OnRedirect func(profile, tenant string, from, to time.Time)
+	// OnSealProbeError is called when the writer could not tell whether an
+	// hour is sealed (the store failed, or the writer may not read seals/).
+	// The object is then put into the hour the clock names: the check is a
+	// guard against a late object, and is not allowed to stop the trail.
+	OnSealProbeError func(profile, tenant string, hour time.Time, err error)
 
 	mu   sync.Mutex
 	open map[partition]*batch
@@ -203,9 +212,9 @@ func (r *Roller) put(ctx context.Context, key partition, b *batch) error {
 
 	// The batch is taken now: the ULID and the hour come from one moment, which
 	// is the ingest time the contract keys by.
-	id, at, err := r.ids.New(r.now())
+	id, at, err := r.nextOpen(ctx, key, r.now())
 	if err != nil {
-		return fmt.Errorf("writer: %w", err)
+		return err
 	}
 	objectKey := store.RecordKey(key.profile, key.tenant, at, id)
 
@@ -228,6 +237,67 @@ func (r *Roller) put(ctx context.Context, key partition, b *batch) error {
 	}
 	delete(r.open, key)
 	return nil
+}
+
+// maxRedirect bounds how many sealed hours an object is moved past. A writer
+// whose clock is two days behind the notary's seals is broken, and says so.
+const maxRedirect = 48
+
+// nextOpen makes the ULID and the moment it encodes, and moves that moment into
+// the first hour that has no seal.
+//
+// The notary writes one seal per profile, tenant and hour and never rewrites it
+// (docs/decisions/0061), so an object that lands in a sealed hour is covered by
+// nothing: a writer clock behind the notary's, or a batch held across the
+// notary's settle time, is a mismatch for good. The key's hour is ingest time,
+// and the record's own times are inside it, so an object put into a later hour
+// loses nothing a reader uses; the ULID is made for the start of that hour,
+// which keeps the hour and the ULID agreeing (store.ParseRecordKey) and the
+// generator, which never goes backwards, from taking the writer back into the
+// sealed hour afterwards.
+func (r *Roller) nextOpen(ctx context.Context, key partition, now time.Time) (string, time.Time, error) {
+	var from time.Time
+	at := now
+	for i := 0; ; i++ {
+		id, got, err := r.ids.New(at)
+		if err != nil {
+			return "", time.Time{}, fmt.Errorf("writer: %w", err)
+		}
+		hour := got.Truncate(time.Hour)
+		if from.IsZero() {
+			from = hour
+		}
+		sealed, err := r.sealed(ctx, key, hour)
+		if err != nil {
+			if r.OnSealProbeError != nil {
+				r.OnSealProbeError(key.profile, key.tenant, hour, err)
+			}
+			return id, got, nil
+		}
+		if !sealed {
+			if hour.After(from) && r.OnRedirect != nil {
+				r.OnRedirect(key.profile, key.tenant, from, hour)
+			}
+			return id, got, nil
+		}
+		if i >= maxRedirect {
+			return "", time.Time{}, fmt.Errorf("writer: the hours from %s on are sealed for %s/%s: the clock is too far behind the notary",
+				from.Format(time.RFC3339), key.profile, key.tenant)
+		}
+		at = hour.Add(time.Hour)
+	}
+}
+
+// sealed reports whether the hour already has a seal.
+func (r *Roller) sealed(ctx context.Context, key partition, hour time.Time) (bool, error) {
+	_, err := r.Store.Head(ctx, store.SealKey(key.profile, key.tenant, hour))
+	switch {
+	case err == nil:
+		return true, nil
+	case errors.Is(err, store.ErrNotFound):
+		return false, nil
+	}
+	return false, err
 }
 
 func (r *Roller) ensure() {
