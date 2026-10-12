@@ -1238,7 +1238,7 @@ func (a *LambdaArgs) validate() (LambdaArgs, error) {
 // function, behind a regional custom domain with mutual TLS. The controllers'
 // passes and the directory refresh are invoked by EventBridge
 // schedules, through a role of their own that may invoke only this function.
-func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulumi.ResourceOption) (*Lambda, error) {
+func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulumi.ResourceOption) (_ *Lambda, retErr error) {
 	a, err := args.validate()
 	if err != nil {
 		return nil, err
@@ -1426,6 +1426,12 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 	if err != nil {
 		return nil, fmt.Errorf("sluis log group: %w", err)
 	}
+	resolveModuleRoles, rejectModuleRoles := func(*moduleFunctions) {}, func(error) {}
+	defer func() {
+		if retErr != nil {
+			rejectModuleRoles(retErr)
+		}
+	}()
 	role, rolePolicy, err := newFunctionRole(ctx, name, fnName, &a, signingArns, wrappedArn, signKeyArn, secretsKeyArn, logs.Arn, fnArn+":"+LiveAlias, tags, child)
 	if err != nil {
 		return nil, fmt.Errorf("sluis role: %w", err)
@@ -1440,7 +1446,10 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 	auditURL, auditArn := rsEmpty, rsEmpty
 	switch a.audit.mode {
 	case auditInstall:
-		aargs, err := a.auditInstallArgs(a.audit, role.Arn, a.moduleSenders()...)
+		// The module roles are made below: the queue's policy waits for them.
+		var modSenders []pulumi.StringInput
+		modSenders, resolveModuleRoles, rejectModuleRoles = a.moduleSenders(ctx)
+		aargs, err := a.auditInstallArgs(a.audit, role.Arn, modSenders...)
 		if err != nil {
 			return nil, err
 		}
@@ -1517,6 +1526,7 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 		if mods, err = newModuleFunctions(ctx, name, &a, secretsKeyArn, child); err != nil {
 			return nil, err
 		}
+		resolveModuleRoles(mods)
 	}
 
 	// ---- the API
