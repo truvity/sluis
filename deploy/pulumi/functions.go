@@ -286,22 +286,40 @@ func issuerFunctionArns(a *LambdaArgs) map[string]string {
 	return a.moduleFunctionArns()
 }
 
-// moduleSenders are the module functions' roles, by their ARNs: the audit queue
-// admits each of them, and a role it does not name has its records refused.
-func (a *LambdaArgs) moduleSenders() []pulumi.StringInput {
-	var out []pulumi.StringInput
+// moduleSenders are the audit queue's senders besides the issuer: the module
+// functions' roles, as outputs resolved when the roles are declared (resolve), so
+// that the queue's policy is applied after them (SQS refuses a policy that names
+// a role that does not exist), and the old names of renamed roles, which exist
+// already. reject releases the outputs when NewLambda stops before it declares
+// the roles.
+func (a *LambdaArgs) moduleSenders(ctx *pulumi.Context) (senders []pulumi.StringInput, resolve func(*moduleFunctions), reject func(error)) {
+	resolvers, rejecters := map[string]func(pulumi.StringInput){}, map[string]func(error){}
 	if a.hasModuleFunctions() {
 		for _, r := range ModuleFunctions() {
 			if a.hostsModule(r) {
-				out = append(out, pulumi.String(a.roleArnOf(a.moduleFunctionName(r))))
+				in, res, rej := deferredArn(ctx)
+				senders = append(senders, in)
+				resolvers[r], rejecters[r] = res, rej
 			}
 		}
 	}
 	// The old names of renamed roles stay senders while the switch is made.
 	for _, t := range a.TransitionRoles {
-		out = append(out, pulumi.String(a.roleArnOf(t.OldName)))
+		senders = append(senders, pulumi.String(a.roleArnOf(t.OldName)))
 	}
-	return out
+	resolve = func(m *moduleFunctions) {
+		for r, res := range resolvers {
+			if fn, ok := m.fns[r]; ok {
+				res(fn.role.Arn)
+			}
+		}
+	}
+	reject = func(err error) {
+		for _, rej := range rejecters {
+			rej(err)
+		}
+	}
+	return senders, resolve, reject
 }
 
 // hostsModule is whether NewLambda makes the module's function. It makes all
