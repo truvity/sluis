@@ -28,6 +28,7 @@ type puller struct {
 	err    error
 	all    hub.RefreshResult
 	passed []string
+	probed int
 }
 
 func (p *puller) Pass(_ context.Context, ws string, unsafeLocal bool) (hub.RefreshOutcome, error) {
@@ -36,6 +37,11 @@ func (p *puller) Pass(_ context.Context, ws string, unsafeLocal bool) (hub.Refre
 		return "", errors.New("a function must not opt in to a lease held in memory")
 	}
 	return p.out, p.err
+}
+
+func (p *puller) ProbePass(context.Context) error {
+	p.probed++
+	return nil
 }
 
 func (p *puller) RefreshPass(context.Context) (hub.RefreshResult, error) {
@@ -67,6 +73,9 @@ func TestARefreshEventRefreshesEveryWorkspace(t *testing.T) {
 	}
 	if !slices.Equal(p.passed, []string{"*"}) {
 		t.Errorf("passes: %v", p.passed)
+	}
+	if p.probed != 1 {
+		t.Errorf("the schedule probed %d times, want once: nothing else renews a workspace's health on Lambda", p.probed)
 	}
 }
 

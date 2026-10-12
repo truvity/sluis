@@ -113,6 +113,11 @@ func (h *HTTP) WithCloudflare(run func(context.Context) (failed int, summary str
 // modules make to the module it runs, with s. Only the function that runs that
 // module is given a server: any other refuses them.
 func (h *HTTP) WithRPC(s *modcall.Server) *HTTP {
+	// A call the module refuses or fails is logged by the function that
+	// answered it, with the request id; the caller is told a code only.
+	if s != nil {
+		s.SetLogger(h.log)
+	}
 	h.rpc = s
 	return h
 }

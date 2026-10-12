@@ -1,8 +1,11 @@
 package modcall_test
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -237,4 +240,53 @@ func TestAServiceAccountNameIsNotItsClass(t *testing.T) {
 	if err := call("system:serviceaccount:ns:issuer"); !errors.Is(err, &modcall.Error{Code: modcall.CodeForbidden}) {
 		t.Errorf("a ServiceAccount named issuer: %v", err)
 	}
+}
+
+func TestAServerWithALoggerSaysWhyACallFailed(t *testing.T) {
+	var buf bytes.Buffer
+	s := modcall.NewServer("m")
+	s.SetLogger(slog.New(slog.NewJSONHandler(&buf, nil)))
+	modcall.Handle(s, "boom", func(context.Context, struct{}) (struct{}, error) {
+		return struct{}{}, errors.New("the table is gone")
+	})
+	modcall.Handle(s, "coded", func(context.Context, struct{}) (struct{}, error) {
+		return struct{}{}, modcall.CodedCause(modcall.CodeInternal, "", errors.New("the cause"))
+	})
+	modcall.Handle(s, "only_issuer", func(context.Context, struct{}) (struct{}, error) { return struct{}{}, nil }, modcall.Allow("issuer"))
+	ctx := modcall.WithRequestID(modcall.WithCaller(context.Background(), "console"), "req-1")
+
+	for _, tc := range []struct{ method, code, level, text string }{
+		{"boom", modcall.CodeInternal, "ERROR", "the table is gone"},
+		{"coded", modcall.CodeInternal, "ERROR", "the cause"},
+		{"only_issuer", modcall.CodeForbidden, "WARN", ""},
+		{"missing", modcall.CodeNoSuchMethod, "WARN", ""},
+	} {
+		buf.Reset()
+		resp := s.Dispatch(ctx, modcall.Request{Kind: modcall.Kind, Module: "m", Method: tc.method})
+		if resp.Error == nil || resp.Error.Code != tc.code {
+			t.Fatalf("%s: %+v", tc.method, resp)
+		}
+		if strings.Contains(string(mustJSON(t, resp)), "the cause") || strings.Contains(string(mustJSON(t, resp)), "table is gone") {
+			t.Errorf("%s: the cause was sent to the caller: %s", tc.method, mustJSON(t, resp))
+		}
+		var line map[string]any
+		if err := json.Unmarshal(buf.Bytes(), &line); err != nil {
+			t.Fatalf("%s: nothing was logged (%q)", tc.method, buf.String())
+		}
+		if line["level"] != tc.level || line["method"] != tc.method || line["code"] != tc.code || line["request_id"] != "req-1" {
+			t.Errorf("%s: %v", tc.method, line)
+		}
+		if tc.text != "" && !strings.Contains(buf.String(), tc.text) {
+			t.Errorf("%s: the cause is not in the log: %s", tc.method, buf.String())
+		}
+	}
+}
+
+func mustJSON(t *testing.T, v any) []byte {
+	t.Helper()
+	b, err := json.Marshal(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
 }

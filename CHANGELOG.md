@@ -1,5 +1,9 @@
 ## Unreleased
 
+### Changed
+
+- **The Google module's console actions that reach Google work on a warm function, and a module call that fails says why.** The Google function opened its module on the first console call of a container with that invocation's context and kept it for the rest of the container's life. Lambda cancels an invocation's context when the invocation returns, and the Google clients fetch their access tokens with the context they were opened with, so every later call that reached Google (**Refresh** and **Probe**) failed at once with "the Google module failed" while the scheduled refresh, which opens its own module per invocation, kept working. The module is now opened with the call's values and not its cancellation (the Slack function too). The failure was also silent: the module told the caller `internal` and logged nothing, so a module server now logs a call it refuses or fails (module, method, code, the cause, and the Lambda request id), and the console service keeps the cause of a failure it reports as `internal`. The same stale context made a console **Probe** record the workspace as `failing`, and nothing on Lambda renewed that health (the probe loop only runs in a process that has one), so the directory stayed non-authoritative and the operators it vouches for were shown as viewers; the scheduled `{"kind":"refresh"}` event now also probes every workspace. A contract test holds every module's function to registering each method the issuer calls on it, read from the constants the module's wire declares.
+
 ## v1.76.0-rc.5
 
 ### Changed

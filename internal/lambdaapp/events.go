@@ -14,6 +14,7 @@ import (
 	"github.com/aws/aws-lambda-go/lambdacontext"
 
 	"github.com/truvity/sluis/internal/deploycheck"
+	"github.com/truvity/sluis/internal/modcall"
 	"github.com/truvity/sluis/internal/modcall/lambdacall"
 	"github.com/truvity/sluis/internal/port/invoke"
 	"github.com/truvity/sluis/storage/logattr"
@@ -401,6 +402,9 @@ func (h *HTTP) serveRPC(ctx context.Context, payload json.RawMessage) (any, erro
 			h.settle()
 		}
 	}()
+	if lc, ok := lambdacontext.FromContext(ctx); ok && lc.AwsRequestID != "" {
+		ctx = modcall.WithRequestID(ctx, lc.AwsRequestID)
+	}
 	out, err := lambdacall.Serve(ctx, h.rpc, payload, invokedAlias(ctx))
 	if err != nil {
 		return nil, err

@@ -51,7 +51,8 @@ func (c *calls) service(ctx context.Context) (*slackconsole.Service, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.app == nil {
-		app, err := slackapp.New(ctx, c.cfg, c.log)
+		// The app outlives this call: see googlefn's service.
+		app, err := slackapp.New(context.WithoutCancel(ctx), c.cfg, c.log)
 		if err != nil {
 			return nil, err
 		}
