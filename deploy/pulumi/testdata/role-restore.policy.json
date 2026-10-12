@@ -427,23 +427,27 @@
     },
     {
       "Action": [
+        "ssm:GetParameter"
+      ],
+      "Effect": "Allow",
+      "Resource": "arn:aws:ssm:r1:111122223333:parameter/sluis/i1/internal/backup/restore-identity",
+      "Sid": "SluisRestoreIdentity"
+    },
+    {
+      "Action": [
         "kms:Decrypt"
       ],
       "Condition": {
-        "ForAllValues:StringEquals": {
-          "kms:EncryptionContextKeys": [
-            "instance",
-            "purpose"
-          ]
-        },
-        "StringEquals": {
-          "kms:EncryptionContext:instance": "i1",
-          "kms:EncryptionContext:purpose": "archive"
+        "StringLike": {
+          "kms:EncryptionContext:PARAMETER_ARN": [
+            "arn:aws:ssm:r1:111122223333:parameter/sluis/i1/internal/backup/restore-identity"
+          ],
+          "kms:ViaService": "ssm.*.amazonaws.com"
         }
       },
       "Effect": "Allow",
-      "Resource": "arn:aws:kms:r1:111122223333:key/archive",
-      "Sid": "SluisArchiveKey"
+      "Resource": "arn:aws:kms:r1:111122223333:key/shared",
+      "Sid": "SluisRestoreIdentityKey"
     },
     {
       "Action": "lambda:InvokeFunction",

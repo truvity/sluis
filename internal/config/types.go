@@ -307,6 +307,10 @@ type (
 		KMSKey    string `json:"kmsKey,omitempty"`
 		Endpoint  string `json:"endpoint,omitempty"`
 		PathStyle bool   `json:"pathStyle,omitempty"`
+		// Checksum is the integrity header of every upload: sha256 (the
+		// default, x-amz-checksum-sha256), md5 (Content-MD5) or none, for a
+		// store that refuses SHA-256.
+		Checksum string `json:"checksum,omitempty"`
 		// CredentialsRef is the internal address (`internal/<kind>/<id>`) of
 		// the s3-credentials/v1 document the installation's secrets store
 		// holds for Endpoint. It needs Endpoint and the ssm secrets source.

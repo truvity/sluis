@@ -8,8 +8,10 @@ The backup module writes the installation, encrypted, to S3 ([ADR 0071](../../de
 |---|---|
 | `apiVersion` | `sluis.truvity.github.io/sluis-backup/v1`, schema `schemas/config/sluis-backup.schema.json`. Layout v5 only: `secrets.layout: v5`, `ports.dynamodb.tables`, the installation's `ports.blob` |
 | `backup.role` | `backup` (default) or `restore`: which function the zip is. The restore function's role may write every module's table |
-| `backup.key` | The alias that seals each backup's data key; the same as `keys.archive`, give one. The adapter is `keys.adapter`, default `kms` |
-| `backup.target` | The archive bucket: `bucket`, `prefix`, `region`, `kmsKey`, `endpoint`, `pathStyle`. Credentials are the role's. Object Lock retention must not exceed `retention.maxAge` |
+| `backup.recipients` | The age recipients (`age1...`) every backup is encrypted to. The backup function holds no secret that opens a backup |
+| `backup.identity` | The secret, in the backup module's namespace (`restore-identity`), that holds the age identity the restore function decrypts with |
+| `backup.key` | Format v1: the alias that seals each backup's data key; the same as `keys.archive`, give one. Not needed with `recipients` or `identity` |
+| `backup.target` | The archive bucket: `bucket`, `prefix`, `region`, `kmsKey`, `endpoint`, `pathStyle`, `checksum`. Credentials are the role's. Object Lock retention must not exceed `retention.maxAge` |
 | `backup.retention` | The `keep` newest backups (default 7) always stay. Another goes when older than `maxAge` (default 720h) |
 | `instance` | Names the archive path `backup/<instance>/<id>/` and the key's encryption context |
 

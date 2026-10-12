@@ -149,8 +149,14 @@ type BackupCommon struct {
 	// ModuleEnv.MinterRefs.
 	MinterRefs []string
 
-	// ArchiveKeyAlias is the alias (alias/<name>) of the key that seals each
-	// backup's data key (`backup.key`, purpose `archive`). Required. Not an ARN.
+	// ArchiveKeyAlias was the alias (alias/<name>) of the KMS key that sealed each
+	// backup's data key.
+	//
+	// Deprecated: backups are encrypted with age (format v2) to the installation's
+	// recipients; no KMS key is used for the archive, the roles get no grant on
+	// it, and it is optional. While it is set it is still held to an alias, is
+	// rendered as `backup.key` for a binary of format v1, and the outputs
+	// ArchiveKeyArn keep naming the key behind it for the estates that export them.
 	ArchiveKeyAlias string
 	// Archive is the bucket.
 	Archive ArchiveArgs
@@ -201,6 +207,13 @@ type BackupScheduleArgs struct {
 type BackupArgs struct {
 	BackupCommon
 	Schedule BackupScheduleArgs
+	// ExtraRecipients are further age recipients (`age1...`) every backup is
+	// encrypted to, beside the installation's own generated one: an offline
+	// break-glass key whose identity is kept off the platform. Each is validated
+	// as an age X25519 recipient; an invalid one is refused. An offline recipient
+	// is recommended: it opens the backups when the installation, its parameter
+	// store and the restore function are all gone.
+	ExtraRecipients []string
 }
 
 // Backup is the component. Its fields are the outputs.
@@ -229,8 +242,21 @@ type Backup struct {
 	// bucket in another account (ArchiveBucketPolicyStatements); the same
 	// grants on a bucket in this account are in the roles' policies.
 	ArchiveBucketPolicy pulumi.StringOutput
-	// ArchiveKeyArn is the archive key behind the alias.
+	// ArchiveKeyArn is the key behind ArchiveKeyAlias; empty when it is not set.
+	//
+	// Deprecated: the archive uses no KMS key.
 	ArchiveKeyArn pulumi.StringOutput
+	// RestoreRecipient is the age recipient (`age1...`) of the installation's
+	// generated restore keypair: public, and the first of the recipients in the
+	// backup document. Its identity is the parameter RestoreIdentityParameter,
+	// read by the restore role only.
+	RestoreRecipient pulumi.StringOutput
+	// Recipients are every recipient the backups are encrypted to: RestoreRecipient,
+	// then ExtraRecipients.
+	Recipients pulumi.StringArrayOutput
+	// RestoreIdentityParameter is the SSM parameter that holds the age identity,
+	// `/sluis/<instance>/internal/backup/restore-identity`.
+	RestoreIdentityParameter pulumi.StringOutput
 	// AlarmNames are the alarms: no completed backup in 36 hours, a failed run,
 	// a message in the schedules' dead-letter queue.
 	AlarmNames pulumi.StringArrayOutput
@@ -263,7 +289,6 @@ func (c *BackupCommon) plan(role string) (*backupPlan, error) {
 	req("AccountID", p.AccountID)
 	req("Instance", p.Instance)
 	req("Archive.Bucket", p.Archive.Bucket)
-	req("ArchiveKeyAlias", p.ArchiveKeyAlias)
 	if p.Instance != "" && !validInstance(p.Instance) {
 		errs = append(errs, fmt.Errorf("the Instance %q is lower-case letters, digits and dashes, at most 32, and not private or export", p.Instance))
 	}
@@ -461,8 +486,10 @@ func durationText(d time.Duration) string {
 	return d.String()
 }
 
-// document renders the `sluis-backup/v1` document of the role.
-func (p *backupPlan) document() (string, error) {
+// document renders the `sluis-backup/v1` document of the role. The backup
+// function's lists its age recipients; the restore function's names the secret
+// that holds the identity.
+func (p *backupPlan) document(recipients []string) (string, error) {
 	tables := map[Module]string{}
 	for _, m := range Modules() {
 		tables[m] = p.modules.TableName(m)
@@ -487,11 +514,23 @@ func (p *backupPlan) document() (string, error) {
 		target["kmsKey"] = p.Archive.SSEKeyArn
 	}
 	bk := map[string]any{
-		"key": p.ArchiveKeyAlias, "region": p.Region, "target": target,
+		"region": p.Region, "target": target,
 		"retention": map[string]any{"keep": p.retention.Keep, "maxAge": durationText(p.retention.MaxAge)},
+	}
+	if p.ArchiveKeyAlias != "" {
+		// Deprecated, and rendered only while it is set: a binary of format v1
+		// opens its archive key from it. Format v2 names no key.
+		bk["key"] = p.ArchiveKeyAlias
 	}
 	if p.role == RoleRestore {
 		bk["role"] = RoleRestore
+		bk["identity"] = RestoreIdentityName
+	} else {
+		rs := make([]any, 0, len(recipients))
+		for _, r := range recipients {
+			rs = append(rs, r)
+		}
+		bk["recipients"] = rs
 	}
 	audit := map[string]any{"adapter": "log"}
 	if p.AuditQueueURL != "" {
@@ -560,16 +599,22 @@ func (p *backupPlan) telemetryAudiences() []string {
 type statementsFor func(env ModuleEnv, g ArchiveGrant) ([]map[string]any, error)
 
 // moduleFunctionArgs maps the plan onto the generic builder. The role's policy
-// is the statements rendered from the resolved references.
-func (p *backupPlan) moduleFunctionArgs(name, doc string, archiveKey, archiveBucketArn pulumi.StringInput,
+// is the statements rendered from the resolved references. doc is the document
+// when it is known at plan; docOut is it when it holds an apply-time value.
+func (p *backupPlan) moduleFunctionArgs(name, doc string, docOut pulumi.StringInput, archiveBucketArn pulumi.StringInput,
 	callers, noRetry []string, omitLive bool, statements statementsFor) *ModuleFunctionArgs {
+	docs := map[string]string{}
+	if docOut == nil {
+		docs[docSluis] = doc
+	}
 	return &ModuleFunctionArgs{
 		Name: name, FunctionName: p.FunctionName,
 		Package: p.Package, PackageSHA256: p.PackageSHA256, PackageVersion: p.PackageVersion, Release: p.Release,
-		Artifacts:       p.Artifacts,
-		Documents:       map[string]string{docSluis: doc},
-		DocumentVersion: backupDocumentVersion,
-		MemoryMB:        p.Function.MemoryMB, TimeoutSeconds: p.Function.TimeoutSeconds,
+		Artifacts:           p.Artifacts,
+		Documents:           docs,
+		SluisDocumentOutput: docOut,
+		DocumentVersion:     backupDocumentVersion,
+		MemoryMB:            p.Function.MemoryMB, TimeoutSeconds: p.Function.TimeoutSeconds,
 		LogRetentionDays: p.LogRetentionDays, PermissionsBoundaryArn: p.PermissionsBoundaryArn, Tags: p.Tags,
 		Callers: callers, NoRetry: noRetry, OmitLive: omitLive,
 		Telemetry: p.Telemetry,
@@ -583,10 +628,10 @@ func (p *backupPlan) moduleFunctionArgs(name, doc string, archiveKey, archiveBuc
 				tableKey = p.State.KeyArn
 			}
 			queue := pulumi.String(p.auditArn)
-			return pulumi.All(bucket, tableKey, logGroup, queue, archiveKey, archiveBucketArn, moduleTableArns(p.State)).ApplyT(func(v []any) (string, error) {
+			return pulumi.All(bucket, tableKey, logGroup, queue, archiveBucketArn, moduleTableArns(p.State)).ApplyT(func(v []any) (string, error) {
 				r := backupRefs{
 					bucketArn: v[0].(string), tableKey: v[1].(string), logGroup: v[2].(string), queueArn: v[3].(string),
-					archiveKey: v[4].(string), archiveBucket: v[5].(string), tables: moduleTablesOf(v[6]),
+					archiveBucket: v[4].(string), tables: moduleTablesOf(v[5]),
 				}
 				st, err := statements(p.env(r), p.grant(r))
 				if err != nil {
@@ -598,19 +643,45 @@ func (p *backupPlan) moduleFunctionArgs(name, doc string, archiveKey, archiveBuc
 	}
 }
 
-// buildFunction makes the function of the role on the generic builder.
+// buildFunction makes the function of the role on the generic builder. With
+// recipients (the backup role) the document is an output: the generated
+// recipient is known at apply.
 func buildFunction(ctx *pulumi.Context, name string, p *backupPlan, archiveBucketArn pulumi.StringInput,
-	callers, noRetry []string, omitLive bool, statements statementsFor, owner pulumi.Resource) (*backupFn, error) {
-	doc, err := p.document()
+	callers, noRetry []string, omitLive bool, statements statementsFor, recipients pulumi.StringArrayInput, owner pulumi.Resource) (*backupFn, error) {
+	var doc string
+	var docOut pulumi.StringInput
+	var err error
+	if recipients == nil {
+		doc, err = p.document(nil)
+	} else {
+		// Rendered once now with a stand-in recipient, so that the document the
+		// schema refuses is refused at plan; the real one is rendered at apply.
+		if _, err = p.document([]string{standInRecipient()}); err == nil {
+			docOut = recipients.ToStringArrayOutput().ApplyT(func(rs []string) (string, error) { return p.document(rs) }).(pulumi.StringOutput)
+		}
+	}
 	if err != nil {
 		return nil, err
 	}
-	key := kms.LookupAliasOutput(ctx, kms.LookupAliasOutputArgs{Name: pulumi.String(p.ArchiveKeyAlias)}, pulumi.Parent(owner)).TargetKeyArn()
-	fn, err := newModuleFunction(ctx, p.moduleFunctionArgs(name, doc, key, archiveBucketArn, callers, noRetry, omitLive, statements), pulumi.Parent(owner))
+	fn, err := newModuleFunction(ctx, p.moduleFunctionArgs(name, doc, docOut, archiveBucketArn, callers, noRetry, omitLive, statements), pulumi.Parent(owner))
 	if err != nil {
 		return nil, err
+	}
+	// The former archive key is only looked up to keep the output of the estates
+	// that still export it.
+	key := pulumi.String("").ToStringOutput()
+	if p.ArchiveKeyAlias != "" {
+		key = kms.LookupAliasOutput(ctx, kms.LookupAliasOutputArgs{Name: pulumi.String(p.ArchiveKeyAlias)}, pulumi.Parent(owner)).TargetKeyArn()
 	}
 	return &backupFn{moduleFunction: fn, archiveKey: key}, nil
+}
+
+// standInRecipient is a valid age recipient that stands in for the generated
+// one while the document is checked at plan. It is never rendered into a
+// function.
+func standInRecipient() string {
+	_, rcpt, _ := AgeKeypairFromSeed(make([]byte, 32))
+	return rcpt
 }
 
 // backupFn is a module function with the archive key its role names.
@@ -629,6 +700,10 @@ func NewBackup(ctx *pulumi.Context, name string, args *BackupArgs, opts ...pulum
 		return nil, errors.New("sluispulumi: BackupArgs is nil")
 	}
 	p, err := args.plan(RoleBackup)
+	if err != nil {
+		return nil, err
+	}
+	extra, err := ParseBackupRecipients(args.ExtraRecipients)
 	if err != nil {
 		return nil, err
 	}
@@ -662,8 +737,19 @@ func NewBackup(ctx *pulumi.Context, name string, args *BackupArgs, opts ...pulum
 	}
 	out.ArchiveBucketName, out.ArchiveBucketArn = bucketName, bucketArn.ToStringOutput()
 
+	// ---- the restore keypair: the recipient goes into the backup document, the
+	// identity into the parameter only the restore role reads.
+	ident, err := newRestoreIdentity(ctx, name, p, parent)
+	if err != nil {
+		return nil, err
+	}
+	recipients := ident.Recipient.ApplyT(func(r string) []string {
+		return dedupeStrings(append([]string{r}, extra...))
+	}).(pulumi.StringArrayOutput)
+	out.RestoreRecipient, out.Recipients, out.RestoreIdentityParameter = ident.Recipient, recipients, ident.ParameterName
+
 	fn, err := buildFunction(ctx, name, p, bucketArn, []string{ClassConsole, ClassAdmin, ClassBreakglass}, []string{LiveAlias}, false,
-		BackupRoleStatements, out)
+		BackupRoleStatements, recipients, out)
 	if err != nil {
 		return nil, err
 	}
@@ -706,8 +792,22 @@ func NewBackup(ctx *pulumi.Context, name string, args *BackupArgs, opts ...pulum
 		"schedulerRoleArn": out.SchedulerRoleArn, "scheduleNames": out.ScheduleNames, "scheduleDlqArn": out.ScheduleDLQArn,
 		"archiveBucketName": out.ArchiveBucketName, "archiveBucketArn": out.ArchiveBucketArn,
 		"archiveBucketPolicy": out.ArchiveBucketPolicy, "archiveKeyArn": out.ArchiveKeyArn, "alarmNames": out.AlarmNames,
+		"restoreRecipient": out.RestoreRecipient, "recipients": out.Recipients, "restoreIdentityParameter": out.RestoreIdentityParameter,
 	}); err != nil {
 		return nil, err
 	}
 	return out, nil
+}
+
+// dedupeStrings drops repeats, keeping the first of each.
+func dedupeStrings(in []string) []string {
+	seen := map[string]bool{}
+	out := make([]string, 0, len(in))
+	for _, v := range in {
+		if !seen[v] {
+			seen[v] = true
+			out = append(out, v)
+		}
+	}
+	return out
 }

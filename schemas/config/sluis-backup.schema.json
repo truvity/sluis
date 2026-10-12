@@ -211,6 +211,11 @@
       "additionalProperties": false,
       "description": "What the backup module writes and where. The module reads every module's table, secrets and blobs through the `ports` and `secrets` above (its role has read access to them), and writes sealed chunks to `target`.",
       "properties": {
+        "identity": {
+          "description": "The name, in the backup module's secrets namespace, of the secret that holds the age identity (`AGE-SECRET-KEY-1...`, the byte codec) the restore function decrypts with. Only the restore role reads it.",
+          "minLength": 1,
+          "type": "string"
+        },
         "key": {
           "description": "The key that seals each backup's data key (purpose `archive`): an alias, or {key, context}. The same as `keys.archive`; give one of them. The adapter is `keys.adapter`, or kms.",
           "oneOf": [
@@ -281,6 +286,14 @@
             }
           ]
         },
+        "recipients": {
+          "description": "The age recipients (`age1...`) every backup is encrypted to (format v2). The backup function holds no secret that opens a backup: the identity is the restore function's.",
+          "items": {
+            "pattern": "^age1[0-9a-z]+$",
+            "type": "string"
+          },
+          "type": "array"
+        },
         "region": {
           "description": "The region of the key service, for adapter kms. Unset follows the AWS SDK's own resolution.",
           "minLength": 1,
@@ -320,6 +333,15 @@
               "description": "The bucket. It must exist.",
               "minLength": 1,
               "type": "string"
+            },
+            "checksum": {
+              "default": "sha256",
+              "description": "The integrity header of every upload: `sha256` (x-amz-checksum-sha256, computed over the whole body and sent precomputed, never as an aws-chunked trailer), `md5` (Content-MD5) or `none`, for a store that refuses SHA-256. AWS refuses a PutObject without one on an Object Lock bucket.",
+              "enum": [
+                "sha256",
+                "md5",
+                "none"
+              ]
             },
             "endpoint": {
               "$ref": "#/$defs/url",
@@ -847,6 +869,15 @@
                   "description": "The bucket. It must exist, with public access blocked.",
                   "minLength": 1,
                   "type": "string"
+                },
+                "checksum": {
+                  "default": "sha256",
+                  "description": "The integrity header of every upload: `sha256` (x-amz-checksum-sha256, computed over the whole body and sent precomputed, never as an aws-chunked trailer), `md5` (Content-MD5) or `none`, for a store that refuses SHA-256. AWS refuses a PutObject without one on an Object Lock bucket.",
+                  "enum": [
+                    "sha256",
+                    "md5",
+                    "none"
+                  ]
                 },
                 "credentials": {
                   "additionalProperties": false,

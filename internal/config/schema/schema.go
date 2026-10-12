@@ -480,6 +480,7 @@ func portsBlobSchema() m {
 			"kmsKey":    str("A KMS key id, ARN or alias for server-side encryption (SSE-KMS) of every write. Absent, the bucket's default encryption applies."),
 			"endpoint":  url("Overrides the S3 address: LocalStack or an S3-compatible store (Cloudflare R2, MinIO)."),
 			"pathStyle": boolean("Addresses the bucket in the path and not the host name, which LocalStack and most S3-compatible stores need."),
+			"checksum":  enum("The integrity header of every upload: `sha256` (x-amz-checksum-sha256, computed over the whole body and sent precomputed, never as an aws-chunked trailer), `md5` (Content-MD5) or `none`, for a store that refuses SHA-256. AWS refuses a PutObject without one on an Object Lock bucket.", "sha256", "sha256", "md5", "none"),
 			"credentialsRef": m{"type": "string", "pattern": "^internal/[a-z0-9][a-z0-9-]{0,30}/[a-z0-9][a-z0-9._-]{0,62}$",
 				"description": "The internal address, `internal/<kind>/<id>`, of the `s3-credentials/v1` document (`access_key_id`, `secret_access_key`) that holds the static credentials for `endpoint`, in the installation's secrets store (the ssm secrets source). Read at start and again after an answer of 403, at most once a minute. Needs `endpoint`; `region` defaults to `auto` with it. Any other address is refused. This static document is the simple way and needs nothing else: no `cloudflare` section is involved."},
 			"credentials": obj("Instead of a static document, sluis mints its own R2 credentials from a Cloudflare preset: the account's minter credential clones the preset's prototype, the credentials are renewed with a third of their lifetime left and minted again once after a 403. Exclusive with `credentialsRef`. Needs `endpoint`, the ssm secrets source, and the `cloudflare` section.", m{
@@ -679,8 +680,10 @@ func sluisBackupSchema() m {
 			e["description"] = "The key that seals each backup's data key (purpose `archive`): an alias, or {key, context}. The same as `keys.archive`; give one of them. The adapter is `keys.adapter`, or kms."
 			return e
 		}(),
-		"role":   enum("Which function this document configures: `backup` (the scheduled export, the default) or `restore` (the restore function, which only an administrator or the break-glass role may invoke and whose role may write every module's table). The zip is the same; the document picks the role, and `sluis restore` selects it on the command line.", "backup", "backup", "restore"),
-		"region": str("The region of the key service, for adapter kms. Unset follows the AWS SDK's own resolution."),
+		"recipients": list("The age recipients (`age1...`) every backup is encrypted to (format v2). The backup function holds no secret that opens a backup: the identity is the restore function's.", m{"type": "string", "pattern": "^age1[0-9a-z]+$"}),
+		"identity":   str("The name, in the backup module's secrets namespace, of the secret that holds the age identity (`AGE-SECRET-KEY-1...`, the byte codec) the restore function decrypts with. Only the restore role reads it."),
+		"role":       enum("Which function this document configures: `backup` (the scheduled export, the default) or `restore` (the restore function, which only an administrator or the break-glass role may invoke and whose role may write every module's table). The zip is the same; the document picks the role, and `sluis restore` selects it on the command line.", "backup", "backup", "restore"),
+		"region":     str("The region of the key service, for adapter kms. Unset follows the AWS SDK's own resolution."),
 		"target": obj("The S3 bucket of the archive. For an AWS bucket with Object Lock, enable versioning and a default retention no longer than `retention`; credentials are the function role's and are never configured here.", m{
 			"bucket":    str("The bucket. It must exist."),
 			"prefix":    str("A key prefix inside the bucket, put before `backup/<instance>/`."),
@@ -688,6 +691,7 @@ func sluisBackupSchema() m {
 			"kmsKey":    str("A KMS key id, ARN or alias for server-side encryption of every write. Unset leaves the bucket's own default encryption."),
 			"endpoint":  url("Overrides the S3 address: LocalStack or an S3-compatible store."),
 			"pathStyle": boolean("Addresses the bucket in the path and not the host name, which LocalStack and most S3-compatible stores need."),
+			"checksum":  enum("The integrity header of every upload: `sha256` (x-amz-checksum-sha256, computed over the whole body and sent precomputed, never as an aws-chunked trailer), `md5` (Content-MD5) or `none`, for a store that refuses SHA-256. AWS refuses a PutObject without one on an Object Lock bucket.", "sha256", "sha256", "md5", "none"),
 		}, "bucket"),
 		"retention": obj("Which completed backups a prune keeps. A backup is deleted when it is beyond the `keep` newest AND older than `maxAge`.", m{
 			"keep":   integer("How many of the newest completed backups are always kept.", 1, 7),

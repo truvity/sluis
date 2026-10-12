@@ -164,11 +164,11 @@ func TestTheRestoreRolePolicyIsTheOneRestoreRoleStatementsRenders(t *testing.T) 
 	if got := g["s3:GetObject"]; !contains(got, arnp+"s3:::"+archiveBucket+"/vault/backup/staging/*") {
 		t.Errorf("the restore role does not read the archive: %v", got)
 	}
-	if got := g["kms:Decrypt"]; !contains(got, out["keyArn"]) {
-		t.Errorf("decrypt grants = %v", got)
+	if contains(g["kms:Decrypt"], out["keyArn"]) || contains(g["kms:GenerateDataKey"], out["keyArn"]) {
+		t.Error("the restore role has archive KMS grants: backups are age-encrypted")
 	}
-	if contains(g["kms:GenerateDataKey"], out["keyArn"]) {
-		t.Error("the restore role can seal a data key")
+	if got := g["ssm:GetParameter"]; !contains(got, arnp+"ssm:"+region+":"+account+":parameter/sluis/staging/internal/backup/restore-identity") {
+		t.Errorf("the restore role does not read the restore identity: %v", got)
 	}
 	for _, s := range st {
 		if s["Effect"] == "Deny" {
@@ -230,7 +230,6 @@ func TestRestoreArgumentsAreHeldToWhatTheResourcePolicyMayName(t *testing.T) {
 		"a user":                 func(a *arp.RestoreArgs) { a.RestoreInvokers.BreakglassRoleArns = []string{user} },
 		"one role in both":       func(a *arp.RestoreArgs) { a.RestoreInvokers.BreakglassRoleArns = []string{adminRole} },
 		"the archive is created": func(a *arp.RestoreArgs) { a.Archive.Create = &arp.ArchiveBucketArgs{} },
-		"no archive key":         func(a *arp.RestoreArgs) { a.ArchiveKeyAlias = "" },
 		"a table missing":        func(a *arp.RestoreArgs) { delete(a.State.Tables, arp.ModuleBackup) },
 	} {
 		if _, _, err := buildRestore(t, mut); err == nil {

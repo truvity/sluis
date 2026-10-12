@@ -408,6 +408,15 @@
                   "minLength": 1,
                   "type": "string"
                 },
+                "checksum": {
+                  "default": "sha256",
+                  "description": "The integrity header of every upload: `sha256` (x-amz-checksum-sha256, computed over the whole body and sent precomputed, never as an aws-chunked trailer), `md5` (Content-MD5) or `none`, for a store that refuses SHA-256. AWS refuses a PutObject without one on an Object Lock bucket.",
+                  "enum": [
+                    "sha256",
+                    "md5",
+                    "none"
+                  ]
+                },
                 "credentials": {
                   "additionalProperties": false,
                   "description": "Instead of a static document, sluis mints its own R2 credentials from a Cloudflare preset: the account's minter credential clones the preset's prototype, the credentials are renewed with a third of their lifetime left and minted again once after a 403. Exclusive with `credentialsRef`. Needs `endpoint`, the ssm secrets source, and the `cloudflare` section.",

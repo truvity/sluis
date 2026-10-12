@@ -412,25 +412,23 @@
       "Sid": "SluisArchiveList"
     },
     {
+      "Action": "ssm:*",
+      "Effect": "Deny",
+      "Resource": "arn:aws:ssm:r1:111122223333:parameter/sluis/i1/internal/backup/restore-identity",
+      "Sid": "SluisDenyRestoreIdentity"
+    },
+    {
       "Action": [
-        "kms:Decrypt",
-        "kms:GenerateDataKey"
+        "kms:Decrypt"
       ],
       "Condition": {
-        "ForAllValues:StringEquals": {
-          "kms:EncryptionContextKeys": [
-            "instance",
-            "purpose"
-          ]
-        },
         "StringEquals": {
-          "kms:EncryptionContext:instance": "i1",
-          "kms:EncryptionContext:purpose": "archive"
+          "kms:EncryptionContext:PARAMETER_ARN": "arn:aws:ssm:r1:111122223333:parameter/sluis/i1/internal/backup/restore-identity"
         }
       },
-      "Effect": "Allow",
-      "Resource": "arn:aws:kms:r1:111122223333:key/archive",
-      "Sid": "SluisArchiveKey"
+      "Effect": "Deny",
+      "Resource": "*",
+      "Sid": "SluisDenyRestoreIdentityKey"
     }
   ],
   "Version": "2012-10-17"

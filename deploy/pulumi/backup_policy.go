@@ -10,7 +10,6 @@ import (
 const (
 	sidArchiveObjects = "SluisArchiveObjects"
 	sidArchiveList    = "SluisArchiveList"
-	sidArchiveKey     = "SluisArchiveKey"
 	sidArchiveSSEKey  = "SluisArchiveSSEKey"
 	sidRestoreSelf    = "SluisRestoreSelf"
 	// ArchivePurpose is the `purpose` of the encryption context of the archive
@@ -28,7 +27,10 @@ type ArchiveGrant struct {
 	// Instance names the archive path `<Prefix>backup/<Instance>/` and the
 	// archive key's encryption context.
 	Instance string
-	// KeyArn is the archive key (`backup.key`, purpose `archive`).
+	// KeyArn is the former archive key.
+	//
+	// Deprecated: backups are encrypted with age (format v2), not with a KMS
+	// key. The field is accepted and ignored: no statement names it.
 	KeyArn string
 	// SSEKeyArn is the key of server-side encryption of the bucket's objects
 	// (`backup.target.kmsKey`), if the bucket does not use S3's own.
@@ -49,9 +51,6 @@ func (g ArchiveGrant) validate() error {
 	if g.Instance == "" {
 		errs = append(errs, errors.New("the Instance is required"))
 	}
-	if g.KeyArn == "" {
-		errs = append(errs, errors.New("the KeyArn is required"))
-	}
 	if g.Prefix != "" && (strings.HasPrefix(g.Prefix, "/") || !strings.HasSuffix(g.Prefix, "/")) {
 		errs = append(errs, fmt.Errorf("the Prefix %q ends in a slash and does not start with one", g.Prefix))
 	}
@@ -59,21 +58,6 @@ func (g ArchiveGrant) validate() error {
 		return fmt.Errorf("sluispulumi: ArchiveGrant: %w", err)
 	}
 	return nil
-}
-
-// archiveKeyStatement is the use of the archive key under the runtime's default
-// context {instance, purpose: archive} and no other context key.
-func (g ArchiveGrant) archiveKeyStatement(actions []string) statement {
-	return statement{
-		"Sid": sidArchiveKey, "Effect": "Allow", "Action": actions, "Resource": g.KeyArn,
-		"Condition": map[string]any{
-			"StringEquals": map[string]any{
-				"kms:EncryptionContext:instance": g.Instance,
-				"kms:EncryptionContext:purpose":  ArchivePurpose,
-			},
-			"ForAllValues:StringEquals": map[string]any{"kms:EncryptionContextKeys": contextKeys},
-		},
-	}
 }
 
 // sseKeyStatement is the bucket's own key, through S3 only.
@@ -100,8 +84,9 @@ func (g ArchiveGrant) listStatement(versions bool) statement {
 
 // backupArchiveStatements is the backup role's use of the archive: put, list,
 // get and delete under the installation's path, the versions of those objects
-// when the bucket is versioned, and the archive key to seal and open a data
-// key. Nothing outside the path.
+// when the bucket is versioned, and the bucket's own SSE key. Nothing outside
+// the path, and no key that opens a backup: they are age-encrypted to the
+// installation's recipients.
 func backupArchiveStatements(g ArchiveGrant) []statement {
 	acts := []string{s3GetObject, s3PutObject, s3DeleteObject}
 	if g.Versioned {
@@ -110,14 +95,13 @@ func backupArchiveStatements(g ArchiveGrant) []statement {
 	st := []statement{
 		{"Sid": sidArchiveObjects, "Effect": "Allow", "Action": acts, "Resource": g.BucketArn + "/" + g.ArchivePath() + "*"},
 		g.listStatement(g.Versioned),
-		g.archiveKeyStatement([]string{kmsDecrypt, kmsGenerateDK}),
 	}
 	return append(st, g.sseKeyStatement([]string{kmsDecrypt, kmsGenerateDK})...)
 }
 
 // restoreArchiveStatements is the restore role's read of the archive: get and
-// list under the installation's path and the archive key to open a data key.
-// No put, no delete, no key to seal.
+// list under the installation's path (the age identity that opens a backup is
+// [restoreIdentityAllow]'s). No put, no delete.
 func restoreArchiveStatements(g ArchiveGrant) []statement {
 	acts := []string{s3GetObject}
 	if g.Versioned {
@@ -126,7 +110,6 @@ func restoreArchiveStatements(g ArchiveGrant) []statement {
 	st := []statement{
 		{"Sid": sidArchiveObjects, "Effect": "Allow", "Action": acts, "Resource": g.BucketArn + "/" + g.ArchivePath() + "*"},
 		g.listStatement(g.Versioned),
-		g.archiveKeyStatement([]string{kmsDecrypt}),
 	}
 	return append(st, g.sseKeyStatement([]string{kmsDecrypt})...)
 }
@@ -147,6 +130,7 @@ func BackupRoleStatements(env ModuleEnv, g ArchiveGrant) ([]map[string]any, erro
 		return nil, err
 	}
 	st = append(st, backupArchiveStatements(g)...)
+	st = append(st, restoreIdentityDeny(env)...)
 	if err := uniqueSids(st); err != nil {
 		return nil, err
 	}
@@ -209,6 +193,7 @@ func RestoreRoleStatements(env ModuleEnv, g ArchiveGrant, selfArns []string) ([]
 		return nil, err
 	}
 	st = append(st, restoreArchiveStatements(g)...)
+	st = append(st, restoreIdentityAllow(env)...)
 	st = append(st, statement{
 		"Sid": sidRestoreSelf, "Effect": "Allow", "Action": lambdaInvokeFunction, "Resource": sortedStrings(selfArns),
 	})

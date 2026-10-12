@@ -52,6 +52,13 @@ type Backup struct {
 	// Key is the key that seals each backup's data key (purpose `archive`): an
 	// alias, or {key, context}. It is the same as `keys.archive`; give one.
 	Key *keys.Entry `json:"key,omitempty"`
+	// Recipients are the age recipients (`age1...`) every backup is encrypted
+	// to (format v2). The backup function needs no secret to write one.
+	Recipients []string `json:"recipients,omitempty"`
+	// Identity names the secret (in the backup module's namespace, `restore-identity`)
+	// that holds the age identity (`AGE-SECRET-KEY-1...`) the restore function
+	// decrypts with.
+	Identity string `json:"identity,omitempty"`
 	// Region is the region of the key service, for adapter kms.
 	Region string `json:"region,omitempty"`
 	// Target is the bucket the archive is written to.
@@ -72,6 +79,9 @@ type BackupTarget struct {
 	KMSKey    string `json:"kmsKey,omitempty"`
 	Endpoint  string `json:"endpoint,omitempty"`
 	PathStyle bool   `json:"pathStyle,omitempty"`
+	// Checksum is the integrity header of every upload: sha256 (the default),
+	// md5 (Content-MD5) or none, for a store that refuses SHA-256.
+	Checksum string `json:"checksum,omitempty"`
 }
 
 // BackupRetention is the retention rule of [Backup.Retention].
@@ -134,8 +144,12 @@ func (s *SluisBackup) Validate() error {
 	if keep, maxAge := s.Backup.Retention.Rule(); keep < 1 || keep > BackupMaxKeep || maxAge < 0 {
 		return fmt.Errorf("backup.retention: keep is 1 to %d and maxAge is not negative", BackupMaxKeep)
 	}
-	if _, err := s.ArchiveKeys(); err != nil {
-		return err
+	// Format v2 encrypts with age (`recipients`, `identity`) and names no KMS key;
+	// the key is the v1 way, required until neither is given.
+	if len(s.Backup.Recipients) == 0 && s.Backup.Identity == "" {
+		if _, err := s.ArchiveKeys(); err != nil {
+			return err
+		}
 	}
 	return nil
 }

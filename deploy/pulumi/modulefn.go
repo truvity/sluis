@@ -1,6 +1,8 @@
 package sluispulumi
 
 import (
+	"crypto/sha256"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"sort"
@@ -8,6 +10,7 @@ import (
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/cloudwatch"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/iam"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/lambda"
+	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/s3"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/truvity/sluis/audit/deploy/pulumi/artifact"
@@ -48,6 +51,14 @@ type ModuleFunctionArgs struct {
 	// extension; they are written to `sluis/<name>.yaml`. The one named
 	// [docSluis] is the function's SLUIS_CONFIG. Required.
 	Documents map[string]string
+	// SluisDocumentOutput, when set, is the [docSluis] document as an output, for
+	// a document that holds a value only known at apply (the backup function's
+	// generated recipient). It takes the place of Documents[docSluis]. The layer is
+	// then built when the value is known: as an archive output, or, with
+	// Artifacts, as an object of the artifacts bucket under a key that does not
+	// carry the content's digest (the bucket is versioned: a new content is a new
+	// version, which the layer names).
+	SluisDocumentOutput pulumi.StringInput
 	// DocumentVersion is the apiVersion the layer description names.
 	DocumentVersion string
 
@@ -107,7 +118,7 @@ func newModuleFunction(ctx *pulumi.Context, a *ModuleFunctionArgs, parent pulumi
 	if a.Name == "" || a.FunctionName == "" || a.Policy == nil {
 		return nil, errors.New("sluispulumi: a module function needs Name, FunctionName and Policy")
 	}
-	if _, ok := a.Documents[docSluis]; !ok {
+	if _, ok := a.Documents[docSluis]; !ok && a.SluisDocumentOutput == nil {
 		return nil, fmt.Errorf("sluispulumi: the module function %s has no %q document", a.FunctionName, docSluis)
 	}
 	if err := a.Telemetry.validate(); err != nil {
@@ -140,6 +151,22 @@ func newModuleFunction(ctx *pulumi.Context, a *ModuleFunctionArgs, parent pulumi
 		if code, err = uploadArtifact(ctx, name+"-code", a.Artifacts, pkg, parent); err != nil {
 			return nil, fmt.Errorf("sluis artifacts: %w", err)
 		}
+	}
+	switch {
+	case a.SluisDocumentOutput != nil && a.Artifacts != nil:
+		if err := dynamicLayerObject(ctx, name, a, pkg.Version, files, layerArgs, parent); err != nil {
+			return nil, err
+		}
+	case a.SluisDocumentOutput != nil:
+		layerArgs.Code = a.SluisDocumentOutput.ToStringOutput().ApplyT(func(doc string) pulumi.Archive {
+			all := map[string]any{}
+			for k, v := range assets {
+				all[k] = v
+			}
+			all["sluis/"+docSluis+".yaml"] = pulumi.NewStringAsset(doc)
+			return pulumi.NewAssetArchive(all)
+		}).(pulumi.ArchiveOutput)
+	case a.Artifacts != nil:
 		layerZip, err := artifact.Zip(files)
 		if err != nil {
 			return nil, fmt.Errorf("sluis configuration layer: %w", err)
@@ -155,7 +182,7 @@ func newModuleFunction(ctx *pulumi.Context, a *ModuleFunctionArgs, parent pulumi
 		}
 		layerArgs.S3Bucket, layerArgs.S3Key, layerArgs.S3ObjectVersion = pulumi.String(obj.Bucket), pulumi.String(obj.Key), obj.VersionID
 		layerArgs.SourceCodeHash = pulumi.String(obj.CodeSHA256)
-	} else {
+	default:
 		layerArgs.Code = pulumi.NewAssetArchive(assets)
 	}
 	if out.layer, err = lambda.NewLayerVersion(ctx, name+"-config", layerArgs, parent); err != nil {
@@ -268,4 +295,46 @@ func (b *moduleFunction) aliasArns() pulumi.StringMapOutput {
 		m[k] = a.Arn
 	}
 	return m.ToStringMapOutput()
+}
+
+// dynamicLayerObject uploads the configuration layer of a document known at
+// apply to the artifacts bucket: the zip is built from the document when it is
+// known and sent as base64 content, under a key that names the function and the
+// release and not the digest (which is not known at plan).
+func dynamicLayerObject(ctx *pulumi.Context, name string, a *ModuleFunctionArgs, version string, files map[string][]byte,
+	layerArgs *lambda.LayerVersionArgs, parent pulumi.ResourceOption) error {
+	type built struct{ b64, sum string }
+	zipOut := a.SluisDocumentOutput.ToStringOutput().ApplyT(func(doc string) (built, error) {
+		all := map[string][]byte{}
+		for k, v := range files {
+			all[k] = v
+		}
+		all["sluis/"+docSluis+".yaml"] = []byte(doc)
+		raw, err := artifact.Zip(all)
+		if err != nil {
+			return built{}, fmt.Errorf("sluis configuration layer: %w", err)
+		}
+		h := sha256.Sum256(raw)
+		return built{b64: base64.StdEncoding.EncodeToString(raw), sum: base64.StdEncoding.EncodeToString(h[:])}, nil
+	})
+	b64 := zipOut.ApplyT(func(v any) string { return v.(built).b64 }).(pulumi.StringOutput)
+	sum := zipOut.ApplyT(func(v any) string { return v.(built).sum }).(pulumi.StringOutput)
+	key := a.Artifacts.Key(version, "config", a.FunctionName+"-config.zip")
+	obj, err := s3.NewBucketObjectv2(ctx, name+"-config-code", &s3.BucketObjectv2Args{
+		Bucket: pulumi.String(a.Artifacts.Bucket), Key: pulumi.String(key),
+		ContentBase64: b64, ContentType: pulumi.String("application/zip"),
+	}, parent)
+	if err != nil {
+		return fmt.Errorf("sluis artifacts: %w", err)
+	}
+	bucket := a.Artifacts.Bucket
+	layerArgs.S3Bucket, layerArgs.S3Key = pulumi.String(bucket), pulumi.String(key)
+	layerArgs.S3ObjectVersion = obj.VersionId.ApplyT(func(v string) (string, error) {
+		if v == "" || v == "null" {
+			return "", fmt.Errorf("artifact: s3://%s/%s has no version id: the artifacts bucket %s is not versioned", bucket, key, bucket)
+		}
+		return v, nil
+	}).(pulumi.StringOutput)
+	layerArgs.SourceCodeHash = sum
+	return nil
 }
