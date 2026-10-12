@@ -66,3 +66,23 @@ func FromPlan(cfg Config, t port.Table) (Config, error) {
 	}
 	return cfg, nil
 }
+
+// stubSQS is the client [Verify] builds the publisher over: it is never called.
+type stubSQS struct{ SQSAPI }
+
+// Verify builds what [Open] builds from cfg, as far as it can without reaching
+// anything: the catalogue loads, and the `sqs` publisher is constructed from
+// its settings (a missing queue is refused). A `connect` trail is not opened,
+// because opening it registers the catalogue with the installation. Run it on
+// the Config [FromPlan] returned.
+func Verify(cfg Config) error {
+	if _, _, err := Catalogue(); err != nil {
+		return err
+	}
+	if cfg.SQS != nil {
+		if _, err := newSQSPublisher(stubSQS{}, *cfg.SQS); err != nil {
+			return err
+		}
+	}
+	return nil
+}

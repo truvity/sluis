@@ -125,12 +125,28 @@ func Check(doc *config.SluisGoogle) func(context.Context) (deploycheck.Report, e
 	}
 }
 
+// CheckFile is the {"kind":"check"} answer of the function whose document is in
+// file: the adapters the function builds at start and in a refresh tick (State,
+// the blobs, the secrets, the audit sink), built from the document and refused
+// with the setting that is missing; then the secrets it declares. Nothing it
+// reaches mutates. The document is read again when asked, which is once per
+// deploy.
+func CheckFile(file string) func(context.Context) (deploycheck.Report, error) {
+	return func(ctx context.Context) (deploycheck.Report, error) {
+		cfg, err := googleapp.Load(file)
+		if err != nil {
+			return deploycheck.Report{}, err
+		}
+		doc, err := config.LoadGoogle(file)
+		if err != nil {
+			return deploycheck.Report{}, err
+		}
+		return lambdaapp.CheckAdapters(func(ctx context.Context) error { return cfg.Verify(ctx, nil) }, Check(doc))(ctx)
+	}
+}
+
 func open(ctx context.Context, file string) (*lambdaapp.Function, error) {
 	cfg, err := googleapp.Load(file)
-	if err != nil {
-		return nil, err
-	}
-	doc, err := config.LoadGoogle(file)
 	if err != nil {
 		return nil, err
 	}
@@ -149,7 +165,7 @@ func open(ctx context.Context, file string) (*lambdaapp.Function, error) {
 			}
 			defer func() { _ = app.Close() }()
 			return Refresh(ctx, app, workspace)
-		}, Check(doc)), Server(log, served.service)),
+		}, CheckFile(file)), Server(log, served.service)),
 		Flush: func(ctx context.Context) {
 			served.flush(ctx)
 			flush(ctx)

@@ -113,12 +113,27 @@ func Handler(log *slog.Logger, declared func(target string) bool, open func(cont
 	return lambdaapp.NewHTTP(http.NotFoundHandler(), nil, log).WithControllers(kindsOf, controllers).WithCheck(check)
 }
 
+// CheckFile is the {"kind":"check"} answer of the function whose document is in
+// file: the adapters a pass builds (State, the blobs, the secrets, the trigger,
+// the audit sink), built from the document and refused with the setting that is
+// missing; then the secrets it declares. Nothing it reaches mutates.
+func CheckFile(file string) func(context.Context) (deploycheck.Report, error) {
+	return func(ctx context.Context) (deploycheck.Report, error) {
+		cfg, err := slackapp.Load(file)
+		if err != nil {
+			return deploycheck.Report{}, err
+		}
+		doc, err := config.LoadConfig[config.ControllerSlack](file, nil)
+		if err != nil {
+			return deploycheck.Report{}, err
+		}
+		return lambdaapp.CheckAdapters(func(ctx context.Context) error { return cfg.Verify(ctx, nil) },
+			lambdaapp.CheckOwn(doc.Service.Secrets, doc.Policy, Kinds...))(ctx)
+	}
+}
+
 func open(ctx context.Context, file string) (*lambdaapp.Function, error) {
 	cfg, err := slackapp.Load(file)
-	if err != nil {
-		return nil, err
-	}
-	doc, err := config.LoadConfig[config.ControllerSlack](file, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -136,7 +151,7 @@ func open(ctx context.Context, file string) (*lambdaapp.Function, error) {
 				return nil, err
 			}
 			return app, nil
-		}, lambdaapp.CheckOwn(doc.Service.Secrets, doc.Policy, Kinds...)), Server(log, served.service)),
+		}, CheckFile(file)), Server(log, served.service)),
 		Flush: func(ctx context.Context) {
 			served.flush(ctx)
 			flush(ctx)
