@@ -146,6 +146,37 @@ func FunctionHosts(role string) []Module {
 	return []Module{ModuleOfFunction(role)}
 }
 
+// roleTables are the modules whose table the role's function opens: the ones it
+// hosts and the ones a cross-grant lets it read or write. The role's document
+// lists exactly these in `ports.dynamodb.tables`, because the function's
+// readiness probe describes every table the document lists, and a table the role
+// has no grant on would fail it. The modules come in the order of [Modules].
+func roleTables(role string) []Module {
+	has := map[Module]bool{}
+	hosts := FunctionHosts(role)
+	if role == RoleBackup || role == RoleRestore {
+		hosts = []Module{ModuleBackup}
+	}
+	for _, m := range hosts {
+		has[m] = true
+	}
+	for _, g := range CrossGrants {
+		if g.Role != role || g.Verb == CrossInvoke || g.Verb == CrossReadBlobs {
+			continue
+		}
+		for _, m := range g.Modules {
+			has[m] = true
+		}
+	}
+	var out []Module
+	for _, m := range Modules() {
+		if has[m] {
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
 // CrossVerb is what one role may do to a module it does not host.
 type CrossVerb string
 
@@ -153,7 +184,7 @@ const (
 	// CrossReadTable reads the module's table.
 	CrossReadTable CrossVerb = "read-table"
 	// CrossReadSnapshot reads the module's table by key (GetItem, Query) and
-	// nothing else of it: no Scan, no write, no parameter and no parameter key.
+	// describes it, which the readiness probe does, and nothing else of it: no Scan, no write, no parameter and no parameter key.
 	// With [CrossReadBlobs] it is the issuer's whole access to the google
 	// module, the snapshots it serves (v1.76 D-v176-6 a).
 	CrossReadSnapshot CrossVerb = "read-snapshot"

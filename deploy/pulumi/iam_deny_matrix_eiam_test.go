@@ -144,7 +144,9 @@ func eiamRows(t *testing.T) (rows []mxRow, identity map[string]iameval.Policy, k
 		role := string(self)
 		for _, f := range mxFunctions {
 			for _, q := range []string{"", ":$LATEST", ":live", ":live-issuer", ":live-console", ":1"} {
-				add(role, "eiam-converse-invoke", "invoke "+f+q, "lambda:InvokeFunction", mxFn(f)+q, false, nil)
+				// The controllers' run-now starts their own function on the console alias.
+				own := f == role && q == ":live-console" && (self == ModuleGitHub || self == ModuleSlack)
+				add(role, "eiam-converse-invoke", "invoke "+f+q, "lambda:InvokeFunction", mxFn(f)+q, own, nil)
 			}
 		}
 		for _, peer := range Modules() {

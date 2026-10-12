@@ -100,7 +100,8 @@
     {
       "Action": [
         "dynamodb:GetItem",
-        "dynamodb:Query"
+        "dynamodb:Query",
+        "dynamodb:DescribeTable"
       ],
       "Effect": "Allow",
       "Resource": "arn:aws:dynamodb:r1:111122223333:table/sluis-i1-google",

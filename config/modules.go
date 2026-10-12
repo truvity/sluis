@@ -291,8 +291,14 @@ func lambdaPlatform() *internal.Platform {
 // adapters are what a module that notifies nobody takes from the installation:
 // its audit sink. The trigger is the in-process one: the preset's `invoke`
 // starts a controller function, and a module's function is started by events.
-func (b moduleBuilder) adapters() map[string]internal.AdapterChoice {
+func (b moduleBuilder) adapters(module string) map[string]internal.AdapterChoice {
 	out := map[string]internal.AdapterChoice{"trigger": {Adapter: "memory"}}
+	// A controller's own "run a pass now" (the console's, a roster change) has
+	// nobody to deliver to in the process on Lambda: it invokes the module's own
+	// function, as the issuer's does for the console's.
+	if t, ok := b.svc.Adapters["trigger"]; ok && t.Adapter == "invoke" && (module == ModuleGitHub || module == ModuleSlack) {
+		out["trigger"] = internal.AdapterChoice{Adapter: "invoke", Settings: map[string]any{module: FunctionNameOf(b.in, module)}}
+	}
 	if a, ok := b.svc.Adapters["audit"]; ok {
 		a.Settings = maps.Clone(a.Settings)
 		out["audit"] = a
@@ -311,14 +317,14 @@ func (b moduleBuilder) consoleProof(c *internal.RosterConsole) *internal.RosterC
 
 // controllerOf makes the Roster a controller's section and the process's shared
 // keys say, with the keys of a module function.
-func (b moduleBuilder) rosterOf(r *internal.Roster, withConsole bool) error {
+func (b moduleBuilder) rosterOf(module string, r *internal.Roster, withConsole bool) error {
 	var err error
 	if r.Secrets, err = b.secrets(); err != nil {
 		return err
 	}
 	r.GitHub, r.Slack, r.Google = nil, nil, nil
 	r.Platform = lambdaPlatform()
-	r.Adapters = b.adapters()
+	r.Adapters = b.adapters(module)
 	if r.Audit != nil && r.Audit.Writer == "" && r.Audit.TokenFile == "" {
 		r.Audit = nil
 	}
@@ -343,7 +349,7 @@ func (b moduleBuilder) github() (any, error) {
 	}
 	t.Controllers = &internal.Controllers{GitHub: &g}
 	doc := t.GitHubController()
-	if err := b.rosterOf(&doc.Roster, true); err != nil {
+	if err := b.rosterOf(ModuleGitHub, &doc.Roster, true); err != nil {
 		return nil, err
 	}
 	doc.Ports = b.ports(ModuleGitHub)
@@ -358,7 +364,7 @@ func (b moduleBuilder) slack() (any, error) {
 	}
 	t.Controllers = &internal.Controllers{Slack: &g}
 	doc := t.SlackController()
-	if err := b.rosterOf(&doc.Roster, true); err != nil {
+	if err := b.rosterOf(ModuleSlack, &doc.Roster, true); err != nil {
 		return nil, err
 	}
 	doc.Ports = b.ports(ModuleSlack)
@@ -383,7 +389,7 @@ func (b moduleBuilder) google() (any, error) {
 	doc.Ports = b.ports(ModuleGoogle)
 	// The function builds the audit adapter at its start and in a refresh tick,
 	// as every module does: the queue the issuer's document names is its too.
-	doc.Adapters = b.adapters()
+	doc.Adapters = b.adapters(ModuleGoogle)
 	if d := b.in.Directory; d != nil {
 		doc.Google.Workspaces = slices.Clone(d.Workspaces)
 	}
@@ -415,7 +421,7 @@ func (b moduleBuilder) cloudflare() (any, error) {
 	c.Release, c.Instance = b.svc.Release, b.svc.Instance
 	c.Policy = copyOf(b.svc.Policy)
 	c.Log = copyOf(b.svc.Log)
-	c.Platform, c.Preset, c.Adapters = lambdaPlatform(), b.svc.Preset, b.adapters()
+	c.Platform, c.Preset, c.Adapters = lambdaPlatform(), b.svc.Preset, b.adapters(ModuleCloudflare)
 	c.Ports = b.ports(ModuleCloudflare)
 	var err error
 	if c.Secrets, err = b.secrets(); err != nil {

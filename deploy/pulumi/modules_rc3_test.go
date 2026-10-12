@@ -67,8 +67,13 @@ func TestEveryModuleDocumentCarriesTheAuditQueue(t *testing.T) {
 		if a := doc.Adapters.Audit; a.Adapter != "sqs" || a.Settings.QueueURL == "" {
 			t.Errorf("%s: adapters.audit is %+v, want sqs with the queue", m, a)
 		}
-		if tr := doc.Adapters.Trigger.Adapter; tr != "memory" {
-			t.Errorf("%s: adapters.trigger is %q, want memory", m, tr)
+		// A controller's run-now starts its own function; the rest notify nobody.
+		want := "memory"
+		if m == "github" || m == "slack" {
+			want = "invoke"
+		}
+		if tr := doc.Adapters.Trigger.Adapter; tr != want {
+			t.Errorf("%s: adapters.trigger is %q, want %s", m, tr, want)
 		}
 	}
 }
