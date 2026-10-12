@@ -4,6 +4,8 @@
 
 - **`cloudflare.tick`: how often the rotation looks at the presets.** A credential rotates on the schedule's tick, up to one tick after its `rotation`. The Pulumi library now writes the tick of `CloudflareRotation` (its `Interval`, a plain `rate(...)`, or the 15m default) into the service document when the installation leaves `cloudflare.tick` out; a cron `Rate` leaves it for the installation to state, and an installation's own value is kept. The console's Cloudflare list carries it as `CloudflarePreset.rotation_tick_seconds`, a minute when unset (the Kubernetes loop's). The Cloudflare guide says to make `rotation` a multiple of the tick to rotate when intended.
 
+- **`sluisctl recovery password`: the recovery password of a Lambda installation, decoded.** On layout v5 the password is at `/sluis/<instance>/internal/oidc/recovery-password`, stored by the secret store's byte codec as `{"value":"<base64>"}`, so an operator in an outage had to know to decode two layers by hand. The command reads the parameter with the caller's own AWS credentials (`--instance`, `--region`, `--profile`), decodes it and prints the password and nothing else, with a newline, on standard output. It refuses to print to a terminal unless `--show` is given, before it reads anything, so a pipe (`| pbcopy`) works and a casual display does not. An installation still on layout v4 (the text itself at `/sluis/<instance>/internal/config/recovery/password`) is read when the v5 parameter does not exist. Tests hold the decode of both forms and its failures, the fallback, a refusal that is not mistaken for a missing parameter, and the terminal refusal. [Recover on Lambda](docs/guides/sluis/operate/recover-on-lambda.md) gives the path, the encoding and the command.
+
 ### Changed
 
 - **A holder's "through ..." reason no longer links a matcher to a provider group.** The group page's "People in it now" linked every reason to the provider group page, including the words of a matcher such as "signed in at tsarev.id", whose page asked the hub for a group of that name and got `invalid_argument: hub: address has no domain`. A domain now leads to the People list filtered by it (`#/people?domain=...`), a "signed in as" address to that person, a workload matcher to nothing, and only a provider group to its page.
@@ -11,6 +13,10 @@
 - **The console no longer calls a healthy Cloudflare credential "past its rotation".** It showed a warning ("Past its rotation (20m); the next tick replaces it.") and a "pending, past rotation" badge whenever the stored credential was older than `rotation`, but rotation only happens on the tick, so with a 20m `rotation` and a 15m tick every credential was "past rotation" for up to a tick of every cycle while perfectly healthy. A credential past `rotation` is now **due**, in a neutral style ("Due: past its rotation (20m); the rotation runs every 15m, and the next tick replaces it."), and **overdue**, a warning, only past `rotation + tick` and a minute of slack; past twice the rotation it is still "not rotating" and the alert still fires. Tests hold each boundary, a tick longer than the rotation, and an older server that sends no tick.
 
 - **`TestATimeoutIsRetriedOnce` no longer races a sleep against a timeout.** Its slow first attempt slept 300ms against a 100ms client timeout, and the retry had the same 100ms, which a loaded runner missed ("Client.Timeout exceeded while awaiting headers"). The first attempt is now never answered until the test ends (so it times out whatever the load) and the retry is answered at once under a 2s budget; the test also holds that exactly two calls were made and that the first took its whole budget to time out.
+
+### Documentation
+
+- [Recover on Lambda](docs/guides/sluis/operate/recover-on-lambda.md) named the layout v4 path for the password; it now names the layout v5 parameter and its encoding.
 
 ## v1.76.0-rc.6
 
