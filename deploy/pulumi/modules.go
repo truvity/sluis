@@ -2,6 +2,7 @@ package sluispulumi
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -211,6 +212,64 @@ var CrossGrants = []CrossGrant{
 	{Role: RoleIssuer, Verb: CrossReadBlobs, Modules: []Module{ModuleGoogle}},
 	{Role: RoleBackup, Verb: CrossReadAll, Modules: Modules()},
 	{Role: RoleRestore, Verb: CrossWriteAll, Modules: Modules()},
+}
+
+// ConsoleCallers are the roles whose function calls the issuer's console over
+// HTTP and proves itself with its role's outbound web identity token
+// (`sts:GetWebIdentityToken`, internal/consoleauth): the GitHub and Slack
+// controllers, which ask the console who holds a group, or which roster to
+// apply, on every pass. Their documents carry `console.auth.aws`
+// (config.moduleBuilder.rosterOf). The role of each holds the token grant, on the
+// console's audience, and no other module role does.
+var ConsoleCallers = []string{RoleGitHub, RoleSlack}
+
+// ModuleCall is one call from a function to another, as the policies and the
+// aliases are derived from it.
+type ModuleCall struct {
+	// Caller and Callee are roles.
+	Caller, Callee string
+	// Alias is the alias of the callee the call goes through, `live-<class>`;
+	// empty for a call that is not a Lambda invocation (the controllers' HTTP
+	// calls to the console).
+	Alias string
+	// WebIdentity is whether the caller authenticates to the callee with its
+	// role's web identity token, so that its role needs sts:GetWebIdentityToken.
+	WebIdentity bool
+}
+
+// ModuleCalls is the routing table, derived from [CrossGrants] (every Lambda
+// invocation between functions) and [ConsoleCallers] (every call to the
+// console). The callee's aliases, the callers' invoke grants and the callers'
+// token grants are rendered from it and nothing else.
+func ModuleCalls() []ModuleCall {
+	var out []ModuleCall
+	for _, g := range CrossGrants {
+		if g.Verb != CrossInvoke {
+			continue
+		}
+		for _, f := range g.Functions {
+			out = append(out, ModuleCall{Caller: g.Role, Callee: f, Alias: CallerAlias(g.Class)})
+		}
+	}
+	for _, c := range ConsoleCallers {
+		out = append(out, ModuleCall{Caller: c, Callee: RoleIssuer, WebIdentity: true})
+	}
+	return out
+}
+
+// CallerClasses are the caller classes that call the function of the role, in
+// the order of [CrossGrants]: the function has the alias `live-<class>` of each.
+func CallerClasses(role string) []string {
+	var out []string
+	seen := map[string]bool{}
+	for _, g := range CrossGrants {
+		if g.Verb != CrossInvoke || seen[g.Class] || !slices.Contains(g.Functions, role) {
+			continue
+		}
+		seen[g.Class] = true
+		out = append(out, g.Class)
+	}
+	return out
 }
 
 func capitalize(m Module) string {

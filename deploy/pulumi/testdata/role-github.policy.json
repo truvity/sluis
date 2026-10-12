@@ -98,6 +98,12 @@
       "Sid": "SluisGithubBlobList"
     },
     {
+      "Action": "sts:GetWebIdentityToken",
+      "Effect": "Allow",
+      "Resource": "*",
+      "Sid": "SluisWebIdentity"
+    },
+    {
       "Action": [
         "dynamodb:PutItem",
         "dynamodb:UpdateItem",

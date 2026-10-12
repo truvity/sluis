@@ -117,6 +117,27 @@ func eiamRows(t *testing.T) (rows []mxRow, identity map[string]iameval.Policy, k
 		}
 	}
 
+	// The routing table (ModuleCalls), row for row: a caller invokes the alias
+	// the table names, on every callee that alias is named for and no other, and
+	// holds sts:GetWebIdentityToken exactly when a row says it proves itself
+	// with the token.
+	for _, c := range ModuleCalls() {
+		if c.Alias == "" {
+			continue
+		}
+		add(c.Caller, "eiam-table-invoke", c.Caller+"->"+c.Callee+" "+c.Alias, "lambda:InvokeFunction", mxFn(c.Callee)+":"+c.Alias, true, nil)
+	}
+	for _, r := range append([]string{RoleIssuer}, ModuleFunctions()...) {
+		if r == RoleIssuer {
+			continue
+		}
+		var web bool
+		for _, c := range ModuleCalls() {
+			web = web || (c.Caller == r && c.WebIdentity)
+		}
+		add(r, "eiam-table-token", r+" GetWebIdentityToken", "sts:GetWebIdentityToken", "*", web, nil)
+	}
+
 	// The converse: each provider's role.
 	oidcTable := mxTable(ModuleOIDC)
 	for _, self := range eiamProviders {

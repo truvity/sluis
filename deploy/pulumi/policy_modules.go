@@ -1,6 +1,9 @@
 package sluispulumi
 
-import "fmt"
+import (
+	"fmt"
+	"slices"
+)
 
 // ModuleEnv is what a role's statements are rendered from.
 type ModuleEnv struct {
@@ -31,6 +34,10 @@ type ModuleEnv struct {
 	MinterRefs []string
 	// Roles is every role of the installation.
 	Roles []Role
+	// WebIdentityAudience is the audience of the web identity token the roles of
+	// [ConsoleCallers] may ask STS for: the console's. Empty allows any audience,
+	// as on the issuer's role.
+	WebIdentityAudience string
 }
 
 var (
@@ -187,6 +194,10 @@ func ModuleRoleStatements(env ModuleEnv, role Role) ([]map[string]any, error) {
 					env.Modules.InternalPrefix(m), env.Modules.ExternalPrefix(m))...)
 			}
 		}
+	}
+	// A role that calls the console proves itself with its web identity token.
+	if slices.Contains(ConsoleCallers, role.Name) {
+		st = append(st, webIdentityStatement(env.WebIdentityAudience, nil))
 	}
 	// The maintenance flag is written by the restore role alone: every other
 	// role is denied the writes of that partition on every table it holds, its
