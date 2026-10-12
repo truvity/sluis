@@ -1,5 +1,9 @@
 ## Unreleased
 
+### Changed
+
+- **The Google module function now carries the audit adapter.** Its document had no `adapters` section, so the preset's `sqs` audit adapter had no queue and the function refused at start and in a directory-refresh tick ("audit adapter sqs needs settings.queueURL"): the directory could not be vouched for and sign-in was refused. The Google document now names the same `adapters.audit` (and the in-process trigger) as the other modules. A test resolves each module document's adapter table, as the function does at start, and holds every concern to its settings.
+
 ## v1.76.0-rc.3
 
 ### Changed
