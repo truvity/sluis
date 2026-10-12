@@ -7,6 +7,7 @@ toolchain go1.27.2
 require (
 	connectrpc.com/connect v1.21.0
 	connectrpc.com/otelconnect v0.12.0
+	filippo.io/age v1.3.2
 	github.com/alicebob/miniredis/v2 v2.39.0
 	github.com/aws/aws-lambda-go v1.55.1
 	github.com/aws/aws-sdk-go-v2 v1.47.2
@@ -54,6 +55,7 @@ require (
 	cloud.google.com/go/auth/oauth2adapt v0.3.0 // indirect
 	cloud.google.com/go/compute/metadata v0.10.0 // indirect
 	connectrpc.com/connect/v2 v2.0.0 // indirect
+	filippo.io/hpke v0.4.0 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.21 // indirect
 	github.com/aws/aws-sdk-go-v2/credentials v1.20.8 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.20.2 // indirect

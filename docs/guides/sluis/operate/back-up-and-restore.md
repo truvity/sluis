@@ -46,7 +46,19 @@ To verify, compare a remote key's keys with `kubectl get secret -o json | jq '.d
 
 ## On a State adapter
 
-With `ports.adapter` other than `legacy` the credentials are in the Secrets port, not in these Secrets. Backup and restore cover the whole installation ([ADR 0041](../../../decisions/0041-the-secret-contract.md)); the `source: bundle` exports are retired ([exports](../../../reference/sluis/exports.md)).
+With `ports.adapter` other than `legacy` the credentials are in the Secrets port. Backup and restore cover the installation ([ADR 0041](../../../decisions/0041-the-secret-contract.md)); the `source: bundle` exports are retired ([exports](../../../reference/sluis/exports.md)).
+
+## On layout v5: the backup module
+
+| Step | Do |
+|---|---|
+| Format | One age-encrypted `tar.gz` per backup ([backup](../../../reference/sluis/backup.md)) |
+| Keys | `age-keygen -o key.txt` twice; keep both files offline and apart |
+| Encrypt | Set `backup.recipients` to both `age1...` public keys |
+| Restore identity | Store one key file as the secret `internal/backup/restore-identity` |
+| Check | `sluis backup verify <id> --identity key.txt` |
+| Restore | `sluis restore preview <id>`, then `sluis restore start <id> --confirm <instance>` |
+| Without sluis | `age -d -i key.txt <id>.tar.gz.age \| tar xz` |
 
 ## 3. Restore the five Secrets
 

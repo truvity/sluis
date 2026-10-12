@@ -16,8 +16,6 @@ import (
 	"github.com/truvity/sluis/storage/logattr"
 )
 
-const manifestFile = "manifest.json"
-
 // idLayout is the timestamp an id begins with.
 const idLayout = "20060102T150405Z"
 
@@ -32,23 +30,29 @@ func idTime(id string) (time.Time, bool) {
 	return t, err == nil
 }
 
-func (j *Job) root() string { return "backup/" + j.c.Installation + "/" }
+func (j *Job) root() string { return backup.Root(j.c.Installation) }
 
-// ids are the backup ids that have any object in the archive, and which of
-// them have a manifest.
-func (j *Job) ids(ctx context.Context) (all []string, withManifest map[string]bool, err error) {
+// ids are the backup ids that have an object or a sidecar in the archive, and
+// which of them have a sidecar. Anything else under the root is not this
+// format's and is left alone.
+func (j *Job) ids(ctx context.Context) (all []string, withSidecar map[string]bool, err error) {
 	names, err := j.c.Archive.List(ctx, j.root())
 	if err != nil {
 		return nil, nil, fmt.Errorf("list the archive: %w", err)
 	}
 	seen := map[string]bool{}
-	withManifest = map[string]bool{}
+	withSidecar = map[string]bool{}
 	for _, n := range names {
 		rest, ok := strings.CutPrefix(n, j.root())
-		if !ok {
+		if !ok || strings.Contains(rest, "/") {
 			continue
 		}
-		id, file, _ := strings.Cut(rest, "/")
+		id, sidecar := strings.CutSuffix(rest, backup.SidecarSuffix)
+		if !sidecar {
+			if id, ok = strings.CutSuffix(rest, backup.ObjectSuffix); !ok {
+				continue
+			}
+		}
 		if !backup.ValidName(id) {
 			continue
 		}
@@ -56,15 +60,15 @@ func (j *Job) ids(ctx context.Context) (all []string, withManifest map[string]bo
 			seen[id] = true
 			all = append(all, id)
 		}
-		if file == manifestFile {
-			withManifest[id] = true
+		if sidecar {
+			withSidecar[id] = true
 		}
 	}
 	sort.Strings(all)
-	return all, withManifest, nil
+	return all, withSidecar, nil
 }
 
-// List is the backups in the archive, newest first: the ones with a manifest.
+// List is the backups in the archive, newest first: the ones with a sidecar.
 func (j *Job) List(ctx context.Context) ([]Info, error) {
 	all, with, err := j.ids(ctx)
 	if err != nil {
@@ -76,7 +80,7 @@ func (j *Job) List(ctx context.Context) ([]Info, error) {
 			continue
 		}
 		in := Info{ID: id}
-		m, err := backup.Peek(ctx, j.c.Archive, j.c.Installation, id)
+		sc, err := backup.ReadSidecar(ctx, j.c.Archive, j.c.Installation, id)
 		if err != nil {
 			in.Error = oneLine(err)
 			if t, ok := idTime(id); ok {
@@ -85,12 +89,9 @@ func (j *Job) List(ctx context.Context) ([]Info, error) {
 			out = append(out, in)
 			continue
 		}
-		in.Created, _ = time.Parse(time.RFC3339, m.Created)
-		in.Creator, in.Format, in.Layout, in.Modules = m.Creator, m.Format, string(m.Layout), len(m.Modules)
-		in.Records = m.Records(backup.State) + m.Records(backup.Secrets) + m.Records(backup.Blobs)
-		for _, e := range m.Modules {
-			in.Chunks += len(e.State.Chunks) + len(e.Secrets.Chunks) + len(e.Blobs.Chunks)
-		}
+		in.Created, _ = time.Parse(time.RFC3339, sc.Created)
+		in.Creator, in.Format, in.Layout, in.Modules = sc.Creator, sc.Format, string(sc.Layout), len(sc.Modules)
+		in.Records, in.Chunks, in.Size = sc.Records(), 1, sc.Object.Size
 		out = append(out, in)
 	}
 	sort.SliceStable(out, func(a, b int) bool {
@@ -148,7 +149,8 @@ func (j *Job) prune(ctx context.Context, actor audit.Actor, dryRun bool) (Pass, 
 		}
 	}
 	now := j.now()
-	for i, in := range infos {
+	for i := range infos {
+		in := &infos[i]
 		if i < j.c.Keep || now.Sub(in.Created) < j.c.MaxAge {
 			continue
 		}
@@ -201,27 +203,15 @@ func (j *Job) prune(ctx context.Context, actor audit.Actor, dryRun bool) (Pass, 
 	return pass, nil
 }
 
-// delete removes one backup's objects, the manifest first: a backup missing
-// its manifest is not a backup, so a delete that stops half-way leaves nothing
-// that restores wrongly.
+// delete removes one backup, the sidecar first: a backup missing its sidecar
+// is not a backup, so a delete that stops half-way leaves nothing that
+// restores wrongly. A refused delete (Object Lock) is reported, not retried.
 func (j *Job) delete(ctx context.Context, id string) error {
-	names, err := j.c.Archive.List(ctx, backup.Prefix(j.c.Installation, id))
-	if err != nil {
+	if err := j.c.Archive.Delete(ctx, backup.SidecarName(j.c.Installation, id)); err != nil {
+		// The sidecar still stands: the object is not an orphan.
 		return err
 	}
-	manifest := backup.ManifestName(j.c.Installation, id)
-	sort.SliceStable(names, func(a, b int) bool { return names[a] == manifest && names[b] != manifest })
-	var errs []error
-	for _, n := range names {
-		if err := j.c.Archive.Delete(ctx, n); err != nil {
-			errs = append(errs, err)
-			if n == manifest {
-				// The manifest still stands: the rest are not orphans.
-				return err
-			}
-		}
-	}
-	return errors.Join(errs...)
+	return j.c.Archive.Delete(ctx, backup.ObjectName(j.c.Installation, id))
 }
 
 // trimRuns deletes the records of the backups just removed and the oldest

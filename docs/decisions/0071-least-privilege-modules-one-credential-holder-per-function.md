@@ -1,6 +1,6 @@
 # 0071 — Least-privilege modules: one function per credential holder, the signer inside the issuer and a binary per module
 
-**Status:** Accepted (2026-10-09); amended 2026-10-09 by [0072](0072-storage-layout-v5-module-first.md) (points 1, 3, 5, 8, 9 and 11: the signer and the console stay inside `sluis-issuer`; six binaries and seven functions; restore is a second deployment of the backup binary). Supersedes [0037](0037-one-process-everywhere.md) (one process everywhere); amends
+**Status:** Accepted (2026-10-09); amended 2026-10-09 by [0072](0072-storage-layout-v5-module-first.md) (points 1, 3, 5, 8, 9 and 11: the signer and the console stay inside `sluis-issuer`; six binaries and seven functions; restore is a second deployment of the backup binary). Amended 2026-10-12 by [0073](0073-backup-format-2-age-encrypted-tar.md) (point 9: a backup is encrypted with age to public recipients, not under a KMS or OpenBao key). Supersedes [0037](0037-one-process-everywhere.md) (one process everywhere); amends
 [0036](0036-configuration-is-immutable-per-instance.md) (immutability moves from the instance to the execution
 environment, and AWS configuration is delivered through AppConfig); builds on [0026](0026-two-platforms-permanently-kubernetes-and-aws-lambda.md),
 [0030](0030-workload-identity-on-both-platforms.md), [0041](0041-the-secret-contract.md) and

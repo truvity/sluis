@@ -39,7 +39,9 @@ func (f *fake) List(context.Context) ([]job.Info, error) {
 func (f *fake) Run(_ context.Context, req job.Request) (job.Result, error) {
 	f.ran = &req
 	v := job.View{ID: "20261010T020000Z-a1b2c3", State: job.StatePaused, Trigger: job.TriggerRun, Started: at, Updated: at, Units: 40, Done: 3}
-	return job.Result{Outcome: job.OutcomePaused, ID: v.ID, Run: &v}, nil
+	// The answer a released envelope was recorded with: a paused run of
+	// format 1, which no run of this release reports any more.
+	return job.Result{Outcome: "paused", ID: v.ID, Run: &v}, nil
 }
 
 func server(f *fake) *modcall.Server {

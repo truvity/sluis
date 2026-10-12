@@ -1,15 +1,16 @@
-// Package restore writes a backup ([backup.Reader]) into an installation of
-// layout v5, and shows beforehand what that would do.
+// Package restore writes a backup ([backup.Reader], verified whole when it was
+// opened) into an installation of layout v5, and shows beforehand what that
+// would do.
 //
 // # Preview and Apply
 //
-// [Preview] verifies the archive, reads the destination and reports, per
+// [Preview] reads the destination and reports, per
 // module and section, what would be created, overwritten or left alone. It
 // writes nothing. The [Report] carries names and versions only; a value, a
 // secret or a blob body is read to be compared and never leaves the package.
 //
-// [Apply] verifies the whole archive before the first write (a tampered or
-// truncated archive is refused with nothing written), plans, refuses a
+// [Apply] runs on an archive [backup.Open] verified before the first write (a
+// tampered or truncated archive is refused with nothing written), plans, refuses a
 // destination that holds a different value unless [Options.Overwrite] is set,
 // writes, and reads everything back: any record that differs makes the call
 // fail with [ErrVerify]. The destination is not wiped; records the archive
@@ -24,7 +25,7 @@
 //     does not hold are removed.
 //   - Secrets as documents, created with an empty revision, or written over
 //     the current revision on overwrite.
-//   - Blobs, reassembled from their parts and checked against their hash.
+//   - Blobs, each a file of the archive, checked against its hash.
 //
 // Leases, notifications, gates, caches, dedupe records and the maintenance
 // record are never restored: the modules regenerate them, and the maintenance

@@ -1,50 +1,63 @@
-// Package backup is the archive format of a sluis backup and its encryption.
-// It holds no exporter and no restore logic: those write and read records
-// through [Writer] and [Reader].
+// Package backup is the archive format of a sluis backup (format 2). It holds
+// no exporter and no restore logic: those write and read records through
+// [Writer] and [Reader].
 //
-// # Layout
+// # Objects
 //
-// A backup is a set of objects in an S3-compatible bucket, written through a
-// [port.Blob], under
+// A backup is two objects in an S3-compatible bucket, written through a
+// [port.Blob]:
 //
-//	backup/<installation>/<id>/
-//	    manifest.json
-//	    state/<module>/<n>
-//	    secrets/<module>/<n>
-//	    blobs/<module>/<n>
+//	backup/<instance>/<id>.tar.gz.age   the backup
+//	backup/<instance>/<id>.json         the sidecar, written last
 //
-// The three sections hold the module's State records, its secrets and its
-// blobs. Each is a run of chunks numbered from 0. A chunk is a sealed run of
-// records; the records are opaque bytes to this package (the exporters
-// define them). The manifest is written last, so a backup without a manifest
-// is not a backup.
+// The id is the UTC start and a random suffix, 20261013T020000Z-ab12cd. The
+// sidecar ([Sidecar]) is plain JSON: the object's key, size and SHA-256, the
+// recipients it was encrypted to and, per module, the counts. It names no
+// secret and holds no value. It is written only after the object, so it is
+// the completion marker: an object without a sidecar is not a backup.
 //
-// # Sealing
+// # The object
 //
-// One data key is generated per backup with the configured key
-// (keys.Archive; a KMS alias or an OpenBao transit key) under its
-// configured encryption context, and stored wrapped in the manifest. Two
-// keys are derived from it with HKDF-SHA-256: one per chunk, bound to the
-// chunk's object name, and one for the manifest's MAC. A chunk is sealed
-// with AES-256-GCM; its additional data names the installation, the backup
-// id, the section, the module and the chunk number, so a chunk moved to
-// another place, another backup or another position does not open. The
-// manifest lists every chunk's SHA-256 (of the stored bytes) and size and is
-// authenticated by an HMAC-SHA-256, so a changed, dropped, added or
-// reordered chunk is found before any record is used.
+// The object is a POSIX tar (PAX), compressed with gzip and encrypted with age
+// (https://age-encryption.org/v1) to the configured X25519 recipients, binary,
+// not armored. It is read without sluis:
 //
-// Nothing in the manifest is secret: it holds the module names, counts,
-// sizes and hashes, the wrapped data key and the creator. Every record,
-// whether a State item, a secret value or a blob, is inside a sealed chunk;
-// there is no plaintext copy of any of them in the archive. Without the right
-// to decrypt with the key the data key is not recovered and [Open] fails
-// closed.
+//	age -d -i key.txt <id>.tar.gz.age | tar xz
+//
+// The tar's members, in this order:
+//
+//	manifest.json
+//	<module>/state.jsonl
+//	<module>/secrets.jsonl
+//	<module>/blobs/<escaped object key>   (sorted by member name)
+//
+// for each module in [port.Modules] order. A JSONL line is one export record
+// (internal/backup/export); a blob is the object's bytes. Every member has mode
+// 0600, the backup's start as its modification time and no owner names.
+//
+// manifest.json ([Manifest]) is first and lists the SHA-256 of every other
+// member and the counts of each module, so a reader verifies each member as
+// it reads it and refuses a missing, extra, reordered or changed one.
+//
+// # Escaping a blob key
+//
+// An object key becomes a relative path that cannot leave its directory and
+// reads back to the same key ([EscapeKey], [UnescapeKey]): the key is split at
+// '/', and in each segment every byte that is not a letter, a digit, '-', '_'
+// or '.' is written %XX (upper-case hex), as is a '.' that begins a segment
+// (so no segment is '.', '..' or hidden); an empty segment is written '%'.
+//
+// # Encryption
+//
+// The writer needs only the recipients' public keys: it holds no key that
+// decrypts, and no KMS. The restore reads the age identity (AGE-SECRET-KEY-1...)
+// from its own secret. age authenticates the whole stream, so a changed byte
+// fails the decryption; the sidecar's SHA-256 is checked before that, and the
+// manifest's hashes after it.
 //
 // # Versions
 //
-// The manifest carries a format version. A reader opens the current version
-// and the one before it ([Readable]); anything else is refused with
-// [ErrFormat]. The golden archives under testdata keep that promise: a
-// released format's archive stays in the tree and is opened by every later
-// release.
+// The sidecar and the manifest carry the format version; this release reads
+// format 2 only ([Version]). Format 1 (chunks sealed under a KMS data key) is
+// gone: no format 1 backup was ever kept.
 package backup

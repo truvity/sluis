@@ -426,19 +426,20 @@ func invokedAlias(ctx context.Context) string {
 }
 
 // KindBackup is the event an EventBridge Scheduler schedule sends the backup
-// function: {"kind":"backup"} writes a backup, or continues one that paused for
-// want of time; {"kind":"backup","resume":true} only continues a paused one and
-// costs one read of the State when there is none, which is the schedule to run
-// every few minutes beside the daily one so a large installation finishes.
+// function: {"kind":"backup"} writes a backup in one invocation (format 2).
+// {"kind":"backup","resume":true} was the schedule that continued a paused run
+// of format 1; it still answers, idle, so a schedule left behind does not
+// fail.
 const KindBackup = "backup"
 
 // BackupResult is what a backup invocation returns.
 type BackupResult struct {
 	Kind string `json:"kind"`
-	// Outcome is completed, paused, idle, contended or maintenance.
+	// Outcome is completed, idle, contended or maintenance (paused was a run
+	// of format 1).
 	Outcome string `json:"outcome"`
 	ID      string `json:"id,omitempty"`
-	// Done and Units are the export's progress of a paused run.
+	// Done and Units were the progress of a paused run of format 1; always 0.
 	Done  int `json:"done,omitempty"`
 	Units int `json:"units,omitempty"`
 }

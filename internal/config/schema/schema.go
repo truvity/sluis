@@ -674,16 +674,19 @@ func sluisBackupSchema() m {
 	for _, k := range []string{"instance", "keys", "log", "ports", "platform", "preset", "adapters", "secrets", "audit"} {
 		props[k] = all[k]
 	}
-	props["backup"] = obj("What the backup module writes and where. The module reads every module's table, secrets and blobs through the `ports` and `secrets` above (its role has read access to them), and writes sealed chunks to `target`.", m{
+	props["backup"] = obj("What the backup module writes and where. The module reads every module's table, secrets and blobs through the `ports` and `secrets` above (its role has read access to them), and writes one age-encrypted tar.gz per backup, then its sidecar, to `target` (format 2, docs/reference/sluis/backup.md).", m{
+		"recipients": m{"type": "array", "minItems": 1, "uniqueItems": true,
+			"items":       m{"type": "string", "pattern": `^age1[02-9ac-hj-np-z]{58}$`},
+			"description": "The age X25519 public keys (age1...) every backup is encrypted to; at least one, and required in the backup role. Each holder of a matching identity can decrypt a backup without sluis: `age -d -i key.txt <id>.tar.gz.age | tar xz`. The backup role holds nothing that decrypts."},
+		"identity": m{"type": "string", "pattern": `^[A-Za-z0-9][A-Za-z0-9._-]*$`, "default": "restore-identity",
+			"description": "The restore role's secret holding the age identity (AGE-SECRET-KEY-1...) that decrypts the backups: internal/backup/<identity> in the secret store, as {\"value\":\"<base64>\"}. Only the restore role reads it."},
 		"key": func() m {
 			e := keysSchema()["properties"].(m)["archive"].(m)
-			e["description"] = "The key that seals each backup's data key (purpose `archive`): an alias, or {key, context}. The same as `keys.archive`; give one of them. The adapter is `keys.adapter`, or kms."
+			e["description"] = "Deprecated, ignored: the KMS key of backup format 1. Accepted for one release so a document that still sets it loads; set `recipients`."
 			return e
 		}(),
-		"recipients": list("The age recipients (`age1...`) every backup is encrypted to (format v2). The backup function holds no secret that opens a backup: the identity is the restore function's.", m{"type": "string", "pattern": "^age1[0-9a-z]+$"}),
-		"identity":   str("The name, in the backup module's secrets namespace, of the secret that holds the age identity (`AGE-SECRET-KEY-1...`, the byte codec) the restore function decrypts with. Only the restore role reads it."),
-		"role":       enum("Which function this document configures: `backup` (the scheduled export, the default) or `restore` (the restore function, which only an administrator or the break-glass role may invoke and whose role may write every module's table). The zip is the same; the document picks the role, and `sluis restore` selects it on the command line.", "backup", "backup", "restore"),
-		"region":     str("The region of the key service, for adapter kms. Unset follows the AWS SDK's own resolution."),
+		"role":   enum("Which function this document configures: `backup` (the scheduled export, the default) or `restore` (the restore function, which only an administrator or the break-glass role may invoke and whose role may write every module's table). The zip is the same; the document picks the role, and `sluis restore` selects it on the command line.", "backup", "backup", "restore"),
+		"region": str("Deprecated, ignored: the region of the KMS key of backup format 1."),
 		"target": obj("The S3 bucket of the archive. For an AWS bucket with Object Lock, enable versioning and a default retention no longer than `retention`; credentials are the function role's and are never configured here.", m{
 			"bucket":    str("The bucket. It must exist."),
 			"prefix":    str("A key prefix inside the bucket, put before `backup/<instance>/`."),
@@ -703,7 +706,7 @@ func sluisBackupSchema() m {
 	delete(s, "allOf")
 	s["$id"] = ID("sluis-backup", apiVersionOf(props))
 	s["title"] = "sluis backup"
-	s["description"] = "The configuration of `sluis backup`, the backup module (docs/decisions/0071): a scheduled export of the installation, sealed with the archive key, into an S3 bucket." + secretsNote
+	s["description"] = "The configuration of `sluis backup`, the backup module (docs/decisions/0071): a scheduled export of the installation, encrypted with age to `backup.recipients`, into an S3 bucket." + secretsNote
 	return s
 }
 

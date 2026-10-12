@@ -3,6 +3,7 @@ instance: example
 log: {level: info}
 keys:
   adapter: kms
+  # Deprecated since format 2 and ignored; accepted for one release.
   archive: alias/example-archive
 secrets:
   source: ssm
@@ -29,7 +30,10 @@ adapters:
   audit: {adapter: sqs, settings: {queue: "https://sqs.eu-west-1.amazonaws.com/000000000000/audit"}}
 audit: {writer: "http://audit.example.svc:8080", tokenFile: /var/run/audit/token}
 backup:
-  region: eu-west-1
+  recipients:
+    - age1843v2a5nyfrx6ssyftdyz7n8gncu5r0c3mwx4pgrv00uvca6vgjqa59uwj
+    - age1akzhxjkmgkq06fgkmrwadezd4rlav56g330960ez7f232z2ksf9sq7xk5u
+  identity: restore-identity
   target:
     bucket: example-backups
     prefix: archive

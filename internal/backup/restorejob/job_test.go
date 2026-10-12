@@ -2,7 +2,6 @@ package restorejob_test
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,6 +9,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"filippo.io/age"
 
 	"github.com/truvity/sluis/internal/audit"
 	"github.com/truvity/sluis/internal/audit/audittest"
@@ -22,8 +23,6 @@ import (
 	"github.com/truvity/sluis/internal/port/memory"
 	"github.com/truvity/sluis/internal/rails"
 	"github.com/truvity/sluis/internal/secretstore"
-	"github.com/truvity/sluis/storage/keys"
-	"github.com/truvity/sluis/storage/keys/local"
 	statemem "github.com/truvity/sluis/storage/state/memory"
 )
 
@@ -31,24 +30,33 @@ var ctx = context.Background()
 
 var epoch = time.Date(2026, 10, 10, 3, 0, 0, 0, time.UTC)
 
-func archiveKey(t *testing.T) *keys.Key {
-	t.Helper()
-	a := sha256.Sum256([]byte("restorejob test root"))
-	b := sha256.Sum256(a[:])
-	be, err := local.New(append(a[:], b[:]...))
+// recipient is the identity every test backup is encrypted to.
+var recipient = func() *age.X25519Identity {
+	id, err := age.GenerateX25519Identity()
 	if err != nil {
-		t.Fatal(err)
+		panic(err)
 	}
-	set, err := keys.Open(keys.Config{Adapter: "local", Keys: map[keys.Purpose]keys.Entry{keys.Archive: {Key: "backup"}}},
-		keys.Options{Backend: be, Instance: "example"})
+	return id
+}()
+
+func identities(context.Context) ([]age.Identity, error) { return []age.Identity{recipient}, nil }
+
+// publish writes a backup built by build into the archive.
+func (r *rig) publish(id string, build func(*backup.Writer) (*backup.Archive, error)) {
+	r.t.Helper()
+	w, err := backup.NewWriter(backup.Params{Instance: "example", ID: id, Layout: backup.LayoutV5, Creator: "test",
+		Now: func() time.Time { return epoch }, Recipients: []string{recipient.Recipient().String()}, TempDir: r.t.TempDir()})
 	if err != nil {
-		t.Fatal(err)
+		r.t.Fatal(err)
 	}
-	k, err := set.For(keys.Archive)
+	a, err := build(w)
 	if err != nil {
-		t.Fatal(err)
+		r.t.Fatal(err)
 	}
-	return k
+	defer a.Remove()
+	if err := backup.Publish(ctx, r.archive, a); err != nil {
+		r.t.Fatal(err)
+	}
 }
 
 type fanout struct{ mods *memory.Modules }
@@ -96,7 +104,6 @@ type rig struct {
 	secrets *secretstore.StoresV5
 	blob    *memory.Blobs
 	archive port.Blob
-	key     *keys.Key
 	audit   *audittest.Recorder
 
 	mu         sync.Mutex
@@ -113,7 +120,7 @@ func newRig(t *testing.T) *rig {
 	r := &rig{t: t, src: memory.NewModules(memory.WithClock(func() time.Time { return epoch })),
 		dst:   memory.NewModules(memory.WithClock(func() time.Time { return epoch })),
 		blob:  memory.New().Blobs(),
-		audit: audittest.New(t), key: archiveKey(t), archive: memory.New().Blobs(), flagsAtput: map[string]int{}}
+		audit: audittest.New(t), archive: memory.New().Blobs(), flagsAtput: map[string]int{}}
 	r.secrets = secretstore.FromStoreV5(statemem.New(), "")
 	put := func(m port.Module, key string, ttl time.Duration) {
 		if _, err := r.src.Store(m).Put(ctx, key, []byte(fmt.Sprintf(`{"id":%q}`, key)), ttl); err != nil {
@@ -127,16 +134,11 @@ func newRig(t *testing.T) *rig {
 	put(port.ModuleSlack, "ws.slack.T01", 0)
 	// A backup is written from the source.
 	for _, id := range []string{"b1", "b2"} {
-		w, err := backup.NewWriter(ctx, r.archive, r.key, backup.Params{Installation: "example", ID: id, Layout: backup.LayoutV5,
-			Creator: "test", Now: func() time.Time { return epoch }, ChunkBytes: 4096})
-		if err != nil {
-			t.Fatal(err)
-		}
 		f := fanout{r.src}
 		src := export.Source{State: f, Index: f, Secrets: secretstore.FromStoreV5(statemem.New(), ""), Blob: memory.New().Blobs()}
-		if _, err := export.Run(ctx, w, src, export.Options{Now: func() time.Time { return epoch }}); err != nil {
-			t.Fatal(err)
-		}
+		r.publish(id, func(w *backup.Writer) (*backup.Archive, error) {
+			return export.Run(ctx, w, src, export.Options{Now: func() time.Time { return epoch }})
+		})
 	}
 	return r
 }
@@ -171,7 +173,7 @@ func (r *rig) job(mutate ...func(*restorejob.Config)) *restorejob.Job {
 			Table:   func(m port.Module) restore.Table { return hooked{r.dst.Store(m), m, r, nil} },
 			Secrets: r.secrets, Blob: r.blob,
 		},
-		Archive: r.archive, Key: r.key, Audit: r.audit, Now: func() time.Time { return epoch }, Holder: "h1",
+		Archive: r.archive, Identity: identities, TempDir: r.t.TempDir(), Audit: r.audit, Now: func() time.Time { return epoch }, Holder: "h1",
 		Sleep:  func(_ context.Context, d time.Duration) error { r.slept = append(r.slept, d); return nil },
 		Suffix: func() string { return "aaaaaa" },
 	}
@@ -296,20 +298,28 @@ func TestMaintenanceStaysSetOnEveryFailure(t *testing.T) {
 	})
 	t.Run("archive", func(t *testing.T) {
 		r := newRig(t)
-		w, err := backup.NewWriter(ctx, r.archive, r.key, backup.Params{Installation: "example", ID: "bad", Layout: backup.LayoutV5,
-			Creator: "t", Now: func() time.Time { return epoch }, ChunkBytes: 4096})
-		if err != nil {
-			t.Fatal(err)
-		}
-		rec, _ := json.Marshal(export.State{V: export.RecordVersion, T: export.TypeState, Key: "gh.org.acme", Value: []byte(`{}`)})
-		if err := w.Add(ctx, backup.State, port.ModuleSlack, rec); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := w.Close(ctx); err != nil {
-			t.Fatal(err)
-		}
+		r.publish("bad", func(w *backup.Writer) (*backup.Archive, error) {
+			rec, _ := json.Marshal(export.State{V: export.RecordVersion, T: export.TypeState, Key: "gh.org.acme", Value: []byte(`{}`)})
+			if err := w.Add(ctx, backup.State, port.ModuleSlack, rec); err != nil {
+				return nil, err
+			}
+			return w.Close(ctx)
+		})
 		res, err := r.job().Start(ctx, restorejob.Request{BackupID: "bad", Actor: admin})
 		check(t, r, res, err, restorejob.ReasonArchive)
+	})
+	t.Run("another identity", func(t *testing.T) {
+		r := newRig(t)
+		other, _ := age.GenerateX25519Identity()
+		res, err := r.job(func(c *restorejob.Config) {
+			c.Identity = func(context.Context) ([]age.Identity, error) { return []age.Identity{other}, nil }
+		}).Start(ctx, restorejob.Request{BackupID: "b1", Actor: admin})
+		if err != nil || res.Outcome != restorejob.OutcomeRefused || res.Reason != restorejob.ReasonKey {
+			t.Fatalf("%+v, %v", res, err)
+		}
+		if len(r.writes) != 0 {
+			t.Errorf("writes %v", r.writes)
+		}
 	})
 	t.Run("a flag that cannot be set", func(t *testing.T) {
 		r := newRig(t)

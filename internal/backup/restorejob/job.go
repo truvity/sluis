@@ -134,9 +134,13 @@ type Config struct {
 	Flags   func(port.Module) port.State
 	// Target is what the archive is written to.
 	Target restore.Target
-	// Archive and Key open the backups.
-	Archive port.Blob
-	Key     backup.Key
+	// Archive holds the backups, and Identity reads the age identity that
+	// decrypts them (the restore role's own secret).
+	Archive  port.Blob
+	Identity backup.Identities
+	// TempDir holds the decrypted archive, encrypted under a process-only
+	// key, while it is restored; os.TempDir() when empty.
+	TempDir string
 	// Audit records the outcomes; nil records nothing.
 	Audit audit.Recorder
 	Log   *slog.Logger
@@ -165,8 +169,8 @@ func New(c Config) (*Job, error) {
 	switch {
 	case !backup.ValidName(c.Installation):
 		return nil, errors.New("restore: the installation name must be one path segment of letters, digits, '.', '-' and '_'")
-	case c.State == nil || c.Archive == nil || c.Key == nil:
-		return nil, errors.New("restore: the job needs a State, an archive Blob and a key")
+	case c.State == nil || c.Archive == nil || c.Identity == nil:
+		return nil, errors.New("restore: the job needs a State, an archive Blob and an identity")
 	case len(c.Modules) == 0 || c.Flags == nil:
 		return nil, errors.New("restore: the job needs the modules' tables to set the maintenance flag in")
 	case c.Target.Table == nil || c.Target.Secrets == nil || c.Target.Blob == nil:
@@ -236,7 +240,7 @@ type Result struct {
 // Preview verifies the archive and reports what a restore would do. It takes no
 // lease, sets no flag and writes nothing.
 func (j *Job) Preview(ctx context.Context, backupID string) (*restore.Report, error) {
-	r, err := backup.Open(ctx, j.c.Archive, j.c.Key, j.c.Installation, backupID)
+	r, err := backup.Open(ctx, j.c.Archive, j.c.Identity, j.c.Installation, backupID, j.c.TempDir)
 	if err != nil {
 		return nil, err
 	}
@@ -289,7 +293,7 @@ func (j *Job) locked(ctx context.Context, req Request) (Result, error) {
 	if run != nil {
 		id = run.run.BackupID
 	}
-	r, err := backup.Open(ctx, j.c.Archive, j.c.Key, j.c.Installation, id)
+	r, err := backup.Open(ctx, j.c.Archive, j.c.Identity, j.c.Installation, id, j.c.TempDir)
 	if err != nil {
 		reason := ReasonBackup
 		if errors.Is(err, backup.ErrKey) {

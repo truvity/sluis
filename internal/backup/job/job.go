@@ -23,7 +23,9 @@ import (
 
 // The states of a run.
 const (
-	StateRunning   = "running"
+	StateRunning = "running"
+	// StatePaused is a run of an earlier release that paused; it is closed
+	// as abandoned.
 	StatePaused    = "paused"
 	StateCompleted = "completed"
 	StateFailed    = "failed"
@@ -40,10 +42,8 @@ const (
 const (
 	// OutcomeCompleted is a backup written and sealed.
 	OutcomeCompleted = "completed"
-	// OutcomePaused is a run that stopped at a unit boundary for want of time;
-	// the next run continues it.
-	OutcomePaused = "paused"
-	// OutcomeIdle is a resume-only run with nothing to continue.
+	// OutcomeIdle is the answer to a resume-only call: a run is one
+	// invocation since format 2 and there is never anything to continue.
 	OutcomeIdle = "idle"
 	// OutcomeContended is a run another runner holds the lease of.
 	OutcomeContended = "contended"
@@ -56,6 +56,7 @@ const (
 const (
 	ReasonKey       = "key"
 	ReasonExport    = "export"
+	ReasonUpload    = "upload"
 	ReasonCanceled  = "canceled"
 	ReasonAbandoned = "abandoned"
 )
@@ -74,13 +75,8 @@ const (
 
 // Timings.
 const (
-	// Margin is how much of an invocation's deadline must be left to start the
-	// next unit of the export; with less, the run pauses.
-	Margin = 3 * time.Minute
-	// ResumeWindow is how old an unfinished run may be and still be continued.
-	ResumeWindow = 24 * time.Hour
-	// OrphanAge is how old the chunks of a run with no manifest must be before
-	// a prune deletes them.
+	// OrphanAge is how old the object of a run with no sidecar must be before
+	// a prune deletes it.
 	OrphanAge = 7 * 24 * time.Hour
 	// KeepRuns is how many status records a prune leaves.
 	KeepRuns = 100
@@ -98,21 +94,22 @@ type Run struct {
 	Started  time.Time `json:"started"`
 	Updated  time.Time `json:"updated"`
 	Finished time.Time `json:"finished,omitzero"`
-	// Modules, Records and Chunks are the backup's, set when it completed.
+	// Modules and Records are the backup's, set when it completed; Chunks is
+	// the number of archive objects (1 since format 2) and Size the bytes of
+	// the encrypted object.
 	Modules int   `json:"modules,omitempty"`
 	Records int64 `json:"records,omitempty"`
 	Chunks  int   `json:"chunks,omitempty"`
-	// Resumed is whether the run continued an interrupted one.
+	Size    int64 `json:"size,omitempty"`
+	// Resumed is whether a run of an earlier release continued an
+	// interrupted one; a run is one invocation since format 2.
 	Resumed bool `json:"resumed,omitempty"`
 	// Reason is the failure word, Error a one-line summary of the cause.
 	Reason string `json:"reason,omitempty"`
 	Error  string `json:"error,omitempty"`
-	// Checkpoint is what a resume needs; gone once the run completed.
-	Checkpoint *export.Checkpoint `json:"checkpoint,omitempty"`
 }
 
-// View is a run as the CLI and the module's methods show it: no checkpoint,
-// only how far the export got.
+// View is a run as the CLI and the module's methods show it.
 type View struct {
 	ID       string    `json:"id"`
 	State    string    `json:"state"`
@@ -124,10 +121,12 @@ type View struct {
 	Modules  int       `json:"modules,omitempty"`
 	Records  int64     `json:"records,omitempty"`
 	Chunks   int       `json:"chunks,omitempty"`
+	Size     int64     `json:"size,omitempty"`
 	Resumed  bool      `json:"resumed,omitempty"`
 	Reason   string    `json:"reason,omitempty"`
 	Error    string    `json:"error,omitempty"`
-	// Units and Done are the export's progress while it is unfinished.
+	// Units and Done were the progress of a paused run; a run is one
+	// invocation since format 2 and they are always 0.
 	Units int `json:"units,omitempty"`
 	Done  int `json:"done,omitempty"`
 }
@@ -135,11 +134,8 @@ type View struct {
 // View is the run as shown.
 func (r Run) View() View {
 	v := View{ID: r.ID, State: r.State, Trigger: r.Trigger, Creator: r.Creator, Started: r.Started, Updated: r.Updated,
-		Finished: r.Finished, Modules: r.Modules, Records: r.Records, Chunks: r.Chunks, Resumed: r.Resumed,
+		Finished: r.Finished, Modules: r.Modules, Records: r.Records, Chunks: r.Chunks, Size: r.Size, Resumed: r.Resumed,
 		Reason: r.Reason, Error: r.Error}
-	if r.Checkpoint != nil && (r.State == StateRunning || r.State == StatePaused) {
-		v.Units, v.Done = r.Checkpoint.Units, r.Checkpoint.Next
-	}
 	return v
 }
 
@@ -159,8 +155,8 @@ type Pass struct {
 // Rule is the retention in words, for a record.
 func (p Pass) Rule() string { return fmt.Sprintf("keep %d, max age %s", p.Keep, p.MaxAge) }
 
-// Info is one backup in the archive, as its manifest says. The manifest is
-// not verified: a listing is for showing, and a restore opens with the key.
+// Info is one backup in the archive, as its sidecar says. The sidecar is not
+// verified: a listing is for showing, and a restore verifies the object.
 type Info struct {
 	ID      string    `json:"id"`
 	Created time.Time `json:"created"`
@@ -170,7 +166,9 @@ type Info struct {
 	Modules int       `json:"modules"`
 	Records int64     `json:"records"`
 	Chunks  int       `json:"chunks"`
-	// Error is why the manifest could not be read, when it could not.
+	// Size is the encrypted object's.
+	Size int64 `json:"size,omitempty"`
+	// Error is why the sidecar could not be read, when it could not.
 	Error string `json:"error,omitempty"`
 }
 
@@ -178,7 +176,7 @@ type Info struct {
 type Config struct {
 	// Installation is the archive path segment, the instance name.
 	Installation string
-	// Creator names the writer in each manifest, "sluis-backup 1.75.0".
+	// Creator names the writer in each manifest, "sluis-backup 1.76.1".
 	Creator string
 	// State is the backup module's own State: its records and its lease. On
 	// layout v5 the router over the tables routes these keys to that table.
@@ -189,8 +187,12 @@ type Config struct {
 	Source export.Source
 	// Archive is the bucket the backups are written to.
 	Archive port.Blob
-	// Key seals each backup's data key.
-	Key backup.Key
+	// Recipients are the age X25519 public keys (age1...) every backup is
+	// encrypted to; at least one. The job holds nothing that decrypts.
+	Recipients []string
+	// TempDir holds the spool and the encrypted file of a run; os.TempDir()
+	// (/tmp on Lambda) when empty.
+	TempDir string
 	// Keep and MaxAge are the retention rule.
 	Keep   int
 	MaxAge time.Duration
@@ -201,8 +203,6 @@ type Config struct {
 	Holder string
 	// Now is the clock; time.Now when nil.
 	Now func() time.Time
-	// ChunkBytes overrides the chunk size, for tests.
-	ChunkBytes int
 	// Suffix makes the random suffix of an id; for tests.
 	Suffix func() string
 }
@@ -219,12 +219,15 @@ func New(c Config) (*Job, error) {
 	switch {
 	case !backup.ValidName(c.Installation):
 		return nil, errors.New("backup: the installation name must be one path segment of letters, digits, '.', '-' and '_'")
-	case c.State == nil || c.Archive == nil || c.Key == nil:
-		return nil, errors.New("backup: the job needs a State, an archive Blob and a key")
+	case c.State == nil || c.Archive == nil:
+		return nil, errors.New("backup: the job needs a State and an archive Blob")
 	case c.Source.State == nil:
 		return nil, errors.New("backup: the job needs an export source")
 	case c.Keep < 1:
 		return nil, errors.New("backup: retention keep must be at least 1")
+	}
+	if _, err := backup.ParseRecipients(c.Recipients); err != nil {
+		return nil, err
 	}
 	if c.Log == nil {
 		c.Log = slog.Default()
@@ -249,7 +252,8 @@ type Request struct {
 	Trigger string
 	// Actor is who asked, for the audit record; the system for a schedule.
 	Actor audit.Actor
-	// ResumeOnly continues an unfinished run and starts none.
+	// ResumeOnly was the schedule that continued a paused run. A run is one
+	// invocation since format 2: it answers [OutcomeIdle] and touches nothing.
 	ResumeOnly bool
 }
 
@@ -262,13 +266,13 @@ type Result struct {
 	Run *View `json:"run,omitempty"`
 }
 
-// errPause stops an export at a unit boundary.
-var errPause = errors.New("backup: paused for want of time")
-
-// Run takes the lease and runs one backup, or continues an interrupted one.
-// A failed run is an error and its record says so; a run that is paused,
-// contended, skipped or idle is a result.
+// Run takes the lease and runs one backup. A failed run is an error and its
+// record says so; a run that is contended, skipped or idle is a result.
 func (j *Job) Run(ctx context.Context, req Request) (Result, error) {
+	if req.ResumeOnly {
+		// The schedules of an earlier release still send the resume event.
+		return Result{Outcome: OutcomeIdle}, nil
+	}
 	if req.Trigger == "" {
 		req.Trigger = TriggerRun
 	}
@@ -293,53 +297,34 @@ func (j *Job) Run(ctx context.Context, req Request) (Result, error) {
 }
 
 func (j *Job) locked(ctx context.Context, req Request) (Result, error) {
-	run, rev, resumed, err := j.pickup(ctx, req)
+	run, rev, err := j.start(ctx, req)
 	if err != nil {
 		return Result{}, err
-	}
-	if run == nil {
-		return Result{Outcome: OutcomeIdle}, nil
-	}
-	if resumed {
-		run.Resumed, run.State, run.Reason = true, StateRunning, ""
 	}
 	return j.execute(ctx, req, run, rev)
 }
 
-// pickup finds the unfinished run to continue, closing the ones too old or
-// without a checkpoint, or starts a new one. nil, with no error, is nothing to
-// do (ResumeOnly and no unfinished run).
-func (j *Job) pickup(ctx context.Context, req Request) (*Run, port.Revision, bool, error) {
+// start closes every unfinished run (under the lease, a run still marked
+// running is one whose invocation died) and writes the record of a new one.
+func (j *Job) start(ctx context.Context, req Request) (*Run, port.Revision, error) {
 	runs, err := j.records(ctx)
 	if err != nil {
-		return nil, "", false, err
+		return nil, "", err
 	}
-	var open []*recorded
 	for _, r := range runs {
 		if r.run.State == StateRunning || r.run.State == StatePaused {
-			open = append(open, r)
+			if err := j.fail(ctx, &r.run, r.rev, ReasonAbandoned, errors.New("the run was interrupted"), req.Actor); err != nil {
+				return nil, "", err
+			}
 		}
-	}
-	// The newest unfinished run is the one to continue; any other is closed.
-	for i := len(open) - 1; i >= 0; i-- {
-		r := open[i]
-		if i == len(open)-1 && r.run.Checkpoint != nil && j.now().Sub(r.run.Started) < ResumeWindow {
-			return &r.run, r.rev, true, nil
-		}
-		if err := j.fail(ctx, &r.run, r.rev, ReasonAbandoned, errors.New("the run was interrupted and cannot be continued"), req.Actor); err != nil {
-			return nil, "", false, err
-		}
-	}
-	if req.ResumeOnly {
-		return nil, "", false, nil
 	}
 	now := j.now()
 	run := Run{ID: j.newID(now), State: StateRunning, Trigger: req.Trigger, Creator: j.c.Creator, Started: now, Updated: now}
 	rev, err := j.create(ctx, run)
 	if err != nil {
-		return nil, "", false, err
+		return nil, "", err
 	}
-	return &run, rev, false, nil
+	return &run, rev, nil
 }
 
 func (j *Job) newID(now time.Time) string {
@@ -355,85 +340,47 @@ func (j *Job) newID(now time.Time) string {
 }
 
 func (j *Job) params(run *Run) backup.Params {
-	return backup.Params{Installation: j.c.Installation, ID: run.ID, Layout: backup.LayoutV5, Creator: run.Creator,
-		Now: j.c.Now, ChunkBytes: j.c.ChunkBytes}
+	return backup.Params{Instance: j.c.Installation, ID: run.ID, Layout: backup.LayoutV5, Creator: run.Creator,
+		Recipients: j.c.Recipients, Now: func() time.Time { return run.Started }, TempDir: j.c.TempDir}
 }
 
+// execute exports into a local encrypted file, uploads it, and writes the
+// sidecar last.
 func (j *Job) execute(ctx context.Context, req Request, run *Run, rev port.Revision) (Result, error) {
-	var w *backup.Writer
-	var err error
-	if run.Checkpoint != nil {
-		w, err = backup.Resume(ctx, j.c.Archive, j.c.Key, j.params(run), run.Checkpoint.Progress)
-	} else {
-		w, err = backup.NewWriter(ctx, j.c.Archive, j.c.Key, j.params(run))
-	}
+	w, err := backup.NewWriter(j.params(run))
 	if err != nil {
 		return j.failed(ctx, req, run, rev, ReasonKey, err)
 	}
-	opt := export.Options{Now: j.c.Now, Log: j.log, Resume: run.Checkpoint}
-	opt.Checkpoint = func(ctx context.Context, cp export.Checkpoint) error {
-		run.Checkpoint, run.Updated = &cp, j.now()
-		next, err := j.update(ctx, *run, rev)
-		if err != nil {
-			return err
+	a, err := export.Run(ctx, w, j.c.Source, export.Options{Now: j.c.Now, Log: j.log})
+	if err != nil {
+		reason := ReasonExport
+		if ctx.Err() != nil {
+			reason = ReasonCanceled
 		}
-		rev = next
-		if lowOnTime(ctx) {
-			return errPause
+		return j.failed(ctx, req, run, rev, reason, err)
+	}
+	defer a.Remove()
+	if err := backup.Publish(ctx, j.c.Archive, a); err != nil {
+		reason := ReasonUpload
+		if ctx.Err() != nil {
+			reason = ReasonCanceled
 		}
-		return nil
+		return j.failed(ctx, req, run, rev, reason, err)
 	}
-	m, err := export.Run(ctx, w, j.c.Source, opt)
-	switch {
-	case err == nil:
-	case errors.Is(err, errPause):
-		return j.paused(ctx, run, rev, "")
-	case ctx.Err() != nil:
-		// The function's time ran out, or the lease was lost: the last
-		// checkpoint stands, and the next run continues from it.
-		return j.paused(ctx, run, rev, ReasonCanceled)
-	default:
-		return j.failed(ctx, req, run, rev, ReasonExport, err)
-	}
-	return j.completed(ctx, req, run, rev, m)
+	return j.completed(ctx, req, run, rev, a)
 }
 
-// lowOnTime is whether the invocation has less than [Margin] left.
-func lowOnTime(ctx context.Context) bool {
-	d, ok := ctx.Deadline()
-	return ok && time.Until(d) < Margin
-}
-
-func (j *Job) paused(ctx context.Context, run *Run, rev port.Revision, reason string) (Result, error) {
-	// ctx may be done; the record is written all the same.
-	wctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
-	defer cancel()
-	run.State, run.Updated, run.Reason = StatePaused, j.now(), reason
-	if _, err := j.update(wctx, *run, rev); err != nil {
-		return Result{}, err
-	}
-	j.log.InfoContext(ctx, "a backup run paused; the next run continues it", slog.String("id", run.ID), slog.String("reason", reason))
-	v := run.View()
-	return Result{Outcome: OutcomePaused, ID: run.ID, Run: &v}, nil
-}
-
-func (j *Job) completed(ctx context.Context, req Request, run *Run, rev port.Revision, m *backup.Manifest) (Result, error) {
+func (j *Job) completed(ctx context.Context, req Request, run *Run, rev port.Revision, a *backup.Archive) (Result, error) {
 	run.State, run.Updated, run.Finished = StateCompleted, j.now(), j.now()
-	run.Checkpoint, run.Reason, run.Error = nil, "", ""
-	run.Modules, run.Records = len(m.Modules), 0
-	run.Chunks = 0
-	for _, e := range m.Modules {
-		for _, p := range []backup.Part{e.State, e.Secrets, e.Blobs} {
-			run.Records += p.Records
-			run.Chunks += len(p.Chunks)
-		}
-	}
+	run.Reason, run.Error = "", ""
+	run.Modules, run.Records = len(a.Sidecar.Modules), a.Sidecar.Records()
+	run.Chunks, run.Size = 1, a.Sidecar.Object.Size
 	if _, err := j.update(ctx, *run, rev); err != nil {
 		return Result{}, err
 	}
 	j.record(ctx, audit.BackupCompleted(req.Actor, run.ID, j.audit(run, "")))
 	j.log.InfoContext(ctx, "a backup was written", slog.String("id", run.ID), slog.Int("modules", run.Modules),
-		slog.Int64("records", run.Records), slog.Int("chunks", run.Chunks))
+		slog.Int64("records", run.Records), slog.Int64("bytes", run.Size))
 	// Retention is part of the run, but its failure is not the backup's: the
 	// backup exists. The next run prunes again.
 	if _, err := j.prune(ctx, req.Actor, false); err != nil {
@@ -457,7 +404,6 @@ func (j *Job) failed(ctx context.Context, req Request, run *Run, rev port.Revisi
 func (j *Job) fail(ctx context.Context, run *Run, rev port.Revision, reason string, cause error, actor audit.Actor) error {
 	run.State, run.Updated, run.Finished = StateFailed, j.now(), j.now()
 	run.Reason, run.Error = reason, oneLine(cause)
-	run.Checkpoint = nil
 	if _, err := j.update(ctx, *run, rev); err != nil {
 		return err
 	}
@@ -554,7 +500,7 @@ type Status struct {
 	Latest *View `json:"latest,omitempty"`
 	// LastCompleted is the newest completed run.
 	LastCompleted *View `json:"lastCompleted,omitempty"`
-	// Unfinished is a run that is running or paused.
+	// Unfinished is a run that is running.
 	Unfinished *View `json:"unfinished,omitempty"`
 	// Retention is the last prune pass.
 	Retention *Pass `json:"retention,omitempty"`

@@ -2,8 +2,6 @@ package export
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -39,29 +37,12 @@ type Source struct {
 	Blob port.Blob
 }
 
-// Checkpoint is what a run keeps to continue after a stop: the number of units
-// done and the writer's [backup.Progress]. It holds no secret and no record.
-type Checkpoint struct {
-	// Units is the length of the run's list of units; a resume refuses another.
-	Units int `json:"units"`
-	// Next is the number of units done.
-	Next     int             `json:"next"`
-	Progress backup.Progress `json:"progress"`
-}
-
 // Options are the optional parts of a run.
 type Options struct {
 	// Modules limits the run; the default is every module of [port.Modules].
-	// A resume names the same ones.
 	Modules []port.Module
 	// Now is the clock the remaining lifetimes are made absolute by.
 	Now func() time.Time
-	// Resume continues from the last [Checkpoint] seen. The writer must be
-	// one made with [backup.Resume] from the checkpoint's Progress.
-	Resume *Checkpoint
-	// Checkpoint is called after each unit with what a resume needs. An error
-	// stops the run.
-	Checkpoint func(context.Context, Checkpoint) error
 	// Log receives one line per unit, with counts only. Nil is silent.
 	Log *slog.Logger
 }
@@ -112,7 +93,12 @@ func units(mods []port.Module) []unit {
 		for _, p := range port.SetPrefixes5(m) {
 			out = append(out, unit{m, unitIndex, p})
 		}
-		out = append(out, unit{m, unitSecrets, Internal})
+		// The backup module's secrets are the backup's own (the restore
+		// identity above all): the backup role never reads them, and a
+		// restore must not replace the identity it restores with.
+		if m != port.ModuleBackup {
+			out = append(out, unit{m, unitSecrets, Internal})
+		}
 		if secretstore.ModuleExternal(secretstore.Module(m)) {
 			out = append(out, unit{m, unitSecrets, External})
 		}
@@ -123,20 +109,20 @@ func units(mods []port.Module) []unit {
 	return out
 }
 
-// Run exports the source into w and closes it, returning the manifest. The
-// writer is aborted when the run fails. See the package comment for resuming.
-func Run(ctx context.Context, w *backup.Writer, src Source, opt Options) (*backup.Manifest, error) {
-	m, err := run(ctx, w, src, opt)
-	if err != nil {
+// Run exports the source into w and closes it, returning the archive (a local
+// file; [backup.Publish] uploads it). The writer is aborted when the run
+// fails. A run is one pass: there is nothing to resume.
+func Run(ctx context.Context, w *backup.Writer, src Source, opt Options) (*backup.Archive, error) {
+	if err := run(ctx, w, src, opt); err != nil {
 		w.Abort()
 		return nil, err
 	}
-	return m, nil
+	return w.Close(ctx)
 }
 
-func run(ctx context.Context, w *backup.Writer, src Source, opt Options) (*backup.Manifest, error) {
+func run(ctx context.Context, w *backup.Writer, src Source, opt Options) error {
 	if src.State == nil || src.Index == nil || src.Secrets == nil || src.Blob == nil {
-		return nil, errors.New("export: the source needs State, Index, Secrets and Blob")
+		return errors.New("export: the source needs State, Index, Secrets and Blob")
 	}
 	mods := opt.Modules
 	if len(mods) == 0 {
@@ -144,42 +130,30 @@ func run(ctx context.Context, w *backup.Writer, src Source, opt Options) (*backu
 	}
 	for _, m := range mods {
 		if !m.Valid() {
-			return nil, fmt.Errorf("export: %q is not a module", m)
+			return fmt.Errorf("export: %q is not a module", m)
 		}
-	}
-	list := units(mods)
-	from := 0
-	if r := opt.Resume; r != nil {
-		if r.Units != len(list) || r.Next < 0 || r.Next > len(list) {
-			return nil, fmt.Errorf("export: the checkpoint (%d of %d units) is for another run of %d units", r.Next, r.Units, len(list))
-		}
-		from = r.Next
 	}
 	e := &exporter{w: w, src: src, now: opt.Now}
 	if e.now == nil {
 		e.now = time.Now
 	}
-	for i := from; i < len(list); i++ {
-		u := list[i]
+	for _, u := range units(mods) {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if err := w.Include(u.module); err != nil {
+			return err
+		}
 		n, err := e.unit(ctx, u)
 		if err != nil {
-			return nil, fmt.Errorf("export %s: %w", u, err)
-		}
-		prog, err := w.Flush(ctx)
-		if err != nil {
-			return nil, err
+			return fmt.Errorf("export %s: %w", u, err)
 		}
 		if opt.Log != nil {
 			opt.Log.InfoContext(ctx, "exported", slog.String("module", string(u.module)),
 				slog.String("section", string(u.section())), slog.String("what", u.arg), slog.Int("records", n))
 		}
-		if opt.Checkpoint != nil {
-			if err := opt.Checkpoint(ctx, Checkpoint{Units: len(list), Next: i + 1, Progress: prog}); err != nil {
-				return nil, err
-			}
-		}
 	}
-	return w.Close(ctx)
+	return nil
 }
 
 type exporter struct {
@@ -288,15 +262,9 @@ func (e *exporter) blobs(ctx context.Context, u unit) (int, error) {
 		if err != nil {
 			return n, fmt.Errorf("read %s: %w", name, err)
 		}
-		sum := sha256.Sum256(o.Body)
-		parts := max(1, (len(o.Body)+BlobPart-1)/BlobPart)
-		for i := range parts {
-			part := o.Body[min(i*BlobPart, len(o.Body)):min((i+1)*BlobPart, len(o.Body))]
-			n++
-			if err := e.add(ctx, backup.Blobs, u.module, Blob{V: RecordVersion, T: TypeBlob, Name: name,
-				Size: int64(len(o.Body)), SHA256: hex.EncodeToString(sum[:]), Part: i, Parts: parts, Data: part}); err != nil {
-				return n, err
-			}
+		n++
+		if err := e.w.AddBlob(ctx, u.module, name, o.Body); err != nil {
+			return n, err
 		}
 	}
 	return n, nil

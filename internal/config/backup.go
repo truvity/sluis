@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"filippo.io/age"
 	policyconfig "github.com/truvity/policy/config"
 
 	"github.com/truvity/sluis/storage/keys"
@@ -15,16 +16,17 @@ import (
 // sluis.truvity.github.io/sluis-backup/v1, schemas/config/sluis-backup.schema.json).
 // It holds what the module reads and nothing of the issuer, the console or a
 // policy: the storage it reads an installation from (`ports`, `secrets`), the
-// audit trail, the archive key, and the bucket a backup is written to.
+// audit trail, the age recipients a backup is encrypted to, and the bucket it
+// is written to.
 type SluisBackup struct {
 	APIVersion string `json:"apiVersion"`
 	// Instance names the installation: the path of its backups in the archive
 	// bucket and the default encryption context of the archive key.
 	Instance string `json:"instance,omitempty"`
 	Log      *Log   `json:"log,omitempty"`
-	// Keys is the key service block every product shares. The backup module
-	// uses its `archive` purpose only, and `backup.key` is the short way to
-	// set it.
+	// Keys is the key service block every product shares. Since format 2 the
+	// backup module uses none of it: `keys.archive` is accepted for one release
+	// and ignored (deprecated).
 	Keys     *keys.Config             `json:"keys,omitempty"`
 	Secrets  *Secrets                 `json:"secrets,omitempty"`
 	Ports    *Ports                   `json:"ports,omitempty"`
@@ -49,18 +51,17 @@ const (
 type Backup struct {
 	// Role is [BackupRoleBackup] (the default) or [BackupRoleRestore].
 	Role string `json:"role,omitempty"`
-	// Key is the key that seals each backup's data key (purpose `archive`): an
-	// alias, or {key, context}. It is the same as `keys.archive`; give one.
-	Key *keys.Entry `json:"key,omitempty"`
-	// Recipients are the age recipients (`age1...`) every backup is encrypted
-	// to (format v2). The backup function needs no secret to write one.
+	// Recipients are the age X25519 public keys (age1...) every backup is
+	// encrypted to. The backup role requires at least one.
 	Recipients []string `json:"recipients,omitempty"`
-	// Identity names the secret (in the backup module's namespace, `restore-identity`)
-	// that holds the age identity (`AGE-SECRET-KEY-1...`) the restore function
-	// decrypts with.
+	// Identity names the restore role's secret that holds the age identity
+	// (AGE-SECRET-KEY-1...): internal/backup/<identity> in the secret store,
+	// [BackupDefaultIdentity] when unset.
 	Identity string `json:"identity,omitempty"`
-	// Region is the region of the key service, for adapter kms.
-	Region string `json:"region,omitempty"`
+	// Key and Region were the KMS archive key of format 1. Deprecated: they
+	// are accepted for one release and ignored.
+	Key    *keys.Entry `json:"key,omitempty"`
+	Region string      `json:"region,omitempty"`
 	// Target is the bucket the archive is written to.
 	Target BackupTarget `json:"target"`
 	// Retention is how many backups are kept and for how long.
@@ -91,6 +92,10 @@ type BackupRetention struct {
 	// MaxAge is how old a backup beyond Keep may be before it is deleted.
 	MaxAge *Duration `json:"maxAge,omitempty"`
 }
+
+// BackupDefaultIdentity is the restore identity's secret when backup.identity
+// names none.
+const BackupDefaultIdentity = "restore-identity"
 
 // The retention defaults.
 const (
@@ -144,45 +149,54 @@ func (s *SluisBackup) Validate() error {
 	if keep, maxAge := s.Backup.Retention.Rule(); keep < 1 || keep > BackupMaxKeep || maxAge < 0 {
 		return fmt.Errorf("backup.retention: keep is 1 to %d and maxAge is not negative", BackupMaxKeep)
 	}
-	// Format v2 encrypts with age (`recipients`, `identity`) and names no KMS key;
-	// the key is the v1 way, required until neither is given.
-	if len(s.Backup.Recipients) == 0 && s.Backup.Identity == "" {
-		if _, err := s.ArchiveKeys(); err != nil {
+	// The backup role encrypts to the recipients; the restore role needs
+	// none, but a list it is given is still held to the form.
+	if s.RoleOf() == BackupRoleBackup || len(s.Backup.Recipients) > 0 {
+		if err := checkRecipients(s.Backup.Recipients); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// ArchiveKeys is the key configuration of the module: the `archive` purpose and
-// no other, whether it came from `backup.key` or from `keys.archive`. The
-// adapter is `keys.adapter`, or kms. A document that gives the key twice is
-// refused: two places for one key is a place to drift.
-func (s *SluisBackup) ArchiveKeys() (keys.Config, error) {
-	kc := keys.Config{Adapter: "kms", Keys: map[keys.Purpose]keys.Entry{}}
-	var given *keys.Entry
-	if s.Keys != nil {
-		if s.Keys.Adapter != "" {
-			kc.Adapter = s.Keys.Adapter
-		}
-		if e, ok := s.Keys.Keys[keys.Archive]; ok {
-			given = &e
+// checkRecipients refuses an empty list and anything that is not an age
+// X25519 public key.
+func checkRecipients(rs []string) error {
+	if len(rs) == 0 {
+		return errors.New("backup.recipients: required: at least one age X25519 public key (age1...) every backup is encrypted to")
+	}
+	for i, r := range rs {
+		if _, err := age.ParseX25519Recipient(r); err != nil {
+			return fmt.Errorf("backup.recipients[%d]: not an age X25519 public key (age1...)", i)
 		}
 	}
+	return nil
+}
+
+// Deprecated reports the keys the document sets that format 2 ignores
+// (backup.key, backup.region, keys.archive), for a warning at start.
+func (s *SluisBackup) Deprecated() []string {
+	var out []string
 	if s.Backup.Key != nil {
-		if given != nil {
-			return keys.Config{}, errors.New("backup.key and keys.archive both name the archive key: give one")
+		out = append(out, "backup.key")
+	}
+	if s.Backup.Region != "" {
+		out = append(out, "backup.region")
+	}
+	if s.Keys != nil {
+		if _, ok := s.Keys.Keys[keys.Archive]; ok {
+			out = append(out, "keys.archive")
 		}
-		given = s.Backup.Key
 	}
-	if given == nil {
-		return keys.Config{}, errors.New("backup.key: required (the key that seals each backup's data key, the same as keys.archive)")
+	return out
+}
+
+// IdentityRef is the name of the restore identity's secret.
+func (s *SluisBackup) IdentityRef() string {
+	if s.Backup.Identity != "" {
+		return s.Backup.Identity
 	}
-	kc.Keys[keys.Archive] = *given
-	if err := kc.Validate(); err != nil {
-		return keys.Config{}, err
-	}
-	return kc, nil
+	return BackupDefaultIdentity
 }
 
 // Serve is the part of the document the storage ports and the audit trail are

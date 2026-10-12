@@ -1,5 +1,5 @@
-# Without the key nothing can be sealed.
-# error: backup.config needs backup.key
+# Without a recipient nothing can be encrypted.
+# error: backup.config needs backup.recipients
 config:
   issuerURL: https://issuer.example
 backup:

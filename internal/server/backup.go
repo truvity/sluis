@@ -93,7 +93,8 @@ func (c *Console) ListBackups(
 	// is not left to the module alone.
 	slices.SortStableFunc(all, func(a, b job.Info) int { return b.Created.Compare(a.Created) })
 	out := &directoryrosterv1.ListBackupsResponse{Available: true}
-	for _, b := range all {
+	for i := range all {
+		b := &all[i]
 		out.Backups = append(out.Backups, &directoryrosterv1.BackupInfo{
 			Id: b.ID, Created: stamp(b.Created), Creator: b.Creator, Format: int32(b.Format), Layout: b.Layout,
 			Modules: int32(b.Modules), Records: b.Records, Chunks: int32(b.Chunks), Error: b.Error,

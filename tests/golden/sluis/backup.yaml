@@ -91,6 +91,8 @@ data:
       tokenFile: /var/run/audit/token
       writer: https://audit.example:8443
     backup:
+      recipients:
+      - age1843v2a5nyfrx6ssyftdyz7n8gncu5r0c3mwx4pgrv00uvca6vgjqa59uwj
       retention:
         keep: 7
         maxAge: 720h
@@ -99,9 +101,6 @@ data:
         prefix: sluis
         region: eu-west-1
     instance: sluis
-    keys:
-      adapter: kms
-      archive: alias/sluis-archive
     ports:
       blob:
         adapter: s3
@@ -432,7 +431,7 @@ spec:
             app.kubernetes.io/component: backup
             app.kubernetes.io/part-of: sluis
           annotations:
-            checksum/config: 39b156c2092c7c64435773c4c663a7c899341fdd41bf279b948aa418df6a3624
+            checksum/config: b9c0e29e3cb3e5993b6174480ccdf4dc8f656bd975ea34c7328e1d7a91eb21a6
         spec:
           restartPolicy: Never
           serviceAccountName: sluis-backup
@@ -528,7 +527,7 @@ spec:
             app.kubernetes.io/component: backup
             app.kubernetes.io/part-of: sluis
           annotations:
-            checksum/config: 39b156c2092c7c64435773c4c663a7c899341fdd41bf279b948aa418df6a3624
+            checksum/config: b9c0e29e3cb3e5993b6174480ccdf4dc8f656bd975ea34c7328e1d7a91eb21a6
         spec:
           restartPolicy: Never
           serviceAccountName: sluis-backup

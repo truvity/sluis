@@ -374,7 +374,8 @@ func backupList(args []string) error {
 		say("the archive holds no backup")
 		return nil
 	}
-	for _, b := range list.Backups {
+	for i := range list.Backups {
+		b := &list.Backups[i]
 		line := fmt.Sprintf("%s  %s  %d modules  %d records  layout %s", b.ID, b.Created.Format(time.RFC3339), b.Modules, b.Records, b.Layout)
 		if b.Error != "" {
 			line += "  (manifest unreadable: " + b.Error + ")"
