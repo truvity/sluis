@@ -38,6 +38,8 @@ func TestV5PathGolden(t *testing.T) {
 	put(t, s.Slack().AppCredential("bot", "r1"))
 	put(t, s.Google().WorkspaceKey("ws"))
 	put(t, s.Backup().KeyRef("seal"))
+	put(t, s.Backup().RestoreIdentity(""))
+	put(t, s.Backup().RestoreIdentity("dr-identity"))
 	m, err := s.Cloudflare().Minter("main")
 	if err != nil {
 		t.Fatal(err)
@@ -64,6 +66,8 @@ func TestV5PathGolden(t *testing.T) {
 		"external/oidc/rp",
 		"external/slack/bot",
 		"internal/backup/keys/seal",
+		"internal/backup/restore-identity",
+		"internal/backup/dr-identity",
 		"internal/cloudflare/main/minter",
 		"internal/cloudflare/minted/p",
 		"internal/github/apps/app-1/r1",

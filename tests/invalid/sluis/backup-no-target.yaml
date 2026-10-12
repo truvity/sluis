@@ -10,4 +10,3 @@ backup:
     ports:
       dynamodb: {region: eu-west-1, tables: {backup: sluis-backup}}
       blob: {adapter: s3, s3: {bucket: b}}
-    keys: {adapter: kms, archive: alias/a}

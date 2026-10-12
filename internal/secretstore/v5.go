@@ -347,6 +347,21 @@ func (b BackupInternal) KeyRef(name string) state.Value[[]byte] {
 	return state.NewValue(b.s, "keys/"+segment(name), state.Raw())
 }
 
+// DefaultRestoreIdentity is the name of the restore identity when
+// `backup.identity` names none.
+const DefaultRestoreIdentity = "restore-identity"
+
+// RestoreIdentity is the age identity the restore decrypts backups with
+// (AGE-SECRET-KEY-1..., an identity file's text) at internal/backup/<ref>,
+// `restore-identity` by default: {"value":"<base64>"} (state.Raw). Only the
+// restore role reads it.
+func (b BackupInternal) RestoreIdentity(ref string) state.Value[[]byte] {
+	if ref == "" {
+		ref = DefaultRestoreIdentity
+	}
+	return state.NewValue(b.s, segment(ref), state.Raw())
+}
+
 // OIDCExternal is external/oidc.
 type OIDCExternal struct{ s state.Store }
 

@@ -50,7 +50,8 @@ type ListResponse struct {
 	Backups []job.Info `json:"backups"`
 }
 
-// RunRequest starts a backup, or with Resume only continues a paused one.
+// RunRequest starts a backup. Resume, which continued a paused run of format
+// 1, answers idle.
 type RunRequest struct {
 	Resume bool `json:"resume,omitempty"`
 }

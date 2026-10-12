@@ -1,16 +1,21 @@
 // Package app assembles the backup module as a process of its own
 // (docs/decisions/0071): the storage it reads an installation from, the archive
-// bucket and key it writes to, the audit trail, and the job that runs under the
+// bucket and the age recipients it writes to (or, in the restore role, the age
+// identity it reads with), the audit trail, and the job that runs under the
 // backup lease (internal/backup/job). It has no listener and no inbound API but
 // the module-call methods of internal/backup/rpc.
 package app
 
 import (
+	"bytes"
 	"context"
+
 	"errors"
 	"fmt"
 	"log/slog"
 	"os"
+
+	"filippo.io/age"
 
 	"github.com/truvity/sluis/internal/audit"
 	"github.com/truvity/sluis/internal/backup"
@@ -25,10 +30,10 @@ import (
 	dynamoport "github.com/truvity/sluis/internal/port/dynamodb"
 	"github.com/truvity/sluis/internal/port/s3blob"
 	"github.com/truvity/sluis/internal/secrets"
-	"github.com/truvity/sluis/internal/signer"
+	"github.com/truvity/sluis/internal/secretstore"
 	"github.com/truvity/sluis/internal/store"
 	"github.com/truvity/sluis/internal/version"
-	"github.com/truvity/sluis/storage/keys"
+	"github.com/truvity/sluis/storage/state"
 )
 
 // Config is what the module is made of, built from its document.
@@ -36,15 +41,14 @@ type Config struct {
 	doc      *config.SluisBackup
 	stores   store.Config
 	audit    audit.Config
-	keys     keys.Config
 	logLevel slog.Level
 	// role is the function the zip acts as: the document's, or the command's.
 	role string
 
-	// Test seams: an archive and a key backend in place of the S3 bucket and
-	// KMS the document names.
-	archive    port.Blob
-	keyBackend keys.Backend
+	// Test seams: an archive in place of the S3 bucket the document names, and
+	// the restore identity in place of the secret.
+	archive  port.Blob
+	identity backup.Identities
 }
 
 // LogLevel is the level the process should log at.
@@ -75,10 +79,6 @@ func FromDocument(doc *config.SluisBackup) (Config, error) {
 	if !backup.ValidName(doc.Name()) {
 		return Config{}, fmt.Errorf("instance: %q is not one path segment of letters, digits, '.', '-' and '_' (it is the archive path)", doc.Name())
 	}
-	kc, err := doc.ArchiveKeys()
-	if err != nil {
-		return Config{}, err
-	}
 	serve := doc.Serve()
 	stores, err := store.FromServe(serve)
 	if err != nil {
@@ -95,7 +95,7 @@ func FromDocument(doc *config.SluisBackup) (Config, error) {
 	if stores.Secrets, err = secrets.Open(context.Background(), serve); err != nil {
 		return Config{}, err
 	}
-	c := Config{doc: doc, stores: stores, keys: kc, role: doc.RoleOf(), audit: audit.Config{Version: version.String()}}
+	c := Config{doc: doc, stores: stores, role: doc.RoleOf(), audit: audit.Config{Version: version.String()}}
 	// The audit instance is the pod, which is its hostname in a cluster.
 	c.audit.Instance, _ = os.Hostname()
 	if a := doc.Audit; a != nil {
@@ -129,13 +129,15 @@ func Creator() string { return "sluis-backup " + version.String() }
 
 // App is the assembled module.
 type App struct {
-	role    string
-	job     *job.Job
-	restore *restorejob.Job
-	rpc     *modcall.Server
-	log     *slog.Logger
-	stores  *store.Stores
-	trail   *audit.Trail
+	role     string
+	instance string
+	archive  port.Blob
+	job      *job.Job
+	restore  *restorejob.Job
+	rpc      *modcall.Server
+	log      *slog.Logger
+	stores   *store.Stores
+	trail    *audit.Trail
 }
 
 // New assembles the module: the ports, the archive, the key, the audit trail.
@@ -163,9 +165,9 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 			return fail(fmt.Errorf("backup.target: %w", err))
 		}
 	}
-	key, err := openKey(ctx, cfg)
-	if err != nil {
-		return fail(err)
+	if dep := cfg.doc.Deprecated(); len(dep) > 0 {
+		log.WarnContext(ctx, "the backup document sets keys that backup format 2 ignores; remove them (backups are age-encrypted to backup.recipients)",
+			slog.Any("keys", dep))
 	}
 
 	cfg.audit.Log = log
@@ -176,15 +178,15 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 	if err != nil {
 		return fail(err)
 	}
-	a := &App{role: cfg.role, log: log, stores: stores, trail: trail}
+	a := &App{role: cfg.role, instance: cfg.doc.Name(), archive: archive, log: log, stores: stores, trail: trail}
 	if cfg.role == config.BackupRoleRestore {
-		if err := a.openRestore(cfg, archive, key); err != nil {
+		if err := a.openRestore(cfg, archive); err != nil {
 			_ = trail.Close()
 			return fail(err)
 		}
 		return a, nil
 	}
-	if err := a.openBackup(cfg, archive, key); err != nil {
+	if err := a.openBackup(cfg, archive); err != nil {
 		_ = trail.Close()
 		return fail(err)
 	}
@@ -192,7 +194,7 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 }
 
 // openBackup assembles the scheduled export.
-func (a *App) openBackup(cfg Config, archive port.Blob, key backup.Key) error {
+func (a *App) openBackup(cfg Config, archive port.Blob) error {
 	stores := a.stores
 	src := export.Source{Secrets: stores.V5, Blob: stores.Ports.Blob}
 	var ok bool
@@ -210,7 +212,7 @@ func (a *App) openBackup(cfg Config, archive port.Blob, key backup.Key) error {
 	state := stores.Ports.State
 	jc := job.Config{
 		Installation: cfg.doc.Name(), Creator: Creator(),
-		State: state, Source: src, Archive: archive, Key: key,
+		State: state, Source: src, Archive: archive, Recipients: cfg.doc.Backup.Recipients,
 		Keep: keep, MaxAge: maxAge, Audit: a.trail, Log: a.log,
 	}
 	// The backup module's own table holds the flag the restore sets; the gate
@@ -230,7 +232,7 @@ func (a *App) openBackup(cfg Config, archive port.Blob, key backup.Key) error {
 // openRestore assembles the restore function: the same binary, selected by
 // `backup.role` (or by `sluis restore`), whose role may write every module's
 // table. It writes the maintenance flag in each table itself.
-func (a *App) openRestore(cfg Config, archive port.Blob, key backup.Key) error {
+func (a *App) openRestore(cfg Config, archive port.Blob) error {
 	stores := a.stores
 	if stores.Ports.Blob == nil {
 		return errors.New("ports.blob: the restore writes the reports kept in the blob store back, so it needs the installation's")
@@ -248,6 +250,10 @@ func (a *App) openRestore(cfg Config, archive port.Blob, key backup.Key) error {
 			return err
 		}
 	}
+	identity := cfg.identity
+	if identity == nil {
+		identity = restoreIdentity(stores.V5, cfg.doc.IdentityRef())
+	}
 	j, err := restorejob.New(restorejob.Config{
 		Installation: cfg.doc.Name(), State: stores.Ports.State,
 		Modules: mods,
@@ -256,7 +262,7 @@ func (a *App) openRestore(cfg Config, archive port.Blob, key backup.Key) error {
 			Table:   func(m port.Module) restore.Table { t, _ := tables(m); return t },
 			Secrets: stores.V5, Blob: stores.Ports.Blob,
 		},
-		Archive: archive, Key: key, Audit: a.trail, Log: a.log,
+		Archive: archive, Identity: identity, Audit: a.trail, Log: a.log,
 	})
 	if err != nil {
 		return err
@@ -266,23 +272,20 @@ func (a *App) openRestore(cfg Config, archive port.Blob, key backup.Key) error {
 	return nil
 }
 
-// openKey opens the archive key (purpose archive) of the configured adapter.
-func openKey(ctx context.Context, cfg Config) (*keys.Key, error) {
-	backend := cfg.keyBackend
-	if backend == nil {
-		if cfg.keys.Adapter != "kms" {
-			return nil, fmt.Errorf("keys.adapter %q: the backup module opens kms keys here", cfg.keys.Adapter)
+// restoreIdentity reads the age identity from the backup module's secret
+// internal/backup/<ref> ({"value":"<base64>"}), each time a backup is opened,
+// so a rotated identity is used without a restart.
+func restoreIdentity(st *secretstore.StoresV5, ref string) backup.Identities {
+	return func(ctx context.Context) ([]age.Identity, error) {
+		raw, _, err := st.Backup().RestoreIdentity(ref).Get(ctx)
+		if err != nil {
+			if errors.Is(err, state.ErrNotFound) {
+				return nil, fmt.Errorf("the restore identity internal/backup/%s is not set", ref)
+			}
+			return nil, fmt.Errorf("read the restore identity internal/backup/%s: %w", ref, err)
 		}
-		var err error
-		if backend, err = signer.OpenKMS(ctx, cfg.doc.Backup.Region); err != nil {
-			return nil, err
-		}
+		return backup.ParseIdentities(string(raw))
 	}
-	set, err := keys.Open(cfg.keys, keys.Options{Backend: backend, Instance: cfg.doc.Name()})
-	if err != nil {
-		return nil, err
-	}
-	return set.For(keys.Archive)
 }
 
 // RPC is the module's server: what a transport of internal/modcall serves.
@@ -350,6 +353,41 @@ func (a *App) Prune(ctx context.Context, actor audit.Actor, dryRun bool) (job.Pa
 		return job.Pass{}, "", errNotBackup
 	}
 	return a.job.Prune(ctx, actor, dryRun)
+}
+
+// Verification is what `sluis backup verify` found.
+type Verification struct {
+	ID string `json:"id"`
+	// Object is the encrypted object as its sidecar describes it; its size
+	// and SHA-256 matched.
+	Object backup.ObjectInfo `json:"object"`
+	// Decrypted is whether an identity was given and the archive decrypted,
+	// and every member matched the manifest.
+	Decrypted bool  `json:"decrypted"`
+	Modules   int   `json:"modules"`
+	Records   int64 `json:"records"`
+	Files     int   `json:"files,omitempty"`
+}
+
+// Verify reads a backup and checks its object against its sidecar; with
+// identities it also decrypts it and checks every member against the
+// manifest. It writes nothing and takes no lease.
+func (a *App) Verify(ctx context.Context, id string, ids []age.Identity) (Verification, error) {
+	sc, body, err := backup.Fetch(ctx, a.archive, a.instance, id)
+	if err != nil {
+		return Verification{}, err
+	}
+	v := Verification{ID: id, Object: sc.Object, Modules: len(sc.Modules), Records: sc.Records()}
+	if len(ids) == 0 {
+		return v, nil
+	}
+	r, err := backup.Decrypt(ctx, sc, bytes.NewReader(body), ids, "")
+	if err != nil {
+		return v, err
+	}
+	defer r.Close()
+	v.Decrypted, v.Files = true, len(r.Manifest().Files)+1
+	return v, nil
 }
 
 // Flush delivers the audit records still queued: a Lambda function calls it

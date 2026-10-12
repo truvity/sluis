@@ -13,14 +13,14 @@ import (
 	"testing"
 	"time"
 
+	"filippo.io/age"
+
 	"github.com/truvity/sluis/internal/backup"
 	"github.com/truvity/sluis/internal/backup/export"
 	"github.com/truvity/sluis/internal/backup/restore"
 	"github.com/truvity/sluis/internal/port"
 	"github.com/truvity/sluis/internal/port/memory"
 	"github.com/truvity/sluis/internal/secretstore"
-	"github.com/truvity/sluis/storage/keys"
-	"github.com/truvity/sluis/storage/keys/local"
 	"github.com/truvity/sluis/storage/state"
 	statemem "github.com/truvity/sluis/storage/state/memory"
 )
@@ -29,24 +29,56 @@ var ctx = context.Background()
 
 var epoch = time.Date(2026, 10, 10, 3, 0, 0, 0, time.UTC)
 
-func archiveKey(t *testing.T) *keys.Key {
+// recipient is the identity every test backup is encrypted to.
+var recipient = func() *age.X25519Identity {
+	id, err := age.GenerateX25519Identity()
+	if err != nil {
+		panic(err)
+	}
+	return id
+}()
+
+func identities(context.Context) ([]age.Identity, error) { return []age.Identity{recipient}, nil }
+
+// archive writes a backup with fill, publishes it to store and opens it.
+func archive(t *testing.T, store port.Blob, id string, now time.Time, build func(*backup.Writer) (*backup.Archive, error)) (*backup.Reader, error) {
 	t.Helper()
-	a := sha256.Sum256([]byte("restore test root"))
-	b := sha256.Sum256(a[:])
-	be, err := local.New(append(a[:], b[:]...))
+	w, err := backup.NewWriter(backup.Params{Instance: "example", ID: id, Layout: backup.LayoutV5, Creator: "restore test",
+		Now: func() time.Time { return now }, Recipients: []string{recipient.Recipient().String()}, TempDir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
-	set, err := keys.Open(keys.Config{Adapter: "local", Keys: map[keys.Purpose]keys.Entry{
-		keys.Archive: {Key: "backup"}}}, keys.Options{Backend: be, Instance: "example"})
+	a, err := build(w)
 	if err != nil {
 		t.Fatal(err)
 	}
-	k, err := set.For(keys.Archive)
-	if err != nil {
+	defer a.Remove()
+	if err := backup.Publish(ctx, store, a); err != nil {
 		t.Fatal(err)
 	}
-	return k
+	r, err := backup.Open(ctx, store, identities, "example", id, t.TempDir())
+	if r != nil {
+		t.Cleanup(r.Close)
+	}
+	return r, err
+}
+
+// exportOf builds a backup by exporting src.
+func exportOf(src export.Source, now time.Time) func(*backup.Writer) (*backup.Archive, error) {
+	return func(w *backup.Writer) (*backup.Archive, error) {
+		return export.Run(ctx, w, src, export.Options{Now: func() time.Time { return now }})
+	}
+}
+
+// by builds a backup with fill.
+func by(fill func(*backup.Writer) error) func(*backup.Writer) (*backup.Archive, error) {
+	return func(w *backup.Writer) (*backup.Archive, error) {
+		if err := fill(w); err != nil {
+			w.Abort()
+			return nil, err
+		}
+		return w.Close(ctx)
+	}
 }
 
 // fanout routes an export over the memory tables.
@@ -88,7 +120,7 @@ func (s *side) source() export.Source {
 	return export.Source{State: f, Index: f, Secrets: s.secrets, Blob: s.blob}
 }
 
-const bigBlob = export.BlobPart + 10
+const bigBlob = 9<<20 + 10
 
 // seed fills a source installation. The values carry markers that must never
 // reach a report.
@@ -149,7 +181,7 @@ func seed(t *testing.T, s *side) {
 	secret(port.ModuleGitHub, export.Internal, "apps/app1/r1", "SECRET-VALUE-0003")
 	secret(port.ModuleCloudflare, export.Internal, "main/minter", "SECRET-VALUE-0004")
 	secret(port.ModuleGoogle, export.Internal, "workspaces/C01/key", "SECRET-VALUE-"+strings.Repeat("k", 8<<10))
-	secret(port.ModuleBackup, export.Internal, "s3/credentials", "SECRET-VALUE-0006")
+	secret(port.ModuleBackup, export.Internal, "restore-identity", "SECRET-VALUE-0006")
 
 	big := bytes.Repeat([]byte("B"), bigBlob)
 	for name, body := range map[string][]byte{
@@ -165,57 +197,42 @@ func seed(t *testing.T, s *side) {
 }
 
 // backupOf archives a source installation into a fresh store.
-func backupOf(t *testing.T, src export.Source) (port.Blob, backup.Key, *backup.Reader) {
+func backupOf(t *testing.T, src export.Source) (port.Blob, *backup.Reader) {
 	t.Helper()
 	store := memory.New().Blobs()
-	key := archiveKey(t)
-	w, err := backup.NewWriter(ctx, store, key, backup.Params{Installation: "example", ID: "b1", Layout: backup.LayoutV5,
-		Creator: "restore test", Now: func() time.Time { return epoch }, ChunkBytes: 4096})
+	r, err := archive(t, store, "b1", epoch, exportOf(src, epoch))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := export.Run(ctx, w, src, export.Options{Now: func() time.Time { return epoch }}); err != nil {
-		t.Fatal(err)
-	}
-	r, err := backup.Open(ctx, store, key, "example", "b1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(r.Close)
-	return store, key, r
+	return store, r
 }
 
 // dump is every record an export of src at now holds, by "<module>/<section>",
-// sorted.
+// sorted; a blob is its name and the SHA-256 of its body.
 func dump(t *testing.T, src export.Source, now time.Time) map[string][]string {
 	t.Helper()
-	store := memory.New().Blobs()
-	key := archiveKey(t)
-	w, err := backup.NewWriter(ctx, store, key, backup.Params{Installation: "example", ID: "d", Layout: backup.LayoutV5,
-		Creator: "dump", Now: func() time.Time { return now }, ChunkBytes: 4096})
+	r, err := archive(t, memory.New().Blobs(), "d", now, exportOf(src, now))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := export.Run(ctx, w, src, export.Options{Now: func() time.Time { return now }}); err != nil {
-		t.Fatal(err)
-	}
-	r, err := backup.Open(ctx, store, key, "example", "d")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer r.Close()
 	out := map[string][]string{}
 	for _, m := range port.Modules() {
-		for _, s := range backup.Sections() {
+		for _, s := range []backup.Section{backup.State, backup.Secrets} {
 			k := fmt.Sprintf("%s/%s", m, s)
 			if err := r.Records(ctx, s, m, func(b []byte) error {
-				// An empty body is null or "" depending on the adapter that read it.
-				out[k] = append(out[k], strings.Replace(string(b), `"data":null`, `"data":""`, 1))
+				out[k] = append(out[k], string(b))
 				return nil
 			}); err != nil {
 				t.Fatal(err)
 			}
 			sort.Strings(out[k])
+		}
+		k := fmt.Sprintf("%s/blobs", m)
+		if err := r.Blobs(ctx, m, func(name string, b []byte) error {
+			out[k] = append(out[k], fmt.Sprintf("%s=%x", name, sha256.Sum256(b)))
+			return nil
+		}); err != nil {
+			t.Fatal(err)
 		}
 	}
 	return out
@@ -366,7 +383,7 @@ func newSource(t *testing.T) *side {
 
 func TestRestoreEqualsSourceAndTTLsShrink(t *testing.T) {
 	src := newSource(t)
-	_, _, r := backupOf(t, src.source())
+	_, r := backupOf(t, src.source())
 	want := dump(t, src.source(), epoch)
 
 	d := newDest(epoch.Add(30 * time.Minute))
@@ -423,7 +440,7 @@ func TestRestoreEqualsSourceAndTTLsShrink(t *testing.T) {
 
 func TestPreviewWritesNothingAndShowsNoValue(t *testing.T) {
 	src := newSource(t)
-	_, _, r := backupOf(t, src.source())
+	_, r := backupOf(t, src.source())
 	d := newDest(epoch.Add(30 * time.Minute))
 	rep, err := restore.Preview(ctx, r, d.target, d.opts())
 	if err != nil {
@@ -480,13 +497,11 @@ func TestPreviewWritesNothingAndShowsNoValue(t *testing.T) {
 	}
 }
 
+// A changed archive does not open, so nothing can be written from it.
 func TestTamperedArchiveRefusedBeforeAnyWrite(t *testing.T) {
 	src := newSource(t)
-	store, _, r := backupOf(t, src.source())
-	mf := r.Manifest()
-	// Flip a byte in the last chunk of the last module read: the first writes would have happened before it.
-	last := mf.Part(port.ModuleOIDC, backup.State)
-	name := backup.ChunkName("example", "b1", backup.State, port.ModuleOIDC, len(last.Chunks)-1)
+	store, _ := backupOf(t, src.source())
+	name := backup.ObjectName("example", "b1")
 	o, err := store.Read(ctx, name)
 	if err != nil {
 		t.Fatal(err)
@@ -496,21 +511,14 @@ func TestTamperedArchiveRefusedBeforeAnyWrite(t *testing.T) {
 	if _, err := store.Write(ctx, name, body); err != nil {
 		t.Fatal(err)
 	}
-	d := newDest(epoch)
-	if _, err := restore.Apply(ctx, r, d.target, d.opts()); !errors.Is(err, backup.ErrIntegrity) {
-		t.Fatalf("apply: %v, want integrity failure", err)
-	}
-	if _, err := restore.Preview(ctx, r, d.target, d.opts()); !errors.Is(err, backup.ErrIntegrity) {
-		t.Fatalf("preview: %v, want integrity failure", err)
-	}
-	if d.rec.count() != 0 {
-		t.Errorf("%d writes happened before the refusal", d.rec.count())
+	if _, err := backup.Open(ctx, store, identities, "example", "b1", t.TempDir()); !errors.Is(err, backup.ErrIntegrity) {
+		t.Fatalf("open: %v, want integrity failure", err)
 	}
 }
 
 func TestOIDCKeysAreWrittenLast(t *testing.T) {
 	src := newSource(t)
-	_, _, r := backupOf(t, src.source())
+	_, r := backupOf(t, src.source())
 	d := newDest(epoch)
 	if _, err := restore.Apply(ctx, r, d.target, d.opts()); err != nil {
 		t.Fatal(err)
@@ -551,7 +559,7 @@ func TestOIDCKeysAreWrittenLast(t *testing.T) {
 
 func TestNonEmptyDestinationRefusedUnlessOverwrite(t *testing.T) {
 	src := newSource(t)
-	_, _, r := backupOf(t, src.source())
+	_, r := backupOf(t, src.source())
 	d := newDest(epoch)
 	if _, err := d.mods.Store(port.ModuleGitHub).Put(ctx, "gh.org.acme", []byte(`{"other":true}`), 0); err != nil {
 		t.Fatal(err)
@@ -580,7 +588,7 @@ func TestNonEmptyDestinationRefusedUnlessOverwrite(t *testing.T) {
 
 func TestPartialApplyThenResume(t *testing.T) {
 	src := newSource(t)
-	_, _, r := backupOf(t, src.source())
+	_, r := backupOf(t, src.source())
 	d := newDest(epoch)
 	d.rec.failAt = 20
 	if _, err := restore.Apply(ctx, r, d.target, d.opts()); err == nil {
@@ -608,29 +616,15 @@ func TestPartialApplyThenResume(t *testing.T) {
 }
 
 func TestRecordOfAnotherModuleRefused(t *testing.T) {
-	src := newSide(func() time.Time { return epoch })
-	seed(t, src)
-	// A github key placed in the slack table of the source: the export of
-	// slack skips it, so build the archive by hand.
-	store := memory.New().Blobs()
-	key := archiveKey(t)
-	w, err := backup.NewWriter(ctx, store, key, backup.Params{Installation: "example", ID: "x", Layout: backup.LayoutV5,
-		Creator: "t", Now: func() time.Time { return epoch }, ChunkBytes: 4096})
+	// A github key placed in the slack file: the export of slack skips it, so
+	// build the archive by hand.
+	r, err := archive(t, memory.New().Blobs(), "x", epoch, by(func(w *backup.Writer) error {
+		rec, _ := json.Marshal(export.State{V: export.RecordVersion, T: export.TypeState, Key: "gh.org.acme", Value: []byte(`{}`)})
+		return w.Add(ctx, backup.State, port.ModuleSlack, rec)
+	}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	rec, _ := json.Marshal(export.State{V: export.RecordVersion, T: export.TypeState, Key: "gh.org.acme", Value: []byte(`{}`)})
-	if err := w.Add(ctx, backup.State, port.ModuleSlack, rec); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := w.Close(ctx); err != nil {
-		t.Fatal(err)
-	}
-	r, err := backup.Open(ctx, store, key, "example", "x")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer r.Close()
 	d := newDest(epoch)
 	if _, err := restore.Apply(ctx, r, d.target, d.opts()); !errors.Is(err, restore.ErrArchive) {
 		t.Fatalf("got %v, want ErrArchive", err)
@@ -640,28 +634,32 @@ func TestRecordOfAnotherModuleRefused(t *testing.T) {
 	}
 }
 
+func TestABlobOutsideTheModulesPrefixesIsRefused(t *testing.T) {
+	r, err := archive(t, memory.New().Blobs(), "z", epoch, by(func(w *backup.Writer) error {
+		return w.AddBlob(ctx, port.ModuleGitHub, "slack/reports/acme", []byte("x"))
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := newDest(epoch)
+	if _, err := restore.Apply(ctx, r, d.target, d.opts()); !errors.Is(err, restore.ErrArchive) {
+		t.Fatalf("got %v, want ErrArchive", err)
+	}
+}
+
 func TestBackupModuleRunRecordsAreRegenerated(t *testing.T) {
-	store := memory.New().Blobs()
-	key := archiveKey(t)
-	w, err := backup.NewWriter(ctx, store, key, backup.Params{Installation: "example", ID: "y", Layout: backup.LayoutV5,
-		Creator: "t", Now: func() time.Time { return epoch }, ChunkBytes: 4096})
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, k := range []string{"rec.backup.run.r1", "rec.backup.retention"} {
-		rec, _ := json.Marshal(export.State{V: export.RecordVersion, T: export.TypeState, Key: k, Value: []byte(`{}`)})
-		if err := w.Add(ctx, backup.State, port.ModuleBackup, rec); err != nil {
-			t.Fatal(err)
+	r, err := archive(t, memory.New().Blobs(), "y", epoch, by(func(w *backup.Writer) error {
+		for _, k := range []string{"rec.backup.run.r1", "rec.backup.retention"} {
+			rec, _ := json.Marshal(export.State{V: export.RecordVersion, T: export.TypeState, Key: k, Value: []byte(`{}`)})
+			if err := w.Add(ctx, backup.State, port.ModuleBackup, rec); err != nil {
+				return err
+			}
 		}
-	}
-	if _, err := w.Close(ctx); err != nil {
-		t.Fatal(err)
-	}
-	r, err := backup.Open(ctx, store, key, "example", "y")
+		return nil
+	}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer r.Close()
 	d := newDest(epoch)
 	rep, err := restore.Apply(ctx, r, d.target, d.opts())
 	if err != nil {

@@ -25,9 +25,9 @@ import (
 
 // The targets of a tick.
 const (
-	// TargetRun starts a backup, or continues a paused one.
+	// TargetRun writes a backup.
 	TargetRun = "run"
-	// TargetResume continues a paused backup and starts none.
+	// TargetResume continued a paused backup of format 1; it answers idle.
 	TargetResume = "resume"
 	// TargetPrune applies the retention rule.
 	TargetPrune = "prune"

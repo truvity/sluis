@@ -18,10 +18,10 @@ backup:
       blob:
         adapter: s3
         s3: {bucket: sluis-blobs, region: eu-west-1}
-    keys:
-      adapter: kms
-      archive: alias/sluis-archive
     backup:
+      # The age public keys every backup is encrypted to (age-keygen -y key.txt).
+      recipients:
+        - age1843v2a5nyfrx6ssyftdyz7n8gncu5r0c3mwx4pgrv00uvca6vgjqa59uwj
       target: {bucket: sluis-archive, region: eu-west-1}
 restore:
   enabled: true

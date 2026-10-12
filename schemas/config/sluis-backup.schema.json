@@ -29,7 +29,7 @@
   "$id": "https://truvity.github.io/sluis/schemas/v1/config/sluis-backup.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "The configuration of `sluis backup`, the backup module (docs/decisions/0071): a scheduled export of the installation, sealed with the archive key, into an S3 bucket. Secrets are never in this file: a field ending in ...Secret holds the NAME of a secret, which `secrets` says how to deliver, and a field ending in ...File holds a path (a credential the platform mounts and rotates). Telemetry is the OTEL_* environment, not configuration.",
+  "description": "The configuration of `sluis backup`, the backup module (docs/decisions/0071): a scheduled export of the installation, encrypted with age to `backup.recipients`, into an S3 bucket. Secrets are never in this file: a field ending in ...Secret holds the NAME of a secret, which `secrets` says how to deliver, and a field ending in ...File holds a path (a credential the platform mounts and rotates). Telemetry is the OTEL_* environment, not configuration.",
   "properties": {
     "adapters": {
       "additionalProperties": false,
@@ -209,15 +209,16 @@
     },
     "backup": {
       "additionalProperties": false,
-      "description": "What the backup module writes and where. The module reads every module's table, secrets and blobs through the `ports` and `secrets` above (its role has read access to them), and writes sealed chunks to `target`.",
+      "description": "What the backup module writes and where. The module reads every module's table, secrets and blobs through the `ports` and `secrets` above (its role has read access to them), and writes one age-encrypted tar.gz per backup, then its sidecar, to `target` (format 2, docs/reference/sluis/backup.md).",
       "properties": {
         "identity": {
-          "description": "The name, in the backup module's secrets namespace, of the secret that holds the age identity (`AGE-SECRET-KEY-1...`, the byte codec) the restore function decrypts with. Only the restore role reads it.",
-          "minLength": 1,
+          "default": "restore-identity",
+          "description": "The restore role's secret holding the age identity (AGE-SECRET-KEY-1...) that decrypts the backups: internal/backup/<identity> in the secret store, as {\"value\":\"<base64>\"}. Only the restore role reads it.",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
           "type": "string"
         },
         "key": {
-          "description": "The key that seals each backup's data key (purpose `archive`): an alias, or {key, context}. The same as `keys.archive`; give one of them. The adapter is `keys.adapter`, or kms.",
+          "description": "Deprecated, ignored: the KMS key of backup format 1. Accepted for one release so a document that still sets it loads; set `recipients`.",
           "oneOf": [
             {
               "description": "An alias such as alias/sluis-<instance>-audit-seal (kms) or a transit key name. An ARN or a key id is refused.",
@@ -287,15 +288,17 @@
           ]
         },
         "recipients": {
-          "description": "The age recipients (`age1...`) every backup is encrypted to (format v2). The backup function holds no secret that opens a backup: the identity is the restore function's.",
+          "description": "The age X25519 public keys (age1...) every backup is encrypted to; at least one, and required in the backup role. Each holder of a matching identity can decrypt a backup without sluis: `age -d -i key.txt <id>.tar.gz.age | tar xz`. The backup role holds nothing that decrypts.",
           "items": {
-            "pattern": "^age1[0-9a-z]+$",
+            "pattern": "^age1[02-9ac-hj-np-z]{58}$",
             "type": "string"
           },
-          "type": "array"
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
         },
         "region": {
-          "description": "The region of the key service, for adapter kms. Unset follows the AWS SDK's own resolution.",
+          "description": "Deprecated, ignored: the region of the KMS key of backup format 1.",
           "minLength": 1,
           "type": "string"
         },

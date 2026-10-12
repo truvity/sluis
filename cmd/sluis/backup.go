@@ -11,7 +11,10 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"filippo.io/age"
+
 	"github.com/truvity/sluis/internal/audit"
+	"github.com/truvity/sluis/internal/backup"
 	"github.com/truvity/sluis/internal/backup/job"
 	modbackup "github.com/truvity/sluis/internal/module/backup"
 )
@@ -20,15 +23,20 @@ import (
 // log lines (stderr) never mix with it.
 var backupOut io.Writer = os.Stdout
 
-const backupUsage = `Usage: sluis backup <run|list|status|prune> [--config <file>] [flags]
+const backupUsage = `Usage: sluis backup <run|list|status|prune|verify> [--config <file>] [flags]
 
-  run [--resume] [--json]   write a backup now under the backup lease, or continue one that paused
-                            (--resume continues and never starts one); exits 0 when another runner
-                            holds the lease or the module is under maintenance
-  list [--json]             the backups in the archive, newest first (from their manifests)
+  run [--json]              write a backup now under the backup lease; exits 0 when another runner
+                            holds the lease or the module is under maintenance (--resume, the
+                            schedule of an earlier release, answers idle)
+  list [--json]             the backups in the archive, newest first (from their sidecars)
   status [--json]           the latest runs, the last retention pass
   prune [--dry-run] [--json] apply the retention rule: keep the newest backups and any younger than
-                            maxAge, delete the rest, and the chunks of runs that never finished
+                            maxAge, delete the rest (sidecar first), and the objects of runs that
+                            never wrote a sidecar
+  verify <id> [--identity <file>] [--json]
+                            read a backup and check its object's size and SHA-256 against its
+                            sidecar; with an age identity file, also decrypt it and check every
+                            file against its manifest. Read-only.
 
 The document is schemas/config/sluis-backup.schema.json.`
 
@@ -41,14 +49,22 @@ func backupCmd(out io.Writer, args []string) error {
 			_, _ = fmt.Fprintln(out, backupUsage)
 			return nil
 		}
-		return fmt.Errorf("%w: sluis backup needs a command: run, list, status or prune\n%s", errUsage, backupUsage)
+		return fmt.Errorf("%w: sluis backup needs a command: run, list, status, prune or verify\n%s", errUsage, backupUsage)
 	}
 	sub, rest := args[0], args[1:]
 	allowed := map[string][]string{
 		"run": {"--resume", "--json"}, "list": {"--json"}, "status": {"--json"}, "prune": {"--dry-run", "--json"},
+		"verify": {"--json"},
 	}[sub]
 	if allowed == nil {
-		return fmt.Errorf("%w: sluis backup %q: the commands are run, list, status and prune", errUsage, sub)
+		return fmt.Errorf("%w: sluis backup %q: the commands are run, list, status, prune and verify", errUsage, sub)
+	}
+	var id, identity string
+	if sub == "verify" {
+		var err error
+		if id, identity, rest, err = verifyArgs(rest); err != nil {
+			return err
+		}
 	}
 	set := map[string]bool{}
 	rest = slices.DeleteFunc(slices.Clone(rest), func(a string) bool {
@@ -59,8 +75,67 @@ func backupCmd(out io.Writer, args []string) error {
 		return false
 	})
 	return start(out, "sluis backup "+sub, "sluis-backup", rest, func(ctx context.Context, file string) error {
+		if sub == "verify" {
+			return runVerify(ctx, file, id, identity, set["--json"])
+		}
 		return runBackup(ctx, sub, file, set["--json"], set["--resume"], set["--dry-run"])
 	})
+}
+
+// verifyArgs takes the backup id and `--identity <file>` out of the arguments.
+func verifyArgs(args []string) (id, identity string, rest []string, err error) {
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "--identity" && i+1 < len(args):
+			identity = args[i+1]
+			i++
+		case strings.HasPrefix(a, "--identity="):
+			identity = strings.TrimPrefix(a, "--identity=")
+		case !strings.HasPrefix(a, "-") && id == "" && (i == 0 || args[i-1] != "--config"):
+			id = a
+		default:
+			rest = append(rest, a)
+		}
+	}
+	if id == "" {
+		return "", "", nil, fmt.Errorf("%w: sluis backup verify needs the backup id\n%s", errUsage, backupUsage)
+	}
+	return id, identity, rest, nil
+}
+
+func runVerify(ctx context.Context, file, id, identity string, asJSON bool) error {
+	var ids []age.Identity
+	if identity != "" {
+		raw, err := os.ReadFile(identity)
+		if err != nil {
+			return fmt.Errorf("--identity: %w", err)
+		}
+		if ids, err = backup.ParseIdentities(string(raw)); err != nil {
+			return fmt.Errorf("--identity %s: %w", identity, err)
+		}
+	}
+	a, _, closeApp, err := modbackup.Module{}.Open(ctx, file)
+	if err != nil {
+		return err
+	}
+	defer closeApp()
+	v, err := a.Verify(ctx, id, ids)
+	if err != nil {
+		return fmt.Errorf("backup %s: %w", id, err)
+	}
+	if asJSON {
+		enc := json.NewEncoder(backupOut)
+		enc.SetIndent("", "  ")
+		return enc.Encode(v)
+	}
+	_, _ = fmt.Fprintf(backupOut, "backup %s: %s, %d bytes, sha256 %s: matches its sidecar\n", v.ID, v.Object.Key, v.Object.Size, v.Object.SHA256)
+	if v.Decrypted {
+		_, _ = fmt.Fprintf(backupOut, "  decrypted: %d files match the manifest; %d records in %d modules\n", v.Files, v.Records, v.Modules)
+	} else {
+		_, _ = fmt.Fprintln(backupOut, "  not decrypted: give --identity <file> to check the content")
+	}
+	return nil
 }
 
 func runBackup(ctx context.Context, sub, file string, asJSON, resume, dryRun bool) error {
@@ -133,8 +208,8 @@ func writeResult(w io.Writer, res job.Result) {
 		return
 	}
 	_, _ = fmt.Fprintf(w, "%s: backup %s, %d records in %d modules\n", res.Outcome, res.ID, res.Run.Records, res.Run.Modules)
-	if res.Run.Units > 0 {
-		_, _ = fmt.Fprintf(w, "  %d of %d units written; run `sluis backup run --resume` to continue\n", res.Run.Done, res.Run.Units)
+	if res.Run.Size > 0 {
+		_, _ = fmt.Fprintf(w, "  %s, %d bytes\n", res.ID+".tar.gz.age", res.Run.Size)
 	}
 	if res.Run.Error != "" {
 		_, _ = fmt.Fprintf(w, "  %s: %s\n", res.Run.Reason, res.Run.Error)
@@ -148,9 +223,10 @@ func writeList(w io.Writer, infos []job.Info) {
 	}
 	tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
 	_, _ = fmt.Fprintln(tw, "ID\tCREATED\tRECORDS\tMODULES\tFORMAT\tCREATOR")
-	for _, in := range infos {
+	for i := range infos {
+		in := &infos[i]
 		if in.Error != "" {
-			_, _ = fmt.Fprintf(tw, "%s\t%s\t-\t-\t-\tmanifest unreadable: %s\n", in.ID, in.Created.Format(time.RFC3339), in.Error)
+			_, _ = fmt.Fprintf(tw, "%s\t%s\t-\t-\t-\tsidecar unreadable: %s\n", in.ID, in.Created.Format(time.RFC3339), in.Error)
 			continue
 		}
 		_, _ = fmt.Fprintf(tw, "%s\t%s\t%d\t%d\t%d\t%s\n", in.ID, in.Created.Format(time.RFC3339), in.Records, in.Modules, in.Format, in.Creator)

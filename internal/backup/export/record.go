@@ -2,8 +2,6 @@ package export
 
 import (
 	"bytes"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,15 +13,11 @@ import (
 // RecordVersion is the version of the record encoding this release writes.
 const RecordVersion = 1
 
-// BlobPart is the size of the pieces a blob is split into.
-const BlobPart = 8 << 20
-
 // Record types.
 const (
 	TypeState  = "state"
 	TypeIndex  = "index"
 	TypeSecret = "secret"
-	TypeBlob   = "blob"
 )
 
 // The secret namespaces.
@@ -36,7 +30,8 @@ const (
 // or type, a type that does not belong in the section, or a field out of range.
 var ErrRecord = errors.New("export: unreadable record")
 
-// Record is a decoded record: [State], [Index], [Secret] or [Blob].
+// Record is a decoded record: [State], [Index] or [Secret]. A blob is not a
+// record: it is a file of its own in the archive.
 type Record interface{ recordType() string }
 
 type head struct {
@@ -75,24 +70,9 @@ type Secret struct {
 	Doc json.RawMessage `json:"doc"`
 }
 
-// Blob is one part of one object.
-type Blob struct {
-	V    int    `json:"v"`
-	T    string `json:"t"`
-	Name string `json:"name"`
-	// Size and SHA256 are the whole object's.
-	Size   int64  `json:"size"`
-	SHA256 string `json:"sha256"`
-	// Part counts from 0 of Parts.
-	Part  int    `json:"part"`
-	Parts int    `json:"parts"`
-	Data  []byte `json:"data"`
-}
-
 func (State) recordType() string  { return TypeState }
 func (Index) recordType() string  { return TypeIndex }
 func (Secret) recordType() string { return TypeSecret }
-func (Blob) recordType() string   { return TypeBlob }
 
 // ExpiresAt is the instant a record expires, or the zero time for none.
 func ExpiresAt(s string) (time.Time, error) {
@@ -114,7 +94,7 @@ func expires(now time.Time, ttl time.Duration) string {
 }
 
 // Decode reads a record of a section. The state section holds state and index
-// records; secrets, secret records; blobs, blob records.
+// records; secrets, secret records.
 func Decode(s backup.Section, rec []byte) (Record, error) {
 	var h head
 	if err := json.Unmarshal(rec, &h); err != nil {
@@ -171,60 +151,6 @@ func Decode(s backup.Section, rec []byte) (Record, error) {
 			return nil, fmt.Errorf("%w: a secret record is incomplete", ErrRecord)
 		}
 		return r, nil
-	case TypeBlob:
-		if s != backup.Blobs {
-			return bad()
-		}
-		var r Blob
-		if err := strict(&r); err != nil {
-			return nil, err
-		}
-		if r.Name == "" || r.Parts < 1 || r.Part < 0 || r.Part >= r.Parts || len(r.SHA256) != 64 || r.Size < 0 {
-			return nil, fmt.Errorf("%w: a blob record is out of range", ErrRecord)
-		}
-		return r, nil
 	}
 	return nil, fmt.Errorf("%w: unknown type %q", ErrRecord, h.T)
 }
-
-// Assembler puts the parts of blobs back together. Parts of one object arrive
-// in order, one object after another, as they were written; memory is one
-// object.
-type Assembler struct {
-	cur  *Blob
-	body []byte
-}
-
-// Add takes the next part. When it is the last of an object, done is true and
-// name and body are the object, verified against its size and hash; body is
-// valid until the next Add.
-func (a *Assembler) Add(b Blob) (name string, body []byte, done bool, err error) {
-	switch {
-	case b.Part == 0:
-		if a.cur != nil {
-			return "", nil, false, fmt.Errorf("%w: blob %q ended before its last part", ErrRecord, a.cur.Name)
-		}
-		a.cur, a.body = &b, a.body[:0]
-	case a.cur == nil || a.cur.Name != b.Name || a.cur.Parts != b.Parts || a.cur.SHA256 != b.SHA256 || a.cur.Size != b.Size ||
-		b.Part != a.next():
-		a.cur = nil
-		return "", nil, false, fmt.Errorf("%w: blob %q part %d is out of order", ErrRecord, b.Name, b.Part)
-	}
-	a.body = append(a.body, b.Data...)
-	a.cur.Part = b.Part
-	if b.Part < b.Parts-1 {
-		return "", nil, false, nil
-	}
-	name, size, want := a.cur.Name, a.cur.Size, a.cur.SHA256
-	a.cur = nil
-	sum := sha256.Sum256(a.body)
-	if int64(len(a.body)) != size || hex.EncodeToString(sum[:]) != want {
-		return "", nil, false, fmt.Errorf("%w: blob %q does not match its size and hash", ErrRecord, name)
-	}
-	return name, a.body, true, nil
-}
-
-func (a *Assembler) next() int { return a.cur.Part + 1 }
-
-// Pending reports whether an object is only partly given.
-func (a *Assembler) Pending() bool { return a.cur != nil }

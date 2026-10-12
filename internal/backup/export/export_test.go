@@ -3,23 +3,22 @@ package export_test
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"strings"
 	"testing"
 	"time"
+
+	"filippo.io/age"
 
 	"github.com/truvity/sluis/internal/backup"
 	"github.com/truvity/sluis/internal/backup/export"
 	"github.com/truvity/sluis/internal/port"
 	"github.com/truvity/sluis/internal/port/memory"
 	"github.com/truvity/sluis/internal/secretstore"
-	"github.com/truvity/sluis/storage/keys"
-	"github.com/truvity/sluis/storage/keys/local"
 	"github.com/truvity/sluis/storage/state"
 	statemem "github.com/truvity/sluis/storage/state/memory"
 )
@@ -30,29 +29,34 @@ var epoch = time.Date(2026, 10, 10, 3, 0, 0, 0, time.UTC)
 
 func clock() time.Time { return epoch }
 
-func archiveKey(t *testing.T) *keys.Key {
-	t.Helper()
-	a := sha256.Sum256([]byte("export test root"))
-	b := sha256.Sum256(a[:])
-	be, err := local.New(append(a[:], b[:]...))
+// recipient is the identity every test backup is encrypted to.
+var recipient = func() *age.X25519Identity {
+	id, err := age.GenerateX25519Identity()
 	if err != nil {
-		t.Fatal(err)
+		panic(err)
 	}
-	set, err := keys.Open(keys.Config{Adapter: "local", Keys: map[keys.Purpose]keys.Entry{
-		keys.Archive: {Key: "backup"}}}, keys.Options{Backend: be, Instance: "example"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	k, err := set.For(keys.Archive)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return k
+	return id
+}()
+
+func params(t *testing.T, id string) backup.Params {
+	return backup.Params{Instance: "example", ID: id, Layout: backup.LayoutV5, Creator: "export test",
+		Now: clock, Recipients: []string{recipient.Recipient().String()}, TempDir: t.TempDir()}
 }
 
-func params(id string, chunk int) backup.Params {
-	return backup.Params{Installation: "example", ID: id, Layout: backup.LayoutV5, Creator: "export test",
-		Now: clock, ChunkBytes: chunk}
+func identities(context.Context) ([]age.Identity, error) { return []age.Identity{recipient}, nil }
+
+// records is the record count of a module's section in a manifest.
+func records(m *backup.Manifest, mod port.Module, s backup.Section) int64 {
+	e := m.Module(mod)
+	switch {
+	case e == nil:
+		return 0
+	case s == backup.State:
+		return e.State.Records
+	case s == backup.Secrets:
+		return e.Secrets.Records
+	}
+	return e.Blobs.Count
 }
 
 // fanout is the Router's routing over the memory stores: a prefix in one
@@ -219,7 +223,9 @@ func newInstall(t *testing.T) *install {
 	secret(port.ModuleSlack, export.Internal, "workspaces/T01/r1", "SECRET-VALUE-slack-ws-0009")
 	secret(port.ModuleCloudflare, export.Internal, "main/minter", "SECRET-VALUE-cloudflare-0010")
 	secret(port.ModuleGoogle, export.Internal, "workspaces/C01/key", "SECRET-VALUE-google-"+strings.Repeat("k", 8<<10-len("SECRET-VALUE-google-")))
-	secret(port.ModuleBackup, export.Internal, "s3/credentials", "SECRET-VALUE-backup-0012")
+	// The backup module's own secret (the restore identity) is never exported.
+	secret(port.ModuleBackup, export.Internal, "restore-identity", "SECRET-VALUE-backup-0012")
+	in.count(port.ModuleBackup, backup.Secrets, -1)
 
 	// Blobs: reports of two modules, and a snapshot that is a cache.
 	blob := func(m port.Module, name string, body []byte) {
@@ -228,7 +234,7 @@ func newInstall(t *testing.T) *install {
 			t.Fatal(err)
 		}
 		if m != "" {
-			in.count(m, backup.Blobs, max(1, (len(body)+export.BlobPart-1)/export.BlobPart))
+			in.count(m, backup.Blobs, 1)
 		}
 	}
 	blob(port.ModuleGitHub, "github/reports/acme", []byte(`{"status":"ok"}`))
@@ -238,39 +244,47 @@ func newInstall(t *testing.T) *install {
 	return in
 }
 
-func runExport(t *testing.T, in *install, store port.Blob, key backup.Key, id string, chunk int, f *fanout) *backup.Manifest {
+func runExport(t *testing.T, in *install, store port.Blob, id string, f *fanout) *backup.Manifest {
 	t.Helper()
-	w, err := backup.NewWriter(ctx, store, key, params(id, chunk))
+	w, err := backup.NewWriter(params(t, id))
 	if err != nil {
 		t.Fatal(err)
 	}
-	m, err := export.Run(ctx, w, in.src(f), export.Options{Now: clock})
+	a, err := export.Run(ctx, w, in.src(f), export.Options{Now: clock})
 	if err != nil {
 		t.Fatal(err)
 	}
-	return m
+	defer a.Remove()
+	if err := backup.Publish(ctx, store, a); err != nil {
+		t.Fatal(err)
+	}
+	return a.Manifest
 }
 
-// dump is every record of a backup, by "<module>/<section>".
-func dump(t *testing.T, store port.Blob, key backup.Key, id string) (map[string][]string, *backup.Manifest) {
+// dump is every record of a backup, by "<module>/<section>"; a blob is its
+// name and body.
+func dump(t *testing.T, store port.Blob, id string) (map[string][]string, *backup.Manifest) {
 	t.Helper()
-	r, err := backup.Open(ctx, store, key, "example", id)
+	r, err := backup.Open(ctx, store, identities, "example", id, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer r.Close()
-	if err := r.Verify(ctx); err != nil {
-		t.Fatal(err)
-	}
 	out := map[string][]string{}
 	for _, m := range port.Modules() {
-		for _, s := range backup.Sections() {
+		for _, s := range []backup.Section{backup.State, backup.Secrets} {
 			if err := r.Records(ctx, s, m, func(b []byte) error {
 				out[fmt.Sprintf("%s/%s", m, s)] = append(out[fmt.Sprintf("%s/%s", m, s)], string(b))
 				return nil
 			}); err != nil {
 				t.Fatal(err)
 			}
+		}
+		if err := r.Blobs(ctx, m, func(name string, b []byte) error {
+			out[fmt.Sprintf("%s/blobs", m)] = append(out[fmt.Sprintf("%s/blobs", m)], name+"="+string(b))
+			return nil
+		}); err != nil {
+			t.Fatal(err)
 		}
 	}
 	return out, r.Manifest()
@@ -279,17 +293,21 @@ func dump(t *testing.T, store port.Blob, key backup.Key, id string) (map[string]
 func TestExportFullInstallation(t *testing.T) {
 	in := newInstall(t)
 	store := memory.New().Blobs()
-	key := archiveKey(t)
 	var logs bytes.Buffer
-	w, err := backup.NewWriter(ctx, store, key, params("full", 4096))
+	w, err := backup.NewWriter(params(t, "full"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	log := slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
-	if _, err := export.Run(ctx, w, in.src(nil), export.Options{Now: clock, Log: log}); err != nil {
+	a, err := export.Run(ctx, w, in.src(nil), export.Options{Now: clock, Log: log})
+	if err != nil {
 		t.Fatal(err)
 	}
-	recs, m := dump(t, store, key, "full")
+	defer a.Remove()
+	if err := backup.Publish(ctx, store, a); err != nil {
+		t.Fatal(err)
+	}
+	recs, m := dump(t, store, "full")
 
 	for _, mod := range port.Modules() {
 		for _, s := range backup.Sections() {
@@ -297,13 +315,13 @@ func TestExportFullInstallation(t *testing.T) {
 			if got := len(recs[name]); got != in.want[name] {
 				t.Errorf("%s: %d records, want %d", name, got, in.want[name])
 			}
-			if got := m.Part(mod, s).Records; got != int64(in.want[name]) {
+			if got := records(m, mod, s); got != int64(in.want[name]) {
 				t.Errorf("%s: manifest says %d records, want %d", name, got, in.want[name])
 			}
 		}
 	}
-	if len(recs["oidc/state"]) <= 3 || m.Part(port.ModuleOIDC, backup.State).Chunks == nil || len(m.Part(port.ModuleOIDC, backup.State).Chunks) < 2 {
-		t.Errorf("the oidc state should span several chunks, has %d", len(m.Part(port.ModuleOIDC, backup.State).Chunks))
+	if m.Module(port.ModuleBackup) != nil {
+		t.Error("the backup module, which contributes nothing, is in the manifest")
 	}
 
 	// Every record decodes, carries a lifetime that is absolute, and none is a
@@ -311,6 +329,10 @@ func TestExportFullInstallation(t *testing.T) {
 	types := map[string]int{}
 	for name, list := range recs {
 		_, s, _ := strings.Cut(name, "/")
+		if s == "blobs" {
+			types["blob"] += len(list)
+			continue
+		}
 		for _, raw := range list {
 			rec, err := export.Decode(backup.Section(s), []byte(raw))
 			if err != nil {
@@ -340,18 +362,19 @@ func TestExportFullInstallation(t *testing.T) {
 				}
 			case export.Secret:
 				types["secret"]++
-			case export.Blob:
-				types["blob"]++
+				if strings.Contains(raw, "SECRET-VALUE-backup") {
+					t.Error("the restore identity was exported")
+				}
 			}
 		}
 	}
-	if types["state"] != 42 || types["index"] != 3 || types["secret"] != 12 || types["blob"] != 3 {
+	if types["state"] != 42 || types["index"] != 3 || types["secret"] != 11 || types["blob"] != 3 {
 		t.Errorf("record types %v", types)
 	}
 
 	// The backup holds nothing in the clear: not a secret, not a State value.
 	names, err := store.List(ctx, "backup/")
-	if err != nil || len(names) < 5 {
+	if err != nil || len(names) != 2 {
 		t.Fatalf("archive objects %v, %v", names, err)
 	}
 	for _, name := range names {
@@ -374,7 +397,7 @@ func TestExportFullInstallation(t *testing.T) {
 	if logs.Len() == 0 {
 		t.Error("the run logged nothing")
 	}
-	// The planted values are in the sealed chunks, so the scan can find them.
+	// The planted values are in the encrypted archive, so the scan can find them.
 	found := 0
 	for _, list := range recs {
 		for _, raw := range list {
@@ -386,195 +409,66 @@ func TestExportFullInstallation(t *testing.T) {
 			}
 		}
 	}
-	if found < 12 {
+	if found < 11 {
 		t.Errorf("the decrypted records hold %d planted values; the scan proves nothing", found)
 	}
 }
 
-func TestLargeBlobIsSplitAndReassembled(t *testing.T) {
+func TestALargeBlobIsOneFile(t *testing.T) {
 	in := newInstall(t)
-	body := make([]byte, 2*export.BlobPart+12345)
+	body := make([]byte, 20<<20+12345)
 	for i := range body {
 		body[i] = byte(i*31 + i>>7)
 	}
 	if _, err := in.blob.Write(ctx, "slack/reports/big", body); err != nil {
 		t.Fatal(err)
 	}
-	in.count(port.ModuleSlack, backup.Blobs, 3)
 	store := memory.New().Blobs()
-	key := archiveKey(t)
-	runExport(t, in, store, key, "big", 1<<20, nil)
-
-	r, err := backup.Open(ctx, store, key, "example", "big")
+	m := runExport(t, in, store, "big", nil)
+	if e := m.Module(port.ModuleSlack); e == nil || e.Blobs.Count != 2 || e.Blobs.Bytes != int64(len(body))+15 {
+		t.Errorf("slack blobs %+v", e)
+	}
+	r, err := backup.Open(ctx, store, identities, "example", "big", t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer r.Close()
-	var a export.Assembler
 	got := map[string][]byte{}
-	parts := 0
-	if err := r.Records(ctx, backup.Blobs, port.ModuleSlack, func(rec []byte) error {
-		d, err := export.Decode(backup.Blobs, rec)
-		if err != nil {
-			return err
-		}
-		parts++
-		name, b, done, err := a.Add(d.(export.Blob))
-		if done {
-			got[name] = bytes.Clone(b)
-		}
-		return err
-	}); err != nil {
+	if err := r.Blobs(ctx, port.ModuleSlack, func(name string, b []byte) error { got[name] = bytes.Clone(b); return nil }); err != nil {
 		t.Fatal(err)
-	}
-	if a.Pending() || parts != in.want["slack/blobs"] || parts != 4 {
-		t.Errorf("parts %d (want 4), pending %v", parts, a.Pending())
 	}
 	if !bytes.Equal(got["slack/reports/big"], body) || string(got["slack/reports/acme"]) != `{"status":"ok"}` {
 		t.Error("the blob did not come back whole")
 	}
 }
 
-func TestAssemblerRefusesDamage(t *testing.T) {
-	mk := func(part int, data string) export.Blob {
-		sum := sha256.Sum256([]byte("abcd"))
-		return export.Blob{V: 1, T: "blob", Name: "n", Size: 4, SHA256: fmt.Sprintf("%x", sum), Part: part, Parts: 2, Data: []byte(data)}
-	}
-	var a export.Assembler
-	if _, _, _, err := a.Add(mk(1, "cd")); !errors.Is(err, export.ErrRecord) {
-		t.Errorf("a part with no first: %v", err)
-	}
-	a = export.Assembler{}
-	if _, _, _, err := a.Add(mk(0, "ab")); err != nil {
-		t.Fatal(err)
-	}
-	if _, _, _, err := a.Add(mk(0, "ab")); !errors.Is(err, export.ErrRecord) {
-		t.Errorf("a repeated first part: %v", err)
-	}
-	a = export.Assembler{}
-	if _, _, _, err := a.Add(mk(0, "ab")); err != nil {
-		t.Fatal(err)
-	}
-	if _, _, _, err := a.Add(mk(1, "xx")); !errors.Is(err, export.ErrRecord) {
-		t.Errorf("a changed part: %v", err)
-	}
-	a = export.Assembler{}
-	if _, _, _, err := a.Add(mk(0, "ab")); err != nil {
-		t.Fatal(err)
-	}
-	if _, b, done, err := a.Add(mk(1, "cd")); err != nil || !done || string(b) != "abcd" {
-		t.Errorf("good parts: %q %v %v", b, done, err)
-	}
-}
-
-func TestResumeAfterInterruptionYieldsTheSameRecords(t *testing.T) {
+func TestAFailedRunWritesNothing(t *testing.T) {
 	in := newInstall(t)
-	store := memory.New().Blobs()
-	key := archiveKey(t)
-
-	runExport(t, in, store, key, "whole", 256, nil)
-	whole, wm := dump(t, store, key, "whole")
-
-	// First interruption inside a unit that already wrote chunks, then one at a
-	// checkpoint.
-	for _, tc := range []struct {
-		name string
-		f    func() *fanout
-		stop int
-	}{
-		{"inside a unit", func() *fanout { return &fanout{mods: in.mods, failPrefix: "tok.", failAfter: 12} }, 0},
-		{"at a checkpoint", func() *fanout { return nil }, 4},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			id := "resumed-" + strings.ReplaceAll(tc.name, " ", "-")
-			var last *export.Checkpoint
-			errStop := errors.New("stop")
-			opt := export.Options{Now: clock, Checkpoint: func(_ context.Context, c export.Checkpoint) error {
-				last = &c
-				if tc.stop > 0 && c.Next == tc.stop {
-					return errStop
-				}
-				return nil
-			}}
-			w, err := backup.NewWriter(ctx, store, key, params(id, 256))
-			if err != nil {
-				t.Fatal(err)
-			}
-			if _, err := export.Run(ctx, w, in.src(tc.f()), opt); err == nil {
-				t.Fatal("the run was not interrupted")
-			}
-			if last == nil {
-				t.Fatal("no checkpoint before the interruption")
-			}
-			if _, _, err := manifestOf(store, id); err == nil {
-				t.Fatal("an interrupted run left a manifest")
-			}
-			// The checkpoint survives a restart as JSON.
-			raw, err := json.Marshal(last)
-			if err != nil {
-				t.Fatal(err)
-			}
-			var cp export.Checkpoint
-			if err := json.Unmarshal(raw, &cp); err != nil {
-				t.Fatal(err)
-			}
-			w, err = backup.Resume(ctx, store, key, params(id, 256), cp.Progress)
-			if err != nil {
-				t.Fatal(err)
-			}
-			m, err := export.Run(ctx, w, in.src(nil), export.Options{Now: clock, Resume: &cp})
-			if err != nil {
-				t.Fatal(err)
-			}
-			got, gm := dump(t, store, key, id)
-			for name, list := range whole {
-				if strings.Join(got[name], "\n") != strings.Join(list, "\n") {
-					t.Errorf("%s differs after the resume: %d records, want %d", name, len(got[name]), len(list))
-				}
-			}
-			for _, mod := range port.Modules() {
-				for _, s := range backup.Sections() {
-					if gm.Part(mod, s).Records != wm.Part(mod, s).Records {
-						t.Errorf("%s/%s: %d records, want %d", mod, s, gm.Part(mod, s).Records, wm.Part(mod, s).Records)
-					}
-				}
-			}
-			_ = m
-		})
-	}
-}
-
-func manifestOf(store port.Blob, id string) (*backup.Manifest, bool, error) {
-	m, err := backup.Peek(ctx, store, "example", id)
-	return m, err == nil, err
-}
-
-func TestResumeRefusesAnotherRun(t *testing.T) {
-	in := newInstall(t)
-	store := memory.New().Blobs()
-	key := archiveKey(t)
-	w, err := backup.NewWriter(ctx, store, key, params("x", 256))
+	p := params(t, "x")
+	w, err := backup.NewWriter(p)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = export.Run(ctx, w, in.src(nil), export.Options{Now: clock, Resume: &export.Checkpoint{Units: 2, Next: 1}})
-	if err == nil || !strings.Contains(err.Error(), "another run") {
-		t.Errorf("a checkpoint of another run: %v", err)
+	f := &fanout{mods: in.mods, failPrefix: "tok.", failAfter: 3}
+	if _, err := export.Run(ctx, w, in.src(f), export.Options{Now: clock}); err == nil {
+		t.Fatal("an interrupted read did not fail the run")
 	}
-	if _, err := backup.Peek(ctx, store, "example", "x"); err == nil {
-		t.Error("a refused run wrote a manifest")
+	if left, _ := os.ReadDir(p.TempDir); len(left) != 0 {
+		t.Errorf("a failed run left %v", left)
 	}
 }
 
 func TestModulesOption(t *testing.T) {
 	in := newInstall(t)
 	store := memory.New().Blobs()
-	key := archiveKey(t)
-	w, _ := backup.NewWriter(ctx, store, key, params("one", 4096))
-	m, err := export.Run(ctx, w, in.src(nil), export.Options{Now: clock, Modules: []port.Module{port.ModuleSlack}})
+	w, _ := backup.NewWriter(params(t, "one"))
+	a, err := export.Run(ctx, w, in.src(nil), export.Options{Now: clock, Modules: []port.Module{port.ModuleSlack}})
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer a.Remove()
+	_ = store
+	m := a.Manifest
 	if len(m.Modules) != 1 || m.Modules[0].Module != port.ModuleSlack || m.Records(backup.State) != 3+1 {
 		t.Errorf("manifest %+v", m.Modules)
 	}
@@ -595,7 +489,7 @@ func TestDecodeRefuses(t *testing.T) {
 		"bad lifetime":     {backup.State, `{"v":1,"t":"state","key":"a","expires":"soon"}`},
 		"secret no doc":    {backup.Secrets, `{"v":1,"t":"secret","ns":"internal","name":"a"}`},
 		"secret namespace": {backup.Secrets, `{"v":1,"t":"secret","ns":"x","name":"a","doc":{}}`},
-		"blob part range":  {backup.Blobs, `{"v":1,"t":"blob","name":"a","size":0,"sha256":"` + strings.Repeat("0", 64) + `","part":1,"parts":1}`},
+		"a blob record":    {backup.Blobs, `{"v":1,"t":"blob","name":"a"}`},
 	} {
 		if _, err := export.Decode(tc.s, []byte(tc.rec)); !errors.Is(err, export.ErrRecord) {
 			t.Errorf("%s: %v", name, err)
@@ -606,7 +500,8 @@ func TestDecodeRefuses(t *testing.T) {
 func TestSourceNeedsEveryPort(t *testing.T) {
 	in := newInstall(t)
 	store := memory.New().Blobs()
-	w, _ := backup.NewWriter(ctx, store, archiveKey(t), params("none", 4096))
+	w, _ := backup.NewWriter(params(t, "none"))
+	_ = store
 	src := in.src(nil)
 	src.Blob = nil
 	if _, err := export.Run(ctx, w, src, export.Options{}); err == nil {

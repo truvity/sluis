@@ -387,13 +387,13 @@ never the document's, because a CronJob must not be able to restore.
 {{- if or $b.enabled $r.enabled -}}
 {{- $c := $b.config | default dict -}}
 {{- if not $c -}}
-{{- fail "backup.enabled or restore.enabled is set and backup.config is empty: it is the sluis-backup/v1 document (backup.target, backup.key, secrets, ports), see charts/sluis/examples/backup-v5.yaml" -}}
+{{- fail "backup.enabled or restore.enabled is set and backup.config is empty: it is the sluis-backup/v1 document (backup.target, backup.recipients, secrets, ports), see charts/sluis/examples/backup-v5.yaml" -}}
 {{- end -}}
 {{- if not (dig "backup" "target" "bucket" "" $c) -}}
 {{- fail "backup.config.backup.target.bucket is required: the archive bucket, which the backup writes to and the restore reads from" -}}
 {{- end -}}
-{{- if not (or (dig "backup" "key" "" $c) (dig "keys" "archive" "" $c)) -}}
-{{- fail "backup.config needs backup.key (or keys.archive): the alias that seals each backup's data key" -}}
+{{- if and $b.enabled (not (dig "backup" "recipients" list $c)) -}}
+{{- fail "backup.config needs backup.recipients: the age public keys (age1...) every backup is encrypted to" -}}
 {{- end -}}
 {{- if ne (dig "backup" "role" "backup" $c) "backup" -}}
 {{- fail "backup.config.backup.role must be unset: the CronJob is the backup role and restore.enabled renders the restore Job, so a CronJob cannot restore" -}}

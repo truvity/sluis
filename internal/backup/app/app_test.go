@@ -19,7 +19,7 @@ func write(t *testing.T, body string) string {
 }
 
 const head = "apiVersion: sluis.truvity.github.io/sluis-backup/v1\n"
-const target = "backup:\n  key: alias/archive\n  target: {bucket: b}\n"
+const target = "backup:\n  recipients: [age1843v2a5nyfrx6ssyftdyz7n8gncu5r0c3mwx4pgrv00uvca6vgjqa59uwj]\n  target: {bucket: b}\n"
 
 func TestTheFullDocumentBuildsTheSettings(t *testing.T) {
 	cfg, err := app.Load(filepath.Join("..", "..", "config", "testdata", "sluis-backup.full.yaml"))

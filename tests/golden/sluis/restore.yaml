@@ -88,13 +88,12 @@ data:
   config.yaml: |
     apiVersion: sluis.truvity.github.io/sluis-backup/v1
     backup:
+      recipients:
+      - age1843v2a5nyfrx6ssyftdyz7n8gncu5r0c3mwx4pgrv00uvca6vgjqa59uwj
       target:
         bucket: sluis-archive
         region: eu-west-1
     instance: sluis
-    keys:
-      adapter: kms
-      archive: alias/sluis-archive
     ports:
       blob:
         adapter: s3
@@ -399,7 +398,7 @@ spec:
         app.kubernetes.io/component: restore
         app.kubernetes.io/part-of: sluis
       annotations:
-        checksum/config: 876899042186d048ee8f50866d799ca5b11c57a3262d45a1962f281f72aa3f45
+        checksum/config: 2ed3c6fb52211c7dc2e635a60a261756dc3949778e585978e61a550a62c3d65e
     spec:
       restartPolicy: Never
       serviceAccountName: sluis-restore

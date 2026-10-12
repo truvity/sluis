@@ -76,29 +76,24 @@ func ownRecord(a port.Address5) bool {
 	return a.Module == port.ModuleBackup && (a.Kind == "run" || a.Kind == "restore" || a.Kind == "retention")
 }
 
-// Preview verifies the archive and reports what Apply would do. It writes
-// nothing.
+// Preview reports what Apply would do with an archive [backup.Open] verified.
+// It writes nothing.
 func Preview(ctx context.Context, r *backup.Reader, t Target, opt Options) (*Report, error) {
 	p, err := newRun(r, t, opt)
 	if err != nil {
 		return nil, err
 	}
-	if err := r.Verify(ctx); err != nil {
-		return nil, err
-	}
 	return p.walk(ctx, modePlan)
 }
 
-// Apply restores the archive. The archive is verified before any write; a
+// Apply restores the archive, which [backup.Open] verified whole before
+// anything is written; a
 // different value in the destination refuses the restore unless
 // [Options.Overwrite]; afterwards every record is read back. The report is the
 // plan that was carried out: Create and Overwrite count the writes.
 func Apply(ctx context.Context, r *backup.Reader, t Target, opt Options) (*Report, error) {
 	p, err := newRun(r, t, opt)
 	if err != nil {
-		return nil, err
-	}
-	if err := r.Verify(ctx); err != nil {
 		return nil, err
 	}
 	plan, err := p.walk(ctx, modePlan)
@@ -177,7 +172,7 @@ func (p *run) walk(ctx context.Context, m mode) (*Report, error) {
 	mf := p.r.Manifest()
 	p.mode = m
 	p.at = p.now()
-	p.rep = &Report{Installation: mf.Installation, ID: mf.ID, Layout: mf.Layout, Created: mf.Created}
+	p.rep = &Report{Installation: mf.Instance, ID: mf.ID, Layout: mf.Layout, Created: mf.Created}
 	for _, mod := range p.order() {
 		steps := []struct {
 			s backup.Section
@@ -208,8 +203,10 @@ func (p *run) section(ctx context.Context, mod port.Module, s backup.Section, w 
 		i = len(p.rep.Sections) - 1
 	}
 	p.cur = &p.rep.Sections[i]
-	var asm export.Assembler
-	err := p.r.Records(ctx, s, mod, func(raw []byte) error {
+	if s == backup.Blobs {
+		return p.r.Blobs(ctx, mod, func(name string, body []byte) error { return p.blob(ctx, mod, name, body) })
+	}
+	return p.r.Records(ctx, s, mod, func(raw []byte) error {
 		rec, err := export.Decode(s, raw)
 		if err != nil {
 			return err
@@ -227,22 +224,9 @@ func (p *run) section(ctx context.Context, mod port.Module, s backup.Section, w 
 			return p.index(ctx, mod, r)
 		case export.Secret:
 			return p.secret(ctx, mod, r)
-		case export.Blob:
-			name, body, done, err := asm.Add(r)
-			if err != nil || !done {
-				return err
-			}
-			return p.blob(ctx, mod, name, body)
 		}
 		return nil
 	})
-	if err != nil {
-		return err
-	}
-	if asm.Pending() {
-		return fmt.Errorf("%w: a blob ends before its last part", export.ErrRecord)
-	}
-	return nil
 }
 
 // isKeyring reports whether a key belongs to the signing key ring.
@@ -422,7 +406,7 @@ func (p *run) blob(ctx context.Context, mod port.Module, name string, body []byt
 	}
 	live, err := p.t.Blob.Read(ctx, name)
 	write := func() error {
-		// The assembler reuses body for the next object; an adapter may keep what it is given.
+		// The reader reuses body for the next object; an adapter may keep what it is given.
 		_, err := p.t.Blob.Write(ctx, name, bytes.Clone(body))
 		return err
 	}
