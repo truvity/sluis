@@ -94,6 +94,12 @@ type Args struct {
 	// an S3-compatible store.
 	TruststoreBucket *TruststoreBucketArgs
 
+	// PublicCache asks for the public documents (the key set and the metadata)
+	// to be cached by Cloudflare: NewEdge builds the rule (PublicCacheRule) and
+	// hands it to PublicCache.CreateCacheRule. Default none: every request
+	// reaches the origin.
+	PublicCache *PublicCacheArgs
+
 	// Tags are put on what the edge creates. Default none.
 	Tags map[string]string
 }
@@ -130,6 +136,14 @@ func (a *Args) validate() error {
 			return errors.New("edgecloudflare: Args.TruststoreBucket.Name is required")
 		}
 		if err := a.guard(b.ApplyPrincipalArns).Validate(); err != nil {
+			return err
+		}
+	}
+	if c := a.PublicCache; c != nil {
+		if c.CreateCacheRule == nil {
+			return errors.New("edgecloudflare: Args.PublicCache.CreateCacheRule is required")
+		}
+		if _, err := PublicCacheRule(a.DomainName, *c); err != nil {
 			return err
 		}
 	}
@@ -180,6 +194,9 @@ type Edge struct {
 	TruststoreBucketName pulumi.StringOutput
 	TruststoreURI        pulumi.StringOutput
 	TruststoreVersion    pulumi.StringOutput
+	// PublicCacheRule is the rule handed to Args.PublicCache.CreateCacheRule,
+	// nil without Args.PublicCache.
+	PublicCacheRule *CacheRule
 }
 
 // NewEdge creates the custom domain with mutual TLS, its mapping to the API,
@@ -307,6 +324,18 @@ func NewEdge(ctx *pulumi.Context, name string, args *Args, opts ...pulumi.Resour
 		}
 		return *c.HostedZoneId
 	}).(pulumi.StringOutput)
+	// ---- the edge cache of the public documents, in the estate's zone
+	if c := a.PublicCache; c != nil {
+		rule, err := PublicCacheRule(a.DomainName, *c)
+		if err != nil {
+			return nil, err
+		}
+		if err := c.CreateCacheRule(ctx, rule); err != nil {
+			return nil, fmt.Errorf("sluis edge public cache rule: %w", err)
+		}
+		out.PublicCacheRule = &rule
+	}
+
 	out.CertificateArn = certArn.ToStringOutput()
 	out.TruststoreBucketName = bucketName.ToStringOutput()
 	out.TruststoreURI = uri
