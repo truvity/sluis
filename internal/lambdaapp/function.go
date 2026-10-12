@@ -288,6 +288,21 @@ func CheckFunc(file string, only ...string) func(context.Context) (deploycheck.R
 	}
 }
 
+// CheckAdapters is a check that first builds the adapters the function uses
+// (verify) and then answers check. The secrets check proves the secrets are
+// there; it never builds the adapters, so a document that lacks a setting an
+// adapter needs passes it and fails the function's first tick. verify's refusal
+// is the check's, with the setting it names.
+func CheckAdapters(verify func(context.Context) error,
+	check func(context.Context) (deploycheck.Report, error)) func(context.Context) (deploycheck.Report, error) {
+	return func(ctx context.Context) (deploycheck.Report, error) {
+		if err := verify(ctx); err != nil {
+			return deploycheck.Report{}, fmt.Errorf("adapters: %w", err)
+		}
+		return check(ctx)
+	}
+}
+
 // CheckOwn is the {"kind":"check"} answer of a function whose module declares
 // the given kinds of secret (none, for the GitHub and Slack controllers: an
 // App's credential is made at run time and no document names it). It holds the

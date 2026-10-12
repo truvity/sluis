@@ -652,6 +652,41 @@ func Open(ctx context.Context, cfg Config, log *slog.Logger) (*Stores, error) {
 	return st, nil
 }
 
+// OpenDry builds what [Open] builds, as a deploy's check does: nothing it
+// reaches mutates. The adapter table is resolved and validated, and State, the
+// blobs, the secrets and the trigger are constructed from their settings, so a
+// setting a function needs and the document lacks is refused here as it is at
+// start. A DynamoDB table is bound and never created, and a blob whose
+// credentials a Cloudflare preset mints is validated and left unopened, because
+// opening it would mint. The Stores are the caller's to Close. An adapter that
+// needs a cluster (the Kubernetes build's own) is planned and not opened, and
+// the Stores are nil.
+func (c Config) OpenDry(ctx context.Context, log *slog.Logger) (*Stores, port.Table, error) {
+	switch c.Adapter {
+	case AdapterMemory, AdapterDynamoDB:
+	default:
+		table, err := c.Plan(ctx, log)
+		return nil, table, err
+	}
+	if err := c.validatePorts(); err != nil {
+		return nil, nil, err
+	}
+	c.DynamoDB.Create = false
+	// No cluster is reached either: the Kubernetes objects are not what is checked.
+	c.Kube = KubeNone
+	if b := c.Blob; b != nil && b.S3 != nil && b.S3.Credentials != nil {
+		s3, blob := *b.S3, *b
+		s3.Credentials = nil
+		blob.S3 = &s3
+		c.Blob = &blob
+	}
+	st, err := Open(ctx, c, log)
+	if err != nil {
+		return nil, nil, err
+	}
+	return st, st.Plan, nil
+}
+
 // applyTrigger replaces the Trigger the state adapter brought with the one the
 // plan names, when that is an adapter of its own: `invoke`, which starts a
 // controller function. The state adapters' triggers (the table's, the in-process
