@@ -582,6 +582,9 @@ func TestTheBackupDocumentListsTheGeneratedRecipientThenTheExtraOnes(t *testing.
 	if prop(p, "name").StringValue() != "/sluis/staging/internal/backup/restore-identity" || prop(p, "type").StringValue() != "SecureString" {
 		t.Errorf("the identity parameter is %v", p.Inputs)
 	}
+	if ow := prop(p, "overwrite"); !ow.IsBool() || !ow.BoolValue() {
+		t.Error("the identity parameter does not adopt an existing one (overwrite)")
+	}
 	value := prop(p, "value")
 	if !value.IsSecret() {
 		t.Error("the identity parameter's value is not secret in state")

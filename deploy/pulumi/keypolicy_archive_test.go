@@ -1,6 +1,7 @@
 package sluispulumi
 
 import (
+	"encoding/json"
 	"reflect"
 	"slices"
 	"strings"
@@ -65,5 +66,52 @@ func TestTheKeyPolicyDeniesTheBackupRoleTheRestoreIdentity(t *testing.T) {
 	want := arnPrefix + "ssm:" + kpRegion + ":" + kpAccount + ":parameter/sluis/" + kpInst + "/internal/backup/restore-identity"
 	if eq["kms:EncryptionContext:PARAMETER_ARN"] != want || deny["Effect"] != "Deny" || !reflect.DeepEqual(deny["Action"], []string{"kms:Decrypt"}) {
 		t.Errorf("the deny is %v", deny)
+	}
+}
+
+// The deployer reads the restore identity back (the provider decrypts a
+// SecureString after create and on refresh): the admins are granted it, the
+// backup role stays denied, the restore role keeps its own grant, and nobody
+// else gains the parameter.
+func TestAdminsReadTheRestoreIdentityAndNoOneElseGainsIt(t *testing.T) {
+	ident := arnPrefix + "ssm:" + kpRegion + ":" + kpAccount + ":parameter/sluis/" + kpInst + "/internal/backup/restore-identity"
+	holds := func(s map[string]any) bool {
+		raw, _ := json.Marshal(s["Condition"])
+		return strings.Contains(string(raw), ident)
+	}
+	var granted []string
+	for _, s := range kpStatements(t, kpArgs(LayoutV5)) {
+		if s["Effect"] == "Allow" && holds(s) {
+			granted = append(granted, s["Sid"].(string))
+		}
+	}
+	if !reflect.DeepEqual(granted, []string{"SluisKeyAdminReads"}) {
+		t.Fatalf("statements that name the restore identity explicitly: %v", granted)
+	}
+	reads := kpBySid(t, kpStatements(t, kpArgs(LayoutV5)), "SluisKeyAdminReads")
+	if !reflect.DeepEqual(reads["Action"], []string{"kms:Decrypt"}) {
+		t.Errorf("admin reads actions: %v", reads["Action"])
+	}
+	c := reads["Condition"].(map[string]any)
+	if !reflect.DeepEqual(c["ArnLike"], map[string]any{"aws:PrincipalArn": []string{kpAdmin}}) ||
+		c["StringEquals"].(map[string]any)["kms:ViaService"] != "ssm."+kpRegion+".amazonaws.com" {
+		t.Errorf("admin reads condition: %v", c)
+	}
+	// The deny is still about the backup role alone, so it never reaches an admin.
+	for _, s := range kpStatements(t, kpArgs(LayoutV5)) {
+		if s["Sid"] == "SluisKeyDenyRestoreIdentity" {
+			who := s["Condition"].(map[string]any)["ArnEquals"].(map[string]any)["aws:PrincipalArn"]
+			if !reflect.DeepEqual(who, []string{kpBackup}) {
+				t.Errorf("deny principals: %v", who)
+			}
+		}
+	}
+	// Without a backup role there is no identity parameter, so no grant for it.
+	a := kpArgs(LayoutV5)
+	a.Roles = slices.DeleteFunc(slices.Clone(a.Roles), func(r KeyRole) bool { return r.Role.Name == RoleBackup })
+	for _, s := range kpStatements(t, a) {
+		if holds(s) {
+			t.Errorf("%v names the restore identity without a backup role", s["Sid"])
+		}
 	}
 }
