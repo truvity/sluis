@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -247,6 +248,16 @@ type KeyPolicyArgs struct {
 	// calls and DescribeKey. Off by default: it is a statement about the sluis
 	// roles only, but a role an estate shares with another usage would lose it.
 	DenyOtherActions bool
+	// BackupArchive and RestoreArchive add the statements for the backup archive's
+	// encryption context {instance, purpose: archive} on a key the archive shares
+	// with the rest of the estate (ArchiveGrant.KeyArn is this key): the backup
+	// role seals and opens each backup's data key under that context and no other
+	// (Decrypt, GenerateDataKey), the restore role opens it (Decrypt), the purpose
+	// is reserved to those roles, and they use the key under that purpose only.
+	// Off by default: an archive on a key of its own needs none, and a key shared
+	// with another usage keeps the usage's own statements. BackupArchive needs the
+	// backup role in Roles, RestoreArchive the restore role (and BackupArchive).
+	BackupArchive, RestoreArchive bool
 }
 
 // The Sids of the statements SluisKeyPolicyStatements returns. All start with
@@ -268,6 +279,10 @@ const (
 	sidKeySignPurposeOnly  = "SluisKeySignDirectPurposeOnly"
 	sidKeySignContextOnly  = "SluisKeySignDirectContextKeysOnly"
 	sidKeyRolesNothingElse = "SluisKeyRolesNothingElse"
+	sidKeyArchive          = "SluisKeyArchive"
+	sidKeyArchiveRestore   = "SluisKeyArchiveRestore"
+	sidKeyArchiveReserved  = "SluisKeyArchiveContextReserved"
+	sidKeyArchiveOnly      = "SluisKeyArchiveRolesPurposeOnly"
 	kmsDescribe            = "kms:DescribeKey"
 	condPrincipalArn       = "aws:PrincipalArn"
 	condViaService         = "kms:ViaService"
@@ -491,10 +506,48 @@ func SluisKeyPolicyStatements(a KeyPolicyArgs) ([]map[string]any, error) {
 			st = append(st, d)
 		}
 	}
+	if a.BackupArchive {
+		var archive []string
+		for i := range sorted {
+			r := &sorted[i]
+			switch {
+			case r.Role.Name == RoleBackup:
+				archive = append(archive, r.arns()...)
+				st = append(st, allow(sidKeyArchive, []string{kmsDecrypt, kmsGenerateDK}, archiveCondition(a.Modules.Instance, r)))
+			case r.Role.Name == RoleRestore && a.RestoreArchive:
+				archive = append(archive, r.arns()...)
+				st = append(st, allow(sidKeyArchiveRestore, []string{kmsDecrypt}, archiveCondition(a.Modules.Instance, r)))
+			}
+		}
+		archive = sortedStrings(archive)
+		purpose := map[string]any{condContextPurpose: ArchivePurpose}
+		crypto := []string{kmsEncrypt, kmsDecrypt, "kms:ReEncrypt*", "kms:GenerateDataKey*", "kms:CreateGrant"}
+		reserved := deny(sidKeyArchiveReserved, map[string]any{
+			condStringEquals: purpose, "ArnNotEquals": map[string]any{condPrincipalArn: archive},
+		})
+		only := deny(sidKeyArchiveOnly, map[string]any{
+			condArnEquals: map[string]any{condPrincipalArn: archive}, "StringNotEquals": purpose,
+		})
+		reserved["Action"], only["Action"] = crypto, crypto
+		st = append(st, reserved, only)
+	}
 	if err := uniqueSids(st); err != nil {
 		return nil, err
 	}
 	return st, nil
+}
+
+// archiveCondition holds a role to the backup archive's context: the instance and
+// the archive purpose, and no other context key.
+func archiveCondition(instance string, r *KeyRole) map[string]any {
+	return map[string]any{
+		condArnEquals: map[string]any{condPrincipalArn: r.principalCond()},
+		condStringEquals: map[string]any{
+			condContextInstance: instance,
+			condContextPurpose:  ArchivePurpose,
+		},
+		"ForAllValues:StringEquals": map[string]any{condContextKeys: []string{"instance", "purpose"}},
+	}
 }
 
 func (a KeyPolicyArgs) validate() error {
@@ -536,6 +589,17 @@ func (a KeyPolicyArgs) validate() error {
 			if !validModule(m) {
 				return fmt.Errorf("sluispulumi: KeyPolicyArgs role %q hosts unknown module %q", r.Role.Name, m)
 			}
+		}
+	}
+	if a.RestoreArchive && !a.BackupArchive {
+		return errors.New("sluispulumi: KeyPolicyArgs.RestoreArchive needs BackupArchive: the restore function opens what the backup function sealed")
+	}
+	for _, c := range []struct {
+		on   bool
+		role string
+	}{{a.BackupArchive, RoleBackup}, {a.RestoreArchive, RoleRestore}} {
+		if c.on && !slices.ContainsFunc(a.Roles, func(r KeyRole) bool { return r.Role.Name == c.role }) {
+			return fmt.Errorf("sluispulumi: KeyPolicyArgs asks for the archive statements of the %s role, and Roles has none", c.role)
 		}
 	}
 	for _, list := range [][]string{a.ExternalReaders, a.Admins, a.Breakglass} {
