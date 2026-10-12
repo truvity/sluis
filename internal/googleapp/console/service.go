@@ -90,7 +90,9 @@ func fail(err error) error {
 	case errors.Is(err, hub.ErrDeclared):
 		return modcall.Coded(CodeFailedPrecondition, err.Error())
 	}
-	return modcall.Coded(modcall.CodeInternal, "")
+	// The caller is told nothing of the cause; the module's server logs it with
+	// the request id (modcall.Server.SetLogger).
+	return modcall.CodedCause(modcall.CodeInternal, "", err)
 }
 
 func (s *Service) view(ctx context.Context, id string) (*directoryrosterv1.Workspace, error) {

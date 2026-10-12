@@ -129,7 +129,7 @@ func handleJSON[Req, Resp any](
 		}
 		raw, err := json.Marshal(resp)
 		if err != nil {
-			return consolecall.Reply{}, modcall.Coded(modcall.CodeInternal, "")
+			return consolecall.Reply{}, modcall.CodedCause(modcall.CodeInternal, "", err)
 		}
 		return consolecall.Reply{Msg: raw}, nil
 	}, opts...)

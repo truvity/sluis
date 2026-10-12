@@ -274,6 +274,19 @@ func (a *App) Pass(ctx context.Context, workspace string, unsafeLocal bool) (hub
 	return out, nil
 }
 
+// ProbePass exercises every workspace's credential once and records the outcome,
+// which is what the probe loop does in a process that has one. A function has
+// none, so without this the health a failed probe wrote stays until an operator
+// probes again, and a workspace that is not healthy answers non-authoritatively
+// (and demotes the operators it vouches for).
+func (a *App) ProbePass(ctx context.Context) error {
+	_, err := a.hub.Probe(ctx, "")
+	if err != nil {
+		a.log.WarnContext(ctx, "the probe pass failed", slog.Any("error", err))
+	}
+	return err
+}
+
 // RefreshPass runs one refresh pass over every workspace, under each one's
 // lease: what a scheduled function runs.
 func (a *App) RefreshPass(ctx context.Context) (hub.RefreshResult, error) {

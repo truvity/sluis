@@ -31,9 +31,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"slices"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -41,6 +43,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/truvity/sluis/internal/telemetry"
+	"github.com/truvity/sluis/storage/logattr"
 )
 
 // Kind is the `kind` of a Lambda event that carries a module call, beside the
@@ -114,7 +117,14 @@ type Response struct {
 type Error struct {
 	Code    string `json:"code"`
 	Message string `json:"message,omitempty"`
+
+	// cause is what went wrong behind a code that tells nothing. It is never
+	// sent: the callee's log has it ([Server.SetLogger]).
+	cause error
 }
+
+// Unwrap is the cause the callee kept for its log, if any.
+func (e *Error) Unwrap() error { return e.cause }
 
 // Error implements error.
 func (e *Error) Error() string {
@@ -132,6 +142,12 @@ func (e *Error) Is(target error) bool {
 
 // Coded is an error a handler returns to answer with code and message.
 func Coded(code, message string) error { return &Error{Code: code, Message: message} }
+
+// CodedCause is [Coded] that keeps the error behind it for the callee's log. The
+// cause is not sent: a caller is another module's trust domain.
+func CodedCause(code, message string, cause error) error {
+	return &Error{Code: code, Message: message, cause: cause}
+}
 
 // Caller sends one call to a module and returns its raw result.
 type Caller interface {
@@ -193,6 +209,7 @@ func MaxBytes(n int) Option {
 // Server dispatches calls to the methods a module registered.
 type Server struct {
 	module string
+	log    atomic.Pointer[slog.Logger]
 
 	mu       sync.RWMutex
 	handlers map[string]*handler
@@ -201,6 +218,58 @@ type Server struct {
 // NewServer is the server of one module.
 func NewServer(module string) *Server {
 	return &Server{module: module, handlers: map[string]*handler{}}
+}
+
+// SetLogger makes the server log what it refuses or fails to answer, with the
+// request id [WithRequestID] put on the context: a caller is told a code and
+// nothing else, so without this the callee's log says nothing of a failed call.
+// A server with no logger logs nothing; SetLogger does not replace one already
+// set.
+func (s *Server) SetLogger(log *slog.Logger) {
+	if log != nil {
+		s.log.CompareAndSwap(nil, log)
+	}
+}
+
+// requestKey carries the transport's request id on a context.
+type requestKey struct{}
+
+// WithRequestID marks ctx with the transport's id of the request (a Lambda
+// request id), for the callee's log.
+func WithRequestID(ctx context.Context, id string) context.Context {
+	return context.WithValue(ctx, requestKey{}, id)
+}
+
+// report logs a call that was refused or failed. Refusals of the caller's
+// request are warnings; a failure of the callee's own is an error. Neither
+// carries the payload.
+func (s *Server) report(ctx context.Context, req Request, resp Response, cause error) {
+	log := s.log.Load()
+	if log == nil || resp.Error == nil {
+		return
+	}
+	level := slog.LevelWarn
+	switch resp.Error.Code {
+	case CodeInternal, CodeDeadlineExceeded:
+		level = slog.LevelError
+	}
+	attrs := []slog.Attr{
+		slog.String("module", s.module), slog.String("method", req.Method), slog.String("code", resp.Error.Code),
+	}
+	if id, _ := ctx.Value(requestKey{}).(string); id != "" {
+		attrs = append(attrs, slog.String("request_id", id))
+	}
+	var coded *Error
+	if errors.As(cause, &coded) && coded.cause != nil {
+		cause = coded.cause
+	}
+	if cause != nil {
+		attrs = append(attrs, logattr.SafeError("error", cause))
+	}
+	if resp.Error.Code == CodeForbidden {
+		attrs = append(attrs, slog.String("caller", CallerOf(ctx)))
+	}
+	log.LogAttrs(ctx, level, "a module call was refused or failed", attrs...)
 }
 
 // Module is the module the server answers for.
@@ -253,13 +322,17 @@ func (s *Server) Dispatch(ctx context.Context, req Request) Response {
 
 func (s *Server) dispatch(ctx context.Context, v int, req Request) Response {
 	if req.Module != s.module {
-		return Response{Error: &Error{Code: CodeNoSuchMethod, Message: "no such module"}}
+		resp := Response{Error: &Error{Code: CodeNoSuchMethod, Message: "no such module"}}
+		s.report(ctx, req, resp, nil)
+		return resp
 	}
 	s.mu.RLock()
 	h, ok := s.handlers[req.Method]
 	s.mu.RUnlock()
 	if !ok {
-		return Response{Error: &Error{Code: CodeNoSuchMethod, Message: "no such method"}}
+		resp := Response{Error: &Error{Code: CodeNoSuchMethod, Message: "no such method"}}
+		s.report(ctx, req, resp, nil)
+		return resp
 	}
 	if v >= 2 {
 		ctx = telemetry.ExtractWire(ctx, req.Traceparent, req.Tracestate)
@@ -267,7 +340,8 @@ func (s *Server) dispatch(ctx context.Context, v int, req Request) Response {
 	ctx, span := telemetry.Tracer().Start(ctx, "modcall "+s.module+"."+req.Method,
 		trace.WithSpanKind(trace.SpanKindServer), trace.WithAttributes(rpcAttrs(s.module, req.Method)...))
 	defer span.End()
-	resp := s.run(ctx, v, h, req)
+	resp, cause := s.run(ctx, v, h, req)
+	s.report(ctx, req, resp, cause)
 	if resp.Error != nil {
 		span.SetStatus(codes.Error, "")
 		span.SetAttributes(attribute.String("error.type", resp.Error.Code))
@@ -275,12 +349,12 @@ func (s *Server) dispatch(ctx context.Context, v int, req Request) Response {
 	return resp
 }
 
-func (s *Server) run(ctx context.Context, v int, h *handler, req Request) Response {
+func (s *Server) run(ctx context.Context, v int, h *handler, req Request) (Response, error) {
 	if h.allow != nil && !h.allows(ctx) {
-		return Response{Error: &Error{Code: CodeForbidden}}
+		return Response{Error: &Error{Code: CodeForbidden}}, nil
 	}
 	if len(req.Payload) > h.max {
-		return Response{Error: &Error{Code: CodeBadRequest, Message: "the request is too large"}}
+		return Response{Error: &Error{Code: CodeBadRequest, Message: "the request is too large"}}, nil
 	}
 	if v >= 2 && req.Deadline > 0 {
 		var cancel context.CancelFunc
@@ -288,24 +362,27 @@ func (s *Server) run(ctx context.Context, v int, h *handler, req Request) Respon
 		defer cancel()
 	}
 	if ctx.Err() != nil {
-		return Response{Error: &Error{Code: CodeDeadlineExceeded}}
+		return Response{Error: &Error{Code: CodeDeadlineExceeded}}, ctx.Err()
 	}
 	out, err := h.fn(ctx, req.Payload)
 	if err != nil {
 		var coded *Error
 		switch {
 		case errors.As(err, &coded):
-			return Response{Error: coded}
+			return Response{Error: &Error{Code: coded.Code, Message: coded.Message}}, err
 		case errors.Is(err, context.DeadlineExceeded):
-			return Response{Error: &Error{Code: CodeDeadlineExceeded}}
+			return Response{Error: &Error{Code: CodeDeadlineExceeded}}, err
 		}
-		return Response{Error: &Error{Code: CodeInternal}}
+		return Response{Error: &Error{Code: CodeInternal}}, err
 	}
 	raw, err := json.Marshal(out)
 	if err != nil || len(raw) > h.max {
-		return Response{Error: &Error{Code: CodeInternal}}
+		if err == nil {
+			err = fmt.Errorf("the result is %d bytes, over the method's bound of %d", len(raw), h.max)
+		}
+		return Response{Error: &Error{Code: CodeInternal}}, err
 	}
-	return Response{Result: raw}
+	return Response{Result: raw}, nil
 }
 
 // rpcAttrs are the span attributes of a call: the system and the method, both
