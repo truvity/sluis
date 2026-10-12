@@ -10,6 +10,8 @@
 
 - **The console no longer calls a healthy Cloudflare credential "past its rotation".** It showed a warning ("Past its rotation (20m); the next tick replaces it.") and a "pending, past rotation" badge whenever the stored credential was older than `rotation`, but rotation only happens on the tick, so with a 20m `rotation` and a 15m tick every credential was "past rotation" for up to a tick of every cycle while perfectly healthy. A credential past `rotation` is now **due**, in a neutral style ("Due: past its rotation (20m); the rotation runs every 15m, and the next tick replaces it."), and **overdue**, a warning, only past `rotation + tick` and a minute of slack; past twice the rotation it is still "not rotating" and the alert still fires. Tests hold each boundary, a tick longer than the rotation, and an older server that sends no tick.
 
+- **`TestATimeoutIsRetriedOnce` no longer races a sleep against a timeout.** Its slow first attempt slept 300ms against a 100ms client timeout, and the retry had the same 100ms, which a loaded runner missed ("Client.Timeout exceeded while awaiting headers"). The first attempt is now never answered until the test ends (so it times out whatever the load) and the retry is answered at once under a 2s budget; the test also holds that exactly two calls were made and that the first took its whole budget to time out.
+
 ## v1.76.0-rc.6
 
 ### Changed

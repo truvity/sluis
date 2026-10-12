@@ -353,17 +353,35 @@ func TestATimeoutIsRetriedOnce(t *testing.T) {
 	}
 
 	// A slow answer: the per-attempt client timeout fires, then the retry succeeds.
+	//
+	// The first attempt is never answered, so it times out whatever the load,
+	// and the second is answered at once, so the budget it has is far more
+	// than it needs: nothing here races a sleep against a timeout.
+	const attemptBudget = 2 * time.Second
+	hold := make(chan struct{})
 	var slow atomic.Int32
 	resolver2, srv2 := served(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if slow.Add(1) == 1 {
-			time.Sleep(300 * time.Millisecond)
+			select {
+			case <-hold:
+			case <-r.Context().Done():
+			}
+			return
 		}
 		goodDoc(w, r)
 	}))
+	t.Cleanup(func() { close(hold) }) // runs before the server's Close, which waits for the handler
 	resolver2.backoff = time.Millisecond
-	resolver2.fetch.Timeout = 100 * time.Millisecond
+	resolver2.fetch.Timeout = attemptBudget
+	start := time.Now()
 	if _, err := resolver2.Resolve(context.Background(), srv2.URL+"/cimd.json"); err != nil {
 		t.Fatalf("Resolve after one timeout: %v", err)
+	}
+	if got := slow.Load(); got != 2 {
+		t.Errorf("calls = %d, want 2: the first attempt must have timed out and been retried once", got)
+	}
+	if took := time.Since(start); took < attemptBudget {
+		t.Errorf("Resolve took %v, under the %v attempt budget: the first attempt did not time out", took, attemptBudget)
 	}
 }
 
