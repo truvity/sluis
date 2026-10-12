@@ -26,6 +26,9 @@ metadata:
   labels:
     {{- include "audit.labels" . | nindent 4 }}
     app.kubernetes.io/component: query
+  {{- with include "audit.objectAnnotations" (dict "root" . "comp" .Values.query) }}
+  {{- . | nindent 2 }}
+  {{- end }}
 spec:
   replicas: {{ .Values.query.replicas }}
   selector:

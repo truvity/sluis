@@ -29,6 +29,9 @@ metadata:
   name: {{ if $front }}{{ include "audit.fullname" $ }}{{ else }}{{ include "audit.fullname" $ }}-consumer{{ end }}
   labels:
     {{- include "audit.labels" $ | nindent 4 }}
+  {{- with include "audit.objectAnnotations" (dict "root" $ "comp" $comp) }}
+  {{- . | nindent 2 }}
+  {{- end }}
 spec:
   replicas: {{ $replicas }}
   {{- if and $archive $.Values.keysVolume.enabled (not (has "ReadWriteMany" $.Values.keysVolume.accessModes)) }}

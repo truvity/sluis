@@ -22,6 +22,18 @@ app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end -}}
 
+{{/* The `annotations:` block of a workload object (a Deployment or a CronJob),
+not of its pods: the chart-wide `commonAnnotations` with the component's own
+`annotations` laid over them. Renders nothing when both are empty. Takes (dict
+"root" $ "comp" <the component's values>). */}}
+{{- define "audit.objectAnnotations" -}}
+{{- $a := mergeOverwrite (deepCopy (.root.Values.commonAnnotations | default dict)) (deepCopy (.comp.annotations | default dict)) -}}
+{{- with $a }}
+annotations:
+  {{- toYaml . | nindent 2 }}
+{{- end }}
+{{- end -}}
+
 {{- define "audit.selectorLabels" -}}
 app.kubernetes.io/name: {{ include "audit.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
