@@ -1,5 +1,9 @@
 ## Unreleased
 
+### Changed
+
+- **The deployer reads the restore identity back.** `NewBackup` creates the restore identity as a SecureString, and the AWS provider decrypts it after create and on every refresh, but `SluisKeyAdminReads` named only the state secret and the recovery password, so an admin role with no other path to the key was refused `kms:Decrypt` and the apply failed after the parameter existed in AWS and before it was recorded in state. `SluisKeyAdminReads` now also covers the restore identity's `PARAMETER_ARN` (layout v5 with a backup role), under the same `KeyPolicyOptions.Admins` principals and SSM `ViaService`. `SluisKeyDenyRestoreIdentity` and the backup role's IAM denies are unchanged: only the backup role is denied; admins and the restore role read it. Admins could already read the break-glass identity, so this adds no recovery capability. The parameter keeps `overwrite: true`, so an apply whose earlier create succeeded in AWS adopts it (the value derives from the seed in state and is identical). Tests hold the grant, the unchanged deny, that no other statement names the parameter, and `overwrite`.
+
 ## v1.76.1
 
 ### Changed

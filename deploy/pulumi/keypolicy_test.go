@@ -196,7 +196,10 @@ func TestSluisKeyPolicyParameterScopes(t *testing.T) {
 	if got := arns("SluisKeyMinterIssuer", st); !reflect.DeepEqual(got, []string{root + "/internal/cloudflare/main/minter"}) {
 		t.Errorf("minter: %v", got)
 	}
-	if got := arns("SluisKeyAdminReads", st); !reflect.DeepEqual(got, []string{root + "/internal/oidc/state-secret", root + "/internal/oidc/recovery-password"}) {
+	wantAdmin := []string{
+		root + "/internal/oidc/state-secret", root + "/internal/oidc/recovery-password", root + "/internal/backup/restore-identity",
+	}
+	if got := arns("SluisKeyAdminReads", st); !reflect.DeepEqual(got, wantAdmin) {
 		t.Errorf("admin reads v5: %v", got)
 	}
 	// v4 adds the v4 names and gives the issuer the whole of internal/ and external/.

@@ -311,8 +311,9 @@ const (
 //     document opens blobs from a preset (KeyRole.OpensPresetBlobs);
 //   - SluisKeyExternalReaders: Decrypt of `external/*` only, through SSM;
 //   - SluisKeyAdminSeeds: Encrypt and GenerateDataKey through SSM (seed
-//     parameters); SluisKeyAdminReads: Decrypt of the state secret and the
-//     recovery password, which the stack reads back on every refresh;
+//     parameters); SluisKeyAdminReads: Decrypt of the state secret, the
+//     recovery password and (with a backup role on layout v5) the restore
+//     identity, which the stack reads back on every refresh;
 //   - SluisKeyBreakglass: the function's operations through SSM;
 //   - SluisKeySign: the roles that host oidc, directly (no service), Encrypt,
 //     Decrypt and GenerateDataKey under exactly {instance, purpose: sign}
@@ -443,6 +444,15 @@ func SluisKeyPolicyStatements(a KeyPolicyArgs) ([]map[string]any, error) {
 		var own2 []string
 		for _, n := range own {
 			own2 = append(own2, arnPrefix+"ssm:"+a.Region+":"+a.Account+":parameter"+n)
+		}
+		// The stack also reads the restore identity back (the provider decrypts a
+		// SecureString after create and on refresh). Admins read it; the backup role
+		// is denied it below, and nobody else is granted it here.
+		for i := range sorted {
+			if a.Layout.has5() && sorted[i].Role.Name == RoleBackup {
+				own2 = append(own2, restoreIdentityArn(a.Region, a.Account, a.Modules))
+				break
+			}
 		}
 		st = append(st,
 			allow(sidKeyAdminSeeds, []string{kmsEncrypt, kmsGenerateDK, kmsDescribe}, map[string]any{
