@@ -1,5 +1,7 @@
 ## Unreleased
 
+## v1.76.1
+
 ### Changed
 
 - **Every S3 and R2 upload carries a precomputed SHA-256 checksum.** AWS refuses a `PutObject` on an Object Lock bucket without `Content-MD5` or an `x-amz-checksum-*` header, and the adapter sent neither (it keeps the SDK's `WhenRequired`, because R2 refuses the streaming `aws-chunked` trailer). `put` now computes SHA-256 over the whole body and sends it as `x-amz-checksum-sha256`; no `aws-chunked` encoding and no `x-amz-trailer` is used. This applies to every target: the backup archive and the live blobs (`ports.blob.s3`). The new `checksum` key of `ports.blob.s3` and `backup.target` is the escape hatch for a store that refuses SHA-256: `sha256` (the default), `md5` (sends `Content-MD5`) or `none`. Tests run the real SDK client against an `httptest` server and hold the header, the absence of the trailer and of `aws-chunked`, the hash's dependence on the body, and the other two modes.
