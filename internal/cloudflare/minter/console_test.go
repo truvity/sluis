@@ -125,3 +125,14 @@ func TestRotateNowRefusesAnActivePrototype(t *testing.T) {
 		t.Error("a token was created from an active prototype")
 	}
 }
+
+// A preset says how often it is looked at, so the console can tell a credential
+// waiting for the tick from one the tick missed. Unset is the finest tick.
+func TestAPresetCarriesTheTickItIsRotatedOn(t *testing.T) {
+	e := setup(t)
+	for _, p := range e.m.Presets() {
+		if p.Tick != minter.DefaultTick {
+			t.Errorf("%s: tick = %v, want the default %v when the document says none", p.Name, p.Tick, minter.DefaultTick)
+		}
+	}
+}

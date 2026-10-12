@@ -165,12 +165,24 @@ type PresetInfo struct {
 	Endpoint string
 	Lifetime time.Duration
 	Rotation time.Duration
+	// Tick is how often the rotation looks at the preset, so how late a
+	// rotation can be without anything being wrong: a credential rotates up to
+	// one Tick after its Rotation.
+	Tick time.Duration `json:",omitzero"`
 }
 
-func infoOf(name string, p config.CloudflarePreset) PresetInfo {
+// DefaultTick is the rotation's tick when the configuration does not say: the
+// Kubernetes loop's.
+const DefaultTick = time.Minute
+
+func infoOf(name string, p config.CloudflarePreset, tick config.Duration) PresetInfo {
+	t := tick.D()
+	if t <= 0 {
+		t = DefaultTick
+	}
 	return PresetInfo{
 		Name: name, Description: p.Description, Account: p.Account, R2: p.R2(), Endpoint: p.Endpoint,
-		Lifetime: p.Lifetime.D(), Rotation: p.Rotation.D(),
+		Lifetime: p.Lifetime.D(), Rotation: p.Rotation.D(), Tick: t,
 	}
 }
 
@@ -178,7 +190,7 @@ func infoOf(name string, p config.CloudflarePreset) PresetInfo {
 func (m *Minter) Presets() []PresetInfo {
 	var out []PresetInfo
 	for _, name := range m.cfg.Cloudflare.PresetNames() {
-		out = append(out, infoOf(name, m.cfg.Cloudflare.Presets[name]))
+		out = append(out, infoOf(name, m.cfg.Cloudflare.Presets[name], m.cfg.Cloudflare.Tick))
 	}
 	return out
 }
@@ -189,7 +201,7 @@ func (m *Minter) Preset(name string) (PresetInfo, bool) {
 	if !ok {
 		return PresetInfo{}, false
 	}
-	return infoOf(name, p), true
+	return infoOf(name, p, m.cfg.Cloudflare.Tick), true
 }
 
 // Caller is who asks for a token, as the token exchange verified them. The
@@ -209,7 +221,7 @@ func (m *Minter) Granted(c Caller) []PresetInfo {
 	var out []PresetInfo
 	for _, name := range m.cfg.Cloudflare.PresetNames() {
 		if m.cfg.Grants.Allows(name, c.Groups) {
-			out = append(out, infoOf(name, m.cfg.Cloudflare.Presets[name]))
+			out = append(out, infoOf(name, m.cfg.Cloudflare.Presets[name], m.cfg.Cloudflare.Tick))
 		}
 	}
 	return out

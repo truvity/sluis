@@ -86,7 +86,7 @@ func (c *Console) ListCloudflare(
 func presetProto(p cfrpc.PresetView) *directoryrosterv1.CloudflarePreset {
 	out := &directoryrosterv1.CloudflarePreset{
 		Name: p.Name, Description: p.Description, Account: p.Account, Endpoint: p.Endpoint,
-		LifetimeSeconds: int64(p.Lifetime / time.Second), RotationSeconds: int64(p.Rotation / time.Second),
+		LifetimeSeconds: int64(p.Lifetime / time.Second), RotationSeconds: int64(p.Rotation / time.Second), RotationTickSeconds: int64(p.Tick / time.Second),
 		Prototype: &directoryrosterv1.CloudflarePrototype{Id: p.Prototype.ID, Status: p.Prototype.Status, Detail: p.Prototype.Detail},
 		LiveError: p.LiveError,
 		Stored: &directoryrosterv1.CloudflareStored{

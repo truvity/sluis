@@ -30,6 +30,7 @@ func cloudflareSchema() m {
 				"endpoint":    url("Makes this an R2 preset: the S3 endpoint of the account (`https://<account-id>.r2.cloudflarestorage.com`, or `https://<account-id>.eu.r2.cloudflarestorage.com` for an EU jurisdiction). The stored document then holds an access key and secret instead of a token."),
 			}, "account", "prototype", "description", "lifetime", "rotation"),
 		},
+		"tick": duration("How often the rotation looks at the presets: the interval of the schedule that invokes it on Lambda (the library fills it from `CloudflareRotation` when unset), a minute for the Kubernetes loop. A credential rotates up to one tick after its preset's `rotation`, so the console calls one overdue only past `rotation + tick`; make `rotation` a multiple of the tick to rotate when intended. Unset is a minute.", ""),
 		"remote": obj("Where the minter is when it is not this process: the on-demand token exchange calls the Cloudflare module there (docs/decisions/0071), and this document then declares no `accounts` or `presets`. Set exactly one of `function` and `url`. Unset keeps the minter in this process.", m{
 			"function":  str("The module's Lambda function, name or ARN. It is invoked through its `live-issuer` alias."),
 			"url":       url("The module's Kubernetes Service. A call carries the pod's projected ServiceAccount token."),

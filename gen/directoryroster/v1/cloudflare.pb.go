@@ -199,9 +199,14 @@ type CloudflarePreset struct {
 	// the preset's tokens minted on demand that Cloudflare still accepts.
 	Live []*CloudflareLiveToken `protobuf:"bytes,9,rep,name=live,proto3" json:"live,omitempty"`
 	// set when the live tokens could not be listed: the reason, not a list.
-	LiveError     string `protobuf:"bytes,10,opt,name=live_error,json=liveError,proto3" json:"live_error,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	LiveError string `protobuf:"bytes,10,opt,name=live_error,json=liveError,proto3" json:"live_error,omitempty"`
+	// how often the rotation looks at the preset (the schedule's tick on Lambda,
+	// a minute on Kubernetes). A credential rotates up to one tick after
+	// rotation_seconds, so it is overdue only past rotation_seconds +
+	// rotation_tick_seconds.
+	RotationTickSeconds int64 `protobuf:"varint,11,opt,name=rotation_tick_seconds,json=rotationTickSeconds,proto3" json:"rotation_tick_seconds,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *CloudflarePreset) Reset() {
@@ -302,6 +307,13 @@ func (x *CloudflarePreset) GetLiveError() string {
 		return x.LiveError
 	}
 	return ""
+}
+
+func (x *CloudflarePreset) GetRotationTickSeconds() int64 {
+	if x != nil {
+		return x.RotationTickSeconds
+	}
+	return 0
 }
 
 // CloudflarePrototype is the prototype token as sluis reads it now.
@@ -1038,7 +1050,7 @@ const file_directoryroster_v1_cloudflare_proto_rawDesc = "" +
 	"canOperate\"B\n" +
 	"\x11CloudflareAccount\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x19\n" +
-	"\bid_last4\x18\x02 \x01(\tR\aidLast4\"\xb5\x03\n" +
+	"\bid_last4\x18\x02 \x01(\tR\aidLast4\"\xe9\x03\n" +
 	"\x10CloudflarePreset\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x18\n" +
@@ -1051,7 +1063,8 @@ const file_directoryroster_v1_cloudflare_proto_rawDesc = "" +
 	"\x04live\x18\t \x03(\v2'.directoryroster.v1.CloudflareLiveTokenR\x04live\x12\x1d\n" +
 	"\n" +
 	"live_error\x18\n" +
-	" \x01(\tR\tliveError\"U\n" +
+	" \x01(\tR\tliveError\x122\n" +
+	"\x15rotation_tick_seconds\x18\v \x01(\x03R\x13rotationTickSeconds\"U\n" +
 	"\x13CloudflarePrototype\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
 	"\x06status\x18\x02 \x01(\tR\x06status\x12\x16\n" +

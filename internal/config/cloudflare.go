@@ -29,6 +29,12 @@ type Cloudflare struct {
 	// them under. They cannot remove from it: nothing in a document shortens
 	// the built-in list.
 	ForbiddenPermissionGroups []string `json:"forbiddenPermissionGroups,omitempty"`
+	// Tick is how often the rotation looks at the presets: the schedule's
+	// interval on Lambda (the library fills it from CloudflareRotation when it
+	// is unset), a minute for the Kubernetes loop. A credential rotates up to
+	// one Tick after its preset's `rotation`, so the console calls one overdue
+	// only past `rotation + tick`. Zero means a minute.
+	Tick Duration `json:"tick,omitempty"`
 	// Remote is where the minter is when it is not this process: the on-demand
 	// exchange then calls the Cloudflare module there, and this process holds no
 	// account and no preset.
