@@ -1,6 +1,7 @@
 package sluispulumi_test
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"os/exec"
@@ -12,6 +13,8 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 	yaml "go.yaml.in/yaml/v3"
+
+	"filippo.io/age"
 
 	arp "github.com/truvity/sluis/deploy/pulumi"
 )
@@ -61,6 +64,8 @@ func buildBackup(t *testing.T, mutate func(*arp.BackupArgs)) (*recorder, map[str
 		collect("bucketArn", b.ArchiveBucketArn)
 		collect("bucketPolicy", b.ArchiveBucketPolicy)
 		collect("keyArn", b.ArchiveKeyArn)
+		collect("recipient", b.RestoreRecipient)
+		collect("identityParam", b.RestoreIdentityParameter)
 		collect("alarms", b.AlarmNames.ApplyT(func(v []string) string { return strings.Join(v, ",") }).(pulumi.StringOutput))
 		return nil
 	})
@@ -157,8 +162,19 @@ func TestTheBackupFunctionIsTheReleaseZipWithTheBackupDocument(t *testing.T) {
 		t.Errorf("ports.blob = %v", at(t, doc, "ports", "blob"))
 	}
 	bk := doc["backup"].(map[string]any)
+	// The deprecated alias is still rendered while it is set (a format v1 binary
+	// opens its key from it); no role holds a grant on the key.
 	if bk["key"] != "alias/staging-archive" {
 		t.Errorf("backup.key = %v", bk["key"])
+	}
+	if _, set := bk["identity"]; set {
+		t.Errorf("backup.identity = %v: the backup function holds no identity", bk["identity"])
+	}
+	rcpts, _ := bk["recipients"].([]any)
+	if len(rcpts) != 1 {
+		t.Errorf("backup.recipients = %v, want the generated one", bk["recipients"])
+	} else if _, err := age.ParseX25519Recipient(rcpts[0].(string)); err != nil {
+		t.Errorf("backup.recipients[0] = %v: %v", rcpts[0], err)
 	}
 	if _, set := bk["role"]; set {
 		t.Errorf("backup.role = %v: the default role is the backup's", bk["role"])
@@ -309,7 +325,7 @@ func TestTheBackupRolePolicyIsTheOneBackupRoleStatementsRenders(t *testing.T) {
 	}
 	for _, want := range []string{
 		"SluisTableBackup", "SluisCrossOidcTable", "SluisCrossGoogleParameters", "SluisMaintenanceDeny",
-		"SluisArchiveObjects", "SluisArchiveList", "SluisArchiveKey",
+		"SluisArchiveObjects", "SluisArchiveList", "SluisDenyRestoreIdentity", "SluisDenyRestoreIdentityKey",
 	} {
 		if !sids[want] {
 			t.Errorf("no %s in %v", want, sids)
@@ -319,14 +335,14 @@ func TestTheBackupRolePolicyIsTheOneBackupRoleStatementsRenders(t *testing.T) {
 	if got := g["s3:PutObject"]; !contains(got, arnp+"s3:::"+archiveBucket+"/vault/backup/staging/*") {
 		t.Errorf("put grants = %v", got)
 	}
-	if got := g["kms:GenerateDataKey"]; !contains(got, out["keyArn"]) || !strings.HasSuffix(out["keyArn"], "/staging-archive") {
-		t.Errorf("archive key grants = %v (key %s)", got, out["keyArn"])
+	if sids["SluisArchiveKey"] || contains(g["kms:GenerateDataKey"], out["keyArn"]) || contains(g["kms:Decrypt"], out["keyArn"]) {
+		t.Errorf("the backup role has archive KMS grants: %v (key %s)", g["kms:GenerateDataKey"], out["keyArn"])
 	}
 	if got := g["sqs:SendMessage"]; len(got) != 1 || !strings.HasSuffix(got[0], ":audit-ingest") {
 		t.Errorf("audit grants = %v", got)
 	}
-	if !strings.Contains(doc, "kms:EncryptionContext:purpose") || !strings.Contains(doc, `"archive"`) {
-		t.Error("the archive key has no encryption-context condition")
+	if strings.Contains(doc, `"archive"`) {
+		t.Error("the backup policy names the archive purpose of the KMS key")
 	}
 	// The log group is its own.
 	if got := g["logs:PutLogEvents"]; len(got) != 1 || !strings.HasSuffix(got[0], "log-group:/aws/lambda/sluis-staging-backup:*") {
@@ -529,5 +545,78 @@ func TestTheRenderedBackupAndRestoreDocumentsStartTheModule(t *testing.T) {
 				t.Fatalf("the module's startup over the rendered %s document: %v\n%s", name, err, out)
 			}
 		})
+	}
+}
+
+func TestWithoutTheDeprecatedArchiveKeyAliasTheDocumentNamesNoKey(t *testing.T) {
+	rec, out := mustBackup(t, func(a *arp.BackupArgs) { a.ArchiveKeyAlias = "" })
+	bk := layerDocument(t, rec, "staging-backup-config")["backup"].(map[string]any)
+	if _, set := bk["key"]; set {
+		t.Errorf("backup.key = %v", bk["key"])
+	}
+	if out["keyArn"] != "" {
+		t.Errorf("ArchiveKeyArn = %q", out["keyArn"])
+	}
+}
+
+func TestTheBackupDocumentListsTheGeneratedRecipientThenTheExtraOnes(t *testing.T) {
+	_, extra, err := arp.AgeKeypairFromSeed(bytes.Repeat([]byte{9}, 32))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec, out := mustBackup(t, func(a *arp.BackupArgs) { a.ExtraRecipients = []string{extra} })
+	bk := layerDocument(t, rec, "staging-backup-config")["backup"].(map[string]any)
+	rcpts, _ := bk["recipients"].([]any)
+	if len(rcpts) != 2 || rcpts[1] != extra {
+		t.Fatalf("backup.recipients = %v", rcpts)
+	}
+	// The generated one is the one derived from the stored seed, and it is the
+	// output the estate reads.
+	wantID, wantRcpt, _ := arp.AgeKeypairFromSeed([]byte("state-secret-state-secret-state!"))
+	if rcpts[0] != wantRcpt || out["recipient"] != wantRcpt {
+		t.Errorf("generated recipient = %v (output %q), want %s", rcpts[0], out["recipient"], wantRcpt)
+	}
+	// The identity is the SecureString parameter, in the byte codec, with the
+	// installation's parameter key; the document never holds it.
+	p := rec.one(t, "aws:ssm/parameter:Parameter", "staging-backup-restore-identity")
+	if prop(p, "name").StringValue() != "/sluis/staging/internal/backup/restore-identity" || prop(p, "type").StringValue() != "SecureString" {
+		t.Errorf("the identity parameter is %v", p.Inputs)
+	}
+	value := prop(p, "value")
+	if !value.IsSecret() {
+		t.Error("the identity parameter's value is not secret in state")
+	} else {
+		value = value.SecretValue().Element
+	}
+	var codec struct{ Value []byte }
+	if err := json.Unmarshal([]byte(value.StringValue()), &codec); err != nil || string(codec.Value) != wantID {
+		t.Errorf("the identity parameter holds %q (%v), want the identity", value.StringValue(), err)
+	}
+	if out["identityParam"] != "/sluis/staging/internal/backup/restore-identity" {
+		t.Errorf("the identity output = %q", out["identityParam"])
+	}
+	// The parameter is the restore role's: the document of the backup function
+	// does not carry the identity.
+	raw, _ := json.Marshal(bk)
+	if strings.Contains(string(raw), "AGE-SECRET-KEY") {
+		t.Error("the backup document holds the identity")
+	}
+}
+
+func TestAnInvalidExtraRecipientRefusesTheBackup(t *testing.T) {
+	_, _, err := buildBackup(t, func(a *arp.BackupArgs) { a.ExtraRecipients = []string{"age1notakey"} })
+	if err == nil || !strings.Contains(err.Error(), "ExtraRecipients[0]") {
+		t.Fatalf("an invalid recipient was accepted: %v", err)
+	}
+}
+
+func TestTheRestoreDocumentNamesTheIdentitySecretAndNoRecipients(t *testing.T) {
+	rec, _ := mustRestore(t, nil)
+	bk := layerDocument(t, rec, "staging-restore-config")["backup"].(map[string]any)
+	if bk["identity"] != "restore-identity" || bk["role"] != "restore" {
+		t.Errorf("backup = %v", bk)
+	}
+	if _, set := bk["recipients"]; set {
+		t.Errorf("backup.recipients = %v", bk["recipients"])
 	}
 }

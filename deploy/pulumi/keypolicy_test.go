@@ -78,6 +78,7 @@ func TestSluisKeyPolicyStatementList(t *testing.T) {
 		"SluisKeyRoleIssuer", "SluisKeyMinterIssuer",
 		"SluisKeyRoleRestore", "SluisKeyWriteAllRestore",
 		"SluisKeyExternalReaders", "SluisKeyAdminSeeds", "SluisKeyAdminReads", "SluisKeyBreakglass",
+		"SluisKeyDenyRestoreIdentity",
 		"SluisKeySign", "SluisKeySignContextReserved", "SluisKeySignDirectPurposeOnly", "SluisKeySignDirectContextKeysOnly",
 	}
 	got := kpSids(kpStatements(t, kpArgs(LayoutV5)))
@@ -241,7 +242,8 @@ func TestSluisKeyPolicyHasNoCatchAll(t *testing.T) {
 		case "Deny":
 			bySign := cond["StringEquals"] != nil && cond["StringEquals"].(map[string]any)["kms:EncryptionContext:purpose"] == "sign"
 			byRole := cond["ArnEquals"] != nil && reflect.DeepEqual(cond["ArnEquals"], map[string]any{"aws:PrincipalArn": []string{kpIssuer}})
-			if !bySign && !byRole {
+			byBackup := sid == "SluisKeyDenyRestoreIdentity" && cond["ArnEquals"] != nil
+			if !bySign && !byRole && !byBackup {
 				t.Errorf("%s: a Deny about neither the sign purpose nor a sluis role: %s", sid, raw)
 			}
 		}

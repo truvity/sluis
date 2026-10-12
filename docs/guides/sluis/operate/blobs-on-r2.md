@@ -42,7 +42,7 @@ The start log has `blobs are kept in S3` with the bucket and prefix. After the f
 
 The service reads the document at start. An unreadable or malformed document stops the start and names the address, never a value. After a 403 it rereads the document and retries once, at most once a minute. Put the new document in place and the service follows within a minute of its next refused request.
 
-The Blob writer sends no `Content-Encoding`, and the client computes a checksum only where an operation requires one. R2's refusal of an SDK checksum together with a content encoding does not arise.
+The Blob writer sends no `Content-Encoding`, and the client computes a checksum only where an operation requires one. R2's refusal of an SDK checksum together with a content encoding does not arise. Every upload still carries an integrity header, because AWS refuses a PutObject without one on an Object Lock bucket: `ports.blob.s3.checksum` (default `sha256`) is computed over the whole body and sent precomputed as `x-amz-checksum-sha256`, never as the SDK's `aws-chunked` trailer, which R2 refuses. `md5` sends `Content-MD5` instead and `none` sends no checksum, for a store that refuses SHA-256.
 
 ## Mint credentials instead
 

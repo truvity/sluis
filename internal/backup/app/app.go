@@ -158,7 +158,7 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 	if archive == nil {
 		t := cfg.doc.Backup.Target
 		archive, err = s3blob.New(ctx, s3blob.Config{Bucket: t.Bucket, Prefix: t.Prefix, Region: t.Region, KMSKey: t.KMSKey,
-			Endpoint: t.Endpoint, PathStyle: t.PathStyle})
+			Endpoint: t.Endpoint, PathStyle: t.PathStyle, Checksum: t.Checksum})
 		if err != nil {
 			return fail(fmt.Errorf("backup.target: %w", err))
 		}

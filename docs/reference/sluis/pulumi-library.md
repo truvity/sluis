@@ -125,7 +125,8 @@ The role trusts `pods.eks.amazonaws.com` for this cluster and ServiceAccount.
 | `Storage`, `BlobBucketName`, `BlobPrefix` | Required | The blob store: `ports.blob`. `BlobBucketName` is not needed with `Storage.External` |
 | `State`, `TableNames` | Required | `States.Grant()` with all six tables; `ports.dynamodb.tables` |
 | `ParameterKeyArn`, `MinterRefs` | None | `secrets.kmsKeyId`; the Cloudflare minter parameters for `credentials.preset`, read only |
-| `ArchiveKeyAlias` | Required | `backup.key`, `alias/<name>`; purpose `archive` |
+| `ArchiveKeyAlias` | None | Deprecated. Backups are age-encrypted (format v2) and no role holds a KMS grant for the archive. While set it is held to an `alias/<name>`, rendered as `backup.key` for a binary of format v1, and `ArchiveKeyArn` names the key behind it |
+| `ExtraRecipients` | None | `BackupArgs` only. Further age recipients (`age1...`) every backup is encrypted to, after the installation's generated one: an offline break-glass key is recommended. Each is parsed as an age X25519 recipient; an invalid one is refused, a repeat is dropped |
 | `Archive` | Required | `Bucket`, `Prefix`, `Region`, `AccountID`, `Versioned` (true), `SSEKeyArn`, `RestoreRoleArn`, `Create` |
 | `Archive.Create` | nil | `ArchiveBucketArgs`: `Mode` (`GOVERNANCE`; `COMPLIANCE` needs `AcknowledgeCompliance`), `RetentionDays` (`Retention.MaxAge` in days), `Tags` |
 | `Retention` | 7; 720h | `Keep`, `MaxAge`: `backup.retention`. An Object Lock longer than `MaxAge` is refused |
@@ -139,7 +140,11 @@ The role trusts `pods.eks.amazonaws.com` for this cluster and ServiceAccount.
 | `FunctionArn`, `FunctionName`, `RoleArn`, `RoleName`, `ConfigLayerArn` | Function, role and layer |
 | `LiveAliasArn`, `AliasArns` | `live`, which the schedules invoke, and `live-console`, `live-admin`, `live-breakglass`; the alias is the caller class of a [module call](backup.md#calls) |
 | `SchedulerRoleArn`, `ScheduleNames`, `ScheduleDLQArn` | `<function>-daily` sends `{"kind":"backup"}`, `<function>-resume` sends `{"kind":"backup","resume":true}`; undelivered events go to the queue |
-| `ArchiveBucketName`, `ArchiveBucketArn`, `ArchiveKeyArn` | The archive and its key |
+| `ArchiveBucketName`, `ArchiveBucketArn` | The archive |
+| `ArchiveKeyArn` | Deprecated: the key behind `ArchiveKeyAlias`, empty when it is not set |
+| `RestoreRecipient` | The `age1...` recipient of the installation's generated restore keypair. Public |
+| `Recipients` | Every recipient of `backup.recipients`: `RestoreRecipient`, then `ExtraRecipients` |
+| `RestoreIdentityParameter` | `/sluis/<instance>/internal/backup/restore-identity`, the SecureString parameter that holds the age identity |
 | `ArchiveBucketPolicy` | The policy a bucket owner in another account applies, from `ArchiveBucketPolicyStatements` |
 | `AlarmNames` | The three alarms below |
 
@@ -156,8 +161,15 @@ The role trusts `pods.eks.amazonaws.com` for this cluster and ServiceAccount.
 | `SluisMaintenanceDeny` | Deny `PutItem`, `UpdateItem`, `DeleteItem`, `BatchWriteItem`, `TransactWriteItems` | Every table, when the first key is `maintenance`. The role reads the flag and never writes it |
 | `SluisArchiveObjects` | `s3:GetObject`, `PutObject`, `DeleteObject`, and `GetObjectVersion` on a versioned bucket | `<bucket>/<prefix>backup/<instance>/*` |
 | `SluisArchiveList` | `s3:ListBucket`, and `ListBucketVersions` on a versioned bucket | The bucket, `s3:prefix` `<prefix>backup/<instance>/*` |
-| `SluisArchiveKey` | `kms:Decrypt`, `GenerateDataKey` | The archive key, context `{instance, purpose=archive}` and no other key |
 | `SluisArchiveSSEKey` | `kms:Decrypt`, `GenerateDataKey` | `SSEKeyArn`, through S3 only |
+| `SluisDenyRestoreIdentity` | Deny `ssm:*` | The restore identity parameter. The role hosts the backup module, whose namespace the identity is in |
+| `SluisDenyRestoreIdentityKey` | Deny `kms:Decrypt` | Any key, when the encryption context `PARAMETER_ARN` is the identity parameter: closes `GetParametersByPath`, which is authorised on the path |
+
+### Backup keys
+
+The backup format v2 encrypts each backup with [age](https://age-encryption.org) to `backup.recipients`. `NewBackup` generates the installation's restore keypair: a `random.RandomBytes` seed of 32 bytes (secret in state, never rotated by an apply), from which the X25519 identity and recipient are derived. The recipient is the first entry of `backup.recipients` in the backup function's document, followed by `ExtraRecipients`. The identity (`AGE-SECRET-KEY-1...`) is stored in the byte codec (`{"value":"<base64>"}`) as a SecureString parameter at `/sluis/<instance>/internal/backup/restore-identity`, encrypted with `ParameterKeyArn`, and the restore document names it with `backup.identity: restore-identity`. The backup role has no key that opens a backup: it is denied the parameter, and the decryption of its value (`SluisDenyRestoreIdentity`, `SluisDenyRestoreIdentityKey`). `SluisKeyPolicyStatements` adds `SluisKeyDenyRestoreIdentity` to the key policy for the same refusal. Only the restore role reads it. Rotating the seed (`pulumi up --replace` on the `<name>-restore-identity-seed` resource) makes the older backups readable only by an `ExtraRecipients` identity, so keep one offline.
+
+`KeyPolicyOptions.BackupArchive` and `RestoreArchive`, `KeyPolicyArgs.BackupArchive` and `RestoreArchive` and `ArchiveGrant.KeyArn` are deprecated: they are accepted and add no statement.
 
 | Helper | Renders |
 |---|---|
@@ -168,7 +180,7 @@ The role trusts `pods.eks.amazonaws.com` for this cluster and ServiceAccount.
 
 | `RestoreArgs` | Default | Meaning |
 |---|---|---|
-| `BackupCommon` | As `BackupArgs` | The same installation, archive and key. `Archive.Create` is refused: `NewBackup` makes the bucket. `FunctionName` defaults to `sluis-<instance>-restore` |
+| `BackupCommon` | As `BackupArgs` | The same installation and archive. `NewBackup` of the same instance must be in the stack: it creates the restore identity this function reads. `Archive.Create` is refused: `NewBackup` makes the bucket. `FunctionName` defaults to `sluis-<instance>-restore` |
 | `RestoreInvokers` | Required | `AdminRoleArns` and `BreakglassRoleArns`, at least one role each. A wildcard, an account root, a user, or a role in both lists is refused |
 | `Function.TimeoutSeconds` | 900 | At least 180, twice `RestoreMargin` (90 s): the slice a restore keeps back before it pauses and continues itself |
 
@@ -178,7 +190,7 @@ The role trusts `pods.eks.amazonaws.com` for this cluster and ServiceAccount.
 | Aliases | `live-admin` and `live-breakglass` only. Both are asynchronous without retry |
 | Resource policy | One `lambda:InvokeFunction` permission per invoker, on the alias of its class: administrators on `live-admin`, break-glass roles on `live-breakglass`. No unqualified permission, no service principal. Identity policies of other principals must not grant the invoke |
 | Alarm | `<function>-invoked`: `Invocations` at least 1 in a minute |
-| Outputs | `FunctionArn`, `FunctionName`, `RoleArn`, `RoleName`, `ConfigLayerArn`, `AliasArns`, `ArchiveKeyArn`, `AlarmNames` |
+| Outputs | `FunctionArn`, `FunctionName`, `RoleArn`, `RoleName`, `ConfigLayerArn`, `AliasArns`, `IdentityParameter`, `ArchiveKeyArn` (deprecated), `AlarmNames` |
 
 | Restore role grant | Actions | Resource |
 |---|---|---|
@@ -186,7 +198,7 @@ The role trusts `pods.eks.amazonaws.com` for this cluster and ServiceAccount.
 | `SluisCross<Module>Table`, `…Parameters`, `…Blobs` | Table read and write; `ssm:GetParameter`, `PutParameter`, `DeleteParameter`; `s3:GetObject`, `PutObject`, `DeleteObject` | The other five modules' tables, `internal/<module>/*`, `external/<module>/*`, `<module>/` prefixes, and the key through SSM |
 | `SluisCrossCloudflareMinter` | `ssm:GetParameter` | The `MinterRefs` parameters, with `credentials.preset`; never the issuer (it asks the cloudflare function to mint) |
 | `SluisArchiveObjects`, `SluisArchiveList` | `s3:GetObject`, `GetObjectVersion`; `ListBucket`, `ListBucketVersions` | `<bucket>/<prefix>backup/<instance>/*`. No put, no delete |
-| `SluisArchiveKey` | `kms:Decrypt` | The archive key, context `{instance, purpose=archive}`. No `GenerateDataKey` |
+| `SluisRestoreIdentity`, `SluisRestoreIdentityKey` | `ssm:GetParameter`; `kms:Decrypt` through SSM | The restore identity parameter `internal/backup/restore-identity` and its encryption context. The only role that reads it |
 | `SluisRestoreSelf` | `lambda:InvokeFunction` | Its own two aliases: a paused restore continues through the ARN it was invoked through |
 | Maintenance flag | n/a | No `SluisMaintenanceDeny`: this role alone writes the flag in every table. `RestoreRoleStatements(env, grant, selfArns)` renders it |
 

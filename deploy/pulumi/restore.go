@@ -56,8 +56,14 @@ type Restore struct {
 	// AliasArns holds `live-admin` and `live-breakglass`; the function has no
 	// other alias and no unqualified invoke is allowed.
 	AliasArns pulumi.StringMapOutput
-	// ArchiveKeyArn is the archive key behind the alias.
+	// ArchiveKeyArn is the key behind ArchiveKeyAlias; empty when it is not set.
+	//
+	// Deprecated: the archive uses no KMS key.
 	ArchiveKeyArn pulumi.StringOutput
+	// IdentityParameter is the SSM parameter the function reads its age identity
+	// from, `/sluis/<instance>/internal/backup/restore-identity`. NewBackup of the
+	// same instance creates it.
+	IdentityParameter pulumi.StringOutput
 	// AlarmNames is the one alarm: any invocation.
 	AlarmNames pulumi.StringArrayOutput
 }
@@ -134,7 +140,7 @@ func NewRestore(ctx *pulumi.Context, name string, args *RestoreArgs, opts ...pul
 	fn, err := buildFunction(ctx, name, p, pulumi.String(arnPrefix+"s3:::"+p.Archive.Bucket), classes, noRetry, true,
 		func(env ModuleEnv, g ArchiveGrant) ([]map[string]any, error) {
 			return RestoreRoleStatements(env, g, self)
-		}, out)
+		}, nil, out)
 	if err != nil {
 		return nil, err
 	}
@@ -169,9 +175,11 @@ func NewRestore(ctx *pulumi.Context, name string, args *RestoreArgs, opts ...pul
 	out.RoleArn, out.RoleName = fn.role.Arn, fn.role.Name
 	out.ConfigLayerArn, out.AliasArns, out.ArchiveKeyArn = fn.layer.Arn, fn.aliasArns(), fn.archiveKey
 	out.AlarmNames = pulumi.StringArray{pulumi.String(alarmName)}.ToStringArrayOutput()
+	out.IdentityParameter = pulumi.String(RestoreIdentityParameterName(p.Instance)).ToStringOutput()
 	if err := ctx.RegisterResourceOutputs(out, pulumi.Map{
 		"functionArn": out.FunctionArn, "functionName": out.FunctionName, "roleArn": out.RoleArn, "roleName": out.RoleName,
 		"configLayerArn": out.ConfigLayerArn, "aliasArns": out.AliasArns, "archiveKeyArn": out.ArchiveKeyArn, "alarmNames": out.AlarmNames,
+		"identityParameter": out.IdentityParameter,
 	}); err != nil {
 		return nil, err
 	}

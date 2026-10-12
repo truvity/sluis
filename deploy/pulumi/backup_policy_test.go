@@ -112,7 +112,7 @@ func kmsCtx(action, key string, ctx map[string]string) iamReq {
 }
 
 func testArchive() ArchiveGrant {
-	return ArchiveGrant{BucketArn: "arch", Prefix: "pre/", Instance: "i1", KeyArn: "akey", SSEKeyArn: "sse", Versioned: true}
+	return ArchiveGrant{BucketArn: "arch", Prefix: "pre/", Instance: "i1", SSEKeyArn: "sse", Versioned: true}
 }
 
 func TestBackupRoleReadsEveryModuleAndWritesOnlyItsOwnTable(t *testing.T) {
@@ -201,29 +201,21 @@ func TestBackupRoleUsesTheArchivePathAndNothingElse(t *testing.T) {
 	}
 }
 
-func TestBackupRoleUsesTheArchiveKeyUnderItsContext(t *testing.T) {
+func TestBackupRoleUsesNoKMSKeyForTheArchive(t *testing.T) {
 	st, err := BackupRoleStatements(testModuleEnv(), testArchive())
 	if err != nil {
 		t.Fatal(err)
 	}
 	ctx := map[string]string{"instance": "i1", "purpose": ArchivePurpose}
-	for _, a := range []string{"kms:Decrypt", "kms:GenerateDataKey"} {
-		if !allowed(t, st, kmsCtx(a, "akey", ctx)) {
-			t.Errorf("the backup role cannot %s with the archive key", a)
-		}
-		for name, bad := range map[string]map[string]string{
-			"other instance": {"instance": "i2", "purpose": ArchivePurpose},
-			"other purpose":  {"instance": "i1", "purpose": "sign"},
-			"extra key":      {"instance": "i1", "purpose": ArchivePurpose, "alg": "x"},
-			"none":           {},
-		} {
-			if allowed(t, st, kmsCtx(a, "akey", bad)) {
-				t.Errorf("the backup role can %s with the archive key under %s", a, name)
-			}
+	for _, a := range []string{"kms:Decrypt", "kms:GenerateDataKey", "kms:Encrypt"} {
+		if allowed(t, st, kmsCtx(a, "akey", ctx)) {
+			t.Errorf("the backup role can %s with the archive key: backups are age-encrypted and need none", a)
 		}
 	}
-	if allowed(t, st, kmsCtx("kms:Encrypt", "akey", ctx)) {
-		t.Error("the backup role can kms:Encrypt with the archive key: it seals a data key with GenerateDataKey")
+	for _, s := range st {
+		if s["Sid"] == "SluisArchiveKey" {
+			t.Error("the backup role has an archive key statement")
+		}
 	}
 	via := func(a string) bool {
 		return allowed(t, st, iamReq{action: a, resource: "sse", keys: map[string][]string{"kms:ViaService": {"s3.r1.amazonaws.com"}}})
@@ -265,11 +257,10 @@ func TestMinterRefsReachTheBackupRoleAsReadOnly(t *testing.T) {
 
 func TestArchiveGrantRefusesWhatItCannotNameAPathWith(t *testing.T) {
 	for name, g := range map[string]ArchiveGrant{
-		"no bucket":     {Instance: "i", KeyArn: "k"},
-		"no instance":   {BucketArn: "b", KeyArn: "k"},
-		"no key":        {BucketArn: "b", Instance: "i"},
-		"slash first":   {BucketArn: "b", Instance: "i", KeyArn: "k", Prefix: "/p/"},
-		"no slash last": {BucketArn: "b", Instance: "i", KeyArn: "k", Prefix: "p"},
+		"no bucket":     {Instance: "i"},
+		"no instance":   {BucketArn: "b"},
+		"slash first":   {BucketArn: "b", Instance: "i", Prefix: "/p/"},
+		"no slash last": {BucketArn: "b", Instance: "i", Prefix: "p"},
 	} {
 		if _, err := BackupRoleStatements(testModuleEnv(), g); err == nil {
 			t.Errorf("%s: accepted", name)
@@ -411,16 +402,10 @@ func TestRestoreRoleReadsTheArchiveAndWritesNothingToIt(t *testing.T) {
 		t.Error("the restore role cannot list the archive path")
 	}
 	ctx := map[string]string{"instance": "i1", "purpose": ArchivePurpose}
-	if !allowed(t, st, kmsCtx("kms:Decrypt", "akey", ctx)) {
-		t.Error("the restore role cannot open a data key")
-	}
-	for _, a := range []string{"kms:GenerateDataKey", "kms:Encrypt"} {
+	for _, a := range []string{"kms:Decrypt", "kms:GenerateDataKey", "kms:Encrypt"} {
 		if allowed(t, st, kmsCtx(a, "akey", ctx)) {
-			t.Errorf("the restore role can %s with the archive key: it writes no archive", a)
+			t.Errorf("the restore role can %s with the archive key: backups are age-encrypted and need none", a)
 		}
-	}
-	if allowed(t, st, kmsCtx("kms:Decrypt", "akey", map[string]string{"instance": "i2", "purpose": ArchivePurpose})) {
-		t.Error("the restore role opens another instance's data key")
 	}
 }
 

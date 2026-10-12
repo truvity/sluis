@@ -17,6 +17,7 @@ aws:lambda/layerVersion:LayerVersion/staging-backup-config
 aws:scheduler/schedule:Schedule/staging-backup-daily
 aws:scheduler/schedule:Schedule/staging-backup-resume
 aws:sqs/queue:Queue/staging-backup-schedule-dlq
+aws:ssm/parameter:Parameter/staging-backup-restore-identity
 name aws:cloudwatch/logGroup:LogGroup/staging-backup-logs name=/aws/lambda/sluis-staging-backup
 name aws:iam/role:Role/staging-backup-role name=sluis-staging-backup
 name aws:iam/role:Role/staging-backup-scheduler-role name=sluis-staging-backup-scheduler
@@ -30,4 +31,5 @@ name aws:lambda/alias:Alias/staging-backup-alias-live-console functionName=sluis
 name aws:lambda/alias:Alias/staging-backup-alias-live-console name=live-console
 name aws:lambda/function:Function/staging-backup-fn name=sluis-staging-backup
 name aws:lambda/layerVersion:LayerVersion/staging-backup-config layerName=sluis-staging-backup-config
+random:index/randomBytes:RandomBytes/staging-backup-restore-identity-seed
 sluis:aws:Backup/staging-backup

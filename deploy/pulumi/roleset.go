@@ -187,9 +187,9 @@ type KeyPolicyOptions struct {
 	// ReaderStatements are the key statements of [ExternalReaderRole]s
 	// (ExternalReaderRole.KeyStatement), merged after the library's.
 	ReaderStatements []map[string]any
-	// BackupArchive and RestoreArchive are those of KeyPolicyArgs: the statements
-	// for the backup archive's encryption context, when the archive is sealed
-	// under this key. Opt-in.
+	// BackupArchive and RestoreArchive are those of KeyPolicyArgs.
+	//
+	// Deprecated: accepted and ignored; the archive uses no KMS key.
 	BackupArchive, RestoreArchive bool
 }
 

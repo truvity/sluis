@@ -382,6 +382,28 @@
     },
     {
       "Action": [
+        "kms:Decrypt"
+      ],
+      "Condition": {
+        "ArnEquals": {
+          "aws:PrincipalArn": [
+            "arn:aws:iam::111122223333:role/sluis-staging-backup"
+          ]
+        },
+        "StringEquals": {
+          "kms:EncryptionContext:PARAMETER_ARN": "arn:aws:ssm:eu-central-1:111122223333:parameter/sluis/staging/internal/backup/restore-identity",
+          "kms:ViaService": "ssm.eu-central-1.amazonaws.com"
+        }
+      },
+      "Effect": "Deny",
+      "Principal": {
+        "AWS": "*"
+      },
+      "Resource": "*",
+      "Sid": "SluisKeyDenyRestoreIdentity"
+    },
+    {
+      "Action": [
         "kms:Encrypt",
         "kms:Decrypt",
         "kms:GenerateDataKey"

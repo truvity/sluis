@@ -12,7 +12,10 @@
 // read again after an answer of 403, at most once a minute (see credentials.go).
 // The sluis blob writer sends no content-encoding, so the SDK's checksums stay
 // off ("when required") and R2's refusal of a checksum together with a
-// content-encoding does not arise.
+// content-encoding does not arise. Every upload still carries an integrity
+// header, because AWS refuses a PutObject without one on an Object Lock bucket:
+// [Config.Checksum] (default sha256) is computed over the whole body and sent
+// as a precomputed x-amz-checksum-sha256 (or Content-MD5), never as a trailer.
 //
 // # Operations
 //
@@ -43,6 +46,9 @@ package s3blob
 import (
 	"bytes"
 	"context"
+	"crypto/md5" //nolint:gosec // see put
+	"crypto/sha256"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
@@ -82,7 +88,19 @@ type Config struct {
 	// default chain, for an Endpoint with no ambient identity. It is called
 	// when the adapter is built and again after a 403, at most once a minute.
 	Credentials CredentialsFunc
+	// Checksum is the integrity header every upload carries: "sha256" (the
+	// default), "md5" (Content-MD5) or "none". AWS refuses a PutObject without
+	// one on an Object Lock bucket. It is a PRECOMPUTED header over the whole
+	// body, never the SDK's streaming trailer (aws-chunked), which R2 refuses.
+	Checksum string `json:"checksum,omitempty"`
 }
+
+// The Checksum values.
+const (
+	ChecksumSHA256 = "sha256"
+	ChecksumMD5    = "md5"
+	ChecksumNone   = "none"
+)
 
 // API is the part of the S3 client the adapter calls. *s3.Client satisfies
 // it; the unit tests use a fake.
@@ -100,6 +118,7 @@ type Blob struct {
 	bucket string
 	prefix string
 	kmsKey string
+	sum    string
 }
 
 var _ port.Blob = (*Blob)(nil)
@@ -108,6 +127,9 @@ var _ port.Blob = (*Blob)(nil)
 func New(ctx context.Context, cfg Config) (*Blob, error) {
 	if cfg.Bucket == "" {
 		return nil, errors.New("s3blob: bucket is required")
+	}
+	if _, err := checksumKind(cfg.Checksum); err != nil {
+		return nil, err
 	}
 	var loaders []func(*awsconfig.LoadOptions) error
 	if cfg.Region != "" {
@@ -130,8 +152,10 @@ func New(ctx context.Context, cfg Config) (*Blob, error) {
 		if cfg.Endpoint != "" {
 			o.BaseEndpoint = aws.String(cfg.Endpoint)
 		}
-		// The SDK's default is to add a CRC trailer to every request, which an
-		// S3-compatible store may not accept; only what an operation requires.
+		// The SDK's default is to add a CRC trailer (aws-chunked) to every
+		// request, which an S3-compatible store may not accept; only what an
+		// operation requires. The integrity header is computed by put() over
+		// the whole body and sent precomputed.
 		o.RequestChecksumCalculation = aws.RequestChecksumCalculationWhenRequired
 		o.ResponseChecksumValidation = aws.ResponseChecksumValidationWhenRequired
 	})
@@ -146,11 +170,15 @@ func NewWithAPI(api API, cfg Config) (*Blob, error) {
 	if cfg.Bucket == "" {
 		return nil, errors.New("s3blob: bucket is required")
 	}
+	sum, err := checksumKind(cfg.Checksum)
+	if err != nil {
+		return nil, err
+	}
 	prefix := strings.Trim(cfg.Prefix, "/")
 	if prefix != "" {
 		prefix += "/"
 	}
-	return &Blob{api: api, bucket: cfg.Bucket, prefix: prefix, kmsKey: cfg.KMSKey}, nil
+	return &Blob{api: api, bucket: cfg.Bucket, prefix: prefix, kmsKey: cfg.KMSKey, sum: sum}, nil
 }
 
 func (b *Blob) key(name string) string { return b.prefix + name }
@@ -247,11 +275,30 @@ func (b *Blob) put(name string, body []byte) *s3.PutObjectInput {
 		Key:    aws.String(b.key(name)),
 		Body:   bytes.NewReader(body),
 	}
+	switch b.sum {
+	case ChecksumSHA256:
+		h := sha256.Sum256(body)
+		in.ChecksumSHA256 = aws.String(base64.StdEncoding.EncodeToString(h[:]))
+	case ChecksumMD5:
+		h := md5.Sum(body) //nolint:gosec // Content-MD5 is the protocol's integrity header, not a security use
+		in.ContentMD5 = aws.String(base64.StdEncoding.EncodeToString(h[:]))
+	}
 	if b.kmsKey != "" {
 		in.ServerSideEncryption = types.ServerSideEncryptionAwsKms
 		in.SSEKMSKeyId = aws.String(b.kmsKey)
 	}
 	return in
+}
+
+// checksumKind validates Config.Checksum and applies the default.
+func checksumKind(v string) (string, error) {
+	switch v {
+	case "":
+		return ChecksumSHA256, nil
+	case ChecksumSHA256, ChecksumMD5, ChecksumNone:
+		return v, nil
+	}
+	return "", fmt.Errorf("s3blob: checksum %q is not sha256, md5 or none", v)
 }
 
 // status is the HTTP status of an S3 error, 0 when it has none.

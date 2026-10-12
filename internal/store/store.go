@@ -224,7 +224,7 @@ func (c Config) s3Blob(ctx context.Context) (*s3blob.Blob, error) {
 	v5 := c.v4 != nil && c.v4.v5 != nil
 	cfg := s3blob.Config{
 		Bucket: b.Bucket, Prefix: b.Prefix, Region: b.Region, KMSKey: b.KMSKey,
-		Endpoint: b.Endpoint, PathStyle: b.PathStyle,
+		Endpoint: b.Endpoint, PathStyle: b.PathStyle, Checksum: b.Checksum,
 	}
 	if b.CredentialsRef != "" {
 		if c.v4 == nil || (c.v4.stores == nil && !v5) {
