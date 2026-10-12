@@ -346,8 +346,9 @@ func newModuleFunctions(ctx *pulumi.Context, name string, a *LambdaArgs, child p
 			DocumentVersion: moduleDocumentVersion(p.role),
 			MemoryMB:        p.memory, TimeoutSeconds: p.time, ReservedConcurrency: p.reserved,
 			LogRetentionDays: a.LogRetentionDays, PermissionsBoundaryArn: a.PermissionsBoundaryArn, Tags: a.Tags,
-			Callers: callers,
-			Policy:  a.modulePolicy(p.role, roles),
+			Callers:   callers,
+			Policy:    a.modulePolicy(p.role, roles),
+			Telemetry: a.Telemetry,
 		}
 		// A pass that failed is the next one's: no retry by the platform.
 		fa.NoRetry = []string{LiveAlias, CallerAlias(ClassIssuer)}
@@ -404,6 +405,7 @@ func (a *LambdaArgs) modulePolicy(role string, roles []Role) func(pulumi.StringO
 				TableArns:    moduleTablesOf(v[4]),
 				LogGroupArns: map[string]string{role: v[3].(string)},
 				FunctionArns: a.moduleFunctionArns(), Roles: roles, WebIdentityAudience: a.WebIdentityAudience,
+				TelemetryAudiences: a.telemetryAudiences(),
 			}
 			if a.Storage != nil && a.Storage.External != nil {
 				env.BucketArn = ""
@@ -418,4 +420,14 @@ func (a *LambdaArgs) modulePolicy(role string, roles []Role) func(pulumi.StringO
 			return document(st)
 		}).(pulumi.StringOutput)
 	}
+}
+
+// telemetryAudiences are the audiences the module roles may ask STS for a web
+// identity token for the telemetry layer: AdditionalWebIdentityAudiences, and
+// only with Telemetry. Without it, none.
+func (a *LambdaArgs) telemetryAudiences() []string {
+	if a.Telemetry == nil {
+		return nil
+	}
+	return a.AdditionalWebIdentityAudiences
 }

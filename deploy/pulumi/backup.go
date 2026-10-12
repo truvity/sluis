@@ -174,6 +174,17 @@ type BackupCommon struct {
 	AlarmActionArns []string
 	// Tags are put on everything that takes tags.
 	Tags map[string]string
+
+	// Telemetry is the OpenTelemetry layer, as LambdaArgs.Telemetry: the same
+	// installation value gives every function of the library the same
+	// telemetry. Nil: no layer and no OTEL environment.
+	Telemetry *TelemetryArgs
+	// AdditionalWebIdentityAudiences are the audiences the role may ask STS to
+	// mint a web identity token for, for the telemetry layer (as
+	// LambdaArgs.AdditionalWebIdentityAudiences; this role calls no console, so
+	// it holds these alone). Allowed with Telemetry only. Empty entries and
+	// duplicates are refused.
+	AdditionalWebIdentityAudiences []string
 }
 
 // BackupScheduleArgs are the two schedules of the backup function.
@@ -271,6 +282,24 @@ func (c *BackupCommon) plan(role string) (*backupPlan, error) {
 			if p.State.Tables[m] == nil {
 				errs = append(errs, fmt.Errorf("State.Tables has no table for module %q: the role reads or writes all six", m))
 			}
+		}
+	}
+	if err := p.Telemetry.validate(); err != nil {
+		errs = append(errs, err)
+	}
+	if len(p.AdditionalWebIdentityAudiences) > 0 {
+		if p.Telemetry == nil {
+			errs = append(errs, errors.New("AdditionalWebIdentityAudiences is for the telemetry layer: set Telemetry"))
+		}
+		seen := map[string]bool{}
+		for i, aud := range p.AdditionalWebIdentityAudiences {
+			switch {
+			case strings.TrimSpace(aud) == "":
+				errs = append(errs, fmt.Errorf("AdditionalWebIdentityAudiences[%d] is empty", i))
+			case seen[aud]:
+				errs = append(errs, fmt.Errorf("AdditionalWebIdentityAudiences[%d] %q is a duplicate", i, aud))
+			}
+			seen[aud] = true
 		}
 	}
 	p.modules = ModuleSet{Instance: p.Instance, Tables: p.TableNames}
@@ -509,6 +538,7 @@ func (p *backupPlan) env(r backupRefs) ModuleEnv {
 		BucketArn: r.bucketArn, TableArns: r.tables, TableKeyArn: r.tableKey,
 		ParameterKeyArn: p.ParameterKeyArn, QueueArn: r.queueArn,
 		LogGroupArns: map[string]string{p.role: r.logGroup}, MinterRefs: p.MinterRefs,
+		TelemetryAudiences: p.telemetryAudiences(),
 	}
 }
 
@@ -516,6 +546,14 @@ func (p *backupPlan) grant(r backupRefs) ArchiveGrant {
 	g := p.archive
 	g.BucketArn, g.KeyArn = r.archiveBucket, r.archiveKey
 	return g
+}
+
+// telemetryAudiences are the audiences the role asks STS for, with Telemetry.
+func (p *backupPlan) telemetryAudiences() []string {
+	if p.Telemetry == nil {
+		return nil
+	}
+	return p.AdditionalWebIdentityAudiences
 }
 
 // statementsFor renders the role's statements from the resolved references.
@@ -534,6 +572,7 @@ func (p *backupPlan) moduleFunctionArgs(name, doc string, archiveKey, archiveBuc
 		MemoryMB:        p.Function.MemoryMB, TimeoutSeconds: p.Function.TimeoutSeconds,
 		LogRetentionDays: p.LogRetentionDays, PermissionsBoundaryArn: p.PermissionsBoundaryArn, Tags: p.Tags,
 		Callers: callers, NoRetry: noRetry, OmitLive: omitLive,
+		Telemetry: p.Telemetry,
 		Policy: func(logGroup pulumi.StringOutput) pulumi.StringInput {
 			bucket := p.Storage.BucketArn
 			if bucket == nil {
