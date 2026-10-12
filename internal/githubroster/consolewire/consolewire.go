@@ -49,8 +49,12 @@ const (
 	LinkCompleteOf      = "console.link_complete"
 	ConfirmRemovals     = "console.confirm_removals"
 	ImportLinks         = "console.import_links"
-	BeginAppConnect     = "console.begin_app_connect"
-	DisconnectApp       = "console.disconnect_app"
+	// ListLinkLogins answers which GitHub account proves each address, for the
+	// people search: the links are the module's records, and the console that
+	// narrows a search by them does not open them.
+	ListLinkLogins  = "console.list_link_logins"
+	BeginAppConnect = "console.begin_app_connect"
+	DisconnectApp   = "console.disconnect_app"
 )
 
 // The two places GitHub sends the browser back to, at the origin root beside a
@@ -173,6 +177,17 @@ type BeginLinkAppConnectRequest struct {
 // authorize page is, with [StatePlaceholder] where the state belongs.
 type LinkPage struct {
 	AuthorizeURL string `json:"authorize_url"`
+}
+
+// LinkLogins is what the people search needs of the links: whether they are
+// known at all, and the GitHub login each address is proven against.
+type LinkLogins struct {
+	// Known is false where the module keeps no links, which is a different
+	// answer from an empty Logins: nobody linked, against nowhere to link.
+	Known bool `json:"known"`
+	// Logins maps a lowercased work address to the login of the account that a
+	// link which counts proves it with.
+	Logins map[string]string `json:"logins,omitempty"`
 }
 
 // LinkComplete is what the issuer hands the module when GitHub sends a person

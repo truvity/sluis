@@ -275,12 +275,68 @@ func (c *Console) GetGitHubApp(
 	return githubProto[directoryrosterv1.GetGitHubAppRequest, directoryrosterv1.GetGitHubAppResponse](ctx, c, consolewire.GetApp, access.RoleViewer, req)
 }
 
+// githubLoginsRemote is [Console.githubLogins] for a GitHub module in another
+// process: the links are its records, so it indexes them.
+func (c *Console) githubLoginsRemote(ctx context.Context) (map[string]string, bool, error) {
+	id, ok := IdentityFrom(ctx)
+	if !ok {
+		return nil, false, connect.NewError(connect.CodeUnauthenticated, errors.New("sign in first"))
+	}
+	ctx, cancel := context.WithTimeout(ctx, githubCallTimeout)
+	defer cancel()
+	ctx = consolecall.WithFacts(ctx, c.githubFacts(ctx, nil))
+	out, err := consolecall.ProxyJSON[struct{}, consolewire.LinkLogins](
+		ctx, c.githubModule(), consolewire.Module, consolewire.ListLinkLogins, c.snapshot(id), struct{}{})
+	if err != nil {
+		return nil, false, githubError(err)
+	}
+	if !out.Known {
+		return nil, false, nil
+	}
+	return out.Logins, true, nil
+}
+
 // ListGitHubAppTokens lists the last installation tokens asked of an App.
+//
+// The ring of them is written where the decision to mint is made, which is the
+// issuer, and read here. A GitHub module in another process mints but keeps no
+// ring (the issuer asks it for each token and records the request itself), so
+// there is nothing to forward the question to: the module is asked only which
+// App this is and whether the person may operate it, and the ring answers.
 func (c *Console) ListGitHubAppTokens(
 	ctx context.Context, req *connect.Request[directoryrosterv1.ListGitHubAppTokensRequest],
 ) (*connect.Response[directoryrosterv1.ListGitHubAppTokensResponse], error) {
+	if c.deps.Modules.GitHub != nil {
+		return c.listGitHubAppTokensRemote(ctx, req.Msg.GetId())
+	}
 	return githubProto[directoryrosterv1.ListGitHubAppTokensRequest, directoryrosterv1.ListGitHubAppTokensResponse](
 		ctx, c, consolewire.ListAppTokens, access.RoleOperator, req)
+}
+
+func (c *Console) listGitHubAppTokensRemote(
+	ctx context.Context, id string,
+) (*connect.Response[directoryrosterv1.ListGitHubAppTokensResponse], error) {
+	// Operator, not viewer: a request names who asked for it.
+	if _, err := requireAnywhere(ctx, access.RoleOperator); err != nil {
+		return nil, err
+	}
+	got, err := githubProto[directoryrosterv1.GetGitHubAppRequest, directoryrosterv1.GetGitHubAppResponse](
+		ctx, c, consolewire.GetApp, access.RoleViewer, connect.NewRequest(&directoryrosterv1.GetGitHubAppRequest{Id: id}))
+	if err != nil {
+		return nil, err
+	}
+	app := got.Msg.GetApp()
+	switch {
+	case app.GetPurpose() != directoryrosterv1.AppPurpose_APP_PURPOSE_TOKENS:
+		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
+			"%s mints no installation tokens: only an App the catalogue declares does", app.GetId()))
+	case !app.GetCanOperate():
+		return nil, connect.NewError(connect.CodePermissionDenied, errors.New("this needs the operator role over the App's organisation"))
+	case c.deps.GitHubMints == nil:
+		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New(
+			"this deployment mints no installation tokens here, so it keeps none to show"))
+	}
+	return connect.NewResponse(ghconsole.TokensOf(c.deps.GitHubMints, app.GetId())), nil
 }
 
 // CheckGitHubApp asks GitHub again about one App, whichever kind it is.

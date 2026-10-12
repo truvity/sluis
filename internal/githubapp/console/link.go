@@ -228,6 +228,33 @@ func (c *Service) GitHubLinkPage(ctx context.Context) (consolewire.LinkPage, err
 	}, nil
 }
 
+// GitHubLinkLogins indexes every address a link proves against the GitHub
+// account that proves it, lowercased. Only a link that counts is in it: one
+// GitHub still verifies an address for. Known is false where this module keeps
+// no links.
+func (c *Service) GitHubLinkLogins(ctx context.Context) (consolewire.LinkLogins, error) {
+	if _, err := requireAnywhere(ctx, access.RoleViewer); err != nil {
+		return consolewire.LinkLogins{}, err
+	}
+	if c.deps.Links == nil {
+		return consolewire.LinkLogins{}, nil
+	}
+	links, err := c.deps.Links.List(ctx)
+	if err != nil {
+		return consolewire.LinkLogins{}, connect.NewError(connect.CodeUnavailable, err)
+	}
+	out := consolewire.LinkLogins{Known: true, Logins: make(map[string]string, len(links))}
+	for i := range links {
+		if !links[i].Active() {
+			continue
+		}
+		for _, email := range links[i].Emails {
+			out.Logins[strings.ToLower(email)] = links[i].Login
+		}
+	}
+	return out, nil
+}
+
 // linkRate bounds how many links the module finishes in a minute, whoever asks:
 // finishing one spends a handful of calls to GitHub and a write, and the page
 // that leads here has no session.
