@@ -279,6 +279,16 @@ func Open(ctx context.Context, c Config) (*Writer, error) {
 		Roller: &inner.Roller{
 			Store: c.Archive, Instance: instance, Interval: c.RollInterval,
 			Held: holds.Held,
+			OnRedirect: func(profile, tenant string, from, to time.Time) {
+				log.WarnContext(ctx, "an object's hour was already sealed and it was put into a later hour",
+					slog.String("event", "sealed_hour_redirect"), slog.String("profile", logSafe(profile, 128)),
+					slog.String("tenant", logSafe(tenant, 128)), slog.Time("from", from), slog.Time("to", to))
+			},
+			OnSealProbeError: func(profile, tenant string, hour time.Time, err error) {
+				log.WarnContext(ctx, "could not tell whether an hour is sealed; the object was put into the hour of the clock",
+					slog.String("event", "seal_probe_failed"), slog.String("profile", logSafe(profile, 128)),
+					slog.String("tenant", logSafe(tenant, 128)), slog.Time("hour", hour), logattr.SafeError("error", err))
+			},
 			OnPut: func(key string, n int) {
 				log.InfoContext(ctx, "object written", slog.String("key", key), slog.Int("records", n))
 				counts.Written(key, n)
