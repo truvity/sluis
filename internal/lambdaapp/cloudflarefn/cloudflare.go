@@ -13,6 +13,7 @@ import (
 	"github.com/truvity/sluis/internal/config"
 	"github.com/truvity/sluis/internal/deploycheck"
 	"github.com/truvity/sluis/internal/lambdaapp"
+	"github.com/truvity/sluis/internal/modcall"
 )
 
 func init() { lambdaapp.Register(lambdaapp.ModuleCloudflare, openCloudflare) }
@@ -49,9 +50,8 @@ func openCloudflare(ctx context.Context, file string) (*lambdaapp.Function, erro
 	if err != nil {
 		return nil, err
 	}
-	notFound := http.NotFoundHandler()
 	return &lambdaapp.Function{
-		Handler: lambdaapp.NewHTTP(notFound, nil, log).WithRPC(a.RPC()).WithCheck(CheckFile(file)),
+		Handler: handler(a.RPC(), a.TickAll, CheckFile(file), log),
 		Flush: func(ctx context.Context) {
 			fctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 			defer cancel()
@@ -62,4 +62,13 @@ func openCloudflare(ctx context.Context, file string) (*lambdaapp.Function, erro
 		},
 		Close: func() { _ = a.Close() },
 	}, nil
+}
+
+// handler is the function's handler: the module's calls, the deploy check, and
+// the rotation schedule's {"kind":"cloudflare"} event, which is this function's
+// to answer since the issuer no longer hosts the module (docs/decisions/0071).
+func handler(rpc *modcall.Server, tick func(context.Context) (failed int, summary string, err error),
+	check func(context.Context) (deploycheck.Report, error), log *slog.Logger,
+) *lambdaapp.HTTP {
+	return lambdaapp.NewHTTP(http.NotFoundHandler(), nil, log).WithRPC(rpc).WithCheck(check).WithCloudflare(tick)
 }
