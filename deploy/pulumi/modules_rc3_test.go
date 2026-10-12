@@ -40,3 +40,35 @@ func TestEveryModuleDocumentCarriesTheExternalBlobs(t *testing.T) {
 		}
 	}
 }
+
+// Every function builds the audit adapter, at its start and in a tick of the
+// directory refresh: every module document names the queue, the Google module's
+// too.
+func TestEveryModuleDocumentCarriesTheAuditQueue(t *testing.T) {
+	in := moduleInstallation(t, "modules-full")
+	rec, _ := mustLambda(t, moduleEstate(t, in))
+	for _, m := range sluisconfig.Modules() {
+		var doc struct {
+			Adapters struct {
+				Audit struct {
+					Adapter  string `yaml:"adapter"`
+					Settings struct {
+						QueueURL string `yaml:"queueURL"`
+					} `yaml:"settings"`
+				} `yaml:"audit"`
+				Trigger struct {
+					Adapter string `yaml:"adapter"`
+				} `yaml:"trigger"`
+			} `yaml:"adapters"`
+		}
+		if err := yaml.Unmarshal([]byte(archiveFiles(t, rec.one(t, layerType, "staging-"+m+"-config"))["sluis/sluis.yaml"]), &doc); err != nil {
+			t.Fatalf("%s: %v", m, err)
+		}
+		if a := doc.Adapters.Audit; a.Adapter != "sqs" || a.Settings.QueueURL == "" {
+			t.Errorf("%s: adapters.audit is %+v, want sqs with the queue", m, a)
+		}
+		if tr := doc.Adapters.Trigger.Adapter; tr != "memory" {
+			t.Errorf("%s: adapters.trigger is %q, want memory", m, tr)
+		}
+	}
+}

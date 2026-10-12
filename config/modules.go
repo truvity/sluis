@@ -381,6 +381,9 @@ func (b moduleBuilder) google() (any, error) {
 		return nil, err
 	}
 	doc.Ports = b.ports(ModuleGoogle)
+	// The function builds the audit adapter at its start and in a refresh tick,
+	// as every module does: the queue the issuer's document names is its too.
+	doc.Adapters = b.adapters()
 	if d := b.in.Directory; d != nil {
 		doc.Google.Workspaces = slices.Clone(d.Workspaces)
 	}

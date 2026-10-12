@@ -1,4 +1,12 @@
 apiVersion: sluis.truvity.github.io/sluis-google/v1
+adapters:
+  audit:
+    adapter: sqs
+    settings:
+      queueURL: https://sqs.eu-central-1.amazonaws.com/111122223333/example-audit-ingest
+      region: eu-central-1
+  trigger:
+    adapter: memory
 google:
   freshnessWindow: 30m
   oauthClient:
