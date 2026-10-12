@@ -700,6 +700,54 @@ type TelemetryArgs struct {
 	Env map[string]string
 }
 
+// validate refuses a layer without its ARN and an environment that holds
+// anything but telemetry settings. Nil is valid. Every function of the library
+// is checked by it.
+func (t *TelemetryArgs) validate() error {
+	if t == nil {
+		return nil
+	}
+	if t.LayerArn == nil {
+		return errors.New("sluispulumi: Telemetry.LayerArn is required with Telemetry")
+	}
+	for k := range t.Env {
+		if !telemetryVariable(k) {
+			return fmt.Errorf("sluispulumi: Telemetry.Env: %s is not a telemetry setting: the environment holds OTEL_*, "+
+				"the telemetry layer's own (the SLUIS_* names it lists, or the deprecated ACCESS_ROSTER_*; "+
+				"OPENTELEMETRY_*) and AWS_LAMBDA_EXEC_WRAPPER, and nothing else", k)
+		}
+	}
+	return nil
+}
+
+// env is the function's telemetry environment: Env, and OTEL_SERVICE_NAME, the
+// function's name, unless Env has it. Nil gives an empty map (never nil), to
+// which the caller adds SLUIS_CONFIG.
+func (t *TelemetryArgs) env(fnName string) pulumi.StringMap {
+	env := pulumi.StringMap{}
+	if t == nil {
+		return env
+	}
+	if _, has := t.Env["OTEL_SERVICE_NAME"]; !has {
+		env["OTEL_SERVICE_NAME"] = pulumi.String(fnName)
+	}
+	for k, v := range t.Env {
+		env[k] = pulumi.String(v)
+	}
+	return env
+}
+
+// layers is the function's layer list: the telemetry layer FIRST (when set) and
+// the configuration layer LAST. A layer later in the list wins a path an
+// earlier one also writes, and nothing may write over the documents.
+func (t *TelemetryArgs) layers(config pulumi.StringInput) pulumi.StringArray {
+	layers := pulumi.StringArray{}
+	if t != nil {
+		layers = append(layers, t.LayerArn)
+	}
+	return append(layers, config)
+}
+
 // Lambda is the component. Its fields are the outputs.
 type Lambda struct {
 	pulumi.ResourceState
@@ -1157,17 +1205,8 @@ func (a *LambdaArgs) validate() (LambdaArgs, error) {
 			seen[id] = true
 		}
 	}
-	if t := out.Telemetry; t != nil {
-		if t.LayerArn == nil {
-			return out, errors.New("sluispulumi: Telemetry.LayerArn is required with Telemetry")
-		}
-		for k := range t.Env {
-			if !telemetryVariable(k) {
-				return out, fmt.Errorf("sluispulumi: Telemetry.Env: %s is not a telemetry setting: the environment holds OTEL_*, "+
-					"the telemetry layer's own (the SLUIS_* names it lists, or the deprecated ACCESS_ROSTER_*; "+
-					"OPENTELEMETRY_*) and AWS_LAMBDA_EXEC_WRAPPER, and nothing else", k)
-			}
-		}
+	if err := out.Telemetry.validate(); err != nil {
+		return out, err
 	}
 	if err := out.validateTransitionRoles(); err != nil {
 		return out, err
@@ -1417,24 +1456,9 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 		auditArn = a.AuditQueueArn.ToStringOutput()
 	}
 	out.AuditQueueURL, out.AuditQueueArn = auditURL, auditArn
-	env := pulumi.StringMap{}
-	if t := a.Telemetry; t != nil {
-		if _, has := t.Env["OTEL_SERVICE_NAME"]; !has {
-			env["OTEL_SERVICE_NAME"] = pulumi.String(fnName)
-		}
-		for k, v := range t.Env {
-			env[k] = pulumi.String(v)
-		}
-	}
+	env := a.Telemetry.env(fnName)
 	env[sluisconfig.EnvConfig] = pulumi.String(DocumentPath(docSluis))
-
-	// The configuration layer is LAST: a layer later in the list wins a path an
-	// earlier one also writes, and nothing may write over the documents.
-	layers := pulumi.StringArray{}
-	if a.Telemetry != nil {
-		layers = append(layers, a.Telemetry.LayerArn)
-	}
-	layers = append(layers, layer.Arn)
+	layers := a.Telemetry.layers(layer.Arn)
 	fnArgs := &lambda.FunctionArgs{
 		// A version on every change of the code or the configuration; the alias
 		// below is what callers use.

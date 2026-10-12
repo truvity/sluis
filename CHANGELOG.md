@@ -1,5 +1,9 @@
 ## Unreleased
 
+### Changed
+
+- **Every Lambda function the library creates exports telemetry as the issuer does.** `LambdaArgs.Telemetry` put the OpenTelemetry layer and its `OTEL_*` environment on the issuer's function alone, so the GitHub, Slack, Google, Cloudflare, backup and restore functions (the ones that do the work) exported nothing. With `Telemetry` set, each of them now gets the telemetry layer first and the configuration layer last, the same `OTEL_*` settings, and `OTEL_SERVICE_NAME` defaulting to the function's own name unless `Telemetry.Env` sets it; the layer, environment and validation (`Telemetry.Env` holds telemetry settings only) are one helper for all of them. The layer authenticates with an AWS-minted web identity token, so each module role also holds `sts:GetWebIdentityToken` for `AdditionalWebIdentityAudiences` (after the console's audience on the roles that call the console), and only when `Telemetry` is set; unset, no function changes. `BackupArgs` and `RestoreArgs` (`BackupCommon`) take `Telemetry` and `AdditionalWebIdentityAudiences` for the same, `ModuleEnv.TelemetryAudiences` renders the grant, and a contract test finds every function the library creates and holds it to all of this. An estate that passes `Telemetry` to `LambdaArgs` needs no change: its module functions pick it up on the next apply (a new version of each function); pass the same two values to `Backup` and `Restore` to cover them.
+
 ## v1.76.0-rc.4
 
 ### Changed
