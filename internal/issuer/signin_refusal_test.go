@@ -118,8 +118,11 @@ func TestASignInRefusalPageNamesNobodyAndNothing(t *testing.T) {
 			if got := records[0].GetData().AsMap()["reason_code"]; got != tc.code {
 				t.Errorf("reason_code = %v, want %s", got, tc.code)
 			}
+			// The reference is a random hex id, which can spell "ada" by chance:
+			// the page is scanned without it.
+			scanned := strings.ReplaceAll(body, requestIDOf(t, header), "<reference>")
 			for _, leaked := range []string{email, "north.example", "ada", "dial tcp", "idp said", "not live", "directory"} {
-				if strings.Contains(body, leaked) {
+				if strings.Contains(scanned, leaked) {
 					t.Errorf("the page gives away %q:\n%s", leaked, body)
 				}
 			}
