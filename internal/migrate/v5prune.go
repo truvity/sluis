@@ -58,7 +58,7 @@ var (
 const (
 	// KeptNotMigrated is a parameter the migration deliberately does not carry.
 	KeptNotMigrated = "not-migrated"
-	// KeptPulumi is a parameter the Pulumi library owns (Compat.DropV4).
+	// KeptPulumi is a parameter the Pulumi library owns (a layout v5 apply deletes it).
 	KeptPulumi = "pulumi-owned"
 	// KeptUnmapped is a name layout v4 never wrote, or that is already a layout
 	// v5 name.
@@ -331,7 +331,7 @@ func v4Names(ctx context.Context, from Side) ([]string, error) {
 // keptReason says why a parameter is kept; the class is empty for one to delete.
 func keptReason(name string, cov covered, sameRoot bool, s3Ref string) (reason, class string) {
 	if slices.Contains(pulumiOwned, name) {
-		return "created by the Pulumi library; Compat.DropV4 deletes it", KeptPulumi
+		return "created by the Pulumi library; a layout v5 apply deletes it", KeptPulumi
 	}
 	t, err := MapSecret(name)
 	if name == s3Ref && s3Ref != "" {

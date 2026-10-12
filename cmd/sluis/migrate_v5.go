@@ -49,7 +49,7 @@ that has a layout v5 address is the same on the destination (no new, different,
 refused or missing item). It then deletes only the parameters whose layout v5 copy
 was found equal. It keeps, and lists, the ones the migration does not carry
 (internal/config/valkey/password), and an organisation's key until its App holds the same key, the two the Pulumi
-library owns (Compat.DropV4 deletes them), and any it did not verify.
+library owns (a layout v5 apply deletes them), and any it did not verify.
 
   1. --dry-run prints what would be deleted and kept, and a plan hash.
   2. Without --dry-run the run needs --confirm-plan <that hash>; a different
