@@ -281,6 +281,10 @@ message Provenance {
   string digest_id = 3;
   // When a verifier last found the seal clean; empty when none has.
   google.protobuf.Timestamp verified_at = 4;
+  // True when this service cannot tell whether the hour is sealed: it looks in
+  // no archive, or the archive could not be asked. Empty digest_id then says
+  // nothing, and a reader shows no seal state rather than "not sealed".
+  bool seal_unknown = 5;
 }
 
 message ExportRequest {

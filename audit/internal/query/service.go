@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
@@ -47,7 +48,10 @@ type Service struct {
 	Identities *identity.Map
 	// Seals, when given, is the archive the seals are looked for in: a record
 	// read from an object whose hour has been sealed says which seal covers it.
-	Seals    store.Store
+	Seals store.Store
+	// Logger receives what the service cannot report to a caller, such as a
+	// seal lookup that failed. Nil means slog.Default().
+	Logger   *slog.Logger
 	Version  string
 	Instance string
 	// OnUnrecorded is called when a read happened and the trail does not say
@@ -261,7 +265,7 @@ func (s *Service) Get(
 	// to set (observe's verification marks), and a reader takes empty as not
 	// verified, the conservative answer.
 	if err == nil {
-		where.Digest = s.sealOf(ctx, where.ObjectKey)
+		where.Digest, where.SealUnknown = s.sealOf(ctx, where.ObjectKey)
 	}
 	// audit.get declares only the record it read.
 	s.record(ctx, "audit.get", p, g, err, []*record.Target{
@@ -493,21 +497,37 @@ func (s *Service) instance() string {
 	return record.InstanceName()
 }
 
-// sealOf is the key of the seal that covers a record object's hour, or "" when
-// the service looks in no archive, the key is not a record object's, or the
-// hour is not sealed yet: the ordinary state of the current hour, and a finding
-// in any other that `audit verify` makes.
-func (s *Service) sealOf(ctx context.Context, objectKey string) string {
+// sealOf is the key of the seal that covers a record object's hour, and
+// whether the answer is known. A seal object that is absent gives ("", false):
+// the ordinary state of the current hour, and a finding in any other that
+// `audit verify` makes. The state is unknown, ("", true), when the service looks
+// in no archive (the query service deliberately holds no archive credential) or
+// asking the archive failed: an expired credential must not read as "not
+// sealed". A key that is not a record object's is no object of ours and
+// reports unknown too.
+func (s *Service) sealOf(ctx context.Context, objectKey string) (string, bool) {
 	if s.Seals == nil {
-		return ""
+		return "", true
 	}
 	o, ok := store.ParseRecordKey(objectKey)
 	if !ok {
-		return ""
+		return "", true
 	}
 	key := store.SealKey(o.Profile, o.Tenant, o.Hour)
 	if _, err := s.Seals.Head(ctx, key); err != nil {
-		return ""
+		if errors.Is(err, store.ErrNotFound) {
+			return "", false
+		}
+		s.logger().WarnContext(ctx, "audit query: could not look for the seal of a record's hour",
+			"key", key, "error", err)
+		return "", true
 	}
-	return key
+	return key, false
+}
+
+func (s *Service) logger() *slog.Logger {
+	if s.Logger != nil {
+		return s.Logger
+	}
+	return slog.Default()
 }
