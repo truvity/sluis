@@ -217,6 +217,18 @@ func (a *App) Run(ctx context.Context) error {
 	}
 }
 
+// TickAll is one scheduled pass over every preset, one failure never stopping
+// the others: the {"kind":"cloudflare"} event of the module's Lambda function.
+// It returns the presets that failed, a one-line account (preset=outcome) and
+// the failures joined.
+func (a *App) TickAll(ctx context.Context) (failed int, summary string, err error) {
+	res := a.minter.Tick(ctx)
+	if res.Failed() > 0 {
+		a.log.WarnContext(ctx, "some Cloudflare presets did not rotate; the next tick retries", slog.Int("failed", res.Failed()))
+	}
+	return res.Failed(), res.Summary(), res.Err()
+}
+
 // Tick runs one preset's rotation once, under its lease, and returns: a
 // credential that is not due costs no call to Cloudflare, and a preset another
 // runner holds is left to it.
