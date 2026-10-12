@@ -440,3 +440,83 @@ func TestAnEvidenceObjectIsLockedUntilItsLatestExpiryPlusTheYears(t *testing.T) 
 		})
 	}
 }
+
+// An hour that already has a seal is covered by nothing that is put into it
+// afterwards, so the object goes into the next hour that has none (ADR 0061).
+func TestObjectForASealedHourIsPutIntoTheNextOpenHour(t *testing.T) {
+	ctx := context.Background()
+	s := storetest.NewMemory()
+	at := day(t, "2026-09-17T10:30:00Z")
+	// Hours 10 and 11 are sealed; the writer's clock still says 10.
+	for _, h := range []string{"2026-09-17T10:00:00Z", "2026-09-17T11:00:00Z"} {
+		if err := s.Put(ctx, store.Object{Key: store.SealKey("security", "acme", day(t, h)), Body: []byte("x")}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	r := roller(t, s, func() time.Time { return at })
+	var from, to time.Time
+	r.OnRedirect = func(_, _ string, f, tt time.Time) { from, to = f, tt }
+	p := profiles(t)["security"]
+
+	if err := r.Add(ctx, p, copyFor(t, "security", "acme", at)); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Flush(ctx); err != nil {
+		t.Fatal(err)
+	}
+	var recs []string
+	for _, k := range s.Keys() {
+		if strings.HasPrefix(k, "records/") {
+			recs = append(recs, k)
+		}
+	}
+	if len(recs) != 1 || !strings.HasPrefix(recs[0], "records/security/acme/2026/09/17/12/") {
+		t.Fatalf("record keys = %v, want one in hour 12", recs)
+	}
+	if _, ok := store.ParseRecordKey(recs[0]); !ok {
+		t.Fatalf("%q does not parse as a record key", recs[0])
+	}
+	if !from.Equal(day(t, "2026-09-17T10:00:00Z")) || !to.Equal(day(t, "2026-09-17T12:00:00Z")) {
+		t.Fatalf("redirect from %s to %s", from, to)
+	}
+
+	// The writer stays in the open hour afterwards, with the clock still behind.
+	if err := r.Add(ctx, p, copyFor(t, "security", "acme", at)); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Flush(ctx); err != nil {
+		t.Fatal(err)
+	}
+	n := 0
+	for _, k := range s.Keys() {
+		if strings.HasPrefix(k, "records/security/acme/2026/09/17/12/") {
+			n++
+		}
+	}
+	if n != 2 {
+		t.Fatalf("objects in hour 12 = %d, want 2 (keys %v)", n, s.Keys())
+	}
+}
+
+// An hour with no seal is written where the clock says, and nothing is called.
+func TestObjectForAnOpenHourIsNotRedirected(t *testing.T) {
+	ctx := context.Background()
+	s := storetest.NewMemory()
+	at := day(t, "2026-09-17T10:30:00Z")
+	// A seal for another hour and another tenant changes nothing.
+	_ = s.Put(ctx, store.Object{Key: store.SealKey("security", "acme", day(t, "2026-09-17T09:00:00Z")), Body: []byte("x")})
+	_ = s.Put(ctx, store.Object{Key: store.SealKey("security", "other", day(t, "2026-09-17T10:00:00Z")), Body: []byte("x")})
+	r := roller(t, s, func() time.Time { return at })
+	r.OnRedirect = func(_, _ string, _, _ time.Time) { t.Fatal("redirected") }
+	if err := r.Add(ctx, profiles(t)["security"], copyFor(t, "security", "acme", at)); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Flush(ctx); err != nil {
+		t.Fatal(err)
+	}
+	for _, k := range s.Keys() {
+		if strings.HasPrefix(k, "records/") && !strings.HasPrefix(k, "records/security/acme/2026/09/17/10/") {
+			t.Fatalf("key %q", k)
+		}
+	}
+}

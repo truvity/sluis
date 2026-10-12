@@ -106,8 +106,9 @@ func webIdentityStatement(audience string) statement {
 // refuses a put that carries an Object Lock header unless the caller also holds
 // the matching permission. The writer reads the catalogue it compares at
 // start-up, the legal holds, and the archive an addendum scans; it lists the
-// bucket for the last two. It has no delete, no access to seals/ or keys/, and
-// no KMS Sign: whoever can write the archive and can also sign for it can choose
+// bucket for the last two. It has no delete, no write to seals/ or keys/ (it reads
+// seals/ to see whether an hour is sealed, so that it never puts an object into
+// one), and no KMS Sign: whoever can write the archive and can also sign for it can choose
 // what to sign (ADR 0061). When its configuration names secrets it may read the
 // SSM parameters under its root and decrypt them, and read nothing else of SSM.
 // Only the attested preset's bucket is locked (bucketGrant.Locked); the writer
@@ -125,7 +126,7 @@ func writerPolicy(buckets []bucketGrant, archiveKeyArns []string, tableArn, queu
 		}
 		st = append(st,
 			allow(put, b.under(writerPrefixes...), nil),
-			allow([]string{"s3:GetObject"}, b.under(append(append([]string{}, writerPrefixes...), "holds/")...), nil),
+			allow([]string{"s3:GetObject"}, b.under(append(append([]string{}, writerPrefixes...), "holds/", "seals/")...), nil),
 			b.list(),
 		)
 	}
