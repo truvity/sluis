@@ -109,21 +109,29 @@ func TestWithoutTheFlagTheLegacyTableStaysProtectedAndNothingIsExported(t *testi
 	}
 }
 
-func TestRetiringNeedsTheV4ParametersDropped(t *testing.T) {
-	if _, err := statesRun(t, retireArgs(legacy(), &arp.CompatArgs{RetireLegacyTable: true})); err == nil ||
-		!strings.Contains(err.Error(), "Compat.DropV4") {
-		t.Errorf("States: RetireLegacyTable without DropV4 = %v", err)
+func TestRetiringIsRefusedWhileTheV4ParametersAreKept(t *testing.T) {
+	if _, err := statesRun(t, retireArgs(legacy(), &arp.CompatArgs{RetireLegacyTable: true, KeepV4: true})); err == nil ||
+		!strings.Contains(err.Error(), "Compat.KeepV4") {
+		t.Errorf("States: RetireLegacyTable with KeepV4 = %v", err)
 	}
 	for name, e := range map[string]estate{
-		"without DropV4": withLayout(arp.LayoutV5, func(a *arp.LambdaArgs) { a.Compat = &arp.CompatArgs{RetireLegacyTable: true} }),
-		"on v4":          {mutate: func(a *arp.LambdaArgs) { a.Compat = &arp.CompatArgs{DropV4: true, RetireLegacyTable: true} }},
+		"with KeepV4": withLayout(arp.LayoutV5, func(a *arp.LambdaArgs) {
+			a.Compat = &arp.CompatArgs{KeepV4: true, RetireLegacyTable: true}
+		}),
+		"on v4": {mutate: func(a *arp.LambdaArgs) { a.Compat = &arp.CompatArgs{RetireLegacyTable: true} }},
 		"on v4+v5": withLayout(arp.LayoutV4V5, func(a *arp.LambdaArgs) {
-			a.Compat = &arp.CompatArgs{DropV4: true, RetireLegacyTable: true}
+			a.Compat = &arp.CompatArgs{RetireLegacyTable: true}
 		}),
 	} {
 		if _, _, err := buildLambda(t, e); err == nil {
 			t.Errorf("the function took RetireLegacyTable %s", name)
 		}
+	}
+	// v5 drops the v4 parameters by default, so retiring needs no DropV4.
+	if _, _, err := buildLambda(t, withLayout(arp.LayoutV5, func(a *arp.LambdaArgs) {
+		a.Compat = &arp.CompatArgs{RetireLegacyTable: true}
+	})); err != nil {
+		t.Errorf("RetireLegacyTable on v5: %v", err)
 	}
 }
 

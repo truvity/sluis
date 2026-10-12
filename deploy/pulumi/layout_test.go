@@ -192,6 +192,7 @@ func TestTheLayoutIsValidated(t *testing.T) {
 		"v5 without the module tables":  {mutate: func(a *arp.LambdaArgs) { a.Layout = arp.LayoutV5 }},
 		"v4+v5 without the legacy":      withLayout(arp.LayoutV4V5, func(a *arp.LambdaArgs) { a.State.TableArn = nil }),
 		"DropV4 on v4":                  {mutate: func(a *arp.LambdaArgs) { a.Compat = &arp.CompatArgs{DropV4: true} }},
+		"KeepV4 with DropV4":            withLayout(arp.LayoutV5, func(a *arp.LambdaArgs) { a.Compat = &arp.CompatArgs{KeepV4: true, DropV4: true} }),
 		"DropV4 on v4+v5":               withLayout(arp.LayoutV4V5, func(a *arp.LambdaArgs) { a.Compat = &arp.CompatArgs{DropV4: true} }),
 		"an unknown module's table":     withLayout(arp.LayoutV5, func(a *arp.LambdaArgs) { a.TableNames = map[arp.Module]string{"nope": "x"} }),
 		"a migration role that is not":  withLayout(arp.LayoutV5, func(a *arp.LambdaArgs) { a.MigrationRoleArn = arnp + "iam::" + account + ":user/x" }),
@@ -374,14 +375,14 @@ func (s previewDiff) String() string {
 	}, ", ")
 }
 
-// An estate goes v4, v4+v5, v5 and drops v4: the first apply creates the two v5
-// parameters and deletes or replaces nothing; the flip creates nothing and
-// deletes nothing (the v4 parameters stay for the rollback window); dropping
-// them deletes exactly the two.
+// An estate goes v4, v4+v5, v5: the first apply creates the two v5 parameters
+// and deletes or replaces nothing; the flip to v5 deletes the two v4 parameters
+// (nothing reads them there) unless Compat.KeepV4, which deletes nothing.
 func TestThePreviewShapeAcrossTheLayouts(t *testing.T) {
 	build := func(e estate) *recorder { rec, _ := mustLambda(t, e); return rec }
 	v4 := build(withLayout(arp.LayoutV4))
 	window := build(withLayout(arp.LayoutV4V5))
+	kept := build(withLayout(arp.LayoutV5, func(a *arp.LambdaArgs) { a.Compat = &arp.CompatArgs{KeepV4: true} }))
 	flipped := build(withLayout(arp.LayoutV5))
 	dropped := build(withLayout(arp.LayoutV5, func(a *arp.LambdaArgs) { a.Compat = &arp.CompatArgs{DropV4: true} }))
 
@@ -391,15 +392,17 @@ func TestThePreviewShapeAcrossTheLayouts(t *testing.T) {
 		want          string
 	}{
 		{"v4 -> v4+v5", v4, window, "2 created, 0 deleted, 0 replaced"},
-		{"v4+v5 -> v5", window, flipped, "0 created, 0 deleted, 0 replaced"},
-		{"v5 -> v5 + DropV4", flipped, dropped, "0 created, 2 deleted, 0 replaced"},
+		{"v4+v5 -> v5 + KeepV4", window, kept, "0 created, 0 deleted, 0 replaced"},
+		{"v4+v5 -> v5", window, flipped, "0 created, 2 deleted, 0 replaced"},
+		{"v5 + KeepV4 -> v5", kept, flipped, "0 created, 2 deleted, 0 replaced"},
+		{"v5 -> v5 + DropV4", flipped, dropped, "0 created, 0 deleted, 0 replaced"},
 		{"v4+v5 -> v5 + DropV4", window, dropped, "0 created, 2 deleted, 0 replaced"},
 	} {
 		if got := previewShape(c.before, c.after, ssmParameterType).String(); got != c.want {
 			t.Errorf("%s: %s, want %s", c.name, got, c.want)
 		}
 	}
-	got := previewShape(window, dropped, ssmParameterType)
+	got := previewShape(window, flipped, ssmParameterType)
 	if !slices.Equal(got.deleted, []string{"staging-recovery-password-internal", "staging-state-secret-internal"}) {
 		t.Errorf("deleted: %v", got.deleted)
 	}
@@ -423,9 +426,20 @@ func TestThePreviewShapeAcrossTheLayouts(t *testing.T) {
 	if s := previewShape(v4, window, "aws:dynamodb/table:Table"); len(s.created)+len(s.deleted)+len(s.replaced) != 0 {
 		t.Errorf("tables: %s", s)
 	}
-	// A born-on-v5 estate has no v4 parameters at all.
-	if n := len(dropped.ofType(ssmParameterType)); n != 2 {
-		t.Errorf("a v5 estate with DropV4 has %d parameters, want the two v5 ones", n)
+	// A v5 estate has no v4 parameters by default, with DropV4 (a no-op) too;
+	// KeepV4 declares them beside the v5 pair; the v4 layouts are unchanged.
+	for name, r := range map[string]*recorder{"default": flipped, "DropV4": dropped} {
+		if n := len(r.ofType(ssmParameterType)); n != 2 {
+			t.Errorf("a v5 estate (%s) has %d parameters, want the two v5 ones", name, n)
+		}
+	}
+	for name, c := range map[string]struct {
+		r *recorder
+		n int
+	}{"v5 + KeepV4": {kept, 4}, "v4+v5": {window, 4}, "v4": {v4, 2}} {
+		if n := len(c.r.ofType(ssmParameterType)); n != c.n {
+			t.Errorf("%s has %d parameters, want %d", name, n, c.n)
+		}
 	}
 }
 

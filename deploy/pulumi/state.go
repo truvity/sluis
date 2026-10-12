@@ -175,7 +175,7 @@ type StatesArgs struct {
 	// born on v5, or one whose table is gone.
 	Legacy *LegacyStateArgs
 	// Compat is the same CompatArgs the function takes. With RetireLegacyTable
-	// (and DropV4) and Legacy set, this apply exports the legacy table to a
+	// and Legacy set, this apply exports the legacy table to a
 	// bucket the library creates (kept 30 days), then turns off the table's
 	// deletion protection and unprotects it in the state; the stack output
 	// `legacyTableBackupArn` is the export's ARN. The apply after, Legacy is left
