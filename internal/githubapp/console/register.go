@@ -66,6 +66,9 @@ func Register(s *modcall.Server, svc *Service) {
 	consolecall.HandleJSON(s, consolewire.LinkCompleteOf, adapt(svc, svc.GitHubLinkComplete))
 	handleProto(svc, s, consolewire.ConfirmRemovals, svc.ConfirmGitHubRemovals)
 	handleProto(svc, s, consolewire.ImportLinks, svc.ImportGitHubLinks, consolecall.List())
+	consolecall.HandleJSON(s, consolewire.ListLinkLogins, adapt(svc, func(ctx context.Context, _ struct{}) (consolewire.LinkLogins, error) {
+		return svc.GitHubLinkLogins(ctx)
+	}), consolecall.List())
 	consolecall.HandleJSON(s, consolewire.BeginAppConnect, adapt(svc, svc.BeginGitHubAppConnect))
 	handleProto(svc, s, consolewire.DisconnectApp, svc.DisconnectGitHubApp)
 }

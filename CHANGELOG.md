@@ -1,5 +1,11 @@
 ## Unreleased
 
+### Changed
+
+- **The people filter by GitHub link works when the GitHub module is a function of its own.** `#/people?github=linked` and `?github=not-linked` answered `failed_precondition: nobody can link a GitHub account in this deployment` on a Lambda installation, although the link App had linked accounts: the links are the GitHub module's records and the issuer's console opens none, so it read "no link store" as "no links anywhere". The console now asks the module (a new console method, `console.list_link_logins`, which answers the console class alone and returns the logins of the links that count, or says the module keeps no links); the precondition stays for a deployment that keeps links nowhere.
+
+- **A GitHub App's "Recent tokens" no longer fails on a Lambda installation.** `ListGitHubAppTokens` was forwarded to the GitHub module, which mints the installation tokens but keeps no record of them: the ring of recent requests is written by the issuer, which decides each mint, so the module answered "this deployment mints no installation tokens here" for every App. With the module remote the console now asks it only which App the id names and whether the person may operate it, and answers from the issuer's ring (a ring in function memory, which says since when it has been kept, as it always did). The route contract test also holds every GitHub console method to reaching the module or being answered at the issuer on purpose, with a reason, so this class of gap fails a test.
+
 ## v1.76.0-rc.6
 
 ### Changed

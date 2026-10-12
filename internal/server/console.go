@@ -865,6 +865,11 @@ func (c *Console) SearchPeople(
 // that keeps none, or a read that failed; the error is returned beside it
 // so a caller that cannot go on can say which.
 func (c *Console) githubLogins(ctx context.Context) (map[string]string, bool, error) {
+	// A module in another process keeps the links; this process opens none.
+	// Ask it, as the person who is searching.
+	if c.deps.Modules.GitHub != nil {
+		return c.githubLoginsRemote(ctx)
+	}
 	if c.deps.GitHubLinks == nil {
 		return nil, false, nil
 	}
