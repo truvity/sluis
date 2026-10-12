@@ -171,7 +171,8 @@ type LambdaArgs struct {
 	// migration window: the v5 parameters exist and the migration can copy, and the
 	// flip to "v5" is the next change. Both set the v5 parameters
 	// (`internal/oidc/state-secret`, `internal/oidc/recovery-password`) with the
-	// value of the v4 ones; the v4 parameters stay until Compat.DropV4.
+	// value of the v4 ones. The v4 parameters are declared on "v4" and "v4+v5" (a role there
+	// still reads them) and, on "v5", only with Compat.KeepV4.
 	Layout Layout
 	// TableNames overrides the table name of a module in the document
 	// (`ports.dynamodb.tables`), as ModuleSet.Tables does for States. Default
@@ -886,25 +887,41 @@ type Lambda struct {
 
 // CompatArgs is what the library keeps for the layouts that are going away.
 type CompatArgs struct {
-	// DropV4 removes the v4 state secret and recovery password parameters
-	// (`internal/config/issuer/state-secret`, `internal/config/recovery/password`).
-	// They stay, with the v5 copies beside them, until it is set, so that a flip
-	// back to Layout "v4" inside the rollback window finds them. It needs Layout
-	// "v5". An installation born on v5 sets it from the start and never has them.
+	// DropV4 is deprecated and kept for source compatibility. A layout "v5"
+	// installation no longer declares the v4 state secret and recovery password
+	// parameters (`internal/config/issuer/state-secret`,
+	// `internal/config/recovery/password`) by default, so setting it changes
+	// nothing there. It is refused on "v4" and "v4+v5", whose roles still read
+	// them, and together with KeepV4.
+	//
+	// Deprecated: v5 drops the v4 parameters by default; use KeepV4 to keep them.
 	DropV4 bool
-	// RetireLegacyTable ends the legacy table's life after the v4 parameters are
-	// gone. It needs Layout "v5" and DropV4, and the same Compat on StatesArgs,
-	// where it backs the table up and unprotects it (see StatesArgs.Compat). Here
-	// the migration role loses its read of the legacy table.
+	// KeepV4 declares the v4 state secret and recovery password parameters on
+	// layout "v5" as well, for an estate that still needs them during a migration
+	// (a flip back to "v4" inside the rollback window finds them). Without it a
+	// "v5" apply deletes them from AWS: nothing reads them on v5. It is refused
+	// together with DropV4 and with RetireLegacyTable.
+	KeepV4 bool
+	// RetireLegacyTable ends the legacy table's life. It needs Layout "v5" and the
+	// same Compat on StatesArgs, where it backs the table up and unprotects it
+	// (see StatesArgs.Compat). Here the migration role loses its read of the
+	// legacy table. It is refused with KeepV4.
 	RetireLegacyTable bool
 }
 
-// validate refuses a Compat that retires the legacy table while the v4
-// parameters it is read through are still there.
+// validate refuses a Compat that asks for the v4 parameters to be both kept and
+// dropped, or kept while the legacy table retires.
 func (c *CompatArgs) validate() error {
-	if c != nil && c.RetireLegacyTable && !c.DropV4 {
-		return errors.New("sluispulumi: Compat.RetireLegacyTable needs Compat.DropV4: " +
-			"retire the legacy table after the v4 parameters are dropped, in a later apply")
+	if c == nil {
+		return nil
+	}
+	if c.KeepV4 && c.DropV4 {
+		return errors.New("sluispulumi: Compat.KeepV4 and Compat.DropV4 contradict each other: " +
+			"layout v5 drops the v4 parameters by default, so set KeepV4 to keep them or neither")
+	}
+	if c.KeepV4 && c.RetireLegacyTable {
+		return errors.New("sluispulumi: Compat.RetireLegacyTable cannot be set with Compat.KeepV4: " +
+			"retire the legacy table once the v4 parameters are no longer wanted")
 	}
 	return nil
 }
@@ -1638,8 +1655,10 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 	//
 	// Layout v5 (and v4+v5) writes the same value at the v5 address as well, from
 	// the same generator, under a logical name of its own: it is a create, and the
-	// v4 parameter is neither replaced nor deleted until Compat.DropV4.
-	dropV4 := a.Compat != nil && a.Compat.DropV4
+	// v4 parameter is neither replaced nor deleted on "v4+v5". On "v5" the v4
+	// parameters are not declared unless Compat.KeepV4: nothing reads them, so an
+	// apply that flips a window estate to v5 deletes them.
+	dropV4 := a.Layout == LayoutV5 && (a.Compat == nil || !a.Compat.KeepV4)
 	var params []pulumi.Resource
 	stateName, recoveryName := pulumi.StringOutput{}, pulumi.StringOutput{}
 	newSecretParam := func(logical, path string, value pulumi.StringInput) (*ssm.Parameter, error) {

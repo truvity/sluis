@@ -1,5 +1,11 @@
 ## Unreleased
 
+### Changed
+
+- **A layout v5 installation no longer declares the v4 state secret and recovery password parameters unless `Compat.KeepV4` is set.** The Pulumi library kept `internal/config/issuer/state-secret` and `internal/config/recovery/password` beside the v5 pair until `Compat.DropV4`, although nothing reads them on v5, so every v5 estate carried two secrets it had to remember to drop. On `Layout: "v5"` the library now declares only the v5 pair; `v4` and `v4+v5` (whose roles still read the v4 pair) are unchanged. `Compat.DropV4` is deprecated and kept for source compatibility: a no-op on v5, still refused on `v4` and `v4+v5`. The new `Compat.KeepV4` keeps the v4 pair on v5 for an estate that still needs it during a migration; it is refused with `DropV4` and with `RetireLegacyTable`, and `RetireLegacyTable` no longer needs `DropV4`. Tests hold the default, `KeepV4`, `DropV4` on v5, the refusals, the unchanged v4 layouts and the preview shape of each step.
+
+  **UPGRADE NOTE:** an estate on layout v5 that did not set `DropV4` will see its next apply delete the two v4 parameters from AWS (they are no longer read on v5). To keep them, set `Compat: &CompatArgs{KeepV4: true}`.
+
 ## v1.76.0-rc.7
 
 ### Added

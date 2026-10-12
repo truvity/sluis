@@ -76,7 +76,7 @@ The table of the [DynamoDB adapter](storage-layout.md#dynamodb-the-dynamodb-stat
 | `Only` | Every module | The modules that get a table |
 | `KeyArn`, `Tags` | None | On every table |
 | `Legacy` | None | `LegacyStateArgs`: the `Name` and arguments `NewState` had; same URN, protected |
-| `Compat` | None | The function's `CompatArgs`. With `DropV4` and `RetireLegacyTable` and `Legacy` set: exports the legacy table to a private bucket that expires it after 30 days (output `legacyTableBackupArn`; refused while the live table has point-in-time recovery off), turns off its deletion protection and unprotects it |
+| `Compat` | None | The function's `CompatArgs`. With `RetireLegacyTable` and `Legacy` set: exports the legacy table to a private bucket that expires it after 30 days (output `legacyTableBackupArn`; refused while the live table has point-in-time recovery off), turns off its deletion protection and unprotects it |
 
 | Detail | Behavior |
 |---|---|
@@ -247,8 +247,9 @@ l, _ := sluispulumi.NewLambda(ctx, "access", &sluispulumi.LambdaArgs{
 | `Storage`, `State` | Required | The grants |
 | `Layout` | `v4` | `v4`, `v5` or `v4+v5`: which grants the role carries and which layout the document names ([layouts](#layouts)) |
 | `TableNames` | `sluis-<instance>-<module>` | Table name per module in `ports.dynamodb.tables`; the same map as `StatesArgs.Modules.Tables` |
-| `Compat.DropV4` | false | Removes the v4 state secret and recovery password parameters. Needs `Layout: v5` |
-| `Compat.RetireLegacyTable` | false | Takes the migration role's read of the legacy table. Needs `Layout: v5` and `DropV4`; the same `Compat` on `StatesArgs` exports and unprotects the table |
+| `Compat.KeepV4` | false | Declares the v4 state secret and recovery password parameters on `Layout: v5` as well, for a migration that still needs them. Without it a `v5` apply does not declare them (and deletes them from AWS). Refused with `DropV4` and `RetireLegacyTable` |
+| `Compat.DropV4` | false | Deprecated, kept for source compatibility: a no-op on `v5`, which drops the v4 parameters by default. Refused on `v4` and `v4+v5` |
+| `Compat.RetireLegacyTable` | false | Takes the migration role's read of the legacy table. Needs `Layout: v5`; refused with `KeepV4`; the same `Compat` on `StatesArgs` exports and unprotects the table |
 | `MigrationRoleArn` | None | Role that runs `sluis migrate v5`: an inline policy lets it read the legacy table (`State.TableArn`) and nothing else |
 | `Artifacts`, `Release` | Unset | [Artifacts bucket](#artifacts-bucket) |
 | `Audit` | Install | [Audit](#audit). Needs `Installation` |
@@ -287,15 +288,15 @@ l, _ := sluispulumi.NewLambda(ctx, "access", &sluispulumi.LambdaArgs{
 |---|---|---|---|
 | `v4` | The legacy table (writes of the `maintenance` key denied); `internal/credentials`, `internal/config`, `external` (and the Cloudflare paths with presets); the whole bucket | `internal/config/issuer/state-secret`, `internal/config/recovery/password` | `ports.dynamodb.table` or the adapter, as the estate wrote it |
 | `v4+v5` | Both sets; a statement the sets share is written once | The v4 pair and `internal/oidc/state-secret`, `internal/oidc/recovery-password`: the same values from the same generators, the v5 pair as the secret store's document (`{"value":"<base64>"}`) | The v4 document |
-| `v5` | `ModuleRoleStatements` of the hosted modules (`oidc`, `github`, `slack`, `google`, and `cloudflare` with presets): their tables, `internal/<module>`, `external/<module>`, `<module>/` blob prefixes; `SluisMaintenanceDeny` on their tables (and the legacy table on `v4+v5`) | The v5 pair, as documents; the v4 pair stays until `Compat.DropV4` | `secrets.layout: v5` and `ports.dynamodb.tables`; `aws.table` and `ports.dynamodb.table` are refused |
+| `v5` | `ModuleRoleStatements` of the hosted modules (`oidc`, `github`, `slack`, `google`, and `cloudflare` with presets): their tables, `internal/<module>`, `external/<module>`, `<module>/` blob prefixes; `SluisMaintenanceDeny` on their tables (and the legacy table on `v4+v5`) | The v5 pair, as documents; no v4 pair unless `Compat.KeepV4` | `secrets.layout: v5` and `ports.dynamodb.tables`; `aws.table` and `ports.dynamodb.table` are refused |
 
 | Detail | Behavior |
 |---|---|
 | Preview, `v4` to `v4+v5` | 2 created (the v5 parameters), 0 deleted, 0 replaced; the `NewStates` module tables, with the old table adopted as `LegacyState`; role updates |
 | The v5 parameters | Set `overwrite` and adopt the existing copies, with the same `RandomBytes` and `RandomPassword` values. Each holds a document, `{"value":"<base64>"}`; an older library wrote the plain value, which `migrate v5 plan` refuses |
 | The flip to `v5` | The service document carries `secrets.layout: v5` and `ports.dynamodb.tables`. `aws.table` and `ports.dynamodb.table` are refused. A blob `CredentialsRef` is `internal/google/blobs-<name>` |
-| Preview, `v4+v5` to `v5` | The role policy and the layer change; no parameter changes |
-| Preview, `Compat.DropV4` | 2 deleted (the v4 parameters), 0 created, 0 replaced |
+| Preview, `v4+v5` to `v5` (policy) | The role policy and the layer change |
+| Preview, `v4+v5` to `v5` | 2 deleted (the v4 parameters), 0 created, 0 replaced; with `Compat.KeepV4`, none |
 | `v5` and `credentials.preset` | A role other than the issuer that does not host `cloudflare` reads the minter parameters the document declares (`SluisCrossCloudflareMinter`), read only |
 | Needs | `v5` and `v4+v5`: `State.Tables` (`States.Grant()`) for the hosted modules; `v4+v5` also `State.TableArn` |
 
