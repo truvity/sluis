@@ -1,8 +1,14 @@
 ## Unreleased
 
+### Changed
+
+- **The audit queue's policy the library writes waits for the module roles.** With `Audit` installing the audit library, the queue's policy named the GitHub, Slack, Google and Cloudflare roles as plain strings while those roles were declared after the queue, so on a first apply SQS could be asked to accept a policy that names a role that does not exist yet. The module roles are now outputs of the module functions' role resources, as the issuer's already was, so the policy is applied after them. Nothing else moves.
+
 ### Added
 
 - **`RoleArgs`: the role lists from the names alone.** A stack that exists before the sluis stack (the foundation stack with the shared key's policy, the audit stack with the ingest queue's) had to build a `LambdaArgs` full of stand-ins (tables, a package digest, a queue) only to ask for the principals, because `Senders`, `Roles`, `ViewerRoles` and `KeyPolicyStatements` validate the whole args. `RoleArgs` holds what the names depend on (region, account, instance, layout, the installation, the function name overrides, the transition roles, and whether the stack creates the backup and restore components) and answers the same four, equal to the full args' for the same names. `FunctionRoles` lists every function once, with its name, ARN and whether the stack creates it, so nothing repeats a default function name; `ViewerMatchers` and `FunctionRole.Matcher` give the access policy's matcher rows (account, role name, path `/`) for the viewer roles and for any one role. `LambdaArgs.RoleArgs()` and `Lambda.RoleArgs()` convert.
+
+- **Queue senders that exist: `RoleArgs.CreatedSenders` and `DeferredSenders`.** SQS refuses a queue policy that names a role that does not exist, and `Senders` lists every function's role, the restore function's that no stack of an estate may create included. `FunctionRole.Created` says which roles the stack creates (the issuer's and the module functions' that host a module, and the backup and restore roles only when `RoleArgs.Backup` and `Restore` say the stack makes those components); `CreatedSenders` is their ARNs and the old names a transition keeps, which exist already. A stack that makes the queue before the sluis stack calls `RoleArgs.DeferredSenders(ctx)`: the created roles are outputs for `IngestArgs.Senders`, resolved by `Lambda(l)`, `Backup(b)` and `Restore(r)` once the components are declared (`Reject(err)` releases them), so the queue policy is applied after the roles. The rule: a policy names a role that is `Created` only after that role, and a role that is not `Created` only if it exists some other way.
 
 ## v1.76.0-rc.5
 
