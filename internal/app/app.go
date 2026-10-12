@@ -1497,3 +1497,7 @@ func (demoConnections) PassRequests(context.Context) (map[string]connection.Pass
 func (demoConnections) SetOwner(context.Context, string, string) (string, bool, error) {
 	return "", false, errDemoConnect
 }
+
+// AuditConfig is the audit configuration the legacy `audit` keys say, before the
+// resolved adapter table is applied to it (audit.FromPlan).
+func (c Config) AuditConfig() audit.Config { return c.audit }

@@ -11,10 +11,27 @@ import (
 
 	cfapp "github.com/truvity/sluis/internal/cloudflare/app"
 	"github.com/truvity/sluis/internal/config"
+	"github.com/truvity/sluis/internal/deploycheck"
 	"github.com/truvity/sluis/internal/lambdaapp"
 )
 
 func init() { lambdaapp.Register(lambdaapp.ModuleCloudflare, openCloudflare) }
+
+// CheckFile is the {"kind":"check"} answer of the function whose document is in
+// file: the adapters the module builds (State, the secrets store the minter
+// credential lives in, the blobs, the audit sink), built from the document and
+// refused with the setting that is missing; then the minter secret. Nothing it
+// reaches mutates and nothing is minted.
+func CheckFile(file string) func(context.Context) (deploycheck.Report, error) {
+	return func(ctx context.Context) (deploycheck.Report, error) {
+		cfg, err := cfapp.Load(file)
+		if err != nil {
+			return deploycheck.Report{}, err
+		}
+		return lambdaapp.CheckAdapters(func(ctx context.Context) error { return cfg.Verify(ctx, nil) },
+			lambdaapp.CheckFunc(file, config.SecretMinter))(ctx)
+	}
+}
 
 // openCloudflare assembles the function that runs the Cloudflare module: it
 // answers other modules' calls (docs/decisions/0071) and has no HTTP surface.
@@ -34,7 +51,7 @@ func openCloudflare(ctx context.Context, file string) (*lambdaapp.Function, erro
 	}
 	notFound := http.NotFoundHandler()
 	return &lambdaapp.Function{
-		Handler: lambdaapp.NewHTTP(notFound, nil, log).WithRPC(a.RPC()).WithCheck(lambdaapp.CheckFunc(file, config.SecretMinter)),
+		Handler: lambdaapp.NewHTTP(notFound, nil, log).WithRPC(a.RPC()).WithCheck(CheckFile(file)),
 		Flush: func(ctx context.Context) {
 			fctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 			defer cancel()

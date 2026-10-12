@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/truvity/sluis/internal/deploycheck"
 	githubapp "github.com/truvity/sluis/internal/githubroster/app"
 	githubcontroller "github.com/truvity/sluis/internal/githubroster/controller"
 	"github.com/truvity/sluis/internal/hub"
@@ -22,6 +23,21 @@ import (
 )
 
 func init() { lambdaapp.Register(lambdaapp.ModuleIssuer, open) }
+
+// CheckFile is the {"kind":"check"} answer of the function whose document is in
+// file: the adapters the issuer builds at start (State and the peers' tables, the
+// blobs, the secrets, the trigger, the audit sink and the signing adapter's
+// settings), built from the document and refused with the setting that is
+// missing; then the secrets it declares. Nothing it reaches mutates.
+func CheckFile(file string) func(context.Context) (deploycheck.Report, error) {
+	return func(ctx context.Context) (deploycheck.Report, error) {
+		cfg, err := rosterapp.Load(file)
+		if err != nil {
+			return deploycheck.Report{}, err
+		}
+		return lambdaapp.CheckAdapters(func(ctx context.Context) error { return cfg.Verify(ctx, nil) }, lambdaapp.CheckFunc(file))(ctx)
+	}
+}
 
 func open(ctx context.Context, file string) (*lambdaapp.Function, error) {
 	// The KMS signer's state secret (signingKey.kms.stateSecret) is a secret
@@ -111,7 +127,7 @@ func open(ctx context.Context, file string) (*lambdaapp.Function, error) {
 		// snapshots and both are the Google module's.
 		service.UseRequestRefresh(hub.DefaultRequestRefreshTimeout)
 	}
-	http := lambdaapp.NewHTTP(service.Handler(), service.Settle, log).WithControllers(kindsOf, controllers).WithCheck(lambdaapp.CheckFunc(file))
+	http := lambdaapp.NewHTTP(service.Handler(), service.Settle, log).WithControllers(kindsOf, controllers).WithCheck(CheckFile(file))
 	if service.Cloudflare() != nil && (cfg.Cloudflare == nil || cfg.Cloudflare.Remote == nil) {
 		http.WithCloudflare(func(ctx context.Context) (int, string, error) {
 			res, err := service.TickCloudflare(ctx)
