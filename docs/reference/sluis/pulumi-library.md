@@ -422,6 +422,7 @@ front, _ := edgecloudflare.NewEdge(ctx, "access", &edgecloudflare.Args{
 | `CertificateArn` or `Certificate` | One of the two. `CertificateArn` is a caller-supplied ACM certificate in the function's region. `Certificate` requests one with DNS validation and calls `CreateValidationRecord(ctx, record)` (`Name`, `Type`, `Value`) to create the record in your DNS and return its name. The edge holds no DNS credential |
 | `TruststorePEM` | Required: CAs a client certificate chains to; for Authenticated Origin Pulls, Cloudflare's origin-pull CA |
 | `Storage` or `TruststoreBucket` | One of the two |
+| `PublicCache` | Optional. Builds a Cloudflare cache rule for the public documents and calls `CreateCacheRule(ctx, rule)` to create it in your zone. `TTL` defaults to 5 minutes (1 second to 1 hour, whole seconds); `Paths` defaults to `/keys` and the two `/.well-known` metadata documents |
 | `Tags` | On what the edge creates |
 
 | `Edge` output | Meaning |
@@ -429,6 +430,13 @@ front, _ := edgecloudflare.NewEdge(ctx, "access", &edgecloudflare.Args{
 | `DomainTarget`, `DomainHostedZoneID` | DNS target (CNAME or alias) |
 | `CertificateArn` | Certificate in use |
 | `TruststoreBucketName`, `TruststoreURI`, `TruststoreVersion` | Client-CA bundle location and pinned version |
+| `PublicCacheRule` | The rule handed to `CreateCacheRule`; nil without `PublicCache` |
+
+| Edge cache | Meaning |
+|---|---|
+| `edgecloudflare.PublicCacheRule(host, args)` | The same rule without a Pulumi engine, for a zone managed in another program |
+| `CacheRule` | `Expression` and `EdgeTTLSeconds`. Create it in the zone's `http_request_cache_settings` ruleset: action `set_cache_settings`, `cache: true`, `edge_ttl {mode: override_origin, default: EdgeTTLSeconds}`, `browser_ttl {mode: respect_origin}` |
+| What it matches | `GET` and `HEAD` without an `Origin` header: the service echoes the caller's origin in `Access-Control-Allow-Origin`, and Cloudflare ignores `Vary: Origin` |
 
 | Truststore | Behavior |
 |---|---|
