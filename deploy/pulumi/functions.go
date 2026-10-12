@@ -319,7 +319,7 @@ func (a *LambdaArgs) hostsModule(role string) bool {
 
 // newModuleFunctions makes the function of each module of [ModuleFunctions] on
 // newModuleFunction, with the role ModuleRoleStatements renders for it and the
-// aliases `live` and `live-issuer` (and, for google, slack and github, `live-console`): the one the schedules and the issuer's runs
+// aliases `live` and one `live-<class>` for each caller class that calls it (CallerClasses): the one the schedules and the issuer's runs
 // invoke and the one its calls go through. Nothing is shared with the issuer's
 // function but the account.
 func newModuleFunctions(ctx *pulumi.Context, name string, a *LambdaArgs, child pulumi.ResourceOption) (*moduleFunctions, error) {
@@ -331,11 +331,13 @@ func newModuleFunctions(ctx *pulumi.Context, name string, a *LambdaArgs, child p
 	out := &moduleFunctions{fns: map[string]*moduleFunction{}}
 	for _, p := range plans {
 		p := p
+		// Every alias a caller of the routing table (ModuleCalls) targets, and
+		// `live-issuer`, the one the issuer's runs and the module's own passes use.
 		callers := []string{ClassIssuer}
-		if p.role == RoleGoogle || p.role == RoleSlack || p.role == RoleGitHub {
-			// The console's pages are these modules' (D-v176-1 b): their alias for
-			// the class `console` is the one the issuer's console calls through.
-			callers = append(callers, ClassConsole)
+		for _, c := range CallerClasses(p.role) {
+			if c != ClassIssuer {
+				callers = append(callers, c)
+			}
 		}
 		fa := &ModuleFunctionArgs{
 			Name: name + "-" + p.role, FunctionName: p.name,
@@ -401,7 +403,7 @@ func (a *LambdaArgs) modulePolicy(role string, roles []Role) func(pulumi.StringO
 				BucketArn: v[0].(string), TableKeyArn: v[1].(string), ParameterKeyArn: a.ParameterKeyArn, QueueArn: v[2].(string),
 				TableArns:    moduleTablesOf(v[4]),
 				LogGroupArns: map[string]string{role: v[3].(string)},
-				FunctionArns: a.moduleFunctionArns(), Roles: roles,
+				FunctionArns: a.moduleFunctionArns(), Roles: roles, WebIdentityAudience: a.WebIdentityAudience,
 			}
 			if a.Storage != nil && a.Storage.External != nil {
 				env.BucketArn = ""
