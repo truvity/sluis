@@ -22,15 +22,13 @@
 
 - **`TestATimeoutIsRetriedOnce` no longer races a sleep against a timeout.** Its slow first attempt slept 300ms against a 100ms client timeout, and the retry had the same 100ms, which a loaded runner missed ("Client.Timeout exceeded while awaiting headers"). The first attempt is now never answered until the test ends (so it times out whatever the load) and the retry is answered at once under a 2s budget; the test also holds that exactly two calls were made and that the first took its whole budget to time out.
 
-### Documentation
-
-- [Recover on Lambda](docs/guides/sluis/operate/recover-on-lambda.md) named the layout v4 path for the password; it now names the layout v5 parameter and its encoding.
-
-### Changed
-
 - **The people filter by GitHub link works when the GitHub module is a function of its own.** `#/people?github=linked` and `?github=not-linked` answered `failed_precondition: nobody can link a GitHub account in this deployment` on a Lambda installation, although the link App had linked accounts: the links are the GitHub module's records and the issuer's console opens none, so it read "no link store" as "no links anywhere". The console now asks the module (a new console method, `console.list_link_logins`, which answers the console class alone and returns the logins of the links that count, or says the module keeps no links); the precondition stays for a deployment that keeps links nowhere.
 
 - **A GitHub App's "Recent tokens" no longer fails on a Lambda installation.** `ListGitHubAppTokens` was forwarded to the GitHub module, which mints the installation tokens but keeps no record of them: the ring of recent requests is written by the issuer, which decides each mint, so the module answered "this deployment mints no installation tokens here" for every App. With the module remote the console now asks it only which App the id names and whether the person may operate it, and answers from the issuer's ring (a ring in function memory, which says since when it has been kept, as it always did). The route contract test also holds every GitHub console method to reaching the module or being answered at the issuer on purpose, with a reason, so this class of gap fails a test.
+
+### Documentation
+
+- [Recover on Lambda](docs/guides/sluis/operate/recover-on-lambda.md) named the layout v4 path for the password; it now names the layout v5 parameter and its encoding.
 
 ## v1.76.0-rc.6
 
