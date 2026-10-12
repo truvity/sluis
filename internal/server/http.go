@@ -105,6 +105,9 @@ type ConsoleServer struct {
 	auditQuery     *AuditQuery
 	auditProxyOnce sync.Once
 	auditHandler   http.Handler
+	// sessionsAPI is the issuer's session service in this process, when there
+	// is one; see [ConsoleServer.UseSessions].
+	sessionsAPI *SessionsService
 }
 
 // UseAuditQuery connects the Audit page to an audit installation's query
@@ -341,6 +344,9 @@ func (s *ConsoleServer) Handler() http.Handler {
 	mux.HandleFunc("GET "+consolewire.LinkCallbackPath, s.githubLinkCallback)
 	mux.HandleFunc("GET /.access/whoami", s.whoami)
 	mux.HandleFunc(auditQueryPrefix, s.audit)
+	for _, prefix := range sessionsPrefixes {
+		mux.HandleFunc(prefix, s.sessionsCall)
+	}
 
 	return AuditRequests(s.forwardedForTrustedHops, s.withIdentity(s.withMaintenance(mux)))
 }
@@ -1157,6 +1163,9 @@ type whoamiBody struct {
 	// proxy is gone, so relying on it alone hid these sections exactly
 	// where they work best.
 	IssuerURL string `json:"issuerUrl,omitempty"`
+	// Sessions says the console lists and ends sessions itself, as the person
+	// signed in to it, so the page needs no session with the issuer.
+	Sessions bool `json:"sessions,omitempty"`
 	// Audit says an audit installation is connected, so the console shows
 	// its Audit page. Whether the person may read anything there is the
 	// installation's to say.
@@ -1189,6 +1198,7 @@ func (s *ConsoleServer) whoami(w http.ResponseWriter, r *http.Request) {
 			SignOutURL:  s.signOut(),
 			IssuerURL:   s.issuerOrigin(),
 			Audit:       s.auditQuery != nil,
+			Sessions:    s.sessionsAPI != nil,
 			Cloudflare:  s.console != nil && s.console.deps.Cloudflare != nil,
 			Backup:      s.console != nil && s.console.deps.Backup != nil,
 			Maintenance: s.maintenanceBody(r.Context()),

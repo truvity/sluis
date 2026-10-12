@@ -1,5 +1,13 @@
 ## Unreleased
 
+### Changed
+
+- The console's recovery sign-in now works on the Sessions pages and reads the Audit page calmly. Sessions are listed and
+  ended through the console itself, as the person signed in to it, instead of by the browser with an issuer cookie that
+  a recovery sign-in does not have (it was refused with "sign in first" on #/sessions and on every person and client
+  page). Directory sign-ins are unchanged. The Audit page tells a recovery sign-in that the trail is read as a person
+  the directory admits, with a 403 rather than a 502 and "HTTP 502", and mints and calls nothing.
+
 ## v1.76.0-rc.6
 
 ### Changed

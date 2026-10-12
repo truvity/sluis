@@ -128,3 +128,20 @@ export function groupSessions<T extends SessionFacts>(
     }
     return [...people.values()];
 }
+
+/** Whether this console can list and end sessions at all: it serves them itself
+ *  (so a recovery sign-in, which has no issuer session, can too), or the issuer
+ *  shares its origin and the browser's own issuer cookie does it. Where neither
+ *  holds the call could only fail, so it is not made. */
+export function sessionsReachable(
+  me: { sessions?: boolean; issuerUrl?: string } | undefined,
+  here: string = window.location.href,
+): boolean {
+  if (me?.sessions) return true;
+  if (!me?.issuerUrl) return false;
+  try {
+    return new URL(me.issuerUrl, here).origin === new URL(here).origin;
+  } catch {
+    return false;
+  }
+}
