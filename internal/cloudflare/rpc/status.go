@@ -42,10 +42,13 @@ type PresetView struct {
 	Endpoint    string        `json:"endpoint,omitempty"`
 	Lifetime    time.Duration `json:"lifetime"`
 	Rotation    time.Duration `json:"rotation"`
-	Prototype   PrototypeView `json:"prototype"`
-	Stored      StoredView    `json:"stored"`
-	Live        []LiveView    `json:"live,omitempty"`
-	LiveError   string        `json:"live_error,omitempty"`
+	// Tick is how often the rotation looks at the preset: the stored credential
+	// is overdue only past Rotation + Tick.
+	Tick      time.Duration `json:"tick,omitempty"`
+	Prototype PrototypeView `json:"prototype"`
+	Stored    StoredView    `json:"stored"`
+	Live      []LiveView    `json:"live,omitempty"`
+	LiveError string        `json:"live_error,omitempty"`
 }
 
 // PrototypeView is the preset's prototype token and whether it can be cloned.
@@ -119,7 +122,7 @@ func presetView(ctx context.Context, src Source, info PresetInfo) PresetView {
 	protoID, _ := src.PrototypeID(info.Name)
 	out := PresetView{
 		Name: info.Name, Description: info.Description, Account: info.Account, Endpoint: info.Endpoint,
-		Lifetime: info.Lifetime, Rotation: info.Rotation,
+		Lifetime: info.Lifetime, Rotation: info.Rotation, Tick: info.Tick,
 		Prototype: prototypeOf(protoID, src.CheckPreset(ctx, info.Name)),
 	}
 	live, lerr := src.Live(ctx, info.Name)

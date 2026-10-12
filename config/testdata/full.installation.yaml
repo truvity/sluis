@@ -107,6 +107,7 @@ cloudflare:
     address: :8080
     audience: cloudflare
   forbiddenPermissionGroups: [Workers Scripts Write]
+  tick: 15m
   accounts:
     main:
       id: 0123456789abcdef0123456789abcdef

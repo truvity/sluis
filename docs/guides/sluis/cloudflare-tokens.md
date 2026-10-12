@@ -55,6 +55,7 @@ cloudflare:
 | Limit or rule | Value |
 |---|---|
 | Pass | every 15 minutes per preset by default (`CloudflareRotation.Interval`); a credential rotates up to one tick after its `rotation` age, so `rotation` + tick + 5m must be under `lifetime`; a due rotation reads the prototype, creates a token and deletes the expired ones |
+| Rotation timing | the first tick after `rotation` replaces the credential, so make `rotation` a multiple of the tick to rotate when intended (20m on a 15m tick rotates every 30m); the console calls it *due* until then and *overdue* past `rotation` + tick + 1m, taking the tick from `cloudflare.tick`, which the Pulumi library fills from `CloudflareRotation` (a minute when unset) |
 | Cloudflare API | 1,200 requests per 5 minutes per user; past it Cloudflare blocks the API for 5 minutes |
 | Tokens per account | 500; a 1h `lifetime` with a 20m `rotation` keeps about three live per preset |
 | Token names | `sluis/<instance>/<preset>/<time>`; on demand `sluis/<instance>/<preset>/<caller>/<time>` |

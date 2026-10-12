@@ -34,17 +34,48 @@ export function prototypeView(proto: Pick<CloudflarePrototype, "status" | "detai
   }
 }
 
-/** How a stored credential stands against its preset's rotation. It is the
- *  same threshold the alert uses: late is past one rotation (the next tick
- *  should have replaced it), stale is past two. */
-export type Freshness = "none" | "fresh" | "late" | "stale";
+/** How a stored credential stands against its preset's rotation.
+ *
+ *  Rotation happens on a tick (the schedule on Lambda, a minute on
+ *  Kubernetes), so a credential older than `rotation` is not late: it is due,
+ *  and the next tick replaces it. It is overdue only past
+ *  `rotation + tick + slack`, which a healthy rotation never reaches; `stale`
+ *  is past twice the rotation, the alert's threshold.
+ *
+ *  - none: nothing stored yet
+ *  - fresh: within one rotation
+ *  - due: past the rotation, within one tick: waiting for the tick, nothing wrong
+ *  - late: overdue, the tick should have replaced it
+ *  - stale: not rotated for twice its rotation */
+export type Freshness = "none" | "fresh" | "due" | "late" | "stale";
 
-export function freshness(preset: Pick<CloudflarePreset, "rotationSeconds">, stored: Pick<CloudflareStored, "present" | "mintedAt"> | undefined, now: Date): Freshness {
+/** Slack on top of the tick: the time a pass takes, and the clocks of the
+ *  scheduler and of the browser. */
+export const tickSlackSeconds = 60;
+
+/** The tick when the server does not say (an older server): the Kubernetes
+ *  loop's, which is the finest one, so an unknown tick never hides a late
+ *  rotation. */
+export const defaultTickSeconds = 60;
+
+export function tickOf(preset: Pick<CloudflarePreset, "rotationTickSeconds">): number {
+  const tick = Number(preset.rotationTickSeconds);
+  return tick > 0 ? tick : defaultTickSeconds;
+}
+
+export function freshness(
+  preset: Pick<CloudflarePreset, "rotationSeconds" | "rotationTickSeconds">,
+  stored: Pick<CloudflareStored, "present" | "mintedAt"> | undefined,
+  now: Date,
+): Freshness {
   if (!stored?.present || !stored.mintedAt) return "none";
   const age = ageSeconds(stored.mintedAt, now);
   const rotation = Number(preset.rotationSeconds);
-  if (rotation > 0 && age > 2 * rotation) return "stale";
-  if (rotation > 0 && age > rotation) return "late";
+  if (!(rotation > 0)) return "fresh";
+  const overdue = rotation + tickOf(preset) + tickSlackSeconds;
+  if (age > 2 * rotation && age > overdue) return "stale";
+  if (age > overdue) return "late";
+  if (age > rotation) return "due";
   return "fresh";
 }
 
@@ -53,13 +84,16 @@ function ageSeconds(stamp: { seconds: bigint }, now: Date): number {
 }
 
 /** The sentence that goes with a freshness, or empty when nothing needs saying. */
-export function freshnessNote(f: Freshness, rotationSeconds: bigint | number): string {
+export function freshnessNote(f: Freshness, rotationSeconds: bigint | number, tickSeconds: bigint | number = defaultTickSeconds): string {
   const rotation = span(Number(rotationSeconds));
+  const tick = span(Number(tickSeconds) > 0 ? Number(tickSeconds) : defaultTickSeconds);
   switch (f) {
     case "stale":
       return `Not rotated for more than twice its rotation (${rotation}). The alert fires on this: look at the service log.`;
     case "late":
-      return `Past its rotation (${rotation}); the next tick replaces it.`;
+      return `Overdue: past its rotation (${rotation}) and a whole tick (${tick}), so a tick has not replaced it. Look at the service log.`;
+    case "due":
+      return `Due: past its rotation (${rotation}); the rotation runs every ${tick}, and the next tick replaces it.`;
     case "none":
       return "Nothing is stored yet; the next tick mints the first one.";
     default:

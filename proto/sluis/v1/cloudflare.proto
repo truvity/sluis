@@ -74,6 +74,11 @@ message CloudflarePreset {
   repeated CloudflareLiveToken live = 9;
   // set when the live tokens could not be listed: the reason, not a list.
   string live_error = 10;
+  // how often the rotation looks at the preset (the schedule's tick on Lambda,
+  // a minute on Kubernetes). A credential rotates up to one tick after
+  // rotation_seconds, so it is overdue only past rotation_seconds +
+  // rotation_tick_seconds.
+  int64 rotation_tick_seconds = 11;
 }
 
 // CloudflarePrototype is the prototype token as sluis reads it now.

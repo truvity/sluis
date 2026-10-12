@@ -59,7 +59,7 @@ func (f *fakeSTS) Accounts() []minter.AccountInfo {
 }
 
 func (f *fakeSTS) info(name string) minter.PresetInfo {
-	return minter.PresetInfo{Name: name, Description: name + " records", Account: "main", Lifetime: time.Hour, Rotation: 20 * time.Minute}
+	return minter.PresetInfo{Name: name, Description: name + " records", Account: "main", Lifetime: time.Hour, Rotation: 20 * time.Minute, Tick: 15 * time.Minute}
 }
 
 func (f *fakeSTS) Presets() []minter.PresetInfo {
@@ -178,6 +178,9 @@ func TestCloudflareListIsTheAdministratorsAndRedactsTheAccount(t *testing.T) {
 	}
 	if dns.LifetimeSeconds != 3600 || dns.RotationSeconds != 1200 {
 		t.Fatalf("lifetime/rotation = %d/%d", dns.LifetimeSeconds, dns.RotationSeconds)
+	}
+	if dns.RotationTickSeconds != 900 {
+		t.Fatalf("rotation tick = %d, want 900: the console calls a credential overdue only past rotation + tick", dns.RotationTickSeconds)
 	}
 	op, err := c.ListCloudflare(asRole(access.RoleOperator), connect.NewRequest(&directoryrosterv1.ListCloudflareRequest{}))
 	if err != nil || !op.Msg.CanOperate {
