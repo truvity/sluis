@@ -47,6 +47,7 @@ import {
   tabOf,
   recentTokensEmpty,
   recentTokensKept,
+  keyPlaceWords,
   recentTokensProblem,
   repositoryWords,
   requestedText,
@@ -140,7 +141,7 @@ export function GitHubPage({ section, rest, onDone }: Omit<Props, "operator"> & 
       <Loading busy={status.loading || listed.loading} />
       <Failure error={status.error ?? listed.error} />
       {value && !value.reportsAvailable ? (
-        <Nothing>This deployment keeps no state in Kubernetes, so a controller has nowhere to report: only the bindings are shown.</Nothing>
+        <Nothing>This deployment has no store for its state, so a controller has nowhere to report: only the bindings are shown.</Nothing>
       ) : null}
       {body}
     </Box>
@@ -837,7 +838,7 @@ function AppsList({ listed, apps }: { listed: ListGitHubAppsResponse; apps: GitH
       )}
       {!listed.catalogueAvailable ? (
         <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1 }}>
-          This deployment keeps no state in Kubernetes, so it keeps no catalogue Apps: their keys would not survive a restart.
+          This deployment has no store for its state, so it keeps no catalogue Apps: their keys would not survive a restart.
         </Typography>
       ) : null}
     </Page>
@@ -991,7 +992,7 @@ function AppPage({
                 ? "One click by an owner of the organisation it is created under; it is installed nowhere."
                 : `Two clicks by an owner of ${shown.org}: create, then install.`
               : shown.declared
-                ? "This deployment keeps no state in Kubernetes, so the App's key would not survive a restart."
+                ? "This deployment has no store for its state, so the App's key would not survive a restart."
                 : "The deployment no longer declares it."
           }
         >
@@ -1259,15 +1260,18 @@ function AppPage({
         </Disclosure>
       ) : null}
 
-      <Disclosure title="Where it is kept" hint="the Kubernetes Secret its key is in, and its ids on GitHub">
+      <Disclosure title="Where it is kept" hint={keyPlaceWords(shown.secretAdapter).hint}>
         <Paper variant="outlined" sx={{ p: 2 }}>
           <Facts
             items={[
               {
-                label: "Kubernetes Secret",
-                value: shown.secret ? <Mono>{shown.secret}</Mono> : "none: this deployment keeps no state in Kubernetes",
+                label: keyPlaceWords(shown.secretAdapter).label,
+                value: shown.secretLocation ? <Mono>{shown.secretLocation}</Mono> : "not reported: this deployment does not say where it keeps the key",
               },
-              { label: "Keys in the Secret", value: shown.secretKeys.length ? <Mono>{shown.secretKeys.join(", ")}</Mono> : undefined },
+              {
+                label: "Keys in the Secret",
+                value: keyPlaceWords(shown.secretAdapter).listsKeys && shown.secretKeys.length ? <Mono>{shown.secretKeys.join(", ")}</Mono> : undefined,
+              },
               { label: "App id", value: shown.appId ? String(shown.appId) : undefined },
               { label: "Installation id", value: shown.installationId ? String(shown.installationId) : undefined },
               { label: "Declared in", value: shown.origin === "catalogue" ? (shown.declared ? "catalogue" : "catalogue, no longer") : "built in" },

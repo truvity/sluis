@@ -89,7 +89,7 @@ export function SlackPage({ onDone }: Props) {
       <Failure error={loaded.error ?? failure} />
       {loaded.value && !loaded.value.connectingAvailable ? (
         <Alert severity="info" sx={{ mb: 2 }}>
-          This deployment keeps no state in Kubernetes, so it cannot connect a workspace: a bot token would not survive a restart.
+          This deployment has no store for its state, so it cannot connect a workspace: a bot token would not survive a restart.
         </Alert>
       ) : null}
       {loaded.value && !loaded.value.reportsAvailable ? (

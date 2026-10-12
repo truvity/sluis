@@ -17,6 +17,7 @@ import (
 	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/githubapp"
 	"github.com/truvity/sluis/internal/githubapp/catalogue"
+	"github.com/truvity/sluis/internal/githubroster/appid"
 	"github.com/truvity/sluis/internal/githubroster/catalogueapp"
 	"github.com/truvity/sluis/internal/githubroster/connection"
 	"github.com/truvity/sluis/internal/githubroster/consolewire"
@@ -93,10 +94,8 @@ type githubAppSpec struct {
 	key     func() string
 	keyless string
 
-	// secret and secretKeys are where the App's key is kept, for a
-	// deployment copying it.
-	secret     string
-	secretKeys []string
+	// place is where the App's key is kept, for a deployment copying it.
+	place keyPlace
 
 	// linked is how many accounts people linked through the link App.
 	linked int
@@ -120,16 +119,36 @@ type githubAppsFacts struct {
 }
 
 // secretNamer is a store that can say which Kubernetes Secret it keeps
-// keys in. A deployment keeping no state in Kubernetes has none, and the
-// App then names no Secret rather than naming one that does not exist.
+// keys in.
 type secretNamer interface{ SecretName() string }
 
-func secretNameOf(store any) string {
-	if named, ok := store.(secretNamer); ok {
-		return named.SecretName()
-	}
-	return ""
+// keyPlace is where one App's key is kept: the secrets adapter, the address
+// or Secret name in it, and the keys within a Kubernetes Secret.
+type keyPlace struct {
+	adapter, location string
+	keys              []string
 }
+
+// placeOf says where an App's key is kept. A store of the ports is asked
+// through Places by the App's id in it; a Kubernetes store names its Secret.
+// The keys within the Secret are the Kubernetes store's alone. An empty place
+// says nothing is known, which is not a claim that nothing is kept.
+func (c *Service) placeOf(store any, id string, keys []string) keyPlace {
+	if named, ok := store.(secretNamer); ok {
+		if name := named.SecretName(); name != "" {
+			return keyPlace{adapter: adapterKubernetes, location: name, keys: keys}
+		}
+	}
+	if c.deps.Places != nil && id != "" {
+		if adapter, location, ok := c.deps.Places.GitHubAppPlace(id); ok {
+			return keyPlace{adapter: adapter, location: location}
+		}
+	}
+	return keyPlace{}
+}
+
+// adapterKubernetes is the place of a key kept in a Kubernetes Secret.
+const adapterKubernetes = "kubernetes"
 
 // ListGitHubApps implements the Apps list: every App in one shape.
 func (c *Service) ListGitHubApps(
@@ -401,7 +420,7 @@ func (c *Service) linkAppSpecs(ctx context.Context, taken map[string]bool) ([]gi
 		// holds, and an App whose declaration cannot be checked says so
 		// rather than reporting a match nobody verified.
 		keyless: "This service keeps no App key for the link App — it is used by being authorized, not as the App — so GitHub cannot be asked what it holds.",
-		secret:  secretNameOf(c.deps.LinkApp), secretKeys: []string{link.AppKey},
+		place:   c.placeOf(c.deps.LinkApp, appid.LinkID, []string{link.AppKey}),
 	}
 	if connected {
 		spec.org, spec.entry = record.Owner, githubapp.LinkAppNamed(record.Owner, c.deps.LinkAppName)
@@ -465,7 +484,7 @@ func (c *Service) controllerAppSpecs(ctx context.Context, bound map[string]*bind
 		spec := githubAppSpec{
 			id: presetID(org+"-controller", taken), purpose: appController, origin: appPreset, org: org,
 			declared: isBound, reported: reported[org], reports: c.deps.Reports != nil,
-			secret: secretNameOf(c.deps.Orgs), secretKeys: []string{connection.Key(org)},
+			place: c.placeOf(c.deps.Orgs, records[org].AppRef, []string{connection.Key(org)}),
 		}
 		if isBound {
 			spec.entry = githubapp.OrganisationAppNamed(org, c.orgAppName(org))
@@ -531,7 +550,7 @@ func (c *Service) runnerAppSpecs(ctx context.Context, bound map[string]*binding,
 		spec := githubAppSpec{
 			id: presetID(key.org+"-runners-"+key.tier, taken), purpose: appRunners, origin: appPreset,
 			org: key.org, tier: key.tier, declared: declared,
-			secret: secretNameOf(store), secretKeys: runnerAppKeys(key.tier, key.org),
+			place: c.placeOf(store, appid.RunnerID(key.tier, key.org), runnerAppKeys(key.tier, key.org)),
 		}
 		if declared {
 			spec.entry = githubapp.RunnerApp(key.org, key.tier)
@@ -614,7 +633,7 @@ func (c *Service) catalogueAppSpec(
 	store := c.deps.CatalogueApps
 	spec := githubAppSpec{
 		id: id, purpose: appTokens, origin: appCatalogue, org: entry.Org, entry: entry,
-		secret: secretNameOf(store), secretKeys: catalogueAppKeys(id),
+		place: c.placeOf(store, id, catalogueAppKeys(id)),
 	}
 	if !created {
 		return spec
@@ -659,8 +678,14 @@ func (c *Service) githubAppView(ctx context.Context, spec githubAppSpec, fresh b
 		Id: spec.id, Org: spec.org, Purpose: spec.purpose, Tier: spec.tier, Origin: spec.origin,
 		Name: spec.appSlug, Description: spec.entry.Description, Public: spec.entry.Public,
 		Installation: spec.entry.InstallationScope(), State: appNotCreated, Declared: spec.declared,
-		Events: slices.Clone(spec.entry.Events), Secret: spec.secret, SecretKeys: slices.Clone(spec.secretKeys),
+		Events: slices.Clone(spec.entry.Events), SecretKeys: slices.Clone(spec.place.keys),
 		LinkedAccounts: int32(spec.linked), //nolint:gosec // a count of people
+	}
+	if p := spec.place; p.adapter != "" {
+		out.SecretPlace = &directoryrosterv1.SecretPlace{Adapter: p.adapter, Location: p.location}
+		if p.adapter == adapterKubernetes {
+			out.Secret = p.location
+		}
 	}
 	if out.GetName() == "" {
 		out.Name = spec.declaredName()

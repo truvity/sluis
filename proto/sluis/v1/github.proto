@@ -330,6 +330,24 @@ message GitHubApp {
   // when the webhook's secret was last set on GitHub: the creation, or the
   // latest rotation.
   google.protobuf.Timestamp webhook_rotated_at = 36;
+  // where the App's key is kept, whichever store the deployment keeps
+  // secrets in. Unset where nothing says: `secret` then still names a
+  // Kubernetes Secret when there is one.
+  SecretPlace secret_place = 37;
+}
+
+// SecretPlace is where a deployment keeps an item's secret: the secrets
+// adapter and the item's address in it. The address is stable: a write adds
+// a fresh ref beneath it, so it is the prefix to look under, never a
+// secret's value or its latest name.
+message SecretPlace {
+  // the secrets adapter: `kubernetes`, `ssm`, `openbao`, or another the
+  // deployment names.
+  string adapter = 1;
+  // a Kubernetes Secret's name; for `ssm` and `openbao`, the path prefix
+  // the item's secrets are written under (ending in `/`), or the installation
+  // root where the item has no address of its own.
+  string location = 2;
 }
 
 message ListGitHubAppsRequest {}

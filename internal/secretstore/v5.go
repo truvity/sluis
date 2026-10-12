@@ -225,6 +225,13 @@ func (g GitHubInternal) AppCredential(id, ref string) state.Value[[]byte] {
 	return state.NewValue(g.s, "apps/"+segment(id)+"/"+segment(ref), state.Raw())
 }
 
+// AppPrefix is the address, under the installation root, beneath which every
+// write of a GitHub App's credential is kept: internal/github/apps/<id>/. It is
+// stable across writes, which add a fresh ref beneath it.
+func (GitHubInternal) AppPrefix(id string) string {
+	return "internal/" + string(ModuleGitHub) + "/apps/" + segment(id) + "/"
+}
+
 // DeleteAppCredential removes one write of a GitHub App's credential. An
 // absent one is not an error.
 func (g GitHubInternal) DeleteAppCredential(ctx context.Context, id, ref string) error {
