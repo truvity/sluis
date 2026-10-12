@@ -148,9 +148,10 @@ func TestModuleRoleGitHubServesTheMintWithNothingBeyondItsOwnModule(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Its own function on the console alias, for a run-now, and nothing else.
 	for _, s := range st {
 		for _, a := range actionsOf(s["Action"]) {
-			if a == "lambda:InvokeFunction" {
+			if a == "lambda:InvokeFunction" && s["Sid"] != sidInvokeOwnController {
 				t.Errorf("the github function invokes a peer: %v", s["Sid"])
 			}
 		}

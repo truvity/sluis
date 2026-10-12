@@ -1514,7 +1514,7 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 	// ---- the module functions: one per module, each with the role of its own.
 	var mods *moduleFunctions
 	if a.hasModuleFunctions() {
-		if mods, err = newModuleFunctions(ctx, name, &a, child); err != nil {
+		if mods, err = newModuleFunctions(ctx, name, &a, secretsKeyArn, child); err != nil {
 			return nil, err
 		}
 	}

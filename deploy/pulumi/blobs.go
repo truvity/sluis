@@ -134,7 +134,14 @@ func credentialsStatements(b *ExternalBlobs, region, account, instance, paramete
 	st := []statement{{
 		"Sid": sidBlobCredentials, "Effect": "Allow", "Action": ssmGetParameter, "Resource": arn,
 	}}
-	return append(st, parameterKeyStatements(parameterKeyArn, []string{kmsDecrypt}, []string{arn})...)
+	// The key statement has a Sid of its own: a role's parameters have their
+	// SluisParameterKey, and a Sid is unique in a policy, so a shared one would
+	// drop one of the two (the credential's, or the role's own).
+	for _, k := range parameterKeyStatements(parameterKeyArn, []string{kmsDecrypt}, []string{arn}) {
+		k["Sid"] = sidBlobCredentials + "Key"
+		st = append(st, k)
+	}
+	return st
 }
 
 const sidBlobCredentials = "SluisBlobCredentials"

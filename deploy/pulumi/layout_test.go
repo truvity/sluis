@@ -238,7 +238,7 @@ func TestOnlyLayoutV5WritesTheTablesIntoTheDocument(t *testing.T) {
 			t.Errorf("%q: tables in the document: %v", l, d)
 		}
 	}
-	rename := func(a *arp.LambdaArgs) { a.TableNames = map[arp.Module]string{arp.ModuleSlack: "custom-slack"} }
+	rename := func(a *arp.LambdaArgs) { a.TableNames = map[arp.Module]string{arp.ModuleGoogle: "custom-google"} }
 	for name, c := range map[string]struct {
 		e        estate
 		instance string
@@ -256,7 +256,9 @@ func TestOnlyLayoutV5WritesTheTablesIntoTheDocument(t *testing.T) {
 			}
 			d := portsDynamoOf(t, doc)
 			tables, _ := d["tables"].(map[string]any)
-			if len(tables) != len(arp.Modules()) || tables["oidc"] != "sluis-"+c.instance+"-oidc" || tables["slack"] != "custom-slack" {
+			// The issuer's document lists the tables its role opens: its own and the
+			// Google snapshot's. The readiness probe describes every one listed.
+			if len(tables) != 2 || tables["oidc"] != "sluis-"+c.instance+"-oidc" || tables["google"] != "custom-google" {
 				t.Errorf("tables = %v", d)
 			}
 			if d["table"] != nil {

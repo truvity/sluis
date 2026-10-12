@@ -411,8 +411,10 @@ type functionPolicyIn struct {
 	layout Layout
 	// modules names the instance and the tables, for the v5 grants.
 	modules ModuleSet
-	// minterRefs are the minter parameters (internal addresses, a `*` allowed) the
-	// role reads without hosting the Cloudflare module (credentials.preset).
+	// minterRefs are the minter parameters (internal addresses, a `*` allowed) of
+	// the issuer's document (credentials.preset). The issuer's role holds no grant
+	// on them (it asks the cloudflare function to mint, v1.76 E-FIN); the module
+	// roles' own are in modulePolicy.
 	minterRefs []string
 }
 

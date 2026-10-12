@@ -18,6 +18,11 @@ type ModuleEnv struct {
 	TableKeyArn string
 	// ParameterKeyArn is the key the SecureString parameters are encrypted with, if any.
 	ParameterKeyArn string
+	// SecretsKeyArn is the key LambdaArgs.Keys.Secrets names, once resolved: the
+	// key for the role's parameters, set instead of ParameterKeyArn (the two are
+	// exclusive). The role's grant on it is the ParameterKeyArn one: through SSM,
+	// for exactly the parameters the role uses.
+	SecretsKeyArn string
 	// QueueArn is the audit queue; empty when audit is off.
 	QueueArn string
 	// LogGroupArns is each role's log group, by role name.
@@ -32,6 +37,11 @@ type ModuleEnv struct {
 	// Cloudflare module: a read of exactly those parameters and nothing else of
 	// the module. A role that hosts the module has them already.
 	MinterRefs []string
+	// OpensPresetBlobs says the role's own document opens blobs with
+	// `ports.blob.s3.credentials.preset`, so the role runs the minter in its
+	// process: it reads the minter parameters (MinterRefs) and writes what it
+	// mints. The backup role holds the read whatever the document says.
+	OpensPresetBlobs bool
 	// Roles is every role of the installation.
 	Roles []Role
 	// WebIdentityAudience is the audience of the web identity token the roles of
@@ -48,7 +58,9 @@ type ModuleEnv struct {
 
 var (
 	// ddbSnapshotActions are a read by key, for the issuer's view of a snapshot.
-	ddbSnapshotActions = []string{ddbGetItem, ddbQuery}
+	// DescribeTable too: the readiness probe describes every table the document
+	// lists (internal/port/dynamodb.Tables.Ping), the peer's among them.
+	ddbSnapshotActions = []string{ddbGetItem, ddbQuery, ddbDescribeTable}
 	ddbReadActions     = []string{ddbGetItem, ddbQuery, ddbScan, ddbDescribeTable}
 	ddbWriteActions    = []string{ddbGetItem, ddbPutItem, ddbUpdateItem, ddbDeleteItem, ddbQuery, ddbScan, ddbDescribeTable}
 	// ddbMaintenanceDenied are the writes a role other than restore is denied on
@@ -116,7 +128,7 @@ func ModuleRoleStatements(env ModuleEnv, role Role) ([]map[string]any, error) {
 	}
 	if len(arns) > 0 {
 		// A role that hosts no module has no parameter of its own to use the key on.
-		st = append(st, parameterKeyStatements(env.ParameterKeyArn,
+		st = append(st, parameterKeyStatements(env.parameterKey(),
 			[]string{kmsEncrypt, kmsDecrypt, "kms:GenerateDataKey"}, arns)...)
 	}
 
@@ -149,11 +161,12 @@ func ModuleRoleStatements(env ModuleEnv, role Role) ([]map[string]any, error) {
 		keyActions[kmsDecrypt] = true
 		crossArns = append(crossArns, refs...)
 	}
-	if len(env.MinterRefs) > 0 && own[ModuleBackup] {
+	if len(env.MinterRefs) > 0 && !own[ModuleCloudflare] && (own[ModuleBackup] || env.OpensPresetBlobs) {
 		// credentials.preset: the minter's credential, read and never written. The
-		// issuer has none: it asks the cloudflare function to mint (v1.76 E-FIN), and the
-		// github, slack and google functions have none either (v1.76 E-IAM): only the
-		// cloudflare function, which hosts the minter, and the backup role hold it.
+		// issuer has none: it asks the cloudflare function to mint (v1.76 E-FIN). The
+		// cloudflare function, which hosts the minter, has it already. The backup
+		// role holds it, and so does a role whose own document opens blobs from a
+		// preset (OpensPresetBlobs): its process mints in place.
 		var refs []string
 		for _, r := range sortedStrings(env.MinterRefs) {
 			refs = append(refs, arnPrefix+"ssm:"+env.Region+":"+env.Account+":parameter"+env.Modules.rootOf()+"/"+r)
@@ -163,6 +176,22 @@ func ModuleRoleStatements(env ModuleEnv, role Role) ([]map[string]any, error) {
 		})
 		keyActions[kmsDecrypt] = true
 		crossArns = append(crossArns, refs...)
+	}
+	if len(env.MinterRefs) > 0 && !own[ModuleCloudflare] && env.OpensPresetBlobs {
+		// What the minter writes: the record of the tokens it minted
+		// (internal/cloudflare/minted/<preset>) and the credential it stores where
+		// the blobs adapter reads it (external/cloudflare/<preset>). A role that
+		// mints holds nothing else of the module.
+		minted := parameterArnsUnder(env.Region, env.Account,
+			env.Modules.InternalPrefix(ModuleCloudflare)+"/minted", env.Modules.ExternalPrefix(ModuleCloudflare))
+		st = append(st, statement{
+			"Sid": "SluisCrossCloudflareMinted", "Effect": "Allow", "Action": ssmOwnActions, "Resource": minted,
+		})
+		for _, k := range parameterKeyStatements(env.parameterKey(),
+			[]string{kmsEncrypt, kmsDecrypt, "kms:GenerateDataKey"}, minted) {
+			k["Sid"] = sidParamKy + "Minted"
+			st = append(st, k)
+		}
 	}
 	for _, g := range CrossGrants {
 		if g.Role != role.Name {
@@ -199,6 +228,17 @@ func ModuleRoleStatements(env ModuleEnv, role Role) ([]map[string]any, error) {
 				crossArns = append(crossArns, parameterArnsUnder(env.Region, env.Account,
 					env.Modules.InternalPrefix(m), env.Modules.ExternalPrefix(m))...)
 			}
+		}
+	}
+	// A controller's "run a pass now" starts its own function (the `invoke`
+	// trigger of its document), on the alias the adapter always qualifies with:
+	// the grant is that alias of this function's ARN and nothing else.
+	if own[ModuleGitHub] || own[ModuleSlack] {
+		if arn := env.FunctionArns[role.Name]; arn != "" {
+			st = append(st, statement{
+				"Sid": sidInvokeOwnController, "Effect": "Allow", "Action": lambdaInvokeFunction,
+				"Resource": arn + ":" + CallerAlias(ClassConsole),
+			})
 		}
 	}
 	// A role that calls the console proves itself with its web identity token.
@@ -260,6 +300,15 @@ func RestoreInvokeStatement(functionArn string, principalArns []string) map[stri
 	}
 }
 
+// parameterKey is the key the role's SecureString parameters are encrypted
+// with: the ParameterKeyArn, or the Keys.Secrets key (the two are exclusive).
+func (env ModuleEnv) parameterKey() string {
+	if env.ParameterKeyArn != "" {
+		return env.ParameterKeyArn
+	}
+	return env.SecretsKeyArn
+}
+
 func (env ModuleEnv) tableArn(m Module) (string, error) {
 	arn := env.TableArns[m]
 	if arn == "" {
@@ -267,6 +316,10 @@ func (env ModuleEnv) tableArn(m Module) (string, error) {
 	}
 	return arn, nil
 }
+
+// sidInvokeOwnController is the Sid of the grant to invoke the controller's own
+// function for a run-now.
+const sidInvokeOwnController = "SluisInvokeOwnController"
 
 // sidMaintenanceDeny is the Sid of the deny of the maintenance partition.
 const sidMaintenanceDeny = "SluisMaintenanceDeny"
@@ -381,7 +434,7 @@ func (r Role) hasCrossGrants() bool {
 // parameterKeyStatementsCross is the key statement of the cross-grants, beside
 // the one the role's own parameters have; the two never share a Sid.
 func parameterKeyStatementsCross(env ModuleEnv, actions, arns []string) []statement {
-	out := parameterKeyStatements(env.ParameterKeyArn, sortedStrings(actions), arns)
+	out := parameterKeyStatements(env.parameterKey(), sortedStrings(actions), arns)
 	for _, s := range out {
 		s["Sid"] = sidParamKy + "Cross"
 	}

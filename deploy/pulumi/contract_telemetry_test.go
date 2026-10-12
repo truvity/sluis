@@ -22,7 +22,7 @@ const telemetryAudience = "https://access.example.test"
 
 func telemetryLayer() *arp.TelemetryArgs {
 	return &arp.TelemetryArgs{
-		LayerArn: pulumi.String("arn:aws:lambda:eu-west-1:111111111111:layer:otlp-lambda:7"),
+		LayerArn: pulumi.String("arn:aws:lambda:eu-west-1:111122223333:layer:otlp-lambda:7"),
 		Env:      map[string]string{"OTEL_EXPORTER_OTLP_ENDPOINT": "https://otlp.example.test"},
 	}
 }
