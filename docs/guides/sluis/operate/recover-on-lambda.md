@@ -4,11 +4,11 @@ Sign in with the recovery password on a Lambda installation when no directory ca
 
 ## Before you start
 
-- You need `ssm:GetParameter` on `/sluis/<instance>/internal/config/*`, and `kms:Decrypt` on `ParameterKeyArn` when set.
+- You need `ssm:GetParameter` on `/sluis/<instance>/internal/oidc/recovery-password`, and `kms:Decrypt` on `ParameterKeyArn` when set.
 
 - Lambda has no API server, so recovery is a password. The browser, cookie and `429` refusals of [lost operator access](lost-operator-access.md) apply here.
 
-- `sluispulumi.NewLambda` generates a 40-character password that an apply never rotates. It stores it as the SSM SecureString `/sluis/<instance>/internal/config/recovery/password`, and the service reads it at cold start and every five minutes. The `RecoveryPasswordParameter` output holds the name, never the value.
+- `sluispulumi.NewLambda` generates a 40-character password that an apply never rotates. It stores it as the SSM SecureString `/sluis/<instance>/internal/oidc/recovery-password`, and the service reads it at cold start and every five minutes. The `RecoveryPasswordParameter` output holds the name, never the value.
 
 - Without `recovery.passwordSecret` ([secrets](../../../reference/sluis/secrets.md#the-names)), recovery on Lambda logs an ERROR and builds nothing.
 
@@ -23,9 +23,14 @@ Sign in with the recovery password on a Lambda installation when no directory ca
 1. Read the password. It is 40 characters.
 
    ```sh
+   # Refuses a terminal unless --show; --profile names an AWS profile.
+   sluisctl recovery password --instance <instance> --region <region> | pbcopy
+
+   # Without sluisctl: layout v5 stores {"value":"<base64>"}; layout v4 keeps the
+   # text at /sluis/<instance>/internal/config/recovery/password, readable as is.
    aws ssm get-parameter --with-decryption \
-     --name /sluis/<instance>/internal/config/recovery/password \
-     --query Parameter.Value --output text
+     --name /sluis/<instance>/internal/oidc/recovery-password \
+     --query Parameter.Value --output text | jq -r .value | base64 --decode
    ```
 
 2. Open `https://<issuer host>/console/login`, expand **Recovery sign-in** and paste the password. You sign in as `recovery`, an operator by construction. Use this page even when `console.client` sends everybody else to the issuer's page.

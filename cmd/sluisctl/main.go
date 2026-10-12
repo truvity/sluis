@@ -140,6 +140,8 @@ func run(args []string) error {
 		return restoreCommand(args[1:])
 	case "render":
 		return renderCommand(args[1:])
+	case "recovery":
+		return recoveryCommand(args[1:])
 	case "help", "-h", "--help":
 		usage(os.Stdout)
 		return nil
@@ -176,6 +178,7 @@ func usage(to *os.File) {
   clients       rotate, show or purge the stored secret of a generated client (operators)
   backup        run, status, list: the backup function, with your AWS credentials
   restore       preview, start, resume, status: the restore function (start needs --confirm)
+  recovery      password: the recovery password of a Lambda installation, decoded, for a pipe
   render        an installation in, the service and policy documents out
   policy render the one policy document an installation reads, from its layers
 
