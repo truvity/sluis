@@ -1,8 +1,10 @@
 package query_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
 	"strings"
 	"testing"
 	"time"
@@ -507,8 +509,8 @@ func TestAGetNamesTheSealThatCoversItsHour(t *testing.T) {
 		return where
 	}
 
-	if got := get(); got.Digest != "" {
-		t.Fatalf("an hour that is not sealed is covered by %q", got.Digest)
+	if got := get(); got.Digest != "" || got.SealUnknown {
+		t.Fatalf("an hour that is not sealed is covered by %q, unknown=%v: a missing seal is a known answer", got.Digest, got.SealUnknown)
 	}
 	sealKey := store.SealKey("security", "acme", hour)
 	if err := archive.Put(context.Background(), store.Object{Key: sealKey, Body: []byte("x"), RetainUntil: hour.AddDate(1, 0, 0)}); err != nil {
@@ -569,5 +571,66 @@ func TestTheLimitCeilingIsTheServices(t *testing.T) {
 	}
 	if q.Limit != 1000 {
 		t.Fatalf("limit %d, want the ceiling of 1000", q.Limit)
+	}
+}
+
+// failingHead is an archive whose lookups fail, as with an expired credential.
+type failingHead struct{ store.Store }
+
+func (failingHead) Head(context.Context, string) (store.Entry, error) {
+	return store.Entry{}, errors.New("ExpiredToken")
+}
+
+// Whether an hour is sealed is only known when the archive was asked and
+// answered. With no archive, or an archive that fails, the state is unknown and
+// is reported so: neither may read as "not sealed yet". A failure is logged
+// with the key it was looking for.
+func TestAGetSaysSealUnknownWhenItCannotAsk(t *testing.T) {
+	common, err := catalogue.Common()
+	if err != nil {
+		t.Fatal(err)
+	}
+	hour := at(t, "2026-09-17T10:00:00Z")
+	objectKey := store.RecordKey("security", "acme", hour, ulid.From(hour.Add(5*time.Minute), 1))
+	rows := index.NewMemory()
+	if err := rows.Index(context.Background(), "security", []index.Row{{
+		ID: "018f0000-0000-7000-8000-00000000000a", TenantID: "acme", OccurredAt: hour, RecordedAt: hour,
+		Source: "wallet", Action: "wallet.credential.issued", Operation: "create", Outcome: "success",
+		ObjectKey: objectKey, Line: 1,
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	for name, tc := range map[string]struct {
+		seals  store.Store
+		logged bool
+	}{
+		"no archive": {seals: nil},
+		"head fails": {seals: failingHead{storetest.NewMemory()}, logged: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			var logs bytes.Buffer
+			s, err := query.New(&query.Service{
+				Searcher:   rows,
+				Authorizer: auth.Declarative{Rules: []auth.Rule{{Name: "a-rule", Grant: fullGrant()}}},
+				Sink:       &reads{}, Catalogue: common, Instance: "query-1", Seals: tc.seals,
+				Logger: slog.New(slog.NewTextHandler(&logs, nil)),
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = s.Close() })
+			_, where, _, err := s.Get(context.Background(), caller(), &auditv1.GetRequest{
+				Profile: "security", Id: "018f0000-0000-7000-8000-00000000000a"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !where.SealUnknown || where.Digest != "" || !where.VerifiedAt.IsZero() {
+				t.Fatalf("got %+v, want an unknown seal state", where)
+			}
+			sealKey := store.SealKey("security", "acme", hour)
+			if got := strings.Contains(logs.String(), sealKey); got != tc.logged {
+				t.Fatalf("seal key logged = %v, want %v; log: %s", got, tc.logged, logs.String())
+			}
+		})
 	}
 }

@@ -51,6 +51,8 @@ export interface FakeOptions {
   deny?: Code;
   /** Records the fake says a verified digest covers. */
   verified?: string[];
+  /** Ids whose seal state the service cannot tell (no archive to ask). */
+  sealUnknown?: string[];
   /** Records covered by a digest nobody has verified yet. */
   sealed?: string[];
   /** The profiles access() says the caller may search; default every profile a record is in. */
@@ -108,6 +110,7 @@ export function fakeQueryService(options: FakeOptions = {}): Fake {
           provenance: {
             objectKey: `profile=${req.profile}/x.ndjson.zst`,
             line: 1n,
+            ...(options.sealUnknown?.includes(req.id) ? { sealUnknown: true } : {}),
             ...(sealed && !verified ? { digestId: "digest/profile=security/hour=10.json" } : {}),
             ...(verified ? { digestId: "digest/profile=security/hour=10.json", verifiedAt: timestampFromDate(new Date()) } : {}),
           },

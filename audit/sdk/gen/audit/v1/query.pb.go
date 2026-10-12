@@ -2453,7 +2453,11 @@ type Provenance struct {
 	// name is from before seals, when it was a digest's.
 	DigestId string `protobuf:"bytes,3,opt,name=digest_id,json=digestId,proto3" json:"digest_id,omitempty"`
 	// When a verifier last found the seal clean; empty when none has.
-	VerifiedAt    *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=verified_at,json=verifiedAt,proto3" json:"verified_at,omitempty"`
+	VerifiedAt *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=verified_at,json=verifiedAt,proto3" json:"verified_at,omitempty"`
+	// True when this service cannot tell whether the hour is sealed: it looks in
+	// no archive, or the archive could not be asked. Empty digest_id then says
+	// nothing, and a reader shows no seal state rather than "not sealed".
+	SealUnknown   bool `protobuf:"varint,5,opt,name=seal_unknown,json=sealUnknown,proto3" json:"seal_unknown,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2514,6 +2518,13 @@ func (x *Provenance) GetVerifiedAt() *timestamppb.Timestamp {
 		return x.VerifiedAt
 	}
 	return nil
+}
+
+func (x *Provenance) GetSealUnknown() bool {
+	if x != nil {
+		return x.SealUnknown
+	}
+	return false
 }
 
 type ExportRequest struct {
@@ -2928,7 +2939,7 @@ const file_audit_v1_query_proto_rawDesc = "" +
 	"\x06record\x18\x01 \x01(\v2\x10.audit.v1.RecordR\x06record\x124\n" +
 	"\n" +
 	"provenance\x18\x02 \x01(\v2\x14.audit.v1.ProvenanceR\n" +
-	"provenance\"\x99\x01\n" +
+	"provenance\"\xbc\x01\n" +
 	"\n" +
 	"Provenance\x12\x1d\n" +
 	"\n" +
@@ -2936,7 +2947,8 @@ const file_audit_v1_query_proto_rawDesc = "" +
 	"\x04line\x18\x02 \x01(\x03R\x04line\x12\x1b\n" +
 	"\tdigest_id\x18\x03 \x01(\tR\bdigestId\x12;\n" +
 	"\vverified_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"verifiedAt\"\xd0\x01\n" +
+	"verifiedAt\x12!\n" +
+	"\fseal_unknown\x18\x05 \x01(\bR\vsealUnknown\"\xd0\x01\n" +
 	"\rExportRequest\x12\x18\n" +
 	"\aprofile\x18\x01 \x01(\tR\aprofile\x12(\n" +
 	"\x06filter\x18\x02 \x03(\v2\x10.audit.v1.FilterR\x06filter\x126\n" +

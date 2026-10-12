@@ -91,6 +91,17 @@ describe("the audit view", () => {
     expect(await screen.findByText("Not sealed yet")).toBeTruthy();
   });
 
+  it("shows no seal chip when this service cannot tell", async () => {
+    show({ sealUnknown: ["r-3"] });
+    fireEvent.click(await screen.findByText("ps_alice placed order o-3"));
+    fireEvent.click(screen.getByText("ps_bob placed order o-2"));
+    // r-2's lookup is a known "not sealed"; once its chip is there both details
+    // have loaded, and r-3, whose state is unknown, must have added none.
+    expect(await screen.findAllByText("Not sealed yet")).toHaveLength(1);
+    expect(screen.queryByText("Sealed, not yet verified")).toBeNull();
+    expect(screen.queryByText(/^Verified /)).toBeNull();
+  });
+
   it("opens a row from the keyboard and shows the zone of the time", async () => {
     show();
     const label = await screen.findByText("ps_bob placed order o-2");

@@ -330,7 +330,7 @@ function Detail({ record: r, profile, narrow, permalink }: RecordRowProps) {
         ) : provenance?.digestId ? (
           <Chip size="small" color="info" label="Sealed, not yet verified"
             title={`Covered by digest ${provenance.digestId}, which nobody has checked yet`} />
-        ) : provenance ? (
+        ) : provenance?.sealUnknown ? null : provenance ? (
           <Chip size="small" label="Not sealed yet" title={provenance.objectKey} />
         ) : null}
         {permalink && (
