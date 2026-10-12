@@ -3,6 +3,8 @@ package lambdaapp_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"log/slog"
 	"net/http"
 	"strings"
 	"testing"
@@ -70,5 +72,25 @@ func TestOtherEventsAreUntouchedByAnRPCServer(t *testing.T) {
 	}
 	if raw, _ := json.Marshal(out); !strings.Contains(string(raw), `"statusCode":418`) {
 		t.Errorf("%s", raw)
+	}
+}
+
+func TestAFailedRPCIsLoggedByTheFunctionWithTheRequestID(t *testing.T) {
+	var logged strings.Builder
+	log := slog.New(slog.NewJSONHandler(&logged, nil))
+	s := modcall.NewServer("cloudflare")
+	modcall.Handle(s, "echo", func(context.Context, map[string]string) (map[string]string, error) {
+		return nil, errors.New("the table is gone")
+	})
+	h := lambdaapp.NewHTTP(http.NotFoundHandler(), nil, log).WithRPC(s)
+	ctx := lambdacontext.NewContext(context.Background(), &lambdacontext.LambdaContext{AwsRequestID: "req-42",
+		InvokedFunctionArn: strings.Join([]string{"arn", "partition", "lambda", "region", "account", "function", "cloudflare", "live-console"}, ":")})
+	if _, err := h.Handle(ctx, rpcEvent(t)); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{`"level":"ERROR"`, `"method":"echo"`, `"request_id":"req-42"`, "the table is gone"} {
+		if !strings.Contains(logged.String(), want) {
+			t.Errorf("%s is not in the log: %s", want, logged.String())
+		}
 	}
 }

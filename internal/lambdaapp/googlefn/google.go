@@ -64,6 +64,10 @@ type calls struct {
 	cfg googleapp.Config
 	log *slog.Logger
 
+	// start assembles the module; googleapp.New in a function, a stand-in in a
+	// test.
+	start func(ctx context.Context, cfg googleapp.Config, log *slog.Logger) (*googleapp.App, error)
+
 	mu  sync.Mutex
 	app *googleapp.App
 }
@@ -74,7 +78,16 @@ func (c *calls) service(ctx context.Context) (*googleconsole.Service, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.app == nil {
-		app, err := googleapp.New(ctx, c.cfg, c.log)
+		// The app outlives this call, and what it opens keeps the context it
+		// was opened with: the Google clients fetch their tokens with it. The
+		// call's own is cancelled when the invocation returns, so every later
+		// call on this container would find a token it cannot fetch. The
+		// values stay (the trace, the logger); the cancellation does not.
+		start := c.start
+		if start == nil {
+			start = googleapp.New
+		}
+		app, err := start(context.WithoutCancel(ctx), c.cfg, c.log)
 		if err != nil {
 			return nil, err
 		}
@@ -178,6 +191,7 @@ func open(ctx context.Context, file string) (*lambdaapp.Function, error) {
 type Puller interface {
 	Pass(ctx context.Context, workspace string, unsafeLocal bool) (hub.RefreshOutcome, error)
 	RefreshPass(ctx context.Context) (hub.RefreshResult, error)
+	ProbePass(ctx context.Context) error
 }
 
 // Refresh runs one refresh over every workspace (workspace is empty) or the one
@@ -185,6 +199,13 @@ type Puller interface {
 // the pass needs no opt-in for a lease held in the process's own memory.
 func Refresh(ctx context.Context, p Puller, workspace string) (lambdaapp.RefreshResult, error) {
 	if workspace == "" {
+		// The probe loop of a process that has one: the schedule is the
+		// function's only clock, and a health that only an operator's click
+		// could renew would keep a workspace failing after its cause is gone.
+		// A failed probe is recorded as the workspace's health, not as a
+		// failed refresh.
+		// (The pass logs its own failure.)
+		_ = p.ProbePass(ctx)
 		res, err := p.RefreshPass(ctx)
 		return lambdaapp.RefreshResult{Kind: lambdaapp.KindRefresh, Workspaces: res.Workspaces, Ran: res.Ran,
 			Contended: res.Contended, Failed: res.Failed, Paused: res.Paused}, err
