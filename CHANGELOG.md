@@ -12,6 +12,10 @@
 
 - **The audit chart takes annotations for the workload objects themselves.** Every Deployment and CronJob it renders (`writer`, `receiver`, `query`, `observe`, `jobs.notary`, `jobs.verify`, `jobs.purge`, `jobs.clockSync`) now takes `annotations`, rendered on the object's own `metadata`, and the chart takes `commonAnnotations` for all of them (a component's own win). Until now only the pod template carried annotations, which a controller such as Stakater Reloader does not read, so an estate running it with `autoReloadAll` could not stop the indexer and the notary being rolled on every rotation of a short-lived archive credential, though they reread it themselves (`archive.sluisDir`). The defaults are empty and no render changes; set `reloader.stakater.com/auto: "false"` under `observe.annotations` and `jobs.notary.annotations` to opt out (see the chart values reference, "Reloader").
 
+### Added
+
+- **`RoleArgs`: the role lists from the names alone.** A stack that exists before the sluis stack (the foundation stack with the shared key's policy, the audit stack with the ingest queue's) had to build a `LambdaArgs` full of stand-ins (tables, a package digest, a queue) only to ask for the principals, because `Senders`, `Roles`, `ViewerRoles` and `KeyPolicyStatements` validate the whole args. `RoleArgs` holds what the names depend on (region, account, instance, layout, the installation, the function name overrides, the transition roles, and whether the stack creates the backup and restore components) and answers the same four, equal to the full args' for the same names. `FunctionRoles` lists every function once, with its name, ARN and whether the stack creates it, so nothing repeats a default function name; `ViewerMatchers` and `FunctionRole.Matcher` give the access policy's matcher rows (account, role name, path `/`) for the viewer roles and for any one role. `LambdaArgs.RoleArgs()` and `Lambda.RoleArgs()` convert.
+
 ## v1.76.0-rc.5
 
 ### Changed
