@@ -352,3 +352,40 @@ func TestTheCloudflareTickIsConfigurableAndHeldToThePresets(t *testing.T) {
 		t.Errorf("a disabled schedule was held to the margin: %v", err)
 	}
 }
+
+// The console calls a credential overdue only past rotation + tick, so the
+// documents carry the tick of the schedule that rotates.
+func TestTheRotationTickReachesTheDocuments(t *testing.T) {
+	in := exampleInstallation(t)
+	withCloudflare(in)
+	has := func(rec *recorder, want string) bool {
+		for _, doc := range functionDocuments(t, rec) {
+			if strings.Contains(doc, want) {
+				return true
+			}
+		}
+		return false
+	}
+	rec, _ := mustLambda(t, withInstallation(in, nil))
+	if !has(rec, "tick: 15m") {
+		t.Error("the default 15m tick is not in the documents")
+	}
+	rec, _ = mustLambda(t, withInstallation(in, func(a *arp.LambdaArgs) { a.CloudflareRotation.Interval = 10 * time.Minute }))
+	if !has(rec, "tick: 10m") {
+		t.Error("Interval 10m is not in the documents")
+	}
+	if in.Cloudflare.Tick != 0 {
+		t.Error("the caller's installation was changed")
+	}
+	// A tick the installation states is its own; a cron expression states none.
+	in.Cloudflare.Tick = sluisconfig.Duration(7 * time.Minute)
+	rec, _ = mustLambda(t, withInstallation(in, nil))
+	if !has(rec, "tick: 7m") || has(rec, "tick: 15m") {
+		t.Error("the installation's own tick was overwritten")
+	}
+	in.Cloudflare.Tick = 0
+	rec, _ = mustLambda(t, withInstallation(in, func(a *arp.LambdaArgs) { a.CloudflareRotation.Rate = "cron(0/20 * * * ? *)" }))
+	if has(rec, "tick:") {
+		t.Error("a tick was invented for a cron expression")
+	}
+}

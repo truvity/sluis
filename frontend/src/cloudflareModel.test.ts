@@ -6,7 +6,7 @@ import { awsProfile, credentialProcess, freshness, freshnessNote, prototypeView,
 
 const now = new Date("2026-10-09T12:00:00Z");
 const secondsAgo = (n: number) => ({ seconds: BigInt(Math.floor(now.getTime() / 1000) - n), nanos: 0 });
-const preset = create(CloudflarePresetSchema, { name: "dns", rotationSeconds: 1200n, lifetimeSeconds: 3600n });
+const preset = create(CloudflarePresetSchema, { name: "dns", rotationSeconds: 1200n, lifetimeSeconds: 3600n, rotationTickSeconds: 900n });
 const stored = (age: number) => create(CloudflareStoredSchema, { present: true, mintedAt: secondsAgo(age) });
 
 describe("the prototype's chip", () => {
@@ -29,12 +29,27 @@ describe("the prototype's chip", () => {
 });
 
 describe("how fresh the stored token is", () => {
-  it("is fresh within one rotation, late past it, stale past two", () => {
+  it("is fresh within one rotation, due until the next tick has run, overdue past that, stale past two rotations", () => {
+    // rotation 20m, tick 15m, slack 1m: overdue after 36m, stale after 40m.
     expect(freshness(preset, stored(600), now)).toBe("fresh");
     expect(freshness(preset, stored(1200), now)).toBe("fresh");
-    expect(freshness(preset, stored(1201), now)).toBe("late");
+    expect(freshness(preset, stored(1201), now)).toBe("due");
+    expect(freshness(preset, stored(2100), now)).toBe("due");
+    expect(freshness(preset, stored(2160), now)).toBe("due");
+    expect(freshness(preset, stored(2161), now)).toBe("late");
     expect(freshness(preset, stored(2400), now)).toBe("late");
     expect(freshness(preset, stored(2401), now)).toBe("stale");
+  });
+
+  it("does not call a healthy credential late whatever the tick, and calls a missed tick late", () => {
+    // With a tick longer than the rotation a credential is due for the whole tick.
+    const slow = create(CloudflarePresetSchema, { name: "dns", rotationSeconds: 1200n, rotationTickSeconds: 3600n });
+    expect(freshness(slow, stored(3000), now)).toBe("due");
+    expect(freshness(slow, stored(4861), now)).toBe("stale");
+    // Without the field (an older server) the tick is a minute.
+    const unknown = create(CloudflarePresetSchema, { name: "dns", rotationSeconds: 1200n });
+    expect(freshness(unknown, stored(1260), now)).toBe("due");
+    expect(freshness(unknown, stored(1321), now)).toBe("late");
   });
 
   it("has nothing to judge before the first token", () => {
@@ -46,8 +61,10 @@ describe("how fresh the stored token is", () => {
     expect(freshness(preset, stored(-60), now)).toBe("fresh");
   });
 
-  it("explains the two that need explaining, and is silent when fresh", () => {
+  it("explains the three that need explaining, and is silent when fresh", () => {
     expect(freshnessNote("stale", 1200n)).toContain("twice its rotation (20m)");
+    expect(freshnessNote("due", 1200n, 900n)).toBe("Due: past its rotation (20m); the rotation runs every 15m, and the next tick replaces it.");
+    expect(freshnessNote("late", 1200n, 900n)).toContain("Overdue");
     expect(freshnessNote("fresh", 1200n)).toBe("");
   });
 });

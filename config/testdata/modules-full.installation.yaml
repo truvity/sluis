@@ -78,6 +78,7 @@ cloudflare:
       description: DNS edits on example.com for the release job
       lifetime: 1h
       rotation: 20m
+  tick: 15m
   grants:
     - group: all:infra:dns-editors
       presets: [dns-example]

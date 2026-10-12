@@ -323,7 +323,7 @@ function PresetCard({
   const proto = prototypeView(preset.prototype);
   const stored = preset.stored;
   const fresh = freshness(preset, stored, new Date());
-  const note = freshnessNote(fresh, preset.rotationSeconds);
+  const note = freshnessNote(fresh, preset.rotationSeconds, preset.rotationTickSeconds);
   return (
     <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
       <Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "flex-start", gap: 2, flexWrap: "wrap" }}>
@@ -377,7 +377,8 @@ function PresetCard({
           <Typography variant="body2">minted {ago(at(stored.mintedAt))}</Typography>
           <Typography variant="body2">expires {until(at(stored.expiresOn))}</Typography>
           {fresh === "stale" ? <State kind="failing" label="not rotating" title={note} /> : null}
-          {fresh === "late" ? <State kind="pending" label="past rotation" title={note} /> : null}
+          {fresh === "due" ? <State kind="unknown" label="due" title={note} /> : null}
+          {fresh === "late" ? <State kind="pending" label="overdue" title={note} /> : null}
           {canOperate && stored.tokenId ? (
             <Button size="small" color="warning" onClick={() => onRevoke({ id: stored.tokenId, caller: "", stored: true })}>
               Revoke
@@ -389,7 +390,12 @@ function PresetCard({
           {note}
         </Typography>
       )}
-      {note && fresh !== "none" && fresh !== "fresh" ? (
+      {fresh === "due" ? (
+        <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
+          {note}
+        </Typography>
+      ) : null}
+      {note && fresh !== "none" && fresh !== "fresh" && fresh !== "due" ? (
         <Alert severity={fresh === "stale" ? "error" : "warning"} sx={{ mt: 1 }}>
           {note}
         </Alert>

@@ -1,5 +1,9 @@
 ## Unreleased
 
+### Added
+
+- **`cloudflare.tick`: how often the rotation looks at the presets.** A credential rotates on the schedule's tick, up to one tick after its `rotation`. The Pulumi library now writes the tick of `CloudflareRotation` (its `Interval`, a plain `rate(...)`, or the 15m default) into the service document when the installation leaves `cloudflare.tick` out; a cron `Rate` leaves it for the installation to state, and an installation's own value is kept. The console's Cloudflare list carries it as `CloudflarePreset.rotation_tick_seconds`, a minute when unset (the Kubernetes loop's). The Cloudflare guide says to make `rotation` a multiple of the tick to rotate when intended.
+
 ### Changed
 
 - The console's recovery sign-in now works on the Sessions pages and reads the Audit page calmly. Sessions are listed and
@@ -9,6 +13,8 @@
   the directory admits, with a 403 rather than a 502 and "HTTP 502", and mints and calls nothing.
 
 - **A holder's "through ..." reason no longer links a matcher to a provider group.** The group page's "People in it now" linked every reason to the provider group page, including the words of a matcher such as "signed in at tsarev.id", whose page asked the hub for a group of that name and got `invalid_argument: hub: address has no domain`. A domain now leads to the People list filtered by it (`#/people?domain=...`), a "signed in as" address to that person, a workload matcher to nothing, and only a provider group to its page.
+
+- **The console no longer calls a healthy Cloudflare credential "past its rotation".** It showed a warning ("Past its rotation (20m); the next tick replaces it.") and a "pending, past rotation" badge whenever the stored credential was older than `rotation`, but rotation only happens on the tick, so with a 20m `rotation` and a 15m tick every credential was "past rotation" for up to a tick of every cycle while perfectly healthy. A credential past `rotation` is now **due**, in a neutral style ("Due: past its rotation (20m); the rotation runs every 15m, and the next tick replaces it."), and **overdue**, a warning, only past `rotation + tick` and a minute of slack; past twice the rotation it is still "not rotating" and the alert still fires. Tests hold each boundary, a tick longer than the rotation, and an older server that sends no tick.
 
 ## v1.76.0-rc.6
 

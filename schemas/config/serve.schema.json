@@ -368,6 +368,10 @@
             }
           },
           "type": "object"
+        },
+        "tick": {
+          "$ref": "#/$defs/duration",
+          "description": "How often the rotation looks at the presets: the interval of the schedule that invokes it on Lambda (the library fills it from `CloudflareRotation` when unset), a minute for the Kubernetes loop. A credential rotates up to one tick after its preset's `rotation`, so the console calls one overdue only past `rotation + tick`; make `rotation` a multiple of the tick to rotate when intended. Unset is a minute."
         }
       },
       "type": "object"

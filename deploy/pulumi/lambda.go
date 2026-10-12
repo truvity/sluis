@@ -541,6 +541,37 @@ func rateTick(expr string) (time.Duration, bool) {
 	return time.Duration(n) * unit, true
 }
 
+// withCloudflareTick returns the installation with `cloudflare.tick` set to the
+// rotation schedule's interval when the installation leaves it out, so the
+// console calls a credential overdue only past `rotation + tick` and not at
+// `rotation`: the schedule is the only thing that rotates on Lambda, and it
+// looks once a tick. A tick that is not a plain interval (a cron expression)
+// is left for the installation to state. The caller's installation is not
+// changed.
+func (a LambdaArgs) withCloudflareTick() *sluisconfig.Installation {
+	in := a.Installation
+	if in.Cloudflare == nil || !in.Cloudflare.Declared() || in.Cloudflare.Tick != 0 || a.CloudflareRotation.Disabled {
+		return in
+	}
+	var tick time.Duration
+	switch {
+	case a.CloudflareRotation.Rate != "":
+		tick, _ = rateTick(a.CloudflareRotation.Rate)
+	case a.CloudflareRotation.Interval != 0:
+		tick = a.CloudflareRotation.Interval
+	default:
+		tick = DefaultCloudflareRotationInterval
+	}
+	if tick <= 0 {
+		return in
+	}
+	cp := *in
+	cf := *in.Cloudflare
+	cf.Tick = sluisconfig.Duration(tick)
+	cp.Cloudflare = &cf
+	return &cp
+}
+
 // checkCloudflareMargin refuses a tick under which a credential could expire
 // before its replacement is synced: the worst case is a rotation one tick late,
 // and the new credential then needs CloudflareConsumerSyncMargin.
@@ -972,6 +1003,7 @@ func (a *LambdaArgs) validate() (LambdaArgs, error) {
 	}
 	out := *a
 	if out.Installation != nil {
+		out.Installation = out.withCloudflareTick()
 		var err error
 		if out, err = out.withInstallation(); err != nil {
 			return out, err
