@@ -12,7 +12,8 @@ import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
 
-import { access, forHowLong, github, issuerIsSameOrigin, issuerFailure, personName, roleName, sessions, sourceName, type Me } from "./api";
+import { sessionsReachable } from "./sessionsModel";
+import { access, forHowLong, github, issuerFailure, personName, roleName, sessions, sourceName, type Me } from "./api";
 import type { ExplainRequest, ExplainResponse } from "./gen/sluis/v1/access_pb";
 import { RevokeScope, type Session } from "./gen/sluis/v1/session_pb";
 import { explainPanels } from "./explainModel";
@@ -59,7 +60,7 @@ export function Person({
           value={explained.value}
           directory={explained.value.workspaceId || undefined}
           signedInVia={self ? sourceName(me?.source) : undefined}
-          sessionsOf={issuerIsSameOrigin(me?.issuerUrl) && (self || operator) ? email : undefined}
+          sessionsOf={sessionsReachable(me) && (self || operator) ? email : undefined}
           signOutURL={self ? (me?.signOutUrl ?? "/logout") : undefined}
           onDone={onDone}
         />

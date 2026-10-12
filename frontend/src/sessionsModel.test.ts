@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { clientLabel, groupSessions, matchesClient, neverUsed, resourceLabel, type SessionFacts } from "./sessionsModel";
+import { clientLabel, groupSessions, matchesClient, neverUsed, resourceLabel, sessionsReachable, type SessionFacts } from "./sessionsModel";
 
 const NOW = Date.UTC(2026, 9, 10, 12, 0, 0);
 const stamp = (msAgo: number) => ({ seconds: BigInt(Math.floor((NOW - msAgo) / 1000)), nanos: 0 });
@@ -89,4 +89,20 @@ describe("client filter", () => {
         }
         expect(matchesClient(s, "argo")).toBe(false);
     });
+});
+
+describe("sessions reachable", () => {
+  const here = "https://sluis.example/console/";
+  it("is so wherever the console serves sessions itself, recovery sign-in included", () => {
+    expect(sessionsReachable({ sessions: true }, here)).toBe(true);
+    expect(sessionsReachable({ sessions: true, issuerUrl: "https://other.example" }, here)).toBe(true);
+  });
+  it("falls back to the issuer on the console's own origin", () => {
+    expect(sessionsReachable({ issuerUrl: "https://sluis.example" }, here)).toBe(true);
+    expect(sessionsReachable({ issuerUrl: "https://other.example" }, here)).toBe(false);
+  });
+  it("is not where there is neither", () => {
+    expect(sessionsReachable({}, here)).toBe(false);
+    expect(sessionsReachable(undefined, here)).toBe(false);
+  });
 });

@@ -33,7 +33,7 @@ import AppsIcon from "@mui/icons-material/Apps";
 import RuleIcon from "@mui/icons-material/Rule";
 import CloudIcon from "@mui/icons-material/Cloud";
 
-import { issuerIsSameOrigin, mounted, personName, whoami, type Me } from "./api";
+import { mounted, personName, whoami, type Me } from "./api";
 import { maintenancePollMs, maintenanceText, type Maintenance } from "./maintenanceModel";
 import { useAsync } from "./hooks";
 import { clusters } from "./navModel";
@@ -49,6 +49,7 @@ import { Groups, Group } from "./Groups";
 import { Clients, Client } from "./Clients";
 import { GitHubPage } from "./GitHub";
 import { SessionsPage } from "./Sessions";
+import { sessionsReachable } from "./sessionsModel";
 import { SlackHub } from "./SlackHub";
 import { AuditPage } from "./Audit";
 import { SettingsView } from "./Settings";
@@ -201,7 +202,7 @@ export function App() {
         </Typography>
       </Box>
       <List dense disablePadding sx={{ pb: 1 }}>
-        {clusters({ sessions: operator && issuerIsSameOrigin(identityInfo?.issuerUrl), audit: Boolean(identityInfo?.audit), cloudflare: Boolean(identityInfo?.cloudflare), backup: Boolean(identityInfo?.backup) && roles.includes("viewer") }).map((cluster) => (
+        {clusters({ sessions: operator && sessionsReachable(identityInfo), audit: Boolean(identityInfo?.audit), cloudflare: Boolean(identityInfo?.cloudflare), backup: Boolean(identityInfo?.backup) && roles.includes("viewer") }).map((cluster) => (
           <Box key={cluster.heading ?? "start"}>
             {cluster.heading ? (
               <ListSubheader disableSticky sx={{ mt: 1.5, textTransform: "uppercase", letterSpacing: "0.06em", fontSize: "0.7rem", lineHeight: "32px" }} title={cluster.hint}>
@@ -339,7 +340,7 @@ function PageFor({
     case "groups":
       return id ? <Group name={id} /> : <Groups />;
     case "clients":
-      return id ? <Client id={id} issuerUrl={issuerIsSameOrigin(me?.issuerUrl) ? me?.issuerUrl : undefined} operator={operator} onDone={onDone} /> : <Clients />;
+      return id ? <Client id={id} issuerUrl={sessionsReachable(me) ? (me?.issuerUrl ?? "console") : undefined} operator={operator} onDone={onDone} /> : <Clients />;
     case "github":
       return <GitHubPage section={id} rest={rest} onDone={onDone} />;
     case "slack":
