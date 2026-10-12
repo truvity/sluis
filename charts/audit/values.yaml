@@ -289,6 +289,10 @@ writer:
   # In stream mode, how many writers consume the stream. They scale with the
   # record rate; the receivers (`replicas`) with the application's request rate.
   consumers: 3
+  # Annotations of this workload's own object (not its pods; `podAnnotations`
+  # is the pods'), merged over `commonAnnotations`. See "Reloader" at
+  # `commonAnnotations`.
+  annotations: {}
   # The audit-writer configuration: schemas/config/audit-writer.schema.json.
   # In direct mode this is the one writer; in stream mode, the consumers.
   #
@@ -308,6 +312,10 @@ writer:
 
 # Stream mode only: the receiver's configuration, with `mode: receiver`.
 receiver:
+  # Annotations of this workload's own object (not its pods; `podAnnotations`
+  # is the pods'), merged over `commonAnnotations`. See "Reloader" at
+  # `commonAnnotations`.
+  annotations: {}
   # The front door publishes and holds nothing of the archive: it must not run
   # as the writer. The chart refuses a receiver and a writer with one name.
   serviceAccount:
@@ -456,6 +464,10 @@ acknowledgeMinterCustody: false
 query:
   enabled: false
   replicas: 2
+  # Annotations of this workload's own object (not its pods; `podAnnotations`
+  # is the pods'), merged over `commonAnnotations`. See "Reloader" at
+  # `commonAnnotations`.
+  annotations: {}
   service:
     port: 8080
   # The audit-query configuration: schemas/config/audit-query.schema.json.
@@ -531,6 +543,10 @@ query:
 observe:
   enabled: false
   replicas: 1
+  # Annotations of this workload's own object (not its pods; `podAnnotations`
+  # is the pods'), merged over `commonAnnotations`. See "Reloader" at
+  # `commonAnnotations`.
+  annotations: {}
   # The audit-observe configuration: schemas/config/audit-observe.schema.json.
   # `deployment: /etc/audit/deployment.yaml` names the buckets it follows (the
   # `presets`), `archive` is only `{stateRoot, ca}`, `database` is the role
@@ -669,6 +685,10 @@ jobs:
   # you give it a key.
   notary:
     enabled: false
+    # Annotations of this workload's own object (not its pods; `podAnnotations`
+    # is the pods'), merged over `commonAnnotations`. See "Reloader" at
+    # `commonAnnotations`.
+    annotations: {}
     # Seventeen minutes past: an hour is sealed ten minutes after it ends (the
     # config's `settle`), and the job then has seven minutes of slack.
     schedule: "17 * * * *"
@@ -689,6 +709,10 @@ jobs:
     tokens: []
   verify:
     enabled: true
+    # Annotations of this workload's own object (not its pods; `podAnnotations`
+    # is the pods'), merged over `commonAnnotations`. See "Reloader" at
+    # `commonAnnotations`.
+    annotations: {}
     schedule: "23 3 * * *"
     # Credentials that read the archive and nothing else.
     serviceAccount:
@@ -705,6 +729,10 @@ jobs:
     tokens: []
   purge:
     enabled: true
+    # Annotations of this workload's own object (not its pods; `podAnnotations`
+    # is the pods'), merged over `commonAnnotations`. See "Reloader" at
+    # `commonAnnotations`.
+    annotations: {}
     schedule: "41 4 * * *"
     # Its own identity, `<fullname>-purge`. Purging deletes from the archive, so
     # bind the role it needs here; `create: false` runs as the release's own
@@ -719,6 +747,10 @@ jobs:
     secretMounts: []
   clockSync:
     enabled: true
+    # Annotations of this workload's own object (not its pods; `podAnnotations`
+    # is the pods'), merged over `commonAnnotations`. See "Reloader" at
+    # `commonAnnotations`.
+    annotations: {}
     schedule: "13 2 * * *"
     # Its own identity, `<fullname>-clock-sync`. Clock sync needs no cloud
     # rights. `create: false` runs as the release's own `serviceAccount`, which
@@ -777,6 +809,37 @@ telemetry:
     extraEnv: {}
 
 podAnnotations: {}
+
+# Annotations on every Deployment and CronJob the chart renders, on the object
+# itself. A component's own `annotations` (`observe.annotations`,
+# `jobs.notary.annotations`, ...) win over these. Empty by default.
+#
+# Reloader. A controller such as Stakater Reloader that rolls a workload when a
+# Secret or ConfigMap it mounts changes reads its annotations from the workload
+# OBJECT; the same key on the pod template (`podAnnotations`) does nothing. The
+# chart does not run or require Reloader and sets no default. With Reloader on
+# `autoReloadAll`, every Deployment here, and every CronJob's next pod, is
+# replaced whenever a Secret it mounts changes, which for an archive credential
+# that sluis rotates (a Cloudflare R2 token lives minutes) is every rotation.
+# That is needless for a process that rereads the credential file by itself
+# (`archive: {sluisDir: ...}`): it rereads within a minute, before the token
+# expires, and after a 403, so it never holds an expired one. To opt such
+# workloads out:
+#
+#   observe:
+#     annotations:
+#       reloader.stakater.com/auto: "false"
+#   jobs:
+#     notary:
+#       annotations:
+#         reloader.stakater.com/auto: "false"
+#
+# Opt out only a workload that reads the credential through `sluisDir` on a
+# directory mount. A `subPath` mount never follows the rotation (the kubelet does
+# not update it), so a pod that mounts the credential that way needs the roll.
+# A configuration change still replaces the pods, through the `checksum/*` pod
+# annotations, whatever Reloader does.
+commonAnnotations: {}
 podSecurityContext:
   runAsNonRoot: true
   runAsUser: 65532

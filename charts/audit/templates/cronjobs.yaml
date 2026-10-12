@@ -15,6 +15,9 @@ metadata:
   name: {{ include "audit.fullname" $ }}-{{ .name }}
   labels:
     {{- include "audit.labels" $ | nindent 4 }}
+  {{- with include "audit.objectAnnotations" (dict "root" $ "comp" .comp) }}
+  {{- . | nindent 2 }}
+  {{- end }}
 spec:
   schedule: {{ .comp.schedule | quote }}
   # A run that overlaps itself only does the same work twice.

@@ -7211,6 +7211,13 @@
       "description": "Catalogue documents mounted for the writer, as name to document, for the `catalogues` key of its config.",
       "type": "object"
     },
+    "commonAnnotations": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "Annotations on every Deployment and CronJob the chart renders, on the object and not on its pods. A component's own `annotations` win over these.",
+      "type": "object"
+    },
     "dashboards": {
       "additionalProperties": false,
       "description": "Grafana dashboards, rendered with `renders: dashboards`.",
@@ -7343,6 +7350,13 @@
           "additionalProperties": false,
           "description": "A scheduled job: `audit <command> --config`, or `audit-notary --config` for the notary.",
           "properties": {
+            "annotations": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "description": "Annotations of this component's Deployment or CronJob object (not its pods), merged over `commonAnnotations`; this component's win. An empty string value is kept.",
+              "type": "object"
+            },
             "config": {
               "description": "Rendered as it stands into a ConfigMap and mounted as /etc/audit/config.yaml. Its schema is audit-clock-sync's: schemas/config/audit-clock-sync.schema.json.",
               "type": "object"
@@ -7378,6 +7392,13 @@
           "additionalProperties": false,
           "description": "A scheduled job: `audit <command> --config`, or `audit-notary --config` for the notary.",
           "properties": {
+            "annotations": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "description": "Annotations of this component's Deployment or CronJob object (not its pods), merged over `commonAnnotations`; this component's win. An empty string value is kept.",
+              "type": "object"
+            },
             "config": {
               "description": "Rendered as it stands into a ConfigMap and mounted as /etc/audit/config.yaml. Its schema is audit-notary's: schemas/config/audit-notary.schema.json.",
               "type": "object"
@@ -7413,6 +7434,13 @@
           "additionalProperties": false,
           "description": "A scheduled job: `audit <command> --config`, or `audit-notary --config` for the notary.",
           "properties": {
+            "annotations": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "description": "Annotations of this component's Deployment or CronJob object (not its pods), merged over `commonAnnotations`; this component's win. An empty string value is kept.",
+              "type": "object"
+            },
             "config": {
               "description": "Rendered as it stands into a ConfigMap and mounted as /etc/audit/config.yaml. Its schema is audit-purge's: schemas/config/audit-purge.schema.json.",
               "type": "object"
@@ -7445,6 +7473,13 @@
           "additionalProperties": false,
           "description": "A scheduled job: `audit <command> --config`, or `audit-notary --config` for the notary.",
           "properties": {
+            "annotations": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "description": "Annotations of this component's Deployment or CronJob object (not its pods), merged over `commonAnnotations`; this component's win. An empty string value is kept.",
+              "type": "object"
+            },
             "config": {
               "description": "Rendered as it stands into a ConfigMap and mounted as /etc/audit/config.yaml. Its schema is audit-verify's: schemas/config/audit-verify.schema.json.",
               "type": "object"
@@ -7567,6 +7602,13 @@
       "additionalProperties": false,
       "description": "The indexer: follows the archive by cursor and writes the index the query service reads.",
       "properties": {
+        "annotations": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Annotations of this component's Deployment or CronJob object (not its pods), merged over `commonAnnotations`; this component's win. An empty string value is kept.",
+          "type": "object"
+        },
         "config": {
           "description": "Rendered as it stands into a ConfigMap and mounted as /etc/audit/config.yaml. Its schema is audit-observe's: schemas/config/audit-observe.schema.json.",
           "type": "object"
@@ -7714,6 +7756,13 @@
       "additionalProperties": false,
       "description": "The query service.",
       "properties": {
+        "annotations": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Annotations of this component's Deployment or CronJob object (not its pods), merged over `commonAnnotations`; this component's win. An empty string value is kept.",
+          "type": "object"
+        },
         "config": {
           "description": "Rendered as it stands into a ConfigMap and mounted as /etc/audit/config.yaml. Its schema is audit-query's: schemas/config/audit-query.schema.json.",
           "type": "object"
@@ -7830,6 +7879,13 @@
       "additionalProperties": false,
       "description": "Stream mode: the receiver, which serves the sink and publishes to the stream.",
       "properties": {
+        "annotations": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Annotations of this component's Deployment or CronJob object (not its pods), merged over `commonAnnotations`; this component's win. An empty string value is kept.",
+          "type": "object"
+        },
         "config": {
           "description": "Rendered as it stands into a ConfigMap and mounted as /etc/audit/config.yaml. Its schema is audit-writer's: schemas/config/audit-writer.schema.json.",
           "type": "object"
@@ -8036,6 +8092,13 @@
       "additionalProperties": false,
       "description": "The writer: the one pod in direct mode, the consumers in stream mode. `enabled: false` when it runs elsewhere.",
       "properties": {
+        "annotations": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Annotations of this component's Deployment or CronJob object (not its pods), merged over `commonAnnotations`; this component's win. An empty string value is kept.",
+          "type": "object"
+        },
         "config": {
           "description": "Rendered as it stands into a ConfigMap and mounted as /etc/audit/config.yaml. Its schema is audit-writer's: schemas/config/audit-writer.schema.json.",
           "type": "object"
