@@ -38,6 +38,12 @@ type ModuleEnv struct {
 	// [ConsoleCallers] may ask STS for: the console's. Empty allows any audience,
 	// as on the issuer's role.
 	WebIdentityAudience string
+	// TelemetryAudiences are the audiences every role may ask STS for a web
+	// identity token for, because the function runs the telemetry layer, which
+	// authenticates to the collector with it (LambdaArgs.AdditionalWebIdentityAudiences,
+	// with Telemetry). A role of [ConsoleCallers] holds them after the console's
+	// audience in one statement. Empty: the roles hold no more than before.
+	TelemetryAudiences []string
 }
 
 var (
@@ -196,8 +202,12 @@ func ModuleRoleStatements(env ModuleEnv, role Role) ([]map[string]any, error) {
 		}
 	}
 	// A role that calls the console proves itself with its web identity token.
-	if slices.Contains(ConsoleCallers, role.Name) {
-		st = append(st, webIdentityStatement(env.WebIdentityAudience, nil))
+	// A role whose function runs the telemetry layer holds the layer's audiences.
+	switch {
+	case slices.Contains(ConsoleCallers, role.Name):
+		st = append(st, webIdentityStatement(env.WebIdentityAudience, env.TelemetryAudiences))
+	case len(env.TelemetryAudiences) > 0:
+		st = append(st, webIdentityStatement(env.TelemetryAudiences[0], env.TelemetryAudiences[1:]))
 	}
 	// The maintenance flag is written by the restore role alone: every other
 	// role is denied the writes of that partition on every table it holds, its

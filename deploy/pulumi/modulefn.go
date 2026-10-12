@@ -73,6 +73,12 @@ type ModuleFunctionArgs struct {
 	NoRetry []string
 	// Check, when set, adds the post-deploy check.
 	Check *ModuleCheck
+	// Telemetry is the OpenTelemetry layer of the function: first in its layers,
+	// the configuration layer last, with the OTEL_* environment and
+	// OTEL_SERVICE_NAME defaulting to FunctionName. Nil: none. The caller
+	// validates it ([TelemetryArgs] validate) and grants the role's web identity
+	// token for the layer's audiences.
+	Telemetry *TelemetryArgs
 }
 
 // moduleFunction is what newModuleFunction makes of one function.
@@ -100,6 +106,9 @@ func newModuleFunction(ctx *pulumi.Context, a *ModuleFunctionArgs, parent pulumi
 	}
 	if _, ok := a.Documents[docSluis]; !ok {
 		return nil, fmt.Errorf("sluispulumi: the module function %s has no %q document", a.FunctionName, docSluis)
+	}
+	if err := a.Telemetry.validate(); err != nil {
+		return nil, err
 	}
 	pkg, err := loadPackage(a.Package, a.PackageSHA256, packageRelease(a.Package, a.PackageVersion), a.Release)
 	if err != nil {
@@ -169,7 +178,10 @@ func newModuleFunction(ctx *pulumi.Context, a *ModuleFunctionArgs, parent pulumi
 		return nil, fmt.Errorf("sluis role policy: %w", err)
 	}
 
-	// ---- the function. The layer is the only one: no telemetry layer here.
+	// ---- the function. The configuration layer is last; the telemetry layer,
+	// when there is one, is first.
+	env := a.Telemetry.env(a.FunctionName)
+	env[sluisconfig.EnvConfig] = pulumi.String(DocumentPath(docSluis))
 	fnArgs := &lambda.FunctionArgs{
 		Publish:       pulumi.Bool(true),
 		Name:          pulumi.String(a.FunctionName),
@@ -179,10 +191,8 @@ func newModuleFunction(ctx *pulumi.Context, a *ModuleFunctionArgs, parent pulumi
 		Architectures: pulumi.StringArray{pulumi.String("arm64")},
 		MemorySize:    pulumi.Int(a.MemoryMB),
 		Timeout:       pulumi.Int(a.TimeoutSeconds),
-		Layers:        pulumi.StringArray{out.layer.Arn},
-		Environment: &lambda.FunctionEnvironmentArgs{Variables: pulumi.StringMap{
-			sluisconfig.EnvConfig: pulumi.String(DocumentPath(docSluis)),
-		}},
+		Layers:        a.Telemetry.layers(out.layer.Arn),
+		Environment:   &lambda.FunctionEnvironmentArgs{Variables: env},
 		LoggingConfig: &lambda.FunctionLoggingConfigArgs{LogFormat: pulumi.String("Text"), LogGroup: out.logs.Name},
 		Tags:          tags,
 	}
