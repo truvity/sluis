@@ -48,6 +48,9 @@ type declaredOptions struct {
 	// DeleteBeforeReplace is true only when the program asked for delete-before-replace.
 	DeleteBeforeReplace bool
 	RetainOnDelete      bool
+	// DependsOnInputs counts the dependencies declared through outputs
+	// (pulumi.DependsOnInputs), which the mock monitor does not report either.
+	DependsOnInputs int
 }
 
 type declared struct {
@@ -177,6 +180,7 @@ func (r *recorder) transform(ctx *pulumi.Context) error {
 			}
 			o.DeleteBeforeReplace = ro.DeleteBeforeReplace
 			o.RetainOnDelete = ro.RetainOnDelete
+			o.DependsOnInputs = len(ro.DependsOnInputs)
 		}
 		r.options[a.Type+"/"+a.Name] = o
 		return nil

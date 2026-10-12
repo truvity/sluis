@@ -5,6 +5,8 @@ import (
 	"sort"
 	"strings"
 
+	auditpulumi "github.com/truvity/sluis/audit/deploy/pulumi"
+
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	sluisconfig "github.com/truvity/sluis/config"
@@ -340,7 +342,9 @@ func (a *LambdaArgs) hostsModule(role string) bool {
 // aliases `live` and one `live-<class>` for each caller class that calls it (CallerClasses): the one the schedules and the issuer's runs
 // invoke and the one its calls go through. Nothing is shared with the issuer's
 // function but the account.
-func newModuleFunctions(ctx *pulumi.Context, name string, a *LambdaArgs, secretsKey pulumi.StringInput, child pulumi.ResourceOption) (*moduleFunctions, error) {
+func newModuleFunctions(
+	ctx *pulumi.Context, name string, a *LambdaArgs, secretsKey pulumi.StringInput, writerFirst pulumi.ResourceArrayInput, child pulumi.ResourceOption,
+) (*moduleFunctions, error) {
 	plans, err := a.planModules()
 	if err != nil {
 		return nil, err
@@ -371,6 +375,8 @@ func newModuleFunctions(ctx *pulumi.Context, name string, a *LambdaArgs, secrets
 			Callers:   callers,
 			Policy:    a.modulePolicy(p.role, roles, secretsKey, minterRefs),
 			Telemetry: a.Telemetry,
+			// The audit writer is updated before the function.
+			FunctionDependsOn: writerFirst,
 		}
 		// A pass that failed is the next one's: no retry by the platform.
 		fa.NoRetry = []string{LiveAlias, CallerAlias(ClassIssuer)}
@@ -492,4 +498,21 @@ func (a *LambdaArgs) telemetryAudiences() []string {
 		return nil
 	}
 	return a.AdditionalWebIdentityAudiences
+}
+
+// writerFirst are the dependencies of every function NewLambda makes that put
+// the audit writer first: the writer of the installation it installs (its
+// function, which is updated after the layer that holds the catalogue), or the
+// resources Audit.Use names. Nothing is returned with no audit or none to wait
+// for. See AuditUse.DependsOn.
+func (a *LambdaArgs) writerFirst(installed *auditpulumi.Audit) pulumi.ResourceArrayInput {
+	switch {
+	case installed != nil:
+		// A dependency through an output: the component's own DependsOn does not
+		// reach its children, and the function is the one resource that matters.
+		return installed.WriterFunctionArn.ApplyT(func(string) []pulumi.Resource { return nil }).(pulumi.ResourceArrayOutput)
+	case a.Audit != nil && a.Audit.Use != nil:
+		return a.Audit.Use.DependsOn
+	}
+	return nil
 }
