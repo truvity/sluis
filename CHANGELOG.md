@@ -1,5 +1,9 @@
 ## Unreleased
 
+### Added
+
+- **`RoleArgs`: the role lists from the names alone.** A stack that exists before the sluis stack (the foundation stack with the shared key's policy, the audit stack with the ingest queue's) had to build a `LambdaArgs` full of stand-ins (tables, a package digest, a queue) only to ask for the principals, because `Senders`, `Roles`, `ViewerRoles` and `KeyPolicyStatements` validate the whole args. `RoleArgs` holds what the names depend on (region, account, instance, layout, the installation, the function name overrides, the transition roles, and whether the stack creates the backup and restore components) and answers the same four, equal to the full args' for the same names. `FunctionRoles` lists every function once, with its name, ARN and whether the stack creates it, so nothing repeats a default function name; `ViewerMatchers` and `FunctionRole.Matcher` give the access policy's matcher rows (account, role name, path `/`) for the viewer roles and for any one role. `LambdaArgs.RoleArgs()` and `Lambda.RoleArgs()` convert.
+
 ## v1.76.0-rc.5
 
 ### Changed
