@@ -1,5 +1,7 @@
 ## Unreleased
 
+## v1.76.0-rc.5
+
 ### Changed
 
 - **The module roles use the secrets key, the blob credential's key and the minter of a preset's blobs.** With `Keys.Secrets` only the issuer's role held the secrets key, so the GitHub, Slack, Google and Cloudflare functions could not read or write a SecureString under it; each module role now holds it through SSM for exactly its own parameters (and the Google role the sign-in client's), as `ParameterKeyArn` always did. With external blobs and `ParameterKeyArn` the blob credential's key statement shared its Sid with the role's own and was dropped (on the issuer, the other way round): it has a Sid of its own, `SluisBlobCredentialsKey`, so both survive. A module whose document opens blobs from `credentials.preset` mints in its process and now holds the minter's read, the write of the minted records and stored credentials, and the matching key statements (`KeyRole.MinterRefs` and `OpensPresetBlobs` carry it to the shared key's policy); no other role does.
