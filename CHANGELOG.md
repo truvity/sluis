@@ -1,5 +1,7 @@
 ## Unreleased
 
+## v1.76.0-rc.7
+
 ### Added
 
 - **`cloudflare.tick`: how often the rotation looks at the presets.** A credential rotates on the schedule's tick, up to one tick after its `rotation`. The Pulumi library now writes the tick of `CloudflareRotation` (its `Interval`, a plain `rate(...)`, or the 15m default) into the service document when the installation leaves `cloudflare.tick` out; a cron `Rate` leaves it for the installation to state, and an installation's own value is kept. The console's Cloudflare list carries it as `CloudflarePreset.rotation_tick_seconds`, a minute when unset (the Kubernetes loop's). The Cloudflare guide says to make `rotation` a multiple of the tick to rotate when intended.
