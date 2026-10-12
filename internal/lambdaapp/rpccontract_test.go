@@ -7,11 +7,14 @@ import (
 	"go/parser"
 	"go/token"
 	"log/slog"
+	"path/filepath"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
 	"testing"
 
+	"github.com/truvity/sluis/gen/directoryroster/v1/directoryrosterv1connect"
 	backuprpc "github.com/truvity/sluis/internal/backup/rpc"
 	cloudflarerpc "github.com/truvity/sluis/internal/cloudflare/rpc"
 	ghconsole "github.com/truvity/sluis/internal/githubapp/console"
@@ -115,5 +118,99 @@ func TestEveryMethodTheIssuerCallsOnAModuleIsRegisteredByItsFunction(t *testing.
 				}
 			}
 		})
+	}
+}
+
+// consoleGitHubAnsweredHere are the GitHubService methods the issuer's console
+// answers from what it holds itself when the GitHub module is remote, each with
+// the reason it is on purpose. A method not here must reach the module.
+var consoleGitHubAnsweredHere = map[string]string{
+	"ListGitHubAppTokens": "the ring of recent requests is written by the issuer, which decides each mint; " +
+		"the module keeps none, and is asked only which App it is and whether the person may operate it",
+}
+
+// reachesModule reports whether a function of the console package, by the
+// functions and methods it calls in that package, ends in a call to the GitHub
+// module.
+func reachesModule(decls map[string][]*ast.FuncDecl, name string, seen map[string]bool) bool {
+	if seen[name] {
+		return false
+	}
+	seen[name] = true
+	for _, decl := range decls[name] {
+		reached := false
+		ast.Inspect(decl.Body, func(n ast.Node) bool {
+			id, ok := n.(*ast.Ident)
+			if !ok || reached {
+				return !reached
+			}
+			switch id.Name {
+			case "githubModule", "ProxyJSON", "Proxy":
+				reached = true
+			default:
+				reached = reachesModule(decls, id.Name, seen)
+			}
+			return !reached
+		})
+		if reached {
+			return true
+		}
+	}
+	return false
+}
+
+// TestEveryGitHubConsoleMethodIsForwardedOrAnsweredHereOnPurpose holds the
+// issuer's console, for a deployment whose GitHub module is another function,
+// to having no GitHub method that fails for want of the records only the
+// module opens: each GitHubService method reaches the module, or is named in
+// [consoleGitHubAnsweredHere] with a reason. The people search narrows by the
+// GitHub links, which are the module's too, so it is held to reaching the
+// module for them.
+func TestEveryGitHubConsoleMethodIsForwardedOrAnsweredHereOnPurpose(t *testing.T) {
+	files, err := filepath.Glob("../server/*.go")
+	if err != nil || len(files) == 0 {
+		t.Fatalf("no console sources found: %v", err)
+	}
+	decls := map[string][]*ast.FuncDecl{}
+	for _, file := range files {
+		if strings.HasSuffix(file, "_test.go") {
+			continue
+		}
+		f, err := parser.ParseFile(token.NewFileSet(), file, nil, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, d := range f.Decls {
+			if fn, ok := d.(*ast.FuncDecl); ok && fn.Body != nil {
+				decls[fn.Name.Name] = append(decls[fn.Name.Name], fn)
+			}
+		}
+	}
+
+	handler := reflect.TypeOf((*directoryrosterv1connect.GitHubServiceHandler)(nil)).Elem()
+	if handler.NumMethod() == 0 {
+		t.Fatal("GitHubServiceHandler has no methods: the check would pass anything")
+	}
+	declared := map[string]bool{}
+	for i := range handler.NumMethod() {
+		method := handler.Method(i).Name
+		declared[method] = true
+		forwarded := reachesModule(decls, method, map[string]bool{})
+		reason, here := consoleGitHubAnsweredHere[method]
+		switch {
+		case !forwarded && !here:
+			t.Errorf("the console serves GitHubService.%s without reaching the GitHub module, and says nowhere that it should not: "+
+				"with the module remote it can only fail for want of records it does not open", method)
+		case here && reason == "":
+			t.Errorf("GitHubService.%s is answered here without a reason", method)
+		}
+	}
+	for method := range consoleGitHubAnsweredHere {
+		if !declared[method] {
+			t.Errorf("%s is listed as answered here but is no GitHubService method", method)
+		}
+	}
+	if !reachesModule(decls, "githubLogins", map[string]bool{}) {
+		t.Error("the people search's GitHub filter does not reach the GitHub module: its links are the module's when it is remote")
 	}
 }

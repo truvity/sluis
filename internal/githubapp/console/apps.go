@@ -17,6 +17,7 @@ import (
 	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/githubapp"
 	"github.com/truvity/sluis/internal/githubapp/catalogue"
+	"github.com/truvity/sluis/internal/githubapp/mints"
 	"github.com/truvity/sluis/internal/githubroster/appid"
 	"github.com/truvity/sluis/internal/githubroster/catalogueapp"
 	"github.com/truvity/sluis/internal/githubroster/connection"
@@ -268,11 +269,18 @@ func (c *Service) ListGitHubAppTokens(
 		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New(
 			"this deployment mints no installation tokens here, so it keeps none to show"))
 	}
+	return connect.NewResponse(TokensOf(c.deps.Mints, spec.id)), nil
+}
+
+// TokensOf is the ring's last requests of one App, as the console tells them.
+// It is shared by the module and by an issuer that keeps the ring itself: the
+// ring is written where the decision to mint is made, which is the issuer.
+func TokensOf(ring *mints.Ring, app string) *directoryrosterv1.ListGitHubAppTokensResponse {
 	out := &directoryrosterv1.ListGitHubAppTokensResponse{
-		Kept:      int32(c.deps.Mints.PerAppKept()), //nolint:gosec // a page's worth
-		KeptSince: timestampOf(c.deps.Mints.Since()),
+		Kept:      int32(ring.PerAppKept()), //nolint:gosec // a page's worth
+		KeptSince: timestampOf(ring.Since()),
 	}
-	recent := c.deps.Mints.Recent(spec.id)
+	recent := ring.Recent(app)
 	for i := range recent {
 		out.Tokens = append(out.Tokens, &directoryrosterv1.GitHubAppToken{
 			At: timestampOf(recent[i].At), Subject: recent[i].Subject, Proof: recent[i].Proof, Grant: recent[i].Grant,
@@ -280,7 +288,7 @@ func (c *Service) ListGitHubAppTokens(
 			Outcome: recent[i].Outcome, Reason: recent[i].Reason,
 		})
 	}
-	return connect.NewResponse(out), nil
+	return out
 }
 
 // CheckGitHubApp asks GitHub again about one App, whichever kind it is.
