@@ -456,6 +456,13 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 		a.Close()
 		return nil, err
 	}
+	// The console lists and ends sessions through this process's own session
+	// service, as the person signed in to the console. A browser signed in by
+	// recovery has no issuer session to present, and needs none.
+	directory.ConsoleServer().UseSessions(&server.SessionsService{
+		Handler: assembled.Handler(),
+		As:      issuer.WithConsoleCaller,
+	})
 	// The console's Audit page reads the audit installation's query
 	// service as the person signed in, with a token minted here for the
 	// installation's audience. Only now can it be: the issuer that mints
@@ -563,7 +570,9 @@ const auditTokenLifetime = 5 * time.Minute
 // workload), may not read the trail through the console.
 func auditToken(assembled *issuerapp.App, audience string) func(context.Context, access.Identity) (string, time.Time, error) {
 	return func(ctx context.Context, id access.Identity) (string, time.Time, error) {
-		if id.Email == "" {
+		// A recovery sign-in carries its subject as its "address", so the
+		// address alone does not say it is no person the directory knows.
+		if id.Email == "" || id.Source == access.SourceRecovery {
 			return "", time.Time{}, server.ErrNotAdmitted
 		}
 		token, expires, err := assembled.MintFor(ctx, id.Email, audience, auditTokenLifetime)

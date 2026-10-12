@@ -648,3 +648,49 @@ func TestListingNamesClientsAndResources(t *testing.T) {
 		t.Errorf("scopes = %v, want openid and email", s)
 	}
 }
+
+// The console of this process vouches for its own sign-in, which may have no
+// issuer cookie or bearer at all (a recovery sign-in), and the same rules
+// apply to the caller it names: an operator lists everything, anybody else
+// only their own.
+func TestTheConsoleCanVouchForItsCaller(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	state := issuer.NewMemoryState()
+	sessions := issuer.NewSessions(state, time.Hour, 0)
+	svc := service(t, state)
+
+	for _, who := range []string{"ada@north.example", "eli@south.example"} {
+		if _, err := sessions.Record(ctx, issuer.Opened{Identity: who, ClientID: "argocd", How: issuer.HowCode, Token: "t-" + who}); err != nil {
+			t.Fatalf("record: %v", err)
+		}
+	}
+
+	ask := func(ctx context.Context, req *accessissuerv1.ListSessionsRequest) (*connect.Response[accessissuerv1.ListSessionsResponse], error) {
+		return svc.ListSessions(ctx, connect.NewRequest(req))
+	}
+
+	// Without the console's word and without credentials: nobody.
+	if _, err := ask(ctx, &accessissuerv1.ListSessionsRequest{}); connect.CodeOf(err) != connect.CodeUnauthenticated {
+		t.Fatalf("an anonymous call = %v, want unauthenticated", err)
+	}
+
+	operator := issuer.WithConsoleCaller(ctx, "system:serviceaccount:sluis:recovery", true)
+	got, err := ask(operator, &accessissuerv1.ListSessionsRequest{})
+	if err != nil || len(got.Msg.GetSessions()) != 2 {
+		t.Fatalf("an operator the console vouches for: %v, %v", got, err)
+	}
+
+	person := issuer.WithConsoleCaller(ctx, "ada@north.example", false)
+	if _, err := ask(person, &accessissuerv1.ListSessionsRequest{}); connect.CodeOf(err) != connect.CodePermissionDenied {
+		t.Errorf("a person listing everything = %v, want permission denied", err)
+	}
+	got, err = ask(person, &accessissuerv1.ListSessionsRequest{Identity: "ada@north.example"})
+	if err != nil || len(got.Msg.GetSessions()) != 1 {
+		t.Errorf("a person listing their own: %v, %v", got, err)
+	}
+	if _, err := ask(person, &accessissuerv1.ListSessionsRequest{Identity: "eli@south.example"}); connect.CodeOf(err) != connect.CodePermissionDenied {
+		t.Errorf("a person listing another = %v, want permission denied", err)
+	}
+}

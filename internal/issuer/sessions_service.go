@@ -115,6 +115,22 @@ func groupsOf(claims *oidc.AccessTokenClaims) []string {
 	return out
 }
 
+// consoleCallerKey carries the caller the console of this same process vouches
+// for, instead of an issuer cookie or bearer.
+type consoleCallerKey struct{}
+
+// WithConsoleCaller returns a context in which the session service takes the
+// caller to be identity, an operator or not, without a cookie or a bearer.
+//
+// It is how the console reads and ends sessions for somebody signed in to the
+// console alone: a recovery sign-in has no issuer session, so the browser has
+// no issuer cookie to present. A context can only be made by code in this
+// process, so the console, which has authenticated the person itself, is the
+// only one who can say this; a request from a browser cannot.
+func WithConsoleCaller(ctx context.Context, identity string, operator bool) context.Context {
+	return context.WithValue(ctx, consoleCallerKey{}, caller{identity: identity, operator: operator})
+}
+
 // caller is who is asking, and whether they may ask about anyone.
 type caller struct {
 	identity string
@@ -150,6 +166,13 @@ func identityKey(identity string) string { return strings.ToLower(strings.TrimSp
 // JavaScript. The bearer is the cross-origin path, for a console that
 // weaves the operator's view into its own pages.
 func (s *SessionsService) who(ctx context.Context, header http.Header) (caller, error) {
+	// The console in this process has already established who is signed in
+	// to IT -- a directory sign-in or a recovery one, which has no issuer
+	// session at all -- and says so in the context, which no request from
+	// outside can set.
+	if held, ok := ctx.Value(consoleCallerKey{}).(caller); ok {
+		return held, nil
+	}
 	// A cookie whose sign-in does not stand -- past the absolute limit, a
 	// person the directory no longer admits -- proves nobody here, not
 	// even who they are: this service revokes sessions, and a sign-in the

@@ -69,15 +69,27 @@ export const audit = createQueryClient(
   createConnectTransport({ baseUrl: mounted("audit"), jsonOptions: { useProtoFieldName: true } }),
 );
 
-// The issuer's SessionService, same-origin at the domain root — never
-// under this console's own path, however it is
-// mounted. A plain "/" is exactly that root, unaffected by the prefix
-// above. The fetch override is what carries the browser's issuer SSO
-// cookie on a same-origin call, the same cookie `/account` on the issuer
-// itself would read, so a call here needs no bearer and no CORS.
+// The issuer's SessionService. Where the console serves it itself (whoami's
+// `sessions`), the call goes through this console as the person signed in to
+// it, so a sign-in that never touched the issuer -- the console's recovery
+// sign-in -- reads sessions like any other. Otherwise it is a same-origin call
+// at the domain root, never under this console's own path, carrying the
+// browser's issuer SSO cookie: no bearer and no CORS.
+let sessionsViaConsole = false;
+
+/** Route session calls through this console (true) or to the issuer's own
+ *  origin with its cookie (false). Set from whoami; see [sessionsReachable]. */
+export function routeSessionsThroughConsole(on: boolean): void {
+  sessionsViaConsole = on;
+}
+
 const issuerTransport = createConnectTransport({
   baseUrl: "/",
-  fetch: withLegacyFallback((input, init) => globalThis.fetch(input, { ...init, credentials: "include" })),
+  fetch: withLegacyFallback((input, init) => {
+    if (!sessionsViaConsole) return globalThis.fetch(input, { ...init, credentials: "include" });
+    const target = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+    return globalThis.fetch(mounted(new URL(target, window.location.href).pathname.replace(/^\//, "")), init);
+  }),
 });
 
 export const sessions = createClient(SessionService, issuerTransport);
@@ -102,6 +114,9 @@ export type Me = Identity & {
    *  render only when this is set, because there is nothing to read or
    *  end otherwise. */
   issuerUrl?: string;
+  /** the console lists and ends sessions itself, as the person signed in to
+   *  it, so a sign-in with no issuer session (recovery) can use them. */
+  sessions?: boolean;
   /** an audit installation is connected, so the console has an Audit
    *  page; what the person may read there is the installation's to say. */
   audit?: boolean;
@@ -141,7 +156,9 @@ export function issuerIsSameOrigin(issuerUrl?: string): boolean {
  *  them to authenticate again for nothing — the same mistake, in a
  *  browser, that this project refuses to make about a directory. */
 export async function whoami(signal?: AbortSignal): Promise<Me> {
-  return (await fetchIdentity({ path: mounted(".access/whoami"), ...(signal ? { signal } : {}) })) as Me;
+  const me = (await fetchIdentity({ path: mounted(".access/whoami"), ...(signal ? { signal } : {}) })) as Me;
+  routeSessionsThroughConsole(Boolean(me.sessions));
+  return me;
 }
 
 /** A protobuf timestamp, as a Date. */

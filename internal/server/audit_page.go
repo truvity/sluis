@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httputil"
@@ -60,13 +61,13 @@ func (s *ConsoleServer) auditProxy() http.Handler {
 		Transport: transport,
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
 			s.log.WarnContext(r.Context(), "the audit query service could not be reached", logattr.SafeError("error", err))
-			http.Error(w, "the audit trail cannot be read just now", http.StatusBadGateway)
+			connectRefusal(w, http.StatusBadGateway, "unavailable", "the audit trail cannot be read just now")
 		},
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		id, ok := IdentityFrom(r.Context())
 		if !ok {
-			http.Error(w, "sign in first", http.StatusUnauthorized)
+			connectRefusal(w, http.StatusUnauthorized, "unauthenticated", "sign in first")
 			return
 		}
 		method := strings.TrimPrefix(r.URL.Path, auditQueryPrefix)
@@ -74,15 +75,24 @@ func (s *ConsoleServer) auditProxy() http.Handler {
 			http.NotFound(w, r)
 			return
 		}
+		// A recovery sign-in is the root for the day the directory and the
+		// policy cannot be trusted, and a token for the trail is the
+		// directory's and the policy's to give: it is a person's, with the
+		// groups the directory says they hold. Nothing here may mint one
+		// for a recovery, so say so rather than fail trying.
+		if id.Source == access.SourceRecovery {
+			connectRefusal(w, http.StatusForbidden, "permission_denied", errRecoveryAudit)
+			return
+		}
 		token, err := tokens.get(r.Context(), id)
 		if err != nil {
 			if errors.Is(err, ErrNotAdmitted) {
-				http.Error(w, "this sign-in may not read the audit trail", http.StatusForbidden)
+				connectRefusal(w, http.StatusForbidden, "permission_denied", "this sign-in may not read the audit trail")
 				return
 			}
 			s.log.WarnContext(r.Context(), "a token for the audit trail could not be minted",
 				logattr.SafeString("who", id.Who()), logattr.SafeError("error", err))
-			http.Error(w, "the audit trail cannot be read just now", http.StatusBadGateway)
+			connectRefusal(w, http.StatusBadGateway, "unavailable", "the audit trail cannot be read just now")
 			return
 		}
 		out := r.Clone(r.Context())
@@ -94,6 +104,19 @@ func (s *ConsoleServer) auditProxy() http.Handler {
 		out.Header.Set("Authorization", "Bearer "+token)
 		proxy.ServeHTTP(w, out)
 	})
+}
+
+// errRecoveryAudit is said to a recovery sign-in that asks for the trail.
+const errRecoveryAudit = "the audit trail is not read with a recovery sign-in: it is read as a person the directory admits, " +
+	"and a recovery has no directory identity. Sign in through the directory to read it"
+
+// connectRefusal answers in the Connect protocol's error JSON, which is what
+// the page's client reads a message from; a plain-text body would reach the
+// person as nothing but its status ("HTTP 502").
+func connectRefusal(w http.ResponseWriter, status int, code, message string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(map[string]string{"code": code, "message": message})
 }
 
 // auditTokens keeps one minted token per person until shortly before it

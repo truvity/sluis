@@ -182,3 +182,40 @@ func TestAQueryURLWithAPathPrefixKeepsIt(t *testing.T) {
 		t.Errorf("the service was asked %q, want %q", got, want)
 	}
 }
+
+// A recovery sign-in has no directory identity, so the trail is not read with
+// it: it is told so, in the Connect error the page's client reads, and no token
+// is minted nor any call made. Never a 502.
+func TestARecoverySignInIsToldTheTrailIsNotItsToRead(t *testing.T) {
+	t.Parallel()
+	s, service, minted := auditPage(t, func(context.Context, access.Identity) (string, time.Time, error) {
+		return "t", time.Now().Add(time.Hour), nil
+	})
+	recovery := &access.Identity{Email: "system:serviceaccount:sluis:recovery", Source: access.SourceRecovery, Role: access.RoleOperator}
+	w := ask(s, http.MethodPost, "/audit/audit.v1.QueryService/Access", recovery)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("recovery = %d %s, want 403", w.Code, w.Body)
+	}
+	if got := w.Header().Get("Content-Type"); got != "application/json" {
+		t.Errorf("content type = %q, want the Connect error's JSON", got)
+	}
+	if !strings.Contains(w.Body.String(), `"permission_denied"`) || !strings.Contains(w.Body.String(), "recovery sign-in") {
+		t.Errorf("body = %s, want a permission_denied that names the recovery sign-in", w.Body)
+	}
+	if *minted != 0 || len(service.paths) != 0 {
+		t.Errorf("minted %d, reached %v: a recovery must reach nothing", *minted, service.paths)
+	}
+}
+
+// A token that cannot be minted is the service's trouble and says so as a
+// Connect "unavailable".
+func TestAnUnmintableTokenIsUnavailableInConnectJSON(t *testing.T) {
+	t.Parallel()
+	s, _, _ := auditPage(t, func(context.Context, access.Identity) (string, time.Time, error) {
+		return "", time.Time{}, context.DeadlineExceeded
+	})
+	w := ask(s, http.MethodPost, "/audit/audit.v1.QueryService/Access", &access.Identity{Email: "ada@north.example"})
+	if w.Code != http.StatusBadGateway || !strings.Contains(w.Body.String(), `"unavailable"`) {
+		t.Errorf("= %d %s, want 502 with a Connect unavailable", w.Code, w.Body)
+	}
+}
