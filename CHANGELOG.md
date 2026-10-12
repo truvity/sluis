@@ -1,5 +1,9 @@
 ## Unreleased
 
+### Changed
+
+- **A holder's "through ..." reason no longer links a matcher to a provider group.** The group page's "People in it now" linked every reason to the provider group page, including the words of a matcher such as "signed in at tsarev.id", whose page asked the hub for a group of that name and got `invalid_argument: hub: address has no domain`. A domain now leads to the People list filtered by it (`#/people?domain=...`), a "signed in as" address to that person, a workload matcher to nothing, and only a provider group to its page.
+
 ## v1.76.0-rc.6
 
 ### Changed

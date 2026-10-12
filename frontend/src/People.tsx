@@ -22,9 +22,9 @@ import { Facet, Facets, Failure, Loading, Mono, Nothing, Page, Ref, State } from
  *  for — which provider, which domain, whether the account is live, and
  *  whether they linked a GitHub account — and shows the account they
  *  linked rather than only letting you filter on it. */
-export function People({ github: initialGitHub = "" }: { github?: string }) {
+export function People({ github: initialGitHub = "", domain: initialDomain = "" }: { github?: string; domain?: string }) {
   const [provider, setProvider] = useState("");
-  const [domain, setDomain] = useState("");
+  const [domain, setDomain] = useState(initialDomain);
   const [account, setAccount] = useState<AccountFilter>(AccountFilter.UNSPECIFIED);
   const [linked, setLinked] = useState<LinkFilter>(
     initialGitHub === "linked" ? LinkFilter.LINKED : initialGitHub === "not-linked" ? LinkFilter.NOT_LINKED : LinkFilter.UNSPECIFIED,

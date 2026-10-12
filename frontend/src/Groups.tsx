@@ -13,6 +13,7 @@ import { access, adds, ago, at, forHowLong, matcherKind, people as peopleCount, 
 import { atMost, repositoryWords } from "./githubModel";
 import { useAsync } from "./hooks";
 import { paths } from "./router";
+import { viaTarget } from "./viaModel";
 import { SlackChannelsFed } from "./SlackReach";
 import { Failure, Loading, Mono, Names, Nothing, Page, Ref, Rows, Section, State } from "./ui";
 
@@ -190,7 +191,7 @@ export function Group({ name }: { name: string }) {
           primary={(h) => <Ref to={paths.person(h.email)}>{personName(h.givenName, h.familyName, h.email)}</Ref>}
           secondary={(h) => (
             <>
-              {h.email} · through <Names items={h.via.map((why) => ({ label: why, to: paths.directoryGroup(why), mono: true }))} muted />
+              {h.email} · through <Names items={h.via.map((why) => ({ label: why, to: viaTarget(why), mono: true }))} muted />
             </>
           )}
           right={(h) => (
