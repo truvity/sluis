@@ -1,5 +1,7 @@
 ## Unreleased
 
+## v1.76.0-rc.4
+
 ### Changed
 
 - **The Cloudflare module function answers its rotation schedule.** Since the module moved out of the issuer in rc.2, the schedule's `{"kind":"cloudflare"}` event went to the Cloudflare function, which never registered the pass and answered "this function has no cloudflare section": no preset rotated, and a credential with a 1h lifetime expired an hour after the upgrade (its consumers, such as an audit writer reading its archive credential, then failed at start). The function now runs one pass over every preset on that event (`App.TickAll`); a preset that did not rotate fails the event, as on the issuer. Tests hold the function to the event and to naming the failed preset.
