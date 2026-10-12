@@ -165,11 +165,17 @@ The role trusts `pods.eks.amazonaws.com` for this cluster and ServiceAccount.
 | `SluisDenyRestoreIdentity` | Deny `ssm:*` | The restore identity parameter. The role hosts the backup module, whose namespace the identity is in |
 | `SluisDenyRestoreIdentityKey` | Deny `kms:Decrypt` | Any key, when the encryption context `PARAMETER_ARN` is the identity parameter: closes `GetParametersByPath`, which is authorised on the path |
 
-### Backup keys
+### Keys
 
-The backup format v2 encrypts each backup with [age](https://age-encryption.org) to `backup.recipients`. `NewBackup` generates the installation's restore keypair: a `random.RandomBytes` seed of 32 bytes (secret in state, never rotated by an apply), from which the X25519 identity and recipient are derived. The recipient is the first entry of `backup.recipients` in the backup function's document, followed by `ExtraRecipients`. The identity (`AGE-SECRET-KEY-1...`) is stored in the byte codec (`{"value":"<base64>"}`) as a SecureString parameter at `/sluis/<instance>/internal/backup/restore-identity`, encrypted with `ParameterKeyArn`, and the restore document names it with `backup.identity: restore-identity`. The backup role has no key that opens a backup: it is denied the parameter, and the decryption of its value (`SluisDenyRestoreIdentity`, `SluisDenyRestoreIdentityKey`). `SluisKeyPolicyStatements` adds `SluisKeyDenyRestoreIdentity` to the key policy for the same refusal. Only the restore role reads it. Rotating the seed (`pulumi up --replace` on the `<name>-restore-identity-seed` resource) makes the older backups readable only by an `ExtraRecipients` identity, so keep one offline.
-
-`KeyPolicyOptions.BackupArchive` and `RestoreArchive`, `KeyPolicyArgs.BackupArchive` and `RestoreArchive` and `ArchiveGrant.KeyArn` are deprecated: they are accepted and add no statement.
+| Detail | Behavior |
+|---|---|
+| Format | v2 encrypts each backup with [age](https://age-encryption.org) to `backup.recipients`. The backup role holds no key that opens one |
+| Keypair | `NewBackup` makes a 32-byte `random.RandomBytes` seed (secret in state, never rotated by an apply) and derives the X25519 identity and recipient from it |
+| Recipients | The generated recipient, then `ExtraRecipients`, in the backup document. Keep an offline `ExtraRecipients` identity: it opens backups when the installation is gone |
+| Identity | `AGE-SECRET-KEY-1...` in the byte codec (`{"value":"<base64>"}`), a SecureString at `/sluis/<instance>/internal/backup/restore-identity` under `ParameterKeyArn`. The restore document names it with `backup.identity: restore-identity` |
+| Readers | The restore role only. The backup role is denied the parameter and its decryption (`SluisDenyRestoreIdentity`, `SluisDenyRestoreIdentityKey`); `SluisKeyPolicyStatements` adds `SluisKeyDenyRestoreIdentity` |
+| Rotation | `pulumi up --replace` on `<name>-restore-identity-seed` leaves older backups readable by an `ExtraRecipients` identity only |
+| Deprecated | `KeyPolicyOptions` and `KeyPolicyArgs` `BackupArchive` and `RestoreArchive`, and `ArchiveGrant.KeyArn`, are accepted and add nothing |
 
 | Helper | Renders |
 |---|---|
