@@ -181,10 +181,14 @@ func TestTheIssuerCanInvokeOnlyTheAliasesItNeeds(t *testing.T) {
 	if !slices.Equal(invokes, want) {
 		t.Errorf("the issuer may invoke\n%v\nwant\n%v", invokes, want)
 	}
-	// No module function's role invokes anything.
+	// No module function's role invokes anything but, for a controller's
+	// run-now, its own function on the console alias.
 	for _, m := range moduleRoles {
 		for _, s := range statements(t, prop(rec.one(t, policyType, "staging-"+m+"-policy"), "policy").StringValue()) {
-			if slices.Contains(strs(s["Action"]), "lambda:InvokeFunction") {
+			if !slices.Contains(strs(s["Action"]), "lambda:InvokeFunction") {
+				continue
+			}
+			if own := []string{fnArn("sluis-staging-"+m) + ":live-console"}; (m != "github" && m != "slack") || !slices.Equal(strs(s["Resource"]), own) {
 				t.Errorf("%s may invoke %v", m, s["Resource"])
 			}
 		}

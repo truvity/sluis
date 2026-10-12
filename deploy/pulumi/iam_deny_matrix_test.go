@@ -81,8 +81,9 @@ func mxSpecs() []roleSpec {
 		{name: "backup", hosts: []Module{ModuleBackup}, readAll: true},
 		{name: "restore", hosts: []Module{ModuleBackup}, writeAll: true, invokes: []string{mxFn("restore") + ":live-console"}},
 		{name: "cloudflare", hosts: []Module{ModuleCloudflare}},
-		{name: "github", hosts: []Module{ModuleGitHub}},
-		{name: "slack", hosts: []Module{ModuleSlack}},
+		// A controller's run-now starts its own function, on the console alias.
+		{name: "github", hosts: []Module{ModuleGitHub}, invokes: []string{mxFn("github") + ":live-console"}},
+		{name: "slack", hosts: []Module{ModuleSlack}, invokes: []string{mxFn("slack") + ":live-console"}},
 		{name: "google", hosts: []Module{ModuleGoogle}},
 	}
 }

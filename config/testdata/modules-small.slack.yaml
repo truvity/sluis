@@ -6,7 +6,9 @@ adapters:
       queueURL: https://sqs.eu-central-1.amazonaws.com/111122223333/example-audit-ingest
       region: eu-central-1
   trigger:
-    adapter: memory
+    adapter: invoke
+    settings:
+      slack: sluis-example-slack
 console:
   auth:
     aws:

@@ -98,6 +98,12 @@
       "Sid": "SluisSlackBlobList"
     },
     {
+      "Action": "lambda:InvokeFunction",
+      "Effect": "Allow",
+      "Resource": "arn:aws:lambda:r1:111122223333:function:sluis-i1-slack:live-console",
+      "Sid": "SluisInvokeOwnController"
+    },
+    {
       "Action": "sts:GetWebIdentityToken",
       "Effect": "Allow",
       "Resource": "*",

@@ -132,10 +132,25 @@ func (a *LambdaArgs) keyRoles() ([]KeyRole, error) {
 	if err != nil {
 		return nil, err
 	}
+	// The module roles whose own document opens blobs from a preset mint in place:
+	// the key admits them to the minter's parameters and what they write.
+	refs := map[string][]string{}
+	if a.hasModuleFunctions() {
+		plans, err := a.planModules()
+		if err != nil {
+			return nil, err
+		}
+		for i := range plans {
+			if refs[plans[i].role], err = a.moduleMinterRefs(&plans[i]); err != nil {
+				return nil, err
+			}
+		}
+	}
 	var out []KeyRole
 	for i := range rs {
 		r := &rs[i]
-		kr := KeyRole{Role: r.role, Arn: r.arn, AlsoArns: r.also, ReadModules: r.readModule}
+		kr := KeyRole{Role: r.role, Arn: r.arn, AlsoArns: r.also, ReadModules: r.readModule,
+			MinterRefs: refs[r.role.Name], OpensPresetBlobs: len(refs[r.role.Name]) > 0}
 		out = append(out, kr)
 	}
 	return out, nil

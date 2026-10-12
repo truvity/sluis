@@ -168,9 +168,11 @@ func parameterNames(secrets *sluisconfig.Secrets, declared []sluisconfig.Declare
 // (`ports.blob.s3.credentials.preset`) reads: the minter of each account the
 // document declares, or every account's when it declares none (the minter is
 // then remote and its accounts are not in this document). Nil when no preset is
-// used. The role of a function that hosts the Cloudflare module has them
-// already; any other role needs this one cross-grant on layout v5, because the
-// minter's parameter is in the Cloudflare module's prefix.
+// used. This is the issuer's document, whose role holds none of them (the
+// issuer asks the cloudflare function to mint, v1.76 E-FIN). The module
+// functions' documents are read by moduleMinterRefs: a role whose own document
+// opens such blobs mints in its process and holds the minter's read and what it
+// writes (ModuleEnv.OpensPresetBlobs); the Cloudflare function has them already.
 func minterRefsOf(docs map[string]string) ([]string, error) {
 	svc, pol, err := loadDocuments(docs)
 	if err != nil {
@@ -497,12 +499,48 @@ func (a *LambdaArgs) ownModuleDocuments(docs map[string][]byte) (map[string]stri
 			}
 			body = string(patched)
 		}
+		// A controller's run-now invokes its own function, whose name the library
+		// knows (ModuleArgs.FunctionName may rename it).
+		if module == RoleGitHub || module == RoleSlack {
+			patched, err := a.ownModuleTrigger(module, body)
+			if err != nil {
+				return nil, err
+			}
+			body = patched
+		}
 		if err := sluisconfig.ValidateModule(module, []byte(body), []byte(a.Policy)); err != nil {
 			return nil, fmt.Errorf("sluispulumi: %w", err)
 		}
 		out[module] = body
 	}
 	return out, nil
+}
+
+// ownModuleTrigger names the module's own function in the `invoke` trigger of a
+// controller's document, when it chooses that adapter.
+func (a *LambdaArgs) ownModuleTrigger(module, body string) (string, error) {
+	doc, err := yamlMap(body, "Installation")
+	if err != nil {
+		return "", err
+	}
+	adapters, ok := doc["adapters"].(map[string]any)
+	if !ok {
+		return body, nil
+	}
+	trigger, ok := adapters["trigger"].(map[string]any)
+	if !ok || trigger["adapter"] != "invoke" {
+		return body, nil
+	}
+	name := a.moduleFunctionName(module)
+	if cur, _ := trigger["settings"].(map[string]any); len(cur) == 1 && cur[module] == name {
+		return body, nil
+	}
+	trigger["settings"] = map[string]any{module: name}
+	patched, err := yaml.Marshal(doc)
+	if err != nil {
+		return "", err
+	}
+	return string(patched), nil
 }
 
 // withKeys makes the installation carry exactly the keys the library supplies
@@ -628,7 +666,8 @@ func ownLayoutV5(doc map[string]any, a *LambdaArgs) error {
 	}
 	tables := map[string]any{}
 	set := ModuleSet{Instance: a.Instance, Tables: a.TableNames}
-	for _, m := range Modules() {
+	// The tables the issuer's role opens, and no other (roleTables).
+	for _, m := range roleTables(RoleIssuer) {
 		if _, ok := a.State.Tables[m]; ok {
 			tables[string(m)] = set.TableName(m)
 		}
