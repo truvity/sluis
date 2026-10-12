@@ -26,6 +26,10 @@ Guard the prefix where you declare the bucket, with `StorageArgs.ProtectedPrefix
 
 The arguments are in [the Pulumi library](../../../reference/sluis/pulumi-library.md#the-edge-modules).
 
+## Cache the public documents at the edge
+
+Set `PublicCache` and Cloudflare answers the key set and the metadata documents for 5 minutes; requests with an `Origin` header still reach the function. Keep the TTL under the signing keys' prepublish window, and purge these paths after removing a compromised key.
+
 ## Move a stack that built its own domain
 
 The arguments `API.DomainName`, `API.CertificateArn`, `API.TruststorePEM` and `API.TruststoreBucketName` are deprecated. When you set all four, the core library builds the domain itself with no diff and warns.

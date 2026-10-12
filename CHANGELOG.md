@@ -1,5 +1,9 @@
 ## Unreleased
 
+### Added
+
+- **The Cloudflare edge module can cache the public documents at the edge.** `edgecloudflare.PublicCacheRule(host, args)` builds a Cloudflare cache rule for `/keys`, `/.well-known/openid-configuration` and `/.well-known/oauth-authorization-server` (`PublicCacheArgs.Paths` to change them): `GET` and `HEAD` only, an edge TTL of 5 minutes by default (`TTL`, 1 second to 1 hour), and only requests without an `Origin` header, because the service echoes the caller's origin in `Access-Control-Allow-Origin` and Cloudflare ignores `Vary: Origin`. The new optional `Args.PublicCache` makes `NewEdge` build the rule and call `PublicCache.CreateCacheRule(ctx, rule)` to create it in the estate's zone; the module still holds no Cloudflare credential. `Edge.PublicCacheRule` exposes the rule. Tests hold the expression, the Origin exclusion, the defaults and limits, the refusals (host and path characters, TTL bounds, duplicates, a missing callback), and that nothing is created before a refusal.
+
 ## v1.76.1
 
 ### Changed
