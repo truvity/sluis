@@ -1,5 +1,9 @@
 ## Unreleased
 
+### Changed
+
+- **The console no longer says "Not sealed yet" about records whose seal the query service cannot look up.** `sealOf` took any failure of the seal lookup, and the absence of an archive (an `audit-query` configured without `archive`, deliberately, to keep the archive credential off the caller-facing pod), for "no seal", so every record of such an installation showed "Not sealed yet" and an expired archive credential read the same. `Provenance` now carries `seal_unknown`: set when there is no archive to ask or the lookup failed (logged with the seal key), clear when the archive answered, including "no such object", which is still "not sealed yet". The console shows no seal chip when it is set. Observe does not record seal verification in the index, so `verified_at` is still empty from the query service. Tests hold the nil archive, a missing seal, a failing archive and the chip.
+
 ## v1.76.0-rc.5
 
 ### Changed

@@ -183,6 +183,10 @@ type Provenance struct {
 	// VerifiedAt is when that seal was last verified clean. Zero means it
 	// has not been, or the last verification found a problem.
 	VerifiedAt time.Time
+	// SealUnknown is set when the caller could not find out whether the hour is
+	// sealed (no archive to ask, or the ask failed): an empty Digest then does
+	// not mean "not sealed yet".
+	SealUnknown bool
 }
 
 // Capabilities is what an implementation can do.

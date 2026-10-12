@@ -135,6 +135,7 @@ func (h *Handler) Get(
 	}
 	provenance := &auditv1.Provenance{
 		ObjectKey: where.ObjectKey, Line: int64(where.Line), DigestId: where.Digest,
+		SealUnknown: where.SealUnknown,
 	}
 	if !where.VerifiedAt.IsZero() {
 		provenance.VerifiedAt = timestamppb.New(where.VerifiedAt)
