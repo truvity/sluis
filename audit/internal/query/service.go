@@ -519,7 +519,7 @@ func (s *Service) sealOf(ctx context.Context, objectKey string) (string, bool) {
 			return "", false
 		}
 		s.logger().WarnContext(ctx, "audit query: could not look for the seal of a record's hour",
-			"key", key, "error", err)
+			slog.String("key", key), slog.Any("error", err))
 		return "", true
 	}
 	return key, false
