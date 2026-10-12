@@ -65,13 +65,13 @@ export function SlackAppsPage({ onDone }: Props) {
   return (
     <Page
       title="Slack Apps"
-      lede="The Slack Apps this deployment declares in slackApps. Creating one takes a throwaway app configuration token, used once and never kept; installing it is approved in Slack by an owner of the workspace; the bot token that comes back is kept in a Secret, and only for the workspace the policy names."
+      lede="The Slack Apps this deployment declares in slackApps. Creating one takes a throwaway app configuration token, used once and never kept; installing it is approved in Slack by an owner of the workspace; the bot token that comes back is kept in the deployment's secret store, and only for the workspace the policy names."
     >
       <Loading busy={listed.loading} />
       <Failure error={listed.error ?? failure} />
       {listed.value && !listed.value.available ? (
         <Alert severity="info" sx={{ mb: 2 }}>
-          This deployment keeps no state in Kubernetes, so it keeps no Slack Apps: a bot token would not survive a restart.
+          This deployment has no store for its state, so it keeps no Slack Apps: a bot token would not survive a restart.
         </Alert>
       ) : null}
       {listed.value && apps.length === 0 ? (

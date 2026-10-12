@@ -1,5 +1,9 @@
 ## Unreleased
 
+### Changed
+
+- **The console says where an App's key is kept in the words of the store that keeps it.** The Apps page always said "Kubernetes Secret" and, on a Lambda installation, that "this deployment keeps no state in Kubernetes", because only the Kubernetes stores could name a place; the stores of the ports (SSM, OpenBao) named none. `GitHubApp` now carries `secret_place` (the secrets adapter and the stable address beneath which the App's key is written, such as `/sluis/<instance>/internal/github/apps/<id>/`, to which each write adds a fresh ref), and the page labels it "Kubernetes Secret", "SSM parameter", "OpenBao path" or, for an adapter it does not know, "Secret store entry". The Kubernetes Secret's keys are listed for a Kubernetes Secret only, and the other "keeps no state in Kubernetes" notices now say the deployment has no store for its state. `GitHubApp.secret` still carries a Kubernetes Secret's name.
+
 ## v1.76.0-rc.5
 
 ### Changed

@@ -104,9 +104,22 @@ type Deps struct {
 	WebhookPingWindow, WebhookPingEvery time.Duration
 	// Catalogue is every App the deployment declares. Nil declares none.
 	Catalogue *catalogue.Catalogue
+	// Places says where a deployment that keeps secrets in a store of the
+	// ports (SSM, OpenBao) keeps an App's key, by the App's id in that store.
+	// Nil is a deployment that keeps them in Kubernetes Secrets, which the
+	// stores of internal/kube name themselves.
+	Places Places
 	// HTTP makes the calls to GitHub that connecting and disconnecting need.
 	// Nil is a client with a short timeout.
 	HTTP *http.Client
+}
+
+// Places is where the secrets of the ports are kept.
+type Places interface {
+	// GitHubAppPlace is the secrets adapter and the stable address beneath
+	// which the key of the App with this id (`link`, a catalogue id,
+	// `runner-<tier>-<org>`) is kept. ok is false when it is not known.
+	GitHubAppPlace(id string) (adapter, location string, ok bool)
 }
 
 // Service is the module's console handlers.

@@ -214,7 +214,7 @@ export function ChannelsTab({ index, query, onDone }: { index: SlackIndex; query
       </Facets>
       {index.ordinary.value && !index.ordinary.value.available ? (
         <Alert severity="info" sx={{ mb: 2 }}>
-          This deployment keeps no state in Kubernetes, so it keeps no console channel records.
+          This deployment has no store for its state, so it keeps no console channel records.
         </Alert>
       ) : null}
       {!index.loading && rows.length === 0 ? (
@@ -324,7 +324,7 @@ export function ConnectTab({ index, query, onDone }: { index: SlackIndex; query:
       ) : null}
       {index.shared.value && !index.shared.value.available ? (
         <Alert severity="info" sx={{ mb: 2 }}>
-          This deployment keeps no state in Kubernetes, so it keeps no shared channel records.
+          This deployment has no store for its state, so it keeps no shared channel records.
         </Alert>
       ) : null}
       {!index.loading && rows.length === 0 ? <Nothing>{all.length === 0 ? "No shared channel is defined for a workspace you may see." : "No shared channel matches that filter."}</Nothing> : null}

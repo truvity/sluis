@@ -99,3 +99,38 @@ func (m *memConn) PassRequests(context.Context) (map[string]connection.PassReque
 func (m *memConn) Credential(context.Context, string) (connection.Credential, bool, error) {
 	return connection.Credential{}, false, nil
 }
+
+type kubeStore struct{}
+
+func (kubeStore) SecretName() string { return "sluis-github-orgs" }
+
+type portsPlaces struct{}
+
+func (portsPlaces) GitHubAppPlace(id string) (string, string, bool) {
+	return "ssm", "/sluis/prod/internal/github/apps/" + id + "/", true
+}
+
+// Where a key is kept follows the store: a Kubernetes store names its Secret
+// and the keys within it, a deployment on the ports names the adapter and the
+// address of the App, and neither is claimed where nothing says.
+func TestWhereAKeyIsKept(t *testing.T) {
+	keys := []string{"link"}
+	for _, tc := range []struct {
+		name   string
+		deps   Deps
+		store  any
+		id     string
+		expect keyPlace
+	}{
+		{"kubernetes", Deps{}, kubeStore{}, "x", keyPlace{adapter: "kubernetes", location: "sluis-github-orgs", keys: keys}},
+		{"ssm", Deps{Places: portsPlaces{}}, struct{}{}, "app-1", keyPlace{adapter: "ssm", location: "/sluis/prod/internal/github/apps/app-1/"}},
+		{"unknown", Deps{}, struct{}{}, "app-1", keyPlace{}},
+		{"no id", Deps{Places: portsPlaces{}}, struct{}{}, "", keyPlace{}},
+	} {
+		svc := &Service{deps: tc.deps}
+		got := svc.placeOf(tc.store, tc.id, keys)
+		if got.adapter != tc.expect.adapter || got.location != tc.expect.location || len(got.keys) != len(tc.expect.keys) {
+			t.Errorf("%s: placeOf = %+v, want %+v", tc.name, got, tc.expect)
+		}
+	}
+}

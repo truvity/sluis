@@ -45,7 +45,8 @@ func NewMinter(ctx context.Context, cfg Config, log *slog.Logger) (*Minter, erro
 		stores.Close()
 		return nil, fmt.Errorf("ports.adapter %s: the mint reads the catalogue Apps from the State and Secrets ports", stores.Adapter)
 	}
-	base := portstore.New(stores.Ports).WithV4(stores.V4).WithV5(stores.V5)
+	adapter, root := stores.SecretsPlace()
+	base := portstore.New(stores.Ports).WithV4(stores.V4).WithV5(stores.V5).WithPlace(adapter, root)
 	if err = base.RequireSecrets(); err != nil {
 		stores.Close()
 		return nil, fmt.Errorf("ports.adapter %s: %w", stores.Adapter, err)
@@ -98,6 +99,7 @@ func (m *Minter) ServeConsole(ctx context.Context, cfg Config, log *slog.Logger)
 		RunnerTiers:   cfg.policy.RunnerTiers(),
 		CatalogueApps: portstore.NewGitHubCatalogueApps(m.base),
 		Catalogue:     cfg.policy.GitHubCatalogue(),
+		Places:        m.base,
 	}))
 	return nil
 }

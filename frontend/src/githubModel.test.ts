@@ -29,6 +29,7 @@ import {
   purposeWords,
   summaryOf,
   tabOf,
+  keyPlaceWords,
 } from "./githubModel";
 
 type AppInit = MessageInitShape<typeof GitHubAppSchema>;
@@ -120,6 +121,18 @@ describe("appView", () => {
     expect(view.drift).toHaveLength(1);
     expect(view.secret).toBe("access-issuer-github-catalogue-apps");
     expect(view.secretKeys).toHaveLength(2);
+    expect(view.secretAdapter).toBe("kubernetes");
+    expect(view.secretLocation).toBe("access-issuer-github-catalogue-apps");
+  });
+
+  it("carries the store and address a key is kept at when the server says them", () => {
+    const view = app({
+      id: "release-bot",
+      secretPlace: { adapter: "ssm", location: "/sluis/prod/internal/github/apps/release-bot/" },
+    });
+    expect(view.secretAdapter).toBe("ssm");
+    expect(view.secretLocation).toBe("/sluis/prod/internal/github/apps/release-bot/");
+    expect(app({ id: "x" })).toMatchObject({ secretAdapter: "", secretLocation: "" });
   });
 });
 
@@ -312,5 +325,15 @@ describe("Refresh", () => {
     expect(passRequested(org({ passRequestedAt: requested, tick: { at: at(1100) } }))).toBe(false);
     expect(passRequested(org({ tick: { at: at(900) } }))).toBe(false);
     expect(passRequested(org())).toBe(false);
+  });
+});
+
+describe("keyPlaceWords", () => {
+  it("names the place by the store that keeps the key", () => {
+    expect(keyPlaceWords("kubernetes")).toMatchObject({ label: "Kubernetes Secret", listsKeys: true });
+    expect(keyPlaceWords("ssm")).toMatchObject({ label: "SSM parameter", listsKeys: false });
+    expect(keyPlaceWords("openbao")).toMatchObject({ label: "OpenBao path", listsKeys: false });
+    expect(keyPlaceWords("")).toMatchObject({ label: "Secret store entry", listsKeys: false });
+    expect(keyPlaceWords("ssm").hint).not.toMatch(/Kubernetes/);
   });
 });
