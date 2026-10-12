@@ -161,3 +161,37 @@ func TestLambdaArgsConvertToRoleArgs(t *testing.T) {
 		}
 	}
 }
+
+// The archive statements ride KeyPolicyOptions on every path to the key policy,
+// and only when asked for.
+func TestKeyPolicyOptionsAddTheArchiveStatements(t *testing.T) {
+	sh := roleShapes(t)["switching"]
+	sids := func(st []map[string]any) (out []string) {
+		for _, s := range st {
+			if strings.HasPrefix(s["Sid"].(string), "SluisKeyArchive") {
+				out = append(out, s["Sid"].(string))
+			}
+		}
+		return out
+	}
+	plain, err := sh.min.KeyPolicyStatements(arp.KeyPolicyOptions{})
+	if err != nil || len(sids(plain)) != 0 {
+		t.Fatalf("without the option: %v (%v)", sids(plain), err)
+	}
+	o := arp.KeyPolicyOptions{BackupArchive: true, RestoreArchive: true}
+	fromRoles, err := sh.min.KeyPolicyStatements(o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	full := sh.full
+	fromArgs, err := full.KeyPolicyStatements(o)
+	if err != nil || !reflect.DeepEqual(fromRoles, fromArgs) {
+		t.Fatalf("the paths differ (%v)", err)
+	}
+	if got := sids(fromRoles); len(got) != 4 {
+		t.Errorf("archive statements %v, want the backup and restore allows and the two denies", got)
+	}
+	if _, err := arp.KeyPolicyDocument("sluis", fromRoles); err != nil {
+		t.Error(err)
+	}
+}

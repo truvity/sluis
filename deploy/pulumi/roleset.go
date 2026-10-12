@@ -187,6 +187,10 @@ type KeyPolicyOptions struct {
 	// ReaderStatements are the key statements of [ExternalReaderRole]s
 	// (ExternalReaderRole.KeyStatement), merged after the library's.
 	ReaderStatements []map[string]any
+	// BackupArchive and RestoreArchive are those of KeyPolicyArgs: the statements
+	// for the backup archive's encryption context, when the archive is sealed
+	// under this key. Opt-in.
+	BackupArchive, RestoreArchive bool
 }
 
 func (a *LambdaArgs) keyPolicyStatements(o KeyPolicyOptions) ([]map[string]any, error) {
@@ -197,6 +201,7 @@ func (a *LambdaArgs) keyPolicyStatements(o KeyPolicyOptions) ([]map[string]any, 
 	st, err := SluisKeyPolicyStatements(KeyPolicyArgs{
 		Region: a.Region, Account: a.AccountID, Modules: ModuleSet{Instance: a.Instance, Tables: a.TableNames}, Layout: a.Layout,
 		Roles: roles, ExternalReaders: o.ExternalReaders, Admins: o.Admins, Breakglass: o.Breakglass, DenyOtherActions: o.DenyOtherActions,
+		BackupArchive: o.BackupArchive, RestoreArchive: o.RestoreArchive,
 	})
 	if err != nil {
 		return nil, err
