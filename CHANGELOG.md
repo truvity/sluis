@@ -1,5 +1,9 @@
 ## Unreleased
 
+### Changed
+
+- **The audit chart takes annotations for the workload objects themselves.** Every Deployment and CronJob it renders (`writer`, `receiver`, `query`, `observe`, `jobs.notary`, `jobs.verify`, `jobs.purge`, `jobs.clockSync`) now takes `annotations`, rendered on the object's own `metadata`, and the chart takes `commonAnnotations` for all of them (a component's own win). Until now only the pod template carried annotations, which a controller such as Stakater Reloader does not read, so an estate running it with `autoReloadAll` could not stop the indexer and the notary being rolled on every rotation of a short-lived archive credential, though they reread it themselves (`archive.sluisDir`). The defaults are empty and no render changes; set `reloader.stakater.com/auto: "false"` under `observe.annotations` and `jobs.notary.annotations` to opt out (see the chart values reference, "Reloader").
+
 ## v1.76.0-rc.5
 
 ### Changed

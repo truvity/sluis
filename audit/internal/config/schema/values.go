@@ -104,9 +104,16 @@ func Values() []byte {
 		}
 		return base
 	}
+	// Annotations of the workload object itself (the Deployment or CronJob), not
+	// of its pods: `podAnnotations` is the pods'. A controller that reads the
+	// object, such as a reloader, looks here.
+	annotated := func(p m) m {
+		p["annotations"] = m{"type": "object", "additionalProperties": m{"type": "string"}, "description": "Annotations of this component's Deployment or CronJob object (not its pods), merged over `commonAnnotations`; this component's win. An empty string value is kept."}
+		return p
+	}
 	schedule := str("A cron schedule.")
 	job := func(config string, tokens bool, extra m) m {
-		props := with(platform(config, true, tokens), m{"enabled": boolean("Run it."), "schedule": schedule})
+		props := with(annotated(platform(config, true, tokens)), m{"enabled": boolean("Run it."), "schedule": schedule})
 		if extra != nil {
 			props = with(props, extra)
 		}
@@ -127,12 +134,12 @@ func Values() []byte {
 		"mode":             m{"enum": []string{"direct", "stream"}, "description": "`direct`: one process is the front door and the write path. `stream`: a receiver in front and `writer.consumers` writers behind a durable consumer."},
 		"replicas":         integer("Pods of the front door: the writer in direct mode, the receiver in stream mode.", 0, nil),
 		"writer": obj("The writer: the one pod in direct mode, the consumers in stream mode. `enabled: false` when it runs elsewhere.",
-			with(platform("audit-writer", true, true), m{
+			with(annotated(platform("audit-writer", true, true)), m{
 				"enabled":   boolean("Host the write path in this release. False when the writer runs elsewhere (the writer Lambda behind SQS): no writer, receiver, consumers or Service are rendered, and every recording component needs a `sink` that reaches it (`sqs`, or an external front door's `url`)."),
 				"consumers": integer("In stream mode, how many writers consume the stream.", 0, nil),
 			})),
 		"receiver": obj("Stream mode: the receiver, which serves the sink and publishes to the stream.",
-			with(platform("audit-writer", true, true), m{"serviceAccount": def("serviceAccount")})),
+			with(annotated(platform("audit-writer", true, true)), m{"serviceAccount": def("serviceAccount")})),
 		"profiles": m{"type": "object", "description": "The profile document a config names as `deployment`: each profile composed from framework profiles.", "additionalProperties": m{"type": "object"}},
 		"presets": func() m {
 			// The chart's default is no preset configured, which the render refuses with
@@ -145,7 +152,7 @@ func Values() []byte {
 		}(),
 		"acknowledgeMinterCustody":     boolean("Required for any preset that names `credentials_preset`: the statement that every process opening the archive holds the Cloudflare minter, which can mint any right its creating user holds. Prefer `credentials_ref`."),
 		"externalIdentifiersAreOpaque": boolean("The identifiers received for people outside the organisation already mean nothing outside the application's own database."),
-		"query": obj("The query service.", with(platform("audit-query", true, true), m{
+		"query": obj("The query service.", with(annotated(platform("audit-query", true, true)), m{
 			"enabled":        boolean("Run it."),
 			"replicas":       integer("Pods.", 0, nil),
 			"service":        obj("Its Service.", m{"port": integer("The Service's port.", 1, nil)}),
@@ -161,7 +168,7 @@ func Values() []byte {
 				"securityPolicy": m{"type": "object", "not": m{"anyOf": []any{m{"required": []string{"targetRefs"}}, m{"required": []string{"targetRef"}}, m{"required": []string{"targetSelectors"}}}}, "description": "When set, an Envoy Gateway SecurityPolicy (gateway.envoyproxy.io/v1alpha1) is rendered with this as its spec, plus a `targetRefs` the chart sets to this HTTPRoute. `targetRefs`, `targetRef` and `targetSelectors` must not be given: the policy attaches to this route and to nothing else."},
 			}),
 		})),
-		"observe": obj("The indexer: follows the archive by cursor and writes the index the query service reads.", with(platform("audit-observe", true, true), m{
+		"observe": obj("The indexer: follows the archive by cursor and writes the index the query service reads.", with(annotated(platform("audit-observe", true, true)), m{
 			"enabled":        boolean("Run it."),
 			"replicas":       integer("Pods. Several are safe, each reading the same cursors, and one is enough.", 0, nil),
 			"serviceAccount": def("serviceAccount"),
@@ -216,6 +223,7 @@ func Values() []byte {
 		"terminationGracePeriodSeconds": integer("How long a write-path pod has to stop: longer than the writer's 30s shutdown budget plus `preStopSleepSeconds`, which the chart enforces.", 31, 45),
 		"preStopSleepSeconds":           integer("How long the front door sleeps before it is stopped, so that it keeps answering while the endpoints drain. 0 turns it off.", 0, 5),
 		"podAnnotations":                m{"type": "object"},
+		"commonAnnotations":             m{"type": "object", "additionalProperties": m{"type": "string"}, "description": "Annotations on every Deployment and CronJob the chart renders, on the object and not on its pods. A component's own `annotations` win over these."},
 		"podSecurityContext":            m{"type": "object"},
 		"securityContext":               m{"type": "object"},
 		"resources":                     m{"type": "object"},
