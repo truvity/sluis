@@ -1043,6 +1043,15 @@ func (a *LambdaArgs) validate() (LambdaArgs, error) {
 	if err := out.Keys.validate(); err != nil {
 		return out, err
 	}
+	if out.Installation != nil && out.Storage != nil && out.Storage.External != nil {
+		var presets map[string]sluisconfig.CloudflarePreset
+		if out.Installation.Cloudflare != nil {
+			presets = out.Installation.Cloudflare.Presets
+		}
+		if err := out.Storage.External.checkPreset(presets); err != nil {
+			return out, err
+		}
+	}
 	if out.Keys != nil && out.Keys.Secrets != "" && out.ParameterKeyArn != "" {
 		return out, errors.New("sluispulumi: LambdaArgs.Keys.Secrets and ParameterKeyArn both name the key the secrets are encrypted with: set one")
 	}
