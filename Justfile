@@ -304,6 +304,12 @@ release-lint:
 release-verify version:
     hack/release-verify.sh {{version}}
 
+# The OpenID conformance suite's Config profile against a deployed issuer
+# (discovery and the key set; needs docker, curl, jq). On demand: the
+# `conformance` job of security.yaml runs it from a dispatch with an issuer.
+conformance-config issuer:
+    ISSUER={{issuer}} hack/conformance-config.sh
+
 # The reason this repository can be public. CI runs it on every change, in
 # the docs group.
 leak-canary:
