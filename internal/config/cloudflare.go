@@ -168,6 +168,32 @@ var (
 	cloudflarePrototypePattern = regexp.MustCompile(`^[A-Za-z0-9_-]{8,64}$`)
 )
 
+// CloudflareStoredRefPrefix begins the address of the credential the schedule
+// keeps for a preset with `store: external`: external/cloudflare/<preset>.
+const CloudflareStoredRefPrefix = "external/cloudflare/"
+
+// CloudflareStoredRef reports whether ref names the stored credential of a
+// preset (`external/cloudflare/<preset>`), and the preset's name. The name is
+// not checked here: [CheckCloudflareStoredRef] does.
+func CloudflareStoredRef(ref string) (preset string, ok bool) {
+	preset, ok = strings.CutPrefix(ref, CloudflareStoredRefPrefix)
+	if !ok {
+		return "", false
+	}
+	return preset, true
+}
+
+// CheckCloudflareStoredRef refuses an address that is not
+// `external/cloudflare/<preset>` with a preset that is a DNS label, and returns
+// the preset's name.
+func CheckCloudflareStoredRef(ref string) (string, error) {
+	preset, ok := CloudflareStoredRef(ref)
+	if !ok || !CloudflareNamePattern.MatchString(preset) {
+		return "", fmt.Errorf("%q is not an external/cloudflare/<preset> address", ref)
+	}
+	return preset, nil
+}
+
 // CheckCloudflareMinterRef refuses a minter address that is not below internal/.
 func CheckCloudflareMinterRef(ref string) error {
 	if !cloudflareMinterPattern.MatchString(ref) || strings.Contains(ref, "..") {

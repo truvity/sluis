@@ -386,9 +386,6 @@ type LambdaArgs struct {
 
 	// audit is what Audit resolved to (planAudit), set once.
 	audit *auditPlan
-	// minterRefs are the minter parameters a role that does not host the
-	// Cloudflare module reads for blob credentials from a preset (layout v5).
-	minterRefs []string
 	// moduleDocs are the module functions' documents, by module, rendered from
 	// the Installation. Nil with the deprecated Config and Policy.
 	moduleDocs map[string]string
@@ -1030,6 +1027,20 @@ func (a *LambdaArgs) validate() (LambdaArgs, error) {
 		return LambdaArgs{}, errors.New("sluispulumi: LambdaArgs is nil")
 	}
 	out := *a
+	if out.Installation != nil && out.Storage != nil && out.Storage.External != nil {
+		// Before the documents are rendered: a preset that is not there is
+		// named here, and not by the document that would carry it.
+		var presets map[string]sluisconfig.CloudflarePreset
+		if out.Installation.Cloudflare != nil {
+			presets = out.Installation.Cloudflare.Presets
+		}
+		// With module functions the presets are the Cloudflare module's, and the
+		// other functions reach them with cloudflare.remote.
+		remote := out.hasModuleFunctions() && out.Installation.Cloudflare.Declared()
+		if err := out.Storage.External.checkPreset(presets, remote); err != nil {
+			return out, err
+		}
+	}
 	if out.Installation != nil {
 		out.Installation = out.withCloudflareTick()
 		var err error
@@ -1042,15 +1053,6 @@ func (a *LambdaArgs) validate() (LambdaArgs, error) {
 	}
 	if err := out.Keys.validate(); err != nil {
 		return out, err
-	}
-	if out.Installation != nil && out.Storage != nil && out.Storage.External != nil {
-		var presets map[string]sluisconfig.CloudflarePreset
-		if out.Installation.Cloudflare != nil {
-			presets = out.Installation.Cloudflare.Presets
-		}
-		if err := out.Storage.External.checkPreset(presets); err != nil {
-			return out, err
-		}
 	}
 	if out.Keys != nil && out.Keys.Secrets != "" && out.ParameterKeyArn != "" {
 		return out, errors.New("sluispulumi: LambdaArgs.Keys.Secrets and ParameterKeyArn both name the key the secrets are encrypted with: set one")
@@ -1327,11 +1329,6 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 	declaredNames, err := declaredParameters(docs)
 	if err != nil {
 		return nil, err
-	}
-	if a.Layout.has5() {
-		if a.minterRefs, err = minterRefsOf(docs); err != nil {
-			return nil, err
-		}
 	}
 	out := &Lambda{resolved: a}
 	if err := ctx.RegisterComponentResource(LambdaType, name, out, opts...); err != nil {
@@ -1917,7 +1914,6 @@ func newFunctionRole(ctx *pulumi.Context, name, fnName string, a *LambdaArgs, si
 			cloudflareStored:   a.cloudflareStored(),
 			layout:             a.Layout,
 			modules:            ModuleSet{Instance: a.Instance, Tables: a.TableNames},
-			minterRefs:         a.minterRefs,
 			functionArns:       issuerFunctionArns(a),
 		})
 	}).(pulumi.StringOutput)

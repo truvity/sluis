@@ -69,6 +69,17 @@ type (
 // `<Group>/<document>/v<N>`.
 const Group = internal.Group
 
+// CloudflareStoredRefPrefix begins the address of the credential the Cloudflare
+// module rotates for a preset with `store: external`:
+// `external/cloudflare/<preset>`, which `ports.blob.s3.credentialsRef` may name.
+const CloudflareStoredRefPrefix = internal.CloudflareStoredRefPrefix
+
+// CloudflareStoredRef reports whether ref is a stored preset credential's
+// address, and the preset it names.
+func CloudflareStoredRef(ref string) (preset string, ok bool) {
+	return internal.CloudflareStoredRef(ref)
+}
+
 // The values of a Cloudflare preset's `store`: `external` (the default) has the
 // schedule rotate the preset into external/cloudflare/<preset>; `none` makes it
 // on-demand only, with nothing stored.

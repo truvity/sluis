@@ -114,7 +114,7 @@ A pod fed `external/cloudflare/<preset>` by a secrets operator needs no identity
 credential_process = sluisctl cloudflare r2 r2-archive --file /var/run/secrets/cloudflare/r2-archive.json
 ```
 
-The blob adapter mints its own R2 credentials with `ports.blob.s3.credentials: {preset: r2-blobs}`, exclusive with `credentialsRef`.
+Blobs mint R2 credentials with `ports.blob.s3.credentials: {preset: r2-blobs}` or read `credentialsRef: external/cloudflare/r2-blobs`.
 
 ## 6. Verify
 

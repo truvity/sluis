@@ -433,8 +433,8 @@
                   "type": "object"
                 },
                 "credentialsRef": {
-                  "description": "The internal address, `internal/<kind>/<id>`, of the `s3-credentials/v1` document (`access_key_id`, `secret_access_key`) that holds the static credentials for `endpoint`, in the installation's secrets store (the ssm secrets source). Read at start and again after an answer of 403, at most once a minute. Needs `endpoint`; `region` defaults to `auto` with it. Any other address is refused. This static document is the simple way and needs nothing else: no `cloudflare` section is involved.",
-                  "pattern": "^internal/[a-z0-9][a-z0-9-]{0,30}/[a-z0-9][a-z0-9._-]{0,62}$",
+                  "description": "Where the credentials for `endpoint` are, in the installation's secrets store (the ssm secrets source): the internal address, `internal/<kind>/<id>`, of the `s3-credentials/v1` document (`access_key_id`, `secret_access_key`) that holds static credentials, or `external/cloudflare/<preset>`, the `cloudflare/v1` document the Cloudflare module rotates for an R2 preset with `store: external` (the access key is the token's id; it is read again with a third of its time left and after a 403). Read at start and again after an answer of 403, at most once a minute. Needs `endpoint`; `region` defaults to `auto` with it. Any other address is refused. This is the simple way and needs no `cloudflare` section in this document, so it is the one to use when the presets are another module's (`cloudflare.remote`).",
+                  "pattern": "^(internal/[a-z0-9][a-z0-9-]{0,30}/[a-z0-9][a-z0-9._-]{0,62}|external/cloudflare/[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?)$",
                   "type": "string"
                 },
                 "endpoint": {

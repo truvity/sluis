@@ -33,14 +33,16 @@ type ModuleEnv struct {
 	FunctionArns map[string]string
 	// MinterRefs are the Cloudflare minter parameters (internal addresses,
 	// `internal/cloudflare/<account>/minter`, a `*` allowed for the account) that
-	// a role reads for `ports.blob.s3.credentials.preset` without hosting the
-	// Cloudflare module: a read of exactly those parameters and nothing else of
-	// the module. A role that hosts the module has them already.
+	// the backup role reads without hosting the Cloudflare module: a read of
+	// exactly those parameters and nothing else of the module. A role that hosts
+	// the module has them already, and no other role gets them.
 	MinterRefs []string
-	// OpensPresetBlobs says the role's own document opens blobs with
-	// `ports.blob.s3.credentials.preset`, so the role runs the minter in its
-	// process: it reads the minter parameters (MinterRefs) and writes what it
-	// mints. The backup role holds the read whatever the document says.
+	// OpensPresetBlobs has no effect.
+	//
+	// Deprecated: a module role no longer mints its blob credentials in its own
+	// process, so it holds neither the minter's read nor a write of what the
+	// minter keeps. A store whose credentials a preset rotates is read from
+	// external/cloudflare/<preset> (StorageArgs.Blobs.CredentialsRef).
 	OpensPresetBlobs bool
 	// Roles is every role of the installation.
 	Roles []Role
@@ -161,12 +163,13 @@ func ModuleRoleStatements(env ModuleEnv, role Role) ([]map[string]any, error) {
 		keyActions[kmsDecrypt] = true
 		crossArns = append(crossArns, refs...)
 	}
-	if len(env.MinterRefs) > 0 && !own[ModuleCloudflare] && (own[ModuleBackup] || env.OpensPresetBlobs) {
-		// credentials.preset: the minter's credential, read and never written. The
-		// issuer has none: it asks the cloudflare function to mint (v1.76 E-FIN). The
-		// cloudflare function, which hosts the minter, has it already. The backup
-		// role holds it, and so does a role whose own document opens blobs from a
-		// preset (OpensPresetBlobs): its process mints in place.
+	if len(env.MinterRefs) > 0 && !own[ModuleCloudflare] && own[ModuleBackup] {
+		// The minter's credential, read and never written. Only the backup role
+		// holds it. The issuer has none (it asks the cloudflare function to mint,
+		// v1.76 E-FIN), the cloudflare function, which hosts the minter, has it
+		// already, and no other module role mints: a blob store whose credentials
+		// come from a preset reads the credential the Cloudflare module rotates
+		// (external/cloudflare/<preset>, StorageArgs.Blobs.CredentialsRef).
 		var refs []string
 		for _, r := range sortedStrings(env.MinterRefs) {
 			refs = append(refs, arnPrefix+"ssm:"+env.Region+":"+env.Account+":parameter"+env.Modules.rootOf()+"/"+r)
@@ -176,22 +179,6 @@ func ModuleRoleStatements(env ModuleEnv, role Role) ([]map[string]any, error) {
 		})
 		keyActions[kmsDecrypt] = true
 		crossArns = append(crossArns, refs...)
-	}
-	if len(env.MinterRefs) > 0 && !own[ModuleCloudflare] && env.OpensPresetBlobs {
-		// What the minter writes: the record of the tokens it minted
-		// (internal/cloudflare/minted/<preset>) and the credential it stores where
-		// the blobs adapter reads it (external/cloudflare/<preset>). A role that
-		// mints holds nothing else of the module.
-		minted := parameterArnsUnder(env.Region, env.Account,
-			env.Modules.InternalPrefix(ModuleCloudflare)+"/minted", env.Modules.ExternalPrefix(ModuleCloudflare))
-		st = append(st, statement{
-			"Sid": "SluisCrossCloudflareMinted", "Effect": "Allow", "Action": ssmOwnActions, "Resource": minted,
-		})
-		for _, k := range parameterKeyStatements(env.parameterKey(),
-			[]string{kmsEncrypt, kmsDecrypt, "kms:GenerateDataKey"}, minted) {
-			k["Sid"] = sidParamKy + "Minted"
-			st = append(st, k)
-		}
 	}
 	listsAll := false
 	for _, g := range CrossGrants {
