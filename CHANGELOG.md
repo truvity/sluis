@@ -1,5 +1,9 @@
 ## Unreleased
 
+### Added
+
+- **Rendering and loading the same documents again is remembered.** `config.Render`, `config.RenderModules`, `config.ValidateModule` and `config.ModuleSecrets` hold the documents they produce or read to their JSON schemas and decode them, which costs seconds on a realistic estate, and a stack calls them again with the same installation on every `NewLambda`. The outcome of each check, error included, is now remembered by a hash of the bytes it is a function of (bounded to the newest 256 outcomes, safe for concurrent use, computed once when callers ask at the same time), as is what `NewLambda` decodes from its rendered documents. Results and error messages are unchanged: a caller still gets its own copy of every slice it is handed. A repeated render of one installation goes from about 130 ms to 4 ms in `BenchmarkRender`.
+
 ### Changed
 
 - **Lambda functions flush metrics at most once a minute per instance.** Every invocation flushed the meter and tracer providers together, and with cumulative temporality each metric flush re-sent every total, which made up most of an installation's Lambda telemetry egress (about 8 GB a day of DataTransfer-Out on one estate). Traces are still flushed on every invocation. Metrics are flushed on an instance's first invocation and then only when a minute (`metricsInterval`) has passed since its last successful metric flush; a skipped flush loses nothing, because the next one carries the totals, and the only loss is the last minute before the platform retires an instance. The failure backoff is unchanged, and a failed flush does not count as a metric flush. The audit Lambdas flush on their own and are not changed. Tests hold the first flush, the skip inside a minute with traces still flushed, the flush after it, and the backoff.

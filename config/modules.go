@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	internal "github.com/truvity/sluis/internal/config"
+	"github.com/truvity/sluis/internal/memo"
 )
 
 // The modules a Lambda installation runs as functions of their own, by the name
@@ -436,6 +437,19 @@ func (b moduleBuilder) cloudflare() (any, error) {
 
 // verifyModules loads every document as the function that reads it does.
 func verifyModules(d *ModuleDocuments) error {
+	parts := [][]byte{[]byte("modules"), d.Issuer, d.Policy}
+	for _, m := range Modules() {
+		parts = append(parts, []byte(m), d.Modules[m])
+	}
+	_, err := verified.Do(memo.KeyOf(parts...), func() (struct{}, error) { return struct{}{}, verifyModulesUncached(d) })
+	return err
+}
+
+// verified remembers the outcome of loading a set of documents: a function of
+// their bytes alone.
+var verified = memo.New[struct{}](256)
+
+func verifyModulesUncached(d *ModuleDocuments) error {
 	var errs []error
 	if err := withFiles(map[string][]byte{"sluis": d.Issuer, "policy": d.Policy}, func(f map[string]string) error {
 		if _, err := internal.Load[internal.Sluis](f["sluis"]); err != nil {
@@ -462,6 +476,13 @@ func verifyModules(d *ModuleDocuments) error {
 // schema, the decode and the checks a schema cannot make. policy, when given, is
 // the policy document the Cloudflare module's grants are held to.
 func ValidateModule(module string, doc, policy []byte) error {
+	_, err := verified.Do(memo.KeyOf([]byte("module"), []byte(module), doc, policy), func() (struct{}, error) {
+		return struct{}{}, validateModule(module, doc, policy)
+	})
+	return err
+}
+
+func validateModule(module string, doc, policy []byte) error {
 	err := withFiles(map[string][]byte{"sluis": doc, "policy": policy}, func(f map[string]string) error {
 		switch module {
 		case ModuleGitHub:
@@ -506,6 +527,16 @@ func ValidateModule(module string, doc, policy []byte) error {
 // sign-in client, the policy's client secrets, the blob store's credential). The
 // blob store's credential is the one both the issuer and the Google module read.
 func ModuleSecrets(module string, doc, policy []byte) ([]DeclaredSecret, error) {
+	out, err := moduleSecrets.Do(memo.KeyOf([]byte(module), doc, policy), func() ([]DeclaredSecret, error) {
+		return moduleSecretsOf(module, doc, policy)
+	})
+	return slices.Clone(out), err
+}
+
+// moduleSecrets remembers what a module's documents declare.
+var moduleSecrets = memo.New[[]DeclaredSecret](256)
+
+func moduleSecretsOf(module string, doc, policy []byte) ([]DeclaredSecret, error) {
 	var out []DeclaredSecret
 	err := withFiles(map[string][]byte{"sluis": doc, "policy": policy}, func(f map[string]string) error {
 		var pol *PolicyDocument
