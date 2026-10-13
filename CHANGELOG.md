@@ -1,5 +1,7 @@
 ## Unreleased
 
+## v1.76.8
+
 ### Added
 
 - **A blob store can read the credential the Cloudflare module rotates: `ports.blob.s3.credentialsRef: external/cloudflare/<preset>`.** `ExternalBlobs.CredentialsRef` takes the same address in `deploy/pulumi`. The blob adapter reads that `cloudflare/v1` document (the access key is the token's id), reads it again with a third of its time left and once after a 403, and keeps nothing on disk. The library checks that the preset is declared, has an `endpoint`, keeps `store: external` and is at the blobs' endpoint (against `Installation.Cloudflare.Presets`, so it also works when the presets are the Cloudflare module's own document and the other functions use `cloudflare.remote`), grants each function that has the blobs a read of that one parameter and nothing else under `external/cloudflare/`, and renders the Cloudflare function's own blobs with `credentials.preset` so it starts before the first rotation. See [Pulumi library](docs/reference/sluis/pulumi-library.md) and [Cloudflare tokens](docs/guides/sluis/cloudflare-tokens.md).
