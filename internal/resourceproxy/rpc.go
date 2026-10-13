@@ -3,8 +3,8 @@ package resourceproxy
 import (
 	"bytes"
 	"encoding/json"
-	"strings"
-	"unicode"
+
+	"github.com/truvity/sluis/internal/logsafe"
 )
 
 // rpcCall is what an audit line keeps of one JSON-RPC message: its
@@ -75,20 +75,5 @@ func parseOne(raw []byte) (rpcCall, bool) {
 // trail.
 func clean(s string) string { return bounded(s, maxNameLen) }
 
-// bounded is clean with a caller-chosen cap. Line breaks go first and by
-// name, then every other control character; a cut that lands inside a
-// multi-byte character drops the broken tail rather than logging it.
-func bounded(s string, limit int) string {
-	s = strings.ReplaceAll(s, "\n", "")
-	s = strings.ReplaceAll(s, "\r", "")
-	s = strings.Map(func(r rune) rune {
-		if unicode.IsControl(r) {
-			return -1
-		}
-		return r
-	}, s)
-	if len(s) > limit {
-		s = strings.ToValidUTF8(s[:limit], "")
-	}
-	return s
-}
+// bounded is clean with a caller-chosen cap.
+func bounded(s string, limit int) string { return logsafe.Bounded(s, limit) }
