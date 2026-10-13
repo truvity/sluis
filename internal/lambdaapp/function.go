@@ -200,11 +200,12 @@ func Logger(ctx context.Context, service string, level slog.Level) (*slog.Logger
 	return log, f.Flush, nil
 }
 
-// forceFlush sends the batches the global providers hold.
-func forceFlush(ctx context.Context) error {
+// forceFlush sends the batches the global providers hold: the tracer
+// provider's always, the meter provider's when metrics is set.
+func forceFlush(ctx context.Context, metrics bool) error {
 	type flusher interface{ ForceFlush(context.Context) error }
 	var errs []error
-	if p, ok := any(otel.GetMeterProvider()).(flusher); ok {
+	if p, ok := any(otel.GetMeterProvider()).(flusher); ok && metrics {
 		errs = append(errs, p.ForceFlush(ctx))
 	}
 	if p, ok := any(otel.GetTracerProvider()).(flusher); ok {
@@ -222,6 +223,9 @@ const (
 	// doubles with each failure in a row up to flushBackoffMax.
 	flushBackoff    = 5 * time.Second
 	flushBackoffMax = 5 * time.Minute
+	// metricsInterval is the least time between two metric flushes of one
+	// instance, counted from the last successful one.
+	metricsInterval = time.Minute
 )
 
 // flusher is the flush before an invocation returns, which the response waits
@@ -232,14 +236,25 @@ const (
 // hold goes out with a later flush or their own timers, or is dropped when
 // their queues fill. Telemetry never makes a caller wait more than
 // flushBudget, and only once per backoff.
+//
+// Traces are flushed on every invocation. Metrics are flushed on an instance's
+// first invocation and then only when metricsInterval has passed since its
+// last successful metric flush: the meters use cumulative temporality, so a
+// skipped flush loses nothing, because the next one carries the totals, and
+// re-sending them on every invocation was most of the function's telemetry
+// egress. The only loss is the last metricsInterval before the platform
+// retires an instance.
 type flusher struct {
-	flush func(context.Context) error
+	flush func(ctx context.Context, metrics bool) error
 	// now is the clock; nil is time.Now.
 	now func() time.Time
 
 	mu       sync.Mutex
 	failures int
 	skipTill time.Time
+	// lastMetrics is when metrics were last flushed successfully; zero before
+	// the first.
+	lastMetrics time.Time
 }
 
 func (f *flusher) clock() time.Time {
@@ -249,21 +264,27 @@ func (f *flusher) clock() time.Time {
 	return time.Now()
 }
 
-// Flush flushes within flushBudget, unless a recent flush failed.
+// Flush flushes within flushBudget, unless a recent flush failed: traces
+// always, metrics once per metricsInterval.
 func (f *flusher) Flush(ctx context.Context) {
 	f.mu.Lock()
-	if f.clock().Before(f.skipTill) {
+	now := f.clock()
+	if now.Before(f.skipTill) {
 		f.mu.Unlock()
 		return
 	}
+	metrics := f.lastMetrics.IsZero() || now.Sub(f.lastMetrics) >= metricsInterval
 	f.mu.Unlock()
 	fctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), flushBudget)
-	err := f.flush(fctx)
+	err := f.flush(fctx, metrics)
 	cancel()
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if err == nil {
 		f.failures, f.skipTill = 0, time.Time{}
+		if metrics {
+			f.lastMetrics = f.clock()
+		}
 		return
 	}
 	wait := flushBackoffMax
