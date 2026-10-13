@@ -1,5 +1,15 @@
 ## Unreleased
 
+### Changed
+
+- **`NewBackup` no longer creates the `<function>-resume` schedule; an apply deletes it.** Since backup format 2 a run does not pause, and the only answer to `{"kind":"backup","resume":true}` is `idle`, so the schedule invoked the function every five minutes for nothing. An apply of this version deletes the EventBridge schedule `<function>-resume` (the resource `<name>-resume`) of an installation that has one; the scheduler role, its policy and the dead-letter queue stay, because the daily schedule uses them. `ScheduleNames` now lists the daily schedule alone. `BackupScheduleArgs.ResumeRate` is deprecated: it is accepted and ignored, even an invalid value, so no estate stops compiling, and `DefaultBackupResumeRate` is deprecated and unused. The backup function still answers `{"kind":"backup","resume":true}` with `idle` for one release, for a schedule still in flight, and `sluisctl backup run --resume` still answers `idle`. Tests hold that the resume schedule is not declared and that the daily one is unchanged.
+
+### Fixed
+
+- **`keys.archive` is described as deprecated and ignored.** The schema called it "Long-term storage", the audit module's wording from the shared keys schema, although since v1.76.1 the backup module ignores it (as `backup.key` and `backup.region`). The description now says so, at its source in `internal/config/schema`; the generated schemas, the chart's values schema and the configuration and chart-values references follow.
+
+- **Wording of backup format 2 and of one function per module.** The `charts/sluis/examples/backup-v5.yaml` header described the sealed archive of format 1 and now names the age-encrypted `<id>.tar.gz.age` and the `<id>.json` sidecar. The port-adapters reference no longer says the console function is the only one that reads `internal/config/*`, and the high-availability page renames "The controllers in the one process" to "The controllers and the rollout" (the old anchor still works).
+
 ## v1.76.4
 
 ### Added
