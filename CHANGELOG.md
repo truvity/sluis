@@ -1,5 +1,7 @@
 ## Unreleased
 
+## v1.76.7
+
 ### Added
 
 - **`sluisctl cloudflare token --no-cache` (and `cloudflare r2 --no-cache`), or `SLUISCTL_CLOUDFLARE_NO_CACHE=1`.** The commands cached each minted credential under `~/.config/sluisctl/cloudflare/` so a repeat call cost no exchange. With the flag or the variable set they neither read nor write that cache and take no cache lock: the token is never written to disk, and every call mints a new one. Use it where a program execs `sluisctl` and the token must not outlive it. See [sluisctl](docs/reference/sluis/sluisctl.md).
