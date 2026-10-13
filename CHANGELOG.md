@@ -17,6 +17,7 @@
 
 ### Fixed
 
+- **The resource proxy's audit line cleans every caller-supplied string where it writes it (CodeQL #111's pattern).** `internal/resourceproxy/audit.go` logged `rec.method` and `rec.tool` as they were recorded, relying on the parser having cleaned them. The writer now strips line breaks and control characters and caps the length, as it already did for the path, subject, email, name and client. The helper `internal/modcall` added in v1.76.6 (`logValue`) moved to the shared `internal/logsafe` package and both packages use it.
 - **A supplied verify-only key is the estate's kind of key: ECDSA on P-384, or RSA of 2048 bits or more.** v1.76.5 made `deploy/spec.CheckVerifyKey` call the issuer's `ParseVerifyOnlyKey`, which took ES256, ES512 (P-256, P-521 keys) and RSA of any length. The parser now refuses an EC key on any curve but P-384 and an RSA key under 2048 bits, in every encoding (PUBLIC KEY, RSA PUBLIC KEY, certificate, JWK), and `signingKey.verifyOnly[].alg` is `ES384` or `RS256` in the schema. `deploy/pulumi`'s `LambdaArgs.VerifyOnly` check holds the same rule, and the agreement test between `deploy/spec` and the issuer still holds. RSA of 2048 bits or more stays accepted: the previous issuer's RS256 key (relying parties such as Kargo pin it) is published as verify-only for the overlap of a cutover, as the estate's installations do. That key is the old issuer's own pair, not a third party's. A P-256 or P-521 verify-only key now stops the start and the render.
 
 ## v1.76.10
