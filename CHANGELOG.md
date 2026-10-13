@@ -1,5 +1,7 @@
 ## Unreleased
 
+## v1.76.6
+
 ### Fixed
 
 - **Log fields from callers can no longer forge log lines (CodeQL go/log-injection #111).** The log of a refused or failed module call carries the method from the request, the transport's request id and the caller's subject; each is now stripped of line breaks and other control characters and bounded to 256 bytes before it is logged. The message and the keys are unchanged, and an ordinary value is logged as before.
