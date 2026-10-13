@@ -15,7 +15,7 @@ func TestAFailingFlushIsBoundedAndThenSkipped(t *testing.T) {
 	calls := 0
 	var deadline time.Duration
 	failing := true
-	f := &flusher{now: func() time.Time { return now }, flush: func(ctx context.Context) error {
+	f := &flusher{now: func() time.Time { return now }, flush: func(ctx context.Context, _ bool) error {
 		calls++
 		d, _ := ctx.Deadline()
 		deadline = time.Until(d)
@@ -62,5 +62,63 @@ func TestAFailingFlushIsBoundedAndThenSkipped(t *testing.T) {
 	f.Flush(context.Background())
 	if calls != before+1 {
 		t.Fatal("a flush after a success was skipped")
+	}
+}
+
+// Traces go out on every invocation; metrics on the first and then once per
+// metricsInterval after the last successful metric flush.
+func TestMetricsFlushOncePerInterval(t *testing.T) {
+	now := time.Date(2026, 10, 13, 12, 0, 0, 0, time.UTC)
+	var traces, metrics int
+	f := &flusher{now: func() time.Time { return now }, flush: func(_ context.Context, m bool) error {
+		traces++
+		if m {
+			metrics++
+		}
+		return nil
+	}}
+	f.Flush(context.Background())
+	if traces != 1 || metrics != 1 {
+		t.Fatalf("first invocation: traces %d, metrics %d", traces, metrics)
+	}
+	now = now.Add(metricsInterval - time.Second)
+	f.Flush(context.Background())
+	if traces != 2 || metrics != 1 {
+		t.Fatalf("within the interval: traces %d, metrics %d", traces, metrics)
+	}
+	now = now.Add(time.Second)
+	f.Flush(context.Background())
+	if traces != 3 || metrics != 2 {
+		t.Fatalf("after the interval: traces %d, metrics %d", traces, metrics)
+	}
+	// The interval counts from that flush, not from the first.
+	now = now.Add(metricsInterval - time.Second)
+	f.Flush(context.Background())
+	if metrics != 2 {
+		t.Fatalf("metrics = %d, the interval restarts at each successful flush", metrics)
+	}
+}
+
+// A failed flush does not count as a metric flush: the next one carries the
+// metrics again once the backoff has passed, however recent the failure.
+func TestAFailedMetricFlushIsNotCounted(t *testing.T) {
+	now := time.Date(2026, 10, 13, 12, 0, 0, 0, time.UTC)
+	var got []bool
+	fail := true
+	f := &flusher{now: func() time.Time { return now }, flush: func(_ context.Context, m bool) error {
+		got = append(got, m)
+		if fail {
+			return errors.New("503")
+		}
+		return nil
+	}}
+	f.Flush(context.Background())
+	fail = false
+	now = now.Add(flushBackoff)
+	f.Flush(context.Background())
+	now = now.Add(time.Second)
+	f.Flush(context.Background())
+	if len(got) != 3 || !got[0] || !got[1] || got[2] {
+		t.Fatalf("metrics flags = %v, want [true true false]", got)
 	}
 }
