@@ -78,10 +78,10 @@ Expect no output and exit status 0. `rendered/` holds `sluis.yaml` (the service 
 
 ## 3. Fetch the release and pin its digest
 
-Use one release for the Pulumi library and the binary. This tutorial needs v1.75 or later, where the per-module zips start; it uses v1.76.3.
+Use one release for the Pulumi library and the binary. This tutorial needs v1.75 or later, where the per-module zips start; it uses v1.76.4.
 
 ```sh
-VERSION=1.76.3        # the release you chose, without the v
+VERSION=1.76.4        # the release you chose, without the v
 gh release download "v$VERSION" --repo truvity/sluis --dir dist \
   --pattern "sluis-issuer_${VERSION}_linux_arm64.zip" --pattern checksums.txt
 grep "sluis-issuer_${VERSION}_linux_arm64.zip" dist/checksums.txt
@@ -94,8 +94,8 @@ Expect one line: a 64-character SHA-256 and the file name. Copy the digest into 
 In an empty Pulumi Go project (`pulumi new aws-go`), add the library at the release's tag and copy `installation.yaml` beside `main.go`. The truststore is the PEM of the CAs a client certificate must chain to. Make a test CA and client certificate:
 
 ```sh
-go get github.com/truvity/sluis/deploy/pulumi@v1.76.3 github.com/truvity/sluis/deploy/pulumi/edge/cloudflare@v1.76.3 \
-  github.com/truvity/sluis@v1.76.3
+go get github.com/truvity/sluis/deploy/pulumi@v1.76.4 github.com/truvity/sluis/deploy/pulumi/edge/cloudflare@v1.76.4 \
+  github.com/truvity/sluis@v1.76.4
 openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -days 30 \
   -keyout ca.key -out truststore.pem -subj "/CN=demo-client-ca"
 openssl req -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes \
@@ -122,7 +122,7 @@ import (
 const (
 	region       = "eu-central-1"
 	account      = "111122223333"
-	version      = "1.76.3"
+	version      = "1.76.4"
 	lambdaSHA256 = "<the digest from step 3>"
 	certArn      = "<the ACM certificate's ARN>"
 	applyRoleArn = "<the ARN of the IAM role you apply with>"
