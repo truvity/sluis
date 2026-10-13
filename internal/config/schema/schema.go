@@ -630,7 +630,15 @@ func keysSchema() m {
 	delete(out, "$schema")
 	delete(out, "$id")
 	delete(out, "$defs")
-	return inlineDefs(out, defs).(map[string]any)
+	inlined := inlineDefs(out, defs).(map[string]any)
+	// sluis does not use the archive purpose: the shared schema's description
+	// is audit's. Since backup format 2 the backup module ignores the key.
+	if props, ok := inlined["properties"].(map[string]any); ok {
+		if e, ok := props["archive"].(map[string]any); ok {
+			e["description"] = "Deprecated, ignored: the archive key of backup format 1. Accepted so a document that still sets it loads; backups are age-encrypted to `backup.recipients`."
+		}
+	}
+	return inlined
 }
 
 func inlineDefs(v any, defs map[string]any) any {
