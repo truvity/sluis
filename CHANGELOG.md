@@ -1,5 +1,7 @@
 ## Unreleased
 
+## v1.76.5
+
 ### Added
 
 - **`audit/deploy/spec`: the audit deploy names and checks without the Pulumi SDK.** The names `audit/deploy/pulumi` gives an installation's AWS resources (`ComponentRoleName`, `InstallationComponents`, `ArchiveBucketName`) and the checks of the values an estate hands it (`CheckName`, `CheckRolePath`, `CheckLockMode`, `CheckProfile`, `CheckBucketPrefix`, `CheckTelemetryURLs`, `CheckExtensionLayer`) are importable by tooling that must not link a cloud provider SDK. A test in `audit/deploy/pulumi` holds the two equal.
