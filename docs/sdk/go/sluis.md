@@ -1,6 +1,6 @@
 # Go module
 
-The module `github.com/truvity/sluis` verifies a caller, exchanges tokens and evaluates policy. Packages: `identity`, `tokens`, `policy`, `config`, `backend` ([extending](../../guides/sluis/extend.md)). TypeScript: [`@truvity/sluis`](../typescript/sluis.md).
+The module `github.com/truvity/sluis` verifies a caller, exchanges tokens and evaluates policy. Packages: `identity`, `tokens`, `policy`, `policy/compile`, `config`, `backend` ([extending](../../guides/sluis/extend.md)). TypeScript: [`@truvity/sluis`](../typescript/sluis.md).
 
 Both verifiers of [trust](../../concepts/sluis/trust.md) return one `Verified`: `Subject, Email, Name, GivenName, FamilyName, Groups, ServiceAccount`. See [service to service](../../guides/sluis/connect/service-to-service.md).
 

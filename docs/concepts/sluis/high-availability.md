@@ -50,10 +50,9 @@ for that long. Each fetch re-checks that the document's `client_id` matches its 
 
 ## The controllers and the rollout
 
-On Kubernetes the GitHub and Slack controllers run inside `sluis serve`, so the Deployment rolls with the default
+The GitHub and Slack controllers run inside `sluis serve`, so the Deployment rolls with the default
 `RollingUpdate`. An old pod leaves when the new one is Ready: policy loaded, stores open, audit catalogue accepted
-(`/readyz` on `probes.address`, default `:7070`). Pods that crash at start leave the running pods alone. On AWS Lambda
-(layout v4 and later) each module is its own function and there is no pod to roll.
+(`/readyz` on `probes.address`, default `:7070`). Pods that crash at start leave the running pods alone.
 
 A controller runs in every replica, so each target is ticked under a lease from the State port. A lease keeps another
 pod off only when the State is shared.
