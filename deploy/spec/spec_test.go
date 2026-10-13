@@ -10,10 +10,12 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"go.yaml.in/yaml/v3"
 
 	"github.com/truvity/sluis/deploy/spec"
+	"github.com/truvity/sluis/internal/issuer"
 )
 
 func publicPEM(t *testing.T, key any) string {
@@ -106,6 +108,68 @@ func TestChecks(t *testing.T) {
 }
 
 func TestCheckVerifyKey(t *testing.T) {
+	keys := verifyKeys(t)
+
+	for _, c := range []struct{ name, pem, alg string }{
+		{"P-384 for ES384", keys.p384, spec.AlgES384},
+		{"RSA for RS256", keys.rsa2048, spec.AlgRS256},
+		{"P-256 for ES256, which the issuer takes", keys.p256, "ES256"},
+		{"no algorithm: the key's own", keys.p384, ""},
+	} {
+		if err := spec.CheckVerifyKey(c.pem, c.alg); err != nil {
+			t.Errorf("%s: %v", c.name, err)
+		}
+	}
+
+	for want, c := range map[string]struct{ pem, alg string }{
+		"alg says ES384":     {keys.p256, spec.AlgES384},
+		"alg says RS256":     {keys.p384, spec.AlgRS256},
+		"PUBLIC key":         {keys.private, spec.AlgES384},
+		"holds several":      {keys.p384 + keys.p384, spec.AlgES384},
+		"not a JWK or a PEM": {"nonsense", ""},
+	} {
+		err := spec.CheckVerifyKey(c.pem, c.alg)
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("err = %v, want one saying %q", err, want)
+		}
+	}
+}
+
+// TestCheckVerifyKeyAgreesWithTheIssuer feeds the same inputs to the deploy
+// check and to the issuer's own parser and holds their accept and refuse
+// equal: a key the check passes must load in the running issuer, and one the
+// issuer refuses must be refused before the apply.
+func TestCheckVerifyKeyAgreesWithTheIssuer(t *testing.T) {
+	keys := verifyKeys(t)
+	for name, c := range map[string]struct{ pem, alg string }{
+		"p384":             {keys.p384, ""},
+		"p384 es384":       {keys.p384, "ES384"},
+		"p384 rs256":       {keys.p384, "RS256"},
+		"p256":             {keys.p256, "ES256"},
+		"p256 es384":       {keys.p256, "ES384"},
+		"rsa 2048":         {keys.rsa2048, "RS256"},
+		"rsa 2048 es384":   {keys.rsa2048, "ES384"},
+		"rsa 1024":         {keys.rsa1024, "RS256"},
+		"private":          {keys.private, ""},
+		"two blocks":       {keys.p384 + keys.p384, ""},
+		"unknown alg":      {keys.p384, "HS256"},
+		"empty":            {"", ""},
+		"garbage":          {"-----BEGIN PUBLIC KEY-----\nAAAA\n-----END PUBLIC KEY-----\n", ""},
+		"a JWK":            {`{"kty":"EC","crv":"P-384","x":"","y":""}`, ""},
+		"trailing newline": {keys.p384 + "\n\n", "ES384"},
+	} {
+		_, issuerErr := issuer.ParseVerifyOnlyKey([]byte(c.pem), "", c.alg, time.Time{})
+		if got := spec.CheckVerifyKey(c.pem, c.alg) == nil; got != (issuerErr == nil) {
+			t.Errorf("%s: deploy/spec accepts %v, the issuer %v (%v)", name, got, issuerErr == nil, issuerErr)
+		}
+	}
+}
+
+type verifyKeySet struct{ p384, p256, rsa2048, rsa1024, private string }
+
+func verifyKeys(t *testing.T) verifyKeySet {
+	t.Helper()
+
 	p384, err := ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
 	if err != nil {
 		t.Fatal(err)
@@ -121,34 +185,15 @@ func TestCheckVerifyKey(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rsa1024, err := rsa.GenerateKey(rand.Reader, 1024) //nolint:gosec // the test needs a key too short
+	rsa1024, err := rsa.GenerateKey(rand.Reader, 1024) //nolint:gosec // the test needs a short key
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if err := spec.CheckVerifyKey(publicPEM(t, &p384.PublicKey), spec.AlgES384); err != nil {
-		t.Errorf("P-384 for ES384: %v", err)
-	}
-
-	if err := spec.CheckVerifyKey(publicPEM(t, &rsa2048.PublicKey), spec.AlgRS256); err != nil {
-		t.Errorf("RSA 2048 for RS256: %v", err)
-	}
-
-	private := string(pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: []byte("x")}))
-
-	for want, c := range map[string]struct{ pem, alg string }{
-		"curve P-384":           {publicPEM(t, &p256.PublicKey), spec.AlgES384},
-		"not an ECDSA one":      {publicPEM(t, &p384.PublicKey), spec.AlgRS256},
-		"not an RSA one":        {publicPEM(t, &rsa2048.PublicKey), spec.AlgES384},
-		"at least 2048":         {publicPEM(t, &rsa1024.PublicKey), spec.AlgRS256},
-		"a PUBLIC key":          {private, spec.AlgES384},
-		"nothing after it":      {publicPEM(t, &p384.PublicKey) + publicPEM(t, &p384.PublicKey), spec.AlgES384},
-		"is not ES384 or RS256": {publicPEM(t, &p384.PublicKey), "ES256"},
-	} {
-		err := spec.CheckVerifyKey(c.pem, c.alg)
-		if err == nil || !strings.Contains(err.Error(), want) {
-			t.Errorf("err = %v, want one saying %q", err, want)
-		}
+	return verifyKeySet{
+		p384: publicPEM(t, &p384.PublicKey), p256: publicPEM(t, &p256.PublicKey),
+		rsa2048: publicPEM(t, &rsa2048.PublicKey), rsa1024: publicPEM(t, &rsa1024.PublicKey),
+		private: string(pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: []byte("x")})),
 	}
 }
 

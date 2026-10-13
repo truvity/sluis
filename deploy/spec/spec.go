@@ -12,21 +12,17 @@
 package spec
 
 import (
-	"crypto/ecdsa"
-	"crypto/elliptic"
-	"crypto/rsa"
-	"crypto/x509"
-	"encoding/pem"
-	"errors"
 	"fmt"
 	"regexp"
 	"strings"
 	"time"
 
 	internalconfig "github.com/truvity/sluis/internal/config"
+	"github.com/truvity/sluis/internal/issuer"
 )
 
-// The two signing algorithms a verify-only key may be for.
+// The two signing algorithms deploy tooling names for a verify-only key; the
+// issuer accepts others too (ES256, ES512), and CheckVerifyKey follows it.
 const (
 	AlgES384 = "ES384"
 	AlgRS256 = "RS256"
@@ -132,54 +128,16 @@ func CheckBucketPrefix(prefix, region string) error {
 	return nil
 }
 
-// CheckVerifyKey holds one verify-only key to exactly one `PUBLIC KEY` PEM
-// block of the algorithm it is for: ES384 an ECDSA key on P-384, RS256 an RSA
-// key of at least 2048 bits. Anything private is refused: a private block is
-// the wrong PEM type and does not parse as PKIX. An error never carries key
-// material.
+// CheckVerifyKey holds one verify-only key, and the algorithm it is for, to
+// what the running issuer accepts: it IS the issuer's own parser
+// ([issuer.ParseVerifyOnlyKey]), so the deploy check and the issuer cannot
+// disagree about a key. alg may be empty (the key's own algorithm), and the
+// key may be a PEM or a JWK. A private key is refused whatever its encoding,
+// and an error never carries key material.
 func CheckVerifyKey(pemText, alg string) error {
-	if alg != AlgES384 && alg != AlgRS256 {
-		return fmt.Errorf("algorithm %q is not %s or %s", alg, AlgES384, AlgRS256)
-	}
+	_, err := issuer.ParseVerifyOnlyKey([]byte(pemText), "", alg, time.Time{})
 
-	block, rest := pem.Decode([]byte(strings.TrimSpace(pemText)))
-	if block == nil || block.Type != "PUBLIC KEY" {
-		return errors.New("must be one -----BEGIN PUBLIC KEY----- block (a PUBLIC key)")
-	}
-
-	if strings.TrimSpace(string(rest)) != "" {
-		return errors.New("must be exactly one PEM block, with nothing after it")
-	}
-
-	key, err := x509.ParsePKIXPublicKey(block.Bytes)
-	if err != nil {
-		return fmt.Errorf("is not a PKIX public key: %w", err)
-	}
-
-	es384 := alg == AlgES384
-
-	switch k := key.(type) {
-	case *ecdsa.PublicKey:
-		if !es384 {
-			return errors.New("must be an RSA key (RS256), not an ECDSA one")
-		}
-
-		if k.Curve != elliptic.P384() {
-			return errors.New("must be on curve P-384 (ES384)")
-		}
-	case *rsa.PublicKey:
-		if es384 {
-			return errors.New("must be an ECDSA P-384 key (ES384), not an RSA one")
-		}
-
-		if k.N.BitLen() < 2048 {
-			return fmt.Errorf("is a %d-bit RSA key; RS256 needs at least 2048", k.N.BitLen())
-		}
-	default:
-		return fmt.Errorf("is a %T, not an ECDSA or RSA public key", key)
-	}
-
-	return nil
+	return err
 }
 
 // CheckCloudflareRotation holds a Cloudflare preset's token lifetime and
