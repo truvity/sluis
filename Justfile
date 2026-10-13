@@ -1,5 +1,6 @@
 # Development commands for sluis. Tools come from devbox
-# (`devbox shell`, or direnv); CI runs each recipe as its own job.
+# (`devbox shell`, or direnv). CI runs the recipes in groups, one job per
+# group: the `ci-*` recipes near `check`, which `just` runs the same way.
 
 # Disable go.work (a parent workspace interferes with standalone module builds)
 export GOWORK := "off"
@@ -105,22 +106,26 @@ lambda-size: console
     [ "$built" -ge 3 ] || { echo "lambda-size: only $built mains built, want at least the issuer, cloudflare and backup" >&2; exit 1; }
 
 # Run unit tests
-# `console` first, and the same on every recipe that COMPILES Go: CI
-# runs each recipe as its own job in a fresh checkout, so nothing else
-# has built the bundle the binary embeds. Locally this is invisible --
-# `check` runs `build` first and the bundle is already there -- and in CI
-# it is `pattern all:dist: no matching files found`, four jobs at once.
+# `console` first, and the same on every recipe that COMPILES Go: in a
+# fresh checkout nothing else has built the bundle the binary embeds, and
+# the compiler says `pattern all:dist: no matching files found`. The CI
+# groups run these with `--no-deps` after `console-ready` instead.
 test: console
     go test ./... -coverprofile=coverage.out
 
-# The whole module under the race detector. Not part of `check`: -race
-# needs cgo and recompiles every package instrumented, which makes the
-# run several times slower than `test`, and a push should not pay that;
-# CI runs it as its own job. devbox forces CGO_ENABLED=0 and the race
-# detector refuses to run without cgo, so it is switched back on here
-# (gcc is in devbox). `console` first for the same reason as `test`.
+# The whole module under the race detector: the suite `check` and CI run.
+# It is the same suite as `test`, whose coverage nothing reads, so CI runs
+# it once, instrumented. devbox forces CGO_ENABLED=0 and the race detector
+# refuses to run without cgo, so it is switched back on here (a C compiler
+# must be on PATH). `console` first for the same reason as `test`.
+#
+# A failed test is rerun, up to twice (gotestsum --rerun-fails), and never
+# after a data race; the tests that were rerun are written to dist/ci/,
+# where hack/ci-group.sh lists them as flaky. A test that fails three times
+# fails the recipe.
 test-race: console
-    env CGO_ENABLED=1 go test -race ./...
+    @mkdir -p dist/ci
+    env CGO_ENABLED=1 gotestsum --format pkgname --rerun-fails --rerun-fails-abort-on-data-race --rerun-fails-report dist/ci/reruns-test-race.txt --packages ./... -- -race
 
 # The LocalStack the S3 Blob and DynamoDB State adapters are tested against. Pinned
 # by digest, and the community 4.x line: LocalStack's `latest` and `stable` now
@@ -131,7 +136,7 @@ s3_image := "localstack/localstack@sha256:3ebc37595918b8accb852f8048fef2aff047d4
 
 # The S3 Blob and DynamoDB State adapters against LocalStack, started
 # with `docker run` (no testcontainers) and removed afterwards. Not part of
-# `check`, which needs nothing but the checkout; CI runs it as its own job. It
+# `check`, which needs nothing but the checkout; CI's services job runs it. It
 # fails if the conformance tests skipped (hack/s3-conformance.sh,
 # hack/dynamodb-conformance.sh).
 test-s3:
@@ -299,7 +304,8 @@ release-lint:
 release-verify version:
     hack/release-verify.sh {{version}}
 
-# The reason this repository can be public. Runs in CI as its own job.
+# The reason this repository can be public. CI runs it on every change, in
+# the docs group.
 leak-canary:
     hack/leak-canary.sh
 
@@ -535,6 +541,14 @@ ts-package: deps
 ts: ts-package
     cd ts && npx tsc --noEmit && npx vitest run
 
+# frontend/dist for the recipes that embed it, built only when it is absent.
+# The CI groups run their recipes with `--no-deps`, after this: in CI the
+# bundle is restored from a cache keyed on its sources, and `check` builds it
+# fresh in `ci-web` before any Go group runs. Locally, an old bundle is kept:
+# `just console` rebuilds it.
+console-ready:
+    @if [ -z "$(ls -A frontend/dist 2>/dev/null)" ]; then just console; else echo "console-ready: frontend/dist is there"; fi
+
 # Build the console SPA into frontend/dist, which the Go binary embeds.
 #
 # NOT committed, and `build` depends on it so the embed always has
@@ -582,15 +596,39 @@ audit-sentences:
         (cd audit && go run ./cmd/audit messages "$root/internal/audit/catalogue/roster.yaml")
     } > frontend/src/auditSentences.ts
 
-# Run all checks (build + test + lint + chart-lint + telemetry + leak-canary)
-# Everything CI runs, so that the pre-push hook catches what CI would.
+# The CI groups. Each is one job of .github/workflows/ci.yaml and one row on a
+# pull request, and runs here exactly as there: `just ci-go-lint` is the
+# go-lint job. hack/ci-group.sh runs every recipe of the group even after one
+# fails, lists each with its result, and fails at the end if any failed. The
+# Go groups are split by what they hold in memory, so that the build and the
+# linter never share a runner: compilers (go-build), the race-instrumented
+# suite (go-test), and type-checkers with what reuses their build cache
+# (go-lint: the nested modules' tests compile what golangci-lint already did).
+ci-go-build:
+    hack/ci-group.sh go-build console-ready fmt cross lambda-size build release-lint archive-check
+
+ci-go-test:
+    hack/ci-group.sh go-test console-ready test-race
+
+ci-go-lint:
+    hack/ci-group.sh go-lint console-ready lint pulumi-test storage-test chart-lint telemetry release-chain audit-catalogue
+
+# The TypeScript package and the console's own tests and build, from a clean
+# install. `tidy` first, as `deps` has it.
+ci-web:
+    hack/ci-group.sh web tidy deps ts console
+
+ci-docs:
+    hack/ci-group.sh docs docs-check leak-canary
+
+# Run all checks: every CI group except the ones that need more than the
+# checkout (audit, which fetches from a schema registry; the service
+# containers; the kind cluster), so that the pre-push hook catches what CI
+# would. `ci-web` first: it builds the console the Go groups embed.
 # `vuln` is deliberately not here: run it on its own with `just vuln`,
 # the same way `.github/workflows/security.yaml` does.
-#
-# `ts` is in here despite being slow: it typechecks and tests the
-# published package, which nothing else does. `console` arrives through
-# `build`, which needs it.
-check: build test pulumi-test storage-test lint chart-lint telemetry archive-check release-lint docs-check leak-canary audit-catalogue ts
+check:
+    hack/ci-group.sh check ci-web ci-go-build ci-go-test ci-go-lint ci-docs
 
 # ---------------------------------------------------------------------------
 # audit/ — the audit trail component (moved here from truvity/audit).
@@ -702,7 +740,7 @@ audit-test:
 # contributor without Postgres still runs everything else, and `check` stays
 # hermetic. This runs the whole suite rather than `./index/...`, because the
 # writer's end-to-end tests need the database too.
-# CI runs this as its own job with a service container.
+# CI's services job runs it with a service container (hack/audit-service-tests.sh).
 #
 # This starts a Postgres under .devbox, initialising it on first use.
 [working-directory: 'audit']
@@ -749,8 +787,8 @@ audit-test-s3:
 # runs here — the searchers' conformance suite against all three searchers, the
 # transports' corpus, the archive walks, the transit keys and signer, and the
 # read-only conformance run against an embedded query service. A few minutes;
-# not part of `check`, which needs nothing but the checkout. CI runs it as its
-# own job.
+# not part of `check`, which needs nothing but the checkout. CI's services job
+# runs the same tests (hack/audit-service-tests.sh).
 [working-directory: 'audit']
 audit-conformance:
     #!/usr/bin/env bash
@@ -789,10 +827,14 @@ audit-conformance:
 # toolchain. Putting it in the gate would mean every contributor needs one to
 # run the gate at all. CI runs this as its own job, where the toolchain is the
 # runner's own.
+#
+# A failed test is rerun up to twice, as `test-race` has it; dist/ci/ keeps
+# the list.
 [working-directory: 'audit']
 audit-race:
-    CGO_ENABLED=1 go test -race ./...
-    cd sdk && CGO_ENABLED=1 go test -race ./...
+    @mkdir -p ../dist/ci
+    CGO_ENABLED=1 gotestsum --format pkgname --rerun-fails --rerun-fails-abort-on-data-race --rerun-fails-report ../dist/ci/reruns-audit-race.txt --packages ./... -- -race
+    cd sdk && CGO_ENABLED=1 gotestsum --format pkgname --rerun-fails --rerun-fails-abort-on-data-race --rerun-fails-report ../../dist/ci/reruns-audit-race-sdk.txt --packages ./... -- -race
 
 # Run linters
 [working-directory: 'audit']
@@ -967,7 +1009,7 @@ audit-telemetry:
 
 # The TypeScript package: install, typecheck, test, build, and check what a
 # publish would ship. Not part of `check`, which needs nothing but the
-# checkout: this fetches from the npm registry. CI runs it as its own job.
+# checkout: this fetches from the npm registry. CI runs it in the audit job.
 [working-directory: 'audit']
 audit-ts:
     cd ts && npm ci --no-audit --no-fund
@@ -1093,3 +1135,10 @@ audit-e2e-all: audit-e2e-snapshot audit-e2e-fixture audit-e2e-install audit-e2e-
 # `just vuln` on its own to check.
 [working-directory: 'audit']
 audit-check: audit-build audit-test audit-lint audit-proto audit-drift audit-schemas audit-chart audit-telemetry audit-pages audit-sdk-closure audit-pulumi-test
+
+# The audit job of CI: audit-check, its dependencies listed (the group runs
+# with `--no-deps`), and what needs a C toolchain or the network: the race
+# detector, which runs the suite `audit-test` runs, so CI runs it once; the
+# TypeScript drift check; the TypeScript packages.
+ci-audit:
+    hack/ci-group.sh audit audit-fmt audit-build audit-race audit-lint audit-proto audit-generate-local audit-ts-sentences audit-config-schemas audit-drift audit-schemas audit-chart audit-telemetry audit-pages audit-sdk-closure audit-pulumi-test audit-generate audit-drift-ts audit-ts
