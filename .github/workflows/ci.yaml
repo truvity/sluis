@@ -40,12 +40,30 @@ jobs:
           BASE: ${{ github.event.pull_request.base.sha }}
         run: hack/ci-plan.sh
 
+  # The console, built and tested once: the Go groups embed frontend/dist and
+  # download it from here. Skipped when no Go group is planned.
+  console:
+    needs: plan
+    if: contains(needs.plan.outputs.groups, '"go-')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: truvity/ci-actions/setup-devbox@0fcf84dbeb8d406bce34d969e6cc32592af5cb5b # v1.15.0
+      - run: devbox run -- just ci-console
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: console
+          path: frontend/dist
+          retention-days: 1
+          if-no-files-found: error
+
   # go-build, go-test, go-lint, web, docs, audit. The Go groups embed the
-  # console: frontend/dist comes from a cache keyed on its sources, and the
-  # group's `console-ready` builds it on a miss.
+  # console they download from the `console` job.
   group:
     name: ${{ matrix.group }}
-    needs: plan
+    needs: [plan, console]
+    if: ${{ !cancelled() && needs.plan.result == 'success' && needs.console.result != 'failure' }}
     runs-on: ubuntu-latest
     timeout-minutes: 40
     strategy:
@@ -59,10 +77,10 @@ jobs:
           fetch-depth: ${{ matrix.group == 'docs' && 0 || 1 }}
       - uses: truvity/ci-actions/setup-devbox@f9130c63db2899c18884c027a7eade20d0ab796a # v1.18.0
       - if: startsWith(matrix.group, 'go-')
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
+          name: console
           path: frontend/dist
-          key: console-${{ hashFiles('frontend/**', 'ts/**', 'audit/ts/**', 'audit/react/**', 'devbox.lock') }}
       # golangci-lint's analysis cache: nothing else keeps it between runs.
       - id: golangci
         if: matrix.group == 'go-lint' || matrix.group == 'audit'
@@ -159,22 +177,25 @@ jobs:
   # `check` never sees. Every job the plan picked must succeed; one it did not
   # pick must be skipped. Failed, cancelled, or skipped when planned is red.
   check:
-    needs: [plan, group, services, e2e]
+    needs: [plan, console, group, services, e2e]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - env:
           PLAN: ${{ needs.plan.result }}
+          CONSOLE: ${{ needs.console.result }}
           GROUP: ${{ needs.group.result }}
           SERVICES: ${{ needs.services.result }}
           E2E: ${{ needs.e2e.result }}
+          WANT_CONSOLE: ${{ contains(needs.plan.outputs.groups, '"go-') && 'success' || 'skipped' }}
           WANT_SERVICES: ${{ needs.plan.outputs.services != '' && 'success' || 'skipped' }}
           WANT_E2E: ${{ needs.plan.outputs.audit == 'true' && 'success' || 'skipped' }}
         run: |
           fail=0
           verdict() { echo "$1: $2 (wanted $3)"; [ "$2" = "$3" ] || fail=1; }
           verdict plan "$PLAN" success
+          verdict console "$CONSOLE" "$WANT_CONSOLE"
           verdict group "$GROUP" success
           verdict services "$SERVICES" "$WANT_SERVICES"
           verdict e2e "$E2E" "$WANT_E2E"
