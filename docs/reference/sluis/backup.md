@@ -88,7 +88,7 @@ age -d -i key.txt 20261013T020000Z-ab12cd.tar.gz.age | tar xz
 | Event or method | Callers | Answers |
 |---|---|---|
 | `{"kind":"backup"}` | EventBridge Scheduler, daily | `outcome`: `completed`, `contended` or `maintenance`. A failed run fails the invocation |
-| `{"kind":"backup","resume":true}` | the `<function>-resume` schedule, `Schedule.ResumeRate` | `idle`, touching nothing: a run is one invocation since format 2 |
+| `{"kind":"backup","resume":true}` | a `<function>-resume` schedule left by an earlier release (an apply of v1.76.5 or later deletes it) | `idle`, touching nothing |
 | `backup.status` | console, admin, breakglass | `latest`, `lastCompleted`, `unfinished`, `retention` |
 | `backup.list` | console, admin, breakglass | `backups`, newest first; `limit` |
 | `backup.run` | admin, breakglass | A run's result; `resume` answers `idle` |

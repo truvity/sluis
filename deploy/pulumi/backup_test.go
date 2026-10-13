@@ -231,12 +231,11 @@ func TestTheBackupFunctionHasOneAliasPerCallerClassAndLive(t *testing.T) {
 
 func TestTheBackupSchedulesSendTheEventsAndHaveADeadLetterQueue(t *testing.T) {
 	rec, out := mustBackup(t, nil)
-	if out["scheduleNames"] != "sluis-staging-backup-daily,sluis-staging-backup-resume" {
+	if out["scheduleNames"] != "sluis-staging-backup-daily" {
 		t.Errorf("schedules = %s", out["scheduleNames"])
 	}
 	for res, want := range map[string]struct{ expr, input string }{
-		"staging-backup-daily":  {"cron(0 2 * * ? *)", `{"kind":"backup"}`},
-		"staging-backup-resume": {"rate(5 minutes)", `{"kind":"backup","resume":true}`},
+		"staging-backup-daily": {"cron(0 2 * * ? *)", `{"kind":"backup"}`},
 	} {
 		s := rec.one(t, "aws:scheduler/schedule:Schedule", res)
 		if prop(s, "scheduleExpression").StringValue() != want.expr {
@@ -271,7 +270,7 @@ func TestPausedBackupSchedulesAreDeclaredDisabled(t *testing.T) {
 	rec, _ := mustBackup(t, func(a *arp.BackupArgs) {
 		a.Schedule = arp.BackupScheduleArgs{Daily: "cron(30 3 * * ? *)", Paused: true}
 	})
-	for _, res := range []string{"staging-backup-daily", "staging-backup-resume"} {
+	for _, res := range []string{"staging-backup-daily"} {
 		if got := prop(rec.one(t, "aws:scheduler/schedule:Schedule", res), "state").StringValue(); got != "DISABLED" {
 			t.Errorf("%s state = %q", res, got)
 		}

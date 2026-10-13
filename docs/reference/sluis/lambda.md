@@ -33,7 +33,7 @@ See [sluis on AWS Lambda](../../concepts/sluis/lambda.md) and [the Pulumi librar
 | `{"kind":"clients"}` | One reconcile of the generated client secrets, and nothing else | EventBridge Scheduler |
 | `{"kind":"refresh"}` | The name before `clients`, accepted for one release: the same reconcile, and one directory refresh under the refresh lease (`DirectoryRefresh.Rate`, 15 minutes) where the directory is hosted in the process, none where `google.remote` is set | EventBridge Scheduler |
 | `{"kind":"check"}` | Each declared secret is read; a missing one fails it | A deploy |
-| `{"kind":"backup"}`, `{"kind":"backup","resume":true}` | The [backup module](backup.md)'s function only: a backup; `resume` answers `idle` since format 2 | EventBridge Scheduler |
+| `{"kind":"backup"}`, `{"kind":"backup","resume":true}` | The [backup module](backup.md)'s function only: a backup; `resume` answers `idle` since format 2; the library no longer creates a resume schedule | EventBridge Scheduler |
 
 A target is a GitHub organisation, `github:links` or a Slack workspace. A pass holds its DynamoDB lease and returns `{"kind":"tick","target":"acme","outcome":"ran"}`.
 
