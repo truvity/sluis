@@ -1,6 +1,6 @@
 # How does the GitHub controller decide?
 
-The GitHub controller is a loop inside the sluis process, enabled by `controllers.github` in the service document ([one process](design.md#one-process)). It has no listener and no console. It holds the GitHub App keys and writes to GitHub.
+The GitHub controller is a loop in the GitHub module's process, enabled by `controllers.github` in the service document ([one binary per module](design.md#one-binary-per-module)). It has no listener and no console. It holds the GitHub App keys and writes to GitHub.
 
 Each pass makes an organisation's teams and membership match the policy's `github` table. To connect an organisation, see [connect a GitHub organisation](../../guides/sluis/connect/github-organisation.md). For the Secrets and records, see the [GitHub controller reference](../../reference/sluis/github-organisation.md).
 

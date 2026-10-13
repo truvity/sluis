@@ -8,7 +8,8 @@ Each page is one task. A shell is needed for the export, a restore, a migration,
 | get back in when nobody is an operator | [Lost operator access](lost-operator-access.md) |
 | do the same on Lambda, with the recovery password | [Recover on Lambda](recover-on-lambda.md) |
 | understand a console symptom, or a rollout that stalls | [Check health](check-health.md) |
-| back up or restore what the console holds, Slack state included | [Back up and restore](back-up-and-restore.md) |
+| run the backup module on layout v5, verify a backup, restore one | [Back up and restore on layout v5](back-up-on-layout-v5.md) |
+| back up or restore what the console holds on the legacy store, Slack state included | [Back up and restore](back-up-and-restore.md) |
 | write everything the service manages to one file | [Export](export.md) |
 | rotate a credential, the session key or a Slack token | [Rotate keys and credentials](rotate-keys-and-credentials.md) |
 | let the issuer generate a confidential client's secret | [Let the issuer generate a client's secret](../let-the-issuer-generate-a-clients-secret.md) |

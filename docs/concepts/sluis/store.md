@@ -29,8 +29,8 @@ opens from the credential stored beside it.
 If that credential is missing or refused, the process says so and carries on, so one directory never takes the others down.
 
 Each credential carries a copy of its record without its health, so the credentials alone restore an installation.
-Start-up puts back every record missing beside a credential. A deployment makes the backup with an export or a
-`PushSecret` per bundle. Nothing in the service depends on the copy.
+Start-up puts back every record missing beside a credential. On layout v5 the backup module makes the backup; the
+legacy store uses a `PushSecret` per bundle. Nothing in the service depends on the copy.
 
 Without a backup, **Reconnect** recovers a lost workspace credential, and whatever declared a secret re-delivers it. The
 console never returns secret material and the logs never print it. **Disconnect** revokes the token at the backend before

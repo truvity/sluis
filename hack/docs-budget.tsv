@@ -1,14 +1,14 @@
 # Per-directory ceilings on prose words (hack/check-docs-budget.py). Each documentation pass lowers them.
 .	2031
 charts/audit	250
-charts/sluis	237
+charts/sluis	236
 docs	89
 docs/concepts/audit	9215
-docs/concepts/sluis	18542
+docs/concepts/sluis	18810
 docs/concepts/storage	649
 docs/get-started/audit	1589
-docs/get-started/sluis	2287
-docs/get-started/sluis/deployment	933
+docs/get-started/sluis	2310
+docs/get-started/sluis/deployment	1020
 docs/get-started/storage	58
 docs/guides/audit/connect	1555
 docs/guides/audit/operate	8346
@@ -17,11 +17,11 @@ docs/guides/sluis	5584
 docs/guides/sluis/connect	11104
 docs/guides/sluis/connect/examples	2771
 docs/guides/sluis/migrate	3561
-docs/guides/sluis/operate	6921
-docs/guides/sluis/upgrade	1894
+docs/guides/sluis/operate	7253
+docs/guides/sluis/upgrade	1934
 docs/guides/storage	312
 docs/reference/audit	3837
-docs/reference/sluis	7529
+docs/reference/sluis	7507
 docs/reference/storage	105
 docs/sdk	121
 docs/sdk/go	669

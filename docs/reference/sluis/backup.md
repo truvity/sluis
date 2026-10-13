@@ -11,7 +11,8 @@ The backup module writes the installation, encrypted with age, to S3 ([ADR 0071]
 | `backup.recipients` | The age X25519 public keys (`age1...`) every backup is encrypted to. Required in the backup role, at least one |
 | `backup.identity` | The restore role's secret holding the age identity (`AGE-SECRET-KEY-1...`): `internal/backup/<identity>`, default `restore-identity`, stored as `{"value":"<base64>"}`. Only the restore role reads it |
 | `backup.key`, `backup.region`, `keys.archive` | Deprecated and ignored since format 2; accepted for one release with a warning |
-| `backup.target` | The archive bucket: `bucket`, `prefix`, `region`, `kmsKey`, `endpoint`, `pathStyle`, `checksum`. Credentials are the role's. Object Lock retention must not exceed `retention.maxAge` |
+| `backup.target` | The archive bucket: `bucket`, `prefix`, `region`, `kmsKey`, `endpoint`, `pathStyle`. Credentials are the role's. Object Lock retention must not exceed `retention.maxAge` |
+| `backup.target.checksum` | The integrity header of every upload, as `ports.blob.s3.checksum`: `sha256` (default, `x-amz-checksum-sha256`, precomputed), `md5` (`Content-MD5`) or `none`. An Object Lock bucket refuses an upload without one |
 | `backup.retention` | The `keep` newest backups (default 7) always stay. Another goes when older than `maxAge` (default 720h) |
 | `instance` | Names the archive path `backup/<instance>/` |
 
@@ -87,7 +88,7 @@ age -d -i key.txt 20261013T020000Z-ab12cd.tar.gz.age | tar xz
 | Event or method | Callers | Answers |
 |---|---|---|
 | `{"kind":"backup"}` | EventBridge Scheduler, daily | `outcome`: `completed`, `contended` or `maintenance`. A failed run fails the invocation |
-| `{"kind":"backup","resume":true}` | a schedule of format 1 | `idle`, touching nothing |
+| `{"kind":"backup","resume":true}` | the `<function>-resume` schedule, `Schedule.ResumeRate` | `idle`, touching nothing: a run is one invocation since format 2 |
 | `backup.status` | console, admin, breakglass | `latest`, `lastCompleted`, `unfinished`, `retention` |
 | `backup.list` | console, admin, breakglass | `backups`, newest first; `limit` |
 | `backup.run` | admin, breakglass | A run's result; `resume` answers `idle` |

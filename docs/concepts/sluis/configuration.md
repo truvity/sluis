@@ -4,7 +4,7 @@ The keys, types and defaults are in the [configuration reference](../../referenc
 
 ## One file, one binary, one chart
 
-sluis is one chart, `charts/sluis`, and one image. It renders the directory, the policy, the OpenID provider, the login page and the console. When `config.controllers` names them, it also runs the GitHub and Slack controllers in the same process ([one process](design.md#one-process)).
+sluis is one chart, `charts/sluis`, and one image, with a Deployment per module. The issuer renders the directory, the policy, the OpenID provider, the login page and the console. When `config.controllers` names them and no `modules.<m>` is enabled, it also runs the GitHub and Slack controllers in its process ([one binary per module](design.md#one-binary-per-module)).
 
 Two documents configure a process. The service document says where State lives and which keys sign. The policy says who may have what. They change for different reasons and have different owners.
 

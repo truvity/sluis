@@ -30,35 +30,40 @@ The one thing it writes that outlives it is the audit trail, kept by an audit in
 
 ## Containers
 
-Browsers, the CLI and CI reach one process.
+Browsers, the CLI and CI reach the issuer. Each module is a process of its own, a Lambda function or a Deployment, and holds only its own credentials.
 
 ```mermaid
 flowchart TB
   browser["Browser"]
   cli["sluisctl, kubelogin,<br/>GitHub Actions"]
   gw["Envoy Gateway<br/>native OIDC"]
-  subgraph ar["sluis, one process"]
-    issuer["issuer<br/>login and sessions"]
-    dir["directory<br/>snapshots, routing"]
-    con["console<br/>/console/"]
-    ctl["GitHub and Slack<br/>controllers"]
+  subgraph ar["sluis"]
+    subgraph iss["the issuer"]
+      issuer["issuer<br/>login, sessions, signer"]
+      con["console<br/>/console/"]
+    end
+    subgraph mods["one process per module"]
+      google["google<br/>directory snapshots"]
+      ctl["github, slack<br/>controllers"]
+      cf["cloudflare<br/>token mint"]
+      bk["backup, restore"]
+    end
   end
   idp["Google Workspace"]
-  st[("State, Secrets,<br/>blobs")]
+  st[("State, Secrets, blobs:<br/>a table, a namespace and<br/>a prefix per module")]
   aud[("audit installation")]
   browser --> gw
   gw --> issuer
   cli -- "exchange" --> issuer
-  issuer --> dir
   con -. "same origin" .-> issuer
+  issuer -- "calls, by alias or Service" --> mods
   ctl -- "who holds which group" --> issuer
-  issuer -- "sign-in" --> idp
-  dir -- "reads" --> idp
+  google -- "sign-in, reads" --> idp
   ar --> st
   ar -- "records" --> aud
 ```
 
-The controllers are loops in the same process, not services. They read the console's API with the pod's own ServiceAccount token and report into a record the console shows. See [the GitHub controller](github-controller.md) and [the Slack reconciler](slack-reconciler.md).
+The controllers are passes in the GitHub and Slack modules. A module whose `remote` is unset in the issuer's document runs inside the issuer. They read the console's API with their own identity and report into a record the console shows. See [the GitHub controller](github-controller.md) and [the Slack reconciler](slack-reconciler.md).
 
 The issuer holds the root of the hostname. The issuer URL is the `iss` claim in every token, and discovery sits at `/.well-known/openid-configuration`. The same document is served as RFC 8414 metadata at `/.well-known/oauth-authorization-server`. The console is mounted under `/console/`. See [the console](console.md).
 
@@ -105,4 +110,5 @@ For failures, see [failure semantics](failure-semantics.md).
 ## Decided in
 
 - [ADR 0003: deprecate and remove the proxy chart](../../decisions/0003-deprecate-access-proxy.md)
-- [ADR 0037: one process everywhere](../../decisions/0037-one-process-everywhere.md)
+- [ADR 0071: least-privilege modules, one process per credential holder](../../decisions/0071-least-privilege-modules-one-credential-holder-per-function.md)
+- [ADR 0072: a table, a namespace and a prefix per module](../../decisions/0072-storage-layout-v5-module-first.md)

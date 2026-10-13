@@ -1,6 +1,6 @@
 # Tutorial: sluis on AWS Lambda
 
-You deploy one sluis function on AWS Lambda behind a mutual-TLS custom domain (preset `aws-hybrid`; `aws-serverless` has no Kubernetes beside it). State is in DynamoDB, blobs in S3, secrets in SSM. Tokens are signed by key pairs the function generates and wraps under a KMS key you supply. Allow about an hour, most of it waiting for AWS.
+You deploy the sluis issuer function on AWS Lambda, on secrets layout v4, behind a mutual-TLS custom domain (preset `aws-hybrid`; `aws-serverless` has no Kubernetes beside it). State is in DynamoDB, blobs in S3, secrets in SSM. Tokens are signed by key pairs the function generates and wraps under a KMS key you supply. Allow about an hour, most of it waiting for AWS.
 
 Design: [ports](../../concepts/sluis/ports.md). Library arguments: [Pulumi library](../../reference/sluis/pulumi-library.md). Keys: [configuration](../../reference/sluis/configuration.md).
 
@@ -78,13 +78,13 @@ Expect no output and exit status 0. `rendered/` holds `sluis.yaml` (the service 
 
 ## 3. Fetch the release and pin its digest
 
-Use one release for the Pulumi library and the binary. This tutorial needs v1.74 or later, where `Audit.Use` and the edge module start.
+Use one release for the Pulumi library and the binary. This tutorial needs v1.75 or later, where the per-module zips start; it uses v1.76.3.
 
 ```sh
-VERSION=1.74.0        # the release you chose, without the v
+VERSION=1.76.3        # the release you chose, without the v
 gh release download "v$VERSION" --repo truvity/sluis --dir dist \
-  --pattern "sluis-lambda_${VERSION}_linux_arm64.zip" --pattern checksums.txt
-grep "sluis-lambda_${VERSION}_linux_arm64.zip" dist/checksums.txt
+  --pattern "sluis-issuer_${VERSION}_linux_arm64.zip" --pattern checksums.txt
+grep "sluis-issuer_${VERSION}_linux_arm64.zip" dist/checksums.txt
 ```
 
 Expect one line: a 64-character SHA-256 and the file name. Copy the digest into `main.go` as a constant and commit it. Do not read it from `dist/checksums.txt` in the program. The library checks the zip against the constant and deploys it byte for byte.
@@ -94,8 +94,8 @@ Expect one line: a 64-character SHA-256 and the file name. Copy the digest into 
 In an empty Pulumi Go project (`pulumi new aws-go`), add the library at the release's tag and copy `installation.yaml` beside `main.go`. The truststore is the PEM of the CAs a client certificate must chain to. Make a test CA and client certificate:
 
 ```sh
-go get github.com/truvity/sluis/deploy/pulumi@v1.74.0 github.com/truvity/sluis/deploy/pulumi/edge/cloudflare@v1.74.0 \
-  github.com/truvity/sluis@v1.74.0
+go get github.com/truvity/sluis/deploy/pulumi@v1.76.3 github.com/truvity/sluis/deploy/pulumi/edge/cloudflare@v1.76.3 \
+  github.com/truvity/sluis@v1.76.3
 openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -days 30 \
   -keyout ca.key -out truststore.pem -subj "/CN=demo-client-ca"
 openssl req -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes \
@@ -122,7 +122,7 @@ import (
 const (
 	region       = "eu-central-1"
 	account      = "111122223333"
-	version      = "1.74.0"
+	version      = "1.76.3"
 	lambdaSHA256 = "<the digest from step 3>"
 	certArn      = "<the ACM certificate's ARN>"
 	applyRoleArn = "<the ARN of the IAM role you apply with>"
@@ -162,7 +162,7 @@ func main() {
 		}
 		l, err := sluispulumi.NewLambda(ctx, "demo", &sluispulumi.LambdaArgs{
 			Installation:   in,
-			Package:        "dist/sluis-lambda_" + version + "_linux_arm64.zip",
+			Package:        "dist/sluis-issuer_" + version + "_linux_arm64.zip",
 			PackageSHA256:  lambdaSHA256,
 			Storage:        store.Grant(),
 			State:          state.Grant(),
@@ -231,7 +231,7 @@ curl --cert client.crt --key client.key https://access.example.test/.well-known/
 Expect JSON whose `issuer` is `https://access.example.test`. A TLS failure means the certificate does not chain to `truststore.pem` or the CNAME has not propagated. Read the function's log:
 
 ```sh
-aws logs tail /aws/lambda/sluis --since 15m
+aws logs tail /aws/lambda/sluis-demo-issuer --since 15m
 ```
 
 The log group is `/aws/lambda/<function name>`, `sluis-<instance>-issuer` unless the installation sets `aws.functions.issuer` (or `aws.functionName`). A document the loader refuses stops the cold start and is named there.
@@ -251,6 +251,6 @@ Import `client.crt` and `client.key` into a browser as a PKCS#12 file. Open `htt
 
 - Connect a directory: [Google Workspace](../../guides/sluis/connect/google-workspace.md). Then connect each relying party: [how-to index](../../concepts/sluis/README.md).
 
-- Take a release: [upgrade pages](../../guides/sluis/upgrade/v1.64.md).
+- Move to layout v5, a function per module and the backup module: [upgrade to v1.75](../../guides/sluis/upgrade/v1.75.md), then [v1.76](../../guides/sluis/upgrade/v1.76.md).
 
 - Operate on Lambda: [Lambda reference](../../reference/sluis/lambda.md).

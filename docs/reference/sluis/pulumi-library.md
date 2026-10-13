@@ -132,14 +132,14 @@ The role trusts `pods.eks.amazonaws.com` for this cluster and ServiceAccount.
 | `Retention` | 7; 720h | `Keep`, `MaxAge`: `backup.retention`. An Object Lock longer than `MaxAge` is refused |
 | `AuditQueueURL` | None | `adapters.audit` sqs; without it the `log` adapter |
 | `FunctionName`, `Function`, `LogRetentionDays` | `sluis-<instance>-backup`; 512 MB, 900 s; 30 | `Function.TimeoutSeconds` is 60 to 900 |
-| `Schedule` | `cron(0 2 * * ? *)`; `rate(5 minutes)`; false | `Daily`, `ResumeRate`, `Paused` |
+| `Schedule` | `cron(0 2 * * ? *)`; `rate(5 minutes)`; false | `Daily`, `ResumeRate`, `Paused`. The resume schedule stays and is answered `idle` since format 2 |
 | `AlarmActionArns`, `PermissionsBoundaryArn`, `Tags` | None | Notified by the alarms; boundary of the roles |
 
 | Output | Meaning |
 |---|---|
 | `FunctionArn`, `FunctionName`, `RoleArn`, `RoleName`, `ConfigLayerArn` | Function, role and layer |
 | `LiveAliasArn`, `AliasArns` | `live`, which the schedules invoke, and `live-console`, `live-admin`, `live-breakglass`; the alias is the caller class of a [module call](backup.md#calls) |
-| `SchedulerRoleArn`, `ScheduleNames`, `ScheduleDLQArn` | `<function>-daily` sends `{"kind":"backup"}`, `<function>-resume` sends `{"kind":"backup","resume":true}`; undelivered events go to the queue |
+| `SchedulerRoleArn`, `ScheduleNames`, `ScheduleDLQArn` | `<function>-daily` sends `{"kind":"backup"}`, `<function>-resume` sends `{"kind":"backup","resume":true}`, answered `idle`; undelivered events go to the queue |
 | `ArchiveBucketName`, `ArchiveBucketArn` | The archive |
 | `ArchiveKeyArn` | Deprecated: the key behind `ArchiveKeyAlias`, empty when it is not set |
 | `RestoreRecipient` | The `age1...` recipient of the installation's generated restore keypair. Public |
@@ -158,6 +158,7 @@ The role trusts `pods.eks.amazonaws.com` for this cluster and ServiceAccount.
 |---|---|---|
 | `SluisTableBackup` | `GetItem`, `PutItem`, `UpdateItem`, `DeleteItem`, `Query`, `Scan`, `DescribeTable` | The backup table |
 | `SluisCross<Module>Table`, `…Parameters`, `…Blobs` | Read: `GetItem`, `Query`, `Scan`; `ssm:GetParameter`; `s3:GetObject` and the prefix's `ListBucket` | The other five modules' tables, `internal/<module>/*`, `external/<module>/*`, `<module>/` |
+| `SluisCrossParametersList` | `ssm:GetParametersByPath` | `internal/*` and `external/*` of the instance, never the namespace roots: the export lists each module's parameters before it reads them by name (v1.76.3). A listing decrypts nothing |
 | `SluisMaintenanceDeny` | Deny `PutItem`, `UpdateItem`, `DeleteItem`, `BatchWriteItem`, `TransactWriteItems` | Every table, when the first key is `maintenance`. The role reads the flag and never writes it |
 | `SluisArchiveObjects` | `s3:GetObject`, `PutObject`, `DeleteObject`, and `GetObjectVersion` on a versioned bucket | `<bucket>/<prefix>backup/<instance>/*` |
 | `SluisArchiveList` | `s3:ListBucket`, and `ListBucketVersions` on a versioned bucket | The bucket, `s3:prefix` `<prefix>backup/<instance>/*` |
@@ -173,7 +174,9 @@ The role trusts `pods.eks.amazonaws.com` for this cluster and ServiceAccount.
 | Keypair | `NewBackup` makes a 32-byte `random.RandomBytes` seed (secret in state, never rotated by an apply) and derives the X25519 identity and recipient from it |
 | Recipients | The generated recipient, then `ExtraRecipients`, in the backup document. Keep an offline `ExtraRecipients` identity: it opens backups when the installation is gone |
 | Identity | `AGE-SECRET-KEY-1...` in the byte codec (`{"value":"<base64>"}`), a SecureString at `/sluis/<instance>/internal/backup/restore-identity` under `ParameterKeyArn`. The restore document names it with `backup.identity: restore-identity` |
-| Readers | The restore role only. The backup role is denied the parameter and its decryption (`SluisDenyRestoreIdentity`, `SluisDenyRestoreIdentityKey`); `SluisKeyPolicyStatements` adds `SluisKeyDenyRestoreIdentity` |
+| Readers | The restore role, and the deployer: `SluisKeyAdminReads` lets `KeyPolicyOptions.Admins` decrypt it, as the provider does after create and on every refresh (v1.76.2). The backup role is denied the parameter and its decryption (`SluisDenyRestoreIdentity`, `SluisDenyRestoreIdentityKey`); `SluisKeyPolicyStatements` adds `SluisKeyDenyRestoreIdentity` |
+| Adoption | The parameter has `overwrite: true`: an apply whose earlier create succeeded in AWS adopts it, with the same value from the seed in state |
+| Break-glass | `age-keygen -o breakglass.txt` offline; `age-keygen -y breakglass.txt` prints the recipient for `ExtraRecipients` ([guide](../../guides/sluis/operate/back-up-on-layout-v5.md)) |
 | Rotation | `pulumi up --replace` on `<name>-restore-identity-seed` leaves older backups readable by an `ExtraRecipients` identity only |
 | Deprecated | `KeyPolicyOptions` and `KeyPolicyArgs` `BackupArchive` and `RestoreArchive`, and `ArchiveGrant.KeyArn`, are accepted and add nothing |
 
@@ -196,6 +199,7 @@ The role trusts `pods.eks.amazonaws.com` for this cluster and ServiceAccount.
 | Aliases | `live-admin` and `live-breakglass` only. Both are asynchronous without retry |
 | Resource policy | One `lambda:InvokeFunction` permission per invoker, on the alias of its class: administrators on `live-admin`, break-glass roles on `live-breakglass`. No unqualified permission, no service principal. Identity policies of other principals must not grant the invoke |
 | Alarm | `<function>-invoked`: `Invocations` at least 1 in a minute |
+| Policy size | The role's inline policy is near IAM's 10,240 characters; a long instance name can exceed it. The tests hold it on realistic ARNs |
 | Outputs | `FunctionArn`, `FunctionName`, `RoleArn`, `RoleName`, `ConfigLayerArn`, `AliasArns`, `IdentityParameter`, `ArchiveKeyArn` (deprecated), `AlarmNames` |
 
 | Restore role grant | Actions | Resource |
@@ -204,7 +208,7 @@ The role trusts `pods.eks.amazonaws.com` for this cluster and ServiceAccount.
 | `SluisCross<Module>Table`, `…Parameters`, `…Blobs` | Table read and write; `ssm:GetParameter`, `PutParameter`, `DeleteParameter`; `s3:GetObject`, `PutObject`, `DeleteObject` | The other five modules' tables, `internal/<module>/*`, `external/<module>/*`, `<module>/` prefixes, and the key through SSM |
 | `SluisCrossCloudflareMinter` | `ssm:GetParameter` | The `MinterRefs` parameters, with `credentials.preset`; never the issuer (it asks the cloudflare function to mint) |
 | `SluisArchiveObjects`, `SluisArchiveList` | `s3:GetObject`, `GetObjectVersion`; `ListBucket`, `ListBucketVersions` | `<bucket>/<prefix>backup/<instance>/*`. No put, no delete |
-| `SluisRestoreIdentity`, `SluisRestoreIdentityKey` | `ssm:GetParameter`; `kms:Decrypt` through SSM | The restore identity parameter `internal/backup/restore-identity` and its encryption context. The only role that reads it |
+| `SluisRestoreIdentity`, `SluisRestoreIdentityKey` | `ssm:GetParameter`; `kms:Decrypt` through SSM | The restore identity parameter `internal/backup/restore-identity` and its encryption context. The only function role that reads it; the deployer reads it back through `SluisKeyAdminReads` |
 | `SluisRestoreSelf` | `lambda:InvokeFunction` | Its own two aliases: a paused restore continues through the ARN it was invoked through |
 | Maintenance flag | n/a | No `SluisMaintenanceDeny`: this role alone writes the flag in every table. `RestoreRoleStatements(env, grant, selfArns)` renders it |
 
@@ -396,6 +400,20 @@ To adopt an existing audit stack, import it under the new component ([resource n
 | `LegacySigningContext` (nil is true) | Also keeps `GenerateDataKeyPair` and `Decrypt` on `Sign` under `purpose=sluis-signing` for older ring entries (`WrappedKeyPolicyStatements` belongs in the key policy). Set false after the ring rotates |
 | `RekeyOperatorStatements(region, account, instance, keyArn)` | For the role that runs [`sluis secrets rekey`](secrets.md#one-key): `ssm:DescribeParameters` on `*`, `ssm:GetParameters` and `ssm:PutParameter` on `/sluis/<instance>/*`, and the `Secrets` key's grant above. `OperatorAuditStatements(queueArn)` adds `sqs:SendMessage` for its audit record |
 | `SluisKeyPolicyStatements(KeyPolicyArgs)` | The statements of the shared key's policy, each `SluisKey…` Sid: a statement per function role (its hosted modules' parameters, through SSM), backup read-all and restore write-all, `external/*` for the External Secrets readers, admin seeds and reads, breakglass, and `{instance, purpose: sign}` for the roles that host `oidc` with three denies that hold the purpose to them. No catch-all deny and no key administration. Concatenate your own statements and pass the lists to `KeyPolicyDocument`, which refuses a repeated Sid and a policy over 32 KiB |
+
+| `SluisKey…` Sid | Principals | Grants, through SSM unless said otherwise |
+|---|---|---|
+| `SluisKeyRole<Role>` | each function role | `Encrypt`, `Decrypt`, `GenerateDataKey`, `DescribeKey` on its hosted modules' `internal/<module>/*` and `external/<module>/*`; on layout v4 the issuer's whole `internal/*` and `external/*` |
+| `SluisKeyReadModule<Role>` | a role with `ReadModules` | `Decrypt` of those modules' parameters |
+| `SluisKeySignInClientGoogle` | the google role | `Decrypt` of the sign-in client under `internal/oidc/signin/` |
+| `SluisKeyReadAll<Role>`, `SluisKeyWriteAll<Role>` | the backup role; the restore role | `Decrypt` of every `internal/*` and `external/*` parameter; the same with `Encrypt` and `GenerateDataKey` |
+| `SluisKeyMinter<Role>`, `SluisKeyMinted<Role>` | a role with `credentials.preset` that does not host `cloudflare` | `Decrypt` of the `MinterRefs`; the Cloudflare module's `minted` records and `external/cloudflare/*` |
+| `SluisKeyExternalReaders` | `ExternalReaders` | `Decrypt` of `external/*` |
+| `SluisKeyAdminSeeds`, `SluisKeyAdminReads` | `Admins`, as ARN patterns | `Encrypt` and `GenerateDataKey` on any parameter; `Decrypt` of the state secret, the recovery password and, with a backup role on v5, the restore identity |
+| `SluisKeyBreakglass` | `Breakglass` | the four actions on any parameter |
+| `SluisKeyDenyRestoreIdentity` | the backup role | Deny `Decrypt` where the encryption context `PARAMETER_ARN` is the restore identity |
+| `SluisKeySign`, `SluisKeySignContextReserved`, `SluisKeySignDirectPurposeOnly`, `SluisKeySignDirectContextKeysOnly` | the roles that host `oidc`, directly | `{instance, purpose: sign}` and the three denies that hold the purpose to them |
+| `SluisKeyRolesNothingElse` | the same, with `DenyOtherActions` | Deny every other action |
 
 ### The edge modules
 
