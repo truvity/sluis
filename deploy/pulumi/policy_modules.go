@@ -3,6 +3,7 @@ package sluispulumi
 import (
 	"fmt"
 	"slices"
+	"strings"
 )
 
 // ModuleEnv is what a role's statements are rendered from.
@@ -11,6 +12,11 @@ type ModuleEnv struct {
 	Modules         ModuleSet
 	// BucketArn is the blob bucket; empty when blobs are external.
 	BucketArn string
+	// BlobKeyPrefix is `ports.blob.s3.prefix`, the key prefix the whole blob
+	// store sits under inside the bucket ("" or any slashes: it is normalised).
+	// The module prefixes of the grants (`github/`) follow it, as the runtime
+	// puts it before every key.
+	BlobKeyPrefix string
 	// TableArns is each module's table ARN. A role needs the ARN of every table
 	// it is granted.
 	TableArns map[Module]string
@@ -351,6 +357,16 @@ func tableStatement(sid, tableArn string, actions []string) statement {
 	return statement{"Sid": sid, "Effect": "Allow", "Action": actions, "Resource": tableArn}
 }
 
+// blobPrefix is the module's key prefix in the bucket as the runtime spells it:
+// the installation's prefix, then the module's.
+func (env ModuleEnv) blobPrefix(m Module) string {
+	root := strings.Trim(env.BlobKeyPrefix, "/")
+	if root != "" {
+		root += "/"
+	}
+	return root + BlobPrefix(m)
+}
+
 // blobStatements grants the module's prefix of the bucket and the listing of
 // exactly that prefix.
 func (env ModuleEnv) blobStatements(m Module, sid string, actions []string) []statement {
@@ -359,10 +375,10 @@ func (env ModuleEnv) blobStatements(m Module, sid string, actions []string) []st
 	}
 	return []statement{{
 		"Sid": sid + "Blobs", "Effect": "Allow", "Action": actions,
-		"Resource": env.BucketArn + "/" + BlobPrefix(m) + "*",
+		"Resource": env.BucketArn + "/" + env.blobPrefix(m) + "*",
 	}, {
 		"Sid": sid + "BlobList", "Effect": "Allow", "Action": s3ListBucket, "Resource": env.BucketArn,
-		"Condition": map[string]any{"StringLike": map[string]any{"s3:prefix": []string{BlobPrefix(m) + "*"}}},
+		"Condition": map[string]any{"StringLike": map[string]any{"s3:prefix": []string{env.blobPrefix(m) + "*"}}},
 	}}
 }
 

@@ -76,3 +76,41 @@ func TestPolicyGrantsNoRootOfTheBucket(t *testing.T) {
 		}
 	}
 }
+
+// With `ports.blob.s3.prefix` set, the runtime lists and writes
+// `<prefix>/github/reports/...`, and the grants follow: a key outside the
+// installation's prefix, such as the module's root alone, is not granted.
+func TestPolicyGrantsFollowTheBlobKeyPrefix(t *testing.T) {
+	env := testModuleEnv()
+	env.BlobKeyPrefix = "/roster/" // normalised
+	roles := map[string]Role{}
+	for _, r := range env.Roles {
+		roles[r.Name] = r
+	}
+	for module, prefixes := range blobprefix.Used() {
+		var host string
+		for _, r := range env.Roles {
+			if r.hosts(Module(module)) {
+				host = r.Name
+			}
+		}
+		for _, prefix := range prefixes {
+			for _, role := range []string{host, RoleBackup, RoleRestore} {
+				st, err := ModuleRoleStatements(env, roles[role])
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !allowed(t, st, iamReq{action: s3GetObject, resource: env.BucketArn + "/roster/" + prefix + "x"}) {
+					t.Errorf("role %s is not allowed to read roster/%sx", role, prefix)
+				}
+				if !allowed(t, st, listReq(env.BucketArn, "roster/"+prefix)) {
+					t.Errorf("role %s is not allowed to list roster/%s", role, prefix)
+				}
+				if allowed(t, st, iamReq{action: s3GetObject, resource: env.BucketArn + "/" + prefix + "x"}) ||
+					allowed(t, st, listReq(env.BucketArn, prefix)) {
+					t.Errorf("role %s is still granted %s without the installation's prefix", role, prefix)
+				}
+			}
+		}
+	}
+}
