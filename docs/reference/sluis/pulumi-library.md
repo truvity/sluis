@@ -45,13 +45,14 @@ ids, _ := sluispulumi.NewKubernetesIdentity(ctx, "acme", &sluispulumi.Kubernetes
 | `ExternalBlobs` | Meaning |
 |---|---|
 | `Bucket`, `Endpoint` (https), `Region` (default `auto`), `PathStyle`, `Prefix` | The store |
-| `CredentialsRef` | Address `internal/<kind>/<id>`, for example `internal/blobs/r2`. It names the secret, never holds it |
+| `CredentialsRef` | Address `internal/<kind>/<id>`, for example `internal/blobs/r2`. It names the secret, never holds it. Set this or `CredentialsPreset`, not both |
+| `CredentialsPreset` | A key of `Installation.Cloudflare.Presets` with an `endpoint` (R2), declared in the installation: sluis mints the store's credentials in process and the document gets `ports.blob.s3.credentials.preset`. No parameter and no `SluisBlobCredentials` grant; the functions get the Cloudflare minter reads they already have. Any `store` works, since the blobs mint on demand and never read the stored credential: use `none` when nothing else reads it. Exclusive with `CredentialsRef` |
 
 | With `Blobs` | Behavior |
 |---|---|
 | Document | Writes `ports.blob` (`adapter: s3`). A document naming `ports.blob`, `adapters.blobs` or `endpoint` is refused |
-| IAM | `ssm:GetParameter` on `/sluis/<instance>/<CredentialsRef>`, decrypted through SSM with `ParameterKeyArn` |
-| Seed | The `s3-credentials/v1` parameter, out of band ([blobs on R2](../../guides/sluis/operate/blobs-on-r2.md)) |
+| IAM | With `CredentialsRef`: `ssm:GetParameter` on `/sluis/<instance>/<CredentialsRef>`, decrypted through SSM with `ParameterKeyArn`. With `CredentialsPreset`: none |
+| Seed | With `CredentialsRef`, the `s3-credentials/v1` parameter, out of band ([blobs on R2](../../guides/sluis/operate/blobs-on-r2.md)) |
 
 ## State
 

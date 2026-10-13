@@ -6,6 +6,8 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+
+	sluisconfig "github.com/truvity/sluis/config"
 )
 
 // ExternalBlobs is a blob store on an S3-compatible endpoint that the
@@ -31,13 +33,44 @@ type ExternalBlobs struct {
 	// the secret that holds the access key pair: `internal/<kind>/<id>`, for
 	// example `internal/blobs/r2`. The function reads it at run time through its
 	// secrets source; the library grants it read on that one parameter and
-	// nothing else. Required. Seed the secret out of band
-	// (docs/how-to: seed a secret without printing it).
+	// nothing else. Seed the secret out of band
+	// (docs/how-to: seed a secret without printing it). Exactly one of
+	// CredentialsRef and CredentialsPreset is required.
 	CredentialsRef string
+	// CredentialsPreset makes sluis mint its own R2 credentials for the store
+	// from this key of the installation's `cloudflare.presets` (an R2 preset: it
+	// has an `endpoint`), and renders `ports.blob.s3.credentials.preset`. The
+	// library then declares no parameter and grants no read for blob
+	// credentials: each function that has the blobs mints in process through the
+	// Cloudflare minter, whose grants it already receives. The preset may have
+	// `store` external or none: the blobs never read the stored credential, they
+	// mint on demand, so `none` (nothing stored, no rotation) is the right
+	// choice when nothing else reads it. Exclusive with CredentialsRef.
+	CredentialsPreset string
 }
 
 // credentialsRefPattern is an `internal/<kind>/<id>` address: two lower-case
 // segments, no wildcard, no dot-dot.
+// cloudflareNamePattern is a preset's name: a DNS label, as the service document
+// spells it.
+var cloudflareNamePattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$`)
+
+// checkPreset holds CredentialsPreset to the installation's Cloudflare presets:
+// it must be declared, and be an R2 preset.
+func (b *ExternalBlobs) checkPreset(presets map[string]sluisconfig.CloudflarePreset) error {
+	if b == nil || b.CredentialsPreset == "" {
+		return nil
+	}
+	p, ok := presets[b.CredentialsPreset]
+	switch {
+	case !ok:
+		return fmt.Errorf("sluispulumi: StorageArgs.Blobs.CredentialsPreset %q is not in Installation.Cloudflare.Presets", b.CredentialsPreset)
+	case p.Endpoint == "":
+		return fmt.Errorf("sluispulumi: StorageArgs.Blobs.CredentialsPreset %q has no endpoint, so it is not an R2 preset", b.CredentialsPreset)
+	}
+	return nil
+}
+
 var credentialsRefPattern = regexp.MustCompile(`^internal/[a-z0-9][a-z0-9-]{0,30}/[a-z0-9][a-z0-9._-]{0,62}$`)
 
 // ValidAddress is whether s is an `<area>/<kind>/<id>` secret address with the
@@ -62,7 +95,14 @@ func (b *ExternalBlobs) validate() error {
 	case err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "":
 		errs = append(errs, fmt.Errorf("the endpoint %q is not an https URL (host, no credentials, no query)", b.Endpoint))
 	}
-	if !credentialsRefPattern.MatchString(b.CredentialsRef) || strings.Contains(b.CredentialsRef, "..") {
+	switch {
+	case b.CredentialsRef != "" && b.CredentialsPreset != "":
+		errs = append(errs, errors.New("CredentialsRef and CredentialsPreset are exclusive: name the secret that holds the credentials, or the Cloudflare preset that mints them"))
+	case b.CredentialsPreset != "":
+		if !cloudflareNamePattern.MatchString(b.CredentialsPreset) {
+			errs = append(errs, fmt.Errorf("the credentials preset %q is not a preset name (a lower-case DNS label)", b.CredentialsPreset))
+		}
+	case !credentialsRefPattern.MatchString(b.CredentialsRef) || strings.Contains(b.CredentialsRef, ".."):
 		errs = append(errs, fmt.Errorf("the credentials ref %q is not an address of the form internal/<kind>/<id> "+
 			"(lower-case letters, digits, - . _; no wildcard); it names a secret and is never the secret", b.CredentialsRef))
 	}
@@ -90,6 +130,9 @@ func V5CredentialsRef(ref string) string {
 // checkLayoutV5 refuses a layout v4 credentials ref where the layout is v5: the
 // function would read an address the v5 secrets layout does not have.
 func (b *ExternalBlobs) checkLayoutV5() error {
+	if b.CredentialsPreset != "" {
+		return nil
+	}
 	if want := V5CredentialsRef(b.CredentialsRef); want != b.CredentialsRef {
 		return fmt.Errorf("sluispulumi: StorageArgs.Blobs.CredentialsRef %q is a layout v4 address and Layout is v5, where it is "+
 			"internal/<module>/<name>: set it to %q (`sluis migrate v5` copies the secret there)", b.CredentialsRef, want)
@@ -107,7 +150,12 @@ func (b *ExternalBlobs) region() string {
 // portsBlob is `ports.blob` for these blobs.
 func (b *ExternalBlobs) portsBlob() map[string]any {
 	s3 := map[string]any{
-		"bucket": b.Bucket, "endpoint": b.Endpoint, "region": b.region(), "credentialsRef": b.CredentialsRef,
+		"bucket": b.Bucket, "endpoint": b.Endpoint, "region": b.region(),
+	}
+	if b.CredentialsPreset != "" {
+		s3["credentials"] = map[string]any{"preset": b.CredentialsPreset}
+	} else {
+		s3["credentialsRef"] = b.CredentialsRef
 	}
 	if b.PathStyle {
 		s3["pathStyle"] = true
@@ -127,7 +175,7 @@ func secretParameterArn(region, account, instance, address string) string {
 // credentialsStatements lets a role read the one parameter of the external
 // blobs' credentials, and decrypt it with the parameter key when there is one.
 func credentialsStatements(b *ExternalBlobs, region, account, instance, parameterKeyArn string) []statement {
-	if b == nil {
+	if b == nil || b.CredentialsPreset != "" {
 		return nil
 	}
 	arn := secretParameterArn(region, account, instance, b.CredentialsRef)

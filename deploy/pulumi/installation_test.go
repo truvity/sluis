@@ -430,3 +430,67 @@ func TestAnOnDemandPresetGetsNoScheduleNoStoredGrantAndNoMargin(t *testing.T) {
 		t.Errorf("the stored preset lost its grant: %v", g["ssm:PutParameter"])
 	}
 }
+
+// External blobs can name a Cloudflare preset instead of a secret: the document
+// gets ports.blob.s3.credentials.preset, the library declares no read of blob
+// credentials, and the preset must be one of the installation's R2 presets,
+// whether it is stored or on demand only.
+func TestExternalBlobsCanMintTheirCredentialsFromAPreset(t *testing.T) {
+	const r2url = "https://0123456789abcdef0123456789abcdef.r2.cloudflarestorage.com"
+	blobs := func(preset string) func(*arp.LambdaArgs) {
+		return func(a *arp.LambdaArgs) {
+			a.Storage = &arp.StorageGrant{External: &arp.ExternalBlobs{Bucket: "acme-blobs", Endpoint: r2url, CredentialsPreset: preset}}
+		}
+	}
+	for _, store := range []string{"", "store: none, "} {
+		cf := "cloudflare: {accounts: {main: {id: 0123456789abcdef0123456789abcdef, minter: internal/cloudflare/main/minter}}, " +
+			"presets: {blobs: {account: main, prototype: proto-r2-0001, description: R2, lifetime: 15m, " + store + "rotation: 5m, endpoint: '" + r2url + "'}}}\n"
+		if store != "" {
+			cf = strings.Replace(cf, ", rotation: 5m", "", 1)
+		}
+		rec, _ := mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) {
+			noDomain(a)
+			blobs("blobs")(a)
+			a.Config += cf
+		}})
+		doc := layerFiles(t, rec)["sluis/sluis.yaml"]
+		if !strings.Contains(doc, "preset: blobs") || strings.Contains(doc, "credentialsRef") {
+			t.Errorf("store %q: the document does not name the preset instead of a ref:\n%s", store, doc)
+		}
+		for _, s := range statements(t, prop(rec.one(t, policyType, "staging-issuer-policy"), "policy").StringValue()) {
+			if s["Sid"] == "SluisBlobCredentials" || s["Sid"] == "SluisBlobCredentialsKey" {
+				t.Errorf("store %q: a grant for blob credentials: %v", store, s)
+			}
+		}
+	}
+
+	in := exampleInstallation(t)
+	withCloudflare(in)
+	for name, preset := range map[string]string{"an undeclared preset": "missing", "a preset that is not R2": "dns"} {
+		if _, _, err := buildLambda(t, withInstallation(in, blobs(preset))); err == nil || !strings.Contains(err.Error(), "CredentialsPreset") {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+}
+
+func TestExternalBlobsNeedExactlyOneOfARefAndAPreset(t *testing.T) {
+	for name, b := range map[string]*arp.ExternalBlobs{
+		"both":              {Bucket: "b", Endpoint: "https://x.example.test", CredentialsRef: "internal/blobs/r2", CredentialsPreset: "blobs"},
+		"neither":           {Bucket: "b", Endpoint: "https://x.example.test"},
+		"a bad preset name": {Bucket: "b", Endpoint: "https://x.example.test", CredentialsPreset: "Not A Label"},
+	} {
+		_, _, err := run(t, func(ctx *pulumi.Context, _ func(string, pulumi.StringInput)) error {
+			_, err := arp.NewStorage(ctx, "staging", &arp.StorageArgs{Blobs: b})
+			return err
+		})
+		if err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+	if _, _, err := run(t, func(ctx *pulumi.Context, _ func(string, pulumi.StringInput)) error {
+		_, err := arp.NewStorage(ctx, "staging", &arp.StorageArgs{Blobs: &arp.ExternalBlobs{Bucket: "b", Endpoint: "https://x.example.test", CredentialsPreset: "blobs"}})
+		return err
+	}); err != nil {
+		t.Errorf("a preset alone: %v", err)
+	}
+}
