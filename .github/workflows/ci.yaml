@@ -100,6 +100,20 @@ jobs:
           key: ${{ steps.golangci.outputs.cache-primary-key }}
       # Every pin of truvity/ci-workflows and ci-actions is a tagged release,
       # and the component contract (C1-C13) holds.
+      # The Markdown this pull request changes, checked offline (lychee.toml):
+      # relative links and anchors. The external links are security.yaml's.
+      - id: changed
+        if: ${{ !cancelled() && matrix.group == 'docs' && github.event_name == 'pull_request' }}
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git diff --name-only --diff-filter=d "$BASE" HEAD -- '*.md' > changed.txt
+          echo "count=$(wc -l < changed.txt)" >> "$GITHUB_OUTPUT"
+      - if: ${{ steps.changed.outputs.count != '' && steps.changed.outputs.count != '0' }}
+        uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
+        with:
+          args: --config lychee.toml --offline --no-progress --root-dir "${{ github.workspace }}" --files-from changed.txt
+          fail: true
       - if: ${{ !cancelled() && matrix.group == 'docs' }}
         uses: truvity/ci-actions/tagged-pins@598251d570fd99ba403b99bfa65ae4472ed25e73 # v1.8.0
       - if: ${{ !cancelled() && matrix.group == 'docs' }}
