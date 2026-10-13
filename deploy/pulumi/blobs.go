@@ -97,7 +97,8 @@ func (b *ExternalBlobs) validate() error {
 	}
 	switch {
 	case b.CredentialsRef != "" && b.CredentialsPreset != "":
-		errs = append(errs, errors.New("CredentialsRef and CredentialsPreset are exclusive: name the secret that holds the credentials, or the Cloudflare preset that mints them"))
+		errs = append(errs, errors.New("CredentialsRef and CredentialsPreset are exclusive: name the secret that holds the "+
+			"credentials, or the Cloudflare preset that mints them"))
 	case b.CredentialsPreset != "":
 		if !cloudflareNamePattern.MatchString(b.CredentialsPreset) {
 			errs = append(errs, fmt.Errorf("the credentials preset %q is not a preset name (a lower-case DNS label)", b.CredentialsPreset))

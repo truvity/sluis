@@ -488,7 +488,8 @@ func TestExternalBlobsNeedExactlyOneOfARefAndAPreset(t *testing.T) {
 		}
 	}
 	if _, _, err := run(t, func(ctx *pulumi.Context, _ func(string, pulumi.StringInput)) error {
-		_, err := arp.NewStorage(ctx, "staging", &arp.StorageArgs{Blobs: &arp.ExternalBlobs{Bucket: "b", Endpoint: "https://x.example.test", CredentialsPreset: "blobs"}})
+		alone := &arp.ExternalBlobs{Bucket: "b", Endpoint: "https://x.example.test", CredentialsPreset: "blobs"}
+		_, err := arp.NewStorage(ctx, "staging", &arp.StorageArgs{Blobs: alone})
 		return err
 	}); err != nil {
 		t.Errorf("a preset alone: %v", err)
