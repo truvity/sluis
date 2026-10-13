@@ -1,5 +1,7 @@
 ## Unreleased
 
+## v1.76.4
+
 ### Added
 
 - **`policy/compile`: the access-model derivation as a library.** An installation resolves its access file into a `compile.Model`, states its naming decisions in `compile.Conventions` and calls `compile.Roster` and `compile.BuildVocabulary` for the policy's `groups`, `lifetimes`, `github`, `slack`, `people` and `vocabulary` tables. The GitHub job and App rows, the workload and AWS account rows and the relying-party URL rules (`compile.Endpoints`) come with their validation, and `ValidateAudiences`/`ValidateClaims` run the policy's own rules against the derived tables. A rung with a session duration but no population names no lifetime and does not lower the default (the issuer refuses a lifetime for an undeclared group). Additive: nothing in the service imports it.
