@@ -1084,6 +1084,10 @@ audit-e2e-fixture:
 audit-e2e-kms-fixture:
     bash e2e/fixture/kms.sh
 
+# The KMS lane's install: both fixtures, then the chart with the KMS values.
+audit-e2e-kms-install: audit-e2e-fixture audit-e2e-kms-fixture
+    EXTRA_VALUES=../charts/audit/testdata/values/e2e-kms.yaml just audit-e2e-install
+
 # Install the PACKAGED chart `e2e-snapshot` produced — never the source
 # directory — on top of what `e2e-fixture` provisioned.
 [doc("Install the chart into the local cluster")]
