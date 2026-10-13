@@ -156,3 +156,70 @@ func TestVerifyOnlyKeysArePublishedUntilTheyExpire(t *testing.T) {
 		t.Error("a token signed by the old key does not verify against the published set")
 	}
 }
+
+// The estate signs with EC P-384, and RS256 where a relying party pins it: a
+// supplied verify-only key is that and nothing else, in every encoding.
+func TestAVerifyOnlyKeyIsP384OrAnRSAOfAtLeast2048Bits(t *testing.T) {
+	t.Parallel()
+	gen := func(c elliptic.Curve) *ecdsa.PublicKey {
+		k, err := ecdsa.GenerateKey(c, rand.Reader)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return &k.PublicKey
+	}
+	genRSA := func(bits int) *rsa.PublicKey {
+		k, err := rsa.GenerateKey(rand.Reader, bits) //nolint:gosec // the test needs a short key
+		if err != nil {
+			t.Fatal(err)
+		}
+		return &k.PublicKey
+	}
+	p384, p256, p521 := gen(elliptic.P384()), gen(elliptic.P256()), gen(elliptic.P521())
+	rsa2048, rsa1024 := genRSA(2048), genRSA(1024)
+
+	for name, c := range map[string]struct {
+		raw  []byte
+		want jose.SignatureAlgorithm
+	}{
+		"p384 pkix": {pemBlock(t, "PUBLIC KEY", mustPKIX(t, p384)), jose.ES384},
+		"p384 jwk":  {mustJWK(t, p384), jose.ES384},
+		"rsa 2048":  {pemBlock(t, "PUBLIC KEY", mustPKIX(t, rsa2048)), jose.RS256},
+		"rsa pkcs1": {pemBlock(t, "RSA PUBLIC KEY", x509.MarshalPKCS1PublicKey(rsa2048)), jose.RS256},
+		"rsa jwk":   {mustJWK(t, rsa2048), jose.RS256},
+	} {
+		got, err := issuer.ParseVerifyOnlyKey(c.raw, "", "", time.Time{})
+		if err != nil || got.Alg != c.want {
+			t.Errorf("%s: alg %q, err %v, want %s", name, got.Alg, err, c.want)
+		}
+	}
+
+	for name, c := range map[string]struct {
+		raw  []byte
+		alg  string
+		want string
+	}{
+		"p256 pkix":      {pemBlock(t, "PUBLIC KEY", mustPKIX(t, p256)), "", "P-384"},
+		"p256 es256":     {pemBlock(t, "PUBLIC KEY", mustPKIX(t, p256)), "ES256", "P-384"},
+		"p256 jwk":       {mustJWK(t, p256), "", "P-384"},
+		"p521 pkix":      {pemBlock(t, "PUBLIC KEY", mustPKIX(t, p521)), "ES512", "P-384"},
+		"p521 jwk":       {mustJWK(t, p521), "", "P-384"},
+		"rsa 1024 pkix":  {pemBlock(t, "PUBLIC KEY", mustPKIX(t, rsa1024)), "", "at least 2048"},
+		"rsa 1024 pkcs1": {pemBlock(t, "RSA PUBLIC KEY", x509.MarshalPKCS1PublicKey(rsa1024)), "RS256", "at least 2048"},
+		"rsa 1024 jwk":   {mustJWK(t, rsa1024), "", "at least 2048"},
+	} {
+		_, err := issuer.ParseVerifyOnlyKey(c.raw, "", c.alg, time.Time{})
+		if err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("%s: err = %v, want a refusal saying %q", name, err, c.want)
+		}
+	}
+}
+
+func mustJWK(t *testing.T, pub any) []byte {
+	t.Helper()
+	out, err := json.Marshal(jose.JSONWebKey{Key: pub})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return out
+}

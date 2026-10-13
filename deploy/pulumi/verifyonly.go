@@ -221,16 +221,15 @@ func verifyOnlyPublicKey(text string) (any, error) {
 func verifyOnlyAlg(pub any) (string, error) {
 	switch k := pub.(type) {
 	case *rsa.PublicKey:
+		if bits := k.N.BitLen(); bits < 2048 {
+			return "", fmt.Errorf("the RSA key is %d bits: a verify-only RSA key is at least 2048", bits)
+		}
 		return "RS256", nil
 	case *ecdsa.PublicKey:
-		switch k.Curve {
-		case elliptic.P256():
-			return "ES256", nil
-		case elliptic.P384():
+		if k.Curve == elliptic.P384() {
 			return "ES384", nil
-		case elliptic.P521():
-			return "ES512", nil
 		}
+		return "", fmt.Errorf("the EC key is on %s: a verify-only EC key is on P-384", k.Curve.Params().Name)
 	}
-	return "", fmt.Errorf("the key is %T: a verify-only key is RSA, or ECDSA on P-256, P-384 or P-521", pub)
+	return "", fmt.Errorf("the key is %T: a verify-only key is ECDSA on P-384, or RSA of 2048 bits or more", pub)
 }
