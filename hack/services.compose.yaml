@@ -1,0 +1,48 @@
+# The services the `services` job of .github/workflows/ci.yaml starts
+# (`docker compose -f hack/services.compose.yaml up -d --wait`), for the tests
+# that skip without them: LocalStack, a dev OpenBao for storage, a dev OpenBao
+# for audit, and PostgreSQL. Images pinned by digest, equal to `s3_image`,
+# `openbao_image` and `audit_openbao_image` in the Justfile.
+services:
+  localstack:
+    image: localstack/localstack@sha256:3ebc37595918b8accb852f8048fef2aff047d465167edd655528065b07bc364a
+    environment:
+      SERVICES: s3,kms,sqs,dynamodb,ssm
+    ports: ["4566:4566"]
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:4566/_localstack/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+  openbao:
+    image: ghcr.io/openbao/openbao@sha256:11fd73a2102cda9c55d5d881a8c3210303146a7ec1e8ac76f526e175c6d24641 # 2.6.2
+    environment:
+      BAO_DEV_ROOT_TOKEN_ID: root
+    ports: ["8200:8200"]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8200/v1/sys/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+  audit-openbao:
+    image: openbao/openbao@sha256:597f62847dd382382056a1d6704d50465908c2040038c4611832a23269a67112
+    environment:
+      BAO_DEV_ROOT_TOKEN_ID: root
+      BAO_DEV_LISTEN_ADDRESS: 0.0.0.0:8200
+    ports: ["8201:8200"]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8200/v1/sys/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: audit_test
+    ports: ["5432:5432"]
+    healthcheck:
+      test: ["CMD", "pg_isready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5

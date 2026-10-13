@@ -92,48 +92,12 @@ jobs:
   # The tests that skip without their service, each script failing when the
   # test it exists for did not run: sluis's S3, DynamoDB, KMS and SSM adapters
   # and the storage module's backends (LocalStack, OpenBao), and audit's
-  # (Postgres, LocalStack, its own OpenBao). Images pinned by digest, equal to
-  # `s3_image`, `openbao_image` and `audit_openbao_image` in the Justfile.
+  # (Postgres, LocalStack, its own OpenBao): hack/services.compose.yaml.
   services:
     needs: plan
     if: needs.plan.outputs.services != ''
     runs-on: ubuntu-latest
     timeout-minutes: 25
-    services:
-      localstack:
-        image: localstack/localstack@sha256:3ebc37595918b8accb852f8048fef2aff047d465167edd655528065b07bc364a
-        env:
-          SERVICES: s3,kms,sqs,dynamodb,ssm
-        ports: ["4566:4566"]
-        options: >-
-          --health-cmd "curl -sf http://localhost:4566/_localstack/health"
-          --health-interval 10s --health-timeout 5s --health-retries 10
-      openbao:
-        image: ghcr.io/openbao/openbao@sha256:11fd73a2102cda9c55d5d881a8c3210303146a7ec1e8ac76f526e175c6d24641 # 2.6.2
-        env:
-          BAO_DEV_ROOT_TOKEN_ID: root
-        ports: ["8200:8200"]
-        options: >-
-          --health-cmd "wget -q -O /dev/null http://127.0.0.1:8200/v1/sys/health"
-          --health-interval 5s --health-timeout 5s --health-retries 10
-      audit-openbao:
-        image: openbao/openbao@sha256:597f62847dd382382056a1d6704d50465908c2040038c4611832a23269a67112
-        env:
-          BAO_DEV_ROOT_TOKEN_ID: root
-          BAO_DEV_LISTEN_ADDRESS: 0.0.0.0:8200
-        ports: ["8201:8200"]
-        options: >-
-          --health-cmd "wget -qO- http://127.0.0.1:8200/v1/sys/health"
-          --health-interval 5s --health-timeout 5s --health-retries 20
-      postgres:
-        image: postgres:17
-        env:
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: audit_test
-        ports: ["5432:5432"]
-        options: >-
-          --health-cmd pg_isready --health-interval 10s
-          --health-timeout 5s --health-retries 5
     env:
       CGO_ENABLED: "0"
       GOEXPERIMENT: jsonv2
@@ -152,6 +116,7 @@ jobs:
       AUDIT_OPENBAO_TOKEN: root
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: docker compose -f hack/services.compose.yaml up -d --wait
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: go.mod
@@ -181,18 +146,12 @@ jobs:
       timeout-minutes: 30
       lanes: |
         [
-          {
-            "name": "audit",
-            "build": "devbox run -- just audit-e2e-snapshot",
-            "install": "devbox run -- just audit-e2e-fixture && devbox run -- just audit-e2e-install",
-            "test": "devbox run -- just audit-e2e-smoke"
-          },
-          {
-            "name": "audit-kms",
-            "build": "devbox run -- just audit-e2e-snapshot",
-            "install": "devbox run -- just audit-e2e-fixture && devbox run -- just audit-e2e-kms-fixture && EXTRA_VALUES=../charts/audit/testdata/values/e2e-kms.yaml devbox run -- just audit-e2e-install",
-            "test": "E2E_KMS=1 devbox run -- just audit-e2e-smoke"
-          }
+          {"name": "audit", "build": "devbox run -- just audit-e2e-snapshot",
+           "install": "devbox run -- just audit-e2e-fixture audit-e2e-install",
+           "test": "devbox run -- just audit-e2e-smoke"},
+          {"name": "audit-kms", "build": "devbox run -- just audit-e2e-snapshot",
+           "install": "devbox run -- just audit-e2e-kms-install",
+           "test": "E2E_KMS=1 devbox run -- just audit-e2e-smoke"}
         ]
 
   # The required context, under a name of its own: a matrix or a reusable
