@@ -331,6 +331,11 @@ docs-check:
     go run ./cmd/docsgen -check
     go test -count=1 ./internal/contractsdoc/ ./internal/port/matrixdoc/
 
+# The documentation site as GitHub Pages serves it (mkdocs --strict, Mermaid,
+# the schemas checked against their $id), into _site. Needs python3 with venv.
+docs-site:
+    hack/docs-site.sh _site
+
 # Rewrite the generated regions of the docs (config keys, chart values, policy
 # keys, audit actions, alerts, the ADR index) from their sources: the JSON
 # schemas, the audit catalogue, the chart's golden alert render and the ADRs.
@@ -623,7 +628,7 @@ ci-console:
     hack/ci-group.sh console tidy deps console
 
 ci-docs:
-    hack/ci-group.sh docs docs-check leak-canary
+    hack/ci-group.sh docs docs-check docs-site leak-canary
 
 # Run all checks: every CI group except the ones that need more than the
 # checkout (audit, which fetches from a schema registry; the service
@@ -1041,7 +1046,7 @@ audit-snapshot:
 
 # Assemble the schema half of the Pages site (sluis's and audit's) into a
 # scratch directory: proves every published schema's $id is the URL it is
-# served at. The documentation half is `mkdocs build` (see pages.yaml).
+# served at. The documentation half is `just docs-site`.
 audit-pages:
     hack/pages-site.sh "$(mktemp -d)/site"
 
