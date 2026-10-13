@@ -190,10 +190,9 @@ type KeyRole struct {
 	// as in ModuleEnv.MinterRefs) the role reads for `credentials.preset` without
 	// hosting the Cloudflare module: Decrypt on exactly those, through SSM.
 	MinterRefs []string
-	// OpensPresetBlobs says the role's own document opens blobs from a preset,
-	// so its process also writes what it mints (ModuleEnv.OpensPresetBlobs):
-	// Encrypt, Decrypt and GenerateDataKey on the Cloudflare module's minted
-	// records and stored credentials, through SSM.
+	// OpensPresetBlobs has no effect.
+	//
+	// Deprecated: see ModuleEnv.OpensPresetBlobs.
 	OpensPresetBlobs bool
 	// ReadModules are the modules the role reads whole without hosting them
 	// (a generic read grant, none today): Decrypt and DescribeKey of those modules'
@@ -264,7 +263,6 @@ const (
 	sidKeyReadPrefix       = "SluisKeyReadAll"
 	sidKeyWritePrefix      = "SluisKeyWriteAll"
 	sidKeyMinterPrefix     = "SluisKeyMinter"
-	sidKeyMintedPrefix     = "SluisKeyMinted"
 	sidKeyReadModulePrefix = "SluisKeyReadModule"
 	sidKeyExtReaderPrefix  = "SluisKeyExternalReader"
 	sidKeyExternalReaders  = "SluisKeyExternalReaders"
@@ -306,9 +304,6 @@ const (
 //     parameters of the modules it reads (KeyRole.ReadModules) and of no other;
 //   - SluisKeyMinter<Role>: Decrypt of the minter parameters a role without the
 //     Cloudflare module reads;
-//   - SluisKeyMinted<Role>: Encrypt, Decrypt and GenerateDataKey of the Cloudflare
-//     module's minted records and stored credentials, for a role whose own
-//     document opens blobs from a preset (KeyRole.OpensPresetBlobs);
 //   - SluisKeyExternalReaders: Decrypt of `external/*` only, through SSM;
 //   - SluisKeyAdminSeeds: Encrypt and GenerateDataKey through SSM (seed
 //     parameters); SluisKeyAdminReads: Decrypt of the state secret, the
@@ -413,14 +408,6 @@ func SluisKeyPolicyStatements(a KeyPolicyArgs) ([]map[string]any, error) {
 				condArnEquals:    map[string]any{condPrincipalArn: r.principalCond()},
 				condStringEquals: viaSSM,
 				condStringLike:   map[string]any{condParameterArn: refs},
-			}))
-		}
-		if len(r.MinterRefs) > 0 && r.OpensPresetBlobs && !r.Role.hosts(ModuleCloudflare) {
-			st = append(st, allow(sidKeyMintedPrefix+name, []string{kmsEncrypt, kmsDecrypt, kmsGenerateDK, kmsDescribe}, map[string]any{
-				condArnEquals:    map[string]any{condPrincipalArn: r.principalCond()},
-				condStringEquals: viaSSM,
-				condStringLike: map[string]any{condParameterArn: arns(
-					a.Modules.InternalPrefix(ModuleCloudflare)+"/minted", a.Modules.ExternalPrefix(ModuleCloudflare))},
 			}))
 		}
 		if r.Role.hosts(ModuleOIDC) {

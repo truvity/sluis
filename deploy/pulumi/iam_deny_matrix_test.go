@@ -144,7 +144,7 @@ func mxPolicies(t *testing.T) (identity map[string]iameval.Policy, key iameval.P
 		keys:            &keyGrants{signArn: mxKey, secretsArn: mxKey},
 		parameterKeyArn: mxKey, instance: mxInst, invokeFunctionArns: []string{mxFn("issuer") + ":live"},
 		webIdentityAud: "acme", layout: LayoutV5, functionArns: env.FunctionArns,
-		modules: ModuleSet{Instance: mxInst}, minterRefs: []string{mxMinter},
+		modules: ModuleSet{Instance: mxInst},
 	})
 	parse("issuer", doc, err)
 

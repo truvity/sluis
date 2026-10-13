@@ -313,7 +313,9 @@ type (
 		Checksum string `json:"checksum,omitempty"`
 		// CredentialsRef is the internal address (`internal/<kind>/<id>`) of
 		// the s3-credentials/v1 document the installation's secrets store
-		// holds for Endpoint. It needs Endpoint and the ssm secrets source.
+		// holds for Endpoint, or `external/cloudflare/<preset>`, the
+		// cloudflare/v1 document the Cloudflare module rotates for an R2 preset
+		// with `store: external`. It needs Endpoint and the ssm secrets source.
 		CredentialsRef string `json:"credentialsRef,omitempty"`
 		// Credentials makes sluis mint its own R2 credentials from a
 		// `cloudflare.presets` entry instead of reading a static document. It

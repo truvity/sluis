@@ -45,13 +45,14 @@ ids, _ := sluispulumi.NewKubernetesIdentity(ctx, "acme", &sluispulumi.Kubernetes
 | `ExternalBlobs` | Meaning |
 |---|---|
 | `Bucket`, `Endpoint` (https), `Region` (default `auto`), `PathStyle`, `Prefix` | The store |
-| `CredentialsRef` | Address `internal/<kind>/<id>`, for example `internal/blobs/r2`. It names the secret, never holds it. Set this or `CredentialsPreset`, not both |
-| `CredentialsPreset` | A key of `Installation.Cloudflare.Presets` with an `endpoint` (R2), declared in the installation: sluis mints the store's credentials in process and the document gets `ports.blob.s3.credentials.preset`. No parameter and no `SluisBlobCredentials` grant; the functions get the Cloudflare minter reads they already have. Any `store` works, since the blobs mint on demand and never read the stored credential: use `none` when nothing else reads it. Exclusive with `CredentialsRef` |
+| `CredentialsRef` | Address `internal/<kind>/<id>`, for example `internal/blobs/r2`, or `external/cloudflare/<preset>`. It names the secret, never holds it. Set this or `CredentialsPreset`, not both |
+| `CredentialsRef: external/cloudflare/<preset>` | The credential the Cloudflare module rotates for an R2 preset of `Installation.Cloudflare.Presets`: the preset must be declared, have an `endpoint`, keep `store: external` and be at the blobs' `Endpoint`. Every function that has the blobs reads that one `cloudflare/v1` document (`SluisBlobCredentials`); none holds the minter. The Cloudflare function mints for its own blobs, so it starts before the first rotation. This is the form for an installation with module functions. The adapter reads the document again with a third of its time left and once after a 403, and keeps nothing on disk. Choose `lifetime` longer than `rotation` plus the schedule's tick and five minutes (for example `lifetime: 1h`, `rotation: 20m`, a tick of 15m). Rotate the preset once (the first tick, or Rotate on the console's Cloudflare page) before the other functions switch to the address |
+| `CredentialsPreset` | A key of `Installation.Cloudflare.Presets` with an `endpoint` (R2): sluis mints the store's credentials in process and the document gets `ports.blob.s3.credentials.preset`. No parameter and no `SluisBlobCredentials` grant. It works where the one function holds the minter (presets rendered into it, as on Kubernetes or without module functions); with module functions (layout `v5`) the presets are the Cloudflare module's, no other function can mint, and the library refuses it and names the `CredentialsRef` to use. Exclusive with `CredentialsRef` |
 
 | With `Blobs` | Behavior |
 |---|---|
 | Document | Writes `ports.blob` (`adapter: s3`). A document naming `ports.blob`, `adapters.blobs` or `endpoint` is refused |
-| IAM | With `CredentialsRef`: `ssm:GetParameter` on `/sluis/<instance>/<CredentialsRef>`, decrypted through SSM with `ParameterKeyArn`. With `CredentialsPreset`: none |
+| IAM | With `CredentialsRef`: `ssm:GetParameter` on `/sluis/<instance>/<CredentialsRef>`, decrypted through SSM with `ParameterKeyArn`. With `external/cloudflare/<preset>`: the same grant on `/sluis/<instance>/external/cloudflare/<preset>`, nothing else under `external/cloudflare/` and no minter parameter. With `CredentialsPreset`: none |
 | Seed | With `CredentialsRef`, the `s3-credentials/v1` parameter, out of band ([blobs on R2](../../guides/sluis/operate/blobs-on-r2.md)) |
 
 ## State
@@ -125,7 +126,7 @@ The role trusts `pods.eks.amazonaws.com` for this cluster and ServiceAccount.
 | `Package`, `PackageSHA256`, `PackageVersion`, `Artifacts`, `Release` | As `LambdaArgs` | The release zip, byte for byte |
 | `Storage`, `BlobBucketName`, `BlobPrefix` | Required | The blob store: `ports.blob`. `BlobBucketName` is not needed with `Storage.External` |
 | `State`, `TableNames` | Required | `States.Grant()` with all six tables; `ports.dynamodb.tables` |
-| `ParameterKeyArn`, `MinterRefs` | None | `secrets.kmsKeyId`; the Cloudflare minter parameters for `credentials.preset`, read only |
+| `ParameterKeyArn`, `MinterRefs` | None | `secrets.kmsKeyId`; the Cloudflare minter parameters the backup role reads, read only |
 | `ArchiveKeyAlias` | None | Deprecated. Backups are age-encrypted (format v2) and no role holds a KMS grant for the archive. While set it is held to an `alias/<name>`, rendered as `backup.key` for a binary of format v1, and `ArchiveKeyArn` names the key behind it |
 | `ExtraRecipients` | None | `BackupArgs` only. Further age recipients (`age1...`) every backup is encrypted to, after the installation's generated one: an offline break-glass key is recommended. Each is parsed as an age X25519 recipient; an invalid one is refused, a repeat is dropped |
 | `Archive` | Required | `Bucket`, `Prefix`, `Region`, `AccountID`, `Versioned` (true), `SSEKeyArn`, `RestoreRoleArn`, `Create` |
@@ -207,7 +208,7 @@ The role trusts `pods.eks.amazonaws.com` for this cluster and ServiceAccount.
 |---|---|---|
 | `SluisTableBackup` | Table read and write | The backup table: `rec.backup.restore.*`, `lease.restore:*` and the `maintenance` flag |
 | `SluisCross<Module>Table`, `…Parameters`, `…Blobs` | Table read and write; `ssm:GetParameter`, `PutParameter`, `DeleteParameter`; `s3:GetObject`, `PutObject`, `DeleteObject` | The other five modules' tables, `internal/<module>/*`, `external/<module>/*`, `<module>/` prefixes, and the key through SSM |
-| `SluisCrossCloudflareMinter` | `ssm:GetParameter` | The `MinterRefs` parameters, with `credentials.preset`; never the issuer (it asks the cloudflare function to mint) |
+| `SluisCrossCloudflareMinter` | `ssm:GetParameter` | The `MinterRefs` parameters; the backup role only, never the issuer (it asks the cloudflare function to mint) or a module role |
 | `SluisArchiveObjects`, `SluisArchiveList` | `s3:GetObject`, `GetObjectVersion`; `ListBucket`, `ListBucketVersions` | `<bucket>/<prefix>backup/<instance>/*`. No put, no delete |
 | `SluisRestoreIdentity`, `SluisRestoreIdentityKey` | `ssm:GetParameter`; `kms:Decrypt` through SSM | The restore identity parameter `internal/backup/restore-identity` and its encryption context. The only function role that reads it; the deployer reads it back through `SluisKeyAdminReads` |
 | `SluisRestoreSelf` | `lambda:InvokeFunction` | Its own two aliases: a paused restore continues through the ARN it was invoked through |
@@ -320,7 +321,7 @@ l, _ := sluispulumi.NewLambda(ctx, "access", &sluispulumi.LambdaArgs{
 | The flip to `v5` | The service document carries `secrets.layout: v5` and `ports.dynamodb.tables`. `aws.table` and `ports.dynamodb.table` are refused. A blob `CredentialsRef` is `internal/google/blobs-<name>` |
 | Preview, `v4+v5` to `v5` (policy) | The role policy and the layer change |
 | Preview, `v4+v5` to `v5` | 2 deleted (the v4 parameters), 0 created, 0 replaced; with `Compat.KeepV4`, none |
-| `v5` and `credentials.preset` | A role other than the issuer that does not host `cloudflare` reads the minter parameters the document declares (`SluisCrossCloudflareMinter`), read only |
+| `v5` and blobs from a preset | No role other than backup and the Cloudflare function reads the minter. A store whose credentials a preset rotates is read from `external/cloudflare/<preset>` (`CredentialsRef`) |
 | Needs | `v5` and `v4+v5`: `State.Tables` (`States.Grant()`) for the hosted modules; `v4+v5` also `State.TableArn` |
 
 ### Outputs
@@ -408,7 +409,7 @@ To adopt an existing audit stack, import it under the new component ([resource n
 | `SluisKeyReadModule<Role>` | a role with `ReadModules` | `Decrypt` of those modules' parameters |
 | `SluisKeySignInClientGoogle` | the google role | `Decrypt` of the sign-in client under `internal/oidc/signin/` |
 | `SluisKeyReadAll<Role>`, `SluisKeyWriteAll<Role>` | the backup role; the restore role | `Decrypt` of every `internal/*` and `external/*` parameter; the same with `Encrypt` and `GenerateDataKey` |
-| `SluisKeyMinter<Role>`, `SluisKeyMinted<Role>` | a role with `credentials.preset` that does not host `cloudflare` | `Decrypt` of the `MinterRefs`; the Cloudflare module's `minted` records and `external/cloudflare/*` |
+| `SluisKeyMinter<Role>` | a role with `KeyRole.MinterRefs` (none today) that does not host `cloudflare` | `Decrypt` of the `MinterRefs` |
 | `SluisKeyExternalReaders` | `ExternalReaders` | `Decrypt` of `external/*` |
 | `SluisKeyAdminSeeds`, `SluisKeyAdminReads` | `Admins`, as ARN patterns | `Encrypt` and `GenerateDataKey` on any parameter; `Decrypt` of the state secret, the recovery password and, with a backup role on v5, the restore identity |
 | `SluisKeyBreakglass` | `Breakglass` | the four actions on any parameter |

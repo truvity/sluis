@@ -508,7 +508,7 @@ func (p *backupPlan) document(recipients []string) (string, error) {
 	}
 	pb := ports["ports"].(map[string]any)
 	if b := p.Storage.External; b != nil {
-		pb["blob"] = b.portsBlob()
+		pb["blob"] = b.portsBlob(RoleBackup)
 	}
 	secrets := map[string]any{"source": "ssm", "root": SSMRoot(p.Instance), "region": p.Region, "layout": string(LayoutV5)}
 	if p.ParameterKeyArn != "" {

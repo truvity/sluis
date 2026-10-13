@@ -361,10 +361,6 @@ func newModuleFunctions(
 				callers = append(callers, c)
 			}
 		}
-		minterRefs, err := a.moduleMinterRefs(&p)
-		if err != nil {
-			return nil, err
-		}
 		fa := &ModuleFunctionArgs{
 			Name: name + "-" + p.role, FunctionName: p.name,
 			Package: p.pkg, PackageSHA256: p.pkgSHA, PackageVersion: a.PackageVersion, Release: a.Release, Artifacts: a.Artifacts,
@@ -373,7 +369,7 @@ func newModuleFunctions(
 			MemoryMB:        p.memory, TimeoutSeconds: p.time, ReservedConcurrency: p.reserved,
 			LogRetentionDays: a.LogRetentionDays, PermissionsBoundaryArn: a.PermissionsBoundaryArn, Tags: a.Tags,
 			Callers:   callers,
-			Policy:    a.modulePolicy(p.role, roles, secretsKey, minterRefs),
+			Policy:    a.modulePolicy(p.role, roles, secretsKey),
 			Telemetry: a.Telemetry,
 			// The audit writer is updated before the function.
 			FunctionDependsOn: writerFirst,
@@ -398,42 +394,6 @@ func newModuleFunctions(
 	return out, nil
 }
 
-// moduleMinterRefs are the minter parameters the module's own document reads
-// to mint the credentials of its blobs (`ports.blob.s3.credentials.preset`);
-// none for the module that hosts the minter, which has them already, and none
-// for a document that opens no such blobs.
-func (a *LambdaArgs) moduleMinterRefs(p *moduleFunctionPlan) ([]string, error) {
-	if p.role == RoleCloudflare {
-		return nil, nil
-	}
-	doc, err := yamlMap(p.document, "Modules")
-	if err != nil {
-		return nil, err
-	}
-	// The module's document has no Cloudflare accounts of its own (they are the
-	// Cloudflare module's), so the minter is every account's.
-	if !opensPresetBlobs(doc) {
-		return nil, nil
-	}
-	return []string{"internal/cloudflare/*/minter"}, nil
-}
-
-// opensPresetBlobs is whether the document has `ports.blob.s3.credentials.preset`.
-func opensPresetBlobs(doc map[string]any) bool {
-	node := any(doc)
-	for _, k := range []string{"ports", "blob", "s3", "credentials", "preset"} {
-		m, ok := node.(map[string]any)
-		if !ok {
-			return false
-		}
-		if node, ok = m[k]; !ok {
-			return false
-		}
-	}
-	v, ok := node.(string)
-	return ok && v != ""
-}
-
 // moduleLayerDocuments are the files of a module function's configuration layer:
 // its service document and, where the function decides by it, the policy
 // document its service document names (the same file as the issuer's).
@@ -448,7 +408,7 @@ func (a *LambdaArgs) moduleLayerDocuments(p *moduleFunctionPlan) map[string]stri
 // modulePolicy is the policy of a module function's role: ModuleRoleStatements
 // of its role, and the read of the external blobs' credentials where the role
 // has blobs.
-func (a *LambdaArgs) modulePolicy(role string, roles []Role, secretsKey pulumi.StringInput, minterRefs []string) func(pulumi.StringOutput) pulumi.StringInput {
+func (a *LambdaArgs) modulePolicy(role string, roles []Role, secretsKey pulumi.StringInput) func(pulumi.StringOutput) pulumi.StringInput {
 	return func(logGroupArn pulumi.StringOutput) pulumi.StringInput {
 		bucket := pulumi.StringInput(pulumi.String(""))
 		if a.Storage != nil && a.Storage.BucketArn != nil {
@@ -473,7 +433,7 @@ func (a *LambdaArgs) modulePolicy(role string, roles []Role, secretsKey pulumi.S
 				LogGroupArns: map[string]string{role: v[3].(string)},
 				FunctionArns: a.moduleFunctionArns(), Roles: roles, WebIdentityAudience: a.WebIdentityAudience,
 				TelemetryAudiences: a.telemetryAudiences(),
-				SecretsKeyArn:      v[5].(string), MinterRefs: minterRefs, OpensPresetBlobs: len(minterRefs) > 0,
+				SecretsKeyArn:      v[5].(string),
 			}
 			if a.Storage != nil && a.Storage.External != nil {
 				env.BucketArn = ""
@@ -482,7 +442,9 @@ func (a *LambdaArgs) modulePolicy(role string, roles []Role, secretsKey pulumi.S
 			if err != nil {
 				return "", err
 			}
-			if a.Storage != nil {
+			// The Cloudflare function mints for its own blobs (portsBlob), so it
+			// reads no stored credential, and keeps the write it has.
+			if a.Storage != nil && (role != RoleCloudflare || a.Storage.External.storedPreset() == "") {
 				st = appendNew(st, credentialsStatements(a.Storage.External, a.Region, a.AccountID, a.Instance, env.parameterKey())...)
 			}
 			return document(st)

@@ -414,11 +414,6 @@ type functionPolicyIn struct {
 	layout Layout
 	// modules names the instance and the tables, for the v5 grants.
 	modules ModuleSet
-	// minterRefs are the minter parameters (internal addresses, a `*` allowed) of
-	// the issuer's document (credentials.preset). The issuer's role holds no grant
-	// on them (it asks the cloudflare function to mint, v1.76 E-FIN); the module
-	// roles' own are in modulePolicy.
-	minterRefs []string
 }
 
 // ssmStatements is the grant on /sluis/<instance> that both the Lambda role and
@@ -593,7 +588,6 @@ func (in functionPolicyIn) moduleStatements() ([]statement, error) {
 		ParameterKeyArn: in.parameterKeyArn, QueueArn: in.queueArn,
 		LogGroupArns: map[string]string{RoleIssuer: in.logGroupArn},
 		FunctionArns: in.functionArns,
-		MinterRefs:   in.minterRefs,
 		Roles:        []Role{role},
 	}
 	if in.external != nil {

@@ -163,38 +163,6 @@ func parameterNames(secrets *sluisconfig.Secrets, declared []sluisconfig.Declare
 	return slices.Compact(names)
 }
 
-// minterRefsOf is the Cloudflare minter parameters (internal addresses) a
-// process that mints its blob credentials from a preset
-// (`ports.blob.s3.credentials.preset`) reads: the minter of each account the
-// document declares, or every account's when it declares none (the minter is
-// then remote and its accounts are not in this document). Nil when no preset is
-// used. This is the issuer's document, whose role holds none of them (the
-// issuer asks the cloudflare function to mint, v1.76 E-FIN). The module
-// functions' documents are read by moduleMinterRefs: a role whose own document
-// opens such blobs mints in its process and holds the minter's read and what it
-// writes (ModuleEnv.OpensPresetBlobs); the Cloudflare function has them already.
-func minterRefsOf(docs map[string]string) ([]string, error) {
-	svc, pol, err := loadDocuments(docs)
-	if err != nil {
-		return nil, err
-	}
-	p := svc.Ports
-	if p == nil || p.Blob == nil || p.Blob.S3 == nil || p.Blob.S3.Credentials == nil || p.Blob.S3.Credentials.Preset == "" {
-		return nil, nil
-	}
-	var refs []string
-	for _, d := range sluisconfig.DeclaredSecrets(svc, pol) {
-		if d.Ref && strings.HasPrefix(d.Name, "internal/cloudflare/") && strings.HasSuffix(d.Name, "/minter") {
-			refs = append(refs, d.Name)
-		}
-	}
-	if len(refs) == 0 {
-		refs = []string{"internal/cloudflare/*/minter"}
-	}
-	slices.Sort(refs)
-	return slices.Compact(refs), nil
-}
-
 // ownRuntime writes what the estate supplies and the runtime reads, beyond what
 // the renderer knows: `instance` and the `keys:` block (LambdaArgs.Keys), and
 // `ports.blob` for external blobs (StorageArgs.Blobs). It reports whether it
@@ -252,7 +220,7 @@ func ownRuntime(doc map[string]any, a *LambdaArgs) (bool, error) {
 				return false, errors.New("sluispulumi: LambdaArgs.Config names adapters.blobs and the storage's Blobs is set: leave it out")
 			}
 		}
-		ports["blob"] = b.portsBlob()
+		ports["blob"] = b.portsBlob(RoleIssuer)
 		added = true
 	}
 	return added, nil
@@ -492,7 +460,7 @@ func (a *LambdaArgs) ownModuleDocuments(docs map[string][]byte) (map[string]stri
 			if err != nil {
 				return nil, err
 			}
-			ports["blob"] = b.portsBlob()
+			ports["blob"] = b.portsBlob(module)
 			patched, err := yaml.Marshal(doc)
 			if err != nil {
 				return nil, err

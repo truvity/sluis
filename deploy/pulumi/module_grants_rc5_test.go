@@ -232,54 +232,42 @@ ports:
         preset: r2
 `
 
-// G4. A module whose document opens blobs from a preset holds the minter's
-// read and what it writes; no other role does, and the key admits it.
-func TestAModuleThatMintsItsBlobCredentialsHoldsTheMinter(t *testing.T) {
+// G4. A module whose document opens blobs from a preset in its own process has
+// no minter to mint with, and the library no longer gives it one: no role holds
+// the minter's read or a write of what the minter keeps (a store whose
+// credentials a preset rotates is read from external/cloudflare/<preset>), and
+// the shared key's policy admits no role to them.
+func TestNoModuleRoleHoldsTheMinterForItsBlobCredentials(t *testing.T) {
 	mutate := func(a *arp.LambdaArgs) {
 		noDomain(a)
 		a.ParameterKeyArn = paramKey
 		a.Modules = map[string]arp.ModuleArgs{"github": {Document: githubWithPresetBlobs}}
 	}
 	rec, _ := mustLambda(t, v5Estate(mutate))
-	pol := rolePolicies(t, rec)
-	minter := sidOf(pol["github"], "SluisCrossCloudflareMinter")
-	if minter == nil || !slices.Equal(strs(minter["Resource"]), []string{ssmBase + "internal/cloudflare/*/minter"}) {
-		t.Fatalf("github: the minter read is %v", minter)
-	}
-	for _, a := range strs(minter["Action"]) {
-		if strings.Contains(a, "Put") || strings.Contains(a, "Delete") {
-			t.Errorf("the minter credential is written: %s", a)
-		}
-	}
-	minted := sidOf(pol["github"], "SluisCrossCloudflareMinted")
-	wantMinted := []string{ssmBase + "external/cloudflare/*", ssmBase + "internal/cloudflare/minted/*"}
-	if minted == nil || !slices.Equal(sortedCopy(strs(minted["Resource"])), wantMinted) || !slices.Contains(strs(minted["Action"]), "ssm:PutParameter") {
-		t.Errorf("github: what the minter writes is %v", minted)
-	}
-	keyed := keyedParameters(withResource(pol["github"], paramKey))
-	for _, want := range append(wantMinted, ssmBase+"internal/cloudflare/*/minter") {
-		if !slices.Contains(keyed, want) {
-			t.Errorf("github: the parameter key is not granted for %s: %v", want, keyed)
-		}
-	}
-	for _, role := range []string{"issuer", "slack", "google", "cloudflare"} {
+	for role, st := range rolePolicies(t, rec) {
 		for _, sid := range []string{"SluisCrossCloudflareMinter", "SluisCrossCloudflareMinted", "SluisParameterKeyMinted"} {
-			if sidOf(pol[role], sid) != nil {
+			if sidOf(st, sid) != nil {
 				t.Errorf("%s holds %s", role, sid)
+			}
+		}
+		if role == "cloudflare" {
+			continue
+		}
+		for _, r := range resourcesOf(st) {
+			if strings.Contains(r, "internal/cloudflare") || strings.Contains(r, "external/cloudflare") {
+				t.Errorf("%s reaches the Cloudflare module's parameters: %s", role, r)
 			}
 		}
 	}
 	noRoleRepeatsASid(t, "preset blobs", rec)
 
-	// The shared key's policy admits exactly that role to the minter's
-	// parameters and what it writes.
 	a := v5Estate(mutate).args(t)
 	roles, err := a.Roles()
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, r := range roles {
-		if got := len(r.MinterRefs) > 0; got != (r.Role.Name == "github") || r.OpensPresetBlobs != got {
+		if len(r.MinterRefs) > 0 || r.OpensPresetBlobs {
 			t.Errorf("key role %s: MinterRefs %v, OpensPresetBlobs %v", r.Role.Name, r.MinterRefs, r.OpensPresetBlobs)
 		}
 	}
@@ -287,14 +275,9 @@ func TestAModuleThatMintsItsBlobCredentialsHoldsTheMinter(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, sid := range []string{"SluisKeyMinterGithub", "SluisKeyMintedGithub"} {
-		if sidOf(ks, sid) == nil {
-			t.Errorf("the key policy lacks %s", sid)
-		}
-	}
 	for _, s := range ks {
-		if sid, _ := s["Sid"].(string); (strings.HasPrefix(sid, "SluisKeyMinter") || strings.HasPrefix(sid, "SluisKeyMinted")) && !strings.HasSuffix(sid, "Github") {
-			t.Errorf("the key policy admits another role to the minter: %s", sid)
+		if sid, _ := s["Sid"].(string); strings.HasPrefix(sid, "SluisKeyMinter") || strings.HasPrefix(sid, "SluisKeyMinted") {
+			t.Errorf("the key policy admits a role to the minter: %s", sid)
 		}
 	}
 }

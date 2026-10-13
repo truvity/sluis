@@ -28,6 +28,7 @@ import (
 	_ "github.com/truvity/sluis/internal/port/ssm" // registers the ssm secrets adapter
 	"github.com/truvity/sluis/internal/secrets"
 	"github.com/truvity/sluis/internal/secretstore"
+	storagecf "github.com/truvity/sluis/storage/cloudflare"
 	"github.com/truvity/sluis/storage/state"
 )
 
@@ -160,6 +161,18 @@ func (c Config) validatePorts() error {
 			}
 		}
 		if ref := b.S3.CredentialsRef; ref != "" {
+			if _, stored := config.CloudflareStoredRef(ref); stored {
+				// The credential the Cloudflare module rotates for a preset
+				// (external/cloudflare/<preset>): a plain address, whose preset
+				// this process need not know.
+				if _, err := config.CheckCloudflareStoredRef(ref); err != nil {
+					return fmt.Errorf("ports.blob.s3.credentialsRef: %w", err)
+				}
+				if b.S3.Endpoint == "" {
+					return errors.New("ports.blob.s3.credentialsRef: needs ports.blob.s3.endpoint (the endpoint the stored credential is for)")
+				}
+				return nil
+			}
 			if _, err := secretstore.CheckInternalRef(ref); err != nil {
 				return fmt.Errorf("ports.blob.s3.credentialsRef: %w", err)
 			}
@@ -226,7 +239,21 @@ func (c Config) s3Blob(ctx context.Context) (*s3blob.Blob, error) {
 		Bucket: b.Bucket, Prefix: b.Prefix, Region: b.Region, KMSKey: b.KMSKey,
 		Endpoint: b.Endpoint, PathStyle: b.PathStyle, Checksum: b.Checksum,
 	}
-	if b.CredentialsRef != "" {
+	if preset, stored := config.CloudflareStoredRef(b.CredentialsRef); stored {
+		if c.v4 == nil || (c.v4.stores == nil && !v5) {
+			return nil, errors.New("credentialsRef needs the installation's secrets on the ssm secrets source (secrets.source), where the stored credential is")
+		}
+		var doc state.Value[secretstore.Cloudflarev1]
+		if v5 {
+			doc = c.v4.v5.CloudflareExternal().Preset(preset)
+		} else {
+			doc = c.v4.stores.External.Cloudflare(preset)
+		}
+		if cfg.Region == "" {
+			cfg.Region = "auto"
+		}
+		cfg.Credentials = storedPresetCredentials(doc, b.CredentialsRef, b.Endpoint, time.Now)
+	} else if b.CredentialsRef != "" {
 		if c.v4 == nil || (c.v4.stores == nil && !v5) {
 			return nil, errors.New("credentialsRef needs the installation's secrets on the ssm secrets source (secrets.source), where the internal address is")
 		}
@@ -287,6 +314,42 @@ func (c Config) s3Blob(ctx context.Context) (*s3blob.Blob, error) {
 		cfg.Credentials = presetCredentials(prov)
 	}
 	return s3blob.New(ctx, cfg)
+}
+
+// storedPresetCredentials reads the R2 credential the Cloudflare module rotates
+// for a preset (`cloudflare/v1`, at external/cloudflare/<preset>): the access
+// key is the token's id and the secret the one the module stored. Nothing is
+// kept on disk. The pair is to be read again with a third of its time left (the
+// blob adapter also reads again once after a 403, which is how a rotation or a
+// revocation is picked up), so a pair is never used past two thirds of the
+// time it had when it was read. A document for another endpoint, one holding an
+// API token, and an expired one are refused, naming the address and never a value.
+func storedPresetCredentials(doc state.Value[secretstore.Cloudflarev1], ref, endpoint string, now func() time.Time) s3blob.CredentialsFunc {
+	return func(ctx context.Context) (s3blob.Credentials, error) {
+		got, _, err := doc.Get(ctx)
+		if err != nil {
+			return s3blob.Credentials{}, fmt.Errorf("reading %s: %w", ref, err)
+		}
+		if got.Token != "" || got.AccessKeyID == "" || got.SecretAccessKey == "" {
+			return s3blob.Credentials{}, fmt.Errorf("%s holds no R2 credentials: is the preset an R2 preset (it has an endpoint)?", ref)
+		}
+		if !storagecf.SameEndpoint(got.Endpoint, endpoint) {
+			return s3blob.Credentials{}, fmt.Errorf("%s is for the endpoint %q and the store is at %q: is it the preset of this store's account?",
+				ref, got.Endpoint, endpoint)
+		}
+		expires, err := time.Parse(time.RFC3339, got.ExpiresOn)
+		if err != nil {
+			return s3blob.Credentials{}, fmt.Errorf("%s: expires_on %q is not RFC 3339", ref, got.ExpiresOn)
+		}
+		t := now()
+		left := expires.Sub(t)
+		if left <= 0 {
+			return s3blob.Credentials{}, fmt.Errorf("%s expired at %s: is sluis rotating the preset (store: external)?", ref, expires.UTC().Format(time.RFC3339))
+		}
+		return s3blob.Credentials{
+			AccessKeyID: got.AccessKeyID, SecretAccessKey: got.SecretAccessKey, Expires: t.Add(left * 2 / 3),
+		}, nil
+	}
 }
 
 func (c Config) dial() minter.Dialer {
