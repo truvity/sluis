@@ -8,7 +8,7 @@ import (
 	"github.com/truvity/sluis/audit/deploy/spec"
 )
 
-// TestSpecAgreesWithTheLibrary holds deploy/spec, the SDK-free copy of the
+// TestSpecAgreesWithTheLibrary holds audit/deploy/spec, the SDK-free copy of the
 // names and checks an estate's tooling uses before anything exists, to the
 // rules this library applies.
 func TestSpecAgreesWithTheLibrary(t *testing.T) {
@@ -28,7 +28,7 @@ func TestSpecAgreesWithTheLibrary(t *testing.T) {
 		"role":          {ComponentRoleName("p", "writer"), spec.ComponentRoleName("p", "writer")},
 	} {
 		if pair[0] != pair[1] {
-			t.Errorf("%s: the library's is %q, deploy/spec's %q", name, pair[0], pair[1])
+			t.Errorf("%s: the library's is %q, audit/deploy/spec's %q", name, pair[0], pair[1])
 		}
 	}
 
@@ -36,18 +36,18 @@ func TestSpecAgreesWithTheLibrary(t *testing.T) {
 	if !slices.EqualFunc(lib, own, func(a Component, b spec.Component) bool {
 		return a.Name == b.Name && a.ServiceAccount == b.ServiceAccount
 	}) {
-		t.Errorf("components: the library's %v, deploy/spec's %v", lib, own)
+		t.Errorf("components: the library's %v, audit/deploy/spec's %v", lib, own)
 	}
 
 	agree := func(what string, a, b error) {
 		t.Helper()
 
 		if (a == nil) != (b == nil) {
-			t.Errorf("%s: the library says %v, deploy/spec %v", what, a, b)
+			t.Errorf("%s: the library says %v, audit/deploy/spec %v", what, a, b)
 		}
 
 		if a != nil && !strings.HasSuffix(a.Error(), b.Error()) {
-			t.Errorf("%s: the library says %q, deploy/spec %q", what, a, b)
+			t.Errorf("%s: the library says %q, audit/deploy/spec %q", what, a, b)
 		}
 	}
 
