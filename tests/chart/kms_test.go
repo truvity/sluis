@@ -130,15 +130,14 @@ func TestTheRotationAlertFollowsTheRotationInterval(t *testing.T) {
 	threshold := func(args ...string) string {
 		for _, d := range renderArgs(t, args...) {
 			for _, r := range rulesOf(t, d) {
-				if r["alert"] == "AccessRosterSigningKeyRotationStalled" {
+				if r["alert"] == "SluisSigningKeyRotationStalled" {
 					expr := r["expr"].(string)
-					// The expression is `(<sluis_ names>) or (<old names>)`: the last
-					// threshold is followed by the closing parenthesis.
-					return strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(expr[strings.LastIndex(expr, ">")+1:]), ")"))
+					// The threshold follows the last `>`.
+					return strings.TrimSpace(expr[strings.LastIndex(expr, ">")+1:])
 				}
 			}
 		}
-		t.Fatal("no AccessRosterSigningKeyRotationStalled rule")
+		t.Fatal("no SluisSigningKeyRotationStalled rule")
 		return ""
 	}
 	if got := threshold("-f", caseValues("alerts-kms-wrapped")); got != "50400" {

@@ -53,13 +53,12 @@ func rulesOf(t *testing.T, doc map[string]any) []map[string]any {
 	return out
 }
 
-// The number of rules the chart ships, and the number written in its template.
-// In the v1.75 dual-name window each template rule renders twice, as the
-// `AccessRoster...` rule and the `Sluis...` one. A guard that sweeps nothing
-// proves nothing, so each check below counts what it saw against these.
+// The number of rules the chart ships, which is the number written in its
+// template. A guard that sweeps nothing proves nothing, so each check below
+// counts what it saw against it.
 const (
 	templateRuleCount = 11
-	ruleCount         = 2 * templateRuleCount
+	ruleCount         = templateRuleCount
 )
 
 // `renders: alerts` renders the rule object and nothing else, and none of the
@@ -90,7 +89,7 @@ func TestAlertsCanBeAPrometheusRuleAndOneRuleCanBeOff(t *testing.T) {
 	docs := renderArgs(t, "-f", alertsCase,
 		"--set", "alerts.format=prometheusrule", "--set", "alerts.rules.seatsShort.enabled=false",
 		"--set", "alerts.runbookBaseUrl=")
-	if docs[0]["kind"] != "PrometheusRule" || len(rulesOf(t, docs[0])) != ruleCount-2 {
+	if docs[0]["kind"] != "PrometheusRule" || len(rulesOf(t, docs[0])) != ruleCount-1 {
 		t.Fatalf("%v with %d rules", docs[0]["kind"], len(rulesOf(t, docs[0])))
 	}
 	for _, r := range rulesOf(t, docs[0]) {
@@ -100,30 +99,114 @@ func TestAlertsCanBeAPrometheusRuleAndOneRuleCanBeOff(t *testing.T) {
 	}
 }
 
-// `renders: dashboards` renders ConfigMaps for Grafana's sidecar and nothing
-// else, each holding a dashboard that is valid JSON.
-func TestDashboardsModeRendersOnlySidecarConfigMaps(t *testing.T) {
-	docs := renderArgs(t, "-f", filepath.Join("..", "cases", "sluis", "dashboards", "values.yaml"))
-	if len(docs) == 0 {
-		t.Fatal("nothing rendered")
+// `renders: dashboards` renders a GrafanaFolder and the GrafanaDashboards in
+// it, for the grafana-operator, and nothing else.
+func TestDashboardsModeRendersTheFolderAndTheDashboards(t *testing.T) {
+	docs := renderArgs(t, "--namespace", "sluis", "-f", filepath.Join("..", "cases", "sluis", "dashboards", "values.yaml"))
+	selector := func(d map[string]any) string {
+		v, _ := dig(d, "spec", "instanceSelector", "matchLabels", "observability.truvity.io/grafana")
+		s, _ := v.(string)
+		return s
 	}
+	var folders int
+	uids := map[string]bool{}
 	for _, d := range docs {
-		if d["kind"] != "ConfigMap" {
-			t.Errorf("a %v in dashboards mode", d["kind"])
-			continue
+		if ns, _ := dig(d, "metadata", "namespace"); ns != "sluis" {
+			t.Errorf("%v in namespace %v, want sluis", d["kind"], ns)
 		}
-		if ns, _ := dig(d, "metadata", "namespace"); ns != "monitoring" {
-			t.Errorf("namespace %v", ns)
+		if selector(d) != "shared" {
+			t.Errorf("%v: instanceSelector %v, want the shared Grafana", d["kind"], selector(d))
 		}
-		if l, _ := dig(d, "metadata", "labels", "grafana_dashboard"); l != "1" {
-			t.Errorf("the sidecar label is %v", l)
+		if v, _ := dig(d, "spec", "allowCrossNamespaceImport"); v != true {
+			t.Errorf("%v lacks allowCrossNamespaceImport", d["kind"])
 		}
-		data, _ := dig(d, "data")
-		for name, body := range data.(map[string]any) {
+		switch d["kind"] {
+		case "GrafanaFolder":
+			folders++
+			if v, _ := dig(d, "spec", "uid"); v != "prod-sluis" {
+				t.Errorf("folder uid %v", v)
+			}
+			if v, _ := dig(d, "spec", "parentFolderUID"); v != "prod" {
+				t.Errorf("parentFolderUID %v", v)
+			}
+			if v, _ := dig(d, "metadata", "annotations", "argocd.argoproj.io/sync-wave"); v != "0" {
+				t.Errorf("folder sync wave %v, want 0", v)
+			}
+		case "GrafanaDashboard":
+			if v, _ := dig(d, "spec", "folderUID"); v != "prod-sluis" {
+				t.Errorf("dashboard folderUID %v", v)
+			}
+			if v, _ := dig(d, "metadata", "annotations", "argocd.argoproj.io/sync-wave"); v != "1" {
+				t.Errorf("dashboard sync wave %v, want 1", v)
+			}
+			body, _ := dig(d, "spec", "json")
 			var dash map[string]any
 			if err := yaml.Unmarshal([]byte(body.(string)), &dash); err != nil || dash["title"] == nil {
-				t.Errorf("%s is not a dashboard: %v", name, err)
+				t.Fatalf("not a dashboard: %v", err)
 			}
+			uid, _ := dash["uid"].(string)
+			if uid == "" || len(uid) > 40 || !strings.HasPrefix(uid, "prod-sluis-") {
+				t.Errorf("dashboard uid %q: want prod-sluis-... of at most 40 characters", uid)
+			}
+			uids[uid] = true
+			if !strings.Contains(body.(string), `"value": "prod-metrics"`) {
+				t.Errorf("%s: the metrics datasource uid is not the datasource variable's default", uid)
+			}
+		default:
+			t.Errorf("a %v in dashboards mode", d["kind"])
+		}
+	}
+	if folders != 1 || !uids["prod-sluis-overview"] || !uids["prod-sluis-audit"] || len(uids) != 2 {
+		t.Errorf("%d folders and dashboards %v; want one folder, sluis-overview and audit-overview", folders, uids)
+	}
+}
+
+// A folder uid that makes a dashboard uid longer than Grafana allows, and a
+// missing required value, are refused at render time.
+func TestDashboardsModeRefusesWhatGrafanaWould(t *testing.T) {
+	cmd := func(args ...string) error {
+		a := append([]string{"template", "sluis", chartDir, "-f", filepath.Join("..", "cases", "sluis", "dashboards", "values.yaml")}, args...)
+		return exec.Command(helm(t), a...).Run() //nolint:gosec // the helm binary the test found
+	}
+	if err := cmd("--set", "dashboards.clusterFolderUID=0123456789012345678901234"); err != nil {
+		t.Errorf("a 25-character folder uid must render: %v", err)
+	}
+	for name, set := range map[string]string{
+		"a 26-character folder uid": "dashboards.clusterFolderUID=01234567890123456789012345",
+		"no folder uid":             "dashboards.clusterFolderUID=",
+		"no metrics datasource":     "dashboards.datasources.metrics=",
+		"no logs datasource":        "dashboards.datasources.logs=",
+	} {
+		if cmd("--set", set) == nil {
+			t.Errorf("%s was accepted", name)
+		}
+	}
+}
+
+// The audit dashboard is a copy of the audit chart's own: Helm cannot read
+// outside a chart, so the two are held byte-equal here instead of drifting.
+func TestTheAuditDashboardIsTheAuditCharts(t *testing.T) {
+	a, err := os.ReadFile(filepath.Join(chartDir, "dashboards", "audit-overview.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(filepath.Join("..", "..", "charts", "audit", "dashboards", "audit-overview.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(a, b) {
+		t.Fatal("charts/sluis/dashboards/audit-overview.json differs from charts/audit/dashboards/audit-overview.json: copy the audit chart's file over it")
+	}
+}
+
+// The Lambda function's series carry the namespace in another label: the
+// selector and the aggregations follow `alerts.namespaceLabel`.
+func TestAlertsFollowTheNamespaceLabel(t *testing.T) {
+	docs := renderArgs(t, "-f", alertsCase, "--set", "alerts.namespaceLabel=k8s_namespace_name", "--set", "alerts.namespace=lambda")
+	for _, r := range rulesOf(t, docs[0]) {
+		expr := r["expr"].(string)
+		if !strings.Contains(expr, `k8s_namespace_name="lambda"`) || strings.Contains(expr, `namespace="sluis"`) || strings.Contains(expr, ", namespace") {
+			t.Errorf("%v: expr %s", r["alert"], expr)
 		}
 	}
 }
@@ -139,8 +222,8 @@ func TestTheAppModeRendersNoAlertsAndNoDashboards(t *testing.T) {
 		if d["kind"] == "VMRule" || d["kind"] == "PrometheusRule" {
 			t.Errorf("the app renders a %v", d["kind"])
 		}
-		if l, _ := dig(d, "metadata", "labels", "grafana_dashboard"); l != nil {
-			t.Errorf("the app renders a dashboard: %v", d["kind"])
+		if d["kind"] == "GrafanaFolder" || d["kind"] == "GrafanaDashboard" {
+			t.Errorf("the app renders a %v", d["kind"])
 		}
 	}
 }

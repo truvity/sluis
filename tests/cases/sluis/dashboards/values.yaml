@@ -1,5 +1,8 @@
-# Dashboards-only mode: the service's own values are absent, and the
-# ConfigMaps go to Grafana's namespace.
+# Dashboards-only mode: the service's own values are absent; a GrafanaFolder
+# and the GrafanaDashboards go to the namespace `sluis` of the Grafana cluster.
 renders: dashboards
 dashboards:
-  namespace: monitoring
+  clusterFolderUID: prod
+  datasources:
+    metrics: prod-metrics
+    logs: prod-logs
