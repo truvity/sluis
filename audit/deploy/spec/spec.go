@@ -5,7 +5,7 @@
 // An estate's own tooling needs both before anything exists: a key policy
 // names a component's role, a render writes the archive bucket's name, and a
 // configuration file is refused before a preview. Code that must not link a
-// cloud provider SDK imports this package; `deploy/pulumi` applies the same
+// cloud provider SDK imports this package; `audit/deploy/pulumi` applies the same
 // rules, and its tests hold the two equal.
 package spec
 
