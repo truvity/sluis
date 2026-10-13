@@ -4,7 +4,7 @@ Point the pod at an OpenTelemetry collector, then install the alerts and Grafana
 
 ## Before you start
 
-- You need an OTLP collector (`http/protobuf`) and a Grafana sidecar that reads labelled ConfigMaps.
+- You need an OTLP collector (`http/protobuf`) and, on the cluster that holds Grafana, the grafana-operator with its `GrafanaFolder` and `GrafanaDashboard` kinds.
 
 - You need a ruler that reads `VMRule`, or `PrometheusRule` with `alerts.format: prometheusrule`.
 
@@ -46,30 +46,36 @@ Point the pod at an OpenTelemetry collector, then install the alerts and Grafana
    helm install   sluis-alerts oci://ghcr.io/truvity/charts/sluis --version X.Y.Z -n monitoring -f alerts.yaml
    ```
 
-3. Install the dashboard.
+3. Install the dashboards, in the namespace `sluis` of the cluster that holds Grafana. They are a `GrafanaFolder` named `sluis` under the cluster's folder (Argo CD sync wave 0) and two `GrafanaDashboard`s in it (wave 1): the service's overview and the audit trail's. Both are off unless `renders: dashboards`.
 
    ```yaml
    # dashboards.yaml
    renders: dashboards
    dashboards:
-     namespace: monitoring         # the cluster Grafana runs on
+     clusterFolderUID: prod          # folder.uid of the observability-cluster chart; at most 25 characters
+     datasources:
+       metrics: prod-metrics         # the uids of the Grafana's datasources
+       logs: prod-logs
+     # instanceSelector: {}          # the shared Grafana by default
    ```
 
+   The folder's uid is `<clusterFolderUID>-sluis` and the dashboards' `<clusterFolderUID>-sluis-overview` and `<clusterFolderUID>-sluis-audit`: dashboard uids are global in the shared Grafana, so they carry the cluster. The render refuses a missing value or a uid over 40 characters.
+
    ```sh
-   helm install sluis-dashboards oci://ghcr.io/truvity/charts/sluis --version X.Y.Z -n monitoring -f dashboards.yaml
+   helm install sluis-dashboards oci://ghcr.io/truvity/charts/sluis --version X.Y.Z -n sluis -f dashboards.yaml
    ```
 
 ## Verify
 
 - The pod has `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_PROTOCOL`, `OTEL_SERVICE_NAME` and your `extraEnv`; a minute on, `sluis_http_requests_total` has series.
 
-- The ruler lists one group of twelve rules, none erroring.
+- The ruler lists one group of eleven rules, none erroring.
 
-- The Grafana `Access` folder has the overview dashboard (a ConfigMap per file) with a `$cluster` variable.
+- The shared Grafana has `<cluster> / sluis` with the overview and audit dashboards, each with a `$cluster` variable.
 - A log line written inside a request carries `trace_id`, `span_id` and `trace_flags` (W3C hex), the trace's own id; a line outside a span has none. Logs stay on stdout. In Lambda the OTLP layer forwards only platform events, so function logs reach CloudWatch Logs only.
 
 A rule with no series does not fire; the platform's scrape alert covers a service that is down.
 
 ## Roll back
 
-Empty `endpoint` and upgrade, then `helm uninstall sluis-alerts -n monitoring` and `helm uninstall sluis-dashboards -n monitoring`.
+Empty `endpoint` and upgrade, then `helm uninstall sluis-alerts -n monitoring` and `helm uninstall sluis-dashboards -n sluis`.
