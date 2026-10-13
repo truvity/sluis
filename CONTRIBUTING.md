@@ -190,14 +190,14 @@ The release carries two checksummed bundles beside the binaries:
 ## Audit
 
 audit lives in this repository. Its recipes are the root Justfile's `audit-*` recipes: `just audit-check` is the gate, and a page that says `just X` for audit means `just audit-X`.
-Its tools come from the root `devbox.json`, and its CI is the `audit*` jobs of `ci.yaml`.
+Its tools come from the root `devbox.json`, and its CI is the `audit` job of `ci.yaml`.
 audit never imports sluis. Both share the `storage` module, which imports nothing of sluis.
 
 - A compliance bundle is a **profile**. The files in `audit/profiles/` are *framework profiles*: they cite the clause they implement and state that they are an engineering reading, not legal advice.
 
 - Update the matching reference page when you change `audit/proto/`, `audit/schemas/` or `audit/profiles/`. Add a decision record when the change is not additive. A decision for one deployment only is not recorded here.
 
-- `just audit-check` needs only this checkout. CI runs the heavier checks as separate jobs:
+- `just audit-check` needs only this checkout. CI runs the heavier checks:
 
   - `just audit-race` needs a C toolchain. Run it before changing code that hands a record to a background goroutine, because a race there loses a record.
 

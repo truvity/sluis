@@ -1,6 +1,6 @@
 # Git hooks (installed by the devbox init_hook: lefthook install).
 #
-# pre-push runs exactly what CI's `check` job runs.
+# pre-push runs `just check`: the CI groups that need only the checkout.
 #
 # It goes through `devbox run` rather than calling `just` directly: a git
 # hook fires from whatever shell the push came from, which is often not a
