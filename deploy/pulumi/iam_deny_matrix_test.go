@@ -230,13 +230,16 @@ func mxBuildRows(specs []roleSpec) []mxRow {
 				add("ssm", fmt.Sprintf("%s/%s write", ns, ms), "ssm:PutParameter", p, s.writes(m), nil)
 				add("ssm", fmt.Sprintf("%s/%s delete", ns, ms), "ssm:DeleteParameter", p, s.writes(m), nil)
 				add("ssm", fmt.Sprintf("%s/%s lookalike sibling", ns, ms), "ssm:GetParameter", mxParam(ns, ms+"x", "k"), false, nil)
-				// A listing is authorised against the bare path: only a role that
-				// hosts the module lists it, and neither a sibling, a deeper path
-				// nor the namespace root.
+				// A listing is authorised against the bare path: a role that hosts
+				// the module lists its two paths, and neither a sibling, a deeper
+				// path nor the namespace root. The backup (read-all) lists every
+				// path under internal/ and external/, the reach its key grant has
+				// (its export walks every module); never the roots. The restore
+				// (write-all) lists nothing it does not host: it reads by name.
 				bare := strings.TrimSuffix(mxParam(ns, ms, ""), "/")
-				add("ssm", fmt.Sprintf("%s/%s list own path", ns, ms), "ssm:GetParametersByPath", bare, s.hostsModule(m), nil)
-				add("ssm", fmt.Sprintf("%s/%s list lookalike sibling", ns, ms), "ssm:GetParametersByPath", bare+"x", false, nil)
-				add("ssm", fmt.Sprintf("%s/%s list below own path", ns, ms), "ssm:GetParametersByPath", bare+"/k", false, nil)
+				add("ssm", fmt.Sprintf("%s/%s list the module path", ns, ms), "ssm:GetParametersByPath", bare, s.hostsModule(m) || s.readAll, nil)
+				add("ssm", fmt.Sprintf("%s/%s list lookalike sibling", ns, ms), "ssm:GetParametersByPath", bare+"x", s.readAll, nil)
+				add("ssm", fmt.Sprintf("%s/%s list below own path", ns, ms), "ssm:GetParametersByPath", bare+"/k", s.readAll, nil)
 				root := strings.TrimSuffix(bare, "/"+ms)
 				add("ssm", fmt.Sprintf("%s list the namespace root", ns), "ssm:GetParametersByPath", root, false, nil)
 				kmsAdd(fmt.Sprintf("%s/%s decrypt", ns, ms), "kms:Decrypt", p, s.reads(m))

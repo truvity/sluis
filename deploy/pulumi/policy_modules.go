@@ -193,10 +193,12 @@ func ModuleRoleStatements(env ModuleEnv, role Role) ([]map[string]any, error) {
 			st = append(st, k)
 		}
 	}
+	listsAll := false
 	for _, g := range CrossGrants {
 		if g.Role != role.Name {
 			continue
 		}
+		listsAll = listsAll || g.Verb == CrossReadAll
 		if g.Verb == CrossInvoke {
 			sts, err := env.invokeStatements(g)
 			if err != nil {
@@ -229,6 +231,24 @@ func ModuleRoleStatements(env ModuleEnv, role Role) ([]map[string]any, error) {
 					env.Modules.InternalPrefix(m), env.Modules.ExternalPrefix(m))...)
 			}
 		}
+	}
+	if listsAll {
+		// The backup's export lists every module's internal/<m> and external/<m>
+		// (recursively) before it reads them, and a listing is authorised against
+		// the path ARN, which the `/*` of SluisCross<M>Parameters never covers.
+		// The read-all role reads every parameter of both namespaces already, and
+		// the key admits it to exactly `internal/*` and `external/*`
+		// (SluisKeyReadAll<Role>): the listing is granted on those two, not on a
+		// bare path per module, which would take the role's inline policy past
+		// IAM's 10,240 characters. The namespace roots themselves are not listed.
+		// A listing decrypts nothing: a value is decrypted through the key, whose
+		// deny of the restore identity holds.
+		st = append(st, statement{
+			"Sid": "SluisCrossParametersList", "Effect": "Allow",
+			"Action": []string{ssmGetParametersByPath},
+			"Resource": parameterArnsUnder(env.Region, env.Account,
+				InternalParameterPrefix(env.Modules.Instance), ExternalParameterPrefix(env.Modules.Instance)),
+		})
 	}
 	// A controller's "run a pass now" starts its own function (the `invoke`
 	// trigger of its document), on the alias the adapter always qualifies with:

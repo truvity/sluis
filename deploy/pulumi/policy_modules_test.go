@@ -281,7 +281,8 @@ func TestModuleRoleMinterCrossGrant(t *testing.T) {
 }
 
 // A listing is authorised against the bare path ARN, so a role lists exactly
-// its own modules' two paths: not `/*`, not a sibling, not the root.
+// its own modules' two paths: not `/*`, not a sibling, not the root. The
+// read-all role alone also lists below the two namespaces.
 func TestModuleRoleListsOnlyItsOwnBarePaths(t *testing.T) {
 	env := testModuleEnv()
 	base := arnPrefix + "ssm:" + env.Region + ":" + env.Account + ":parameter/sluis/i1/"
@@ -290,10 +291,17 @@ func TestModuleRoleListsOnlyItsOwnBarePaths(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		// A role lists the paths of the modules it hosts; the read-all role (the
+		// backup's export) lists everything under the two namespaces, which is
+		// the reach of its key grant, and never the namespace roots.
 		want := map[string]bool{}
 		for _, m := range role.Hosts {
 			want[base+"internal/"+string(m)] = true
 			want[base+"external/"+string(m)] = true
+		}
+		readsAll := slices.ContainsFunc(CrossGrants, func(g CrossGrant) bool { return g.Role == role.Name && g.Verb == CrossReadAll })
+		if readsAll {
+			want[base+"internal/*"], want[base+"external/*"] = true, true
 		}
 		got := map[string]bool{}
 		for _, s := range st {
@@ -307,7 +315,7 @@ func TestModuleRoleListsOnlyItsOwnBarePaths(t *testing.T) {
 			}
 			res, _ := s["Resource"].([]string)
 			for _, r := range res {
-				if strings.HasSuffix(r, "*") {
+				if strings.HasSuffix(r, "*") && (!readsAll || !want[r]) {
 					t.Errorf("%s: list resource %q is wider than a bare path", role.Name, r)
 				}
 				got[r] = true

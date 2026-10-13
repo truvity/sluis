@@ -319,6 +319,17 @@
     },
     {
       "Action": [
+        "ssm:GetParametersByPath"
+      ],
+      "Effect": "Allow",
+      "Resource": [
+        "arn:aws:ssm:r1:111122223333:parameter/sluis/i1/internal/*",
+        "arn:aws:ssm:r1:111122223333:parameter/sluis/i1/external/*"
+      ],
+      "Sid": "SluisCrossParametersList"
+    },
+    {
+      "Action": [
         "dynamodb:PutItem",
         "dynamodb:UpdateItem",
         "dynamodb:DeleteItem",
