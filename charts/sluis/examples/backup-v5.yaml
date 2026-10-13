@@ -1,6 +1,7 @@
 # A Kubernetes estate on storage layout v5 with the backup module: the service
 # keeps its state in one DynamoDB table per module, its secrets in SSM, and a
-# CronJob writes the sealed archive to S3 as an account of its own. Copy it into
+# CronJob writes the backup to S3 as an account of its own: an age-encrypted
+# `<id>.tar.gz.age` plus an `<id>.json` sidecar (format 2). Copy it into
 # your values; the roles, tables, bucket and keys are yours to make (the Pulumi
 # library makes them: docs/reference/sluis/pulumi-library.md).
 #
