@@ -2,15 +2,15 @@
 
 One issuer that every cluster, cloud account, CD system and console trusts, fed by the corporate directories the company already runs. It answers two questions about a person, whether the account is live and who is in a group. It turns the answer into a token under a policy that is a file in git. It authenticates nobody: passwords, MFA and device policy stay with Google Workspace or Entra.
 
-## One process
+## One binary per module
 
-The directory reader, token service, console, GitHub controller and Slack controller are one process. The controllers are loops switched on by the `controllers` section of the service document, and they share its health probes. The answer about a person is a function call, so a login makes no network call except to the corporate directory.
+The issuer, the signer and the console are one process, `sluis-issuer`. The GitHub, Slack, Google, Cloudflare and backup modules are processes of their own, one binary each, that the issuer calls ([ADR 0071](../../decisions/0071-least-privilege-modules-one-credential-holder-per-function.md)). A module whose `remote` is unset in the issuer's document runs inside the issuer instead and shares its health probes. A login makes no network call except to the corporate directory and the Google module.
 
-The directory's own endpoint is not served. The controllers read the console's API, which is this process, with the policy digest on every answer.
+The directory's own endpoint is not served. The controllers read the console's API with their own identity, with the policy digest on every answer.
 
-That leaves one chart, one Deployment or Lambda function, one service document, one policy file and one health endpoint. The assembly is `internal/rosterapp`: wiring only, and the halves keep their own packages and tests.
+That leaves one chart, one policy file, and per process one service document and one health endpoint. The assembly is `internal/rosterapp`: wiring only, and the halves keep their own packages and tests.
 
-The controllers hold GitHub App keys, so the boundary between them and the rest sits in IAM scoped to the installation, in validated configuration and in the release signature.
+A module alone holds its credentials: a GitHub App key is in the GitHub module's namespace and nowhere else. The boundary sits in IAM per role, in validated configuration and in the release signature.
 
 ## Where each part is explained
 
@@ -40,4 +40,4 @@ A console with no OpenID flow of its own uses gateway-native OIDC on Envoy Gatew
 ## Decided in
 
 - [ADR 0003: deprecate and remove the proxy chart](../../decisions/0003-deprecate-access-proxy.md)
-- [ADR 0037: one process everywhere](../../decisions/0037-one-process-everywhere.md)
+- [ADR 0071: least-privilege modules, one process per credential holder](../../decisions/0071-least-privilege-modules-one-credential-holder-per-function.md)

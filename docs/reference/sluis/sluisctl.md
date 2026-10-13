@@ -185,7 +185,7 @@ sluisctl restore status
 | Credentials | The caller's own AWS credentials, the SDK's default chain, so a profile from `aws-config` works. No issuer, session or console. `--profile` and `--region` override |
 | Function | `--function`, else `$SLUISCTL_BACKUP_FUNCTION` or `$SLUISCTL_RESTORE_FUNCTION`, else `backup.function` or `backup.restoreFunction` in `config.yaml`; `backup.region` and `backup.instance` too. Addresses, no secret |
 | Class | `--as admin` (default) or `breakglass`: every call goes through the alias `live-<class>` |
-| Backup | Module calls `backup.run` (synchronous), `backup.status`, `backup.list`. See [backup](backup.md) |
+| Backup | Module calls `backup.run` (synchronous; `--resume` answers `idle` since format 2), `backup.status`, `backup.list`. Verifying a backup is `sluis backup verify`, with the backup document ([backup](backup.md#commands)) |
 | `restore preview` | A synchronous restore event with `preview`: counts per module and section, names in `--json`, never values |
 | `restore start` | Refuses unless `--confirm` equals the instance (`--instance`, `$SLUISCTL_INSTANCE`, `backup.instance`). Sends the event asynchronously with `by` set to the caller's `sts:GetCallerIdentity` ARN, then looks up the run and prints its id. `--wait` polls `restore.status` every 5 seconds until `completed`, or `failed` (exit 1) |
 | `restore resume` | Does nothing when no restore is unfinished |

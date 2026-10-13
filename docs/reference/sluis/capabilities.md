@@ -40,9 +40,9 @@ The presets `server`, `k8s-minimal` and `k8s-openbao` are unavailable; `aws-serv
 | Slack `users.info` cache on the State (`cache.slack.user.<workspace>.<id>`, 24 h; `slack_roster.user_cache` counts hits and misses) | 🧪 | 📄 |
 | Shared inputs of the Slack controller in the State (`cache.<digest>.<name>`) | 📄 (stays in memory) | 📄 |
 | Controllers reading the console's records from the State instead of mounted files (`ports.adapter` other than `legacy`) | 🧪 | 📄 |
-| One Lambda function: the issuer and console behind an API Gateway HTTP API, and the controllers' ticks from EventBridge Scheduler (v1.63, [0037](../../decisions/0037-one-process-everywhere.md)) | n/a | ✅ |
-| One binary `sluis` (v1.63, [0037](../../decisions/0037-one-process-everywhere.md): `serve`, which runs the GitHub and Slack controllers in-process; `controller github|slack` deprecated, removed in the next release; `tick <github|slack> <target>` runs one tick once; `migrate --from <config> --to <config>` copies the State between storages) | 🧪 | 📄 |
-| One chart `sluis` (one Deployment, `sluis serve`; the controllers are `config.controllers.*`) | 🧪 | n/a |
+| A function per module on Lambda: the issuer and console behind an API Gateway HTTP API, and `github`, `slack`, `google`, `cloudflare`, `backup` and `restore`, each with its own role; the controllers' ticks from EventBridge Scheduler (v1.76, [0071](../../decisions/0071-least-privilege-modules-one-credential-holder-per-function.md)) | n/a | ✅ |
+| Six server binaries, one per module and pinned at build (v1.76, [0071](../../decisions/0071-least-privilege-modules-one-credential-holder-per-function.md)): `sluis-issuer`, `sluis-github`, `sluis-slack`, `sluis-google`, `sluis-cloudflare`, `sluis-backup`; `sluis serve` runs a module in-process where its `remote` is unset; `tick <github|slack> <target>` runs one tick once; `migrate --from <config> --to <config>` copies the State between storages | ✅ | ✅ |
+| One chart `sluis`: a Deployment per module, the issuer and each enabled `modules.<m>`; `backup.enabled` adds the CronJobs | 🧪 | n/a |
 | One service document (`sluis/v3`) validated against a schema | ✅ | ✅ |
 
 ## Identity
@@ -61,7 +61,7 @@ The federation verifier is the same code on both platforms.
 | Piece | Kubernetes | AWS Lambda |
 |---|---|---|
 | `sluis migrate --from <config> --to <config>`: every domain store through its business interface, with `--dry-run`, create-if-absent and `--overwrite`, a plan before any write, and a read-back verification reported as JSON ([operations/migrate.md](../../guides/sluis/migrate/migrate-state.md)) | 🧪 | 📄 |
-| Backup and export through the same command (a file as one end) | 📄 (a follow-up: there is no file adapter yet) | 📄 |
+| The backup module on layout v5 ([0073](../../decisions/0073-backup-format-2-age-encrypted-tar.md)): one age-encrypted `tar.gz` per backup in an archive bucket, retention, `sluis backup verify`, and a restore as a second deployment of the binary | ✅ (CronJobs, a Job) | ✅ (`NewBackup`, `NewRestore`) |
 | Copy of Valkey sessions, refresh tokens and the keyring schedule into the new store, each with its remaining lifetime | 🧪 | n/a |
 | Rollback by the same command in the other direction (`--from dynamodb --to legacy`) | 🧪 | n/a |
 | Existing backup: a copy of named Secrets | ✅ | n/a |

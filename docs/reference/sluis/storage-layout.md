@@ -178,13 +178,14 @@ The logical key maps to kind and credential path as follows.
 | a Slack App's client secret | `internal/slack/apps/<id>/<ref>` |
 | the Cloudflare minter, and its minted-token record | `internal/cloudflare/<account>/minter`, `internal/cloudflare/minted/<preset>` |
 | static S3 credentials (`credentialsRef`) | `internal/<module>/<name>`, its own module |
+| the restore identity, an age key (`AGE-SECRET-KEY-1...`) | `internal/backup/restore-identity`, written by the Pulumi library as `{"value":"<base64>"}`; read by the restore role, never by the backup role |
 
 ## Backup archive
 
-| Object under `backup/<installation>/<id>/` | Content |
+| Object under `backup/<instance>/` | Content |
 |---|---|
-| `manifest.json` | Format version, wrapped data key, the manifest (installation, id, layout, creator, per-module counts, chunk sizes and SHA-256) and its HMAC |
-| `state/<module>/<n>`, `secrets/<module>/<n>`, `blobs/<module>/<n>` | Chunk `n` (from 0) of the module's records, sealed with AES-256-GCM under a key derived from the data key; names, section and position are authenticated |
+| `<id>.tar.gz.age` | The backup: a PAX tar, gzip, encrypted with age to `backup.recipients`. `manifest.json` first, then per module `state.jsonl`, `secrets.jsonl` and `blobs/<key>` ([format 2](backup.md#format-2)) |
+| `<id>.json` | The sidecar, written last: object key, size, SHA-256, recipients and per-module counts. Never a secret. An object without its sidecar is not a backup |
 
 ## S3 (the `s3` Blob adapter)
 

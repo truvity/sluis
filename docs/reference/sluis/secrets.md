@@ -13,7 +13,7 @@ secrets:
   region: eu-west-1    # ssm only
   refresh: 1m          # ssm only
   kmsKeyId: alias/example   # ssm only: the key every PutParameter the service makes is encrypted with
-  layout: v4           # ssm only: v4 (the only value and the default), see "SSM layout"
+  layout: v4           # ssm only: v4 (the default) or v5, see "SSM layout"
   grace: 24h           # ssm only: how long a rotated client secret's previous value is accepted
 ```
 
@@ -21,7 +21,7 @@ secrets:
 |---|---|---|
 | `env` (the default) | the variable `SLUIS_SECRET_<NAME>`: the name upper-cased, every character that is not a letter or a digit an underscore (`valkey/password` is `SLUIS_SECRET_VALKEY_PASSWORD`). Two names may not share a variable | once, at start; for a local run |
 | `file` | the file `<root>/<name>` | on every use, so a rotated Secret the platform mounts takes effect without a restart. The chart's `secrets` value projects each name as a file under `/var/run/sluis/secrets` |
-| `ssm` | the SecureString `<root>/internal/config/<name>` of AWS SSM Parameter Store | that one parameter, decrypted, on first use and again once `refresh` (`1m`) has passed. Nothing is read at start |
+| `ssm` | the SecureString `<root>/internal/config/<name>` of AWS SSM Parameter Store; on layout v5 `<root>/<name>`, the name being `internal/<module>/...` | that one parameter, decrypted, on first use and again once `refresh` (`1m`) has passed. Nothing is read at start |
 
 
 An undelivered name fails the request that reads it, with the name in the error and never its value. `sluis check --config <file>` finds it first. Kubernetes defaults to `file`, Lambda to `ssm`. See [OpenBao](openbao-secrets-adapter.md).
@@ -45,6 +45,8 @@ Layout v4 ([ADR 0041](../../decisions/0041-the-secret-contract.md)) keeps each v
 /sluis/<instance>/internal/config/<name>                   what an operator seeds: the names above
 /sluis/<instance>/internal/credentials/<kind>/<id>/<ref>   what sluis writes: the credentials of the Secrets port
 /sluis/<instance>/external/<kind>/<id>                     one typed document per address: the public contract
+/sluis/<instance>/internal/<module>/<name>                 layout v5: that module's secrets, seeded or written by it
+/sluis/<instance>/external/<module>/<id>                   layout v5: the same contract, module first
 ```
 
 Only sluis reads `internal/`. `external/` is granted per consumer on exact addresses. The `ssm` Secrets adapter takes the same root; another is refused. `private`, `export`, `internal` and `external` are reserved names.
@@ -65,7 +67,7 @@ IAM per function: [AWS Lambda](lambda.md#iam-one-role).
 | Races | A parameter that changes during the run is skipped, or reported with both versions. Run it while nothing writes secrets; a second run finishes the rest |
 | Audits | A real run records `roster.secrets.rekeyed` before the first write and refuses if it cannot. `--no-audit` warns and prints the record to stderr |
 
-`secrets.layout` (`ssm` only) is `v4`, which is also the default. Layouts v3 (`private/` and `export/`) and `transition` were removed in v1.75: an installation still on one runs v1.74.x and `sluis migrate secrets-layout` first, then upgrades.
+`secrets.layout` (`ssm` only) is `v4`, the default, or `v5`, module first ([storage layout](storage-layout.md)). Layouts v3 and `transition` went in v1.75; an installation on one runs v1.74.x first.
 
 ### The external documents
 
