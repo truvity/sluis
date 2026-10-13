@@ -1566,7 +1566,7 @@
         "alerts",
         "dashboards"
       ],
-      "description": "What this release renders: `app`, the service and the controllers (the default); `alerts`, only the alert rules; `dashboards`, only the Grafana dashboard ConfigMaps. In the last two nothing else is rendered."
+      "description": "What this release renders: `app`, the service and the controllers (the default); `alerts`, only the alert rules; `dashboards`, only the Grafana folder and dashboards (grafana-operator objects). In the last two nothing else is rendered."
     },
     "alerts": {
       "type": "object",
@@ -1613,6 +1613,10 @@
         "namespace": {
           "type": "string",
           "description": "The namespace sluis runs in, whose series the rules read. Empty: the release's."
+        },
+        "namespaceLabel": {
+          "type": "string",
+          "description": "The label that carries the namespace on the series the rules read: `namespace` (the default), or `k8s_namespace_name` where the gateway keeps the resource's own."
         },
         "selector": {
           "type": "string",
@@ -1975,30 +1979,37 @@
     "dashboards": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Grafana dashboards, rendered with `renders: dashboards`.",
+      "description": "Grafana dashboards, rendered with `renders: dashboards`: a GrafanaFolder and the GrafanaDashboards in it, for the grafana-operator.",
       "properties": {
-        "namespace": {
+        "clusterFolderUID": {
           "type": "string",
-          "description": "Grafana's namespace. Empty: the release's."
+          "description": "The uid of this cluster's folder in the shared Grafana. Required in dashboards mode; at most 25 characters."
         },
-        "folder": {
-          "type": "string",
-          "description": "The Grafana folder, for a sidecar that reads the folder annotation."
+        "datasources": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "The uids of the datasources the dashboards offer by default. Required in dashboards mode.",
+          "properties": {
+            "metrics": {
+              "type": "string",
+              "description": "The metrics datasource uid."
+            },
+            "logs": {
+              "type": "string",
+              "description": "The logs datasource uid."
+            }
+          }
         },
-        "sidecarLabel": {
-          "type": "string",
-          "description": "The label Grafana's sidecar selects ConfigMaps by."
+        "instanceSelector": {
+          "type": "object",
+          "description": "Which Grafana the objects go to; a full selector. Empty: the shared one (observability.truvity.io/grafana: shared)."
         },
-        "sidecarLabelValue": {
-          "type": "string",
-          "description": "Its value."
-        },
-        "labels": {
+        "commonAnnotations": {
           "type": "object",
           "additionalProperties": {
             "type": "string"
           },
-          "description": "Extra labels on each ConfigMap."
+          "description": "Extra annotations merged into the folder and the dashboards."
         }
       }
     }

@@ -57,7 +57,7 @@ an expired document.
 ## Verify
 
 The listing succeeds; on any other bucket the credentials are refused (403). `sluisctl whoami` lists the granted presets.
-The audit trail has `roster.cloudflare.token.minted`. The alert `AccessRosterCloudflareRotationStale` fires when the stored
+The audit trail has `roster.cloudflare.token.minted`. The alert `SluisCloudflareRotationStale` fires when the stored
 credential is older than twice its rotation.
 
 ## Undo

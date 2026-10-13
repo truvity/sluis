@@ -6514,6 +6514,10 @@
           "description": "The namespace sluis runs in, whose series the rules read. Empty: the release's.",
           "type": "string"
         },
+        "namespaceLabel": {
+          "description": "The label that carries the namespace on the series the rules read: `namespace` (the default), or `k8s_namespace_name` where the gateway keeps the resource's own.",
+          "type": "string"
+        },
         "objectNamespace": {
           "description": "Where the rule object goes. Empty: the release's namespace.",
           "type": "string"
@@ -7021,30 +7025,37 @@
     },
     "dashboards": {
       "additionalProperties": false,
-      "description": "Grafana dashboards, rendered with `renders: dashboards`.",
+      "description": "Grafana dashboards, rendered with `renders: dashboards`: a GrafanaFolder and the GrafanaDashboards in it, for the grafana-operator.",
       "properties": {
-        "folder": {
-          "description": "The Grafana folder, for a sidecar that reads the folder annotation.",
+        "clusterFolderUID": {
+          "description": "The uid of this cluster's folder in the shared Grafana. Required in dashboards mode; at most 25 characters.",
           "type": "string"
         },
-        "labels": {
+        "commonAnnotations": {
           "additionalProperties": {
             "type": "string"
           },
-          "description": "Extra labels on each ConfigMap.",
+          "description": "Extra annotations merged into the folder and the dashboards.",
           "type": "object"
         },
-        "namespace": {
-          "description": "Grafana's namespace. Empty: the release's.",
-          "type": "string"
+        "datasources": {
+          "additionalProperties": false,
+          "description": "The uids of the datasources the dashboards offer by default. Required in dashboards mode.",
+          "properties": {
+            "logs": {
+              "description": "The logs datasource uid.",
+              "type": "string"
+            },
+            "metrics": {
+              "description": "The metrics datasource uid.",
+              "type": "string"
+            }
+          },
+          "type": "object"
         },
-        "sidecarLabel": {
-          "description": "The label Grafana's sidecar selects ConfigMaps by.",
-          "type": "string"
-        },
-        "sidecarLabelValue": {
-          "description": "Its value.",
-          "type": "string"
+        "instanceSelector": {
+          "description": "Which Grafana the objects go to; a full selector. Empty: the shared one (observability.truvity.io/grafana: shared).",
+          "type": "object"
         }
       },
       "type": "object"
@@ -7965,7 +7976,7 @@
       "description": "The policy document, without its apiVersion, which the chart writes: rendered into the ConfigMap <release>-policy beside the sections the chart's own values fill (exchange.clusters and exchange.aws from `exchange`, the catalogues from `githubApps.catalogue` and `slackApps`). Its schema is schemas/config/policy.schema.json. An access document or a directory of layers is rendered first: `sluisctl policy render`."
     },
     "renders": {
-      "description": "What this release renders: `app`, the service and the controllers (the default); `alerts`, only the alert rules; `dashboards`, only the Grafana dashboard ConfigMaps. In the last two nothing else is rendered.",
+      "description": "What this release renders: `app`, the service and the controllers (the default); `alerts`, only the alert rules; `dashboards`, only the Grafana folder and dashboards (grafana-operator objects). In the last two nothing else is rendered.",
       "enum": [
         "app",
         "alerts",

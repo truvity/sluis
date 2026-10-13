@@ -1,8 +1,15 @@
 ## Unreleased
 
+### Breaking (chart)
+
+- **`renders: dashboards` renders grafana-operator objects, not ConfigMaps for a sidecar.** It renders one `GrafanaFolder` (`sluis`, under the cluster's folder) and a `GrafanaDashboard` for each of `sluis-overview` and `audit-overview` (the audit trail's, in the same folder), in the release's namespace. `dashboards.namespace`, `folder`, `sidecarLabel`, `sidecarLabelValue` and `labels` are gone, and `dashboards.clusterFolderUID` and `dashboards.datasources.{metrics,logs}` are required. The estate must: delete the `grafana-dashboards-app` and `access-roster-alerts` Argo CD apps; install a dashboards release and an alerts release (`renders: alerts`) in the namespace `sluis` of the cluster that holds Grafana, with the cluster's folder uid and the Grafana's datasource uids; and set `alerts.namespaceLabel: k8s_namespace_name` with `alerts.namespace: lambda` for the Lambda function's series. See [Install telemetry](docs/guides/sluis/operate/install-telemetry.md).
+- **The `AccessRoster...` alerts are retired, with the old access-roster dashboard.** Every rule is the `Sluis...` one only (11 rules, one group `sluis`), including `AccessRosterNoSigningKeyPublished`, which is `SluisNoSigningKeyPublished`. A route, a silence or an inhibition on an `AccessRoster...` name must move. `charts/sluis/dashboards/access-roster-overview.json` and its generator `hack/dashboards/access-roster-overview.py` are deleted; `sluis-overview.json` is now edited by hand.
+
 ### Added
 
 - **Backend log lines carry the trace context: `trace_id`, `span_id` and `trace_flags` (W3C hex).** `telemetry.LogHandler` adds the three fields to every record logged with a context that holds a valid span, and nothing to a record without one. It wraps the JSON handler of the Lambda functions (`lambdaapp.Logger`), the Kubernetes services (`module.Logger`) and the resource proxy; stdout stays the only sink and there is no OTel logs SDK. sloglint's `context: all` already requires the `...Context` variants. The Lambda logger's comment no longer says the OTLP layer collects function logs: it forwards only platform events. See [Install telemetry](docs/guides/sluis/operate/install-telemetry.md).
+- **`alerts.namespaceLabel`** (default `namespace`) names the label that carries the namespace on the series the rules read, so one rule set serves both the pods' series and the Lambda function's (`k8s_namespace_name="lambda"`).
+- The dashboards are `uid`-scoped to the cluster (`<clusterFolderUID>-sluis-overview`, `<clusterFolderUID>-sluis-audit`, at most 40 characters), with `allowCrossNamespaceImport`, the shared Grafana's `instanceSelector` by default and Argo CD sync waves 0 (folder) and 1 (dashboards).
 
 ### Fixed
 
