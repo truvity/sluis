@@ -400,7 +400,7 @@
           ]
         },
         "archive": {
-          "description": "Long-term storage.",
+          "description": "Deprecated, ignored: the archive key of backup format 1. Accepted so a document that still sets it loads; backups are age-encrypted to `backup.recipients`.",
           "oneOf": [
             {
               "description": "An alias such as alias/sluis-<instance>-audit-seal (kms) or a transit key name. An ARN or a key id is refused.",
