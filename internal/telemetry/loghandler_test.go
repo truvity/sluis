@@ -12,7 +12,7 @@ import (
 	"github.com/truvity/sluis/internal/telemetry"
 )
 
-func logLine(t *testing.T, ctx context.Context) map[string]any {
+func logLine(ctx context.Context, t *testing.T) map[string]any {
 	t.Helper()
 	var out bytes.Buffer
 	log := slog.New(telemetry.LogHandler(slog.NewJSONHandler(&out, nil))).With(slog.String("component", "test"))
@@ -30,7 +30,7 @@ func TestLogHandlerAddsTraceContext(t *testing.T) {
 		SpanID:     trace.SpanID{0x00, 0xf0, 0x67, 0xaa, 0x0b, 0xa9, 0x02, 0xb7},
 		TraceFlags: trace.FlagsSampled,
 	})
-	line := logLine(t, trace.ContextWithSpanContext(context.Background(), sc))
+	line := logLine(trace.ContextWithSpanContext(context.Background(), sc), t)
 	want := map[string]string{
 		"trace_id":    "4bf92f3577b34da6a3ce929d0e0e4736",
 		"span_id":     "00f067aa0ba902b7",
@@ -45,7 +45,7 @@ func TestLogHandlerAddsTraceContext(t *testing.T) {
 }
 
 func TestLogHandlerLeavesARecordWithoutASpanAlone(t *testing.T) {
-	line := logLine(t, context.Background())
+	line := logLine(context.Background(), t)
 	for _, k := range []string{"trace_id", "span_id", "trace_flags"} {
 		if _, ok := line[k]; ok {
 			t.Errorf("%s present on a record with no span context", k)
