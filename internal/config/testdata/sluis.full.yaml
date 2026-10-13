@@ -112,6 +112,12 @@ cloudflare:
       endpoint: https://0123456789abcdef0123456789abcdef.r2.cloudflarestorage.com
       lifetime: 15m
       rotation: 5m
+    dns-adhoc:
+      account: main
+      prototype: 5e6f7a8b9c0d1e2f3a4b5c6d1a2b3c4d
+      description: DNS edits minted only on demand
+      lifetime: 15m
+      store: none
 github:
   remote:
     url: http://github.sluis.svc:8080

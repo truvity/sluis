@@ -21,14 +21,15 @@ func cloudflareSchema() m {
 		"presets": m{
 			"type": "object", "propertyNames": m{"pattern": cloudflareName},
 			"description": "What may be minted, by name (a DNS label). The name is in the external address, `external/cloudflare/<preset>`, and in the name of every token minted for it.",
-			"additionalProperties": obj("One preset: a prototype token and how long its clones live.", m{
+			"additionalProperties": withRotationUnlessOnDemand(obj("One preset: a prototype token and how long its clones live.", m{
 				"account":     str("A key of `accounts`."),
 				"prototype":   m{"type": "string", "pattern": `^[A-Za-z0-9_-]{8,64}$`, "description": "The id of the prototype: an account token in Cloudflare that is DISABLED and whose policies and condition are the preset's rights. An active prototype is refused (it would be a usable token that never expires), and so is one granting Account API Tokens Edit, Billing, Account Settings, Memberships or Access identity providers. It is read at every mint, so editing it applies at the next rotation."},
 				"description": str("What the preset is for. Shown by the console and `sluisctl whoami`."),
 				"lifetime":    duration("How long each minted token lives: its `expires_on`. At least 1m, at most 24h. Past it sluis deletes the token in Cloudflare.", ""),
-				"rotation":    duration("How often the stored token is replaced. At least 1m and shorter than `lifetime`: `lifetime - rotation` is the time consumers have to pick up a new token.", ""),
+				"rotation":    duration("How often the stored token is replaced. At least 1m and shorter than `lifetime`: `lifetime - rotation` is the time consumers have to pick up a new token. Required unless `store` is `none`, and then left out.", ""),
+				"store":       enum("Where the schedule keeps this preset's token. `external` rotates it into `external/cloudflare/<preset>` for consumers to read. `none` keeps nothing: the schedule never mints it, no parameter exists for it, and a token is minted only on demand (`sluisctl cloudflare token <preset>`) for a caller the policy's grants allow.", "external", "external", "none"),
 				"endpoint":    url("Makes this an R2 preset: the S3 endpoint of the account (`https://<account-id>.r2.cloudflarestorage.com`, or `https://<account-id>.eu.r2.cloudflarestorage.com` for an EU jurisdiction). The stored document then holds an access key and secret instead of a token."),
-			}, "account", "prototype", "description", "lifetime", "rotation"),
+			}, "account", "prototype", "description", "lifetime")),
 		},
 		"tick": duration("How often the rotation looks at the presets: the interval of the schedule that invokes it on Lambda (the library fills it from `CloudflareRotation` when unset), a minute for the Kubernetes loop. A credential rotates up to one tick after its preset's `rotation`, so the console calls one overdue only past `rotation + tick`; make `rotation` a multiple of the tick to rotate when intended. Unset is a minute.", ""),
 		"remote": obj("Where the minter is when it is not this process: the on-demand token exchange calls the Cloudflare module there (docs/decisions/0071), and this document then declares no `accounts` or `presets`. Set exactly one of `function` and `url`. Unset keeps the minter in this process.", m{
@@ -56,4 +57,13 @@ func policyCloudflareSchema() m {
 			"presets": m{"type": "array", "minItems": 1, "uniqueItems": true, "items": m{"type": "string", "pattern": cloudflareName}, "description": "The presets the row opens."},
 		}, "group", "presets")),
 	})
+}
+
+// withRotationUnlessOnDemand makes `rotation` required for a stored preset and
+// refused for one with `store: none`, which is never rotated.
+func withRotationUnlessOnDemand(preset m) m {
+	preset["if"] = m{"properties": m{"store": m{"const": "none"}}, "required": []string{"store"}}
+	preset["then"] = m{"not": m{"required": []string{"rotation"}}}
+	preset["else"] = m{"required": []string{"rotation"}}
+	return preset
 }

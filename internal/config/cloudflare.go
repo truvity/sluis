@@ -95,7 +95,13 @@ type CloudflarePreset struct {
 	// Lifetime is how long a minted token lives (its expires_on).
 	Lifetime Duration `json:"lifetime"`
 	// Rotation is how often the stored token is replaced. Shorter than Lifetime.
-	Rotation Duration `json:"rotation"`
+	// Unused, and optional, with `store: none`.
+	Rotation Duration `json:"rotation,omitempty"`
+	// Store is where the schedule keeps this preset's token: `external`
+	// (unset too) rotates it into external/cloudflare/<preset>; `none` keeps
+	// nothing, and the preset is minted only on demand through the token
+	// exchange.
+	Store string `json:"store,omitempty"`
 	// Endpoint, when set, makes this an R2 preset: the S3 endpoint of the
 	// account (and jurisdiction) the credentials are for.
 	Endpoint string `json:"endpoint,omitempty"`
@@ -103,6 +109,42 @@ type CloudflarePreset struct {
 
 // R2 reports whether the preset hands out R2 (S3) credentials.
 func (p CloudflarePreset) R2() bool { return p.Endpoint != "" }
+
+// The values of a preset's `store`.
+const (
+	// CloudflareStoreExternal is the default: the schedule rotates the preset's
+	// token into external/cloudflare/<preset>.
+	CloudflareStoreExternal = "external"
+	// CloudflareStoreNone makes the preset on-demand only: the schedule never
+	// mints or stores it, and no external parameter exists for it.
+	CloudflareStoreNone = "none"
+)
+
+// StoreMode is the preset's store, the default spelled out.
+func (p CloudflarePreset) StoreMode() string {
+	if p.Store == "" {
+		return CloudflareStoreExternal
+	}
+	return p.Store
+}
+
+// Stored reports whether the schedule keeps a token of the preset at
+// external/cloudflare/<preset>. False means on-demand only.
+func (p CloudflarePreset) Stored() bool { return p.StoreMode() != CloudflareStoreNone }
+
+// AnyStored reports whether some preset is rotated by the schedule: the
+// rotation schedule and the grants on the stored credentials exist only then.
+func (c *Cloudflare) AnyStored() bool {
+	if c == nil {
+		return false
+	}
+	for _, p := range c.Presets {
+		if p.Stored() {
+			return true
+		}
+	}
+	return false
+}
 
 // The limits of a preset's two settings.
 const (
@@ -212,6 +254,11 @@ func (c *Cloudflare) validatePreset(name string, p CloudflarePreset) error {
 	if strings.TrimSpace(p.Description) == "" {
 		errs = append(errs, fmt.Errorf("%s.description: required", at))
 	}
+	switch p.Store {
+	case "", CloudflareStoreExternal, CloudflareStoreNone:
+	default:
+		errs = append(errs, fmt.Errorf("%s.store: %q is not %q or %q", at, p.Store, CloudflareStoreExternal, CloudflareStoreNone))
+	}
 	life, rot := p.Lifetime.D(), p.Rotation.D()
 	switch {
 	case life < CloudflareMinLifetime:
@@ -219,10 +266,14 @@ func (c *Cloudflare) validatePreset(name string, p CloudflarePreset) error {
 	case life > CloudflareMaxLifetime:
 		errs = append(errs, fmt.Errorf("%s.lifetime: %s is longer than %s", at, life, CloudflareMaxLifetime))
 	}
-	if rot < CloudflareMinLifetime {
+	if !p.Stored() {
+		if rot != 0 {
+			errs = append(errs, fmt.Errorf("%s.rotation: a preset with store: none is never rotated; leave rotation out", at))
+		}
+	} else if rot < CloudflareMinLifetime {
 		errs = append(errs, fmt.Errorf("%s.rotation: %s is shorter than %s", at, rot, CloudflareMinLifetime))
 	}
-	if rot >= life {
+	if p.Stored() && rot >= life {
 		errs = append(errs, fmt.Errorf("%s.rotation: %s must be shorter than lifetime %s (lifetime - rotation is the time consumers have to pick up the new token)", at, rot, life))
 	}
 	if p.Endpoint != "" {

@@ -389,3 +389,44 @@ func TestTheRotationTickReachesTheDocuments(t *testing.T) {
 		t.Error("a tick was invented for a cron expression")
 	}
 }
+
+// A preset with `store: none` is minted on demand only: the library gives it no
+// rotation schedule and no grant on external/cloudflare, and holds it to no
+// rotation margin. Presets beside it that are stored keep all three.
+func TestAnOnDemandPresetGetsNoScheduleNoStoredGrantAndNoMargin(t *testing.T) {
+	root := arnp + "ssm:" + region + ":" + account + ":parameter/sluis/example"
+	onDemand := sluisconfig.CloudflarePreset{
+		Account: "main", Prototype: "proto-adhoc-01", Description: "On demand",
+		// No rotation: it would not fit the margin below if it counted.
+		Lifetime: sluisconfig.Duration(30 * time.Minute), Store: sluisconfig.CloudflareStoreNone,
+	}
+
+	only := exampleInstallation(t)
+	withCloudflare(only)
+	only.Cloudflare.Presets = map[string]sluisconfig.CloudflarePreset{"dns": onDemand}
+	rec, _ := mustLambda(t, withInstallation(only, func(a *arp.LambdaArgs) { a.CloudflareRotation.Interval = 29 * time.Minute }))
+	if rec.has("aws:scheduler/schedule:Schedule", "staging-cloudflare-rotation") {
+		t.Error("a rotation schedule for presets that are all store: none")
+	}
+	g := rolePolicy(t, rec)
+	if slices.Contains(g["ssm:PutParameter"], root+"/external/cloudflare/*") || slices.Contains(g["ssm:GetParameter"], root+"/external/cloudflare/*") {
+		t.Errorf("a grant on the stored credentials with nothing stored: %v", g["ssm:PutParameter"])
+	}
+	// The minter credential and the record of minted ids are still needed: the
+	// token exchange mints, and the sweep reads the record.
+	if !slices.Contains(g["ssm:GetParameter"], root+"/internal/cloudflare/*") || !slices.Contains(g["ssm:PutParameter"], root+"/internal/cloudflare-minted/*") {
+		t.Errorf("the minter grants are missing: %v", g["ssm:GetParameter"])
+	}
+	if doc := layerFiles(t, rec)["sluis/sluis.yaml"]; !strings.Contains(doc, "store: none") {
+		t.Errorf("the document does not carry the store:\n%s", doc)
+	}
+
+	mixed := exampleInstallation(t)
+	withCloudflare(mixed)
+	mixed.Cloudflare.Presets["adhoc"] = onDemand
+	rec, _ = mustLambda(t, withInstallation(mixed, nil))
+	rec.one(t, "aws:scheduler/schedule:Schedule", "staging-cloudflare-rotation")
+	if g = rolePolicy(t, rec); !slices.Contains(g["ssm:PutParameter"], root+"/external/cloudflare/*") {
+		t.Errorf("the stored preset lost its grant: %v", g["ssm:PutParameter"])
+	}
+}

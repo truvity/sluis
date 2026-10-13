@@ -29,6 +29,9 @@ const (
 	// OutcomeMaintenance is a tick not started because the module is under
 	// maintenance. It is not a failure.
 	OutcomeMaintenance = "maintenance"
+	// OutcomeOnDemand is a preset with `store: none`: the schedule mints and
+	// stores nothing for it, and only sweeps its expired on-demand tokens.
+	OutcomeOnDemand = "on-demand"
 	// OutcomeFailed is a rotation that was due and did not complete.
 	OutcomeFailed = "failed"
 )
@@ -84,6 +87,8 @@ func (m *Minter) Tick(ctx context.Context) TickResult {
 // older than the preset's rotation, mint a new one, store it at
 // external/cloudflare/<preset>, and delete this preset's own tokens that have
 // expired. A stored credential that is not yet due costs no call to Cloudflare.
+// A preset with `store: none` is never minted or stored by the tick; its
+// expired on-demand tokens are still swept.
 func (m *Minter) TickPreset(ctx context.Context, preset string) PresetResult {
 	res := PresetResult{Preset: preset, Outcome: OutcomeFresh}
 	p, ok := m.cfg.Cloudflare.Presets[preset]
@@ -96,6 +101,9 @@ func (m *Minter) TickPreset(ctx context.Context, preset string) PresetResult {
 		return res
 	}
 	run := func(ctx context.Context) { res = m.tick(ctx, preset, p) }
+	if !p.Stored() {
+		run = func(ctx context.Context) { res = m.tickOnDemand(ctx, preset, p) }
+	}
 	if m.cfg.Lock == nil {
 		run(ctx)
 		return res
@@ -106,6 +114,19 @@ func (m *Minter) TickPreset(ctx context.Context, preset string) PresetResult {
 		res.Outcome, res.Err = OutcomeFailed, err
 	case !ran:
 		res.Outcome = OutcomeContended
+	}
+	return res
+}
+
+// tickOnDemand is the tick of a preset nothing is stored for: it mints nothing
+// and writes nothing, and deletes the preset's own expired on-demand tokens, as
+// the sweep after a rotation does.
+func (m *Minter) tickOnDemand(ctx context.Context, preset string, p config.CloudflarePreset) PresetResult {
+	res := PresetResult{Preset: preset, Outcome: OutcomeOnDemand}
+	swept, err := m.sweep(ctx, preset, p, "", m.now())
+	res.Swept = swept
+	if err != nil {
+		res.Err = fmt.Errorf("sweep: %w", err)
 	}
 	return res
 }
@@ -351,7 +372,7 @@ func (m *Minter) Revoke(ctx context.Context, preset, tokenID string, actor audit
 			slog.String("token", tokenID), logattr.SafeError("error", err))
 	}
 	var res RevokeResult
-	if !cloudflare.IsStored(tok.Name, m.cfg.Instance, preset) {
+	if !p.Stored() || !cloudflare.IsStored(tok.Name, m.cfg.Instance, preset) {
 		return res, nil
 	}
 	// It was the schedule's token if the stored document is the one it expires

@@ -406,6 +406,9 @@ type functionPolicyIn struct {
 	functionArns map[string]string
 	// cloudflare adds the grants of the Cloudflare minter (see ssmStatements).
 	cloudflare bool
+	// cloudflareStored adds the grant on the credentials the rotation stores at
+	// external/cloudflare: not for presets that are all `store: none`.
+	cloudflareStored bool
 
 	// layout says which grants the role carries; the empty one is v4.
 	layout Layout
@@ -429,7 +432,7 @@ type functionPolicyIn struct {
 //     clients and workspaces); config/* is the operator's and the stack's;
 //   - with a customer-managed parameter key, its use through SSM only, for the
 //     parameters under those prefixes.
-func ssmStatements(region, account, instance, parameterKeyArn string, cloudflare bool) []statement {
+func ssmStatements(region, account, instance, parameterKeyArn string, cloudflare, stored bool) []statement {
 	all := []string{ssmGetParameter, ssmGetParameters, ssmGetParametersByPath, ssmPutParameter, ssmDeleteParameter}
 	var st []statement
 	withHistory := append(append([]string{}, all...), ssmGetParameterHistory)
@@ -465,12 +468,15 @@ func ssmStatements(region, account, instance, parameterKeyArn string, cloudflare
 			"Effect":   "Allow",
 			"Action":   withHistory,
 			"Resource": parameterArns(region, account, InternalParameterPrefix(instance)+"/cloudflare-minted"),
-		}, statement{
-			"Sid":      sidCloudflare + "Stored",
-			"Effect":   "Allow",
-			"Action":   withHistory,
-			"Resource": parameterArns(region, account, ExternalParameterPrefix(instance)+"/cloudflare"),
 		})
+		if stored {
+			st = append(st, statement{
+				"Sid":      sidCloudflare + "Stored",
+				"Effect":   "Allow",
+				"Action":   withHistory,
+				"Resource": parameterArns(region, account, ExternalParameterPrefix(instance)+"/cloudflare"),
+			})
+		}
 	}
 	prefixes := []string{InternalParameterPrefix(instance), ExternalParameterPrefix(instance)}
 	return append(st, parameterKeyStatements(parameterKeyArn, []string{kmsEncrypt, kmsDecrypt, "kms:GenerateDataKey"},
@@ -498,7 +504,7 @@ func functionPolicy(in functionPolicyIn) (string, error) {
 	if in.layout.has4() {
 		// Layout v4: the one table and the v4 paths. The module tables are v5's.
 		st = append(st, stateStatements(in.tableArn, in.tableKey, nil, false)...)
-		st = append(st, ssmStatements(in.region, in.account, in.instance, in.parameterKeyArn, in.cloudflare)...)
+		st = append(st, ssmStatements(in.region, in.account, in.instance, in.parameterKeyArn, in.cloudflare, in.cloudflareStored)...)
 	}
 	if in.layout.has5() {
 		// Layout v5: what ModuleRoleStatements renders for the modules this one

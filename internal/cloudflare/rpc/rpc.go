@@ -44,6 +44,8 @@ var (
 	ErrMaintenance = minter.ErrMaintenance
 	// ErrNotOurs is a token sluis did not mint for the preset.
 	ErrNotOurs = minter.ErrNotOurs
+	// ErrOnDemandOnly is a preset with `store: none`: nothing is stored to rotate.
+	ErrOnDemandOnly = minter.ErrOnDemandOnly
 	// ErrContended is a preset another runner is rotating.
 	ErrContended = minter.ErrContended
 	// ErrNoMinter is an account whose minter credential is not in the store.
@@ -93,6 +95,7 @@ const (
 	codeMaintenance   = maintenance.Code
 	codeNotOurs       = "not_ours"
 	codeContended     = "contended"
+	codeOnDemandOnly  = "on_demand_only"
 	codeNoMinter      = "no_minter"
 	codeRefused       = "prototype_refused"
 )
@@ -141,6 +144,8 @@ func codeOf(err error) error {
 		return modcall.Coded(codeNotOurs, "")
 	case errors.Is(err, minter.ErrContended):
 		return modcall.Coded(codeContended, "")
+	case errors.Is(err, minter.ErrOnDemandOnly):
+		return modcall.Coded(codeOnDemandOnly, "")
 	case errors.Is(err, minter.ErrNoMinter):
 		return modcall.Coded(codeNoMinter, "")
 	}
@@ -211,6 +216,8 @@ func errOf(err error) error {
 		return ErrNotOurs
 	case codeContended:
 		return ErrContended
+	case codeOnDemandOnly:
+		return ErrOnDemandOnly
 	case codeNoMinter:
 		return ErrNoMinter
 	case codeRefused:

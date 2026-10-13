@@ -551,7 +551,7 @@ func rateTick(expr string) (time.Duration, bool) {
 // changed.
 func (a LambdaArgs) withCloudflareTick() *sluisconfig.Installation {
 	in := a.Installation
-	if in.Cloudflare == nil || !in.Cloudflare.Declared() || in.Cloudflare.Tick != 0 || a.CloudflareRotation.Disabled {
+	if in.Cloudflare == nil || !in.Cloudflare.AnyStored() || in.Cloudflare.Tick != 0 || a.CloudflareRotation.Disabled {
 		return in
 	}
 	var tick time.Duration
@@ -580,6 +580,9 @@ func checkCloudflareMargin(tick time.Duration, presets map[string]sluisconfig.Cl
 	var errs []error
 	for _, name := range slices.Sorted(maps.Keys(presets)) {
 		p := presets[name]
+		if !p.Stored() {
+			continue // never rotated: nothing for a consumer to pick up
+		}
 		if need := p.Rotation.D() + tick + CloudflareConsumerSyncMargin; need >= p.Lifetime.D() {
 			errs = append(errs, fmt.Errorf("sluispulumi: CloudflareRotation: preset %q: "+
 				"rotation %s + tick %s + consumer sync margin %s = %s is not under its lifetime %s; "+
@@ -594,6 +597,14 @@ func checkCloudflareMargin(tick time.Duration, presets map[string]sluisconfig.Cl
 // exist only then.
 func (a *LambdaArgs) cloudflare() bool {
 	return a.Installation != nil && a.Installation.Cloudflare.Declared()
+}
+
+// cloudflareStored reports whether some declared preset is rotated by the
+// schedule (`store` unset or `external`). An installation whose presets are all
+// `store: none` is minted from on demand only, and has no rotation schedule
+// and no grant on the stored credentials.
+func (a *LambdaArgs) cloudflareStored() bool {
+	return a.Installation != nil && a.Installation.Cloudflare.AnyStored()
 }
 
 // DefaultDirectoryRefreshSchedule is the directory refresh's tick when
@@ -1894,6 +1905,7 @@ func newFunctionRole(ctx *pulumi.Context, name, fnName string, a *LambdaArgs, si
 			webIdentityAud:     a.WebIdentityAudience,
 			webIdentityExtra:   a.AdditionalWebIdentityAudiences,
 			cloudflare:         a.cloudflare(),
+			cloudflareStored:   a.cloudflareStored(),
 			layout:             a.Layout,
 			modules:            ModuleSet{Instance: a.Instance, Tables: a.TableNames},
 			minterRefs:         a.minterRefs,
@@ -2189,7 +2201,7 @@ func newSchedules(ctx *pulumi.Context, name string, a *LambdaArgs, live *lambda.
 		}
 		names = append(names, pulumi.String(rname))
 	}
-	if a.cloudflare() && !a.CloudflareRotation.Disabled {
+	if a.cloudflareStored() && !a.CloudflareRotation.Disabled {
 		arn, err := use(RoleCloudflare)
 		if err != nil {
 			return nil, none, err

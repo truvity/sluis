@@ -79,6 +79,10 @@ message CloudflarePreset {
   // rotation_seconds, so it is overdue only past rotation_seconds +
   // rotation_tick_seconds.
   int64 rotation_tick_seconds = 11;
+  // where the schedule keeps the preset's token: "external" (rotated into
+  // external/cloudflare/<preset>) or "none" (on-demand only: nothing is stored
+  // and rotation_seconds is zero).
+  string store = 12;
 }
 
 // CloudflarePrototype is the prototype token as sluis reads it now.

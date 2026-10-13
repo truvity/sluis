@@ -2,9 +2,13 @@
 package config_test
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	yaml "go.yaml.in/yaml/v3"
 
 	"github.com/truvity/sluis/internal/config"
 	"github.com/truvity/sluis/policy"
@@ -92,6 +96,16 @@ func TestACloudflareSectionIsRefusedWhenItCannotWork(t *testing.T) {
 			p.Endpoint = "http://acct.r2.cloudflarestorage.com"
 			c.Presets["dns-example"] = p
 		}, "endpoint"},
+		"an unknown store": {func(c *config.Cloudflare) {
+			p := c.Presets["dns-example"]
+			p.Store = "deploy"
+			c.Presets["dns-example"] = p
+		}, "store"},
+		"a rotation on an on-demand preset": {func(c *config.Cloudflare) {
+			p := c.Presets["dns-example"]
+			p.Store = config.CloudflareStoreNone
+			c.Presets["dns-example"] = p
+		}, "never rotated"},
 		"two accounts sharing a minter": {func(c *config.Cloudflare) {
 			c.Accounts["second"] = config.CloudflareAccount{ID: "fedcba9876543210fedcba9876543210", Minter: "internal/cloudflare/main/minter"}
 		}, "already holds"},
@@ -204,5 +218,68 @@ func TestCloudflareServeNeedsPresetsAndNotRemote(t *testing.T) {
 		if err := c.Validate(); err == nil || !strings.Contains(err.Error(), "cloudflare.serve") {
 			t.Errorf("%s: %v", name, err)
 		}
+	}
+}
+
+func TestAPresetWithStoreNoneNeedsNoRotation(t *testing.T) {
+	c := goodCloudflare()
+	p := c.Presets["dns-example"]
+	p.Store, p.Rotation = config.CloudflareStoreNone, 0
+	c.Presets["dns-example"] = p
+	if err := c.Validate(); err != nil {
+		t.Fatalf("an on-demand preset without a rotation: %v", err)
+	}
+	if p.Stored() || c.AnyStored() {
+		t.Errorf("store: none reads as stored")
+	}
+	if !(config.CloudflarePreset{}).Stored() || !goodCloudflare().AnyStored() {
+		t.Errorf("the default store is not external")
+	}
+}
+
+// The schema is the first check: it names the two stores, refuses any other,
+// and asks for a rotation only where the schedule rotates.
+func TestTheSchemaHoldsStoreToExternalOrNone(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("testdata", "sluis.full.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, tc := range map[string]struct {
+		store    any
+		rotation any
+		valid    bool
+	}{
+		"external with a rotation":    {"external", "5m", true},
+		"unset with a rotation":       {nil, "5m", true},
+		"none without a rotation":     {"none", nil, true},
+		"external without a rotation": {"external", nil, false},
+		"unset without a rotation":    {nil, nil, false},
+		"none with a rotation":        {"none", "5m", false},
+		"an unknown value":            {"deploy", "5m", false},
+		"a differently cased value":   {"None", nil, false},
+		"an empty value":              {"", "5m", false},
+		"a boolean":                   {false, "5m", false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			var doc map[string]any
+			if err := yaml.Unmarshal(raw, &doc); err != nil {
+				t.Fatal(err)
+			}
+			preset := doc["cloudflare"].(map[string]any)["presets"].(map[string]any)["dns-example"].(map[string]any)
+			delete(preset, "rotation")
+			if tc.store != nil {
+				preset["store"] = tc.store
+			}
+			if tc.rotation != nil {
+				preset["rotation"] = tc.rotation
+			}
+			err := config.Validate("sluis", doc)
+			if tc.valid && err != nil {
+				t.Errorf("refused: %v", err)
+			}
+			if !tc.valid && err == nil {
+				t.Error("accepted")
+			}
+		})
 	}
 }

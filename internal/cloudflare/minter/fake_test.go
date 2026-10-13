@@ -167,6 +167,13 @@ func setup(t *testing.T, grants ...config.CloudflareGrant) *env {
 // setupPaused is setup with the maintenance gate the module reads.
 func setupPaused(t *testing.T, pause minter.Pause, grants ...config.CloudflareGrant) *env {
 	t.Helper()
+	return setupWith(t, pause, nil, grants...)
+}
+
+// setupWith is setupPaused with a change to the declared Cloudflare section
+// before the minter is made.
+func setupWith(t *testing.T, pause minter.Pause, change func(*config.Cloudflare), grants ...config.CloudflareGrant) *env {
+	t.Helper()
 	clock := time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC)
 	e := &env{t: t, clock: &clock, rec: audittest.New(t)}
 	now := func() time.Time { return clock }
@@ -188,6 +195,9 @@ func setupPaused(t *testing.T, pause minter.Pause, grants ...config.CloudflareGr
 			"r2": {Account: "main", Prototype: r2Proto, Description: "R2", Lifetime: config.Duration(15 * time.Minute), Rotation: config.Duration(5 * time.Minute),
 				Endpoint: "https://" + acct + ".r2.cloudflarestorage.com"},
 		},
+	}
+	if change != nil {
+		change(cf)
 	}
 	mv, err := minterAt("internal/cloudflare/main/minter")
 	if err != nil {

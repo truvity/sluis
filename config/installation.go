@@ -128,6 +128,12 @@ type Cloudflare struct {
 // then schedules the rotation and grants the function what it needs.
 func (c *Cloudflare) Declared() bool { return c != nil && len(c.Presets) > 0 }
 
+// AnyStored reports whether some declared preset is rotated by the schedule
+// (`store` unset or `external`). The library schedules the rotation and grants
+// the stored credentials only then: presets that are all `store: none` are
+// minted on demand and nothing is kept for them.
+func (c *Cloudflare) AnyStored() bool { return c != nil && c.Cloudflare.AnyStored() }
+
 // Issuer is the issuer and where a browser reaches the console.
 type Issuer struct {
 	// URL is the issuer (`issuerURL`).
