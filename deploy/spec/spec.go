@@ -201,3 +201,13 @@ func CheckCloudflareRotation(lifetime, rotation string) error {
 
 	return nil
 }
+
+// ChartSecret is one entry of the sluis chart's `secrets` value: the secret
+// the service reads by Name, projected from one key of a Kubernetes Secret.
+type ChartSecret struct {
+	// Name is the secret's name as the service reads it (`clients/<id>/secret`).
+	Name string `yaml:"name"`
+	// SecretName and Key are the Kubernetes Secret and its key.
+	SecretName string `yaml:"secretName"`
+	Key        string `yaml:"key"`
+}
