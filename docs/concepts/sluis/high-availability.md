@@ -46,11 +46,14 @@ on an unknown `kid`. A proxy that adds a hint reopens the stale-JWKS window that
 The client-metadata-document cache is per replica, in process memory for 10 minutes. Replicas can see old and new values
 for that long. Each fetch re-checks that the document's `client_id` matches its URL.
 
-## The controllers in the one process
+<a id="the-controllers-in-the-one-process"></a>
 
-The GitHub and Slack controllers run inside `sluis serve`, so the Deployment rolls with the default `RollingUpdate`. An
-old pod leaves when the new one is Ready: policy loaded, stores open, audit catalogue accepted (`/readyz` on
-`probes.address`, default `:7070`). Pods that crash at start leave the running pods alone.
+## The controllers and the rollout
+
+On Kubernetes the GitHub and Slack controllers run inside `sluis serve`, so the Deployment rolls with the default
+`RollingUpdate`. An old pod leaves when the new one is Ready: policy loaded, stores open, audit catalogue accepted
+(`/readyz` on `probes.address`, default `:7070`). Pods that crash at start leave the running pods alone. On AWS Lambda
+(layout v4 and later) each module is its own function and there is no pod to roll.
 
 A controller runs in every replica, so each target is ticked under a lease from the State port. A lease keeps another
 pod off only when the State is shared.

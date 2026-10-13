@@ -41,7 +41,7 @@ IAM for the sluis role, on the parameters of the root:
 
 | Grant | Applies to |
 |---|---|
-| Read-only `GetParameter`, `GetParameters`, `GetParametersByPath` on `/sluis/<instance>/internal/config/*` | The console function only. Controllers are denied |
+| Read-only `GetParameter`, `GetParameters`, `GetParametersByPath` on `/sluis/<instance>/internal/config/*` | The issuer module's function, which serves the console. The GitHub and Slack functions (one function per module) are denied |
 | `kms:Decrypt`, `kms:Encrypt` on the key | Only when `kmsKeyId` is set |
 | `ssm:GetParameterHistory` | The service role |
 | Resources `<prefix>` and `<prefix>/*` | Every read grant: `GetParametersByPath` is authorised against the path itself |
