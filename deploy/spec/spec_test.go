@@ -7,8 +7,11 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
+	"os"
 	"strings"
 	"testing"
+
+	"go.yaml.in/yaml/v3"
 
 	"github.com/truvity/sluis/deploy/spec"
 )
@@ -146,5 +149,28 @@ func TestCheckVerifyKey(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("err = %v, want one saying %q", err, want)
 		}
+	}
+}
+
+func TestChartSecretIsTheChartsShape(t *testing.T) {
+	raw, err := os.ReadFile("../../charts/sluis/values.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The chart documents the shape in a comment above `secrets: []`.
+	for _, key := range []string{"- name: valkey/password", "secretName: valkey", "key: password"} {
+		if !strings.Contains(string(raw), key) {
+			t.Fatalf("the chart's values no longer document %q", key)
+		}
+	}
+
+	var entries []spec.ChartSecret
+	if err := yaml.Unmarshal([]byte("- name: valkey/password\n  secretName: valkey\n  key: password\n"), &entries); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(entries) != 1 || entries[0] != (spec.ChartSecret{Name: "valkey/password", SecretName: "valkey", Key: "password"}) {
+		t.Errorf("entries = %+v", entries)
 	}
 }
