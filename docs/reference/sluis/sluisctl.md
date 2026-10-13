@@ -76,12 +76,13 @@ How-to: [Cloudflare tokens](../../guides/sluis/cloudflare-tokens.md).
 
 | Command | Output |
 |---|---|
-| `cloudflare token <preset> [--format env\|json] [--lifetime <duration>]` | `env` (default): `CLOUDFLARE_API_TOKEN=<token>`. `json`: `{"token","expires_on"}`. An R2 preset is refused with the command to use |
-| `cloudflare r2 <preset> [--lifetime <duration>] [--file <path>]` | `credential_process` JSON `{"Version":1,"AccessKeyId","SecretAccessKey","Expiration"}`, no `SessionToken`. `--file` reads a projected `cloudflare/v1` document, signs in to nothing and refuses an expired one |
+| `cloudflare token <preset> [--format env\|json] [--lifetime <duration>] [--no-cache]` | `env` (default): `CLOUDFLARE_API_TOKEN=<token>`. `json`: `{"token","expires_on"}`. An R2 preset is refused with the command to use |
+| `cloudflare r2 <preset> [--lifetime <duration>] [--file <path>] [--no-cache]` | `credential_process` JSON `{"Version":1,"AccessKeyId","SecretAccessKey","Expiration"}`, no `SessionToken`. `--file` reads a projected `cloudflare/v1` document, signs in to nothing and refuses an expired one |
 
 | Detail | Behavior |
 |---|---|
 | Flags | Both take `--issuer` and `--client`; CI uses the job identity. `--lifetime` is at most the preset's |
+| `--no-cache`, `SLUISCTL_CLOUDFLARE_NO_CACHE=1` | Neither reads nor writes the credential cache and takes no cache lock, so a minted token is never written to disk and every call mints a new one. Use it where a program execs `sluisctl` and the token must not outlive it. The flag or a true value of the variable (`1`, `true`) turns it on. The sign-in session cache is not a credential cache and is unchanged. `--file` caches nothing either way |
 | Exit 4 | Not granted, or nonexistent |
 | `aws-config` | Adds profile `<preset>@r2` per granted R2 preset: `credential_process = sluisctl cloudflare r2 <preset> --issuer <issuer>`, `endpoint_url`, `region = auto`, `request_checksum_calculation` and `response_checksum_validation = when_required`, `s3 =` with `addressing_style = path` |
 | `whoami` | Lists granted presets |

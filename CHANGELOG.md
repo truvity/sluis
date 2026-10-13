@@ -2,6 +2,8 @@
 
 ### Added
 
+- **`sluisctl cloudflare token --no-cache` (and `cloudflare r2 --no-cache`), or `SLUISCTL_CLOUDFLARE_NO_CACHE=1`.** The commands cached each minted credential under `~/.config/sluisctl/cloudflare/` so a repeat call cost no exchange. With the flag or the variable set they neither read nor write that cache and take no cache lock: the token is never written to disk, and every call mints a new one. Use it where a program execs `sluisctl` and the token must not outlive it. See [sluisctl](docs/reference/sluis/sluisctl.md).
+
 - **A Cloudflare preset can be on-demand only: `cloudflare.presets.<name>.store: none`.** The default, `external`, is today's behaviour: the rotation mints the preset into `external/cloudflare/<preset>`. With `none` the tick never mints or stores it, nothing for it appears in SSM, and `rotation` is left out; a token is minted only through the exchange (`sluisctl cloudflare token <preset>`) for a caller the grants allow, and its expired and revoked tokens are still swept. The console shows the store mode and offers no rotate for it, and the Pulumi library grants nothing on `external/cloudflare/*` and schedules no rotation when every preset is `none`. See [Cloudflare tokens](docs/guides/sluis/cloudflare-tokens.md) and [ADR 0070](docs/decisions/0070-cloudflare-tokens-and-r2-credentials-by-prototype-clone.md).
 
 ## v1.76.6

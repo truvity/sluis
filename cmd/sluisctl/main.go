@@ -168,7 +168,8 @@ func usage(to *os.File) {
   aws           an AWS credential process answer  (run by the AWS SDKs)
   bao           authenticate, then run the real bao CLI unchanged (OpenBAO)
   cloudflare    a Cloudflare API token or R2 credentials, minted for you:
-                cloudflare token <preset>, cloudflare r2 <preset> (a credential process)
+                cloudflare token <preset>, cloudflare r2 <preset> (a credential process);
+                --no-cache (or SLUISCTL_CLOUDFLARE_NO_CACHE=1) writes nothing to disk
   r2            DEPRECATED, use cloudflare r2: run the real r2broker CLI unchanged
   psql          authenticate, mint a Postgres client certificate, run psql
   pg            the same, running any command instead of psql
