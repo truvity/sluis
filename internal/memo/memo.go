@@ -41,15 +41,15 @@ type entry[V any] struct {
 // Cache holds up to a fixed number of outcomes, the oldest dropped first. It is
 // safe for concurrent use. The zero value is not usable: call [New].
 type Cache[V any] struct {
-	max   int
+	limit int
 	mu    sync.Mutex
 	items map[Key]*entry[V]
 	order []Key
 }
 
-// New is a cache of at most max outcomes.
-func New[V any](max int) *Cache[V] {
-	return &Cache[V]{max: max, items: map[Key]*entry[V]{}}
+// New is a cache of at most limit outcomes.
+func New[V any](limit int) *Cache[V] {
+	return &Cache[V]{limit: limit, items: map[Key]*entry[V]{}}
 }
 
 // Do returns the outcome of compute for key, computing it once per key even
@@ -62,7 +62,7 @@ func (c *Cache[V]) Do(key Key, compute func() (V, error)) (V, error) {
 		e = &entry[V]{}
 		c.items[key] = e
 		c.order = append(c.order, key)
-		if len(c.order) > c.max {
+		if len(c.order) > c.limit {
 			delete(c.items, c.order[0])
 			c.order = c.order[1:]
 		}
