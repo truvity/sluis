@@ -275,3 +275,27 @@ func TestDuration(t *testing.T) {
 		}
 	}
 }
+
+// A rung with a session duration but no population has no group in the
+// policy, so it must name no lifetime (the issuer refuses a lifetime for an
+// undeclared group) and must not lower the default.
+func TestRosterAnEmptyRungNamesNoLifetime(t *testing.T) {
+	m := exampleModel()
+	m.Rungs["empty"] = compile.Rung{SessionDuration: "PT1H"}
+
+	p := compile.Roster(m, exampleConventions())
+
+	if _, has := groupsByName(p)[compile.RungPrefix+"empty"]; has {
+		t.Fatalf("an empty rung became a group")
+	}
+
+	for _, l := range p.Lifetimes {
+		if l.Group == compile.RungPrefix+"empty" {
+			t.Errorf("lifetimes name %s, a group the policy does not declare", l.Group)
+		}
+
+		if l.Group == policy.LifetimeDefault && l.Duration != "2h" {
+			t.Errorf("default = %s, want 2h (the shortest populated rung)", l.Duration)
+		}
+	}
+}
