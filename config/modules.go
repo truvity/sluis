@@ -446,7 +446,8 @@ func verifyModules(d *ModuleDocuments) error {
 }
 
 // verified remembers the outcome of loading a set of documents: a function of
-// their bytes alone.
+// their bytes alone. A future AppConfig or environment layer must merge ABOVE
+// `Load[T]`, so that the memo key stays the document set.
 var verified = memo.New[struct{}](256)
 
 func verifyModulesUncached(d *ModuleDocuments) error {
