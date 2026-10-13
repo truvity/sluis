@@ -19,7 +19,7 @@ func TestACredentialsRefMayBeTheStoredCredentialOfAPreset(t *testing.T) {
 	ok := func(ref string) error {
 		return blobWith(config.PortsBlobS3{Bucket: "b", Endpoint: storedEndpoint, CredentialsRef: ref}).validatePorts()
 	}
-	if err := ok("external/cloudflare/hive-r2-sluis-blobs"); err != nil {
+	if err := ok("external/cloudflare/r2-blobs"); err != nil {
 		t.Errorf("the stored credential of a preset: %v", err)
 	}
 	// It is a plain address: no cloudflare section, and no preset to consult.
