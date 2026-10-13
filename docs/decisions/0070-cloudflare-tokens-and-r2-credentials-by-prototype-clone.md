@@ -78,6 +78,15 @@ is directly an S3 credential.
     the real client speaks the five calls over plain `net/http`, because the SDK's root client linked every
     Cloudflare service into the Lambda bootstrap and took it past the 100 MiB deploy/pulumi accepts.
 
+12. **Amendment, 2026-10-13: a preset can be on-demand only.** A preset takes `store`: `external` (the default,
+    point 4 as written) or `none`. With `none` the schedule never mints or stores the preset, no
+    `external/cloudflare/<preset>` parameter exists for it, and a token is minted only through the exchange
+    (`sluisctl cloudflare token <preset>`) for a caller the grants allow. Its `rotation` is left out. The sweep still
+    deletes its expired and revoked on-demand tokens, and the audit events are the on-demand kind. The Pulumi
+    library schedules no rotation, and grants nothing on `external/cloudflare/*`, when every preset is `none`.
+    The reason is a caller, such as an infrastructure run, that wants a fresh short-lived provider token and has no use
+    for a stored one that is rotated and readable by others. No `deploy` value was added.
+
 ### Limits to document
 
 | Limit | Value |

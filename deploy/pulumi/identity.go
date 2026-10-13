@@ -78,6 +78,10 @@ type KubernetesIdentityArgs struct {
 	// credentials read and write. Set it when the service document declares
 	// `cloudflare` presets.
 	Cloudflare bool
+	// CloudflareOnDemandOnly drops, from Cloudflare, the grant on the
+	// credentials the rotation stores at external/cloudflare: set it when every
+	// preset is `store: none`.
+	CloudflareOnDemandOnly bool
 	// State is the DynamoDB table of the State port. Nil when State is not in
 	// DynamoDB (it is in ConfigMaps or memory), and the roles then carry no DynamoDB grant.
 	State *StateGrant
@@ -233,7 +237,7 @@ func newPodIdentity(ctx *pulumi.Context, parent *KubernetesIdentity, a *Kubernet
 			st = append(st, wrappedSigningStatement(v[3].(string)))
 		}
 		if a.Instance != "" {
-			st = append(st, ssmStatements(a.Region, a.AccountID, a.Instance, a.ParameterKeyArn, a.Cloudflare)...)
+			st = append(st, ssmStatements(a.Region, a.AccountID, a.Instance, a.ParameterKeyArn, a.Cloudflare, !a.CloudflareOnDemandOnly)...)
 		}
 		return document(st)
 	}).(pulumi.StringOutput)

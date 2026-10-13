@@ -36,12 +36,14 @@ type AccountView struct {
 // part's message, never the whole page's: a prototype that is refused is what
 // the page exists to show.
 type PresetView struct {
-	Name        string        `json:"name"`
-	Description string        `json:"description,omitempty"`
-	Account     string        `json:"account,omitempty"`
-	Endpoint    string        `json:"endpoint,omitempty"`
-	Lifetime    time.Duration `json:"lifetime"`
-	Rotation    time.Duration `json:"rotation"`
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	Account     string `json:"account,omitempty"`
+	Endpoint    string `json:"endpoint,omitempty"`
+	// Store is "none" for an on-demand-only preset, empty for a stored one.
+	Store    string        `json:"store,omitempty"`
+	Lifetime time.Duration `json:"lifetime"`
+	Rotation time.Duration `json:"rotation"`
 	// Tick is how often the rotation looks at the preset: the stored credential
 	// is overdue only past Rotation + Tick.
 	Tick      time.Duration `json:"tick,omitempty"`
@@ -121,7 +123,7 @@ func BuildStatus(ctx context.Context, src Source) Status {
 func presetView(ctx context.Context, src Source, info PresetInfo) PresetView {
 	protoID, _ := src.PrototypeID(info.Name)
 	out := PresetView{
-		Name: info.Name, Description: info.Description, Account: info.Account, Endpoint: info.Endpoint,
+		Name: info.Name, Description: info.Description, Account: info.Account, Endpoint: info.Endpoint, Store: info.Store,
 		Lifetime: info.Lifetime, Rotation: info.Rotation, Tick: info.Tick,
 		Prototype: prototypeOf(protoID, src.CheckPreset(ctx, info.Name)),
 	}

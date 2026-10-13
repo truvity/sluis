@@ -69,6 +69,14 @@ type (
 // `<Group>/<document>/v<N>`.
 const Group = internal.Group
 
+// The values of a Cloudflare preset's `store`: `external` (the default) has the
+// schedule rotate the preset into external/cloudflare/<preset>; `none` makes it
+// on-demand only, with nothing stored.
+const (
+	CloudflareStoreExternal = internal.CloudflareStoreExternal
+	CloudflareStoreNone     = internal.CloudflareStoreNone
+)
+
 // EnvConfig is the variable that names the service document when a process is
 // given no --config.
 const EnvConfig = internal.EnvConfig

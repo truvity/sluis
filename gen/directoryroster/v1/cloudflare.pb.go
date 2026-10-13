@@ -205,8 +205,12 @@ type CloudflarePreset struct {
 	// rotation_seconds, so it is overdue only past rotation_seconds +
 	// rotation_tick_seconds.
 	RotationTickSeconds int64 `protobuf:"varint,11,opt,name=rotation_tick_seconds,json=rotationTickSeconds,proto3" json:"rotation_tick_seconds,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	// where the schedule keeps the preset's token: "external" (rotated into
+	// external/cloudflare/<preset>) or "none" (on-demand only: nothing is stored
+	// and rotation_seconds is zero).
+	Store         string `protobuf:"bytes,12,opt,name=store,proto3" json:"store,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CloudflarePreset) Reset() {
@@ -314,6 +318,13 @@ func (x *CloudflarePreset) GetRotationTickSeconds() int64 {
 		return x.RotationTickSeconds
 	}
 	return 0
+}
+
+func (x *CloudflarePreset) GetStore() string {
+	if x != nil {
+		return x.Store
+	}
+	return ""
 }
 
 // CloudflarePrototype is the prototype token as sluis reads it now.
@@ -1050,7 +1061,7 @@ const file_directoryroster_v1_cloudflare_proto_rawDesc = "" +
 	"canOperate\"B\n" +
 	"\x11CloudflareAccount\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x19\n" +
-	"\bid_last4\x18\x02 \x01(\tR\aidLast4\"\xe9\x03\n" +
+	"\bid_last4\x18\x02 \x01(\tR\aidLast4\"\xff\x03\n" +
 	"\x10CloudflarePreset\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x18\n" +
@@ -1064,7 +1075,8 @@ const file_directoryroster_v1_cloudflare_proto_rawDesc = "" +
 	"\n" +
 	"live_error\x18\n" +
 	" \x01(\tR\tliveError\x122\n" +
-	"\x15rotation_tick_seconds\x18\v \x01(\x03R\x13rotationTickSeconds\"U\n" +
+	"\x15rotation_tick_seconds\x18\v \x01(\x03R\x13rotationTickSeconds\x12\x14\n" +
+	"\x05store\x18\f \x01(\tR\x05store\"U\n" +
 	"\x13CloudflarePrototype\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
 	"\x06status\x18\x02 \x01(\tR\x06status\x12\x16\n" +

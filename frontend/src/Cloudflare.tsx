@@ -324,6 +324,8 @@ function PresetCard({
   const stored = preset.stored;
   const fresh = freshness(preset, stored, new Date());
   const note = freshnessNote(fresh, preset.rotationSeconds, preset.rotationTickSeconds);
+  // `store: none`: minted on demand only; nothing is stored or rotated.
+  const onDemandOnly = preset.store === "none";
   return (
     <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
       <Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "flex-start", gap: 2, flexWrap: "wrap" }}>
@@ -335,7 +337,7 @@ function PresetCard({
             {preset.description}
           </Typography>
         </Box>
-        {canOperate ? (
+        {canOperate && !onDemandOnly ? (
           <Tooltip title={proto.usable ? "Mint the stored token now instead of at its next rotation" : "The prototype is refused: nothing can be minted until it is fixed"}>
             <span>
               <Button size="small" variant="outlined" disabled={!proto.usable} onClick={onRotate}>
@@ -348,7 +350,8 @@ function PresetCard({
 
       <Stack direction="row" sx={{ gap: 4, flexWrap: "wrap", mt: 1.5 }}>
         <Fact label="Lifetime">{span(Number(preset.lifetimeSeconds))}</Fact>
-        <Fact label="Rotation">{span(Number(preset.rotationSeconds))}</Fact>
+        <Fact label="Store">{onDemandOnly ? "none (on demand only)" : "external"}</Fact>
+        {onDemandOnly ? null : <Fact label="Rotation">{span(Number(preset.rotationSeconds))}</Fact>}
         {preset.endpoint ? (
           <Fact label="Endpoint">
             <Mono>{preset.endpoint}</Mono>
@@ -364,10 +367,12 @@ function PresetCard({
         </Alert>
       ) : null}
 
-      <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 2, mb: 0.5 }}>
-        Stored token (what consumers read)
-      </Typography>
-      {stored?.error ? (
+      {onDemandOnly ? null : (
+        <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 2, mb: 0.5 }}>
+          Stored token (what consumers read)
+        </Typography>
+      )}
+      {onDemandOnly ? null : stored?.error ? (
         <Failure error={stored.error} />
       ) : stored?.present ? (
         <Stack direction="row" sx={{ gap: 3, flexWrap: "wrap", alignItems: "center" }}>
@@ -390,12 +395,12 @@ function PresetCard({
           {note}
         </Typography>
       )}
-      {fresh === "due" ? (
+      {!onDemandOnly && fresh === "due" ? (
         <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
           {note}
         </Typography>
       ) : null}
-      {note && fresh !== "none" && fresh !== "fresh" && fresh !== "due" ? (
+      {!onDemandOnly && note && fresh !== "none" && fresh !== "fresh" && fresh !== "due" ? (
         <Alert severity={fresh === "stale" ? "error" : "warning"} sx={{ mt: 1 }}>
           {note}
         </Alert>

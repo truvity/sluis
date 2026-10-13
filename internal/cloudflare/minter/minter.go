@@ -25,6 +25,9 @@ import (
 var (
 	// ErrUnknownPreset is a preset the service document does not declare.
 	ErrUnknownPreset = errors.New("cloudflare: no such preset")
+	// ErrOnDemandOnly is a preset with `store: none`: the schedule keeps no
+	// token of it, so there is nothing to rotate; it is minted only on demand.
+	ErrOnDemandOnly = errors.New("cloudflare: the preset is on-demand only (store: none), so it has no stored token to rotate")
 	// ErrNotGranted is a caller the policy's cloudflare.grants do not open the
 	// preset to.
 	ErrNotGranted = errors.New("cloudflare: the caller is not granted this preset")
@@ -163,6 +166,11 @@ type PresetInfo struct {
 	// S3 endpoint, and empty otherwise.
 	R2       bool
 	Endpoint string
+	// Store is "none" for a preset that is on-demand only (nothing is stored,
+	// Rotation is zero), and empty for one the schedule rotates into
+	// external/cloudflare/<preset>. Empty is omitted on the wire, so an answer
+	// for a stored preset is the one released versions give.
+	Store    string `json:",omitempty"`
 	Lifetime time.Duration
 	Rotation time.Duration
 	// Tick is how often the rotation looks at the preset, so how late a
@@ -180,10 +188,14 @@ func infoOf(name string, p config.CloudflarePreset, tick config.Duration) Preset
 	if t <= 0 {
 		t = DefaultTick
 	}
-	return PresetInfo{
+	info := PresetInfo{
 		Name: name, Description: p.Description, Account: p.Account, R2: p.R2(), Endpoint: p.Endpoint,
 		Lifetime: p.Lifetime.D(), Rotation: p.Rotation.D(), Tick: t,
 	}
+	if !p.Stored() {
+		info.Store = config.CloudflareStoreNone
+	}
+	return info
 }
 
 // Presets are all the presets, sorted by name.

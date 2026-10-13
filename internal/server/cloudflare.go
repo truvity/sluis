@@ -86,7 +86,7 @@ func (c *Console) ListCloudflare(
 func presetProto(p cfrpc.PresetView) *directoryrosterv1.CloudflarePreset {
 	out := &directoryrosterv1.CloudflarePreset{
 		Name: p.Name, Description: p.Description, Account: p.Account, Endpoint: p.Endpoint,
-		LifetimeSeconds: int64(p.Lifetime / time.Second), RotationSeconds: int64(p.Rotation / time.Second), RotationTickSeconds: int64(p.Tick / time.Second),
+		Store: storeOf(p.Store), LifetimeSeconds: int64(p.Lifetime / time.Second), RotationSeconds: int64(p.Rotation / time.Second), RotationTickSeconds: int64(p.Tick / time.Second),
 		Prototype: &directoryrosterv1.CloudflarePrototype{Id: p.Prototype.ID, Status: p.Prototype.Status, Detail: p.Prototype.Detail},
 		LiveError: p.LiveError,
 		Stored: &directoryrosterv1.CloudflareStored{
@@ -219,6 +219,8 @@ func cloudflareError(err error) error {
 		return connect.NewError(connect.CodeUnavailable, err)
 	case errors.Is(err, cfrpc.ErrNotOurs):
 		return connect.NewError(connect.CodeNotFound, err)
+	case errors.Is(err, cfrpc.ErrOnDemandOnly):
+		return connect.NewError(connect.CodeFailedPrecondition, err)
 	case errors.Is(err, cfrpc.ErrContended):
 		return connect.NewError(connect.CodeAborted, err)
 	case errors.As(err, &re):
@@ -228,4 +230,13 @@ func cloudflareError(err error) error {
 	default:
 		return connect.NewError(connect.CodeInternal, errors.New("the call to Cloudflare or the secrets store did not complete; see the service log"))
 	}
+}
+
+// storeOf is a preset's store as the page's message spells it: the default is
+// written out.
+func storeOf(store string) string {
+	if store == "" {
+		return "external"
+	}
+	return store
 }
