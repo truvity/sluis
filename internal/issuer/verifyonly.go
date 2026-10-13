@@ -37,7 +37,8 @@ type VerifyOnlyKey struct {
 // own when it has one, and otherwise the RFC 7638 thumbprint of the key: the
 // derivation a file signing key uses, so the kid an old token carries is the
 // one published for the same key. The algorithm is alg when given (it must suit
-// the key), else the one the key type signs with.
+// the key), else the one the key type signs with. Only ECDSA on P-384 (ES384)
+// and RSA of 2048 bits or more (RS256) are accepted.
 //
 // A private key is refused, whatever the encoding: nothing here may hold the
 // means to sign. The error names no key material.
@@ -124,21 +125,30 @@ func parsePublicKey(raw []byte) (crypto.PublicKey, string, error) {
 	return found, "", nil
 }
 
+// MinVerifyOnlyRSABits is the shortest RSA key a verify-only entry may be.
+const MinVerifyOnlyRSABits = 2048
+
+// publicSignatureAlgorithm is the algorithm a supplied verify-only key is for,
+// and refuses what the estate does not sign with: EC keys other than P-384
+// (ES384), and RSA keys under [MinVerifyOnlyRSABits]. RSA of 2048 bits or more
+// stays, as RS256: the key an earlier signer held for the relying parties that
+// pin RS256 (Kargo, EKS's OIDC provider) is real, and its tokens must verify
+// for the overlap. That is the previous issuer's own RS256 key carried over,
+// not a third party's key.
 func publicSignatureAlgorithm(pub crypto.PublicKey) (jose.SignatureAlgorithm, error) {
 	switch k := pub.(type) {
 	case *rsa.PublicKey:
+		if bits := k.N.BitLen(); bits < MinVerifyOnlyRSABits {
+			return "", fmt.Errorf("issuer: a verify-only RSA key must be at least %d bits, and this one is %d", MinVerifyOnlyRSABits, bits)
+		}
 		return jose.RS256, nil
 	case *ecdsa.PublicKey:
-		switch k.Curve {
-		case elliptic.P256():
-			return jose.ES256, nil
-		case elliptic.P384():
+		if k.Curve == elliptic.P384() {
 			return jose.ES384, nil
-		case elliptic.P521():
-			return jose.ES512, nil
 		}
+		return "", fmt.Errorf("issuer: a verify-only EC key must be on P-384, and this one is on %s", k.Curve.Params().Name)
 	}
-	return "", fmt.Errorf("issuer: a verify-only key is an RSA or an ECDSA key on P-256, P-384 or P-521, not %T", pub)
+	return "", fmt.Errorf("issuer: a verify-only key is an ECDSA key on P-384 or an RSA key of %d bits or more, not %T", MinVerifyOnlyRSABits, pub)
 }
 
 // UseVerifyOnly sets the keys published beside the rings' own. They are never
