@@ -4999,14 +4999,12 @@
                   "alg": {
                     "description": "The key's algorithm. Unset follows the key.",
                     "enum": [
-                      "ES256",
                       "ES384",
-                      "ES512",
                       "RS256"
                     ]
                   },
                   "file": {
-                    "description": "A PEM public key (`PUBLIC KEY`, `RSA PUBLIC KEY`, or a certificate) or a JWK file. Never a private key.",
+                    "description": "A PEM public key (`PUBLIC KEY`, `RSA PUBLIC KEY`, or a certificate) or a JWK file: ECDSA on P-384 (ES384) or RSA of 2048 bits or more (RS256). Another curve or a shorter RSA key is refused. Never a private key.",
                     "minLength": 1,
                     "type": "string"
                   },

@@ -55,10 +55,10 @@ func audited(log *slog.Logger, next http.Handler) http.Handler {
 			}
 		}
 		if rec.method != "" {
-			attrs = append(attrs, slog.String("method", rec.method))
+			attrs = append(attrs, slog.String("method", clean(rec.method)))
 		}
 		if rec.tool != "" {
-			attrs = append(attrs, slog.String("tool", rec.tool))
+			attrs = append(attrs, slog.String("tool", clean(rec.tool)))
 		}
 		if rec.batched {
 			attrs = append(attrs, slog.Any("calls", rec.calls))
