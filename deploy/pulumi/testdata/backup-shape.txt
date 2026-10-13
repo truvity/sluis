@@ -15,7 +15,6 @@ aws:lambda/function:Function/staging-backup-fn
 aws:lambda/functionEventInvokeConfig:FunctionEventInvokeConfig/staging-backup-async-live
 aws:lambda/layerVersion:LayerVersion/staging-backup-config
 aws:scheduler/schedule:Schedule/staging-backup-daily
-aws:scheduler/schedule:Schedule/staging-backup-resume
 aws:sqs/queue:Queue/staging-backup-schedule-dlq
 aws:ssm/parameter:Parameter/staging-backup-restore-identity
 name aws:cloudwatch/logGroup:LogGroup/staging-backup-logs name=/aws/lambda/sluis-staging-backup

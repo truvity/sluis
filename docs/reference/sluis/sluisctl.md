@@ -188,6 +188,7 @@ sluisctl restore status
 | Backup | Module calls `backup.run` (synchronous; `--resume` answers `idle` since format 2), `backup.status`, `backup.list`. Verifying a backup is `sluis backup verify`, with the backup document ([backup](backup.md#commands)) |
 | `restore preview` | A synchronous restore event with `preview`: counts per module and section, names in `--json`, never values |
 | `restore start` | Refuses unless `--confirm` equals the instance (`--instance`, `$SLUISCTL_INSTANCE`, `backup.instance`). Sends the event asynchronously with `by` set to the caller's `sts:GetCallerIdentity` ARN, then looks up the run and prints its id. `--wait` polls `restore.status` every 5 seconds until `completed`, or `failed` (exit 1) |
+| `backup run --resume` | Only continues a paused run, and since format 2 none pauses: it answers `idle` and starts no backup. Kept for old scripts |
 | `restore resume` | Does nothing when no restore is unfinished |
 | IAM | `lambda:InvokeFunction` on the function's `live-admin` or `live-breakglass` alias; a refusal exits 4 |
 | Output | Text, or `--json`; never a secret |

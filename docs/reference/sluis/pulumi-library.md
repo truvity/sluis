@@ -132,14 +132,14 @@ The role trusts `pods.eks.amazonaws.com` for this cluster and ServiceAccount.
 | `Retention` | 7; 720h | `Keep`, `MaxAge`: `backup.retention`. An Object Lock longer than `MaxAge` is refused |
 | `AuditQueueURL` | None | `adapters.audit` sqs; without it the `log` adapter |
 | `FunctionName`, `Function`, `LogRetentionDays` | `sluis-<instance>-backup`; 512 MB, 900 s; 30 | `Function.TimeoutSeconds` is 60 to 900 |
-| `Schedule` | `cron(0 2 * * ? *)`; `rate(5 minutes)`; false | `Daily`, `ResumeRate`, `Paused`. The resume schedule stays and is answered `idle` since format 2 |
+| `Schedule` | `cron(0 2 * * ? *)`; false | `Daily`, `Paused`. `ResumeRate` is deprecated and ignored: the `<function>-resume` schedule is gone (a run of format 2 does not pause), and an apply deletes it |
 | `AlarmActionArns`, `PermissionsBoundaryArn`, `Tags` | None | Notified by the alarms; boundary of the roles |
 
 | Output | Meaning |
 |---|---|
 | `FunctionArn`, `FunctionName`, `RoleArn`, `RoleName`, `ConfigLayerArn` | Function, role and layer |
 | `LiveAliasArn`, `AliasArns` | `live`, which the schedules invoke, and `live-console`, `live-admin`, `live-breakglass`; the alias is the caller class of a [module call](backup.md#calls) |
-| `SchedulerRoleArn`, `ScheduleNames`, `ScheduleDLQArn` | `<function>-daily` sends `{"kind":"backup"}`, `<function>-resume` sends `{"kind":"backup","resume":true}`, answered `idle`; undelivered events go to the queue |
+| `SchedulerRoleArn`, `ScheduleNames`, `ScheduleDLQArn` | `<function>-daily` sends `{"kind":"backup"}`; undelivered events go to the queue |
 | `ArchiveBucketName`, `ArchiveBucketArn` | The archive |
 | `ArchiveKeyArn` | Deprecated: the key behind `ArchiveKeyAlias`, empty when it is not set |
 | `RestoreRecipient` | The `age1...` recipient of the installation's generated restore keypair. Public |

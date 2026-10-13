@@ -97,8 +97,7 @@ func newArchiveBucket(ctx *pulumi.Context, name string, p *backupPlan, parent pu
 	return bucket, nil
 }
 
-// newBackupSchedules is the daily run and the resume schedule, both invoking
-// the live alias through a scheduler role that may invoke that alias and send to
+// newBackupSchedules is the daily run, invoking the live alias through a scheduler role that may invoke that alias and send to
 // the dead-letter queue, and nothing else. A schedule that cannot deliver sends
 // its event to the queue.
 func newBackupSchedules(ctx *pulumi.Context, name string, p *backupPlan, sch BackupScheduleArgs, out *Backup,
@@ -141,9 +140,11 @@ func newBackupSchedules(ctx *pulumi.Context, name string, p *backupPlan, sch Bac
 	}
 	out.SchedulerRoleArn = role.Arn
 	var names pulumi.StringArray
+	// There is no resume schedule: since format 2 a run does not pause and the
+	// only answer to {"kind":"backup","resume":true} is idle. An apply deletes
+	// the schedule of an installation that still has one.
 	for _, s := range []struct{ suffix, expr, desc, input string }{
 		{"daily", sch.Daily, "Takes the daily backup.", `{"kind":"backup"}`},
-		{"resume", sch.ResumeRate, "Continues a paused backup run.", `{"kind":"backup","resume":true}`},
 	} {
 		sname := p.FunctionName + "-" + s.suffix
 		if len(sname) > 64 {

@@ -34,7 +34,11 @@ func CallerAlias(class string) string { return LiveAlias + "-" + class }
 const (
 	// DefaultBackupSchedule is the daily run: 02:00 UTC.
 	DefaultBackupSchedule = "cron(0 2 * * ? *)"
-	// DefaultBackupResumeRate is how often a paused run is looked for.
+	// DefaultBackupResumeRate is the rate of the resume schedule NewBackup no
+	// longer creates.
+	//
+	// Deprecated: since backup format 2 a run does not pause, the schedule's
+	// only answer was `idle`, and an apply deletes it. Nothing reads this.
 	DefaultBackupResumeRate = "rate(5 minutes)"
 	// DefaultBackupTimeoutSeconds is the backup and restore functions' timeout:
 	// a run pauses itself under three minutes left and the next continues it.
@@ -193,13 +197,17 @@ type BackupCommon struct {
 	AdditionalWebIdentityAudiences []string
 }
 
-// BackupScheduleArgs are the two schedules of the backup function.
+// BackupScheduleArgs is the schedule of the backup function.
 type BackupScheduleArgs struct {
 	// Daily is the run: default [DefaultBackupSchedule].
 	Daily string
-	// ResumeRate looks for a paused run: default [DefaultBackupResumeRate].
+	// ResumeRate is accepted and ignored.
+	//
+	// Deprecated: the `<function>-resume` schedule is gone (a backup run of
+	// format 2 does not pause), so an apply deletes it. The field stays so
+	// that no estate stops compiling; any value, valid or not, is ignored.
 	ResumeRate string
-	// Paused declares both schedules DISABLED.
+	// Paused declares the daily schedule DISABLED.
 	Paused bool
 }
 
@@ -711,13 +719,8 @@ func NewBackup(ctx *pulumi.Context, name string, args *BackupArgs, opts ...pulum
 	if sch.Daily == "" {
 		sch.Daily = DefaultBackupSchedule
 	}
-	if sch.ResumeRate == "" {
-		sch.ResumeRate = DefaultBackupResumeRate
-	}
-	for k, v := range map[string]string{"Schedule.Daily": sch.Daily, "Schedule.ResumeRate": sch.ResumeRate} {
-		if !strings.HasPrefix(v, "rate(") && !strings.HasPrefix(v, "cron(") {
-			return nil, fmt.Errorf("sluispulumi: %s %q is not an EventBridge Scheduler expression", k, v)
-		}
+	if !strings.HasPrefix(sch.Daily, "rate(") && !strings.HasPrefix(sch.Daily, "cron(") {
+		return nil, fmt.Errorf("sluispulumi: Schedule.Daily %q is not an EventBridge Scheduler expression", sch.Daily)
 	}
 	out := &Backup{}
 	if err := ctx.RegisterComponentResource(BackupType, name, out, opts...); err != nil {
