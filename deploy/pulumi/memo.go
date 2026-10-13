@@ -14,7 +14,7 @@ import (
 // callers read it and never modify it. (The same cache lives in the root
 // module's internal/memo, which this library may not import.)
 type outcomes[V any] struct {
-	max   int
+	limit int
 	mu    sync.Mutex
 	items map[[sha256.Size]byte]*outcome[V]
 	order [][sha256.Size]byte
@@ -26,8 +26,8 @@ type outcome[V any] struct {
 	err  error
 }
 
-func newOutcomes[V any](max int) *outcomes[V] {
-	return &outcomes[V]{max: max, items: map[[sha256.Size]byte]*outcome[V]{}}
+func newOutcomes[V any](limit int) *outcomes[V] {
+	return &outcomes[V]{limit: limit, items: map[[sha256.Size]byte]*outcome[V]{}}
 }
 
 // outcomeKey hashes parts so that no two sequences of parts collide on the
@@ -52,7 +52,7 @@ func (c *outcomes[V]) do(key [sha256.Size]byte, compute func() (V, error)) (V, e
 		e = &outcome[V]{}
 		c.items[key] = e
 		c.order = append(c.order, key)
-		if len(c.order) > c.max {
+		if len(c.order) > c.limit {
 			delete(c.items, c.order[0])
 			c.order = c.order[1:]
 		}
