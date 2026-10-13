@@ -66,6 +66,7 @@ Point the pod at an OpenTelemetry collector, then install the alert rules and th
 - The ruler lists one group of twelve rules, none in error.
 
 - The Grafana `Access` folder has the overview dashboard, one ConfigMap per dashboard file, with a `$cluster` variable.
+- A log line written inside a request carries `trace_id`, `span_id` and `trace_flags` (W3C hex), so a trace and its log lines are found by the same id. Logs stay on stdout; sluis has no log exporter. A line written outside a span has none of the three. In Lambda functions the OTLP layer forwards only platform events, so function logs reach CloudWatch Logs alone.
 
 A rule whose series is absent does not fire. The platform's own scrape alert covers a service that does not run.
 
