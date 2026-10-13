@@ -257,10 +257,29 @@ func Roster(m Model, c Conventions) *Policy {
 
 	rosterWorkloads(m, a)
 
-	// The default lifetime is the shortest rung's, so that an identity
-	// holding no rung is never given a longer session than the most
+	// A rung with no population has no group in the policy (sortedGroups
+	// drops empty groups), and the issuer refuses a lifetime for a group the
+	// policy does not declare: such a rung contributes no lifetime, and no
+	// share of the default either.
+	groups := sortedGroups(a.groups)
+	declared := make(map[string]bool, len(groups))
+	for _, g := range groups {
+		declared[g.Name] = true
+	}
+
+	populated := map[string]Rung{}
+	for name, rung := range m.Rungs {
+		if declared[RungPrefix+name] {
+			populated[name] = rung
+		} else {
+			delete(lifetimes, RungPrefix+name)
+		}
+	}
+
+	// The default lifetime is the shortest populated rung's, so that an
+	// identity holding no rung is never given a longer session than the most
 	// privileged person in the model.
-	if shortest := shortestDuration(m.Rungs); shortest != "" {
+	if shortest := shortestDuration(populated); shortest != "" {
 		lifetimes[policy.LifetimeDefault] = shortest
 	}
 
@@ -273,7 +292,7 @@ func Roster(m Model, c Conventions) *Policy {
 	})
 
 	return &Policy{
-		Groups:    sortedGroups(a.groups),
+		Groups:    groups,
 		Lifetimes: sortedLifetimes(lifetimes),
 		Deferred:  deferred,
 		GitHub:    bindings,
