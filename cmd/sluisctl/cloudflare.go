@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -45,10 +46,24 @@ func cloudflareCommand(args []string) error {
 	}
 }
 
+// envCloudflareNoCache is the variable that makes the commands neither read nor
+// write the credential cache, as --no-cache does: set it (1, true) for a
+// program that execs sluisctl and must never leave a token on disk.
+const envCloudflareNoCache = "SLUISCTL_CLOUDFLARE_NO_CACHE"
+
+// cloudflareNoCacheDefault is --no-cache's default: the variable, when it is a
+// boolean. A value that is not one counts as unset.
+func cloudflareNoCacheDefault() bool {
+	on, err := strconv.ParseBool(strings.TrimSpace(os.Getenv(envCloudflareNoCache)))
+	return err == nil && on
+}
+
 // cloudflareRequest is a cloudflare command line, read.
 type cloudflareRequest struct {
 	preset, issuer, client, format, file string
 	lifetime                             time.Duration
+	// noCache keeps the credential off disk: no cache read, write or lock.
+	noCache bool
 }
 
 // parseCloudflareFlags reads `<preset> [flags]` in either order.
@@ -57,6 +72,8 @@ func parseCloudflareFlags(name string, args []string, r2 bool) (cloudflareReques
 	flags := flag.NewFlagSet("cloudflare "+name, flag.ContinueOnError)
 	flags.StringVar(&out.issuer, "issuer", "", "the issuer, when not configured")
 	flags.StringVar(&out.client, "client", "", "the client to present")
+	flags.BoolVar(&out.noCache, "no-cache", cloudflareNoCacheDefault(),
+		"neither read nor write the credential cache, so the token is never written to disk (or set "+envCloudflareNoCache+"=1)")
 	flags.DurationVar(&out.lifetime, "lifetime", 0, "how long the credential should live, at most the preset's (default: the preset's)")
 	if r2 {
 		flags.StringVar(&out.file, "file", "", "read the cloudflare/v1 document a secrets operator projected, and sign in to nothing")
@@ -104,7 +121,7 @@ func cloudflareToken(args []string) error {
 	if err != nil {
 		return err
 	}
-	cred, err := cloudflareCredential(context.Background(), cfg, request.preset, request.lifetime)
+	cred, err := cloudflareCredential(context.Background(), cfg, request.preset, request.lifetime, request.noCache)
 	if err != nil {
 		return err
 	}
@@ -133,7 +150,7 @@ func cloudflareR2(args []string) error {
 	} else {
 		var cfg Config
 		if cfg, err = loadConfig(request.issuer, request.client); err == nil {
-			cred, err = cloudflareCredential(context.Background(), cfg, request.preset, request.lifetime)
+			cred, err = cloudflareCredential(context.Background(), cfg, request.preset, request.lifetime, request.noCache)
 		}
 	}
 	if err != nil {
@@ -181,9 +198,15 @@ func readCloudflareFile(path string) (tokens.CloudflareCredential, error) {
 
 // cloudflareCredential returns a credential of the preset, from the cache
 // while a third of its lifetime is left, and minted by the issuer otherwise.
-func cloudflareCredential(ctx context.Context, cfg Config, preset string, lifetime time.Duration) (tokens.CloudflareCredential, error) {
+// With noCache it always mints, and touches no cache file and no lock.
+func cloudflareCredential(ctx context.Context, cfg Config, preset string, lifetime time.Duration, noCache bool) (tokens.CloudflareCredential, error) {
 	audience := tokens.CloudflareAudiencePrefix + preset
-	path, cacheErr := cloudflareCachePath(cfg.Issuer, cfg.ClientID, preset, lifetime)
+	path, cacheErr := "", error(nil)
+	if noCache {
+		cacheErr = errNoCache
+	} else {
+		path, cacheErr = cloudflareCachePath(cfg.Issuer, cfg.ClientID, preset, lifetime)
+	}
 	if cacheErr == nil {
 		if cached, ok := readCloudflareCache(path, time.Now()); ok {
 			return cached, nil
@@ -228,6 +251,9 @@ func cloudflareCredential(ctx context.Context, cfg Config, preset string, lifeti
 	})
 	return result, err
 }
+
+// errNoCache stands for a cache that is not to be used: --no-cache.
+var errNoCache = errors.New("the credential cache is off")
 
 // A cached credential: what the issuer minted, and for how long it was minted,
 // so that the renewal point (a third of the lifetime left) can be found

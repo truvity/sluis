@@ -375,3 +375,103 @@ func TestWhoamiListsTheGrantedPresets(t *testing.T) {
 		}
 	}
 }
+
+// onDisk lists the files below dir whose content holds any of secrets, and the
+// files that are a Cloudflare cache or its lock.
+func onDisk(t *testing.T, dir string, secrets ...string) (leaks, caches []string) {
+	t.Helper()
+	err := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		if strings.Contains(path, string(filepath.Separator)+"cloudflare"+string(filepath.Separator)) {
+			caches = append(caches, path)
+		}
+		body, rerr := os.ReadFile(path)
+		if rerr != nil {
+			return nil //nolint:nilerr // an unreadable file holds nothing we wrote
+		}
+		for _, s := range secrets {
+			if strings.Contains(string(body), s) {
+				leaks = append(leaks, path)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return leaks, caches
+}
+
+// --no-cache (and SLUISCTL_CLOUDFLARE_NO_CACHE) keep the credential off disk:
+// no cache file, no lock, no read of an earlier cache.
+func TestCloudflareNoCacheWritesAndReadsNothing(t *testing.T) {
+	for name, tc := range map[string]struct {
+		args []string
+		env  string
+		r2   bool
+	}{
+		"token flag":     {args: []string{"cloudflare", "token", "dns-example", "--no-cache"}},
+		"token env":      {args: []string{"cloudflare", "token", "dns-example"}, env: "1"},
+		"token env true": {args: []string{"cloudflare", "token", "dns-example"}, env: "true"},
+		"r2 flag":        {args: []string{"cloudflare", "r2", "r2-archive", "--no-cache"}, r2: true},
+		"r2 env":         {args: []string{"cloudflare", "r2", "r2-archive"}, env: "1", r2: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			issuer := newFakeCloudflareIssuer(t)
+			home := signedInHome(t, issuer.URL)
+			t.Setenv(envCloudflareNoCache, tc.env)
+			args := append(append([]string{}, tc.args...), "--issuer", issuer.URL)
+			out := ""
+			for range 2 {
+				out = captureStdout(t, func() error { return run(args) })
+			}
+			if n := issuer.exchanges.Load(); n != 2 {
+				t.Errorf("exchanged %d times for two runs, want 2 (no cache is read)", n)
+			}
+			want := "cf-token"
+			if tc.r2 {
+				want = "s3-secret"
+			}
+			if !strings.Contains(out, want) {
+				t.Fatalf("the credential was not printed: %q", out)
+			}
+			leaks, caches := onDisk(t, home, "cf-token", "s3-secret", "key-id")
+			if len(leaks) > 0 || len(caches) > 0 {
+				t.Errorf("the credential reached the disk: files %v, cache files %v", leaks, caches)
+			}
+		})
+	}
+}
+
+// Without the flag the cache is written, so the test above proves something;
+// and a cache that is there is not read with the flag set.
+func TestCloudflareNoCacheIgnoresAnExistingCache(t *testing.T) {
+	issuer := newFakeCloudflareIssuer(t)
+	home := signedInHome(t, issuer.URL)
+	t.Setenv(envCloudflareNoCache, "")
+	cached := func() string {
+		return captureStdout(t, func() error { return run([]string{"cloudflare", "token", "dns-example", "--issuer", issuer.URL}) })
+	}
+	cached()
+	cached()
+	if n := issuer.exchanges.Load(); n != 1 {
+		t.Fatalf("exchanged %d times with the cache on, want 1", n)
+	}
+	if leaks, _ := onDisk(t, home, "cf-token"); len(leaks) != 1 {
+		t.Fatalf("the cache was not written: %v", leaks)
+	}
+	_ = captureStdout(t, func() error {
+		return run([]string{"cloudflare", "token", "dns-example", "--issuer", issuer.URL, "--no-cache"})
+	})
+	if n := issuer.exchanges.Load(); n != 2 {
+		t.Errorf("--no-cache served the cache: %d exchanges, want 2", n)
+	}
+	// A value that is not a boolean does not turn the cache off.
+	t.Setenv(envCloudflareNoCache, "please")
+	cached()
+	if n := issuer.exchanges.Load(); n != 2 {
+		t.Errorf("a junk %s turned the cache off: %d exchanges", envCloudflareNoCache, n)
+	}
+}
