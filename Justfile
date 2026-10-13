@@ -543,9 +543,9 @@ ts: ts-package
 
 # frontend/dist for the recipes that embed it, built only when it is absent.
 # The CI groups run their recipes with `--no-deps`, after this: in CI the
-# bundle is restored from a cache keyed on its sources, and `check` builds it
-# fresh in `ci-web` before any Go group runs. Locally, an old bundle is kept:
-# `just console` rebuilds it.
+# bundle is the artifact the `console` job built (`ci-console`), and `check`
+# builds it fresh in `ci-console` before any Go group runs. Locally, an old
+# bundle is kept: `just console` rebuilds it.
 console-ready:
     @if [ -z "$(ls -A frontend/dist 2>/dev/null)" ]; then just console; else echo "console-ready: frontend/dist is there"; fi
 
@@ -613,10 +613,14 @@ ci-go-test:
 ci-go-lint:
     hack/ci-group.sh go-lint console-ready lint pulumi-test storage-test chart-lint telemetry release-chain audit-catalogue
 
-# The TypeScript package and the console's own tests and build, from a clean
-# install. `tidy` first, as `deps` has it.
+# The TypeScript package's tests, from a clean install. `tidy` first, as `deps` has it.
 ci-web:
-    hack/ci-group.sh web tidy deps ts console
+    hack/ci-group.sh web tidy deps ts
+
+# The console's own tests and build: frontend/dist, which the Go groups embed.
+# Built once per CI run, by the `console` job.
+ci-console:
+    hack/ci-group.sh console tidy deps console
 
 ci-docs:
     hack/ci-group.sh docs docs-check leak-canary
@@ -624,11 +628,11 @@ ci-docs:
 # Run all checks: every CI group except the ones that need more than the
 # checkout (audit, which fetches from a schema registry; the service
 # containers; the kind cluster), so that the pre-push hook catches what CI
-# would. `ci-web` first: it builds the console the Go groups embed.
+# would. `ci-console` first: it builds the console the Go groups embed.
 # `vuln` is deliberately not here: run it on its own with `just vuln`,
 # the same way `.github/workflows/security.yaml` does.
 check:
-    hack/ci-group.sh check ci-web ci-go-build ci-go-test ci-go-lint ci-docs
+    hack/ci-group.sh check ci-console ci-web ci-go-build ci-go-test ci-go-lint ci-docs
 
 # ---------------------------------------------------------------------------
 # audit/ — the audit trail component (moved here from truvity/audit).
