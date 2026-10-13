@@ -15,12 +15,12 @@ const (
 	rcRegion   = "eu-central-1"
 	rcAccount  = "123456789012"
 	rcInst     = "prod"
-	rcKey      = "arn:aws:kms:eu-central-1:123456789012:key/0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b"
-	rcTableKey = "arn:aws:kms:eu-central-1:123456789012:key/1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d"
-	rcSSEKey   = "arn:aws:kms:eu-central-1:123456789012:key/2b3c4d5e-6f7a-8b9c-0d1e-2f3a4b5c6d7e"
-	rcBucket   = "arn:aws:s3:::sluis-prod-blobs-123456789012"
-	rcArchive  = "arn:aws:s3:::sluis-prod-archive-123456789012"
-	rcQueue    = "arn:aws:sqs:eu-central-1:123456789012:sluis-prod-audit"
+	rcKey      = arnPrefix + "kms:eu-central-1:123456789012:key/0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b"
+	rcTableKey = arnPrefix + "kms:eu-central-1:123456789012:key/1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d"
+	rcSSEKey   = arnPrefix + "kms:eu-central-1:123456789012:key/2b3c4d5e-6f7a-8b9c-0d1e-2f3a4b5c6d7e"
+	rcBucket   = arnPrefix + "s3:::sluis-prod-blobs-123456789012"
+	rcArchive  = arnPrefix + "s3:::sluis-prod-archive-123456789012"
+	rcQueue    = arnPrefix + "sqs:eu-central-1:123456789012:sluis-prod-audit"
 )
 
 func rcEnv() ModuleEnv {
