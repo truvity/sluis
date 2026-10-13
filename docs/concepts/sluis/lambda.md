@@ -23,7 +23,7 @@ flowchart LR
   F --> D[("DynamoDB<br/>a table per module")]
   F --> B[("S3 blobs<br/>a prefix per module")]
   F -->|"sign: the issuer only"| K["KMS"]
-  F -->|"internal/&lt;module&gt;/*"| P["SSM Parameter Store"]
+  F -->|"internal/{module}/*"| P["SSM Parameter Store"]
   F -->|"emit"| Q["SQS audit"]
 ```
 
