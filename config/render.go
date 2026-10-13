@@ -16,6 +16,7 @@ import (
 	yaml "go.yaml.in/yaml/v3"
 
 	internal "github.com/truvity/sluis/internal/config"
+	"github.com/truvity/sluis/internal/memo"
 	"github.com/truvity/sluis/internal/port"
 	"github.com/truvity/sluis/storage/keys"
 )
@@ -559,6 +560,13 @@ func normalise(n *yaml.Node, root bool) {
 // verify loads both documents as the service does: the schema, the decode and,
 // for the policy, the semantic checks.
 func verify(service, policy []byte) error {
+	_, err := verified.Do(memo.KeyOf([]byte("render"), service, policy), func() (struct{}, error) {
+		return struct{}{}, verifyUncached(service, policy)
+	})
+	return err
+}
+
+func verifyUncached(service, policy []byte) error {
 	dir, err := os.MkdirTemp("", "sluis-render-")
 	if err != nil {
 		return err

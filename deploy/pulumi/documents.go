@@ -751,26 +751,37 @@ func ownTrigger(doc map[string]any, a *LambdaArgs) error {
 // PolicyPath (a file or a directory of layers, rendered by sluis's own
 // renderer).
 func renderPolicy(a *LambdaArgs) (string, error) {
-	var doc *sluisconfig.PolicyDocument
-	switch {
-	case strings.TrimSpace(a.Policy) != "":
-		dir, err := os.MkdirTemp("", "sluis-policy-")
-		if err != nil {
-			return "", err
-		}
-		defer func() { _ = os.RemoveAll(dir) }()
-		file := filepath.Join(dir, "policy.yaml")
-		if err = os.WriteFile(file, []byte(a.Policy), 0o600); err != nil {
-			return "", err
-		}
-		if doc, err = sluisconfig.Load[sluisconfig.PolicyDocument](file); err != nil {
-			return "", fmt.Errorf("sluispulumi: LambdaArgs.Policy: %w", err)
-		}
-	default:
-		var err error
-		if doc, err = sluisconfig.RenderPolicyLayers(a.PolicyPath); err != nil {
-			return "", fmt.Errorf("sluispulumi: LambdaArgs.PolicyPath: %w", err)
-		}
+	if strings.TrimSpace(a.Policy) != "" {
+		return renderedPolicies.do(outcomeKey(a.Policy), func() (string, error) { return renderPolicyDocument(a.Policy) })
+	}
+	doc, err := sluisconfig.RenderPolicyLayers(a.PolicyPath)
+	if err != nil {
+		return "", fmt.Errorf("sluispulumi: LambdaArgs.PolicyPath: %w", err)
+	}
+	raw, err := doc.Encode()
+	if err != nil {
+		return "", err
+	}
+	return string(raw), nil
+}
+
+// renderedPolicies is renderPolicyDocument's result by the document's bytes.
+var renderedPolicies = newOutcomes[string](64)
+
+// renderPolicyDocument is the canonical form of a policy document given as text.
+func renderPolicyDocument(policy string) (string, error) {
+	dir, err := os.MkdirTemp("", "sluis-policy-")
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = os.RemoveAll(dir) }()
+	file := filepath.Join(dir, "policy.yaml")
+	if err = os.WriteFile(file, []byte(policy), 0o600); err != nil {
+		return "", err
+	}
+	doc, err := sluisconfig.Load[sluisconfig.PolicyDocument](file)
+	if err != nil {
+		return "", fmt.Errorf("sluispulumi: LambdaArgs.Policy: %w", err)
 	}
 	raw, err := doc.Encode()
 	if err != nil {
@@ -788,6 +799,23 @@ func validateDocuments(docs map[string]string) error {
 // loadDocuments loads each rendered document as the function will and returns
 // what it decoded; a document that does not load is nil.
 func loadDocuments(docs map[string]string) (*sluisconfig.Sluis, *sluisconfig.PolicyDocument, error) {
+	r, err := loaded.do(outcomeKey(docSluis, docs[docSluis], docPolicy, docs[docPolicy]), func() (loadedDocuments, error) {
+		svc, pol, err := loadDocumentsUncached(docs)
+		return loadedDocuments{svc, pol}, err
+	})
+	return r.svc, r.pol, err
+}
+
+type loadedDocuments struct {
+	svc *sluisconfig.Sluis
+	pol *sluisconfig.PolicyDocument
+}
+
+// loaded is what loadDocuments decoded, by the bytes of the documents; its
+// callers only read it.
+var loaded = newOutcomes[loadedDocuments](64)
+
+func loadDocumentsUncached(docs map[string]string) (*sluisconfig.Sluis, *sluisconfig.PolicyDocument, error) {
 	dir, err := os.MkdirTemp("", "sluis-layer-")
 	if err != nil {
 		return nil, nil, err

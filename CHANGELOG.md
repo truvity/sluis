@@ -1,5 +1,9 @@
 ## Unreleased
 
+### Changed
+
+- **Rendering and loading the same documents again is remembered.** `config.Render`, `config.RenderModules`, `config.ValidateModule` and `config.ModuleSecrets` hold the documents they produce or read to their JSON schemas and decode them, which costs seconds on a realistic estate, and a stack calls them again with the same installation on every `NewLambda`. The outcome of each check, error included, is now remembered by a hash of the bytes it is a function of (bounded to the newest 256 outcomes, safe for concurrent use, computed once when callers ask at the same time), as is what `NewLambda` decodes from its rendered documents. Results and error messages are unchanged: a caller still gets its own copy of every slice it is handed. A repeated render of one installation goes from about 130 ms to 4 ms in `BenchmarkRender`.
+
 ## v1.76.3
 
 ### Changed
