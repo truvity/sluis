@@ -263,14 +263,14 @@ func Roster(m Model, c Conventions) *Policy {
 	// share of the default either.
 	groups := sortedGroups(a.groups)
 	declared := make(map[string]bool, len(groups))
-	for _, g := range groups {
-		declared[g.Name] = true
+	for i := range groups {
+		declared[groups[i].Name] = true
 	}
 
 	populated := map[string]Rung{}
-	for name, rung := range m.Rungs {
+	for name := range m.Rungs {
 		if declared[RungPrefix+name] {
-			populated[name] = rung
+			populated[name] = m.Rungs[name]
 		} else {
 			delete(lifetimes, RungPrefix+name)
 		}
