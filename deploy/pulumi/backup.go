@@ -582,7 +582,7 @@ type backupRefs struct {
 func (p *backupPlan) env(r backupRefs) ModuleEnv {
 	return ModuleEnv{
 		Region: p.Region, Account: p.AccountID, Modules: p.modules,
-		BucketArn: r.bucketArn, TableArns: r.tables, TableKeyArn: r.tableKey,
+		BucketArn: r.bucketArn, BlobKeyPrefix: p.BlobPrefix, TableArns: r.tables, TableKeyArn: r.tableKey,
 		ParameterKeyArn: p.ParameterKeyArn, QueueArn: r.queueArn,
 		LogGroupArns: map[string]string{p.role: r.logGroup}, MinterRefs: p.MinterRefs,
 		TelemetryAudiences: p.telemetryAudiences(),
