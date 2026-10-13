@@ -34,9 +34,11 @@ import (
 	"log/slog"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -254,10 +256,10 @@ func (s *Server) report(ctx context.Context, req Request, resp Response, cause e
 		level = slog.LevelError
 	}
 	attrs := []slog.Attr{
-		slog.String("module", s.module), slog.String("method", req.Method), slog.String("code", resp.Error.Code),
+		slog.String("module", s.module), slog.String("method", logValue(req.Method)), slog.String("code", resp.Error.Code),
 	}
 	if id, _ := ctx.Value(requestKey{}).(string); id != "" {
-		attrs = append(attrs, slog.String("request_id", id))
+		attrs = append(attrs, slog.String("request_id", logValue(id)))
 	}
 	var coded *Error
 	if errors.As(cause, &coded) && coded.cause != nil {
@@ -267,9 +269,31 @@ func (s *Server) report(ctx context.Context, req Request, resp Response, cause e
 		attrs = append(attrs, logattr.SafeError("error", cause))
 	}
 	if resp.Error.Code == CodeForbidden {
-		attrs = append(attrs, slog.String("caller", CallerOf(ctx)))
+		attrs = append(attrs, slog.String("caller", logValue(CallerOf(ctx))))
 	}
 	log.LogAttrs(ctx, level, "a module call was refused or failed", attrs...)
+}
+
+// maxLogValue bounds a caller-supplied value in a log line, in bytes.
+const maxLogValue = 256
+
+// logValue is a caller-supplied string (a method name from the request, the
+// transport's request id, the caller's subject) made safe to put in a log
+// line: line breaks and other control characters are removed, so the value
+// cannot start a forged line, and its length is bounded. An ordinary value is
+// returned unchanged.
+func logValue(v string) string {
+	v = strings.ReplaceAll(strings.ReplaceAll(v, "\n", ""), "\r", "")
+	v = strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return -1
+		}
+		return r
+	}, v)
+	if len(v) > maxLogValue {
+		v = strings.ToValidUTF8(v[:maxLogValue], "")
+	}
+	return v
 }
 
 // Module is the module the server answers for.
