@@ -1,5 +1,9 @@
 ## Unreleased
 
+### Added
+
+- **Backend log lines carry the trace context: `trace_id`, `span_id` and `trace_flags` (W3C hex).** `telemetry.LogHandler` adds the three fields to every record logged with a context that holds a valid span, and nothing to a record without one. It wraps the JSON handler of the Lambda functions (`lambdaapp.Logger`), the Kubernetes services (`module.Logger`) and the resource proxy; stdout stays the only sink and there is no OTel logs SDK. sloglint's `context: all` already requires the `...Context` variants. The Lambda logger's comment no longer says the OTLP layer collects function logs: it forwards only platform events. See [Install telemetry](docs/guides/sluis/operate/install-telemetry.md).
+
 ### Fixed
 
 - **The backup and restore roles' inline policies stay under IAM's 10,240 characters for a long instance name.** The cross-grants were five statements per kind, one per module, and the policy grew with the instance name (every ARN carries it): the restore role passed the limit at an instance name of about 6 characters, the backup role at about 9. A grant on several modules is now one statement per kind (`SluisCrossTable`, `SluisCrossParameters`, `SluisCrossBlobs`, `SluisCrossBlobList`) with the modules in its resource list; the permissions are the same, and a grant on one module (the issuer's) keeps its `SluisCross<Module>...` Sids. For a 32-character instance name the restore policy goes from 11,519 characters to 8,623 and the backup policy from 11,414 to 9,170. A test renders both roles for such a name and checks the limit. The role policies change once on upgrade; a tool that matches the `SluisCross<Module>Table` Sids of these two roles matches the new ones.

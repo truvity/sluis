@@ -23,13 +23,14 @@ import (
 	"time"
 
 	"github.com/truvity/sluis/internal/resourceproxy"
+	"github.com/truvity/sluis/internal/telemetry"
 	"github.com/truvity/sluis/internal/version"
 )
 
 func main() { os.Exit(run()) }
 
 func run() int {
-	log := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	log := slog.New(telemetry.LogHandler(slog.NewJSONHandler(os.Stdout, nil)))
 
 	cfg, err := parse(os.Args[1:], os.Getenv)
 	if err != nil {
