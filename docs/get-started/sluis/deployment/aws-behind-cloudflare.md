@@ -2,6 +2,8 @@
 
 The [AWS Lambda](aws-lambda.md) shape with Cloudflare in front: proxied DNS and an API Gateway custom domain that accepts only Cloudflare's client certificate. A request that did not come through the proxy never reaches the function. The module is `github.com/truvity/sluis/deploy/pulumi/edge/cloudflare`.
 
+> **Deprecated:** use [truvity/edge `cloudflare/awsapigw`](https://github.com/truvity/edge/blob/master/docs/cloudflare/awsapigw.md).
+
 ## What the module builds
 
 - The ACM certificate for the domain, requested with DNS validation (`Certificate`). Pass `CertificateArn` instead to supply your own.
@@ -10,7 +12,7 @@ The [AWS Lambda](aws-lambda.md) shape with Cloudflare in front: proxied DNS and 
 
 - The truststore: one versioned object, `truststore/client-ca.pem`, holding the Authenticated Origin Pulls CA.
 
-The module needs no Cloudflare credential and imports no Cloudflare provider. You create the proxied record, the ACM validation record and the zone's Authenticated Origin Pulls setting with your own provider. With `Certificate`, the module asks for a callback that creates the validation record.
+The module needs no Cloudflare credential and imports no Cloudflare provider. You create the proxied record, the ACM validation record and the zone's Authenticated Origin Pulls setting with your own provider.
 
 ## The truststore
 
@@ -28,7 +30,7 @@ The arguments are in [the Pulumi library](../../../reference/sluis/pulumi-librar
 
 ## Cache the public documents at the edge
 
-Set `PublicCache` and Cloudflare answers the key set and the metadata documents for 5 minutes; requests with an `Origin` header still reach the function. Keep the TTL under the signing keys' prepublish window, and purge these paths after removing a compromised key.
+Set `PublicCache` and Cloudflare answers the key set and the metadata documents for 5 minutes; requests with an `Origin` header still reach the function. Keep the TTL under the signing keys' prepublish window.
 
 ## Move a stack that built its own domain
 

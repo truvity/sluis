@@ -65,6 +65,8 @@ type TruststoreBucketArgs struct {
 }
 
 // Args is the edge.
+//
+// Deprecated: use github.com/truvity/edge/v3/cloudflare/awsapigw (the front door); this module is removed after v1.77.
 type Args struct {
 	// FrontDoor is the installation's HTTP API: Lambda.FrontDoor(). Required.
 	FrontDoor *sluispulumi.FrontDoor
@@ -214,6 +216,8 @@ type Edge struct {
 // Cloudflare presents none and the domain refuses every request.
 //
 // The AWS provider is the caller's to choose, as for the core library.
+//
+// Deprecated: use github.com/truvity/edge/v3/cloudflare/awsapigw (the front door); this module is removed after v1.77.
 func NewEdge(ctx *pulumi.Context, name string, args *Args, opts ...pulumi.ResourceOption) (*Edge, error) {
 	if err := args.validate(); err != nil {
 		return nil, err
