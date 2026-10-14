@@ -156,7 +156,7 @@ A conflict is a lease or session rotation working, not an error. Issuer and port
 
 ## Alerts
 
-Eleven rules, rendered with `renders: alerts`. The `AccessRoster…` names of v1.76 are gone with the `access_roster_*` series they read (v1.77): move a route or a silence to the `Sluis…` name. Which series a rule reads is set by `alerts.namespaceLabel`, `alerts.namespace` and `alerts.selector`: for the Lambda function's series set `namespaceLabel: k8s_namespace_name` and `namespace: lambda`. A threshold is `alerts.rules.<rule>`. A rule whose series is absent does not fire.
+Eleven rules, rendered with `renders: alerts`. A threshold is `alerts.rules.<rule>`. A rule whose series is absent does not fire.
 
 <!-- generated: telemetry-alerts -->
 
