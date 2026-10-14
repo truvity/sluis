@@ -13,8 +13,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/aws/aws-lambda-go/lambdacontext"
 	"github.com/aws/aws-lambda-go/events"
+	"github.com/aws/aws-lambda-go/lambdacontext"
 
 	"github.com/truvity/sluis/internal/deploycheck"
 	"github.com/truvity/sluis/internal/modcall"
