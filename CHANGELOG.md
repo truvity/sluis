@@ -1,5 +1,7 @@
 ## Unreleased
 
+## v1.76.10
+
 ### Added
 
 - **`config.MarshalInstallation` writes the installation document in one canonical form, and `config.CheckInstallation` compares a committed file with it.** The form has `apiVersion` first, every other key sorted, a two-space indent, block style and durations as `1h` or `15m` (the access tables' `1h0m0s` too). Unset fields and empty lists are left out; a section that is set but empty is kept. `MarshalOptions.Header` is a comment block the caller owns. An installation that the loader or `Render`'s checks would refuse is not written, so the output always loads, and loading it gives an installation that writes the same bytes. `CheckInstallation` returns whether the file is equal and a line diff when it is not, for an estate's `--check` mode. See [Write one](docs/reference/sluis/installation-document.md#write-one).
