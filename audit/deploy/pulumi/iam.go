@@ -2,8 +2,10 @@ package auditpulumi
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"regexp"
+	"strings"
 )
 
 // A policy document is built from ARNs that exist only once the resources do, so
@@ -351,4 +353,80 @@ func sealKeyPolicy(accountRootArn, notaryRoleArn string) string {
 			"Action": []string{"kms:Sign", "kms:GetPublicKey", "kms:DescribeKey"}, "Resource": "*",
 		},
 	)
+}
+
+// ArchiveKeyPolicyArgs are the principals and the bucket of the archive grants
+// on a shared key's policy.
+type ArchiveKeyPolicyArgs struct {
+	// AccountID is the 12-digit account of the key; its root is the principal of
+	// every statement, narrowed by aws:PrincipalArn.
+	AccountID string
+	// Region is the region of the archive bucket (kms:ViaService s3.<region>).
+	Region string
+	// BucketArn is the archive bucket's ARN, `arn:aws:s3:::<bucket>`. S3 puts it
+	// (with a bucket key) or the object's ARN in the encryption context.
+	BucketArn string
+	// Roles are the roles that write: GenerateDataKey, Decrypt and DescribeKey
+	// (the writer and the notary), as exact ARNs.
+	Roles []string
+	// Readers are the roles that read: Decrypt and DescribeKey (observe and
+	// query), as exact ARNs.
+	Readers []string
+	// Operator is the operator's role as an ARN pattern (`*` allowed, as for an
+	// SSO role with a hash suffix). It may do what Roles may, to rewrite an
+	// object under the key.
+	Operator string
+}
+
+// ArchiveKeyPolicyStatements are the archive purpose of a shared symmetric key,
+// for the key's policy: the three statements `AuditReadersOpenTheArchiveThroughS3`,
+// `AuditRolesUseTheArchiveThroughS3` and `OperatorRewritesTheArchiveThroughS3`,
+// in that order. Each is an Allow for the account root narrowed by
+// aws:PrincipalArn, through S3 only and for the archive bucket's context only,
+// so the roles need not exist when the key is made. The roles' own IAM
+// policies, which the library writes, are what grant the calls.
+func ArchiveKeyPolicyStatements(a ArchiveKeyPolicyArgs) ([]map[string]any, error) {
+	switch {
+	case !accountIDRE.MatchString(a.AccountID):
+		return nil, fmt.Errorf("auditpulumi: ArchiveKeyPolicyArgs.AccountID %q must be a 12-digit account id", a.AccountID)
+	case a.Region == "":
+		return nil, errors.New("auditpulumi: ArchiveKeyPolicyArgs.Region is required")
+	case !strings.HasPrefix(a.BucketArn, "arn:aws:s3:::"):
+		return nil, fmt.Errorf("auditpulumi: ArchiveKeyPolicyArgs.BucketArn %q must be arn:aws:s3:::<bucket>", a.BucketArn)
+	case len(a.Roles) == 0 || len(a.Readers) == 0:
+		return nil, errors.New("auditpulumi: ArchiveKeyPolicyArgs.Roles and Readers are required")
+	case a.Operator == "":
+		return nil, errors.New("auditpulumi: ArchiveKeyPolicyArgs.Operator is required")
+	}
+	root := map[string]any{"AWS": "arn:" + "aws:iam::" + a.AccountID + ":root"}
+	viaS3 := map[string]any{"kms:ViaService": "s3." + a.Region + ".amazonaws.com"}
+	context := map[string]any{"kms:EncryptionContext:aws:s3:arn": []string{a.BucketArn, a.BucketArn + "/*"}}
+	actions := []string{"kms:GenerateDataKey", "kms:Decrypt", "kms:DescribeKey"}
+	readActions := []string{"kms:Decrypt", "kms:DescribeKey"}
+	return []map[string]any{
+		{
+			"Sid": "AuditReadersOpenTheArchiveThroughS3", "Effect": "Allow", "Principal": root,
+			"Action": readActions, "Resource": "*",
+			"Condition": map[string]any{
+				"ArnEquals":    map[string]any{"aws:PrincipalArn": append([]string{}, a.Readers...)},
+				"StringEquals": viaS3, "StringLike": context,
+			},
+		},
+		{
+			"Sid": "AuditRolesUseTheArchiveThroughS3", "Effect": "Allow", "Principal": root,
+			"Action": actions, "Resource": "*",
+			"Condition": map[string]any{
+				"ArnEquals":    map[string]any{"aws:PrincipalArn": append([]string{}, a.Roles...)},
+				"StringEquals": viaS3, "StringLike": context,
+			},
+		},
+		{
+			"Sid": "OperatorRewritesTheArchiveThroughS3", "Effect": "Allow", "Principal": root,
+			"Action": actions, "Resource": "*",
+			"Condition": map[string]any{
+				"ArnLike":      map[string]any{"aws:PrincipalArn": a.Operator},
+				"StringEquals": viaS3, "StringLike": context,
+			},
+		},
+	}, nil
 }

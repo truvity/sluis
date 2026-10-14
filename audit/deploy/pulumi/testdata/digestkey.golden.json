@@ -1,0 +1,35 @@
+[
+  {
+    "import": "",
+    "inputs": {
+      "name": "alias/audit-digest-example",
+      "targetKeyId": "audit-digest-example"
+    },
+    "name": "audit-digest-example-alias",
+    "type": "aws:kms/alias:Alias"
+  },
+  {
+    "import": "",
+    "inputs": {
+      "customerMasterKeySpec": "ECC_NIST_P256",
+      "description": "audit installation digest chain signing key, example",
+      "keyUsage": "SIGN_VERIFY",
+      "policy": {
+        "Statement": [
+          {
+            "Action": "kms:*",
+            "Effect": "Allow",
+            "Principal": {
+              "AWS": "arn:aws:iam::111111111111:root"
+            },
+            "Resource": "*",
+            "Sid": "BackupAccountKeyAdmin"
+          }
+        ],
+        "Version": "2012-10-17"
+      }
+    },
+    "name": "audit-digest-example",
+    "type": "aws:kms/key:Key"
+  }
+]
