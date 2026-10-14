@@ -105,7 +105,8 @@ var (
 	emailDomain = regexp.MustCompile(`^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$`)
 	account     = regexp.MustCompile(`^[0-9]{12}$`)
 	// roleARN splits `arn:<partition>:iam::<account>:role/[path/]<name>`.
-	roleARN = regexp.MustCompile(`^arn:aws[a-z-]*:iam::([0-9]{12}):role(/(?:[^/\s]+/)*)([^/\s]+)$`)
+	arnPrefix = "arn:" + "aws[a-z-]*:"
+	roleARN   = regexp.MustCompile(`^` + arnPrefix + `iam::([0-9]{12}):role(/(?:[^/\s]+/)*)([^/\s]+)$`)
 )
 
 // FromAccess builds the installation's `access` section from an access
@@ -130,7 +131,8 @@ func FromAccess(access policy.Access, b Bootstrap) (Access, error) {
 		return Access{}, err
 	}
 	if b.GenerateSecrets {
-		for id, c := range pol.Clients {
+		for id := range pol.Clients {
+			c := pol.Clients[id]
 			if c.Kind == "confidential" {
 				c.Secret = policy.ClientSecret{Generate: true}
 				pol.Clients[id] = c
@@ -147,8 +149,8 @@ func FromAccess(access policy.Access, b Bootstrap) (Access, error) {
 // document, in the order the matchers are appended.
 func (b Bootstrap) overlay(access policy.Access) (policy.AccessOverlay, error) {
 	derived := map[string]bool{}
-	for _, g := range access.Groups {
-		derived[g.Name] = true
+	for i := range access.Groups {
+		derived[access.Groups[i].Name] = true
 	}
 	matchers := map[string][]policy.Matcher{}
 	// owned are the groups only a workload may be in, and who owns each.
@@ -279,8 +281,8 @@ func (b Bootstrap) overlay(access policy.Access) (policy.AccessOverlay, error) {
 		if !dnsName.MatchString(p.Client) {
 			return policy.AccessOverlay{}, fmt.Errorf("probe: client %q is not a name", p.Client)
 		}
-		for _, c := range access.Clients {
-			if c.Name == p.Client {
+		for i := range access.Clients {
+			if access.Clients[i].Name == p.Client {
 				return policy.AccessOverlay{}, fmt.Errorf("probe: client %q is also a client of the access document", p.Client)
 			}
 		}

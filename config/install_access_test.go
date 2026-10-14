@@ -191,7 +191,7 @@ func TestFromAccessRefuses(t *testing.T) {
 			b.Viewers = &config.BootstrapViewers{Group: "v", EmailDomain: "@example.com"}
 		}, "not a domain"},
 		{"bad role ARN", func(b *config.Bootstrap) {
-			b.Viewers = &config.BootstrapViewers{Group: "v", RoleARNs: []string{"arn:aws:iam::123:role/x"}}
+			b.Viewers = &config.BootstrapViewers{Group: "v", RoleARNs: []string{"arn:aws:iam::111122223333:role"}}
 		}, "not an IAM role ARN"},
 		{"role listed twice", func(b *config.Bootstrap) {
 			arn := "arn:aws:iam::111122223333:role/x"
