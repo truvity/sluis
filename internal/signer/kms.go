@@ -153,7 +153,7 @@ func (s *kmsSigner) forRequest(ctx context.Context) *kmsSigner {
 // kmsSigner is a [jose.OpaqueSigner] over kms:Sign.
 type kmsSigner struct {
 	// ctx is the request's, set only on the copy [kmsSigner.forRequest] makes.
-	ctx context.Context //nolint:containedctx // go-jose's SignPayload has no context parameter
+	ctx     context.Context //nolint:containedctx // go-jose's SignPayload has no context parameter
 	api     KMSAPI
 	keyID   string
 	kid     string
