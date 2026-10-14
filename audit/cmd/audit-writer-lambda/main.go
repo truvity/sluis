@@ -144,7 +144,8 @@ func run() error {
 	if window == 0 {
 		window = widestDedupeWindow(profiles)
 	}
-	seen, err := dynamodbdedupe.New(dynamodb.NewFromConfig(awsCfg, func(o *dynamodb.Options) { o.TracerProvider, o.MeterProvider = awsotel.Providers() }), table.Table, window)
+	ddbClient := dynamodb.NewFromConfig(awsCfg, func(o *dynamodb.Options) { o.TracerProvider, o.MeterProvider = awsotel.Providers() })
+	seen, err := dynamodbdedupe.New(ddbClient, table.Table, window)
 	if err != nil {
 		return err
 	}
