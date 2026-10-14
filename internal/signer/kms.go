@@ -143,8 +143,17 @@ func KMSSigningKeyFor(ctx context.Context, api KMSAPI, ref string, seed []byte, 
 	return &SigningKey{id: id, key: signer, pub: pub, alg: alg, seed: append([]byte(nil), seed...)}, nil
 }
 
+// forRequest is a copy of s whose KMS call runs under ctx.
+func (s *kmsSigner) forRequest(ctx context.Context) *kmsSigner {
+	c := *s
+	c.ctx = ctx
+	return &c
+}
+
 // kmsSigner is a [jose.OpaqueSigner] over kms:Sign.
 type kmsSigner struct {
+	// ctx is the request's, set only on the copy [kmsSigner.forRequest] makes.
+	ctx context.Context //nolint:containedctx // go-jose's SignPayload has no context parameter
 	api     KMSAPI
 	keyID   string
 	kid     string
@@ -169,7 +178,15 @@ func (s *kmsSigner) SignPayload(payload []byte, alg jose.SignatureAlgorithm) ([]
 	if alg != s.alg {
 		return nil, fmt.Errorf("issuer: this KMS key signs %s, not %s", s.alg, alg)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), kmsSignTimeout)
+	// go-jose's SignPayload carries no context: a request-scoped copy of the
+	// signer (see [kmsSigner.forRequest]) holds the request's, so the KMS call
+	// is a child span of the request and ends with it. A signer used outside
+	// a request has none and bounds the call by the timeout alone.
+	parent := s.ctx
+	if parent == nil {
+		parent = context.Background()
+	}
+	ctx, cancel := context.WithTimeout(parent, kmsSignTimeout)
 	defer cancel()
 	var digest []byte
 	var spec types.SigningAlgorithmSpec
