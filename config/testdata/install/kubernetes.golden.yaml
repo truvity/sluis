@@ -1,0 +1,142 @@
+client_documents:
+    origins:
+        - claude.example.com
+    requires:
+        - all:roster:viewer
+    session: agent
+    ttl_cap: 15m0s
+clients:
+    console:
+        display_name: Console
+        kind: public
+        redirects:
+            - https://id.example.com/console/callback
+        requires:
+            - all:roster:viewer
+    deploy:
+        kind: exchange
+        requires:
+            - ci:build
+    exchange-probe:
+        kind: exchange
+        requires:
+            - west:probe:exchange
+    grafana:
+        backchannel_logout_uri: https://grafana.example.com/logout
+        groups:
+            - k8s
+        kind: confidential
+        redirects:
+            - https://grafana.example.com/oauth2/callback
+        requires:
+            - east:k8s:viewer
+        secret:
+            generate: true
+        signed_out:
+            - https://grafana.example.com/
+        signing_alg: ES384
+        ttl_cap: 5m0s
+github:
+    example-org:
+        members:
+            - all:roster:viewer
+        teams:
+            platform:
+                maintainers:
+                    - all:roster:operator
+groups:
+    all:roster:operator:
+        matchers:
+            - email: ada@example.com
+            - email: grace@example.com
+            - service_account:
+                name: sluis-recovery
+                namespace: sluis
+        members:
+            - role-admins@example.com
+    all:roster:viewer:
+        matchers:
+            - email_domain: example.com
+            - service_account:
+                cluster: east
+                name: sluis
+                namespace: sluis
+        members:
+            - team-all@example.com
+    ci:build:
+        matchers:
+            - github:
+                owner: example-org
+                ref: refs/heads/main
+                visibility: private
+            - aws:
+                account: "111122223333"
+                path: /
+                role: ci-build
+    east:k8s:auditor:
+        matchers:
+            - service_account:
+                name: sluis-recovery
+                namespace: sluis
+        members:
+            - role-security@example.com
+    east:k8s:viewer:
+        members:
+            - team-all@example.com
+    west:probe:exchange:
+        matchers:
+            - service_account:
+                cluster: west
+                name: exchange-probe
+                namespace: probe
+lifetimes:
+    all:roster:operator: 1h0m0s
+    default: 4h0m0s
+people:
+    ada:
+        - ada@example.com
+resources:
+    https://api.example.com:
+        display_name: API
+        read_only: true
+        requires:
+            - east:k8s:viewer
+slack:
+    workspaces:
+        example:
+            channels:
+                ops:
+                    from:
+                        - all:roster:operator
+                    mode: strict
+                    private: true
+vocabulary:
+    scopes:
+        all: {}
+        east: {}
+        west: {}
+    things:
+        k8s:
+            roles:
+                auditor:
+                    - viewer
+                viewer: []
+            scopes:
+                - east
+        probe:
+            roles:
+                exchange: []
+            scopes:
+                - west
+        roster:
+            roles:
+                operator:
+                    - viewer
+                viewer: []
+            scopes:
+                - all
+        sluis:
+            roles:
+                controller: []
+            scopes:
+                - all
