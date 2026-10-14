@@ -1,5 +1,9 @@
 ## Unreleased
 
+### Added
+
+- **`config.FromAccess` builds the installation's `access` section from an access document.** It takes the derived part (`policy.Access`) and a `config.Bootstrap`, typed rows for the recovery ServiceAccount, the viewers, the controllers' ServiceAccounts or Lambda role ARNs, and the exchange probe, and returns the `config.Access` an installation holds. The rows fold into their groups after the derived matchers, as `policy.AccessDocument.Policy` does for an overlay. `Bootstrap.GenerateSecrets` writes confidential clients' secrets as `{generate: true}` and `Bootstrap.Claims` carries the claims table the access document lacks. A malformed row, a workload listed twice, and a controllers or probe group or probe client that the access document also declares are refused. A test edits each field of `policy.Access` and requires the section to change, so a field added without a mapping fails. See [Build the installation's access section](docs/reference/sluis/installation-access.md).
+
 ## v1.76.9
 
 ### Deprecated

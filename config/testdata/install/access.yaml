@@ -1,0 +1,99 @@
+# The derived part of an access document, as an estate's tooling writes it.
+version: 1
+access:
+  lifetimes:
+    default: 4h
+    all:roster:operator: 1h
+  groups:
+    - name: all:roster:operator
+      members: [role-admins@example.com]
+      emails: [ada@example.com, grace@example.com]
+    - name: all:roster:viewer
+      members: [team-all@example.com]
+    - name: east:k8s:viewer
+      members: [team-all@example.com]
+    - name: east:k8s:auditor
+      members: [role-security@example.com]
+    - name: ci:build
+      github:
+        - owner: example-org
+          visibility: private
+          ref: refs/heads/main
+      aws:
+        - account: "111122223333"
+          role: ci-build
+          path: /
+  people:
+    - name: ada
+      addresses: [ada@example.com]
+  slack:
+    - workspace: example
+      channels:
+        - name: ops
+          mode: strict
+          private: true
+          from: [all:roster:operator]
+  github:
+    - org: example-org
+      members: [all:roster:viewer]
+      teams:
+        - slug: platform
+          maintainers: [all:roster:operator]
+  vocabulary:
+    scopes:
+      - name: all
+      - name: east
+      - name: west
+    things:
+      - name: roster
+        scopes: [all]
+        roles:
+          - name: viewer
+          - name: operator
+            implies: [viewer]
+      - name: sluis
+        scopes: [all]
+        roles:
+          - name: controller
+      - name: probe
+        scopes: [west]
+        roles:
+          - name: exchange
+      - name: k8s
+        scopes: [east]
+        roles:
+          - name: viewer
+          - name: auditor
+            implies: [viewer]
+  clients:
+    - name: console
+      kind: public
+      displayName: Console
+      redirects: [https://id.example.com/console/callback]
+      requires: [all:roster:viewer]
+      hostname: id.example.com
+      prefix: /console
+    - name: grafana
+      kind: confidential
+      secret: grafana-client
+      secretKey: client-secret
+      redirects: [https://grafana.example.com/oauth2/callback]
+      signedOut: [https://grafana.example.com/]
+      backchannelLogout: https://grafana.example.com/logout
+      ttlCap: 5m
+      signingAlg: ES384
+      requires: [east:k8s:viewer]
+      groups: [k8s]
+    - name: deploy
+      kind: exchange
+      requires: [ci:build]
+  clientDocuments:
+    origins: [claude.example.com]
+    requires: [all:roster:viewer]
+    ttlCap: 15m
+    session: agent
+  resources:
+    - id: https://api.example.com
+      displayName: API
+      requires: [east:k8s:viewer]
+      readOnly: true
