@@ -29,6 +29,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/truvity/sluis/storage/awsotel"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awshttp "github.com/aws/aws-sdk-go-v2/aws/transport/http"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
@@ -173,7 +175,7 @@ func New(api API, o Options) (*Store, error) {
 // mechanism -- the static credentials the environment carries
 // (AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY, which the SDK reads itself).
 func FromConfig(cfg aws.Config, o Options) (*Store, error) {
-	client := s3.NewFromConfig(cfg, configure(o))
+	client := s3.NewFromConfig(cfg, configure(o), func(so *s3.Options) { so.TracerProvider, so.MeterProvider = awsotel.Providers() })
 	built, err := New(client, o)
 	if err != nil {
 		return nil, err

@@ -8,6 +8,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/truvity/sluis/storage/awsotel"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	awsssm "github.com/aws/aws-sdk-go-v2/service/ssm"
@@ -100,6 +102,7 @@ func NewSSM(ctx context.Context, root, region, endpoint string, refresh time.Dur
 		return nil, fmt.Errorf("secrets: ssm: %w", err)
 	}
 	client := awsssm.NewFromConfig(cfg, func(o *awsssm.Options) {
+		o.TracerProvider, o.MeterProvider = awsotel.Providers()
 		o.Retryer = awsretry.New()
 		if endpoint != "" {
 			o.BaseEndpoint = aws.String(endpoint)

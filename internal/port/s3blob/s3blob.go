@@ -57,6 +57,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/truvity/sluis/storage/awsotel"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
@@ -148,6 +150,7 @@ func New(ctx context.Context, cfg Config) (*Blob, error) {
 		return nil, fmt.Errorf("s3blob: loading the AWS configuration: %w", err)
 	}
 	client := s3.NewFromConfig(awsCfg, func(o *s3.Options) {
+		o.TracerProvider, o.MeterProvider = awsotel.Providers()
 		o.UsePathStyle = cfg.PathStyle
 		if cfg.Endpoint != "" {
 			o.BaseEndpoint = aws.String(cfg.Endpoint)

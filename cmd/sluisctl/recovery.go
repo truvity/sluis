@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/truvity/sluis/storage/awsotel"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
@@ -65,7 +67,7 @@ func realSSMClient(ctx context.Context, profile, region string) (parameterAPI, e
 	if err != nil {
 		return nil, fmt.Errorf("load the AWS configuration: %w", err)
 	}
-	return ssm.NewFromConfig(cfg), nil
+	return ssm.NewFromConfig(cfg, func(o *ssm.Options) { o.TracerProvider, o.MeterProvider = awsotel.Providers() }), nil
 }
 
 const recoveryUsage = `Usage: sluisctl recovery password --instance <name> [--region R] [--profile P] [--show]

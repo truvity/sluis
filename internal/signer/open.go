@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/truvity/sluis/storage/awsotel"
+
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 
@@ -22,7 +24,7 @@ func OpenKMS(ctx context.Context, region string) (keys.Backend, error) {
 	if err != nil {
 		return nil, fmt.Errorf("load the AWS configuration for keys.adapter kms: %w", err)
 	}
-	return keysbackend.New(kms.NewFromConfig(awsCfg)), nil
+	return keysbackend.New(kms.NewFromConfig(awsCfg, func(o *kms.Options) { o.TracerProvider, o.MeterProvider = awsotel.Providers() })), nil
 }
 
 // OpenSignKey opens the key behind `keys.sign`. A nil backend is opened from

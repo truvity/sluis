@@ -42,6 +42,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/truvity/sluis/storage/awsotel"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	awss3 "github.com/aws/aws-sdk-go-v2/service/s3"
@@ -111,6 +113,7 @@ func Open(ctx context.Context, cfg Config, opts ...state.Option) (state.Store, e
 		return nil, fmt.Errorf("s3: load AWS config: %w", err)
 	}
 	client := awss3.NewFromConfig(acfg, func(so *awss3.Options) {
+		so.TracerProvider, so.MeterProvider = awsotel.Providers()
 		if o.Endpoint != "" {
 			so.BaseEndpoint = aws.String(o.Endpoint)
 			so.UsePathStyle = true

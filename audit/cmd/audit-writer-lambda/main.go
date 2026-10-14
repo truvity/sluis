@@ -39,6 +39,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/truvity/sluis/storage/awsotel"
+
 	"github.com/aws/aws-lambda-go/lambda"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
@@ -142,7 +144,7 @@ func run() error {
 	if window == 0 {
 		window = widestDedupeWindow(profiles)
 	}
-	seen, err := dynamodbdedupe.New(dynamodb.NewFromConfig(awsCfg), table.Table, window)
+	seen, err := dynamodbdedupe.New(dynamodb.NewFromConfig(awsCfg, func(o *dynamodb.Options) { o.TracerProvider, o.MeterProvider = awsotel.Providers() }), table.Table, window)
 	if err != nil {
 		return err
 	}
