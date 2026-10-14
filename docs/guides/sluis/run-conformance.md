@@ -70,7 +70,7 @@ It prints `SUITE=http://<ip>:8080` and four lines `config|basic|rp-logout|backch
 SUITE=http://<ip>:8080 ISSUER=https://access.example.com CONTEXT=prod@oidc hack/conformance_drive.py <config-plan-id>
 ```
 
-Config needs no browser and ends `FINISHED / PASSED`. The `conformance.yaml` workflow runs it on a manual dispatch with an `issuer` input.
+Config needs no browser and ends `FINISHED / PASSED`. `just conformance-config <issuer>` runs it; the Security workflow does so on dispatch.
 
 ## 4. Run the attended plans
 

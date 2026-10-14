@@ -49,6 +49,6 @@ The suite therefore runs in the cluster, at a hostname of its own, while the con
 
 A person runs the whole suite at every major and minor release. One profile run alone reads as passing while the two profiles that sign somebody in have not run.
 
-The Config workflow ([`conformance.yaml`](../../../.github/workflows/conformance.yaml)) stays one click away. It needs no credential and guards the discovery document.
+The Config profile (`just conformance-config`, run from the Security workflow) stays one click away. It needs no credential and guards the discovery document.
 
 [`hack/conformance_drive.py`](../../../hack/conformance_drive.py) drives headless Chrome through the browser half: it signs in through recovery and answers the manual steps with a screenshot. Thirty-five modules are one command. Pass `--manual` to hand one module's browser step to a person, for example to check claims with a real account.
