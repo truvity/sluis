@@ -1,3 +1,4 @@
+// Deprecated: use github.com/truvity/edge/v3/cloudflare/awsapigw (front door) and github.com/truvity/edge/v3/cloudflare/rules (PublicPathsCache); this module is removed after v1.77.
 module github.com/truvity/sluis/deploy/pulumi/edge/cloudflare
 
 go 1.27.0

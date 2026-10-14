@@ -39,6 +39,8 @@ const (
 // hand one site's CORS answer to the next. Requests without an Origin (token
 // verifiers, CLIs, cloud STS services, MCP servers) are cached; browser
 // requests still reach the origin.
+//
+// Deprecated: use PublicPathsCache in github.com/truvity/edge/v3/cloudflare/rules; this module is removed after v1.77.
 type PublicCacheArgs struct {
 	// TTL is how long Cloudflare keeps a copy (the rule's edge TTL, overriding
 	// the origin, which sends no Cache-Control). Default DefaultPublicCacheTTL,
@@ -87,6 +89,8 @@ var (
 // PublicCacheRule is the rule that caches host's public documents at the edge.
 // It needs no Pulumi engine, so an estate that manages its Cloudflare zone in
 // another program calls it there with the installation's domain.
+//
+// Deprecated: use PublicPathsCache in github.com/truvity/edge/v3/cloudflare/rules; this module is removed after v1.77.
 func PublicCacheRule(host string, a PublicCacheArgs) (CacheRule, error) {
 	if !hostPattern.MatchString(host) {
 		return CacheRule{}, fmt.Errorf("edgecloudflare: public cache: host %q is not a domain name", host)

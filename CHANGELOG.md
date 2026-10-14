@@ -1,5 +1,9 @@
 ## Unreleased
 
+### Deprecated
+
+- **`deploy/pulumi/edge/cloudflare` is deprecated in favour of truvity/edge.** The front door is `github.com/truvity/edge/v3/cloudflare/awsapigw` (truvity/edge v3.2.0) and the cache rule is `PublicPathsCache` in `github.com/truvity/edge/v3/cloudflare/rules`. The module's `go.mod`, `NewEdge`, `Args`, `PublicCacheArgs` and `PublicCacheRule` carry `Deprecated:` notices; nothing else changes. The module is removed after v1.77. See [the front door](https://github.com/truvity/edge/blob/master/docs/cloudflare/awsapigw.md).
+
 ## v1.76.8
 
 ### Added
