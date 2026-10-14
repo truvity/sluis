@@ -7,10 +7,12 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	yaml "go.yaml.in/yaml/v3"
 
 	"github.com/truvity/sluis/config"
+	"github.com/truvity/sluis/policy"
 )
 
 // roundTripInstallations are the installations the writer is held to: every
@@ -209,5 +211,33 @@ func TestCheckInstallation(t *testing.T) {
 	bad.Instance = ""
 	if _, _, err := config.CheckInstallation(want, &bad, opts); err == nil {
 		t.Fatal("an installation the loader refuses was compared")
+	}
+}
+
+// Only a duration is respelled: a string that merely looks like one is not.
+func TestMarshalInstallationLeavesNonDurationsAlone(t *testing.T) {
+	in := roundTripInstallations(t)["example.installation.yaml"]
+	var id string
+	for id = range in.Access.Clients {
+		break
+	}
+	if id == "" {
+		t.Fatal("the fixture has no client")
+	}
+	c := in.Access.Clients[id]
+	c.Description = "5m0s"
+	c.TTLCap = policy.Duration(15 * time.Minute)
+	in.Access.Clients[id] = c
+	got, err := config.MarshalInstallation(in, config.MarshalOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"description: 5m0s", "ttl_cap: 15m\n"} {
+		if !strings.Contains(string(got), want) {
+			t.Errorf("missing %q in:\n%s", want, got)
+		}
+	}
+	if back := loadBytes(t, got); back.Access.Clients[id].Description != "5m0s" {
+		t.Error("the description changed")
 	}
 }
