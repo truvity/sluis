@@ -42,7 +42,8 @@ func Dial(ctx context.Context, b *config.ConsoleBackup) (*Client, error) {
 			if err != nil {
 				return nil, fmt.Errorf("console.backup: %w", err)
 			}
-			lambda = lambdacall.New(awslambda.NewFromConfig(awsCfg, func(o *awslambda.Options) { o.TracerProvider, o.MeterProvider = awsotel.Providers() }), cfg).As(CallerConsole)
+			client := awslambda.NewFromConfig(awsCfg, func(o *awslambda.Options) { o.TracerProvider, o.MeterProvider = awsotel.Providers() })
+			lambda = lambdacall.New(client, cfg).As(CallerConsole)
 		}
 		if t.URL != "" {
 			urls[name], audiences[name] = t.URL, t.Audience

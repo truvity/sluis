@@ -93,7 +93,10 @@ func realBackupClients(ctx context.Context, profile, region string) (backupClien
 	if err != nil {
 		return backupClients{}, fmt.Errorf("load the AWS configuration: %w", err)
 	}
-	return backupClients{Lambda: awslambda.NewFromConfig(cfg, func(o *awslambda.Options) { o.TracerProvider, o.MeterProvider = awsotel.Providers() }), STS: sts.NewFromConfig(cfg, func(o *sts.Options) { o.TracerProvider, o.MeterProvider = awsotel.Providers() })}, nil
+	return backupClients{
+		Lambda: awslambda.NewFromConfig(cfg, func(o *awslambda.Options) { o.TracerProvider, o.MeterProvider = awsotel.Providers() }),
+		STS:    sts.NewFromConfig(cfg, func(o *sts.Options) { o.TracerProvider, o.MeterProvider = awsotel.Providers() }),
+	}, nil
 }
 
 func sleepContext(ctx context.Context, d time.Duration) error {
