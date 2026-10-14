@@ -3,6 +3,7 @@ package sluispulumi
 import (
 	"fmt"
 	"slices"
+	"strings"
 )
 
 // ModuleEnv is what a role's statements are rendered from.
@@ -11,6 +12,11 @@ type ModuleEnv struct {
 	Modules         ModuleSet
 	// BucketArn is the blob bucket; empty when blobs are external.
 	BucketArn string
+	// BlobKeyPrefix is `ports.blob.s3.prefix`, the key prefix the whole blob
+	// store sits under inside the bucket ("" or any slashes: it is normalised).
+	// The module prefixes of the grants (`github/`) follow it, as the runtime
+	// puts it before every key.
+	BlobKeyPrefix string
 	// TableArns is each module's table ARN. A role needs the ARN of every table
 	// it is granted.
 	TableArns map[Module]string
@@ -194,15 +200,28 @@ func ModuleRoleStatements(env ModuleEnv, role Role) ([]map[string]any, error) {
 			st = append(st, sts...)
 			continue
 		}
+		// A grant on several modules is one statement per kind (table,
+		// parameters, blobs, blob listing), its resources a list: the same
+		// permissions in a fraction of the characters, which the role's inline
+		// policy has a limit of (10,240) to spend. A grant on one module keeps
+		// the statements named by the module.
+		var mods []Module
 		for _, m := range sortedModules(g.Modules) {
-			if own[m] {
-				continue
+			if !own[m] {
+				mods = append(mods, m)
 			}
+		}
+		var merged crossMerge
+		for _, m := range mods {
 			sts, key, err := env.crossStatements(g.Verb, m)
 			if err != nil {
 				return nil, err
 			}
-			st = append(st, sts...)
+			if len(mods) > 1 {
+				merged.add(m, sts)
+			} else {
+				st = append(st, sts...)
+			}
 			if g.Verb != CrossReadBlobs {
 				arn, err := env.tableArn(m)
 				if err != nil {
@@ -218,6 +237,7 @@ func ModuleRoleStatements(env ModuleEnv, role Role) ([]map[string]any, error) {
 					env.Modules.InternalPrefix(m), env.Modules.ExternalPrefix(m))...)
 			}
 		}
+		st = append(st, merged.statements()...)
 	}
 	if listsAll {
 		// The backup's export lists every module's internal/<m> and external/<m>
@@ -351,6 +371,16 @@ func tableStatement(sid, tableArn string, actions []string) statement {
 	return statement{"Sid": sid, "Effect": "Allow", "Action": actions, "Resource": tableArn}
 }
 
+// blobPrefix is the module's key prefix in the bucket as the runtime spells it:
+// the installation's prefix, then the module's.
+func (env ModuleEnv) blobPrefix(m Module) string {
+	root := strings.Trim(env.BlobKeyPrefix, "/")
+	if root != "" {
+		root += "/"
+	}
+	return root + BlobPrefix(m)
+}
+
 // blobStatements grants the module's prefix of the bucket and the listing of
 // exactly that prefix.
 func (env ModuleEnv) blobStatements(m Module, sid string, actions []string) []statement {
@@ -359,10 +389,10 @@ func (env ModuleEnv) blobStatements(m Module, sid string, actions []string) []st
 	}
 	return []statement{{
 		"Sid": sid + "Blobs", "Effect": "Allow", "Action": actions,
-		"Resource": env.BucketArn + "/" + BlobPrefix(m) + "*",
+		"Resource": env.BucketArn + "/" + env.blobPrefix(m) + "*",
 	}, {
 		"Sid": sid + "BlobList", "Effect": "Allow", "Action": s3ListBucket, "Resource": env.BucketArn,
-		"Condition": map[string]any{"StringLike": map[string]any{"s3:prefix": []string{BlobPrefix(m) + "*"}}},
+		"Condition": map[string]any{"StringLike": map[string]any{"s3:prefix": []string{env.blobPrefix(m) + "*"}}},
 	}}
 }
 
@@ -405,6 +435,97 @@ func (env ModuleEnv) crossStatements(v CrossVerb, m Module) ([]statement, []stri
 		return out, kact, nil
 	}
 	return nil, nil, fmt.Errorf("sluispulumi: unknown cross verb %q", v)
+}
+
+// crossMerge folds the statements of one grant on several modules into one
+// statement per kind, in the order the kinds first appear.
+type crossMerge struct {
+	kinds []string
+	by    map[string]statement
+}
+
+// add takes the statements crossStatements rendered for module m.
+func (c *crossMerge) add(m Module, sts []statement) {
+	if c.by == nil {
+		c.by = map[string]statement{}
+	}
+	prefix := "SluisCross" + capitalize(m)
+	for _, s := range sts {
+		kind := strings.TrimPrefix(s["Sid"].(string), prefix)
+		have, ok := c.by[kind]
+		if !ok {
+			// Copy: the lists below are appended to.
+			n := statement{}
+			for k, v := range s {
+				n[k] = v
+			}
+			n["Sid"] = "SluisCross" + kind
+			n["Resource"] = stringList(s["Resource"])
+			if cond, ok := s["Condition"].(map[string]any); ok {
+				n["Condition"] = copyCondition(cond)
+			}
+			c.by[kind] = n
+			c.kinds = append(c.kinds, kind)
+			continue
+		}
+		have["Resource"] = appendUnique(have["Resource"].([]string), stringList(s["Resource"])...)
+		if cond, ok := s["Condition"].(map[string]any); ok {
+			for op, kv := range cond {
+				for k, v := range kv.(map[string]any) {
+					if list, ok := v.([]string); ok {
+						dst := have["Condition"].(map[string]any)[op].(map[string]any)
+						dst[k] = appendUnique(dst[k].([]string), list...)
+					}
+				}
+			}
+		}
+	}
+}
+
+func (c *crossMerge) statements() []statement {
+	var out []statement
+	for _, k := range c.kinds {
+		s := c.by[k]
+		if r := s["Resource"].([]string); len(r) == 1 {
+			s["Resource"] = r[0]
+		}
+		out = append(out, s)
+	}
+	return out
+}
+
+func stringList(v any) []string {
+	switch r := v.(type) {
+	case string:
+		return []string{r}
+	case []string:
+		return slices.Clone(r)
+	}
+	return nil
+}
+
+func copyCondition(cond map[string]any) map[string]any {
+	out := map[string]any{}
+	for op, kv := range cond {
+		inner := map[string]any{}
+		for k, v := range kv.(map[string]any) {
+			if list, ok := v.([]string); ok {
+				v = slices.Clone(list)
+			}
+			inner[k] = v
+		}
+		out[op] = inner
+	}
+	return out
+}
+
+func appendUnique(dst []string, add ...string) []string {
+	for _, a := range add {
+		if !slices.Contains(dst, a) {
+			dst = append(dst, a)
+		}
+	}
+	return dst
 }
 
 // invokeStatements renders a [CrossInvoke] grant: one statement, on the alias

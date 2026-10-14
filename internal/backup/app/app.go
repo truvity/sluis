@@ -25,6 +25,7 @@ import (
 	"github.com/truvity/sluis/internal/backup/restorejob"
 	"github.com/truvity/sluis/internal/backup/rpc"
 	"github.com/truvity/sluis/internal/config"
+	"github.com/truvity/sluis/internal/maintenance"
 	"github.com/truvity/sluis/internal/modcall"
 	"github.com/truvity/sluis/internal/port"
 	dynamoport "github.com/truvity/sluis/internal/port/dynamodb"
@@ -217,9 +218,13 @@ func (a *App) openBackup(cfg Config, archive port.Blob) error {
 	}
 	// The backup module's own table holds the flag the restore sets; the gate
 	// reads that table, not the router's guess at where a module-less key lives.
-	if g := stores.MaintenanceOf(port.ModuleBackup); g != nil {
-		jc.Maintenance = g
-	}
+	jc.Maintenance = backupGate(func(m port.Module) (port.State, bool) {
+		t, ok := stores.Tables.Store(m)
+		if !ok {
+			return nil, false
+		}
+		return t, true
+	})
 	j, err := job.New(jc)
 	if err != nil {
 		return err
@@ -227,6 +232,19 @@ func (a *App) openBackup(cfg Config, archive port.Blob) error {
 	a.job, a.rpc = j, modcall.NewServer(rpc.Module)
 	rpc.Register(a.rpc, a)
 	return nil
+}
+
+// backupGate is the gate over the maintenance flag in the backup module's own
+// table, which table returns. This process hosts no module of its own in the
+// ports (store.Stores.MaintenanceOf falls back to Ports.State, which routes a
+// module-less key to the oidc table), so the table is named here. Nil, which
+// never refuses, when there is no such table.
+func backupGate(table func(port.Module) (port.State, bool)) *maintenance.Gate {
+	st, ok := table(port.ModuleBackup)
+	if !ok {
+		return nil
+	}
+	return maintenance.New(st)
 }
 
 // openRestore assembles the restore function: the same binary, selected by

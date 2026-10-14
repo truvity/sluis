@@ -159,7 +159,7 @@ The role trusts `pods.eks.amazonaws.com` for this cluster and ServiceAccount.
 | Backup role grant | Actions | Resource |
 |---|---|---|
 | `SluisTableBackup` | `GetItem`, `PutItem`, `UpdateItem`, `DeleteItem`, `Query`, `Scan`, `DescribeTable` | The backup table |
-| `SluisCross<Module>Table`, `…Parameters`, `…Blobs` | Read: `GetItem`, `Query`, `Scan`; `ssm:GetParameter`; `s3:GetObject` and the prefix's `ListBucket` | The other five modules' tables, `internal/<module>/*`, `external/<module>/*`, `<module>/` |
+| `SluisCrossTable`, `…Parameters`, `…Blobs`, `…BlobList` (one statement per kind, the five modules in its resource list) | Read: `GetItem`, `Query`, `Scan`; `ssm:GetParameter`; `s3:GetObject` and the prefix's `ListBucket` | The other five modules' tables, `internal/<module>/*`, `external/<module>/*`, `<module>/` |
 | `SluisCrossParametersList` | `ssm:GetParametersByPath` | `internal/*` and `external/*` of the instance, never the namespace roots: the export lists each module's parameters before it reads them by name (v1.76.3). A listing decrypts nothing |
 | `SluisMaintenanceDeny` | Deny `PutItem`, `UpdateItem`, `DeleteItem`, `BatchWriteItem`, `TransactWriteItems` | Every table, when the first key is `maintenance`. The role reads the flag and never writes it |
 | `SluisArchiveObjects` | `s3:GetObject`, `PutObject`, `DeleteObject`, and `GetObjectVersion` on a versioned bucket | `<bucket>/<prefix>backup/<instance>/*` |
@@ -207,7 +207,7 @@ The role trusts `pods.eks.amazonaws.com` for this cluster and ServiceAccount.
 | Restore role grant | Actions | Resource |
 |---|---|---|
 | `SluisTableBackup` | Table read and write | The backup table: `rec.backup.restore.*`, `lease.restore:*` and the `maintenance` flag |
-| `SluisCross<Module>Table`, `…Parameters`, `…Blobs` | Table read and write; `ssm:GetParameter`, `PutParameter`, `DeleteParameter`; `s3:GetObject`, `PutObject`, `DeleteObject` | The other five modules' tables, `internal/<module>/*`, `external/<module>/*`, `<module>/` prefixes, and the key through SSM |
+| `SluisCrossTable`, `…Parameters`, `…Blobs`, `…BlobList` (one statement per kind, the five modules in its resource list) | Table read and write; `ssm:GetParameter`, `PutParameter`, `DeleteParameter`; `s3:GetObject`, `PutObject`, `DeleteObject` | The other five modules' tables, `internal/<module>/*`, `external/<module>/*`, `<module>/` prefixes, and the key through SSM |
 | `SluisCrossCloudflareMinter` | `ssm:GetParameter` | The `MinterRefs` parameters; the backup role only, never the issuer (it asks the cloudflare function to mint) or a module role |
 | `SluisArchiveObjects`, `SluisArchiveList` | `s3:GetObject`, `GetObjectVersion`; `ListBucket`, `ListBucketVersions` | `<bucket>/<prefix>backup/<instance>/*`. No put, no delete |
 | `SluisRestoreIdentity`, `SluisRestoreIdentityKey` | `ssm:GetParameter`; `kms:Decrypt` through SSM | The restore identity parameter `internal/backup/restore-identity` and its encryption context. The only function role that reads it; the deployer reads it back through `SluisKeyAdminReads` |
@@ -283,7 +283,7 @@ l, _ := sluispulumi.NewLambda(ctx, "access", &sluispulumi.LambdaArgs{
 | `SigningKeyAlias` | None, required unless `Keys` or `WrappedSigning` is set | Deprecated: ES384 key alias, such as `alias/sluis-<instance>-sign` |
 | `SigningKeyRS256Alias`, `DisableSigningKeyRS256` | None, required unless `Keys`, `WrappedSigning` or `DisableSigningKeyRS256` is set; false | Deprecated: RSA key alias, such as `alias/sluis-<instance>-sign-rs256`; created unless disabled |
 | `WrappedSigning` | nil | Deprecated: `KeyArn` (unset creates one), `KeyAlias` (none; required without `KeyArn`, such as `alias/sluis-<instance>-wrapped`). The asymmetric keys are not declared; `signingKey.kms` beside it is refused |
-| `VerifyOnly` | None | `[]VerifyOnlyKeyArgs` of an earlier signer: `PEM` (one public key or certificate, RSA or ECDSA), `KeyID` (default RFC 7638 thumbprint), `Alg`, `Until` (required). Written to `/opt/sluis/verify-keys/<index>.pem` and `signingKey.verifyOnly`. Private keys, duplicates, a mismatched `Alg` and zero `Until` are refused |
+| `VerifyOnly` | None | `[]VerifyOnlyKeyArgs` of an earlier signer: `PEM` (one public key or certificate: ECDSA on P-384, or RSA of 2048 bits or more), `KeyID` (default RFC 7638 thumbprint), `Alg`, `Until` (required). Written to `/opt/sluis/verify-keys/<index>.pem` and `signingKey.verifyOnly`. Private keys, EC keys other than P-384, RSA keys under 2048 bits, duplicates, a mismatched `Alg` and zero `Until` are refused |
 | `Recovery` | Enabled | `RecoveryArgs.Enabled` (`*bool`) writes `recovery.enabled`; the password parameter exists either way ([recovery](../../guides/sluis/operate/recover-on-lambda.md)) |
 | `FunctionNamePrefix` | `sluis` | Names `<prefix>-scheduler`, `<prefix>-config` and the function default |
 | `FunctionName` | `sluis-<instance>-issuer` | Function, role, policy and log group. `aws.functions` overrides it. A name kept from `sluis` or `sluis-http` replaces nothing (see the CHANGELOG upgrade note) |

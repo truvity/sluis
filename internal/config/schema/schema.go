@@ -358,9 +358,9 @@ func serveSchema() m {
 			"additionalFiles": list("Every OTHER algorithm this installation signs with at once, one file per algorithm.", str("A key file.")),
 			"verifyOnly": list("PUBLIC keys published in the JWKS and never signed with, so tokens an earlier signer issued keep verifying until they expire: the overlap of a cutover from file keys to `kmsWrapped`. Each is dropped from the JWKS at its `until`. A private key stops the start.",
 				obj("One public key.", m{
-					"file":  str("A PEM public key (`PUBLIC KEY`, `RSA PUBLIC KEY`, or a certificate) or a JWK file. Never a private key."),
+					"file":  str("A PEM public key (`PUBLIC KEY`, `RSA PUBLIC KEY`, or a certificate) or a JWK file: ECDSA on P-384 (ES384) or RSA of 2048 bits or more (RS256). Another curve or a shorter RSA key is refused. Never a private key."),
 					"kid":   str("The `kid` the old tokens carry. Unset is the RFC 7638 thumbprint of the key, which is what a file signer derived for it."),
-					"alg":   m{"enum": []string{"ES256", "ES384", "ES512", "RS256"}, "description": "The key's algorithm. Unset follows the key."},
+					"alg":   m{"enum": []string{"ES384", "RS256"}, "description": "The key's algorithm. Unset follows the key."},
 					"until": m{"type": "string", "format": "date-time", "description": "An RFC 3339 instant after which the key is no longer published: the old tokens' last expiry, plus the verifiers' cache. Required: an overlap has an end."},
 				}, "file", "until")),
 			"pollInterval":    duration("How often the files are re-read.", "30s"),

@@ -44,7 +44,7 @@ var (
 // (access-issuer, github-roster, slack-roster), so a dashboard or an alert that
 // selects on it still finds the process.
 func Logger(ctx context.Context, w interface{ Write([]byte) (int, error) }, service string, level slog.Level) (*slog.Logger, func(), error) {
-	log := slog.New(refusal.LogHandler(slog.NewJSONHandler(w, &slog.HandlerOptions{Level: level})))
+	log := slog.New(telemetry.LogHandler(refusal.LogHandler(slog.NewJSONHandler(w, &slog.HandlerOptions{Level: level}))))
 	slog.SetDefault(log)
 	shutdown, err := telemetry.Start(ctx, service, log)
 	if err != nil {
