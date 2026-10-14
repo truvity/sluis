@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/truvity/sluis/storage/awsotel"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	awslambda "github.com/aws/aws-sdk-go-v2/service/lambda"
@@ -113,7 +115,7 @@ func realBackupClients(ctx context.Context, profile, region string) (backupClien
 	if err != nil {
 		return backupClients{}, fmt.Errorf("load the AWS configuration: %w", err)
 	}
-	return backupClients{Lambda: awslambda.NewFromConfig(cfg), STS: sts.NewFromConfig(cfg)}, nil
+	return backupClients{Lambda: awslambda.NewFromConfig(cfg, func(o *awslambda.Options) { o.TracerProvider, o.MeterProvider = awsotel.Providers() }), STS: sts.NewFromConfig(cfg, func(o *sts.Options) { o.TracerProvider, o.MeterProvider = awsotel.Providers() })}, nil
 }
 
 func sleepContext(ctx context.Context, d time.Duration) error {

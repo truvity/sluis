@@ -54,6 +54,12 @@ var SpanAttributeAllowlist = map[attribute.Key]bool{
 
 	"rpc.system.name": true, "rpc.method": true, "rpc.response.status_code": true, "error.type": true,
 	"http.request.method": true, "http.response.status_code": true, "http.route": true,
+
+	// A function invocation (the Lambda request id), and the AWS SDK client
+	// spans (storage/awsotel): the service and operation called, the status and
+	// the AWS request id. None names a caller or a stored key.
+	"faas.invocation_id": true, "rpc.system": true, "rpc.service": true,
+	"aws.request_id": true, "http.status_code": true,
 }
 
 // FilterExporter wraps an exporter so that only [SpanAttributeAllowlist]
@@ -135,6 +141,7 @@ func HTTPHandler(next http.Handler, service string, route func(*http.Request) st
 		name := route(r)
 		span := trace.SpanFromContext(r.Context())
 		span.SetAttributes(attribute.String("http.route", name))
+		span.SetAttributes(InvocationAttrs(r.Context())...)
 		recorder := &statusRecorder{ResponseWriter: w}
 		started := time.Now()
 		next.ServeHTTP(recorder, r)
@@ -237,4 +244,29 @@ func ExtractWire(ctx context.Context, traceparent, tracestate string) context.Co
 		carrier["tracestate"] = tracestate
 	}
 	return wire.Extract(ctx, carrier)
+}
+
+// AttrFaaSInvocationID is the OpenTelemetry semantic-convention name of a
+// function invocation's id: on Lambda, the request id.
+const AttrFaaSInvocationID = "faas.invocation_id"
+
+type invocationKey struct{}
+
+// WithInvocationID marks ctx with the platform's id of this function
+// invocation (the Lambda request id), so the server span that is started below
+// it can carry [AttrFaaSInvocationID]. An empty id leaves ctx as it was.
+func WithInvocationID(ctx context.Context, id string) context.Context {
+	if id == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, invocationKey{}, id)
+}
+
+// InvocationAttrs is the span attributes the invocation in ctx adds: the
+// invocation id, or nothing outside a function.
+func InvocationAttrs(ctx context.Context) []attribute.KeyValue {
+	if id, ok := ctx.Value(invocationKey{}).(string); ok {
+		return []attribute.KeyValue{attribute.String(AttrFaaSInvocationID, id)}
+	}
+	return nil
 }

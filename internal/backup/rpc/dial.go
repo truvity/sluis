@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/truvity/sluis/storage/awsotel"
+
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	awslambda "github.com/aws/aws-sdk-go-v2/service/lambda"
 
@@ -40,7 +42,7 @@ func Dial(ctx context.Context, b *config.ConsoleBackup) (*Client, error) {
 			if err != nil {
 				return nil, fmt.Errorf("console.backup: %w", err)
 			}
-			lambda = lambdacall.New(awslambda.NewFromConfig(awsCfg, func(*awslambda.Options) {}), cfg).As(CallerConsole)
+			lambda = lambdacall.New(awslambda.NewFromConfig(awsCfg, func(o *awslambda.Options) { o.TracerProvider, o.MeterProvider = awsotel.Providers() }), cfg).As(CallerConsole)
 		}
 		if t.URL != "" {
 			urls[name], audiences[name] = t.URL, t.Audience

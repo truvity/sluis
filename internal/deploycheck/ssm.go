@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/truvity/sluis/storage/awsotel"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	awsssm "github.com/aws/aws-sdk-go-v2/service/ssm"
@@ -85,6 +87,7 @@ func CheckDeclared(ctx context.Context, s *config.Secrets, declared []config.Dec
 		return Report{}, fmt.Errorf("load the AWS configuration: %w", err)
 	}
 	client := awsssm.NewFromConfig(cfg, func(o *awsssm.Options) {
+		o.TracerProvider, o.MeterProvider = awsotel.Providers()
 		o.Retryer = awsretry.New()
 		if s.Endpoint != "" {
 			o.BaseEndpoint = aws.String(s.Endpoint)

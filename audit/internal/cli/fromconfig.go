@@ -8,6 +8,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/truvity/sluis/storage/awsotel"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
@@ -335,7 +337,7 @@ func OpenSignerFrom(ctx context.Context, s config.Signer, k *config.Keys, secret
 		if s.KMS.Region != "" {
 			cfg.Region = s.KMS.Region
 		}
-		return &keys.KMSSigner{Client: kms.NewFromConfig(cfg), Key: s.KMS.Key}, nil
+		return &keys.KMSSigner{Client: kms.NewFromConfig(cfg, func(o *kms.Options) { o.TracerProvider, o.MeterProvider = awsotel.Providers() }), Key: s.KMS.Key}, nil
 	case s.File != nil:
 		return keys.LoadLocalSignerFile("", s.File.Path)
 	}
@@ -403,7 +405,7 @@ var newSQS = func(ctx context.Context, region string) (sqssink.API, error) {
 	if err != nil {
 		return nil, fmt.Errorf("loading the AWS configuration for SQS: %w", err)
 	}
-	return sqs.NewFromConfig(cfg), nil
+	return sqs.NewFromConfig(cfg, func(o *sqs.Options) { o.TracerProvider, o.MeterProvider = awsotel.Providers() }), nil
 }
 
 // sqsSinkFrom is a sink that sends to the ingest queue of a writer running

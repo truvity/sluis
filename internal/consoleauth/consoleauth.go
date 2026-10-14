@@ -20,6 +20,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/truvity/sluis/storage/awsotel"
+
 	"connectrpc.com/connect"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
@@ -94,7 +96,7 @@ func NewAWS(ctx context.Context, audience string) (*AWS, error) {
 	if err != nil {
 		return nil, fmt.Errorf("consoleauth: %w", err)
 	}
-	a, err := NewAWSWith(sts.NewFromConfig(cfg), audience, time.Now)
+	a, err := NewAWSWith(sts.NewFromConfig(cfg, func(o *sts.Options) { o.TracerProvider, o.MeterProvider = awsotel.Providers() }), audience, time.Now)
 	if err != nil {
 		return nil, err
 	}

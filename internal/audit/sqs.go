@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/truvity/sluis/storage/awsotel"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
@@ -90,6 +92,7 @@ func openSQSClient(ctx context.Context, c SQSConfig) (*sqs.Client, error) {
 		return nil, fmt.Errorf("audit: loading the AWS configuration: %w", err)
 	}
 	return sqs.NewFromConfig(cfg, func(o *sqs.Options) {
+		o.TracerProvider, o.MeterProvider = awsotel.Providers()
 		if c.Endpoint != "" {
 			o.BaseEndpoint = aws.String(c.Endpoint)
 		}

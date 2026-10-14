@@ -15,7 +15,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.114.2
 	github.com/aws/aws-sdk-go-v2/service/sqs v1.52.3
 	github.com/aws/aws-sdk-go-v2/service/ssm v1.79.2
-	github.com/aws/smithy-go v1.28.4
+	github.com/aws/smithy-go v1.28.5
 	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.11.0
@@ -60,6 +60,8 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sso v1.38.3 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.43.3 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.51.3 // indirect
+	github.com/aws/smithy-go/metrics/smithyotelmetrics v1.0.33 // indirect
+	github.com/aws/smithy-go/tracing/smithyoteltracing v1.0.33 // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/felixge/httpsnoop v1.1.0 // indirect
