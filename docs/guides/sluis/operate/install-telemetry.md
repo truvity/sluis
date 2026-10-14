@@ -1,24 +1,24 @@
 # Install telemetry
 
-Point the pod at an OpenTelemetry collector, then install the alert rules and the Grafana dashboard that read what it publishes. [Telemetry](../../../reference/sluis/telemetry.md) lists the metrics and alerts.
+Point the pod at an OpenTelemetry collector, then install the alerts and Grafana dashboard. [Telemetry](../../../reference/sluis/telemetry.md) lists the metrics and alerts.
 
 ## Before you start
 
-- You need an OTLP collector reachable from the pod over `http/protobuf`, and a Grafana sidecar that reads labelled ConfigMaps.
+- You need an OTLP collector (`http/protobuf`) and a Grafana sidecar that reads labelled ConfigMaps.
 
 - You need a ruler that reads `VMRule`, or `PrometheusRule` with `alerts.format: prometheusrule`.
 
-- The chart refuses a non-http(s) endpoint, an `extraEnv` name without the `OTEL_` prefix, and `OTEL_EXPORTER_OTLP_ENDPOINT` in `extraEnv`. `helm template` fails naming the key.
+- The chart refuses a non-http(s) endpoint, an `extraEnv` name without the `OTEL_` prefix, and `OTEL_EXPORTER_OTLP_ENDPOINT` in `extraEnv`; `helm template` names the key.
 
-- `extraEnv` renders as plain values. Put `OTEL_EXPORTER_OTLP_HEADERS` with a token in a Secret and reach the pod through `secretEnv`.
+- `extraEnv` renders as plain values; put `OTEL_EXPORTER_OTLP_HEADERS` with a token in a Secret via `secretEnv`.
 
-- Alerts and dashboards are separate releases. `renders: alerts` and `renders: dashboards` render only those objects, where the ruler and Grafana look.
+- Alerts and dashboards are separate releases: each renders only its own objects.
 
-- Series report under the one process's service name, `sluis` ([ADR 0037](../../../decisions/0037-one-process-everywhere.md)). v1.75 also publishes the old metric names.
+- Series use the name `sluis` ([ADR 0037](../../../decisions/0037-one-process-everywhere.md)); v1.75 also publishes the old metric names.
 
 ## Steps
 
-1. Export from the pod. Add this to the sluis release values, then run `helm template` and `helm upgrade`. An empty `endpoint` renders nothing.
+1. Add this to the release values, then `helm template` and `helm upgrade`; an empty `endpoint` renders nothing.
 
    ```yaml
    telemetry:
@@ -30,7 +30,7 @@ Point the pod at an OpenTelemetry collector, then install the alert rules and th
          OTEL_TRACES_SAMPLER_ARG: "0.1"
    ```
 
-2. Install the alerts. `alerts.ruleLabels` is added to every rule beside its `severity`, and `alerts.rules.<rule>.labels` to one rule. `alerts.runbookBaseUrl` sets the [runbook](../../../reference/sluis/telemetry.md#runbook) link (empty renders none). Every threshold is `alerts.rules.<rule>.*`.
+2. Install the alerts. `alerts.ruleLabels` adds labels to every rule beside its `severity`; `alerts.rules.<rule>.labels` to one rule. `alerts.runbookBaseUrl` sets the [runbook](../../../reference/sluis/telemetry.md#runbook) link (empty: none). Thresholds are `alerts.rules.<rule>.*`.
 
    ```yaml
    # alerts.yaml
@@ -61,15 +61,15 @@ Point the pod at an OpenTelemetry collector, then install the alert rules and th
 
 ## Verify
 
-- The pod has `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_PROTOCOL`, `OTEL_SERVICE_NAME` and your `extraEnv`. After a minute `sluis_http_requests_total` has series for the cluster.
+- The pod has `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_PROTOCOL`, `OTEL_SERVICE_NAME` and your `extraEnv`; a minute on, `sluis_http_requests_total` has series.
 
-- The ruler lists one group of twelve rules, none in error.
+- The ruler lists one group of twelve rules, none erroring.
 
-- The Grafana `Access` folder has the overview dashboard, one ConfigMap per dashboard file, with a `$cluster` variable.
-- A log line written inside a request carries `trace_id`, `span_id` and `trace_flags` (W3C hex), so a trace and its log lines are found by the same id. Logs stay on stdout; sluis has no log exporter. A line written outside a span has none of the three. In Lambda functions the OTLP layer forwards only platform events, so function logs reach CloudWatch Logs alone.
+- The Grafana `Access` folder has the overview dashboard (a ConfigMap per file) with a `$cluster` variable.
+- A log line written inside a request carries `trace_id`, `span_id` and `trace_flags` (W3C hex), the trace's own id; a line outside a span has none. Logs stay on stdout. In Lambda the OTLP layer forwards only platform events, so function logs reach CloudWatch Logs only.
 
-A rule whose series is absent does not fire. The platform's own scrape alert covers a service that does not run.
+A rule with no series does not fire; the platform's scrape alert covers a service that is down.
 
 ## Roll back
 
-Empty `endpoint` and upgrade. Run `helm uninstall sluis-alerts -n monitoring` and `helm uninstall sluis-dashboards -n monitoring`.
+Empty `endpoint` and upgrade, then `helm uninstall sluis-alerts -n monitoring` and `helm uninstall sluis-dashboards -n monitoring`.
