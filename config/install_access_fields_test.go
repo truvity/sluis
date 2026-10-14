@@ -30,7 +30,7 @@ func fill(v reflect.Value, path string) {
 		v.SetBool(true)
 	case reflect.Int64: // policy.Duration
 		v.SetInt(int64(time.Minute))
-	case reflect.Ptr:
+	case reflect.Pointer:
 		v.Set(reflect.New(v.Type().Elem()))
 		fill(v.Elem(), path)
 	case reflect.Struct:
@@ -69,7 +69,7 @@ func mutations(v reflect.Value, path string, yield func(path string, edit func()
 		yield(path, func() { v.SetBool(!v.Bool()) })
 	case reflect.Int64:
 		yield(path, func() { v.SetInt(v.Int() + int64(time.Second)) })
-	case reflect.Ptr:
+	case reflect.Pointer:
 		mutations(v.Elem(), path, yield)
 	case reflect.Struct:
 		for i := range v.NumField() {
