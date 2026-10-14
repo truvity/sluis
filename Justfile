@@ -459,9 +459,7 @@ chart-lint:
 
 # The chart's alert rules and dashboard, held to what the estate holds them to.
 #
-# The dashboards are generated (hack/dashboards/access-roster-overview.py, which
-# writes sluis-overview too when given `sluis`) and the committed JSON is held to
-# the generator. `dashboardlint`, from
+# The dashboards are committed JSON under charts/sluis/dashboards. `dashboardlint`, from
 # truvity/observability at the version pinned above, judges it against that
 # repository's dashboard contract (docs/dashboards.md): a datasource variable
 # every panel uses, a cluster variable, `$cluster` in the title and every
@@ -474,14 +472,11 @@ chart-lint:
 telemetry:
     #!/usr/bin/env bash
     set -euo pipefail
-    python3 hack/dashboards/access-roster-overview.py | diff - charts/sluis/dashboards/access-roster-overview.json
-    python3 hack/dashboards/access-roster-overview.py sluis | diff - charts/sluis/dashboards/sluis-overview.json
-
     tools=$(mktemp -d); trap 'rm -rf "$tools"' EXIT
     GOBIN="$tools" go install github.com/truvity/observability/cmd/dashboardlint@{{observability_version}}
     "$tools/dashboardlint" charts/sluis/dashboards/*.json
     # The refusal is real: the same dashboard with a literal datasource must fail.
-    sed 's/"uid": "${datasource}"/"uid": "a-literal-uid"/' charts/sluis/dashboards/access-roster-overview.json > "$tools/pinned.json"
+    sed 's/"uid": "${datasource}"/"uid": "a-literal-uid"/' charts/sluis/dashboards/sluis-overview.json > "$tools/pinned.json"
     if "$tools/dashboardlint" "$tools/pinned.json" 2>"$tools/pinned.err"; then
         echo "dashboardlint accepted a dashboard pinned to one datasource" >&2; exit 1
     fi
