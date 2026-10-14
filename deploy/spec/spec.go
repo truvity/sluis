@@ -22,7 +22,8 @@ import (
 )
 
 // The two signing algorithms deploy tooling names for a verify-only key; the
-// issuer accepts others too (ES256, ES512), and CheckVerifyKey follows it.
+// issuer takes no other (CheckVerifyKey follows it): ES384 is P-384, RS256 an
+// RSA key of 2048 bits or more.
 const (
 	AlgES384 = "ES384"
 	AlgRS256 = "RS256"

@@ -185,10 +185,12 @@ func OpenModule(ctx context.Context, getenv func(string) string, module string) 
 // beside the imports above) once they land, so that the aws-serverless preset
 // resolves in the Lambda binary.
 
-// Logger is the JSON logger a function writes to stdout, which CloudWatch Logs
-// (and the OTLP layer's log pipeline) collects.
+// Logger is the JSON logger a function writes to stdout, which reaches
+// CloudWatch Logs. The OTLP layer forwards only the platform's events, not the
+// function's logs. Records logged with a span in their context carry trace_id,
+// span_id and trace_flags.
 func Logger(ctx context.Context, service string, level slog.Level) (*slog.Logger, func(context.Context), error) {
-	log := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: level}))
+	log := slog.New(telemetry.LogHandler(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: level})))
 	slog.SetDefault(log)
 	// The shutdown is not kept: a function is never shut down in order, the
 	// platform freezes and ends it, so what matters is the flush. A failed

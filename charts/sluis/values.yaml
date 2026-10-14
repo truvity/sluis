@@ -33,8 +33,8 @@ fullnameOverride: ""
 #               validated: install it a second time, where the metrics
 #               store's ruler looks for rule objects, beside the release that
 #               runs the service.
-#   dashboards  ONLY the Grafana dashboard ConfigMaps (`dashboards`), for the
-#               cluster Grafana runs on.
+#   dashboards  ONLY the Grafana folder and dashboards (`dashboards`), as
+#               grafana-operator objects, for the cluster Grafana runs on.
 #
 # Not to be confused with `route` (the Gateway API route), `exchange.clusters`
 # (workloads' home clusters) or `config.controllers` (which controllers run):
@@ -70,6 +70,10 @@ alerts:
   # the release's namespace. In an alerts-only release in another namespace,
   # set it.
   namespace: ""
+  # The label that carries the namespace on the series the rules read:
+  # `namespace` for the service's pods; `k8s_namespace_name` (with `namespace:
+  # lambda`) for the Lambda function's series.
+  namespaceLabel: namespace
   # Extra matchers for every series, e.g. `k8s_cluster_name="prod"`.
   selector: ""
   # Where an alert's runbook entry is. The alert's name, lower-cased, is the
@@ -176,19 +180,27 @@ alerts:
       for: 10m
       labels: {}
 
-# Grafana dashboards, rendered only with `renders: dashboards`: one ConfigMap
-# per file in dashboards/, labelled for Grafana's sidecar. Install it into the
-# cluster Grafana runs on.
+# Grafana dashboards, rendered only with `renders: dashboards`: a GrafanaFolder
+# (the `sluis` folder, under the cluster's folder) and one GrafanaDashboard per
+# file in dashboards/ (sluis-overview and audit-overview), as grafana-operator
+# objects for the ONE shared Grafana. Install it in the namespace `sluis` of the
+# cluster that holds Grafana. The folder is Argo CD sync wave 0, the dashboards
+# wave 1. Dashboard uids are global in the shared Grafana, so they carry the
+# cluster: <clusterFolderUID>-sluis-overview, at most 40 characters.
 dashboards:
-  # Grafana's namespace. Empty: the release's.
-  namespace: ""
-  # The Grafana folder, when the sidecar is set to read the folder annotation.
-  folder: Access
-  # The label Grafana's sidecar selects ConfigMaps by (its
-  # `sidecar.dashboards.label`, and `labelValue`).
-  sidecarLabel: grafana_dashboard
-  sidecarLabelValue: "1"
-  labels: {}
+  # The uid of this cluster's folder in the shared Grafana (`folder.uid` of the
+  # observability-cluster chart). Required; at most 25 characters.
+  clusterFolderUID: ""
+  # The uids of the datasources the dashboards offer by default. Required.
+  datasources:
+    metrics: ""
+    logs: ""
+  # Which Grafana the objects go to. Empty: the shared one, selected by the
+  # label observability-cluster stamps on it
+  # (observability.truvity.io/grafana: shared). Otherwise a full selector.
+  instanceSelector: {}
+  # Extra annotations merged into the folder and the dashboards.
+  commonAnnotations: {}
 
 image:
   # The one image, and the one command the Deployment runs: `sluis serve`.

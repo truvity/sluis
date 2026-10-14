@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/truvity/sluis/identity"
 	"github.com/truvity/sluis/internal/testissuer"
 )
 
@@ -381,5 +382,51 @@ func TestBoundedNeverSplitsACharacter(t *testing.T) {
 	got := bounded(strings.Repeat("é", 10), 5) // 2 bytes each: a cut at 5 lands mid-character
 	if got != "éé" {
 		t.Errorf("bounded = %q", got)
+	}
+}
+
+// Every string an audit line takes from the caller is cleaned where the line
+// is written, not only where it was parsed: a record that carries a line break
+// or an oversize name must still make one bounded line.
+func TestAuditLineCleansEveryCallerSuppliedString(t *testing.T) {
+	t.Parallel()
+	var buf bytes.Buffer
+	log := slog.New(slog.NewJSONHandler(&buf, nil))
+	hostile := "tools/call\n{\"level\":\"ERROR\",\"msg\":\"forged\"}" + strings.Repeat("m", 4*maxNameLen)
+	h := audited(log, http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		rec := recordOf(r.Context())
+		rec.have = true
+		rec.who = identity.Verified{
+			Subject: "s\nforged", Email: "e\r\n@x", Name: "n\x1b[31m", ClientID: "c\nforged",
+		}
+		rec.method, rec.tool = hostile, "tool\nforged"+strings.Repeat("t", 4*maxNameLen)
+	}))
+	req := httptest.NewRequest(http.MethodPost, "/mcp", nil)
+	req.Method = "PO\nST"
+	h.ServeHTTP(httptest.NewRecorder(), req)
+
+	if n := strings.Count(strings.TrimSpace(buf.String()), "\n"); n != 0 {
+		t.Fatalf("the audit record spans %d lines: %q", n+1, buf.String())
+	}
+	var line map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &line); err != nil {
+		t.Fatal(err)
+	}
+	for _, k := range []string{"http_method", "path", "sub", "email", "name", "client", "method", "tool"} {
+		got, _ := line[k].(string)
+		if got == "" {
+			t.Errorf("%s is missing from %v", k, line)
+		}
+		if strings.ContainsAny(got, "\n\r\x1b") {
+			t.Errorf("%s keeps a control character: %q", k, got)
+		}
+		if len(got) > maxPathLen {
+			t.Errorf("%s is %d bytes", k, len(got))
+		}
+	}
+	for _, k := range []string{"method", "tool"} {
+		if got, _ := line[k].(string); len(got) > maxNameLen {
+			t.Errorf("%s is %d bytes, cap is %d", k, len(got), maxNameLen)
+		}
 	}
 }

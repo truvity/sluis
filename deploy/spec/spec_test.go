@@ -113,7 +113,6 @@ func TestCheckVerifyKey(t *testing.T) {
 	for _, c := range []struct{ name, pem, alg string }{
 		{"P-384 for ES384", keys.p384, spec.AlgES384},
 		{"RSA for RS256", keys.rsa2048, spec.AlgRS256},
-		{"P-256 for ES256, which the issuer takes", keys.p256, "ES256"},
 		{"no algorithm: the key's own", keys.p384, ""},
 	} {
 		if err := spec.CheckVerifyKey(c.pem, c.alg); err != nil {
@@ -122,11 +121,14 @@ func TestCheckVerifyKey(t *testing.T) {
 	}
 
 	for want, c := range map[string]struct{ pem, alg string }{
-		"alg says ES384":     {keys.p256, spec.AlgES384},
-		"alg says RS256":     {keys.p384, spec.AlgRS256},
-		"PUBLIC key":         {keys.private, spec.AlgES384},
-		"holds several":      {keys.p384 + keys.p384, spec.AlgES384},
-		"not a JWK or a PEM": {"nonsense", ""},
+		"this one is on P-256": {keys.p256, "ES256"},
+		"at least 2048":        {keys.rsa1024, spec.AlgRS256},
+		"this one is on P-521": {keys.p521, "ES512"},
+		"alg says ES256":       {keys.p384, "ES256"},
+		"alg says RS256":       {keys.p384, spec.AlgRS256},
+		"PUBLIC key":           {keys.private, spec.AlgES384},
+		"holds several":        {keys.p384 + keys.p384, spec.AlgES384},
+		"not a JWK or a PEM":   {"nonsense", ""},
 	} {
 		err := spec.CheckVerifyKey(c.pem, c.alg)
 		if err == nil || !strings.Contains(err.Error(), want) {
@@ -147,6 +149,7 @@ func TestCheckVerifyKeyAgreesWithTheIssuer(t *testing.T) {
 		"p384 rs256":       {keys.p384, "RS256"},
 		"p256":             {keys.p256, "ES256"},
 		"p256 es384":       {keys.p256, "ES384"},
+		"p521":             {keys.p521, "ES512"},
 		"rsa 2048":         {keys.rsa2048, "RS256"},
 		"rsa 2048 es384":   {keys.rsa2048, "ES384"},
 		"rsa 1024":         {keys.rsa1024, "RS256"},
@@ -165,7 +168,7 @@ func TestCheckVerifyKeyAgreesWithTheIssuer(t *testing.T) {
 	}
 }
 
-type verifyKeySet struct{ p384, p256, rsa2048, rsa1024, private string }
+type verifyKeySet struct{ p384, p256, p521, rsa2048, rsa1024, private string }
 
 func verifyKeys(t *testing.T) verifyKeySet {
 	t.Helper()
@@ -176,6 +179,11 @@ func verifyKeys(t *testing.T) verifyKeySet {
 	}
 
 	p256, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	p521, err := ecdsa.GenerateKey(elliptic.P521(), rand.Reader)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -191,7 +199,7 @@ func verifyKeys(t *testing.T) verifyKeySet {
 	}
 
 	return verifyKeySet{
-		p384: publicPEM(t, &p384.PublicKey), p256: publicPEM(t, &p256.PublicKey),
+		p384: publicPEM(t, &p384.PublicKey), p256: publicPEM(t, &p256.PublicKey), p521: publicPEM(t, &p521.PublicKey),
 		rsa2048: publicPEM(t, &rsa2048.PublicKey), rsa1024: publicPEM(t, &rsa1024.PublicKey),
 		private: string(pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: []byte("x")})),
 	}
