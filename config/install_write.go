@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"regexp"
+	"reflect"
 	"strings"
 	"time"
 
 	yaml "go.yaml.in/yaml/v3"
+
+	"github.com/truvity/sluis/policy"
 )
 
 // MarshalOptions are the caller's choices for [MarshalInstallation].
@@ -61,7 +63,7 @@ func MarshalInstallation(in *Installation, opts MarshalOptions) ([]byte, error) 
 	if err := dec.Decode(&generic); err != nil {
 		return nil, fmt.Errorf("marshal installation: %w", err)
 	}
-	generic = canonicalDurations(generic)
+	canonicalAccess(generic)
 	if err := ValidateInstallation(generic); err != nil {
 		return nil, fmt.Errorf("marshal installation: %w", err)
 	}
@@ -85,32 +87,77 @@ func MarshalInstallation(in *Installation, opts MarshalOptions) ([]byte, error) 
 	return append(headerComment(opts.Header), body...), nil
 }
 
-// zeroTail is a duration the access model spells with trailing zero units:
-// `1h0m0s`, `15m0s`.
-var zeroTail = regexp.MustCompile(`^(\d+h)?\d+m0s$`)
+// canonicalAccess rewrites the access tables' durations (the policy's
+// Duration fields, found by type, not by how a string looks) from Go's full
+// form (`4h0m0s`, `15m0s`) to the form every other section uses (`4h`, `15m`),
+// so the document spells a span one way. Both read back as the same span. A
+// string in any other field is left as it is.
+func canonicalAccess(doc any) {
+	m, ok := doc.(map[string]any)
+	if !ok || m["access"] == nil {
+		return
+	}
+	m["access"] = canonicalDurations(m["access"], reflect.TypeFor[policy.Policy]())
+}
 
-// canonicalDurations rewrites the durations the access tables spell in Go's
-// full form (`4h0m0s`, `15m0s`) to the form every other section uses (`4h`,
-// `15m`), so the document spells a span one way. Both read back as the same
-// span.
-func canonicalDurations(v any) any {
-	switch t := v.(type) {
-	case map[string]any:
-		for k, e := range t {
-			t[k] = canonicalDurations(e)
-		}
-	case []any:
-		for i, e := range t {
-			t[i] = canonicalDurations(e)
-		}
+var durationType = reflect.TypeFor[policy.Duration]()
+
+func canonicalDurations(v any, t reflect.Type) any {
+	for t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	switch val := v.(type) {
 	case string:
-		if zeroTail.MatchString(t) {
-			if d, err := time.ParseDuration(t); err == nil {
+		if t == durationType {
+			if d, err := time.ParseDuration(val); err == nil {
 				return Duration(d).String()
 			}
 		}
+	case []any:
+		if t.Kind() == reflect.Slice || t.Kind() == reflect.Array {
+			for i, e := range val {
+				val[i] = canonicalDurations(e, t.Elem())
+			}
+		}
+	case map[string]any:
+		switch t.Kind() {
+		case reflect.Map:
+			for k, e := range val {
+				val[k] = canonicalDurations(e, t.Elem())
+			}
+		case reflect.Struct:
+			canonicalFields(val, t)
+		}
 	}
 	return v
+}
+
+// canonicalFields visits the fields of a struct by the names its yaml tags
+// give, descending into inlined structs.
+func canonicalFields(val map[string]any, t reflect.Type) {
+	for i := range t.NumField() {
+		f := t.Field(i)
+		name, opts, _ := strings.Cut(f.Tag.Get("yaml"), ",")
+		if strings.Contains(opts, "inline") {
+			ft := f.Type
+			for ft.Kind() == reflect.Pointer {
+				ft = ft.Elem()
+			}
+			if ft.Kind() == reflect.Struct {
+				canonicalFields(val, ft)
+			}
+			continue
+		}
+		if name == "" {
+			name = strings.ToLower(f.Name)
+		}
+		if name == "-" || !f.IsExported() {
+			continue
+		}
+		if e, ok := val[name]; ok {
+			val[name] = canonicalDurations(e, f.Type)
+		}
+	}
 }
 
 func headerComment(h string) []byte {
