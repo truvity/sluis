@@ -125,7 +125,7 @@ Source: `internal/clientcreds/telemetry.go`.
 | `sluis.leases.held` | up-down counter | `kind` | Leases this runner holds now. |
 
 
-Each tick emits `sluis.ticks`, `sluis.tick.duration` and, when ok, `sluis.tick.last_success_timestamp` (`kind`: `github-tick`, `github-links`, `slack-tick`). A vanished series needs `absent(...)`. `AccessRosterTickStale` looks back a day.
+Each tick emits `sluis.ticks`, `sluis.tick.duration` and, when ok, `sluis.tick.last_success_timestamp` (`kind`: `github-tick`, `github-links`, `slack-tick`). A vanished series needs `absent(...)`. `SluisTickStale` looks back a day.
 
 ```text
 absent(last_over_time(sluis_tick_last_success_timestamp_seconds[1d]))
@@ -156,35 +156,24 @@ A conflict is a lease or session rotation working, not an error. Issuer and port
 
 ## Alerts
 
-Eleven rules, each also as `Sluis…`, rendered with `renders: alerts`. A threshold is `alerts.rules.<rule>`. A rule whose series is absent does not fire.
+Eleven rules, rendered with `renders: alerts`. A threshold is `alerts.rules.<rule>`. A rule whose series is absent does not fire.
 
 <!-- generated: telemetry-alerts -->
 
-Source: `tests/golden/sluis/alerts.yaml`, the render of `charts/sluis/templates/alerts.yaml` with default values (22 rules). The expressions carry the default thresholds; every one is a value under `alerts.rules`.
+Source: `tests/golden/sluis/alerts.yaml`, the render of `charts/sluis/templates/alerts.yaml` with default values (11 rules). The expressions carry the default thresholds; every one is a value under `alerts.rules`.
 
 | Alert | Severity | For | What it says | Default expression |
 |---|---|---|---|---|
-| `AccessRosterNoSigningKeyPublished` | critical | 5m | The issuer's key ring holds no key to publish for this algorithm, so its JWKS is empty and no relying party can verify a token. | `min by (k8s_cluster_name, namespace, algorithm) (sluis_signing_keys_published{namespace="sluis"}) < 1` |
 | `SluisNoSigningKeyPublished` | critical | 5m | The issuer's key ring holds no key to publish for this algorithm, so its JWKS is empty and no relying party can verify a token. | `min by (k8s_cluster_name, namespace, algorithm) (sluis_signing_keys_published{namespace="sluis"}) < 1` |
-| `AccessRosterSigningKeyRotationStalled` | warning | 1h | The active signing key is older than 30240000s and has not rotated. | `time() - max by (k8s_cluster_name, namespace, algorithm) (sluis_signing_key_active_since_timestamp_seconds{namespace="sluis"}) > 30240000` |
 | `SluisSigningKeyRotationStalled` | warning | 1h | The active signing key is older than 30240000s and has not rotated. | `time() - max by (k8s_cluster_name, namespace, algorithm) (sluis_signing_key_active_since_timestamp_seconds{namespace="sluis"}) > 30240000` |
-| `AccessRosterIssuer5xx` | critical | 10m | More than 5% of the requests in the last 10 minutes failed on the server side. | `( sum by (k8s_cluster_name, namespace) (increase(sluis_http_requests_total{namespace="sluis",status_class="5xx"}[10m])) / sum by (k8s_cluster_name, namespace) (increase(sluis_http_requests_total{namespace="sluis"}[10m])) ) > 0.05 and sum by (k8s_cluster_name, namespace) (increase(sluis_http_requests_total{namespace="sluis",status_class="5xx"}[10m])) >= 5` |
 | `SluisIssuer5xx` | critical | 10m | More than 5% of the requests in the last 10 minutes failed on the server side. | `( sum by (k8s_cluster_name, namespace) (increase(sluis_http_requests_total{namespace="sluis",status_class="5xx"}[10m])) / sum by (k8s_cluster_name, namespace) (increase(sluis_http_requests_total{namespace="sluis"}[10m])) ) > 0.05 and sum by (k8s_cluster_name, namespace) (increase(sluis_http_requests_total{namespace="sluis",status_class="5xx"}[10m])) >= 5` |
-| `AccessRosterTokenEndpointSlow` | warning | 15m | Token requests are taking longer than 2s at the 99th percentile. | `histogram_quantile(0.99, sum by (k8s_cluster_name, namespace, le) (rate(sluis_http_request_duration_seconds_bucket{namespace="sluis",route="token"}[10m]))) > 2` |
 | `SluisTokenEndpointSlow` | warning | 15m | Token requests are taking longer than 2s at the 99th percentile. | `histogram_quantile(0.99, sum by (k8s_cluster_name, namespace, le) (rate(sluis_http_request_duration_seconds_bucket{namespace="sluis",route="token"}[10m]))) > 2` |
-| `AccessRosterTickFailing` | warning | 0m | The controller's tick of this target failed 3 or more times within 45m. | `sum by (k8s_cluster_name, namespace, kind, target) (increase(sluis_ticks_total{namespace="sluis",outcome="failed"}[45m])) >= 3` |
 | `SluisTickFailing` | warning | 0m | The controller's tick of this target failed 3 or more times within 45m. | `sum by (k8s_cluster_name, namespace, kind, target) (increase(sluis_ticks_total{namespace="sluis",outcome="failed"}[45m])) >= 3` |
-| `AccessRosterTickStale` | critical | 10m | This target has not completed a tick for longer than 3600s. | `time() - max by (k8s_cluster_name, namespace, kind, target) (last_over_time(sluis_tick_last_success_timestamp_seconds{namespace="sluis"}[1d])) > 3600` |
 | `SluisTickStale` | critical | 10m | This target has not completed a tick for longer than 3600s. | `time() - max by (k8s_cluster_name, namespace, kind, target) (last_over_time(sluis_tick_last_success_timestamp_seconds{namespace="sluis"}[1d])) > 3600` |
-| `AccessRosterLeaseLost` | warning | 0m | Controllers lost their lease on a target 3 or more times within 1h. | `sum by (k8s_cluster_name, namespace, kind) (increase(sluis_leases_lost_total{namespace="sluis"}[1h])) >= 3` |
 | `SluisLeaseLost` | warning | 0m | Controllers lost their lease on a target 3 or more times within 1h. | `sum by (k8s_cluster_name, namespace, kind) (increase(sluis_leases_lost_total{namespace="sluis"}[1h])) >= 3` |
-| `AccessRosterCloudflareRotationStale` | critical | 5m | The stored credential of this preset is older than 2 times its rotation. | `time() - max by (k8s_cluster_name, namespace, preset) (last_over_time(sluis_cloudflare_rotation_last_timestamp_seconds{namespace="sluis"}[1d])) > 2 * max by (k8s_cluster_name, namespace, preset) (last_over_time(sluis_cloudflare_rotation_interval_seconds{namespace="sluis"}[1d]))` |
 | `SluisCloudflareRotationStale` | critical | 5m | The stored credential of this preset is older than 2 times its rotation. | `time() - max by (k8s_cluster_name, namespace, preset) (last_over_time(sluis_cloudflare_rotation_last_timestamp_seconds{namespace="sluis"}[1d])) > 2 * max by (k8s_cluster_name, namespace, preset) (last_over_time(sluis_cloudflare_rotation_interval_seconds{namespace="sluis"}[1d]))` |
-| `AccessRosterGitHubRateLimitLow` | warning | 30m | The GitHub budget for this resource has been under 100 requests for 30m. | `min by (k8s_cluster_name, namespace, resource) (github_roster_rate_limit_remaining{namespace="sluis"}) < 100` |
 | `SluisGitHubRateLimitLow` | warning | 30m | The GitHub budget for this resource has been under 100 requests for 30m. | `min by (k8s_cluster_name, namespace, resource) (github_roster_rate_limit_remaining{namespace="sluis"}) < 100` |
-| `AccessRosterSeatsShort` | warning | 30m | The controller could not invite everyone the policy admits to this organisation because it has no free seats. | `max by (k8s_cluster_name, namespace, org) (github_roster_seats_short{namespace="sluis"}) > 0` |
 | `SluisSeatsShort` | warning | 30m | The controller could not invite everyone the policy admits to this organisation because it has no free seats. | `max by (k8s_cluster_name, namespace, org) (github_roster_seats_short{namespace="sluis"}) > 0` |
-| `AccessRosterPortErrors` | critical | 10m | More than 5% of the calls to this storage port failed in the last 5 minutes. | `( sum by (k8s_cluster_name, namespace, port) (increase(sluis_port_operation_duration_seconds_count{namespace="sluis",outcome=~"unavailable\|error"}[5m])) / sum by (k8s_cluster_name, namespace, port) (increase(sluis_port_operation_duration_seconds_count{namespace="sluis"}[5m])) ) > 0.05 and sum by (k8s_cluster_name, namespace, port) (increase(sluis_port_operation_duration_seconds_count{namespace="sluis",outcome=~"unavailable\|error"}[5m])) >= 5` |
 | `SluisPortErrors` | critical | 10m | More than 5% of the calls to this storage port failed in the last 5 minutes. | `( sum by (k8s_cluster_name, namespace, port) (increase(sluis_port_operation_duration_seconds_count{namespace="sluis",outcome=~"unavailable\|error"}[5m])) / sum by (k8s_cluster_name, namespace, port) (increase(sluis_port_operation_duration_seconds_count{namespace="sluis"}[5m])) ) > 0.05 and sum by (k8s_cluster_name, namespace, port) (increase(sluis_port_operation_duration_seconds_count{namespace="sluis",outcome=~"unavailable\|error"}[5m])) >= 5` |
 <!-- /generated -->
 
@@ -192,15 +181,14 @@ Source: `tests/golden/sluis/alerts.yaml`, the render of `charts/sluis/templates/
 
 | Alert | Cause and check |
 |---|---|
-| `Sluis…` | The row of the `AccessRoster…` rule of the same name. |
-| `AccessRosterNoSigningKeyPublished` | The key ring is empty, so the JWKS is empty. Check the Secret at `config.signingKey.file` (cert-manager's Certificate or `signingKey.existingSecret`) and the issuer log ("the active signing key changed", "a signing key was seen"). A rollout shows zero for seconds, not five minutes. |
-| `AccessRosterSigningKeyRotationStalled` | The active key was not replaced. cert-manager renews `signingKey.certificate.renewBefore` early (720h before 8760h), so a key is at most about 335 days old and the rule fires at 350. Check `kubectl describe certificate` and `config.signingKey.pollInterval`. After changing `duration` or `renewBefore`, set `maxAgeSeconds` to their difference plus two weeks. For hand rotation, turn the rule off or set your cadence. |
-| `AccessRosterIssuer5xx` | Server errors. The dashboard's 5xx panel names the route. If `AccessRosterPortErrors` also fires, the store is the cause. Otherwise check `directory_unreachable` and policy loading. |
-| `AccessRosterTokenEndpointSlow` | Slow p99. A token costs one store write: check the port latency panel (DynamoDB, or the API server with the legacy store), then the policy size. |
-| `AccessRosterTickFailing` | A target's ticks failed three times in 45 minutes. The console's controller page and the log ("a pass over an organisation failed") give the error: uninstalled App, revoked credential or GitHub down. |
-| `AccessRosterTickStale` | No tick for an hour: the controller is not running, nobody can take the lease, or the loop hangs. Check the sluis pod, a lease held by a gone runner (it expires on its own) and the log. A target removed from the policy fires for at most a day, so remove it from the policy first. |
-| `AccessRosterLeaseLost` | One loss is normal. Repeated losses mean two runners on one target (more than one replica without a shared State, which the chart refuses; [high availability](../../guides/sluis/operate/high-availability.md)) or an unreachable State: see `AccessRosterPortErrors`. |
-| `AccessRosterCloudflareRotationStale` | A preset's credential is older than twice its `rotation`. The log line "a Cloudflare token was not minted" gives the reason: `prototype_active`, `prototype_forbidden`, `prototype_missing`, `minter_missing`, `store_error` or `cloudflare_error`. On Lambda check that the `{"kind":"cloudflare"}` schedule invokes the function. |
-| `AccessRosterGitHubRateLimitLow` | Budget under 100 for half an hour. `github_roster_rate_limited_total` shows waits. Lengthen the controller's `interval` or find what else spends the App's budget. |
-| `AccessRosterSeatsShort` | Fewer free seats than invitations. Buy a seat or remove a member; the next pass invites. |
-| `AccessRosterPortErrors` | Over 5% of storage calls failed. `unavailable` is the store down: check its health and NetworkPolicy. `error` is anything else: the log line names the call. Conflicts and missing keys do not count. |
+| `SluisNoSigningKeyPublished` | The key ring is empty, so the JWKS is empty. Check the Secret at `config.signingKey.file` (cert-manager's Certificate or `signingKey.existingSecret`) and the issuer log ("the active signing key changed", "a signing key was seen"). A rollout shows zero for seconds, not five minutes. |
+| `SluisSigningKeyRotationStalled` | The active key was not replaced. cert-manager renews `signingKey.certificate.renewBefore` early (720h before 8760h), so a key is at most about 335 days old and the rule fires at 350. Check `kubectl describe certificate` and `config.signingKey.pollInterval`. After changing `duration` or `renewBefore`, set `maxAgeSeconds` to their difference plus two weeks. For hand rotation, turn the rule off or set your cadence. |
+| `SluisIssuer5xx` | Server errors. The dashboard's 5xx panel names the route. If `SluisPortErrors` also fires, the store is the cause. Otherwise check `directory_unreachable` and policy loading. |
+| `SluisTokenEndpointSlow` | Slow p99. A token costs one store write: check the port latency panel (DynamoDB, or the API server with the legacy store), then the policy size. |
+| `SluisTickFailing` | A target's ticks failed three times in 45 minutes. The console's controller page and the log ("a pass over an organisation failed") give the error: uninstalled App, revoked credential or GitHub down. |
+| `SluisTickStale` | No tick for an hour: the controller is not running, nobody can take the lease, or the loop hangs. Check the sluis pod, a lease held by a gone runner (it expires on its own) and the log. A target removed from the policy fires for at most a day, so remove it from the policy first. |
+| `SluisLeaseLost` | One loss is normal. Repeated losses mean two runners on one target (more than one replica without a shared State, which the chart refuses; [high availability](../../guides/sluis/operate/high-availability.md)) or an unreachable State: see `SluisPortErrors`. |
+| `SluisCloudflareRotationStale` | A preset's credential is older than twice its `rotation`. The log line "a Cloudflare token was not minted" gives the reason: `prototype_active`, `prototype_forbidden`, `prototype_missing`, `minter_missing`, `store_error` or `cloudflare_error`. On Lambda check that the `{"kind":"cloudflare"}` schedule invokes the function. |
+| `SluisGitHubRateLimitLow` | Budget under 100 for half an hour. `github_roster_rate_limited_total` shows waits. Lengthen the controller's `interval` or find what else spends the App's budget. |
+| `SluisSeatsShort` | Fewer free seats than invitations. Buy a seat or remove a member; the next pass invites. |
+| `SluisPortErrors` | Over 5% of storage calls failed. `unavailable` is the store down: check its health and NetworkPolicy. `error` is anything else: the log line names the call. Conflicts and missing keys do not count. |

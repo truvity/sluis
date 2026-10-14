@@ -304,6 +304,12 @@ release-lint:
 release-verify version:
     hack/release-verify.sh {{version}}
 
+# The OpenID conformance suite's Config profile against a deployed issuer
+# (discovery and the key set; needs docker, curl, jq). On demand: the
+# `conformance` job of security.yaml runs it from a dispatch with an issuer.
+conformance-config issuer:
+    ISSUER={{issuer}} hack/conformance-config.sh
+
 # The reason this repository can be public. CI runs it on every change, in
 # the docs group.
 leak-canary:
@@ -330,6 +336,11 @@ docs-check:
     ./hack/check-changelog-headings.py
     go run ./cmd/docsgen -check
     go test -count=1 ./internal/contractsdoc/ ./internal/port/matrixdoc/
+
+# The documentation site as GitHub Pages serves it (mkdocs --strict, Mermaid,
+# the schemas checked against their $id), into _site. Needs python3 with venv.
+docs-site:
+    hack/docs-site.sh _site
 
 # Rewrite the generated regions of the docs (config keys, chart values, policy
 # keys, audit actions, alerts, the ADR index) from their sources: the JSON
@@ -448,9 +459,7 @@ chart-lint:
 
 # The chart's alert rules and dashboard, held to what the estate holds them to.
 #
-# The dashboards are generated (hack/dashboards/access-roster-overview.py, which
-# writes sluis-overview too when given `sluis`) and the committed JSON is held to
-# the generator. `dashboardlint`, from
+# The dashboards are committed JSON under charts/sluis/dashboards. `dashboardlint`, from
 # truvity/observability at the version pinned above, judges it against that
 # repository's dashboard contract (docs/dashboards.md): a datasource variable
 # every panel uses, a cluster variable, `$cluster` in the title and every
@@ -463,14 +472,11 @@ chart-lint:
 telemetry:
     #!/usr/bin/env bash
     set -euo pipefail
-    python3 hack/dashboards/access-roster-overview.py | diff - charts/sluis/dashboards/access-roster-overview.json
-    python3 hack/dashboards/access-roster-overview.py sluis | diff - charts/sluis/dashboards/sluis-overview.json
-
     tools=$(mktemp -d); trap 'rm -rf "$tools"' EXIT
     GOBIN="$tools" go install github.com/truvity/observability/cmd/dashboardlint@{{observability_version}}
     "$tools/dashboardlint" charts/sluis/dashboards/*.json
     # The refusal is real: the same dashboard with a literal datasource must fail.
-    sed 's/"uid": "${datasource}"/"uid": "a-literal-uid"/' charts/sluis/dashboards/access-roster-overview.json > "$tools/pinned.json"
+    sed 's/"uid": "${datasource}"/"uid": "a-literal-uid"/' charts/sluis/dashboards/sluis-overview.json > "$tools/pinned.json"
     if "$tools/dashboardlint" "$tools/pinned.json" 2>"$tools/pinned.err"; then
         echo "dashboardlint accepted a dashboard pinned to one datasource" >&2; exit 1
     fi
@@ -543,9 +549,9 @@ ts: ts-package
 
 # frontend/dist for the recipes that embed it, built only when it is absent.
 # The CI groups run their recipes with `--no-deps`, after this: in CI the
-# bundle is restored from a cache keyed on its sources, and `check` builds it
-# fresh in `ci-web` before any Go group runs. Locally, an old bundle is kept:
-# `just console` rebuilds it.
+# bundle is the artifact the `console` job built (`ci-console`), and `check`
+# builds it fresh in `ci-console` before any Go group runs. Locally, an old
+# bundle is kept: `just console` rebuilds it.
 console-ready:
     @if [ -z "$(ls -A frontend/dist 2>/dev/null)" ]; then just console; else echo "console-ready: frontend/dist is there"; fi
 
@@ -613,22 +619,26 @@ ci-go-test:
 ci-go-lint:
     hack/ci-group.sh go-lint console-ready lint pulumi-test storage-test chart-lint telemetry release-chain audit-catalogue
 
-# The TypeScript package and the console's own tests and build, from a clean
-# install. `tidy` first, as `deps` has it.
+# The TypeScript package's tests, from a clean install. `tidy` first, as `deps` has it.
 ci-web:
-    hack/ci-group.sh web tidy deps ts console
+    hack/ci-group.sh web tidy deps ts
+
+# The console's own tests and build: frontend/dist, which the Go groups embed.
+# Built once per CI run, by the `console` job.
+ci-console:
+    hack/ci-group.sh console tidy deps console
 
 ci-docs:
-    hack/ci-group.sh docs docs-check leak-canary
+    hack/ci-group.sh docs docs-check docs-site leak-canary
 
 # Run all checks: every CI group except the ones that need more than the
 # checkout (audit, which fetches from a schema registry; the service
 # containers; the kind cluster), so that the pre-push hook catches what CI
-# would. `ci-web` first: it builds the console the Go groups embed.
+# would. `ci-console` first: it builds the console the Go groups embed.
 # `vuln` is deliberately not here: run it on its own with `just vuln`,
 # the same way `.github/workflows/security.yaml` does.
 check:
-    hack/ci-group.sh check ci-web ci-go-build ci-go-test ci-go-lint ci-docs
+    hack/ci-group.sh check ci-console ci-web ci-go-build ci-go-test ci-go-lint ci-docs
 
 # ---------------------------------------------------------------------------
 # audit/ — the audit trail component (moved here from truvity/audit).
@@ -1037,7 +1047,7 @@ audit-snapshot:
 
 # Assemble the schema half of the Pages site (sluis's and audit's) into a
 # scratch directory: proves every published schema's $id is the URL it is
-# served at. The documentation half is `mkdocs build` (see pages.yaml).
+# served at. The documentation half is `just docs-site`.
 audit-pages:
     hack/pages-site.sh "$(mktemp -d)/site"
 
@@ -1083,6 +1093,10 @@ audit-e2e-fixture:
 [working-directory: 'audit']
 audit-e2e-kms-fixture:
     bash e2e/fixture/kms.sh
+
+# The KMS lane's install: both fixtures, then the chart with the KMS values.
+audit-e2e-kms-install: audit-e2e-fixture audit-e2e-kms-fixture
+    EXTRA_VALUES=../charts/audit/testdata/values/e2e-kms.yaml just audit-e2e-install
 
 # Install the PACKAGED chart `e2e-snapshot` produced — never the source
 # directory — on top of what `e2e-fixture` provisioned.

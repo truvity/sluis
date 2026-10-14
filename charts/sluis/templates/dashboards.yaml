@@ -1,42 +1,90 @@
 {{- include "sluis.prepare" . -}}
 {{- if eq .Values.renders "dashboards" }}
 {{- /*
-Dashboards-only mode: the Grafana dashboard ConfigMaps and nothing else, for
-the cluster Grafana's sidecar reads. A Grafana on one cluster and an install on
-another is the usual shape, so the dashboards are shipped as their own release
-into Grafana's namespace (`dashboards.namespace`), labelled for the sidecar.
+Dashboards-only mode: the sluis dashboards as grafana-operator objects for the
+ONE shared Grafana, and nothing else. Install it in the namespace `sluis` of the
+cluster that holds Grafana. A cluster without the operator has no GrafanaFolder
+or GrafanaDashboard kind, which is why this is a mode of its own and not part of
+the service's release.
 
-The dashboard holds to truvity/observability's contract, docs/dashboards.md,
-and `just telemetry` runs that repository's own `dashboardlint` over it:
-a `datasource` variable that every panel uses, a `cluster` variable chained
-off it and filled by label_values(), `$cluster` in the title and in every
-query. No datasource UID is written into it, so there is nothing to configure.
+The operator of THIS cluster places them in a folder `sluis` under the cluster's
+own folder (dashboards.clusterFolderUID); it holds Edit on that folder only and a
+nested folder inherits it. Dashboard uids are global in the shared Grafana, so
+each is derived from the cluster folder (<clusterFolderUID>-sluis-overview,
+<clusterFolderUID>-sluis-audit): a fixed uid would collide across
+clusters. The GrafanaFolder is Argo CD sync wave 0 and the dashboards wave 1;
+the operator does not retry a dashboard applied before its folder.
+
+Both dashboards are the files in dashboards/. audit-overview.json is a copy of
+charts/audit/dashboards/audit-overview.json (Helm cannot read outside the chart,
+and the audit chart is a separate release); tests/chart holds the two byte-equal.
+
+The dashboards hold to truvity/observability's docs/dashboards.md (`just
+telemetry` runs its dashboardlint): a `datasource` variable that every panel
+uses, a `cluster` variable chained off it, `$cluster` in the title and every
+query. The datasource uid is only the variable's default, filled in here.
 */ -}}
 {{- $d := .Values.dashboards -}}
+{{- $folder := required "dashboards.clusterFolderUID is required: the uid of this cluster's folder in the shared Grafana (the folder.uid of the observability-cluster chart)" $d.clusterFolderUID -}}
+{{- $metrics := required "dashboards.datasources.metrics is required: the uid of the metrics datasource of the Grafana these dashboards live in" $d.datasources.metrics -}}
+{{- $_ := required "dashboards.datasources.logs is required: the uid of the logs datasource of the Grafana these dashboards live in" $d.datasources.logs -}}
+{{- $fuid := printf "%s-sluis" $folder -}}
+{{- $selector := dict "matchLabels" (dict "observability.truvity.io/grafana" "shared") -}}
+{{- if $d.instanceSelector }}{{ $selector = $d.instanceSelector }}{{ end -}}
+{{- $ann := $d.commonAnnotations | default dict -}}
+{{- $names := dict "sluis-overview" "sluis-overview" "audit-overview" "sluis-audit" -}}
+{{- /* Check every uid before rendering any of them. */ -}}
+{{- range $file, $suffix := $names }}
+{{- $u := printf "%s-%s" $folder $suffix }}
+{{- if not (regexMatch "^[A-Za-z0-9_-]{1,40}$" $u) }}
+{{- fail (printf "dashboards.clusterFolderUID %q gives the dashboard uid %q, which must be 1 to 40 characters of letters, digits, '-' and '_' (a folder uid of at most 25 characters fits)" $folder $u) }}
+{{- end }}
+{{- end }}
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaFolder
+metadata:
+  name: {{ include "sluis.fullname" . }}-folder
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "sluis.labels" . | nindent 4 }}
+    app.kubernetes.io/component: dashboards
+  annotations:
+    {{- merge (dict "argocd.argoproj.io/sync-wave" "0") $ann | toYaml | nindent 4 }}
+spec:
+  # The Grafana resource lives in the observability-cluster release's
+  # namespace, not this one; the folder needs the flag as much as a dashboard.
+  allowCrossNamespaceImport: true
+  title: sluis
+  uid: {{ $fuid | quote }}
+  parentFolderUID: {{ $folder | quote }}
+  instanceSelector:
+    {{- toYaml $selector | nindent 4 }}
 {{- range $path, $_ := .Files.Glob "dashboards/*.json" }}
 {{- $name := trimSuffix ".json" (base $path) }}
-apiVersion: v1
-kind: ConfigMap
+{{- $dash := $.Files.Get $path | fromJson }}
+{{- $_ := set $dash "uid" (printf "%s-%s" $folder (get $names $name)) }}
+{{- range $v := $dash.templating.list }}
+{{- if eq $v.name "datasource" }}
+{{- $_ := set $v "current" (dict "selected" false "text" $metrics "value" $metrics) }}
+{{- end }}
+{{- end }}
+---
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaDashboard
 metadata:
-  name: {{ printf "%s-%s" (include "sluis.fullname" $) $name | trunc 63 | trimSuffix "-" }}
-  namespace: {{ default $.Release.Namespace $d.namespace }}
+  name: {{ include "sluis.fullname" $ }}-{{ $name }}
+  namespace: {{ $.Release.Namespace }}
   labels:
     {{- include "sluis.labels" $ | nindent 4 }}
     app.kubernetes.io/component: dashboards
-    # The k8s-sidecar convention: Grafana's sidecar collects any ConfigMap
-    # carrying this label (its `sidecar.dashboards.label`).
-    {{ $d.sidecarLabel }}: {{ $d.sidecarLabelValue | quote }}
-    {{- with $d.labels }}
-    {{- toYaml . | nindent 4 }}
-    {{- end }}
   annotations:
-    # Files the dashboard in a Grafana folder, when the sidecar is set to read
-    # it (`sidecar.dashboards.folderAnnotation` and
-    # `provider.foldersFromFilesStructure`); inert otherwise.
-    k8s-sidecar-target-directory: {{ $d.folder | quote }}
-data:
-  {{ $name }}.json: |
-    {{- $.Files.Get $path | nindent 4 }}
----
+    {{- merge (dict "argocd.argoproj.io/sync-wave" "1") $ann | toYaml | nindent 4 }}
+spec:
+  allowCrossNamespaceImport: true
+  folderUID: {{ $fuid | quote }}
+  instanceSelector:
+    {{- toYaml $selector | nindent 4 }}
+  json: |
+    {{- $dash | toPrettyJson | nindent 4 }}
 {{- end }}
 {{- end }}

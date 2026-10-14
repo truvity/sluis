@@ -108,8 +108,14 @@
         "dynamodb:DescribeTable"
       ],
       "Effect": "Allow",
-      "Resource": "arn:aws:dynamodb:r1:111122223333:table/sluis-i1-cloudflare",
-      "Sid": "SluisCrossCloudflareTable"
+      "Resource": [
+        "arn:aws:dynamodb:r1:111122223333:table/sluis-i1-cloudflare",
+        "arn:aws:dynamodb:r1:111122223333:table/sluis-i1-github",
+        "arn:aws:dynamodb:r1:111122223333:table/sluis-i1-google",
+        "arn:aws:dynamodb:r1:111122223333:table/sluis-i1-oidc",
+        "arn:aws:dynamodb:r1:111122223333:table/sluis-i1-slack"
+      ],
+      "Sid": "SluisCrossTable"
     },
     {
       "Action": [
@@ -122,217 +128,17 @@
       "Effect": "Allow",
       "Resource": [
         "arn:aws:ssm:r1:111122223333:parameter/sluis/i1/internal/cloudflare/*",
-        "arn:aws:ssm:r1:111122223333:parameter/sluis/i1/external/cloudflare/*"
-      ],
-      "Sid": "SluisCrossCloudflareParameters"
-    },
-    {
-      "Action": [
-        "s3:GetObject",
-        "s3:PutObject",
-        "s3:DeleteObject"
-      ],
-      "Effect": "Allow",
-      "Resource": "arn:aws:s3:::acme-blobs/cloudflare/*",
-      "Sid": "SluisCrossCloudflareBlobs"
-    },
-    {
-      "Action": "s3:ListBucket",
-      "Condition": {
-        "StringLike": {
-          "s3:prefix": [
-            "cloudflare/*"
-          ]
-        }
-      },
-      "Effect": "Allow",
-      "Resource": "arn:aws:s3:::acme-blobs",
-      "Sid": "SluisCrossCloudflareBlobList"
-    },
-    {
-      "Action": [
-        "dynamodb:GetItem",
-        "dynamodb:PutItem",
-        "dynamodb:UpdateItem",
-        "dynamodb:DeleteItem",
-        "dynamodb:Query",
-        "dynamodb:Scan",
-        "dynamodb:DescribeTable"
-      ],
-      "Effect": "Allow",
-      "Resource": "arn:aws:dynamodb:r1:111122223333:table/sluis-i1-github",
-      "Sid": "SluisCrossGithubTable"
-    },
-    {
-      "Action": [
-        "ssm:GetParameter",
-        "ssm:GetParameters",
-        "ssm:GetParameterHistory",
-        "ssm:PutParameter",
-        "ssm:DeleteParameter"
-      ],
-      "Effect": "Allow",
-      "Resource": [
+        "arn:aws:ssm:r1:111122223333:parameter/sluis/i1/external/cloudflare/*",
         "arn:aws:ssm:r1:111122223333:parameter/sluis/i1/internal/github/*",
-        "arn:aws:ssm:r1:111122223333:parameter/sluis/i1/external/github/*"
-      ],
-      "Sid": "SluisCrossGithubParameters"
-    },
-    {
-      "Action": [
-        "s3:GetObject",
-        "s3:PutObject",
-        "s3:DeleteObject"
-      ],
-      "Effect": "Allow",
-      "Resource": "arn:aws:s3:::acme-blobs/github/*",
-      "Sid": "SluisCrossGithubBlobs"
-    },
-    {
-      "Action": "s3:ListBucket",
-      "Condition": {
-        "StringLike": {
-          "s3:prefix": [
-            "github/*"
-          ]
-        }
-      },
-      "Effect": "Allow",
-      "Resource": "arn:aws:s3:::acme-blobs",
-      "Sid": "SluisCrossGithubBlobList"
-    },
-    {
-      "Action": [
-        "dynamodb:GetItem",
-        "dynamodb:PutItem",
-        "dynamodb:UpdateItem",
-        "dynamodb:DeleteItem",
-        "dynamodb:Query",
-        "dynamodb:Scan",
-        "dynamodb:DescribeTable"
-      ],
-      "Effect": "Allow",
-      "Resource": "arn:aws:dynamodb:r1:111122223333:table/sluis-i1-google",
-      "Sid": "SluisCrossGoogleTable"
-    },
-    {
-      "Action": [
-        "ssm:GetParameter",
-        "ssm:GetParameters",
-        "ssm:GetParameterHistory",
-        "ssm:PutParameter",
-        "ssm:DeleteParameter"
-      ],
-      "Effect": "Allow",
-      "Resource": [
+        "arn:aws:ssm:r1:111122223333:parameter/sluis/i1/external/github/*",
         "arn:aws:ssm:r1:111122223333:parameter/sluis/i1/internal/google/*",
-        "arn:aws:ssm:r1:111122223333:parameter/sluis/i1/external/google/*"
-      ],
-      "Sid": "SluisCrossGoogleParameters"
-    },
-    {
-      "Action": [
-        "s3:GetObject",
-        "s3:PutObject",
-        "s3:DeleteObject"
-      ],
-      "Effect": "Allow",
-      "Resource": "arn:aws:s3:::acme-blobs/google/*",
-      "Sid": "SluisCrossGoogleBlobs"
-    },
-    {
-      "Action": "s3:ListBucket",
-      "Condition": {
-        "StringLike": {
-          "s3:prefix": [
-            "google/*"
-          ]
-        }
-      },
-      "Effect": "Allow",
-      "Resource": "arn:aws:s3:::acme-blobs",
-      "Sid": "SluisCrossGoogleBlobList"
-    },
-    {
-      "Action": [
-        "dynamodb:GetItem",
-        "dynamodb:PutItem",
-        "dynamodb:UpdateItem",
-        "dynamodb:DeleteItem",
-        "dynamodb:Query",
-        "dynamodb:Scan",
-        "dynamodb:DescribeTable"
-      ],
-      "Effect": "Allow",
-      "Resource": "arn:aws:dynamodb:r1:111122223333:table/sluis-i1-oidc",
-      "Sid": "SluisCrossOidcTable"
-    },
-    {
-      "Action": [
-        "ssm:GetParameter",
-        "ssm:GetParameters",
-        "ssm:GetParameterHistory",
-        "ssm:PutParameter",
-        "ssm:DeleteParameter"
-      ],
-      "Effect": "Allow",
-      "Resource": [
+        "arn:aws:ssm:r1:111122223333:parameter/sluis/i1/external/google/*",
         "arn:aws:ssm:r1:111122223333:parameter/sluis/i1/internal/oidc/*",
-        "arn:aws:ssm:r1:111122223333:parameter/sluis/i1/external/oidc/*"
-      ],
-      "Sid": "SluisCrossOidcParameters"
-    },
-    {
-      "Action": [
-        "s3:GetObject",
-        "s3:PutObject",
-        "s3:DeleteObject"
-      ],
-      "Effect": "Allow",
-      "Resource": "arn:aws:s3:::acme-blobs/oidc/*",
-      "Sid": "SluisCrossOidcBlobs"
-    },
-    {
-      "Action": "s3:ListBucket",
-      "Condition": {
-        "StringLike": {
-          "s3:prefix": [
-            "oidc/*"
-          ]
-        }
-      },
-      "Effect": "Allow",
-      "Resource": "arn:aws:s3:::acme-blobs",
-      "Sid": "SluisCrossOidcBlobList"
-    },
-    {
-      "Action": [
-        "dynamodb:GetItem",
-        "dynamodb:PutItem",
-        "dynamodb:UpdateItem",
-        "dynamodb:DeleteItem",
-        "dynamodb:Query",
-        "dynamodb:Scan",
-        "dynamodb:DescribeTable"
-      ],
-      "Effect": "Allow",
-      "Resource": "arn:aws:dynamodb:r1:111122223333:table/sluis-i1-slack",
-      "Sid": "SluisCrossSlackTable"
-    },
-    {
-      "Action": [
-        "ssm:GetParameter",
-        "ssm:GetParameters",
-        "ssm:GetParameterHistory",
-        "ssm:PutParameter",
-        "ssm:DeleteParameter"
-      ],
-      "Effect": "Allow",
-      "Resource": [
+        "arn:aws:ssm:r1:111122223333:parameter/sluis/i1/external/oidc/*",
         "arn:aws:ssm:r1:111122223333:parameter/sluis/i1/internal/slack/*",
         "arn:aws:ssm:r1:111122223333:parameter/sluis/i1/external/slack/*"
       ],
-      "Sid": "SluisCrossSlackParameters"
+      "Sid": "SluisCrossParameters"
     },
     {
       "Action": [
@@ -341,21 +147,31 @@
         "s3:DeleteObject"
       ],
       "Effect": "Allow",
-      "Resource": "arn:aws:s3:::acme-blobs/slack/*",
-      "Sid": "SluisCrossSlackBlobs"
+      "Resource": [
+        "arn:aws:s3:::acme-blobs/cloudflare/*",
+        "arn:aws:s3:::acme-blobs/github/*",
+        "arn:aws:s3:::acme-blobs/google/*",
+        "arn:aws:s3:::acme-blobs/oidc/*",
+        "arn:aws:s3:::acme-blobs/slack/*"
+      ],
+      "Sid": "SluisCrossBlobs"
     },
     {
       "Action": "s3:ListBucket",
       "Condition": {
         "StringLike": {
           "s3:prefix": [
+            "cloudflare/*",
+            "github/*",
+            "google/*",
+            "oidc/*",
             "slack/*"
           ]
         }
       },
       "Effect": "Allow",
       "Resource": "arn:aws:s3:::acme-blobs",
-      "Sid": "SluisCrossSlackBlobList"
+      "Sid": "SluisCrossBlobList"
     },
     {
       "Action": [

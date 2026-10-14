@@ -1,15 +1,15 @@
-# The documentation site (docs/, built with mkdocs-material) and the JSON
-# schemas, served at https://truvity.github.io/sluis/. A pull request builds the
-# site and checks every schema's $id against the URL it is served at; only a
-# push to master deploys. Deploying needs GitHub Pages enabled for the
-# repository (Settings > Pages > Source: GitHub Actions), a repository setting
-# this workflow does not change.
+# Deploys the documentation site (docs/, mkdocs-material) and the JSON schemas
+# to https://truvity.github.io/sluis/ on a push to master that changes them.
+# Deploy only: a pull request builds and checks the same site in the `docs`
+# group of ci.yaml (`just docs-site`), so this job runs the one build script
+# and publishes it. Needs GitHub Pages enabled for the repository (Settings >
+# Pages > Source: GitHub Actions), a setting this workflow does not change.
 name: Pages
 
 on:
   push:
     branches: [master]
-    paths: &paths
+    paths:
       - "docs/**"
       - "mkdocs.yaml"
       - "hack/mkdocs_hooks.py"
@@ -19,12 +19,10 @@ on:
       - "audit/sdk/schemas/**"
       - "audit/sdk/catalogue/**"
       - "audit/gen/jsonschema/**"
+      - "hack/docs-site.sh"
       - "hack/pages-site.sh"
       - "hack/fetch-mermaid.sh"
       - ".github/workflows/pages.yaml"
-  pull_request:
-    branches: [master]
-    paths: *paths
   workflow_dispatch:
 
 permissions:
@@ -35,41 +33,25 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: "3.13"
-          cache: pip
-          cache-dependency-path: hack/pages-requirements.txt
-      - name: Build the documentation
-        run: |
-          pip install -r hack/pages-requirements.txt
-          hack/fetch-mermaid.sh
-          mkdocs build --strict -d _site
-          test -f _site/assets/vendor/mermaid.min.js || { echo "::error::the site has no Mermaid bundle, so every diagram would show as source"; exit 1; }
-      - name: Add the schemas
-        run: hack/pages-site.sh _site
-      - name: Keep Jekyll off the site
-        run: touch _site/.nojekyll
-      - name: Upload the site
-        if: github.event_name != 'pull_request'
-        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
-        with:
-          path: _site
-
   deploy:
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
-    needs: build
+    if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
+      contents: read
       pages: write
       id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+      - run: hack/docs-site.sh _site
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: _site
       - id: deployment
         uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

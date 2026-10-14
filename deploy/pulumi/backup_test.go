@@ -323,7 +323,7 @@ func TestTheBackupRolePolicyIsTheOneBackupRoleStatementsRenders(t *testing.T) {
 		sids[s["Sid"].(string)] = true
 	}
 	for _, want := range []string{
-		"SluisTableBackup", "SluisCrossOidcTable", "SluisCrossGoogleParameters", "SluisMaintenanceDeny",
+		"SluisTableBackup", "SluisCrossTable", "SluisCrossParameters", "SluisMaintenanceDeny",
 		"SluisArchiveObjects", "SluisArchiveList", "SluisDenyRestoreIdentity", "SluisDenyRestoreIdentityKey",
 	} {
 		if !sids[want] {

@@ -1,6 +1,8 @@
 # govulncheck for every Go module (the sluis and audit recipes), daily and on
-# master. Deliberately NOT in ci.yaml and not a required context: a
-# standard-library advisory with no released fix would otherwise wedge every
+# master; and, scheduled weekly, the external links of the built documentation
+# site, and on demand the OpenID conformance Config profile. Deliberately NOT in
+# ci.yaml and not a required context: a standard-library advisory with no
+# released fix, or a third-party site that is down, would otherwise wedge every
 # pull request on a finding nobody can act on. CodeQL is the repository's
 # default setup, not a workflow.
 name: Security
@@ -10,13 +12,81 @@ on:
     branches: [master]
   schedule:
     - cron: "0 6 * * *" # daily 6am UTC
+    - cron: "17 5 * * 1" # Mondays: the link check
   workflow_dispatch:
+    inputs:
+      issuer:
+        description: Run the OpenID conformance Config profile against this issuer, e.g. https://access.example.com.
+        required: false
 
 permissions:
   contents: read
 
 jobs:
   govulncheck:
+    if: github.event.schedule != '17 5 * * 1'
     uses: truvity/ci-workflows/.github/workflows/check.yaml@a523f2f6e5868b00362056569c667243631fd90f # v3.26.2
     with:
       recipes: '["vuln","audit-vuln"]'
+
+  # Every external link of the built site (lychee.toml); a dead one opens (or
+  # comments on) an issue. A pull request gets the offline check of the
+  # Markdown it changes, in the docs group of ci.yaml.
+  links:
+    if: github.event.schedule == '17 5 * * 1' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+      - run: hack/docs-site.sh _site
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .lycheecache
+          key: lychee-${{ github.run_id }}
+          restore-keys: lychee-
+      - id: lychee
+        uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
+        with:
+          args: --config lychee.toml --no-progress --root-dir "${{ github.workspace }}/_site" '_site/**/*.html'
+          fail: false
+          output: lychee-report.md
+      - if: steps.lychee.outputs.exit_code != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          title="Dead links in the documentation"
+          existing=$(gh issue list --state open --search "\"$title\" in:title" --json number --jq '.[0].number // empty')
+          body="The weekly link check of the built site found dead links (run ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}).
+
+          $(cat lychee-report.md)"
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body "$body"
+          else
+            gh issue create --title "$title" --body "$body"
+          fi
+          exit 1
+
+  # The OpenID conformance Config profile against the issuer named at dispatch:
+  # on demand only (docs/guides/sluis/run-conformance.md says why not scheduled).
+  # A dispatch with no issuer runs the other jobs only.
+  conformance:
+    if: github.event_name == 'workflow_dispatch' && inputs.issuer != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - env:
+          ISSUER: ${{ inputs.issuer }}
+        run: hack/conformance-config.sh
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: always()
+        with:
+          name: conformance-config-profile
+          path: dist/conformance/
+          if-no-files-found: warn
