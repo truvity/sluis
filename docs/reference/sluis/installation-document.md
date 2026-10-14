@@ -21,3 +21,9 @@ It is a superset of the service and policy documents: each section sits under it
 | `access` | the access model's tables (`groups`, `clients`, `resources`, `github`, `slack`, ...), the policy document's, unchanged. [`config.FromAccess`](installation-access.md) builds it. |
 
 For shape `lambda` the renderer writes what the library owns (`secrets` as `ssm` with the instance's root and region, `recovery.passwordSecret`, the `invoke` trigger's function) and refuses a different value. A named adapter replaces what a resource stands for. The output is deterministic and held to the service's loader. Start checks adapter platform answers and OpenBao reachability.
+
+## Write one
+
+`config.MarshalInstallation(in, MarshalOptions{Header})` writes the canonical document; `config.CheckInstallation(existing, in, opts)` reports whether `existing` is that document. When it is not, it returns a line diff, for a `--check` mode.
+
+`apiVersion` comes first and the other keys are sorted. Durations are `1h` or `15m`, never `1h0m0s`. Unset fields and empty lists are left out. A set but empty section is kept, as `controllers.github: {}` is a controller that is on. `Header` is a comment block. An installation the loader would refuse is not written.
