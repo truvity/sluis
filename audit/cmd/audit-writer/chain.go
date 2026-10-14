@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/truvity/sluis/storage/awsotel"
+
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 
@@ -28,7 +30,7 @@ var newSQS = func(ctx context.Context, region string) (sqssink.API, error) {
 	if err != nil {
 		return nil, fmt.Errorf("loading the AWS configuration for SQS: %w", err)
 	}
-	return sqs.NewFromConfig(cfg), nil
+	return sqs.NewFromConfig(cfg, func(o *sqs.Options) { o.TracerProvider, o.MeterProvider = awsotel.Providers() }), nil
 }
 
 // forwardTo builds a receiver's onward hop from the configuration: the one

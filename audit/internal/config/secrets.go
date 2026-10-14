@@ -7,6 +7,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/truvity/sluis/storage/awsotel"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
@@ -57,7 +59,7 @@ var OpenSSM = func(ctx context.Context) (ParameterAPI, error) {
 	if err != nil {
 		return nil, fmt.Errorf("loading the AWS configuration for SSM: %w", err)
 	}
-	return ssm.NewFromConfig(cfg), nil
+	return ssm.NewFromConfig(cfg, func(o *ssm.Options) { o.TracerProvider, o.MeterProvider = awsotel.Providers() }), nil
 }
 
 // ssmStore is the policyconfig.Store over SSM Parameter Store: it reads one

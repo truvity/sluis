@@ -6,6 +6,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/truvity/sluis/storage/awsotel"
+
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	awslambda "github.com/aws/aws-sdk-go-v2/service/lambda"
 
@@ -20,5 +22,5 @@ func lambdaCaller(ctx context.Context, cfg modcall.Config, class string) (modcal
 	if err != nil {
 		return nil, fmt.Errorf("modcall: %w", err)
 	}
-	return lambdacall.New(awslambda.NewFromConfig(awsCfg), cfg).As(class), nil
+	return lambdacall.New(awslambda.NewFromConfig(awsCfg, func(o *awslambda.Options) { o.TracerProvider, o.MeterProvider = awsotel.Providers() }), cfg).As(class), nil
 }

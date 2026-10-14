@@ -19,7 +19,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sqs v1.52.3
 	github.com/aws/aws-sdk-go-v2/service/ssm v1.79.2
 	github.com/aws/aws-sdk-go-v2/service/sts v1.51.3
-	github.com/aws/smithy-go v1.28.4
+	github.com/aws/smithy-go v1.28.5
 	github.com/cenkalti/backoff/v5 v5.0.3
 	github.com/go-jose/go-jose/v4 v4.1.5
 	github.com/google/uuid v1.6.0
@@ -70,6 +70,8 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/signin v1.10.3 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sso v1.38.3 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.43.3 // indirect
+	github.com/aws/smithy-go/metrics/smithyotelmetrics v1.0.33 // indirect
+	github.com/aws/smithy-go/tracing/smithyoteltracing v1.0.33 // indirect
 	github.com/bmatcuk/doublestar/v4 v4.10.2 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect

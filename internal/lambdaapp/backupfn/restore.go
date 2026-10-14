@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/truvity/sluis/storage/awsotel"
+
 	"github.com/aws/aws-lambda-go/lambdacontext"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	awslambda "github.com/aws/aws-sdk-go-v2/service/lambda"
@@ -88,5 +90,5 @@ func openLambdaAPI(ctx context.Context) (lambdaAPI, error) {
 	if err != nil {
 		return nil, fmt.Errorf("lambda client: %w", err)
 	}
-	return awslambda.NewFromConfig(cfg), nil
+	return awslambda.NewFromConfig(cfg, func(o *awslambda.Options) { o.TracerProvider, o.MeterProvider = awsotel.Providers() }), nil
 }

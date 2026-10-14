@@ -35,6 +35,8 @@ A tracer exists only when a collector is named for traces.
 | The controllers' clients of the console | A client span per call, and the `traceparent` carried to the console, so a tick's trace continues into the console's own spans. |
 | A module call (`internal/modcall`) | A client span in the caller and a server span in the callee, `modcall <module>.<method>` (`rpc.system.name` is `sluis.modcall`, `rpc.method` the module and method). The envelope carries the `traceparent` and `tracestate`, so the callee's span is the caller's child on every transport. |
 | A tick | `tick <kind>`, with the target kind, the target and the outcome (`ok` or `failed`). The kinds are `github-tick`, `github-links` and `slack-tick`. |
+| An AWS SDK call (every client of every adapter: `storage/awsotel`) | One span per call named `<Service>.<Operation>` (`SSM.GetParameter`; `rpc.system` is `aws-api`, with `rpc.service` and `rpc.method`), a child of the span in the call's context, and under it ten child spans: `RetryLoop`, `Attempt` (one per try), `OperationSerializer`, `ResolveAuthScheme`, `GetIdentity`, `ResolveEndpoint`, `ComputePayloadSHA256`, `SignRequest`, `DoHTTPRequest` and `OperationDeserializer`. The SDK's own client metrics go to the same meter provider. |
+| A function invocation on Lambda | The server span of a module call (and of an API Gateway request) carries the Lambda request id as `faas.invocation_id`, and continues the caller's `traceparent`. X-Ray is not used. |
 | A storage port call | `port <port> <operation>`, with the port, the operation and the outcome. Only inside a trace that is already being recorded, so a loop that started none makes no root span per call. |
 
 ### What leaves the process
@@ -45,7 +47,8 @@ Spans leave through the allowlist exporter `telemetry.FilterExporter`; only thes
 access_roster.target.kind  access_roster.target.id  access_roster.outcome
 access_roster.port  access_roster.operation  rpc.system.name  rpc.method
 rpc.response.status_code  error.type  http.request.method
-http.response.status_code  http.route
+http.response.status_code  http.route  faas.invocation_id  rpc.system
+rpc.service  aws.request_id  http.status_code
 ```
 
 Events, link attributes and status text are removed. A port call's key is never an attribute. A test asserts no personal marker reaches the next exporter.

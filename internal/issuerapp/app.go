@@ -22,6 +22,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/truvity/sluis/storage/awsotel"
+
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	jose "github.com/go-jose/go-jose/v4"
@@ -1456,7 +1458,7 @@ func kmsSigningKeys(
 		if err != nil {
 			return nil, nil, nil, nil, fmt.Errorf("load the AWS configuration for signingKey.kms: %w", err)
 		}
-		api = kms.NewFromConfig(awsCfg)
+		api = kms.NewFromConfig(awsCfg, func(o *kms.Options) { o.TracerProvider, o.MeterProvider = awsotel.Providers() })
 	}
 	sets := []*signer.KMSKeyRefs{{Alg: jose.ES384, API: api, Refs: cfg.kmsKeys, Seed: seed}}
 	for _, a := range cfg.kmsAdditional {

@@ -339,7 +339,7 @@ func (s *Server) dispatch(ctx context.Context, v int, req Request) Response {
 		ctx = telemetry.ExtractWire(ctx, req.Traceparent, req.Tracestate)
 	}
 	ctx, span := telemetry.Tracer().Start(ctx, "modcall "+s.module+"."+req.Method,
-		trace.WithSpanKind(trace.SpanKindServer), trace.WithAttributes(rpcAttrs(s.module, req.Method)...))
+		trace.WithSpanKind(trace.SpanKindServer), trace.WithAttributes(append(rpcAttrs(s.module, req.Method), telemetry.InvocationAttrs(ctx)...)...))
 	defer span.End()
 	resp, cause := s.run(ctx, v, h, req)
 	s.report(ctx, req, resp, cause)

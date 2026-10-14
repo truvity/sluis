@@ -20,6 +20,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/truvity/sluis/storage/awsotel"
+
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -655,7 +657,7 @@ func signerFor(ctx context.Context, keyFile, keyID, kmsKey, region string) (keys
 		if region != "" {
 			cfg.Region = region
 		}
-		return &keys.KMSSigner{Client: kms.NewFromConfig(cfg), Key: kmsKey}, nil
+		return &keys.KMSSigner{Client: kms.NewFromConfig(cfg, func(o *kms.Options) { o.TracerProvider, o.MeterProvider = awsotel.Providers() }), Key: kmsKey}, nil
 	default:
 		return keys.LoadLocalSignerFile(keyID, keyFile)
 	}

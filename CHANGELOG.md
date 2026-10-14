@@ -2,6 +2,8 @@
 
 ### Added
 
+- **AWS SDK calls are spans and client metrics.** Every AWS client (DynamoDB, S3 and R2 blobs, SSM, KMS, STS, SQS, Lambda invoke; the audit module's too) is built with `awsotel.Providers()` (`storage/awsotel`), which gives it the SDK's own OpenTelemetry adapters, `smithyoteltracing` and `smithyotelmetrics`, over the process's global providers. Each call is a child of the span in its context: `<Service>.<Operation>` with ten child spans (serialize, resolve, sign, send, retry attempts), so expect about eleven spans per call and one more per retry. Sampling is unchanged. The span allowlist gains `rpc.system`, `rpc.service`, `aws.request_id` and `http.status_code`; the endpoint and peer attributes stay out. A test fails when a `NewFromConfig` does not use the helper. See [Telemetry](docs/reference/sluis/telemetry.md).
+- **The Lambda server span carries `faas.invocation_id`** (the Lambda request id, OpenTelemetry semantic convention) on module calls and API Gateway requests. The `traceparent` was already continued; X-Ray is not enabled.
 - **Backend log lines carry the trace context: `trace_id`, `span_id` and `trace_flags` (W3C hex).** `telemetry.LogHandler` adds the three fields to every record logged with a context that holds a valid span, and nothing to a record without one. It wraps the JSON handler of the Lambda functions (`lambdaapp.Logger`), the Kubernetes services (`module.Logger`) and the resource proxy; stdout stays the only sink and there is no OTel logs SDK. sloglint's `context: all` already requires the `...Context` variants. The Lambda logger's comment no longer says the OTLP layer collects function logs: it forwards only platform events. See [Install telemetry](docs/guides/sluis/operate/install-telemetry.md).
 
 ### Fixed

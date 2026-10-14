@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/truvity/sluis/storage/awsotel"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	awsssm "github.com/aws/aws-sdk-go-v2/service/ssm"
@@ -27,6 +29,7 @@ func openSSMState(ctx context.Context, prefix string, opts ...state.Option) (sta
 		return nil, fmt.Errorf("ssm: load AWS config: %w", err)
 	}
 	client := awsssm.NewFromConfig(cfg, func(so *awsssm.Options) {
+		so.TracerProvider, so.MeterProvider = awsotel.Providers()
 		so.Retryer = awsretry.New()
 		if o.Endpoint != "" {
 			so.BaseEndpoint = aws.String(o.Endpoint)
