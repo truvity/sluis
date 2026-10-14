@@ -65,14 +65,14 @@ Point the pod at an OpenTelemetry collector, then install the alerts and Grafana
 
 ## Verify
 
-- The pod has the `OTEL_*` variables. After a minute `sluis_http_requests_total` has series for the cluster.
+- The pod has the `OTEL_*` variables; after a minute `sluis_http_requests_total` has series.
 
 - The ruler lists one group of eleven rules, none erroring.
 
 - The shared Grafana has `<cluster> / sluis` with both dashboards, each with a `$cluster` variable.
 - A log line written inside a request carries `trace_id`, `span_id` and `trace_flags` (W3C hex), the trace's own id; a line outside a span has none. Logs stay on stdout. In Lambda the OTLP layer forwards only platform events, so function logs reach CloudWatch Logs only.
 
-A rule with no series does not fire; the platform's scrape alert covers a service that is down.
+A rule with no series does not fire; the platform's scrape alert covers a down service.
 
 ## Roll back
 
