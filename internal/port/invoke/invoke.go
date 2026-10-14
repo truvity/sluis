@@ -19,6 +19,8 @@ import (
 	"slices"
 	"sync"
 
+	"github.com/truvity/sluis/storage/awsotel"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	awslambda "github.com/aws/aws-sdk-go-v2/service/lambda"
@@ -102,6 +104,7 @@ func Open(ctx context.Context, cfg Config) (*Trigger, error) {
 		return nil, fmt.Errorf("invoke: %w", err)
 	}
 	return New(awslambda.NewFromConfig(awsCfg, func(o *awslambda.Options) {
+		o.TracerProvider, o.MeterProvider = awsotel.Providers()
 		if cfg.Endpoint != "" {
 			o.BaseEndpoint = aws.String(cfg.Endpoint)
 		}

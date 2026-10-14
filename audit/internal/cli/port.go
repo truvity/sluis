@@ -9,6 +9,8 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/truvity/sluis/storage/awsotel"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
@@ -141,7 +143,7 @@ func OpenKeyPort(ctx context.Context, k *config.Keys, secrets *config.Secrets, w
 			}
 			opts = append(opts, kmskeys.WithWrappedStore(kmskeys.FromState(st)))
 		}
-		backend = kmskeys.New(kms.NewFromConfig(awscfg), opts...)
+		backend = kmskeys.New(kms.NewFromConfig(awscfg, func(o *kms.Options) { o.TracerProvider, o.MeterProvider = awsotel.Providers() }), opts...)
 	case "transit":
 		oc := openbao.Config{Address: k.OpenBAO.Address, Namespace: k.OpenBAO.Namespace, CAFile: k.OpenBAO.CAFile}
 		login, token, tokenFile, err := openBAOCredentials(ctx, *k.OpenBAO, secrets)

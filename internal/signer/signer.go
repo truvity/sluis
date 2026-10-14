@@ -222,8 +222,12 @@ func (s *inProcess) Sign(ctx context.Context, req Request) (Signed, error) {
 	if !ok {
 		return Signed{}, ErrNoKey
 	}
+	key := active.Key
+	if k, ok := key.(*kmsSigner); ok {
+		key = k.forRequest(ctx)
+	}
 	js, err := jose.NewSigner(
-		jose.SigningKey{Algorithm: active.Algorithm, Key: active.Key},
+		jose.SigningKey{Algorithm: active.Algorithm, Key: key},
 		(&jose.SignerOptions{}).WithType(jose.ContentType(typ[req.Purpose])).WithHeader("kid", active.KID),
 	)
 	if err != nil {

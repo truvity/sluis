@@ -34,16 +34,15 @@ import (
 	"log/slog"
 	"slices"
 	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
-	"unicode"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/truvity/sluis/internal/logsafe"
 	"github.com/truvity/sluis/internal/telemetry"
 	"github.com/truvity/sluis/storage/logattr"
 )
@@ -256,10 +255,10 @@ func (s *Server) report(ctx context.Context, req Request, resp Response, cause e
 		level = slog.LevelError
 	}
 	attrs := []slog.Attr{
-		slog.String("module", s.module), slog.String("method", logValue(req.Method)), slog.String("code", resp.Error.Code),
+		slog.String("module", s.module), slog.String("method", logsafe.Value(req.Method)), slog.String("code", resp.Error.Code),
 	}
 	if id, _ := ctx.Value(requestKey{}).(string); id != "" {
-		attrs = append(attrs, slog.String("request_id", logValue(id)))
+		attrs = append(attrs, slog.String("request_id", logsafe.Value(id)))
 	}
 	var coded *Error
 	if errors.As(cause, &coded) && coded.cause != nil {
@@ -269,31 +268,9 @@ func (s *Server) report(ctx context.Context, req Request, resp Response, cause e
 		attrs = append(attrs, logattr.SafeError("error", cause))
 	}
 	if resp.Error.Code == CodeForbidden {
-		attrs = append(attrs, slog.String("caller", logValue(CallerOf(ctx))))
+		attrs = append(attrs, slog.String("caller", logsafe.Value(CallerOf(ctx))))
 	}
 	log.LogAttrs(ctx, level, "a module call was refused or failed", attrs...)
-}
-
-// maxLogValue bounds a caller-supplied value in a log line, in bytes.
-const maxLogValue = 256
-
-// logValue is a caller-supplied string (a method name from the request, the
-// transport's request id, the caller's subject) made safe to put in a log
-// line: line breaks and other control characters are removed, so the value
-// cannot start a forged line, and its length is bounded. An ordinary value is
-// returned unchanged.
-func logValue(v string) string {
-	v = strings.ReplaceAll(strings.ReplaceAll(v, "\n", ""), "\r", "")
-	v = strings.Map(func(r rune) rune {
-		if unicode.IsControl(r) {
-			return -1
-		}
-		return r
-	}, v)
-	if len(v) > maxLogValue {
-		v = strings.ToValidUTF8(v[:maxLogValue], "")
-	}
-	return v
 }
 
 // Module is the module the server answers for.
@@ -362,7 +339,7 @@ func (s *Server) dispatch(ctx context.Context, v int, req Request) Response {
 		ctx = telemetry.ExtractWire(ctx, req.Traceparent, req.Tracestate)
 	}
 	ctx, span := telemetry.Tracer().Start(ctx, "modcall "+s.module+"."+req.Method,
-		trace.WithSpanKind(trace.SpanKindServer), trace.WithAttributes(rpcAttrs(s.module, req.Method)...))
+		trace.WithSpanKind(trace.SpanKindServer), trace.WithAttributes(append(rpcAttrs(s.module, req.Method), telemetry.InvocationAttrs(ctx)...)...))
 	defer span.End()
 	resp, cause := s.run(ctx, v, h, req)
 	s.report(ctx, req, resp, cause)

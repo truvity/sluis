@@ -22,6 +22,9 @@ import (
 	"github.com/aws/smithy-go"
 	jose "github.com/go-jose/go-jose/v4"
 	"github.com/zitadel/oidc/v3/pkg/op"
+	"go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+	oteltrace "go.opentelemetry.io/otel/trace"
 
 	"github.com/truvity/sluis/internal/issuer"
 	"github.com/truvity/sluis/internal/signer"
@@ -38,6 +41,7 @@ type fakeKMS struct {
 	signErr  error
 	signs    int
 	lastSign *kms.SignInput
+	signCtx  context.Context
 }
 
 func newFakeKMS(t *testing.T) *fakeKMS {
@@ -84,9 +88,10 @@ func (f *fakeKMS) GetPublicKey(_ context.Context, _ *kms.GetPublicKeyInput, _ ..
 	}, nil
 }
 
-func (f *fakeKMS) Sign(_ context.Context, in *kms.SignInput, _ ...func(*kms.Options)) (*kms.SignOutput, error) {
+func (f *fakeKMS) Sign(ctx context.Context, in *kms.SignInput, _ ...func(*kms.Options)) (*kms.SignOutput, error) {
 	f.signs++
 	f.lastSign = in
+	f.signCtx = ctx
 	if f.signErr != nil {
 		return nil, f.signErr
 	}
@@ -513,4 +518,32 @@ func mustKMSKey(t *testing.T, api signer.KMSAPI, alg jose.SignatureAlgorithm) *s
 		t.Fatal(err)
 	}
 	return k
+}
+
+// The KMS call of a signing request runs under that request's context, so its
+// span (the SDK's) is a child of the request's span.
+func TestTheKMSSignCallRunsUnderTheRequestsContext(t *testing.T) {
+	t.Parallel()
+	fake := newFakeKMS(t)
+	key, err := signer.KMSSigningKey(context.Background(), fake, "alias/sluis-signing", kmsSeed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	provider := trace.NewTracerProvider(trace.WithSyncer(tracetest.NewInMemoryExporter()))
+	ctx, span := provider.Tracer("test").Start(context.Background(), "request")
+	defer span.End()
+
+	r := &ring{def: jose.ES384, active: map[jose.SignatureAlgorithm]signer.ActiveKey{
+		jose.ES384: {KID: key.ID(), Algorithm: jose.ES384, Key: key.Key()},
+	}}
+	if _, err = signer.New(r, limits()).Sign(ctx, signer.Request{Purpose: signer.PurposeAccess, Payload: []byte(`{"iat":100,"exp":160}`)}); err != nil {
+		t.Fatal(err)
+	}
+	got := oteltrace.SpanFromContext(fake.signCtx).SpanContext()
+	if got.SpanID() != span.SpanContext().SpanID() {
+		t.Errorf("the KMS call's context holds span %s, not the request's %s", got.SpanID(), span.SpanContext().SpanID())
+	}
+	if _, ok := fake.signCtx.Deadline(); !ok {
+		t.Error("the KMS call lost its timeout")
+	}
 }

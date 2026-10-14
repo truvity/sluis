@@ -45,17 +45,25 @@ func TestANamedCollectorStartsTheExporter(t *testing.T) {
 // one in the environment replaces that without a release.
 func TestTheDefaultSamplerKeepsRootTracesAndTheEnvironmentOverridesIt(t *testing.T) {
 	for _, c := range []struct {
-		name, sampler string
-		sampled       bool
+		name, sampler, arg string
+		sampled            bool
+		// childOfSampled: a span whose remote parent is sampled.
+		childOfSampled bool
 	}{
-		{"default", "", true},
-		{"always_off", "always_off", false},
-		{"parentbased_always_off", "parentbased_always_off", false},
+		{"default", "", "", true, true},
+		{"always_on", "always_on", "", true, true},
+		{"always_off", "always_off", "", false, false},
+		{"parentbased_always_on", "parentbased_always_on", "", true, true},
+		{"parentbased_always_off", "parentbased_always_off", "", false, true},
+		{"parentbased_traceidratio 0", "parentbased_traceidratio", "0", false, true},
+		{"parentbased_traceidratio 1", "parentbased_traceidratio", "1", true, true},
+		{"traceidratio 0", "traceidratio", "0", false, false},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			t.Setenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "http://127.0.0.1:1")
 			t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
 			t.Setenv("OTEL_TRACES_SAMPLER", c.sampler)
+			t.Setenv("OTEL_TRACES_SAMPLER_ARG", c.arg)
 			if !telemetry.TracesEnabled() {
 				t.Fatal("traces are not enabled with a collector named")
 			}
@@ -74,6 +82,12 @@ func TestTheDefaultSamplerKeepsRootTracesAndTheEnvironmentOverridesIt(t *testing
 			defer span.End()
 			if got := span.SpanContext().IsSampled(); got != c.sampled {
 				t.Errorf("sampled = %v, want %v", got, c.sampled)
+			}
+			remote := telemetry.ExtractWire(context.Background(), "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01", "")
+			_, child := telemetry.Tracer().Start(remote, "child")
+			defer child.End()
+			if got := child.SpanContext().IsSampled(); got != c.childOfSampled {
+				t.Errorf("a child of a sampled remote parent: sampled = %v, want %v", got, c.childOfSampled)
 			}
 		})
 	}

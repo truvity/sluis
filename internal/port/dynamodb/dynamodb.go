@@ -100,6 +100,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/truvity/sluis/storage/awsotel"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	ddb "github.com/aws/aws-sdk-go-v2/service/dynamodb"
@@ -241,6 +243,7 @@ func newClient(ctx context.Context, cfg Config) (API, error) {
 		return nil, unavailable(err)
 	}
 	return ddb.NewFromConfig(awsCfg, func(o *ddb.Options) {
+		o.TracerProvider, o.MeterProvider = awsotel.Providers()
 		if cfg.Endpoint != "" {
 			o.BaseEndpoint = aws.String(cfg.Endpoint)
 		}

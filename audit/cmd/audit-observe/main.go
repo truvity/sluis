@@ -24,6 +24,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/truvity/sluis/storage/awsotel"
+
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -194,7 +196,8 @@ func wakeFrom(ctx context.Context, w *config.Wake, wake chan<- struct{}) (func()
 		done := make(chan struct{})
 		go func() {
 			defer close(done)
-			observe.SQSWake(running, sqs.NewFromConfig(cfg), w.SQS.QueueURL, wake, slog.Default())
+			queue := sqs.NewFromConfig(cfg, func(o *sqs.Options) { o.TracerProvider, o.MeterProvider = awsotel.Providers() })
+			observe.SQSWake(running, queue, w.SQS.QueueURL, wake, slog.Default())
 		}()
 		slog.InfoContext(ctx, "woken by notifications", slog.String("queue", w.SQS.QueueURL))
 		return func() { cancel(); <-done }, nil

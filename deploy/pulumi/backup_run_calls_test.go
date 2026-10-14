@@ -2,6 +2,7 @@ package sluispulumi
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 	"unicode"
 
@@ -23,7 +24,11 @@ const (
 	rcQueue    = arnPrefix + "sqs:eu-central-1:123456789012:sluis-prod-audit"
 )
 
-func rcEnv() ModuleEnv {
+func rcEnv() ModuleEnv { return rcEnvFor(rcInst) }
+
+// rcEnvFor is rcEnv for an installation named inst: every name that carries it
+// (tables, log groups, functions, the buckets' and queue's names) does.
+func rcEnvFor(inst string) ModuleEnv {
 	tables := map[Module]string{}
 	for _, m := range Modules() {
 		tables[m] = arnPrefix + "dynamodb:" + rcRegion + ":" + rcAccount + ":table/sluis-" + rcInst + "-" + string(m)
@@ -34,16 +39,19 @@ func rcEnv() ModuleEnv {
 		fns[r] = arnPrefix + "lambda:" + rcRegion + ":" + rcAccount + ":function:sluis-" + rcInst + "-" + r
 	}
 	return ModuleEnv{
-		Region: rcRegion, Account: rcAccount, Modules: ModuleSet{Instance: rcInst},
-		BucketArn: rcBucket, TableArns: tables, TableKeyArn: rcTableKey, ParameterKeyArn: rcKey,
-		QueueArn: rcQueue, LogGroupArns: logs, FunctionArns: fns,
+		Region: rcRegion, Account: rcAccount, Modules: ModuleSet{Instance: inst},
+		BucketArn: strings.ReplaceAll(rcBucket, "-"+rcInst+"-", "-"+inst+"-"), TableArns: tables, TableKeyArn: rcTableKey, ParameterKeyArn: rcKey,
+		QueueArn: strings.ReplaceAll(rcQueue, "-"+rcInst+"-", "-"+inst+"-"), LogGroupArns: logs, FunctionArns: fns,
 		MinterRefs:         []string{"internal/cloudflare/*/minter"},
 		TelemetryAudiences: []string{"https://otlp.collector.example.com"},
 	}
 }
 
-func rcArchiveGrant() ArchiveGrant {
-	return ArchiveGrant{BucketArn: rcArchive, Prefix: "sluis/", Instance: rcInst, SSEKeyArn: rcSSEKey, Versioned: true}
+func rcArchiveGrant() ArchiveGrant { return rcArchiveGrantFor(rcInst) }
+
+func rcArchiveGrantFor(inst string) ArchiveGrant {
+	return ArchiveGrant{BucketArn: strings.ReplaceAll(rcArchive, "-"+rcInst+"-", "-"+inst+"-"), Prefix: "sluis/",
+		Instance: inst, SSEKeyArn: rcSSEKey, Versioned: true}
 }
 
 // iamInlineRoleLimit is IAM's limit on the inline policies of one role, in
@@ -83,6 +91,34 @@ func TestBackupAndRestoreRolePoliciesFitTheInlineLimit(t *testing.T) {
 		t.Logf("%s: %d of IAM's %d characters", name, n, iamInlineRoleLimit)
 		if n > iamInlineRoleLimit {
 			t.Errorf("%s: the role policy is %d characters, over IAM's inline limit of %d", name, n, iamInlineRoleLimit)
+		}
+	}
+}
+
+// The inline limit holds for a long instance name as well: every name in the
+// policy carries it (tables, log groups, buckets, parameter paths), so the
+// size grows with it, and the cross-grants are one statement per kind to leave
+// the room. A role over the limit is one the apply refuses.
+func TestBackupAndRestoreRolePoliciesFitTheLimitForALongInstanceName(t *testing.T) {
+	inst := strings.Repeat("i", 32)
+	env, g := rcEnvFor(inst), rcArchiveGrantFor(inst)
+	bst, err := BackupRoleStatements(env, g)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rst, err := RestoreRoleStatements(env, g, []string{env.FunctionArns[RoleRestore] + ":live-console"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, st := range map[string][]map[string]any{RoleBackup: bst, RoleRestore: rst} {
+		raw, err := json.Marshal(map[string]any{"Version": polVersion, "Statement": st})
+		if err != nil {
+			t.Fatal(err)
+		}
+		n := iamSize(string(raw))
+		t.Logf("%s, %d-character instance: %d of IAM's %d characters", name, len(inst), n, iamInlineRoleLimit)
+		if n > iamInlineRoleLimit {
+			t.Errorf("%s: %d characters for a %d-character instance name, over IAM's %d", name, n, len(inst), iamInlineRoleLimit)
 		}
 	}
 }

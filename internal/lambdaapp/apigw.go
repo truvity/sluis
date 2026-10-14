@@ -14,9 +14,11 @@ import (
 	"unicode/utf8"
 
 	"github.com/aws/aws-lambda-go/events"
+	"github.com/aws/aws-lambda-go/lambdacontext"
 
 	"github.com/truvity/sluis/internal/deploycheck"
 	"github.com/truvity/sluis/internal/modcall"
+	"github.com/truvity/sluis/internal/telemetry"
 	"github.com/truvity/sluis/storage/logattr"
 )
 
@@ -132,6 +134,9 @@ func NewHTTP(handler http.Handler, settle func(), log *slog.Logger) *HTTP {
 
 // Handle implements [Handler]: payload is an API Gateway HTTP API event.
 func (h *HTTP) Handle(ctx context.Context, payload json.RawMessage) (any, error) {
+	if lc, ok := lambdacontext.FromContext(ctx); ok {
+		ctx = telemetry.WithInvocationID(ctx, lc.AwsRequestID)
+	}
 	// An API Gateway event has no top-level `kind`; a scheduled one does.
 	var peek struct {
 		Kind string `json:"kind"`
