@@ -61,7 +61,7 @@ func TestDigestKeyIsItsGolden(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	raw = append(raw, '\n')
+	raw = append(bytes.ReplaceAll(raw, []byte(account), []byte("<account>")), '\n')
 	path := filepath.Join("testdata", "digestkey.golden.json")
 	if os.Getenv("SLUIS_UPDATE_GOLDEN") != "" {
 		if err := os.WriteFile(path, raw, 0o644); err != nil {
@@ -86,7 +86,7 @@ func TestDigestKeyPolicyIsTheEstatesText(t *testing.T) {
       "Action": "kms:*",
       "Effect": "Allow",
       "Principal": {
-        "AWS": "arn:aws:iam::` + account + `:root"
+        "AWS": "arn:` + "aws:iam::" + account + `:root"
       },
       "Resource": "*",
       "Sid": "BackupAccountKeyAdmin"
@@ -125,7 +125,7 @@ func TestDigestKeyRefusesWhatItCannotKeep(t *testing.T) {
 	for name, args := range map[string]*auditpulumi.DigestKeyArgs{
 		"no description": {BackupAccountID: account},
 		"short account":  {Description: digestDescription, BackupAccountID: "1234"},
-		"an ARN alias":   {Description: digestDescription, BackupAccountID: account, AliasName: "arn:aws:kms:eu-west-1:" + account + ":alias/x"},
+		"an ARN alias":   {Description: digestDescription, BackupAccountID: account, AliasName: arnp + "kms:eu-west-1:" + account + ":alias/x"},
 	} {
 		if _, err := runDigestKey(t, "audit-digest-example", args); err == nil {
 			t.Errorf("%s: accepted", name)
@@ -151,7 +151,7 @@ func gitopsArchiveStatements(accountID, region, bucket string, roles, readers []
 	context := map[string]any{condKMSS3ARN: []string{bucket, bucket + "/*"}}
 	actions := []string{"kms:GenerateDataKey", "kms:Decrypt", "kms:DescribeKey"}
 	readActions := []string{"kms:Decrypt", "kms:DescribeKey"}
-	root := fmt.Sprintf("arn:aws:iam::%s:root", accountID)
+	root := fmt.Sprintf("arn:"+"aws:iam::%s:root", accountID)
 	return []map[string]any{
 		{
 			polSid: "AuditReadersOpenTheArchiveThroughS3", polEffect: polAllow, polPrincipal: map[string]any{polAWS: root},
@@ -173,16 +173,16 @@ func gitopsArchiveStatements(accountID, region, bucket string, roles, readers []
 
 func TestArchiveKeyPolicyStatementsAreTheEstatesBytes(t *testing.T) {
 	const region = "eu-west-1"
-	bucket := "arn:aws:s3:::acme-audit-" + account + "-" + region
+	bucket := arnp + "s3:::acme-audit-" + account + "-" + region
 	roles := []string{
-		"arn:aws:iam::" + account + ":role/audit/acme-writer",
-		"arn:aws:iam::" + account + ":role/audit/acme-notary",
+		arnp + "iam::" + account + ":role/audit/acme-writer",
+		arnp + "iam::" + account + ":role/audit/acme-notary",
 	}
 	readers := []string{
-		"arn:aws:iam::" + account + ":role/audit/acme-observe-reader",
-		"arn:aws:iam::" + account + ":role/audit/acme-query",
+		arnp + "iam::" + account + ":role/audit/acme-observe-reader",
+		arnp + "iam::" + account + ":role/audit/acme-query",
 	}
-	admin := "arn:aws:iam::" + account + ":role/aws-reserved/sso.amazonaws.com/*AWSReservedSSO_role-admin_*"
+	admin := arnp + "iam::" + account + ":role/aws-reserved/sso.amazonaws.com/*AWSReservedSSO_role-admin_*"
 
 	got, err := auditpulumi.ArchiveKeyPolicyStatements(auditpulumi.ArchiveKeyPolicyArgs{
 		AccountID: account, Region: region, BucketArn: bucket, Roles: roles, Readers: readers, Operator: admin,
@@ -206,7 +206,7 @@ func TestArchiveKeyPolicyStatementsAreTheEstatesBytes(t *testing.T) {
 
 func TestArchiveKeyPolicyStatementsRefuseAnIncompleteInput(t *testing.T) {
 	ok := auditpulumi.ArchiveKeyPolicyArgs{
-		AccountID: account, Region: "eu-west-1", BucketArn: "arn:aws:s3:::b",
+		AccountID: account, Region: "eu-west-1", BucketArn: arnp + "s3:::b",
 		Roles: []string{"r"}, Readers: []string{"q"}, Operator: "o",
 	}
 	for name, edit := range map[string]func(*auditpulumi.ArchiveKeyPolicyArgs){

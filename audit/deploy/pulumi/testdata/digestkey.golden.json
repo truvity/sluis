@@ -20,7 +20,7 @@
             "Action": "kms:*",
             "Effect": "Allow",
             "Principal": {
-              "AWS": "arn:aws:iam::111111111111:root"
+              "AWS": "arn:aws:iam::<account>:root"
             },
             "Resource": "*",
             "Sid": "BackupAccountKeyAdmin"
