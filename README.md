@@ -1,6 +1,6 @@
 # sluis
 
-sluis turns the proofs you already have into short-lived tokens under one policy file. audit keeps a tamper-evident record. One tag, one version.
+sluis federates one identity source, your corporate directory, into every system you run. People, groups and short-lived credentials come from one reviewed policy file, and every decision lands in one tamper-evident audit trail. You change a person's group once, and each system follows.
 
 [![CI](https://github.com/truvity/sluis/actions/workflows/ci.yaml/badge.svg)](https://github.com/truvity/sluis/actions/workflows/ci.yaml)
 [![Release](https://img.shields.io/github/v/release/truvity/sluis?include_prereleases)](https://github.com/truvity/sluis/releases)
@@ -15,13 +15,35 @@ sluis turns the proofs you already have into short-lived tokens under one policy
 | `@truvity/sluis`, `@truvity/audit`, `@truvity/audit-react` | GitHub Packages |
 | GitHub Action | `truvity/sluis@<commit>` |
 
-## Who it is for
+## What it federates
 
-Platform teams that drive tokens, GitHub teams and Slack channels from one reviewed policy file. Applications that need an audit trail an auditor can verify.
+```mermaid
+flowchart LR
+  dir["Corporate directory<br/>people and groups"] --> sluis["sluis<br/>groups and policy"]
+  sluis --> in["Sign-in<br/>Kubernetes, Argo CD, consoles"]
+  sluis --> sync["Membership<br/>GitHub teams, Slack channels"]
+  sluis --> cred["Short-lived credentials<br/>AWS, Cloudflare, OpenBao"]
+  sluis --> aud["audit<br/>one trail"]
+```
+
+| System | What sluis does | How | Guide |
+|---|---|---|---|
+| Google Workspace | reads people and groups | directory reader | [Google Workspace](docs/guides/sluis/connect/google-workspace.md) |
+| Kubernetes API server | sign-in, groups to RBAC roles | OIDC client | [Kubernetes cluster](docs/guides/sluis/connect/kubernetes-cluster.md) |
+| Argo CD, Kargo | sign-in, groups to roles | OIDC client | [Argo CD](docs/guides/sluis/connect/argocd.md), [Kargo](docs/guides/sluis/connect/kargo.md) |
+| Your consoles and applications | sign-in, groups claim | OIDC client | [Console app](docs/guides/sluis/connect/console-app.md) |
+| GitHub organisation | team membership, account linking | reconciler | [GitHub organisation](docs/guides/sluis/connect/github-organisation.md), [account links](docs/guides/sluis/connect/github-account-links.md) |
+| Slack | channel membership | reconciler | [Slack workspace](docs/guides/sluis/connect/slack-workspace.md) |
+| GitHub Actions | short-lived credentials for CI jobs | token exchange | [GitHub Actions](docs/guides/sluis/connect/github-actions.md) |
+| AWS | role mapping, short-lived credentials | token exchange | [AWS account](docs/guides/sluis/connect/aws-account.md) |
+| Cloudflare | short-lived API tokens and R2 credentials | preset | [Cloudflare tokens](docs/guides/sluis/cloudflare-tokens.md) |
+| OpenBao | sign-in, short-lived certificates | token exchange | [OpenBao](docs/guides/sluis/connect/openbao.md) |
+
+[Connect something](docs/guides/sluis/connect/README.md) lists every integration. sluis runs on Kubernetes or AWS Lambda.
 
 ## The model
 
-A policy file maps directory groups and machine identities to groups. sluis mints tokens and reconciles GitHub and Slack from it; audit records what it did. See [concepts](docs/concepts/sluis/concepts.md).
+A policy file maps directory groups and machine identities to groups. sluis mints tokens and reconciles GitHub and Slack from it. See [concepts](docs/concepts/sluis/concepts.md).
 
 ## Install and a worked example
 

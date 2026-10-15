@@ -1,5 +1,7 @@
 # Documentation
 
+sluis federates one identity source, your corporate directory, into every system you run: sign-in, group membership and short-lived credentials, with one audit trail. [The README](https://github.com/truvity/sluis#what-it-federates) lists each system. Every integration is in [connect something](guides/sluis/connect/README.md).
+
 Three products share one repository and one version. The tabs above (Get started, Guides, Reference, Concepts) hold a section for each.
 
 | | What it is | Start at |
