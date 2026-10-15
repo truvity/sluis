@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"slices"
+	"strings"
 	"time"
 
 	"connectrpc.com/connect"
@@ -13,17 +15,32 @@ import (
 	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/backup/job"
 	"github.com/truvity/sluis/internal/backup/restorejob"
+	"github.com/truvity/sluis/internal/backup/rpc"
 	"github.com/truvity/sluis/storage/logattr"
 )
 
 // BackupModule is the backup module and the restore function as the console
-// reads them (*rpc.Client of internal/backup/rpc, which calls them as the
-// caller class `console`). It only reads: the console starts neither a backup
-// nor a restore, and the modules would refuse it.
+// calls them (*rpc.Client of internal/backup/rpc, which calls them as the
+// caller class `console`). It reads, previews a restore and starts a backup for
+// a named person; it starts and resumes no restore, and the modules would
+// refuse it.
 type BackupModule interface {
 	Status(ctx context.Context) (job.Status, error)
 	List(ctx context.Context, limit int) ([]job.Info, error)
 	RestoreStatus(ctx context.Context) (restorejob.Status, error)
+	Run(ctx context.Context, by string, resume bool) (job.Result, error)
+	PreviewRestore(ctx context.Context, backupID string) (rpc.PreviewResponse, error)
+}
+
+// BackupRunners says whether a holder of groups may start a backup: the
+// policy's `backup.runGroups` ([config.PolicyBackup] is one).
+type BackupRunners interface {
+	MayRun(groups []string) bool
+}
+
+// UseBackupRunners sets who may start a backup. Without it nobody may.
+func (s *ConsoleServer) UseBackupRunners(r BackupRunners) {
+	s.console.deps.BackupRunners = r
 }
 
 // UseBackup connects the Backups page to the modules, with the same timing as
@@ -35,6 +52,10 @@ func (s *ConsoleServer) UseBackup(m BackupModule) {
 // backupCallTimeout bounds one call to a module: the page makes three, and a
 // slow cold start of one must not hold the others.
 const backupCallTimeout = 20 * time.Second
+
+// backupRunTimeout bounds a backup run and a restore preview, each of which is
+// one synchronous call that Lambda stops at 15 minutes.
+const backupRunTimeout = 16 * time.Minute
 
 // backupError is a module that could not answer. The message is the transport's
 // and holds no record value.
@@ -126,6 +147,80 @@ func (c *Console) GetRestoreStatus(
 		out.Maintenance = append(out.Maintenance, &directoryrosterv1.ModuleMaintenance{
 			Module: string(m.Module), State: m.State, Since: stamp(m.Since), By: m.By, Unreadable: m.Unreadable,
 		})
+	}
+	return connect.NewResponse(out), nil
+}
+
+// RunBackup implements the runner's contract: a person whose groups the policy
+// names starts a backup, and the module records them as who asked.
+func (c *Console) RunBackup(
+	ctx context.Context, req *connect.Request[directoryrosterv1.RunBackupRequest],
+) (*connect.Response[directoryrosterv1.RunBackupResponse], error) {
+	id, ok := IdentityFrom(ctx)
+	if !ok {
+		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("sign in first"))
+	}
+	// The group is the gate, and nothing else opens it: not the operator role,
+	// which only the groups the policy names are asked to stand in for.
+	if c.deps.BackupRunners == nil || !c.deps.BackupRunners.MayRun(id.Groups) {
+		return nil, connect.NewError(connect.CodePermissionDenied,
+			errors.New("starting a backup needs a group that the policy's backup.runGroups names"))
+	}
+	if c.deps.Backup == nil {
+		return connect.NewResponse(&directoryrosterv1.RunBackupResponse{}), nil
+	}
+	// By is the address, or for a workload the subject: what the audit record
+	// names. A caller with neither is refused rather than recorded as nobody.
+	by := id.Who()
+	if by == "" || id.Source == access.SourceRecovery {
+		return nil, connect.NewError(connect.CodePermissionDenied, errors.New("this sign-in cannot be named in the audit record of a backup"))
+	}
+	// A run is one synchronous call that lasts as long as the backup, so it is
+	// bounded by the module's own limit and not by [backupCallTimeout].
+	ctx, cancel := context.WithTimeout(ctx, backupRunTimeout)
+	defer cancel()
+	c.log().InfoContext(ctx, "a backup was requested through the console", slog.String("by", logattr.Safe(by)))
+	res, err := c.deps.Backup.Run(ctx, by, req.Msg.GetResume())
+	if err != nil {
+		return nil, backupError("the backup module did not answer", err)
+	}
+	return connect.NewResponse(&directoryrosterv1.RunBackupResponse{
+		Available: true, Outcome: res.Outcome, Id: res.ID, Run: backupRun(res.Run),
+	}), nil
+}
+
+// GetRestorePreview implements the operator's contract: counts per section, and
+// no record's name or value.
+func (c *Console) GetRestorePreview(
+	ctx context.Context, req *connect.Request[directoryrosterv1.GetRestorePreviewRequest],
+) (*connect.Response[directoryrosterv1.GetRestorePreviewResponse], error) {
+	if _, err := requireRole(ctx, access.RoleOperator); err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(req.Msg.GetBackupId()) == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("backup_id is required"))
+	}
+	if c.deps.Backup == nil {
+		return connect.NewResponse(&directoryrosterv1.GetRestorePreviewResponse{}), nil
+	}
+	ctx, cancel := context.WithTimeout(ctx, backupRunTimeout)
+	defer cancel()
+	res, err := c.deps.Backup.PreviewRestore(ctx, req.Msg.GetBackupId())
+	if err != nil {
+		return nil, backupError("the restore function did not answer", err)
+	}
+	out := &directoryrosterv1.GetRestorePreviewResponse{
+		Available: true, Outcome: res.Outcome, Error: res.Error, BackupId: res.Backup,
+	}
+	if r := res.Report; r != nil {
+		out.Installation, out.Layout, out.Created = r.Installation, string(r.Layout), r.Created
+		out.BackupId = r.ID
+		for _, s := range r.Sections {
+			out.Sections = append(out.Sections, &directoryrosterv1.RestorePreviewSection{
+				Module: string(s.Module), Section: string(s.Section), Create: int32(s.Create), Overwrite: int32(s.Overwrite),
+				Same: int32(s.Same), Expired: int32(s.Expired), Regenerated: int32(s.Regenerated),
+			})
+		}
 	}
 	return connect.NewResponse(out), nil
 }

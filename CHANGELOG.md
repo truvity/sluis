@@ -1,5 +1,20 @@
 ## Unreleased
 
+### Added
+
+- **`sluisctl backup run|status|list` and `restore preview|status` go through the issuer, with the sign-in `sluisctl login` holds.** The issuer forwards them to the backup module over the transport the installation already uses, as the caller class `console`; no AWS credentials are needed. The console's `BackupService` gains `RunBackup` and `GetRestorePreview` (under `sluis.v1` and the legacy `directoryroster.v1`), and accepts the `sluisctl` client's access token as a bearer for that service only; who the token names is asked of the directory and the policy as for a browser session. `RunBackup` needs a group that the policy's new `backup.runGroups` names (unset lets nobody; the operators group is not implied), is refused while the backup module is under maintenance, and is recorded by the existing `roster.backup.completed` and `.failed` actions with the person as the actor. `GetRestorePreview` is the operator's and answers counts per module and section, never a record's name. The backup module's `backup.run` now also admits the `console` class (`RunRequest` gains `by`, believed from that class only), and the restore function registers `restore.preview` for `console`, `admin` and `breakglass`. `restore start` and `restore resume` stay direct, with the caller's own credentials, so a restore works when the issuer is broken or lost. See [backup: routes](docs/reference/sluis/backup.md#routes).
+- **The issuer serves `/.well-known/sluis-configuration` to a caller that presents an access token it signed.** The document holds `issuer`, `instance`, `backup.endpoint`, `restore.endpoint` and `region`; an endpoint is a URI whose scheme names the transport, and `arn:aws:lambda:<region>:<account>:function:<name>` is the only one `sluisctl` reaches (`k8s://` and `https://` are reserved). A function named by a bare name, or by a cluster URL, is not listed. `sluisctl login` saves it in `backup:` of `config.yaml` as `endpoint`, `restoreEndpoint`, `instance` and `region`. See [discovery](docs/reference/sluis/backup.md#discovery).
+- **`sluisctl backup` and `restore` take `--issuer`, `--endpoint` and `--direct`.** The endpoint is, in order: `--endpoint`, `$SLUISCTL_BACKUP_ENDPOINT` or `$SLUISCTL_RESTORE_ENDPOINT`, the issuer's live document, the copy saved at login; a failed fetch says so on stderr and uses the saved copy. `restore start --confirm` is still held to the instance name saved at login. An endpoint scheme `sluisctl` cannot reach is a usage error. `login` also keeps the access token that comes with the code, so the first command presents it instead of spending the refresh token.
+- **`backup.runGroups` in the policy document** names the groups whose holders may start a backup through the issuer. It is held to the policy's groups. See [policy](docs/reference/sluis/policy.md).
+
+### Changed
+
+- **Signed in, `sluisctl backup run|status|list` and `restore preview|status` go through the issuer instead of invoking the functions.** Pass `--direct` for the old behavior, with your own AWS credentials. `--endpoint`, `--function`, `--profile`, `--region` and `--as breakglass` imply it, and so does having no login. A script that relied on a login being ignored here, and that is not granted a group in `backup.runGroups` (for `run`), now exits 4. `--json` of `backup status` through the issuer reports the last prune's counts, not the ids of the backups it removed.
+
+### Deprecated
+
+- **`--function`, `$SLUISCTL_BACKUP_FUNCTION`, `$SLUISCTL_RESTORE_FUNCTION` and the `function` and `restoreFunction` keys of `backup:` in `config.yaml`** are the old names of `--endpoint`, `$SLUISCTL_BACKUP_ENDPOINT`, `$SLUISCTL_RESTORE_ENDPOINT`, `endpoint` and `restoreEndpoint`. They still work, as an `arn:` endpoint or a bare function name; `--function` warns on stderr.
+
 ## v1.76.10
 
 ### Added

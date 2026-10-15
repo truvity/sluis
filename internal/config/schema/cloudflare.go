@@ -59,6 +59,13 @@ func policyCloudflareSchema() m {
 	})
 }
 
+// policyBackupSchema is the policy document's `backup` section.
+func policyBackupSchema() m {
+	return obj("Who may start a backup through the issuer, from the console or `sluisctl backup run`. Reading the status, the list and a restore needs the viewer role and is not named here. A restore is never started through the issuer.", m{
+		"runGroups": m{"type": "array", "uniqueItems": true, "items": m{"type": "string", "minLength": 1}, "description": "Groups of this policy: every holder may start a backup. Empty or unset lets nobody; the operators group is not implied."},
+	})
+}
+
 // withRotationUnlessOnDemand makes `rotation` required for a stored preset and
 // refused for one with `store: none`, which is never rotated.
 func withRotationUnlessOnDemand(preset m) m {

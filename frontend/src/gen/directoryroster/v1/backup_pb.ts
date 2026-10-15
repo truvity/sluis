@@ -12,7 +12,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file directoryroster/v1/backup.proto.
  */
 export const file_directoryroster_v1_backup: GenFile = /*@__PURE__*/
-  fileDesc("Ch9kaXJlY3Rvcnlyb3N0ZXIvdjEvYmFja3VwLnByb3RvEhJkaXJlY3Rvcnlyb3N0ZXIudjEiGAoWR2V0QmFja3VwU3RhdHVzUmVxdWVzdCL9AQoXR2V0QmFja3VwU3RhdHVzUmVzcG9uc2USEQoJYXZhaWxhYmxlGAEgASgIEi0KBmxhdGVzdBgCIAEoCzIdLmRpcmVjdG9yeXJvc3Rlci52MS5CYWNrdXBSdW4SNQoObGFzdF9jb21wbGV0ZWQYAyABKAsyHS5kaXJlY3Rvcnlyb3N0ZXIudjEuQmFja3VwUnVuEjEKCnVuZmluaXNoZWQYBCABKAsyHS5kaXJlY3Rvcnlyb3N0ZXIudjEuQmFja3VwUnVuEjYKCXJldGVudGlvbhgFIAEoCzIjLmRpcmVjdG9yeXJvc3Rlci52MS5CYWNrdXBSZXRlbnRpb24izwIKCUJhY2t1cFJ1bhIKCgJpZBgBIAEoCRINCgVzdGF0ZRgCIAEoCRIPCgd0cmlnZ2VyGAMgASgJEg8KB2NyZWF0b3IYBCABKAkSKwoHc3RhcnRlZBgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASKwoHdXBkYXRlZBgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLAoIZmluaXNoZWQYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEg8KB21vZHVsZXMYCCABKAUSDwoHcmVjb3JkcxgJIAEoAxIOCgZjaHVua3MYCiABKAUSDwoHcmVzdW1lZBgLIAEoCBIOCgZyZWFzb24YDCABKAkSDQoFZXJyb3IYDSABKAkSDQoFdW5pdHMYDiABKAUSDAoEZG9uZRgPIAEoBSKZAQoPQmFja3VwUmV0ZW50aW9uEiYKAmF0GAEgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIMCgRrZWVwGAIgASgFEg8KB21heF9hZ2UYAyABKAkSDAoEa2VwdBgEIAEoBRIPCgdyZW1vdmVkGAUgASgFEg8KB2NsZWFuZWQYBiABKAUSDwoHcmVmdXNlZBgHIAEoBSIjChJMaXN0QmFja3Vwc1JlcXVlc3QSDQoFbGltaXQYASABKAUiWQoTTGlzdEJhY2t1cHNSZXNwb25zZRIRCglhdmFpbGFibGUYASABKAgSLwoHYmFja3VwcxgCIAMoCzIeLmRpcmVjdG9yeXJvc3Rlci52MS5CYWNrdXBJbmZvIrcBCgpCYWNrdXBJbmZvEgoKAmlkGAEgASgJEisKB2NyZWF0ZWQYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEg8KB2NyZWF0b3IYAyABKAkSDgoGZm9ybWF0GAQgASgFEg4KBmxheW91dBgFIAEoCRIPCgdtb2R1bGVzGAYgASgFEg8KB3JlY29yZHMYByABKAMSDgoGY2h1bmtzGAggASgFEg0KBWVycm9yGAkgASgJIhkKF0dldFJlc3RvcmVTdGF0dXNSZXF1ZXN0IoUCChhHZXRSZXN0b3JlU3RhdHVzUmVzcG9uc2USEQoJYXZhaWxhYmxlGAEgASgIEi4KBmxhdGVzdBgCIAEoCzIeLmRpcmVjdG9yeXJvc3Rlci52MS5SZXN0b3JlUnVuEjIKCnVuZmluaXNoZWQYAyABKAsyHi5kaXJlY3Rvcnlyb3N0ZXIudjEuUmVzdG9yZVJ1bhI2Cg5sYXN0X2NvbXBsZXRlZBgEIAEoCzIeLmRpcmVjdG9yeXJvc3Rlci52MS5SZXN0b3JlUnVuEjoKC21haW50ZW5hbmNlGAUgAygLMiUuZGlyZWN0b3J5cm9zdGVyLnYxLk1vZHVsZU1haW50ZW5hbmNlIuYCCgpSZXN0b3JlUnVuEgoKAmlkGAEgASgJEhEKCWJhY2t1cF9pZBgCIAEoCRINCgVzdGF0ZRgDIAEoCRIRCglvdmVyd3JpdGUYBCABKAgSCgoCYnkYBSABKAkSDAoEbm90ZRgGIAEoCRIrCgdzdGFydGVkGAcgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIrCgd1cGRhdGVkGAggASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIsCghmaW5pc2hlZBgJIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEwoLbWFpbnRlbmFuY2UYCiABKAkSDgoGc2xpY2VzGAsgASgFEg4KBmNyZWF0ZRgMIAEoBRITCgtvdmVyd3JpdHRlbhgNIAEoBRIMCgRzYW1lGA4gASgFEg4KBnJlYXNvbhgPIAEoCRINCgVlcnJvchgQIAEoCSJ9ChFNb2R1bGVNYWludGVuYW5jZRIOCgZtb2R1bGUYASABKAkSDQoFc3RhdGUYAiABKAkSKQoFc2luY2UYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEgoKAmJ5GAQgASgJEhIKCnVucmVhZGFibGUYBSABKAgyygIKDUJhY2t1cFNlcnZpY2USagoPR2V0QmFja3VwU3RhdHVzEiouZGlyZWN0b3J5cm9zdGVyLnYxLkdldEJhY2t1cFN0YXR1c1JlcXVlc3QaKy5kaXJlY3Rvcnlyb3N0ZXIudjEuR2V0QmFja3VwU3RhdHVzUmVzcG9uc2USXgoLTGlzdEJhY2t1cHMSJi5kaXJlY3Rvcnlyb3N0ZXIudjEuTGlzdEJhY2t1cHNSZXF1ZXN0GicuZGlyZWN0b3J5cm9zdGVyLnYxLkxpc3RCYWNrdXBzUmVzcG9uc2USbQoQR2V0UmVzdG9yZVN0YXR1cxIrLmRpcmVjdG9yeXJvc3Rlci52MS5HZXRSZXN0b3JlU3RhdHVzUmVxdWVzdBosLmRpcmVjdG9yeXJvc3Rlci52MS5HZXRSZXN0b3JlU3RhdHVzUmVzcG9uc2VC0QEKFmNvbS5kaXJlY3Rvcnlyb3N0ZXIudjFCC0JhY2t1cFByb3RvUAFaQWdpdGh1Yi5jb20vdHJ1dml0eS9zbHVpcy9nZW4vZGlyZWN0b3J5cm9zdGVyL3YxO2RpcmVjdG9yeXJvc3RlcnYxogIDRFhYqgISRGlyZWN0b3J5cm9zdGVyLlYxygISRGlyZWN0b3J5cm9zdGVyXFYx4gIeRGlyZWN0b3J5cm9zdGVyXFYxXEdQQk1ldGFkYXRh6gITRGlyZWN0b3J5cm9zdGVyOjpWMWIGcHJvdG8z", [file_google_protobuf_timestamp]);
+  fileDesc("Ch9kaXJlY3Rvcnlyb3N0ZXIvdjEvYmFja3VwLnByb3RvEhJkaXJlY3Rvcnlyb3N0ZXIudjEiGAoWR2V0QmFja3VwU3RhdHVzUmVxdWVzdCL9AQoXR2V0QmFja3VwU3RhdHVzUmVzcG9uc2USEQoJYXZhaWxhYmxlGAEgASgIEi0KBmxhdGVzdBgCIAEoCzIdLmRpcmVjdG9yeXJvc3Rlci52MS5CYWNrdXBSdW4SNQoObGFzdF9jb21wbGV0ZWQYAyABKAsyHS5kaXJlY3Rvcnlyb3N0ZXIudjEuQmFja3VwUnVuEjEKCnVuZmluaXNoZWQYBCABKAsyHS5kaXJlY3Rvcnlyb3N0ZXIudjEuQmFja3VwUnVuEjYKCXJldGVudGlvbhgFIAEoCzIjLmRpcmVjdG9yeXJvc3Rlci52MS5CYWNrdXBSZXRlbnRpb24izwIKCUJhY2t1cFJ1bhIKCgJpZBgBIAEoCRINCgVzdGF0ZRgCIAEoCRIPCgd0cmlnZ2VyGAMgASgJEg8KB2NyZWF0b3IYBCABKAkSKwoHc3RhcnRlZBgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASKwoHdXBkYXRlZBgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLAoIZmluaXNoZWQYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEg8KB21vZHVsZXMYCCABKAUSDwoHcmVjb3JkcxgJIAEoAxIOCgZjaHVua3MYCiABKAUSDwoHcmVzdW1lZBgLIAEoCBIOCgZyZWFzb24YDCABKAkSDQoFZXJyb3IYDSABKAkSDQoFdW5pdHMYDiABKAUSDAoEZG9uZRgPIAEoBSKZAQoPQmFja3VwUmV0ZW50aW9uEiYKAmF0GAEgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIMCgRrZWVwGAIgASgFEg8KB21heF9hZ2UYAyABKAkSDAoEa2VwdBgEIAEoBRIPCgdyZW1vdmVkGAUgASgFEg8KB2NsZWFuZWQYBiABKAUSDwoHcmVmdXNlZBgHIAEoBSIjChJMaXN0QmFja3Vwc1JlcXVlc3QSDQoFbGltaXQYASABKAUiWQoTTGlzdEJhY2t1cHNSZXNwb25zZRIRCglhdmFpbGFibGUYASABKAgSLwoHYmFja3VwcxgCIAMoCzIeLmRpcmVjdG9yeXJvc3Rlci52MS5CYWNrdXBJbmZvIrcBCgpCYWNrdXBJbmZvEgoKAmlkGAEgASgJEisKB2NyZWF0ZWQYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEg8KB2NyZWF0b3IYAyABKAkSDgoGZm9ybWF0GAQgASgFEg4KBmxheW91dBgFIAEoCRIPCgdtb2R1bGVzGAYgASgFEg8KB3JlY29yZHMYByABKAMSDgoGY2h1bmtzGAggASgFEg0KBWVycm9yGAkgASgJIhkKF0dldFJlc3RvcmVTdGF0dXNSZXF1ZXN0IoUCChhHZXRSZXN0b3JlU3RhdHVzUmVzcG9uc2USEQoJYXZhaWxhYmxlGAEgASgIEi4KBmxhdGVzdBgCIAEoCzIeLmRpcmVjdG9yeXJvc3Rlci52MS5SZXN0b3JlUnVuEjIKCnVuZmluaXNoZWQYAyABKAsyHi5kaXJlY3Rvcnlyb3N0ZXIudjEuUmVzdG9yZVJ1bhI2Cg5sYXN0X2NvbXBsZXRlZBgEIAEoCzIeLmRpcmVjdG9yeXJvc3Rlci52MS5SZXN0b3JlUnVuEjoKC21haW50ZW5hbmNlGAUgAygLMiUuZGlyZWN0b3J5cm9zdGVyLnYxLk1vZHVsZU1haW50ZW5hbmNlIuYCCgpSZXN0b3JlUnVuEgoKAmlkGAEgASgJEhEKCWJhY2t1cF9pZBgCIAEoCRINCgVzdGF0ZRgDIAEoCRIRCglvdmVyd3JpdGUYBCABKAgSCgoCYnkYBSABKAkSDAoEbm90ZRgGIAEoCRIrCgdzdGFydGVkGAcgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIrCgd1cGRhdGVkGAggASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIsCghmaW5pc2hlZBgJIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEwoLbWFpbnRlbmFuY2UYCiABKAkSDgoGc2xpY2VzGAsgASgFEg4KBmNyZWF0ZRgMIAEoBRITCgtvdmVyd3JpdHRlbhgNIAEoBRIMCgRzYW1lGA4gASgFEg4KBnJlYXNvbhgPIAEoCRINCgVlcnJvchgQIAEoCSJ9ChFNb2R1bGVNYWludGVuYW5jZRIOCgZtb2R1bGUYASABKAkSDQoFc3RhdGUYAiABKAkSKQoFc2luY2UYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEgoKAmJ5GAQgASgJEhIKCnVucmVhZGFibGUYBSABKAgiIgoQUnVuQmFja3VwUmVxdWVzdBIOCgZyZXN1bWUYASABKAgibwoRUnVuQmFja3VwUmVzcG9uc2USEQoJYXZhaWxhYmxlGAEgASgIEg8KB291dGNvbWUYAiABKAkSCgoCaWQYAyABKAkSKgoDcnVuGAQgASgLMh0uZGlyZWN0b3J5cm9zdGVyLnYxLkJhY2t1cFJ1biItChhHZXRSZXN0b3JlUHJldmlld1JlcXVlc3QSEQoJYmFja3VwX2lkGAEgASgJItUBChlHZXRSZXN0b3JlUHJldmlld1Jlc3BvbnNlEhEKCWF2YWlsYWJsZRgBIAEoCBIPCgdvdXRjb21lGAIgASgJEg0KBWVycm9yGAMgASgJEhQKDGluc3RhbGxhdGlvbhgEIAEoCRIRCgliYWNrdXBfaWQYBSABKAkSDgoGbGF5b3V0GAYgASgJEg8KB2NyZWF0ZWQYByABKAkSOwoIc2VjdGlvbnMYCCADKAsyKS5kaXJlY3Rvcnlyb3N0ZXIudjEuUmVzdG9yZVByZXZpZXdTZWN0aW9uIo8BChVSZXN0b3JlUHJldmlld1NlY3Rpb24SDgoGbW9kdWxlGAEgASgJEg8KB3NlY3Rpb24YAiABKAkSDgoGY3JlYXRlGAMgASgFEhEKCW92ZXJ3cml0ZRgEIAEoBRIMCgRzYW1lGAUgASgFEg8KB2V4cGlyZWQYBiABKAUSEwoLcmVnZW5lcmF0ZWQYByABKAUylgQKDUJhY2t1cFNlcnZpY2USagoPR2V0QmFja3VwU3RhdHVzEiouZGlyZWN0b3J5cm9zdGVyLnYxLkdldEJhY2t1cFN0YXR1c1JlcXVlc3QaKy5kaXJlY3Rvcnlyb3N0ZXIudjEuR2V0QmFja3VwU3RhdHVzUmVzcG9uc2USXgoLTGlzdEJhY2t1cHMSJi5kaXJlY3Rvcnlyb3N0ZXIudjEuTGlzdEJhY2t1cHNSZXF1ZXN0GicuZGlyZWN0b3J5cm9zdGVyLnYxLkxpc3RCYWNrdXBzUmVzcG9uc2USbQoQR2V0UmVzdG9yZVN0YXR1cxIrLmRpcmVjdG9yeXJvc3Rlci52MS5HZXRSZXN0b3JlU3RhdHVzUmVxdWVzdBosLmRpcmVjdG9yeXJvc3Rlci52MS5HZXRSZXN0b3JlU3RhdHVzUmVzcG9uc2USWAoJUnVuQmFja3VwEiQuZGlyZWN0b3J5cm9zdGVyLnYxLlJ1bkJhY2t1cFJlcXVlc3QaJS5kaXJlY3Rvcnlyb3N0ZXIudjEuUnVuQmFja3VwUmVzcG9uc2UScAoRR2V0UmVzdG9yZVByZXZpZXcSLC5kaXJlY3Rvcnlyb3N0ZXIudjEuR2V0UmVzdG9yZVByZXZpZXdSZXF1ZXN0Gi0uZGlyZWN0b3J5cm9zdGVyLnYxLkdldFJlc3RvcmVQcmV2aWV3UmVzcG9uc2VC0QEKFmNvbS5kaXJlY3Rvcnlyb3N0ZXIudjFCC0JhY2t1cFByb3RvUAFaQWdpdGh1Yi5jb20vdHJ1dml0eS9zbHVpcy9nZW4vZGlyZWN0b3J5cm9zdGVyL3YxO2RpcmVjdG9yeXJvc3RlcnYxogIDRFhYqgISRGlyZWN0b3J5cm9zdGVyLlYxygISRGlyZWN0b3J5cm9zdGVyXFYx4gIeRGlyZWN0b3J5cm9zdGVyXFYxXEdQQk1ldGFkYXRh6gITRGlyZWN0b3J5cm9zdGVyOjpWMWIGcHJvdG8z", [file_google_protobuf_timestamp]);
 
 /**
  * @generated from message directoryroster.v1.GetBackupStatusRequest
@@ -502,14 +502,200 @@ export const ModuleMaintenanceSchema: GenMessage<ModuleMaintenance> = /*@__PURE_
   messageDesc(file_directoryroster_v1_backup, 10);
 
 /**
- * BackupService is the console's read-only view of the backup module and of the
- * restore function: how the last backups went, what the archive holds, and how
- * a restore stands. It calls the modules as the caller class `console`, which
- * those modules allow to read and nothing else.
+ * @generated from message directoryroster.v1.RunBackupRequest
+ */
+export type RunBackupRequest = Message<"directoryroster.v1.RunBackupRequest"> & {
+  /**
+   * Resume only continues a paused run of format 1 and starts none; since
+   * format 2 it answers idle.
+   *
+   * @generated from field: bool resume = 1;
+   */
+  resume: boolean;
+};
+
+/**
+ * Describes the message directoryroster.v1.RunBackupRequest.
+ * Use `create(RunBackupRequestSchema)` to create a new message.
+ */
+export const RunBackupRequestSchema: GenMessage<RunBackupRequest> = /*@__PURE__*/
+  messageDesc(file_directoryroster_v1_backup, 11);
+
+/**
+ * @generated from message directoryroster.v1.RunBackupResponse
+ */
+export type RunBackupResponse = Message<"directoryroster.v1.RunBackupResponse"> & {
+  /**
+   * Available is false when this deployment has no backup module to ask.
+   *
+   * @generated from field: bool available = 1;
+   */
+  available: boolean;
+
+  /**
+   * Outcome is completed, idle, contended, maintenance or failed.
+   *
+   * @generated from field: string outcome = 2;
+   */
+  outcome: string;
+
+  /**
+   * Id is the run's, empty when none ran.
+   *
+   * @generated from field: string id = 3;
+   */
+  id: string;
+
+  /**
+   * @generated from field: directoryroster.v1.BackupRun run = 4;
+   */
+  run?: BackupRun | undefined;
+};
+
+/**
+ * Describes the message directoryroster.v1.RunBackupResponse.
+ * Use `create(RunBackupResponseSchema)` to create a new message.
+ */
+export const RunBackupResponseSchema: GenMessage<RunBackupResponse> = /*@__PURE__*/
+  messageDesc(file_directoryroster_v1_backup, 12);
+
+/**
+ * @generated from message directoryroster.v1.GetRestorePreviewRequest
+ */
+export type GetRestorePreviewRequest = Message<"directoryroster.v1.GetRestorePreviewRequest"> & {
+  /**
+   * @generated from field: string backup_id = 1;
+   */
+  backupId: string;
+};
+
+/**
+ * Describes the message directoryroster.v1.GetRestorePreviewRequest.
+ * Use `create(GetRestorePreviewRequestSchema)` to create a new message.
+ */
+export const GetRestorePreviewRequestSchema: GenMessage<GetRestorePreviewRequest> = /*@__PURE__*/
+  messageDesc(file_directoryroster_v1_backup, 13);
+
+/**
+ * @generated from message directoryroster.v1.GetRestorePreviewResponse
+ */
+export type GetRestorePreviewResponse = Message<"directoryroster.v1.GetRestorePreviewResponse"> & {
+  /**
+   * Available is false when this deployment has no restore function to ask.
+   *
+   * @generated from field: bool available = 1;
+   */
+  available: boolean;
+
+  /**
+   * Outcome is preview, or refused when the backup could not be previewed.
+   *
+   * @generated from field: string outcome = 2;
+   */
+  outcome: string;
+
+  /**
+   * @generated from field: string error = 3;
+   */
+  error: string;
+
+  /**
+   * @generated from field: string installation = 4;
+   */
+  installation: string;
+
+  /**
+   * @generated from field: string backup_id = 5;
+   */
+  backupId: string;
+
+  /**
+   * @generated from field: string layout = 6;
+   */
+  layout: string;
+
+  /**
+   * @generated from field: string created = 7;
+   */
+  created: string;
+
+  /**
+   * @generated from field: repeated directoryroster.v1.RestorePreviewSection sections = 8;
+   */
+  sections: RestorePreviewSection[];
+};
+
+/**
+ * Describes the message directoryroster.v1.GetRestorePreviewResponse.
+ * Use `create(GetRestorePreviewResponseSchema)` to create a new message.
+ */
+export const GetRestorePreviewResponseSchema: GenMessage<GetRestorePreviewResponse> = /*@__PURE__*/
+  messageDesc(file_directoryroster_v1_backup, 14);
+
+/**
+ * RestorePreviewSection is what a restore would do with one module's section:
+ * counts only, never a record's name or value.
  *
- * There is no method here that starts a backup or a restore, or previews one.
- * A restore is started with `sluisctl` by an administrator or the break-glass
- * role, never through the console. No message carries a value from a record.
+ * @generated from message directoryroster.v1.RestorePreviewSection
+ */
+export type RestorePreviewSection = Message<"directoryroster.v1.RestorePreviewSection"> & {
+  /**
+   * @generated from field: string module = 1;
+   */
+  module: string;
+
+  /**
+   * @generated from field: string section = 2;
+   */
+  section: string;
+
+  /**
+   * @generated from field: int32 create = 3;
+   */
+  create: number;
+
+  /**
+   * @generated from field: int32 overwrite = 4;
+   */
+  overwrite: number;
+
+  /**
+   * @generated from field: int32 same = 5;
+   */
+  same: number;
+
+  /**
+   * @generated from field: int32 expired = 6;
+   */
+  expired: number;
+
+  /**
+   * @generated from field: int32 regenerated = 7;
+   */
+  regenerated: number;
+};
+
+/**
+ * Describes the message directoryroster.v1.RestorePreviewSection.
+ * Use `create(RestorePreviewSectionSchema)` to create a new message.
+ */
+export const RestorePreviewSectionSchema: GenMessage<RestorePreviewSection> = /*@__PURE__*/
+  messageDesc(file_directoryroster_v1_backup, 15);
+
+/**
+ * BackupService is the console's view of the backup module and of the restore
+ * function: how the last backups went, what the archive holds, how a restore
+ * stands, what restoring a backup would do, and a backup run now. It calls the
+ * modules as the caller class `console`, which those modules allow to read, to
+ * preview a restore and to start a backup, and nothing else.
+ *
+ * `sluisctl` calls it with the caller's own sign-in, so a laptop needs no AWS
+ * credentials for these (docs/reference/sluis/backup.md).
+ *
+ * There is no method here that starts or resumes a restore. A restore is
+ * started with `sluisctl` by an administrator or the break-glass role, with
+ * their own credentials, never through the console or the issuer: it must work
+ * when the issuer is broken. No message carries a value from a record.
  *
  * @generated from service directoryroster.v1.BackupService
  */
@@ -548,6 +734,30 @@ export const BackupService: GenService<{
     methodKind: "unary";
     input: typeof GetRestoreStatusRequestSchema;
     output: typeof GetRestoreStatusResponseSchema;
+  },
+  /**
+   * RunBackup writes a backup now, under the backup lease, and answers when the
+   * run ended or another runner held the lease. The caller must hold a group
+   * that the policy's `backup.runGroups` names; the run is audited with who
+   * asked. Anything else is refused as permission denied.
+   *
+   * @generated from rpc directoryroster.v1.BackupService.RunBackup
+   */
+  runBackup: {
+    methodKind: "unary";
+    input: typeof RunBackupRequestSchema;
+    output: typeof RunBackupResponseSchema;
+  },
+  /**
+   * GetRestorePreview reports what restoring a backup would do, as counts per
+   * module and section, and writes nothing. Operator.
+   *
+   * @generated from rpc directoryroster.v1.BackupService.GetRestorePreview
+   */
+  getRestorePreview: {
+    methodKind: "unary";
+    input: typeof GetRestorePreviewRequestSchema;
+    output: typeof GetRestorePreviewResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_directoryroster_v1_backup, 0);

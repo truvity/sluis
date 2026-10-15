@@ -194,6 +194,8 @@ func Route(r *http.Request) string {
 		return "account"
 	case GrantsPath:
 		return "grants"
+	case SluisConfigurationPath:
+		return "sluis_configuration"
 	}
 	switch {
 	case strings.HasPrefix(path, ClientSecretsPath+"/"):

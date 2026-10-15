@@ -28,7 +28,7 @@ sluisctl pg   --address https://openbao.example:8200 -ns staging -- pg_dump orde
 
 sluisctl r2 --service-url https://r2-broker.example.com -- credentials --bucket example-bucket --prefix nix/
 
-sluisctl backup status                          # the backup function, with your AWS credentials
+sluisctl backup status                          # through the issuer you signed in at; --direct uses your AWS credentials
 sluisctl restore start 20261010T020000Z-3fa9c1 --confirm example --wait
 
 sluisctl render --installation installation.yaml --out rendered/   # the service and policy documents
@@ -53,7 +53,7 @@ sluisctl policy render policy/ -o policy.yaml   # the one policy document an ins
 | `exchange` | the raw exchange: a token in, a token for an audience out | below |
 | `bao`, `r2` (deprecated), `psql`, `pg`, `ssh known-hosts` | authenticate, then run another program | [wrappers](sluisctl-wrappers.md) |
 | `clients rotate\|show\|purge` | look after a generated client's secret | [clients](#clients-rotate-show-purge) |
-| `backup run\|status\|list`, `restore preview\|start\|resume\|status` | invoke the backup and restore functions | [backup](#backup-and-restore) |
+| `backup run\|status\|list`, `restore preview\|start\|resume\|status` | through the issuer, or invoke the backup and restore functions | [backup](#backup-and-restore) |
 | `render` | an installation in, the service and policy documents out | [render](#render-an-installation-in-the-two-documents-out) |
 | `policy render` | the one policy document an installation reads, from its layers | [policy render](#policy-render-the-one-policy-document) |
 
@@ -62,7 +62,7 @@ sluisctl policy render policy/ -o policy.yaml   # the one policy document an ins
 | Source | `usage` in `cmd/sluisctl/main.go` |
 | Shared flags | `--audience`, `--issuer`, `--client`; the client defaults to what `login` wrote. `aws` also takes `--role` |
 | Issuer choice | `--issuer`, else `$SLUISCTL_ISSUER`, else the `issuer:` key of `config.yaml` (these three pin the issuer), else the one issuer with a live session. When none is pinned and more than one issuer has a live session, the command exits 2 and lists them, rather than using the most recent login. A session counts as live if its file parses, holds a refresh token and does not record an expiry in the past. With no live session the last login is used, so the error is "not signed in". `login` without `--issuer` uses the pin, else the last login |
-| `login` | Authorization code with PKCE on a loopback port. The policy client is `kind: public` with a loopback redirect and `sign_in_exchange: true`, else later commands exit 4 |
+| `login` | Authorization code with PKCE on a loopback port. The policy client is `kind: public` with a loopback redirect and `sign_in_exchange: true`, else later commands exit 4. Then it saves the issuer's `/.well-known/sluis-configuration` in `backup:` of `config.yaml`, when the issuer serves one; a failure does not fail the sign-in |
 | `version` | `sluisctl <version>`, or `sluisctl dev` without release ldflags, with commit and date when stamped. `--json` prints `{"version","commit","date"}`. No network, config or `HOME` |
 | `token --show` | Prints the claims of the token it was just issued, not the token: `iss`, `sub`, `aud`, `groups`, `exp` and `iat` as UTC times, then any other claim under `claims`. Decoded locally, not verified; never the compact token or its signature. YAML, or `--format json` |
 | `github-token` | `--app <id>`, `--repository <name>` (repeatable; none needs an all-repositories grant), `--permission <name>=<level>` (repeatable; none asks for the grant), `--json` prints `{"token","expires_at","repositories","permissions"}`. See [GitHub App tokens](../../guides/sluis/connect/github-app-tokens.md) |
@@ -183,15 +183,20 @@ sluisctl restore status
 
 | Detail | Behavior |
 |---|---|
-| Credentials | The caller's own AWS credentials, the SDK's default chain, so a profile from `aws-config` works. No issuer, session or console. `--profile` and `--region` override |
-| Function | `--function`, else `$SLUISCTL_BACKUP_FUNCTION` or `$SLUISCTL_RESTORE_FUNCTION`, else `backup.function` or `backup.restoreFunction` in `config.yaml`; `backup.region` and `backup.instance` too. Addresses, no secret |
-| Class | `--as admin` (default) or `breakglass`: every call goes through the alias `live-<class>` |
+| Route | Signed in (the issuer from `--issuer`, `$SLUISCTL_ISSUER`, `issuer:` or the one live session), `backup run\|status\|list` and `restore preview\|status` go through the issuer with the login's token. No AWS credentials. `--direct` uses the caller's own AWS credentials, the SDK's default chain, so a profile from `aws-config` works. So do `--endpoint`, `--function`, `--profile`, `--region` and `--as breakglass`, which imply `--direct`. Without a login every command is direct. See [routes](backup.md#routes) |
+| Always direct | `restore start` and `restore resume` never go through the issuer, so a restore works when the issuer is broken or lost |
+| Issuer refusals | `4` for a group the policy does not name (`backup run` needs `backup.runGroups`) or a role short of viewer or operator; `3` when not signed in; `5` when the issuer cannot be reached. `--direct` is the way round an issuer without a backup module |
+| Endpoint | `--endpoint`, else `$SLUISCTL_BACKUP_ENDPOINT` or `$SLUISCTL_RESTORE_ENDPOINT`, else the issuer's live [document](backup.md#discovery), else `backup.endpoint` or `backup.restoreEndpoint` in `config.yaml`, which `login` saves. A failed fetch says so on stderr and uses the saved copy. A Lambda function ARN is the only transport implemented; another scheme exits 2 |
+| Old names | `--function` is a deprecated alias of `--endpoint`. `$SLUISCTL_BACKUP_FUNCTION`, `$SLUISCTL_RESTORE_FUNCTION` and the `function` and `restoreFunction` keys still work, as an `arn:` endpoint or a bare function name |
+| Saved | `backup.instance` and `backup.region` too. Addresses, no secret. `--region` overrides the region, which is otherwise the endpoint's |
+| Class | `--as admin` (default) or `breakglass`: every direct call goes through the alias `live-<class>` |
 | Backup | Module calls `backup.run` (synchronous; `--resume` answers `idle` since format 2), `backup.status`, `backup.list`. Verifying a backup is `sluis backup verify`, with the backup document ([backup](backup.md#commands)) |
-| `restore preview` | A synchronous restore event with `preview`: counts per module and section, names in `--json`, never values |
-| `restore start` | Refuses unless `--confirm` equals the instance (`--instance`, `$SLUISCTL_INSTANCE`, `backup.instance`). Sends the event asynchronously with `by` set to the caller's `sts:GetCallerIdentity` ARN, then looks up the run and prints its id. `--wait` polls `restore.status` every 5 seconds until `completed`, or `failed` (exit 1) |
+| `--json` | The same shape on both routes. Through the issuer, `retention` in `backup status` holds the counts in the text, not the ids of the backups removed |
+| `restore preview` | Counts per module and section. Direct, a synchronous restore event with `preview`, names in `--json`; through the issuer, never names, and a refusal without its cause |
+| `restore start` | Refuses unless `--confirm` equals the instance (`--instance`, `$SLUISCTL_INSTANCE`, `backup.instance` as `login` saved it, else the issuer's live document). Sends the event asynchronously with `by` set to the caller's `sts:GetCallerIdentity` ARN, then looks up the run and prints its id. `--wait` polls `restore.status` every 5 seconds until `completed`, or `failed` (exit 1) |
 | `backup run --resume` | Only continues a paused run, and since format 2 none pauses: it answers `idle` and starts no backup. Kept for old scripts |
 | `restore resume` | Does nothing when no restore is unfinished |
-| IAM | `lambda:InvokeFunction` on the function's `live-admin` or `live-breakglass` alias; a refusal exits 4 |
+| IAM | Direct only: `lambda:InvokeFunction` on the function's `live-admin` or `live-breakglass` alias; a refusal exits 4 |
 | Output | Text, or `--json`; never a secret |
 
 ## Exit codes

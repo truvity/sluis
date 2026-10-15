@@ -163,6 +163,10 @@ type ConsoleDeps struct {
 	// modcall as the caller class `console`. Nil is a deployment with neither
 	// and no Backups page; it is connected late, by [ConsoleServer.UseBackup].
 	Backup BackupModule
+	// BackupRunners says who may start a backup: the policy's
+	// `backup.runGroups`. Nil lets nobody; it is set by
+	// [ConsoleServer.UseBackupRunners].
+	BackupRunners BackupRunners
 	// WebhookHTTP sends the signed ping a webhook rotation checks a new
 	// target with. Nil is a client with a short timeout that follows no
 	// redirect, so a target that moves counts as one that refused.

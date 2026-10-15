@@ -2179,6 +2179,22 @@
           },
           "type": "object"
         },
+        "backup": {
+          "additionalProperties": false,
+          "description": "Who may start a backup through the issuer, from the console or `sluisctl backup run`. Reading the status, the list and a restore needs the viewer role and is not named here. A restore is never started through the issuer.",
+          "properties": {
+            "runGroups": {
+              "description": "Groups of this policy: every holder may start a backup. Empty or unset lets nobody; the operators group is not implied.",
+              "items": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "type": "array",
+              "uniqueItems": true
+            }
+          },
+          "type": "object"
+        },
         "claims": {
           "additionalProperties": {
             "description": "A claims fragment: merged into the token (docs/reference/sluis/policy.md#claims).",

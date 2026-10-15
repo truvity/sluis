@@ -1,6 +1,6 @@
 # Backup
 
-The backup module writes the installation, encrypted with age, to S3 ([ADR 0071](../../decisions/0071-least-privilege-modules-one-credential-holder-per-function.md), [ADR 0072](../../decisions/0072-storage-layout-v5-module-first.md), [ADR 0073](../../decisions/0073-backup-format-2-age-encrypted-tar.md)).
+The backup module writes the installation to S3, age-encrypted ([ADR 0071](../../decisions/0071-least-privilege-modules-one-credential-holder-per-function.md), [ADR 0072](../../decisions/0072-storage-layout-v5-module-first.md), [ADR 0073](../../decisions/0073-backup-format-2-age-encrypted-tar.md)).
 
 ## Configuration
 
@@ -73,7 +73,40 @@ age -d -i key.txt 20261013T020000Z-ab12cd.tar.gz.age | tar xz
 | `{"kind":"restore","resume":true}` | the function itself, admin, breakglass | Continues the unfinished restore; `idle` when none |
 | `{"kind":"restore","backup":"<id>","preview":true}` | admin, breakglass; invoke synchronously | The preview report |
 | `restore.status` | console, admin, breakglass | `latest`, `unfinished`, `lastCompleted`, `maintenance` |
+| `restore.preview` | console, admin, breakglass | The preview report as counts per module and section. Without record names; a refusal carries no cause |
 | Audit | `roster.restore.started`, `.completed`, `.failed` | Counts and a reason, never a value |
+
+## Routes
+
+| Route | Credentials | Commands | Who may |
+|---|---|---|---|
+| Through the issuer | The `sluisctl login` token. The issuer calls the module as `console`, over the module transport the installation already uses | `backup run\|status\|list`, `restore preview\|status` | Status, list and `restore status`: the viewer role. `restore preview`: the operator role. `backup run`: a group in `backup.runGroups` of the policy |
+| Direct | The caller's own AWS credentials, as `admin` or `breakglass` | Every command | IAM on the function's `live-<class>` alias |
+| Direct only | The same | `restore start`, `restore resume` | The same. They work when the issuer is broken or lost |
+
+| Policy key | Meaning |
+|---|---|
+| `backup.runGroups` | Groups of the policy whose holders may start a backup through the issuer. Unset lets nobody. The operators group is not implied |
+
+| Detail | Behavior |
+|---|---|
+| Served | The console's `BackupService`, to the `sluisctl` client's bearer token and to no other service |
+| Maintenance | `RunBackup` is refused while the backup module is under maintenance |
+| Long runs | `RunBackup` waits for the run. Behind a gateway with a shorter limit (an HTTP API in front of a Lambda issuer has 30 seconds) the caller sees a timeout while the run goes on in the function. Read `backup status`, or run `--direct` |
+| Restore | No call of the console or the issuer starts or resumes a restore |
+
+## Discovery
+
+| Detail | Behavior |
+|---|---|
+| Endpoint | `GET /.well-known/sluis-configuration` on the issuer |
+| Callers | An access token the issuer signed. Anyone else gets `401`. An issuer without `console.backup` answers `404` |
+| `issuer` | The issuer's URL |
+| `instance` | `instance`, else `release`, else `sluis`. `restore start --confirm` must equal it |
+| `backup.endpoint`, `restore.endpoint` | A URI whose scheme names the transport. `arn:aws:lambda:<region>:<account>:function:<name>` is the only one `sluisctl` reaches. `k8s://` and `https://` are reserved, and refused as a usage error |
+| `region` | The region of a Lambda endpoint |
+| Not listed | A bare function name in `console.backup.function`, and `console.backup.url`: a laptop cannot invoke either |
+| `sluisctl` | `login` saves the document in `backup:` of `config.yaml`. A direct command fetches it again, and falls back to the saved copy with a note on stderr |
 
 ## Runs
 
@@ -91,7 +124,7 @@ age -d -i key.txt 20261013T020000Z-ab12cd.tar.gz.age | tar xz
 | `{"kind":"backup","resume":true}` | a `<function>-resume` schedule left by an earlier release (an apply of v1.76.5 or later deletes it) | `idle`, touching nothing |
 | `backup.status` | console, admin, breakglass | `latest`, `lastCompleted`, `unfinished`, `retention` |
 | `backup.list` | console, admin, breakglass | `backups`, newest first; `limit` |
-| `backup.run` | admin, breakglass | A run's result; `resume` answers `idle` |
+| `backup.run` | console, admin, breakglass | A run's result; `resume` answers `idle`. From `console`, `by` names the person: the issuer checked their group first, and the audit records name them. From `admin` and `breakglass`, `by` is ignored and the actor is the workload `lambda:<class>` |
 | Audit | `roster.backup.completed`, `.failed`, `.pruned` ([audit actions](audit-actions.md)) | Counts and a reason, never a value |
 
 ## On Kubernetes

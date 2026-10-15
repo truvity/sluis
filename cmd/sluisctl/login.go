@@ -107,6 +107,10 @@ func login(args []string) error {
 	// over a feature it never opted into.
 	refreshKnownHostsAfterLogin(cfg)
 
+	// Best-effort as well: where the installation's backup and restore
+	// functions are, saved for `sluisctl backup` and `restore`.
+	loginAfterBackup(context.Background(), cfg)
+
 	who := session.Email
 	if who == "" {
 		who = session.Subject
@@ -200,6 +204,7 @@ func redeem(ctx context.Context, cfg Config, code, verifier, redirect string) (S
 
 	var granted struct {
 		RefreshToken string `json:"refresh_token"`
+		AccessToken  string `json:"access_token"`
 		IDToken      string `json:"id_token"`
 		ExpiresIn    int64  `json:"expires_in"`
 	}
@@ -214,6 +219,13 @@ func redeem(ctx context.Context, cfg Config, code, verifier, redirect string) (S
 	}
 
 	session := Session{RefreshToken: granted.RefreshToken}
+	// The access token that came with the code is kept, as a refresh would keep
+	// it: the first command then presents it instead of spending the refresh
+	// token for one just like it.
+	if granted.AccessToken != "" && granted.ExpiresIn > 0 {
+		session.AccessToken = granted.AccessToken
+		session.AccessExpires = time.Now().Add(time.Duration(granted.ExpiresIn) * time.Second)
+	}
 	// The ID token is read for the person's own name only, and is not
 	// verified here: it was just received over TLS from the issuer this
 	// process chose, and nothing is authorized on it.

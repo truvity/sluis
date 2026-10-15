@@ -306,6 +306,7 @@ func policySchema() m {
 		"apps":             policyAppsSchema(),
 		"controllers":      policyControllersSchema(),
 		"cloudflare":       policyCloudflareSchema(),
+		"backup":           policyBackupSchema(),
 	}
 	return document("policy", "sluis policy",
 		"The policy document: what an installation decides, read by every process of it. The access model's tables (docs/reference/sluis/policy.md) and beside them whom the exchange trusts, what an operator may make, what each controller may change and what is copied out. Rendered by `sluisctl policy render` from layers; a process reads exactly one. Nothing here is a secret.",

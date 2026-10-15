@@ -28,3 +28,23 @@ func TestTheConsoleClientReadsTheThreeMethods(t *testing.T) {
 		t.Errorf("restore status = %+v, %v", st, err)
 	}
 }
+
+// The client starts a backup naming the person, and previews a restore, as the
+// console, through the servers the modules register.
+func TestTheConsoleClientRunsABackupForAPersonAndPreviewsARestore(t *testing.T) {
+	f := &fake{}
+	back := modcall.NewServer(rpc.Module)
+	rpc.Register(back, f)
+	rest := modcall.NewServer(rpc.RestoreModule)
+	rpc.RegisterRestore(rest, restoreFake{})
+	c := rpc.NewClient(modcall.Local{rpc.Module: back, rpc.RestoreModule: rest}.As(rpc.CallerConsole))
+
+	res, err := c.Run(t.Context(), "ada@example.com", false)
+	if err != nil || res.ID == "" || f.ran == nil || f.ran.Actor.ID != "ada@example.com" {
+		t.Errorf("run = %+v, %v, %+v", res, err, f.ran)
+	}
+	p, err := c.PreviewRestore(t.Context(), "20261010T020000Z-a1b2c3")
+	if err != nil || p.Report == nil || p.Report.Totals().Create != 2 {
+		t.Errorf("preview = %+v, %v", p, err)
+	}
+}

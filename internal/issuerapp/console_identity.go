@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/truvity/sluis/internal/access"
+	"github.com/truvity/sluis/internal/emailaddr"
 	"github.com/truvity/sluis/internal/issuer"
 	"github.com/truvity/sluis/policy"
 )
@@ -65,5 +66,23 @@ func signedIn(read func(http.ResponseWriter, *http.Request) (issuer.SSOSession, 
 			Subject: session.Identity,
 			Source:  access.SourceOIDC,
 		}, true
+	}
+}
+
+// personBearer turns the subject of a CLI access token into the person it
+// names. Only an address qualifies: a workload's exchanged token has a subject
+// that is not one, and a recovery sign-in is not read here (recovery has its
+// own door, the browser).
+func personBearer(read func(*http.Request) (string, bool)) func(*http.Request) (access.Principal, bool) {
+	return func(r *http.Request) (access.Principal, bool) {
+		subject, ok := read(r)
+		if !ok {
+			return access.Principal{}, false
+		}
+		email := strings.ToLower(strings.TrimSpace(subject))
+		if _, ok := emailaddr.Domain(email); !ok || strings.ContainsFunc(email, func(r rune) bool { return r < 0x20 || r == 0x7f || r == ' ' }) {
+			return access.Principal{}, false
+		}
+		return access.Principal{Email: email, Subject: subject, Source: access.SourceOIDC}, true
 	}
 }

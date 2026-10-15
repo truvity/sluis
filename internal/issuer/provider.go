@@ -203,11 +203,7 @@ func HandlerWithSignIn(iss *Issuer, storage op.Storage, signIn SignInDeps) (http
 	// only today's algorithm, for the same reason [Provider] uses it: this
 	// verifier's real defence is [keySetOf], which only ever accepts a
 	// signature one of this issuer's own published keys produces.
-	verifier := op.NewAccessTokenVerifier(
-		iss.Config().URL,
-		keySetOf(storage),
-		op.WithSupportedAccessTokenSigningAlgorithms(signer.SigningAlgorithmStrings()...),
-	)
+	verifier := accessTokenVerifier(iss, storage)
 	sessionsService := NewSessionsService(iss, verifier, signIn.Secure)
 	sessionsService.announce = signIn.Announce
 	if concrete, ok := storage.(*Storage); ok {
@@ -225,6 +221,12 @@ func HandlerWithSignIn(iss *Issuer, storage op.Storage, signIn SignInDeps) (http
 			return "", nil, err
 		}
 		return claims.Subject, groupsOf(claims), nil
+	}))
+	// Where the installation's backup and restore functions are, for a caller
+	// that is signed in. The same verifier: any token this issuer signed.
+	mux.Handle("GET "+SluisConfigurationPath, sluisConfigurationHandler(iss, func(ctx context.Context, bearer string) error {
+		_, err := op.VerifyAccessToken[*oidc.AccessTokenClaims](ctx, bearer, verifier)
+		return err
 	}))
 	// An operator's rotation, look and purge of a generated client's secret.
 	// The same verifier again; the groups in the token are what admit it.
@@ -933,4 +935,16 @@ func mountSessions(mux *http.ServeMux, service accessissuerv1connect.SessionServ
 	mux.Handle(path, sessions)
 	mux.Handle("/"+sluisv1connect.SessionServiceName+"/",
 		connectalias.Rewrite(sessions, sluisv1connect.SessionServiceName, accessissuerv1connect.SessionServiceName))
+}
+
+// accessTokenVerifier checks the access tokens this issuer signed, against its
+// own keys. It is one function so that the session service, the operator
+// endpoints, the discovery document and the console's bearer reader cannot come
+// to accept different tokens.
+func accessTokenVerifier(iss *Issuer, storage op.Storage) *op.AccessTokenVerifier {
+	return op.NewAccessTokenVerifier(
+		iss.Config().URL,
+		keySetOf(storage),
+		op.WithSupportedAccessTokenSigningAlgorithms(signer.SigningAlgorithmStrings()...),
+	)
 }

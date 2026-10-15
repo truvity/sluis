@@ -42,6 +42,11 @@ const (
 	// BackupServiceGetRestoreStatusProcedure is the fully-qualified name of the BackupService's
 	// GetRestoreStatus RPC.
 	BackupServiceGetRestoreStatusProcedure = "/directoryroster.v1.BackupService/GetRestoreStatus"
+	// BackupServiceRunBackupProcedure is the fully-qualified name of the BackupService's RunBackup RPC.
+	BackupServiceRunBackupProcedure = "/directoryroster.v1.BackupService/RunBackup"
+	// BackupServiceGetRestorePreviewProcedure is the fully-qualified name of the BackupService's
+	// GetRestorePreview RPC.
+	BackupServiceGetRestorePreviewProcedure = "/directoryroster.v1.BackupService/GetRestorePreview"
 )
 
 // BackupServiceClient is a client for the directoryroster.v1.BackupService service.
@@ -57,6 +62,14 @@ type BackupServiceClient interface {
 	// GetRestoreStatus is the latest restore, one that is running or paused,
 	// and the modules whose maintenance flag is set. Viewer.
 	GetRestoreStatus(context.Context, *connect.Request[v1.GetRestoreStatusRequest]) (*connect.Response[v1.GetRestoreStatusResponse], error)
+	// RunBackup writes a backup now, under the backup lease, and answers when the
+	// run ended or another runner held the lease. The caller must hold a group
+	// that the policy's `backup.runGroups` names; the run is audited with who
+	// asked. Anything else is refused as permission denied.
+	RunBackup(context.Context, *connect.Request[v1.RunBackupRequest]) (*connect.Response[v1.RunBackupResponse], error)
+	// GetRestorePreview reports what restoring a backup would do, as counts per
+	// module and section, and writes nothing. Operator.
+	GetRestorePreview(context.Context, *connect.Request[v1.GetRestorePreviewRequest]) (*connect.Response[v1.GetRestorePreviewResponse], error)
 }
 
 // NewBackupServiceClient constructs a client for the directoryroster.v1.BackupService service. By
@@ -88,14 +101,28 @@ func NewBackupServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(backupServiceMethods.ByName("GetRestoreStatus")),
 			connect.WithClientOptions(opts...),
 		),
+		runBackup: connect.NewClient[v1.RunBackupRequest, v1.RunBackupResponse](
+			httpClient,
+			baseURL+BackupServiceRunBackupProcedure,
+			connect.WithSchema(backupServiceMethods.ByName("RunBackup")),
+			connect.WithClientOptions(opts...),
+		),
+		getRestorePreview: connect.NewClient[v1.GetRestorePreviewRequest, v1.GetRestorePreviewResponse](
+			httpClient,
+			baseURL+BackupServiceGetRestorePreviewProcedure,
+			connect.WithSchema(backupServiceMethods.ByName("GetRestorePreview")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // backupServiceClient implements BackupServiceClient.
 type backupServiceClient struct {
-	getBackupStatus  *connect.Client[v1.GetBackupStatusRequest, v1.GetBackupStatusResponse]
-	listBackups      *connect.Client[v1.ListBackupsRequest, v1.ListBackupsResponse]
-	getRestoreStatus *connect.Client[v1.GetRestoreStatusRequest, v1.GetRestoreStatusResponse]
+	getBackupStatus   *connect.Client[v1.GetBackupStatusRequest, v1.GetBackupStatusResponse]
+	listBackups       *connect.Client[v1.ListBackupsRequest, v1.ListBackupsResponse]
+	getRestoreStatus  *connect.Client[v1.GetRestoreStatusRequest, v1.GetRestoreStatusResponse]
+	runBackup         *connect.Client[v1.RunBackupRequest, v1.RunBackupResponse]
+	getRestorePreview *connect.Client[v1.GetRestorePreviewRequest, v1.GetRestorePreviewResponse]
 }
 
 // GetBackupStatus calls directoryroster.v1.BackupService.GetBackupStatus.
@@ -113,6 +140,16 @@ func (c *backupServiceClient) GetRestoreStatus(ctx context.Context, req *connect
 	return c.getRestoreStatus.CallUnary(ctx, req)
 }
 
+// RunBackup calls directoryroster.v1.BackupService.RunBackup.
+func (c *backupServiceClient) RunBackup(ctx context.Context, req *connect.Request[v1.RunBackupRequest]) (*connect.Response[v1.RunBackupResponse], error) {
+	return c.runBackup.CallUnary(ctx, req)
+}
+
+// GetRestorePreview calls directoryroster.v1.BackupService.GetRestorePreview.
+func (c *backupServiceClient) GetRestorePreview(ctx context.Context, req *connect.Request[v1.GetRestorePreviewRequest]) (*connect.Response[v1.GetRestorePreviewResponse], error) {
+	return c.getRestorePreview.CallUnary(ctx, req)
+}
+
 // BackupServiceHandler is an implementation of the directoryroster.v1.BackupService service.
 type BackupServiceHandler interface {
 	// GetBackupStatus is the latest backup run and its state, the newest
@@ -126,6 +163,14 @@ type BackupServiceHandler interface {
 	// GetRestoreStatus is the latest restore, one that is running or paused,
 	// and the modules whose maintenance flag is set. Viewer.
 	GetRestoreStatus(context.Context, *connect.Request[v1.GetRestoreStatusRequest]) (*connect.Response[v1.GetRestoreStatusResponse], error)
+	// RunBackup writes a backup now, under the backup lease, and answers when the
+	// run ended or another runner held the lease. The caller must hold a group
+	// that the policy's `backup.runGroups` names; the run is audited with who
+	// asked. Anything else is refused as permission denied.
+	RunBackup(context.Context, *connect.Request[v1.RunBackupRequest]) (*connect.Response[v1.RunBackupResponse], error)
+	// GetRestorePreview reports what restoring a backup would do, as counts per
+	// module and section, and writes nothing. Operator.
+	GetRestorePreview(context.Context, *connect.Request[v1.GetRestorePreviewRequest]) (*connect.Response[v1.GetRestorePreviewResponse], error)
 }
 
 // NewBackupServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -153,6 +198,18 @@ func NewBackupServiceHandler(svc BackupServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(backupServiceMethods.ByName("GetRestoreStatus")),
 		connect.WithHandlerOptions(opts...),
 	)
+	backupServiceRunBackupHandler := connect.NewUnaryHandler(
+		BackupServiceRunBackupProcedure,
+		svc.RunBackup,
+		connect.WithSchema(backupServiceMethods.ByName("RunBackup")),
+		connect.WithHandlerOptions(opts...),
+	)
+	backupServiceGetRestorePreviewHandler := connect.NewUnaryHandler(
+		BackupServiceGetRestorePreviewProcedure,
+		svc.GetRestorePreview,
+		connect.WithSchema(backupServiceMethods.ByName("GetRestorePreview")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/directoryroster.v1.BackupService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case BackupServiceGetBackupStatusProcedure:
@@ -161,6 +218,10 @@ func NewBackupServiceHandler(svc BackupServiceHandler, opts ...connect.HandlerOp
 			backupServiceListBackupsHandler.ServeHTTP(w, r)
 		case BackupServiceGetRestoreStatusProcedure:
 			backupServiceGetRestoreStatusHandler.ServeHTTP(w, r)
+		case BackupServiceRunBackupProcedure:
+			backupServiceRunBackupHandler.ServeHTTP(w, r)
+		case BackupServiceGetRestorePreviewProcedure:
+			backupServiceGetRestorePreviewHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -180,4 +241,12 @@ func (UnimplementedBackupServiceHandler) ListBackups(context.Context, *connect.R
 
 func (UnimplementedBackupServiceHandler) GetRestoreStatus(context.Context, *connect.Request[v1.GetRestoreStatusRequest]) (*connect.Response[v1.GetRestoreStatusResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("directoryroster.v1.BackupService.GetRestoreStatus is not implemented"))
+}
+
+func (UnimplementedBackupServiceHandler) RunBackup(context.Context, *connect.Request[v1.RunBackupRequest]) (*connect.Response[v1.RunBackupResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("directoryroster.v1.BackupService.RunBackup is not implemented"))
+}
+
+func (UnimplementedBackupServiceHandler) GetRestorePreview(context.Context, *connect.Request[v1.GetRestorePreviewRequest]) (*connect.Response[v1.GetRestorePreviewResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("directoryroster.v1.BackupService.GetRestorePreview is not implemented"))
 }
