@@ -22,13 +22,25 @@ func TestABearerFromTheIssuerOpensTheBackupServiceOnly(t *testing.T) {
 		return access.Principal{Email: "ada@example.com", Subject: "ada@example.com", Source: access.SourceOIDC}, true
 	})
 	for path, want := range map[string]bool{
-		"/" + sluisv1connect.BackupServiceName + "/RunBackup":                 true,
-		"/" + directoryrosterv1connect.BackupServiceName + "/GetBackupStatus": true,
-		"/" + sluisv1connect.AccessServiceName + "/ListHolders":               false,
-		"/" + sluisv1connect.CloudflareServiceName + "/ListCloudflare":        false,
-		"/" + sluisv1connect.BackupServiceName:                                false,
-		"/.access/whoami":                                                     false,
-		"/":                                                                   false,
+		"/" + sluisv1connect.BackupServiceName + "/../" + sluisv1connect.AccessServiceName + "/ListHolders":                    false,
+		"/" + sluisv1connect.BackupServiceName + "/%2e%2e/" + sluisv1connect.AccessServiceName + "/ListHolders":                false,
+		"/" + sluisv1connect.BackupServiceName + "/..%2f" + sluisv1connect.AccessServiceName + "/ListHolders":                  false,
+		"/" + sluisv1connect.BackupServiceName + "%2f..%2f" + sluisv1connect.AccessServiceName + "/ListHolders":                false,
+		"/" + sluisv1connect.BackupServiceName + "/GetBackupStatus/../../" + sluisv1connect.AccessServiceName + "/ListHolders": false,
+		"/" + sluisv1connect.BackupServiceName + "//GetBackupStatus":                                                           false,
+		"/" + sluisv1connect.BackupServiceName + "/GetBackupStatus/":                                                           false,
+		"/" + sluisv1connect.BackupServiceName + "/GetBackupStatus/x":                                                          false,
+		"/" + sluisv1connect.BackupServiceName + "/Get%42ackupStatus":                                                          false,
+		"/" + sluisv1connect.BackupServiceName + "x/GetBackupStatus":                                                           false,
+		"/x" + sluisv1connect.BackupServiceName + "/GetBackupStatus":                                                           false,
+		"/console/" + sluisv1connect.BackupServiceName + "/GetBackupStatus":                                                    false,
+		"/" + sluisv1connect.BackupServiceName + "/RunBackup":                                                                  true,
+		"/" + directoryrosterv1connect.BackupServiceName + "/GetBackupStatus":                                                  true,
+		"/" + sluisv1connect.AccessServiceName + "/ListHolders":                                                                false,
+		"/" + sluisv1connect.CloudflareServiceName + "/ListCloudflare":                                                         false,
+		"/" + sluisv1connect.BackupServiceName:                                                                                 false,
+		"/.access/whoami":                                                                                                      false,
+		"/":                                                                                                                    false,
 	} {
 		before := asked
 		p, ok := server.principal(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, path, nil))

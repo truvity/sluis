@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/truvity/sluis/internal/modcall"
 )
@@ -289,4 +290,46 @@ func mustJSON(t *testing.T, v any) []byte {
 		t.Fatal(err)
 	}
 	return b
+}
+
+// A call in this process starts and the caller goes on; the callee runs to its
+// end in the background, as the class that called.
+func TestStartRunsTheCalleeInTheBackgroundAsTheCallersClass(t *testing.T) {
+	s := modcall.NewServer("slow")
+	got := make(chan string, 1)
+	release := make(chan struct{})
+	modcall.Handle(s, "run", func(ctx context.Context, _ struct{}) (struct{}, error) {
+		<-release
+		got <- modcall.CallerOf(ctx)
+		return struct{}{}, nil
+	})
+	c := modcall.Local{"slow": s}.As("console")
+	if err := modcall.Start(t.Context(), c, "slow", "run", struct{}{}); err != nil {
+		t.Fatal(err)
+	}
+	// Start has returned while the method has not finished.
+	select {
+	case <-got:
+		t.Fatal("the method finished before it was released")
+	default:
+	}
+	close(release)
+	select {
+	case class := <-got:
+		if class != "console" {
+			t.Errorf("class = %q", class)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the method never ran")
+	}
+}
+
+type syncOnly struct{}
+
+func (syncOnly) Call(context.Context, string, string, []byte) ([]byte, error) { return nil, nil }
+
+func TestStartOverATransportThatCannotReturnEarlyFails(t *testing.T) {
+	if err := modcall.Start(t.Context(), syncOnly{}, "m", "x", struct{}{}); !errors.Is(err, modcall.ErrNoAsync) {
+		t.Errorf("err = %v", err)
+	}
 }

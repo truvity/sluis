@@ -4,7 +4,10 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/truvity/sluis/internal/demo"
 	"github.com/truvity/sluis/internal/issuer"
@@ -35,34 +38,94 @@ func configurationRequest(t *testing.T, server *httptest.Server, method, bearer 
 	return resp.StatusCode, body, resp.Header
 }
 
-// signedInToken is a real access token of the issuer under test.
-func signedInToken(t *testing.T, server *httptest.Server) string {
+// sluisctlPolicy declares the CLI the way an installation does: the client
+// whose sign-in the console and the discovery document accept.
+var sluisctlPolicy = strings.Replace(demo.Policy, "clients:\n",
+	"clients:\n  sluisctl: { kind: public, redirects: [http://127.0.0.1/callback], requires: [devel:k8s:viewer, mgmt:k8s:admin], sign_in_exchange: true }\n", 1)
+
+// sluisctlRig is the real issuer under that policy, with its storage.
+type sluisctlRig struct {
+	server  *httptest.Server
+	iss     *issuer.Issuer
+	storage *issuer.Storage
+}
+
+func newSluisctlRig(t *testing.T) *sluisctlRig {
 	t.Helper()
-	status, body := exchange(t, server, "k8s:devel/identity-system/authorization-webhook", "directory-roster")
-	if status != http.StatusOK {
-		t.Fatalf("exchange = %d, %v", status, body)
+	declared, err := policy.Parse([]byte(sluisctlPolicy))
+	if err != nil {
+		t.Fatal(err)
 	}
-	token, _ := body["access_token"].(string)
+	set, err := policy.NewSet(declared)
+	if err != nil {
+		t.Fatal(err)
+	}
+	iss := issuer.New(issuer.Config{URL: "http://issuer.example", AllowInsecure: true}, set, adaDirectory(), issuer.NewMemoryState())
+	storage, err := issuer.NewTestStorage(iss, fakeVerifier{}, nil, nil, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h, err := handler(iss, storage)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(h)
+	t.Cleanup(server.Close)
+	return &sluisctlRig{server: server, iss: iss, storage: storage}
+}
+
+// tokens signs ada in at client and answers the tokens of a refresh.
+func (r *sluisctlRig) tokens(t *testing.T, client string) map[string]any {
+	t.Helper()
+	return signedInTokens(t, r.server, r.iss, client)
+}
+
+func (r *sluisctlRig) access(t *testing.T, client string) string {
+	t.Helper()
+	token, _ := r.tokens(t, client)["access_token"].(string)
 	return token
 }
 
-// The document names the installation's functions, so it is for callers the
-// issuer signed in and for nobody else.
-func TestTheSluisConfigurationIsNotServedToAnonymousCallers(t *testing.T) {
+func (r *sluisctlRig) revokeAll(t *testing.T) {
+	t.Helper()
+	sessions, err := r.iss.Sessions().List(t.Context(), issuer.Query{Identity: "ada@north.example"})
+	if err != nil || len(sessions) == 0 {
+		t.Fatalf("list the sessions: %v %v", sessions, err)
+	}
+	for i := range sessions {
+		if _, err = r.iss.Sessions().RevokeID(t.Context(), sessions[i].ID); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// The document names the installation's functions, so it is for a person
+// signed in at the CLI and for nobody else. Everyone else sees the 404 of an
+// issuer with nothing to say.
+func TestTheSluisConfigurationRevealsNothingToAnyoneButALiveCLISignIn(t *testing.T) {
 	t.Parallel()
-	server, iss := serveIssuer(t)
-	iss.UseConfiguration(issuer.SluisConfiguration{Instance: "example",
+	rig := newSluisctlRig(t)
+	rig.iss.UseConfiguration(issuer.SluisConfiguration{Instance: "example",
 		Backup: &issuer.SluisConfigEndpoint{Endpoint: testBackupARN}})
 
-	for name, bearer := range map[string]string{"no token": "", "a made-up token": "not-a-token", "a forged one": "eyJhbGciOiJub25lIn0.e30."} {
-		status, body, header := configurationRequest(t, server, http.MethodGet, bearer)
-		if status != http.StatusUnauthorized {
+	exchanged := func() string {
+		_, body := exchange(t, rig.server, "k8s:devel/identity-system/authorization-webhook", "directory-roster")
+		token, _ := body["access_token"].(string)
+		return token
+	}
+	for name, bearer := range map[string]string{
+		"no token":                   "",
+		"a made-up token":            "not-a-token",
+		"a forged one":               "eyJhbGciOiJub25lIn0.e30.",
+		"a workload's exchanged one": exchanged(),
+		"another client's sign-in":   rig.access(t, "local-dev"),
+		"the CLI's ID token":         func() string { s, _ := rig.tokens(t, "sluisctl")["id_token"].(string); return s }(),
+	} {
+		status, body, _ := configurationRequest(t, rig.server, http.MethodGet, bearer)
+		if status != http.StatusNotFound {
 			t.Errorf("%s: status %d", name, status)
 		}
-		if header.Get("WWW-Authenticate") == "" {
-			t.Errorf("%s: no WWW-Authenticate", name)
-		}
-		if _, leaked := body["backup"]; leaked || body["instance"] != nil {
+		if body["backup"] != nil || body["instance"] != nil {
 			t.Errorf("%s: the document leaked: %v", name, body)
 		}
 	}
@@ -70,13 +133,13 @@ func TestTheSluisConfigurationIsNotServedToAnonymousCallers(t *testing.T) {
 
 func TestTheSluisConfigurationAnswersTheInstallationsDocument(t *testing.T) {
 	t.Parallel()
-	server, iss := serveIssuer(t)
-	iss.UseConfiguration(issuer.SluisConfiguration{
+	rig := newSluisctlRig(t)
+	rig.iss.UseConfiguration(issuer.SluisConfiguration{
 		Instance: "example", Region: "eu-west-1",
 		Backup:  &issuer.SluisConfigEndpoint{Endpoint: testBackupARN},
 		Restore: &issuer.SluisConfigEndpoint{Endpoint: testRestoreARN},
 	})
-	status, body, header := configurationRequest(t, server, http.MethodGet, signedInToken(t, server))
+	status, body, header := configurationRequest(t, rig.server, http.MethodGet, rig.access(t, "sluisctl"))
 	if status != http.StatusOK {
 		t.Fatalf("status %d: %v", status, body)
 	}
@@ -93,66 +156,100 @@ func TestTheSluisConfigurationAnswersTheInstallationsDocument(t *testing.T) {
 	}
 }
 
+func TestTheSluisConfigurationStopsWithTheSession(t *testing.T) {
+	t.Parallel()
+	rig := newSluisctlRig(t)
+	rig.iss.UseConfiguration(issuer.SluisConfiguration{Instance: "example"})
+	token := rig.access(t, "sluisctl")
+	if status, _, _ := configurationRequest(t, rig.server, http.MethodGet, token); status != http.StatusOK {
+		t.Fatalf("before: %d", status)
+	}
+	rig.revokeAll(t)
+	if status, _, _ := configurationRequest(t, rig.server, http.MethodGet, token); status != http.StatusNotFound {
+		t.Errorf("after the session ended: %d", status)
+	}
+}
+
 func TestTheSluisConfigurationIsAbsentWhereTheIssuerKnowsNoFunction(t *testing.T) {
 	t.Parallel()
-	server, _ := serveIssuer(t)
-	if status, _, _ := configurationRequest(t, server, http.MethodGet, signedInToken(t, server)); status != http.StatusNotFound {
+	rig := newSluisctlRig(t)
+	if status, _, _ := configurationRequest(t, rig.server, http.MethodGet, rig.access(t, "sluisctl")); status != http.StatusNotFound {
 		t.Errorf("status %d, want 404", status)
 	}
 }
 
 func TestTheSluisConfigurationAnswersOnlyReads(t *testing.T) {
 	t.Parallel()
-	server, iss := serveIssuer(t)
-	iss.UseConfiguration(issuer.SluisConfiguration{Instance: "example"})
-	if status, _, _ := configurationRequest(t, server, http.MethodPost, signedInToken(t, server)); status == http.StatusOK {
+	rig := newSluisctlRig(t)
+	rig.iss.UseConfiguration(issuer.SluisConfiguration{Instance: "example"})
+	if status, _, _ := configurationRequest(t, rig.server, http.MethodPost, rig.access(t, "sluisctl")); status == http.StatusOK {
 		t.Errorf("a POST was answered")
 	}
 }
 
-// BearerReader reads a person's laptop token and refuses every other: a token
-// minted for another client, a forged one, and none.
-func TestBearerReaderNamesTheSubjectOfATokenForAKnownClientOnly(t *testing.T) {
+// CLISubject names the person of a live CLI sign-in and refuses everything else
+// this issuer signs.
+func TestCLISubjectIsALiveCLISignInAndNothingElse(t *testing.T) {
 	t.Parallel()
-	declared, err := policy.Parse([]byte(demo.Policy))
-	if err != nil {
-		t.Fatal(err)
-	}
-	set, err := policy.NewSet(declared)
-	if err != nil {
-		t.Fatal(err)
-	}
-	iss := issuer.New(issuer.Config{URL: "http://issuer.example", AllowInsecure: true}, set, &fakeDirectory{}, issuer.NewMemoryState())
-	storage, err := issuer.NewTestStorage(iss, fakeVerifier{}, nil, nil, nil, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	h, err := handler(iss, storage)
-	if err != nil {
-		t.Fatal(err)
-	}
-	server := httptest.NewServer(h)
-	t.Cleanup(server.Close)
-	token := signedInToken(t, server)
+	clients := []string{"sluisctl"}
+	ctx := t.Context()
 
-	request := func(bearer string) *http.Request {
-		r := httptest.NewRequest(http.MethodPost, "/sluis.v1.BackupService/RunBackup", nil)
-		if bearer != "" {
-			r.Header.Set("Authorization", "Bearer "+bearer)
+	t.Run("a live sign-in", func(t *testing.T) {
+		rig := newSluisctlRig(t)
+		if who, ok := rig.storage.CLISubject(ctx, rig.access(t, "sluisctl"), clients); !ok || who != "ada@north.example" {
+			t.Errorf("= %q, %v", who, ok)
 		}
-		return r
-	}
-	// The token is for the client `directory-roster`.
-	read := issuer.BearerReader(iss, storage, []string{"directory-roster"})
-	if subject, ok := read(request(token)); !ok || subject == "" {
-		t.Errorf("a token for a client in the list: %q, %v", subject, ok)
-	}
-	if _, ok := issuer.BearerReader(iss, storage, issuer.CLIAudiences)(request(token)); ok {
-		t.Error("a token for another client was read as a laptop's")
-	}
-	for name, bearer := range map[string]string{"none": "", "made up": "x.y.z", "tampered": token[:len(token)-3] + "AAA"} {
-		if _, ok := read(request(bearer)); ok {
-			t.Errorf("%s was read", name)
+	})
+	t.Run("a revoked session is refused at once", func(t *testing.T) {
+		rig := newSluisctlRig(t)
+		token := rig.access(t, "sluisctl")
+		rig.revokeAll(t)
+		if _, ok := rig.storage.CLISubject(ctx, token, clients); ok {
+			t.Error("a token of an ended session was read")
 		}
-	}
+	})
+	t.Run("another client's token is refused", func(t *testing.T) {
+		rig := newSluisctlRig(t)
+		if _, ok := rig.storage.CLISubject(ctx, rig.access(t, "local-dev"), clients); ok {
+			t.Error("a relying party's token was read")
+		}
+		if _, ok := rig.storage.CLISubject(ctx, rig.access(t, "sluisctl"), []string{"local-dev"}); ok {
+			t.Error("the client was not in the list")
+		}
+	})
+	t.Run("an ID token for the CLI is refused", func(t *testing.T) {
+		rig := newSluisctlRig(t)
+		id, _ := rig.tokens(t, "sluisctl")["id_token"].(string)
+		if id == "" {
+			t.Fatal("no ID token")
+		}
+		if _, ok := rig.storage.CLISubject(ctx, id, clients); ok {
+			t.Error("an ID token was read as a bearer")
+		}
+	})
+	t.Run("an agent-class session is refused", func(t *testing.T) {
+		rig := newSluisctlRig(t)
+		if _, err := rig.iss.Sessions().Record(ctx, issuer.Opened{Identity: "ada@north.example", ClientID: "sluisctl", How: issuer.HowCode,
+			Token: "agent-refresh", Scopes: []string{"openid", "email"}, AuthTime: time.Now(), Class: issuer.ClassAgent}); err != nil {
+			t.Fatal(err)
+		}
+		form := url.Values{"grant_type": {"refresh_token"}, "refresh_token": {"agent-refresh"}, "client_id": {"sluisctl"}, "scope": {"openid email"}}
+		body := postToken(t, rig.server, form, "sluisctl", http.StatusOK)
+		access, _ := body["access_token"].(string)
+		sessions, _ := rig.iss.Sessions().List(ctx, issuer.Query{Identity: "ada@north.example"})
+		if len(sessions) != 1 || !sessions[0].Agent() {
+			t.Fatalf("the session is not an agent's: %+v", sessions)
+		}
+		if _, ok := rig.storage.CLISubject(ctx, access, clients); ok {
+			t.Error("an agent session's token was read")
+		}
+	})
+	t.Run("junk is refused", func(t *testing.T) {
+		rig := newSluisctlRig(t)
+		for _, b := range []string{"", "x.y.z", rig.access(t, "sluisctl") + "A"} {
+			if _, ok := rig.storage.CLISubject(ctx, b, clients); ok {
+				t.Errorf("%q was read", b)
+			}
+		}
+	})
 }

@@ -45,8 +45,6 @@ const (
 	sluisConfigurationPath = "/.well-known/sluis-configuration"
 	// consoleMount is where the issuer serves the console's API.
 	consoleMount = "/console"
-
-	arnLambdaPrefix = "arn:aws:lambda:"
 )
 
 // backupStderr is where the route's notes go: a seam for a test.
@@ -167,14 +165,14 @@ func backupLogin(issuerFlag string) (cfg Config, ok bool, err error) {
 // lambdaFunction turns an endpoint into the function the Lambda API is given.
 //
 // The scheme of an endpoint names the transport. Only a Lambda function
-// (`arn:aws:lambda:...`) is implemented; a bare name, which the older
+// (an ARN of the lambda service) is implemented; a bare name, which the older
 // `function` key and $SLUISCTL_*_FUNCTION held, is read as a function in the
 // caller's own account and region. `k8s://` and `https://` are reserved, and
 // refused as what they are rather than guessed at.
 func lambdaFunction(endpoint string) (string, error) {
 	e := strings.TrimSpace(endpoint)
 	switch {
-	case strings.HasPrefix(e, arnLambdaPrefix):
+	case isLambdaARN(e):
 		return e, nil
 	case strings.HasPrefix(e, "arn:"):
 		return "", badUsage("the endpoint %q is an ARN of something other than a Lambda function", e)
@@ -190,14 +188,16 @@ func lambdaFunction(endpoint string) (string, error) {
 
 // regionOf is the region of a Lambda ARN, or "".
 func regionOf(function string) string {
-	if !strings.HasPrefix(function, arnLambdaPrefix) {
+	if !isLambdaARN(function) {
 		return ""
 	}
-	parts := strings.Split(function, ":")
-	if len(parts) > 3 {
-		return parts[3]
-	}
-	return ""
+	return strings.Split(function, ":")[3]
+}
+
+// isLambdaARN is whether s is an ARN of the Lambda service: arn:<partition>:lambda:<region>:...
+func isLambdaARN(s string) bool {
+	parts := strings.Split(s, ":")
+	return len(parts) >= 6 && parts[0] == "arn" && parts[2] == "lambda" && parts[1] != "" && parts[3] != ""
 }
 
 // resolveEndpoint settles where a direct command invokes: --endpoint (or its
@@ -289,15 +289,47 @@ func issuerError(err error) error {
 
 var errNoBackupModule = errors.New("the issuer has no backup module connected; add --direct to use your own AWS credentials")
 
-func (i *issuerBackup) run(ctx context.Context, resume bool) (job.Result, error) {
-	res, err := i.client.RunBackup(ctx, connect.NewRequest(&sluisv1.RunBackupRequest{Resume: resume}))
+// run asks the issuer to start a backup. The issuer answers when the module has
+// the run, not when it ends: outcome is started, contended or idle, and started
+// is the issuer's clock when the run was handed over, to find the run by.
+func (i *issuerBackup) run(ctx context.Context, resume bool) (res job.Result, started time.Time, err error) {
+	got, err := i.client.RunBackup(ctx, connect.NewRequest(&sluisv1.RunBackupRequest{Resume: resume}))
 	if err != nil {
-		return job.Result{}, issuerError(err)
+		return job.Result{}, time.Time{}, issuerError(err)
 	}
-	if !res.Msg.GetAvailable() {
-		return job.Result{}, errNoBackupModule
+	if !got.Msg.GetAvailable() {
+		return job.Result{}, time.Time{}, errNoBackupModule
 	}
-	return job.Result{Outcome: res.Msg.GetOutcome(), ID: res.Msg.GetId(), Run: viewOf(res.Msg.GetRun())}, nil
+	return job.Result{Outcome: got.Msg.GetOutcome(), ID: got.Msg.GetId(), Run: viewOf(got.Msg.GetRun())}, stampOf(got.Msg.GetStarted()), nil
+}
+
+// runSkew is how far before the issuer's start a run's own start may be read.
+const runSkew = 10 * time.Second
+
+// awaitRun polls the status until the run started at or after started has ended.
+// A run that failed is an error, as it is on the direct route. The wait ends
+// with ctx; the run goes on in the function.
+func (i *issuerBackup) awaitRun(ctx context.Context, started time.Time) (*job.View, error) {
+	for {
+		st, _, err := i.status(ctx)
+		if err != nil {
+			return nil, err
+		}
+		for _, v := range []*job.View{st.Unfinished, st.Latest} {
+			if v == nil || v.Started.Before(started.Add(-runSkew)) {
+				continue
+			}
+			switch v.State {
+			case job.StateCompleted:
+				return v, nil
+			case job.StateFailed:
+				return v, fmt.Errorf("the backup failed (%s): %s", v.Reason, v.Error)
+			}
+		}
+		if err = pollSleep(ctx, pollInterval); err != nil {
+			return nil, fmt.Errorf("stopped waiting for the backup: %w; it carries on in the function (`sluisctl backup status`)", err)
+		}
+	}
 }
 
 // retentionCounts is the last prune as the issuer reports it: how many, not which.

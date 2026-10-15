@@ -62,10 +62,11 @@ type BackupServiceClient interface {
 	// GetRestoreStatus is the latest restore, one that is running or paused,
 	// and the modules whose maintenance flag is set. Viewer.
 	GetRestoreStatus(context.Context, *connect.Request[v1.GetRestoreStatusRequest]) (*connect.Response[v1.GetRestoreStatusResponse], error)
-	// RunBackup writes a backup now, under the backup lease, and answers when the
-	// run ended or another runner held the lease. The caller must hold a group
-	// that the policy's `backup.runGroups` names; the run is audited with who
-	// asked. Anything else is refused as permission denied.
+	// RunBackup starts a backup and answers at once: started, or contended when
+	// a run is already going or this person started one a moment ago. The run
+	// is read back with GetBackupStatus. The caller must hold a group that the
+	// policy's `backup.runGroups` names; the run is audited with who asked.
+	// Anything else is refused as permission denied.
 	RunBackup(context.Context, *connect.Request[v1.RunBackupRequest]) (*connect.Response[v1.RunBackupResponse], error)
 	// GetRestorePreview reports what restoring a backup would do, as counts per
 	// module and section, and writes nothing. Operator.
@@ -163,10 +164,11 @@ type BackupServiceHandler interface {
 	// GetRestoreStatus is the latest restore, one that is running or paused,
 	// and the modules whose maintenance flag is set. Viewer.
 	GetRestoreStatus(context.Context, *connect.Request[v1.GetRestoreStatusRequest]) (*connect.Response[v1.GetRestoreStatusResponse], error)
-	// RunBackup writes a backup now, under the backup lease, and answers when the
-	// run ended or another runner held the lease. The caller must hold a group
-	// that the policy's `backup.runGroups` names; the run is audited with who
-	// asked. Anything else is refused as permission denied.
+	// RunBackup starts a backup and answers at once: started, or contended when
+	// a run is already going or this person started one a moment ago. The run
+	// is read back with GetBackupStatus. The caller must hold a group that the
+	// policy's `backup.runGroups` names; the run is audited with who asked.
+	// Anything else is refused as permission denied.
 	RunBackup(context.Context, *connect.Request[v1.RunBackupRequest]) (*connect.Response[v1.RunBackupResponse], error)
 	// GetRestorePreview reports what restoring a backup would do, as counts per
 	// module and section, and writes nothing. Operator.

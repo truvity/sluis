@@ -223,10 +223,14 @@ func HandlerWithSignIn(iss *Issuer, storage op.Storage, signIn SignInDeps) (http
 		return claims.Subject, groupsOf(claims), nil
 	}))
 	// Where the installation's backup and restore functions are, for a caller
-	// that is signed in. The same verifier: any token this issuer signed.
-	mux.Handle("GET "+SluisConfigurationPath, sluisConfigurationHandler(iss, func(ctx context.Context, bearer string) error {
-		_, err := op.VerifyAccessToken[*oidc.AccessTokenClaims](ctx, bearer, verifier)
-		return err
+	// that is signed in at the CLI: a live sign-in, not any token this issuer signed.
+	mux.Handle("GET "+SluisConfigurationPath, sluisConfigurationHandler(iss, func(ctx context.Context, bearer string) bool {
+		concrete, ok := storage.(*Storage)
+		if !ok {
+			return false
+		}
+		_, ok = concrete.CLISubject(ctx, bearer, CLIAudiences)
+		return ok
 	}))
 	// An operator's rotation, look and purge of a generated client's secret.
 	// The same verifier again; the groups in the token are what admit it.

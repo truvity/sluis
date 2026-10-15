@@ -47,6 +47,12 @@ type fakeBackupIssuer struct {
 	configStatus int
 	// denied makes every call a permission error.
 	denied bool
+	// outcome is what RunBackup answers (started when empty); runState is the
+	// state the run it started shows in the status (completed when empty);
+	// polls counts the status reads after a start.
+	outcome, runState string
+	polls             int
+	started           bool
 }
 
 func (f *fakeBackupIssuer) record(name string, h http.Header) {
@@ -68,8 +74,15 @@ func (f *fakeBackupIssuer) RunBackup(_ context.Context, req *connect.Request[slu
 	if err := f.refuse(); err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&sluisv1.RunBackupResponse{Available: true, Outcome: "completed", Id: testBackup,
-		Run: &sluisv1.BackupRun{Id: testBackup, State: "completed", Modules: 6, Records: 42, Chunks: 3}}), nil
+	outcome := f.outcome
+	if outcome == "" {
+		outcome = "started"
+	}
+	f.mu.Lock()
+	f.started = true
+	f.mu.Unlock()
+	// The answer is at once and holds no run, as the issuer's does.
+	return connect.NewResponse(&sluisv1.RunBackupResponse{Available: true, Outcome: outcome, Started: timestamppb.Now()}), nil
 }
 
 func (f *fakeBackupIssuer) GetBackupStatus(_ context.Context, req *connect.Request[sluisv1.GetBackupStatusRequest]) (*connect.Response[sluisv1.GetBackupStatusResponse], error) {
@@ -77,7 +90,25 @@ func (f *fakeBackupIssuer) GetBackupStatus(_ context.Context, req *connect.Reque
 	if err := f.refuse(); err != nil {
 		return nil, err
 	}
-	run := &sluisv1.BackupRun{Id: testBackup, State: "completed", Modules: 6, Records: 42, Chunks: 3}
+	state := f.runState
+	if state == "" {
+		state = "completed"
+	}
+	f.mu.Lock()
+	n := 0
+	if f.started {
+		f.polls++
+		n = f.polls
+	}
+	f.mu.Unlock()
+	// The first read of a run that ends shows it still going.
+	if n == 1 && state != "running" {
+		state = "running"
+	}
+	run := &sluisv1.BackupRun{Id: testBackup, State: state, Started: timestamppb.Now(), Modules: 6, Records: 42, Chunks: 3, Reason: "bucket", Error: "refused"}
+	if state == "running" {
+		return connect.NewResponse(&sluisv1.GetBackupStatusResponse{Available: true, Latest: run, Unfinished: run}), nil
+	}
 	return connect.NewResponse(&sluisv1.GetBackupStatusResponse{Available: true, Latest: run, LastCompleted: run,
 		Retention: &sluisv1.BackupRetention{At: timestamppb.New(time.Date(2026, 10, 10, 2, 0, 0, 0, time.UTC)), Keep: 7, MaxAge: "720h", Kept: 7, Removed: 2, Cleaned: 1, Refused: 3}}), nil
 }
@@ -189,7 +220,7 @@ func TestSignedInTheBackupCommandsGoThroughTheIssuerWithTheLoginsToken(t *testin
 		}
 	}
 	calls := iss.called()
-	if got := strings.Join(calls, " "); got != "RunBackup GetBackupStatus ListBackups GetRestoreStatus GetRestorePreview" {
+	if got := strings.Join(calls, " "); got != "RunBackup GetBackupStatus GetBackupStatus GetBackupStatus ListBackups GetRestoreStatus GetRestorePreview" {
 		t.Errorf("issuer calls = %s", got)
 	}
 	for i, b := range iss.bearers {
@@ -261,6 +292,8 @@ func TestRestoreStartAndResumeNeverGoThroughTheIssuer(t *testing.T) {
 	l := &fakeLambda{status: func() restorejob.Status { return restorejob.Status{Unfinished: &r} }}
 	routeEnv(t, l)
 	iss := newFakeBackupIssuer(t)
+	path, _ := configPath()
+	writeTestFile(t, path, "backup:\n  instance: example\n  restoreEndpoint: "+routeRestoreARN+"\n", 0o600)
 
 	if _, err := runRestore(t, "start", testBackup, "--confirm", "example"); err != nil {
 		t.Fatal(err)
@@ -281,15 +314,13 @@ func TestRestoreStartAndResumeNeverGoThroughTheIssuer(t *testing.T) {
 		}
 	}
 	// And a broken issuer changes nothing: the document is the saved copy.
-	path, _ := configPath()
-	writeTestFile(t, path, "backup:\n  restoreEndpoint: "+routeRestoreARN+"\n", 0o600)
 	iss.server.Close()
 	buf := captureRouteStderr(t)
 	if _, err := runRestore(t, "resume"); err != nil {
 		t.Fatalf("with the issuer down: %v", err)
 	}
-	if !strings.Contains(buf.String(), "using the copy saved at login") {
-		t.Errorf("stderr: %q", buf.String())
+	if buf.Len() != 0 {
+		t.Errorf("a resume tried the issuer: %q", buf.String())
 	}
 }
 
@@ -313,11 +344,56 @@ func TestStartIsHeldToTheSavedInstanceName(t *testing.T) {
 	}
 }
 
-func TestALiveDocumentFillsTheInstanceOfALaptopThatWasToldNone(t *testing.T) {
+// A restore starts from what this laptop was told, never from the issuer's
+// live word: a document that moves the target or the guard would let a broken or
+// hostile issuer aim a restore.
+func TestAHostileLiveDocumentCannotAimARestoreStartOrResume(t *testing.T) {
+	const hostile = "arn:aws:lambda:eu-west-1:444455556666:function:elsewhere"
+	r := startedRun(restorejob.StatePaused)
+	l := &fakeLambda{status: func() restorejob.Status { return restorejob.Status{Unfinished: &r} }}
+	routeEnv(t, l)
+	iss := newFakeBackupIssuer(t)
+	iss.config = `{"instance":"hostile","region":"eu-west-1","backup":{"endpoint":"` + hostile + `"},"restore":{"endpoint":"` + hostile + `"}}`
+	path, _ := configPath()
+	writeTestFile(t, path, "backup:\n  instance: example\n  restoreEndpoint: "+routeRestoreARN+"\n", 0o600)
+
+	// The guard is the saved name, not the document's.
+	var usage usageError
+	if _, err := runRestore(t, "start", testBackup, "--confirm", "hostile"); !errors.As(err, &usage) || len(l.calls) != 0 {
+		t.Fatalf("the document's instance guarded a start: %v, %d calls", err, len(l.calls))
+	}
+	if _, err := runRestore(t, "start", testBackup, "--confirm", "example"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runRestore(t, "resume"); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range l.calls {
+		if got := *c.FunctionName; got != routeRestoreARN {
+			t.Errorf("invoked %q: the document moved the target", got)
+		}
+	}
+	if iss.configs != 0 {
+		t.Errorf("the document was fetched %d times for a start or resume", iss.configs)
+	}
+	// The saved copy is untouched.
+	if saved, _ := readConfigFile(); saved.Backup.RestoreEndpoint != routeRestoreARN || saved.Backup.Instance != "example" {
+		t.Errorf("saved = %+v", saved.Backup)
+	}
+}
+
+// With nothing saved and no --instance, a start has no name to hold --confirm to.
+func TestStartRefusesWithoutASavedOrExplicitInstance(t *testing.T) {
 	l := &fakeLambda{status: func() restorejob.Status { return restorejob.Status{} }}
 	routeEnv(t, l)
 	newFakeBackupIssuer(t)
-	if _, err := runRestore(t, "start", testBackup, "--confirm", "example"); err != nil {
+	path, _ := configPath()
+	writeTestFile(t, path, "backup:\n  restoreEndpoint: "+routeRestoreARN+"\n", 0o600)
+	var usage usageError
+	if _, err := runRestore(t, "start", testBackup, "--confirm", "example"); !errors.As(err, &usage) || len(l.calls) != 0 {
+		t.Fatalf("a start with no known instance: %v, %d calls", err, len(l.calls))
+	}
+	if _, err := runRestore(t, "start", testBackup, "--confirm", "example", "--instance", "example"); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -522,5 +598,70 @@ func TestLoginSaysNothingWhereTheIssuerPublishesNothing(t *testing.T) {
 	}
 	if saved, _ := readConfigFile(); saved.Backup != (BackupConfig{}) {
 		t.Errorf("saved = %+v", saved.Backup)
+	}
+}
+
+// The issuer starts the run and answers at once; sluisctl reads it back until it
+// ends, and a failed run is an error as it is on the direct route.
+func TestRunThroughTheIssuerStartsThenPollsUntilTheRunEnds(t *testing.T) {
+	routeEnv(t, &fakeLambda{})
+	iss := newFakeBackupIssuer(t)
+	out, err := runBackupCmd(t, "run", "--json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var res job.Result
+	if err = json.Unmarshal([]byte(out), &res); err != nil || res.Outcome != "completed" || res.Run == nil || res.Run.Records != 42 {
+		t.Errorf("%s, %v", out, err)
+	}
+	if got := strings.Join(iss.called(), " "); got != "RunBackup GetBackupStatus GetBackupStatus" {
+		t.Errorf("calls = %s", got)
+	}
+
+	iss2 := newFakeBackupIssuer(t)
+	iss2.runState = "failed"
+	if _, err = runBackupCmd(t, "run"); err == nil || !strings.Contains(err.Error(), "the backup failed") {
+		t.Errorf("a failed run: %v", err)
+	}
+}
+
+func TestNoWaitPrintsStartedAndDoesNotPoll(t *testing.T) {
+	routeEnv(t, &fakeLambda{})
+	iss := newFakeBackupIssuer(t)
+	out, err := runBackupCmd(t, "run", "--no-wait")
+	if err != nil || !strings.Contains(out, "backup: started") {
+		t.Fatalf("%q, %v", out, err)
+	}
+	if got := iss.called(); len(got) != 1 || got[0] != "RunBackup" {
+		t.Errorf("calls = %v", got)
+	}
+}
+
+func TestAContendedRunIsReportedNotWaitedFor(t *testing.T) {
+	routeEnv(t, &fakeLambda{})
+	iss := newFakeBackupIssuer(t)
+	iss.outcome = "contended"
+	out, err := runBackupCmd(t, "run")
+	if err != nil || !strings.Contains(out, "backup: contended") || len(iss.called()) != 1 {
+		t.Errorf("%q, %v, %v", out, err, iss.called())
+	}
+}
+
+func TestTheWaitIsBoundedByTheContext(t *testing.T) {
+	routeEnv(t, &fakeLambda{})
+	iss := newFakeBackupIssuer(t)
+	iss.runState = "running"
+	saved := pollSleep
+	t.Cleanup(func() { pollSleep = saved })
+	n := 0
+	pollSleep = func(context.Context, time.Duration) error {
+		if n++; n > 3 {
+			return context.DeadlineExceeded
+		}
+		return nil
+	}
+	_, err := runBackupCmd(t, "run")
+	if err == nil || !strings.Contains(err.Error(), "carries on in the function") {
+		t.Errorf("err = %v", err)
 	}
 }

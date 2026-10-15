@@ -179,7 +179,8 @@ func (t *targetFlags) wantsDirect() bool {
 }
 
 // resolve fills what the flags left from the environment, config.yaml and the
-// issuer. viaIssuer says the command may go through the issuer: `restore start`
+// issuer. viaIssuer says the command may go through the issuer, and may read the
+// issuer's live document for where the function is: `restore start`
 // and `restore resume` say false, and are always direct.
 func (t *targetFlags) resolve(ctx context.Context, restoreCommand, viaIssuer bool) (target, error) {
 	if t.as != classAdmin && t.as != classBreakglass {
@@ -206,8 +207,12 @@ func (t *targetFlags) resolve(ctx context.Context, restoreCommand, viaIssuer boo
 		return out, nil
 	}
 
+	// A restore start or resume takes its target from this laptop alone: the
+	// flag, the environment, or the copy saved at login. A live document is
+	// the issuer's word, and the issuer may be the thing that is broken, lost
+	// or hostile when a restore is wanted.
 	var signedIn *Config
-	if loggedIn {
+	if loggedIn && viaIssuer {
 		signedIn = &login
 	}
 	var saved, envNew, envOld string
@@ -232,13 +237,9 @@ func (t *targetFlags) resolve(ctx context.Context, restoreCommand, viaIssuer boo
 	}
 	if restoreCommand {
 		out.restoreFunction = function
-		// The saved name first: the typed --confirm is held to what this laptop
-		// was told when it signed in, and a live document fills in only a
-		// laptop that was told none.
+		// The typed --confirm is held to what this laptop was told when it
+		// signed in, or to --instance; never to a live document.
 		out.instance = firstNonEmpty(t.instance, settingEnv(envInstance), file.Backup.Instance)
-		if out.instance == "" && doc != nil {
-			out.instance = doc.Instance
-		}
 	} else {
 		out.function = function
 	}
@@ -315,7 +316,7 @@ func parseInterleaved(flags *flag.FlagSet, args []string) ([]string, error) {
 	}
 }
 
-const backupUsage = `Usage: sluisctl backup run [--resume] | status | list [--limit N]
+const backupUsage = `Usage: sluisctl backup run [--resume] [--no-wait] | status | list [--limit N]
 
 Signed in (sluisctl login), these go through the issuer, which calls the backup
 function for you: no AWS credentials are needed, and starting a backup needs a
@@ -331,6 +332,9 @@ Flags for every subcommand:
   --as        admin (default) or breakglass: the function's live-<class> alias
   --profile, --region   the AWS profile and region
   --json      print JSON
+
+backup run through the issuer starts the run and waits for it to end (up to 16
+minutes); --no-wait prints that it started and leaves it to "backup status".
 `
 
 func backupCommand(args []string) error {
@@ -355,6 +359,7 @@ func backupRun(args []string) error {
 	flags := newFlags("backup run", backupUsage)
 	tf.register(flags, false)
 	resume := flags.Bool("resume", false, "only continue a paused run; start none")
+	noWait := flags.Bool("no-wait", false, "through the issuer: print that the run started and do not wait for it to end")
 	rest, err := parseInterleaved(flags, args)
 	if err != nil {
 		return err
@@ -368,7 +373,7 @@ func backupRun(args []string) error {
 	if err != nil {
 		return err
 	}
-	res, err := t.runBackup(ctx, *resume)
+	res, err := t.runBackup(ctx, *resume, !*noWait)
 	if err != nil {
 		return err
 	}
@@ -426,10 +431,20 @@ func backupStatus(args []string) error {
 	return nil
 }
 
-// runBackup starts a backup by whichever route the target has.
-func (t target) runBackup(ctx context.Context, resume bool) (job.Result, error) {
+// runBackup starts a backup by whichever route the target has. Through the
+// issuer the run is started and then, with wait, read back until it ends; the
+// answer is the run's, as on the direct route.
+func (t target) runBackup(ctx context.Context, resume, wait bool) (job.Result, error) {
 	if t.issuer != nil {
-		return t.issuer.run(ctx, resume)
+		res, started, err := t.issuer.run(ctx, resume)
+		if err != nil || res.Outcome != "started" || !wait {
+			return res, err
+		}
+		final, err := t.issuer.awaitRun(ctx, started)
+		if final != nil {
+			res = job.Result{Outcome: final.State, ID: final.ID, Run: final}
+		}
+		return res, err
 	}
 	res, err := modcall.Do[rpc.RunRequest, job.Result](ctx, t.caller(rpc.Module), rpc.Module, rpc.MethodRun, rpc.RunRequest{Resume: resume})
 	return res, explain(err)

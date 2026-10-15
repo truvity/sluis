@@ -1002,11 +1002,15 @@ type RunBackupResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Available is false when this deployment has no backup module to ask.
 	Available bool `protobuf:"varint,1,opt,name=available,proto3" json:"available,omitempty"`
-	// Outcome is completed, idle, contended, maintenance or failed.
+	// Outcome is started, contended or idle (a resume, which has nothing to
+	// continue).
 	Outcome string `protobuf:"bytes,2,opt,name=outcome,proto3" json:"outcome,omitempty"`
-	// Id is the run's, empty when none ran.
-	Id            string     `protobuf:"bytes,3,opt,name=id,proto3" json:"id,omitempty"`
-	Run           *BackupRun `protobuf:"bytes,4,opt,name=run,proto3" json:"run,omitempty"`
+	// Id and Run are empty: the run is not recorded yet when this answers.
+	Id  string     `protobuf:"bytes,3,opt,name=id,proto3" json:"id,omitempty"`
+	Run *BackupRun `protobuf:"bytes,4,opt,name=run,proto3" json:"run,omitempty"`
+	// Started is the issuer's clock when the run was handed to the module: a run
+	// of GetBackupStatus whose start is not before it is this one.
+	Started       *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=started,proto3" json:"started,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1065,6 +1069,13 @@ func (x *RunBackupResponse) GetId() string {
 func (x *RunBackupResponse) GetRun() *BackupRun {
 	if x != nil {
 		return x.Run
+	}
+	return nil
+}
+
+func (x *RunBackupResponse) GetStarted() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Started
 	}
 	return nil
 }
@@ -1401,12 +1412,13 @@ const file_directoryroster_v1_backup_proto_rawDesc = "" +
 	"unreadable\x18\x05 \x01(\bR\n" +
 	"unreadable\"*\n" +
 	"\x10RunBackupRequest\x12\x16\n" +
-	"\x06resume\x18\x01 \x01(\bR\x06resume\"\x8c\x01\n" +
+	"\x06resume\x18\x01 \x01(\bR\x06resume\"\xc2\x01\n" +
 	"\x11RunBackupResponse\x12\x1c\n" +
 	"\tavailable\x18\x01 \x01(\bR\tavailable\x12\x18\n" +
 	"\aoutcome\x18\x02 \x01(\tR\aoutcome\x12\x0e\n" +
 	"\x02id\x18\x03 \x01(\tR\x02id\x12/\n" +
-	"\x03run\x18\x04 \x01(\v2\x1d.directoryroster.v1.BackupRunR\x03run\"7\n" +
+	"\x03run\x18\x04 \x01(\v2\x1d.directoryroster.v1.BackupRunR\x03run\x124\n" +
+	"\astarted\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\astarted\"7\n" +
 	"\x18GetRestorePreviewRequest\x12\x1b\n" +
 	"\tbackup_id\x18\x01 \x01(\tR\bbackupId\"\xa3\x02\n" +
 	"\x19GetRestorePreviewResponse\x12\x1c\n" +
@@ -1486,22 +1498,23 @@ var file_directoryroster_v1_backup_proto_depIdxs = []int32{
 	16, // 16: directoryroster.v1.RestoreRun.finished:type_name -> google.protobuf.Timestamp
 	16, // 17: directoryroster.v1.ModuleMaintenance.since:type_name -> google.protobuf.Timestamp
 	2,  // 18: directoryroster.v1.RunBackupResponse.run:type_name -> directoryroster.v1.BackupRun
-	15, // 19: directoryroster.v1.GetRestorePreviewResponse.sections:type_name -> directoryroster.v1.RestorePreviewSection
-	0,  // 20: directoryroster.v1.BackupService.GetBackupStatus:input_type -> directoryroster.v1.GetBackupStatusRequest
-	4,  // 21: directoryroster.v1.BackupService.ListBackups:input_type -> directoryroster.v1.ListBackupsRequest
-	7,  // 22: directoryroster.v1.BackupService.GetRestoreStatus:input_type -> directoryroster.v1.GetRestoreStatusRequest
-	11, // 23: directoryroster.v1.BackupService.RunBackup:input_type -> directoryroster.v1.RunBackupRequest
-	13, // 24: directoryroster.v1.BackupService.GetRestorePreview:input_type -> directoryroster.v1.GetRestorePreviewRequest
-	1,  // 25: directoryroster.v1.BackupService.GetBackupStatus:output_type -> directoryroster.v1.GetBackupStatusResponse
-	5,  // 26: directoryroster.v1.BackupService.ListBackups:output_type -> directoryroster.v1.ListBackupsResponse
-	8,  // 27: directoryroster.v1.BackupService.GetRestoreStatus:output_type -> directoryroster.v1.GetRestoreStatusResponse
-	12, // 28: directoryroster.v1.BackupService.RunBackup:output_type -> directoryroster.v1.RunBackupResponse
-	14, // 29: directoryroster.v1.BackupService.GetRestorePreview:output_type -> directoryroster.v1.GetRestorePreviewResponse
-	25, // [25:30] is the sub-list for method output_type
-	20, // [20:25] is the sub-list for method input_type
-	20, // [20:20] is the sub-list for extension type_name
-	20, // [20:20] is the sub-list for extension extendee
-	0,  // [0:20] is the sub-list for field type_name
+	16, // 19: directoryroster.v1.RunBackupResponse.started:type_name -> google.protobuf.Timestamp
+	15, // 20: directoryroster.v1.GetRestorePreviewResponse.sections:type_name -> directoryroster.v1.RestorePreviewSection
+	0,  // 21: directoryroster.v1.BackupService.GetBackupStatus:input_type -> directoryroster.v1.GetBackupStatusRequest
+	4,  // 22: directoryroster.v1.BackupService.ListBackups:input_type -> directoryroster.v1.ListBackupsRequest
+	7,  // 23: directoryroster.v1.BackupService.GetRestoreStatus:input_type -> directoryroster.v1.GetRestoreStatusRequest
+	11, // 24: directoryroster.v1.BackupService.RunBackup:input_type -> directoryroster.v1.RunBackupRequest
+	13, // 25: directoryroster.v1.BackupService.GetRestorePreview:input_type -> directoryroster.v1.GetRestorePreviewRequest
+	1,  // 26: directoryroster.v1.BackupService.GetBackupStatus:output_type -> directoryroster.v1.GetBackupStatusResponse
+	5,  // 27: directoryroster.v1.BackupService.ListBackups:output_type -> directoryroster.v1.ListBackupsResponse
+	8,  // 28: directoryroster.v1.BackupService.GetRestoreStatus:output_type -> directoryroster.v1.GetRestoreStatusResponse
+	12, // 29: directoryroster.v1.BackupService.RunBackup:output_type -> directoryroster.v1.RunBackupResponse
+	14, // 30: directoryroster.v1.BackupService.GetRestorePreview:output_type -> directoryroster.v1.GetRestorePreviewResponse
+	26, // [26:31] is the sub-list for method output_type
+	21, // [21:26] is the sub-list for method input_type
+	21, // [21:21] is the sub-list for extension type_name
+	21, // [21:21] is the sub-list for extension extendee
+	0,  // [0:21] is the sub-list for field type_name
 }
 
 func init() { file_directoryroster_v1_backup_proto_init() }

@@ -274,7 +274,7 @@ Minted Cloudflare tokens and R2 credentials. Only `GetCloudflareCredential` retu
 | `GetBackupStatus` | viewer | none | `available`, `latest`, `last_completed`, `unfinished` (`units`, `done`), `retention` | calls `backup.status` as caller class `console`; `Unavailable` when the module does not answer |
 | `ListBackups` | viewer | `limit?` | `available`, `backups[]` newest first | `backup.list`; manifests are unverified |
 | `GetRestoreStatus` | viewer | none | `available`, `latest`, `unfinished`, `last_completed`, `maintenance[]` | `restore.status`; no RPC starts or resumes a restore |
-| `RunBackup` | a group in the policy's `backup.runGroups` | `resume?` | `available`, `outcome`, `id`, `run` | `backup.run` as `console` with `by` the caller's address, audited as that person; refused in maintenance; `Unavailable` when the module does not answer |
+| `RunBackup` | a group in the policy's `backup.runGroups` | `resume?` | `available`, `outcome` (`started`, `contended`, `idle`), `started` | starts `backup.run` as `console` without waiting, with `by` the caller's address, audited as that person; read the run with `GetBackupStatus`; `contended` while a run goes or after this person's last start; refused in maintenance; `Unavailable` when the module does not answer |
 | `GetRestorePreview` | operator | `backup_id` | `available`, `outcome`, `error`, `installation`, `backup_id`, `layout`, `created`, `sections[]` (`module`, `section`, `create`, `overwrite`, `same`, `expired`, `regenerated`) | `restore.preview`: counts only, never a record's name |
 
 ## SessionService

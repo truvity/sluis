@@ -32,10 +32,11 @@ service BackupService {
   // and the modules whose maintenance flag is set. Viewer.
   rpc GetRestoreStatus(GetRestoreStatusRequest) returns (GetRestoreStatusResponse);
 
-  // RunBackup writes a backup now, under the backup lease, and answers when the
-  // run ended or another runner held the lease. The caller must hold a group
-  // that the policy's `backup.runGroups` names; the run is audited with who
-  // asked. Anything else is refused as permission denied.
+  // RunBackup starts a backup and answers at once: started, or contended when
+  // a run is already going or this person started one a moment ago. The run
+  // is read back with GetBackupStatus. The caller must hold a group that the
+  // policy's `backup.runGroups` names; the run is audited with who asked.
+  // Anything else is refused as permission denied.
   rpc RunBackup(RunBackupRequest) returns (RunBackupResponse);
 
   // GetRestorePreview reports what restoring a backup would do, as counts per
@@ -162,11 +163,15 @@ message RunBackupRequest {
 message RunBackupResponse {
   // Available is false when this deployment has no backup module to ask.
   bool available = 1;
-  // Outcome is completed, idle, contended, maintenance or failed.
+  // Outcome is started, contended or idle (a resume, which has nothing to
+  // continue).
   string outcome = 2;
-  // Id is the run's, empty when none ran.
+  // Id and Run are empty: the run is not recorded yet when this answers.
   string id = 3;
   BackupRun run = 4;
+  // Started is the issuer's clock when the run was handed to the module: a run
+  // of GetBackupStatus whose start is not before it is this one.
+  google.protobuf.Timestamp started = 5;
 }
 
 message GetRestorePreviewRequest {

@@ -3,6 +3,7 @@ package rpc
 import (
 	"context"
 
+	"github.com/truvity/sluis/internal/backup"
 	"github.com/truvity/sluis/internal/backup/restore"
 	"github.com/truvity/sluis/internal/backup/restorejob"
 	"github.com/truvity/sluis/internal/modcall"
@@ -59,6 +60,9 @@ func RegisterRestore(s *modcall.Server, svc RestoreService) {
 		return svc.RestoreStatus(ctx)
 	}, modcall.Allow(CallerConsole, CallerAdmin, CallerBreakglass))
 	modcall.Handle(s, MethodRestorePreview, func(ctx context.Context, r PreviewRequest) (PreviewResponse, error) {
+		if !backup.ValidName(r.Backup) {
+			return PreviewResponse{Outcome: restorejob.OutcomeRefused, Backup: "", Error: "the backup id is not one path segment"}, nil
+		}
 		rep, err := svc.PreviewRestore(ctx, r.Backup)
 		if err != nil {
 			return PreviewResponse{Outcome: restorejob.OutcomeRefused, Backup: r.Backup, Error: previewRefused}, nil

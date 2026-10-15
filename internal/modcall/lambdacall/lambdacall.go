@@ -125,6 +125,43 @@ func (c *Caller) invoke(ctx context.Context, fn string, req modcall.Request, p *
 	return modcall.Result(res)
 }
 
+// CallAsync implements [modcall.AsyncCaller]: an asynchronous invocation of the
+// alias, accepted (202) when Lambda has queued it. The callee's answer is
+// discarded; a call that failed leaves its record in the callee. A module call
+// answers a 200 with its error inside, so Lambda has nothing to retry.
+func (c *Caller) CallAsync(ctx context.Context, module, method string, payload []byte) error {
+	fn, ok := c.Functions[module]
+	if !ok {
+		return fmt.Errorf("%w: no function is configured for module %q", modcall.ErrNoRoute, module)
+	}
+	// The envelope's deadline is when the callee should have finished, not when
+	// the invocation was queued.
+	ctx, req, p, err := modcall.Begin(context.WithoutCancel(ctx), module, method, payload, c.MaxBytes)
+	if err != nil {
+		return err
+	}
+	_, err = p.Finish(nil, c.queue(ctx, fn, req))
+	return err
+}
+
+func (c *Caller) queue(ctx context.Context, fn string, req modcall.Request) error {
+	body, err := json.Marshal(req)
+	if err != nil {
+		return err
+	}
+	out, err := c.API.Invoke(ctx, &awslambda.InvokeInput{
+		FunctionName: aws.String(fn), Qualifier: aws.String(AliasOf(c.Class)),
+		InvocationType: types.InvocationTypeEvent, Payload: body,
+	}, WithoutRetries)
+	if err != nil {
+		return fmt.Errorf("%w: invoke %s: %w", modcall.ErrTransport, fn, err)
+	}
+	if out.StatusCode != 202 {
+		return fmt.Errorf("%w: %s did not accept the invocation: status %d", modcall.ErrTransport, fn, out.StatusCode)
+	}
+	return nil
+}
+
 // ErrNotACall is an event that is not a module call (a scheduler tick, say).
 var ErrNotACall = errors.New("lambdacall: the event is not a module call")
 
