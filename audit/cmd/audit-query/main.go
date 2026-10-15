@@ -20,8 +20,6 @@ import (
 
 	"github.com/truvity/sluis/audit/authn"
 
-	"github.com/jackc/pgx/v5/pgxpool"
-
 	"github.com/truvity/sluis/audit/index"
 	"github.com/truvity/sluis/audit/index/postgres"
 	"github.com/truvity/sluis/audit/index/s3scan"
@@ -208,19 +206,15 @@ func exportsFor(ctx context.Context, exports *config.Exports, secrets *config.Se
 func searcherFor(ctx context.Context, cfg *config.Query) (index.Searcher, readiness.Check, error) {
 	switch cfg.Searcher {
 	case "postgres":
-		poolConfig, err := cfg.Database.PoolConfig(ctx, cfg.SecretReader())
+		pool, err := cfg.Database.Pool(ctx, cfg.SecretReader())
 		if err != nil {
 			return nil, readiness.Check{}, err
 		}
-		pool, err := pgxpool.NewWithConfig(ctx, poolConfig)
-		if err != nil {
-			return nil, readiness.Check{}, err
-		}
-		if err := postgres.CheckVersion(ctx, pool); err != nil {
+		if err := pool.Do(ctx, func(ctx context.Context) error { return postgres.CheckVersion(ctx, pool) }); err != nil {
 			return nil, readiness.Check{}, err
 		}
 		reader, err := postgres.NewReader(pool)
-		return reader, readiness.Check{Name: "database", Fn: pool.Ping}, err
+		return reader, readiness.Check{Name: "database", Fn: pool.Health}, err
 	default: // s3scan; the schema admits no other
 		scanned, _, err := cli.OpenArchiveAt(ctx, cfg.Deployment, *cfg.Archive, cfg.SecretReader())
 		if err != nil {

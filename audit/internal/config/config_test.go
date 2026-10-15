@@ -224,17 +224,18 @@ func TestADeclaredSecretIsReadFromTheEnvironment(t *testing.T) {
 	t.Setenv("AUDIT_TEST_DB_PASSWORD", "s3cr:et@/x")
 	ctx := context.Background()
 	env := config.NewSecrets(config.SecretsSource{})
+	t.Setenv("PGSSLROOTCERT", "/etc/ca/ca.crt")
 	p := config.Postgres{URL: "postgres://audit@db.example.test:5432/audit", PasswordSecret: "AUDIT_TEST_DB_PASSWORD", MaxConnections: 7}
-	cfg, err := p.PoolConfig(ctx, env)
+	cfg, err := p.ClientConfig(ctx, env)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.ConnConfig.Password != "s3cr:et@/x" || cfg.MaxConns != 7 || cfg.ConnConfig.User != "audit" {
-		t.Errorf("the pool does not carry what the block names: %+v", cfg.ConnConfig.Config)
+	if cfg.Password != "s3cr:et@/x" || cfg.MaxConns != 7 || cfg.User != "audit" || cfg.PasswordFile != "" {
+		t.Errorf("the pool does not carry what the block names: %v", cfg)
 	}
 
 	p.PasswordSecret = "AUDIT_TEST_NOT_SET"
-	_, err = p.PoolConfig(ctx, env)
+	_, err = p.ClientConfig(ctx, env)
 	// The refusal says which field and where it looked, and does not quote what the
 	// field holds.
 	if err == nil || !strings.Contains(err.Error(), "database.passwordSecret") || !strings.Contains(err.Error(), "is not set") ||
@@ -243,9 +244,11 @@ func TestADeclaredSecretIsReadFromTheEnvironment(t *testing.T) {
 	}
 	// And a variable nobody named is never read: PGPASSWORD is not a way in.
 	t.Setenv("AUDIT_TEST_UNNAMED", "x")
+	t.Setenv("PGPASSWORD", "x")
+	t.Setenv("CNPG_CLIENT_PASSWORD_FILE", "/x")
 	p.PasswordSecret = ""
-	cfg, err = p.PoolConfig(ctx, env)
-	if err != nil || cfg.ConnConfig.Password == "x" {
+	cfg, err = p.ClientConfig(ctx, env)
+	if err != nil || cfg.Password != "" || cfg.PasswordFile != "" {
 		t.Errorf("a variable the file did not name reached the connection: %v", err)
 	}
 }
@@ -597,8 +600,9 @@ func TestAVersion1FileIsConvertedAndItsEnvFieldsBecomeSecrets(t *testing.T) {
 	if got := w.SecretReader().Source(); got != config.SourceEnv {
 		t.Errorf("a converted file reads its secrets from %q, want env", got)
 	}
-	pool, err := w.Database.PoolConfig(context.Background(), w.SecretReader())
-	if err != nil || pool.ConnConfig.Password != "from-the-environment" {
+	t.Setenv("PGSSLROOTCERT", "/etc/ca/ca.crt")
+	pool, err := w.Database.ClientConfig(context.Background(), w.SecretReader())
+	if err != nil || pool.Password != "from-the-environment" {
 		t.Errorf("the converted password does not resolve: %v", err)
 	}
 	// A v2 file does not take the old spelling: it is not v1's reading.
@@ -879,7 +883,8 @@ func TestTheEnvSourceIsRefusedOnLambda(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := w.Database.PoolConfig(context.Background(), w.SecretReader()); err == nil {
+	t.Setenv("PGSSLROOTCERT", "/etc/ca/ca.crt")
+	if _, err := w.Database.ClientConfig(context.Background(), w.SecretReader()); err == nil {
 		t.Error("a converted v1 passwordEnv was read on Lambda")
 	}
 }
@@ -947,14 +952,15 @@ func TestAVersion1FileWithEnvFieldsStillLoadsWithAWarningAndIsRefusedOnLambda(t 
 			t.Errorf("the warning carries %q", leak)
 		}
 	}
-	if _, err := w.Database.PoolConfig(context.Background(), w.SecretReader()); err != nil {
+	t.Setenv("PGSSLROOTCERT", "/etc/ca/ca.crt")
+	if _, err := w.Database.ClientConfig(context.Background(), w.SecretReader()); err != nil {
 		t.Errorf("off Lambda the converted password does not resolve: %v", err)
 	}
 	t.Setenv("AWS_LAMBDA_FUNCTION_NAME", "audit-writer")
 	if _, err := config.LoadPurge(file); err != nil {
 		t.Fatalf("a v1 file that names a secret no longer loads on Lambda: %v", err)
 	}
-	if _, err := w.Database.PoolConfig(context.Background(), config.NewSecrets(w.Secrets)); err == nil || !strings.Contains(err.Error(), "AWS Lambda") {
+	if _, err := w.Database.ClientConfig(context.Background(), config.NewSecrets(w.Secrets)); err == nil || !strings.Contains(err.Error(), "AWS Lambda") {
 		t.Errorf("a converted v1 passwordEnv was read on Lambda: %v", err)
 	}
 }

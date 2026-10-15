@@ -22,7 +22,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/truvity/cnpg/v2/clients/go/pgclient"
 
 	"github.com/truvity/sluis/audit/index/postgres"
 	"github.com/truvity/sluis/audit/internal/cli"
@@ -473,7 +473,7 @@ func migrate(args []string) error {
 	}
 
 	ctx := context.Background()
-	pool, err := pgxpool.New(ctx, *database)
+	pool, err := auditconfig.OpenPool(ctx, *database, auditconfig.PoolOptions{URLPassword: true})
 	if err != nil {
 		return err
 	}
@@ -484,12 +484,14 @@ func migrate(args []string) error {
 
 // applyMigration applies the schema and grants each named role what its part
 // needs and no more.
-func applyMigration(ctx context.Context, pool *pgxpool.Pool, roles postgres.Roles) error {
-	if err := postgres.Migrate(ctx, pool); err != nil {
+func applyMigration(ctx context.Context, pool *pgclient.Pool, roles postgres.Roles) error {
+	// Both are idempotent (the chart reruns them on every upgrade), so a
+	// connection that breaks in the middle of either is tried again whole.
+	if err := pool.Do(ctx, func(ctx context.Context) error { return postgres.Migrate(ctx, pool) }); err != nil {
 		return err
 	}
 	fmt.Printf("index schema version %d applied\n", postgres.Version)
-	if err := postgres.GrantRoles(ctx, pool, roles); err != nil {
+	if err := pool.Do(ctx, func(ctx context.Context) error { return postgres.GrantRoles(ctx, pool, roles) }); err != nil {
 		return err
 	}
 	for part, role := range map[string]string{
@@ -536,12 +538,12 @@ func reindex(args []string) error {
 	}
 
 	ctx := context.Background()
-	pool, err := pgxpool.New(ctx, *database)
+	pool, err := auditconfig.OpenPool(ctx, *database, auditconfig.PoolOptions{URLPassword: true})
 	if err != nil {
 		return err
 	}
 	defer pool.Close()
-	if err := postgres.CheckVersion(ctx, pool); err != nil {
+	if err := pool.Do(ctx, func(ctx context.Context) error { return postgres.CheckVersion(ctx, pool) }); err != nil {
 		return err
 	}
 	target, err := postgres.New(pool)
@@ -745,12 +747,12 @@ func purge(args []string) error {
 	window := dedupeFor(profiles, *dedupeWindow)
 
 	ctx := context.Background()
-	pool, err := pgxpool.New(ctx, *database)
+	pool, err := auditconfig.OpenPool(ctx, *database, auditconfig.PoolOptions{URLPassword: true})
 	if err != nil {
 		return err
 	}
 	defer pool.Close()
-	if err := postgres.CheckVersion(ctx, pool); err != nil {
+	if err := pool.Do(ctx, func(ctx context.Context) error { return postgres.CheckVersion(ctx, pool) }); err != nil {
 		return err
 	}
 	target, err := postgres.New(pool)
@@ -905,11 +907,7 @@ func keyCmd(args []string) error {
 		if cfg.Database != nil {
 			// keys.state.backend: database keeps the wrapped keys, and their
 			// tombstones, in the writer's database: destroy needs it.
-			poolConfig, err := cfg.Database.PoolConfig(ctx, cfg.SecretReader())
-			if err != nil {
-				return err
-			}
-			pool, err := pgxpool.NewWithConfig(ctx, poolConfig)
+			pool, err := cfg.Database.Pool(ctx, cfg.SecretReader())
 			if err != nil {
 				return err
 			}
