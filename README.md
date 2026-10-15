@@ -1,6 +1,6 @@
 # sluis
 
-sluis federates one identity source, your corporate directory, into every system you run. People, groups and short-lived credentials come from one reviewed policy file, and every decision lands in one tamper-evident audit trail. You change a person's group once, and each system follows.
+sluis federates one identity source, your corporate directory, into every system you run. People, groups and short-lived credentials come from one reviewed policy file, and every decision lands in one tamper-evident audit trail. You change a person's group once, and every system follows.
 
 [![CI](https://github.com/truvity/sluis/actions/workflows/ci.yaml/badge.svg)](https://github.com/truvity/sluis/actions/workflows/ci.yaml)
 [![Release](https://img.shields.io/github/v/release/truvity/sluis?include_prereleases)](https://github.com/truvity/sluis/releases)
@@ -39,11 +39,15 @@ flowchart LR
 | Cloudflare | short-lived API tokens and R2 credentials | preset | [Cloudflare tokens](docs/guides/sluis/cloudflare-tokens.md) |
 | OpenBao | sign-in, short-lived certificates | token exchange | [OpenBao](docs/guides/sluis/connect/openbao.md) |
 
-[Connect something](docs/guides/sluis/connect/README.md) lists every integration. sluis runs on Kubernetes or AWS Lambda.
+[Connect something](docs/guides/sluis/connect/README.md) lists every integration. It runs on Kubernetes or Lambda.
+
+## Who it is for
+
+Platform teams running many systems from one directory.
 
 ## The model
 
-A policy file maps directory groups and machine identities to groups. sluis mints tokens and reconciles GitHub and Slack from it. See [concepts](docs/concepts/sluis/concepts.md).
+A policy file maps directory groups to access everywhere. See [concepts](docs/concepts/sluis/concepts.md).
 
 ## Install and a worked example
 
