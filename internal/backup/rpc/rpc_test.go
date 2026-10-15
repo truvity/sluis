@@ -19,7 +19,11 @@ import (
 var at = time.Date(2026, 10, 10, 2, 0, 0, 0, time.UTC)
 
 // fake is a Service with fixed answers; it keeps the last request of Run.
-type fake struct{ ran *job.Request }
+type fake struct {
+	ran *job.Request
+	// done is closed when Run has recorded its request, for a run started in the background.
+	done chan struct{}
+}
 
 func (f *fake) Status(context.Context) (job.Status, error) {
 	v := job.View{ID: "20261010T020000Z-a1b2c3", State: job.StateCompleted, Trigger: job.TriggerSchedule, Creator: "sluis-backup 1.75.0",
@@ -38,6 +42,9 @@ func (f *fake) List(context.Context) ([]job.Info, error) {
 
 func (f *fake) Run(_ context.Context, req job.Request) (job.Result, error) {
 	f.ran = &req
+	if f.done != nil {
+		defer close(f.done)
+	}
 	v := job.View{ID: "20261010T020000Z-a1b2c3", State: job.StatePaused, Trigger: job.TriggerRun, Started: at, Updated: at, Units: 40, Done: 3}
 	// The answer a released envelope was recorded with: a paused run of
 	// format 1, which no run of this release reports any more.

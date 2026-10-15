@@ -40,6 +40,9 @@ func (f *fn) Invoke(ctx context.Context, in *awslambda.InvokeInput, opts ...func
 		return &awslambda.InvokeOutput{StatusCode: 200, FunctionError: &f.crash, Payload: []byte(`{"errorMessage":"x"}`)}, nil
 	}
 	out, err := lambdacall.Serve(ctx, f.server, in.Payload, *in.Qualifier)
+	if in.InvocationType == types.InvocationTypeEvent {
+		return &awslambda.InvokeOutput{StatusCode: 202}, err
+	}
 	return &awslambda.InvokeOutput{StatusCode: 200, Payload: out}, err
 }
 
@@ -208,5 +211,39 @@ func TestACallMarkedWithoutRetryIsSentOnce(t *testing.T) {
 	}
 	if _, ok := f.retryer.(aws.NopRetryer); !ok {
 		t.Fatalf("a call marked WithoutRetry kept the client's retryer: %T", f.retryer)
+	}
+}
+
+// An asynchronous call is an Event invocation of the caller's alias, sent once,
+// accepted with 202, whose answer nobody reads.
+func TestCallAsyncQueuesTheEnvelopeAsAnEventOnTheCallersAlias(t *testing.T) {
+	f, c := setup()
+	if err := modcall.Start(t.Context(), c, "calc", "double", req{N: 4}); err != nil {
+		t.Fatal(err)
+	}
+	if f.got.InvocationType != types.InvocationTypeEvent || *f.got.Qualifier != "live-issuer" || *f.got.FunctionName != "arn:calc" {
+		t.Errorf("invocation = %v %v %v", f.got.InvocationType, *f.got.Qualifier, *f.got.FunctionName)
+	}
+	if !strings.Contains(string(f.got.Payload), `"method":"double"`) || !strings.Contains(string(f.got.Payload), `"N":4`) {
+		t.Errorf("payload = %s", f.got.Payload)
+	}
+	if f.retryer == nil {
+		t.Error("the invocation may be sent twice")
+	}
+}
+
+type notAccepted struct{}
+
+func (n *notAccepted) Invoke(context.Context, *awslambda.InvokeInput, ...func(*awslambda.Options)) (*awslambda.InvokeOutput, error) {
+	return &awslambda.InvokeOutput{StatusCode: 200}, nil
+}
+
+func TestCallAsyncFailsWhenLambdaDoesNotQueueIt(t *testing.T) {
+	c := lambdacall.New(&notAccepted{}, modcall.Config{Modules: map[string]modcall.Target{"calc": {Function: "arn:calc"}}}).As("issuer")
+	if err := modcall.Start(t.Context(), c, "calc", "double", req{}); !errors.Is(err, modcall.ErrTransport) {
+		t.Errorf("err = %v", err)
+	}
+	if err := modcall.Start(t.Context(), c, "elsewhere", "double", req{}); !errors.Is(err, modcall.ErrNoRoute) {
+		t.Errorf("an unrouted module: %v", err)
 	}
 }

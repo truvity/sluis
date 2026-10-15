@@ -9,8 +9,8 @@ import (
 // installation's backup and restore functions are, so that `sluisctl login`
 // can save the addresses and nobody types them. It is not OpenID discovery
 // (that stays at `/.well-known/openid-configuration` and is public): this
-// document is about the installation, and it is served only to a caller that
-// presents a token this issuer signed.
+// document is about the installation, and it is served only to a person signed
+// in at the CLI (see [Storage.CLISubject]); anyone else gets a 404.
 const SluisConfigurationPath = "/.well-known/sluis-configuration"
 
 // SluisConfiguration is the document. Every endpoint is a URI whose scheme
@@ -58,31 +58,21 @@ func (i *Issuer) sluisConfiguration() (SluisConfiguration, bool) {
 	return out, true
 }
 
-// sluisConfigurationHandler serves the document to a caller with a verified
-// token of this issuer. Any such token will do: the document names addresses
-// and the installation, and nothing a caller could not learn from being granted
-// the access the functions themselves enforce. It is withheld from anonymous
-// callers, so that the issuer does not tell the internet where its functions are.
-func sluisConfigurationHandler(iss *Issuer, verify func(context.Context, string) error) http.Handler {
+// sluisConfigurationHandler serves the document to a caller that is signed in
+// at the CLI: a live person's sign-in (see [Storage.CLISubject]), not any token
+// this issuer signed. The document names addresses and the installation, and the
+// issuer does not tell anyone else where its functions are. Everyone else, with
+// no token or a token that does not count, gets the 404 an issuer with nothing
+// to say gets, so the path reveals nothing.
+func sluisConfigurationHandler(iss *Issuer, allowed func(context.Context, string) bool) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
 			w.Header().Set("Allow", "GET, HEAD")
 			http.Error(w, "this endpoint answers GET", http.StatusMethodNotAllowed)
 			return
 		}
-		bearer := bearerFrom(r)
-		if bearer == "" {
-			w.Header().Set("WWW-Authenticate", "Bearer")
-			http.Error(w, "a bearer token is required", http.StatusUnauthorized)
-			return
-		}
-		if err := verify(r.Context(), bearer); err != nil {
-			w.Header().Set("WWW-Authenticate", `Bearer error="invalid_token"`)
-			http.Error(w, "that token was not accepted", http.StatusUnauthorized)
-			return
-		}
 		doc, ok := iss.sluisConfiguration()
-		if !ok {
+		if bearer := bearerFrom(r); !ok || bearer == "" || !allowed(r.Context(), bearer) {
 			http.NotFound(w, r)
 			return
 		}

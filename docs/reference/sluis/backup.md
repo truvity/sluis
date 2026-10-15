@@ -90,9 +90,11 @@ age -d -i key.txt 20261013T020000Z-ab12cd.tar.gz.age | tar xz
 
 | Detail | Behavior |
 |---|---|
-| Served | The console's `BackupService`, to the `sluisctl` client's bearer token and to no other service |
+| Served | The console's `BackupService`, to the access token of a live `sluisctl` session and to no other service. A token of a session that ended, of an agent session, of another client, or an ID token is refused |
 | Maintenance | `RunBackup` is refused while the backup module is under maintenance |
-| Long runs | `RunBackup` waits for the run. Behind a gateway with a shorter limit (an HTTP API in front of a Lambda issuer has 30 seconds) the caller sees a timeout while the run goes on in the function. Read `backup status`, or run `--direct` |
+| Start | `RunBackup` hands the run to the module as an asynchronous call (a Lambda event invocation, or a background call to a Service) and answers `started` with the issuer's clock. `sluisctl` reads `GetBackupStatus` until the run ends, or stops with `--no-wait` |
+| Throttle | `contended` when a run is already going, or when the same person started one in the last 2 minutes (per issuer process; the lease is the guard across replicas) |
+| Policy | `backup.runGroups` is read when the issuer starts, like the rest of the policy. Removing a group takes a restart |
 | Restore | No call of the console or the issuer starts or resumes a restore |
 
 ## Discovery
@@ -100,7 +102,7 @@ age -d -i key.txt 20261013T020000Z-ab12cd.tar.gz.age | tar xz
 | Detail | Behavior |
 |---|---|
 | Endpoint | `GET /.well-known/sluis-configuration` on the issuer |
-| Callers | An access token the issuer signed. Anyone else gets `401`. An issuer without `console.backup` answers `404` |
+| Callers | A person signed in at `sluisctl`: the access token of a live, non-agent session at that client. Anyone else, and an issuer without `console.backup`, gets `404` |
 | `issuer` | The issuer's URL |
 | `instance` | `instance`, else `release`, else `sluis`. `restore start --confirm` must equal it |
 | `backup.endpoint`, `restore.endpoint` | A URI whose scheme names the transport. `arn:aws:lambda:<region>:<account>:function:<name>` is the only one `sluisctl` reaches. `k8s://` and `https://` are reserved, and refused as a usage error |
@@ -124,7 +126,7 @@ age -d -i key.txt 20261013T020000Z-ab12cd.tar.gz.age | tar xz
 | `{"kind":"backup","resume":true}` | a `<function>-resume` schedule left by an earlier release (an apply of v1.76.5 or later deletes it) | `idle`, touching nothing |
 | `backup.status` | console, admin, breakglass | `latest`, `lastCompleted`, `unfinished`, `retention` |
 | `backup.list` | console, admin, breakglass | `backups`, newest first; `limit` |
-| `backup.run` | console, admin, breakglass | A run's result; `resume` answers `idle`. From `console`, `by` names the person: the issuer checked their group first, and the audit records name them. From `admin` and `breakglass`, `by` is ignored and the actor is the workload `lambda:<class>` |
+| `backup.run` | console, admin, breakglass | A run's result; `resume` answers `idle`. From `console`, `by` names the person: the issuer checked their group first, and the audit records name them. The issuer starts it as an asynchronous call and does not wait. From `admin` and `breakglass`, `by` is ignored and the actor is the workload `lambda:<class>` |
 | Audit | `roster.backup.completed`, `.failed`, `.pruned` ([audit actions](audit-actions.md)) | Counts and a reason, never a value |
 
 ## On Kubernetes

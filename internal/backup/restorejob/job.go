@@ -240,6 +240,11 @@ type Result struct {
 // Preview verifies the archive and reports what a restore would do. It takes no
 // lease, sets no flag and writes nothing.
 func (j *Job) Preview(ctx context.Context, backupID string) (*restore.Report, error) {
+	// The id names an object under the installation's prefix; only one path
+	// segment of the characters an id has can.
+	if !backup.ValidName(backupID) {
+		return nil, errors.New("the backup id is not one path segment")
+	}
 	r, err := backup.Open(ctx, j.c.Archive, j.c.Identity, j.c.Installation, backupID, j.c.TempDir)
 	if err != nil {
 		return nil, err

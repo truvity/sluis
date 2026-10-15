@@ -6,13 +6,13 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
-	"strings"
 	"time"
 
 	"connectrpc.com/connect"
 
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
 	"github.com/truvity/sluis/internal/access"
+	"github.com/truvity/sluis/internal/backup"
 	"github.com/truvity/sluis/internal/backup/job"
 	"github.com/truvity/sluis/internal/backup/restorejob"
 	"github.com/truvity/sluis/internal/backup/rpc"
@@ -28,7 +28,7 @@ type BackupModule interface {
 	Status(ctx context.Context) (job.Status, error)
 	List(ctx context.Context, limit int) ([]job.Info, error)
 	RestoreStatus(ctx context.Context) (restorejob.Status, error)
-	Run(ctx context.Context, by string, resume bool) (job.Result, error)
+	StartRun(ctx context.Context, by string) error
 	PreviewRestore(ctx context.Context, backupID string) (rpc.PreviewResponse, error)
 }
 
@@ -151,8 +151,22 @@ func (c *Console) GetRestoreStatus(
 	return connect.NewResponse(out), nil
 }
 
+// backupRunThrottle is how long a person waits between two backups they start.
+// The lease and the module's unfinished run refuse a second run whoever asks;
+// this is for the moments before the first one has a record.
+const backupRunThrottle = 2 * time.Minute
+
+// The outcomes of RunBackup.
+const (
+	runStarted   = "started"
+	runContended = "contended"
+	runIdle      = "idle"
+)
+
 // RunBackup implements the runner's contract: a person whose groups the policy
-// names starts a backup, and the module records them as who asked.
+// names starts a backup, and the module records them as who asked. It answers
+// when the module has been handed the run, not when the run ends: the caller
+// reads the run with GetBackupStatus.
 func (c *Console) RunBackup(
 	ctx context.Context, req *connect.Request[directoryrosterv1.RunBackupRequest],
 ) (*connect.Response[directoryrosterv1.RunBackupResponse], error) {
@@ -175,18 +189,61 @@ func (c *Console) RunBackup(
 	if by == "" || id.Source == access.SourceRecovery {
 		return nil, connect.NewError(connect.CodePermissionDenied, errors.New("this sign-in cannot be named in the audit record of a backup"))
 	}
-	// A run is one synchronous call that lasts as long as the backup, so it is
-	// bounded by the module's own limit and not by [backupCallTimeout].
-	ctx, cancel := context.WithTimeout(ctx, backupRunTimeout)
+	answer := func(outcome string, at time.Time) *connect.Response[directoryrosterv1.RunBackupResponse] {
+		return connect.NewResponse(&directoryrosterv1.RunBackupResponse{Available: true, Outcome: outcome, Started: stamp(at)})
+	}
+	// A run is one invocation since format 2, so a resume has nothing to continue.
+	if req.Msg.GetResume() {
+		return answer(runIdle, time.Time{}), nil
+	}
+	now := time.Now()
+	if !c.reserveRun(by, now) {
+		return answer(runContended, time.Time{}), nil
+	}
+	ctx, cancel := context.WithTimeout(ctx, backupCallTimeout)
 	defer cancel()
-	c.log().InfoContext(ctx, "a backup was requested through the console", slog.String("by", logattr.Safe(by)))
-	res, err := c.deps.Backup.Run(ctx, by, req.Msg.GetResume())
+	// A run already going holds the lease, and another would only find it held.
+	st, err := c.deps.Backup.Status(ctx)
 	if err != nil {
+		c.releaseRun(by)
 		return nil, backupError("the backup module did not answer", err)
 	}
-	return connect.NewResponse(&directoryrosterv1.RunBackupResponse{
-		Available: true, Outcome: res.Outcome, Id: res.ID, Run: backupRun(res.Run),
-	}), nil
+	if st.Unfinished != nil && st.Unfinished.State == job.StateRunning {
+		return answer(runContended, time.Time{}), nil
+	}
+	c.log().InfoContext(ctx, "a backup was requested through the console", slog.String("by", logattr.Safe(by)))
+	if err = c.deps.Backup.StartRun(ctx, by); err != nil {
+		c.releaseRun(by)
+		return nil, backupError("the backup module did not take the run", err)
+	}
+	return answer(runStarted, now), nil
+}
+
+// reserveRun records that by is starting a backup at now, unless they started
+// one within [backupRunThrottle]. Per process: the lease is the guard across
+// replicas.
+func (c *Console) reserveRun(by string, now time.Time) bool {
+	c.runMu.Lock()
+	defer c.runMu.Unlock()
+	if last, ok := c.runBy[by]; ok && now.Sub(last) < backupRunThrottle {
+		return false
+	}
+	if c.runBy == nil {
+		c.runBy = map[string]time.Time{}
+	}
+	for who, at := range c.runBy {
+		if now.Sub(at) >= backupRunThrottle {
+			delete(c.runBy, who)
+		}
+	}
+	c.runBy[by] = now
+	return true
+}
+
+func (c *Console) releaseRun(by string) {
+	c.runMu.Lock()
+	defer c.runMu.Unlock()
+	delete(c.runBy, by)
 }
 
 // GetRestorePreview implements the operator's contract: counts per section, and
@@ -197,8 +254,10 @@ func (c *Console) GetRestorePreview(
 	if _, err := requireRole(ctx, access.RoleOperator); err != nil {
 		return nil, err
 	}
-	if strings.TrimSpace(req.Msg.GetBackupId()) == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("backup_id is required"))
+	// An id names an object under the installation's archive prefix: one path
+	// segment of letters, digits, dot, dash and underscore, never a path.
+	if !backup.ValidName(req.Msg.GetBackupId()) {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("backup_id is not the id of a backup"))
 	}
 	if c.deps.Backup == nil {
 		return connect.NewResponse(&directoryrosterv1.GetRestorePreviewResponse{}), nil

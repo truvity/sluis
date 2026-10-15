@@ -448,7 +448,7 @@ func (s *ConsoleServer) principal(w http.ResponseWriter, r *http.Request) (acces
 	}
 	// A person's laptop: the access token `sluisctl login` holds, for the
 	// backup service only.
-	if s.bearers != nil && bearerMayCall(r.URL.Path) {
+	if s.bearers != nil && bearerMayCall(r.URL) {
 		if p, ok := s.bearers(r); ok {
 			return p, true
 		}

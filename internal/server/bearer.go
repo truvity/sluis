@@ -2,6 +2,8 @@ package server
 
 import (
 	"net/http"
+	"net/url"
+	pathpkg "path"
 	"strings"
 
 	"github.com/truvity/sluis/gen/directoryroster/v1/directoryrosterv1connect"
@@ -30,10 +32,22 @@ var bearerServices = []string{
 	"/" + directoryrosterv1connect.BackupServiceName + "/",
 }
 
-// bearerMayCall says a bearer from [ConsoleServer.UseBearers] may call path.
-func bearerMayCall(path string) bool {
+// bearerMayCall says a bearer from [ConsoleServer.UseBearers] may call the
+// request's path: exactly `/<package>.BackupService/<Method>`, in its cleaned and
+// unescaped form. This runs before the mux cleans or redirects anything, so it
+// does not trust a path that only becomes a BackupService one once something
+// has resolved it: `..`, an encoded `/` or `.`, a doubled slash and a trailing
+// slash are all refused.
+func bearerMayCall(u *url.URL) bool {
+	path := u.Path
+	if u.RawPath != "" && u.RawPath != path || strings.Contains(u.EscapedPath(), "%") || path != pathpkg.Clean(path) {
+		return false
+	}
 	for _, prefix := range bearerServices {
-		if strings.HasPrefix(path, prefix) {
+		method, ok := strings.CutPrefix(path, prefix)
+		if ok && method != "" && !strings.ContainsFunc(method, func(r rune) bool {
+			return (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') && (r < '0' || r > '9')
+		}) {
 			return true
 		}
 	}

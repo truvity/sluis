@@ -30,15 +30,14 @@ type fakeBackup struct {
 	err     error
 	limits  []int
 	// ran is who each Run was for.
-	ran     []string
-	resumed []bool
-	preview rpc.PreviewResponse
+	ran      []string
+	startErr error
+	preview  rpc.PreviewResponse
 }
 
-func (f *fakeBackup) Run(_ context.Context, by string, resume bool) (job.Result, error) {
-	f.ran, f.resumed = append(f.ran, by), append(f.resumed, resume)
-	v := job.View{ID: "20261011T020000Z-aa", State: "completed", Started: time.Date(2026, 10, 11, 2, 0, 0, 0, time.UTC), Modules: 4, Records: 90}
-	return job.Result{Outcome: job.OutcomeCompleted, ID: v.ID, Run: &v}, f.err
+func (f *fakeBackup) StartRun(_ context.Context, by string) error {
+	f.ran = append(f.ran, by)
+	return f.startErr
 }
 
 func (f *fakeBackup) PreviewRestore(context.Context, string) (rpc.PreviewResponse, error) {
@@ -236,6 +235,7 @@ func runnerConsole(m BackupModule, groups ...string) *Console {
 func TestRunBackupNeedsAGroupThePolicyNames(t *testing.T) {
 	t.Parallel()
 	f := newFakeBackup()
+	f.status.Unfinished = nil
 	c := runnerConsole(f, "backup-runners")
 	req := func() *connect.Request[directoryrosterv1.RunBackupRequest] {
 		return connect.NewRequest(&directoryrosterv1.RunBackupRequest{})
@@ -261,7 +261,7 @@ func TestRunBackupNeedsAGroupThePolicyNames(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !res.Msg.GetAvailable() || res.Msg.GetOutcome() != "completed" || res.Msg.GetRun().GetRecords() != 90 {
+	if !res.Msg.GetAvailable() || res.Msg.GetOutcome() != "started" {
 		t.Errorf("run = %v", res.Msg)
 	}
 	// The module is told who asked, which is what its audit record names.
@@ -287,19 +287,92 @@ func TestNobodyMayRunABackupWhenThePolicyNamesNoGroup(t *testing.T) {
 	}
 }
 
-func TestRunBackupPassesResumeAndSurfacesAModuleThatDoesNotAnswer(t *testing.T) {
+func runReq(resume bool) *connect.Request[directoryrosterv1.RunBackupRequest] {
+	return connect.NewRequest(&directoryrosterv1.RunBackupRequest{Resume: resume})
+}
+
+// A run is started and the answer comes at once, with the issuer's clock for the
+// caller to find the run by; the run itself is read back with the status.
+func TestRunBackupAnswersWhenTheModuleHasTheRun(t *testing.T) {
 	t.Parallel()
 	f := newFakeBackup()
+	f.status.Unfinished = nil
 	c := runnerConsole(f, "r")
-	if _, err := c.RunBackup(asRole(access.RoleNone, "r"), connect.NewRequest(&directoryrosterv1.RunBackupRequest{Resume: true})); err != nil {
+	res, err := c.RunBackup(asRole(access.RoleNone, "r"), runReq(false))
+	if err != nil {
 		t.Fatal(err)
 	}
-	if len(f.resumed) != 1 || !f.resumed[0] {
-		t.Errorf("resume reached the module as %v", f.resumed)
+	if res.Msg.GetOutcome() != "started" || res.Msg.GetStarted() == nil || res.Msg.GetId() != "" {
+		t.Errorf("answer = %v", res.Msg)
 	}
-	f.err = errors.New("lambda: throttled")
-	if _, err := c.RunBackup(asRole(access.RoleNone, "r"), connect.NewRequest(&directoryrosterv1.RunBackupRequest{})); code(err) != connect.CodeUnavailable {
-		t.Errorf("code = %v", code(err))
+	if len(f.ran) != 1 || f.ran[0] != "ada@example.com" {
+		t.Errorf("the module was told %v", f.ran)
+	}
+}
+
+func TestRunBackupIsContendedWhileARunIsGoing(t *testing.T) {
+	t.Parallel()
+	f := newFakeBackup()
+	f.status.Unfinished = &job.View{ID: "x", State: job.StateRunning}
+	res, err := runnerConsole(f, "r").RunBackup(asRole(access.RoleNone, "r"), runReq(false))
+	if err != nil || res.Msg.GetOutcome() != "contended" || len(f.ran) != 0 {
+		t.Errorf("%v, %v, %v", res, err, f.ran)
+	}
+}
+
+// One start per person per window: the second asks the module nothing.
+func TestARepeatedRunBackupByOnePersonIsContended(t *testing.T) {
+	t.Parallel()
+	f := newFakeBackup()
+	f.status.Unfinished = nil
+	c := runnerConsole(f, "r")
+	if res, err := c.RunBackup(asRole(access.RoleNone, "r"), runReq(false)); err != nil || res.Msg.GetOutcome() != "started" {
+		t.Fatalf("first: %v, %v", res, err)
+	}
+	res, err := c.RunBackup(asRole(access.RoleNone, "r"), runReq(false))
+	if err != nil || res.Msg.GetOutcome() != "contended" || len(f.ran) != 1 {
+		t.Errorf("second: %v, %v, %v", res, err, f.ran)
+	}
+	// Someone else is not held by it.
+	other := WithIdentity(context.Background(), access.Identity{Email: "bob@example.com", Groups: []string{"r"}})
+	if res, err = c.RunBackup(other, runReq(false)); err != nil || res.Msg.GetOutcome() != "started" {
+		t.Errorf("another person: %v, %v", res, err)
+	}
+}
+
+func TestAFailedStartDoesNotHoldThePersonOff(t *testing.T) {
+	t.Parallel()
+	f := newFakeBackup()
+	f.status.Unfinished = nil
+	f.startErr = errors.New("lambda: throttled")
+	c := runnerConsole(f, "r")
+	if _, err := c.RunBackup(asRole(access.RoleNone, "r"), runReq(false)); code(err) != connect.CodeUnavailable {
+		t.Fatalf("code = %v", code(err))
+	}
+	f.startErr = nil
+	if res, err := c.RunBackup(asRole(access.RoleNone, "r"), runReq(false)); err != nil || res.Msg.GetOutcome() != "started" {
+		t.Errorf("retry: %v, %v", res, err)
+	}
+}
+
+func TestAResumeHasNothingToContinue(t *testing.T) {
+	t.Parallel()
+	f := newFakeBackup()
+	res, err := runnerConsole(f, "r").RunBackup(asRole(access.RoleNone, "r"), runReq(true))
+	if err != nil || res.Msg.GetOutcome() != "idle" || len(f.ran) != 0 {
+		t.Errorf("%v, %v, %v", res, err, f.ran)
+	}
+}
+
+func TestPreviewRefusesAnIdThatIsAPath(t *testing.T) {
+	t.Parallel()
+	f := newFakeBackup()
+	c := backupConsole(f)
+	for _, id := range []string{"..", "../x", "a/b", "a%2Fb", `a\b`, ".hidden", "a b", "a\x00b", strings.Repeat("a", 65), "x/../../y"} {
+		_, err := c.GetRestorePreview(asRole(access.RoleOperator), connect.NewRequest(&directoryrosterv1.GetRestorePreviewRequest{BackupId: id}))
+		if code(err) != connect.CodeInvalidArgument {
+			t.Errorf("%q: %v", id, err)
+		}
 	}
 }
 

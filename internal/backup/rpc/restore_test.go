@@ -135,3 +135,15 @@ func TestRestorePreviewRefusalCarriesNoCause(t *testing.T) {
 		t.Errorf("the cause crossed: %s", resp.Result)
 	}
 }
+
+// An id names an object under the installation's prefix, so a path is refused
+// before the service is asked.
+func TestRestorePreviewRefusesAnIdThatIsAPath(t *testing.T) {
+	for _, id := range []string{"..", "../x", "a/b", ".hidden", "a b", "x/../../y"} {
+		resp := preview(t, rpc.CallerConsole, id)
+		var out rpc.PreviewResponse
+		if resp.Error != nil || json.Unmarshal(resp.Result, &out) != nil || out.Outcome != restorejob.OutcomeRefused || out.Report != nil {
+			t.Errorf("%q: %+v, %s", id, resp.Error, resp.Result)
+		}
+	}
+}

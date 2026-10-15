@@ -195,7 +195,10 @@ type ConsoleDeps struct {
 // Console serves WorkspaceService, SettingsService and AccessService on
 // the console listener.
 type Console struct {
-	deps ConsoleDeps
+	// runBy is when each person last started a backup; see [Console.reserveRun].
+	runMu sync.Mutex
+	runBy map[string]time.Time
+	deps  ConsoleDeps
 	// github, slack and google are the provider modules in this process, built
 	// over the console's own stores when the first page asks, and the way to call
 	// each as the console, for a deployment that has not split it out.

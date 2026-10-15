@@ -19,7 +19,7 @@ func TestTheIssuersConfigurationNamesOnlyFunctionsALaptopCanInvoke(t *testing.T)
 		"two ARNs":        {config.ConsoleBackup{Function: backupARN, RestoreFunction: restoreARN}, backupARN, restoreARN, "eu-west-1"},
 		"a qualified ARN": {config.ConsoleBackup{Function: backupARN + ":live-console"}, backupARN, "", "eu-west-1"},
 		"bare names":      {config.ConsoleBackup{Function: "example-backup", RestoreFunction: "example-restore"}, "", "", ""},
-		"cluster URLs":    {config.ConsoleBackup{URL: "http://backup.svc.cluster.local", RestoreURL: "http://restore.svc.cluster.local"}, "", "", ""},
+		"cluster URLs":    {config.ConsoleBackup{URL: "http://backup.example", RestoreURL: "http://restore.example"}, "", "", ""},
 		"another service": {config.ConsoleBackup{Function: "arn:aws:s3:::bucket"}, "", "", ""},
 	} {
 		doc := backupConfiguration(Config{Backup: &tc.in, BackupName: "example"})

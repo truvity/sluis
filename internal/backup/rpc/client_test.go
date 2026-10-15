@@ -2,6 +2,7 @@ package rpc_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/truvity/sluis/internal/backup/rpc"
 	"github.com/truvity/sluis/internal/modcall"
@@ -32,16 +33,25 @@ func TestTheConsoleClientReadsTheThreeMethods(t *testing.T) {
 // The client starts a backup naming the person, and previews a restore, as the
 // console, through the servers the modules register.
 func TestTheConsoleClientRunsABackupForAPersonAndPreviewsARestore(t *testing.T) {
-	f := &fake{}
+	f := &fake{done: make(chan struct{})}
 	back := modcall.NewServer(rpc.Module)
 	rpc.Register(back, f)
 	rest := modcall.NewServer(rpc.RestoreModule)
 	rpc.RegisterRestore(rest, restoreFake{})
 	c := rpc.NewClient(modcall.Local{rpc.Module: back, rpc.RestoreModule: rest}.As(rpc.CallerConsole))
 
-	res, err := c.Run(t.Context(), "ada@example.com", false)
-	if err != nil || res.ID == "" || f.ran == nil || f.ran.Actor.ID != "ada@example.com" {
-		t.Errorf("run = %+v, %v, %+v", res, err, f.ran)
+	// The run starts in the background and the call returns; the module still
+	// records the person.
+	if err := c.StartRun(t.Context(), "ada@example.com"); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	select {
+	case <-f.done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the run never reached the module")
+	}
+	if f.ran.Actor.ID != "ada@example.com" {
+		t.Errorf("the run was recorded as %+v", f.ran.Actor)
 	}
 	p, err := c.PreviewRestore(t.Context(), "20261010T020000Z-a1b2c3")
 	if err != nil || p.Report == nil || p.Report.Totals().Create != 2 {

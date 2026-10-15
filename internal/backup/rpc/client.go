@@ -33,9 +33,11 @@ func (c *Client) RestoreStatus(ctx context.Context) (restorejob.Status, error) {
 	return modcall.Do[StatusRequest, restorejob.Status](ctx, c.c, RestoreModule, MethodRestoreStatus, StatusRequest{})
 }
 
-// Run is `backup.run` for the person by, whom the module records as the actor.
-func (c *Client) Run(ctx context.Context, by string, resume bool) (job.Result, error) {
-	return modcall.Do[RunRequest, job.Result](ctx, c.c, Module, MethodRun, RunRequest{Resume: resume, By: by})
+// StartRun starts `backup.run` for the person by, whom the module records as the
+// actor, and returns once the module has been handed the call: a backup runs for
+// minutes, and its record is read back with [Client.Status].
+func (c *Client) StartRun(ctx context.Context, by string) error {
+	return modcall.Start(ctx, c.c, Module, MethodRun, RunRequest{By: by})
 }
 
 // PreviewRestore is `restore.preview`: what restoring the backup would do, as counts.
