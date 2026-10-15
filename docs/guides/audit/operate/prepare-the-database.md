@@ -12,8 +12,8 @@ Create one Postgres database with an owner, one role per part (writer, indexer, 
 
 - The writer and indexer never migrate themselves and refuse to start against an unknown schema version.
 
-- The connection is `verify-full` against a CA file, always. Name the file in the URL (`?sslmode=verify-full&sslrootcert=/etc/postgres/ca.crt`) or in `PGSSLROOTCERT`; `sslmode` other than `verify-full` and a missing CA file are refused when the process starts, and so is a URL parameter the client does not use (`host`, `passfile`, `options`). A certificate role adds `sslcert` and `sslkey`, both or neither. The server's certificate must carry the URL's host name: use the `<cluster>-rw` Service of a CloudNativePG cluster. The process follows the [client contract](https://github.com/truvity/cnpg/blob/master/clients/README.md): it opens the first connection with a retry, retires connections after 30 minutes, and retries a start-up check or a migration when the connection breaks (a switchover), never a statement that failed on its own. `CNPG_CLIENT_*` variables tune the pool and the retry; `maxConnections` wins over `CNPG_CLIENT_POOL_MAX`.
-- With `secrets.source: file`, the password file is read again for every new connection, so a rotated Secret is used within 30 minutes without a restart. From any other source the password is read once, at start. `PGPASSWORD` and `CNPG_CLIENT_PASSWORD_FILE` are not read: the secret `passwordSecret` names is the only way in.
+- The connection is `verify-full` against a CA file, named by `sslrootcert=` in the URL or `PGSSLROOTCERT`. Any other `sslmode` is refused.
+- A rotated password file is used within 30 minutes.
 - A password in a database URL is refused. Name a secret with `passwordSecret` and let the [`secrets` block](../../../reference/audit/configuration.md#secrets) resolve it.
 
 ## Steps
