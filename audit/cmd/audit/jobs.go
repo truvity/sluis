@@ -16,8 +16,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
-
 	"github.com/truvity/sluis/audit/index/postgres"
 	"github.com/truvity/sluis/audit/internal/buildinfo"
 	"github.com/truvity/sluis/audit/internal/cli"
@@ -146,16 +144,12 @@ func purgeFromConfig(path string, asJSON bool) error {
 	window := dedupeFor(profiles, cfg.DedupeWindow.D())
 
 	ctx := context.Background()
-	poolConfig, err := cfg.Database.PoolConfig(ctx, cfg.SecretReader())
-	if err != nil {
-		return err
-	}
-	pool, err := pgxpool.NewWithConfig(ctx, poolConfig)
+	pool, err := cfg.Database.Pool(ctx, cfg.SecretReader())
 	if err != nil {
 		return err
 	}
 	defer pool.Close()
-	if err := postgres.CheckVersion(ctx, pool); err != nil {
+	if err := pool.Do(ctx, func(ctx context.Context) error { return postgres.CheckVersion(ctx, pool) }); err != nil {
 		return err
 	}
 	target, err := postgres.New(pool)
@@ -202,11 +196,7 @@ func migrateFromConfig(path string) error {
 		return err
 	}
 	ctx := context.Background()
-	poolConfig, err := cfg.Database.PoolConfig(ctx, cfg.SecretReader())
-	if err != nil {
-		return err
-	}
-	pool, err := pgxpool.NewWithConfig(ctx, poolConfig)
+	pool, err := cfg.Database.Pool(ctx, cfg.SecretReader())
 	if err != nil {
 		return err
 	}

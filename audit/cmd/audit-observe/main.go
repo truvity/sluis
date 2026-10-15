@@ -28,7 +28,6 @@ import (
 
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel"
 
 	"github.com/truvity/sluis/audit/index/postgres"
@@ -84,18 +83,14 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	poolConfig, err := cfg.Database.PoolConfig(ctx, cfg.SecretReader())
-	if err != nil {
-		return err
-	}
-	pool, err := pgxpool.NewWithConfig(ctx, poolConfig)
+	pool, err := cfg.Database.Pool(ctx, cfg.SecretReader())
 	if err != nil {
 		return err
 	}
 	defer pool.Close()
 	// An indexer whose database is at another schema version refuses to start:
 	// migrating is a step an operator takes, not something it races to do.
-	if err := postgres.CheckVersion(ctx, pool); err != nil {
+	if err := pool.Do(ctx, func(ctx context.Context) error { return postgres.CheckVersion(ctx, pool) }); err != nil {
 		return err
 	}
 	target, err := postgres.New(pool)

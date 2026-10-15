@@ -175,7 +175,7 @@ observe:
     deployment: /etc/audit/deployment.yaml
     archive: ARCHIVE
     database:
-      url: postgres://audit_observe@postgres.example.test:5432/audit?sslmode=require
+      url: postgres://audit_observe@postgres.example.test:5432/audit?sslmode=verify-full&sslrootcert=/etc/postgres/ca.crt
       passwordSecret: database-password
     secrets: {source: file, root: /etc/audit/secrets}
   secretFiles:
@@ -186,7 +186,7 @@ migrate:
   config:
     apiVersion: audit.truvity.github.io/audit-migrate/v2
     database:
-      url: postgres://audit@postgres.example.test:5432/audit?sslmode=require
+      url: postgres://audit@postgres.example.test:5432/audit?sslmode=verify-full&sslrootcert=/etc/postgres/ca.crt
       passwordSecret: database-password
     secrets: {source: file, root: /etc/audit/secrets}
     observe: audit_observe
@@ -218,7 +218,7 @@ jobs:
       apiVersion: audit.truvity.github.io/audit-purge/v2
       deployment: /etc/audit/deployment.yaml
       database:
-        url: postgres://audit_purge@postgres.example.test:5432/audit?sslmode=require
+        url: postgres://audit_purge@postgres.example.test:5432/audit?sslmode=verify-full&sslrootcert=/etc/postgres/ca.crt
         passwordSecret: database-password
       secrets: {source: file, root: /etc/audit/secrets}
     secretFiles:
