@@ -952,6 +952,363 @@ func (x *ModuleMaintenance) GetUnreadable() bool {
 	return false
 }
 
+type RunBackupRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Resume only continues a paused run of format 1 and starts none; since
+	// format 2 it answers idle.
+	Resume        bool `protobuf:"varint,1,opt,name=resume,proto3" json:"resume,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RunBackupRequest) Reset() {
+	*x = RunBackupRequest{}
+	mi := &file_directoryroster_v1_backup_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RunBackupRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RunBackupRequest) ProtoMessage() {}
+
+func (x *RunBackupRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_directoryroster_v1_backup_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RunBackupRequest.ProtoReflect.Descriptor instead.
+func (*RunBackupRequest) Descriptor() ([]byte, []int) {
+	return file_directoryroster_v1_backup_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *RunBackupRequest) GetResume() bool {
+	if x != nil {
+		return x.Resume
+	}
+	return false
+}
+
+type RunBackupResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Available is false when this deployment has no backup module to ask.
+	Available bool `protobuf:"varint,1,opt,name=available,proto3" json:"available,omitempty"`
+	// Outcome is completed, idle, contended, maintenance or failed.
+	Outcome string `protobuf:"bytes,2,opt,name=outcome,proto3" json:"outcome,omitempty"`
+	// Id is the run's, empty when none ran.
+	Id            string     `protobuf:"bytes,3,opt,name=id,proto3" json:"id,omitempty"`
+	Run           *BackupRun `protobuf:"bytes,4,opt,name=run,proto3" json:"run,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RunBackupResponse) Reset() {
+	*x = RunBackupResponse{}
+	mi := &file_directoryroster_v1_backup_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RunBackupResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RunBackupResponse) ProtoMessage() {}
+
+func (x *RunBackupResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_directoryroster_v1_backup_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RunBackupResponse.ProtoReflect.Descriptor instead.
+func (*RunBackupResponse) Descriptor() ([]byte, []int) {
+	return file_directoryroster_v1_backup_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *RunBackupResponse) GetAvailable() bool {
+	if x != nil {
+		return x.Available
+	}
+	return false
+}
+
+func (x *RunBackupResponse) GetOutcome() string {
+	if x != nil {
+		return x.Outcome
+	}
+	return ""
+}
+
+func (x *RunBackupResponse) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *RunBackupResponse) GetRun() *BackupRun {
+	if x != nil {
+		return x.Run
+	}
+	return nil
+}
+
+type GetRestorePreviewRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	BackupId      string                 `protobuf:"bytes,1,opt,name=backup_id,json=backupId,proto3" json:"backup_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetRestorePreviewRequest) Reset() {
+	*x = GetRestorePreviewRequest{}
+	mi := &file_directoryroster_v1_backup_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetRestorePreviewRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetRestorePreviewRequest) ProtoMessage() {}
+
+func (x *GetRestorePreviewRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_directoryroster_v1_backup_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetRestorePreviewRequest.ProtoReflect.Descriptor instead.
+func (*GetRestorePreviewRequest) Descriptor() ([]byte, []int) {
+	return file_directoryroster_v1_backup_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *GetRestorePreviewRequest) GetBackupId() string {
+	if x != nil {
+		return x.BackupId
+	}
+	return ""
+}
+
+type GetRestorePreviewResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Available is false when this deployment has no restore function to ask.
+	Available bool `protobuf:"varint,1,opt,name=available,proto3" json:"available,omitempty"`
+	// Outcome is preview, or refused when the backup could not be previewed.
+	Outcome       string                   `protobuf:"bytes,2,opt,name=outcome,proto3" json:"outcome,omitempty"`
+	Error         string                   `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
+	Installation  string                   `protobuf:"bytes,4,opt,name=installation,proto3" json:"installation,omitempty"`
+	BackupId      string                   `protobuf:"bytes,5,opt,name=backup_id,json=backupId,proto3" json:"backup_id,omitempty"`
+	Layout        string                   `protobuf:"bytes,6,opt,name=layout,proto3" json:"layout,omitempty"`
+	Created       string                   `protobuf:"bytes,7,opt,name=created,proto3" json:"created,omitempty"`
+	Sections      []*RestorePreviewSection `protobuf:"bytes,8,rep,name=sections,proto3" json:"sections,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetRestorePreviewResponse) Reset() {
+	*x = GetRestorePreviewResponse{}
+	mi := &file_directoryroster_v1_backup_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetRestorePreviewResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetRestorePreviewResponse) ProtoMessage() {}
+
+func (x *GetRestorePreviewResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_directoryroster_v1_backup_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetRestorePreviewResponse.ProtoReflect.Descriptor instead.
+func (*GetRestorePreviewResponse) Descriptor() ([]byte, []int) {
+	return file_directoryroster_v1_backup_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *GetRestorePreviewResponse) GetAvailable() bool {
+	if x != nil {
+		return x.Available
+	}
+	return false
+}
+
+func (x *GetRestorePreviewResponse) GetOutcome() string {
+	if x != nil {
+		return x.Outcome
+	}
+	return ""
+}
+
+func (x *GetRestorePreviewResponse) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+func (x *GetRestorePreviewResponse) GetInstallation() string {
+	if x != nil {
+		return x.Installation
+	}
+	return ""
+}
+
+func (x *GetRestorePreviewResponse) GetBackupId() string {
+	if x != nil {
+		return x.BackupId
+	}
+	return ""
+}
+
+func (x *GetRestorePreviewResponse) GetLayout() string {
+	if x != nil {
+		return x.Layout
+	}
+	return ""
+}
+
+func (x *GetRestorePreviewResponse) GetCreated() string {
+	if x != nil {
+		return x.Created
+	}
+	return ""
+}
+
+func (x *GetRestorePreviewResponse) GetSections() []*RestorePreviewSection {
+	if x != nil {
+		return x.Sections
+	}
+	return nil
+}
+
+// RestorePreviewSection is what a restore would do with one module's section:
+// counts only, never a record's name or value.
+type RestorePreviewSection struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Module        string                 `protobuf:"bytes,1,opt,name=module,proto3" json:"module,omitempty"`
+	Section       string                 `protobuf:"bytes,2,opt,name=section,proto3" json:"section,omitempty"`
+	Create        int32                  `protobuf:"varint,3,opt,name=create,proto3" json:"create,omitempty"`
+	Overwrite     int32                  `protobuf:"varint,4,opt,name=overwrite,proto3" json:"overwrite,omitempty"`
+	Same          int32                  `protobuf:"varint,5,opt,name=same,proto3" json:"same,omitempty"`
+	Expired       int32                  `protobuf:"varint,6,opt,name=expired,proto3" json:"expired,omitempty"`
+	Regenerated   int32                  `protobuf:"varint,7,opt,name=regenerated,proto3" json:"regenerated,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RestorePreviewSection) Reset() {
+	*x = RestorePreviewSection{}
+	mi := &file_directoryroster_v1_backup_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RestorePreviewSection) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RestorePreviewSection) ProtoMessage() {}
+
+func (x *RestorePreviewSection) ProtoReflect() protoreflect.Message {
+	mi := &file_directoryroster_v1_backup_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RestorePreviewSection.ProtoReflect.Descriptor instead.
+func (*RestorePreviewSection) Descriptor() ([]byte, []int) {
+	return file_directoryroster_v1_backup_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *RestorePreviewSection) GetModule() string {
+	if x != nil {
+		return x.Module
+	}
+	return ""
+}
+
+func (x *RestorePreviewSection) GetSection() string {
+	if x != nil {
+		return x.Section
+	}
+	return ""
+}
+
+func (x *RestorePreviewSection) GetCreate() int32 {
+	if x != nil {
+		return x.Create
+	}
+	return 0
+}
+
+func (x *RestorePreviewSection) GetOverwrite() int32 {
+	if x != nil {
+		return x.Overwrite
+	}
+	return 0
+}
+
+func (x *RestorePreviewSection) GetSame() int32 {
+	if x != nil {
+		return x.Same
+	}
+	return 0
+}
+
+func (x *RestorePreviewSection) GetExpired() int32 {
+	if x != nil {
+		return x.Expired
+	}
+	return 0
+}
+
+func (x *RestorePreviewSection) GetRegenerated() int32 {
+	if x != nil {
+		return x.Regenerated
+	}
+	return 0
+}
+
 var File_directoryroster_v1_backup_proto protoreflect.FileDescriptor
 
 const file_directoryroster_v1_backup_proto_rawDesc = "" +
@@ -1042,11 +1399,39 @@ const file_directoryroster_v1_backup_proto_rawDesc = "" +
 	"\x02by\x18\x04 \x01(\tR\x02by\x12\x1e\n" +
 	"\n" +
 	"unreadable\x18\x05 \x01(\bR\n" +
-	"unreadable2\xca\x02\n" +
+	"unreadable\"*\n" +
+	"\x10RunBackupRequest\x12\x16\n" +
+	"\x06resume\x18\x01 \x01(\bR\x06resume\"\x8c\x01\n" +
+	"\x11RunBackupResponse\x12\x1c\n" +
+	"\tavailable\x18\x01 \x01(\bR\tavailable\x12\x18\n" +
+	"\aoutcome\x18\x02 \x01(\tR\aoutcome\x12\x0e\n" +
+	"\x02id\x18\x03 \x01(\tR\x02id\x12/\n" +
+	"\x03run\x18\x04 \x01(\v2\x1d.directoryroster.v1.BackupRunR\x03run\"7\n" +
+	"\x18GetRestorePreviewRequest\x12\x1b\n" +
+	"\tbackup_id\x18\x01 \x01(\tR\bbackupId\"\xa3\x02\n" +
+	"\x19GetRestorePreviewResponse\x12\x1c\n" +
+	"\tavailable\x18\x01 \x01(\bR\tavailable\x12\x18\n" +
+	"\aoutcome\x18\x02 \x01(\tR\aoutcome\x12\x14\n" +
+	"\x05error\x18\x03 \x01(\tR\x05error\x12\"\n" +
+	"\finstallation\x18\x04 \x01(\tR\finstallation\x12\x1b\n" +
+	"\tbackup_id\x18\x05 \x01(\tR\bbackupId\x12\x16\n" +
+	"\x06layout\x18\x06 \x01(\tR\x06layout\x12\x18\n" +
+	"\acreated\x18\a \x01(\tR\acreated\x12E\n" +
+	"\bsections\x18\b \x03(\v2).directoryroster.v1.RestorePreviewSectionR\bsections\"\xcf\x01\n" +
+	"\x15RestorePreviewSection\x12\x16\n" +
+	"\x06module\x18\x01 \x01(\tR\x06module\x12\x18\n" +
+	"\asection\x18\x02 \x01(\tR\asection\x12\x16\n" +
+	"\x06create\x18\x03 \x01(\x05R\x06create\x12\x1c\n" +
+	"\toverwrite\x18\x04 \x01(\x05R\toverwrite\x12\x12\n" +
+	"\x04same\x18\x05 \x01(\x05R\x04same\x12\x18\n" +
+	"\aexpired\x18\x06 \x01(\x05R\aexpired\x12 \n" +
+	"\vregenerated\x18\a \x01(\x05R\vregenerated2\x96\x04\n" +
 	"\rBackupService\x12j\n" +
 	"\x0fGetBackupStatus\x12*.directoryroster.v1.GetBackupStatusRequest\x1a+.directoryroster.v1.GetBackupStatusResponse\x12^\n" +
 	"\vListBackups\x12&.directoryroster.v1.ListBackupsRequest\x1a'.directoryroster.v1.ListBackupsResponse\x12m\n" +
-	"\x10GetRestoreStatus\x12+.directoryroster.v1.GetRestoreStatusRequest\x1a,.directoryroster.v1.GetRestoreStatusResponseB\xd1\x01\n" +
+	"\x10GetRestoreStatus\x12+.directoryroster.v1.GetRestoreStatusRequest\x1a,.directoryroster.v1.GetRestoreStatusResponse\x12X\n" +
+	"\tRunBackup\x12$.directoryroster.v1.RunBackupRequest\x1a%.directoryroster.v1.RunBackupResponse\x12p\n" +
+	"\x11GetRestorePreview\x12,.directoryroster.v1.GetRestorePreviewRequest\x1a-.directoryroster.v1.GetRestorePreviewResponseB\xd1\x01\n" +
 	"\x16com.directoryroster.v1B\vBackupProtoP\x01ZAgithub.com/truvity/sluis/gen/directoryroster/v1;directoryrosterv1\xa2\x02\x03DXX\xaa\x02\x12Directoryroster.V1\xca\x02\x12Directoryroster\\V1\xe2\x02\x1eDirectoryroster\\V1\\GPBMetadata\xea\x02\x13Directoryroster::V1b\x06proto3"
 
 var (
@@ -1061,51 +1446,62 @@ func file_directoryroster_v1_backup_proto_rawDescGZIP() []byte {
 	return file_directoryroster_v1_backup_proto_rawDescData
 }
 
-var file_directoryroster_v1_backup_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
+var file_directoryroster_v1_backup_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
 var file_directoryroster_v1_backup_proto_goTypes = []any{
-	(*GetBackupStatusRequest)(nil),   // 0: directoryroster.v1.GetBackupStatusRequest
-	(*GetBackupStatusResponse)(nil),  // 1: directoryroster.v1.GetBackupStatusResponse
-	(*BackupRun)(nil),                // 2: directoryroster.v1.BackupRun
-	(*BackupRetention)(nil),          // 3: directoryroster.v1.BackupRetention
-	(*ListBackupsRequest)(nil),       // 4: directoryroster.v1.ListBackupsRequest
-	(*ListBackupsResponse)(nil),      // 5: directoryroster.v1.ListBackupsResponse
-	(*BackupInfo)(nil),               // 6: directoryroster.v1.BackupInfo
-	(*GetRestoreStatusRequest)(nil),  // 7: directoryroster.v1.GetRestoreStatusRequest
-	(*GetRestoreStatusResponse)(nil), // 8: directoryroster.v1.GetRestoreStatusResponse
-	(*RestoreRun)(nil),               // 9: directoryroster.v1.RestoreRun
-	(*ModuleMaintenance)(nil),        // 10: directoryroster.v1.ModuleMaintenance
-	(*timestamppb.Timestamp)(nil),    // 11: google.protobuf.Timestamp
+	(*GetBackupStatusRequest)(nil),    // 0: directoryroster.v1.GetBackupStatusRequest
+	(*GetBackupStatusResponse)(nil),   // 1: directoryroster.v1.GetBackupStatusResponse
+	(*BackupRun)(nil),                 // 2: directoryroster.v1.BackupRun
+	(*BackupRetention)(nil),           // 3: directoryroster.v1.BackupRetention
+	(*ListBackupsRequest)(nil),        // 4: directoryroster.v1.ListBackupsRequest
+	(*ListBackupsResponse)(nil),       // 5: directoryroster.v1.ListBackupsResponse
+	(*BackupInfo)(nil),                // 6: directoryroster.v1.BackupInfo
+	(*GetRestoreStatusRequest)(nil),   // 7: directoryroster.v1.GetRestoreStatusRequest
+	(*GetRestoreStatusResponse)(nil),  // 8: directoryroster.v1.GetRestoreStatusResponse
+	(*RestoreRun)(nil),                // 9: directoryroster.v1.RestoreRun
+	(*ModuleMaintenance)(nil),         // 10: directoryroster.v1.ModuleMaintenance
+	(*RunBackupRequest)(nil),          // 11: directoryroster.v1.RunBackupRequest
+	(*RunBackupResponse)(nil),         // 12: directoryroster.v1.RunBackupResponse
+	(*GetRestorePreviewRequest)(nil),  // 13: directoryroster.v1.GetRestorePreviewRequest
+	(*GetRestorePreviewResponse)(nil), // 14: directoryroster.v1.GetRestorePreviewResponse
+	(*RestorePreviewSection)(nil),     // 15: directoryroster.v1.RestorePreviewSection
+	(*timestamppb.Timestamp)(nil),     // 16: google.protobuf.Timestamp
 }
 var file_directoryroster_v1_backup_proto_depIdxs = []int32{
 	2,  // 0: directoryroster.v1.GetBackupStatusResponse.latest:type_name -> directoryroster.v1.BackupRun
 	2,  // 1: directoryroster.v1.GetBackupStatusResponse.last_completed:type_name -> directoryroster.v1.BackupRun
 	2,  // 2: directoryroster.v1.GetBackupStatusResponse.unfinished:type_name -> directoryroster.v1.BackupRun
 	3,  // 3: directoryroster.v1.GetBackupStatusResponse.retention:type_name -> directoryroster.v1.BackupRetention
-	11, // 4: directoryroster.v1.BackupRun.started:type_name -> google.protobuf.Timestamp
-	11, // 5: directoryroster.v1.BackupRun.updated:type_name -> google.protobuf.Timestamp
-	11, // 6: directoryroster.v1.BackupRun.finished:type_name -> google.protobuf.Timestamp
-	11, // 7: directoryroster.v1.BackupRetention.at:type_name -> google.protobuf.Timestamp
+	16, // 4: directoryroster.v1.BackupRun.started:type_name -> google.protobuf.Timestamp
+	16, // 5: directoryroster.v1.BackupRun.updated:type_name -> google.protobuf.Timestamp
+	16, // 6: directoryroster.v1.BackupRun.finished:type_name -> google.protobuf.Timestamp
+	16, // 7: directoryroster.v1.BackupRetention.at:type_name -> google.protobuf.Timestamp
 	6,  // 8: directoryroster.v1.ListBackupsResponse.backups:type_name -> directoryroster.v1.BackupInfo
-	11, // 9: directoryroster.v1.BackupInfo.created:type_name -> google.protobuf.Timestamp
+	16, // 9: directoryroster.v1.BackupInfo.created:type_name -> google.protobuf.Timestamp
 	9,  // 10: directoryroster.v1.GetRestoreStatusResponse.latest:type_name -> directoryroster.v1.RestoreRun
 	9,  // 11: directoryroster.v1.GetRestoreStatusResponse.unfinished:type_name -> directoryroster.v1.RestoreRun
 	9,  // 12: directoryroster.v1.GetRestoreStatusResponse.last_completed:type_name -> directoryroster.v1.RestoreRun
 	10, // 13: directoryroster.v1.GetRestoreStatusResponse.maintenance:type_name -> directoryroster.v1.ModuleMaintenance
-	11, // 14: directoryroster.v1.RestoreRun.started:type_name -> google.protobuf.Timestamp
-	11, // 15: directoryroster.v1.RestoreRun.updated:type_name -> google.protobuf.Timestamp
-	11, // 16: directoryroster.v1.RestoreRun.finished:type_name -> google.protobuf.Timestamp
-	11, // 17: directoryroster.v1.ModuleMaintenance.since:type_name -> google.protobuf.Timestamp
-	0,  // 18: directoryroster.v1.BackupService.GetBackupStatus:input_type -> directoryroster.v1.GetBackupStatusRequest
-	4,  // 19: directoryroster.v1.BackupService.ListBackups:input_type -> directoryroster.v1.ListBackupsRequest
-	7,  // 20: directoryroster.v1.BackupService.GetRestoreStatus:input_type -> directoryroster.v1.GetRestoreStatusRequest
-	1,  // 21: directoryroster.v1.BackupService.GetBackupStatus:output_type -> directoryroster.v1.GetBackupStatusResponse
-	5,  // 22: directoryroster.v1.BackupService.ListBackups:output_type -> directoryroster.v1.ListBackupsResponse
-	8,  // 23: directoryroster.v1.BackupService.GetRestoreStatus:output_type -> directoryroster.v1.GetRestoreStatusResponse
-	21, // [21:24] is the sub-list for method output_type
-	18, // [18:21] is the sub-list for method input_type
-	18, // [18:18] is the sub-list for extension type_name
-	18, // [18:18] is the sub-list for extension extendee
-	0,  // [0:18] is the sub-list for field type_name
+	16, // 14: directoryroster.v1.RestoreRun.started:type_name -> google.protobuf.Timestamp
+	16, // 15: directoryroster.v1.RestoreRun.updated:type_name -> google.protobuf.Timestamp
+	16, // 16: directoryroster.v1.RestoreRun.finished:type_name -> google.protobuf.Timestamp
+	16, // 17: directoryroster.v1.ModuleMaintenance.since:type_name -> google.protobuf.Timestamp
+	2,  // 18: directoryroster.v1.RunBackupResponse.run:type_name -> directoryroster.v1.BackupRun
+	15, // 19: directoryroster.v1.GetRestorePreviewResponse.sections:type_name -> directoryroster.v1.RestorePreviewSection
+	0,  // 20: directoryroster.v1.BackupService.GetBackupStatus:input_type -> directoryroster.v1.GetBackupStatusRequest
+	4,  // 21: directoryroster.v1.BackupService.ListBackups:input_type -> directoryroster.v1.ListBackupsRequest
+	7,  // 22: directoryroster.v1.BackupService.GetRestoreStatus:input_type -> directoryroster.v1.GetRestoreStatusRequest
+	11, // 23: directoryroster.v1.BackupService.RunBackup:input_type -> directoryroster.v1.RunBackupRequest
+	13, // 24: directoryroster.v1.BackupService.GetRestorePreview:input_type -> directoryroster.v1.GetRestorePreviewRequest
+	1,  // 25: directoryroster.v1.BackupService.GetBackupStatus:output_type -> directoryroster.v1.GetBackupStatusResponse
+	5,  // 26: directoryroster.v1.BackupService.ListBackups:output_type -> directoryroster.v1.ListBackupsResponse
+	8,  // 27: directoryroster.v1.BackupService.GetRestoreStatus:output_type -> directoryroster.v1.GetRestoreStatusResponse
+	12, // 28: directoryroster.v1.BackupService.RunBackup:output_type -> directoryroster.v1.RunBackupResponse
+	14, // 29: directoryroster.v1.BackupService.GetRestorePreview:output_type -> directoryroster.v1.GetRestorePreviewResponse
+	25, // [25:30] is the sub-list for method output_type
+	20, // [20:25] is the sub-list for method input_type
+	20, // [20:20] is the sub-list for extension type_name
+	20, // [20:20] is the sub-list for extension extendee
+	0,  // [0:20] is the sub-list for field type_name
 }
 
 func init() { file_directoryroster_v1_backup_proto_init() }
@@ -1119,7 +1515,7 @@ func file_directoryroster_v1_backup_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_directoryroster_v1_backup_proto_rawDesc), len(file_directoryroster_v1_backup_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   11,
+			NumMessages:   16,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

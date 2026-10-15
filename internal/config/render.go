@@ -166,6 +166,12 @@ func (d *PolicyDocument) merge(layer *PolicyDocument, from string) error {
 		}
 		d.CloudflareGrants.Grants = append(d.CloudflareGrants.Grants, c.Grants...)
 	}
+	if b := layer.BackupRun; b != nil {
+		if d.BackupRun == nil {
+			d.BackupRun = &PolicyBackup{}
+		}
+		d.BackupRun.RunGroups = union(d.BackupRun.RunGroups, b.RunGroups)
+	}
 	return nil
 }
 

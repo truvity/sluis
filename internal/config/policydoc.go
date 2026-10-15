@@ -50,6 +50,9 @@ type PolicyDocument struct {
 	// CloudflareGrants is who may ask for which Cloudflare preset
 	// (`cloudflare.grants`); the presets are the service document's.
 	CloudflareGrants *PolicyCloudflare `yaml:"cloudflare,omitempty"`
+	// BackupRun is who may start a backup through the issuer
+	// (`backup.runGroups`).
+	BackupRun *PolicyBackup `yaml:"backup,omitempty"`
 }
 
 type (
@@ -171,7 +174,7 @@ type (
 
 // The sections the policy document adds to the access model's tables, as the
 // file spells them.
-var policySections = []string{"exchange", "apps", "controllers", "cloudflare"}
+var policySections = []string{"exchange", "apps", "controllers", "cloudflare", "backup"}
 
 // policySectionsDoc is the part of a policy document beside the tables.
 type policySectionsDoc struct {
@@ -179,6 +182,7 @@ type policySectionsDoc struct {
 	Apps        *PolicyApps        `yaml:"apps,omitempty"`
 	Controllers *PolicyControllers `yaml:"controllers,omitempty"`
 	Cloudflare  *PolicyCloudflare  `yaml:"cloudflare,omitempty"`
+	Backup      *PolicyBackup      `yaml:"backup,omitempty"`
 }
 
 // NewPolicyDocument is a v2 document holding only the access model's tables.
@@ -235,7 +239,7 @@ func decodePolicyDocument(raw []byte) (*PolicyDocument, error) {
 	s.Apps.FoldLegacy()
 	return &PolicyDocument{
 		APIVersion: APIVersion("policy"), Policy: p,
-		Exchange: s.Exchange, Apps: s.Apps, Controllers: s.Controllers, CloudflareGrants: s.Cloudflare,
+		Exchange: s.Exchange, Apps: s.Apps, Controllers: s.Controllers, CloudflareGrants: s.Cloudflare, BackupRun: s.Backup,
 	}, nil
 }
 
@@ -277,7 +281,8 @@ func (d PolicyDocument) MarshalYAML() (any, error) {
 		}
 	}
 	var sections yaml.Node
-	if err = sections.Encode(policySectionsDoc{Exchange: d.Exchange, Apps: d.Apps, Controllers: d.Controllers, Cloudflare: d.CloudflareGrants}); err != nil {
+	doc := policySectionsDoc{Exchange: d.Exchange, Apps: d.Apps, Controllers: d.Controllers, Cloudflare: d.CloudflareGrants, Backup: d.BackupRun}
+	if err = sections.Encode(doc); err != nil {
 		return nil, err
 	}
 	out.Content = append(out.Content, sections.Content...)
@@ -412,6 +417,7 @@ func (d *PolicyDocument) Validate() error {
 	errs = append(errs, d.validateApps()...)
 	errs = append(errs, d.validateControllers()...)
 	errs = append(errs, d.CloudflareGrants.validate(func(g string) bool { _, ok := d.Policy.Groups[g]; return ok })...)
+	errs = append(errs, d.BackupRun.validate(func(g string) bool { _, ok := d.Policy.Groups[g]; return ok })...)
 	return errors.Join(errs...)
 }
 

@@ -6,6 +6,7 @@ package rpc
 
 import (
 	"context"
+	"strings"
 
 	"github.com/truvity/sluis/internal/audit"
 	"github.com/truvity/sluis/internal/backup/job"
@@ -21,9 +22,10 @@ const (
 )
 
 // Caller classes (the alias a call arrives through, `live-<class>`): the console
-// shows the status and the list; an administrator or the break-glass role also
-// starts a backup. The console has no button for a restore, and none to start
-// a backup.
+// shows the status and the list, and starts a backup for a person its policy
+// lets (`backup.runGroups`), naming that person in [RunRequest.By]; an
+// administrator or the break-glass role start one with their own credentials.
+// No caller class starts or resumes a restore through a module call.
 const (
 	CallerConsole    = "console"
 	CallerAdmin      = "admin"
@@ -54,6 +56,21 @@ type ListResponse struct {
 // 1, answers idle.
 type RunRequest struct {
 	Resume bool `json:"resume,omitempty"`
+	// By is the person the console started the run for, by the address its
+	// policy knows them by. Only the console class is believed: it is the
+	// issuer's own, authenticated the person and checked the group before it
+	// called. From any other class the field is ignored, since an alias says
+	// nothing about the human behind it.
+	By string `json:"by,omitempty"`
+}
+
+// runActor is who a run is recorded as: the person the console named, or else
+// the workload the caller class is.
+func runActor(caller, by string) audit.Actor {
+	if caller == CallerConsole && strings.TrimSpace(by) != "" {
+		return audit.Identified(strings.TrimSpace(by))
+	}
+	return audit.Workload("lambda:" + caller)
 }
 
 // Register makes svc answer the module's methods on s.
@@ -73,8 +90,9 @@ func Register(s *modcall.Server, svc Service) {
 	}, modcall.Allow(CallerConsole, CallerAdmin, CallerBreakglass))
 	modcall.Handle(s, MethodRun, func(ctx context.Context, r RunRequest) (job.Result, error) {
 		// The caller class is the transport's to say; the actor of the record is
-		// the workload that class is, since an alias is not a person.
-		who := audit.Workload("lambda:" + modcall.CallerOf(ctx))
+		// the person the console named, or else the workload that class is,
+		// since an alias is not a person.
+		who := runActor(modcall.CallerOf(ctx), r.By)
 		return svc.Run(ctx, job.Request{Trigger: job.TriggerRun, Actor: who, ResumeOnly: r.Resume})
-	}, modcall.Allow(CallerAdmin, CallerBreakglass))
+	}, modcall.Allow(CallerConsole, CallerAdmin, CallerBreakglass))
 }

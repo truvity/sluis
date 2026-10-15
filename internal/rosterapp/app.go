@@ -25,6 +25,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"golang.org/x/sync/errgroup"
@@ -75,6 +76,11 @@ type Config struct {
 	// Backup is where the console reads the backup module and the restore
 	// function (`console.backup`); nil leaves the console without a Backups page.
 	Backup *config.ConsoleBackup
+	// BackupRun is who may start a backup through the issuer (the policy's
+	// `backup.runGroups`); Name is the installation's name, which the issuer's
+	// configuration document gives `sluisctl`.
+	BackupRun  *config.PolicyBackup
+	BackupName string
 	// Remote are the modules this process reaches in another one, by module
 	// name (`github.remote`, `slack.remote`, `google.remote`; Cloudflare's has
 	// its own field). A module named here is not hosted: [Load] leaves its
@@ -229,6 +235,8 @@ func FromConfig(f *config.Serve, p *config.PolicyDocument) (Config, error) {
 	if f.Console != nil {
 		cfg.Backup = f.Console.Backup
 	}
+	cfg.BackupRun = p.Backup()
+	cfg.BackupName = firstNonEmpty(f.Instance, f.Release, "sluis")
 	if f.Cloudflare != nil || (p != nil && len(p.Cloudflare().Grants) > 0) {
 		// Grants for presets nobody declared would read as rights nobody can use.
 		if err = config.CheckCloudflare(f.Cloudflare, p); err != nil {
@@ -416,6 +424,9 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 		// sets. The console is built before the issuer exists, so it is
 		// handed the reader rather than building one.
 		UseWorkloads: directory.ConsoleServer().UseWorkloads,
+		// A laptop's `sluisctl` reaches the backup service with the access
+		// token its sign-in holds.
+		UseBearers: directory.ConsoleServer().UseBearers,
 		// One audit trail for both halves: a sign-in and the connect that
 		// made it possible belong to one history.
 		Audit: directory.Audit(),
@@ -523,6 +534,9 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 			return nil, err
 		}
 		directory.ConsoleServer().UseBackup(client)
+		directory.ConsoleServer().UseBackupRunners(cfg.BackupRun)
+		// Where the functions are, for a signed-in `sluisctl` to save.
+		assembled.Issuer().UseConfiguration(backupConfiguration(cfg))
 	}
 	log.InfoContext(ctx, "sluis assembled as one service: a login makes no network "+
 		"call except to the corporate directory", slog.Int("controllers", len(a.consoles)))
@@ -581,4 +595,51 @@ func auditToken(assembled *issuerapp.App, audience string) func(context.Context,
 		}
 		return token, expires, err
 	}
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if strings.TrimSpace(v) != "" {
+			return strings.TrimSpace(v)
+		}
+	}
+	return ""
+}
+
+// backupConfiguration is the part of the issuer's /.well-known/sluis-configuration
+// that the installation supplies: its name and the addresses of the two
+// functions a laptop could invoke. Only a Lambda function named by its ARN is
+// one; a bare name does not say its account or region, and a cluster Service's
+// URL is not reachable from a laptop, so neither is published (the issuer route
+// does not need them).
+func backupConfiguration(cfg Config) issuer.SluisConfiguration {
+	out := issuer.SluisConfiguration{Instance: cfg.BackupName}
+	b := cfg.Backup
+	if b == nil {
+		return out
+	}
+	if arn, region, ok := lambdaEndpoint(b.Function); ok {
+		out.Backup, out.Region = &issuer.SluisConfigEndpoint{Endpoint: arn}, region
+	}
+	if arn, region, ok := lambdaEndpoint(b.RestoreFunction); ok {
+		out.Restore = &issuer.SluisConfigEndpoint{Endpoint: arn}
+		if out.Region == "" {
+			out.Region = region
+		}
+	}
+	return out
+}
+
+// lambdaEndpoint is a function's unqualified ARN and its region, when fn is
+// one: `arn:aws:lambda:<region>:<account>:function:<name>[:<qualifier>]`. The
+// callers pick the alias themselves, per caller class.
+func lambdaEndpoint(fn string) (arn, region string, ok bool) {
+	parts := strings.Split(strings.TrimSpace(fn), ":")
+	if len(parts) < 7 || len(parts) > 8 || parts[0] != "arn" || parts[2] != "lambda" || parts[5] != "function" {
+		return "", "", false
+	}
+	if parts[3] == "" || parts[4] == "" || parts[6] == "" {
+		return "", "", false
+	}
+	return strings.Join(parts[:7], ":"), parts[3], true
 }

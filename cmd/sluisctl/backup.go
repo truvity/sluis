@@ -26,14 +26,21 @@ import (
 )
 
 // `sluisctl backup` and `sluisctl restore` are what an administrator runs
-// against the two functions (docs/reference/sluis/backup.md). They do not go
-// through the issuer or the console: the caller's own AWS credentials invoke the
-// function, so IAM, and the resource policy on the function, decide who may. The
-// credentials are the SDK's default chain, which is what the profiles of
-// `sluisctl aws-config` feed. A restore is never a module call; it is an
-// invocation of the restore function, and the console has no way to make one.
+// against the two functions (docs/reference/sluis/backup.md), by one of two
+// routes (backup_route.go). Signed in, `backup run|status|list` and `restore
+// preview|status` go through the issuer, which calls the backup module for the
+// caller: no AWS credential is needed, and the issuer's policy decides who may
+// start a backup. Otherwise, with --direct, and always for `restore start` and
+// `restore resume`, the caller's own AWS credentials invoke the function, so
+// IAM, and the resource policy on the function, decide who may; the credentials
+// are the SDK's default chain, which is what the profiles of `sluisctl
+// aws-config` feed. A restore starts and resumes only that way, so that it works
+// when the issuer is broken or lost: it is an invocation of the restore
+// function, and neither the console nor the issuer has a way to make one.
 
 const (
+	// envBackupFunction and envRestoreFunction are the older names of
+	// $SLUISCTL_BACKUP_ENDPOINT and $SLUISCTL_RESTORE_ENDPOINT, and still work.
 	envBackupFunction  = "SLUISCTL_BACKUP_FUNCTION"
 	envRestoreFunction = "SLUISCTL_RESTORE_FUNCTION"
 	envInstance        = "SLUISCTL_INSTANCE"
@@ -47,16 +54,31 @@ const (
 )
 
 // BackupConfig is the `backup:` key of config.yaml: where the two functions are.
-// None of it is a secret.
+// `login` saves it from the issuer's document. None of it is a secret.
 type BackupConfig struct {
-	// Function is the backup function's name or ARN.
+	// Endpoint is the backup function's address: a URI whose scheme names the
+	// transport. A Lambda function's ARN is the only one sluisctl reaches yet.
+	Endpoint string `yaml:"endpoint,omitempty"`
+	// RestoreEndpoint is the restore function's address.
+	RestoreEndpoint string `yaml:"restoreEndpoint,omitempty"`
+	// Function is the older key for Endpoint: the backup function's name or
+	// ARN, read as an `arn:` endpoint (or a bare name) when Endpoint is unset.
 	Function string `yaml:"function,omitempty"`
-	// RestoreFunction is the restore function's name or ARN.
+	// RestoreFunction is the older key for RestoreEndpoint.
 	RestoreFunction string `yaml:"restoreFunction,omitempty"`
 	// Instance is the installation's name, which `restore start --confirm` must match.
 	Instance string `yaml:"instance,omitempty"`
 	// Region is the functions' region, when the AWS configuration names none.
 	Region string `yaml:"region,omitempty"`
+}
+
+// backupEndpoint is the saved backup address: endpoint, else the older function.
+func (b BackupConfig) backupEndpoint() string { return firstNonEmpty(b.Endpoint, b.Function) }
+
+// restoreEndpoint is the saved restore address: restoreEndpoint, else the
+// older restoreFunction.
+func (b BackupConfig) restoreEndpoint() string {
+	return firstNonEmpty(b.RestoreEndpoint, b.RestoreFunction)
 }
 
 // The seams of a test: the AWS clients, the clock and the pause between polls.
@@ -106,55 +128,121 @@ func sleepContext(ctx context.Context, d time.Duration) error {
 }
 
 // target is what the flags, the environment and config.yaml settle: which
-// function, as which caller class.
+// route, which function, as which caller class.
 type target struct {
 	function, restoreFunction, instance, class string
 	asJSON                                     bool
 	clients                                    backupClients
+	// issuer is set on the issuer route; the AWS clients are then unused.
+	issuer *issuerBackup
 }
 
 // targetFlags are the flags every backup and restore command takes.
 type targetFlags struct {
-	function, restoreFunction, instance, as, profile, region string
-	asJSON                                                   bool
+	endpoint, instance, as, profile, region, issuerURL string
+	asJSON, direct                                     bool
+	// deprecated is set when the older --function was used.
+	deprecated bool
+}
+
+// functionAlias is --function, the deprecated alias of --endpoint.
+type functionAlias struct{ t *targetFlags }
+
+func (f functionAlias) String() string { return "" }
+func (f functionAlias) Set(v string) error {
+	f.t.endpoint, f.t.deprecated = v, true
+	return nil
 }
 
 func (t *targetFlags) register(flags *flag.FlagSet, restoreCommand bool) {
 	if restoreCommand {
-		flags.StringVar(&t.restoreFunction, "function", "", "the restore function's name or ARN (else $"+envRestoreFunction+", else config.yaml)")
+		flags.StringVar(&t.endpoint, "endpoint", "",
+			"the restore function's Lambda ARN (else $"+envRestoreEndpoint+", else the issuer's, else backup.restoreEndpoint in config.yaml)")
 	} else {
-		flags.StringVar(&t.function, "function", "", "the backup function's name or ARN (else $"+envBackupFunction+", else config.yaml)")
+		flags.StringVar(&t.endpoint, "endpoint", "",
+			"the backup function's Lambda ARN (else $"+envBackupEndpoint+", else the issuer's, else backup.endpoint in config.yaml)")
 	}
-	flags.StringVar(&t.as, "as", classAdmin, "the caller class, admin or breakglass: the function's live-<class> alias")
-	flags.StringVar(&t.profile, "profile", "", "the AWS profile (else the SDK's default chain)")
-	flags.StringVar(&t.region, "region", "", "the AWS region (else the configuration's, else backup.region in config.yaml)")
+	flags.Var(functionAlias{t}, "function", "deprecated: the same as --endpoint")
+	flags.StringVar(&t.issuerURL, "issuer", "", "the issuer, when not configured")
+	flags.BoolVar(&t.direct, "direct", false, "call the function with your own AWS credentials instead of through the issuer")
+	flags.StringVar(&t.as, "as", classAdmin, "the caller class, admin or breakglass: the function's live-<class> alias (direct route)")
+	flags.StringVar(&t.profile, "profile", "", "the AWS profile (else the SDK's default chain; direct route)")
+	flags.StringVar(&t.region, "region", "", "the AWS region (else the endpoint's, else backup.region in config.yaml; direct route)")
 	flags.BoolVar(&t.asJSON, "json", false, "print JSON")
 }
 
-// resolve fills what the flags left from the environment and config.yaml, and
-// opens the AWS clients.
-func (t *targetFlags) resolve(ctx context.Context, restoreCommand bool) (target, error) {
+// wantsDirect is whether the flags name something only the direct route has:
+// a function, an AWS profile or region, or the break-glass class, whose point
+// is to work without the issuer.
+func (t *targetFlags) wantsDirect() bool {
+	return t.direct || t.endpoint != "" || t.profile != "" || t.region != "" || t.as == classBreakglass
+}
+
+// resolve fills what the flags left from the environment, config.yaml and the
+// issuer. viaIssuer says the command may go through the issuer: `restore start`
+// and `restore resume` say false, and are always direct.
+func (t *targetFlags) resolve(ctx context.Context, restoreCommand, viaIssuer bool) (target, error) {
 	if t.as != classAdmin && t.as != classBreakglass {
 		return target{}, badUsage("--as is admin or breakglass, not %q", t.as)
+	}
+	if t.deprecated {
+		_, _ = fmt.Fprintln(backupStderr, "sluisctl: --function is deprecated; use --endpoint")
 	}
 	file, err := readConfigFile()
 	if err != nil {
 		return target{}, err
 	}
-	out := target{class: t.as, asJSON: t.asJSON}
-	if restoreCommand {
-		out.restoreFunction = firstNonEmpty(t.restoreFunction, settingEnv(envRestoreFunction), file.Backup.RestoreFunction)
-		if out.restoreFunction == "" {
-			return target{}, badUsage("no restore function: pass --function, set $%s, or set backup.restoreFunction in %s", envRestoreFunction, configFileHint())
-		}
-		out.instance = firstNonEmpty(t.instance, settingEnv(envInstance), file.Backup.Instance)
-	} else {
-		out.function = firstNonEmpty(t.function, settingEnv(envBackupFunction), file.Backup.Function)
-		if out.function == "" {
-			return target{}, badUsage("no backup function: pass --function, set $%s, or set backup.function in %s", envBackupFunction, configFileHint())
-		}
+	login, loggedIn, err := backupLogin(t.issuerURL)
+	if err != nil {
+		return target{}, err
 	}
-	out.clients, err = newBackupClients(ctx, t.profile, firstNonEmpty(t.region, file.Backup.Region))
+	out := target{class: t.as, asJSON: t.asJSON}
+
+	if viaIssuer && loggedIn && !t.wantsDirect() {
+		out.issuer, err = newIssuerBackup(ctx, login)
+		if err != nil {
+			return target{}, err
+		}
+		return out, nil
+	}
+
+	var signedIn *Config
+	if loggedIn {
+		signedIn = &login
+	}
+	var saved, envNew, envOld string
+	if restoreCommand {
+		saved, envNew, envOld = file.Backup.restoreEndpoint(), envRestoreEndpoint, envRestoreFunction
+	} else {
+		saved, envNew, envOld = file.Backup.backupEndpoint(), envBackupEndpoint, envBackupFunction
+	}
+	endpoint, doc := resolveEndpoint(ctx, t.endpoint, envNew, envOld, saved, signedIn, restoreCommand)
+	if endpoint == "" {
+		return target{}, badUsage("no %s function: pass --endpoint, set $%s, run `sluisctl login` at an issuer that publishes one, or set backup.%s in %s",
+			map[bool]string{true: "restore", false: "backup"}[restoreCommand], envNew,
+			map[bool]string{true: "restoreEndpoint", false: "endpoint"}[restoreCommand], configFileHint())
+	}
+	function, err := lambdaFunction(endpoint)
+	if err != nil {
+		return target{}, err
+	}
+	region := firstNonEmpty(t.region, file.Backup.Region, regionOf(function))
+	if doc != nil {
+		region = firstNonEmpty(t.region, file.Backup.Region, regionOf(function), doc.Region)
+	}
+	if restoreCommand {
+		out.restoreFunction = function
+		// The saved name first: the typed --confirm is held to what this laptop
+		// was told when it signed in, and a live document fills in only a
+		// laptop that was told none.
+		out.instance = firstNonEmpty(t.instance, settingEnv(envInstance), file.Backup.Instance)
+		if out.instance == "" && doc != nil {
+			out.instance = doc.Instance
+		}
+	} else {
+		out.function = function
+	}
+	out.clients, err = newBackupClients(ctx, t.profile, region)
 	if err != nil {
 		return target{}, err
 	}
@@ -229,10 +317,17 @@ func parseInterleaved(flags *flag.FlagSet, args []string) ([]string, error) {
 
 const backupUsage = `Usage: sluisctl backup run [--resume] | status | list [--limit N]
 
-Calls the backup function with your own AWS credentials (the SDK's default
-chain). Flags for every subcommand:
-  --function  the backup function's name or ARN (else $SLUISCTL_BACKUP_FUNCTION,
-              else backup.function in config.yaml)
+Signed in (sluisctl login), these go through the issuer, which calls the backup
+function for you: no AWS credentials are needed, and starting a backup needs a
+group the installation's policy names. Without a sign-in, or with --direct, they
+call the function with your own AWS credentials (the SDK's default chain).
+Flags for every subcommand:
+  --issuer    the issuer, when not configured
+  --direct    use your own AWS credentials, not the issuer. --endpoint, --profile,
+              --region and --as breakglass imply it
+  --endpoint  the backup function's Lambda ARN (else
+              $SLUISCTL_BACKUP_ENDPOINT, else the issuer's, else backup.endpoint
+              in config.yaml). --function is its deprecated alias
   --as        admin (default) or breakglass: the function's live-<class> alias
   --profile, --region   the AWS profile and region
   --json      print JSON
@@ -269,13 +364,13 @@ func backupRun(args []string) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), backupRunTimeout)
 	defer cancel()
-	t, err := tf.resolve(ctx, false)
+	t, err := tf.resolve(ctx, false, true)
 	if err != nil {
 		return err
 	}
-	res, err := modcall.Do[rpc.RunRequest, job.Result](ctx, t.caller(rpc.Module), rpc.Module, rpc.MethodRun, rpc.RunRequest{Resume: *resume})
+	res, err := t.runBackup(ctx, *resume)
 	if err != nil {
-		return explain(err)
+		return err
 	}
 	if t.asJSON {
 		return printJSON(res)
@@ -302,13 +397,13 @@ func backupStatus(args []string) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
-	t, err := tf.resolve(ctx, false)
+	t, err := tf.resolve(ctx, false, true)
 	if err != nil {
 		return err
 	}
-	st, err := modcall.Do[rpc.StatusRequest, job.Status](ctx, t.caller(rpc.Module), rpc.Module, rpc.MethodStatus, rpc.StatusRequest{})
+	st, counts, err := t.backupStatus(ctx)
 	if err != nil {
-		return explain(err)
+		return err
 	}
 	if t.asJSON {
 		return printJSON(st)
@@ -326,9 +421,45 @@ func backupStatus(args []string) error {
 	}
 	if p := st.Retention; p != nil {
 		say("last prune: %s, kept %d, removed %d, orphans %d, refused %d (keep %d, max age %s)",
-			p.At.Format(time.RFC3339), p.Kept, len(p.Removed), len(p.Orphans), len(p.Failed), p.Keep, p.MaxAge)
+			p.At.Format(time.RFC3339), p.Kept, counts.removed, counts.cleaned, counts.refused, p.Keep, p.MaxAge)
 	}
 	return nil
+}
+
+// runBackup starts a backup by whichever route the target has.
+func (t target) runBackup(ctx context.Context, resume bool) (job.Result, error) {
+	if t.issuer != nil {
+		return t.issuer.run(ctx, resume)
+	}
+	res, err := modcall.Do[rpc.RunRequest, job.Result](ctx, t.caller(rpc.Module), rpc.Module, rpc.MethodRun, rpc.RunRequest{Resume: resume})
+	return res, explain(err)
+}
+
+// backupStatus reads `backup.status`. The counts are the last prune's, which the
+// issuer reports as numbers and the function as lists.
+func (t target) backupStatus(ctx context.Context) (job.Status, *retentionCounts, error) {
+	if t.issuer != nil {
+		return t.issuer.status(ctx)
+	}
+	st, err := modcall.Do[rpc.StatusRequest, job.Status](ctx, t.caller(rpc.Module), rpc.Module, rpc.MethodStatus, rpc.StatusRequest{})
+	if err != nil {
+		return st, nil, explain(err)
+	}
+	var counts *retentionCounts
+	if p := st.Retention; p != nil {
+		counts = &retentionCounts{removed: len(p.Removed), cleaned: len(p.Orphans), refused: len(p.Failed)}
+	}
+	return st, counts, nil
+}
+
+// backupList reads `backup.list`.
+func (t target) backupList(ctx context.Context, limit int) (rpc.ListResponse, error) {
+	if t.issuer != nil {
+		backups, err := t.issuer.list(ctx, limit)
+		return rpc.ListResponse{Backups: backups}, err
+	}
+	list, err := modcall.Do[rpc.ListRequest, rpc.ListResponse](ctx, t.caller(rpc.Module), rpc.Module, rpc.MethodList, rpc.ListRequest{Limit: limit})
+	return list, explain(err)
 }
 
 func printBackupRun(label string, v job.View) {
@@ -359,13 +490,13 @@ func backupList(args []string) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
-	t, err := tf.resolve(ctx, false)
+	t, err := tf.resolve(ctx, false, true)
 	if err != nil {
 		return err
 	}
-	list, err := modcall.Do[rpc.ListRequest, rpc.ListResponse](ctx, t.caller(rpc.Module), rpc.Module, rpc.MethodList, rpc.ListRequest{Limit: *limit})
+	list, err := t.backupList(ctx, *limit)
 	if err != nil {
-		return explain(err)
+		return err
 	}
 	if t.asJSON {
 		return printJSON(list)
@@ -390,10 +521,17 @@ const restoreUsage = `Usage: sluisctl restore preview <backup-id>
        sluisctl restore resume [--wait]
        sluisctl restore status
 
-Invokes the restore function with your own AWS credentials; the function's
-resource policy names who may. Flags for every subcommand:
-  --function  the restore function's name or ARN (else $SLUISCTL_RESTORE_FUNCTION,
-              else backup.restoreFunction in config.yaml)
+preview and status go through the issuer when you are signed in, as backup
+does. start and resume always invoke the restore function with your own AWS
+credentials, so that a restore works when the issuer is broken or lost; the
+function's resource policy names who may. Flags for every subcommand:
+  --issuer    the issuer, when not configured
+  --direct    use your own AWS credentials, not the issuer (start and resume
+              always do)
+  --endpoint  the restore function's Lambda ARN (else
+              $SLUISCTL_RESTORE_ENDPOINT, else the issuer's, else
+              backup.restoreEndpoint in config.yaml). --function is its
+              deprecated alias
   --as        admin (default) or breakglass: the function's live-<class> alias
   --profile, --region   the AWS profile and region
   --json      print JSON
@@ -466,6 +604,9 @@ func (t target) invokeRestore(ctx context.Context, ev restoreEvent, async bool) 
 }
 
 func (t target) restoreStatus(ctx context.Context) (restorejob.Status, error) {
+	if t.issuer != nil {
+		return t.issuer.restoreStatus(ctx)
+	}
 	st, err := modcall.Do[rpc.StatusRequest, restorejob.Status](ctx, t.caller(rpc.RestoreModule), rpc.RestoreModule, rpc.MethodRestoreStatus, rpc.StatusRequest{})
 	return st, explain(err)
 }
@@ -483,17 +624,23 @@ func restorePreview(args []string) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), backupRunTimeout)
 	defer cancel()
-	t, err := tf.resolve(ctx, true)
-	if err != nil {
-		return err
-	}
-	out, err := t.invokeRestore(ctx, restoreEvent{Backup: rest[0], Preview: true}, false)
+	t, err := tf.resolve(ctx, true, true)
 	if err != nil {
 		return err
 	}
 	var ans restoreAnswer
-	if err = json.Unmarshal(out.Payload, &ans); err != nil {
-		return fmt.Errorf("the restore function's answer is not valid: %w", err)
+	if t.issuer != nil {
+		if ans, err = t.issuer.preview(ctx, rest[0]); err != nil {
+			return err
+		}
+	} else {
+		out, invokeErr := t.invokeRestore(ctx, restoreEvent{Backup: rest[0], Preview: true}, false)
+		if invokeErr != nil {
+			return invokeErr
+		}
+		if err = json.Unmarshal(out.Payload, &ans); err != nil {
+			return fmt.Errorf("the restore function's answer is not valid: %w", err)
+		}
 	}
 	if t.asJSON {
 		return printJSON(ans)
@@ -538,7 +685,8 @@ func restoreStart(args []string) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), waitLimit)
 	defer cancel()
-	t, err := tf.resolve(ctx, true)
+	// Never through the issuer: a restore must start when the issuer is broken.
+	t, err := tf.resolve(ctx, true, false)
 	if err != nil {
 		return err
 	}
@@ -703,7 +851,8 @@ func restoreResume(args []string) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), waitLimit)
 	defer cancel()
-	t, err := tf.resolve(ctx, true)
+	// Never through the issuer, for the reason restore start is not.
+	t, err := tf.resolve(ctx, true, false)
 	if err != nil {
 		return err
 	}
@@ -759,7 +908,7 @@ func restoreStatus(args []string) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
-	t, err := tf.resolve(ctx, true)
+	t, err := tf.resolve(ctx, true, true)
 	if err != nil {
 		return err
 	}

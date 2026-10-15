@@ -86,7 +86,10 @@ type ConsoleServer struct {
 	consoleUI   fs.FS
 	signedIn    func(http.ResponseWriter, *http.Request) (access.Principal, bool)
 	workloads   func(*http.Request) (access.Principal, bool)
-	entry       func() string
+	// bearers reads the issuer's access token as a person's bearer, for the
+	// services in [bearerServices] only; see [ConsoleServer.UseBearers].
+	bearers func(*http.Request) (access.Principal, bool)
+	entry   func() string
 	// issuerURL is the issuer this console shares an origin with, when
 	// the process serving it IS that issuer. Supplied rather than
 	// derived, like signedIn and entry above, and for the same reason:
@@ -440,6 +443,13 @@ func (s *ConsoleServer) principal(w http.ResponseWriter, r *http.Request) (acces
 	// every token it cannot verify.
 	if s.workloads != nil {
 		if p, ok := s.workloads(r); ok {
+			return p, true
+		}
+	}
+	// A person's laptop: the access token `sluisctl login` holds, for the
+	// backup service only.
+	if s.bearers != nil && bearerMayCall(r.URL.Path) {
+		if p, ok := s.bearers(r); ok {
 			return p, true
 		}
 	}

@@ -12,7 +12,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file sluis/v1/backup.proto.
  */
 export const file_sluis_v1_backup: GenFile = /*@__PURE__*/
-  fileDesc("ChVzbHVpcy92MS9iYWNrdXAucHJvdG8SCHNsdWlzLnYxIhgKFkdldEJhY2t1cFN0YXR1c1JlcXVlc3Qi1QEKF0dldEJhY2t1cFN0YXR1c1Jlc3BvbnNlEhEKCWF2YWlsYWJsZRgBIAEoCBIjCgZsYXRlc3QYAiABKAsyEy5zbHVpcy52MS5CYWNrdXBSdW4SKwoObGFzdF9jb21wbGV0ZWQYAyABKAsyEy5zbHVpcy52MS5CYWNrdXBSdW4SJwoKdW5maW5pc2hlZBgEIAEoCzITLnNsdWlzLnYxLkJhY2t1cFJ1bhIsCglyZXRlbnRpb24YBSABKAsyGS5zbHVpcy52MS5CYWNrdXBSZXRlbnRpb24izwIKCUJhY2t1cFJ1bhIKCgJpZBgBIAEoCRINCgVzdGF0ZRgCIAEoCRIPCgd0cmlnZ2VyGAMgASgJEg8KB2NyZWF0b3IYBCABKAkSKwoHc3RhcnRlZBgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASKwoHdXBkYXRlZBgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLAoIZmluaXNoZWQYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEg8KB21vZHVsZXMYCCABKAUSDwoHcmVjb3JkcxgJIAEoAxIOCgZjaHVua3MYCiABKAUSDwoHcmVzdW1lZBgLIAEoCBIOCgZyZWFzb24YDCABKAkSDQoFZXJyb3IYDSABKAkSDQoFdW5pdHMYDiABKAUSDAoEZG9uZRgPIAEoBSKZAQoPQmFja3VwUmV0ZW50aW9uEiYKAmF0GAEgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIMCgRrZWVwGAIgASgFEg8KB21heF9hZ2UYAyABKAkSDAoEa2VwdBgEIAEoBRIPCgdyZW1vdmVkGAUgASgFEg8KB2NsZWFuZWQYBiABKAUSDwoHcmVmdXNlZBgHIAEoBSIjChJMaXN0QmFja3Vwc1JlcXVlc3QSDQoFbGltaXQYASABKAUiTwoTTGlzdEJhY2t1cHNSZXNwb25zZRIRCglhdmFpbGFibGUYASABKAgSJQoHYmFja3VwcxgCIAMoCzIULnNsdWlzLnYxLkJhY2t1cEluZm8itwEKCkJhY2t1cEluZm8SCgoCaWQYASABKAkSKwoHY3JlYXRlZBgCIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASDwoHY3JlYXRvchgDIAEoCRIOCgZmb3JtYXQYBCABKAUSDgoGbGF5b3V0GAUgASgJEg8KB21vZHVsZXMYBiABKAUSDwoHcmVjb3JkcxgHIAEoAxIOCgZjaHVua3MYCCABKAUSDQoFZXJyb3IYCSABKAkiGQoXR2V0UmVzdG9yZVN0YXR1c1JlcXVlc3Qi3QEKGEdldFJlc3RvcmVTdGF0dXNSZXNwb25zZRIRCglhdmFpbGFibGUYASABKAgSJAoGbGF0ZXN0GAIgASgLMhQuc2x1aXMudjEuUmVzdG9yZVJ1bhIoCgp1bmZpbmlzaGVkGAMgASgLMhQuc2x1aXMudjEuUmVzdG9yZVJ1bhIsCg5sYXN0X2NvbXBsZXRlZBgEIAEoCzIULnNsdWlzLnYxLlJlc3RvcmVSdW4SMAoLbWFpbnRlbmFuY2UYBSADKAsyGy5zbHVpcy52MS5Nb2R1bGVNYWludGVuYW5jZSLmAgoKUmVzdG9yZVJ1bhIKCgJpZBgBIAEoCRIRCgliYWNrdXBfaWQYAiABKAkSDQoFc3RhdGUYAyABKAkSEQoJb3ZlcndyaXRlGAQgASgIEgoKAmJ5GAUgASgJEgwKBG5vdGUYBiABKAkSKwoHc3RhcnRlZBgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASKwoHdXBkYXRlZBgIIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLAoIZmluaXNoZWQYCSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhMKC21haW50ZW5hbmNlGAogASgJEg4KBnNsaWNlcxgLIAEoBRIOCgZjcmVhdGUYDCABKAUSEwoLb3ZlcndyaXR0ZW4YDSABKAUSDAoEc2FtZRgOIAEoBRIOCgZyZWFzb24YDyABKAkSDQoFZXJyb3IYECABKAkifQoRTW9kdWxlTWFpbnRlbmFuY2USDgoGbW9kdWxlGAEgASgJEg0KBXN0YXRlGAIgASgJEikKBXNpbmNlGAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIKCgJieRgEIAEoCRISCgp1bnJlYWRhYmxlGAUgASgIMo4CCg1CYWNrdXBTZXJ2aWNlElYKD0dldEJhY2t1cFN0YXR1cxIgLnNsdWlzLnYxLkdldEJhY2t1cFN0YXR1c1JlcXVlc3QaIS5zbHVpcy52MS5HZXRCYWNrdXBTdGF0dXNSZXNwb25zZRJKCgtMaXN0QmFja3VwcxIcLnNsdWlzLnYxLkxpc3RCYWNrdXBzUmVxdWVzdBodLnNsdWlzLnYxLkxpc3RCYWNrdXBzUmVzcG9uc2USWQoQR2V0UmVzdG9yZVN0YXR1cxIhLnNsdWlzLnYxLkdldFJlc3RvcmVTdGF0dXNSZXF1ZXN0GiIuc2x1aXMudjEuR2V0UmVzdG9yZVN0YXR1c1Jlc3BvbnNlQosBCgxjb20uc2x1aXMudjFCC0JhY2t1cFByb3RvUAFaLWdpdGh1Yi5jb20vdHJ1dml0eS9zbHVpcy9nZW4vc2x1aXMvdjE7c2x1aXN2MaICA1NYWKoCCFNsdWlzLlYxygIIU2x1aXNcVjHiAhRTbHVpc1xWMVxHUEJNZXRhZGF0YeoCCVNsdWlzOjpWMWIGcHJvdG8z", [file_google_protobuf_timestamp]);
+  fileDesc("ChVzbHVpcy92MS9iYWNrdXAucHJvdG8SCHNsdWlzLnYxIhgKFkdldEJhY2t1cFN0YXR1c1JlcXVlc3Qi1QEKF0dldEJhY2t1cFN0YXR1c1Jlc3BvbnNlEhEKCWF2YWlsYWJsZRgBIAEoCBIjCgZsYXRlc3QYAiABKAsyEy5zbHVpcy52MS5CYWNrdXBSdW4SKwoObGFzdF9jb21wbGV0ZWQYAyABKAsyEy5zbHVpcy52MS5CYWNrdXBSdW4SJwoKdW5maW5pc2hlZBgEIAEoCzITLnNsdWlzLnYxLkJhY2t1cFJ1bhIsCglyZXRlbnRpb24YBSABKAsyGS5zbHVpcy52MS5CYWNrdXBSZXRlbnRpb24izwIKCUJhY2t1cFJ1bhIKCgJpZBgBIAEoCRINCgVzdGF0ZRgCIAEoCRIPCgd0cmlnZ2VyGAMgASgJEg8KB2NyZWF0b3IYBCABKAkSKwoHc3RhcnRlZBgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASKwoHdXBkYXRlZBgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLAoIZmluaXNoZWQYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEg8KB21vZHVsZXMYCCABKAUSDwoHcmVjb3JkcxgJIAEoAxIOCgZjaHVua3MYCiABKAUSDwoHcmVzdW1lZBgLIAEoCBIOCgZyZWFzb24YDCABKAkSDQoFZXJyb3IYDSABKAkSDQoFdW5pdHMYDiABKAUSDAoEZG9uZRgPIAEoBSKZAQoPQmFja3VwUmV0ZW50aW9uEiYKAmF0GAEgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIMCgRrZWVwGAIgASgFEg8KB21heF9hZ2UYAyABKAkSDAoEa2VwdBgEIAEoBRIPCgdyZW1vdmVkGAUgASgFEg8KB2NsZWFuZWQYBiABKAUSDwoHcmVmdXNlZBgHIAEoBSIjChJMaXN0QmFja3Vwc1JlcXVlc3QSDQoFbGltaXQYASABKAUiTwoTTGlzdEJhY2t1cHNSZXNwb25zZRIRCglhdmFpbGFibGUYASABKAgSJQoHYmFja3VwcxgCIAMoCzIULnNsdWlzLnYxLkJhY2t1cEluZm8itwEKCkJhY2t1cEluZm8SCgoCaWQYASABKAkSKwoHY3JlYXRlZBgCIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASDwoHY3JlYXRvchgDIAEoCRIOCgZmb3JtYXQYBCABKAUSDgoGbGF5b3V0GAUgASgJEg8KB21vZHVsZXMYBiABKAUSDwoHcmVjb3JkcxgHIAEoAxIOCgZjaHVua3MYCCABKAUSDQoFZXJyb3IYCSABKAkiGQoXR2V0UmVzdG9yZVN0YXR1c1JlcXVlc3Qi3QEKGEdldFJlc3RvcmVTdGF0dXNSZXNwb25zZRIRCglhdmFpbGFibGUYASABKAgSJAoGbGF0ZXN0GAIgASgLMhQuc2x1aXMudjEuUmVzdG9yZVJ1bhIoCgp1bmZpbmlzaGVkGAMgASgLMhQuc2x1aXMudjEuUmVzdG9yZVJ1bhIsCg5sYXN0X2NvbXBsZXRlZBgEIAEoCzIULnNsdWlzLnYxLlJlc3RvcmVSdW4SMAoLbWFpbnRlbmFuY2UYBSADKAsyGy5zbHVpcy52MS5Nb2R1bGVNYWludGVuYW5jZSLmAgoKUmVzdG9yZVJ1bhIKCgJpZBgBIAEoCRIRCgliYWNrdXBfaWQYAiABKAkSDQoFc3RhdGUYAyABKAkSEQoJb3ZlcndyaXRlGAQgASgIEgoKAmJ5GAUgASgJEgwKBG5vdGUYBiABKAkSKwoHc3RhcnRlZBgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASKwoHdXBkYXRlZBgIIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLAoIZmluaXNoZWQYCSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhMKC21haW50ZW5hbmNlGAogASgJEg4KBnNsaWNlcxgLIAEoBRIOCgZjcmVhdGUYDCABKAUSEwoLb3ZlcndyaXR0ZW4YDSABKAUSDAoEc2FtZRgOIAEoBRIOCgZyZWFzb24YDyABKAkSDQoFZXJyb3IYECABKAkifQoRTW9kdWxlTWFpbnRlbmFuY2USDgoGbW9kdWxlGAEgASgJEg0KBXN0YXRlGAIgASgJEikKBXNpbmNlGAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIKCgJieRgEIAEoCRISCgp1bnJlYWRhYmxlGAUgASgIIiIKEFJ1bkJhY2t1cFJlcXVlc3QSDgoGcmVzdW1lGAEgASgIImUKEVJ1bkJhY2t1cFJlc3BvbnNlEhEKCWF2YWlsYWJsZRgBIAEoCBIPCgdvdXRjb21lGAIgASgJEgoKAmlkGAMgASgJEiAKA3J1bhgEIAEoCzITLnNsdWlzLnYxLkJhY2t1cFJ1biItChhHZXRSZXN0b3JlUHJldmlld1JlcXVlc3QSEQoJYmFja3VwX2lkGAEgASgJIssBChlHZXRSZXN0b3JlUHJldmlld1Jlc3BvbnNlEhEKCWF2YWlsYWJsZRgBIAEoCBIPCgdvdXRjb21lGAIgASgJEg0KBWVycm9yGAMgASgJEhQKDGluc3RhbGxhdGlvbhgEIAEoCRIRCgliYWNrdXBfaWQYBSABKAkSDgoGbGF5b3V0GAYgASgJEg8KB2NyZWF0ZWQYByABKAkSMQoIc2VjdGlvbnMYCCADKAsyHy5zbHVpcy52MS5SZXN0b3JlUHJldmlld1NlY3Rpb24ijwEKFVJlc3RvcmVQcmV2aWV3U2VjdGlvbhIOCgZtb2R1bGUYASABKAkSDwoHc2VjdGlvbhgCIAEoCRIOCgZjcmVhdGUYAyABKAUSEQoJb3ZlcndyaXRlGAQgASgFEgwKBHNhbWUYBSABKAUSDwoHZXhwaXJlZBgGIAEoBRITCgtyZWdlbmVyYXRlZBgHIAEoBTKyAwoNQmFja3VwU2VydmljZRJWCg9HZXRCYWNrdXBTdGF0dXMSIC5zbHVpcy52MS5HZXRCYWNrdXBTdGF0dXNSZXF1ZXN0GiEuc2x1aXMudjEuR2V0QmFja3VwU3RhdHVzUmVzcG9uc2USSgoLTGlzdEJhY2t1cHMSHC5zbHVpcy52MS5MaXN0QmFja3Vwc1JlcXVlc3QaHS5zbHVpcy52MS5MaXN0QmFja3Vwc1Jlc3BvbnNlElkKEEdldFJlc3RvcmVTdGF0dXMSIS5zbHVpcy52MS5HZXRSZXN0b3JlU3RhdHVzUmVxdWVzdBoiLnNsdWlzLnYxLkdldFJlc3RvcmVTdGF0dXNSZXNwb25zZRJECglSdW5CYWNrdXASGi5zbHVpcy52MS5SdW5CYWNrdXBSZXF1ZXN0Ghsuc2x1aXMudjEuUnVuQmFja3VwUmVzcG9uc2USXAoRR2V0UmVzdG9yZVByZXZpZXcSIi5zbHVpcy52MS5HZXRSZXN0b3JlUHJldmlld1JlcXVlc3QaIy5zbHVpcy52MS5HZXRSZXN0b3JlUHJldmlld1Jlc3BvbnNlQosBCgxjb20uc2x1aXMudjFCC0JhY2t1cFByb3RvUAFaLWdpdGh1Yi5jb20vdHJ1dml0eS9zbHVpcy9nZW4vc2x1aXMvdjE7c2x1aXN2MaICA1NYWKoCCFNsdWlzLlYxygIIU2x1aXNcVjHiAhRTbHVpc1xWMVxHUEJNZXRhZGF0YeoCCVNsdWlzOjpWMWIGcHJvdG8z", [file_google_protobuf_timestamp]);
 
 /**
  * @generated from message sluis.v1.GetBackupStatusRequest
@@ -502,14 +502,200 @@ export const ModuleMaintenanceSchema: GenMessage<ModuleMaintenance> = /*@__PURE_
   messageDesc(file_sluis_v1_backup, 10);
 
 /**
- * BackupService is the console's read-only view of the backup module and of the
- * restore function: how the last backups went, what the archive holds, and how
- * a restore stands. It calls the modules as the caller class `console`, which
- * those modules allow to read and nothing else.
+ * @generated from message sluis.v1.RunBackupRequest
+ */
+export type RunBackupRequest = Message<"sluis.v1.RunBackupRequest"> & {
+  /**
+   * Resume only continues a paused run of format 1 and starts none; since
+   * format 2 it answers idle.
+   *
+   * @generated from field: bool resume = 1;
+   */
+  resume: boolean;
+};
+
+/**
+ * Describes the message sluis.v1.RunBackupRequest.
+ * Use `create(RunBackupRequestSchema)` to create a new message.
+ */
+export const RunBackupRequestSchema: GenMessage<RunBackupRequest> = /*@__PURE__*/
+  messageDesc(file_sluis_v1_backup, 11);
+
+/**
+ * @generated from message sluis.v1.RunBackupResponse
+ */
+export type RunBackupResponse = Message<"sluis.v1.RunBackupResponse"> & {
+  /**
+   * Available is false when this deployment has no backup module to ask.
+   *
+   * @generated from field: bool available = 1;
+   */
+  available: boolean;
+
+  /**
+   * Outcome is completed, idle, contended, maintenance or failed.
+   *
+   * @generated from field: string outcome = 2;
+   */
+  outcome: string;
+
+  /**
+   * Id is the run's, empty when none ran.
+   *
+   * @generated from field: string id = 3;
+   */
+  id: string;
+
+  /**
+   * @generated from field: sluis.v1.BackupRun run = 4;
+   */
+  run?: BackupRun | undefined;
+};
+
+/**
+ * Describes the message sluis.v1.RunBackupResponse.
+ * Use `create(RunBackupResponseSchema)` to create a new message.
+ */
+export const RunBackupResponseSchema: GenMessage<RunBackupResponse> = /*@__PURE__*/
+  messageDesc(file_sluis_v1_backup, 12);
+
+/**
+ * @generated from message sluis.v1.GetRestorePreviewRequest
+ */
+export type GetRestorePreviewRequest = Message<"sluis.v1.GetRestorePreviewRequest"> & {
+  /**
+   * @generated from field: string backup_id = 1;
+   */
+  backupId: string;
+};
+
+/**
+ * Describes the message sluis.v1.GetRestorePreviewRequest.
+ * Use `create(GetRestorePreviewRequestSchema)` to create a new message.
+ */
+export const GetRestorePreviewRequestSchema: GenMessage<GetRestorePreviewRequest> = /*@__PURE__*/
+  messageDesc(file_sluis_v1_backup, 13);
+
+/**
+ * @generated from message sluis.v1.GetRestorePreviewResponse
+ */
+export type GetRestorePreviewResponse = Message<"sluis.v1.GetRestorePreviewResponse"> & {
+  /**
+   * Available is false when this deployment has no restore function to ask.
+   *
+   * @generated from field: bool available = 1;
+   */
+  available: boolean;
+
+  /**
+   * Outcome is preview, or refused when the backup could not be previewed.
+   *
+   * @generated from field: string outcome = 2;
+   */
+  outcome: string;
+
+  /**
+   * @generated from field: string error = 3;
+   */
+  error: string;
+
+  /**
+   * @generated from field: string installation = 4;
+   */
+  installation: string;
+
+  /**
+   * @generated from field: string backup_id = 5;
+   */
+  backupId: string;
+
+  /**
+   * @generated from field: string layout = 6;
+   */
+  layout: string;
+
+  /**
+   * @generated from field: string created = 7;
+   */
+  created: string;
+
+  /**
+   * @generated from field: repeated sluis.v1.RestorePreviewSection sections = 8;
+   */
+  sections: RestorePreviewSection[];
+};
+
+/**
+ * Describes the message sluis.v1.GetRestorePreviewResponse.
+ * Use `create(GetRestorePreviewResponseSchema)` to create a new message.
+ */
+export const GetRestorePreviewResponseSchema: GenMessage<GetRestorePreviewResponse> = /*@__PURE__*/
+  messageDesc(file_sluis_v1_backup, 14);
+
+/**
+ * RestorePreviewSection is what a restore would do with one module's section:
+ * counts only, never a record's name or value.
  *
- * There is no method here that starts a backup or a restore, or previews one.
- * A restore is started with `sluisctl` by an administrator or the break-glass
- * role, never through the console. No message carries a value from a record.
+ * @generated from message sluis.v1.RestorePreviewSection
+ */
+export type RestorePreviewSection = Message<"sluis.v1.RestorePreviewSection"> & {
+  /**
+   * @generated from field: string module = 1;
+   */
+  module: string;
+
+  /**
+   * @generated from field: string section = 2;
+   */
+  section: string;
+
+  /**
+   * @generated from field: int32 create = 3;
+   */
+  create: number;
+
+  /**
+   * @generated from field: int32 overwrite = 4;
+   */
+  overwrite: number;
+
+  /**
+   * @generated from field: int32 same = 5;
+   */
+  same: number;
+
+  /**
+   * @generated from field: int32 expired = 6;
+   */
+  expired: number;
+
+  /**
+   * @generated from field: int32 regenerated = 7;
+   */
+  regenerated: number;
+};
+
+/**
+ * Describes the message sluis.v1.RestorePreviewSection.
+ * Use `create(RestorePreviewSectionSchema)` to create a new message.
+ */
+export const RestorePreviewSectionSchema: GenMessage<RestorePreviewSection> = /*@__PURE__*/
+  messageDesc(file_sluis_v1_backup, 15);
+
+/**
+ * BackupService is the console's view of the backup module and of the restore
+ * function: how the last backups went, what the archive holds, how a restore
+ * stands, what restoring a backup would do, and a backup run now. It calls the
+ * modules as the caller class `console`, which those modules allow to read, to
+ * preview a restore and to start a backup, and nothing else.
+ *
+ * `sluisctl` calls it with the caller's own sign-in, so a laptop needs no AWS
+ * credentials for these (docs/reference/sluis/backup.md).
+ *
+ * There is no method here that starts or resumes a restore. A restore is
+ * started with `sluisctl` by an administrator or the break-glass role, with
+ * their own credentials, never through the console or the issuer: it must work
+ * when the issuer is broken. No message carries a value from a record.
  *
  * @generated from service sluis.v1.BackupService
  */
@@ -548,6 +734,30 @@ export const BackupService: GenService<{
     methodKind: "unary";
     input: typeof GetRestoreStatusRequestSchema;
     output: typeof GetRestoreStatusResponseSchema;
+  },
+  /**
+   * RunBackup writes a backup now, under the backup lease, and answers when the
+   * run ended or another runner held the lease. The caller must hold a group
+   * that the policy's `backup.runGroups` names; the run is audited with who
+   * asked. Anything else is refused as permission denied.
+   *
+   * @generated from rpc sluis.v1.BackupService.RunBackup
+   */
+  runBackup: {
+    methodKind: "unary";
+    input: typeof RunBackupRequestSchema;
+    output: typeof RunBackupResponseSchema;
+  },
+  /**
+   * GetRestorePreview reports what restoring a backup would do, as counts per
+   * module and section, and writes nothing. Operator.
+   *
+   * @generated from rpc sluis.v1.BackupService.GetRestorePreview
+   */
+  getRestorePreview: {
+    methodKind: "unary";
+    input: typeof GetRestorePreviewRequestSchema;
+    output: typeof GetRestorePreviewResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_sluis_v1_backup, 0);

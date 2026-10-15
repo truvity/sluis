@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -15,8 +16,11 @@ import (
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
 	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/backup/job"
+	"github.com/truvity/sluis/internal/backup/restore"
 	"github.com/truvity/sluis/internal/backup/restorejob"
+	"github.com/truvity/sluis/internal/backup/rpc"
 	"github.com/truvity/sluis/internal/port"
+	"github.com/truvity/sluis/policy"
 )
 
 type fakeBackup struct {
@@ -25,6 +29,20 @@ type fakeBackup struct {
 	restore restorejob.Status
 	err     error
 	limits  []int
+	// ran is who each Run was for.
+	ran     []string
+	resumed []bool
+	preview rpc.PreviewResponse
+}
+
+func (f *fakeBackup) Run(_ context.Context, by string, resume bool) (job.Result, error) {
+	f.ran, f.resumed = append(f.ran, by), append(f.resumed, resume)
+	v := job.View{ID: "20261011T020000Z-aa", State: "completed", Started: time.Date(2026, 10, 11, 2, 0, 0, 0, time.UTC), Modules: 4, Records: 90}
+	return job.Result{Outcome: job.OutcomeCompleted, ID: v.ID, Run: &v}, f.err
+}
+
+func (f *fakeBackup) PreviewRestore(context.Context, string) (rpc.PreviewResponse, error) {
+	return f.preview, f.err
 }
 
 func (f *fakeBackup) Status(context.Context) (job.Status, error) { return f.status, f.err }
@@ -172,19 +190,20 @@ func TestAModuleThatDoesNotAnswerIsUnavailableAndSaysWhy(t *testing.T) {
 	}
 }
 
-// The console reads and cannot do more: the service has no method that runs a
-// backup, restores, or previews a restore. The set is pinned so that adding one
-// is a decision the diff shows.
-func TestThereIsNoRestoreRouteInTheBackupService(t *testing.T) {
+// The service starts a backup and previews a restore and has no method that
+// starts or resumes a restore. The set is pinned so that adding one is a
+// decision the diff shows.
+func TestThereIsNoRestoreStartInTheBackupService(t *testing.T) {
 	t.Parallel()
 	svc := directoryrosterv1.File_directoryroster_v1_backup_proto.Services().ByName("BackupService")
-	want := map[string]bool{"GetBackupStatus": true, "ListBackups": true, "GetRestoreStatus": true}
+	want := map[string]bool{"GetBackupStatus": true, "ListBackups": true, "GetRestoreStatus": true, "RunBackup": true, "GetRestorePreview": true}
 	got := map[string]bool{}
 	for i := range svc.Methods().Len() {
 		name := string(svc.Methods().Get(i).Name())
 		got[name] = true
-		if !rpcIsRead("/x.v1.BackupService/" + name) {
-			t.Errorf("%s is not named as a read, so maintenance would not recognise it", name)
+		// Only the backup run writes, so only it is held by maintenance.
+		if isRead := rpcIsRead("/x.v1.BackupService/" + name); isRead == (name == "RunBackup") {
+			t.Errorf("%s: rpcIsRead = %v", name, isRead)
 		}
 	}
 	if len(got) != len(want) {
@@ -194,6 +213,135 @@ func TestThereIsNoRestoreRouteInTheBackupService(t *testing.T) {
 		if !got[name] {
 			t.Errorf("missing %s", name)
 		}
+	}
+}
+
+type runners []string
+
+func (r runners) MayRun(groups []string) bool {
+	for _, g := range groups {
+		if slices.Contains(r, g) {
+			return true
+		}
+	}
+	return false
+}
+
+func runnerConsole(m BackupModule, groups ...string) *Console {
+	return &Console{deps: ConsoleDeps{Backup: m, BackupRunners: runners(groups)}}
+}
+
+// A backup is started by a group the policy names, and by nothing else: the
+// operator role, which opens every other write, does not.
+func TestRunBackupNeedsAGroupThePolicyNames(t *testing.T) {
+	t.Parallel()
+	f := newFakeBackup()
+	c := runnerConsole(f, "backup-runners")
+	req := func() *connect.Request[directoryrosterv1.RunBackupRequest] {
+		return connect.NewRequest(&directoryrosterv1.RunBackupRequest{})
+	}
+
+	if _, err := c.RunBackup(context.Background(), req()); code(err) != connect.CodeUnauthenticated {
+		t.Errorf("no sign-in: %v", err)
+	}
+	for name, ctx := range map[string]context.Context{
+		"an operator in no group": asRole(access.RoleOperator),
+		"a viewer in another":     asRole(access.RoleViewer, "someone-else"),
+		"no role":                 asRole(access.RoleNone),
+	} {
+		if _, err := c.RunBackup(ctx, req()); code(err) != connect.CodePermissionDenied {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	if len(f.ran) != 0 {
+		t.Fatalf("the module was called %d times for callers the policy does not admit", len(f.ran))
+	}
+
+	res, err := c.RunBackup(asRole(access.RoleNone, "backup-runners"), req())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Msg.GetAvailable() || res.Msg.GetOutcome() != "completed" || res.Msg.GetRun().GetRecords() != 90 {
+		t.Errorf("run = %v", res.Msg)
+	}
+	// The module is told who asked, which is what its audit record names.
+	if len(f.ran) != 1 || f.ran[0] != "ada@example.com" {
+		t.Errorf("run was for %v", f.ran)
+	}
+}
+
+func TestNobodyMayRunABackupWhenThePolicyNamesNoGroup(t *testing.T) {
+	t.Parallel()
+	f := newFakeBackup()
+	for name, c := range map[string]*Console{
+		"no runners":         {deps: ConsoleDeps{Backup: f}},
+		"an empty group set": runnerConsole(f),
+	} {
+		_, err := c.RunBackup(asRole(access.RoleOperator, policy.GroupOperators, "backup-runners"), connect.NewRequest(&directoryrosterv1.RunBackupRequest{}))
+		if code(err) != connect.CodePermissionDenied {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	if len(f.ran) != 0 {
+		t.Errorf("the module was called: %v", f.ran)
+	}
+}
+
+func TestRunBackupPassesResumeAndSurfacesAModuleThatDoesNotAnswer(t *testing.T) {
+	t.Parallel()
+	f := newFakeBackup()
+	c := runnerConsole(f, "r")
+	if _, err := c.RunBackup(asRole(access.RoleNone, "r"), connect.NewRequest(&directoryrosterv1.RunBackupRequest{Resume: true})); err != nil {
+		t.Fatal(err)
+	}
+	if len(f.resumed) != 1 || !f.resumed[0] {
+		t.Errorf("resume reached the module as %v", f.resumed)
+	}
+	f.err = errors.New("lambda: throttled")
+	if _, err := c.RunBackup(asRole(access.RoleNone, "r"), connect.NewRequest(&directoryrosterv1.RunBackupRequest{})); code(err) != connect.CodeUnavailable {
+		t.Errorf("code = %v", code(err))
+	}
+}
+
+func TestRunBackupRefusesASignInThatCannotBeNamed(t *testing.T) {
+	t.Parallel()
+	f := newFakeBackup()
+	c := runnerConsole(f, "r")
+	ctx := WithIdentity(context.Background(), access.Identity{Source: access.SourceRecovery, Subject: "system:serviceaccount:ns:recovery", Groups: []string{"r"}})
+	if _, err := c.RunBackup(ctx, connect.NewRequest(&directoryrosterv1.RunBackupRequest{})); code(err) != connect.CodePermissionDenied {
+		t.Errorf("recovery: %v", err)
+	}
+	if len(f.ran) != 0 {
+		t.Errorf("the module was called: %v", f.ran)
+	}
+}
+
+func TestRestorePreviewIsAnOperatorsAndCarriesCountsOnly(t *testing.T) {
+	t.Parallel()
+	f := newFakeBackup()
+	f.preview = rpc.PreviewResponse{Outcome: "preview", Backup: "new", Report: &restore.Report{Installation: "example", ID: "new", Layout: "v5",
+		Created: "2026-10-10T02:00:00Z", Sections: []restore.SectionReport{{Module: port.ModuleOIDC, Section: "state", Create: 2, Overwrite: 1, Same: 7}}}}
+	c := backupConsole(f)
+	req := func(id string) *connect.Request[directoryrosterv1.GetRestorePreviewRequest] {
+		return connect.NewRequest(&directoryrosterv1.GetRestorePreviewRequest{BackupId: id})
+	}
+	if _, err := c.GetRestorePreview(context.Background(), req("new")); code(err) != connect.CodeUnauthenticated {
+		t.Errorf("anonymous: %v", err)
+	}
+	if _, err := c.GetRestorePreview(asRole(access.RoleViewer), req("new")); code(err) != connect.CodePermissionDenied {
+		t.Errorf("viewer: %v", err)
+	}
+	if _, err := c.GetRestorePreview(asRole(access.RoleOperator), req(" ")); code(err) != connect.CodeInvalidArgument {
+		t.Errorf("no id: %v", err)
+	}
+	res, err := c.GetRestorePreview(asRole(access.RoleOperator), req("new"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := res.Msg
+	if !m.GetAvailable() || m.GetOutcome() != "preview" || m.GetBackupId() != "new" || len(m.GetSections()) != 1 ||
+		m.GetSections()[0].GetCreate() != 2 || m.GetSections()[0].GetOverwrite() != 1 || m.GetSections()[0].GetModule() != "oidc" {
+		t.Errorf("preview = %v", m)
 	}
 }
 

@@ -110,3 +110,5 @@ cloudflare:
       presets: [dns-example, r2-archive]
     - group: "all:access-roster:releaser"
       presets: [dns-example]
+backup:
+  runGroups: ["all:access-roster:operator"]

@@ -4,14 +4,19 @@ package directoryroster.v1;
 
 import "google/protobuf/timestamp.proto";
 
-// BackupService is the console's read-only view of the backup module and of the
-// restore function: how the last backups went, what the archive holds, and how
-// a restore stands. It calls the modules as the caller class `console`, which
-// those modules allow to read and nothing else.
+// BackupService is the console's view of the backup module and of the restore
+// function: how the last backups went, what the archive holds, how a restore
+// stands, what restoring a backup would do, and a backup run now. It calls the
+// modules as the caller class `console`, which those modules allow to read, to
+// preview a restore and to start a backup, and nothing else.
 //
-// There is no method here that starts a backup or a restore, or previews one.
-// A restore is started with `sluisctl` by an administrator or the break-glass
-// role, never through the console. No message carries a value from a record.
+// `sluisctl` calls it with the caller's own sign-in, so a laptop needs no AWS
+// credentials for these (docs/reference/sluis/backup.md).
+//
+// There is no method here that starts or resumes a restore. A restore is
+// started with `sluisctl` by an administrator or the break-glass role, with
+// their own credentials, never through the console or the issuer: it must work
+// when the issuer is broken. No message carries a value from a record.
 service BackupService {
   // GetBackupStatus is the latest backup run and its state, the newest
   // completed one, a run that is running or paused with its progress, and the
@@ -26,6 +31,16 @@ service BackupService {
   // GetRestoreStatus is the latest restore, one that is running or paused,
   // and the modules whose maintenance flag is set. Viewer.
   rpc GetRestoreStatus(GetRestoreStatusRequest) returns (GetRestoreStatusResponse);
+
+  // RunBackup writes a backup now, under the backup lease, and answers when the
+  // run ended or another runner held the lease. The caller must hold a group
+  // that the policy's `backup.runGroups` names; the run is audited with who
+  // asked. Anything else is refused as permission denied.
+  rpc RunBackup(RunBackupRequest) returns (RunBackupResponse);
+
+  // GetRestorePreview reports what restoring a backup would do, as counts per
+  // module and section, and writes nothing. Operator.
+  rpc GetRestorePreview(GetRestorePreviewRequest) returns (GetRestorePreviewResponse);
 }
 
 message GetBackupStatusRequest {}
@@ -136,4 +151,49 @@ message ModuleMaintenance {
   google.protobuf.Timestamp since = 3;
   string by = 4;
   bool unreadable = 5;
+}
+
+message RunBackupRequest {
+  // Resume only continues a paused run of format 1 and starts none; since
+  // format 2 it answers idle.
+  bool resume = 1;
+}
+
+message RunBackupResponse {
+  // Available is false when this deployment has no backup module to ask.
+  bool available = 1;
+  // Outcome is completed, idle, contended, maintenance or failed.
+  string outcome = 2;
+  // Id is the run's, empty when none ran.
+  string id = 3;
+  BackupRun run = 4;
+}
+
+message GetRestorePreviewRequest {
+  string backup_id = 1;
+}
+
+message GetRestorePreviewResponse {
+  // Available is false when this deployment has no restore function to ask.
+  bool available = 1;
+  // Outcome is preview, or refused when the backup could not be previewed.
+  string outcome = 2;
+  string error = 3;
+  string installation = 4;
+  string backup_id = 5;
+  string layout = 6;
+  string created = 7;
+  repeated RestorePreviewSection sections = 8;
+}
+
+// RestorePreviewSection is what a restore would do with one module's section:
+// counts only, never a record's name or value.
+message RestorePreviewSection {
+  string module = 1;
+  string section = 2;
+  int32 create = 3;
+  int32 overwrite = 4;
+  int32 same = 5;
+  int32 expired = 6;
+  int32 regenerated = 7;
 }

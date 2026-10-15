@@ -49,8 +49,16 @@ Admit `args.KeyPolicyStatements` in the shared key's policy and the roles in the
 ## 3. Take a backup
 
 ```sh
-sluisctl backup run --function sluis-<instance>-backup --region <region>
-sluisctl backup list --function sluis-<instance>-backup --region <region>
+sluisctl login --issuer https://access.example   # once; saves where the functions are
+sluisctl backup run              # through the issuer: no AWS credentials, but a group of backup.runGroups
+sluisctl backup list
+sluisctl backup run --direct     # your own AWS credentials, with or without a sign-in
+```
+
+```yaml
+# policy: who may start a backup through the issuer
+backup:
+  runGroups: ["all:acme:operator"]
 ```
 
 Expect one id, such as `20261013T020000Z-ab12cd`, and in the bucket `backup/<instance>/<id>.tar.gz.age` with its `<id>.json` sidecar.
@@ -66,8 +74,8 @@ Run it where the archive is readable, with the backup document. Without `--ident
 ## 5. Restore
 
 ```sh
-sluisctl restore preview <id> --function sluis-<instance>-restore --region <region>
-sluisctl restore start <id> --confirm <instance> --function sluis-<instance>-restore --region <region> --wait
+sluisctl restore preview <id>                           # through the issuer when signed in
+sluisctl restore start <id> --confirm <instance> --wait # always your own AWS credentials
 ```
 
 The preview names what a restore creates, overwrites, leaves and skips. A destination that holds different data is refused without `--overwrite`. A restore is a rotation: restart afterwards ([rotate keys and credentials](rotate-keys-and-credentials.md)).

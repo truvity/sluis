@@ -356,6 +356,57 @@ type CloudflareGrant struct {
 	Presets []string `yaml:"presets" json:"presets"`
 }
 
+// PolicyBackup is the policy document's `backup` section: who may start a
+// backup through the issuer.
+type PolicyBackup struct {
+	// RunGroups are internal groups of the policy; every holder may start a
+	// backup from the console or `sluisctl backup run`. Nobody is implied: not
+	// the operators group, not a role.
+	RunGroups []string `yaml:"runGroups,omitempty" json:"runGroups,omitempty"`
+}
+
+// Backup is the policy's backup section, never nil.
+func (d *PolicyDocument) Backup() *PolicyBackup {
+	if d == nil || d.BackupRun == nil {
+		return &PolicyBackup{}
+	}
+	return d.BackupRun
+}
+
+// MayRun reports whether a holder of groups may start a backup.
+func (b *PolicyBackup) MayRun(groups []string) bool {
+	if b == nil {
+		return false
+	}
+	for _, g := range b.RunGroups {
+		if g != "" && slices.Contains(groups, g) {
+			return true
+		}
+	}
+	return false
+}
+
+// validate holds the groups to the policy's.
+func (b *PolicyBackup) validate(declared func(group string) bool) []error {
+	if b == nil {
+		return nil
+	}
+	var errs []error
+	seen := map[string]bool{}
+	for i, g := range b.RunGroups {
+		switch {
+		case g == "":
+			errs = append(errs, fmt.Errorf("backup.runGroups[%d]: name the group", i))
+		case !declared(g):
+			errs = append(errs, fmt.Errorf("backup.runGroups[%d]: group %q is not declared by the policy", i, g))
+		case seen[g]:
+			errs = append(errs, fmt.Errorf("backup.runGroups[%d]: %q is listed twice", i, g))
+		}
+		seen[g] = true
+	}
+	return errs
+}
+
 // Cloudflare is the policy's section, never nil.
 func (d *PolicyDocument) Cloudflare() *PolicyCloudflare {
 	if d == nil || d.CloudflareGrants == nil {

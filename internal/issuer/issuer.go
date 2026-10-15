@@ -157,6 +157,8 @@ type Issuer struct {
 	// cloudflare mints Cloudflare credentials on demand; unset refuses every
 	// such request.
 	cloudflare atomic.Pointer[CloudflareMinter]
+	// sluisConfig is the document at SluisConfigurationPath; nil is a 404.
+	sluisConfig atomic.Pointer[SluisConfiguration]
 }
 
 // UseAudit gives the issuer the service's recorder. The directory half

@@ -417,6 +417,10 @@ type Deps struct {
 	// its own projected token. Nil is never called with, and a deployment
 	// federating no cluster hands it nothing.
 	UseWorkloads func(func(*http.Request) (access.Principal, bool))
+	// UseBearers is called with a reader of the access tokens this issuer
+	// signed for the CLI (`sluisctl`), as a person's bearer: how a laptop
+	// reaches the console's backup service with its own sign-in.
+	UseBearers func(func(*http.Request) (access.Principal, bool))
 	// UseIssuerURL is called with this issuer's own URL, so the console
 	// can tell a browser where the SessionService is.
 	//
@@ -798,6 +802,10 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 		if read := workloadBearer(clusters, log); read != nil {
 			deps.UseWorkloads(read)
 		}
+	}
+
+	if deps.UseBearers != nil {
+		deps.UseBearers(personBearer(issuer.BearerReader(core, storage, issuer.CLIAudiences)))
 	}
 
 	// Readiness follows the state store; liveness does not. An issuer

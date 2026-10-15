@@ -8,7 +8,7 @@ Connect also speaks JSON over HTTP, so `curl` works. The proto package is `sluis
 
 | Services | Reached by | Path prefix |
 |---|---|---|
-| `WorkspaceService`, `SettingsService`, `AccessService`, `GitHubService`, `SlackService`, `SlackChannelService`, `SlackSharedChannelService`, `SlackAppService`, `CloudflareService`, `BackupService`, the SPA, and the audit `QueryService` forwarded under `/audit/` | the console, same origin under `console.mount`; a workload with its own ServiceAccount token | `/<package>.*/` |
+| `WorkspaceService`, `SettingsService`, `AccessService`, `GitHubService`, `SlackService`, `SlackChannelService`, `SlackSharedChannelService`, `SlackAppService`, `CloudflareService`, `BackupService`, the SPA, and the audit `QueryService` forwarded under `/audit/` | the console, same origin under `console.mount`; a workload with its own ServiceAccount token; `sluisctl`'s bearer token, for `BackupService` only | `/<package>.*/` |
 | `sluis.v1.SessionService` | a browser at the issuer's host (SSO cookie); any caller with a token from this issuer | `/sluis.v1.SessionService/`, legacy `/accessissuer.v1.SessionService/` |
 | `/login/*`, `/connect/*`, `/.access/*` | the origin root: bootstrap surface and CLI endpoints | none |
 | `directory.v1.DirectoryService` | nothing: it has no listener and no chart value enables one | none |
@@ -272,8 +272,10 @@ Minted Cloudflare tokens and R2 credentials. Only `GetCloudflareCredential` retu
 | RPC | Role | Request | Response | Notes |
 |---|---|---|---|---|
 | `GetBackupStatus` | viewer | none | `available`, `latest`, `last_completed`, `unfinished` (`units`, `done`), `retention` | calls `backup.status` as caller class `console`; `Unavailable` when the module does not answer |
-| `ListBackups` | viewer | `limit?` | `available`, `backups[]` newest first | `backup.list`; manifests are unverified; no RPC runs a backup |
-| `GetRestoreStatus` | viewer | none | `available`, `latest`, `unfinished`, `last_completed`, `maintenance[]` | `restore.status`; no RPC starts or previews a restore |
+| `ListBackups` | viewer | `limit?` | `available`, `backups[]` newest first | `backup.list`; manifests are unverified |
+| `GetRestoreStatus` | viewer | none | `available`, `latest`, `unfinished`, `last_completed`, `maintenance[]` | `restore.status`; no RPC starts or resumes a restore |
+| `RunBackup` | a group in the policy's `backup.runGroups` | `resume?` | `available`, `outcome`, `id`, `run` | `backup.run` as `console` with `by` the caller's address, audited as that person; refused in maintenance; `Unavailable` when the module does not answer |
+| `GetRestorePreview` | operator | `backup_id` | `available`, `outcome`, `error`, `installation`, `backup_id`, `layout`, `created`, `sections[]` (`module`, `section`, `create`, `overwrite`, `same`, `expired`, `regenerated`) | `restore.preview`: counts only, never a record's name |
 
 ## SessionService
 

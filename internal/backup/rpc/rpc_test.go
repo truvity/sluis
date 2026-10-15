@@ -62,7 +62,7 @@ func TestWhoMayCallWhat(t *testing.T) {
 		caller, method string
 		ok             bool
 	}{
-		{rpc.CallerConsole, rpc.MethodStatus, true}, {rpc.CallerConsole, rpc.MethodList, true}, {rpc.CallerConsole, rpc.MethodRun, false},
+		{rpc.CallerConsole, rpc.MethodStatus, true}, {rpc.CallerConsole, rpc.MethodList, true}, {rpc.CallerConsole, rpc.MethodRun, true},
 		{rpc.CallerAdmin, rpc.MethodStatus, true}, {rpc.CallerAdmin, rpc.MethodRun, true},
 		{rpc.CallerBreakglass, rpc.MethodRun, true},
 		{"issuer", rpc.MethodStatus, false}, {"issuer", rpc.MethodRun, false}, {"", rpc.MethodList, false},
@@ -85,6 +85,36 @@ func TestRunCarriesTheCallerClassAsTheActorAndResume(t *testing.T) {
 	}
 	if f.ran.Trigger != job.TriggerRun || !f.ran.ResumeOnly || f.ran.Actor != audit.Workload("lambda:breakglass") {
 		t.Errorf("request %+v", *f.ran)
+	}
+}
+
+// The console starts a backup for a person it has authenticated and checked
+// against the policy, and the module records that person. No other class is
+// believed about who is behind it: an alias is not a person.
+func TestARunFromTheConsoleIsRecordedAsThePersonItNames(t *testing.T) {
+	f := &fake{}
+	resp := call(server(f), rpc.CallerConsole, rpc.MethodRun, `{"by":"Ada@Example.com"}`)
+	if resp.Error != nil || f.ran == nil {
+		t.Fatalf("%+v", resp)
+	}
+	if f.ran.Actor != audit.Person("ada@example.com") || f.ran.Trigger != job.TriggerRun {
+		t.Errorf("request %+v", *f.ran)
+	}
+}
+
+func TestARunFromTheConsoleNamingNobodyIsTheConsoleWorkload(t *testing.T) {
+	f := &fake{}
+	if resp := call(server(f), rpc.CallerConsole, rpc.MethodRun, `{}`); resp.Error != nil || f.ran.Actor != audit.Workload("lambda:console") {
+		t.Errorf("%+v, %+v", resp, f.ran)
+	}
+}
+
+func TestAnAdminCannotNameAnotherPersonAsTheActor(t *testing.T) {
+	for _, class := range []string{rpc.CallerAdmin, rpc.CallerBreakglass} {
+		f := &fake{}
+		if resp := call(server(f), class, rpc.MethodRun, `{"by":"ada@example.com"}`); resp.Error != nil || f.ran.Actor != audit.Workload("lambda:"+class) {
+			t.Errorf("%s: %+v, %+v", class, resp, f.ran)
+		}
 	}
 }
 
