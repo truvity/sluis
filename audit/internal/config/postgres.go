@@ -4,12 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/truvity/cnpg/v2/clients/go/pgclient"
 )
@@ -80,10 +78,6 @@ func OpenPool(ctx context.Context, rawURL string, opts PoolOptions) (*pgclient.P
 }
 
 func openPool(ctx context.Context, cfg pgclient.Config) (*pgclient.Pool, error) {
-	cfg.Retry.OnRetry = func(attempt int, err error, delay time.Duration) {
-		slog.Warn("database: connection-class error, retrying",
-			"attempt", attempt, "delay", delay.String(), "error", err.Error())
-	}
 	return pgclient.New(ctx, cfg)
 }
 
