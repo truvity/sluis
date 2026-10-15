@@ -24,6 +24,7 @@ require (
 	github.com/nats-io/nats-server/v2 v2.15.0
 	github.com/nats-io/nats.go v1.54.0
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
+	github.com/truvity/cnpg/v2 v2.29.0
 	github.com/truvity/gateway-auth v0.7.1
 	github.com/truvity/gemaal v0.25.1
 	github.com/truvity/policy v1.49.0

@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/truvity/cnpg/v2/clients/go/pgclient"
 	policyconfig "github.com/truvity/policy/config"
 
 	"sigs.k8s.io/yaml"
@@ -810,6 +811,13 @@ func checkDatabase(p *Postgres) error {
 		// url.Parse's own message quotes the URL; the URL carries no
 		// password, but an error is logged, so say where and not what.
 		return errors.New("database.url is not a URL")
+	}
+	// The client speaks verify-full and nothing else. Refuse a weaker mode
+	// here, where the file is read, rather than at the first connection.
+	if u, err := url.Parse(p.URL); err == nil {
+		if mode := u.Query().Get("sslmode"); mode != "" && mode != pgclient.VerifyFull {
+			return errors.New("database.url: sslmode must be verify-full or absent")
+		}
 	}
 	return nil
 }

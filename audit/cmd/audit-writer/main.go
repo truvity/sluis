@@ -42,6 +42,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
+	"github.com/truvity/cnpg/v2/clients/go/pgclient"
 
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -134,13 +135,9 @@ func run() error {
 	// and is not the writer's: observe writes it by following the bucket, and
 	// this connection's role has no grant on it. Without a database the writer
 	// still writes the archive, which is the part that is evidence.
-	var pool *pgxpool.Pool
+	var pool *pgclient.Pool
 	if cfg.Database != nil {
-		poolConfig, err := cfg.Database.PoolConfig(ctx, cfg.SecretReader())
-		if err != nil {
-			return err
-		}
-		if pool, err = pgxpool.NewWithConfig(ctx, poolConfig); err != nil {
+		if pool, err = cfg.Database.Pool(ctx, cfg.SecretReader()); err != nil {
 			return err
 		}
 		defer pool.Close()
@@ -234,12 +231,16 @@ func run() error {
 		if err != nil {
 			return err
 		}
+		var database *pgxpool.Pool // the writer takes pgx's pool: pgclient's embeds it
+		if pool != nil {
+			database = pool.Pool
+		}
 		w, err := writer.Open(ctx, writer.Config{
 			Archive:          archive,
 			Profiles:         profiles,
 			Keys:             provider,
 			Catalogues:       found,
-			Database:         pool,
+			Database:         database,
 			Replicas:         cfg.Replicas,
 			ForgetIdentities: cfg.ForgetIdentities,
 			RollInterval:     cfg.Roll.Interval.D(),
