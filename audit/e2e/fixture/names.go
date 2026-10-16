@@ -55,7 +55,8 @@ func (o Options) withDefaults() Options {
 	return o
 }
 
-// secretEnv is one entry of a component's `secretEnv`: a Secret's key, put in
+// secretEnv is one entry of a component's `secretEnv` or `secretFiles`: a
+// Secret's key, put in
 // the variable its config names.
 type secretEnv struct {
 	Name       string `json:"name"`
@@ -91,7 +92,8 @@ type chartValues struct {
 				Consumer string `json:"consumer"`
 			} `json:"stream"`
 		} `json:"config"`
-		SecretEnv []secretEnv `json:"secretEnv"`
+		SecretEnv   []secretEnv `json:"secretEnv"`
+		SecretFiles []secretEnv `json:"secretFiles"`
 	} `json:"writer"`
 	Migrate struct {
 		Config struct {
@@ -101,7 +103,8 @@ type chartValues struct {
 			} `json:"database"`
 			Reader string `json:"reader"`
 		} `json:"config"`
-		SecretEnv []secretEnv `json:"secretEnv"`
+		SecretEnv   []secretEnv `json:"secretEnv"`
+		SecretFiles []secretEnv `json:"secretFiles"`
 	} `json:"migrate"`
 	Observe struct {
 		Config struct {
@@ -110,7 +113,8 @@ type chartValues struct {
 				PasswordEnv string `json:"passwordSecret"`
 			} `json:"database"`
 		} `json:"config"`
-		SecretEnv []secretEnv `json:"secretEnv"`
+		SecretEnv   []secretEnv `json:"secretEnv"`
+		SecretFiles []secretEnv `json:"secretFiles"`
 	} `json:"observe"`
 	Jobs struct {
 	} `json:"jobs"`
@@ -199,26 +203,26 @@ func Resolve(o Options) (Names, error) {
 	if err != nil {
 		return Names{}, fmt.Errorf("%s: observe.config.database.url: %w", valuesFilePath(), err)
 	}
-	ownerSecret := secretOf(v.Migrate.SecretEnv, v.Migrate.Config.Database.PasswordEnv)
-	writerSecret := secretOf(v.Writer.SecretEnv, "AUDIT_DATABASE_PASSWORD")
-	observeSecret := secretOf(v.Observe.SecretEnv, v.Observe.Config.Database.PasswordEnv)
+	ownerSecret := secretOf(v.Migrate.SecretFiles, v.Migrate.Config.Database.PasswordEnv)
+	writerSecret := secretOf(v.Writer.SecretFiles, "audit-database-password")
+	observeSecret := secretOf(v.Observe.SecretFiles, v.Observe.Config.Database.PasswordEnv)
 	s3Secret := secretOf(v.Writer.SecretEnv, "AUDIT_S3_ACCESS_KEY_ID")
 
 	for field, got := range map[string]string{
-		"presets.standard.bucket":                            v.Presets.Standard.Bucket,
-		"migrate.config.database.url (host)":                 db.Host,
-		"migrate.config.database.url (user)":                 db.User.Username(),
-		"migrate.config.database.url (database)":             strings.TrimPrefix(db.Path, "/"),
-		"migrate.secretEnv (the owner's password Secret)":    ownerSecret,
-		"writer.config.database.url (user)":                  writer.User.Username(),
-		"writer.secretEnv (the writer's password Secret)":    writerSecret,
-		"observe.config.database.url (user)":                 observer.User.Username(),
-		"observe.secretEnv (the indexer's password Secret)":  observeSecret,
-		"writer.secretEnv (AUDIT_S3_ACCESS_KEY_ID's Secret)": s3Secret,
-		"writer.config.stream.nats.url":                      v.Writer.Config.Stream.NATS.URL,
-		"writer.config.stream.name":                          v.Writer.Config.Stream.Name,
-		"writer.config.stream.consumer":                      v.Writer.Config.Stream.Consumer,
-		"migrate.config.reader":                              v.Migrate.Config.Reader,
+		"presets.standard.bucket":                             v.Presets.Standard.Bucket,
+		"migrate.config.database.url (host)":                  db.Host,
+		"migrate.config.database.url (user)":                  db.User.Username(),
+		"migrate.config.database.url (database)":              strings.TrimPrefix(db.Path, "/"),
+		"migrate.secretFiles (the owner's password Secret)":   ownerSecret,
+		"writer.config.database.url (user)":                   writer.User.Username(),
+		"writer.secretFiles (the writer's password Secret)":   writerSecret,
+		"observe.config.database.url (user)":                  observer.User.Username(),
+		"observe.secretFiles (the indexer's password Secret)": observeSecret,
+		"writer.secretEnv (AUDIT_S3_ACCESS_KEY_ID's Secret)":  s3Secret,
+		"writer.config.stream.nats.url":                       v.Writer.Config.Stream.NATS.URL,
+		"writer.config.stream.name":                           v.Writer.Config.Stream.Name,
+		"writer.config.stream.consumer":                       v.Writer.Config.Stream.Consumer,
+		"migrate.config.reader":                               v.Migrate.Config.Reader,
 	} {
 		if got == "" {
 			return Names{}, fmt.Errorf("%s: %s is empty — this package has nothing to name", valuesFilePath(), field)

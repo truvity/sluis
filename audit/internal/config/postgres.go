@@ -14,11 +14,7 @@ import (
 
 // PoolOptions is what a caller adds to a database URL.
 type PoolOptions struct {
-	// Password is a password already in hand, for a caller that has read it
-	// from somewhere the pool cannot re-read.
-	Password string
 	// PasswordFile is a file the pool reads again for every new connection.
-	// It wins over Password.
 	PasswordFile string
 	// MaxConnections, when positive, is the pool size.
 	MaxConnections int
@@ -42,18 +38,19 @@ var urlParameters = map[string]bool{
 // secret the block names; when the installation's `secrets` source is `file`
 // that is the file itself, which the pool reads again for every new
 // connection, so a rotated Secret reaches the process within one connection
-// lifetime. From any other source it is read once, here.
+// lifetime. Any other source is refused: a password read once would fail new
+// connections after a rotation.
 //
 // The result is held to the contract of truvity/cnpg's clients: verify-full
 // only, against the CA file the URL's `sslrootcert` (or PGSSLROOTCERT) names.
 func (p Postgres) ClientConfig(ctx context.Context, secrets *Secrets) (pgclient.Config, error) {
 	opts := PoolOptions{MaxConnections: p.MaxConnections}
 	if p.PasswordSecret != "" {
-		file, password, err := secrets.fileOrValue(ctx, "database.passwordSecret", p.PasswordSecret)
+		file, err := secrets.passwordFile(ctx, "database.passwordSecret", p.PasswordSecret)
 		if err != nil {
 			return pgclient.Config{}, err
 		}
-		opts.PasswordFile, opts.Password = file, password
+		opts.PasswordFile = file
 	}
 	return ClientConfigFromURL(p.URL, opts)
 }
@@ -127,9 +124,6 @@ func ClientConfigFromURL(rawURL string, opts PoolOptions) (pgclient.Config, erro
 		}
 		set["PGPASSWORD"] = password
 	}
-	if opts.Password != "" {
-		set["PGPASSWORD"] = opts.Password
-	}
 	if opts.PasswordFile != "" {
 		set["CNPG_CLIENT_PASSWORD_FILE"] = opts.PasswordFile
 	}
@@ -155,17 +149,20 @@ func ClientConfigFromURL(rawURL string, opts PoolOptions) (pgclient.Config, erro
 	return cfg, nil
 }
 
-// fileOrValue is the secret `name` that `field` holds: its path, when the source
-// is a directory of files (so that the pool reads it again for each connection),
-// and its value otherwise. Either way the name is checked and the secret read
-// once here, so a name that is wrong or a file that is empty fails at start.
-func (s *Secrets) fileOrValue(ctx context.Context, field, name string) (file, value string, err error) {
-	value, err = s.Get(ctx, field, name)
-	if err != nil {
-		return "", "", err
+// errPasswordNeedsFile is the refusal of a database password from any source
+// but a directory of files.
+var errPasswordNeedsFile = errors.New("database.passwordSecret needs secrets.source: file — the database client re-reads the password file " +
+	"for every new connection, so a rotated Secret is used without a restart; a password read once from ssm/env would fail new connections after a rotation")
+
+// passwordFile is the path of the secret `name` that `field` holds. Only the
+// file source has one. The name is checked and the file read once here, so a
+// name that is wrong or a file that is empty fails at start.
+func (s *Secrets) passwordFile(ctx context.Context, field, name string) (string, error) {
+	if s.Source() != SourceFile {
+		return "", errPasswordNeedsFile
 	}
-	if s.Source() == SourceFile {
-		return filepath.Join(s.src.Root, filepath.FromSlash(name)), "", nil
+	if _, err := s.Get(ctx, field, name); err != nil {
+		return "", err
 	}
-	return "", value, nil
+	return filepath.Join(s.src.Root, filepath.FromSlash(name)), nil
 }
