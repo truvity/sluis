@@ -15,6 +15,12 @@
 #   - the PostgreSQL database and its four roles.
 #   - the Secrets named below.
 #
+# PostgreSQL here is a CloudNativePG cluster named `audit-db` in the `postgres`
+# namespace. Every connection verifies the server (`sslmode=verify-full`, the
+# only mode the binaries accept) against the cluster's own CA, so the URL names
+# the read-write Service `audit-db-rw`, a name the server certificate carries,
+# and `sslrootcert` names the CA file mounted by `trust` below.
+#
 # The host and Secret names are examples. A secret is never in this file.
 mode: stream
 replicas: 2
@@ -43,12 +49,25 @@ profiles:
 # (see the variants at the end) if records carry direct identifiers.
 externalIdentifiersAreOpaque: true
 
+# The CA of the CNPG cluster's server certificate is the `ca.crt` key of its
+# `audit-db-ca` Secret. `trust` takes a ConfigMap, so put the CA in one in this
+# release's namespace, for example with trust-manager (a Bundle whose source is
+# that Secret, in trust-manager's own namespace, and whose target is a ConfigMap
+# with key ca.crt), or once by hand:
+#   kubectl -n postgres get secret audit-db-ca -o jsonpath='{.data.ca\.crt}' | base64 -d \
+#     | kubectl -n audit create configmap audit-db-ca --from-file=ca.crt=/dev/stdin
+# The chart mounts it on every pod at /etc/audit/trust, where the URLs below
+# point `sslrootcert`.
+trust:
+  configMap: audit-db-ca
+  key: ca.crt
+
 migrate:
   enabled: true
   config:
     apiVersion: audit.truvity.github.io/audit-migrate/v2
     database:
-      url: postgres://audit_owner@postgres.postgres.svc:5432/audit?sslmode=require
+      url: postgres://audit_owner@audit-db-rw.postgres.svc:5432/audit?sslmode=verify-full&sslrootcert=/etc/audit/trust/ca.crt
       passwordSecret: AUDIT_DATABASE_PASSWORD
     writer: audit_writer
     observe: audit_observe
@@ -67,7 +86,7 @@ receiver:
     deployment: /etc/audit/deployment.yaml
     anonymousWrites: true
     database:
-      url: postgres://audit_writer@postgres.postgres.svc:5432/audit?sslmode=require
+      url: postgres://audit_writer@audit-db-rw.postgres.svc:5432/audit?sslmode=verify-full&sslrootcert=/etc/audit/trust/ca.crt
       passwordSecret: AUDIT_DATABASE_PASSWORD
     stream:
       nats:
@@ -88,7 +107,7 @@ writer:
     anonymousWrites: true
     replicas: 3
     database:
-      url: postgres://audit_writer@postgres.postgres.svc:5432/audit?sslmode=require
+      url: postgres://audit_writer@audit-db-rw.postgres.svc:5432/audit?sslmode=verify-full&sslrootcert=/etc/audit/trust/ca.crt
       passwordSecret: AUDIT_DATABASE_PASSWORD
     stream:
       nats:
@@ -106,7 +125,7 @@ observe:
     apiVersion: audit.truvity.github.io/audit-observe/v2
     deployment: /etc/audit/deployment.yaml
     database:
-      url: postgres://audit_observe@postgres.postgres.svc:5432/audit?sslmode=require
+      url: postgres://audit_observe@audit-db-rw.postgres.svc:5432/audit?sslmode=verify-full&sslrootcert=/etc/audit/trust/ca.crt
       passwordSecret: AUDIT_DATABASE_PASSWORD
   secretEnv:
     - name: AUDIT_DATABASE_PASSWORD
