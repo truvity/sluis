@@ -125,7 +125,7 @@ data:
     anonymousWrites: true
     apiVersion: audit.truvity.github.io/audit-writer/v2
     database:
-      passwordSecret: AUDIT_DATABASE_PASSWORD
+      passwordSecret: audit-database-password
       url: postgres://audit_writer@db.example.test:5432/audit?sslmode=verify-full&sslrootcert=/etc/audit/trust/ca.crt
     deployment: /etc/audit/deployment.yaml
     keys:
@@ -141,6 +141,9 @@ data:
         namespace: devel
       pseudonym: audit-pseudonym
     replicas: 3
+    secrets:
+      root: /etc/audit/secrets
+      source: file
 
 ---
 # Source: audit/templates/cronjobs.yaml
@@ -276,7 +279,7 @@ data:
   config.yaml: |
     apiVersion: audit.truvity.github.io/audit-query/v2
     database:
-      passwordSecret: AUDIT_QUERY_DATABASE_PASSWORD
+      passwordSecret: audit-query-database-password
       url: postgres://audit_query@db.example.test:5432/audit?sslmode=verify-full&sslrootcert=/etc/audit/trust/ca.crt
     deployment: /etc/audit/deployment.yaml
     grants: /etc/audit/grants.yaml
@@ -292,6 +295,9 @@ data:
           role: audit-resolve
         namespace: devel
       pseudonym: audit-pseudonym
+    secrets:
+      root: /etc/audit/secrets
+      source: file
     sink:
       url: http://audit:8080
 
@@ -373,7 +379,7 @@ spec:
         app.kubernetes.io/instance: audit
         app.kubernetes.io/component: query
       annotations:
-        checksum/config: 8b44e4d4f73fb3ded487cfb3b961d5e6a2b39d0abe3cdf5e56aa665db1e87fd2
+        checksum/config: 93b0b7c03c05322086d81b098342a611aea21a1b4ccbe932d474e0f684e4da20
         checksum/grants: c6e926709c6176bc66b906eaad228b9bb32e6760036c8733b2758355055342a1
         # A grant preset turns roles into profiles, so the profiles are part
         # of what a grant means.
@@ -393,13 +399,6 @@ spec:
           imagePullPolicy: IfNotPresent
           args:
             - --config=/etc/audit/config.yaml
-          env:
-            
-            - name: AUDIT_QUERY_DATABASE_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: audit-query-database
-                  key: password
           ports:
             - name: http
               containerPort: 8080
@@ -439,6 +438,9 @@ spec:
               mountPath: /etc/audit/trust
               readOnly: true
             
+            - name: secret-files
+              mountPath: /etc/audit/secrets
+              readOnly: true
             - name: token-0
               mountPath: /var/run/openbao
               readOnly: true
@@ -459,6 +461,16 @@ spec:
           configMap:
             name: private-ca-bundle
         
+        - name: secret-files
+          projected:
+            # Readable by the owner and the pod's fsGroup and by nobody else.
+            defaultMode: 0440
+            sources:
+              - secret:
+                  name: audit-query-database
+                  items:
+                    - key: password
+                      path: audit-query-database-password
         - name: token-0
           projected:
             sources:
@@ -497,7 +509,7 @@ spec:
       annotations:
         # A changed configuration must reach a running pod, and a file mounted
         # with subPath is never updated in place, so the pod is replaced.
-        checksum/config: 40fd2a9a7fb9137bcd74e4db53ece0e79e35e130bb7894bf8ae9f612dfc82ca4
+        checksum/config: 4ff656370189f5378dce2c804dcab598fa6b255374bcd921b7b36a7bbf1d4d9b
         # Likewise a change to the profile document, hashed whole: it also holds
         # externalIdentifiersAreOpaque, which changes what a profile keeps.
         checksum/deployment: 2627126ba849240e4bf0b9521213f88070f1e799ddaac233f9cbd753acb830cf
@@ -523,13 +535,6 @@ spec:
           imagePullPolicy: IfNotPresent
           args:
             - --config=/etc/audit/config.yaml
-          env:
-            
-            - name: AUDIT_DATABASE_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: audit-database
-                  key: password
           ports:
             - name: http
               containerPort: 8080
@@ -572,6 +577,9 @@ spec:
               mountPath: /etc/audit/trust
               readOnly: true
             
+            - name: secret-files
+              mountPath: /etc/audit/secrets
+              readOnly: true
             - name: token-0
               mountPath: /var/run/openbao
               readOnly: true
@@ -589,6 +597,16 @@ spec:
           configMap:
             name: private-ca-bundle
         
+        - name: secret-files
+          projected:
+            # Readable by the owner and the pod's fsGroup and by nobody else.
+            defaultMode: 0440
+            sources:
+              - secret:
+                  name: audit-database
+                  items:
+                    - key: password
+                      path: audit-database-password
         - name: token-0
           projected:
             sources:
@@ -884,8 +902,11 @@ data:
   config.yaml: |
     apiVersion: audit.truvity.github.io/audit-migrate/v2
     database:
-      passwordSecret: AUDIT_DATABASE_PASSWORD
+      passwordSecret: audit-database-password
       url: postgres://audit_owner@db.example.test:5432/audit?sslmode=verify-full&sslrootcert=/etc/audit/trust/ca.crt
+    secrets:
+      root: /etc/audit/secrets
+      source: file
     writer: audit_writer
 
 ---
@@ -935,13 +956,6 @@ spec:
           args:
             - migrate
             - --config=/etc/audit/config.yaml
-          env:
-            
-            - name: AUDIT_DATABASE_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: audit-owner-database
-                  key: password
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -958,6 +972,9 @@ spec:
               mountPath: /etc/audit/trust
               readOnly: true
             
+            - name: secret-files
+              mountPath: /etc/audit/secrets
+              readOnly: true
       volumes:
         - name: config
           configMap:
@@ -967,4 +984,14 @@ spec:
           configMap:
             name: private-ca-bundle
         
+        - name: secret-files
+          projected:
+            # Readable by the owner and the pod's fsGroup and by nobody else.
+            defaultMode: 0440
+            sources:
+              - secret:
+                  name: audit-owner-database
+                  items:
+                    - key: password
+                      path: audit-database-password
 
