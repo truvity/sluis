@@ -41,7 +41,7 @@ A `...Secret` field holds a secret's name, never the secret. The file's `secrets
 <!-- generated: config-secrets -->
 | key | holds |
 |---|---|
-| `database.passwordSecret` | the Postgres password; needs `secrets.source: file`, so that a rotated file is read for each new connection |
+| `database.passwordSecret` | the Postgres password; `secrets.source: file` only, so a rotated Secret needs no restart. No deployment runs audit with Postgres on Lambda; that would need its own design (IAM database authentication) |
 | `bucket.credentialsSecret.accessKeyID`, `.secretAccessKey` | the static credentials of an S3-compatible store |
 | `openbao.tokenSecret` | an OpenBAO token |
 <!-- /generated -->
@@ -205,7 +205,6 @@ Every refusal is a start-up error naming the key. The grants file has its own, u
 | `secrets` with `root` and source `env`; source `file` or `ssm` with a root that is not an absolute directory or SSM path |
 | A `signer` with none or several of `kms`, `file` |
 | A database URL with a password |
-| `database.passwordSecret` with a `secrets.source` other than `file` | The client re-reads the password file for every new connection; a password read once would fail after a rotation |
 | A query service with the `postgres` searcher and no `database`, or `s3scan` and no `archive` |
 
 | Refused after the schema | Reason |
