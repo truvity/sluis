@@ -23,7 +23,7 @@ profiles:
 
 x-database: &database
   url: postgres://audit_writer@db.example.test:5432/audit?sslmode=verify-full
-  passwordSecret: AUDIT_DATABASE_PASSWORD
+  passwordSecret: audit-database-password
 x-stream: &stream
   nats:
     url: nats://nats.audit.svc:4222
@@ -37,13 +37,16 @@ x-sink: &sink
 receiver:
   config:
     apiVersion: audit.truvity.github.io/audit-writer/v2
+    secrets:
+      source: file
+      root: /etc/audit/secrets
     mode: receiver
     deployment: /etc/audit/deployment.yaml
     workloads: /etc/audit/workloads.yaml
     database: *database
     stream: *stream
-  secretEnv:
-    - name: AUDIT_DATABASE_PASSWORD
+  secretFiles:
+    - name: audit-database-password
       secretName: audit-database
       key: password
   tokens:
@@ -53,6 +56,9 @@ writer:
   consumers: 3
   config:
     apiVersion: audit.truvity.github.io/audit-writer/v2
+    secrets:
+      source: file
+      root: /etc/audit/secrets
     deployment: /etc/audit/deployment.yaml
     workloads: /etc/audit/workloads.yaml
     replicas: 3
@@ -65,8 +71,8 @@ writer:
       pseudonym: audit-pseudonym
       rootFile: /etc/audit/keys/root
     stream: *stream
-  secretEnv:
-    - name: AUDIT_DATABASE_PASSWORD
+  secretFiles:
+    - name: audit-database-password
       secretName: audit-database
       key: password
   secretMounts:
@@ -83,25 +89,31 @@ migrate:
   enabled: true
   config:
     apiVersion: audit.truvity.github.io/audit-migrate/v2
+    secrets:
+      source: file
+      root: /etc/audit/secrets
     database:
       url: postgres://audit_owner@db.example.test:5432/audit?sslmode=verify-full
-      passwordSecret: AUDIT_DATABASE_PASSWORD
+      passwordSecret: audit-database-password
     writer: audit_writer
     observe: audit_observe
     reader: audit_query
     purge: audit_purge
-  secretEnv:
-    - name: AUDIT_DATABASE_PASSWORD
+  secretFiles:
+    - name: audit-database-password
       secretName: audit-owner-database
       key: password
 observe:
   enabled: true
   config:
     apiVersion: audit.truvity.github.io/audit-observe/v2
+    secrets:
+      source: file
+      root: /etc/audit/secrets
     deployment: /etc/audit/deployment.yaml
     database:
       url: postgres://audit_observe@db.example.test:5432/audit?sslmode=verify-full
-      passwordSecret: AUDIT_OBSERVE_DATABASE_PASSWORD
+      passwordSecret: audit-observe-database-password
     settle: 2m
     wake:
       nats:
@@ -109,8 +121,8 @@ observe:
           url: nats://nats.audit.svc:4222
           tokenFile: /var/run/audit/stream/token
         subject: audit.bucket.created
-  secretEnv:
-    - name: AUDIT_OBSERVE_DATABASE_PASSWORD
+  secretFiles:
+    - name: audit-observe-database-password
       secretName: audit-observe-database
       key: password
   tokens:
@@ -139,12 +151,15 @@ query:
   keysVolume: true
   config:
     apiVersion: audit.truvity.github.io/audit-query/v2
+    secrets:
+      source: file
+      root: /etc/audit/secrets
     deployment: /etc/audit/deployment.yaml
     grants: /etc/audit/grants.yaml
     sink: *sink
     database:
       url: postgres://audit_query@db.example.test:5432/audit?sslmode=verify-full
-      passwordSecret: AUDIT_QUERY_DATABASE_PASSWORD
+      passwordSecret: audit-query-database-password
     exports:
       bucket:
         name: audit-exports
@@ -153,8 +168,8 @@ query:
       instance: audit
       pseudonym: audit-pseudonym
       rootFile: /etc/audit/keys/root
-  secretEnv:
-    - name: AUDIT_QUERY_DATABASE_PASSWORD
+  secretFiles:
+    - name: audit-query-database-password
       secretName: audit-query-database
       key: password
   secretMounts:
@@ -178,13 +193,16 @@ jobs:
   purge:
     config:
       apiVersion: audit.truvity.github.io/audit-purge/v2
+      secrets:
+        source: file
+        root: /etc/audit/secrets
       deployment: /etc/audit/deployment.yaml
       database:
         url: postgres://audit_purge@db.example.test:5432/audit?sslmode=verify-full
-        passwordSecret: AUDIT_DATABASE_PASSWORD
+        passwordSecret: audit-database-password
       dedupeWindow: 336h
-    secretEnv:
-      - name: AUDIT_DATABASE_PASSWORD
+    secretFiles:
+      - name: audit-database-password
         secretName: audit-purge-database
         key: password
   clockSync:

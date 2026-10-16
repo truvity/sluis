@@ -12,6 +12,8 @@ Create one Postgres database with an owner, one role per part (writer, indexer, 
 
 - The writer and indexer never migrate themselves and refuse to start against an unknown schema version.
 
+- The connection is `verify-full` against a CA file, named by `sslrootcert=` in the URL or `PGSSLROOTCERT`. Any other `sslmode` is refused.
+- The password is a file only (`secrets.source: file`).
 - A password in a database URL is refused. Name a secret with `passwordSecret` and let the [`secrets` block](../../../reference/audit/configuration.md#secrets) resolve it.
 
 ## Steps

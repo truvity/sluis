@@ -16,15 +16,55 @@ kubectl() { command kubectl --context "$KCTX" "$@"; }
 
 step() { printf '\n\033[1m==> %s\033[0m\n' "$1"; }
 
+POSTGRES_CA_CONFIGMAP=audit-e2e-postgres-ca # e2e.yaml's trust.configMap
+
 eval "$(go run ./e2e/fixture/cmd/resolve -namespace "${NS:-audit-e2e}" -release "${RELEASE:-audit-e2e}")"
 
 kubectl get namespace "$NAMESPACE" >/dev/null 2>&1 || kubectl create namespace "$NAMESPACE"
+
+# The box's Postgres comes with a self-signed certificate that carries no host
+# name, which only `sslmode=require` accepts. The chart connects with
+# `sslmode=verify-full`, so this issues a throwaway CA and a server certificate
+# for the Service's names, swaps the certificate Secret the server reads, and
+# hands the chart the CA as a ConfigMap (e2e.yaml's `trust.configMap`, mounted
+# at /etc/audit/trust). The CA's key is thrown away with the temporary
+# directory; no key is printed. The server reads its certificate when it
+# starts, so it is restarted once — before the roles below exist, because the
+# box's data is an emptyDir — and a re-run that finds the certificate already
+# issued leaves it alone.
+step "the database server's certificate"
+if [ "$(kubectl -n postgres get secret postgres-tls -o jsonpath='{.metadata.annotations.audit-e2e/ca}' 2>/dev/null)" != "issued" ] ||
+  ! kubectl -n "$NAMESPACE" get configmap "$POSTGRES_CA_CONFIGMAP" >/dev/null 2>&1; then
+  tls=$(mktemp -d)
+  trap 'rm -rf "$tls"' EXIT
+  (
+    umask 077
+    cd "$tls"
+    openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes \
+      -keyout ca.key -out ca.crt -days 3 -subj "/CN=audit-e2e postgres CA" >/dev/null 2>&1
+    openssl req -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes \
+      -keyout tls.key -out tls.csr -subj "/CN=$DATABASE_HOST" >/dev/null 2>&1
+    printf 'subjectAltName=DNS:%s,DNS:%s.cluster.local,DNS:postgres\nextendedKeyUsage=serverAuth\n' \
+      "$DATABASE_HOST" "$DATABASE_HOST" >san.ext
+    openssl x509 -req -in tls.csr -CA ca.crt -CAkey ca.key -CAcreateserial \
+      -out tls.crt -days 3 -extfile san.ext >/dev/null 2>&1
+  )
+  kubectl -n postgres create secret tls postgres-tls --cert="$tls/tls.crt" --key="$tls/tls.key" \
+    --dry-run=client -o yaml | kubectl -n postgres apply -f - >/dev/null
+  kubectl -n postgres annotate secret postgres-tls audit-e2e/ca=issued --overwrite >/dev/null
+  kubectl -n "$NAMESPACE" create configmap "$POSTGRES_CA_CONFIGMAP" --from-file=ca.crt="$tls/ca.crt" \
+    --dry-run=client -o yaml | kubectl -n "$NAMESPACE" apply -f - >/dev/null
+  kubectl -n postgres rollout restart deployment/postgres >/dev/null
+  kubectl -n postgres rollout status deployment/postgres --timeout=5m
+fi
 
 # One credential per role, and one role per part: the owner of the tables (the
 # migration's, and nobody else's), the writer, the indexer and the query
 # service. The chart reads the password (the config names the variable it
 # arrives in, and carries the URL without it); the suite that connects from
-# outside reads the whole connection string.
+# outside reads the whole connection string. That one is the test client's, over
+# a port-forward to localhost, where the server certificate's names cannot match,
+# so it stays `sslmode=require`; the chart's own URLs are verify-full.
 role_secret() { # <secret> <role>
   if ! kubectl -n "$NAMESPACE" get secret "$1" >/dev/null 2>&1; then
     password=$(head -c 24 /dev/urandom | base64 | tr -d '/+=')

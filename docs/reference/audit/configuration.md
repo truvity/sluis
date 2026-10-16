@@ -41,7 +41,7 @@ A `...Secret` field holds a secret's name, never the secret. The file's `secrets
 <!-- generated: config-secrets -->
 | key | holds |
 |---|---|
-| `database.passwordSecret` | the Postgres password |
+| `database.passwordSecret` | the Postgres password; `secrets.source: file` only, so a rotated Secret needs no restart. No deployment runs audit with Postgres on Lambda; that would need its own design (IAM database authentication) |
 | `bucket.credentialsSecret.accessKeyID`, `.secretAccessKey` | the static credentials of an S3-compatible store |
 | `openbao.tokenSecret` | an OpenBAO token |
 <!-- /generated -->
