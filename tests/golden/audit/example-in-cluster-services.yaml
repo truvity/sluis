@@ -145,7 +145,7 @@ data:
     apiVersion: audit.truvity.github.io/audit-writer/v2
     database:
       passwordSecret: AUDIT_DATABASE_PASSWORD
-      url: postgres://audit_writer@postgres.postgres.svc:5432/audit?sslmode=require
+      url: postgres://audit_writer@audit-db-rw.postgres.svc:5432/audit?sslmode=verify-full&sslrootcert=/etc/audit/trust/ca.crt
     deployment: /etc/audit/deployment.yaml
     replicas: 3
     stream:
@@ -176,7 +176,7 @@ data:
     apiVersion: audit.truvity.github.io/audit-writer/v2
     database:
       passwordSecret: AUDIT_DATABASE_PASSWORD
-      url: postgres://audit_writer@postgres.postgres.svc:5432/audit?sslmode=require
+      url: postgres://audit_writer@audit-db-rw.postgres.svc:5432/audit?sslmode=verify-full&sslrootcert=/etc/audit/trust/ca.crt
     deployment: /etc/audit/deployment.yaml
     mode: receiver
     stream:
@@ -297,7 +297,7 @@ data:
     apiVersion: audit.truvity.github.io/audit-observe/v2
     database:
       passwordSecret: AUDIT_DATABASE_PASSWORD
-      url: postgres://audit_observe@postgres.postgres.svc:5432/audit?sslmode=require
+      url: postgres://audit_observe@audit-db-rw.postgres.svc:5432/audit?sslmode=verify-full&sslrootcert=/etc/audit/trust/ca.crt
     deployment: /etc/audit/deployment.yaml
 
 ---
@@ -355,7 +355,7 @@ spec:
         app.kubernetes.io/instance: audit
         app.kubernetes.io/component: observe
       annotations:
-        checksum/config: a5de0a49c39b323c6417db11f9f0a62eebf057f7bc9984ed4e31532ef35f88ae
+        checksum/config: 8132c141ffcbb4f9df9c5e7da66e6e79ad5f4130830d59bae9d3348619086234
         checksum/deployment: fa612d72e6da8d4680769f7eb11c072a25c95e4576bdd37ddd9ad7665524b676
     spec:
       serviceAccountName: audit-observe
@@ -410,6 +410,9 @@ spec:
               subPath: deployment.yaml
               readOnly: true
             
+            - name: trust
+              mountPath: /etc/audit/trust
+              readOnly: true
             
             - name: tmp
               mountPath: /tmp
@@ -421,6 +424,9 @@ spec:
           configMap:
             name: audit-deployment
         
+        - name: trust
+          configMap:
+            name: audit-db-ca
         
         - name: tmp
           emptyDir: {}
@@ -453,7 +459,7 @@ spec:
       annotations:
         # A changed configuration must reach a running pod, and a file mounted
         # with subPath is never updated in place, so the pod is replaced.
-        checksum/config: 3b6ef20f19a37a2460451f4eef490b3d1f74e37e0884e353d40224ddfbc80cf2
+        checksum/config: 56ffedf7a4697d4ffc4a7b055d35b21010556447b2f052765c188c1303e02310
         # Likewise a change to the profile document, hashed whole: it also holds
         # externalIdentifiersAreOpaque, which changes what a profile keeps.
         checksum/deployment: fa612d72e6da8d4680769f7eb11c072a25c95e4576bdd37ddd9ad7665524b676
@@ -524,6 +530,9 @@ spec:
               subPath: deployment.yaml
               readOnly: true
             
+            - name: trust
+              mountPath: /etc/audit/trust
+              readOnly: true
             
             - name: tmp
               mountPath: /tmp
@@ -535,6 +544,9 @@ spec:
           configMap:
             name: audit-deployment
         
+        - name: trust
+          configMap:
+            name: audit-db-ca
         
         - name: tmp
           emptyDir: {}
@@ -567,7 +579,7 @@ spec:
       annotations:
         # A changed configuration must reach a running pod, and a file mounted
         # with subPath is never updated in place, so the pod is replaced.
-        checksum/config: 12faa781670c0faa1ae729c64790d2cbdf0bd28f3cf6666f870067207ac90705
+        checksum/config: 38bac35b15a0570b533132a3da7321c4d206233470b7f1d6bef12c4b9524a461
         # Likewise a change to the profile document, hashed whole: it also holds
         # externalIdentifiersAreOpaque, which changes what a profile keeps.
         checksum/deployment: fa612d72e6da8d4680769f7eb11c072a25c95e4576bdd37ddd9ad7665524b676
@@ -631,6 +643,9 @@ spec:
               subPath: deployment.yaml
               readOnly: true
             
+            - name: trust
+              mountPath: /etc/audit/trust
+              readOnly: true
             
             - name: tmp
               mountPath: /tmp
@@ -642,6 +657,9 @@ spec:
           configMap:
             name: audit-deployment
         
+        - name: trust
+          configMap:
+            name: audit-db-ca
         
         - name: tmp
           emptyDir: {}
@@ -706,6 +724,9 @@ spec:
                   subPath: deployment.yaml
                   readOnly: true
                 
+                - name: trust
+                  mountPath: /etc/audit/trust
+                  readOnly: true
                 
           volumes:
             - name: config
@@ -715,6 +736,9 @@ spec:
               configMap:
                 name: audit-deployment
             
+            - name: trust
+              configMap:
+                name: audit-db-ca
             
 
 ---
@@ -778,6 +802,9 @@ spec:
                   subPath: deployment.yaml
                   readOnly: true
                 
+                - name: trust
+                  mountPath: /etc/audit/trust
+                  readOnly: true
                 
           volumes:
             - name: config
@@ -787,6 +814,9 @@ spec:
               configMap:
                 name: audit-deployment
             
+            - name: trust
+              configMap:
+                name: audit-db-ca
             
 
 ---
@@ -845,11 +875,18 @@ spec:
                   subPath: config.yaml
                   readOnly: true
                 
+                - name: trust
+                  mountPath: /etc/audit/trust
+                  readOnly: true
                 
           volumes:
             - name: config
               configMap:
                 name: audit-clock-sync-config
+            
+            - name: trust
+              configMap:
+                name: audit-db-ca
 ---
 # Source: audit/templates/migrate.yaml
 # The identity this Job runs as, created as a hook of its own so that it
@@ -903,7 +940,7 @@ data:
     apiVersion: audit.truvity.github.io/audit-migrate/v2
     database:
       passwordSecret: AUDIT_DATABASE_PASSWORD
-      url: postgres://audit_owner@postgres.postgres.svc:5432/audit?sslmode=require
+      url: postgres://audit_owner@audit-db-rw.postgres.svc:5432/audit?sslmode=verify-full&sslrootcert=/etc/audit/trust/ca.crt
     observe: audit_observe
     reader: audit_query
     writer: audit_writer
@@ -974,11 +1011,17 @@ spec:
               subPath: config.yaml
               readOnly: true
             
+            - name: trust
+              mountPath: /etc/audit/trust
+              readOnly: true
             
       volumes:
         - name: config
           configMap:
             name: audit-migrate-config
         
+        - name: trust
+          configMap:
+            name: audit-db-ca
         
 
