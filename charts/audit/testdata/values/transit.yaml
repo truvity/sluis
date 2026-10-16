@@ -11,10 +11,13 @@ trust:
   configMap: private-ca-bundle
 x-database: &database
   url: postgres://audit_writer@db.example.test:5432/audit?sslmode=verify-full&sslrootcert=/etc/audit/trust/ca.crt
-  passwordSecret: AUDIT_DATABASE_PASSWORD
+  passwordSecret: audit-database-password
 writer:
   config:
     apiVersion: audit.truvity.github.io/audit-writer/v2
+    secrets:
+      source: file
+      root: /etc/audit/secrets
     deployment: /etc/audit/deployment.yaml
     anonymousWrites: true
     replicas: 3
@@ -31,8 +34,8 @@ writer:
           mount: jwt-devel
           role: audit-writer
           jwtFile: /var/run/openbao/token
-  secretEnv:
-    - name: AUDIT_DATABASE_PASSWORD
+  secretFiles:
+    - name: audit-database-password
       secretName: audit-database
       key: password
   tokens:
@@ -43,12 +46,15 @@ migrate:
   enabled: true
   config:
     apiVersion: audit.truvity.github.io/audit-migrate/v2
+    secrets:
+      source: file
+      root: /etc/audit/secrets
     database:
       url: postgres://audit_owner@db.example.test:5432/audit?sslmode=verify-full&sslrootcert=/etc/audit/trust/ca.crt
-      passwordSecret: AUDIT_DATABASE_PASSWORD
+      passwordSecret: audit-database-password
     writer: audit_writer
-  secretEnv:
-    - name: AUDIT_DATABASE_PASSWORD
+  secretFiles:
+    - name: audit-database-password
       secretName: audit-owner-database
       key: password
 jobs:
@@ -93,13 +99,16 @@ query:
         audience: audit
   config:
     apiVersion: audit.truvity.github.io/audit-query/v2
+    secrets:
+      source: file
+      root: /etc/audit/secrets
     deployment: /etc/audit/deployment.yaml
     grants: /etc/audit/grants.yaml
     sink:
       url: http://audit:8080
     database:
       url: postgres://audit_query@db.example.test:5432/audit?sslmode=verify-full&sslrootcert=/etc/audit/trust/ca.crt
-      passwordSecret: AUDIT_QUERY_DATABASE_PASSWORD
+      passwordSecret: audit-query-database-password
     keys:
       adapter: transit
       instance: audit
@@ -112,8 +121,8 @@ query:
           mount: jwt-devel
           role: audit-resolve
           jwtFile: /var/run/openbao/token
-  secretEnv:
-    - name: AUDIT_QUERY_DATABASE_PASSWORD
+  secretFiles:
+    - name: audit-query-database-password
       secretName: audit-query-database
       key: password
   tokens:

@@ -46,9 +46,9 @@ profiles:
 # index. The tables' OWNER is the migration's, and nothing else connects as it.
 x-database: &database
   url: postgres://audit_e2e_writer@postgres.postgres.svc:5432/audit_e2e?sslmode=verify-full&sslrootcert=/etc/audit/trust/ca.crt
-  passwordSecret: AUDIT_DATABASE_PASSWORD
+  passwordSecret: audit-database-password
 x-database-secret: &database-secret
-  - name: AUDIT_DATABASE_PASSWORD
+  - name: audit-database-password
     secretName: audit-e2e-database
     key: password
 x-stream: &stream
@@ -88,26 +88,29 @@ x-archive-secret: &archive-secret
 receiver:
   config:
     apiVersion: audit.truvity.github.io/audit-writer/v2
+    secrets:
+      source: file
+      root: /etc/audit/secrets
     mode: receiver
     deployment: /etc/audit/deployment.yaml
     anonymousWrites: true
     database: *database
     stream: *stream
-  secretEnv: *database-secret
+  secretFiles: *database-secret
 
 writer:
   consumers: 3
   config:
     apiVersion: audit.truvity.github.io/audit-writer/v2
+    secrets:
+      source: file
+      root: /etc/audit/secrets
     deployment: /etc/audit/deployment.yaml
     anonymousWrites: true
     replicas: 3
     database: *database
     stream: *stream
   secretEnv:
-    - name: AUDIT_DATABASE_PASSWORD
-      secretName: audit-e2e-database
-      key: password
     - name: AUDIT_S3_ACCESS_KEY_ID
       secretName: audit-e2e-s3-credentials
       key: AWS_ACCESS_KEY_ID
@@ -120,21 +123,28 @@ writer:
     - name: AWS_SECRET_ACCESS_KEY
       secretName: audit-e2e-s3-credentials
       key: AWS_SECRET_ACCESS_KEY
+  secretFiles:
+    - name: audit-database-password
+      secretName: audit-e2e-database
+      key: password
 
 migrate:
   enabled: true
   config:
     apiVersion: audit.truvity.github.io/audit-migrate/v2
+    secrets:
+      source: file
+      root: /etc/audit/secrets
     database:
       url: postgres://audit_e2e_owner@postgres.postgres.svc:5432/audit_e2e?sslmode=verify-full&sslrootcert=/etc/audit/trust/ca.crt
-      passwordSecret: AUDIT_DATABASE_PASSWORD
+      passwordSecret: audit-database-password
     # What the migration grants each part's role: the writer the deduplication
     # table and the registry, the indexer the index, the query service a read.
     writer: audit_e2e_writer
     observe: audit_e2e_observe
     reader: audit_e2e_query
-  secretEnv:
-    - name: AUDIT_DATABASE_PASSWORD
+  secretFiles:
+    - name: audit-database-password
       secretName: audit-e2e-owner-database
       key: password
 
@@ -145,16 +155,16 @@ observe:
   enabled: true
   config:
     apiVersion: audit.truvity.github.io/audit-observe/v2
+    secrets:
+      source: file
+      root: /etc/audit/secrets
     deployment: /etc/audit/deployment.yaml
     database:
       url: postgres://audit_e2e_observe@postgres.postgres.svc:5432/audit_e2e?sslmode=verify-full&sslrootcert=/etc/audit/trust/ca.crt
-      passwordSecret: AUDIT_OBSERVE_DATABASE_PASSWORD
+      passwordSecret: audit-observe-database-password
     settle: 10s
     interval: 5s
   secretEnv:
-    - name: AUDIT_OBSERVE_DATABASE_PASSWORD
-      secretName: audit-e2e-observe-database
-      key: password
     - name: AUDIT_S3_ACCESS_KEY_ID
       secretName: audit-e2e-s3-credentials
       key: AWS_ACCESS_KEY_ID
@@ -167,6 +177,10 @@ observe:
     - name: AWS_SECRET_ACCESS_KEY
       secretName: audit-e2e-s3-credentials
       key: AWS_SECRET_ACCESS_KEY
+  secretFiles:
+    - name: audit-observe-database-password
+      secretName: audit-e2e-observe-database
+      key: password
 
 query:
   enabled: false

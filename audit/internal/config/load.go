@@ -391,7 +391,7 @@ func (w *Writer) finish() error {
 			return err
 		}
 	}
-	return checkDatabase(w.Database)
+	return checkDatabase(w.Database, w.Secrets)
 }
 
 // finishTransports carries the `stream` shorthand into `forward` or `consume`,
@@ -631,7 +631,7 @@ func (q *Query) finish() error {
 			return errors.New("keys turn resolve on, which needs archive: resolve opens what the writer sealed in the archive")
 		}
 	}
-	return checkDatabase(q.Database)
+	return checkDatabase(q.Database, q.Secrets)
 }
 
 func (o *Observe) finish() error {
@@ -658,7 +658,7 @@ func (o *Observe) finish() error {
 			return err
 		}
 	}
-	return checkDatabase(&o.Database)
+	return checkDatabase(&o.Database, o.Secrets)
 }
 
 // DefaultSettle is how long after an hour has ended it is sealed.
@@ -708,7 +708,7 @@ func (v *Verify) finish() error {
 	return nil
 }
 
-func (p *Purge) finish() error { return checkDatabase(&p.Database) }
+func (p *Purge) finish() error { return checkDatabase(&p.Database, p.Secrets) }
 
 func (c *ClockSync) finish() error {
 	if err := checkRequire(c.Require, c.Sink); err != nil {
@@ -724,7 +724,7 @@ func (c *ClockSync) finish() error {
 	return nil
 }
 
-func (m *Migrate) finish() error { return checkDatabase(&m.Database) }
+func (m *Migrate) finish() error { return checkDatabase(&m.Database, m.Secrets) }
 
 // adoptKey makes the archive purpose of the keys block the key objects are
 // encrypted with (archive.kmsKey), so there is one place it is read from. Naming
@@ -803,7 +803,7 @@ func (k *Keys) Enabled() bool { return k.enabled() }
 
 // checkDatabase refuses what the schema's pattern cannot express: a URL that
 // does not parse, or that names no host and no socket to reach.
-func checkDatabase(p *Postgres) error {
+func checkDatabase(p *Postgres, secrets SecretsSource) error {
 	if p == nil {
 		return nil
 	}
@@ -818,6 +818,9 @@ func checkDatabase(p *Postgres) error {
 		if mode := u.Query().Get("sslmode"); mode != "" && mode != pgclient.VerifyFull {
 			return errors.New("database.url: sslmode must be verify-full or absent")
 		}
+	}
+	if p.PasswordSecret != "" && secrets.Source != SourceFile {
+		return errPasswordNeedsFile
 	}
 	return nil
 }

@@ -11,12 +11,15 @@ externalIdentifiersAreOpaque: false
 writer:
   config:
     apiVersion: audit.truvity.github.io/audit-writer/v2
+    secrets:
+      source: file
+      root: /etc/audit/secrets
     deployment: /etc/audit/deployment.yaml
     anonymousWrites: true
     replicas: 3
     database:
       url: postgres://audit_e2e_writer@postgres.postgres.svc:5432/audit_e2e?sslmode=verify-full&sslrootcert=/etc/audit/trust/ca.crt
-      passwordSecret: AUDIT_DATABASE_PASSWORD
+      passwordSecret: audit-database-password
     stream:
       nats:
         url: nats://nats.nats.svc:4222
@@ -34,9 +37,6 @@ writer:
       state:
         backend: database
   secretEnv:
-    - name: AUDIT_DATABASE_PASSWORD
-      secretName: audit-e2e-database
-      key: password
     - name: AUDIT_S3_ACCESS_KEY_ID
       secretName: audit-e2e-s3-credentials
       key: AWS_ACCESS_KEY_ID
@@ -55,6 +55,10 @@ writer:
     - name: AWS_REGION
       secretName: audit-e2e-kms
       key: AWS_REGION
+  secretFiles:
+    - name: audit-database-password
+      secretName: audit-e2e-database
+      key: password
 jobs:
   notary:
     enabled: true

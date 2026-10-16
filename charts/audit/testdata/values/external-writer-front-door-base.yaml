@@ -37,13 +37,16 @@ migrate:
   enabled: true
   config:
     apiVersion: audit.truvity.github.io/audit-migrate/v2
+    secrets:
+      source: file
+      root: /etc/audit/secrets
     database:
       url: postgres://audit_owner@db.example.com:5432/audit?sslmode=verify-full
-      passwordSecret: AUDIT_DATABASE_PASSWORD
+      passwordSecret: audit-database-password
     observe: audit_observe
     reader: audit_query
-  secretEnv:
-    - name: AUDIT_DATABASE_PASSWORD
+  secretFiles:
+    - name: audit-database-password
       secretName: audit-db-owner
       key: password
 
@@ -56,13 +59,16 @@ observe:
       eks.amazonaws.com/role-arn: ROLE-ARN-OF-THE-OBSERVE-ROLE
   config:
     apiVersion: audit.truvity.github.io/audit-observe/v2
+    secrets:
+      source: file
+      root: /etc/audit/secrets
     deployment: /etc/audit/deployment.yaml
     database:
       url: postgres://audit_observe@db.example.com:5432/audit?sslmode=verify-full
-      passwordSecret: AUDIT_OBSERVE_DATABASE_PASSWORD
+      passwordSecret: audit-observe-database-password
     settle: 2m
-  secretEnv:
-    - name: AUDIT_OBSERVE_DATABASE_PASSWORD
+  secretFiles:
+    - name: audit-observe-database-password
       secretName: audit-db-observe
       key: password
 
@@ -81,6 +87,9 @@ query:
         audience: audit
   config:
     apiVersion: audit.truvity.github.io/audit-query/v2
+    secrets:
+      source: file
+      root: /etc/audit/secrets
     deployment: /etc/audit/deployment.yaml
     grants: /etc/audit/grants.yaml
     require: queued
@@ -89,9 +98,9 @@ query:
       expect: queued
     database:
       url: postgres://audit_query@db.example.com:5432/audit?sslmode=verify-full
-      passwordSecret: AUDIT_QUERY_DATABASE_PASSWORD
-  secretEnv:
-    - name: AUDIT_QUERY_DATABASE_PASSWORD
+      passwordSecret: audit-query-database-password
+  secretFiles:
+    - name: audit-query-database-password
       secretName: audit-db-query
       key: password
 
