@@ -62,7 +62,9 @@ fi
 # migration's, and nobody else's), the writer, the indexer and the query
 # service. The chart reads the password (the config names the variable it
 # arrives in, and carries the URL without it); the suite that connects from
-# outside reads the whole connection string.
+# outside reads the whole connection string. That one is the test client's, over
+# a port-forward to localhost, where the server certificate's names cannot match,
+# so it stays `sslmode=require`; the chart's own URLs are verify-full.
 role_secret() { # <secret> <role>
   if ! kubectl -n "$NAMESPACE" get secret "$1" >/dev/null 2>&1; then
     password=$(head -c 24 /dev/urandom | base64 | tr -d '/+=')
