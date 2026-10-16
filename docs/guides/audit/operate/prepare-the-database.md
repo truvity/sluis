@@ -6,14 +6,14 @@ Create one Postgres database with an owner, one role per part (writer, indexer, 
 
 - Use a Postgres the installation can reach. One instance is enough: the index is rebuildable from the archive, so it needs no backup or replica. See [repair or rebuild the index](rebuild-the-index.md).
 
-- On AWS Lambda the writer has no database: deduplication is DynamoDB. Observe and query still need one. No deployment runs audit with Postgres on Lambda today; it would need a separate design (IAM database authentication), because the rule below on the password source cannot be met there.
+- On AWS Lambda the writer has no database: deduplication is DynamoDB. Observe and query still need one.
 
 - Use different roles. The tenant row-level policies bind the query role and an owner bypasses them. The chart refuses to render when the writer, indexer or query service names the owner's or one another's credentials.
 
 - The writer and indexer never migrate themselves and refuse to start against an unknown schema version.
 
 - The connection is `verify-full` against a CA file, named by `sslrootcert=` in the URL or `PGSSLROOTCERT`. Any other `sslmode` is refused.
-- The password comes from a file and from nowhere else. A `database` block that names `passwordSecret` needs `secrets.source: file`, and the file is refused at load with `ssm` or `env`. The database client reads the password file again for every new connection, so a rotated Secret is used within 30 minutes, without a restart. A password read once from `ssm` or `env` would fail every new connection after a rotation. Project the Secret with the chart's `secretFiles`.
+- The password is a file only (`secrets.source: file`).
 - A password in a database URL is refused. Name a secret with `passwordSecret` and let the [`secrets` block](../../../reference/audit/configuration.md#secrets) resolve it.
 
 ## Steps
