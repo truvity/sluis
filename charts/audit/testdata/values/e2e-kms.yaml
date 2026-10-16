@@ -15,7 +15,7 @@ writer:
     anonymousWrites: true
     replicas: 3
     database:
-      url: postgres://audit_e2e_writer@postgres.postgres.svc:5432/audit_e2e?sslmode=require
+      url: postgres://audit_e2e_writer@postgres.postgres.svc:5432/audit_e2e?sslmode=verify-full&sslrootcert=/etc/audit/trust/ca.crt
       passwordSecret: AUDIT_DATABASE_PASSWORD
     stream:
       nats:
