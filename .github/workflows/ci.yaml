@@ -57,7 +57,7 @@ jobs:
         with:
           # policy-conformance's C5 reads the CHANGELOG against the latest tag.
           fetch-depth: ${{ matrix.group == 'docs' && 0 || 1 }}
-      - uses: truvity/ci-actions/setup-devbox@0fcf84dbeb8d406bce34d969e6cc32592af5cb5b # v1.15.0
+      - uses: truvity/ci-actions/setup-devbox@f9130c63db2899c18884c027a7eade20d0ab796a # v1.18.0
       - if: startsWith(matrix.group, 'go-')
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -85,7 +85,7 @@ jobs:
       - if: ${{ !cancelled() && matrix.group == 'docs' }}
         uses: truvity/ci-actions/tagged-pins@598251d570fd99ba403b99bfa65ae4472ed25e73 # v1.8.0
       - if: ${{ !cancelled() && matrix.group == 'docs' }}
-        uses: truvity/ci-actions/policy-conformance@b9e15d9c85bab02f91156faf9363fcd240946dcb # v1.16.0
+        uses: truvity/ci-actions/policy-conformance@f9130c63db2899c18884c027a7eade20d0ab796a # v1.18.0
         with:
           strict: "true"
 
@@ -171,7 +171,7 @@ jobs:
   e2e:
     needs: plan
     if: needs.plan.outputs.audit == 'true'
-    uses: truvity/ci-workflows/.github/workflows/integration.yaml@a523f2f6e5868b00362056569c667243631fd90f # v3.26.2
+    uses: truvity/ci-workflows/.github/workflows/integration.yaml@8ab8774ba50e3668dcb5a07ad40ec900866ae140 # v3.33.0
     permissions:
       contents: read
       id-token: write
