@@ -318,7 +318,7 @@ a067fd77e84214d56286bfb427e2c6f24e6ee875d1be44129fb95c76ebb5d4da  roster-1.20.0/
 26386c108650f5dda38fe9dbdc1ad03d1f871bda09899cf49a863a4f67e266d7  roster-1.20.0/workspace-connected.json
 6693708a9ea205ec916addea995b9e590033b08aa49f6dd6492590d3b2fff19a  roster-1.20.0/workspace-domains.json
 b0487df3c1c4e5d2bec56f7e44e3b30630445b3d9896fef1796ce7adc8fc71ac  roster-1.20.0/workspace-groups.json
-7cb6ee2753e2857e164bb49971c09e3a59be2d2d34a10346b8fc70884fb778b1  roster-1.21.0.yaml
+961319ea14aa0a2c556e8a3d04e279fe5f42a64b32932b5765dfdddccfb62107  roster-1.21.0.yaml
 751195085512405ab46639bc7b27a3f2b8bab81935f885bca1b6a2be736b1612  roster-1.21.0/access-explained.json
 b3130cc917dd33d1f0c85fd0085603508e87c8ce6aefcfb994be6a8185a0e5cb  roster-1.21.0/app-created.json
 ad5e394e77f2329927042d19c4b6436886d986df790bb4f3f1904d9854f39d70  roster-1.21.0/app-disconnected.json
@@ -338,7 +338,7 @@ d701ac3925c60ba69b84d32836b256ef7790fdb8cbef713f9d58b3b15285a347  roster-1.21.0/
 06def895c64e8a2f1be3768c9016884d88aa63676a97e279c2c4167fb3ef9e70  roster-1.21.0/migration-copied.json
 0da7f774ec5a3f596eb265d4ba4507ece77b4239b6871ab9da84df6fcd41ad0e  roster-1.21.0/owner-changed.json
 01070f2288ca9809df3cd72c8e426973d5fe2bd905d6fd6e001d1460e556da14  roster-1.21.0/removals-confirmed.json
-90926f93ae225af94a9abe3e1610001cd7952de89f93f07fc1d2646ee1a41ebb  roster-1.21.0/restore.json
+65d2577e3de1d4331bfd6b53fa8b98f6dd4800c3ef88974fd9974690de6eed08  roster-1.21.0/restore.json
 030b1fe9d393fac60b3a939b2516a22c0eb2d9c19b26c7269b98f0efb01aa0c2  roster-1.21.0/secrets-pruned.json
 b7511b67a4ed6cd5018ef1b6c45d9a871eb680187e2eddb282841c46d0ce2ddf  roster-1.21.0/secrets-rekeyed.json
 21fcb8b2c50cacf51002cba0e18bfab88f3ef100d75c94d8ae471de2d7a0ff2a  roster-1.21.0/session-revoked.json

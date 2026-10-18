@@ -61,7 +61,8 @@ func restoreEvent(ctx context.Context, a restorer, api lambdaAPI, log *slog.Logg
 		return lambdaapp.RestoreResult{Outcome: "preview", Backup: ev.Backup, Report: rep}, nil
 	}
 	res, err := a.Restore(ctx, restorejob.Request{BackupID: ev.Backup, Overwrite: ev.Overwrite, AllowUnverified: ev.AllowUnverified,
-		Actor: audit.Workload("lambda:restore"), By: ev.By, Note: ev.Note})
+		AllowUnaudited: ev.AllowUnaudited,
+		Actor:          audit.Workload("lambda:restore"), By: ev.By, Note: ev.Note})
 	if err != nil {
 		return lambdaapp.RestoreResult{}, err
 	}

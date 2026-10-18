@@ -33,6 +33,12 @@
       "x-audit-class": "shared",
       "x-audit-pii": "none"
     },
+    "by": {
+      "type": "string",
+      "description": "Who asked, in their own words: the caller declares it, and nothing verifies it.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none"
+    },
     "modules": {
       "type": "integer",
       "description": "How many modules the restore wrote.",

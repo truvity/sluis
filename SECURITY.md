@@ -39,7 +39,7 @@ Each property links the page that owns it; this file does not restate them.
   [policy clients](docs/reference/sluis/policy-clients.md#clients-that-describe-themselves)
 - A restore accepts a backup only when the **sealed audit trail** vouches for it: the hashes
   of its object and sidecar, its recipients and a sealed hour. The archive bucket alone is not
-  trusted, and `--allow-unverified` is an audited override. [backup](docs/reference/sluis/backup.md#provenance)
+  trusted, and `--allow-unverified` is an override that is kept in the trail first and never covers a record that disagrees. [backup](docs/reference/sluis/backup.md#provenance)
 - Every request-derived value is routed through `logattr` (`storage/logattr`) before it is logged.
 - The client address in an audit record is read from `X-Forwarded-For` only as far as
   `audit.forwardedForTrustedHops` says: set it to the deployment's own proxies and no more.

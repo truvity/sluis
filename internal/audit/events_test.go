@@ -17,6 +17,15 @@ import (
 )
 
 // every is one record of every action, built the way the code builds them.
+// No constructor puts a value in data that the record builder does not
+// handle: one that did would vanish from its record.
+func TestNoConstructorCarriesAValueTheBuilderDrops(t *testing.T) {
+	defer audit.SetUnsupportedDataHook(func(key string, v any) { t.Errorf("data %q has a %T the builder does not handle", key, v) })()
+	if len(every()) == 0 {
+		t.Fatal("no records")
+	}
+}
+
 func every() []*record.Record {
 	person := audit.Person("A.Person@Example.com")
 	app := audit.App{ID: 42, Slug: "roster-example"}
@@ -100,6 +109,7 @@ func every() []*record.Record {
 			ObjectKey: "backup/example/20261010T020000Z-d4e5f6.tar.gz.age", ObjectSize: 4096, ObjectSHA256: strings.Repeat("a", 64),
 			SidecarSHA256: strings.Repeat("b", 64), Recipients: []string{strings.Repeat("c", 64), strings.Repeat("d", 64)}}),
 		audit.RestoreStarted(person, "20261010T020000Z-a1b2c3", audit.Restore{Installation: "example", Unverified: true, Verification: "unavailable"}),
+		audit.RestoreUnverified(person, "20261010T020000Z-a1b2c3", audit.Restore{Installation: "example", Modules: 6, Unverified: true, Verification: "unavailable", By: "ada"}),
 		audit.BackupFailed(audit.System(), "20261010T020000Z-a1b2c3", audit.BackupRun{Installation: "example", Trigger: "schedule", Reason: "archive"}, "the archive bucket refused a write"),
 		audit.BackupPruned(audit.System(), []string{"20260901T020000Z-aaaaaa"}, []string{"20260902T020000Z-bbbbbb"}, 7, "keep 7, 30d"),
 		audit.SecretsRekeyed(person, audit.SecretsRekey{Installation: "example", Key: "alias/example-secrets", Phase: audit.RekeyStarted,

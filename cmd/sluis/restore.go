@@ -29,14 +29,16 @@ const restoreUsage = `Usage: sluis restore <preview|start|status> [--config <fil
   preview <backup-id> [--allow-unverified] [--json]
                             what restoring the backup would do, per module: records to create, to
                             overwrite, already the same; names, never values. Writes nothing.
-  start <backup-id> --confirm <instance> [--overwrite] [--allow-unverified] [--by <name>] [--note <text>] [--json]
+  start <backup-id> --confirm <instance> [--overwrite] [--allow-unverified [--allow-unaudited]] [--by <name>] [--note <text>] [--json]
                             restore the backup. Every module goes under maintenance first, and is lifted
                             only when the restore has been read back and matches. One at a time. A
                             destination that holds different data is refused unless --overwrite.
                             The backup must be vouched for by the sealed audit trail (a record of it
                             with its hashes, in a sealed hour); --allow-unverified restores one that is
-                            not, for the day the audit pipeline is down. It is recorded, and needs
-                            backup.recipients in the document.
+                            not, for the day the audit pipeline is down. It is kept in the trail
+                            before the restore begins, or refused; --allow-unaudited goes ahead and
+                            logs it instead. It does not override a record that disagrees with the
+                            backup, or recipients that differ from backup.recipients, which it needs.
   start --resume [--json]   continue a restore that paused; --confirm is not needed
   status [--json]           the latest restores and the modules still under maintenance
 
@@ -49,8 +51,9 @@ The document is schemas/config/sluis-backup.schema.json.`
 // take a value.
 var restoreFlags = map[string]map[string]bool{
 	"preview": {"--json": false, "--allow-unverified": false},
-	"start":   {"--json": false, "--overwrite": false, "--allow-unverified": false, "--resume": false, "--confirm": true, "--by": true, "--note": true},
-	"status":  {"--json": false},
+	"start": {"--json": false, "--overwrite": false, "--allow-unverified": false, "--allow-unaudited": false, "--resume": false,
+		"--confirm": true, "--by": true, "--note": true},
+	"status": {"--json": false},
 }
 
 // restoreCmd is `sluis restore <preview|start|status>` (docs/decisions/0071,
@@ -163,7 +166,8 @@ func runRestore(ctx context.Context, sub, file, id string, set map[string]string
 		}
 	}
 	res, err := a.Restore(ctx, restorejob.Request{BackupID: id, Overwrite: set["--overwrite"] != "",
-		AllowUnverified: set["--allow-unverified"] != "", Actor: audit.Workload("cli:restore"), By: by, Note: set["--note"]})
+		AllowUnverified: set["--allow-unverified"] != "", AllowUnaudited: set["--allow-unaudited"] != "",
+		Actor: audit.Workload("cli:restore"), By: by, Note: set["--note"]})
 	if err != nil {
 		return err
 	}

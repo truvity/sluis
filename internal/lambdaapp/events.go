@@ -487,6 +487,7 @@ func (h *HTTP) tickBackup(ctx context.Context, payload json.RawMessage) (any, er
 //	{"kind":"restore","backup":"<id>"}                    start a restore of the backup
 //	{"kind":"restore","backup":"<id>","overwrite":true}   ... replacing different data in the destination
 //	{"kind":"restore","backup":"<id>","allowUnverified":true}  ... though the sealed audit trail does not vouch for the backup
+//	{"kind":"restore","backup":"<id>","allowUnverified":true,"allowUnaudited":true}  ... and though the decision cannot be written to the trail
 //	{"kind":"restore","backup":"<id>","preview":true}     what it would do; writes nothing (invoke it synchronously)
 //	{"kind":"restore","resume":true}                      continue a restore that paused
 //
@@ -503,11 +504,14 @@ type RestoreEvent struct {
 	Overwrite bool   `json:"overwrite,omitempty"`
 	// AllowUnverified goes ahead with a backup the sealed audit trail does not
 	// vouch for. It is recorded as unverified, with why.
-	AllowUnverified bool   `json:"allowUnverified,omitempty"`
-	Preview         bool   `json:"preview,omitempty"`
-	Resume          bool   `json:"resume,omitempty"`
-	By              string `json:"by,omitempty"`
-	Note            string `json:"note,omitempty"`
+	AllowUnverified bool `json:"allowUnverified,omitempty"`
+	// AllowUnaudited goes ahead with an unverified restore although its
+	// decision could not be written to the audit trail; the log has it.
+	AllowUnaudited bool   `json:"allowUnaudited,omitempty"`
+	Preview        bool   `json:"preview,omitempty"`
+	Resume         bool   `json:"resume,omitempty"`
+	By             string `json:"by,omitempty"`
+	Note           string `json:"note,omitempty"`
 }
 
 // RestoreResult is what a restore invocation returns.

@@ -5451,7 +5451,7 @@
               ]
             },
             "recipients": {
-              "description": "The age X25519 public keys (age1...) every backup is encrypted to; at least one, and required in the backup role. Each holder of a matching identity can decrypt a backup without sluis: `age -d -i key.txt <id>.tar.gz.age | tar xz`. The backup role holds nothing that decrypts. In the restore role they are the recipients a backup's sidecar must list, exactly: a backup that lists others is refused whatever else is passed, and an `allowUnverified` restore needs them.",
+              "description": "The age X25519 public keys (age1...) every backup is encrypted to; at least one, and required in the backup role. Each holder of a matching identity can decrypt a backup without sluis: `age -d -i key.txt <id>.tar.gz.age | tar xz`. The backup role holds nothing that decrypts. In the restore role they are the recipients a backup's sidecar must list: a backup written to another set (before the recipients changed) is refused whatever else is passed, and an `allowUnverified` restore needs them. This does not detect a forged backup: the recipients are public.",
               "items": {
                 "pattern": "^age1[02-9ac-hj-np-z]{58}$",
                 "type": "string"
@@ -5542,8 +5542,12 @@
               "additionalProperties": false,
               "description": "How the restore role proves a backup is the one the backup function made, before it decrypts a byte (docs/reference/sluis/backup.md). Each completed backup is recorded in the audit trail with the hashes of its object and sidecar and its recipients; the restore asks the audit installation's query service for that record and requires the hashes to match and the hour to be sealed. Unset, the restore refuses every backup unless it is started with `allowUnverified`. Read by the restore role only.",
               "properties": {
+                "anyObserver": {
+                  "description": "Accept a record stamped by any observer. Weakens the check to whoever may write a record as the `roster` source; a start logs a warning. One of `observer` and `anyObserver` is required.",
+                  "type": "boolean"
+                },
                 "observer": {
-                  "description": "The id the audit writer stamps on the backup function's records (the writer's `senders` table). When set, a record of a backup stamped by any other is refused. Unset asks nothing of the observer.",
+                  "description": "The id the audit writer stamps on the backup function's records (the writer's `senders` table). A record of a backup stamped by any other is refused. Required unless `anyObserver` is set: without it, any principal that may send to the audit queue can plant a record that vouches for a forged backup.",
                   "minLength": 1,
                   "type": "string"
                 },
@@ -5554,7 +5558,7 @@
                 },
                 "query": {
                   "$ref": "#/definitions/config-sluis-backup.url",
-                  "description": "The audit installation's query service (its address, without the `/audit.v1.QueryService/...` path)."
+                  "description": "The audit installation's query service (its address, without the `/audit.v1.QueryService/...` path). https, or http on a loopback address."
                 },
                 "tokenFile": {
                   "description": "A file holding the bearer token the query service accepts, read on every request. The token's grants must let it search and get on `profile`.",

@@ -67,6 +67,9 @@ const (
 	// backup encrypted to other recipients than the restore is configured with.
 	ReasonUnverified = "unverified"
 	ReasonRecipients = "recipients"
+	// ReasonUnaudited is an unverified restore whose decision could not be
+	// written to the trail, for which the admin did not pass AllowUnaudited.
+	ReasonUnaudited = "unaudited"
 )
 
 // Maintenance values of [Run.Maintenance].
@@ -247,6 +250,12 @@ type Request struct {
 	// recorded as unverified, with why. Pass it only when the admin asked for
 	// it.
 	AllowUnverified bool
+	// AllowUnaudited lets an unverified restore begin although its decision
+	// (`roster.restore.unverified`) could not be kept in the audit trail,
+	// which is the usual state of an audit pipeline that is down. The detail
+	// goes to the log at error level instead. Pass it only when the admin
+	// asked for it, and only with AllowUnverified.
+	AllowUnaudited bool
 	// Actor is who asked, for the audit record.
 	Actor audit.Actor
 	// By and Note are the caller's words for the status record and the flag.
@@ -274,14 +283,21 @@ func (j *Job) Preview(ctx context.Context, backupID string) (*restore.Report, er
 }
 
 // PreviewWith is [Job.Preview] that, with allowUnverified, previews a backup
-// the trail does not vouch for, as a start with it would restore one.
+// the trail does not vouch for, as a start with it would restore one. A preview
+// reads and changes nothing, so this is logged and not recorded in the trail.
 func (j *Job) PreviewWith(ctx context.Context, backupID string, allowUnverified bool) (*restore.Report, error) {
 	// The id names an object under the installation's prefix; only one path
 	// segment of the characters an id has can.
 	if !backup.ValidName(backupID) {
 		return nil, errors.New("the backup id is not one path segment")
 	}
-	r, _, err := backup.OpenVerified(ctx, j.c.Archive, j.c.Identity, j.verifier(allowUnverified, nil), j.c.Installation, backupID, j.c.TempDir)
+	r, ver, err := backup.OpenVerified(ctx, j.c.Archive, j.c.Identity, j.verifier(allowUnverified, nil), j.c.Installation, backupID, j.c.TempDir)
+	if err == nil && ver.Unverified {
+		// A preview reads and changes nothing, so it is not a decision to be
+		// kept in the trail; the log has it.
+		j.log.WarnContext(ctx, "a restore preview of a backup the sealed audit trail does not vouch for", slog.String("backup", backupID),
+			slog.String("verification", ver.Reason))
+	}
 	if err != nil {
 		if reason := unverifiedReason(err); reason != "" {
 			j.log.WarnContext(ctx, "a restore preview was refused: the backup is not vouched for", slog.String("backup", backupID),
@@ -363,6 +379,14 @@ func (j *Job) locked(ctx context.Context, req Request) (Result, error) {
 		return Result{Outcome: OutcomeRefused, Reason: reason, Error: oneLine(err)}, nil
 	}
 	defer r.Close()
+	// Going round the check is kept in the trail before the restore begins, or
+	// the restore is refused. A run that already did so (its hashes are in its
+	// record) is not asked again.
+	if ver.Unverified && (run == nil || run.run.ObjectSHA256 == "") {
+		if res := j.decideUnverified(ctx, req, id, ver, len(r.Manifest().Modules)); res != nil {
+			return *res, nil
+		}
+	}
 	if run == nil {
 		if open != nil {
 			// Another backup, or another overwrite choice: the one before is
@@ -388,8 +412,46 @@ func (j *Job) locked(ctx context.Context, req Request) (Result, error) {
 		j.log.InfoContext(ctx, "a restore started; every module goes under maintenance", slog.String("id", run.run.ID), slog.String("backup", id))
 	} else {
 		run.run.State, run.run.Reason, run.run.Error = StateRunning, "", ""
+		if run.run.ObjectSHA256 == "" {
+			// A run begun before restores kept the hashes they verified. What
+			// it was verified as is settled now, and the later slices are held
+			// to these bytes.
+			run.run.Unverified, run.run.Verification = ver.Unverified, ver.Reason
+			run.run.ObjectSHA256, run.run.SidecarSHA256 = ver.Hashes.Object, ver.Hashes.Sidecar
+			run.run.Updated = j.now()
+			if run.rev, err = j.update(ctx, run.run, run.rev); err != nil {
+				return Result{}, err
+			}
+		}
 	}
 	return j.execute(ctx, req, r, &run.run, run.rev)
+}
+
+// decideUnverified writes down, durably, that an admin chose to restore a backup
+// the trail does not vouch for. It returns the refusal when that cannot be
+// done and the admin did not accept it.
+func (j *Job) decideUnverified(ctx context.Context, req Request, id string, ver backup.Verification, mods int) *Result {
+	d := j.audit(mods, "")
+	d.Unverified, d.Verification, d.By = true, ver.Reason, req.By
+	var err error
+	if j.c.Audit != nil {
+		err = j.c.Audit.RecordDurable(ctx, audit.RestoreUnverified(req.Actor, id, d))
+	}
+	if err == nil {
+		return nil
+	}
+	if req.AllowUnaudited {
+		// The trail is what could not be written to; the log is what is left.
+		j.log.ErrorContext(ctx, "an UNVERIFIED restore begins and its decision is NOT in the audit trail",
+			slog.String("backup", id), slog.String("verification", ver.Reason), slog.String("by", req.By),
+			slog.String("note", req.Note), slog.String("actor", req.Actor.ID), logattr.SafeError("error", err))
+		return nil
+	}
+	j.log.ErrorContext(ctx, "an unverified restore was refused: its decision could not be written to the audit trail",
+		slog.String("backup", id), slog.String("verification", ver.Reason), slog.String("by", req.By), logattr.SafeError("error", err))
+	return &Result{Outcome: OutcomeRefused, Reason: ReasonUnaudited,
+		Error: oneLine(fmt.Errorf("the decision to restore without a sealed record could not be written to the audit trail (%w); "+
+			"pass allowUnaudited to go ahead and log it", err))}
 }
 
 func (j *Job) execute(ctx context.Context, req Request, r *backup.Reader, run *Run, rev port.Revision) (Result, error) {

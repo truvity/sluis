@@ -234,6 +234,19 @@ actions:
     message:
       en: "{actor} began restoring from backup {targets_0_id}"
 
+  roster.restore.unverified:
+    summary: An operator chose to restore a backup the sealed audit trail does not vouch for (`allowUnverified`). Recorded before the restore begins, and the restore is refused when it cannot be kept.
+    operation: restore
+    categories: [data_change, privileged_access]
+    category: security
+    target_types: [backup]
+    # Kept before the restore is allowed to begin: going round the check must
+    # never happen off the record.
+    delivery: block
+    data_schema: https://schemas.example/access-roster/v1/restore.json
+    message:
+      en: "{actor} chose to restore backup {targets_0_id} without a sealed record of it ({data_verification})"
+
   roster.restore.completed:
     summary: A restore verified against its backup and lifted the maintenance flag.
     operation: restore

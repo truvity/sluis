@@ -290,6 +290,12 @@ export const roster: Sentences = {
         "en": "{actor} began restoring from backup {targets_0_id}"
       }
     },
+    "roster.restore.unverified": {
+      "summary": "An operator chose to restore a backup the sealed audit trail does not vouch for (`allowUnverified`). Recorded before the restore begins, and the restore is refused when it cannot be kept.",
+      "message": {
+        "en": "{actor} chose to restore backup {targets_0_id} without a sealed record of it ({data_verification})"
+      }
+    },
     "roster.runner_app.created": {
       "summary": "A GitHub App for self-hosted runners was created.",
       "message": {

@@ -122,15 +122,27 @@ backup:
 		t.Fatalf("%+v, %v", doc.Backup.Verify, err)
 	}
 	for name, c := range map[string]struct{ body, want string }{
-		"no query":     {"verify: {tokenFile: /t}", "query"},
-		"not a URL":    {"verify: {query: audit, tokenFile: /t}", "query"},
-		"no token":     {"verify: {query: \"https://a.example.test\"}", "tokenFile"},
-		"unknown key":  {"verify: {query: \"https://a.example.test\", tokenFile: /t, bogus: 1}", "bogus"},
-		"empty tokens": {"verify: {query: \"https://a.example.test\", tokenFile: \"\"}", "tokenFile"},
+		"no query":     {"verify: {tokenFile: /t, observer: o}", "query"},
+		"not a URL":    {"verify: {query: audit, tokenFile: /t, observer: o}", "query"},
+		"no token":     {"verify: {query: \"https://a.example.test\", observer: o}", "tokenFile"},
+		"no observer":  {"verify: {query: \"https://a.example.test\", tokenFile: /t}", "observer"},
+		"both":         {"verify: {query: \"https://a.example.test\", tokenFile: /t, observer: o, anyObserver: true}", "one or the other"},
+		"plain http":   {"verify: {query: \"http://audit.example.test\", tokenFile: /t, observer: o}", "https"},
+		"unknown key":  {"verify: {query: \"https://a.example.test\", tokenFile: /t, observer: o, bogus: 1}", "bogus"},
+		"empty tokens": {"verify: {query: \"https://a.example.test\", tokenFile: \"\", observer: o}", "tokenFile"},
 	} {
 		_, err := config.LoadBackup(writeBackupDoc(t, backupHead+"backup:\n  role: restore\n  "+c.body+"\n  target: {bucket: b}\n"))
 		if err == nil || !strings.Contains(err.Error(), c.want) {
 			t.Errorf("%s: %v, want it to say %q", name, err, c.want)
+		}
+	}
+}
+
+func TestTheRestoreVerificationMayAcceptAnyObserverIfItSaysSoAndLoopbackMayBePlainHTTP(t *testing.T) {
+	for _, v := range []string{`{query: "https://audit.example.test", tokenFile: /t, anyObserver: true}`,
+		`{query: "http://127.0.0.1:8080", tokenFile: /t, observer: o}`, `{query: "http://localhost:8080", tokenFile: /t, observer: o}`} {
+		if _, err := config.LoadBackup(writeBackupDoc(t, backupHead+"backup:\n  role: restore\n  verify: "+v+"\n  target: {bucket: b}\n")); err != nil {
+			t.Errorf("%s: %v", v, err)
 		}
 	}
 }

@@ -4,6 +4,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net/netip"
 	neturl "net/url"
 	"time"
 
@@ -75,7 +76,8 @@ type Backup struct {
 
 // BackupVerify is `backup.verify`: where the audit trail is and how to ask it.
 type BackupVerify struct {
-	// Query is the audit installation's query service.
+	// Query is the audit installation's query service: https, or http on a
+	// loopback address.
 	Query string `json:"query"`
 	// TokenFile holds the bearer token the query service accepts.
 	TokenFile string `json:"tokenFile"`
@@ -83,8 +85,36 @@ type BackupVerify struct {
 	// "activity" when unset.
 	Profile string `json:"profile,omitempty"`
 	// Observer is the id the audit writer stamps on the backup function's
-	// records; unset asks nothing of it.
+	// records. A record stamped by any other is refused. Required unless
+	// AnyObserver is set.
 	Observer string `json:"observer,omitempty"`
+	// AnyObserver accepts a record stamped by anyone. Any principal that may
+	// send to the audit queue, or write as the roster, can then plant a record
+	// that vouches for a forged backup; a start logs a warning.
+	AnyObserver bool `json:"anyObserver,omitempty"`
+}
+
+// VerifyQueryURL refuses a query-service address that is not https, or http
+// on a loopback host: the token and the answer cross it.
+func VerifyQueryURL(raw string) error {
+	u, err := neturl.Parse(raw)
+	if err != nil || u.Host == "" {
+		return errors.New("the audit installation's query service, an https address")
+	}
+	switch u.Scheme {
+	case "https":
+		return nil
+	case "http":
+		h := u.Hostname()
+		if h == "localhost" {
+			return nil
+		}
+		if ip, err := netip.ParseAddr(h); err == nil && ip.IsLoopback() {
+			return nil
+		}
+		return errors.New("http is for a loopback address only: use https")
+	}
+	return errors.New("the audit installation's query service, an https address")
 }
 
 // BackupTarget is the S3 (or S3-compatible) bucket of the archive. Credentials
@@ -169,9 +199,15 @@ func (s *SluisBackup) Validate() error {
 		return fmt.Errorf("backup.retention: keep is 1 to %d and maxAge is not negative", BackupMaxKeep)
 	}
 	if v := s.Backup.Verify; v != nil {
-		u, err := neturl.Parse(v.Query)
-		if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
-			return errors.New("backup.verify.query: required: the audit installation's query service, an http(s) address")
+		if err := VerifyQueryURL(v.Query); err != nil {
+			return fmt.Errorf("backup.verify.query: required: %w", err)
+		}
+		if v.Observer == "" && !v.AnyObserver {
+			return errors.New("backup.verify.observer: required: the id the audit writer stamps on the backup function's records " +
+				"(or set anyObserver: true, which lets any sender of audit records vouch for a backup)")
+		}
+		if v.Observer != "" && v.AnyObserver {
+			return errors.New("backup.verify: observer and anyObserver are one or the other")
 		}
 		if v.TokenFile == "" {
 			return errors.New("backup.verify.tokenFile: required: the query service answers nobody it cannot name")

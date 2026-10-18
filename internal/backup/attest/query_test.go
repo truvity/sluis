@@ -3,9 +3,11 @@ package attest_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -31,6 +33,23 @@ type trail struct {
 	bearers  []string
 }
 
+// page serves records the way the query service does: by limit and cursor,
+// newest first, with a next cursor that never runs out.
+func page(all []*auditv1.Record, r *auditv1.SearchRequest) *auditv1.SearchResponse {
+	from := 0
+	if r.GetCursor() != "" {
+		_, _ = fmt.Sscanf(r.GetCursor(), "%d", &from)
+	}
+	to := from + int(r.GetLimit())
+	if from > len(all) {
+		from = len(all)
+	}
+	if to > len(all) {
+		to = len(all)
+	}
+	return &auditv1.SearchResponse{Items: all[from:to], Cursors: &auditv1.Cursors{Next: fmt.Sprint(to)}}
+}
+
 func (s *trail) Search(_ context.Context, r *connect.Request[auditv1.SearchRequest]) (*connect.Response[auditv1.SearchResponse], error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -39,7 +58,7 @@ func (s *trail) Search(_ context.Context, r *connect.Request[auditv1.SearchReque
 	if s.failWith != nil {
 		return nil, s.failWith
 	}
-	return connect.NewResponse(&auditv1.SearchResponse{Items: s.records}), nil
+	return connect.NewResponse(page(s.records, r.Msg)), nil
 }
 
 func (s *trail) Get(_ context.Context, r *connect.Request[auditv1.GetRequest]) (*connect.Response[auditv1.GetResponse], error) {
@@ -71,7 +90,7 @@ func setup(t *testing.T, s *trail, mutate ...func(*attest.Config)) *attest.Query
 	if err := os.WriteFile(tok, []byte("tok-1\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	c := attest.Config{URL: srv.URL, TokenFile: tok, Timeout: 5 * time.Second}
+	c := attest.Config{URL: srv.URL, TokenFile: tok, Timeout: 5 * time.Second, Observer: "backup-fn"}
 	for _, m := range mutate {
 		m(&c)
 	}
@@ -159,24 +178,95 @@ func TestAnUnreachableServiceIsUnavailable(t *testing.T) {
 func TestAnObserverPinRefusesARecordStampedByAnother(t *testing.T) {
 	s := &trail{records: []*auditv1.Record{completed("rec-1", "b1", func(r *auditv1.Record) { r.Observer.Id = "somebody-else" })},
 		seal: map[string]string{"rec-1": "seals/x.jws"}}
-	pinned := setup(t, s, func(c *attest.Config) { c.Observer = "backup-fn" })
-	if _, err := pinned.Attest(context.Background(), "example", "b1"); !errors.Is(err, backup.ErrMismatch) {
+	if _, err := setup(t, s).Attest(context.Background(), "example", "b1"); !errors.Is(err, backup.ErrMismatch) {
 		t.Fatalf("%v", err)
 	}
-	// Unpinned, the observer is not asked about.
-	if claims, err := setup(t, s).Attest(context.Background(), "example", "b1"); err != nil || len(claims) != 1 {
+	// Only a deployment that says so accepts anyone's record.
+	anyone := setup(t, s, func(c *attest.Config) { c.Observer, c.AnyObserver = "", true })
+	if claims, err := anyone.Attest(context.Background(), "example", "b1"); err != nil || len(claims) != 1 {
 		t.Fatalf("%v, %v", claims, err)
 	}
 }
 
+func TestAPinnedObserverIsRequiredUnlessAnyIsAskedFor(t *testing.T) {
+	base := attest.Config{URL: "https://audit.example.test", TokenFile: "t"}
+	if _, err := attest.New(base); err == nil || !strings.Contains(err.Error(), "observer") {
+		t.Errorf("an unpinned attestor was built: %v", err)
+	}
+	both := base
+	both.Observer, both.AnyObserver = "backup-fn", true
+	if _, err := attest.New(both); err == nil {
+		t.Error("an observer and any observer")
+	}
+	for _, c := range []attest.Config{{Observer: "backup-fn"}, {AnyObserver: true}} {
+		c.URL, c.TokenFile = base.URL, base.TokenFile
+		if _, err := attest.New(c); err != nil {
+			t.Errorf("%+v: %v", c, err)
+		}
+	}
+}
+
+// A forger posts newer records for a backup: the real one is not on the first
+// page, and a record that disagrees on a later page still refuses the backup.
+func TestEveryPageOfRecordsIsRead(t *testing.T) {
+	var recs []*auditv1.Record
+	for i := range 60 {
+		recs = append(recs, completed(fmt.Sprintf("rec-%02d", i), "b1"))
+	}
+	recs[55].Data.Fields["object_sha256"] = structpb.NewStringValue("ff")
+	seal := map[string]string{}
+	for _, r := range recs {
+		seal[r.GetId()] = "seals/x.jws"
+	}
+	s := &trail{records: recs, seal: seal}
+	claims, err := setup(t, s).Attest(context.Background(), "example", "b1")
+	if err != nil || len(claims) != 60 {
+		t.Fatalf("%d claims, %v", len(claims), err)
+	}
+	if len(s.searches) != 2 || s.searches[1].GetCursor() == "" {
+		t.Errorf("%d searches", len(s.searches))
+	}
+	// The verifier sees the one on the second page and refuses.
+	f := &backup.Fetched{SidecarSHA256: "bb", Sidecar: &backup.Sidecar{Instance: "example", ID: "b1",
+		Object: backup.ObjectInfo{Key: "backup/example/b1.tar.gz.age", Size: 4096, SHA256: "aa"}}}
+	v := backup.Verifier{Attestor: backup.AttestorFunc(func(context.Context, string, string) ([]backup.Claim, error) {
+		return claims, nil
+	})}
+	if _, err := v.Check(context.Background(), f); !errors.Is(err, backup.ErrMismatch) {
+		t.Errorf("a record on page two: %v", err)
+	}
+}
+
+func TestAFloodOfRecordsRefusesTheBackup(t *testing.T) {
+	var recs []*auditv1.Record
+	for i := range 400 {
+		recs = append(recs, completed(fmt.Sprintf("rec-%03d", i), "b1"))
+	}
+	if _, err := setup(t, &trail{records: recs}).Attest(context.Background(), "example", "b1"); !errors.Is(err, backup.ErrMismatch) {
+		t.Fatalf("%v", err)
+	}
+}
+
+func TestAPlainHTTPAddressIsRefusedExceptOnLoopback(t *testing.T) {
+	for url, ok := range map[string]bool{
+		"https://audit.example.test": true, "http://127.0.0.1:8080": true, "http://localhost:8080": true, "http://[::1]:8080": true,
+		"http://audit.example.test": false, "http://10.0.0.5": false, "ftp://audit.example.test": false, "audit.example.test": false,
+	} {
+		_, err := attest.New(attest.Config{URL: url, TokenFile: "t", Observer: "o"})
+		if (err == nil) != ok {
+			t.Errorf("%s: %v", url, err)
+		}
+	}
+}
+
 func TestTheAttestorNeedsAnAddressAndAToken(t *testing.T) {
-	if _, err := attest.New(attest.Config{TokenFile: "t"}); err == nil {
+	if _, err := attest.New(attest.Config{TokenFile: "t", Observer: "o"}); err == nil {
 		t.Error("no address")
 	}
-	if _, err := attest.New(attest.Config{URL: "https://audit.example"}); err == nil {
+	if _, err := attest.New(attest.Config{URL: "https://audit.example", Observer: "o"}); err == nil {
 		t.Error("no token")
 	}
-	q, err := attest.New(attest.Config{URL: "https://audit.example/", TokenFile: "t"})
+	q, err := attest.New(attest.Config{URL: "https://audit.example/", TokenFile: "t", Observer: "o"})
 	if err != nil || q == nil {
 		t.Fatal(err)
 	}
