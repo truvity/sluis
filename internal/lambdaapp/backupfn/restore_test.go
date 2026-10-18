@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"strings"
 	"testing"
 
 	"github.com/aws/aws-lambda-go/lambdacontext"
@@ -21,6 +22,8 @@ type fakeRestorer struct {
 	err error
 	got []restorejob.Request
 	pre []string
+	// allow is the allowUnverified of each preview.
+	allow []bool
 }
 
 func (f *fakeRestorer) Restore(_ context.Context, r restorejob.Request) (restorejob.Result, error) {
@@ -28,8 +31,9 @@ func (f *fakeRestorer) Restore(_ context.Context, r restorejob.Request) (restore
 	return f.res, f.err
 }
 
-func (f *fakeRestorer) PreviewRestore(_ context.Context, id string) (*restore.Report, error) {
+func (f *fakeRestorer) PreviewRestoreWith(_ context.Context, id string, allow bool) (*restore.Report, error) {
 	f.pre = append(f.pre, id)
+	f.allow = append(f.allow, allow)
 	if id == "nope" {
 		return nil, errors.New("no such backup")
 	}
@@ -107,6 +111,32 @@ func TestAPreviewWritesNothingAndStartsNothing(t *testing.T) {
 	ev := lambdaapp.RestoreEvent{Backup: "nope", Preview: true}
 	if out, err = restoreEvent(lambdaCtx(), f, api, slog.Default(), ev); err != nil || out.Outcome != "refused" {
 		t.Errorf("%+v, %v", out, err)
+	}
+}
+
+func TestAllowUnverifiedReachesTheRestoreAndThePreviewAndNothingElseDoes(t *testing.T) {
+	f, api := &fakeRestorer{}, &fakeLambda{}
+	if _, err := restoreEvent(lambdaCtx(), f, api, slog.Default(), lambdaapp.RestoreEvent{Backup: "b1"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := restoreEvent(lambdaCtx(), f, api, slog.Default(), lambdaapp.RestoreEvent{Backup: "b1", AllowUnverified: true}); err != nil {
+		t.Fatal(err)
+	}
+	if len(f.got) != 2 || f.got[0].AllowUnverified || !f.got[1].AllowUnverified {
+		t.Errorf("a restore is verified unless asked not to be: %+v", f.got)
+	}
+	for _, allow := range []bool{false, true} {
+		if _, err := restoreEvent(lambdaCtx(), f, api, slog.Default(), lambdaapp.RestoreEvent{Backup: "b1", Preview: true, AllowUnverified: allow}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(f.allow) != 2 || f.allow[0] || !f.allow[1] {
+		t.Errorf("a preview is verified unless asked not to be: %v", f.allow)
+	}
+	// The continuation a paused restore sends itself carries no flag: the run
+	// remembers whether it was verified.
+	if strings.Contains(string(continueEvent), "allowUnverified") {
+		t.Errorf("the continuation carries the flag: %s", continueEvent)
 	}
 }
 

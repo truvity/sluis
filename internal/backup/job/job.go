@@ -378,7 +378,12 @@ func (j *Job) completed(ctx context.Context, req Request, run *Run, rev port.Rev
 	if _, err := j.update(ctx, *run, rev); err != nil {
 		return Result{}, err
 	}
-	j.record(ctx, audit.BackupCompleted(req.Actor, run.ID, j.audit(run, "")))
+	// The record carries what a restore will hold the archive's copy to: the
+	// bytes of the object and the sidecar as written, and who it is for.
+	br := j.audit(run, "")
+	br.ObjectKey, br.ObjectSize, br.ObjectSHA256 = a.Sidecar.Object.Key, a.Sidecar.Object.Size, a.Sidecar.Object.SHA256
+	br.SidecarSHA256, br.Recipients = a.SidecarSHA256, backup.Fingerprints(a.Sidecar.Recipients)
+	j.record(ctx, audit.BackupCompleted(req.Actor, run.ID, br))
 	j.log.InfoContext(ctx, "a backup was written", slog.String("id", run.ID), slog.Int("modules", run.Modules),
 		slog.Int64("records", run.Records), slog.Int64("bytes", run.Size))
 	// Retention is part of the run, but its failure is not the backup's: the

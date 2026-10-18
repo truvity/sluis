@@ -220,6 +220,15 @@ type BackupRun struct {
 	// Reason is a short word for a failure: export, archive, key, maintenance
 	// or canceled.
 	Reason string
+	// ObjectKey, ObjectSize and ObjectSHA256 describe the encrypted object,
+	// SidecarSHA256 the sidecar as written, and Recipients are the SHA-256 of
+	// each age recipient it was encrypted to (backup.Fingerprints). A restore
+	// requires the backup it fetched to match them. Set on a completed run.
+	ObjectKey     string
+	ObjectSize    int64
+	ObjectSHA256  string
+	SidecarSHA256 string
+	Recipients    []string
 }
 
 func (b BackupRun) data() data {
@@ -227,6 +236,10 @@ func (b BackupRun) data() data {
 		"chunks": b.Chunks, "reason": b.Reason}
 	if b.Resumed {
 		d["resumed"] = true
+	}
+	if b.ObjectSHA256 != "" {
+		d["object_key"], d["object_size"], d["object_sha256"] = b.ObjectKey, b.ObjectSize, b.ObjectSHA256
+		d["sidecar_sha256"], d["recipients"] = b.SidecarSHA256, b.Recipients
 	}
 	return d
 }
@@ -259,10 +272,18 @@ type Restore struct {
 	Modules      int
 	// Reason is a short word for a failure.
 	Reason string
+	// Unverified is set when the restore went ahead without the sealed record
+	// of its backup, and Verification says why (backup.Verification).
+	Unverified   bool
+	Verification string
 }
 
 func (r Restore) data() data {
-	return data{"installation": r.Installation, "role": "restore", "modules": r.Modules, "reason": r.Reason}
+	d := data{"installation": r.Installation, "role": "restore", "modules": r.Modules, "reason": r.Reason}
+	if r.Unverified {
+		d["unverified"], d["verification"] = true, r.Verification
+	}
+	return d
 }
 
 // RestoreStarted is a restore beginning.
@@ -932,6 +953,8 @@ func (d data) proto() *structpb.Struct {
 		case bool:
 			fields[k] = structpb.NewBoolValue(v)
 		case int:
+			fields[k] = structpb.NewNumberValue(float64(v))
+		case int64:
 			fields[k] = structpb.NewNumberValue(float64(v))
 		case []string:
 			if len(v) > 0 {

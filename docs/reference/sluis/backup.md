@@ -8,7 +8,8 @@ The backup module writes the installation to S3, age-encrypted ([ADR 0071](../..
 |---|---|
 | `apiVersion` | `sluis.truvity.github.io/sluis-backup/v1`, schema `schemas/config/sluis-backup.schema.json`. Layout v5 only: `secrets.layout: v5`, `ports.dynamodb.tables`, the installation's `ports.blob` |
 | `backup.role` | `backup` (default) or `restore`: which function the zip is. The restore function's role may write every module's table |
-| `backup.recipients` | The age X25519 public keys (`age1...`) every backup is encrypted to. Required in the backup role, at least one |
+| `backup.recipients` | The age X25519 public keys (`age1...`) every backup is encrypted to. Required in the backup role, at least one. In the restore role they are the recipients a backup's sidecar must list, no more and no fewer; see [Provenance](#provenance) |
+| `backup.verify` | Restore role: where the audit trail is and how to ask it. `query` (the query service's address) and `tokenFile` are required; `profile` (default `activity`) and `observer` are optional |
 | `backup.identity` | The restore role's secret holding the age identity (`AGE-SECRET-KEY-1...`): `internal/backup/<identity>`, default `restore-identity`, stored as `{"value":"<base64>"}`. Only the restore role reads it |
 | `backup.key`, `backup.region`, `keys.archive` | Deprecated and ignored since format 2; accepted for one release with a warning |
 | `backup.target` | The archive bucket: `bucket`, `prefix`, `region`, `kmsKey`, `endpoint`, `pathStyle`. Credentials are the role's. Object Lock retention must not exceed `retention.maxAge` |
@@ -54,8 +55,8 @@ age -d -i key.txt 20261013T020000Z-ab12cd.tar.gz.age | tar xz
 | Command | Does |
 |---|---|
 | all | The restore role of this zip; on Lambda it is `backup.role: restore`. Take `--config <file>` and `--json`. Only an administrator or the break-glass role may invoke it |
-| `sluis restore preview <id>` | Per module and section: records to create, overwrite, leave, skip. Names, never values. Writes nothing, takes no lease |
-| `sluis restore start <id> --confirm <instance> [--overwrite] [--by] [--note]` | Restores. A destination that holds different data is refused unless `--overwrite` |
+| `sluis restore preview <id> [--allow-unverified]` | Per module and section: records to create, overwrite, leave, skip. Names, never values. Writes nothing, takes no lease |
+| `sluis restore start <id> --confirm <instance> [--overwrite] [--allow-unverified] [--by] [--note]` | Restores. A destination that holds different data is refused unless `--overwrite`. A backup the sealed audit trail does not vouch for is refused unless `--allow-unverified` |
 | `sluis restore start --resume` | Continues a restore that paused |
 | `sluis restore status` | The latest restores and the modules still under maintenance |
 
@@ -63,18 +64,43 @@ age -d -i key.txt 20261013T020000Z-ab12cd.tar.gz.age | tar xz
 |---|---|
 | Lease | `lease.restore:run`: one restore at a time. The record is `rec.backup.restore.<id>` (`running`, `paused`, `completed`, `failed`) |
 | Maintenance | The flag is set in every module's own table, then 15 seconds pass for the modules' cache |
-| Write | Read the identity, download, verify and decrypt the archive, write, read every record back. A pause starts the next invocation itself |
+| Verify | Download the backup and check it against the audit trail ([Provenance](#provenance)) before the identity is read |
+| Write | Read the identity, decrypt the archive, verify every member, write, read every record back. A pause starts the next invocation itself |
 | Lift | Only after a clean read-back |
 | Failure | The flag stays. Reasons: `not-empty`, `verify`, `archive`, `integrity`, `key` (the identity does not open the backup), `maintenance`, `clear`. Run again to retry |
+| Refusal | A start that changes nothing is `refused`: `backup` (no such backup), `key`, `unverified` (the audit trail does not vouch for it), `recipients` (the sidecar lists other recipients than `backup.recipients`) |
 
 | Event or method | Callers | Answers |
 |---|---|---|
-| `{"kind":"restore","backup":"<id>","overwrite":false}` | admin, breakglass; invoke asynchronously | `completed`, `paused`, `failed`, `contended` or `refused`. A failed restore does not fail the invocation |
+| `{"kind":"restore","backup":"<id>","overwrite":false,"allowUnverified":false}` | admin, breakglass; invoke asynchronously | `completed`, `paused`, `failed`, `contended` or `refused`. A failed restore does not fail the invocation |
 | `{"kind":"restore","resume":true}` | the function itself, admin, breakglass | Continues the unfinished restore; `idle` when none |
-| `{"kind":"restore","backup":"<id>","preview":true}` | admin, breakglass; invoke synchronously | The preview report |
+| `{"kind":"restore","backup":"<id>","preview":true}` | admin, breakglass; invoke synchronously | The preview report. `allowUnverified` applies |
 | `restore.status` | console, admin, breakglass | `latest`, `unfinished`, `lastCompleted`, `maintenance` |
-| `restore.preview` | console, admin, breakglass | The preview report as counts per module and section. Without record names; a refusal carries no cause |
-| Audit | `roster.restore.started`, `.completed`, `.failed` | Counts and a reason, never a value |
+| `restore.preview` | console, admin, breakglass | The preview report as counts per module and section. Without record names; a refusal carries no cause. The backup is verified; there is no `allowUnverified` here |
+| Audit | `roster.restore.started`, `.completed`, `.failed` | Counts and a reason, never a value. `unverified` and `verification` when `allowUnverified` was used |
+
+## Provenance
+
+A restore asks the audit trail whether a backup is genuine, because the archive bucket cannot say.
+
+| Step | Rule |
+|---|---|
+| Record | `roster.backup.completed` carries `object_key`, `object_size`, `object_sha256`, `sidecar_sha256` and `recipients` (the SHA-256 of each `age1...`). It is written after the sidecar |
+| Lookup | The query service, `backup.verify.query`, searches `backup.verify.profile` for `roster.backup.completed` records whose target is the backup |
+| Match | A record exists, every record agrees, and its installation, object key, size, hashes and recipients are those of the fetched backup. An old record without hashes never matches |
+| Sealed | The hour holding each record has a seal. Before that the restore is refused with `not sealed yet`: wait for the notary and run it again |
+| Observer | With `backup.verify.observer`, the writer must have stamped the record with that id |
+| Recipients | With `backup.recipients`, the sidecar lists only those, verified or not. No flag overrides it |
+| Order | All of this happens before the identity is read |
+| Token | The query token's grants must let it search and get on `backup.verify.profile` |
+| Sealed means | A seal object exists for the hour, as the query service reports. `audit verify --root` checks the seal's signature |
+| Rotation | After `backup.recipients` changes, an older backup is refused. Set the earlier list to restore it, or use `--allow-unverified` |
+
+| Case | Outcome |
+|---|---|
+| `backup.verify` unset, query service down, no record, a mismatch, an unsealed hour | `refused`, reason `unverified`. Nothing is changed and nothing is recorded but a log line |
+| `--allow-unverified` | The restore goes ahead. It needs `backup.recipients`. `roster.restore.started` and `.completed` carry `unverified: true` and `verification`: `unattested`, `mismatch`, `unsealed` or `unavailable` |
+| A restore that paused | Continues against the hashes it began with and does not ask the trail again. A backup replaced while it was paused is refused |
 
 ## Routes
 
@@ -127,7 +153,7 @@ age -d -i key.txt 20261013T020000Z-ab12cd.tar.gz.age | tar xz
 | `backup.status` | console, admin, breakglass | `latest`, `lastCompleted`, `unfinished`, `retention` |
 | `backup.list` | console, admin, breakglass | `backups`, newest first; `limit` |
 | `backup.run` | console, admin, breakglass | A run's result; `resume` answers `idle`. From `console`, `by` names the person: the issuer checked their group first, and the audit records name them. The issuer starts it as an asynchronous call and does not wait. From `admin` and `breakglass`, `by` is ignored and the actor is the workload `lambda:<class>` |
-| Audit | `roster.backup.completed`, `.failed`, `.pruned` ([audit actions](audit-actions.md)) | Counts and a reason, never a value |
+| Audit | `roster.backup.completed`, `.failed`, `.pruned` ([audit actions](audit-actions.md)) | Counts and a reason, never a value. A completed backup also names its hashes and recipients' fingerprints |
 
 ## On Kubernetes
 

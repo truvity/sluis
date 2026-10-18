@@ -98,3 +98,39 @@ func TestTheBackupDocumentIsRefusedWhenItIsWrong(t *testing.T) {
 		}
 	}
 }
+
+// A restore proves a backup genuine against the audit trail: where it is and
+// how to ask are in the document, and a half-written block is refused.
+func TestTheRestoreVerificationIsReadAndHeldToItsShape(t *testing.T) {
+	doc, err := config.LoadBackup(writeBackupDoc(t, backupHead+`
+backup:
+  role: restore
+  recipients: [`+recipient1+`]
+  verify: {query: "https://audit.example.test", tokenFile: /var/run/audit/token, profile: activity, observer: backup-fn}
+  target: {bucket: b}
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v := doc.Backup.Verify; v == nil || v.Query != "https://audit.example.test" || v.TokenFile != "/var/run/audit/token" ||
+		v.Profile != "activity" || v.Observer != "backup-fn" {
+		t.Errorf("verify %+v", v)
+	}
+	// Unset, the restore refuses every backup that is not started with allowUnverified.
+	doc, err = config.LoadBackup(writeBackupDoc(t, backupHead+"backup:\n  role: restore\n  target: {bucket: b}\n"))
+	if err != nil || doc.Backup.Verify != nil {
+		t.Fatalf("%+v, %v", doc.Backup.Verify, err)
+	}
+	for name, c := range map[string]struct{ body, want string }{
+		"no query":     {"verify: {tokenFile: /t}", "query"},
+		"not a URL":    {"verify: {query: audit, tokenFile: /t}", "query"},
+		"no token":     {"verify: {query: \"https://a.example.test\"}", "tokenFile"},
+		"unknown key":  {"verify: {query: \"https://a.example.test\", tokenFile: /t, bogus: 1}", "bogus"},
+		"empty tokens": {"verify: {query: \"https://a.example.test\", tokenFile: \"\"}", "tokenFile"},
+	} {
+		_, err := config.LoadBackup(writeBackupDoc(t, backupHead+"backup:\n  role: restore\n  "+c.body+"\n  target: {bucket: b}\n"))
+		if err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("%s: %v, want it to say %q", name, err, c.want)
+		}
+	}
+}

@@ -44,8 +44,9 @@ const (
 	OutcomeContended = "contended"
 	// OutcomeIdle is a resume with nothing to continue.
 	OutcomeIdle = "idle"
-	// OutcomeRefused is a start that changed nothing: no such backup, or an
-	// archive the key does not open.
+	// OutcomeRefused is a start that changed nothing: no such backup, an
+	// archive the key does not open, or a backup the sealed audit trail does
+	// not vouch for.
 	OutcomeRefused = "refused"
 )
 
@@ -61,6 +62,11 @@ const (
 	ReasonClear       = "clear"
 	ReasonRestore     = "restore"
 	ReasonSuperseded  = "superseded"
+	// ReasonUnverified is a backup the sealed audit trail does not vouch for
+	// (see backup.Verifier); the error says which way. ReasonRecipients is a
+	// backup encrypted to other recipients than the restore is configured with.
+	ReasonUnverified = "unverified"
+	ReasonRecipients = "recipients"
 )
 
 // Maintenance values of [Run.Maintenance].
@@ -97,6 +103,16 @@ type Run struct {
 	// Overwrite is whether the admin asked for a different value in the
 	// destination to be replaced.
 	Overwrite bool `json:"overwrite,omitempty"`
+	// Unverified is whether the restore went ahead without the sealed record of
+	// its backup (the admin passed allowUnverified), and Verification why it
+	// was not verified: unattested, mismatch, unsealed or unavailable.
+	Unverified   bool   `json:"unverified,omitempty"`
+	Verification string `json:"verification,omitempty"`
+	// ObjectSHA256 and SidecarSHA256 are the hashes of the backup that was
+	// verified when the restore began; a later slice requires the same bytes
+	// and does not ask the trail again.
+	ObjectSHA256  string `json:"objectSha256,omitempty"`
+	SidecarSHA256 string `json:"sidecarSha256,omitempty"`
 	// By and Note say who asked and why, as the caller declared them. IAM
 	// decided who may invoke the function; these are for the people reading.
 	By      string    `json:"by,omitempty"`
@@ -138,6 +154,12 @@ type Config struct {
 	// decrypts them (the restore role's own secret).
 	Archive  port.Blob
 	Identity backup.Identities
+	// Attestor asks the audit trail whether a backup is the one the backup
+	// function made, and Recipients are the age recipients (age1...) this
+	// restore is configured with; see [backup.Verifier]. A nil Attestor
+	// refuses every backup that is not started with AllowUnverified.
+	Attestor   backup.Attestor
+	Recipients []string
 	// TempDir holds the decrypted archive, encrypted under a process-only
 	// key, while it is restored; os.TempDir() when empty.
 	TempDir string
@@ -220,6 +242,11 @@ type Request struct {
 	// Overwrite lets the restore replace a different value in the destination.
 	// Pass it only when the admin asked for it.
 	Overwrite bool
+	// AllowUnverified lets a backup the sealed audit trail does not vouch for
+	// go ahead, for the day the audit pipeline is down. The restore is
+	// recorded as unverified, with why. Pass it only when the admin asked for
+	// it.
+	AllowUnverified bool
 	// Actor is who asked, for the audit record.
 	Actor audit.Actor
 	// By and Note are the caller's words for the status record and the flag.
@@ -239,14 +266,27 @@ type Result struct {
 
 // Preview verifies the archive and reports what a restore would do. It takes no
 // lease, sets no flag and writes nothing.
+//
+// The backup is verified as a start verifies it, and a preview of one the trail
+// does not vouch for is refused.
 func (j *Job) Preview(ctx context.Context, backupID string) (*restore.Report, error) {
+	return j.PreviewWith(ctx, backupID, false)
+}
+
+// PreviewWith is [Job.Preview] that, with allowUnverified, previews a backup
+// the trail does not vouch for, as a start with it would restore one.
+func (j *Job) PreviewWith(ctx context.Context, backupID string, allowUnverified bool) (*restore.Report, error) {
 	// The id names an object under the installation's prefix; only one path
 	// segment of the characters an id has can.
 	if !backup.ValidName(backupID) {
 		return nil, errors.New("the backup id is not one path segment")
 	}
-	r, err := backup.Open(ctx, j.c.Archive, j.c.Identity, j.c.Installation, backupID, j.c.TempDir)
+	r, _, err := backup.OpenVerified(ctx, j.c.Archive, j.c.Identity, j.verifier(allowUnverified, nil), j.c.Installation, backupID, j.c.TempDir)
 	if err != nil {
+		if reason := unverifiedReason(err); reason != "" {
+			j.log.WarnContext(ctx, "a restore preview was refused: the backup is not vouched for", slog.String("backup", backupID),
+				slog.String("reason", reason), logattr.SafeError("error", err))
+		}
 		return nil, err
 	}
 	defer r.Close()
@@ -298,11 +338,27 @@ func (j *Job) locked(ctx context.Context, req Request) (Result, error) {
 	if run != nil {
 		id = run.run.BackupID
 	}
-	r, err := backup.Open(ctx, j.c.Archive, j.c.Identity, j.c.Installation, id, j.c.TempDir)
+	var was *Run
+	if run != nil {
+		was = &run.run
+	}
+	r, ver, err := backup.OpenVerified(ctx, j.c.Archive, j.c.Identity, j.verifier(req.AllowUnverified, was), j.c.Installation, id, j.c.TempDir)
 	if err != nil {
 		reason := ReasonBackup
-		if errors.Is(err, backup.ErrKey) {
+		switch {
+		case errors.Is(err, backup.ErrKey):
 			reason = ReasonKey
+		case errors.Is(err, backup.ErrRecipients), errors.Is(err, backup.ErrNoRecipients):
+			reason = ReasonRecipients
+		case errors.Is(err, backup.ErrUnverified):
+			reason = ReasonUnverified
+		}
+		if reason == ReasonUnverified || reason == ReasonRecipients {
+			// Nothing changed, and a backup that is in the archive and not in
+			// the trail is what a planted one looks like: say so where it is
+			// read, with the way it failed.
+			j.log.ErrorContext(ctx, "a restore was refused: the backup is not vouched for", slog.String("backup", id),
+				slog.String("reason", reason), slog.String("verification", backup.ReasonOf(err)), logattr.SafeError("error", err))
 		}
 		return Result{Outcome: OutcomeRefused, Reason: reason, Error: oneLine(err)}, nil
 	}
@@ -317,11 +373,18 @@ func (j *Job) locked(ctx context.Context, req Request) (Result, error) {
 		}
 		now := j.now()
 		run = &recorded{run: Run{ID: j.newID(now), BackupID: id, State: StateRunning, Overwrite: req.Overwrite, By: req.By, Note: req.Note,
-			Started: now, Updated: now}}
+			Started: now, Updated: now, Unverified: ver.Unverified, Verification: ver.Reason,
+			ObjectSHA256: ver.Hashes.Object, SidecarSHA256: ver.Hashes.Sidecar}}
 		if run.rev, err = j.create(ctx, run.run); err != nil {
 			return Result{}, err
 		}
-		j.record(ctx, audit.RestoreStarted(req.Actor, id, j.audit(len(r.Manifest().Modules), "")))
+		started := j.audit(len(r.Manifest().Modules), "")
+		started.Unverified, started.Verification = ver.Unverified, ver.Reason
+		j.record(ctx, audit.RestoreStarted(req.Actor, id, started))
+		if ver.Unverified {
+			j.log.WarnContext(ctx, "the restore goes ahead UNVERIFIED: the sealed audit trail does not vouch for this backup", slog.String("backup", id),
+				slog.String("verification", ver.Reason))
+		}
 		j.log.InfoContext(ctx, "a restore started; every module goes under maintenance", slog.String("id", run.run.ID), slog.String("backup", id))
 	} else {
 		run.run.State, run.run.Reason, run.run.Error = StateRunning, "", ""
@@ -420,7 +483,7 @@ func (j *Job) finish(ctx context.Context, req Request, run *Run, rev port.Revisi
 	if _, err := j.update(ctx, *run, rev); err != nil {
 		return Result{}, err
 	}
-	j.record(ctx, audit.RestoreCompleted(req.Actor, run.BackupID, j.audit(mods, "")))
+	j.record(ctx, audit.RestoreCompleted(req.Actor, run.BackupID, j.auditRun(run, mods, "")))
 	j.log.InfoContext(ctx, "a restore completed and verified; maintenance is lifted", slog.String("id", run.ID), slog.String("backup", run.BackupID))
 	return Result{Outcome: OutcomeCompleted, ID: run.ID, Run: run}, nil
 }
@@ -456,7 +519,7 @@ func (j *Job) fail(ctx context.Context, run *Run, rev port.Revision, reason stri
 	if _, err := j.update(ctx, *run, rev); err != nil {
 		return err
 	}
-	j.record(ctx, audit.RestoreFailed(actor, run.BackupID, j.audit(mods, reason), run.Error))
+	j.record(ctx, audit.RestoreFailed(actor, run.BackupID, j.auditRun(run, mods, reason), run.Error))
 	j.log.ErrorContext(ctx, "a restore failed; the modules stay under maintenance", slog.String("id", run.ID),
 		slog.String("reason", reason), logattr.SafeError("error", cause))
 	return nil
@@ -464,6 +527,39 @@ func (j *Job) fail(ctx context.Context, run *Run, rev port.Revision, reason stri
 
 func (j *Job) audit(mods int, reason string) audit.Restore {
 	return audit.Restore{Installation: j.c.Installation, Modules: mods, Reason: reason}
+}
+
+// auditRun is the restore record's data for a run that has been verified or
+// not, so that its completion and failure say what its start said.
+func (j *Job) auditRun(run *Run, mods int, reason string) audit.Restore {
+	r := j.audit(mods, reason)
+	r.Unverified, r.Verification = run.Unverified, run.Verification
+	return r
+}
+
+// verifier is what a backup is held to. A run that already verified its backup
+// (earlier is the run's record) is held to the same bytes, and the trail is not
+// asked again: the audit pipeline being down must not strand a restore that
+// began while it was up.
+func (j *Job) verifier(allowUnverified bool, earlier *Run) backup.Verifier {
+	v := backup.Verifier{Attestor: j.c.Attestor, Recipients: j.c.Recipients, AllowUnverified: allowUnverified}
+	if earlier != nil && earlier.ObjectSHA256 != "" && earlier.SidecarSHA256 != "" {
+		v.Pinned = &backup.Hashes{Object: earlier.ObjectSHA256, Sidecar: earlier.SidecarSHA256}
+		v.Was = backup.Verification{Unverified: earlier.Unverified, Reason: earlier.Verification}
+	}
+	return v
+}
+
+// unverifiedReason is the word for an error that is the trail not vouching for
+// a backup, or the recipients not being the configured ones; "" otherwise.
+func unverifiedReason(err error) string {
+	switch {
+	case errors.Is(err, backup.ErrRecipients), errors.Is(err, backup.ErrNoRecipients):
+		return ReasonRecipients
+	case errors.Is(err, backup.ErrUnverified):
+		return backup.ReasonOf(err)
+	}
+	return ""
 }
 
 func (j *Job) record(ctx context.Context, r *record.Record) {
