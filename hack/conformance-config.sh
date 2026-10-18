@@ -10,13 +10,26 @@
 #
 # Needs docker (compose), curl and jq. The suite answers on a PUBLIC name that
 # resolves to 127.0.0.1, which is how it gets a real certificate on a runner.
-# The suite's log is kept in dist/conformance/.
+# The suite's log is kept in dist/conformance/, and the suite is stopped on
+# exit.
+#
+# The images are public. A stale `docker login registry.gitlab.com` makes the
+# pull fail with "HTTP Basic: Access denied": point DOCKER_CONFIG at a directory
+# that holds `{}` and run again.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 issuer=${ISSUER:?usage: ISSUER=<issuer url> hack/conformance-config.sh}
 suite=https://localhost.emobix.co.uk:8443
 work=$(mktemp -d)
-trap 'mkdir -p dist/conformance; curl -sk "$suite/api/log" -o dist/conformance/runs.json || true; rm -rf "$work"' EXIT
+cleanup() {
+  mkdir -p dist/conformance
+  curl -sk "$suite/api/log" -o dist/conformance/runs.json || true
+  (cd "$work/suite" && docker compose -f docker-compose-prebuilt.yml down -v) || true
+  # The database's directory belongs to the container's user.
+  docker run --rm -v "$work:/w" alpine rm -rf /w/suite 2>/dev/null || true
+  rm -rf "$work" || true
+}
+trap cleanup EXIT
 
 git clone --depth 1 https://gitlab.com/openid/conformance-suite.git "$work/suite"
 (cd "$work/suite" && docker compose -f docker-compose-prebuilt.yml up -d)
@@ -26,6 +39,8 @@ for _ in $(seq 1 60); do
   sleep 5
 done
 [ "$(curl -sk -o /dev/null -w '%{http_code}' "$suite/api/runner/available" || true)" = 200 ] || { echo "::error::the suite never came up" >&2; exit 1; }
+
+echo "suite: $(curl -sk "$suite/api/server" | jq -r '.version // "unknown"')"
 
 code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "$issuer/.well-known/openid-configuration")
 [ "$code" = 200 ] || { echo "::error::$issuer answered $code for its discovery document" >&2; exit 1; }

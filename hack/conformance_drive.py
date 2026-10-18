@@ -8,17 +8,35 @@ the authorization completes, the suite is never told, and the module sits
 in WAITING until the next one interrupts it. That reads as a hang and is
 the reason a plan showed a row of grey boxes.
 
-Signing in is RECOVERY: a ServiceAccount token the cluster vouches for,
-rather than a person at a Google prompt. That is what makes thirty
-modules unattended. It is the audited break-glass path, and the issuer
-logs every use of it at WARN.
+Signing in is RECOVERY, rather than a person at a Google prompt. That is
+what makes thirty modules unattended. It is the audited break-glass path,
+and the issuer logs every use of it at WARN. On Kubernetes the proof is a
+ServiceAccount token the cluster vouches for (RECOVERY=kubernetes, the
+default); on AWS Lambda it is the recovery password (RECOVERY=password),
+which the installation must have turned on for the run.
 
 The sign-in is re-established WHENEVER the issuer asks for one, not once
 at the start, because the logout modules exist to end it — a driver that
 cached a session would pass them by accident.
 
 Usage:
-  hack/conformance_drive.py <plan-id> [--from <module>] [--only <module>]
+  hack/conformance_drive.py <plan-id> [--from <module>] [--only <module>] [--manual]
+
+  SUITE      the suite's URL (default https://localhost.emobix.co.uk:8443)
+  ISSUER     the issuer under test (required)
+  RECOVERY   kubernetes (default) or password
+  CONTEXT    kubernetes: the kubectl context of the issuer's cluster
+  KUBECTL    kubernetes: how to run kubectl
+  NAMESPACE, SERVICE_ACCOUNT, AUDIENCE
+             kubernetes: the recovery account (defaults access-issuer,
+             access-issuer-recovery, access-issuer-recovery)
+  RECOVERY_PASSWORD_CMD
+             password: a command, run without a shell, whose output is the
+             recovery password, for example
+             "sluisctl recovery password --instance <instance> --region <region>".
+             It runs once and the value is kept in memory only.
+  CHROME_PROFILE
+             the browser's profile directory (default a fresh temporary one)
 
 Run ONE plan at a time. The suite serves every plan's callback under its
 `alias`, so starting a test in a plan that shares an alias interrupts the
@@ -30,8 +48,11 @@ import base64
 import json
 import os
 import struct
+import shlex
+import shutil
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.parse
 import urllib.error
@@ -41,9 +62,20 @@ SUITE = os.environ.get("SUITE", "https://localhost.emobix.co.uk:8443")
 # The issuer under test: no default, so a run never certifies an
 # installation nobody named.
 ISSUER = os.environ.get("ISSUER") or sys.exit("ISSUER: set it to the issuer to certify, e.g. https://access.example.com")
+# How the driver proves itself to the issuer's recovery sign-in: a
+# ServiceAccount token on Kubernetes, the recovery password on AWS Lambda.
+RECOVERY = os.environ.get("RECOVERY", "kubernetes")
+if RECOVERY not in ("kubernetes", "password"):
+    sys.exit("RECOVERY: kubernetes or password")
 # The kubectl context of the issuer's cluster: no default either, for the
 # same reason.
-CONTEXT = os.environ.get("CONTEXT") or sys.exit("CONTEXT: set it to the kubectl context of the issuer's cluster, e.g. prod@oidc")
+CONTEXT = os.environ.get("CONTEXT") or ""
+# The recovery ServiceAccount: where it lives and what its token is for.
+NAMESPACE = os.environ.get("NAMESPACE", "access-issuer")
+SERVICE_ACCOUNT = os.environ.get("SERVICE_ACCOUNT", "access-issuer-recovery")
+AUDIENCE = os.environ.get("AUDIENCE", "access-issuer-recovery")
+# The command that prints the recovery password. A list, never a shell.
+PASSWORD_CMD = shlex.split(os.environ.get("RECOVERY_PASSWORD_CMD", ""))
 # How to run kubectl, because reaching the cluster can need more than the
 # binary. A context that authenticates through OIDC needs the
 # `kubectl-oidc_login` credential plugin on PATH, and when it is missing
@@ -51,6 +83,8 @@ CONTEXT = os.environ.get("CONTEXT") or sys.exit("CONTEXT: set it to the kubectl 
 # runs for a while and then dies mid-plan. Point this at a wrapper that
 # has the plugin.
 KUBECTL = os.environ.get("KUBECTL", "kubectl").split()
+# The browser's profile: fresh unless named, and removed with the run.
+PROFILE = os.environ.get("CHROME_PROFILE")
 PORT = 9223
 
 
@@ -89,11 +123,35 @@ def api(path, method="GET", body=None, text=None):
     raise last
 
 
+_password = []
+
+
 def proof():
-    """A fresh recovery token. Minted per sign-in and never stored."""
+    """What the recovery form takes, kept in memory and never printed.
+
+    Kubernetes: a fresh ServiceAccount token, minted per sign-in. Lambda:
+    the recovery password, read once by the configured command.
+    """
+    # Checked here, at the first sign-in: the Config plan signs nobody in
+    # and needs neither.
+    if RECOVERY == "password":
+        if not PASSWORD_CMD:
+            sys.exit("RECOVERY_PASSWORD_CMD: set it to a command that prints the recovery password")
+        if not _password:
+            read = subprocess.run(PASSWORD_CMD, capture_output=True, text=True)
+            if read.returncode != 0 or not read.stdout.strip():
+                # The command's own sentence, but never its output: a
+                # failing command may have echoed part of what it read.
+                sys.exit("could not read the recovery password (exit %d):\n%s" % (
+                    read.returncode, read.stderr.strip()))
+            _password.append(read.stdout.strip())
+        return _password[0]
+
+    if not CONTEXT:
+        sys.exit("CONTEXT: set it to the kubectl context of the issuer's cluster, e.g. prod@oidc")
     minted = subprocess.run(
-        KUBECTL + ["--context", CONTEXT, "-n", "access-issuer", "create", "token",
-                   "access-issuer-recovery", "--audience", "access-issuer-recovery",
+        KUBECTL + ["--context", CONTEXT, "-n", NAMESPACE, "create", "token",
+                   SERVICE_ACCOUNT, "--audience", AUDIENCE,
                    "--duration", "10m"],
         capture_output=True, text=True)
     if minted.returncode != 0:
@@ -171,12 +229,12 @@ class CDP:
         return result.get("result", {}).get("value")
 
 
-def start_chrome():
+def start_chrome(profile):
     chrome = subprocess.Popen([
         "google-chrome", "--headless=new", "--disable-gpu", "--no-sandbox",
         "--ignore-certificate-errors",
         "--remote-debugging-port=%d" % PORT,
-        "--user-data-dir=/tmp/claude-1000/chrome-conformance",
+        "--user-data-dir=%s" % profile,
         "about:blank",
     ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
@@ -443,7 +501,8 @@ def main():
             print("  %-10s %s   %s/log-detail.html?log=%s" % (result, module, SUITE, test))
         sys.exit(0 if all(r in ("PASSED", "WARNING", "REVIEW") for r in results.values()) else 1)
 
-    chrome, cdp = start_chrome()
+    profile = PROFILE or tempfile.mkdtemp(prefix="conformance-chrome-")
+    chrome, cdp = start_chrome(profile)
     cdp.call("Page.enable")
     cdp.call("Network.enable")
 
@@ -464,6 +523,9 @@ def main():
                 "   %s/log-detail.html?log=%s" % (SUITE, test)))
     finally:
         chrome.terminate()
+        chrome.wait()
+        if not PROFILE:
+            shutil.rmtree(profile, ignore_errors=True)
 
     print()
     counts = {}

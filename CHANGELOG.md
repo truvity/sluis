@@ -4,6 +4,10 @@
 
 - **The old `access-roster` packages are retired and deleted from GitHub Packages (2026-10-18).** The release workflow no longer publishes the build a second time as `@truvity/access-roster`. Deleted: the containers `ghcr.io/truvity/access-roster/{access-issuer,github-roster,slack-roster,resource-proxy,access-roster}`, the chart `oci://ghcr.io/truvity/charts/access-roster` and the npm package `@truvity/access-roster`. Use `ghcr.io/truvity/sluis/{sluis,resource-proxy}`, `oci://ghcr.io/truvity/charts/sluis` and `@truvity/sluis`. See [0035](docs/decisions/0035-renamed-to-sluis.md).
 
+### Changed
+
+- **The conformance harness runs against an installation on AWS Lambda.** `hack/conformance-plans.sh` reads the four client secrets from SSM (`SECRETS=ssm`, `INSTANCE`) and takes the suite's address from `SUITE`; `hack/conformance_drive.py` signs in with the recovery password (`RECOVERY=password`, `RECOVERY_PASSWORD_CMD`) and no longer needs a kube context for it. The Kubernetes names stay the defaults. `hack/conformance-config.sh` stops the suite and exits 0 when it finishes. See [run conformance](docs/guides/sluis/run-conformance.md).
+
 ## v1.77.0-rc.1
 
 ### Breaking (chart)
