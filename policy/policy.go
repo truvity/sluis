@@ -1100,7 +1100,8 @@ func (c Client) validate(id string, p Policy) error {
 	case "", PKCERequired:
 	case PKCEOptional:
 		if c.Kind == KindPublic {
-			return fmt.Errorf("client %q is public and declares pkce: optional: a public client holds no secret, so PKCE is all that protects its code and it is always required", id)
+			return fmt.Errorf("client %q is public and declares pkce: optional: a public client holds no secret, "+
+				"so PKCE is all that protects its code and it is always required", id)
 		}
 	default:
 		return fmt.Errorf("client %q: pkce %q is not %q or %q", id, c.PKCE, PKCERequired, PKCEOptional)
