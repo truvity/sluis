@@ -171,6 +171,14 @@ func (e Endpoints) absolute(paths []string) []string {
 // and the state ride in that URL, and over plain HTTP anyone on the path
 // reads them. The issuer's library allows `http://` for a confidential
 // client's code flow, so this is where it is stopped.
+//
+// A back-channel logout endpoint is not a browser redirect and is left as it
+// is: it may be `http://`, because the service that receives a logout token is
+// often inside the cluster, where the policy may declare it by its plain
+// address (the issuer's own post refuses loopback and link-local targets and
+// follows no redirect). The token is a signed JWT with a two-minute life, not
+// a credential for the endpoint. Like the others it must be on this client's
+// host.
 func (e Endpoints) ValidateURLs() error {
 	every := append(append([]string(nil), e.Redirects...), e.SignedOut...)
 	browsers := len(every)

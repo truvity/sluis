@@ -283,7 +283,7 @@ func HandlerWithSignIn(iss *Issuer, storage op.Storage, signIn SignInDeps) (http
 	protocol := withoutUnserved(bindAuthorization(signIn, singleValued(challenges(iss.Config().URL, refusedAuthorize(
 		loopbackRedirects(storage.GetClientByClientID, authorizeSurface(storage.GetClientByClientID, defaultScope(resourceIndicators(
 			iss.Policy().Resource, storage.GetClientByClientID, requirePKCE(iss.Policy, presentedClients(
-				endSession(signIn, truthfulDiscovery(
+				endSession(signIn, storage.GetClientByClientID, truthfulDiscovery(
 					iss.Config().URL, func() bool { return iss.Policy().ClientDocuments().Enabled() },
 					refusalFilter(provider))))))))))))))
 	// An installation token for a catalogue App is claimed in front of the
@@ -343,7 +343,6 @@ func neverCached(next http.Handler) http.Handler {
 		"/revoke":      true,
 		"/userinfo":    true,
 		"/oauth/token": true,
-		"/introspect":  true,
 	}
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -397,7 +396,7 @@ var tokenPaths = map[string]bool{"/token": true, "/oauth/token": true}
 // `/token` and wrong here: this endpoint's caller is a person whose
 // browser was redirected to it. Anything that did not ask for HTML still
 // gets the JSON.
-func endSession(signIn SignInDeps, next http.Handler) http.Handler {
+func endSession(signIn SignInDeps, clients clientLookup, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != endSessionPath {
 			next.ServeHTTP(w, r)
@@ -415,12 +414,25 @@ func endSession(signIn SignInDeps, next http.Handler) http.Handler {
 			return
 		}
 
-		// No id_token_hint: nothing here says the request came from the
-		// relying party the person is signed in to, and a link, a frame or
-		// a redirect from any site can send a browser to this address.
-		// RP-Initiated Logout 1.0 2 asks the OP to ask the person, so it does,
-		// and ends nothing until they press the button.
-		if r.Form.Get("id_token_hint") == "" && !confirmedEndSession(signIn, w, r) {
+		// The post-logout address is held to the client's registered ones
+		// here, before anything is shown or ended: the library compares a
+		// native client's loopback address by path and query alone, and a
+		// bad address is refused up front instead of after the person has
+		// pressed a button.
+		if why := endSessionRedirectRefusal(r, clients); why != "" {
+			endSessionRefusal(w, r, http.StatusBadRequest, why)
+			return
+		}
+
+		// A request that does not come from the relying party the person is
+		// signed in to is asked about: nothing in a link, a frame or a
+		// redirect from any site says the person meant it. RP-Initiated
+		// Logout 1.0 2 asks the OP to ask, and nothing ends until they press
+		// the button. Only an id_token_hint whose subject is the browser's
+		// own sign-in is taken as the relying party's word (the library
+		// verifies its signature before anything ends); any other, an
+		// expired one included, is no better than none.
+		if !confirmedEndSession(signIn, clients, w, r) {
 			return
 		}
 

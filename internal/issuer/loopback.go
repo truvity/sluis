@@ -79,10 +79,21 @@ func loopbackRegistered(registered []string, asked *url.URL) bool {
 
 	for _, entry := range registered {
 		reg, ok := op.HTTPLoopbackOrLocalhost(entry)
-		if ok && reg.Scheme == asked.Scheme && reg.Path == asked.Path && reg.RawQuery == asked.RawQuery {
+		if !ok || reg.Scheme != asked.Scheme || reg.Path != asked.Path || reg.RawQuery != asked.RawQuery {
+			continue
+		}
+		// The host is the registered one, or any of the three spellings of
+		// "this machine" for another: not every address the platform calls
+		// loopback (127.0.0.2, an IPv4-mapped IPv6 address).
+		if reg.Hostname() == asked.Hostname() || (loopbackName(reg.Hostname()) && loopbackName(asked.Hostname())) {
 			return true
 		}
 	}
 
 	return false
+}
+
+// loopbackName is a spelling of "this machine" RFC 8252 7.3 names.
+func loopbackName(host string) bool {
+	return host == "127.0.0.1" || host == "::1" || host == "localhost"
 }

@@ -55,6 +55,12 @@ func TestOnlyThePortOfALoopbackRedirectIsFree(t *testing.T) {
 		"a port that is not one":      {"cli", "http://127.0.0.1:x/callback", true}, // does not parse; the library refuses it
 		"port zero":                   {"cli", "http://127.0.0.1:0/callback", false},
 		"a port out of range":         {"cli", "http://127.0.0.1:70000/callback", false},
+		"an upper-case host":          {"cli", "http://LOCALHOST:1/other?x=1", true},  // not loopback to the library; it refuses
+		"a trailing dot":              {"cli", "http://localhost.:1/other?x=1", true}, // likewise
+		"a suffix of localhost":       {"cli", "http://localhost.evil.com:1/other?x=1", true},
+		"a name that embeds 127":      {"cli", "http://127.0.0.1.nip.io:1/callback", true},
+		"an IPv4-mapped IPv6 address": {"cli", "http://[::ffff:127.0.0.1]:1/callback", false},
+		"another 127 address":         {"cli", "http://127.0.0.2:1/callback", false},
 		"a fragment":                  {"cli", "http://127.0.0.1:1/callback#f", false},
 		"userinfo":                    {"cli", "http://u@127.0.0.1:1/callback", false},
 		"a confidential client":       {"web", "http://127.0.0.1:1/callback", true}, // the library's exact match refuses it

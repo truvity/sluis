@@ -508,10 +508,10 @@ func (d *documentClients) load(ctx context.Context, target *url.URL) (policy.Cli
 	// `client_secret` MUST NOT be present). Refused, not ignored: ignoring
 	// it admits the client as public while its author believes it
 	// confidential.
-	if sharedSecretMethod(doc.AuthMethod) {
+	if !publicAuthMethod(doc.AuthMethod) {
 		return policy.Client{}, 0, fmt.Errorf(
 			"the client document at %s declares token_endpoint_auth_method %q; a client described by a document is public "+
-				"and authenticates with no shared secret", target.Redacted(), doc.AuthMethod)
+				"and authenticates with nothing (`none`): this issuer holds no secret, key or certificate for it", target.Redacted(), doc.AuthMethod)
 	}
 	if doc.ClientSecret != nil {
 		return policy.Client{}, 0, fmt.Errorf(
@@ -534,13 +534,18 @@ func (d *documentClients) load(ctx context.Context, target *url.URL) (policy.Cli
 	}, cacheLifetime(resp.Header), nil
 }
 
-// sharedSecretMethod reports a `token_endpoint_auth_method` that proves a
-// client with a secret the issuer and the client share (RFC 7591 2,
-// RFC 7523): `client_secret_basic`, `client_secret_post`, `client_secret_jwt`,
-// and any other spelling that starts that way. `none` and `private_key_jwt`
-// are not.
-func sharedSecretMethod(method string) bool {
-	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(method)), "client_secret")
+// publicAuthMethod reports a `token_endpoint_auth_method` a document client
+// may declare: none, or nothing at all. Every other method proves the client
+// with something this issuer would have to hold and does not -- a shared
+// secret (`client_secret_basic`, `client_secret_post`, `client_secret_jwt`), a
+// key (`private_key_jwt`; the document's `jwks` is not read) or a certificate
+// (`tls_client_auth`, `self_signed_tls_client_auth`) -- so a document that asks
+// for one is refused, not admitted as a public client its author does not
+// think it is.
+func publicAuthMethod(method string) bool {
+	method = strings.ToLower(strings.TrimSpace(method))
+
+	return method == "" || method == "none"
 }
 
 // documentName is the name shown on the sign-in page, bounded.

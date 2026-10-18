@@ -195,6 +195,46 @@ func TestDocumentRefusals(t *testing.T) {
 			path:  "/cimd.json",
 			wants: "Client_Secret_JWT",
 		},
+		"a key (private_key_jwt)": {
+			handler: document("/cimd.json", func(self string) any {
+				return map[string]any{
+					"client_id": self, "redirect_uris": []string{"https://app.example/cb"},
+					"token_endpoint_auth_method": "private_key_jwt",
+				}
+			}),
+			path:  "/cimd.json",
+			wants: "private_key_jwt",
+		},
+		"a certificate (tls_client_auth)": {
+			handler: document("/cimd.json", func(self string) any {
+				return map[string]any{
+					"client_id": self, "redirect_uris": []string{"https://app.example/cb"},
+					"token_endpoint_auth_method": "tls_client_auth",
+				}
+			}),
+			path:  "/cimd.json",
+			wants: "tls_client_auth",
+		},
+		"a certificate (self_signed_tls_client_auth)": {
+			handler: document("/cimd.json", func(self string) any {
+				return map[string]any{
+					"client_id": self, "redirect_uris": []string{"https://app.example/cb"},
+					"token_endpoint_auth_method": "self_signed_tls_client_auth",
+				}
+			}),
+			path:  "/cimd.json",
+			wants: "self_signed_tls_client_auth",
+		},
+		"a method nobody has heard of": {
+			handler: document("/cimd.json", func(self string) any {
+				return map[string]any{
+					"client_id": self, "redirect_uris": []string{"https://app.example/cb"},
+					"token_endpoint_auth_method": "magic",
+				}
+			}),
+			path:  "/cimd.json",
+			wants: "magic",
+		},
 		"a client_secret": {
 			handler: document("/cimd.json", func(self string) any {
 				return map[string]any{
