@@ -58,8 +58,8 @@ func (b *grantBook) Store(request op.TokenExchangeRequest, grant Grant) {
 	}
 
 	if now.Sub(b.swept) >= grantTTL/4 {
-		for key, entry := range b.entries {
-			if !now.Before(entry.expires) {
+		for key := range b.entries {
+			if !now.Before(b.entries[key].expires) {
 				delete(b.entries, key)
 			}
 		}

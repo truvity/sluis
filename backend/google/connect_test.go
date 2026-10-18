@@ -194,17 +194,23 @@ func TestASignInNeedsAVerifiedAddress(t *testing.T) {
 		want   string
 		fail   bool
 	}{
-		"verified":                 {claims: `{"sub":"1","email":"Ada@North.Example","email_verified":true}`, want: "ada@north.example"},
-		"verified as a string":     {claims: `{"sub":"1","email":"ada@north.example","email_verified":"true"}`, want: "ada@north.example"},
-		"not verified":             {claims: `{"sub":"1","email":"ada@north.example","email_verified":false}`, fail: true},
-		"verification absent":      {claims: `{"sub":"1","email":"ada@north.example"}`, fail: true},
-		"verification not a bool":  {claims: `{"sub":"1","email":"ada@north.example","email_verified":1}`, fail: true},
-		"no subject":               {claims: `{"email":"ada@north.example","email_verified":true}`, fail: true},
-		"no address":               {claims: `{"sub":"1","email_verified":true}`, fail: true},
-		"hosted domain matches":    {claims: `{"sub":"1","email":"ada@north.example","email_verified":true,"hd":"North.Example"}`, hosted: []string{"north.example"}, want: "ada@north.example"},
-		"hosted domain is another": {claims: `{"sub":"1","email":"ada@north.example","email_verified":true,"hd":"south.example"}`, hosted: []string{"north.example"}, fail: true},
-		"hosted domain absent":     {claims: `{"sub":"1","email":"ada@north.example","email_verified":true}`, hosted: []string{"north.example"}, fail: true},
-		"hosted domain not asked":  {claims: `{"sub":"1","email":"ada@north.example","email_verified":true,"hd":"south.example"}`, want: "ada@north.example"},
+		"verified":                {claims: `{"sub":"1","email":"Ada@North.Example","email_verified":true}`, want: "ada@north.example"},
+		"verified as a string":    {claims: `{"sub":"1","email":"ada@north.example","email_verified":"true"}`, want: "ada@north.example"},
+		"not verified":            {claims: `{"sub":"1","email":"ada@north.example","email_verified":false}`, fail: true},
+		"verification absent":     {claims: `{"sub":"1","email":"ada@north.example"}`, fail: true},
+		"verification not a bool": {claims: `{"sub":"1","email":"ada@north.example","email_verified":1}`, fail: true},
+		"no subject":              {claims: `{"email":"ada@north.example","email_verified":true}`, fail: true},
+		"no address":              {claims: `{"sub":"1","email_verified":true}`, fail: true},
+		"hosted domain matches": {
+			claims: `{"sub":"1","email":"ada@north.example","email_verified":true,"hd":"North.Example"}`,
+			hosted: []string{"north.example"}, want: "ada@north.example",
+		},
+		"hosted domain is another": {
+			claims: `{"sub":"1","email":"ada@north.example","email_verified":true,"hd":"south.example"}`,
+			hosted: []string{"north.example"}, fail: true,
+		},
+		"hosted domain absent":    {claims: `{"sub":"1","email":"ada@north.example","email_verified":true}`, hosted: []string{"north.example"}, fail: true},
+		"hosted domain not asked": {claims: `{"sub":"1","email":"ada@north.example","email_verified":true,"hd":"south.example"}`, want: "ada@north.example"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
