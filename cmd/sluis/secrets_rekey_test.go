@@ -191,7 +191,8 @@ func TestRekeyDryRunShowsTheKeysAndTheUnknown(t *testing.T) {
 	if err := rekeyRun(context.Background(), &out, "example", p, o, nil, audit.Person("oleg@example.com"), false); err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"3 SecureString parameters, 1 already under the key", "to re-write: 1", "1 under alias/aws/ssm -> arn:aws:kms:eu-central-1:111122223333:key/ssm",
+	for _, want := range []string{"3 SecureString parameters, 1 already under the key", "to re-write: 1",
+		"1 under alias/aws/ssm -> arn:aws:kms:eu-central-1:111122223333:key/ssm",
 		"[the key]", "unknown key (DescribeKey refused; left alone unless --include-unknown): /sluis/example/external/oidc/c"} {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("output lacks %q:\n%s", want, out.String())
