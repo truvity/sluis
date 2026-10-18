@@ -151,8 +151,6 @@ func TestPostLogoutRedirectIsCheckedUpFrontAndLoopbackIsStrict(t *testing.T) {
 		t.Fatal("the demonstration policy changed; this test needs a native client with a landing page")
 	}
 
-	server, _ := signInServerWith(t, "ada@north.example", withLanding)
-
 	for name, tc := range map[string]struct {
 		uri string
 		ok  bool
@@ -170,6 +168,8 @@ func TestPostLogoutRedirectIsCheckedUpFrontAndLoopbackIsStrict(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
+			// A server of its own: the directory stand-in counts calls without a lock.
+			server, _ := signInServerWith(t, "ada@north.example", withLanding)
 			b := newBrowser(t, server)
 			b.signIn()
 

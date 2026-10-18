@@ -432,7 +432,7 @@ func endSession(signIn SignInDeps, clients clientLookup, next http.Handler) http
 		// own sign-in is taken as the relying party's word (the library
 		// verifies its signature before anything ends); any other, an
 		// expired one included, is no better than none.
-		if !confirmedEndSession(signIn, clients, w, r) {
+		if !confirmedEndSession(signIn, w, r) {
 			return
 		}
 
