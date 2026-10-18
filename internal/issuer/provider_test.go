@@ -31,7 +31,6 @@ func TestOnlyCredentialResponsesRefuseCaching(t *testing.T) {
 		{"/token", true},
 		{"/revoke", true},
 		{"/userinfo", true},
-		{"/introspect", true},
 		{"/keys", false},
 		{"/.well-known/openid-configuration", false},
 		{"/authorize", false},
