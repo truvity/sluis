@@ -39,7 +39,7 @@ var keyAdministerActions = []string{
 	"kms:UpdateAlias", "kms:UpdateKeyDescription",
 }
 
-var adminArnRE = regexp.MustCompile(`^arn:aws[a-z-]*:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_*/-]+$`)
+var adminArnRE = regexp.MustCompile(`^arn:` + `aws[a-z-]*:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_*/-]+$`)
 
 const (
 	ssoRegionPath       = "aws-reserved/sso.amazonaws.com/*/"
