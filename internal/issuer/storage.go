@@ -9,7 +9,6 @@ import (
 	"log/slog"
 	"slices"
 	"strings"
-	"sync"
 	"time"
 
 	jose "github.com/go-jose/go-jose/v4"
@@ -234,7 +233,9 @@ type Storage struct {
 	// between two calls the library makes about the *same* request, in
 	// the same handler, microseconds apart — writing that down would be
 	// storing something that never outlives the function that made it.
-	grants sync.Map // op.TokenExchangeRequest → Grant
+	// It forgets by time ([grantBook]): it used to keep every decision for
+	// the life of the process.
+	grants grantBook
 
 	// scopingReport rate-limits the groups-scoping report line; see
 	// [Storage.reportGroupsScoping].
@@ -1472,6 +1473,11 @@ func (s *Storage) SetUserinfoFromRequest(
 	if id := sessionOf(request); id != "" {
 		info.AppendClaims("sid", id)
 	}
+	if refresh, ok := request.(*refreshRequest); ok {
+		if acr := refresh.acrClaim(); acr != "" {
+			info.AppendClaims("acr", acr)
+		}
+	}
 
 	// An ID token is a client being signed somebody in, and the sign-in
 	// remembers which clients that happened at, so that ending it can
@@ -2192,7 +2198,25 @@ type refreshRequest struct {
 
 var _ op.RefreshTokenRequest = (*refreshRequest)(nil)
 
-func (r *refreshRequest) GetAMR() []string { return []string{"pwd"} }
+// GetAMR is what the sign-in this session came from presented, as the sign-in
+// itself reported it ([amrFor]). It said `pwd` for every refresh, which no
+// sign-in here is and which dropped a recovery sign-in's `swk` after the
+// first renewal.
+func (r *refreshRequest) GetAMR() []string { return amrFor(r.session.Method) }
+
+// acrClaim is the authentication context class a refreshed ID token repeats
+// from the sign-in, or nothing for a session that records no method (an
+// exchange, or one recorded before the field existed), which asserts none.
+// The library takes an ID token's `acr` from an authorization request only, so
+// a refresh carries it as a claim of its own; without it a relying party that
+// gates on the recovery class would see it on the first ID token and never
+// again.
+func (r *refreshRequest) acrClaim() string {
+	if r.session.Method == "" {
+		return ""
+	}
+	return acrFor(r.session.Method)
+}
 
 // GetAudience is the resource this session was opened for, or the client
 // itself. Without the first case a refresh would quietly re-mint the
@@ -2239,6 +2263,14 @@ func (r *refreshRequest) GetScopes() []string {
 }
 
 // GetRefreshTokenInfo implements [op.AuthStorage].
+//
+// It answers the refresh token itself as the token's id, not the id of its
+// session. The library hands that id to [Storage.RevokeToken] as the thing to
+// revoke, and a session id is not a secret: it is in the `sid` claim and in a
+// logout token. Handing it back would make "a refresh token that resolves" and
+// "a session id typed by someone who was never given the token" the same
+// request, and RevokeToken could not tell them apart. The token is what the
+// caller proved they hold, so it is what travels.
 func (s *Storage) GetRefreshTokenInfo(ctx context.Context, _ string, tok string) (string, string, error) {
 	// The same window. Revocation resolves through here too, and a
 	// caller revoking with the token it holds must be obeyed even when a
@@ -2252,38 +2284,61 @@ func (s *Storage) GetRefreshTokenInfo(ctx context.Context, _ string, tok string)
 	if !ok {
 		return "", "", op.ErrInvalidRefreshToken
 	}
-	return session.Identity, session.ID, nil
+	return session.Identity, tok, nil
 }
 
 // RevokeToken ends a session or an access token. It is RFC 7009, and it
-// is the mechanism under both Revoke in the console and a person's own
-// sign-out-everywhere.
-func (s *Storage) RevokeToken(ctx context.Context, tokenOrTokenID, _, _ string) *oidc.Error {
-	// The library resolves a refresh token through GetRefreshTokenInfo
-	// first and then hands back what that returned, so this is the
-	// session id for a refresh token and the raw value for anything else.
-	// Both have to work, or revocation silently succeeds while the
-	// session lives on — which is the worst possible outcome for a
-	// security control whose entire job is to end access.
-	// Both, always, and in that order — never one *or* the other. A hit
-	// on either is not proof that revocation is done: the access token
-	// lives under its own key, and leaving it there would keep it valid
-	// at every replica. A security control that reports success and
-	// leaves access in place is worse than one that fails.
-	if _, err := s.iss.Sessions().RevokeToken(ctx, tokenOrTokenID); err != nil {
+// is the mechanism under a client's own sign-out.
+//
+// What it accepts is what the caller proved they hold, and no more:
+//
+//   - a refresh token, resolved through the pointer this issuer keeps for it
+//     (also within the window a rotation leaves), which ends its session; or
+//   - the id of an access token this issuer signed, which the library has
+//     verified before it gets here, which removes that token's record.
+//
+// Each only for the client that was issued it (RFC 7009 section 2.1: the
+// server verifies the token was issued to the client making the request). A
+// value that is neither, and in particular a session id -- visible in the `sid`
+// claim and in logout tokens, so not a credential -- ends nothing. A token of
+// another client is answered as success and left alone, as one that does not
+// exist is: saying otherwise tells a caller whether a token they do not hold
+// is real.
+//
+// Both, always, and in that order -- never one *or* the other. A hit on the
+// session is not proof that revocation is done: the access token lives under
+// its own key, and leaving it there would keep it valid at every replica. A
+// security control that reports success and leaves access in place is worse
+// than one that fails.
+func (s *Storage) RevokeToken(ctx context.Context, tokenOrTokenID, _, clientID string) *oidc.Error {
+	if clientID == "" || tokenOrTokenID == "" {
+		return nil
+	}
+
+	if session, found, err := s.iss.Sessions().ByRefreshToken(ctx, tokenOrTokenID); err != nil {
+		return fault(ctx, err)
+	} else if found && session.ClientID == clientID {
+		if _, err = s.iss.Sessions().RevokeToken(ctx, tokenOrTokenID); err != nil {
+			return fault(ctx, err)
+		}
+
+		if _, err = s.iss.Sessions().RevokeID(ctx, session.ID); err != nil {
+			return fault(ctx, err)
+		}
+	}
+
+	issued, err := getJSON[token](ctx, s.state, tokenKey(tokenOrTokenID))
+	if err != nil {
 		return fault(ctx, err)
 	}
 
-	if _, err := s.iss.Sessions().RevokeID(ctx, tokenOrTokenID); err != nil {
-		return fault(ctx, err)
-	}
-
-	if err := s.state.Delete(ctx, tokenKey(tokenOrTokenID)); err != nil {
-		return fault(ctx, err)
+	if issued != nil && issued.ClientID == clientID {
+		if err = s.state.Delete(ctx, tokenKey(tokenOrTokenID)); err != nil {
+			return fault(ctx, err)
+		}
 	}
 	// A token that was already gone is a success: revocation is
-	// idempotent, and saying otherwise tells a caller whether a token
-	// they do not hold ever existed.
+	// idempotent.
 	return nil
 }
 
@@ -2844,12 +2899,7 @@ func (s *Storage) signInProof(ctx context.Context, request exchangeSubject) (Pro
 }
 
 func (s *Storage) grantFor(request op.TokenExchangeRequest) (Grant, bool) {
-	value, ok := s.grants.Load(request)
-	if !ok {
-		return Grant{}, false
-	}
-	grant, ok := value.(Grant)
-	return grant, ok
+	return s.grants.Load(request)
 }
 
 // CreateTokenExchangeRequest implements [op.TokenExchangeStorage].

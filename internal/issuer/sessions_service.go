@@ -65,8 +65,11 @@ type SessionsService struct {
 
 var _ accessissuerv1connect.SessionServiceHandler = (*SessionsService)(nil)
 
-// NewSessionsService returns the handler over an issuer.
-func NewSessionsService(iss *Issuer, verifier *op.AccessTokenVerifier, secure bool) *SessionsService {
+// NewSessionsService returns the handler over an issuer. A bearer is read from
+// storage's record of the token ([Storage.liveSignInClaims]): the access token of
+// a live sign-in at the console or the CLI, and no other token this issuer
+// signed. Where storage is not the concrete one, no bearer is admitted.
+func NewSessionsService(iss *Issuer, storage op.Storage, secure bool) *SessionsService {
 	return &SessionsService{
 		secure:   secure,
 		sessions: iss.Sessions(),
@@ -80,9 +83,13 @@ func NewSessionsService(iss *Issuer, verifier *op.AccessTokenVerifier, secure bo
 			return cookieCaller(iss, iss.checkSignIn(ctx, iss.SSO(), cookie, "", 0))
 		},
 		verify: func(ctx context.Context, bearer string) (string, []string, error) {
-			claims, err := op.VerifyAccessToken[*oidc.AccessTokenClaims](ctx, bearer, verifier)
-			if err != nil {
-				return "", nil, err
+			concrete, ok := storage.(*Storage)
+			if !ok {
+				return "", nil, errors.New("no token record to check")
+			}
+			claims, ok := concrete.liveSignInClaims(ctx, bearer, SessionsAudiences())
+			if !ok {
+				return "", nil, errors.New("not a live sign-in at the console or the CLI")
 			}
 
 			return claims.Subject, groupsOf(claims), nil

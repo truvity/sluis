@@ -28,33 +28,51 @@ var CLIAudiences = []string{"sluisctl", "accessctl"}
 // console, stops the token at once; an ID token, which has no such record, and
 // another client's access token are refused.
 func (s *Storage) CLISubject(ctx context.Context, bearer string, clients []string) (string, bool) {
-	if bearer == "" || s == nil {
+	claims, ok := s.liveSignInClaims(ctx, bearer, clients)
+	if !ok {
 		return "", false
+	}
+	return claims.Subject, true
+}
+
+// liveSignInClaims is the check [Storage.CLISubject] makes, and answers the
+// claims of the access token it accepted. The session service reads the groups
+// from them; nobody else needs more than the subject.
+func (s *Storage) liveSignInClaims(ctx context.Context, bearer string, clients []string) (*oidc.AccessTokenClaims, bool) {
+	if bearer == "" || s == nil {
+		return nil, false
 	}
 	claims, err := op.VerifyAccessToken[*oidc.AccessTokenClaims](ctx, bearer, accessTokenVerifier(s.iss, s))
 	if err != nil || strings.TrimSpace(claims.Subject) == "" {
-		return "", false
+		return nil, false
 	}
 	if claims.JWTID == "" {
-		return "", false
+		return nil, false
 	}
 	issued, err := getJSON[token](ctx, s.state, tokenKey(claims.JWTID))
 	if err != nil || issued == nil {
-		return "", false
+		return nil, false
 	}
 	if !slices.Contains(clients, issued.ClientID) || claims.ClientID != issued.ClientID ||
 		!slices.Contains(claims.Audience, issued.ClientID) || claims.Subject != issued.Subject {
-		return "", false
+		return nil, false
 	}
 	if !strings.Contains(issued.Subject, "@") || issued.Session == "" {
-		return "", false
+		return nil, false
 	}
 	session, live, err := s.iss.Sessions().ByID(ctx, issued.Session)
 	if err != nil || !live || session.Agent() {
-		return "", false
+		return nil, false
 	}
-	return issued.Subject, true
+	return claims, true
 }
+
+// SessionsAudiences are the clients whose sign-ins may call the session
+// service as a bearer: the CLI's and the console's, the same set that manages
+// client secrets. Any other token this issuer signed -- a relying party's, an
+// ID token, a workload's exchange -- is not a person acting through their
+// own console.
+func SessionsAudiences() []string { return ClientSecretsAudiences }
 
 // BearerReader returns who a request's bearer token names, by [Storage.CLISubject]
 // over clients. It reads nothing else from the token, and in particular not its
