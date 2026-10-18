@@ -175,7 +175,16 @@ func waitForCode(listener net.Listener, state string) (string, error) {
 		}),
 	}
 	go func() { _ = server.Serve(listener) }()
-	defer func() { _ = server.Close() }()
+	defer func() {
+		// Shut down, do not close: the handler hands over the answer before it
+		// returns, and closing would cut the page off the browser (and make a
+		// client retry the request against a listener that is gone).
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		if server.Shutdown(ctx) != nil {
+			_ = server.Close()
+		}
+	}()
 
 	select {
 	case answer := <-answers:
