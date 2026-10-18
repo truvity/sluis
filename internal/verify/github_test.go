@@ -265,3 +265,57 @@ func TestWithoutOwnersItVerifiesNothing(t *testing.T) {
 		t.Errorf("Verify = %v, want ErrUnverified with no owners declared", err)
 	}
 }
+
+// A login is a name: it can be renamed, and an organisation that is deleted
+// frees its login for anybody to register. The numeric ids GitHub puts in the
+// token do not move, so an installation that names them holds a token to them.
+func TestAGitHubTokenIsHeldToTheNumericIDsAnInstallationNames(t *testing.T) {
+	t.Parallel()
+
+	fake := newFakeGitHub(t)
+	mint := func(owner, repository any) string {
+		return fake.mint(t, map[string]any{
+			"repository":          "globex/gitops",
+			"repository_owner":    "globex",
+			"repository_owner_id": owner,
+			"repository_id":       repository,
+		}, nil)
+	}
+	verifier := func(ownerIDs, repositoryIDs []string) *verify.GitHub {
+		v := githubVerifier(fake)
+		v.OwnerIDs = ownerIDs
+		v.RepositoryIDs = repositoryIDs
+		return v
+	}
+
+	for name, tc := range map[string]struct {
+		token  string
+		owners []string
+		repos  []string
+		admit  bool
+	}{
+		"no id asked, none carried":          {mint(nil, nil), nil, nil, true},
+		"owner id matches":                   {mint("1001", "2002"), []string{"1001"}, nil, true},
+		"owner id matches as a number":       {mint(1001, 2002), []string{"1001"}, nil, true},
+		"owner id is another's, same login":  {mint("9999", "2002"), []string{"1001"}, nil, false},
+		"owner id asked, none carried":       {mint(nil, "2002"), []string{"1001"}, nil, false},
+		"repository id matches":              {mint("1001", "2002"), nil, []string{"2002"}, true},
+		"repository id is another's":         {mint("1001", "7777"), nil, []string{"2002"}, false},
+		"repository id asked, none carried":  {mint("1001", nil), nil, []string{"2002"}, false},
+		"both asked, both match":             {mint("1001", "2002"), []string{"1001"}, []string{"2002"}, true},
+		"both asked, the repository differs": {mint("1001", "7777"), []string{"1001"}, []string{"2002"}, false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			_, err := verifier(tc.owners, tc.repos).Verify(context.Background(), tc.token, verify.TypeJWT)
+			switch {
+			case tc.admit && err != nil:
+				t.Errorf("refused: %v", err)
+			case !tc.admit && err == nil:
+				t.Error("admitted")
+			case !tc.admit && errors.Is(err, issuer.ErrUnverified):
+				t.Error("a refused token fell through as unrecognised")
+			}
+		})
+	}
+}

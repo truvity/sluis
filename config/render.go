@@ -460,7 +460,9 @@ func (x *Exchange) policyExchange() *internal.PolicyExchange {
 		out.AWS = f
 	}
 	if g := x.GitHub; g != nil {
-		out.GitHub = &internal.ExchangeGitHub{Owners: sortedSet(g.Owners)}
+		out.GitHub = &internal.ExchangeGitHub{
+			Owners: sortedSet(g.Owners), OwnerIDs: sortedSet(g.OwnerIDs), RepositoryIDs: sortedSet(g.RepositoryIDs),
+		}
 	}
 	if len(out.Clusters) == 0 && out.AWS == nil && out.GitHub == nil {
 		return nil

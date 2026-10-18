@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 
 	"golang.org/x/oauth2"
@@ -63,6 +64,13 @@ type OAuthClient struct {
 	// is the failure that arrives late, in a cloud console's own words,
 	// naming nothing useful.
 	BaseURL string
+	// HostedDomains are the Google Workspace domains a person may sign in
+	// from. When set, a sign-in must carry an `hd` claim naming one of them
+	// (compared without regard to case): an account of any other
+	// organisation, and a consumer account, which has no `hd`, is refused
+	// before the address is read. Empty asks nothing of `hd`, and the
+	// directory the hub reads still decides which domains it serves.
+	HostedDomains []string
 }
 
 // ConsentRedirect is where the consent flow returns; one of the two URIs
@@ -114,12 +122,97 @@ func Identify(ctx context.Context, client OAuthClient, code string) (string, err
 	if err != nil {
 		return "", fmt.Errorf("google: exchange the sign-in code: %w", err)
 	}
-	email := consentingAccount(token)
+	return signedInAccount(token, client.HostedDomains)
+}
+
+// signedInAccount is the address a sign-in's ID token vouches for, when Google
+// vouches for it.
+//
+// Three things are asked of the token beyond an address. `email_verified` must
+// be true: Google says the account has proved it owns the address, and an
+// address it has not verified is a string somebody typed. When hosted domains
+// are configured, `hd` must be one of them, so that an address of the
+// right shape from another organisation or from a consumer account is not
+// taken for one of ours. And the token must carry its `sub`, Google's stable
+// account id, which a token without is not one this client was handed.
+//
+// The identity is still the address, as every link and every grant here is
+// keyed by it; `sub` is not recorded. Keying by `sub` would orphan every
+// existing link, so it is a migration and not part of this check.
+func signedInAccount(token *oauth2.Token, hostedDomains []string) (string, error) {
+	claims, ok := idTokenClaims(token)
+	if !ok {
+		return "", errors.New("google: the sign-in did not say which account it was; " +
+			"the OAuth client must be allowed the openid and email scopes")
+	}
+	email := strings.ToLower(strings.TrimSpace(claims.Email))
 	if email == "" {
 		return "", errors.New("google: the sign-in did not say which account it was; " +
 			"the OAuth client must be allowed the openid and email scopes")
 	}
+	if claims.Subject == "" {
+		return "", errors.New("google: the sign-in carried no subject")
+	}
+	if !claims.EmailVerified.true() {
+		return "", errors.New("google: the account's address is not verified")
+	}
+	if len(hostedDomains) > 0 {
+		hosted := strings.TrimSpace(claims.HostedDomain)
+		if !slices.ContainsFunc(hostedDomains, func(d string) bool { return strings.EqualFold(strings.TrimSpace(d), hosted) }) || hosted == "" {
+			return "", errors.New("google: the account is not in a hosted domain this installation signs in")
+		}
+	}
 	return email, nil
+}
+
+// verifiedFlag is Google's `email_verified`, a boolean in an ID token and a
+// string in some of its older responses. Absent or anything but true is not
+// verified.
+type verifiedFlag struct{ value bool }
+
+func (f *verifiedFlag) UnmarshalJSON(data []byte) error {
+	var raw any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil //nolint:nilerr // unreadable is not verified
+	}
+	switch v := raw.(type) {
+	case bool:
+		f.value = v
+	case string:
+		f.value = v == "true"
+	}
+	return nil
+}
+
+func (f verifiedFlag) true() bool { return f.value }
+
+// idTokenClaim are the claims of an ID token a sign-in reads.
+type idTokenClaim struct {
+	Subject       string       `json:"sub"`
+	Email         string       `json:"email"`
+	EmailVerified verifiedFlag `json:"email_verified"`
+	HostedDomain  string       `json:"hd"`
+}
+
+// idTokenClaims reads the claims out of the ID token that came back with a
+// grant. The token is not verified here for the reason [consentingAccount]
+// gives: it arrived from Google's token endpoint over TLS, in the response to
+// a request carrying this client's secret.
+func idTokenClaims(token *oauth2.Token) (idTokenClaim, bool) {
+	raw, _ := token.Extra("id_token").(string)
+	parts := strings.Split(raw, ".")
+	if len(parts) != 3 {
+		return idTokenClaim{}, false
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return idTokenClaim{}, false
+	}
+	var claims idTokenClaim
+	if err = json.Unmarshal(payload, &claims); err != nil {
+		return idTokenClaim{}, false
+	}
+	return claims, true
 }
 
 // AuthURL is where the browser goes to consent.

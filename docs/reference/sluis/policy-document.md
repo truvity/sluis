@@ -7,6 +7,8 @@ The policy document is the one file a process loads, named by the service docume
 | `exchange.clusters[]` | `{name, issuer, jwksUri}` per federated cluster |
 | `exchange.aws` | `audience`, `maxAge` and `accounts[]` (`{account, name, issuer, jwksUri, orgId, algs}`) |
 | `exchange.github.owners[]` | organisations whose CI tokens are verified; none verifies none |
+| `exchange.github.ownerIds[]` | optional. The numeric ids of those organisations (a token's `repository_owner_id`). When set, a token must carry one of them as well as an owner above: a login can be renamed, or taken by someone else after the organisation is deleted, and an id cannot. Unset asks nothing of the id |
+| `exchange.github.repositoryIds[]` | optional. The numeric ids of the repositories whose tokens are verified (`repository_id`). When set, a token must carry one of them, which narrows an organisation to named repositories whatever they are called. Unset asks nothing of the id |
 | `apps.github.apps[]` | every GitHub App: `{id, purpose, labels, export, org, tier, name}` (`name`: the `link` App's or a catalogue App's name on GitHub, at most 34) and, for `catalogue`, the App's declaration ([GitHub Apps catalogue](../../guides/sluis/connect/github-apps-catalogue.md)) |
 | `apps.github.runnerTiers[]`, `apps.github.catalogue[]` | deprecated, removed in v1.77: read as entries of `apps.github.apps`, with a warning |
 | `apps.slack.catalogue[]` | the Slack App catalogue ([Slack Apps catalogue](../../guides/sluis/connect/slack-apps-catalogue.md)) |

@@ -58,6 +58,10 @@ type Google struct {
 type GoogleOAuthClient struct {
 	ID       string `json:"id,omitempty"`
 	Provider string `json:"provider,omitempty"`
+	// HostedDomains are the Google Workspace domains a person may sign in
+	// from: the sign-in's `hd` claim must be one of them. Unset asks nothing
+	// of `hd`.
+	HostedDomains []string `json:"hostedDomains,omitempty"`
 }
 
 // GoogleAPIVersion is the apiVersion of the Google module's document.
@@ -99,6 +103,11 @@ func (s *SluisGoogle) Validate() error {
 			return errors.New("google.oauthClient.provider: required (it names the client's secret)")
 		case strings.TrimSpace(o.ID) != o.ID:
 			return errors.New("google.oauthClient.id: has surrounding space")
+		}
+		for _, d := range o.HostedDomains {
+			if d == "" || strings.TrimSpace(d) != d || strings.ContainsAny(d, "@/ ") {
+				return fmt.Errorf("google.oauthClient.hostedDomains: %q is not a domain", d)
+			}
 		}
 	}
 	seen := map[string]bool{}

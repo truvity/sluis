@@ -1,7 +1,9 @@
 package verify
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -43,6 +45,18 @@ type GitHub struct {
 	// Owners are the GitHub organisations (and users) whose repositories
 	// this installation will act on, lowercased on comparison.
 	Owners []string
+	// OwnerIDs are the numeric ids of those organisations, as GitHub puts them
+	// in `repository_owner_id`. A login can be renamed, and a deleted
+	// organisation's login can be taken by someone else; the id cannot.
+	// When set, the token's `repository_owner_id` must be one of them, in
+	// addition to its `repository_owner` being in Owners. Unset asks
+	// nothing of it, which is every installation before this existed.
+	OwnerIDs []string
+	// RepositoryIDs are the numeric ids of the repositories a token may come
+	// from, as GitHub puts them in `repository_id`. When set, the token's
+	// `repository_id` must be one of them, whatever its owner. Unset asks
+	// nothing of it.
+	RepositoryIDs []string
 	// Audience the workflow must have requested: this issuer's URL.
 	Audience string
 	// Client fetches the keys. Nil means [http.DefaultClient].
@@ -103,6 +117,16 @@ func (g *GitHub) Verify(ctx context.Context, token, tokenType string) (issuer.Pr
 			"%w: that repository's owner is not one this installation runs jobs for", errRefused)
 	}
 
+	if len(g.OwnerIDs) > 0 && !idListed(g.OwnerIDs, claims.RepositoryOwnerID) {
+		return issuer.Proof{}, fmt.Errorf(
+			"%w: that repository's owner id is not one this installation runs jobs for", errRefused)
+	}
+
+	if len(g.RepositoryIDs) > 0 && !idListed(g.RepositoryIDs, claims.RepositoryID) {
+		return issuer.Proof{}, fmt.Errorf(
+			"%w: that repository's id is not one this installation runs jobs for", errRefused)
+	}
+
 	repository := strings.TrimSpace(claims.Repository)
 	if repository == "" {
 		return issuer.Proof{}, fmt.Errorf("%w: the GitHub token names no repository", errRefused)
@@ -128,6 +152,40 @@ func (g *GitHub) Verify(ctx context.Context, token, tokenType string) (issuer.Pr
 		EventName:      strings.TrimSpace(claims.EventName),
 		RefType:        strings.TrimSpace(claims.RefType),
 	}}, nil
+}
+
+// idListed reports whether a numeric id GitHub put in a token is among those
+// allowed. GitHub writes these claims as strings; a number is read the same,
+// and an absent claim is in no list.
+func idListed(allowed []string, claim numericID) bool {
+	if claim == "" {
+		return false
+	}
+	for _, id := range allowed {
+		if strings.TrimSpace(id) == string(claim) {
+			return true
+		}
+	}
+	return false
+}
+
+// numericID is a GitHub numeric id claim, read from a string or a number.
+type numericID string
+
+func (n *numericID) UnmarshalJSON(data []byte) error {
+	var raw any
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.UseNumber()
+	if err := dec.Decode(&raw); err != nil {
+		return err
+	}
+	switch v := raw.(type) {
+	case string:
+		*n = numericID(strings.TrimSpace(v))
+	case json.Number:
+		*n = numericID(v.String())
+	}
+	return nil
 }
 
 // errRefused marks a token this verifier owned and rejected, so that
@@ -206,9 +264,13 @@ type githubClaims struct {
 
 	Repository      string `json:"repository,omitempty"`
 	RepositoryOwner string `json:"repository_owner,omitempty"`
-	Ref             string `json:"ref,omitempty"`
-	Workflow        string `json:"workflow,omitempty"`
-	Environment     string `json:"environment,omitempty"`
+	// RepositoryOwnerID and RepositoryID are the numeric ids behind the two
+	// names, which do not change when a name does.
+	RepositoryOwnerID numericID `json:"repository_owner_id,omitempty"`
+	RepositoryID      numericID `json:"repository_id,omitempty"`
+	Ref               string    `json:"ref,omitempty"`
+	Workflow          string    `json:"workflow,omitempty"`
+	Environment       string    `json:"environment,omitempty"`
 	// RepositoryVisibility is public, private or internal.
 	RepositoryVisibility string `json:"repository_visibility,omitempty"`
 	WorkflowRef          string `json:"workflow_ref,omitempty"`

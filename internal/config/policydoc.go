@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -17,6 +18,9 @@ import (
 	slackcatalogue "github.com/truvity/sluis/internal/slackapp/catalogue"
 	"github.com/truvity/sluis/policy"
 )
+
+// numericGitHubID is what GitHub's numeric ids look like.
+var numericGitHubID = regexp.MustCompile(`^[0-9]+$`)
 
 // PolicyDocument is the policy document: what an installation decides, in one
 // file every process of it reads (`policy.file`).
@@ -109,6 +113,15 @@ type (
 		// verified. None verifies none: an empty list would admit every
 		// repository there is.
 		Owners []string `yaml:"owners,omitempty"`
+		// OwnerIDs are the numeric ids of those organisations
+		// (`repository_owner_id`). When set, a token must carry one of
+		// them as well as an owner in Owners: a login can be renamed or
+		// reused, an id cannot. Unset asks nothing of the id.
+		OwnerIDs []string `yaml:"ownerIds,omitempty"`
+		// RepositoryIDs are the numeric ids of the repositories whose
+		// tokens are verified (`repository_id`). When set, a token must
+		// carry one of them. Unset asks nothing of the id.
+		RepositoryIDs []string `yaml:"repositoryIds,omitempty"`
 	}
 
 	// PolicyApps is what an operator may make on the console.
@@ -327,6 +340,24 @@ func (d *PolicyDocument) GitHubOwners() []string {
 	return d.Exchange.GitHub.Owners
 }
 
+// GitHubOwnerIDs are the numeric ids of the organisations whose CI tokens are
+// verified, when the document pins them.
+func (d *PolicyDocument) GitHubOwnerIDs() []string {
+	if d == nil || d.Exchange == nil || d.Exchange.GitHub == nil {
+		return nil
+	}
+	return d.Exchange.GitHub.OwnerIDs
+}
+
+// GitHubRepositoryIDs are the numeric ids of the repositories whose CI tokens
+// are verified, when the document pins them.
+func (d *PolicyDocument) GitHubRepositoryIDs() []string {
+	if d == nil || d.Exchange == nil || d.Exchange.GitHub == nil {
+		return nil
+	}
+	return d.Exchange.GitHub.RepositoryIDs
+}
+
 // RunnerTiers are the tiers an operator may create a runner App for: those of
 // the runner entries, each once.
 func (d *PolicyDocument) RunnerTiers() []string {
@@ -412,6 +443,13 @@ func (d *PolicyDocument) Validate() error {
 	for i, owner := range d.GitHubOwners() {
 		if strings.TrimSpace(owner) == "" {
 			errs = append(errs, fmt.Errorf("exchange.github.owners[%d] is empty: an empty owner would admit every repository there is", i))
+		}
+	}
+	for field, ids := range map[string][]string{"ownerIds": d.GitHubOwnerIDs(), "repositoryIds": d.GitHubRepositoryIDs()} {
+		for i, id := range ids {
+			if !numericGitHubID.MatchString(id) {
+				errs = append(errs, fmt.Errorf("exchange.github.%s[%d] is %q: a GitHub id is a number", field, i, id))
+			}
 		}
 	}
 	errs = append(errs, d.validateApps()...)

@@ -742,6 +742,8 @@ func sluisGoogleSchema() m {
 		"oauthClient": obj("The OAuth client registered once with Google: needed to reopen a workspace that was connected by consent (a stored refresh token). Not needed for service-account keys.", m{
 			"id":       oauth["id"],
 			"provider": oauth["provider"],
+			"hostedDomains": m{"type": "array", "uniqueItems": true, "items": m{"type": "string", "minLength": 1},
+				"description": "The Google Workspace domains a person may sign in from. A sign-in must carry an `hd` claim that names one of them, so an account of another organisation, or a consumer account, is refused whatever its address says. Unset asks nothing of `hd`. A sign-in must in every case carry a verified address."},
 		}),
 		"publicURL":       url("Where a browser reaches the issuer, including its mount. The consent and sign-in redirect URIs are built from it, so it is the issuer's own `publicURL`. Needed to start a consent or a sign-in; a module that only refreshes does not read it."),
 		"refreshInterval": duration("How often a snapshot is refreshed: the schedule's period. A snapshot younger than three quarters of it is not read again, whatever runner asks.", "15m"),
