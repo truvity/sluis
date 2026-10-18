@@ -16,6 +16,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/kms"
 	awsssm "github.com/aws/aws-sdk-go-v2/service/ssm"
 
 	"github.com/truvity/sluis/internal/audit"
@@ -26,7 +27,7 @@ import (
 	"github.com/truvity/sluis/internal/store"
 )
 
-const secretsUsage = `Usage: sluis secrets rekey --config <file> [--dry-run] [--json] [--include-recent] [--by <name>] [--no-audit]
+const secretsUsage = `Usage: sluis secrets rekey --config <file> [--dry-run] [--json] [--include-recent] [--include-unknown] [--by <name>] [--no-audit]
 
   rekey
         re-write every SecureString parameter below secrets.root that is not under the
@@ -43,13 +44,19 @@ const secretsUsage = `Usage: sluis secrets rekey --config <file> [--dry-run] [--
         anyway. Run it while nothing writes secrets; a parameter that changes under the
         run is skipped or reported, and a second run finishes what is left.
 
+        Which parameters are already under the key is decided on key ARNs: every key id the
+        parameters report (SSM returns it as it was written: an alias, an alias ARN, a key
+        id or a key ARN) and secrets.kmsKeyId are resolved once with kms:DescribeKey. A
+        parameter under a key DescribeKey will not describe, and not the configured key by
+        its spelling, is listed as unknown and left alone; --include-unknown re-writes it.
+
         --dry-run lists what would be re-written and writes nothing. A real run is
         audited (roster.secrets.rekeyed): the record is delivered BEFORE the first write,
         and the run refuses, writing nothing, if it cannot be. --no-audit is the
         break-glass: it goes ahead, warns, and prints the record to stderr as JSON.
 
 The credentials are the caller's: ssm:DescribeParameters, ssm:GetParameters and
-ssm:PutParameter on the root, kms:Decrypt on the keys the parameters are under now, and
+ssm:PutParameter on the root, kms:DescribeKey on the keys, kms:Decrypt on the keys the parameters are under now, and
 kms:Encrypt, kms:Decrypt and kms:GenerateDataKey on the new key (see
 RekeyOperatorStatements in the Pulumi library), and sqs:SendMessage on the audit queue.`
 
@@ -65,7 +72,7 @@ func secretsCmd(out io.Writer, args []string) error {
 	if args[0] != "rekey" {
 		return fmt.Errorf("%w: sluis secrets %q: the command is rekey", errUsage, args[0])
 	}
-	var dryRun, asJSON, recent, noAudit bool
+	var dryRun, asJSON, recent, unknown, noAudit bool
 	var by string
 	var remaining []string
 	rest := args[1:]
@@ -81,6 +88,8 @@ func secretsCmd(out io.Writer, args []string) error {
 			asJSON = true
 		case name == "include-recent":
 			recent = true
+		case name == "include-unknown":
+			unknown = true
 		case name == "no-audit":
 			noAudit = true
 		case name == "by":
@@ -101,13 +110,13 @@ func secretsCmd(out io.Writer, args []string) error {
 		}
 	}
 	return start(out, "sluis secrets rekey", "sluis", remaining, func(ctx context.Context, file string) error {
-		return runRekey(ctx, out, file, rekeyFlags{dryRun: dryRun, asJSON: asJSON, recent: recent, noAudit: noAudit, by: by})
+		return runRekey(ctx, out, file, rekeyFlags{dryRun: dryRun, asJSON: asJSON, recent: recent, unknown: unknown, noAudit: noAudit, by: by})
 	})
 }
 
 type rekeyFlags struct {
-	dryRun, asJSON, recent, noAudit bool
-	by                              string
+	dryRun, asJSON, recent, unknown, noAudit bool
+	by                                       string
 }
 
 func runRekey(ctx context.Context, out io.Writer, file string, f rekeyFlags) error {
@@ -129,11 +138,12 @@ func runRekey(ctx context.Context, out io.Writer, file string, f rekeyFlags) err
 	if instance == "" {
 		instance = file
 	}
-	api, err := openRekeySSM(ctx, sec)
+	api, keys, err := openRekeyAWS(ctx, sec)
 	if err != nil {
 		return err
 	}
-	opt := rekey.Options{Root: sec.Root, KeyID: sec.KMSKeyID, DryRun: f.dryRun, IncludeRecent: f.recent}
+	opt := rekey.Options{Root: sec.Root, KeyID: sec.KMSKeyID, DryRun: f.dryRun, IncludeRecent: f.recent,
+		IncludeUnknown: f.unknown, KMS: keys}
 	if sec.Grace != nil {
 		opt.Grace = sec.Grace.D()
 	}
@@ -200,22 +210,30 @@ func rekeyRun(ctx context.Context, out io.Writer, instance string, api rekey.API
 	return err
 }
 
-func openRekeySSM(ctx context.Context, sec *config.Secrets) (rekey.API, error) {
+func openRekeyAWS(ctx context.Context, sec *config.Secrets) (rekey.API, rekey.KMS, error) {
 	var load []func(*awsconfig.LoadOptions) error
 	if sec.Region != "" {
 		load = append(load, awsconfig.WithRegion(sec.Region))
 	}
 	cfg, err := awsconfig.LoadDefaultConfig(ctx, load...)
 	if err != nil {
-		return nil, fmt.Errorf("sluis secrets rekey: load AWS config: %w", err)
+		return nil, nil, fmt.Errorf("sluis secrets rekey: load AWS config: %w", err)
 	}
-	return awsssm.NewFromConfig(cfg, func(o *awsssm.Options) {
+	ssmClient := awsssm.NewFromConfig(cfg, func(o *awsssm.Options) {
 		o.TracerProvider, o.MeterProvider = awsotel.Providers()
 		o.Retryer = awsretry.New()
 		if sec.Endpoint != "" {
 			o.BaseEndpoint = aws.String(sec.Endpoint)
 		}
-	}), nil
+	})
+	kmsClient := kms.NewFromConfig(cfg, func(o *kms.Options) {
+		o.TracerProvider, o.MeterProvider = awsotel.Providers()
+		o.Retryer = awsretry.New()
+		if sec.Endpoint != "" {
+			o.BaseEndpoint = aws.String(sec.Endpoint)
+		}
+	})
+	return ssmClient, kmsClient, nil
 }
 
 // printRekey says what the run found: names, versions and counts.
@@ -231,6 +249,23 @@ func printRekey(w io.Writer, r *rekey.Report, asJSON bool) {
 		mode += " --dry-run (nothing was written)"
 	}
 	_, _ = fmt.Fprintf(w, "\n%s %s -> %s\n  %d SecureString parameters, %d already under the key\n", mode, r.Root, r.KeyID, r.Considered, r.Current)
+	if r.KeyARN != "" {
+		_, _ = fmt.Fprintf(w, "  the key is %s\n", r.KeyARN)
+	}
+	for _, k := range r.Keys {
+		where := "-> " + k.ARN
+		if k.ARN == "" {
+			where = "-> unresolved (" + k.Error + ")"
+		}
+		if k.Reported == "" {
+			k.Reported = "(none reported)"
+		}
+		tag := ""
+		if k.Current {
+			tag = " [the key]"
+		}
+		_, _ = fmt.Fprintf(w, "    %d under %s %s%s\n", k.Count, k.Reported, where, tag)
+	}
 	verb := "to re-write"
 	if !r.DryRun {
 		verb = "selected"
@@ -238,6 +273,9 @@ func printRekey(w io.Writer, r *rekey.Report, asJSON bool) {
 	_, _ = fmt.Fprintf(w, "  %s: %d\n", verb, len(r.Rekey))
 	for _, n := range r.Rekey {
 		_, _ = fmt.Fprintf(w, "    %s\n", n)
+	}
+	for _, n := range r.Unknown {
+		_, _ = fmt.Fprintf(w, "  unknown key (DescribeKey refused; left alone unless --include-unknown): %s\n", n)
 	}
 	for _, n := range r.Deferred {
 		_, _ = fmt.Fprintf(w, "  deferred (changed within the grace window): %s\n", n)
