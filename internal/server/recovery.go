@@ -209,6 +209,9 @@ type PasswordRecovery struct {
 	// Service runs the exchanges. It is set when the console is assembled,
 	// beside the State it keeps them in.
 	Service *srpauth.Service
+	// Check, when set, asks whether the password the hub derives its verifier from
+	// may sit behind one. Nil where the verifier is stored and no password is read.
+	Check func(context.Context) error
 }
 
 var _ Recovery = (*PasswordRecovery)(nil)

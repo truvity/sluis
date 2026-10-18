@@ -1,7 +1,9 @@
 package sluispulumi_test
 
 import (
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -16,6 +18,9 @@ import (
 // The mock's generated password, with the look-alikes swapped as the library
 // does (0 O 1 l I -> x X y Y z).
 const mockedPassword = "AbxXcyYzdEfGhJkMnPqRsTuVwXyZaBcDeFgHjKmN"
+
+// The mock's RandomPassword result, before the look-alikes are swapped.
+const rawPassword = "Ab0Oc1lIdEfGhJkMnPqRsTuVwXyZaBcDeFgHjKmN"
 
 // The mock's generated salt: 32 bytes ("state-secret-state-secret-state!"), unrelated to the password.
 const mockedSalt = "state-secret-state-secret-state!"
@@ -83,8 +88,19 @@ func TestTheSaltIsRandomAndKeptWithThePasswordAndNotDerivedFromIt(t *testing.T) 
 	if prop(salt, "length").NumberValue() != 32 {
 		t.Errorf("salt: %v", salt.Inputs)
 	}
-	if k := prop(salt, "keepers"); !k.HasValue() || !k.IsObject() || !k.ObjectValue()["password"].HasValue() {
-		t.Errorf("the salt is not kept with the password: %v", salt.Inputs)
+	// The keeper is the digest of the password, not the password: it is not copied into
+	// another resource's state.
+	sum := sha256.Sum256([]byte(rawPassword))
+	keeper := prop(salt, "keepers")
+	if !keeper.HasValue() || !keeper.IsObject() || !keeper.ObjectValue()["password"].HasValue() {
+		t.Fatalf("the salt is not kept with the password: %v", salt.Inputs)
+	}
+	got := keeper.ObjectValue()["password"]
+	if got.IsSecret() {
+		got = got.SecretValue().Element
+	}
+	if got.StringValue() != hex.EncodeToString(sum[:]) || strings.Contains(got.StringValue(), rawPassword) {
+		t.Errorf("the keeper is %q, want the SHA-256 of the password", got.StringValue())
 	}
 	b, _ := mustLambda(t, withLayout(arp.LayoutV5))
 	one := prop(a.one(t, ssmParameterType, "staging-recovery-verifier-v5"), "value").SecretValue().Element.StringValue()
