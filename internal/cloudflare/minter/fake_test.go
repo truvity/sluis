@@ -219,7 +219,9 @@ func setupWith(t *testing.T, pause minter.Pause, change func(*config.Cloudflare)
 			if id != acct {
 				return nil, fmt.Errorf("wrong account %s", id)
 			}
+			e.api.mu.Lock()
 			e.api.gotMinter = token
+			e.api.mu.Unlock()
 			return e.api, nil
 		},
 		Audit: e.rec, Now: now, Propagation: -1, Maintenance: pause,
