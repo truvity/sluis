@@ -227,6 +227,12 @@ func TestRestoreArgumentsAreHeldToWhatTheResourcePolicyMayName(t *testing.T) {
 		"an account": func(a *arp.RestoreArgs) {
 			a.RestoreInvokers.AdminRoleArns = []string{arnp + "iam::" + account + ":root"}
 		},
+		"a role wildcard": func(a *arp.RestoreArgs) {
+			a.RestoreInvokers.AdminRoleArns = []string{arnp + "iam::" + account + ":role/*"}
+		},
+		"a role pattern": func(a *arp.RestoreArgs) {
+			a.RestoreInvokers.BreakglassRoleArns = []string{arnp + "iam::" + account + ":role/aws-reserved/sso/AWSReservedSSO_Admin_*"}
+		},
 		"a user":                 func(a *arp.RestoreArgs) { a.RestoreInvokers.BreakglassRoleArns = []string{user} },
 		"one role in both":       func(a *arp.RestoreArgs) { a.RestoreInvokers.BreakglassRoleArns = []string{adminRole} },
 		"the archive is created": func(a *arp.RestoreArgs) { a.Archive.Create = &arp.ArchiveBucketArgs{} },

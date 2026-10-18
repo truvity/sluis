@@ -2,6 +2,7 @@ package sluispulumi_test
 
 import (
 	"slices"
+	"strings"
 	"testing"
 
 	arp "github.com/truvity/sluis/deploy/pulumi"
@@ -53,15 +54,16 @@ func TestKeysSecretsEncryptsTheParametersTheLibraryCreates(t *testing.T) {
 	if got := prop(p, "keyId"); !got.HasValue() || got.StringValue() != "alias/acme-secrets" {
 		t.Errorf("keyId = %v, want alias/acme-secrets", got)
 	}
-	// Without it, and without ParameterKeyArn, nothing changes.
-	rec, _ = mustLambda(t, estate{mutate: noDomain})
-	if prop(rec.one(t, "aws:ssm/parameter:Parameter", "staging-state-secret-internal"), "keyId").HasValue() {
-		t.Error("a key is set although none was given")
-	}
-	// Sign alone does not key the parameters.
-	rec, _ = mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) { noDomain(a); a.Keys = &arp.KeysArgs{Sign: "alias/acme-sign"} }})
-	if prop(rec.one(t, "aws:ssm/parameter:Parameter", "staging-state-secret-internal"), "keyId").HasValue() {
-		t.Error("a key is set from Keys.Sign")
+	// With no key at all, or with Sign alone (which does not key the parameters),
+	// the library refuses: the parameters would be encrypted with the AWS-managed
+	// key, which any role with ssm:GetParameter can decrypt.
+	for name, e := range map[string]estate{
+		"no key":          {noParameterKey: true, mutate: noDomain},
+		"Keys.Sign alone": {noParameterKey: true, mutate: func(a *arp.LambdaArgs) { noDomain(a); a.Keys = &arp.KeysArgs{Sign: "alias/acme-sign"} }},
+	} {
+		if _, _, err := buildLambda(t, e); err == nil || !strings.Contains(err.Error(), "no customer-managed key for the secrets") {
+			t.Errorf("%s: %v, want the refusal", name, err)
+		}
 	}
 }
 

@@ -17,6 +17,24 @@ func (c *Args) checkArchive() error {
 	created := c.created()
 	aws := c.awsStores()
 
+	// The lock of the buckets the library manages is the break-glass roles' alone.
+	managed := 0
+	for i := range c.stores {
+		if c.stores[i].managed() && !c.stores[i].external() {
+			managed++
+		}
+	}
+	switch {
+	case managed > 0 && len(ar.BreakglassRoleArns) == 0:
+		return errors.New("auditpulumi: Archive.BreakglassRoleArns is required: the buckets the library manages deny the bypass of the lock, " +
+			"its configuration and the deletion of versions to every principal but these roles (the break-glass role, and the role that applies the stack)")
+	case managed == 0 && len(ar.BreakglassRoleArns) > 0:
+		return errors.New("auditpulumi: Archive.BreakglassRoleArns is set and the library manages no bucket: it guards the buckets it creates or adopts")
+	}
+	if err := checkKeyAdmins("Archive.BreakglassRoleArns", ar.BreakglassRoleArns); err != nil {
+		return err
+	}
+
 	// Object Lock is the attested preset's bucket alone, and only the library's
 	// own bucket is configured by it.
 	var lockedHere bool

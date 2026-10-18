@@ -208,9 +208,29 @@ type LambdaArgs struct {
 	// into the document by the library.
 	AuditQueueArn pulumi.StringInput
 
+	// CodeSigningConfigArn is an AWS Lambda code signing configuration
+	// (artifact.NewCodeSigningConfig) every function the library creates here is put
+	// under: Lambda then refuses, or warns of (the configuration's policy), a
+	// deployment whose package was not signed by one of its AWS Signer profiles.
+	// Optional. The release zips are not Signer-signed: the library uploads the
+	// release's bytes as they are, so under an ENFORCING configuration the estate
+	// signs the zip with its own profile first (a Signer job that writes the signed
+	// object to the artifacts bucket, which Lambda's S3Key then names) or sets the
+	// configuration to warn. The digest check of the release (Release, PackageSHA256)
+	// is independent of it.
+	CodeSigningConfigArn pulumi.StringInput
+
 	// ParameterKeyArn is the customer-managed key SecureString parameters under
-	// /sluis are encrypted with. Default none: the AWS-managed key, which needs no
-	// grant. With a key, the function may use it through SSM only.
+	// /sluis are encrypted with, by ARN. Required, unless Keys.Secrets names the
+	// key by alias (the two are exclusive): the library refuses to create the
+	// state secret and the recovery password, or to start the functions that
+	// write the installation's credentials, without one. Left to SSM, those
+	// parameters are encrypted with the AWS-managed key `alias/aws/ssm`, which
+	// every role with ssm:GetParameter on them can decrypt (a viewer, an
+	// auditor, a power user), and the key's policy fences none of them. The key
+	// is also the `secrets.kmsKeyId` of every function's document, so that the
+	// parameters the services write (GitHub and Slack apps, Google keys, the
+	// sign-in client) land on it too. The functions use it through SSM only.
 	ParameterKeyArn string
 
 	// Keys are the KMS keys the estate supplies, by alias: the library creates
@@ -239,6 +259,19 @@ type LambdaArgs struct {
 	// Deprecated: see SigningKeyAlias.
 	SigningKeyRS256Alias   string
 	DisableSigningKeyRS256 bool
+
+	// KeyAdmins are the roles that administer the KMS keys the library creates
+	// (the two remote signing keys, or the wrapped signing key): they alone hold
+	// the keys' control plane (KeyControlPlaneActions: the key policy, grants,
+	// disabling and deletion), and every other principal is denied it, however
+	// its IAM policy reads. Role ARNs, a `*` only in the hash of an SSO role's
+	// name (CheckKeyAdmin). Include the role that applies the stack, and the
+	// break-glass role. Required while the library creates a key (Keys nil, and
+	// WrappedSigning without KeyArn); refused with Keys, which supplies the keys
+	// and with them their policies.
+	//
+	// Deprecated: with SigningKeyAlias and the other keys the library creates.
+	KeyAdmins []string
 
 	// WrappedSigning switches token signing to the `kms-wrapped` adapter: ONE
 	// symmetric KMS key, from which the issuer generates and wraps its signing
@@ -998,6 +1031,39 @@ func roleNameOf(arn string) (string, error) {
 // but with WrappedSigning, which replaces them.
 func (a *LambdaArgs) remoteSigning() bool { return a.WrappedSigning == nil && a.Keys == nil }
 
+// requireParameterKey refuses an installation whose SecureStrings would fall
+// back to the AWS-managed key.
+func (a *LambdaArgs) requireParameterKey() error {
+	if parameterKeyID(a) != "" {
+		return nil
+	}
+	return errors.New("sluispulumi: no customer-managed key for the secrets: set LambdaArgs.Keys.Secrets (an alias) or ParameterKeyArn. " +
+		"Without one the state secret, the recovery password and every parameter the services write are encrypted with the AWS-managed key " +
+		"alias/aws/ssm, which any role with ssm:GetParameter can decrypt")
+}
+
+// createsKeys says the library makes a KMS key: the remote signing keys, or the
+// wrapped one (unless WrappedSigning.KeyArn names it).
+func (a *LambdaArgs) createsKeys() bool {
+	return a.Keys == nil && (a.remoteSigning() || a.WrappedSigning.KeyArn == nil)
+}
+
+// validateKeyAdmins holds KeyAdmins to the keys the library creates: some are
+// needed to make them, and none are accepted where it makes none.
+func (a *LambdaArgs) validateKeyAdmins() error {
+	switch {
+	case a.createsKeys():
+		if _, err := keyAdminSet(a.KeyAdmins); err != nil {
+			return fmt.Errorf("LambdaArgs.KeyAdmins: %w (the library creates KMS keys, and a key made without a policy hands its control plane to every IAM principal "+
+				"with a kms:* allow)", err)
+		}
+	case len(a.KeyAdmins) > 0:
+		return errors.New("sluispulumi: LambdaArgs.KeyAdmins is of the keys the library creates, and it creates none: " +
+			"the keys' policies are the estate's (SluisKeyPolicyStatements, KeyAdmins of KeyPolicyArgs)")
+	}
+	return checkKeyAdmins("LambdaArgs.KeyAdmins", a.KeyAdmins)
+}
+
 // checkAdditionalAudiences refuses an additional web identity audience list
 // that is empty-valued, repeats an audience, or sits beside an empty
 // WebIdentityAudience (which means any audience, so listing more makes no sense).
@@ -1054,6 +1120,12 @@ func (a *LambdaArgs) validate() (LambdaArgs, error) {
 	if err := out.Keys.validate(); err != nil {
 		return out, err
 	}
+	if err := out.validateKeyAdmins(); err != nil {
+		return out, err
+	}
+	if err := out.requireParameterKey(); err != nil {
+		return out, err
+	}
 	if out.Keys != nil && out.Keys.Secrets != "" && out.ParameterKeyArn != "" {
 		return out, errors.New("sluispulumi: LambdaArgs.Keys.Secrets and ParameterKeyArn both name the key the secrets are encrypted with: set one")
 	}
@@ -1094,7 +1166,11 @@ func (a *LambdaArgs) validate() (LambdaArgs, error) {
 			out.PackageVersion = v
 		}
 		if out.PackageSHA256 == "" {
-			cp := artifact.Release{ResolveChecksums: true, Version: v, BaseURL: base}
+			cp := artifact.Release{}
+			if out.Release != nil {
+				cp = *out.Release
+			}
+			cp.ResolveChecksums, cp.Version = true, v
 			out.Release = &cp
 		}
 	}
@@ -1344,11 +1420,16 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 	rsArn, rsID, rsAlias := rsEmpty, rsEmpty, rsEmpty
 	var signingArns []pulumi.StringInput
 	if a.remoteSigning() {
+		signPolicy, err := signingKeyPolicy(a.AccountID, a.KeyAdmins)
+		if err != nil {
+			return nil, err
+		}
 		key, err := kms.NewKey(ctx, name+"-signing-key", &kms.KeyArgs{
 			Description:           pulumi.String(name + " token signing: the issuer signs its tokens with it"),
 			KeyUsage:              pulumi.String("SIGN_VERIFY"),
 			CustomerMasterKeySpec: pulumi.String("ECC_NIST_P384"),
 			DeletionWindowInDays:  pulumi.Int(30),
+			Policy:                pulumi.String(signPolicy),
 			Tags:                  tags,
 		}, child, pulumi.Protect(true))
 		if err != nil {
@@ -1368,6 +1449,7 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 				KeyUsage:              pulumi.String("SIGN_VERIFY"),
 				CustomerMasterKeySpec: pulumi.String("RSA_3072"),
 				DeletionWindowInDays:  pulumi.Int(30),
+				Policy:                pulumi.String(signPolicy),
 				Tags:                  tags,
 			}, child, pulumi.Protect(true))
 			if err != nil {
@@ -1408,7 +1490,7 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 		} else {
 			roles := append([]string{arnPrefix + "iam::" + a.AccountID + ":role/" + a.FunctionName},
 				w.AdditionalSigningRoleArns...)
-			policy, err := wrappedKeyPolicy(a.AccountID, roles)
+			policy, err := wrappedKeyPolicy(a.AccountID, roles, a.KeyAdmins)
 			if err != nil {
 				return nil, err
 			}
@@ -1556,6 +1638,9 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 	if r := a.Function.ReservedConcurrency; r != nil {
 		fnArgs.ReservedConcurrentExecutions = pulumi.Int(*r)
 	}
+	if a.CodeSigningConfigArn != nil {
+		fnArgs.CodeSigningConfigArn = codeSigning(a.CodeSigningConfigArn)
+	}
 	if code != nil {
 		fnArgs.S3Bucket, fnArgs.S3Key, fnArgs.S3ObjectVersion = pulumi.String(code.Bucket), pulumi.String(code.Key), code.VersionID
 		fnArgs.SourceCodeHash = pulumi.String(code.CodeSHA256)
@@ -1686,9 +1771,9 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 			Overwrite: pulumi.Bool(true),
 			Tags:      tags,
 		}
-		if k := parameterKeyID(&a); k != "" {
-			pargs.KeyId = pulumi.String(k)
-		}
+		// The key is always set (validate refuses an installation without one): a
+		// SecureString left to SSM is encrypted with the AWS-managed key.
+		pargs.KeyId = pulumi.String(parameterKeyID(&a))
 		return ssm.NewParameter(ctx, logical, pargs, child)
 	}
 	stateValue := pulumi.ToSecret(stateSecret.Base64).(pulumi.StringOutput)
@@ -2106,6 +2191,27 @@ func newLegacyDomain(ctx *pulumi.Context, name string, a *LambdaArgs, api *apiga
 	return domain, bucket, nil
 }
 
+// schedulerTrust is the trust of a scheduler role: EventBridge Scheduler, for the
+// schedules of this account and of this installation only. aws:SourceAccount alone
+// lets any schedule of the account assume the role, whatever it targets; the
+// schedule's ARN (aws:SourceArn, the default group's `schedule/default/<prefix>…`)
+// holds it to the schedules the installation names, so another schedule of the
+// account, with a target of its own, cannot ask the role to invoke it.
+func schedulerTrust(region, account, schedulePrefix string) map[string]any {
+	return map[string]any{
+		"Version": polVersion,
+		"Statement": []map[string]any{{
+			"Effect": "Allow", "Principal": map[string]any{"Service": "scheduler.amazonaws.com"}, "Action": "sts:AssumeRole",
+			"Condition": map[string]any{
+				"StringEquals": map[string]any{"aws:SourceAccount": account},
+				"ArnLike": map[string]any{
+					"aws:SourceArn": arnPrefix + "scheduler:" + region + ":" + account + ":schedule/default/" + schedulePrefix + "*",
+				},
+			},
+		}},
+	}
+}
+
 // newSchedules is the scheduler's role and one schedule per target, one for the
 // directory refresh, one for the Cloudflare rotation and, with the module
 // functions, one for the issuer's clients pass. Each targets the `live` alias of
@@ -2115,13 +2221,7 @@ func newLegacyDomain(ctx *pulumi.Context, name string, a *LambdaArgs, api *apiga
 func newSchedules(ctx *pulumi.Context, name string, a *LambdaArgs, live *lambda.Alias, mods *moduleFunctions,
 	tags pulumi.StringMapInput, opts ...pulumi.ResourceOption) (*iam.Role, pulumi.StringArrayOutput, error) {
 	var none pulumi.StringArrayOutput
-	trust, _ := json.Marshal(map[string]any{
-		"Version": polVersion,
-		"Statement": []map[string]any{{
-			"Effect": "Allow", "Principal": map[string]any{"Service": "scheduler.amazonaws.com"}, "Action": "sts:AssumeRole",
-			"Condition": map[string]any{"StringEquals": map[string]any{"aws:SourceAccount": a.AccountID}},
-		}},
-	})
+	trust, _ := json.Marshal(schedulerTrust(a.Region, a.AccountID, a.FunctionNamePrefix+"-"))
 	rargs := &iam.RoleArgs{Name: pulumi.String(a.FunctionNamePrefix + "-scheduler"), AssumeRolePolicy: pulumi.String(string(trust)), Tags: tags}
 	if a.PermissionsBoundaryArn != "" {
 		rargs.PermissionsBoundary = pulumi.String(a.PermissionsBoundaryArn)

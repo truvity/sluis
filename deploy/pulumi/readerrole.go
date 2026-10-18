@@ -87,6 +87,12 @@ func trustForPrincipal(principal string) (string, error) {
 	if !strings.HasPrefix(principal, arnPrefix+"iam::") || strings.ContainsAny(principal, "*?") {
 		return "", fmt.Errorf("sluispulumi: ExternalReaderRoleArgs.TrustPrincipalArn needs an exact IAM ARN, got %q", principal)
 	}
+	// The account's root is an exact ARN and the widest principal there is: every
+	// identity of the account that its own IAM policies let assume the role would.
+	if rest := strings.TrimPrefix(principal, arnPrefix+"iam::"); !strings.Contains(rest, ":role/") && !strings.Contains(rest, ":user/") {
+		return "", fmt.Errorf("sluispulumi: ExternalReaderRoleArgs.TrustPrincipalArn %q is not one role or one user: "+
+			"the account's root would let every identity of the account assume the role", principal)
+	}
 	raw, err := json.Marshal(map[string]any{"Version": polVersion, "Statement": []map[string]any{{
 		"Effect": "Allow", "Principal": map[string]any{"AWS": principal}, "Action": "sts:AssumeRole",
 	}}})

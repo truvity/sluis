@@ -119,6 +119,11 @@ func (a *LambdaArgs) validateModules() error {
 			return fmt.Errorf("sluispulumi: LambdaArgs.Modules names %q, which is not a module function (%s)", k, strings.Join(ModuleFunctions(), ", "))
 		}
 		m := a.Modules[k]
+		if m.Document != "" {
+			if err := checkModuleDocumentKey(k, m.Document, parameterKeyID(a)); err != nil {
+				return err
+			}
+		}
 		if m.FunctionName != "" && !functionNamePattern.MatchString(m.FunctionName) {
 			return fmt.Errorf("sluispulumi: LambdaArgs.Modules[%s].FunctionName %q is letters, digits, - and _, at most 64", k, m.FunctionName)
 		}
@@ -368,9 +373,10 @@ func newModuleFunctions(
 			DocumentVersion: moduleDocumentVersion(p.role),
 			MemoryMB:        p.memory, TimeoutSeconds: p.time, ReservedConcurrency: p.reserved,
 			LogRetentionDays: a.LogRetentionDays, PermissionsBoundaryArn: a.PermissionsBoundaryArn, Tags: a.Tags,
-			Callers:   callers,
-			Policy:    a.modulePolicy(p.role, roles, secretsKey),
-			Telemetry: a.Telemetry,
+			Callers:              callers,
+			CodeSigningConfigArn: a.CodeSigningConfigArn,
+			Policy:               a.modulePolicy(p.role, roles, secretsKey),
+			Telemetry:            a.Telemetry,
 			// The audit writer is updated before the function.
 			FunctionDependsOn: writerFirst,
 		}

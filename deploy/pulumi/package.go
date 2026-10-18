@@ -89,7 +89,7 @@ func loadPackage(src, sha, version string, rel *ReleaseArgs) (*releasePackage, e
 			v = version
 		}
 		var err error
-		if sha, err = artifact.ResolveSHA256(rel.BaseURL, v, fileName(src)); err != nil {
+		if sha, err = artifact.ResolveSHA256(rel, v, fileName(src)); err != nil {
 			return nil, fmt.Errorf("sluispulumi: PackageSHA256: %w", err)
 		}
 	}
@@ -179,3 +179,11 @@ const libraryModule = "github.com/truvity/sluis/deploy/pulumi"
 
 // readBuildInfo is where the library reads its own release; a test replaces it.
 var readBuildInfo = debug.ReadBuildInfo
+
+// codeSigning is an optional Lambda code signing configuration for a function.
+func codeSigning(arn pulumi.StringInput) pulumi.StringPtrInput {
+	if arn == nil {
+		return nil
+	}
+	return arn.ToStringOutput().ApplyT(func(s string) *string { return &s }).(pulumi.StringPtrOutput)
+}

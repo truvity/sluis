@@ -652,6 +652,39 @@ func ownLayoutV5(doc map[string]any, a *LambdaArgs) error {
 	return nil
 }
 
+// checkModuleDocumentKey holds a module function's document, written by the
+// estate, to the installation's key: the parameters a service writes (GitHub and
+// Slack apps, Google keys) are encrypted with the document's
+// `secrets.kmsKeyId` (or the ssm secrets adapter's), and left unset that is the
+// AWS-managed key, which every role with ssm:GetParameter can decrypt. A document
+// the library renders from an installation carries the key; one the estate
+// writes must name the same.
+func checkModuleDocumentKey(role, document, key string) error {
+	field := "Modules[" + role + "].Document"
+	doc, err := yamlMap(document, field)
+	if err != nil {
+		return err
+	}
+	got := ""
+	if s, ok := doc["secrets"].(map[string]any); ok {
+		got, _ = s["kmsKeyId"].(string)
+	}
+	if adapters, ok := doc["adapters"].(map[string]any); ok {
+		if s, ok := adapters["secrets"].(map[string]any); ok {
+			if st, ok := s["settings"].(map[string]any); ok {
+				if v, _ := st["kmsKeyId"].(string); v != "" {
+					got = v
+				}
+			}
+		}
+	}
+	if got != key {
+		return fmt.Errorf("sluispulumi: LambdaArgs.%s names the secrets key %q and the installation's is %q: set `secrets.kmsKeyId: %s` in the document, "+
+			"or the parameters the %s function writes are encrypted with the AWS-managed key", field, got, key, key, role)
+	}
+	return nil
+}
+
 // ownSecretsAdapterKey refuses an `adapters.secrets` ssm adapter that names a
 // key other than the library's; the same value, or none, is accepted.
 func ownSecretsAdapterKey(doc map[string]any, key string) error {

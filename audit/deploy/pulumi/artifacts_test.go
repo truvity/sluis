@@ -236,7 +236,7 @@ func zipFiles(t *testing.T) map[string][]byte {
 
 func resolving(base string, version string) func(*auditpulumi.Args) {
 	return func(a *auditpulumi.Args) {
-		a.Release = &auditpulumi.ReleaseArgs{ResolveChecksums: true, BaseURL: base, Version: version}
+		a.Release = &auditpulumi.ReleaseArgs{ResolveChecksums: true, UnverifiedChecksums: true, BaseURL: base, Version: version}
 		a.Writer.Package = base + "/v" + releaseVersion + "/audit-writer-lambda_" + releaseVersion + "_linux_arm64.zip"
 		a.Notary.Package = base + "/v" + releaseVersion + "/audit-notary-lambda_" + releaseVersion + "_linux_arm64.zip"
 		a.Writer.PackageSHA256, a.Notary.PackageSHA256 = "", ""
@@ -248,6 +248,20 @@ func TestADigestLeftEmptyIsReadFromTheReleasesChecksums(t *testing.T) {
 	base := release(t, releaseVersion, zipFiles(t), nil)
 	if _, _, err := build(t, resolving(base, "")); err != nil {
 		t.Fatalf("digests from checksums.txt: %v", err)
+	}
+}
+
+// checksums.txt is the release's word for itself unless its Sigstore bundle
+// verifies: with no bundle beside it the digests are refused.
+func TestDigestsFromTheChecksumsNeedTheirSignature(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	base := release(t, releaseVersion, zipFiles(t), nil)
+	_, _, err := build(t, func(a *auditpulumi.Args) {
+		resolving(base, "")(a)
+		a.Release.UnverifiedChecksums = false
+	})
+	if err == nil || !strings.Contains(err.Error(), "checksums.txt.sigstore.json") {
+		t.Errorf("a release with no bundle: %v", err)
 	}
 }
 
@@ -337,7 +351,7 @@ func depAt(version string) *debug.BuildInfo {
 }
 
 func ownRelease(a *auditpulumi.Args, base string) {
-	a.Release = &auditpulumi.ReleaseArgs{BaseURL: base}
+	a.Release = &auditpulumi.ReleaseArgs{BaseURL: base, UnverifiedChecksums: true}
 	a.Writer.Package, a.Notary.Package = "", ""
 	a.Writer.PackageSHA256, a.Notary.PackageSHA256 = "", ""
 }

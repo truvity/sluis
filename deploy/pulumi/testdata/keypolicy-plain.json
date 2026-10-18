@@ -377,6 +377,53 @@
     },
     {
       "Action": [
+        "kms:CreateGrant",
+        "kms:DisableKey",
+        "kms:PutKeyPolicy",
+        "kms:RevokeGrant",
+        "kms:ScheduleKeyDeletion"
+      ],
+      "Condition": {
+        "ArnLike": {
+          "aws:PrincipalArn": [
+            "arn:aws:iam::111122223333:role/key-admin"
+          ]
+        }
+      },
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "arn:aws:iam::111122223333:root"
+      },
+      "Resource": "*",
+      "Sid": "SluisKeyControlPlaneAdmins"
+    },
+    {
+      "Action": [
+        "kms:CreateGrant",
+        "kms:DisableKey",
+        "kms:PutKeyPolicy",
+        "kms:RevokeGrant",
+        "kms:ScheduleKeyDeletion"
+      ],
+      "Condition": {
+        "ArnNotLike": {
+          "aws:PrincipalArn": [
+            "arn:aws:iam::111122223333:role/key-admin"
+          ]
+        },
+        "Bool": {
+          "aws:PrincipalIsAWSService": "false"
+        }
+      },
+      "Effect": "Deny",
+      "Principal": {
+        "AWS": "*"
+      },
+      "Resource": "*",
+      "Sid": "SluisKeyControlPlaneAdminsOnly"
+    },
+    {
+      "Action": [
         "kms:Encrypt",
         "kms:Decrypt",
         "kms:GenerateDataKey"

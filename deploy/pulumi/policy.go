@@ -233,11 +233,47 @@ func wrappedSigningStatement(keyArn string) statement {
 //
 // The roles are named by an ArnEquals on aws:PrincipalArn and not as principals,
 // so the key can be created before the roles exist.
-func wrappedKeyPolicy(account string, signingRoleArns []string) (string, error) {
-	return document(append([]statement{{
-		"Sid": "EnableIAMPolicies", "Effect": "Allow", "Resource": "*", "Action": "kms:*",
+//
+// The account's root enables IAM for the use of the key and for its upkeep, and
+// not for its control plane (KeyControlPlaneStatements): the policy, grants,
+// disabling and deletion are the administrators' alone, denied to every other
+// principal. That the key's policy was "kms:*" for the root meant any role with
+// a kms:* allow could rewrite it and unwrap the signing keys.
+func wrappedKeyPolicy(account string, signingRoleArns, admins []string) (string, error) {
+	cp, err := KeyControlPlaneStatements(account, admins)
+	if err != nil {
+		return "", err
+	}
+	st := append([]statement{enableIAMStatement(account, wrappedKeyDataActions)}, cp...)
+	return document(append(st, WrappedKeyPolicyStatements(signingRoleArns)...))
+}
+
+// The calls the account root delegates to IAM for the library's own keys: the
+// use of the key (the roles' policies and the denials say who), beside the
+// upkeep of keyAdministerActions.
+var (
+	wrappedKeyDataActions = []string{"kms:Decrypt", "kms:Encrypt", "kms:GenerateDataKey*", "kms:ReEncrypt*"}
+	signKeyDataActions    = []string{"kms:Sign", "kms:Verify"}
+)
+
+// enableIAMStatement is the root statement of a key the library creates: IAM
+// governs the use and the upkeep, and the control plane is the next statements'.
+func enableIAMStatement(account string, use []string) statement {
+	acts := append(append([]string(nil), keyAdministerActions...), use...)
+	sort.Strings(acts)
+	return statement{
+		"Sid": "EnableIAMPolicies", "Effect": "Allow", "Resource": "*", "Action": acts,
 		"Principal": map[string]any{"AWS": arnPrefix + "iam::" + account + ":root"},
-	}}, WrappedKeyPolicyStatements(signingRoleArns)...))
+	}
+}
+
+// signingKeyPolicy is the key policy of a remote signing key the library creates.
+func signingKeyPolicy(account string, admins []string) (string, error) {
+	cp, err := KeyControlPlaneStatements(account, admins)
+	if err != nil {
+		return "", err
+	}
+	return document(append([]statement{enableIAMStatement(account, signKeyDataActions)}, cp...))
 }
 
 // WrappedKeyPolicyStatements are the statements a wrapped signing key's policy

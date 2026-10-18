@@ -166,7 +166,7 @@ func releaseServer(t *testing.T, listed string, hits *int) (base, digest string)
 func resolve(base, version string) func(*arp.LambdaArgs) {
 	return func(a *arp.LambdaArgs) {
 		a.Package, a.PackageSHA256 = base+"/v1.63.0/"+zipName, ""
-		a.Release = &arp.ReleaseArgs{ResolveChecksums: true, BaseURL: base, Version: version}
+		a.Release = &arp.ReleaseArgs{ResolveChecksums: true, UnverifiedChecksums: true, BaseURL: base, Version: version}
 	}
 }
 
@@ -175,6 +175,30 @@ func TestADigestLeftEmptyIsReadFromTheReleasesChecksums(t *testing.T) {
 	base, _ := releaseServer(t, "", nil)
 	if _, _, err := buildLambda(t, estate{pkg: base + "/v1.63.0/" + zipName, mutate: resolve(base, "")}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// checksums.txt is the release's word for itself unless its Sigstore bundle
+// verifies: a digest read from it without the bundle, or with one that is none,
+// is refused, and only UnverifiedChecksums reads the file as it is.
+func TestADigestFromTheChecksumsNeedsTheirSignature(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	base, _ := releaseServer(t, "", nil)
+	signed := func(a *arp.LambdaArgs) {
+		resolve(base, "")(a)
+		a.Release.UnverifiedChecksums = false
+	}
+	_, _, err := buildLambda(t, estate{pkg: base + "/v1.63.0/" + zipName, mutate: signed})
+	if err == nil || !strings.Contains(err.Error(), "checksums.txt.sigstore.json") {
+		t.Errorf("a release with no bundle: %v", err)
+	}
+	// The same through the library's own release (no Package named).
+	t.Cleanup(arp.SetBuildInfo(depAt("v1.63.0")))
+	_, _, err = buildLambda(t, estate{pkg: "x", mutate: func(a *arp.LambdaArgs) {
+		a.Package, a.PackageSHA256, a.Release = "", "", &arp.ReleaseArgs{BaseURL: base}
+	}})
+	if err == nil || !strings.Contains(err.Error(), "checksums.txt.sigstore.json") {
+		t.Errorf("the library's own release with no bundle: %v", err)
 	}
 }
 
@@ -229,7 +253,7 @@ func depAt(v string) *debug.BuildInfo {
 func own(base string) func(*arp.LambdaArgs) {
 	return func(a *arp.LambdaArgs) {
 		a.Package, a.PackageSHA256 = "", ""
-		a.Release = &arp.ReleaseArgs{BaseURL: base}
+		a.Release = &arp.ReleaseArgs{BaseURL: base, UnverifiedChecksums: true}
 	}
 }
 

@@ -47,6 +47,10 @@ type ModuleFunctionArgs struct {
 	// uploaded by Pulumi as assets.
 	Artifacts *ArtifactsArgs
 
+	// CodeSigningConfigArn puts the function under a Lambda code signing
+	// configuration (LambdaArgs.CodeSigningConfigArn). Optional.
+	CodeSigningConfigArn pulumi.StringInput
+
 	// Documents are the configuration layer's files, by name without the
 	// extension; they are written to `sluis/<name>.yaml`. The one named
 	// [docSluis] is the function's SLUIS_CONFIG. Required.
@@ -228,6 +232,9 @@ func newModuleFunction(ctx *pulumi.Context, a *ModuleFunctionArgs, parent pulumi
 	}
 	if a.ReservedConcurrency != nil {
 		fnArgs.ReservedConcurrentExecutions = pulumi.Int(*a.ReservedConcurrency)
+	}
+	if a.CodeSigningConfigArn != nil {
+		fnArgs.CodeSigningConfigArn = codeSigning(a.CodeSigningConfigArn)
 	}
 	if code != nil {
 		fnArgs.S3Bucket, fnArgs.S3Key, fnArgs.S3ObjectVersion = pulumi.String(code.Bucket), pulumi.String(code.Key), code.VersionID

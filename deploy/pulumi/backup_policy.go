@@ -172,6 +172,35 @@ func ArchiveBucketPolicyStatements(g ArchiveGrant, backupRoleArn, restoreRoleArn
 	return out, nil
 }
 
+// ArchiveGuardActions are what only the break-glass roles may do to the archive
+// bucket's lock: shorten a governance retention, change or remove the lock
+// configuration, and delete a version (a locked version is not deleted until its
+// retention ends, and an unlocked one is the backup, gone for good).
+var ArchiveGuardActions = []string{"s3:BypassGovernanceRetention", "s3:DeleteObjectVersion", "s3:PutBucketObjectLockConfiguration"}
+
+// ArchiveBucketGuardStatement is the bucket-policy statement that keeps the
+// archive's lock to the break-glass roles: a Deny of ArchiveGuardActions on the
+// bucket and its objects to every principal not matched by breakglass. A role
+// with a broad S3 allow (a power user, a StackSet or automation role) can then
+// neither shorten the lock nor delete a backup's version. The backup and restore
+// roles do not use these actions: the prune deletes the object (a delete marker)
+// and the lifecycle expires the versions, which no principal's policy governs.
+// breakglass are role ARNs (CheckKeyAdmin), at least one.
+func ArchiveBucketGuardStatement(bucketArn string, breakglass []string) (map[string]any, error) {
+	if bucketArn == "" {
+		return nil, errors.New("sluispulumi: ArchiveBucketGuardStatement: the bucket's ARN is required")
+	}
+	exempt, err := keyAdminSet(breakglass)
+	if err != nil {
+		return nil, fmt.Errorf("sluispulumi: the archive bucket's guard: %w", err)
+	}
+	return statement{
+		"Sid": "SluisArchiveLockBreakglassOnly", "Effect": "Deny", "Principal": "*",
+		"Action": append([]string(nil), ArchiveGuardActions...), "Resource": []string{bucketArn, bucketArn + "/*"},
+		"Condition": map[string]any{"ArnNotLike": map[string]any{condPrincipalArn: exempt}},
+	}, nil
+}
+
 // RestoreRoleStatements is the statement list of the restore function's role:
 // the module pattern for the role [RoleRestore] (its own table, which holds
 // `rec.backup.restore.*` and `lease.restore:*`, and the write-all cross-grant on

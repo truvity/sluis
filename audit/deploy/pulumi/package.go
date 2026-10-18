@@ -71,10 +71,11 @@ func loadPackage(field, src, sha, cmd string, rel *artifact.Release) (*releasePa
 		}
 		src = artifact.AssetURL(baseOf(rel), v, cmd+"_"+v+"_linux_arm64.zip")
 		if sha == "" {
-			cp := artifact.Release{ResolveChecksums: true, Version: v}
+			cp := artifact.Release{}
 			if rel != nil {
-				cp.BaseURL = rel.BaseURL
+				cp = *rel
 			}
+			cp.ResolveChecksums, cp.Version = true, v
 			rel = &cp
 		}
 	}
@@ -84,7 +85,7 @@ func loadPackage(field, src, sha, cmd string, rel *artifact.Release) (*releasePa
 			version = versionFromName(src, cmd)
 		}
 		var err error
-		if sha, err = artifact.ResolveSHA256(rel.BaseURL, version, fileName(src)); err != nil {
+		if sha, err = artifact.ResolveSHA256(rel, version, fileName(src)); err != nil {
 			return nil, fmt.Errorf("auditpulumi: %s.PackageSHA256: %w", field, err)
 		}
 	}

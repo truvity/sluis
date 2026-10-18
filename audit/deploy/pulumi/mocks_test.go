@@ -252,12 +252,26 @@ func buildArchived(t *testing.T, archived map[string]string, edit func(*auditpul
 			IssuerURL:         "https://access.example.test",
 			OTLPEndpoint:      "https://otlp.example.test",
 		},
-		Ingest:  auditpulumi.IngestArgs{Senders: []pulumi.StringInput{pulumi.String(arnp + "iam::" + account + ":role/app/receiver")}},
-		Alerts:  auditpulumi.AlertsArgs{EndpointURL: pulumi.String("https://alerts.example.test/sns")},
-		Observe: &auditpulumi.ObserveArgs{TrustedPrincipalArn: pulumi.String(arnp + "iam::" + otherAccount + ":role/kernel/audit-observe")},
+		Ingest: auditpulumi.IngestArgs{Senders: []pulumi.StringInput{pulumi.String(arnp + "iam::" + account + ":role/app/receiver")}},
+		Alerts: auditpulumi.AlertsArgs{EndpointURL: pulumi.String("https://alerts.example.test/sns")},
+		Observe: &auditpulumi.ObserveArgs{
+			TrustedPrincipalArn: pulumi.String(arnp + "iam::" + otherAccount + ":role/kernel/audit-observe"),
+			ExternalID:          "observe-example",
+		},
+		// The lock of the buckets the library creates is the break-glass role's alone.
+		Archive: auditpulumi.ArchiveArgs{BreakglassRoleArns: []string{arnp + "iam::" + account + ":role/breakglass"}},
 	}
 	if edit != nil {
 		edit(args)
+	}
+	// The break-glass roles guard the buckets the library manages; with none (every
+	// preset at an endpoint, or only named) there is nothing to guard.
+	managed := false
+	for _, p := range args.Presets {
+		managed = managed || p.Create || p.Adopt
+	}
+	if !managed {
+		args.Archive.BreakglassRoleArns = nil
 	}
 	rec := &recorder{archived: archived}
 	if mockSetup != nil {

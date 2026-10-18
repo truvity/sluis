@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"sort"
 
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/kms"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
@@ -25,9 +26,17 @@ type DigestKeyArgs struct {
 	// creation only: a change forces a replacement of the key, so an estate that
 	// has the key passes the text it has.
 	Description string
-	// BackupAccountID is the 12-digit account whose root administers the key
-	// (`kms:*`). The key policy names it and nobody else. Required.
+	// BackupAccountID is the 12-digit account whose root enables IAM for the key's
+	// use (Sign, Verify) and upkeep. The key policy names it and nobody else.
+	// Required.
 	BackupAccountID string
+	// KeyAdmins are the roles that hold the key's CONTROL PLANE: its policy,
+	// grants, disabling and deletion (KeyControlPlaneActions). Every other
+	// principal is denied those, the account's root included, so a role with a
+	// kms:* allow cannot rewrite the policy to sign a chain of its own. Role ARNs
+	// of the backup account (a `*` only in the hash of an SSO role's name, see
+	// CheckKeyAdmin); the role that applies the stack is one. Required.
+	KeyAdmins []string
 
 	// AliasName is the alias's physical name, `alias/<name>`. Default
 	// `alias/<name>` of the name DigestKey is called with.
@@ -94,7 +103,10 @@ func NewDigestKey(ctx *pulumi.Context, name string, args *DigestKeyArgs, opts ..
 	}
 	kopts = append(kopts, args.KeyOptions...)
 
-	policy := DigestKeyPolicy(args.BackupAccountID)
+	policy, err := DigestKeyPolicy(args.BackupAccountID, args.KeyAdmins)
+	if err != nil {
+		return nil, err
+	}
 	key, err := kms.NewKey(ctx, keyName, &kms.KeyArgs{
 		Description:           pulumi.String(args.Description),
 		CustomerMasterKeySpec: pulumi.String("ECC_NIST_P256"), //nolint:staticcheck // the field the existing state has
@@ -131,24 +143,34 @@ func orDefault(v, d string) string {
 }
 
 // DigestKeyPolicy is the digest signing key's policy: the backup account's root
-// administers the key (`kms:*`) and no other principal is named. The digest and
-// verify roles are not in it: KMS refuses a policy that names a principal that
-// does not exist, and the chain stays verifiable by the key's public half, which
-// the estate exports.
-func DigestKeyPolicy(backupAccountID string) string {
-	doc := map[string]any{
-		"Version": "2012-10-17",
-		"Statement": []map[string]any{{
-			"Sid":       "BackupAccountKeyAdmin",
-			"Effect":    "Allow",
-			"Principal": map[string]any{"AWS": "arn:" + "aws:iam::" + backupAccountID + ":root"},
-			"Action":    "kms:*",
-			"Resource":  "*",
-		}},
+// enables IAM for the key's use (kms:Sign and kms:Verify, which the digest and
+// verify roles are granted in their own policies) and its upkeep, and no other
+// principal is named. The key's control plane (KeyControlPlaneActions) is the
+// administrators' alone: the root allows it to them, and a Deny takes it from
+// everyone else. The digest and verify roles are not in it: KMS refuses a policy
+// that names a principal that does not exist, and the chain stays verifiable by
+// the key's public half, which the estate exports.
+//
+// Before this policy the root held `kms:*`, so a role with that allow could
+// rewrite the policy and sign a chain of its own.
+func DigestKeyPolicy(backupAccountID string, admins []string) (string, error) {
+	if !accountIDRE.MatchString(backupAccountID) {
+		return "", fmt.Errorf("auditpulumi: DigestKeyPolicy: %q must be a 12-digit account id", backupAccountID)
 	}
-	out, err := json.MarshalIndent(doc, "", "  ")
+	exempt, err := keyAdminSet("DigestKeyArgs.KeyAdmins", admins)
 	if err != nil {
-		panic(err) // maps of strings
+		return "", err
 	}
-	return string(out)
+	root := "arn:" + "aws:iam::" + backupAccountID + ":root"
+	use := append(append([]string(nil), keyAdministerActions...), "kms:Sign", "kms:Verify")
+	sort.Strings(use)
+	st := append([]statement{{
+		"Sid": "BackupAccountKeyAdmin", "Effect": "Allow", "Principal": map[string]any{"AWS": root},
+		"Action": use, "Resource": "*",
+	}}, controlPlane(root, exempt)...)
+	out, err := json.MarshalIndent(map[string]any{"Version": "2012-10-17", "Statement": st}, "", "  ")
+	if err != nil {
+		return "", err // maps of strings
+	}
+	return string(out), nil
 }

@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -211,20 +212,70 @@ func TestTheLibraryCreatesNoKeyAndLooksUpTheEstatesByAlias(t *testing.T) {
 	}
 }
 
-// SealKeyPolicy is what the estate puts on the seal key: the account's root
-// administers it and cannot sign, and only the notary's role signs.
+// SealKeyPolicy is what the estate puts on the seal key: the account's root keeps
+// the key's upkeep and cannot sign, only the notary's role signs, and the key's
+// control plane (the policy, grants, disabling, deletion) is the administrators'
+// alone: a role with a kms:* allow cannot rewrite the policy to sign with the key.
 func TestTheSealKeyPolicyKeepsTheAccountRootOutOfSign(t *testing.T) {
 	notary := arnp + "iam::" + account + ":role/audit/audit-notary"
-	pol := auditpulumi.SealKeyPolicy(arnp+"iam::"+account+":root", notary)
+	root := arnp + "iam::" + account + ":root"
+	admins := []string{arnp + "iam::" + account + ":role/key-admin", arnp + "iam::" + account + ":role/breakglass"}
+	pol, err := auditpulumi.SealKeyPolicy(root, notary, admins)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !strings.Contains(pol, notary) {
 		t.Errorf("the seal key's policy does not name the notary's role: %s", pol)
 	}
+	control := []string{"kms:CreateGrant", "kms:DisableKey", "kms:PutKeyPolicy", "kms:RevokeGrant", "kms:ScheduleKeyDeletion"}
+	by := map[string]map[string]any{}
 	for _, s := range policyOf(t, pol) {
+		by[s["Sid"].(string)] = s
+		if s["Effect"] != "Allow" {
+			continue
+		}
 		principal := s["Principal"].(map[string]any)["AWS"].(string)
 		for _, a := range strs(s["Action"]) {
 			if strings.HasSuffix(principal, ":root") && (a == "kms:Sign" || a == "kms:*" || a == "kms:Decrypt") {
 				t.Errorf("the account root may %s with the seal key", a)
 			}
+			// Only the control plane's own allow (narrowed to the administrators) grants those.
+			if slices.Contains(control, a) && s["Sid"] != "AdministerTheKey" {
+				t.Errorf("%v allows %s", s["Sid"], a)
+			}
+			if s["Sid"] != "AdministerTheKey" && (strings.HasPrefix(a, "kms:Create") && a != "kms:CreateAlias" || strings.HasPrefix(a, "kms:Put")) {
+				t.Errorf("%v allows %s wholesale", s["Sid"], a)
+			}
+		}
+	}
+	deny := by["ControlPlaneAdminsOnly"]
+	if deny == nil || deny["Effect"] != "Deny" || !slices.Equal(strs(deny["Action"]), control) {
+		t.Fatalf("the control plane's deny: %v", deny)
+	}
+	wantAdmins := []any{admins[1], admins[0]} // sorted
+	if got := deny["Condition"].(map[string]any)["ArnNotLike"]; !reflect.DeepEqual(got, map[string]any{"aws:PrincipalArn": wantAdmins}) {
+		t.Errorf("deny but for %v", got)
+	}
+	if allow := by["AdministerTheKey"]; allow == nil ||
+		!reflect.DeepEqual(allow["Condition"], map[string]any{"ArnLike": map[string]any{"aws:PrincipalArn": wantAdmins}}) {
+		t.Errorf("the administrators' allow: %v", allow)
+	}
+	// kms:Sign is the notary's: a deny to everyone else, the administrators too.
+	nosign := by["NoSealButTheNotary"]
+	if nosign == nil || nosign["Effect"] != "Deny" || nosign["Action"] != "kms:Sign" ||
+		!reflect.DeepEqual(nosign["Condition"], map[string]any{"ArnNotEquals": map[string]any{"aws:PrincipalArn": notary}}) {
+		t.Errorf("the deny of kms:Sign: %v", nosign)
+	}
+	// The notary statement is what it was.
+	if n := by["SealWithTheNotaryOnly"]; n == nil || !slices.Equal(strs(n["Action"]), []string{"kms:Sign", "kms:GetPublicKey", "kms:DescribeKey"}) {
+		t.Errorf("the notary's statement: %v", n)
+	}
+	// No administrator, no policy: the key could not be changed again.
+	for name, bad := range map[string][]string{
+		"none": nil, "the root": {root}, "every role": {arnp + "iam::" + account + ":role/*"}, "a star": {"*"},
+	} {
+		if _, err := auditpulumi.SealKeyPolicy(root, notary, bad); err == nil {
+			t.Errorf("%s: a policy was rendered", name)
 		}
 	}
 }
