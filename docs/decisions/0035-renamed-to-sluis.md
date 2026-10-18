@@ -161,3 +161,13 @@ The configuration directory had already moved the same way. The "Renaming them
 would sign every person out" objection is met by the fallback and by keeping
 the client a session was minted for. The `accessctl` alias binary is removed
 by the D301 a update above.
+
+## Update 2026-10-18: the old name is retired
+
+The old `access-roster` packages are retired and deleted from GitHub Packages:
+the containers `ghcr.io/truvity/access-roster/{access-issuer,github-roster,slack-roster,resource-proxy,access-roster}`,
+the chart `charts/access-roster` (`oci://ghcr.io/truvity/charts/access-roster`)
+and the npm package `@truvity/access-roster`. The second publish under the old
+npm name is removed from `release.yaml`, so nothing publishes under the old
+names any more. The images and chart are published as `ghcr.io/truvity/sluis/*`
+and `oci://ghcr.io/truvity/charts/sluis`, and the package as `@truvity/sluis`.
