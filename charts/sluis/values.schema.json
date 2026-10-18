@@ -3886,8 +3886,8 @@
           "description": "The Strict-Transport-Security header the issuer and the console send on a response that arrived over https. Never `preload`; never sent over http or to a loopback host.",
           "properties": {
             "includeSubDomains": {
-              "default": true,
-              "description": "Extend the rule to the host's subdomains. Every subdomain must then answer https.",
+              "default": false,
+              "description": "Extend the rule to the host's subdomains. Off by default: an issuer on an apex or parent domain would pin every sibling subdomain to https for `maxAge`. Turn it on only when every subdomain answers https.",
               "type": "boolean"
             },
             "maxAge": {

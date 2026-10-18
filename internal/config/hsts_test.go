@@ -15,17 +15,17 @@ func TestHSTSDefaultsAndOverrides(t *testing.T) {
 		v := config.Duration(d)
 		return &v
 	}
-	off := false
+	on := true
 
 	for name, c := range map[string]struct {
 		section *config.HSTS
 		want    httpsec.HSTS
 		wantErr bool
 	}{
-		"absent":    {nil, httpsec.HSTS{MaxAge: 8760 * time.Hour, IncludeSubDomains: true, PublicURL: "https://x.example"}, false},
-		"empty":     {&config.HSTS{}, httpsec.HSTS{MaxAge: 8760 * time.Hour, IncludeSubDomains: true, PublicURL: "https://x.example"}, false},
-		"overrides": {&config.HSTS{MaxAge: age(time.Hour), IncludeSubDomains: &off}, httpsec.HSTS{MaxAge: time.Hour, PublicURL: "https://x.example"}, false},
-		"off":       {&config.HSTS{MaxAge: age(0)}, httpsec.HSTS{IncludeSubDomains: true, PublicURL: "https://x.example"}, false},
+		"absent":    {nil, httpsec.HSTS{MaxAge: 8760 * time.Hour, PublicURL: "https://x.example"}, false},
+		"empty":     {&config.HSTS{}, httpsec.HSTS{MaxAge: 8760 * time.Hour, PublicURL: "https://x.example"}, false},
+		"overrides": {&config.HSTS{MaxAge: age(time.Hour), IncludeSubDomains: &on}, httpsec.HSTS{MaxAge: time.Hour, IncludeSubDomains: true, PublicURL: "https://x.example"}, false},
+		"off":       {&config.HSTS{MaxAge: age(0)}, httpsec.HSTS{PublicURL: "https://x.example"}, false},
 		"negative":  {&config.HSTS{MaxAge: age(-time.Hour)}, httpsec.HSTS{}, true},
 		"fraction":  {&config.HSTS{MaxAge: age(1500 * time.Millisecond)}, httpsec.HSTS{}, true},
 	} {
