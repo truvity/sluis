@@ -7,7 +7,7 @@ import (
 	"github.com/truvity/sluis/internal/config"
 )
 
-// The issuer's Strict-Transport-Security is a year with subdomains unless the
+// The issuer's Strict-Transport-Security is a year for the host alone unless the
 // document says otherwise, and is published at the issuer's URL; a max-age
 // that cannot be sent is refused at load.
 func TestHSTSComesFromTheDocument(t *testing.T) {
@@ -16,19 +16,19 @@ func TestHSTSComesFromTheDocument(t *testing.T) {
 		t.Fatalf("load: %v", err)
 	}
 
-	if cfg.hsts.MaxAge != 365*24*time.Hour || !cfg.hsts.IncludeSubDomains || cfg.hsts.PublicURL != "https://access.example" {
+	if cfg.hsts.MaxAge != 365*24*time.Hour || cfg.hsts.IncludeSubDomains || cfg.hsts.PublicURL != "https://access.example" {
 		t.Errorf("hsts = %+v", cfg.hsts)
 	}
 
 	cfg, err = FromConfig(withPolicy(t, &config.Serve{
 		IssuerURL: "https://access.example",
-		HSTS:      &config.HSTS{MaxAge: ptr(config.Duration(time.Hour)), IncludeSubDomains: ptr(false)},
+		HSTS:      &config.HSTS{MaxAge: ptr(config.Duration(time.Hour)), IncludeSubDomains: ptr(true)},
 	}))
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
 
-	if cfg.hsts.MaxAge != time.Hour || cfg.hsts.IncludeSubDomains {
+	if cfg.hsts.MaxAge != time.Hour || !cfg.hsts.IncludeSubDomains {
 		t.Errorf("hsts = %+v", cfg.hsts)
 	}
 

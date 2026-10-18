@@ -72,7 +72,8 @@ type (
 		// zero sends no header.
 		MaxAge *Duration `json:"maxAge,omitempty"`
 		// IncludeSubDomains extends the rule to the host's subdomains.
-		// Unset is true.
+		// Unset is false: a service on an apex or parent domain would pin
+		// every sibling subdomain to https.
 		IncludeSubDomains *bool `json:"includeSubDomains,omitempty"`
 	}
 

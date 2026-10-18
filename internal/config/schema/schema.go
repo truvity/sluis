@@ -276,7 +276,7 @@ func serveSchema() m {
 		"secureCookies": boolean("Mark session cookies Secure. Unset follows the scheme the browser will use: https in the URL."),
 		"hsts": obj("The Strict-Transport-Security header the issuer and the console send on a response that arrived over https. Never `preload`; never sent over http or to a loopback host.", m{
 			"maxAge":            duration("How long a browser keeps the rule, in whole seconds. Zero sends no header.", "8760h"),
-			"includeSubDomains": boolDefault("Extend the rule to the host's subdomains. Every subdomain must then answer https.", true),
+			"includeSubDomains": boolDefault("Extend the rule to the host's subdomains. Off by default: an issuer on an apex or parent domain would pin every sibling subdomain to https for `maxAge`. Turn it on only when every subdomain answers https.", false),
 		}),
 		"groupsScoping": enum("How far this installation has moved toward per-audience `groups` scoping: `off`, `report` or `enforce`.", "report", "off", "report", "enforce"),
 		"secrets":       secretsSchema(),
