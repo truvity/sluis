@@ -19,6 +19,7 @@ import (
 	"github.com/truvity/sluis/internal/maintenance"
 	"github.com/truvity/sluis/internal/port"
 	"github.com/truvity/sluis/internal/rails"
+	"github.com/truvity/sluis/policy"
 	"github.com/truvity/sluis/storage/logattr"
 )
 
@@ -316,7 +317,11 @@ func (j *Job) Start(ctx context.Context, req Request) (Result, error) {
 	if req.Actor.Kind == "" {
 		req.Actor = audit.System()
 	}
-	req.By, req.Note = clip(req.By), clip(req.Note)
+	by, err := cleanBy(req.By)
+	if err != nil {
+		return Result{Outcome: OutcomeRefused, Reason: ReasonBackup, Error: err.Error()}, nil
+	}
+	req.By, req.Note = by, clip(req.Note)
 	var res Result
 	var runErr error
 	ran, err := j.leases.Do(ctx, LeaseKind, LeaseTarget, func(ctx context.Context) {
@@ -434,7 +439,17 @@ func (j *Job) decideUnverified(ctx context.Context, req Request, id string, ver 
 	d := j.audit(mods, "")
 	d.Unverified, d.Verification, d.By = true, ver.Reason, req.By
 	var err error
-	if j.c.Audit != nil {
+	switch c := j.c.Audit.(type) {
+	case nil:
+		err = errors.New("no audit trail is configured")
+	case interface{ Connected() bool }:
+		// A trail with no installation answers nil to a durable write: nothing
+		// is waited for and nothing is kept.
+		if !c.Connected() {
+			err = errors.New("no audit installation is connected, so nothing can be kept")
+		}
+	}
+	if err == nil {
 		err = j.c.Audit.RecordDurable(ctx, audit.RestoreUnverified(req.Actor, id, d))
 	}
 	if err == nil {
@@ -640,6 +655,20 @@ func (j *Job) newID(now time.Time) string {
 		suffix = hex.EncodeToString(b[:])
 	}
 	return now.Format("20060102T150405Z") + "-" + suffix
+}
+
+// maxBy bounds the caller's own name for themselves, in bytes. It goes into the
+// audit trail and the log, so a longer one is refused and not cut.
+const maxBy = 256
+
+// cleanBy takes what makes a name unsafe to show out of it (control and
+// formatting characters, bidirectional overrides) and refuses one that is
+// longer than [maxBy] bytes.
+func cleanBy(s string) (string, error) {
+	if len(s) > maxBy {
+		return "", fmt.Errorf("by is %d bytes: at most %d", len(s), maxBy)
+	}
+	return policy.CleanDisplayText(s, maxBy), nil
 }
 
 func clip(s string) string {

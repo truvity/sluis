@@ -19,6 +19,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
+	"net/http"
 	"strings"
 	"time"
 
@@ -31,6 +33,7 @@ import (
 	"github.com/truvity/sluis/internal/audit"
 	"github.com/truvity/sluis/internal/backup"
 	"github.com/truvity/sluis/internal/config"
+	"github.com/truvity/sluis/storage/logattr"
 )
 
 // DefaultProfile is the audit profile that keeps the `activity` category, the
@@ -41,12 +44,17 @@ const DefaultProfile = "activity"
 // the trail down fails in seconds rather than waiting out an invocation.
 const DefaultTimeout = 30 * time.Second
 
-// pageSize and maxPages bound the records read for one backup: a backup has
-// one. More than that is a flood of records naming it, and the backup is
-// refused rather than judged on the first page.
+// maxRecords bounds the records of the configured observer read for one
+// backup: a backup has one. More than that is a flood, and the backup is
+// refused rather than judged on the first page. maxPages bounds the pages
+// read in all, foreign records included, so that a flood from another sender
+// costs time and not the restore.
 const (
-	pageSize = 50
-	maxPages = 4
+	pageSize   = 50
+	maxRecords = 200
+	maxPages   = 40
+	// maxLogged is how many foreign records are logged one by one.
+	maxLogged = 5
 )
 
 // Action is the record that says a backup was written.
@@ -75,6 +83,9 @@ type Config struct {
 	// HTTP is the client to reach the service with; one that presents
 	// TokenFile when nil. For tests.
 	HTTP connect.HTTPClient
+	// Log is where a record of another observer is reported; slog.Default()
+	// when nil.
+	Log *slog.Logger
 }
 
 // Query is a [backup.Attestor] over the audit query service.
@@ -83,6 +94,7 @@ type Query struct {
 	profile  string
 	observer string
 	timeout  time.Duration
+	log      *slog.Logger
 }
 
 var _ backup.Attestor = (*Query)(nil)
@@ -104,10 +116,13 @@ func New(c Config) (*Query, error) {
 		if c.TokenFile == "" {
 			return nil, errors.New("attest: a token file is required: the query service answers nobody it cannot name")
 		}
-		hc = auth.TokenFile(c.TokenFile)
+		hc = noRedirectAcrossOrigins(auth.TokenFile(c.TokenFile))
 	}
 	q := &Query{client: auditv1connect.NewQueryServiceClient(hc, strings.TrimRight(c.URL, "/")),
-		profile: c.Profile, observer: c.Observer, timeout: c.Timeout}
+		profile: c.Profile, observer: c.Observer, timeout: c.Timeout, log: c.Log}
+	if q.log == nil {
+		q.log = slog.Default()
+	}
 	if q.profile == "" {
 		q.profile = DefaultProfile
 	}
@@ -117,9 +132,27 @@ func New(c Config) (*Query, error) {
 	return q, nil
 }
 
+// noRedirectAcrossOrigins refuses a redirect to another scheme or host: the
+// client presents a bearer token, and a redirect must not carry it elsewhere.
+func noRedirectAcrossOrigins(c *http.Client) *http.Client {
+	c.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		if len(via) >= 3 {
+			return errors.New("attest: too many redirects")
+		}
+		if first := via[0].URL; req.URL.Scheme != first.Scheme || req.URL.Host != first.Host {
+			return fmt.Errorf("attest: the query service redirected to another origin (%s://%s); refused", req.URL.Scheme, req.URL.Host)
+		}
+		return nil
+	}
+	return c
+}
+
 // Attest returns the completed-backup records of the backup. It reads every
 // page of the search, up to a bound: a record that disagrees on a later page is
-// as much the verifier's to see as one on the first.
+// as much the verifier's to see as one on the first. With a pinned observer
+// only that observer's records decide; any other's is skipped and reported,
+// since one junk record from any sender of audit records must not make a backup
+// permanently unrestorable.
 func (q *Query) Attest(ctx context.Context, _, id string) ([]backup.Claim, error) {
 	ctx, cancel := context.WithTimeout(ctx, q.timeout)
 	defer cancel()
@@ -129,18 +162,6 @@ func (q *Query) Attest(ctx context.Context, _, id string) ([]backup.Claim, error
 	}
 	var claims []backup.Claim
 	for _, r := range items {
-		if !hasTarget(r, id) || r.GetSource() != audit.Source || r.GetAction() != Action {
-			continue
-		}
-		if r.GetOutcome().GetResult() != auditv1.Outcome_RESULT_SUCCESS {
-			continue
-		}
-		if q.observer != "" && r.GetObserver().GetId() != q.observer {
-			// Written by something other than the backup function. It is not
-			// dropped as noise: a record that cannot be the real one but
-			// names this backup is what a forger would send.
-			return nil, fmt.Errorf("%w: record %s was stamped by an observer other than the configured one", backup.ErrMismatch, r.GetId())
-		}
 		c := ClaimOf(r)
 		got, err := q.client.Get(ctx, connect.NewRequest(&auditv1.GetRequest{Profile: q.profile, Id: r.GetId()}))
 		if err != nil {
@@ -158,10 +179,12 @@ func (q *Query) Attest(ctx context.Context, _, id string) ([]backup.Claim, error
 	return claims, nil
 }
 
-// search reads the pages of the completed-backup records naming the backup.
-// A page shorter than the page size is the last: the cursor never runs out.
+// search reads the pages of the completed-backup records naming the backup, and
+// keeps the ones that may decide: with a pinned observer, that observer's. A
+// page with no records or no next cursor is the last.
 func (q *Query) search(ctx context.Context, id string) ([]*auditv1.Record, error) {
-	var items []*auditv1.Record
+	var keep []*auditv1.Record
+	foreign := 0
 	cursor := ""
 	for page := 0; page < maxPages; page++ {
 		res, err := q.client.Search(ctx, connect.NewRequest(&auditv1.SearchRequest{
@@ -178,13 +201,32 @@ func (q *Query) search(ctx context.Context, id string) ([]*auditv1.Record, error
 		if err != nil {
 			return nil, unavailable("search the trail", err)
 		}
-		items = append(items, res.Msg.GetItems()...)
+		for _, r := range res.Msg.GetItems() {
+			if !hasTarget(r, id) || r.GetSource() != audit.Source || r.GetAction() != Action ||
+				r.GetOutcome().GetResult() != auditv1.Outcome_RESULT_SUCCESS {
+				continue
+			}
+			if q.observer != "" && r.GetObserver().GetId() != q.observer {
+				foreign++
+				if foreign <= maxLogged {
+					q.log.ErrorContext(ctx, "a completed-backup record was stamped by an observer other than the configured one; it is ignored",
+						slog.String("backup", id), slog.String("record", r.GetId()), logattr.SafeString("observer", r.GetObserver().GetId()))
+				}
+				continue
+			}
+			if keep = append(keep, r); len(keep) > maxRecords {
+				return nil, fmt.Errorf("%w: more than %d records name backup %s; a backup has one", backup.ErrMismatch, maxRecords, id)
+			}
+		}
 		cursor = res.Msg.GetCursors().GetNext()
-		if len(res.Msg.GetItems()) < pageSize || cursor == "" {
-			return items, nil
+		if len(res.Msg.GetItems()) == 0 || cursor == "" {
+			if foreign > maxLogged {
+				q.log.ErrorContext(ctx, "more completed-backup records by other observers were ignored", slog.String("backup", id), slog.Int("ignored", foreign-maxLogged))
+			}
+			return keep, nil
 		}
 	}
-	return nil, fmt.Errorf("%w: more than %d records name backup %s; a backup has one", backup.ErrMismatch, maxPages*pageSize, id)
+	return nil, fmt.Errorf("%w: the search of the trail for backup %s did not end within %d pages", backup.ErrAttestUnavailable, id, maxPages)
 }
 
 func unavailable(what string, err error) error {
