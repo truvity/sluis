@@ -59,7 +59,7 @@ func (m *Minter) CheckPreset(ctx context.Context, preset string) error {
 	if err != nil {
 		return fmt.Errorf("read the prototype: %w", err)
 	}
-	return m.checkPrototype(ctx, p.Account, api, proto)
+	return m.checkPrototype(ctx, preset, p.Account, api, proto)
 }
 
 // StoredInfo is the preset's stored credential, described. It is the

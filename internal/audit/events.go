@@ -418,7 +418,8 @@ func CloudflareTokenMinted(actor Actor, preset string, t CloudflareToken) *recor
 // CloudflareTokenRefused is a token not minted. reason is a short word
 // (not_granted, lifetime_too_long, unknown_preset, prototype_active,
 // prototype_forbidden, prototype_missing, minter_missing, cloudflare_error,
-// store_error); detail says what the check found, never a value. A caller who
+// store_error, and for an on-demand limit caller_cap, preset_cap or
+// rate_limited); detail says what the check found, never a value. A caller who
 // was not granted the preset is Denied, anything else Failed.
 func CloudflareTokenRefused(actor Actor, preset, variant, reason, detail string, denied bool) *record.Record {
 	o := Failed(reason)

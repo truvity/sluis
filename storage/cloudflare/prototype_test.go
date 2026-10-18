@@ -136,3 +136,36 @@ func TestConfigurationOnlyAddsToTheBuiltInList(t *testing.T) {
 		t.Error("an extra list shortened the built-in one")
 	}
 }
+
+// A preset can say what it is for. With an allowlist, a prototype grants those
+// groups and no others; without one only the built-in floor applies. A name on
+// the allowlist does not lift the floor.
+func TestCheckPrototypeAllowing(t *testing.T) {
+	names := map[string]string{"a": "DNS Write", "b": "Billing Write", "c": "Workers Scripts Write"}
+	reason := func(tok cloudflare.Token, allowed ...string) string {
+		err := cloudflare.CheckPrototypeAllowing(tok, names, nil, allowed)
+		if err == nil {
+			return ""
+		}
+		pe, ok := cloudflare.IsPrototypeError(err)
+		if !ok {
+			t.Fatalf("not a PrototypeError: %v", err)
+		}
+		return pe.Reason
+	}
+	if r := reason(proto("disabled", "a", "c")); r != "" {
+		t.Errorf("no allowlist asks nothing beyond the floor: %s", r)
+	}
+	if r := reason(proto("disabled", "a"), "dns  write"); r != "" {
+		t.Errorf("a named group, spelled loosely: %s", r)
+	}
+	if r := reason(proto("disabled", "a", "c"), "DNS Write"); r != cloudflare.ReasonPrototypeForbidden {
+		t.Errorf("a group the allowlist does not name: %q", r)
+	}
+	if r := reason(proto("disabled", "b"), "Billing Write"); r != cloudflare.ReasonPrototypeForbidden {
+		t.Errorf("the floor was lifted by the allowlist: %q", r)
+	}
+	if !cloudflare.GroupAllowed("Zone  Read", []string{"zone read"}) || cloudflare.GroupAllowed("Zone Write", []string{"zone read"}) {
+		t.Error("GroupAllowed folds case and spacing and nothing else")
+	}
+}

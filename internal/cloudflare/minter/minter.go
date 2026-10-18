@@ -34,6 +34,11 @@ var (
 	// ErrLifetime is a requested lifetime longer than the preset's or under a
 	// minute.
 	ErrLifetime = errors.New("cloudflare: the requested lifetime is outside the preset's")
+	// ErrLimit is a mint refused because the caller, or the preset, already holds
+	// as many live on-demand tokens as the preset allows, or the caller has been
+	// minted as many in the last hour. It crosses the module boundary under the
+	// code "limit".
+	ErrLimit = errors.New("cloudflare: too many tokens: the preset's limit on live or recent on-demand tokens is reached")
 	// ErrNotOurs is a token id that is not one sluis minted for the preset.
 	ErrNotOurs = errors.New("cloudflare: the token was not minted by sluis for this preset")
 	// ErrMaintenance is a call refused because the module is under maintenance:
@@ -122,6 +127,10 @@ type Minter struct {
 
 	mu     sync.Mutex
 	groups map[string]cachedGroups
+	// minting is what this process has minted lately and has under way, by
+	// preset and caller, for the limits that Cloudflare's own list cannot show:
+	// a token that expired inside the hour, and one not yet created.
+	minting map[string][]time.Time
 }
 
 type cachedGroups struct {
@@ -143,7 +152,7 @@ func New(cfg Config) (*Minter, error) {
 	if err := cfg.Cloudflare.Validate(); err != nil {
 		return nil, err
 	}
-	m := &Minter{cfg: cfg, log: cfg.Log, now: cfg.Now, groups: map[string]cachedGroups{}}
+	m := &Minter{cfg: cfg, log: cfg.Log, now: cfg.Now, groups: map[string]cachedGroups{}, minting: map[string][]time.Time{}}
 	if m.log == nil {
 		m.log = slog.Default()
 	}
@@ -302,8 +311,20 @@ func (m *Minter) MintFor(ctx context.Context, preset string, caller Caller, life
 	}
 	who := caller.Actor.ID
 	now := m.now()
-	out, err := m.mint(ctx, preset, p, cloudflare.OnDemandName(m.cfg.Instance, preset, who, now), now, lifetime)
+	name := cloudflare.OnDemandName(m.cfg.Instance, preset, who, now)
+	release, err := m.admit(ctx, preset, p, name, now)
 	if err != nil {
+		var limit *limitError
+		if errors.As(err, &limit) {
+			m.refused(ctx, caller.Actor, preset, audit.CloudflareOnDemand, limit.reason, limit.detail, true)
+			return nil, err
+		}
+		m.fail(ctx, caller.Actor, preset, audit.CloudflareOnDemand, err)
+		return nil, err
+	}
+	out, err := m.mint(ctx, preset, p, name, now, lifetime)
+	if err != nil {
+		release()
 		m.fail(ctx, caller.Actor, preset, audit.CloudflareOnDemand, err)
 		return nil, err
 	}
@@ -344,7 +365,7 @@ func (m *Minter) mint(ctx context.Context, preset string, p config.CloudflarePre
 	if err != nil {
 		return nil, &cloudflareError{err: fmt.Errorf("read the prototype: %w", err)}
 	}
-	if err = m.checkPrototype(ctx, p.Account, api, proto); err != nil {
+	if err = m.checkPrototype(ctx, preset, p.Account, api, proto); err != nil {
 		return nil, err
 	}
 	policies, err := cloudflare.ClonePolicies(proto.Policies)
@@ -385,17 +406,18 @@ func (m *Minter) mint(ctx context.Context, preset string, p config.CloudflarePre
 
 // checkPrototype resolves the prototype's permission groups to names, asking
 // the account again once when one is not in the cached list.
-func (m *Minter) checkPrototype(ctx context.Context, account string, api API, proto cloudflare.Token) error {
+func (m *Minter) checkPrototype(ctx context.Context, preset, account string, api API, proto cloudflare.Token) error {
 	names, err := m.permissionGroups(ctx, account, api, false)
 	if err != nil {
 		return &cloudflareError{err: fmt.Errorf("list the permission groups: %w", err)}
 	}
-	err = cloudflare.CheckPrototype(proto, names, m.cfg.Cloudflare.ForbiddenPermissionGroups...)
+	allowed := m.cfg.Cloudflare.Presets[preset].AllowedPermissionGroups
+	err = cloudflare.CheckPrototypeAllowing(proto, names, m.cfg.Cloudflare.ForbiddenPermissionGroups, allowed)
 	if pe, ok := cloudflare.IsPrototypeError(err); ok && pe.Reason == cloudflare.ReasonPrototypeForbidden && m.unresolved(proto, names) {
 		if names, err = m.permissionGroups(ctx, account, api, true); err != nil {
 			return &cloudflareError{err: fmt.Errorf("list the permission groups: %w", err)}
 		}
-		return cloudflare.CheckPrototype(proto, names, m.cfg.Cloudflare.ForbiddenPermissionGroups...)
+		return cloudflare.CheckPrototypeAllowing(proto, names, m.cfg.Cloudflare.ForbiddenPermissionGroups, allowed)
 	}
 	return err
 }

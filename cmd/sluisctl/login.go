@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -130,35 +131,47 @@ func waitForCode(listener net.Listener, state string) (string, error) {
 		err  error
 	}
 	answers := make(chan result, 1)
+	// answer keeps the first answer; a second one (a browser that asks twice)
+	// is dropped rather than left blocking a handler.
+	answer := func(r result) {
+		select {
+		case answers <- r:
+		default:
+		}
+	}
 
 	server := &http.Server{
 		ReadHeaderTimeout: 10 * time.Second,
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			query := r.URL.Query()
+			// The state is checked first, before anything else in the request
+			// is believed. This listener is on the loopback interface for as
+			// long as the browser takes, and anything that can reach it -- a
+			// web page the person has open, a process on the machine -- can
+			// send it an `?error=` or a code. Such a request is not the
+			// issuer's answer to this sign-in and does not end it; the real
+			// callback, which carries the state, can still arrive.
+			if subtle.ConstantTimeCompare([]byte(query.Get("state")), []byte(state)) != 1 {
+				pageStatus(w, http.StatusBadRequest, "Not this sign-in", "That request does not belong to the sign-in in progress. It was ignored.")
+				return
+			}
 			if failure := query.Get("error"); failure != "" {
 				detail := query.Get("error_description")
 				if detail == "" {
 					detail = failure
 				}
 				page(w, "Sign-in refused", detail)
-				answers <- result{err: fmt.Errorf("the issuer refused the sign-in: %s", detail)}
-				return
-			}
-			// The state is checked before the code is used: a callback
-			// somebody else caused is not one to redeem.
-			if query.Get("state") != state {
-				page(w, "Sign-in refused", "That response does not belong to this sign-in.")
-				answers <- result{err: errors.New("the callback did not match this sign-in")}
+				answer(result{err: fmt.Errorf("the issuer refused the sign-in: %s", detail)})
 				return
 			}
 			code := query.Get("code")
 			if code == "" {
 				page(w, "Sign-in refused", "No authorization code came back.")
-				answers <- result{err: errors.New("no authorization code came back")}
+				answer(result{err: errors.New("no authorization code came back")})
 				return
 			}
 			page(w, "Signed in", "You can close this tab and go back to the terminal.")
-			answers <- result{code: code}
+			answer(result{code: code})
 		}),
 	}
 	go func() { _ = server.Serve(listener) }()
@@ -263,13 +276,17 @@ func readIDToken(token string) (subject, email string, ok bool) {
 // attacker-controlled by anyone who can make a browser visit this
 // loopback port while a sign-in is running. Reflecting it unescaped was
 // a reflected XSS, and CodeQL was right to say so.
-func page(w http.ResponseWriter, title, message string) {
+func page(w http.ResponseWriter, title, message string) { pageStatus(w, http.StatusOK, title, message) }
+
+// pageStatus is [page] with a status other than 200.
+func pageStatus(w http.ResponseWriter, status int, title, message string) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	// Nothing on this page loads a script, so the policy says exactly
 	// that. It costs one header and closes the whole class rather than
 	// this one instance of it.
 	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.WriteHeader(status)
 	safeTitle, safeMessage := html.EscapeString(title), html.EscapeString(message)
 	_, _ = fmt.Fprintf(w, `<!doctype html><meta charset="utf-8"><title>%s</title>
 <style>body{font:16px/1.5 system-ui,sans-serif;margin:4rem auto;max-width:32rem;padding:0 1rem}</style>

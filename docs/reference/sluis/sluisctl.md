@@ -61,6 +61,7 @@ sluisctl policy render policy/ -o policy.yaml   # the one policy document an ins
 |---|---|
 | Source | `usage` in `cmd/sluisctl/main.go` |
 | Shared flags | `--audience`, `--issuer`, `--client`; the client defaults to what `login` wrote. `aws` also takes `--role` |
+| Issuer scheme | An issuer must be `https://`. `http://` is accepted for `localhost`, `127.0.0.1` and `::1` only. The sign-in callback on the loopback port ignores a request that does not carry the sign-in's `state` |
 | Issuer choice | `--issuer`, else `$SLUISCTL_ISSUER`, else the `issuer:` key of `config.yaml` (these three pin the issuer), else the one issuer with a live session. When none is pinned and more than one issuer has a live session, the command exits 2 and lists them, rather than using the most recent login. A session counts as live if its file parses, holds a refresh token and does not record an expiry in the past. With no live session the last login is used, so the error is "not signed in". `login` without `--issuer` uses the pin, else the last login |
 | `login` | Authorization code with PKCE on a loopback port. The policy client is `kind: public` with a loopback redirect and `sign_in_exchange: true`, else later commands exit 4. Then it saves the issuer's `/.well-known/sluis-configuration` in `backup:` of `config.yaml`, when the issuer serves one; a failure does not fail the sign-in |
 | `version` | `sluisctl <version>`, or `sluisctl dev` without release ldflags, with commit and date when stamped. `--json` prints `{"version","commit","date"}`. No network, config or `HOME` |

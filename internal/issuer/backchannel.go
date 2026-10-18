@@ -3,6 +3,7 @@ package issuer
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/truvity/sluis/internal/egress"
 	"github.com/truvity/sluis/internal/signer"
 	"github.com/truvity/sluis/storage/logattr"
 )
@@ -103,6 +105,43 @@ func (s *Storage) announceLogout(ctx context.Context, log *slog.Logger, ended []
 	wg.Wait()
 }
 
+// backChannelTimeout is short: delivery runs while somebody is waiting for a
+// sign-out page, and a relying party that cannot answer in a few seconds is one
+// whose session will die at its next refresh anyway.
+const backChannelTimeout = 5 * time.Second
+
+// errBackChannelRedirected is a delivery that was answered with a redirect.
+var errBackChannelRedirected = errors.New("the back-channel logout address redirected; it is posted to as declared and nowhere else")
+
+// refuseRedirect makes a redirect a failure. A logout token is a signed
+// statement about a person, posted to the address the policy declares for a
+// client; a redirect would carry it, and the form it is in, to an address the
+// policy did not declare, and a POST that is redirected is sent again as a GET
+// by some clients and as a POST by others.
+func refuseRedirect(*http.Request, []*http.Request) error { return errBackChannelRedirected }
+
+// newAnnounceClient is the client that delivers logout tokens, connecting under
+// network.
+func newAnnounceClient(network egress.Policy) *http.Client {
+	return &http.Client{Timeout: backChannelTimeout, Transport: network.Transport(), CheckRedirect: refuseRedirect}
+}
+
+// egressFor is the network policy a delivery or a fetch connects under: base,
+// or none at all in a development installation, which talks to its own
+// loopback.
+//
+// A client document is fetched from a URL the client chose, so it may reach
+// public addresses only. A back-channel address is one the policy declares, and
+// is as likely to be a service in the cluster as a public one, so private
+// ranges are admitted for it; loopback, link-local (the instance metadata
+// service) and the other reserved ranges never are.
+func egressFor(iss *Issuer, base egress.Policy) egress.Policy {
+	if iss != nil && iss.Config().AllowInsecure {
+		return egress.Development
+	}
+	return base
+}
+
 // announceInFlight bounds how many logout tokens are being delivered at once.
 const announceInFlight = 8
 
@@ -123,10 +162,10 @@ func (s *Storage) postLogoutToken(ctx context.Context, where string, session *Se
 
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	// Short: this runs while somebody is waiting for a sign-out page, and
-	// a relying party that cannot answer in a few seconds is one whose
-	// session will die at its next refresh anyway.
-	client := &http.Client{Timeout: 5 * time.Second}
+	client := s.announce
+	if client == nil {
+		client = newAnnounceClient(egress.Declared)
+	}
 
 	response, err := client.Do(request)
 	if err != nil {

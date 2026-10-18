@@ -105,6 +105,56 @@ type CloudflarePreset struct {
 	// Endpoint, when set, makes this an R2 preset: the S3 endpoint of the
 	// account (and jurisdiction) the credentials are for.
 	Endpoint string `json:"endpoint,omitempty"`
+	// AllowedPermissionGroups, when set, limits the prototype to the permission
+	// groups it names (by the name Cloudflare lists them under): a prototype
+	// that grants any other is refused. The built-in forbidden list and
+	// ForbiddenPermissionGroups stay the floor; a name here does not lift them.
+	AllowedPermissionGroups []string `json:"allowedPermissionGroups,omitempty"`
+	// MaxLivePerCaller, MaxLive and MaxMintsPerCallerPerHour bound what the
+	// on-demand exchange mints for the preset. Zero is the default
+	// ([DefaultCloudflareMaxLivePerCaller] and the like).
+	MaxLivePerCaller         int `json:"maxLivePerCaller,omitempty"`
+	MaxLive                  int `json:"maxLive,omitempty"`
+	MaxMintsPerCallerPerHour int `json:"maxMintsPerCallerPerHour,omitempty"`
+}
+
+// The defaults of a preset's on-demand limits. Cloudflare allows an account 500
+// tokens, and an expired one counts until it is deleted; these keep one caller,
+// and one preset, from spending them.
+const (
+	// DefaultCloudflareMaxLivePerCaller is how many unexpired on-demand tokens
+	// of one preset one caller may hold.
+	DefaultCloudflareMaxLivePerCaller = 10
+	// DefaultCloudflareMaxLive is how many unexpired on-demand tokens one preset
+	// may have in all.
+	DefaultCloudflareMaxLive = 50
+	// DefaultCloudflareMaxMintsPerCallerPerHour is how many tokens of one preset
+	// one caller may be minted in an hour.
+	DefaultCloudflareMaxMintsPerCallerPerHour = 30
+)
+
+// LivePerCaller is the preset's cap on one caller's live on-demand tokens.
+func (p CloudflarePreset) LivePerCaller() int {
+	if p.MaxLivePerCaller > 0 {
+		return p.MaxLivePerCaller
+	}
+	return DefaultCloudflareMaxLivePerCaller
+}
+
+// LiveTotal is the preset's cap on live on-demand tokens in all.
+func (p CloudflarePreset) LiveTotal() int {
+	if p.MaxLive > 0 {
+		return p.MaxLive
+	}
+	return DefaultCloudflareMaxLive
+}
+
+// MintsPerCallerPerHour is the preset's cap on one caller's mints in an hour.
+func (p CloudflarePreset) MintsPerCallerPerHour() int {
+	if p.MaxMintsPerCallerPerHour > 0 {
+		return p.MaxMintsPerCallerPerHour
+	}
+	return DefaultCloudflareMaxMintsPerCallerPerHour
 }
 
 // R2 reports whether the preset hands out R2 (S3) credentials.
@@ -138,8 +188,8 @@ func (c *Cloudflare) AnyStored() bool {
 	if c == nil {
 		return false
 	}
-	for _, p := range c.Presets {
-		if p.Stored() {
+	for name := range c.Presets {
+		if c.Presets[name].Stored() {
 			return true
 		}
 	}
@@ -301,6 +351,16 @@ func (c *Cloudflare) validatePreset(name string, p CloudflarePreset) error {
 	}
 	if p.Stored() && rot >= life {
 		errs = append(errs, fmt.Errorf("%s.rotation: %s must be shorter than lifetime %s (lifetime - rotation is the time consumers have to pick up the new token)", at, rot, life))
+	}
+	for i, g := range p.AllowedPermissionGroups {
+		if strings.TrimSpace(g) == "" {
+			errs = append(errs, fmt.Errorf("%s.allowedPermissionGroups[%d] is empty", at, i))
+		}
+	}
+	for field, v := range map[string]int{"maxLivePerCaller": p.MaxLivePerCaller, "maxLive": p.MaxLive, "maxMintsPerCallerPerHour": p.MaxMintsPerCallerPerHour} {
+		if v < 0 {
+			errs = append(errs, fmt.Errorf("%s.%s: %d is negative", at, field, v))
+		}
 	}
 	if p.Endpoint != "" {
 		u, err := url.Parse(p.Endpoint)

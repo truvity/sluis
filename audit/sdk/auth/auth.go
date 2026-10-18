@@ -112,11 +112,14 @@ type Authorizer interface {
 // tenant's security profile must not become every tenant's history — which
 // is why the profile is fixed first.
 //
-// A time window does not union. A grant with none covers every period, so if
-// any covering grant is unbounded the answer is. If every one is bounded they
-// have to agree: the hull of two different windows includes the gap between
-// them, and which period was meant is not this service's to guess, so it
-// refuses.
+// A time window does not union, and it is never lent from one grant to the
+// tenants of another. Taking the tenants of two grants and the widest window of
+// either would let an unbounded grant over one tenant stretch a time-boxed
+// grant over another to every period. A grant that another covers, with at
+// least its tenants over at least its window, adds nothing and is set aside.
+// Of what is left, the grants have to agree on one window: the hull of two
+// windows includes the gap between them, and which period was meant for which
+// tenant is not this service's to guess, so it refuses.
 //
 // The rule stamped on the read is every covering grant's, so that a record
 // of the read says which grants together allowed it.
@@ -142,33 +145,27 @@ func Effective(grants []Grant, profile string, op Operation) (Grant, error) {
 	}
 
 	out := Grant{Profiles: []string{profile}, Operations: []Operation{op}}
-	tenants := map[string]bool{}
 	rules := make([]string, 0, len(covering))
-	bounded, unbounded := 0, false
 	for _, g := range covering {
+		if g.Rule != "" {
+			rules = append(rules, g.Rule)
+		}
+	}
+	covering = unsubsumed(covering)
+	tenants := map[string]bool{}
+	for i, g := range covering {
 		if g.AllTenants {
 			out.AllTenants = true
 		}
 		for _, t := range g.Tenants {
 			tenants[t] = true
 		}
-		if g.Rule != "" {
-			rules = append(rules, g.Rule)
-		}
-		if g.From.IsZero() && g.Until.IsZero() {
-			unbounded = true
-			continue
-		}
-		if bounded > 0 && (!g.From.Equal(out.From) || !g.Until.Equal(out.Until)) {
+		if i > 0 && (!g.From.Equal(out.From) || !g.Until.Equal(out.Until)) {
 			return Grant{}, fmt.Errorf(
-				"%w: two grants on profile %s carry different time windows, and which period is "+
-					"meant is not this service's to guess", ErrDenied, profile)
+				"%w: grants on profile %s carry different time windows over different tenants, and which "+
+					"period is meant for which tenant is not this service's to guess", ErrDenied, profile)
 		}
 		out.From, out.Until = g.From, g.Until
-		bounded++
-	}
-	if unbounded {
-		out.From, out.Until = time.Time{}, time.Time{}
 	}
 	if !out.AllTenants {
 		for t := range tenants {
@@ -179,6 +176,48 @@ func Effective(grants []Grant, profile string, op Operation) (Grant, error) {
 	sort.Strings(rules)
 	out.Rule = strings.Join(rules, ",")
 	return out, nil
+}
+
+// unsubsumed drops every grant that another one in the list covers: at least
+// its tenants over at least its window. Of two that cover each other (the same
+// tenants and window) the first stays.
+func unsubsumed(grants []Grant) []Grant {
+	out := make([]Grant, 0, len(grants))
+	for i, g := range grants {
+		covered := false
+		for j, other := range grants {
+			if i == j || !covers(other, g) {
+				continue
+			}
+			if covers(g, other) && i < j {
+				continue // equal: keep the earlier one
+			}
+			covered = true
+			break
+		}
+		if !covered {
+			out = append(out, g)
+		}
+	}
+	return out
+}
+
+// covers reports whether a reaches every tenant and every period b does.
+func covers(a, b Grant) bool {
+	if !a.AllTenants {
+		if b.AllTenants {
+			return false
+		}
+		for _, t := range b.Tenants {
+			if !contains(a.Tenants, t) {
+				return false
+			}
+		}
+	}
+	if !a.From.IsZero() && (b.From.IsZero() || b.From.Before(a.From)) {
+		return false
+	}
+	return a.Until.IsZero() || (!b.Until.IsZero() && !b.Until.After(a.Until))
 }
 
 // ErrUnauthenticated is what a caller is told when its credential is missing or

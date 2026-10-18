@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/truvity/sluis/policy"
 )
@@ -1290,5 +1291,49 @@ clients:
 	want := []string{"team:b:viewer"}
 	if !slices.Equal(got, want) {
 		t.Errorf("Unconsumed = %v, want %v -- prod:grafana:admin should be consumed by groups: [grafana]", got, want)
+	}
+}
+
+// Text somebody else wrote is cleaned to what a declared client's would be
+// allowed: whatever comes out passes the check a declared name is held to.
+func TestCleanDisplayTextLeavesWhatADeclaredNameWouldPass(t *testing.T) {
+	cases := map[string]string{
+		"Plain Name":                     "Plain Name",
+		"  spaced \t out \n name  ":      "spaced out name",
+		"RLO \u202eevil\u202c name":      "RLO evil name",
+		"iso\u2066late\u2069d":           "isolated",
+		"zero\u200bwidth\u200djoin":      "zerowidthjoin",
+		"line\u2028sep\u2029arator":      "lineseparator",
+		"bad \xff\xfe bytes":             "bad bytes",
+		"":                               "",
+		"\u202e\u202c":                   "",
+		"\u00e9\u00e9\u00e9\u00e9\u00e9": "\u00e9\u00e9\u00e9\u00e9\u00e9",
+	}
+	for in, want := range cases {
+		if got := policy.CleanDisplayText(in, 80); got != want {
+			t.Errorf("CleanDisplayText(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// Truncation counts characters and stops on a boundary: a name of multi-byte
+// characters is cut to the limit in characters, valid UTF-8 every time, with no
+// trailing space.
+func TestCleanDisplayTextCutsOnACharacterBoundary(t *testing.T) {
+	long := strings.Repeat("\u00e9\u4e16 ", 100) // two- and three-byte characters
+	for _, limit := range []int{1, 2, 3, 7, 64} {
+		got := policy.CleanDisplayText(long, limit)
+		if !utf8.ValidString(got) {
+			t.Errorf("limit %d: %q is not valid UTF-8", limit, got)
+		}
+		if n := utf8.RuneCountInString(got); n > limit || n == 0 {
+			t.Errorf("limit %d: %d characters", limit, n)
+		}
+		if strings.HasSuffix(got, " ") {
+			t.Errorf("limit %d: %q ends in a space", limit, got)
+		}
+		if err := policy.DisplayTextForTest("display_name", got, limit); err != nil {
+			t.Errorf("limit %d: the cleaned text does not pass the declared-name check: %v", limit, err)
+		}
 	}
 }

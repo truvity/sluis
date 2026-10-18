@@ -165,7 +165,7 @@ func TestTheGrantsWindowClampsTheRequest(t *testing.T) {
 
 // A profile or operation outside the grant is refused, saying which.
 func TestOutsideTheGrantIsRefused(t *testing.T) {
-	s, into := service(t, auth.Grant{
+	s, _ := service(t, auth.Grant{
 		Tenants: []string{"acme"}, Profiles: []string{"history"},
 		Operations: []auth.Operation{auth.Search},
 	})
@@ -174,8 +174,67 @@ func TestOutsideTheGrantIsRefused(t *testing.T) {
 	if !errors.Is(err, auth.ErrDenied) {
 		t.Fatalf("a profile outside the grant gave %v", err)
 	}
-	if len(into.of("audit.search")) != 0 {
-		t.Fatal("a request refused before it ran was recorded as a search")
+}
+
+// A refused read is a read of the trail somebody tried, and is recorded: as a
+// failure, with the refusal as its reason, for search, facets and get alike. The
+// same caller refused the same way again within the minute is not recorded
+// again, so a loop of denied calls cannot flood the trail it is probing; the
+// next minute's is.
+func TestARefusedReadIsRecordedOncePerMinute(t *testing.T) {
+	s, into := service(t, auth.Grant{
+		Tenants: []string{"acme"}, Profiles: []string{"history"},
+		Operations: []auth.Operation{auth.Search, auth.Facets, auth.Get},
+	})
+	now := at(t, "2026-09-17T12:00:00Z")
+	s.Now = func() time.Time { return now }
+	ctx := context.Background()
+
+	search := func() {
+		if _, _, err := s.Search(ctx, caller(), &auditv1.SearchRequest{Profile: "security", Limit: 10}); !errors.Is(err, auth.ErrDenied) {
+			t.Fatalf("search: %v", err)
+		}
+	}
+	search()
+	search()
+	search()
+	if _, _, err := s.Facets(ctx, caller(), &auditv1.FacetsRequest{Profile: "security", Fields: []string{index.FieldAction}}); !errors.Is(err, auth.ErrDenied) {
+		t.Fatalf("facets: %v", err)
+	}
+	getReq := &auditv1.GetRequest{Profile: "security", Id: "018f0000-0000-7000-8000-00000000000a"}
+	if _, _, _, err := s.Get(ctx, caller(), getReq); !errors.Is(err, auth.ErrDenied) {
+		t.Fatalf("get: %v", err)
+	}
+	// Another caller is refused on its own account.
+	other := caller()
+	other.Subject = "mallory"
+	if _, _, err := s.Search(ctx, other, &auditv1.SearchRequest{Profile: "security", Limit: 10}); !errors.Is(err, auth.ErrDenied) {
+		t.Fatalf("search by another caller: %v", err)
+	}
+	now = now.Add(61 * time.Second)
+	search()
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	searches := into.of("audit.search")
+	if len(searches) != 3 {
+		t.Fatalf("%d search refusals recorded, want 3 (one per minute for olga, one for mallory)", len(searches))
+	}
+	for _, r := range searches {
+		if r.GetOutcome().GetResult() != auditv1.Outcome_RESULT_FAILURE || !strings.Contains(r.GetOutcome().GetReason(), "profile security") {
+			t.Errorf("a refusal is recorded as %v %q", r.GetOutcome().GetResult(), r.GetOutcome().GetReason())
+		}
+		if r.GetActor().GetId() == "" || r.GetActor().GetKind() != "operator" {
+			t.Errorf("a refusal does not name the caller: %+v", r.GetActor())
+		}
+	}
+	if got := len(into.of("audit.facets")); got != 1 {
+		t.Errorf("%d facets refusals recorded, want 1", got)
+	}
+	gets := into.of("audit.get")
+	if len(gets) != 1 || gets[0].GetTargets()[0].GetId() != "018f0000-0000-7000-8000-00000000000a" {
+		t.Errorf("get refusals = %v, want one naming the record asked for", gets)
 	}
 }
 

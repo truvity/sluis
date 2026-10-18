@@ -221,6 +221,11 @@ func cloudflareTokenError(ctx context.Context, err error) *oidc.Error {
 		return deny(ctx, oidc.ErrInvalidTarget, err)
 	case errors.Is(err, cfrpc.ErrLifetime):
 		return malformed(ctx, err)
+	case errors.Is(err, cfrpc.ErrLimit):
+		// The caller is not wrong about what it asked for and can ask again once
+		// a token expires or an hour passes; the limit itself is in the audit
+		// trail and the log, not in the answer.
+		return deny(ctx, oidc.ErrAccessDenied, err)
 	default:
 		// What went wrong is in the audit trail and the log under this request.
 		return fault(ctx, err)

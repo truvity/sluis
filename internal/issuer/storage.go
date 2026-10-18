@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"slices"
 	"strings"
 	"time"
@@ -20,6 +21,7 @@ import (
 	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/audit"
 	"github.com/truvity/sluis/internal/clientcreds"
+	"github.com/truvity/sluis/internal/egress"
 	"github.com/truvity/sluis/internal/maintenance"
 	"github.com/truvity/sluis/internal/signer"
 	"github.com/truvity/sluis/policy"
@@ -228,6 +230,10 @@ type Storage struct {
 	// and a shared one would be a way for one replica's stale answer to
 	// become every replica's.
 	documents *documentClients
+	// announce delivers back-channel logout tokens. It connects under the
+	// network policy and follows no redirect: see [egressFor] and
+	// [refuseRedirect].
+	announce *http.Client
 
 	// grants is per-process on purpose. It carries an exchange decision
 	// between two calls the library makes about the *same* request, in
@@ -418,7 +424,8 @@ func NewStorage(
 		dir:           dir,
 		secrets:       secrets,
 		state:         state,
-		documents:     newDocumentClients(iss.Policy().ClientDocuments()),
+		documents:     newDocumentClientsWith(iss.Policy().ClientDocuments(), egressFor(iss, egress.Public)),
+		announce:      newAnnounceClient(egressFor(iss, egress.Declared)),
 		scopingReport: newGroupsScopingReporter(),
 		now:           time.Now,
 		// The session index's clock, so that time a test moves for the

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/truvity/sluis/audit/index"
@@ -53,10 +54,14 @@ type Exporter struct {
 
 // Job is what was asked for and what became of it.
 type Job struct {
-	ID        string     `json:"id"`
-	Profile   string     `json:"profile"`
-	Format    string     `json:"format"`
-	By        string     `json:"by"`
+	ID      string `json:"id"`
+	Profile string `json:"profile"`
+	Format  string `json:"format"`
+	By      string `json:"by"`
+	// ByIssuer is the issuer of the subject in By. A subject is only unique
+	// within its issuer. Jobs written before it was kept have none, and are held
+	// to the subject alone until they expire.
+	ByIssuer  string     `json:"by_issuer,omitempty"`
 	Rule      string     `json:"rule"`
 	AskedAt   time.Time  `json:"asked_at"`
 	Records   int        `json:"records,omitempty"`
@@ -121,7 +126,7 @@ func (s *Service) Export(
 	}
 	job := Job{
 		ID: record.NewID(), Profile: req.GetProfile(), Format: format,
-		By: p.Subject, Rule: g.Rule, AskedAt: s.Exporter.now(),
+		By: p.Subject, ByIssuer: p.Issuer, Rule: g.Rule, AskedAt: s.Exporter.now(),
 	}
 	job.ExpiresAt = job.AskedAt.Add(s.Exporter.expiry())
 
@@ -197,18 +202,34 @@ func (s *Service) GetExport(ctx context.Context, p auth.Principal, id string) (J
 	if err != nil {
 		return Job{}, "", err
 	}
-	// Whoever asked for it is whoever may collect it. An export is a copy of
-	// records that has left the service's control, so the link is not something
-	// to hand to a second person on the strength of a job identifier.
-	if job.By != p.Subject {
+	// Whoever asked for it is whoever may collect it, as the issuer vouches for
+	// them: a subject is unique within an issuer, not across them. An export is
+	// a copy of records that has left the service's control, so the link is not
+	// something to hand to a second person on the strength of a job identifier.
+	if job.By != p.Subject || (job.ByIssuer != "" && job.ByIssuer != p.Issuer) {
 		return Job{}, "", fmt.Errorf("%w: no export %s", ErrNotFound, id)
 	}
 	if job.State() != auditv1.ExportState_EXPORT_STATE_READY {
 		return job, "", nil
 	}
+	// And only while they may still export from that profile. The job was
+	// allowed by the grant of its day; a person who has since lost the grant
+	// does not collect what it produced.
+	g, err := s.allow(ctx, p, job.Profile, auth.Export)
+	if err != nil {
+		s.recordRefusal(ctx, "audit.export.completed", p, job.Profile, err, []*record.Target{{Type: "export", Id: job.ID}})
+		return Job{}, "", err
+	}
 	if !s.Exporter.now().Before(job.ExpiresAt) {
 		return job, "", fmt.Errorf("query: export %s expired at %s",
 			id, job.ExpiresAt.Format(time.RFC3339))
+	}
+	// The link is a copy of the trail leaving: it is recorded before it is
+	// handed out, and if the trail cannot say so, it is not handed out. It is
+	// the completed action again, whose summary is that the signed URL was
+	// issued, with the person who collected it as the actor.
+	if err := s.recordExportLink(ctx, p, g, job); err != nil {
+		return job, "", fmt.Errorf("query: the link was not issued because it could not be recorded: %w", err)
 	}
 	url, err := s.Exporter.Presigner.Presign(ctx,
 		FileKey(job.ID, job.Format), s.Exporter.linkValid())
@@ -282,6 +303,23 @@ func (s *Service) recordExportCompleted(
 	}, data)
 }
 
+// recordExportLink records one issue of a link to a finished export, through
+// the emitter that waits for the record to be taken.
+func (s *Service) recordExportLink(ctx context.Context, p auth.Principal, g auth.Grant, job Job) error {
+	if s.confirmed == nil {
+		// No sink is configured: the reading of the trail leaves no trace, which
+		// a deployment chose when it left the sink out.
+		return nil
+	}
+	data, err := structData(map[string]any{"records": float64(job.Records), "format": job.Format})
+	if err != nil {
+		return err
+	}
+	return s.confirmed.Record(ctx, s.readRecord("audit.export.completed", p, g, nil, []*record.Target{
+		{Type: "export", Id: job.ID},
+	}, data))
+}
+
 // write puts one of a job's records.
 func (e *Exporter) write(ctx context.Context, job Job, key string) error {
 	body, err := json.MarshalIndent(job, "", "  ")
@@ -348,6 +386,20 @@ func contentType(format string) string {
 	return "application/x-ndjson"
 }
 
+// csvSafe keeps a spreadsheet from running a cell as a formula. A cell that
+// begins with = + - @ or a tab or carriage return is read by Excel, Sheets and
+// LibreOffice as one, and an actor id or a source is a value somebody else chose.
+// The cell gets a leading quote, which the spreadsheet shows as nothing. The
+// NDJSON export is not affected.
+func csvSafe(cells []string) []string {
+	for i, c := range cells {
+		if c != "" && strings.ContainsRune("=+-@\t\r", rune(c[0])) {
+			cells[i] = "'" + c
+		}
+	}
+	return cells
+}
+
 // render writes the rows in the form asked for.
 func render(rows []index.Row, format string) ([]byte, error) {
 	var b bytes.Buffer
@@ -361,12 +413,12 @@ func render(rows []index.Row, format string) ([]byte, error) {
 			return nil, err
 		}
 		for _, r := range rows {
-			if err := w.Write([]string{
+			if err := w.Write(csvSafe([]string{
 				r.ID, r.TenantID, r.OccurredAt.UTC().Format(time.RFC3339Nano),
 				r.RecordedAt.UTC().Format(time.RFC3339Nano), r.Source, r.Action,
 				r.Operation, r.Outcome, r.ActorKind, r.ActorID,
 				r.ObjectKey, strconv.Itoa(r.Line),
-			}); err != nil {
+			})); err != nil {
 				return nil, err
 			}
 		}

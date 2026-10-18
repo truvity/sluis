@@ -201,6 +201,45 @@ func TestEffectiveWindows(t *testing.T) {
 	}
 }
 
+// A time-boxed grant over one tenant is not stretched by an unbounded grant over
+// another: taking the union of the tenants and the widest window would have read
+// acme for every period. A grant that another covers adds nothing, so an
+// unbounded grant over every tenant still answers unbounded.
+func TestEffectiveDoesNotLendAWindowToAnotherTenant(t *testing.T) {
+	ops := []auth.Operation{auth.Search}
+	acmeQ3 := auth.Grant{Rule: "acme-q3", Tenants: []string{"acme"}, Profiles: []string{"history"}, Operations: ops,
+		From: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC), Until: time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)}
+	globexAlways := auth.Grant{Rule: "globex", Tenants: []string{"globex"}, Profiles: []string{"history"}, Operations: ops}
+
+	if _, err := auth.Effective([]auth.Grant{acmeQ3, globexAlways}, "history", auth.Search); !errors.Is(err, auth.ErrDenied) {
+		t.Fatalf("a bounded grant over acme was combined with an unbounded one over globex: %v", err)
+	}
+	// Alone each is itself.
+	if g, err := auth.Effective([]auth.Grant{acmeQ3}, "history", auth.Search); err != nil || g.From.IsZero() {
+		t.Fatalf("acme alone lost its window: %+v %v", g, err)
+	}
+	// Covered grants are set aside: an unbounded grant over acme and globex covers
+	// the time-boxed one over acme.
+	both := auth.Grant{Rule: "both", Tenants: []string{"acme", "globex"}, Profiles: []string{"history"}, Operations: ops}
+	g, err := auth.Effective([]auth.Grant{acmeQ3, both}, "history", auth.Search)
+	if err != nil || !g.From.IsZero() || !g.Until.IsZero() || len(g.Tenants) != 2 || g.Rule != "acme-q3,both" {
+		t.Fatalf("a covered grant changed the answer: %+v %v", g, err)
+	}
+	// The same window over different tenants unions.
+	globexQ3 := acmeQ3
+	globexQ3.Rule, globexQ3.Tenants = "globex-q3", []string{"globex"}
+	g, err = auth.Effective([]auth.Grant{acmeQ3, globexQ3}, "history", auth.Search)
+	if err != nil || len(g.Tenants) != 2 || !g.From.Equal(acmeQ3.From) || !g.Until.Equal(acmeQ3.Until) {
+		t.Fatalf("one window over two tenants: %+v %v", g, err)
+	}
+	// An unbounded grant over a tenant does not cover a bounded one over every tenant.
+	allQ3 := auth.Grant{Rule: "all-q3", AllTenants: true, Profiles: []string{"history"}, Operations: ops,
+		From: acmeQ3.From, Until: acmeQ3.Until}
+	if _, err := auth.Effective([]auth.Grant{allQ3, globexAlways}, "history", auth.Search); !errors.Is(err, auth.ErrDenied) {
+		t.Fatalf("every tenant for Q3 plus globex always was combined: %v", err)
+	}
+}
+
 // Nothing grants a caller nothing, rather than an empty grant that would read
 // as a grant.
 func TestAnUnmatchedCallerIsDenied(t *testing.T) {

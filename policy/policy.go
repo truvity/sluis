@@ -1153,6 +1153,45 @@ func displayText(field, value string, limit int) error {
 	return nil
 }
 
+// CleanDisplayText is [displayText] for text somebody else wrote, where refusing
+// it would refuse a sign-in: it returns the value with what displayText refuses
+// taken out, so that what is left would pass.
+//
+// Bytes that are not UTF-8 are dropped, a line break or tab becomes a space,
+// the other control and formatting characters (bidirectional overrides and
+// isolates among them, zero-width characters, the line and paragraph
+// separators) are dropped, runs of whitespace become one space, and the result
+// is cut to at most limit characters on a character boundary, never in the
+// middle of an encoded one. A value with nothing left is empty.
+func CleanDisplayText(value string, limit int) string {
+	var b strings.Builder
+	space := false
+	n := 0
+	for _, r := range strings.ToValidUTF8(value, "") {
+		switch {
+		case r == '\n' || r == '\r' || r == '\t' || unicode.IsSpace(r) && !unicode.In(r, unicode.Zl, unicode.Zp, unicode.Cc, unicode.Cf):
+			space = b.Len() > 0
+			continue
+		case unicode.In(r, unicode.Cc, unicode.Cf, unicode.Zl, unicode.Zp):
+			continue
+		}
+		if n >= limit {
+			break
+		}
+		if space {
+			if n+1 >= limit {
+				break
+			}
+			b.WriteByte(' ')
+			n++
+			space = false
+		}
+		b.WriteRune(r)
+		n++
+	}
+	return b.String()
+}
+
 // checkFragments refuses two groups setting one scalar to different
 // values. Doing it here rather than at merge time means the failure is a
 // rollout that stops, not a login that behaves oddly for one person who

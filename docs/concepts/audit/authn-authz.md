@@ -43,9 +43,19 @@ Two issuers can assert the same claim, for example `all:audit:auditor` in `group
 
 The receiver verifies the token as a JWT from the cluster's own OIDC issuer. The subject is the service account, which the kubelet vouches for. The receiver stamps it on each record as the observer. It also authenticates `RegisterCatalogue`.
 
+| Caller and records | Behaviour |
+|---|---|
+| Source of a record | with workloads listed, a record of another `source` is refused by id and the batch goes on; a caller not listed writes nothing |
+| Tenant and actor | not bound: the workloads file carries neither |
+
 ### On the SQS path
 
 A record arriving through the ingest queue carries no verified caller identity. SQS delivers the body and attributes the sender chose. The writer attributes the record to itself.
+
+| Consumer | Stamp in the message |
+|---|---|
+| writer Lambda, queue consumer | ignored: `observer`, `recorded_at` and `origin_hash` are the writer's own |
+| NATS consumer | kept: the stream admits this installation's receivers alone |
 
 Whoever may send to the queue can therefore record under any `source` and `actor` a catalogue admits. Authenticity on this path rests on the queue policy's sender principals alone.
 
@@ -66,6 +76,11 @@ The HTTP and stream paths differ: the receiver verifies the caller's token and s
 | policy-engine adapter | optional | an engine whose query plan returns a filter and whose decision log names the rule |
 
 An authorizer answers with every grant the caller holds. `auth.Effective` picks, per request, the grants covering the profile and operation asked. Tenants union within a profile and never across profiles. A time window never unions.
+
+| Grants with windows | Effect |
+|---|---|
+| one covers another's tenants and window | the covered one is set aside |
+| the rest differ in window | the request is refused |
 
 The `access-roster` grants preset (legacy identifier, renamed in v1.75–v1.76) reads the estate's grant grammar, which sluis defines. `authn.SplitGroup` splits it. Roles bind to the framework profiles a profile is composed from, not to profile names. `viewer` must be tenant-scoped. `resolve` and time-boxed grants are explicit rules only. The reference lists the role table.
 

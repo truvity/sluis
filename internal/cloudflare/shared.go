@@ -39,20 +39,21 @@ var ErrNotFound = shared.ErrNotFound
 
 // The functions of the shared vocabulary.
 var (
-	R2Secret           = shared.R2Secret
-	Prefix             = shared.Prefix
-	StoredName         = shared.StoredName
-	OnDemandName       = shared.OnDemandName
-	SplitName          = shared.SplitName
-	IsOwn              = shared.IsOwn
-	IsStored           = shared.IsStored
-	Caller             = shared.Caller
-	ValidateInstance   = shared.ValidateInstance
-	ForbiddenGroup     = shared.ForbiddenGroup
-	ForbiddenGroupWith = shared.ForbiddenGroupWith
-	GroupIDs           = shared.GroupIDs
-	CheckPrototype     = shared.CheckPrototype
-	IsPrototypeError   = shared.IsPrototypeError
-	ClonePolicies      = shared.ClonePolicies
-	CloneCondition     = shared.CloneCondition
+	R2Secret               = shared.R2Secret
+	Prefix                 = shared.Prefix
+	StoredName             = shared.StoredName
+	OnDemandName           = shared.OnDemandName
+	SplitName              = shared.SplitName
+	IsOwn                  = shared.IsOwn
+	IsStored               = shared.IsStored
+	Caller                 = shared.Caller
+	ValidateInstance       = shared.ValidateInstance
+	ForbiddenGroup         = shared.ForbiddenGroup
+	ForbiddenGroupWith     = shared.ForbiddenGroupWith
+	GroupIDs               = shared.GroupIDs
+	CheckPrototype         = shared.CheckPrototype
+	CheckPrototypeAllowing = shared.CheckPrototypeAllowing
+	IsPrototypeError       = shared.IsPrototypeError
+	ClonePolicies          = shared.ClonePolicies
+	CloneCondition         = shared.CloneCondition
 )

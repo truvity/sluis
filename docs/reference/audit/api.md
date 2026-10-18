@@ -123,6 +123,9 @@ A predicate on `id` takes whole UUIDs; anything else is `invalid_argument`. `Get
 | `limit` | 1000; a larger value is cut to it |
 | Export | 100000 records; a larger match fails the job, asking to narrow the filter |
 | Export recording | `audit.export.requested` is recorded before any read; if it cannot be, the export does not start |
+| Refused reads | `audit.search`, `audit.facets`, `audit.get` and `audit.pseudonym.resolved` are recorded as failures; the same caller refused the same way on a profile is recorded once a minute |
+| Collecting | Only the issuer and subject that asked for the job collect it, and only while they still hold the export grant on the profile. Each link issued is recorded (`audit.export.completed`) before it is returned; if it cannot be, no link is issued |
+| CSV | A cell that begins with `=`, `+`, `-`, `@`, a tab or a carriage return is written with a leading `'`, so a spreadsheet does not run it |
 
 A grant's window narrows a wider request. 64-bit integers (`count`, `line`, `records`) are JSON strings.
 

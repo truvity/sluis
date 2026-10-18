@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/truvity/sluis/audit/internal/config"
 	"github.com/truvity/sluis/audit/internal/registry"
 	"github.com/truvity/sluis/audit/sdk/record"
 )
@@ -22,5 +23,25 @@ func TestARegistrationRecordIsAWholeRecord(t *testing.T) {
 	}
 	if r.GetObserver().GetVersion() != "0.2.6" {
 		t.Fatalf("observer.version = %q, want the writer's", r.GetObserver().GetVersion())
+	}
+}
+
+// Only a NATS stream is read as the receivers' own: the stream's credentials
+// admit them and nothing else. A queue delivers whatever its sender wrote, so a
+// stamp inside a message from one is a claim and is replaced.
+func TestOnlyANATSStreamKeepsTheUpstreamStamp(t *testing.T) {
+	cases := []struct {
+		name string
+		cfg  *config.Writer
+		want bool
+	}{
+		{"no stream", &config.Writer{}, false},
+		{"nats", &config.Writer{Consume: &config.Consume{NATS: &config.Stream{}}}, true},
+		{"sqs", &config.Writer{Consume: &config.Consume{SQS: &config.ConsumeSQS{}}}, false},
+	}
+	for _, c := range cases {
+		if got := keepsUpstreamStamp(c.cfg); got != c.want {
+			t.Errorf("%s: keepsUpstreamStamp = %v, want %v", c.name, got, c.want)
+		}
 	}
 }

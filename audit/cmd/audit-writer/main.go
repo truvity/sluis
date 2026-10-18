@@ -174,6 +174,7 @@ func run() error {
 	// who may register what. It must never be nil: the registry reads a nil
 	// Identity as "nobody is checking" and would then take the document's word.
 	sourceOf := auth.Workloads(nil).SourceFrom
+	var bound auth.Workloads
 	switch {
 	case cfg.Workloads != "":
 		callers, err := cli.LoadWorkloads(cfg.Workloads)
@@ -184,6 +185,7 @@ func run() error {
 			return err
 		}
 		sourceOf = callers.Map.SourceFrom
+		bound = callers.Map
 	case cfg.AnonymousWrites:
 		slog.WarnContext(context.Background(), "accepting writes from callers nobody verified: records written over HTTP "+
 			"carry no observer identity, and anyone who can reach this port can write them")
@@ -243,10 +245,12 @@ func run() error {
 			RollInterval:     cfg.Roll.Interval.D(),
 			Version:          version,
 			Evidence:         evidence,
-			// Records reaching this writer over the stream were stamped by a
-			// receiver of this installation, which is the only thing that may
-			// publish to it.
-			FromStream: cfg.Consume != nil,
+			// Records reaching this writer over a NATS stream were stamped by
+			// a receiver of this installation, which is the only thing the
+			// stream's credentials let publish to it. A queue is not that: SQS
+			// delivers the body its sender chose, so what arrives from one is
+			// stamped afresh (see keepsUpstreamStamp).
+			FromStream: keepsUpstreamStamp(cfg),
 		})
 		if err != nil {
 			return err
@@ -295,7 +299,18 @@ func run() error {
 		checks = append(checks, readiness.Check{Name: "consumer", Fn: func(context.Context) error { return health.err() }})
 	}
 
-	path, handler := sinkserver.NewHandler(front)
+	// A listed workload writes the source it is listed for and no other, and
+	// with a list in force, a caller missing from it writes nothing: the
+	// registry already treats it as nobody. Records the writer makes about
+	// itself do not pass here, they never leave the process.
+	httpFront := front
+	if len(bound) > 0 {
+		httpFront = &sinkserver.SourceBound{To: front, Workloads: bound, OnRefused: func(ctx context.Context, subject, source string) {
+			slog.WarnContext(ctx, "a record was refused: its source is not the caller's",
+				slog.String("caller", subject), slog.String("record_source", source))
+		}}
+	}
+	path, handler := sinkserver.NewHandler(httpFront)
 	if authenticated != nil {
 		handler = auth.Middleware(authenticated, handler)
 	}
@@ -366,6 +381,15 @@ func run() error {
 
 // recorder records a registration, because a catalogue arriving changes what
 // the archive's records mean.
+// keepsUpstreamStamp reports whether the writer keeps the stamp a record
+// arrives with. It does for a NATS stream only: the stream's credentials admit
+// this installation's receivers and nothing else, so the stamp was made by one.
+// A queue delivers whatever its sender wrote, so records from it are stamped
+// afresh with the writer's own identity and clock.
+func keepsUpstreamStamp(cfg *config.Writer) bool {
+	return cfg.Consume != nil && cfg.Consume.NATS != nil
+}
+
 func recorder(to sink.Sink, version string) func(context.Context, registry.Entry) {
 	return func(ctx context.Context, e registry.Entry) {
 		_, err := to.Write(ctx, &sink.Request{
