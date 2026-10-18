@@ -2301,6 +2301,13 @@
                   "exchange"
                 ]
               },
+              "pkce": {
+                "description": "Whether it must use PKCE (RFC 7636, RFC 9700 2.1.1): `required` refuses an authorization request with no S256 `code_challenge` and a code redeemed with no `code_verifier`. A public client is always `required` and refuses `optional`; absent is `optional` for a confidential client. Refused on an exchange client.",
+                "enum": [
+                  "required",
+                  "optional"
+                ]
+              },
               "redirects": {
                 "description": "The redirect URIs.",
                 "items": {

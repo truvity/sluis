@@ -27,12 +27,32 @@ A client's id is the `aud`, unless the request named a [resource](#resources).
 | `requires` | internal groups, any one admits |
 | `ttl_cap` | upper bound on token lifetime |
 | `session` | `interactive` (default) or `agent`; refused on `exchange`; see [agent-class sessions](#agent-class-sessions) |
+| `pkce` | `required` or `optional`; see [PKCE per client](#pkce) |
 | `sign_in_exchange` | `true` lets a sign-in be a token-exchange proof (`access_token`) while its session lives; `public` only |
 | `display_name`, `description` | [sign-in page text](#what-the-sign-in-page-calls-a-client) |
 | `backchannel_logout_uri` | receives a signed `logout+jwt` naming the `sid` when a sign-in ends; unusable behind [oauth2-proxy](../../guides/sluis/connect/oauth2-proxy.md) |
 | `groups` | [groups override](#groups-override) |
 | `groups_delimiter` | [rewrites `:`](#groups_delimiter) |
 | `signing_alg` | [pins the algorithm](#signing_alg) |
+
+### PKCE
+
+| `kind` | `pkce` absent | `pkce: required` | `pkce: optional` |
+|---|---|---|---|
+| `public` | required | accepted (the same) | refused at load |
+| `confidential` | optional | required | optional |
+| `exchange` | none | refused at load | refused at load |
+
+| Where | A `required` client |
+|---|---|
+| `/authorize` without an S256 `code_challenge` | `invalid_request` before any sign-in page, as for a `public` client |
+| `/authorize` with `code_challenge_method=plain` | `invalid_request`, for every client |
+| `/token` for a code issued against a challenge, without `code_verifier` | `invalid_grant` |
+| Client document | `public`, so always required |
+| Confidential client that sent a challenge | held to the verifier whatever its `pkce` (RFC 7636 4.6) |
+| Absent on a confidential client | `optional`: the OpenID Basic OP conformance clients send no challenge |
+| Digest | `pkce` is in the policy digest |
+| Advice | `required` on every confidential client that can send a challenge: OAuth 2.1, [RFC 9700 2.1.1](https://www.rfc-editor.org/rfc/rfc9700#section-2.1.1) |
 
 ### A generated secret
 
@@ -230,7 +250,7 @@ resources:
   https://legacy.example/: { requires: [prod:k8s:admin], signing_alg: RS256 }
 ```
 
-Accepts `RS256`, `ES256` or `ES384`; anything else is refused at load. A row without it gets the signing key's algorithm (ES384 in the chart).
+Accepts `RS256`, `ES256` or `ES384`; others are refused at load. A row without it gets the signing key's algorithm (ES384 in the chart).
 
 | Token | Row read |
 |---|---|
