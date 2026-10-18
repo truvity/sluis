@@ -81,6 +81,9 @@ const (
 	LoginNotEntitled = "not_entitled"
 	// LoginRecoveryRefused is a recovery proof that did not verify.
 	LoginRecoveryRefused = "recovery_refused"
+	// LoginRecoveryThrottled is a recovery proof not looked at, because its
+	// source had spent its refusals for the window.
+	LoginRecoveryThrottled = "recovery_throttled"
 	// LoginUnaudited is a sign-in refused because the audit trail could not be
 	// written.
 	LoginUnaudited = "unaudited"

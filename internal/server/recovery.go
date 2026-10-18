@@ -14,6 +14,7 @@ import (
 	"golang.org/x/crypto/argon2"
 
 	"github.com/truvity/sluis/internal/lazy"
+	"github.com/truvity/sluis/internal/throttle"
 )
 
 // Recovery is the way in when the ordinary one is broken: nobody is in the
@@ -183,8 +184,15 @@ const (
 	argonLength  = 32
 )
 
-// recoveryAttempts is how many failures are answered before the password
-// stops answering for recoveryWindow.
+// recoveryAttempts is how many failures one source is answered before the
+// password stops answering it for recoveryWindow; recoveryCeiling is how many
+// every source together are answered.
+//
+// The two are not one number. The ceiling protects the process from many
+// callers and sits well above what one may do, because a single count for
+// everybody is a lock anyone can hold shut: ten wrong proofs from anywhere
+// stopped the one operator holding the right one, on the path that exists for
+// when nothing else works.
 //
 // Not really about guessing — a generated password will not be guessed.
 // It is because verifying costs memory on purpose, and an endpoint anyone
@@ -192,8 +200,25 @@ const (
 // hardening becomes a way to take the hub down.
 const (
 	recoveryAttempts = 10
+	recoveryCeiling  = 100
 	recoveryWindow   = time.Minute
 )
+
+// recoverySourceKey carries the address a recovery proof came from.
+type recoverySourceKey struct{}
+
+// WithRecoverySource returns a context in which a recovery proof is taken to
+// come from source, the address the deployment's proxies vouch for. A
+// recovery counts its refusals per source; one asked with no source counts
+// them all as one.
+func WithRecoverySource(ctx context.Context, source string) context.Context {
+	return context.WithValue(ctx, recoverySourceKey{}, source)
+}
+
+func recoverySource(ctx context.Context) string {
+	source, _ := ctx.Value(recoverySourceKey{}).(string)
+	return source
+}
 
 // PasswordRecovery is the shape for a hub outside Kubernetes: a generated
 // password, kept only as an Argon2id digest with a random salt.
@@ -215,10 +240,18 @@ type PasswordRecovery struct {
 	// changed is digested again; one that did not keeps its salt and digest.
 	password *lazy.Value[string]
 
-	mu       sync.Mutex
-	failures int
-	blocked  time.Time
-	now      func() time.Time
+	// mu serialises verification, one at a time, which is what bounds the
+	// memory a flood of proofs can hold at once.
+	mu sync.Mutex
+	// refused counts refusals per source and overall ([throttle]).
+	refused *throttle.Limiter
+	now     func() time.Time
+}
+
+// newRefusalCount is the limiter a password recovery counts its refusals in.
+// The clock is read late, so a test that moves p.now moves it too.
+func (p *PasswordRecovery) newRefusalCount() *throttle.Limiter {
+	return throttle.New(recoveryAttempts, recoveryCeiling, recoveryWindow, 0, func() time.Time { return p.now() })
 }
 
 var _ Recovery = (*PasswordRecovery)(nil)
@@ -230,11 +263,13 @@ func NewPasswordRecovery(password string) *PasswordRecovery {
 	// source is broken, which is the right outcome for a process about to
 	// authenticate people.
 	_, _ = rand.Read(salt)
-	return &PasswordRecovery{
+	p := &PasswordRecovery{
 		salt:   salt,
 		digest: argon2.IDKey([]byte(password), salt, argonTime, argonMemory, argonThreads, argonLength),
 		now:    time.Now,
 	}
+	p.refused = p.newRefusalCount()
+	return p
 }
 
 // NewLazyPasswordRecovery returns the password shape over a password that is
@@ -244,6 +279,7 @@ func NewPasswordRecovery(password string) *PasswordRecovery {
 func NewLazyPasswordRecovery(ttl time.Duration, load func(context.Context) (string, error)) *PasswordRecovery {
 	p := &PasswordRecovery{password: lazy.New(ttl, load), now: time.Now}
 	p.password.SetClock(func() time.Time { return p.now() })
+	p.refused = p.newRefusalCount()
 	return p
 }
 
@@ -289,8 +325,8 @@ func (p *PasswordRecovery) Verify(ctx context.Context, proof string) (string, er
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	now := p.now()
-	if now.Before(p.blocked) {
+	source := recoverySource(ctx)
+	if p.refused.Blocked(source) {
 		return "", ErrRecoveryThrottled
 	}
 	if err := p.settle(ctx); err != nil {
@@ -298,13 +334,10 @@ func (p *PasswordRecovery) Verify(ctx context.Context, proof string) (string, er
 	}
 	got := argon2.IDKey([]byte(proof), p.salt, argonTime, argonMemory, argonThreads, argonLength)
 	if subtle.ConstantTimeCompare(got, p.digest) != 1 {
-		p.failures++
-		if p.failures >= recoveryAttempts {
-			p.failures, p.blocked = 0, now.Add(recoveryWindow)
-		}
+		p.refused.Refused(source)
 		return "", ErrRecoveryRefused
 	}
-	p.failures = 0
+	p.refused.Accepted(source)
 	return "recovery", nil
 }
 

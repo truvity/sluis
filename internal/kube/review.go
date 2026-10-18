@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	authnv1 "k8s.io/api/authentication/v1"
@@ -61,6 +62,15 @@ func (c *Client) ReviewToken(ctx context.Context, token string, audiences []stri
 	// hub's operator role.
 	username := strings.TrimSpace(review.Status.User.Username)
 	if username == "" {
+		return "", ErrTokenRejected
+	}
+	// The API server reports the audiences it found common to the review and
+	// the token. Empty on an authenticated token means the token is valid for
+	// the API server's own audience and none of ours (the field's contract in
+	// the TokenReview API), which is what a mounted token is; a review that
+	// names none of the audiences asked for was not audience aware at all.
+	// Either way the token was not minted for this purpose.
+	if !slices.ContainsFunc(review.Status.Audiences, func(got string) bool { return slices.Contains(audiences, got) }) {
 		return "", ErrTokenRejected
 	}
 	return username, nil

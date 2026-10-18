@@ -384,3 +384,66 @@ func TestAnOversizedRecoveryPostIsRefused(t *testing.T) {
 		t.Errorf("%d requests completed by an oversized post", n)
 	}
 }
+
+// proofRecovery accepts one proof and refuses the rest, as the cluster's
+// TokenReview does.
+type proofRecovery struct{ acceptingRecovery }
+
+func (proofRecovery) Verify(_ context.Context, proof string) (string, error) {
+	if proof != "the-right-proof" {
+		return "", issuer.ErrRecoveryRefused
+	}
+
+	return "system:serviceaccount:sluis:recovery", nil
+}
+
+// Refused proofs are counted per source. One caller's wrong proofs stop that
+// caller; they do not keep the operator with the right one out, which for a
+// break-glass door is the attack.
+func TestRecoveryRefusalsAreCountedPerSource(t *testing.T) {
+	t.Parallel()
+
+	codec := access.NewStateCodec(make([]byte, 32), time.Minute)
+	storage := &countingCompleter{}
+	mux := http.NewServeMux()
+	issuer.SignInRoutes(mux, issuer.SignInDeps{
+		Recovery: proofRecovery{}, Storage: storage, State: codec,
+		SSO:    issuer.NewSSO(issuer.NewMemoryState(), time.Hour),
+		Return: func(context.Context, string) string { return "/done" },
+		Log:    slog.New(slog.DiscardHandler),
+	})
+	handler := refusal.Middleware(mux)
+
+	state, err := codec.IssueAs(access.Binding{Bind: "req-1", Owner: access.RecoveryPurpose})
+	if err != nil {
+		t.Fatal(err)
+	}
+	post := func(source, proof string) int {
+		form := url.Values{"state": {state}, "proof": {proof}}
+		request := httptest.NewRequest(http.MethodPost, "/login/recovery", strings.NewReader(form.Encode()))
+		request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		request.AddCookie(&http.Cookie{Name: access.RecoveryCookieName, Value: state})
+		request.RemoteAddr = source + ":4000"
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+
+		return response.Code
+	}
+
+	for i := range 5 {
+		if code := post("203.0.113.7", "wrong"); code != http.StatusForbidden {
+			t.Fatalf("refusal %d = %d, want 403", i, code)
+		}
+	}
+	// The noisy source is stopped, even with the right proof.
+	if code := post("203.0.113.7", "the-right-proof"); code != http.StatusTooManyRequests {
+		t.Errorf("a source past its allowance = %d, want 429", code)
+	}
+	if n := storage.count(); n != 0 {
+		t.Errorf("%d sign-ins completed for a throttled source", n)
+	}
+	// Another source is not.
+	if code := post("198.51.100.20", "the-right-proof"); code != http.StatusFound {
+		t.Errorf("another source = %d, want 302: one caller locked the door for everybody", code)
+	}
+}
