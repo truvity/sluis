@@ -1153,7 +1153,7 @@ func newObserveReader(ctx *pulumi.Context, name string, a *Args, accountID strin
 }
 
 // observePrincipalRE is what may assume the observe reader: one IAM role or user.
-var observePrincipalRE = regexp.MustCompile(`^arn:aws[a-z-]*:iam::([0-9]{12}):(role|user)/[A-Za-z0-9+=,.@_/-]+$`)
+var observePrincipalRE = regexp.MustCompile(`^arn:` + `aws[a-z-]*:iam::([0-9]{12}):(role|user)/[A-Za-z0-9+=,.@_/-]+$`)
 
 // checkObservePrincipal holds the principal that may assume the observe reader to
 // one role or user: the account's root, a wildcard or a session ARN would let every

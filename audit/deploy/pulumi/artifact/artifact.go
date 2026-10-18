@@ -448,4 +448,4 @@ func NewCodeSigningConfig(ctx *pulumi.Context, name string, a CodeSigningArgs, o
 	}, opts...)
 }
 
-var signerProfileRE = regexp.MustCompile(`^arn:aws[a-z-]*:signer:[a-z0-9-]+:[0-9]{12}:/signing-profiles/[A-Za-z0-9_]{2,64}/[A-Za-z0-9]{10}$`)
+var signerProfileRE = regexp.MustCompile(`^arn:` + `aws[a-z-]*:signer:[a-z0-9-]+:[0-9]{12}:/signing-profiles/[A-Za-z0-9_]{2,64}/[A-Za-z0-9]{10}$`)

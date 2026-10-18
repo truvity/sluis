@@ -103,7 +103,7 @@ func keyAdminSet(admins []string) ([]string, error) {
 var (
 	accountPattern = regexp.MustCompile(`^[0-9]{12}$`)
 	// adminArnPattern is a role ARN: `arn:aws:iam::<account>:role/[path/]name`.
-	adminArnPattern = regexp.MustCompile(`^arn:aws[a-z-]*:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_*/-]+$`)
+	adminArnPattern = regexp.MustCompile(`^arn:` + `aws[a-z-]*:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_*/-]+$`)
 )
 
 // ssoRegionPath is the one path with a wildcard: an SSO role's, whose region
