@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/truvity/sluis/internal/egress"
 	"github.com/truvity/sluis/policy"
 	"github.com/truvity/sluis/storage/logattr"
 )
@@ -72,7 +73,29 @@ const (
 	// injection but a name long enough to push the real one off the page,
 	// or to be a sentence claiming to be somebody else.
 	documentNameMax = 64
+	// documentFailedFor is how long a failed fetch of one document is
+	// remembered and answered again without asking its origin. The id is
+	// chosen by the caller, so each unknown or broken one is a request from
+	// this process to somebody else's server for as long as callers keep
+	// asking. A document that has been corrected is picked up this long after.
+	documentFailedFor = time.Minute
+	// documentFailedMax bounds how many failures are remembered. Past it a
+	// failure is not remembered, which is the old behaviour, rather than
+	// memory growing with the ids a caller invents.
+	documentFailedMax = 1024
+	// documentHostRate and documentHostWindow bound how many fetches one host
+	// is asked for in the window, whatever the ids: a host that serves
+	// documents at a million paths is one origin, and sign-ins for them are not
+	// a reason to fetch a million times.
+	documentHostRate   = 30
+	documentHostWindow = time.Minute
+	// documentHostsMax bounds how many hosts the rate limit remembers.
+	documentHostsMax = 1024
 )
+
+// errThrottled is a fetch not made because its host has been asked for too
+// many documents lately.
+var errThrottled = errors.New("too many client document fetches from this host; try again shortly")
 
 // errTransient marks a fetch failure that says nothing about the document
 // itself: the origin could not be reached in time, reset the connection or
@@ -103,6 +126,15 @@ type documentClients struct {
 
 	mu     sync.Mutex
 	cached map[string]cachedDocument
+	// failed remembers a fetch that failed, by client id, for [documentFailedFor].
+	failed map[string]failedFetch
+	// hosts is when each host was last fetched from, within [documentHostWindow].
+	hosts map[string][]time.Time
+}
+
+type failedFetch struct {
+	err   error
+	until time.Time
 }
 
 // cacheLifetime is how long a response may be reused: its `max-age`,
@@ -145,18 +177,29 @@ type cachedDocument struct {
 // somewhere the allow-list does not name -- and a redirect chain is how
 // an allow-list on the first hop stops meaning anything.
 func newDocumentClients(allow policy.ClientDocuments) *documentClients {
+	return newDocumentClientsWith(allow, egress.Public)
+}
+
+// newDocumentClientsWith is [newDocumentClients] with the network policy the
+// fetch connects under. The address is checked where the socket connects,
+// after the name is resolved, so a host that answers a public address to a
+// look and a private one to a connection is refused as the private one is.
+func newDocumentClientsWith(allow policy.ClientDocuments, network egress.Policy) *documentClients {
 	return &documentClients{
 		allow:   allow,
 		now:     time.Now,
 		log:     slog.Default(),
 		backoff: documentRetryBackoff,
 		fetch: &http.Client{
-			Timeout: documentFetchTimeout,
+			Timeout:   documentFetchTimeout,
+			Transport: network.Transport(),
 			CheckRedirect: func(req *http.Request, _ []*http.Request) error {
 				return fmt.Errorf("%w: the document redirected to %s; a client document is served at its own id", errRedirected, req.URL.Redacted())
 			},
 		},
 		cached: map[string]cachedDocument{},
+		failed: map[string]failedFetch{},
+		hosts:  map[string][]time.Time{},
 	}
 }
 
@@ -185,6 +228,13 @@ func (d *documentClients) Resolve(ctx context.Context, clientID string) (policy.
 		return client, nil
 	}
 
+	if err := d.recentFailure(clientID); err != nil {
+		return policy.Client{}, err
+	}
+	if !d.admitHost(target.Host) {
+		return policy.Client{}, fmt.Errorf("fetch the client document at %s: %w", target.Redacted(), errThrottled)
+	}
+
 	client, life, err := d.loadWithRetry(ctx, target)
 	if err != nil {
 		// BOUNDED STALE-WHILE-ERROR, on the transport only. If the origin
@@ -208,14 +258,87 @@ func (d *documentClients) Resolve(ctx context.Context, clientID string) (policy.
 				logattr.SafeString("origin", target.Host), logattr.SafeString("client_id", clientID), logattr.SafeError("error", err))
 			return stale, nil
 		}
+		if ctx.Err() == nil {
+			// A fetch the caller gave up on says nothing about the document.
+			d.rememberFailure(clientID, err)
+		}
 		return policy.Client{}, err
 	}
 
 	d.mu.Lock()
 	d.cached[clientID] = cachedDocument{client: client, until: d.now().Add(life)}
+	delete(d.failed, clientID)
 	d.mu.Unlock()
 
 	return client, nil
+}
+
+// recentFailure is the error this document's last fetch failed with, while it
+// is still within [documentFailedFor], and nil otherwise.
+func (d *documentClients) recentFailure(clientID string) error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	f, ok := d.failed[clientID]
+	if !ok {
+		return nil
+	}
+	if !d.now().Before(f.until) {
+		delete(d.failed, clientID)
+		return nil
+	}
+	return f.err
+}
+
+func (d *documentClients) rememberFailure(clientID string, err error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	now := d.now()
+	if len(d.failed) >= documentFailedMax {
+		for id, f := range d.failed {
+			if !now.Before(f.until) {
+				delete(d.failed, id)
+			}
+		}
+		if len(d.failed) >= documentFailedMax {
+			return
+		}
+	}
+	d.failed[clientID] = failedFetch{err: err, until: now.Add(documentFailedFor)}
+}
+
+// admitHost counts a fetch against its host's allowance, and says whether it
+// may go ahead.
+func (d *documentClients) admitHost(host string) bool {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	now := d.now()
+	recent := d.hosts[host][:0:0]
+	for _, at := range d.hosts[host] {
+		if now.Sub(at) < documentHostWindow {
+			recent = append(recent, at)
+		}
+	}
+	if len(recent) >= documentHostRate {
+		d.hosts[host] = recent
+		return false
+	}
+	if _, known := d.hosts[host]; !known && len(d.hosts) >= documentHostsMax {
+		for h, times := range d.hosts {
+			if len(times) == 0 || now.Sub(times[len(times)-1]) >= documentHostWindow {
+				delete(d.hosts, h)
+			}
+		}
+		if len(d.hosts) >= documentHostsMax {
+			// Every slot is a host asked for within the minute. The table is
+			// full of hosts that matter more than this one.
+			return false
+		}
+	}
+	d.hosts[host] = append(recent, now)
+	return true
 }
 
 func (d *documentClients) fromCache(clientID string) (policy.Client, bool) {
@@ -321,7 +444,9 @@ func (d *documentClients) load(ctx context.Context, target *url.URL) (policy.Cli
 
 	resp, err := d.fetch.Do(req)
 	if err != nil {
-		if !errors.Is(err, errRedirected) {
+		// A redirect and a refused address are the answer, not a hiccup:
+		// neither is retried, and neither is covered by a stale copy.
+		if !errors.Is(err, errRedirected) && !errors.Is(err, egress.ErrBlocked) {
 			err = fmt.Errorf("%w: %w", errTransient, err)
 		}
 		return policy.Client{}, 0, fmt.Errorf("fetch the client document at %s: %w", target.Redacted(), err)
@@ -389,23 +514,17 @@ func (d *documentClients) load(ctx context.Context, target *url.URL) (policy.Cli
 
 // documentName is the name shown on the sign-in page, bounded.
 //
+// It is cleaned with what a declared client's display name is held to
+// ([policy.CleanDisplayText]): a bidirectional override that reorders it on the
+// screen, a zero-width or other formatting character, a line break or bytes
+// that are not text are taken out, and it is cut to [documentNameMax]
+// characters, never in the middle of one.
+//
 // Falling back to the host rather than to the whole URL: the host is the
 // part a person can recognise, and it is the part the allow-list blessed.
 func documentName(name string, target *url.URL) string {
-	name = strings.TrimSpace(name)
-	// A name is one line. Anything that moves the cursor is a name trying
-	// to lay out a page it does not own.
-	name = strings.Map(func(r rune) rune {
-		if r == '\n' || r == '\r' || r == '\t' {
-			return ' '
-		}
-		return r
-	}, name)
-	if name == "" {
-		return target.Host
+	if name = policy.CleanDisplayText(name, documentNameMax); name != "" {
+		return name
 	}
-	if len(name) > documentNameMax {
-		return name[:documentNameMax]
-	}
-	return name
+	return target.Host
 }

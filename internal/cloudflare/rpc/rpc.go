@@ -39,6 +39,8 @@ var (
 	ErrNotGranted = minter.ErrNotGranted
 	// ErrLifetime is a lifetime outside the preset's.
 	ErrLifetime = minter.ErrLifetime
+	// ErrLimit is a mint over the preset's limit on live or recent on-demand tokens.
+	ErrLimit = minter.ErrLimit
 	// ErrMaintenance is the module being restored: it mints nothing until the
 	// restore has finished.
 	ErrMaintenance = minter.ErrMaintenance
@@ -92,6 +94,7 @@ const (
 	codeUnknownPreset = "unknown_preset"
 	codeNotGranted    = "not_granted"
 	codeLifetime      = "lifetime"
+	codeLimit         = "limit"
 	codeMaintenance   = maintenance.Code
 	codeNotOurs       = "not_ours"
 	codeContended     = "contended"
@@ -138,6 +141,8 @@ func codeOf(err error) error {
 		return modcall.Coded(codeNotGranted, "")
 	case errors.Is(err, ErrLifetime):
 		return modcall.Coded(codeLifetime, "")
+	case errors.Is(err, ErrLimit):
+		return modcall.Coded(codeLimit, "")
 	case errors.Is(err, minter.ErrMaintenance), errors.Is(err, minter.ErrMaintenanceUnknown):
 		return modcall.Coded(codeMaintenance, "")
 	case errors.Is(err, minter.ErrNotOurs):
@@ -210,6 +215,8 @@ func errOf(err error) error {
 		return ErrNotGranted
 	case codeLifetime:
 		return ErrLifetime
+	case codeLimit:
+		return ErrLimit
 	case codeMaintenance:
 		return ErrMaintenance
 	case codeNotOurs:

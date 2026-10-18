@@ -96,8 +96,8 @@ func TestAMintCrossesTheBoundaryWithItsCallerAndLifetime(t *testing.T) {
 	}
 }
 
-func TestTheThreeRefusalsComeBackAsTheMintersErrors(t *testing.T) {
-	for _, want := range []error{rpc.ErrUnknownPreset, rpc.ErrNotGranted, rpc.ErrLifetime} {
+func TestTheRefusalsComeBackAsTheMintersErrors(t *testing.T) {
+	for _, want := range []error{rpc.ErrUnknownPreset, rpc.ErrNotGranted, rpc.ErrLifetime, rpc.ErrLimit} {
 		_, err := client(&fake{err: errors.Join(want, errors.New("detail"))}).MintFor(context.Background(), "x", rpc.Caller{}, 0)
 		if !errors.Is(err, want) {
 			t.Errorf("%v: got %v", want, err)

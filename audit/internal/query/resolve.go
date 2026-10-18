@@ -36,6 +36,11 @@ func (s *Service) Resolve(
 	}
 	g, err := s.allow(ctx, p, req.GetProfile(), auth.Resolve)
 	if err != nil {
+		s.recordRefusal(ctx, "audit.pseudonym.resolved", p, req.GetProfile(), err, []*record.Target{
+			{Type: "pseudonym", Id: req.GetPseudonym()},
+			{Type: "tenant", Id: req.GetTenantId()},
+			{Type: "profile", Id: req.GetProfile()},
+		})
 		return "", err
 	}
 	if !granted(req.GetTenantId(), g) {

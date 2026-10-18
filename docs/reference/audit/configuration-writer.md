@@ -81,7 +81,8 @@ A process that records through a writer (`audit-query` and every job with a `sin
 |---|---|
 | `workloads` set | The receiver verifies who writes and stamps the caller's service account as the record's observer |
 | Neither `workloads` nor `anonymousWrites: true` | The receiver refuses to start |
-| Records over the stream | No verified observer; the stream's authentication admits the publisher |
+| Records over the stream | No verified observer; the stream's authentication admits the publisher. A NATS consumer keeps the receiver's stamp; a queue consumer and the writer Lambda stamp afresh with their own identity and clock |
+| Source of a record | With `workloads` listing workloads, a record must carry the source its caller is listed for, or it is refused (`rejected`). A caller not listed writes nothing |
 | Observer version | The build's version, not configurable |
 
 ### audit-writer-lambda

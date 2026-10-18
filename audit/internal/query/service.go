@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -59,6 +60,12 @@ type Service struct {
 	// unrecorded is not a degraded service, it is the service failing at one of
 	// the two things it is for.
 	OnUnrecorded func(action string, err error)
+	// Now is the clock, for tests. Default time.Now.
+	Now func() time.Time
+
+	// refused remembers which refusals were recorded lately, so that a caller
+	// hammering a denied read leaves one record a minute and not one a request.
+	refused refusals
 
 	emitter *emit.Emitter
 	// confirmed honours the delivery each action declares, for the one read
@@ -129,6 +136,7 @@ func (s *Service) Search(
 ) (index.Page, auth.Grant, error) {
 	g, err := s.allow(ctx, p, req.GetProfile(), auth.Search)
 	if err != nil {
+		s.recordRefusal(ctx, "audit.search", p, req.GetProfile(), err, profileTarget(req.GetProfile()))
 		return index.Page{}, g, err
 	}
 	compiled, err := Compile(req)
@@ -145,6 +153,7 @@ func (s *Service) Search(
 	// tail operation, not only search.
 	if len(compiled.Sort) > 0 && compiled.Sort[0].Field == index.SortRecordedAt {
 		if _, err := s.allow(ctx, p, req.GetProfile(), auth.Tail); err != nil {
+			s.recordRefusal(ctx, "audit.search", p, req.GetProfile(), err, profileTarget(req.GetProfile()))
 			return index.Page{}, g, err
 		}
 	}
@@ -213,6 +222,7 @@ func (s *Service) Facets(
 ) ([]index.Facet, auth.Grant, error) {
 	g, err := s.allow(ctx, p, req.GetProfile(), auth.Facets)
 	if err != nil {
+		s.recordRefusal(ctx, "audit.facets", p, req.GetProfile(), err, profileTarget(req.GetProfile()))
 		return nil, g, err
 	}
 	compiled, err := Compile(&auditv1.SearchRequest{
@@ -236,6 +246,9 @@ func (s *Service) Get(
 ) (index.Row, index.Provenance, auth.Grant, error) {
 	g, err := s.allow(ctx, p, req.GetProfile(), auth.Get)
 	if err != nil {
+		// audit.get declares only the record it was asked for; the profile is in
+		// the outcome's reason, which names what was missing.
+		s.recordRefusal(ctx, "audit.get", p, req.GetProfile(), err, []*record.Target{{Type: "record", Id: req.GetId()}})
 		return index.Row{}, index.Provenance{}, g, err
 	}
 
@@ -374,6 +387,83 @@ func granted(tenant string, g auth.Grant) bool {
 		}
 	}
 	return false
+}
+
+func profileTarget(profile string) []*record.Target {
+	return []*record.Target{{Type: "profile", Id: profile}}
+}
+
+// refusalWindow is how long one refusal stands for the same refusal repeated.
+const refusalWindow = time.Minute
+
+// refusalCap bounds what is remembered. A full table records every refusal
+// rather than forgetting to record one: the cap is for memory, not for the
+// trail.
+const refusalCap = 4096
+
+// refusals is the dedupe of recorded refusals: a caller, an action and a
+// profile are recorded once a window.
+type refusals struct {
+	mu   sync.Mutex
+	last map[string]time.Time
+}
+
+// first reports whether this refusal is the first of its kind in the window.
+func (r *refusals) first(key string, now time.Time) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.last == nil {
+		r.last = map[string]time.Time{}
+	}
+	if at, ok := r.last[key]; ok && now.Sub(at) < refusalWindow {
+		return false
+	}
+	if len(r.last) >= refusalCap {
+		for k, at := range r.last {
+			if now.Sub(at) >= refusalWindow {
+				delete(r.last, k)
+			}
+		}
+		if len(r.last) >= refusalCap {
+			return true
+		}
+	}
+	r.last[key] = now
+	return true
+}
+
+func (s *Service) now() time.Time {
+	if s.Now != nil {
+		return s.Now().UTC()
+	}
+	return time.Now().UTC()
+}
+
+// recordRefusal puts a refused read in the trail, once a minute per caller,
+// action and profile.
+//
+// A caller that is turned away is the read most worth a record: it is somebody
+// probing for what they may see. Only an authorization refusal is recorded
+// (auth.ErrDenied); a failure of the authorizer itself is the service's, not
+// the caller's, and is returned to the caller as it always was. The refusal is
+// recorded with an empty grant, so its outcome's reason is the refusal and
+// names what was missing.
+func (s *Service) recordRefusal(
+	ctx context.Context, action string, p auth.Principal, profile string, failure error, targets []*record.Target,
+) {
+	if !errors.Is(failure, auth.ErrDenied) {
+		return
+	}
+	if p.Subject == "" {
+		// A caller nobody identified is still a caller turned away, and a record
+		// of an operator needs an id to be kept at all.
+		p.Subject = "(unidentified)"
+	}
+	key := p.Issuer + "\x00" + p.Subject + "\x00" + action + "\x00" + profile
+	if !s.refused.first(key, s.now()) {
+		return
+	}
+	s.record(ctx, action, p, auth.Grant{}, failure, targets)
 }
 
 func (s *Service) recordSearch(

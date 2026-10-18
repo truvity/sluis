@@ -52,6 +52,9 @@ type ProviderConfig struct {
 	Dial func(account, token string) API
 	// ExtraForbidden adds names to the built-in refusal list.
 	ExtraForbidden []string
+	// AllowedGroups, when not empty, limits the prototype to the permission
+	// groups it names; the built-in refusal list stays the floor.
+	AllowedGroups []string
 	// Record, when set, is the state store in which the ids of the tokens the
 	// provider minted are kept (at cloudflare-minted/<preset>, the document
 	// sluis's own sweep reads), so that expired ones are deleted: Cloudflare
@@ -228,7 +231,7 @@ func (p *Provider) check(ctx context.Context, api API, proto Token) error {
 			}
 			p.groups, p.groupsAt = g, p.now()
 		}
-		err := CheckPrototype(proto, p.groups, p.cfg.ExtraForbidden...)
+		err := CheckPrototypeAllowing(proto, p.groups, p.cfg.ExtraForbidden, p.cfg.AllowedGroups)
 		pe, ok := IsPrototypeError(err)
 		if err == nil || !ok || pe.Reason != ReasonPrototypeForbidden || refresh {
 			return err

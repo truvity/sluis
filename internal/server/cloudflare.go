@@ -215,6 +215,8 @@ func cloudflareError(err error) error {
 		return connect.NewError(connect.CodePermissionDenied, err)
 	case errors.Is(err, cfrpc.ErrLifetime):
 		return connect.NewError(connect.CodeInvalidArgument, err)
+	case errors.Is(err, cfrpc.ErrLimit):
+		return connect.NewError(connect.CodeResourceExhausted, err)
 	case errors.Is(err, cfrpc.ErrMaintenance):
 		return connect.NewError(connect.CodeUnavailable, err)
 	case errors.Is(err, cfrpc.ErrNotOurs):

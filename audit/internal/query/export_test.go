@@ -13,6 +13,7 @@ import (
 	"github.com/truvity/sluis/audit/sdk/catalogue"
 	auditv1 "github.com/truvity/sluis/audit/sdk/gen/audit/v1"
 
+	"github.com/truvity/sluis/audit/index"
 	"github.com/truvity/sluis/audit/internal/query"
 	"github.com/truvity/sluis/audit/sdk/sink"
 	"github.com/truvity/sluis/audit/store/storetest"
@@ -310,5 +311,126 @@ func TestCSVExportHasAHeaderAndARowEach(t *testing.T) {
 	}
 	if rows[0][0] != "id" {
 		t.Fatalf("the first row is not a header: %v", rows[0])
+	}
+}
+
+// A cell a spreadsheet would run as a formula is quoted. An actor id or a source
+// is a value somebody else chose, and the export is opened by a person.
+func TestCSVExportDoesNotCarryFormulas(t *testing.T) {
+	common, err := catalogue.Common()
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := index.NewMemory()
+	hostile := []string{"=HYPERLINK(\"http://evil.test\")", "+1", "-1", "@SUM(1)", "\tx", "\rx"}
+	var rows []index.Row
+	for n, v := range hostile {
+		rows = append(rows, index.Row{
+			ID: "018f0000-0000-7000-8000-00000000000" + string("abcdef"[n]), TenantID: "acme",
+			OccurredAt: at(t, "2026-09-17T10:00:00Z"), RecordedAt: at(t, "2026-09-17T10:00:00Z"),
+			Source: "wallet", Action: "wallet.credential.issued", Operation: "create", Outcome: "success",
+			ActorKind: "service", ActorID: v, ObjectKey: "k", Line: n + 1,
+		})
+	}
+	if err := m.Index(context.Background(), "security", rows); err != nil {
+		t.Fatal(err)
+	}
+	files := storetest.NewMemory()
+	s, err := query.New(&query.Service{
+		Searcher:   m,
+		Authorizer: auth.Declarative{Rules: []auth.Rule{{Name: "a-rule", Grant: exportGrant()}}},
+		Sink:       &reads{}, Catalogue: common, Instance: "query-1",
+		Exporter: &query.Exporter{Store: files, Presigner: &links{}, Now: func() time.Time { return at(t, "2026-09-18T00:00:00Z") }},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	ctx := context.Background()
+	job, err := s.Export(ctx, caller(), &auditv1.ExportRequest{Profile: "security", Format: auditv1.ExportRequest_FORMAT_CSV})
+	if err != nil || job.Failed != "" {
+		t.Fatalf("export: %v %q", err, job.Failed)
+	}
+	body, err := files.Get(ctx, query.FileKey(job.ID, "csv"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := csv.NewReader(strings.NewReader(string(body))).ReadAll()
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := map[string]bool{}
+	for _, row := range got[1:] {
+		actor := row[9]
+		seen[actor] = true
+		if strings.ContainsRune("=+-@\t\r", rune(actor[0])) {
+			t.Errorf("actor cell %q would run as a formula", actor)
+		}
+	}
+	for _, v := range hostile {
+		if !seen["'"+v] {
+			t.Errorf("%q is not in the file quoted: %v", v, seen)
+		}
+	}
+}
+
+// A subject is unique within its issuer. The same subject at another issuer is
+// somebody else and does not collect the job.
+func TestAnExportIsCollectedByTheIssuerAndSubjectThatAskedForIt(t *testing.T) {
+	s, _, _, _ := exporting(t, exportGrant())
+	ctx := context.Background()
+	job, err := s.Export(ctx, caller(), &auditv1.ExportRequest{Profile: "security"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	other := caller()
+	other.Issuer = "https://another-issuer.test"
+	if _, url, err := s.GetExport(ctx, other, job.ID); !errors.Is(err, query.ErrNotFound) || url != "" {
+		t.Fatalf("the same subject at another issuer collected: %q %v", url, err)
+	}
+	if _, url, err := s.GetExport(ctx, caller(), job.ID); err != nil || url == "" {
+		t.Fatalf("the asker could not collect: %q %v", url, err)
+	}
+}
+
+// The grant is checked again at collection: a person who lost the export grant
+// since asking does not take the file away.
+func TestAnExportIsNotCollectedAfterTheGrantIsGone(t *testing.T) {
+	s, _, _, _ := exporting(t, exportGrant())
+	ctx := context.Background()
+	job, err := s.Export(ctx, caller(), &auditv1.ExportRequest{Profile: "security"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Authorizer = auth.Declarative{Rules: []auth.Rule{{Name: "a-rule", Grant: fullGrant()}}}
+	if _, url, err := s.GetExport(ctx, caller(), job.ID); !errors.Is(err, auth.ErrDenied) || url != "" {
+		t.Fatalf("collected without the grant: %q %v", url, err)
+	}
+}
+
+// Handing out a link is a copy of the trail leaving, and is in the trail: the
+// action says a signed URL was issued, and the actor is the person who took it.
+func TestIssuingALinkIsRecorded(t *testing.T) {
+	s, _, into, _ := exporting(t, exportGrant())
+	ctx := context.Background()
+	job, err := s.Export(ctx, caller(), &auditv1.ExportRequest{Profile: "security"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.GetExport(ctx, caller(), job.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	// One when the job finished, one when the link was issued.
+	got := into.of("audit.export.completed")
+	if len(got) != 2 {
+		t.Fatalf("%d records of completed/link issued, want 2", len(got))
+	}
+	for _, r := range got {
+		if r.GetActor().GetId() != "olga" || r.GetTargets()[0].GetId() != job.ID {
+			t.Errorf("record = %+v", r)
+		}
 	}
 }

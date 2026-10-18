@@ -427,7 +427,7 @@ func (m *Minter) Check(ctx context.Context) map[string]error {
 			out[name] = fmt.Errorf("read the prototype: %w", err)
 			continue
 		}
-		if err = m.checkPrototype(ctx, p.Account, api, proto); err != nil {
+		if err = m.checkPrototype(ctx, name, p.Account, api, proto); err != nil {
 			out[name] = err
 		}
 	}

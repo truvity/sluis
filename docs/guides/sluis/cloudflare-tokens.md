@@ -12,6 +12,11 @@ Make sluis clone a disabled Cloudflare prototype token into expiring account tok
 
 - sluis refuses an active or missing prototype, and one granting token admin, Billing, Account Settings, Memberships or Access identity rights. `cloudflare.forbiddenPermissionGroups` only adds names. A refusal is audited as `roster.cloudflare.token.refused`.
 
+| Preset key | Effect |
+|---|---|
+| `allowedPermissionGroups` | the prototype may grant only these groups, else `prototype_forbidden`; the forbidden list stays the floor. Prefer setting it |
+| `maxLivePerCaller`, `maxLive`, `maxMintsPerCallerPerHour` | on-demand caps, defaults 10, 50 and 30. Over one the mint is refused (`caller_cap`, `preset_cap`, `rate_limited`), audited, and answered `access_denied` |
+
 ## 1. Create the minter token
 
 Create an account API token with Account API Tokens Read and Write only. Keep it out of service documents, Pulumi inputs and command lines.

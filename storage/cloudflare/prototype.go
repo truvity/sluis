@@ -129,6 +129,19 @@ func GroupIDs(policies json.RawMessage) ([]string, error) {
 // it does not know is judged by the name the policy itself carries, and refused
 // when there is none, since what cannot be named cannot be vetted.
 func CheckPrototype(tok Token, names map[string]string, extra ...string) error {
+	return CheckPrototypeAllowing(tok, names, extra, nil)
+}
+
+// CheckPrototypeAllowing is [CheckPrototype] with an allowlist: when allowed is
+// not empty, a prototype may grant only the permission groups it names (by the
+// name Cloudflare lists them under, case and spacing folded). The built-in
+// forbidden list stays the floor: it is judged first and a name on the allowlist
+// does not lift it. An empty allowlist asks nothing beyond the floor.
+//
+// The floor is five patterns and cannot be a complete list of what is
+// dangerous in an account, since Cloudflare adds permission groups. The
+// allowlist is how a preset says what it is for.
+func CheckPrototypeAllowing(tok Token, names map[string]string, extra, allowed []string) error {
 	if tok.ID == "" {
 		return &PrototypeError{Reason: ReasonPrototypeMissing, Detail: "the prototype token does not exist"}
 	}
@@ -142,7 +155,7 @@ func CheckPrototype(tok Token, names map[string]string, extra ...string) error {
 	if len(ps) == 0 {
 		return &PrototypeError{Reason: ReasonPrototypeMissing, Detail: fmt.Sprintf("the prototype %s has no policies", tok.ID)}
 	}
-	var forbidden, unknown []string
+	var forbidden, unknown, outside []string
 	for _, p := range ps {
 		if len(p.PermissionGroups) == 0 {
 			return &PrototypeError{Reason: ReasonPrototypeMissing, Detail: fmt.Sprintf("a policy of the prototype %s names no permission group", tok.ID)}
@@ -157,6 +170,8 @@ func CheckPrototype(tok Token, names map[string]string, extra ...string) error {
 				unknown = append(unknown, g.ID)
 			case ForbiddenGroupWith(name, extra):
 				forbidden = append(forbidden, name)
+			case len(allowed) > 0 && !GroupAllowed(name, allowed):
+				outside = append(outside, name)
 			}
 		}
 	}
@@ -168,7 +183,23 @@ func CheckPrototype(tok Token, names map[string]string, extra ...string) error {
 		sort.Strings(unknown)
 		return &PrototypeError{Reason: ReasonPrototypeForbidden, Detail: "the prototype names permission groups that cannot be resolved to a name: " + strings.Join(dedupe(unknown), ", ")}
 	}
+	if len(outside) > 0 {
+		sort.Strings(outside)
+		return &PrototypeError{Reason: ReasonPrototypeForbidden, Detail: "the prototype grants " + strings.Join(dedupe(outside), ", ") + ", which the preset's allowed permission groups do not name"}
+	}
 	return nil
+}
+
+// GroupAllowed reports whether a permission group's name is on an allowlist,
+// folding case and spacing as [ForbiddenGroupWith] does.
+func GroupAllowed(name string, allowed []string) bool {
+	n := strings.ToLower(strings.Join(strings.Fields(name), " "))
+	for _, a := range allowed {
+		if n == strings.ToLower(strings.Join(strings.Fields(a), " ")) {
+			return true
+		}
+	}
+	return false
 }
 
 func dedupe(sorted []string) []string {

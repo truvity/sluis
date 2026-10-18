@@ -176,11 +176,14 @@ func run() error {
 		// writer sharing one deduplication table. Two is "more than one" to the
 		// guards that care.
 		Replicas: 2,
-		// What is on the queue was stamped by a receiver of this installation,
-		// which is the only principal the queue's policy lets send; there is no
-		// caller here to verify, and re-stamping would replace the identity the
-		// receiver checked with nothing.
-		FromStream: true,
+		// What is on the queue is what a sender chose. SQS delivers the body its
+		// sender wrote, and the queue's policy admits principals, not an
+		// identity the writer could map to an observer, so a stamp inside the
+		// body (observer, recorded_at, origin hash) is a claim anyone allowed to
+		// send could make about anyone. The writer therefore stamps every record
+		// itself, with its own identity and its own clock (FromStream stays
+		// false): the record says that the trail took it here and when, not who
+		// the sender said it was.
 	})
 	if err != nil {
 		return err

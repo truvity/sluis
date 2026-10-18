@@ -447,7 +447,10 @@ func TestAValidationFailureIsNeverServedStale(t *testing.T) {
 		if _, err := resolver.Resolve(context.Background(), id); err == nil {
 			t.Errorf("%s: a stale copy was served over the origin's own answer", m)
 		}
-		// Put the good copy back so each case starts from a cached entry.
+		// Put the good copy back so each case starts from a cached entry. The
+		// failure is remembered for a minute and answered again unasked, so the
+		// minute passes first.
+		clock = clock.Add(documentFailedFor + time.Second)
 		mu.Lock()
 		mode = "good"
 		mu.Unlock()

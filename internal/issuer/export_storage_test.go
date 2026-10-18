@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/truvity/sluis/internal/clientcreds"
+	"github.com/truvity/sluis/internal/egress"
 	"github.com/truvity/sluis/internal/signer"
 )
 
@@ -38,5 +39,10 @@ func NewTestStorageRings(
 		return nil, nil, fmt.Errorf("issuer: adopt the signing keys: %w", err)
 	}
 	storage, err := NewStorage(iss, verify, secrets, signer.New(keys, signer.LimitsFor(iss.Config().TokenLifetime)), keys, state)
+	if storage != nil {
+		// The tests' relying parties are httptest servers on the loopback
+		// interface, which the production policy does not connect to.
+		storage.announce = newAnnounceClient(egress.Development)
+	}
 	return storage, keys, err
 }

@@ -45,7 +45,7 @@ Each property links the page that owns it; this file does not restate them.
 
 - Records are append-only; the store is expected to carry S3 Object Lock in compliance
   mode. [prepare the bucket](docs/guides/audit/operate/prepare-the-bucket.md)
-- Every read of the audit trail is itself recorded.
+- Every read of the audit trail is itself recorded, a refused one included (once a minute per caller, action and profile).
 - Subjects are referenced by identifiers or keyed pseudonyms, never by identity attributes.
   [ADR 0047](docs/decisions/0047-identity-tiers-and-pseudonymisation.md)
 - The split writer is the most privileged component: it holds unwrapped pseudonymisation

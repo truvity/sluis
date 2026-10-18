@@ -290,8 +290,13 @@ func TestCloudflareRequestsAreRefusedBeforeAnyProofIsRead(t *testing.T) {
 	if status, body, _ := c.ask(t, "", ok()); status != http.StatusBadRequest || body["error"] != "invalid_request" {
 		t.Errorf("a lifetime the minter refuses = %d %v", status, body)
 	}
-	c.minter.err = fmt.Errorf("create the token: secret detail")
+	c.minter.err = fmt.Errorf("%w: caller_cap: 10 live", minter.ErrLimit)
 	status, body, _ := c.ask(t, "", ok())
+	if status != http.StatusBadRequest || body["error"] != "access_denied" || strings.Contains(fmt.Sprint(body), "caller_cap") {
+		t.Errorf("a limit the minter refuses = %d %v, want access_denied without the limit", status, body)
+	}
+	c.minter.err = fmt.Errorf("create the token: secret detail")
+	status, body, _ = c.ask(t, "", ok())
 	if status != http.StatusInternalServerError || body["error"] != "server_error" || strings.Contains(fmt.Sprint(body), "secret detail") {
 		t.Errorf("a Cloudflare failure = %d %v, want server_error without the detail", status, body)
 	}

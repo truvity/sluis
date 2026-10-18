@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"net/netip"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -430,6 +432,9 @@ func resolveConfig(issuer, clientID string, forLogin bool) (Config, error) {
 	if cfg.Issuer == "" {
 		return cfg, badUsage("no issuer: pass --issuer, set $%s, or run `sluisctl login --issuer ...` once", envIssuer)
 	}
+	if err = checkIssuerURL(cfg.Issuer); err != nil {
+		return cfg, err
+	}
 	if cfg.ClientID == "" {
 		cfg.ClientID, cfg.ClientDefaulted = DefaultClientID, true
 		// A login that fell back to the legacy id recorded it in its
@@ -442,6 +447,44 @@ func resolveConfig(issuer, clientID string, forLogin bool) (Config, error) {
 		}
 	}
 	return cfg, nil
+}
+
+// checkIssuerURL refuses an issuer that is not an https URL, except one on the
+// loopback interface (a development issuer).
+//
+// Everything sluisctl does with an issuer rides on its address: the sign-in
+// opens it in a browser, the code and the refresh token go to its /token, and
+// every credential it hands out was asked of it. Over http:// all of that is
+// readable and rewritable by whoever is on the path, and a refresh token is
+// good for as long as the session.
+func checkIssuerURL(issuer string) error {
+	u, err := url.Parse(issuer)
+	if err != nil || u.Host == "" || u.Hostname() == "" {
+		return badUsage("the issuer %q is not a URL: want https://<host>", issuer)
+	}
+	if u.User != nil {
+		return badUsage("the issuer URL carries credentials; leave them out")
+	}
+	switch u.Scheme {
+	case "https":
+		return nil
+	case "http":
+		if isLoopbackHost(u.Hostname()) {
+			return nil
+		}
+		return badUsage("the issuer %s is http://, which sends the sign-in and the tokens in the clear; use https:// "+
+			"(http:// is accepted only for localhost, 127.0.0.1 and ::1)", issuer)
+	}
+	return badUsage("the issuer %q is not an https URL", issuer)
+}
+
+// isLoopbackHost reports whether host is the loopback interface by name or address.
+func isLoopbackHost(host string) bool {
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip, err := netip.ParseAddr(host)
+	return err == nil && ip.Unmap().IsLoopback()
 }
 
 func configFileHint() string {
