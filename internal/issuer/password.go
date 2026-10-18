@@ -80,7 +80,7 @@ func (d *PasswordDoor) lookup(iss *Issuer, pending Pending) srpauth.Lookup {
 func (d *PasswordDoor) identity(username string) (subject, how string, ok bool) {
 	switch username {
 	case srpauth.RecoveryUser:
-		return d.RecoverySubject, RecoveryHow, d.RecoverySubject != ""
+		return d.RecoverySubject, RecoveryPasswordHow, d.RecoverySubject != ""
 	case srpauth.ConformanceUser:
 		return d.ConformanceSubject, ConformanceHow, d.ConformanceSubject != ""
 	}
@@ -269,7 +269,12 @@ func (s *signIn) passwordFinish(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.handOver(w, r, who, secret)
-	recordLoginSuccess(r.Context(), how)
+	// Counted as the account: both proofs of recovery are "recovery".
+	method := how
+	if isRecovery(how) {
+		method = RecoveryHow
+	}
+	recordLoginSuccess(r.Context(), method)
 	// WARN: this is a way in that bypasses the directory, and as loud in a log
 	// as it is rare.
 	s.deps.Log.WarnContext(r.Context(), "password sign-in", logattr.SafeString("subject", subject), logattr.SafeString("account", proved.User))

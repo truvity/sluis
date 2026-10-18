@@ -305,8 +305,9 @@ func TestTheRecoveryAccountSignsInWithoutSendingItsPassword(t *testing.T) {
 	if !slices.Contains(groupsIn(t, tokens["access_token"].(string)), "all:sluis:operator") {
 		t.Errorf("recovery lost its operator group: %v", groupsIn(t, tokens["access_token"].(string)))
 	}
-	if amr, _ := claims["amr"].([]any); len(amr) != 1 || amr[0] != "swk" {
-		t.Errorf("amr = %v, want the recovery marker unchanged", claims["amr"])
+	// A password is `pwd` (RFC 8176); the recovery class stays in `acr`.
+	if amr, _ := claims["amr"].([]any); len(amr) != 1 || amr[0] != "pwd" {
+		t.Errorf("amr = %v, want [pwd]", claims["amr"])
 	}
 
 	// Nothing the server was sent carries the password, in a body, a header or a
@@ -769,5 +770,47 @@ func TestTheRecoverySweepEndsConformanceSessionsToo(t *testing.T) {
 	}
 	if _, live, _ := w.iss.Sessions().ByID(ctx, person.ID); !live {
 		t.Error("a person's session went with it")
+	}
+}
+
+// A session recovery opened by password is a recovery session in every way that
+// matters -- the switch ends it, the sweep ends it, it is no bearer -- and says
+// `pwd` where a token's says `swk`, on a refresh as on the first token.
+func TestAPasswordRecoverySessionIsARecoverySessionWithItsOwnAmr(t *testing.T) {
+	t.Parallel()
+	w := newPasswordWorld(t, pwOptions{})
+	ctx := t.Context()
+	session, err := w.iss.Sessions().Record(ctx, issuer.Opened{
+		Identity: lookAlike, ClientID: "app", How: issuer.HowCode, Method: issuer.RecoveryPasswordHow,
+		Token: "refresh-password-recovery", Scopes: []string{"openid"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	refresh := func() (int, map[string]any) {
+		form := url.Values{"grant_type": {"refresh_token"}, "refresh_token": {"refresh-password-recovery"}, "client_id": {"app"}}
+		resp, err := http.Post(w.server.URL+"/token", "application/x-www-form-urlencoded", strings.NewReader(form.Encode())) //nolint:noctx // a test
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		out := map[string]any{}
+		_ = json.NewDecoder(resp.Body).Decode(&out)
+		return resp.StatusCode, out
+	}
+	status, body := refresh()
+	if status != http.StatusOK {
+		t.Fatalf("a refresh = %d %v", status, body)
+	}
+	claims := payloadOf(t, body["id_token"].(string))
+	if amr, _ := claims["amr"].([]any); len(amr) != 1 || amr[0] != "pwd" || claims["acr"] != issuer.ACRRecovery {
+		t.Errorf("amr %v acr %v, want [pwd] at the recovery class", claims["amr"], claims["acr"])
+	}
+	w.gate.off.Store(true)
+	if status, body = refresh(); status != http.StatusBadRequest {
+		t.Errorf("a refresh with the switch thrown = %d %v, want 400", status, body)
+	}
+	if _, live, _ := w.iss.Sessions().ByID(ctx, session.ID); live {
+		t.Error("the switch left the session alive")
 	}
 }

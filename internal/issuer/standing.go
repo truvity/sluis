@@ -51,7 +51,7 @@ type signInStanding struct {
 // its subject. A subject string is whatever an identity provider said, and
 // one that happens to look like a ServiceAccount must not skip the
 // directory or be taken for the recovery account.
-func (s SSOSession) recovered() bool { return s.How == RecoveryHow }
+func (s SSOSession) recovered() bool { return isRecovery(s.How) }
 
 // conformance reports whether the sign-in was made by the conformance account.
 func (s SSOSession) conformance() bool { return s.How == ConformanceHow }
