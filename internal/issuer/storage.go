@@ -297,6 +297,16 @@ func NormalizeACR(value string) string {
 // the reason this maps rather than switching on that type.
 const RecoveryHow = "recovery"
 
+// RecoveryPasswordHow is what a recovery sign-in made by password records: the same
+// way in as [RecoveryHow], every rule of it (the recovery switch, the class, the
+// operator, the durable record), and the proof it was made with, which is `pwd` in
+// the token's `amr` where a recovery token's is `swk` (RFC 8176). Anything that asks
+// whether a sign-in was made by recovery asks [isRecovery].
+const RecoveryPasswordHow = "recovery-password"
+
+// isRecovery reports whether how names a sign-in made by recovery, by either proof.
+func isRecovery(how string) bool { return how == RecoveryHow || how == RecoveryPasswordHow }
+
 // ConformanceHow is what a sign-in of the conformance account records as its
 // method (docs/decisions/0076). It is not recovery: it is no operator, it has
 // no break-glass authority, and it is admitted only to clients the policy marks
@@ -312,17 +322,17 @@ const ACRConformance = "urn:truvity:sluis:acr:conformance"
 
 // provedWithoutDirectory reports whether how names a sign-in that no directory
 // vouched for: recovery and the conformance account.
-func provedWithoutDirectory(how string) bool { return how == RecoveryHow || how == ConformanceHow }
+func provedWithoutDirectory(how string) bool { return isRecovery(how) || how == ConformanceHow }
 
 // acrFor maps how somebody was proved onto a class a relying party can
 // act on. The distinction that earns its keep is DIRECTORY against
 // RECOVERY: one went through the company's own identity provider, the
 // other bypassed it on purpose.
 func acrFor(how string) string {
-	switch how {
-	case RecoveryHow:
+	switch {
+	case isRecovery(how):
 		return ACRRecovery
-	case ConformanceHow:
+	case how == ConformanceHow:
 		return ACRConformance
 	}
 
@@ -335,6 +345,11 @@ func acrFor(how string) string {
 // is the honest answer where we were not told, which is most of the time:
 // the provider knows whether there was a second factor and does not say.
 func amrFor(how string) []string {
+	if how == RecoveryPasswordHow {
+		// A password, proved without sending it (SRP): the recovery marker
+		// stays in `acr`.
+		return []string{"pwd"}
+	}
 	if how == RecoveryHow {
 		// Not a password and not a person: a token the API server
 		// vouched for.
@@ -1007,7 +1022,7 @@ func (s *Storage) Complete(ctx context.Context, id string, who Authenticated) er
 	// A sign-in made by recovery completes nothing once an operator has switched
 	// recovery off (docs/decisions/0075): refused before anything is decided or
 	// recorded about it, as the form and the sign-in cookie are.
-	if who.How == RecoveryHow && s.iss.recoveryCheck(ctx).refuse() {
+	if isRecovery(who.How) && s.iss.recoveryCheck(ctx).refuse() {
 		return ErrRecoveryOff
 	}
 
@@ -1015,7 +1030,7 @@ func (s *Storage) Complete(ctx context.Context, id string, who Authenticated) er
 	// one a code can be issued for.
 	if err = s.entitledAs(ctx, req.Req.ClientID, req.Resource, who.Subject, provedWithoutDirectory(who.How), who.How); err != nil {
 		if errors.Is(err, ErrNotEntitled) {
-			recovery := who.How == RecoveryHow
+			recovery := isRecovery(who.How)
 			why := s.signInRefusal(ctx, req.Req.ClientID, who.Subject, provedWithoutDirectory(who.How), "not_admitted")
 			if why.Admitted {
 				// The client admitted them; the resource they asked a token for did not.
@@ -1073,7 +1088,7 @@ func (s *Storage) Complete(ctx context.Context, id string, who Authenticated) er
 	// fail open: the way in that bypasses the directory must never leave
 	// no trace, and the write depends on the audit installation's writer
 	// and the pod's own token alone, nothing this service runs.
-	recovery := who.How == RecoveryHow
+	recovery := isRecovery(who.How)
 	if recovery {
 		if err = s.iss.recordDurable(ctx, signedIn); err != nil {
 			s.iss.record(ctx, signInEvent(who, req.Req.ClientID, req.Class, deadline,
@@ -1191,7 +1206,7 @@ func classOfRequest(request op.TokenRequest) SessionClass {
 // computed deadline (docs/decisions/0040-agent-class-sessions.md, decision
 // 8); a refusal decided neither and carries none.
 func signInEvent(who Authenticated, clientID string, class SessionClass, deadline time.Time, o audit.Outcome) *record.Record {
-	if who.How == RecoveryHow {
+	if isRecovery(who.How) {
 		return audit.RecoverySignedIn(audit.RecoveryIdentity(who.Subject), clientID, who.How, o)
 	}
 	return audit.SignedInSession(audit.Identified(who.Subject), clientID, who.How, string(class), deadline, o)
@@ -1705,7 +1720,7 @@ func (s *Storage) issue(ctx context.Context, request op.TokenRequest) (*token, e
 	// switched recovery off: not a code that was already issued, not a refresh.
 	// Asked here because every token, fresh or refreshed, is minted through this
 	// function.
-	if methodOf(request) == RecoveryHow {
+	if isRecovery(methodOf(request)) {
 		switch s.iss.recoveryCheck(ctx) {
 		case recoveryEnded:
 			return nil, deny(ctx, oidc.ErrInvalidGrant, errRecoveryOff)
@@ -1732,7 +1747,7 @@ func (s *Storage) issue(ctx context.Context, request op.TokenRequest) (*token, e
 	// And how its subject was proved, for [Storage.GetPrivateClaimsFromScopes],
 	// which the library hands the subject string and nothing else.
 	signingAudienceFrom(ctx).markSubject(request.GetSubject(), provedAsServiceAccount(request))
-	signingAudienceFrom(ctx).markRecovery(methodOf(request) == RecoveryHow)
+	signingAudienceFrom(ctx).markRecovery(isRecovery(methodOf(request)))
 
 	claims, held, given, family, err := s.claimsFor(ctx, request)
 	if err != nil {
@@ -2096,7 +2111,7 @@ func (s *Storage) TokenRequestByRefreshToken(ctx context.Context, refreshToken s
 	// switched recovery off. The sweep that follows the switch revokes these
 	// already; this is the refresh that finds one the sweep did not (a sign-in
 	// made on another container while the switch was spreading).
-	if session.Method == RecoveryHow {
+	if isRecovery(session.Method) {
 		switch s.iss.recoveryCheck(ctx) {
 		case recoveryEnded:
 			if !maintenance.ReadOnly(ctx) {
@@ -3057,7 +3072,7 @@ func (s *Storage) signInProof(ctx context.Context, request exchangeSubject) (Pro
 
 	// And a recovery sign-in is never a person's proof to trade, for the same
 	// reason it is not a bearer ([Storage.liveSignInClaims]).
-	if session.Method == RecoveryHow {
+	if isRecovery(session.Method) {
 		return refuse("recovery_session", "a sign-in made by recovery cannot be exchanged")
 	}
 	if session.Method == ConformanceHow {

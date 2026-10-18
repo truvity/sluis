@@ -98,7 +98,8 @@ The usernames are `recovery` and `conformance`. Any other username gets the same
 - **`recovery`** keeps every rule it had. It completes as a ServiceAccount subject (`system:serviceaccount:<ns>:<name>`,
   from `recovery.serviceAccount` in the namespace the issuer runs in; `sluis:recovery` where there is none), so the
   policy's `service_account` matchers decide what it is in, as for a recovery token. Its sign-in records the method
-  `recovery`, its tokens carry `acr` recovery and the `swk` marker and `sluis_recovery`, it opens interactive sessions
+  `recovery-password` (the token door's is `recovery`; both are recovery in every rule below), its tokens carry `acr`
+  recovery, `amr` `["pwd"]` (RFC 8176; a recovery token's is `swk`) and `sluis_recovery`, it opens interactive sessions
   only, and its sign-in is recorded durably as `roster.recovery.signed_in` and refused without the record. At the
   console it is an operator by construction. The recovery switch of 0075 ends it everywhere.
 - **`conformance`** is new: a test subject for the harness, with no privilege.
@@ -205,10 +206,8 @@ clients of a run carry `harness: true`, and `requires` is no longer what lets th
   renderer must emit `harness: true` into the sluis client for the clients it calls harness.
 - **What it does not cover.** A stolen verifier is an offline target at 600000 hashes a guess (section 1). The page's
   arithmetic and the server's are not constant-time, and the first ask for an unknown name costs a little more than
-  a real start. `acr` is `recovery` and `amr` `swk`
-  for a recovery sign-in by password as for one by token: the markers say it bypassed the directory, and a relying party
-  that wants the proof's kind reads the method in the audit record. The conformance password is as sensitive as a test
-  account's; turn the account off when the run is over.
+  a real start. The conformance password is as
+  sensitive as a test account's; turn the account off when the run is over.
 
 ## Alternatives considered
 

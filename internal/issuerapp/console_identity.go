@@ -55,7 +55,7 @@ func signedIn(read func(http.ResponseWriter, *http.Request) (issuer.SSOSession, 
 		if session.How == issuer.ConformanceHow {
 			return access.Principal{}, false
 		}
-		if session.How == issuer.RecoveryHow {
+		if session.How == issuer.RecoveryHow || session.How == issuer.RecoveryPasswordHow {
 			account, ok := policy.ParseServiceAccountSubject(session.Identity)
 			if !ok {
 				return access.Principal{}, false
