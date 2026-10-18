@@ -9,10 +9,12 @@
 // which a stolen verifier does (the verifier is a password hash with a fast
 // function, so the password it stands for must be machine-generated).
 //
-// Two things differ from RFC 5054 and are spelled out in the decision:
-// the hash is SHA-256 where the RFC says SHA-1, and the session key and the
-// two proofs are RFC 2945's with fixed-width group elements. [Params] takes
-// the hash and the group, so the RFC's own test vectors (SHA-1, the 1024-bit
+// Three things differ from RFC 5054 and are spelled out in the decision:
+// the hash is SHA-256 where the RFC says SHA-1; the session key and the two
+// proofs are RFC 2945's with fixed-width group elements; and the private key x
+// is stretched with PBKDF2 ([Iterations] rounds, which the server tells the
+// client with the salt). [Params] takes the hash, the group and the rounds
+// (none is the RFC's own x), so the RFC's test vectors (SHA-1, the 1024-bit
 // group) run through the same code the 3072-bit SHA-256 default does.
 //
 // Every group element crosses the wire as lower-case hexadecimal of its
@@ -21,6 +23,7 @@ package srp
 
 import (
 	"crypto/hmac"
+	"crypto/pbkdf2"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -45,11 +48,25 @@ var (
 // the floor RFC 5054 asks for.
 const PrivateBytes = 32
 
-// Params is a group and a hash.
+// Iterations is the number of PBKDF2-HMAC-SHA256 rounds the default parameters
+// stretch the password with (OWASP's figure for SHA-256, 2023). A credential
+// records the number it was made with, and the server hands it to the client with
+// the salt, so it can be raised later without a flag day.
+const Iterations = 600_000
+
+// The bounds a client accepts for the number a server names: a server cannot
+// turn the stretching off, and cannot make the page spin for minutes.
+const (
+	MinIterations = 100_000
+	MaxIterations = 10_000_000
+)
+
+// Params is a group, a hash and the stretching of x.
 type Params struct {
-	n, g *big.Int
-	h    func() hash.Hash
-	size int // the width of a group element in bytes: |N|
+	n, g       *big.Int
+	h          func() hash.Hash
+	size       int // the width of a group element in bytes: |N|
+	iterations int // PBKDF2 rounds; zero is RFC 5054's x, unstretched
 }
 
 // New returns the parameters for the prime n, the generator g and the hash h.
@@ -57,13 +74,23 @@ func New(n, g *big.Int, h func() hash.Hash) Params {
 	return Params{n: new(big.Int).Set(n), g: new(big.Int).Set(g), h: h, size: (n.BitLen() + 7) / 8}
 }
 
-// Default is what sluis uses: the 3072-bit group of RFC 5054 with SHA-256.
+// WithIterations returns the parameters stretching x with PBKDF2 for n rounds.
+func (p Params) WithIterations(n int) Params {
+	p.iterations = n
+	return p
+}
+
+// Iterations is the number of rounds new credentials are made with.
+func (p Params) Iterations() int { return p.iterations }
+
+// Default is what sluis uses: the 3072-bit group of RFC 5054 with SHA-256, and x
+// stretched with [Iterations] rounds.
 var Default = func() Params {
 	n, ok := new(big.Int).SetString(group3072N, 16)
 	if !ok {
 		panic("srp: the group constant does not parse")
 	}
-	return New(n, big.NewInt(group3072G), sha256.New)
+	return New(n, big.NewInt(group3072G), sha256.New).WithIterations(Iterations)
 }()
 
 // Modulus is N, in its fixed-width form.
@@ -92,17 +119,31 @@ func (p Params) k() *big.Int { return p.hashInt(p.pad(p.n), p.pad(p.g)) }
 // u is the scrambling parameter, H(PAD(A) | PAD(B)) (RFC 5054 section 2.6).
 func (p Params) u(a, b *big.Int) *big.Int { return p.hashInt(p.pad(a), p.pad(b)) }
 
-// x is the private key derived from the password, H(s | H(I | ":" | P))
-// (RFC 5054 section 2.6): the username is part of it.
-func (p Params) x(salt []byte, username, password string) *big.Int {
+// x is the private key derived from the password. RFC 5054 section 2.6 has
+// H(s | H(I | ":" | P)), the username part of it; with rounds > 0 the inner hash is
+// stretched, H(s | PBKDF2(H(I | ":" | P), s, rounds)), so that a stolen verifier
+// costs rounds hashes a guess and not one.
+func (p Params) x(salt []byte, username, password string, rounds int) (*big.Int, error) {
 	inner := p.hash([]byte(username), []byte(":"), []byte(password))
-	return p.hashInt(salt, inner)
+	if rounds > 0 {
+		stretched, err := pbkdf2.Key(p.h, string(inner), salt, rounds, len(inner))
+		if err != nil {
+			return nil, err
+		}
+		inner = stretched
+	}
+	return p.hashInt(salt, inner), nil
 }
 
 // Verifier is g^x mod N, in its fixed-width form: what a server stores beside
-// the salt in place of the password.
+// the salt in place of the password. The salt is random and has nothing to do
+// with the password: the server hands it to anyone who asks.
 func (p Params) Verifier(salt []byte, username, password string) []byte {
-	return p.pad(new(big.Int).Exp(p.g, p.x(salt, username, password), p.n))
+	x, err := p.x(salt, username, password, p.iterations)
+	if err != nil {
+		panic("srp: " + err.Error()) // only an unusable hash or a rounds count below zero
+	}
+	return p.pad(new(big.Int).Exp(p.g, x, p.n))
 }
 
 // NewSalt returns a random salt.
@@ -195,7 +236,7 @@ func (s *Server) Public() []byte { return s.p.pad(s.bPub) }
 func (s *Server) Verify(a, m1 []byte) (m2, key []byte, err error) {
 	p := s.p
 	aInt := new(big.Int).SetBytes(a)
-	if len(a) > p.size || !p.valid(aInt) {
+	if len(a) > p.size || aInt.Cmp(p.n) >= 0 || !p.valid(aInt) {
 		return nil, nil, ErrBadPublic
 	}
 	u := p.u(aInt, s.bPub)
@@ -215,7 +256,7 @@ func (s *Server) Verify(a, m1 []byte) (m2, key []byte, err error) {
 	return p.m2(aInt, m1, key), key, nil
 }
 
-// Decoy returns the salt and verifier the server answers with for a username
+// Decoy returns the salt and verifier (with the default rounds) the server answers with for a username
 // it has no account for: both are derived from a secret the server keeps and
 // the username, so they are the same on every request, on every process that
 // has the secret, and look like a real account's. A run against them ends in
@@ -263,16 +304,19 @@ func (p Params) ResumeClient(username, password string, private []byte) *Client 
 func (c *Client) Public() []byte { return c.p.pad(c.aPub) }
 
 // secret is S = (B - k*g^x)^(a + u*x) mod N, and u.
-func (c *Client) secret(salt []byte, bInt *big.Int) (s, u *big.Int, err error) {
+func (c *Client) secret(salt []byte, bInt *big.Int, rounds int) (s, u *big.Int, err error) {
 	p := c.p
-	if bInt.BitLen() > p.size*8 || !p.valid(bInt) {
+	if bInt.Cmp(p.n) >= 0 || !p.valid(bInt) {
 		return nil, nil, ErrBadPublic
 	}
 	u = p.u(c.aPub, bInt)
 	if u.Sign() == 0 {
 		return nil, nil, ErrBadPublic
 	}
-	x := p.x(salt, c.username, c.password)
+	x, err := p.x(salt, c.username, c.password, rounds)
+	if err != nil {
+		return nil, nil, err
+	}
 	base := new(big.Int).Exp(p.g, x, p.n)
 	base.Mul(base, p.k())
 	base.Sub(bInt, base)
@@ -282,10 +326,16 @@ func (c *Client) secret(salt []byte, bInt *big.Int) (s, u *big.Int, err error) {
 	return base.Exp(base, exp, p.n), u, nil
 }
 
-// Respond takes the server's salt and B and returns the proof M1.
-func (c *Client) Respond(salt, b []byte) ([]byte, error) {
+// Respond takes the server's salt, B and the number of PBKDF2 rounds it names,
+// and returns the proof M1. A server that names fewer than [MinIterations] (but
+// not none, for parameters that stretch nothing) or more than [MaxIterations] is
+// refused.
+func (c *Client) Respond(salt, b []byte, rounds int) ([]byte, error) {
+	if c.p.iterations > 0 && (rounds < MinIterations || rounds > MaxIterations) {
+		return nil, fmt.Errorf("srp: the server names %d rounds, outside %d..%d", rounds, MinIterations, MaxIterations)
+	}
 	bInt := new(big.Int).SetBytes(b)
-	secret, _, err := c.secret(salt, bInt)
+	secret, _, err := c.secret(salt, bInt, rounds)
 	if err != nil {
 		return nil, err
 	}

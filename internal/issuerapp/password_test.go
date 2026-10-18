@@ -1,6 +1,7 @@
 package issuerapp
 
 import (
+	"bytes"
 	"context"
 	"log/slog"
 	"net/http"
@@ -30,17 +31,23 @@ func policySet(t *testing.T, text string) *policy.Set {
 	return set
 }
 
+// credentialOf is an account's credential for the password "pw", with the least
+// stretching a credential may name.
+func credentialOf(account string) srp.Credential {
+	return srp.Default.WithIterations(srp.MinIterations).NewCredential(bytes.Repeat([]byte{7}, 32), account, "pw")
+}
+
 func v5With(t *testing.T, recovery, conformance bool) *secretstore.StoresV5 {
 	t.Helper()
 	v5 := secretstore.FromStoreV5(secretrec.New(), "")
 	ctx := context.Background()
 	if recovery {
-		if _, err := v5.OIDC().RecoveryVerifier().Put(ctx, srp.Default.NewCredential("recovery", "pw").Document(), ""); err != nil {
+		if _, err := v5.OIDC().RecoveryVerifier().Put(ctx, credentialOf("recovery").Document(), ""); err != nil {
 			t.Fatal(err)
 		}
 	}
 	if conformance {
-		if _, err := v5.OIDC().ConformanceVerifier().Put(ctx, srp.Default.NewCredential("conformance", "pw").Document(), ""); err != nil {
+		if _, err := v5.OIDC().ConformanceVerifier().Put(ctx, credentialOf("conformance").Document(), ""); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -131,7 +138,7 @@ func TestADoorReadsTheVerifierAndNotThePassword(t *testing.T) {
 	t.Parallel()
 	rec := secretrec.New()
 	v5 := secretstore.FromStoreV5(rec, "")
-	cred := srp.Default.NewCredential("recovery", "pw")
+	cred := srp.Default.WithIterations(srp.MinIterations).NewCredential(bytes.Repeat([]byte{7}, 32), "recovery", "pw")
 	if _, err := v5.OIDC().RecoveryVerifier().Put(context.Background(), cred.Document(), ""); err != nil {
 		t.Fatal(err)
 	}

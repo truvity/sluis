@@ -34,7 +34,7 @@ An undelivered name fails the request that reads it, with the name in the error 
 | `providers/google/<provider>/client-id`, `.../client-secret` | `oauthClient.provider` | the Google OAuth client registered for the directory |
 | `issuer/state-secret` | `signingKey.kms.stateSecret`, `signingKey.kmsWrapped.stateSecret` | the sign-in state secret |
 | `recovery/password` | `recovery.passwordSecret` | the recovery password. Layout v5 does not name it |
-| `recovery/verifier`, `conformance/verifier` | `recovery.verifierSecret`, `conformance.verifierSecret` | the SRP credential of an account: `{"salt","verifier"}`. `sluisctl recovery verifier` makes one |
+| `recovery/verifier`, `conformance/verifier` | `recovery.verifierSecret`, `conformance.verifierSecret` | the SRP credential of an account: `{"salt","verifier","iterations"}`. `sluisctl recovery verifier` makes one |
 | `directory/<id>/key` | `directory.workspaces[].keySecret` | a declared workspace's service-account key |
 | `valkey/password` | `valkey.passwordSecret` | the shared store's password |
 

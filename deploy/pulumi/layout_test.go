@@ -314,8 +314,9 @@ func TestTheV5ParametersAreTheSameValuesAtTheOIDCAddresses(t *testing.T) {
 	if got := arp.ConfigParameterPrefixV5("staging"); got != "/sluis/staging/internal/oidc" {
 		t.Errorf("prefix v5 = %s", got)
 	}
-	// One generator each, however many parameters.
-	if n := len(rec.ofType("random:index/randomBytes:RandomBytes")) + len(rec.ofType("random:index/randomPassword:RandomPassword")); n != 2 {
+	// One generator each, however many parameters, and the recovery account's salt
+	// (docs/decisions/0076), which is kept with the password.
+	if n := len(rec.ofType("random:index/randomBytes:RandomBytes")) + len(rec.ofType("random:index/randomPassword:RandomPassword")); n != 3 {
 		t.Errorf("%d generators", n)
 	}
 	// On v4+v5 the outputs still name the v4 addresses.

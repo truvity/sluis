@@ -213,8 +213,9 @@ func (s *signIn) passwordStart(w http.ResponseWriter, r *http.Request) {
 		s.srpError(w, r, err)
 		return
 	}
-	srpReply(w, http.StatusOK, map[string]string{
-		"handle": begun.Handle, "salt": hex.EncodeToString(begun.Salt), "B": hex.EncodeToString(begun.B),
+	srpReply(w, http.StatusOK, map[string]any{
+		"handle": begun.Handle, "username": begun.Username, "salt": hex.EncodeToString(begun.Salt),
+		"B": hex.EncodeToString(begun.B), "iterations": begun.Iterations,
 	})
 }
 

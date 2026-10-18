@@ -1,6 +1,7 @@
 package lambdatest
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"os"
@@ -38,7 +39,7 @@ const (
 )
 
 // RecoveryPassword is the fixture's recovery password.
-const RecoveryPassword = "correct horse battery staple"
+const RecoveryPassword = "correct horse battery staple, forty-ish chars"
 
 // NewHarness starts the emulator, the SSM fake (holding the fixture's declared
 // secret) and the GitHub fake. It sets the environment the AWS SDK reads so
@@ -56,10 +57,16 @@ func NewHarness(t *testing.T) *Harness {
 		Emulator: New(t),
 		SSM: NewSSM(t, map[string]string{
 			RecoveryPasswordParam: `{"value":"` + base64.StdEncoding.EncodeToString([]byte(RecoveryPassword)) + `"}`,
-			RecoveryVerifierParam: `{"value":"` + base64.StdEncoding.EncodeToString(srp.Default.NewCredential("recovery", RecoveryPassword).Document()) + `"}`,
+			RecoveryVerifierParam: `{"value":"` + base64.StdEncoding.EncodeToString(recoveryCredential().Document()) + `"}`,
 		}),
 		GitHub: githubfake.Start(t, "acme-org"),
 	}
+}
+
+// recoveryCredential is the recovery account's credential for the fixture's password,
+// with the least stretching a credential may name.
+func recoveryCredential() srp.Credential {
+	return srp.Default.WithIterations(srp.MinIterations).NewCredential(bytes.Repeat([]byte{7}, 32), "recovery", RecoveryPassword)
 }
 
 // IssuerDocument writes the issuer's service document: layout v5 secrets in

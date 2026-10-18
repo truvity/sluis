@@ -98,11 +98,24 @@ func (l *Limiter) Blocked(source string) bool {
 
 // Refused records that source's attempt was refused.
 func (l *Limiter) Refused(source string) {
+	l.refuse(source, true)
+}
+
+// RefusedBySource records a refusal against source alone, and not against the
+// ceiling across every source: for an attempt that cost nothing to refuse, which
+// must not be a way to use up everybody's share.
+func (l *Limiter) RefusedBySource(source string) {
+	l.refuse(source, false)
+}
+
+func (l *Limiter) refuse(source string, overall bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
 	now := l.now()
-	bump(&l.overall, now, l.expired(&l.overall, now))
+	if overall {
+		bump(&l.overall, now, l.expired(&l.overall, now))
+	}
 
 	key := source
 	c, ok := l.bySrc[key]

@@ -92,8 +92,10 @@ the v5 parameter does not exist.
 stack makes when conformance.enabled is set.
 
 "recovery verifier" is for an installation that is not a Pulumi stack: it reads
-a password from standard input and prints the account's SRP credential, the
-salt and the verifier the service holds in place of the password
+a password from standard input (a trailing line ending is removed, nothing else;
+a weak password or one that is not printable ASCII is refused) and prints the
+account's SRP credential, the random salt, the verifier and the PBKDF2 rounds the
+service holds in place of the password
 (docs/decisions/0076), to store as the secret conformance.verifierSecret or
 recovery.verifierSecret names.
 
@@ -213,7 +215,14 @@ func recoveryVerifier(args []string, in io.Reader, out io.Writer) error {
 	if password == "" {
 		return badUsage("the password on standard input is empty")
 	}
-	_, err = fmt.Fprintln(out, string(srp.Default.NewCredential(*account, password).Document()))
+	// Only the trailing line ending is removed: the page sends the password as it is
+	// typed, so a space in it is part of it. A password too weak to sit behind a
+	// verifier (a stolen one is an offline target) is refused.
+	if err = srp.CheckPassword(password); err != nil {
+		return badUsage("refusing this password: %v", err)
+	}
+	// A fresh random salt each time: it is public, and independent of the password.
+	_, err = fmt.Fprintln(out, string(srp.Default.NewCredential(srp.NewSalt(), *account, password).Document()))
 	return err
 }
 

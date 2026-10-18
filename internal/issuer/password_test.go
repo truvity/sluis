@@ -33,6 +33,13 @@ import (
 // conformance account prove a password by SRP, in two requests the sign-in page's
 // script makes, and the issuer holds a verifier and not the password.
 
+// fast is the default group with the least stretching a credential may name, for
+// tests that run many exchanges; testSalt is any salt.
+var (
+	fast     = srp.Default.WithIterations(srp.MinIterations)
+	testSalt = bytes.Repeat([]byte{7}, 32)
+)
+
 const (
 	recoveryPassword    = "r3covery-password-of-forty-characters-xyz"
 	conformancePassword = "c0nformance-password-of-forty-chars-xyz"
@@ -146,16 +153,16 @@ func newPasswordWorld(t *testing.T, o pwOptions) *pwWorld {
 	}
 	door := &issuer.PasswordDoor{
 		Service: &srpauth.Service{
-			Params:   srp.Default,
+			Params:   fast,
 			Store:    srpauth.StateStore{State: o.shared.ports},
 			DecoyKey: func() ([]byte, error) { return []byte("the decoy key"), nil },
 			Refusals: refusals,
 		},
-		Conformance:        srpauth.Fixed(srp.Default.NewCredential("conformance", conformancePassword)),
+		Conformance:        srpauth.Fixed(fast.NewCredential(testSalt, "conformance", conformancePassword)),
 		ConformanceSubject: conformanceSubject,
 	}
 	if !o.noRecovery {
-		door.Recovery = srpauth.Fixed(srp.Default.NewCredential("recovery", recoveryPassword))
+		door.Recovery = srpauth.Fixed(fast.NewCredential(testSalt, "recovery", recoveryPassword))
 		door.RecoverySubject = lookAlike
 	}
 	h, err := handlerWithSignIn(iss, storage, issuer.SignInDeps{
@@ -237,11 +244,12 @@ func signInWith(t *testing.T, b *browser, state, username, password string) (int
 	}
 	salt, _ := hex.DecodeString(begun["salt"].(string))
 	pub, _ := hex.DecodeString(begun["B"].(string))
-	client, err := srp.Default.NewClient(username, password, rand.Reader)
+	// The server spells the username; the proof is made with its spelling.
+	client, err := srp.Default.NewClient(begun["username"].(string), password, rand.Reader)
 	if err != nil {
 		t.Fatal(err)
 	}
-	m1, err := client.Respond(salt, pub)
+	m1, err := client.Respond(salt, pub, int(begun["iterations"].(float64)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -315,6 +323,24 @@ func TestTheRecoveryAccountSignsInWithoutSendingItsPassword(t *testing.T) {
 	}
 }
 
+// The server spells the username (lower case, trimmed) and the proof is made with
+// its spelling: what a person typed in another case signs in, and does not burn a
+// refusal.
+func TestAMixedCaseUsernameSignsIn(t *testing.T) {
+	t.Parallel()
+	w := newPasswordWorld(t, pwOptions{})
+	b := newBrowser(t, w.server)
+	state := stateOf(t, openChooser(t, b, "app"))
+	for _, typed := range []string{"Recovery", " RECOVERY ", "\tRecovery"} {
+		if status, done := signInWith(t, b, state, typed, recoveryPassword); status != http.StatusOK {
+			t.Fatalf("%q = %d %v", typed, status, done)
+		}
+		// The state is spent by a success; open another page for the next.
+		b = newBrowser(t, w.server)
+		state = stateOf(t, openChooser(t, b, "app"))
+	}
+}
+
 func TestAWrongPasswordAndAnUnknownUsernameAreRefusedTheSameWay(t *testing.T) {
 	t.Parallel()
 	w := newPasswordWorld(t, pwOptions{})
@@ -363,6 +389,9 @@ func TestAnUnknownUsernameGetsAStableSaltOfTheRightShape(t *testing.T) {
 		t.Error("the salt of an unknown username changed between two asks")
 	}
 	for name, body := range map[string]map[string]any{"unknown": one, "known": known} {
+		if body["iterations"] != known["iterations"] {
+			t.Errorf("%s: iterations %v, an account's are %v", name, body["iterations"], known["iterations"])
+		}
 		if len(body["salt"].(string)) != len(known["salt"].(string)) || len(body["B"].(string)) != 2*srp.Default.Size() ||
 			len(body["handle"].(string)) != 22 {
 			t.Errorf("%s: the answer's shape differs: %v", name, body)
@@ -382,7 +411,7 @@ func TestAHandleIsGoodForOneFinishAndForTwoMinutes(t *testing.T) {
 		salt, _ := hex.DecodeString(begun["salt"].(string))
 		pub, _ := hex.DecodeString(begun["B"].(string))
 		client, _ := srp.Default.NewClient("recovery", recoveryPassword, rand.Reader)
-		m1, _ := client.Respond(salt, pub)
+		m1, _ := client.Respond(salt, pub, int(begun["iterations"].(float64)))
 		return begun["handle"].(string), map[string]string{"state": state, "handle": begun["handle"].(string),
 			"A": hex.EncodeToString(client.Public()), "M1": hex.EncodeToString(m1)}
 	}
@@ -420,7 +449,7 @@ func TestAnotherBrowsersStateCannotFinishAnExchange(t *testing.T) {
 	salt, _ := hex.DecodeString(begun["salt"].(string))
 	pub, _ := hex.DecodeString(begun["B"].(string))
 	client, _ := srp.Default.NewClient("recovery", recoveryPassword, rand.Reader)
-	m1, _ := client.Respond(salt, pub)
+	m1, _ := client.Respond(salt, pub, int(begun["iterations"].(float64)))
 	finish := map[string]string{"state": stateA, "handle": begun["handle"].(string),
 		"A": hex.EncodeToString(client.Public()), "M1": hex.EncodeToString(m1)}
 
@@ -450,7 +479,7 @@ func TestAnExchangeBegunInOneContainerIsFinishedInAnother(t *testing.T) {
 	salt, _ := hex.DecodeString(begun["salt"].(string))
 	pub, _ := hex.DecodeString(begun["B"].(string))
 	client, _ := srp.Default.NewClient("recovery", recoveryPassword, rand.Reader)
-	m1, _ := client.Respond(salt, pub)
+	m1, _ := client.Respond(salt, pub, int(begun["iterations"].(float64)))
 	finish := map[string]string{"state": state, "handle": begun["handle"].(string),
 		"A": hex.EncodeToString(client.Public()), "M1": hex.EncodeToString(m1)}
 

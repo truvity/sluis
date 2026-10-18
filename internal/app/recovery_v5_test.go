@@ -23,7 +23,7 @@ func TestTheRecoveryVerifierOnLayoutV5IsReadFromTheOIDCModuleAndThePasswordIsNot
 	log := slog.New(slog.DiscardHandler)
 	rec := secretrec.New()
 	v5 := secretstore.FromStoreV5(rec, "")
-	cred := srp.Default.NewCredential(srpauth.RecoveryUser, "a-long-generated-password")
+	cred := srp.Default.NewCredential(srp.NewSalt(), srpauth.RecoveryUser, "a-long-generated-password")
 	if _, err := v5.OIDC().RecoveryVerifier().Put(ctx, cred.Document(), ""); err != nil {
 		t.Fatal(err)
 	}

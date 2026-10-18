@@ -28,7 +28,7 @@ import (
 // in-memory State, the way the console assembles one.
 func newPasswordRecovery(t *testing.T, password string) *PasswordRecovery {
 	t.Helper()
-	p := NewPasswordRecovery(srpauth.Fixed(srp.Default.NewCredential(srpauth.RecoveryUser, password)), "")
+	p := NewPasswordRecovery(srpauth.Fixed(srp.Default.WithIterations(srp.MinIterations).NewCredential(srp.NewSalt(), srpauth.RecoveryUser, password)), "")
 	p.Open(memory.New(), func() ([]byte, error) { return []byte("a key every container shares"), nil })
 	return p
 }
@@ -46,7 +46,7 @@ func prove(t *testing.T, p *PasswordRecovery, source, user, password string) (sr
 	if err != nil {
 		t.Fatal(err)
 	}
-	m1, err := client.Respond(begun.Salt, begun.B)
+	m1, err := client.Respond(begun.Salt, begun.B, begun.Iterations)
 	if err != nil {
 		t.Fatal(err)
 	}

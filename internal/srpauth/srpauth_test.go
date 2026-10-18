@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/rand"
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -17,7 +18,11 @@ import (
 
 const password = "a generated password of forty characters!"
 
-func credential(user, pw string) srp.Credential { return srp.Default.NewCredential(user, pw) }
+// credential is an account's, with the least stretching a credential may name: the
+// tests run many exchanges.
+func credential(user, pw string) srp.Credential {
+	return srp.Default.WithIterations(srp.MinIterations).NewCredential(bytes.Repeat([]byte{7}, 32), user, pw)
+}
 
 // accounts is a lookup holding the recovery account only.
 func accounts(allowed ...string) srpauth.Lookup {
@@ -54,7 +59,7 @@ func run(t *testing.T, s *srpauth.Service, source, bind, user, pw string, lookup
 	if err != nil {
 		t.Fatal(err)
 	}
-	m1, err := client.Respond(begun.Salt, begun.B)
+	m1, err := client.Respond(begun.Salt, begun.B, begun.Iterations)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -143,7 +148,7 @@ func TestAHandleIsSpentByItsFirstFinish(t *testing.T) {
 	lookup := accounts("recovery")
 	begun := mustStart(t, s, "recovery", lookup)
 	client, _ := srp.Default.NewClient("recovery", password, rand.Reader)
-	m1, _ := client.Respond(begun.Salt, begun.B)
+	m1, _ := client.Respond(begun.Salt, begun.B, begun.Iterations)
 
 	if _, err := s.Finish(ctx, "src", "bind", begun.Handle, client.Public(), m1, lookup); err != nil {
 		t.Fatalf("first finish: %v", err)
@@ -160,7 +165,7 @@ func TestAnExpiredHandleIsRefused(t *testing.T) {
 	lookup := accounts("recovery")
 	begun := mustStart(t, s, "recovery", lookup)
 	client, _ := srp.Default.NewClient("recovery", password, rand.Reader)
-	m1, _ := client.Respond(begun.Salt, begun.B)
+	m1, _ := client.Respond(begun.Salt, begun.B, begun.Iterations)
 
 	mem.Advance(srpauth.ExchangeTTL + time.Second)
 	if _, err := s.Finish(context.Background(), "src", "bind", begun.Handle, client.Public(), m1, lookup); !errors.Is(err, srpauth.ErrRefused) {
@@ -174,7 +179,7 @@ func TestAnotherBrowsersBindingIsRefusedAndSpendsTheHandle(t *testing.T) {
 	lookup := accounts("recovery")
 	begun := mustStart(t, s, "recovery", lookup)
 	client, _ := srp.Default.NewClient("recovery", password, rand.Reader)
-	m1, _ := client.Respond(begun.Salt, begun.B)
+	m1, _ := client.Respond(begun.Salt, begun.B, begun.Iterations)
 
 	if _, err := s.Finish(ctx, "src", "someone else's state", begun.Handle, client.Public(), m1, lookup); !errors.Is(err, srpauth.ErrRefused) {
 		t.Errorf("other binding: err = %v, want ErrRefused", err)
@@ -194,7 +199,7 @@ func TestTwoContainersShareOneExchange(t *testing.T) {
 
 	begun := mustStart(t, one, "recovery", lookup)
 	client, _ := srp.Default.NewClient("recovery", password, rand.Reader)
-	m1, _ := client.Respond(begun.Salt, begun.B)
+	m1, _ := client.Respond(begun.Salt, begun.B, begun.Iterations)
 	proved, err := two.Finish(ctx, "src", "bind", begun.Handle, client.Public(), m1, lookup)
 	if err != nil {
 		t.Fatalf("the other container: %v", err)
@@ -235,7 +240,7 @@ func TestAnAccountTurnedOffBetweenTheRequestsIsRefused(t *testing.T) {
 	ctx := context.Background()
 	begun := mustStart(t, s, "recovery", accounts("recovery"))
 	client, _ := srp.Default.NewClient("recovery", password, rand.Reader)
-	m1, _ := client.Respond(begun.Salt, begun.B)
+	m1, _ := client.Respond(begun.Salt, begun.B, begun.Iterations)
 
 	off := accounts() // the gate was thrown after the start
 	if _, err := s.Finish(ctx, "src", "bind", begun.Handle, client.Public(), m1, off); !errors.Is(err, srpauth.ErrRefused) {
@@ -285,4 +290,64 @@ func (failingStore) Put(context.Context, string, srpauth.Record, time.Duration) 
 }
 func (failingStore) Take(context.Context, string) (srpauth.Record, error) {
 	return srpauth.Record{}, errors.New("down")
+}
+
+// A finish that names a handle nobody holds does no work, so it counts against
+// its source and not against the ceiling across all sources: a crowd of sources
+// cannot use up the ceiling with requests that cost nothing and lock the operator out.
+func TestRefusalsThatDidNoWorkDoNotSpendTheGlobalCeiling(t *testing.T) {
+	s := newService(srpauth.StateStore{State: memory.New()})
+	s.Refusals = throttle.New(5, 20, time.Minute, 0, nil)
+	lookup := accounts("recovery")
+	ctx := context.Background()
+	for i := range 100 {
+		source := fmt.Sprintf("192.0.2.%d", i)
+		_, err := s.Finish(ctx, source, "bind", "AAAAAAAAAAAAAAAAAAAAAA", make([]byte, 384), make([]byte, 32), lookup)
+		if !errors.Is(err, srpauth.ErrRefused) {
+			t.Fatalf("source %d: %v", i, err)
+		}
+	}
+	if _, err := run(t, s, "198.51.100.7", "bind", "recovery", password, lookup); err != nil {
+		t.Errorf("the operator, after 100 sources sent unknown handles: %v", err)
+	}
+	// One source doing it alone is still stopped by its own share.
+	for range 5 {
+		_, _ = s.Finish(ctx, "203.0.113.9", "bind", "AAAAAAAAAAAAAAAAAAAAAA", make([]byte, 384), make([]byte, 32), lookup)
+	}
+	if _, err := s.Start(ctx, "203.0.113.9", "bind", "recovery", lookup); !errors.Is(err, srpauth.ErrThrottled) {
+		t.Errorf("a source that spent its share on unknown handles: %v, want ErrThrottled", err)
+	}
+	// A wrong proof, which did run the check, does count against the ceiling.
+	for i := range 20 {
+		_, _ = run(t, s, fmt.Sprintf("10.0.0.%d", i), "bind", "recovery", "wrong", lookup)
+	}
+	if _, err := s.Start(ctx, "198.51.100.8", "bind", "recovery", lookup); !errors.Is(err, srpauth.ErrThrottled) {
+		t.Errorf("after 20 wrong proofs from 20 sources: %v, want the ceiling", err)
+	}
+}
+
+// The made-up answers of unknown usernames are cached, bounded, and the same
+// whether they came from the cache or not.
+func TestTheDecoyCacheIsBoundedAndInvisible(t *testing.T) {
+	s := newService(srpauth.StateStore{State: memory.New()})
+	s.Starts = nil
+	lookup := accounts("recovery")
+	first := map[string][]byte{}
+	for i := range 1500 {
+		name := fmt.Sprintf("user%d", i)
+		b, err := s.Start(context.Background(), "src", "bind", name, lookup)
+		if err != nil {
+			t.Fatal(err)
+		}
+		first[name] = b.Salt
+	}
+	for _, name := range []string{"user0", "user1499"} {
+		b, err := s.Start(context.Background(), "src", "bind", name, lookup)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(b.Salt, first[name]) {
+			t.Errorf("%s: the salt changed", name)
+		}
+	}
 }

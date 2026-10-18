@@ -158,27 +158,43 @@ func TestTheConformancePasswordIsReadFromItsOwnParameterAndNeverFallsBack(t *tes
 }
 
 func TestRecoveryVerifierPrintsTheCredentialOfAPasswordAndNotThePassword(t *testing.T) {
-	var out bytes.Buffer
-	if err := recoveryVerifier([]string{"--account", "conformance"}, strings.NewReader("a long password\n"), &out); err != nil {
-		t.Fatal(err)
+	const password = "aB3-Kf9xQ2mLpR7vTz1WcY8nHd5JgS4e"
+	read := func(input string) (srp.Credential, string) {
+		t.Helper()
+		var out bytes.Buffer
+		if err := recoveryVerifier([]string{"--account", "conformance"}, strings.NewReader(input), &out); err != nil {
+			t.Fatal(err)
+		}
+		cred, err := srp.Default.ParseCredential(bytes.TrimSpace(out.Bytes()))
+		if err != nil {
+			t.Fatalf("not a credential: %v: %s", err, out.String())
+		}
+		return cred, out.String()
 	}
-	cred, err := srp.Default.ParseCredential(bytes.TrimSpace(out.Bytes()))
-	if err != nil {
-		t.Fatalf("not a credential: %v: %s", err, out.String())
+	cred, out := read(password + "\n")
+	want := srp.Default.NewCredential(cred.Salt, "conformance", password)
+	if !bytes.Equal(cred.Verifier, want.Verifier) || cred.Iterations != srp.Iterations {
+		t.Error("the verifier is not the conformance account's for that password at the default rounds")
 	}
-	want := srp.Default.NewCredential("conformance", "a long password")
-	if !bytes.Equal(cred.Verifier, want.Verifier) {
-		t.Error("the verifier is not the conformance account's for that password")
-	}
-	if strings.Contains(out.String(), "a long password") {
+	if strings.Contains(out, password) {
 		t.Error("the output carries the password")
 	}
+	// The salt is random: two runs on one password give two salts and two verifiers.
+	if again, _ := read(password + "\r\n"); bytes.Equal(again.Salt, cred.Salt) || bytes.Equal(again.Verifier, cred.Verifier) {
+		t.Error("two runs gave one salt: it is derived from something it should not be")
+	}
+	var sink bytes.Buffer
 	for name, args := range map[string][]string{"another account": {"--account", "root"}, "an argument": {"x"}} {
-		if err := recoveryVerifier(args, strings.NewReader("pw"), &out); err == nil {
+		if err := recoveryVerifier(args, strings.NewReader(password), &sink); err == nil {
 			t.Errorf("%s was accepted", name)
 		}
 	}
-	if err := recoveryVerifier(nil, strings.NewReader("\n"), &out); err == nil {
-		t.Error("an empty password was accepted")
+	for name, input := range map[string]string{
+		"empty": "\n", "short": "recover-me\n", "one character": strings.Repeat("a", 40) + "\n",
+		"non-ASCII": password[:30] + "é\n", "trailing space": password + " \n",
+	} {
+		if err := recoveryVerifier(nil, strings.NewReader(input), &sink); err == nil {
+			t.Errorf("%s was accepted", name)
+		}
 	}
 }

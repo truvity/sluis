@@ -1,6 +1,7 @@
 package sluispulumi
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -1876,19 +1877,36 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 	// recovery account in by proving the password against a salt and a verifier
 	// derived from it, and never reads the password -- its role is denied the
 	// password's parameter. The verifier is computed from the generated password
-	// here, in the program, and is a pure function of it (the salt is derived too),
-	// so an apply that does not rotate the password does not rewrite the
-	// parameter. The conformance account's password and verifier are made the same
-	// way, when the installation turns the account on.
+	// here, in the program, under a salt that is random and independent of the
+	// password (the service hands the salt to anybody who starts a sign-in, so a salt
+	// made from the password would let anybody test guesses against it). The salt is a
+	// RandomBytes whose keeper is the password: it is stable across applies and
+	// replaced when the password is, and so an apply that does not rotate the
+	// password does not rewrite the parameter. The conformance account's password,
+	// salt and verifier are made the same way, when the installation turns the
+	// account on.
 	verifierName, conformanceName := pulumi.String("").ToStringOutput(), pulumi.String("").ToStringOutput()
 	if a.Layout.has5() {
-		srpParam := func(logical, path, account string, password pulumi.StringOutput) (*ssm.Parameter, error) {
-			doc := password.ApplyT(func(pw string) (string, error) {
-				return secretDocument(string(srp.Default.NewCredential(account, pw).Document()))
+		srpParam := func(logical, path, account string, raw, password pulumi.StringOutput) (*ssm.Parameter, error) {
+			salt, err := random.NewRandomBytes(ctx, name+"-"+account+"-salt", &random.RandomBytesArgs{
+				Length: pulumi.Int(srpSaltBytes),
+				// The salt is replaced when the password is, and not otherwise.
+				Keepers: pulumi.StringMap{"password": raw},
+			}, child)
+			if err != nil {
+				return nil, fmt.Errorf("sluis %s salt: %w", account, err)
+			}
+			doc := pulumi.All(password, salt.Base64).ApplyT(func(v []any) (string, error) {
+				saltBytes, err := base64.StdEncoding.DecodeString(v[1].(string))
+				if err != nil || len(saltBytes) != srpSaltBytes {
+					return "", fmt.Errorf("the %s salt is not %d bytes of base64", account, srpSaltBytes)
+				}
+				return secretDocument(string(srp.Default.NewCredential(saltBytes, account, v[0].(string)).Document()))
 			}).(pulumi.StringOutput)
 			return newSecretParam(logical, path, pulumi.ToSecret(doc).(pulumi.StringOutput))
 		}
-		verifier, err := srpParam(name+"-recovery-verifier-v5", RecoveryVerifierParameterNameV5(a.Instance), "recovery", recoveryValue)
+		verifier, err := srpParam(name+"-recovery-verifier-v5", RecoveryVerifierParameterNameV5(a.Instance), "recovery",
+			recoveryPassword.Result, recoveryValue)
 		if err != nil {
 			return nil, fmt.Errorf("sluis recovery verifier parameter (v5): %w", err)
 		}
@@ -1909,7 +1927,8 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 			if err != nil {
 				return nil, fmt.Errorf("sluis conformance password parameter (v5): %w", err)
 			}
-			conformanceVerifier, err := srpParam(name+"-conformance-verifier-v5", ConformanceVerifierParameterNameV5(a.Instance), "conformance", conformanceValue)
+			conformanceVerifier, err := srpParam(name+"-conformance-verifier-v5", ConformanceVerifierParameterNameV5(a.Instance), "conformance",
+				conformancePassword.Result, conformanceValue)
 			if err != nil {
 				return nil, fmt.Errorf("sluis conformance verifier parameter (v5): %w", err)
 			}
@@ -2023,6 +2042,9 @@ func (a LambdaArgs) conformance() *sluisconfig.Conformance {
 	}
 	return nil
 }
+
+// srpSaltBytes is the length of an account's SRP salt.
+const srpSaltBytes = 32
 
 // recoveryPasswordLength is the generated recovery password's length.
 const recoveryPasswordLength = 40
