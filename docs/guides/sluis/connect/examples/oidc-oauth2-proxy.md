@@ -32,7 +32,7 @@ oauth2-proxy \
   --skip-provider-button --http-address=:4180 --upstream=http://backend-service:8080/
 ```
 
-`--email-domain=*` admits everyone the client's `requires` admits. Point the console's sign-out link at `/oauth2/sign_out?rd=` followed by the percent-encoded issuer `end_session` address. Otherwise the issuer keeps the sign-in.
+`--email-domain=*` admits everyone the client's `requires` admits. Point the console's sign-out link at `/oauth2/sign_out?rd=` followed by the percent-encoded issuer `end_session` address. Otherwise the issuer keeps the sign-in. Without `id_token_hint` it ends on a *Sign out?* page.
 
 ## Verify
 

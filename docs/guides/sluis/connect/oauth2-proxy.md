@@ -60,7 +60,7 @@ Point the console's sign-out link at the proxy with the issuer's `end_session` a
 GET /oauth2/sign_out?rd=https%3A%2F%2Fissuer.example.com%2Fend_session%3Fclient_id%3Dmy-console-proxy%26id_token_hint%3D<token>
 ```
 
-`/oauth2/sign_out` ends only the proxy cookie. The `end_session` redirect ends the issuer sign-in. Percent-encode the inner address, or its `&` ends `rd`.
+`/oauth2/sign_out` ends only the proxy cookie. The `end_session` redirect ends the issuer sign-in. Percent-encode the inner address, or its `&` ends `rd`. Without the signed-in person's `id_token_hint`, it ends on a *Sign out?* page and waits for a click.
 
 ## Verify
 
