@@ -25,6 +25,13 @@
 //     concurrent write, with both versions named. Run it while nothing writes
 //     secrets (the issuer writes them only on a rotation or an export).
 //
+// Which parameters are already under the key is decided on key ARNs, not on
+// spelling: SSM reports a SecureString's KeyId as it was given to PutParameter
+// (an alias, an alias ARN, a key id or a key ARN), so each distinct KeyId and
+// the configured one are resolved once with kms:DescribeKey. A key KMS will not
+// describe is compared by spelling; a parameter under one that the spelling does
+// not settle is reported as unknown and left alone ([Options.IncludeUnknown]).
+//
 // Nothing printed, logged or recorded is a value: names, versions, counts.
 package rekey
 
@@ -37,6 +44,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/kms"
 	awsssm "github.com/aws/aws-sdk-go-v2/service/ssm"
 	"github.com/aws/aws-sdk-go-v2/service/ssm/types"
 	"github.com/aws/smithy-go"
@@ -47,6 +55,12 @@ type API interface {
 	DescribeParameters(ctx context.Context, in *awsssm.DescribeParametersInput, opts ...func(*awsssm.Options)) (*awsssm.DescribeParametersOutput, error)
 	GetParameters(ctx context.Context, in *awsssm.GetParametersInput, opts ...func(*awsssm.Options)) (*awsssm.GetParametersOutput, error)
 	PutParameter(ctx context.Context, in *awsssm.PutParameterInput, opts ...func(*awsssm.Options)) (*awsssm.PutParameterOutput, error)
+}
+
+// KMS is the part of the KMS client a re-key uses to tell which key a name is;
+// *kms.Client satisfies it.
+type KMS interface {
+	DescribeKey(ctx context.Context, in *kms.DescribeKeyInput, opts ...func(*kms.Options)) (*kms.DescribeKeyOutput, error)
 }
 
 const (
@@ -71,6 +85,15 @@ type Options struct {
 	// KeyID is the key every parameter should be under: an alias
 	// (alias/...), a key id or an ARN, as the document names it.
 	KeyID string
+	// KMS resolves every key a parameter reports, and KeyID, to the key's ARN
+	// (kms:DescribeKey, once per distinct spelling), so that an alias, an alias
+	// ARN, a key id and a key ARN of one key are one key. Nil compares the
+	// spellings ([SameKey]), which is right only when they are written alike.
+	KMS KMS
+	// IncludeUnknown re-writes a parameter whose key could not be resolved
+	// (DescribeKey refused) and is not the configured key by its spelling; by
+	// default such a parameter is listed as unknown and left alone.
+	IncludeUnknown bool
 	// DryRun reads and reports; nothing is written and Before is not called.
 	DryRun bool
 	// Grace defers a parameter modified within it (zero is [DefaultGrace]); IncludeRecent re-writes it anyway.
@@ -97,6 +120,15 @@ type Report struct {
 	// those already under the key.
 	Considered int `json:"considered"`
 	Current    int `json:"current"`
+	// KeyARN is KeyID as KMS names it, empty if KMS refused to say.
+	KeyARN string `json:"keyArn,omitempty"`
+	// Keys are the distinct keys the parameters reported, as spelled, with what
+	// each resolved to and how many parameters are under it.
+	Keys []KeyUse `json:"keys,omitempty"`
+	// Unknown are parameters whose key could not be resolved (kms:DescribeKey
+	// was refused) and that are not the configured key by their spelling: left
+	// alone unless [Options.IncludeUnknown].
+	Unknown []string `json:"unknown,omitempty"`
 	// Rekey are the parameters to re-write (a dry run) or the ones selected.
 	Rekey []string `json:"rekey"`
 	// Deferred were modified within the grace window and are left for a later run.
@@ -116,6 +148,18 @@ type Report struct {
 	Error      string   `json:"error,omitempty"`
 }
 
+// KeyUse is one spelling of a key that parameters reported.
+type KeyUse struct {
+	// Reported is the KeyId as SSM reported it; ARN is the key ARN it resolved
+	// to, or empty with Error saying why not.
+	Reported string `json:"reported"`
+	ARN      string `json:"arn,omitempty"`
+	Error    string `json:"error,omitempty"`
+	// Current is whether it is the configured key; Count the parameters under it.
+	Current bool `json:"current"`
+	Count   int  `json:"count"`
+}
+
 // ErrNotStarted marks a run stopped by its Before hook: nothing was written.
 var ErrNotStarted = errors.New("rekey: nothing was written")
 
@@ -127,9 +171,10 @@ type param struct {
 	modified time.Time
 }
 
-// SameKey reports whether the key a parameter reports (DescribeParameters
-// returns it as it was given to PutParameter: an alias, a key id or an ARN) is
-// the configured one. An alias ARN is its alias.
+// SameKey reports whether two spellings of a key are the same spelling: an
+// alias and its alias ARN are. It cannot tell an alias from the key id or key
+// ARN of the key it points to; [Run] asks KMS for that and falls back to this
+// only for a key KMS would not describe.
 func SameKey(reported, want string) bool {
 	trim := func(k string) string {
 		if i := strings.Index(k, ":alias/"); strings.HasPrefix(k, "arn:") && i >= 0 {
@@ -181,6 +226,10 @@ func Run(ctx context.Context, api API, opt Options) (*Report, error) {
 		out.Error = err.Error()
 		return out, err
 	}
+	kr := newKeyResolver(opt.KMS, opt.KeyID, backoff, sleep)
+	if err := kr.resolveWant(ctx); err != nil {
+		return fail(err)
+	}
 	var todo []param
 	var next *string
 	for {
@@ -202,9 +251,16 @@ func Run(ctx context.Context, api API, opt Options) (*Report, error) {
 				continue
 			}
 			out.Considered++
-			if SameKey(aws.ToString(m.KeyId), opt.KeyID) {
+			status := kr.classify(ctx, aws.ToString(m.KeyId))
+			if status == keyCurrent {
 				out.Current++
 				continue
+			}
+			if status == keyUnknown {
+				out.Unknown = append(out.Unknown, aws.ToString(m.Name))
+				if !opt.IncludeUnknown {
+					continue
+				}
 			}
 			p := param{name: aws.ToString(m.Name), version: m.Version, tier: m.Tier, desc: aws.ToString(m.Description)}
 			if m.LastModifiedDate != nil {
@@ -222,6 +278,8 @@ func Run(ctx context.Context, api API, opt Options) (*Report, error) {
 	}
 	slices.SortFunc(todo, func(a, b param) int { return strings.Compare(a.name, b.name) })
 	slices.Sort(out.Deferred)
+	slices.Sort(out.Unknown)
+	kr.report(out)
 	for _, p := range todo {
 		out.Rekey = append(out.Rekey, p.name)
 	}
@@ -230,6 +288,7 @@ func Run(ctx context.Context, api API, opt Options) (*Report, error) {
 			"%d parameters were modified within the last %s (secrets.grace) and are left: re-writing one would make its previous version the same value, "+
 				"ending a rotated client secret's overlap. Run again after the window, or with --include-recent", len(out.Deferred), grace))
 	}
+	out.Notes = append(out.Notes, kr.notes(out, opt.IncludeUnknown)...)
 	out.Notes = append(out.Notes, "history is not re-keyed: earlier versions keep the key they were written under")
 	if opt.DryRun || len(todo) == 0 {
 		out.OK = true

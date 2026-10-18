@@ -20,12 +20,19 @@ func TestRekeyOperatorStatements(t *testing.T) {
 	for _, s := range st {
 		by[s["Sid"].(string)] = s
 	}
-	if len(st) != 3 || by["SluisRekeyList"] == nil || by["SluisRekeyParameters"] == nil || by["SluisRekeyKey"] == nil {
+	if len(st) != 4 || by["SluisRekeyDescribeKey"] == nil || by["SluisRekeyList"] == nil || by["SluisRekeyParameters"] == nil || by["SluisRekeyKey"] == nil {
 		t.Fatalf("statements = %v", st)
 	}
 	list := by["SluisRekeyList"]
 	if !slices.Equal(listOf(list["Action"]), []string{"ssm:DescribeParameters"}) || !slices.Equal(listOf(list["Resource"]), []string{"*"}) {
 		t.Errorf("list: %v", by["SluisRekeyList"])
+	}
+	// DescribeKey resolves every spelling of a key SSM may report, on the
+	// account's keys in the region: not a grant to use any of them.
+	dk := by["SluisRekeyDescribeKey"]
+	if !slices.Equal(listOf(dk["Action"]), []string{"kms:DescribeKey"}) ||
+		!slices.Equal(listOf(dk["Resource"]), []string{arnp + "kms:" + region + ":" + account + ":key/*"}) || dk["Condition"] != nil {
+		t.Errorf("describe key: %v", dk)
 	}
 	params := by["SluisRekeyParameters"]
 	if !slices.Equal(listOf(params["Action"]), []string{"ssm:GetParameters", "ssm:PutParameter"}) ||

@@ -10,6 +10,13 @@ import "fmt"
 //
 //   - SluisRekeyList: ssm:DescribeParameters, which has no resource-level
 //     permission (Resource "*"), to list the parameters and the key each is under;
+//   - SluisRekeyDescribeKey: kms:DescribeKey on the account's keys in the region
+//     (metadata only; no data key or plaintext), so the command can tell which
+//     key each name is: SSM reports a parameter's KeyId as it was written (an
+//     alias, an alias ARN, a key id or a key ARN) and the command compares the
+//     key ARNs they resolve to, the AWS-managed `aws/ssm` key among them. A key
+//     the role may not describe is "unknown": its parameters are left alone
+//     unless the command is run with --include-unknown;
 //   - SluisRekeyParameters: ssm:GetParameters and ssm:PutParameter on the
 //     instance's parameters only;
 //   - SluisRekeyKey: kms:Encrypt, kms:Decrypt and kms:GenerateDataKey on the new
@@ -30,6 +37,11 @@ func RekeyOperatorStatements(region, account, instance, keyArn string) ([]map[st
 	return []map[string]any{
 		{"Sid": "SluisRekeyList", "Effect": "Allow", "Action": []string{"ssm:DescribeParameters"}, "Resource": "*"},
 		{
+			"Sid": "SluisRekeyDescribeKey", "Effect": "Allow",
+			"Action":   []string{kmsDescribeKey},
+			"Resource": arnPrefix + "kms:" + region + ":" + account + ":key/*",
+		},
+		{
 			"Sid": "SluisRekeyParameters", "Effect": "Allow",
 			"Action":   []string{ssmGetParameters, ssmPutParameter},
 			"Resource": parameterArnsUnder(region, account, SSMRoot(instance)),
@@ -37,3 +49,5 @@ func RekeyOperatorStatements(region, account, instance, keyArn string) ([]map[st
 		key,
 	}, nil
 }
+
+const kmsDescribeKey = "kms:DescribeKey"

@@ -1,5 +1,9 @@
 ## Unreleased
 
+### Fixed
+
+- **`sluis secrets rekey` compares keys by their resolved ARN, not their spelling.** It decided whether a SecureString was already under `secrets.kmsKeyId` by comparing strings (an alias with its alias ARN, nothing else), but SSM reports `KeyId` as it was written: an alias, an alias ARN, a key id or a key ARN. With `kmsKeyId: alias/...`, parameters reported by key ARN were taken for needing a rewrite (and with the key ARN configured, the alias-reported ones were), so the run read them with decryption, which the operator role may not be allowed, and failed after the `started` audit record. It now resolves every distinct reported `KeyId` and the configured one once per run with `kms:DescribeKey` and compares the key ARNs; `alias/aws/ssm` resolves too and is another key. A key `DescribeKey` refuses is compared by spelling, and a parameter under one that the spelling does not settle is listed as **unknown** and left alone; `--include-unknown` re-writes it. A configured key KMS does not know stops the run before anything is read. The dry run prints each reported spelling, the ARN it resolved to and how many parameters are under it, and `already under the key` counts all of them. `RekeyOperatorStatements` gains `SluisRekeyDescribeKey` (`kms:DescribeKey` on the account's keys in the region); a role built from the earlier statements needs it, or its parameters under another spelling are unknown. See [secrets](docs/reference/sluis/secrets.md#one-key).
+
 ## v1.77.0
 
 v1.77.0-rc.2, which ran overnight on a canary installation, plus one release fix. Its notes are under v1.77.0-rc.2 and v1.77.0-rc.1 below.

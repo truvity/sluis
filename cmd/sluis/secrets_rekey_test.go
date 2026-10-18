@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/kms"
+	kmstypes "github.com/aws/aws-sdk-go-v2/service/kms/types"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	sqstypes "github.com/aws/aws-sdk-go-v2/service/sqs/types"
 	awsssm "github.com/aws/aws-sdk-go-v2/service/ssm"
@@ -159,6 +161,44 @@ func TestRekeyDryRunRecordsNothing(t *testing.T) {
 	}
 	if p.writes != 0 || !strings.Contains(out.String(), "nothing was written") {
 		t.Errorf("writes %d, output %q", p.writes, out.String())
+	}
+}
+
+// dryKMS resolves the estate's alias and key ARN to one key and refuses the rest.
+type dryKMS struct{}
+
+func (dryKMS) DescribeKey(_ context.Context, in *kms.DescribeKeyInput, _ ...func(*kms.Options)) (*kms.DescribeKeyOutput, error) {
+	const arn = "arn:aws:kms:eu-central-1:111122223333:key/estate"
+	switch aws.ToString(in.KeyId) {
+	case "alias/example-secrets", arn:
+		return &kms.DescribeKeyOutput{KeyMetadata: &kmstypes.KeyMetadata{Arn: aws.String(arn)}}, nil
+	case "alias/aws/ssm":
+		return &kms.DescribeKeyOutput{KeyMetadata: &kmstypes.KeyMetadata{Arn: aws.String("arn:aws:kms:eu-central-1:111122223333:key/ssm")}}, nil
+	}
+	return nil, errors.New("AccessDeniedException")
+}
+
+// The dry run says which spelling resolved to what, counts the parameters
+// already on the key under another spelling, and names the unknown ones.
+func TestRekeyDryRunShowsTheKeysAndTheUnknown(t *testing.T) {
+	p := newParameters()
+	p.keys["/sluis/example/internal/oidc/a"] = "arn:aws:kms:eu-central-1:111122223333:key/estate"
+	p.keys["/sluis/example/external/oidc/b"] = "alias/aws/ssm"
+	p.keys["/sluis/example/external/oidc/c"] = "9999-some-key-id"
+	o := rekeyOptions()
+	o.DryRun, o.KMS = true, dryKMS{}
+	var out bytes.Buffer
+	if err := rekeyRun(context.Background(), &out, "example", p, o, nil, audit.Person("oleg@example.com"), false); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"3 SecureString parameters, 1 already under the key", "to re-write: 1", "1 under alias/aws/ssm -> arn:aws:kms:eu-central-1:111122223333:key/ssm",
+		"[the key]", "unknown key (DescribeKey refused; left alone unless --include-unknown): /sluis/example/external/oidc/c"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("output lacks %q:\n%s", want, out.String())
+		}
+	}
+	if p.writes != 0 {
+		t.Errorf("a dry run wrote %d", p.writes)
 	}
 }
 
