@@ -298,8 +298,9 @@ def main():
         if not serves(cdp, host):
             passed.append(ok(False, "could not sign in again"))
         else:
-            cdp.call("Page.navigate", {"url": ISSUER + "/logout"})
-            time.sleep(5)
+            if not drive.sign_out(cdp):
+                passed.append(ok(False, "the issuer's /logout page had no sign-out button"))
+            time.sleep(3)
             print("     %s signed out at the issuer; polling the console" % stamp())
             stopped, waited = False, 0
             while waited < 150:

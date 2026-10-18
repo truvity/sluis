@@ -23,6 +23,7 @@ import (
 
 	"github.com/truvity/sluis/gen/accessissuer/v1/accessissuerv1connect"
 	"github.com/truvity/sluis/gen/sluis/v1/sluisv1connect"
+	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/connectalias"
 	"github.com/truvity/sluis/internal/httpsec"
 	"github.com/truvity/sluis/internal/refusal"
@@ -146,13 +147,25 @@ func Provider(iss *Issuer, storage op.Storage) (*op.Provider, error) {
 
 // Handler is the provider as an http.Handler, which is all a deployment
 // needs to serve it, with its discovery document corrected.
+//
+// The sign-in pages need a key to bind an authorization request to its
+// browser and to confirm a sign-out, and this entry is given none: it draws
+// one for the life of the process. That serves a single process and tests; a
+// deployment with several instances passes a shared one to
+// [HandlerWithSignIn].
 func Handler(iss *Issuer, storage op.Storage) (http.Handler, error) {
-	return HandlerWithSignIn(iss, storage, SignInDeps{})
+	key := make([]byte, 32)
+	if _, err := rand.Read(key); err != nil {
+		return nil, fmt.Errorf("draw the sign-in state key: %w", err)
+	}
+
+	return HandlerWithSignIn(iss, storage, SignInDeps{State: access.NewStateCodec(key, signInWindow)})
 }
 
 // HandlerWithSignIn is the same, with this service's own pages in front
 // of it: the chooser a browser is sent to, the provider round trip, and
-// the page a sign-out lands on.
+// the page a sign-out lands on. It refuses a browser session store with no
+// state codec ([SignInDeps.State]).
 //
 // They sit in one mux with the protocol endpoints because the library
 // hands a browser to `client.LoginURL` on the same host, and because a
@@ -177,6 +190,9 @@ func HandlerWithSignIn(iss *Issuer, storage op.Storage, signIn SignInDeps) (http
 	// The chooser renders with no provider buttons and says so, which is
 	// the honest page for an installation that signs nobody in yet.
 	signIn = signIn.over(iss, storage)
+	if err := signIn.validate(); err != nil {
+		return nil, err
+	}
 	if signIn.Return == nil {
 		signIn.Return = op.AuthCallbackURL(provider)
 	}

@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"sync"
 
+	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/issuer"
 	"github.com/zitadel/oidc/v3/pkg/op"
 )
@@ -102,6 +103,10 @@ func handler(iss *issuer.Issuer, storage op.Storage) (http.Handler, error) {
 func handlerWithSignIn(iss *issuer.Issuer, storage op.Storage, signIn issuer.SignInDeps) (http.Handler, error) {
 	libraryEndpoints.Lock()
 	defer libraryEndpoints.Unlock()
+	// The wiring a deployment always has: a key for the sign-in state.
+	if signIn.State == nil {
+		signIn.State = access.NewStateCodec([]byte("a-test-key-for-signing-state"), 0)
+	}
 	h, err := issuer.HandlerWithSignIn(iss, storage, signIn)
 	if err != nil {
 		return nil, err

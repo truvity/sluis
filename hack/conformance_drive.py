@@ -312,6 +312,28 @@ def visit(cdp, url, pages=None):
         time.sleep(3.5)
 
 
+def sign_out(cdp):
+    """Sign the browser out at the issuer, as a person does.
+
+    `/logout` is a page that asks: a GET ends nothing (a link from another
+    site could otherwise sign anybody out). The page's button POSTs a token
+    bound to the sign-in cookie, so this opens the page and presses it. A
+    browser with no sign-in is sent straight on and there is no form, which
+    is the right answer too. Returns whether the button was pressed.
+    """
+    cdp.call("Page.navigate", {"url": ISSUER + "/logout"})
+    time.sleep(1.5)
+    pressed = cdp.eval("""(() => {
+      const form = document.querySelector('form[action="/logout"]');
+      if (!form) return 'no-form';
+      form.submit();
+      return 'submitted';
+    })()""")
+    time.sleep(2)
+
+    return pressed == "submitted"
+
+
 def review(cdp, test, seen, pages):
     """Answer the suite's manual steps with what the browser is showing.
 
@@ -435,8 +457,7 @@ def run(cdp, plan, module):
     # recovery account came to hold 104 open sign-ins and fill the
     # console's Sessions page with its own litter.
     try:
-        cdp.call("Page.navigate", {"url": ISSUER + "/logout"})
-        time.sleep(1.5)
+        sign_out(cdp)
     except Exception:
         pass
 
