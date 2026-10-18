@@ -281,6 +281,14 @@ def main():
                 ISSUER, client, urllib.parse.quote(host + "/", safe="")), safe=""))
         cdp.call("Page.navigate", {"url": chain})
         time.sleep(6)
+        # The chain carries no id_token_hint, so the issuer asks before it
+        # ends anything (RP-Initiated Logout 1.0 2): press the button, as a
+        # person does.
+        cdp.eval("""(() => {
+          const form = document.querySelector('form[action="/end_session"]');
+          if (form) form.submit();
+        })()""")
+        time.sleep(4)
         after = watcher.sessions(client)
         passed.append(ok(len(after) <= before,
                          "sessions for %s went %d -> %d" % (client, len(opened), len(after))))

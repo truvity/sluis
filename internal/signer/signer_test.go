@@ -171,3 +171,21 @@ func TestPublicKeys(t *testing.T) {
 		t.Fatalf("%v %v maintained=%d", keys, err, r.maintained)
 	}
 }
+
+// Back-Channel Logout 1.0 2.4 requires `exp` in a logout token; the deployment's
+// limits give it the short life and no more.
+func TestADeploymentsLogoutTokenMayCarryAShortExp(t *testing.T) {
+	r, _, _ := newRing(t)
+	s := signer.New(r, signer.LimitsFor(time.Hour))
+
+	for payload, ok := range map[string]bool{
+		`{"iat":100,"exp":220}`: true,
+		`{"iat":100,"exp":221}`: false,
+		`{"iat":100,"exp":400}`: false,
+	} {
+		_, err := s.Sign(context.Background(), signer.Request{Purpose: signer.PurposeLogout, Payload: []byte(payload)})
+		if (err == nil) != ok {
+			t.Errorf("%s: err = %v, want accepted = %v", payload, err, ok)
+		}
+	}
+}

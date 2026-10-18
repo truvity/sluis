@@ -112,14 +112,21 @@ type Directory interface {
 	Secret(label string) []byte
 }
 
+// LogoutTokenLifetime is how long a back-channel logout token is valid. The
+// token is posted at the moment of sign-out and checked on arrival, so it only
+// has to outlive a delivery and a clock that is a little off; a short life is
+// also what bounds a replay (OpenID Connect Back-Channel Logout 1.0 2.4 makes
+// `exp` required).
+const LogoutTokenLifetime = 2 * time.Minute
+
 // LimitsFor is the per-purpose limits of a deployment whose tokens live at most
-// tokenLifetime: every JWT purpose is capped at it, and a logout token carries
-// no exp.
+// tokenLifetime: every JWT purpose is capped at it, and a logout token at
+// [LogoutTokenLifetime].
 func LimitsFor(tokenLifetime time.Duration) Limits {
 	return Limits{MaxLifetime: map[Purpose]time.Duration{
 		PurposeAccess:  tokenLifetime,
 		PurposeIDToken: tokenLifetime,
-		PurposeLogout:  0,
+		PurposeLogout:  LogoutTokenLifetime,
 	}}
 }
 

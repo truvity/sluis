@@ -281,11 +281,11 @@ func HandlerWithSignIn(iss *Issuer, storage op.Storage, signIn SignInDeps) (http
 	// The installation-token claims below take their client from HTTP Basic
 	// and read no parameter the library also reads.
 	protocol := withoutUnserved(bindAuthorization(signIn, singleValued(challenges(iss.Config().URL, refusedAuthorize(
-		authorizeSurface(storage.GetClientByClientID, defaultScope(resourceIndicators(
+		loopbackRedirects(storage.GetClientByClientID, authorizeSurface(storage.GetClientByClientID, defaultScope(resourceIndicators(
 			iss.Policy().Resource, storage.GetClientByClientID, requirePKCE(iss.Policy, presentedClients(
 				endSession(signIn, truthfulDiscovery(
 					iss.Config().URL, func() bool { return iss.Policy().ClientDocuments().Enabled() },
-					refusalFilter(provider)))))))))))))
+					refusalFilter(provider))))))))))))))
 	// An installation token for a catalogue App is claimed in front of the
 	// library, which can only mint tokens this issuer signs. The storage
 	// is the concrete one wherever a deployment runs; a test's stand-in
@@ -412,6 +412,15 @@ func endSession(signIn SignInDeps, next http.Handler) http.Handler {
 			endSessionRefusal(w, r, http.StatusBadRequest,
 				"post_logout_redirect_uri invalid: the request carries no id_token_hint "+
 					"and no client_id, so there is no client to have registered it")
+			return
+		}
+
+		// No id_token_hint: nothing here says the request came from the
+		// relying party the person is signed in to, and a link, a frame or
+		// a redirect from any site can send a browser to this address.
+		// RP-Initiated Logout 1.0 2 asks the OP to ask the person, so it does,
+		// and ends nothing until they press the button.
+		if r.Form.Get("id_token_hint") == "" && !confirmedEndSession(signIn, w, r) {
 			return
 		}
 

@@ -185,6 +185,31 @@ func (b *browser) logout() (status int, location, body string) {
 	return status, location, body
 }
 
+// hiddenField is one hidden input of a page's form, as the page writes it.
+var hiddenField = regexp.MustCompile(`<input type="hidden" name="([a-z_]+)" value="([^"]*)">`)
+
+// endSession ends a sign-in through `/end_session` as a person does when the
+// request carries no id_token_hint: the page asks, and the button is pressed
+// with what the page put in its form. A request the endpoint answered without
+// asking (a hint, a browser with no sign-in, a refusal) is returned as it is.
+func (b *browser) endSession(path string) (status int, location, body string) {
+	b.t.Helper()
+
+	status, location, body = b.do(http.MethodGet, path)
+	if status != http.StatusOK || !strings.Contains(body, `action="/end_session"`) {
+		return status, location, body
+	}
+
+	form := url.Values{}
+	for _, field := range hiddenField.FindAllStringSubmatch(body, -1) {
+		form.Set(field[1], html.UnescapeString(field[2]))
+	}
+
+	status, location, body, _ = b.post("/end_session", form)
+
+	return status, location, body
+}
+
 // door is a sign-out door, as a person uses it: `/logout` through its page
 // and button, any other as a request.
 func (b *browser) door(method, path string) (status int, location, body string) {
@@ -192,6 +217,10 @@ func (b *browser) door(method, path string) (status int, location, body string) 
 
 	if path == "/logout" {
 		return b.logout()
+	}
+
+	if method == http.MethodGet && strings.HasPrefix(path, "/end_session") {
+		return b.endSession(path)
 	}
 
 	return b.do(method, path)
@@ -336,7 +365,7 @@ func TestSigningOutEndsTheBrowserSession(t *testing.T) {
 	b := newBrowser(t, server)
 	b.signIn()
 
-	if _, _, _ = b.do(http.MethodGet, "/end_session"); b.cookies[issuer.SSOCookieName] != "" {
+	if _, _, _ = b.endSession("/end_session"); b.cookies[issuer.SSOCookieName] != "" {
 		t.Fatal("end_session left the browser session behind")
 	}
 
@@ -438,13 +467,43 @@ func TestTheSessionServiceIsMountedWithoutAConsoleOrigin(t *testing.T) {
 // browser's cookies are and whatever it says it accepts. The shared
 // `browser.do` cannot be used: these cases turn on the Accept header and
 // on the query, and both of those are the thing under test.
+//
+// A request with no id_token_hint is answered with the page that asks; the
+// button is pressed here with what the page put in its form, which is what a
+// person does, and the answer to that is what is returned.
 func endSessionRequest(t *testing.T, b *browser, query, accept string) (int, string, string) {
 	t.Helper()
 
-	request, err := http.NewRequestWithContext(t.Context(), http.MethodGet,
-		b.server.URL+"/end_session"+query, nil)
+	status, location, body := endSessionOnce(t, b, http.MethodGet, query, accept, nil)
+	if status != http.StatusOK || !strings.Contains(body, `action="/end_session"`) {
+		return status, location, body
+	}
+
+	form := url.Values{}
+	for _, field := range hiddenField.FindAllStringSubmatch(body, -1) {
+		form.Set(field[1], html.UnescapeString(field[2]))
+	}
+
+	return endSessionOnce(t, b, http.MethodPost, "", accept, form)
+}
+
+// endSessionOnce is one request to `/end_session`, answered as it is.
+func endSessionOnce(t *testing.T, b *browser, method, query, accept string, form url.Values) (int, string, string) {
+	t.Helper()
+
+	var content io.Reader
+	if form != nil {
+		content = strings.NewReader(form.Encode())
+	}
+
+	request, err := http.NewRequestWithContext(t.Context(), method,
+		b.server.URL+"/end_session"+query, content)
 	if err != nil {
 		t.Fatalf("build the request: %v", err)
+	}
+
+	if form != nil {
+		request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	}
 
 	if accept != "" {
@@ -466,10 +525,9 @@ func endSessionRequest(t *testing.T, b *browser, query, accept string) (int, str
 
 	defer func() { _ = response.Body.Close() }()
 
-	body := make([]byte, 4096)
-	n, _ := response.Body.Read(body)
+	body, _ := io.ReadAll(io.LimitReader(response.Body, 16<<10))
 
-	return response.StatusCode, response.Header.Get("Location"), string(body[:n])
+	return response.StatusCode, response.Header.Get("Location"), string(body)
 }
 
 // A sign-out that names nowhere to go lands on the page that says it
@@ -599,7 +657,7 @@ func TestEndSessionRevokesWhatTheBrowserOpened(t *testing.T) {
 		t.Fatalf("recorded 1 session, list says %d", len(before))
 	}
 
-	if _, _, _ = b.do(http.MethodGet, "/end_session"); b.cookies[issuer.SSOCookieName] != "" {
+	if _, _, _ = b.endSession("/end_session"); b.cookies[issuer.SSOCookieName] != "" {
 		t.Fatal("end_session left the browser session behind")
 	}
 
@@ -685,7 +743,7 @@ func TestAnIDTokenHintDoesNotRevokeOnItsOwn(t *testing.T) {
 	b := newBrowser(t, server)
 	b.signIn()
 
-	if _, _, _ = b.do(http.MethodGet, "/end_session?client_id=argocd"); b.cookies[issuer.SSOCookieName] != "" {
+	if _, _, _ = b.endSession("/end_session?client_id=argocd"); b.cookies[issuer.SSOCookieName] != "" {
 		t.Fatal("end_session left the browser session behind")
 	}
 
@@ -1020,6 +1078,14 @@ func TestBackChannelLogoutTellsAClientThatHoldsNoRefreshToken(t *testing.T) {
 
 	if claims["aud"] != "local-dev" || claims["sub"] != "ada@north.example" {
 		t.Errorf("aud=%v sub=%v, want the client and the person", claims["aud"], claims["sub"])
+	}
+
+	// Back-Channel Logout 1.0 2.4: `exp` is required, and short.
+	iat, _ := claims["iat"].(float64)
+	exp, ok := claims["exp"].(float64)
+
+	if !ok || exp <= iat || exp-iat > 120 {
+		t.Errorf("iat=%v exp=%v, want an exp at most two minutes after iat", claims["iat"], claims["exp"])
 	}
 
 	if events, _ := claims["events"].(map[string]any); events["http://schemas.openid.net/event/backchannel-logout"] == nil {

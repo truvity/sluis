@@ -51,6 +51,7 @@ type logoutToken struct {
 	Issuer    string         `json:"iss"`
 	Audience  string         `json:"aud"`
 	IssuedAt  int64          `json:"iat"`
+	Expires   int64          `json:"exp"`
 	JWTID     string         `json:"jti"`
 	Subject   string         `json:"sub,omitempty"`
 	SessionID string         `json:"sid,omitempty"`
@@ -206,12 +207,16 @@ func (s *Storage) mintLogoutToken(session *Session) (string, error) {
 	// token is never minted for a resource -- so, like [Storage.MintFor],
 	// this resolves its algorithm directly rather than through the
 	// context carrier the library's own mint paths need.
+	issued := time.Now()
 	claims := logoutToken{
 		Issuer:   s.iss.Config().URL,
 		Audience: session.ClientID,
-		IssuedAt: time.Now().Unix(),
-		JWTID:    uuid.NewString(),
-		Subject:  session.Identity,
+		IssuedAt: issued.Unix(),
+		// Required by Back-Channel Logout 1.0 2.4, and short: the token is
+		// posted now and only has to survive its delivery.
+		Expires: issued.Add(signer.LogoutTokenLifetime).Unix(),
+		JWTID:   uuid.NewString(),
+		Subject: session.Identity,
 		// The SAME `sid` the relying party's ID token carried, which is
 		// this per-client session and not the browser sign-in
 		// it hangs off. A relying party matches a logout token to its

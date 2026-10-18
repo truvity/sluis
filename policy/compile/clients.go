@@ -165,13 +165,21 @@ func (e Endpoints) absolute(paths []string) []string {
 // another host. The host has one source in the row; an absolute URL
 // elsewhere would be a second one, and a second source is the drift. A
 // loopback address is the one exception, for a loopback client.
+//
+// It refuses `http://` for a redirect or a landing page that is not on a
+// loopback address too (RFC 9700 4.1, RFC 8252 7.3): the authorization code
+// and the state ride in that URL, and over plain HTTP anyone on the path
+// reads them. The issuer's library allows `http://` for a confidential
+// client's code flow, so this is where it is stopped.
 func (e Endpoints) ValidateURLs() error {
 	every := append(append([]string(nil), e.Redirects...), e.SignedOut...)
+	browsers := len(every)
+
 	if e.BackChannelLogout != "" {
 		every = append(every, e.BackChannelLogout)
 	}
 
-	for _, raw := range every {
+	for i, raw := range every {
 		if !strings.Contains(raw, "://") {
 			if !strings.HasPrefix(raw, "/") {
 				return fmt.Errorf("%q must be host-relative (start with /) or absolute", raw)
@@ -185,12 +193,17 @@ func (e Endpoints) ValidateURLs() error {
 			return fmt.Errorf("%q is not a URL: %w", raw, err)
 		}
 
-		if parsed.Hostname() == "127.0.0.1" || parsed.Hostname() == "localhost" {
+		if isLoopbackHost(parsed.Hostname()) {
 			if !e.Loopback {
 				return fmt.Errorf("%q is a loopback redirect — set `loopback: true` to say that is what this client is", raw)
 			}
 
 			continue
+		}
+
+		if i < browsers && !strings.EqualFold(parsed.Scheme, "https") {
+			return fmt.Errorf("%q is not https — a redirect or landing page that is not on a loopback address "+
+				"must be https, because the authorization code travels in it", raw)
 		}
 
 		if parsed.Host != e.Hostname {
@@ -199,6 +212,12 @@ func (e Endpoints) ValidateURLs() error {
 	}
 
 	return nil
+}
+
+// isLoopbackHost says a host name is the machine itself: what a native
+// client listens on (RFC 8252 7.3).
+func isLoopbackHost(host string) bool {
+	return host == "127.0.0.1" || host == "::1" || host == "localhost"
 }
 
 // ValidateLanding refuses an address that is both a redirect and a

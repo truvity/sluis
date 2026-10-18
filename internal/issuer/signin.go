@@ -99,6 +99,11 @@ type Pending struct {
 	// ClientID is the client that made the request, as the library
 	// accepted it at /authorize.
 	ClientID string
+	// Hint is the subject of the verified `id_token_hint`, lowercased, or
+	// empty when the request carried none. OpenID Connect Core 3.1.2.1: the
+	// request is for THAT person, so a browser session of someone else does
+	// not answer it, and neither does a sign-in as someone else.
+	Hint string
 	// Resource is what the request asks a token FOR (RFC 8707), empty for
 	// a token for the client itself. It decides which absolute session
 	// limit a silent sign-in is held to.
@@ -714,7 +719,7 @@ func (s *signIn) recover(w http.ResponseWriter, r *http.Request) {
 		} else {
 			s.handOver(w, r, who, secret)
 		}
-		if s.refuseUnentitled(w, r, err, request) || s.refuseUnaudited(w, r, err) {
+		if s.refuseUnentitled(w, r, err, request) || s.refuseUnaudited(w, r, err) || s.refuseHint(w, r, err, request) {
 			return
 		}
 
@@ -801,7 +806,8 @@ func (s *signIn) callback(w http.ResponseWriter, r *http.Request) {
 	// entitled to, does not undo that.
 	s.handOver(w, r, who, secret)
 	if err != nil {
-		if s.refuseUnentitled(w, r, err, request) || s.askAgentConsent(w, r, err, request, who) {
+		if s.refuseUnentitled(w, r, err, request) || s.refuseHint(w, r, err, request) ||
+			s.askAgentConsent(w, r, err, request, who) {
 			return
 		}
 
@@ -1361,6 +1367,14 @@ func (s *signIn) silent(w http.ResponseWriter, r *http.Request, request string, 
 		return false
 	}
 
+	// An `id_token_hint` names the person the request is for. The browser's
+	// sign-in is somebody else's, so it does not answer: not silently, and
+	// the caller falls through to what a request with no sign-in gets,
+	// which is `login_required` for `prompt=none` and a sign-in otherwise.
+	if hintMismatch(pending.Hint, session.Identity) {
+		return false
+	}
+
 	who := Authenticated{
 		Subject:  session.Identity,
 		AuthTime: session.AuthTime,
@@ -1377,7 +1391,7 @@ func (s *signIn) silent(w http.ResponseWriter, r *http.Request, request string, 
 		// connection is answered with its consent page: the person is
 		// authenticated, and is asked rather than completed silently.
 		return s.refuseUnentitled(w, r, err, request) || s.refuseUnaudited(w, r, err) ||
-			s.askAgentConsent(w, r, err, request, who)
+			s.refuseHint(w, r, err, request) || s.askAgentConsent(w, r, err, request, who)
 	}
 
 	recordLoginSuccess(r.Context(), "browser_session")
@@ -1433,6 +1447,30 @@ func (s *signIn) refuseUnentitled(w http.ResponseWriter, r *http.Request, err er
 		`<p>Your account is not in a group that opens `+named(s.pendingOf(request), "this application")+`.</p>
 	<p class="note">Nothing is wrong with your sign-in, and signing in again will not change it.
 	Ask whoever administers access to grant it.</p>`)
+
+	return true
+}
+
+// hintMismatch reports a request for one person completed as another. An
+// absent hint asks nothing.
+func hintMismatch(hint, subject string) bool {
+	return hint != "" && hint != strings.ToLower(subject)
+}
+
+// refuseHint answers a sign-in that is not the person the request's
+// `id_token_hint` named (OpenID Connect Core 3.1.2.1), and reports whether
+// that is what happened. The answer goes to the CLIENT as `login_required`:
+// it asked for somebody in particular, and the person who signed in is not
+// them, so the code it was waiting for is not coming. Nothing was completed;
+// the browser keeps the sign-in it just made, which is the person's own.
+func (s *signIn) refuseHint(w http.ResponseWriter, r *http.Request, err error, request string) bool {
+	if !errors.Is(err, ErrHintMismatch) {
+		return false
+	}
+
+	recordLoginFailure(r.Context(), LoginNotWaiting)
+	s.refuse(w, r, s.pendingOf(request), "login_required",
+		"the sign-in is not the person the request's id_token_hint names")
 
 	return true
 }
