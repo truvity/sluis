@@ -262,6 +262,9 @@ type (
 		SQS
 		Batch      int      `json:"batch,omitempty"`
 		Visibility Duration `json:"visibility,omitzero"`
+		// Senders names the principals that send to the queue, by the unique
+		// id SQS reports as SenderId, as the observer to record them under.
+		Senders map[string]string `json:"senders,omitempty"`
 	}
 
 	// Log is the log sink, which has nothing to configure: it writes a line per
@@ -521,4 +524,7 @@ type WriterLambda struct {
 	ForgetIdentities bool    `json:"forgetIdentities,omitempty"`
 	Dedupe           Dedupe  `json:"dedupe"`
 	Require          string  `json:"require,omitempty"`
+	// Senders names the principals that send to the queue, by the unique id SQS
+	// reports as SenderId, as the observer to record them under.
+	Senders map[string]string `json:"senders,omitempty"`
 }

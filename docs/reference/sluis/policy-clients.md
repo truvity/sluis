@@ -263,7 +263,7 @@ A client presents an HTTPS URL as `client_id`. sluis fetches its OAuth Client ID
 | Stale-while-error | last good copy up to 1 h past expiry, transport failures only; warning logged each time |
 | Never served stale | refused answer: invalid document, redirect, 4xx, oversized body |
 | Display name | cleaned as a declared name is held to (no line breaks, controls, bidirectional overrides or formatting characters), cut to 64 characters on a character boundary; host shown when absent |
-| Fetch | public addresses only, no redirects, a failure remembered for 1 minute, at most 30 fetches a minute per host ([endpoints](endpoints.md#hardening)) |
+| Fetch | public addresses only, no redirects, a failure remembered for 1 minute, at most 30 fetches a minute per host, which can delay a legitimate uncached document of a busy host ([endpoints](endpoints.md#hardening)) |
 | Audit | records the URL |
 | Discovery | `client_id_metadata_document_supported` in discovery and `/.well-known/oauth-authorization-server` only while an origin is named |
 

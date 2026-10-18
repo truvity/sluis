@@ -9,6 +9,7 @@ import (
 
 	"github.com/aws/aws-lambda-go/events"
 
+	"github.com/truvity/sluis/audit/internal/sqsorigin"
 	"github.com/truvity/sluis/audit/sdk/record"
 	"github.com/truvity/sluis/audit/sdk/sink"
 )
@@ -34,6 +35,10 @@ type handler struct {
 	after func(context.Context)
 	now   func() time.Time
 	log   *slog.Logger
+	// origin stamps each record from the message's system attributes, in place
+	// of the stamp its body carries (internal/sqsorigin). Nil leaves the
+	// records for the writer to stamp, with its own clock.
+	origin *sqsorigin.Origin
 }
 
 // Handle writes a batch and answers with partial batch responses
@@ -76,6 +81,14 @@ func (h *handler) Handle(ctx context.Context, ev events.SQSEvent) (events.SQSEve
 			fails = append(fails, events.SQSBatchItemFailure{ItemIdentifier: m.MessageId})
 			continue
 		}
+		if h.origin != nil {
+			if err := h.origin.Stamp(&r, m.Attributes); err != nil {
+				h.log.ErrorContext(ctx, "a message could not be stamped; it is returned to the queue and will reach the DLQ",
+					slog.String("message", oneLine(m.MessageId)), slog.String("error", oneLine(err.Error())))
+				fails = append(fails, events.SQSBatchItemFailure{ItemIdentifier: m.MessageId})
+				continue
+			}
+		}
 		records = append(records, &r)
 		decoded = append(decoded, decodedMessage{message: m.MessageId, record: r.GetId()})
 	}
@@ -83,6 +96,10 @@ func (h *handler) Handle(ctx context.Context, ev events.SQSEvent) (events.SQSEve
 		return events.SQSEventResponse{BatchItemFailures: fails}, nil
 	}
 
+	if h.origin != nil {
+		// Every record of the batch was stamped just above.
+		ctx = sqsorigin.Trust(ctx)
+	}
 	res, err := h.target.Write(ctx, &sink.Request{Records: records, Delivery: sink.Block})
 	if err != nil {
 		h.log.ErrorContext(ctx, "the writer did not take the batch; every message in it goes back to the queue",

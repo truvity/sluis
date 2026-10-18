@@ -54,8 +54,13 @@ A record arriving through the ingest queue carries no verified caller identity. 
 
 | Consumer | Stamp in the message |
 |---|---|
-| writer Lambda, queue consumer | ignored: `observer`, `recorded_at` and `origin_hash` are the writer's own |
+| writer Lambda, queue consumer | ignored: `observer`, `recorded_at` and `origin_hash` are made from what SQS sets |
 | NATS consumer | kept: the stream admits this installation's receivers alone |
+
+| Stamped from SQS | Value |
+|---|---|
+| `observer.id` | the `senders` entry for the message's `SenderId` (`AROA...` of the role, or the whole id with its session); empty when none |
+| `recorded_at` | the message's `SentTimestamp` |
 
 Whoever may send to the queue can therefore record under any `source` and `actor` a catalogue admits. Authenticity on this path rests on the queue policy's sender principals alone.
 
@@ -63,7 +68,7 @@ Whoever may send to the queue can therefore record under any `source` and `actor
 - `Ingest.AnySenderInAccount` allows any principal of the account with `sqs:SendMessage`, for a trial. The trail then cannot say who sent a record. The two settings are refused together.
 - Name one principal per sending workload (the receiver, the query service, the notary), each with `sqs:SendMessage` on the queue only. Name a principal in another account the same way.
 
-The observer is not taken from a message attribute, which is the sender's own claim. SQS stamps a `SenderId` the sender cannot choose, but the library cannot map a sender's role id to an observer name. To tell senders apart, give each sender its own queue.
+The observer is not taken from a message attribute, which is the sender's own claim. SQS sets a `SenderId` the sender cannot choose. Map each sender's role id to a name in `senders`, or give each sender its own queue.
 
 The HTTP and stream paths differ: the receiver verifies the caller's token and stamps the observer.
 

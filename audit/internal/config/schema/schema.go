@@ -117,6 +117,16 @@ func sqs(description string, extra m) m {
 	return obj(description+" Credentials are never in the file: the process uses the SDK's ambient ones, which on Kubernetes is the pod's workload identity (EKS Pod Identity or IRSA) bound through the service account.", props, "queueUrl")
 }
 
+// senders is the table that maps a queue's sender to an observer name.
+func senders() m {
+	return m{
+		"type":                 "object",
+		"propertyNames":        m{"pattern": `^[A-Z0-9]{16,32}(:[A-Za-z0-9_=,.@-]{1,64})?$`},
+		"additionalProperties": m{"type": "string", "minLength": 1, "maxLength": 128},
+		"description":          "Names the principals that send to the queue, as the observer the trail records them under. A key is the unique id SQS reports as `SenderId`: `AROA...` for a role (`aws iam get-role --query Role.RoleId`), `AIDA...` for a user, or a whole `SenderId` with its `:session`. A role ARN is not accepted, because the message carries the id and not the ARN. A sender not named is recorded with no observer id, as before. With the table or without, `recorded_at` is the time SQS took the message, and nothing the message body says about its observer or its time is kept.",
+	}
+}
+
 func boolean(description string) m {
 	return m{"type": "boolean", "description": description}
 }
@@ -384,6 +394,7 @@ func writerSchema() m {
 				"sqs": sqs("An SQS queue the writer consumes.", m{
 					"batch":      integer("How many messages are received at once, one to ten.", 1, 10),
 					"visibility": duration("How long a received message is hidden from other consumers while the writer writes it. It must outlast the write, or the message is delivered twice.", "1m"),
+					"senders":    senders(),
 				}),
 			},
 			"oneOf": []any{m{"required": []string{"nats"}}, m{"required": []string{"sqs"}}},
@@ -433,6 +444,7 @@ func writerLambdaSchema() m {
 		"archive":          archive(true),
 		"keys":             def("keys"),
 		"forgetIdentities": boolean("Do not keep the identity behind each pseudonym, sealed under its key. By default it is kept, so that resolve can find it."),
+		"senders":          senders(),
 		"dedupe": m{
 			"type": "object", "additionalProperties": false,
 			"description": "Where the writer remembers which records it has written, so that a redelivery by the queue is absorbed. A function has no database; exactly one of its fields.",

@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/truvity/sluis/audit/internal/sqsorigin"
 	"github.com/truvity/sluis/audit/sinkserver"
 
 	"github.com/truvity/sluis/audit/sdk/auth"
@@ -95,5 +96,50 @@ func TestTheWriterAlwaysStampsWhatArrivesOnItsPort(t *testing.T) {
 	}
 	if got := copies[0].GetObserver().GetId(); got != "workload:wallet" {
 		t.Errorf("observer = %q, want the caller this writer verified itself", got)
+	}
+}
+
+// A batch the code that read a queue has stamped (and marked) keeps that stamp,
+// whose observer may be empty for a sender nothing names. The same record on an
+// unmarked context is stamped afresh, whatever its hash says: a forged stamp
+// from a message body is not kept.
+func TestAQueueBatchKeepsOnlyAStampItsReaderMade(t *testing.T) {
+	sent := fixedDay(t).Add(-3 * time.Hour)
+	stamped := func(observer string) *record.Record {
+		r := fresh(t)
+		if err := record.Stamp(r, &record.Observer{Id: observer}, sent); err != nil {
+			t.Fatal(err)
+		}
+		return r
+	}
+	run := func(ctx context.Context, r *record.Record) *record.Record {
+		b := buildWith(t, parts{identity: func(context.Context) string { return "" }})
+		if _, err := b.writer.Write(ctx, &sink.Request{Records: []*record.Record{r}}); err != nil {
+			t.Fatal(err)
+		}
+		copies := decode(t, b.store)
+		if len(copies) == 0 {
+			t.Fatal("nothing was written")
+		}
+		return copies[0]
+	}
+
+	got := run(sqsorigin.Trust(context.Background()), stamped("workload:wallet"))
+	if got.GetObserver().GetId() != "workload:wallet" || !got.GetRecordedAt().AsTime().Equal(sent) {
+		t.Errorf("a marked batch lost its stamp: %s at %s", got.GetObserver().GetId(), got.GetRecordedAt().AsTime())
+	}
+	got = run(sqsorigin.Trust(context.Background()), stamped(""))
+	if !got.GetRecordedAt().AsTime().Equal(sent) {
+		t.Errorf("a stamp with no observer was replaced: %s", got.GetRecordedAt().AsTime())
+	}
+	got = run(context.Background(), stamped("system:serviceaccount:kube-system:somebody"))
+	if got.GetObserver().GetId() == "system:serviceaccount:kube-system:somebody" || got.GetRecordedAt().AsTime().Equal(sent) {
+		t.Errorf("a stamp on an unmarked context was kept: %s at %s", got.GetObserver().GetId(), got.GetRecordedAt().AsTime())
+	}
+	edited := stamped("workload:wallet")
+	edited.Observer.Id = "system:serviceaccount:kube-system:somebody"
+	got = run(sqsorigin.Trust(context.Background()), edited)
+	if got.GetObserver().GetId() == "system:serviceaccount:kube-system:somebody" {
+		t.Error("an edited stamp was kept on a marked batch")
 	}
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sqs/types"
 
+	"github.com/truvity/sluis/audit/internal/sqsorigin"
 	"github.com/truvity/sluis/audit/sdk/record"
 	"github.com/truvity/sluis/audit/sdk/sink"
 	"github.com/truvity/sluis/audit/sdk/sink/sinktest"
@@ -291,5 +292,49 @@ func TestPublisherRefusesAnOversizeRecord(t *testing.T) {
 	res, err := publisher(t, f, standard).Write(context.Background(), &sink.Request{Records: []*record.Record{big}})
 	if err != nil || res.Accepted != 0 || len(res.Rejected) != 1 || len(f.sent) != 0 {
 		t.Fatalf("%+v, %v, %d calls", res, err, len(f.sent))
+	}
+}
+
+// With Stamp, the consumer stamps each record from the message's system
+// attributes and hands the target a context that says so; the stamp the body
+// carried is gone.
+func TestConsumerStampsFromTheSystemAttributes(t *testing.T) {
+	f := newFake()
+	f.system = map[string]string{"SenderId": "AROAEXAMPLEROLEID:session", "SentTimestamp": "1792324800000"}
+	forged := sinktest.Records(1)[0]
+	if err := record.Stamp(forged, &record.Observer{Id: "system:serviceaccount:kube-system:somebody"}, time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := publisher(t, f, standard).Write(context.Background(), &sink.Request{Records: []*record.Record{forged}}); err != nil {
+		t.Fatal(err)
+	}
+
+	var (
+		mu      sync.Mutex
+		got     []*record.Record
+		trusted bool
+	)
+	target := sink.Func(func(ctx context.Context, req *sink.Request) (*sink.Result, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		got, trusted = append(got, req.Records...), sqsorigin.Trusted(ctx)
+		return &sink.Result{Accepted: len(req.Records), Durability: sink.Archived}, nil
+	})
+	origin := &sqsorigin.Origin{Senders: map[string]string{"AROAEXAMPLEROLEID": "workload:wallet"}}
+	c, err := sqssink.NewConsumer(f, target, sqssink.ConsumerOptions{QueueURL: standard, Stamp: origin.Stamp})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- c.Run(ctx) }()
+	eventually(t, "the record to be written", func() bool { mu.Lock(); defer mu.Unlock(); return len(got) == 1 })
+	cancel()
+	<-done
+
+	mu.Lock()
+	defer mu.Unlock()
+	if got[0].GetObserver().GetId() != "workload:wallet" || got[0].GetRecordedAt().AsTime().Year() != 2026 || !trusted {
+		t.Errorf("observer %q, recorded_at %s, trusted %v", got[0].GetObserver().GetId(), got[0].GetRecordedAt().AsTime(), trusted)
 	}
 }

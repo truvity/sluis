@@ -1074,3 +1074,30 @@ func TestTheIndexerPollDefaultsAgree(t *testing.T) {
 		t.Errorf("the schema defaults to %q, the indexer to %v (%v)", doc.Properties.Interval.Default, observe.DefaultInterval, err)
 	}
 }
+
+// `senders` maps the unique id SQS reports to an observer name, for the Lambda
+// and for a writer that consumes a queue, and refuses a key that is not one (a
+// role ARN, which a message does not carry).
+func TestSendersMapASenderIdToAnObserver(t *testing.T) {
+	w, err := config.LoadWriterLambda(writeAs(t, "audit-writer-lambda",
+		"deployment: /d.yaml\narchive: {}\ndedupe: {dynamodb: {table: t}}\nsenders: {AROAEXAMPLEROLEID01: 'workload:wallet', 'AROAEXAMPLEROLEID02:batch': batch}\n"))
+	if err != nil || w.Senders["AROAEXAMPLEROLEID01"] != "workload:wallet" || len(w.Senders) != 2 {
+		t.Fatalf("%+v %v", w, err)
+	}
+	c, err := config.LoadWriter(writeAs(t, "audit-writer",
+		"deployment: /d.yaml\nanonymousWrites: true\narchive: {}\n"+
+			"consume: {sqs: {queueUrl: 'https://sqs.example.test/A/q', senders: {AROAEXAMPLEROLEID01: wallet}}}\n"))
+	if err != nil || c.Consume.SQS.Senders["AROAEXAMPLEROLEID01"] != "wallet" {
+		t.Fatalf("%+v %v", c, err)
+	}
+	for name, key := range map[string]string{
+		"a role ARN": "'arn:aws:iam::123456789012:role/wallet'", "lower case": "aroaexampleroleid01", "empty": "''",
+	} {
+		t.Run(name, func(t *testing.T) {
+			body := "deployment: /d.yaml\narchive: {}\ndedupe: {dynamodb: {table: t}}\nsenders: {" + key + ": wallet}\n"
+			if _, err := config.LoadWriterLambda(writeAs(t, "audit-writer-lambda", body)); err == nil {
+				t.Fatal("the key was accepted")
+			}
+		})
+	}
+}

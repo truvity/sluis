@@ -7,6 +7,9 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
 
 	"github.com/truvity/sluis/audit/sinkserver"
 
@@ -15,6 +18,7 @@ import (
 
 	"github.com/truvity/sluis/audit/internal/config"
 	"github.com/truvity/sluis/audit/internal/registry"
+	"github.com/truvity/sluis/audit/internal/sqsorigin"
 	"github.com/truvity/sluis/audit/sdk/record"
 	"github.com/truvity/sluis/audit/sdk/sink"
 	"github.com/truvity/sluis/audit/sink/sqssink"
@@ -188,5 +192,71 @@ func TestTheStreamShorthandIsTheReceiversForwardNATS(t *testing.T) {
 	cfg := load(t, receiverHead+"stream: {nats: {url: 'nats://n:4222'}, name: AUDIT}\n")
 	if cfg.Forward == nil || cfg.Forward.NATS == nil || cfg.Forward.NATS.NATS.URL != "nats://n:4222" || cfg.Require != "queued" {
 		t.Errorf("stream was not read as forward.nats: %+v require=%s", cfg.Forward, cfg.Require)
+	}
+}
+
+// oneMessage is a queue holding one message with the system attributes SQS would
+// set, handed out once.
+type oneMessage struct {
+	queue
+	body   string
+	system map[string]string
+	given  bool
+}
+
+func (q *oneMessage) ReceiveMessage(ctx context.Context, _ *sqs.ReceiveMessageInput, _ ...func(*sqs.Options)) (*sqs.ReceiveMessageOutput, error) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if q.given {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
+	q.given = true
+	return &sqs.ReceiveMessageOutput{Messages: []types.Message{{
+		Body: aws.String(q.body), ReceiptHandle: aws.String("r"), Attributes: q.system,
+	}}}, nil
+}
+
+// A forged stamp in the body of a message on the queue is replaced on the path a
+// writer reads a queue by: the observer is what the sender id maps to and
+// recorded_at is when SQS took the message. Taking the stamping out of consumeSQS
+// fails this.
+func TestAQueueConsumerReplacesAForgedStamp(t *testing.T) {
+	cfg := load(t, "deployment: /d.yaml\nanonymousWrites: true\narchive: {}\n"+
+		"consume: {sqs: {queueUrl: 'https://sqs.example.test/ACCOUNT/audit', senders: {AROAEXAMPLEROLEID: 'workload:wallet'}}}\n")
+	forged := registrationRecord(registry.Entry{Source: "app", Version: "1"}, "test")
+	if err := record.Stamp(forged, &record.Observer{Id: "system:serviceaccount:kube-system:somebody", Instance: "evil"},
+		time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)); err != nil {
+		t.Fatal(err)
+	}
+	body, err := record.Canonical(forged)
+	if err != nil {
+		t.Fatal(err)
+	}
+	q := &oneMessage{body: string(body), system: map[string]string{"SenderId": "AROAEXAMPLEROLEID:session", "SentTimestamp": "1792324800000"}}
+	newSQS = func(context.Context, string) (sqssink.API, error) { return q, nil }
+
+	got := make(chan *record.Record, 1)
+	trusted := make(chan bool, 1)
+	target := sink.Func(func(ctx context.Context, req *sink.Request) (*sink.Result, error) {
+		got <- req.Records[0]
+		trusted <- sqsorigin.Trusted(ctx)
+		return &sink.Result{Accepted: len(req.Records), Durability: sink.Archived}, nil
+	})
+	stop, err := consumeSQS(context.Background(), cfg.Consume.SQS, target, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stop()
+	select {
+	case r := <-got:
+		if r.GetObserver().GetId() != "workload:wallet" || r.GetObserver().GetInstance() == "evil" || r.GetRecordedAt().AsTime().Year() != 2026 {
+			t.Errorf("observer %+v, recorded_at %s: the forged stamp survived", r.GetObserver(), r.GetRecordedAt().AsTime())
+		}
+		if !<-trusted {
+			t.Error("the batch was not marked as stamped by its reader, so the writer would stamp it afresh")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the message was never written")
 	}
 }

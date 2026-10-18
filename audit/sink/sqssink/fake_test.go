@@ -34,6 +34,9 @@ type fakeSQS struct {
 	fail func(call int, e types.SendMessageBatchRequestEntry) *types.BatchResultErrorEntry
 	// sendErr, when set, fails a whole send.
 	sendErr error
+	// system are the system attributes (SenderId, SentTimestamp) every received
+	// message carries.
+	system map[string]string
 }
 
 type fakeMessage struct {
@@ -114,6 +117,7 @@ func (f *fakeSQS) ReceiveMessage(ctx context.Context, in *sqs.ReceiveMessageInpu
 		m.visibleAt = f.now.Add(time.Duration(in.VisibilityTimeout) * time.Second)
 		out.Messages = append(out.Messages, types.Message{
 			Body: aws.String(m.body), ReceiptHandle: aws.String(m.receipt), MessageAttributes: m.attrs,
+			Attributes: f.system,
 		})
 	}
 	f.mu.Unlock()

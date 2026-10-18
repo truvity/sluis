@@ -2,6 +2,8 @@ package sinkserver
 
 import (
 	"context"
+	"maps"
+	"slices"
 
 	"github.com/truvity/sluis/audit/sdk/auth"
 	"github.com/truvity/sluis/audit/sdk/record"
@@ -25,9 +27,12 @@ type SourceBound struct {
 	To sink.Sink
 	// Workloads maps a verified principal to its source.
 	Workloads auth.Workloads
-	// OnRefused is told once per refused record, with the caller's subject and
-	// the source the record claimed. Nil says nothing.
-	OnRefused func(ctx context.Context, subject, source string)
+	// OnRefused is told once per batch that had a refusal, with the caller's
+	// subject, how many records were refused, and the sources they claimed
+	// (distinct, sorted, at most five). Once per batch, not per record: a caller
+	// that sends a thousand records of the wrong source writes one line, not a
+	// thousand. Nil says nothing.
+	OnRefused func(ctx context.Context, subject string, refused int, sources []string)
 }
 
 // Guarantees implements sink.Guarantor: a hop that only refuses gives what its
@@ -42,6 +47,7 @@ func (b *SourceBound) Write(ctx context.Context, req *sink.Request) (*sink.Resul
 	}
 	want := b.Workloads.SourceOf(p)
 	var refused []sink.Rejection
+	claimed := map[string]bool{}
 	kept := make([]*record.Record, 0, len(req.Records))
 	for _, r := range req.Records {
 		if want != "" && r.GetSource() == want {
@@ -53,9 +59,11 @@ func (b *SourceBound) Write(ctx context.Context, req *sink.Request) (*sink.Resul
 			reason = "the caller is not listed as speaking for any source"
 		}
 		refused = append(refused, sink.Rejection{ID: r.GetId(), Reason: reason})
-		if b.OnRefused != nil {
-			b.OnRefused(ctx, p.Subject, r.GetSource())
-		}
+		claimed[r.GetSource()] = true
+	}
+	if len(refused) > 0 && b.OnRefused != nil {
+		sources := slices.Sorted(maps.Keys(claimed))
+		b.OnRefused(ctx, p.Subject, len(refused), sources[:min(len(sources), 5)])
 	}
 	if len(refused) == 0 {
 		return b.To.Write(ctx, req)

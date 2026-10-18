@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -351,7 +353,31 @@ func (s *Service) allow(
 	if err != nil {
 		return auth.Grant{}, err
 	}
-	return auth.Effective(held, profile, op)
+	g, err := auth.Effective(held, profile, op)
+	if err != nil {
+		// Which profiles the caller's own grants name travels with the refusal,
+		// for the dedupe of its record: see [Service.recordRefusal].
+		return g, &refusal{err: err, held: heldProfiles(held)}
+	}
+	return g, nil
+}
+
+// refusal is an authorization refusal and the profiles the caller holds grants
+// on.
+type refusal struct {
+	err  error
+	held []string
+}
+
+func (r *refusal) Error() string { return r.err.Error() }
+func (r *refusal) Unwrap() error { return r.err }
+
+func heldProfiles(held []auth.Grant) []string {
+	var out []string
+	for _, g := range held {
+		out = append(out, g.Profiles...)
+	}
+	return out
 }
 
 // narrow applies the grant to a compiled query.
@@ -396,41 +422,76 @@ func profileTarget(profile string) []*record.Target {
 // refusalWindow is how long one refusal stands for the same refusal repeated.
 const refusalWindow = time.Minute
 
-// refusalCap bounds what is remembered. A full table records every refusal
-// rather than forgetting to record one: the cap is for memory, not for the
-// trail.
-const refusalCap = 4096
+const (
+	// refusalCap bounds what is remembered in all, and refusalPerSubject what
+	// one caller may occupy of it. A caller that is turned away chooses the
+	// profile and the record id it asks for, so neither is in the key unless it
+	// is one the caller's own grants name; and a caller that did get past that
+	// cannot push everyone else's entries out.
+	refusalCap        = 4096
+	refusalPerSubject = 64
+	// refusalPart bounds each part of a key.
+	refusalPart = 128
+)
 
 // refusals is the dedupe of recorded refusals: a caller, an action and a
-// profile are recorded once a window.
+// profile the caller holds are recorded once a window.
 type refusals struct {
-	mu   sync.Mutex
-	last map[string]time.Time
+	mu        sync.Mutex
+	last      map[string]refusedAt
+	bySubject map[string]int
+}
+
+type refusedAt struct {
+	at      time.Time
+	subject string
 }
 
 // first reports whether this refusal is the first of its kind in the window.
-func (r *refusals) first(key string, now time.Time) bool {
+// A caller over its share, or a full table, is suppressed rather than allowed to
+// record every request: the first refusal of the window was recorded, and the
+// flood is the thing the dedupe is for.
+func (r *refusals) first(subject, key string, now time.Time) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.last == nil {
-		r.last = map[string]time.Time{}
+		r.last, r.bySubject = map[string]refusedAt{}, map[string]int{}
 	}
-	if at, ok := r.last[key]; ok && now.Sub(at) < refusalWindow {
+	if e, ok := r.last[key]; ok && now.Sub(e.at) < refusalWindow {
 		return false
 	}
-	if len(r.last) >= refusalCap {
-		for k, at := range r.last {
-			if now.Sub(at) >= refusalWindow {
-				delete(r.last, k)
+	if _, ok := r.last[key]; !ok {
+		if r.bySubject[subject] >= refusalPerSubject {
+			r.expire(now)
+			if r.bySubject[subject] >= refusalPerSubject {
+				return false
 			}
 		}
 		if len(r.last) >= refusalCap {
-			return true
+			r.expire(now)
+			if len(r.last) >= refusalCap {
+				return false
+			}
 		}
+		r.bySubject[subject]++
 	}
-	r.last[key] = now
+	r.last[key] = refusedAt{at: now, subject: subject}
 	return true
 }
+
+// expire forgets the entries whose window is over.
+func (r *refusals) expire(now time.Time) {
+	for k, e := range r.last {
+		if now.Sub(e.at) >= refusalWindow {
+			delete(r.last, k)
+			if r.bySubject[e.subject]--; r.bySubject[e.subject] <= 0 {
+				delete(r.bySubject, e.subject)
+			}
+		}
+	}
+}
+
+func clip(v string) string { return clipTo(v, refusalPart) }
 
 func (s *Service) now() time.Time {
 	if s.Now != nil {
@@ -448,6 +509,11 @@ func (s *Service) now() time.Time {
 // the caller's, and is returned to the caller as it always was. The refusal is
 // recorded with an empty grant, so its outcome's reason is the refusal and
 // names what was missing.
+//
+// The profile is in the dedupe key only when the caller's own grants name it.
+// The caller chooses the profile it asks for, so a key that took any of them
+// would give a probing caller a fresh key, and so a fresh record, on every
+// request. The profile it asked for is in the record either way.
 func (s *Service) recordRefusal(
 	ctx context.Context, action string, p auth.Principal, profile string, failure error, targets []*record.Target,
 ) {
@@ -459,11 +525,34 @@ func (s *Service) recordRefusal(
 		// of an operator needs an id to be kept at all.
 		p.Subject = "(unidentified)"
 	}
-	key := p.Issuer + "\x00" + p.Subject + "\x00" + action + "\x00" + profile
-	if !s.refused.first(key, s.now()) {
+	keyed := ""
+	var r *refusal
+	if errors.As(failure, &r) && slices.Contains(r.held, profile) {
+		keyed = profile
+	}
+	subject := clip(p.Issuer) + "\x00" + clip(p.Subject)
+	if !s.refused.first(subject, subject+"\x00"+action+"\x00"+clip(keyed), s.now()) {
 		return
 	}
-	s.record(ctx, action, p, auth.Grant{}, failure, targets)
+	// What the caller typed is cut before it is written down: the record keeps
+	// the profile or the id asked for, not a megabyte of it.
+	for _, t := range targets {
+		t.Id = strings.ToValidUTF8(clipTo(t.Id, 256), "")
+	}
+	s.record(ctx, action, p, auth.Grant{}, &clipped{failure}, targets)
+}
+
+// clipped is a refusal whose text is cut to 512 bytes.
+type clipped struct{ error }
+
+func (c *clipped) Error() string { return strings.ToValidUTF8(clipTo(c.error.Error(), 512), "") }
+func (c *clipped) Unwrap() error { return c.error }
+
+func clipTo(v string, n int) string {
+	if len(v) > n {
+		return v[:n]
+	}
+	return v
 }
 
 func (s *Service) recordSearch(

@@ -257,7 +257,7 @@ func serveSchema() m {
 		"instance":      m{"type": "string", "pattern": `^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$`, "description": "The installation's name, bound into the default encryption context of `keys` ({instance, purpose}): stable and not secret, because a ciphertext made under it opens only with it. Unset is `release`."},
 		"keys":          keysSchema(),
 		"cluster":       str("Names this cluster in a ServiceAccount's subject. A pod cannot discover it; unset keeps the older unqualified subject."),
-		"allowInsecure": boolean("Accept a plain-http issuer URL, for a local run."),
+		"allowInsecure": boolean("Accept a plain-http issuer URL, for a local run. When the issuer URL is also on the loopback interface (`localhost`, `127.0.0.1`, `::1`), the issuer connects to loopback and private addresses when it fetches client documents and posts back-channel logouts; with any other issuer URL those guards stay on."),
 		"demo":          boolean("Two tenants held in memory, which need no credential and no network."),
 		"inCluster":     boolean("Prove recovery against the cluster the pod runs in. Set by a deployment that turns recovery on."),
 		"listen":        listen(":8080"),

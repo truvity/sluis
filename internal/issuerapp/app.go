@@ -831,6 +831,9 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 	if cfg.allowInsecure {
 		log.WarnContext(ctx, "the issuer URL may be plaintext: every token this service signs is a "+
 			"bearer credential, and an issuer reached over http can be impersonated by anyone on the path")
+		if issuer.LoopbackURL(cfg.issuerURL) {
+			log.WarnContext(ctx, "the issuer URL is on loopback: client document fetches and back-channel posts are not held away from private addresses")
+		}
 	}
 	// While the restore function holds the oidc table's maintenance flag the
 	// issuer signs nobody in and issues nothing; what a relying party needs to

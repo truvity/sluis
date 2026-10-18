@@ -50,9 +50,11 @@ import (
 	"github.com/truvity/sluis/audit/internal/buildinfo"
 	"github.com/truvity/sluis/audit/internal/cli"
 	"github.com/truvity/sluis/audit/internal/config"
+	"github.com/truvity/sluis/audit/internal/sqsorigin"
 	"github.com/truvity/sluis/audit/internal/telemetry"
 	"github.com/truvity/sluis/audit/profile"
 	"github.com/truvity/sluis/audit/sdk/catalogue"
+	"github.com/truvity/sluis/audit/sdk/record"
 	"github.com/truvity/sluis/audit/sdk/sink"
 	"github.com/truvity/sluis/audit/writer"
 )
@@ -177,13 +179,11 @@ func run() error {
 		// guards that care.
 		Replicas: 2,
 		// What is on the queue is what a sender chose. SQS delivers the body its
-		// sender wrote, and the queue's policy admits principals, not an
-		// identity the writer could map to an observer, so a stamp inside the
-		// body (observer, recorded_at, origin hash) is a claim anyone allowed to
-		// send could make about anyone. The writer therefore stamps every record
-		// itself, with its own identity and its own clock (FromStream stays
-		// false): the record says that the trail took it here and when, not who
-		// the sender said it was.
+		// sender wrote, so a stamp inside it (observer, recorded_at,
+		// origin hash) is a claim anyone allowed to send could make about
+		// anyone. FromStream stays false: the handler replaces the stamp of
+		// every record from what SQS itself sets (see originFor), and only a
+		// batch it has stamped is kept as stamped.
 	})
 	if err != nil {
 		return err
@@ -193,21 +193,19 @@ func run() error {
 		return err
 	}
 
-	h := &handler{
-		target: front, age: queue, now: time.Now, log: slog.Default(),
-		before: func(ctx context.Context) {
-			if err := w.RefreshHolds(ctx); err != nil {
-				// The last answer stands, as it does for the background refresh.
-				slog.ErrorContext(ctx, "could not refresh the legal holds; keeping the last answer", slog.Any("error", err))
-			}
-		},
-		after: func(ctx context.Context) {
-			flush, cancel := context.WithTimeout(context.WithoutCancel(ctx), 3*time.Second)
-			defer cancel()
-			if err := telemetry.Flush(flush); err != nil {
-				slog.WarnContext(ctx, "could not export telemetry at the end of the invocation", slog.Any("error", err))
-			}
-		},
+	h := handlerFor(front, queue, originFor(cfg.Senders, buildinfo.Version))
+	h.before = func(ctx context.Context) {
+		if err := w.RefreshHolds(ctx); err != nil {
+			// The last answer stands, as it does for the background refresh.
+			slog.ErrorContext(ctx, "could not refresh the legal holds; keeping the last answer", slog.Any("error", err))
+		}
+	}
+	h.after = func(ctx context.Context) {
+		flush, cancel := context.WithTimeout(context.WithoutCancel(ctx), 3*time.Second)
+		defer cancel()
+		if err := telemetry.Flush(flush); err != nil {
+			slog.WarnContext(ctx, "could not export telemetry at the end of the invocation", slog.Any("error", err))
+		}
 	}
 
 	go func() {
@@ -227,6 +225,19 @@ func run() error {
 		slog.String("table", table.Table), slog.String("window", window.String()))
 	lambda.StartWithOptions(h.Handle, lambda.WithContext(ctx))
 	return nil
+}
+
+// handlerFor is the handler of the function: the writer behind its guard, the
+// queue's age metric, and the origin every record is stamped from.
+func handlerFor(target sink.Sink, age queueMetrics, origin *sqsorigin.Origin) *handler {
+	return &handler{target: target, age: age, now: time.Now, log: slog.Default(), origin: origin}
+}
+
+// originFor is what stamps a record that came off the queue: the observer its
+// SenderId maps to in `senders`, the time SQS took the message, and this
+// function's version and instance. The sender's own claims are never read.
+func originFor(senders map[string]string, version string) *sqsorigin.Origin {
+	return &sqsorigin.Origin{Senders: senders, Version: version, Instance: record.InstanceName()}
 }
 
 // guard holds the writer to `require`: it refuses at start-up when the chain can
