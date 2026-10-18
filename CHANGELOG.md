@@ -1,5 +1,7 @@
 ## Unreleased
 
+## v1.77.0-rc.1
+
 ### Breaking (chart)
 
 - **Breaking: `renders: dashboards` renders grafana-operator objects, not ConfigMaps for a sidecar.** It renders one `GrafanaFolder` (`sluis`, under the cluster's folder) and a `GrafanaDashboard` for each of `sluis-overview` and `audit-overview` (the audit trail's, in the same folder), in the release's namespace. `dashboards.namespace`, `folder`, `sidecarLabel`, `sidecarLabelValue` and `labels` are gone, and `dashboards.clusterFolderUID` and `dashboards.datasources.{metrics,logs}` are required. The estate must: delete the `grafana-dashboards-app` and `access-roster-alerts` Argo CD apps; install a dashboards release and an alerts release (`renders: alerts`) in the namespace `sluis` of the cluster that holds Grafana, with the cluster's folder uid and the Grafana's datasource uids; and set `alerts.namespaceLabel: k8s_namespace_name` with `alerts.namespace: lambda` for the Lambda function's series. See [Install telemetry](docs/guides/sluis/operate/install-telemetry.md).
