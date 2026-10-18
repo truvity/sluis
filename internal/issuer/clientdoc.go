@@ -476,6 +476,10 @@ func (d *documentClients) load(ctx context.Context, target *url.URL) (policy.Cli
 		ClientName   string   `json:"client_name"`
 		RedirectURIs []string `json:"redirect_uris"`
 		ClientURI    string   `json:"client_uri"`
+		// What the document says about how it authenticates. Only read to
+		// refuse a shared secret; see below.
+		AuthMethod   string           `json:"token_endpoint_auth_method"`
+		ClientSecret *json.RawMessage `json:"client_secret"`
 	}
 	if err := json.Unmarshal(body, &doc); err != nil {
 		return policy.Client{}, 0, fmt.Errorf("the client document at %s is not JSON: %w", target.Redacted(), err)
@@ -495,6 +499,24 @@ func (d *documentClients) load(ctx context.Context, target *url.URL) (policy.Cli
 	if len(doc.RedirectURIs) == 0 {
 		return policy.Client{}, 0, fmt.Errorf("the client document at %s declares no redirect_uris", target.Redacted())
 	}
+	// A document is public, always, and is not a place for a shared secret:
+	// anyone can fetch it, so a secret in it is no secret, and a method
+	// that authenticates with one is a promise this issuer cannot keep for
+	// a client it holds no secret of
+	// (draft-ietf-oauth-client-id-metadata-document, "Metadata Document":
+	// `token_endpoint_auth_method` MUST NOT be a shared-secret method and
+	// `client_secret` MUST NOT be present). Refused, not ignored: ignoring
+	// it admits the client as public while its author believes it
+	// confidential.
+	if sharedSecretMethod(doc.AuthMethod) {
+		return policy.Client{}, 0, fmt.Errorf(
+			"the client document at %s declares token_endpoint_auth_method %q; a client described by a document is public "+
+				"and authenticates with no shared secret", target.Redacted(), doc.AuthMethod)
+	}
+	if doc.ClientSecret != nil {
+		return policy.Client{}, 0, fmt.Errorf(
+			"the client document at %s carries a client_secret; a document is public and holds no secret", target.Redacted())
+	}
 
 	return policy.Client{
 		// Public, always. A document carries no secret and there is
@@ -510,6 +532,15 @@ func (d *documentClients) load(ctx context.Context, target *url.URL) (policy.Cli
 		Requires: d.allow.Requires,
 		TTLCap:   d.allow.TTLCap,
 	}, cacheLifetime(resp.Header), nil
+}
+
+// sharedSecretMethod reports a `token_endpoint_auth_method` that proves a
+// client with a secret the issuer and the client share (RFC 7591 2,
+// RFC 7523): `client_secret_basic`, `client_secret_post`, `client_secret_jwt`,
+// and any other spelling that starts that way. `none` and `private_key_jwt`
+// are not.
+func sharedSecretMethod(method string) bool {
+	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(method)), "client_secret")
 }
 
 // documentName is the name shown on the sign-in page, bounded.

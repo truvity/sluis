@@ -166,12 +166,30 @@ func TestEndpoints(t *testing.T) {
 	}
 
 	for want, e := range map[string]compile.Endpoints{
-		"host-relative":     {Hostname: "app.example.com", Redirects: []string{"callback"}},
-		"loopback: true":    {Hostname: "app.example.com", Redirects: []string{"http://localhost/cb"}},
-		"one row names one": {Hostname: "app.example.com", SignedOut: []string{"https://other.example.com/"}},
+		"host-relative":            {Hostname: "app.example.com", Redirects: []string{"callback"}},
+		"loopback: true":           {Hostname: "app.example.com", Redirects: []string{"http://localhost/cb"}},
+		"one row names one":        {Hostname: "app.example.com", SignedOut: []string{"https://other.example.com/"}},
+		"is not https":             {Hostname: "app.example.com", Redirects: []string{"http://app.example.com/cb"}},
+		"landing page that is not": {Hostname: "app.example.com", SignedOut: []string{"http://app.example.com/bye"}},
+		"a loopback redirect":      {Hostname: "app.example.com", Redirects: []string{"http://[::1]/cb"}},
 	} {
 		if err := e.ValidateURLs(); err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("err = %v, want one saying %q", err, want)
+		}
+	}
+
+	// The loopback exception stays, and a back-channel endpoint inside the
+	// cluster is not a browser redirect.
+	for name, e := range map[string]compile.Endpoints{
+		"loopback v4":  {Loopback: true, Redirects: []string{"http://127.0.0.1/cb"}},
+		"loopback v6":  {Loopback: true, Redirects: []string{"http://[::1]:8080/cb"}},
+		"localhost":    {Loopback: true, Redirects: []string{"http://localhost/cb"}},
+		"https":        {Hostname: "app.example.com", Redirects: []string{"https://app.example.com/cb"}, SignedOut: []string{"https://app.example.com/bye"}},
+		"upper scheme": {Hostname: "app.example.com", Redirects: []string{"HTTPS://app.example.com/cb"}},
+		"in-cluster":   {Hostname: "app.example.com", BackChannelLogout: "http://app.example.com/logout"},
+	} {
+		if err := e.ValidateURLs(); err != nil {
+			t.Errorf("%s refused: %v", name, err)
 		}
 	}
 

@@ -1,12 +1,16 @@
 package issuer
 
 import (
+	"fmt"
+	"html"
 	"log/slog"
 	"net/http"
 	"slices"
+	"strings"
 
 	"github.com/zitadel/oidc/v3/pkg/oidc"
 
+	"github.com/truvity/sluis/internal/httpsec"
 	"github.com/truvity/sluis/internal/refusal"
 	"github.com/truvity/sluis/storage/logattr"
 )
@@ -134,4 +138,84 @@ func refuseAuthorize(w http.ResponseWriter, r *http.Request, clients clientLooku
 	}
 
 	writeRefusal(w, r, code, refusal.InvalidRequest)
+}
+
+// endSessionPurpose is what the form of the `/end_session` confirmation is
+// for, so that its token opens nothing else (and `/logout`'s opens this not).
+const endSessionPurpose = "end_session"
+
+// endSessionKept are the parameters of a hint-less `/end_session` request
+// that the confirmation carries through to the button. The hint is not one:
+// a request with a hint is not asked about.
+var endSessionKept = []string{"client_id", "post_logout_redirect_uri", "state"}
+
+// confirmedEndSession reports whether a hint-less `/end_session` request may
+// go on to end the sign-in, and answers it itself when it may not.
+//
+//   - A browser holding no sign-in has nothing to end, and nothing to ask
+//     about: the request goes on as it did.
+//   - A GET is answered with a page and a button, and ends nothing. The
+//     button POSTs the same parameters back with a token bound to the
+//     sign-in cookie, as `/logout` does.
+//   - A POST goes on only with that token. A page of somebody else's cannot
+//     read it, and the cookie is SameSite=Lax, so it does not ride a
+//     cross-site POST either.
+//
+// The library then validates the parameters exactly as for a GET, so what a
+// confirmed request may do is what an unconfirmed one always could.
+func confirmedEndSession(signIn SignInDeps, w http.ResponseWriter, r *http.Request) bool {
+	if signIn.SSO == nil || signIn.State == nil {
+		return true
+	}
+
+	cookie := SSOFromRequest(r, signIn.Secure)
+	if cookie == "" {
+		return true
+	}
+
+	if r.Method == http.MethodPost {
+		if signIn.State.CSRFValid(endSessionPurpose, cookie, r.PostFormValue("csrf")) {
+			return true
+		}
+
+		recordLoginFailure(r.Context(), LoginBadState)
+		logRefusal(r.Context(), http.StatusBadRequest, "the sign-out did not come from the sign-out page", nil, nil)
+		_ = writePage(w, http.StatusBadRequest, "Sign-out not confirmed",
+			`<p>This sign-out did not come from the page that asks, so nothing was ended.</p>
+	<p class="note">You are still signed in. <a href="/logout">Sign out</a> from the page that asks.</p>`)
+
+		return false
+	}
+
+	if r.Method != http.MethodGet {
+		return true
+	}
+
+	token, err := signIn.State.CSRFToken(endSessionPurpose, cookie)
+	if err != nil {
+		refusalPage(w, r, http.StatusInternalServerError, "the sign-out could not be prepared", err)
+		return false
+	}
+
+	var fields strings.Builder
+
+	for _, name := range endSessionKept {
+		if value := r.Form.Get(name); value != "" {
+			fmt.Fprintf(&fields, `<input type="hidden" name="%s" value="%s">`, name, html.EscapeString(value))
+		}
+	}
+
+	// The answer to the form is a redirect to the relying party, which the
+	// page's content security policy holds back by default: see
+	// [httpsec.Policy.FormsMayRedirect].
+	httpsec.Apply(w, httpsec.Policy{FormsMayRedirect: true})
+	_ = writePage(w, http.StatusOK, "Sign out?",
+		`<p>An application asked to sign you out. This ends your sign-in here, and the sessions it opened in a browser.</p>
+	<p class="note">Agent connections you allowed to work in the background keep running.</p>
+	<form method="post" action="`+endSessionPath+`">
+		<input type="hidden" name="csrf" value="`+html.EscapeString(token)+`">`+fields.String()+`
+		<p><button type="submit">Sign out</button></p>
+	</form>`)
+
+	return false
 }

@@ -88,6 +88,22 @@ func TestADocumentClientIsAdmittedAsPublic(t *testing.T) {
 	}
 }
 
+// A document that says it needs no secret is the ordinary public client.
+func TestADocumentDeclaringNoAuthenticationIsAdmitted(t *testing.T) {
+	t.Parallel()
+
+	resolver, srv := served(t, document("/cimd.json", func(self string) any {
+		return map[string]any{
+			"client_id": self, "redirect_uris": []string{"https://app.example/cb"},
+			"token_endpoint_auth_method": "none",
+		}
+	}))
+
+	if _, err := resolver.Resolve(context.Background(), srv.URL+"/cimd.json"); err != nil {
+		t.Fatalf("a document with token_endpoint_auth_method none was refused: %v", err)
+	}
+}
+
 // TestADocumentCannotWidenItsOwnGate is the property the whole mechanism
 // rests on: a hostile document may ask for anything it likes.
 func TestADocumentCannotWidenItsOwnGate(t *testing.T) {
@@ -148,6 +164,45 @@ func TestDocumentRefusals(t *testing.T) {
 			}),
 			path:  "/cimd.json",
 			wants: "no redirect_uris",
+		},
+		"a shared-secret method (basic)": {
+			handler: document("/cimd.json", func(self string) any {
+				return map[string]any{
+					"client_id": self, "redirect_uris": []string{"https://app.example/cb"},
+					"token_endpoint_auth_method": "client_secret_basic",
+				}
+			}),
+			path:  "/cimd.json",
+			wants: "client_secret_basic",
+		},
+		"a shared-secret method (post)": {
+			handler: document("/cimd.json", func(self string) any {
+				return map[string]any{
+					"client_id": self, "redirect_uris": []string{"https://app.example/cb"},
+					"token_endpoint_auth_method": "client_secret_post",
+				}
+			}),
+			path:  "/cimd.json",
+			wants: "client_secret_post",
+		},
+		"a shared-secret method (jwt)": {
+			handler: document("/cimd.json", func(self string) any {
+				return map[string]any{
+					"client_id": self, "redirect_uris": []string{"https://app.example/cb"},
+					"token_endpoint_auth_method": "Client_Secret_JWT",
+				}
+			}),
+			path:  "/cimd.json",
+			wants: "Client_Secret_JWT",
+		},
+		"a client_secret": {
+			handler: document("/cimd.json", func(self string) any {
+				return map[string]any{
+					"client_id": self, "redirect_uris": []string{"https://app.example/cb"}, "client_secret": "s3cret",
+				}
+			}),
+			path:  "/cimd.json",
+			wants: "carries a client_secret",
 		},
 		"not JSON": {
 			handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

@@ -160,7 +160,7 @@ func TestEndSessionSparesAgentsExceptTheClientItNames(t *testing.T) {
 		b, id := rig.signedInBrowser(t)
 		rig.openAgent(t, ssoEmail, agentClient, id, "agent-token", time.Now())
 
-		b.do(http.MethodGet, "/end_session")
+		b.endSession("/end_session")
 
 		if _, kept := rig.listed(t, ssoEmail)[agentClient]; !kept {
 			t.Error("end_session naming no client ended the agent session")
@@ -178,7 +178,7 @@ func TestEndSessionSparesAgentsExceptTheClientItNames(t *testing.T) {
 		rig.openAgent(t, ssoEmail, agentClient, id, "agent-token", time.Now())
 		rig.openAgent(t, ssoEmail, "another-agent", id, "other-token", time.Now())
 
-		if status, _, body := b.do(http.MethodGet, "/end_session?client_id="+agentClient); status >= http.StatusBadRequest {
+		if status, _, body := b.endSession("/end_session?client_id=" + agentClient); status >= http.StatusBadRequest {
 			t.Fatalf("end_session: %d %s", status, body)
 		}
 

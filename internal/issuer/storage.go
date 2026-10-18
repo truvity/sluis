@@ -958,6 +958,17 @@ func (s *Storage) Complete(ctx context.Context, id string, who Authenticated) er
 		return ErrCompletedByAnother
 	}
 
+	// An `id_token_hint` names the person this request is for (OpenID Connect
+	// Core 3.1.2.1), and until completion that is what the request's subject
+	// is. Whoever signed in is somebody else: the request is not completed
+	// for them, and no code is issued.
+	if !req.IsDone && hintMismatch(strings.ToLower(req.Subject), who.Subject) {
+		s.logger().InfoContext(ctx, "refused to complete an authorization request as somebody its id_token_hint does not name",
+			logattr.SafeString("client", req.Req.ClientID))
+
+		return ErrHintMismatch
+	}
+
 	authTime := who.AuthTime
 	if authTime.IsZero() {
 		authTime = time.Now()
@@ -1050,6 +1061,10 @@ func (s *Storage) Complete(ctx context.Context, id string, who Authenticated) er
 // ErrUnaudited is a recovery sign-in refused because its record could not
 // be written.
 var ErrUnaudited = errors.New("the audit trail could not be written")
+
+// ErrHintMismatch is an authorization request whose `id_token_hint` names one
+// person, being completed as another.
+var ErrHintMismatch = errors.New("the sign-in is not the person the id_token_hint names")
 
 // ErrCompletedByAnother is an authorization request that was already
 // completed by a different person, or under a different sign-in.
@@ -1156,6 +1171,12 @@ func (s *Storage) Pending(id string) (Pending, error) {
 	out := Pending{
 		RedirectURI: req.Req.RedirectURI, State: req.Req.State, ClientID: req.Req.ClientID,
 		Resource: req.Resource,
+	}
+	// Until the request is completed its subject is the one the library took
+	// from a verified `id_token_hint`, and empty when there was none;
+	// completing overwrites it with whoever signed in.
+	if !req.IsDone {
+		out.Hint = strings.ToLower(req.Subject)
 	}
 
 	// The declared row, for the page to name the application by. Looked

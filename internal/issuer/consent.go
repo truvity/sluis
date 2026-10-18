@@ -237,7 +237,7 @@ func (s *signIn) acceptAgent(w http.ResponseWriter, r *http.Request) {
 		Consent:  consent,
 	})
 	if err != nil {
-		if s.refuseUnentitled(w, r, err, request) {
+		if s.refuseUnentitled(w, r, err, request) || s.refuseHint(w, r, err, request) {
 			return
 		}
 

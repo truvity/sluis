@@ -132,7 +132,7 @@ func TestThePreUpgradeFallbackNeverAppliesToAHashedRecord(t *testing.T) {
 	stranger.cookies[issuer.SSOCookieName] = id
 	stranger.logout()
 	stranger.cookies[issuer.SSOCookieName] = id
-	stranger.do(http.MethodGet, "/end_session")
+	stranger.endSession("/end_session")
 
 	if _, live, _ := rig.iss.SSO().Get(context.Background(), id); !live {
 		t.Error("a current sign-in was ended by its id")

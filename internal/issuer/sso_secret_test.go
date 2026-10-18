@@ -685,7 +685,7 @@ func TestEveryEndOfASignInRemovesThePointer(t *testing.T) {
 			b.logout()
 		}},
 		{name: "end_session", end: func(_ *testing.T, _ *ssoRig, b *browser, _ string) {
-			b.do(http.MethodGet, "/end_session")
+			b.endSession("/end_session")
 		}},
 		{name: "revoke one browser by id", end: func(t *testing.T, rig *ssoRig, _ *browser, id string) {
 			t.Helper()
