@@ -46,19 +46,6 @@ secretMounts:
   - { secretName: google-oauth-client, mountPath: /var/run/sluis/oauth-client }
 ```
 
-### Restrict who may sign in
-
-A sign-in with Google is accepted only when Google says the account has verified its address (`email_verified`). On the Lambda installation's Google module, `google.oauthClient.hostedDomains` also names the Workspace domains a person may sign in from:
-
-```yaml
-google:
-  oauthClient:
-    provider: example
-    hostedDomains: [example.com]
-```
-
-When it is set, the sign-in must carry an `hd` claim naming one of them, so a consumer account or an account of another organisation is refused whatever address it presents. Unset, `hd` is not asked and the directory the issuer reads still decides which domains are served. The person is still identified by the address, not by Google's account id.
-
 ## 4. Connect a tenant
 
 An operator presses **Connect Google Workspace**, and a Super Admin signs in and consents. A refused first read usually means the Admin SDK API is off.

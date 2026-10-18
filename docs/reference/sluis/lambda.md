@@ -63,7 +63,7 @@ A failed pass, or a `tick` for an unrun target, returns an error.
 | Who may call | A console method refuses every class but `console`, the sign-in every class but `issuer`; the class is the alias, never the payload |
 | Refusal | `not authorised` in every case; the reason is in the module's log |
 | Module owns | The OAuth client secret, the service-account keys, the workspace records, the refresh writer; the issuer holds none and reads only the snapshot |
-| Document keys | `google.oauthClient`, `google.publicURL` (the address the redirects are built from), `audit` |
+| Document keys | `google.oauthClient` (`hostedDomains` lists the Workspace domains a sign-in's `hd` must be in; a sign-in needs a verified address either way), `google.publicURL` (the address the redirects are built from), `audit` |
 | **Sign-in depends on the function** | Every Google sign-in calls `sign_in_url` and `identify`; there is no provisioned concurrency, so the first sign-in after idle waits for the cold start (storage, secrets, every workspace reader) |
 | Sign-in failure | Each call is bounded at 25 s; the issuer shows a "Sign-in unavailable" page with a retry. A throttled or removed function fails every Google sign-in; recovery and a gateway's forwarded identity do not use it |
 | Cold start | Provisioned concurrency of 1 on `live-issuer` removes it; the estate decides |
