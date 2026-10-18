@@ -144,6 +144,10 @@ func Address(s config.DeclaredSecret, layout string) string {
 	switch s.Kind {
 	case config.SecretRecoveryPassword:
 		return "internal/oidc/recovery-password"
+	case config.SecretRecoveryVerifier:
+		return "internal/oidc/recovery-verifier"
+	case config.SecretConformanceVerifier:
+		return "internal/oidc/conformance-verifier"
 	case config.SecretStateSecret:
 		return "internal/oidc/state-secret"
 	case config.SecretSignInClientID:

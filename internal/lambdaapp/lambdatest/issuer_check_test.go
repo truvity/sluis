@@ -31,8 +31,8 @@ func TestTheIssuerAnswersACheckEventThroughTheEmulator(t *testing.T) {
 	if !rep.OK || rep.Layout != "v5" || rep.Root != "/sluis/"+lambdatest.Instance {
 		t.Fatalf("report = %+v", rep)
 	}
-	if len(rep.Results) != 1 || rep.Results[0].Address != lambdatest.RecoveryPasswordParam || !rep.Results[0].OK {
-		t.Fatalf("results = %+v, want the recovery password only", rep.Results)
+	if len(rep.Results) != 1 || rep.Results[0].Address != lambdatest.RecoveryVerifierParam || !rep.Results[0].OK {
+		t.Fatalf("results = %+v, want the recovery verifier only", rep.Results)
 	}
 	if strings.Contains(string(res.Payload), "correct horse") {
 		t.Errorf("the report carries a secret's value: %s", res.Payload)
@@ -48,13 +48,13 @@ func TestTheIssuerAnswersACheckEventThroughTheEmulator(t *testing.T) {
 func TestTheCheckEventFailsTheInvocationForAMissingSecret(t *testing.T) {
 	h := lambdatest.NewHarness(t)
 	fn := h.OpenIssuer(t)
-	h.SSM.Delete(lambdatest.RecoveryPasswordParam)
+	h.SSM.Delete(lambdatest.RecoveryVerifierParam)
 
 	res, err := h.Emulator.Invoke(context.Background(), fn, "live", []byte(`{"kind":"check"}`))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.FunctionError == "" || !strings.Contains(string(res.Payload), lambdatest.RecoveryPasswordParam+": missing") {
+	if res.FunctionError == "" || !strings.Contains(string(res.Payload), lambdatest.RecoveryVerifierParam+": missing") {
 		t.Fatalf("function error %q, payload %s", res.FunctionError, res.Payload)
 	}
 }

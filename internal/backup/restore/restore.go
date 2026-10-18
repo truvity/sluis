@@ -70,7 +70,7 @@ const (
 // and a restore never writes it, so restoring an older archive does not turn a
 // disabled door back on.
 var regenerated = map[string]bool{"lease": true, "notify": true, "gate": true, "cache": true, "dedupe": true,
-	"maintenance": true, "recovery": true}
+	"maintenance": true, "recovery": true, "srp": true}
 
 // ownRecord reports whether the key is one of the backup module's own run or
 // restore records or its retention marker: they describe the installation that was

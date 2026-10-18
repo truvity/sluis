@@ -173,6 +173,7 @@ var rules5 = []rule5{
 	r5(ModuleOIDC, "request", "req.", convID),
 	r5(ModuleOIDC, "code", "code.", convID),
 	r5(ModuleOIDC, "code-session", "codesess.", convID),
+	r5(ModuleOIDC, "srp", "srp.", convID),
 	r5(ModuleOIDC, "token", "tok.", convID),
 	r5(ModuleOIDC, "sso", "sso.", convID),
 	r5(ModuleOIDC, "session-token", "rt.", convID),

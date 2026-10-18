@@ -27,6 +27,7 @@ import (
 	auditpulumi "github.com/truvity/sluis/audit/deploy/pulumi"
 	"github.com/truvity/sluis/audit/deploy/pulumi/artifact"
 	sluisconfig "github.com/truvity/sluis/config"
+	"github.com/truvity/sluis/srp"
 	"github.com/truvity/sluis/storage/state"
 )
 
@@ -72,6 +73,30 @@ func StateSecretParameterNameV5(instance string) string {
 // RecoveryPasswordParameterName.
 func RecoveryPasswordParameterNameV5(instance string) string {
 	return ConfigParameterPrefixV5(instance) + "/recovery-password"
+}
+
+// RecoveryVerifierParameterNameV5 is the recovery account's SRP credential on
+// layout v5, `/sluis/<instance>/internal/oidc/recovery-verifier`: a salt and a
+// verifier derived from the recovery password, in the secret store's document.
+// It is what the service reads in place of the password
+// (docs/decisions/0076); the password stays at [RecoveryPasswordParameterNameV5]
+// for the operator and the function's role may not read it.
+func RecoveryVerifierParameterNameV5(instance string) string {
+	return ConfigParameterPrefixV5(instance) + "/recovery-verifier"
+}
+
+// ConformancePasswordParameterNameV5 is the conformance account's password on
+// layout v5, `/sluis/<instance>/internal/oidc/conformance-password`, generated
+// when the installation turns the account on (`conformance.enabled`) and read by
+// the operator who runs the conformance suite, never by the function.
+func ConformancePasswordParameterNameV5(instance string) string {
+	return ConfigParameterPrefixV5(instance) + "/conformance-password"
+}
+
+// ConformanceVerifierParameterNameV5 is the conformance account's SRP
+// credential, `/sluis/<instance>/internal/oidc/conformance-verifier`.
+func ConformanceVerifierParameterNameV5(instance string) string {
+	return ConfigParameterPrefixV5(instance) + "/conformance-verifier"
 }
 
 // DefaultSchedule is the controllers' tick when LambdaArgs.Schedule.Rate is empty.
@@ -924,6 +949,20 @@ type Lambda struct {
 	// letters and digits with no look-alikes. Only the name is an output, never the
 	// value; an operator reads it with `aws ssm get-parameter --with-decryption`.
 	RecoveryPasswordParameter pulumi.StringOutput
+	// RecoveryVerifierParameter is the name of the SSM SecureString that holds the
+	// recovery account's SRP credential on layout v5,
+	// `/sluis/<instance>/internal/oidc/recovery-verifier`: a salt and a verifier
+	// derived from the recovery password, which is what the service reads in its
+	// place. Empty on layout v4 and v4+v5, where the service derives it from the
+	// password itself.
+	RecoveryVerifierParameter pulumi.StringOutput
+	// ConformancePasswordParameter is the name of the SSM SecureString that holds
+	// the conformance account's password on layout v5,
+	// `/sluis/<instance>/internal/oidc/conformance-password`, generated when the
+	// installation sets `conformance.enabled`; empty otherwise. Only the name is an
+	// output. The function's role may not read it: whoever runs the conformance
+	// suite does.
+	ConformancePasswordParameter pulumi.StringOutput
 }
 
 // CompatArgs is what the library keeps for the layouts that are going away.
@@ -1833,6 +1872,52 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 		}
 	}
 
+	// ---- the SRP verifiers (docs/decisions/0076), layout v5: the service signs the
+	// recovery account in by proving the password against a salt and a verifier
+	// derived from it, and never reads the password -- its role is denied the
+	// password's parameter. The verifier is computed from the generated password
+	// here, in the program, and is a pure function of it (the salt is derived too),
+	// so an apply that does not rotate the password does not rewrite the
+	// parameter. The conformance account's password and verifier are made the same
+	// way, when the installation turns the account on.
+	verifierName, conformanceName := pulumi.String("").ToStringOutput(), pulumi.String("").ToStringOutput()
+	if a.Layout.has5() {
+		srpParam := func(logical, path, account string, password pulumi.StringOutput) (*ssm.Parameter, error) {
+			doc := password.ApplyT(func(pw string) (string, error) {
+				return secretDocument(string(srp.Default.NewCredential(account, pw).Document()))
+			}).(pulumi.StringOutput)
+			return newSecretParam(logical, path, pulumi.ToSecret(doc).(pulumi.StringOutput))
+		}
+		verifier, err := srpParam(name+"-recovery-verifier-v5", RecoveryVerifierParameterNameV5(a.Instance), "recovery", recoveryValue)
+		if err != nil {
+			return nil, fmt.Errorf("sluis recovery verifier parameter (v5): %w", err)
+		}
+		params = append(params, verifier)
+		if a.Layout == LayoutV5 {
+			verifierName = verifier.Name
+		}
+		if c := a.conformance(); c != nil && c.Enabled {
+			conformancePassword, err := random.NewRandomPassword(ctx, name+"-conformance-password", &random.RandomPasswordArgs{
+				Length: pulumi.Int(recoveryPasswordLength), Special: pulumi.Bool(false),
+			}, child)
+			if err != nil {
+				return nil, fmt.Errorf("sluis conformance password: %w", err)
+			}
+			conformanceValue := pulumi.ToSecret(conformancePassword.Result.ApplyT(unambiguous)).(pulumi.StringOutput)
+			passwordParam, err := newSecretParam(name+"-conformance-password-v5", ConformancePasswordParameterNameV5(a.Instance),
+				conformanceValue.ApplyT(secretDocument).(pulumi.StringOutput))
+			if err != nil {
+				return nil, fmt.Errorf("sluis conformance password parameter (v5): %w", err)
+			}
+			conformanceVerifier, err := srpParam(name+"-conformance-verifier-v5", ConformanceVerifierParameterNameV5(a.Instance), "conformance", conformanceValue)
+			if err != nil {
+				return nil, fmt.Errorf("sluis conformance verifier parameter (v5): %w", err)
+			}
+			params = append(params, passwordParam, conformanceVerifier)
+			conformanceName = passwordParam.Name
+		}
+	}
+
 	// ---- the post-deploy check: after the function, its alias, its role's
 	// policy and the parameters this stack writes exist. The other declared
 	// parameters (a client's secret, a workspace's key) are the operator's and
@@ -1856,6 +1941,7 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 	out.SchedulerRoleArn = schedRole.Arn
 	out.StateSecretParameter = stateName
 	out.RecoveryPasswordParameter = recoveryName
+	out.RecoveryVerifierParameter, out.ConformancePasswordParameter = verifierName, conformanceName
 	out.ScheduleNames = schedNames
 	out.ConfigLayerArn = layer.Arn
 	issuerAliases := pulumi.StringMap{LiveAlias: live.Arn}
@@ -1878,6 +1964,7 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 		"schedulerRoleArn": out.SchedulerRoleArn, "scheduleNames": out.ScheduleNames,
 		"stateSecretParameter":      out.StateSecretParameter,
 		"recoveryPasswordParameter": out.RecoveryPasswordParameter, "configLayerArn": out.ConfigLayerArn,
+		"recoveryVerifierParameter": out.RecoveryVerifierParameter, "conformancePasswordParameter": out.ConformancePasswordParameter,
 		"auditQueueUrl": out.AuditQueueURL, "auditQueueArn": out.AuditQueueArn,
 	}); err != nil {
 		return nil, err
@@ -1915,6 +2002,24 @@ func newCheck(ctx *pulumi.Context, name string, live *lambda.Alias, fnName pulum
 		},
 	}, parent, pulumi.DependsOn(after)); err != nil {
 		return fmt.Errorf("sluis check: %w", err)
+	}
+	return nil
+}
+
+// conformance is the installation's conformance account, or nil.
+func (a LambdaArgs) conformance() *sluisconfig.Conformance {
+	if a.Installation != nil {
+		return a.Installation.Conformance
+	}
+	// The deprecated Config: its `conformance.enabled`.
+	doc, err := yamlMap(a.Config, "Config")
+	if err != nil {
+		return nil
+	}
+	if c, ok := doc["conformance"].(map[string]any); ok {
+		if on, _ := c["enabled"].(bool); on {
+			return &sluisconfig.Conformance{Enabled: true}
+		}
 	}
 	return nil
 }

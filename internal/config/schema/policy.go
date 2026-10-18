@@ -121,6 +121,7 @@ func clientSchema() m {
 			"enum":        []string{"required", "optional"},
 			"description": "Whether it must use PKCE (RFC 7636, RFC 9700 2.1.1): `required` refuses an authorization request with no S256 `code_challenge` and a code redeemed with no `code_verifier`. A public client is always `required` and refuses `optional`; absent is `optional` for a confidential client. Refused on an exchange client.",
 		},
+		"harness": boolean("A conformance or test harness signs in through it: the only kind of client the conformance account (`conformance.enabled`) may sign in to. Refused on an exchange client."),
 		"session": sessionClass("Its refresh chains", "Refused on an exchange client and, as `agent`, with `sign_in_exchange`."),
 	}, "kind")
 }

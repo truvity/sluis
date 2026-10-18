@@ -344,6 +344,9 @@ func (s *ConsoleServer) Handler() http.Handler {
 	mux.HandleFunc("GET /login/{backend}/start", s.signInStart)
 	mux.HandleFunc("GET /login/{backend}/callback", s.signInCallback)
 	mux.HandleFunc("POST /login/recovery", s.recoveryLogin)
+	if _, ok := s.passwordRecovery(); ok {
+		s.registerPassword(mux)
+	}
 	mux.HandleFunc("POST /logout", s.logout)
 	mux.HandleFunc("GET /connect/{backend}/callback", s.connectCallback)
 	// GitHub's two, more specific than the pattern above and so chosen
@@ -568,7 +571,12 @@ func (s *ConsoleServer) loginPage(w http.ResponseWriter, r *http.Request) {
 	if s.recoveryAvailable(r.Context()) {
 		recoveryState = s.recoveryState()
 	}
-	if recoveryState != "" {
+	if _, password := s.passwordRecovery(); password && recoveryState != "" {
+		// A password is proved by the page's script and never sent: the form
+		// has no field that carries it (docs/decisions/0076).
+		recovery = s.passwordForm(recoveryState)
+		access.SetCookie(w, access.RecoveryCookie(recoveryState, s.sessions.Secure(), signInWindow))
+	} else if recoveryState != "" {
 		prompt := s.recovery.Prompt()
 		command := ""
 		if prompt.Command != "" {
@@ -874,6 +882,17 @@ func (s *ConsoleServer) recoveryLogin(w http.ResponseWriter, r *http.Request) {
 			"it comes back only by a change of the configuration (recovery.generation)", nil)
 		return
 	}
+	// A password is not a proof that is presented: it is proved by an exchange
+	// the sign-in page's script runs (docs/decisions/0076). This door takes a
+	// token and nothing else, and does not even read a body that might hold a
+	// password.
+	proofRecovery, ok := s.recovery.(ProofRecovery)
+	if !ok {
+		refuseCheap(reasonNoPlainPassword)
+		s.refusePage(w, r, http.StatusBadRequest, "this recovery signs in by password through the sign-in page, "+
+			"which proves it without sending it: a password in a form, a body or a header is not accepted", nil)
+		return
+	}
 	// A proof is a few KiB at most. Bounded before anything is read, so
 	// that nobody can make this door read megabytes of form unchecked.
 	r.Body = http.MaxBytesReader(w, r.Body, access.RecoveryFormLimit)
@@ -893,11 +912,7 @@ func (s *ConsoleServer) recoveryLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Refusals are counted per source: the address the deployment's proxies
-	// vouch for, so that one caller's wrong proofs do not shut the door on
-	// another's right one.
-	source := clientAddress(r.Header, r.RemoteAddr, s.forwardedForTrustedHops)
-	subject, err := s.recovery.Verify(WithRecoverySource(r.Context(), source), strings.TrimSpace(proof))
+	subject, err := proofRecovery.Verify(r.Context(), strings.TrimSpace(proof))
 	switch {
 	case errors.Is(err, ErrRecoveryThrottled):
 		s.log.WarnContext(r.Context(), "recovery refused: too many attempts", logattr.SafeString("remote", r.RemoteAddr))
@@ -1063,6 +1078,7 @@ const (
 	reasonRecoveryDisabled  = "recovery sign-in was turned off from the console"
 	reasonRecoveryThrottled = "too many refused attempts; recovery is paused for a minute"
 	reasonRecoveryRefused   = "the proof was not accepted"
+	reasonNoPlainPassword   = "a password was presented in a form, a body or a header, which this recovery does not accept"
 	reasonRecoveryUnchecked = "the proof could not be checked"
 )
 

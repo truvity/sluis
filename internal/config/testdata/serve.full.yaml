@@ -31,7 +31,8 @@ freshness: {refreshInterval: 15m, freshnessWindow: 30m, probeInterval: 5m}
 hsts: {maxAge: 720h, includeSubDomains: false}
 exchange:
   audience: access-issuer
-recovery: {enabled: true, serviceAccount: access-issuer-recovery, audience: access-issuer-recovery, passwordSecret: recovery/password}
+recovery: {enabled: true, serviceAccount: access-issuer-recovery, audience: access-issuer-recovery, passwordSecret: recovery/password, verifierSecret: recovery/verifier}
+conformance: {enabled: true, verifierSecret: conformance/verifier}
 login:
   directory: true
   signOutURL: https://access.example/logout

@@ -11,6 +11,7 @@ import (
 	"github.com/truvity/sluis/internal/githubapp/githubfake"
 	"github.com/truvity/sluis/internal/lambdaapp"
 	_ "github.com/truvity/sluis/internal/lambdaapp/issuerfn" // registers the issuer module; the scenarios open it by document
+	"github.com/truvity/sluis/srp"
 )
 
 // Instance is the instance name the fixture's SSM root and functions carry.
@@ -28,8 +29,16 @@ type Harness struct {
 	GitHub *githubfake.Org
 }
 
-// RecoveryPasswordParam is where layout v5 keeps the recovery password.
-const RecoveryPasswordParam = "/sluis/" + Instance + "/internal/oidc/recovery-password"
+// RecoveryPasswordParam is where layout v5 keeps the recovery password, which
+// the function never reads (docs/decisions/0076); RecoveryVerifierParam is the
+// recovery account's SRP credential, which it does.
+const (
+	RecoveryPasswordParam = "/sluis/" + Instance + "/internal/oidc/recovery-password"
+	RecoveryVerifierParam = "/sluis/" + Instance + "/internal/oidc/recovery-verifier"
+)
+
+// RecoveryPassword is the fixture's recovery password.
+const RecoveryPassword = "correct horse battery staple"
 
 // NewHarness starts the emulator, the SSM fake (holding the fixture's declared
 // secret) and the GitHub fake. It sets the environment the AWS SDK reads so
@@ -46,7 +55,8 @@ func NewHarness(t *testing.T) *Harness {
 	return &Harness{
 		Emulator: New(t),
 		SSM: NewSSM(t, map[string]string{
-			RecoveryPasswordParam: `{"value":"` + base64.StdEncoding.EncodeToString([]byte("correct horse battery staple")) + `"}`,
+			RecoveryPasswordParam: `{"value":"` + base64.StdEncoding.EncodeToString([]byte(RecoveryPassword)) + `"}`,
+			RecoveryVerifierParam: `{"value":"` + base64.StdEncoding.EncodeToString(srp.Default.NewCredential("recovery", RecoveryPassword).Document()) + `"}`,
 		}),
 		GitHub: githubfake.Start(t, "acme-org"),
 	}
@@ -63,7 +73,9 @@ func (h *Harness) IssuerDocument(t *testing.T) string {
 	if err := os.WriteFile(policy, []byte(`
 version: 1
 groups:
-  all:access-roster:operator: { members: [platform@acme.example] }
+  all:access-roster:operator:
+    members: [platform@acme.example]
+    matchers: [{service_account: {namespace: sluis, name: recovery}}]
   all:access-roster:viewer: {}
 lifetimes: { default: 12h }
 clients:
@@ -77,7 +89,7 @@ issuerURL: https://access.acme.example
 publicURL: https://access.acme.example/console
 policy: {file: `+policy+`}
 secrets: {source: ssm, root: /sluis/`+Instance+`, layout: v5, endpoint: `+h.SSM.URL()+`}
-recovery: {enabled: true, passwordSecret: recovery/password}
+recovery: {enabled: true, verifierSecret: recovery/verifier}
 adapters:
   secrets: {adapter: ssm, settings: {endpoint: `+h.SSM.URL()+`}}
   state: {adapter: memory}

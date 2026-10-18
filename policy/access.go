@@ -185,6 +185,7 @@ type AccessClient struct {
 	Groups            GroupsOverride `yaml:"groups,omitempty"`
 	Session           string         `yaml:"session,omitempty"`
 	PKCE              string         `yaml:"pkce,omitempty"`
+	Harness           bool           `yaml:"harness,omitempty"`
 
 	Hostname string `yaml:"hostname,omitempty"`
 	Prefix   string `yaml:"prefix,omitempty"`
@@ -466,6 +467,7 @@ func (a Access) clients() (map[string]Client, error) {
 			Redirects: c.Redirects, SignedOut: c.SignedOut, Requires: c.Requires, TTLCap: c.TTLCap,
 			SignInExchange: c.SignInExchange, BackChannelLogout: c.BackchannelLogout, SigningAlg: c.SigningAlg,
 			Groups: c.Groups, GroupsDelimiter: c.GroupsDelimiter, Session: c.Session, PKCE: c.PKCE,
+			Harness: c.Harness,
 		}
 	}
 	return out, nil

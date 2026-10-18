@@ -151,6 +151,31 @@
       "Sid": "SluisCrossGoogleBlobList"
     },
     {
+      "Action": "ssm:*",
+      "Effect": "Deny",
+      "Resource": [
+        "arn:aws:ssm:r1:111122223333:parameter/sluis/i1/internal/oidc/recovery-password",
+        "arn:aws:ssm:r1:111122223333:parameter/sluis/i1/internal/oidc/conformance-password"
+      ],
+      "Sid": "SluisDenyPasswords"
+    },
+    {
+      "Action": [
+        "kms:Decrypt"
+      ],
+      "Condition": {
+        "StringEquals": {
+          "kms:EncryptionContext:PARAMETER_ARN": [
+            "arn:aws:ssm:r1:111122223333:parameter/sluis/i1/internal/oidc/recovery-password",
+            "arn:aws:ssm:r1:111122223333:parameter/sluis/i1/internal/oidc/conformance-password"
+          ]
+        }
+      },
+      "Effect": "Deny",
+      "Resource": "*",
+      "Sid": "SluisDenyPasswordsKey"
+    },
+    {
       "Action": [
         "dynamodb:PutItem",
         "dynamodb:UpdateItem",

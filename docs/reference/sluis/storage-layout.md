@@ -12,6 +12,7 @@ Layout v4 for SSM, and the AWS adapters' tables. A record has a kind and an id: 
 | `<root>/internal/config/clients/<oidc-client-id>/secret` | the secret of a confidential client of the issuer (read as the `oidc/v1` document `external/oidc/<id>`) | an operator seeds it |
 | `<root>/internal/config/issuer/state-secret` | the issuer's sign-in state secret (32 random bytes, base64) | `deploy/pulumi` generates it (`StateSecretParameterName(instance)`) |
 | `<root>/internal/config/recovery/password` | the recovery password | `deploy/pulumi` generates it |
+| `<root>/internal/oidc/recovery-verifier`, `conformance-verifier`, `conformance-password` | layout v5: the SRP credentials of the two password accounts and the conformance password. The issuer's role reads the verifiers and is denied the passwords | `deploy/pulumi` derives them |
 | `<root>/internal/config/directory/<id>/key` | a declared workspace's service-account key | an operator seeds it |
 | `<root>/internal/config/valkey/password` | the shared store's password | an operator seeds it |
 | `<root>/internal/credentials/console/session-key` | the key the console signs its sessions with | sluis (one stable item) |
@@ -67,6 +68,7 @@ One table with string `pk` (hash) and string `sk` (range). `pk` is the kind, so 
 | `slack-share` | `<host>/<channel>` | a Slack Connect share |
 | `slack-user-cache` | `<team>/<user>` | who a Slack member is (24 h) |
 | `console` | `session-key` | (the key itself is in Secrets) |
+| `srp` | `<handle>` | the half of a password sign-in exchange (SRP) that outlives its first request, for one use and two minutes; never exported by a backup |
 | `recovery` | `off` | the recovery switch, in the oidc table: the set `disabled` of `generation`, `at`, `by`; the issuer and console read it at most every 3 s, and once seen never again; never exported by a backup |
 | `lease` | `<kind>/<target>` | a tick's lease: kinds `github-tick`, `github-links`, `slack-tick`, `refresh` |
 | `notify` | `<target>` | a notification (a minute) |
@@ -77,6 +79,7 @@ One table with string `pk` (hash) and string `sk` (range). `pk` is the kind, so 
 | `keyring-index` | `<alg>/<kid>` | the members of the key ring (Index) |
 | `issuer-request` | `<uuid>` | a pending authorization request |
 | `issuer-code`, `issuer-code-session` | `<id>` | an authorization code, the session it opened |
+| `issuer-srp` | `<handle>` | the half of a password sign-in exchange (SRP) that outlives its first request, for one use and two minutes; never exported by a backup |
 | `issuer-token` | `<uuid>` | a minted token's record |
 | `issuer-session`, `issuer-sso`, `issuer-sso-of` | `<id>`, `<id>`, `<identity>` | sessions and the browser's SSO session |
 | `issuer-sso-cookie` | `<hash>` | pointer from the browser's SSO cookie, hashed, to the sign-in id; the record's lifetime. The `issuer-sso` record carries the same hash as `cookie_hash` |
@@ -165,7 +168,7 @@ The logical key maps to kind and credential path as follows.
 | Secret | Layout v4 | Layout v5 |
 |---|---|---|
 | the sign-in state secret | `<root>/internal/config/<name in the document>` | `<root>/internal/oidc/state-secret` |
-| the recovery password | `<root>/internal/config/<name in the document>` | `<root>/internal/oidc/recovery-password` |
+| the recovery password | `<root>/internal/config/<name in the document>` | `<root>/internal/oidc/recovery-password`, read by operators only |
 | the Google sign-in client | `<root>/internal/config/providers/google/<provider>/client-id` and `client-secret` | `<root>/internal/oidc/signin/<provider>/client-id` and `client-secret` |
 | the console session key | `<root>/internal/credentials/console/session-key` | `<root>/internal/oidc/console-session-key` |
 | a delivered client secret | `<root>/internal/config/clients/<id>/secret` | `<root>/internal/oidc/clients/<id>` |

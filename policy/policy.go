@@ -677,6 +677,15 @@ type Client struct {
 	// authorization request. A client that describes itself by document
 	// is public and always required.
 	PKCE string `yaml:"pkce,omitempty"`
+	// Harness marks a client that a conformance or test harness signs in
+	// through: the one kind of client the conformance account may sign in
+	// to (docs/decisions/0076). The account is off unless the installation
+	// turns it on (`conformance.enabled`), and it is never admitted to a
+	// client without this mark, whatever the client `requires`. The mark
+	// grants nothing else: a harness client is an ordinary client, and a
+	// person or the recovery account signs in to it as to any other. Refused
+	// on an exchange client, which nobody signs in to.
+	Harness bool `yaml:"harness,omitempty"`
 }
 
 // PKCERequired reports whether an authorization request for this client
@@ -1105,6 +1114,9 @@ func (c Client) validate(id string, p Policy) error {
 		}
 	default:
 		return fmt.Errorf("client %q: pkce %q is not %q or %q", id, c.PKCE, PKCERequired, PKCEOptional)
+	}
+	if c.Harness && c.Kind == KindExchange {
+		return fmt.Errorf("client %q is an exchange target and declares harness: nobody signs into it, so no harness does", id)
 	}
 	if c.PKCE != "" && c.Kind == KindExchange {
 		return fmt.Errorf("client %q is an exchange target and declares pkce: nobody signs into it, so it has no authorization request to protect", id)

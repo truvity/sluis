@@ -1,6 +1,6 @@
 # Run the OpenID conformance suite
 
-Run the four OpenID Foundation profiles on Kubernetes or AWS Lambda. Results: [conformance findings](../../concepts/sluis/conformance-findings.md).
+Run the four OpenID Foundation profiles on Kubernetes or AWS Lambda. See the [findings](../../concepts/sluis/conformance-findings.md).
 
 | profile | plan | attended |
 |---|---|---|
@@ -11,7 +11,7 @@ Run the four OpenID Foundation profiles on Kubernetes or AWS Lambda. Results: [c
 
 ## Before you start
 
-- Run at every major and minor release, by a person. A patch needs one only when it touches the issuing path.
+- Run at every major and minor release, by a person; a patch only when it touches the issuing path.
 
 - Deploy the suite so the issuer reaches its `/test/` paths over public HTTPS. In a cluster it is Service `conformance-suite` in namespace `conformance`.
 
@@ -25,12 +25,12 @@ The scripts default to Kubernetes:
 |---|---|---|
 | `SECRETS` | `kubernetes`: Secret `<id>-client` in `CLIENT_NAMESPACE` (`access-issuer`) | `ssm`, with `INSTANCE` |
 | `SUITE` | ClusterIP of `conformance-suite`, read with `KUBECTL` | the suite's control-plane URL |
-| `RECOVERY` | `kubernetes`: a token for `SERVICE_ACCOUNT` in `NAMESPACE` (`access-issuer-recovery`) | `password`, with `RECOVERY_PASSWORD_CMD` |
+| `RECOVERY` | `kubernetes`: a token for `SERVICE_ACCOUNT` in `NAMESPACE` (`access-issuer-recovery`) | `password`, with `RECOVERY_PASSWORD_CMD`: the conformance account |
 | `ALIAS` | `access-issuer` | the path segment of the registered redirects |
 
 ## 1. Declare the clients
 
-Add four temporary rows to `access.clients`, render and upgrade ([install](operate/install-with-helm.md)) or apply the Lambda stack.
+Add four temporary rows to `access.clients`, and on Lambda `conformance.enabled`. Render and upgrade ([install](operate/install-with-helm.md)) or apply the Lambda stack.
 
 ```yaml
 conformance:       # and conformance-2
@@ -39,6 +39,7 @@ conformance:       # and conformance-2
   redirects: [https://conformance.example.com/test/a/access-issuer/callback]
   signed_out: [https://conformance.example.com/test/a/access-issuer/post_logout_redirect]
   requires: [all:sluis:operator]
+  harness: true
 conformance-bc:    # and conformance-bc-2
   kind: confidential
   secret: {generate: true}
@@ -46,16 +47,17 @@ conformance-bc:    # and conformance-bc-2
   signed_out: [https://conformance.example.com/test/a/access-issuer/post_logout_redirect]
   backchannel_logout_uri: https://conformance.example.com/test/a/access-issuer/backchannel_logout
   requires: [all:sluis:operator]
+  harness: true
 ```
 
-`requires` must name a group recovery holds: `operator`, not `viewer`. The Back-Channel plan needs its own pair ([client fields](../../reference/sluis/policy-clients.md), [secrets](../../reference/sluis/secrets.md#the-names)).
+`harness` admits the Lambda test account. Kubernetes signs in as recovery, so `requires` must name `operator`, not `viewer`. The Back-Channel plan needs its own pair ([client fields](../../reference/sluis/policy-clients.md), [secrets](../../reference/sluis/secrets.md#the-names)).
 
 ```sh
 curl -s https://<issuer>/.well-known/openid-configuration | jq .backchannel_logout_supported
 kubectl -n access-issuer get secret conformance-client   # Lambda: aws ssm describe-parameters, name /sluis/<instance>/external/oidc/conformance
 ```
 
-The check prints `true` and the secret exists. On Lambda it appears within five minutes.
+Expect `true` and the secret; on Lambda it appears within five minutes.
 
 ## 2. Create the plans
 
@@ -86,20 +88,20 @@ Run `basic`, `rp-logout` and `backchannel` in that order with the same command. 
 
 ```sh
 CONTEXT=prod@oidc ...                                                       # Kubernetes
-RECOVERY=password RECOVERY_PASSWORD_CMD="sluisctl recovery password --instance prod --region eu-west-1" ...   # Lambda
+RECOVERY=password RECOVERY_PASSWORD_CMD="sluisctl recovery password --account conformance --instance prod --region eu-west-1" ...   # Lambda
 ```
 
-On Lambda, turn recovery on for the run ([recover on Lambda](operate/recover-on-lambda.md)).
+On Lambda the run signs in as `conformance`, in no group ([ADR 0076](../../decisions/0076-password-sign-in-is-srp-for-recovery-and-conformance-only.md)).
 
 FAILED and INTERRUPTED disqualify a profile. Check that each REVIEW's screenshot shows the right page.
 
-Recovery has no address or name, so `oidcc-scope-email`, `oidcc-scope-profile` and `oidcc-alternate-happy-flow` warn. Those and the screenshot modules need a person's Google sign-in.
+Neither has an address or name, so `oidcc-scope-email`, `oidcc-scope-profile` and `oidcc-alternate-happy-flow` warn. Those and the screenshot modules need a person's Google sign-in.
 
 A Back-Channel module in WAITING with `connection refused` in the issuer's log cannot reach the suite.
 
 ## 5. Clean up
 
-Export each plan's results to the ticket. Remove the four rows, render and upgrade, turn recovery off. Verify: `kubectl -n access-issuer get secret conformance-client` returns `NotFound`. On Lambda, `sluisctl clients purge <id>` clears each record. Record the date, version and plan ids on the findings page.
+Export each plan's results. Remove the four rows, render and upgrade, turn `conformance.enabled` off. Verify: `kubectl -n access-issuer get secret conformance-client` returns `NotFound`. On Lambda, `sluisctl clients purge <id>` clears each record. Record the date, version and plan ids in the findings.
 
 ## Roll back
 

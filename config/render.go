@@ -30,6 +30,11 @@ func DefaultSignKeyAlias(instance string) string { return "alias/sluis-" + insta
 const (
 	// StateSecretName is the issuer's sign-in state secret.
 	StateSecretName = "issuer/state-secret"
+	// RecoveryVerifierName is the recovery account's SRP verifier, and
+	// ConformanceVerifierName the conformance account's: what the sign-in
+	// checks the password against where there is no cluster.
+	RecoveryVerifierName    = "recovery/verifier"
+	ConformanceVerifierName = "conformance/verifier"
 	// RecoveryPasswordName is the recovery password, where there is no cluster
 	// to prove access to.
 	RecoveryPasswordName = "recovery/password"
@@ -219,6 +224,7 @@ func (in *Installation) service() (*internal.Sluis, error) {
 		s.Cloudflare = &c
 	}
 	s.Recovery = copyOf(in.Recovery)
+	s.Conformance = copyOf(in.Conformance)
 	s.SigningKey = copyOf(in.SigningKey)
 	s.Keys = copyOf(in.Keys)
 	if in.Exchange != nil && in.Exchange.Audience != "" {
@@ -277,7 +283,27 @@ func (in *Installation) secrets(s *internal.Sluis) error {
 	if got := s.Recovery.LoginSecret; got != "" && got != RecoveryPasswordName {
 		return fmt.Errorf("recovery.passwordSecret is %q, and shape lambda names it %s", got, RecoveryPasswordName)
 	}
+	if got := s.Recovery.VerifierSecret; got != "" && got != RecoveryVerifierName {
+		return fmt.Errorf("recovery.verifierSecret is %q, and shape lambda names it %s", got, RecoveryVerifierName)
+	}
+	if want.Layout == internal.SecretsLayoutV5 {
+		// Layout v5 holds the recovery account's verifier (docs/decisions/0076) and the
+		// service never reads the password: the document does not name it, and the
+		// function's role may not read it.
+		s.Recovery.LoginSecret, s.Recovery.VerifierSecret = "", RecoveryVerifierName
+		if c := s.Conformance; c != nil && c.Enabled {
+			if got := c.VerifierSecret; got != "" && got != ConformanceVerifierName {
+				return fmt.Errorf("conformance.verifierSecret is %q, and shape lambda names it %s", got, ConformanceVerifierName)
+			}
+			c.VerifierSecret = ConformanceVerifierName
+		}
+		return nil
+	}
+	// Layout v4 keeps the password, and the service derives the verifier from it.
 	s.Recovery.LoginSecret = RecoveryPasswordName
+	if c := s.Conformance; c != nil && c.Enabled && c.VerifierSecret == "" {
+		return errors.New("conformance.enabled needs secrets.layout v5, or conformance.verifierSecret naming the account's verifier")
+	}
 	return nil
 }
 

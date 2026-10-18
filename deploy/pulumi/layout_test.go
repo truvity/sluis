@@ -391,7 +391,7 @@ func TestThePreviewShapeAcrossTheLayouts(t *testing.T) {
 		before, after *recorder
 		want          string
 	}{
-		{"v4 -> v4+v5", v4, window, "2 created, 0 deleted, 0 replaced"},
+		{"v4 -> v4+v5", v4, window, "3 created, 0 deleted, 0 replaced"},
 		{"v4+v5 -> v5 + KeepV4", window, kept, "0 created, 0 deleted, 0 replaced"},
 		{"v4+v5 -> v5", window, flipped, "0 created, 2 deleted, 0 replaced"},
 		{"v5 + KeepV4 -> v5", kept, flipped, "0 created, 2 deleted, 0 replaced"},
@@ -429,14 +429,14 @@ func TestThePreviewShapeAcrossTheLayouts(t *testing.T) {
 	// A v5 estate has no v4 parameters by default, with DropV4 (a no-op) too;
 	// KeepV4 declares them beside the v5 pair; the v4 layouts are unchanged.
 	for name, r := range map[string]*recorder{"default": flipped, "DropV4": dropped} {
-		if n := len(r.ofType(ssmParameterType)); n != 2 {
-			t.Errorf("a v5 estate (%s) has %d parameters, want the two v5 ones", name, n)
+		if n := len(r.ofType(ssmParameterType)); n != 3 {
+			t.Errorf("a v5 estate (%s) has %d parameters, want the three v5 ones (the state secret, the recovery password and its verifier)", name, n)
 		}
 	}
 	for name, c := range map[string]struct {
 		r *recorder
 		n int
-	}{"v5 + KeepV4": {kept, 4}, "v4+v5": {window, 4}, "v4": {v4, 2}} {
+	}{"v5 + KeepV4": {kept, 5}, "v4+v5": {window, 5}, "v4": {v4, 2}} {
 		if n := len(c.r.ofType(ssmParameterType)); n != c.n {
 			t.Errorf("%s has %d parameters, want %d", name, n, c.n)
 		}
@@ -534,7 +534,8 @@ func TestTheMaintenanceDenyCoversTheTablesOfEveryLayout(t *testing.T) {
 		st := policyOf(t, withLayout(l))
 		var denies []map[string]any
 		for _, s := range st {
-			if s["Effect"] == "Deny" {
+			// The passwords' deny (docs/decisions/0076) is the next test's.
+			if s["Effect"] == "Deny" && s["Sid"] != "SluisDenyPasswords" && s["Sid"] != "SluisDenyPasswordsKey" {
 				denies = append(denies, s)
 			}
 		}

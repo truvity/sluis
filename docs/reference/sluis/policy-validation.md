@@ -15,6 +15,7 @@ Conflicts across files are refused when the layers merge. The merged policy is v
 | Matchers | no field; `service_account` without `namespace` and `name`; `aws` without a twelve-digit `account` or with a pattern that does not compile; `github` `visibility` other than `public`, `private`, `internal` |
 | Clients | `display_name` or `description` that is not one bounded line; `sign_in_exchange` on a non-`public` client; a confidential client without `secret`; an empty `requires` |
 | PKCE | `pkce` other than `required` or `optional`; `pkce: optional` on a `public` client; `pkce` on an `exchange` client |
+| Harness | `harness` on an `exchange` client |
 | Session | `session` on an `exchange` client; `session: agent` with `sign_in_exchange: true` |
 | Resources | an id that is not an absolute URI without a fragment; a `requires` naming no declared group |
 | `client_documents` | an origin with a scheme, path or wildcard; `origins` without `requires`; `requires` or `ttl_cap` without `origins` |

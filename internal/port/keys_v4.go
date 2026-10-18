@@ -121,6 +121,9 @@ var keyRules = []keyRule{
 	{prefix: "req.", kind: "issuer-request"},
 	{prefix: "code.", kind: "issuer-code"},
 	{prefix: "codesess.", kind: "issuer-code-session"},
+	// An exchange of the SRP sign-in between its two requests (internal/srpauth):
+	// one record a handle names, good for one use and two minutes.
+	{prefix: "srp.", kind: "issuer-srp"},
 	{prefix: "tok.", kind: "issuer-token"},
 	{prefix: "sso.", kind: "issuer-sso"},
 	{prefix: "rt.", kind: "issuer-session-token"},

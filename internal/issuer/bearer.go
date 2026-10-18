@@ -68,7 +68,7 @@ func (s *Storage) liveSignInClaims(ctx context.Context, bearer string, clients [
 	// bearer here, whether or not recovery is on: the subject test above already
 	// excludes its ServiceAccount subject, and this keeps it excluded if that ever
 	// changes (docs/decisions/0075).
-	if session.Method == RecoveryHow {
+	if provedWithoutDirectory(session.Method) {
 		return nil, false
 	}
 	return claims, true

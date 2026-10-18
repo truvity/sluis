@@ -551,3 +551,64 @@ func TestRenderCarriesTheAppNamesOfTheGitHubController(t *testing.T) {
 		t.Errorf("a too-long App name was rendered: %v", err)
 	}
 }
+
+// On layout v5 the renderer names the recovery account's verifier and not its
+// password, the service never reading the password (docs/decisions/0076); on
+// layout v4 it names the password. The conformance account's verifier is named
+// only when the account is on.
+func TestRenderNamesTheVerifierOnLayoutV5AndThePasswordOnV4(t *testing.T) {
+	render := func(change func(*config.Installation)) string {
+		t.Helper()
+		in := installation(t, "example")
+		change(in)
+		service, _, err := config.Render(in)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(service)
+	}
+	v4 := render(func(*config.Installation) {})
+	if !strings.Contains(v4, "passwordSecret: recovery/password") || strings.Contains(v4, "verifierSecret") {
+		t.Errorf("layout v4:\n%s", v4)
+	}
+	v5 := render(func(in *config.Installation) { in.Secrets = &config.Secrets{Layout: "v5"} })
+	if strings.Contains(v5, "passwordSecret") || !strings.Contains(v5, "verifierSecret: recovery/verifier") {
+		t.Errorf("layout v5:\n%s", v5)
+	}
+	if strings.Contains(v5, "conformance") {
+		t.Errorf("the conformance account is named with its flag off:\n%s", v5)
+	}
+	on := render(func(in *config.Installation) {
+		in.Secrets = &config.Secrets{Layout: "v5"}
+		in.Conformance = &config.Conformance{Enabled: true}
+	})
+	if !strings.Contains(on, "verifierSecret: conformance/verifier") || !strings.Contains(on, "enabled: true") {
+		t.Errorf("conformance on:\n%s", on)
+	}
+
+	// Another spelling is not a choice, and a v4 stack cannot make the verifier.
+	for name, change := range map[string]func(*config.Installation){
+		"another recovery verifier": func(in *config.Installation) {
+			in.Recovery = &config.Recovery{VerifierSecret: "elsewhere"}
+		},
+		"another conformance verifier": func(in *config.Installation) {
+			in.Secrets = &config.Secrets{Layout: "v5"}
+			in.Conformance = &config.Conformance{Enabled: true, VerifierSecret: "elsewhere"}
+		},
+		"conformance on layout v4 with no verifier": func(in *config.Installation) {
+			in.Conformance = &config.Conformance{Enabled: true}
+		},
+	} {
+		in := installation(t, "example")
+		change(in)
+		if _, _, err := config.Render(in); err == nil {
+			t.Errorf("%s was accepted", name)
+		}
+	}
+	v4Named := render(func(in *config.Installation) {
+		in.Conformance = &config.Conformance{Enabled: true, VerifierSecret: "conformance/own"}
+	})
+	if !strings.Contains(v4Named, "verifierSecret: conformance/own") {
+		t.Errorf("layout v4 with a named verifier:\n%s", v4Named)
+	}
+}

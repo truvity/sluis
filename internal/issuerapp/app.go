@@ -92,6 +92,20 @@ type Config struct {
 	// recoveryGeneration is `recovery.generation`: which decision to have
 	// recovery on a disable from the console covers (internal/recoverygate).
 	recoveryGeneration string
+	// recoveryPassword is whether the recovery account's password sign-in may be
+	// offered: recovery is not turned off. It is the hub's rule (on unless
+	// `recovery.enabled: false`), not the token door's, which needs the account
+	// and audience named; the door also needs a verifier, which a cluster
+	// install has none of unless it names one.
+	recoveryPassword bool
+	// recoveryVerifier names the recovery account's SRP verifier
+	// (`recovery.verifierSecret`), read from layout v5's fixed address instead
+	// when the secrets are layout v5's.
+	recoveryVerifier string
+	// conformanceEnabled is `conformance.enabled`, and conformanceVerifier names
+	// the account's SRP verifier (`conformance.verifierSecret`).
+	conformanceEnabled  bool
+	conformanceVerifier string
 	// secrets delivers every secret this document names, by name: the
 	// stores' source, set at New.
 	secrets secrets.Source
@@ -200,11 +214,18 @@ func FromConfig(f *config.Serve, p *config.PolicyDocument) (Config, error) {
 	if f.Exchange != nil {
 		c.audience = f.Exchange.Audience
 	}
+	c.recoveryPassword = true
 	if r := f.Recovery; r != nil {
 		c.recoveryEnabled = r.Enabled != nil && *r.Enabled
+		c.recoveryPassword = r.Enabled == nil || *r.Enabled
 		c.recoveryAccount = r.ServiceAccount
 		c.recoveryAudience = r.Audience
 		c.recoveryGeneration = r.Generation
+		c.recoveryVerifier = r.VerifierSecret
+	}
+	if cf := f.Conformance; cf != nil {
+		c.conformanceEnabled = cf.Enabled
+		c.conformanceVerifier = cf.VerifierSecret
 	}
 	var err error
 	if o := f.OAuthClient; o != nil {
@@ -632,6 +653,7 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 		recoveryGate = recoverygate.New(stores.RecoveryState(), cfg.recoveryGeneration, recoverygate.WithLog(log))
 	}
 	core.UseRecoveryGate(recoveryGate)
+	core.UseConformance(cfg.conformanceEnabled)
 
 	if err := applySigningPlan(ctx, &cfg, stores.Plan); err != nil {
 		return nil, err
@@ -790,9 +812,14 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 			signIn = gateSignIns(signIn, newStateSecretGate(shared, opened.seed, leases))
 		}
 	}
+	password, err := openPassword(ctx, cfg, stores, set, stateKey, log)
+	if err != nil {
+		return nil, err
+	}
 	signInDeps := issuer.SignInDeps{
 		Providers:     signIn,
 		Recovery:      openRecovery(ctx, cfg, stores, log),
+		Password:      password,
 		State:         access.NewStateCodecWith(stateKey, signInWindow),
 		ConsoleOrigin: cfg.consoleOrigin,
 		// Where an old /account bookmark is sent. Empty when this

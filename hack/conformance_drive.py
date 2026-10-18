@@ -8,12 +8,15 @@ the authorization completes, the suite is never told, and the module sits
 in WAITING until the next one interrupts it. That reads as a hang and is
 the reason a plan showed a row of grey boxes.
 
-Signing in is RECOVERY, rather than a person at a Google prompt. That is
-what makes thirty modules unattended. It is the audited break-glass path,
-and the issuer logs every use of it at WARN. On Kubernetes the proof is a
-ServiceAccount token the cluster vouches for (RECOVERY=kubernetes, the
-default); on AWS Lambda it is the recovery password (RECOVERY=password),
-which the installation must have turned on for the run.
+Signing in is not a person at a Google prompt. That is what makes thirty
+modules unattended. On Kubernetes it is RECOVERY, the audited break-glass
+path, which the issuer logs at WARN on every use: the proof is a ServiceAccount
+token the cluster vouches for (RECOVERY=kubernetes, the default). Anywhere else
+it is the CONFORMANCE test account (RECOVERY=password): a username and password
+that the page's script proves to the issuer with SRP and never sends
+(docs/decisions/0076). The installation must have turned it on for the run
+(`conformance.enabled`), and the plan's clients must carry `harness: true`.
+The account holds no group and signs in to no other client.
 
 The sign-in is re-established WHENEVER the issuer asks for one, not once
 at the start, because the logout modules exist to end it — a driver that
@@ -24,7 +27,7 @@ Usage:
 
   SUITE      the suite's URL (default https://localhost.emobix.co.uk:8443)
   ISSUER     the issuer under test (required)
-  RECOVERY   kubernetes (default) or password
+  RECOVERY   kubernetes (default) or password (the conformance account)
   CONTEXT    kubernetes: the kubectl context of the issuer's cluster
   KUBECTL    kubernetes: how to run kubectl
   NAMESPACE, SERVICE_ACCOUNT, AUDIENCE
@@ -32,9 +35,11 @@ Usage:
              access-issuer-recovery, access-issuer-recovery)
   RECOVERY_PASSWORD_CMD
              password: a command, run without a shell, whose output is the
-             recovery password, for example
-             "sluisctl recovery password --instance <instance> --region <region>".
+             conformance account's password, for example
+             "sluisctl recovery password --account conformance --instance <instance> --region <region>".
              It runs once and the value is kept in memory only.
+  RECOVERY_USERNAME
+             password: the account's username (default conformance)
   CHROME_PROFILE
              the browser's profile directory (default a fresh temporary one)
 
@@ -62,8 +67,8 @@ SUITE = os.environ.get("SUITE", "https://localhost.emobix.co.uk:8443")
 # The issuer under test: no default, so a run never certifies an
 # installation nobody named.
 ISSUER = os.environ.get("ISSUER") or sys.exit("ISSUER: set it to the issuer to certify, e.g. https://access.example.com")
-# How the driver proves itself to the issuer's recovery sign-in: a
-# ServiceAccount token on Kubernetes, the recovery password on AWS Lambda.
+# How the driver proves itself to the issuer's sign-in: a
+# ServiceAccount token on Kubernetes, the conformance account's password elsewhere.
 RECOVERY = os.environ.get("RECOVERY", "kubernetes")
 if RECOVERY not in ("kubernetes", "password"):
     sys.exit("RECOVERY: kubernetes or password")
@@ -74,8 +79,10 @@ CONTEXT = os.environ.get("CONTEXT") or ""
 NAMESPACE = os.environ.get("NAMESPACE", "access-issuer")
 SERVICE_ACCOUNT = os.environ.get("SERVICE_ACCOUNT", "access-issuer-recovery")
 AUDIENCE = os.environ.get("AUDIENCE", "access-issuer-recovery")
-# The command that prints the recovery password. A list, never a shell.
+# The command that prints the conformance account's password. A list, never a shell.
 PASSWORD_CMD = shlex.split(os.environ.get("RECOVERY_PASSWORD_CMD", ""))
+# The account the password belongs to.
+USERNAME = os.environ.get("RECOVERY_USERNAME", "conformance")
 # How to run kubectl, because reaching the cluster can need more than the
 # binary. A context that authenticates through OIDC needs the
 # `kubectl-oidc_login` credential plugin on PATH, and when it is missing
@@ -127,22 +134,24 @@ _password = []
 
 
 def proof():
-    """What the recovery form takes, kept in memory and never printed.
+    """What the sign-in takes, kept in memory and never printed.
 
-    Kubernetes: a fresh ServiceAccount token, minted per sign-in. Lambda:
-    the recovery password, read once by the configured command.
+    Kubernetes: a fresh ServiceAccount token, minted per sign-in. Otherwise
+    the conformance account's password, read once by the configured command;
+    it goes into the page's form and the page's script proves it without
+    sending it.
     """
     # Checked here, at the first sign-in: the Config plan signs nobody in
     # and needs neither.
     if RECOVERY == "password":
         if not PASSWORD_CMD:
-            sys.exit("RECOVERY_PASSWORD_CMD: set it to a command that prints the recovery password")
+            sys.exit("RECOVERY_PASSWORD_CMD: set it to a command that prints the conformance account's password")
         if not _password:
             read = subprocess.run(PASSWORD_CMD, capture_output=True, text=True)
             if read.returncode != 0 or not read.stdout.strip():
                 # The command's own sentence, but never its output: a
                 # failing command may have echoed part of what it read.
-                sys.exit("could not read the recovery password (exit %d):\n%s" % (
+                sys.exit("could not read the conformance password (exit %d):\n%s" % (
                     read.returncode, read.stderr.strip()))
             _password.append(read.stdout.strip())
         return _password[0]
@@ -279,9 +288,11 @@ def shoot(cdp):
 def visit(cdp, url, pages=None):
     """Follow one URL the suite is waiting on, signing in if asked.
 
-    Signing in means submitting the recovery form IN THE PAGE, so the
-    browser follows the redirects itself and runs the callback's script —
-    which is the whole reason this is a browser and not curl.
+    Signing in means using the sign-in form IN THE PAGE, so the browser
+    follows the redirects itself and runs the callback's script — which is
+    the whole reason this is a browser and not curl. The password form is
+    driven the way a person drives it: the fields are filled and the form is
+    submitted, and the page's script does the SRP and moves the page on.
 
     `pages` collects a screenshot of every ISSUER page passed through,
     because some steps ask for a picture of one the driver does not stop
@@ -297,15 +308,28 @@ def visit(cdp, url, pages=None):
         if "/login" not in here or ISSUER not in here:
             return
         token = proof()
-        filled = cdp.eval("""(() => {
-          const form = document.querySelector('form[action="/login/recovery"]');
-          if (!form) return 'no-form';
-          const field = form.querySelector('input[name="proof"]');
-          if (!field) return 'no-field';
-          field.value = %s;
-          form.submit();
-          return 'submitted';
-        })()""" % json.dumps(token))
+        if RECOVERY == "password":
+            filled = cdp.eval("""(() => {
+              const form = document.querySelector('form[data-srp]');
+              if (!form) return 'no-form';
+              const user = form.querySelector('[data-srp-user]');
+              const password = form.querySelector('[data-srp-password]');
+              if (!user || !password) return 'no-field';
+              user.value = %s;
+              password.value = %s;
+              form.requestSubmit();
+              return 'submitted';
+            })()""" % (json.dumps(USERNAME), json.dumps(token)))
+        else:
+            filled = cdp.eval("""(() => {
+              const form = document.querySelector('form[action="/login/recovery"]');
+              if (!form) return 'no-form';
+              const field = form.querySelector('input[name="proof"]');
+              if (!field) return 'no-field';
+              field.value = %s;
+              form.submit();
+              return 'submitted';
+            })()""" % json.dumps(token))
         if filled != "submitted":
             print("      sign-in: %s" % filled)
             return

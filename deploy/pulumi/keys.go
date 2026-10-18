@@ -498,6 +498,29 @@ func SluisKeyPolicyStatements(a KeyPolicyArgs) ([]map[string]any, error) {
 		d["Action"] = []string{kmsDecrypt}
 		st = append(st, d)
 	}
+	// The roles that host the oidc module never decrypt the recovery and
+	// conformance passwords on layout v5: the service holds their SRP verifiers
+	// (docs/decisions/0076). The role policy denies it; this is the same refusal
+	// in the key's own policy.
+	if a.Layout.has5() {
+		var oidcArns []string
+		for i := range sorted {
+			if sorted[i].Role.hosts(ModuleOIDC) {
+				oidcArns = append(oidcArns, sorted[i].arns()...)
+			}
+		}
+		if len(oidcArns) > 0 {
+			d := deny(sidKeyDenyPasswords, map[string]any{
+				condArnEquals: map[string]any{condPrincipalArn: sortedStrings(oidcArns)},
+				condStringEquals: map[string]any{
+					condViaService:   "ssm." + a.Region + ".amazonaws.com",
+					condParameterArn: oidcPasswordArns(a.Region, a.Account, a.Modules),
+				},
+			})
+			d["Action"] = []string{kmsDecrypt}
+			st = append(st, d)
+		}
+	}
 	// The control plane is the administrators' alone.
 	cp, err := KeyControlPlaneStatements(a.Account, append(append([]string(nil), a.KeyAdmins...), a.Breakglass...))
 	if err != nil {

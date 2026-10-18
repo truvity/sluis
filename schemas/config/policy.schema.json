@@ -632,6 +632,10 @@
             "minLength": 1,
             "type": "string"
           },
+          "harness": {
+            "description": "A conformance or test harness signs in through it: the only kind of client the conformance account (`conformance.enabled`) may sign in to. Refused on an exchange client.",
+            "type": "boolean"
+          },
           "kind": {
             "description": "public, confidential or exchange.",
             "enum": [

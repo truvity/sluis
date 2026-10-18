@@ -11,6 +11,10 @@ It is the only check that still asks the cluster anything. It depends on nothing
 Nothing is stored. The authority is the cluster's RBAC: who may mint a token for that account. You revoke it by removing
 a binding, and the audit log records it.
 
+## And a password?
+
+Without an API server a password proves it, and the page's script proves it with SRP-6a and never sends it. A second account, `conformance`, is off by default, holds no group, and signs in only to clients marked `harness`. One recovery switch shuts both ([ADR 0076](../../decisions/0076-password-sign-in-is-srp-for-recovery-and-conformance-only.md)).
+
 ## What does it grant?
 
 Nothing by itself. A recovered sign-in completes as the ServiceAccount subject. Only a `service_account` matcher in the

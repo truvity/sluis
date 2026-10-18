@@ -257,6 +257,11 @@ func ModuleRoleStatements(env ModuleEnv, role Role) ([]map[string]any, error) {
 				InternalParameterPrefix(env.Modules.Instance), ExternalParameterPrefix(env.Modules.Instance)),
 		})
 	}
+	// The passwords of the recovery and conformance accounts are the operator's:
+	// the issuer reads their verifiers (docs/decisions/0076).
+	if own[ModuleOIDC] {
+		st = append(st, oidcPasswordsDeny(env)...)
+	}
 	// A controller's "run a pass now" starts its own function (the `invoke`
 	// trigger of its document), on the alias the adapter always qualifies with:
 	// the grant is that alias of this function's ARN and nothing else.

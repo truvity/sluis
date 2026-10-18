@@ -3,7 +3,8 @@
 **Status:** Accepted (2026-10-09). Refines point 8 of [0071](0071-least-privilege-modules-one-credential-holder-per-function.md)
 (state, secrets, keys and blobs are per module) and amends its points 1, 5, 9 and 11; builds on
 [0041](0041-the-secret-contract.md) (the secret contract) and [0031](0031-a-generic-migration-tool.md) (a generic
-migration tool).
+migration tool); extended by [0076](0076-password-sign-in-is-srp-for-recovery-and-conformance-only.md) (two verifier
+parameters, and a deny on the passwords, in the issuer's namespace).
 **Date:** 2026-10-09
 
 ## Context

@@ -2,11 +2,18 @@ package app_test
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"html"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
+	"net/url"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -16,6 +23,7 @@ import (
 	"github.com/truvity/sluis/internal/app"
 	"github.com/truvity/sluis/internal/config"
 	"github.com/truvity/sluis/internal/store"
+	"github.com/truvity/sluis/srp"
 )
 
 // issuerFile is the service's configuration file as a test states it: the
@@ -116,6 +124,55 @@ func get(t *testing.T, client *http.Client, url string) (int, string) {
 	return response.StatusCode, string(body)
 }
 
+// recoverWith signs in as the recovery account the way the sign-in page's script
+// does: it loads the page (which sets the cookie the state is bound to), runs
+// SRP against the console's two endpoints and returns the status of the last
+// answer. The password is never sent.
+func recoverWith(t *testing.T, client *http.Client, at, username, password string) (int, string) {
+	t.Helper()
+	code, page := get(t, client, at+"/login")
+	if code != http.StatusOK {
+		t.Fatalf("the sign-in page = %d", code)
+	}
+	match := regexp.MustCompile(`data-state="([^"]+)"`).FindStringSubmatch(page)
+	if match == nil {
+		return http.StatusNotFound, "the sign-in page offers no password form"
+	}
+	state := html.UnescapeString(match[1])
+
+	code, body := rpc(t, client, at+"/login/srp/start", fmt.Sprintf(`{"state":%q,"username":%q}`, state, username))
+	if code != http.StatusOK {
+		return code, body
+	}
+	var begun struct{ Handle, Salt, B string }
+	if err := json.Unmarshal([]byte(body), &begun); err != nil {
+		t.Fatalf("start: %v: %s", err, body)
+	}
+	salt, _ := hex.DecodeString(begun.Salt)
+	b, _ := hex.DecodeString(begun.B)
+	proof, err := srp.Default.NewClient(username, password, rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m1, err := proof.Respond(salt, b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	code, body = rpc(t, client, at+"/login/srp/finish", fmt.Sprintf(`{"state":%q,"handle":%q,"A":%q,"M1":%q}`,
+		state, begun.Handle, hex.EncodeToString(proof.Public()), hex.EncodeToString(m1)))
+	if code == http.StatusOK {
+		var done struct{ M2 string }
+		if err = json.Unmarshal([]byte(body), &done); err != nil {
+			t.Fatalf("finish: %v: %s", err, body)
+		}
+		m2, _ := hex.DecodeString(done.M2)
+		if err = proof.VerifyServer(m2); err != nil {
+			t.Errorf("the server's proof did not verify: %v", err)
+		}
+	}
+	return code, body
+}
+
 func rpc(t *testing.T, client *http.Client, url, body string) (int, string) {
 	t.Helper()
 	request, err := http.NewRequestWithContext(context.Background(), http.MethodPost, url, strings.NewReader(body))
@@ -182,7 +239,7 @@ func TestTheRedirectsFollowThePublicURL(t *testing.T) {
 	// rather than a sign-in to read them, because a sign-in redirect
 	// built from that URL would go somewhere this test is not.
 	client, at, _ := console(t, func(f *config.Serve) { f.PublicURL = "https://directory.example" })
-	if code, body := rpc(t, client, at+"/login/recovery", `{"proof":"recover-me"}`); code != http.StatusNoContent {
+	if code, body := recoverWith(t, client, at, "recovery", "recover-me"); code != http.StatusOK {
 		t.Fatalf("recovery = %d, %q", code, body)
 	}
 	code, body := rpc(t, client, at+"/directoryroster.v1.SettingsService/GetSettings", "{}")
@@ -224,11 +281,11 @@ func TestSignInOffLeavesOneDoor(t *testing.T) {
 func TestRecoveryReachesTheConsole(t *testing.T) {
 	client, at, _ := console(t)
 
-	code, body := rpc(t, client, at+"/login/recovery", `{"proof":"wrong"}`)
-	if code != http.StatusUnauthorized {
+	code, body := recoverWith(t, client, at, "recovery", "wrong")
+	if code != http.StatusForbidden {
 		t.Fatalf("a wrong proof = %d, %q", code, body)
 	}
-	if code, body = rpc(t, client, at+"/login/recovery", `{"proof":"recover-me"}`); code != http.StatusNoContent {
+	if code, body = recoverWith(t, client, at, "recovery", "recover-me"); code != http.StatusOK {
 		t.Fatalf("recovery = %d, %q", code, body)
 	}
 	code, who := get(t, client, at+"/.access/whoami")
@@ -237,6 +294,58 @@ func TestRecoveryReachesTheConsole(t *testing.T) {
 	}
 	if !strings.Contains(who, `"operator"`) {
 		t.Errorf("recovery did not grant operator: %q", who)
+	}
+}
+
+// There is no way to present the recovery password: not in a JSON body, not as a
+// bearer, not in a form. The sign-in page's script proves it without sending it
+// (docs/decisions/0076), and the console's recovery route takes a token and
+// nothing else.
+func TestNoPlaintextRecoveryPasswordIsAccepted(t *testing.T) {
+	client, at, _ := console(t)
+
+	code, page := get(t, client, at+"/login")
+	if code != http.StatusOK || !strings.Contains(page, "data-srp") || !strings.Contains(page, "/login/srp.js") {
+		t.Fatalf("the sign-in page offers no password form: %d %q", code, page)
+	}
+	if regexp.MustCompile(`name="(proof|password)"`).MatchString(page) {
+		t.Errorf("the page has a field that would carry the password: %q", page)
+	}
+	state := regexp.MustCompile(`data-state="([^"]+)"`).FindStringSubmatch(page)[1]
+
+	bearer, err := http.NewRequestWithContext(context.Background(), http.MethodPost, at+"/login/recovery", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bearer.Header.Set("Authorization", "Bearer recover-me")
+	for name, send := range map[string]func() (int, string){
+		"a JSON body": func() (int, string) { return rpc(t, client, at+"/login/recovery", `{"proof":"recover-me"}`) },
+		"a bearer": func() (int, string) {
+			resp, err := client.Do(bearer)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = resp.Body.Close() }()
+			body, _ := io.ReadAll(resp.Body)
+			return resp.StatusCode, string(body)
+		},
+		"a form": func() (int, string) {
+			resp, err := client.PostForm(at+"/login/recovery", url.Values{"state": {html.UnescapeString(state)}, "proof": {"recover-me"}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = resp.Body.Close() }()
+			body, _ := io.ReadAll(resp.Body)
+			return resp.StatusCode, string(body)
+		},
+	} {
+		if code, body := send(); code != http.StatusBadRequest {
+			t.Errorf("the password in %s = %d %q, want 400", name, code, body)
+		}
+	}
+	code, who := get(t, client, at+"/.access/whoami")
+	if code != http.StatusOK || strings.Contains(who, `"source":"recovery"`) {
+		t.Errorf("a presented password signed somebody in: %d %q", code, who)
 	}
 }
 
@@ -251,6 +360,9 @@ func TestRecoveryCanBeTurnedOff(t *testing.T) {
 	}
 	if code, _ = rpc(t, client, at+"/login/recovery", `{"proof":"recover-me"}`); code != http.StatusForbidden {
 		t.Errorf("the recovery route = %d, want it closed", code)
+	}
+	if code, _ = rpc(t, client, at+"/login/srp/start", `{"state":"x","username":"recovery"}`); code != http.StatusNotFound && code != http.StatusMethodNotAllowed {
+		t.Errorf("the password route = %d, want it closed", code)
 	}
 }
 

@@ -68,6 +68,24 @@ func TestOnlyWhatIsDeclaredIsDeclared(t *testing.T) {
 	if got := config.DeclaredSecrets(doc, nil); len(got) != 0 {
 		t.Errorf("a disabled recovery declared %v", got)
 	}
+	// The verifiers are declared with the account they belong to: the recovery
+	// verifier while recovery is on, the conformance verifier while its flag is.
+	doc = &config.Serve{
+		Recovery:    &config.Recovery{VerifierSecret: "recovery/verifier"},
+		Conformance: &config.Conformance{Enabled: true, VerifierSecret: "conformance/verifier"},
+	}
+	got := config.DeclaredSecrets(doc, nil)
+	if len(got) != 2 || got[0].Kind != config.SecretConformanceVerifier || got[1].Kind != config.SecretRecoveryVerifier {
+		t.Errorf("the verifiers declared %v", got)
+	}
+	doc.Conformance.Enabled = false
+	if got = config.DeclaredSecrets(doc, nil); len(got) != 1 || got[0].Kind != config.SecretRecoveryVerifier {
+		t.Errorf("with the conformance flag off declared %v", got)
+	}
+	doc.Recovery.Enabled = &off
+	if got = config.DeclaredSecrets(doc, nil); len(got) != 0 {
+		t.Errorf("with recovery off declared %v", got)
+	}
 	// A file signer has no state secret; a KMS one has.
 	doc = &config.Serve{SigningKey: &config.SigningKey{File: "/k"}}
 	if got := config.DeclaredSecrets(doc, nil); len(got) != 0 {

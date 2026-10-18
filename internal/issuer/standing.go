@@ -53,6 +53,9 @@ type signInStanding struct {
 // directory or be taken for the recovery account.
 func (s SSOSession) recovered() bool { return s.How == RecoveryHow }
 
+// conformance reports whether the sign-in was made by the conformance account.
+func (s SSOSession) conformance() bool { return s.How == ConformanceHow }
+
 // checkSignIn is the issuer's decision about the sign-in cookie names, and
 // nothing else: it ends nothing and writes no cookie. Every door that
 // answers from a browser's sign-in asks it -- the silent completion of an
@@ -94,6 +97,18 @@ func (i *Issuer) checkSignIn(ctx context.Context, sso *SSO, cookie, resource str
 		}
 	}
 
+	// The conformance account's sign-in stands only while the account is on and
+	// the recovery switch has not been thrown, asked at the same place.
+	if session.conformance() {
+		switch i.conformanceCheck(ctx) {
+		case recoveryEnded:
+			return signInStanding{Verdict: signInRecoveryOff, Session: session}
+		case recoveryUnknown:
+			return signInStanding{Verdict: signInAbsent}
+		case recoveryOn:
+		}
+	}
+
 	// The limit is the one THIS request's resource allows: a read-only
 	// resource may carry a longer absolute session than the installation's
 	// (ADR 0033), and a browser session older than the installation's
@@ -108,7 +123,7 @@ func (i *Issuer) checkSignIn(ctx context.Context, sso *SSO, cookie, resource str
 		return signInStanding{Verdict: signInStale, Session: session}
 	}
 
-	if session.recovered() {
+	if provedWithoutDirectory(session.How) {
 		return signInStanding{Verdict: signInStands, Session: session}
 	}
 

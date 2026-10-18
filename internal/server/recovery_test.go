@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"io"
 	"log/slog"
@@ -17,36 +18,65 @@ import (
 	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/hub"
 	"github.com/truvity/sluis/internal/kube"
+	"github.com/truvity/sluis/internal/port/memory"
+	"github.com/truvity/sluis/internal/srpauth"
+	"github.com/truvity/sluis/internal/throttle"
+	"github.com/truvity/sluis/srp"
 )
 
-// Outside a cluster there is nothing to prove access to, so recovery is a
-// password — the one credential this service holds that a person may have
-// chosen. It is kept the way a chosen password has to be: stretched,
-// salted, compared in constant time.
-func TestTheRecoveryPasswordIsStretchedAndSalted(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
+// passwordHelper builds a password recovery over a fixed credential and an
+// in-memory State, the way the console assembles one.
+func newPasswordRecovery(t *testing.T, password string) *PasswordRecovery {
+	t.Helper()
+	p := NewPasswordRecovery(srpauth.Fixed(srp.Default.NewCredential(srpauth.RecoveryUser, password)), "")
+	p.Open(memory.New(), func() ([]byte, error) { return []byte("a key every container shares"), nil })
+	return p
+}
 
-	account := NewPasswordRecovery("correct horse battery staple")
-	if who, err := account.Verify(ctx, "correct horse battery staple"); err != nil || who == "" {
-		t.Fatalf("the right password was refused: %q, %v", who, err)
+// prove runs the exchange the page's script runs, from source, and returns what
+// the server concluded.
+func prove(t *testing.T, p *PasswordRecovery, source, user, password string) (srpauth.Proved, error) {
+	t.Helper()
+	ctx := context.Background()
+	begun, err := p.Service.Start(ctx, source, "bound", user, p.lookup())
+	if err != nil {
+		return srpauth.Proved{}, err
 	}
-	if _, err := account.Verify(ctx, "wrong"); !errors.Is(err, ErrRecoveryRefused) {
+	client, err := srp.Default.NewClient(user, password, rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m1, err := client.Respond(begun.Salt, begun.B)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return p.Service.Finish(ctx, source, "bound", begun.Handle, client.Public(), m1, p.lookup())
+}
+
+// Outside a cluster there is nothing to prove access to, so recovery is a
+// password -- proved by an exchange that never carries it, against a verifier.
+func TestThePasswordRecoveryIsProvedAndNeverPresented(t *testing.T) {
+	t.Parallel()
+
+	account := newPasswordRecovery(t, "correct horse battery staple")
+	if proved, err := prove(t, account, "src", "recovery", "correct horse battery staple"); err != nil || proved.User != "recovery" {
+		t.Fatalf("the right password was refused: %+v, %v", proved, err)
+	}
+	if _, err := prove(t, account, "src", "recovery", "wrong"); !errors.Is(err, srpauth.ErrRefused) {
 		t.Errorf("a wrong password = %v, want refused", err)
 	}
-	if _, err := account.Verify(ctx, ""); !errors.Is(err, ErrRecoveryRefused) {
+	if _, err := prove(t, account, "src", "recovery", ""); !errors.Is(err, srpauth.ErrRefused) {
 		t.Errorf("an empty password = %v, want refused", err)
 	}
-
-	// The digest is not the password, and two accounts with the same
-	// password do not share one: a salt read from one installation must
-	// say nothing about another.
-	if strings.Contains(string(account.digest), "correct") {
-		t.Error("the digest carries the password")
+	// The conformance account is not the console's, and neither is any name.
+	if _, err := prove(t, account, "src", "conformance", "correct horse battery staple"); !errors.Is(err, srpauth.ErrRefused) {
+		t.Errorf("the conformance account signed in to the console: %v", err)
 	}
-	other := NewPasswordRecovery("correct horse battery staple")
-	if string(other.digest) == string(account.digest) {
-		t.Error("two accounts with the same password share a digest; the salt is not random")
+
+	// A password is not a proof a console takes whole: the type has no Verify,
+	// so no form field, body or header can carry one.
+	if _, ok := Recovery(account).(ProofRecovery); ok {
+		t.Error("a password recovery takes a presented proof")
 	}
 
 	// A deployment with no recovery path at all has no Recovery, and the
@@ -57,42 +87,40 @@ func TestTheRecoveryPasswordIsStretchedAndSalted(t *testing.T) {
 	}
 }
 
-// Verifying costs memory on purpose, and anyone who can reach the console
-// can ask for it. Without a ceiling the hardening becomes a way to take
-// the hub down.
+// Anyone who can reach the console can start an exchange. Without a ceiling the
+// door becomes a way to fill the State.
 func TestTheRecoveryPasswordStopsAnsweringAfterTooManyAttempts(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
 
-	account := NewPasswordRecovery("the-real-one")
+	account := newPasswordRecovery(t, "the-real-one")
 	now := time.Date(2026, 9, 8, 12, 0, 0, 0, time.UTC)
-	account.now = func() time.Time { return now }
+	account.Service.Refusals = throttle.New(recoveryAttempts, recoveryCeiling, recoveryWindow, 0, func() time.Time { return now })
 
 	for i := range recoveryAttempts {
-		if _, err := account.Verify(ctx, "guess"); errors.Is(err, ErrRecoveryThrottled) {
+		if _, err := prove(t, account, "src", "recovery", "guess"); errors.Is(err, srpauth.ErrThrottled) {
 			t.Fatalf("stopped answering after %d attempts, want %d", i, recoveryAttempts)
 		}
 	}
-	if _, err := account.Verify(ctx, "guess"); !errors.Is(err, ErrRecoveryThrottled) {
+	if _, err := prove(t, account, "src", "recovery", "guess"); !errors.Is(err, srpauth.ErrThrottled) {
 		t.Errorf("still answering after the limit: %v", err)
 	}
 	// The right password is refused too while it is blocked: otherwise
 	// the limit is a hint about which guess was close.
-	if _, err := account.Verify(ctx, "the-real-one"); !errors.Is(err, ErrRecoveryThrottled) {
+	if _, err := prove(t, account, "src", "recovery", "the-real-one"); !errors.Is(err, srpauth.ErrThrottled) {
 		t.Errorf("the block is not applied to a correct password: %v", err)
 	}
 
 	now = now.Add(recoveryWindow + time.Second)
-	if _, err := account.Verify(ctx, "the-real-one"); err != nil {
+	if _, err := prove(t, account, "src", "recovery", "the-real-one"); err != nil {
 		t.Errorf("the block outlived its window: %v", err)
 	}
 
 	// A success clears the count, so an operator who mistypes twice and
 	// then gets it right is not one attempt from being locked out.
 	for range recoveryAttempts - 1 {
-		_, _ = account.Verify(ctx, "guess")
+		_, _ = prove(t, account, "src", "recovery", "guess")
 	}
-	if _, err := account.Verify(ctx, "the-real-one"); err != nil {
+	if _, err := prove(t, account, "src", "recovery", "the-real-one"); err != nil {
 		t.Errorf("failures were not cleared by a success: %v", err)
 	}
 }
@@ -218,7 +246,7 @@ func TestRecoveryByClusterAccess(t *testing.T) {
 
 	// The password shape says something else entirely: there is nothing
 	// to run, and the danger is handing it over rather than running it.
-	password := NewPasswordRecovery("x").Prompt()
+	password := NewPasswordRecovery(nil, "").Prompt()
 	if password.Command != "" || !strings.Contains(password.Caution, "Never give it") {
 		t.Errorf("password prompt = %+v", password)
 	}
@@ -268,7 +296,7 @@ func TestTheSignInPageShowsTheRealCommand(t *testing.T) {
 
 	// The password shape has nothing to run, so it shows no command block
 	// and warns about the other danger.
-	password := page(NewPasswordRecovery("x"))
+	password := page(NewPasswordRecovery(srpauth.Fixed(srp.Credential{}), ""))
 	if strings.Contains(password, "<pre>") || strings.Contains(password, "kubectl") {
 		t.Error("the password shape rendered a command block")
 	}
@@ -299,12 +327,12 @@ func (stubSignIn) Exchange(context.Context, string, string) (hub.Workspace, back
 // The console names this installation's own parameter, never an example's,
 // and never the password.
 func TestThePasswordLocationIsTheInstallationsOwn(t *testing.T) {
-	r := NewPasswordRecovery("correct horse battery staple")
+	r := newPasswordRecovery(t, "correct horse battery staple")
 	r.Where = "ssm /sluis/example/internal/config/recovery/password"
 	if got := recoveryLocationOf(r); got != r.Where {
 		t.Errorf("location = %q", got)
 	}
-	if got := recoveryLocationOf(NewPasswordRecovery("generated")); got != "" {
+	if got := recoveryLocationOf(newPasswordRecovery(t, "generated")); got != "" {
 		t.Errorf("a generated password has location %q", got)
 	}
 	if got := recoveryLocationOf(&TokenRecovery{}); got != "" {
@@ -321,17 +349,14 @@ func TestThePasswordLocationIsTheInstallationsOwn(t *testing.T) {
 func TestOneSourcesWrongProofsDoNotLockOutAnother(t *testing.T) {
 	t.Parallel()
 
-	account := NewPasswordRecovery("the-real-one")
-	attacker := WithRecoverySource(context.Background(), "203.0.113.7")
-	operator := WithRecoverySource(context.Background(), "198.51.100.20")
-
+	account := newPasswordRecovery(t, "the-real-one")
 	for range recoveryAttempts {
-		_, _ = account.Verify(attacker, "guess")
+		_, _ = prove(t, account, "203.0.113.7", "recovery", "guess")
 	}
-	if _, err := account.Verify(attacker, "guess"); !errors.Is(err, ErrRecoveryThrottled) {
+	if _, err := prove(t, account, "203.0.113.7", "recovery", "guess"); !errors.Is(err, srpauth.ErrThrottled) {
 		t.Fatalf("the noisy source is still answered: %v", err)
 	}
-	if _, err := account.Verify(operator, "the-real-one"); err != nil {
+	if _, err := prove(t, account, "198.51.100.20", "recovery", "the-real-one"); err != nil {
 		t.Errorf("another source was locked out by the first: %v", err)
 	}
 }
@@ -341,23 +366,23 @@ func TestOneSourcesWrongProofsDoNotLockOutAnother(t *testing.T) {
 func TestTheRecoveryPasswordHasAGlobalCeilingAboveAnySources(t *testing.T) {
 	t.Parallel()
 
-	account := NewPasswordRecovery("the-real-one")
+	account := newPasswordRecovery(t, "the-real-one")
 	now := time.Date(2026, 9, 8, 12, 0, 0, 0, time.UTC)
-	account.now = func() time.Time { return now }
+	account.Service.Refusals = throttle.New(recoveryAttempts, recoveryCeiling, recoveryWindow, 0, func() time.Time { return now })
+	account.Service.Starts = nil
 
 	// Each source stays under its own allowance.
 	for i := range recoveryCeiling {
-		ctx := WithRecoverySource(context.Background(), "192.0.2."+strconv.Itoa(i))
-		if _, err := account.Verify(ctx, "guess"); errors.Is(err, ErrRecoveryThrottled) {
+		source := "192.0.2." + strconv.Itoa(i)
+		if _, err := prove(t, account, source, "recovery", "guess"); errors.Is(err, srpauth.ErrThrottled) {
 			t.Fatalf("source %d was throttled under both limits", i)
 		}
 	}
-	fresh := WithRecoverySource(context.Background(), "198.51.100.99")
-	if _, err := account.Verify(fresh, "the-real-one"); !errors.Is(err, ErrRecoveryThrottled) {
+	if _, err := prove(t, account, "198.51.100.99", "recovery", "the-real-one"); !errors.Is(err, srpauth.ErrThrottled) {
 		t.Errorf("a source nobody has seen is answered past the ceiling: %v", err)
 	}
 	now = now.Add(recoveryWindow + time.Second)
-	if _, err := account.Verify(fresh, "the-real-one"); err != nil {
+	if _, err := prove(t, account, "198.51.100.99", "recovery", "the-real-one"); err != nil {
 		t.Errorf("the ceiling outlived its window: %v", err)
 	}
 }
