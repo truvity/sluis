@@ -658,7 +658,9 @@ func ownLayoutV5(doc map[string]any, a *LambdaArgs) error {
 // `secrets.kmsKeyId` (or the ssm secrets adapter's), and left unset that is the
 // AWS-managed key, which every role with ssm:GetParameter can decrypt. A document
 // the library renders from an installation carries the key; one the estate
-// writes must name the same.
+// writes must name the same. The ids are compared as text, not resolved: an alias
+// and the ARN of the key behind it differ, so the document says what the library
+// holds (the alias of Keys.Secrets, the ARN of ParameterKeyArn).
 func checkModuleDocumentKey(role, document, key string) error {
 	field := "Modules[" + role + "].Document"
 	doc, err := yamlMap(document, field)

@@ -86,37 +86,40 @@ func TestTheWriterMayOnlyAddRecords(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var onRecords, elsewhere []map[string]any
+	// Per bucket: records/ is PutObject under the write-once condition, and the lock
+	// actions (retention, legal hold) on records/ are unconditional: they are the
+	// requests that extend a retention or place a hold on an object that exists, which
+	// carry no If-None-Match header and would be refused under the condition.
+	var onRecords, lockOnRecords, elsewhere []map[string]any
 	for _, s := range policy(t, rec, "audit-writer") {
-		if s["Effect"] != "Allow" || !contains(strs(s["Action"]), "s3:PutObject") {
+		acts := strs(s["Action"])
+		if s["Effect"] != "Allow" || (!contains(acts, "s3:PutObject") && !contains(acts, "s3:PutObjectLegalHold")) {
 			continue
 		}
-		if strings.Contains(strings.Join(strs(s["Resource"]), ","), "/records/*") {
+		switch onR := strings.Contains(strings.Join(strs(s["Resource"]), ","), "/records/*"); {
+		case onR && contains(acts, "s3:PutObject"):
 			onRecords = append(onRecords, s)
-		} else {
+		case onR:
+			lockOnRecords = append(lockOnRecords, s)
+		default:
 			elsewhere = append(elsewhere, s)
 		}
 	}
-	// One pair per bucket: the standard preset's, and the attested preset's (locked).
-	if len(onRecords) != 2 || len(elsewhere) != 2 {
-		t.Fatalf("%d put statements on records/ and %d elsewhere, want 2 and 2", len(onRecords), len(elsewhere))
+	if len(onRecords) != 2 || len(lockOnRecords) != 1 || len(elsewhere) != 2 {
+		t.Fatalf("%d PutObject statements on records/, %d lock statements and %d elsewhere, want 2, 1 and 2", len(onRecords), len(lockOnRecords), len(elsewhere))
 	}
-	locked := 0
 	for _, s := range onRecords {
 		if got := s["Condition"]; !reflect.DeepEqual(got, map[string]any{"StringEquals": map[string]any{"s3:if-none-match": "*"}}) {
 			t.Errorf("records/ put condition = %v", got)
 		}
-		if len(strs(s["Resource"])) != 1 {
-			t.Errorf("the conditional put covers more than records/: %v", s["Resource"])
-		}
-		// The legal hold the writer places on a held tenant's record, and retention, are still its.
-		acts := strings.Join(strs(s["Action"]), ",")
-		if strings.Contains(acts, "s3:PutObjectLegalHold") && strings.Contains(acts, "s3:PutObjectRetention") {
-			locked++
+		if !reflect.DeepEqual(strs(s["Action"]), []string{"s3:PutObject"}) || len(strs(s["Resource"])) != 1 {
+			t.Errorf("the conditional statement is more than PutObject on records/: %v", s)
 		}
 	}
-	if locked != 1 {
-		t.Errorf("%d records/ puts carry the retention and the legal hold, want the locked bucket's one", locked)
+	// The locked bucket's legal hold and retention on records/ carry no condition.
+	if l := lockOnRecords[0]; l["Condition"] != nil ||
+		!reflect.DeepEqual(strs(l["Action"]), []string{"s3:PutObjectRetention", "s3:PutObjectLegalHold"}) || len(strs(l["Resource"])) != 1 {
+		t.Errorf("the lock actions on records/: %v", l)
 	}
 	for _, s := range elsewhere {
 		if s["Condition"] != nil {
@@ -189,7 +192,10 @@ func TestTheObserveReaderIsAssumedByOneRoleOnly(t *testing.T) {
 
 // ---- the scheduler's trust (C)
 
-func TestTheNotarysSchedulerTrustNamesItsSchedule(t *testing.T) {
+// EventBridge Scheduler passes the schedule GROUP's ARN as aws:SourceArn, not the
+// schedule's (AWS, "Confused deputy prevention in EventBridge Scheduler"): a condition
+// on a schedule ARN is never true and the schedule cannot assume the role.
+func TestTheNotarysSchedulerTrustNamesItsScheduleGroup(t *testing.T) {
 	rec, _, err := build(t, func(a *auditpulumi.Args) { a.AccountID, a.Region = account, "eu-west-1" })
 	if err != nil {
 		t.Fatal(err)
@@ -203,12 +209,13 @@ func TestTheNotarysSchedulerTrustNamesItsSchedule(t *testing.T) {
 	if cond["StringEquals"].(map[string]any)["aws:SourceAccount"] != account {
 		t.Errorf("source account: %v", cond)
 	}
-	if got, want := cond["ArnEquals"].(map[string]any)["aws:SourceArn"], arnp+"scheduler:eu-west-1:"+account+":schedule/default/audit-notary"; got != want {
+	if got, want := cond["ArnEquals"].(map[string]any)["aws:SourceArn"], arnp+"scheduler:eu-west-1:"+account+":schedule-group/default"; got != want {
 		t.Errorf("source ARN = %v, want %s", got, want)
 	}
+	// The schedule is in the default group (it names none), the group the trust names.
 	sched := rec.one(t, "aws:scheduler/schedule:Schedule", "audit-notary")
-	if prop(sched, "name").StringValue() != "audit-notary" {
-		t.Errorf("the schedule is %v, the trust names audit-notary", prop(sched, "name"))
+	if g := prop(sched, "groupName"); g.HasValue() && g.StringValue() != "default" {
+		t.Errorf("the schedule is in the group %v, the trust names default", g)
 	}
 }
 

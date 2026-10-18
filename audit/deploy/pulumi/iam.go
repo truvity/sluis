@@ -88,18 +88,20 @@ func assumeRoleJSON(service string) string {
 	})
 }
 
-// schedulerTrust lets EventBridge Scheduler assume a role for ONE schedule of the
-// account: aws:SourceAccount holds it to the account's schedules, and aws:SourceArn
-// to the schedule the role is for (the default group's `schedule/default/<name>`).
-// With no condition at all any schedule of any account could ask the role to
-// invoke its function.
-func schedulerTrust(region, account, scheduleName string) string {
+// schedulerTrust lets EventBridge Scheduler assume a role for the schedules of
+// the account in the schedule group the notary's is in (`default`): aws:SourceAccount
+// holds it to the account, and aws:SourceArn to the group. EventBridge Scheduler
+// passes the schedule GROUP's ARN as aws:SourceArn, not the schedule's (AWS,
+// "Confused deputy prevention in EventBridge Scheduler": the value must be the
+// schedule group ARN, not a schedule or a name prefix), so a condition on the
+// schedule's ARN would never be true and the schedule could not assume the role.
+func schedulerTrust(region, account string) string {
 	return policyJSON(statement{
 		"Effect": "Allow", "Principal": map[string]any{"Service": "scheduler.amazonaws.com"}, "Action": "sts:AssumeRole",
 		"Condition": map[string]any{
 			"StringEquals": map[string]any{"aws:SourceAccount": account},
 			"ArnEquals": map[string]any{
-				"aws:SourceArn": "arn:" + "aws:scheduler:" + region + ":" + account + ":schedule/default/" + scheduleName,
+				"aws:SourceArn": "arn:" + "aws:scheduler:" + region + ":" + account + ":schedule-group/default",
 			},
 		},
 	})
@@ -163,8 +165,21 @@ func writerPolicy(buckets []bucketGrant, archiveKeyArns []string, tableArn, queu
 				others = append(others, p)
 			}
 		}
+		// Only the PutObject carries the condition. PutObjectRetention and
+		// PutObjectLegalHold are authorised as the actions they are: the put of a locked
+		// object needs them beside PutObject, and the later calls that extend a retention
+		// or place a hold on an object that exists (s3store SetLegalHold, ExtendRetention)
+		// are requests of their own with no If-None-Match header, so a condition on them
+		// would refuse the hold and the extension.
+		recordPut, recordLock := []string{"s3:PutObject"}, []string(nil)
+		if b.Locked {
+			recordLock = []string{"s3:PutObjectRetention", "s3:PutObjectLegalHold"}
+		}
+		st = append(st, allow(recordPut, b.under(recordsPrefix), writeOnce))
+		if len(recordLock) > 0 {
+			st = append(st, allow(recordLock, b.under(recordsPrefix), nil))
+		}
 		st = append(st,
-			allow(put, b.under(recordsPrefix), writeOnce),
 			allow(put, b.under(others...), nil),
 			allow([]string{"s3:GetObject"}, b.under(append(append([]string{}, writerPrefixes...), "holds/", "seals/")...), nil),
 			b.list(),

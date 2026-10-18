@@ -128,6 +128,7 @@ With `Artifacts`, the verified zip goes unchanged (a file asset) to a versioned 
 | `Artifacts.Prefix` | `audit/` | Starts every key: `<prefix><version>/<sha256>-<file name>`. The digest in the key means a key never holds two contents and a re-run uploads nothing new |
 | `Release.ResolveChecksums` | false | Reads an empty `Writer.PackageSHA256` or `Notary.PackageSHA256` from `<BaseURL>/v<version>/checksums.txt` after verifying it against `checksums.txt.sigstore.json` (release workflow of `Release.SignerRepository`, default `truvity/sluis`, at the release's tag; see [the sluis library](../sluis/pulumi-library.md)). A given digest is used as is |
 | `Release.UnverifiedChecksums` | false | Reads `checksums.txt` without its signature; see the sluis library's table |
+| `Release.TrustedRootJSON` | none | A Sigstore trusted root for an estate that cannot reach the TUF repository; see the sluis library's table |
 | `CodeSigningConfigArn` | none | A Lambda code signing configuration (`artifact.NewCodeSigningConfig`) the writer and the notary are put under |
 | `Release.Version` | from the file name | The release when the name does not say; names the release when `Writer.Package` or `Notary.Package` is empty. `(devel)` and empty are refused |
 | `Release.BaseURL` | the project's GitHub releases | Where the release is published, for a mirror |
@@ -216,7 +217,7 @@ The writer, notary and scheduler roles exist only with their part. The writer an
 |---|---|
 | Object Lock permissions | S3 refuses a put carrying an Object Lock header unless the caller holds `PutObjectRetention` and `PutObjectLegalHold`. The writer needs the legal hold: it places one on the put of a record whose tenant is held. With `ObjectLockMode: NONE` the functions send no header and both grants are omitted |
 | Records are written once | The writer's put into `records/` is allowed with the condition `s3:if-none-match: *` (the store sends `If-None-Match: *` on every put), so the writer, or a role with its credentials, can add a record and never replace one, in a bucket without Object Lock too. The other prefixes it writes have no condition |
-| The scheduler's trust | `audit-scheduler` is assumed by EventBridge Scheduler for the account (`aws:SourceAccount`) and the notary's schedule only (`aws:SourceArn` `…:schedule/default/<name>-notary`); the region and account are looked up when `Region` and `AccountID` are empty |
+| The scheduler's trust | `audit-scheduler` is assumed by EventBridge Scheduler for the account (`aws:SourceAccount`) and its default schedule group (`aws:SourceArn` `…:schedule-group/default`: EventBridge Scheduler presents the group's ARN, not the schedule's); the region and account are looked up when `Region` and `AccountID` are empty |
 | Deletes | No role has one |
 | KMS rows | Empty with `Encryption: s3` or `aws-managed` |
 | Seal key policy | The account root administers the key (create, describe, enable, put policy, schedule deletion) and cannot use it. Only the notary's role may `Sign`, `GetPublicKey`, `DescribeKey`. The default key policy would let any principal with a `kms:Sign` allow sign seals |

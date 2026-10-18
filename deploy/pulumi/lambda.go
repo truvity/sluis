@@ -2191,21 +2191,27 @@ func newLegacyDomain(ctx *pulumi.Context, name string, a *LambdaArgs, api *apiga
 	return domain, bucket, nil
 }
 
+// defaultScheduleGroup is the schedule group the library's schedules are in (it
+// names none, so EventBridge Scheduler puts them in `default`).
+const defaultScheduleGroup = "default"
+
 // schedulerTrust is the trust of a scheduler role: EventBridge Scheduler, for the
-// schedules of this account and of this installation only. aws:SourceAccount alone
-// lets any schedule of the account assume the role, whatever it targets; the
-// schedule's ARN (aws:SourceArn, the default group's `schedule/default/<prefix>…`)
-// holds it to the schedules the installation names, so another schedule of the
-// account, with a target of its own, cannot ask the role to invoke it.
-func schedulerTrust(region, account, schedulePrefix string) map[string]any {
+// schedules of this account in the schedule group the installation's are in.
+// aws:SourceAccount alone lets any schedule of the account assume the role,
+// whatever it targets. EventBridge Scheduler passes the schedule GROUP's ARN as
+// aws:SourceArn, not the schedule's: AWS, "Confused deputy prevention in
+// EventBridge Scheduler", says the value must be the schedule group ARN and not a
+// specific schedule or a name prefix, and a condition on a schedule ARN is never
+// true, so every schedule's AssumeRole would fail.
+func schedulerTrust(region, account string) map[string]any {
 	return map[string]any{
 		"Version": polVersion,
 		"Statement": []map[string]any{{
 			"Effect": "Allow", "Principal": map[string]any{"Service": "scheduler.amazonaws.com"}, "Action": "sts:AssumeRole",
 			"Condition": map[string]any{
 				"StringEquals": map[string]any{"aws:SourceAccount": account},
-				"ArnLike": map[string]any{
-					"aws:SourceArn": arnPrefix + "scheduler:" + region + ":" + account + ":schedule/default/" + schedulePrefix + "*",
+				"ArnEquals": map[string]any{
+					"aws:SourceArn": arnPrefix + "scheduler:" + region + ":" + account + ":schedule-group/" + defaultScheduleGroup,
 				},
 			},
 		}},
@@ -2221,7 +2227,7 @@ func schedulerTrust(region, account, schedulePrefix string) map[string]any {
 func newSchedules(ctx *pulumi.Context, name string, a *LambdaArgs, live *lambda.Alias, mods *moduleFunctions,
 	tags pulumi.StringMapInput, opts ...pulumi.ResourceOption) (*iam.Role, pulumi.StringArrayOutput, error) {
 	var none pulumi.StringArrayOutput
-	trust, _ := json.Marshal(schedulerTrust(a.Region, a.AccountID, a.FunctionNamePrefix+"-"))
+	trust, _ := json.Marshal(schedulerTrust(a.Region, a.AccountID))
 	rargs := &iam.RoleArgs{Name: pulumi.String(a.FunctionNamePrefix + "-scheduler"), AssumeRolePolicy: pulumi.String(string(trust)), Tags: tags}
 	if a.PermissionsBoundaryArn != "" {
 		rargs.PermissionsBoundary = pulumi.String(a.PermissionsBoundaryArn)

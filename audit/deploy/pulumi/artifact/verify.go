@@ -64,16 +64,33 @@ var TrustedRoot = func() (root.TrustedMaterial, error) {
 // these bytes, with a certificate that Fulcio issued to the release workflow of
 // repo at the tag of version, by GitHub's OIDC issuer, and the signature must
 // be in Rekor's transparency log with a signed certificate timestamp.
-func VerifyChecksums(checksums, bundleJSON []byte, repo, version string) error {
+//
+// trustedRootJSON is a Sigstore trusted root (the JSON `cosign trusted-root create`
+// or the public-good instance's `trusted_root.json` is), for an estate that is
+// mirrored or air-gapped and cannot reach the TUF repository; empty fetches the
+// public-good root through TUF.
+func VerifyChecksums(checksums, bundleJSON []byte, repo, version, trustedRootJSON string) error {
 	b, err := parseBundle(bundleJSON)
 	if err != nil {
 		return err
 	}
-	tm, err := TrustedRoot()
+	tm, err := trustedMaterial(trustedRootJSON)
 	if err != nil {
 		return err
 	}
 	return verifySigned(tm, b, checksums, repo, version, strictOptions...)
+}
+
+// trustedMaterial is the supplied trusted root, or the public-good one.
+func trustedMaterial(trustedRootJSON string) (root.TrustedMaterial, error) {
+	if strings.TrimSpace(trustedRootJSON) == "" {
+		return TrustedRoot()
+	}
+	tm, err := root.NewTrustedRootFromJSON([]byte(trustedRootJSON))
+	if err != nil {
+		return nil, fmt.Errorf("Release.TrustedRootJSON is not a Sigstore trusted root: %w", err)
+	}
+	return tm, nil
 }
 
 func parseBundle(bundleJSON []byte) (*bundle.Bundle, error) {

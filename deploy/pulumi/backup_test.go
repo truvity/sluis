@@ -445,7 +445,7 @@ func TestTheArchiveLockFollowsMaxAgeAndNeverExceedsIt(t *testing.T) {
 			a.Retention = &arp.BackupRetentionArgs{MaxAge: 12 * hour}
 		},
 		"compliance unacknowledged": func(a *arp.BackupArgs) { governanceBucket(a); a.Archive.Create.Mode = "COMPLIANCE" },
-		"no mode, unacknowledged":   func(a *arp.BackupArgs) { governanceBucket(a); a.Archive.Create.Mode = "" },
+		"no mode":                   func(a *arp.BackupArgs) { governanceBucket(a); a.Archive.Create.Mode = "" },
 		"unknown mode":              func(a *arp.BackupArgs) { governanceBucket(a); a.Archive.Create.Mode = "LOOSE" },
 		"unversioned lock": func(a *arp.BackupArgs) {
 			f := false
@@ -654,26 +654,34 @@ func TestTheRestoreDocumentNamesTheIdentitySecretAndNoRecipients(t *testing.T) {
 	}
 }
 
-// The mode of a bucket is chosen and not defaulted: left empty it is COMPLIANCE
-// (which nobody can shorten) and so needs the acknowledgement, and GOVERNANCE has
-// to be asked for. A stack that relied on the old default is refused, not moved.
-func TestTheArchiveBucketsDefaultModeIsComplianceAndGovernanceIsExplicit(t *testing.T) {
+// The mode of a bucket is chosen and never defaulted: COMPLIANCE cannot be undone, and
+// an empty mode that meant either would move the lock of a bucket that exists.
+func TestTheArchiveBucketsModeIsExplicit(t *testing.T) {
 	create := func(a *arp.BackupArgs, c *arp.ArchiveBucketArgs) {
 		a.Archive.Create, a.Archive.BreakglassRoleArns = c, []string{testBreakglass}
 	}
+	for name, c := range map[string]*arp.ArchiveBucketArgs{
+		"empty":                      {},
+		"empty, acknowledged":        {AcknowledgeCompliance: true},
+		"compliance, unacknowledged": {Mode: "COMPLIANCE"},
+	} {
+		_, _, err := buildBackup(t, func(a *arp.BackupArgs) { create(a, c) })
+		if err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
 	_, _, err := buildBackup(t, func(a *arp.BackupArgs) { create(a, &arp.ArchiveBucketArgs{}) })
-	if err == nil || !strings.Contains(err.Error(), "AcknowledgeCompliance") || !strings.Contains(err.Error(), "GOVERNANCE") {
-		t.Errorf("an empty mode: %v, want the refusal that names both ways out", err)
+	if err == nil || !strings.Contains(err.Error(), "Mode is required") {
+		t.Errorf("an empty mode: %v", err)
 	}
-	rec, _ := mustBackup(t, func(a *arp.BackupArgs) { create(a, &arp.ArchiveBucketArgs{AcknowledgeCompliance: true}) })
-	lock := rec.one(t, "aws:s3/bucketObjectLockConfiguration:BucketObjectLockConfiguration", "staging-backup-archive-lock")
-	if m := prop(lock, "rule").ObjectValue()["defaultRetention"].ObjectValue()["mode"].StringValue(); m != "COMPLIANCE" {
-		t.Errorf("an empty mode made %s", m)
-	}
-	rec, _ = mustBackup(t, func(a *arp.BackupArgs) { create(a, &arp.ArchiveBucketArgs{Mode: "GOVERNANCE"}) })
-	lock = rec.one(t, "aws:s3/bucketObjectLockConfiguration:BucketObjectLockConfiguration", "staging-backup-archive-lock")
-	if m := prop(lock, "rule").ObjectValue()["defaultRetention"].ObjectValue()["mode"].StringValue(); m != "GOVERNANCE" {
-		t.Errorf("GOVERNANCE made %s", m)
+	for mode, c := range map[string]*arp.ArchiveBucketArgs{
+		"GOVERNANCE": {Mode: "GOVERNANCE"}, "COMPLIANCE": {Mode: "COMPLIANCE", AcknowledgeCompliance: true},
+	} {
+		rec, _ := mustBackup(t, func(a *arp.BackupArgs) { create(a, c) })
+		lock := rec.one(t, "aws:s3/bucketObjectLockConfiguration:BucketObjectLockConfiguration", "staging-backup-archive-lock")
+		if m := prop(lock, "rule").ObjectValue()["defaultRetention"].ObjectValue()["mode"].StringValue(); m != mode {
+			t.Errorf("%s made %s", mode, m)
+		}
 	}
 }
 

@@ -10,6 +10,7 @@ import (
 
 	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
+	"github.com/sigstore/sigstore-go/pkg/root"
 	"github.com/sigstore/sigstore-go/pkg/testing/ca"
 	"github.com/sigstore/sigstore-go/pkg/verify"
 )
@@ -130,9 +131,10 @@ func TestResolveSHA256VerifiesTheChecksumsFirst(t *testing.T) {
 	var gotRepo, gotVersion string
 	var gotSums, gotBundle string
 	verdict := error(nil)
-	defer func(old func([]byte, []byte, string, string) error) { verifier = old }(verifier)
-	verifier = func(sums, bundle []byte, repo, version string) error {
-		gotSums, gotBundle, gotRepo, gotVersion = string(sums), string(bundle), repo, version
+	defer func(old func([]byte, []byte, string, string, string) error) { verifier = old }(verifier)
+	var gotRoot string
+	verifier = func(sums, bundle []byte, repo, version, trustedRoot string) error {
+		gotSums, gotBundle, gotRepo, gotVersion, gotRoot = string(sums), string(bundle), repo, version, trustedRoot
 		return verdict
 	}
 
@@ -144,6 +146,10 @@ func TestResolveSHA256VerifiesTheChecksumsFirst(t *testing.T) {
 		t.Errorf("the verifier was given %q, %q, %q", gotSums, gotBundle, gotVersion)
 	}
 
+	rel.TrustedRootJSON = `{"mediaType":"root"}`
+	if _, err := ResolveSHA256(rel, "1.77.0", asset); err != nil || gotRoot != rel.TrustedRootJSON {
+		t.Errorf("the trusted root reached the verifier as %q (%v)", gotRoot, err)
+	}
 	rel.SignerRepository = "acme/fork"
 	if _, err := ResolveSHA256(rel, "1.77.0", asset); err != nil || gotRepo != "acme/fork" {
 		t.Errorf("the signer repository reached the verifier as %q (%v)", gotRepo, err)
@@ -194,4 +200,24 @@ func (noMocks) NewResource(a pulumi.MockResourceArgs) (string, resource.Property
 }
 func (noMocks) Call(pulumi.MockCallArgs) (resource.PropertyMap, error) {
 	return resource.PropertyMap{}, nil
+}
+
+// A supplied trusted root replaces the TUF fetch, and one that is none is refused
+// by name; with none supplied the default is read.
+func TestASuppliedTrustedRootReplacesTheFetchAndMustBeOne(t *testing.T) {
+	defer func(old func() (root.TrustedMaterial, error)) { TrustedRoot = old }(TrustedRoot)
+	fetched := 0
+	TrustedRoot = func() (root.TrustedMaterial, error) {
+		fetched++
+		return ca.NewVirtualSigstore()
+	}
+	if _, err := trustedMaterial(""); err != nil || fetched != 1 {
+		t.Errorf("no root supplied: fetched %d times (%v)", fetched, err)
+	}
+	if _, err := trustedMaterial(`{"mediaType":"not a trusted root"}`); err == nil || !strings.Contains(err.Error(), "Release.TrustedRootJSON") {
+		t.Errorf("a root that is none: %v", err)
+	}
+	if _, err := trustedMaterial("not json"); err == nil || fetched != 1 {
+		t.Errorf("garbage: %v, fetched %d times (a supplied root is never replaced by the fetch)", err, fetched)
+	}
 }

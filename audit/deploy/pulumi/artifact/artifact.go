@@ -278,10 +278,11 @@ func ResolveSHA256(rel *Release, version, asset string) (string, error) {
 		return "", errors.New("the digest is asked of the release's checksums.txt and the release is not known (" +
 			"unset or (devel)): name the release, or give the digest")
 	}
-	var base, repo string
+	var base, repo, trustedRoot string
 	unverified := false
 	if rel != nil {
 		base, repo, unverified = rel.BaseURL, rel.SignerRepository, rel.UnverifiedChecksums
+		trustedRoot = rel.TrustedRootJSON
 	}
 	src := AssetURL(base, v, "checksums.txt")
 	raw, err := Fetch(src, "")
@@ -294,7 +295,7 @@ func ResolveSHA256(rel *Release, version, asset string) (string, error) {
 			return "", fmt.Errorf("%s of the release v%s: %w (the digest is read from a signed checksums.txt: "+
 				"give the package's digest, or set Release.UnverifiedChecksums to accept the unsigned file)", ChecksumsBundle, v, err)
 		}
-		if err := verifier(raw, bundleJSON, repo, v); err != nil {
+		if err := verifier(raw, bundleJSON, repo, v, trustedRoot); err != nil {
 			return "", fmt.Errorf("checksums.txt of the release v%s: %w", v, err)
 		}
 	}
@@ -349,6 +350,15 @@ type Release struct {
 	// signs the release. Default truvity/sluis; a fork that releases itself names
 	// its own.
 	SignerRepository string
+	// TrustedRootJSON is a Sigstore trusted root (the contents of a
+	// `trusted_root.json`: the Fulcio and Rekor roots and the transparency logs'
+	// keys) the signature is checked against, for an estate that is mirrored or
+	// air-gapped and cannot reach the public-good TUF repository at deploy time.
+	// Empty fetches the public-good root through TUF (cached under the user's
+	// cache directory). A root you supply is the root of trust: take it from a
+	// verified source (`cosign trusted-root create`, or the TUF client of a
+	// connected machine) and not from the release's own mirror.
+	TrustedRootJSON string
 	// UnverifiedChecksums reads checksums.txt without checking its signature, as
 	// ResolveChecksums did before it verified: the digest then proves only that
 	// the download is what the release page says, and a release page that is

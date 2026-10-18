@@ -176,11 +176,14 @@ func TestIssuerClientsScheduleIsConfigurable(t *testing.T) {
 	}
 }
 
-// The scheduler's role is assumed by EventBridge Scheduler for this installation's
-// schedules only: aws:SourceAccount alone lets every schedule of the account ask
-// it to invoke its aliases.
-func TestTheSchedulersTrustNamesTheInstallationsSchedules(t *testing.T) {
-	check := func(t *testing.T, trust, prefix string) {
+// The scheduler's role is assumed by EventBridge Scheduler for the schedules of this
+// account in the schedule group the installation's are in. EventBridge Scheduler
+// passes the schedule GROUP's ARN as aws:SourceArn, not the schedule's (AWS,
+// "Confused deputy prevention in EventBridge Scheduler": the value must be the
+// schedule group ARN, not a schedule or a name prefix); a condition on a schedule ARN
+// is never true and no schedule could assume the role.
+func TestTheSchedulersTrustNamesTheScheduleGroup(t *testing.T) {
+	check := func(t *testing.T, trust string) {
 		t.Helper()
 		sts := statements(t, trust)
 		if len(sts) != 1 {
@@ -190,23 +193,27 @@ func TestTheSchedulersTrustNamesTheInstallationsSchedules(t *testing.T) {
 		if eq := cond["StringEquals"].(map[string]any); eq["aws:SourceAccount"] != account {
 			t.Errorf("source account: %v", cond)
 		}
-		want := arnp + "scheduler:" + region + ":" + account + ":schedule/default/" + prefix + "*"
-		if got := cond["ArnLike"].(map[string]any)["aws:SourceArn"]; got != want {
-			t.Errorf("source ARN = %v, want %s", got, want)
+		want := arnp + "scheduler:" + region + ":" + account + ":schedule-group/default"
+		if got := cond["ArnEquals"].(map[string]any)["aws:SourceArn"]; got != want {
+			t.Errorf("source ARN = %v, want the group %s", got, want)
+		}
+		if cond["ArnLike"] != nil || strings.Contains(trust, ":schedule/") {
+			t.Errorf("the trust names a schedule, which EventBridge Scheduler never presents: %s", trust)
 		}
 	}
 	rec, _ := mustLambda(t, scheduled(v5Estate()))
-	check(t, prop(rec.one(t, "aws:iam/role:Role", "staging-scheduler-role"), "assumeRolePolicy").StringValue(), "sluis-")
+	check(t, prop(rec.one(t, "aws:iam/role:Role", "staging-scheduler-role"), "assumeRolePolicy").StringValue())
+	// The schedules are in the group the trust names: none sets a group, so `default`.
 	for _, s := range rec.ofType(schedType) {
-		if !strings.HasPrefix(prop(s, "name").StringValue(), "sluis-") {
-			t.Errorf("schedule %s is outside the prefix its role trusts", prop(s, "name").StringValue())
+		if g := prop(s, "groupName"); g.HasValue() && g.StringValue() != "default" {
+			t.Errorf("schedule %s is in the group %v", s.Name, g)
 		}
 	}
 	brec, _ := mustBackup(t, nil)
-	check(t, prop(brec.one(t, "aws:iam/role:Role", "staging-backup-scheduler-role"), "assumeRolePolicy").StringValue(), "sluis-staging-backup-")
+	check(t, prop(brec.one(t, "aws:iam/role:Role", "staging-backup-scheduler-role"), "assumeRolePolicy").StringValue())
 	for _, s := range brec.ofType(schedType) {
-		if !strings.HasPrefix(prop(s, "name").StringValue(), "sluis-staging-backup-") {
-			t.Errorf("schedule %s is outside the prefix its role trusts", prop(s, "name").StringValue())
+		if g := prop(s, "groupName"); g.HasValue() && g.StringValue() != "default" {
+			t.Errorf("backup schedule %s is in the group %v", s.Name, g)
 		}
 	}
 }
