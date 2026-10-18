@@ -14,6 +14,7 @@ import (
 	"github.com/truvity/sluis/internal/audit"
 	"github.com/truvity/sluis/internal/audit/audittest"
 	"github.com/truvity/sluis/internal/backup"
+	"github.com/truvity/sluis/internal/backup/attest"
 	"github.com/truvity/sluis/internal/backup/export"
 	"github.com/truvity/sluis/internal/backup/job"
 	"github.com/truvity/sluis/internal/maintenance"
@@ -202,6 +203,45 @@ func TestARunWritesAVerifiableBackupAndItsRecords(t *testing.T) {
 	// The run's own records and the restore identity are not in the backup.
 	if rd.Manifest().Module(port.ModuleBackup) != nil {
 		t.Error("the backup holds the backup module's records or secrets")
+	}
+}
+
+// The record of a completed backup carries what a restore holds the archive's
+// copy to: the verifier accepts the backup the record describes, and nothing
+// else.
+func TestTheRecordOfACompletedBackupIsWhatARestoreVerifiesItAgainst(t *testing.T) {
+	r := newRig(t)
+	res := r.run(r.job())
+	recs := r.audit.Find("roster.backup.completed")
+	if len(recs) != 1 {
+		t.Fatalf("audit %v", r.audit.Actions())
+	}
+	claim := attest.ClaimOf(recs[0])
+	claim.Sealed, claim.SealKey = true, "seals/x.jws"
+	f, err := backup.FetchAll(ctx, r.archive, "example", res.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, field := range []string{"object_key", "object_size", "object_sha256", "sidecar_sha256", "recipients"} {
+		if _, ok := recs[0].GetData().GetFields()[field]; !ok {
+			t.Errorf("the record lacks %s: %v", field, recs[0].GetData())
+		}
+	}
+	v := backup.Verifier{Recipients: []string{recipient.Recipient().String()},
+		Attestor: backup.AttestorFunc(func(context.Context, string, string) ([]backup.Claim, error) { return []backup.Claim{claim}, nil })}
+	if ver, err := v.Check(ctx, f); err != nil || ver.Unverified {
+		t.Fatalf("%+v, %v", ver, err)
+	}
+	// The same record does not vouch for a sidecar changed by a byte.
+	f.SidecarSHA256 = strings.Repeat("0", 64)
+	if _, err := v.Check(ctx, f); !errors.Is(err, backup.ErrMismatch) {
+		t.Errorf("a changed sidecar: %v", err)
+	}
+	// The recipients are named by their hash, not in the clear.
+	for _, fp := range recs[0].GetData().GetFields()["recipients"].GetListValue().GetValues() {
+		if strings.HasPrefix(fp.GetStringValue(), "age1") || fp.GetStringValue() != backup.Fingerprint(recipient.Recipient().String()) {
+			t.Errorf("recipient %q", fp.GetStringValue())
+		}
 	}
 }
 

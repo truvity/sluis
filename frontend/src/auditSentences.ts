@@ -3,7 +3,7 @@ import type { Sentences } from "@truvity/audit";
 
 export const roster: Sentences = {
   "source": "roster",
-  "version": "1.20.0",
+  "version": "1.21.0",
   "locales": [
     "en"
   ],
@@ -15,7 +15,7 @@ export const roster: Sentences = {
       }
     },
     "roster.backup.completed": {
-      "summary": "A backup of the installation was written to the archive bucket and its manifest sealed. Counts only.",
+      "summary": "A backup of the installation was written to the archive bucket and its manifest sealed. Counts, and the hashes of the object and sidecar and the fingerprints of the recipients, which a restore requires of the backup it fetches.",
       "message": {
         "en": "backup {targets_0_id} was written: {data_records, plural, one {# record} other {# records}} of {data_modules, plural, one {# module} other {# modules}}"
       }
@@ -285,7 +285,7 @@ export const roster: Sentences = {
       }
     },
     "roster.restore.started": {
-      "summary": "A restore of an installation from a backup began. The module is under maintenance until it completes.",
+      "summary": "A restore of an installation from a backup began. The module is under maintenance until it completes. `unverified` is set when an operator went ahead without the backup's sealed record.",
       "message": {
         "en": "{actor} began restoring from backup {targets_0_id}"
       }

@@ -39,6 +39,41 @@
       "x-audit-class": "shared",
       "x-audit-pii": "none"
     },
+    "object_key": {
+      "type": "string",
+      "description": "The key of the encrypted object in the archive bucket, as the sidecar names it. Absent on a failure.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none"
+    },
+    "object_size": {
+      "type": "integer",
+      "description": "The size in bytes of the encrypted object. Absent on a failure.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none"
+    },
+    "object_sha256": {
+      "type": "string",
+      "description": "The SHA-256 of the encrypted object, lower-case hex. A restore requires the object it fetched to match it. Absent on a failure.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none"
+    },
+    "sidecar_sha256": {
+      "type": "string",
+      "description": "The SHA-256 of the sidecar as it was written, lower-case hex. A restore requires the sidecar it fetched to match it. Absent on a failure.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none"
+    },
+    "recipients": {
+      "type": "array",
+      "description": "The SHA-256 of each age recipient (the age1... string) the backup was encrypted to, lower-case hex, sorted. A restore requires the sidecar's recipients, and the ones it is configured with, to give the same list. Absent on a failure.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none",
+      "items": {
+        "type": "string",
+        "x-audit-class": "shared",
+        "x-audit-pii": "none"
+      }
+    },
     "reason": {
       "type": "string",
       "description": "A short word for why a run failed (export, archive, key, maintenance, canceled); absent on success.",

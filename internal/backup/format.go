@@ -1,9 +1,12 @@
 package backup
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 
 	"filippo.io/age"
@@ -213,6 +216,26 @@ func ParseRecipients(in []string) ([]age.Recipient, error) {
 		out = append(out, r)
 	}
 	return out, nil
+}
+
+// Fingerprint is the lower-case hex SHA-256 of an age recipient (the age1...
+// string, trimmed). It is what the audit record of a backup names the
+// recipients by.
+func Fingerprint(recipient string) string {
+	sum := sha256.Sum256([]byte(strings.TrimSpace(recipient)))
+	return hex.EncodeToString(sum[:])
+}
+
+// Fingerprints are the [Fingerprint] of each recipient, sorted and without
+// repeats: two lists name the same recipients when their fingerprints are
+// equal.
+func Fingerprints(recipients []string) []string {
+	out := make([]string, 0, len(recipients))
+	for _, r := range recipients {
+		out = append(out, Fingerprint(r))
+	}
+	slices.Sort(out)
+	return slices.Compact(out)
 }
 
 // ParseIdentities parses an age identity file: one or more AGE-SECRET-KEY-1...

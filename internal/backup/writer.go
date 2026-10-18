@@ -196,6 +196,9 @@ type Archive struct {
 	Sidecar *Sidecar
 	// Path is the encrypted file.
 	Path string
+	// SidecarSHA256 is the SHA-256 (hex) of the sidecar exactly as [Publish]
+	// wrote it; empty until it has.
+	SidecarSHA256 string
 }
 
 // Remove deletes the local file.
@@ -378,8 +381,11 @@ func Publish(ctx context.Context, store port.Blob, a *Archive) error {
 		return err
 	}
 	name := SidecarName(a.Sidecar.Instance, a.Sidecar.ID)
-	if _, err := store.Write(ctx, name, append(sc, '\n')); err != nil {
+	sc = append(sc, '\n')
+	if _, err := store.Write(ctx, name, sc); err != nil {
 		return fmt.Errorf("backup: write %s: %w", name, err)
 	}
+	ssum := sha256.Sum256(sc)
+	a.SidecarSHA256 = hex.EncodeToString(ssum[:])
 	return nil
 }

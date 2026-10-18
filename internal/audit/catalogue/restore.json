@@ -21,6 +21,18 @@
       "x-audit-class": "shared",
       "x-audit-pii": "none"
     },
+    "unverified": {
+      "type": "boolean",
+      "description": "Whether the restore went ahead without the sealed audit record of its backup (an operator passed allowUnverified). Absent when the backup was verified.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none"
+    },
+    "verification": {
+      "type": "string",
+      "description": "Why an unverified restore was not verified: unattested (no record of the backup), mismatch (the record disagrees with what was fetched), unsealed (the record's hour is not sealed yet), unavailable (the trail could not be asked, or no verification is configured). Absent when the backup was verified.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none"
+    },
     "modules": {
       "type": "integer",
       "description": "How many modules the restore wrote.",

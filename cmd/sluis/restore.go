@@ -26,13 +26,17 @@ var restoreOut io.Writer = os.Stdout
 
 const restoreUsage = `Usage: sluis restore <preview|start|status> [--config <file>] [flags]
 
-  preview <backup-id> [--json]
+  preview <backup-id> [--allow-unverified] [--json]
                             what restoring the backup would do, per module: records to create, to
                             overwrite, already the same; names, never values. Writes nothing.
-  start <backup-id> --confirm <instance> [--overwrite] [--by <name>] [--note <text>] [--json]
+  start <backup-id> --confirm <instance> [--overwrite] [--allow-unverified] [--by <name>] [--note <text>] [--json]
                             restore the backup. Every module goes under maintenance first, and is lifted
                             only when the restore has been read back and matches. One at a time. A
                             destination that holds different data is refused unless --overwrite.
+                            The backup must be vouched for by the sealed audit trail (a record of it
+                            with its hashes, in a sealed hour); --allow-unverified restores one that is
+                            not, for the day the audit pipeline is down. It is recorded, and needs
+                            backup.recipients in the document.
   start --resume [--json]   continue a restore that paused; --confirm is not needed
   status [--json]           the latest restores and the modules still under maintenance
 
@@ -44,8 +48,8 @@ The document is schemas/config/sluis-backup.schema.json.`
 // restoreFlags are the flags `sluis restore` adds to --config, by whether they
 // take a value.
 var restoreFlags = map[string]map[string]bool{
-	"preview": {"--json": false},
-	"start":   {"--json": false, "--overwrite": false, "--resume": false, "--confirm": true, "--by": true, "--note": true},
+	"preview": {"--json": false, "--allow-unverified": false},
+	"start":   {"--json": false, "--overwrite": false, "--allow-unverified": false, "--resume": false, "--confirm": true, "--by": true, "--note": true},
 	"status":  {"--json": false},
 }
 
@@ -134,7 +138,7 @@ func runRestore(ctx context.Context, sub, file, id string, set map[string]string
 	}
 	switch sub {
 	case "preview":
-		rep, err := a.PreviewRestore(ctx, id)
+		rep, err := a.PreviewRestoreWith(ctx, id, set["--allow-unverified"] != "")
 		if err != nil {
 			return err
 		}
@@ -158,8 +162,8 @@ func runRestore(ctx context.Context, sub, file, id string, set map[string]string
 			by = u.Username
 		}
 	}
-	res, err := a.Restore(ctx, restorejob.Request{BackupID: id, Overwrite: set["--overwrite"] != "", Actor: audit.Workload("cli:restore"),
-		By: by, Note: set["--note"]})
+	res, err := a.Restore(ctx, restorejob.Request{BackupID: id, Overwrite: set["--overwrite"] != "",
+		AllowUnverified: set["--allow-unverified"] != "", Actor: audit.Workload("cli:restore"), By: by, Note: set["--note"]})
 	if err != nil {
 		return err
 	}
@@ -174,7 +178,7 @@ func runRestore(ctx context.Context, sub, file, id string, set map[string]string
 	case restorejob.OutcomeContended:
 		return errors.New("another restore holds the lease; nothing was changed")
 	case restorejob.OutcomeRefused:
-		return fmt.Errorf("the restore was refused (%s); nothing was changed", res.Reason)
+		return fmt.Errorf("the restore was refused (%s): %s; nothing was changed", res.Reason, res.Error)
 	}
 	return fmt.Errorf("the restore failed (%s); the modules stay under maintenance until a restore completes", res.Run.Reason)
 }

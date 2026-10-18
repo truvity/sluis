@@ -4,6 +4,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	neturl "net/url"
 	"time"
 
 	"filippo.io/age"
@@ -54,6 +55,10 @@ type Backup struct {
 	// Recipients are the age X25519 public keys (age1...) every backup is
 	// encrypted to. The backup role requires at least one.
 	Recipients []string `json:"recipients,omitempty"`
+	// Verify is how the restore role proves a backup is the one the backup
+	// function made. Unset, a restore refuses every backup that is not started
+	// with allowUnverified.
+	Verify *BackupVerify `json:"verify,omitempty"`
 	// Identity names the restore role's secret that holds the age identity
 	// (AGE-SECRET-KEY-1...): internal/backup/<identity> in the secret store,
 	// [BackupDefaultIdentity] when unset.
@@ -66,6 +71,20 @@ type Backup struct {
 	Target BackupTarget `json:"target"`
 	// Retention is how many backups are kept and for how long.
 	Retention *BackupRetention `json:"retention,omitempty"`
+}
+
+// BackupVerify is `backup.verify`: where the audit trail is and how to ask it.
+type BackupVerify struct {
+	// Query is the audit installation's query service.
+	Query string `json:"query"`
+	// TokenFile holds the bearer token the query service accepts.
+	TokenFile string `json:"tokenFile"`
+	// Profile is the audit profile that keeps the `activity` category;
+	// "activity" when unset.
+	Profile string `json:"profile,omitempty"`
+	// Observer is the id the audit writer stamps on the backup function's
+	// records; unset asks nothing of it.
+	Observer string `json:"observer,omitempty"`
 }
 
 // BackupTarget is the S3 (or S3-compatible) bucket of the archive. Credentials
@@ -148,6 +167,15 @@ func (s *SluisBackup) Validate() error {
 	}
 	if keep, maxAge := s.Backup.Retention.Rule(); keep < 1 || keep > BackupMaxKeep || maxAge < 0 {
 		return fmt.Errorf("backup.retention: keep is 1 to %d and maxAge is not negative", BackupMaxKeep)
+	}
+	if v := s.Backup.Verify; v != nil {
+		u, err := neturl.Parse(v.Query)
+		if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
+			return errors.New("backup.verify.query: required: the audit installation's query service, an http(s) address")
+		}
+		if v.TokenFile == "" {
+			return errors.New("backup.verify.tokenFile: required: the query service answers nobody it cannot name")
+		}
 	}
 	// The backup role encrypts to the recipients; the restore role needs
 	// none, but a list it is given is still held to the form.

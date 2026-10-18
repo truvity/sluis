@@ -80,6 +80,17 @@ sluisctl restore start <id> --confirm <instance> --wait # always your own AWS cr
 
 The preview names what a restore creates, overwrites, leaves and skips. A destination that holds different data is refused without `--overwrite`. A restore is a rotation: restart afterwards ([rotate keys and credentials](rotate-keys-and-credentials.md)).
 
+A restore checks the backup against the sealed audit trail ([provenance](../../../reference/sluis/backup.md#provenance)). Set `backup.verify` in the restore document:
+
+```yaml
+backup:
+  role: restore
+  recipients: ["age1..."]
+  verify: {query: "https://audit.example", tokenFile: /var/run/secrets/audit/token}
+```
+
+A backup from the last hour is refused until the notary seals it.
+
 ## 6. Open a backup without sluis
 
 ```sh
@@ -103,6 +114,14 @@ age -d -i breakglass.txt <id>.tar.gz.age | tar xz
 ## Verify
 
 `sluisctl backup status` shows `lastCompleted` within a day. `sluis backup verify` with the offline identity passes.
+
+## When the audit trail is down
+
+With the trail unreachable, a restore is refused as `unverified`. Pass the flag to restore on the bucket's word alone:
+
+```sh
+sluis restore start <id> --confirm <instance> --allow-unverified
+```
 
 ## Roll back
 

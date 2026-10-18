@@ -30,7 +30,7 @@ type lambdaAPI interface {
 // restorer is the restore role of the backup module; *backupapp.App is one.
 type restorer interface {
 	Restore(ctx context.Context, req restorejob.Request) (restorejob.Result, error)
-	PreviewRestore(ctx context.Context, backupID string) (*restore.Report, error)
+	PreviewRestoreWith(ctx context.Context, backupID string, allowUnverified bool) (*restore.Report, error)
 }
 
 var _ restorer = (*backupapp.App)(nil)
@@ -54,14 +54,14 @@ func reinvoke(ctx context.Context, api lambdaAPI) error {
 // slice when this one paused; nil only reports it.
 func restoreEvent(ctx context.Context, a restorer, api lambdaAPI, log *slog.Logger, ev lambdaapp.RestoreEvent) (lambdaapp.RestoreResult, error) {
 	if ev.Preview {
-		rep, err := a.PreviewRestore(ctx, ev.Backup)
+		rep, err := a.PreviewRestoreWith(ctx, ev.Backup, ev.AllowUnverified)
 		if err != nil {
 			return lambdaapp.RestoreResult{Outcome: restorejob.OutcomeRefused, Backup: ev.Backup, Error: err.Error()}, nil
 		}
 		return lambdaapp.RestoreResult{Outcome: "preview", Backup: ev.Backup, Report: rep}, nil
 	}
-	res, err := a.Restore(ctx, restorejob.Request{BackupID: ev.Backup, Overwrite: ev.Overwrite, Actor: audit.Workload("lambda:restore"),
-		By: ev.By, Note: ev.Note})
+	res, err := a.Restore(ctx, restorejob.Request{BackupID: ev.Backup, Overwrite: ev.Overwrite, AllowUnverified: ev.AllowUnverified,
+		Actor: audit.Workload("lambda:restore"), By: ev.By, Note: ev.Note})
 	if err != nil {
 		return lambdaapp.RestoreResult{}, err
 	}

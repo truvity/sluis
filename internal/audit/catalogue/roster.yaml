@@ -19,7 +19,7 @@
 # A change to what an action carries is a new version. The installation keeps
 # every version it was sent, so records already written keep their meaning.
 source: roster
-version: "1.20.0"
+version: "1.21.0"
 locales: [en]
 
 actor_kinds:
@@ -186,10 +186,12 @@ actions:
   # ---------------------------------------------------- backup and restore
   # What the backup module and the restore function (docs/decisions/0071)
   # record. None of these carries a value, a key or a chunk: the backup's id,
-  # counts, and a short reason.
+  # counts, and a short reason. A completed backup also carries the hashes of
+  # its object and sidecar and the fingerprints of its recipients, which a
+  # restore requires of the backup it fetches (docs/decisions/0073).
 
   roster.backup.completed:
-    summary: A backup of the installation was written to the archive bucket and its manifest sealed. Counts only.
+    summary: A backup of the installation was written to the archive bucket and its manifest sealed. Counts, and the hashes of the object and sidecar and the fingerprints of the recipients, which a restore requires of the backup it fetches.
     operation: transfer
     categories: [data_access]
     category: activity
@@ -222,7 +224,7 @@ actions:
       en: "{data_removed, plural, one {# backup} other {# backups}} beyond the retention rule {data_removed, plural, one {was} other {were}} deleted, {data_kept} kept"
 
   roster.restore.started:
-    summary: A restore of an installation from a backup began. The module is under maintenance until it completes.
+    summary: A restore of an installation from a backup began. The module is under maintenance until it completes. `unverified` is set when an operator went ahead without the backup's sealed record.
     operation: restore
     categories: [data_change, privileged_access]
     category: security

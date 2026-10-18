@@ -26,45 +26,71 @@ const maxManifest = 64 << 20
 // ReadSidecar reads a backup's sidecar. Nothing authenticates it: it is for
 // listing, and for checking the object against before it is decrypted.
 func ReadSidecar(ctx context.Context, store port.Blob, instance, id string) (*Sidecar, error) {
+	sc, _, err := readSidecar(ctx, store, instance, id)
+	return sc, err
+}
+
+// readSidecar reads the sidecar and the SHA-256 (hex) of its bytes.
+func readSidecar(ctx context.Context, store port.Blob, instance, id string) (*Sidecar, string, error) {
 	if !ValidName(instance) || !ValidName(id) {
-		return nil, fmt.Errorf("%w: instance or id is not a valid name", ErrFormat)
+		return nil, "", fmt.Errorf("%w: instance or id is not a valid name", ErrFormat)
 	}
 	o, err := store.Read(ctx, SidecarName(instance, id))
 	if err != nil {
 		if errors.Is(err, port.ErrNotFound) {
-			return nil, fmt.Errorf("%w: backup %s/%s has no sidecar (%s): it is not a complete backup", ErrFormat, instance, id, SidecarName(instance, id))
+			return nil, "", fmt.Errorf("%w: backup %s/%s has no sidecar (%s): it is not a complete backup", ErrFormat, instance, id, SidecarName(instance, id))
 		}
-		return nil, fmt.Errorf("backup: read the sidecar: %w", err)
+		return nil, "", fmt.Errorf("backup: read the sidecar: %w", err)
 	}
 	var sc Sidecar
 	if err := json.Unmarshal(o.Body, &sc); err != nil {
-		return nil, fmt.Errorf("%w: %s is not a sidecar", ErrFormat, SidecarName(instance, id))
+		return nil, "", fmt.Errorf("%w: %s is not a sidecar", ErrFormat, SidecarName(instance, id))
 	}
 	if err := sc.validate(instance, id); err != nil {
-		return nil, err
+		return nil, "", err
 	}
-	return &sc, nil
+	sum := sha256.Sum256(o.Body)
+	return &sc, hex.EncodeToString(sum[:]), nil
+}
+
+// Fetched is a backup read from the archive: the sidecar, the SHA-256 of the
+// sidecar's bytes, and the encrypted object, whose size and SHA-256 matched
+// the sidecar's. None of it is authenticated: whoever may write the archive
+// bucket wrote it. A [Verifier] is what says it is the backup that was made.
+type Fetched struct {
+	Sidecar       *Sidecar
+	SidecarSHA256 string
+	Body          []byte
 }
 
 // Fetch reads a backup's sidecar and its encrypted object and checks the
 // object's size and SHA-256 against the sidecar. It needs no identity.
 func Fetch(ctx context.Context, store port.Blob, instance, id string) (*Sidecar, []byte, error) {
-	sc, err := ReadSidecar(ctx, store, instance, id)
+	f, err := FetchAll(ctx, store, instance, id)
 	if err != nil {
 		return nil, nil, err
+	}
+	return f.Sidecar, f.Body, nil
+}
+
+// FetchAll is [Fetch] that also reports the hash of the sidecar's bytes.
+func FetchAll(ctx context.Context, store port.Blob, instance, id string) (*Fetched, error) {
+	sc, ssum, err := readSidecar(ctx, store, instance, id)
+	if err != nil {
+		return nil, err
 	}
 	o, err := store.Read(ctx, sc.Object.Key)
 	if err != nil {
 		if errors.Is(err, port.ErrNotFound) {
-			return nil, nil, fmt.Errorf("%w: the object %s is missing", ErrIntegrity, sc.Object.Key)
+			return nil, fmt.Errorf("%w: the object %s is missing", ErrIntegrity, sc.Object.Key)
 		}
-		return nil, nil, fmt.Errorf("backup: read %s: %w", sc.Object.Key, err)
+		return nil, fmt.Errorf("backup: read %s: %w", sc.Object.Key, err)
 	}
 	sum := sha256.Sum256(o.Body)
 	if int64(len(o.Body)) != sc.Object.Size || hex.EncodeToString(sum[:]) != sc.Object.SHA256 {
-		return nil, nil, fmt.Errorf("%w: the object %s does not match its sidecar's size and SHA-256", ErrIntegrity, sc.Object.Key)
+		return nil, fmt.Errorf("%w: the object %s does not match its sidecar's size and SHA-256", ErrIntegrity, sc.Object.Key)
 	}
-	return sc, o.Body, nil
+	return &Fetched{Sidecar: sc, SidecarSHA256: ssum, Body: o.Body}, nil
 }
 
 // Identities returns the age identities a reader decrypts with; it is called
@@ -85,6 +111,9 @@ type Reader struct {
 // manifest (its hash, its place in the order, the counts) before it returns.
 // A key that does not open it fails with [ErrKey]; anything changed, with
 // [ErrIntegrity]. tempDir holds the spool ("" is os.TempDir()).
+//
+// Open trusts the archive bucket: it does not ask whether the backup is the one
+// the backup function wrote. A restore uses [OpenVerified].
 func Open(ctx context.Context, store port.Blob, ids Identities, instance, id, tempDir string) (*Reader, error) {
 	sc, body, err := Fetch(ctx, store, instance, id)
 	if err != nil {
@@ -98,6 +127,31 @@ func Open(ctx context.Context, store port.Blob, ids Identities, instance, id, te
 		return nil, fmt.Errorf("%w: %v", ErrKey, err)
 	}
 	return Decrypt(ctx, sc, bytes.NewReader(body), idents, tempDir)
+}
+
+// OpenVerified is [Open] for a restore: the backup is fetched, and v decides
+// whether it is genuine before the identity is read or a byte is decrypted
+// (see [Verifier]). A backup v refuses is [ErrUnverified] (or [ErrRecipients]),
+// and nothing is read of it but its sidecar and its hash. The verification it
+// passed is returned with the reader.
+func OpenVerified(ctx context.Context, store port.Blob, ids Identities, v Verifier, instance, id, tempDir string) (*Reader, Verification, error) {
+	f, err := FetchAll(ctx, store, instance, id)
+	if err != nil {
+		return nil, Verification{}, err
+	}
+	ver, err := v.Check(ctx, f)
+	if err != nil {
+		return nil, ver, err
+	}
+	if ids == nil {
+		return nil, ver, fmt.Errorf("%w: no identity is configured", ErrKey)
+	}
+	idents, err := ids(ctx)
+	if err != nil {
+		return nil, ver, fmt.Errorf("%w: %v", ErrKey, err)
+	}
+	r, err := Decrypt(ctx, f.Sidecar, bytes.NewReader(f.Body), idents, tempDir)
+	return r, ver, err
 }
 
 // Decrypt reads the encrypted object of the sidecar from r: see [Open].

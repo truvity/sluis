@@ -57,6 +57,25 @@ func (r *rig) publish(id string, build func(*backup.Writer) (*backup.Archive, er
 	if err := backup.Publish(ctx, r.archive, a); err != nil {
 		r.t.Fatal(err)
 	}
+	// The backup function records what it wrote in the sealed trail.
+	r.trail[id] = backup.Claim{RecordID: "rec-" + id, Instance: "example", ObjectKey: a.Sidecar.Object.Key, ObjectSize: a.Sidecar.Object.Size,
+		ObjectSHA256: a.Sidecar.Object.SHA256, SidecarSHA256: a.SidecarSHA256, Recipients: backup.Fingerprints(a.Sidecar.Recipients),
+		Sealed: true, SealKey: "seals/activity/t/2026/10/10/02.jws"}
+}
+
+// attestor is the audit trail as the rig holds it: the claim published with
+// each backup, and whether the trail can be asked.
+func (r *rig) attestor() backup.Attestor {
+	return backup.AttestorFunc(func(_ context.Context, _, id string) ([]backup.Claim, error) {
+		r.asked++
+		if r.trailDown {
+			return nil, fmt.Errorf("%w: the query service is down", backup.ErrAttestUnavailable)
+		}
+		if c, ok := r.trail[id]; ok {
+			return []backup.Claim{c}, nil
+		}
+		return nil, nil
+	})
 }
 
 type fanout struct{ mods *memory.Modules }
@@ -106,6 +125,12 @@ type rig struct {
 	archive port.Blob
 	audit   *audittest.Recorder
 
+	// trail is the claim of each backup by id, trailDown makes the trail
+	// unreachable, and asked counts the questions put to it.
+	trail     map[string]backup.Claim
+	trailDown bool
+	asked     int
+
 	mu         sync.Mutex
 	writes     []string
 	slept      []time.Duration
@@ -120,7 +145,7 @@ func newRig(t *testing.T) *rig {
 	r := &rig{t: t, src: memory.NewModules(memory.WithClock(func() time.Time { return epoch })),
 		dst:   memory.NewModules(memory.WithClock(func() time.Time { return epoch })),
 		blob:  memory.New().Blobs(),
-		audit: audittest.New(t), archive: memory.New().Blobs(), flagsAtput: map[string]int{}}
+		audit: audittest.New(t), archive: memory.New().Blobs(), flagsAtput: map[string]int{}, trail: map[string]backup.Claim{}}
 	r.secrets = secretstore.FromStoreV5(statemem.New(), "")
 	put := func(m port.Module, key string, ttl time.Duration) {
 		if _, err := r.src.Store(m).Put(ctx, key, []byte(fmt.Sprintf(`{"id":%q}`, key)), ttl); err != nil {
@@ -173,7 +198,8 @@ func (r *rig) job(mutate ...func(*restorejob.Config)) *restorejob.Job {
 			Table:   func(m port.Module) restore.Table { return hooked{r.dst.Store(m), m, r, nil} },
 			Secrets: r.secrets, Blob: r.blob,
 		},
-		Archive: r.archive, Identity: identities, TempDir: r.t.TempDir(), Audit: r.audit, Now: func() time.Time { return epoch }, Holder: "h1",
+		Archive: r.archive, Identity: identities, Attestor: r.attestor(), Recipients: []string{recipient.Recipient().String()},
+		TempDir: r.t.TempDir(), Audit: r.audit, Now: func() time.Time { return epoch }, Holder: "h1",
 		Sleep:  func(_ context.Context, d time.Duration) error { r.slept = append(r.slept, d); return nil },
 		Suffix: func() string { return "aaaaaa" },
 	}

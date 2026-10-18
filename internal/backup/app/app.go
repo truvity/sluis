@@ -19,6 +19,7 @@ import (
 
 	"github.com/truvity/sluis/internal/audit"
 	"github.com/truvity/sluis/internal/backup"
+	"github.com/truvity/sluis/internal/backup/attest"
 	"github.com/truvity/sluis/internal/backup/export"
 	"github.com/truvity/sluis/internal/backup/job"
 	"github.com/truvity/sluis/internal/backup/restore"
@@ -50,6 +51,7 @@ type Config struct {
 	// the restore identity in place of the secret.
 	archive  port.Blob
 	identity backup.Identities
+	attestor backup.Attestor
 }
 
 // LogLevel is the level the process should log at.
@@ -272,6 +274,22 @@ func (a *App) openRestore(cfg Config, archive port.Blob) error {
 	if identity == nil {
 		identity = restoreIdentity(stores.V5, cfg.doc.IdentityRef())
 	}
+	// How a backup is proved genuine before it is decrypted: the audit trail's
+	// record of it. Not configured, every restore is refused unless an
+	// administrator passes allowUnverified.
+	attestor := cfg.attestor
+	if attestor == nil {
+		attestor = backup.NoAttestor{}
+		if v := cfg.doc.Backup.Verify; v != nil {
+			q, err := attest.New(attest.Config{URL: v.Query, TokenFile: v.TokenFile, Profile: v.Profile, Observer: v.Observer})
+			if err != nil {
+				return fmt.Errorf("backup.verify: %w", err)
+			}
+			attestor = q
+		} else {
+			a.log.WarnContext(context.Background(), "backup.verify is not set: this restore refuses every backup unless it is started with allowUnverified")
+		}
+	}
 	j, err := restorejob.New(restorejob.Config{
 		Installation: cfg.doc.Name(), State: stores.Ports.State,
 		Modules: mods,
@@ -281,6 +299,7 @@ func (a *App) openRestore(cfg Config, archive port.Blob) error {
 			Secrets: stores.V5, Blob: stores.Ports.Blob,
 		},
 		Archive: archive, Identity: identity, Audit: a.trail, Log: a.log,
+		Attestor: attestor, Recipients: cfg.doc.Backup.Recipients,
 	})
 	if err != nil {
 		return err
@@ -330,11 +349,18 @@ func (a *App) Restore(ctx context.Context, req restorejob.Request) (restorejob.R
 }
 
 // PreviewRestore reports what restoring a backup would do and writes nothing.
+// The backup is verified as a restore verifies it.
 func (a *App) PreviewRestore(ctx context.Context, backupID string) (*restore.Report, error) {
+	return a.PreviewRestoreWith(ctx, backupID, false)
+}
+
+// PreviewRestoreWith is [App.PreviewRestore] that, with allowUnverified,
+// previews a backup the sealed audit trail does not vouch for.
+func (a *App) PreviewRestoreWith(ctx context.Context, backupID string, allowUnverified bool) (*restore.Report, error) {
 	if a.restore == nil {
 		return nil, errNotRestore
 	}
-	return a.restore.Preview(ctx, backupID)
+	return a.restore.PreviewWith(ctx, backupID, allowUnverified)
 }
 
 // RestoreStatus is the latest restores and the maintenance flags.

@@ -141,7 +141,8 @@ func TestTheRestoreCommand(t *testing.T) {
 	}
 	for _, args := range [][]string{
 		{"restore", "status"}, {"restore", "preview", "b1"}, {"restore", "start", "b1", "--confirm", "x", "--overwrite"},
-		{"restore", "start", "--resume"},
+		{"restore", "start", "--resume"}, {"restore", "preview", "b1", "--allow-unverified"},
+		{"restore", "start", "b1", "--confirm", "x", "--allow-unverified"},
 	} {
 		var out bytes.Buffer
 		if err := run(args, &out); err == nil || !strings.Contains(err.Error(), "--config") {
@@ -149,13 +150,17 @@ func TestTheRestoreCommand(t *testing.T) {
 		}
 	}
 	var out bytes.Buffer
-	if err := run([]string{"restore", "--help"}, &out); err != nil || !strings.Contains(out.String(), "--overwrite") {
+	if err := run([]string{"restore", "--help"}, &out); err != nil ||
+		!strings.Contains(out.String(), "--overwrite") || !strings.Contains(out.String(), "--allow-unverified") {
 		t.Errorf("restore --help: %v, %q", err, out.String())
 	}
 	// A flag of another command is the configuration line's to refuse.
 	out.Reset()
 	if err := run([]string{"restore", "status", "--overwrite", "--config", "x"}, &out); err == nil {
 		t.Error("restore status took --overwrite")
+	}
+	if err := run([]string{"restore", "status", "--allow-unverified", "--config", "x"}, &out); err == nil {
+		t.Error("restore status took --allow-unverified")
 	}
 }
 

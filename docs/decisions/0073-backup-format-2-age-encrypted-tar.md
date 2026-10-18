@@ -48,3 +48,27 @@ Three faults decided it:
 - **Cloud-native only (S3 server-side encryption, Object Lock, AWS Backup).** The data would be readable by anyone
   with read on the bucket and the key. It keeps the KMS single point of failure and does not exist on Kubernetes.
   Server-side encryption and Object Lock stay on the bucket, under age.
+
+## Amendment: a restore proves a backup genuine (2026-10-18)
+
+The recipients are public keys and the sidecar is unsigned JSON. Anyone who can put an object under `backup/<instance>/` could plant a backup that a restore accepted, and a restore writes every module's table, signing keys included. The 2026-10-18 review found several principals with that right.
+
+Decision D682 (b): the backup function records each backup's hashes in the audit trail, and a restore checks them there.
+
+1. `roster.backup.completed` carries the object's key, size and SHA-256, the sidecar's SHA-256 and the SHA-256 of each recipient. The record is written after the sidecar.
+2. Before it reads the identity, a restore asks the audit query service for the record of the backup. It requires a record of the installation, and every record of the backup to agree, with the hashes of the object and sidecar it fetched, the recipients of the sidecar, and an hour that is sealed.
+3. A restore with `backup.recipients` set requires the sidecar to list exactly those. No flag overrides it.
+4. `allowUnverified` goes ahead without the record, for the day the audit pipeline is down. It needs `backup.recipients`, and `roster.restore.started` and `.completed` say `unverified` and why.
+5. A restore that paused is continued against the hashes it began with and does not ask the trail again.
+
+Consequences:
+
+- A restore depends on the audit pipeline. Unconfigured, unreachable, or with the record lost in delivery, it refuses until an operator passes `allowUnverified`. The owner chose this knowing that.
+- A backup made before this change has no hashes in its record. It restores only with `allowUnverified`.
+- A backup is available to restore once the notary has sealed the hour of its record: at the notary's first run after that hour ends, up to about an hour and a quarter after the run.
+- "Sealed" is what the query service reports: a seal object exists for the hour. The signature of the seal is checked by `audit verify --root`, not by the restore.
+
+Alternatives rejected:
+
+- **Sign the manifest with the notary or a KMS key.** It needs a new signing key for the backup function and a verify path in the restore. The audit trail already holds records nobody who can write the bucket can change.
+- **Compare the sidecar's recipients only.** The recipients are public: the attacker lists them too.
