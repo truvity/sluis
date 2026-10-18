@@ -193,6 +193,22 @@ type SignInDeps struct {
 	Log    *slog.Logger
 }
 
+// errSignInWithoutState is the one wiring [SignInDeps] refuses.
+var errSignInWithoutState = errors.New("issuer: sign-in deps hold a browser session store (SSO) and no state codec (State)")
+
+// validate refuses a wiring that fails open. Binding an authorization
+// request to its browser and confirming a sign-out both need the state
+// codec's key, and without it the first would be off and the second would
+// end nothing: a browser session store with no codec is a deployment that
+// signs people in silently and cannot tell whose request it is completing.
+func (d SignInDeps) validate() error {
+	if d.SSO != nil && d.State == nil {
+		return errSignInWithoutState
+	}
+
+	return nil
+}
+
 // signInWindow is how long a person has to finish signing in.
 const signInWindow = 10 * time.Minute
 
@@ -203,6 +219,12 @@ const signInWindow = 10 * time.Minute
 // They are the issuer's own because each runs before there is anyone to
 // authorize — there is no session yet to decide what a console would show.
 func SignInRoutes(mux *http.ServeMux, deps SignInDeps) {
+	// A wiring error, found when the routes are built and not by the first
+	// person to sign in.
+	if err := deps.validate(); err != nil {
+		panic(err)
+	}
+
 	if deps.Log == nil {
 		deps.Log = slog.Default()
 	}
@@ -261,12 +283,6 @@ func (s *signIn) chooser(w http.ResponseWriter, r *http.Request) {
 		s.page(w, "Sign in", `<p>This page is reached from an application asking you to sign in.</p>`)
 		return
 	}
-	// The request must have been started in THIS browser: a link to
-	// somebody else's request is not one to complete from a live sign-in.
-	if !s.boundHere(r, request) {
-		startedElsewhere(w, r)
-		return
-	}
 	// A live browser session is what makes the second console cost no
 	// login, so it is tried before anything is rendered: the page below
 	// is the fallback, not the normal path.
@@ -283,6 +299,27 @@ func (s *signIn) chooser(w http.ResponseWriter, r *http.Request) {
 		}
 
 		pending = asked
+	}
+
+	// The request must have been started in THIS browser: a link to
+	// somebody else's request is not one to complete from a live sign-in.
+	//
+	// `prompt=none` is answered to the CLIENT, as it is for a browser with
+	// no sign-in at all: its caller is usually a hidden frame that cannot
+	// read a page, and a frame in another site does not carry this issuer's
+	// cookies, so it is a browser this cookie is never in. Only an
+	// interactive request is shown the page.
+	if !s.boundHere(r, request) {
+		if pending.ForbidsUI {
+			s.refuse(w, r, pending, "login_required",
+				"there is no active sign-in here to continue from")
+
+			return
+		}
+
+		startedElsewhere(w, r)
+
+		return
 	}
 
 	// An agent connection is never made without the person seeing it, so

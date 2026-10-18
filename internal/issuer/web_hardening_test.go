@@ -1,10 +1,17 @@
 package issuer_test
 
 import (
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/truvity/sluis/internal/access"
+	"github.com/truvity/sluis/internal/demo"
+	"github.com/truvity/sluis/internal/issuer"
+	"github.com/truvity/sluis/policy"
 )
 
 // requiredDirectives are what every page must carry in its policy.
@@ -124,4 +131,61 @@ func TestCrossOriginAnswersNeverAllowCredentials(t *testing.T) {
 			}
 		}
 	}
+}
+
+// A browser session store with no state codec fails open: the binding of a
+// request to its browser is off and a sign-out cannot be confirmed. It is
+// refused where the routes are built.
+func TestASessionStoreWithNoStateCodecIsRefused(t *testing.T) {
+	t.Parallel()
+
+	sso := issuer.NewSSO(issuer.NewMemoryState(), time.Hour)
+
+	t.Run("the routes", func(t *testing.T) {
+		t.Parallel()
+
+		defer func() {
+			if recover() == nil {
+				t.Error("SignInRoutes accepted an SSO with no State")
+			}
+		}()
+
+		issuer.SignInRoutes(http.NewServeMux(), issuer.SignInDeps{SSO: sso, Log: slog.New(slog.DiscardHandler)})
+	})
+
+	t.Run("the handler", func(t *testing.T) {
+		t.Parallel()
+
+		declared, err := policy.Parse([]byte(demo.Policy))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		set, err := policy.NewSet(declared)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		iss := issuer.New(issuer.Config{URL: "http://issuer.example", AllowInsecure: true}, set,
+			&fakeDirectory{}, issuer.NewMemoryState())
+
+		storage, err := issuer.NewTestStorage(iss, fakeVerifier{}, nil, nil, nil, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// The issuer's own session store is used when none is given, so
+		// an empty SignInDeps is a store with no codec as well.
+		if _, err = issuer.HandlerWithSignIn(iss, storage, issuer.SignInDeps{}); err == nil {
+			t.Error("HandlerWithSignIn accepted a session store with no State")
+		}
+
+		// And with one it is served.
+		if _, err = issuer.HandlerWithSignIn(iss, storage, issuer.SignInDeps{
+			State: access.NewStateCodec([]byte("a-test-key-for-signing-state"), 0),
+		}); err != nil {
+			t.Errorf("HandlerWithSignIn with a State: %v", err)
+		}
+
+	})
 }

@@ -26,6 +26,13 @@ func startRequest(t *testing.T, b *browser) string {
 func startRequestWithHeader(t *testing.T, b *browser) (string, http.Header) {
 	t.Helper()
 
+	return startRequestWith(t, b, "")
+}
+
+// startRequestWith is it with more query parameters, such as `&prompt=none`.
+func startRequestWith(t *testing.T, b *browser, extra string) (string, http.Header) {
+	t.Helper()
+
 	sum := sha256.Sum256([]byte(pkceVerifier))
 	query := url.Values{
 		"client_id":             {"local-dev"},
@@ -37,7 +44,7 @@ func startRequestWithHeader(t *testing.T, b *browser) (string, http.Header) {
 		"code_challenge_method": {"S256"},
 	}
 
-	status, where, body, header := b.send(http.MethodGet, "/authorize?"+query.Encode(), nil)
+	status, where, body, header := b.send(http.MethodGet, "/authorize?"+query.Encode()+extra, nil)
 	if status != http.StatusFound || !strings.HasPrefix(where, "/login?auth=") {
 		t.Fatalf("/authorize: %d to %q (%s)", status, where, body)
 	}
@@ -170,5 +177,50 @@ func TestTheAuthorizeCookieIsBoundToTheRequestAndNothingElse(t *testing.T) {
 
 	if got := fresh.cookies[access.AuthRequestCookieName]; got != "" {
 		t.Errorf("a refused /authorize set the request cookie %q", got)
+	}
+}
+
+// `prompt=none` is answered to the CLIENT, bound or not: its caller is
+// usually a hidden frame that cannot read a page. A frame in another site
+// carries none of this issuer's cookies, so it is exactly a browser the
+// binding cookie is never in; it must still be told `login_required` at the
+// client's redirect, and not be shown a 400 page it cannot read.
+func TestPromptNoneFromABrowserWithoutTheCookieIsAnsweredToTheClient(t *testing.T) {
+	t.Parallel()
+
+	server, _ := signInServer(t, "ada@north.example")
+	starter := newBrowser(t, server)
+	frame := newBrowser(t, server) // no cookies at all, as in a cross-site frame
+	frame.signIn()                 // even with a live sign-in
+
+	link, _ := startRequestWith(t, starter, "&prompt=none")
+
+	status, where, body := frame.do(http.MethodGet, link)
+	if status != http.StatusFound || !strings.HasPrefix(where, "http://localhost:8000/callback?") {
+		t.Fatalf("prompt=none without the cookie = %d to %q (%s), want a redirect to the client", status, where, body)
+	}
+
+	back, err := url.Parse(where)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got := back.Query().Get("error"); got != "login_required" {
+		t.Errorf("error = %q, want login_required", got)
+	}
+
+	if got := back.Query().Get("state"); got != "bind-test" {
+		t.Errorf("state = %q, want the client's own", got)
+	}
+
+	if back.Query().Get("code") != "" {
+		t.Error("a code was issued to a browser that did not start the request")
+	}
+
+	// An interactive request from the same browser is still shown the page.
+	interactive, _ := startRequestWith(t, starter, "")
+	if status, _, body = frame.do(http.MethodGet, interactive); status != http.StatusBadRequest ||
+		!strings.Contains(body, "started in another browser") {
+		t.Errorf("an interactive request without the cookie = %d, want the 400 page", status)
 	}
 }
