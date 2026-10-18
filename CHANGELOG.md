@@ -1,5 +1,9 @@
 ## Unreleased
 
+### Removed
+
+- **The old `access-roster` packages are retired and deleted from GitHub Packages (2026-10-18).** The release workflow no longer publishes the build a second time as `@truvity/access-roster`. Deleted: the containers `ghcr.io/truvity/access-roster/{access-issuer,github-roster,slack-roster,resource-proxy,access-roster}`, the chart `oci://ghcr.io/truvity/charts/access-roster` and the npm package `@truvity/access-roster`. Use `ghcr.io/truvity/sluis/{sluis,resource-proxy}`, `oci://ghcr.io/truvity/charts/sluis` and `@truvity/sluis`. See [0035](docs/decisions/0035-renamed-to-sluis.md).
+
 ## v1.77.0-rc.1
 
 ### Breaking (chart)
