@@ -2406,10 +2406,15 @@ func (s *Storage) SetUserinfoFromScopes(context.Context, *oidc.UserInfo, string,
 // revoked the session, and `userinfo` went on answering with the access
 // token from the first redemption. Fixing only that case would have left
 // every OTHER revocation with the same hole.
+//
+// What it returns decides the status: a plain error is a token that is no
+// longer good (the library says 403, [challenges] makes it the 401
+// `invalid_token` of RFC 6750 3.1), and a [fault] is this issuer's own
+// storage failing, which stays a server error.
 func (s *Storage) SetUserinfoFromToken(ctx context.Context, info *oidc.UserInfo, tokenID, _, _ string) error {
 	issued, err := getJSON[token](ctx, s.state, tokenKey(tokenID))
 	if err != nil {
-		return err
+		return fault(ctx, err)
 	}
 
 	if issued == nil {
@@ -2419,7 +2424,7 @@ func (s *Storage) SetUserinfoFromToken(ctx context.Context, info *oidc.UserInfo,
 	if issued.Session != "" {
 		_, live, err := s.iss.Sessions().ByID(ctx, issued.Session)
 		if err != nil {
-			return err
+			return fault(ctx, err)
 		}
 
 		if !live {
