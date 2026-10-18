@@ -11,7 +11,10 @@ import (
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 
+	"github.com/truvity/sluis/audit/internal/buildinfo"
 	"github.com/truvity/sluis/audit/internal/config"
+	"github.com/truvity/sluis/audit/internal/sqsorigin"
+	"github.com/truvity/sluis/audit/sdk/record"
 	"github.com/truvity/sluis/audit/sdk/sink"
 	"github.com/truvity/sluis/audit/sdk/sink/logsink"
 	"github.com/truvity/sluis/audit/sink/sqssink"
@@ -77,6 +80,13 @@ func guard(front sink.Sink, require string) (sink.Sink, error) {
 	return guarded, nil
 }
 
+// queueOrigin is what stamps a record read off the queue: the observer its
+// SenderId maps to in `senders`, the time SQS took the message, and this build's
+// version and instance.
+func queueOrigin(q *config.ConsumeSQS) *sqsorigin.Origin {
+	return &sqsorigin.Origin{Senders: q.Senders, Version: buildinfo.Version, Instance: record.InstanceName()}
+}
+
 // consumeSQS runs a consumer on a queue into the writer until the context is
 // cancelled; the returned function waits for it to stop. A message is deleted
 // only once the writer has taken it.
@@ -89,6 +99,9 @@ func consumeSQS(ctx context.Context, q *config.ConsumeSQS, target sink.Sink, onS
 		QueueURL:   q.QueueURL,
 		Batch:      q.Batch,
 		Visibility: q.Visibility.D(),
+		// A message body is the sender's: the observer and the time are taken
+		// from what SQS sets, never from it.
+		Stamp: queueOrigin(q).Stamp,
 		OnError: func(err error) {
 			// The message is not deleted, so the queue brings it back.
 			slog.ErrorContext(ctx, "the writer refused a batch from the queue", slog.Any("error", err))

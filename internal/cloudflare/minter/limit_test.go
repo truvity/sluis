@@ -4,6 +4,8 @@ package minter_test
 import (
 	"errors"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -156,5 +158,52 @@ func TestAPresetsAllowedPermissionGroupsHoldThePrototype(t *testing.T) {
 	}
 	if err = e.m.CheckPreset(ctx, "adhoc"); err != nil {
 		t.Fatalf("CheckPreset: %v", err)
+	}
+}
+
+// Concurrent requests in one process cannot each see room that one of them
+// takes: with a cap of three, exactly three of thirty succeed, and the burst
+// reads Cloudflare's list once, not thirty times.
+func TestAConcurrentBurstCannotOvershootACap(t *testing.T) {
+	e := limited(t, func(p *config.CloudflarePreset) { p.MaxLivePerCaller = 3 })
+	var wg sync.WaitGroup
+	var ok, limit atomic.Int32
+	for range 30 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := e.m.MintFor(ctx, "adhoc", asker("a@example.com"), time.Minute)
+			switch {
+			case err == nil:
+				ok.Add(1)
+			case errors.Is(err, minter.ErrLimit):
+				limit.Add(1)
+			default:
+				t.Error(err)
+			}
+		}()
+	}
+	wg.Wait()
+	if ok.Load() != 3 || limit.Load() != 27 {
+		t.Fatalf("%d minted and %d refused, want 3 and 27", ok.Load(), limit.Load())
+	}
+	e.api.mu.Lock()
+	lists := e.api.lists
+	e.api.mu.Unlock()
+	if lists != 1 {
+		t.Errorf("the burst listed the account's tokens %d times, want 1", lists)
+	}
+}
+
+// A list that fails fails the mint: a cap that cannot be counted is not skipped.
+func TestAMintFailsClosedWhenTheTokensCannotBeCounted(t *testing.T) {
+	e := limited(t, func(*config.CloudflarePreset) {})
+	e.api.listErr = errors.New("cloudflare is down")
+	creates := e.api.creates
+	if _, err := e.m.MintFor(ctx, "adhoc", asker("a@example.com"), time.Minute); err == nil || errors.Is(err, minter.ErrLimit) {
+		t.Fatalf("a mint with no count: %v", err)
+	}
+	if e.api.creates != creates {
+		t.Error("a token was created without being counted")
 	}
 }

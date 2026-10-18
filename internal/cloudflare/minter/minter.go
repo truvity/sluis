@@ -131,6 +131,10 @@ type Minter struct {
 	// preset and caller, for the limits that Cloudflare's own list cannot show:
 	// a token that expired inside the hour, and one not yet created.
 	minting map[string][]time.Time
+	// limitMu admits on-demand mints one at a time (see admit), and lists holds
+	// the last list of each preset's live tokens.
+	limitMu sync.Mutex
+	lists   map[string]*liveList
 }
 
 type cachedGroups struct {
@@ -152,7 +156,7 @@ func New(cfg Config) (*Minter, error) {
 	if err := cfg.Cloudflare.Validate(); err != nil {
 		return nil, err
 	}
-	m := &Minter{cfg: cfg, log: cfg.Log, now: cfg.Now, groups: map[string]cachedGroups{}, minting: map[string][]time.Time{}}
+	m := &Minter{cfg: cfg, log: cfg.Log, now: cfg.Now, groups: map[string]cachedGroups{}, minting: map[string][]time.Time{}, lists: map[string]*liveList{}}
 	if m.log == nil {
 		m.log = slog.Default()
 	}
@@ -312,7 +316,7 @@ func (m *Minter) MintFor(ctx context.Context, preset string, caller Caller, life
 	who := caller.Actor.ID
 	now := m.now()
 	name := cloudflare.OnDemandName(m.cfg.Instance, preset, who, now)
-	release, err := m.admit(ctx, preset, p, name, now)
+	release, err := m.admit(ctx, preset, p, name, now, lifetime)
 	if err != nil {
 		var limit *limitError
 		if errors.As(err, &limit) {

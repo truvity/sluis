@@ -2,6 +2,8 @@ package sinkserver_test
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/truvity/sluis/audit/sdk/auth"
@@ -17,7 +19,9 @@ func bound(next sink.Sink, refused *[]string) *sinkserver.SourceBound {
 			{Subject: "system:serviceaccount:shop:api", Source: "shop"},
 			{Subject: "system:serviceaccount:wallet:api", Source: "wallet"},
 		},
-		OnRefused: func(_ context.Context, subject, source string) { *refused = append(*refused, subject+"->"+source) },
+		OnRefused: func(_ context.Context, subject string, n int, sources []string) {
+			*refused = append(*refused, fmt.Sprintf("%s->%d:%s", subject, n, strings.Join(sources, ",")))
+		},
 	}
 }
 
@@ -44,7 +48,7 @@ func TestSourceBoundRefusesARecordOfAnotherSource(t *testing.T) {
 	if len(res.Rejected) != 1 || res.Rejected[0].ID != other.GetId() {
 		t.Fatalf("rejected = %+v, want the record of the other source", res.Rejected)
 	}
-	if len(refused) != 1 || refused[0] != "system:serviceaccount:shop:api->wallet" {
+	if len(refused) != 1 || refused[0] != "system:serviceaccount:shop:api->1:wallet" {
 		t.Errorf("OnRefused saw %v", refused)
 	}
 }
@@ -76,5 +80,25 @@ func TestSourceBoundPassesAContextWithNoPrincipal(t *testing.T) {
 	res, err := b.Write(context.Background(), &sink.Request{Records: []*record.Record{rec}})
 	if err != nil || next.Len() != 1 || len(res.Rejected) != 0 {
 		t.Fatalf("err=%v forwarded=%d rejected=%v", err, next.Len(), res.Rejected)
+	}
+}
+
+// A caller that sends many records of the wrong source is logged once for the
+// batch, with a count.
+func TestSourceBoundReportsOncePerBatch(t *testing.T) {
+	next := &sink.Memory{}
+	var refused []string
+	b := bound(next, &refused)
+	var recs []*record.Record
+	for range 50 {
+		recs = append(recs, &record.Record{Id: record.NewID(), Source: "wallet", Action: "wallet.card.added"})
+	}
+	recs = append(recs, &record.Record{Id: record.NewID(), Source: "billing", Action: "billing.x"})
+	res, err := b.Write(asCaller("system:serviceaccount:shop:api"), &sink.Request{Records: recs})
+	if err != nil || len(res.Rejected) != 51 {
+		t.Fatalf("%v %d", err, len(res.Rejected))
+	}
+	if len(refused) != 1 || refused[0] != "system:serviceaccount:shop:api->51:billing,wallet" {
+		t.Errorf("reported %v, want one line with the count", refused)
 	}
 }

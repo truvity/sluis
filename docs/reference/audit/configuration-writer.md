@@ -38,6 +38,7 @@ One binary, two roles chosen by `mode`.
 | `consume.sqs.queueUrl`, `.region`, `.fifo` | as `forward.sqs` | | the queue the writer consumes |
 | `consume.sqs.batch` | integer, 1 to 10 | 10 | how many messages are received at once |
 | `consume.sqs.visibility` | duration | `1m` | how long a received message is hidden from other consumers while the writer writes it. It must outlast a write to the bucket, or the message is delivered twice |
+| `consume.sqs.senders` | map | none | sender id to observer name: the unique id SQS reports as `SenderId` (`AROA...` of a role, `AIDA...` of a user, or a whole id with its `:session`) mapped to the observer the trail records it under. A role ARN is not accepted; `aws iam get-role --query Role.RoleId` gives the id. A sender not named is recorded with no observer id. `recorded_at` is `SentTimestamp` either way |
 | `stream.nats.url` | string, required with `stream` | | the JetStream server, for example `nats://nats:4222` |
 | `stream.nats.tokenFile` | path | none: no credentials | the token presented to a broker that verifies who connects, read afresh on every connect ([stream](../../guides/audit/operate/run-stream-mode.md)) |
 | `stream.name` | string | `AUDIT` | the stream |
@@ -81,7 +82,7 @@ A process that records through a writer (`audit-query` and every job with a `sin
 |---|---|
 | `workloads` set | The receiver verifies who writes and stamps the caller's service account as the record's observer |
 | Neither `workloads` nor `anonymousWrites: true` | The receiver refuses to start |
-| Records over the stream | No verified observer; the stream's authentication admits the publisher. A NATS consumer keeps the receiver's stamp; a queue consumer and the writer Lambda stamp afresh with their own identity and clock |
+| Records over the stream | No verified observer; the stream's authentication admits the publisher. A NATS consumer keeps the receiver's stamp; a queue consumer and the writer Lambda stamp from SQS's `SenderId` (through `senders`) and `SentTimestamp` |
 | Source of a record | With `workloads` listing workloads, a record must carry the source its caller is listed for, or it is refused (`rejected`). A caller not listed writes nothing |
 | Observer version | The build's version, not configurable |
 
@@ -106,6 +107,7 @@ The Pulumi library puts the file in the function's configuration layer at `/opt/
 | `archive` | `archive` | | `stateRoot`, `sluisRoot`, `ca` and `kmsKey`; the stores are the deployment's `presets` |
 | `keys` | `keys` | none | pseudonymisation keys. Only a provider a function outside a VPC can reach is usable: `transit` over a public address |
 | `forgetIdentities` | boolean | false | as in `audit-writer` |
+| `senders` | map | none | as `consume.sqs.senders`: the Lambda's queue senders by `SenderId`, mapped to observer names |
 | `dedupe.dynamodb.table` | string, required | | the table: a string hash key `pk`, TTL on `expires_at` |
 | `dedupe.dynamodb.region` | string | the SDK's (`AWS_REGION`) | the table's region |
 | `dedupe.dynamodb.window` | duration | the widest window any profile asks for | how long a written record's id is remembered. It wants to be at least as long as the queue keeps a message (SQS: 14 days at most) |

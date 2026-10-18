@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 	"testing"
@@ -691,5 +692,62 @@ func TestAGetSaysSealUnknownWhenItCannotAsk(t *testing.T) {
 				t.Fatalf("seal key logged = %v, want %v; log: %s", got, tc.logged, logs.String())
 			}
 		})
+	}
+}
+
+// The dedupe key is not the caller's to choose: a caller that varies the profile
+// and the record id it asks for, none of which its grants name, leaves one record
+// a minute per action, not one per request. The same holds for a flood of
+// distinct callers' share of the table.
+func TestVaryingWhatIsAskedForDoesNotMultiplyTheRecords(t *testing.T) {
+	s, into := service(t, auth.Grant{
+		Tenants: []string{"acme"}, Profiles: []string{"history"},
+		Operations: []auth.Operation{auth.Search, auth.Facets, auth.Get},
+	})
+	now := at(t, "2026-09-17T12:00:00Z")
+	s.Now = func() time.Time { return now }
+	ctx := context.Background()
+
+	for i := range 200 {
+		profile := fmt.Sprintf("p%d", i)
+		_, _, _ = s.Search(ctx, caller(), &auditv1.SearchRequest{Profile: profile, Limit: 1})
+		_, _, _ = s.Facets(ctx, caller(), &auditv1.FacetsRequest{Profile: profile, Fields: []string{index.FieldAction}})
+		_, _, _, _ = s.Get(ctx, caller(), &auditv1.GetRequest{Profile: profile, Id: fmt.Sprintf("018f0000-0000-7000-8000-%012d", i)})
+	}
+	// An enormous profile name is cut in the record.
+	_, _, _ = s.Search(ctx, caller(), &auditv1.SearchRequest{Profile: strings.Repeat("x", 100000), Limit: 1})
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	for _, action := range []string{"audit.search", "audit.facets", "audit.get"} {
+		if n := len(into.of(action)); n != 1 {
+			t.Errorf("%d records of %s for 200 different requests, want 1", n, action)
+		}
+	}
+	for _, r := range into.records {
+		if len(r.GetOutcome().GetReason()) > 600 {
+			t.Errorf("a refusal's reason is %d bytes", len(r.GetOutcome().GetReason()))
+		}
+	}
+}
+
+// The profile is in the key when the caller's own grants name it, which the
+// caller cannot extend: a grant on one profile and a refusal on another operation
+// of it are recorded on their own.
+func TestARefusalOnAProfileTheCallerHoldsIsKeyedByIt(t *testing.T) {
+	s, into := service(t, auth.Grant{
+		Tenants: []string{"acme"}, Profiles: []string{"security", "history"},
+		Operations: []auth.Operation{auth.Search},
+	})
+	now := at(t, "2026-09-17T12:00:00Z")
+	s.Now = func() time.Time { return now }
+	for _, profile := range []string{"security", "history", "security", "history"} {
+		_, _, _ = s.Facets(context.Background(), caller(), &auditv1.FacetsRequest{Profile: profile, Fields: []string{index.FieldAction}})
+	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if n := len(into.of("audit.facets")); n != 2 {
+		t.Errorf("%d facets refusals, want one for each profile the caller holds", n)
 	}
 }

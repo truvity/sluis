@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/truvity/sluis/audit/internal/sqsorigin"
 	"github.com/truvity/sluis/audit/sdk/catalogue"
 	"github.com/truvity/sluis/audit/sdk/emit"
 	"github.com/truvity/sluis/audit/sdk/record"
@@ -310,7 +311,10 @@ func (w *Writer) one(ctx context.Context, r *record.Record, pending *[]extension
 		Instance: r.GetObserver().GetInstance(),
 	}
 	at := w.now()
-	if w.KeepUpstreamStamp && stampedUpstream(r) {
+	// A queue's batch is stamped by the code that read the queue, from what the
+	// queue itself knows (internal/sqsorigin), and marks its context so; the
+	// stamp may carry no observer, for a sender nothing names.
+	if (w.KeepUpstreamStamp && stampedUpstream(r)) || (sqsorigin.Trusted(ctx) && stampedAtAll(r)) {
 		// A receiver verified the caller and stamped this record before it
 		// went on the stream. Re-stamping here would replace a verified
 		// identity with nothing, because a consumer reading messages has no
@@ -441,6 +445,16 @@ func (w *Writer) Close(ctx context.Context) error {
 // come from its own installation's receivers.
 func stampedUpstream(r *record.Record) bool {
 	if r.GetOriginHash() == "" || r.GetObserver().GetId() == "" || r.GetRecordedAt() == nil {
+		return false
+	}
+	h, err := record.OriginHash(r)
+	return err == nil && h == r.GetOriginHash()
+}
+
+// stampedAtAll is stampedUpstream for a stamp that may name no observer: a time
+// it was recorded, and an origin hash that recomputes to the same value.
+func stampedAtAll(r *record.Record) bool {
+	if r.GetOriginHash() == "" || r.GetRecordedAt() == nil {
 		return false
 	}
 	h, err := record.OriginHash(r)

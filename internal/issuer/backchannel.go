@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"strings"
 	"sync"
@@ -128,7 +129,9 @@ func newAnnounceClient(network egress.Policy) *http.Client {
 
 // egressFor is the network policy a delivery or a fetch connects under: base,
 // or none at all in a development installation, which talks to its own
-// loopback.
+// loopback. That is `allowInsecure` AND an issuer URL on the loopback
+// interface: `allowInsecure` alone is reachable from a production document and
+// must not lift a guard against the metadata service.
 //
 // A client document is fetched from a URL the client chose, so it may reach
 // public addresses only. A back-channel address is one the policy declares, and
@@ -136,10 +139,25 @@ func newAnnounceClient(network egress.Policy) *http.Client {
 // ranges are admitted for it; loopback, link-local (the instance metadata
 // service) and the other reserved ranges never are.
 func egressFor(iss *Issuer, base egress.Policy) egress.Policy {
-	if iss != nil && iss.Config().AllowInsecure {
+	if iss != nil && iss.Config().AllowInsecure && LoopbackURL(iss.Config().URL) {
 		return egress.Development
 	}
 	return base
+}
+
+// LoopbackURL reports whether raw is a URL whose host is the loopback interface
+// by name or address.
+func LoopbackURL(raw string) bool {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return false
+	}
+	host := u.Hostname()
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip, err := netip.ParseAddr(host)
+	return err == nil && ip.Unmap().IsLoopback()
 }
 
 // announceInFlight bounds how many logout tokens are being delivered at once.

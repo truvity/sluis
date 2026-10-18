@@ -305,9 +305,9 @@ func run() error {
 	// itself do not pass here, they never leave the process.
 	httpFront := front
 	if len(bound) > 0 {
-		httpFront = &sinkserver.SourceBound{To: front, Workloads: bound, OnRefused: func(ctx context.Context, subject, source string) {
-			slog.WarnContext(ctx, "a record was refused: its source is not the caller's",
-				slog.String("caller", subject), slog.String("record_source", source))
+		httpFront = &sinkserver.SourceBound{To: front, Workloads: bound, OnRefused: func(ctx context.Context, subject string, refused int, sources []string) {
+			slog.WarnContext(ctx, "records were refused: their source is not the caller's",
+				slog.String("caller", subject), slog.Int("refused", refused), slog.Any("record_sources", sources))
 		}}
 	}
 	path, handler := sinkserver.NewHandler(httpFront)

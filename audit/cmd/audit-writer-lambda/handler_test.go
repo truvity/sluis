@@ -10,6 +10,7 @@ import (
 
 	"github.com/aws/aws-lambda-go/events"
 
+	"github.com/truvity/sluis/audit/internal/sqsorigin"
 	"github.com/truvity/sluis/audit/sdk/record"
 	"github.com/truvity/sluis/audit/sdk/sink"
 )
@@ -20,10 +21,12 @@ type fakeSink struct {
 	err      error
 	rejected []string
 	got      []*record.Record
+	trusted  bool
 }
 
-func (f *fakeSink) Write(_ context.Context, req *sink.Request) (*sink.Result, error) {
+func (f *fakeSink) Write(ctx context.Context, req *sink.Request) (*sink.Result, error) {
 	f.got = append(f.got, req.Records...)
+	f.trusted = sqsorigin.Trusted(ctx)
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -196,5 +199,59 @@ func TestOneLine(t *testing.T) {
 		if got := oneLine(in); got != want {
 			t.Errorf("oneLine(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+// A forged stamp in a message body is replaced in the handler the function is
+// built with: the observer is what the sender id maps to (none for a sender the
+// table does not name), recorded_at is SQS's SentTimestamp, and the batch is marked
+// as stamped by its reader so the writer keeps those. Building the function
+// without originFor, or taking the stamping out of the handler, fails this.
+func TestTheFunctionsHandlerReplacesAForgedStamp(t *testing.T) {
+	forged := func() *record.Record {
+		r := newRecord()
+		if err := record.Stamp(r, &record.Observer{Id: "system:serviceaccount:kube-system:somebody", Instance: "evil"},
+			time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)); err != nil {
+			t.Fatal(err)
+		}
+		return r
+	}
+	mapped, unmapped := message(t, "m1", forged(), time.Time{}), message(t, "m2", forged(), time.Time{})
+	mapped.Attributes["SenderId"], mapped.Attributes["SentTimestamp"] = "AROAEXAMPLEROLEID:session", "1792324800000"
+	unmapped.Attributes["SenderId"], unmapped.Attributes["SentTimestamp"] = "AROAOTHERROLEID:session", "1792324800000"
+
+	f := &fakeSink{}
+	h := handlerFor(f, nil, originFor(map[string]string{"AROAEXAMPLEROLEID": "workload:wallet"}, "1.2.3"))
+	h.log = slog.New(slog.DiscardHandler)
+	res, err := h.Handle(context.Background(), events.SQSEvent{Records: []events.SQSMessage{mapped, unmapped}})
+	if err != nil || len(res.BatchItemFailures) != 0 {
+		t.Fatalf("%v %+v", err, res)
+	}
+	if len(f.got) != 2 || !f.trusted {
+		t.Fatalf("%d records, trusted %v", len(f.got), f.trusted)
+	}
+	if f.got[0].GetObserver().GetId() != "workload:wallet" {
+		t.Errorf("a mapped sender is recorded as %q", f.got[0].GetObserver().GetId())
+	}
+	if f.got[1].GetObserver().GetId() != "" {
+		t.Errorf("an unmapped sender is recorded as %q: its own claim survived", f.got[1].GetObserver().GetId())
+	}
+	for _, r := range f.got {
+		if r.GetObserver().GetInstance() == "evil" || r.GetObserver().GetVersion() != "1.2.3" || r.GetRecordedAt().AsTime().Year() != 2026 {
+			t.Errorf("observer %+v, recorded_at %s: the sender's claim survived", r.GetObserver(), r.GetRecordedAt().AsTime())
+		}
+	}
+}
+
+// With no origin the handler stamps nothing and marks nothing: the records go to
+// the writer, which stamps them with its own clock.
+func TestWithoutAnOriginTheBatchIsNotMarked(t *testing.T) {
+	f := &fakeSink{}
+	h, _ := newHandler(f)
+	if _, err := h.Handle(context.Background(), events.SQSEvent{Records: []events.SQSMessage{message(t, "m", newRecord(), time.Time{})}}); err != nil {
+		t.Fatal(err)
+	}
+	if f.trusted {
+		t.Error("a batch nobody stamped was marked as stamped")
 	}
 }

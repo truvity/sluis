@@ -28,6 +28,7 @@ type fakeAPI struct {
 
 	creates, deletes, lists int
 	createErr               error
+	listErr                 error
 	gotMinter               string
 }
 
@@ -81,6 +82,9 @@ func (f *fakeAPI) ListTokens(context.Context) ([]cloudflare.Token, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.lists++
+	if f.listErr != nil {
+		return nil, f.listErr
+	}
 	var out []cloudflare.Token
 	for _, t := range f.tokens {
 		// An expired token is hidden from the list (checked against a live account).

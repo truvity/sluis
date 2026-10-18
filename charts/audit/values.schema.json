@@ -5608,6 +5608,18 @@
                   "minLength": 1,
                   "type": "string"
                 },
+                "senders": {
+                  "additionalProperties": {
+                    "maxLength": 128,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "description": "Names the principals that send to the queue, as the observer the trail records them under. A key is the unique id SQS reports as `SenderId`: `AROA...` for a role (`aws iam get-role --query Role.RoleId`), `AIDA...` for a user, or a whole `SenderId` with its `:session`. A role ARN is not accepted, because the message carries the id and not the ARN. A sender not named is recorded with no observer id, as before. With the table or without, `recorded_at` is the time SQS took the message, and nothing the message body says about its observer or its time is kept.",
+                  "propertyNames": {
+                    "pattern": "^[A-Z0-9]{16,32}(:[A-Za-z0-9_=,.@-]{1,64})?$"
+                  },
+                  "type": "object"
+                },
                 "visibility": {
                   "$ref": "#/$defs/config-audit-writer.v2.duration",
                   "default": "1m",

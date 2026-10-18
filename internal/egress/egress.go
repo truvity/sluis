@@ -64,6 +64,7 @@ var (
 		netip.MustParsePrefix("198.51.100.0/24"),
 		netip.MustParsePrefix("203.0.113.0/24"),
 		netip.MustParsePrefix("240.0.0.0/4"), // reserved, and the broadcast address
+		netip.MustParsePrefix("2001::/32"),   // Teredo: tunnels to an address the packet names
 		netip.MustParsePrefix("2001:db8::/32"),
 		netip.MustParsePrefix("100::/64"), // discard-only
 		// Metadata services that sit in ranges an operator may declare: AWS's
@@ -72,6 +73,11 @@ var (
 		netip.MustParsePrefix("100.100.100.200/32"),
 	}
 	carrierNAT = netip.MustParsePrefix("100.64.0.0/10")
+	// globalUnicast6 is 2000::/3, the only IPv6 space allocated for public
+	// use. Everything else (::/96 IPv4-compatible addresses, 64:ff9b:1::/48,
+	// the discard and reserved blocks) is refused after the embedded IPv4
+	// forms are judged by the address they embed.
+	globalUnicast6 = netip.MustParsePrefix("2000::/3")
 )
 
 // Blocked reports whether the policy refuses a connection to ip.
@@ -104,6 +110,8 @@ func (p Policy) Blocked(ip netip.Addr) bool {
 		return true
 	case ip.IsPrivate(), carrierNAT.Contains(ip):
 		return !p.AllowPrivate
+	case ip.Is6() && !globalUnicast6.Contains(ip):
+		return true
 	}
 	return false
 }

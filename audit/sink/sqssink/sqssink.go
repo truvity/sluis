@@ -34,6 +34,7 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/truvity/sluis/audit/internal/sqsorigin"
 	"github.com/truvity/sluis/audit/internal/telemetry"
 	"github.com/truvity/sluis/audit/sdk/record"
 	"github.com/truvity/sluis/audit/sdk/sink"
@@ -306,6 +307,7 @@ type Consumer struct {
 	visibility int32
 	retryAfter int32
 	onError    func(error)
+	stamp      func(*record.Record, map[string]string) error
 }
 
 // ConsumerOptions configure a consumer.
@@ -330,6 +332,13 @@ type ConsumerOptions struct {
 	// not be decoded, and a call to SQS that failed. A refused message is not
 	// deleted, so the queue redelivers it.
 	OnError func(error)
+	// Stamp, when given, stamps each record from the message's system
+	// attributes (SenderId, SentTimestamp), which SQS sets and the sender cannot
+	// choose, in place of whatever stamp the body carries. The target is then
+	// handed the batch on a context that says so (internal/sqsorigin), and keeps
+	// those stamps. A record Stamp fails on is skipped and reported, as one that
+	// cannot be decoded is. Without it the target stamps the records itself.
+	Stamp func(r *record.Record, attrs map[string]string) error
 }
 
 // NewConsumer binds a consumer to a Sink.
@@ -358,7 +367,7 @@ func NewConsumer(api API, target sink.Sink, o ConsumerOptions) (*Consumer, error
 	return &Consumer{
 		api: api, queue: o.QueueURL, target: target, batch: int32(o.Batch),
 		wait: int32(o.Wait / time.Second), visibility: int32(o.Visibility / time.Second),
-		retryAfter: int32(o.RetryAfter / time.Second), onError: o.OnError,
+		retryAfter: int32(o.RetryAfter / time.Second), onError: o.OnError, stamp: o.Stamp,
 	}, nil
 }
 
@@ -380,6 +389,9 @@ func (c *Consumer) Run(ctx context.Context) error {
 			WaitTimeSeconds:       c.wait,
 			VisibilityTimeout:     c.visibility,
 			MessageAttributeNames: traceAttributes,
+			MessageSystemAttributeNames: []types.MessageSystemAttributeName{
+				types.MessageSystemAttributeNameSenderId, types.MessageSystemAttributeNameSentTimestamp,
+			},
 		})
 		if err != nil {
 			if ctx.Err() != nil {
@@ -411,6 +423,13 @@ func (c *Consumer) handle(ctx context.Context, msgs []types.Message) {
 			skipped = append(skipped, m)
 			continue
 		}
+		if c.stamp != nil {
+			if err := c.stamp(&r, m.Attributes); err != nil {
+				c.report(fmt.Errorf("sqssink: a message could not be stamped and was skipped: %w", err))
+				skipped = append(skipped, m)
+				continue
+			}
+		}
 		records = append(records, &r)
 		held = append(held, m)
 	}
@@ -441,6 +460,9 @@ func (c *Consumer) handle(ctx context.Context, msgs []types.Message) {
 		trace.WithAttributes(
 			attribute.String(telemetry.AttrTransport, sink.TransportSQS),
 			attribute.Int(telemetry.AttrRecords, len(records))))
+	if c.stamp != nil {
+		spanCtx = sqsorigin.Trust(spanCtx)
+	}
 	res, err := c.target.Write(spanCtx, &sink.Request{Records: records, Delivery: sink.Block})
 	if err == nil {
 		err = res.Err()

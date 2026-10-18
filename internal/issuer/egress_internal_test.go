@@ -184,3 +184,33 @@ func mustAddr(t *testing.T, s string) netip.Addr {
 	}
 	return a
 }
+
+// `allowInsecure` is reachable from a production document, so it does not by
+// itself lift the guards against loopback and the metadata service: the issuer
+// URL has to be on loopback too.
+func TestAllowInsecureLiftsTheEgressGuardsOnlyForALoopbackIssuer(t *testing.T) {
+	t.Parallel()
+
+	iss := func(url string, insecure bool) *Issuer {
+		return &Issuer{cfg: Config{URL: url, AllowInsecure: insecure}}
+	}
+	cases := []struct {
+		name string
+		iss  *Issuer
+		dev  bool
+	}{
+		{"loopback and insecure", iss("http://127.0.0.1:8080", true), true},
+		{"localhost and insecure", iss("http://localhost:8080", true), true},
+		{"ipv6 loopback and insecure", iss("http://[::1]:8080", true), true},
+		{"a real host and insecure", iss("http://access.example.com", true), false},
+		{"a private address and insecure", iss("http://10.0.0.5", true), false},
+		{"loopback, not insecure", iss("http://127.0.0.1:8080", false), false},
+		{"production", iss("https://access.example.com", false), false},
+		{"a host that only starts with localhost", iss("http://localhost.evil.example", true), false},
+	}
+	for _, c := range cases {
+		if got := egressFor(c.iss, egress.Public) == egress.Development; got != c.dev {
+			t.Errorf("%s: development policy = %v, want %v", c.name, got, c.dev)
+		}
+	}
+}

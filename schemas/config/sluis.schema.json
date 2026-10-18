@@ -190,7 +190,7 @@
       "type": "object"
     },
     "allowInsecure": {
-      "description": "Accept a plain-http issuer URL, for a local run.",
+      "description": "Accept a plain-http issuer URL, for a local run. When the issuer URL is also on the loopback interface (`localhost`, `127.0.0.1`, `::1`), the issuer connects to loopback and private addresses when it fetches client documents and posts back-channel logouts; with any other issuer URL those guards stay on.",
       "type": "boolean"
     },
     "apiVersion": {
