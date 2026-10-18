@@ -136,6 +136,7 @@ type Config struct {
 	// issuer.DefaultAbsoluteLifetime for why 24h.
 	absoluteLifetime  time.Duration
 	secureCookies     bool
+	hsts              httpsec.HSTS
 	forwardedHeader   string
 	forwardedIssuer   string
 	signOutURL        string
@@ -292,6 +293,9 @@ func FromConfig(f *config.Serve, p *config.PolicyDocument) (Config, error) {
 	c.holdWindow = dur(l.Hold, 4*time.Hour)
 	if c.publicURL == "" {
 		c.publicURL = fmt.Sprintf("http://localhost:%d", c.consolePort)
+	}
+	if c.hsts, err = f.HSTS.Policy(c.publicURL); err != nil {
+		return Config{}, err
 	}
 	level := "info"
 	if f.Log != nil && f.Log.Level != "" {
@@ -1020,6 +1024,7 @@ func New(ctx context.Context, cfg Config, st *store.Stores, log *slog.Logger) (*
 		// carry it.
 		Mount:                   mountOf(cfg.publicURL),
 		ForwardedForTrustedHops: cfg.auditForwardedForTrustedHops,
+		HSTS:                    cfg.hsts,
 		Log:                     log,
 		UI:                      frontend.FS(),
 	})

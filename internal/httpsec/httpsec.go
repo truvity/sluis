@@ -9,7 +9,11 @@
 package httpsec
 
 import (
+	"context"
+	"net"
 	"net/http"
+	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -137,12 +141,146 @@ func Apply(w http.ResponseWriter, p Policy) {
 	header.Set("X-Content-Type-Options", "nosniff")
 }
 
+// DefaultHSTSMaxAge is how long a browser is told to keep using https for a
+// host: a year, the figure the preload list asks for and the longest anybody
+// has reason to ask.
+const DefaultHSTSMaxAge = 365 * 24 * time.Hour
+
+// HSTS is what a service says about Strict-Transport-Security. The zero
+// value says nothing.
+//
+// The header is sent on a response only when the request arrived over https
+// as this service sees it ([HSTS.secure]) -- a header on a plain-http
+// response is ignored by browsers (RFC 6797 section 8.1) and a server is
+// told not to send it (section 7.2). It never carries `preload`: that is a
+// commitment about every subdomain of a registrable domain, made once by the
+// owner of the domain, not by one service on it.
+type HSTS struct {
+	// MaxAge is how long a browser keeps the rule, in whole seconds. Zero
+	// sends no header.
+	MaxAge time.Duration
+
+	// IncludeSubDomains extends the rule to every subdomain of the host.
+	IncludeSubDomains bool
+
+	// PublicURL is the address the service is published at. When it is
+	// https, a request whose Host is that host is taken to have arrived over
+	// https at a front that ends TLS, unless the front says it did not
+	// ([HSTS.secure]). Empty or http leaves only a TLS connection and
+	// [TrustHTTPS] to say so.
+	PublicURL string
+}
+
+// Value is the header's value, empty when there is none to send.
+func (h HSTS) Value() string {
+	seconds := int64(h.MaxAge / time.Second)
+	if seconds <= 0 {
+		return ""
+	}
+
+	value := "max-age=" + strconv.FormatInt(seconds, 10)
+	if h.IncludeSubDomains {
+		value += "; includeSubDomains"
+	}
+
+	return value
+}
+
+type httpsKey struct{}
+
+// TrustHTTPS marks a request as having reached the service over https, for a
+// front the service itself trusts to say so: the Lambda adapter, whose
+// payload comes from API Gateway and from nowhere else. Only code in this
+// process can set it; nothing a client sends does.
+func TrustHTTPS(ctx context.Context) context.Context {
+	return context.WithValue(ctx, httpsKey{}, true)
+}
+
+func trustedHTTPS(ctx context.Context) bool {
+	trusted, _ := ctx.Value(httpsKey{}).(bool)
+
+	return trusted
+}
+
+// secure says whether r arrived over https, as this service sees it:
+//
+//   - the connection is TLS; or
+//   - the front the process trusts said so ([TrustHTTPS]); or
+//   - the service is published at an https address, the request is for that
+//     host, and nothing in front of it said the hop was plain. A deployment
+//     behind a gateway that ends TLS sees plain http on its own listener,
+//     and that is why the cookie flag follows the public URL too.
+//
+// An X-Forwarded-Proto of the request is read in one direction only: `http`
+// withholds the header, and no value grants it, so a client cannot make the
+// service say something it would not have.
+//
+// A loopback host is never secure: a browser does not apply HSTS to it, and
+// a developer's localhost must not be pinned to https by a service that was
+// run there once.
+func (h HSTS) secure(r *http.Request) bool {
+	if loopbackHost(r.Host) {
+		return false
+	}
+
+	if r.TLS != nil || trustedHTTPS(r.Context()) {
+		return true
+	}
+
+	public, err := url.Parse(h.PublicURL)
+	if err != nil || public.Scheme != "https" || loopbackHost(public.Host) {
+		return false
+	}
+
+	if strings.EqualFold(strings.TrimSpace(r.Header.Get("X-Forwarded-Proto")), "http") {
+		return false
+	}
+
+	return strings.EqualFold(hostOnly(r.Host), hostOnly(public.Host))
+}
+
+// hostOnly is host without a port.
+func hostOnly(host string) string {
+	if name, _, err := net.SplitHostPort(host); err == nil {
+		return name
+	}
+
+	return strings.Trim(host, "[]")
+}
+
+// loopbackHost reports whether host (with or without a port) names this
+// machine: localhost, a name under .localhost, or a loopback address.
+func loopbackHost(host string) bool {
+	name := strings.TrimSuffix(strings.ToLower(hostOnly(host)), ".")
+	if name == "localhost" || strings.HasSuffix(name, ".localhost") {
+		return true
+	}
+
+	ip := net.ParseIP(name)
+
+	return ip != nil && ip.IsLoopback()
+}
+
 // Headers sets the default policy on every response, so that no page is
 // served without it by having been forgotten. A handler that needs another
-// policy sets it with [Apply].
+// policy sets it with [Apply]. It says nothing about HSTS: see [HeadersWith].
 func Headers(next http.Handler) http.Handler {
+	return HeadersWith(next, HSTS{})
+}
+
+// HeadersWith is [Headers] that also sends Strict-Transport-Security under
+// hsts to a request that arrived over https. A header already on the
+// response when the request reaches this middleware is left as it is.
+func HeadersWith(next http.Handler, hsts HSTS) http.Handler {
+	value := hsts.Value()
+
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		Apply(w, Policy{})
+
+		if value != "" && w.Header().Get("Strict-Transport-Security") == "" && hsts.secure(r) {
+			w.Header().Set("Strict-Transport-Security", value)
+		}
+
 		next.ServeHTTP(w, r)
 	})
 }

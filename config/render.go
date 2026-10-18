@@ -207,6 +207,7 @@ func (in *Installation) service() (*internal.Sluis, error) {
 	s.Log = copyOf(in.Log)
 	s.Lifetimes = copyOf(in.Lifetimes)
 	s.Freshness = copyOf(in.Freshness)
+	s.HSTS = copyOf(in.HSTS)
 	s.Directory = copyOf(in.Directory)
 	s.Login = copyOf(in.Login)
 	s.Console = copyOf(in.Console)

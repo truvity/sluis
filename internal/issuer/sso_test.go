@@ -47,6 +47,14 @@ func signInServer(t *testing.T, email string) (*httptest.Server, *issuer.Issuer)
 func signInServerWith(t *testing.T, email, policyYAML string) (*httptest.Server, *issuer.Issuer) {
 	t.Helper()
 
+	return signInServerConfigured(t, email, policyYAML, issuer.Config{URL: "http://issuer.example", AllowInsecure: true})
+}
+
+// signInServerConfigured is the same issuer under a configuration of the
+// test's own.
+func signInServerConfigured(t *testing.T, email, policyYAML string, cfg issuer.Config) (*httptest.Server, *issuer.Issuer) {
+	t.Helper()
+
 	declared, err := policy.Parse([]byte(policyYAML))
 	if err != nil {
 		t.Fatalf("parse the policy: %v", err)
@@ -61,7 +69,7 @@ func signInServerWith(t *testing.T, email, policyYAML string) (*httptest.Server,
 		email: {Found: true, Authoritative: true, Groups: []string{"engineering@north.example"}},
 	}}
 	iss := issuer.New(
-		issuer.Config{URL: "http://issuer.example", AllowInsecure: true},
+		cfg,
 		set, dir, issuer.NewMemoryState(),
 	)
 

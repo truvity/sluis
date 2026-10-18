@@ -3,6 +3,7 @@ package issuer_test
 import (
 	"log/slog"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/demo"
+	"github.com/truvity/sluis/internal/httpsec"
 	"github.com/truvity/sluis/internal/issuer"
 	"github.com/truvity/sluis/policy"
 )
@@ -85,6 +87,57 @@ func TestEveryIssuerResponseCarriesTheSecurityHeaders(t *testing.T) {
 	_ = response.Body.Close()
 
 	checkHeaders(t, "the refusal of /authorize", response.Header, true)
+}
+
+// The issuer says Strict-Transport-Security on what reached it over https as
+// its public URL says, and on nothing else.
+func TestTheIssuerSendsHSTSOnlyToARequestThatCameOverHTTPS(t *testing.T) {
+	t.Parallel()
+
+	published, _ := signInServerConfigured(t, "ada@north.example", demo.Policy, issuer.Config{
+		URL: "https://issuer.example", AllowInsecure: true,
+		HSTS: httpsec.HSTS{MaxAge: httpsec.DefaultHSTSMaxAge, IncludeSubDomains: true},
+	})
+	plain, _ := signInServerConfigured(t, "ada@north.example", demo.Policy, issuer.Config{
+		URL: "http://issuer.example", AllowInsecure: true,
+		HSTS: httpsec.HSTS{MaxAge: httpsec.DefaultHSTSMaxAge, IncludeSubDomains: true},
+	})
+
+	for name, c := range map[string]struct {
+		server  *httptest.Server
+		host    string
+		forward string
+		want    string
+	}{
+		"the published host":              {published, "issuer.example", "", "max-age=31536000; includeSubDomains"},
+		"the published host, front https": {published, "issuer.example", "https", "max-age=31536000; includeSubDomains"},
+		"the published host, front http":  {published, "issuer.example", "http", ""},
+		"another host":                    {published, "elsewhere.example", "", ""},
+		"an http issuer":                  {plain, "issuer.example", "https", ""},
+	} {
+		for _, path := range []string{"/.well-known/openid-configuration", "/login", "/no-such-page"} {
+			request, err := http.NewRequestWithContext(t.Context(), http.MethodGet, c.server.URL+path, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			request.Host = c.host
+			if c.forward != "" {
+				request.Header.Set("X-Forwarded-Proto", c.forward)
+			}
+
+			response, err := http.DefaultClient.Do(request)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			_ = response.Body.Close()
+
+			if got := response.Header.Get("Strict-Transport-Security"); got != c.want {
+				t.Errorf("%s, %s: Strict-Transport-Security = %q, want %q", name, path, got, c.want)
+			}
+		}
+	}
 }
 
 // The protocol endpoints answer a browser's page from any origin, and never

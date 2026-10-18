@@ -825,6 +825,23 @@
         "enforce"
       ]
     },
+    "hsts": {
+      "additionalProperties": false,
+      "description": "The Strict-Transport-Security header the issuer and the console send on a response that arrived over https. Never `preload`; never sent over http or to a loopback host.",
+      "properties": {
+        "includeSubDomains": {
+          "default": true,
+          "description": "Extend the rule to the host's subdomains. Every subdomain must then answer https.",
+          "type": "boolean"
+        },
+        "maxAge": {
+          "$ref": "#/$defs/duration",
+          "default": "8760h",
+          "description": "How long a browser keeps the rule, in whole seconds. Zero sends no header."
+        }
+      },
+      "type": "object"
+    },
     "inCluster": {
       "description": "Prove recovery against the cluster the pod runs in. Set by a deployment that turns recovery on.",
       "type": "boolean"

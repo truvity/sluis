@@ -10,6 +10,7 @@ import (
 
 	"github.com/aws/aws-lambda-go/events"
 
+	"github.com/truvity/sluis/internal/httpsec"
 	"github.com/truvity/sluis/internal/lambdaapp"
 )
 
@@ -146,5 +147,38 @@ func TestSettleRunsAfterEveryRequest(t *testing.T) {
 	}
 	if settled != 1 {
 		t.Errorf("settled %d times", settled)
+	}
+}
+
+// An API Gateway event is a request that came over https, so the security
+// middleware answers it with Strict-Transport-Security, unless the gateway
+// said the request was plain http or the host is the machine's own.
+func TestAnAPIGatewayEventGetsHSTS(t *testing.T) {
+	handler := httpsec.HeadersWith(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}), httpsec.HSTS{MaxAge: httpsec.DefaultHSTSMaxAge, IncludeSubDomains: true, PublicURL: "https://id.example.org"})
+
+	for name, c := range map[string]struct {
+		forward, host, want string
+	}{
+		"https":            {"https", "id.example.org", "max-age=31536000; includeSubDomains"},
+		"no forwarded":     {"", "id.example.org", "max-age=31536000; includeSubDomains"},
+		"the default host": {"https", "abc123.execute-api.eu-west-1.amazonaws.com", "max-age=31536000; includeSubDomains"},
+		"http":             {"http", "id.example.org", ""},
+		"localhost":        {"https", "localhost:3000", ""},
+	} {
+		e := event("GET", "/", "")
+		e.Headers["host"] = c.host
+
+		if c.forward == "" {
+			delete(e.Headers, "x-forwarded-proto")
+		} else {
+			e.Headers["x-forwarded-proto"] = c.forward
+		}
+
+		got := serve(t, handler, e).Headers["Strict-Transport-Security"]
+		if got != c.want {
+			t.Errorf("%s: Strict-Transport-Security = %q, want %q", name, got, c.want)
+		}
 	}
 }

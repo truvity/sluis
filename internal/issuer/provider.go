@@ -296,7 +296,7 @@ func HandlerWithSignIn(iss *Issuer, storage op.Storage, signIn SignInDeps) (http
 	}
 	mux.Handle("/", neverCached(protocol))
 
-	return refusal.Middleware(httpsec.Headers(withSigningAudience(withOneResolution(authorizationResponseIssuer(iss.Config().URL, mux))))), nil
+	return refusal.Middleware(httpsec.HeadersWith(withSigningAudience(withOneResolution(authorizationResponseIssuer(iss.Config().URL, mux))), iss.hsts())), nil
 }
 
 // withSigningAudience installs a fresh [signingAudience] carrier on every
@@ -1149,4 +1149,13 @@ func accessTokenVerifier(iss *Issuer, storage op.Storage) *op.AccessTokenVerifie
 		keySetOf(storage),
 		op.WithSupportedAccessTokenSigningAlgorithms(signer.SigningAlgorithmStrings()...),
 	)
+}
+
+// hsts is the Strict-Transport-Security policy of this issuer, published at
+// its URL.
+func (i *Issuer) hsts() httpsec.HSTS {
+	policy := i.Config().HSTS
+	policy.PublicURL = i.Config().URL
+
+	return policy
 }

@@ -75,6 +75,8 @@ type Installation struct {
 	Log       *Log       `json:"log,omitempty"`
 	Lifetimes *Lifetimes `json:"lifetimes,omitempty"`
 	Freshness *Freshness `json:"freshness,omitempty"`
+	// HSTS is the service document's `hsts`.
+	HSTS *HSTS `json:"hsts,omitempty"`
 	// Secrets is the service document's `secrets`, for a platform with no
 	// secrets adapter of its own. Shape lambda fills it (ssm, the instance's
 	// root) and refuses another value.

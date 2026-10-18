@@ -80,6 +80,8 @@ type Config struct {
 	release       string
 	oauthClientID string
 	secureCookies bool
+	// hsts is the Strict-Transport-Security policy: see [config.HSTS].
+	hsts httpsec.HSTS
 	// oauthProvider names the OAuth client's secrets:
 	// providers/google/<provider>/client-id and .../client-secret.
 	oauthProvider    string
@@ -253,6 +255,10 @@ func FromConfig(f *config.Serve, p *config.PolicyDocument) (Config, error) {
 	c.secureCookies = strings.HasPrefix(c.issuerURL, "https://")
 	if f.SecureCookies != nil {
 		c.secureCookies = *f.SecureCookies
+	}
+
+	if c.hsts, err = f.HSTS.Policy(c.issuerURL); err != nil {
+		return Config{}, err
 	}
 
 	l := f.Lifetimes
@@ -599,6 +605,7 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 		HoldWindow:       cfg.holdWindow,
 		Agent:            cfg.agentLifetimes,
 		AllowInsecure:    cfg.allowInsecure,
+		HSTS:             cfg.hsts,
 		GroupsScoping:    cfg.groupsScoping,
 	}, set, directory, shared)
 	// The service's one audit trail, opened by the directory half. A

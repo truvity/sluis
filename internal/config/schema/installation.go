@@ -77,6 +77,7 @@ func installationSchema() m {
 		"log":       serveProps["log"],
 		"lifetimes": serveProps["lifetimes"],
 		"freshness": serveProps["freshness"],
+		"hsts":      serveProps["hsts"],
 		"secrets":   serveProps["secrets"],
 		"aws": obj("The AWS account and the resources the installation is built on. Each resource named here becomes the adapter setting that uses it (`state` the table, `blobs` the bucket, `audit` the queue), unless `adapters` names that concern.", m{
 			"account":      m{"type": "string", "pattern": "^[0-9]{12}$", "description": "The 12-digit account id."},

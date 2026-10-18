@@ -13,6 +13,7 @@ import (
 	"github.com/truvity/sluis/audit/sdk/record"
 
 	"github.com/truvity/sluis/internal/audit"
+	"github.com/truvity/sluis/internal/httpsec"
 	"github.com/truvity/sluis/policy"
 )
 
@@ -57,6 +58,10 @@ type Config struct {
 	// impersonated by anyone on the path. It exists for a local run and a
 	// test, and a deployment that sets it has misconfigured itself.
 	AllowInsecure bool
+	// HSTS is the Strict-Transport-Security this issuer sends on a response
+	// that arrived over https; its PublicURL is [Config.URL]. The zero value
+	// sends none.
+	HSTS httpsec.HSTS
 	// GroupsScoping is how far this installation has moved toward
 	// per-audience `groups` scoping. Empty defaults to
 	// [GroupsScopingReport] in [Config.withDefaults] -- see

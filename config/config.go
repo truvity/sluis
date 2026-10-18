@@ -32,6 +32,9 @@ type (
 	Lifetimes = internal.Lifetimes
 	// AgentLifetimes is `lifetimes.agent`: the agent session class's own.
 	AgentLifetimes = internal.AgentLifetimes
+	// HSTS is `hsts`: the Strict-Transport-Security header the issuer and the
+	// console send on a response that arrived over https.
+	HSTS = internal.HSTS
 	// Freshness is `freshness`: how the directory's snapshot is kept current.
 	Freshness = internal.Freshness
 	// Secrets is `secrets`: how the secrets a document names are delivered.

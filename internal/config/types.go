@@ -65,6 +65,17 @@ type (
 		Agent *AgentLifetimes `json:"agent,omitempty"`
 	}
 
+	// HSTS is what the issuer and the console say about
+	// Strict-Transport-Security on a response that arrived over https.
+	HSTS struct {
+		// MaxAge is how long a browser keeps the rule. Unset is a year;
+		// zero sends no header.
+		MaxAge *Duration `json:"maxAge,omitempty"`
+		// IncludeSubDomains extends the rule to the host's subdomains.
+		// Unset is true.
+		IncludeSubDomains *bool `json:"includeSubDomains,omitempty"`
+	}
+
 	// AgentLifetimes are the agent class's own lifetimes
 	// (docs/decisions/0040-agent-class-sessions.md): its idle limit, its
 	// absolute limit from `auth_time`, and the mandatory cap on its access
@@ -467,6 +478,9 @@ type Serve struct {
 	PublicRootURL string     `json:"publicRootURL,omitempty"`
 	SecureCookies *bool      `json:"secureCookies,omitempty"`
 	GroupsScoping string     `json:"groupsScoping,omitempty"`
+	// HSTS tunes the Strict-Transport-Security header; unset sends the
+	// defaults on every https response.
+	HSTS *HSTS `json:"hsts,omitempty"`
 
 	// Secrets says how the secrets this document names are delivered.
 	Secrets *Secrets `json:"secrets,omitempty"`
