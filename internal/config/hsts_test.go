@@ -22,16 +22,16 @@ func TestHSTSDefaultsAndOverrides(t *testing.T) {
 		want    httpsec.HSTS
 		wantErr bool
 	}{
-		"absent":    {nil, httpsec.HSTS{MaxAge: 8760 * time.Hour, PublicURL: "https://x.example"}, false},
-		"empty":     {&config.HSTS{}, httpsec.HSTS{MaxAge: 8760 * time.Hour, PublicURL: "https://x.example"}, false},
+		"absent": {nil, httpsec.HSTS{MaxAge: 8760 * time.Hour, PublicURL: "https://x.example"}, false},
+		"empty":  {&config.HSTS{}, httpsec.HSTS{MaxAge: 8760 * time.Hour, PublicURL: "https://x.example"}, false},
 		"overrides": {
 			&config.HSTS{MaxAge: age(time.Hour), IncludeSubDomains: &on},
 			httpsec.HSTS{MaxAge: time.Hour, IncludeSubDomains: true, PublicURL: "https://x.example"},
 			false,
 		},
-		"off":       {&config.HSTS{MaxAge: age(0)}, httpsec.HSTS{PublicURL: "https://x.example"}, false},
-		"negative":  {&config.HSTS{MaxAge: age(-time.Hour)}, httpsec.HSTS{}, true},
-		"fraction":  {&config.HSTS{MaxAge: age(1500 * time.Millisecond)}, httpsec.HSTS{}, true},
+		"off":      {&config.HSTS{MaxAge: age(0)}, httpsec.HSTS{PublicURL: "https://x.example"}, false},
+		"negative": {&config.HSTS{MaxAge: age(-time.Hour)}, httpsec.HSTS{}, true},
+		"fraction": {&config.HSTS{MaxAge: age(1500 * time.Millisecond)}, httpsec.HSTS{}, true},
 	} {
 		got, err := c.section.Policy("https://x.example")
 		if (err != nil) != c.wantErr {
