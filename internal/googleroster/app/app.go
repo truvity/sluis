@@ -330,7 +330,7 @@ func oauthClient(o *config.GoogleOAuthClient, publicURL string, src secrets.Sour
 		}
 	}
 	value := lazy.New(lazy.TTL, func(ctx context.Context) (google.OAuthClient, error) {
-		c := google.OAuthClient{ID: o.ID, BaseURL: strings.TrimSuffix(publicURL, "/")}
+		c := google.OAuthClient{ID: o.ID, BaseURL: strings.TrimSuffix(publicURL, "/"), HostedDomains: o.HostedDomains}
 		var err error
 		if c.ID == "" {
 			if c.ID, err = src.Get(ctx, secrets.ProviderClientID(o.Provider)); err != nil {

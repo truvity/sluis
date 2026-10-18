@@ -102,6 +102,8 @@ type Config struct {
 	consoleClientID    string
 	audience           string
 	githubOwners       []string
+	githubOwnerIDs     []string
+	githubRepositoryID []string
 	consoleOrigin      string
 	signingKeyFile     string
 	// additionalSigningKeyFiles are every OTHER algorithm this
@@ -179,6 +181,8 @@ func FromConfig(f *config.Serve, p *config.PolicyDocument) (Config, error) {
 	c.keys = f.Keys
 	c.instance = orDefault(f.Instance, c.release)
 	c.githubOwners = p.GitHubOwners()
+	c.githubOwnerIDs = p.GitHubOwnerIDs()
+	c.githubRepositoryID = p.GitHubRepositoryIDs()
 	c.clusters = p.Clusters()
 	c.aws = p.AWS()
 	if f.Console != nil {
@@ -1362,7 +1366,9 @@ func openVerifiers(ctx context.Context, cfg Config, log *slog.Logger) (all, clus
 		log.InfoContext(ctx, "CI tokens are verified against GitHub",
 			slog.Any("owners", cfg.githubOwners), slog.String("audience", cfg.issuerURL))
 		verifiers = append(verifiers, &verify.GitHub{
-			Owners: cfg.githubOwners,
+			Owners:        cfg.githubOwners,
+			OwnerIDs:      cfg.githubOwnerIDs,
+			RepositoryIDs: cfg.githubRepositoryID,
 			// The audience a workflow must request is this issuer's own
 			// URL. A token minted for a cloud provider is a valid GitHub
 			// token, and one audience per relying party is what keeps it

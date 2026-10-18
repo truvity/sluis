@@ -98,6 +98,8 @@ func (d *PolicyDocument) merge(layer *PolicyDocument, from string) error {
 				d.Exchange.GitHub = &ExchangeGitHub{}
 			}
 			d.Exchange.GitHub.Owners = union(d.Exchange.GitHub.Owners, x.GitHub.Owners)
+			d.Exchange.GitHub.OwnerIDs = union(d.Exchange.GitHub.OwnerIDs, x.GitHub.OwnerIDs)
+			d.Exchange.GitHub.RepositoryIDs = union(d.Exchange.GitHub.RepositoryIDs, x.GitHub.RepositoryIDs)
 		}
 		for i, row := range d.Exchange.Clusters {
 			for _, other := range d.Exchange.Clusters[:i] {

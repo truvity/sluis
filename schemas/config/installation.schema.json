@@ -2064,10 +2064,26 @@
           "additionalProperties": false,
           "description": "Whose GitHub Actions tokens are verified, for this issuer's URL as the audience.",
           "properties": {
+            "ownerIds": {
+              "description": "The numeric ids of those organisations (the token's `repository_owner_id`). When set, a token must carry one of them as well as an owner above: a login can be renamed or taken by someone else after a deletion, an id cannot. Unset asks nothing of the id.",
+              "items": {
+                "pattern": "^[0-9]+$",
+                "type": "string"
+              },
+              "type": "array"
+            },
             "owners": {
               "description": "The organisations. None verifies none: an empty list would admit every repository there is.",
               "items": {
                 "minLength": 1,
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "repositoryIds": {
+              "description": "The numeric ids of the repositories whose tokens are verified (the token's `repository_id`). When set, a token must carry one of them. Unset asks nothing of the id.",
+              "items": {
+                "pattern": "^[0-9]+$",
                 "type": "string"
               },
               "type": "array"

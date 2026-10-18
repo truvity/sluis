@@ -204,6 +204,15 @@
           "additionalProperties": false,
           "description": "The OAuth client registered once with Google: needed to reopen a workspace that was connected by consent (a stored refresh token). Not needed for service-account keys.",
           "properties": {
+            "hostedDomains": {
+              "description": "The Google Workspace domains a person may sign in from. A sign-in must carry an `hd` claim that names one of them, so an account of another organisation, or a consumer account, is refused whatever its address says. Unset asks nothing of `hd`. A sign-in must in every case carry a verified address.",
+              "items": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "type": "array",
+              "uniqueItems": true
+            },
             "id": {
               "description": "The client id, for a local run. Not a secret.",
               "minLength": 1,

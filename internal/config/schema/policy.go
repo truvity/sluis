@@ -259,6 +259,10 @@ func policyExchangeSchema() m {
 		}),
 		"github": obj("Whose GitHub Actions tokens are verified, for this issuer's URL as the audience.", m{
 			"owners": strList("The organisations. None verifies none: an empty list would admit every repository there is."),
+			"ownerIds": list("The numeric ids of those organisations (the token's `repository_owner_id`). When set, a token must carry one of them as well as an owner above: a login can be renamed or taken by someone else after a deletion, an id cannot. Unset asks nothing of the id.",
+				m{"type": "string", "pattern": "^[0-9]+$"}),
+			"repositoryIds": list("The numeric ids of the repositories whose tokens are verified (the token's `repository_id`). When set, a token must carry one of them. Unset asks nothing of the id.",
+				m{"type": "string", "pattern": "^[0-9]+$"}),
 		}),
 	})
 }

@@ -176,3 +176,56 @@ func TestSignInAsksForNothingButAnAddress(t *testing.T) {
 		t.Error("a callback with no code was accepted")
 	}
 }
+
+func signInToken(claims string) *oauth2.Token {
+	payload := base64.RawURLEncoding.EncodeToString([]byte(claims))
+	return (&oauth2.Token{}).WithExtra(map[string]any{"id_token": "header." + payload + ".signature"})
+}
+
+// A sign-in is believed only as far as Google vouches for the address: the
+// account must have verified it, and where the installation names the domains
+// it signs in, the account must belong to one.
+func TestASignInNeedsAVerifiedAddress(t *testing.T) {
+	t.Parallel()
+
+	for name, tc := range map[string]struct {
+		claims string
+		hosted []string
+		want   string
+		fail   bool
+	}{
+		"verified":                 {claims: `{"sub":"1","email":"Ada@North.Example","email_verified":true}`, want: "ada@north.example"},
+		"verified as a string":     {claims: `{"sub":"1","email":"ada@north.example","email_verified":"true"}`, want: "ada@north.example"},
+		"not verified":             {claims: `{"sub":"1","email":"ada@north.example","email_verified":false}`, fail: true},
+		"verification absent":      {claims: `{"sub":"1","email":"ada@north.example"}`, fail: true},
+		"verification not a bool":  {claims: `{"sub":"1","email":"ada@north.example","email_verified":1}`, fail: true},
+		"no subject":               {claims: `{"email":"ada@north.example","email_verified":true}`, fail: true},
+		"no address":               {claims: `{"sub":"1","email_verified":true}`, fail: true},
+		"hosted domain matches":    {claims: `{"sub":"1","email":"ada@north.example","email_verified":true,"hd":"North.Example"}`, hosted: []string{"north.example"}, want: "ada@north.example"},
+		"hosted domain is another": {claims: `{"sub":"1","email":"ada@north.example","email_verified":true,"hd":"south.example"}`, hosted: []string{"north.example"}, fail: true},
+		"hosted domain absent":     {claims: `{"sub":"1","email":"ada@north.example","email_verified":true}`, hosted: []string{"north.example"}, fail: true},
+		"hosted domain not asked":  {claims: `{"sub":"1","email":"ada@north.example","email_verified":true,"hd":"south.example"}`, want: "ada@north.example"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			got, err := signedInAccount(signInToken(tc.claims), tc.hosted)
+			if tc.fail {
+				if err == nil {
+					t.Fatalf("accepted %s as %q", tc.claims, got)
+				}
+				return
+			}
+			if err != nil || got != tc.want {
+				t.Errorf("= %q, %v; want %q", got, err, tc.want)
+			}
+		})
+	}
+}
+
+func TestASignInWithNoIDTokenIsRefused(t *testing.T) {
+	t.Parallel()
+
+	if _, err := signedInAccount(&oauth2.Token{}, nil); err == nil {
+		t.Error("a sign-in with no ID token was accepted")
+	}
+}

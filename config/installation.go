@@ -226,6 +226,11 @@ type AWSAccount struct {
 // ExchangeGitHub is whose GitHub Actions tokens are verified.
 type ExchangeGitHub struct {
 	Owners []string `json:"owners,omitempty"`
+	// OwnerIDs and RepositoryIDs pin the numeric ids behind those names
+	// (`repository_owner_id`, `repository_id`): when set, a token must carry
+	// one of them. Unset asks nothing of the id.
+	OwnerIDs      []string `json:"ownerIds,omitempty"`
+	RepositoryIDs []string `json:"repositoryIds,omitempty"`
 }
 
 // Apps is what an operator may make on the console: the policy document's
