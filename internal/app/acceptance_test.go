@@ -24,6 +24,7 @@ import (
 	"github.com/truvity/sluis/internal/config"
 	"github.com/truvity/sluis/internal/store"
 	"github.com/truvity/sluis/srp"
+	"github.com/truvity/sluis/storage/logtest"
 )
 
 // recoverPassword is the fixture's recovery password: long and random enough to sit
@@ -482,4 +483,65 @@ func where(t *testing.T, client *http.Client, url string) string {
 	}
 	defer func() { _ = response.Body.Close() }()
 	return response.Header.Get("Location")
+}
+
+// A password the verifier is derived from is held to the strength a verifier needs
+// at start: a weak one is an ERROR in the log and a hub that is not ready, and not
+// a 503 found by the first sign-in of an incident.
+func TestAWeakRecoveryPasswordIsAnErrorAtStartAndNotReady(t *testing.T) {
+	for name, tc := range map[string]struct {
+		password string
+		ok       bool
+	}{"weak": {"recover-me", false}, "strong": {recoverPassword, true}} {
+		t.Run(name, func(t *testing.T) {
+			f := issuerFile(t)
+			t.Setenv("SLUIS_SECRET_RECOVERY_PASSWORD", tc.password)
+			cfg, err := app.FromConfig(f, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			log, logs := logtest.Logger()
+			assembled, err := app.New(context.Background(), cfg, openStores(t, f), log)
+			if err != nil {
+				t.Fatalf("New: %v", err)
+			}
+			t.Cleanup(assembled.Close)
+			ready := assembled.Readiness()
+			var readyErr error
+			if ready.Check != nil {
+				readyErr = ready.Check(context.Background())
+			}
+			errored := logs.CountLevel(slog.LevelError) > 0 && logs.Mentions("cannot sit behind a verifier")
+			switch {
+			case tc.ok && (errored || readyErr != nil):
+				t.Errorf("a strong password: logged error %v, readiness %v", errored, readyErr)
+			case !tc.ok && (!errored || readyErr == nil || !strings.Contains(readyErr.Error(), "recovery.passwordSecret")):
+				t.Errorf("a weak password: logged error %v, readiness %v", errored, readyErr)
+			}
+		})
+	}
+}
+
+// A function reads no secret at start: the weak password is found by readiness and
+// by the first sign-in, and the start makes no read.
+func TestAFunctionStartReadsNoRecoveryPassword(t *testing.T) {
+	f := issuerFile(t)
+	t.Setenv("SLUIS_SECRET_RECOVERY_PASSWORD", "recover-me")
+	cfg, err := app.FromConfig(f, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.ReadsNoSecretAtStart = true
+	log, logs := logtest.Logger()
+	assembled, err := app.New(context.Background(), cfg, openStores(t, f), log)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	t.Cleanup(assembled.Close)
+	if logs.Mentions("cannot sit behind a verifier") {
+		t.Error("the start read the password")
+	}
+	if err = assembled.Readiness().Check(context.Background()); err == nil {
+		t.Error("readiness did not notice the weak password")
+	}
 }

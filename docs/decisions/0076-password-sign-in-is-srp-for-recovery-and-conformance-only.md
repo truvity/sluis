@@ -208,6 +208,23 @@ clients of a run carry `harness: true`, and `requires` is no longer what lets th
   arithmetic and the server's are not constant-time, and the first ask for an unknown name costs a little more than
   a real start. The conformance password is as
   sensitive as a test account's; turn the account off when the run is over.
+- **Residuals, stated.**
+  - **Lockout by many sources.** The refusal counts are per container. About twenty sources at the issuer (ten at the
+    console), each spending its share on wrong proofs that ran the check, can hold that container's ceiling for a
+    minute and refuse the operator for that minute. This is how recovery was throttled before; section 4 removed only
+    the cheap way to do it (handles that do no work).
+  - **The decoy cache fills.** It holds 1024 names and evicts none, so after that many distinct names the first ask for
+    a new one costs a modular exponentiation again and the timing difference of section 4 returns. Low value: the
+    accounts' names are fixed and public.
+  - **Raising the rounds.** A decoy announces `Params.Iterations()`, the current default, and a stored credential
+    announces the rounds it was made with. After the default is raised, an account made at the old number differs
+    from a decoy in that field. Re-derive stored credentials (a new apply, a new `sluisctl recovery verifier`) when
+    raising it.
+  - **Session-key rotation on layouts v4 and v4+v5.** The hub derives its salt from the session key (section 5). A
+    container that has the new key and one that has the old serve different salts for up to `lazy.TTL` (30 s), so a
+    sign-in whose two requests straddle the change, or reach the two containers, fails once. Retry.
+  - **A weak password is found at start.** The hub that derives its verifier checks the password then: an ERROR in the
+    log and a readiness that fails, and every sign-in is refused until the password is replaced.
 
 ## Alternatives considered
 

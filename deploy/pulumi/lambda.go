@@ -1,7 +1,9 @@
 package sluispulumi
 
 import (
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -1890,8 +1892,13 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 		srpParam := func(logical, path, account string, raw, password pulumi.StringOutput) (*ssm.Parameter, error) {
 			salt, err := random.NewRandomBytes(ctx, name+"-"+account+"-salt", &random.RandomBytesArgs{
 				Length: pulumi.Int(srpSaltBytes),
-				// The salt is replaced when the password is, and not otherwise.
-				Keepers: pulumi.StringMap{"password": raw},
+				// The salt is replaced when the password is, and not otherwise. The keeper
+				// is the password's digest, so the password is not copied into another
+				// resource's state.
+				Keepers: pulumi.StringMap{"password": raw.ApplyT(func(pw string) string {
+					sum := sha256.Sum256([]byte(pw))
+					return hex.EncodeToString(sum[:])
+				}).(pulumi.StringOutput)},
 			}, child)
 			if err != nil {
 				return nil, fmt.Errorf("sluis %s salt: %w", account, err)

@@ -75,6 +75,7 @@ import (
 	"github.com/truvity/sluis/internal/version"
 	"github.com/truvity/sluis/policy"
 	"github.com/truvity/sluis/srp"
+	"github.com/truvity/sluis/storage/logattr"
 )
 
 // Config is the whole of the hub's configuration. The chart sets it from
@@ -106,6 +107,11 @@ type Config struct {
 	// State and hands the same to the issuer half; nil builds one over the
 	// stores this hub is given.
 	RecoveryGate *recoverygate.Gate
+	// ReadsNoSecretAtStart says a start must read no secret (a function: a herd of
+	// cold starts would read each of them in every new environment). The check of
+	// the password a verifier is derived from then waits for readiness or the
+	// first sign-in, and is not run at start.
+	ReadsNoSecretAtStart bool
 
 	consolePort int
 	healthPort  int
@@ -412,6 +418,9 @@ func openRecovery(
 	if kept.reviewToken == nil {
 		where := ""
 		var source srpauth.Source
+		// check, set where the hub derives the verifier from a password, asks whether
+		// the password may sit behind one: it is run at start and by readiness.
+		var check func(context.Context) error
 		if cfg.recoveryLogin != "" || cfg.recoveryVerifier != "" {
 			// The credential is read when the first proof arrives, and again after
 			// its time to live: opening the recovery reads no secret.
@@ -432,12 +441,15 @@ func openRecovery(
 					source = srpauth.SourceOf(nil, src, srpauth.RecoveryUser, cfg.recoveryVerifier)
 				} else {
 					source = derivedCredential(src, cfg.recoveryLogin, kept.sessionKey)
+					check = func(ctx context.Context) error { _, err := recoveryPassword(ctx, src, cfg.recoveryLogin); return err }
 				}
 			}
 			log.InfoContext(ctx, "recovery sign-in is by the secret the configuration names", slog.String("secret", where))
 		}
 		if source != nil {
-			return server.NewPasswordRecovery(source, where), nil
+			recovery := server.NewPasswordRecovery(source, where)
+			recovery.Check = check
+			return recovery, nil
 		}
 		if os.Getenv("AWS_LAMBDA_FUNCTION_NAME") != "" {
 			// A function instance would generate a password nobody can read except
@@ -480,15 +492,9 @@ func openRecovery(
 // derives the same one and a password guess cannot be tested against it.
 func derivedCredential(src secrets.Source, name string, key access.KeyFunc) srpauth.Source {
 	return srpauth.Cached(lazy.TTL, func(ctx context.Context) (srp.Credential, error) {
-		password, err := src.Get(ctx, name)
+		password, err := recoveryPassword(ctx, src, name)
 		if err != nil {
-			return srp.Credential{}, fmt.Errorf("recovery.passwordSecret: %w", err)
-		}
-		if password == "" {
-			return srp.Credential{}, errors.New("recovery.passwordSecret: the password is empty")
-		}
-		if err = srp.CheckPassword(password); err != nil {
-			return srp.Credential{}, fmt.Errorf("recovery.passwordSecret: %w", err)
+			return srp.Credential{}, err
 		}
 		if key == nil {
 			return srp.Credential{}, errors.New("recovery.passwordSecret: this console has no key to derive the salt from")
@@ -501,6 +507,54 @@ func derivedCredential(src secrets.Source, name string, key access.KeyFunc) srpa
 		mac.Write([]byte("sluis srp salt\x00" + srpauth.RecoveryUser))
 		return srp.Default.NewCredential(mac.Sum(nil), srpauth.RecoveryUser, password), nil
 	})
+}
+
+// recoveryPassword reads the recovery password the hub derives its verifier from
+// and holds it to [srp.CheckPassword]: a weak one is refused here, at start and by
+// readiness, and not found out by the first sign-in of an incident.
+func recoveryPassword(ctx context.Context, src secrets.Source, name string) (string, error) {
+	password, err := src.Get(ctx, name)
+	if err != nil {
+		return "", fmt.Errorf("recovery.passwordSecret: %w", err)
+	}
+	if password == "" {
+		return "", errors.New("recovery.passwordSecret: the password is empty")
+	}
+	if err = srp.CheckPassword(password); err != nil {
+		return "", fmt.Errorf("recovery.passwordSecret: %w", err)
+	}
+	return password, nil
+}
+
+// recoveryReadiness is the readiness of a recovery whose verifier is derived from
+// a password: not ready while the password is too weak to sit behind one. Asked
+// per probe, it reads the secret once in [lazy.TTL].
+func recoveryReadiness(check func(context.Context) error) health.Dependency {
+	cached := lazy.New(lazy.TTL, func(ctx context.Context) (struct{}, error) { return struct{}{}, check(ctx) })
+	return health.Dependency{Name: "the recovery password", Check: func(ctx context.Context) error {
+		_, err := cached.Get(ctx)
+		return err
+	}}
+}
+
+// bothReady is the readiness of two dependencies, either of which may be absent
+// (a zero [health.Dependency]): the first failure answers.
+func bothReady(first, second health.Dependency) health.Dependency {
+	switch {
+	case first.Check == nil:
+		return second
+	case second.Check == nil:
+		return first
+	}
+	return health.Dependency{Name: first.Name + " and " + second.Name, Check: func(ctx context.Context) error {
+		if err := first.Check(ctx); err != nil {
+			return fmt.Errorf("%s: %w", first.Name, err)
+		}
+		if err := second.Check(ctx); err != nil {
+			return fmt.Errorf("%s: %w", second.Name, err)
+		}
+		return nil
+	}}
 }
 
 // githubOrgStore is what the console asks of where organisations are kept.
@@ -899,6 +953,7 @@ func New(ctx context.Context, cfg Config, st *store.Stores, log *slog.Logger) (*
 	sessionKey := kept.sessionKey
 	sessions := access.NewSessionsWith(sessionKey, cappedSessionLifetime(cfg.sessionLifetime, cfg.absoluteLifetime), cfg.secureCookies)
 
+	var recoveryDependency health.Dependency
 	recovery, err := openRecovery(ctx, cfg, kept, st.Secrets, st.V5, log)
 	if err != nil {
 		return nil, err
@@ -912,6 +967,20 @@ func New(ctx context.Context, cfg Config, st *store.Stores, log *slog.Logger) (*
 			exchanges = st.Ports.State
 		}
 		password.Open(exchanges, sessionKey)
+		if password.Check != nil {
+			// The verifier is derived from a password this hub reads: held to the
+			// strength a verifier needs now, so a weak one is an ERROR at start and
+			// a hub that is not ready, not a 503 found during an incident.
+			if !cfg.ReadsNoSecretAtStart {
+				checkCtx, cancel := context.WithTimeout(ctx, secretReadTimeout)
+				if err = password.Check(checkCtx); err != nil {
+					log.ErrorContext(ctx, "recovery sign-in will be refused: its password cannot sit behind a verifier",
+						logattr.SafeError("error", err))
+				}
+				cancel()
+			}
+			recoveryDependency = recoveryReadiness(password.Check)
+		}
 	}
 	recoveryGate := cfg.RecoveryGate
 	if recoveryGate == nil {
@@ -1091,7 +1160,7 @@ func New(ctx context.Context, cfg Config, st *store.Stores, log *slog.Logger) (*
 	// that cannot read a snapshot cannot answer anything, and saying
 	// ready through that is how a moved Valkey became a half-hour of
 	// hanging requests on 2026-09-10 with every pod green.
-	ready := health.Follow("the snapshot store", st.Readiness())
+	ready := bothReady(health.Follow("the snapshot store", st.Readiness()), recoveryDependency)
 	healthMux := health.Mux(0, ready)
 
 	// "the directory", not the old service name: in the merged process
