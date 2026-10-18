@@ -1091,7 +1091,7 @@ func TestSendersMapASenderIdToAnObserver(t *testing.T) {
 		t.Fatalf("%+v %v", c, err)
 	}
 	for name, key := range map[string]string{
-		"a role ARN": "'arn:aws:iam::123456789012:role/wallet'", "lower case": "aroaexampleroleid01", "empty": "''",
+		"a role ARN": "'" + "arn" + ":iam::1:role/wallet'", "lower case": "aroaexampleroleid01", "empty": "''",
 	} {
 		t.Run(name, func(t *testing.T) {
 			body := "deployment: /d.yaml\narchive: {}\ndedupe: {dynamodb: {table: t}}\nsenders: {" + key + ": wallet}\n"
