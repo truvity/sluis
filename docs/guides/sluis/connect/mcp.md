@@ -72,7 +72,7 @@ The first answers `401` with `resource_metadata`. The second lists your issuer u
 ## What the issuer does for MCP clients
 
 - With no `scope`, `/authorize` supplies `scope=openid`.
-- RFC 9207 `iss` is not emitted, so a client that requires it refuses the response.
+- RFC 9207 `iss` is emitted, so a client that requires it accepts the response.
 - There is no `insufficient_scope` and no step-up. Groups decide reach.
 - Dynamic client registration (RFC 7591) is not offered.
 - With a path in the issuer URL, RFC 8414 metadata is served only at `/.well-known/oauth-authorization-server/<path>`. The gateway strips the path prefix before forwarding other endpoints.
