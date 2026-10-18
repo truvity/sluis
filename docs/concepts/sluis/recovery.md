@@ -22,6 +22,11 @@ A recovery sign-in is written durably before it completes, and refused when it c
 ([audit](audit.md#recording-never-fails-what-is-being-recorded)). To use recovery, follow
 [lost operator access](../../guides/sluis/operate/lost-operator-access.md).
 
+## Can it be turned off?
+
+An operator who signed in through the identity provider can turn it off from the console, and nothing in the console turns it on again. That needs a new `recovery.generation` in the configuration. See [turn off recovery](../../guides/sluis/operate/turn-off-recovery.md).
+
 ## See also
 
 - [Trust](trust.md#recovery-is-the-root-not-a-back-door): where recovery sits among the anchors
+- [ADR 0075](../../decisions/0075-recovery-is-turned-off-from-the-console-and-on-by-configuration.md): why it closes from the console and opens only by configuration

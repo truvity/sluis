@@ -28,6 +28,7 @@ No access pattern needs a secondary index. Sessions are listed per person under 
 | `rec.slack.shared.<name>` | a Slack Connect channel's definition | console | permanent |
 | `rec.slack.channel.<workspace>.<name>` | a console channel's record | console | permanent |
 | `rec.console.session-key` | the key the console signs its sessions with, in Secrets (`credentials/console/session-key`); created by the first replica that starts | console | permanent |
+| `rec.recovery.off` | the switch an operator throws to turn the recovery sign-in off: `{generation, at, by}`. Recovery is off while the record's `generation` equals `recovery.generation` of the document; another generation covers nothing. In the oidc module's table, never in a backup, never written by a restore ([ADR 0075](../../decisions/0075-recovery-is-turned-off-from-the-console-and-on-by-configuration.md)) | console | permanent |
 | `rec.maintenance` | the maintenance flag: present while the module's table is being restored; the module refuses writes until it is gone | restore function | permanent |
 | `rec.backup.run.<id>` | one backup run: its state, counts and the object's size; the backup module's table only, never in a backup | backup | permanent |
 | `rec.backup.restore.<id>` | one restore: its state, the backup it restores from, the counts of the last slice and whether the maintenance flag is still set; the backup module's table only, never in a backup | restore | permanent |

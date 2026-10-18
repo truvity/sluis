@@ -120,6 +120,8 @@ func every() []*record.Record {
 		audit.RestoreCompleted(person, "20261010T020000Z-a1b2c3", audit.Restore{Installation: "example", Modules: 6}),
 		audit.RestoreFailed(person, "20261010T020000Z-a1b2c3", audit.Restore{Installation: "example", Reason: "verify"}, "a record differs after the write"),
 		audit.MaintenanceChanged(person, audit.Maintenance{Installation: "example", State: "migration", Modules: 6, Reason: "layout v5 move"}),
+		audit.RecoveryDisabled(person, "example", "2026-10", 2, 3, false, audit.Succeeded()),
+		audit.RecoveryDisabled(person, "example", "", 0, 0, true, audit.Failed("the switch could not be kept")),
 		audit.MaintenanceChanged(person, audit.Maintenance{Installation: "example", State: audit.MaintenanceCleared, Modules: 1, Forced: true}),
 		audit.MaintenanceFailed(person, audit.Maintenance{Installation: "example", State: "migration", Modules: 6}, "a table refused the flag"),
 		audit.SecretsPruned(person, audit.SecretsPrune{Installation: "example", From: "example-v4", Phase: audit.PhaseStarted, Plan: "abc123",

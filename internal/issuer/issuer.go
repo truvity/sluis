@@ -149,6 +149,9 @@ type Issuer struct {
 	sessions *Sessions
 	sso      *SSO
 	audit    audit.Recorder
+	// recoveryGate is the switch an operator throws to turn recovery off; nil is
+	// never off. Set before the issuer serves.
+	recoveryGate RecoveryGate
 	// clientSecrets is what the operator endpoint manages; nil mounts nothing.
 	clientSecrets ClientSecretAdmin
 	// githubApps are the catalogue Apps installation tokens are minted

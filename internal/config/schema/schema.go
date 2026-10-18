@@ -300,6 +300,7 @@ func serveSchema() m {
 			"enabled":        boolean("Turn recovery on. Needs `inCluster`, `serviceAccount` and `audience` to be usable."),
 			"serviceAccount": str("The ServiceAccount whose token signs in."),
 			"audience":       str("The audience its token must carry."),
+			"generation":     str("Names this configuration's decision to have recovery on. An operator may disable recovery from the console (only after signing in through the identity provider); the disable is kept in the State against the generation in force and covers only it. A redeploy of the same document keeps recovery disabled; change this value, to any other string, to turn it back on. Unset is the generation `\"\"`."),
 			"passwordSecret": secretField("Outside a cluster: the secret the recovery password is (`recovery/password`), read at start (the hub keeps only an Argon2id digest of it). Unset generates one and prints it, except on a function, where recovery is then off. `enabled: false` leaves it untouched and refuses the sign-in, so turning it back on needs no new password."),
 		}),
 		"login": obj("How a person signs in to the console.", m{

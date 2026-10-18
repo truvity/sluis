@@ -97,6 +97,14 @@ type (
 		// LoginSecret (`passwordSecret`) names the recovery password, for a hub that is not
 		// in a cluster: `recovery/password` in the layout.
 		LoginSecret string `json:"passwordSecret,omitempty"`
+		// Generation names this configuration's decision to have recovery on.
+		// An operator who signs in through the identity provider may disable
+		// recovery from the console; that is recorded in the State against the
+		// generation in force, and a record covers only that generation. So a
+		// redeploy of the SAME document keeps recovery disabled, and the way
+		// back is a deliberate change of this value (any other string).
+		// Unset is the generation "".
+		Generation string `json:"generation,omitempty"`
 	}
 
 	// Forwarded is a sign-in an authenticating proxy in front of the console

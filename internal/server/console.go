@@ -26,6 +26,7 @@ import (
 	"github.com/truvity/sluis/internal/hub"
 	"github.com/truvity/sluis/internal/modcall"
 	"github.com/truvity/sluis/internal/port"
+	"github.com/truvity/sluis/internal/recoverygate"
 	"github.com/truvity/sluis/internal/settings"
 	slackconsole "github.com/truvity/sluis/internal/slackapp/console"
 	"github.com/truvity/sluis/internal/version"
@@ -62,7 +63,13 @@ type ConsoleDeps struct {
 	// Recovery is the way in when the ordinary one is broken; nil is a
 	// deployment with none. The console reports its shape, because only
 	// a stored password is a standing credential worth a banner.
-	Recovery     Recovery
+	Recovery Recovery
+	// RecoveryGate is the switch an operator throws to turn recovery off from
+	// the console (docs/decisions/0075). Nil is never thrown, and a console
+	// with none cannot disable.
+	RecoveryGate *recoverygate.Gate
+	// Instance names this installation in the audit trail's records.
+	Instance     string
 	LoginSources []string
 	CacheBackend string
 	SecureCookie bool
@@ -199,6 +206,8 @@ type Console struct {
 	runMu sync.Mutex
 	runBy map[string]time.Time
 	deps  ConsoleDeps
+	// recoveryEnd sweeps the sessions recovery opened; see [RecoveryEnder].
+	recoveryEnd recoveryEnd
 	// github, slack and google are the provider modules in this process, built
 	// over the console's own stores when the first page asks, and the way to call
 	// each as the console, for a deployment that has not split it out.
@@ -657,8 +666,8 @@ func (c *Console) GetPolicy(
 	set := c.deps.Authorizer.Policy()
 	groups := set.Groups()
 	out := &directoryrosterv1.GetPolicyResponse{
-		RecoveryEnabled: recoveryEnabled(c.deps.Recovery),
-		RecoveryKind:    recoveryKindOf(c.deps.Recovery),
+		RecoveryEnabled: c.recoveryUsable(ctx),
+		RecoveryKind:    c.recoveryKindNow(ctx),
 		// The location, not the password: the console's setup step names the
 		// parameter of this instance and layout rather than an example's.
 		RecoveryPasswordLocation: recoveryLocationOf(c.deps.Recovery),

@@ -57,6 +57,12 @@ const (
 	// AccessServiceResolveDirectoryGroupsProcedure is the fully-qualified name of the AccessService's
 	// ResolveDirectoryGroups RPC.
 	AccessServiceResolveDirectoryGroupsProcedure = "/sluis.v1.AccessService/ResolveDirectoryGroups"
+	// AccessServiceGetRecoveryProcedure is the fully-qualified name of the AccessService's GetRecovery
+	// RPC.
+	AccessServiceGetRecoveryProcedure = "/sluis.v1.AccessService/GetRecovery"
+	// AccessServiceDisableRecoveryProcedure is the fully-qualified name of the AccessService's
+	// DisableRecovery RPC.
+	AccessServiceDisableRecoveryProcedure = "/sluis.v1.AccessService/DisableRecovery"
 )
 
 // AccessServiceClient is a client for the sluis.v1.AccessService service.
@@ -123,6 +129,19 @@ type AccessServiceClient interface {
 	// directory the caller cannot see. The answer carries the policy digest,
 	// like ListHolders, so a consumer checks it decided under the same policy.
 	ResolveDirectoryGroups(context.Context, *connect.Request[v1.ResolveDirectoryGroupsRequest]) (*connect.Response[v1.ResolveDirectoryGroupsResponse], error)
+	// GetRecovery reports the state of the recovery sign-in: whether it can
+	// be used now, and when and by whom it was turned off if it was, and
+	// whether the caller may turn it off from this sign-in. Operator.
+	GetRecovery(context.Context, *connect.Request[v1.GetRecoveryRequest]) (*connect.Response[v1.GetRecoveryResponse], error)
+	// DisableRecovery turns the recovery sign-in off for the whole
+	// installation, at once, and ends every session recovery opened. It is
+	// the ONLY switch: nothing here turns recovery on, which is a change of
+	// the configuration (`recovery.generation`). Only an operator whose
+	// sign-in went through the identity provider may call it: a recovery
+	// sign-in, a workload and a scoped operator are refused. Idempotent. The
+	// switch takes effect before the audit record is written and does not wait
+	// for it. See docs/decisions/0075.
+	DisableRecovery(context.Context, *connect.Request[v1.DisableRecoveryRequest]) (*connect.Response[v1.DisableRecoveryResponse], error)
 }
 
 // NewAccessServiceClient constructs a client for the sluis.v1.AccessService service. By default, it
@@ -190,6 +209,18 @@ func NewAccessServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(accessServiceMethods.ByName("ResolveDirectoryGroups")),
 			connect.WithClientOptions(opts...),
 		),
+		getRecovery: connect.NewClient[v1.GetRecoveryRequest, v1.GetRecoveryResponse](
+			httpClient,
+			baseURL+AccessServiceGetRecoveryProcedure,
+			connect.WithSchema(accessServiceMethods.ByName("GetRecovery")),
+			connect.WithClientOptions(opts...),
+		),
+		disableRecovery: connect.NewClient[v1.DisableRecoveryRequest, v1.DisableRecoveryResponse](
+			httpClient,
+			baseURL+AccessServiceDisableRecoveryProcedure,
+			connect.WithSchema(accessServiceMethods.ByName("DisableRecovery")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -204,6 +235,8 @@ type accessServiceClient struct {
 	listDirectoryGroups    *connect.Client[v1.ListDirectoryGroupsRequest, v1.ListDirectoryGroupsResponse]
 	getDirectoryGroup      *connect.Client[v1.GetDirectoryGroupRequest, v1.GetDirectoryGroupResponse]
 	resolveDirectoryGroups *connect.Client[v1.ResolveDirectoryGroupsRequest, v1.ResolveDirectoryGroupsResponse]
+	getRecovery            *connect.Client[v1.GetRecoveryRequest, v1.GetRecoveryResponse]
+	disableRecovery        *connect.Client[v1.DisableRecoveryRequest, v1.DisableRecoveryResponse]
 }
 
 // WhoAmI calls sluis.v1.AccessService.WhoAmI.
@@ -249,6 +282,16 @@ func (c *accessServiceClient) GetDirectoryGroup(ctx context.Context, req *connec
 // ResolveDirectoryGroups calls sluis.v1.AccessService.ResolveDirectoryGroups.
 func (c *accessServiceClient) ResolveDirectoryGroups(ctx context.Context, req *connect.Request[v1.ResolveDirectoryGroupsRequest]) (*connect.Response[v1.ResolveDirectoryGroupsResponse], error) {
 	return c.resolveDirectoryGroups.CallUnary(ctx, req)
+}
+
+// GetRecovery calls sluis.v1.AccessService.GetRecovery.
+func (c *accessServiceClient) GetRecovery(ctx context.Context, req *connect.Request[v1.GetRecoveryRequest]) (*connect.Response[v1.GetRecoveryResponse], error) {
+	return c.getRecovery.CallUnary(ctx, req)
+}
+
+// DisableRecovery calls sluis.v1.AccessService.DisableRecovery.
+func (c *accessServiceClient) DisableRecovery(ctx context.Context, req *connect.Request[v1.DisableRecoveryRequest]) (*connect.Response[v1.DisableRecoveryResponse], error) {
+	return c.disableRecovery.CallUnary(ctx, req)
 }
 
 // AccessServiceHandler is an implementation of the sluis.v1.AccessService service.
@@ -315,6 +358,19 @@ type AccessServiceHandler interface {
 	// directory the caller cannot see. The answer carries the policy digest,
 	// like ListHolders, so a consumer checks it decided under the same policy.
 	ResolveDirectoryGroups(context.Context, *connect.Request[v1.ResolveDirectoryGroupsRequest]) (*connect.Response[v1.ResolveDirectoryGroupsResponse], error)
+	// GetRecovery reports the state of the recovery sign-in: whether it can
+	// be used now, and when and by whom it was turned off if it was, and
+	// whether the caller may turn it off from this sign-in. Operator.
+	GetRecovery(context.Context, *connect.Request[v1.GetRecoveryRequest]) (*connect.Response[v1.GetRecoveryResponse], error)
+	// DisableRecovery turns the recovery sign-in off for the whole
+	// installation, at once, and ends every session recovery opened. It is
+	// the ONLY switch: nothing here turns recovery on, which is a change of
+	// the configuration (`recovery.generation`). Only an operator whose
+	// sign-in went through the identity provider may call it: a recovery
+	// sign-in, a workload and a scoped operator are refused. Idempotent. The
+	// switch takes effect before the audit record is written and does not wait
+	// for it. See docs/decisions/0075.
+	DisableRecovery(context.Context, *connect.Request[v1.DisableRecoveryRequest]) (*connect.Response[v1.DisableRecoveryResponse], error)
 }
 
 // NewAccessServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -378,6 +434,18 @@ func NewAccessServiceHandler(svc AccessServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(accessServiceMethods.ByName("ResolveDirectoryGroups")),
 		connect.WithHandlerOptions(opts...),
 	)
+	accessServiceGetRecoveryHandler := connect.NewUnaryHandler(
+		AccessServiceGetRecoveryProcedure,
+		svc.GetRecovery,
+		connect.WithSchema(accessServiceMethods.ByName("GetRecovery")),
+		connect.WithHandlerOptions(opts...),
+	)
+	accessServiceDisableRecoveryHandler := connect.NewUnaryHandler(
+		AccessServiceDisableRecoveryProcedure,
+		svc.DisableRecovery,
+		connect.WithSchema(accessServiceMethods.ByName("DisableRecovery")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/sluis.v1.AccessService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case AccessServiceWhoAmIProcedure:
@@ -398,6 +466,10 @@ func NewAccessServiceHandler(svc AccessServiceHandler, opts ...connect.HandlerOp
 			accessServiceGetDirectoryGroupHandler.ServeHTTP(w, r)
 		case AccessServiceResolveDirectoryGroupsProcedure:
 			accessServiceResolveDirectoryGroupsHandler.ServeHTTP(w, r)
+		case AccessServiceGetRecoveryProcedure:
+			accessServiceGetRecoveryHandler.ServeHTTP(w, r)
+		case AccessServiceDisableRecoveryProcedure:
+			accessServiceDisableRecoveryHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -441,4 +513,12 @@ func (UnimplementedAccessServiceHandler) GetDirectoryGroup(context.Context, *con
 
 func (UnimplementedAccessServiceHandler) ResolveDirectoryGroups(context.Context, *connect.Request[v1.ResolveDirectoryGroupsRequest]) (*connect.Response[v1.ResolveDirectoryGroupsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sluis.v1.AccessService.ResolveDirectoryGroups is not implemented"))
+}
+
+func (UnimplementedAccessServiceHandler) GetRecovery(context.Context, *connect.Request[v1.GetRecoveryRequest]) (*connect.Response[v1.GetRecoveryResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sluis.v1.AccessService.GetRecovery is not implemented"))
+}
+
+func (UnimplementedAccessServiceHandler) DisableRecovery(context.Context, *connect.Request[v1.DisableRecoveryRequest]) (*connect.Response[v1.DisableRecoveryResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sluis.v1.AccessService.DisableRecovery is not implemented"))
 }

@@ -81,6 +81,9 @@ const (
 	LoginNotEntitled = "not_entitled"
 	// LoginRecoveryRefused is a recovery proof that did not verify.
 	LoginRecoveryRefused = "recovery_refused"
+	// LoginRecoveryOff is a recovery proof presented after an operator turned
+	// recovery off from the console.
+	LoginRecoveryOff = "recovery_off"
 	// LoginRecoveryThrottled is a recovery proof not looked at, because its
 	// source had spent its refusals for the window.
 	LoginRecoveryThrottled = "recovery_throttled"

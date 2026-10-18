@@ -354,7 +354,7 @@ function PageFor({
     case "audit":
       return <AuditPage query={query} connected={Boolean(me?.audit)} />;
     case "settings":
-      return <SettingsView />;
+      return <SettingsView me={me} operator={operator} />;
     default:
       return <Overview me={me} operator={operator} />;
   }

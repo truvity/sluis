@@ -614,6 +614,18 @@ func (s *Stores) Maintenance() *maintenance.Gate {
 	return maintenance.New(s.Ports.State)
 }
 
+// RecoveryState is the State that keeps the switch an operator throws to turn the
+// recovery sign-in off (internal/recoverygate): the oidc module's own table. Nil
+// where the storage cannot keep the record, which is the legacy adapter and a
+// process with no State: a disable that would be gone at the next restart is
+// refused rather than half done.
+func (s *Stores) RecoveryState() port.State {
+	if s == nil || !s.Usable || s.Adapter == AdapterLegacy || s.Ports.State == nil {
+		return nil
+	}
+	return s.Ports.State
+}
+
 // MaintenanceOf is the gate over module m's own table, for a process that hosts
 // several modules (the issuer's function). On layout v4 there is one table, so it
 // is [Stores.Maintenance].

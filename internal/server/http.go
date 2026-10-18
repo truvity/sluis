@@ -34,6 +34,7 @@ import (
 	"github.com/truvity/sluis/internal/hub"
 	"github.com/truvity/sluis/internal/maintenance"
 	"github.com/truvity/sluis/internal/modcall"
+	"github.com/truvity/sluis/internal/recoverygate"
 	"github.com/truvity/sluis/internal/refusal"
 	slackconsole "github.com/truvity/sluis/internal/slackapp/console"
 	"github.com/truvity/sluis/internal/telemetry"
@@ -74,7 +75,10 @@ type ConsoleServer struct {
 	connectors map[string]Connector
 	hub        *hub.Hub
 	recovery   Recovery
-	cheap      cheapRefusals
+	// recoveryGate is the switch an operator throws from the console to turn
+	// recovery off; nil is never off. See [ConsoleServer.recoveryAvailable].
+	recoveryGate *recoverygate.Gate
+	cheap        cheapRefusals
 	// linkLimits is the allowance of each address on the link routes.
 	linkLimits linkLimits
 	signIn     bool
@@ -145,6 +149,11 @@ type ConsoleServerDeps struct {
 	// Recovery is the way in when the ordinary one is broken. Nil is a
 	// deployment with no recovery path at all.
 	Recovery Recovery
+	// RecoveryGate is the switch an operator throws, from the console, to turn
+	// the recovery sign-in off for the installation. While it is thrown the
+	// sign-in is refused and a session recovery opened is not a session. Nil is
+	// never thrown.
+	RecoveryGate *recoverygate.Gate
 	// SignIn offers the hub's own sign-in page. A console reached only
 	// through a gateway that has already run the login wants one door,
 	// not two. It does not affect connecting a directory, which is an
@@ -211,23 +220,24 @@ func NewConsoleServer(deps ConsoleServerDeps) *ConsoleServer {
 		deps.Log = slog.Default()
 	}
 	s := &ConsoleServer{
-		console:     deps.Console,
-		authz:       deps.Authorizer,
-		sessions:    deps.Sessions,
-		state:       deps.State,
-		connectors:  map[string]Connector{},
-		hub:         deps.Hub,
-		recovery:    deps.Recovery,
-		signIn:      deps.SignIn,
-		signOutURL:  deps.SignOutURL,
-		maintenance: deps.Maintenance,
-		forwarded:   deps.Forwarded,
-		bearer:      newForwardedBearer(deps.Forwarded, deps.Log),
-		log:         deps.Log,
-		consoleUI:   deps.UI,
-		mount:       strings.TrimSuffix(strings.TrimSpace(deps.Mount), "/"),
-		signedIn:    deps.SignedIn,
-		entry:       deps.SignInEntry,
+		console:      deps.Console,
+		authz:        deps.Authorizer,
+		sessions:     deps.Sessions,
+		state:        deps.State,
+		connectors:   map[string]Connector{},
+		hub:          deps.Hub,
+		recovery:     deps.Recovery,
+		recoveryGate: deps.RecoveryGate,
+		signIn:       deps.SignIn,
+		signOutURL:   deps.SignOutURL,
+		maintenance:  deps.Maintenance,
+		forwarded:    deps.Forwarded,
+		bearer:       newForwardedBearer(deps.Forwarded, deps.Log),
+		log:          deps.Log,
+		consoleUI:    deps.UI,
+		mount:        strings.TrimSuffix(strings.TrimSpace(deps.Mount), "/"),
+		signedIn:     deps.SignedIn,
+		entry:        deps.SignInEntry,
 
 		forwardedForTrustedHops: deps.ForwardedForTrustedHops,
 	}
@@ -433,12 +443,18 @@ func (s *ConsoleServer) principal(w http.ResponseWriter, r *http.Request) (acces
 	// is what lets somebody who signed in at another console reach this
 	// one with no second session.
 	if s.signedIn != nil {
-		if p, ok := s.signedIn(w, r); ok {
+		if p, ok := s.signedIn(w, r); ok && s.recoveryStands(r.Context(), p) {
 			return p, true
 		}
 	}
 	if p, err := s.sessions.Read(r); err == nil {
-		return p, true
+		if s.recoveryStands(r.Context(), p) {
+			return p, true
+		}
+		// A recovery session of this console, after recovery was turned off:
+		// not a session any more, whatever its cookie still says. Cleared so
+		// the browser stops sending it.
+		s.sessions.Clear(w)
 	}
 	// A workload's own ServiceAccount token, before an issuer-signed
 	// bearer. Ordering costs nothing either way — a token is recognised
@@ -529,7 +545,7 @@ func (s *ConsoleServer) loginPage(w http.ResponseWriter, r *http.Request) {
 	// the open invites a password manager to fill it and everyone else to
 	// treat it as the normal way in.
 	recovery, recoveryState := "", ""
-	if recoveryEnabled(s.recovery) {
+	if s.recoveryAvailable(r.Context()) {
 		recoveryState = s.recoveryState()
 	}
 	if recoveryState != "" {
@@ -832,6 +848,12 @@ func (s *ConsoleServer) recoveryLogin(w http.ResponseWriter, r *http.Request) {
 			"whoever can change its configuration turns it back on, and the recovery credential is kept", nil)
 		return
 	}
+	if !s.recoveryAvailable(r.Context()) {
+		refuseCheap(reasonRecoveryDisabled)
+		s.refusePage(w, r, http.StatusForbidden, "recovery sign-in was turned off from the console; "+
+			"it comes back only by a change of the configuration (recovery.generation)", nil)
+		return
+	}
 	// A proof is a few KiB at most. Bounded before anything is read, so
 	// that nobody can make this door read megabytes of form unchecked.
 	r.Body = http.MaxBytesReader(w, r.Body, access.RecoveryFormLimit)
@@ -913,6 +935,30 @@ func (s *ConsoleServer) recoveryLogin(w http.ResponseWriter, r *http.Request) {
 	redirectOrOK(w, r, s.at("/"))
 }
 
+// recoveryAvailable reports whether the recovery sign-in can be used now: it is
+// built, and no operator has turned it off from the console. The switch is read
+// from the State (cached for a few seconds), so every container agrees.
+func (s *ConsoleServer) recoveryAvailable(ctx context.Context) bool {
+	if !recoveryEnabled(s.recovery) {
+		return false
+	}
+	off, _ := s.recoveryGate.Off(ctx)
+	return !off
+}
+
+// recoveryStands reports whether a principal is still a principal: anything
+// that was not established by recovery always is, and a recovery sign-in is
+// only while recovery has not been turned off. This is what ends every session
+// recovery opened (the console's own cookie and the issuer's sign-in alike) in
+// every container, without a table of sessions to find them in.
+func (s *ConsoleServer) recoveryStands(ctx context.Context, p access.Principal) bool {
+	if p.Source != access.SourceRecovery {
+		return true
+	}
+	off, _ := s.recoveryGate.Off(ctx)
+	return !off
+}
+
 // recoveryState is a fresh state for the recovery form, or "" when this
 // console has nothing to sign one with -- then the form is not offered,
 // since its post could only be refused, and the bearer stays the way in.
@@ -980,6 +1026,7 @@ func recoveryProof(r *http.Request) (proof string, fromForm bool, err error) {
 // with, when its own record could not be written.
 const (
 	reasonRecoveryOff       = "recovery sign-in is turned off (recovery.enabled is false)"
+	reasonRecoveryDisabled  = "recovery sign-in was turned off from the console"
 	reasonRecoveryThrottled = "too many refused attempts; recovery is paused for a minute"
 	reasonRecoveryRefused   = "the proof was not accepted"
 	reasonRecoveryUnchecked = "the proof could not be checked"

@@ -41,6 +41,7 @@ import (
 	"github.com/truvity/sluis/internal/port"
 	"github.com/truvity/sluis/internal/port/memory"
 	"github.com/truvity/sluis/internal/rails"
+	"github.com/truvity/sluis/internal/recoverygate"
 	"github.com/truvity/sluis/internal/refusal"
 	"github.com/truvity/sluis/internal/secrets"
 	"github.com/truvity/sluis/internal/secretstore"
@@ -86,6 +87,9 @@ type Config struct {
 	recoveryAccount  string
 	cluster          string
 	recoveryAudience string
+	// recoveryGeneration is `recovery.generation`: which decision to have
+	// recovery on a disable from the console covers (internal/recoverygate).
+	recoveryGeneration string
 	// secrets delivers every secret this document names, by name: the
 	// stores' source, set at New.
 	secrets secrets.Source
@@ -198,6 +202,7 @@ func FromConfig(f *config.Serve, p *config.PolicyDocument) (Config, error) {
 		c.recoveryEnabled = r.Enabled != nil && *r.Enabled
 		c.recoveryAccount = r.ServiceAccount
 		c.recoveryAudience = r.Audience
+		c.recoveryGeneration = r.Generation
 	}
 	var err error
 	if o := f.OAuthClient; o != nil {
@@ -428,6 +433,14 @@ type Deps struct {
 	// signed for the CLI (`sluisctl`), as a person's bearer: how a laptop
 	// reaches the console's backup service with its own sign-in.
 	UseBearers func(func(*http.Request) (access.Principal, bool))
+	// RecoveryGate is the switch the console throws to turn recovery off, shared
+	// with the console so that both halves of the process agree at once. Nil
+	// builds one over the stores.
+	RecoveryGate *recoverygate.Gate
+	// UseRecoveryEnder is called with the function that ends every sign-in and
+	// client session recovery opened, and reports how many: the sweep after the
+	// switch is thrown. Nil is never called with.
+	UseRecoveryEnder func(func(ctx context.Context) (signIns, sessions int, err error))
 	// UseIssuerURL is called with this issuer's own URL, so the console
 	// can tell a browser where the SessionService is.
 	//
@@ -602,6 +615,21 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 
 	if deps.GitHubApps != nil {
 		core.UseGitHubApps(*deps.GitHubApps)
+	}
+	// The recovery sign-in can be turned off at run time from the console
+	// (docs/decisions/0075). One gate is shared by the issuer's pages, sessions
+	// and refreshes and the console's own; without one given, this issuer reads
+	// the same record itself.
+	recoveryGate := deps.RecoveryGate
+	if recoveryGate == nil {
+		recoveryGate = recoverygate.New(stores.RecoveryState(), cfg.recoveryGeneration, recoverygate.WithLog(log))
+	}
+	core.UseRecoveryGate(recoveryGate)
+	if deps.UseRecoveryEnder != nil {
+		deps.UseRecoveryEnder(func(ctx context.Context) (int, int, error) {
+			ended, err := core.EndRecovery(ctx)
+			return ended.SignIns, ended.Sessions, err
+		})
 	}
 
 	if err := applySigningPlan(ctx, &cfg, stores.Plan); err != nil {

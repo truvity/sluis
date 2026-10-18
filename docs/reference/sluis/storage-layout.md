@@ -67,6 +67,7 @@ One table with string `pk` (hash) and string `sk` (range). `pk` is the kind, so 
 | `slack-share` | `<host>/<channel>` | a Slack Connect share |
 | `slack-user-cache` | `<team>/<user>` | who a Slack member is (24 h) |
 | `console` | `session-key` | (the key itself is in Secrets) |
+| `recovery` | `off` | the recovery switch, in the oidc table: fields `generation`, `at`, `by`; the issuer and console read it at most every 3 s, and once seen never again; never exported by a backup |
 | `lease` | `<kind>/<target>` | a tick's lease: kinds `github-tick`, `github-links`, `slack-tick`, `refresh` |
 | `notify` | `<target>` | a notification (a minute) |
 | `maintenance` | `flag` | the maintenance flag, in every table: fields `state`, `since`, `by`, `reason`; while it exists the module refuses writes (503 with `Retry-After`) and keeps serving reads, discovery and the key set, cached for 10 s; only the restore role can write it |
@@ -126,6 +127,7 @@ The logical key maps to kind and credential path as follows.
 | `lease.<kind>:<target>` | `lease` / `<kind>/<target>` | none |
 | `notify.<target>` | `notify` / `<target>` | none |
 | `rec.maintenance` | `maintenance` / `flag` | none |
+| `rec.recovery.off` | `recovery` / `off` | none |
 | `rec.backup.run.<id>`, `rec.backup.restore.<id>`, `rec.backup.retention` | `backup-run` / `<id>`, `backup-restore` / `<id>`, `backup-retention` / `last` | none |
 | `issuer:request:<id>` | `issuer-request` / `<id>` | none |
 | `issuer:code:<id>`, `issuer:code-session:<id>` | `issuer-code`, `issuer-code-session` / `<id>` | none |

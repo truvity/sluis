@@ -3,7 +3,7 @@ import type { Sentences } from "@truvity/audit";
 
 export const roster: Sentences = {
   "source": "roster",
-  "version": "1.21.0",
+  "version": "1.22.0",
   "locales": [
     "en"
   ],
@@ -264,6 +264,12 @@ export const roster: Sentences = {
       "summary": "A person signed in to a client, or was refused; at the issuer, with the class of the session it opens (interactive or agent) and that session's deadline.",
       "message": {
         "en": "{outcome, select, success {{actor} signed in to {targets_0_id}} denied {{actor} was refused sign-in to {targets_0_id}} other {{actor} could not sign in to {targets_0_id}}}"
+      }
+    },
+    "roster.recovery.disabled": {
+      "summary": "An operator who signed in through the identity provider turned the recovery sign-in off for the whole installation, from the console. Recovery sessions end with it. There is no matching action to turn it on; that is a change of the configuration's `recovery.generation`.",
+      "message": {
+        "en": "{outcome, select, success {{actor} turned off the recovery sign-in of {targets_0_id}} other {{actor} could not turn off the recovery sign-in of {targets_0_id}}}"
       }
     },
     "roster.recovery.signed_in": {

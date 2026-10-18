@@ -978,6 +978,13 @@ func (s *Storage) Complete(ctx context.Context, id string, who Authenticated) er
 		authTime = time.Now()
 	}
 
+	// A sign-in made by recovery completes nothing once an operator has switched
+	// recovery off (docs/decisions/0075): refused before anything is decided or
+	// recorded about it, as the form and the sign-in cookie are.
+	if who.How == RecoveryHow && s.iss.recoveryOff(ctx) {
+		return ErrRecoveryOff
+	}
+
 	// Before the request is marked done, because a request marked done is
 	// one a code can be issued for.
 	if err = s.entitled(ctx, req.Req.ClientID, req.Resource, who.Subject, who.How == RecoveryHow); err != nil {
@@ -1668,6 +1675,14 @@ func sessionOf(request op.IDTokenRequest) string {
 // issue decides one access token and returns it, unrecorded: [Storage.keep]
 // records it, once whatever session it belongs to is known.
 func (s *Storage) issue(ctx context.Context, request op.TokenRequest) (*token, error) {
+	// Nothing is minted for a sign-in made by recovery once an operator has
+	// switched recovery off: not a code that was already issued, not a refresh.
+	// Asked here because every token, fresh or refreshed, is minted through this
+	// function.
+	if methodOf(request) == RecoveryHow && s.iss.recoveryOff(ctx) {
+		return nil, deny(ctx, oidc.ErrInvalidGrant, errRecoveryOff)
+	}
+
 	// Marked before anything else: this is the FIRST storage call the
 	// library makes for either a fresh access token or one paired with a
 	// refresh (see [op.CreateAccessToken] -> createTokens), and it runs
@@ -2034,6 +2049,20 @@ func (s *Storage) TokenRequestByRefreshToken(ctx context.Context, refreshToken s
 		s.refuseDead(ctx, sum, presented.dead)
 
 		return nil, op.ErrInvalidRefreshToken
+	}
+
+	// A session opened by recovery ends at its next refresh once an operator has
+	// switched recovery off. The sweep that follows the switch revokes these
+	// already; this is the refresh that finds one the sweep did not (a sign-in
+	// made on another container while the switch was spreading).
+	if session.Method == RecoveryHow && s.iss.recoveryOff(ctx) {
+		if !maintenance.ReadOnly(ctx) {
+			if _, endErr := s.iss.Sessions().RevokeID(ctx, session.ID); endErr != nil {
+				s.logger().WarnContext(ctx, "a recovery session could not be revoked", logattr.SafeError("error", endErr))
+			}
+		}
+
+		return nil, deny(ctx, oidc.ErrInvalidGrant, errRecoveryOff)
 	}
 
 	// The limit as the policy states it NOW. A record carries the end it

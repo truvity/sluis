@@ -96,10 +96,10 @@ export function Setup({ progress, operator }: { progress: Progress; operator: bo
       title: "Turn off the recovery password",
       body: (
         <Typography variant="body2" color="text.secondary">
-          Once a directory works, set <Mono>recovery.enabled: false</Mono> in the configuration. The password
-          stays where it is kept
-          <PasswordLocation location={progress.passwordLocation} />, so turning it back on is the same one-line
-          change and nothing is rotated. Or run sluis in a cluster, where recovery is a short-lived token
+          Once a directory works and you are signed in through it, press <Ref to={paths.settings()}>Disable recovery</Ref> in Settings, or set{" "}
+          <Mono>recovery.enabled: false</Mono> in the configuration. The password stays where it is kept
+          <PasswordLocation location={progress.passwordLocation} />, so turning it back on is a configuration change
+          (<Mono>recovery.enabled: true</Mono>, and a new <Mono>recovery.generation</Mono> if you pressed the button) and nothing is rotated. Or run sluis in a cluster, where recovery is a short-lived token
           proving access to the API server and no password is kept at all.
         </Typography>
       ),

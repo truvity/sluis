@@ -2,11 +2,12 @@ import Alert from "@mui/material/Alert";
 import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
 
-import { every, settings } from "./api";
+import { every, settings, type Me } from "./api";
 import { useAsync } from "./hooks";
+import { RecoveryPanel } from "./RecoveryPanel";
 import { Facts, Failure, Loading, Page, Section, State } from "./ui";
 
-export function SettingsView() {
+export function SettingsView({ me, operator }: { me?: Me; operator: boolean }) {
   const current = useAsync(() => settings.getSettings({}), []);
 
   const client = current.value?.oauthClient;
@@ -34,6 +35,8 @@ export function SettingsView() {
             : "No OAuth client is configured, so nobody can sign in and this installation issues tokens to machines only. It is delivered as a Secret, named in the values."}
         </Alert>
       </Section>
+
+      <RecoveryPanel me={me} operator={operator} />
 
       <Section title="Freshness" hint="how often sluis reads, and how old a reading may be before it stops vouching">
         <Paper variant="outlined" sx={{ p: 2 }}>

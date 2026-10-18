@@ -42,6 +42,7 @@ var stateRows = []struct{ key, kind, id string }{
 	{"lease.export:slack-app.alerts", "lease", "export/slack-app.alerts"},
 	{"notify.acme", "notify", "acme"},
 	{"rec.maintenance", "maintenance", "flag"},
+	{"rec.recovery.off", "recovery", "off"},
 	{"rec.backup.run.20261010T020000Z-a1b2c3", "backup-run", "20261010T020000Z-a1b2c3"},
 	{"rec.backup.restore.20261010T030000Z-d4e5f6", "backup-restore", "20261010T030000Z-d4e5f6"},
 	{"rec.backup.retention", "backup-retention", "last"},

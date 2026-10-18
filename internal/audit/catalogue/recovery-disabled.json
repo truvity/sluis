@@ -1,0 +1,37 @@
+{
+  "$id": "https://schemas.example/access-roster/v1/recovery-disabled.json",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "installation": {
+      "type": "string",
+      "description": "The installation whose recovery sign-in was turned off.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none"
+    },
+    "generation": {
+      "type": "string",
+      "description": "The configuration's recovery.generation the disable covers. Recovery comes back only when the configuration names another one. Absent for the generation \"\".",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none"
+    },
+    "sign_ins_ended": {
+      "type": "integer",
+      "description": "How many browser sign-ins made by recovery were ended with it.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none"
+    },
+    "sessions_ended": {
+      "type": "integer",
+      "description": "How many client sessions (refresh tokens) opened by those sign-ins were revoked with it.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none"
+    },
+    "repeat": {
+      "type": "boolean",
+      "description": "True when the switch was already thrown and this call only ended recovery sessions it found.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none"
+    }
+  }
+}

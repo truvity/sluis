@@ -167,6 +167,7 @@ var rules5 = []rule5{
 
 	// oidc: the issuer's records and the console's session key.
 	r5exact(ModuleOIDC, "console", "rec.console.session-key", "session-key"),
+	r5exact(ModuleOIDC, "recovery", "rec.recovery.off", "off"),
 	r5(ModuleOIDC, "session", "ses.", convDots),
 	r5(ModuleOIDC, "session-pointer", "sid.", convID),
 	r5(ModuleOIDC, "request", "req.", convID),

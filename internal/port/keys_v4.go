@@ -105,6 +105,10 @@ var keyRules = []keyRule{
 	{prefix: "notify.", kind: "notify"},
 	// The maintenance flag: one record in every table (internal/maintenance).
 	{prefix: "rec.maintenance", kind: "maintenance", exact: "flag"},
+	// The switch an operator throws to turn the recovery sign-in off
+	// (internal/recoverygate): one record, kept until the configuration's
+	// generation changes.
+	{prefix: "rec.recovery.off", kind: "recovery", exact: "off"},
 	// The backup module's own records (internal/backup/job): one status record
 	// per run and the outcome of the last retention pass.
 	{prefix: "rec.backup.run.", kind: "backup-run"},

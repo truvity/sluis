@@ -35,7 +35,7 @@ Sign in with the recovery password on a Lambda installation when no directory ca
 
 2. Open `https://<issuer host>/console/login`, expand **Recovery sign-in** and paste the password. You sign in as `recovery`, an operator by construction. Use this page even when `console.client` sends everybody else to the issuer's page.
 
-3. Fix the directory group, then turn recovery off. Read the Pulumi preview before the apply.
+3. Fix the directory group, then turn recovery off. Sign in through your identity provider and press **Disable recovery** in Settings ([turn off recovery](turn-off-recovery.md)), or change the configuration. Read the Pulumi preview before the apply.
 
    ```go
    off := false
@@ -55,7 +55,7 @@ The trail has `roster.recovery.signed_in` with outcome `success` ([read the audi
 
 ## Roll back
 
-Sign out. To turn recovery back on, set `Enabled` true: the password is unchanged. Rotate it if anyone pasted it elsewhere.
+Sign out. To turn recovery back on, set `Enabled` true: the password is unchanged. After a turn-off from the console, also set a new `recovery.generation` in `Config`. Rotate the password if anyone pasted it elsewhere.
 
 ## Decided in
 

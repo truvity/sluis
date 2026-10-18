@@ -361,7 +361,7 @@ func (s *signIn) chooser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	kinds := slices.Sorted(maps.Keys(s.providers))
-	recovery, recoveryState := s.recoveryForm(request)
+	recovery, recoveryState := s.recoveryForm(r.Context(), request)
 
 	// One provider and no recovery is the only case with a single way in,
 	// and skipping a page with one button on it is a kindness. With
@@ -608,8 +608,8 @@ func (s *signIn) refuse(w http.ResponseWriter, r *http.Request, pending Pending,
 // and it is the recovery cookie's too, which the chooser sets: a signed
 // state alone is something anybody can fetch for themselves and post from
 // another site (see [signIn.recover]).
-func (s *signIn) recoveryForm(request string) (form, state string) {
-	if s.deps.Recovery == nil {
+func (s *signIn) recoveryForm(ctx context.Context, request string) (form, state string) {
+	if s.deps.Recovery == nil || s.deps.Issuer.recoveryOff(ctx) {
 		return "", ""
 	}
 	state, err := s.deps.State.IssueAs(access.Binding{Bind: request, Owner: access.RecoveryPurpose})
@@ -642,6 +642,13 @@ func (s *signIn) recoveryForm(request string) (form, state string) {
 func (s *signIn) recover(w http.ResponseWriter, r *http.Request) {
 	if s.deps.Recovery == nil {
 		refusalPage(w, r, http.StatusNotFound, "this issuer has no recovery", nil)
+		return
+	}
+	// Turned off from the console: refused before the form is read, the proof
+	// looked at or the API server asked.
+	if s.deps.Issuer.recoveryOff(r.Context()) {
+		recordLoginFailure(r.Context(), LoginRecoveryOff)
+		refuseRecoveryOff(w, r)
 		return
 	}
 	// A proof is a few KiB at most. Bounded before anything is read, so
@@ -710,7 +717,7 @@ func (s *signIn) recover(w http.ResponseWriter, r *http.Request) {
 
 	who, secret := s.established(w, r, subject, RecoveryHow)
 	if err = s.deps.Storage.Complete(r.Context(), request, who); err != nil {
-		if errors.Is(err, ErrUnaudited) {
+		if errors.Is(err, ErrUnaudited) || errors.Is(err, ErrRecoveryOff) {
 			// The browser session this recovery began goes with it: a
 			// session that never had its record is not one to sign in
 			// from silently later. It was never handed to the browser,
@@ -718,6 +725,10 @@ func (s *signIn) recover(w http.ResponseWriter, r *http.Request) {
 			s.unestablish(r, who)
 		} else {
 			s.handOver(w, r, who, secret)
+		}
+		if errors.Is(err, ErrRecoveryOff) {
+			refuseRecoveryOff(w, r)
+			return
 		}
 		if s.refuseUnentitled(w, r, err, request) || s.refuseUnaudited(w, r, err) || s.refuseHint(w, r, err, request) {
 			return

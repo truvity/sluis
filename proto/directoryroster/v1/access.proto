@@ -86,6 +86,21 @@ service AccessService {
   // directory the caller cannot see. The answer carries the policy digest,
   // like ListHolders, so a consumer checks it decided under the same policy.
   rpc ResolveDirectoryGroups(ResolveDirectoryGroupsRequest) returns (ResolveDirectoryGroupsResponse);
+
+  // GetRecovery reports the state of the recovery sign-in: whether it can
+  // be used now, and when and by whom it was turned off if it was, and
+  // whether the caller may turn it off from this sign-in. Operator.
+  rpc GetRecovery(GetRecoveryRequest) returns (GetRecoveryResponse);
+
+  // DisableRecovery turns the recovery sign-in off for the whole
+  // installation, at once, and ends every session recovery opened. It is
+  // the ONLY switch: nothing here turns recovery on, which is a change of
+  // the configuration (`recovery.generation`). Only an operator whose
+  // sign-in went through the identity provider may call it: a recovery
+  // sign-in, a workload and a scoped operator are refused. Idempotent. The
+  // switch takes effect before the audit record is written and does not wait
+  // for it. See docs/decisions/0075.
+  rpc DisableRecovery(DisableRecoveryRequest) returns (DisableRecoveryResponse);
 }
 
 // Role is what an identity may do in this console. Operator implies
@@ -292,6 +307,48 @@ message PolicyClient {
   repeated string redirects = 4;
   google.protobuf.Duration ttl_cap = 5;
   string secret = 6;
+}
+
+message GetRecoveryRequest {}
+message GetRecoveryResponse {
+  // the configuration builds a recovery sign-in at all (recovery.enabled).
+  bool configured = 1;
+  // it can be used now: configured, and not turned off from the console.
+  bool effective = 2;
+  // "token" or "password", as GetPolicyResponse.recovery_kind.
+  string kind = 3;
+  // when and by whom recovery was turned off from the console, for the
+  // configuration generation in force. Unset while it is not.
+  google.protobuf.Timestamp disabled_at = 4;
+  string disabled_by = 5;
+  // an earlier turn-off that a change of recovery.generation has since
+  // overridden: the configuration turned recovery back on. Unset when none.
+  google.protobuf.Timestamp superseded_at = 6;
+  string superseded_by = 7;
+  // recovery.generation in force.
+  string generation = 8;
+  // this installation's State can keep a turn-off; without it the action is
+  // not offered.
+  bool durable = 9;
+  // the caller may turn recovery off from this sign-in, and if not why not.
+  bool can_disable = 10;
+  string cannot_disable_reason = 11;
+}
+
+message DisableRecoveryRequest {}
+message DisableRecoveryResponse {
+  google.protobuf.Timestamp disabled_at = 1;
+  string disabled_by = 2;
+  // the switch was already thrown (by this operator or another); nothing
+  // was changed except any recovery session found and ended.
+  bool already_disabled = 3;
+  // browser sign-ins made by recovery that were ended with it, and client
+  // sessions (refresh tokens) they had opened that were revoked.
+  int32 sign_ins_ended = 4;
+  int32 sessions_ended = 5;
+  // the audit record could not be kept durably. The switch is thrown
+  // regardless; the failure is logged at ERROR and the record is retried.
+  bool audit_pending = 6;
 }
 
 message GetPolicyRequest {}
