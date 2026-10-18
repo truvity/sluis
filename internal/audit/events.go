@@ -117,6 +117,20 @@ func RecoverySignedIn(actor Actor, client, how string, o Outcome) *record.Record
 		subjectOf(actor), []*record.Target{targetClient(client)}, data{"how": how})
 }
 
+// RecoveryDisabled is an operator turning the recovery sign-in off for the
+// installation from the console, with how many recovery sign-ins and client
+// sessions went with it (docs/decisions/0075). repeat says the switch was
+// already thrown and this only ended recovery sessions it found. The catalogue
+// declares it block: it is tried durably, and the switch does not wait for it.
+func RecoveryDisabled(actor Actor, installation, generation string, signIns, sessions int, repeat bool, o Outcome) *record.Record {
+	d := data{"installation": installation, "generation": generation, "sign_ins_ended": signIns, "sessions_ended": sessions}
+	if repeat {
+		d["repeat"] = true
+	}
+	return build("roster.recovery.disabled", actor, o, subjectOf(actor),
+		[]*record.Target{{Type: "installation", Id: installation}}, d)
+}
+
 // TokenExchanged is a token exchange for one client, by the kind of proof
 // presented.
 func TokenExchanged(actor Actor, audience, proof string, o Outcome) *record.Record {

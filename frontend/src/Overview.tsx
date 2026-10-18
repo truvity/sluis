@@ -112,7 +112,8 @@ export function Overview({ me, operator }: { me?: Me; operator: boolean }) {
             {standingPassword && !settingUp ? (
               <Row severity="warning" title="A recovery password is kept on this installation">
                 It is a standing credential. In a cluster, recovery proves access to the API server instead and
-                keeps nothing; otherwise turn it off once a group grants operator to a real identity.
+                keeps nothing; otherwise turn it off once a group grants operator to a real identity. An operator who signed in
+                through the identity provider can do it from <Ref to={paths.settings()}>Settings</Ref>.
               </Row>
             ) : null}
             {failing.map((w) => (

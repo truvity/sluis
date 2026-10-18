@@ -45,6 +45,7 @@ import (
 	"github.com/truvity/sluis/internal/issuerapp"
 	"github.com/truvity/sluis/internal/modcall"
 	"github.com/truvity/sluis/internal/port"
+	"github.com/truvity/sluis/internal/recoverygate"
 	"github.com/truvity/sluis/internal/secrets"
 	"github.com/truvity/sluis/internal/server"
 	slackapp "github.com/truvity/sluis/internal/slackroster/app"
@@ -87,6 +88,9 @@ type Config struct {
 	// controller out, and the process only calls it. A module not named is
 	// hosted in this process, as the demonstration and the tests have it.
 	Remote map[string]config.ModuleRemote
+	// RecoveryGeneration is `recovery.generation`: which decision to have
+	// recovery on a turn-off from the console covers (docs/decisions/0075).
+	RecoveryGeneration string
 	// Dial turns the routing for a caller class into a Caller; nil is
 	// [dial.Dial]. It is the seam a test uses in place of the transports.
 	Dial func(ctx context.Context, cfg modcall.Config, class string) (modcall.Caller, error)
@@ -232,6 +236,9 @@ func FromConfig(f *config.Serve, p *config.PolicyDocument) (Config, error) {
 	// (ADR 0072, decision 1). A module that still runs in this process takes
 	// its own table through Stores.ForModule.
 	cfg := Config{Directory: directory, Issuer: issuer, Stores: stores.As(port.ModuleOIDC, IssuerPeers()...)}
+	if f.Recovery != nil {
+		cfg.RecoveryGeneration = f.Recovery.Generation
+	}
 	if f.Console != nil {
 		cfg.Backup = f.Console.Backup
 	}
@@ -367,6 +374,12 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 			return nil, err
 		}
 	}
+	// One switch for the recovery sign-in, read from the issuer's own table and
+	// shared by the console and the issuer, so a turn-off from the console is
+	// seen by the issuer's pages, sessions and refreshes in this process at once
+	// and by every other container within the gate's few seconds.
+	recoveryGate := recoverygate.New(stores.RecoveryState(), cfg.RecoveryGeneration, recoverygate.WithLog(log))
+	cfg.Directory.RecoveryGate = recoveryGate
 	directory, err := app.New(ctx, cfg.Directory, stores, log)
 	if err != nil {
 		stores.Close()
@@ -410,6 +423,10 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 		// `demo` the directory built a demonstration policy and the
 		// issuer refused to start on an empty path.
 		Policy: directory.Policy(),
+		// The switch the console throws to turn recovery off, and the sweep of
+		// the sessions recovery opened that follows it.
+		RecoveryGate:     recoveryGate,
+		UseRecoveryEnder: func(end func(context.Context) (int, int, error)) { directory.ConsoleServer().UseRecoveryEnder(end) },
 		// And the console learns who is signed in from the issuer's own
 		// browser session, once the issuer exists. Without this the
 		// merged deployment would need either a proxy in front of the

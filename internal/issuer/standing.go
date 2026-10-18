@@ -28,6 +28,9 @@ const (
 	// signInNotAdmitted: the directory, through the issuer's resolver and
 	// its hold window, no longer admits the person.
 	signInNotAdmitted
+	// signInRecoveryOff: the sign-in was made by recovery, and an operator has
+	// since switched recovery off (docs/decisions/0075).
+	signInRecoveryOff
 )
 
 // signInStanding is the decision and what it was made from.
@@ -72,6 +75,14 @@ func (i *Issuer) checkSignIn(ctx context.Context, sso *SSO, cookie, resource str
 	session, live, err := sso.Resolve(ctx, cookie)
 	if err != nil || !live {
 		return signInStanding{Verdict: signInAbsent}
+	}
+
+	// A recovery sign-in does not outlive the switch an operator threw: it is
+	// asked here, at the one place every door answers from a browser's sign-in,
+	// so that all of them agree and the sign-in is ended the first time any of
+	// them finds it.
+	if session.recovered() && i.recoveryOff(ctx) {
+		return signInStanding{Verdict: signInRecoveryOff, Session: session}
 	}
 
 	// The limit is the one THIS request's resource allows: a read-only
@@ -162,6 +173,15 @@ func standingSignIn(deps SignInDeps, w http.ResponseWriter, r *http.Request, res
 		// refresh, which resolves the person afresh.
 		deps.log().WarnContext(r.Context(), "browser session is no longer admitted",
 			logattr.SafeString("identity", standing.Session.Identity), logattr.SafeError("error", standing.Refusal))
+		_ = deps.SSO.End(r.Context(), standing.Session.ID)
+		access.SetCookie(w, deps.SSO.Cookie("", deps.Secure))
+
+	case signInRecoveryOff:
+		// Recovery was switched off while this browser was signed in by it.
+		// The sign-in record ends and the cookie is cleared; the sessions it
+		// opened were revoked by the sweep that followed the switch, or are
+		// refused at their next refresh.
+		deps.log().InfoContext(r.Context(), "a recovery sign-in ended: recovery has been turned off")
 		_ = deps.SSO.End(r.Context(), standing.Session.ID)
 		access.SetCookie(w, deps.SSO.Cookie("", deps.Secure))
 

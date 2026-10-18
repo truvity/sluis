@@ -184,10 +184,11 @@ func (e *exporter) add(ctx context.Context, s backup.Section, m port.Module, rec
 
 // owned reports whether the exported key is a record of module m that a backup
 // keeps: not another module's (an adapter that cannot route a prefix reads
-// every table), not of no module, and never the maintenance record.
+// every table), not of no module, and never the maintenance record or the
+// recovery switch: a restore must not roll back the disable of a break-glass door.
 func owned(m port.Module, key string) bool {
 	a, err := port.Locate5(key)
-	return err == nil && a.Module == m && a.Kind != "maintenance"
+	return err == nil && a.Module == m && a.Kind != "maintenance" && a.Kind != "recovery"
 }
 
 func (e *exporter) state(ctx context.Context, u unit) (int, error) {

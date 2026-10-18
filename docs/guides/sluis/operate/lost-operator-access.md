@@ -12,15 +12,15 @@ Get an operator back into the console when nobody is in the operators group, the
 
 - `429 too many attempts`, outside a cluster: ten wrong passwords block the password, the correct one too, for a minute. Wait, then try once.
 
-- `400 this sign-in did not start in this browser`: post the form from the browser that loaded the sign-in page, which sets the recovery cookie `__Host-sluis_recovery`. Two open recovery forms share the cookie, so only the last loaded can recover. A body over 16 KiB gets 413.
+- `400 this sign-in did not start in this browser`: post the form from the browser that loaded the sign-in page, which sets the cookie `__Host-sluis_recovery`. Two open recovery forms share it, so only the last loaded can recover. A body over 16 KiB gets 413.
 
-- Recovery disabled (`config.recovery.enabled: false`): step 1 turns it back on.
+- Recovery disabled (`config.recovery.enabled: false`, or [in the console](turn-off-recovery.md)): step 1 turns it back on.
 
 - Behind a gateway with its own cookie, sign-out runs the proxy's sign-out, then the issuer's `end_session` with the console's client id, then the front page, which the client lists in `signed_out`. The proxy's half alone signs the person straight back in.
 
 ## Steps
 
-1. If recovery is off, set `config.recovery.enabled: true` with `config.inCluster: true` and roll the Deployment. Check the ServiceAccount exists and `/login` offers *Recovery sign-in*.
+1. If recovery is off, set `config.recovery.enabled: true`, `config.inCluster: true` and a new `config.recovery.generation`, and roll the Deployment. Check the ServiceAccount exists and `/login` offers *Recovery sign-in*.
 
    ```sh
    kubectl -n <namespace> get serviceaccount <recovery serviceAccount>

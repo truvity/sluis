@@ -60,6 +60,7 @@ import (
 	"github.com/truvity/sluis/internal/port"
 	"github.com/truvity/sluis/internal/portstore"
 	"github.com/truvity/sluis/internal/rails"
+	"github.com/truvity/sluis/internal/recoverygate"
 	"github.com/truvity/sluis/internal/refusal"
 	"github.com/truvity/sluis/internal/secrets"
 	"github.com/truvity/sluis/internal/secretstore"
@@ -95,6 +96,11 @@ type Config struct {
 	// to its data (v1.76 E-FIN). Unset is the module in this process, as the
 	// demonstration and the tests have it.
 	GitHubRemote, SlackRemote, CloudflareRemote bool
+	// RecoveryGate is the switch an operator throws, from the console, to turn
+	// the recovery sign-in off. The merged service builds one over the issuer's
+	// State and hands the same to the issuer half; nil builds one over the
+	// stores this hub is given.
+	RecoveryGate *recoverygate.Gate
 
 	consolePort int
 	healthPort  int
@@ -116,7 +122,12 @@ type Config struct {
 	loginDirectory   bool
 	// recoveryLogin names the recovery password's secret, read instead of
 	// being generated, outside a cluster.
-	recoveryLogin   string
+	recoveryLogin string
+	// recoveryGeneration is `recovery.generation`: which decision to have
+	// recovery on a disable from the console covers (internal/recoverygate).
+	recoveryGeneration string
+	// instance names this installation in the audit trail's records.
+	instance        string
 	sessionLifetime time.Duration
 	// absoluteLifetime caps the console's own session the same way it caps
 	// a per-client one in the issuer: read from the SAME key
@@ -204,7 +215,9 @@ func FromConfig(f *config.Serve, p *config.PolicyDocument) (Config, error) {
 		c.recoveryAccount = orDefault(r.ServiceAccount, c.recoveryAccount)
 		c.recoveryAudience = orDefault(r.Audience, c.recoveryAudience)
 		c.recoveryLogin = r.LoginSecret
+		c.recoveryGeneration = r.Generation
 	}
+	c.instance = orDefault(f.Instance, orDefault(f.Release, "sluis"))
 	if d := f.Directory; d != nil {
 		c.workspaces = d.Workspaces
 	}
@@ -838,6 +851,10 @@ func New(ctx context.Context, cfg Config, st *store.Stores, log *slog.Logger) (*
 	if err != nil {
 		return nil, err
 	}
+	recoveryGate := cfg.RecoveryGate
+	if recoveryGate == nil {
+		recoveryGate = recoverygate.New(st.RecoveryState(), cfg.recoveryGeneration, recoverygate.WithLog(log))
+	}
 
 	oauthClient := func() (google.OAuthClient, error) {
 		// The client is read when /connect first needs it; the read is bounded.
@@ -944,6 +961,8 @@ func New(ctx context.Context, cfg Config, st *store.Stores, log *slog.Logger) (*
 		Connectors:   connectors,
 		Modules:      consolecall.Callers{Google: cfg.GoogleConsole},
 		Recovery:     recovery,
+		RecoveryGate: recoveryGate,
+		Instance:     cfg.instance,
 		LoginSources: loginSources,
 		CacheBackend: st.Name(),
 		SecureCookie: cfg.secureCookies,
@@ -978,14 +997,15 @@ func New(ctx context.Context, cfg Config, st *store.Stores, log *slog.Logger) (*
 	}
 
 	consoleServer := server.NewConsoleServer(server.ConsoleServerDeps{
-		Console:     console,
-		Authorizer:  authorizer,
-		Sessions:    sessions,
-		State:       access.NewStateCodecWith(sessionKey, 10*time.Minute),
-		Connectors:  connectors,
-		Hub:         directory,
-		Recovery:    recovery,
-		Maintenance: kept.maintenance,
+		Console:      console,
+		Authorizer:   authorizer,
+		Sessions:     sessions,
+		State:        access.NewStateCodecWith(sessionKey, 10*time.Minute),
+		Connectors:   connectors,
+		Hub:          directory,
+		Recovery:     recovery,
+		RecoveryGate: recoveryGate,
+		Maintenance:  kept.maintenance,
 		Forwarded: server.ForwardedIdentity{
 			Issuer:      cfg.forwardedIssuer,
 			Audience:    cfg.forwardedAudience,

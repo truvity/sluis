@@ -12,12 +12,13 @@ The actions sluis records, from the catalogue [`internal/audit/catalogue/roster.
 
 <!-- generated: audit-actions -->
 
-Catalogue version 1.21.0, 85 actions.
+Catalogue version 1.22.0, 86 actions.
 
 | Action | Operation | Targets | Delivery | Summary |
 |---|---|---|---|---|
 | `roster.person.signed_in` | authentication | client | async | A person signed in to a client, or was refused; at the issuer, with the class of the session it opens (interactive or agent) and that session's deadline. |
 | `roster.recovery.signed_in` | authentication | client | block | Somebody signed in with the recovery identity, which bypasses the directory. |
+| `roster.recovery.disabled` | modify | installation | block | An operator who signed in through the identity provider turned the recovery sign-in off for the whole installation, from the console. Recovery sessions end with it. There is no matching action to turn it on; that is a change of the configuration's `recovery.generation`. |
 | `roster.access.explained` | access | client | async | An operator looked up what a person, CI job or workload would effectively be granted, or a caller who may not was refused. The record carries counts only. |
 | `roster.token.exchanged` | authentication | client | async | A token was exchanged for one another client accepts, or the exchange was refused. |
 | `roster.github_token.minted` | create | github_app | async | A GitHub App installation token was minted, or refused. Never the token. |

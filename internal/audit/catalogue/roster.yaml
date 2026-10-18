@@ -19,7 +19,7 @@
 # A change to what an action carries is a new version. The installation keeps
 # every version it was sent, so records already written keep their meaning.
 source: roster
-version: "1.21.0"
+version: "1.22.0"
 locales: [en]
 
 actor_kinds:
@@ -103,6 +103,21 @@ actions:
     data_schema: https://schemas.example/access-roster/v1/sign-in.json
     message:
       en: "{outcome, select, success {{actor} signed in to {targets_0_id} by recovery} other {a recovery sign-in to {targets_0_id} did not complete}}"
+
+  roster.recovery.disabled:
+    summary: An operator who signed in through the identity provider turned the recovery sign-in off for the whole installation, from the console. Recovery sessions end with it. There is no matching action to turn it on; that is a change of the configuration's `recovery.generation`.
+    operation: modify
+    categories: [configuration_change, privileged_access]
+    category: security
+    target_types: [installation]
+    # Kept before the answer, when it can be. The switch takes effect first and
+    # does not wait for the trail: a disable only ever reduces what can get in, so
+    # an outage of the trail must not stop an operator from closing the door (the
+    # failure is logged at ERROR instead).
+    delivery: block
+    data_schema: https://schemas.example/access-roster/v1/recovery-disabled.json
+    message:
+      en: "{outcome, select, success {{actor} turned off the recovery sign-in of {targets_0_id}} other {{actor} could not turn off the recovery sign-in of {targets_0_id}}}"
 
   roster.access.explained:
     summary: An operator looked up what a person, CI job or workload would effectively be granted, or a caller who may not was refused. The record carries counts only.
