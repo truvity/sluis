@@ -2,7 +2,7 @@ package issuer
 
 import "net/http"
 
-// ConfirmedEndSessionForTest is [confirmedEndSession] with no client lookup.
+// ConfirmedEndSessionForTest is [confirmedEndSession] .
 func ConfirmedEndSessionForTest(signIn SignInDeps, w http.ResponseWriter, r *http.Request) bool {
-	return confirmedEndSession(signIn, nil, w, r)
+	return confirmedEndSession(signIn, w, r)
 }

@@ -285,7 +285,7 @@ func endSessionRedirectRefusal(r *http.Request, clients clientLookup) string {
 //
 // The library then validates the parameters exactly as for a GET, so what a
 // confirmed request may do is what an unconfirmed one always could.
-func confirmedEndSession(signIn SignInDeps, clients clientLookup, w http.ResponseWriter, r *http.Request) bool {
+func confirmedEndSession(signIn SignInDeps, w http.ResponseWriter, r *http.Request) bool {
 	if signIn.SSO == nil {
 		return true
 	}
