@@ -274,6 +274,10 @@ func serveSchema() m {
 		"publicURL":     m{"$ref": "#/$defs/url", "description": "Where a browser reaches the console, including its mount. The admin-consent redirect URI and the values the setup steps show are built from it. Default http://localhost:8081."},
 		"publicRootURL": m{"$ref": "#/$defs/url", "description": "The host's root, never carrying the console's mount: the bootstrap surface stays there. Unset follows `publicURL`."},
 		"secureCookies": boolean("Mark session cookies Secure. Unset follows the scheme the browser will use: https in the URL."),
+		"hsts": obj("The Strict-Transport-Security header the issuer and the console send on a response that arrived over https. Never `preload`; never sent over http or to a loopback host.", m{
+			"maxAge":            duration("How long a browser keeps the rule, in whole seconds. Zero sends no header.", "8760h"),
+			"includeSubDomains": boolDefault("Extend the rule to the host's subdomains. Every subdomain must then answer https.", true),
+		}),
 		"groupsScoping": enum("How far this installation has moved toward per-audience `groups` scoping: `off`, `report` or `enforce`.", "report", "off", "report", "enforce"),
 		"secrets":       secretsSchema(),
 		"lifetimes": obj("How long what the issuer hands out lives.", m{

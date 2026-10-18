@@ -108,6 +108,8 @@ type ConsoleServer struct {
 	mount string
 	// forwardedForTrustedHops: see [ConsoleServerDeps.ForwardedForTrustedHops].
 	forwardedForTrustedHops int
+	// hsts: see [ConsoleServerDeps.HSTS].
+	hsts httpsec.HSTS
 	// auditQuery is the audit installation's query service, when one is
 	// connected; see [ConsoleServer.UseAuditQuery].
 	auditQuery     *AuditQuery
@@ -208,7 +210,11 @@ type ConsoleServerDeps struct {
 	// peer as an audit event's client address; otherwise the entry just
 	// left of those hops is the client.
 	ForwardedForTrustedHops int
-	Log                     *slog.Logger
+	// HSTS is the Strict-Transport-Security this console sends on a response
+	// that arrived over https; its PublicURL is where the console is
+	// published. The zero value sends none.
+	HSTS httpsec.HSTS
+	Log  *slog.Logger
 	// UI is the built console. Nil serves no UI, which is what a
 	// deployment that only wants the API does.
 	UI fs.FS
@@ -240,6 +246,7 @@ func NewConsoleServer(deps ConsoleServerDeps) *ConsoleServer {
 		entry:        deps.SignInEntry,
 
 		forwardedForTrustedHops: deps.ForwardedForTrustedHops,
+		hsts:                    deps.HSTS,
 	}
 	for _, c := range deps.Connectors {
 		s.connectors[c.Kind()] = c
@@ -366,7 +373,7 @@ func (s *ConsoleServer) Handler() http.Handler {
 	// Every page this console writes, and the shell, carries the same
 	// headers: no framing, no referrer, no sniffing, and a policy that
 	// allows this origin's own files only.
-	return httpsec.Headers(AuditRequests(s.forwardedForTrustedHops, s.withIdentity(s.withMaintenance(mux))))
+	return httpsec.HeadersWith(AuditRequests(s.forwardedForTrustedHops, s.withIdentity(s.withMaintenance(mux))), s.hsts)
 }
 
 // at turns a path of this console's into one a browser can follow. Every

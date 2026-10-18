@@ -17,6 +17,7 @@ import (
 	"github.com/aws/aws-lambda-go/lambdacontext"
 
 	"github.com/truvity/sluis/internal/deploycheck"
+	"github.com/truvity/sluis/internal/httpsec"
 	"github.com/truvity/sluis/internal/modcall"
 	"github.com/truvity/sluis/internal/telemetry"
 	"github.com/truvity/sluis/storage/logattr"
@@ -227,6 +228,12 @@ func Request(ctx context.Context, event events.APIGatewayV2HTTPRequest) (*http.R
 	scheme := "https"
 	if proto := event.Headers["x-forwarded-proto"]; proto == "http" {
 		scheme = "http"
+	}
+	if scheme == "https" {
+		// The event is API Gateway's, which ends TLS and is the only thing
+		// that can invoke this function: the one front here whose word on
+		// the scheme the service takes, for Strict-Transport-Security.
+		ctx = httpsec.TrustHTTPS(ctx)
 	}
 	target := scheme + "://" + host + event.RawPath
 	if event.RawQueryString != "" {

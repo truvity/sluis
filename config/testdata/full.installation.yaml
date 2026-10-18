@@ -18,6 +18,7 @@ issuer:
 log: {level: info}
 lifetimes: {token: 1h, refresh: 12h, absolute: 24h, hold: 4h, session: 12h}
 freshness: {refreshInterval: 15m, freshnessWindow: 30m, probeInterval: 5m}
+hsts: {maxAge: 720h, includeSubDomains: false}
 secrets: {source: file, root: /var/run/sluis/secrets}
 aws:
   account: "111122223333"

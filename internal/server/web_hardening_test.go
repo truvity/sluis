@@ -57,6 +57,49 @@ func TestEveryConsoleResponseCarriesTheSecurityHeaders(t *testing.T) {
 	}
 }
 
+// The console says Strict-Transport-Security on every kind of response it
+// serves when the request came over https, and not over plain http.
+func TestTheConsoleSendsHSTSOnlyToARequestThatCameOverHTTPS(t *testing.T) {
+	t.Parallel()
+
+	console := signInHarness(t, "ada@north.example")
+	console.consoleUI = fstest.MapFS{
+		"index.html":    {Data: []byte("<!doctype html><title>sluis</title>")},
+		"assets/app.js": {Data: []byte("console.log(1)")},
+	}
+	console.hsts = httpsec.HSTS{
+		MaxAge: httpsec.DefaultHSTSMaxAge, IncludeSubDomains: true, PublicURL: "https://access.example/console",
+	}
+	handler := console.Handler()
+
+	for _, path := range []string{"/login", "/", "/assets/app.js", "/no-such-page", "/login/nowhere/start"} {
+		for name, c := range map[string]struct {
+			host, forward string
+			want          string
+		}{
+			"published":        {"access.example", "", "max-age=31536000; includeSubDomains"},
+			"front said http":  {"access.example", "http", ""},
+			"another host":     {"elsewhere.example", "", ""},
+			"a loopback host":  {"localhost:8081", "", ""},
+			"a client's claim": {"elsewhere.example", "https", ""},
+		} {
+			request := httptest.NewRequest(http.MethodGet, path, nil)
+			request.Host = c.host
+
+			if c.forward != "" {
+				request.Header.Set("X-Forwarded-Proto", c.forward)
+			}
+
+			recorder := httptest.NewRecorder()
+			handler.ServeHTTP(recorder, request)
+
+			if got := recorder.Header().Get("Strict-Transport-Security"); got != c.want {
+				t.Errorf("%s %s (%d): Strict-Transport-Security = %q, want %q", name, path, recorder.Code, got, c.want)
+			}
+		}
+	}
+}
+
 // The bundle is one script from this origin and styles written at run time
 // by its component library; the policy must allow exactly that.
 func TestTheConsolePolicyAllowsTheBuiltBundleAndNothingMore(t *testing.T) {

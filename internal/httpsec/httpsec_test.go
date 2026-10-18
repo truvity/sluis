@@ -1,12 +1,14 @@
 package httpsec_test
 
 import (
+	"crypto/tls"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"testing/fstest"
+	"time"
 
 	"github.com/truvity/sluis/internal/httpsec"
 )
@@ -152,5 +154,198 @@ func TestNoListingAnswersADirectoryWith404(t *testing.T) {
 		if strings.Contains(recorder.Body.String(), "app.js") && path != "/assets/app.js" {
 			t.Errorf("GET %s listed the directory: %s", path, recorder.Body.String())
 		}
+	}
+}
+
+func hstsHandler(hsts httpsec.HSTS) http.Handler {
+	return httpsec.HeadersWith(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/upstream" {
+			w.Header().Set("Strict-Transport-Security", "max-age=1")
+		}
+
+		w.WriteHeader(http.StatusNoContent)
+	}), hsts)
+}
+
+func hstsAnswer(t *testing.T, handler http.Handler, r *http.Request) string {
+	t.Helper()
+
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, r)
+
+	return recorder.Header().Get("Strict-Transport-Security")
+}
+
+func TestHSTSIsSentWithItsDefaultsOverTLS(t *testing.T) {
+	t.Parallel()
+
+	handler := hstsHandler(httpsec.HSTS{MaxAge: httpsec.DefaultHSTSMaxAge, IncludeSubDomains: true})
+
+	request := httptest.NewRequest(http.MethodGet, "https://issuer.example/", nil)
+	request.TLS = &tls.ConnectionState{}
+
+	got := hstsAnswer(t, handler, request)
+	if got != "max-age=31536000; includeSubDomains" {
+		t.Errorf("Strict-Transport-Security = %q", got)
+	}
+
+	if strings.Contains(got, "preload") {
+		t.Errorf("Strict-Transport-Security = %q carries preload", got)
+	}
+}
+
+func TestHSTSIsAbsentOverPlainHTTPOffTheLoopback(t *testing.T) {
+	t.Parallel()
+
+	handler := hstsHandler(httpsec.HSTS{MaxAge: httpsec.DefaultHSTSMaxAge, IncludeSubDomains: true})
+
+	// No TLS, no public URL, and a front that says https: a client can send
+	// that header, and it grants nothing.
+	request := httptest.NewRequest(http.MethodGet, "http://issuer.example/", nil)
+	request.Header.Set("X-Forwarded-Proto", "https")
+
+	if got := hstsAnswer(t, handler, request); got != "" {
+		t.Errorf("Strict-Transport-Security = %q over plain http", got)
+	}
+}
+
+func TestHSTSIsNeverSentToALoopbackHost(t *testing.T) {
+	t.Parallel()
+
+	handler := hstsHandler(httpsec.HSTS{
+		MaxAge: httpsec.DefaultHSTSMaxAge, IncludeSubDomains: true, PublicURL: "https://localhost:8443",
+	})
+
+	for _, host := range []string{
+		"localhost", "localhost:8443", "LOCALHOST.", "sluis.localhost", "127.0.0.1", "127.0.0.1:8080", "[::1]:8443", "[::1]", "127.1.2.3",
+	} {
+		for name, tlsOn := range map[string]bool{"tls": true, "plain": false} {
+			request := httptest.NewRequest(http.MethodGet, "/", nil)
+			request.Host = host
+
+			if tlsOn {
+				request.TLS = &tls.ConnectionState{}
+			}
+
+			if got := hstsAnswer(t, handler, request); got != "" {
+				t.Errorf("%s over %s: Strict-Transport-Security = %q", host, name, got)
+			}
+		}
+	}
+}
+
+func TestHSTSFollowsThePublicHTTPSURLUnlessTheFrontSaysHTTP(t *testing.T) {
+	t.Parallel()
+
+	handler := hstsHandler(httpsec.HSTS{
+		MaxAge: httpsec.DefaultHSTSMaxAge, IncludeSubDomains: true, PublicURL: "https://issuer.example/console",
+	})
+
+	for name, c := range map[string]struct {
+		host, forward, want string
+	}{
+		"the published host":            {"issuer.example", "", "max-age=31536000; includeSubDomains"},
+		"the published host and a port": {"issuer.example:443", "", "max-age=31536000; includeSubDomains"},
+		"in another case":               {"Issuer.Example", "", "max-age=31536000; includeSubDomains"},
+		"the front said https":          {"issuer.example", "https", "max-age=31536000; includeSubDomains"},
+		"the front said http":           {"issuer.example", "http", ""},
+		"the front said HTTP":           {"issuer.example", "HTTP", ""},
+		"another host":                  {"elsewhere.example", "", ""},
+		"another host, front https":     {"elsewhere.example", "https", ""},
+	} {
+		request := httptest.NewRequest(http.MethodGet, "/", nil)
+		request.Host = c.host
+
+		if c.forward != "" {
+			request.Header.Set("X-Forwarded-Proto", c.forward)
+		}
+
+		if got := hstsAnswer(t, handler, request); got != c.want {
+			t.Errorf("%s: Strict-Transport-Security = %q, want %q", name, got, c.want)
+		}
+	}
+
+	// A public URL that is not https says nothing about the browser's scheme.
+	plain := hstsHandler(httpsec.HSTS{MaxAge: httpsec.DefaultHSTSMaxAge, PublicURL: "http://issuer.example"})
+	request := httptest.NewRequest(http.MethodGet, "/", nil)
+	request.Host = "issuer.example"
+
+	if got := hstsAnswer(t, plain, request); got != "" {
+		t.Errorf("an http public URL: Strict-Transport-Security = %q", got)
+	}
+}
+
+func TestHSTSIsConfigurable(t *testing.T) {
+	t.Parallel()
+
+	for name, c := range map[string]struct {
+		hsts httpsec.HSTS
+		want string
+	}{
+		"a shorter age":     {httpsec.HSTS{MaxAge: 5 * time.Minute, IncludeSubDomains: true}, "max-age=300; includeSubDomains"},
+		"no subdomains":     {httpsec.HSTS{MaxAge: time.Hour}, "max-age=3600"},
+		"switched off":      {httpsec.HSTS{IncludeSubDomains: true}, ""},
+		"the zero value":    {httpsec.HSTS{}, ""},
+		"under a second":    {httpsec.HSTS{MaxAge: time.Millisecond}, ""},
+		"whole seconds out": {httpsec.HSTS{MaxAge: 90*time.Second + time.Millisecond}, "max-age=90"},
+	} {
+		hsts := c.hsts
+		request := httptest.NewRequest(http.MethodGet, "/", nil)
+		request.TLS = &tls.ConnectionState{}
+
+		if got := hstsAnswer(t, hstsHandler(hsts), request); got != c.want {
+			t.Errorf("%s: Strict-Transport-Security = %q, want %q", name, got, c.want)
+		}
+	}
+}
+
+func TestHSTSAnUpstreamHeaderIsKept(t *testing.T) {
+	t.Parallel()
+
+	handler := hstsHandler(httpsec.HSTS{MaxAge: httpsec.DefaultHSTSMaxAge, IncludeSubDomains: true})
+
+	// Already on the response before the middleware runs.
+	outer := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Strict-Transport-Security", "max-age=60")
+		handler.ServeHTTP(w, r)
+	})
+
+	request := httptest.NewRequest(http.MethodGet, "/", nil)
+	request.TLS = &tls.ConnectionState{}
+
+	if got := hstsAnswer(t, outer, request); got != "max-age=60" {
+		t.Errorf("Strict-Transport-Security = %q, want the upstream's", got)
+	}
+
+	// A handler that sets its own wins too.
+	request = httptest.NewRequest(http.MethodGet, "/upstream", nil)
+	request.TLS = &tls.ConnectionState{}
+
+	if got := hstsAnswer(t, handler, request); got != "max-age=1" {
+		t.Errorf("Strict-Transport-Security = %q, want the handler's", got)
+	}
+}
+
+func TestHSTSTrustedFrontIsOnlyWhatTheProcessMarks(t *testing.T) {
+	t.Parallel()
+
+	handler := hstsHandler(httpsec.HSTS{MaxAge: httpsec.DefaultHSTSMaxAge, IncludeSubDomains: true})
+
+	request := httptest.NewRequest(http.MethodGet, "/", nil)
+	request.Host = "id.example.org"
+
+	if got := hstsAnswer(t, handler, request); got != "" {
+		t.Errorf("unmarked: Strict-Transport-Security = %q", got)
+	}
+
+	request = request.WithContext(httpsec.TrustHTTPS(request.Context()))
+	if got := hstsAnswer(t, handler, request); got != "max-age=31536000; includeSubDomains" {
+		t.Errorf("marked: Strict-Transport-Security = %q", got)
+	}
+
+	// The default middleware says nothing about HSTS.
+	plain := httpsec.Headers(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	if got := hstsAnswer(t, plain, request); got != "" {
+		t.Errorf("Headers: Strict-Transport-Security = %q", got)
 	}
 }
