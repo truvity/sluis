@@ -79,6 +79,7 @@ func newFixture(t *testing.T) *fixture {
 		if review.Spec.Token == "good" && slices.Contains(review.Spec.Audiences, "sluis") {
 			out.Status = authnv1.TokenReviewStatus{
 				Authenticated: true, User: authnv1.UserInfo{Username: "system:serviceaccount:ns:sa"},
+				Audiences: []string{"sluis"},
 			}
 		}
 		return true, out, nil

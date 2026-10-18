@@ -87,6 +87,7 @@ Prometheus names turn dots into underscores and add `_total` to counters: `sluis
 | `directory_refused`, `directory_unreachable` | the directory refused or did not answer |
 | `not_entitled` | signed in, but not in a group the application requires |
 | `recovery_refused` | the recovery sign-in was refused |
+| `recovery_throttled` | a recovery proof was not looked at: its source had spent its refusals for the window |
 | `unaudited` | the audit trail could not be written |
 | `not_waiting` | the authorization request is gone |
 | `consent_refused` | an agent connection's consent was not accepted in that browser |

@@ -846,7 +846,11 @@ func (s *ConsoleServer) recoveryLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	subject, err := s.recovery.Verify(r.Context(), strings.TrimSpace(proof))
+	// Refusals are counted per source: the address the deployment's proxies
+	// vouch for, so that one caller's wrong proofs do not shut the door on
+	// another's right one.
+	source := clientAddress(r.Header, r.RemoteAddr, s.forwardedForTrustedHops)
+	subject, err := s.recovery.Verify(WithRecoverySource(r.Context(), source), strings.TrimSpace(proof))
 	switch {
 	case errors.Is(err, ErrRecoveryThrottled):
 		s.log.WarnContext(r.Context(), "recovery refused: too many attempts", logattr.SafeString("remote", r.RemoteAddr))

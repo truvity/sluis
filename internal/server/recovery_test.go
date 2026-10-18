@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -311,5 +312,52 @@ func TestThePasswordLocationIsTheInstallationsOwn(t *testing.T) {
 	}
 	if got := recoveryLocationOf(nil); got != "" {
 		t.Errorf("no recovery has location %q", got)
+	}
+}
+
+// The break-glass path must not be one anybody can shut. Refusals are counted
+// per source, so a caller spending its attempts does not stop the operator who
+// has the right password and comes from somewhere else.
+func TestOneSourcesWrongProofsDoNotLockOutAnother(t *testing.T) {
+	t.Parallel()
+
+	account := NewPasswordRecovery("the-real-one")
+	attacker := WithRecoverySource(context.Background(), "203.0.113.7")
+	operator := WithRecoverySource(context.Background(), "198.51.100.20")
+
+	for range recoveryAttempts {
+		_, _ = account.Verify(attacker, "guess")
+	}
+	if _, err := account.Verify(attacker, "guess"); !errors.Is(err, ErrRecoveryThrottled) {
+		t.Fatalf("the noisy source is still answered: %v", err)
+	}
+	if _, err := account.Verify(operator, "the-real-one"); err != nil {
+		t.Errorf("another source was locked out by the first: %v", err)
+	}
+}
+
+// Many sources together are bounded too, well above what one may spend, and
+// the bound lifts with its window.
+func TestTheRecoveryPasswordHasAGlobalCeilingAboveAnySources(t *testing.T) {
+	t.Parallel()
+
+	account := NewPasswordRecovery("the-real-one")
+	now := time.Date(2026, 9, 8, 12, 0, 0, 0, time.UTC)
+	account.now = func() time.Time { return now }
+
+	// Each source stays under its own allowance.
+	for i := range recoveryCeiling {
+		ctx := WithRecoverySource(context.Background(), "192.0.2."+strconv.Itoa(i))
+		if _, err := account.Verify(ctx, "guess"); errors.Is(err, ErrRecoveryThrottled) {
+			t.Fatalf("source %d was throttled under both limits", i)
+		}
+	}
+	fresh := WithRecoverySource(context.Background(), "198.51.100.99")
+	if _, err := account.Verify(fresh, "the-real-one"); !errors.Is(err, ErrRecoveryThrottled) {
+		t.Errorf("a source nobody has seen is answered past the ceiling: %v", err)
+	}
+	now = now.Add(recoveryWindow + time.Second)
+	if _, err := account.Verify(fresh, "the-real-one"); err != nil {
+		t.Errorf("the ceiling outlived its window: %v", err)
 	}
 }

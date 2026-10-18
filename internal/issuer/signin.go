@@ -15,11 +15,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/truvity/sluis/audit/sdk/emit"
 	auditrecord "github.com/truvity/sluis/audit/sdk/record"
 
 	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/audit"
 	"github.com/truvity/sluis/internal/refusal"
+	"github.com/truvity/sluis/internal/throttle"
 	"github.com/truvity/sluis/policy"
 	"github.com/truvity/sluis/storage/logattr"
 )
@@ -203,7 +205,7 @@ func SignInRoutes(mux *http.ServeMux, deps SignInDeps) {
 	if deps.Log == nil {
 		deps.Log = slog.Default()
 	}
-	s := &signIn{deps: deps, providers: map[string]SignIn{}}
+	s := &signIn{deps: deps, providers: map[string]SignIn{}, recoveries: throttle.Default()}
 	for _, provider := range deps.Providers {
 		s.providers[provider.Kind()] = provider
 	}
@@ -241,6 +243,11 @@ func SignInRoutes(mux *http.ServeMux, deps SignInDeps) {
 type signIn struct {
 	deps      SignInDeps
 	providers map[string]SignIn
+	// recoveries counts the recovery proofs refused, per source and overall,
+	// and stops answering a source that has spent its share. A proof costs
+	// the cluster's API server a TokenReview, and the door is open to anyone
+	// who can load the page.
+	recoveries *throttle.Limiter
 }
 
 // chooser asks which directory, and only when there is more than one to
@@ -616,8 +623,20 @@ func (s *signIn) recover(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Refusals are counted per source, so one caller's wrong proofs cannot
+	// keep another's right one out. Before the proof is looked at: a source
+	// that has spent its share costs the API server nothing more.
+	source := requestSource(r)
+	if s.recoveries.Blocked(source) {
+		s.deps.Log.WarnContext(r.Context(), "recovery refused: too many attempts")
+		recordLoginFailure(r.Context(), LoginRecoveryThrottled)
+		refusalPage(w, r, http.StatusTooManyRequests, "too many attempts; wait a minute and try again", nil)
+		return
+	}
+
 	subject, err := s.deps.Recovery.Verify(r.Context(), r.PostFormValue("proof"))
 	if err != nil {
+		s.recoveries.Refused(source)
 		// One message for every reason, and the reason in the log: a
 		// caller told which part of its proof failed is a caller helped
 		// to produce a better one.
@@ -626,6 +645,7 @@ func (s *signIn) recover(w http.ResponseWriter, r *http.Request) {
 		refusalPage(w, r, http.StatusForbidden, "that proof was not accepted", nil)
 		return
 	}
+	s.recoveries.Accepted(source)
 	// Spent once a proof is accepted, as the callback spends it: the
 	// form is not one to post twice. A refused proof leaves it, so the
 	// person can correct a paste without reloading the page.
@@ -1487,4 +1507,18 @@ func (s *signIn) account(w http.ResponseWriter, r *http.Request) {
 	}
 
 	http.Redirect(w, r, to, http.StatusFound)
+}
+
+// requestSource is who a request came from, as the deployment's proxies vouch
+// for it: the address the audit middleware put in the request's context, and the
+// peer's host where nothing did. Never a header read here: a caller who sends
+// the header owns it.
+func requestSource(r *http.Request) string {
+	if c := emit.RequestContext(r.Context()); c != nil && len(c.GetClientAddresses()) > 0 {
+		return c.GetClientAddresses()[0]
+	}
+	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+		return host
+	}
+	return r.RemoteAddr
 }
