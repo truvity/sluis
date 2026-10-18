@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	auditv1 "github.com/truvity/sluis/audit/sdk/gen/audit/v1"
@@ -941,9 +942,14 @@ type data map[string]any
 
 // unsupportedData is told of a data value whose type [data.proto] does not
 // handle. It logs an error; a test replaces it with a failure.
-var unsupportedData = func(key string, v any) {
-	slog.Default().ErrorContext(context.Background(), "an audit record carries a value of a type its builder does not handle; it is recorded as text",
-		slog.String("key", key), slog.String("type", fmt.Sprintf("%T", v)))
+var unsupportedData atomic.Pointer[func(key string, v any)]
+
+func init() {
+	f := func(key string, v any) {
+		slog.Default().ErrorContext(context.Background(), "an audit record carries a value of a type its builder does not handle; it is recorded as text",
+			slog.String("key", key), slog.String("type", fmt.Sprintf("%T", v)))
+	}
+	unsupportedData.Store(&f)
 }
 
 func build(action string, actor Actor, o Outcome, subject *record.Party, targets []*record.Target, d data) *record.Record {
@@ -990,7 +996,7 @@ func (d data) proto() *structpb.Struct {
 			// A value of a type this builder does not know used to vanish
 			// from the record without a word (an int64 did, and a backup's
 			// record count with it). Say so, loudly, and keep the line.
-			unsupportedData(k, v)
+			(*unsupportedData.Load())(k, v)
 			fields[k] = structpb.NewStringValue(fmt.Sprint(v))
 		}
 	}

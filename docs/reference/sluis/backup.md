@@ -86,13 +86,13 @@ A restore asks the audit trail whether a backup is genuine, because the archive 
 | Step | Rule |
 |---|---|
 | Record | `roster.backup.completed` carries `object_key`, `object_size`, `object_sha256`, `sidecar_sha256` and `recipients` (the SHA-256 of each `age1...`). It is written after the sidecar |
-| Lookup | The query service, `backup.verify.query`, searches `backup.verify.profile` for `roster.backup.completed` records whose target is the backup. It reads up to four pages of 50, and more records than that refuse the backup |
+| Lookup | The query service, `backup.verify.query`, searches `backup.verify.profile` for `roster.backup.completed` records whose target is the backup. It reads every page, and more than 200 records of the pinned observer refuse the backup |
 | Match | A record exists, every record agrees, and its installation, object key, size, hashes and recipients are those of the fetched backup. A record without hashes, made by an earlier release, is no evidence: the backup is `unattested` |
 | Sealed | The hour holding each record has a seal. Before that the restore is refused with `not sealed yet`: wait for the notary and run it again |
-| Observer | The writer must have stamped the record with `backup.verify.observer`. With `anyObserver`, any sender of audit records can vouch for a backup, and a start logs a warning |
+| Observer | Only records the writer stamped with `backup.verify.observer` count. Another observer's record is ignored and logged at error level. With `anyObserver`, any sender of audit records can vouch for a backup, and a start logs a warning |
 | Recipients | With `backup.recipients`, the sidecar lists only those, verified or not. No flag overrides it. The recipients are public, so this is not a check on forgery |
 | Order | All of this happens before the identity is read |
-| Token | The query token's grants must let it search and get on `backup.verify.profile` |
+| Token | The query token's grants must let it search and get on `backup.verify.profile`. A redirect to another origin is refused |
 | Sealed means | A seal object exists for the hour, as the query service reports. Not yet checked: the seal's signature (`audit verify --root` does), and that the seal covers the record's object |
 | Rotation | After `backup.recipients` changes, an older backup is refused. Set the earlier list to restore it, or use `--allow-unverified` |
 
@@ -101,8 +101,8 @@ A restore asks the audit trail whether a backup is genuine, because the archive 
 | `backup.verify` unset, query service down, no record, a mismatch, an unsealed hour | `refused`, reason `unverified`. Nothing is changed and nothing is recorded but a log line |
 | A record that disagrees with the backup, or a replaced backup | `refused`, reason `unverified`, `verification` `mismatch`. No flag overrides it: the trail says the archive was tampered with |
 | `--allow-unverified` | For `unattested`, `unsealed` and `unavailable` only. It needs `backup.recipients`. `roster.restore.unverified` is kept (delivery `block`) before the restore begins, and `.started` and `.completed` carry `unverified: true` and `verification` |
-| `--allow-unaudited` | With `--allow-unverified`, when `roster.restore.unverified` cannot be kept. Without it the restore is refused as `unaudited`. With it, an error log line names the backup, the reason, `by` and `note` |
-| Who asked | The record names the workload (`lambda:restore`, `cli:restore`) and the caller's own `by`, which nothing verifies. The invoker is in CloudTrail's Lambda data events where those are enabled |
+| `--allow-unaudited` | With `--allow-unverified`, when `roster.restore.unverified` cannot be kept, or no audit installation is connected. Without it the restore is refused as `unaudited`. With it, an error log line names the backup, the reason, `by` and `note` |
+| Who asked | The record names the workload (`lambda:restore`, `cli:restore`) and the caller's own `by` (at most 256 bytes, control characters removed), which nothing verifies. The invoker is in CloudTrail's Lambda data events where those are enabled |
 | A restore that paused | Continues against the hashes it began with and does not ask the trail again. A backup replaced while it was paused is refused |
 
 ## Routes

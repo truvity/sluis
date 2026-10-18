@@ -1,14 +1,18 @@
 package attest_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -175,16 +179,77 @@ func TestAnUnreachableServiceIsUnavailable(t *testing.T) {
 	}
 }
 
-func TestAnObserverPinRefusesARecordStampedByAnother(t *testing.T) {
-	s := &trail{records: []*auditv1.Record{completed("rec-1", "b1", func(r *auditv1.Record) { r.Observer.Id = "somebody-else" })},
-		seal: map[string]string{"rec-1": "seals/x.jws"}}
-	if _, err := setup(t, s).Attest(context.Background(), "example", "b1"); !errors.Is(err, backup.ErrMismatch) {
-		t.Fatalf("%v", err)
-	}
-	// Only a deployment that says so accepts anyone's record.
-	anyone := setup(t, s, func(c *attest.Config) { c.Observer, c.AnyObserver = "", true })
-	if claims, err := anyone.Attest(context.Background(), "example", "b1"); err != nil || len(claims) != 1 {
+// One junk record from any sender of audit records must not make a backup
+// unrestorable: with a pinned observer only that observer's records decide,
+// and the others are reported.
+func TestARecordStampedByAnotherObserverIsIgnoredAndReported(t *testing.T) {
+	var logs bytes.Buffer
+	s := &trail{records: []*auditv1.Record{
+		completed("junk", "b1", func(r *auditv1.Record) {
+			r.Observer.Id = "somebody-else"
+			r.Data.Fields["object_sha256"] = structpb.NewStringValue("ff")
+		}),
+		completed("rec-1", "b1"),
+	}, seal: map[string]string{"rec-1": "seals/x.jws", "junk": "seals/x.jws"}}
+	pinned := setup(t, s, func(c *attest.Config) { c.Log = slog.New(slog.NewTextHandler(&logs, nil)) })
+	claims, err := pinned.Attest(context.Background(), "example", "b1")
+	if err != nil || len(claims) != 1 || claims[0].RecordID != "rec-1" {
 		t.Fatalf("%v, %v", claims, err)
+	}
+	if out := logs.String(); !strings.Contains(out, "level=ERROR") || !strings.Contains(out, "somebody-else") || !strings.Contains(out, "junk") {
+		t.Errorf("the foreign record was not reported: %q", out)
+	}
+	// Only a deployment that says so lets anyone's record decide.
+	anyone := setup(t, s, func(c *attest.Config) { c.Observer, c.AnyObserver = "", true })
+	if claims, err := anyone.Attest(context.Background(), "example", "b1"); err != nil || len(claims) != 2 {
+		t.Fatalf("%v, %v", claims, err)
+	}
+}
+
+func TestAFloodOfForeignRecordsDoesNotHideTheRealOne(t *testing.T) {
+	var recs []*auditv1.Record
+	seal := map[string]string{"rec-real": "seals/x.jws"}
+	for i := range 300 {
+		recs = append(recs, completed(fmt.Sprintf("junk-%03d", i), "b1", func(r *auditv1.Record) { r.Observer.Id = "somebody-else" }))
+	}
+	recs = append(recs, completed("rec-real", "b1"))
+	for _, r := range recs {
+		seal[r.GetId()] = "seals/x.jws"
+	}
+	var logs bytes.Buffer
+	claims, err := setup(t, &trail{records: recs, seal: seal}, func(c *attest.Config) { c.Log = slog.New(slog.NewTextHandler(&logs, nil)) }).
+		Attest(context.Background(), "example", "b1")
+	if err != nil || len(claims) != 1 || claims[0].RecordID != "rec-real" {
+		t.Fatalf("%v, %v", claims, err)
+	}
+	// Reported, but not 300 lines.
+	if n := strings.Count(logs.String(), "level=ERROR"); n == 0 || n > 10 {
+		t.Errorf("%d error lines", n)
+	}
+}
+
+func TestARedirectToAnotherOriginIsRefusedSoTheTokenStaysHome(t *testing.T) {
+	var got atomic.Value
+	got.Store("")
+	elsewhere := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) { got.Store(r.Header.Get("Authorization")) }))
+	defer elsewhere.Close()
+	redirecting := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, elsewhere.URL+r.URL.Path, http.StatusTemporaryRedirect)
+	}))
+	defer redirecting.Close()
+	tok := filepath.Join(t.TempDir(), "token")
+	if err := os.WriteFile(tok, []byte("secret-token"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	q, err := attest.New(attest.Config{URL: redirecting.URL, TokenFile: tok, Observer: "o", Timeout: 5 * time.Second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := q.Attest(context.Background(), "example", "b1"); !errors.Is(err, backup.ErrAttestUnavailable) {
+		t.Errorf("%v", err)
+	}
+	if got.Load() != "" {
+		t.Errorf("the token reached another origin: %q", got.Load())
 	}
 }
 
@@ -223,7 +288,7 @@ func TestEveryPageOfRecordsIsRead(t *testing.T) {
 	if err != nil || len(claims) != 60 {
 		t.Fatalf("%d claims, %v", len(claims), err)
 	}
-	if len(s.searches) != 2 || s.searches[1].GetCursor() == "" {
+	if len(s.searches) != 3 || s.searches[1].GetCursor() == "" {
 		t.Errorf("%d searches", len(s.searches))
 	}
 	// The verifier sees the one on the second page and refuses.

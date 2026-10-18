@@ -9,6 +9,7 @@ import (
 
 	"filippo.io/age"
 
+	"github.com/truvity/sluis/internal/audit"
 	"github.com/truvity/sluis/internal/backup"
 	"github.com/truvity/sluis/internal/backup/restorejob"
 	"github.com/truvity/sluis/internal/port"
@@ -389,5 +390,51 @@ func TestAContinuedRunWithNoStoredHashesIsVerifiedAndPinnedOnTheWay(t *testing.T
 	}
 	if got := r.audit.Find("roster.restore.completed"); len(got) != 1 || !got[0].GetData().GetFields()["unverified"].GetBoolValue() {
 		t.Errorf("the completion is not truthful: %v", got)
+	}
+}
+
+// With nowhere to write the decision down, it is not made quietly.
+func TestAnUnverifiedRestoreWithNoAuditTrailIsUnaudited(t *testing.T) {
+	for name, recorder := range map[string]func(*rig) func(*restorejob.Config){
+		"none": func(*rig) func(*restorejob.Config) { return func(c *restorejob.Config) { c.Audit = nil } },
+		"not connected": func(r *rig) func(*restorejob.Config) {
+			return func(c *restorejob.Config) { c.Audit = unconnected{r.audit} }
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			r := newRig(t)
+			r.forge("evil")
+			res, err := r.job(recorder(r)).Start(ctx, restorejob.Request{BackupID: "evil", Actor: admin, AllowUnverified: true})
+			refused(t, res, err, restorejob.ReasonUnaudited, "")
+			if len(r.flagged()) != 0 || len(r.writes) != 0 {
+				t.Errorf("a refused restore changed something")
+			}
+			res, err = r.job(recorder(r)).Start(ctx, restorejob.Request{BackupID: "evil", Actor: admin, AllowUnverified: true, AllowUnaudited: true})
+			if err != nil || res.Outcome != restorejob.OutcomeCompleted || !res.Run.Unverified {
+				t.Fatalf("%+v, %v", res, err)
+			}
+		})
+	}
+}
+
+// unconnected is a recorder of a trail that keeps nothing: a durable write
+// answers nil all the same.
+type unconnected struct{ audit.Recorder }
+
+func (unconnected) Connected() bool { return false }
+
+func TestTheCallersNameIsCleanedAndBounded(t *testing.T) {
+	r := newRig(t)
+	res, err := r.job().Start(ctx, restorejob.Request{BackupID: "b1", Actor: admin, By: "ada\u202e\nlovelace\x00"})
+	if err != nil || res.Outcome != restorejob.OutcomeCompleted || res.Run.By != "ada lovelace" {
+		t.Fatalf("%+v, %v", res.Run, err)
+	}
+	r = newRig(t)
+	res, err = r.job().Start(ctx, restorejob.Request{BackupID: "b1", Actor: admin, By: strings.Repeat("a", 257)})
+	refused(t, res, err, restorejob.ReasonBackup, "at most 256")
+	r.untouched(t)
+	res, err = r.job().Start(ctx, restorejob.Request{BackupID: "b1", Actor: admin, By: strings.Repeat("a", 256)})
+	if err != nil || res.Outcome != restorejob.OutcomeCompleted {
+		t.Fatalf("%+v, %v", res, err)
 	}
 }
