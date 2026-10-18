@@ -61,6 +61,9 @@ type signingAudience struct {
 	// for the same reason.
 	subject        string
 	serviceAccount bool
+	// recovery is whether the token about to be minted opens from a sign-in made
+	// by recovery, so that its access token says so ([RecoveryClaim]).
+	recovery bool
 
 	// agentUntil is the latest the ID token minted next may expire, when
 	// the request belongs to an agent-class chain: the access token's own
@@ -117,6 +120,28 @@ func (c *signingAudience) markSubject(subject string, serviceAccount bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.subject, c.serviceAccount = subject, serviceAccount
+}
+
+// markRecovery records that the token about to be minted is a recovery
+// sign-in's.
+func (c *signingAudience) markRecovery(recovery bool) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.recovery = recovery
+}
+
+// isRecovery reports whether the token about to be minted is a recovery
+// sign-in's and is for subject.
+func (c *signingAudience) isRecovery(subject string) bool {
+	if c == nil {
+		return false
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.recovery && c.subject == subject
 }
 
 // subjectIsServiceAccount reports whether subject is the one marked and

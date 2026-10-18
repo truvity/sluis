@@ -81,8 +81,17 @@ func (i *Issuer) checkSignIn(ctx context.Context, sso *SSO, cookie, resource str
 	// asked here, at the one place every door answers from a browser's sign-in,
 	// so that all of them agree and the sign-in is ended the first time any of
 	// them finds it.
-	if session.recovered() && i.recoveryOff(ctx) {
-		return signInStanding{Verdict: signInRecoveryOff, Session: session}
+	if session.recovered() {
+		switch i.recoveryCheck(ctx) {
+		case recoveryEnded:
+			return signInStanding{Verdict: signInRecoveryOff, Session: session}
+		case recoveryUnknown:
+			// Could not tell whether recovery was turned off: nobody is signed in
+			// by it for now, and the sign-in is NOT ended, so that a fault in the
+			// State does not destroy what an operator never meant to.
+			return signInStanding{Verdict: signInAbsent}
+		case recoveryOn:
+		}
 	}
 
 	// The limit is the one THIS request's resource allows: a read-only

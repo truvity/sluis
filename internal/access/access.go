@@ -64,6 +64,12 @@ const (
 	// SourceForwarded is a bearer an authenticating gateway forwarded —
 	// the normal path where a proxy fronts every console.
 	SourceForwarded Source = "forwarded"
+	// SourceForwardedHeader is an address an authenticating gateway put in a
+	// header, which this service trusts and cannot verify: it is only as
+	// strong as whatever keeps other pods off its port. It is its own source so
+	// that what must not rest on an unverified header (turning recovery off) can
+	// say so.
+	SourceForwardedHeader Source = "forwarded-header"
 	// SourceDirectory is the hub's own sign-in with a connected directory,
 	// for a standalone installation.
 	SourceDirectory Source = "directory"
@@ -103,6 +109,12 @@ type Principal struct {
 	// entitled to is the policy's `aws` matchers, the same table that answers
 	// for a role exchanging a token.
 	AWS *policy.AWSRole
+	// Recovery is set when a verified bearer was minted under a recovery
+	// sign-in (the token's `sluis_recovery` claim). It is not the source: the
+	// policy decides what that caller is. It exists so that turning recovery
+	// off also ends the tokens recovery already issued, where they are verified
+	// offline.
+	Recovery bool
 }
 
 // Identity is an authorized caller: a principal, the internal groups the

@@ -70,6 +70,7 @@ func (b *forwardedBearer) identity(r *http.Request) (access.Principal, bool) {
 			Source:         access.SourceForwarded,
 			Issuer:         b.issuer.URL,
 			ServiceAccount: who.ServiceAccount,
+			Recovery:       who.Recovery,
 		}, true
 	}
 	if who.Email == "" {
@@ -79,9 +80,10 @@ func (b *forwardedBearer) identity(r *http.Request) (access.Principal, bool) {
 	}
 
 	return access.Principal{
-		Email:   who.Email,
-		Subject: who.Subject,
-		Source:  access.SourceForwarded,
-		Issuer:  b.issuer.URL,
+		Email:    who.Email,
+		Subject:  who.Subject,
+		Source:   access.SourceForwarded,
+		Issuer:   b.issuer.URL,
+		Recovery: who.Recovery,
 	}, true
 }

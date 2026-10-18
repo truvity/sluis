@@ -41,7 +41,7 @@ func sourceEnum(s access.Source) directoryrosterv1.IdentitySource {
 		return directoryrosterv1.IdentitySource_IDENTITY_SOURCE_DIRECTORY
 	case access.SourceOIDC:
 		return directoryrosterv1.IdentitySource_IDENTITY_SOURCE_OIDC
-	case access.SourceForwarded:
+	case access.SourceForwarded, access.SourceForwardedHeader:
 		return directoryrosterv1.IdentitySource_IDENTITY_SOURCE_FORWARDED
 	case access.SourceRecovery:
 		return directoryrosterv1.IdentitySource_IDENTITY_SOURCE_RECOVERY

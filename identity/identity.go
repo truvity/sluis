@@ -71,6 +71,11 @@ type Verified struct {
 	// ServiceAccount is set when the caller is a workload rather than a
 	// person, parsed from the subject.
 	ServiceAccount *policy.ServiceAccountRef
+	// Recovery is set when the token was minted under a recovery sign-in (the
+	// claim `sluis_recovery`). A consumer that can tell whether recovery has been
+	// turned off refuses such a token then; one that cannot treats it as any
+	// other.
+	Recovery bool
 }
 
 // Has reports whether the caller is in an internal group.
@@ -248,6 +253,9 @@ func (c *Cluster) Verify(ctx context.Context, token string) (Verified, error) {
 // recovery sign-in: either way it is not a person and has no address.
 func fromClaims(claims *oidc.AccessTokenClaims) Verified {
 	out := Verified{Subject: claims.Subject, Groups: groupsOf(claims)}
+	if recovery, _ := claims.Claims["sluis_recovery"].(bool); recovery {
+		out.Recovery = true
+	}
 	out.ClientID = claims.AuthorizedParty
 	if out.ClientID == "" {
 		out.ClientID = claims.ClientID

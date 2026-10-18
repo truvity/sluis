@@ -3,8 +3,10 @@ package server
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"sync"
+	"time"
 
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -51,6 +53,8 @@ func (s *ConsoleServer) UseRecoveryEnder(fn RecoveryEnder) {
 const (
 	cannotRecovery = "You signed in with the recovery sign-in. Sign in through your identity provider to turn it off: " +
 		"a break-glass session does not get to decide the break-glass door's fate."
+	cannotHeader = "Your address came in a header the gateway set, which this console cannot verify. " +
+		"Turning recovery off needs a verified sign-in: the gateway's signed token, or this console's own sign-in."
 	cannotNotPerson = "Only a person signed in through the identity provider can turn recovery off."
 	cannotOperator  = "Turning recovery off needs the installation-wide operator role."
 )
@@ -74,6 +78,8 @@ func recoveryDisableRefusal(id access.Identity) string {
 	case access.SourceRecovery:
 		return cannotRecovery
 	case access.SourceForwarded, access.SourceDirectory, access.SourceOIDC:
+	case access.SourceForwardedHeader:
+		return cannotHeader
 	case access.SourceWorkload:
 		return cannotNotPerson
 	default:
@@ -165,7 +171,16 @@ func (c *Console) DisableRecovery(
 	if why := recoveryDisableRefusal(id); why != "" {
 		// A refused attempt is worth a record: somebody holding a recovery
 		// session, or a viewer, asked to close the break-glass door.
-		c.record(ctx, audit.RecoveryDisabled(actorOf(ctx), c.installation(), gate.Generation(), 0, 0, false, audit.Denied(why)))
+		// Once a window per caller and reason, with the count: the refusal is free
+		// to ask for in a loop, and a record for each would let it flood the trail.
+		actor := actorOf(ctx)
+		if n, ok := c.recoveryDenied.note(actor.Kind+"\x00"+actor.ID+"\x00"+why, time.Now()); ok {
+			reason := why
+			if n > 1 {
+				reason = fmt.Sprintf("%s (%d attempts in the last %s)", why, n, cheapWindow)
+			}
+			c.record(ctx, audit.RecoveryDisabled(actor, c.installation(), gate.Generation(), 0, 0, false, audit.Denied(reason)))
+		}
 		return nil, connect.NewError(connect.CodePermissionDenied, errors.New(why))
 	}
 	if !c.recoveryConfigured() {

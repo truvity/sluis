@@ -64,6 +64,13 @@ func (s *Storage) liveSignInClaims(ctx context.Context, bearer string, clients [
 	if err != nil || !live || session.Agent() {
 		return nil, false
 	}
+	// A sign-in made by recovery is never a laptop's or a console person's
+	// bearer here, whether or not recovery is on: the subject test above already
+	// excludes its ServiceAccount subject, and this keeps it excluded if that ever
+	// changes (docs/decisions/0075).
+	if session.Method == RecoveryHow {
+		return nil, false
+	}
 	return claims, true
 }
 

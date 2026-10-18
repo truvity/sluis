@@ -61,6 +61,18 @@ type logoutToken struct {
 	// ID token by a relying party that checks too little.
 }
 
+// AnnounceEnded tells the clients of sessions that were ended outside a browser's
+// sign-out (the sweep after recovery is turned off) by back-channel logout, to
+// those that declared one. It waits for the posts and logs what it could not
+// deliver.
+func (s *Storage) AnnounceEnded(ctx context.Context, log *slog.Logger, ended []Session) {
+	if log == nil {
+		log = slog.Default()
+	}
+
+	s.announceLogout(ctx, log, ended)
+}
+
 // announceLogout tells every client that asked to be told. Errors are
 // logged and not returned: the sign-out has already happened, and a
 // relying party that cannot be reached must not turn a completed
