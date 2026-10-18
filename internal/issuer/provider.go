@@ -15,13 +15,16 @@ import (
 	"strconv"
 	"strings"
 
+	"connectrpc.com/connect"
 	"github.com/go-jose/go-jose/v4"
+	"github.com/rs/cors"
 	"github.com/zitadel/oidc/v3/pkg/oidc"
 	"github.com/zitadel/oidc/v3/pkg/op"
 
 	"github.com/truvity/sluis/gen/accessissuer/v1/accessissuerv1connect"
 	"github.com/truvity/sluis/gen/sluis/v1/sluisv1connect"
 	"github.com/truvity/sluis/internal/connectalias"
+	"github.com/truvity/sluis/internal/httpsec"
 	"github.com/truvity/sluis/internal/refusal"
 	"github.com/truvity/sluis/internal/signer"
 	"github.com/truvity/sluis/internal/telemetry"
@@ -106,6 +109,7 @@ func Provider(iss *Issuer, storage op.Storage) (*op.Provider, error) {
 		// freshly-signed tokens until their stale cache finally expires.
 		// See [TestJWKSAndDiscoveryAreNotCacheableByAProxy].
 		op.WithCustomKeysEndpoint(op.NewEndpoint("/keys")),
+		op.WithCORSOptions(corsOptions()),
 	}
 	if iss.Config().AllowInsecure {
 		options = append(options, op.WithAllowInsecure())
@@ -254,11 +258,11 @@ func HandlerWithSignIn(iss *Issuer, storage op.Storage, signIn SignInDeps) (http
 	// it, so none of them can see one value where the library takes another.
 	// The installation-token claims below take their client from HTTP Basic
 	// and read no parameter the library also reads.
-	protocol := singleValued(challenges(refusedAuthorize(defaultScope(resourceIndicators(
+	protocol := bindAuthorization(signIn, singleValued(challenges(refusedAuthorize(defaultScope(resourceIndicators(
 		iss.Policy().Resource, storage.GetClientByClientID, requirePKCE(iss.Policy, presentedClients(
 			endSession(signIn, truthfulDiscovery(
 				iss.Config().URL, func() bool { return iss.Policy().ClientDocuments().Enabled() },
-				refusalFilter(provider))))))))))
+				refusalFilter(provider)))))))))))
 	// An installation token for a catalogue App is claimed in front of the
 	// library, which can only mint tokens this issuer signs. The storage
 	// is the concrete one wherever a deployment runs; a test's stand-in
@@ -269,7 +273,7 @@ func HandlerWithSignIn(iss *Issuer, storage op.Storage, signIn SignInDeps) (http
 	}
 	mux.Handle("/", neverCached(protocol))
 
-	return refusal.Middleware(withSigningAudience(withOneResolution(authorizationResponseIssuer(iss.Config().URL, mux)))), nil
+	return refusal.Middleware(httpsec.Headers(withSigningAudience(withOneResolution(authorizationResponseIssuer(iss.Config().URL, mux))))), nil
 }
 
 // withSigningAudience installs a fresh [signingAudience] carrier on every
@@ -406,22 +410,21 @@ func endSession(signIn SignInDeps, next http.Handler) http.Handler {
 	})
 }
 
-// endSessionNames are the clients an `/end_session` request names: its
-// `client_id`, and the audience (and `azp`) of its `id_token_hint`. Their
-// sessions under the sign-in are ended even when they are agent-class
+// endSessionNames are the clients an `/end_session` request names: the
+// audience (and `azp`) of its `id_token_hint`. Their sessions under the
+// sign-in are ended even when they are agent-class
 // (docs/decisions/0040-agent-class-sessions.md, decision 7): the relying
 // party that sent the person here is signing ITSELF out too.
 //
-// The hint's payload is read without verifying it, on purpose: a name
-// here can only end more of the sessions this browser's own sign-out is
-// already ending, never fewer, and never anything outside this sign-in.
-// Whether the library accepted the hint is decided before this runs.
+// ONLY the hint names a client, and only because the library has verified
+// its signature before this runs (a request it refused never gets here). A
+// bare `client_id` is a string anybody can put in a link: honouring it
+// would let a page of an attacker's end a victim's agent connections, which
+// are meant to survive a sign-out of the browser, by sending them to
+// `/end_session?client_id=<the agent's client>`. Such a request still
+// signs the browser out; it spares the agent sessions, as `/logout` does.
 func endSessionNames(r *http.Request) []string {
 	var names []string
-
-	if clientID := strings.TrimSpace(r.Form.Get("client_id")); clientID != "" {
-		names = append(names, clientID)
-	}
 
 	parts := strings.Split(r.Form.Get("id_token_hint"), ".")
 	if len(parts) != 3 {
@@ -843,6 +846,27 @@ func (l *localKeys) VerifySignature(ctx context.Context, jws *jose.JSONWebSignat
 	return nil, errors.New("no published key verified that signature")
 }
 
+// corsOptions is the cross-origin policy of the protocol endpoints the
+// library serves: any origin, and never credentials.
+//
+// The library's default reflects whatever Origin asks and allows
+// credentials with it, which is the combination a browser is told never to
+// trust. None of these endpoints rides on a cookie a cross-site page could
+// make a browser send: discovery and the key set are public documents, and
+// the token and userinfo endpoints are reached with a client credential, a
+// code with its verifier, or a bearer the caller holds. So the answer is
+// `*`, which a browser does not pair with credentials, and the credentials
+// header is not sent at all.
+func corsOptions() *cors.Options {
+	return &cors.Options{
+		AllowedOrigins:   []string{"*"},
+		AllowCredentials: false,
+		AllowedMethods:   []string{http.MethodGet, http.MethodHead, http.MethodPost},
+		AllowedHeaders:   []string{"Origin", "Accept", "Accept-Language", "Authorization", "Content-Type", "X-Requested-With"},
+		ExposedHeaders:   []string{"Location", "Content-Length"},
+	}
+}
+
 // browserAllowed lets ONE origin call this from a browser: the console
 // the installation configured, and nothing else.
 //
@@ -935,7 +959,12 @@ func (c *challenged) Write(b []byte) (int, error) {
 // older console still calls. One handler answers both, so the CORS and the
 // checks in front of it are the same for each.
 func mountSessions(mux *http.ServeMux, service accessissuerv1connect.SessionServiceHandler, consoleOrigin string) {
-	path, sessions := accessissuerv1connect.NewSessionServiceHandler(service, append(telemetry.ConnectOptions(), refusal.ConnectOptions(nil)...)...)
+	options := append(append(telemetry.ConnectOptions(), refusal.ConnectOptions(nil)...),
+		// A call to this service is a few fields; the limit is on the message
+		// as decoded, which the listener's cap on the body cannot see when the
+		// body is compressed.
+		connect.WithReadMaxBytes(httpsec.MaxRequestBody))
+	path, sessions := accessissuerv1connect.NewSessionServiceHandler(service, options...)
 	if consoleOrigin != "" {
 		sessions = browserAllowed(consoleOrigin, sessions)
 	}

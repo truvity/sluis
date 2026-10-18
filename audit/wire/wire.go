@@ -25,13 +25,21 @@ import (
 )
 
 // HandlerOptions make a handler write snake_case JSON, under both names a
-// Connect client may ask for JSON by.
+// Connect client may ask for JSON by, and refuse a message over
+// [MaxRequestBytes].
 func HandlerOptions() []connect.HandlerOption {
 	return []connect.HandlerOption{
 		connect.WithCodec(Codec{name: "json"}),
 		connect.WithCodec(Codec{name: "json; charset=utf-8"}),
+		connect.WithReadMaxBytes(MaxRequestBytes),
 	}
 }
+
+// MaxRequestBytes is the largest message a handler reads, as decoded: a sink
+// batch of at most ten records, or a catalogue being registered. The
+// listener caps the body as sent; this caps what a compressed body expands
+// to.
+const MaxRequestBytes = 4 << 20
 
 // Codec is protojson with the proto's own field names on output.
 //

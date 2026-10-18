@@ -86,7 +86,7 @@ func TestAPreUpgradeCookieCanSignOutAndNothingElse(t *testing.T) {
 
 			b.cookies[issuer.SSOCookieName] = "old-sign-in" // proves() may have cleared it
 
-			b.do(door.method, door.path)
+			b.door(door.method, door.path)
 
 			if _, live, _ := rig.iss.SSO().Get(context.Background(), "old-sign-in"); live {
 				t.Error("signing out with the pre-upgrade cookie left the sign-in")
@@ -130,7 +130,7 @@ func TestThePreUpgradeFallbackNeverAppliesToAHashedRecord(t *testing.T) {
 
 	stranger := newBrowser(t, rig.server)
 	stranger.cookies[issuer.SSOCookieName] = id
-	stranger.do(http.MethodGet, "/logout")
+	stranger.logout()
 	stranger.cookies[issuer.SSOCookieName] = id
 	stranger.do(http.MethodGet, "/end_session")
 
@@ -175,7 +175,7 @@ func TestSignOutWithAnUnreadableStoreEndsNothingAndKeepsTheCookie(t *testing.T) 
 			}
 
 			rig.state.setFailures(true, nil)
-			status, _, body := b.do(door.method, door.path)
+			status, _, body := b.door(door.method, door.path)
 			rig.state.setFailures(false, nil)
 
 			if status < 500 {
@@ -203,7 +203,7 @@ func TestSignOutWithAnUnreadableStoreEndsNothingAndKeepsTheCookie(t *testing.T) 
 			}
 
 			// And the retry, with the store back, ends it.
-			b.do(door.method, door.path)
+			b.door(door.method, door.path)
 
 			if _, live, _ := rig.iss.SSO().Get(context.Background(), id); live {
 				t.Error("the retry did not end the sign-in")

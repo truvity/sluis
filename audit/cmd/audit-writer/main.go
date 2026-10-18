@@ -49,6 +49,7 @@ import (
 	"github.com/truvity/sluis/audit/internal/cli"
 	"github.com/truvity/sluis/audit/internal/config"
 	readiness "github.com/truvity/sluis/audit/internal/health"
+	"github.com/truvity/sluis/audit/internal/httpsrv"
 	"github.com/truvity/sluis/audit/internal/registry"
 	"github.com/truvity/sluis/audit/internal/telemetry"
 	"github.com/truvity/sluis/audit/keys"
@@ -341,7 +342,7 @@ func run() error {
 
 	mux.Handle("/healthz", health)
 	mux.Handle("/readyz", readiness.Ready(slog.Default(), checks...))
-	server := &http.Server{Addr: cfg.Listen.Address, Handler: telemetry.HTTPHandler(mux, "audit-writer"), ReadHeaderTimeout: 10 * time.Second}
+	server := httpsrv.New(cfg.Listen.Address, telemetry.HTTPHandler(mux, "audit-writer"))
 
 	go func() {
 		<-ctx.Done()

@@ -71,7 +71,7 @@ func TestASignOutAfterAStepUpEndsWhatWasOpenedBeforeIt(t *testing.T) {
 			}
 
 			// And the person's sign-out reaches them.
-			if status, _, _ := b.do(http.MethodGet, "/logout"); status != http.StatusFound {
+			if status, _, _ := b.logout(); status != http.StatusFound {
 				t.Fatalf("sign-out: %d", status)
 			}
 

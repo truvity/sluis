@@ -420,7 +420,7 @@ func TestSigningBackChannelLogoutFollowsTheReceivingClient(t *testing.T) {
 		"scope":     "openid",
 	}, ""))
 
-	b.do(http.MethodGet, "/logout")
+	b.logout()
 
 	var raw string
 	select {

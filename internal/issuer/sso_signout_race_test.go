@@ -64,7 +64,7 @@ func TestACodeCompletedUnderASignInThatHasSinceEndedOpensNothing(t *testing.T) {
 			tab := newBrowser(t, rig.server)
 			tab.cookies = maps.Clone(b.cookies)
 
-			if status, _, _ := tab.do(http.MethodGet, "/logout"); status != http.StatusFound {
+			if status, _, _ := tab.logout(); status != http.StatusFound {
 				t.Fatalf("sign-out: %d", status)
 			}
 
@@ -119,7 +119,7 @@ func TestACodeRedeemedWhileASignOutIsAnnouncingOpensNothing(t *testing.T) {
 	tab := newBrowser(t, rig.server)
 	tab.cookies = maps.Clone(b.cookies)
 
-	if code, _, _ := tab.do(http.MethodGet, "/logout"); code != http.StatusFound {
+	if code, _, _ := tab.logout(); code != http.StatusFound {
 		t.Fatalf("sign-out: %d", code)
 	}
 

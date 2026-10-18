@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/truvity/sluis/internal/access"
+	"github.com/truvity/sluis/internal/httpsec"
 	"github.com/truvity/sluis/storage/logattr"
 )
 
@@ -80,7 +81,10 @@ func (s *signIn) askAgentConsent(w http.ResponseWriter, r *http.Request, err err
 	access.SetCookie(w, access.AgentConsentCookie(token, s.deps.Secure, signInWindow))
 	noFraming(w)
 	// The page's one script is its own, by nonce; nothing else runs here.
-	w.Header().Set("Content-Security-Policy", "frame-ancestors 'none'; script-src 'nonce-"+nonce+"'")
+	// Its form ends a sign-in, so the answer is a redirect to the
+	// application, which `form-action 'self'` would stop (see
+	// [httpsec.Policy.FormsMayRedirect]).
+	httpsec.Apply(w, httpsec.Policy{ScriptNonce: nonce, FormsMayRedirect: true})
 	s.page(w, "Allow a background connection?", agentConsentBody(s.pendingOf(request), who, token, nonce))
 
 	return true
@@ -103,8 +107,7 @@ func scriptNonce() (string, error) {
 // noFraming refuses to let the page be shown inside another one: a
 // one-click accept in a frame is a click somebody else's page can steal.
 func noFraming(w http.ResponseWriter) {
-	w.Header().Set("Content-Security-Policy", "frame-ancestors 'none'")
-	w.Header().Set("X-Frame-Options", "DENY")
+	httpsec.Apply(w, httpsec.Policy{})
 }
 
 // agentConsentBody is what the person is asked to accept: the client, its

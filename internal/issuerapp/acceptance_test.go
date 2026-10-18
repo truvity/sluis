@@ -378,6 +378,7 @@ func TestAPersonSignsInAndTheRequestIsCompleted(t *testing.T) {
 	app := bootWithSignIn(t, hub, directory, &issuerURL)
 	client, at := browser(t, app.Handler())
 	issuerURL = at
+	app.startedIn(t, client, at, "req-123")
 
 	// The library sends a browser here with the request it is in the
 	// middle of; one provider means no question to ask.
@@ -409,6 +410,7 @@ func TestASuspendedPersonIsRefusedAtTheDoor(t *testing.T) {
 	app := bootWithSignIn(t, hub, directory, &issuerURL)
 	client, at := browser(t, app.Handler())
 	issuerURL = at
+	app.startedIn(t, client, at, "req-456")
 
 	code, body := follow(t, client, at+"/login?auth=req-456")
 	if code != http.StatusForbidden {
