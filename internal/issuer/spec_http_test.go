@@ -2,12 +2,16 @@ package issuer_test
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/url"
 	"slices"
+	"strings"
 	"testing"
 
 	jose "github.com/go-jose/go-jose/v4"
+
+	"github.com/truvity/sluis/internal/issuer"
 )
 
 // Discovery says what this issuer does: the claims it issues, the one
@@ -144,5 +148,113 @@ func TestUnservedAuthorizationFeaturesAreRefusedToTheClient(t *testing.T) {
 				t.Errorf("redirect parameters = %v, want %s with state and iss and no code", got, tc.code)
 			}
 		})
+	}
+}
+
+// userinfoCall sends one request to /userinfo.
+func userinfoCall(t *testing.T, server, method, query string, header http.Header, form url.Values) (int, http.Header, string) {
+	t.Helper()
+
+	var content io.Reader
+	if form != nil {
+		content = strings.NewReader(form.Encode())
+	}
+
+	req, err := http.NewRequestWithContext(t.Context(), method, server+"/userinfo"+query, content)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for name, values := range header {
+		req.Header[name] = values
+	}
+
+	if form != nil {
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	body, _ := io.ReadAll(resp.Body)
+
+	return resp.StatusCode, resp.Header, string(body)
+}
+
+// RFC 6750 over the real endpoint: a request with no token is challenged with
+// no error; a token in the URL is refused; the header and the POST body work;
+// and a token whose session ended is a 401 `invalid_token`, where the library
+// said 403 and `{}`.
+func TestUserinfoSpeaksRFC6750(t *testing.T) {
+	t.Parallel()
+	server, iss := signInServer(t, "ada@north.example")
+
+	access, _ := signedInTokens(t, server, iss, "local-dev")["access_token"].(string)
+	if access == "" {
+		t.Fatal("no access token")
+	}
+
+	bearer := http.Header{"Authorization": {"Bearer " + access}}
+	const realm = `Bearer realm="http://issuer.example"`
+
+	// No token at all: a challenge that names no error.
+	status, header, _ := userinfoCall(t, server.URL, http.MethodGet, "", nil, nil)
+	if status != http.StatusUnauthorized || header.Get("WWW-Authenticate") != realm {
+		t.Errorf("no token: %d %q, want 401 and %q", status, header.Get("WWW-Authenticate"), realm)
+	}
+
+	// A token that is nothing.
+	status, header, _ = userinfoCall(t, server.URL, http.MethodGet, "", http.Header{"Authorization": {"Bearer nonsense"}}, nil)
+	if status != http.StatusUnauthorized || header.Get("WWW-Authenticate") != realm+`, error="invalid_token"` {
+		t.Errorf("a bad token: %d %q, want 401 invalid_token", status, header.Get("WWW-Authenticate"))
+	}
+
+	// The header and the body of a POST are what OpenID Connect Core allows.
+	if status, _, body := userinfoCall(t, server.URL, http.MethodGet, "", bearer, nil); status != http.StatusOK {
+		t.Errorf("GET with the header: %d %s", status, body)
+	}
+
+	if status, _, body := userinfoCall(t, server.URL, http.MethodPost, "", nil, url.Values{"access_token": {access}}); status != http.StatusOK {
+		t.Errorf("POST with the token in the body: %d %s", status, body)
+	}
+
+	// The URL is not: it ends up in logs, history and Referer.
+	for name, call := range map[string]func() (int, http.Header, string){
+		"GET": func() (int, http.Header, string) {
+			return userinfoCall(t, server.URL, http.MethodGet, "?access_token="+url.QueryEscape(access), nil, nil)
+		},
+		"GET beside a header": func() (int, http.Header, string) {
+			return userinfoCall(t, server.URL, http.MethodGet, "?access_token="+url.QueryEscape(access), bearer, nil)
+		},
+		"POST": func() (int, http.Header, string) {
+			return userinfoCall(t, server.URL, http.MethodPost, "?access_token="+url.QueryEscape(access), nil, url.Values{})
+		},
+	} {
+		status, header, body := call()
+		if status != http.StatusBadRequest || header.Get("WWW-Authenticate") != realm+`, error="invalid_request"` ||
+			strings.Contains(body, access) {
+			t.Errorf("%s with the token in the query: %d %q %s, want 400 invalid_request", name, status, header.Get("WWW-Authenticate"), body)
+		}
+	}
+
+	// And a revoked session's token is simply no longer a token.
+	sessions, err := iss.Sessions().List(t.Context(), issuer.Query{Identity: "ada@north.example"})
+	if err != nil || len(sessions) == 0 {
+		t.Fatalf("list the sessions: %v %v", sessions, err)
+	}
+
+	for _, session := range sessions {
+		if _, err = iss.Sessions().RevokeID(t.Context(), session.ID); err != nil {
+			t.Fatalf("revoke: %v", err)
+		}
+	}
+
+	status, header, body := userinfoCall(t, server.URL, http.MethodGet, "", bearer, nil)
+	if status != http.StatusUnauthorized || header.Get("WWW-Authenticate") != realm+`, error="invalid_token"` ||
+		!strings.Contains(body, `"error":"invalid_token"`) {
+		t.Errorf("after revocation: %d %q %s, want 401 invalid_token", status, header.Get("WWW-Authenticate"), body)
 	}
 }

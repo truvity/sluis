@@ -280,7 +280,7 @@ func HandlerWithSignIn(iss *Issuer, storage op.Storage, signIn SignInDeps) (http
 	// it, so none of them can see one value where the library takes another.
 	// The installation-token claims below take their client from HTTP Basic
 	// and read no parameter the library also reads.
-	protocol := withoutUnserved(bindAuthorization(signIn, singleValued(challenges(refusedAuthorize(
+	protocol := withoutUnserved(bindAuthorization(signIn, singleValued(challenges(iss.Config().URL, refusedAuthorize(
 		authorizeSurface(storage.GetClientByClientID, defaultScope(resourceIndicators(
 			iss.Policy().Resource, storage.GetClientByClientID, requirePKCE(iss.Policy, presentedClients(
 				endSession(signIn, truthfulDiscovery(
@@ -929,21 +929,30 @@ var bearerPaths = map[string]bool{
 	"/userinfo": true,
 }
 
-// challenges adds the `WWW-Authenticate` header RFC 6750 requires on a
-// 401 from a bearer-protected endpoint.
+// challenges makes `/userinfo` answer a bearer failure as RFC 6750 asks.
 //
-// The library answers an unusable access token at `/userinfo` with a
-// bare `http.Error`, and a 401 with no challenge is the one shape a
-// conforming client cannot act on: it is told it is unauthenticated and
-// not told what would fix it, so a library reports a transport failure
-// or retries the same token for ever. This is the same reasoning the
-// hub's own API guard already applies to its refusals; the difference is
-// only that this 401 is written inside a dependency.
+//   - No token presented (3.1: "if the request lacks any authentication
+//     information ... the resource server SHOULD NOT include an error code"):
+//     401 with `WWW-Authenticate: Bearer realm="<issuer>"` and no `error`.
+//   - A token that is not usable: 401 with `error="invalid_token"`. That
+//     includes the token of a session that ended or a record that is gone,
+//     which the library answers with 403 and a JSON `{}`; 403 is for a token
+//     that is good and not enough (`insufficient_scope`), and a client told
+//     that keeps the dead token and retries it. A failure of this issuer's
+//     own storage is not the token's fault and stays a 5xx.
+//   - The token in the URL query (`?access_token=`): 400 `invalid_request`.
+//     RFC 6750 2.3 allows it only with caveats and RFC 9700 4.3 forbids it,
+//     since a URL is logged by every proxy and kept in history and in
+//     `Referer`. The form-encoded body of a POST (RFC 6750 2.2) is what
+//     OpenID Connect Core 5.3.1 has the endpoint accept, and stays.
 //
-// Written as a wrapper rather than as a patch upstream because the
-// header has to be set before the status is, and a ResponseWriter that
-// adds it at WriteHeader time is the one place that is always true.
-func challenges(next http.Handler) http.Handler {
+// A 401 with no challenge is the one shape a conforming client cannot act
+// on: it is told it is unauthenticated and not told what would fix it, so a
+// library reports a transport failure or retries the same token for ever.
+// The library writes these answers inside a dependency, as a bare
+// `http.Error`, so the header is set by a ResponseWriter at WriteHeader time,
+// the one place that is always before the status.
+func challenges(realm string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !bearerPaths[r.URL.Path] {
 			next.ServeHTTP(w, r)
@@ -951,34 +960,142 @@ func challenges(next http.Handler) http.Handler {
 			return
 		}
 
-		next.ServeHTTP(&challenged{ResponseWriter: w}, r)
+		if r.URL.Query().Has("access_token") {
+			refuseBearer(w, r, realm, http.StatusBadRequest, string(oidc.InvalidRequest), refusal.InvalidRequest,
+				"the access token was sent in the URL query; send it in the Authorization header "+
+					"(RFC 6750 2.1) or in the body of a POST (RFC 6750 2.2)")
+
+			return
+		}
+
+		c := &challenged{ResponseWriter: w, r: r, realm: realm, presented: bearerPresented(r)}
+		next.ServeHTTP(c, r)
+		c.finish()
 	})
 }
 
-// challenged sets the challenge on the way out, and only on a 401 —
-// every other status is somebody else's answer and is passed through
-// untouched.
-type challenged struct {
-	http.ResponseWriter
-	wrote bool
-}
-
-func (c *challenged) WriteHeader(status int) {
-	if !c.wrote && status == http.StatusUnauthorized && c.Header().Get("WWW-Authenticate") == "" {
-		c.Header().Set("WWW-Authenticate", `Bearer error="invalid_token"`)
+// bearerPresented reports whether the request carries a bearer token at all:
+// in an `Authorization: Bearer` header, or in the form body of a POST.
+func bearerPresented(r *http.Request) bool {
+	if scheme, token, ok := strings.Cut(strings.TrimSpace(r.Header.Get("Authorization")), " "); ok &&
+		strings.EqualFold(scheme, "Bearer") && strings.TrimSpace(token) != "" {
+		return true
 	}
 
-	c.wrote = true
+	if r.Method == http.MethodPost && r.ParseForm() == nil {
+		return r.PostForm.Get("access_token") != ""
+	}
+
+	return false
+}
+
+// bearerChallenge is the `WWW-Authenticate` value for a bearer endpoint.
+// code is empty when the request carried no token.
+func bearerChallenge(realm, code string) string {
+	value := `Bearer realm="` + strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(realm) + `"`
+	if code != "" {
+		value += `, error="` + code + `"`
+	}
+
+	return value
+}
+
+// refuseBearer is a refusal of a bearer request in the form RFC 6750 3 gives
+// it: the status, the challenge and an OAuth error body in fixed words.
+func refuseBearer(w http.ResponseWriter, r *http.Request, realm string, status int, code, phrase, why string) {
+	logRefusal(r.Context(), status, why, nil, []any{slog.String("error", code)})
+	if status < http.StatusInternalServerError {
+		w.Header().Set("WWW-Authenticate", bearerChallenge(realm, code))
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(map[string]string{
+		"error":             code,
+		"error_description": refusal.Text(r.Context(), phrase),
+	})
+}
+
+// challenged sets the challenge on the way out, and only on a 401; every
+// other status is somebody else's answer and passes through untouched, bar
+// the 403 held back for [challenged.finish].
+type challenged struct {
+	http.ResponseWriter
+
+	r         *http.Request
+	realm     string
+	presented bool
+	decided   bool
+	held      bool
+	body      bytes.Buffer
+}
+
+func (c *challenged) Unwrap() http.ResponseWriter { return c.ResponseWriter }
+
+func (c *challenged) WriteHeader(status int) {
+	if c.decided {
+		return
+	}
+
+	c.decided = true
+
+	switch status {
+	case http.StatusForbidden:
+		// The library's answer to a token its storage will not serve.
+		c.held = true
+
+		return
+	case http.StatusUnauthorized:
+		if c.Header().Get("WWW-Authenticate") == "" {
+			code := ""
+			if c.presented {
+				code = errInvalidToken
+			}
+
+			c.Header().Set("WWW-Authenticate", bearerChallenge(c.realm, code))
+		}
+	}
 
 	c.ResponseWriter.WriteHeader(status)
 }
 
 func (c *challenged) Write(b []byte) (int, error) {
-	if !c.wrote {
+	if !c.decided {
 		c.WriteHeader(http.StatusOK)
 	}
 
+	if c.held {
+		return c.body.Write(b)
+	}
+
 	return c.ResponseWriter.Write(b)
+}
+
+// finish answers a held 403. A `server_error` body is the storage failing,
+// and goes out as the 500 it is; anything else is a token that is no longer
+// good, which is 401 `invalid_token` whatever the library thought it was.
+func (c *challenged) finish() {
+	if !c.held {
+		return
+	}
+
+	var body struct {
+		Error string `json:"error"`
+	}
+	_ = json.Unmarshal(c.body.Bytes(), &body)
+
+	if body.Error == string(oidc.ServerError) {
+		refuseBearer(c.ResponseWriter, c.r, c.realm, http.StatusInternalServerError,
+			string(oidc.ServerError), refusal.ServerError, "the userinfo storage failed")
+
+		return
+	}
+
+	// The "ended" and "no such token" answers carry no description of their
+	// own; why the token is bad is for the log, if anything.
+	refuseBearer(c.ResponseWriter, c.r, c.realm, http.StatusUnauthorized,
+		errInvalidToken, refusal.NotAuthorised, "the access token is no longer usable")
 }
 
 // mountSessions serves the session service on mux under both its names,
