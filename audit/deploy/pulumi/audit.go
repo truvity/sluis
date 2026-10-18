@@ -1061,7 +1061,7 @@ func notaryFiles(name string, a *Args) (map[string]string, error) {
 // idempotent.
 func newSchedule(ctx *pulumi.Context, name string, a *Args, region, account string, fn *lambda.Function, live *lambda.Alias, tags pulumi.StringMap,
 	opts ...pulumi.ResourceOption) (*scheduler.Schedule, error) {
-	role, err := newRole(ctx, name+"-scheduler", a.RolePath, schedulerTrust(region, account, name+"-notary"), tags, opts...)
+	role, err := newRole(ctx, name+"-scheduler", a.RolePath, schedulerTrust(region, account), tags, opts...)
 	if err != nil {
 		return nil, err
 	}

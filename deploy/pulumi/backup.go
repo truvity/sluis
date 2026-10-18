@@ -94,15 +94,13 @@ type ArchiveArgs struct {
 
 // ArchiveBucketArgs is the bucket NewBackup creates.
 type ArchiveBucketArgs struct {
-	// Mode is the Object Lock mode of the default retention: COMPLIANCE, which
-	// nobody can shorten (the root included) and needs AcknowledgeCompliance, or
-	// GOVERNANCE, which a role holding s3:BypassGovernanceRetention can shorten.
-	// Required in effect: left empty it is COMPLIANCE (it was GOVERNANCE before
-	// v1.78), so a stack that relied on the old default is refused until it says
-	// GOVERNANCE (what the bucket has) or acknowledges COMPLIANCE. The lock of a
-	// bucket that exists is not changed by editing this on the quiet: Pulumi
-	// applies a different Mode to the bucket's lock configuration, which is
-	// why the choice is made in the arguments and never by a default.
+	// Mode is the Object Lock mode of the default retention, and is REQUIRED:
+	// GOVERNANCE, which a role holding s3:BypassGovernanceRetention can shorten
+	// (what a bucket made before v1.78 has), or COMPLIANCE, which nobody can
+	// shorten (the root included) and needs AcknowledgeCompliance. Empty is
+	// refused (it was GOVERNANCE before v1.78): COMPLIANCE cannot be undone, and a
+	// default must not move the lock of a bucket that exists, since Pulumi applies
+	// a different Mode to the bucket's lock configuration.
 	Mode                  string
 	AcknowledgeCompliance bool
 	// RetentionDays is the default retention. Default: `retention.maxAge` in
@@ -415,12 +413,15 @@ func (c *BackupCommon) plan(role string) (*backupPlan, error) {
 		p.lockDays = days
 		switch c.Mode {
 		case "GOVERNANCE":
-		case "", "COMPLIANCE":
+		case "COMPLIANCE":
 			if !c.AcknowledgeCompliance {
-				return nil, errors.New("sluispulumi: Archive.Create.Mode is COMPLIANCE (the default since v1.78; GOVERNANCE must be asked for) and it cannot be " +
-					"shortened or removed by anybody, the account's root included: set AcknowledgeCompliance to say so, or Mode GOVERNANCE " +
-					"to keep a bucket that was made under it (the lock of an existing bucket is not changed unless the arguments say so)")
+				return nil, errors.New("sluispulumi: Archive.Create.Mode COMPLIANCE cannot be shortened or removed by anybody, the account's root included: " +
+					"set AcknowledgeCompliance to say so")
 			}
+		case "":
+			return nil, errors.New("sluispulumi: Archive.Create.Mode is required: GOVERNANCE (a role with s3:BypassGovernanceRetention can shorten it; " +
+				"what a bucket made before v1.78 has) or COMPLIANCE (nobody can, and it needs AcknowledgeCompliance). Neither is a default: COMPLIANCE " +
+				"cannot be undone, and an empty mode must never move the lock of a bucket that exists")
 		default:
 			return nil, fmt.Errorf("sluispulumi: Archive.Create.Mode %q is GOVERNANCE or COMPLIANCE", c.Mode)
 		}

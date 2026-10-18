@@ -32,10 +32,7 @@ func newArchiveBucket(ctx *pulumi.Context, name string, p *backupPlan, parent pu
 	if err != nil {
 		return nil, fmt.Errorf("sluis archive versioning: %w", err)
 	}
-	mode := c.Mode
-	if mode == "" {
-		mode = "COMPLIANCE"
-	}
+	mode := c.Mode // plan() has refused an empty one
 	if _, err := s3.NewBucketObjectLockConfiguration(ctx, name+"-archive-lock", &s3.BucketObjectLockConfigurationArgs{
 		Bucket: bucket.ID(), ObjectLockEnabled: pulumi.String("Enabled"),
 		Rule: &s3.BucketObjectLockConfigurationRuleArgs{
@@ -116,7 +113,7 @@ func newBackupSchedules(ctx *pulumi.Context, name string, p *backupPlan, sch Bac
 		return fmt.Errorf("sluis schedule dead-letter queue: %w", err)
 	}
 	out.ScheduleDLQArn = dlq.Arn
-	trust, _ := json.Marshal(schedulerTrust(p.Region, p.AccountID, p.FunctionName+"-"))
+	trust, _ := json.Marshal(schedulerTrust(p.Region, p.AccountID))
 	rargs := &iam.RoleArgs{Name: pulumi.String(p.FunctionName + "-scheduler"), AssumeRolePolicy: pulumi.String(string(trust)), Tags: tags}
 	if p.PermissionsBoundaryArn != "" {
 		rargs.PermissionsBoundary = pulumi.String(p.PermissionsBoundaryArn)
