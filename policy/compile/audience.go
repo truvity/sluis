@@ -16,6 +16,8 @@ type AudienceClient struct {
 	Requires        []string
 	SigningAlg      string
 	GroupsDelimiter string
+	// PKCE is [policy.PKCERequired], [policy.PKCEOptional] or empty.
+	PKCE string
 	// SecretName is the name a confidential client's secret is delivered
 	// under.
 	SecretName string
@@ -63,6 +65,7 @@ func ValidateAudiences(p *Policy, clients []AudienceClient, docs *policy.ClientD
 			Requires:        c.Requires,
 			SigningAlg:      c.SigningAlg,
 			GroupsDelimiter: c.GroupsDelimiter,
+			PKCE:            c.PKCE,
 		}
 
 		if c.Kind == policy.KindConfidential {

@@ -309,6 +309,12 @@ type presentedKey struct{}
 type presentedRequest struct {
 	clientID string
 	scopes   []string
+	// token is set by [presentedClients]: the request is a token request that
+	// reached the library, as opposed to a call made without one.
+	token bool
+	// verifier is whether the request carried a non-empty `code_verifier`.
+	// Its value is the library's to judge ([Storage.checkVerifier]).
+	verifier bool
 }
 
 // presentedFrom is what the token request named, empty when it named
@@ -346,6 +352,8 @@ func presentedClients(next http.Handler) http.Handler {
 		asked := presentedRequest{
 			clientID: r.PostForm.Get("client_id"),
 			scopes:   strings.Fields(r.PostForm.Get("scope")),
+			token:    true,
+			verifier: r.PostForm.Get("code_verifier") != "",
 		}
 		if asked.clientID == "" {
 			// RFC 6749 2.3.1: the id in HTTP Basic is form-encoded.

@@ -219,6 +219,17 @@ func TestValidateAudiencesAndClaims(t *testing.T) {
 		t.Error("an unknown signing algorithm was accepted")
 	}
 
+	clients[1].SigningAlg = ""
+	clients[0].PKCE = policy.PKCERequired
+	if err := compile.ValidateAudiences(p, clients, nil, nil); err != nil {
+		t.Errorf("pkce: required on a confidential client refused: %v", err)
+	}
+
+	clients[1].PKCE = policy.PKCEOptional
+	if err := compile.ValidateAudiences(p, clients, nil, nil); err == nil || !strings.Contains(err.Error(), "pkce") {
+		t.Errorf("err = %v, want pkce: optional on a public client refused", err)
+	}
+
 	if err := compile.ValidateAudiences(nil, clients, nil, nil); err != nil {
 		t.Errorf("a nil policy is no check, got %v", err)
 	}

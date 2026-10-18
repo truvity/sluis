@@ -209,6 +209,19 @@ const (
 	KindExchange = "exchange"
 )
 
+// The PKCE policies a client may declare (`pkce`).
+const (
+	// PKCERequired refuses an authorization request with no S256
+	// `code_challenge`, and redeems no code without its `code_verifier`
+	// (RFC 7636, RFC 9700 2.1.1, OAuth 2.1). A public client is always
+	// this; a confidential client opts in.
+	PKCERequired = "required"
+	// PKCEOptional lets a confidential client send a challenge or not.
+	// It is the default of a confidential client, and refused on a
+	// public one, which cannot do without.
+	PKCEOptional = "optional"
+)
+
 // LifetimeDefault is the key under which the fallback lifetime lives.
 const LifetimeDefault = "default"
 
@@ -652,6 +665,25 @@ type Client struct {
 	// together with [Client.SignInExchange]. See
 	// docs/decisions/0040-agent-class-sessions.md.
 	Session string `yaml:"session,omitempty"`
+	// PKCE is whether this client must use PKCE: [PKCERequired] or
+	// [PKCEOptional]. Absent is `optional` for a confidential client (the
+	// OpenID Basic OP conformance clients send no challenge) and `required`
+	// for a public one, which cannot be anything else: `optional` on a
+	// public client is refused. `required` on a confidential client turns
+	// away an authorization request with no `code_challenge` and a code
+	// redeemed with no `code_verifier`, as RFC 9700 2.1.1 and OAuth 2.1
+	// require of every client. The method is S256 in every case; `plain`
+	// is never accepted. Refused on an exchange client, which has no
+	// authorization request. A client that describes itself by document
+	// is public and always required.
+	PKCE string `yaml:"pkce,omitempty"`
+}
+
+// PKCERequired reports whether an authorization request for this client
+// must carry an S256 `code_challenge`: a public client always, a
+// confidential one when it declares `pkce: required`.
+func (c Client) PKCERequired() bool {
+	return c.Kind == KindPublic || c.PKCE == PKCERequired
 }
 
 // Agent reports whether this client's chains are agent-class.
@@ -1063,6 +1095,18 @@ func (c Client) validate(id string, p Policy) error {
 	}
 	if c.SignInExchange && c.Kind != KindPublic {
 		return fmt.Errorf("client %q allows sign_in_exchange but is %s: only a public client, a CLI, may trade its sign-in", id, c.Kind)
+	}
+	switch c.PKCE {
+	case "", PKCERequired:
+	case PKCEOptional:
+		if c.Kind == KindPublic {
+			return fmt.Errorf("client %q is public and declares pkce: optional: a public client holds no secret, so PKCE is all that protects its code and it is always required", id)
+		}
+	default:
+		return fmt.Errorf("client %q: pkce %q is not %q or %q", id, c.PKCE, PKCERequired, PKCEOptional)
+	}
+	if c.PKCE != "" && c.Kind == KindExchange {
+		return fmt.Errorf("client %q is an exchange target and declares pkce: nobody signs into it, so it has no authorization request to protect", id)
 	}
 	if !validSession(c.Session) {
 		return fmt.Errorf("client %q: session %q is not %q or %q", id, c.Session, SessionInteractive, SessionAgent)
