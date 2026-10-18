@@ -305,7 +305,12 @@ func serveSchema() m {
 			"serviceAccount": str("The ServiceAccount whose token signs in."),
 			"audience":       str("The audience its token must carry."),
 			"generation":     str("Names this configuration's decision to have recovery on. An operator may disable recovery from the console (only after signing in through the identity provider); the disable is kept in the State against the generation in force and covers only it. A redeploy of the same document keeps recovery disabled; change this value, to any other string, to turn it back on. Unset is the generation `\"\"`."),
-			"passwordSecret": secretField("Outside a cluster: the secret the recovery password is (`recovery/password`), read at start (the hub keeps only an Argon2id digest of it). Unset generates one and prints it, except on a function, where recovery is then off. `enabled: false` leaves it untouched and refuses the sign-in, so turning it back on needs no new password."),
+			"verifierSecret": secretField("Outside a cluster: the secret the recovery account's SRP verifier is (`recovery/verifier`): a salt and a verifier, never the password. The sign-in page proves knowledge of the password against it without sending it (docs/decisions/0076). Unset derives one from the password at start."),
+			"passwordSecret": secretField("Outside a cluster: the secret the recovery password is (`recovery/password`), read to derive the account's SRP verifier, which is all the hub holds of it, unless `verifierSecret` names one (docs/decisions/0076). Unset generates one and prints it, except on a function, where recovery is then off. `enabled: false` leaves it untouched and refuses the sign-in, so turning it back on needs no new password."),
+		}),
+		"conformance": obj("The test account of the OpenID conformance harness: a non-privileged subject that signs in with a username and password, only to clients the policy marks `harness`, and only while enabled. Off unless turned on (docs/decisions/0076).", m{
+			"enabled":        boolean("Turn the account on. The sign-in page offers it only for a request of a client marked `harness`; a Lambda stack also generates its password and verifier."),
+			"verifierSecret": secretField("The secret the account's SRP verifier is (`conformance/verifier`): a salt and a verifier, never the password."),
 		}),
 		"login": obj("How a person signs in to the console.", m{
 			"directory":  boolDefault("Sign in with the corporate directory.", true),

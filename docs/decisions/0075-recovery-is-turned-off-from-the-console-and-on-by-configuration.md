@@ -2,7 +2,9 @@
 
 **Status:** Accepted (2026-10-18). Refines [0036](0036-configuration-is-immutable-per-instance.md) (configuration is
 immutable and State is read live: this is a decision kept in State that the configuration overrides only by naming a new
-generation). Applies [0027](0027-the-state-port-nats-jetstream-and-dynamodb.md) (the State port keeps the record).
+generation). Applies [0027](0027-the-state-port-nats-jetstream-and-dynamodb.md) (the State port keeps the record);
+extended by [0076](0076-password-sign-in-is-srp-for-recovery-and-conformance-only.md) (the switch shuts the conformance
+account's password door as well).
 **Date:** 2026-10-18
 
 ## Context

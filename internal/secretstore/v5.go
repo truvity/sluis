@@ -191,6 +191,19 @@ func (o OIDCInternal) RecoveryPassword() state.Value[[]byte] {
 	return state.NewValue(o.s, "recovery-password", state.Raw())
 }
 
+// RecoveryVerifier is the recovery account's SRP credential, the salt and the
+// verifier and never the password: oidc/recovery-verifier
+// (docs/decisions/0076).
+func (o OIDCInternal) RecoveryVerifier() state.Value[[]byte] {
+	return state.NewValue(o.s, "recovery-verifier", state.Raw())
+}
+
+// ConformanceVerifier is the conformance account's SRP credential:
+// oidc/conformance-verifier.
+func (o OIDCInternal) ConformanceVerifier() state.Value[[]byte] {
+	return state.NewValue(o.s, "conformance-verifier", state.Raw())
+}
+
 // ConsoleSessionKey is the key the console signs its sessions with:
 // oidc/console-session-key.
 func (o OIDCInternal) ConsoleSessionKey() state.Value[[]byte] {

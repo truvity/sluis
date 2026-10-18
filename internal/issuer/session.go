@@ -129,7 +129,7 @@ func (s Session) Agent() bool { return s.Class == ClassAgent && !s.Deadline.IsZe
 // like.
 func (s Session) serviceAccount() bool {
 	switch {
-	case s.Method == RecoveryHow:
+	case provedWithoutDirectory(s.Method):
 		return true
 	case s.How == HowExchange:
 		// A person can open an exchange's session too, trading their own

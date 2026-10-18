@@ -12,6 +12,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 	"github.com/aws/smithy-go"
+
+	"github.com/truvity/sluis/srp"
 )
 
 type fakeParameters struct {
@@ -134,5 +136,49 @@ func TestTheRecoveryPasswordPipesAlone(t *testing.T) {
 	}
 	if err := recoveryPassword([]string{"--instance", "../x"}, &out); err == nil {
 		t.Error("an instance that is a path was accepted")
+	}
+}
+
+func TestTheConformancePasswordIsReadFromItsOwnParameterAndNeverFallsBack(t *testing.T) {
+	v5 := &fakeParameters{values: map[string]string{
+		"/sluis/acme/internal/oidc/conformance-password": recoveryDocument("conf-secret"),
+		"/sluis/acme/internal/oidc/recovery-password":    recoveryDocument("rec-secret"),
+	}}
+	if got, err := readConformancePassword(context.Background(), v5, "acme"); err != nil || got != "conf-secret" {
+		t.Fatalf("conformance: %q, %v", got, err)
+	}
+	none := &fakeParameters{values: map[string]string{"/sluis/acme/internal/oidc/recovery-password": recoveryDocument("rec-secret")}}
+	_, err := readConformancePassword(context.Background(), none, "acme")
+	if err == nil || !strings.Contains(err.Error(), "conformance.enabled") {
+		t.Errorf("an absent conformance password = %v, want a message naming conformance.enabled", err)
+	}
+	if len(none.asked) != 1 {
+		t.Errorf("asked %v: the conformance account has no other parameter to fall back to", none.asked)
+	}
+}
+
+func TestRecoveryVerifierPrintsTheCredentialOfAPasswordAndNotThePassword(t *testing.T) {
+	var out bytes.Buffer
+	if err := recoveryVerifier([]string{"--account", "conformance"}, strings.NewReader("a long password\n"), &out); err != nil {
+		t.Fatal(err)
+	}
+	cred, err := srp.Default.ParseCredential(bytes.TrimSpace(out.Bytes()))
+	if err != nil {
+		t.Fatalf("not a credential: %v: %s", err, out.String())
+	}
+	want := srp.Default.NewCredential("conformance", "a long password")
+	if !bytes.Equal(cred.Verifier, want.Verifier) {
+		t.Error("the verifier is not the conformance account's for that password")
+	}
+	if strings.Contains(out.String(), "a long password") {
+		t.Error("the output carries the password")
+	}
+	for name, args := range map[string][]string{"another account": {"--account", "root"}, "an argument": {"x"}} {
+		if err := recoveryVerifier(args, strings.NewReader("pw"), &out); err == nil {
+			t.Errorf("%s was accepted", name)
+		}
+	}
+	if err := recoveryVerifier(nil, strings.NewReader("\n"), &out); err == nil {
+		t.Error("an empty password was accepted")
 	}
 }

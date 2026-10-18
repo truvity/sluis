@@ -8,6 +8,7 @@ No access pattern needs a secondary index. Sessions are listed per person under 
 |---|---|---|---|
 | `req.<id>` | a pending authorization request, also backing a device-code poll | issuer | 30 min |
 | `code.<id>` | an authorization code | issuer | 5 min |
+| `srp.<handle>` | the half of a password sign-in exchange (SRP) that outlives its first request: the account asked for and the server's private value, for one use; never exported by a backup | issuer, console | 2 min |
 | `codesess.<id>` | the session a redeemed code opened, for a replayed redemption | issuer | 5 min |
 | `ses.<person>.<sid>` | a per-client session: identity, client, how it began, how the person was proved (`method`: a provider's kind or `recovery`), scopes, SSO session, refresh token (hashed), authentication time | issuer | the session lifetime |
 | `sid.<sid>` | pointer from a session id to `<person>`; written with the session, deleted with it | issuer | the session lifetime |

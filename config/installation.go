@@ -96,6 +96,7 @@ type Installation struct {
 	Keys        *keys.Config `json:"keys,omitempty"`
 	SigningKey  *SigningKey  `json:"signingKey,omitempty"`
 	Recovery    *Recovery    `json:"recovery,omitempty"`
+	Conformance *Conformance `json:"conformance,omitempty"`
 	Login       *Login       `json:"login,omitempty"`
 	Console     *Console     `json:"console,omitempty"`
 	OAuthClient *OAuthClient `json:"oauthClient,omitempty"`

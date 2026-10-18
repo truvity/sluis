@@ -43,6 +43,37 @@ func TestPKCEPolicyReadsBack(t *testing.T) {
 	}
 }
 
+// A client is a harness's by saying so, and the access document's spelling
+// carries it. An exchange client has no sign-in for a harness to use.
+func TestHarnessClientsAreMarkedAndRefusedOnExchange(t *testing.T) {
+	t.Parallel()
+
+	declared, err := parseSessionPolicy(t, "clients:\n"+
+		"  rp: { kind: confidential, secret: s1, redirects: ['https://a.example/cb'], requires: [a], harness: true }\n"+
+		"  app: { kind: public, redirects: ['http://127.0.0.1/cb'], requires: [a] }\n")
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if !declared.Clients["rp"].Harness || declared.Clients["app"].Harness {
+		t.Errorf("harness: rp %v, app %v", declared.Clients["rp"].Harness, declared.Clients["app"].Harness)
+	}
+	access, err := policy.ParseAccess([]byte("version: 1\n" +
+		"access:\n" +
+		"  groups: [{ name: a, members: [g@h.example] }]\n" +
+		"  clients:\n" +
+		"    - { name: rp, kind: confidential, secret: s1, redirects: ['https://a.example/cb'], requires: [a], harness: true }\n"))
+	if err != nil {
+		t.Fatalf("parse access: %v", err)
+	}
+	if !access.Clients["rp"].Harness {
+		t.Error("the access document dropped harness")
+	}
+	if _, err = parseSessionPolicy(t, "clients:\n  x: { kind: exchange, requires: [a], harness: true }\n"); err == nil ||
+		!strings.Contains(err.Error(), "harness") {
+		t.Errorf("harness on an exchange client = %v, want a refusal naming it", err)
+	}
+}
+
 // `optional` on a public client, an unknown value, and any value on an
 // exchange client are refused at load.
 func TestPKCEPolicyIsRefusedWhereItCannotApply(t *testing.T) {

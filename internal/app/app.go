@@ -58,6 +58,7 @@ import (
 	"github.com/truvity/sluis/internal/maintenance"
 	"github.com/truvity/sluis/internal/modcall"
 	"github.com/truvity/sluis/internal/port"
+	"github.com/truvity/sluis/internal/port/memory"
 	"github.com/truvity/sluis/internal/portstore"
 	"github.com/truvity/sluis/internal/rails"
 	"github.com/truvity/sluis/internal/recoverygate"
@@ -67,9 +68,11 @@ import (
 	"github.com/truvity/sluis/internal/server"
 	"github.com/truvity/sluis/internal/settings"
 	slackcatalogue "github.com/truvity/sluis/internal/slackapp/catalogue"
+	"github.com/truvity/sluis/internal/srpauth"
 	"github.com/truvity/sluis/internal/store"
 	"github.com/truvity/sluis/internal/version"
 	"github.com/truvity/sluis/policy"
+	"github.com/truvity/sluis/srp"
 )
 
 // Config is the whole of the hub's configuration. The chart sets it from
@@ -123,6 +126,11 @@ type Config struct {
 	// recoveryLogin names the recovery password's secret, read instead of
 	// being generated, outside a cluster.
 	recoveryLogin string
+	// recoveryVerifier names the recovery account's SRP verifier
+	// (`recovery.verifierSecret`): what the password sign-in checks the
+	// password against, so that the hub holds a verifier and not the password
+	// (docs/decisions/0076). Unset derives one from the password.
+	recoveryVerifier string
 	// recoveryGeneration is `recovery.generation`: which decision to have
 	// recovery on a disable from the console covers (internal/recoverygate).
 	recoveryGeneration string
@@ -216,6 +224,7 @@ func FromConfig(f *config.Serve, p *config.PolicyDocument) (Config, error) {
 		c.recoveryAccount = orDefault(r.ServiceAccount, c.recoveryAccount)
 		c.recoveryAudience = orDefault(r.Audience, c.recoveryAudience)
 		c.recoveryLogin = r.LoginSecret
+		c.recoveryVerifier = r.VerifierSecret
 		c.recoveryGeneration = r.Generation
 	}
 	c.instance = orDefault(f.Instance, orDefault(f.Release, "sluis"))
@@ -400,31 +409,33 @@ func openRecovery(
 	}
 	if kept.reviewToken == nil {
 		where := ""
-		var load func(context.Context) (string, error)
-		if cfg.recoveryLogin != "" {
-			// The password is read when the first proof arrives, and again after
+		var source srpauth.Source
+		if cfg.recoveryLogin != "" || cfg.recoveryVerifier != "" {
+			// The credential is read when the first proof arrives, and again after
 			// its time to live: opening the recovery reads no secret.
 			if v5 != nil {
-				// Layout v5: the password is at one fixed address, whatever the
-				// document names it.
+				// Layout v5: the account's verifier is at one fixed address, whatever
+				// the document names it, and the password is not read at all. The
+				// password's address is only what an operator is told.
 				where = v5.OIDC().Prefix() + "/recovery-password"
-				load = func(ctx context.Context) (string, error) {
-					raw, _, err := v5.OIDC().RecoveryPassword().Get(ctx)
-					return string(raw), err
-				}
+				source = srpauth.SourceOf(v5, nil, srpauth.RecoveryUser, "")
 			} else {
 				if src == nil {
 					return nil, errors.New("recovery.passwordSecret: no secrets source is configured")
 				}
-				where = src.Describe(cfg.recoveryLogin)
-				load = func(ctx context.Context) (string, error) { return src.Get(ctx, cfg.recoveryLogin) }
+				if cfg.recoveryLogin != "" {
+					where = src.Describe(cfg.recoveryLogin)
+				}
+				if cfg.recoveryVerifier != "" {
+					source = srpauth.SourceOf(nil, src, srpauth.RecoveryUser, cfg.recoveryVerifier)
+				} else {
+					source = derivedCredential(src, cfg.recoveryLogin)
+				}
 			}
 			log.InfoContext(ctx, "recovery sign-in is by the secret the configuration names", slog.String("secret", where))
 		}
-		if load != nil {
-			r := server.NewLazyPasswordRecovery(lazy.TTL, load)
-			r.Where = where
-			return r, nil
+		if source != nil {
+			return server.NewPasswordRecovery(source, where), nil
 		}
 		if os.Getenv("AWS_LAMBDA_FUNCTION_NAME") != "" {
 			// A function instance would generate a password nobody can read except
@@ -440,7 +451,7 @@ func openRecovery(
 			return nil, err
 		}
 		announceRecoveryPassword(generated)
-		return server.NewPasswordRecovery(generated), nil
+		return server.NewPasswordRecovery(srpauth.Fixed(srp.Default.NewCredential(srpauth.RecoveryUser, generated)), ""), nil
 	}
 
 	subject := access.ServiceAccountSubject(kept.namespace, cfg.recoveryAccount)
@@ -453,6 +464,23 @@ func openRecovery(
 		Audience:  cfg.recoveryAudience,
 		Subjects:  []string{subject},
 	}, nil
+}
+
+// derivedCredential is the recovery account's credential made from the password
+// the secrets source holds, for an installation that keeps the password and not
+// a verifier (layout v4, a file): the hub reads the password only to derive the
+// verifier, in memory, and never compares one with what a client sends.
+func derivedCredential(src secrets.Source, name string) srpauth.Source {
+	return srpauth.Cached(lazy.TTL, func(ctx context.Context) (srp.Credential, error) {
+		password, err := src.Get(ctx, name)
+		if err != nil {
+			return srp.Credential{}, fmt.Errorf("recovery.passwordSecret: %w", err)
+		}
+		if strings.TrimSpace(password) == "" {
+			return srp.Credential{}, errors.New("recovery.passwordSecret: the password is empty")
+		}
+		return srp.Default.NewCredential(srpauth.RecoveryUser, strings.TrimSpace(password)), nil
+	})
 }
 
 // githubOrgStore is what the console asks of where organisations are kept.
@@ -854,6 +882,16 @@ func New(ctx context.Context, cfg Config, st *store.Stores, log *slog.Logger) (*
 	recovery, err := openRecovery(ctx, cfg, kept, st.Secrets, st.V5, log)
 	if err != nil {
 		return nil, err
+	}
+	if password, ok := recovery.(*server.PasswordRecovery); ok {
+		// The exchanges of the password sign-in are kept in the State, so that any
+		// container may answer the second request. Without a shared State this
+		// process is the only one there is.
+		var exchanges port.State = memory.New()
+		if st.Usable {
+			exchanges = st.Ports.State
+		}
+		password.Open(exchanges, sessionKey)
 	}
 	recoveryGate := cfg.RecoveryGate
 	if recoveryGate == nil {

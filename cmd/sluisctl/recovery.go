@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/truvity/sluis/srp"
 	"github.com/truvity/sluis/storage/awsotel"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -36,6 +37,12 @@ const (
 	// layout v5 (a document) and on layout v4 (the text itself).
 	recoveryPasswordV5 = "/sluis/%s/internal/oidc/recovery-password"
 	recoveryPasswordV4 = "/sluis/%s/internal/config/recovery/password"
+)
+
+// The two accounts that sign in by password (docs/decisions/0076).
+const (
+	accountRecovery    = "recovery"
+	accountConformance = "conformance"
 )
 
 // instanceName is an installation's name as the SSM paths spell it.
@@ -70,7 +77,8 @@ func realSSMClient(ctx context.Context, profile, region string) (parameterAPI, e
 	return ssm.NewFromConfig(cfg, func(o *ssm.Options) { o.TracerProvider, o.MeterProvider = awsotel.Providers() }), nil
 }
 
-const recoveryUsage = `Usage: sluisctl recovery password --instance <name> [--region R] [--profile P] [--show]
+const recoveryUsage = `Usage: sluisctl recovery password --instance <name> [--account recovery|conformance] [--region R] [--profile P] [--show]
+       sluisctl recovery verifier [--account recovery|conformance]
 
 Reads the recovery password of a Lambda installation with your own AWS
 credentials (the SDK's default chain) and prints it, decoded, and nothing else.
@@ -79,8 +87,19 @@ a document {"value":"<base64>"}; an installation still on layout v4 keeps the
 text at /sluis/<instance>/internal/config/recovery/password, which is read when
 the v5 parameter does not exist.
 
+--account conformance reads the conformance test account's password instead,
+/sluis/<instance>/internal/oidc/conformance-password (layout v5 only), which a
+stack makes when conformance.enabled is set.
+
+"recovery verifier" is for an installation that is not a Pulumi stack: it reads
+a password from standard input and prints the account's SRP credential, the
+salt and the verifier the service holds in place of the password
+(docs/decisions/0076), to store as the secret conformance.verifierSecret or
+recovery.verifierSecret names.
+
 Standard output must not be a terminal: pipe it (| pbcopy) or pass --show.
   --instance  the installation's name (else $SLUISCTL_INSTANCE, else backup.instance in config.yaml)
+  --account   recovery (the default) or conformance
   --region    the AWS region (else the configuration's, else backup.region in config.yaml)
   --profile   the AWS profile
   --show      print to a terminal as well
@@ -91,10 +110,13 @@ func recoveryCommand(args []string) error {
 		_, _ = fmt.Fprint(os.Stderr, recoveryUsage)
 		return badUsage("recovery needs password")
 	}
-	if args[0] != "password" {
-		return badUsage("recovery %q is not password", args[0])
+	switch args[0] {
+	case "password":
+		return recoveryPassword(args[1:], stdout)
+	case "verifier":
+		return recoveryVerifier(args[1:], os.Stdin, stdout)
 	}
-	return recoveryPassword(args[1:], stdout)
+	return badUsage("recovery %q is not password or verifier", args[0])
 }
 
 func recoveryPassword(args []string, out io.Writer) error {
@@ -103,12 +125,16 @@ func recoveryPassword(args []string, out io.Writer) error {
 	region := flags.String("region", "", "the AWS region")
 	profile := flags.String("profile", "", "the AWS profile")
 	show := flags.Bool("show", false, "print to a terminal as well")
+	account := flags.String("account", accountRecovery, "recovery or conformance")
 	rest, err := parseInterleaved(flags, args)
 	if err != nil {
 		return err
 	}
 	if len(rest) > 0 {
 		return badUsage("recovery password takes no argument, not %q", rest[0])
+	}
+	if *account != accountRecovery && *account != accountConformance {
+		return badUsage("--account %q is neither recovery nor conformance", *account)
 	}
 	// Refuse before anything is read: a password on a screen is in scrollback,
 	// a shared session and a screen recording.
@@ -133,11 +159,61 @@ func recoveryPassword(args []string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	password, err := readRecoveryPassword(ctx, client, name)
+	var password string
+	if *account == accountConformance {
+		password, err = readConformancePassword(ctx, client, name)
+	} else {
+		password, err = readRecoveryPassword(ctx, client, name)
+	}
 	if err != nil {
 		return explain(err)
 	}
 	_, err = fmt.Fprintln(out, password)
+	return err
+}
+
+// conformancePasswordV5 is where the conformance account's password is, on
+// layout v5.
+const conformancePasswordV5 = "/sluis/%s/internal/oidc/conformance-password"
+
+// readConformancePassword reads the conformance account's password.
+func readConformancePassword(ctx context.Context, client parameterAPI, instance string) (string, error) {
+	name := fmt.Sprintf(conformancePasswordV5, instance)
+	text, err := getParameter(ctx, client, name)
+	if err != nil {
+		if isParameterNotFound(err) {
+			return "", fmt.Errorf("%s does not exist: wrong --instance or --region, or conformance.enabled is not set on this stack", name)
+		}
+		return "", fmt.Errorf("read %s: %w", name, err)
+	}
+	return decodeRecoveryPassword(text)
+}
+
+// recoveryVerifier prints the SRP credential of a password read from in: the
+// document an installation that is not a Pulumi stack stores under
+// recovery.verifierSecret or conformance.verifierSecret.
+func recoveryVerifier(args []string, in io.Reader, out io.Writer) error {
+	flags := newFlags("recovery verifier", recoveryUsage)
+	account := flags.String("account", accountRecovery, "recovery or conformance")
+	rest, err := parseInterleaved(flags, args)
+	if err != nil {
+		return err
+	}
+	if len(rest) > 0 {
+		return badUsage("recovery verifier takes no argument, not %q", rest[0])
+	}
+	if *account != accountRecovery && *account != accountConformance {
+		return badUsage("--account %q is neither recovery nor conformance", *account)
+	}
+	raw, err := io.ReadAll(io.LimitReader(in, 4<<10))
+	if err != nil {
+		return fmt.Errorf("read the password: %w", err)
+	}
+	password := strings.TrimRight(string(raw), "\r\n")
+	if password == "" {
+		return badUsage("the password on standard input is empty")
+	}
+	_, err = fmt.Fprintln(out, string(srp.Default.NewCredential(*account, password).Document()))
 	return err
 }
 

@@ -52,6 +52,7 @@ var stateRows = []struct{ key, kind, id string }{
 	{"req.r1", "issuer-request", "r1"},
 	{"code.c1", "issuer-code", "c1"},
 	{"codesess.r1", "issuer-code-session", "r1"},
+	{"srp.h1", "issuer-srp", "h1"},
 	{"tok.j1", "issuer-token", "j1"},
 	{"sso.s1", "issuer-sso", "s1"},
 	{"rt.h1", "issuer-session-token", "h1"},

@@ -44,7 +44,8 @@ signingKey:
   overlap: 25h
   verifyOnly:
     - {file: /var/run/access-issuer/verify-keys/0.pem, kid: old, alg: ES384, until: "2026-11-01T00:00:00Z"}
-recovery: {enabled: true, serviceAccount: sluis-recovery, audience: sluis-recovery, passwordSecret: recovery/password}
+recovery: {enabled: true, serviceAccount: sluis-recovery, audience: sluis-recovery, passwordSecret: recovery/password, verifierSecret: recovery/verifier}
+conformance: {enabled: true, verifierSecret: conformance/verifier}
 login: {directory: false, signOutURL: https://access.example.test/signed-out, forwarded: {issuer: https://proxy.example.test, audience: proxy, emailHeader: X-Email}}
 console: {origin: https://access.example.test, client: access-console, awsAudience: https://access.example.test/console}
 oauthClient: {provider: default, secretName: oauth, idKey: client-id, secretKey: client-secret}

@@ -33,7 +33,7 @@ const (
 // mxRows is the fewest rows the matrix may have. It is pinned so that a sweep
 // that silently shrinks (a role dropped, Modules() emptied, a group skipped)
 // fails instead of passing. Raise it when roles or groups are added; never lower it.
-const mxRows = 2281
+const mxRows = 2762
 
 // roleSpec is what a role is for in v1.76.
 type roleSpec struct {
@@ -282,6 +282,24 @@ func mxBuildRows(specs []roleSpec) []mxRow {
 			add("s3", ms+" list lookalike sibling", "s3:ListBucket", mxBucket, false, prefix(ms+"x/"))
 		}
 
+		// The passwords of the recovery and conformance accounts (docs/decisions/0076)
+		// are the operator's: the role that hosts oidc holds their verifiers and may
+		// not read, write or decrypt them, in its own policy and in the key's. A
+		// role that reads every module's parameters (the backup) still does.
+		for _, leaf := range []string{"recovery-password", "conformance-password"} {
+			p := mxParam("internal", "oidc", leaf)
+			outsideIssuer := !s.hostsModule(ModuleOIDC)
+			add("passwords", leaf+" read", "ssm:GetParameter", p, s.reads(ModuleOIDC) && outsideIssuer, nil)
+			add("passwords", leaf+" read many", "ssm:GetParameters", p, s.reads(ModuleOIDC) && outsideIssuer, nil)
+			add("passwords", leaf+" write", "ssm:PutParameter", p, s.writes(ModuleOIDC) && outsideIssuer, nil)
+			kmsAdd(leaf+" decrypt", "kms:Decrypt", p, s.reads(ModuleOIDC) && outsideIssuer)
+		}
+		for _, leaf := range []string{"recovery-verifier", "conformance-verifier"} {
+			p := mxParam("internal", "oidc", leaf)
+			add("verifiers", leaf+" read", "ssm:GetParameter", p, s.reads(ModuleOIDC), nil)
+			kmsAdd(leaf+" decrypt", "kms:Decrypt", p, s.reads(ModuleOIDC))
+		}
+
 		// S3 outside every module's prefix.
 		add("s3", "root object", "s3:GetObject", mxBucket+"/stray", false, nil)
 		add("s3", "list without a prefix", "s3:ListBucket", mxBucket, false, nil)
@@ -463,6 +481,60 @@ func TestTheKeyPolicyIsWhatRefusesTheIssuerAnotherModulesSecrets(t *testing.T) {
 	}
 	if !alone.Allowed {
 		t.Log("the issuer identity policy no longer spans other modules parameters; the key policy is no longer the only ceiling")
+	}
+}
+
+// The issuer signs the recovery and conformance accounts in against their
+// verifiers and never reads their passwords (docs/decisions/0076). Each half is
+// held by its own statement: the role's policy denies the parameter and the
+// decryption of its value, and the key's policy refuses the decryption whatever
+// the role's policy says.
+func TestTheIssuerReadsTheVerifiersAndNeverThePasswords(t *testing.T) {
+	identity, key := mxPolicies(t)
+	issuer := mxRoleArn("issuer")
+	decrypt := func(param string) iameval.Request {
+		return iameval.Request{Principal: issuer, Action: "kms:Decrypt", Resource: mxKey}.
+			WithContext("kms:ViaService", mxSsmVia).WithEncryptionContext(map[string]string{"PARAMETER_ARN": param})
+	}
+	eval := func(req iameval.Request, id, k iameval.Policy) bool {
+		t.Helper()
+		if !strings.HasPrefix(req.Action, "kms:") {
+			k = iameval.Policy{} // the key's policy is asked about the key's actions only
+		}
+		d, err := iameval.Evaluate(req, id, k)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return d.Allowed
+	}
+	for _, leaf := range []string{"recovery-password", "conformance-password"} {
+		p := mxParam("internal", "oidc", leaf)
+		for _, action := range []string{"ssm:GetParameter", "ssm:GetParameters", "ssm:GetParameterHistory", "ssm:PutParameter", "ssm:DeleteParameter"} {
+			if eval(iameval.Request{Principal: issuer, Action: action, Resource: p}, identity["issuer"], key) {
+				t.Errorf("the issuer's role may %s %s", action, leaf)
+			}
+		}
+		if eval(decrypt(p), identity["issuer"], key) {
+			t.Errorf("the issuer may decrypt %s", leaf)
+		}
+		// The key policy alone refuses the decryption: an identity policy that
+		// allowed all of KMS would not open it.
+		everything, err := iameval.Parse([]map[string]any{{"Sid": "All", "Effect": "Allow", "Action": "kms:*", "Resource": "*"}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if eval(decrypt(p), everything, key) {
+			t.Errorf("the key policy lets the issuer decrypt %s", leaf)
+		}
+	}
+	for _, leaf := range []string{"recovery-verifier", "conformance-verifier", "state-secret"} {
+		p := mxParam("internal", "oidc", leaf)
+		if !eval(iameval.Request{Principal: issuer, Action: "ssm:GetParameter", Resource: p}, identity["issuer"], key) {
+			t.Errorf("the issuer's role may not read %s", leaf)
+		}
+		if !eval(decrypt(p), identity["issuer"], key) {
+			t.Errorf("the issuer may not decrypt %s", leaf)
+		}
 	}
 }
 

@@ -41,6 +41,8 @@ type (
 	Secrets = internal.Secrets
 	// Recovery is `recovery`: the sign-in that needs no directory.
 	Recovery = internal.Recovery
+	// Conformance is `conformance`: the test account of the conformance harness.
+	Conformance = internal.Conformance
 	// Login is `login`: how a person signs in to the console.
 	Login = internal.Login
 	// Console is `console`: where the console is published.

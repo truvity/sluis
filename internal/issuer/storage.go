@@ -297,13 +297,33 @@ func NormalizeACR(value string) string {
 // the reason this maps rather than switching on that type.
 const RecoveryHow = "recovery"
 
+// ConformanceHow is what a sign-in of the conformance account records as its
+// method (docs/decisions/0076). It is not recovery: it is no operator, it has
+// no break-glass authority, and it is admitted only to clients the policy marks
+// `harness`. It is a subject proved without a directory, like recovery, and is
+// evaluated by the policy's ServiceAccount matchers, which hold it to no group
+// unless an operator writes one that is not an operator group (the service
+// refuses to start otherwise).
+const ConformanceHow = "conformance"
+
+// ACRConformance is the authentication context class of a conformance sign-in.
+// It is not offered in discovery: nothing asks for it.
+const ACRConformance = "urn:truvity:sluis:acr:conformance"
+
+// provedWithoutDirectory reports whether how names a sign-in that no directory
+// vouched for: recovery and the conformance account.
+func provedWithoutDirectory(how string) bool { return how == RecoveryHow || how == ConformanceHow }
+
 // acrFor maps how somebody was proved onto a class a relying party can
 // act on. The distinction that earns its keep is DIRECTORY against
 // RECOVERY: one went through the company's own identity provider, the
 // other bypassed it on purpose.
 func acrFor(how string) string {
-	if how == RecoveryHow {
+	switch how {
+	case RecoveryHow:
 		return ACRRecovery
+	case ConformanceHow:
+		return ACRConformance
 	}
 
 	// A provider kind, or empty on a deployment that records none:
@@ -319,6 +339,11 @@ func amrFor(how string) []string {
 		// Not a password and not a person: a token the API server
 		// vouched for.
 		return []string{"swk"}
+	}
+	if how == ConformanceHow {
+		// A password, proved without sending it (SRP), and the marker that tells
+		// a relying party it is the test account.
+		return []string{"pwd", "conformance"}
 	}
 
 	return nil
@@ -988,10 +1013,10 @@ func (s *Storage) Complete(ctx context.Context, id string, who Authenticated) er
 
 	// Before the request is marked done, because a request marked done is
 	// one a code can be issued for.
-	if err = s.entitled(ctx, req.Req.ClientID, req.Resource, who.Subject, who.How == RecoveryHow); err != nil {
+	if err = s.entitledAs(ctx, req.Req.ClientID, req.Resource, who.Subject, provedWithoutDirectory(who.How), who.How); err != nil {
 		if errors.Is(err, ErrNotEntitled) {
 			recovery := who.How == RecoveryHow
-			why := s.signInRefusal(ctx, req.Req.ClientID, who.Subject, recovery, "not_admitted")
+			why := s.signInRefusal(ctx, req.Req.ClientID, who.Subject, provedWithoutDirectory(who.How), "not_admitted")
 			if why.Admitted {
 				// The client admitted them; the resource they asked a token for did not.
 				why.Code = "resource_not_admitted"
@@ -1018,7 +1043,7 @@ func (s *Storage) Complete(ctx context.Context, id string, who Authenticated) er
 	// recovery sign-in is the way in that bypasses the directory, and it
 	// never opens a month-long chain, whatever the client's class.
 	req.Class = s.classOf(req.Req.ClientID)
-	if who.How == RecoveryHow {
+	if provedWithoutDirectory(who.How) {
 		req.Class = ClassInteractive
 	}
 	deadline := s.iss.Sessions().deadlineAt(req.Class, authTime, req.Resource)
@@ -1625,7 +1650,7 @@ func methodOf(request op.TokenRequest) string {
 func provedAsServiceAccount(request any) bool {
 	switch req := request.(type) {
 	case *authRequest:
-		return req.How == RecoveryHow
+		return provedWithoutDirectory(req.How)
 	case *refreshRequest:
 		return req.session.serviceAccount()
 	default:
@@ -1687,6 +1712,14 @@ func (s *Storage) issue(ctx context.Context, request op.TokenRequest) (*token, e
 		case recoveryUnknown:
 			return nil, fault(ctx, errRecoveryUnknown)
 		case recoveryOn:
+		}
+	}
+
+	// And nothing for the conformance account's sign-in once its flag is off, the
+	// recovery switch has been thrown, or the client is no longer a harness's.
+	if methodOf(request) == ConformanceHow {
+		if err := s.conformanceToken(ctx, clientOf(request)); err != nil {
+			return nil, err
 		}
 	}
 
@@ -2082,6 +2115,25 @@ func (s *Storage) TokenRequestByRefreshToken(ctx context.Context, refreshToken s
 		}
 	}
 
+	// And a session of the conformance account ends at its next refresh once its
+	// flag is off or the switch is thrown. The entitlement check below asks the
+	// client's `harness` mark.
+	if session.Method == ConformanceHow {
+		switch s.iss.conformanceCheck(ctx) {
+		case recoveryEnded:
+			if !maintenance.ReadOnly(ctx) {
+				if _, endErr := s.iss.Sessions().RevokeID(ctx, session.ID); endErr != nil {
+					s.logger().WarnContext(ctx, "a conformance session could not be revoked", logattr.SafeError("error", endErr))
+				}
+			}
+
+			return nil, deny(ctx, oidc.ErrInvalidGrant, errConformanceOff)
+		case recoveryUnknown:
+			return refusedLater(ctx, fault(ctx, errRecoveryUnknown)), nil
+		case recoveryOn:
+		}
+	}
+
 	// The limit as the policy states it NOW. A record carries the end it
 	// was given when last written; a policy that has since withdrawn an
 	// extension must end the chain here, not at the longer end it holds.
@@ -2100,7 +2152,7 @@ func (s *Storage) TokenRequestByRefreshToken(ctx context.Context, refreshToken s
 	// authorization, which meets the same gate and says why on a page.
 	// The description is deliberately plain -- the detail is in the log,
 	// and the client is not who needs telling.
-	if err = s.entitled(ctx, session.ClientID, session.Resource, session.Identity, session.serviceAccount()); err != nil {
+	if err = s.entitledAs(ctx, session.ClientID, session.Resource, session.Identity, session.serviceAccount(), session.Method); err != nil {
 		if errors.Is(err, ErrNotEntitled) {
 			s.logger().InfoContext(ctx, "refused a refresh for a client the identity is no longer entitled to",
 				logattr.SafeString("client_id", session.ClientID), logattr.SafeError("error", err))
@@ -2692,6 +2744,15 @@ var ErrNotEntitled = errors.New("no group this client requires")
 // the sign-in finishes: the request arrives before anyone has proved who
 // they are.
 func (s *Storage) entitled(ctx context.Context, clientID, resource, subject string, serviceAccount bool) error {
+	return s.entitledAs(ctx, clientID, resource, subject, serviceAccount, "")
+}
+
+// entitledAs is [Storage.entitled] for a sign-in made by method: the conformance
+// account's is entitled by the client's `harness` mark and by nothing else.
+func (s *Storage) entitledAs(ctx context.Context, clientID, resource, subject string, serviceAccount bool, method string) error {
+	if method == ConformanceHow {
+		return s.conformanceEntitled(ctx, clientID, resource)
+	}
 	declared, ok := s.iss.Policy().Client(clientID)
 	if !ok {
 		// A client that describes itself carries the document policy's
@@ -2998,6 +3059,9 @@ func (s *Storage) signInProof(ctx context.Context, request exchangeSubject) (Pro
 	// reason it is not a bearer ([Storage.liveSignInClaims]).
 	if session.Method == RecoveryHow {
 		return refuse("recovery_session", "a sign-in made by recovery cannot be exchanged")
+	}
+	if session.Method == ConformanceHow {
+		return refuse("conformance_session", "a sign-in of the conformance account cannot be exchanged")
 	}
 
 	return Proof{Email: issued.Subject}, nil

@@ -96,7 +96,7 @@ The library renders both from `LambdaArgs.Installation` ([inputs](pulumi-library
 |---|---|
 | `apiVersion`, `policy.file` | Fixed |
 | `secrets` | `{source: ssm, root: /sluis/<instance>, region}`, plus `kmsKeyId: <ParameterKeyArn>` when set. Another `kmsKeyId` is refused |
-| `recovery.passwordSecret`, `recovery.enabled` | From `Recovery` |
+| `recovery.passwordSecret`, `recovery.verifierSecret`, `recovery.enabled` | `enabled` from `Recovery`. On layout v5 `verifierSecret` is `recovery/verifier` and the password is not named; on v4 `passwordSecret` is `recovery/password` |
 | State secret name under `signingKey.kms` or `signingKey.kmsWrapped` | Generated |
 | `adapters.trigger.settings.github`, `.slack` | With `invoke`: this function |
 | `signingKey.verifyOnly` | From `VerifyOnly`: `file` under `/opt/sluis/verify-keys/`, `kid`, `alg`, `until` (RFC 3339) |
@@ -131,6 +131,8 @@ Each name under `internal/config/` is read when first used and every `secrets.re
 |---|---|---|
 | `internal/oidc/state-secret`; layout v4 `internal/config/issuer/state-secret` | Base64 of 32 random bytes, on v5 as `{"value":"<base64>"}`; output `StateSecretParameter` | `pulumi up --replace` on the `RandomBytes` resource; signs out all in-flight sign-ins. An apply never regenerates it |
 | `internal/oidc/recovery-password`; layout v4 `internal/config/recovery/password` | 40 random letters and digits, on v5 as `{"value":"<base64>"}` | Read with `sluisctl recovery password` ([recovery](../../guides/sluis/operate/recover-on-lambda.md)). An apply never regenerates it |
+| `internal/oidc/recovery-verifier`, layout v5 | The recovery account's SRP credential, `{"salt","verifier"}` in the secret store's document, derived from the password; output `RecoveryVerifierParameter`. The service reads it, never the password | Follows the password. An apply that does not rotate the password rewrites nothing |
+| `internal/oidc/conformance-password` and `.../conformance-verifier`, with `conformance.enabled` | The conformance account's password and credential, made as above; output `ConformancePasswordParameter` | `pulumi up --replace` on `<name>-conformance-password`. Read with `sluisctl recovery password --account conformance` |
 | `internal/backup/restore-identity` | The age identity that opens the backups, with `NewBackup`; output `RestoreIdentityParameter` ([Pulumi library](pulumi-library.md#keys)) | `pulumi up --replace` on `<name>-restore-identity-seed`; older backups then need an `ExtraRecipients` identity |
 | The v4 pair on `Layout: v5` | Not declared, and deleted by the next apply, unless `Compat.KeepV4` | n/a |
 

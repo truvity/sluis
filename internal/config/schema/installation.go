@@ -106,6 +106,7 @@ func installationSchema() m {
 		"adapters":    adaptersSchema(),
 		"signingKey":  signing,
 		"recovery":    serveProps["recovery"],
+		"conformance": serveProps["conformance"],
 		"login":       serveProps["login"],
 		"console":     serveProps["console"],
 		"oauthClient": serveProps["oauthClient"],

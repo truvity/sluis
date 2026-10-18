@@ -88,6 +88,17 @@ func TestTheAddressesOfEachLayout(t *testing.T) {
 	}
 }
 
+func TestTheVerifiersHaveTheirOwnAddressesOnLayoutV5(t *testing.T) {
+	for kind, want := range map[string]string{
+		config.SecretRecoveryVerifier:    "internal/oidc/recovery-verifier",
+		config.SecretConformanceVerifier: "internal/oidc/conformance-verifier",
+	} {
+		if got := deploycheck.Address(config.DeclaredSecret{Kind: kind}, config.SecretsLayoutV5); got != want {
+			t.Errorf("%s on v5: %q, want %q", kind, got, want)
+		}
+	}
+}
+
 func store(layout string, state string) fake {
 	f := fake{}
 	for i, d := range declared {

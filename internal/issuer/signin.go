@@ -152,6 +152,10 @@ type SignInDeps struct {
 	// providers rather than instead of them: a directory that cannot
 	// answer yet is only the first of the days it exists for.
 	Recovery Recovery
+	// Password is the sign-in by username and password proved with SRP, which
+	// the recovery account and the conformance account use
+	// (docs/decisions/0076). Nil is a deployment with neither.
+	Password *PasswordDoor
 	Issuer   *Issuer
 	// AfterSignOut is where a person lands once their sign-in has ended.
 	//
@@ -241,6 +245,9 @@ func SignInRoutes(mux *http.ServeMux, deps SignInDeps) {
 	mux.HandleFunc("GET /login/{provider}/start", s.start)
 	mux.HandleFunc("GET /login/{provider}/callback", s.callback)
 	mux.HandleFunc("POST /login/recovery", s.recover)
+	if deps.Password != nil {
+		s.passwordRoutes(mux)
+	}
 	mux.HandleFunc("POST "+agentConsentPath, s.acceptAgent)
 	// BOTH methods. A person following a link sends GET, and is shown a
 	// page that asks; the page's button sends POST, which ends the
@@ -361,7 +368,7 @@ func (s *signIn) chooser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	kinds := slices.Sorted(maps.Keys(s.providers))
-	recovery, recoveryState := s.recoveryForm(r.Context(), request)
+	recovery, recoveryState := s.recoveryForm(r.Context(), request, pending)
 
 	// One provider and no recovery is the only case with a single way in,
 	// and skipping a page with one button on it is a kindness. With
@@ -608,20 +615,24 @@ func (s *signIn) refuse(w http.ResponseWriter, r *http.Request, pending Pending,
 // and it is the recovery cookie's too, which the chooser sets: a signed
 // state alone is something anybody can fetch for themselves and post from
 // another site (see [signIn.recover]).
-func (s *signIn) recoveryForm(ctx context.Context, request string) (form, state string) {
-	if s.deps.Recovery == nil || s.deps.Issuer.recoveryCheck(ctx).refuse() {
+func (s *signIn) recoveryForm(ctx context.Context, request string, pending Pending) (form, state string) {
+	token := s.deps.Recovery != nil && !s.deps.Issuer.recoveryCheck(ctx).refuse()
+	passwordRecovery, passwordConformance := s.deps.Password.offered(ctx, s.deps.Issuer, pending)
+	if !token && !passwordRecovery && !passwordConformance {
 		return "", ""
 	}
 	state, err := s.deps.State.IssueAs(access.Binding{Bind: request, Owner: access.RecoveryPurpose})
 	if err != nil {
 		return "", ""
 	}
-	prompt := s.deps.Recovery.Prompt()
-	command := ""
-	if prompt.Command != "" {
-		command = "<pre>" + html.EscapeString(prompt.Command) + "</pre>"
-	}
-	return fmt.Sprintf(`<details><summary class="note">Recovery sign-in</summary>
+	var out strings.Builder
+	if token {
+		prompt := s.deps.Recovery.Prompt()
+		command := ""
+		if prompt.Command != "" {
+			command = "<pre>" + html.EscapeString(prompt.Command) + "</pre>"
+		}
+		fmt.Fprintf(&out, `<details><summary class="note">Recovery sign-in</summary>
 	<p class="note">%s</p>%s
 	<form method="post" action="/login/recovery">
 		<input type="hidden" name="state" value="%s">
@@ -629,8 +640,13 @@ func (s *signIn) recoveryForm(ctx context.Context, request string) (form, state 
 		<p><button type="submit">Recover access</button></p>
 	</form>
 	<p class="warn">%s</p></details>`,
-		html.EscapeString(prompt.Intro), command, html.EscapeString(state),
-		html.EscapeString(prompt.Label), html.EscapeString(prompt.Caution)), state
+			html.EscapeString(prompt.Intro), command, html.EscapeString(state),
+			html.EscapeString(prompt.Label), html.EscapeString(prompt.Caution))
+	}
+	if passwordRecovery || passwordConformance {
+		out.WriteString(passwordForm(state, passwordRecovery, passwordConformance))
+	}
+	return out.String(), state
 }
 
 // recover completes a sign-in with a ServiceAccount the cluster vouches

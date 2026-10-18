@@ -111,7 +111,9 @@ func (i *Issuer) EndRecovery(ctx context.Context) (RecoveryEnded, error) {
 		}
 
 		for _, signIn := range signIns {
-			if !signIn.recovered() {
+			// The conformance account is shut by the same switch (docs/decisions/0076),
+			// so what it opened goes with recovery's.
+			if !signIn.recovered() && !signIn.conformance() {
 				continue
 			}
 
@@ -140,7 +142,7 @@ func (i *Issuer) EndRecovery(ctx context.Context) (RecoveryEnded, error) {
 	}
 
 	for k := range sessions {
-		if sessions[k].Method != RecoveryHow {
+		if !provedWithoutDirectory(sessions[k].Method) {
 			continue
 		}
 

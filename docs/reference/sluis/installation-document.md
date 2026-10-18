@@ -20,7 +20,7 @@ It is a superset of the service and policy documents: each section sits under it
 | `controllers` | `github` and `slack`, each present when the controller is on: its own keys go to the service document's `controllers`, `enabledOrgs` and `enabledWorkspaces` to the policy document's. |
 | `access` | the access model's tables (`groups`, `clients`, `resources`, `github`, `slack`, ...), the policy document's, unchanged. [`config.FromAccess`](installation-access.md) builds it. |
 
-For shape `lambda` the renderer writes what the library owns (`secrets` as `ssm` with the instance's root and region, `recovery.passwordSecret`, the `invoke` trigger's function) and refuses a different value. A named adapter replaces what a resource stands for. The output is deterministic and held to the service's loader. Start checks adapter platform answers and OpenBao reachability.
+For shape `lambda` the renderer writes what the library owns (`secrets` as `ssm` with the instance's root and region, `recovery.passwordSecret` on layout v4 or `recovery.verifierSecret` on layout v5, the `invoke` trigger's function) and refuses a different value. A named adapter replaces what a resource stands for. The output is deterministic and held to the service's loader. Start checks adapter platform answers and OpenBao reachability.
 
 ## Write one
 

@@ -221,6 +221,11 @@ func cookieCaller(iss *Issuer, standing signInStanding) (caller, bool) {
 		return caller{}, false
 	}
 	identity := standing.Session.Identity
+	if standing.Session.conformance() {
+		// A test subject: it holds no group here whatever the policy says, so it is
+		// never an operator at the sessions service.
+		return caller{identity: identity}, true
+	}
 	if standing.Session.recovered() {
 		account, ok := serviceAccountSubject(identity)
 		if !ok {

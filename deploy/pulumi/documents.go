@@ -32,6 +32,13 @@ const (
 	// keeps naming the v4 spellings, and a process on layout v5 reads these.
 	stateSecretNameV5      = "oidc/state-secret"
 	recoveryPasswordNameV5 = "oidc/recovery-password"
+	// The recovery account's SRP verifier, which the service reads on layout v5
+	// in place of the password, and the conformance account's pair
+	// (docs/decisions/0076).
+	recoveryVerifierName      = "recovery/verifier"
+	recoveryVerifierNameV5    = "oidc/recovery-verifier"
+	conformancePasswordNameV5 = "oidc/conformance-password"
+	conformanceVerifierNameV5 = "oidc/conformance-verifier"
 )
 
 // renderDocuments renders the two documents the configuration layer holds and
@@ -151,6 +158,10 @@ func parameterNames(secrets *sluisconfig.Secrets, declared []sluisconfig.Declare
 			names = append(names, "internal/"+stateSecretNameV5)
 		case !v4 && d.Kind == "recovery-password":
 			names = append(names, "internal/"+recoveryPasswordNameV5)
+		case !v4 && d.Kind == "recovery-verifier":
+			names = append(names, "internal/"+recoveryVerifierNameV5)
+		case !v4 && d.Kind == "conformance-verifier":
+			names = append(names, "internal/"+conformanceVerifierNameV5)
 		case v4 && d.Name != "":
 			names = append(names, "internal/config/"+d.Name)
 		case d.Subject != "":
@@ -270,6 +281,16 @@ func (a LambdaArgs) withInstallation() (LambdaArgs, error) {
 			errs = append(errs, fmt.Errorf("sluispulumi: LambdaArgs.Layout is %q and the installation's secrets.layout is %q: say it once "+
 				"(the library writes secrets.layout: v5 for Layout v5 and leaves v4 for v4 and v4+v5)", a.Layout, in.Secrets.Layout))
 		}
+	}
+	if a.Layout == LayoutV5 {
+		// The renderer names the recovery account's verifier, and not the password,
+		// on layout v5 (docs/decisions/0076).
+		sec := sluisconfig.Secrets{}
+		if in.Secrets != nil {
+			sec = *in.Secrets
+		}
+		sec.Layout = string(LayoutV5)
+		in.Secrets = &sec
 	}
 	fill("Instance", in.Instance, a.Instance, func(v string) { in.Instance = v })
 	fill("Region", aws.Region, a.Region, func(v string) { aws.Region = v })
@@ -562,8 +583,30 @@ func ownServe(doc map[string]any, a *LambdaArgs, root string) error {
 	if err != nil {
 		return err
 	}
-	if err = own(recovery, "Config: recovery", "passwordSecret", recoveryPasswordName); err != nil {
+	if a.Layout == LayoutV5 {
+		// The function holds the verifier and never the password, so the document
+		// does not name it and its role may not read it.
+		if v, set := recovery["passwordSecret"]; set {
+			return fmt.Errorf("sluispulumi: LambdaArgs.Config: recovery.passwordSecret is %v and Layout is v5: the service reads "+
+				"the recovery account's verifier, not its password: leave it out", v)
+		}
+		if err = own(recovery, "Config: recovery", "verifierSecret", recoveryVerifierName); err != nil {
+			return err
+		}
+	} else if err = own(recovery, "Config: recovery", "passwordSecret", recoveryPasswordName); err != nil {
 		return err
+	}
+	if c, ok := doc["conformance"].(map[string]any); ok {
+		if on, _ := c["enabled"].(bool); on {
+			// The account's password and verifier are the library's to make, on layout v5.
+			if a.Layout != LayoutV5 {
+				return errors.New("sluispulumi: LambdaArgs.Config: conformance.enabled needs Layout v5: " +
+					"the library makes the conformance account's password and verifier there")
+			}
+			if err = own(c, "Config: conformance", "verifierSecret", "conformance/verifier"); err != nil {
+				return err
+			}
+		}
 	}
 	if a.Recovery != nil && a.Recovery.Enabled != nil {
 		if v, set := recovery["enabled"]; set && v != *a.Recovery.Enabled {

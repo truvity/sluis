@@ -236,6 +236,8 @@ func buildLambda(t *testing.T, e estate) (*recorder, map[string]string, error) {
 		collect("schedulerRoleArn", l.SchedulerRoleArn)
 		collect("stateSecretParameter", l.StateSecretParameter)
 		collect("recoveryPasswordParameter", l.RecoveryPasswordParameter)
+		collect("recoveryVerifierParameter", l.RecoveryVerifierParameter)
+		collect("conformancePasswordParameter", l.ConformancePasswordParameter)
 		collect("configLayerArn", l.ConfigLayerArn)
 		collect("declaredParameters", l.DeclaredParameters.ApplyT(func(v []string) string { return strings.Join(v, ",") }).(pulumi.StringOutput))
 		collect("auditQueueUrl", l.AuditQueueURL)

@@ -344,6 +344,7 @@ l, _ := sluispulumi.NewLambda(ctx, "access", &sluispulumi.LambdaArgs{
 | `ConfigLayerArn` | Configuration layer version |
 | `DeclaredParameters` | SSM names the documents declare (layout v4: `internal/config/<name>`), sorted; set whether or not `Check` is on |
 | `StateSecretParameter`, `RecoveryPasswordParameter` | SSM parameters of the OAuth-state secret and the recovery password; the v5 addresses under `Layout: v5` |
+| `RecoveryVerifierParameter`, `ConformancePasswordParameter` | The recovery account's SRP credential on layout v5, and the conformance password with `conformance.enabled`; empty otherwise |
 | `Audit` | `*auditpulumi.Audit` the library installed; nil with `Use`, `Enabled: false` or `AuditQueueArn` |
 | `AuditQueueURL`, `AuditQueueArn` | The publish queue; empty when audit is off |
 

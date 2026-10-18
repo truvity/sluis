@@ -157,6 +157,9 @@ type Issuer struct {
 	// recoveryGate is the switch an operator throws to turn recovery off; nil is
 	// never off. Set before the issuer serves.
 	recoveryGate RecoveryGate
+	// conformance is `conformance.enabled`: whether the conformance account may
+	// sign in (docs/decisions/0076). Set before the issuer serves.
+	conformance bool
 	// clientSecrets is what the operator endpoint manages; nil mounts nothing.
 	clientSecrets ClientSecretAdmin
 	// githubApps are the catalogue Apps installation tokens are minted

@@ -578,6 +578,11 @@ func (d *PolicyDocument) Unconsumed() []string {
 const (
 	// SecretRecoveryPassword is the password of the recovery sign-in.
 	SecretRecoveryPassword = "recovery-password"
+	// SecretRecoveryVerifier is the SRP verifier of the recovery account:
+	// what the sign-in page's proof is checked against (docs/decisions/0076).
+	SecretRecoveryVerifier = "recovery-verifier"
+	// SecretConformanceVerifier is the SRP verifier of the conformance account.
+	SecretConformanceVerifier = "conformance-verifier"
 	// SecretStateSecret is the sign-in state's secret of a KMS-signed issuer.
 	SecretStateSecret = "state-secret"
 	// SecretSignInClientID is the Google sign-in client's id.
@@ -624,7 +629,10 @@ type DeclaredSecret struct {
 // The rules:
 //
 //   - the recovery password, when `recovery.passwordSecret` names it and
-//     `recovery.enabled` is not false;
+//     `recovery.enabled` is not false, and the recovery verifier likewise
+//     (`recovery.verifierSecret`);
+//   - the conformance verifier, when `conformance.enabled` and
+//     `conformance.verifierSecret` name it;
 //   - the state secret, when `signingKey.kms` or `signingKey.kmsWrapped` is
 //     set (a file signer has none);
 //   - the Google sign-in client: its secret, and its id unless
@@ -659,6 +667,12 @@ func declaredFromService(doc *Serve) []DeclaredSecret {
 	var out []DeclaredSecret
 	if r := doc.Recovery; r != nil && r.LoginSecret != "" && (r.Enabled == nil || *r.Enabled) {
 		out = append(out, DeclaredSecret{Kind: SecretRecoveryPassword, Name: r.LoginSecret})
+	}
+	if r := doc.Recovery; r != nil && r.VerifierSecret != "" && (r.Enabled == nil || *r.Enabled) {
+		out = append(out, DeclaredSecret{Kind: SecretRecoveryVerifier, Name: r.VerifierSecret})
+	}
+	if c := doc.Conformance; c != nil && c.Enabled && c.VerifierSecret != "" {
+		out = append(out, DeclaredSecret{Kind: SecretConformanceVerifier, Name: c.VerifierSecret})
 	}
 	if k := doc.SigningKey; k != nil {
 		if k.KMS != nil {

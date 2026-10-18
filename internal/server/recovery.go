@@ -2,8 +2,6 @@ package server
 
 import (
 	"context"
-	"crypto/rand"
-	"crypto/subtle"
 	"errors"
 	"fmt"
 	"slices"
@@ -11,10 +9,10 @@ import (
 	"sync"
 	"time"
 
-	"golang.org/x/crypto/argon2"
-
-	"github.com/truvity/sluis/internal/lazy"
+	"github.com/truvity/sluis/internal/port"
+	"github.com/truvity/sluis/internal/srpauth"
 	"github.com/truvity/sluis/internal/throttle"
+	"github.com/truvity/sluis/srp"
 )
 
 // Recovery is the way in when the ordinary one is broken: nobody is in the
@@ -32,6 +30,14 @@ type Recovery interface {
 	// carries its own words, because the two are not variations on one
 	// sentence: one is a command to run, the other a secret to have kept.
 	Prompt() Prompt
+}
+
+// ProofRecovery is a recovery whose proof is presented whole: a token. A
+// password is not: it is proved by an exchange that never carries it
+// ([PasswordRecovery], docs/decisions/0076), so there is no form field, JSON
+// body or bearer that takes one.
+type ProofRecovery interface {
+	Recovery
 	// Verify returns the identity the proof establishes.
 	Verify(ctx context.Context, proof string) (string, error)
 }
@@ -111,7 +117,7 @@ type TokenRecovery struct {
 	Subjects []string
 }
 
-var _ Recovery = (*TokenRecovery)(nil)
+var _ ProofRecovery = (*TokenRecovery)(nil)
 
 // Kind implements [Recovery].
 func (t *TokenRecovery) Kind() string { return "token" }
@@ -168,22 +174,6 @@ func (t *TokenRecovery) Verify(ctx context.Context, proof string) (string, error
 
 // ---------------------------------------------------------- by password
 
-// Argon2id parameters for the recovery password.
-//
-// Deliberately modest. The password this normally holds is machine
-// generated, against which no amount of stretching matters; the
-// stretching is for the installation that sets a memorable one, where
-// reaching the process memory should not hand the password back. Memory
-// is the parameter that bounds what an unauthenticated caller can cost
-// us, so it is kept where one verification is a few tens of milliseconds
-// — and [recoveryAttempts] stops there being many.
-const (
-	argonTime    = 2
-	argonMemory  = 32 * 1024 // KiB
-	argonThreads = 2
-	argonLength  = 32
-)
-
 // recoveryAttempts is how many failures one source is answered before the
 // password stops answering it for recoveryWindow; recoveryCeiling is how many
 // every source together are answered.
@@ -193,119 +183,53 @@ const (
 // everybody is a lock anyone can hold shut: ten wrong proofs from anywhere
 // stopped the one operator holding the right one, on the path that exists for
 // when nothing else works.
-//
-// Not really about guessing — a generated password will not be guessed.
-// It is because verifying costs memory on purpose, and an endpoint anyone
-// can reach that allocates on every call needs a ceiling, or the
-// hardening becomes a way to take the hub down.
 const (
 	recoveryAttempts = 10
 	recoveryCeiling  = 100
 	recoveryWindow   = time.Minute
 )
 
-// recoverySourceKey carries the address a recovery proof came from.
-type recoverySourceKey struct{}
-
-// WithRecoverySource returns a context in which a recovery proof is taken to
-// come from source, the address the deployment's proxies vouch for. A
-// recovery counts its refusals per source; one asked with no source counts
-// them all as one.
-func WithRecoverySource(ctx context.Context, source string) context.Context {
-	return context.WithValue(ctx, recoverySourceKey{}, source)
-}
-
-func recoverySource(ctx context.Context) string {
-	source, _ := ctx.Value(recoverySourceKey{}).(string)
-	return source
-}
-
-// PasswordRecovery is the shape for a hub outside Kubernetes: a generated
-// password, kept only as an Argon2id digest with a random salt.
+// PasswordRecovery is the shape for a hub outside Kubernetes: the recovery
+// account, signing in with a password that is proved and never sent
+// (SRP-6a, docs/decisions/0076).
 //
-// It carries a lock, so it is created once and used through a pointer;
-// the lock serialises verification, which keeps the memory cost of one
-// attempt from becoming the cost of as many as anyone cares to send.
+// The hub holds the account's salt and verifier and not the password, wherever
+// it is deployed: on layout v5 only the verifier is in the store the hub may
+// read, and elsewhere it is derived from the password at the moment it is read.
+// The sign-in page's script does its half of the exchange; nothing here takes a
+// password as an argument.
 type PasswordRecovery struct {
 	// Where is where the password is kept, as the secrets source describes it
-	// ("ssm /sluis/<instance>/internal/config/recovery/password"): the console
+	// ("ssm /sluis/<instance>/internal/oidc/recovery-password"): the console
 	// shows the operator this installation's own location. Empty for a
 	// generated password.
 	Where string
-
-	salt   []byte
-	digest []byte
-	// password, when set, is where a lazily opened recovery reads the password:
-	// on the first proof, and again after its time to live. A password that
-	// changed is digested again; one that did not keeps its salt and digest.
-	password *lazy.Value[string]
-
-	// mu serialises verification, one at a time, which is what bounds the
-	// memory a flood of proofs can hold at once.
-	mu sync.Mutex
-	// refused counts refusals per source and overall ([throttle]).
-	refused *throttle.Limiter
-	now     func() time.Time
-}
-
-// newRefusalCount is the limiter a password recovery counts its refusals in.
-// The clock is read late, so a test that moves p.now moves it too.
-func (p *PasswordRecovery) newRefusalCount() *throttle.Limiter {
-	return throttle.New(recoveryAttempts, recoveryCeiling, recoveryWindow, 0, func() time.Time { return p.now() })
+	// Source reads the account's credential.
+	Source srpauth.Source
+	// Service runs the exchanges. It is set when the console is assembled,
+	// beside the State it keeps them in.
+	Service *srpauth.Service
 }
 
 var _ Recovery = (*PasswordRecovery)(nil)
 
-// NewPasswordRecovery returns the password shape.
-func NewPasswordRecovery(password string) *PasswordRecovery {
-	salt := make([]byte, 16)
-	// crypto/rand.Read does not fail; it stops the program if the system
-	// source is broken, which is the right outcome for a process about to
-	// authenticate people.
-	_, _ = rand.Read(salt)
-	p := &PasswordRecovery{
-		salt:   salt,
-		digest: argon2.IDKey([]byte(password), salt, argonTime, argonMemory, argonThreads, argonLength),
-		now:    time.Now,
-	}
-	p.refused = p.newRefusalCount()
-	return p
+// NewPasswordRecovery returns the password shape over a credential source.
+func NewPasswordRecovery(source srpauth.Source, where string) *PasswordRecovery {
+	return &PasswordRecovery{Where: where, Source: source}
 }
 
-// NewLazyPasswordRecovery returns the password shape over a password that is
-// read when the first proof arrives, and read again after ttl, so that opening
-// it reads no secret and a rotated password takes effect without a restart. A
-// password that cannot be read, or is empty, refuses every proof.
-func NewLazyPasswordRecovery(ttl time.Duration, load func(context.Context) (string, error)) *PasswordRecovery {
-	p := &PasswordRecovery{password: lazy.New(ttl, load), now: time.Now}
-	p.password.SetClock(func() time.Time { return p.now() })
-	p.refused = p.newRefusalCount()
-	return p
-}
-
-// settle reads the password and digests it when it is new. The caller holds mu.
-func (p *PasswordRecovery) settle(ctx context.Context) error {
-	if p.password == nil {
-		return nil
+// Open gives the recovery the State its exchanges are kept in and the key every
+// container shares, which the made-up answers for unknown usernames come from.
+// Refusals are counted as they always were: ten a source, a hundred in all, a
+// minute.
+func (p *PasswordRecovery) Open(state port.State, key func() ([]byte, error)) {
+	p.Service = &srpauth.Service{
+		Params:   srp.Default,
+		Store:    srpauth.StateStore{State: state},
+		DecoyKey: srpauth.DecoyKey(key),
+		Refusals: throttle.New(recoveryAttempts, recoveryCeiling, recoveryWindow, 0, nil),
+		Starts:   srpauth.NewStarts(nil),
 	}
-	password, err := p.password.Get(ctx)
-	if err != nil {
-		return fmt.Errorf("recovery.passwordSecret: %w", err)
-	}
-	if password == "" {
-		return errors.New("recovery.passwordSecret: the password is empty")
-	}
-	if p.digest != nil {
-		same := argon2.IDKey([]byte(password), p.salt, argonTime, argonMemory, argonThreads, argonLength)
-		if subtle.ConstantTimeCompare(same, p.digest) == 1 {
-			return nil
-		}
-	}
-	salt := make([]byte, 16)
-	_, _ = rand.Read(salt)
-	p.salt = salt
-	p.digest = argon2.IDKey([]byte(password), salt, argonTime, argonMemory, argonThreads, argonLength)
-	return nil
 }
 
 // Kind implements [Recovery].
@@ -315,30 +239,26 @@ func (p *PasswordRecovery) Kind() string { return "password" }
 func (p *PasswordRecovery) Prompt() Prompt {
 	return Prompt{
 		Label:   "Recovery password",
-		Intro:   "Present the password this hub printed when it started.",
+		Intro:   "The recovery account's username is recovery. Its password is proved in this page and never sent.",
 		Caution: "This grants operator on this hub. Never give it to anyone who asks for it.",
 	}
 }
 
-// Verify implements [Recovery].
-func (p *PasswordRecovery) Verify(ctx context.Context, proof string) (string, error) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	source := recoverySource(ctx)
-	if p.refused.Blocked(source) {
-		return "", ErrRecoveryThrottled
+// lookup is the one account the console offers: the recovery account.
+func (p *PasswordRecovery) lookup() srpauth.Lookup {
+	return func(ctx context.Context, username string) (srp.Credential, bool, error) {
+		if username != srpauth.RecoveryUser || p.Source == nil {
+			return srp.Credential{}, false, nil
+		}
+		cred, err := p.Source(ctx)
+		if errors.Is(err, srpauth.ErrNoCredential) {
+			return srp.Credential{}, false, nil
+		}
+		if err != nil {
+			return srp.Credential{}, false, err
+		}
+		return cred, true, nil
 	}
-	if err := p.settle(ctx); err != nil {
-		return "", err
-	}
-	got := argon2.IDKey([]byte(proof), p.salt, argonTime, argonMemory, argonThreads, argonLength)
-	if subtle.ConstantTimeCompare(got, p.digest) != 1 {
-		p.refused.Refused(source)
-		return "", ErrRecoveryRefused
-	}
-	p.refused.Accepted(source)
-	return "recovery", nil
 }
 
 // cheapWindow is how often a refusal that costs nothing is recorded.

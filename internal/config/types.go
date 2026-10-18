@@ -109,6 +109,12 @@ type (
 		// LoginSecret (`passwordSecret`) names the recovery password, for a hub that is not
 		// in a cluster: `recovery/password` in the layout.
 		LoginSecret string `json:"passwordSecret,omitempty"`
+		// VerifierSecret (`verifierSecret`) names the recovery account's SRP
+		// verifier (`recovery/verifier`): a salt and a verifier, not the
+		// password (docs/decisions/0076). Outside a cluster it is what the
+		// password sign-in checks against; unset derives one from the password
+		// at start, where the secrets are not layout v5's.
+		VerifierSecret string `json:"verifierSecret,omitempty"`
 		// Generation names this configuration's decision to have recovery on.
 		// An operator who signs in through the identity provider may disable
 		// recovery from the console; that is recorded in the State against the
@@ -117,6 +123,17 @@ type (
 		// back is a deliberate change of this value (any other string).
 		// Unset is the generation "".
 		Generation string `json:"generation,omitempty"`
+	}
+
+	// Conformance is the test account of the OpenID conformance harness: a
+	// non-privileged subject that signs in with a username and password, only
+	// to clients the policy marks `harness`, and only while Enabled
+	// (docs/decisions/0076). Off unless the document turns it on.
+	Conformance struct {
+		Enabled bool `json:"enabled,omitempty"`
+		// VerifierSecret (`verifierSecret`) names the account's SRP verifier
+		// (`conformance/verifier`).
+		VerifierSecret string `json:"verifierSecret,omitempty"`
 	}
 
 	// Forwarded is a sign-in an authenticating proxy in front of the console
@@ -491,6 +508,7 @@ type Serve struct {
 	Directory   *Directory   `json:"directory,omitempty"`
 	Exchange    *Exchange    `json:"exchange,omitempty"`
 	Recovery    *Recovery    `json:"recovery,omitempty"`
+	Conformance *Conformance `json:"conformance,omitempty"`
 	Login       *Login       `json:"login,omitempty"`
 	Console     *Console     `json:"console,omitempty"`
 	OAuthClient *OAuthClient `json:"oauthClient,omitempty"`

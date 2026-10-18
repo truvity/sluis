@@ -11,12 +11,16 @@ import (
 	"github.com/truvity/sluis/storage/logtest"
 
 	"github.com/truvity/sluis/internal/secrets"
+	"github.com/truvity/sluis/internal/server"
+	"github.com/truvity/sluis/internal/srpauth"
+	"github.com/truvity/sluis/srp"
 )
 
 // Outside a cluster the password is the secret recovery.passwordSecret names
 // when it names one: a platform keeps it in its secret store, so it is the same
-// one across restarts rather than one generated per start.
-func TestTheRecoveryPasswordIsReadFromItsSecret(t *testing.T) {
+// one across restarts rather than one generated per start. The hub derives the
+// recovery account's verifier from it and compares nothing with a password.
+func TestTheRecoveryCredentialIsDerivedFromItsPasswordSecret(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	log := slog.New(slog.DiscardHandler)
@@ -37,11 +41,13 @@ func TestTheRecoveryPasswordIsReadFromItsSecret(t *testing.T) {
 	if recovery.Kind() != "password" {
 		t.Errorf("kind = %q", recovery.Kind())
 	}
-	if _, err = recovery.Verify(ctx, "a-long-generated-password"); err != nil {
-		t.Errorf("the file's password was refused: %v", err)
+	got, err := recovery.(*server.PasswordRecovery).Source(ctx)
+	if err != nil {
+		t.Fatalf("the file's password gave no credential: %v", err)
 	}
-	if _, err = recovery.Verify(ctx, "something-else"); err == nil {
-		t.Error("another password was accepted")
+	want := srp.Default.NewCredential(srpauth.RecoveryUser, "a-long-generated-password")
+	if string(got.Verifier) != string(want.Verifier) {
+		t.Error("the credential is not the one derived from the file's password")
 	}
 
 	// Turned off keeps the file and builds nothing; turning it on again is
@@ -55,7 +61,7 @@ func TestTheRecoveryPasswordIsReadFromItsSecret(t *testing.T) {
 	}
 
 	// Opening reads nothing, so a password that is empty or absent is refused
-	// by the first proof, naming the key.
+	// at the first use, naming the key.
 	if err = os.WriteFile(filepath.Join(dir, "recovery", "empty"), []byte(" \n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -64,9 +70,35 @@ func TestTheRecoveryPasswordIsReadFromItsSecret(t *testing.T) {
 		if err != nil || r == nil {
 			t.Fatalf("%s: opening read the password: %v, %v", name, r, err)
 		}
-		if _, err = r.Verify(ctx, "anything"); err == nil || !strings.Contains(err.Error(), "recovery.passwordSecret") {
-			t.Errorf("%s: a proof = %v, want a refusal naming the key", name, err)
+		if _, err = r.(*server.PasswordRecovery).Source(ctx); err == nil || !strings.Contains(err.Error(), "recovery.passwordSecret") {
+			t.Errorf("%s: a use = %v, want a refusal naming the key", name, err)
 		}
+	}
+}
+
+// A verifier the document names is read in place of the password: the hub holds
+// no password then.
+func TestANamedVerifierIsReadAndThePasswordIsNot(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	dir := t.TempDir()
+	src := secrets.File{Root: dir}
+	cred := srp.Default.NewCredential(srpauth.RecoveryUser, "pw")
+	if err := os.MkdirAll(filepath.Join(dir, "recovery"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "recovery", "verifier"), cred.Document(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// There is no password file at all.
+	r, err := openRecovery(ctx, Config{recoveryEnabled: true, recoveryLogin: "recovery/password", recoveryVerifier: "recovery/verifier"},
+		stores{}, src, nil, slog.New(slog.DiscardHandler))
+	if err != nil || r == nil {
+		t.Fatalf("openRecovery = %v, %v", r, err)
+	}
+	got, err := r.(*server.PasswordRecovery).Source(ctx)
+	if err != nil || string(got.Verifier) != string(cred.Verifier) {
+		t.Errorf("credential = %v, %v", got, err)
 	}
 }
 

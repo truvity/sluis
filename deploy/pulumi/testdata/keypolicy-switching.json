@@ -405,6 +405,32 @@
     },
     {
       "Action": [
+        "kms:Decrypt"
+      ],
+      "Condition": {
+        "ArnEquals": {
+          "aws:PrincipalArn": [
+            "arn:aws:iam::111122223333:role/sluis-old",
+            "arn:aws:iam::111122223333:role/sluis-staging-issuer"
+          ]
+        },
+        "StringEquals": {
+          "kms:EncryptionContext:PARAMETER_ARN": [
+            "arn:aws:ssm:eu-central-1:111122223333:parameter/sluis/staging/internal/oidc/recovery-password",
+            "arn:aws:ssm:eu-central-1:111122223333:parameter/sluis/staging/internal/oidc/conformance-password"
+          ],
+          "kms:ViaService": "ssm.eu-central-1.amazonaws.com"
+        }
+      },
+      "Effect": "Deny",
+      "Principal": {
+        "AWS": "*"
+      },
+      "Resource": "*",
+      "Sid": "SluisKeyDenyPasswords"
+    },
+    {
+      "Action": [
         "kms:CreateGrant",
         "kms:DisableKey",
         "kms:PutKeyPolicy",

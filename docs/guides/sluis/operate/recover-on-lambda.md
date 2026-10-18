@@ -8,19 +8,19 @@ Sign in with the recovery password on a Lambda installation when no directory ca
 
 - Lambda has no API server, so recovery is a password. The browser, cookie and `429` refusals of [lost operator access](lost-operator-access.md) apply here.
 
-- `sluispulumi.NewLambda` generates a 40-character password that an apply never rotates. It stores it as the SSM SecureString `/sluis/<instance>/internal/oidc/recovery-password`, and the service reads it at cold start and every five minutes. The `RecoveryPasswordParameter` output holds the name, never the value.
+- `sluispulumi.NewLambda` generates a 40-character password that an apply never rotates. It stores the password as the SSM SecureString `/sluis/<instance>/internal/oidc/recovery-password`, and a salt and verifier derived from it at `.../recovery-verifier`. The service reads only the verifier, and the page never sends the password ([ADR 0076](../../../decisions/0076-password-sign-in-is-srp-for-recovery-and-conformance-only.md)).
 
-- Without `recovery.passwordSecret` ([secrets](../../../reference/sluis/secrets.md#the-names)), recovery on Lambda logs an ERROR and builds nothing.
+- With no stored verifier, or no `recovery.verifierSecret` ([secrets](../../../reference/sluis/secrets.md#the-names)), every sign-in is refused.
 
-- Recovery is on by default, and the setup checklist shows *Turn off the recovery password* while it is.
+- Recovery is on by default; the setup checklist shows *Turn off the recovery password*.
 
 - Every attempt is recorded as `roster.recovery.signed_in` ([audit actions](../../../reference/sluis/audit-actions.md)). With the audit trail unwritable, no session is issued.
 
-- `API.KeepDefaultEndpoint: true` skips the custom domain's mutual TLS. Use it for a cutover acceptance run only. Ten refused attempts make one instance answer 429 for a minute, so consider capping reserved concurrency.
+- `API.KeepDefaultEndpoint: true` skips the custom domain's mutual TLS: for a cutover acceptance run only. Ten refused attempts make one instance answer 429 for a minute, so consider capping reserved concurrency.
 
 ## Steps
 
-1. Read the password. It is 40 characters.
+1. Read the password.
 
    ```sh
    # Refuses a terminal unless --show; --profile names an AWS profile.
@@ -33,7 +33,7 @@ Sign in with the recovery password on a Lambda installation when no directory ca
      --query Parameter.Value --output text | jq -r .value | base64 --decode
    ```
 
-2. Open `https://<issuer host>/console/login`, expand **Recovery sign-in** and paste the password. You sign in as `recovery`, an operator by construction. Use this page even when `console.client` sends everybody else to the issuer's page.
+2. Open `https://<issuer host>/console/login`, expand **Recovery sign-in**, type `recovery` and the password. You sign in as `recovery`, an operator by construction. Use this page even when `console.client` sends everybody else to the issuer's page.
 
 3. Fix the directory group, then turn recovery off. Sign in through your identity provider and press **Disable recovery** in Settings ([turn off recovery](turn-off-recovery.md)), or change the configuration. Read the Pulumi preview before the apply.
 

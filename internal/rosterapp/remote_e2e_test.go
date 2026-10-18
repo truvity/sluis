@@ -8,9 +8,11 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
+	"html"
 	"io"
 	"log/slog"
 	"net/http"
@@ -18,6 +20,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -55,6 +58,7 @@ import (
 	"github.com/truvity/sluis/internal/rosterapp"
 	slackconsole "github.com/truvity/sluis/internal/slackapp/console"
 	"github.com/truvity/sluis/policy"
+	"github.com/truvity/sluis/srp"
 )
 
 // The end-to-end remote mode of v1.76: the issuer runs with `github.remote`,
@@ -295,21 +299,67 @@ adapters:
 	return fn
 }
 
-// session signs in by the recovery password and returns the session cookie.
+// session signs in as the recovery account and returns the session cookie. The
+// password is proved the way the sign-in page's script proves it (SRP), and is
+// never sent.
 func (r *e2eRig) session() *http.Cookie {
 	r.t.Helper()
-	req := httptest.NewRequest(http.MethodPost, e2eMount+"/login/recovery", nil)
-	req.Header.Set("Authorization", "Bearer "+e2ePassword)
-	rec := httptest.NewRecorder()
-	r.handler.ServeHTTP(rec, req)
-	res := rec.Result()
-	defer func() { _ = res.Body.Close() }()
-	for _, c := range res.Cookies() {
-		if c.Value != "" && c.MaxAge >= 0 && strings.Contains(c.Name, "session") {
-			return c
+	cookies := map[string]string{}
+	send := func(req *http.Request) *httptest.ResponseRecorder {
+		for name, value := range cookies {
+			req.AddCookie(&http.Cookie{Name: name, Value: value})
+		}
+		rec := httptest.NewRecorder()
+		r.handler.ServeHTTP(rec, req)
+		for _, c := range rec.Result().Cookies() {
+			if c.Value == "" || c.MaxAge < 0 {
+				delete(cookies, c.Name)
+				continue
+			}
+			cookies[c.Name] = c.Value
+		}
+		return rec
+	}
+	page := send(httptest.NewRequest(http.MethodGet, e2eMount+"/login", nil))
+	found := regexp.MustCompile(`data-state="([^"]+)"`).FindStringSubmatch(page.Body.String())
+	if found == nil {
+		r.t.Fatalf("the sign-in page offers no password form: %d %s", page.Code, page.Body.String())
+	}
+	state := html.UnescapeString(found[1])
+	post := func(path string, body map[string]string) (int, map[string]string) {
+		raw, _ := json.Marshal(body)
+		req := httptest.NewRequest(http.MethodPost, e2eMount+path, bytes.NewReader(raw))
+		req.Header.Set("Content-Type", "application/json")
+		rec := send(req)
+		out := map[string]string{}
+		_ = json.Unmarshal(rec.Body.Bytes(), &out)
+		return rec.Code, out
+	}
+	code, begun := post("/login/srp/start", map[string]string{"state": state, "username": "recovery"})
+	if code != http.StatusOK {
+		r.t.Fatalf("recovery start = %d %v", code, begun)
+	}
+	salt, _ := hex.DecodeString(begun["salt"])
+	pub, _ := hex.DecodeString(begun["B"])
+	client, err := srp.Default.NewClient("recovery", e2ePassword, rand.Reader)
+	if err != nil {
+		r.t.Fatal(err)
+	}
+	m1, err := client.Respond(salt, pub)
+	if err != nil {
+		r.t.Fatal(err)
+	}
+	if code, done := post("/login/srp/finish", map[string]string{
+		"state": state, "handle": begun["handle"], "A": hex.EncodeToString(client.Public()), "M1": hex.EncodeToString(m1),
+	}); code != http.StatusOK {
+		r.t.Fatalf("recovery finish = %d %v", code, done)
+	}
+	for name, value := range cookies {
+		if strings.Contains(name, "session") {
+			return &http.Cookie{Name: name, Value: value}
 		}
 	}
-	r.t.Fatalf("recovery sign-in = %d, no session cookie: %v %s", rec.Code, res.Cookies(), rec.Body.String())
+	r.t.Fatalf("recovery sign-in left no session cookie: %v", cookies)
 	return nil
 }
 

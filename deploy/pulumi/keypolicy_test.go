@@ -80,7 +80,7 @@ func TestSluisKeyPolicyStatementList(t *testing.T) {
 		"SluisKeyRoleIssuer", "SluisKeyMinterIssuer",
 		"SluisKeyRoleRestore", "SluisKeyWriteAllRestore",
 		"SluisKeyExternalReaders", "SluisKeyAdminSeeds", "SluisKeyAdminReads", "SluisKeyBreakglass",
-		"SluisKeyDenyRestoreIdentity",
+		"SluisKeyDenyRestoreIdentity", "SluisKeyDenyPasswords",
 		"SluisKeyControlPlaneAdmins", "SluisKeyControlPlaneAdminsOnly",
 		"SluisKeySign", "SluisKeySignContextReserved", "SluisKeySignDirectPurposeOnly", "SluisKeySignDirectContextKeysOnly",
 	}

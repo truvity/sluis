@@ -50,6 +50,11 @@ func signedIn(read func(http.ResponseWriter, *http.Request) (issuer.SSOSession, 
 		// subject is whatever an identity provider said. A sign-in that
 		// was not made by recovery is a person, asked of the directory
 		// like any other, whatever its subject looks like.
+		// The conformance account is a test subject and never the console's: it
+		// is not recovery, and not a person the directory knows.
+		if session.How == issuer.ConformanceHow {
+			return access.Principal{}, false
+		}
 		if session.How == issuer.RecoveryHow {
 			account, ok := policy.ParseServiceAccountSubject(session.Identity)
 			if !ok {
