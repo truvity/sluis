@@ -819,6 +819,10 @@ func (s *Storage) AuthRequestByCode(ctx context.Context, code string) (op.AuthRe
 		return nil, err
 	}
 
+	if err = s.checkVerifier(ctx, request); err != nil {
+		return nil, err
+	}
+
 	return request, nil
 }
 

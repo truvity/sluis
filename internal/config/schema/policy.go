@@ -117,7 +117,11 @@ func clientSchema() m {
 		"signing_alg":            str("The algorithm its tokens are signed with, when it cannot verify the default: RS256, ES256 or ES384."),
 		"groups":                 groupsOverride(),
 		"groups_delimiter":       str("Rewrites `:` in its `groups` claim (docs/decisions/0015)."),
-		"session":                sessionClass("Its refresh chains", "Refused on an exchange client and, as `agent`, with `sign_in_exchange`."),
+		"pkce": m{
+			"enum":        []string{"required", "optional"},
+			"description": "Whether it must use PKCE (RFC 7636, RFC 9700 2.1.1): `required` refuses an authorization request with no S256 `code_challenge` and a code redeemed with no `code_verifier`. A public client is always `required` and refuses `optional`; absent is `optional` for a confidential client. Refused on an exchange client.",
+		},
+		"session": sessionClass("Its refresh chains", "Refused on an exchange client and, as `agent`, with `sign_in_exchange`."),
 	}, "kind")
 }
 

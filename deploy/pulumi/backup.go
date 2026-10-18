@@ -96,9 +96,9 @@ type ArchiveArgs struct {
 type ArchiveBucketArgs struct {
 	// Mode is the Object Lock mode of the default retention, and is REQUIRED:
 	// GOVERNANCE, which a role holding s3:BypassGovernanceRetention can shorten
-	// (what a bucket made before v1.78 has), or COMPLIANCE, which nobody can
+	// (what a bucket made before v1.77.0 has), or COMPLIANCE, which nobody can
 	// shorten (the root included) and needs AcknowledgeCompliance. Empty is
-	// refused (it was GOVERNANCE before v1.78): COMPLIANCE cannot be undone, and a
+	// refused (it was GOVERNANCE before v1.77.0): COMPLIANCE cannot be undone, and a
 	// default must not move the lock of a bucket that exists, since Pulumi applies
 	// a different Mode to the bucket's lock configuration.
 	Mode                  string
@@ -420,7 +420,7 @@ func (c *BackupCommon) plan(role string) (*backupPlan, error) {
 			}
 		case "":
 			return nil, errors.New("sluispulumi: Archive.Create.Mode is required: GOVERNANCE (a role with s3:BypassGovernanceRetention can shorten it; " +
-				"what a bucket made before v1.78 has) or COMPLIANCE (nobody can, and it needs AcknowledgeCompliance). Neither is a default: COMPLIANCE " +
+				"what a bucket made before v1.77.0 has) or COMPLIANCE (nobody can, and it needs AcknowledgeCompliance). Neither is a default: COMPLIANCE " +
 				"cannot be undone, and an empty mode must never move the lock of a bucket that exists")
 		default:
 			return nil, fmt.Errorf("sluispulumi: Archive.Create.Mode %q is GOVERNANCE or COMPLIANCE", c.Mode)
