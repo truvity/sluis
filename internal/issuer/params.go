@@ -23,9 +23,9 @@ var singleValuedParameters = []string{
 }
 
 // singleValuedPaths are the endpoints that read a form: the authorization,
-// token, revocation, introspection and end-session endpoints.
+// token, revocation and end-session endpoints.
 var singleValuedPaths = []string{
-	authorizePath, endSessionPath, "/token", "/oauth/token", "/revoke", "/introspect", "/oauth/introspect",
+	authorizePath, endSessionPath, "/token", "/oauth/token", "/revoke",
 }
 
 // singleValued refuses, before the library parses anything, a request to a

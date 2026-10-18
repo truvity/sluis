@@ -83,7 +83,8 @@ func phraseOf(code string) string {
 	case string(oidc.ServerError):
 		return refusal.ServerError
 	case string(oidc.InvalidRequest), string(oidc.UnsupportedGrantType),
-		string(oidc.RequestNotSupported), "unsupported_response_type":
+		string(oidc.RequestNotSupported), "unsupported_response_type",
+		errRequestURINotSupported, errRegistrationNotSupported:
 		return refusal.InvalidRequest
 	}
 	return refusal.NotAuthorised

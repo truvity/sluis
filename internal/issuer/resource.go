@@ -173,6 +173,16 @@ type clientLookup func(ctx context.Context, clientID string) (op.Client, error)
 // port for a native client, an exact match otherwise) is the same here as
 // where the library would have sent the code.
 func targetRedirect(r *http.Request, clients clientLookup, description string) (string, bool) {
+	return errorRedirect(r, clients, string(oidc.InvalidTarget), description,
+		r.Form.Get("response_mode") == string(oidc.ResponseModeFragment))
+}
+
+// errorRedirect is the error response of an authorization request, built from
+// what the client registered, and false when the request has no redirect URI
+// it may be sent to. Every refusal made in front of the library that the
+// specifications return to the client goes through it, so none of them can
+// redirect to an address nobody registered.
+func errorRedirect(r *http.Request, clients clientLookup, code, description string, inFragment bool) (string, bool) {
 	clientID := r.Form.Get("client_id")
 	redirect := r.Form.Get("redirect_uri")
 	if clientID == "" || redirect == "" {
@@ -191,12 +201,12 @@ func targetRedirect(r *http.Request, clients clientLookup, description string) (
 	}
 
 	result := url.Values{}
-	result.Set("error", string(oidc.InvalidTarget))
+	result.Set("error", code)
 	result.Set("error_description", description)
 	if state := r.Form.Get("state"); state != "" {
 		result.Set("state", state)
 	}
-	if r.Form.Get("response_mode") == string(oidc.ResponseModeFragment) {
+	if inFragment {
 		target.Fragment = result.Encode()
 		return target.String(), true
 	}

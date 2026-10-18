@@ -35,10 +35,10 @@ import (
 // JWKS, the token endpoint with its grants, revocation and end-session.
 //
 // Everything protocol-shaped comes from the library. What this repository
-// contributes is the storage beneath it, the policy that decides, and one
-// endpoint the library does not have — dynamic client registration, whose
-// rule (a ServiceAccount token, a per-namespace host pattern) is ours
-// anyway.
+// contributes is the storage beneath it, the policy that decides, and the
+// checks in front of it that [HandlerWithSignIn] lists. Dynamic client
+// registration is not served: an origin named in `client_documents` is
+// admitted through Client ID Metadata Documents instead, with nothing stored.
 func Provider(iss *Issuer, storage op.Storage) (*op.Provider, error) {
 	var cryptoKey [32]byte
 	if _, err := rand.Read(cryptoKey[:]); err != nil {
@@ -59,8 +59,14 @@ func Provider(iss *Issuer, storage op.Storage) (*op.Provider, error) {
 		SupportedScopes: []string{
 			"openid", "profile", "email", "offline_access",
 		},
+		// Every claim an ID token or the userinfo response carries. The
+		// fixed ones first (OpenID Connect Core 2, 3.1.3.6, 5.1), then the
+		// issuer's own: `client_id`, and `groups` beside whatever the
+		// policy's claim fragments add, which a list cannot name.
 		SupportedClaims: []string{
-			"sub", "aud", "exp", "iat", "iss", "email", "email_verified", "name", "groups",
+			"iss", "sub", "aud", "exp", "iat", "auth_time", "nonce", "acr", "amr", "azp", "at_hash", "sid",
+			"email", "email_verified", "name", "given_name", "family_name", "preferred_username",
+			"client_id", "groups",
 		},
 		// Back-channel logout IS served, per client and opt-in: a client
 		// that declares no `backchannel_logout_uri` is never contacted.
@@ -274,11 +280,12 @@ func HandlerWithSignIn(iss *Issuer, storage op.Storage, signIn SignInDeps) (http
 	// it, so none of them can see one value where the library takes another.
 	// The installation-token claims below take their client from HTTP Basic
 	// and read no parameter the library also reads.
-	protocol := bindAuthorization(signIn, singleValued(challenges(refusedAuthorize(defaultScope(resourceIndicators(
-		iss.Policy().Resource, storage.GetClientByClientID, requirePKCE(iss.Policy, presentedClients(
-			endSession(signIn, truthfulDiscovery(
-				iss.Config().URL, func() bool { return iss.Policy().ClientDocuments().Enabled() },
-				refusalFilter(provider)))))))))))
+	protocol := withoutUnserved(bindAuthorization(signIn, singleValued(challenges(refusedAuthorize(
+		authorizeSurface(storage.GetClientByClientID, defaultScope(resourceIndicators(
+			iss.Policy().Resource, storage.GetClientByClientID, requirePKCE(iss.Policy, presentedClients(
+				endSession(signIn, truthfulDiscovery(
+					iss.Config().URL, func() bool { return iss.Policy().ClientDocuments().Enabled() },
+					refusalFilter(provider)))))))))))))
 	// An installation token for a catalogue App is claimed in front of the
 	// library, which can only mint tokens this issuer signs. The storage
 	// is the concrete one wherever a deployment runs; a test's stand-in
@@ -751,6 +758,10 @@ func truthfulDiscovery(issuerURL string, documentClientsEnabled func() bool, nex
 		// client that talks to several servers can tell which one sent
 		// it.
 		doc["authorization_response_iss_parameter_supported"] = true
+		// The code flow answers in the query and nowhere else; see
+		// [servedResponseModes]. The library omits the member, which
+		// OpenID Connect Discovery 3 reads as `query` and `fragment`.
+		doc["response_modes_supported"] = servedResponseModes
 		// The library advertises a device endpoint from its own defaults,
 		// whatever the configuration says. The grant is gone,
 		// so the address of it is a promise to nobody.
