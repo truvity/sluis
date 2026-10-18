@@ -401,7 +401,7 @@ func TestRevocationEndsTheSession(t *testing.T) {
 	sessions := iss.Sessions()
 
 	if _, err := sessions.Record(t.Context(), issuer.Opened{
-		Identity: "ada@north.example", ClientID: "argocd", How: issuer.HowCode, Token: "refresh-1",
+		Identity: "ada@north.example", ClientID: "local-dev", How: issuer.HowCode, Token: "refresh-1",
 	}); err != nil {
 		t.Fatalf("record: %v", err)
 	}
