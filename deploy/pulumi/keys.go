@@ -39,8 +39,9 @@ type KeysArgs struct {
 	Sign string
 	// Secrets is the alias of the key the SSM secrets store encrypts its
 	// SecureString parameters with: the service document's `secrets.kmsKeyId`,
-	// passed as KeyId on PutParameter. Optional: unset, the secrets use
-	// ParameterKeyArn or the AWS-managed key. Exclusive with ParameterKeyArn.
+	// passed as KeyId on PutParameter. Required unless ParameterKeyArn names the
+	// key (the AWS-managed key is refused: any role that can read a parameter can
+	// decrypt it). Exclusive with ParameterKeyArn.
 	// SSM encrypts under the context {PARAMETER_ARN}, so the grant is through SSM
 	// only, for the installation's parameters, and has no instance/purpose context.
 	Secrets string
@@ -76,7 +77,7 @@ func (k *KeysArgs) validate() error {
 
 // parameterKeyID is the key the parameters the library creates are encrypted
 // with, as SSM takes it in KeyId: the alias of Keys.Secrets, else ParameterKeyArn,
-// else "" (the AWS-managed key). It is the same key the function's own writes use
+// else "" (the AWS-managed key, which LambdaArgs.validate refuses). It is the same key the function's own writes use
 // (the document's `secrets.kmsKeyId`), so one estate key covers both.
 func parameterKeyID(a *LambdaArgs) string {
 	if a.Keys != nil && a.Keys.Secrets != "" {
@@ -235,13 +236,23 @@ type KeyPolicyArgs struct {
 	// ExternalReaders are the ARNs of the roles that read the exported documents
 	// (the External Secrets readers). They decrypt `external/*` and nothing else.
 	ExternalReaders []string
-	// Admins are the operator's roles, as ARN patterns (`*` allowed, so an SSO
-	// role with a hash suffix is a pattern). They seed parameters and read the two
+	// Admins are the operator's roles, as role ARNs (a `*` only in the hash of an
+	// SSO role's name, see CheckKeyAdmin). They seed parameters and read the two
 	// the stack manages (the state secret and the recovery password).
 	Admins []string
-	// Breakglass are the emergency roles, as ARN patterns: the function's
-	// operations on every parameter, through SSM.
+	// Breakglass are the emergency roles, as role ARNs (as Admins): the
+	// function's operations on every parameter, through SSM. They are also key
+	// administrators (KeyAdmins).
 	Breakglass []string
+	// KeyAdmins are the roles that hold the key's CONTROL PLANE: its policy,
+	// grants, disabling and deletion (KeyControlPlaneActions). Every other
+	// principal is denied those, however its IAM policy reads, and the account
+	// root is no exception. Include the role that applies the stack, which changes
+	// the key policy on every apply. Breakglass is added to them. At least one
+	// of the two is required: the key policy would otherwise leave the control
+	// plane to every IAM principal with an allow, which is how a role that was
+	// only to operate the installation could rewrite the policy and use the key.
+	KeyAdmins []string
 	// DenyOtherActions adds the deny that holds each sign role to the key's three
 	// calls and DescribeKey. Off by default: it is a statement about the sluis
 	// roles only, but a role an estate shares with another usage would lose it.
@@ -256,7 +267,8 @@ type KeyPolicyArgs struct {
 	BackupArchive, RestoreArchive bool
 }
 
-// The Sids of the statements SluisKeyPolicyStatements returns. All start with
+// The Sids of the statements SluisKeyPolicyStatements returns, besides the
+// two of KeyControlPlaneStatements. All start with
 // `SluisKey`; the role names are camel-cased into the Sid.
 const (
 	sidKeyRolePrefix       = "SluisKeyRole"
@@ -310,6 +322,12 @@ const (
 //     recovery password and (with a backup role on layout v5) the restore
 //     identity, which the stack reads back on every refresh;
 //   - SluisKeyBreakglass: the function's operations through SSM;
+//   - SluisKeyControlPlaneAdmins and SluisKeyControlPlaneAdminsOnly: the key's
+//     policy, grants, disabling and deletion (KeyControlPlaneActions) are the
+//     administrators' alone (KeyAdmins and Breakglass), denied to every other
+//     principal, the account root's delegation included. The one catch-all of
+//     these statements, and the only one: it is about the key's control plane and
+//     never about its use;
 //   - SluisKeySign: the roles that host oidc, directly (no service), Encrypt,
 //     Decrypt and GenerateDataKey under exactly {instance, purpose: sign}
 //     (decision D8), and three denies that hold the sign purpose to them:
@@ -319,14 +337,18 @@ const (
 //     SluisKeyRolesNothingElse too.
 //
 // Composition. The statements are about sluis's principals and the sign
-// purpose; none is a catch-all (no Deny on a principal other than a sluis role,
-// no NotPrincipal, no Deny without a sluis condition), so an estate's other
-// usages of the same key (a seal, Pulumi secrets, sops, a state bucket) keep
-// working. The estate concatenates its own statements with these and passes the
-// lists to KeyPolicyDocument, which refuses a repeated Sid and a policy over
-// KMS's size limit. The estate keeps what is its own: key administration, its
-// other usages, and a "nothing else" deny over its own principals, which must
-// name the sluis roles among the principals it lets through.
+// purpose; the one deny that is not about a sluis role is the control plane's
+// (SluisKeyControlPlaneAdminsOnly: the key policy, grants, disabling and
+// deletion, to the administrators and nobody else), and it is about no use of
+// the key, so an estate's other usages of the same key (a seal, Pulumi secrets,
+// sops, a state bucket) keep working. The estate concatenates its own statements
+// with these and passes the lists to KeyPolicyDocument, which refuses a repeated
+// Sid and a policy over KMS's size limit. The estate keeps what is its own: the
+// root statement that enables IAM (which should no longer grant the five
+// control-plane actions to every principal: for the upkeep alone, see
+// KeyControlPlaneStatements), its other usages, and a "nothing else" deny over
+// its own principals, which must name the sluis roles among the principals it
+// lets through.
 func SluisKeyPolicyStatements(a KeyPolicyArgs) ([]map[string]any, error) {
 	if err := a.validate(); err != nil {
 		return nil, err
@@ -476,6 +498,12 @@ func SluisKeyPolicyStatements(a KeyPolicyArgs) ([]map[string]any, error) {
 		d["Action"] = []string{kmsDecrypt}
 		st = append(st, d)
 	}
+	// The control plane is the administrators' alone.
+	cp, err := KeyControlPlaneStatements(a.Account, append(append([]string(nil), a.KeyAdmins...), a.Breakglass...))
+	if err != nil {
+		return nil, fmt.Errorf("KeyPolicyArgs.KeyAdmins: %w", err)
+	}
+	st = append(st, cp...)
 	if len(signRoles) > 0 {
 		signRoles = sortedStrings(signRoles)
 		actions := []string{kmsEncrypt, kmsDecrypt, kmsGenerateDK}
@@ -572,6 +600,13 @@ func (a KeyPolicyArgs) validate() error {
 		if strings.ContainsAny(v, "*?") {
 			return fmt.Errorf("sluispulumi: KeyPolicyArgs.ExternalReaders needs exact role ARNs, got %q", v)
 		}
+	}
+	if err := errors.Join(
+		checkKeyAdmins("KeyPolicyArgs.Admins", a.Admins),
+		checkKeyAdmins("KeyPolicyArgs.Breakglass", a.Breakglass),
+		checkKeyAdmins("KeyPolicyArgs.KeyAdmins", a.KeyAdmins),
+	); err != nil {
+		return err
 	}
 	return nil
 }

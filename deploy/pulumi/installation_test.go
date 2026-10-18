@@ -47,6 +47,7 @@ func withInstallation(in *sluisconfig.Installation, more func(*arp.LambdaArgs)) 
 // `sluisctl render` shows an estate is what the function reads.
 func TestAnInstallationIsRenderedIntoTheLayerByTheRootRenderer(t *testing.T) {
 	in := exampleInstallation(t)
+	in.Secrets = &sluisconfig.Secrets{KMSKeyID: paramKey} // the key is the installation's to say
 	service, policy, err := sluisconfig.Render(in)
 	if err != nil {
 		t.Fatal(err)

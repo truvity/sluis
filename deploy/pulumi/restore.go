@@ -82,8 +82,8 @@ func (r RestoreInvokers) validate() error {
 		}
 		for _, a := range arns {
 			switch {
-			case !strings.HasPrefix(a, "arn:") || !strings.Contains(a, ":role/"):
-				errs = append(errs, fmt.Errorf("RestoreInvokers: %q is not the ARN of a role: a wildcard, an account or a user is refused", a))
+			case !strings.HasPrefix(a, "arn:") || !strings.Contains(a, ":role/") || strings.ContainsAny(a, "*?"):
+				errs = append(errs, fmt.Errorf("RestoreInvokers: %q is not the ARN of one role: a wildcard, an account or a user is refused", a))
 			case seen[a] != "":
 				errs = append(errs, fmt.Errorf("RestoreInvokers: %q is both %s and %s: the alias is the class", a, seen[a], class))
 			}

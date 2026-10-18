@@ -164,10 +164,12 @@ func (a *LambdaArgs) viewerRoles() ([]string, error) {
 // KeyPolicyOptions are what the estate adds to the statements the library
 // renders for its own roles.
 type KeyPolicyOptions struct {
-	// ExternalReaders, Admins, Breakglass and DenyOtherActions are those of KeyPolicyArgs.
+	// ExternalReaders, Admins, Breakglass, KeyAdmins and DenyOtherActions are those
+	// of KeyPolicyArgs. KeyAdmins or Breakglass is required.
 	ExternalReaders  []string
 	Admins           []string
 	Breakglass       []string
+	KeyAdmins        []string
 	DenyOtherActions bool
 	// ReaderStatements are the key statements of [ExternalReaderRole]s
 	// (ExternalReaderRole.KeyStatement), merged after the library's.
@@ -185,8 +187,9 @@ func (a *LambdaArgs) keyPolicyStatements(o KeyPolicyOptions) ([]map[string]any, 
 	}
 	st, err := SluisKeyPolicyStatements(KeyPolicyArgs{
 		Region: a.Region, Account: a.AccountID, Modules: ModuleSet{Instance: a.Instance, Tables: a.TableNames}, Layout: a.Layout,
-		Roles: roles, ExternalReaders: o.ExternalReaders, Admins: o.Admins, Breakglass: o.Breakglass, DenyOtherActions: o.DenyOtherActions,
-		BackupArchive: o.BackupArchive, RestoreArchive: o.RestoreArchive,
+		Roles: roles, ExternalReaders: o.ExternalReaders, Admins: o.Admins, Breakglass: o.Breakglass, KeyAdmins: o.KeyAdmins,
+		DenyOtherActions: o.DenyOtherActions,
+		BackupArchive:    o.BackupArchive, RestoreArchive: o.RestoreArchive,
 	})
 	if err != nil {
 		return nil, err

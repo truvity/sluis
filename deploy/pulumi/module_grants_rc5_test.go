@@ -241,7 +241,7 @@ func TestNoModuleRoleHoldsTheMinterForItsBlobCredentials(t *testing.T) {
 	mutate := func(a *arp.LambdaArgs) {
 		noDomain(a)
 		a.ParameterKeyArn = paramKey
-		a.Modules = map[string]arp.ModuleArgs{"github": {Document: githubWithPresetBlobs}}
+		a.Modules = map[string]arp.ModuleArgs{"github": {Document: githubWithPresetBlobs + "secrets:\n  kmsKeyId: " + paramKey + "\n"}}
 	}
 	rec, _ := mustLambda(t, v5Estate(mutate))
 	for role, st := range rolePolicies(t, rec) {
@@ -271,7 +271,7 @@ func TestNoModuleRoleHoldsTheMinterForItsBlobCredentials(t *testing.T) {
 			t.Errorf("key role %s: MinterRefs %v, OpensPresetBlobs %v", r.Role.Name, r.MinterRefs, r.OpensPresetBlobs)
 		}
 	}
-	ks, err := a.KeyPolicyStatements(arp.KeyPolicyOptions{})
+	ks, err := a.KeyPolicyStatements(arp.KeyPolicyOptions{KeyAdmins: []string{kpEstateKeyAdmin}})
 	if err != nil {
 		t.Fatal(err)
 	}

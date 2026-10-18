@@ -53,7 +53,7 @@ func roleShapes(t *testing.T) map[string]struct {
 // The role lists of RoleArgs are those of the full args: the same principals
 // from just the names.
 func TestRoleArgsAnswerWhatTheFullArgsAnswer(t *testing.T) {
-	opts := arp.KeyPolicyOptions{Admins: []string{arnp + "iam::" + account + ":role/admin"}, DenyOtherActions: true}
+	opts := arp.KeyPolicyOptions{Admins: []string{arnp + "iam::" + account + ":role/admin"}, KeyAdmins: []string{kpEstateKeyAdmin}, DenyOtherActions: true}
 	for name, sh := range roleShapes(t) {
 		full, narrow := sh.full, sh.min
 		fs, ferr := full.Senders()
@@ -174,11 +174,11 @@ func TestDeprecatedArchiveKeyPolicyOptionsAddNothing(t *testing.T) {
 		}
 		return out
 	}
-	plain, err := sh.min.KeyPolicyStatements(arp.KeyPolicyOptions{})
+	plain, err := sh.min.KeyPolicyStatements(arp.KeyPolicyOptions{KeyAdmins: []string{kpEstateKeyAdmin}})
 	if err != nil || len(sids(plain)) != 0 {
 		t.Fatalf("without the option: %v (%v)", sids(plain), err)
 	}
-	o := arp.KeyPolicyOptions{BackupArchive: true, RestoreArchive: true}
+	o := arp.KeyPolicyOptions{KeyAdmins: []string{kpEstateKeyAdmin}, BackupArchive: true, RestoreArchive: true}
 	fromRoles, err := sh.min.KeyPolicyStatements(o)
 	if err != nil {
 		t.Fatal(err)

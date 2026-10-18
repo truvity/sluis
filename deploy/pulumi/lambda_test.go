@@ -109,6 +109,9 @@ func sha(t *testing.T, path string) string {
 	return hex.EncodeToString(sum[:])
 }
 
+// testKeyAdmin administers the keys the library creates in these tests.
+var testKeyAdmin = arnp + "iam::" + account + ":role/key-admin"
+
 const minimalPolicy = "apiVersion: sluis.truvity.github.io/policy/v2\ngroups:\n  all:access-roster:operator: {}\n"
 
 type estate struct {
@@ -121,6 +124,8 @@ type estate struct {
 	noSigningAlias      bool // leave SigningKeyAlias empty on the legacy path
 	noRS256Alias        bool // leave SigningKeyRS256Alias empty on the legacy path
 	noWrappedAlias      bool // leave WrappedSigning.KeyAlias empty
+	noParameterKey      bool // leave the secrets without a customer key
+	noKeyAdmins         bool // leave the library-created keys without administrators
 	keepDefaultEndpoint bool
 	mutate              func(*arp.LambdaArgs)
 }
@@ -191,6 +196,14 @@ func (e estate) args(t *testing.T) *arp.LambdaArgs {
 	if w := a.WrappedSigning; w != nil && w.KeyArn == nil && w.KeyAlias == "" && !e.noWrappedAlias {
 		w.KeyAlias = "alias/sluis-staging-wrapped"
 	}
+	// The keys the library creates have administrators, and the secrets a customer
+	// key: the library refuses to build without them.
+	if a.Keys == nil && (a.WrappedSigning == nil || a.WrappedSigning.KeyArn == nil) && len(a.KeyAdmins) == 0 && !e.noKeyAdmins {
+		a.KeyAdmins = []string{testKeyAdmin}
+	}
+	if a.ParameterKeyArn == "" && (a.Keys == nil || a.Keys.Secrets == "") && !e.noParameterKey {
+		a.ParameterKeyArn = paramKey
+	}
 	return a
 }
 
@@ -249,6 +262,18 @@ const (
 )
 
 // rolePolicy is the grants of the function's one role.
+// withoutParamKey drops the installation's secrets key from a list of resources:
+// the role uses it through SSM, beside the key a test is about.
+func withoutParamKey(in []string) []string {
+	var out []string
+	for _, v := range in {
+		if v != paramKey {
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
 func rolePolicy(t *testing.T, rec *recorder) map[string][]string {
 	t.Helper()
 	return grants(statements(t, prop(rec.one(t, policyType, "staging-issuer-policy"), "policy").StringValue()))
@@ -932,7 +957,7 @@ func TestAPackageEntryOutsideTheRootIsRefused(t *testing.T) {
 
 func TestTheStateSecretIsGeneratedOnceAndKeptSecret(t *testing.T) {
 	key := arnp + "kms:" + region + ":" + account + ":key/params"
-	for _, k := range []string{"", key} {
+	for _, k := range []string{key} {
 		rec, _ := mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) { a.ParameterKeyArn = k }})
 		r := rec.one(t, "random:index/randomBytes:RandomBytes", "staging-state-secret")
 		if prop(r, "length").NumberValue() != 32 || prop(r, "keepers").HasValue() {
@@ -948,7 +973,7 @@ func TestTheStateSecretIsGeneratedOnceAndKeptSecret(t *testing.T) {
 		if !prop(p, "overwrite").BoolValue() {
 			t.Error("the parameter would refuse a value copied there first")
 		}
-		if got := prop(p, "keyId"); got.HasValue() != (k != "") || (k != "" && got.StringValue() != key) {
+		if got := prop(p, "keyId"); !got.HasValue() || got.StringValue() != key {
 			t.Errorf("keyId %v with ParameterKeyArn %q", prop(p, "keyId"), k)
 		}
 	}
@@ -1146,7 +1171,7 @@ func TestWrappedSigningReplacesTheAsymmetricKeysWithOneSymmetricKey(t *testing.T
 		t.Errorf("the role signs remotely: %v", g)
 	}
 	for _, a := range []string{"kms:GenerateDataKeyPairWithoutPlaintext", "kms:Decrypt"} {
-		if got := g[a]; !reflect.DeepEqual(got, []string{wantKey}) {
+		if got := withoutParamKey(g[a]); !reflect.DeepEqual(got, []string{wantKey}) {
 			t.Errorf("%s on %v", a, got)
 		}
 	}
@@ -1172,9 +1197,36 @@ func TestWrappedSigningReplacesTheAsymmetricKeysWithOneSymmetricKey(t *testing.T
 	for _, st := range statements(t, prop(k, "policy").StringValue()) {
 		byID[st["Sid"].(string)] = st
 	}
-	if root := byID["EnableIAMPolicies"]; root == nil || root["Effect"] != "Allow" || root["Action"] != "kms:*" ||
-		!reflect.DeepEqual(root["Principal"], map[string]any{"AWS": arnp + "iam::" + account + ":root"}) {
+	// The root enables IAM for the key's use and upkeep, and not for its control
+	// plane: the policy, grants, disabling and deletion are the administrators'.
+	root := byID["EnableIAMPolicies"]
+	if root == nil || root["Effect"] != "Allow" || !reflect.DeepEqual(root["Principal"], map[string]any{"AWS": arnp + "iam::" + account + ":root"}) {
 		t.Errorf("admin statement: %v", root)
+	} else {
+		for _, a := range strs(root["Action"]) {
+			if a == "kms:*" || slices.Contains(arp.KeyControlPlaneActions, a) || strings.HasPrefix(a, "kms:Create") && a != "kms:CreateAlias" ||
+				strings.HasPrefix(a, "kms:Put") {
+				t.Errorf("the root statement grants %s: %v", a, root["Action"])
+			}
+		}
+		for _, a := range []string{"kms:Decrypt", "kms:Encrypt", "kms:GenerateDataKey*", "kms:DescribeKey"} {
+			if !slices.Contains(strs(root["Action"]), a) {
+				t.Errorf("the root statement does not enable %s: %v", a, root["Action"])
+			}
+		}
+	}
+	wantAdmins := []any{testKeyAdmin}
+	if allow := byID["SluisKeyControlPlaneAdmins"]; allow == nil || allow["Effect"] != "Allow" ||
+		!reflect.DeepEqual(allow["Condition"], map[string]any{"ArnLike": map[string]any{"aws:PrincipalArn": wantAdmins}}) ||
+		!reflect.DeepEqual(strs(allow["Action"]), arp.KeyControlPlaneActions) {
+		t.Errorf("the administrators' allow: %v", allow)
+	}
+	if deny := byID["SluisKeyControlPlaneAdminsOnly"]; deny == nil || deny["Effect"] != "Deny" ||
+		!reflect.DeepEqual(strs(deny["Action"]), arp.KeyControlPlaneActions) ||
+		!reflect.DeepEqual(deny["Condition"], map[string]any{
+			"ArnNotLike": map[string]any{"aws:PrincipalArn": wantAdmins}, "Bool": map[string]any{"aws:PrincipalIsAWSService": "false"},
+		}) {
+		t.Errorf("the control plane's deny: %v", deny)
 	}
 	for sid, want := range map[string]string{
 		"SluisSigningRolePurposeOnly":     "StringNotEquals",
@@ -1211,7 +1263,7 @@ func TestWrappedSigningReplacesTheAsymmetricKeysWithOneSymmetricKey(t *testing.T
 			t.Errorf("the signing role is denied the key ring: %v", st)
 		}
 	}
-	if len(byID) != 5 {
+	if len(byID) != 7 {
 		t.Errorf("key policy statements: %v", byID)
 	}
 }
@@ -1227,7 +1279,7 @@ func TestWrappedSigningWithAnExistingKeyCreatesNoKey(t *testing.T) {
 	if out["wrappedSigningKeyArn"] != app || out["wrappedSigningKeyAlias"] != "" {
 		t.Errorf("outputs: %v", out)
 	}
-	if got := rolePolicy(t, rec)["kms:Decrypt"]; !reflect.DeepEqual(got, []string{app}) {
+	if got := withoutParamKey(rolePolicy(t, rec)["kms:Decrypt"]); !reflect.DeepEqual(got, []string{app}) {
 		t.Errorf("the role decrypts with %v", got)
 	}
 }
@@ -1334,7 +1386,8 @@ func TestTheSharedKeyStatementsAreTheWholeOfTheKeyPolicyBeyondTheRootStatement(t
 	rec, _ := mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) { a.WrappedSigning = &arp.WrappedSigningArgs{} }})
 	k := rec.one(t, "aws:kms/key:Key", "staging-signing-key-wrapped")
 	got := statements(t, prop(k, "policy").StringValue())
-	if len(got) != 1+len(st) {
+	// The root statement, the two of the control plane, and exactly these.
+	if len(got) != 3+len(st) {
 		t.Errorf("the created key has %d statements", len(got))
 	}
 	// The three role denials name only the signing roles; the reserved denial is
@@ -1351,7 +1404,7 @@ func TestTheSharedKeyStatementsAreTheWholeOfTheKeyPolicyBeyondTheRootStatement(t
 // its VALUE is in no output: only the parameter's name is.
 func TestTheRecoveryPasswordIsGeneratedOnceStoredSecretAndMappedToAFile(t *testing.T) {
 	key := arnp + "kms:" + region + ":" + account + ":key/params"
-	for _, k := range []string{"", key} {
+	for _, k := range []string{key} {
 		rec, out := mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) { a.ParameterKeyArn = k }})
 		r := rec.one(t, "random:index/randomPassword:RandomPassword", "staging-recovery-password")
 		if prop(r, "length").NumberValue() < 32 || prop(r, "special").BoolValue() || prop(r, "keepers").HasValue() {
@@ -1368,7 +1421,7 @@ func TestTheRecoveryPasswordIsGeneratedOnceStoredSecretAndMappedToAFile(t *testi
 		if got := value.SecretValue().Element.StringValue(); strings.ContainsAny(got, "0O1lI") || len(got) != 40 {
 			t.Errorf("the stored password %q has a look-alike or the wrong length", got)
 		}
-		if got := prop(p, "keyId"); got.HasValue() != (k != "") || (k != "" && got.StringValue() != key) {
+		if got := prop(p, "keyId"); !got.HasValue() || got.StringValue() != key {
 			t.Errorf("keyId %v with ParameterKeyArn %q", prop(p, "keyId"), k)
 		}
 		for name, v := range out {

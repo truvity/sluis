@@ -175,3 +175,38 @@ func TestIssuerClientsScheduleIsConfigurable(t *testing.T) {
 		t.Error("v4 made the clients schedule")
 	}
 }
+
+// The scheduler's role is assumed by EventBridge Scheduler for this installation's
+// schedules only: aws:SourceAccount alone lets every schedule of the account ask
+// it to invoke its aliases.
+func TestTheSchedulersTrustNamesTheInstallationsSchedules(t *testing.T) {
+	check := func(t *testing.T, trust, prefix string) {
+		t.Helper()
+		sts := statements(t, trust)
+		if len(sts) != 1 {
+			t.Fatalf("trust: %s", trust)
+		}
+		cond := sts[0]["Condition"].(map[string]any)
+		if eq := cond["StringEquals"].(map[string]any); eq["aws:SourceAccount"] != account {
+			t.Errorf("source account: %v", cond)
+		}
+		want := arnp + "scheduler:" + region + ":" + account + ":schedule/default/" + prefix + "*"
+		if got := cond["ArnLike"].(map[string]any)["aws:SourceArn"]; got != want {
+			t.Errorf("source ARN = %v, want %s", got, want)
+		}
+	}
+	rec, _ := mustLambda(t, scheduled(v5Estate()))
+	check(t, prop(rec.one(t, "aws:iam/role:Role", "staging-scheduler-role"), "assumeRolePolicy").StringValue(), "sluis-")
+	for _, s := range rec.ofType(schedType) {
+		if !strings.HasPrefix(prop(s, "name").StringValue(), "sluis-") {
+			t.Errorf("schedule %s is outside the prefix its role trusts", prop(s, "name").StringValue())
+		}
+	}
+	brec, _ := mustBackup(t, nil)
+	check(t, prop(brec.one(t, "aws:iam/role:Role", "staging-backup-scheduler-role"), "assumeRolePolicy").StringValue(), "sluis-staging-backup-")
+	for _, s := range brec.ofType(schedType) {
+		if !strings.HasPrefix(prop(s, "name").StringValue(), "sluis-staging-backup-") {
+			t.Errorf("schedule %s is outside the prefix its role trusts", prop(s, "name").StringValue())
+		}
+	}
+}

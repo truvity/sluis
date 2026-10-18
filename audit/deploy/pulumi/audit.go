@@ -26,6 +26,8 @@ package auditpulumi
 
 import (
 	"fmt"
+	"regexp"
+	"strings"
 
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/cloudwatch"
@@ -155,12 +157,25 @@ func New(ctx *pulumi.Context, name string, args *Args, opts ...pulumi.ResourceOp
 	// gave New (pulumi.Provider, pulumi.Providers) or inherited. A stack with the
 	// default providers disabled has no other one. AccountID skips the lookup.
 	accountID := a.AccountID
-	if accountID == "" && (a.Writer.Secrets != nil || needState) {
+	// The observe reader's trust needs it too, unless an external id holds the
+	// principal whatever its account.
+	observeNeedsAccount := a.Observe != nil && a.Observe.TrustedPrincipalArn != nil && a.Observe.ExternalID == ""
+	if accountID == "" && (a.Writer.Secrets != nil || needState || notary || observeNeedsAccount) {
 		identity, err := aws.GetCallerIdentity(ctx, nil, child)
 		if err != nil {
 			return nil, fmt.Errorf("auditpulumi: the caller's account (pass the AWS provider with pulumi.Provider, or set Args.AccountID): %w", err)
 		}
 		accountID = identity.AccountId
+	}
+	// The notary's schedule is named in its scheduler role's trust (aws:SourceArn),
+	// which needs the schedule's region.
+	scheduleRegion := a.Region
+	if notary && scheduleRegion == "" {
+		r, err := aws.GetRegion(ctx, nil, child)
+		if err != nil {
+			return nil, fmt.Errorf("auditpulumi: the region for the scheduler's trust (pass the AWS provider with pulumi.Provider, or set Args.Region): %w", err)
+		}
+		scheduleRegion = r.Region
 	}
 	// What the writer may read of SSM, when its configuration names secrets.
 	var grant *secretGrant
@@ -449,7 +464,7 @@ func New(ctx *pulumi.Context, name string, args *Args, opts ...pulumi.ResourceOp
 		}, child); err != nil {
 			return nil, err
 		}
-		if schedule, err = newSchedule(ctx, name, a, notaryFn, notaryLive, tags, child); err != nil {
+		if schedule, err = newSchedule(ctx, name, a, scheduleRegion, accountID, notaryFn, notaryLive, tags, child); err != nil {
 			return nil, err
 		}
 	}
@@ -471,7 +486,7 @@ func New(ctx *pulumi.Context, name string, args *Args, opts ...pulumi.ResourceOp
 	empty := pulumi.String("").ToStringOutput()
 	observeArn, archiveWriterArn := empty, empty
 	if a.Observe != nil {
-		role, err := newObserveReader(ctx, name, a, refs, grantKeys, tags, child)
+		role, err := newObserveReader(ctx, name, a, accountID, refs, grantKeys, tags, child)
 		if err != nil {
 			return nil, err
 		}
@@ -719,11 +734,14 @@ func newArchive(ctx *pulumi.Context, name string, a *Args, st presetStore, keyAr
 	if _, err := s3.NewBucketPolicy(ctx, res, &s3.BucketPolicyArgs{
 		Bucket: bucket.ID(),
 		Policy: bucket.Arn.ApplyT(func(arn string) string {
-			return policyJSON(statement{
-				"Sid": "OnlyOverTLS", "Effect": "Deny", "Principal": "*", "Action": "s3:*",
-				"Resource":  []string{arn, arn + "/*"},
-				"Condition": map[string]any{"Bool": map[string]any{"aws:SecureTransport": "false"}},
-			})
+			return policyJSON(
+				statement{
+					"Sid": "OnlyOverTLS", "Effect": "Deny", "Principal": "*", "Action": "s3:*",
+					"Resource":  []string{arn, arn + "/*"},
+					"Condition": map[string]any{"Bool": map[string]any{"aws:SecureTransport": "false"}},
+				},
+				ArchiveLockGuard(arn, ar.BreakglassRoleArns),
+			)
 		}).(pulumi.StringOutput),
 	}, opts...); err != nil {
 		return nil, err
@@ -976,7 +994,8 @@ func newFunction(ctx *pulumi.Context, s functionSpec, a *Args, tags pulumi.Strin
 		LoggingConfig: &lambda.FunctionLoggingConfigArgs{
 			LogFormat: pulumi.String("Text"), LogGroup: logs.Name,
 		},
-		Tags: tags,
+		Tags:                 tags,
+		CodeSigningConfigArn: codeSigning(a.CodeSigningConfigArn),
 		// No VpcConfig: the functions run outside a VPC (a decision of the AWS design). They
 		// reach S3, DynamoDB, SQS and KMS over the public regional endpoints with
 		// the role's credentials, and the OTLP door over the internet.
@@ -1040,9 +1059,9 @@ func notaryFiles(name string, a *Args) (map[string]string, error) {
 // invoke that one function. It does not retry: a run that failed is the Errors
 // alarm's, and the next run seals whatever is missing, because a run is
 // idempotent.
-func newSchedule(ctx *pulumi.Context, name string, a *Args, fn *lambda.Function, live *lambda.Alias, tags pulumi.StringMap,
+func newSchedule(ctx *pulumi.Context, name string, a *Args, region, account string, fn *lambda.Function, live *lambda.Alias, tags pulumi.StringMap,
 	opts ...pulumi.ResourceOption) (*scheduler.Schedule, error) {
-	role, err := newRole(ctx, name+"-scheduler", a.RolePath, assumeRoleJSON("scheduler.amazonaws.com"), tags, opts...)
+	role, err := newRole(ctx, name+"-scheduler", a.RolePath, schedulerTrust(region, account, name+"-notary"), tags, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1077,7 +1096,7 @@ func newSchedule(ctx *pulumi.Context, name string, a *Args, fn *lambda.Function,
 // newObserveReader is the role audit-observe assumes to follow the archive: from
 // another account (a principal), from a Kubernetes workload (IRSA or EKS Pod
 // Identity), or any of them that are given.
-func newObserveReader(ctx *pulumi.Context, name string, a *Args, refs []bucketRef, archiveKeyArns []string, tags pulumi.StringMap,
+func newObserveReader(ctx *pulumi.Context, name string, a *Args, accountID string, refs []bucketRef, archiveKeyArns []string, tags pulumi.StringMap,
 	opts ...pulumi.ResourceOption) (*iam.Role, error) {
 	o := a.Observe
 	principal := pulumi.String("").ToStringOutput()
@@ -1104,6 +1123,9 @@ func newObserveReader(ctx *pulumi.Context, name string, a *Args, refs []bucketRe
 				}
 				extra = append(extra, s)
 			}
+			if err := checkObservePrincipal(v[0].(string), accountID, o.ExternalID); err != nil {
+				return "", err
+			}
 			return trustPolicy(v[0].(string), o.ExternalID, o.IRSA, v[1].(string), extra...), nil
 		}).(pulumi.StringOutput),
 	}, opts...)
@@ -1128,6 +1150,52 @@ func newObserveReader(ctx *pulumi.Context, name string, a *Args, refs []bucketRe
 		}
 	}
 	return role, nil
+}
+
+// observePrincipalRE is what may assume the observe reader: one IAM role or user.
+var observePrincipalRE = regexp.MustCompile(`^arn:aws[a-z-]*:iam::([0-9]{12}):(role|user)/[A-Za-z0-9+=,.@_/-]+$`)
+
+// checkObservePrincipal holds the principal that may assume the observe reader to
+// one role or user: the account's root, a wildcard or a session ARN would let every
+// identity of an account (or of any account) read the archive. From another account
+// the trust also needs the external id, which keeps the reader from being assumed
+// by a role of that account that was only told its ARN (the confused deputy). An
+// empty principal is the IRSA or Pod Identity trust's alone. accountID is the
+// archive's account; empty means it is not known, and any principal is then held to
+// the external id.
+func checkObservePrincipal(principal, accountID, externalID string) error {
+	if principal == "" {
+		return nil
+	}
+	m := observePrincipalRE.FindStringSubmatch(principal)
+	switch {
+	case strings.ContainsAny(principal, "*?"):
+		return fmt.Errorf("auditpulumi: Observe.TrustedPrincipalArn %q has a wildcard: name one role", principal)
+	case strings.HasSuffix(principal, ":root"):
+		return fmt.Errorf("auditpulumi: Observe.TrustedPrincipalArn %q is an account's root, which every identity of that account that its own IAM allows "+
+			"could assume the reader through: name one role", principal)
+	case m == nil:
+		return fmt.Errorf("auditpulumi: Observe.TrustedPrincipalArn %q is not the ARN of one IAM role or user (a session or an STS ARN is none)", principal)
+	case (accountID == "" || m[1] != accountID) && externalID == "":
+		return fmt.Errorf("auditpulumi: Observe.TrustedPrincipalArn %q is in another account than the archive's (%s): Observe.ExternalID is required "+
+			"for a cross-account trust", principal, orUnknown(accountID))
+	}
+	return nil
+}
+
+func orUnknown(account string) string {
+	if account == "" {
+		return "not known; set Args.AccountID"
+	}
+	return account
+}
+
+// codeSigning is an optional Lambda code signing configuration for a function.
+func codeSigning(arn pulumi.StringInput) pulumi.StringPtrInput {
+	if arn == nil {
+		return nil
+	}
+	return arn.ToStringOutput().ApplyT(func(s string) *string { return &s }).(pulumi.StringPtrOutput)
 }
 
 // newQuery is the role audit-query runs as on EKS, `<name>-query`: the observe

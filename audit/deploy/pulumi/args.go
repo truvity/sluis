@@ -141,7 +141,11 @@ type Args struct {
 	Writer    WriterArgs
 	Notary    NotaryArgs
 	Telemetry *TelemetryArgs
-	Alerts    AlertsArgs
+	// CodeSigningConfigArn puts the writer and the notary under a Lambda code
+	// signing configuration (artifact.NewCodeSigningConfig). Optional; see
+	// sluispulumi.LambdaArgs.CodeSigningConfigArn for what it asks of the release zips.
+	CodeSigningConfigArn pulumi.StringInput
+	Alerts               AlertsArgs
 	// Observe, when given, creates the read role audit-observe assumes, from
 	// another AWS account or from a Kubernetes workload (IRSA). Nil creates none.
 	Observe *ObserveArgs
@@ -181,6 +185,17 @@ type ArchiveArgs struct {
 	// AcknowledgeCompliance. Once the lock is on, NONE is refused by AWS, not by
 	// this library: Object Lock cannot be disabled on a bucket.
 	ObjectLockMode string
+	// BreakglassRoleArns are the roles that alone may bypass the lock of the
+	// buckets the library manages (creates or adopts): their policies deny
+	// s3:BypassGovernanceRetention, s3:PutBucketObjectLockConfiguration and
+	// s3:DeleteObjectVersion to every other principal, so that a role with a broad
+	// S3 allow (a power user, an automation or StackSet role) cannot shorten a
+	// governance retention, switch the lock off or delete a version of the
+	// archive. Role ARNs (a `*` only in the hash of an SSO role's name, see
+	// CheckKeyAdmin). Required when the library manages a bucket, and refused
+	// when it does not. Include the role that applies the stack, which changes
+	// the lock configuration. The lifecycle expiry is S3's own and is not denied.
+	BreakglassRoleArns []string
 	// AcknowledgeCompliance is the deliberate step before COMPLIANCE: true says
 	// the retentions were seen working in a governance trial and the deployer has
 	// signed them off. With ObjectLockMode COMPLIANCE and this false the library

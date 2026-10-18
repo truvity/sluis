@@ -26,13 +26,15 @@ func runDigestKey(t *testing.T, name string, args *auditpulumi.DigestKeyArgs) (*
 	return rec, err
 }
 
+var digestAdmins = []string{arnp + "iam::" + account + ":role/key-admin"}
+
 const digestDescription = "audit installation digest chain signing key, example"
 
 // The resource set and the policy are the golden: a change is a change to the
 // file, which a reviewer reads. SLUIS_UPDATE_GOLDEN=1 rewrites it.
 func TestDigestKeyIsItsGolden(t *testing.T) {
 	rec, err := runDigestKey(t, "audit-digest-example", &auditpulumi.DigestKeyArgs{
-		Description: digestDescription, BackupAccountID: account,
+		Description: digestDescription, BackupAccountID: account, KeyAdmins: digestAdmins,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -77,31 +79,103 @@ func TestDigestKeyIsItsGolden(t *testing.T) {
 	}
 }
 
-// The policy text is what gitops hand-built: indented by two spaces, one
-// statement, the backup account's root and nobody else.
+// The policy text: indented by two spaces, the backup account's root enabling IAM
+// for the key's use and upkeep, the control plane the administrators' alone.
 func TestDigestKeyPolicyIsTheEstatesText(t *testing.T) {
+	root := "arn:" + "aws:iam::" + account + ":root"
+	admin := arnp + "iam::" + account + ":role/key-admin"
 	want := `{
   "Statement": [
     {
-      "Action": "kms:*",
+      "Action": [
+        "kms:CancelKeyDeletion",
+        "kms:CreateAlias",
+        "kms:DeleteAlias",
+        "kms:DescribeKey",
+        "kms:DisableKeyRotation",
+        "kms:EnableKey",
+        "kms:EnableKeyRotation",
+        "kms:Get*",
+        "kms:List*",
+        "kms:Sign",
+        "kms:TagResource",
+        "kms:UntagResource",
+        "kms:UpdateAlias",
+        "kms:UpdateKeyDescription",
+        "kms:Verify"
+      ],
       "Effect": "Allow",
       "Principal": {
-        "AWS": "arn:` + "aws:iam::" + account + `:root"
+        "AWS": "` + root + `"
       },
       "Resource": "*",
       "Sid": "BackupAccountKeyAdmin"
+    },
+    {
+      "Action": [
+        "kms:CreateGrant",
+        "kms:DisableKey",
+        "kms:PutKeyPolicy",
+        "kms:RevokeGrant",
+        "kms:ScheduleKeyDeletion"
+      ],
+      "Condition": {
+        "ArnLike": {
+          "aws:PrincipalArn": [
+            "` + admin + `"
+          ]
+        }
+      },
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "` + root + `"
+      },
+      "Resource": "*",
+      "Sid": "AdministerTheKey"
+    },
+    {
+      "Action": [
+        "kms:CreateGrant",
+        "kms:DisableKey",
+        "kms:PutKeyPolicy",
+        "kms:RevokeGrant",
+        "kms:ScheduleKeyDeletion"
+      ],
+      "Condition": {
+        "ArnNotLike": {
+          "aws:PrincipalArn": [
+            "` + admin + `"
+          ]
+        },
+        "Bool": {
+          "aws:PrincipalIsAWSService": "false"
+        }
+      },
+      "Effect": "Deny",
+      "Principal": {
+        "AWS": "*"
+      },
+      "Resource": "*",
+      "Sid": "ControlPlaneAdminsOnly"
     }
   ],
   "Version": "2012-10-17"
 }`
-	if got := auditpulumi.DigestKeyPolicy(account); got != want {
+	got, err := auditpulumi.DigestKeyPolicy(account, digestAdmins)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != want {
 		t.Errorf("policy:\n%s\nwant:\n%s", got, want)
+	}
+	if _, err := auditpulumi.DigestKeyPolicy(account, nil); err == nil {
+		t.Error("a policy with no administrator was rendered: the key could not be changed again")
 	}
 }
 
 func TestDigestKeyHooksKeepNamesAndImports(t *testing.T) {
 	rec, err := runDigestKey(t, "audit-digest-example", &auditpulumi.DigestKeyArgs{
-		Description: digestDescription, BackupAccountID: account,
+		Description: digestDescription, BackupAccountID: account, KeyAdmins: digestAdmins,
 		AliasName:      "alias/legacy-digest",
 		KeyLogicalName: "legacy-key", AliasLogicalName: "legacy-key-alias",
 		KeyAliases:   []pulumi.Alias{{Name: pulumi.String("old-key")}},
@@ -123,9 +197,14 @@ func TestDigestKeyHooksKeepNamesAndImports(t *testing.T) {
 
 func TestDigestKeyRefusesWhatItCannotKeep(t *testing.T) {
 	for name, args := range map[string]*auditpulumi.DigestKeyArgs{
-		"no description": {BackupAccountID: account},
-		"short account":  {Description: digestDescription, BackupAccountID: "1234"},
-		"an ARN alias":   {Description: digestDescription, BackupAccountID: account, AliasName: arnp + "kms:eu-west-1:" + account + ":alias/x"},
+		"no description":         {BackupAccountID: account, KeyAdmins: digestAdmins},
+		"no administrator":       {Description: digestDescription, BackupAccountID: account},
+		"the root administers":   {Description: digestDescription, BackupAccountID: account, KeyAdmins: []string{arnp + "iam::" + account + ":root"}},
+		"every role administers": {Description: digestDescription, BackupAccountID: account, KeyAdmins: []string{arnp + "iam::" + account + ":role/*"}},
+		"short account":          {Description: digestDescription, BackupAccountID: "1234", KeyAdmins: digestAdmins},
+		"an ARN alias": {
+			Description: digestDescription, BackupAccountID: account, KeyAdmins: digestAdmins, AliasName: arnp + "kms:eu-west-1:" + account + ":alias/x",
+		},
 	} {
 		if _, err := runDigestKey(t, "audit-digest-example", args); err == nil {
 			t.Errorf("%s: accepted", name)

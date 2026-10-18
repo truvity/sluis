@@ -16,15 +16,16 @@ const (
 )
 
 var (
-	kpIssuer  = arnPrefix + "iam::" + kpAccount + ":role/fn-issuer"
-	kpCF      = arnPrefix + "iam::" + kpAccount + ":role/fn-cloudflare"
-	kpBackup  = arnPrefix + "iam::" + kpAccount + ":role/fn-backup"
-	kpRestore = arnPrefix + "iam::" + kpAccount + ":role/fn-restore"
-	kpReader1 = arnPrefix + "iam::" + kpAccount + ":role/cluster-b-reader"
-	kpReader2 = arnPrefix + "iam::" + kpAccount + ":role/cluster-a-reader"
-	kpAdmin   = arnPrefix + "iam::" + kpAccount + ":role/aws-reserved/sso.example/*Admin_*"
-	kpGlass   = arnPrefix + "iam::" + kpAccount + ":role/aws-reserved/sso.example/*Glass_*"
-	kpRoot    = arnPrefix + "iam::" + kpAccount + ":root"
+	kpIssuer   = arnPrefix + "iam::" + kpAccount + ":role/fn-issuer"
+	kpCF       = arnPrefix + "iam::" + kpAccount + ":role/fn-cloudflare"
+	kpBackup   = arnPrefix + "iam::" + kpAccount + ":role/fn-backup"
+	kpRestore  = arnPrefix + "iam::" + kpAccount + ":role/fn-restore"
+	kpReader1  = arnPrefix + "iam::" + kpAccount + ":role/cluster-b-reader"
+	kpReader2  = arnPrefix + "iam::" + kpAccount + ":role/cluster-a-reader"
+	kpAdmin    = arnPrefix + "iam::" + kpAccount + ":role/aws-reserved/sso.example/*Admin_*"
+	kpGlass    = arnPrefix + "iam::" + kpAccount + ":role/aws-reserved/sso.example/*Glass_*"
+	kpRoot     = arnPrefix + "iam::" + kpAccount + ":root"
+	kpKeyAdmin = arnPrefix + "iam::" + kpAccount + ":role/key-admin"
 )
 
 func kpArgs(l Layout) KeyPolicyArgs {
@@ -40,6 +41,7 @@ func kpArgs(l Layout) KeyPolicyArgs {
 		ExternalReaders: []string{kpReader1, kpReader2},
 		Admins:          []string{kpAdmin},
 		Breakglass:      []string{kpGlass},
+		KeyAdmins:       []string{kpKeyAdmin},
 	}
 }
 
@@ -79,6 +81,7 @@ func TestSluisKeyPolicyStatementList(t *testing.T) {
 		"SluisKeyRoleRestore", "SluisKeyWriteAllRestore",
 		"SluisKeyExternalReaders", "SluisKeyAdminSeeds", "SluisKeyAdminReads", "SluisKeyBreakglass",
 		"SluisKeyDenyRestoreIdentity",
+		"SluisKeyControlPlaneAdmins", "SluisKeyControlPlaneAdminsOnly",
 		"SluisKeySign", "SluisKeySignContextReserved", "SluisKeySignDirectPurposeOnly", "SluisKeySignDirectContextKeysOnly",
 	}
 	got := kpSids(kpStatements(t, kpArgs(LayoutV5)))
@@ -239,14 +242,18 @@ func TestSluisKeyPolicyHasNoCatchAll(t *testing.T) {
 			if s["Principal"].(map[string]any)["AWS"] != kpRoot || !strings.Contains(string(raw), "aws:PrincipalArn") {
 				t.Errorf("%s: an Allow not narrowed to principals: %s", sid, raw)
 			}
-			if !strings.Contains(string(raw), "kms:ViaService") && sid != "SluisKeySign" {
+			if !strings.Contains(string(raw), "kms:ViaService") && sid != "SluisKeySign" && sid != "SluisKeyControlPlaneAdmins" {
 				t.Errorf("%s: not held to SSM", sid)
 			}
 		case "Deny":
 			bySign := cond["StringEquals"] != nil && cond["StringEquals"].(map[string]any)["kms:EncryptionContext:purpose"] == "sign"
 			byRole := cond["ArnEquals"] != nil && reflect.DeepEqual(cond["ArnEquals"], map[string]any{"aws:PrincipalArn": []string{kpIssuer}})
 			byBackup := sid == "SluisKeyDenyRestoreIdentity" && cond["ArnEquals"] != nil
-			if !bySign && !byRole && !byBackup {
+			// The control plane's deny is the one that is about no sluis role: it is about
+			// who administers the key, and no use of it.
+			byAdmins := sid == "SluisKeyControlPlaneAdminsOnly" && s["Principal"].(map[string]any)["AWS"] == "*" &&
+				reflect.DeepEqual(s["Action"], KeyControlPlaneActions)
+			if !bySign && !byRole && !byBackup && !byAdmins {
 				t.Errorf("%s: a Deny about neither the sign purpose nor a sluis role: %s", sid, raw)
 			}
 		}
@@ -571,6 +578,110 @@ func TestSluisKeyPolicyRefusesBadInput(t *testing.T) {
 		mut(&a)
 		if _, err := SluisKeyPolicyStatements(a); err == nil {
 			t.Errorf("%s: accepted", name)
+		}
+	}
+}
+
+// ---- the key's control plane (audit 2026-10-18, A2)
+
+// The key policy of the shared key denies the five control-plane actions to every
+// principal but the administrators, and allows them to those alone.
+func TestControlPlaneIsTheAdministratorsAlone(t *testing.T) {
+	st := kpStatements(t, kpArgs(LayoutV5))
+	wantActions := []string{"kms:CreateGrant", "kms:DisableKey", "kms:PutKeyPolicy", "kms:RevokeGrant", "kms:ScheduleKeyDeletion"}
+	admins := []string{kpGlass, kpKeyAdmin} // sorted: the break-glass role is added to the administrators
+
+	deny := kpBySid(t, st, "SluisKeyControlPlaneAdminsOnly")
+	if deny["Effect"] != "Deny" || !reflect.DeepEqual(deny["Principal"], map[string]any{"AWS": "*"}) ||
+		!reflect.DeepEqual(deny["Action"], wantActions) || deny["Resource"] != "*" {
+		t.Errorf("deny: %v", deny)
+	}
+	if !reflect.DeepEqual(deny["Condition"], map[string]any{
+		"ArnNotLike": map[string]any{"aws:PrincipalArn": admins},
+		"Bool":       map[string]any{"aws:PrincipalIsAWSService": "false"},
+	}) {
+		t.Errorf("deny condition: %v", deny["Condition"])
+	}
+
+	allow := kpBySid(t, st, "SluisKeyControlPlaneAdmins")
+	if allow["Effect"] != "Allow" || allow["Principal"].(map[string]any)["AWS"] != kpRoot || !reflect.DeepEqual(allow["Action"], wantActions) {
+		t.Errorf("allow: %v", allow)
+	}
+	if !reflect.DeepEqual(allow["Condition"], map[string]any{"ArnLike": map[string]any{"aws:PrincipalArn": admins}}) {
+		t.Errorf("allow condition: %v", allow["Condition"])
+	}
+
+	// No other statement grants a control-plane action: the sluis roles and the
+	// operators use the key and never administer it.
+	for _, s := range st {
+		if s["Effect"] != "Allow" || s["Sid"] == "SluisKeyControlPlaneAdmins" {
+			continue
+		}
+		raw, _ := json.Marshal(s["Action"])
+		for _, a := range wantActions {
+			if strings.Contains(string(raw), a) {
+				t.Errorf("%v allows %s", s["Sid"], a)
+			}
+		}
+	}
+}
+
+// The key could not be administered again without an administrator, so a policy
+// with none is not rendered; the break-glass role alone is one.
+func TestAKeyPolicyNeedsAnAdministrator(t *testing.T) {
+	a := kpArgs(LayoutV5)
+	a.KeyAdmins = nil
+	if _, err := SluisKeyPolicyStatements(a); err != nil {
+		t.Errorf("the break-glass role alone administers the key: %v", err)
+	}
+	a.Breakglass = nil
+	if _, err := SluisKeyPolicyStatements(a); err == nil || !strings.Contains(err.Error(), "KeyAdmins") {
+		t.Errorf("no administrator: %v", err)
+	}
+}
+
+// An administrator is a role: not the account's root, a user, a wildcard account
+// or path, or a pattern that names a whole family of roles. The wildcard of an SSO
+// role's hash stays.
+func TestKeyAdministratorsAreRoles(t *testing.T) {
+	good := []string{
+		kpKeyAdmin, kpAdmin, kpGlass,
+		arnPrefix + "iam::" + kpAccount + ":role/aws-reserved/sso.amazonaws.com/*/AWSReservedSSO_Admin_*",
+		arnPrefix + "iam::" + kpAccount + ":role/aws-reserved/sso.amazonaws.com/eu-central-1/AWSReservedSSO_Admin_0123abcd",
+	}
+	for _, v := range good {
+		if err := CheckKeyAdmin(v); err != nil {
+			t.Errorf("%s: %v", v, err)
+		}
+	}
+	bad := map[string]string{
+		"root":              arnPrefix + "iam::" + kpAccount + ":root",
+		"user":              arnPrefix + "iam::" + kpAccount + ":user/ops",
+		"star":              "*",
+		"arn star":          "arn:*",
+		"any account":       arnPrefix + "iam::*:role/admin",
+		"every role":        arnPrefix + "iam::" + kpAccount + ":role/*",
+		"every role (path)": arnPrefix + "iam::" + kpAccount + ":role/aws-reserved/*",
+		"a few letters":     arnPrefix + "iam::" + kpAccount + ":role/a*",
+		"wildcard in path":  arnPrefix + "iam::" + kpAccount + ":role/*/admin",
+		"question mark":     arnPrefix + "iam::" + kpAccount + ":role/adm?n",
+		"no role":           arnPrefix + "iam::" + kpAccount + ":role/",
+		"an assumed role":   arnPrefix + "sts::" + kpAccount + ":assumed-role/admin/me",
+	}
+	for name, v := range bad {
+		if err := CheckKeyAdmin(v); err == nil {
+			t.Errorf("%s: %s was accepted", name, v)
+		}
+		for field, set := range map[string]func(*KeyPolicyArgs){
+			"Admins":     func(a *KeyPolicyArgs) { a.Admins = []string{v} },
+			"Breakglass": func(a *KeyPolicyArgs) { a.Breakglass = []string{v} },
+			"KeyAdmins":  func(a *KeyPolicyArgs) { a.KeyAdmins = []string{v} },
+		} {
+			a := kpArgs(LayoutV5)
+			set(&a)
+			if _, err := SluisKeyPolicyStatements(a); err == nil {
+				t.Errorf("%s as %s: rendered", name, field)
+			}
 		}
 	}
 }

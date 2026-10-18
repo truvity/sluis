@@ -34,6 +34,10 @@ func moduleInstallation(t *testing.T, name string) *sluisconfig.Installation {
 // in the test, not the fixture's.
 var queueLine = regexp.MustCompile(`queueURL: \S+`)
 
+// keyLine is the secrets key the library writes into every document (the
+// installation's customer key): not in the fixtures, which name none.
+var keyLine = regexp.MustCompile(`(?m)^ *kmsKeyId: \S+\n`)
+
 func moduleEstate(t *testing.T, in *sluisconfig.Installation, more ...func(*arp.LambdaArgs)) estate {
 	t.Helper()
 	return withInstallation(in, func(a *arp.LambdaArgs) {
@@ -89,7 +93,8 @@ func TestEachModuleFunctionReadsItsRenderedDocuments(t *testing.T) {
 				}
 				files := archiveFiles(t, rec.one(t, layerType, "staging-"+m+"-config"))
 				want := golden(m)
-				if got := queueLine.ReplaceAllString(files["sluis/sluis.yaml"], "queueURL: Q"); got != queueLine.ReplaceAllString(want, "queueURL: Q") {
+				got := keyLine.ReplaceAllString(queueLine.ReplaceAllString(files["sluis/sluis.yaml"], "queueURL: Q"), "")
+				if got != queueLine.ReplaceAllString(want, "queueURL: Q") {
 					t.Errorf("%s: the service document is not the renderer's:\n%s\n--- want ---\n%s", m, files["sluis/sluis.yaml"], want)
 				}
 				p, hasPolicy := files["sluis/policy.yaml"]

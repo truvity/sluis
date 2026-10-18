@@ -42,33 +42,53 @@ func TestParameterKeyArnIsWrittenIntoTheServiceDocument(t *testing.T) {
 	}
 }
 
-// Unset, the document is what it was: no key, and the same bytes as with a key
-// but for the key's own line.
-func TestWithoutParameterKeyArnTheServiceDocumentIsUnchanged(t *testing.T) {
-	for name, mk := range map[string]func(more func(*arp.LambdaArgs)) estate{
-		"config": func(more func(*arp.LambdaArgs)) estate { return estate{mutate: more} },
-		"installation": func(more func(*arp.LambdaArgs)) estate {
-			return withInstallation(exampleInstallation(t), more)
-		},
+// Unset, the library refuses to render: the parameters the services write would
+// be encrypted with the AWS-managed key, which any role with ssm:GetParameter can
+// decrypt. A Config, an Installation and an Installation that names the key
+// itself (secrets.kmsKeyId) without ParameterKeyArn are all refused: the key is
+// also what the roles are granted on.
+func TestWithoutAParameterKeyTheLibraryRefuses(t *testing.T) {
+	in := exampleInstallation(t)
+	in.Secrets = &sluisconfig.Secrets{KMSKeyID: paramKey}
+	for name, e := range map[string]estate{
+		"config":                {noParameterKey: true},
+		"installation":          withInstallation(exampleInstallation(t), func(a *arp.LambdaArgs) { a.ParameterKeyArn = "" }),
+		"installation, own key": withInstallation(in, func(a *arp.LambdaArgs) { a.ParameterKeyArn = "" }),
 	} {
 		t.Run(name, func(t *testing.T) {
-			recOff, _ := mustLambda(t, mk(nil))
-			off := layerFiles(t, recOff)["sluis/sluis.yaml"]
-			if strings.Contains(off, "kmsKeyId") {
-				t.Errorf("no ParameterKeyArn, and the document names a key:\n%s", off)
-			}
-			recOn, _ := mustLambda(t, mk(func(a *arp.LambdaArgs) { a.ParameterKeyArn = paramKey }))
-			on := layerFiles(t, recOn)["sluis/sluis.yaml"]
-			var kept []string
-			for _, l := range strings.Split(on, "\n") {
-				if !strings.Contains(l, "kmsKeyId: "+paramKey) {
-					kept = append(kept, l)
-				}
-			}
-			if strings.Join(kept, "\n") != off {
-				t.Errorf("the key changed more than its own line:\n%s\n--- without ---\n%s", on, off)
+			e.noParameterKey = true
+			if _, _, err := buildLambda(t, e); err == nil || !strings.Contains(err.Error(), "no customer-managed key for the secrets") {
+				t.Errorf("got %v", err)
 			}
 		})
+	}
+}
+
+// A module function's document written by the estate names the same key, or the
+// parameters that function writes (GitHub and Slack apps, Google keys) are
+// encrypted with the AWS-managed key.
+func TestAModuleDocumentOfTheEstateNamesTheParameterKey(t *testing.T) {
+	doc := func(key string) string {
+		d := "apiVersion: sluis.truvity.github.io/controller-github/v2\n"
+		if key != "" {
+			d += "secrets: {kmsKeyId: " + key + "}\n"
+		}
+		return d
+	}
+	for name, c := range map[string]struct {
+		doc     string
+		refused bool
+	}{"names no key": {doc(""), true}, "names another": {doc("alias/other"), true}, "names the key": {doc(paramKey), false}} {
+		_, _, err := buildLambda(t, v5Estate(func(a *arp.LambdaArgs) {
+			noDomain(a)
+			a.Modules = map[string]arp.ModuleArgs{"github": {Document: c.doc}}
+		}))
+		switch {
+		case c.refused && (err == nil || !strings.Contains(err.Error(), "Modules[github].Document")):
+			t.Errorf("%s: %v, want a refusal naming the document", name, err)
+		case !c.refused && err != nil:
+			t.Errorf("%s: %v", name, err)
+		}
 	}
 }
 

@@ -29,6 +29,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/lambda"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/s3"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 )
@@ -265,20 +266,46 @@ func Remember(sha string, raw []byte) {
 // ResolveSHA256 reads a release's checksums.txt (<base>/v<version>/checksums.txt,
 // base ReleaseBase when empty) and returns the digest it lists for the file
 // asset. version is the release; "" and "(devel)" are no release.
-func ResolveSHA256(base, version, asset string) (string, error) {
+//
+// checksums.txt is held to the Sigstore bundle published beside it
+// (checksums.txt.sigstore.json) first: see VerifyChecksums. An unsigned
+// checksums.txt is the release's own word for itself, and a digest read from
+// it protects against a corrupt download and against nothing else. Only
+// rel.UnverifiedChecksums reads it without the signature.
+func ResolveSHA256(rel *Release, version, asset string) (string, error) {
 	v := strings.TrimPrefix(strings.TrimSpace(version), "v")
 	if v == "" || v == "(devel)" {
 		return "", errors.New("the digest is asked of the release's checksums.txt and the release is not known (" +
 			"unset or (devel)): name the release, or give the digest")
 	}
-	if base == "" {
-		base = ReleaseBase
+	var base, repo string
+	unverified := false
+	if rel != nil {
+		base, repo, unverified = rel.BaseURL, rel.SignerRepository, rel.UnverifiedChecksums
 	}
-	src := strings.TrimSuffix(base, "/") + "/v" + v + "/checksums.txt"
+	src := AssetURL(base, v, "checksums.txt")
 	raw, err := Fetch(src, "")
 	if err != nil {
 		return "", fmt.Errorf("checksums.txt of the release v%s: %w", v, err)
 	}
+	if !unverified {
+		bundleJSON, err := Fetch(AssetURL(base, v, ChecksumsBundle), "")
+		if err != nil {
+			return "", fmt.Errorf("%s of the release v%s: %w (the digest is read from a signed checksums.txt: "+
+				"give the package's digest, or set Release.UnverifiedChecksums to accept the unsigned file)", ChecksumsBundle, v, err)
+		}
+		if err := verifier(raw, bundleJSON, repo, v); err != nil {
+			return "", fmt.Errorf("checksums.txt of the release v%s: %w", v, err)
+		}
+	}
+	return digestOf(raw, v, asset)
+}
+
+// verifier is VerifyChecksums; a test replaces it.
+var verifier = VerifyChecksums
+
+// digestOf is the digest checksums.txt lists for asset.
+func digestOf(raw []byte, v, asset string) (string, error) {
 	found := ""
 	for _, line := range strings.Split(string(raw), "\n") {
 		f := strings.Fields(line)
@@ -300,19 +327,36 @@ func ResolveSHA256(base, version, asset string) (string, error) {
 }
 
 // Release is how a digest the estate did not give is found: in the release's
-// own checksums.txt.
+// own checksums.txt, which is held to its Sigstore signature.
 type Release struct {
 	// ResolveChecksums reads the digest of a package whose SHA-256 is left
-	// empty from <BaseURL>/v<Version>/checksums.txt. A digest that is given is
-	// used as it is. Off by default: the library does not take a release's word
-	// for itself unless asked to.
+	// empty from <BaseURL>/v<Version>/checksums.txt, after verifying
+	// checksums.txt against checksums.txt.sigstore.json beside it: the
+	// signature must be the release workflow of SignerRepository at the tag of
+	// the release, issued by GitHub's OIDC issuer, and be in Sigstore's
+	// transparency log (what hack/release-verify.sh checks with cosign). A digest
+	// that is given is used as it is. Off by default: the library does not take
+	// a release's word for itself unless asked to.
 	ResolveChecksums bool
 	// Version is the release (`1.74.0`) when the package's file name does not
 	// say. Empty and `(devel)` are no release and are refused.
 	Version string
 	// BaseURL is where releases are published, for a mirror of them. Default
-	// the project's GitHub releases.
+	// the project's GitHub releases. A mirror carries checksums.txt.sigstore.json
+	// beside checksums.txt, byte for byte.
 	BaseURL string
+	// SignerRepository is the repository (owner/name) whose release workflow
+	// signs the release. Default truvity/sluis; a fork that releases itself names
+	// its own.
+	SignerRepository string
+	// UnverifiedChecksums reads checksums.txt without checking its signature, as
+	// ResolveChecksums did before it verified: the digest then proves only that
+	// the download is what the release page says, and a release page that is
+	// replaced (a stolen token, a mirror) is replaced with its checksums. It is the
+	// way out of an estate that cannot reach Sigstore's trusted root (TUF) or has
+	// no mirror of the bundle; give PackageSHA256 from a verified release instead
+	// where you can (hack/release-verify.sh).
+	UnverifiedChecksums bool
 }
 
 // ReleaseOf is the release a library ships when the estate names no package:
@@ -362,3 +406,46 @@ func AssetURL(base, version, asset string) string {
 	}
 	return strings.TrimSuffix(base, "/") + "/v" + strings.TrimPrefix(version, "v") + "/" + asset
 }
+
+// CodeSigningArgs is a Lambda code signing configuration: the AWS Signer
+// signing profiles whose signature a function's package must carry.
+type CodeSigningArgs struct {
+	// SigningProfileVersionArns are the AWS Signer profile versions
+	// (arn:aws:signer:<region>:<account>:/signing-profiles/<name>/<version>) that
+	// may sign a package. At least one, at most 20.
+	SigningProfileVersionArns []string
+	// Warn lets a deployment of a package that is not signed (or signed by
+	// another profile) through with a CloudTrail record, instead of refusing it.
+	// Default false: Lambda refuses it. The release zips are not Signer-signed,
+	// so an enforcing configuration needs the estate to sign them first.
+	Warn bool
+	// Description is the configuration's.
+	Description string
+}
+
+// NewCodeSigningConfig declares the Lambda code signing configuration, for
+// LambdaArgs.CodeSigningConfigArn and its siblings. It is the estate's to make
+// once and pass to every library's functions.
+func NewCodeSigningConfig(ctx *pulumi.Context, name string, a CodeSigningArgs, opts ...pulumi.ResourceOption) (*lambda.CodeSigningConfig, error) {
+	if n := len(a.SigningProfileVersionArns); n == 0 || n > 20 {
+		return nil, fmt.Errorf("artifact: a code signing configuration names 1 to 20 signing profile versions, got %d", n)
+	}
+	for _, p := range a.SigningProfileVersionArns {
+		if !signerProfileRE.MatchString(p) {
+			return nil, fmt.Errorf("artifact: %q is not an AWS Signer profile version ARN (arn:aws:signer:<region>:<account>:/signing-profiles/<name>/<version>)", p)
+		}
+	}
+	policy := "Enforce"
+	if a.Warn {
+		policy = "Warn"
+	}
+	return lambda.NewCodeSigningConfig(ctx, name, &lambda.CodeSigningConfigArgs{
+		Description: pulumi.String(a.Description),
+		AllowedPublishers: &lambda.CodeSigningConfigAllowedPublishersArgs{
+			SigningProfileVersionArns: pulumi.ToStringArray(a.SigningProfileVersionArns),
+		},
+		Policies: &lambda.CodeSigningConfigPoliciesArgs{UntrustedArtifactOnDeployment: pulumi.String(policy)},
+	}, opts...)
+}
+
+var signerProfileRE = regexp.MustCompile(`^arn:aws[a-z-]*:signer:[a-z0-9-]+:[0-9]{12}:/signing-profiles/[A-Za-z0-9_]{2,64}/[A-Za-z0-9]{10}$`)

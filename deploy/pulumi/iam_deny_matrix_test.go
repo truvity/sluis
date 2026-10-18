@@ -169,6 +169,7 @@ func mxPolicies(t *testing.T) (identity map[string]iameval.Policy, key iameval.P
 	}
 	kst, err := SluisKeyPolicyStatements(KeyPolicyArgs{
 		Region: mxRegion, Account: mxAccount, Modules: ModuleSet{Instance: mxInst}, Layout: LayoutV5, Roles: kroles,
+		KeyAdmins: []string{arnPrefix + "iam::" + mxAccount + ":role/key-admin"},
 	})
 	if err != nil {
 		t.Fatal(err)

@@ -106,7 +106,10 @@ func auditEstate(t *testing.T, audit *arp.AuditArgs, more func(*arp.LambdaArgs))
 func installAudit(t *testing.T) *arp.AuditArgs {
 	t.Helper()
 	zip, digest := auditWriterZip(t)
-	return &arp.AuditArgs{WriterPackage: zip, WriterPackageSHA256: digest, CatalogueDir: catalogueDir()}
+	return &arp.AuditArgs{
+		WriterPackage: zip, WriterPackageSHA256: digest, CatalogueDir: catalogueDir(),
+		Archive: arp.AuditArchiveArgs{BreakglassRoleArns: []string{testBreakglass}},
+	}
 }
 
 // auditLayer is what the audit writer's configuration layer holds, by path under
@@ -238,6 +241,8 @@ func TestTheQueueNamesTheModuleFunctionsRolesToo(t *testing.T) {
 func TestAuditArchiveOnAnS3CompatibleStore(t *testing.T) {
 	au := installAudit(t)
 	au.Presets = map[string]arp.AuditPreset{"operational": {PresetStorage: auditpulumi.PresetStorage{Bucket: "acme-audit", Endpoint: "https://acct.r2.example.test"}}} //nolint:lll // a table row
+	// The store is not a bucket of ours: there is nothing to guard.
+	au.Archive.BreakglassRoleArns = nil
 	rec, _ := mustLambda(t, auditEstate(t, au, nil))
 	if rec.has("aws:s3/bucket:Bucket", "audit-example-archive-operational") {
 		t.Error("the archive is the store's, and an AWS bucket is declared for it")
@@ -263,6 +268,7 @@ func TestAuditArchiveOnAnS3CompatibleStore(t *testing.T) {
 func TestAuditArchiveCanReuseTheBlobStore(t *testing.T) {
 	au := installAudit(t)
 	au.Presets = map[string]arp.AuditPreset{"operational": {PresetStorage: auditpulumi.PresetStorage{Bucket: "acme-audit"}, ReuseBlobStore: true}}
+	au.Archive.BreakglassRoleArns = nil
 	blobs := r2()
 	blobs.PathStyle = true
 	rec, _ := mustLambda(t, auditEstate(t, au, onBlobStore(blobs)))
@@ -275,6 +281,7 @@ func TestAuditArchiveCanReuseTheBlobStore(t *testing.T) {
 	// Not the blob bucket.
 	au = installAudit(t)
 	au.Presets = map[string]arp.AuditPreset{"operational": {PresetStorage: auditpulumi.PresetStorage{Bucket: blobs.Bucket}, ReuseBlobStore: true}}
+	au.Archive.BreakglassRoleArns = nil
 	_, _, err := buildLambda(t, auditEstate(t, au, onBlobStore(r2())))
 	if err == nil || !strings.Contains(err.Error(), "blob bucket") {
 		t.Errorf("the blob bucket as the archive: %v", err)
@@ -288,6 +295,7 @@ func TestAuditCredentialsRefDefaultsToThisInstallation(t *testing.T) {
 	au.Presets = map[string]arp.AuditPreset{"operational": {
 		PresetStorage: auditpulumi.PresetStorage{Bucket: "acme-audit", CredentialsRef: "external/cloudflare/audit-r2"}, ReuseBlobStore: true,
 	}}
+	au.Archive.BreakglassRoleArns = nil
 	rec, _ := mustLambda(t, auditEstate(t, au, onBlobStore(r2())))
 	layer := auditLayer(t, rec)
 	if !strings.Contains(layer["audit/audit.yaml"], "sluisRoot: /sluis/") {
@@ -474,7 +482,7 @@ func TestAuditMixedPresetsAreTwoBuckets(t *testing.T) {
 		"standard": {PresetStorage: auditpulumi.PresetStorage{Prefix: "standard/", Create: true}},
 		"attested": {PresetStorage: auditpulumi.PresetStorage{Prefix: "attested/", Create: true}},
 	}
-	au.Archive = arp.AuditArchiveArgs{AcknowledgeCompliance: true, DefaultRetentionDays: 30}
+	au.Archive = arp.AuditArchiveArgs{AcknowledgeCompliance: true, DefaultRetentionDays: 30, BreakglassRoleArns: []string{testBreakglass}}
 	au.Notary.Disabled = true
 	rec, _ := mustLambda(t, auditEstate(t, au, nil))
 	rec.one(t, "aws:s3/bucket:Bucket", "audit-example-archive-standard")

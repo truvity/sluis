@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -38,6 +39,7 @@ func backupCommon(t *testing.T) arp.BackupCommon {
 		BlobBucketName:  bucket,
 		State:           &arp.StateGrant{Tables: tables},
 		ArchiveKeyAlias: "alias/staging-archive",
+		ParameterKeyArn: paramKey,
 		Archive:         arp.ArchiveArgs{Bucket: archiveBucket, Prefix: "vault"},
 		AuditQueueURL:   "https://sqs." + region + ".amazonaws.com/" + account + "/audit-ingest",
 	}
@@ -359,8 +361,18 @@ func TestAnExistingArchiveBucketIsNotCreated(t *testing.T) {
 	}
 }
 
+// testBreakglass may bypass the archive bucket's lock.
+var testBreakglass = arnp + "iam::" + account + ":role/breakglass"
+
+// governanceBucket has the library create the archive bucket under GOVERNANCE,
+// the mode of the buckets made before the default became COMPLIANCE.
+func governanceBucket(a *arp.BackupArgs) {
+	a.Archive.Create = &arp.ArchiveBucketArgs{Mode: "GOVERNANCE"}
+	a.Archive.BreakglassRoleArns = []string{testBreakglass}
+}
+
 func TestTheCreatedArchiveBucketIsVersionedLockedAndNoLongerThanMaxAge(t *testing.T) {
-	rec, out := mustBackup(t, func(a *arp.BackupArgs) { a.Archive.Create = &arp.ArchiveBucketArgs{} })
+	rec, out := mustBackup(t, func(a *arp.BackupArgs) { governanceBucket(a) })
 	if !rec.isProtected("aws:s3/bucket:Bucket", "staging-backup-archive") {
 		t.Error("the archive bucket is not protected")
 	}
@@ -383,6 +395,23 @@ func TestTheCreatedArchiveBucketIsVersionedLockedAndNoLongerThanMaxAge(t *testin
 	if !strings.Contains(pol, "aws:SecureTransport") {
 		t.Errorf("no TLS-only deny: %s", pol)
 	}
+	// Nobody but the break-glass role bypasses the lock, changes its configuration
+	// or deletes a version, whatever their IAM policies say.
+	var doc struct{ Statement []map[string]any }
+	if err := json.Unmarshal([]byte(pol), &doc); err != nil {
+		t.Fatal(err)
+	}
+	var guard map[string]any
+	for _, st := range doc.Statement {
+		if st["Sid"] == "SluisArchiveLockBreakglassOnly" {
+			guard = st
+		}
+	}
+	if guard == nil || guard["Effect"] != "Deny" || guard["Principal"] != "*" ||
+		!reflect.DeepEqual(guard["Action"], []any{"s3:BypassGovernanceRetention", "s3:DeleteObjectVersion", "s3:PutBucketObjectLockConfiguration"}) ||
+		!reflect.DeepEqual(guard["Condition"], map[string]any{"ArnNotLike": map[string]any{"aws:PrincipalArn": []any{testBreakglass}}}) {
+		t.Errorf("the lock's guard: %v", guard)
+	}
 	if len(rec.ofType("aws:s3/bucketServerSideEncryptionConfiguration:BucketServerSideEncryptionConfiguration")) != 1 {
 		t.Error("the bucket is not encrypted")
 	}
@@ -398,7 +427,7 @@ func TestTheCreatedArchiveBucketIsVersionedLockedAndNoLongerThanMaxAge(t *testin
 
 func TestTheArchiveLockFollowsMaxAgeAndNeverExceedsIt(t *testing.T) {
 	rec, _ := mustBackup(t, func(a *arp.BackupArgs) {
-		a.Archive.Create = &arp.ArchiveBucketArgs{}
+		governanceBucket(a)
 		a.Retention = &arp.BackupRetentionArgs{Keep: 3, MaxAge: 240 * hour}
 	})
 	lock := rec.one(t, "aws:s3/bucketObjectLockConfiguration:BucketObjectLockConfiguration", "staging-backup-archive-lock")
@@ -410,20 +439,21 @@ func TestTheArchiveLockFollowsMaxAgeAndNeverExceedsIt(t *testing.T) {
 		t.Errorf("retention = %v", at(t, doc, "backup", "retention"))
 	}
 	for name, mut := range map[string]func(*arp.BackupArgs){
-		"retention beyond maxAge": func(a *arp.BackupArgs) { a.Archive.Create = &arp.ArchiveBucketArgs{RetentionDays: 31} },
+		"retention beyond maxAge": func(a *arp.BackupArgs) { governanceBucket(a); a.Archive.Create.RetentionDays = 31 },
 		"maxAge under a day": func(a *arp.BackupArgs) {
-			a.Archive.Create = &arp.ArchiveBucketArgs{}
+			governanceBucket(a)
 			a.Retention = &arp.BackupRetentionArgs{MaxAge: 12 * hour}
 		},
-		"compliance unacknowledged": func(a *arp.BackupArgs) { a.Archive.Create = &arp.ArchiveBucketArgs{Mode: "COMPLIANCE"} },
-		"unknown mode":              func(a *arp.BackupArgs) { a.Archive.Create = &arp.ArchiveBucketArgs{Mode: "LOOSE"} },
+		"compliance unacknowledged": func(a *arp.BackupArgs) { governanceBucket(a); a.Archive.Create.Mode = "COMPLIANCE" },
+		"no mode, unacknowledged":   func(a *arp.BackupArgs) { governanceBucket(a); a.Archive.Create.Mode = "" },
+		"unknown mode":              func(a *arp.BackupArgs) { governanceBucket(a); a.Archive.Create.Mode = "LOOSE" },
 		"unversioned lock": func(a *arp.BackupArgs) {
 			f := false
-			a.Archive.Create = &arp.ArchiveBucketArgs{}
+			governanceBucket(a)
 			a.Archive.Versioned = &f
 		},
 		"another account's bucket": func(a *arp.BackupArgs) {
-			a.Archive.Create = &arp.ArchiveBucketArgs{}
+			governanceBucket(a)
 			a.Archive.AccountID = strings.Repeat("2", 12)
 		},
 	} {
@@ -432,6 +462,7 @@ func TestTheArchiveLockFollowsMaxAgeAndNeverExceedsIt(t *testing.T) {
 		}
 	}
 	if _, _, err := buildBackup(t, func(a *arp.BackupArgs) {
+		governanceBucket(a)
 		a.Archive.Create = &arp.ArchiveBucketArgs{Mode: "COMPLIANCE", AcknowledgeCompliance: true, RetentionDays: 30}
 	}); err != nil {
 		t.Errorf("acknowledged COMPLIANCE: %v", err)
@@ -620,5 +651,61 @@ func TestTheRestoreDocumentNamesTheIdentitySecretAndNoRecipients(t *testing.T) {
 	}
 	if _, set := bk["recipients"]; set {
 		t.Errorf("backup.recipients = %v", bk["recipients"])
+	}
+}
+
+// The mode of a bucket is chosen and not defaulted: left empty it is COMPLIANCE
+// (which nobody can shorten) and so needs the acknowledgement, and GOVERNANCE has
+// to be asked for. A stack that relied on the old default is refused, not moved.
+func TestTheArchiveBucketsDefaultModeIsComplianceAndGovernanceIsExplicit(t *testing.T) {
+	create := func(a *arp.BackupArgs, c *arp.ArchiveBucketArgs) {
+		a.Archive.Create, a.Archive.BreakglassRoleArns = c, []string{testBreakglass}
+	}
+	_, _, err := buildBackup(t, func(a *arp.BackupArgs) { create(a, &arp.ArchiveBucketArgs{}) })
+	if err == nil || !strings.Contains(err.Error(), "AcknowledgeCompliance") || !strings.Contains(err.Error(), "GOVERNANCE") {
+		t.Errorf("an empty mode: %v, want the refusal that names both ways out", err)
+	}
+	rec, _ := mustBackup(t, func(a *arp.BackupArgs) { create(a, &arp.ArchiveBucketArgs{AcknowledgeCompliance: true}) })
+	lock := rec.one(t, "aws:s3/bucketObjectLockConfiguration:BucketObjectLockConfiguration", "staging-backup-archive-lock")
+	if m := prop(lock, "rule").ObjectValue()["defaultRetention"].ObjectValue()["mode"].StringValue(); m != "COMPLIANCE" {
+		t.Errorf("an empty mode made %s", m)
+	}
+	rec, _ = mustBackup(t, func(a *arp.BackupArgs) { create(a, &arp.ArchiveBucketArgs{Mode: "GOVERNANCE"}) })
+	lock = rec.one(t, "aws:s3/bucketObjectLockConfiguration:BucketObjectLockConfiguration", "staging-backup-archive-lock")
+	if m := prop(lock, "rule").ObjectValue()["defaultRetention"].ObjectValue()["mode"].StringValue(); m != "GOVERNANCE" {
+		t.Errorf("GOVERNANCE made %s", m)
+	}
+}
+
+// A created bucket names the roles that may bypass its lock; an existing bucket
+// that names them gets the same statement in the policy the owner applies, and one
+// that names none gets none (nothing is guarded that the library does not own).
+func TestTheArchiveGuardNeedsBreakglassRolesAndRidesTheHandedOverPolicy(t *testing.T) {
+	for name, mut := range map[string]func(*arp.BackupArgs){
+		"none": func(a *arp.BackupArgs) { governanceBucket(a); a.Archive.BreakglassRoleArns = nil },
+		"the root": func(a *arp.BackupArgs) {
+			governanceBucket(a)
+			a.Archive.BreakglassRoleArns = []string{arnp + "iam::" + account + ":root"}
+		},
+		"every role": func(a *arp.BackupArgs) {
+			governanceBucket(a)
+			a.Archive.BreakglassRoleArns = []string{arnp + "iam::" + account + ":role/*"}
+		},
+		"a bare star": func(a *arp.BackupArgs) { governanceBucket(a); a.Archive.BreakglassRoleArns = []string{"*"} },
+	} {
+		if _, _, err := buildBackup(t, mut); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+	_, out := mustBackup(t, func(a *arp.BackupArgs) {
+		a.Archive.AccountID = strings.Repeat("2", 12)
+		a.Archive.BreakglassRoleArns = []string{testBreakglass}
+	})
+	if !strings.Contains(out["bucketPolicy"], "SluisArchiveLockBreakglassOnly") || !strings.Contains(out["bucketPolicy"], "s3:BypassGovernanceRetention") {
+		t.Errorf("the policy handed over has no guard: %s", out["bucketPolicy"])
+	}
+	_, out = mustBackup(t, func(a *arp.BackupArgs) { a.Archive.AccountID = strings.Repeat("2", 12) })
+	if strings.Contains(out["bucketPolicy"], "SluisArchiveLockBreakglassOnly") {
+		t.Errorf("a guard no break-glass role was named for: %s", out["bucketPolicy"])
 	}
 }

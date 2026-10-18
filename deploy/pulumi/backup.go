@@ -79,13 +79,30 @@ type ArchiveArgs struct {
 	// Create makes the bucket: versioned, encrypted, private, TLS only and under
 	// Object Lock. Only NewBackup creates; NewRestore refuses it.
 	Create *ArchiveBucketArgs
+	// BreakglassRoleArns are the roles that alone may bypass the bucket's lock:
+	// the bucket's policy denies s3:BypassGovernanceRetention,
+	// s3:PutBucketObjectLockConfiguration and s3:DeleteObjectVersion to every
+	// other principal (ArchiveBucketGuardStatement), so that a role with a broad S3
+	// allow (a power user, an automation role) cannot shorten the lock, switch
+	// it off or delete a backup's version. Role ARNs, a `*` only in the hash of
+	// an SSO role's name (CheckKeyAdmin). Required with Create; with an existing
+	// bucket it adds the same statement to the ArchiveBucketPolicy output, for the
+	// bucket's owner to apply. Include the role that applies the stack, which
+	// changes the lock configuration.
+	BreakglassRoleArns []string
 }
 
 // ArchiveBucketArgs is the bucket NewBackup creates.
 type ArchiveBucketArgs struct {
-	// Mode is the Object Lock mode of the default retention: GOVERNANCE (the
-	// default) or COMPLIANCE, which nobody can shorten and needs
-	// AcknowledgeCompliance.
+	// Mode is the Object Lock mode of the default retention: COMPLIANCE, which
+	// nobody can shorten (the root included) and needs AcknowledgeCompliance, or
+	// GOVERNANCE, which a role holding s3:BypassGovernanceRetention can shorten.
+	// Required in effect: left empty it is COMPLIANCE (it was GOVERNANCE before
+	// v1.78), so a stack that relied on the old default is refused until it says
+	// GOVERNANCE (what the bucket has) or acknowledges COMPLIANCE. The lock of a
+	// bucket that exists is not changed by editing this on the quiet: Pulumi
+	// applies a different Mode to the bucket's lock configuration, which is
+	// why the choice is made in the arguments and never by a default.
 	Mode                  string
 	AcknowledgeCompliance bool
 	// RetentionDays is the default retention. Default: `retention.maxAge` in
@@ -146,7 +163,8 @@ type BackupCommon struct {
 	// `sluis-<instance>-<module>` (the same as LambdaArgs.TableNames).
 	TableNames map[Module]string
 	// ParameterKeyArn is the customer key the SecureString parameters are
-	// encrypted with, written as `secrets.kmsKeyId`.
+	// encrypted with, written as `secrets.kmsKeyId`. Required: the restore
+	// identity is one of them, and the AWS-managed key is not a custodian of it.
 	ParameterKeyArn string
 	// MinterRefs are the Cloudflare minter parameters a process reads for
 	// `ports.blob.s3.credentials.preset` without hosting the module, as
@@ -184,6 +202,8 @@ type BackupCommon struct {
 	AlarmActionArns []string
 	// Tags are put on everything that takes tags.
 	Tags map[string]string
+	// CodeSigningConfigArn is LambdaArgs.CodeSigningConfigArn, for these functions.
+	CodeSigningConfigArn pulumi.StringInput
 
 	// Telemetry is the OpenTelemetry layer, as LambdaArgs.Telemetry: the same
 	// installation value gives every function of the library the same
@@ -297,6 +317,11 @@ func (c *BackupCommon) plan(role string) (*backupPlan, error) {
 	req("AccountID", p.AccountID)
 	req("Instance", p.Instance)
 	req("Archive.Bucket", p.Archive.Bucket)
+	if p.ParameterKeyArn == "" {
+		errs = append(errs, errors.New("ParameterKeyArn is required: the customer-managed key the installation's SecureStrings are encrypted with. "+
+			"NewBackup stores the restore identity, the age key that opens every backup, as a SecureString, and the restore and backup functions write "+
+			"the restored credentials; left to SSM they are encrypted with the AWS-managed key alias/aws/ssm, which every role with ssm:GetParameter can decrypt"))
+	}
 	if p.Instance != "" && !validInstance(p.Instance) {
 		errs = append(errs, fmt.Errorf("the Instance %q is lower-case letters, digits and dashes, at most 32, and not private or export", p.Instance))
 	}
@@ -389,15 +414,23 @@ func (c *BackupCommon) plan(role string) (*backupPlan, error) {
 		}
 		p.lockDays = days
 		switch c.Mode {
-		case "", "GOVERNANCE":
-		case "COMPLIANCE":
+		case "GOVERNANCE":
+		case "", "COMPLIANCE":
 			if !c.AcknowledgeCompliance {
-				return nil, errors.New("sluispulumi: Archive.Create.Mode COMPLIANCE cannot be shortened or removed by anybody, the account's root included: " +
-					"set AcknowledgeCompliance to say so")
+				return nil, errors.New("sluispulumi: Archive.Create.Mode is COMPLIANCE (the default since v1.78; GOVERNANCE must be asked for) and it cannot be " +
+					"shortened or removed by anybody, the account's root included: set AcknowledgeCompliance to say so, or Mode GOVERNANCE " +
+					"to keep a bucket that was made under it (the lock of an existing bucket is not changed unless the arguments say so)")
 			}
 		default:
 			return nil, fmt.Errorf("sluispulumi: Archive.Create.Mode %q is GOVERNANCE or COMPLIANCE", c.Mode)
 		}
+		if len(p.Archive.BreakglassRoleArns) == 0 {
+			return nil, errors.New("sluispulumi: Archive.BreakglassRoleArns is required with Archive.Create: the bucket's policy denies the bypass of " +
+				"the lock, its configuration and the deletion of versions to every principal but these roles (the break-glass role, and the role that applies the stack)")
+		}
+	}
+	if err := checkKeyAdmins("Archive.BreakglassRoleArns", p.Archive.BreakglassRoleArns); err != nil {
+		return nil, err
 	}
 	if p.AuditQueueURL != "" {
 		arn, err := queueArnOf(p.AuditQueueURL)
@@ -465,7 +498,11 @@ func resolvePackage(c *BackupCommon) error {
 		c.PackageVersion = v
 	}
 	if c.PackageSHA256 == "" {
-		cp := artifact.Release{ResolveChecksums: true, Version: v, BaseURL: base}
+		cp := artifact.Release{}
+		if c.Release != nil {
+			cp = *c.Release
+		}
+		cp.ResolveChecksums, cp.Version = true, v
 		c.Release = &cp
 	}
 	return nil
@@ -625,7 +662,8 @@ func (p *backupPlan) moduleFunctionArgs(name, doc string, docOut pulumi.StringIn
 		MemoryMB:            p.Function.MemoryMB, TimeoutSeconds: p.Function.TimeoutSeconds,
 		LogRetentionDays: p.LogRetentionDays, PermissionsBoundaryArn: p.PermissionsBoundaryArn, Tags: p.Tags,
 		Callers: callers, NoRetry: noRetry, OmitLive: omitLive,
-		Telemetry: p.Telemetry,
+		CodeSigningConfigArn: p.CodeSigningConfigArn,
+		Telemetry:            p.Telemetry,
 		Policy: func(logGroup pulumi.StringOutput) pulumi.StringInput {
 			bucket := p.Storage.BucketArn
 			if bucket == nil {
@@ -773,6 +811,13 @@ func NewBackup(ctx *pulumi.Context, name string, args *BackupArgs, opts ...pulum
 		st, err := ArchiveBucketPolicyStatements(g, v[0].(string), restoreRole)
 		if err != nil {
 			return "", err
+		}
+		if len(p.Archive.BreakglassRoleArns) > 0 {
+			guard, err := ArchiveBucketGuardStatement(g.BucketArn, p.Archive.BreakglassRoleArns)
+			if err != nil {
+				return "", err
+			}
+			st = append(st, guard)
 		}
 		return document(st)
 	}).(pulumi.StringOutput)

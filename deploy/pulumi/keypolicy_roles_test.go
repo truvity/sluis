@@ -15,6 +15,7 @@ import (
 	arp "github.com/truvity/sluis/deploy/pulumi"
 )
 
+var kpEstateKeyAdmin = arnp + "iam::" + account + ":role/key-admin"
 var kpEstateAdmin = arnp + "iam::" + account + ":role/aws-reserved/sso.example/*Admin_*"
 
 // kpShapes are two installations: the plain one, and one that keeps the issuer's
@@ -30,6 +31,7 @@ func kpShapes() map[string]struct {
 		"plain": {args: func(*arp.LambdaArgs) {}, opts: arp.KeyPolicyOptions{
 			ExternalReaders: []string{arnp + "iam::" + account + ":role/cluster-a-reader"},
 			Admins:          []string{kpEstateAdmin},
+			KeyAdmins:       []string{kpEstateKeyAdmin},
 		}},
 		"switching": {
 			args: func(a *arp.LambdaArgs) {
@@ -40,6 +42,7 @@ func kpShapes() map[string]struct {
 					arnp + "iam::" + account + ":role/cluster-a-reader", arnp + "iam::" + account + ":role/cluster-b-reader",
 				},
 				Admins:           []string{kpEstateAdmin},
+				KeyAdmins:        []string{kpEstateKeyAdmin},
 				Breakglass:       []string{arnp + "iam::" + account + ":role/aws-reserved/sso.example/*Glass_*"},
 				DenyOtherActions: true,
 			},
@@ -160,7 +163,7 @@ func TestNoRoleButOIDCReachesTheSignContext(t *testing.T) {
 // alone through its own statement.
 func TestTheGitHubRoleDecryptsGitHubParametersAlone(t *testing.T) {
 	a := kpLambdaArgs(t, nil)
-	st, err := a.KeyPolicyStatements(arp.KeyPolicyOptions{})
+	st, err := a.KeyPolicyStatements(arp.KeyPolicyOptions{KeyAdmins: []string{kpEstateKeyAdmin}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -293,7 +296,7 @@ func TestExternalReaderRoleGrantsExactlyItsAddresses(t *testing.T) {
 	}
 	// It merges into the library's key policy without a Sid collision.
 	a := kpLambdaArgs(t, nil)
-	if _, err := a.KeyPolicyStatements(arp.KeyPolicyOptions{ReaderStatements: []map[string]any{stmt}}); err != nil {
+	if _, err := a.KeyPolicyStatements(arp.KeyPolicyOptions{KeyAdmins: []string{kpEstateKeyAdmin}, ReaderStatements: []map[string]any{stmt}}); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -305,6 +308,7 @@ func TestExternalReaderRoleRefusesWhatIsNotExactOrNotTrusted(t *testing.T) {
 		"wildcard address": func(a *arp.ExternalReaderRoleArgs) { a.Addresses = []string{"external/github/*"} },
 		"no trust":         func(a *arp.ExternalReaderRoleArgs) { a.TrustPrincipalArn = "" },
 		"wildcard trust":   func(a *arp.ExternalReaderRoleArgs) { a.TrustPrincipalArn = arnp + "iam::" + account + ":root*" },
+		"the account root": func(a *arp.ExternalReaderRoleArgs) { a.TrustPrincipalArn = arnp + "iam::" + account + ":root" },
 		"two trusts":       func(a *arp.ExternalReaderRoleArgs) { a.TrustPolicy = pulumi.String("{}") },
 		"bad role name":    func(a *arp.ExternalReaderRoleArgs) { a.RoleName = "a/b" },
 	} {

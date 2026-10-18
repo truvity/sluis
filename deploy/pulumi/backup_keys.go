@@ -108,9 +108,9 @@ func newRestoreIdentity(ctx *pulumi.Context, name string, p *backupPlan, parent 
 		Description: pulumi.String("The age identity the restore function decrypts backups with. Read by the restore role only."),
 		Tags:        tagMap(p.Tags),
 	}
-	if p.ParameterKeyArn != "" {
-		pargs.KeyId = pulumi.String(p.ParameterKeyArn)
-	}
+	// Always the installation's key: plan() refuses a plan without one, and a
+	// SecureString left to SSM is encrypted with the AWS-managed key.
+	pargs.KeyId = pulumi.String(p.ParameterKeyArn)
 	param, err := ssm.NewParameter(ctx, name+restoreIdentityLogicalName, pargs, parent)
 	if err != nil {
 		return nil, fmt.Errorf("sluis restore identity parameter: %w", err)

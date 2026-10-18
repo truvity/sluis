@@ -69,8 +69,15 @@ func (b bucketGrant) list(prefixes ...string) statement {
 // The prefixes of the bucket contract (docs/reference/audit/bucket-contract.md) a part
 // writes. The writer writes everything but seals and keys; the notary writes
 // those two and nothing else.
+const recordsPrefix = "records/"
+
+// writeOnce is the condition of a put that may not replace an object: the
+// request carries If-None-Match: * (the s3:if-none-match condition key), which S3
+// answers with 412 for a key that exists.
+var writeOnce = map[string]any{"StringEquals": map[string]any{"s3:if-none-match": "*"}}
+
 var (
-	writerPrefixes = []string{"records/", "catalogue/", "schema/", "identity/", "dlq/"}
+	writerPrefixes = []string{recordsPrefix, "catalogue/", "schema/", "identity/", "dlq/"}
 	sealPrefixes   = []string{"seals/", "keys/"}
 )
 
@@ -78,6 +85,23 @@ var (
 func assumeRoleJSON(service string) string {
 	return policyJSON(statement{
 		"Effect": "Allow", "Principal": map[string]any{"Service": service}, "Action": "sts:AssumeRole",
+	})
+}
+
+// schedulerTrust lets EventBridge Scheduler assume a role for ONE schedule of the
+// account: aws:SourceAccount holds it to the account's schedules, and aws:SourceArn
+// to the schedule the role is for (the default group's `schedule/default/<name>`).
+// With no condition at all any schedule of any account could ask the role to
+// invoke its function.
+func schedulerTrust(region, account, scheduleName string) string {
+	return policyJSON(statement{
+		"Effect": "Allow", "Principal": map[string]any{"Service": "scheduler.amazonaws.com"}, "Action": "sts:AssumeRole",
+		"Condition": map[string]any{
+			"StringEquals": map[string]any{"aws:SourceAccount": account},
+			"ArnEquals": map[string]any{
+				"aws:SourceArn": "arn:" + "aws:scheduler:" + region + ":" + account + ":schedule/default/" + scheduleName,
+			},
+		},
 	})
 }
 
@@ -106,7 +130,10 @@ func webIdentityStatement(audience string) statement {
 //
 // PutObjectRetention and PutObjectLegalHold are needed by PutObject itself: S3
 // refuses a put that carries an Object Lock header unless the caller also holds
-// the matching permission. The writer reads the catalogue it compares at
+// the matching permission. The legal hold is placed by the put of a record whose
+// tenant is under a hold (roll.go sets LegalHold from the holds the writer reads),
+// so the writer needs it; the notary, the readers and the archive writer do not
+// have it. The put into records/ must carry If-None-Match: * (writeOnce). The writer reads the catalogue it compares at
 // start-up, the legal holds, and the archive an addendum scans; it lists the
 // bucket for the last two. It has no delete, no write to seals/ or keys/ (it reads
 // seals/ to see whether an hour is sealed, so that it never puts an object into
@@ -126,8 +153,19 @@ func writerPolicy(buckets []bucketGrant, archiveKeyArns []string, tableArn, queu
 		if b.Locked {
 			put = append(put, "s3:PutObjectRetention", "s3:PutObjectLegalHold")
 		}
+		// A record is written once: the store sends If-None-Match: * on every put, and
+		// the policy requires it for records/, so that a writer (or a role that stole its
+		// credentials) can only add an object under records/, never replace one, even
+		// in a bucket with no Object Lock (S3 then refuses the put with 412).
+		var others []string
+		for _, p := range writerPrefixes {
+			if p != recordsPrefix {
+				others = append(others, p)
+			}
+		}
 		st = append(st,
-			allow(put, b.under(writerPrefixes...), nil),
+			allow(put, b.under(recordsPrefix), writeOnce),
+			allow(put, b.under(others...), nil),
 			allow([]string{"s3:GetObject"}, b.under(append(append([]string{}, writerPrefixes...), "holds/", "seals/")...), nil),
 			b.list(),
 		)
@@ -325,34 +363,69 @@ func invokePolicy(functionArn string) string {
 // creates no key; this is the policy it would have been created with, for the
 // estate to put on its own. The default policy hands the key to IAM, so any
 // principal in the account with a kms:Sign allow could sign seals; this one does
-// not. The account's root administers the key and cannot use it, and only the
-// notary's role signs. (KMS policies are the one place an administrator is held
-// out of a key's use, and a key that signs the trail is that place.)
+// not. Only the notary's role signs: the account's root is given no kms:Sign,
+// and kms:Sign is denied to every other principal outright.
+//
+// The root's delegation is the key's upkeep (describe, tags, aliases, rotation)
+// and not its control plane. The key policy, grants, disabling and deletion
+// (KeyControlPlaneActions) are the administrators' alone: the root allows them
+// to the named roles and a Deny takes them from everyone else, so a role that
+// has a kms:* or kms:Put* allow in IAM (a power user, an automation or StackSet
+// role) cannot rewrite the policy to give itself kms:Sign and forge a seal. An
+// earlier version of this policy let the root create grants and put policies and
+// its comment said the administrator cannot use the key; the administrator could,
+// by changing the policy first.
+//
+// admins are role ARNs (a `*` only in the hash of an SSO role's name, see
+// CheckKeyAdmin), at least one: the role that applies the stack and the
+// break-glass role. They can still change the policy, and with it the notary: a
+// change of who signs is theirs to make, and CloudTrail records it.
 //
 // The notary's role ARN is
 // arn:<partition>:iam::<account>:role<RolePath><name>-notary, which the estate
 // can write before the installation exists.
-func SealKeyPolicy(accountRootArn, notaryRoleArn string) string {
-	return sealKeyPolicy(accountRootArn, notaryRoleArn)
+func SealKeyPolicy(accountRootArn, notaryRoleArn string, admins []string) (string, error) {
+	return sealKeyPolicy(accountRootArn, notaryRoleArn, admins)
 }
 
 // sealKeyPolicy is SealKeyPolicy.
-func sealKeyPolicy(accountRootArn, notaryRoleArn string) string {
-	return policyJSON(
-		statement{
+func sealKeyPolicy(accountRootArn, notaryRoleArn string, admins []string) (string, error) {
+	exempt, err := keyAdminSet("SealKeyPolicy admins", admins)
+	if err != nil {
+		return "", err
+	}
+	st := []statement{
+		{
 			"Sid": "Administer", "Effect": "Allow", "Principal": map[string]any{"AWS": accountRootArn},
-			"Action": []string{
-				"kms:Create*", "kms:Describe*", "kms:Enable*", "kms:List*", "kms:Put*", "kms:Update*", "kms:Revoke*",
-				"kms:Disable*", "kms:Get*", "kms:Delete*", "kms:TagResource", "kms:UntagResource",
-				"kms:ScheduleKeyDeletion", "kms:CancelKeyDeletion",
-			},
-			"Resource": "*",
+			"Action": append([]string(nil), keyAdministerActions...), "Resource": "*",
 		},
-		statement{
+		{
 			"Sid": "SealWithTheNotaryOnly", "Effect": "Allow", "Principal": map[string]any{"AWS": notaryRoleArn},
 			"Action": []string{"kms:Sign", "kms:GetPublicKey", "kms:DescribeKey"}, "Resource": "*",
 		},
-	)
+	}
+	st = append(st, controlPlane(accountRootArn, exempt)...)
+	st = append(st, statement{
+		"Sid": "NoSealButTheNotary", "Effect": "Deny", "Principal": map[string]any{"AWS": "*"},
+		"Action": "kms:Sign", "Resource": "*",
+		"Condition": map[string]any{"ArnNotEquals": map[string]any{"aws:PrincipalArn": notaryRoleArn}},
+	})
+	return policyJSON(st...), nil
+}
+
+// ArchiveLockGuard is the statement of an archive bucket's policy that keeps the
+// lock to the break-glass roles: a Deny of s3:BypassGovernanceRetention,
+// s3:DeleteObjectVersion and s3:PutBucketObjectLockConfiguration on the bucket and
+// its objects to every principal not matched by breakglass (role ARNs, validated
+// by Args). The writer, the notary and the readers use none of these actions, and
+// the lifecycle's expiry is S3's own.
+func ArchiveLockGuard(bucketArn string, breakglass []string) map[string]any {
+	return statement{
+		"Sid": "LockBreakglassOnly", "Effect": "Deny", "Principal": "*",
+		"Action":    []string{"s3:BypassGovernanceRetention", "s3:DeleteObjectVersion", "s3:PutBucketObjectLockConfiguration"},
+		"Resource":  []string{bucketArn, bucketArn + "/*"},
+		"Condition": map[string]any{"ArnNotLike": map[string]any{"aws:PrincipalArn": dedupe(sortedCopy(breakglass))}},
+	}
 }
 
 // ArchiveKeyPolicyArgs are the principals and the bucket of the archive grants

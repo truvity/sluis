@@ -132,6 +132,13 @@ type AuditArchiveArgs struct {
 	DefaultRetentionDays  int
 	GlacierIRDays         int
 	DeepArchiveDays       int
+	// BreakglassRoleArns are the roles that alone may bypass the lock of the
+	// buckets the library creates (auditpulumi.ArchiveArgs.BreakglassRoleArns):
+	// their policies deny s3:BypassGovernanceRetention,
+	// s3:PutBucketObjectLockConfiguration and s3:DeleteObjectVersion to every other
+	// principal. Required when a preset's bucket is created (the default install
+	// creates one), refused when none is.
+	BreakglassRoleArns []string
 }
 
 // AuditUse is an audit installation that exists: the outputs of its ingest queue.
@@ -314,6 +321,7 @@ func (a *LambdaArgs) auditInstallArgs(p *auditPlan, role pulumi.StringInput, mor
 		Encryption:     ar.Encryption,
 		ObjectLockMode: ar.ObjectLockMode, AcknowledgeCompliance: ar.AcknowledgeCompliance,
 		DefaultRetentionDays: ar.DefaultRetentionDays, GlacierIRDays: ar.GlacierIRDays, DeepArchiveDays: ar.DeepArchiveDays,
+		BreakglassRoleArns: ar.BreakglassRoleArns,
 	}
 	presets := map[string]auditpulumi.PresetStorage{}
 	if au.Presets == nil {

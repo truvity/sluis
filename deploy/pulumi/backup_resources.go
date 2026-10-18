@@ -34,7 +34,7 @@ func newArchiveBucket(ctx *pulumi.Context, name string, p *backupPlan, parent pu
 	}
 	mode := c.Mode
 	if mode == "" {
-		mode = "GOVERNANCE"
+		mode = "COMPLIANCE"
 	}
 	if _, err := s3.NewBucketObjectLockConfiguration(ctx, name+"-archive-lock", &s3.BucketObjectLockConfigurationArgs{
 		Bucket: bucket.ID(), ObjectLockEnabled: pulumi.String("Enabled"),
@@ -66,10 +66,14 @@ func newArchiveBucket(ctx *pulumi.Context, name string, p *backupPlan, parent pu
 		return nil, fmt.Errorf("sluis archive public access block: %w", err)
 	}
 	policy := bucket.Arn.ApplyT(func(arn string) (string, error) {
+		guard, err := ArchiveBucketGuardStatement(arn, p.Archive.BreakglassRoleArns)
+		if err != nil {
+			return "", err
+		}
 		return document([]statement{{
 			"Sid": "DenyPlainHTTP", "Effect": "Deny", "Principal": "*", "Action": "s3:*", "Resource": []string{arn, arn + "/*"},
 			"Condition": map[string]any{"Bool": map[string]any{"aws:SecureTransport": "false"}},
-		}})
+		}, guard})
 	}).(pulumi.StringOutput)
 	if _, err := s3.NewBucketPolicy(ctx, name+"-archive-policy", &s3.BucketPolicyArgs{Bucket: bucket.ID(), Policy: policy},
 		parent, pulumi.DependsOn([]pulumi.Resource{block})); err != nil {
@@ -112,13 +116,7 @@ func newBackupSchedules(ctx *pulumi.Context, name string, p *backupPlan, sch Bac
 		return fmt.Errorf("sluis schedule dead-letter queue: %w", err)
 	}
 	out.ScheduleDLQArn = dlq.Arn
-	trust, _ := json.Marshal(map[string]any{
-		"Version": polVersion,
-		"Statement": []map[string]any{{
-			"Effect": "Allow", "Principal": map[string]any{"Service": "scheduler.amazonaws.com"}, "Action": "sts:AssumeRole",
-			"Condition": map[string]any{"StringEquals": map[string]any{"aws:SourceAccount": p.AccountID}},
-		}},
-	})
+	trust, _ := json.Marshal(schedulerTrust(p.Region, p.AccountID, p.FunctionName+"-"))
 	rargs := &iam.RoleArgs{Name: pulumi.String(p.FunctionName + "-scheduler"), AssumeRolePolicy: pulumi.String(string(trust)), Tags: tags}
 	if p.PermissionsBoundaryArn != "" {
 		rargs.PermissionsBoundary = pulumi.String(p.PermissionsBoundaryArn)
