@@ -1,5 +1,7 @@
 ## Unreleased
 
+## v1.77.0-rc.2
+
 ### Security
 
 Fixes from the 2026-10-18 review of the issuer and its sign-in. Relying parties that behave correctly see no change; the rows marked *behaviour* are the ones that can.
