@@ -18,7 +18,9 @@ package app
 
 import (
 	"context"
+	"crypto/hmac"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -429,7 +431,7 @@ func openRecovery(
 				if cfg.recoveryVerifier != "" {
 					source = srpauth.SourceOf(nil, src, srpauth.RecoveryUser, cfg.recoveryVerifier)
 				} else {
-					source = derivedCredential(src, cfg.recoveryLogin)
+					source = derivedCredential(src, cfg.recoveryLogin, kept.sessionKey)
 				}
 			}
 			log.InfoContext(ctx, "recovery sign-in is by the secret the configuration names", slog.String("secret", where))
@@ -451,7 +453,7 @@ func openRecovery(
 			return nil, err
 		}
 		announceRecoveryPassword(generated)
-		return server.NewPasswordRecovery(srpauth.Fixed(srp.Default.NewCredential(srpauth.RecoveryUser, generated)), ""), nil
+		return server.NewPasswordRecovery(srpauth.Fixed(srp.Default.NewCredential(srp.NewSalt(), srpauth.RecoveryUser, generated)), ""), nil
 	}
 
 	subject := access.ServiceAccountSubject(kept.namespace, cfg.recoveryAccount)
@@ -470,16 +472,34 @@ func openRecovery(
 // the secrets source holds, for an installation that keeps the password and not
 // a verifier (layout v4, a file): the hub reads the password only to derive the
 // verifier, in memory, and never compares one with what a client sends.
-func derivedCredential(src secrets.Source, name string) srpauth.Source {
+//
+// The password is used as the source delivers it (a file's trailing newline is
+// the source's to remove) and is refused when it is too weak to sit behind a
+// verifier ([srp.CheckPassword]). The salt is random in effect and has nothing
+// to do with the password: an HMAC of the shared session key, so every container
+// derives the same one and a password guess cannot be tested against it.
+func derivedCredential(src secrets.Source, name string, key access.KeyFunc) srpauth.Source {
 	return srpauth.Cached(lazy.TTL, func(ctx context.Context) (srp.Credential, error) {
 		password, err := src.Get(ctx, name)
 		if err != nil {
 			return srp.Credential{}, fmt.Errorf("recovery.passwordSecret: %w", err)
 		}
-		if strings.TrimSpace(password) == "" {
+		if password == "" {
 			return srp.Credential{}, errors.New("recovery.passwordSecret: the password is empty")
 		}
-		return srp.Default.NewCredential(srpauth.RecoveryUser, strings.TrimSpace(password)), nil
+		if err = srp.CheckPassword(password); err != nil {
+			return srp.Credential{}, fmt.Errorf("recovery.passwordSecret: %w", err)
+		}
+		if key == nil {
+			return srp.Credential{}, errors.New("recovery.passwordSecret: this console has no key to derive the salt from")
+		}
+		k, err := key()
+		if err != nil {
+			return srp.Credential{}, fmt.Errorf("recovery.passwordSecret: %w", err)
+		}
+		mac := hmac.New(sha256.New, k)
+		mac.Write([]byte("sluis srp salt\x00" + srpauth.RecoveryUser))
+		return srp.Default.NewCredential(mac.Sum(nil), srpauth.RecoveryUser, password), nil
 	})
 }
 

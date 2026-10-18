@@ -17,6 +17,9 @@ import (
 // does (0 O 1 l I -> x X y Y z).
 const mockedPassword = "AbxXcyYzdEfGhJkMnPqRsTuVwXyZaBcDeFgHjKmN"
 
+// The mock's generated salt: 32 bytes ("state-secret-state-secret-state!"), unrelated to the password.
+const mockedSalt = "state-secret-state-secret-state!"
+
 func creds(t *testing.T, doc string) srp.Credential {
 	t.Helper()
 	var wrapper struct {
@@ -51,8 +54,9 @@ func TestTheRecoveryVerifierIsDerivedFromTheGeneratedPasswordOnLayoutV5(t *testi
 		t.Error("the verifier's value is not marked secret")
 	}
 	got := creds(t, value.SecretValue().Element.StringValue())
-	if want := srp.Default.NewCredential("recovery", mockedPassword); string(got.Verifier) != string(want.Verifier) || string(got.Salt) != string(want.Salt) {
-		t.Error("the stored credential is not the one derived from the generated password for the account recovery")
+	if want := srp.Default.NewCredential([]byte(mockedSalt), "recovery", mockedPassword); string(got.Verifier) != string(want.Verifier) ||
+		string(got.Salt) != mockedSalt || got.Iterations != srp.Iterations {
+		t.Error("the stored credential is not the one derived from the generated password and the generated salt for the account recovery")
 	}
 	if strings.Contains(value.SecretValue().Element.StringValue(), mockedPassword) {
 		t.Error("the verifier's document carries the password")
@@ -69,13 +73,28 @@ func TestTheRecoveryVerifierIsDerivedFromTheGeneratedPasswordOnLayoutV5(t *testi
 	}
 }
 
-func TestTheVerifierIsAPureFunctionOfThePassword(t *testing.T) {
+// The salt is served to anybody who starts a sign-in, so it must tell nothing of the
+// password: a RandomBytes of its own, kept while the password is and replaced with
+// it, not a function of the password. And a second run with the same salt and password
+// writes the same parameter, so an apply that rotates nothing rewrites nothing.
+func TestTheSaltIsRandomAndKeptWithThePasswordAndNotDerivedFromIt(t *testing.T) {
 	a, _ := mustLambda(t, withLayout(arp.LayoutV5))
+	salt := a.one(t, "random:index/randomBytes:RandomBytes", "staging-recovery-salt")
+	if prop(salt, "length").NumberValue() != 32 {
+		t.Errorf("salt: %v", salt.Inputs)
+	}
+	if k := prop(salt, "keepers"); !k.HasValue() || !k.IsObject() || !k.ObjectValue()["password"].HasValue() {
+		t.Errorf("the salt is not kept with the password: %v", salt.Inputs)
+	}
 	b, _ := mustLambda(t, withLayout(arp.LayoutV5))
 	one := prop(a.one(t, ssmParameterType, "staging-recovery-verifier-v5"), "value").SecretValue().Element.StringValue()
 	two := prop(b.one(t, ssmParameterType, "staging-recovery-verifier-v5"), "value").SecretValue().Element.StringValue()
 	if one != two {
-		t.Error("two runs with the same password wrote two different verifiers: an apply would rewrite the parameter")
+		t.Error("two runs with the same password and salt wrote two different verifiers: an apply would rewrite the parameter")
+	}
+	// The salt in the document is the resource's, byte for byte.
+	if got := creds(t, one); string(got.Salt) != mockedSalt {
+		t.Errorf("the stored salt is %q, the resource's is %q", got.Salt, mockedSalt)
 	}
 }
 
@@ -121,7 +140,7 @@ func TestTheConformanceAccountIsMadeOnlyWhenTurnedOn(t *testing.T) {
 		t.Errorf("verifier parameter: %v", v.Inputs)
 	}
 	got := creds(t, prop(v, "value").SecretValue().Element.StringValue())
-	want := srp.Default.NewCredential("conformance", mockedPassword)
+	want := srp.Default.NewCredential([]byte(mockedSalt), "conformance", mockedPassword)
 	if string(got.Verifier) != string(want.Verifier) {
 		t.Error("the conformance verifier is not derived from its password for the account conformance")
 	}

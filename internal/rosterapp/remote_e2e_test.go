@@ -69,7 +69,7 @@ import (
 const (
 	e2eIssuerURL = "https://access.acme.example"
 	e2eMount     = e2eIssuerURL + "/console"
-	e2ePassword  = "correct horse battery staple"
+	e2ePassword  = "correct horse battery staple, forty-ish chars"
 	e2eOrg       = "acme-org"
 	e2eLinkUser  = "platform@north.example"
 )
@@ -326,12 +326,12 @@ func (r *e2eRig) session() *http.Cookie {
 		r.t.Fatalf("the sign-in page offers no password form: %d %s", page.Code, page.Body.String())
 	}
 	state := html.UnescapeString(found[1])
-	post := func(path string, body map[string]string) (int, map[string]string) {
+	post := func(path string, body map[string]string) (int, map[string]any) {
 		raw, _ := json.Marshal(body)
 		req := httptest.NewRequest(http.MethodPost, e2eMount+path, bytes.NewReader(raw))
 		req.Header.Set("Content-Type", "application/json")
 		rec := send(req)
-		out := map[string]string{}
+		out := map[string]any{}
 		_ = json.Unmarshal(rec.Body.Bytes(), &out)
 		return rec.Code, out
 	}
@@ -339,18 +339,19 @@ func (r *e2eRig) session() *http.Cookie {
 	if code != http.StatusOK {
 		r.t.Fatalf("recovery start = %d %v", code, begun)
 	}
-	salt, _ := hex.DecodeString(begun["salt"])
-	pub, _ := hex.DecodeString(begun["B"])
+	salt, _ := hex.DecodeString(begun["salt"].(string))
+	pub, _ := hex.DecodeString(begun["B"].(string))
+	iterations := int(begun["iterations"].(float64))
 	client, err := srp.Default.NewClient("recovery", e2ePassword, rand.Reader)
 	if err != nil {
 		r.t.Fatal(err)
 	}
-	m1, err := client.Respond(salt, pub)
+	m1, err := client.Respond(salt, pub, iterations)
 	if err != nil {
 		r.t.Fatal(err)
 	}
 	if code, done := post("/login/srp/finish", map[string]string{
-		"state": state, "handle": begun["handle"], "A": hex.EncodeToString(client.Public()), "M1": hex.EncodeToString(m1),
+		"state": state, "handle": begun["handle"].(string), "A": hex.EncodeToString(client.Public()), "M1": hex.EncodeToString(m1),
 	}); code != http.StatusOK {
 		r.t.Fatalf("recovery finish = %d %v", code, done)
 	}

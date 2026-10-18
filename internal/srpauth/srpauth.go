@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/truvity/sluis/internal/port"
@@ -99,6 +100,55 @@ type Service struct {
 	// a State write each and which anyone who can load the page can make.
 	Refusals *throttle.Limiter
 	Starts   *throttle.Limiter
+
+	decoys decoyCache
+}
+
+// decoyCache keeps the made-up verifiers, so that an unknown username costs the
+// server what a real one does (a verifier is one modular exponentiation to make).
+// It is bounded: a caller who tries a million names fills a thousand places, and
+// the rest are made each time.
+type decoyCache struct {
+	mu sync.Mutex
+	m  map[string]decoyEntry
+}
+
+type decoyEntry struct{ salt, verifier []byte }
+
+const decoyCacheSize = 1024
+
+func (c *decoyCache) get(key string) (decoyEntry, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	e, ok := c.m[key]
+	return e, ok
+}
+
+func (c *decoyCache) put(key string, e decoyEntry) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.m == nil {
+		c.m = map[string]decoyEntry{}
+	}
+	if len(c.m) < decoyCacheSize {
+		c.m[key] = e
+	}
+}
+
+// decoy is the made-up salt and verifier of a username.
+func (s *Service) decoy(username string) (salt, verifier []byte, err error) {
+	key, err := s.DecoyKey()
+	if err != nil {
+		return nil, nil, err
+	}
+	// The cache is keyed by the key too: a rotated key is a new set of decoys.
+	cacheKey := string(key) + "\x00" + username
+	if e, ok := s.decoys.get(cacheKey); ok {
+		return e.salt, e.verifier, nil
+	}
+	salt, verifier = s.Params.Decoy(key, username)
+	s.decoys.put(cacheKey, decoyEntry{salt, verifier})
+	return salt, verifier, nil
 }
 
 // NewStarts is the limiter of starts: thirty a source and six hundred in all,
@@ -110,8 +160,13 @@ func NewStarts(now func() time.Time) *throttle.Limiter {
 // Begun is the answer to a start.
 type Begun struct {
 	Handle string
-	Salt   []byte
-	B      []byte
+	// Username is the username as the server spells it (lower-cased and trimmed),
+	// which the client must use: it is part of x and of the proof.
+	Username string
+	Salt     []byte
+	B        []byte
+	// Iterations is the number of PBKDF2 rounds x is stretched with.
+	Iterations int
 }
 
 func (s *Service) random() io.Reader {
@@ -152,11 +207,10 @@ func (s *Service) Start(ctx context.Context, source, bind, username string, look
 		}
 	}
 	if !ok {
-		key, err := s.DecoyKey()
-		if err != nil {
+		if cred.Salt, cred.Verifier, err = s.decoy(username); err != nil {
 			return Begun{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
 		}
-		cred.Salt, cred.Verifier = s.Params.Decoy(key, username)
+		cred.Iterations = s.Params.Iterations()
 	}
 	server, err := s.Params.NewServer(username, cred.Salt, cred.Verifier, s.random())
 	if err != nil {
@@ -171,7 +225,7 @@ func (s *Service) Start(ctx context.Context, source, bind, username string, look
 	if err = s.Store.Put(ctx, handle, rec, ExchangeTTL); err != nil {
 		return Begun{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
-	return Begun{Handle: handle, Salt: cred.Salt, B: server.Public()}, nil
+	return Begun{Handle: handle, Username: username, Salt: cred.Salt, B: server.Public(), Iterations: cred.Iterations}, nil
 }
 
 // Proved is an exchange that ended well.
@@ -189,6 +243,11 @@ func (s *Service) Finish(ctx context.Context, source, bind, handle string, a, m1
 	if s.Refusals != nil && s.Refusals.Blocked(source) {
 		return Proved{}, ErrThrottled
 	}
+	// A refusal that ran the proof check counts against the source and against the
+	// ceiling across all sources, as it always did. One that did no work (a handle
+	// that is unknown, spent or expired) counts against the source only, so that
+	// a crowd of sources cannot use up the ceiling with requests that cost nothing
+	// and lock the operator out.
 	refuse := func() (Proved, error) {
 		if s.Refusals != nil {
 			s.Refusals.Refused(source)
@@ -198,7 +257,10 @@ func (s *Service) Finish(ctx context.Context, source, bind, handle string, a, m1
 	rec, err := s.Store.Take(ctx, handle)
 	switch {
 	case errors.Is(err, ErrRefused):
-		return refuse()
+		if s.Refusals != nil {
+			s.Refusals.RefusedBySource(source)
+		}
+		return Proved{}, ErrRefused
 	case err != nil:
 		return Proved{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
@@ -209,11 +271,10 @@ func (s *Service) Finish(ctx context.Context, source, bind, handle string, a, m1
 		return Proved{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
 	if !ok || rec.Decoy {
-		key, derr := s.DecoyKey()
-		if derr != nil {
+		var derr error
+		if cred.Salt, cred.Verifier, derr = s.decoy(rec.User); derr != nil {
 			return Proved{}, fmt.Errorf("%w: %w", ErrUnavailable, derr)
 		}
-		cred.Salt, cred.Verifier = s.Params.Decoy(key, rec.User)
 	}
 	// The proof is checked on every path that reaches here, so that an unknown
 	// username, a wrong browser and a wrong password cost the same.

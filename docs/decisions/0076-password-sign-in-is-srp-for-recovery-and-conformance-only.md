@@ -2,7 +2,9 @@
 
 **Status:** Accepted (2026-10-19). Extends [0075](0075-recovery-is-turned-off-from-the-console-and-on-by-configuration.md)
 (the recovery switch closes the new door too) and [0072](0072-storage-layout-v5-module-first.md) (two new parameters in
-the issuer's namespace, and a deny on the password). Owner decision D688.
+the issuer's namespace, and a deny on the password). Owner decisions D688 (SRP for this password), D709 (keep the
+hand-written implementation, with the review's fixes), D710 (the recovery switch shuts the conformance account too),
+D711 (one client key, `harness`), D712 (a password recovery says `amr` `pwd`).
 **Date:** 2026-10-19
 
 ## Context
@@ -32,7 +34,7 @@ the big-endian form left-padded to `|N|` = 384 bytes, and `|` concatenation:
 | value | definition |
 |---|---|
 | `k` | `H(N \| PAD(g))` (RFC 5054 2.5.3) |
-| `x` | `H(s \| H(I \| ":" \| P))`: **the username `I` is part of `x`** (RFC 5054 2.6) |
+| `x` | `H(s \| PBKDF2-HMAC-SHA256(H(I \| ":" \| P), s, R))`: **the username `I` is part of `x`** (RFC 5054 2.6), and the inner hash is stretched (below) |
 | `u` | `H(PAD(A) \| PAD(B))` |
 | `B` | `k·v + g^b mod N`; `A = g^a mod N`; `a`, `b` are 256 random bits |
 | `S` | `(A·v^u)^b` at the server, `(B − k·g^x)^(a + u·x)` at the client; both mod N |
@@ -42,15 +44,37 @@ the big-endian form left-padded to `|N|` = 384 bytes, and `|` concatenation:
 
 **Deviations, stated.** RFC 5054 says SHA-1; this uses SHA-256 throughout. RFC 2945 gives `K` as a SHA-1 interleave of
 `S` and leaves group elements unpadded in `M1`; here `K = H(PAD(S))` and every group element has the fixed width of `N`,
-so the browser and the server cannot disagree on a leading zero. The two proofs are mutual: the page checks `M2` before
-it moves on. The server refuses `A mod N = 0` before it computes anything from `A`, the client refuses `B mod N = 0`,
-and both refuse `u = 0`. Proofs are compared in constant time. The arithmetic is `math/big` and `BigInt`, which are not
-constant-time; `b` lives for two minutes and each source gets a few tries.
+so the browser and the server cannot disagree on a leading zero. `x` is stretched with PBKDF2 (below), which the RFC
+does not do. The two proofs are mutual: the page checks `M2` before it moves on. The server refuses `A` when it is
+zero modulo `N` or not below `N`, before it computes anything from it; the client does the same for `B`; both refuse
+`u = 0`. Proofs are compared in constant time. The arithmetic is `math/big` and `BigInt`, which are not constant-time;
+`b` lives for two minutes and each source gets a few tries.
 
-**Test vectors.** Package `srp` takes the hash and the group as parameters, so RFC 5054 Appendix B (`alice`,
-`password123`, the 1024-bit group, SHA-1) runs through the code the default runs through, and `k`, `x`, `v`, `A`, `B`,
-`u` and the premaster secret match the RFC byte for byte. A Go↔JS test signs in with the page's script against the Go
-server and compares `A` and `M1` for a fixed `a`.
+**Stretched.** `R = 600000` rounds of PBKDF2-HMAC-SHA256 (OWASP's figure), so a stolen verifier costs 600000 hashes and
+a 3072-bit exponentiation a guess, where RFC 5054's `x` costs one hash. `R` is a protocol constant (`srp.Iterations`)
+and is **recorded in the credential** (`"iterations"`) and sent to the client with the salt, so it can be raised later
+without a flag day; the page refuses a number below 100000 or above 10 million, so a server cannot switch the
+stretching off. The salt is **random and independent of the password** (32 bytes): the server hands it to anyone who
+starts an exchange, and a salt made from the password would let that anyone test guesses against it with no verifier
+at all. The page's cost: PBKDF2 at 600000 rounds measured 70 ms in headless Chrome and 67 ms for the whole proof under
+node; a sign-in is well under a second. Generated passwords (40 characters of a 57-letter alphabet, over 200 bits) are
+the design point; **the tools refuse a weak one** (`srp.CheckPassword`: printable ASCII only, at least 20 characters
+and 10 distinct, estimated at 128 bits or more) wherever an operator supplies a password: `sluisctl recovery verifier`
+and the hub that derives its verifier from `recovery.passwordSecret`.
+
+**The username and the password are used as the person typed them, except the username's case.** The server spells the
+username (lower case, spaces trimmed) and returns it with the salt; the page uses that spelling in `x` and in `M1`, so
+`Recovery` signs in and burns no refusal. The password is never trimmed or normalised, by the page, the hub or
+`sluisctl` (which removes the trailing line ending of its standard input and nothing else; a file or environment
+source removes the trailing newline it always has).
+
+**Test vectors.** Package `srp` takes the hash, the group and the rounds as parameters (none is RFC 5054's own `x`), so
+RFC 5054 Appendix B (`alice`, `password123`, the 1024-bit group, SHA-1) runs through the code the default runs through:
+`k`, `x`, `v`, `A`, `B`, `u` and the premaster secret match the RFC byte for byte, and the exchange goes on through
+`Server.Verify`. A pinned known-answer vector for the default parameters (`srp/testdata/default-vector.json`: `x` with
+PBKDF2, `v`, `A`, `B`, `u`, `S`, `K`, `M1`, `M2` for fixed secrets) was computed independently in Python and is checked
+in Go and in the page's script. A Go↔JS test also signs in with the script against the Go server, with a mixed-case
+username.
 
 **The library.** `srp` is written here (about 250 lines), not taken from `github.com/1Password/srp`, which is maintained
 but cannot meet the interop the owner asked for: it fixes SHA-256, derives its session key from the hexadecimal text of
@@ -109,7 +133,7 @@ The usernames are `recovery` and `conformance`. Any other username gets the same
 
 ### 4. State between the two requests
 
-`start` takes the username and answers `{handle, salt, B}`; `finish` takes `{handle, A, M1}` and answers `{M2, next}`
+`start` takes the username and answers `{handle, username, salt, B, iterations}`; `finish` takes `{handle, A, M1}` and answers `{M2, next}`
 and signs the browser in. The server's `b` is kept in the State port as `srp.<handle>` (a new key family of the oidc
 module, layout 4 `issuer-srp`), under a 128-bit random handle, for **two minutes and one use**: `finish` reads the record
 and deletes it at its revision, so of two containers asked at once one wins, and the record is spent before anything is
@@ -121,9 +145,12 @@ flag off) and a username longer than 64 bytes get a **decoy** salt and `B` deriv
 container shares (an HMAC of the sign-in state key): the same on every ask, the same shape as a real one, and a `finish`
 that does the same work and ends the way a wrong password does. Refusals are counted exactly as before, per source and
 overall (5 and 100 at the issuer, 10 and 100 at the console, a minute), and a blocked source is also refused at `start`.
-Starts are counted separately (30 and 600) because each costs a State write. The residual: the decoy costs one more
-modular exponentiation than a real start, which a precise clock could in principle see; the accounts' names are fixed
-and documented, so there is little to learn.
+Starts are counted separately (30 and 600) because each costs a State write. **Only a refusal that ran the proof check
+counts against the ceiling across all sources**; a finish naming a handle that is unknown, spent or expired does no
+work and counts against its source alone, so about twenty sources cannot use up the ceiling and lock recovery out. The
+decoy verifier of a username is cached (a thousand names, then made each time), so a repeated ask costs what a real
+start does. The residual: the first ask for a name costs one more modular exponentiation, which a precise clock could
+in principle see; the accounts' names are fixed and documented, so there is little to learn.
 
 ### 5. Verifier custody
 
@@ -134,15 +161,21 @@ The issuer reads `{salt, verifier}` and never the password.
 | recovery verifier | `internal/oidc/recovery-verifier`, written by the Pulumi library | none: the service derives it from the password it already reads (`recovery.passwordSecret`), in memory |
 | conformance | `internal/oidc/conformance-password` (the operator's) and `.../conformance-verifier`, when `conformance.enabled` | needs `conformance.verifierSecret`; the stack does not make it |
 
-The value is the secret store's document of `{"salt":"<hex>","verifier":"<hex>"}`. The library computes it in the
-program from the generated password; the salt is derived from the password and the username, so an apply that does not
-rotate the password rewrites nothing. `sluisctl recovery verifier` computes the same for an installation that is not a
-Pulumi stack, and `sluisctl recovery password --account conformance` reads the generated password.
+The value is the secret store's document of `{"salt":"<hex>","verifier":"<hex>","iterations":600000}`. The library
+computes it in the program from the generated password under a salt of its own: a `RandomBytes` of 32 bytes whose
+keeper is the password, so it is stable across applies and replaced when the password is, and an apply that does not
+rotate the password rewrites nothing. Where the hub derives the verifier itself (layouts v4 and v4+v5, a file), the
+salt is an HMAC of the session key the containers share, which is the same everywhere and tells nothing of the
+password. `sluisctl recovery verifier` makes a fresh random salt each run, for an installation that is not a Pulumi
+stack, and `sluisctl recovery password --account conformance` reads the generated password.
 
 On **layout v5** the renderer no longer names `recovery.passwordSecret` and names `recovery.verifierSecret`, and the
 issuer's role is **denied** the two password parameters, in its policy (`SluisDenyPasswords`, with the decryption of
 their values) and in the parameter key's (`SluisKeyDenyPasswords`). A deny is needed because the role holds the whole
-`internal/oidc/` namespace. Read-all roles (backup) keep what they had. The IAM matrix pins both halves.
+`internal/oidc/` namespace. Read-all roles (backup) keep what they had. The IAM matrix pins both halves. On
+**layouts v4 and v4+v5** the deny is cosmetic: the hub there reads the v4 password to derive its verifier, so the
+role keeps the v4 parameter and the v5 password parameters, which nothing reads, are denied for nothing. The
+guarantee that the issuer never reads the password is a layout v5 one.
 
 ### 6. The harness
 
@@ -165,7 +198,14 @@ clients of a run carry `harness: true`, and `requires` is no longer what lets th
 - **The plaintext password path is removed**, including the one-line `curl` runbook with a bearer. The token door for
   clusters keeps its bearer: a short-lived token is not a password.
 - **A script is required.** There is no sign-in with the password without the page's script, by design.
-- **What it does not cover.** A stolen verifier is an offline target (section 1). `acr` is `recovery` and `amr` `swk`
+- **The conformance clients need `harness` in the sluis policy.** In gitops `harness` already means something else:
+  a client with no portal card whose secret is not put in the cluster. The sluis policy's `harness: true` is a third
+  meaning (a client the conformance account may sign in to), and gitops does not pass `harness` into the sluis policy
+  yet. Until it does, an estate that renders its policy from gitops cannot mark a client for the account: the gitops
+  renderer must emit `harness: true` into the sluis client for the clients it calls harness.
+- **What it does not cover.** A stolen verifier is an offline target at 600000 hashes a guess (section 1). The page's
+  arithmetic and the server's are not constant-time, and the first ask for an unknown name costs a little more than
+  a real start. `acr` is `recovery` and `amr` `swk`
   for a recovery sign-in by password as for one by token: the markers say it bypassed the directory, and a relying party
   that wants the proof's kind reads the method in the audit record. The conformance password is as sensitive as a test
   account's; turn the account off when the run is over.

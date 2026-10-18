@@ -6,8 +6,10 @@ import (
 	"crypto/sha1" //nolint:gosec // RFC 5054 Appendix B is a SHA-1 vector
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"math/big"
+	"os"
 	"testing"
 )
 
@@ -67,6 +69,10 @@ func rfcParams(t *testing.T) Params {
 	return New(bigHex(t, rfcN), big.NewInt(2), sha1.New) //nolint:gosec // see above
 }
 
+// fast is the default group and hash with the least stretching a credential may
+// name, for the tests that run many exchanges.
+var fast = Default.WithIterations(MinIterations)
+
 func TestRFC5054AppendixBVectors(t *testing.T) {
 	p := rfcParams(t)
 	salt, err := hex.DecodeString(rfcSalt)
@@ -77,7 +83,10 @@ func TestRFC5054AppendixBVectors(t *testing.T) {
 	if got, want := p.k(), bigHex(t, rfcK); got.Cmp(want) != 0 {
 		t.Errorf("k = %x, want %x", got, want)
 	}
-	x := p.x(salt, "alice", "password123")
+	x, err := p.x(salt, "alice", "password123", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if want := bigHex(t, rfcX); x.Cmp(want) != 0 {
 		t.Errorf("x = %x, want %x", x, want)
 	}
@@ -101,7 +110,7 @@ func TestRFC5054AppendixBVectors(t *testing.T) {
 
 	// The premaster secret, from the client's side and from the server's.
 	want := bigHex(t, rfcPremaster)
-	clientS, _, err := client.secret(salt, server.bPub)
+	clientS, _, err := client.secret(salt, server.bPub, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,6 +122,89 @@ func TestRFC5054AppendixBVectors(t *testing.T) {
 	if serverS := base.Exp(base, server.b, p.n); serverS.Cmp(want) != 0 {
 		t.Errorf("server S = %x, want %x", serverS, want)
 	}
+
+	// And the whole exchange over the RFC's numbers: the server's Verify takes the
+	// client's proof, and the keys agree.
+	m1, err := client.Respond(salt, server.Public(), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m2, key, err := server.Verify(client.Public(), m1)
+	if err != nil {
+		t.Fatalf("the server refused the RFC's own exchange: %v", err)
+	}
+	if err = client.VerifyServer(m2); err != nil || !bytes.Equal(key, client.Key()) {
+		t.Errorf("the client refused the server's proof or the keys differ: %v", err)
+	}
+}
+
+// The pinned known-answer test of the default parameters, computed independently
+// of this code (Python's hashlib.pbkdf2_hmac and integers) and checked in Go here and
+// in JS (internal/srpweb): every intermediate value of a run with fixed secrets.
+func TestTheDefaultParametersKnownAnswer(t *testing.T) {
+	raw, err := os.ReadFile("testdata/default-vector.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Keys of the file differ only by case (a/A, b/B, k/K): read them by hand.
+	var all map[string]any
+	if err = json.Unmarshal(raw, &all); err != nil {
+		t.Fatal(err)
+	}
+	get := func(key string) []byte {
+		t.Helper()
+		out, err := hex.DecodeString(all[key].(string))
+		if err != nil {
+			t.Fatalf("%s: %v", key, err)
+		}
+		return out
+	}
+	username, password := all["username"].(string), all["password"].(string)
+	rounds := int(all["iterations"].(float64))
+	salt, priA, priB := get("salt"), get("a"), get("b")
+	p := Default
+	if p.Iterations() != rounds || rounds != 600000 {
+		t.Fatalf("the default rounds are %d, the vector's %d", p.Iterations(), rounds)
+	}
+
+	x, err := p.x(salt, username, password, rounds)
+	if err != nil {
+		t.Fatal(err)
+	}
+	check := func(name string, got, want []byte) {
+		t.Helper()
+		if !bytes.Equal(got, want) {
+			t.Errorf("%s = %x, want %x", name, got, want)
+		}
+	}
+	// x and u and k are 32-byte values; the group elements are 384.
+	check("k", p.k().FillBytes(make([]byte, 32)), get("k"))
+	check("x", x.FillBytes(make([]byte, 32)), get("x"))
+	verifier := p.Verifier(salt, username, password)
+	check("v", verifier, get("v"))
+
+	client := p.ResumeClient(username, password, priA)
+	server := p.ResumeServer(username, salt, verifier, priB)
+	check("A", client.Public(), get("A"))
+	check("B", server.Public(), get("B"))
+	check("u", p.u(client.aPub, server.bPub).FillBytes(make([]byte, 32)), get("u"))
+	secret, _, err := client.secret(salt, server.bPub, rounds)
+	if err != nil {
+		t.Fatal(err)
+	}
+	check("S", p.pad(secret), get("S"))
+	m1, err := client.Respond(salt, server.Public(), rounds)
+	if err != nil {
+		t.Fatal(err)
+	}
+	check("K", client.Key(), get("K"))
+	check("M1", m1, get("M1"))
+	m2, key, err := server.Verify(client.Public(), m1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	check("server K", key, get("K"))
+	check("M2", m2, get("M2"))
 }
 
 // The protocol end to end over the RFC's own parameters and over the default.
@@ -129,7 +221,7 @@ func TestAgreement(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			m1, err := client.Respond(salt, server.Public())
+			m1, err := client.Respond(salt, server.Public(), p.Iterations())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -150,14 +242,14 @@ func TestAgreement(t *testing.T) {
 }
 
 func TestWrongPasswordAndWrongUsername(t *testing.T) {
-	p := Default
+	p := fast
 	salt := NewSalt()
 	v := p.Verifier(salt, "recovery", "right")
 	for name, c := range map[string][2]string{"password": {"recovery", "wrong"}, "username": {"someone", "right"}} {
 		t.Run(name, func(t *testing.T) {
 			server, _ := p.NewServer("recovery", salt, v, rand.Reader)
 			client, _ := p.NewClient(c[0], c[1], rand.Reader)
-			m1, err := client.Respond(salt, server.Public())
+			m1, err := client.Respond(salt, server.Public(), p.Iterations())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -168,14 +260,16 @@ func TestWrongPasswordAndWrongUsername(t *testing.T) {
 	}
 }
 
-func TestPublicValuesZeroModuloNAreRefused(t *testing.T) {
-	p := Default
+func TestPublicValuesZeroModuloNOrNotBelowNAreRefused(t *testing.T) {
+	p := fast
 	salt := NewSalt()
 	v := p.Verifier(salt, "recovery", "pw")
 	zero := make([]byte, p.Size())
 	n := p.pad(p.n) // N itself: zero modulo N
+	nPlusOne := p.pad(new(big.Int).Add(p.n, big.NewInt(1)))
 	twoN := new(big.Int).Lsh(p.n, 1)
-	for name, a := range map[string][]byte{"zero": zero, "N": n, "2N": twoN.Bytes(), "empty": nil} {
+	over := p.pad(new(big.Int).Add(p.n, big.NewInt(12345))) // not canonical: A and A mod N are one value
+	for name, a := range map[string][]byte{"zero": zero, "N": n, "N+1": nPlusOne, "N+12345": over, "2N": twoN.Bytes(), "empty": nil} {
 		t.Run("A is "+name, func(t *testing.T) {
 			server, _ := p.NewServer("recovery", salt, v, rand.Reader)
 			if _, _, err := server.Verify(a, make([]byte, 32)); !errors.Is(err, ErrBadPublic) {
@@ -184,17 +278,30 @@ func TestPublicValuesZeroModuloNAreRefused(t *testing.T) {
 		})
 	}
 	client, _ := p.NewClient("recovery", "pw", rand.Reader)
-	for name, b := range map[string][]byte{"zero": zero, "N": n} {
+	for name, b := range map[string][]byte{"zero": zero, "N": n, "N+1": nPlusOne, "N+12345": over} {
 		t.Run("B is "+name, func(t *testing.T) {
-			if _, err := client.Respond(salt, b); !errors.Is(err, ErrBadPublic) {
+			if _, err := client.Respond(salt, b, p.Iterations()); !errors.Is(err, ErrBadPublic) {
 				t.Errorf("err = %v, want ErrBadPublic", err)
 			}
 		})
 	}
 }
 
+// A server cannot talk the client out of the stretching, or into minutes of it.
+func TestTheClientBoundsTheRoundsTheServerNames(t *testing.T) {
+	p := fast
+	salt := NewSalt()
+	server, _ := p.NewServer("recovery", salt, p.Verifier(salt, "recovery", "pw"), rand.Reader)
+	client, _ := p.NewClient("recovery", "pw", rand.Reader)
+	for _, rounds := range []int{0, 1, MinIterations - 1, MaxIterations + 1} {
+		if _, err := client.Respond(salt, server.Public(), rounds); err == nil {
+			t.Errorf("%d rounds were accepted", rounds)
+		}
+	}
+}
+
 func TestDecoyIsStableAndFailsAsAWrongPasswordDoes(t *testing.T) {
-	p := Default
+	p := fast
 	secret := []byte("a secret the server keeps")
 	s1, v1 := p.Decoy(secret, "nobody")
 	s2, v2 := p.Decoy(secret, "nobody")
@@ -204,12 +311,13 @@ func TestDecoyIsStableAndFailsAsAWrongPasswordDoes(t *testing.T) {
 	if s3, _ := p.Decoy(secret, "somebody"); bytes.Equal(s1, s3) {
 		t.Error("two usernames share a decoy salt")
 	}
-	if len(v1) != p.Size() {
-		t.Errorf("decoy verifier is %d bytes, want %d", len(v1), p.Size())
+	// The shape of a real account's: a salt of NewSalt's length and a verifier of the group's width.
+	if len(s1) != len(NewSalt()) || len(v1) != p.Size() {
+		t.Errorf("decoy salt is %d bytes and verifier %d, want %d and %d", len(s1), len(v1), len(NewSalt()), p.Size())
 	}
 	server, _ := p.NewServer("nobody", s1, v1, rand.Reader)
 	client, _ := p.NewClient("nobody", "guess", rand.Reader)
-	m1, _ := client.Respond(s1, server.Public())
+	m1, _ := client.Respond(s1, server.Public(), p.Iterations())
 	if _, _, err := server.Verify(client.Public(), m1); !errors.Is(err, ErrBadProof) {
 		t.Errorf("err = %v, want ErrBadProof", err)
 	}
@@ -225,33 +333,76 @@ func TestDefaultGroup(t *testing.T) {
 	if Default.h().Size() != sha256.Size {
 		t.Error("the default hash is not SHA-256")
 	}
+	if Default.Iterations() != 600000 {
+		t.Errorf("the default rounds are %d, want 600000", Default.Iterations())
+	}
 }
 
-func TestCredentialIsDeterministicAndRoundTrips(t *testing.T) {
-	p := Default
-	a, b := p.NewCredential("recovery", "pw"), p.NewCredential("recovery", "pw")
-	if !bytes.Equal(a.Salt, b.Salt) || !bytes.Equal(a.Verifier, b.Verifier) {
-		t.Fatal("the same username and password gave two credentials")
+func TestACredentialRoundTripsAndTheSaltIsNotThePasswords(t *testing.T) {
+	p := fast
+	one, two := NewSalt(), NewSalt()
+	a := p.NewCredential(one, "recovery", "pw")
+	if again := p.NewCredential(one, "recovery", "pw"); !bytes.Equal(a.Verifier, again.Verifier) {
+		t.Error("the same salt, username and password gave two verifiers")
 	}
-	if c := p.NewCredential("conformance", "pw"); bytes.Equal(a.Salt, c.Salt) || bytes.Equal(a.Verifier, c.Verifier) {
-		t.Error("two usernames share a salt or a verifier")
+	if b := p.NewCredential(two, "recovery", "pw"); bytes.Equal(a.Verifier, b.Verifier) || bytes.Equal(a.Salt, b.Salt) {
+		t.Error("two salts gave one verifier")
+	}
+	if c := p.NewCredential(one, "conformance", "pw"); bytes.Equal(a.Verifier, c.Verifier) {
+		t.Error("two usernames share a verifier")
+	}
+	// The salt is stored as given, whatever the password: nothing of the password is in it.
+	if !bytes.Equal(a.Salt, one) || a.Iterations != MinIterations {
+		t.Errorf("salt %x, rounds %d", a.Salt, a.Iterations)
 	}
 	back, err := p.ParseCredential(a.Document())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(back.Salt, a.Salt) || !bytes.Equal(back.Verifier, a.Verifier) {
+	if !bytes.Equal(back.Salt, a.Salt) || !bytes.Equal(back.Verifier, a.Verifier) || back.Iterations != a.Iterations {
 		t.Error("the credential changed on the way through its document")
 	}
+	hexOf := hex.EncodeToString
+	zero := hexOf(make([]byte, p.Size()))
+	over := hexOf(p.pad(new(big.Int).Add(p.n, big.NewInt(5))))
 	for name, doc := range map[string]string{
 		"empty":         ``,
-		"no salt":       `{"verifier":"` + hex.EncodeToString(a.Verifier) + `"}`,
-		"short":         `{"salt":"` + hex.EncodeToString(a.Salt) + `","verifier":"00"}`,
-		"zero":          `{"salt":"` + hex.EncodeToString(a.Salt) + `","verifier":"` + hex.EncodeToString(make([]byte, p.Size())) + `"}`,
-		"unknown field": `{"salt":"` + hex.EncodeToString(a.Salt) + `","verifier":"` + hex.EncodeToString(a.Verifier) + `","password":"pw"}`,
+		"no salt":       `{"verifier":"` + hexOf(a.Verifier) + `","iterations":100000}`,
+		"short":         `{"salt":"` + hexOf(a.Salt) + `","verifier":"00","iterations":100000}`,
+		"zero":          `{"salt":"` + hexOf(a.Salt) + `","verifier":"` + zero + `","iterations":100000}`,
+		"not below N":   `{"salt":"` + hexOf(a.Salt) + `","verifier":"` + over + `","iterations":100000}`,
+		"no rounds":     `{"salt":"` + hexOf(a.Salt) + `","verifier":"` + hexOf(a.Verifier) + `"}`,
+		"few rounds":    `{"salt":"` + hexOf(a.Salt) + `","verifier":"` + hexOf(a.Verifier) + `","iterations":99999}`,
+		"many rounds":   `{"salt":"` + hexOf(a.Salt) + `","verifier":"` + hexOf(a.Verifier) + `","iterations":10000001}`,
+		"unknown field": `{"salt":"` + hexOf(a.Salt) + `","verifier":"` + hexOf(a.Verifier) + `","iterations":100000,"password":"pw"}`,
 	} {
 		if _, err := p.ParseCredential([]byte(doc)); err == nil {
 			t.Errorf("%s: a credential that is not one was read", name)
+		}
+	}
+}
+
+func TestCheckPassword(t *testing.T) {
+	for name, pw := range map[string]string{
+		"generated alphanumeric": "aB3Kf9xQ2mLpR7vTz1WcY8nHd5JgS4e",
+		"forty letters":          "AbxXcyYzdEfGhJkMnPqRsTuVwXyZaBcDeFgHjKmN",
+		"a long phrase":          "correct horse battery staple, forty-ish chars",
+	} {
+		if err := CheckPassword(pw); err != nil {
+			t.Errorf("%s was refused: %v", name, err)
+		}
+	}
+	for name, pw := range map[string]string{
+		"empty":       "",
+		"short":       "aB3Kf9xQ2mLpR7v",
+		"one letter":  "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		"digits only": "12345678901234567890",
+		"non-ASCII":   "aB3Kf9xQ2mLpR7vTz1WcY8nHd5JgS4é",
+		"a newline":   "aB3Kf9xQ2mLpR7vTz1WcY8nHd5JgS4e\n",
+		"trailing":    "aB3Kf9xQ2mLpR7vTz1WcY8nHd5JgS4e ",
+	} {
+		if err := CheckPassword(pw); err == nil {
+			t.Errorf("%s was accepted", name)
 		}
 	}
 }

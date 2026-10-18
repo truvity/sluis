@@ -26,12 +26,16 @@ import (
 	"github.com/truvity/sluis/srp"
 )
 
+// recoverPassword is the fixture's recovery password: long and random enough to sit
+// behind a verifier.
+const recoverPassword = "aB3-Kf9xQ2mLpR7vTz1WcY8nHd5JgS4e"
+
 // issuerFile is the service's configuration file as a test states it: the
 // defaults a test wants, then what the test changes.
 func issuerFile(t *testing.T, change ...func(*config.Serve)) *config.Serve {
 	t.Helper()
 	// The recovery password is a declared secret: the file names the variable.
-	t.Setenv("SLUIS_SECRET_RECOVERY_PASSWORD", "recover-me")
+	t.Setenv("SLUIS_SECRET_RECOVERY_PASSWORD", recoverPassword)
 	enabled := true
 	f := &config.Serve{
 		IssuerURL: "https://issuer.example",
@@ -144,17 +148,20 @@ func recoverWith(t *testing.T, client *http.Client, at, username, password strin
 	if code != http.StatusOK {
 		return code, body
 	}
-	var begun struct{ Handle, Salt, B string }
+	var begun struct {
+		Handle, Username, Salt, B string
+		Iterations                int
+	}
 	if err := json.Unmarshal([]byte(body), &begun); err != nil {
 		t.Fatalf("start: %v: %s", err, body)
 	}
 	salt, _ := hex.DecodeString(begun.Salt)
 	b, _ := hex.DecodeString(begun.B)
-	proof, err := srp.Default.NewClient(username, password, rand.Reader)
+	proof, err := srp.Default.NewClient(begun.Username, password, rand.Reader)
 	if err != nil {
 		t.Fatal(err)
 	}
-	m1, err := proof.Respond(salt, b)
+	m1, err := proof.Respond(salt, b, begun.Iterations)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -239,7 +246,7 @@ func TestTheRedirectsFollowThePublicURL(t *testing.T) {
 	// rather than a sign-in to read them, because a sign-in redirect
 	// built from that URL would go somewhere this test is not.
 	client, at, _ := console(t, func(f *config.Serve) { f.PublicURL = "https://directory.example" })
-	if code, body := recoverWith(t, client, at, "recovery", "recover-me"); code != http.StatusOK {
+	if code, body := recoverWith(t, client, at, "recovery", recoverPassword); code != http.StatusOK {
 		t.Fatalf("recovery = %d, %q", code, body)
 	}
 	code, body := rpc(t, client, at+"/directoryroster.v1.SettingsService/GetSettings", "{}")
@@ -285,7 +292,7 @@ func TestRecoveryReachesTheConsole(t *testing.T) {
 	if code != http.StatusForbidden {
 		t.Fatalf("a wrong proof = %d, %q", code, body)
 	}
-	if code, body = recoverWith(t, client, at, "recovery", "recover-me"); code != http.StatusOK {
+	if code, body = recoverWith(t, client, at, "recovery", recoverPassword); code != http.StatusOK {
 		t.Fatalf("recovery = %d, %q", code, body)
 	}
 	code, who := get(t, client, at+"/.access/whoami")
@@ -317,9 +324,9 @@ func TestNoPlaintextRecoveryPasswordIsAccepted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	bearer.Header.Set("Authorization", "Bearer recover-me")
+	bearer.Header.Set("Authorization", "Bearer "+recoverPassword)
 	for name, send := range map[string]func() (int, string){
-		"a JSON body": func() (int, string) { return rpc(t, client, at+"/login/recovery", `{"proof":"recover-me"}`) },
+		"a JSON body": func() (int, string) { return rpc(t, client, at+"/login/recovery", `{"proof":"`+recoverPassword+`"}`) },
 		"a bearer": func() (int, string) {
 			resp, err := client.Do(bearer)
 			if err != nil {
@@ -330,7 +337,7 @@ func TestNoPlaintextRecoveryPasswordIsAccepted(t *testing.T) {
 			return resp.StatusCode, string(body)
 		},
 		"a form": func() (int, string) {
-			resp, err := client.PostForm(at+"/login/recovery", url.Values{"state": {html.UnescapeString(state)}, "proof": {"recover-me"}})
+			resp, err := client.PostForm(at+"/login/recovery", url.Values{"state": {html.UnescapeString(state)}, "proof": {recoverPassword}})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -358,7 +365,7 @@ func TestRecoveryCanBeTurnedOff(t *testing.T) {
 	if code != http.StatusOK || strings.Contains(page, "Recovery sign-in") {
 		t.Errorf("the page still offers recovery: %q", page)
 	}
-	if code, _ = rpc(t, client, at+"/login/recovery", `{"proof":"recover-me"}`); code != http.StatusForbidden {
+	if code, _ = rpc(t, client, at+"/login/recovery", `{"proof":"`+recoverPassword+`"}`); code != http.StatusForbidden {
 		t.Errorf("the recovery route = %d, want it closed", code)
 	}
 	if code, _ = rpc(t, client, at+"/login/srp/start", `{"state":"x","username":"recovery"}`); code != http.StatusNotFound && code != http.StatusMethodNotAllowed {

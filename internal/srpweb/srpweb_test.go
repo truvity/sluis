@@ -2,7 +2,6 @@ package srpweb_test
 
 import (
 	"context"
-	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
@@ -69,7 +68,7 @@ func TestScriptHasNoInlineHandlersNorOutsideReferences(t *testing.T) {
 // issuer and the console serve them.
 func harness(t *testing.T, password string) *httptest.Server {
 	t.Helper()
-	cred := srp.Default.NewCredential("recovery", password)
+	cred := srp.Default.WithIterations(srp.MinIterations).NewCredential(srp.NewSalt(), "recovery", password)
 	svc := &srpauth.Service{
 		Params:   srp.Default,
 		Store:    srpauth.StateStore{State: memory.New()},
@@ -88,8 +87,9 @@ func harness(t *testing.T, password string) *httptest.Server {
 			http.Error(w, `{"error":"no"}`, http.StatusForbidden)
 			return
 		}
-		_ = json.NewEncoder(w).Encode(map[string]string{
-			"handle": begun.Handle, "salt": hex.EncodeToString(begun.Salt), "B": hex.EncodeToString(begun.B)})
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"handle": begun.Handle, "username": begun.Username, "salt": hex.EncodeToString(begun.Salt),
+			"B": hex.EncodeToString(begun.B), "iterations": begun.Iterations})
 	})
 	mux.HandleFunc("POST /finish", func(w http.ResponseWriter, r *http.Request) {
 		var in struct{ State, Handle, A, M1 string }
@@ -161,14 +161,20 @@ func TestScriptSignsInAgainstTheGoServer(t *testing.T) {
 	if out, err = runScript(t, srv.URL, "nobody", password); err == nil || !strings.Contains(out, "refused status=403") {
 		t.Errorf("unknown username: %v: %q", err, out)
 	}
+	// The server spells the username (lower case, trimmed), and the script proves
+	// with its spelling: what a person typed in another case still signs in.
+	for _, typed := range []string{"Recovery", "RECOVERY", " recovery ", "\tRecovery"} {
+		if out, err = runScript(t, srv.URL, typed, password); err != nil || out != "next=/done" {
+			t.Errorf("username %q: %v: %q", typed, err, out)
+		}
+	}
 }
 
-// The Go client signs in against the script's own arithmetic too: the script's
-// A, M1 for a fixed salt and B equal the Go client's for the same private value.
-func TestScriptAndGoClientComputeTheSameProof(t *testing.T) {
-	const user, password = "recovery", "a password"
-	cred := srp.Default.NewCredential(user, password)
-	server, err := srp.Default.NewServer(user, cred.Salt, cred.Verifier, rand.Reader)
+// The pinned known-answer vector (srp/testdata/default-vector.json, computed
+// independently of both implementations) through the script: with the vector's
+// private value the script's A and M1 are the vector's, and it accepts the vector's M2.
+func TestScriptComputesThePinnedKnownAnswer(t *testing.T) {
+	raw, err := os.ReadFile("../../srp/testdata/default-vector.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -176,42 +182,96 @@ func TestScriptAndGoClientComputeTheSameProof(t *testing.T) {
 	if err = os.WriteFile(dir+"/srp.js", srpweb.Script(), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	// A fixed "random" source, so the script's a is the one the Go client gets.
-	a := make([]byte, srp.PrivateBytes)
-	for i := range a {
-		a[i] = byte(i + 1)
+	if err = os.WriteFile(dir+"/vector.json", raw, 0o600); err != nil {
+		t.Fatal(err)
 	}
 	driver := `
 const srp = require(process.argv[2] + '/srp.js');
+const v = require(process.argv[2] + '/vector.json');
 (async () => {
-  const a = Uint8Array.from(Buffer.from(process.argv[3], 'hex'));
-  const c = await srp.client(process.argv[4], process.env.PW, {getRandomValues: (b) => { b.set(a); return b; }});
-  const m1 = await c.respond(process.argv[5], process.argv[6]);
-  console.log(JSON.stringify({A: c.A, M1: m1}));
+  const a = Uint8Array.from(Buffer.from(v.a, 'hex'));
+  const c = await srp.client(v.password, {getRandomValues: (b) => { b.set(a); return b; }});
+  const t0 = Date.now();
+  const m1 = await c.respond(v.username, v.salt, v.B, v.iterations);
+  const took = Date.now() - t0;
+  let verified = true;
+  try { await c.verify(v.M2); } catch (e) { verified = false; }
+  console.log(JSON.stringify({A: c.A, M1: m1, verified: verified, ms: took}));
 })();
 `
 	if err = os.WriteFile(dir+"/driver.js", []byte(driver), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	cmd := exec.Command(node(t), dir+"/driver.js", dir, hex.EncodeToString(a), user, hex.EncodeToString(cred.Salt), hex.EncodeToString(server.Public()))
-	cmd.Env = append(os.Environ(), "PW="+password)
-	out, err := cmd.Output()
+	out, err := exec.Command(node(t), dir+"/driver.js", dir).Output()
 	if err != nil {
 		t.Fatalf("node: %v", err)
 	}
-	var got struct{ A, M1 string }
+	var got struct {
+		A, M1    string
+		Verified bool
+		Ms       int
+	}
 	if err = json.Unmarshal(out, &got); err != nil {
 		t.Fatalf("%v: %s", err, out)
 	}
-	client := srp.Default.ResumeClient(user, password, a)
-	m1, err := client.Respond(cred.Salt, server.Public())
-	if err != nil {
+	var want map[string]any
+	_ = json.Unmarshal(raw, &want)
+	if got.A != want["A"] {
+		t.Error("the script's A differs from the vector's")
+	}
+	if got.M1 != want["M1"] {
+		t.Error("the script's M1 differs from the vector's")
+	}
+	if !got.Verified {
+		t.Error("the script refused the vector's M2")
+	}
+	t.Logf("the script's proof at %d PBKDF2 rounds took %d ms under node", int(want["iterations"].(float64)), got.Ms)
+}
+
+// The script refuses what it must: a B that is not below N, rounds outside the
+// bounds, and a server proof that does not match.
+func TestScriptRefusesWhatItMust(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(dir+"/srp.js", srpweb.Script(), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if got.A != hex.EncodeToString(client.Public()) {
-		t.Error("the script's A differs from the Go client's")
+	driver := `
+const srp = require(process.argv[2] + '/srp.js');
+const n = Buffer.from(process.argv[3], 'hex');
+(async () => {
+  const out = {};
+  const c = await srp.client('pw');
+  const salt = '00'.repeat(32);
+  const attempts = {
+    equalN: [salt, n.toString('hex'), 600000],
+    aboveN: [salt, (BigInt('0x' + n.toString('hex')) + 5n).toString(16).padStart(768, '0'), 600000],
+    zero: [salt, '00'.repeat(384), 600000],
+    fewRounds: [salt, '01'.padStart(768, '0'), 99999],
+    manyRounds: [salt, '01'.padStart(768, '0'), 10000001],
+  };
+  for (const [name, args] of Object.entries(attempts)) {
+    try { await c.respond('recovery', ...args); out[name] = 'accepted'; } catch (e) { out[name] = 'refused'; }
+  }
+  console.log(JSON.stringify(out));
+})();
+`
+	if err := os.WriteFile(dir+"/driver.js", []byte(driver), 0o600); err != nil {
+		t.Fatal(err)
 	}
-	if got.M1 != hex.EncodeToString(m1) {
-		t.Error("the script's M1 differs from the Go client's")
+	out, err := exec.Command(node(t), dir+"/driver.js", dir, hex.EncodeToString(srp.Default.Modulus())).Output()
+	if err != nil {
+		t.Fatalf("node: %v", err)
+	}
+	var got map[string]string
+	if err = json.Unmarshal(out, &got); err != nil {
+		t.Fatalf("%v: %s", err, out)
+	}
+	for name, verdict := range got {
+		if verdict != "refused" {
+			t.Errorf("%s was %s", name, verdict)
+		}
+	}
+	if len(got) != 5 {
+		t.Errorf("%d attempts ran, want 5", len(got))
 	}
 }

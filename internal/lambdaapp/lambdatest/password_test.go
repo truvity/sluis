@@ -116,7 +116,7 @@ func TestTheLambdaIssuerOffersThePasswordDoorAndNeverReadsThePassword(t *testing
 	salt, _ := hex.DecodeString(begun["salt"].(string))
 	pub, _ := hex.DecodeString(begun["B"].(string))
 	client, _ := srp.Default.NewClient("recovery", lambdatest.RecoveryPassword, rand.Reader)
-	m1, err := client.Respond(salt, pub)
+	m1, err := client.Respond(salt, pub, int(begun["iterations"].(float64)))
 	if err != nil {
 		t.Fatal(err)
 	}

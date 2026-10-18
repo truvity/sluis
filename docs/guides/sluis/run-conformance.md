@@ -17,7 +17,7 @@ Run the four OpenID Foundation profiles on Kubernetes or AWS Lambda. See the [fi
 
 - Have `curl`, `jq`, `python3`, headless Chrome, and `kubectl` or `aws`. Run one plan at a time: a second with the same `alias` interrupts the first.
 
-- Send `X-Forwarded-Proto: https` on every hand-typed call to the suite, and drive a real browser.
+- Send `X-Forwarded-Proto: https` on every hand-typed suite call, and drive a real browser.
 
 The scripts default to Kubernetes:
 
@@ -50,14 +50,14 @@ conformance-bc:    # and conformance-bc-2
   harness: true
 ```
 
-`harness` admits the Lambda test account. Kubernetes signs in as recovery, so `requires` must name `operator`, not `viewer`. The Back-Channel plan needs its own pair ([client fields](../../reference/sluis/policy-clients.md), [secrets](../../reference/sluis/secrets.md#the-names)).
+`harness` admits the Lambda test account; gitops must pass it on. Kubernetes signs in as recovery, so `requires` must name `operator`, not `viewer`. The Back-Channel plan needs its own pair ([client fields](../../reference/sluis/policy-clients.md), [secrets](../../reference/sluis/secrets.md#the-names)).
 
 ```sh
 curl -s https://<issuer>/.well-known/openid-configuration | jq .backchannel_logout_supported
 kubectl -n access-issuer get secret conformance-client   # Lambda: aws ssm describe-parameters, name /sluis/<instance>/external/oidc/conformance
 ```
 
-Expect `true` and the secret; on Lambda it appears within five minutes.
+Expect `true` and the secret (on Lambda, within five minutes).
 
 ## 2. Create the plans
 

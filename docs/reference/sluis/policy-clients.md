@@ -28,7 +28,7 @@ A client's id is the `aud`, unless the request named a [resource](#resources).
 | `ttl_cap` | upper bound on token lifetime |
 | `session` | `interactive` (default) or `agent`; refused on `exchange`; see [agent-class sessions](#agent-class-sessions) |
 | `pkce` | `required` or `optional`; see [PKCE per client](#pkce) |
-| `harness` | `true` marks a client the conformance test account may sign in to (`conformance.enabled`); refused on `exchange` |
+| `harness` | `true` marks a client the conformance test account may sign in to (`conformance.enabled`); refused on `exchange`. Not gitops's `harness` (no portal card): gitops must pass it into the sluis policy |
 | `sign_in_exchange` | `true` lets a sign-in be a token-exchange proof (`access_token`) while its session lives; `public` only |
 | `display_name`, `description` | [sign-in page text](#what-the-sign-in-page-calls-a-client) |
 | `backchannel_logout_uri` | receives a signed `logout+jwt` naming the `sid` when a sign-in ends; unusable behind [oauth2-proxy](../../guides/sluis/connect/oauth2-proxy.md) |

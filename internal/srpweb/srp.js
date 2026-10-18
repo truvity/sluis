@@ -87,36 +87,52 @@
     return result;
   }
 
-  // A client for one run. Nothing here is kept after the run.
-  async function client(username, password, random) {
+  var MIN_ROUNDS = 100000, MAX_ROUNDS = 10000000;
+
+  // PBKDF2-HMAC-SHA256 of the inner hash, for the number of rounds the server
+  // named: x is stretched so a stolen verifier costs that many hashes a guess.
+  async function stretch(inner, salt, rounds) {
+    var key = await root.crypto.subtle.importKey('raw', inner, 'PBKDF2', false, ['deriveBits']);
+    return new Uint8Array(await root.crypto.subtle.deriveBits(
+      { name: 'PBKDF2', hash: 'SHA-256', salt: salt, iterations: rounds }, key, 256));
+  }
+
+  // A client for one run. Nothing here is kept after the run. The username is not
+  // known yet: the server spells it (lower case, trimmed) and the proof must use
+  // its spelling, so it comes with the salt (respond).
+  async function client(password, random) {
     var rnd = new Uint8Array(32);
     (random || root.crypto).getRandomValues(rnd);
     var a = toBig(rnd);
     if (a === 0n) { throw new Error('no randomness'); }
     var A = modPow(G, a, N);
     var k = toBig(await H(pad(N), pad(G)));
-    var userHash = await H(utf8.encode(username));
     var state = {};
 
     return {
       A: hex(pad(A)),
-      // respond takes the salt and B as hexadecimal and returns M1 as hexadecimal.
-      respond: async function (saltHex, bHex) {
+      // respond takes the username as the server spells it, the salt and B as
+      // hexadecimal and the number of rounds, and returns M1 as hexadecimal.
+      respond: async function (username, saltHex, bHex, rounds) {
+        if (typeof username !== 'string' || username === '') { throw new Error('no username'); }
+        if (!Number.isInteger(rounds) || rounds < MIN_ROUNDS || rounds > MAX_ROUNDS) {
+          throw new Error('unacceptable rounds');
+        }
         var salt = unhex(saltHex);
         var bytes = unhex(bHex);
         if (bytes.length > SIZE) { throw new Error('invalid public value'); }
         var B = toBig(bytes);
-        if (mod(B, N) === 0n) { throw new Error('invalid public value'); }
+        if (B >= N || mod(B, N) === 0n) { throw new Error('invalid public value'); }
         var u = toBig(await H(pad(A), pad(B)));
         if (u === 0n) { throw new Error('invalid public value'); }
         var inner = await H(utf8.encode(username), utf8.encode(':'), utf8.encode(password));
-        var x = toBig(await H(salt, inner));
+        var x = toBig(await H(salt, await stretch(inner, salt, rounds)));
         var base = mod(B - k * modPow(G, x, N), N);
         var S = modPow(base, a + u * x, N);
         var key = await H(pad(S));
         var hn = await H(pad(N)), hg = await H(pad(G));
         for (var i = 0; i < hn.length; i++) { hn[i] ^= hg[i]; }
-        var m1 = await H(hn, userHash, salt, pad(A), pad(B), key);
+        var m1 = await H(hn, await H(utf8.encode(username)), salt, pad(A), pad(B), key);
         state.m1 = m1;
         state.key = key;
         return hex(m1);
@@ -156,9 +172,9 @@
   // password, state, start and finish (URLs), and optionally post.
   async function signIn(opts) {
     var send = opts.post || post;
-    var c = await client(opts.username, opts.password);
+    var c = await client(opts.password);
     var begun = await send(opts.start, { state: opts.state, username: opts.username });
-    var m1 = await c.respond(begun.salt, begun.B);
+    var m1 = await c.respond(begun.username, begun.salt, begun.B, begun.iterations);
     var done = await send(opts.finish, { state: opts.state, handle: begun.handle, A: c.A, M1: m1 });
     await c.verify(done.M2);
     return done.next;
