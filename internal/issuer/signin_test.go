@@ -2,13 +2,17 @@ package issuer_test
 
 import (
 	"context"
+	"html"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"regexp"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/issuer"
 )
 
@@ -44,15 +48,16 @@ func signInHandler(t *testing.T, sso *issuer.SSO) http.Handler {
 
 	mux := http.NewServeMux()
 	issuer.SignInRoutes(mux, issuer.SignInDeps{
-		SSO: sso,
-		Log: slog.New(slog.DiscardHandler),
+		SSO:   sso,
+		State: access.NewStateCodec(make([]byte, 32), time.Minute),
+		Log:   slog.New(slog.DiscardHandler),
 	})
 
 	return mux
 }
 
 // `/logout` is the sign-out a person follows, and it must actually end
-// the sign-in.
+// the sign-in -- once they have confirmed it on the page that asks.
 //
 // The console's button pointed here and nothing served it: 404, and the
 // session survived. Reported as "even sign-out does not work", which it
@@ -71,39 +76,145 @@ func TestLogoutEndsTheSignIn(t *testing.T) {
 
 	handler := signInHandler(t, sso)
 
-	requestLogout(t, handler, sso, session.ID, cookie, http.MethodGet)
+	recorder := pressSignOut(t, handler, cookie)
+	checkSignedOut(t, recorder, sso, session.ID)
 }
 
-// The console sends POST, because its own sign-out was a POST. A
-// GET-only route answered that with 404 — sign-out fixed once and still
-// not working, which is exactly how it was reported the second time.
-func TestLogoutAcceptsThePostTheConsoleSends(t *testing.T) {
+// A link, a frame or a redirect from another site is a GET, and a GET must
+// not sign anybody out: that is logout CSRF, and with it a way to end the
+// sessions the browser opened. It shows a page that asks.
+func TestLogoutGetOnlyAsks(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	state := issuer.NewMemoryState()
-	sso := issuer.NewSSO(state, time.Hour)
+	sso := issuer.NewSSO(issuer.NewMemoryState(), time.Hour)
 
 	session, cookie, err := sso.Begin(ctx, "ada@north.example", "google")
 	if err != nil {
 		t.Fatalf("begin: %v", err)
 	}
 
-	requestLogout(t, signInHandler(t, sso), sso, session.ID, cookie, http.MethodPost)
+	request := httptest.NewRequest(http.MethodGet, "/logout", nil)
+	request.AddCookie(&http.Cookie{Name: issuer.SSOCookieName, Value: cookie})
+	recorder := httptest.NewRecorder()
+	signInHandler(t, sso).ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), `method="post" action="/logout"`) {
+		t.Fatalf("GET /logout = %d %q, want a page with a sign-out button", recorder.Code, recorder.Body.String())
+	}
+
+	if _, found, err := sso.Get(ctx, session.ID); err != nil || !found {
+		t.Errorf("a GET ended the sign-in: found=%v err=%v", found, err)
+	}
+
+	for _, c := range recorder.Result().Cookies() {
+		if c.Name == issuer.SSOCookieName {
+			t.Errorf("a GET touched the sign-in cookie: %v", c)
+		}
+	}
 }
 
-// requestLogout signs out with one method and checks the whole of what
-// sign-out must do: redirect, end the record, clear the cookie.
-func requestLogout(t *testing.T, handler http.Handler, sso *issuer.SSO, id, cookie, method string) {
+// A browser with no sign-in has nothing to be asked about.
+func TestLogoutGetWithNoSignInGoesStraightOn(t *testing.T) {
+	t.Parallel()
+
+	sso := issuer.NewSSO(issuer.NewMemoryState(), time.Hour)
+	recorder := httptest.NewRecorder()
+	signInHandler(t, sso).ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/logout", nil))
+
+	if recorder.Code != http.StatusFound || recorder.Header().Get("Location") != "/signed-out" {
+		t.Errorf("GET /logout with no sign-in = %d to %q, want a redirect to /signed-out",
+			recorder.Code, recorder.Header().Get("Location"))
+	}
+}
+
+// The POST carries the token the page put in its form, bound to the cookie
+// that proves the sign-in: without it, or with one made for another
+// browser, nothing ends.
+func TestLogoutPostWithoutItsTokenEndsNothing(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	sso := issuer.NewSSO(issuer.NewMemoryState(), time.Hour)
+
+	session, cookie, err := sso.Begin(ctx, "ada@north.example", "google")
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+
+	_, other, err := sso.Begin(ctx, "grace@north.example", "google")
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+
+	handler := signInHandler(t, sso)
+	othersToken := csrfOf(t, handler, other)
+
+	for name, form := range map[string]url.Values{
+		"no token":          nil,
+		"an empty token":    {"csrf": {""}},
+		"a made-up token":   {"csrf": {"forged"}},
+		"another's token":   {"csrf": {othersToken}},
+		"the cookie itself": {"csrf": {cookie}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			request := httptest.NewRequest(http.MethodPost, "/logout", strings.NewReader(form.Encode()))
+			request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			request.AddCookie(&http.Cookie{Name: issuer.SSOCookieName, Value: cookie})
+			recorder := httptest.NewRecorder()
+			handler.ServeHTTP(recorder, request)
+
+			if recorder.Code != http.StatusBadRequest {
+				t.Errorf("POST /logout = %d, want 400", recorder.Code)
+			}
+
+			if _, found, err := sso.Get(ctx, session.ID); err != nil || !found {
+				t.Errorf("a POST without the token ended the sign-in: found=%v err=%v", found, err)
+			}
+		})
+	}
+}
+
+// csrfOf asks the sign-out page for the token it would give this cookie.
+func csrfOf(t *testing.T, handler http.Handler, cookie string) string {
 	t.Helper()
 
-	request := httptest.NewRequest(method, "/logout", nil)
+	request := httptest.NewRequest(http.MethodGet, "/logout", nil)
 	request.AddCookie(&http.Cookie{Name: issuer.SSOCookieName, Value: cookie})
 	recorder := httptest.NewRecorder()
 	handler.ServeHTTP(recorder, request)
 
+	found := regexp.MustCompile(`name="csrf" value="([^"]+)"`).FindStringSubmatch(recorder.Body.String())
+	if found == nil {
+		t.Fatalf("the sign-out page has no token: %d %s", recorder.Code, recorder.Body.String())
+	}
+
+	return html.UnescapeString(found[1])
+}
+
+// pressSignOut is a person asking for the page and pressing its button.
+func pressSignOut(t *testing.T, handler http.Handler, cookie string) *httptest.ResponseRecorder {
+	t.Helper()
+
+	form := url.Values{"csrf": {csrfOf(t, handler, cookie)}}
+	request := httptest.NewRequest(http.MethodPost, "/logout", strings.NewReader(form.Encode()))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	request.AddCookie(&http.Cookie{Name: issuer.SSOCookieName, Value: cookie})
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+
+	return recorder
+}
+
+// checkSignedOut checks the whole of what sign-out must do: redirect, end
+// the record, clear the cookie.
+func checkSignedOut(t *testing.T, recorder *httptest.ResponseRecorder, sso *issuer.SSO, id string) {
+	t.Helper()
+
 	if recorder.Code != http.StatusFound {
-		t.Fatalf("%s /logout = %d, want a redirect", method, recorder.Code)
+		t.Fatalf("POST /logout = %d, want a redirect", recorder.Code)
 	}
 	if to := recorder.Header().Get("Location"); to != "/signed-out" {
 		t.Errorf("landed on %q, want /signed-out", to)
@@ -111,7 +222,7 @@ func requestLogout(t *testing.T, handler http.Handler, sso *issuer.SSO, id, cook
 
 	// The half that was missing: the record itself.
 	if _, found, err := sso.Get(context.Background(), id); err != nil || found {
-		t.Errorf("the sign-in survived %s sign-out: found=%v err=%v", method, found, err)
+		t.Errorf("the sign-in survived sign-out: found=%v err=%v", found, err)
 	}
 
 	// And the cookie is cleared, so a request carrying the old value
@@ -207,12 +318,11 @@ func TestSignOutEndsWhatTheBrowserOpened(t *testing.T) {
 	issuer.SignInRoutes(mux, issuer.SignInDeps{
 		SSO:    sso,
 		Issuer: issuer.NewForSessionsTest(sessions),
+		State:  access.NewStateCodec(make([]byte, 32), time.Minute),
 		Log:    slog.New(slog.DiscardHandler),
 	})
 
-	request := httptest.NewRequest(http.MethodPost, "/logout", nil)
-	request.AddCookie(&http.Cookie{Name: issuer.SSOCookieName, Value: cookie})
-	mux.ServeHTTP(httptest.NewRecorder(), request)
+	pressSignOut(t, mux, cookie)
 
 	left, err := sessions.List(ctx, issuer.Query{Identity: "ada@north.example"})
 	if err != nil {

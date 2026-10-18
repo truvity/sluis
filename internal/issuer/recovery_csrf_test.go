@@ -61,6 +61,19 @@ func recoveryDoor(t *testing.T) (http.Handler, *access.StateCodec, *countingComp
 	return mux, codec, storage, sso
 }
 
+// startedIn is the cookie `/authorize` would have set for the request id, in
+// the browser a test plays.
+func startedIn(t *testing.T, codec *access.StateCodec, id string) *http.Cookie {
+	t.Helper()
+
+	value, err := codec.AddRequest("", id)
+	if err != nil {
+		t.Fatalf("bind %s: %v", id, err)
+	}
+
+	return access.AuthRequestCookie(value, false, time.Minute)
+}
+
 func postRecovery(handler http.Handler, state string, cookie *http.Cookie) *httptest.ResponseRecorder {
 	form := url.Values{"state": {state}, "proof": {"a-good-token"}}
 	request := httptest.NewRequest(http.MethodPost, "/login/recovery", strings.NewReader(form.Encode()))
@@ -142,10 +155,12 @@ var recoveryStateField = regexp.MustCompile(`name="state" value="([^"]+)"`)
 func TestTheRecoveryFormWorksFromTheBrowserItWasServedTo(t *testing.T) {
 	t.Parallel()
 
-	handler, _, storage, _ := recoveryDoor(t)
+	handler, codec, storage, _ := recoveryDoor(t)
 
 	page := httptest.NewRecorder()
-	handler.ServeHTTP(page, httptest.NewRequest(http.MethodGet, "/login?auth=req-1", nil))
+	chooser := httptest.NewRequest(http.MethodGet, "/login?auth=req-1", nil)
+	chooser.AddCookie(startedIn(t, codec, "req-1"))
+	handler.ServeHTTP(page, chooser)
 
 	if page.Code != http.StatusOK {
 		t.Fatalf("chooser = %d", page.Code)
@@ -313,8 +328,9 @@ func TestEachSignInDoorRefusesTheOtherDoorsState(t *testing.T) {
 func TestAProviderSignInDoesNotBreakAPendingRecoveryForm(t *testing.T) {
 	t.Parallel()
 
-	handler, _, storage, _ := recoveryAndProviderDoor(t)
-	jar := map[string]string{}
+	handler, codec, storage, _ := recoveryAndProviderDoor(t)
+	started := startedIn(t, codec, "req-1")
+	jar := map[string]string{started.Name: started.Value}
 
 	keep := func(response *httptest.ResponseRecorder) {
 		for _, c := range response.Result().Cookies() {
@@ -322,8 +338,16 @@ func TestAProviderSignInDoesNotBreakAPendingRecoveryForm(t *testing.T) {
 		}
 	}
 
+	carry := func(request *http.Request) *http.Request {
+		for name, value := range jar {
+			request.AddCookie(&http.Cookie{Name: name, Value: value})
+		}
+
+		return request
+	}
+
 	page := httptest.NewRecorder()
-	handler.ServeHTTP(page, httptest.NewRequest(http.MethodGet, "/login?auth=req-1", nil))
+	handler.ServeHTTP(page, carry(httptest.NewRequest(http.MethodGet, "/login?auth=req-1", nil)))
 	keep(page)
 
 	match := recoveryStateField.FindStringSubmatch(page.Body.String())
@@ -332,7 +356,7 @@ func TestAProviderSignInDoesNotBreakAPendingRecoveryForm(t *testing.T) {
 	}
 
 	start := httptest.NewRecorder()
-	handler.ServeHTTP(start, httptest.NewRequest(http.MethodGet, "/login/google/start?auth=req-1", nil))
+	handler.ServeHTTP(start, carry(httptest.NewRequest(http.MethodGet, "/login/google/start?auth=req-1", nil)))
 	keep(start)
 
 	if start.Code != http.StatusFound || jar[access.LoginCookieName] == "" {

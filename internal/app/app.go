@@ -51,6 +51,7 @@ import (
 	"github.com/truvity/sluis/internal/githubroster/runnerapp"
 	googleconsole "github.com/truvity/sluis/internal/googleapp/console"
 	"github.com/truvity/sluis/internal/health"
+	"github.com/truvity/sluis/internal/httpsec"
 	"github.com/truvity/sluis/internal/hub"
 	"github.com/truvity/sluis/internal/hubwire"
 	"github.com/truvity/sluis/internal/lazy"
@@ -1057,11 +1058,9 @@ func (a *App) Run(ctx context.Context) error {
 
 // serve runs one listener until the context is done, then drains it.
 func serve(ctx context.Context, port int, handler http.Handler, name string, log *slog.Logger) error {
-	srv := &http.Server{
-		Addr:              fmt.Sprintf(":%d", port),
-		Handler:           refusal.Middleware(handler),
-		ReadHeaderTimeout: 10 * time.Second,
-	}
+	// Bounded in what it reads and how long it waits: see [httpsec].
+	srv := httpsec.NewServer(fmt.Sprintf(":%d", port),
+		refusal.Middleware(httpsec.LimitBody(handler, httpsec.MaxRequestBody)))
 	go func() {
 		<-ctx.Done()
 		shutdown, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)

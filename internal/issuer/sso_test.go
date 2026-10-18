@@ -5,10 +5,12 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"html"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -157,6 +159,42 @@ func (b *browser) send(method, path string, form url.Values) (status int, locati
 	raw, _ := io.ReadAll(response.Body)
 
 	return response.StatusCode, response.Header.Get("Location"), string(raw), response.Header
+}
+
+// csrfField is the sign-out form's token, as the page puts it.
+var csrfField = regexp.MustCompile(`name="csrf" value="([^"]+)"`)
+
+// logout signs out as a person does: asks for the page, and presses the
+// button on it. A browser with no sign-in is sent straight on by the page,
+// and that answer is returned as it is.
+func (b *browser) logout() (status int, location, body string) {
+	b.t.Helper()
+
+	status, location, body = b.do(http.MethodGet, "/logout")
+	if status != http.StatusOK {
+		return status, location, body
+	}
+
+	found := csrfField.FindStringSubmatch(body)
+	if found == nil {
+		b.t.Fatalf("the sign-out page has no token: %s", body)
+	}
+
+	status, location, body, _ = b.post("/logout", url.Values{"csrf": {html.UnescapeString(found[1])}})
+
+	return status, location, body
+}
+
+// door is a sign-out door, as a person uses it: `/logout` through its page
+// and button, any other as a request.
+func (b *browser) door(method, path string) (status int, location, body string) {
+	b.t.Helper()
+
+	if path == "/logout" {
+		return b.logout()
+	}
+
+	return b.do(method, path)
 }
 
 // authorize starts one authorization request and returns where the
@@ -746,7 +784,7 @@ func TestBackChannelLogoutTellsOnlyTheClientsThatAsked(t *testing.T) {
 		t.Fatalf("record: %v", err)
 	}
 
-	if _, _, _ = b.do(http.MethodGet, "/logout"); b.cookies[issuer.SSOCookieName] != "" {
+	if _, _, _ = b.logout(); b.cookies[issuer.SSOCookieName] != "" {
 		t.Fatal("sign-out left the browser session behind")
 	}
 
@@ -964,7 +1002,7 @@ func TestBackChannelLogoutTellsAClientThatHoldsNoRefreshToken(t *testing.T) {
 		t.Fatal("openid alone was issued a refresh token; this test is about the client that holds none")
 	}
 
-	if _, _, _ = b.do(http.MethodGet, "/logout"); b.cookies[issuer.SSOCookieName] != "" {
+	if _, _, _ = b.logout(); b.cookies[issuer.SSOCookieName] != "" {
 		t.Fatal("sign-out left the browser session behind")
 	}
 
@@ -1027,7 +1065,7 @@ func TestTheLogoutTokenNamesTheSessionTheIDTokenDid(t *testing.T) {
 		t.Fatal("the ID token carried no sid, so there is nothing for a logout token to name")
 	}
 
-	b.do(http.MethodGet, "/logout")
+	b.logout()
 
 	claims := jwtPart(t, awaitLogoutToken(t, told), 1)
 	if claims["sid"] != sid {

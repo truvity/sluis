@@ -498,7 +498,7 @@ func TestAPreUpgradeSignOutIsAuditedAsAnonymous(t *testing.T) {
 
 	b := newBrowser(t, rig.server)
 	b.cookies[issuer.SSOCookieName] = "old-sign-in"
-	b.do(http.MethodGet, "/logout")
+	b.logout()
 
 	revoked := rig.trail.Find("roster.session.revoked")
 	if len(revoked) != 1 {
@@ -572,7 +572,7 @@ func TestANormalSignOutIsAuditedAsThePerson(t *testing.T) {
 	rig := newSSORig(t, issuer.Config{})
 	b, id := rig.signedInBrowser(t)
 	rig.open(t, ssoEmail, "argocd", id)
-	b.do(http.MethodGet, "/logout")
+	b.logout()
 
 	ended := rig.trail.Find("roster.session.ended")
 	if len(ended) != 1 {

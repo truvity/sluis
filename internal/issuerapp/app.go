@@ -35,6 +35,7 @@ import (
 	"github.com/truvity/sluis/internal/clientcreds"
 	"github.com/truvity/sluis/internal/config"
 	"github.com/truvity/sluis/internal/health"
+	"github.com/truvity/sluis/internal/httpsec"
 	"github.com/truvity/sluis/internal/issuer"
 	"github.com/truvity/sluis/internal/lazy"
 	"github.com/truvity/sluis/internal/port"
@@ -848,7 +849,11 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 	// Outside even that, so that every answer the listener gives -- a
 	// refusal above all -- names the request it answers, and the audit trail
 	// and the log record the same id.
-	handler = refusal.Middleware(handler)
+	//
+	// Inside it, the cap on what a request may carry. Here and not on the
+	// listener alone, because a Lambda serves this handler and has no
+	// listener of ours: the cap and the headers are the handler's.
+	handler = refusal.Middleware(httpsec.LimitBody(handler, httpsec.MaxRequestBody))
 	app := &App{handler: handler, health: healthMux, issuer: core, storage: storage,
 		cfg: cfg, log: log, state: shared, lazyKeys: lazyKeys,
 		generated: generated, creds: creds, credStore: stores.ClientSecretPort(), leases: leases}
@@ -1391,11 +1396,8 @@ func openVerifiers(ctx context.Context, cfg Config, log *slog.Logger) (all, clus
 
 // serve runs one listener until the context is done, then drains it.
 func serve(ctx context.Context, addr string, handler http.Handler, name string, log *slog.Logger) error {
-	srv := &http.Server{
-		Addr:              addr,
-		Handler:           refusal.Middleware(handler),
-		ReadHeaderTimeout: 10 * time.Second,
-	}
+	// Bounded in what it reads and how long it waits: see [httpsec].
+	srv := httpsec.NewServer(addr, refusal.Middleware(handler))
 	go func() {
 		<-ctx.Done()
 		shutdown, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)

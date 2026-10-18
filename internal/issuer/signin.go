@@ -20,6 +20,7 @@ import (
 
 	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/audit"
+	"github.com/truvity/sluis/internal/httpsec"
 	"github.com/truvity/sluis/internal/refusal"
 	"github.com/truvity/sluis/internal/throttle"
 	"github.com/truvity/sluis/policy"
@@ -214,12 +215,13 @@ func SignInRoutes(mux *http.ServeMux, deps SignInDeps) {
 	mux.HandleFunc("GET /login/{provider}/callback", s.callback)
 	mux.HandleFunc("POST /login/recovery", s.recover)
 	mux.HandleFunc("POST "+agentConsentPath, s.acceptAgent)
-	// BOTH methods. A person following a link sends GET; the console
-	// sends POST, because its own sign-out was a POST — "a link that logs
-	// you out would be a link anyone could put in a page" — and a
-	// GET-only route answered that with 404. Serving one and not the
-	// other is how sign-out was fixed once and still did not work.
-	mux.HandleFunc("GET /logout", s.logout)
+	// BOTH methods. A person following a link sends GET, and is shown a
+	// page that asks; the page's button sends POST, which ends the
+	// sign-in. A GET that ended it would be a link anyone could put in a
+	// page -- "a link that logs you out" -- and a GET-only route answered
+	// the POST with 404. Serving one and not the other is how sign-out
+	// was fixed once and still did not work.
+	mux.HandleFunc("GET /logout", s.logoutPage)
 	mux.HandleFunc("POST /logout", s.logout)
 	mux.HandleFunc("GET /signed-out", s.signedOut)
 
@@ -257,6 +259,12 @@ func (s *signIn) chooser(w http.ResponseWriter, r *http.Request) {
 	request := r.URL.Query().Get("auth")
 	if request == "" {
 		s.page(w, "Sign in", `<p>This page is reached from an application asking you to sign in.</p>`)
+		return
+	}
+	// The request must have been started in THIS browser: a link to
+	// somebody else's request is not one to complete from a live sign-in.
+	if !s.boundHere(r, request) {
+		startedElsewhere(w, r)
 		return
 	}
 	// A live browser session is what makes the second console cost no
@@ -351,6 +359,9 @@ func (s *signIn) chooser(w http.ResponseWriter, r *http.Request) {
 		// cookie of its own, so that a provider button followed from this
 		// page, or any other sign-in page on this host, leaves it alone.
 		access.SetCookie(w, access.RecoveryCookie(recoveryState, s.deps.Secure, signInWindow))
+		// The form signs the person in, and its answer is a redirect to
+		// the application: see [httpsec.Policy.FormsMayRedirect].
+		httpsec.Apply(w, httpsec.Policy{FormsMayRedirect: true})
 	}
 	s.page(w, "Sign in", buttons.String())
 }
@@ -478,6 +489,10 @@ func (s *signIn) start(w http.ResponseWriter, r *http.Request) {
 	if request == "" {
 		recordLoginFailure(r.Context(), LoginBadRequest)
 		refusalPage(w, r, http.StatusBadRequest, "this sign-in is not part of an application's request", nil)
+		return
+	}
+	if !s.boundHere(r, request) {
+		startedElsewhere(w, r)
 		return
 	}
 	// The authorization request travels in the state, signed. A callback
@@ -764,7 +779,61 @@ func (s *signIn) callback(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, s.deps.Return(r.Context(), request), http.StatusFound)
 }
 
-// logout is the sign-out a PERSON follows, as opposed to `/end_session`,
+// logoutPurpose is what the sign-out form's token is for.
+const logoutPurpose = "logout"
+
+// logoutFormLimit bounds the sign-out form: a token and nothing else.
+const logoutFormLimit = 4 << 10
+
+// logoutPage is what a person following a sign-out link is shown: a page
+// with a button, not a sign-out.
+//
+// Ending a sign-in on a GET let any page on the internet sign a visitor out
+// by linking, framing or redirecting to this address -- a forced logout,
+// and with it a way to end the sessions the browser opened. So the GET asks,
+// and the POST it leads to carries a token bound to the cookie that proves
+// the sign-in: a page of somebody else's cannot read the token, and the
+// cookie is SameSite=Lax, so it does not ride a cross-site POST either.
+//
+// A browser with no sign-in has nothing to ask about and goes straight on.
+func (s *signIn) logoutPage(w http.ResponseWriter, r *http.Request) {
+	cookie := ""
+	if s.deps.SSO != nil {
+		cookie = SSOFromRequest(r, s.deps.Secure)
+	}
+
+	if cookie == "" || s.deps.State == nil {
+		http.Redirect(w, r, s.afterSignOut(), http.StatusFound)
+		return
+	}
+
+	token, err := s.deps.State.CSRFToken(logoutPurpose, cookie)
+	if err != nil {
+		refusalPage(w, r, http.StatusInternalServerError, "the sign-out could not be prepared", err)
+		return
+	}
+
+	// The answer to the form is a redirect that can lead on to the
+	// directory's own sign-in: see [httpsec.Policy.FormsMayRedirect].
+	httpsec.Apply(w, httpsec.Policy{FormsMayRedirect: true})
+	s.page(w, "Sign out?", fmt.Sprintf(`<p>This ends your sign-in here, and the sessions it opened in a browser.</p>
+	<p class="note">Agent connections you allowed to work in the background keep running.</p>
+	<form method="post" action="/logout">
+		<input type="hidden" name="csrf" value="%s">
+		<p><button type="submit">Sign out</button></p>
+	</form>`, html.EscapeString(token)))
+}
+
+// afterSignOut is where a sign-out leads.
+func (s *signIn) afterSignOut() string {
+	if where := strings.TrimSpace(s.deps.AfterSignOut); where != "" {
+		return where
+	}
+
+	return signedOutPath
+}
+
+// logout is the sign-out a PERSON confirms, as opposed to `/end_session`,
 // which is the protocol endpoint a relying party redirects to.
 //
 // It exists because the console's sign-out button pointed at `/logout`
@@ -775,21 +844,36 @@ func (s *signIn) callback(w http.ResponseWriter, r *http.Request) {
 //
 // Both end the same thing. This one needs no `id_token_hint`, which the
 // console could not supply anyway: it never redeems the code it gets
-// back, so it holds no ID token. That it takes a GET is the same posture
-// `end_session` has — ending a session is not a change somebody else can
-// exploit by making your browser visit it, only annoy you with.
+// back, so it holds no ID token. What it needs instead is the token
+// [signIn.logoutPage] put in its form, when there is a sign-in to end: the
+// POST is the one thing in this exchange another site could otherwise make
+// a browser send.
 func (s *signIn) logout(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, logoutFormLimit)
+	if err := r.ParseForm(); err != nil {
+		refusalPage(w, r, http.StatusBadRequest, "that form could not be read", nil)
+		return
+	}
+
+	if s.deps.SSO != nil {
+		if cookie := SSOFromRequest(r, s.deps.Secure); cookie != "" &&
+			!s.deps.State.CSRFValid(logoutPurpose, cookie, r.PostFormValue("csrf")) {
+			recordLoginFailure(r.Context(), LoginBadState)
+			logRefusal(r.Context(), http.StatusBadRequest, "the sign-out did not come from the sign-out page", nil, nil)
+			_ = writePage(w, http.StatusBadRequest, "Sign-out not confirmed",
+				`<p>This sign-out did not come from the sign-out page, so nothing was ended.</p>
+	<p class="note">You are still signed in. <a href="/logout">Sign out</a> from the page that asks.</p>`)
+
+			return
+		}
+	}
+
 	if err := SignOut(s.deps, w, r); err != nil {
 		signOutFailed(w, r)
 		return
 	}
 
-	where := strings.TrimSpace(s.deps.AfterSignOut)
-	if where == "" {
-		where = signedOutPath
-	}
-
-	http.Redirect(w, r, where, http.StatusFound)
+	http.Redirect(w, r, s.afterSignOut(), http.StatusFound)
 }
 
 // SignOut ends EVERYTHING this browser opened, and then the sign-in
@@ -1227,6 +1311,11 @@ const pageHTML = `<!doctype html><meta charset="utf-8"><title>%s</title>
 // directory. Everything it will not do is as important as what it will.
 func (s *signIn) silent(w http.ResponseWriter, r *http.Request, request string, pending Pending) bool {
 	if s.deps.SSO == nil || s.deps.Storage == nil || pending.ForcesLogin {
+		return false
+	}
+	// Never from a browser that did not start the request: this is the
+	// step a link sent to a victim would otherwise complete.
+	if !s.boundHere(r, request) {
 		return false
 	}
 

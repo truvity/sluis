@@ -24,6 +24,7 @@ require (
 	github.com/go-jose/go-jose/v4 v4.1.5
 	github.com/google/uuid v1.6.0
 	github.com/redis/go-redis/v9 v9.23.0
+	github.com/rs/cors v1.11.1
 	github.com/truvity/policy v1.49.0
 	github.com/truvity/sluis/audit/sdk v1.77.0-rc.1
 	github.com/truvity/sluis/storage v1.77.0-rc.1
@@ -107,7 +108,6 @@ require (
 	github.com/muhlemmer/gu v0.3.1 // indirect
 	github.com/muhlemmer/httpforwarded v0.1.0 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
-	github.com/rs/cors v1.11.1 // indirect
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
 	github.com/x448/float16 v0.8.4 // indirect

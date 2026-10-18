@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
+	neturl "net/url"
 	"testing"
 	"time"
 
@@ -76,11 +77,12 @@ func bootWithSignIn(t *testing.T, hub issuer.Directory, provider *stubProvider, 
 		t.Fatalf("key: %v", err)
 	}
 	mux := http.NewServeMux()
+	state := access.NewStateCodec(key.Derive("test"), 10*time.Minute)
 	issuer.SignInRoutes(mux, issuer.SignInDeps{
 		Issuer:    app.Issuer(),
 		Providers: []issuer.SignIn{provider},
 		Storage:   provider,
-		State:     access.NewStateCodec(key.Derive("test"), 10*time.Minute),
+		State:     state,
 		Return:    func(context.Context, string) string { return "/done" },
 		Log:       slog.New(slog.DiscardHandler),
 	})
@@ -92,10 +94,32 @@ func bootWithSignIn(t *testing.T, hub issuer.Directory, provider *stubProvider, 
 	})
 	mux.Handle("/", app.Handler())
 	_ = issuerURL
-	return &appWithSignIn{handler: refusal.Middleware(mux)}
+	return &appWithSignIn{handler: refusal.Middleware(mux), state: state}
 }
 
-type appWithSignIn struct{ handler http.Handler }
+type appWithSignIn struct {
+	handler http.Handler
+	state   *access.StateCodec
+}
+
+// startedIn gives the browser the cookie `/authorize` would have set for the
+// request, since these tests begin at the sign-in page with a request id of
+// their own: a sign-in is only advanced by the browser that started it.
+func (a *appWithSignIn) startedIn(t *testing.T, client *http.Client, at, request string) {
+	t.Helper()
+
+	value, err := a.state.AddRequest("", request)
+	if err != nil {
+		t.Fatalf("bind the request: %v", err)
+	}
+
+	where, err := neturl.Parse(at)
+	if err != nil {
+		t.Fatalf("parse %q: %v", at, err)
+	}
+
+	client.Jar.SetCookies(where, []*http.Cookie{access.AuthRequestCookie(value, false, time.Hour)})
+}
 
 func (a *appWithSignIn) Handler() http.Handler { return a.handler }
 

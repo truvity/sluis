@@ -30,6 +30,7 @@ import (
 	"github.com/truvity/sluis/internal/consolecall"
 	"github.com/truvity/sluis/internal/emailaddr"
 	"github.com/truvity/sluis/internal/githubroster/consolewire"
+	"github.com/truvity/sluis/internal/httpsec"
 	"github.com/truvity/sluis/internal/hub"
 	"github.com/truvity/sluis/internal/maintenance"
 	"github.com/truvity/sluis/internal/modcall"
@@ -314,7 +315,8 @@ func (s *ConsoleServer) Handler() http.Handler {
 	registerRPC(mux, s.console, maintenanceOptions(s.maintenance)...)
 
 	if s.consoleUI != nil {
-		mux.Handle("GET /assets/", http.FileServerFS(s.consoleUI))
+		// A request for the directory itself is a 404, not a listing of the files.
+		mux.Handle("GET /assets/", httpsec.NoListing(http.FileServerFS(s.consoleUI)))
 		mux.HandleFunc("GET /{$}", s.index)
 		mux.HandleFunc("GET /favicon.ico", func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusNoContent)
@@ -351,7 +353,10 @@ func (s *ConsoleServer) Handler() http.Handler {
 		mux.HandleFunc(prefix, s.sessionsCall)
 	}
 
-	return AuditRequests(s.forwardedForTrustedHops, s.withIdentity(s.withMaintenance(mux)))
+	// Every page this console writes, and the shell, carries the same
+	// headers: no framing, no referrer, no sniffing, and a policy that
+	// allows this origin's own files only.
+	return httpsec.Headers(AuditRequests(s.forwardedForTrustedHops, s.withIdentity(s.withMaintenance(mux))))
 }
 
 // at turns a path of this console's into one a browser can follow. Every
@@ -1303,6 +1308,9 @@ type rpcHandlers interface {
 // controllers still call. Both reach the same handler (see connectalias).
 func registerRPC(mux *http.ServeMux, h rpcHandlers, extra ...connect.HandlerOption) {
 	options := append(append(telemetry.ConnectOptions(), refusal.ConnectOptions(nil)...), extra...)
+	// A message is capped as it is decoded, which the listener's cap on the
+	// body cannot see when the body is compressed.
+	options = append(options, connect.WithReadMaxBytes(httpsec.MaxRequestBody))
 	serve := func(path string, handler http.Handler) {
 		mux.Handle(path, handler)
 		legacy := strings.Trim(path, "/")

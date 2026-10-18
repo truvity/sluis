@@ -210,6 +210,13 @@ func TestAStartLinkOpenedInAnotherBrowserDoesNotComplete(t *testing.T) {
 
 	request, _, _, _ := agentAuthorize(attacker, "")
 
+	// The browser binding ([TestAnAuthorizationRequestCompletesOnlyInTheBrowserThatStartedIt])
+	// already refuses the victim's browser. This test is about the page
+	// behind it, the defence that does not depend on the binding, so the
+	// victim is given the attacker's cookie: the consent page must hold
+	// even then.
+	victim.cookies[access.AuthRequestCookieName] = attacker.cookies[access.AuthRequestCookieName]
+
 	status, where, page, _ := providerRoundTrip(victim, request)
 	if status != http.StatusOK || strings.Contains(where, "/authorize/callback") {
 		t.Fatalf("the start link answered %d to %q in the victim's browser, want the consent page", status, where)
@@ -296,7 +303,7 @@ func TestTheConsentPageRefusesToBeFramed(t *testing.T) {
 	token := tokenOn(t, page)
 
 	check := func(what string, header http.Header) {
-		if got := header.Get("Content-Security-Policy"); !strings.HasPrefix(got, "frame-ancestors 'none'") {
+		if got := header.Get("Content-Security-Policy"); !strings.Contains(got, "frame-ancestors 'none'") {
 			t.Errorf("%s: Content-Security-Policy = %q, want frame-ancestors 'none'", what, got)
 		}
 		if got := header.Get("X-Frame-Options"); got != "DENY" {
@@ -422,7 +429,7 @@ func TestTheAcceptRechecksTheSignIn(t *testing.T) {
 	_, _, page, _ := providerRoundTrip(b, request)
 	token := tokenOn(t, page)
 
-	if status, _, _ := b.do(http.MethodGet, "/logout"); status != http.StatusFound {
+	if status, _, _ := b.logout(); status != http.StatusFound {
 		t.Fatalf("/logout: %d", status)
 	}
 
@@ -544,8 +551,15 @@ func TestTheAllowButtonIsInertUntilThePageHasBeenVisibleAndFocused(t *testing.T)
 		t.Fatalf("no nonce'd script on the page: %s", page)
 	}
 
-	if got, want := header.Get("Content-Security-Policy"), "frame-ancestors 'none'; script-src 'nonce-"+nonce[1]+"'"; got != want {
-		t.Errorf("Content-Security-Policy = %q, want %q", got, want)
+	policy := header.Get("Content-Security-Policy")
+	if !strings.Contains(policy, "script-src 'nonce-"+nonce[1]+"'") || !strings.Contains(policy, "frame-ancestors 'none'") {
+		t.Errorf("Content-Security-Policy = %q, want the page's nonce and frame-ancestors 'none'", policy)
+	}
+
+	// The accept ends in a redirect to the application, which a browser
+	// holds to `form-action`: it must not be there.
+	if strings.Contains(policy, "form-action") {
+		t.Errorf("Content-Security-Policy = %q: form-action would stop the redirect to the application", policy)
 	}
 
 	for _, want := range []string{

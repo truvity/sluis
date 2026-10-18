@@ -607,7 +607,7 @@ func TestTheSignInIDAsACookieSignsNobodyIn(t *testing.T) {
 
 			stranger := newBrowser(t, own.server)
 			stranger.cookies[issuer.SSOCookieName] = ownID
-			stranger.do(door.method, door.path)
+			stranger.door(door.method, door.path)
 
 			if _, live, err := own.iss.SSO().Get(context.Background(), ownID); err != nil || !live {
 				t.Errorf("%s with only the id ended the sign-in: live=%v err=%v", door.path, live, err)
@@ -682,7 +682,7 @@ func TestEveryEndOfASignInRemovesThePointer(t *testing.T) {
 		end  func(t *testing.T, rig *ssoRig, b *browser, id string)
 	}{
 		{name: "logout", end: func(_ *testing.T, _ *ssoRig, b *browser, _ string) {
-			b.do(http.MethodGet, "/logout")
+			b.logout()
 		}},
 		{name: "end_session", end: func(_ *testing.T, _ *ssoRig, b *browser, _ string) {
 			b.do(http.MethodGet, "/end_session")
@@ -1022,11 +1022,11 @@ func TestLogsNeverHoldTheSecretOrItsHash(t *testing.T) {
 	forged := newBrowser(t, rig.server)
 	forged.cookies[issuer.SSOCookieName] = id
 	proves(forged)
-	forged.do(http.MethodGet, "/logout")
+	forged.logout()
 
 	b2, _ := rig.signedInBrowser(t)
 	secret2 := b2.cookies[issuer.SSOCookieName]
-	b2.do(http.MethodGet, "/logout")
+	b2.logout()
 
 	// An unadmitted identity logs a warning of its own.
 	rig.dir.standing[ssoEmail] = issuer.Standing{Found: false, Authoritative: true}

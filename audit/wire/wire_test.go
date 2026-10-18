@@ -79,7 +79,8 @@ func TestTheCodecReadsEitherSpelling(t *testing.T) {
 }
 
 func TestTheCodecAnswersToBothJSONNames(t *testing.T) {
-	if n := len(wire.HandlerOptions()); n != 2 {
-		t.Fatalf("%d options; want one per name Connect asks for JSON by", n)
+	// One per name Connect asks for JSON by, and the limit on a message.
+	if n := len(wire.HandlerOptions()); n != 3 {
+		t.Fatalf("%d options; want one per name Connect asks for JSON by, and the read limit", n)
 	}
 }

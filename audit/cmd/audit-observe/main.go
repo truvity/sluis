@@ -36,6 +36,7 @@ import (
 	"github.com/truvity/sluis/audit/internal/cli"
 	"github.com/truvity/sluis/audit/internal/config"
 	readiness "github.com/truvity/sluis/audit/internal/health"
+	"github.com/truvity/sluis/audit/internal/httpsrv"
 	"github.com/truvity/sluis/audit/internal/observe"
 	"github.com/truvity/sluis/audit/internal/telemetry"
 	"github.com/truvity/sluis/audit/store"
@@ -154,7 +155,7 @@ func run() error {
 			_, err := archive.List(ctx, store.CataloguePrefix, "", 1)
 			return err
 		}}))
-	server := &http.Server{Addr: cfg.Listen.Address, Handler: mux, ReadHeaderTimeout: 10 * time.Second}
+	server := httpsrv.New(cfg.Listen.Address, mux)
 	go func() {
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			slog.ErrorContext(context.Background(), "the health listener stopped", slog.Any("error", err))

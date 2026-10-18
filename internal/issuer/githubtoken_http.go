@@ -22,8 +22,11 @@ import (
 const tokenPath = "/token"
 
 // maxTokenForm is how much of a token request is read to decide whether
-// it is ours: net/http's own limit on a form.
-const maxTokenForm = 10 << 20
+// it is ours. A token request is a grant, a few identifiers and a proof of
+// a few KiB; 1 MiB is generous for the largest and a tenth of what
+// net/http would read of a form, and it equals what the issuer's
+// maintenance gate reads of the same request.
+const maxTokenForm = 1 << 20
 
 // githubTokens serves the one exchange the OpenID library cannot: an
 // installation token for a catalogue App, which is GitHub's token and not

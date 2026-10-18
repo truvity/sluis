@@ -15,6 +15,7 @@ import (
 	"github.com/truvity/sluis/audit/sdk/sink/logsink"
 	"github.com/truvity/sluis/audit/sdk/sink/sinktest"
 	"github.com/truvity/sluis/audit/sinkserver"
+	"github.com/truvity/sluis/audit/wire"
 )
 
 func one(id string) *record.Record {
@@ -140,5 +141,33 @@ func TestConnectCarriesDurability(t *testing.T) {
 	res, err := client.Write(context.Background(), &sink.Request{Records: sinktest.Records(1)})
 	if err != nil || res.Durability != sink.Archived {
 		t.Fatalf("Write = %+v, %v", res, err)
+	}
+}
+
+// A message over the limit is refused as it is decoded, before the sink is
+// reached: the listener caps the body as sent, and this caps what a
+// compressed one expands to.
+func TestConnectRefusesAnOversizeMessage(t *testing.T) {
+	store := &sink.Memory{}
+	path, handler := sinkserver.NewHandler(store)
+	mux := http.NewServeMux()
+	mux.Handle(path, handler)
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	big := one("big")
+	big.Action = strings.Repeat("x", wire.MaxRequestBytes+1)
+
+	client := sink.NewClient(server.Client(), server.URL)
+	if _, err := client.Write(context.Background(), &sink.Request{Records: []*record.Record{big}, Delivery: sink.Block}); err == nil {
+		t.Fatal("an oversize message was accepted")
+	}
+
+	if store.Len() != 0 {
+		t.Fatalf("the sink received %d records from a refused message", store.Len())
+	}
+
+	if _, err := client.Write(context.Background(), &sink.Request{Records: []*record.Record{one("small")}, Delivery: sink.Block}); err != nil {
+		t.Fatalf("a small message after it: %v", err)
 	}
 }

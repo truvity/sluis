@@ -29,6 +29,7 @@ import (
 	"github.com/truvity/sluis/audit/internal/cli"
 	"github.com/truvity/sluis/audit/internal/config"
 	readiness "github.com/truvity/sluis/audit/internal/health"
+	"github.com/truvity/sluis/audit/internal/httpsrv"
 	"github.com/truvity/sluis/audit/internal/telemetry"
 	"github.com/truvity/sluis/audit/keys"
 	"github.com/truvity/sluis/audit/profile"
@@ -167,7 +168,7 @@ func run() error {
 	// Ready when what answers its queries can be reached: the index database, or
 	// the archive for the s3scan searcher.
 	mux.Handle("/readyz", readiness.Ready(slog.Default(), ready))
-	server := &http.Server{Addr: cfg.Listen.Address, Handler: telemetry.HTTPHandler(mux, "audit-query"), ReadHeaderTimeout: 10 * time.Second}
+	server := httpsrv.New(cfg.Listen.Address, telemetry.HTTPHandler(mux, "audit-query"))
 
 	go func() {
 		<-ctx.Done()

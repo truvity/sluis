@@ -94,7 +94,7 @@ func TestOwnSignOutKeepsAnAgentSessionRefreshing(t *testing.T) {
 		}
 	}
 
-	if status, where, _ := b.do(http.MethodGet, "/logout"); status != http.StatusFound || where != "/signed-out" {
+	if status, where, _ := b.logout(); status != http.StatusFound || where != "/signed-out" {
 		t.Fatalf("/logout: %d to %q", status, where)
 	}
 
@@ -147,9 +147,9 @@ func TestOwnSignOutKeepsAnAgentSessionRefreshing(t *testing.T) {
 }
 
 // `/end_session` is the person's own sign-out too, and spares the agents --
-// except a client the request names, by `client_id` or by the audience of
-// its `id_token_hint`: that client is signing itself out, and a name only
-// ever ends more.
+// except a client the request names by the audience of its verified
+// `id_token_hint` (a bare `client_id` names nobody): that client is signing
+// itself out, and a name only ever ends more.
 func TestEndSessionSparesAgentsExceptTheClientItNames(t *testing.T) {
 	t.Parallel()
 
@@ -167,7 +167,10 @@ func TestEndSessionSparesAgentsExceptTheClientItNames(t *testing.T) {
 		}
 	})
 
-	t.Run("by client_id", func(t *testing.T) {
+	// A bare client_id is a string anybody can put in a link. Honouring it
+	// would let a page of an attacker's end the agent connections a person
+	// meant to keep when they sign the browser out.
+	t.Run("by an unverified client_id", func(t *testing.T) {
 		t.Parallel()
 
 		rig := newSSORigWith(t, issuer.Config{}, consentPolicy())
@@ -180,14 +183,19 @@ func TestEndSessionSparesAgentsExceptTheClientItNames(t *testing.T) {
 		}
 
 		left := rig.listed(t, ssoEmail)
-		if _, kept := left[agentClient]; kept {
-			t.Error("end_session naming the agent client spared its session")
+		if _, kept := left[agentClient]; !kept {
+			t.Error("end_session with only a client_id ended the agent session")
 		}
 		if _, kept := left["another-agent"]; !kept {
-			t.Error("end_session naming one agent client ended another's session")
+			t.Error("end_session with only a client_id ended another agent's session")
 		}
-		if !rig.announcedTo(agentClient) {
-			t.Error("the named agent client was not told its session ended")
+		if rig.announcedTo(agentClient) {
+			t.Error("the agent client named only by client_id was told its session ended")
+		}
+
+		// The browser itself was still signed out.
+		if _, live, _ := rig.iss.SSO().Get(context.Background(), id); live {
+			t.Error("the sign-in survived end_session")
 		}
 	})
 
@@ -325,7 +333,7 @@ func TestEveryRevokeEndsAnAgentSession(t *testing.T) {
 
 			// Signed out first: what is left is the spared agent session,
 			// filed under a sign-in that has ended.
-			b.do(http.MethodGet, "/logout")
+			b.logout()
 
 			if _, kept := rig.listed(t, ssoEmail)[agentClient]; !kept {
 				t.Fatal("the sign-out did not spare the agent session")
@@ -450,7 +458,7 @@ func TestTheListingShowsClassAndDeadline(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	b.do(http.MethodGet, "/logout")
+	b.logout()
 	_, other := rig.signedInBrowser(t)
 
 	got, err := list(t, rig.service(), ssoEmail+"|", &accessissuerv1.ListSessionsRequest{Identity: ssoEmail})
