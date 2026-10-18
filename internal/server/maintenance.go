@@ -68,6 +68,12 @@ func rpcModule(procedure string) port.Module {
 // refused in maintenance rather than served.
 func rpcIsRead(procedure string) bool {
 	method := path.Base(procedure)
+	// Closing the break-glass door only ever reduces what can get in, and it
+	// writes a record no restore touches (the kind `recovery` is regenerated): it
+	// must work while a restore is running, which is when an operator may most need it.
+	if method == "DisableRecovery" {
+		return true
+	}
 	for _, p := range []string{"Get", "List", "Search", "Resolve", "Explain", "WhoAmI"} {
 		if strings.HasPrefix(method, p) {
 			return true

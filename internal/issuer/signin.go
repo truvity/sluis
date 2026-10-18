@@ -609,7 +609,7 @@ func (s *signIn) refuse(w http.ResponseWriter, r *http.Request, pending Pending,
 // state alone is something anybody can fetch for themselves and post from
 // another site (see [signIn.recover]).
 func (s *signIn) recoveryForm(ctx context.Context, request string) (form, state string) {
-	if s.deps.Recovery == nil || s.deps.Issuer.recoveryOff(ctx) {
+	if s.deps.Recovery == nil || s.deps.Issuer.recoveryCheck(ctx).refuse() {
 		return "", ""
 	}
 	state, err := s.deps.State.IssueAs(access.Binding{Bind: request, Owner: access.RecoveryPurpose})
@@ -646,7 +646,7 @@ func (s *signIn) recover(w http.ResponseWriter, r *http.Request) {
 	}
 	// Turned off from the console: refused before the form is read, the proof
 	// looked at or the API server asked.
-	if s.deps.Issuer.recoveryOff(r.Context()) {
+	if s.deps.Issuer.recoveryCheck(r.Context()).refuse() {
 		recordLoginFailure(r.Context(), LoginRecoveryOff)
 		refuseRecoveryOff(w, r)
 		return

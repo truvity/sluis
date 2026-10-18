@@ -110,13 +110,13 @@ func TestChangingTheGenerationTurnsRecoveryBackOn(t *testing.T) {
 	if status.Disabled != nil || status.Superseded == nil || status.Superseded.Generation != "a" {
 		t.Errorf("status: %+v", status)
 	}
-	// And a disable of the new generation replaces the old record.
+	// And a disable of the new generation adds to the set: both stay off.
 	rec, wrote, err := g.Disable(t.Context(), "bob@example.com")
 	if err != nil || !wrote || rec.Generation != "b" {
 		t.Fatalf("disable at b: %+v wrote=%v err=%v", rec, wrote, err)
 	}
-	if !off(t, recoverygate.New(st, "b")) || off(t, recoverygate.New(st, "a")) {
-		t.Error("the record covers exactly the generation it was made for")
+	if !off(t, recoverygate.New(st, "b")) || !off(t, recoverygate.New(st, "a")) || off(t, recoverygate.New(st, "c")) {
+		t.Error("the record covers exactly the generations that were disabled")
 	}
 }
 
@@ -177,6 +177,9 @@ func TestAnUnreadableRecordSwitchesRecoveryOffForEveryGeneration(t *testing.T) {
 	if off(t, recoverygate.New(st, "y")) {
 		t.Error("the replaced record still covers every generation")
 	}
+	if !off(t, recoverygate.New(st, "x")) {
+		t.Error("the replacing record does not cover the generation it was made for")
+	}
 }
 
 func TestNoStateCannotDisableAndSwitchesNothingOff(t *testing.T) {
@@ -211,5 +214,54 @@ func TestADisableRaceWritesOneRecord(t *testing.T) {
 	wg.Wait()
 	if wrote.Load() != 1 {
 		t.Errorf("%d callers wrote the record, want 1", wrote.Load())
+	}
+}
+
+// Generations are unordered, so a container still running the older one (a
+// rolling deploy) must not be able to undo the disable of the newer.
+func TestADisableFromAnOlderGenerationDoesNotReenableTheNewer(t *testing.T) {
+	t.Parallel()
+	st := memory.New()
+	if _, _, err := recoverygate.New(st, "B").Disable(t.Context(), "ada@example.com"); err != nil {
+		t.Fatal(err)
+	}
+	if _, wrote, err := recoverygate.New(st, "A").Disable(t.Context(), "bob@example.com"); err != nil || !wrote {
+		t.Fatalf("disable at A: wrote=%v err=%v", wrote, err)
+	}
+	for _, generation := range []string{"A", "B"} {
+		if !off(t, recoverygate.New(st, generation)) {
+			t.Errorf("generation %s is on after both were disabled", generation)
+		}
+	}
+	// And the entry of B is still ada's.
+	status, err := recoverygate.New(st, "B").Status(t.Context())
+	if err != nil || status.Disabled == nil || status.Disabled.By != "ada@example.com" {
+		t.Errorf("B's entry = %+v, %v", status.Disabled, err)
+	}
+	// Reusing a generation that was disabled once keeps recovery off.
+	if !off(t, recoverygate.New(st, "A")) {
+		t.Error("reusing a disabled generation turned recovery on")
+	}
+}
+
+// A State that cannot hold the record holds no switch: recovery is never off
+// there, which is not a lockout, and the action is withheld.
+func TestAStateThatDoesNotSupportTheRecordIsNeverOffAndNotDurable(t *testing.T) {
+	t.Parallel()
+	st := &counting{State: memory.New(), err: port.ErrUnsupported}
+	g := recoverygate.New(st, "")
+	got, err := g.Off(t.Context())
+	if got || err != nil {
+		t.Errorf("Off = %v, %v; want it never off, without an error", got, err)
+	}
+	if g.Durable() {
+		t.Error("durable")
+	}
+	if _, _, err = g.Disable(t.Context(), "ada@example.com"); !errors.Is(err, recoverygate.ErrUnsupported) {
+		t.Errorf("Disable = %v, want ErrUnsupported", err)
+	}
+	status, err := g.Status(t.Context())
+	if err != nil || status.Durable {
+		t.Errorf("Status = %+v, %v", status, err)
 	}
 }

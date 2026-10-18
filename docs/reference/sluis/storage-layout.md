@@ -67,7 +67,7 @@ One table with string `pk` (hash) and string `sk` (range). `pk` is the kind, so 
 | `slack-share` | `<host>/<channel>` | a Slack Connect share |
 | `slack-user-cache` | `<team>/<user>` | who a Slack member is (24 h) |
 | `console` | `session-key` | (the key itself is in Secrets) |
-| `recovery` | `off` | the recovery switch, in the oidc table: fields `generation`, `at`, `by`; the issuer and console read it at most every 3 s, and once seen never again; never exported by a backup |
+| `recovery` | `off` | the recovery switch, in the oidc table: the set `disabled` of `generation`, `at`, `by`; the issuer and console read it at most every 3 s, and once seen never again; never exported by a backup |
 | `lease` | `<kind>/<target>` | a tick's lease: kinds `github-tick`, `github-links`, `slack-tick`, `refresh` |
 | `notify` | `<target>` | a notification (a minute) |
 | `maintenance` | `flag` | the maintenance flag, in every table: fields `state`, `since`, `by`, `reason`; while it exists the module refuses writes (503 with `Retry-After`) and keeps serving reads, discovery and the key set, cached for 10 s; only the restore role can write it |

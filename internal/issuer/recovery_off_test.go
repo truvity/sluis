@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -18,6 +19,7 @@ import (
 	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/issuer"
 	"github.com/truvity/sluis/internal/refusal"
+	"github.com/truvity/sluis/policy"
 )
 
 // Once an operator has turned recovery off from the console, nothing a
@@ -182,16 +184,60 @@ func TestARecoverySignInDoesNotStandOnceRecoveryIsOff(t *testing.T) {
 	}
 }
 
-// A gate that cannot be read is off: the door that bypasses the directory is
-// shut when it cannot be checked.
-func TestAnUnreadableSwitchShutsTheRecoverySignIn(t *testing.T) {
+// A switch that cannot be read denies recovery and destroys nothing: a fault in
+// the State must not end a session an operator never meant to end. Once it can
+// be read again the session works, and only a positive record ends it.
+func TestAnUnreadableSwitchRefusesRecoveryAndEndsNothing(t *testing.T) {
 	t.Parallel()
 	server, iss, gate := newRecoveryIssuer(t)
-	openSession(t, iss, lookAlike, "refresh-unreadable", issuer.RecoveryHow)
+	ctx := t.Context()
+	storage, err := issuer.NewTestStorage(iss, fakeVerifier{}, nil, nil, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	read := issuer.SignedInReader(iss, storage, issuer.SignInDeps{Log: slog.New(slog.DiscardHandler)})
+	recovered := openSession(t, iss, lookAlike, "refresh-unreadable", issuer.RecoveryHow)
+	signIn, secret, err := iss.SSO().Begin(ctx, lookAlike, issuer.RecoveryHow)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	gate.off.Store(true)
 	gate.err = errors.New("dynamodb: throttled")
+
 	if status, _ := refreshLocalDev(t, server.URL, "refresh-unreadable"); status == http.StatusOK {
 		t.Error("a recovery refresh was served while the switch could not be read")
+	} else if status < http.StatusInternalServerError {
+		t.Errorf("the refusal is %d: a fault is a server error the client retries, not an invalid grant that ends its chain", status)
+	}
+	r := httptest.NewRequest(http.MethodGet, "/", nil).WithContext(ctx)
+	r.AddCookie(iss.SSO().Cookie(secret, false))
+	w := httptest.NewRecorder()
+	if got, ok := read(w, r); ok {
+		t.Errorf("a recovery sign-in stood while the switch could not be read: %v", got)
+	}
+	for _, c := range w.Result().Cookies() {
+		if c.Name == issuer.SSOCookieName && c.Value == "" {
+			t.Error("the browser's cookie was cleared on a read error")
+		}
+	}
+	if _, live, _ := iss.Sessions().ByID(ctx, recovered.ID); !live {
+		t.Error("the recovery session was revoked on a read error")
+	}
+	if _, live, _ := iss.SSO().Get(ctx, signIn.ID); !live {
+		t.Error("the recovery sign-in was ended on a read error")
+	}
+
+	// The State is back and says nothing was disabled: it all works again.
+	gate.off.Store(false)
+	gate.err = nil
+	if status, body := refreshLocalDev(t, server.URL, "refresh-unreadable"); status != http.StatusOK {
+		t.Errorf("after the read recovered the refresh = %d %v", status, body)
+	}
+	r = httptest.NewRequest(http.MethodGet, "/", nil).WithContext(ctx)
+	r.AddCookie(iss.SSO().Cookie(secret, false))
+	if _, ok := read(httptest.NewRecorder(), r); !ok {
+		t.Error("the recovery sign-in did not stand once the read recovered")
 	}
 }
 
@@ -303,5 +349,94 @@ func TestACodeRecoveryIssuedIsNotRedeemableOnceRecoveryIsOff(t *testing.T) {
 	}
 	if err = storage.Complete(ctx, start().GetID(), who); !errors.Is(err, issuer.ErrRecoveryOff) {
 		t.Errorf("Complete with recovery off = %v, want ErrRecoveryOff", err)
+	}
+}
+
+// Back-channel logout tells the clients of what the sweep ended.
+func TestEndRecoveryTellsTheClientsItEnded(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	var told atomic.Int32
+	var paths sync.Map
+	listener := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		told.Add(1)
+		paths.Store(r.URL.Path, true)
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(listener.Close)
+
+	declared, err := policy.Parse([]byte("version: 1\nlifetimes:\n  default: 1h\nclients:\n" +
+		"  c0:\n    kind: public\n    redirects: [\"http://localhost:8000/callback\"]\n    requires: [\"all:everyone\"]\n" +
+		"    backchannel_logout_uri: " + listener.URL + "/c0\n" +
+		"  c1:\n    kind: public\n    redirects: [\"http://localhost:8000/callback\"]\n    requires: [\"all:everyone\"]\n" +
+		"    backchannel_logout_uri: " + listener.URL + "/c1\n" +
+		"groups:\n  all:everyone:\n    matchers:\n      - email: ada@north.example\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	set, err := policy.NewSet(declared)
+	if err != nil {
+		t.Fatal(err)
+	}
+	iss := issuer.New(issuer.Config{URL: "http://issuer.example", AllowInsecure: true}, set, &fakeDirectory{}, issuer.NewMemoryState())
+	storage, err := issuer.NewTestStorage(iss, fakeVerifier{}, nil, nil, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	signIn, _, err := iss.SSO().Begin(ctx, lookAlike, issuer.RecoveryHow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// c1 only ever got an ID token under the sign-in; c0 holds a refresh token.
+	if err = iss.SSO().Involve(ctx, signIn.ID, "c1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = iss.Sessions().Record(ctx, issuer.Opened{
+		Identity: lookAlike, ClientID: "c0", How: issuer.HowCode, Method: issuer.RecoveryHow, SSO: signIn.ID,
+		Token: "t-c0", Scopes: []string{"openid"}, AuthTime: time.Now(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	ended, err := iss.EndRecovery(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ended.SignIns != 1 || ended.Sessions != 1 || len(ended.Ended) != 2 {
+		t.Fatalf("ended = %+v, want 1 sign-in, 1 session and 2 clients to tell", ended)
+	}
+	storage.AnnounceEnded(ctx, nil, ended.Ended)
+	if got := told.Load(); got != 2 {
+		t.Errorf("%d clients were told, want 2", got)
+	}
+	for _, path := range []string{"/c0", "/c1"} {
+		if _, ok := paths.Load(path); !ok {
+			t.Errorf("%s was not told", path)
+		}
+	}
+}
+
+// An access token minted under a recovery sign-in carries the claim a verifier
+// that sees only the token reads, and one minted under a person's does not.
+func TestARecoveryAccessTokenCarriesTheRecoveryClaim(t *testing.T) {
+	t.Parallel()
+	server, iss, _ := newRecoveryIssuer(t)
+	openSession(t, iss, lookAlike, "refresh-claim-recovery", issuer.RecoveryHow)
+	openSession(t, iss, "ada@north.example", "refresh-claim-person", "google")
+
+	status, body := refreshLocalDev(t, server.URL, "refresh-claim-recovery")
+	if status != http.StatusOK {
+		t.Fatalf("recovery refresh = %d %v", status, body)
+	}
+	if got := payloadOf(t, body["access_token"].(string))[issuer.RecoveryClaim]; got != true {
+		t.Errorf("a recovery access token carries %s = %v, want true", issuer.RecoveryClaim, got)
+	}
+	status, body = refreshLocalDev(t, server.URL, "refresh-claim-person")
+	if status != http.StatusOK {
+		t.Fatalf("person refresh = %d %v", status, body)
+	}
+	if _, has := payloadOf(t, body["access_token"].(string))[issuer.RecoveryClaim]; has {
+		t.Error("a person's access token carries the recovery claim")
 	}
 }

@@ -188,3 +188,20 @@ func TestWhoamiReportsTheModuleUnderMaintenance(t *testing.T) {
 		t.Fatalf("body = %+v", b)
 	}
 }
+
+// Closing the break-glass door works while a restore holds the issuer's table.
+func TestDisableRecoveryIsServedUnderMaintenance(t *testing.T) {
+	set, tables := gates(t)
+	mux := http.NewServeMux()
+	registerRPC(mux, named{}, maintenanceOptions(set)...)
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	underMaintenance(t, tables[port.ModuleOIDC])
+	if got := connect.CodeOf(callRPC(t, srv, "/directoryroster.v1.AccessService/DisableRecovery")); got != connect.CodeUnimplemented {
+		t.Errorf("DisableRecovery under maintenance = %v, want it to reach the handler", got)
+	}
+	if !rpcIsRead("/directoryroster.v1.AccessService/DisableRecovery") || rpcIsRead("/directoryroster.v1.AccessService/EnableRecovery") {
+		t.Error("only DisableRecovery is exempt")
+	}
+}

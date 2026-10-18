@@ -625,12 +625,6 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 		recoveryGate = recoverygate.New(stores.RecoveryState(), cfg.recoveryGeneration, recoverygate.WithLog(log))
 	}
 	core.UseRecoveryGate(recoveryGate)
-	if deps.UseRecoveryEnder != nil {
-		deps.UseRecoveryEnder(func(ctx context.Context) (int, int, error) {
-			ended, err := core.EndRecovery(ctx)
-			return ended.SignIns, ended.Sessions, err
-		})
-	}
 
 	if err := applySigningPlan(ctx, &cfg, stores.Plan); err != nil {
 		return nil, err
@@ -760,6 +754,16 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 	// groups-scoping report -- carry this deployment's level and
 	// attributes rather than depending on [slog.SetDefault] alone.
 	storage.UseLog(log)
+	if deps.UseRecoveryEnder != nil {
+		// The sweep that follows the console's turn-off of recovery: it ends what
+		// recovery opened and tells the clients that asked to be told.
+		deps.UseRecoveryEnder(func(ctx context.Context) (int, int, error) {
+			ended, err := core.EndRecovery(ctx)
+			storage.AnnounceEnded(ctx, log, ended.Ended)
+
+			return ended.SignIns, ended.Sessions, err
+		})
+	}
 	signIn, err := openSignIn(ctx, cfg, log)
 	if err != nil {
 		return nil, err

@@ -208,6 +208,8 @@ type Console struct {
 	deps  ConsoleDeps
 	// recoveryEnd sweeps the sessions recovery opened; see [RecoveryEnder].
 	recoveryEnd recoveryEnd
+	// recoveryDenied dedupes the records of refused DisableRecovery calls.
+	recoveryDenied cheapRefusals
 	// github, slack and google are the provider modules in this process, built
 	// over the console's own stores when the first page asks, and the way to call
 	// each as the console, for a deployment that has not split it out.

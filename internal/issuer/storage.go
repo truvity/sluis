@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net/http"
 	"slices"
 	"strings"
@@ -977,7 +978,7 @@ func (s *Storage) Complete(ctx context.Context, id string, who Authenticated) er
 	// A sign-in made by recovery completes nothing once an operator has switched
 	// recovery off (docs/decisions/0075): refused before anything is decided or
 	// recorded about it, as the form and the sign-in cookie are.
-	if who.How == RecoveryHow && s.iss.recoveryOff(ctx) {
+	if who.How == RecoveryHow && s.iss.recoveryCheck(ctx).refuse() {
 		return ErrRecoveryOff
 	}
 
@@ -1675,8 +1676,14 @@ func (s *Storage) issue(ctx context.Context, request op.TokenRequest) (*token, e
 	// switched recovery off: not a code that was already issued, not a refresh.
 	// Asked here because every token, fresh or refreshed, is minted through this
 	// function.
-	if methodOf(request) == RecoveryHow && s.iss.recoveryOff(ctx) {
-		return nil, deny(ctx, oidc.ErrInvalidGrant, errRecoveryOff)
+	if methodOf(request) == RecoveryHow {
+		switch s.iss.recoveryCheck(ctx) {
+		case recoveryEnded:
+			return nil, deny(ctx, oidc.ErrInvalidGrant, errRecoveryOff)
+		case recoveryUnknown:
+			return nil, fault(ctx, errRecoveryUnknown)
+		case recoveryOn:
+		}
 	}
 
 	// Marked before anything else: this is the FIRST storage call the
@@ -1688,6 +1695,7 @@ func (s *Storage) issue(ctx context.Context, request op.TokenRequest) (*token, e
 	// And how its subject was proved, for [Storage.GetPrivateClaimsFromScopes],
 	// which the library hands the subject string and nothing else.
 	signingAudienceFrom(ctx).markSubject(request.GetSubject(), provedAsServiceAccount(request))
+	signingAudienceFrom(ctx).markRecovery(methodOf(request) == RecoveryHow)
 
 	claims, held, given, family, err := s.claimsFor(ctx, request)
 	if err != nil {
@@ -2051,14 +2059,23 @@ func (s *Storage) TokenRequestByRefreshToken(ctx context.Context, refreshToken s
 	// switched recovery off. The sweep that follows the switch revokes these
 	// already; this is the refresh that finds one the sweep did not (a sign-in
 	// made on another container while the switch was spreading).
-	if session.Method == RecoveryHow && s.iss.recoveryOff(ctx) {
-		if !maintenance.ReadOnly(ctx) {
-			if _, endErr := s.iss.Sessions().RevokeID(ctx, session.ID); endErr != nil {
-				s.logger().WarnContext(ctx, "a recovery session could not be revoked", logattr.SafeError("error", endErr))
+	if session.Method == RecoveryHow {
+		switch s.iss.recoveryCheck(ctx) {
+		case recoveryEnded:
+			if !maintenance.ReadOnly(ctx) {
+				if _, endErr := s.iss.Sessions().RevokeID(ctx, session.ID); endErr != nil {
+					s.logger().WarnContext(ctx, "a recovery session could not be revoked", logattr.SafeError("error", endErr))
+				}
 			}
-		}
 
-		return nil, deny(ctx, oidc.ErrInvalidGrant, errRecoveryOff)
+			return nil, deny(ctx, oidc.ErrInvalidGrant, errRecoveryOff)
+		case recoveryUnknown:
+			// Refused, and the session left alone: the switch could not be read.
+			// Carried on the request, as an outage is: the library would turn an
+			// error returned here into invalid_grant, which ends the client's chain.
+			return refusedLater(ctx, fault(ctx, errRecoveryUnknown)), nil
+		case recoveryOn:
+		}
 	}
 
 	// The limit as the policy states it NOW. A record carries the end it
@@ -2536,8 +2553,24 @@ func (s *Storage) GetPrivateClaimsFromScopes(ctx context.Context, subject, _ str
 		claims = applyGroupsDelimiter(s.iss.Policy(), claims, audience)
 	}
 
-	return withNames(claims, given, family), nil
+	claims = withNames(claims, given, family)
+	if signingAudienceFrom(ctx).isRecovery(subject) {
+		// So a verifier that sees only the token, and not this issuer's records,
+		// can refuse it once recovery has been turned off (docs/decisions/0075).
+		out := make(map[string]any, len(claims)+1)
+		maps.Copy(out, claims)
+		out[RecoveryClaim] = true
+		claims = out
+	}
+
+	return claims, nil
 }
+
+// RecoveryClaim is the private claim an access token carries when it was minted
+// under a sign-in made by recovery. A consumer that verifies tokens offline
+// (the console behind a gateway: identity.Verified.Recovery) refuses such a
+// token while recovery is turned off.
+const RecoveryClaim = "sluis_recovery"
 
 // withNames returns claims with the person's names added, leaving the map
 // it was given alone. Absent names add nothing: a workload and a recovery
@@ -2955,6 +2988,12 @@ func (s *Storage) signInProof(ctx context.Context, request exchangeSubject) (Pro
 	// outlives a policy change, so the class of the session itself decides.
 	if session.Agent() {
 		return refuse("agent_session", "a sign-in held by an agent-class session cannot be exchanged")
+	}
+
+	// And a recovery sign-in is never a person's proof to trade, for the same
+	// reason it is not a bearer ([Storage.liveSignInClaims]).
+	if session.Method == RecoveryHow {
+		return refuse("recovery_session", "a sign-in made by recovery cannot be exchanged")
 	}
 
 	return Proof{Email: issued.Subject}, nil

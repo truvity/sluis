@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -64,7 +65,7 @@ func newRecoveryRig(t *testing.T, generation string, state port.State) *recovery
 		rig.state = memory.New()
 		state = rig.state
 	}
-	rig.gate = recoverygate.New(state, generation)
+	rig.gate = recoverygate.New(state, generation, recoverygate.WithTTL(time.Nanosecond))
 	rig.console = githubConsole(t, nil)
 	rig.console.deps.Audit = rig.trail
 	rig.console.deps.Recovery = oneRecovery{}
@@ -448,4 +449,177 @@ type failingState struct{ port.State }
 
 func (*failingState) Get(context.Context, string) (port.Record, error) {
 	return port.Record{}, errors.New("dynamodb: throttled")
+}
+
+// flakyState fails its reads while fail is set.
+type flakyState struct {
+	port.State
+	fail atomic.Bool
+}
+
+func (f *flakyState) Get(ctx context.Context, key string) (port.Record, error) {
+	if f.fail.Load() {
+		return port.Record{}, errors.New("dynamodb: throttled")
+	}
+	return f.State.Get(ctx, key)
+}
+
+// A fault in the State refuses the recovery session and clears nothing: the
+// cookie works again once the State answers, and only a record ends it.
+func TestAReadFaultRefusesARecoverySessionWithoutEndingIt(t *testing.T) {
+	t.Parallel()
+	flaky := &flakyState{State: memory.New()}
+	rig := newRecoveryRig(t, "", flaky)
+	handler := recoveryHTTP(t, rig)
+
+	cookie := sessionCookieOf(t, recoverThroughConsole(handler))
+	if got := whoamiStatus(t, handler, cookie); got != "signed-in" {
+		t.Fatalf("before the fault = %s", got)
+	}
+
+	flaky.fail.Store(true)
+	request := httptest.NewRequest(http.MethodGet, "/.access/whoami", nil)
+	request.AddCookie(cookie)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if strings.Contains(response.Body.String(), `"signed-in"`) {
+		t.Fatal("a recovery session was honoured while the switch could not be read")
+	}
+	for _, c := range response.Result().Cookies() {
+		if c.Name == sessionCookie && c.Value == "" {
+			t.Error("the session cookie was cleared on a read fault")
+		}
+	}
+
+	flaky.fail.Store(false)
+	if got := whoamiStatus(t, handler, cookie); got != "signed-in" {
+		t.Errorf("after the State answered again = %s, want the session back", got)
+	}
+
+	if _, err := rig.disable(idpOperator); err != nil {
+		t.Fatal(err)
+	}
+	request = httptest.NewRequest(http.MethodGet, "/.access/whoami", nil)
+	request.AddCookie(cookie)
+	response = httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	cleared := false
+	for _, c := range response.Result().Cookies() {
+		cleared = cleared || (c.Name == sessionCookie && c.Value == "")
+	}
+	honoured := strings.Contains(response.Body.String(), `"signed-in"`)
+	if honoured || !cleared {
+		t.Errorf("after the record the session was honoured=%v, cookie cleared=%v; want ended and cleared", honoured, cleared)
+	}
+}
+
+// ------------------------------------------------- tokens recovery issued
+
+func recoveryBearerServer(t *testing.T, rig *recoveryRig, issuer *fakeIssuer) http.Handler {
+	t.Helper()
+	sessions, err := access.NewSessions(make([]byte, access.SessionKeyBytes), time.Hour, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return NewConsoleServer(ConsoleServerDeps{
+		Console: rig.console, Authorizer: rig.console.deps.Authorizer, Sessions: sessions,
+		State:    access.NewStateCodec(make([]byte, 32), time.Minute),
+		Recovery: oneRecovery{}, RecoveryGate: rig.gate, Log: capturedLogger(),
+		Forwarded: ForwardedIdentity{Issuer: issuer.URL, Audience: "console"},
+	}).Handler()
+}
+
+func callAs(handler http.Handler, bearer, method string) *httptest.ResponseRecorder {
+	request := httptest.NewRequest(http.MethodPost, "/sluis.v1.AccessService/"+method, strings.NewReader("{}"))
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Authorization", "Bearer "+bearer)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	return response
+}
+
+// A token the issuer minted under a recovery sign-in is verified offline here,
+// so the console refuses it itself once recovery is off. Until then it may not
+// turn recovery off either: it names no person.
+func TestARecoveryTokenAtTheForwardedBearerCannotDisableAndDiesWithRecovery(t *testing.T) {
+	t.Parallel()
+	rig := newRecoveryRig(t, "", nil)
+	issuer := newFakeIssuer(t)
+	handler := recoveryBearerServer(t, rig, issuer)
+
+	recoveryToken := issuer.mint(t, map[string]any{
+		"sub": "system:serviceaccount:ops:recovery", "aud": []string{"console"}, "sluis_recovery": true,
+	}, nil)
+	workloadToken := issuer.mint(t, map[string]any{"sub": "system:serviceaccount:ops:ci", "aud": []string{"console"}}, nil)
+
+	if got := callAs(handler, recoveryToken, "GetRecovery"); got.Code != http.StatusForbidden {
+		t.Fatalf("a recovery token read recovery's state: %d %s (it has no role here, but it is a principal)", got.Code, got.Body.String())
+	}
+	denied := callAs(handler, recoveryToken, "DisableRecovery")
+	if denied.Code != http.StatusForbidden {
+		t.Fatalf("a recovery-derived forwarded bearer calling DisableRecovery = %d %s, want it refused", denied.Code, denied.Body.String())
+	}
+	if off, _ := rig.gate.Off(t.Context()); off {
+		t.Fatal("a recovery-derived bearer turned recovery off")
+	}
+
+	if _, err := rig.disable(idpOperator); err != nil {
+		t.Fatal(err)
+	}
+	if got := callAs(handler, recoveryToken, "GetRecovery"); got.Code != http.StatusUnauthorized {
+		t.Errorf("a recovery token after the switch = %d %s, want it not authenticated", got.Code, got.Body.String())
+	}
+	// A token that recovery did not mint is not touched.
+	if got := callAs(handler, workloadToken, "GetRecovery"); got.Code == http.StatusUnauthorized {
+		t.Errorf("a workload's token after the switch = %d, want it still authenticated", got.Code)
+	}
+}
+
+// An address in a header the gateway set is only as strong as the gateway, and
+// is a source of its own: it may not turn recovery off.
+func TestAnUnverifiedHeaderIdentityCannotDisableRecovery(t *testing.T) {
+	t.Parallel()
+	rig := newRecoveryRig(t, "", nil)
+	sessions, err := access.NewSessions(make([]byte, access.SessionKeyBytes), time.Hour, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := NewConsoleServer(ConsoleServerDeps{
+		Console: rig.console, Authorizer: rig.console.deps.Authorizer, Sessions: sessions,
+		Forwarded: ForwardedIdentity{EmailHeader: "X-Email"}, Log: capturedLogger(),
+	})
+	request := httptest.NewRequest(http.MethodGet, "/", nil)
+	request.Header.Set("X-Email", "ada@example.com")
+	principal, ok := server.principal(httptest.NewRecorder(), request)
+	if !ok || principal.Source != access.SourceForwardedHeader {
+		t.Fatalf("principal = %+v, %v; want the header's own source", principal, ok)
+	}
+	id := idpOperator
+	id.Source = access.SourceForwardedHeader
+	_, err = rig.disable(id)
+	if connect.CodeOf(err) != connect.CodePermissionDenied || !strings.Contains(err.Error(), "verified") {
+		t.Fatalf("err = %v, want permission denied asking for a verified sign-in", err)
+	}
+}
+
+// Refused attempts are recorded once a window per caller and reason, with a
+// count, not once each.
+func TestRefusedDisableAttemptsAreRecordedOncePerWindow(t *testing.T) {
+	t.Parallel()
+	rig := newRecoveryRig(t, "", nil)
+	for range 25 {
+		if _, err := rig.disable(recoveryID); connect.CodeOf(err) != connect.CodePermissionDenied {
+			t.Fatalf("err = %v", err)
+		}
+	}
+	if n := len(rig.trail.Find("roster.recovery.disabled")); n != 1 {
+		t.Errorf("%d denied records for 25 identical refusals, want 1", n)
+	}
+	// A different caller is its own.
+	other := recoveryID
+	other.Email, other.Subject = "other", "other"
+	_, _ = rig.disable(other)
+	if n := len(rig.trail.Find("roster.recovery.disabled")); n != 2 {
+		t.Errorf("%d denied records after a second caller, want 2", n)
+	}
 }

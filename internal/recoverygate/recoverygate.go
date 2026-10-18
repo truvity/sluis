@@ -7,21 +7,32 @@
 // signed in through the identity provider. There is no way to turn it on at run
 // time: the only action is [Gate.Disable].
 //
-// A disable is one record in the State, [Key], that names the configuration
-// GENERATION it overrode (`recovery.generation`). Recovery is switched off
-// while a record exists for the generation in force, and a record for any other
-// generation covers nothing. So a Lambda cold start, a redeploy or a rolled pod
-// that reads the SAME document finds the record and stays off, while an
-// operator who changes the generation on purpose has said "on" in the one place
-// a reviewed change is made. A stale document can therefore not turn recovery
-// back on, and a new one can.
+// A disable is one record in the State, [Key], holding the SET of configuration
+// generations (`recovery.generation`) that have been disabled. Recovery is
+// switched off while the generation in force is in the set; a generation that
+// is not in it is covered by nothing. So a Lambda cold start, a redeploy or a
+// rolled pod that reads the SAME document finds its generation in the set and
+// stays off, while an operator who names a generation never disabled has said
+// "on" in the one place a reviewed change is made. A stale document can
+// therefore not turn recovery back on, and a new one can.
+//
+// The set only grows. Generations are strings, not an order, so a container
+// still running generation A (a rolling deploy) that is asked to disable adds A
+// to the set and leaves B where it was: nothing it does can re-enable B. The
+// price is that naming a generation that was disabled once keeps recovery off;
+// an operator picks a string that was never used.
 //
 // Every process reads the record, not a local flag. A gate trusts what it read
 // for [DefaultTTL] when recovery is on, so a disable reaches every Lambda
 // container and every replica within that and a few milliseconds; once it has
 // seen the record it never reads again, because a disable is never undone while
-// the process runs. A read that fails answers "off": recovery is the door that
-// bypasses the directory, and a door that cannot be checked stays shut.
+// the process runs. A read that fails DENIES recovery (Off answers true with the
+// error): recovery is the door that bypasses the directory, and a door that
+// cannot be checked stays shut. A caller that would DESTROY something because
+// recovery is off (end a session, clear a cookie) does so only when Off answered
+// with no error, so a transient fault in the State never ends a session. A State
+// that does not support the record at all (the legacy adapter) holds no switch:
+// recovery is never off there, and nothing can be disabled.
 package recoverygate
 
 import (
@@ -50,9 +61,14 @@ const DefaultTTL = 3 * time.Second
 // restart, so it is refused rather than half done.
 var ErrUnsupported = errors.New("recoverygate: this installation's State cannot keep the record of a disable")
 
-// Record is what a disable keeps.
+// stored is the value of the State record: every generation ever disabled.
+type stored struct {
+	Disabled []Record `json:"disabled"`
+}
+
+// Record is one disable: what a generation's entry in the set keeps.
 type Record struct {
-	// Generation is the `recovery.generation` the disable overrode.
+	// Generation is the `recovery.generation` the disable covers.
 	Generation string `json:"generation"`
 	// At is when the disable was made.
 	At time.Time `json:"at"`
@@ -72,8 +88,8 @@ func (r Record) Covers(generation string) bool { return r.unreadable || r.Genera
 type Status struct {
 	// Disabled is the record that covers the generation in force, or nil.
 	Disabled *Record
-	// Superseded is a record of an earlier generation: a disable the
-	// configuration has since turned back on by changing the generation. Nil
+	// Superseded is the latest disable of an earlier generation: one the
+	// configuration has since turned back on by naming another generation. Nil
 	// when there is none, or when Disabled is set.
 	Superseded *Record
 	// Generation is the `recovery.generation` in force.
@@ -95,6 +111,9 @@ type Gate struct {
 	off  *Record   // set once seen; never cleared
 	on   time.Time // when "no covering record" was last read
 	seen bool
+	// unsupported is set when the State answered that it cannot hold the
+	// record: recovery is then never off, and nothing can be disabled.
+	unsupported bool
 }
 
 // Option adjusts a gate.
@@ -137,40 +156,78 @@ func (g *Gate) Generation() string {
 	return g.generation
 }
 
-// Durable reports whether a disable can be kept.
-func (g *Gate) Durable() bool { return g != nil && g.st != nil }
+// Durable reports whether a disable can be kept: there is a State, and it has
+// not said it cannot hold the record.
+func (g *Gate) Durable() bool {
+	if g == nil || g.st == nil {
+		return false
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return !g.unsupported
+}
 
-// Off reports whether recovery is switched off at run time. A State that cannot
-// be read answers true (see the package comment); the error is returned so a
-// caller can say why.
+// Off reports whether recovery is switched off at run time.
+//
+// The result is a verdict to DENY on: true means refuse the request. A non-nil
+// error means the answer is "could not tell" and is also true; the caller
+// refuses but destroys nothing. Only (true, nil) says an operator turned
+// recovery off, and only then may a caller end a session or clear a cookie.
 func (g *Gate) Off(ctx context.Context) (bool, error) {
 	if g == nil || g.st == nil {
 		return false, nil
 	}
 	g.mu.Lock()
-	if g.off != nil {
+	switch {
+	case g.off != nil:
 		g.mu.Unlock()
 		return true, nil
-	}
-	if g.seen && g.now().Sub(g.on) < g.ttl {
+	case g.unsupported:
+		g.mu.Unlock()
+		return false, nil
+	case g.seen && g.now().Sub(g.on) < g.ttl:
 		g.mu.Unlock()
 		return false, nil
 	}
 	g.mu.Unlock()
 
-	rec, _, err := g.read(ctx)
+	set, bad, _, err := g.read(ctx)
+	if errors.Is(err, ErrUnsupported) {
+		g.markUnsupported()
+		return false, nil
+	}
 	if err != nil {
 		g.logger().WarnContext(ctx, "the recovery switch could not be read, so the recovery sign-in is refused", slog.Any("error", err))
 		return true, err
 	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	if rec != nil && rec.Covers(g.generation) {
+	if rec, covered := covering(set, bad, g.generation); covered {
 		g.off = rec
 		return true, nil
 	}
 	g.on, g.seen = g.now(), true
 	return false, nil
+}
+
+func (g *Gate) markUnsupported() {
+	g.mu.Lock()
+	g.unsupported = true
+	g.mu.Unlock()
+}
+
+// covering is the entry of set that covers generation, and whether anything does.
+// An unreadable record covers every generation, with no entry to show.
+func covering(set []Record, bad bool, generation string) (*Record, bool) {
+	if bad {
+		return &Record{unreadable: true}, true
+	}
+	for i := range set {
+		if set[i].Generation == generation {
+			return &set[i], true
+		}
+	}
+	return nil, false
 }
 
 // Status reads the record afresh, for the console's page.
@@ -179,17 +236,24 @@ func (g *Gate) Status(ctx context.Context) (Status, error) {
 	if !st.Durable {
 		return st, nil
 	}
-	rec, _, err := g.read(ctx)
+	set, bad, _, err := g.read(ctx)
+	if errors.Is(err, ErrUnsupported) {
+		g.markUnsupported()
+		st.Durable = false
+		return st, nil
+	}
 	if err != nil {
 		return st, err
 	}
-	switch {
-	case rec == nil:
-	case rec.Covers(g.generation):
+	if rec, covered := covering(set, bad, g.generation); covered {
 		st.Disabled = rec
 		g.remember(rec)
-	default:
-		st.Superseded = rec
+		return st, nil
+	}
+	for i := range set {
+		if st.Superseded == nil || set[i].At.After(st.Superseded.At) {
+			st.Superseded = &set[i]
+		}
 	}
 	return st, nil
 }
@@ -208,53 +272,68 @@ func (g *Gate) Forget() {
 	g.mu.Unlock()
 }
 
-// read returns the record and its revision; both zero when there is none.
-func (g *Gate) read(ctx context.Context) (*Record, port.Revision, error) {
+// read returns the set of disabled generations and the record's revision; an
+// empty set and no revision when there is no record. bad says the record exists
+// and cannot be parsed.
+func (g *Gate) read(ctx context.Context) (set []Record, bad bool, rev port.Revision, err error) {
 	got, err := g.st.Get(ctx, Key)
 	switch {
 	case errors.Is(err, port.ErrNotFound):
-		return nil, "", nil
+		return nil, false, "", nil
 	case errors.Is(err, port.ErrUnsupported):
-		return nil, "", fmt.Errorf("%w: %w", ErrUnsupported, err)
+		return nil, false, "", fmt.Errorf("%w: %w", ErrUnsupported, err)
 	case err != nil:
-		return nil, "", fmt.Errorf("read the recovery switch: %w", err)
+		return nil, false, "", fmt.Errorf("read the recovery switch: %w", err)
 	}
-	var rec Record
+	var rec stored
 	if err = json.Unmarshal(got.Value, &rec); err != nil {
 		// A record nobody can read still says someone wrote it: it switches
-		// recovery off, and the next disable replaces it with a readable one.
-		return &Record{unreadable: true}, got.Revision, nil
+		// recovery off for every generation, and a disable replaces it with a
+		// readable one (which is the only way to narrow it).
+		return nil, true, got.Revision, nil
 	}
-	return &rec, got.Revision, nil
+	return rec.Disabled, false, got.Revision, nil
 }
 
 // Disable switches recovery off for the generation in force, for good until the
-// configuration changes it. It returns the record that stands and whether this
-// call wrote it: a second call, here or in another container, writes nothing
-// and returns the first one.
+// configuration names another one. It adds the generation to the set the record
+// holds, by compare-and-swap, and never removes or rewrites an entry: a
+// container on an older generation cannot undo a disable of a newer one. It
+// returns the entry that stands for the generation and whether this call wrote
+// it: a second call, here or in another container, writes nothing and returns
+// the first one.
 func (g *Gate) Disable(ctx context.Context, by string) (Record, bool, error) {
 	if !g.Durable() {
 		return Record{}, false, ErrUnsupported
 	}
 	want := Record{Generation: g.generation, At: g.now().UTC().Truncate(time.Second), By: by}
-	body, err := json.Marshal(want)
-	if err != nil {
-		return Record{}, false, err
-	}
-	for range 5 {
-		have, rev, err := g.read(ctx)
+	for range 8 {
+		set, bad, rev, err := g.read(ctx)
+		if errors.Is(err, ErrUnsupported) {
+			g.markUnsupported()
+			return Record{}, false, err
+		}
 		if err != nil {
 			return Record{}, false, err
 		}
-		if have != nil && !have.unreadable && have.Covers(g.generation) {
-			g.remember(have)
-			return *have, false, nil
+		if !bad {
+			if have, covered := covering(set, false, g.generation); covered {
+				g.remember(have)
+				return *have, false, nil
+			}
 		}
-		if have == nil {
+		next := stored{Disabled: append(append([]Record(nil), set...), want)}
+		if bad {
+			// Only an unreadable record is replaced, and by this entry alone.
+			next = stored{Disabled: []Record{want}}
+		}
+		body, err := json.Marshal(next)
+		if err != nil {
+			return Record{}, false, err
+		}
+		if rev == "" && !bad {
 			_, err = g.st.Create(ctx, Key, body, 0)
 		} else {
-			// An earlier generation's record, or an unreadable one: replaced,
-			// and the audit trail keeps the history.
 			_, err = g.st.Update(ctx, Key, body, 0, rev)
 		}
 		switch {
@@ -264,6 +343,7 @@ func (g *Gate) Disable(ctx context.Context, by string) (Record, bool, error) {
 		case errors.Is(err, port.ErrExists), errors.Is(err, port.ErrConflict), errors.Is(err, port.ErrNotFound):
 			continue
 		case errors.Is(err, port.ErrUnsupported):
+			g.markUnsupported()
 			return Record{}, false, fmt.Errorf("%w: %w", ErrUnsupported, err)
 		default:
 			return Record{}, false, fmt.Errorf("keep the recovery switch: %w", err)

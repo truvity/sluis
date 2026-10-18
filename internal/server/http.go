@@ -443,18 +443,26 @@ func (s *ConsoleServer) principal(w http.ResponseWriter, r *http.Request) (acces
 	// is what lets somebody who signed in at another console reach this
 	// one with no second session.
 	if s.signedIn != nil {
-		if p, ok := s.signedIn(w, r); ok && s.recoveryStands(r.Context(), p) {
-			return p, true
+		if p, ok := s.signedIn(w, r); ok {
+			// The issuer ends a recovery sign-in itself when it finds one; this
+			// only keeps the principal out.
+			if stands, _ := s.recoveryStands(r.Context(), p); stands {
+				return p, true
+			}
 		}
 	}
 	if p, err := s.sessions.Read(r); err == nil {
-		if s.recoveryStands(r.Context(), p) {
+		stands, ended := s.recoveryStands(r.Context(), p)
+		if stands {
 			return p, true
 		}
 		// A recovery session of this console, after recovery was turned off:
-		// not a session any more, whatever its cookie still says. Cleared so
-		// the browser stops sending it.
-		s.sessions.Clear(w)
+		// not a session any more, whatever its cookie still says. Cleared so the
+		// browser stops sending it, but only when the switch was read: a fault in
+		// the State refuses the request and leaves the cookie.
+		if ended {
+			s.sessions.Clear(w)
+		}
 	}
 	// A workload's own ServiceAccount token, before an issuer-signed
 	// bearer. Ordering costs nothing either way — a token is recognised
@@ -478,7 +486,12 @@ func (s *ConsoleServer) principal(w http.ResponseWriter, r *http.Request) (acces
 	// decides and a header is never consulted.
 	if s.bearer != nil {
 		if p, ok := s.bearer.identity(r); ok {
-			return p, true
+			// A token minted under a recovery sign-in is refused once recovery
+			// is off: it is verified offline here, so this is the only place
+			// that can end it before it expires.
+			if stands, _ := s.recoveryStands(r.Context(), p); stands {
+				return p, true
+			}
 		}
 	}
 	if s.forwarded.EmailHeader != "" {
@@ -495,7 +508,7 @@ func (s *ConsoleServer) principal(w http.ResponseWriter, r *http.Request) (acces
 			return access.Principal{
 				Email:   email,
 				Subject: email,
-				Source:  access.SourceForwarded,
+				Source:  access.SourceForwardedHeader,
 				Issuer:  s.forwarded.Issuer,
 			}, true
 		}
@@ -946,17 +959,31 @@ func (s *ConsoleServer) recoveryAvailable(ctx context.Context) bool {
 	return !off
 }
 
-// recoveryStands reports whether a principal is still a principal: anything
-// that was not established by recovery always is, and a recovery sign-in is
-// only while recovery has not been turned off. This is what ends every session
-// recovery opened (the console's own cookie and the issuer's sign-in alike) in
-// every container, without a table of sessions to find them in.
-func (s *ConsoleServer) recoveryStands(ctx context.Context, p access.Principal) bool {
-	if p.Source != access.SourceRecovery {
-		return true
+// recoveryStands says whether a principal is still a principal, and whether it
+// was found to be ended.
+//
+// Anything not established by recovery always stands. A recovery sign-in (the
+// console's cookie or the issuer's sign-in) or a verified bearer minted under
+// one (`Principal.Recovery`) stands only while recovery has not been turned off.
+// This is what ends every session recovery opened, in every container, without
+// a table of sessions to find them in.
+//
+// ended is true only when the switch was read and said off. When it could not be
+// read the principal does not stand either, but ended is false: the caller
+// refuses and destroys nothing.
+func (s *ConsoleServer) recoveryStands(ctx context.Context, p access.Principal) (stands, ended bool) {
+	if p.Source != access.SourceRecovery && !p.Recovery {
+		return true, false
 	}
-	off, _ := s.recoveryGate.Off(ctx)
-	return !off
+	off, err := s.recoveryGate.Off(ctx)
+	switch {
+	case err != nil:
+		return false, false
+	case off:
+		return false, true
+	default:
+		return true, false
+	}
 }
 
 // recoveryState is a fresh state for the recovery form, or "" when this
