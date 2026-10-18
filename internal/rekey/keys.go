@@ -179,7 +179,8 @@ func (r *keyResolver) notes(out *Report, includeUnknown bool) []string {
 	}
 	var notes []string
 	if r.wantErr != nil {
-		notes = append(notes, fmt.Sprintf("kms:DescribeKey on %s failed (%s): keys that could not be resolved are compared by their spelling", r.want, briefErr(r.wantErr)))
+		notes = append(notes, fmt.Sprintf("kms:DescribeKey on %s failed (%s): keys that could not be resolved are compared by their spelling",
+			r.want, briefErr(r.wantErr)))
 	}
 	var denied []string
 	for _, k := range out.Keys {
