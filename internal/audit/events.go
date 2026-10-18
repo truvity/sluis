@@ -1,6 +1,9 @@
 package audit
 
 import (
+	"context"
+	"fmt"
+	"log/slog"
 	"strconv"
 	"strings"
 	"time"
@@ -276,6 +279,8 @@ type Restore struct {
 	// of its backup, and Verification says why (backup.Verification).
 	Unverified   bool
 	Verification string
+	// By is who asked, in their own words (the caller declares it).
+	By string
 }
 
 func (r Restore) data() data {
@@ -283,12 +288,22 @@ func (r Restore) data() data {
 	if r.Unverified {
 		d["unverified"], d["verification"] = true, r.Verification
 	}
+	if r.By != "" {
+		d["by"] = r.By
+	}
 	return d
 }
 
 // RestoreStarted is a restore beginning.
 func RestoreStarted(actor Actor, backupID string, r Restore) *record.Record {
 	return build("roster.restore.started", actor, Succeeded(), subjectOf(actor), []*record.Target{targetBackup(backupID)}, r.data())
+}
+
+// RestoreUnverified is the decision to restore a backup the sealed audit trail
+// does not vouch for. It is declared `block`: it is kept before the restore
+// begins, or the restore is refused.
+func RestoreUnverified(actor Actor, backupID string, r Restore) *record.Record {
+	return build("roster.restore.unverified", actor, Succeeded(), subjectOf(actor), []*record.Target{targetBackup(backupID)}, r.data())
 }
 
 // RestoreCompleted is a restore that verified.
@@ -924,6 +939,13 @@ func GitHubOwnerReported(m Member, change, reason string) *record.Record {
 
 type data map[string]any
 
+// unsupportedData is told of a data value whose type [data.proto] does not
+// handle. It logs an error; a test replaces it with a failure.
+var unsupportedData = func(key string, v any) {
+	slog.Default().ErrorContext(context.Background(), "an audit record carries a value of a type its builder does not handle; it is recorded as text",
+		slog.String("key", key), slog.String("type", fmt.Sprintf("%T", v)))
+}
+
 func build(action string, actor Actor, o Outcome, subject *record.Party, targets []*record.Target, d data) *record.Record {
 	r := &record.Record{
 		Action:   action,
@@ -964,6 +986,12 @@ func (d data) proto() *structpb.Struct {
 				}
 				fields[k] = structpb.NewListValue(&structpb.ListValue{Values: list})
 			}
+		default:
+			// A value of a type this builder does not know used to vanish
+			// from the record without a word (an int64 did, and a backup's
+			// record count with it). Say so, loudly, and keep the line.
+			unsupportedData(k, v)
+			fields[k] = structpb.NewStringValue(fmt.Sprint(v))
 		}
 	}
 	if len(fields) == 0 {

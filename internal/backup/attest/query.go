@@ -30,6 +30,7 @@ import (
 
 	"github.com/truvity/sluis/internal/audit"
 	"github.com/truvity/sluis/internal/backup"
+	"github.com/truvity/sluis/internal/config"
 )
 
 // DefaultProfile is the audit profile that keeps the `activity` category, the
@@ -40,25 +41,35 @@ const DefaultProfile = "activity"
 // the trail down fails in seconds rather than waiting out an invocation.
 const DefaultTimeout = 30 * time.Second
 
-// maxRecords is how many records of one backup are read. A backup has one.
-const maxRecords = 20
+// pageSize and maxPages bound the records read for one backup: a backup has
+// one. More than that is a flood of records naming it, and the backup is
+// refused rather than judged on the first page.
+const (
+	pageSize = 50
+	maxPages = 4
+)
 
 // Action is the record that says a backup was written.
 const Action = "roster.backup.completed"
 
 // Config says where the trail is and how to ask it.
 type Config struct {
-	// URL is the audit installation's query service.
+	// URL is the audit installation's query service: https, or http on a
+	// loopback address.
 	URL string
 	// TokenFile holds the bearer token the query service accepts for this
 	// workload or person; it is read on every request.
 	TokenFile string
 	// Profile is the audit profile to search; [DefaultProfile] when empty.
 	Profile string
-	// Observer, when set, is the id the audit writer stamps on the backup
-	// function's records (the `senders` table of the writer): a record stamped
-	// by anyone else is refused.
+	// Observer is the id the audit writer stamps on the backup function's
+	// records (the `senders` table of the writer): a record stamped by anyone
+	// else is refused. Required unless AnyObserver is set.
 	Observer string
+	// AnyObserver accepts a record stamped by anyone. Whoever may send to the
+	// audit queue, or write as the roster source, can then vouch for a forged
+	// backup.
+	AnyObserver bool
 	// Timeout bounds one attestation; [DefaultTimeout] when zero.
 	Timeout time.Duration
 	// HTTP is the client to reach the service with; one that presents
@@ -78,8 +89,15 @@ var _ backup.Attestor = (*Query)(nil)
 
 // New builds the attestor. It connects to nothing.
 func New(c Config) (*Query, error) {
-	if strings.TrimSpace(c.URL) == "" {
-		return nil, errors.New("attest: no query service URL")
+	if err := config.VerifyQueryURL(c.URL); err != nil {
+		return nil, fmt.Errorf("attest: the query service address: %w", err)
+	}
+	switch {
+	case c.Observer == "" && !c.AnyObserver:
+		return nil, errors.New("attest: an observer is required: the id the audit writer stamps on the backup function's records, " +
+			"or AnyObserver, which lets any sender of audit records vouch for a backup")
+	case c.Observer != "" && c.AnyObserver:
+		return nil, errors.New("attest: Observer and AnyObserver are one or the other")
 	}
 	hc := c.HTTP
 	if hc == nil {
@@ -99,25 +117,18 @@ func New(c Config) (*Query, error) {
 	return q, nil
 }
 
-// Attest returns the completed-backup records of the backup.
+// Attest returns the completed-backup records of the backup. It reads every
+// page of the search, up to a bound: a record that disagrees on a later page is
+// as much the verifier's to see as one on the first.
 func (q *Query) Attest(ctx context.Context, _, id string) ([]backup.Claim, error) {
 	ctx, cancel := context.WithTimeout(ctx, q.timeout)
 	defer cancel()
-	res, err := q.client.Search(ctx, connect.NewRequest(&auditv1.SearchRequest{
-		Profile: q.profile,
-		Limit:   maxRecords,
-		Filter: []*auditv1.Filter{{
-			Source: equal(audit.Source),
-			Action: equal(Action),
-			Targets: &auditv1.TargetPredicate{Operator: &auditv1.TargetPredicate_In{In: &auditv1.TargetList{
-				Values: []*auditv1.TargetRef{{Type: "backup", Id: id}}}}},
-		}},
-	}))
+	items, err := q.search(ctx, id)
 	if err != nil {
-		return nil, unavailable("search the trail", err)
+		return nil, err
 	}
 	var claims []backup.Claim
-	for _, r := range res.Msg.GetItems() {
+	for _, r := range items {
 		if !hasTarget(r, id) || r.GetSource() != audit.Source || r.GetAction() != Action {
 			continue
 		}
@@ -145,6 +156,35 @@ func (q *Query) Attest(ctx context.Context, _, id string) ([]backup.Claim, error
 	// A record of another installation's backup that shares an id is the
 	// verifier's to refuse, by installation; it is returned as it is.
 	return claims, nil
+}
+
+// search reads the pages of the completed-backup records naming the backup.
+// A page shorter than the page size is the last: the cursor never runs out.
+func (q *Query) search(ctx context.Context, id string) ([]*auditv1.Record, error) {
+	var items []*auditv1.Record
+	cursor := ""
+	for page := 0; page < maxPages; page++ {
+		res, err := q.client.Search(ctx, connect.NewRequest(&auditv1.SearchRequest{
+			Profile: q.profile,
+			Limit:   pageSize,
+			Cursor:  cursor,
+			Filter: []*auditv1.Filter{{
+				Source: equal(audit.Source),
+				Action: equal(Action),
+				Targets: &auditv1.TargetPredicate{Operator: &auditv1.TargetPredicate_In{In: &auditv1.TargetList{
+					Values: []*auditv1.TargetRef{{Type: "backup", Id: id}}}}},
+			}},
+		}))
+		if err != nil {
+			return nil, unavailable("search the trail", err)
+		}
+		items = append(items, res.Msg.GetItems()...)
+		cursor = res.Msg.GetCursors().GetNext()
+		if len(res.Msg.GetItems()) < pageSize || cursor == "" {
+			return items, nil
+		}
+	}
+	return nil, fmt.Errorf("%w: more than %d records name backup %s; a backup has one", backup.ErrMismatch, maxPages*pageSize, id)
 }
 
 func unavailable(what string, err error) error {

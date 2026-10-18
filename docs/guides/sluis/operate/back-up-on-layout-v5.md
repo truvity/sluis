@@ -86,7 +86,7 @@ A restore checks the backup against the sealed audit trail ([provenance](../../.
 backup:
   role: restore
   recipients: ["age1..."]
-  verify: {query: "https://audit.example", tokenFile: /var/run/secrets/audit/token}
+  verify: {query: "https://audit.example", tokenFile: /var/run/secrets/audit/token, observer: "<the backup function's id>"}
 ```
 
 A backup from the last hour is refused until the notary seals it.

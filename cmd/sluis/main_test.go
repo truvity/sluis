@@ -143,6 +143,7 @@ func TestTheRestoreCommand(t *testing.T) {
 		{"restore", "status"}, {"restore", "preview", "b1"}, {"restore", "start", "b1", "--confirm", "x", "--overwrite"},
 		{"restore", "start", "--resume"}, {"restore", "preview", "b1", "--allow-unverified"},
 		{"restore", "start", "b1", "--confirm", "x", "--allow-unverified"},
+		{"restore", "start", "b1", "--confirm", "x", "--allow-unverified", "--allow-unaudited"},
 	} {
 		var out bytes.Buffer
 		if err := run(args, &out); err == nil || !strings.Contains(err.Error(), "--config") {

@@ -685,7 +685,7 @@ func sluisBackupSchema() m {
 	props["backup"] = obj("What the backup module writes and where. The module reads every module's table, secrets and blobs through the `ports` and `secrets` above (its role has read access to them), and writes one age-encrypted tar.gz per backup, then its sidecar, to `target` (format 2, docs/reference/sluis/backup.md).", m{
 		"recipients": m{"type": "array", "minItems": 1, "uniqueItems": true,
 			"items":       m{"type": "string", "pattern": `^age1[02-9ac-hj-np-z]{58}$`},
-			"description": "The age X25519 public keys (age1...) every backup is encrypted to; at least one, and required in the backup role. Each holder of a matching identity can decrypt a backup without sluis: `age -d -i key.txt <id>.tar.gz.age | tar xz`. The backup role holds nothing that decrypts. In the restore role they are the recipients a backup's sidecar must list, exactly: a backup that lists others is refused whatever else is passed, and an `allowUnverified` restore needs them."},
+			"description": "The age X25519 public keys (age1...) every backup is encrypted to; at least one, and required in the backup role. Each holder of a matching identity can decrypt a backup without sluis: `age -d -i key.txt <id>.tar.gz.age | tar xz`. The backup role holds nothing that decrypts. In the restore role they are the recipients a backup's sidecar must list: a backup written to another set (before the recipients changed) is refused whatever else is passed, and an `allowUnverified` restore needs them. This does not detect a forged backup: the recipients are public."},
 		"identity": m{"type": "string", "pattern": `^[A-Za-z0-9][A-Za-z0-9._-]*$`, "default": "restore-identity",
 			"description": "The restore role's secret holding the age identity (AGE-SECRET-KEY-1...) that decrypts the backups: internal/backup/<identity> in the secret store, as {\"value\":\"<base64>\"}. Only the restore role reads it."},
 		"key": func() m {
@@ -694,10 +694,11 @@ func sluisBackupSchema() m {
 			return e
 		}(),
 		"verify": obj("How the restore role proves a backup is the one the backup function made, before it decrypts a byte (docs/reference/sluis/backup.md). Each completed backup is recorded in the audit trail with the hashes of its object and sidecar and its recipients; the restore asks the audit installation's query service for that record and requires the hashes to match and the hour to be sealed. Unset, the restore refuses every backup unless it is started with `allowUnverified`. Read by the restore role only.", m{
-			"query":     url("The audit installation's query service (its address, without the `/audit.v1.QueryService/...` path)."),
-			"tokenFile": str("A file holding the bearer token the query service accepts, read on every request. The token's grants must let it search and get on `profile`."),
-			"profile":   str("The audit profile that keeps the `activity` category, where `roster.backup.completed` is kept. Default `activity`."),
-			"observer":  str("The id the audit writer stamps on the backup function's records (the writer's `senders` table). When set, a record of a backup stamped by any other is refused. Unset asks nothing of the observer."),
+			"query":       url("The audit installation's query service (its address, without the `/audit.v1.QueryService/...` path). https, or http on a loopback address."),
+			"tokenFile":   str("A file holding the bearer token the query service accepts, read on every request. The token's grants must let it search and get on `profile`."),
+			"profile":     str("The audit profile that keeps the `activity` category, where `roster.backup.completed` is kept. Default `activity`."),
+			"observer":    str("The id the audit writer stamps on the backup function's records (the writer's `senders` table). A record of a backup stamped by any other is refused. Required unless `anyObserver` is set: without it, any principal that may send to the audit queue can plant a record that vouches for a forged backup."),
+			"anyObserver": boolean("Accept a record stamped by any observer. Weakens the check to whoever may write a record as the `roster` source; a start logs a warning. One of `observer` and `anyObserver` is required."),
 		}, "query", "tokenFile"),
 		"role":   enum("Which function this document configures: `backup` (the scheduled export, the default) or `restore` (the restore function, which only an administrator or the break-glass role may invoke and whose role may write every module's table). The zip is the same; the document picks the role, and `sluis restore` selects it on the command line.", "backup", "backup", "restore"),
 		"region": str("Deprecated, ignored: the region of the KMS key of backup format 1."),

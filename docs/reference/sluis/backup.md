@@ -8,8 +8,8 @@ The backup module writes the installation to S3, age-encrypted ([ADR 0071](../..
 |---|---|
 | `apiVersion` | `sluis.truvity.github.io/sluis-backup/v1`, schema `schemas/config/sluis-backup.schema.json`. Layout v5 only: `secrets.layout: v5`, `ports.dynamodb.tables`, the installation's `ports.blob` |
 | `backup.role` | `backup` (default) or `restore`: which function the zip is. The restore function's role may write every module's table |
-| `backup.recipients` | The age X25519 public keys (`age1...`) every backup is encrypted to. Required in the backup role, at least one. In the restore role they are the recipients a backup's sidecar must list, no more and no fewer; see [Provenance](#provenance) |
-| `backup.verify` | Restore role: where the audit trail is and how to ask it. `query` (the query service's address) and `tokenFile` are required; `profile` (default `activity`) and `observer` are optional |
+| `backup.recipients` | The age X25519 public keys (`age1...`) every backup is encrypted to. Required in the backup role, at least one. In the restore role they are the recipients a backup's sidecar must list, no more and no fewer. That catches a backup written before the recipients changed, not a forgery; see [Provenance](#provenance) |
+| `backup.verify` | Restore role: where the audit trail is and how to ask it. `query` (https, or http on loopback), `tokenFile`, and one of `observer` and `anyObserver: true` are required; `profile` defaults to `activity` |
 | `backup.identity` | The restore role's secret holding the age identity (`AGE-SECRET-KEY-1...`): `internal/backup/<identity>`, default `restore-identity`, stored as `{"value":"<base64>"}`. Only the restore role reads it |
 | `backup.key`, `backup.region`, `keys.archive` | Deprecated and ignored since format 2; accepted for one release with a warning |
 | `backup.target` | The archive bucket: `bucket`, `prefix`, `region`, `kmsKey`, `endpoint`, `pathStyle`. Credentials are the role's. Object Lock retention must not exceed `retention.maxAge` |
@@ -48,15 +48,15 @@ age -d -i key.txt 20261013T020000Z-ab12cd.tar.gz.age | tar xz
 | `sluis backup list` | The backups in the archive, newest first, from their unverified sidecars |
 | `sluis backup status` | The latest runs and the last prune |
 | `sluis backup prune [--dry-run]` | Applies the retention rule: the sidecar first, then the object; the object of a run with no sidecar after 7 days. A refused delete (Object Lock) is counted, not retried |
-| `sluis backup verify <id> [--identity <file>]` | Read-only. Checks the object's size and SHA-256 against its sidecar; with an age identity file, decrypts it and checks every member against the manifest |
+| `sluis backup verify <id> [--identity <file>]` | Read-only. Checks the object's size and SHA-256 against its sidecar; with an age identity file, decrypts it and checks every member against the manifest. It does not check provenance: the output says so, and a restore does |
 
 ## Restore
 
 | Command | Does |
 |---|---|
 | all | The restore role of this zip; on Lambda it is `backup.role: restore`. Take `--config <file>` and `--json`. Only an administrator or the break-glass role may invoke it |
-| `sluis restore preview <id> [--allow-unverified]` | Per module and section: records to create, overwrite, leave, skip. Names, never values. Writes nothing, takes no lease |
-| `sluis restore start <id> --confirm <instance> [--overwrite] [--allow-unverified] [--by] [--note]` | Restores. A destination that holds different data is refused unless `--overwrite`. A backup the sealed audit trail does not vouch for is refused unless `--allow-unverified` |
+| `sluis restore preview <id> [--allow-unverified]` | Per module and section: records to create, overwrite, leave, skip. Names, never values. Writes nothing, takes no lease. With the flag it is logged, not recorded in the trail |
+| `sluis restore start <id> --confirm <instance> [--overwrite] [--allow-unverified [--allow-unaudited]] [--by] [--note]` | Restores. A destination that holds different data is refused unless `--overwrite`. A backup the sealed audit trail does not vouch for is refused unless `--allow-unverified` |
 | `sluis restore start --resume` | Continues a restore that paused |
 | `sluis restore status` | The latest restores and the modules still under maintenance |
 
@@ -72,12 +72,12 @@ age -d -i key.txt 20261013T020000Z-ab12cd.tar.gz.age | tar xz
 
 | Event or method | Callers | Answers |
 |---|---|---|
-| `{"kind":"restore","backup":"<id>","overwrite":false,"allowUnverified":false}` | admin, breakglass; invoke asynchronously | `completed`, `paused`, `failed`, `contended` or `refused`. A failed restore does not fail the invocation |
+| `{"kind":"restore","backup":"<id>","overwrite":false,"allowUnverified":false,"allowUnaudited":false}` | admin, breakglass; invoke asynchronously | `completed`, `paused`, `failed`, `contended` or `refused`. A failed restore does not fail the invocation |
 | `{"kind":"restore","resume":true}` | the function itself, admin, breakglass | Continues the unfinished restore; `idle` when none |
 | `{"kind":"restore","backup":"<id>","preview":true}` | admin, breakglass; invoke synchronously | The preview report. `allowUnverified` applies |
 | `restore.status` | console, admin, breakglass | `latest`, `unfinished`, `lastCompleted`, `maintenance` |
 | `restore.preview` | console, admin, breakglass | The preview report as counts per module and section. Without record names; a refusal carries no cause. The backup is verified; there is no `allowUnverified` here |
-| Audit | `roster.restore.started`, `.completed`, `.failed` | Counts and a reason, never a value. `unverified` and `verification` when `allowUnverified` was used |
+| Audit | `roster.restore.unverified`, `.started`, `.completed`, `.failed` | Counts and a reason, never a value. `unverified` and `verification` when `allowUnverified` was used |
 
 ## Provenance
 
@@ -86,20 +86,23 @@ A restore asks the audit trail whether a backup is genuine, because the archive 
 | Step | Rule |
 |---|---|
 | Record | `roster.backup.completed` carries `object_key`, `object_size`, `object_sha256`, `sidecar_sha256` and `recipients` (the SHA-256 of each `age1...`). It is written after the sidecar |
-| Lookup | The query service, `backup.verify.query`, searches `backup.verify.profile` for `roster.backup.completed` records whose target is the backup |
-| Match | A record exists, every record agrees, and its installation, object key, size, hashes and recipients are those of the fetched backup. An old record without hashes never matches |
+| Lookup | The query service, `backup.verify.query`, searches `backup.verify.profile` for `roster.backup.completed` records whose target is the backup. It reads up to four pages of 50, and more records than that refuse the backup |
+| Match | A record exists, every record agrees, and its installation, object key, size, hashes and recipients are those of the fetched backup. A record without hashes, made by an earlier release, is no evidence: the backup is `unattested` |
 | Sealed | The hour holding each record has a seal. Before that the restore is refused with `not sealed yet`: wait for the notary and run it again |
-| Observer | With `backup.verify.observer`, the writer must have stamped the record with that id |
-| Recipients | With `backup.recipients`, the sidecar lists only those, verified or not. No flag overrides it |
+| Observer | The writer must have stamped the record with `backup.verify.observer`. With `anyObserver`, any sender of audit records can vouch for a backup, and a start logs a warning |
+| Recipients | With `backup.recipients`, the sidecar lists only those, verified or not. No flag overrides it. The recipients are public, so this is not a check on forgery |
 | Order | All of this happens before the identity is read |
 | Token | The query token's grants must let it search and get on `backup.verify.profile` |
-| Sealed means | A seal object exists for the hour, as the query service reports. `audit verify --root` checks the seal's signature |
+| Sealed means | A seal object exists for the hour, as the query service reports. Not yet checked: the seal's signature (`audit verify --root` does), and that the seal covers the record's object |
 | Rotation | After `backup.recipients` changes, an older backup is refused. Set the earlier list to restore it, or use `--allow-unverified` |
 
 | Case | Outcome |
 |---|---|
 | `backup.verify` unset, query service down, no record, a mismatch, an unsealed hour | `refused`, reason `unverified`. Nothing is changed and nothing is recorded but a log line |
-| `--allow-unverified` | The restore goes ahead. It needs `backup.recipients`. `roster.restore.started` and `.completed` carry `unverified: true` and `verification`: `unattested`, `mismatch`, `unsealed` or `unavailable` |
+| A record that disagrees with the backup, or a replaced backup | `refused`, reason `unverified`, `verification` `mismatch`. No flag overrides it: the trail says the archive was tampered with |
+| `--allow-unverified` | For `unattested`, `unsealed` and `unavailable` only. It needs `backup.recipients`. `roster.restore.unverified` is kept (delivery `block`) before the restore begins, and `.started` and `.completed` carry `unverified: true` and `verification` |
+| `--allow-unaudited` | With `--allow-unverified`, when `roster.restore.unverified` cannot be kept. Without it the restore is refused as `unaudited`. With it, an error log line names the backup, the reason, `by` and `note` |
+| Who asked | The record names the workload (`lambda:restore`, `cli:restore`) and the caller's own `by`, which nothing verifies. The invoker is in CloudTrail's Lambda data events where those are enabled |
 | A restore that paused | Continues against the hashes it began with and does not ask the trail again. A backup replaced while it was paused is refused |
 
 ## Routes

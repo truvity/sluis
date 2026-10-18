@@ -56,9 +56,9 @@ The recipients are public keys and the sidecar is unsigned JSON. Anyone who can 
 Decision D682 (b): the backup function records each backup's hashes in the audit trail, and a restore checks them there.
 
 1. `roster.backup.completed` carries the object's key, size and SHA-256, the sidecar's SHA-256 and the SHA-256 of each recipient. The record is written after the sidecar.
-2. Before it reads the identity, a restore asks the audit query service for the record of the backup. It requires a record of the installation, and every record of the backup to agree, with the hashes of the object and sidecar it fetched, the recipients of the sidecar, and an hour that is sealed.
-3. A restore with `backup.recipients` set requires the sidecar to list exactly those. No flag overrides it.
-4. `allowUnverified` goes ahead without the record, for the day the audit pipeline is down. It needs `backup.recipients`, and `roster.restore.started` and `.completed` say `unverified` and why.
+2. Before it reads the identity, a restore asks the audit query service for the record of the backup, reading every page of the search up to a bound. It requires a record stamped by the backup function's observer (or an explicit `anyObserver`), of the installation, and every record of the backup to agree, with the hashes of the object and sidecar it fetched, the recipients of the sidecar, and an hour that is sealed.
+3. A restore with `backup.recipients` set requires the sidecar to list those. No flag overrides it. This catches a backup written before the recipients changed; it is not a defence against forgery, since the recipients are public.
+4. `allowUnverified` goes ahead without the record, for the day the audit pipeline is down: for no record, an unsealed hour or a trail that cannot be asked, and never for a record that disagrees with the backup. It needs `backup.recipients`. The decision is kept in the trail first (`roster.restore.unverified`, delivery `block`), or the restore is refused unless `allowUnaudited` is passed; `.started` and `.completed` say `unverified` and why.
 5. A restore that paused is continued against the hashes it began with and does not ask the trail again.
 
 Consequences:
@@ -66,7 +66,7 @@ Consequences:
 - A restore depends on the audit pipeline. Unconfigured, unreachable, or with the record lost in delivery, it refuses until an operator passes `allowUnverified`. The owner chose this knowing that.
 - A backup made before this change has no hashes in its record. It restores only with `allowUnverified`.
 - A backup is available to restore once the notary has sealed the hour of its record: at the notary's first run after that hour ends, up to about an hour and a quarter after the run.
-- "Sealed" is what the query service reports: a seal object exists for the hour. The signature of the seal is checked by `audit verify --root`, not by the restore.
+- "Sealed" is what the query service reports: a seal object exists for the hour. The restore checks neither the seal's signature (`audit verify --root` does) nor that the seal covers the record's object. Both are follow-ups.
 
 Alternatives rejected:
 

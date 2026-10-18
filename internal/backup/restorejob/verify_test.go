@@ -2,6 +2,7 @@ package restorejob_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/truvity/sluis/internal/backup"
 	"github.com/truvity/sluis/internal/backup/restorejob"
+	"github.com/truvity/sluis/internal/port"
 )
 
 // forge puts a backup in the archive the way anyone with PutObject on it can:
@@ -80,7 +82,6 @@ func TestARecordThatDisagreesWithTheArchiveRefusesTheBackup(t *testing.T) {
 		"installation":  func(c *backup.Claim) { c.Instance = "elsewhere" },
 		"recipients":    func(c *backup.Claim) { c.Recipients = backup.Fingerprints([]string{"age1other"}) },
 		"no recipients": func(c *backup.Claim) { c.Recipients = nil },
-		"an old record": func(c *backup.Claim) { c.ObjectSHA256, c.SidecarSHA256, c.Recipients = "", "", nil },
 	} {
 		t.Run(name, func(t *testing.T) {
 			r := newRig(t)
@@ -269,5 +270,124 @@ func TestAnUnverifiedRestoreStaysUnverifiedWhenItIsContinued(t *testing.T) {
 	}
 	if got := r.audit.Find("roster.restore.completed"); len(got) != 1 || !got[0].GetData().GetFields()["unverified"].GetBoolValue() {
 		t.Errorf("the completion does not say it was unverified: %v", got)
+	}
+}
+
+// A record that disagrees with the archive is evidence of tampering, not an
+// absence of evidence: the flag that goes round a missing record does not go
+// round it.
+func TestAllowUnverifiedDoesNotOverrideARecordThatDisagrees(t *testing.T) {
+	r := newRig(t)
+	c := r.trail["b1"]
+	c.ObjectSHA256 = strings.Repeat("0", 64)
+	r.trail["b1"] = c
+	res, err := r.job().Start(ctx, restorejob.Request{BackupID: "b1", Actor: admin, AllowUnverified: true})
+	refused(t, res, err, restorejob.ReasonUnverified, "different")
+	r.untouched(t)
+	if _, err := r.job().PreviewWith(ctx, "b1", true); !errors.Is(err, backup.ErrMismatch) {
+		t.Errorf("a preview: %v", err)
+	}
+}
+
+// A record made before records carried hashes says nothing about this backup:
+// the flag goes ahead, and nothing else does.
+func TestARecordWithoutHashesIsNoEvidenceEitherWay(t *testing.T) {
+	r := newRig(t)
+	c := r.trail["b1"]
+	c.ObjectSHA256, c.SidecarSHA256, c.Recipients = "", "", nil
+	r.trail["b1"] = c
+	res, err := r.job().Start(ctx, restorejob.Request{BackupID: "b1", Actor: admin})
+	refused(t, res, err, restorejob.ReasonUnverified, "no hashes")
+	r.untouched(t)
+	res, err = r.job().Start(ctx, restorejob.Request{BackupID: "b1", Actor: admin, AllowUnverified: true})
+	if err != nil || res.Outcome != restorejob.OutcomeCompleted || !res.Run.Unverified || res.Run.Verification != backup.ReasonUnattested {
+		t.Fatalf("%+v, %v", res, err)
+	}
+}
+
+func TestTheDecisionToGoAheadUnverifiedIsKeptBeforeTheRestoreBegins(t *testing.T) {
+	r := newRig(t)
+	r.forge("evil")
+	res, err := r.job().Start(ctx, restorejob.Request{BackupID: "evil", Actor: admin, AllowUnverified: true, By: "ada"})
+	if err != nil || res.Outcome != restorejob.OutcomeCompleted {
+		t.Fatalf("%+v, %v", res, err)
+	}
+	got := r.audit.Actions()
+	if len(got) != 3 || got[0] != "roster.restore.unverified" || got[1] != "roster.restore.started" {
+		t.Fatalf("audit %v", got)
+	}
+	f := r.audit.Find("roster.restore.unverified")[0].GetData().GetFields()
+	if !f["unverified"].GetBoolValue() || f["verification"].GetStringValue() != backup.ReasonUnattested || f["by"].GetStringValue() != "ada" {
+		t.Errorf("%v", f)
+	}
+	// A verified restore makes no such decision.
+	r2 := newRig(t)
+	if _, err := r2.job().Start(ctx, restorejob.Request{BackupID: "b1", Actor: admin, AllowUnverified: true}); err != nil {
+		t.Fatal(err)
+	}
+	if got := r2.audit.Find("roster.restore.unverified"); len(got) != 0 {
+		t.Errorf("a verified restore recorded the decision to go unverified: %v", got)
+	}
+}
+
+func TestAnUnverifiedRestoreWhoseDecisionCannotBeKeptIsRefusedUnlessAcknowledged(t *testing.T) {
+	r := newRig(t)
+	r.forge("evil")
+	r.audit.Fail = errors.New("the audit pipeline is down")
+	res, err := r.job().Start(ctx, restorejob.Request{BackupID: "evil", Actor: admin, AllowUnverified: true})
+	refused(t, res, err, restorejob.ReasonUnaudited, "allowUnaudited")
+	r.untouched(t)
+	// The same without the acknowledgement of the first flag is the verified refusal.
+	res, err = r.job().Start(ctx, restorejob.Request{BackupID: "evil", Actor: admin, AllowUnaudited: true})
+	refused(t, res, err, restorejob.ReasonUnverified, "no record")
+	// Acknowledged, it begins, and the record of it says unverified.
+	res, err = r.job().Start(ctx, restorejob.Request{BackupID: "evil", Actor: admin, AllowUnverified: true, AllowUnaudited: true})
+	if err != nil || res.Outcome != restorejob.OutcomeCompleted || !res.Run.Unverified {
+		t.Fatalf("%+v, %v", res, err)
+	}
+}
+
+// A run begun before restores kept their hashes is pinned, and its decision
+// kept, when it is continued with the flag.
+func TestAContinuedRunWithNoStoredHashesIsVerifiedAndPinnedOnTheWay(t *testing.T) {
+	r := newRig(t)
+	cctx, cancel := context.WithCancel(ctx)
+	r.cancel, r.cancelAt = cancel, 5
+	res, _ := r.job().Start(cctx, restorejob.Request{BackupID: "b1", Actor: admin})
+	if res.Outcome != restorejob.OutcomePaused {
+		t.Fatalf("%+v", res)
+	}
+	// What an earlier release left: no hashes, no verdict.
+	key := "rec.backup.restore." + res.ID
+	rec, err := r.dst.Store(port.ModuleBackup).Get(ctx, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var m map[string]any
+	if err := json.Unmarshal(rec.Value, &m); err != nil {
+		t.Fatal(err)
+	}
+	delete(m, "objectSha256")
+	delete(m, "sidecarSha256")
+	raw, _ := json.Marshal(m)
+	if _, err := r.dst.Store(port.ModuleBackup).Update(ctx, key, raw, 0, rec.Revision); err != nil {
+		t.Fatal(err)
+	}
+	r.trailDown = true
+	// Without the flag it is verified again, and the trail is down.
+	if res, err = r.job().Start(ctx, restorejob.Request{Actor: admin}); err != nil {
+		t.Fatal(err)
+	}
+	refused(t, res, nil, restorejob.ReasonUnverified, "could not be asked")
+	res, err = r.job().Start(ctx, restorejob.Request{Actor: admin, AllowUnverified: true})
+	if err != nil || res.Outcome != restorejob.OutcomeCompleted || !res.Run.Unverified || res.Run.Verification != backup.ReasonUnavailable ||
+		res.Run.ObjectSHA256 == "" || res.Run.SidecarSHA256 == "" {
+		t.Fatalf("%+v, %v", res, err)
+	}
+	if got := r.audit.Find("roster.restore.unverified"); len(got) != 1 {
+		t.Errorf("the decision was not kept: %v", r.audit.Actions())
+	}
+	if got := r.audit.Find("roster.restore.completed"); len(got) != 1 || !got[0].GetData().GetFields()["unverified"].GetBoolValue() {
+		t.Errorf("the completion is not truthful: %v", got)
 	}
 }

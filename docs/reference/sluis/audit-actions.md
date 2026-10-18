@@ -12,7 +12,7 @@ The actions sluis records, from the catalogue [`internal/audit/catalogue/roster.
 
 <!-- generated: audit-actions -->
 
-Catalogue version 1.21.0, 84 actions.
+Catalogue version 1.21.0, 85 actions.
 
 | Action | Operation | Targets | Delivery | Summary |
 |---|---|---|---|---|
@@ -29,6 +29,7 @@ Catalogue version 1.21.0, 84 actions.
 | `roster.backup.failed` | transfer | backup | async | A backup could not be completed. The records already written stay in the bucket and are not a backup; the next run starts again, and a prune removes them. |
 | `roster.backup.pruned` | remove | backup | async | Backups beyond the retention rule were deleted from the archive bucket (or, with `orphans`, the objects of runs that never wrote a manifest). |
 | `roster.restore.started` | restore | backup | async | A restore of an installation from a backup began. The module is under maintenance until it completes. `unverified` is set when an operator went ahead without the backup's sealed record. |
+| `roster.restore.unverified` | restore | backup | block | An operator chose to restore a backup the sealed audit trail does not vouch for (`allowUnverified`). Recorded before the restore begins, and the restore is refused when it cannot be kept. |
 | `roster.restore.completed` | restore | backup | async | A restore verified against its backup and lifted the maintenance flag. |
 | `roster.restore.failed` | restore | backup | async | A restore did not complete or did not verify. The maintenance flag stays set until an operator looks. |
 | `roster.maintenance.changed` | modify | installation | block | An operator set or lifted the migration freeze (`sluis maintenance on` or `off`). While it is set the installation refuses every write of state, answers 503 with Retry-After, and still serves discovery, the key set and a read-only token exchange. Lifting a restore's flag is `forced`. |

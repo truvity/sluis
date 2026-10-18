@@ -15,9 +15,16 @@ import (
 // the audit trail, the hashes of what it wrote ([Claim]); a restore asks the
 // trail for them ([Attestor]) and refuses a backup whose bytes are not the
 // ones the record names, or whose record is missing or not yet sealed.
+//
+// The recipients are public keys, so listing them proves nothing: a forger
+// lists them too. The record is what proves it. Comparing the sidecar's
+// recipients with the configured ones only catches a backup written before the
+// recipients changed.
 
 // Errors a caller can match with errors.Is. Each of the first four wraps
-// [ErrUnverified], which is what `allowUnverified` overrides.
+// [ErrUnverified]. `allowUnverified` overrides [ErrNotAttested],
+// [ErrNotSealed] and [ErrAttestUnavailable]: the trail says nothing yet. It
+// does not override [ErrMismatch], where the trail says something else.
 var (
 	// ErrUnverified is a backup the sealed audit trail does not vouch for.
 	ErrUnverified = errors.New("backup: not vouched for by the sealed audit trail")
@@ -25,7 +32,8 @@ var (
 	// record: planted in the bucket, or its record never arrived.
 	ErrNotAttested = fmt.Errorf("%w: the trail holds no record that this backup was made", ErrUnverified)
 	// ErrMismatch is a backup whose record names other bytes or other
-	// recipients, or whose records disagree with each other.
+	// recipients, or whose records disagree with each other: positive evidence
+	// that the archive was tampered with. No flag overrides it.
 	ErrMismatch = fmt.Errorf("%w: the record of this backup disagrees with what the archive holds", ErrUnverified)
 	// ErrNotSealed is a backup whose record is in the trail but whose hour is
 	// not sealed yet. Wait for the notary's next run and try again.
@@ -34,7 +42,9 @@ var (
 	// that is not configured to ask.
 	ErrAttestUnavailable = fmt.Errorf("%w: the trail could not be asked", ErrUnverified)
 	// ErrRecipients is a backup encrypted to other recipients than the restore
-	// is configured with. It is not an [ErrUnverified]: no flag overrides it.
+	// is configured with: a backup written before the recipients changed. It is
+	// not an [ErrUnverified], and no flag overrides it. It is not a defence
+	// against forgery: the recipients are public keys, and a forger lists them.
 	ErrRecipients = errors.New("backup: the sidecar's recipients are not the configured ones")
 	// ErrNoRecipients is an unverified restore with no recipients to compare
 	// the sidecar with: it would have no check left.
@@ -134,9 +144,10 @@ type Verifier struct {
 	// Recipients are the age recipients (age1...) the restore is configured
 	// with. When set the sidecar must list exactly these, verified or not.
 	Recipients []string
-	// AllowUnverified lets a backup the trail does not vouch for go ahead,
-	// with [Verification.Unverified] set. It needs Recipients, since the
-	// comparison with them is then the only check left. It does not override
+	// AllowUnverified lets a backup the trail says nothing of go ahead (no
+	// record, an hour not sealed, a trail that cannot be asked), with
+	// [Verification.Unverified] set. It needs Recipients, so that a backup of
+	// an earlier set is still refused. It does not override [ErrMismatch] or
 	// [ErrRecipients].
 	AllowUnverified bool
 	// Pinned, when set, is the hashes an earlier slice of a restore checked.
@@ -180,7 +191,7 @@ func (v Verifier) Check(ctx context.Context, f *Fetched) (Verification, error) {
 	if err == nil {
 		return out, nil
 	}
-	if !errors.Is(err, ErrUnverified) || !v.AllowUnverified {
+	if !errors.Is(err, ErrUnverified) || errors.Is(err, ErrMismatch) || !v.AllowUnverified {
 		return out, err
 	}
 	if len(v.Recipients) == 0 {
@@ -209,10 +220,21 @@ func (v Verifier) attest(ctx context.Context, f *Fetched, out *Verification) err
 	}
 	want := Claim{Instance: sc.Instance, ObjectKey: sc.Object.Key, ObjectSize: sc.Object.Size, ObjectSHA256: sc.Object.SHA256,
 		SidecarSHA256: f.SidecarSHA256, Recipients: Fingerprints(sc.Recipients)}
+	hashless := ""
 	for i := range claims {
-		if what := differs(&claims[i], &want); what != "" {
-			return fmt.Errorf("%w: the record %s names a different %s", ErrMismatch, claims[i].RecordID, what)
+		c := &claims[i]
+		if c.ObjectSHA256 == "" || c.SidecarSHA256 == "" {
+			// Made before records carried hashes: it says nothing about these
+			// bytes, for or against.
+			hashless = c.RecordID
+			continue
 		}
+		if what := differs(c, &want); what != "" {
+			return fmt.Errorf("%w: the record %s names a different %s", ErrMismatch, c.RecordID, what)
+		}
+	}
+	if hashless != "" {
+		return fmt.Errorf("%w (record %s carries no hashes: it was made before records did)", ErrNotAttested, hashless)
 	}
 	for i := range claims {
 		if !claims[i].Sealed {
@@ -234,9 +256,9 @@ func differs(c, want *Claim) string {
 		return "object key"
 	case c.ObjectSize != want.ObjectSize:
 		return "object size"
-	case c.ObjectSHA256 == "" || !strings.EqualFold(c.ObjectSHA256, want.ObjectSHA256):
+	case !strings.EqualFold(c.ObjectSHA256, want.ObjectSHA256):
 		return "object hash"
-	case c.SidecarSHA256 == "" || !strings.EqualFold(c.SidecarSHA256, want.SidecarSHA256):
+	case !strings.EqualFold(c.SidecarSHA256, want.SidecarSHA256):
 		return "sidecar hash"
 	case !slices.Equal(slices.Compact(got), want.Recipients):
 		return "recipient list"

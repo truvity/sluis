@@ -130,6 +130,7 @@ func runVerify(ctx context.Context, file, id, identity string, asJSON bool) erro
 		return enc.Encode(v)
 	}
 	_, _ = fmt.Fprintf(backupOut, "backup %s: %s, %d bytes, sha256 %s: matches its sidecar\n", v.ID, v.Object.Key, v.Object.Size, v.Object.SHA256)
+	_, _ = fmt.Fprintf(backupOut, "  provenance: %s\n", v.Provenance)
 	if v.Decrypted {
 		_, _ = fmt.Fprintf(backupOut, "  decrypted: %d files match the manifest; %d records in %d modules\n", v.Files, v.Records, v.Modules)
 	} else {

@@ -281,9 +281,13 @@ func (a *App) openRestore(cfg Config, archive port.Blob) error {
 	if attestor == nil {
 		attestor = backup.NoAttestor{}
 		if v := cfg.doc.Backup.Verify; v != nil {
-			q, err := attest.New(attest.Config{URL: v.Query, TokenFile: v.TokenFile, Profile: v.Profile, Observer: v.Observer})
+			q, err := attest.New(attest.Config{URL: v.Query, TokenFile: v.TokenFile, Profile: v.Profile, Observer: v.Observer, AnyObserver: v.AnyObserver})
 			if err != nil {
 				return fmt.Errorf("backup.verify: %w", err)
+			}
+			if v.AnyObserver {
+				a.log.WarnContext(context.Background(),
+					"backup.verify.anyObserver is set: any principal that may send audit records can vouch for a forged backup; set backup.verify.observer")
 			}
 			attestor = q
 		} else {
@@ -399,6 +403,10 @@ func (a *App) Prune(ctx context.Context, actor audit.Actor, dryRun bool) (job.Pa
 	return a.job.Prune(ctx, actor, dryRun)
 }
 
+// ProvenanceNotChecked is what `sluis backup verify` says of where a backup
+// came from.
+const ProvenanceNotChecked = "not checked: the audit trail is not consulted; a restore does"
+
 // Verification is what `sluis backup verify` found.
 type Verification struct {
 	ID string `json:"id"`
@@ -407,10 +415,13 @@ type Verification struct {
 	Object backup.ObjectInfo `json:"object"`
 	// Decrypted is whether an identity was given and the archive decrypted,
 	// and every member matched the manifest.
-	Decrypted bool  `json:"decrypted"`
-	Modules   int   `json:"modules"`
-	Records   int64 `json:"records"`
-	Files     int   `json:"files,omitempty"`
+	Decrypted bool `json:"decrypted"`
+	// Provenance says what this does not check: that the backup is the one the
+	// backup function made. A restore checks that against the audit trail.
+	Provenance string `json:"provenance"`
+	Modules    int    `json:"modules"`
+	Records    int64  `json:"records"`
+	Files      int    `json:"files,omitempty"`
 }
 
 // Verify reads a backup and checks its object against its sidecar; with
@@ -421,7 +432,7 @@ func (a *App) Verify(ctx context.Context, id string, ids []age.Identity) (Verifi
 	if err != nil {
 		return Verification{}, err
 	}
-	v := Verification{ID: id, Object: sc.Object, Modules: len(sc.Modules), Records: sc.Records()}
+	v := Verification{ID: id, Object: sc.Object, Modules: len(sc.Modules), Records: sc.Records(), Provenance: ProvenanceNotChecked}
 	if len(ids) == 0 {
 		return v, nil
 	}
