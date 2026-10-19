@@ -298,6 +298,7 @@ type backupPlan struct {
 	retention BackupRetentionArgs
 	lockDays  int
 	auditArn  string
+	verify    *RestoreVerifyArgs // the restore role's backup.verify; nil renders none
 }
 
 func (c *BackupCommon) plan(role string) (*backupPlan, error) {
@@ -534,7 +535,8 @@ func durationText(d time.Duration) string {
 
 // document renders the `sluis-backup/v1` document of the role. The backup
 // function's lists its age recipients; the restore function's names the secret
-// that holds the identity.
+// that holds the identity, and lists the recipients and `backup.verify` when
+// it is given them.
 func (p *backupPlan) document(recipients []string) (string, error) {
 	tables := map[Module]string{}
 	for _, m := range Modules() {
@@ -571,7 +573,13 @@ func (p *backupPlan) document(recipients []string) (string, error) {
 	if p.role == RoleRestore {
 		bk["role"] = RoleRestore
 		bk["identity"] = RestoreIdentityName
-	} else {
+		if p.verify != nil {
+			bk["verify"] = p.verify.render()
+		}
+	}
+	// The backup role encrypts to the recipients; the restore role, given
+	// them, compares a backup's sidecar with them.
+	if p.role != RoleRestore || len(recipients) > 0 {
 		rs := make([]any, 0, len(recipients))
 		for _, r := range recipients {
 			rs = append(rs, r)
@@ -691,8 +699,8 @@ func (p *backupPlan) moduleFunctionArgs(name, doc string, docOut pulumi.StringIn
 }
 
 // buildFunction makes the function of the role on the generic builder. With
-// recipients (the backup role) the document is an output: the generated
-// recipient is known at apply.
+// recipients (always for the backup role, when given for the restore role) the
+// document is an output: the generated recipient is known at apply.
 func buildFunction(ctx *pulumi.Context, name string, p *backupPlan, archiveBucketArn pulumi.StringInput,
 	callers, noRetry []string, omitLive bool, statements statementsFor, recipients pulumi.StringArrayInput, owner pulumi.Resource) (*backupFn, error) {
 	var doc string

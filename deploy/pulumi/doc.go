@@ -41,6 +41,8 @@
 //	_, err = sluispulumi.NewRestore(ctx, "access", &sluispulumi.RestoreArgs{
 //		BackupCommon:    common,
 //		RestoreInvokers: sluispulumi.RestoreInvokers{AdminRoleArns: admins, BreakglassRoleArns: breakglass},
+//		Recipients:      b.Recipients, // backup.recipients, compared with each backup's sidecar
+//		Verify:          &sluispulumi.RestoreVerifyArgs{Query: auditQuery, TokenFile: tokenFile, Observer: backupObserver},
 //	}, pulumi.Providers(aws))
 //	_, err = edgecloudflare.NewEdge(ctx, "access", &edgecloudflare.Args{
 //		FrontDoor: l.FrontDoor(), DomainName: "access.example.test",

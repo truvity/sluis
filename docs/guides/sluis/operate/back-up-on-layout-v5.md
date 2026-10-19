@@ -35,6 +35,10 @@ backup, _ := sluispulumi.NewBackup(ctx, "acme", &sluispulumi.BackupArgs{
 _, _ = sluispulumi.NewRestore(ctx, "acme", &sluispulumi.RestoreArgs{
 	BackupCommon:    common,
 	RestoreInvokers: sluispulumi.RestoreInvokers{AdminRoleArns: adminArns, BreakglassRoleArns: breakglassArns},
+	Recipients:      backup.Recipients, // backup.recipients: the sidecar is compared with them
+	Verify: &sluispulumi.RestoreVerifyArgs{ // backup.verify, step 5
+		Query: "https://audit.example", TokenFile: "/tmp/audit/token", Observer: "<the backup function's id>",
+	},
 }, pulumi.Providers(awsProvider))
 ctx.Export("backupRecipients", backup.Recipients)
 ```
