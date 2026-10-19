@@ -40,8 +40,6 @@ flowchart LR
 | Kubernetes with AWS storage | The issuer as a pod from the Helm chart, state in DynamoDB and S3, signing in KMS. | [tutorial](docs/get-started/sluis/kubernetes-aws.md) |
 | An existing Kubernetes installation | The earlier store on Kubernetes objects and Valkey. | [tutorial](docs/get-started/sluis/kubernetes-legacy-store.md) |
 
-[Choose a deployment](docs/get-started/sluis/README.md) compares them.
-
 ## What it connects
 
 | System | What sluis does | Guide |
@@ -58,13 +56,19 @@ flowchart LR
 | Cloudflare | short-lived API tokens and R2 credentials | [Cloudflare tokens](docs/guides/sluis/cloudflare-tokens.md) |
 | OpenBao | sign-in, short-lived SSH and database certificates | [OpenBao](docs/guides/sluis/connect/openbao.md) |
 
-[Connect something](docs/guides/sluis/connect/README.md) lists every integration.
+## Who it is for
+
+Platform teams that run many systems from one directory.
+
+## The model
+
+A policy file maps directory groups to access everywhere ([concepts](docs/concepts/sluis/concepts.md)).
 
 ## Standards and conformance
 
 <!-- standards-and-conformance: the table and the conformance results are added by the change that carries the conformance runs. -->
 
-## Install and try
+## Install and a worked example
 
 | Step | Where |
 |---|---|
@@ -74,11 +78,9 @@ flowchart LR
 
 ### Try it without a credential
 
-Build the console and start the issuer on an in-memory directory.
-
 ```sh
 devbox shell
-just console
+just console   # builds the console the binary embeds
 cat > /tmp/demo.yaml <<'YAML'
 demo: true
 store: memory
@@ -93,6 +95,22 @@ go run ./cmd/sluis issuer --config /tmp/demo.yaml
 
 Open `http://localhost:8099/console/` and choose *Continue with the demonstration directory*.
 
+## Consumers
+
+| Consumer | Uses |
+|---|---|
+| Estates | the Helm charts or the Pulumi libraries |
+| Services | the Go module or `@truvity/sluis` |
+| CI jobs | the GitHub Action and `sluisctl` |
+| People | `sluisctl` |
+
+## Neighbours
+
+| Neighbour | Role |
+|---|---|
+| OpenBao | trusts sluis tokens and issues certificates; can be audit's key provider |
+| Cloudflare | fronts the Lambda shape; can hold audit's archive on R2 |
+
 ## What is published
 
 | Deliverable | Published at |
@@ -104,14 +122,14 @@ Open `http://localhost:8099/console/` and choose *Continue with the demonstratio
 | `@truvity/sluis`, `@truvity/audit`, `@truvity/audit-react` | GitHub Packages |
 | GitHub Action | `truvity/sluis@<commit>` |
 
-[Artifacts](docs/reference/sluis/artifacts.md) lists every file and image.
-
 ## Documentation
 
 | Topic | Where |
 |---|---|
 | The site | <https://truvity.github.io/sluis/> |
-| Tutorials | [sluis](docs/get-started/sluis/README.md), [audit](docs/get-started/audit/README.md) |
+| Tutorials | [choose a deployment](docs/get-started/sluis/README.md), [audit](docs/get-started/audit/README.md) |
+| Integrations | [connect something](docs/guides/sluis/connect/README.md) |
+| Every file and image | [artifacts](docs/reference/sluis/artifacts.md) |
 | How it works | [concepts](docs/concepts/sluis/README.md), [architecture](docs/concepts/sluis/architecture.md), [decisions](docs/decisions/README.md) |
 | Policy | [policy concepts](docs/concepts/sluis/policy.md), [policy reference](docs/reference/sluis/policy.md) |
 | Operations | [day one](docs/guides/sluis/operate/day-one.md), [day two](docs/guides/sluis/operate/day-two.md) |
@@ -128,7 +146,11 @@ Used in production by its maintainers. audit may break in a minor, with a **Brea
 
 ## Development
 
-Run `devbox shell`, then `just check`. See [CONTRIBUTING](CONTRIBUTING.md), which also covers [releasing](CONTRIBUTING.md#releasing).
+Run `devbox shell`, then `just check`. See [CONTRIBUTING](CONTRIBUTING.md).
+
+## Releasing
+
+By hand, as a pushed tag `vX.Y.Z`. See [CONTRIBUTING](CONTRIBUTING.md#releasing).
 
 ## Licence
 
