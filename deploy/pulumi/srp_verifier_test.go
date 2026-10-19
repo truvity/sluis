@@ -8,7 +8,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
+
 	sluisconfig "github.com/truvity/sluis/config"
+	arp "github.com/truvity/sluis/deploy/pulumi"
 	"github.com/truvity/sluis/srp"
 )
 
@@ -189,9 +192,7 @@ func TestTheAdminReadsNameTheSRPParametersTheStackWrites(t *testing.T) {
 		if on {
 			in.Conformance = &sluisconfig.Conformance{Enabled: true}
 		}
-		in.AWS.Table = ""
 		a := withInstallation(in, func(a *arp.LambdaArgs) {
-			a.Layout = arp.LayoutV5
 			tbl := map[arp.Module]pulumi.StringInput{}
 			for _, m := range arp.Modules() {
 				tbl[m] = pulumi.String(tableArn("sluis-staging-" + string(m)))
