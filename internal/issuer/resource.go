@@ -153,7 +153,7 @@ func validateIndicator(raw string) error {
 // it, is not for the caller to be told by an installation they may not
 // know anything about.
 func refuseTarget(w http.ResponseWriter, r *http.Request, clients clientLookup, why string) {
-	logRefusal(r.Context(), http.StatusBadRequest, why, nil,
+	logRefusal(r, http.StatusBadRequest, why, nil,
 		[]any{slog.String("error", string(oidc.InvalidTarget)), logattr.SafeString("resource", r.Form.Get("resource"))})
 	if r.URL.Path == authorizePath && clients != nil {
 		if to, ok := targetRedirect(r, clients, refusal.Text(r.Context(), refusal.NotAuthorised)); ok {
@@ -259,7 +259,7 @@ func registeredTarget(registered []string, requested string) (*url.URL, bool) {
 // refuseRequest answers an authorization request that is malformed with
 // `invalid_request`, in the same two forms, and the reason in the log.
 func refuseRequest(w http.ResponseWriter, r *http.Request, why string) {
-	logRefusal(r.Context(), http.StatusBadRequest, why, nil, []any{slog.String("error", string(oidc.InvalidRequest))})
+	logRefusal(r, http.StatusBadRequest, why, nil, []any{slog.String("error", string(oidc.InvalidRequest))})
 	writeRefusal(w, r, string(oidc.InvalidRequest), refusal.InvalidRequest)
 }
 

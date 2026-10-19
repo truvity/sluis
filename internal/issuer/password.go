@@ -173,6 +173,7 @@ func (s *signIn) srpRequest(w http.ResponseWriter, r *http.Request, state string
 		srpFail(w, http.StatusBadRequest, "That sign-in is no longer waiting to be completed.")
 		return "", Pending{}, false
 	}
+	noteClient(r.Context(), pending.ClientID)
 	return bound.Bind, pending, true
 }
 

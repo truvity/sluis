@@ -53,7 +53,7 @@ A refusal is fixed words and a request id; the reason is kept under it.
 | `invalid_client` | `401` with `WWW-Authenticate` when the client sent an `Authorization` header, else `400`. An unknown client and a wrong secret are one answer |
 | `invalid_target` at `/token` | an unknown audience and one the proof is refused are one answer |
 | `X-Request-Id` | on every response. The caller's own is kept when it is 8 to 64 letters, digits, `.`, `_`, `:` or `-`, and replaced otherwise |
-| Finding the reason | search the log for `request_id`, or the audit trail for `context.request_id`. A refused exchange or sign-in records `reason_code`, `audience`, `missing_requires`, `held_groups`, `admitted`, `admitted_by` and `directory` ([audit actions](audit-actions.md)) |
+| Finding the reason | search the log for `request_id`, or the audit trail for `context.request_id`. A refused exchange or sign-in records `reason_code`, `audience`, `missing_requires`, `held_groups`, `admitted`, `admitted_by` and `directory` ([audit actions](audit-actions.md)). The issuer's `refused` log line also names the request: `method`, `path` (without its query), `client_id` when the request or its pending authorization names one, and `user_agent` (its first 200 characters). Never the query, `state`, `nonce`, a code or its challenge, the authorization request's id, a cookie or a token |
 
 ## Client secrets
 

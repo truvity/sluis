@@ -296,7 +296,9 @@ func HandlerWithSignIn(iss *Issuer, storage op.Storage, signIn SignInDeps) (http
 	}
 	mux.Handle("/", neverCached(protocol))
 
-	return refusal.Middleware(httpsec.HeadersWith(withSigningAudience(withOneResolution(authorizationResponseIssuer(iss.Config().URL, mux))), iss.hsts())), nil
+	served := withSigningAudience(withOneResolution(authorizationResponseIssuer(iss.Config().URL, mux)))
+
+	return refusal.Middleware(withRequestFacts(httpsec.HeadersWith(served, iss.hsts()))), nil
 }
 
 // withSigningAudience installs a fresh [signingAudience] carrier on every
@@ -548,7 +550,7 @@ func wantsHTML(r *http.Request) bool {
 // so, because a person who asked to sign out needs to know they still
 // have not.
 func endSessionRefusal(w http.ResponseWriter, r *http.Request, status int, why string) {
-	logRefusal(r.Context(), status, why, nil, []any{slog.String("error", string(oidc.InvalidRequest))})
+	logRefusal(r, status, why, nil, []any{slog.String("error", string(oidc.InvalidRequest))})
 	endSessionPage(w, r, status, string(oidc.InvalidRequest), refusal.InvalidRequest)
 }
 
@@ -1024,7 +1026,7 @@ func bearerChallenge(realm, code string) string {
 // refuseBearer is a refusal of a bearer request in the form RFC 6750 3 gives
 // it: the status, the challenge and an OAuth error body in fixed words.
 func refuseBearer(w http.ResponseWriter, r *http.Request, realm string, status int, code, phrase, why string) {
-	logRefusal(r.Context(), status, why, nil, []any{slog.String("error", code)})
+	logRefusal(r, status, why, nil, []any{slog.String("error", code)})
 	if status < http.StatusInternalServerError {
 		w.Header().Set("WWW-Authenticate", bearerChallenge(realm, code))
 	}

@@ -216,6 +216,7 @@ func (s *signIn) acceptAgent(w http.ResponseWriter, r *http.Request) {
 
 		return
 	}
+	noteClient(r.Context(), pending.ClientID)
 
 	// Re-checked on the click: a person signed out, past the limit or
 	// suspended between seeing the page and clicking cannot complete.
