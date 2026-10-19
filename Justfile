@@ -264,11 +264,18 @@ acceptance: console
 release-check tag="": console
     #!/usr/bin/env bash
     set -euo pipefail
+    # The root config's kos name no repository, and goreleaser refuses the
+    # config without one (KO_DOCKER_REPO), even for a snapshot: default it to
+    # the release's own. audit/'s kos name theirs, and get audit's as release.yaml
+    # sets it, unless the caller set one.
+    caller_ko="${KO_DOCKER_REPO:-}"
+    export KO_DOCKER_REPO="${caller_ko:-ghcr.io/truvity/sluis}"
     ./hack/modules.py check "{{ if tag == "" { "v9.9.9" } else { tag } }}"
     ./hack/check-archives.py
     just release-lint
     goreleaser build --snapshot --clean --single-target
     cd audit
+    export KO_DOCKER_REPO="${caller_ko:-ghcr.io/truvity/audit}"
     goreleaser check
     goreleaser build --snapshot --clean --single-target
 
