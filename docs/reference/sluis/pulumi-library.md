@@ -85,7 +85,7 @@ One role for the one pod ([switch the serving pod role](../../guides/sluis/opera
 | `PermissionsBoundaryArn` | None | Boundary of the role |
 | `RoleNamePrefix` | Component name | Role and managed policy are `<prefix>-sluis` |
 | `Description` | Generated | Policy description; a change replaces the policy |
-| `Instance`, `Region`, `ParameterKeyArn` | None | With `Instance`, the role has the Lambda role's SSM grants under `/sluis/<instance>/`; `Region` becomes required |
+| `Instance`, `Region`, `ParameterKeyArn` | None | With `Instance`, the role has the module paths of the layout (`internal/<module>/*`, `external/<module>/*`) and `internal/config/*` (read) under `/sluis/<instance>/`; `Region` becomes required |
 | `Storage` | Required | `Storage.Grant()` |
 | `State` | None | `States.Grant()`; nil for the `legacy` store |
 | `SigningKeyArns` | None | `SigningKeyArn`, `SigningKeyRS256Arn`: allows `kms:Sign`, `kms:GetPublicKey` |

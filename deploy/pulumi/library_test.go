@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -30,6 +31,7 @@ type opts struct {
 	serveSA    string
 	instance   string
 	paramKey   string
+	cloudflare bool
 }
 
 // stack is the three components wired the way a stack would wire them.
@@ -50,7 +52,7 @@ func stack(t *testing.T, o opts) (*recorder, map[string]string, error) {
 			ClusterName: cluster, ClusterArn: arnp + "eks:eu-west-1:" + account + ":cluster/" + cluster, AccountID: account,
 			Namespace: "sluis", PermissionsBoundaryArn: o.boundary,
 			ServiceAccount: o.serveSA, Storage: store.Grant(),
-			Region: "eu-west-1", Instance: o.instance, ParameterKeyArn: o.paramKey,
+			Region: "eu-west-1", Instance: o.instance, ParameterKeyArn: o.paramKey, Cloudflare: o.cloudflare,
 		}
 		collect("bucketName", store.BucketName)
 		collect("bucketArn", store.BucketArn)
@@ -313,23 +315,43 @@ func TestNoGrantIsOnAWildcardResourceOrAWildcardAction(t *testing.T) {
 	}
 }
 
-// With Instance the pod's role has its SSM grants (ssmStatements), scoped to
-// /sluis/<instance>/ and nothing above it, and no wildcard but a trailing /*.
-func TestWithAnInstanceTheRoleHasTheSSMGrantsOfTheLambdaRoleUnderItsRoot(t *testing.T) {
+// With Instance the pod's role has its SSM grants (ssmStatements): the module
+// paths of every module but Cloudflare's internal side, and the read of
+// internal/config, scoped to /sluis/<instance>/ and nothing above it, and no
+// wildcard but a trailing /*. It holds none of the paths of layout v4.
+func TestWithAnInstanceTheRoleHasTheModuleSSMGrantsUnderItsRoot(t *testing.T) {
 	key := arnp + "kms:eu-west-1:" + account + ":key/params"
 	rec, _ := mustStack(t, opts{instance: "staging", paramKey: key})
 	p := rec.one(t, "aws:iam/policy:Policy", "staging-sluis-policy")
 	g := grants(statements(t, prop(p, "policy").StringValue()))
 	ssmArn := arnp + "ssm:eu-west-1:" + account + ":parameter"
-	v4creds := []string{ssmArn + "/sluis/staging/internal/credentials", ssmArn + "/sluis/staging/internal/credentials/*"}
-	v4cfg := []string{ssmArn + "/sluis/staging/internal/config", ssmArn + "/sluis/staging/internal/config/*"}
-	external := []string{ssmArn + "/sluis/staging/external", ssmArn + "/sluis/staging/external/*"}
-	writes := append(append([]string{}, v4creds...), external...)
+	var writes []string
+	for _, m := range []string{"oidc", "github", "slack", "google", "backup"} {
+		p := ssmArn + "/sluis/staging/internal/" + m
+		writes = append(writes, p, p+"/*")
+	}
+	for _, m := range []string{"oidc", "github", "slack", "cloudflare", "google", "backup"} {
+		p := ssmArn + "/sluis/staging/external/" + m
+		writes = append(writes, p, p+"/*")
+	}
+	cfg := []string{ssmArn + "/sluis/staging/internal/config", ssmArn + "/sluis/staging/internal/config/*"}
 	if got := g["ssm:PutParameter"]; !reflect.DeepEqual(sortedCopy(got), sortedCopy(writes)) {
 		t.Errorf("writes %v, want %v", got, writes)
 	}
-	if got := g["ssm:GetParametersByPath"]; !reflect.DeepEqual(sortedCopy(got), sortedCopy(append(append([]string{}, writes...), v4cfg...))) {
+	if got := g["ssm:GetParametersByPath"]; !reflect.DeepEqual(sortedCopy(got), sortedCopy(append(append([]string{}, writes...), cfg...))) {
 		t.Errorf("reads %v", got)
+	}
+	if got := g["ssm:GetParameter"]; !reflect.DeepEqual(sortedCopy(got), sortedCopy(append(append([]string{}, writes...), cfg...))) {
+		t.Errorf("GetParameter %v", got)
+	}
+	for a, res := range g {
+		for _, r := range res {
+			for _, v4 := range []string{"/internal/credentials", "/external/*"} {
+				if strings.HasSuffix(r, v4) {
+					t.Errorf("%s: %s is a layout v4 path", a, r)
+				}
+			}
+		}
 	}
 	for a, res := range g {
 		for _, r := range res {
@@ -362,6 +384,19 @@ func TestWithAnInstanceTheRoleHasTheSSMGrantsOfTheLambdaRoleUnderItsRoot(t *test
 	}
 	if _, _, err := stack(t, opts{instance: "private"}); err == nil {
 		t.Error("an instance named private was accepted")
+	}
+}
+
+// Cloudflare adds the Cloudflare module's internal side to the pod's grants,
+// read and write, under the module's own path and nothing wider.
+func TestWithCloudflareTheRoleHoldsTheMinterModulePath(t *testing.T) {
+	ssmArn := arnp + "ssm:eu-west-1:" + account + ":parameter/sluis/staging/internal/cloudflare"
+	for _, cf := range []bool{false, true} {
+		rec, _ := mustStack(t, opts{instance: "staging", cloudflare: cf})
+		g := grants(statements(t, prop(rec.one(t, "aws:iam/policy:Policy", "staging-sluis-policy"), "policy").StringValue()))
+		if got := slices.Contains(g["ssm:PutParameter"], ssmArn+"/*"); got != cf {
+			t.Errorf("Cloudflare %v: write on %s/*: %v", cf, ssmArn, got)
+		}
 	}
 }
 
