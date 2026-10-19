@@ -44,12 +44,22 @@ repo="${REPO:-truvity/sluis}"
 workflow="$repo/.github/workflows/release.yaml"
 identity_regexp="^https://github.com/$repo/.github/workflows/release.yaml@refs/tags/v"
 issuer=https://token.actions.githubusercontent.com
-images_file="${RELEASE_IMAGES_FILE:-$(dirname "$0")/release-images.txt}"
+# The script's own directory, absolute: the run changes into the assets'
+# directory before it calls hack/check-zips.sh or reads the images list, so
+# a relative $0 (`just release-verify`, `hack/release-verify.sh`) would no
+# longer name them.
+here="$(cd "$(dirname "$0")" && pwd)"
+absolute() { case "$1" in /*) printf '%s\n' "$1" ;; *) printf '%s\n' "$PWD/$1" ;; esac; }
+images_file="$(absolute "${RELEASE_IMAGES_FILE:-$here/release-images.txt}")"
+if [ -n "${RELEASE_ZIPS_FILE:-}" ]; then
+  RELEASE_ZIPS_FILE="$(absolute "$RELEASE_ZIPS_FILE")"
+  export RELEASE_ZIPS_FILE
+fi
 
 fail() { echo "release-verify: FAIL: $*" >&2; exit 1; }
 
 if [ -n "${RELEASE_VERIFY_DIR:-}" ]; then
-  dir="$RELEASE_VERIFY_DIR"
+  dir="$(cd "$RELEASE_VERIFY_DIR" && pwd)"
 else
   dir="$(mktemp -d)"
   trap 'rm -rf "$dir"' EXIT
@@ -83,7 +93,7 @@ done
 
 # The Lambda zips: the same check the release workflow runs on the assets.
 if [ "${RELEASE_VERIFY_SKIP_ZIPS:-}" != 1 ]; then
-  "$(dirname "$0")/check-zips.sh" "$dir" || fail "the Lambda zips do not hold"
+  "$here/check-zips.sh" "$dir" || fail "the Lambda zips do not hold"
 fi
 
 if [ "${RELEASE_VERIFY_SKIP_SIGNATURES:-}" = 1 ]; then

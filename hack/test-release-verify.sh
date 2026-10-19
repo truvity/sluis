@@ -41,6 +41,14 @@ run() { "$root/hack/release-verify.sh" v1.0.0 2>&1; }
 
 out="$(run)" || { echo "test-release-verify: an intact release failed: $out" >&2; exit 1; }
 
+# Invoked by a relative path, as `just release-verify` does, and with the
+# assets' directory relative: the script changes into it before it calls
+# hack/check-zips.sh, which must still be found.
+out="$(cd "$root" && hack/release-verify.sh v1.0.0 2>&1)" ||
+  { echo "test-release-verify: a relative script path failed: $out" >&2; exit 1; }
+out="$(cd "$(dirname "$dir")" && RELEASE_VERIFY_DIR="$(basename "$dir")" "$root/hack/release-verify.sh" v1.0.0 2>&1)" ||
+  { echo "test-release-verify: a relative RELEASE_VERIFY_DIR failed: $out" >&2; exit 1; }
+
 expect_failure() {
   if out="$(run)"; then echo "test-release-verify: $1: verification passed" >&2; exit 1; fi
   case "$out" in *"$2"*) ;; *) echo "test-release-verify: $1: failed, but not with '$2': $out" >&2; exit 1 ;; esac
