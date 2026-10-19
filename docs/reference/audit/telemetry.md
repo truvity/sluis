@@ -81,6 +81,7 @@ One span per write at each hop, continued across processes.
 | HTTP server, then the RPC | server | Writer, receiver, query service (`otelhttp`, `otelconnect`) |
 | `audit.sink.write <transport>` | client, producer, internal | `sink.Client`, NATS and SQS publishers, the front door |
 | `audit.sink.consume <transport>` | consumer | NATS and SQS consumers |
+| `<Service>.<Operation>`, with child spans for serialize, resolve, sign, send and each retry | client | every AWS SDK call (S3, DynamoDB, SQS, SSM, KMS), a child of the span in its context. The SDK's client metrics are published too |
 
 `traceparent` and `tracestate` cross a queue in NATS headers and SQS message attributes. A consumer's span is a child of the first message's trace and links up to sixteen others. The liveness probe is not traced.
 
@@ -156,7 +157,7 @@ The chart renders one ConfigMap per dashboard, labelled `grafana_dashboard: "1"`
 
 ## How it is proven
 
-`just telemetry` runs in CI with pinned tools:
+`just audit-telemetry` runs in CI with pinned tools:
 
 | Check | Detail |
 |---|---|

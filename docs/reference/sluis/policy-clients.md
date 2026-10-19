@@ -296,6 +296,7 @@ A client presents an HTTPS URL as `client_id`. sluis fetches its OAuth Client ID
 | response over 64 KiB or slower than 10 s per attempt | |
 | redirect elsewhere | |
 | no `redirect_uris` | |
+| `token_endpoint_auth_method` other than `none`, or a `client_secret` | a document client is public |
 | `origins` entry with a scheme, path or `*` | origins are hosts |
 | `requires` or `ttl_cap` without `origins`; `origins` without `requires` | |
 

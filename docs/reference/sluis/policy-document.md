@@ -1,6 +1,6 @@
 # The policy document
 
-The policy document is the one file a process loads, named by the service document's `policy.file`. It holds the tables of [the policy](policy.md) plus three sections, held to `schemas/config/policy.schema.json`, `apiVersion: sluis.truvity.github.io/policy/v2`.
+The policy document is the one file a process loads, named by the service document's `policy.file`. It holds the tables of [the policy](policy.md) plus the sections below, held to `schemas/config/policy.schema.json`, `apiVersion: sluis.truvity.github.io/policy/v2`.
 
 | Section | Holds |
 |---|---|
@@ -16,6 +16,7 @@ The policy document is the one file a process loads, named by the service docume
 | `controllers.github.appRefs` | `{org: App id}`: the App an organisation uses (`app_ref`) |
 | `controllers.github.appNames` | `{org: name}`: the name an organisation's App is created with, at most 34; the default is built in |
 | `controllers.slack.enabledWorkspaces[]` | workspaces the Slack controller changes |
+| `backup.runGroups[]` | groups of this policy whose holders may start a backup through the issuer; unset lets nobody ([backup](backup.md#routes)) |
 
 No section holds a secret: every row is a name and a URL.
 

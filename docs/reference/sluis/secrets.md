@@ -62,10 +62,11 @@ IAM per function: [AWS Lambda](lambda.md#iam-one-role).
 
 `secrets.kmsKeyId` is the `KeyId` of every `PutParameter` the service makes.
 
-`sluis secrets rekey --config <file> [--dry-run] [--json] [--include-recent] [--include-unknown] [--no-audit]` moves every other SecureString below `secrets.root` to it.
+`sluis secrets rekey --config <file> [--dry-run] [--json] [--include-recent] [--include-unknown] [--by <name>] [--no-audit]` moves every other SecureString below `secrets.root` to it.
 
 | It | Detail |
 |---|---|
+| Without a key | Unset, SSM uses the AWS-managed key. The [Pulumi library](pulumi-library.md#inputs-lambdaargs) refuses to build without a customer key |
 | Reads and writes | `DescribeParameters`, then ten at a time `GetParameters` with decryption and `PutParameter` with overwrite and `KeyId`. Name, value, tier and description stay. It waits between batches, doubles the wait on throttling, and never prints a value |
 | Compares key ARNs | SSM reports a `KeyId` as it was written: an alias, an alias ARN, a key id or a key ARN. Each distinct one and `secrets.kmsKeyId` are resolved once with `kms:DescribeKey` and the ARNs compared, so a parameter on the key under another spelling is current and is not read. `alias/aws/ssm` is another key. A key `DescribeKey` refuses is compared by spelling; what that leaves open is **unknown**: listed, not re-written without `--include-unknown` |
 | Makes | A new version with the same value. Earlier versions keep their old key until SSM drops them (it keeps 100). Rotate a secret that must leave the old key |

@@ -14,7 +14,8 @@ a, err := auditpulumi.New(ctx, "audit", args, pulumi.Provider(prov)) // or pulum
 | Invoke | When |
 |---|---|
 | `kms.LookupAlias` | Once per key named in `Keys` |
-| `aws.GetCallerIdentity`, `aws.GetRegion` | Only for SSM grants (`Writer.Secrets`, or a state store). `Args.AccountID` and `Args.Region` skip them |
+| `aws.GetCallerIdentity` | When `Args.AccountID` is empty and the installation has SSM grants (`Writer.Secrets`, a state store), a notary, or an `Observe.TrustedPrincipalArn` without `Observe.ExternalID` |
+| `aws.GetRegion` | When `Args.Region` is empty and the installation has SSM grants or a notary, whose scheduler trust names the region |
 | `s3.GetObject` | The catalogue guard, when the writer is given catalogues. `Guards.SkipCatalogueCheck` skips it |
 
 ## Optional parts
@@ -177,7 +178,7 @@ With `Artifacts`, the verified zip goes unchanged (a file asset) to a versioned 
 
 | Resource | Notes |
 |---|---|
-| S3 bucket | Versioning on and stack-destroy protection in every mode. `objectLockEnabled` is never set (it forces replacement). Object Lock is a separate resource unless the mode is `NONE`. SSE-KMS under the archive key with bucket keys (AWS-managed key with `aws-managed`, SSE-S3 with `s3`). All four public-access blocks, bucket-owner-enforced ownership, a policy denying plain HTTP, a lifecycle rule per profile prefix, and one aborting incomplete multipart uploads after 7 days. `ForceDestroy` is never set |
+| S3 bucket | Versioning on and stack-destroy protection in every mode. `objectLockEnabled` is never set (it forces replacement). Object Lock is a separate resource unless the mode is `NONE`. SSE-KMS under the archive key with bucket keys (AWS-managed key with `aws-managed`, SSE-S3 with `s3`). All four public-access blocks, bucket-owner-enforced ownership, a policy denying plain HTTP and denying `s3:BypassGovernanceRetention`, `s3:DeleteObjectVersion` and `s3:PutBucketObjectLockConfiguration` to every principal but `Archive.BreakglassRoleArns` (`LockBreakglassOnly`), a lifecycle rule per profile prefix, and one aborting incomplete multipart uploads after 7 days. `ForceDestroy` is never set |
 | Scope | The `aws` partition and one region per stack |
 | KMS keys | None. The archive, seal, pseudonym and conceal keys are the estate's, named by alias in `Keys` ([below](#keys-state-and-an-s3-compatible-archive)) |
 | SQS ingest queue and DLQ | SSE-SQS; visibility timeout six times the writer's timeout; redrive policy to the DLQ and redrive-allow policy on it; a queue policy denying plain HTTP and allowing the named senders |
@@ -220,7 +221,7 @@ The writer, notary and scheduler roles exist only with their part. The writer an
 | The scheduler's trust | `audit-scheduler` is assumed by EventBridge Scheduler for the account (`aws:SourceAccount`) and its default schedule group (`aws:SourceArn` `…:schedule-group/default`: EventBridge Scheduler presents the group's ARN, not the schedule's); the region and account are looked up when `Region` and `AccountID` are empty |
 | Deletes | No role has one |
 | KMS rows | Empty with `Encryption: s3` or `aws-managed` |
-| Seal key policy | The account root administers the key (create, describe, enable, put policy, schedule deletion) and cannot use it. Only the notary's role may `Sign`, `GetPublicKey`, `DescribeKey`. The default key policy would let any principal with a `kms:Sign` allow sign seals |
+| Seal key policy | `SealKeyPolicy` gives the root the key's upkeep and the control plane to the administrators alone; the root cannot use the key. Only the notary's role may `Sign`, `GetPublicKey`, `DescribeKey`, and `kms:Sign` is denied to every other principal. See [keys](#keys-state-and-an-s3-compatible-archive) |
 
 The web identity statement, for both functions:
 
@@ -282,7 +283,7 @@ One rule per `records/<profile>/` prefix:
 |---|---|
 | `Create` | The library owns the bucket and derives the rules above from profile retention, including expiration and noncurrent-version expiration for a profile whose framework deletes at the end of a fixed retention |
 | neither | The bucket is outside Pulumi |
-| `Adopt: true` | The library imports the existing bucket by name (never creates it; `Protect` and `RetainOnDelete`, so destroying the stack leaves it). It manages versioning, default encryption (per `Archive.Encryption`), the public-access block, ownership controls (`BucketOwnerEnforced`) and the bucket policy. The TLS-only deny replaces the bucket's policy as a whole. It declares no lifecycle configuration: existing rules stay as they are, and "never expire" means no expiration rule. Object Lock is untouched |
+| `Adopt: true` | The library imports the existing bucket by name (never creates it; `Protect` and `RetainOnDelete`, so destroying the stack leaves it). It manages versioning, default encryption (per `Archive.Encryption`), the public-access block, ownership controls (`BucketOwnerEnforced`) and the bucket policy. The TLS-only deny and `LockBreakglassOnly` replace the bucket's policy as a whole. It declares no lifecycle configuration: existing rules stay as they are, and "never expire" means no expiration rule. Object Lock is untouched |
 
 | Rule | Detail |
 |---|---|

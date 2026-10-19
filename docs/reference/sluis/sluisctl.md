@@ -3,7 +3,7 @@
 Commands, files and exit codes of `sluisctl`. Wrappers: [sluisctl-wrappers](sluisctl-wrappers.md). Concepts: [sluisctl](../../concepts/sluis/sluisctl.md).
 
 ```sh
-sluisctl version                            # sluisctl 1.35.0 (also --version, -version)
+sluisctl version                            # sluisctl <version> (also --version, -version)
 sluisctl login   --issuer https://access.example
 sluisctl whoami                             # who you are, and what it opens
 sluisctl setup                              # both of the next two
@@ -54,6 +54,7 @@ sluisctl policy render policy/ -o policy.yaml   # the one policy document an ins
 | `bao`, `r2` (deprecated), `psql`, `pg`, `ssh known-hosts` | authenticate, then run another program | [wrappers](sluisctl-wrappers.md) |
 | `clients rotate\|show\|purge` | look after a generated client's secret | [clients](#clients-rotate-show-purge) |
 | `backup run\|status\|list`, `restore preview\|start\|resume\|status` | through the issuer, or invoke the backup and restore functions | [backup](#backup-and-restore) |
+| `recovery password\|verifier` | read a recovery or conformance password from SSM, or derive the SRP credential the service holds | [recovery](#recovery-password-and-recovery-verifier) |
 | `render` | an installation in, the service and policy documents out | [render](#render-an-installation-in-the-two-documents-out) |
 | `policy render` | the one policy document an installation reads, from its layers | [policy render](#policy-render-the-one-policy-document) |
 
@@ -125,6 +126,24 @@ sluisctl policy render [-o <file>] <file or directory>
 | Scalars | Declared twice is an error |
 
 The result passes every check the service runs at start. Exit codes as `render`.
+
+## recovery password and recovery verifier
+
+```sh
+sluisctl recovery password --instance <name> [--account recovery|conformance] [--region R] [--profile P] [--show]
+sluisctl recovery verifier [--account recovery|conformance]
+```
+
+| Command | Does |
+|---|---|
+| `recovery password` | Reads `/sluis/<instance>/internal/oidc/recovery-password` (layout v5; layout v4 `/sluis/<instance>/internal/config/recovery/password`) with your own AWS credentials, the SDK's default chain, and prints it decoded. `--account conformance` reads `internal/oidc/conformance-password`, which exists on layout v5 when `conformance.enabled` is set |
+| `recovery verifier` | Reads a password from standard input and prints the account's SRP credential: the random salt, the verifier and the PBKDF2 rounds. Store it as the secret `recovery.verifierSecret` or `conformance.verifierSecret` names. For an installation that is not a Pulumi stack. Refuses a password that is weak or not printable ASCII |
+
+| Detail | Behavior |
+|---|---|
+| `--instance` | Else `$SLUISCTL_INSTANCE`, else `backup.instance` in `config.yaml` |
+| `--region` | Else the AWS configuration's, else `backup.region` in `config.yaml` |
+| Output | Standard output must not be a terminal: pipe it or pass `--show` |
 
 ## Where things are kept
 

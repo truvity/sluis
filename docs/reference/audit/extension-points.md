@@ -20,7 +20,7 @@ Proto defines the compiled core record; JSON Schema defines the loaded extension
 | `x-audit-class` | Required on every property: `shared`, `audit`, `metering`, `history` or `evidence` |
 | `x-audit-pii` | Required on every property: `none` or `identifier`; `direct` and `content` are refused |
 | Types | Facetable properties and meter dimensions are primitives; depth and string length are bounded; no binary |
-| `x-audit-filter`, `x-audit-sensitive` (`hmac` or `redact`), `x-ocsf-path`, `x-ecs-path` | Optional |
+| `x-audit-facet`, `x-audit-filter`, `x-audit-sensitive` (`hmac` or `redact`), `x-ocsf-path`, `x-ecs-path` | Optional |
 | `x-audit-expiry: true` | Optional, on a `string` with `format: date-time`: when the credential or certificate expires |
 | `extends: /pointer` | On an action: names the data property (an id, or a list) of the earlier records it adds to; the schema must mark an expiry |
 
