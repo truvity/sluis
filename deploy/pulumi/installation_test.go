@@ -4,7 +4,6 @@ import (
 	"go/parser"
 	"go/token"
 	"io/fs"
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -22,22 +21,7 @@ import (
 // fixtures, with the test account in place of its placeholder.
 func exampleInstallation(t *testing.T) *sluisconfig.Installation {
 	t.Helper()
-	raw, err := os.ReadFile(filepath.Join("..", "..", "config", "testdata", "example.installation.yaml"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	// The library renders the per-module tables from the State grant: a single
-	// table (`aws.table`) is no installation's here.
-	var kept []string
-	for _, l := range strings.Split(string(raw), "\n") {
-		if !strings.HasPrefix(strings.TrimSpace(l), "table:") {
-			kept = append(kept, l)
-		}
-	}
-	file := filepath.Join(t.TempDir(), "example.installation.yaml")
-	if err := os.WriteFile(file, []byte(strings.Join(kept, "\n")), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	file := filepath.Join("..", "..", "config", "testdata", "example.installation.yaml")
 	in, err := sluisconfig.LoadInstallation(file)
 	if err != nil {
 		t.Fatal(err)
