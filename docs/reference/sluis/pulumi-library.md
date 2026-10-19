@@ -418,6 +418,7 @@ To adopt an existing audit stack, import it under the new component ([resource n
 | `SluisKeySignInClientGoogle` | the google role | `Decrypt` of the sign-in client under `internal/oidc/signin/` |
 | `SluisKeyReadAll<Role>`, `SluisKeyWriteAll<Role>` | the backup role; the restore role | `Decrypt` of every `internal/*` and `external/*` parameter; the same with `Encrypt` and `GenerateDataKey` |
 | `SluisKeyMinter<Role>` | a role with `KeyRole.MinterRefs` (none today) that does not host `cloudflare` | `Decrypt` of the `MinterRefs` |
+| `SluisKeyBlobCredentials<Role>` | each role that reads the external blobs' credential (`KeyRole.BlobCredentialsRef`, from `StorageArgs.Blobs.CredentialsRef`) and whose own statements do not reach it: on v5 with a stored preset, the issuer and the github, google and slack roles | `Decrypt` and `DescribeKey` of that one parameter |
 | `SluisKeyExternalReaders` | `ExternalReaders` | `Decrypt` of `external/*` |
 | `SluisKeyAdminSeeds`, `SluisKeyAdminReads` | `Admins`, as ARN patterns | `Encrypt` and `GenerateDataKey` on any parameter; `Decrypt` of the state secret, the recovery password and, with a backup role on v5, the restore identity |
 | `SluisKeyBreakglass` | `Breakglass` | the four actions on any parameter |

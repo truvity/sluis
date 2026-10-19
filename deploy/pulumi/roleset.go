@@ -135,10 +135,26 @@ func (a *LambdaArgs) keyRoles() ([]KeyRole, error) {
 	var out []KeyRole
 	for i := range rs {
 		r := &rs[i]
-		kr := KeyRole{Role: r.role, Arn: r.arn, AlsoArns: r.also, ReadModules: r.readModule}
+		kr := KeyRole{Role: r.role, Arn: r.arn, AlsoArns: r.also, ReadModules: r.readModule,
+			BlobCredentialsRef: a.blobCredentialsRefOf(r.role.Name)}
 		out = append(out, kr)
 	}
 	return out, nil
+}
+
+// blobCredentialsRefOf is the external blobs' credential a role reads, as its
+// IAM policy grants it (credentialsStatements): every role when the blobs name
+// a CredentialsRef, but the Cloudflare module's when that is a stored preset,
+// which it mints in its own process. Empty for a bucket or a CredentialsPreset.
+func (a *LambdaArgs) blobCredentialsRefOf(role string) string {
+	if a.Storage == nil || a.Storage.External == nil {
+		return ""
+	}
+	b := a.Storage.External
+	if b.CredentialsPreset != "" || b.CredentialsRef == "" || (role == RoleCloudflare && b.storedPreset() != "") {
+		return ""
+	}
+	return b.CredentialsRef
 }
 
 // viewerRoles are the ARNs of the roles that read modules' records or blobs

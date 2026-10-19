@@ -1,6 +1,7 @@
 package sluispulumi_test
 
 import (
+	"encoding/json"
 	"slices"
 	"strings"
 	"testing"
@@ -135,6 +136,66 @@ func TestBlobPresetsAreRefusedWithModuleFunctionsAndTheStoredFormIsChecked(t *te
 			t.Errorf("%s: refused: %v", name, err)
 		case c.want != "" && (err == nil || !strings.Contains(err.Error(), c.want)):
 			t.Errorf("%s: %v, want an error naming %q", name, err, c.want)
+		}
+	}
+}
+
+// Under a customer key, every role that reads the stored blob credential is
+// admitted by the key policy to decrypt exactly that parameter, so an estate
+// adds no statement of its own: the Cloudflare module writes it under the key,
+// and a reader the key does not admit cannot open its blobs. The Cloudflare
+// module (which mints for its own blobs and owns the namespace) and the backup
+// and restore roles (which read every parameter) need no row.
+func TestTheKeyPolicyAdmitsTheBlobCredentialsReaders(t *testing.T) {
+	a := moduleEstate(t, storedBlobsInstallation(t, nil), storedBlobs(storedBlobsRef, "")).args(t)
+	viaArgs, err := a.KeyPolicyStatements(arp.KeyPolicyOptions{KeyAdmins: []string{kpEstateKeyAdmin}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ra := a.RoleArgs()
+	ra.Instance = "staging" // the installation names it; the args do not
+	viaRoles, err := ra.KeyPolicyStatements(arp.KeyPolicyOptions{KeyAdmins: []string{kpEstateKeyAdmin}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	credential := ssmBase + storedBlobsRef
+	for name, ks := range map[string][]map[string]any{"LambdaArgs": viaArgs, "RoleArgs": viaRoles} {
+		got := map[string]map[string]any{}
+		for _, s := range ks {
+			if sid, _ := s["Sid"].(string); strings.HasPrefix(sid, "SluisKeyBlobCredentials") {
+				got[strings.TrimPrefix(sid, "SluisKeyBlobCredentials")] = s
+			}
+		}
+		for _, role := range []string{"Issuer", "Github", "Google", "Slack"} {
+			s := got[role]
+			if s == nil {
+				t.Errorf("%s: no SluisKeyBlobCredentials%s: the reader cannot decrypt the blob credential", name, role)
+				continue
+			}
+			raw, _ := json.Marshal(s)
+			if !strings.Contains(string(raw), `"kms:EncryptionContext:PARAMETER_ARN":["`+credential+`"]`) ||
+				!strings.Contains(string(raw), `"Action":["kms:Decrypt","kms:DescribeKey"]`) ||
+				!strings.Contains(string(raw), `"kms:ViaService":"ssm.`) {
+				t.Errorf("%s: SluisKeyBlobCredentials%s = %s, want Decrypt and DescribeKey of %s through SSM", name, role, raw, credential)
+			}
+			if p := principals(s); len(p) != 1 || !strings.Contains(p[0], ":role/sluis-staging") {
+				t.Errorf("%s: SluisKeyBlobCredentials%s admits %v", name, role, p)
+			}
+			delete(got, role)
+		}
+		for role := range got {
+			t.Errorf("%s: SluisKeyBlobCredentials%s: a role whose own statements cover the credential got a row", name, role)
+		}
+	}
+
+	// A bucket, or no blobs credential, adds no row.
+	plain, err := moduleEstate(t, moduleInstallation(t, "modules-full")).args(t).KeyPolicyStatements(arp.KeyPolicyOptions{KeyAdmins: []string{kpEstateKeyAdmin}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range plain {
+		if sid, _ := s["Sid"].(string); strings.HasPrefix(sid, "SluisKeyBlobCredentials") {
+			t.Errorf("a bucket estate has %s", sid)
 		}
 	}
 }
