@@ -63,7 +63,7 @@ Expect `true` and the secret (on Lambda, within five minutes).
 
 ```sh
 ISSUER=https://access.example.com KUBECTL="kubectl --context prod@oidc" hack/conformance-plans.sh v1.76.0
-ISSUER=https://access.example.com SECRETS=ssm INSTANCE=prod SUITE=http://10.0.0.7:8080 hack/conformance-plans.sh v1.77.0
+ISSUER=https://access.example.com SECRETS=ssm INSTANCE=prod SUITE=http://10.0.0.7:8080 hack/conformance-plans.sh v1.77.1
 ```
 
 It prints `SUITE=http://<ip>:8080` and four lines `config|basic|rp-logout|backchannel <plan-id>`. With `ssm`, your AWS role must decrypt `external/oidc/*`.
