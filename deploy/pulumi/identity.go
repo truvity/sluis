@@ -65,23 +65,26 @@ type KubernetesIdentityArgs struct {
 
 	// Instance, when set, is the installation's name (`acme`, `prod`) and gives
 	// the role SSM grants under `/sluis/<instance>`, for a pod whose `secrets`
-	// or Secrets adapter is `ssm`: read and write under internal/credentials/*
-	// and external/*, read under internal/config/*, all scoped to that root.
-	// These are not the module-first paths (internal/<module>/*) a document
-	// with `secrets.layout: v5` reads: a pod on SSM needs more than this. Needs Region. Unset, the role has no SSM grant.
+	// or Secrets adapter is `ssm`: read and write under the module paths
+	// (`internal/<module>/*` and `external/<module>/*`, the layout a document
+	// with `secrets.layout: v5` reads) and read under `internal/config/*`, all
+	// scoped to that root. Needs Region. Unset, the role has no SSM grant.
 	Instance string
 	// ParameterKeyArn is the customer-managed key SecureString parameters under
 	// /sluis are encrypted with; with Instance, the role may use it through SSM
 	// only, for the parameters under its own prefixes. Optional.
 	ParameterKeyArn string
-	// Cloudflare adds the grants of the Cloudflare minter, with Instance: the
-	// minter credentials read-only, the record of minted ids and the stored
-	// credentials read and write. Set it when the service document declares
-	// `cloudflare` presets.
+	// Cloudflare adds, with Instance, the Cloudflare module's internal side
+	// (`internal/cloudflare/*`: the minter credentials and the record of minted
+	// ids). Set it when the service document declares `cloudflare` presets. The
+	// module's external side (the credentials the rotation stores at
+	// `external/cloudflare/<preset>`) is granted whatever this says.
 	Cloudflare bool
-	// CloudflareOnDemandOnly drops, from Cloudflare, the grant on the
-	// credentials the rotation stores at external/cloudflare: set it when every
-	// preset is `store: none`.
+	// CloudflareOnDemandOnly has no effect.
+	//
+	// Deprecated: the grant on external/cloudflare is part of the module's
+	// external paths, which the role holds with Instance whatever the presets
+	// store.
 	CloudflareOnDemandOnly bool
 	// State is the DynamoDB tables of the State port (States.Grant()). Nil when
 	// State is not in DynamoDB (it is in ConfigMaps or memory), and the role then
@@ -236,7 +239,7 @@ func newPodIdentity(ctx *pulumi.Context, parent *KubernetesIdentity, a *Kubernet
 			st = append(st, wrappedSigningStatement(v[2].(string)))
 		}
 		if a.Instance != "" {
-			st = append(st, ssmStatements(a.Region, a.AccountID, a.Instance, a.ParameterKeyArn, a.Cloudflare, !a.CloudflareOnDemandOnly)...)
+			st = append(st, ssmStatements(a.Region, a.AccountID, a.Instance, a.ParameterKeyArn, a.Cloudflare)...)
 		}
 		return document(st)
 	}).(pulumi.StringOutput)

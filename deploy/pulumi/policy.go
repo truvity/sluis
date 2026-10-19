@@ -302,7 +302,6 @@ const (
 	sidLogs           = "SluisLogs"
 	sidPrivate        = "SluisPrivateParameters"
 	sidExternal       = "SluisExternalParameters"
-	sidCloudflare     = "SluisCloudflare"
 	sidParamKy        = "SluisParameterKey"
 	sidInvoke         = "SluisRunAPass"
 	sidAudit          = "SluisAuditIngest"
@@ -405,66 +404,60 @@ type functionPolicyIn struct {
 
 // ssmStatements is the grant on /sluis/<instance> that the Kubernetes pod's
 // role carries (KubernetesIdentityArgs.Instance; one process, one role),
-// scoped to the one root. Its paths are the ones the Lambda role held before
-// the module-first layout, and it is not yet the per-module grant
-// (ModuleRoleStatements) the functions' roles hold:
+// scoped to the one root. The process hosts every module, so it holds the
+// module paths of the layout (docs/decisions/0072), as the functions' roles
+// (ModuleRoleStatements) hold theirs:
 //
-//   - internal/credentials/* and external/*, read and write (with the
-//     parameters' history, which the rotation reads);
-//   - internal/config/*: read only (the secrets its document names: the
-//     recovery password, the state secret, the OAuth client, the declared
-//     clients and workspaces); config/* is the operator's and the stack's;
+//   - internal/<module>/* and external/<module>/*, read and write (with the
+//     parameters' history, which the rotation reads), for every module; the
+//     Cloudflare module's internal side only with cloudflare, as that is the
+//     minter's;
+//   - internal/config/*: read only (the secrets the `ssm` secrets source reads
+//     by name, secrets.ConfigPrefix; config/* is the operator's and the
+//     stack's);
 //   - with a customer-managed parameter key, its use through SSM only, for the
 //     parameters under those prefixes.
-func ssmStatements(region, account, instance, parameterKeyArn string, cloudflare, stored bool) []statement {
-	all := []string{ssmGetParameter, ssmGetParameters, ssmGetParametersByPath, ssmPutParameter, ssmDeleteParameter}
-	var st []statement
-	withHistory := append(append([]string{}, all...), ssmGetParameterHistory)
-	st = append(st, statement{
-		"Sid":      sidPrivate + "V4",
+func ssmStatements(region, account, instance, parameterKeyArn string, cloudflare bool) []statement {
+	set := ModuleSet{Instance: instance}
+	var internal, external []string
+	for _, m := range Modules() {
+		external = append(external, set.ExternalPrefix(m))
+		if m == ModuleCloudflare && !cloudflare {
+			continue
+		}
+		internal = append(internal, set.InternalPrefix(m))
+	}
+	config := InternalParameterPrefix(instance) + "/config"
+	all := []string{ssmGetParameter, ssmGetParameters, ssmGetParametersByPath, ssmPutParameter, ssmDeleteParameter, ssmGetParameterHistory}
+	st := []statement{{
+		"Sid":      sidPrivate,
 		"Effect":   "Allow",
-		"Action":   withHistory,
-		"Resource": parameterArns(region, account, InternalParameterPrefix(instance)+"/credentials"),
-	}, statement{
-		"Sid":      sidPrivate + "V4Config",
+		"Action":   all,
+		"Resource": parameterArnsOf(region, account, internal...),
+	}, {
+		"Sid":      sidPrivate + "Config",
 		"Effect":   "Allow",
 		"Action":   []string{ssmGetParameter, ssmGetParameters, ssmGetParametersByPath},
-		"Resource": parameterArns(region, account, InternalParameterPrefix(instance)+"/config"),
-	}, statement{
+		"Resource": parameterArns(region, account, config),
+	}, {
 		"Sid":      sidExternal,
 		"Effect":   "Allow",
-		"Action":   withHistory,
-		"Resource": parameterArns(region, account, ExternalParameterPrefix(instance)),
-	})
-	if cloudflare {
-		// sluis as the STS for Cloudflare: the minter credential of each account is
-		// read and never written (it is the operator's), the record of the ids it
-		// minted is read and written, and the credentials it stores are written
-		// where consumers read them. Exactly these paths; the KMS grant below
-		// already covers every parameter under internal/ and external/.
-		st = append(st, statement{
-			"Sid":      sidCloudflare + "Minter",
-			"Effect":   "Allow",
-			"Action":   []string{ssmGetParameter, ssmGetParameters, ssmGetParametersByPath},
-			"Resource": parameterArns(region, account, InternalParameterPrefix(instance)+"/cloudflare"),
-		}, statement{
-			"Sid":      sidCloudflare + "Minted",
-			"Effect":   "Allow",
-			"Action":   withHistory,
-			"Resource": parameterArns(region, account, InternalParameterPrefix(instance)+"/cloudflare-minted"),
-		})
-		if stored {
-			st = append(st, statement{
-				"Sid":      sidCloudflare + "Stored",
-				"Effect":   "Allow",
-				"Action":   withHistory,
-				"Resource": parameterArns(region, account, ExternalParameterPrefix(instance)+"/cloudflare"),
-			})
-		}
-	}
-	prefixes := []string{InternalParameterPrefix(instance), ExternalParameterPrefix(instance)}
+		"Action":   all,
+		"Resource": parameterArnsOf(region, account, external...),
+	}}
+	prefixes := append(append(append([]string{}, internal...), external...), config)
 	return append(st, parameterKeyStatements(parameterKeyArn, []string{kmsEncrypt, kmsDecrypt, "kms:GenerateDataKey"},
 		parameterArnsUnder(region, account, prefixes...))...)
+}
+
+// parameterArnsOf is parameterArns of each prefix: the path itself, which a
+// listing is authorised against, and everything under it.
+func parameterArnsOf(region, account string, prefixes ...string) []string {
+	var out []string
+	for _, p := range prefixes {
+		out = append(out, parameterArns(region, account, p)...)
+	}
+	return out
 }
 
 // functionPolicy is the function's role: the storage, the table, its secrets and
