@@ -23,9 +23,14 @@ Each property links the page that owns it; this file does not restate them.
 
 ### sluis
 
-- It **authenticates nobody**: sign-in stays with the corporate directory, and sluis
-  verifies proofs produced elsewhere. It holds no passwords, no users and no MFA.
-  [trust](docs/concepts/sluis/trust.md)
+- It **authenticates nobody** but two accounts: sign-in stays with the corporate directory, and
+  sluis verifies proofs produced elsewhere. It holds no users and no MFA, and no password
+  beyond an SRP-6a verifier for the recovery account and a conformance test account, so a
+  password never reaches the service. [trust](docs/concepts/sluis/trust.md),
+  [ADR 0076](docs/decisions/0076-password-sign-in-is-srp-for-recovery-and-conformance-only.md)
+- The issuer and the console send HSTS on https and a content security policy, refuse a
+  repeated security parameter, and bind an authorization request to the browser that
+  started it. [endpoints](docs/reference/sluis/endpoints.md#hardening)
 - It trusts **exactly two anchors**, the cluster and the issuer, and never a third.
   [trust](docs/concepts/sluis/trust.md)
 - It holds directory credentials so that its consumers hold none, and is **read-only
