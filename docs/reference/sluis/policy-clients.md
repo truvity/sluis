@@ -47,7 +47,8 @@ A client's id is the `aud`, unless the request named a [resource](#resources).
 | Where | A `required` client |
 |---|---|
 | `/authorize` without an S256 `code_challenge` | `invalid_request` before any sign-in page, as for a `public` client |
-| `/authorize` with `code_challenge_method=plain` | `invalid_request`, for every client |
+| `/authorize` with `code_challenge_method=plain`, or a `code_challenge` with no method (which is `plain`, RFC 7636 4.3) | `invalid_request`, for every client |
+| Log | each `/authorize` leaves one info line, `authorization request`, with `pkce` (`true` or `false`), `pkce_method` when there is a challenge, and `client_id`; never the challenge |
 | `/token` for a code issued against a challenge, without `code_verifier` | `invalid_grant` |
 | Client document | `public`, so always required |
 | Confidential client that sent a challenge | held to the verifier whatever its `pkce` (RFC 7636 4.6) |

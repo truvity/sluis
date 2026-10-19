@@ -1,5 +1,13 @@
 ## Unreleased
 
+### Added
+
+- **Each `/authorize` request leaves one info line saying whether it carried PKCE.** The line is `authorization request` with `pkce=true|false`, `pkce_method` (the method named, `plain` when a challenge named none) when there is a challenge, `client_id`, and the request's method, path, user agent and request id. The challenge and the verifier are never logged. It shows which clients still send no challenge before `pkce: required` is set on them.
+
+### Fixed
+
+- **A `code_challenge` with no `code_challenge_method` is refused as `plain` is.** Without a method a challenge is `plain` (RFC 7636 4.3), and the library verified it so, while discovery lists `S256` only and `plain` itself was already refused. It is `invalid_request` before any sign-in page now. *Behaviour:* a client that sent a challenge without a method, and redeemed the code with the challenge itself as the verifier, must send `code_challenge_method=S256` and a hashed challenge; one that sent an S256 challenge without the method could not redeem its code before either.
+
 ## v1.77.1-rc.1
 
 ### Breaking

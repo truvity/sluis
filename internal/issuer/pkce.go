@@ -3,6 +3,7 @@ package issuer
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -23,6 +24,12 @@ import (
 // A confidential client may omit PKCE unless its policy says `pkce:
 // required` (RFC 9700 2.1.1, OAuth 2.1); if it sends a challenge, the
 // method must still be S256.
+//
+// A challenge with no `code_challenge_method` is `plain` (RFC 7636 4.3), and
+// the library verifies it as such, so it is refused as `plain` is.
+//
+// Every authorization request it sees leaves one line at info level saying
+// whether it carried a challenge, and with which method ([logAuthorizePKCE]).
 func requirePKCE(policies func() *policy.Set, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != authorizePath || (r.Method != http.MethodGet && r.Method != http.MethodPost) {
@@ -36,8 +43,13 @@ func requirePKCE(policies func() *policy.Set, next http.Handler) http.Handler {
 
 		challenge := r.Form.Get("code_challenge")
 		method := r.Form.Get("code_challenge_method")
+		logAuthorizePKCE(r, challenge, method)
 		if method != "" && method != string(oidc.CodeChallengeMethodS256) {
 			refuseRequest(w, r, "`code_challenge_method` must be S256; this issuer does not accept `plain`")
+			return
+		}
+		if challenge != "" && method == "" {
+			refuseRequest(w, r, "a `code_challenge` needs `code_challenge_method=S256`; without it the challenge is `plain`, which this issuer does not accept")
 			return
 		}
 		if challenge == "" {
@@ -50,6 +62,30 @@ func requirePKCE(policies func() *policy.Set, next http.Handler) http.Handler {
 		next.ServeHTTP(w, r)
 	})
 }
+
+// logAuthorizePKCE is the line an authorization request leaves about its
+// PKCE: `pkce` says whether it carried a `code_challenge`, and `pkce_method`
+// the method it named, `plain` when it named none (RFC 7636 4.3). The client
+// it named is `client_id`; the request's method, path and user agent follow
+// as on a refusal. Neither the challenge nor any verifier is logged.
+func logAuthorizePKCE(r *http.Request, challenge, method string) {
+	ctx := r.Context()
+	attrs := withID(ctx, slog.Bool("pkce", challenge != ""))
+	if challenge != "" {
+		if method == "" {
+			method = string(oidc.CodeChallengeMethodPlain)
+		}
+		attrs = append(attrs, logattr.SafeString("pkce_method", truncate(method, maxPKCEMethod)))
+	}
+	if id := r.Form.Get("client_id"); id != "" {
+		attrs = append(attrs, logattr.SafeString("client_id", id))
+	}
+	slog.Default().Log(ctx, slog.LevelInfo, "authorization request", withRequest(ctx, r, attrs)...)
+}
+
+// maxPKCEMethod bounds the method as logged: it is the caller's text, and
+// the longest one there is, `plain`, has five characters.
+const maxPKCEMethod = 16
 
 // pkceRequired reports whether an id names a client that must use PKCE,
 // without resolving it: a declared one by its policy (a public client
