@@ -28,7 +28,7 @@ third_party/        patched copies of other projects' modules, each wired in by 
 docs/               see docs/WRITING.md
 ```
 
-The issuer, the signer and the console are one process, `sluis issuer`. Every other module is a process of its own: [design](docs/concepts/sluis/design.md), [ADR 0071](docs/decisions/0071-least-privilege-modules-one-credential-holder-per-function.md). `sluis serve` is the deprecated name of `sluis issuer`.
+The issuer, the signer and the console are one process, `sluis issuer`. Every other module is a process of its own: [design](docs/concepts/sluis/design.md), [ADR 0071](docs/decisions/0071-least-privilege-modules-one-credential-holder-per-function.md).
 Public Go packages stay free of Kubernetes and framework specifics outside the adapters and store implementations.
 Anything a product might import lives behind a storage interface.
 
