@@ -14,12 +14,19 @@ import (
 
 var moduleRoles = []string{"cloudflare", "github", "google", "slack"}
 
-func v5Estate(more ...func(*arp.LambdaArgs)) estate { return withLayout(arp.LayoutV5, more...) }
+// estateWith is the estate of the other tests with the changes more makes.
+func estateWith(more ...func(*arp.LambdaArgs)) estate {
+	return estate{mutate: func(a *arp.LambdaArgs) {
+		for _, f := range more {
+			f(a)
+		}
+	}}
+}
 
 // NewLambda always makes the four module functions beside the issuer's: there is
 // no switch that leaves a module in the issuer.
 func TestNewLambdaMakesAFunctionAndARolePerModule(t *testing.T) {
-	rec, _ := mustLambda(t, v5Estate())
+	rec, _ := mustLambda(t, estateWith())
 	if n := len(rec.ofType(fnType)); n != 1+len(moduleRoles) {
 		t.Fatalf("%d functions, want %d", n, 1+len(moduleRoles))
 	}
@@ -50,7 +57,7 @@ func TestNewLambdaMakesAFunctionAndARolePerModule(t *testing.T) {
 }
 
 func TestTheModuleFunctionsRunTheirOwnZips(t *testing.T) {
-	e := v5Estate()
+	e := estateWith()
 	e.pkg = zipFile(t, nil)
 	rec, _ := mustLambda(t, e)
 	for _, m := range moduleRoles {
@@ -64,7 +71,7 @@ func TestTheModuleFunctionsRunTheirOwnZips(t *testing.T) {
 
 func TestModulesConfigureMemoryConcurrencyAndName(t *testing.T) {
 	one := 3
-	rec, _ := mustLambda(t, v5Estate(func(a *arp.LambdaArgs) {
+	rec, _ := mustLambda(t, estateWith(func(a *arp.LambdaArgs) {
 		a.Modules = map[string]arp.ModuleArgs{
 			"slack": {MemoryMB: 1024, TimeoutSeconds: 60, ReservedConcurrency: &one, FunctionName: "acme-slack"},
 		}
@@ -89,21 +96,18 @@ func TestModulesConfigureMemoryConcurrencyAndName(t *testing.T) {
 }
 
 func TestModulesAreRefusedWhenWrong(t *testing.T) {
-	one, zero := 1, 0
+	zero := 0
 	for name, e := range map[string]estate{
-		"an unknown module":  v5Estate(func(a *arp.LambdaArgs) { a.Modules = map[string]arp.ModuleArgs{"backup": {}} }),
-		"a bad name":         v5Estate(func(a *arp.LambdaArgs) { a.Modules = map[string]arp.ModuleArgs{"slack": {FunctionName: "a b"}} }),
-		"a zero concurrency": v5Estate(func(a *arp.LambdaArgs) { a.Modules = map[string]arp.ModuleArgs{"slack": {ReservedConcurrency: &zero}} }),
-		"too little memory":  v5Estate(func(a *arp.LambdaArgs) { a.Modules = map[string]arp.ModuleArgs{"slack": {MemoryMB: 64}} }),
-		"a name taken twice": v5Estate(func(a *arp.LambdaArgs) {
+		"an unknown module":  estateWith(func(a *arp.LambdaArgs) { a.Modules = map[string]arp.ModuleArgs{"backup": {}} }),
+		"a bad name":         estateWith(func(a *arp.LambdaArgs) { a.Modules = map[string]arp.ModuleArgs{"slack": {FunctionName: "a b"}} }),
+		"a zero concurrency": estateWith(func(a *arp.LambdaArgs) { a.Modules = map[string]arp.ModuleArgs{"slack": {ReservedConcurrency: &zero}} }),
+		"too little memory":  estateWith(func(a *arp.LambdaArgs) { a.Modules = map[string]arp.ModuleArgs{"slack": {MemoryMB: 64}} }),
+		"a name taken twice": estateWith(func(a *arp.LambdaArgs) {
 			a.Modules = map[string]arp.ModuleArgs{"slack": {FunctionName: "sluis-staging-github"}}
 		}),
-		"the issuer's name taken": v5Estate(func(a *arp.LambdaArgs) {
+		"the issuer's name taken": estateWith(func(a *arp.LambdaArgs) {
 			a.Modules = map[string]arp.ModuleArgs{"google": {FunctionName: "sluis-staging-issuer"}}
 		}),
-		"modules on layout v4": {mutate: func(a *arp.LambdaArgs) {
-			a.Modules = map[string]arp.ModuleArgs{"slack": {ReservedConcurrency: &one}}
-		}},
 	} {
 		if _, _, err := buildLambda(t, e); err == nil {
 			t.Errorf("%s: accepted", name)
@@ -111,17 +115,9 @@ func TestModulesAreRefusedWhenWrong(t *testing.T) {
 	}
 }
 
-// Layout v4 has no per-module tables to give the roles: it keeps the one function.
-func TestLayoutV4HasNoModuleFunctions(t *testing.T) {
-	rec, _ := mustLambda(t, withLayout(arp.LayoutV4))
-	if n := len(rec.ofType(fnType)); n != 1 {
-		t.Errorf("%d functions on layout v4", n)
-	}
-}
-
 func TestTheOutputsAreKeyedByModule(t *testing.T) {
 	_, got, err := run(t, func(ctx *pulumi.Context, collect func(string, pulumi.StringInput)) error {
-		l, err := arp.NewLambda(ctx, "staging", v5Estate().args(t))
+		l, err := arp.NewLambda(ctx, "staging", estateWith().args(t))
 		if err != nil {
 			return err
 		}
@@ -161,7 +157,7 @@ func TestTheOutputsAreKeyedByModule(t *testing.T) {
 // The issuer's role invokes the aliases it calls through and nothing else of the
 // other functions: the exact list, each qualified, never the function itself.
 func TestTheIssuerCanInvokeOnlyTheAliasesItNeeds(t *testing.T) {
-	rec, _ := mustLambda(t, v5Estate())
+	rec, _ := mustLambda(t, estateWith())
 	var invokes []string
 	for _, s := range statements(t, prop(rec.one(t, policyType, "staging-issuer-policy"), "policy").StringValue()) {
 		if slices.Contains(strs(s["Action"]), "lambda:InvokeFunction") {
@@ -197,7 +193,7 @@ func TestTheIssuerCanInvokeOnlyTheAliasesItNeeds(t *testing.T) {
 
 // Every module role admits the audit queue's records only if the queue names it.
 func TestTheAuditQueueNamesTheModuleRolesToo(t *testing.T) {
-	rec, _ := mustLambda(t, v5Estate())
+	rec, _ := mustLambda(t, estateWith())
 	for _, m := range moduleRoles {
 		var sends bool
 		for _, s := range statements(t, prop(rec.one(t, policyType, "staging-"+m+"-policy"), "policy").StringValue()) {
@@ -213,7 +209,7 @@ func TestTheAuditQueueNamesTheModuleRolesToo(t *testing.T) {
 // function, role, policy, alias, log group or check exists, and the issuer's
 // invoke grant on the github function is the `live-issuer` alias.
 func TestThereIsNoGitHubMintResource(t *testing.T) {
-	rec, _ := mustLambda(t, v5Estate())
+	rec, _ := mustLambda(t, estateWith())
 	for _, n := range rec.names() {
 		if strings.Contains(n, "github-mint") {
 			t.Errorf("a github-mint resource is declared: %s", n)

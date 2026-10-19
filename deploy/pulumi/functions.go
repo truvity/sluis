@@ -83,10 +83,6 @@ func (a *LambdaArgs) roleArnOf(name string) string {
 	return arnPrefix + "iam::" + a.AccountID + ":role/" + name
 }
 
-// hasModuleFunctions reports whether NewLambda makes the module functions: it
-// does on every layout that has per-module tables (v5, v4+v5).
-func (a *LambdaArgs) hasModuleFunctions() bool { return a.Layout.has5() }
-
 // moduleFunctionArns are the unqualified ARNs of every function a role of the
 // issuer invokes, by role name.
 func (a *LambdaArgs) moduleFunctionArns() map[string]string {
@@ -99,9 +95,6 @@ func (a *LambdaArgs) moduleFunctionArns() map[string]string {
 
 // validateModules holds Modules to the functions NewLambda makes.
 func (a *LambdaArgs) validateModules() error {
-	if len(a.Modules) > 0 && !a.hasModuleFunctions() {
-		return fmt.Errorf("sluispulumi: LambdaArgs.Modules configures the module functions, which need the per-module tables: Layout %q has none", a.Layout)
-	}
 	if a.BackupFunctionName != "" && !functionNamePattern.MatchString(a.BackupFunctionName) {
 		return fmt.Errorf("sluispulumi: LambdaArgs.BackupFunctionName %q is letters, digits, - and _, at most 64", a.BackupFunctionName)
 	}
@@ -136,9 +129,6 @@ func (a *LambdaArgs) validateModules() error {
 		if r := m.ReservedConcurrency; r != nil && *r < 1 {
 			return fmt.Errorf("sluispulumi: LambdaArgs.Modules[%s].ReservedConcurrency %d is not a ceiling: at least 1, or nil for unreserved", k, *r)
 		}
-	}
-	if !a.hasModuleFunctions() {
-		return nil
 	}
 	// Two functions never share a name: a name is a role, a policy and a log group.
 	seen := map[string]string{a.FunctionName: RoleIssuer, a.backupFunctionName(): RoleBackup}
@@ -284,12 +274,8 @@ func tablesNeeded() []Module {
 	return sortedModules(out)
 }
 
-// issuerFunctionArns are the functions the issuer's role invokes, by role; nil
-// where there are no module functions.
+// issuerFunctionArns are the functions the issuer's role invokes, by role.
 func issuerFunctionArns(a *LambdaArgs) map[string]string {
-	if !a.hasModuleFunctions() {
-		return nil
-	}
 	return a.moduleFunctionArns()
 }
 
@@ -301,13 +287,11 @@ func issuerFunctionArns(a *LambdaArgs) map[string]string {
 // the roles.
 func (a *LambdaArgs) moduleSenders(ctx *pulumi.Context) (senders []pulumi.StringInput, resolve func(*moduleFunctions), reject func(error)) {
 	resolvers, rejecters := map[string]func(pulumi.StringInput){}, map[string]func(error){}
-	if a.hasModuleFunctions() {
-		for _, r := range ModuleFunctions() {
-			if a.hostsModule(r) {
-				in, res, rej := deferredArn(ctx)
-				senders = append(senders, in)
-				resolvers[r], rejecters[r] = res, rej
-			}
+	for _, r := range ModuleFunctions() {
+		if a.hostsModule(r) {
+			in, res, rej := deferredArn(ctx)
+			senders = append(senders, in)
+			resolvers[r], rejecters[r] = res, rej
 		}
 	}
 	// The old names of renamed roles stay senders while the switch is made.

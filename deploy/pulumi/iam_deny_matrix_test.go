@@ -143,7 +143,7 @@ func mxPolicies(t *testing.T) (identity map[string]iameval.Policy, key iameval.P
 		moduleTables: tables, queueArn: mxQueue, logGroupArn: env.LogGroupArns["issuer"],
 		keys:            &keyGrants{signArn: mxKey, secretsArn: mxKey},
 		parameterKeyArn: mxKey, instance: mxInst, invokeFunctionArns: []string{mxFn("issuer") + ":live"},
-		webIdentityAud: "acme", layout: LayoutV5, functionArns: env.FunctionArns,
+		webIdentityAud: "acme", functionArns: env.FunctionArns,
 		modules: ModuleSet{Instance: mxInst},
 	})
 	parse("issuer", doc, err)
@@ -168,7 +168,7 @@ func mxPolicies(t *testing.T) (identity map[string]iameval.Policy, key iameval.P
 		kroles = append(kroles, kr)
 	}
 	kst, err := SluisKeyPolicyStatements(KeyPolicyArgs{
-		Region: mxRegion, Account: mxAccount, Modules: ModuleSet{Instance: mxInst}, Layout: LayoutV5, Roles: kroles,
+		Region: mxRegion, Account: mxAccount, Modules: ModuleSet{Instance: mxInst}, Roles: kroles,
 		KeyAdmins: []string{arnPrefix + "iam::" + mxAccount + ":role/key-admin"},
 	})
 	if err != nil {

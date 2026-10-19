@@ -55,13 +55,13 @@ func stack(t *testing.T, o opts) (*recorder, map[string]string, error) {
 		collect("bucketName", store.BucketName)
 		collect("bucketArn", store.BucketArn)
 		if !o.noState {
-			st, err := arp.NewState(ctx, "staging", &arp.StateArgs{TableName: table, KeyArn: o.tableKey})
+			st, err := arp.NewStates(ctx, "staging", &arp.StatesArgs{Modules: arp.ModuleSet{Instance: "staging"}, KeyArn: o.tableKey})
 			if err != nil {
 				return err
 			}
 			id.State = st.Grant()
-			collect("tableName", st.TableName)
-			collect("tableArn", st.TableArn)
+			collect("tableName", st.Tables[arp.ModuleOIDC])
+			collect("tableArn", st.TableArns[arp.ModuleOIDC])
 		}
 		ids, err := arp.NewKubernetesIdentity(ctx, "staging", id)
 		if err != nil {
@@ -136,10 +136,10 @@ func TestVersioningIsOptional(t *testing.T) {
 	}
 }
 
-func TestTheTableIsTheAdaptersAndProtected(t *testing.T) {
+func TestATableIsTheAdaptersAndProtected(t *testing.T) {
 	rec, out := mustStack(t, opts{})
-	d := rec.one(t, "aws:dynamodb/table:Table", "staging-table")
-	if prop(d, "name").StringValue() != table || prop(d, "billingMode").StringValue() != "PAY_PER_REQUEST" ||
+	d := rec.one(t, "aws:dynamodb/table:Table", "staging-oidc-table")
+	if prop(d, "name").StringValue() != "sluis-staging-oidc" || prop(d, "billingMode").StringValue() != "PAY_PER_REQUEST" ||
 		prop(d, "hashKey").StringValue() != "pk" || prop(d, "rangeKey").StringValue() != "sk" {
 		t.Errorf("table inputs: %v", d.Inputs)
 	}
@@ -160,10 +160,10 @@ func TestTheTableIsTheAdaptersAndProtected(t *testing.T) {
 	if prop(d, "serverSideEncryption").HasValue() {
 		t.Errorf("a key was set unasked: %v", prop(d, "serverSideEncryption"))
 	}
-	if !rec.isProtected("aws:dynamodb/table:Table", "staging-table") {
+	if !rec.isProtected("aws:dynamodb/table:Table", "staging-oidc-table") {
 		t.Error("the table is not protected")
 	}
-	if out["tableName"] != table || out["tableArn"] != arnp+"dynamodb:eu-west-1:"+account+":table/"+table {
+	if out["tableName"] != "sluis-staging-oidc" || out["tableArn"] != mockTableArn("sluis-staging-oidc") {
 		t.Errorf("outputs: %v", out)
 	}
 }
@@ -171,7 +171,7 @@ func TestTheTableIsTheAdaptersAndProtected(t *testing.T) {
 func TestATableTakesACustomerManagedKeyAndTheRolesMayUseItOnlyThroughDynamoDB(t *testing.T) {
 	cmk := arnp + "kms:eu-west-1:" + account + ":key/state"
 	rec, _ := mustStack(t, opts{tableKey: pulumi.String(cmk)})
-	d := rec.one(t, "aws:dynamodb/table:Table", "staging-table")
+	d := rec.one(t, "aws:dynamodb/table:Table", "staging-oidc-table")
 	sse := prop(d, "serverSideEncryption").ObjectValue()
 	if !sse["enabled"].BoolValue() || sse["kmsKeyArn"].StringValue() != cmk {
 		t.Errorf("sse: %v", sse)
@@ -250,23 +250,28 @@ func TestTheTrustPolicyNamesTheClusterTheNamespaceAndOneServiceAccount(t *testin
 	}
 }
 
-// What a role may do is asserted whole: an extra action fails here.
-func TestEachRoleGetsExactlyTheStorageAndTheTable(t *testing.T) {
+// What a role may do is asserted whole: an extra action fails here. The pod
+// writes the tables of the modules it hosts (not the minter's, without
+// Cloudflare) and reads the backup table's maintenance item only.
+func TestEachRoleGetsExactlyTheStorageAndTheTables(t *testing.T) {
 	rec, _ := mustStack(t, opts{})
 	bucketArn := arnp + "s3:::" + bucket
-	tableArn := arnp + "dynamodb:eu-west-1:" + account + ":table/" + table
+	var written []string
+	for _, m := range []string{"oidc", "github", "slack", "google"} {
+		written = append(written, mockTableArn("sluis-staging-"+m))
+	}
 	want := map[string][]string{
 		"s3:GetObject":           {bucketArn + "/*"},
 		"s3:PutObject":           {bucketArn + "/*"},
 		"s3:DeleteObject":        {bucketArn + "/*"},
 		"s3:ListBucket":          {bucketArn},
-		"dynamodb:GetItem":       {tableArn},
-		"dynamodb:PutItem":       {tableArn},
-		"dynamodb:UpdateItem":    {tableArn},
-		"dynamodb:DeleteItem":    {tableArn},
-		"dynamodb:Query":         {tableArn},
-		"dynamodb:Scan":          {tableArn},
-		"dynamodb:DescribeTable": {tableArn},
+		"dynamodb:GetItem":       append(append([]string(nil), written...), mockTableArn("sluis-staging-backup")),
+		"dynamodb:PutItem":       written,
+		"dynamodb:UpdateItem":    written,
+		"dynamodb:DeleteItem":    written,
+		"dynamodb:Query":         written,
+		"dynamodb:Scan":          written,
+		"dynamodb:DescribeTable": written,
 	}
 	p := rec.one(t, "aws:iam/policy:Policy", "staging-sluis-policy")
 	got := grants(statements(t, prop(p, "policy").StringValue()))
@@ -308,9 +313,8 @@ func TestNoGrantIsOnAWildcardResourceOrAWildcardAction(t *testing.T) {
 	}
 }
 
-// With Instance the pod's role has the Lambda role's SSM grants: the same rules,
-// scoped to /sluis/<instance>/ and nothing above it, and no wildcard but a
-// trailing /*.
+// With Instance the pod's role has its SSM grants (ssmStatements), scoped to
+// /sluis/<instance>/ and nothing above it, and no wildcard but a trailing /*.
 func TestWithAnInstanceTheRoleHasTheSSMGrantsOfTheLambdaRoleUnderItsRoot(t *testing.T) {
 	key := arnp + "kms:eu-west-1:" + account + ":key/params"
 	rec, _ := mustStack(t, opts{instance: "staging", paramKey: key})
@@ -373,13 +377,6 @@ func TestTheRequiredInputsAreRequired(t *testing.T) {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("the error does not name %s: %v", want, err)
 		}
-	}
-	_, _, err = run(t, func(ctx *pulumi.Context, _ func(string, pulumi.StringInput)) error {
-		_, err := arp.NewState(ctx, "x", &arp.StateArgs{})
-		return err
-	})
-	if err == nil {
-		t.Error("a table with no name was accepted")
 	}
 }
 
@@ -453,16 +450,21 @@ func validate(t *testing.T, name string, ports map[string]any) error {
 // library cannot drift from the code it configures: a key renamed in
 // schemas/config fails here.
 func TestTheRenderedPortsValidateAgainstEveryBinarysSchema(t *testing.T) {
+	tables := portsTables()
 	for _, p := range []arp.PortsArgs{
-		{BucketName: bucket, KeyID: "alias/staging-sluis", TableName: table, Region: "eu-west-1"},
-		{BucketName: bucket, KeyID: "alias/x", TableName: table},
-		{BucketName: bucket, KeyID: "alias/x", TableName: table, Adapter: "dynamodb", BlobPrefix: "/roster/"},
+		{BucketName: bucket, KeyID: "alias/staging-sluis", Tables: tables, Region: "eu-west-1"},
+		{BucketName: bucket, KeyID: "alias/x", Tables: tables},
+		{BucketName: bucket, KeyID: "alias/x", Tables: tables, Adapter: "dynamodb", BlobPrefix: "/roster/"},
 		{BucketName: bucket, KeyID: "alias/x"},
-		{BucketName: bucket, TableName: table},
+		{BucketName: bucket, Tables: tables},
 	} {
 		ports, err := arp.RenderPorts(p)
 		if err != nil {
 			t.Fatal(err)
+		}
+		if len(p.Tables) > 0 {
+			// The schema takes the tables with the layout that goes with them.
+			ports["secrets"] = map[string]any{"source": "ssm", "root": "/sluis/staging", "layout": "v5"}
 		}
 		for name := range required {
 			if err := validate(t, name, ports); err != nil {
@@ -472,8 +474,17 @@ func TestTheRenderedPortsValidateAgainstEveryBinarysSchema(t *testing.T) {
 	}
 }
 
-func TestThePortsNameTheBucketTheKeyTheTableAndTheRegion(t *testing.T) {
-	y, err := arp.RenderPortsYAML(arp.PortsArgs{BucketName: bucket, KeyID: "alias/staging-sluis", TableName: table, Region: "eu-west-1"})
+// portsTables is a table per module, as PortsArgs.Tables takes them.
+func portsTables() map[arp.Module]string {
+	tables := map[arp.Module]string{}
+	for _, m := range arp.Modules() {
+		tables[m] = "sluis-staging-" + string(m)
+	}
+	return tables
+}
+
+func TestThePortsNameTheBucketTheTablesAndTheRegion(t *testing.T) {
+	y, err := arp.RenderPortsYAML(arp.PortsArgs{BucketName: bucket, KeyID: "alias/staging-sluis", Tables: portsTables(), Region: "eu-west-1"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -491,7 +502,11 @@ func TestThePortsNameTheBucketTheKeyTheTableAndTheRegion(t *testing.T) {
 		t.Fatal(err)
 	}
 	p := doc.Ports
-	if p.Adapter != "dynamodb" || !reflect.DeepEqual(p.DynamoDB, map[string]any{"table": table, "region": "eu-west-1"}) ||
+	tables := map[string]any{}
+	for m, n := range portsTables() {
+		tables[string(m)] = n
+	}
+	if p.Adapter != "dynamodb" || !reflect.DeepEqual(p.DynamoDB, map[string]any{"tables": tables, "region": "eu-west-1"}) ||
 		p.Blob.Adapter != "s3" || !reflect.DeepEqual(p.Blob.S3, map[string]any{"bucket": bucket, "region": "eu-west-1"}) {
 		t.Errorf("ports:\n%s", y)
 	}
@@ -517,7 +532,7 @@ func TestWithoutATableNoStateAdapterIsRendered(t *testing.T) {
 }
 
 func TestWithoutAKeyNoSealerIsRendered(t *testing.T) {
-	ports, err := arp.RenderPorts(arp.PortsArgs{BucketName: bucket, TableName: table})
+	ports, err := arp.RenderPorts(arp.PortsArgs{BucketName: bucket, Tables: portsTables()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -528,7 +543,7 @@ func TestWithoutAKeyNoSealerIsRendered(t *testing.T) {
 
 func TestPortsThatCannotBeRenderedAreRefused(t *testing.T) {
 	for name, p := range map[string]arp.PortsArgs{
-		"no bucket":         {KeyID: "alias/x", TableName: table},
+		"no bucket":         {KeyID: "alias/x", Tables: portsTables()},
 		"dynamodb no table": {BucketName: bucket, KeyID: "alias/x", Adapter: "dynamodb"},
 		"nats":              {BucketName: bucket, KeyID: "alias/x", Adapter: "nats"},
 	} {

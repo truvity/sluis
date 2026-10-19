@@ -7,8 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
-
 	arp "github.com/truvity/sluis/deploy/pulumi"
 )
 
@@ -75,7 +73,7 @@ func TestEveryRenderedDocumentLoadsInItsRuntime(t *testing.T) {
 	write(t, "restore", "verify recipients", archiveFiles(t, rv.one(t, layerType, "staging-restore-config"))["sluis/sluis.yaml"])
 
 	// the issuer: the audit installed, used, off, or named by the estate; S3 or
-	// external blobs; the one table or a table per module.
+	// external blobs.
 	audits := map[string]*arp.AuditArgs{
 		"install": installAudit(t),
 		"use":     {Use: &arp.AuditUse{QueueURL: queue}},
@@ -83,29 +81,14 @@ func TestEveryRenderedDocumentLoadsInItsRuntime(t *testing.T) {
 	}
 	for aname, au := range audits {
 		for _, ext := range []bool{false, true} {
-			for _, tables := range []bool{false, true} {
-				more := func(a *arp.LambdaArgs) {
-					if tables {
-						a.Layout = arp.LayoutV5
-						tbl := map[arp.Module]pulumi.StringInput{}
-						for _, m := range arp.Modules() {
-							tbl[m] = pulumi.String(tableArn("sluis-staging-" + string(m)))
-						}
-						a.State.Tables, a.State.TableArn = tbl, nil
-						in := *a.Installation
-						aws := *in.AWS
-						aws.Table = ""
-						in.AWS = &aws
-						a.Installation = &in
-					}
-					if ext {
-						e := external()
-						onBlobStore(e)(a)
-					}
+			more := func(a *arp.LambdaArgs) {
+				if ext {
+					e := external()
+					onBlobStore(e)(a)
 				}
-				rec, _ := mustLambda(t, auditEstate(t, au, more))
-				write(t, "issuer", "audit-"+aname+" external-"+boolWord(ext)+" tables-"+boolWord(tables), serviceDocument(t, rec))
 			}
+			rec, _ := mustLambda(t, auditEstate(t, au, more))
+			write(t, "issuer", "audit-"+aname+" external-"+boolWord(ext), serviceDocument(t, rec))
 		}
 	}
 	// the estate that names the queue in its installation (the older way).

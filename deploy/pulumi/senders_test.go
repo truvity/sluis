@@ -12,12 +12,11 @@ import (
 	arp "github.com/truvity/sluis/deploy/pulumi"
 )
 
-// v5Install is the example installation on layout v5: it names no table of the
-// v4 layout and no queue.
+// v5Install is the example installation without its queue.
 func v5Install(t *testing.T) *sluisconfig.Installation {
 	t.Helper()
 	in := exampleInstallation(t)
-	in.AWS.AuditQueueURL, in.AWS.Table = "", ""
+	in.AWS.AuditQueueURL = ""
 	return in
 }
 
@@ -26,7 +25,6 @@ func v5Audit(t *testing.T, au *arp.AuditArgs) estate {
 	return withInstallation(v5Install(t), func(a *arp.LambdaArgs) {
 		a.AuditQueueArn = nil
 		a.Audit = au
-		withLayout(arp.LayoutV5).mutate(a)
 	})
 }
 
@@ -48,7 +46,7 @@ func indexOf(t *testing.T, rec *recorder, typ string, match func(declared) bool)
 // The senders a queue policy may name are the roles the stack creates, and the
 // old names that exist already: not a restore function the stack does not make.
 func TestCreatedSendersAreTheRolesTheStackCreates(t *testing.T) {
-	base := arp.RoleArgs{Region: region, AccountID: account, Instance: "staging", Layout: arp.LayoutV5}
+	base := arp.RoleArgs{Region: region, AccountID: account, Instance: "staging"}
 	names := func(r arp.RoleArgs) []string {
 		got, err := r.CreatedSenders()
 		if err != nil {
@@ -83,14 +81,9 @@ func TestCreatedSendersAreTheRolesTheStackCreates(t *testing.T) {
 	if !slices.Contains(got, roleArnOf("sluis-old")) || !slices.Contains(got, roleArnOf("sluis-staging-issuer")) {
 		t.Errorf("a transition keeps both names: %v", got)
 	}
-	// v4 has the issuer's function and nothing else.
-	v4 := arp.RoleArgs{Region: region, AccountID: account, Instance: "staging"}
-	if got, _ := v4.CreatedSenders(); !slices.Equal(got, []string{roleArnOf("sluis-staging-issuer")}) {
-		t.Errorf("layout v4: %v", got)
-	}
 	// A module the installation renders no document for has no function, so no role.
 	in := v5Install(t)
-	r := arp.RoleArgs{Region: in.AWS.Region, AccountID: account, Instance: in.Instance, Layout: arp.LayoutV5, Installation: in}
+	r := arp.RoleArgs{Region: in.AWS.Region, AccountID: account, Instance: in.Instance, Installation: in}
 	roles, err := r.FunctionRoles()
 	if err != nil {
 		t.Fatal(err)
@@ -131,7 +124,7 @@ func TestTheLibrarysQueuePolicyWaitsForTheModuleRoles(t *testing.T) {
 func TestDeferredSendersOrderTheQueuePolicyAfterTheRoles(t *testing.T) {
 	in := v5Install(t)
 	args := v5Audit(t, &arp.AuditArgs{Use: &arp.AuditUse{QueueURL: queueURL}}).args(t)
-	roles := arp.RoleArgs{Region: in.AWS.Region, AccountID: account, Instance: in.Instance, Layout: arp.LayoutV5, Installation: in,
+	roles := arp.RoleArgs{Region: in.AWS.Region, AccountID: account, Instance: in.Instance, Installation: in,
 		FunctionName: args.FunctionName}
 	rec, _, err := run(t, func(ctx *pulumi.Context, collect func(string, pulumi.StringInput)) error {
 		s, err := roles.DeferredSenders(ctx)

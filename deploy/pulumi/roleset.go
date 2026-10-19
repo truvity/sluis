@@ -59,19 +59,17 @@ func (a *LambdaArgs) restoreFunctionName() string {
 }
 
 // functionRoles are the roles of every function of the installation: the issuer,
-// the module functions (layout v5) and the Backup component's backup and
+// the module functions and the Backup component's backup and
 // restore. They are derived from [FunctionHosts] and [CrossGrants], the data the
 // policies are rendered from, so a role added there is a role here.
 func (a *LambdaArgs) functionRoles() []functionRole {
 	named := []struct{ role, name string }{{RoleIssuer, a.FunctionName}}
-	if a.hasModuleFunctions() {
-		for _, r := range ModuleFunctions() {
-			named = append(named, struct{ role, name string }{r, a.moduleFunctionName(r)})
-		}
-		named = append(named,
-			struct{ role, name string }{RoleBackup, a.backupFunctionName()},
-			struct{ role, name string }{RoleRestore, a.restoreFunctionName()})
+	for _, r := range ModuleFunctions() {
+		named = append(named, struct{ role, name string }{r, a.moduleFunctionName(r)})
 	}
+	named = append(named,
+		struct{ role, name string }{RoleBackup, a.backupFunctionName()},
+		struct{ role, name string }{RoleRestore, a.restoreFunctionName()})
 	var out []functionRole
 	for _, n := range named {
 		fr := functionRole{role: Role{Name: n.role, Hosts: FunctionHosts(n.role)}, name: n.name, arn: a.roleArnOf(n.name)}
@@ -202,7 +200,7 @@ func (a *LambdaArgs) keyPolicyStatements(o KeyPolicyOptions) ([]map[string]any, 
 		return nil, err
 	}
 	st, err := SluisKeyPolicyStatements(KeyPolicyArgs{
-		Region: a.Region, Account: a.AccountID, Modules: ModuleSet{Instance: a.Instance, Tables: a.TableNames}, Layout: a.Layout,
+		Region: a.Region, Account: a.AccountID, Modules: ModuleSet{Instance: a.Instance, Tables: a.TableNames},
 		Roles: roles, ExternalReaders: o.ExternalReaders, Admins: o.Admins, Breakglass: o.Breakglass, KeyAdmins: o.KeyAdmins,
 		DenyOtherActions: o.DenyOtherActions, Conformance: a.conformanceEnabled(),
 		BackupArchive: o.BackupArchive, RestoreArchive: o.RestoreArchive,

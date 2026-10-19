@@ -30,8 +30,8 @@ type ExternalBlobs struct {
 	// Prefix is a key prefix inside the bucket, for an installation that shares it.
 	Prefix string
 	// CredentialsRef is the address, below the installation's secrets root, of
-	// the secret that holds the access key pair: `internal/<kind>/<id>`, for
-	// example `internal/blobs/r2`. The function reads it at run time through its
+	// the secret that holds the access key pair: `internal/<module>/<name>`, for
+	// example `internal/google/blobs-r2` (the module that owns the blob prefix). The function reads it at run time through its
 	// secrets source; the library grants it read on that one parameter and
 	// nothing else.
 	//
@@ -54,12 +54,11 @@ type ExternalBlobs struct {
 	// has an `endpoint`), and renders `ports.blob.s3.credentials.preset`. The
 	// library then declares no parameter and grants no read for blob
 	// credentials: each function that has the blobs mints in process through the
-	// Cloudflare minter. That works only where the function holds the minter: an
-	// installation whose Cloudflare presets are rendered into the one function
-	// (no module functions). An installation with module functions keeps its
-	// presets in the Cloudflare module's document, and the other functions have
-	// no minter and no preset to mint from, so the library refuses
-	// CredentialsPreset there: name the stored credential as CredentialsRef
+	// Cloudflare minter. That works only where the function holds the minter. An
+	// installation that declares Cloudflare presets keeps them in the Cloudflare
+	// module's document, and the other functions have no minter and no preset to
+	// mint from, so the library refuses CredentialsPreset there: name the stored
+	// credential as CredentialsRef
 	// (`external/cloudflare/<preset>`) instead. Exclusive with CredentialsRef.
 	CredentialsPreset string
 }
@@ -180,13 +179,12 @@ func (b *ExternalBlobs) validate() error {
 	return nil
 }
 
-// V5CredentialsRef is the address a layout v4 CredentialsRef has on layout v5:
-// refs there are `internal/<module>/<name>`, and the credential of a blob store
-// belongs to the module that owns the blob prefix, google, so
-// `internal/blobs/r2` is `internal/google/blobs-r2` (the address `sluis migrate
-// v5` copies it to). A ref that already begins with a module is returned as it
-// is.
-func V5CredentialsRef(ref string) string {
+// moduleCredentialsRef is the address a CredentialsRef that does not begin
+// with a module has under one: refs are `internal/<module>/<name>`, and the
+// credential of a blob store belongs to the module that owns the blob prefix,
+// google, so `internal/blobs/r2` is `internal/google/blobs-r2`. A ref that
+// already begins with a module is returned as it is.
+func moduleCredentialsRef(ref string) string {
 	rest, ok := strings.CutPrefix(ref, "internal/")
 	first, second, _ := strings.Cut(rest, "/")
 	if !ok || validModule(Module(first)) {
@@ -195,15 +193,15 @@ func V5CredentialsRef(ref string) string {
 	return "internal/" + string(ModuleGoogle) + "/" + first + "-" + second
 }
 
-// checkLayoutV5 refuses a layout v4 credentials ref where the layout is v5: the
-// function would read an address the v5 secrets layout does not have.
-func (b *ExternalBlobs) checkLayoutV5() error {
+// checkModuleRef refuses a credentials ref that does not begin with a module:
+// the function would read an address the secrets layout does not have.
+func (b *ExternalBlobs) checkModuleRef() error {
 	if b.CredentialsPreset != "" {
 		return nil
 	}
-	if want := V5CredentialsRef(b.CredentialsRef); want != b.CredentialsRef {
-		return fmt.Errorf("sluispulumi: StorageArgs.Blobs.CredentialsRef %q is a layout v4 address and Layout is v5, where it is "+
-			"internal/<module>/<name>: set it to %q (`sluis migrate v5` copies the secret there)", b.CredentialsRef, want)
+	if want := moduleCredentialsRef(b.CredentialsRef); want != b.CredentialsRef {
+		return fmt.Errorf("sluispulumi: StorageArgs.Blobs.CredentialsRef %q does not begin with a module: a ref is "+
+			"internal/<module>/<name>; set it to %q", b.CredentialsRef, want)
 	}
 	return nil
 }

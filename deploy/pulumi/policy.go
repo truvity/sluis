@@ -53,29 +53,14 @@ const (
 const (
 	sidBlobs = "SluisBlobs"
 	sidList  = "SluisBlobList"
-	sidState = "SluisState"
 	sidKey   = "SluisStateKey"
 )
 
 type statement = map[string]any
 
-// Layout is the storage layout a function's role and documents follow
-// (docs/decisions/0072): LayoutV4 keeps the v4 grants, LayoutV5 gets only the
-// v5 grants, and LayoutV4V5 both, for the migration window.
-type Layout string
-
-// The values of LambdaArgs.Layout.
-const (
-	LayoutV4   Layout = "v4"
-	LayoutV5   Layout = "v5"
-	LayoutV4V5 Layout = "v4+v5"
-)
-
-func (l Layout) valid() bool { return l == "" || l == LayoutV4 || l == LayoutV5 || l == LayoutV4V5 }
-
-// has4 and has5 say which grants the layout carries; the empty layout is v4.
-func (l Layout) has4() bool { return l != LayoutV5 }
-func (l Layout) has5() bool { return l == LayoutV5 || l == LayoutV4V5 }
+// secretsLayout is the `secrets.layout` the library writes into every service
+// document: the module-first layout (docs/decisions/0072), the only one.
+const secretsLayout = "v5"
 
 // storageStatements is what a process that keeps sluis's blobs off the cluster
 // is allowed: get, put and delete objects of the one bucket, and list it (a read
@@ -97,29 +82,13 @@ func storageStatements(bucketArn string) []statement {
 	}
 }
 
-// stateStatements is what the DynamoDB adapter needs of its table: the item
-// calls it makes (a Scan is `sluis migrate` and a listing by a prefix
-// with no dot) and DescribeTable, which the start-up check and the readiness
-// probe make. keyArn, when not empty, is the customer-managed key the table is
-// encrypted with: the caller's principal needs it for the table's reads and
-// writes, and only through DynamoDB.
-func stateStatements(tableArn, keyArn string, tables map[Module]string, cloudflare bool) []statement {
-	var out []statement
-	if tableArn != "" {
-		out = append(out, statement{
-			"Sid":      sidState,
-			"Effect":   "Allow",
-			"Action":   []string{ddbGetItem, ddbPutItem, ddbUpdateItem, ddbDeleteItem, ddbQuery, ddbScan, ddbDescribeTable},
-			"Resource": tableArn,
-		})
-	}
-	if tableArn != "" {
-		// Layout v4 keeps the maintenance flag in this table too; only the restore
-		// role writes it.
-		out = append(out, maintenanceDeny([]string{tableArn}))
-	}
-	out = append(out, moduleTableStatements(tables, cloudflare)...)
-	if keyArn != "" && (tableArn != "" || len(tables) > 0) {
+// stateStatements is what the DynamoDB adapter needs of the module tables
+// (moduleTableStatements). keyArn, when not empty, is the customer-managed key
+// the tables are encrypted with: the caller's principal needs it for the
+// tables' reads and writes, and only through DynamoDB.
+func stateStatements(keyArn string, tables map[Module]string, cloudflare bool) []statement {
+	out := moduleTableStatements(tables, cloudflare)
+	if keyArn != "" && len(tables) > 0 {
 		out = append(out, statement{
 			"Sid":      sidKey,
 			"Effect":   "Allow",
@@ -133,11 +102,10 @@ func stateStatements(tableArn, keyArn string, tables map[Module]string, cloudfla
 	return out
 }
 
-// moduleTableStatements grants the tables of layout v5 to the one role that
-// hosts the issuer's modules (and the minter's, with cloudflare): the same
-// split ModuleRoleStatements makes, so the table of a module the role does not
-// host is never named. The backup table is read for the maintenance item only.
-// Until the layout switch the grants are unused.
+// moduleTableStatements grants the module tables to the one role that hosts
+// the issuer's modules (and the minter's, with cloudflare): the same split
+// ModuleRoleStatements makes, so the table of a module the role does not host
+// is never named. The backup table is read for the maintenance item only.
 func moduleTableStatements(tables map[Module]string, cloudflare bool) []statement {
 	var out []statement
 	for _, m := range Modules() {
@@ -341,23 +309,14 @@ const (
 	sidWebID          = "SluisWebIdentity"
 )
 
-// SSM layout v4 (docs/decisions/0041): one root per installation,
-// `/sluis/<instance>`. `internal` is sluis's alone, and `external` is the typed
-// documents consumers read, each granted on its own side.
+// The SSM root of an installation is `/sluis/<instance>`. `internal` is
+// sluis's alone, and `external` is the typed documents consumers read, each
+// granted on its own side; below each, a module's parameters are under its own
+// name (docs/decisions/0072).
 
-// ConfigParameterPrefix is the operator's and the stack's: the secrets a person
-// seeds (`config/providers/google/<id>/client-secret`,
-// `config/clients/<id>/secret`) and the ones Pulumi generates
-// (`config/issuer/state-secret`, `config/recovery/password`). sluis only reads
-// them, by the names its http document gives; its own writes are under
-// `credentials/` (docs/reference/sluis/storage-layout.md).
-func ConfigParameterPrefix(instance string) string {
-	return InternalParameterPrefix(instance) + "/config"
-}
-
-// ConfigParameterPrefixV5 is the v5 home of what ConfigParameterPrefix holds on
-// layout v4: the issuer's module, `internal/oidc` (`oidc/state-secret`,
-// `oidc/recovery-password`, `oidc/signin/...`, `oidc/clients/<id>`).
+// ConfigParameterPrefixV5 is the issuer's module, `internal/oidc`: the secrets
+// Pulumi generates (`oidc/state-secret`, `oidc/recovery-password`) and the
+// ones a person seeds (`oidc/signin/...`, `oidc/clients/<id>`).
 func ConfigParameterPrefixV5(instance string) string {
 	return InternalParameterPrefix(instance) + "/" + string(ModuleOIDC)
 }
@@ -366,8 +325,8 @@ func ConfigParameterPrefixV5(instance string) string {
 func InternalParameterPrefix(instance string) string { return SSMRoot(instance) + "/internal" }
 
 // ExternalParameterPrefix is where sluis keeps the typed documents consumers
-// read on layout v4 (external/<kind>/<id>). A consumer is granted its exact
-// addresses on its own side, never this prefix.
+// read (external/<module>/<id>). A consumer is granted its exact addresses on
+// its own side, never this prefix.
 func ExternalParameterPrefix(instance string) string { return SSMRoot(instance) + "/external" }
 
 // parameterArns is the ARNs a read of a path names: the path itself, which
@@ -420,10 +379,10 @@ func parameterBareArns(region, account string, prefixes ...string) []string {
 
 // functionPolicyIn is what the function's role is rendered from.
 type functionPolicyIn struct {
-	region, account    string
-	bucketArn          string
-	external           *ExternalBlobs // set: no S3 grant, only the credentials' read
-	tableArn, tableKey string
+	region, account string
+	bucketArn       string
+	external        *ExternalBlobs // set: no S3 grant, only the credentials' read
+	tableKey        string
 	// moduleTables are the ARNs of the per-module tables, by module.
 	moduleTables   map[Module]string
 	queueArn       string
@@ -438,23 +397,17 @@ type functionPolicyIn struct {
 	logGroupArn        string
 	invokeFunctionArns []string
 	// functionArns are the unqualified ARNs of the functions the role invokes
-	// through a cross-grant, by role (layout v5).
+	// through a cross-grant, by role.
 	functionArns map[string]string
-	// cloudflare adds the grants of the Cloudflare minter (see ssmStatements).
-	cloudflare bool
-	// cloudflareStored adds the grant on the credentials the rotation stores at
-	// external/cloudflare: not for presets that are all `store: none`.
-	cloudflareStored bool
-
-	// layout says which grants the role carries; the empty one is v4.
-	layout Layout
-	// modules names the instance and the tables, for the v5 grants.
+	// modules names the instance and the tables, for the module grants.
 	modules ModuleSet
 }
 
-// ssmStatements is the grant on /sluis/<instance> that both the Lambda role and
-// the Kubernetes pod's role carry (one process, one role), scoped to the one
-// root:
+// ssmStatements is the grant on /sluis/<instance> that the Kubernetes pod's
+// role carries (KubernetesIdentityArgs.Instance; one process, one role),
+// scoped to the one root. Its paths are the ones the Lambda role held before
+// the module-first layout, and it is not yet the per-module grant
+// (ModuleRoleStatements) the functions' roles hold:
 //
 //   - internal/credentials/* and external/*, read and write (with the
 //     parameters' history, which the rotation reads);
@@ -526,30 +479,17 @@ func functionPolicy(in functionPolicyIn) (string, error) {
 		"Action":   []string{logsCreateStream, logsPutEvents},
 		"Resource": in.logGroupArn + ":*",
 	}}
-	switch {
-	case in.external != nil:
+	if in.external != nil {
 		st = append(st, credentialsStatements(in.external, in.region, in.account, in.instance, in.parameterKeyArn)...)
-	case in.layout.has4():
-		st = append(st, storageStatements(in.bucketArn)...)
 	}
-	if in.layout.has4() {
-		// Layout v4: the one table and the v4 paths. The module tables are v5's.
-		st = append(st, stateStatements(in.tableArn, in.tableKey, nil, false)...)
-		st = append(st, ssmStatements(in.region, in.account, in.instance, in.parameterKeyArn, in.cloudflare, in.cloudflareStored)...)
+	// What ModuleRoleStatements renders for the modules this one function hosts.
+	// A statement already written (the logs) is not written twice: a Sid is
+	// unique in a policy.
+	mod, err := in.moduleStatements()
+	if err != nil {
+		return "", err
 	}
-	if in.layout.has5() {
-		// Layout v5: what ModuleRoleStatements renders for the modules this one
-		// function hosts. A statement the v4 grants already carry (the logs, the
-		// audit queue, the table key and the parameter key, which v4 grants for
-		// all of internal/ and external/) is not written twice: a Sid is unique
-		// in a policy.
-		v5, err := in.moduleStatements()
-		if err != nil {
-			return "", err
-		}
-		st = mergeMaintenanceDeny(st, v5)
-		st = appendNew(st, v5...)
-	}
+	st = appendNew(st, mod...)
 	if in.queueArn != "" {
 		// No queue (audit off): the function may send to none.
 		st = appendNew(st, statement{
@@ -575,46 +515,7 @@ func functionPolicy(in functionPolicyIn) (string, error) {
 	return document(st)
 }
 
-// maintenanceDeny denies the writes of the maintenance partition on tables.
-func maintenanceDeny(tables []string) statement {
-	return statement{
-		"Sid": sidMaintenanceDeny, "Effect": "Deny", "Action": ddbMaintenanceDenied, "Resource": tablesOf(tables),
-		"Condition": map[string]any{
-			"ForAnyValue:StringEquals": map[string]any{"dynamodb:LeadingKeys": []string{MaintenancePartition}},
-		},
-	}
-}
-
-// mergeMaintenanceDeny makes the one SluisMaintenanceDeny of a role on v4+v5
-// cover the legacy table (already in st) and the module tables (in more): the
-// deny in more is dropped and its tables join the one in st.
-func mergeMaintenanceDeny(st, more []statement) []statement {
-	var extra []string
-	for _, s := range more {
-		if s["Sid"] == sidMaintenanceDeny {
-			extra = append(extra, resourceList(s["Resource"])...)
-		}
-	}
-	for i, s := range st {
-		if s["Sid"] == sidMaintenanceDeny && len(extra) > 0 {
-			st[i] = maintenanceDeny(append(resourceList(s["Resource"]), extra...))
-		}
-	}
-	return st
-}
-
-// resourceList is a statement's Resource as a list.
-func resourceList(v any) []string {
-	switch x := v.(type) {
-	case string:
-		return []string{x}
-	case []string:
-		return x
-	}
-	return nil
-}
-
-// moduleStatements is the v5 grants of the issuer's role: ModuleRoleStatements
+// moduleStatements is the module grants of the issuer's role: ModuleRoleStatements
 // of the role that hosts the oidc module and holds the others by CrossGrants.
 func (in functionPolicyIn) moduleStatements() ([]statement, error) {
 	role := moduleRole(RoleIssuer)

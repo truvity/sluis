@@ -5,36 +5,18 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
-	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 	"go.yaml.in/yaml/v3"
 
-	sluisconfig "github.com/truvity/sluis/config"
 	"github.com/truvity/sluis/storage/state"
 
 	arp "github.com/truvity/sluis/deploy/pulumi"
 )
 
 const ssmParameterType = "aws:ssm/parameter:Parameter"
-
-// withLayout is an estate on a layout: the module tables beside the legacy one.
-func withLayout(l arp.Layout, more ...func(*arp.LambdaArgs)) estate {
-	return estate{mutate: func(a *arp.LambdaArgs) {
-		a.Layout = l
-		tbl := map[arp.Module]pulumi.StringInput{}
-		for _, m := range arp.Modules() {
-			tbl[m] = pulumi.String(tableArn("sluis-staging-" + string(m)))
-		}
-		a.State.Tables = tbl
-		for _, f := range more {
-			f(a)
-		}
-	}}
-}
 
 func policyOf(t *testing.T, e estate) []map[string]any {
 	t.Helper()
@@ -58,34 +40,13 @@ func sids(st []map[string]any) []string {
 	return out
 }
 
-var (
-	paramRoot = arnp + "ssm:" + region + ":" + account + ":parameter/sluis/staging"
-	legacyArn = tableArn(table)
-)
+var paramRoot = arnp + "ssm:" + region + ":" + account + ":parameter/sluis/staging"
 
-// Layout v4 is what it was: the legacy table and the v4 paths, and nothing of
-// the module tables or the v5 paths.
-func TestLayoutV4KeepsTheV4GrantsOnly(t *testing.T) {
-	for _, l := range []arp.Layout{"", arp.LayoutV4} {
-		st := policyOf(t, withLayout(l))
-		res := resourcesOf(st)
-		if !slices.Contains(res, legacyArn) || !slices.Contains(res, paramRoot+"/internal/config/*") {
-			t.Errorf("%q: the v4 grants are missing: %v", l, res)
-		}
-		for _, r := range res {
-			v5 := strings.Contains(r, "sluis-staging-") && !strings.Contains(r, "sluis-staging-issuer")
-			if v5 || strings.Contains(r, "/internal/oidc") || strings.Contains(r, "/external/oidc") {
-				t.Errorf("%q: a v5 resource on layout v4: %s", l, r)
-			}
-		}
-	}
-}
-
-// Layout v5 is the v5 grants only: the issuer hosts the oidc module (its own
+// The issuer's role is its module's grants: it hosts the oidc module (its own
 // table, parameters and blob prefix), reads the providers' tables and the Google
-// snapshots, and invokes their functions; no legacy table, no v4 path.
-func TestLayoutV5GetsOnlyTheV5Grants(t *testing.T) {
-	st := policyOf(t, withLayout(arp.LayoutV5))
+// snapshots, and invokes their functions; no path outside the modules.
+func TestTheIssuerRoleHoldsItsModuleGrantsOnly(t *testing.T) {
+	st := policyOf(t, estateWith())
 	res := resourcesOf(st)
 	for _, want := range []string{
 		tableArn("sluis-staging-oidc"), tableArn("sluis-staging-google"),
@@ -96,12 +57,12 @@ func TestLayoutV5GetsOnlyTheV5Grants(t *testing.T) {
 		fnArn("sluis-staging-cloudflare") + ":live-issuer", fnArn("sluis-staging-backup") + ":live-console",
 	} {
 		if !slices.Contains(res, want) {
-			t.Errorf("v5: no grant on %s", want)
+			t.Errorf("no grant on %s", want)
 		}
 	}
 	for _, r := range res {
 		switch {
-		case r == legacyArn, strings.HasPrefix(r, paramRoot+"/internal/config"), strings.HasPrefix(r, paramRoot+"/internal/credentials"),
+		case r == tableArn(table), strings.HasPrefix(r, paramRoot+"/internal/config"), strings.HasPrefix(r, paramRoot+"/internal/credentials"),
 			r == paramRoot+"/external/*", r == arnp+"s3:::"+bucket+"/*", r == paramRoot+"/internal/*",
 			strings.Contains(r, "table/sluis-staging-cloudflare"), strings.Contains(r, "/internal/cloudflare"),
 			// The providers' secrets are theirs, not the issuer's.
@@ -109,7 +70,7 @@ func TestLayoutV5GetsOnlyTheV5Grants(t *testing.T) {
 			strings.HasPrefix(r, paramRoot+"/internal/slack"), strings.HasPrefix(r, paramRoot+"/external/google"),
 			// Every invoke is of an alias, never the function.
 			strings.Contains(r, ":function:") && !strings.Contains(r[strings.Index(r, ":function:")+1:], ":live"):
-			t.Errorf("v5: a v4 or an unhosted resource is granted: %s", r)
+			t.Errorf("an unhosted resource is granted: %s", r)
 		}
 	}
 	for _, r := range res {
@@ -117,43 +78,10 @@ func TestLayoutV5GetsOnlyTheV5Grants(t *testing.T) {
 			t.Errorf("the backup table is named: %v", r)
 		}
 	}
-	// The rest of the role is the same on every layout.
+	// The rest of the role.
 	for _, sid := range []string{"SluisLogs", "SluisRunAPass", "SluisWebIdentity"} {
 		if !slices.Contains(sids(st), sid) {
-			t.Errorf("v5: %s is gone", sid)
-		}
-	}
-}
-
-// Layout v4+v5 is both, and a statement id is unique in the policy.
-func TestLayoutV4V5GetsBothAndNoSidTwice(t *testing.T) {
-	key := func(a *arp.LambdaArgs) {
-		a.ParameterKeyArn = paramKey
-		a.State.KeyArn = pulumi.String(arnp + "kms:" + region + ":" + account + ":key/tables")
-	}
-	st := policyOf(t, withLayout(arp.LayoutV4V5, key))
-	res := resourcesOf(st)
-	for _, want := range []string{
-		legacyArn, paramRoot + "/internal/config/*", paramRoot + "/internal/credentials/*", paramRoot + "/external/*",
-		tableArn("sluis-staging-oidc"), paramRoot + "/internal/oidc/*", arnp + "s3:::" + bucket + "/*", arnp + "s3:::" + bucket + "/oidc/*",
-	} {
-		if !slices.Contains(res, want) {
-			t.Errorf("v4+v5: no grant on %s", want)
-		}
-	}
-	seen := map[string]bool{}
-	for _, sid := range sids(st) {
-		if seen[sid] {
-			t.Errorf("Sid %s is in the policy twice", sid)
-		}
-		seen[sid] = true
-	}
-	// The v5 policy alone has the same ids for what the layouts share.
-	for _, l := range []arp.Layout{arp.LayoutV4, arp.LayoutV5} {
-		for _, sid := range sids(policyOf(t, withLayout(l, key))) {
-			if !seen[sid] {
-				t.Errorf("v4+v5 lacks %s, which %s has", sid, l)
-			}
+			t.Errorf("%s is gone", sid)
 		}
 	}
 }
@@ -161,13 +89,10 @@ func TestLayoutV4V5GetsBothAndNoSidTwice(t *testing.T) {
 // The Cloudflare minter's module is hosted by the cloudflare function whatever
 // the installation declares; with presets the issuer's role reads the minter's
 // parameters for the blob credentials and never the table.
-func TestLayoutV5HostsTheCloudflareModuleWithPresets(t *testing.T) {
+func TestTheCloudflareFunctionHostsTheCloudflareModuleWithPresets(t *testing.T) {
 	in := exampleInstallation(t)
 	withCloudflare(in)
-	in.AWS.Table = ""
-	rec, _ := mustLambda(t, withInstallation(in, func(a *arp.LambdaArgs) {
-		withLayout(arp.LayoutV5).mutate(a)
-	}))
+	rec, _ := mustLambda(t, withInstallation(in, nil))
 	cf := resourcesOf(statements(t, prop(rec.one(t, policyType, "staging-cloudflare-policy"), "policy").StringValue()))
 	if !slices.Contains(cf, tableArn("sluis-staging-cloudflare")) {
 		t.Errorf("no table for the minter: %v", cf)
@@ -186,29 +111,19 @@ func fnArn(name string) string {
 	return arnp + "lambda:" + region + ":" + account + ":function:" + name
 }
 
-func TestTheLayoutIsValidated(t *testing.T) {
+func TestTheTablesAndTheLayoutAreValidated(t *testing.T) {
 	for name, e := range map[string]estate{
-		"unknown layout":                withLayout("v6"),
-		"v5 without the module tables":  {mutate: func(a *arp.LambdaArgs) { a.Layout = arp.LayoutV5 }},
-		"v4+v5 without the legacy":      withLayout(arp.LayoutV4V5, func(a *arp.LambdaArgs) { a.State.TableArn = nil }),
-		"DropV4 on v4":                  {mutate: func(a *arp.LambdaArgs) { a.Compat = &arp.CompatArgs{DropV4: true} }},
-		"KeepV4 with DropV4":            withLayout(arp.LayoutV5, func(a *arp.LambdaArgs) { a.Compat = &arp.CompatArgs{KeepV4: true, DropV4: true} }),
-		"DropV4 on v4+v5":               withLayout(arp.LayoutV4V5, func(a *arp.LambdaArgs) { a.Compat = &arp.CompatArgs{DropV4: true} }),
-		"an unknown module's table":     withLayout(arp.LayoutV5, func(a *arp.LambdaArgs) { a.TableNames = map[arp.Module]string{"nope": "x"} }),
-		"a migration role that is not":  withLayout(arp.LayoutV5, func(a *arp.LambdaArgs) { a.MigrationRoleArn = arnp + "iam::" + account + ":user/x" }),
-		"a v4 secrets.layout under v5":  withLayout(arp.LayoutV5, func(a *arp.LambdaArgs) { a.Config += "secrets: {layout: v4}\n" }),
-		"the v4 table in a v5 document": withLayout(arp.LayoutV5, func(a *arp.LambdaArgs) { a.Config += "ports: {dynamodb: {table: t}}\n" }),
+		"no module tables":          estateWith(func(a *arp.LambdaArgs) { a.State.Tables = nil }),
+		"a missing module table":    estateWith(func(a *arp.LambdaArgs) { delete(a.State.Tables, arp.ModuleOIDC) }),
+		"an unknown module's table": estateWith(func(a *arp.LambdaArgs) { a.TableNames = map[arp.Module]string{"nope": "x"} }),
+		"another secrets.layout":    estateWith(func(a *arp.LambdaArgs) { a.Config += "secrets: {layout: v4}\n" }),
+		"a single table":            estateWith(func(a *arp.LambdaArgs) { a.Config += "ports: {dynamodb: {table: t}}\n" }),
 	} {
 		_, _, err := buildLambda(t, e)
 		if err == nil {
 			t.Errorf("%s: accepted", name)
 		}
 	}
-}
-
-func noTable(in *sluisconfig.Installation) *sluisconfig.Installation {
-	in.AWS.Table = ""
-	return in
 }
 
 // portsDynamoOf reads the rendered service document's ports.dynamodb.
@@ -226,27 +141,17 @@ func portsDynamoOf(t *testing.T, doc string) map[string]any {
 	return m.Ports.DynamoDB
 }
 
-// Only layout v5 writes `secrets.layout: v5` and the tables into the document,
-// from a Config and from an Installation; v4 and v4+v5 write neither.
-func TestOnlyLayoutV5WritesTheTablesIntoTheDocument(t *testing.T) {
-	for _, l := range []arp.Layout{"", arp.LayoutV4, arp.LayoutV4V5} {
-		rec, _ := mustLambda(t, withLayout(l))
-		doc := layerFiles(t, rec)["sluis/sluis.yaml"]
-		if s := secretsOf(t, doc); s["layout"] != nil {
-			t.Errorf("%q: secrets.layout = %v", l, s["layout"])
-		}
-		if d := portsDynamoOf(t, doc); d["tables"] != nil {
-			t.Errorf("%q: tables in the document: %v", l, d)
-		}
-	}
+// The library writes `secrets.layout: v5` and the tables into the document,
+// from a Config and from an Installation.
+func TestTheDocumentNamesTheLayoutAndTheTables(t *testing.T) {
 	rename := func(a *arp.LambdaArgs) { a.TableNames = map[arp.Module]string{arp.ModuleGoogle: "custom-google"} }
 	for name, c := range map[string]struct {
 		e        estate
 		instance string
 	}{
-		"config": {withLayout(arp.LayoutV5, rename), "staging"},
-		"installation": {withInstallation(noTable(exampleInstallation(t)), func(a *arp.LambdaArgs) {
-			withLayout(arp.LayoutV5, rename).mutate(a)
+		"config": {estateWith(rename), "staging"},
+		"installation": {withInstallation(exampleInstallation(t), func(a *arp.LambdaArgs) {
+			estateWith(rename).mutate(a)
 		}), "example"},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -263,65 +168,53 @@ func TestOnlyLayoutV5WritesTheTablesIntoTheDocument(t *testing.T) {
 				t.Errorf("tables = %v", d)
 			}
 			if d["table"] != nil {
-				t.Errorf("the v4 table beside the tables: %v", d)
+				t.Errorf("a single table beside the tables: %v", d)
 			}
 		})
 	}
 }
 
-// An installation with the v4 table is refused under v5: the layouts do not mix.
-func TestAnInstallationWithTheV4TableIsRefusedOnV5(t *testing.T) {
-	in := exampleInstallation(t)
-	if in.AWS.Table == "" {
-		t.Skip("the example installation names no table")
-	}
-	if _, _, err := buildLambda(t, withInstallation(in, func(a *arp.LambdaArgs) { withLayout(arp.LayoutV5).mutate(a) })); err == nil ||
-		!strings.Contains(err.Error(), "AWS.Table") {
-		t.Errorf("error: %v", err)
-	}
-}
-
-// The v5 parameters hold the very value of the v4 ones: the same generators.
-func TestTheV5ParametersAreTheSameValuesAtTheOIDCAddresses(t *testing.T) {
-	rec, out := mustLambda(t, withLayout(arp.LayoutV4V5))
+// The state secret and the recovery password are generated once each and
+// stored at the oidc module's addresses, as the secret store's document the
+// issuer reads, with the recovery account's verifier beside them; nothing else.
+func TestTheGeneratedParametersAreAtTheOIDCAddresses(t *testing.T) {
+	rec, out := mustLambda(t, estateWith())
 	byPath := map[string]declared{}
 	for _, p := range rec.ofType(ssmParameterType) {
 		byPath[prop(p, "name").StringValue()] = p
 	}
-	for v4, v5 := range map[string]string{
-		arp.StateSecretParameterName("staging"):      arp.StateSecretParameterNameV5("staging"),
-		arp.RecoveryPasswordParameterName("staging"): arp.RecoveryPasswordParameterNameV5("staging"),
-	} {
-		a, b := byPath[v4], byPath[v5]
-		if a.Name == "" || b.Name == "" {
-			t.Fatalf("parameters at %s and %s: %v", v4, v5, slices.Collect(mapKeys(byPath)))
-		}
-		// The v5 copy is the same text in the secret store's document, which is
-		// what the issuer reads there; the v4 one is the text itself.
-		if got := textOfV5Document(t, prop(b, "value")); got != secretText(t, prop(a, "value")) {
-			t.Errorf("%s and %s hold different values", v4, v5)
-		}
-		if prop(b, "type").StringValue() != "SecureString" || !prop(b, "overwrite").BoolValue() {
-			t.Errorf("%s: %v", v5, b.Inputs)
+	want := []string{
+		arp.StateSecretParameterNameV5("staging"), arp.RecoveryPasswordParameterNameV5("staging"),
+		arp.RecoveryVerifierParameterNameV5("staging"),
+	}
+	if got := slices.Sorted(mapKeys(byPath)); !slices.Equal(got, slices.Sorted(slices.Values(want))) {
+		t.Fatalf("parameters %v, want %v", got, want)
+	}
+	for _, n := range want {
+		p := byPath[n]
+		// The value is the secret store's document, which is what the issuer reads.
+		textOfV5Document(t, prop(p, "value"))
+		if prop(p, "type").StringValue() != "SecureString" || !prop(p, "overwrite").BoolValue() {
+			t.Errorf("%s: %v", n, p.Inputs)
 		}
 	}
 	if got := arp.StateSecretParameterNameV5("staging"); got != "/sluis/staging/internal/oidc/state-secret" {
-		t.Errorf("state secret v5 = %s", got)
+		t.Errorf("state secret = %s", got)
 	}
 	if got := arp.RecoveryPasswordParameterNameV5("staging"); got != "/sluis/staging/internal/oidc/recovery-password" {
-		t.Errorf("recovery v5 = %s", got)
+		t.Errorf("recovery = %s", got)
 	}
 	if got := arp.ConfigParameterPrefixV5("staging"); got != "/sluis/staging/internal/oidc" {
-		t.Errorf("prefix v5 = %s", got)
+		t.Errorf("prefix = %s", got)
 	}
-	// One generator each, however many parameters, and the recovery account's salt
-	// (docs/decisions/0076), which is kept with the password.
+	// One generator each, and the recovery account's salt (docs/decisions/0076),
+	// which is kept with the password.
 	if n := len(rec.ofType("random:index/randomBytes:RandomBytes")) + len(rec.ofType("random:index/randomPassword:RandomPassword")); n != 3 {
 		t.Errorf("%d generators", n)
 	}
-	// On v4+v5 the outputs still name the v4 addresses.
-	if out["stateSecretParameter"] != arp.StateSecretParameterName("staging") {
-		t.Errorf("stateSecretParameter = %s", out["stateSecretParameter"])
+	if out["stateSecretParameter"] != arp.StateSecretParameterNameV5("staging") ||
+		out["recoveryPasswordParameter"] != arp.RecoveryPasswordParameterNameV5("staging") {
+		t.Errorf("outputs: %s, %s", out["stateSecretParameter"], out["recoveryPasswordParameter"])
 	}
 }
 
@@ -335,124 +228,15 @@ func mapKeys[K comparable, V any](m map[K]V) func(func(K) bool) {
 	}
 }
 
-// previewDiff is what a preview would say between two programs, from the resources
-// the mocks recorded: a resource (type and logical name) only after is created,
-// only before is deleted, and in both with another physical name is replaced.
-type previewDiff struct{ created, deleted, replaced []string }
-
-func previewShape(before, after *recorder, typ string) previewDiff {
-	index := func(r *recorder) map[string]string {
-		m := map[string]string{}
-		for _, d := range r.ofType(typ) {
-			m[d.Name] = prop(d, "name").StringValue()
-		}
-		return m
-	}
-	b, a := index(before), index(after)
-	var s previewDiff
-	for n, name := range a {
-		old, had := b[n]
-		switch {
-		case !had:
-			s.created = append(s.created, n)
-		case old != name:
-			s.replaced = append(s.replaced, n)
-		}
-	}
-	for n := range b {
-		if _, kept := a[n]; !kept {
-			s.deleted = append(s.deleted, n)
-		}
-	}
-	slices.Sort(s.created)
-	slices.Sort(s.deleted)
-	slices.Sort(s.replaced)
-	return s
-}
-
-func (s previewDiff) String() string {
-	return strings.Join([]string{
-		strconv.Itoa(len(s.created)) + " created", strconv.Itoa(len(s.deleted)) + " deleted", strconv.Itoa(len(s.replaced)) + " replaced",
-	}, ", ")
-}
-
-// An estate goes v4, v4+v5, v5: the first apply creates the two v5 parameters
-// and deletes or replaces nothing; the flip to v5 deletes the two v4 parameters
-// (nothing reads them there) unless Compat.KeepV4, which deletes nothing.
-func TestThePreviewShapeAcrossTheLayouts(t *testing.T) {
-	build := func(e estate) *recorder { rec, _ := mustLambda(t, e); return rec }
-	v4 := build(withLayout(arp.LayoutV4))
-	window := build(withLayout(arp.LayoutV4V5))
-	kept := build(withLayout(arp.LayoutV5, func(a *arp.LambdaArgs) { a.Compat = &arp.CompatArgs{KeepV4: true} }))
-	flipped := build(withLayout(arp.LayoutV5))
-	dropped := build(withLayout(arp.LayoutV5, func(a *arp.LambdaArgs) { a.Compat = &arp.CompatArgs{DropV4: true} }))
-
-	for _, c := range []struct {
-		name          string
-		before, after *recorder
-		want          string
-	}{
-		{"v4 -> v4+v5", v4, window, "3 created, 0 deleted, 0 replaced"},
-		{"v4+v5 -> v5 + KeepV4", window, kept, "0 created, 0 deleted, 0 replaced"},
-		{"v4+v5 -> v5", window, flipped, "0 created, 2 deleted, 0 replaced"},
-		{"v5 + KeepV4 -> v5", kept, flipped, "0 created, 2 deleted, 0 replaced"},
-		{"v5 -> v5 + DropV4", flipped, dropped, "0 created, 0 deleted, 0 replaced"},
-		{"v4+v5 -> v5 + DropV4", window, dropped, "0 created, 2 deleted, 0 replaced"},
-	} {
-		if got := previewShape(c.before, c.after, ssmParameterType).String(); got != c.want {
-			t.Errorf("%s: %s, want %s", c.name, got, c.want)
-		}
-	}
-	got := previewShape(window, flipped, ssmParameterType)
-	if !slices.Equal(got.deleted, []string{"staging-recovery-password-internal", "staging-state-secret-internal"}) {
-		t.Errorf("deleted: %v", got.deleted)
-	}
-	// The v4 layout has no module functions: the flip to a layout with the
-	// per-module tables creates the four (a function, a role and a policy each)
-	// and replaces and deletes nothing of the issuer's.
-	for _, typ := range []string{fnType, policyType, "aws:iam/role:Role"} {
-		s := previewShape(v4, window, typ)
-		if len(s.created) != 4 || len(s.deleted)+len(s.replaced) != 0 {
-			t.Errorf("%s: %s", typ, s)
-		}
-		for _, n := range s.created {
-			if strings.HasPrefix(n, "staging-issuer") {
-				t.Errorf("%s: the issuer's %s is created", typ, n)
-			}
-		}
-		if s := previewShape(window, flipped, typ); len(s.created)+len(s.deleted)+len(s.replaced) != 0 {
-			t.Errorf("%s: v4+v5 -> v5: %s", typ, s)
-		}
-	}
-	if s := previewShape(v4, window, "aws:dynamodb/table:Table"); len(s.created)+len(s.deleted)+len(s.replaced) != 0 {
-		t.Errorf("tables: %s", s)
-	}
-	// A v5 estate has no v4 parameters by default, with DropV4 (a no-op) too;
-	// KeepV4 declares them beside the v5 pair; the v4 layouts are unchanged.
-	for name, r := range map[string]*recorder{"default": flipped, "DropV4": dropped} {
-		if n := len(r.ofType(ssmParameterType)); n != 3 {
-			t.Errorf("a v5 estate (%s) has %d parameters, want the three v5 ones (the state secret, the recovery password and its verifier)", name, n)
-		}
-	}
-	for name, c := range map[string]struct {
-		r *recorder
-		n int
-	}{"v5 + KeepV4": {kept, 5}, "v4+v5": {window, 5}, "v4": {v4, 2}} {
-		if n := len(c.r.ofType(ssmParameterType)); n != c.n {
-			t.Errorf("%s has %d parameters, want %d", name, n, c.n)
-		}
-	}
-}
-
 // A process that mints its blob credentials from a Cloudflare preset still
 // reads no minter parameter when it is the issuer: the cloudflare function mints.
-func TestAPresetBlobCredentialLeavesTheIssuerWithoutTheMinterParameterOnV5(t *testing.T) {
+func TestAPresetBlobCredentialLeavesTheIssuerWithoutTheMinterParameter(t *testing.T) {
 	const r2 = "https://0123456789abcdef0123456789abcdef.r2.cloudflarestorage.com"
 	cfg := "issuerURL: https://x.example\n" +
 		"cloudflare: {accounts: {main: {id: 0123456789abcdef0123456789abcdef, minter: internal/cloudflare/main/minter}}, " +
 		"presets: {blobs: {account: main, prototype: proto-r2-0001, description: R2, lifetime: 15m, rotation: 5m, endpoint: '" + r2 + "'}}}\n" +
 		"ports: {blob: {adapter: s3, s3: {bucket: b, endpoint: '" + r2 + "', credentials: {preset: blobs}}}}\n"
-	e := withLayout(arp.LayoutV5, func(a *arp.LambdaArgs) { a.AllowEndpoints = true })
+	e := estateWith(func(a *arp.LambdaArgs) { a.AllowEndpoints = true })
 	e.config = cfg
 	st := policyOf(t, e)
 	// The issuer asks the cloudflare function to mint: it holds no reference to
@@ -468,107 +252,57 @@ func TestAPresetBlobCredentialLeavesTheIssuerWithoutTheMinterParameterOnV5(t *te
 		}
 	}
 	// Without the preset, nothing of the module.
-	for _, r := range resourcesOf(policyOf(t, withLayout(arp.LayoutV5))) {
+	for _, r := range resourcesOf(policyOf(t, estateWith())) {
 		if strings.Contains(r, "/internal/cloudflare") {
 			t.Errorf("a Cloudflare grant without a preset: %s", r)
 		}
 	}
-	// On v4 the document is the v4 one and nothing is added.
-	v4 := estate{config: cfg, mutate: func(a *arp.LambdaArgs) { a.AllowEndpoints = true }}
-	if slices.Contains(sids(policyOf(t, v4)), "SluisCrossCloudflareMinter") {
-		t.Error("the v5 cross-grant on layout v4")
-	}
 }
 
-// Only the migration role reads the legacy table, and only reads it; nothing is
-// attached without the argument.
-func TestTheMigrationRoleReadsTheLegacyTableAndNothingElse(t *testing.T) {
-	roleArn := arnp + "iam::" + account + ":role/ops/migration"
-	rec, _ := mustLambda(t, withLayout(arp.LayoutV5))
-	if rec.has(policyType, "staging-migration-legacy-read") {
-		t.Error("a policy is attached to a role nobody named")
-	}
-	rec, _ = mustLambda(t, withLayout(arp.LayoutV5, func(a *arp.LambdaArgs) {
-		a.MigrationRoleArn = roleArn
-		a.State.KeyArn = pulumi.String(arnp + "kms:" + region + ":" + account + ":key/tables")
-	}))
-	p := rec.one(t, policyType, "staging-migration-legacy-read")
-	if prop(p, "role").StringValue() != "migration" {
-		t.Errorf("role = %v", prop(p, "role"))
-	}
-	st := statements(t, prop(p, "policy").StringValue())
-	g := grants(st)
-	if got := resourcesOf(st); !slices.Contains(got, legacyArn) {
-		t.Errorf("resources: %v", got)
-	}
-	for _, w := range []string{"dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem", "dynamodb:BatchWriteItem", "kms:Encrypt", "kms:GenerateDataKey"} {
-		if _, has := g[w]; has {
-			t.Errorf("the migration role may %s", w)
-		}
-	}
-	for _, w := range []string{"dynamodb:GetItem", "dynamodb:Query", "dynamodb:Scan", "dynamodb:DescribeTable", "kms:Decrypt"} {
-		if _, has := g[w]; !has {
-			t.Errorf("the migration role may not %s", w)
-		}
-	}
-	// The function's own role has no part of the legacy table on v5.
-	for _, r := range resourcesOf(policyOf(t, withLayout(arp.LayoutV5, func(a *arp.LambdaArgs) { a.MigrationRoleArn = roleArn }))) {
-		if r == legacyArn {
-			t.Error("the function's role reads the legacy table on v5")
-		}
-	}
-}
-
-// The maintenance partition is denied for writes in one statement: on the legacy
-// table (v4, and v4+v5 beside the module tables) and the module tables (v5), and
-// the role still writes its other records.
-func TestTheMaintenanceDenyCoversTheTablesOfEveryLayout(t *testing.T) {
-	var mods []string
+// The maintenance partition is denied for writes in one statement on the
+// module tables the issuer's role names, and the role still writes its other
+// records.
+func TestTheMaintenanceDenyCoversTheModuleTables(t *testing.T) {
+	var want []string
 	for _, m := range []string{"oidc", "google"} {
-		mods = append(mods, tableArn("sluis-staging-"+m))
+		want = append(want, tableArn("sluis-staging-"+m))
 	}
-	for l, want := range map[arp.Layout][]string{
-		arp.LayoutV4:   {legacyArn},
-		arp.LayoutV5:   mods,
-		arp.LayoutV4V5: append([]string{legacyArn}, mods...),
-	} {
-		st := policyOf(t, withLayout(l))
-		var denies []map[string]any
-		for _, s := range st {
-			// The passwords' deny (docs/decisions/0076) is the next test's.
-			if s["Effect"] == "Deny" && s["Sid"] != "SluisDenyPasswords" && s["Sid"] != "SluisDenyPasswordsKey" {
-				denies = append(denies, s)
+	st := policyOf(t, estateWith())
+	var denies []map[string]any
+	for _, s := range st {
+		// The passwords' deny (docs/decisions/0076) is the next test's.
+		if s["Effect"] == "Deny" && s["Sid"] != "SluisDenyPasswords" && s["Sid"] != "SluisDenyPasswordsKey" {
+			denies = append(denies, s)
+		}
+	}
+	if len(denies) != 1 || denies[0]["Sid"] != "SluisMaintenanceDeny" {
+		t.Fatalf("%v", denies)
+	}
+	got := strs(denies[0]["Resource"])
+	slices.Sort(got)
+	slices.Sort(want)
+	if !slices.Equal(got, want) {
+		t.Errorf("deny on %v, want %v", got, want)
+	}
+	cond := denies[0]["Condition"].(map[string]any)["ForAnyValue:StringEquals"].(map[string]any)
+	if k := strs(cond["dynamodb:LeadingKeys"]); !slices.Equal(k, []string{"maintenance"}) {
+		t.Errorf("deny on keys %v", k)
+	}
+	// The other records are still written: an allow of PutItem on each table.
+	allowed := map[string]bool{}
+	for _, s := range st {
+		if s["Effect"] == "Allow" && slices.Contains(strs(s["Action"]), "dynamodb:PutItem") {
+			for _, r := range strs(s["Resource"]) {
+				allowed[r] = true
 			}
 		}
-		if len(denies) != 1 || denies[0]["Sid"] != "SluisMaintenanceDeny" {
-			t.Fatalf("%s: %v", l, denies)
-		}
-		got := strs(denies[0]["Resource"])
-		slices.Sort(got)
-		slices.Sort(want)
-		if !slices.Equal(got, want) {
-			t.Errorf("%s: deny on %v, want %v", l, got, want)
-		}
-		cond := denies[0]["Condition"].(map[string]any)["ForAnyValue:StringEquals"].(map[string]any)
-		if k := strs(cond["dynamodb:LeadingKeys"]); !slices.Equal(k, []string{"maintenance"}) {
-			t.Errorf("%s: deny on keys %v", l, k)
-		}
-		// The other records are still written: an allow of PutItem on each table.
-		allowed := map[string]bool{}
-		for _, s := range st {
-			if s["Effect"] == "Allow" && slices.Contains(strs(s["Action"]), "dynamodb:PutItem") {
-				for _, r := range strs(s["Resource"]) {
-					allowed[r] = true
-				}
-			}
-		}
-		// The issuer writes its own (oidc) table and the legacy one, and reads the
-		// providers': it is denied the flag on those too, and written no record.
-		for _, w := range want {
-			provider := slices.Contains([]string{tableArn("sluis-staging-github"), tableArn("sluis-staging-slack"), tableArn("sluis-staging-google")}, w)
-			if allowed[w] == provider {
-				t.Errorf("%s: write on %s = %v", l, w, allowed[w])
-			}
+	}
+	// The issuer writes its own (oidc) table and reads the providers': it is
+	// denied the flag on those too, and written no record.
+	for _, w := range want {
+		provider := slices.Contains([]string{tableArn("sluis-staging-github"), tableArn("sluis-staging-slack"), tableArn("sluis-staging-google")}, w)
+		if allowed[w] == provider {
+			t.Errorf("write on %s = %v", w, allowed[w])
 		}
 	}
 }
@@ -584,21 +318,21 @@ func secretText(t *testing.T, v resource.PropertyValue) string {
 	return v.StringValue()
 }
 
-// textOfV5Document reads a layout v5 parameter's value the way the issuer does:
+// textOfV5Document reads a generated parameter's value the way the issuer does:
 // through the secret store's byte codec (a raw value is refused there).
 func textOfV5Document(t *testing.T, v resource.PropertyValue) string {
 	t.Helper()
 	raw, err := state.Raw().Unmarshal([]byte(secretText(t, v)))
 	if err != nil {
-		t.Fatalf("the layout v5 parameter is not the secret store's document: %v", err)
+		t.Fatalf("the parameter is not the secret store's document: %v", err)
 	}
 	return string(raw)
 }
 
-// The credentials ref of external blobs is a layout v4 address, internal/blobs/r2,
-// that layout v5 does not have: the library refuses it there and names the one to
-// use, and leaves it alone where the document is v4.
-func TestALayoutV4BlobCredentialsRefIsRefusedOnV5(t *testing.T) {
+// The credentials ref of external blobs begins with a module: one that does
+// not, internal/blobs/r2, is an address the secrets layout does not have, and
+// the library refuses it and names the one to use.
+func TestABlobCredentialsRefOutsideAModuleIsRefused(t *testing.T) {
 	blobs := func(ref string) func(*arp.LambdaArgs) {
 		return func(a *arp.LambdaArgs) {
 			noDomain(a)
@@ -607,40 +341,28 @@ func TestALayoutV4BlobCredentialsRefIsRefusedOnV5(t *testing.T) {
 			a.Storage = &arp.StorageGrant{External: e}
 		}
 	}
-	_, _, err := buildLambda(t, withLayout(arp.LayoutV5, blobs("internal/blobs/r2")))
+	_, _, err := buildLambda(t, estateWith(blobs("internal/blobs/r2")))
 	if err == nil || !strings.Contains(err.Error(), `"internal/google/blobs-r2"`) {
-		t.Fatalf("v5 with internal/blobs/r2: %v, want a refusal naming internal/google/blobs-r2", err)
+		t.Fatalf("internal/blobs/r2: %v, want a refusal naming internal/google/blobs-r2", err)
 	}
-	for name, e := range map[string]estate{
-		"v5, v5 ref": withLayout(arp.LayoutV5, blobs("internal/google/blobs-r2")),
-		"v4+v5":      withLayout(arp.LayoutV4V5, blobs("internal/blobs/r2")),
-		"v4":         withLayout(arp.LayoutV4, blobs("internal/blobs/r2")),
-	} {
-		if _, _, err := buildLambda(t, e); err != nil {
-			t.Errorf("%s: %v", name, err)
-		}
-	}
-	if got := arp.V5CredentialsRef("internal/blobs/r2"); got != "internal/google/blobs-r2" {
-		t.Errorf("V5CredentialsRef = %s", got)
-	}
-	if got := arp.V5CredentialsRef("internal/google/blobs-r2"); got != "internal/google/blobs-r2" {
-		t.Errorf("V5CredentialsRef of a v5 ref = %s", got)
+	if _, _, err := buildLambda(t, estateWith(blobs("internal/google/blobs-r2"))); err != nil {
+		t.Errorf("internal/google/blobs-r2: %v", err)
 	}
 }
 
-// The document the library renders on layout v5 for an estate whose blobs are
+// The document the library renders for an estate whose blobs are
 // on an S3-compatible store (R2) is one the oidc process starts on, and the
 // role of the function reads exactly the parameter that document names. The
 // runtime half is the root module's own test of its config validation, run
 // here over the rendered file: the library cannot import the runtime's
 // internals, and a test that stopped at the library's own checks is what let
 // the library, the migration and the runtime name three addresses.
-func TestTheRenderedV5DocumentStartsTheRuntimeAndTheRoleReadsItsCredential(t *testing.T) {
+func TestTheRenderedDocumentStartsTheRuntimeAndTheRoleReadsItsCredential(t *testing.T) {
 	const ref = "internal/google/blobs-r2"
-	rec, _ := mustLambda(t, withLayout(arp.LayoutV5, func(a *arp.LambdaArgs) {
+	rec, _ := mustLambda(t, estateWith(func(a *arp.LambdaArgs) {
 		noDomain(a)
 		e := r2()
-		e.CredentialsRef = arp.V5CredentialsRef("internal/blobs/r2")
+		e.CredentialsRef = ref
 		a.Storage = &arp.StorageGrant{External: e}
 	}))
 	doc := layerFiles(t, rec)["sluis/sluis.yaml"]

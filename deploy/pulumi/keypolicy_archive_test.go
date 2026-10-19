@@ -22,9 +22,9 @@ func archiveOf(st []map[string]any) []map[string]any {
 // and uses no KMS key, so they are accepted, in any combination, and add no
 // statement.
 func TestTheDeprecatedArchiveKeyOptionsAreAcceptedAndAddNothing(t *testing.T) {
-	base := kpSids(kpStatements(t, kpArgs(LayoutV5)))
+	base := kpSids(kpStatements(t, kpArgs()))
 	for _, c := range []struct{ backup, restore bool }{{true, false}, {true, true}, {false, true}} {
-		a := kpArgs(LayoutV5)
+		a := kpArgs()
 		a.BackupArchive, a.RestoreArchive = c.backup, c.restore
 		st, err := SluisKeyPolicyStatements(a)
 		if err != nil {
@@ -37,7 +37,7 @@ func TestTheDeprecatedArchiveKeyOptionsAreAcceptedAndAddNothing(t *testing.T) {
 			t.Errorf("%+v changed the statements:\n got %v\nwant %v", c, got, base)
 		}
 	}
-	a := kpArgs(LayoutV5)
+	a := kpArgs()
 	a.BackupArchive = true
 	a.Roles = slices.DeleteFunc(slices.Clone(a.Roles), func(r KeyRole) bool { return r.Role.Name == RoleBackup })
 	if _, err := SluisKeyPolicyStatements(a); err != nil {
@@ -49,7 +49,7 @@ func TestTheDeprecatedArchiveKeyOptionsAreAcceptedAndAddNothing(t *testing.T) {
 // identity through SSM, and no other role.
 func TestTheKeyPolicyDeniesTheBackupRoleTheRestoreIdentity(t *testing.T) {
 	var deny map[string]any
-	for _, s := range kpStatements(t, kpArgs(LayoutV5)) {
+	for _, s := range kpStatements(t, kpArgs()) {
 		if s["Sid"] == "SluisKeyDenyRestoreIdentity" {
 			deny = s
 		}
@@ -80,7 +80,7 @@ func TestAdminsReadTheRestoreIdentityAndNoOneElseGainsIt(t *testing.T) {
 		return strings.Contains(string(raw), ident)
 	}
 	var granted []string
-	for _, s := range kpStatements(t, kpArgs(LayoutV5)) {
+	for _, s := range kpStatements(t, kpArgs()) {
 		if s["Effect"] == "Allow" && holds(s) {
 			granted = append(granted, s["Sid"].(string))
 		}
@@ -88,7 +88,7 @@ func TestAdminsReadTheRestoreIdentityAndNoOneElseGainsIt(t *testing.T) {
 	if !reflect.DeepEqual(granted, []string{"SluisKeyAdminReads"}) {
 		t.Fatalf("statements that name the restore identity explicitly: %v", granted)
 	}
-	reads := kpBySid(t, kpStatements(t, kpArgs(LayoutV5)), "SluisKeyAdminReads")
+	reads := kpBySid(t, kpStatements(t, kpArgs()), "SluisKeyAdminReads")
 	if !reflect.DeepEqual(reads["Action"], []string{"kms:Decrypt"}) {
 		t.Errorf("admin reads actions: %v", reads["Action"])
 	}
@@ -98,7 +98,7 @@ func TestAdminsReadTheRestoreIdentityAndNoOneElseGainsIt(t *testing.T) {
 		t.Errorf("admin reads condition: %v", c)
 	}
 	// The deny is still about the backup role alone, so it never reaches an admin.
-	for _, s := range kpStatements(t, kpArgs(LayoutV5)) {
+	for _, s := range kpStatements(t, kpArgs()) {
 		if s["Sid"] == "SluisKeyDenyRestoreIdentity" {
 			who := s["Condition"].(map[string]any)["ArnEquals"].(map[string]any)["aws:PrincipalArn"]
 			if !reflect.DeepEqual(who, []string{kpBackup}) {
@@ -107,7 +107,7 @@ func TestAdminsReadTheRestoreIdentityAndNoOneElseGainsIt(t *testing.T) {
 		}
 	}
 	// Without a backup role there is no identity parameter, so no grant for it.
-	a := kpArgs(LayoutV5)
+	a := kpArgs()
 	a.Roles = slices.DeleteFunc(slices.Clone(a.Roles), func(r KeyRole) bool { return r.Role.Name == RoleBackup })
 	for _, s := range kpStatements(t, a) {
 		if holds(s) {

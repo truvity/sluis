@@ -333,7 +333,7 @@ func (c *BackupCommon) plan(role string) (*backupPlan, error) {
 		errs = append(errs, errors.New("BlobBucketName is required (ports.blob.s3.bucket)"))
 	}
 	if p.State == nil {
-		errs = append(errs, errors.New("State is required (States.Grant())"))
+		errs = append(errs, fmt.Errorf("%s is required (States.Grant())", "State"))
 	} else {
 		for _, m := range Modules() {
 			if p.State.Tables[m] == nil {
@@ -550,7 +550,7 @@ func (p *backupPlan) document(recipients []string) (string, error) {
 	if b := p.Storage.External; b != nil {
 		pb["blob"] = b.portsBlob(RoleBackup)
 	}
-	secrets := map[string]any{"source": "ssm", "root": SSMRoot(p.Instance), "region": p.Region, "layout": string(LayoutV5)}
+	secrets := map[string]any{"source": "ssm", "root": SSMRoot(p.Instance), "region": p.Region, "layout": secretsLayout}
 	if p.ParameterKeyArn != "" {
 		secrets["kmsKeyId"] = p.ParameterKeyArn
 	}

@@ -159,7 +159,7 @@ func ModuleRoleStatements(env ModuleEnv, role Role) ([]map[string]any, error) {
 	var crossArns []string
 	if own[ModuleGoogle] {
 		// The Google module holds the OAuth client (consent, sign-in, reopening a
-		// workspace), whose secrets layout v5 keeps in the issuer's namespace
+		// workspace), whose secrets the layout keeps in the issuer's namespace
 		// (`internal/oidc/signin/<provider>/...`): the module reads those, and
 		// nothing else of oidc.
 		refs := parameterArnsUnder(env.Region, env.Account, signInClientPrefix(env.Modules))
@@ -578,12 +578,11 @@ func parameterKeyStatementsCross(env ModuleEnv, actions, arns []string) []statem
 // `sluis maintenance on|off|status`: an operator's role, never a function's.
 // It reads, writes and deletes the one maintenance item of each table
 // (partition [MaintenancePartition]) and nothing else of them, so that it can
-// set and lift the migration freeze and cannot read or change a session, a
+// set and lift the maintenance freeze and cannot read or change a session, a
 // record or a secret. The function roles keep their [sidMaintenanceDeny];
 // this is the other half of that deny.
 //
-// tables are the table ARNs: the legacy table on layout v4, and the module
-// tables on v5 (env.TableArns, in module order). The table key is used only
+// tables are the module tables' ARNs (env.TableArns, in module order). The table key is used only
 // through DynamoDB.
 func MaintenanceOperatorStatements(tables []string, tableKeyArn string) ([]map[string]any, error) {
 	if len(tables) == 0 {
@@ -611,8 +610,8 @@ func MaintenanceOperatorStatements(tables []string, tableKeyArn string) ([]map[s
 }
 
 // OperatorAuditStatements are the statements that let the principal that runs
-// an audited operator command (`sluis maintenance on|off`, `sluis migrate v5
-// copy|prune`) deliver the command's audit record. Those commands refuse when
+// an audited operator command (`sluis maintenance on|off`) deliver the
+// command's audit record. Those commands refuse when
 // the record cannot be delivered, so the operator's role needs what the
 // function roles have: sqs:SendMessage on the audit queue, and nothing more.
 // If the queue is encrypted with a customer-managed key, the operator also

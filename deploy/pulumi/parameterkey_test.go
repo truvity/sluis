@@ -81,7 +81,7 @@ func TestAModuleDocumentOfTheEstateNamesTheParameterKey(t *testing.T) {
 	}{"names no key": {doc(""), true}, "names another": {doc("alias/other"), true}, "names the key": {doc(paramKey), false},
 		// An alias and the ARN of the key behind it are different ids: compared as text.
 		"names the key behind the ARN as an alias": {doc("alias/params"), true}} {
-		_, _, err := buildLambda(t, v5Estate(func(a *arp.LambdaArgs) {
+		_, _, err := buildLambda(t, estateWith(func(a *arp.LambdaArgs) {
 			noDomain(a)
 			a.Modules = map[string]arp.ModuleArgs{"github": {Document: c.doc}}
 		}))

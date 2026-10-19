@@ -52,7 +52,7 @@ func webIdentityStatements(st []map[string]any) []map[string]any {
 }
 
 func TestTheRoutingTableIsHeldByTheLibrary(t *testing.T) {
-	rec, _ := mustLambda(t, v5Estate(func(a *arp.LambdaArgs) { a.WebIdentityAudience = contractAudience }))
+	rec, _ := mustLambda(t, estateWith(func(a *arp.LambdaArgs) { a.WebIdentityAudience = contractAudience }))
 	backup, _ := mustBackup(t, nil)
 	calls := arp.ModuleCalls()
 	if len(calls) < 10 {
@@ -108,8 +108,8 @@ func TestTheRoutingTableIsHeldByTheLibrary(t *testing.T) {
 // A role that appears in no row as a caller with a web identity holds no token
 // grant: the permission is exactly the table's.
 func TestOnlyTheCallersOfTheTableHoldAWebIdentityGrant(t *testing.T) {
-	rec, _ := mustLambda(t, v5Estate(func(a *arp.LambdaArgs) { a.WebIdentityAudience = contractAudience }))
-	want := map[string]bool{"issuer": true} // the controllers run in it on layout v4, and it mints for its own telemetry
+	rec, _ := mustLambda(t, estateWith(func(a *arp.LambdaArgs) { a.WebIdentityAudience = contractAudience }))
+	want := map[string]bool{"issuer": true} // it mints for its own telemetry
 	for _, c := range arp.ModuleCalls() {
 		if c.WebIdentity {
 			want[c.Caller] = true

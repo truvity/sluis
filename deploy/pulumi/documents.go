@@ -26,14 +26,15 @@ const (
 
 // The names of the configuration secrets this library writes.
 const (
-	stateSecretName      = "issuer/state-secret"
-	recoveryPasswordName = "recovery/password"
-	// The v5 addresses of the same two secrets, below internal/: the document
-	// keeps naming the v4 spellings, and a process on layout v5 reads these.
+	// stateSecretName is the state secret's name in the service document
+	// (`signingKey.*.stateSecret`).
+	stateSecretName = "issuer/state-secret"
+	// The addresses of the state secret and the recovery password below
+	// internal/, which the service reads.
 	stateSecretNameV5      = "oidc/state-secret"
 	recoveryPasswordNameV5 = "oidc/recovery-password"
-	// The recovery account's SRP verifier, which the service reads on layout v5
-	// in place of the password, and the conformance account's pair
+	// The recovery account's SRP verifier, which the service reads in place of
+	// the password, and the conformance account's pair
 	// (docs/decisions/0076).
 	recoveryVerifierName      = "recovery/verifier"
 	recoveryVerifierNameV5    = "oidc/recovery-verifier"
@@ -122,16 +123,16 @@ func renderDocuments(a *LambdaArgs) (map[string]string, error) {
 
 // declaredParameters is the SSM parameters the rendered documents declare, as
 // names below the installation's root, sorted: the set the post-deploy check
-// looks for. A secret of layout v4 is `internal/config/<name>` (an address a
-// document gives, `internal/<module>/<name>`, as it is); a document that
-// selects another layout names each secret by its kind and subject, which is
-// all the library knows of where that layout puts it.
+// looks for. An address a document gives (`internal/<module>/<name>`) is as it
+// is; the secrets the library writes are at their addresses; any other is
+// named by its kind and subject, which is all the library knows of where the
+// layout puts it.
 func declaredParameters(docs map[string]string) ([]string, error) {
 	svc, pol, err := loadDocuments(docs)
 	if err != nil {
 		return nil, err
 	}
-	return parameterNames(svc.Secrets, sluisconfig.DeclaredSecrets(svc, pol)), nil
+	return parameterNames(sluisconfig.DeclaredSecrets(svc, pol)), nil
 }
 
 // moduleParameters is declaredParameters for a module function's own document:
@@ -142,28 +143,24 @@ func moduleParameters(module, doc, policy string) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("sluispulumi: the %s document: %w", module, err)
 	}
-	return parameterNames(&sluisconfig.Secrets{Layout: string(LayoutV5)}, declared), nil
+	return parameterNames(declared), nil
 }
 
-// parameterNames are the declared secrets as names below the root, sorted, for
-// the layout the document's `secrets` section selects.
-func parameterNames(secrets *sluisconfig.Secrets, declared []sluisconfig.DeclaredSecret) []string {
-	v4 := secrets == nil || secrets.Layout == "" || secrets.Layout == "v4"
+// parameterNames are the declared secrets as names below the root, sorted.
+func parameterNames(declared []sluisconfig.DeclaredSecret) []string {
 	names := []string{}
 	for _, d := range declared {
 		switch {
 		case d.Ref:
 			names = append(names, d.Name)
-		case !v4 && d.Kind == "state-secret":
+		case d.Kind == "state-secret":
 			names = append(names, "internal/"+stateSecretNameV5)
-		case !v4 && d.Kind == "recovery-password":
+		case d.Kind == "recovery-password":
 			names = append(names, "internal/"+recoveryPasswordNameV5)
-		case !v4 && d.Kind == "recovery-verifier":
+		case d.Kind == "recovery-verifier":
 			names = append(names, "internal/"+recoveryVerifierNameV5)
-		case !v4 && d.Kind == "conformance-verifier":
+		case d.Kind == "conformance-verifier":
 			names = append(names, "internal/"+conformanceVerifierNameV5)
-		case v4 && d.Name != "":
-			names = append(names, "internal/config/"+d.Name)
 		case d.Subject != "":
 			names = append(names, d.Kind+"/"+d.Subject)
 		default:
@@ -182,13 +179,10 @@ func parameterNames(secrets *sluisconfig.Secrets, declared []sluisconfig.Declare
 // Cloudflare presets' (see [clientEndpoint]) it is what a document may carry
 // without AllowEndpoints.
 func ownRuntime(doc map[string]any, a *LambdaArgs) (bool, error) {
-	added := false
-	if a.Layout == LayoutV5 {
-		if err := ownLayoutV5(doc, a); err != nil {
-			return false, err
-		}
-		added = true
+	if err := ownStateTables(doc, a); err != nil {
+		return false, err
 	}
+	added := true
 	if a.Keys != nil {
 		// A document rendered from an Installation already carries the library's
 		// own block (withKeys), and that alone may be there.
@@ -214,10 +208,8 @@ func ownRuntime(doc map[string]any, a *LambdaArgs) (bool, error) {
 		added = true
 	}
 	if b := a.Storage.External; b != nil {
-		if a.Layout == LayoutV5 {
-			if err := b.checkLayoutV5(); err != nil {
-				return false, err
-			}
+		if err := b.checkModuleRef(); err != nil {
+			return false, err
 		}
 		ports, err := child(doc, "Config", "ports")
 		if err != nil {
@@ -268,30 +260,18 @@ func (a LambdaArgs) withInstallation() (LambdaArgs, error) {
 	default:
 		errs = append(errs, fmt.Errorf("sluispulumi: LambdaArgs.Installation.Shape is %q: the library deploys shape lambda", in.Shape))
 	}
-	if a.Layout == LayoutV5 && aws.Table != "" {
-		errs = append(errs, errors.New("sluispulumi: LambdaArgs.Installation.AWS.Table is the layout v4 table and Layout is v5: "+
-			"leave it out, the library renders ports.dynamodb.tables from the State grant"))
+	if in.Secrets != nil && in.Secrets.Layout != "" && in.Secrets.Layout != secretsLayout {
+		errs = append(errs, fmt.Errorf("sluispulumi: LambdaArgs.Installation: secrets.layout is %q: the library writes %q, the only layout; "+
+			"leave it out", in.Secrets.Layout, secretsLayout))
 	}
-	if in.Secrets != nil && in.Secrets.Layout != "" {
-		want := string(LayoutV4)
-		if a.Layout == LayoutV5 {
-			want = string(LayoutV5)
-		}
-		if in.Secrets.Layout != want {
-			errs = append(errs, fmt.Errorf("sluispulumi: LambdaArgs.Layout is %q and the installation's secrets.layout is %q: say it once "+
-				"(the library writes secrets.layout: v5 for Layout v5 and leaves v4 for v4 and v4+v5)", a.Layout, in.Secrets.Layout))
-		}
+	// The renderer names the recovery account's verifier, and not the password,
+	// on this layout (docs/decisions/0076).
+	layered := sluisconfig.Secrets{}
+	if in.Secrets != nil {
+		layered = *in.Secrets
 	}
-	if a.Layout == LayoutV5 {
-		// The renderer names the recovery account's verifier, and not the password,
-		// on layout v5 (docs/decisions/0076).
-		sec := sluisconfig.Secrets{}
-		if in.Secrets != nil {
-			sec = *in.Secrets
-		}
-		sec.Layout = string(LayoutV5)
-		in.Secrets = &sec
-	}
+	layered.Layout = secretsLayout
+	in.Secrets = &layered
 	fill("Instance", in.Instance, a.Instance, func(v string) { in.Instance = v })
 	fill("Region", aws.Region, a.Region, func(v string) { aws.Region = v })
 	fill("AccountID", aws.Account, a.AccountID, func(v string) { aws.Account = v })
@@ -376,32 +356,24 @@ func (a LambdaArgs) withInstallation() (LambdaArgs, error) {
 	if err := withAudit(&in, plan); err != nil {
 		return a, err
 	}
-	if a.hasModuleFunctions() {
-		// A function per module: the issuer's document calls them and each has a
-		// document of its own.
-		if err := a.withFunctionNames(&in); err != nil {
-			return a, err
-		}
-		set := ModuleSet{Instance: a.Instance, Tables: a.TableNames}
-		tables := map[string]string{}
-		for _, m := range Modules() {
-			tables[string(m)] = set.TableName(m)
-		}
-		docs, err := sluisconfig.RenderModules(&in, sluisconfig.ModuleOptions{Tables: tables})
-		if err != nil {
-			return a, fmt.Errorf("sluispulumi: LambdaArgs.Installation: %w", err)
-		}
-		a.Config, a.Policy = string(docs.Issuer), string(docs.Policy)
-		if a.moduleDocs, err = a.ownModuleDocuments(docs.Modules); err != nil {
-			return a, err
-		}
-		return a, nil
+	// A function per module: the issuer's document calls them and each has a
+	// document of its own.
+	if err := a.withFunctionNames(&in); err != nil {
+		return a, err
 	}
-	service, policy, err := sluisconfig.Render(&in)
+	set := ModuleSet{Instance: a.Instance, Tables: a.TableNames}
+	tables := map[string]string{}
+	for _, m := range Modules() {
+		tables[string(m)] = set.TableName(m)
+	}
+	docs, err := sluisconfig.RenderModules(&in, sluisconfig.ModuleOptions{Tables: tables})
 	if err != nil {
 		return a, fmt.Errorf("sluispulumi: LambdaArgs.Installation: %w", err)
 	}
-	a.Config, a.Policy = string(service), string(policy)
+	a.Config, a.Policy = string(docs.Issuer), string(docs.Policy)
+	if a.moduleDocs, err = a.ownModuleDocuments(docs.Modules); err != nil {
+		return a, err
+	}
 	return a, nil
 }
 
@@ -583,26 +555,18 @@ func ownServe(doc map[string]any, a *LambdaArgs, root string) error {
 	if err != nil {
 		return err
 	}
-	if a.Layout == LayoutV5 {
-		// The function holds the verifier and never the password, so the document
-		// does not name it and its role may not read it.
-		if v, set := recovery["passwordSecret"]; set {
-			return fmt.Errorf("sluispulumi: LambdaArgs.Config: recovery.passwordSecret is %v and Layout is v5: the service reads "+
-				"the recovery account's verifier, not its password: leave it out", v)
-		}
-		if err = own(recovery, "Config: recovery", "verifierSecret", recoveryVerifierName); err != nil {
-			return err
-		}
-	} else if err = own(recovery, "Config: recovery", "passwordSecret", recoveryPasswordName); err != nil {
+	// The function holds the verifier and never the password, so the document
+	// does not name it and its role may not read it.
+	if v, set := recovery["passwordSecret"]; set {
+		return fmt.Errorf("sluispulumi: LambdaArgs.Config: recovery.passwordSecret is %v: the service reads "+
+			"the recovery account's verifier, not its password: leave it out", v)
+	}
+	if err = own(recovery, "Config: recovery", "verifierSecret", recoveryVerifierName); err != nil {
 		return err
 	}
 	if c, ok := doc["conformance"].(map[string]any); ok {
 		if on, _ := c["enabled"].(bool); on {
-			// The account's password and verifier are the library's to make, on layout v5.
-			if a.Layout != LayoutV5 {
-				return errors.New("sluispulumi: LambdaArgs.Config: conformance.enabled needs Layout v5: " +
-					"the library makes the conformance account's password and verifier there")
-			}
+			// The account's password and verifier are the library's to make.
 			if err = own(c, "Config: conformance", "verifierSecret", "conformance/verifier"); err != nil {
 				return err
 			}
@@ -638,18 +602,15 @@ func ownServe(doc map[string]any, a *LambdaArgs, root string) error {
 	return nil
 }
 
-// ownLayoutV5 writes what layout v5 asks of the service document: `secrets.layout:
-// v5` and `ports.dynamodb.tables` (the tables of the modules the State grant
-// names), which the schema takes only together. The layout v4 table
-// (`ports.dynamodb.table`, or `adapters.state` with one) is refused, not
-// dropped: the layouts do not mix. Only layout v5 writes them: on v4 and v4+v5
-// the document is v4's, and the flip is this layout change.
-func ownLayoutV5(doc map[string]any, a *LambdaArgs) error {
+// ownStateTables writes what the layout asks of the service document:
+// `secrets.layout: v5` and `ports.dynamodb.tables` (the tables of the modules
+// the issuer's role opens), which the schema takes only together.
+func ownStateTables(doc map[string]any, a *LambdaArgs) error {
 	secrets, err := child(doc, "Config", "secrets")
 	if err != nil {
 		return err
 	}
-	if err = own(secrets, "Config: secrets", "layout", string(LayoutV5)); err != nil {
+	if err = own(secrets, "Config: secrets", "layout", secretsLayout); err != nil {
 		return err
 	}
 	ports, err := child(doc, "Config", "ports")
@@ -662,18 +623,6 @@ func ownLayoutV5(doc map[string]any, a *LambdaArgs) error {
 	dyn, err := child(ports, "Config: ports", "dynamodb")
 	if err != nil {
 		return err
-	}
-	if _, set := dyn["table"]; set {
-		return errors.New("sluispulumi: LambdaArgs.Config: ports.dynamodb.table is layout v4 and Layout is v5: leave it out, " +
-			"the library writes ports.dynamodb.tables from the State grant")
-	}
-	if ad, ok := doc["adapters"].(map[string]any); ok {
-		if st, ok := ad["state"].(map[string]any); ok {
-			if _, set := st["settings"]; set {
-				return errors.New("sluispulumi: LambdaArgs.Config: adapters.state.settings names the layout v4 table and Layout is v5: " +
-					"leave it out (an Installation: leave aws.table empty)")
-			}
-		}
 	}
 	tables := map[string]any{}
 	set := ModuleSet{Instance: a.Instance, Tables: a.TableNames}

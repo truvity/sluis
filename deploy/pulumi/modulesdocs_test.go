@@ -29,7 +29,7 @@ func moduleInstallation(t *testing.T, name string) *sluisconfig.Installation {
 	return in
 }
 
-// moduleEstate is a layout v5 estate with an audit queue the library makes.
+// moduleEstate is an estate with an audit queue the library makes.
 // queueLine is the audit queue a document names: the one the library installs
 // in the test, not the fixture's.
 var queueLine = regexp.MustCompile(`queueURL: \S+`)
@@ -43,7 +43,6 @@ func moduleEstate(t *testing.T, in *sluisconfig.Installation, more ...func(*arp.
 	return withInstallation(in, func(a *arp.LambdaArgs) {
 		a.AuditQueueArn = nil
 		a.Audit = installAudit(t)
-		withLayout(arp.LayoutV5).mutate(a)
 		for _, f := range more {
 			f(a)
 		}

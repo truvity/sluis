@@ -40,21 +40,7 @@ const LiveAlias = sluisconfig.LiveAlias
 // LambdaType is the Pulumi type token of the Lambda component.
 const LambdaType = "sluis:aws:Lambda"
 
-// StateSecretParameterName is the SSM parameter of the issuer's state secret,
-// `/sluis/<instance>/internal/config/issuer/state-secret`.
-func StateSecretParameterName(instance string) string {
-	return ConfigParameterPrefix(instance) + "/" + stateSecretName
-}
-
-// RecoveryPasswordParameterName is the SSM parameter of the recovery password,
-// `/sluis/<instance>/internal/config/recovery/password`: a SecureString the
-// library generates and keeps across applies, which the http document names
-// (`recovery.passwordSecret`) and its `secrets` source reads.
-func RecoveryPasswordParameterName(instance string) string {
-	return ConfigParameterPrefix(instance) + "/" + recoveryPasswordName
-}
-
-// secretDocument is a secret's text as layout v5 stores it: the document of
+// secretDocument is a secret's text as the layout stores it: the document of
 // the secret store's byte codec (storage/state.Raw), which is what the issuer
 // reads at `internal/oidc/state-secret` and `internal/oidc/recovery-password`.
 // A raw value there fails the issuer's start.
@@ -63,23 +49,24 @@ func secretDocument(text string) (string, error) {
 	return string(doc), err
 }
 
-// StateSecretParameterNameV5 is the state secret's address on layout v5,
-// `/sluis/<instance>/internal/oidc/state-secret`: the same value as
-// StateSecretParameterName, written beside it while the layouts coexist, as the
-// secret store's document (`{"value":"<base64>"}`) that layout v5 reads.
+// StateSecretParameterNameV5 is the state secret's address,
+// `/sluis/<instance>/internal/oidc/state-secret`, a SecureString the library
+// generates and keeps across applies, as the secret store's document
+// (`{"value":"<base64>"}`) the service reads.
 func StateSecretParameterNameV5(instance string) string {
 	return ConfigParameterPrefixV5(instance) + "/state-secret"
 }
 
-// RecoveryPasswordParameterNameV5 is the recovery password's address on layout
-// v5, `/sluis/<instance>/internal/oidc/recovery-password`: the same value as
-// RecoveryPasswordParameterName.
+// RecoveryPasswordParameterNameV5 is the recovery password's address,
+// `/sluis/<instance>/internal/oidc/recovery-password`: a SecureString the
+// library generates and keeps across applies, for the operator; the function
+// reads the verifier ([RecoveryVerifierParameterNameV5]) and never the password.
 func RecoveryPasswordParameterNameV5(instance string) string {
 	return ConfigParameterPrefixV5(instance) + "/recovery-password"
 }
 
-// RecoveryVerifierParameterNameV5 is the recovery account's SRP credential on
-// layout v5, `/sluis/<instance>/internal/oidc/recovery-verifier`: a salt and a
+// RecoveryVerifierParameterNameV5 is the recovery account's SRP credential,
+// `/sluis/<instance>/internal/oidc/recovery-verifier`: a salt and a
 // verifier derived from the recovery password, in the secret store's document.
 // It is what the service reads in place of the password
 // (docs/decisions/0076); the password stays at [RecoveryPasswordParameterNameV5]
@@ -88,8 +75,8 @@ func RecoveryVerifierParameterNameV5(instance string) string {
 	return ConfigParameterPrefixV5(instance) + "/recovery-verifier"
 }
 
-// ConformancePasswordParameterNameV5 is the conformance account's password on
-// layout v5, `/sluis/<instance>/internal/oidc/conformance-password`, generated
+// ConformancePasswordParameterNameV5 is the conformance account's password,
+// `/sluis/<instance>/internal/oidc/conformance-password`, generated
 // when the installation turns the account on (`conformance.enabled`) and read by
 // the operator who runs the conformance suite, never by the function.
 func ConformancePasswordParameterNameV5(instance string) string {
@@ -105,11 +92,11 @@ func ConformanceVerifierParameterNameV5(instance string) string {
 // DefaultSchedule is the controllers' tick when LambdaArgs.Schedule.Rate is empty.
 const DefaultSchedule = "rate(5 minutes)"
 
-// LambdaArgs is the whole Lambda shape of sluis: ONE function from the release
-// zip with ONE role, the HTTP API in front of it, the token-signing key and one
-// schedule per controller target. The function serves the issuer and the console
-// and runs the controllers' passes; the controllers' code runs with the one
-// role's permissions (owner decision S1a, 2026-10-05).
+// LambdaArgs is the whole Lambda shape of sluis: the issuer's function from the
+// release zip with its role, the HTTP API in front of it, the token-signing key,
+// a function and a role per module function ([ModuleFunctions]), and one
+// schedule per controller target. The issuer's function serves the issuer and
+// the console; a module's function runs its passes.
 type LambdaArgs struct {
 	// Region and AccountID name the SSM parameters and the functions in the
 	// roles' policies. Required.
@@ -164,7 +151,7 @@ type LambdaArgs struct {
 	// function runs), which the configuration layer holds at
 	// /opt/sluis/sluis.yaml; the function's SLUIS_CONFIG names it. Required. It
 	// holds no secret: a secret is named, and its `secrets` source reads it from
-	// /sluis/<instance>/internal/config/.
+	// below /sluis/<instance>/internal/.
 	//
 	// Deprecated: write an Installation and let the library render the document.
 	// Config, Policy and PolicyPath keep working for one minor and are removed
@@ -189,37 +176,15 @@ type LambdaArgs struct {
 	Policy     string
 	PolicyPath string
 
-	// Layout is the storage layout the role and the documents follow
-	// (docs/decisions/0072-storage-layout-v5-module-first.md): "v4" (the default
-	// in v1.75.0) keeps the v4 grants and documents; "v5" gives the role only the
-	// v5 grants (the tables, parameters and blob prefixes of the modules the
-	// function hosts), writes `secrets.layout: v5` and `ports.dynamodb.tables`
-	// into the service document, and needs State from States.Grant(); "v4+v5"
-	// gives the role both sets of grants and writes the v4 document, for the
-	// migration window: the v5 parameters exist and the migration can copy, and the
-	// flip to "v5" is the next change. Both set the v5 parameters
-	// (`internal/oidc/state-secret`, `internal/oidc/recovery-password`) with the
-	// value of the v4 ones. The v4 parameters are declared on "v4" and "v4+v5" (a role there
-	// still reads them) and, on "v5", only with Compat.KeepV4.
-	Layout Layout
 	// TableNames overrides the table name of a module in the document
 	// (`ports.dynamodb.tables`), as ModuleSet.Tables does for States. Default
 	// `sluis-<instance>-<module>`. Use the same map as StatesArgs.Modules.Tables.
 	TableNames map[Module]string
-	// Compat is what the library keeps for the layouts that are going away.
-	Compat *CompatArgs
-	// MigrationRoleArn is the role `sluis migrate v5` runs as. It is granted a
-	// read of the legacy table (State.TableArn) and of the table key through
-	// DynamoDB, and nothing else: no other principal reads the legacy table once
-	// Layout is "v5". The library attaches an inline policy to that role, so it
-	// must be in the account and not managed elsewhere in a way that forbids it.
-	// Default none: nothing is attached.
-	MigrationRoleArn string
 
 	// Storage is the blob bucket (Storage.Grant()). Required.
 	Storage *StorageGrant
-	// State is the DynamoDB table (State.Grant()). Required: the function keeps
-	// State in it.
+	// State is the module tables (States.Grant()). Required: the functions keep
+	// State in them, and it must name the table of every module a function hosts.
 	State *StateGrant
 	// Audit is where the service's audit records go: audit is INSTALLED by
 	// default (the audit Pulumi library of this repository, the operational
@@ -350,8 +315,7 @@ type LambdaArgs struct {
 	// Every one of them exists whatever is set here (there is no switch that
 	// leaves a module in the issuer): the settings are memory, timeout,
 	// reserved concurrency, the name, the zip and the document, all optional.
-	// Their names are `sluis-<instance>-<module>`. They need the per-module
-	// tables: Layout "v5" or "v4+v5".
+	// Their names are `sluis-<instance>-<module>`.
 	Modules map[string]ModuleArgs
 	// BackupFunctionName is the name of the Backup component's function, which
 	// the issuer's role may invoke through the alias `live-console`. Default
@@ -383,8 +347,7 @@ type LambdaArgs struct {
 	// DirectoryRefresh is the schedule that refreshes the directory's snapshots.
 	DirectoryRefresh DirectoryRefreshArgs
 	// IssuerClients is the schedule that settles the clients' generated secrets
-	// (`{"kind":"clients"}`, the issuer's `live` alias). It exists only with the
-	// module functions (Layout "v5" or "v4+v5"); Disabled leaves it out.
+	// (`{"kind":"clients"}`, the issuer's `live` alias). Disabled leaves it out.
 	IssuerClients IssuerClientsArgs
 	// CloudflareRotation is the schedule that rotates the Cloudflare credentials
 	// that are due (`{"kind":"cloudflare"}`). It exists only when the
@@ -708,7 +671,8 @@ type FunctionArgs struct {
 
 // RecoveryArgs is the recovery sign-in: the way in for the day no directory can
 // vouch for anybody, which on Lambda is a generated password at
-// /sluis/<instance>/internal/config/recovery/password.
+// /sluis/<instance>/internal/oidc/recovery-password, which the service proves
+// against its verifier.
 //
 // The password and its parameter exist whatever Enabled says, so that turning
 // recovery off and on again is a configuration change and never a rotation.
@@ -887,15 +851,12 @@ type Lambda struct {
 	// aliases by role: `issuer` and every [ModuleFunctions] (cloudflare, github,
 	// google, slack). Functions holds the unqualified function ARNs
 	// and AliasArns, per role, the ARN of each alias by alias name (`live`,
-	// `live-issuer`): a call goes through an alias. The maps hold the issuer
-	// alone on a layout without the per-module tables.
+	// `live-issuer`): a call goes through an alias.
 	Functions, RoleArns pulumi.StringMapOutput
 	AliasArns           pulumi.StringMapMapOutput
 
 	// DeclaredParameters are the SSM parameters the documents declare, as names
-	// below the installation's root (`internal/config/<name>` on layout v4;
-	// `internal/<module>/<name>` for a minter or the S3 credentials document),
-	// sorted. It is what the post-deploy check looks for, and is exported
+	// below the installation's root (`internal/<module>/<name>`), sorted. It is what the post-deploy check looks for, and is exported
 	// whether or not Check is on: an estate that checks in a CI step reads the
 	// list from here. Names only, never a value.
 	DeclaredParameters pulumi.StringArrayOutput
@@ -933,8 +894,9 @@ type Lambda struct {
 	ConfigLayerArn pulumi.StringOutput
 
 	// StateSecretParameter is the name of the SSM SecureString that holds the
-	// issuer's OAuth-state secret, `/sluis/<instance>/internal/config/issuer/state-secret`: 32
-	// random bytes, base64. The library generates it and keeps it across applies.
+	// issuer's OAuth-state secret, `/sluis/<instance>/internal/oidc/state-secret`: 32
+	// random bytes, base64, in the secret store's document. The library generates
+	// it and keeps it across applies.
 	StateSecretParameter pulumi.StringOutput
 
 	// Audit is the audit installation the library installed (Audit unset or
@@ -948,19 +910,18 @@ type Lambda struct {
 	AuditQueueArn pulumi.StringOutput
 
 	// RecoveryPasswordParameter is the name of the SSM SecureString that holds the
-	// recovery password, `/sluis/<instance>/internal/config/recovery/password`: 40 random
-	// letters and digits with no look-alikes. Only the name is an output, never the
+	// recovery password, `/sluis/<instance>/internal/oidc/recovery-password`: 40 random
+	// letters and digits with no look-alikes, in the secret store's document. Only the name is an output, never the
 	// value; an operator reads it with `aws ssm get-parameter --with-decryption`.
 	RecoveryPasswordParameter pulumi.StringOutput
 	// RecoveryVerifierParameter is the name of the SSM SecureString that holds the
-	// recovery account's SRP credential on layout v5,
+	// recovery account's SRP credential,
 	// `/sluis/<instance>/internal/oidc/recovery-verifier`: a salt and a verifier
 	// derived from the recovery password, which is what the service reads in its
-	// place. Empty on layout v4 and v4+v5, where the service derives it from the
-	// password itself.
+	// place.
 	RecoveryVerifierParameter pulumi.StringOutput
 	// ConformancePasswordParameter is the name of the SSM SecureString that holds
-	// the conformance account's password on layout v5,
+	// the conformance account's password,
 	// `/sluis/<instance>/internal/oidc/conformance-password`, generated when the
 	// installation sets `conformance.enabled`; empty otherwise. Only the name is an
 	// output. The function's role may not read it: whoever runs the conformance
@@ -968,79 +929,21 @@ type Lambda struct {
 	ConformancePasswordParameter pulumi.StringOutput
 }
 
-// CompatArgs is what the library keeps for the layouts that are going away.
-type CompatArgs struct {
-	// DropV4 is deprecated and kept for source compatibility. A layout "v5"
-	// installation no longer declares the v4 state secret and recovery password
-	// parameters (`internal/config/issuer/state-secret`,
-	// `internal/config/recovery/password`) by default, so setting it changes
-	// nothing there. It is refused on "v4" and "v4+v5", whose roles still read
-	// them, and together with KeepV4.
-	//
-	// Deprecated: v5 drops the v4 parameters by default; use KeepV4 to keep them.
-	DropV4 bool
-	// KeepV4 declares the v4 state secret and recovery password parameters on
-	// layout "v5" as well, for an estate that still needs them during a migration
-	// (a flip back to "v4" inside the rollback window finds them). Without it a
-	// "v5" apply deletes them from AWS: nothing reads them on v5. It is refused
-	// together with DropV4 and with RetireLegacyTable.
-	KeepV4 bool
-	// RetireLegacyTable ends the legacy table's life. It needs Layout "v5" and the
-	// same Compat on StatesArgs, where it backs the table up and unprotects it
-	// (see StatesArgs.Compat). Here the migration role loses its read of the
-	// legacy table. It is refused with KeepV4.
-	RetireLegacyTable bool
-}
-
-// validate refuses a Compat that asks for the v4 parameters to be both kept and
-// dropped, or kept while the legacy table retires.
-func (c *CompatArgs) validate() error {
-	if c == nil {
-		return nil
-	}
-	if c.KeepV4 && c.DropV4 {
-		return errors.New("sluispulumi: Compat.KeepV4 and Compat.DropV4 contradict each other: " +
-			"layout v5 drops the v4 parameters by default, so set KeepV4 to keep them or neither")
-	}
-	if c.KeepV4 && c.RetireLegacyTable {
-		return errors.New("sluispulumi: Compat.RetireLegacyTable cannot be set with Compat.KeepV4: " +
-			"retire the legacy table once the v4 parameters are no longer wanted")
-	}
-	return nil
-}
-
 var functionNamePattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
 
 // A target is a login or a workspace key, or `github:links` (the link check).
 var targetID = regexp.MustCompile(`^[A-Za-z0-9_.:-]{1,40}$`)
 
-// validateLayout holds the layout and what goes with it to the arguments it
-// needs: v5 grants name the tables of the modules the function hosts, v4 grants
-// the one legacy table.
-func (a *LambdaArgs) validateLayout() error {
-	if !a.Layout.valid() {
-		return fmt.Errorf("sluispulumi: LambdaArgs.Layout %q must be %q, %q or %q", a.Layout, LayoutV4, LayoutV5, LayoutV4V5)
-	}
-	if a.Compat != nil && a.Compat.DropV4 && a.Layout != LayoutV5 {
-		return errors.New("sluispulumi: Compat.DropV4 removes the v4 parameters and needs Layout \"v5\": a role on \"v4\" or \"v4+v5\" still reads them")
-	}
-	if err := a.Compat.validate(); err != nil {
-		return err
-	}
-	if a.Compat != nil && a.Compat.RetireLegacyTable && a.Layout != LayoutV5 {
-		return errors.New("sluispulumi: Compat.RetireLegacyTable retires the legacy table and needs Layout \"v5\": a role on \"v4\" or \"v4+v5\" still reads it")
-	}
+// validateTables holds the table names and the State grant to the functions:
+// each role is granted the tables of the modules it hosts, so the grant names
+// every one of them.
+func (a *LambdaArgs) validateTables() error {
 	for m := range a.TableNames {
 		if !validModule(m) {
 			return fmt.Errorf("sluispulumi: LambdaArgs.TableNames names unknown module %q", m)
 		}
 	}
-	if a.MigrationRoleArn != "" {
-		if _, err := roleNameOf(a.MigrationRoleArn); err != nil {
-			return err
-		}
-	}
-	if a.Layout.has5() && a.State != nil {
+	if a.State != nil {
 		var missing []string
 		for _, m := range tablesNeeded() {
 			if a.State.Tables[m] == nil {
@@ -1048,25 +951,11 @@ func (a *LambdaArgs) validateLayout() error {
 			}
 		}
 		if len(missing) > 0 {
-			return fmt.Errorf("sluispulumi: LambdaArgs.Layout %q needs the tables of the modules the functions host "+
-				"in State.Tables (States.Grant()); missing %v", a.Layout, missing)
+			return fmt.Errorf("sluispulumi: LambdaArgs.State needs the tables of the modules the functions host "+
+				"(States.Grant()); missing %v", missing)
 		}
 	}
-	if a.Layout == LayoutV4V5 && a.State != nil && a.State.TableArn == nil {
-		return fmt.Errorf("sluispulumi: LambdaArgs.Layout %q keeps the v4 grants and needs the legacy table in State.TableArn "+
-			"(States.Grant() with Legacy)", a.Layout)
-	}
 	return nil
-}
-
-// roleNameOf is the name of the role an ARN names, `arn:aws:iam::<account>:role/[path/]<name>`.
-func roleNameOf(arn string) (string, error) {
-	parts := strings.SplitN(arn, ":role/", 2)
-	if len(parts) != 2 || !strings.HasPrefix(parts[0], arnPrefix+"iam::") || parts[1] == "" {
-		return "", fmt.Errorf("sluispulumi: LambdaArgs.MigrationRoleArn %q is not an IAM role ARN", arn)
-	}
-	n := parts[1]
-	return n[strings.LastIndex(n, "/")+1:], nil
 }
 
 // remoteSigning is whether the two asymmetric signing keys are created: always,
@@ -1144,7 +1033,7 @@ func (a *LambdaArgs) validate() (LambdaArgs, error) {
 		}
 		// With module functions the presets are the Cloudflare module's, and the
 		// other functions reach them with cloudflare.remote.
-		remote := out.hasModuleFunctions() && out.Installation.Cloudflare.Declared()
+		remote := out.Installation.Cloudflare.Declared()
 		if err := out.Storage.External.checkPreset(presets, remote); err != nil {
 			return out, err
 		}
@@ -1175,7 +1064,7 @@ func (a *LambdaArgs) validate() (LambdaArgs, error) {
 		return out, errors.New("sluispulumi: LambdaArgs.Keys supplies the keys: WrappedSigning, SigningKeyAlias, SigningKeyRS256Alias " +
 			"and DisableSigningKeyRS256 are of the keys the library creates, and are not set beside it")
 	}
-	if err := out.validateLayout(); err != nil {
+	if err := out.validateTables(); err != nil {
 		return out, err
 	}
 	if out.audit == nil {
@@ -1228,7 +1117,7 @@ func (a *LambdaArgs) validate() (LambdaArgs, error) {
 	for k, nilIn := range map[string]bool{
 		"AuditQueueArn": out.AuditQueueArn == nil,
 		"Storage":       out.Storage == nil || (out.Storage.BucketArn == nil && out.Storage.External == nil),
-		"State":         out.State == nil || (out.State.TableArn == nil && len(out.State.Tables) == 0),
+		"State":         out.State == nil || len(out.State.Tables) == 0,
 	} {
 		if nilIn {
 			missing = append(missing, k)
@@ -1406,27 +1295,27 @@ func (a *LambdaArgs) validate() (LambdaArgs, error) {
 	return out, nil
 }
 
-// NewLambda creates the Lambda shape. The function is the release zip's
-// `bootstrap` (provided.al2023, arm64, no VPC), with ONE role:
+// NewLambda creates the Lambda shape. The issuer's function is the release
+// zip's `bootstrap` (provided.al2023, arm64, no VPC), with its role:
 //
-//   - logs to its own group; S3 on the blob bucket; DynamoDB on the table; SSM
-//     read and write under /sluis/<instance>/internal/credentials/* and
-//     /external/* (with the parameters' history); SSM read under
-//     .../internal/config/* (the secrets its document names);
-//     sqs:SendMessage on the audit queue;
+//   - logs to its own group; what ModuleRoleStatements grants the role that
+//     hosts the oidc module: its blob prefixes, its tables, its parameters
+//     under /sluis/<instance>/internal/oidc and /external/oidc (with the
+//     parameters' history) and the cross-grants; sqs:SendMessage on the audit
+//     queue;
 //   - kms:Sign and kms:GetPublicKey on the signing keys (remote signing) or, with
 //     WrappedSigning, kms:GenerateDataKeyPairWithoutPlaintext and kms:Decrypt on
 //     the symmetric key under the encryption context purpose=sluis-signing;
-//   - lambda:InvokeFunction on itself (run a pass now) and sts:GetWebIdentityToken
-//     (the controllers read the console with it).
+//   - lambda:InvokeFunction on itself and on the module functions' aliases the
+//     routing table names (ModuleCalls), and sts:GetWebIdentityToken.
 //
-// The controllers' code runs with this role: there is no per-role isolation
-// between the issuer and a controller (owner decision S1a, 2026-10-05).
+// Each module function ([ModuleFunctions]) has a role of its own, with what
+// ModuleRoleStatements grants the modules it hosts.
 //
 // The API is an HTTP API with payload format 2.0 and a $default route to the
-// function, behind a regional custom domain with mutual TLS. The controllers'
-// passes and the directory refresh are invoked by EventBridge
-// schedules, through a role of their own that may invoke only this function.
+// issuer's function. The controllers' passes, the directory refresh and the
+// issuer's clients pass are invoked by EventBridge schedules, through a role of
+// their own that may invoke only the live aliases its schedules target.
 func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulumi.ResourceOption) (_ *Lambda, retErr error) {
 	a, err := args.validate()
 	if err != nil {
@@ -1626,11 +1515,6 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 	if err != nil {
 		return nil, fmt.Errorf("sluis role: %w", err)
 	}
-	if a.MigrationRoleArn != "" && (a.Compat == nil || !a.Compat.RetireLegacyTable) {
-		if err := newMigrationRead(ctx, name, &a, child); err != nil {
-			return nil, fmt.Errorf("sluis migration role: %w", err)
-		}
-	}
 	// ---- audit: installed here beside the function (its role is the one sender
 	// the queue accepts), or the queue of an installation that exists.
 	auditURL, auditArn := rsEmpty, rsEmpty
@@ -1719,13 +1603,11 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 	}
 
 	// ---- the module functions: one per module, each with the role of its own.
-	var mods *moduleFunctions
-	if a.hasModuleFunctions() {
-		if mods, err = newModuleFunctions(ctx, name, &a, secretsKeyArn, writerFirst, child); err != nil {
-			return nil, err
-		}
-		resolveModuleRoles(mods)
+	mods, err := newModuleFunctions(ctx, name, &a, secretsKeyArn, writerFirst, child)
+	if err != nil {
+		return nil, err
 	}
+	resolveModuleRoles(mods)
 
 	// ---- the API
 	var accessLogs *cloudwatch.LogGroup
@@ -1787,24 +1669,11 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 	if err != nil {
 		return nil, fmt.Errorf("sluis state secret: %w", err)
 	}
-	// Overwrite adopts a parameter that is already there: `sluis migrate
-	// secrets-layout` wrote the v4 copy at this path with this very value, and it
-	// is not in this stack's state, so a create without Overwrite would fail with
-	// ParameterAlreadyExists. The parameter has its own logical name, apart from
-	// the old private/config one: the old resource is then removed from the
-	// program (a delete at the end of the update, after the new one exists and
-	// the function is updated), not replaced, whatever the provider says about
-	// delete-before-replace. The value comes from the same RandomBytes, so it
+	// The parameters are written with Overwrite, which adopts one that is
+	// already there and not in this stack's state (a create without it fails
+	// with ParameterAlreadyExists). The value comes from the RandomBytes, so it
 	// does not change.
-	//
-	// Layout v5 (and v4+v5) writes the same value at the v5 address as well, from
-	// the same generator, under a logical name of its own: it is a create, and the
-	// v4 parameter is neither replaced nor deleted on "v4+v5". On "v5" the v4
-	// parameters are not declared unless Compat.KeepV4: nothing reads them, so an
-	// apply that flips a window estate to v5 deletes them.
-	dropV4 := a.Layout == LayoutV5 && (a.Compat == nil || !a.Compat.KeepV4)
 	var params []pulumi.Resource
-	stateName, recoveryName := pulumi.StringOutput{}, pulumi.StringOutput{}
 	newSecretParam := func(logical, path string, value pulumi.StringInput) (*ssm.Parameter, error) {
 		pargs := &ssm.ParameterArgs{
 			Name:      pulumi.String(path),
@@ -1819,28 +1688,15 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 		return ssm.NewParameter(ctx, logical, pargs, child)
 	}
 	stateValue := pulumi.ToSecret(stateSecret.Base64).(pulumi.StringOutput)
-	// Layout v5 reads these two parameters through the secret store's byte
-	// codec, which is a document, `{"value":"<base64>"}`; layout v4 reads the
-	// parameter as the text itself. The v5 copy carries the same text, in that
-	// document.
+	// The service reads these parameters through the secret store's byte codec,
+	// which is a document, `{"value":"<base64>"}`, carrying the text.
 	stateValueV5 := stateValue.ApplyT(secretDocument).(pulumi.StringOutput)
-	if !dropV4 {
-		stateParam, err := newSecretParam(name+"-state-secret-internal", StateSecretParameterName(a.Instance), stateValue)
-		if err != nil {
-			return nil, fmt.Errorf("sluis state secret parameter: %w", err)
-		}
-		params, stateName = append(params, stateParam), stateParam.Name
+	stateParamV5, err := newSecretParam(name+"-state-secret-v5", StateSecretParameterNameV5(a.Instance), stateValueV5)
+	if err != nil {
+		return nil, fmt.Errorf("sluis state secret parameter (v5): %w", err)
 	}
-	if a.Layout.has5() {
-		stateParamV5, err := newSecretParam(name+"-state-secret-v5", StateSecretParameterNameV5(a.Instance), stateValueV5)
-		if err != nil {
-			return nil, fmt.Errorf("sluis state secret parameter (v5): %w", err)
-		}
-		params = append(params, stateParamV5)
-		if a.Layout == LayoutV5 {
-			stateName = stateParamV5.Name
-		}
-	}
+	params = append(params, stateParamV5)
+	stateName := stateParamV5.Name
 
 	// ---- the recovery password: generated once and kept (no keepers, so an apply
 	// never rotates it; `pulumi up --replace` on the RandomPassword does), secret
@@ -1856,26 +1712,15 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 		return nil, fmt.Errorf("sluis recovery password: %w", err)
 	}
 	recoveryValue := pulumi.ToSecret(recoveryPassword.Result.ApplyT(unambiguous)).(pulumi.StringOutput)
-	if !dropV4 {
-		recoveryParam, err := newSecretParam(name+"-recovery-password-internal", RecoveryPasswordParameterName(a.Instance), recoveryValue)
-		if err != nil {
-			return nil, fmt.Errorf("sluis recovery password parameter: %w", err)
-		}
-		params, recoveryName = append(params, recoveryParam), recoveryParam.Name
+	recoveryValueV5 := recoveryValue.ApplyT(secretDocument).(pulumi.StringOutput)
+	recoveryParamV5, err := newSecretParam(name+"-recovery-password-v5", RecoveryPasswordParameterNameV5(a.Instance), recoveryValueV5)
+	if err != nil {
+		return nil, fmt.Errorf("sluis recovery password parameter (v5): %w", err)
 	}
-	if a.Layout.has5() {
-		recoveryValueV5 := recoveryValue.ApplyT(secretDocument).(pulumi.StringOutput)
-		recoveryParamV5, err := newSecretParam(name+"-recovery-password-v5", RecoveryPasswordParameterNameV5(a.Instance), recoveryValueV5)
-		if err != nil {
-			return nil, fmt.Errorf("sluis recovery password parameter (v5): %w", err)
-		}
-		params = append(params, recoveryParamV5)
-		if a.Layout == LayoutV5 {
-			recoveryName = recoveryParamV5.Name
-		}
-	}
+	params = append(params, recoveryParamV5)
+	recoveryName := recoveryParamV5.Name
 
-	// ---- the SRP verifiers (docs/decisions/0076), layout v5: the service signs the
+	// ---- the SRP verifiers (docs/decisions/0076): the service signs the
 	// recovery account in by proving the password against a salt and a verifier
 	// derived from it, and never reads the password -- its role is denied the
 	// password's parameter. The verifier is computed from the generated password
@@ -1887,61 +1732,57 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 	// password does not rewrite the parameter. The conformance account's password,
 	// salt and verifier are made the same way, when the installation turns the
 	// account on.
-	verifierName, conformanceName := pulumi.String("").ToStringOutput(), pulumi.String("").ToStringOutput()
-	if a.Layout.has5() {
-		srpParam := func(logical, path, account string, raw, password pulumi.StringOutput) (*ssm.Parameter, error) {
-			salt, err := random.NewRandomBytes(ctx, name+"-"+account+"-salt", &random.RandomBytesArgs{
-				Length: pulumi.Int(srpSaltBytes),
-				// The salt is replaced when the password is, and not otherwise. The keeper
-				// is the password's digest, so the password is not copied into another
-				// resource's state.
-				Keepers: pulumi.StringMap{"password": raw.ApplyT(func(pw string) string {
-					sum := sha256.Sum256([]byte(pw))
-					return hex.EncodeToString(sum[:])
-				}).(pulumi.StringOutput)},
-			}, child)
-			if err != nil {
-				return nil, fmt.Errorf("sluis %s salt: %w", account, err)
-			}
-			doc := pulumi.All(password, salt.Base64).ApplyT(func(v []any) (string, error) {
-				saltBytes, err := base64.StdEncoding.DecodeString(v[1].(string))
-				if err != nil || len(saltBytes) != srpSaltBytes {
-					return "", fmt.Errorf("the %s salt is not %d bytes of base64", account, srpSaltBytes)
-				}
-				return secretDocument(string(srp.Default.NewCredential(saltBytes, account, v[0].(string)).Document()))
-			}).(pulumi.StringOutput)
-			return newSecretParam(logical, path, pulumi.ToSecret(doc).(pulumi.StringOutput))
-		}
-		verifier, err := srpParam(name+"-recovery-verifier-v5", RecoveryVerifierParameterNameV5(a.Instance), "recovery",
-			recoveryPassword.Result, recoveryValue)
+	conformanceName := pulumi.String("").ToStringOutput()
+	srpParam := func(logical, path, account string, raw, password pulumi.StringOutput) (*ssm.Parameter, error) {
+		salt, err := random.NewRandomBytes(ctx, name+"-"+account+"-salt", &random.RandomBytesArgs{
+			Length: pulumi.Int(srpSaltBytes),
+			// The salt is replaced when the password is, and not otherwise. The keeper
+			// is the password's digest, so the password is not copied into another
+			// resource's state.
+			Keepers: pulumi.StringMap{"password": raw.ApplyT(func(pw string) string {
+				sum := sha256.Sum256([]byte(pw))
+				return hex.EncodeToString(sum[:])
+			}).(pulumi.StringOutput)},
+		}, child)
 		if err != nil {
-			return nil, fmt.Errorf("sluis recovery verifier parameter (v5): %w", err)
+			return nil, fmt.Errorf("sluis %s salt: %w", account, err)
 		}
-		params = append(params, verifier)
-		if a.Layout == LayoutV5 {
-			verifierName = verifier.Name
+		doc := pulumi.All(password, salt.Base64).ApplyT(func(v []any) (string, error) {
+			saltBytes, err := base64.StdEncoding.DecodeString(v[1].(string))
+			if err != nil || len(saltBytes) != srpSaltBytes {
+				return "", fmt.Errorf("the %s salt is not %d bytes of base64", account, srpSaltBytes)
+			}
+			return secretDocument(string(srp.Default.NewCredential(saltBytes, account, v[0].(string)).Document()))
+		}).(pulumi.StringOutput)
+		return newSecretParam(logical, path, pulumi.ToSecret(doc).(pulumi.StringOutput))
+	}
+	verifier, err := srpParam(name+"-recovery-verifier-v5", RecoveryVerifierParameterNameV5(a.Instance), "recovery",
+		recoveryPassword.Result, recoveryValue)
+	if err != nil {
+		return nil, fmt.Errorf("sluis recovery verifier parameter (v5): %w", err)
+	}
+	params = append(params, verifier)
+	verifierName := verifier.Name
+	if c := a.conformance(); c != nil && c.Enabled {
+		conformancePassword, err := random.NewRandomPassword(ctx, name+"-conformance-password", &random.RandomPasswordArgs{
+			Length: pulumi.Int(recoveryPasswordLength), Special: pulumi.Bool(false),
+		}, child)
+		if err != nil {
+			return nil, fmt.Errorf("sluis conformance password: %w", err)
 		}
-		if c := a.conformance(); c != nil && c.Enabled {
-			conformancePassword, err := random.NewRandomPassword(ctx, name+"-conformance-password", &random.RandomPasswordArgs{
-				Length: pulumi.Int(recoveryPasswordLength), Special: pulumi.Bool(false),
-			}, child)
-			if err != nil {
-				return nil, fmt.Errorf("sluis conformance password: %w", err)
-			}
-			conformanceValue := pulumi.ToSecret(conformancePassword.Result.ApplyT(unambiguous)).(pulumi.StringOutput)
-			passwordParam, err := newSecretParam(name+"-conformance-password-v5", ConformancePasswordParameterNameV5(a.Instance),
-				conformanceValue.ApplyT(secretDocument).(pulumi.StringOutput))
-			if err != nil {
-				return nil, fmt.Errorf("sluis conformance password parameter (v5): %w", err)
-			}
-			conformanceVerifier, err := srpParam(name+"-conformance-verifier-v5", ConformanceVerifierParameterNameV5(a.Instance), "conformance",
-				conformancePassword.Result, conformanceValue)
-			if err != nil {
-				return nil, fmt.Errorf("sluis conformance verifier parameter (v5): %w", err)
-			}
-			params = append(params, passwordParam, conformanceVerifier)
-			conformanceName = passwordParam.Name
+		conformanceValue := pulumi.ToSecret(conformancePassword.Result.ApplyT(unambiguous)).(pulumi.StringOutput)
+		passwordParam, err := newSecretParam(name+"-conformance-password-v5", ConformancePasswordParameterNameV5(a.Instance),
+			conformanceValue.ApplyT(secretDocument).(pulumi.StringOutput))
+		if err != nil {
+			return nil, fmt.Errorf("sluis conformance password parameter (v5): %w", err)
 		}
+		conformanceVerifier, err := srpParam(name+"-conformance-verifier-v5", ConformanceVerifierParameterNameV5(a.Instance), "conformance",
+			conformancePassword.Result, conformanceValue)
+		if err != nil {
+			return nil, fmt.Errorf("sluis conformance verifier parameter (v5): %w", err)
+		}
+		params = append(params, passwordParam, conformanceVerifier)
+		conformanceName = passwordParam.Name
 	}
 
 	// ---- the post-deploy check: after the function, its alias, its role's
@@ -1971,9 +1812,6 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 	out.ScheduleNames = schedNames
 	out.ConfigLayerArn = layer.Arn
 	issuerAliases := pulumi.StringMap{LiveAlias: live.Arn}
-	if mods == nil {
-		mods = &moduleFunctions{}
-	}
 	out.Functions, out.RoleArns, out.AliasArns = mods.outputs(fn.Arn, role.Arn, issuerAliases)
 
 	if err := ctx.RegisterResourceOutputs(out, pulumi.Map{
@@ -2115,23 +1953,20 @@ func newFunctionRole(ctx *pulumi.Context, name, fnName string, a *LambdaArgs, si
 	if bucketArn == nil {
 		bucketArn = pulumi.String("")
 	}
-	inputs := []any{bucketArn, tableArnOf(a.State), stateKey, a.AuditQueueArn, logGroupArn, wrapped, signKeyArn, secretsKeyArn, moduleTableArns(a.State)}
+	inputs := []any{bucketArn, stateKey, a.AuditQueueArn, logGroupArn, wrapped, signKeyArn, secretsKeyArn, moduleTableArns(a.State)}
 	for _, k := range signingKeyArns {
 		inputs = append(inputs, k)
 	}
 	doc := pulumi.All(inputs...).ApplyT(func(v []any) (string, error) {
 		return functionPolicy(functionPolicyIn{
 			region: a.Region, account: a.AccountID,
-			bucketArn: v[0].(string), external: a.Storage.External, tableArn: v[1].(string), tableKey: v[2].(string),
-			queueArn: v[3].(string), logGroupArn: v[4].(string), wrappedKeyArn: v[5].(string), signingKeyArns: stringsOf(v[9:]), moduleTables: moduleTablesOf(v[8]),
-			keys:            grantsOf(a.Keys, v[6].(string), v[7].(string)),
+			bucketArn: v[0].(string), external: a.Storage.External, tableKey: v[1].(string),
+			queueArn: v[2].(string), logGroupArn: v[3].(string), wrappedKeyArn: v[4].(string), signingKeyArns: stringsOf(v[8:]), moduleTables: moduleTablesOf(v[7]),
+			keys:            grantsOf(a.Keys, v[5].(string), v[6].(string)),
 			parameterKeyArn: a.ParameterKeyArn, instance: a.Instance,
 			invokeFunctionArns: []string{selfArn},
 			webIdentityAud:     a.WebIdentityAudience,
 			webIdentityExtra:   a.AdditionalWebIdentityAudiences,
-			cloudflare:         a.cloudflare(),
-			cloudflareStored:   a.cloudflareStored(),
-			layout:             a.Layout,
 			modules:            ModuleSet{Instance: a.Instance, Tables: a.TableNames},
 			functionArns:       issuerFunctionArns(a),
 		})
@@ -2144,41 +1979,6 @@ func newFunctionRole(ctx *pulumi.Context, name, fnName string, a *LambdaArgs, si
 	}
 	return r, rp, nil
 }
-
-// newMigrationRead lets the migration role read the legacy table and nothing
-// else of it: no write, and no other principal once the function's role is v5's.
-// The statement is on the table of layout v4 and on its key through DynamoDB.
-func newMigrationRead(ctx *pulumi.Context, name string, a *LambdaArgs, opts ...pulumi.ResourceOption) error {
-	if a.State.TableArn == nil {
-		return errors.New("LambdaArgs.MigrationRoleArn reads the legacy table and State has none (State.TableArn)")
-	}
-	roleName, err := roleNameOf(a.MigrationRoleArn)
-	if err != nil {
-		return err
-	}
-	key := pulumi.StringInput(pulumi.String(""))
-	if a.State.KeyArn != nil {
-		key = a.State.KeyArn
-	}
-	doc := pulumi.All(a.State.TableArn, key).ApplyT(func(v []any) (string, error) {
-		st := []statement{tableStatement(sidLegacyRead, v[0].(string), ddbReadActions)}
-		if k := v[1].(string); k != "" {
-			st = append(st, statement{
-				"Sid": sidLegacyRead + "Key", "Effect": "Allow",
-				"Action": []string{kmsDecrypt, "kms:DescribeKey"}, "Resource": k,
-				"Condition": map[string]any{"StringLike": map[string]any{"kms:ViaService": "dynamodb.*.amazonaws.com"}},
-			})
-		}
-		return document(st)
-	}).(pulumi.StringOutput)
-	_, err = iam.NewRolePolicy(ctx, name+"-migration-legacy-read", &iam.RolePolicyArgs{
-		Name: pulumi.String(a.FunctionName + "-legacy-read"), Role: pulumi.String(roleName), Policy: doc,
-	}, opts...)
-	return err
-}
-
-// sidLegacyRead is the migration role's read of the legacy table.
-const sidLegacyRead = "SluisLegacyTableRead"
 
 const truststoreKey = "truststore/client-ca.pem"
 
@@ -2374,10 +2174,6 @@ func newSchedules(ctx *pulumi.Context, name string, a *LambdaArgs, live *lambda.
 	var invoked pulumi.StringArray
 	// use is the alias a module's schedule invokes, recorded for the policy.
 	use := func(module string) (pulumi.StringInput, error) {
-		if mods == nil {
-			invoked = append(invoked, live.Arn)
-			return live.Arn, nil
-		}
 		fn, ok := mods.fns[module]
 		if !ok || fn.aliases[LiveAlias] == nil {
 			return nil, fmt.Errorf("sluispulumi: the %s function has no live alias for its schedule", module)
@@ -2458,7 +2254,7 @@ func newSchedules(ctx *pulumi.Context, name string, a *LambdaArgs, live *lambda.
 		}
 		names = append(names, pulumi.String(cname))
 	}
-	if mods != nil && !a.IssuerClients.Disabled {
+	if !a.IssuerClients.Disabled {
 		invoked = append(invoked, live.Arn)
 		kname := a.FunctionNamePrefix + "-issuer-clients"
 		if err := mk(name+"-issuer-clients", kname, "Settles the clients' generated secrets.",
@@ -2468,12 +2264,8 @@ func newSchedules(ctx *pulumi.Context, name string, a *LambdaArgs, live *lambda.
 		names = append(names, pulumi.String(kname))
 	}
 
-	// The role may invoke the aliases its schedules target and nothing else.
-	// Without the module functions it always holds the issuer's alias, as it
-	// did; with them, a role with no schedule holds no policy.
-	if mods == nil && len(invoked) == 0 {
-		invoked = pulumi.StringArray{live.Arn}
-	}
+	// The role may invoke the aliases its schedules target and nothing else: a
+	// role with no schedule holds no policy.
 	if len(invoked) > 0 {
 		if _, err := iam.NewRolePolicy(ctx, name+"-scheduler-policy", &iam.RolePolicyArgs{
 			Name: pulumi.String(a.FunctionNamePrefix + "-scheduler"), Role: role.Name,

@@ -27,9 +27,6 @@ type RoleArgs struct {
 	Region    string
 	AccountID string
 	Instance  string
-	// Layout is that of LambdaArgs.Layout. Empty is v4, which has the issuer's
-	// function only; v5 and v4+v5 add the module, backup and restore functions.
-	Layout Layout
 	// Installation is that of LambdaArgs.Installation. It decides which module
 	// functions exist (a module the installation renders no document for gets no
 	// function) and which roles mint blobs from a preset. Optional: without it,
@@ -62,7 +59,7 @@ type RoleArgs struct {
 // result when the stack creates those components.
 func (a *LambdaArgs) RoleArgs() RoleArgs {
 	return RoleArgs{
-		Region: a.Region, AccountID: a.AccountID, Instance: a.Instance, Layout: a.Layout,
+		Region: a.Region, AccountID: a.AccountID, Instance: a.Instance,
 		Installation: a.Installation, Blobs: blobsOf(a.Storage),
 		FunctionName: a.FunctionName, Modules: a.Modules,
 		BackupFunctionName: a.BackupFunctionName, RestoreFunctionName: a.RestoreFunctionName,
@@ -118,7 +115,7 @@ func (f FunctionRole) Matcher() policy.Matcher {
 func (r RoleArgs) resolve() (LambdaArgs, error) {
 	off := false
 	a := LambdaArgs{
-		Region: r.Region, AccountID: r.AccountID, Instance: r.Instance, Layout: r.Layout,
+		Region: r.Region, AccountID: r.AccountID, Instance: r.Instance,
 		Installation: r.Installation, FunctionName: r.FunctionName, Modules: r.Modules,
 		BackupFunctionName: r.BackupFunctionName, RestoreFunctionName: r.RestoreFunctionName,
 		TableNames: r.TableNames, TransitionRoles: r.TransitionRoles,
@@ -140,15 +137,9 @@ func (r RoleArgs) resolve() (LambdaArgs, error) {
 	if a.Region == "" || a.AccountID == "" || a.Instance == "" {
 		return a, errors.New("sluispulumi: RoleArgs: Region, AccountID and Instance are required to name the roles")
 	}
-	if !a.Layout.valid() {
-		return a, fmt.Errorf("sluispulumi: RoleArgs.Layout %q must be %q, %q or %q", a.Layout, LayoutV4, LayoutV5, LayoutV4V5)
-	}
 	for _, m := range Modules() {
 		table := ModuleSet{Instance: a.Instance, Tables: a.TableNames}.TableName(m)
 		a.State.Tables[m] = pulumi.String(arnPrefix + "dynamodb:" + a.Region + ":" + a.AccountID + ":table/" + table)
-	}
-	if a.Layout == LayoutV4V5 {
-		a.State.TableArn = pulumi.String(arnPrefix + "dynamodb:" + a.Region + ":" + a.AccountID + ":table/" + a.Instance)
 	}
 	if a.Installation != nil {
 		var err error
@@ -156,7 +147,7 @@ func (r RoleArgs) resolve() (LambdaArgs, error) {
 			return a, err
 		}
 	}
-	if err := a.validateLayout(); err != nil {
+	if err := a.validateTables(); err != nil {
 		return a, err
 	}
 	if !validInstance(a.Instance) {

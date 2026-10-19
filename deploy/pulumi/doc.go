@@ -1,6 +1,6 @@
 // Package sluispulumi is the AWS shape of sluis as a Pulumi Go library: the
 // storage the service keeps its blobs in, the DynamoDB tables of the State port
-// (one per module on layout v5), and, as the main path, the Lambda deployment:
+// (one per module), and, as the main path, the Lambda deployment:
 // one function per module from the release zips, each with its own role. The
 // issuer function (issuer, signer and console) sits behind an HTTP API and
 // owns the token-signing key; the github, slack, google and cloudflare
@@ -25,7 +25,6 @@
 //	states, err := sluispulumi.NewStates(ctx, "access", &sluispulumi.StatesArgs{ /* one table per module */ }, pulumi.Providers(aws))
 //	l, err := sluispulumi.NewLambda(ctx, "access", &sluispulumi.LambdaArgs{
 //		Region: "eu-central-1", AccountID: accountID, Instance: "acme",
-//		Layout:        "v5",
 //		Package:       "sluis-issuer_1.76.3_linux_arm64.zip", // a path or an https URL; empty deploys the library's own release
 //		PackageSHA256: releaseSHA256,                         // from the release's checksums, pinned in source
 //		Installation:  installation, // *sluisconfig.Installation: the library renders every function's documents from it
@@ -72,8 +71,9 @@
 // /sluis/<instance>/external/<module>/<id> are the documents consumers read,
 // each granted on its own side.
 //
-// A layout v4 installation (LambdaArgs.Layout, the default) is one function
-// and one table; v1.76 is the last release that reads it (docs/decisions/0072).
+// The storage layout is v5, module first (docs/decisions/0072): the layout v4
+// switches (LambdaArgs.Layout, Compat, MigrationRoleArn), the single table
+// (NewState) and the legacy table's adoption are gone since v1.77.
 //
 // RenderPorts renders the `ports:` block of the processes' configuration from
 // the same names.

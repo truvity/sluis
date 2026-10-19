@@ -7,7 +7,7 @@ import (
 	yaml "go.yaml.in/yaml/v3"
 )
 
-// The Google module checks the OAuth client's secrets, which layout v5 keeps in
+// The Google module checks the OAuth client's secrets, which the layout keeps in
 // the issuer's namespace: its role reads exactly those and nothing else of oidc.
 func TestTheGoogleRoleReadsTheSignInClientAndNothingElseOfOIDC(t *testing.T) {
 	menv := mxEnv(moduleRoles())
