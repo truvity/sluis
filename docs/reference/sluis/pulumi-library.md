@@ -420,7 +420,7 @@ To adopt an existing audit stack, import it under the new component ([resource n
 | `SluisKeyMinter<Role>` | a role with `KeyRole.MinterRefs` (none today) that does not host `cloudflare` | `Decrypt` of the `MinterRefs` |
 | `SluisKeyBlobCredentials<Role>` | each role that reads the external blobs' credential (`KeyRole.BlobCredentialsRef`, from `StorageArgs.Blobs.CredentialsRef`) and whose own statements do not reach it: on v5 with a stored preset, the issuer and the github, google and slack roles | `Decrypt` and `DescribeKey` of that one parameter |
 | `SluisKeyExternalReaders` | `ExternalReaders` | `Decrypt` of `external/*` |
-| `SluisKeyAdminSeeds`, `SluisKeyAdminReads` | `Admins`, as ARN patterns | `Encrypt` and `GenerateDataKey` on any parameter; `Decrypt` of the state secret, the recovery password and, with a backup role on v5, the restore identity |
+| `SluisKeyAdminSeeds`, `SluisKeyAdminReads` | `Admins`, as ARN patterns | `Encrypt` and `GenerateDataKey` on any parameter; `Decrypt` of the state secret, the recovery password, on v5 the recovery verifier (and the conformance password and verifier when `Conformance` is on), and, with a backup role on v5, the restore identity |
 | `SluisKeyBreakglass` | `Breakglass` | the four actions on any parameter |
 | `SluisKeyDenyRestoreIdentity` | the backup role | Deny `Decrypt` where the encryption context `PARAMETER_ARN` is the restore identity |
 | `SluisKeySign`, `SluisKeySignContextReserved`, `SluisKeySignDirectPurposeOnly`, `SluisKeySignDirectContextKeysOnly` | the roles that host `oidc`, directly | `{instance, purpose: sign}` and the three denies that hold the purpose to them |

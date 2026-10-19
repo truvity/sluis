@@ -204,8 +204,8 @@ func (a *LambdaArgs) keyPolicyStatements(o KeyPolicyOptions) ([]map[string]any, 
 	st, err := SluisKeyPolicyStatements(KeyPolicyArgs{
 		Region: a.Region, Account: a.AccountID, Modules: ModuleSet{Instance: a.Instance, Tables: a.TableNames}, Layout: a.Layout,
 		Roles: roles, ExternalReaders: o.ExternalReaders, Admins: o.Admins, Breakglass: o.Breakglass, KeyAdmins: o.KeyAdmins,
-		DenyOtherActions: o.DenyOtherActions,
-		BackupArchive:    o.BackupArchive, RestoreArchive: o.RestoreArchive,
+		DenyOtherActions: o.DenyOtherActions, Conformance: a.conformanceEnabled(),
+		BackupArchive: o.BackupArchive, RestoreArchive: o.RestoreArchive,
 	})
 	if err != nil {
 		return nil, err
@@ -215,6 +215,13 @@ func (a *LambdaArgs) keyPolicyStatements(o KeyPolicyOptions) ([]map[string]any, 
 		return nil, err
 	}
 	return st, nil
+}
+
+// conformanceEnabled is whether the stack writes the conformance account's
+// password and verifier.
+func (a *LambdaArgs) conformanceEnabled() bool {
+	c := a.conformance()
+	return c != nil && c.Enabled
 }
 
 // withResolved runs f on the validated args.
