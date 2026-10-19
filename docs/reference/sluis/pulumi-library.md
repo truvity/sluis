@@ -207,7 +207,7 @@ The role trusts `pods.eks.amazonaws.com` for this cluster and ServiceAccount.
 
 ## Ports configuration
 
-`RenderPorts` never renders `create`, writes only the blob without `Tables`, and refuses an `Adapter` other than `dynamodb`.
+`RenderPorts` never renders `create`, writes only the blob without `Tables` and refuses any `Adapter` but `dynamodb`.
 
 ```go
 y, _ := sluispulumi.RenderPortsYAML(sluispulumi.PortsArgs{BucketName: "acme-prod-sluis", Region: "eu-west-1",
@@ -233,7 +233,7 @@ ports:
 l, _ := sluispulumi.NewLambda(ctx, "access", &sluispulumi.LambdaArgs{
 	Region: "eu-central-1", AccountID: accountID,
 	Instance:      "acme",    // the SSM root /sluis/acme
-	Package:       "dist/sluis-issuer_1.75.0_linux_arm64.zip", // or an https URL
+	Package:       "dist/sluis-issuer_1.77.1_linux_arm64.zip", // or an https URL
 	PackageSHA256: "<the release's digest, pinned here>",
 	Installation:  installation, // *sluisconfig.Installation: the library renders both documents from it
 	Storage:       store.Grant(),

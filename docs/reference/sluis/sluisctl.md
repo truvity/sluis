@@ -136,7 +136,7 @@ sluisctl recovery verifier [--account recovery|conformance]
 
 | Command | Does |
 |---|---|
-| `recovery password` | Reads `/sluis/<instance>/internal/oidc/recovery-password` (layout v5; layout v4 `/sluis/<instance>/internal/config/recovery/password`) with your own AWS credentials, the SDK's default chain, and prints it decoded. `--account conformance` reads `internal/oidc/conformance-password`, which exists on layout v5 when `conformance.enabled` is set |
+| `recovery password` | Reads `/sluis/<instance>/internal/oidc/recovery-password` with your own AWS credentials, the SDK's default chain, and prints it decoded. `--account conformance` reads `internal/oidc/conformance-password`, which exists when `conformance.enabled` is set |
 | `recovery verifier` | Reads a password from standard input and prints the account's SRP credential: the random salt, the verifier and the PBKDF2 rounds. Store it as the secret `recovery.verifierSecret` or `conformance.verifierSecret` names. For an installation that is not a Pulumi stack. Refuses a password that is weak or not printable ASCII |
 
 | Detail | Behavior |
