@@ -8,7 +8,7 @@
 #
 site_name: sluis
 site_url: https://truvity.github.io/sluis/
-site_description: Documentation for sluis, audit and storage
+site_description: Documentation for sluis, an OpenID Connect issuer for workforce access, and its audit and storage modules
 repo_url: https://github.com/truvity/sluis
 edit_uri: edit/master/docs/
 docs_dir: docs

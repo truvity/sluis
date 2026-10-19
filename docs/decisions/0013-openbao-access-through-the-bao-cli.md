@@ -55,7 +55,7 @@ below gives; only where the login itself may happen has moved.
 
 The login targets the **namespace the caller is about to operate in**,
 by default. OpenBAO's own contract
-([truvity/openbao's `docs/integrations/sluis.md`](https://github.com/truvity/openbao/blob/master/docs/integrations/sluis.md),
+([truvity/openbao's `docs/integrations/sluis.md`](https://github.com/truvity/openbao/blob/master/docs/integrations/access-roster.md),
 "Root and every environment namespace get the same two auth mounts... the
 namespace a person logs in to is the environment's name") gives every
 namespace its own `jwt-roster` door, and a token minted in one namespace
