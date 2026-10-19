@@ -1,6 +1,6 @@
 # How does the GitHub controller decide?
 
-The GitHub controller is a loop in the GitHub module's process, enabled by `controllers.github` in the service document ([one binary per module](design.md#one-binary-per-module)). It has no listener and no console. It holds the GitHub App keys and writes to GitHub.
+The GitHub controller is a loop in the GitHub module's process, enabled by `controllers.github` in the service document ([one binary per module](design.md#one-binary-per-module)). Its only listener is `/rpc`, which the issuer calls, and it has no console. It holds the GitHub App keys and writes to GitHub.
 
 Each pass makes an organisation's teams and membership match the policy's `github` table. To connect an organisation, see [connect a GitHub organisation](../../guides/sluis/connect/github-organisation.md). For the Secrets and records, see the [GitHub controller reference](../../reference/sluis/github-organisation.md).
 
@@ -69,11 +69,11 @@ The policy render refuses these:
 | an organisation binding no group and no team | to stop managing an organisation, remove it |
 | the same team, or the same organisation's `members`, declared twice across merged files | the second would replace the first |
 
-The same team name in two organisations is two teams. The service uses the App key only to uninstall on Disconnect. A workflow's identity runs the other way ([GitHub Actions](../../guides/sluis/connect/github-actions.md)).
+The service uses the App key only to uninstall on Disconnect. A workflow's identity runs the other way ([GitHub Actions](../../guides/sluis/connect/github-actions.md)).
 
 ## The loop
 
-A pass runs every interval and when the watch sees a change. Every 30 seconds the controller hashes its credentials and records and reads the `_pass.<organisation>.json` markers that **Refresh** leaves. A changed hash or newer marker wakes the loop. Refresh is limited to one a minute per organisation and audited.
+A pass runs every interval and when the watch sees a change. Every 30 seconds the controller hashes its credentials and records and reads the pass requests that **Refresh** leaves. A changed hash or newer marker wakes the loop. Refresh is limited to one a minute per organisation and audited.
 
 Every console answer carries the digest of its policy. The controller changes nothing on an answer under another policy. It retries within seconds, a bounded number of times, then falls back to the interval.
 

@@ -48,7 +48,7 @@ for one person, one browser or one client for everybody. So do removal from the 
 answer at a refresh, and refresh-token reuse.
 
 The plain sign-out (`/logout`, `end_session`) ends the person's interactive sessions and keeps agent sessions. An
-`end_session` that names an agent client also ends that client's sessions. A sign-in that passes its absolute limit
+`end_session` whose verified `id_token_hint` was issued to an agent client also ends that client's sessions. A sign-in that passes its absolute limit
 keeps every live chain.
 
 ## How long does an agent outlive a removal?

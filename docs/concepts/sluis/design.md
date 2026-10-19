@@ -1,10 +1,10 @@
 # How is sluis designed?
 
-One issuer that every cluster, cloud account, CD system and console trusts, fed by the corporate directories the company already runs. It answers two questions about a person, whether the account is live and who is in a group. It turns the answer into a token under a policy that is a file in git. It authenticates nobody: passwords, MFA and device policy stay with Google Workspace or Entra.
+One issuer that every cluster, cloud account, CD system and console trusts, fed by the corporate directories the company already runs. It answers two questions about a person, whether the account is live and who is in a group. It turns the answer into a token under a policy that is a file in git. It authenticates nobody but the recovery account and a conformance test account. Passwords, MFA and device policy stay with the corporate directory.
 
 ## One binary per module
 
-The issuer, the signer and the console are one process, `sluis-issuer`. The GitHub, Slack, Google, Cloudflare and backup modules are processes of their own, one binary each, that the issuer calls ([ADR 0071](../../decisions/0071-least-privilege-modules-one-credential-holder-per-function.md)). A module whose `remote` is unset in the issuer's document runs inside the issuer instead and shares its health probes. A login makes no network call except to the corporate directory and the Google module.
+The issuer, the signer and the console are one process, `sluis-issuer`. The GitHub, Slack, Google, Cloudflare and backup modules are processes of their own, one binary each, that the issuer calls ([ADR 0071](../../decisions/0071-least-privilege-modules-one-credential-holder-per-function.md)). A module whose `remote` is unset in the issuer's document runs inside the issuer instead and shares its health probes. A login's only network call is to the Google module, which reaches the directory.
 
 The directory's own endpoint is not served. The controllers read the console's API with their own identity, with the policy digest on every answer.
 
@@ -20,7 +20,7 @@ A module alone holds its credentials: a GitHub App key is in the GitHub module's
 | Two trust anchors and one vocabulary | [Trust](trust.md) |
 | Workspaces, domains and what authoritative means | [Directory model](directory-model.md) |
 | Snapshots, leases and shared state | [Freshness](freshness.md) |
-| The policy, what is verified, six grants | [Verify and issue](verify-and-issue.md) |
+| The policy, what is verified, three grants and three endpoints | [Verify and issue](verify-and-issue.md) |
 | Sessions, limits and sign-out | [Sessions](sessions.md), [back-channel logout](back-channel-logout.md) |
 | The web UI | [Console](console.md) |
 | Joiners, movers and leavers on GitHub | [GitHub controller](github-controller.md) |
@@ -28,12 +28,11 @@ A module alone holds its credentials: a GitHub App key is in the GitHub module's
 | The audit trail | [Audit](audit.md), [audit actions](../../reference/sluis/audit-actions.md) |
 | State, secrets and blobs | [Store](store.md), [ports](ports.md) |
 | The way in when no directory can vouch | [Recovery](recovery.md) |
+| Functions, roles and signing keys on AWS | [Lambda](lambda.md), [signing on AWS](signing-on-aws.md) |
 | What happens when something fails | [Failure semantics](failure-semantics.md) |
 | What was removed | [Not served](not-served.md) |
 
-## Build
-
-Run `devbox shell`, then `just check`. The chart is `charts/sluis`.
+## Consoles without OpenID
 
 A console with no OpenID flow of its own uses gateway-native OIDC on Envoy Gateway, or upstream oauth2-proxy on other gateways ([ADR 0003](../../decisions/0003-deprecate-access-proxy.md)). See [oauth2-proxy](../../guides/sluis/connect/oauth2-proxy.md).
 

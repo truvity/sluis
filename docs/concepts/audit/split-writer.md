@@ -14,13 +14,13 @@ The deployment creates the stream, and the writer refuses to start without it. S
 
 3. **Validate** against the composed schema. A violation is dead-lettered.
 
-4. **Stamp** `recorded_at`, `observer` from the publisher's verified identity, and `origin_hash` as the SHA-256 of the canonical wide record.
+4. **Stamp** `recorded_at`, `observer` from the publisher's verified identity, and `origin_hash` as the SHA-256 of the canonical wide record. From an SQS queue, `recorded_at` is `SentTimestamp` and the observer comes from the `senders` table. When the workloads file lists workloads, the writer refuses by id a record whose `source` is not its caller's.
 
 5. **Split** into one copy per profile the action belongs to, with the profile's allowed fields and classes.
 
 6. **Treat identities** per profile: clear, pseudonym (HMAC under the tenant-and-purpose key), scoped or omit. Apply `x-audit-sensitive`. With no `keys` block, the default, there is no pseudonym treatment. Declare `external_identifiers_are_opaque` instead.
 
-7. **Buffer** per profile and tenant. Roll on an interval of one to five minutes or on size before compression. A roll is one ingest batch keyed by the hour it was taken. Retention is fixed when an object opens, so every copy keeps at least the oldest's period.
+7. **Buffer** per profile and tenant. Roll on `roll.interval` (default 30 seconds), on `roll.maxRecords` or at 8 MiB before compression. A roll is one ingest batch keyed by the hour it was taken. Retention is fixed when an object opens, so every copy keeps at least the oldest's period.
 
 8. **PUT** each object conditionally (`If-None-Match: *`) with `ObjectLockMode=COMPLIANCE`, `RetainUntilDate` from the profile, SSE-KMS, a checksum, `Content-Encoding: zstd` and the metadata `format`, `sha256` and `count`. See the [bucket contract](../../reference/audit/bucket-contract.md).
 

@@ -1,30 +1,30 @@
 # Tutorial: sluis on AWS Lambda
 
-You deploy the sluis issuer and module functions on AWS Lambda, on secrets layout v5, behind a mutual-TLS custom domain (preset `aws-hybrid`; `aws-serverless` has no Kubernetes beside it). State is in DynamoDB, blobs in S3, secrets in SSM. Tokens are signed by key pairs the function generates and wraps under a KMS key you supply. Allow about an hour, most of it waiting for AWS.
+You deploy the sluis issuer and module functions on AWS Lambda, on secrets layout v5, behind a mutual-TLS custom domain (preset `aws-hybrid`; `aws-serverless` has no Kubernetes beside it). State is in DynamoDB, blobs in S3, secrets in SSM. Tokens are signed by key pairs the function generates and wraps under a KMS key you supply. A second key encrypts the SSM parameters. Allow about an hour, most of it waiting for AWS.
 
 Design: [ports](../../concepts/sluis/ports.md). Library arguments: [Pulumi library](../../reference/sluis/pulumi-library.md). Keys: [configuration](../../reference/sluis/configuration.md).
 
 ## What you need
 
-All names are placeholders; replace them.
-
 | Item | Detail |
 |---|---|
 | AWS account | Credentials that create IAM, Lambda, API Gateway, DynamoDB, S3, KMS, SSM and EventBridge resources. Below: `111122223333`, `eu-central-1`. |
 | Apply role | The ARN of the IAM role you apply with (`applyRoleArn`). Only it may write the truststore. |
-| KMS key | Symmetric, alias `alias/demo-sluis-sign`. Step 0 creates it. The library looks the alias up and creates no key. |
+| KMS keys | Two symmetric keys, aliases `alias/demo-sluis-sign` and `alias/demo-sluis-secrets`. Step 0 creates them. The library looks the aliases up and creates no key. |
 | ACM certificate | In that region, for `access.example.test`. You supply its ARN. |
 | Audit queue | URL and ARN of an existing audit installation's SQS ingest queue (`Audit.Use`, v1.74 or later). Without it the library installs audit beside the function: see [Audit](../../reference/sluis/pulumi-library.md#audit). |
 | Tools | Go, `pulumi` logged in to a backend, `gh`, `openssl`, `curl`, and `sluisctl` from the release's `sluisctl_<version>_<os>_<arch>` archive. |
 
-## 0. Create the signing key
+## 0. Create the keys
 
-The key exists before the stack that grants on it. A symmetric key with an alias and the account's default key policy is enough. Once the library grants it, the function's role uses the key under the context `{instance, purpose: sign}`.
+The keys exist before the stack that grants on them. A symmetric key with an alias and the account's default key policy is enough. The function's role uses the sign key under the context `{instance, purpose: sign}`, and the secrets key through SSM only.
 
 ```sh
-KEY=$(aws kms create-key --description "demo sluis: wraps the signing keys" --query KeyMetadata.KeyId --output text)
-aws kms enable-key-rotation --key-id "$KEY"
-aws kms create-alias --alias-name alias/demo-sluis-sign --target-key-id "$KEY"
+for NAME in sign secrets; do
+  KEY=$(aws kms create-key --description "demo sluis: $NAME" --query KeyMetadata.KeyId --output text)
+  aws kms enable-key-rotation --key-id "$KEY"
+  aws kms create-alias --alias-name "alias/demo-sluis-$NAME" --target-key-id "$KEY"
+done
 ```
 
 ## 1. Write the installation
@@ -169,7 +169,7 @@ func main() {
 			Storage:        store.Grant(),
 			State:          states.Grant(),
 			Audit: &sluispulumi.AuditArgs{Use: &sluispulumi.AuditUse{QueueURL: auditQueueURL, QueueArn: auditQueueArn}},
-			Keys:           &sluispulumi.KeysArgs{Sign: "alias/demo-sluis-sign"}, // the key from step 0, by alias
+			Keys: &sluispulumi.KeysArgs{Sign: "alias/demo-sluis-sign", Secrets: "alias/demo-sluis-secrets"}, // the keys from step 0, by alias
 		}, withAWS)
 		if err != nil {
 			return err

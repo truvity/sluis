@@ -2,7 +2,7 @@
 
 See [keys](../../reference/sluis/keys.md), [ports](../../reference/sluis/ports.md) and [ports and adapters](ports.md).
 
-`internal/portstore` implements each domain store on State and Secrets, and `internal/app` picks the implementation in one place (`openStores`). Any `ports.adapter` but `legacy` keeps the domain records on the ports. `legacy` keeps the ConfigMaps and Secrets of `internal/kube`.
+`internal/portstore` implements each domain store on State and Secrets, and `internal/app` picks the implementation in one place (`openStores`). Any `ports.adapter` but `legacy` keeps the domain records on the ports. `legacy` keeps the ConfigMaps and Secrets of `internal/kube`. On layout v5 each module owns its table ([ports](ports.md#who-owns-a-record-and-who-may-read-it)).
 
 The controllers read the same records through `controller.RecordSource` (Slack) and `controller.AppSource` (GitHub). A poll of the records' keys and revisions wakes them, and opens no value.
 
@@ -82,7 +82,6 @@ The shared inputs of a Slack sweep stay in memory.
 
 - A console channel's duplicate check runs on the listing read at the start of the write. Two concurrent creates of different names for one Slack channel can both pass.
 
-- The domain tests run each store over memory State and Secrets (`portstoretest`). Where a second replica matters, they open two processes onto one State.
 
 ## Decided in
 

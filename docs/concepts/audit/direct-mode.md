@@ -25,7 +25,7 @@ Two receiver replicas are safe. The deduplication table is in Postgres, so two p
 
 ## Read path and jobs
 
-The indexer fills the index. The query service answers the console's Audit page. The CronJobs verify and purge the bucket.
+The indexer fills the index. The query service answers the console's Audit page. The CronJobs verify the archive and purge the index and the dedupe table. They never delete an archive object.
 
 ```mermaid
 flowchart TB

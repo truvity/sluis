@@ -4,19 +4,20 @@ Pick the road you are on.
 
 | you are | start at |
 |---|---|
-| installing audit on Kubernetes | [Getting started on Kubernetes](../../get-started/audit/kubernetes.md) |
+| installing audit on Kubernetes with AWS storage | [Getting started on Kubernetes](../../get-started/audit/kubernetes.md) |
+| installing audit with NATS, PostgreSQL and Secrets in the cluster | [Getting started with the services in the cluster](../../get-started/audit/in-cluster.md) |
 | installing audit on AWS Lambda | [Getting started on AWS Lambda](../../get-started/audit/aws-lambda.md) |
 | connecting a sluis install | [Getting started with a sluis-connected install](../../get-started/audit/sluis.md) |
 | connecting an application | [Connect an application](../../guides/audit/connect/connect-an-application.md), then [emit records](../../guides/audit/connect/emit-records.md) |
 | reading or auditing the trail | [Read the trail](../../guides/audit/connect/read-the-trail.md), then [verify the trail](../../guides/audit/operate/verify-the-trail.md) |
-| upgrading | [the upgrade pages](../../guides/audit/upgrade/v0.13.md), linked from the [CHANGELOG](../../../audit/CHANGELOG.md) |
+| upgrading | [the upgrade pages](../../guides/audit/upgrade/v1.75.md), linked from the [CHANGELOG](../../../CHANGELOG.md) |
 | working on this repository | [repository layout](../../reference/audit/repository-layout.md) and [CONTRIBUTING](../../../CONTRIBUTING.md#audit) |
 
 Audit owns the record format, the extension slots and the SDKs. Who may write what to a sluis installation's catalogue is sluis's: [change the audit catalogue](../../guides/sluis/change-the-audit-catalogue.md).
 
 ## Getting started
 
-One tutorial per shape: [Kubernetes](../../get-started/audit/kubernetes.md), [AWS Lambda](../../get-started/audit/aws-lambda.md), [sluis-connected](../../get-started/audit/sluis.md). The [deployment shapes](../../get-started/audit/README.md) compare them.
+One tutorial per shape: [services in the cluster](../../get-started/audit/in-cluster.md), [Kubernetes with AWS storage](../../get-started/audit/kubernetes.md), [AWS Lambda](../../get-started/audit/aws-lambda.md), [sluis-connected](../../get-started/audit/sluis.md). The [deployment shapes](../../get-started/audit/README.md) compare them.
 
 ## How-to
 

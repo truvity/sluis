@@ -21,6 +21,8 @@ all pages, see the [index](README.md). Ask: what goes wrong if I do the obvious 
 |---|---|
 | [configuration](../../reference/sluis/configuration.md) | the strict values schema and the values that refuse to render unset |
 | [failure semantics](failure-semantics.md) | what happens when the directory, the store or the issuer is down |
+| [endpoints: hardening](../../reference/sluis/endpoints.md#hardening) | the security headers, HSTS rule, body limits and timeouts of every response |
+| [recovery](recovery.md) | the password door, its per-source `429` throttle and the switch that turns it off |
 | [trust](trust.md#recovery-is-the-root-not-a-back-door) and [lost operator access](../../guides/sluis/operate/lost-operator-access.md) | the way back in when nobody can sign in |
 | [check health](../../guides/sluis/operate/check-health.md) | what each unhealthy state means |
 | [unreachable installation](../../guides/sluis/operate/read-the-audit-trail.md#3-when-the-installation-cannot-be-reached) | what to do when you cannot reach it |

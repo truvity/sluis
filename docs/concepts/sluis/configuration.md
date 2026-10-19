@@ -4,7 +4,7 @@ The keys, types and defaults are in the [configuration reference](../../referenc
 
 ## One file, one binary, one chart
 
-sluis is one chart, `charts/sluis`, and one image, with a Deployment per module. The issuer renders the directory, the policy, the OpenID provider, the login page and the console. When `config.controllers` names them and no `modules.<m>` is enabled, it also runs the GitHub and Slack controllers in its process ([one binary per module](design.md#one-binary-per-module)).
+sluis is one chart, `charts/sluis`, and one binary, with a Deployment per module. The issuer, always rendered, holds the directory reads, the policy, the OpenID provider, the login page and the console. Enable `modules.github`, `slack`, `google` or `cloudflare` for the others. In documents mode the issuer's pod runs the controllers its document names ([one binary per module](design.md#one-binary-per-module)).
 
 Two documents configure a process. The service document says where State lives and which keys sign. The policy says who may have what. They change for different reasons and have different owners.
 
@@ -38,7 +38,7 @@ A document holds a secret's name, and `secrets.source` says how the platform del
 
 - **It dictates no Secret name.** Every value that consumes a Secret the chart did not create takes the Secret's name and the keys inside it. Key names are fixed only for a Secret the service writes itself.
 
-The service reads and writes plain Kubernetes Secrets and ConfigMaps in its own namespace. To deliver a declared Secret into the namespace, see [deliver a declared Secret](../../guides/sluis/deliver-a-declared-secret.md).
+On the deprecated `legacy` adapter the service reads and writes plain Kubernetes Secrets and ConfigMaps in its own namespace. To deliver a declared Secret into the namespace, see [deliver a declared Secret](../../guides/sluis/deliver-a-declared-secret.md).
 
 ## Two routes
 
@@ -48,9 +48,7 @@ The console is a path, not a host, because discovery must sit at the root of the
 
 ## A record and its credential are two objects
 
-The console shows a record to anyone who may see it. A credential is written once and read once, at start. A record whose credential is missing shows as unhealthy with the reason, and the service still starts.
-
-Each credential carries a copy of its record, so [a restore from the Secrets alone](../../guides/sluis/operate/back-up-and-restore.md) rebuilds everything.
+The reasons are in [the store](store.md#why-are-a-record-and-its-credential-two-objects).
 
 ## Who reads the directory
 
@@ -65,4 +63,4 @@ A service that needs to know who somebody is verifies the issuer's token and rea
 - [ADR 0007: Breaking changes inside 1.x](../../decisions/0007-breaking-changes-inside-1x.md)
 - [ADR 0032: One configuration file, one binary, one chart](../../decisions/0032-one-configuration-file-one-binary-one-chart.md)
 - [ADR 0036: Configuration is immutable per instance](../../decisions/0036-configuration-is-immutable-per-instance.md)
-- [ADR 0037: One process everywhere](../../decisions/0037-one-process-everywhere.md)
+- [ADR 0071: One process per credential holder](../../decisions/0071-least-privilege-modules-one-credential-holder-per-function.md)

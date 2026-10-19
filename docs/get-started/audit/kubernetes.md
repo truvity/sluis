@@ -71,7 +71,7 @@ audit:
   # see charts/audit/examples/direct.yaml
 ```
 
-[`charts/audit/examples/direct.yaml`](../../../charts/audit/examples/direct.yaml) holds every component, and the chart's tests render it.
+[`charts/audit/examples/direct.yaml`](../../../charts/audit/examples/direct.yaml) holds every component, and the chart's tests render it. With `workloads` listed, the writer refuses a record whose `source` is not its caller's.
 Each `config:` key is the binary's own ([configuration](../../reference/audit/configuration.md)); the chart's additions are in [chart values](../../reference/audit/chart-values.md).
 For the profile choice see [which profiles to compose](../../concepts/audit/which-profiles-to-compose.md).
 
@@ -100,11 +100,9 @@ The writer refuses to start and names the profile and both modes.
 6. Once records land, run `audit conformance --query https://audit-query.<app>.svc:8080 --profile security --token-file token`.
 7. With `OTEL_EXPORTER_OTLP_ENDPOINT` set on the pods, page on `audit.observe.index.deferred`, `audit.observe.index.lag`, the dead-letter counter and `audit.emit.records.dropped` ([telemetry](../../reference/audit/telemetry.md)).
 
-The writer refuses to start and logs the reason when the database is at a schema version it does not know, or a profile demands a lock the store lacks.
-
 ## Next
 
 - Failures: [recover from an outage](../../guides/audit/operate/recover-from-an-outage.md), [rebuild the index](../../guides/audit/operate/rebuild-the-index.md), [diagnose a scheduled job](../../guides/audit/operate/diagnose-a-scheduled-job.md).
 - [Place a legal hold](../../guides/audit/operate/place-a-legal-hold.md), [verify the trail](../../guides/audit/operate/verify-the-trail.md).
 - [Billing](../../guides/audit/operate/enable-billing.md), [usage quotas](../../guides/audit/operate/enable-usage-quotas.md).
-- [Upgrade](../../guides/audit/upgrade/v0.13.md).
+- [Upgrade](../../guides/audit/upgrade/v1.75.md).

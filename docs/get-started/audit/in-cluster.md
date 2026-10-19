@@ -15,6 +15,7 @@ The chart takes references to all of these and refuses to render when one is mis
 | An S3 bucket and a prefix | AWS S3 or Cloudflare R2; `attested` needs AWS S3; [prepare the bucket](../../guides/audit/operate/prepare-the-bucket.md) |
 | A key for the seals | AWS KMS or OpenBao transit ([key custody](../../concepts/audit/key-custody.md)); pseudonymising under KMS also needs `keys.conceal`, a symmetric KMS key |
 | The secrets | Kubernetes Secrets named in the values, delivered by an operator such as External Secrets |
+| Who may write | `workloadIdentity` as in [Kubernetes with AWS storage](kubernetes.md), or `anonymousWrites: true` for a trial |
 | A reference clock | an NTP address, for example `pool.ntp.org`, or `169.254.169.123` on AWS |
 | The images | `ghcr.io/truvity/audit/`, one tag that also stamps the chart |
 
@@ -38,17 +39,24 @@ audit:
   replicas: 2
   presets:
     standard: {bucket: audit-eu-example-1, region: eu-example-1, prefix: audit/}
+  profiles:
+    security: {frameworks: [security]}
+  externalIdentifiersAreOpaque: true
   receiver:
     config:
       mode: receiver
+      anonymousWrites: true     # a trial: nobody is verified
       stream: {nats: {url: "nats://nats.nats.svc:4222"}, name: AUDIT}
   writer:
     consumers: 3
+    config:
+      anonymousWrites: true
+      replicas: 3               # the same as consumers
   jobs:
     notary:
       enabled: true
       config:
-        keys: {adapter: kms, seal: {key: alias/sluis-example-audit-seal}}
+        keys: {adapter: kms, instance: audit, seal: {key: alias/sluis-example-audit-seal}}
     clockSync:
       enabled: true
       config:

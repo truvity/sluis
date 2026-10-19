@@ -22,7 +22,7 @@ Compose `billing-nl` where the installation meters. It keeps quantities for seve
 
 Compose `history` only where a tenant reads their own history. The operator's staff appear there by kind and role, never by identity, so the profile needs no key provider.
 
-Keep `evidence-etsi`, `pci-dss`, `dora` and `nen-7513` as files until a contract or regulator demands one. Each raises retention. `pci-dss` obliges someone to review daily and keep the dispositions. Record the decision where the deployment's other decisions live.
+Keep `evidence-etsi`, `pci-dss`, `dora` and `nen-7513` as files until a contract or regulator demands one. Each raises retention. `pci-dss` obliges someone to review daily and keep the dispositions.
 
 ## Composing more than one
 
@@ -34,7 +34,7 @@ Composition is a union that only tightens: the longest retention, the stricter i
 
 Retention cannot be shortened later. Under Object Lock in compliance mode, an object written under a seven-year profile stays seven years.
 
-`pci-dss`, `nen-7513`, `dora` and `evidence-etsi` demand Object Lock in compliance mode, so the bucket needs it. `security`, `history` and `billing-nl` need only seals under a managed key. They run on any S3-compatible store, with a preset of `operational` or `standard` that writes without a lock.
+`pci-dss`, `nen-7513`, `dora` and `evidence-etsi` demand Object Lock in compliance mode, so the bucket needs it. `security`, `history` and `billing-nl` need only seals under a managed key. They run on any S3-compatible store without a lock: `history` takes the `operational` preset, and `security` and `billing-nl` take `standard`.
 
 A component refuses to start when the store is weaker than a composed profile demands.
 

@@ -64,8 +64,8 @@ You choose an adapter per concern: `state`, `secrets`, `blobs`, `signing`, `trig
 Each adapter registers a descriptor in `internal/port` (`port.Register`) with its name, concern, needs, runtimes
 (`kubernetes`, `lambda`, `process`), status (`implemented`, `on-request`) and factory.
 
-The `aws-hybrid` preset runs sluis on Lambda with DynamoDB state, SSM secrets, KMS token signing, S3 blobs, SQS audit,
-EventBridge ticks and an asynchronous invoke for "run a pass now". Every other adapter is on request: in the matrix and
+The `aws-hybrid` and `aws-serverless` presets run sluis on Lambda with DynamoDB state, SSM secrets, KMS-wrapped signing and S3 blobs.
+They add SQS audit, EventBridge ticks and an asynchronous invoke for "run a pass now". Every other adapter is on request: in the matrix and
 refused at start.
 
 ### How do you choose a preset?

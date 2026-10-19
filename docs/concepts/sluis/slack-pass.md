@@ -18,7 +18,7 @@ For every workspace the policy declares, a pass runs these steps:
 
 5. **Decide**, then act if the workspace is in `policy.controllers.slack.enabledWorkspaces`.
 
-6. **Publish** all reports together into the ConfigMap `<release>-slack-status`, one key per workspace.
+6. **Publish** the reports together: the blob `slack/reports/<workspace>`, or on the legacy adapter a ConfigMap key.
 
 A read that is not whole fails the workspace's pass and decides nothing. Examples are a missing `users:read.email` scope, an unrelieved rate limit and a failed page. A workspace with no owner holds every person: *no owning directory: set the owner on the console*.
 
@@ -74,7 +74,7 @@ The controller creates no Slack account, touches no user group, and invites or r
 
 ## Failure is per workspace
 
-A workspace that is not connected or not yet installed reports `waiting` with no error. A failed Slack read, an unreadable owning directory or a bot token from another team reports `failed` with the reason. Neither stops another workspace.
+A workspace that is not connected or not yet installed reports `waiting` with no error. A failed Slack read, an unreadable owning directory or a bot token from another team reports `failed` with the reason.
 
 ## Decided in
 
