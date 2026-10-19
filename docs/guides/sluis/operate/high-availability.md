@@ -1,6 +1,6 @@
 # Run more than one replica
 
-Run `sluis issuer` at two or more replicas so a node loss or a rollout stops neither sign-in nor reconciling.
+Run the issuer (`sluis issuer`) at two or more replicas so a node loss or a rollout stops neither sign-in nor reconciling.
 
 ## Before you start
 
@@ -18,7 +18,6 @@ Run `sluis issuer` at two or more replicas so a node loss or a rollout stops nei
 
 - Add no caching header to `/keys` in front of the service.
 
-- A changed client metadata document may show old values on a replica for 10 minutes.
 
 ## Steps
 

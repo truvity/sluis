@@ -39,7 +39,7 @@ One row per integration, with its how-to and worked example.
 | SSH | people and machines | in | [ssh](ssh.md) | |
 | SSH hosts | host certificates from the SSH CA | in | [ssh-hosts](ssh-hosts.md) | |
 | PostgreSQL | short-lived client certificates | in | [postgresql](postgresql.md), [server side](postgresql-server.md) | |
-| R2 credential broker | prefix-scoped object credentials | in | [r2-storage](r2-storage.md) | |
+| R2 credential broker (deprecated) | prefix-scoped object credentials | in | [r2-storage](r2-storage.md) | |
 | Cloudflare tokens and R2 | short-lived tokens and R2 credentials | both | [cloudflare-tokens](../cloudflare-tokens.md) | [R2](examples/cloudflare-r2-credentials.md), [token](examples/cloudflare-api-token.md) |
 
 ## Directories, GitHub and Slack

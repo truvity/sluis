@@ -30,7 +30,7 @@ permissions:
   contents: read
 steps:
   - id: access
-    uses: truvity/sluis@v1.11.0
+    uses: truvity/sluis@<commit-sha>   # vX.Y.Z
     with:
       issuer: https://access.example.com
       github-app: publisher             # the catalogue id

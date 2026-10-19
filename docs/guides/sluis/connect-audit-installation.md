@@ -6,13 +6,13 @@ Make sluis record into an audit installation and show its Audit page in the cons
 
 - Give a writer without a registry, such as a Lambda, the whole catalogue directory, not only the YAML. Otherwise every cold start fails and records go to its dead-letter queue ([change the audit catalogue](change-the-audit-catalogue.md)).
 
-- Upgrade the audit writer before the issuer when the catalogue moves, because recording is best effort. Catalogue 1.10.0 needs a Lambda writer to hold `roster-1.10.0.yaml` and its schemas first.
+- Upgrade the audit writer before the issuer when the catalogue moves, because recording is best effort. A Lambda writer must hold the new `roster-<version>.yaml` and its schemas first.
 
 - Map the one service account to the source `roster`. The controllers record with its token.
 
 ## 1. Map the workload
 
-In the installation's `workloadIdentity.workloads`, map this release's service account to the source `roster`, with the audience `audit.token.audience` (default `audit`).
+In the installation's `workloadIdentity.workloads`, map this release's service account to the source `roster`, with the audience `audit.token.audience` (default `audit`). A writer that lists workloads refuses a record of another source ([workload identity](../../reference/audit/configuration-writer.md#workload-identity)).
 
 ## 2. Declare the Audit client
 

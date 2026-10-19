@@ -6,9 +6,9 @@ Deploy the release's writer and notary zips through the Pulumi library. The guar
 
 - Use the library (`github.com/truvity/sluis/audit/deploy/pulumi`) at the same release as the zips. The binary's release is read from the zip's file name, so do not rename the file.
 
-- `Guards.AllowVersionSkew` accepts a deliberate mismatch, such as a build from a checkout. A library with no known release (a `replace` directive) compares nothing.
+- `Guards.AllowVersionSkew` accepts a deliberate mismatch, such as a build from a checkout. A library with no known release compares nothing.
 
-- Pin the SHA-256 from the release's `checksums.txt` in the stack source, where it is reviewed. Do not fetch `checksums.txt` at deploy time.
+- Pin the SHA-256 from the release's `checksums.txt` in the stack source, where it is reviewed. Or set `Release.ResolveChecksums`, which verifies `checksums.txt` against its Sigstore bundle ([verify a release](../../sluis/operate/verify-a-release.md)).
 
 - The deploying identity needs `s3:GetObject` on `catalogue/*`, `s3:ListBucket` on the bucket with condition `s3:prefix` = `catalogue/`, `lambda:PublishLayerVersion` and `lambda:GetLayerVersion`. Without `s3:ListBucket`, S3 answers a missing key with 403 and the guard refuses. `Guards.SkipCatalogueCheck` says the identity cannot read the bucket.
 
@@ -53,7 +53,7 @@ Run `pulumi up` with the previous program. Layer versions are never destroyed (`
 
 ## Trap
 
-A function that fails its init is not a failed deploy. The event source mapping keeps invoking it and the ingest queue drains into the dead-letter queue.
+A function that fails its init is not a failed deploy: the ingest queue drains into the dead-letter queue.
 
 ## Build from a checkout
 

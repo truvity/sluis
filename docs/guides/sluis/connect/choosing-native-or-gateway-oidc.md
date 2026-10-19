@@ -39,7 +39,7 @@ Class B is a choice the operator makes. Cap the app's own session, or accept Bac
 | Headlamp | Not verified | Check whether it refreshes or mints its own session |
 | `sluisctl`, kubelogin | A | Nothing |
 
-Grafana's setting comes from Grafana's own reference, not this repository. Check it against your version. OpenBAO's role field names are in the [OpenBAO sluis integration](https://github.com/truvity/openbao/blob/master/docs/integrations/sluis.md).
+Grafana's setting comes from Grafana's own reference, not this repository. Check it against your version. OpenBAO's role field names are in the [OpenBAO sluis integration](https://github.com/truvity/openbao/blob/master/docs/integrations/access-roster.md).
 
 ## Replace the removed proxy chart
 

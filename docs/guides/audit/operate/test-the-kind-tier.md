@@ -15,7 +15,7 @@ Prove the chart end to end on the shared kind tier: a disposable cluster with pl
 1. Run the whole tier.
 
    ```sh
-   just e2e-all
+   just audit-e2e-all
    ```
 
    The parts it runs:
@@ -24,7 +24,9 @@ Prove the chart end to end on the shared kind tier: a disposable cluster with pl
    |---|---|
    | `e2e/fixture` | the database with its writer and query roles, the JetStream stream and the archive bucket; `apply.sh` provisions them and `names.go` reads the values file |
    | `e2e/suite` | the Go suite, through Service endpoints, using `github.com/truvity/gemaal/pkg/harness` |
-   | `hack/e2e-snapshot.sh` | builds the images and packages the chart as a release does, for one architecture, into the box's registry |
+   | `audit/hack/e2e-snapshot.sh` | builds the images and packages the chart as a release does, for one architecture, into the box's registry |
+
+The KMS lane is `just audit-e2e-kms-install`, then `E2E_KMS=1 just audit-e2e-smoke`.
 
 ## Verify
 

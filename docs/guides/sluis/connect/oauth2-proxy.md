@@ -31,7 +31,7 @@ clients:
     requires: ["all:my-console:viewer"]
 ```
 
-Create the Secret that `secret` names. Run `sluisctl policy render policy/ -o policy.yaml` and read the diff: a typo in `redirects` fails at the issuer. Fields are in [policy clients](../../../reference/sluis/policy-clients.md).
+Create the Secret that `secret` names. Run `sluisctl policy render -o policy.yaml policy/` and read the diff: a typo in `redirects` fails at the issuer. Fields are in [policy clients](../../../reference/sluis/policy-clients.md).
 
 ### 2. Run the proxy
 
@@ -76,10 +76,5 @@ GET /oauth2/sign_out?rd=https%3A%2F%2Fissuer.example.com%2Fend_session%3Fclient_
 Route the hostname back to the backend, then remove the client row.
 
 ## Why not something else
-
-
-- Envoy Gateway's OIDC filter needs no proxy: use it on Envoy.
-
-- A proxy built into sluis puts identity code on every request path.
 
 The decision is in [ADR 0001](../../../decisions/0001-sessions-and-an-absolute-limit.md).

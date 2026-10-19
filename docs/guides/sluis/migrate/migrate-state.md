@@ -4,10 +4,10 @@ Copy an installation's State, secrets and controller reports between storages, a
 
 ## Before you start
 
-- Write a `serve` file per side. The legacy side needs `store`, `release` and `valkey`. The destination needs a working Secrets adapter, `ssm` or `openbao`.
+- Write a service document per side. The legacy side needs `store`, `release` and `valkey`. The destination needs a working Secrets adapter, `ssm` or `openbao`.
 - For DynamoDB set `ports.adapter: dynamodb`, `ports.dynamodb` (`tables`, `region`) and `ports.blob` if reports move. Remove `valkey.address`; keep `store`, `release` and `inCluster`.
 - From a workstation pass `--kubeconfig`, `--kube-context` and `--namespace`.
-- A destination on `secrets.source: ssm` needs `secrets.layout: v5`. An installation on layout v3 or v4 moves first: [secrets layout](migrate-secrets-layout.md).
+- A destination on `secrets.source: ssm` needs `secrets.layout: v5`. An installation not on layout v5 moves first, with v1.77.0: [upgrade to v1.77.1](../upgrade/v1.77.1.md).
 - `--i-have-stopped-writers` is your statement that the source is frozen ([freeze](cutover.md#2-freeze)).
 - A differing destination value stops the run and names the key. Pass `--overwrite` only when the source is right.
 - `--with-sessions` keeps sessions and `--skip` leaves out domains. For a backup, copy to a second storage.
@@ -86,7 +86,7 @@ Expect `ok: true`, empty `mismatches`, `conflicts` and `unreadable`, and `totals
 
 ### 5. Switch
 
-Put the new `serve` file into the chart's values and restore the replicas. The log says `keeping state in DynamoDB`; the console lists the same workspaces.
+Put the new service document into the chart's values and restore the replicas. The log says `keeping state in DynamoDB`; the console lists the same workspaces.
 
 ## Roll back
 

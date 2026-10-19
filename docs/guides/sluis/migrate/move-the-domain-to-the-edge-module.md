@@ -2,6 +2,8 @@
 
 Move a stack's custom domain, certificate and truststore from the core library to [the edge module](../../../reference/sluis/pulumi-library.md#the-edge-modules) without replacing the domain. DNS is untouched and nothing is down.
 
+> **Deprecated.** `edgecloudflare` is removed after v1.77. Use [`cloudflare/awsapigw`](https://github.com/truvity/edge/blob/master/docs/cloudflare/awsapigw.md) from `truvity/edge` for the front door.
+
 ## Before you start
 
 - Run a release that has the edge module, with `API.DomainName`, `API.CertificateArn`, `API.TruststorePEM` and `API.TruststoreBucketName` set. The core library deprecates all four.

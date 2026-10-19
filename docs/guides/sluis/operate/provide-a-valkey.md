@@ -7,7 +7,7 @@ Give the `legacy` State adapter a shared store for sessions and directory snapsh
 - You need a Valkey or Redis-protocol server reachable from the namespace. Memory use is the size of the directories, tens of megabytes at most. Persistence is optional: a cold cache costs one fetch per workspace.
 - Set `valkey.cluster: false` for a single node. With one shard, cluster mode makes the client bypass the Service and talk to node addresses from `CLUSTER SLOTS`. Turn it on for three shards with a replica each.
 
-- Without a Valkey, `replicaCount` above 1 is wrong under `ports.adapter: legacy`: each replica keeps logins in its own memory.
+- Under `ports.adapter: legacy` without a Valkey, each replica keeps logins in its own memory, so `replicaCount` above 1 is wrong.
 
 ## Steps
 

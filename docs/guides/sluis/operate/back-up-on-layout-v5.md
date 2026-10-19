@@ -1,14 +1,14 @@
-# Back up and restore on layout v5
+# Back up and restore the installation
 
-Run the backup module: one age-encrypted `tar.gz` a day in the archive bucket, a restore you can rehearse, and a key that opens a backup without sluis.
+Run the backup module: a daily age-encrypted `tar.gz` in the archive bucket, a restore you can rehearse, and a key that opens a backup without sluis.
 
 ## Before you start
 
-- Set `backup.recipients` before the backup function starts. A backup role with no recipient writes nothing.
+- Set `backup.recipients` before the backup function starts: with none it writes nothing.
 
-- Losing every identity loses every backup. Keep two, held apart: the installation's in SSM and one offline.
+- Losing every identity loses every backup. Keep two apart: the installation's in SSM and one offline.
 
-- `NewRestore` needs `NewBackup` of the same instance in the stack, one admin role and one break-glass role. An account root is refused.
+- `NewRestore` needs `NewBackup` of the same instance in the stack, an admin role and a break-glass role. An account root is refused.
 
 ## 1. Make the break-glass key
 
@@ -34,6 +34,7 @@ backup, _ := sluispulumi.NewBackup(ctx, "acme", &sluispulumi.BackupArgs{
 }, pulumi.Providers(awsProvider))
 _, _ = sluispulumi.NewRestore(ctx, "acme", &sluispulumi.RestoreArgs{
 	BackupCommon:    common,
+	Recipients:      backup.Recipients,
 	RestoreInvokers: sluispulumi.RestoreInvokers{AdminRoleArns: adminArns, BreakglassRoleArns: breakglassArns},
 	Recipients:      backup.Recipients, // backup.recipients: the sidecar is compared with them
 	Verify: &sluispulumi.RestoreVerifyArgs{ // backup.verify, step 5
@@ -65,7 +66,7 @@ backup:
   runGroups: ["all:acme:operator"]
 ```
 
-Expect one id, such as `20261013T020000Z-ab12cd`, and in the bucket `backup/<instance>/<id>.tar.gz.age` with its `<id>.json` sidecar.
+Expect one id, such as `20261013T020000Z-ab12cd`, and `backup/<instance>/<id>.tar.gz.age` with its `<id>.json` sidecar in the bucket.
 
 ## 4. Verify a backup
 
@@ -73,7 +74,7 @@ Expect one id, such as `20261013T020000Z-ab12cd`, and in the bucket `backup/<ins
 sluis backup verify <id> --config backup.yaml --identity breakglass.txt
 ```
 
-Run it where the archive is readable, with the backup document. Without `--identity` it checks the size and SHA-256 against the sidecar only.
+Run it where the archive is readable. Without `--identity` it checks only the size and SHA-256 against the sidecar.
 
 ## 5. Restore
 
@@ -82,9 +83,9 @@ sluisctl restore preview <id>                           # through the issuer whe
 sluisctl restore start <id> --confirm <instance> --wait # always your own AWS credentials
 ```
 
-The preview names what a restore creates, overwrites, leaves and skips. A destination that holds different data is refused without `--overwrite`. A restore is a rotation: restart afterwards ([rotate keys and credentials](rotate-keys-and-credentials.md)).
+The preview names what a restore creates, overwrites, leaves and skips. Different data at the destination needs `--overwrite`. A restore is a rotation: restart afterwards ([rotate keys and credentials](rotate-keys-and-credentials.md)).
 
-A restore checks the backup against the sealed audit trail ([provenance](../../../reference/sluis/backup.md#provenance)). Set `backup.verify` in the restore document:
+A restore checks the backup against the sealed audit trail ([provenance](../../../reference/sluis/backup.md#provenance)). On Kubernetes, set `backup.verify` in the restore document. On Lambda, `NewRestore` renders `Recipients` and `Verify`. Until the audit library renders the writer's senders table, a verified restore on Lambda needs `Verify.AnyObserver`.
 
 ```yaml
 backup:
@@ -93,7 +94,7 @@ backup:
   verify: {query: "https://audit.example", tokenFile: /var/run/secrets/audit/token, observer: "<the backup function's id>"}
 ```
 
-A backup from the last hour is refused until the notary seals it.
+The notary must seal a backup's hour first.
 
 ## 6. Open a backup without sluis
 
@@ -102,7 +103,7 @@ aws s3 cp "s3://<bucket>/<prefix>backup/<instance>/<id>.tar.gz.age" .
 age -d -i breakglass.txt <id>.tar.gz.age | tar xz
 ```
 
-`manifest.json` lists the SHA-256 of every member. `<module>/secrets.jsonl` holds that module's secrets in clear.
+`manifest.json` lists the SHA-256 of every member. `<module>/secrets.jsonl` holds secrets in clear.
 
 ## Retention and alarms
 
@@ -117,19 +118,19 @@ age -d -i breakglass.txt <id>.tar.gz.age | tar xz
 
 ## Verify
 
-`sluisctl backup status` shows `lastCompleted` within a day. `sluis backup verify` with the offline identity passes.
+`sluisctl backup status` shows `lastCompleted` within a day.
 
 ## When the audit trail is down
 
-With the trail unreachable, a restore is refused as `unverified`. Pass the flag to restore on the bucket's word alone:
+With the trail unreachable, a restore is refused as `unverified`. `--allow-unverified` restores on the bucket's word alone and needs `backup.recipients`. `sluisctl` has no such flag.
 
 ```sh
-sluis restore start <id> --confirm <instance> --allow-unverified
+sluis restore start <id> --confirm <instance> --allow-unverified   # Kubernetes, with the restore document
 ```
 
 ## Roll back
 
-A failed restore leaves the maintenance flag on the module: run it again, or `sluis maintenance off --force` once it is abandoned. To rotate the installation's identity, `pulumi up --replace` on `<name>-restore-identity-seed`; older backups then open with the offline identity only.
+A failed restore leaves the maintenance flag on: run it again, or `sluis maintenance off --force` once abandoned. To rotate the installation's identity, run `pulumi up --replace` on `<name>-restore-identity-seed`; older backups then open with the offline identity only.
 
 ## Decided in
 

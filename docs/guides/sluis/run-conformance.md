@@ -11,13 +11,13 @@ Run the four OpenID Foundation profiles on Kubernetes or AWS Lambda. See the [fi
 
 ## Before you start
 
-- Run at every major and minor release, by a person; a patch only when it touches the issuing path.
+- Run at every major and minor release; a patch only when it touches the issuing path.
 
 - Deploy the suite so the issuer reaches its `/test/` paths over public HTTPS. In a cluster it is Service `conformance-suite` in namespace `conformance`.
 
 - Have `curl`, `jq`, `python3`, headless Chrome, and `kubectl` or `aws`. Run one plan at a time: a second with the same `alias` interrupts the first.
 
-- Send `X-Forwarded-Proto: https` on every hand-typed suite call, and drive a real browser.
+- Send `X-Forwarded-Proto: https` on every hand-typed suite call.
 
 The scripts default to Kubernetes:
 
@@ -50,7 +50,7 @@ conformance-bc:    # and conformance-bc-2
   harness: true
 ```
 
-`harness` admits the Lambda test account; gitops must pass it on. Kubernetes signs in as recovery, so `requires` must name `operator`, not `viewer`. The Back-Channel plan needs its own pair ([client fields](../../reference/sluis/policy-clients.md), [secrets](../../reference/sluis/secrets.md#the-names)).
+`harness` admits the Lambda test account; gitops must pass it on. Kubernetes signs in as recovery, so `requires` must name `operator`, not `viewer`. Leave `pkce` unset: Basic OP sends no challenge. The Back-Channel plan needs its own pair ([client fields](../../reference/sluis/policy-clients.md), [secrets](../../reference/sluis/secrets.md#the-names)).
 
 ```sh
 curl -s https://<issuer>/.well-known/openid-configuration | jq .backchannel_logout_supported
@@ -62,7 +62,7 @@ Expect `true` and the secret (on Lambda, within five minutes).
 ## 2. Create the plans
 
 ```sh
-ISSUER=https://access.example.com KUBECTL="kubectl --context prod@oidc" hack/conformance-plans.sh v1.64.0
+ISSUER=https://access.example.com KUBECTL="kubectl --context prod@oidc" hack/conformance-plans.sh v1.76.0
 ISSUER=https://access.example.com SECRETS=ssm INSTANCE=prod SUITE=http://10.0.0.7:8080 hack/conformance-plans.sh v1.77.0
 ```
 
@@ -80,7 +80,7 @@ It prints `SUITE=http://<ip>:8080` and four lines `config|basic|rp-logout|backch
 SUITE=http://<ip>:8080 ISSUER=https://access.example.com hack/conformance_drive.py <config-plan-id>
 ```
 
-Config needs no browser and ends `FINISHED / PASSED`. `just conformance-config <issuer>` starts its own suite, with no client.
+Config needs no browser and ends `FINISHED / PASSED`. `just conformance-config <issuer>` starts its own suite.
 
 ## 4. Run the attended plans
 
@@ -105,4 +105,4 @@ Export each plan's results. Remove the four rows, render and upgrade, turn `conf
 
 ## Roll back
 
-Plans are records inside the suite. To run again, repeat step 1.
+Plans live inside the suite. To run again, repeat step 1.

@@ -8,8 +8,6 @@ Make the policy refuse a grant name that is a typo, by declaring which scopes, t
 
 - `rung:` and `emp:` names are exempt.
 
-- Builds older than v1.32.0 refuse the key. Deploy the service before the policy.
-
 ## 1. Collect the names in use
 
 ```sh
@@ -23,7 +21,7 @@ Each name is a `<scope>:<thing>:<role>` that fits the [taxonomy](../../reference
 Add one file with the `vocabulary` table ([shape](../../reference/sluis/policy-vocabulary.md)); a second file is refused. Mark `core` and `prod`, or your equivalents, `sensitive: true`. Use `all` only for a thing that exists once per installation. Declare roles as implies lists such as `admin: [operator]`, and use `{ scopes: [...] }` for a role that applies to some scopes only.
 
 ```sh
-sluisctl policy render policy/ -o /tmp/policy.yaml
+sluisctl policy render -o /tmp/policy.yaml policy/
 ```
 
 A refusal names the offending name. A wildcard key is refused without a vocabulary, and a wildcard that expands to nothing is refused with one.

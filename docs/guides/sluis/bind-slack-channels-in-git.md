@@ -26,7 +26,7 @@ slack:
 `mode: strict` needs `private: true`, because only an administrator can remove somebody from a public channel. The default `extend` only adds. An existing channel is adopted by name: a public one is joined, a private one the bot is in is managed. Visibility never changes and an archived channel is never unarchived.
 
 ```sh
-sluisctl policy render policy/ -o /tmp/policy.yaml
+sluisctl policy render -o /tmp/policy.yaml policy/
 ```
 
 A refusal names the key: an undeclared group, a malformed name, `ignore` without `strict`.

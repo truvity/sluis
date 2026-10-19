@@ -39,9 +39,22 @@ curl -s https://audit-query.example.com/audit.v1.QueryService/Search \
   }'
 ```
 
-Send `cursors.next` back as `"cursor"` with the same query for the next page. The last page's `next` stays valid: ask again later to tail. A search that matches nothing has no `items` key.
+Send `cursors.next` back as `"cursor"` with the same query for the next page. The last page's `next` stays valid: ask again later to tail.
 
 In `Get`, an empty `digest_id` means the hour is not sealed yet. Read an empty `verified_at` as not verified. `Resolve` returns `unimplemented` without a key provider, the default. Retry only `unavailable`.
+
+### Export
+
+`Export` starts a job; `GetExport` returns an expiring link to the caller that started it, while it holds the `export` grant.
+
+```sh
+curl -s …/audit.v1.QueryService/Export -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' -d '{"profile":"security","filter":[…],"format":"FORMAT_NDJSON"}'
+curl -s …/audit.v1.QueryService/GetExport -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' -d '{"job_id":"x-…"}'
+```
+
+A match over 100000 records fails the job: narrow the filter.
 
 ### From Go
 
@@ -54,7 +67,7 @@ See [`examples/read`](../../../../audit/examples/read/main.go).
 
 ### From TypeScript
 
-Point the `@truvity` scope at `https://npm.pkg.github.com`, then `npm install @truvity/audit @truvity/audit-react`.
+Point the `@truvity` scope at `https://npm.pkg.github.com`, then install `@truvity/audit` and `@truvity/audit-react`.
 
 ```ts
 import { createConnectTransport } from "@connectrpc/connect-web";

@@ -8,7 +8,7 @@ lives in the policy.
 ## What you need
 
 - The account side of [the person example](aws-person-profile.md) for the audience `aws:111122223333:platform-deployer`.
-- `github.owners` set to your organisation on the issuer: the allow-list is what makes a GitHub token yours.
+- `exchange.github.owners` set to your organisation on the issuer: the allow-list is what makes a GitHub token yours.
 
 ## The policy snippet
 
