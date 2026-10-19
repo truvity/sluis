@@ -200,10 +200,23 @@ func TestSluisKeyPolicyParameterScopes(t *testing.T) {
 		t.Errorf("minter: %v", got)
 	}
 	wantAdmin := []string{
-		root + "/internal/oidc/state-secret", root + "/internal/oidc/recovery-password", root + "/internal/backup/restore-identity",
+		root + "/internal/oidc/state-secret", root + "/internal/oidc/recovery-password", root + "/internal/oidc/recovery-verifier",
+		root + "/internal/backup/restore-identity",
 	}
 	if got := arns("SluisKeyAdminReads", st); !reflect.DeepEqual(got, wantAdmin) {
 		t.Errorf("admin reads v5: %v", got)
+	}
+	// With the conformance account, its password and verifier too: the stack
+	// writes them, and the provider decrypts each on create and refresh.
+	withConformance := kpArgs(LayoutV5)
+	withConformance.Conformance = true
+	wantConformance := []string{
+		root + "/internal/oidc/state-secret", root + "/internal/oidc/recovery-password", root + "/internal/oidc/recovery-verifier",
+		root + "/internal/oidc/conformance-password", root + "/internal/oidc/conformance-verifier",
+		root + "/internal/backup/restore-identity",
+	}
+	if got := arns("SluisKeyAdminReads", kpStatements(t, withConformance)); !reflect.DeepEqual(got, wantConformance) {
+		t.Errorf("admin reads v5 with conformance: %v", got)
 	}
 	// v4 adds the v4 names and gives the issuer the whole of internal/ and external/.
 	v4 := kpStatements(t, kpArgs(LayoutV4))

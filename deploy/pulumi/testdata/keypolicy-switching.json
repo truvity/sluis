@@ -346,6 +346,7 @@
           "kms:EncryptionContext:PARAMETER_ARN": [
             "arn:aws:ssm:eu-central-1:111122223333:parameter/sluis/staging/internal/oidc/state-secret",
             "arn:aws:ssm:eu-central-1:111122223333:parameter/sluis/staging/internal/oidc/recovery-password",
+            "arn:aws:ssm:eu-central-1:111122223333:parameter/sluis/staging/internal/oidc/recovery-verifier",
             "arn:aws:ssm:eu-central-1:111122223333:parameter/sluis/staging/internal/backup/restore-identity"
           ]
         }

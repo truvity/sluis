@@ -211,3 +211,51 @@ func TestAnInstallationOnLayoutV5NamesTheVerifiersAndNotThePassword(t *testing.T
 		}
 	}
 }
+
+// The administrators read back every SecureString of the SRP credentials the
+// stack writes: the provider decrypts each after create and on refresh, so
+// under a customer key an apply fails without them. The conformance account's
+// are named only when it is on.
+func TestTheAdminReadsNameTheSRPParametersTheStackWrites(t *testing.T) {
+	for _, on := range []bool{false, true} {
+		in := exampleInstallation(t)
+		in.Secrets = &sluisconfig.Secrets{KMSKeyID: paramKey}
+		if on {
+			in.Conformance = &sluisconfig.Conformance{Enabled: true}
+		}
+		in.AWS.Table = ""
+		a := withInstallation(in, func(a *arp.LambdaArgs) {
+			a.Layout = arp.LayoutV5
+			tbl := map[arp.Module]pulumi.StringInput{}
+			for _, m := range arp.Modules() {
+				tbl[m] = pulumi.String(tableArn("sluis-staging-" + string(m)))
+			}
+			a.State.Tables = tbl
+		}).args(t)
+		st, err := a.KeyPolicyStatements(arp.KeyPolicyOptions{
+			Admins: []string{arnp + "iam::" + account + ":role/operator"}, KeyAdmins: []string{kpEstateKeyAdmin},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var reads string
+		for _, s := range st {
+			if s["Sid"] == "SluisKeyAdminReads" {
+				raw, _ := json.Marshal(s)
+				reads = string(raw)
+			}
+		}
+		if reads == "" {
+			t.Fatal("no SluisKeyAdminReads")
+		}
+		for name, want := range map[string]bool{
+			arp.RecoveryVerifierParameterNameV5(in.Instance):    true,
+			arp.ConformancePasswordParameterNameV5(in.Instance): on,
+			arp.ConformanceVerifierParameterNameV5(in.Instance): on,
+		} {
+			if got := strings.Contains(reads, ":parameter"+name+`"`); got != want {
+				t.Errorf("conformance %v: SluisKeyAdminReads names %s = %v, want %v\n%s", on, name, got, want, reads)
+			}
+		}
+	}
+}

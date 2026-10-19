@@ -265,6 +265,11 @@ type KeyPolicyArgs struct {
 	// calls and DescribeKey. Off by default: it is a statement about the sluis
 	// roles only, but a role an estate shares with another usage would lose it.
 	DenyOtherActions bool
+	// Conformance says the installation turns its conformance account on
+	// (Installation.Conformance.Enabled): on layout v5 the stack then writes
+	// the account's password and SRP verifier, and the administrators read
+	// them back as they do the recovery verifier.
+	Conformance bool
 	// BackupArchive and RestoreArchive are accepted and add nothing.
 	//
 	// Deprecated: they added the statements for the backup archive's KMS
@@ -331,8 +336,10 @@ const (
 //   - SluisKeyExternalReaders: Decrypt of `external/*` only, through SSM;
 //   - SluisKeyAdminSeeds: Encrypt and GenerateDataKey through SSM (seed
 //     parameters); SluisKeyAdminReads: Decrypt of the state secret, the
-//     recovery password and (with a backup role on layout v5) the restore
-//     identity, which the stack reads back on every refresh;
+//     recovery password, on layout v5 the recovery verifier (and with
+//     Conformance the conformance password and verifier), and (with a backup
+//     role on layout v5) the restore identity, which the stack reads back on
+//     every refresh;
 //   - SluisKeyBreakglass: the function's operations through SSM;
 //   - SluisKeyControlPlaneAdmins and SluisKeyControlPlaneAdminsOnly: the key's
 //     policy, grants, disabling and deletion (KeyControlPlaneActions) are the
@@ -471,6 +478,15 @@ func SluisKeyPolicyStatements(a KeyPolicyArgs) ([]map[string]any, error) {
 		own := []string{StateSecretParameterNameV5(a.Modules.Instance), RecoveryPasswordParameterNameV5(a.Modules.Instance)}
 		if a.Layout.has4() {
 			own = append(own, StateSecretParameterName(a.Modules.Instance), RecoveryPasswordParameterName(a.Modules.Instance))
+		}
+		// The SRP credentials the stack writes on layout v5 (ADR 0076): the
+		// provider decrypts each SecureString it manages after create and on
+		// refresh, so an apply under a customer key needs them read back.
+		if a.Layout.has5() {
+			own = append(own, RecoveryVerifierParameterNameV5(a.Modules.Instance))
+			if a.Conformance {
+				own = append(own, ConformancePasswordParameterNameV5(a.Modules.Instance), ConformanceVerifierParameterNameV5(a.Modules.Instance))
+			}
 		}
 		var own2 []string
 		for _, n := range own {
