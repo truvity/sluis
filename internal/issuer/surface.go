@@ -135,7 +135,7 @@ func unsupportedResponseMode(values []string) bool {
 // a redirect to the client when it may be sent one and as a page or an OAuth
 // error body otherwise. The fixed words go to the caller and why to the log.
 func refuseAuthorize(w http.ResponseWriter, r *http.Request, clients clientLookup, code, why string) {
-	logRefusal(r.Context(), http.StatusBadRequest, why, nil,
+	logRefusal(r, http.StatusBadRequest, why, nil,
 		[]any{slog.String("error", code), logattr.SafeString("client_id", r.Form.Get("client_id"))})
 
 	if clients != nil {
@@ -291,7 +291,7 @@ func confirmedEndSession(signIn SignInDeps, w http.ResponseWriter, r *http.Reque
 	}
 
 	if signIn.State == nil {
-		logRefusal(r.Context(), http.StatusServiceUnavailable, "no key to bind the sign-out confirmation with", nil, nil)
+		logRefusal(r, http.StatusServiceUnavailable, "no key to bind the sign-out confirmation with", nil, nil)
 		_ = writePage(w, http.StatusServiceUnavailable, "Sign-out is unavailable",
 			`<p>This service cannot ask you to confirm a sign-out just now, so nothing was ended.</p>
 	<p class="note">You are still signed in. Try again later.</p>`)
@@ -320,7 +320,7 @@ func confirmedEndSession(signIn SignInDeps, w http.ResponseWriter, r *http.Reque
 		}
 
 		recordLoginFailure(r.Context(), LoginBadState)
-		logRefusal(r.Context(), http.StatusBadRequest, "the sign-out did not come from the sign-out page", nil, nil)
+		logRefusal(r, http.StatusBadRequest, "the sign-out did not come from the sign-out page", nil, nil)
 		_ = writePage(w, http.StatusBadRequest, "Sign-out not confirmed",
 			`<p>This sign-out did not come from the page that asks, so nothing was ended.</p>
 	<p class="note">You are still signed in. <a href="/logout">Sign out</a> from the page that asks.</p>`)

@@ -43,7 +43,18 @@ func boundHere(deps SignInDeps, r *http.Request, request string) bool {
 		return true
 	}
 
-	return deps.State.RequestStartedHere(r, request, deps.Secure)
+	if deps.State.RequestStartedHere(r, request, deps.Secure) {
+		return true
+	}
+	// The refusal that follows names the client the request is for, which
+	// this browser's request names only by the authorization's id.
+	if deps.Storage != nil && request != "" {
+		if pending, err := deps.Storage.Pending(request); err == nil {
+			noteClient(r.Context(), pending.ClientID)
+		}
+	}
+
+	return false
 }
 
 // startedElsewhere answers a request this browser did not start. The words
@@ -51,7 +62,7 @@ func boundHere(deps SignInDeps, r *http.Request, request string) bool {
 // victim of a link, and is owed no more than what to do.
 func startedElsewhere(w http.ResponseWriter, r *http.Request) {
 	recordLoginFailure(r.Context(), LoginBadState)
-	logRefusal(r.Context(), http.StatusBadRequest, "the authorization request was not started in this browser", nil, nil)
+	logRefusal(r, http.StatusBadRequest, "the authorization request was not started in this browser", nil, nil)
 
 	_ = writePage(w, http.StatusBadRequest, "Sign-in started elsewhere",
 		`<p>This sign-in was started in another browser.</p>

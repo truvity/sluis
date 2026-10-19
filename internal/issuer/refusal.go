@@ -58,10 +58,10 @@ func deny(ctx context.Context, kind func() *oidc.Error, reason error, fields ...
 	if e.ErrorType == oidc.ServerError {
 		level = slog.LevelError
 	}
-	slog.Default().Log(ctx, level, "refused", append(withID(ctx,
+	slog.Default().Log(ctx, level, "refused", withRequest(ctx, nil, append(withID(ctx,
 		slog.String("error", string(e.ErrorType)),
 		logattr.SafeError("reason", reason),
-	), fields...)...)
+	), fields...))...)
 	return e
 }
 
@@ -97,7 +97,7 @@ func phraseOf(code string) string {
 // person who was refused, or someone standing behind them, and neither is
 // owed more than a number to quote.
 func refusalPage(w http.ResponseWriter, r *http.Request, status int, why string, cause error, fields ...any) {
-	logRefusal(r.Context(), status, why, cause, fields)
+	logRefusal(r, status, why, cause, fields)
 	phrase := refusal.NotAuthorised
 	if status >= http.StatusInternalServerError {
 		phrase = refusal.ServerError
@@ -121,8 +121,10 @@ func capital(phrase string) string {
 	return strings.ToUpper(phrase[:1]) + phrase[1:]
 }
 
-// logRefusal is the one line a refusal leaves for an operator.
-func logRefusal(ctx context.Context, status int, why string, cause error, fields []any) {
+// logRefusal is the one line a refusal leaves for an operator: the reason,
+// and which request it was the answer to ([withRequest]).
+func logRefusal(r *http.Request, status int, why string, cause error, fields []any) {
+	ctx := r.Context()
 	level := slog.LevelWarn
 	if status >= http.StatusInternalServerError {
 		level = slog.LevelError
@@ -131,7 +133,7 @@ func logRefusal(ctx context.Context, status int, why string, cause error, fields
 	if cause != nil {
 		attrs = append(attrs, logattr.SafeError("error", cause))
 	}
-	slog.Default().Log(ctx, level, "refused", append(attrs, fields...)...)
+	slog.Default().Log(ctx, level, "refused", withRequest(ctx, r, append(attrs, fields...))...)
 }
 
 // refusalFilter is the net under [deny]: it makes every error the OpenID
@@ -332,9 +334,9 @@ func (f *filtered) note(ctx context.Context, code, was string) {
 	if code == string(oidc.ServerError) {
 		level = slog.LevelError
 	}
-	slog.Default().Log(ctx, level, "refused", withID(ctx,
-		slog.String("error", code), slog.Int("status", f.status), slog.String("path", logattr.Safe(f.r.URL.Path)),
-		logattr.SafeString("reason", was))...)
+	slog.Default().Log(ctx, level, "refused", withRequest(ctx, f.r, withID(ctx,
+		slog.String("error", code), slog.Int("status", f.status),
+		logattr.SafeString("reason", was)))...)
 }
 
 // isFixed reports whether a description is already the fixed words with
@@ -447,7 +449,7 @@ func withID(ctx context.Context, attrs ...any) []any {
 // refusePlain is the refusal of a plain-text endpoint, such as the
 // operator's: the fixed words and the request id, the reason in the log.
 func refusePlain(w http.ResponseWriter, r *http.Request, status int, why string, fields ...any) {
-	logRefusal(r.Context(), status, why, nil, fields)
+	logRefusal(r, status, why, nil, fields)
 	phrase := refusal.NotAuthorised
 	if status >= http.StatusInternalServerError {
 		phrase = refusal.ServerError

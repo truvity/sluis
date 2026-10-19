@@ -311,6 +311,7 @@ func (s *signIn) chooser(w http.ResponseWriter, r *http.Request) {
 		}
 
 		pending = asked
+		noteClient(r.Context(), pending.ClientID)
 	}
 
 	// The request must have been started in THIS browser: a link to
@@ -589,7 +590,7 @@ func (s *signIn) refuse(w http.ResponseWriter, r *http.Request, pending Pending,
 
 	// The code is the one OpenID Connect Core 3.1.2.6 requires for
 	// prompt=none and says all the client needs; why is the log's.
-	logRefusal(r.Context(), http.StatusFound, why, nil, []any{slog.String("error", code)})
+	logRefusal(r, http.StatusFound, why, nil, []any{slog.String("error", code)})
 	query := to.Query()
 	query.Set("error", code)
 	query.Set("error_description", refusal.Text(r.Context(), refusal.NotAuthorised))
@@ -929,7 +930,7 @@ func (s *signIn) logout(w http.ResponseWriter, r *http.Request) {
 		if cookie := SSOFromRequest(r, s.deps.Secure); cookie != "" &&
 			!s.deps.State.CSRFValid(logoutPurpose, cookie, r.PostFormValue("csrf")) {
 			recordLoginFailure(r.Context(), LoginBadState)
-			logRefusal(r.Context(), http.StatusBadRequest, "the sign-out did not come from the sign-out page", nil, nil)
+			logRefusal(r, http.StatusBadRequest, "the sign-out did not come from the sign-out page", nil, nil)
 			_ = writePage(w, http.StatusBadRequest, "Sign-out not confirmed",
 				`<p>This sign-out did not come from the sign-out page, so nothing was ended.</p>
 	<p class="note">You are still signed in. <a href="/logout">Sign out</a> from the page that asks.</p>`)
