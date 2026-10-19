@@ -191,6 +191,14 @@ type KeyRole struct {
 	// as in ModuleEnv.MinterRefs) the role reads for `credentials.preset` without
 	// hosting the Cloudflare module: Decrypt on exactly those, through SSM.
 	MinterRefs []string
+	// BlobCredentialsRef is the address, below the installation's secrets root,
+	// of the external blobs' credentials the role reads
+	// (`ports.blob.s3.credentialsRef`, StorageArgs.Blobs.CredentialsRef), such as
+	// the `external/cloudflare/<preset>` the Cloudflare module rotates: Decrypt
+	// and DescribeKey of exactly that parameter, through SSM, when the role's
+	// own statements do not already cover it. Without it, a role outside the
+	// module that writes the credential cannot decrypt it under a customer key.
+	BlobCredentialsRef string
 	// OpensPresetBlobs has no effect.
 	//
 	// Deprecated: see ModuleEnv.OpensPresetBlobs.
@@ -275,6 +283,7 @@ const (
 	sidKeyReadPrefix       = "SluisKeyReadAll"
 	sidKeyWritePrefix      = "SluisKeyWriteAll"
 	sidKeyMinterPrefix     = "SluisKeyMinter"
+	sidKeyBlobCredsPrefix  = "SluisKeyBlobCredentials"
 	sidKeyReadModulePrefix = "SluisKeyReadModule"
 	sidKeyExtReaderPrefix  = "SluisKeyExternalReader"
 	sidKeyExternalReaders  = "SluisKeyExternalReaders"
@@ -316,6 +325,9 @@ const (
 //     parameters of the modules it reads (KeyRole.ReadModules) and of no other;
 //   - SluisKeyMinter<Role>: Decrypt of the minter parameters a role without the
 //     Cloudflare module reads;
+//   - SluisKeyBlobCredentials<Role>: Decrypt of the external blobs' credential
+//     (KeyRole.BlobCredentialsRef) for a role whose own statements above do not
+//     cover it;
 //   - SluisKeyExternalReaders: Decrypt of `external/*` only, through SSM;
 //   - SluisKeyAdminSeeds: Encrypt and GenerateDataKey through SSM (seed
 //     parameters); SluisKeyAdminReads: Decrypt of the state secret, the
@@ -431,6 +443,16 @@ func SluisKeyPolicyStatements(a KeyPolicyArgs) ([]map[string]any, error) {
 				condStringEquals: viaSSM,
 				condStringLike:   map[string]any{condParameterArn: refs},
 			}))
+		}
+		if ref := r.BlobCredentialsRef; ref != "" {
+			cred := arnPrefix + "ssm:" + a.Region + ":" + a.Account + ":parameter" + a.Modules.rootOf() + "/" + ref
+			if !coveredBy(cred, keyRoleReach(a, r)) {
+				st = append(st, allow(sidKeyBlobCredsPrefix+name, []string{kmsDecrypt, kmsDescribe}, map[string]any{
+					condArnEquals:    map[string]any{condPrincipalArn: r.principalCond()},
+					condStringEquals: viaSSM,
+					condStringLike:   map[string]any{condParameterArn: []string{cred}},
+				}))
+			}
 		}
 		if r.Role.hosts(ModuleOIDC) {
 			signRoles = append(signRoles, r.arns()...)
@@ -571,6 +593,43 @@ func SluisKeyPolicyStatements(a KeyPolicyArgs) ([]map[string]any, error) {
 	return st, nil
 }
 
+// keyRoleReach are the parameter patterns (`<prefix>/*`) the role's own
+// statements decrypt: its hosted modules (the whole of internal/ and external/
+// for the oidc host on layout v4), the modules it reads, and its cross grants.
+func keyRoleReach(a KeyPolicyArgs, r *KeyRole) []string {
+	arns := func(prefixes ...string) []string { return parameterArnsUnder(a.Region, a.Account, prefixes...) }
+	internalAll, externalAll := InternalParameterPrefix(a.Modules.Instance), ExternalParameterPrefix(a.Modules.Instance)
+	var out []string
+	if a.Layout.has4() && r.Role.hosts(ModuleOIDC) {
+		out = append(out, arns(internalAll, externalAll)...)
+	}
+	if a.Layout.has5() || !r.Role.hosts(ModuleOIDC) {
+		for _, m := range r.Role.Hosts {
+			out = append(out, arns(a.Modules.InternalPrefix(m), a.Modules.ExternalPrefix(m))...)
+		}
+	}
+	for _, m := range r.ReadModules {
+		out = append(out, arns(a.Modules.InternalPrefix(m), a.Modules.ExternalPrefix(m))...)
+	}
+	for _, g := range CrossGrants {
+		if g.Role == r.Role.Name && (g.Verb == CrossReadAll || g.Verb == CrossWriteAll) {
+			out = append(out, arns(internalAll, externalAll)...)
+		}
+	}
+	return out
+}
+
+// coveredBy reports whether a parameter ARN is under one of the `<prefix>/*`
+// patterns.
+func coveredBy(arn string, patterns []string) bool {
+	for _, p := range patterns {
+		if prefix, ok := strings.CutSuffix(p, "*"); ok && strings.HasPrefix(arn, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
 func (a KeyPolicyArgs) validate() error {
 	if err := a.Modules.validate(); err != nil {
 		return err
@@ -601,6 +660,10 @@ func (a KeyPolicyArgs) validate() error {
 			}
 		}
 		seen[r.Role.Name] = true
+		if ref := r.BlobCredentialsRef; ref != "" && (strings.ContainsAny(ref, "*?") || strings.HasPrefix(ref, "/") ||
+			strings.HasSuffix(ref, "/") || strings.Contains(ref, "//") || strings.Contains(ref, "..")) {
+			return fmt.Errorf("sluispulumi: KeyPolicyArgs role %q: BlobCredentialsRef %q is not one parameter address below the secrets root", r.Role.Name, ref)
+		}
 		for _, m := range r.ReadModules {
 			if !validModule(m) {
 				return fmt.Errorf("sluispulumi: KeyPolicyArgs role %q reads unknown module %q", r.Role.Name, m)
