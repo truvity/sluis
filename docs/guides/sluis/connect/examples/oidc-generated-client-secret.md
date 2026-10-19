@@ -8,7 +8,6 @@ Stop delivering a confidential client's secret by hand. The issuer makes it and 
 
 - A confidential client.
 - A Secrets adapter that writes only if absent (`ssm` or `openbao`), and a State shared between replicas.
-- Every replica on a version that understands `secret: {generate: true}`, before you write it.
 
 ## The policy snippet
 

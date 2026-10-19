@@ -41,7 +41,7 @@ Remove `Telemetry`. The layer, the variables and the statement go together.
 
 ## Legacy variables
 
-The library also sets the deprecated `ACCESS_ROSTER_*` spellings of the four settings (legacy identifier, renamed in v1.75–v1.76). A function that runs a layer older than v0.69.0 reads only those. Set `Telemetry.OmitLegacyEnv` to drop them. They are removed in v1.76.
+The library also sets the deprecated `ACCESS_ROSTER_*` spellings of the four settings (legacy identifier, renamed in v1.75–v1.76). A function that runs a layer older than v0.69.0 reads only those. Set `Telemetry.OmitLegacyEnv` to drop them.
 
 ## See also
 

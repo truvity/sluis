@@ -7,7 +7,7 @@ Eight places accept something new, each behind an interface with one implementat
 | Directory backend (Entra, LDAP) | implement `Backend` in `backend/`; announce it in `backendOpeners` in `internal/app`; `backend/google` is the example | fake, a runbook under `docs/guides/sluis/connect/`, connect, revoke and domain-move scenarios |
 | Proof kind | implement `issuer.Verifier` in `internal/verify`; add a `policy` matcher kind if the proof carries new attributes | fake issuer minting real signatures, refusal cases, a policy test |
 | Matcher kind | a `Matcher` over a verified proof's claims in `policy/` | a policy test |
-| Middleware adapter | `net/http` ships; see `internal/identity` | a test against `Verified` |
+| Middleware adapter | `net/http` ships; see `identity` | a test against `Verified` |
 | Relying-party recipe | a page under `docs/guides/sluis/connect/` | the page |
 | CLI subcommand | `cmd/sluisctl` | a test with an ambient token and no cache |
 | Audit action | [change the audit catalogue](change-the-audit-catalogue.md) | a constructor in `internal/audit/events.go` |
@@ -31,6 +31,6 @@ Share the login cache, issuer client and ambient-token detection. Work with an a
 
 ## Reconciler
 
-GitHub and Slack are reconcilers built on `internal/rails` pieces, not a framework. Keep the decision, change calls, credentials, status document and audit actions in the system's own package. Ship a fake of the system (`internal/slackapp/slackfake`) and a pure `reconcile` package. Add a status document, a `controllers.<kind>` section, an enabled list born dry-run, audit actions and a connect page. The controller runs inside `sluis issuer` and needs no Deployment.
+GitHub and Slack are reconcilers built on `internal/rails` pieces, not a framework. Keep the decision, change calls, credentials, status document and audit actions in the system's own package. Ship a fake of the system (`internal/slackapp/slackfake`) and a pure `reconcile` package. Add a status document, a `controllers.<kind>` section, an enabled list born dry-run, audit actions and a connect page. The controller runs in the issuer's process and needs no Deployment.
 
 Decided in: [ADR 0024](../../decisions/0024-reconciler-rails-are-shared-pieces-not-a-framework.md), [ADR 0037](../../decisions/0037-one-process-everywhere.md).

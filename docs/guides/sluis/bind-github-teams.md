@@ -28,7 +28,7 @@ github:
 Render the policy. The load refuses a team with neither `members` nor `maintainers`, an organisation binding nothing, an undeclared group, a duplicate and a leftover `github.<org>.owner` ([bindings](../../reference/sluis/policy-bindings.md#github-teams)).
 
 ```sh
-sluisctl policy render policy/ -o /tmp/policy.yaml
+sluisctl policy render -o /tmp/policy.yaml policy/
 ```
 
 Verify: the console's Rules page lists the binding.

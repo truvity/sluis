@@ -30,4 +30,4 @@ Each line has `time`, `level` and `msg`. A message matches a row of [check healt
 
 ## Roll back
 
-Reading changes nothing. If you raised `log.level`, set it back: a DEBUG installation is noisy.
+Reading changes nothing. Set a raised `log.level` back: DEBUG is noisy.

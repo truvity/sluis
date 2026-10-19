@@ -104,7 +104,7 @@ sluisctl aws-config                   # adds a profile r2-archive@r2 per R2 pres
 aws --profile r2-archive@r2 s3 ls s3://example-archive/
 ```
 
-The CLI caches under `<config>/cloudflare/` and mints again with a third of the lifetime left.
+The CLI caches under `<config>/cloudflare/` and mints again with a third of the lifetime left. `--no-cache` writes nothing to disk.
 
 ## 5. Mint for CI or a workload
 
@@ -125,7 +125,7 @@ Blobs mint R2 credentials with `ports.blob.s3.credentials: {preset: r2-blobs}` o
 
 ## 6. Verify
 
-The stored credential is `external/cloudflare/<preset>` as `cloudflare/v1`. With the Pulumi library, declare `Installation.Cloudflare` ([Pulumi library](../../reference/sluis/pulumi-library.md)). The alert `AccessRosterCloudflareRotationStale` fires past twice the rotation.
+The stored credential is `external/cloudflare/<preset>` as `cloudflare/v1`. With the Pulumi library, declare `Installation.Cloudflare` ([Pulumi library](../../reference/sluis/pulumi-library.md)). The alert `SluisCloudflareRotationStale` fires past twice the rotation.
 
 ## Roll back
 

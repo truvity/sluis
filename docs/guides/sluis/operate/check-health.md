@@ -5,12 +5,10 @@ Read what the console says is wrong with a directory, a workspace or a rollout, 
 ## Before you start
 
 - You need operator access to the console ([lost operator access](lost-operator-access.md)) and `kubectl` on the namespace.
-- A non-authoritative answer holds and never removes. Consumers keep what they had, so every symptom below can wait.
+- A non-authoritative answer holds and never removes: consumers keep what they had, so every symptom below can wait.
 - A rotation that has not taken effect looks like one that has. If the symptom followed a Secret write, read [rotate keys and credentials](rotate-keys-and-credentials.md).
 
 ## 1. Match the symptom
-
-Open the directory's page and find the row.
 
 | Symptom (console) | Cause | Action |
 |---|---|---|

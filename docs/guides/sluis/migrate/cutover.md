@@ -16,8 +16,6 @@ Move a running installation from the `legacy` adapter to the AWS hybrid preset (
 
 - Set `signingKey.activationDelay` to the poll interval, for example `30s`. New tokens pause that long after the switch.
 
-- Run v1.61.1 or later: earlier releases fail sign-in after 30 to 60 minutes.
-
 - Ship the [audit catalogue](../change-the-audit-catalogue.md) `.json` schemas.
 
 - Publish old public keys the copy does not carry with `LambdaArgs.VerifyOnly` ([inputs](../../../reference/sluis/pulumi-library.md#inputs-lambdaargs)).
@@ -79,7 +77,7 @@ Set `Paused` again, apply, point DNS back and scale the old Deployment up. To ke
 
 - Keep the old Deployment at 0 and the old ConfigMaps, Secrets and Valkey while a rollback should stay cheap. Then remove the orphaned Application.
 
-- Turn off the recovery password once a directory group grants operator ([recover on Lambda](../operate/recover-on-lambda.md)).
+- Turn off the recovery password once a directory group grants operator ([turn off recovery](../operate/turn-off-recovery.md)).
 
 See also [move the domain to the edge module](move-the-domain-to-the-edge-module.md) and [supply your own signing keys](supply-your-own-signing-keys.md).
 

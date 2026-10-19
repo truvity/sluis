@@ -57,7 +57,7 @@ groups:
   staging:db:orders:client: { members: [team-eng@example.com] }
 clients:
   openbao:
-    kind: static
+    kind: exchange
     requires: [staging:db:orders:client]
 ```
 

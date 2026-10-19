@@ -2,7 +2,7 @@
 
 OpenBao trusts the issuer on a JWT auth mount and mints short-lived certificates for SSH, databases and mutual TLS. `sluisctl bao <args…>` authenticates and runs `bao`.
 
-See the [contract](https://github.com/truvity/openbao/blob/master/docs/integrations/sluis.md), the [issuer side](openbao-issuer-side.md) and the [wrapper reference](../../../reference/sluis/sluisctl-wrappers.md#bao-authenticate-then-run-bao-unchanged).
+See the [contract](https://github.com/truvity/openbao/blob/master/docs/integrations/access-roster.md), the [issuer side](openbao-issuer-side.md) and the [wrapper reference](../../../reference/sluis/sluisctl-wrappers.md#bao-authenticate-then-run-bao-unchanged).
 
 ## Before you start
 
@@ -24,7 +24,7 @@ groups:
   staging:machine:gateway:  { members: [role-sre@example.com] }
 clients:
   openbao:
-    kind: static
+    kind: exchange
     requires: [staging:ssh:user, staging:ssh:admin, staging:db:orders:client, staging:machine:gateway]
 ```
 

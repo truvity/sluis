@@ -26,6 +26,7 @@ clients:
   myconsole.example.internal:
     kind: confidential          # public for your own flow, with no secret
     secret: myconsole-client
+    pkce: required              # when the console sends an S256 challenge; a public client always does
     display_name: My Console    # shown on the sign-in page
     description: the team's dashboard
     redirects:  [https://myconsole.example.internal/oauth2/callback]

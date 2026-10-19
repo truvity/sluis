@@ -1,6 +1,6 @@
 # OpenBao: what the issuer provides
 
-OpenBao trusts the issuer on two auth mounts per namespace, maps the `groups` claim onto its identity groups by name and signs the certificates `sluisctl bao` and `sluisctl pg`/`psql` request. The contract lives in [truvity/openbao docs/integrations/sluis.md](https://github.com/truvity/openbao/blob/master/docs/integrations/sluis.md). The installation steps are in [connect OpenBao](openbao.md).
+OpenBao trusts the issuer on two auth mounts per namespace, maps the `groups` claim onto its identity groups by name and signs the certificates `sluisctl bao` and `sluisctl pg`/`psql` request. The contract lives in [truvity/openbao docs/integrations/sluis.md](https://github.com/truvity/openbao/blob/master/docs/integrations/access-roster.md). The installation steps are in [connect OpenBao](openbao.md).
 
 A change to any item below breaks OpenBao sign-in.
 

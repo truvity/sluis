@@ -41,7 +41,7 @@ actions:
     message: { en: "{actor} placed order {targets_0_id}" }
 ```
 
-Name each action `source.thing.verb`, in the past tense. Choose [`block` or `async`](../../../reference/audit/catalogue.md#delivery) per action. The application registers the catalogue at start-up and stops if the receiver refuses it. Do not retry a refusal.
+Name each action `source.thing.verb`, in the past tense. Choose [`block` or `async`](../../../reference/audit/catalogue.md#delivery) per action. The application registers the catalogue at start-up and stops if the receiver refuses it.
 
 ### One constructor per action
 
@@ -127,7 +127,7 @@ const audit = createQueryClient(createConnectTransport({
 </AuditProvider>
 ```
 
-Generate the sentences with `audit messages catalogue/shop.yaml > audit-sentences.json`. A console in the cluster reaches the Service `<fullname>-query`. If it runs outside, set `query.route` and list the gateway's namespace in `networkPolicy.queryIngressFrom` ([chart README](../../../../charts/audit/README.md#publishing-the-query-service)). The view is described in [the Audit page](../../../concepts/audit/audit-page.md).
+A console in the cluster reaches the Service `<fullname>-query`. If it runs outside, set `query.route` and list the gateway's namespace in `networkPolicy.queryIngressFrom` ([chart README](../../../../charts/audit/README.md#publishing-the-query-service)). The view is described in [the Audit page](../../../concepts/audit/audit-page.md).
 
 ### A console with a session of its own
 
