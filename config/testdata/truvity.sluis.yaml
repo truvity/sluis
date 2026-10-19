@@ -21,7 +21,13 @@ adapters:
     adapter: dynamodb
     settings:
       region: eu-central-1
-      table: example-sluis-staging
+      tables:
+        backup: sluis-staging-backup
+        cloudflare: sluis-staging-cloudflare
+        github: sluis-staging-github
+        google: sluis-staging-google
+        oidc: sluis-staging-oidc
+        slack: sluis-staging-slack
 audit:
   audience: audit
   forwardedForTrustedHops: 2

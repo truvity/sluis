@@ -35,7 +35,7 @@ func TestTheFullDocumentBuildsTheSettings(t *testing.T) {
 func TestADocumentOnLayoutV4OrWithoutTablesIsRefused(t *testing.T) {
 	for name, c := range map[string]struct{ body, want string }{
 		"no storage":   {target, "layout v5"},
-		"v4 secrets":   {"secrets: {source: ssm, root: /sluis/x}\nports: {adapter: dynamodb, dynamodb: {tables: {backup: t}}}\n" + target, "layout v5"},
+		"v4 secrets":   {"secrets: {source: ssm, root: /sluis/x}\nports: {adapter: dynamodb, dynamodb: {tables: {backup: t}}}\n" + target, "layout"},
 		"bad instance": {"instance: a/b\n" + target, "instance"},
 	} {
 		_, err := app.Load(write(t, head+c.body))

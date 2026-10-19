@@ -15,11 +15,6 @@ adapters:
     settings:
       region: eu-central-1
       root: /sluis/example
-  state:
-    adapter: dynamodb
-    settings:
-      region: eu-central-1
-      table: example-sluis
   trigger:
     adapter: invoke
     settings:
@@ -65,9 +60,10 @@ publicRootURL: https://access.example.test
 publicURL: https://access.example.test/console
 recovery:
   enabled: false
-  passwordSecret: recovery/password
+  verifierSecret: recovery/verifier
 release: access-issuer
 secrets:
+  layout: v5
   region: eu-central-1
   root: /sluis/example
   source: ssm

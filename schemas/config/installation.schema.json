@@ -1416,7 +1416,7 @@
     },
     "aws": {
       "additionalProperties": false,
-      "description": "The AWS account and the resources the installation is built on. Each resource named here becomes the adapter setting that uses it (`state` the table, `blobs` the bucket, `audit` the queue), unless `adapters` names that concern.",
+      "description": "The AWS account and the resources the installation is built on. Each resource named here becomes the adapter setting that uses it (`blobs` the bucket, `audit` the queue), unless `adapters` names that concern. The single table of layout v4 (`table`) was removed in v1.77.1: the tables are `ports.dynamodb.tables`, one per module.",
       "properties": {
         "account": {
           "description": "The 12-digit account id.",
@@ -1456,11 +1456,6 @@
         },
         "region": {
           "description": "The region of the resources and of the SSM parameters. Required for shape `lambda`.",
-          "minLength": 1,
-          "type": "string"
-        },
-        "table": {
-          "description": "The DynamoDB table of the `dynamodb` state adapter.",
           "minLength": 1,
           "type": "string"
         }
@@ -2878,6 +2873,23 @@
           "if": {
             "properties": {
               "source": {
+                "const": "ssm"
+              }
+            },
+            "required": [
+              "source"
+            ]
+          },
+          "then": {
+            "required": [
+              "layout"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "source": {
                 "enum": [
                   "env",
                   "file"
@@ -2930,10 +2942,8 @@
           "type": "string"
         },
         "layout": {
-          "default": "v4",
-          "description": "`ssm`: the storage layout of the installation's secrets. `v4`, the default, keeps them under `<root>/internal/config`, `<root>/internal/credentials` and `<root>/external/<kind>` (docs/decisions/0041-the-secret-contract.md). `v5` puts the module first, `<root>/internal/<module>/` and `<root>/external/<module>/` (docs/decisions/0072-storage-layout-v5-module-first.md), and needs `ports.dynamodb.tables`; the two do not mix. Layouts v3 and `transition` are gone; an installation still on one runs v1.74.x first.",
+          "description": "`ssm`, required: the storage layout of the installation's secrets, `v5`, the only one: the module first, `<root>/internal/<module>/` and `<root>/external/<module>/` (docs/decisions/0072-storage-layout-v5-module-first.md). Layout `v4` was removed in v1.77.1 (an installation still on it migrates with `sluis migrate v5` of v1.77.0 first), and with it the reading of an absent layout as `v4`.",
           "enum": [
-            "v4",
             "v5"
           ]
         },

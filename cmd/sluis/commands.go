@@ -65,9 +65,6 @@ func init() {
 }
 
 func newApp(out io.Writer) *cli.Command {
-	serveRun := func(o io.Writer, a []string) error {
-		return start(o, "sluis serve", "sluis", a, issuer.Module{Deprecated: "sluis serve"}.Run)
-	}
 	app := &cli.Command{
 		Name:           "sluis",
 		Usage:          "sluis: one multi-call binary, one module per process",
@@ -82,7 +79,7 @@ func newApp(out io.Writer) *cli.Command {
 		},
 		Commands: []*cli.Command{
 			// The modules (docs/decisions/0071). Until a module has a process of its
-			// own, the issuer role is the one process `serve` is; github and slack are
+			// own, the issuer role is the one process; github and slack are
 			// the controllers' loops and cloudflare is the minter's rotation.
 			moduleCmd(issuer.Module{}, "sluis", "the issuer module: the issuer, the signer and the console in one process", out),
 			moduleCmd(github.Module{}, "controller-github", "the GitHub module: the controller's loop, or `tick <target>` once", out),
@@ -92,7 +89,6 @@ func newApp(out io.Writer) *cli.Command {
 			legacy("backup", "the backup module: run, list, status or prune (sluis backup --help)", backupCmd, out),
 			legacy("restore", "the restore role of the backup zip: preview, start or status (sluis restore --help)", restoreCmd, out),
 			// Today's commands, unchanged.
-			legacy("serve", "(deprecated, use issuer) the one process: issuer, signer, hub, console and the controllers the document names", serveRun, out),
 			legacy("controller", "(deprecated) a controller alone: github or slack", controllerCmd, out),
 			legacy("tick", "one tick, once: github or slack, then the target", tickCmd, out),
 			legacy("check", "verify that every secret the document and its policy declare is in SSM: names and versions, never values", checkCmd, out),
@@ -186,7 +182,7 @@ func run(args []string, out io.Writer) error {
 // build refuses every command that is another module's, as a Lambda zip refuses
 // to start as another module. An unpinned build (the sluis image) runs them all.
 var pinnedCommands = map[string][]string{
-	"issuer":     {"issuer", "serve", "github", "slack", "google", "controller", "tick", "check", "migrate", "secrets"},
+	"issuer":     {"issuer", "github", "slack", "google", "controller", "tick", "check", "migrate", "secrets"},
 	"backup":     {"backup", "restore"},
 	"cloudflare": {"cloudflare"},
 	"github":     {"github"},

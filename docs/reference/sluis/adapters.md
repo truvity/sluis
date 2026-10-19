@@ -16,7 +16,7 @@ One adapter can cover several hosts: the `valkey` adapter is ElastiCache, Memory
 
 | Adapter | Status | AWS | Kubernetes | OpenBao | kubernetes | lambda | process | What it is |
 |---|---|---|---|---|---|---|---|---|
-| `dynamodb` | ✅ implemented | needs | - | - | ✅ | ✅ | ✅ | State, sessions included, in one DynamoDB table with per-item TTL. |
+| `dynamodb` | ✅ implemented | needs | - | - | ✅ | ✅ | ✅ | State, sessions included, in a DynamoDB table per module with per-item TTL. |
 | `kubernetes` | 💤 on request | - | needs | - | ✅ | - | - | State in a ConfigMap the service rebuilds and owns. |
 | `legacy` | ✅ implemented | - | needs | - | ✅ | - | ✅ | ConfigMaps and, optionally, Valkey sessions and leases; deprecated in v1.74.0, removed in v1.75 (migrate with `sluis migrate`). |
 | `memory` | ✅ implemented | - | - | - | ✅ | ✅ | ✅ | In this process's memory; a restart loses it. For tests and the demonstration. |

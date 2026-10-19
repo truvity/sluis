@@ -297,7 +297,6 @@ func TestRenderModulesRefuses(t *testing.T) {
 		want   string
 	}{
 		"a kubernetes installation": {func(in *config.Installation) { in.Shape = config.ShapeKubernetes }, "Lambda"},
-		"the layout v4 table":       {func(in *config.Installation) { in.AWS.Table = "t" }, "layout v4"},
 		"layout v4 secrets":         {func(in *config.Installation) { in.Secrets = &config.Secrets{Layout: "v4"} }, "layout v5"},
 		"a function that is none":   {func(in *config.Installation) { in.AWS.Functions = map[string]string{"nonesuch": "x"} }, "not a function"},
 		"a bad function name":       {func(in *config.Installation) { in.AWS.Functions = map[string]string{"slack": "a b"} }, "letters, digits"},

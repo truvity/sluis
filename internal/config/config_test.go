@@ -355,29 +355,29 @@ func TestThePortsAdapterIsOneOfTheTwo(t *testing.T) {
 	if _, err := config.Load[config.Serve](write(t, minimalIssuer+"ports: {adapter: dynamodb, dynamodb: {region: eu-west-1}}\n")); err == nil {
 		t.Error("a dynamodb section with no table was accepted")
 	}
-	ddbFile := "ports:\n  adapter: dynamodb\n  dynamodb: {table: sluis, region: eu-west-1, endpoint: 'http://localstack:4566', create: true}\n"
-	if f, err := config.Load[config.Serve](write(t, minimalIssuer+ddbFile)); err != nil {
+	v2 := "apiVersion: " + config.APIVersion("serve") + "\n" + minimalIssuer
+	ddbFile := "ports:\n  adapter: dynamodb\n  dynamodb: {tables: {oidc: sluis}, region: eu-west-1, endpoint: 'http://localstack:4566', create: true}\n"
+	if f, err := config.Load[config.Serve](write(t, v2+ddbFile)); err != nil {
 		t.Errorf("the dynamodb adapter was refused: %v", err)
-	} else if d := f.Ports.DynamoDB; d == nil || d.Table != "sluis" || d.Region != "eu-west-1" || !d.Create || d.Endpoint == "" {
+	} else if d := f.Ports.DynamoDB; d == nil || d.Tables["oidc"] != "sluis" || d.Region != "eu-west-1" || !d.Create || d.Endpoint == "" {
 		t.Errorf("ports.dynamodb = %+v", d)
 	}
 	// Layout v5 (ADR 0072): a table per module, named by module, beside
-	// secrets.layout: v5; layout v4 stays valid. The layouts do not mix: the
-	// store refuses a mixed pair, and the schema refuses both tables at once.
-	v2 := "apiVersion: " + config.APIVersion("serve") + "\n" + minimalIssuer
+	// secrets.layout: v5, the only layout. The single table and layout v4 were
+	// removed in v1.77.1, and an ssm source must name its layout.
 	v5File := "ports:\n  adapter: dynamodb\n  dynamodb:\n    tables: {oidc: sluis-prod-oidc, google: sluis-prod-google}\n    region: eu-west-1\n" +
 		"secrets: {source: ssm, root: /sluis/prod, layout: v5}\n"
 	if f, err := config.Load[config.Serve](write(t, v2+v5File)); err != nil {
 		t.Errorf("layout v5 was refused: %v", err)
-	} else if d := f.Ports.DynamoDB; d == nil || d.Table != "" || d.Tables["oidc"] != "sluis-prod-oidc" ||
+	} else if d := f.Ports.DynamoDB; d == nil || d.Tables["oidc"] != "sluis-prod-oidc" ||
 		d.Tables["google"] != "sluis-prod-google" || f.Secrets.Layout != "v5" {
 		t.Errorf("layout v5 = %+v, %+v", d, f.Secrets)
 	}
-	if _, err := config.Load[config.Serve](write(t, v2+"secrets: {source: ssm, root: /sluis/prod, layout: v4}\n"+ddbFile)); err != nil {
-		t.Errorf("layout v4 was refused: %v", err)
-	}
 	for name, doc := range map[string]string{
+		"the single table": "ports: {adapter: dynamodb, dynamodb: {table: t}}\n",
 		"both tables":      "ports: {adapter: dynamodb, dynamodb: {table: t, tables: {oidc: o}}}\n",
+		"layout v4":        "secrets: {source: ssm, root: /sluis/prod, layout: v4}\n",
+		"no layout on ssm": "secrets: {source: ssm, root: /sluis/prod}\n",
 		"not a module":     "ports: {adapter: dynamodb, dynamodb: {tables: {nope: o}}}\n",
 		"an empty name":    "ports: {adapter: dynamodb, dynamodb: {tables: {oidc: ''}}}\n",
 		"no table at all":  "ports: {adapter: dynamodb, dynamodb: {tables: {}}}\n",
@@ -388,7 +388,7 @@ func TestThePortsAdapterIsOneOfTheTwo(t *testing.T) {
 			t.Errorf("%s: accepted", name)
 		}
 	}
-	if _, err := config.Load[config.Serve](write(t, minimalIssuer+"ports: {adapter: dynamodb, dynamodb: {table: t, accessKey: x}}\n")); err == nil {
+	if _, err := config.Load[config.Serve](write(t, minimalIssuer+"ports: {adapter: dynamodb, dynamodb: {tables: {oidc: t}, accessKey: x}}\n")); err == nil {
 		t.Error("a dynamodb credential in the file was accepted")
 	}
 	if _, err := config.Load[config.Serve](write(t, minimalIssuer+"ports: {adapter: cassandra}\n")); err == nil {

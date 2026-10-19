@@ -3,7 +3,7 @@
 apiVersion: sluis.truvity.github.io/sluis/v3
 issuerURL: https://access.example
 policy: {file: testdata/declared/k8s.policy.yaml}
-secrets: {source: ssm, root: /sluis/example}
+secrets: {source: ssm, root: /sluis/example, layout: v5}
 oauthClient: {id: example.apps.example.com, provider: example}
 signingKey: {file: /var/run/sluis/signing-key/tls.key}
 cloudflare:

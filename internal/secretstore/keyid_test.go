@@ -48,8 +48,8 @@ func TestEveryRuntimeWriteCarriesTheConfiguredKeyID(t *testing.T) {
 			put(s.OIDC().StateSecret())
 			put(s.OIDC().SignInClientID("google"))
 		} else {
-			s := secretstore.FromStore(root, keyAlias)
-			if _, err := s.External.OIDC("local-dev").Put(ctx, secretstore.OIDCv1{ClientID: "local-dev", ClientSecret: "x"}, ""); err != nil {
+			s := secretstore.FromStoreV5(root, keyAlias)
+			if _, err := s.OIDCExternal().Client("local-dev").Put(ctx, secretstore.OIDCv1{ClientID: "local-dev", ClientSecret: "x"}, ""); err != nil {
 				t.Fatal(err)
 			}
 		}

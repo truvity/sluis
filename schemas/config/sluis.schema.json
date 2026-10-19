@@ -1569,19 +1569,7 @@
         },
         "dynamodb": {
           "additionalProperties": false,
-          "description": "The DynamoDB table of the `dynamodb` adapter: layout v4 keeps everything in one table (`table`), layout v5 one table per module (`tables`, with `secrets.layout: v5`). Each has a string partition key `pk`, a string sort key `sk` and the TTL attribute `expires`. Credentials are the platform's (EKS Pod Identity, IRSA, a Lambda role) and are never configured here; an S3-compatible `endpoint` with no such identity names a credentials document by address (`credentialsRef`), never by value.",
-          "oneOf": [
-            {
-              "required": [
-                "table"
-              ]
-            },
-            {
-              "required": [
-                "tables"
-              ]
-            }
-          ],
+          "description": "The DynamoDB tables of the `dynamodb` adapter: one table per module (`tables`, layout v5). Each has a string partition key `pk`, a string sort key `sk` and the TTL attribute `expires`. Credentials are the platform's (EKS Pod Identity, IRSA, a Lambda role) and are never configured here; an S3-compatible `endpoint` with no such identity names a credentials document by address (`credentialsRef`), never by value.",
           "properties": {
             "create": {
               "default": false,
@@ -1597,14 +1585,9 @@
               "minLength": 1,
               "type": "string"
             },
-            "table": {
-              "description": "Layout v4: the one table's name.",
-              "minLength": 1,
-              "type": "string"
-            },
             "tables": {
               "additionalProperties": false,
-              "description": "Layout v5 (docs/decisions/0072-storage-layout-v5-module-first.md): the table of each module, by module name. A process names its own module's table and the tables of the peers it reads; a module it does not name is not opened. Needs `secrets.layout: v5`; exclusive with `table`.",
+              "description": "Layout v5 (docs/decisions/0072-storage-layout-v5-module-first.md): the table of each module, by module name. A process names its own module's table and the tables of the peers it reads; a module it does not name is not opened. The single table of layout v4 (`table`) was removed in v1.77.1.",
               "minProperties": 1,
               "properties": {
                 "backup": {
@@ -1641,6 +1624,9 @@
               "type": "object"
             }
           },
+          "required": [
+            "tables"
+          ],
           "type": "object"
         }
       },
@@ -1736,6 +1722,23 @@
           "if": {
             "properties": {
               "source": {
+                "const": "ssm"
+              }
+            },
+            "required": [
+              "source"
+            ]
+          },
+          "then": {
+            "required": [
+              "layout"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "source": {
                 "enum": [
                   "env",
                   "file"
@@ -1788,10 +1791,8 @@
           "type": "string"
         },
         "layout": {
-          "default": "v4",
-          "description": "`ssm`: the storage layout of the installation's secrets. `v4`, the default, keeps them under `<root>/internal/config`, `<root>/internal/credentials` and `<root>/external/<kind>` (docs/decisions/0041-the-secret-contract.md). `v5` puts the module first, `<root>/internal/<module>/` and `<root>/external/<module>/` (docs/decisions/0072-storage-layout-v5-module-first.md), and needs `ports.dynamodb.tables`; the two do not mix. Layouts v3 and `transition` are gone; an installation still on one runs v1.74.x first.",
+          "description": "`ssm`, required: the storage layout of the installation's secrets, `v5`, the only one: the module first, `<root>/internal/<module>/` and `<root>/external/<module>/` (docs/decisions/0072-storage-layout-v5-module-first.md). Layout `v4` was removed in v1.77.1 (an installation still on it migrates with `sluis migrate v5` of v1.77.0 first), and with it the reading of an absent layout as `v4`.",
           "enum": [
-            "v4",
             "v5"
           ]
         },

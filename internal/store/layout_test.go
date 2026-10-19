@@ -6,12 +6,13 @@ import (
 	"time"
 
 	"github.com/truvity/sluis/internal/port"
-	"github.com/truvity/sluis/internal/secretstore"
 	"github.com/truvity/sluis/storage/state"
 	statememory "github.com/truvity/sluis/storage/state/memory"
 )
 
-func TestSecretsLayoutPutsThePortOverV4(t *testing.T) {
+// The ssm secrets are the layout v5 stores, opened at the document's root,
+// region and endpoint; there is no Secrets port over them.
+func TestTheSSMSecretsAreTheLayoutV5Stores(t *testing.T) {
 	ctx := context.Background()
 	var opened struct {
 		prefix string
@@ -21,37 +22,32 @@ func TestSecretsLayoutPutsThePortOverV4(t *testing.T) {
 		opened.prefix, opened.opts = prefix, state.ResolveOptions(state.Options{}, opts...)
 		return statememory.New(), nil
 	}
-	base := Config{
+	c := Config{
 		SecretsRoot: "/sluis/example", SecretsKMSKey: "alias/example", SecretsRegion: "eu-west-1",
 		SecretsEndpoint: "http://localhost:4566", SecretsGrace: time.Hour, OpenState: open,
+		SecretsSSM: true, SecretsLayout: "v5",
 		secrets: &port.Choice{Adapter: "ssm"},
+		held:    &secretsHolder{},
+	}
+	if err := c.overLayout5(ctx, c.SecretsRoot, c.SecretsKMSKey); err != nil {
+		t.Fatal(err)
+	}
+	if c.held.v5 == nil {
+		t.Fatal("no stores")
+	}
+	if opened.prefix != "/sluis/example" || opened.opts.Region != "eu-west-1" || opened.opts.Endpoint != "http://localhost:4566" {
+		t.Fatalf("opened %q %+v", opened.prefix, opened.opts)
+	}
+	if v5, err := c.layout5(); err != nil || !v5 {
+		t.Fatalf("layout5 = %v, %v", v5, err)
 	}
 
-	// The default layout and an explicit v4 are the same.
-	for _, layout := range []string{"", "v4"} {
-		c := base
-		c.SecretsLayout = layout
-		c.v4 = &v4Holder{}
-		got, err := c.overLayout(ctx, c.SecretsRoot, c.SecretsKMSKey)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if _, ok := got.(*secretstore.Secrets); !ok {
-			t.Fatalf("%q: %T", layout, got)
-		}
-		if c.v4.stores == nil {
-			t.Fatalf("%q: no stores", layout)
-		}
-		if opened.prefix != "/sluis/example" || opened.opts.Region != "eu-west-1" || opened.opts.Endpoint != "http://localhost:4566" {
-			t.Fatalf("%q: opened %q %+v", layout, opened.prefix, opened.opts)
-		}
-	}
-
-	// Layouts that are gone, or never were, are refused.
-	for _, layout := range []string{"v3", "transition", "v9"} {
-		c := base
-		c.SecretsLayout = layout
-		if _, err := c.overLayout(ctx, c.SecretsRoot, c.SecretsKMSKey); err == nil {
+	// Layouts that are gone, never were, or are not named, are refused: an empty
+	// layout is no longer read as v4.
+	for _, layout := range []string{"", "v4", "v3", "transition", "v9"} {
+		bad := c
+		bad.SecretsLayout = layout
+		if _, err := bad.layout5(); err == nil {
 			t.Errorf("layout %q was accepted", layout)
 		}
 	}

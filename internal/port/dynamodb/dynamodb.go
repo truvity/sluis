@@ -1,12 +1,12 @@
 // Package dynamodb is the DynamoDB adapter of the State, Index and Trigger
-// ports (docs/concepts/sluis/ports.md, ADR 0027): one table, shared by every replica
-// and every process, so a lease is exclusive across pods and a notification
-// crosses processes. It is the State of the AWS platform, and what a
+// ports (docs/concepts/sluis/ports.md, ADR 0027): a table per module (ADR 0072,
+// [Tables]), each shared by every replica and every process, so a lease is
+// exclusive across pods and a notification crosses processes. It is the State of the AWS platform, and what a
 // Kubernetes deployment on AWS can use.
 //
 // # Table
 //
-// One table with a string partition key `pk` and a string sort key `sk`, and
+// Each table has a string partition key `pk` and a string sort key `sk`, and
 // the table's TTL attribute `expires` (epoch seconds). Credentials are the
 // platform's (Pod Identity, IRSA, a Lambda role): none is configured. With
 // Config.Create the adapter makes the table (on-demand billing, TTL on
@@ -15,9 +15,10 @@
 //
 // # Mapping
 //
-// A key is a record KIND and an ID (internal/port/keys.go, storage layout v2,
-// docs/reference/sluis/storage-layout.md): pk is the kind (`directory`, `github-org`,
-// `issuer-token`) and sk the id, slash-separated when compound (`stable/acme`).
+// A key is a MODULE, a record KIND and an ID (internal/port/layout5.go,
+// docs/reference/sluis/storage-layout.md): the module is the table, pk is the
+// kind (`workspace`, `org`, `token`) and sk the id, slash-separated when
+// compound (`stable/acme`). A key of another module than the table's is refused.
 // A prefix that lies in one kind (`ses.ada.`, `ws.dir.google.`) is a Query on that
 // partition with begins_with on sk, which returns the keys in key order and
 // pages by LastEvaluatedKey. A prefix that names no one kind (`ws.`, “, a legacy
@@ -177,9 +178,6 @@ type API interface {
 
 // Config is how a table is reached and made.
 type Config struct {
-	// Table is the table's name in layout 4: one table for every module.
-	// Exactly one of Table and Tables is set.
-	Table string
 	// Tables is layout 5 (ADR 0072): one table per module, by module. A module
 	// absent here has no table, and a process cannot open or read it. Open
 	// them with [OpenTables]. See [DefaultTables] for the default names.
@@ -204,33 +202,18 @@ func WithClock(now func() time.Time) Option { return func(s *Store) { s.now = no
 // WithPollInterval sets how often a Watch lists its prefix.
 func WithPollInterval(d time.Duration) Option { return func(s *Store) { s.poll = d } }
 
-// Store is the State, Index and Trigger over one table: the whole service's
-// in layout 4, one module's in layout 5 ([Tables]).
+// Store is the State, Index and Trigger over one module's table ([Tables]),
+// addressed by internal/port/layout5.go. It refuses a write of another
+// module's key ([port.ErrNotOwner]) and reads one as absent: that record is in
+// the other module's table.
 type Store struct {
-	api   API
-	table string
-	// v5 is a table of one module, addressed by internal/port/layout5.go. It
-	// refuses a write of another module's key ([port.ErrNotOwner]) and reads
-	// one as absent: that record is in the other module's table.
-	v5     bool
+	api    API
+	table  string
 	module port.Module
 
 	now    func() time.Time
 	offset atomic.Int64
 	poll   time.Duration
-}
-
-// Open connects with the platform's credentials and binds the table, creating
-// it when the configuration says so.
-func Open(ctx context.Context, cfg Config, opts ...Option) (*Store, error) {
-	if cfg.Table == "" {
-		return nil, errors.New("dynamodb: no table")
-	}
-	client, err := newClient(ctx, cfg)
-	if err != nil {
-		return nil, err
-	}
-	return New(ctx, client, cfg, opts...)
 }
 
 func newClient(ctx context.Context, cfg Config) (API, error) {
@@ -248,26 +231,6 @@ func newClient(ctx context.Context, cfg Config) (API, error) {
 			o.BaseEndpoint = aws.String(cfg.Endpoint)
 		}
 	}), nil
-}
-
-// New binds the layout 4 table over a client the caller made.
-func New(ctx context.Context, api API, cfg Config, opts ...Option) (*Store, error) {
-	if cfg.Table == "" {
-		return nil, errors.New("dynamodb: no table")
-	}
-	if len(cfg.Tables) > 0 {
-		return nil, errors.New("dynamodb: table and tables are both set (layout 4 and layout 5 do not mix)")
-	}
-	s := newStore(api, cfg.Table, opts)
-	if cfg.Create {
-		if err := s.createTable(ctx); err != nil {
-			return nil, unavailable(fmt.Errorf("table %q: %w", cfg.Table, err))
-		}
-	}
-	if err := s.Ping(ctx); err != nil {
-		return nil, fmt.Errorf("table %q: %w (set ports.dynamodb.create to make it, or make it with the infrastructure code)", cfg.Table, err)
-	}
-	return s, nil
 }
 
 func newStore(api API, table string, opts []Option) *Store {
@@ -369,22 +332,16 @@ func unavailable(err error) error {
 // --- keys, revisions, lifetimes ---
 
 // locate is where a key lives: its kind (pk) and its id (sk), by the layout of
-// internal/port (keys.go, or layout5.go in a module's table), which every
-// adapter shares. A key of another module than the table's is
-// [port.ErrNotOwner]; a key of no module is the table's own.
+// internal/port (layout5.go), which every adapter shares. A key of another
+// module than the table's is [port.ErrNotOwner]; a key of no module is the
+// table's own.
 func (s *Store) locate(key string) (pk, sk string, err error) {
-	var a port.Address
-	if s.v5 {
-		a5, err := port.Locate5(key)
-		if err != nil {
-			return "", "", err
-		}
-		if a5.Module != "" && a5.Module != s.module {
-			return "", "", fmt.Errorf("%w: %q is the %s module's, this table is %s", port.ErrNotOwner, key, a5.Module, s.module)
-		}
-		a = port.Address{Kind: a5.Kind, ID: a5.ID}
-	} else if a, err = port.Locate(key); err != nil {
+	a, err := port.Locate5(key)
+	if err != nil {
 		return "", "", err
+	}
+	if a.Module != "" && a.Module != s.module {
+		return "", "", fmt.Errorf("%w: %q is the %s module's, this table is %s", port.ErrNotOwner, key, a.Module, s.module)
 	}
 	if len(a.ID) > maxKey {
 		return "", "", fmt.Errorf("%w: a key of %d bytes is over DynamoDB's sort key limit of %d", port.ErrUnsupported, len(a.ID), maxKey)
@@ -736,5 +693,5 @@ func (s *Store) DeleteIfRevision(ctx context.Context, key string, rev port.Revis
 // Table is the table's name.
 func (s *Store) Table() string { return s.table }
 
-// Module is the module whose table this is: empty for the layout 4 table.
+// Module is the module whose table this is.
 func (s *Store) Module() port.Module { return s.module }

@@ -128,10 +128,10 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
-	if stores.V4 == nil && stores.V5 == nil {
+	if stores.V5 == nil {
 		stores.Close()
-		return nil, errors.New("cloudflare: the minter credential and the stored credentials live in the SSM secrets store (layout v4 or v5), " +
-			"so `secrets.source: ssm` is required")
+		return nil, errors.New("cloudflare: the minter credential and the stored credentials live in the SSM secrets store on layout v5, " +
+			"so `secrets: {source: ssm, layout: v5}` is required")
 	}
 	// A refusal found after the start is fatal the way one at the start is, in
 	// the controllers: here it is logged, and the next record says it again.
@@ -155,11 +155,7 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 		Dial: dial, Audit: trail, Log: log,
 		Lock:        &rails.Leases{State: state, Holder: rails.NewHolder(), Log: log, Maintenance: stores.Maintenance()},
 		Maintenance: stores.Maintenance(),
-	}
-	if stores.V5 != nil {
-		mc.V5 = stores.V5
-	} else {
-		mc.Internal, mc.External = stores.V4.Internal, stores.V4.External
+		V5:          stores.V5,
 	}
 	m, err := minter.New(mc)
 	if err != nil {

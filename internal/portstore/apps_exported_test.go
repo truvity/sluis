@@ -14,12 +14,12 @@ import (
 	"github.com/truvity/sluis/storage/state/memory"
 )
 
-func TestAppsExportOnLayoutV4(t *testing.T) {
+func TestAppsExportOnLayoutV5(t *testing.T) {
 	each(t, func(t *testing.T, e env) {
 		now := time.Unix(1700000000, 0).UTC()
 		set := e.open(t)
-		stores := secretstore.FromStore(memory.New(), "")
-		b := portstore.New(set).WithV4(stores).ExportGitHubApps(func(id string) bool { return id == "renovate" })
+		stores := secretstore.FromStoreV5(memory.New(), "")
+		b := portstore.New(set).WithV5(stores).ExportGitHubApps(func(id string) bool { return id == "renovate" })
 
 		// A runner App: pending stays internal; installed is the document.
 		runner := portstore.NewGitHubRunnerApps(b)
@@ -27,7 +27,7 @@ func TestAppsExportOnLayoutV4(t *testing.T) {
 		if err := runner.Put(ctx, rrec, "RUNNER-KEY"); err != nil {
 			t.Fatal(err)
 		}
-		if _, _, err := stores.External.GitHubRunnerApp("stable", "acme").Get(ctx); !errors.Is(err, state.ErrNotFound) {
+		if _, _, err := stores.GitHubExternal().App("runner-stable-acme").Get(ctx); !errors.Is(err, state.ErrNotFound) {
 			t.Fatalf("a pending App is external: %v", err)
 		}
 		if key, ok, err := runner.PrivateKey(ctx, "stable", "acme"); err != nil || !ok || key != "RUNNER-KEY" {
@@ -37,7 +37,7 @@ func TestAppsExportOnLayoutV4(t *testing.T) {
 		if err := runner.Put(ctx, rrec, "RUNNER-KEY"); err != nil {
 			t.Fatal(err)
 		}
-		doc, _, err := stores.External.GitHubRunnerApp("stable", "acme").Get(ctx)
+		doc, _, err := stores.GitHubExternal().App("runner-stable-acme").Get(ctx)
 		if err != nil || doc.AppID != "3" || doc.InstallationID != "4" || doc.PrivateKey != "RUNNER-KEY" {
 			t.Fatalf("document = %+v, %v", doc, err)
 		}
@@ -45,7 +45,7 @@ func TestAppsExportOnLayoutV4(t *testing.T) {
 			t.Fatalf("installed key = %q, %v, %v", key, ok, err)
 		}
 		// Stored once: the internal credential is gone.
-		if names, _ := set.Secrets.List(ctx, "credentials/github-runner-app/stable/acme"); len(names) != 0 {
+		if names, _ := stores.InternalStore(secretstore.ModuleGitHub).Child("apps/runner-stable-acme").List(ctx); len(names) != 0 {
 			t.Fatalf("the key is also internal: %v", names)
 		}
 
@@ -60,10 +60,10 @@ func TestAppsExportOnLayoutV4(t *testing.T) {
 				t.Fatalf("Get %s = %q, %v, %v", id, key, ok, err)
 			}
 		}
-		if _, _, err := stores.External.GitHubApp("renovate").Get(ctx); err != nil {
+		if _, _, err := stores.GitHubExternal().App("renovate").Get(ctx); err != nil {
 			t.Fatalf("exported App is not external: %v", err)
 		}
-		if _, _, err := stores.External.GitHubApp("kept").Get(ctx); !errors.Is(err, state.ErrNotFound) {
+		if _, _, err := stores.GitHubExternal().App("kept").Get(ctx); !errors.Is(err, state.ErrNotFound) {
 			t.Fatalf("an App without export is external: %v", err)
 		}
 
@@ -76,7 +76,7 @@ func TestAppsExportOnLayoutV4(t *testing.T) {
 		if err := slack.Put(ctx, srec, slackcatalogueapp.Credentials{ClientSecret: "CLIENT-SECRET", BotToken: "xoxb-BOT"}); err != nil {
 			t.Fatal(err)
 		}
-		if got, _, err := stores.External.SlackApp("notifier").Get(ctx); err != nil || got.BotToken != "xoxb-BOT" {
+		if got, _, err := stores.SlackExternal().App("notifier").Get(ctx); err != nil || got.BotToken != "xoxb-BOT" {
 			t.Fatalf("slack document = %+v, %v", got, err)
 		}
 		if _, creds, ok, err := slack.Get(ctx, "notifier"); err != nil || !ok || creds.BotToken != "xoxb-BOT" || creds.ClientSecret != "CLIENT-SECRET" {
@@ -87,13 +87,13 @@ func TestAppsExportOnLayoutV4(t *testing.T) {
 		if err := runner.Delete(ctx, "stable", "acme"); err != nil {
 			t.Fatal(err)
 		}
-		if _, _, err := stores.External.GitHubRunnerApp("stable", "acme").Get(ctx); !errors.Is(err, state.ErrNotFound) {
+		if _, _, err := stores.GitHubExternal().App("runner-stable-acme").Get(ctx); !errors.Is(err, state.ErrNotFound) {
 			t.Fatalf("the document outlived the App: %v", err)
 		}
 		if err := slack.Delete(ctx, "notifier"); err != nil {
 			t.Fatal(err)
 		}
-		if _, _, err := stores.External.SlackApp("notifier").Get(ctx); !errors.Is(err, state.ErrNotFound) {
+		if _, _, err := stores.SlackExternal().App("notifier").Get(ctx); !errors.Is(err, state.ErrNotFound) {
 			t.Fatalf("the Slack document outlived the App: %v", err)
 		}
 	})
@@ -107,8 +107,8 @@ func TestACatalogueAppKeepsItsWebhookSecretAcrossWrites(t *testing.T) {
 	each(t, func(t *testing.T, e env) {
 		now := time.Unix(1700000000, 0).UTC()
 		set := e.open(t)
-		stores := secretstore.FromStore(memory.New(), "")
-		b := portstore.New(set).WithV4(stores).ExportGitHubApps(func(id string) bool { return id == "renovate" })
+		stores := secretstore.FromStoreV5(memory.New(), "")
+		b := portstore.New(set).WithV5(stores).ExportGitHubApps(func(id string) bool { return id == "renovate" })
 		cat := portstore.NewGitHubCatalogueApps(b)
 
 		for _, id := range []string{"renovate", "kept"} {
@@ -132,7 +132,7 @@ func TestACatalogueAppKeepsItsWebhookSecretAcrossWrites(t *testing.T) {
 			if _, key, ok, err := cat.Get(ctx, id); err != nil || !ok || key != "KEY-"+id {
 				t.Fatalf("%s: the key beside the secret = %q, %v, %v", id, key, ok, err)
 			}
-			if _, _, err := stores.External.GitHubApp(id).Get(ctx); !errors.Is(err, state.ErrNotFound) {
+			if _, _, err := stores.GitHubExternal().App(id).Get(ctx); !errors.Is(err, state.ErrNotFound) {
 				t.Fatalf("%s: a pending App is external: %v", id, err)
 			}
 
@@ -158,7 +158,7 @@ func TestACatalogueAppKeepsItsWebhookSecretAcrossWrites(t *testing.T) {
 
 		// Exported: all four fields are in the one document, and a later
 		// write keeps all four.
-		doc, _, err := stores.External.GitHubApp("renovate").Get(ctx)
+		doc, _, err := stores.GitHubExternal().App("renovate").Get(ctx)
 		if err != nil || doc.WebhookSecret != "hook-2" || doc.PrivateKey != "KEY-renovate" || doc.InstallationID != "11" || doc.AppID != "8" {
 			t.Fatalf("exported document = %+v, %v", doc, err)
 		}
@@ -169,10 +169,10 @@ func TestACatalogueAppKeepsItsWebhookSecretAcrossWrites(t *testing.T) {
 		if err = cat.Put(ctx, rec, "KEY-renovate"); err != nil {
 			t.Fatal(err)
 		}
-		if doc, _, _ = stores.External.GitHubApp("renovate").Get(ctx); doc.WebhookSecret != "hook-2" {
+		if doc, _, _ = stores.GitHubExternal().App("renovate").Get(ctx); doc.WebhookSecret != "hook-2" {
 			t.Fatalf("a later Put dropped the webhook secret from the document: %+v", doc)
 		}
-		if _, _, err = stores.External.GitHubApp("kept").Get(ctx); !errors.Is(err, state.ErrNotFound) {
+		if _, _, err = stores.GitHubExternal().App("kept").Get(ctx); !errors.Is(err, state.ErrNotFound) {
 			t.Fatalf("an App without export is external: %v", err)
 		}
 

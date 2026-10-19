@@ -41,17 +41,13 @@ func TestTheLayoutsDoNotMix(t *testing.T) {
 		cfg  Config
 		want string // "" is accepted
 	}{
-		"v4 table, v4 secrets": {Config{Adapter: AdapterDynamoDB, DynamoDB: dynamoport.Config{Table: "t"}, SecretsSSM: true, SecretsLayout: "v4"}, ""},
-		"v4 table, default":    {Config{Adapter: AdapterDynamoDB, DynamoDB: dynamoport.Config{Table: "t"}, SecretsSSM: true}, ""},
-		"v5 tables, v5":        {Config{Adapter: AdapterDynamoDB, DynamoDB: dynamoport.Config{Tables: v5}, SecretsSSM: true, SecretsLayout: "v5"}, ""},
-		"v5 tables, no ssm":    {Config{Adapter: AdapterDynamoDB, DynamoDB: dynamoport.Config{Tables: v5}}, ""},
-		"v5 tables, v4":        {Config{Adapter: AdapterDynamoDB, DynamoDB: dynamoport.Config{Tables: v5}, SecretsSSM: true, SecretsLayout: "v4"}, "secrets.layout"},
-		"v5 tables, default":   {Config{Adapter: AdapterDynamoDB, DynamoDB: dynamoport.Config{Tables: v5}, SecretsSSM: true}, "secrets.layout"},
-		"v4 table, v5": {
-			Config{Adapter: AdapterDynamoDB, DynamoDB: dynamoport.Config{Table: "t"}, SecretsSSM: true, SecretsLayout: "v5"}, "ports.dynamodb.tables",
-		},
-		"both":           {Config{Adapter: AdapterDynamoDB, DynamoDB: dynamoport.Config{Table: "t", Tables: v5}}, "both set"},
-		"tables, memory": {Config{Adapter: AdapterMemory, DynamoDB: dynamoport.Config{Tables: v5}}, "dynamodb adapter's"},
+		"v5 tables, v5":       {Config{Adapter: AdapterDynamoDB, DynamoDB: dynamoport.Config{Tables: v5}, SecretsSSM: true, SecretsLayout: "v5"}, ""},
+		"v5 tables, no ssm":   {Config{Adapter: AdapterDynamoDB, DynamoDB: dynamoport.Config{Tables: v5}}, ""},
+		"v5 tables, v4":       {Config{Adapter: AdapterDynamoDB, DynamoDB: dynamoport.Config{Tables: v5}, SecretsSSM: true, SecretsLayout: "v4"}, "secrets.layout"},
+		"v5 tables, unnamed":  {Config{Adapter: AdapterDynamoDB, DynamoDB: dynamoport.Config{Tables: v5}, SecretsSSM: true}, "secrets.layout"},
+		"memory, v4":          {Config{Adapter: AdapterMemory, SecretsSSM: true, SecretsLayout: "v4"}, "secrets.layout"},
+		"dynamodb, no tables": {Config{Adapter: AdapterDynamoDB}, "ports.dynamodb.tables"},
+		"tables, memory":      {Config{Adapter: AdapterMemory, DynamoDB: dynamoport.Config{Tables: v5}}, "dynamodb adapter's"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, err := tc.cfg.layout5()
@@ -64,9 +60,9 @@ func TestTheLayoutsDoNotMix(t *testing.T) {
 		})
 	}
 	// Open refuses the same before it opens anything.
-	_, err := Open(context.Background(), Config{Adapter: AdapterDynamoDB, DynamoDB: dynamoport.Config{Table: "t", Tables: v5}}, nil)
+	_, err := Open(context.Background(), Config{Adapter: AdapterDynamoDB, DynamoDB: dynamoport.Config{Tables: v5}, SecretsSSM: true, SecretsLayout: "v4"}, nil)
 	if err == nil {
-		t.Error("Open accepted a mixed configuration")
+		t.Error("Open accepted layout v4")
 	}
 }
 
@@ -79,7 +75,7 @@ func TestFromServeReadsTheTablesAndTheLayout(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.DynamoDB.Tables[port.ModuleOIDC] != "a" || cfg.DynamoDB.Tables[port.ModuleGoogle] != "b" || cfg.DynamoDB.Table != "" || cfg.SecretsLayout != "v5" {
+	if cfg.DynamoDB.Tables[port.ModuleOIDC] != "a" || cfg.DynamoDB.Tables[port.ModuleGoogle] != "b" || cfg.SecretsLayout != "v5" {
 		t.Errorf("cfg = %+v", cfg)
 	}
 	_, err = FromServe(&config.Serve{
@@ -88,7 +84,7 @@ func TestFromServeReadsTheTablesAndTheLayout(t *testing.T) {
 		Secrets:   &config.Secrets{Source: "ssm", Root: "/sluis/example"},
 	})
 	if err == nil {
-		t.Error("v5 tables with the default secrets layout were accepted")
+		t.Error("v5 tables with no secrets layout were accepted")
 	}
 }
 
@@ -202,17 +198,18 @@ func TestMemoryOnLayout5IsATablePerModule(t *testing.T) {
 		t.Errorf("own table: %v", err)
 	}
 
-	// On layout v4 there is one store and ForModule is the Ports.
-	v4, err := Open(ctx, Config{Adapter: AdapterMemory, Module: port.ModuleOIDC}, quiet)
+	// Memory with no tables and no ssm secrets is one store, and ForModule is
+	// the Ports.
+	one, err := Open(ctx, Config{Adapter: AdapterMemory, Module: port.ModuleOIDC}, quiet)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer v4.Close()
-	if v4.Ports.Module != "" {
-		t.Errorf("layout v4 memory is split: %q", v4.Ports.Module)
+	defer one.Close()
+	if one.Ports.Module != "" {
+		t.Errorf("one memory store is split: %q", one.Ports.Module)
 	}
-	if set, err := v4.ForModule(port.ModuleGoogle); err != nil || set.Module != "" {
-		t.Errorf("ForModule on v4 = %+v, %v", set, err)
+	if set, err := one.ForModule(port.ModuleGoogle); err != nil || set.Module != "" {
+		t.Errorf("ForModule on one store = %+v, %v", set, err)
 	}
 }
 
@@ -224,23 +221,19 @@ func TestSecretsOnLayout5AreModuleFirst(t *testing.T) {
 		prefix = p
 		return root, nil
 	}
-	c := Config{SecretsRoot: "/sluis/example", SecretsKMSKey: "alias/example", SecretsLayout: "v5", OpenState: open, v4: &v4Holder{}}
+	c := Config{SecretsRoot: "/sluis/example", SecretsKMSKey: "alias/example", SecretsLayout: "v5", OpenState: open, held: &secretsHolder{}}
 	if err := c.overLayout5(ctx, c.SecretsRoot, c.SecretsKMSKey); err != nil {
 		t.Fatal(err)
 	}
-	if c.v4.v5 == nil || c.v4.stores != nil || prefix != "/sluis/example" {
-		t.Fatalf("holder = %+v, prefix %q", c.v4, prefix)
+	if c.held.v5 == nil || prefix != "/sluis/example" {
+		t.Fatalf("holder = %+v, prefix %q", c.held, prefix)
 	}
-	if _, err := c.v4.v5.OIDC().StateSecret().Put(ctx, []byte("s"), ""); err != nil {
+	if _, err := c.held.v5.OIDC().StateSecret().Put(ctx, []byte("s"), ""); err != nil {
 		t.Fatal(err)
-	}
-	// Layout v5 is not layout v4's Open.
-	if _, err := secretstore.Open(ctx, &config.Secrets{Source: "ssm", Root: "/sluis/example", Layout: "v5"}, open); err == nil {
-		t.Error("secretstore.Open (layout v4) accepted v5")
 	}
 	// The blob's static credentials are the module's document, internal/<module>/<name>.
 	c.Blob = &config.PortsBlob{Adapter: BlobS3, S3: &config.PortsBlobS3{Bucket: "b", Endpoint: "http://127.0.0.1:1", CredentialsRef: "internal/oidc/blobs-r2"}}
-	doc, err := c.v4.v5.S3Credentials("internal/oidc/blobs-r2")
+	doc, err := c.held.v5.S3Credentials("internal/oidc/blobs-r2")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -253,7 +246,7 @@ func TestSecretsOnLayout5AreModuleFirst(t *testing.T) {
 	if _, err = root.Child("internal").Child("oidc").Get(ctx, "blobs-r2"); err != nil {
 		t.Errorf("the document is not at internal/oidc/blobs-r2: %v", err)
 	}
-	// A v4 address (a kind that is no module) and another module's are refused.
+	// An address whose first segment is no module, and another module's, are refused.
 	for ref, want := range map[string]string{"internal/blobs/r2": "not internal/<module>/<name>", "internal/github/blobs-r2": "runs the oidc module"} {
 		c.Blob.S3.CredentialsRef = ref
 		c.Module = port.ModuleOIDC
@@ -263,7 +256,7 @@ func TestSecretsOnLayout5AreModuleFirst(t *testing.T) {
 	}
 	c.Blob.S3.CredentialsRef = "internal/blobs/r2"
 	if err = c.validatePorts(); err == nil {
-		t.Error("validatePorts accepted a layout v4 address on layout v5")
+		t.Error("validatePorts accepted an address whose first segment is no module")
 	}
 }
 
@@ -278,13 +271,13 @@ func TestTheBlobCredentialOfTheOwnerIsReadableByEveryModule(t *testing.T) {
 	for _, m := range []port.Module{port.ModuleOIDC, port.ModuleGitHub, port.ModuleSlack, port.ModuleGoogle, port.ModuleBackup} {
 		root := statememory.New()
 		open := func(context.Context, string, ...state.Option) (state.Store, error) { return root, nil }
-		c := Config{SecretsRoot: "/sluis/example", SecretsKMSKey: "alias/example", SecretsLayout: "v5", OpenState: open, v4: &v4Holder{}}
+		c := Config{SecretsRoot: "/sluis/example", SecretsKMSKey: "alias/example", SecretsLayout: "v5", OpenState: open, held: &secretsHolder{}}
 		if err := c.overLayout5(ctx, c.SecretsRoot, c.SecretsKMSKey); err != nil {
 			t.Fatal(err)
 		}
 		c = c.As(m)
 		c.Blob = &config.PortsBlob{Adapter: BlobS3, S3: &config.PortsBlobS3{Bucket: "b", Endpoint: "http://127.0.0.1:1", CredentialsRef: ref}}
-		doc, err := c.v4.v5.S3Credentials(ref)
+		doc, err := c.held.v5.S3Credentials(ref)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -332,13 +325,13 @@ func TestTheRenderedLayoutV5DocumentPassesTheRuntimeChecks(t *testing.T) {
 	root := statememory.New()
 	open := func(context.Context, string, ...state.Option) (state.Store, error) { return root, nil }
 	c.OpenState = open
-	c.v4 = &v4Holder{}
+	c.held = &secretsHolder{}
 	if err = c.overLayout5(ctx, c.SecretsRoot, c.SecretsKMSKey); err != nil {
 		t.Fatal(err)
 	}
 	// The oidc process, with the peers the issuer reads.
 	c = c.As(port.ModuleOIDC, port.ModuleGoogle, port.ModuleGitHub, port.ModuleSlack)
-	doc, err := c.v4.v5.S3Credentials(ref)
+	doc, err := c.held.v5.S3Credentials(ref)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -205,12 +205,13 @@ func TestRenderRefusesWhatTheShapeFixes(t *testing.T) {
 	}
 }
 
-// A Lambda installation keeps the layout and the grace of its secrets: the
-// shape fixes the source, the root and the region, not the storage layout.
-func TestRenderKeepsTheSecretsLayoutAndGraceOnLambda(t *testing.T) {
+// A Lambda installation is on layout v5, written whether the installation
+// names it or not, and keeps the grace of its secrets: the shape fixes the
+// source, the root, the region and the layout. Layout v4 is refused.
+func TestRenderWritesLayoutV5AndKeepsTheGraceOnLambda(t *testing.T) {
 	in := installation(t, "example")
 	grace := config.Duration(12 * time.Hour)
-	in.Secrets = &config.Secrets{Layout: "v4", Grace: &grace}
+	in.Secrets = &config.Secrets{Grace: &grace}
 	service, _, err := config.Render(in)
 	if err != nil {
 		t.Fatal(err)
@@ -221,11 +222,16 @@ func TestRenderKeepsTheSecretsLayoutAndGraceOnLambda(t *testing.T) {
 	if err := yaml.Unmarshal(service, &doc); err != nil {
 		t.Fatal(err)
 	}
-	if doc.Secrets["layout"] != "v4" || doc.Secrets["grace"] != "12h0m0s" && doc.Secrets["grace"] != "12h" {
-		t.Errorf("secrets %v, want layout v4 and grace 12h\n%s", doc.Secrets, service)
+	if doc.Secrets["layout"] != "v5" || doc.Secrets["grace"] != "12h0m0s" && doc.Secrets["grace"] != "12h" {
+		t.Errorf("secrets %v, want layout v5 and grace 12h\n%s", doc.Secrets, service)
 	}
 	if doc.Secrets["source"] != "ssm" || doc.Secrets["root"] != "/sluis/example" {
 		t.Errorf("secrets %v lost what the shape fixes", doc.Secrets)
+	}
+	in = installation(t, "example")
+	in.Secrets = &config.Secrets{Layout: "v4"}
+	if _, _, err = config.Render(in); err == nil || !strings.Contains(err.Error(), "v1.77.1") {
+		t.Errorf("layout v4 was rendered: %v", err)
 	}
 }
 
@@ -552,11 +558,10 @@ func TestRenderCarriesTheAppNamesOfTheGitHubController(t *testing.T) {
 	}
 }
 
-// On layout v5 the renderer names the recovery account's verifier and not its
-// password, the service never reading the password (docs/decisions/0076); on
-// layout v4 it names the password. The conformance account's verifier is named
-// only when the account is on.
-func TestRenderNamesTheVerifierOnLayoutV5AndThePasswordOnV4(t *testing.T) {
+// The renderer names the recovery account's verifier and not its password, the
+// service never reading the password (docs/decisions/0076). The conformance
+// account's verifier is named only when the account is on.
+func TestRenderNamesTheVerifierAndNotThePassword(t *testing.T) {
 	render := func(change func(*config.Installation)) string {
 		t.Helper()
 		in := installation(t, "example")
@@ -567,36 +572,32 @@ func TestRenderNamesTheVerifierOnLayoutV5AndThePasswordOnV4(t *testing.T) {
 		}
 		return string(service)
 	}
-	v4 := render(func(*config.Installation) {})
-	if !strings.Contains(v4, "passwordSecret: recovery/password") || strings.Contains(v4, "verifierSecret") {
-		t.Errorf("layout v4:\n%s", v4)
-	}
-	v5 := render(func(in *config.Installation) { in.Secrets = &config.Secrets{Layout: "v5"} })
-	if strings.Contains(v5, "passwordSecret") || !strings.Contains(v5, "verifierSecret: recovery/verifier") {
-		t.Errorf("layout v5:\n%s", v5)
-	}
-	if strings.Contains(v5, "conformance") {
-		t.Errorf("the conformance account is named with its flag off:\n%s", v5)
+	for name, change := range map[string]func(*config.Installation){
+		"no layout named": func(*config.Installation) {},
+		"layout v5":       func(in *config.Installation) { in.Secrets = &config.Secrets{Layout: "v5"} },
+	} {
+		v5 := render(change)
+		if strings.Contains(v5, "passwordSecret") || !strings.Contains(v5, "verifierSecret: recovery/verifier") {
+			t.Errorf("%s:\n%s", name, v5)
+		}
+		if strings.Contains(v5, "conformance") {
+			t.Errorf("%s: the conformance account is named with its flag off:\n%s", name, v5)
+		}
 	}
 	on := render(func(in *config.Installation) {
-		in.Secrets = &config.Secrets{Layout: "v5"}
 		in.Conformance = &config.Conformance{Enabled: true}
 	})
 	if !strings.Contains(on, "verifierSecret: conformance/verifier") || !strings.Contains(on, "enabled: true") {
 		t.Errorf("conformance on:\n%s", on)
 	}
 
-	// Another spelling is not a choice, and a v4 stack cannot make the verifier.
+	// Another spelling is not a choice.
 	for name, change := range map[string]func(*config.Installation){
 		"another recovery verifier": func(in *config.Installation) {
 			in.Recovery = &config.Recovery{VerifierSecret: "elsewhere"}
 		},
 		"another conformance verifier": func(in *config.Installation) {
-			in.Secrets = &config.Secrets{Layout: "v5"}
 			in.Conformance = &config.Conformance{Enabled: true, VerifierSecret: "elsewhere"}
-		},
-		"conformance on layout v4 with no verifier": func(in *config.Installation) {
-			in.Conformance = &config.Conformance{Enabled: true}
 		},
 	} {
 		in := installation(t, "example")
@@ -604,11 +605,5 @@ func TestRenderNamesTheVerifierOnLayoutV5AndThePasswordOnV4(t *testing.T) {
 		if _, _, err := config.Render(in); err == nil {
 			t.Errorf("%s was accepted", name)
 		}
-	}
-	v4Named := render(func(in *config.Installation) {
-		in.Conformance = &config.Conformance{Enabled: true, VerifierSecret: "conformance/own"}
-	})
-	if !strings.Contains(v4Named, "verifierSecret: conformance/own") {
-		t.Errorf("layout v4 with a named verifier:\n%s", v4Named)
 	}
 }

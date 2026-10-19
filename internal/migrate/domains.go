@@ -151,7 +151,7 @@ func OpenDomainsFor(ctx context.Context, st *store.Stores, create bool, exported
 	declared portstore.DeclaredGitHubApps,
 ) (*Domains, error) {
 	if st.Adapter != store.AdapterLegacy {
-		base := portstore.New(st.Ports).WithV4(st.V4).WithV5(st.V5).ExportGitHubApps(exported).DeclareGitHubApps(declared)
+		base := portstore.New(st.Ports).WithV5(st.V5).ExportGitHubApps(exported).DeclareGitHubApps(declared)
 		if err := base.CheckSecrets(ctx); err != nil {
 			return nil, fmt.Errorf("ports.adapter %s: %w", st.Adapter, err)
 		}

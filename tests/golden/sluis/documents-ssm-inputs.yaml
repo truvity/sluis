@@ -88,7 +88,13 @@ data:
         adapter: dynamodb
         settings:
           region: eu-central-1
-          table: example-sluis-staging
+          tables:
+            oidc: example-sluis-staging-oidc
+            github: example-sluis-staging-github
+            slack: example-sluis-staging-slack
+            google: example-sluis-staging-google
+            cloudflare: example-sluis-staging-cloudflare
+            backup: example-sluis-staging-backup
     audit:
       audience: audit
       forwardedForTrustedHops: 2
@@ -133,6 +139,7 @@ data:
       serviceAccount: sluis-recovery
     release: sluis
     secrets:
+      layout: v5
       root: sluis
       source: ssm
     secureCookies: true
@@ -622,7 +629,7 @@ spec:
       annotations:
         # Each document is read once, at start: a change to it, or to the
         # policy, is a rollout.
-        checksum/config: 3f84da1be6d5867927fe187f1c304cbee364cc4c955cb31b1946fe5091ecc333
+        checksum/config: ebfea01ea6c21b19b0e3df686abe26ec1cf6343af7b6e890602d17ab201bd768
         checksum/policy: 264a1aa58a2c2090b55ab756166be63b6f0027f8aac4406a0fbc6a4525656c0a
         checksum/verify-keys: 18ec558ab1c2237d4c0fb00f26dfabc2e1a44002e46a9029553e8a19605e08cd
     spec:

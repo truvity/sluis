@@ -568,7 +568,13 @@ data:
       adapter: dynamodb
       dynamodb:
         region: eu-west-1
-        table: sluis
+        tables:
+          backup: sluis-backup
+          cloudflare: sluis-cloudflare
+          github: sluis-github
+          google: sluis-google
+          oidc: sluis-oidc
+          slack: sluis-slack
     probes:
       address: :7070
     recovery:
@@ -1080,7 +1086,7 @@ spec:
       annotations:
         # Each document is read once, at start: a change to it, or to the
         # policy, is a rollout.
-        checksum/config: 95cb02fe48401139fd63b8f66ee76e6add0f734f84bbb73810347eb522ca16af
+        checksum/config: 6092fdbab110579aa692d0bb673fddc57a99d7358877fde1194240bdc03a066a
         checksum/policy: 9909eca423d3080cb9a8538d9e143b48ef12798afd703ad5562657bc38b316e5
     spec:
       serviceAccountName: sluis-issuer

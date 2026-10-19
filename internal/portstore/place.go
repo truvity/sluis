@@ -12,9 +12,9 @@ func (b *Base) WithPlace(adapter, root string) *Base {
 }
 
 // GitHubAppPlace is where a GitHub App's key is kept; the id is the one
-// [GitHubApps] gives (`link`, a catalogue id, `runner-<tier>-<org>`). On layout
-// v5 that is the App's own prefix, and on layout v4 only the root. ok is false
-// when the secrets adapter is not known.
+// [GitHubApps] gives (`link`, a catalogue id, `runner-<tier>-<org>`). On the
+// layout v5 stores that is the App's own prefix, and on a Secrets port only the
+// root. ok is false when the secrets adapter is not known.
 func (b *Base) GitHubAppPlace(id string) (adapter, location string, ok bool) {
 	if b.placeAdapter == "" {
 		return "", "", false

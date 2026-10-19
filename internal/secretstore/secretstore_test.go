@@ -6,8 +6,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"reflect"
-	"sort"
 	"testing"
 	"time"
 
@@ -17,10 +15,10 @@ import (
 	"github.com/truvity/sluis/storage/state/memory"
 )
 
-func newStores(t *testing.T) (*secretstore.Stores, state.Store) {
+func newStores(t *testing.T) (*secretstore.StoresV5, state.Store) {
 	t.Helper()
 	root := memory.New()
-	return secretstore.FromStore(root, ""), root
+	return secretstore.FromStoreV5(root, ""), root
 }
 
 func readFile(t *testing.T, parts ...string) []byte {
@@ -45,11 +43,11 @@ func TestExternalDocumentsAreGoldenAndMatchTheirSchema(t *testing.T) {
 		put     func() error
 	}{
 		{"oidc", "oidc/example-rp", func() error {
-			_, err := st.External.OIDC("example-rp").Put(ctx, secretstore.OIDCv1{ClientID: "example-rp", ClientSecret: "example-secret-value"}, "")
+			_, err := st.OIDCExternal().Client("example-rp").Put(ctx, secretstore.OIDCv1{ClientID: "example-rp", ClientSecret: "example-secret-value"}, "")
 			return err
 		}},
 		{"github", "github/example-app", func() error {
-			_, err := st.External.GitHubApp("example-app").Put(ctx, secretstore.GitHubv1{
+			_, err := st.GitHubExternal().App("example-app").Put(ctx, secretstore.GitHubv1{
 				AppID: "12345", InstallationID: "67890",
 				PrivateKey:    "-----BEGIN EXAMPLE KEY-----\nexample\n-----END EXAMPLE KEY-----\n",
 				WebhookSecret: "example-webhook-secret",
@@ -57,7 +55,7 @@ func TestExternalDocumentsAreGoldenAndMatchTheirSchema(t *testing.T) {
 			return err
 		}},
 		{"slack", "slack/example-bot", func() error {
-			_, err := st.External.SlackApp("example-bot").Put(ctx, secretstore.Slackv1{BotToken: "example-bot-token"}, "")
+			_, err := st.SlackExternal().App("example-bot").Put(ctx, secretstore.Slackv1{BotToken: "example-bot-token"}, "")
 			return err
 		}},
 	}
@@ -105,7 +103,7 @@ func TestExternalDocumentsAreGoldenAndMatchTheirSchema(t *testing.T) {
 
 			// And it reads back through the typed value.
 			if tc.name == "oidc" {
-				got, _, err := st.External.OIDC("example-rp").Get(ctx)
+				got, _, err := st.OIDCExternal().Client("example-rp").Get(ctx)
 				if err != nil || got.Schema != secretstore.SchemaOIDCv1 || got.ClientSecret != "example-secret-value" {
 					t.Fatalf("read back = %+v, %v", got, err)
 				}
@@ -118,101 +116,22 @@ func TestDocumentsRefuseWhatTheSchemaRefuses(t *testing.T) {
 	ctx := context.Background()
 	st, root := newStores(t)
 
-	if _, err := st.External.OIDC("c").Put(ctx, secretstore.OIDCv1{ClientID: "c"}, ""); !errors.Is(err, secretstore.ErrSchema) {
+	if _, err := st.OIDCExternal().Client("c").Put(ctx, secretstore.OIDCv1{ClientID: "c"}, ""); !errors.Is(err, secretstore.ErrSchema) {
 		t.Fatalf("put without a secret = %v, want ErrSchema", err)
 	}
 	// A document of another schema at the address is refused on read.
 	if _, err := root.Child("external").Put(ctx, "slack/x", []byte(`{"schema":"oidc/v1","client-id":"a","client-secret":"b"}`), ""); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := st.External.SlackApp("x").Get(ctx); !errors.Is(err, secretstore.ErrSchema) {
+	if _, _, err := st.SlackExternal().App("x").Get(ctx); !errors.Is(err, secretstore.ErrSchema) {
 		t.Fatalf("read of another schema = %v, want ErrSchema", err)
 	}
 	// A field a later version adds is not breaking.
 	if _, err := root.Child("external").Put(ctx, "slack/y", []byte(`{"schema":"slack/v1","bot_token":"t","extra":"later"}`), ""); err != nil {
 		t.Fatal(err)
 	}
-	if got, _, err := st.External.SlackApp("y").Get(ctx); err != nil || got.BotToken != "t" {
+	if got, _, err := st.SlackExternal().App("y").Get(ctx); err != nil || got.BotToken != "t" {
 		t.Fatalf("read with an added field = %+v, %v", got, err)
-	}
-}
-
-func TestRunnerNamesAreReserved(t *testing.T) {
-	ctx := context.Background()
-	st, root := newStores(t)
-
-	app := secretstore.GitHubv1{AppID: "1", InstallationID: "2", PrivateKey: "k"}
-	if _, err := st.External.GitHubApp("runner-stable-acme").Put(ctx, app, ""); !errors.Is(err, secretstore.ErrReservedName) {
-		t.Fatalf("catalogue App named runner-… = %v, want ErrReservedName", err)
-	}
-	if _, _, err := st.External.GitHubApp("runner-x").Get(ctx); !errors.Is(err, secretstore.ErrReservedName) {
-		t.Fatalf("read = %v, want ErrReservedName", err)
-	}
-	if _, err := st.External.GitHubRunnerApp("stable", "acme").Put(ctx, app, ""); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := root.Child("external").Get(ctx, "github/runner-stable-acme"); err != nil {
-		t.Fatalf("a runner App is not at github/runner-<tier>-<org>: %v", err)
-	}
-	if err := secretstore.CheckAppName("runner-x"); !errors.Is(err, secretstore.ErrReservedName) {
-		t.Fatal(err)
-	}
-	if err := secretstore.CheckAppName("link"); err != nil {
-		t.Fatal(err)
-	}
-}
-
-// Every domain method has a fixed address under its namespace, pinned here:
-// the external ones are a contract, the internal ones keep v3's names.
-func TestAddresses(t *testing.T) {
-	ctx := context.Background()
-	st, root := newStores(t)
-
-	must := func(_ state.Rev, err error) {
-		t.Helper()
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-	must(st.Internal.ConsoleSessionKey().Put(ctx, []byte("k"), ""))
-	must(st.Internal.PersonToken("4711", "github").Put(ctx, secretstore.PersonToken{AccessToken: "a", RefreshToken: "r"}, ""))
-	must(st.Internal.Directory("example.org").Put(ctx, []byte(`{}`), ""))
-	must(st.Internal.Directory("a/b").Put(ctx, []byte(`{}`), ""))
-	must(st.External.OIDC("rp").Put(ctx, secretstore.OIDCv1{ClientID: "rp", ClientSecret: "s"}, ""))
-	must(st.External.SlackApp("alerts").Put(ctx, secretstore.Slackv1{BotToken: "t"}, ""))
-
-	walk := func(prefix string) []string {
-		var out []string
-		rec := func(p string) {
-			names, err := root.Child(p).List(ctx)
-			if err != nil {
-				t.Fatal(err)
-			}
-			for _, n := range names {
-				out = append(out, p+"/"+n)
-			}
-		}
-		for _, p := range []string{
-			prefix + "/credentials/console", prefix + "/credentials/github-link",
-			prefix + "/credentials/directory/google", prefix + "/oidc", prefix + "/slack",
-		} {
-			rec(p)
-		}
-		sort.Strings(out)
-		return out
-	}
-	want := []string{
-		"external/oidc/rp",
-		"external/slack/alerts",
-		"internal/credentials/console/session-key",
-		"internal/credentials/directory/google/example.org",
-		"internal/credentials/directory/google/u-612f62",
-		"internal/credentials/github-link/4711",
-	}
-	got := append(walk("internal"), walk("external")...)
-	sort.Strings(got)
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("addresses:\n got %v\nwant %v", got, want)
 	}
 }
 
@@ -222,13 +141,13 @@ func TestInternalValuesRoundTrip(t *testing.T) {
 
 	exp := time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC)
 	tok := secretstore.PersonToken{AccessToken: "a", AccessExpires: exp, RefreshToken: "r", RefreshExpires: exp.Add(time.Hour)}
-	if _, err := st.Internal.PersonToken("1", "github").Put(ctx, tok, ""); err != nil {
+	if _, err := st.GitHub().PersonToken("1").Put(ctx, tok, ""); err != nil {
 		t.Fatal(err)
 	}
-	if got, _, err := st.Internal.PersonToken("1", "github").Get(ctx); err != nil || got != tok {
+	if got, _, err := st.GitHub().PersonToken("1").Get(ctx); err != nil || got != tok {
 		t.Fatalf("person token = %+v, %v", got, err)
 	}
-	if _, _, err := st.Internal.PersonToken("2", "github").Get(ctx); !errors.Is(err, state.ErrNotFound) {
+	if _, _, err := st.GitHub().PersonToken("2").Get(ctx); !errors.Is(err, state.ErrNotFound) {
 		t.Fatalf("absent = %v, want ErrNotFound", err)
 	}
 }
@@ -240,8 +159,8 @@ func TestOIDCRotation(t *testing.T) {
 	now := time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC)
 	clock := now
 	root := memory.New(memory.WithClock(func() time.Time { return clock }))
-	st := secretstore.FromStore(root, "")
-	v := st.External.OIDC("rp").WithClock(func() time.Time { return clock })
+	st := secretstore.FromStoreV5(root, "")
+	v := st.OIDCExternal().Client("rp").WithClock(func() time.Time { return clock })
 
 	rev, err := v.Put(ctx, secretstore.OIDCv1{ClientID: "rp", ClientSecret: "one"}, "")
 	if err != nil {
@@ -263,12 +182,10 @@ func TestOIDCRotation(t *testing.T) {
 }
 
 func TestCheckLayout(t *testing.T) {
-	for _, in := range []string{"", "v4"} {
-		if err := secretstore.CheckLayout(in); err != nil {
-			t.Errorf("CheckLayout(%q) = %v", in, err)
-		}
+	if err := secretstore.CheckLayout("v5"); err != nil {
+		t.Errorf("CheckLayout(v5) = %v", err)
 	}
-	for _, in := range []string{"v3", "transition", "v5"} {
+	for _, in := range []string{"", "v4", "v3", "transition"} {
 		if err := secretstore.CheckLayout(in); err == nil {
 			t.Errorf("CheckLayout(%q) accepted", in)
 		}
@@ -284,9 +201,9 @@ func TestOpen(t *testing.T) {
 		gotOpts = state.ResolveOptions(state.Options{}, opts...)
 		return memory.New(), nil
 	}
-	_, err := secretstore.Open(ctx, &config.Secrets{
+	_, err := secretstore.OpenV5(ctx, &config.Secrets{
 		Source: "ssm", Root: "/sluis/example", Region: "eu-west-1", Endpoint: "http://localhost:4566",
-		KMSKeyID: "alias/example", Layout: "v4",
+		KMSKeyID: "alias/example", Layout: "v5",
 	}, open)
 	if err != nil {
 		t.Fatal(err)
@@ -294,26 +211,24 @@ func TestOpen(t *testing.T) {
 	if gotPrefix != "/sluis/example" || gotOpts.Region != "eu-west-1" || gotOpts.Endpoint != "http://localhost:4566" {
 		t.Fatalf("opened %q with %+v", gotPrefix, gotOpts)
 	}
-	// The default layout is v4.
-	if _, err = secretstore.Open(ctx, &config.Secrets{Source: "ssm", Root: "/sluis/example"}, open); err != nil {
-		t.Fatalf("default layout: %v", err)
-	}
 
 	for name, cfg := range map[string]*config.Secrets{
 		"nil":        nil,
 		"env":        {Source: "env"},
-		"file":       {Source: "file", Root: "/run/secrets"},
-		"no root":    {Source: "ssm"},
-		"bad root":   {Source: "ssm", Root: "sluis/x"},
+		"file":       {Source: "file", Root: "/run/secrets", Layout: "v5"},
+		"no root":    {Source: "ssm", Layout: "v5"},
+		"bad root":   {Source: "ssm", Root: "sluis/x", Layout: "v5"},
+		"no layout":  {Source: "ssm", Root: "/sluis/x"},
+		"v4":         {Source: "ssm", Root: "/sluis/x", Layout: "v4"},
 		"layout":     {Source: "ssm", Root: "/sluis/x", Layout: "v9"},
 		"v3":         {Source: "ssm", Root: "/sluis/x", Layout: "v3"},
 		"transition": {Source: "ssm", Root: "/sluis/x", Layout: "transition"},
 	} {
-		if _, err := secretstore.Open(ctx, cfg, open); err == nil {
+		if _, err := secretstore.OpenV5(ctx, cfg, open); err == nil {
 			t.Errorf("%s: accepted", name)
 		}
 	}
-	if _, err := secretstore.Open(ctx, nil, open); !errors.Is(err, secretstore.ErrNoStore) {
+	if _, err := secretstore.OpenV5(ctx, nil, open); !errors.Is(err, secretstore.ErrNoStore) {
 		t.Errorf("nil = %v, want ErrNoStore", err)
 	}
 }
@@ -323,14 +238,14 @@ func TestOpen(t *testing.T) {
 func TestS3CredentialsDocument(t *testing.T) {
 	ctx := context.Background()
 	st, root := newStores(t)
-	doc, err := st.Internal.S3Credentials("internal/blobs/example")
+	doc, err := st.S3Credentials("internal/google/blobs-example")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err = doc.Put(ctx, secretstore.S3Credentialsv1{AccessKeyID: "example-access-key", SecretAccessKey: "example-secret-key"}, ""); err != nil {
 		t.Fatal(err)
 	}
-	it, err := root.Child("internal").Get(ctx, "blobs/example")
+	it, err := root.Child("internal").Get(ctx, "google/blobs-example")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -366,7 +281,7 @@ func TestS3CredentialsDocument(t *testing.T) {
 		t.Errorf("a half document: %v, want ErrSchema", err)
 	}
 	for _, ref := range []string{"external/s3/x", "internal/../x", "internal/a", "x"} {
-		if _, err = st.Internal.S3Credentials(ref); !errors.Is(err, secretstore.ErrRef) {
+		if _, err = st.S3Credentials(ref); !errors.Is(err, secretstore.ErrRef) {
 			t.Errorf("%q: %v, want ErrRef", ref, err)
 		}
 	}
@@ -394,7 +309,7 @@ func TestCloudflareDocumentsAreGoldenAndMatchTheirSchema(t *testing.T) {
 			Endpoint: "https://0123456789abcdef0123456789abcdef.r2.cloudflarestorage.com", ExpiresOn: "2026-10-08T12:15:00Z",
 		}},
 	} {
-		if _, err := st.External.Cloudflare(tc.preset).Put(ctx, tc.doc, ""); err != nil {
+		if _, err := st.CloudflareExternal().Preset(tc.preset).Put(ctx, tc.doc, ""); err != nil {
 			t.Fatalf("%s: %v", tc.preset, err)
 		}
 		it, err := root.Child("external").Get(ctx, "cloudflare/"+tc.preset)
@@ -418,7 +333,8 @@ func TestCloudflareDocumentsAreGoldenAndMatchTheirSchema(t *testing.T) {
 				t.Errorf("%s: field %q is not in the schema", tc.preset, f)
 			}
 		}
-		if got, _, err := st.External.Cloudflare(tc.preset).Get(ctx); err != nil || got.Token != tc.doc.Token || got.SecretAccessKey != tc.doc.SecretAccessKey {
+		got, _, err := st.CloudflareExternal().Preset(tc.preset).Get(ctx)
+		if err != nil || got.Token != tc.doc.Token || got.SecretAccessKey != tc.doc.SecretAccessKey {
 			t.Fatalf("%s: read back = %+v, %v", tc.preset, got, err)
 		}
 	}
@@ -429,7 +345,7 @@ func TestCloudflareDocumentsAreGoldenAndMatchTheirSchema(t *testing.T) {
 		"both shapes":               {Token: "t", AccessKeyID: "a", SecretAccessKey: "s", Endpoint: "https://e", ExpiresOn: "2026-10-08T12:15:00Z"},
 		"half an R2 shape":          {AccessKeyID: "a", ExpiresOn: "2026-10-08T12:15:00Z"},
 	} {
-		if _, err := st.External.Cloudflare("bad").Put(ctx, doc, ""); !errors.Is(err, secretstore.ErrSchema) {
+		if _, err := st.CloudflareExternal().Preset("bad").Put(ctx, doc, ""); !errors.Is(err, secretstore.ErrSchema) {
 			t.Errorf("%s: %v, want ErrSchema", name, err)
 		}
 	}
@@ -439,7 +355,7 @@ func TestCloudflareDocumentsAreGoldenAndMatchTheirSchema(t *testing.T) {
 func TestCloudflareMinterDocument(t *testing.T) {
 	ctx := context.Background()
 	st, root := newStores(t)
-	doc, err := st.Internal.CloudflareMinter("internal/cloudflare/main/minter")
+	doc, err := st.Cloudflare().MinterAt("internal/cloudflare/main/minter")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -478,7 +394,7 @@ func TestCloudflareMinterDocument(t *testing.T) {
 		t.Errorf("an empty minter: %v, want ErrSchema", err)
 	}
 	for _, ref := range []string{"external/cloudflare/main", "internal/../x/y", "internal/a", "x"} {
-		if _, err = st.Internal.CloudflareMinter(ref); !errors.Is(err, secretstore.ErrRef) {
+		if _, err = st.Cloudflare().MinterAt(ref); !errors.Is(err, secretstore.ErrRef) {
 			t.Errorf("%q: %v, want ErrRef", ref, err)
 		}
 	}

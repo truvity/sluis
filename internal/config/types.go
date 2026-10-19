@@ -315,12 +315,11 @@ type (
 	}
 
 	// DynamoDB is where the `dynamodb` adapter keeps State, the transitional
-	// Index and the Trigger: one table. Credentials are the platform's (Pod
-	// Identity, IRSA, a Lambda role), never configured.
+	// Index and the Trigger: a table per module (layout v5). Credentials are
+	// the platform's (Pod Identity, IRSA, a Lambda role), never configured.
 	DynamoDB struct {
-		Table string `json:"table,omitempty"`
-		// Tables is layout v5: the table of each module, by module name
-		// (`secrets.layout: v5`). Exclusive with Table.
+		// Tables is the table of each module, by module name. The single
+		// table of layout v4 (`table`) was removed in v1.77.1.
 		Tables   map[string]string `json:"tables,omitempty"`
 		Region   string            `json:"region,omitempty"`
 		Endpoint string            `json:"endpoint,omitempty"`
@@ -382,8 +381,9 @@ type (
 		// KMSKeyID is `ssm`'s customer-managed key for the parameters the
 		// service writes (credentials, exports). Unset is the AWS-managed key.
 		KMSKeyID string `json:"kmsKeyId,omitempty"`
-		// Layout is the storage layout of an `ssm` installation: `v4` (ADR
-		// 0041), the default, or `v5` (ADR 0072), module first.
+		// Layout is the storage layout of an `ssm` installation, and must be
+		// `v5` (ADR 0072), module first: the only layout. `v4` (ADR 0041), and
+		// with it an empty layout, were removed in v1.77.1.
 		Layout string `json:"layout,omitempty"`
 		// Grace is how long a rotated client secret's previous value is still
 		// accepted (default 24h). It is the overlap of a
@@ -673,8 +673,5 @@ func (s *Sluis) SlackController() *ControllerSlack {
 	return &ControllerSlack{Roster: r, CredentialsDir: g.CredentialsDir}
 }
 
-// The values of [Secrets].Layout.
-const (
-	SecretsLayoutV4 = "v4"
-	SecretsLayoutV5 = "v5"
-)
+// SecretsLayoutV5 is the one value of [Secrets].Layout.
+const SecretsLayoutV5 = "v5"

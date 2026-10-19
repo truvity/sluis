@@ -174,9 +174,6 @@ func (in *Installation) checkModules() error {
 	if in.Shape != ShapeLambda {
 		errs = append(errs, fmt.Errorf("shape is %q: the module functions are Lambda functions", in.Shape))
 	}
-	if in.AWS != nil && in.AWS.Table != "" {
-		errs = append(errs, errors.New("aws.table is the layout v4 table: the module functions run on layout v5, whose tables are ports.dynamodb.tables"))
-	}
 	if s := in.Secrets; s != nil && s.Layout != "" && s.Layout != internal.SecretsLayoutV5 {
 		errs = append(errs, fmt.Errorf("secrets.layout is %q: the module functions read layout v5", s.Layout))
 	}

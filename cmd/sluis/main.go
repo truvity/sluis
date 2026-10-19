@@ -1,8 +1,8 @@
 // Command sluis is the whole product in one binary, one image and one
-// chart (docs/decisions/0032), and one process: `sluis serve` is the issuer, the
+// chart (docs/decisions/0032), and one process: `sluis issuer` is the issuer, the
 // hub, the console and, beside them, the controllers its document names.
 //
-//	sluis serve --config <file>              the one process: the issuer, the hub, the console and its controllers
+//	sluis issuer --config <file>             the one process: the issuer, the hub, the console and its controllers
 //	sluis controller github --config <file>  the GitHub controller's loop alone (deprecated)
 //	sluis controller slack --config <file>   the Slack controller's loop alone (deprecated)
 //	sluis tick github <target> --config <file>  one GitHub target's tick, once
@@ -18,7 +18,7 @@
 // package, internal/rosterapp and internal/{github,slack}roster/app; this file
 // only chooses which one to start and stops it.
 //
-// `serve` runs every controller its service document (apiVersion
+// `issuer` runs every controller its service document (apiVersion
 // sluis.truvity.github.io/sluis/v3) names under `controllers`, each in a loop of
 // its own beside the service. `controller <kind>` is the
 // same loop as a process of its own, kept for one release for a deployment that

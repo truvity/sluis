@@ -238,12 +238,13 @@ func secretsSchema() m {
 		"endpoint":  url("`ssm`: overrides the SSM address, for LocalStack."),
 		"refresh":   duration("`ssm`: how old a secret's copy may be before it is read again: a rotated secret reaches every instance within it.", "1m"),
 		"kmsKeyId":  str("`ssm`: the id, ARN or alias of the customer-managed KMS key the parameters the service itself writes (its credentials) are encrypted with. Unset, the AWS-managed `alias/aws/ssm`. The `ssm` secrets adapter's `kmsKeyId` setting; naming another there is refused."),
-		"layout":    enum("`ssm`: the storage layout of the installation's secrets. `v4`, the default, keeps them under `<root>/internal/config`, `<root>/internal/credentials` and `<root>/external/<kind>` (docs/decisions/0041-the-secret-contract.md). `v5` puts the module first, `<root>/internal/<module>/` and `<root>/external/<module>/` (docs/decisions/0072-storage-layout-v5-module-first.md), and needs `ports.dynamodb.tables`; the two do not mix. Layouts v3 and `transition` are gone; an installation still on one runs v1.74.x first.", "v4", "v4", "v5"),
+		"layout":    enum("`ssm`, required: the storage layout of the installation's secrets, `v5`, the only one: the module first, `<root>/internal/<module>/` and `<root>/external/<module>/` (docs/decisions/0072-storage-layout-v5-module-first.md). Layout `v4` was removed in v1.77.1 (an installation still on it migrates with `sluis migrate v5` of v1.77.0 first), and with it the reading of an absent layout as `v4`.", "", "v5"),
 		"readCache": duration("`ssm`: how long a process keeps a document it read; a write drops it. `0s` is off. SLUIS_SECRETS_READ_CACHE_TTL overrides.", "5m"),
 		"grace":     duration("`ssm`: how long the previous value of a rotated client secret is still accepted: the document's previous revision, while the current one is younger than this (docs/decisions/0039-the-issuer-generates-confidential-client-secrets.md, the overlap).", "24h"),
 	}, "source")
 	s["allOf"] = []any{
 		m{"if": m{"properties": m{"source": m{"enum": []string{"file", "ssm"}}}}, "then": m{"required": []string{"root"}}},
+		m{"if": m{"properties": m{"source": m{"const": "ssm"}}, "required": []string{"source"}}, "then": m{"required": []string{"layout"}}},
 		m{"if": m{"properties": m{"source": m{"enum": []string{"env", "file"}}}}, "then": m{"not": m{"anyOf": []any{m{"required": []string{"kmsKeyId"}}, m{"required": []string{"layout"}}, m{"required": []string{"grace"}}, m{"required": []string{"readCache"}}}}}},
 	}
 	return s
@@ -464,17 +465,16 @@ func portsDynamoDBSchema() m {
 	for _, mod := range []string{"oidc", "github", "slack", "cloudflare", "google", "backup"} {
 		tables[mod] = str("The name of the " + mod + " module's table. The library default is `sluis-<instance>-" + mod + "`.")
 	}
-	named := obj("Layout v5 (docs/decisions/0072-storage-layout-v5-module-first.md): the table of each module, by module name. A process names its own module's table and the tables of the peers it reads; a module it does not name is not opened. Needs `secrets.layout: v5`; exclusive with `table`.",
+	named := obj("Layout v5 (docs/decisions/0072-storage-layout-v5-module-first.md): the table of each module, by module name. A process names its own module's table and the tables of the peers it reads; a module it does not name is not opened. The single table of layout v4 (`table`) was removed in v1.77.1.",
 		tables)
 	named["minProperties"] = 1
-	o := obj("The DynamoDB table of the `dynamodb` adapter: layout v4 keeps everything in one table (`table`), layout v5 one table per module (`tables`, with `secrets.layout: v5`). Each has a string partition key `pk`, a string sort key `sk` and the TTL attribute `expires`. Credentials are the platform's (EKS Pod Identity, IRSA, a Lambda role) and are never configured here; an S3-compatible `endpoint` with no such identity names a credentials document by address (`credentialsRef`), never by value.", m{
-		"table":    str("Layout v4: the one table's name."),
+	o := obj("The DynamoDB tables of the `dynamodb` adapter: one table per module (`tables`, layout v5). Each has a string partition key `pk`, a string sort key `sk` and the TTL attribute `expires`. Credentials are the platform's (EKS Pod Identity, IRSA, a Lambda role) and are never configured here; an S3-compatible `endpoint` with no such identity names a credentials document by address (`credentialsRef`), never by value.", m{
 		"tables":   named,
 		"region":   str("The table's region. Absent, the SDK's own resolution (`AWS_REGION`)."),
 		"endpoint": url("Overrides the DynamoDB address: LocalStack or DynamoDB Local."),
 		"create":   boolDefault("Create the table (on-demand, TTL on `expires`) at start when it is not there, for a test or a development installation. Off, the table must exist: production uses the one the infrastructure code made, and the role needs `dynamodb:DescribeTable` on it (layout v5: the readiness probe asks, not the start).", false),
 	})
-	o["oneOf"] = []any{m{"required": []string{"table"}}, m{"required": []string{"tables"}}}
+	o["required"] = []string{"tables"}
 	return o
 }
 

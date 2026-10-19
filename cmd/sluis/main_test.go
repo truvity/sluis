@@ -10,7 +10,7 @@ import (
 // The command surface is fixed: these are the commands a deployment is
 // written against, and each is refused cleanly when it is wrong.
 func TestTheCommandSurface(t *testing.T) {
-	for _, args := range [][]string{{"--help"}, {"--version"}, {"serve", "--help"}, {"serve", "--version"},
+	for _, args := range [][]string{{"--help"}, {"--version"}, {"issuer", "--help"}, {"issuer", "--version"},
 		{"controller", "github", "--help"}, {"controller", "slack", "--version"}} {
 		var out bytes.Buffer
 		if err := run(args, &out); err != nil {
@@ -24,11 +24,12 @@ func TestTheCommandSurface(t *testing.T) {
 
 func TestAWrongCommandIsAUsageError(t *testing.T) {
 	for name, args := range map[string][]string{
-		"none":                  {},
-		"unknown":               {"tick"},
-		"controller alone":      {"controller"},
-		"controller unknown":    {"controller", "gitlab"},
-		"a retired binary name": {"access-issuer"},
+		"none":                    {},
+		"unknown":                 {"tick"},
+		"controller alone":        {"controller"},
+		"controller unknown":      {"controller", "gitlab"},
+		"a retired binary name":   {"access-issuer"},
+		"the retired serve alias": {"serve", "--config=x"},
 	} {
 		var out bytes.Buffer
 		if err := run(args, &out); !errors.Is(err, errUsage) {
@@ -38,7 +39,7 @@ func TestAWrongCommandIsAUsageError(t *testing.T) {
 }
 
 func TestSubcommandsNeedTheirFile(t *testing.T) {
-	for _, args := range [][]string{{"serve"}, {"controller", "github"}, {"controller", "slack"}} {
+	for _, args := range [][]string{{"issuer"}, {"controller", "github"}, {"controller", "slack"}} {
 		var out bytes.Buffer
 		err := run(args, &out)
 		if err == nil || !strings.Contains(err.Error(), "--config") {
@@ -172,7 +173,7 @@ func TestAPinnedBuildRunsOnlyItsModulesCommands(t *testing.T) {
 		ok   bool
 	}{
 		{"", []string{"backup", "run"}, true},
-		{"issuer", []string{"serve", "--config=x"}, true},
+		{"issuer", []string{"issuer", "--config=x"}, true},
 		{"issuer", []string{"backup", "run"}, false},
 		{"backup", []string{"backup", "run"}, true},
 		{"backup", []string{"restore", "start"}, true},

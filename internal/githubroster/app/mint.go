@@ -46,7 +46,7 @@ func NewMinter(ctx context.Context, cfg Config, log *slog.Logger) (*Minter, erro
 		return nil, fmt.Errorf("ports.adapter %s: the mint reads the catalogue Apps from the State and Secrets ports", stores.Adapter)
 	}
 	adapter, root := stores.SecretsPlace()
-	base := portstore.New(stores.Ports).WithV4(stores.V4).WithV5(stores.V5).WithPlace(adapter, root)
+	base := portstore.New(stores.Ports).WithV5(stores.V5).WithPlace(adapter, root)
 	if err = base.RequireSecrets(); err != nil {
 		stores.Close()
 		return nil, fmt.Errorf("ports.adapter %s: %w", stores.Adapter, err)

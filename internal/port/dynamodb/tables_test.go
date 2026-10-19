@@ -347,7 +347,6 @@ func TestTheConfigurationIsChecked(t *testing.T) {
 	f := newFake()
 	for name, cfg := range map[string]Config{
 		"none":           {},
-		"both":           {Table: "a", Tables: map[port.Module]string{port.ModuleOIDC: "b"}},
 		"not a module":   {Tables: map[port.Module]string{"nope": "b"}},
 		"an empty name":  {Tables: map[port.Module]string{port.ModuleOIDC: ""}},
 		"a shared table": {Tables: map[port.Module]string{port.ModuleOIDC: "x", port.ModuleGitHub: "x"}},
@@ -355,10 +354,6 @@ func TestTheConfigurationIsChecked(t *testing.T) {
 		if _, err := NewTables(ctx(), f, cfg); err == nil {
 			t.Errorf("%s: accepted", name)
 		}
-	}
-	// A layout 4 table with tables set is refused by New too.
-	if _, err := New(ctx(), f, Config{Table: "a", Tables: map[port.Module]string{port.ModuleOIDC: "b"}}); err == nil {
-		t.Error("New accepted both")
 	}
 }
 

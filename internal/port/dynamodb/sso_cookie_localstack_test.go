@@ -1,14 +1,9 @@
 package dynamodb_test
 
 import (
-	"context"
 	"testing"
-	"time"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	awsconfig "github.com/aws/aws-sdk-go-v2/config"
-	ddb "github.com/aws/aws-sdk-go-v2/service/dynamodb"
-
+	"github.com/truvity/sluis/internal/port"
 	dynamoport "github.com/truvity/sluis/internal/port/dynamodb"
 )
 
@@ -18,25 +13,6 @@ import (
 // elsewhere.
 func TestSSOCookieOnDynamoDB(t *testing.T) {
 	url := localstack(t)
-	ctx := context.Background()
-
-	awsCfg, err := awsconfig.LoadDefaultConfig(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	client := ddb.NewFromConfig(awsCfg, func(o *ddb.Options) { o.BaseEndpoint = aws.String(url) })
-	name := "ar-" + randomName(t)
-
-	s, err := dynamoport.New(ctx, client, dynamoport.Config{Table: name, Endpoint: url, Create: true},
-		dynamoport.WithPollInterval(100*time.Millisecond))
-	if err != nil {
-		t.Fatalf("opening the table: %v", err)
-	}
-
-	t.Cleanup(func() {
-		_, _ = client.DeleteTable(context.Background(), &ddb.DeleteTableInput{TableName: aws.String(name)})
-	})
-
+	s, _ := tables(t, url, nil).Store(port.ModuleOIDC)
 	dynamoport.SSOCookieFlow(t, s.Set(), s.Advance)
 }

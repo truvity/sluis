@@ -98,7 +98,7 @@ func shortOpTimeout(t *testing.T, d time.Duration) {
 // as an AWS Lambda invocation's is.
 func TestOperationCappedDespiteLongCallerDeadline(t *testing.T) {
 	shortOpTimeout(t, 100*time.Millisecond)
-	s := &Store{api: &hangAPI{API: newFake()}, table: "t", now: time.Now}
+	s := &Store{api: &hangAPI{API: newFake()}, table: "t", module: port.ModuleOIDC, now: time.Now}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Hour)
 	defer cancel()
 
@@ -123,7 +123,7 @@ func TestOperationCappedDespiteLongCallerDeadline(t *testing.T) {
 // A caller deadline shorter than opTimeout still wins.
 func TestShorterCallerDeadlineWins(t *testing.T) {
 	shortOpTimeout(t, time.Hour)
-	s := &Store{api: &hangAPI{API: newFake()}, table: "t", now: time.Now}
+	s := &Store{api: &hangAPI{API: newFake()}, table: "t", module: port.ModuleOIDC, now: time.Now}
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 	start := time.Now()

@@ -254,7 +254,7 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 		// Any adapter but `legacy` keeps the links, the organisations'
 		// credentials and the operators' requests on the State and Secrets ports,
 		// and the controller reads them there.
-		base := portstore.New(stores.Ports).WithV4(stores.V4).WithV5(stores.V5)
+		base := portstore.New(stores.Ports).WithV5(stores.V5)
 		if err = base.RequireSecrets(); err != nil {
 			stores.Close()
 			return nil, fmt.Errorf("ports.adapter %s: %w", stores.Adapter, err)

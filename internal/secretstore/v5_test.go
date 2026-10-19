@@ -91,30 +91,6 @@ func TestV5PathGolden(t *testing.T) {
 	}
 }
 
-// external/oidc/<client> is byte-identical in v4 and v5.
-func TestV5ExternalOIDCMatchesV4(t *testing.T) {
-	ctx := context.Background()
-	r4, r5 := memory.New(), memory.New()
-	doc := secretstore.OIDCv1{ClientID: "rp", ClientSecret: "s"}
-	if _, err := secretstore.FromStore(r4, "").External.OIDC("rp").Put(ctx, doc, ""); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := secretstore.FromStoreV5(r5, "").OIDCExternal().Client("rp").Put(ctx, doc, ""); err != nil {
-		t.Fatal(err)
-	}
-	a, err := r4.Get(ctx, "external/oidc/rp")
-	if err != nil {
-		t.Fatal(err)
-	}
-	b, err := r5.Get(ctx, "external/oidc/rp")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(a.Value) != string(b.Value) {
-		t.Fatalf("v4 %s\nv5 %s", a.Value, b.Value)
-	}
-}
-
 // A view of module X cannot take a ref of module Y.
 func TestCheckModuleRefRefusesOtherModules(t *testing.T) {
 	ok := map[string]string{

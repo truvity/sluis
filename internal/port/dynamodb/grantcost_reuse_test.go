@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/truvity/sluis/internal/port"
 	"github.com/truvity/sluis/internal/port/porttest/grantcost"
 )
 
@@ -260,10 +261,11 @@ func reuseCost(t *testing.T, env grantcost.Env) {
 // is built, so two tests building one at once race.
 func TestAReuseCostsTwoReadsAndFourWritesThenThreeReadsAndNoWriteOverTheFake(t *testing.T) {
 	f := newFake()
-	s := fakeStore(t, f)
+	tt := newTables(t, f)
+	r := tt.Router()
 	reuseCost(t, grantcost.Env{
-		Set:     s.Set(),
-		Advance: s.Advance,
+		Set:     port.Set{State: r, Index: r},
+		Advance: tt.Advance,
 		Calls: func() map[string]int {
 			f.mu.Lock()
 			defer f.mu.Unlock()

@@ -114,31 +114,23 @@ const (
 	problemNoAddress = "the document does not say where it is"
 )
 
-// Layout checks the layout a `secrets` section names; empty is v4.
+// Layout checks the layout a `secrets` section names: v5, the only one.
 func Layout(s *config.Secrets) (string, error) {
-	switch {
-	case s == nil || s.Source != secrets.KindSSM:
+	if s == nil || s.Source != secrets.KindSSM {
 		return "", errors.New("secrets.source is not ssm: the check reads SSM parameters, and this installation keeps its secrets elsewhere")
-	case s.Layout == "" || s.Layout == config.SecretsLayoutV4:
-		return config.SecretsLayoutV4, nil
-	case s.Layout == config.SecretsLayoutV5:
-		return config.SecretsLayoutV5, nil
 	}
-	return "", fmt.Errorf("secrets.layout: %q is neither %s nor %s", s.Layout, config.SecretsLayoutV4, config.SecretsLayoutV5)
+	if err := secretstore.CheckLayout(s.Layout); err != nil {
+		return "", err
+	}
+	return config.SecretsLayoutV5, nil
 }
 
-// Address is the address below the installation's root where layout puts the
-// secret, or "" when the document does not give enough to say (a v5 workspace
-// key needs the workspace's id, a v4 name needs the name).
-func Address(s config.DeclaredSecret, layout string) string {
+// Address is the address below the installation's root where layout v5 puts
+// the secret, or "" when the document does not give enough to say (a workspace
+// key needs the workspace's id).
+func Address(s config.DeclaredSecret, _ string) string {
 	if s.Ref {
 		return s.Name
-	}
-	if layout != config.SecretsLayoutV5 {
-		if s.Name == "" {
-			return ""
-		}
-		return "internal/config/" + s.Name
 	}
 	seg := secretstore.Segment
 	switch s.Kind {
@@ -220,14 +212,10 @@ func judge(ctx context.Context, rd Reader, d config.DeclaredSecret, layout strin
 	res.OK = true
 }
 
-// content is the secret's own bytes. A layout v4 name below internal/config is
-// plain text. Every other parameter is a JSON document: the raw kinds of layout
-// v5 keep {"value": "<base64>"}, and a credential document (a Cloudflare minter,
-// S3 credentials) is itself the object.
-func content(d config.DeclaredSecret, layout string, stored []byte) ([]byte, bool) {
-	if !d.Ref && layout != config.SecretsLayoutV5 {
-		return stored, true
-	}
+// content is the secret's own bytes. Every parameter is a JSON document: the
+// raw kinds of layout v5 keep {"value": "<base64>"}, and a credential document
+// (a Cloudflare minter, S3 credentials) is itself the object.
+func content(d config.DeclaredSecret, _ string, stored []byte) ([]byte, bool) {
 	var obj map[string]json.RawMessage
 	if err := json.Unmarshal(stored, &obj); err != nil {
 		return nil, false

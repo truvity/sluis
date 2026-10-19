@@ -5,9 +5,6 @@ import (
 	"regexp"
 	"strings"
 	"time"
-
-	"github.com/truvity/sluis/internal/config"
-	"github.com/truvity/sluis/storage/state"
 )
 
 // PersonToken is the token pair a person's authorization of a linked system
@@ -19,40 +16,6 @@ type PersonToken struct {
 	AccessExpires  time.Time `json:"access_expires,omitzero"`
 	RefreshToken   string    `json:"refresh_token,omitempty"`
 	RefreshExpires time.Time `json:"refresh_expires,omitzero"`
-}
-
-// Internal is what only sluis reads: the store rooted at <root>/internal. The
-// addresses below it are sluis's own and not a contract; they keep v3's names
-// so the migration is a prefix move.
-//
-// internal/config/<name> is not here: those names are plain text, as Pulumi and
-// an operator write them, and are read through the secrets source
-// (internal/secrets), so that directory has one shape.
-type Internal struct{ s state.Store }
-
-// NewInternal returns the view of s, which is rooted at <root>/internal.
-func NewInternal(s state.Store) Internal { return Internal{s: s} }
-
-// Store is the store the view is over.
-func (i Internal) Store() state.Store { return i.s }
-
-// ConsoleSessionKey is the key the console signs its sessions with (v3:
-// credentials/console/session-key).
-func (i Internal) ConsoleSessionKey() state.Value[[]byte] {
-	return state.NewValue(i.s, "credentials/console/session-key", state.Raw())
-}
-
-// PersonToken is a person's token pair for a linked system ("github"): v3's
-// credentials/<system>-link/<person>/<ref>, replaced in place now that a
-// version history replaces the random <ref>.
-func (i Internal) PersonToken(person, system string) state.Value[PersonToken] {
-	return state.NewValue(i.s, "credentials/"+segment(system)+"-link/"+segment(person), state.JSON[PersonToken]())
-}
-
-// Directory is an identity directory's credential, for the Google Workspace
-// domain or id (v3: credentials/directory/google/<workspace-id>/<ref>).
-func (i Internal) Directory(domain string) state.Value[[]byte] {
-	return state.NewValue(i.s, "credentials/directory/google/"+segment(domain), state.Raw())
 }
 
 // refPattern is an `internal/<kind>/<id>` address: two lower-case segments.
@@ -71,26 +34,6 @@ func CheckInternalRef(ref string) (string, error) {
 	return strings.TrimPrefix(ref, "internal/"), nil
 }
 
-// S3Credentials is the static credential document of an S3-compatible store,
-// at the internal address ref (`internal/<kind>/<id>`, the setting
-// `ports.blob.s3.credentialsRef`).
-func (i Internal) S3Credentials(ref string) (state.Value[S3Credentialsv1], error) {
-	addr, err := CheckInternalRef(ref)
-	if err != nil {
-		return state.Value[S3Credentialsv1]{}, err
-	}
-	return state.NewValue(i.s, addr, state.Codec[S3Credentialsv1](s3CredentialsCodec)), nil
-}
-
-// CloudflareMinter is the minter credential of a Cloudflare account, at the
-// internal address ref (`cloudflare.accounts.<name>.minter`, below internal/).
-func (i Internal) CloudflareMinter(ref string) (state.Value[CloudflareMinterv1], error) {
-	if err := config.CheckCloudflareMinterRef(ref); err != nil {
-		return state.Value[CloudflareMinterv1]{}, fmt.Errorf("%w: %w", ErrRef, err)
-	}
-	return state.NewValue(i.s, strings.TrimPrefix(ref, "internal/"), state.Codec[CloudflareMinterv1](cloudflareMinterCodec)), nil
-}
-
 // CloudflareMintedToken is one Cloudflare token sluis minted and has not yet
 // deleted.
 type CloudflareMintedToken struct {
@@ -104,10 +47,4 @@ type CloudflareMintedToken struct {
 // find what it must delete. The ids are not secrets.
 type CloudflareMinted struct {
 	Tokens []CloudflareMintedToken `json:"tokens"`
-}
-
-// CloudflareMinted is the record of a preset's minted tokens, at
-// cloudflare-minted/<preset>.
-func (i Internal) CloudflareMinted(preset string) state.Value[CloudflareMinted] {
-	return state.NewValue(i.s, "cloudflare-minted/"+segment(preset), state.JSON[CloudflareMinted]())
 }

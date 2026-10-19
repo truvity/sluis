@@ -102,7 +102,13 @@ data:
           region: eu-west-1
       dynamodb:
         region: eu-west-1
-        table: sluis
+        tables:
+          backup: sluis-backup
+          cloudflare: sluis-cloudflare
+          github: sluis-github
+          google: sluis-google
+          oidc: sluis-oidc
+          slack: sluis-slack
     preset: k8s-aws
     probes:
       address: :7070
@@ -327,7 +333,7 @@ spec:
       annotations:
         # Each document is read once, at start: a change to it, or to the
         # policy, is a rollout.
-        checksum/config: a43adb2bb99cce05fa094f13ff121198983a7e010dae6f237a1e69c5dbb20a1b
+        checksum/config: 9fb0c87be6fa212563aa79ac8f9b1157cfda19b5a6bfafeb2646417d0f29dd62
         checksum/policy: d94ff3ab56430b20d3788fee1435cc1a7c18360ff4c77f059510d6b7589f606b
         checksum/verify-keys: 18ec558ab1c2237d4c0fb00f26dfabc2e1a44002e46a9029553e8a19605e08cd
     spec:

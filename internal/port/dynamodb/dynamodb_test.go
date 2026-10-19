@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/truvity/sluis/internal/port"
-	"github.com/truvity/sluis/internal/port/porttest"
 )
 
 // A DynamoDB table holds State, Index and Trigger; Blob and Identity are
@@ -25,22 +24,23 @@ var otherPorts = map[string]string{
 
 var tables atomic.Int64
 
+// fakeStore is the oidc module's table over api, made by Create: the issuer's
+// records (sessions, tokens, the ring, the Index) are that module's.
 func fakeStore(t *testing.T, api API) *Store {
 	t.Helper()
-	s, err := New(context.Background(), api, Config{Table: fmt.Sprintf("t%d", tables.Add(1)), Create: true}, WithPollInterval(20*time.Millisecond))
+	return fakeModuleStore(t, api, port.ModuleOIDC)
+}
+
+// fakeModuleStore is module m's table over api, made by Create.
+func fakeModuleStore(t *testing.T, api API, m port.Module) *Store {
+	t.Helper()
+	tt, err := NewTables(context.Background(), api, Config{Tables: map[port.Module]string{m: fmt.Sprintf("t%d", tables.Add(1))}, Create: true},
+		WithPollInterval(20*time.Millisecond))
 	if err != nil {
 		t.Fatal(err)
 	}
+	s, _ := tt.Store(m)
 	return s
-}
-
-// The whole conformance suite over the fake: what `go test ./...` runs with no
-// network. The same suite runs against LocalStack in conformance_test.go.
-func TestConformanceOverTheFake(t *testing.T) {
-	porttest.Run(t, func(t *testing.T) porttest.Env {
-		s := fakeStore(t, newFake())
-		return porttest.Env{Set: s.Set(), Advance: s.Advance, Skips: otherPorts}
-	})
 }
 
 func ctx() context.Context { return context.Background() }
@@ -60,8 +60,8 @@ func TestAKeyMapsToItsKindsPartition(t *testing.T) {
 	if _, ok := tbl["session"]["ada/s1"]; !ok {
 		t.Errorf("the sort key is the id: %v", tbl["session"])
 	}
-	if len(tbl["issuer-session-token"]) != 1 {
-		t.Errorf("partition issuer-session-token = %v", tbl["issuer-session-token"])
+	if len(tbl["session-token"]) != 1 {
+		t.Errorf("partition session-token = %v", tbl["session-token"])
 	}
 	// A prefix with a dot is one Query; the listing never scans.
 	before := f.calls["Scan"]
@@ -107,7 +107,7 @@ func TestAReadFiltersAnItemTheEngineHasNotReaped(t *testing.T) {
 		t.Fatal(err)
 	}
 	s.Advance(2 * time.Minute)
-	if len(f.tables[s.table]["issuer-token"]) != 1 {
+	if len(f.tables[s.table]["token"]) != 1 {
 		t.Fatal("the fake reaped the item: the test would prove nothing")
 	}
 	if _, err := s.Get(ctx(), "tok.x"); !errors.Is(err, port.ErrNotFound) {
@@ -180,8 +180,12 @@ func TestErrorsMapToThePortsNames(t *testing.T) {
 
 func TestAnUnreachableTableIsUnavailableNotNotFound(t *testing.T) {
 	f := newFake()
-	if _, err := New(ctx(), f, Config{Table: "absent"}); !errors.Is(err, port.ErrUnavailable) {
-		t.Fatalf("binding a table that is not there: %v, want ErrUnavailable", err)
+	tt, err := NewTables(ctx(), f, Config{Tables: map[port.Module]string{port.ModuleOIDC: "absent"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = tt.Ping(ctx()); !errors.Is(err, port.ErrUnavailable) {
+		t.Fatalf("the probe of a table that is not there: %v, want ErrUnavailable", err)
 	}
 	s := fakeStore(t, f)
 	delete(f.tables, s.table)
@@ -196,7 +200,7 @@ func TestAnUnreachableTableIsUnavailableNotNotFound(t *testing.T) {
 func TestCreatingTheTableIsIdempotent(t *testing.T) {
 	f := newFake()
 	for range 2 {
-		if _, err := New(ctx(), f, Config{Table: "same", Create: true}); err != nil {
+		if _, err := NewTables(ctx(), f, Config{Tables: map[port.Module]string{port.ModuleOIDC: "same"}, Create: true}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -254,7 +258,7 @@ func TestExportStateCarriesTheRemainingLifetime(t *testing.T) {
 	if _, err := s.Put(ctx(), "tok.a", []byte("v"), time.Hour); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.Put(ctx(), "gh.org.x", []byte("w"), 0); err != nil {
+	if _, err := s.Put(ctx(), "rec.console.session-key", []byte("w"), 0); err != nil {
 		t.Fatal(err)
 	}
 	s.Advance(10 * time.Minute)
@@ -269,8 +273,8 @@ func TestExportStateCarriesTheRemainingLifetime(t *testing.T) {
 	if ttl := got["tok.a"]; ttl < 49*time.Minute || ttl > 51*time.Minute {
 		t.Errorf("tok.a has %s left, want about 50m", ttl)
 	}
-	if got["gh.org.x"] != 0 {
-		t.Errorf("a permanent record has a lifetime: %s", got["gh.org.x"])
+	if got["rec.console.session-key"] != 0 {
+		t.Errorf("a permanent record has a lifetime: %s", got["rec.console.session-key"])
 	}
 }
 
@@ -341,27 +345,31 @@ func TestTheTriggerCrossesStoresOnOneTable(t *testing.T) {
 	}
 }
 
-// Storage layout v2: the item every kind of record becomes, pk the kind and sk
-// the id (docs/reference/sluis/storage-layout.md).
+// Storage layout v5: the item every kind of record becomes, in its module's
+// table, pk the kind and sk the id (docs/reference/sluis/storage-layout.md).
 func TestEveryKindIsAnItemOfItsKindAndId(t *testing.T) {
-	for _, c := range []struct{ key, pk, sk string }{
-		{"ws.dir.google.C01ipl6j0", "directory", "google/C01ipl6j0"},
-		{"gh.org.acme", "github-org", "acme"},
-		{"app.gh.link", "github-app", "link"},
-		{"gh.link.299386", "github-link", "299386"},
-		{"app.gh.runner.stable.acme", "github-runner-app", "stable/acme"},
-		{"ws.slack.T01", "slack-workspace", "T01"},
-		{"app.slack.cat.alerts", "slack-app", "alerts"},
-		{"rec.slack.shared.partners", "slack-shared", "partners"},
-		{"rec.slack.channel.acme.ops", "slack-channel", "acme/ops"},
-		{"lease.slack-tick:acme", "lease", "slack-tick/acme"},
-		{"issuer:keyring:entry:ES384:kid1", "keyring", "ES384/kid1"},
-		{"issuer:request:r1", "issuer-request", "r1"},
-		{"issuer:token:j1", "issuer-token", "j1"},
-		{"issuer:kms:state-secret-fingerprint", "issuer-guard", "state-secret-fingerprint"},
+	for _, c := range []struct {
+		key    string
+		module port.Module
+		pk, sk string
+	}{
+		{"ws.dir.google.C01ipl6j0", port.ModuleGoogle, "workspace", "C01ipl6j0"},
+		{"gh.org.acme", port.ModuleGitHub, "org", "acme"},
+		{"app.gh.link", port.ModuleGitHub, "app", "link"},
+		{"gh.link.299386", port.ModuleGitHub, "link", "299386"},
+		{"app.gh.runner.stable.acme", port.ModuleGitHub, "app", "runner-stable-acme"},
+		{"ws.slack.T01", port.ModuleSlack, "workspace", "T01"},
+		{"app.slack.cat.alerts", port.ModuleSlack, "app", "alerts"},
+		{"rec.slack.shared.partners", port.ModuleSlack, "shared", "partners"},
+		{"rec.slack.channel.acme.ops", port.ModuleSlack, "channel", "acme/ops"},
+		{"lease.slack-tick:acme", port.ModuleSlack, "lease", "slack-tick/acme"},
+		{"issuer:keyring:entry:ES384:kid1", port.ModuleOIDC, "keyring", "ES384/kid1"},
+		{"issuer:request:r1", port.ModuleOIDC, "request", "r1"},
+		{"issuer:token:j1", port.ModuleOIDC, "token", "j1"},
+		{"issuer:kms:state-secret-fingerprint", port.ModuleOIDC, "guard", "state-secret-fingerprint"},
 	} {
 		f := newFake()
-		s := fakeStore(t, f)
+		s := fakeModuleStore(t, f, c.module)
 		if _, err := s.Put(ctx(), c.key, []byte("v"), time.Hour); err != nil {
 			t.Fatalf("Put(%q): %v", c.key, err)
 		}
@@ -392,7 +400,7 @@ func TestAnIndexSetIsItsKindsPartition(t *testing.T) {
 // several is a Scan, in key order.
 func TestAListingByAPrefixIsAQueryOnTheKindOrAScan(t *testing.T) {
 	f := newFake()
-	s := fakeStore(t, f)
+	s := fakeModuleStore(t, f, port.ModuleSlack)
 	for _, key := range []string{"rec.slack.channel.acme.ops", "rec.slack.channel.acme.dev", "rec.slack.channel.globex.ops", "rec.slack.shared.p"} {
 		if _, err := s.Put(ctx(), key, []byte("v"), time.Hour); err != nil {
 			t.Fatal(err)

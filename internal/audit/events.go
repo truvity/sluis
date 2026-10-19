@@ -376,8 +376,9 @@ const (
 	PhaseCompleted = "completed"
 )
 
-// SecretsPrune is what `sluis migrate v5 prune` records: names and counts,
-// never a value.
+// SecretsPrune is what `sluis migrate v5 prune` recorded (v1.77.0 and
+// earlier): names and counts, never a value. The action stays in the catalogue
+// so that the archived records still read.
 type SecretsPrune struct {
 	// Installation is the layout v5 side, From the layout v4 one.
 	Installation, From string
@@ -400,7 +401,9 @@ func SecretsPruned(actor Actor, p SecretsPrune, o Outcome) *record.Record {
 			"planned": p.Planned, "deleted": p.Deleted, "kept": p.Kept, "names": p.Names})
 }
 
-// MigrationCopy is what `sluis migrate v5 copy` records: counts and names.
+// MigrationCopy is what `sluis migrate v5 copy` recorded (v1.77.0 and
+// earlier): counts and names. The action stays in the catalogue so that the
+// archived records still read.
 type MigrationCopy struct {
 	// Installation is the layout v5 side, From the layout v4 one.
 	Installation, From string

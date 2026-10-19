@@ -34,7 +34,7 @@ func (m Module) Run(ctx context.Context, file string) error {
 	defer flush()
 	if m.Deprecated != "" {
 		log.WarnContext(ctx, "running a controller as a process of its own is deprecated and goes in the next release: "+
-			"`sluis serve` runs the controllers its document names under `controllers` (apiVersion sluis.truvity.github.io/sluis/v3)",
+			"`sluis issuer` runs the controllers its document names under `controllers` (apiVersion sluis.truvity.github.io/sluis/v3)",
 			slog.String("command", m.Deprecated))
 	}
 

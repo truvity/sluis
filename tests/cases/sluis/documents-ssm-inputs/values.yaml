@@ -30,7 +30,13 @@ documents:
         adapter: dynamodb
         settings:
           region: eu-central-1
-          table: example-sluis-staging
+          tables:
+            oidc: example-sluis-staging-oidc
+            github: example-sluis-staging-github
+            slack: example-sluis-staging-slack
+            google: example-sluis-staging-google
+            cloudflare: example-sluis-staging-cloudflare
+            backup: example-sluis-staging-backup
     audit:
       audience: audit
       forwardedForTrustedHops: 2
@@ -75,6 +81,7 @@ documents:
       serviceAccount: sluis-recovery
     release: sluis
     secrets:
+      layout: v5
       root: sluis
       source: ssm
     secureCookies: true

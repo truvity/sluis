@@ -1,5 +1,5 @@
-# The backup module reads layout v5 only.
-# error: backup.config.secrets.layout must be v5
+# The backup module reads layout v5 only, and says so.
+# error: at '/backup/config/secrets': missing property 'layout'
 config:
   issuerURL: https://issuer.example
 backup:

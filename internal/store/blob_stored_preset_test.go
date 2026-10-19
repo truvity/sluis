@@ -55,8 +55,8 @@ func r2Doc(key, secret string, expires time.Time) secretstore.Cloudflarev1 {
 
 func TestStoredPresetCredentialsAreReadAgainWithAThirdOfTheirTimeLeft(t *testing.T) {
 	ctx := context.Background()
-	stores := secretstore.FromStore(statememory.New(), "")
-	doc := stores.External.Cloudflare("blobs")
+	stores := secretstore.FromStoreV5(statememory.New(), "")
+	doc := stores.CloudflareExternal().Preset("blobs")
 	now := time.Date(2026, 10, 13, 12, 0, 0, 0, time.UTC)
 	clock := func() time.Time { return now }
 	read := storedPresetCredentials(doc, "external/cloudflare/blobs", storedEndpoint, clock)
@@ -102,8 +102,8 @@ func TestStoredPresetCredentialsAreReadAgainWithAThirdOfTheirTimeLeft(t *testing
 
 func TestStoredPresetCredentialsRefuseWhatIsNotTheStoresR2Pair(t *testing.T) {
 	ctx := context.Background()
-	stores := secretstore.FromStore(statememory.New(), "")
-	doc := stores.External.Cloudflare("blobs")
+	stores := secretstore.FromStoreV5(statememory.New(), "")
+	doc := stores.CloudflareExternal().Preset("blobs")
 	now := time.Date(2026, 10, 13, 12, 0, 0, 0, time.UTC)
 	read := storedPresetCredentials(doc, "external/cloudflare/blobs", storedEndpoint, func() time.Time { return now })
 
@@ -125,14 +125,14 @@ func TestStoredPresetCredentialsRefuseWhatIsNotTheStoresR2Pair(t *testing.T) {
 	}
 }
 
-// The adapter is built from the stored credential on layout v4 and answers from
+// The adapter is built from the stored credential and answers from
 // the endpoint (unreachable here, so the store is unavailable); a missing
 // document stops the build, naming the address.
 func TestTheBlobReadsTheStoredCredentialOfAPreset(t *testing.T) {
 	ctx := context.Background()
-	stores := secretstore.FromStore(statememory.New(), "")
+	stores := secretstore.FromStoreV5(statememory.New(), "")
 	c := blobWith(config.PortsBlobS3{Bucket: "b", Endpoint: "http://127.0.0.1:1", PathStyle: true, CredentialsRef: "external/cloudflare/blobs"})
-	c.v4 = &v4Holder{stores: stores}
+	c.held = &secretsHolder{v5: stores}
 
 	if _, err := c.s3Blob(ctx); err == nil || !strings.Contains(err.Error(), "external/cloudflare/blobs") {
 		t.Fatalf("a missing document: %v", err)
@@ -140,7 +140,7 @@ func TestTheBlobReadsTheStoredCredentialOfAPreset(t *testing.T) {
 	// The document's endpoint is the store's own, whatever scheme the test uses.
 	d := r2Doc("token-id", "example-secret", time.Now().Add(time.Hour))
 	d.Endpoint = "http://127.0.0.1:1"
-	if _, err := stores.External.Cloudflare("blobs").Put(ctx, d, ""); err != nil {
+	if _, err := stores.CloudflareExternal().Preset("blobs").Put(ctx, d, ""); err != nil {
 		t.Fatal(err)
 	}
 	blob, err := c.s3Blob(ctx)
@@ -157,7 +157,7 @@ func TestTheBlobReadsTheStoredCredentialOfAPreset(t *testing.T) {
 	}
 
 	// Without the ssm secrets source there is nowhere to read it from.
-	c.v4 = &v4Holder{}
+	c.held = &secretsHolder{}
 	if _, err = c.s3Blob(ctx); err == nil || !strings.Contains(err.Error(), "ssm secrets source") {
 		t.Fatalf("no stores: %v", err)
 	}

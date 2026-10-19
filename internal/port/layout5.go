@@ -17,9 +17,8 @@ import (
 // The kinds lose the module prefix they carry in layout 4 (`github-org` is the
 // kind `org` of the module `github`; `slack-workspace` is `workspace` of
 // `slack`; `directory/google/<id>` is `workspace/<id>` of `google`;
-// `issuer-token` is `token` of `oidc`). The layout 4 mapping is frozen in
-// keys_v4.go ([Locate], [LocatePrefix], [LocateSet], [Kinds]) and is what
-// `migrate` reads the source with and what the compatibility layout writes.
+// `issuer-token` is `token` of `oidc`). The layout 4 mapping was removed in
+// v1.77.1; keys.go holds what the rules share.
 //
 // A few families belong to no one module: the leases and notifications of the
 // controllers, and the generic gate, cache and dedupe families. Every table
@@ -131,8 +130,9 @@ func r5exact(m Module, kind, prefix, id string) rule5 {
 	return rule5{keyRule: keyRule{prefix: prefix, kind: kind, exact: id}, module: m}
 }
 
-// rules5 are the State key families of layout 5, in the order of keyRules.
-// TestLayout5NamesEveryLayout4Family holds the two tables to the same prefixes.
+// rules5 are the State key families of layout 5, one line per kind a record or
+// a credential has. Every kind written anywhere in the service is here; the
+// tests pin each one.
 var rules5 = []rule5{
 	// google: a directory workspace is `ws.dir.google.<id>`; another backend
 	// has no module yet and is refused.

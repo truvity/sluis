@@ -62,9 +62,10 @@ publicRootURL: https://access.example.test
 publicURL: https://access.example.test/console
 recovery:
   enabled: false
-  passwordSecret: recovery/password
+  verifierSecret: recovery/verifier
 release: access-issuer
 secrets:
+  layout: v5
   region: eu-central-1
   root: /sluis/example
   source: ssm

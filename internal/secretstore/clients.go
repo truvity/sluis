@@ -22,62 +22,41 @@ const DefaultGrace = 24 * time.Hour
 // maxHistory bounds the walk back to a document's first revision.
 const maxHistory = 100
 
-// Secrets is the [port.Secrets] of an installation on layout v4:
-// the callers keep their paths (`credentials/<kind>/<id>/<ref>`, `config/…`)
-// and this maps each to its v4 address, so that nothing above the Secrets port
-// knows the layout.
-//
-//   - `credentials/oidc-client/<id>/secret`, the record of a generated client,
-//     is the document external/oidc/<id>. The record callers see is built from
-//     the document and its revisions: Current from the document, Previous from
-//     [state.Value.Rotating] (the revision before the current one, for the
-//     grace period), Created and Rotated from the first and current revisions.
-//     Writing a record writes its Current secret as a new revision and nothing
-//     else is kept (an orphan mark is derived from the policy).
-//   - every other path under `credentials/` or `config/` is the internal value
-//     of the same path, a {"value": <base64>} document.
+// Secrets is the [port.Secrets] of an installation's generated clients: the
+// one thing that still goes through the port on layout v5 (ADR 0072). The
+// record of a generated client, `credentials/oidc-client/<id>/secret`, is the
+// document external/oidc/<id>: the record callers see is built from the
+// document and its revisions: Current from the document, Previous from
+// [state.Value.Rotating] (the revision before the current one, for the grace
+// period), Created and Rotated from the first and current revisions. Writing a
+// record writes its Current secret as a new revision and nothing else is kept
+// (an orphan mark is derived from the policy). Every other path is
+// [port.ErrUnsupported]: a module reads its own names from [StoresV5].
 type Secrets struct {
-	stores *Stores
-	// docs holds the generated clients' documents: external/oidc/<id> on both
-	// layouts (the v4 store keeps them under oidc/).
+	// docs holds the generated clients' documents, external/oidc/<id>.
 	docs  oidcDocs
 	grace time.Duration
 	now   func() time.Time
 }
 
 // oidcDocs is where the generated clients' documents are: s is the store they
-// are in and prefix the address below it, "oidc/" on layout v4 and none on v5
-// (whose store is already rooted at external/oidc).
+// are in (rooted at external/oidc).
 type oidcDocs struct {
-	s      state.Store
-	prefix string
+	s state.Store
 }
 
-func (d oidcDocs) key(id string) string { return d.prefix + segment(id) }
+func (d oidcDocs) key(id string) string { return segment(id) }
 
 func (d oidcDocs) value(id string) state.Value[OIDCv1] {
 	return state.NewValue(d.s, d.key(id), state.Codec[OIDCv1](oidcCodec))
 }
 
-func (d oidcDocs) list(ctx context.Context) ([]string, error) {
-	if d.prefix == "" {
-		return d.s.List(ctx)
-	}
-	return d.s.Child(strings.TrimSuffix(d.prefix, "/")).List(ctx)
-}
+func (d oidcDocs) list(ctx context.Context) ([]string, error) { return d.s.List(ctx) }
 
 var (
 	_ port.Secrets           = (*Secrets)(nil)
 	_ clientcreds.Overlapper = (*Secrets)(nil)
 )
-
-// NewSecrets returns the Secrets port over the v4 stores.
-func NewSecrets(stores *Stores, grace time.Duration) *Secrets {
-	if grace <= 0 {
-		grace = DefaultGrace
-	}
-	return &Secrets{stores: stores, docs: oidcDocs{stores.External.Store(), "oidc/"}, grace: grace, now: time.Now}
-}
 
 // NewSecretsV5 returns the Secrets port over layout v5 for the one thing that
 // still goes through the port there: the generated clients' records, at
@@ -87,7 +66,7 @@ func NewSecretsV5(stores *StoresV5, grace time.Duration) *Secrets {
 	if grace <= 0 {
 		grace = DefaultGrace
 	}
-	return &Secrets{docs: oidcDocs{stores.external.Child(string(ModuleOIDC)), ""}, grace: grace, now: time.Now}
+	return &Secrets{docs: oidcDocs{stores.external.Child(string(ModuleOIDC))}, grace: grace, now: time.Now}
 }
 
 // errNotClient is a path the layout v5 port does not serve.
@@ -131,30 +110,15 @@ func toPort(err error) error {
 	return err
 }
 
-// internalKey is the internal store key of a path.
-func internalKey(path string) string { return path }
-
 // Get implements [port.Secrets].
 func (s *Secrets) Get(ctx context.Context, path string) (port.Secret, error) {
 	if err := port.CheckSecretPath(path); err != nil {
 		return port.Secret{}, err
 	}
-	return s.getV4(ctx, path)
-}
-
-func (s *Secrets) getV4(ctx context.Context, path string) (port.Secret, error) {
 	if id, ok := oidcClient(path); ok {
 		return s.getRecord(ctx, id)
 	}
-	if s.stores == nil {
-		return port.Secret{}, errNotClient(path)
-	}
-	v := state.NewValue(s.stores.Internal.Store(), internalKey(path), state.Raw())
-	val, rev, err := v.Get(ctx)
-	if err != nil {
-		return port.Secret{}, toPort(err)
-	}
-	return port.Secret{Value: val, Version: string(rev)}, nil
+	return port.Secret{}, errNotClient(path)
 }
 
 // getRecord builds the record of a generated client from its
@@ -214,53 +178,10 @@ func (s *Secrets) put(ctx context.Context, path string, value []byte, version *s
 	if err := port.CheckSecretWrite(path, value); err != nil {
 		return "", err
 	}
-	return s.putV4(ctx, path, value, version)
-}
-
-func (s *Secrets) putV4(ctx context.Context, path string, value []byte, version *string) (string, error) {
 	if id, ok := oidcClient(path); ok {
 		return s.putRecord(ctx, id, value, version)
 	}
-	if s.stores == nil {
-		return "", errNotClient(path)
-	}
-	key := internalKey(path)
-	v := state.NewValue(s.stores.Internal.Store(), key, state.Raw())
-	var rev state.Rev
-	var err error
-	if version == nil {
-		rev, err = overwrite(func() (state.Rev, error) { return currentRev(ctx, s.stores.Internal.Store(), key) },
-			func(ifRev state.Rev) (state.Rev, error) { return v.Put(ctx, value, ifRev) })
-	} else {
-		rev, err = v.Put(ctx, value, state.Rev(*version))
-	}
-	return string(rev), toPort(err)
-}
-
-// currentRev is the revision of key, "" when it is absent.
-func currentRev(ctx context.Context, st state.Store, key string) (state.Rev, error) {
-	it, err := st.Get(ctx, key)
-	if errors.Is(err, state.ErrNotFound) {
-		return "", nil
-	}
-	return it.Rev, err
-}
-
-// overwrite writes on top of whatever is current, once more if another writer
-// got in between.
-func overwrite(current func() (state.Rev, error), put func(state.Rev) (state.Rev, error)) (state.Rev, error) {
-	var err error
-	for range 3 {
-		var rev state.Rev
-		if rev, err = current(); err != nil {
-			return "", err
-		}
-		var written state.Rev
-		if written, err = put(rev); !errors.Is(err, state.ErrConflict) {
-			return written, err
-		}
-	}
-	return "", err
+	return "", errNotClient(path)
 }
 
 // putRecord writes a generated client's record as its document: the Current
@@ -326,23 +247,18 @@ func sortedUnique(in []string) []string {
 
 // Delete implements [port.Secrets]. An absent secret is not an error.
 func (s *Secrets) Delete(ctx context.Context, path string) error {
-	var err error
-	if id, ok := oidcClient(path); ok {
-		err = s.docs.s.Delete(ctx, s.docs.key(id))
-	} else if s.stores == nil {
+	id, ok := oidcClient(path)
+	if !ok {
 		return errNotClient(path)
-	} else {
-		err = s.stores.Internal.Store().Delete(ctx, internalKey(path))
 	}
-	if err != nil && !errors.Is(err, state.ErrNotFound) {
+	if err := s.docs.s.Delete(ctx, s.docs.key(id)); err != nil && !errors.Is(err, state.ErrNotFound) {
 		return err
 	}
 	return nil
 }
 
-// List implements [port.Secrets]. A v4 listing is of the keys directly under
-// the prefix (the state store lists one level): the callers list one kind's
-// ids, `credentials/oidc-client`, and ask whether `credentials` answers.
+// List implements [port.Secrets]: the generated clients' records under
+// `credentials/oidc-client`, and nothing under any other prefix.
 func (s *Secrets) List(ctx context.Context, prefix string) ([]string, error) {
 	norm, err := port.SecretPrefix(prefix)
 	if err != nil {
@@ -356,18 +272,6 @@ func (s *Secrets) List(ctx context.Context, prefix string) ([]string, error) {
 		}
 		for _, n := range names {
 			out = append(out, clientcreds.Path(unsegment(n)))
-		}
-	} else if s.stores != nil {
-		child := s.stores.Internal.Store()
-		if norm != "" {
-			child = child.Child(strings.TrimSuffix(norm, "/"))
-		}
-		names, err := child.List(ctx)
-		if err != nil {
-			return nil, err
-		}
-		for _, n := range names {
-			out = append(out, norm+n)
 		}
 	}
 	return sortedUnique(out), nil

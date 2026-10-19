@@ -14,7 +14,7 @@ import (
 
 type fixture struct {
 	sec   *secretstore.Secrets
-	st    *secretstore.Stores
+	st    *secretstore.StoresV5
 	clock *time.Time
 }
 
@@ -23,8 +23,8 @@ func newFixture(t *testing.T) fixture {
 	now := time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC)
 	clock := &now
 	root := memory.New(memory.WithClock(func() time.Time { return *clock }))
-	st := secretstore.FromStore(root, "")
-	sec := secretstore.NewSecrets(st, 24*time.Hour).WithClock(func() time.Time { return *clock })
+	st := secretstore.FromStoreV5(root, "")
+	sec := secretstore.NewSecretsV5(st, 24*time.Hour).WithClock(func() time.Time { return *clock })
 	return fixture{sec: sec, st: st, clock: clock}
 }
 
@@ -37,44 +37,23 @@ func record(t *testing.T, current, previous string) []byte {
 	return b
 }
 
-func TestCredentialsMoveToInternal(t *testing.T) {
+// Every path but a generated client's record is a module's own name on layout
+// v5, and the port refuses it: nothing is written below internal/ through it.
+func TestOnlyClientRecordsGoThroughThePort(t *testing.T) {
 	ctx := context.Background()
 	f := newFixture(t)
 	path := "credentials/console/session-key"
-
-	if _, err := f.sec.Get(ctx, path); !errors.Is(err, port.ErrNotFound) {
-		t.Fatalf("absent = %v", err)
+	if _, err := f.sec.Get(ctx, path); !errors.Is(err, port.ErrUnsupported) {
+		t.Fatalf("get = %v, want ErrUnsupported", err)
 	}
-	v1, err := f.sec.PutIfVersion(ctx, path, []byte{0, 1, 2}, "")
-	if err != nil {
-		t.Fatal(err)
+	if _, err := f.sec.Put(ctx, path, []byte("z")); !errors.Is(err, port.ErrUnsupported) {
+		t.Fatalf("put = %v, want ErrUnsupported", err)
 	}
-	if _, err := f.sec.PutIfVersion(ctx, path, []byte("x"), ""); !errors.Is(err, port.ErrConflict) {
-		t.Fatalf("create-only over a secret = %v, want ErrConflict", err)
+	if err := f.sec.Delete(ctx, path); !errors.Is(err, port.ErrUnsupported) {
+		t.Fatalf("delete = %v, want ErrUnsupported", err)
 	}
-	got, err := f.sec.Get(ctx, path)
-	if err != nil || string(got.Value) != "\x00\x01\x02" || got.Version != v1 {
-		t.Fatalf("get = %+v, %v", got, err)
-	}
-	if _, err := f.sec.PutIfVersion(ctx, path, []byte("y"), "no-such-rev"); !errors.Is(err, port.ErrConflict) {
-		t.Fatalf("stale CAS = %v", err)
-	}
-	if _, err := f.sec.Put(ctx, path, []byte("z")); err != nil {
-		t.Fatal(err)
-	}
-	// It is at the internal address.
-	if _, _, err := f.st.Internal.ConsoleSessionKey().Get(ctx); err != nil {
-		t.Fatalf("not at internal/credentials/console/session-key: %v", err)
-	}
-	names, err := f.sec.List(ctx, "credentials/console")
-	if err != nil || len(names) != 1 || names[0] != path {
+	if names, err := f.sec.List(ctx, "credentials/console"); err != nil || len(names) != 0 {
 		t.Fatalf("list = %v, %v", names, err)
-	}
-	if err := f.sec.Delete(ctx, path); err != nil {
-		t.Fatal(err)
-	}
-	if err := f.sec.Delete(ctx, path); err != nil {
-		t.Fatalf("delete of an absent secret = %v", err)
 	}
 	if _, err := f.sec.Put(ctx, "credentials/bad path", []byte("x")); err == nil {
 		t.Fatal("a bad path was accepted")
@@ -92,7 +71,7 @@ func TestClientRecordIsTheOIDCDocument(t *testing.T) {
 	if _, err := f.sec.PutIfVersion(ctx, path, record(t, "one", ""), ""); err != nil {
 		t.Fatal(err)
 	}
-	doc, _, err := f.st.External.OIDC("rp").Get(ctx)
+	doc, _, err := f.st.OIDCExternal().Client("rp").Get(ctx)
 	if err != nil || doc.ClientID != "rp" || doc.ClientSecret != "one" {
 		t.Fatalf("document = %+v, %v", doc, err)
 	}
@@ -156,7 +135,7 @@ func TestClientRecordIsTheOIDCDocument(t *testing.T) {
 func TestOperatorSeededClientSecret(t *testing.T) {
 	ctx := context.Background()
 	f := newFixture(t)
-	if _, err := f.st.External.OIDC("rp").Put(ctx, secretstore.OIDCv1{ClientID: "the-id", ClientSecret: "seeded"}, ""); err != nil {
+	if _, err := f.st.OIDCExternal().Client("rp").Put(ctx, secretstore.OIDCv1{ClientID: "the-id", ClientSecret: "seeded"}, ""); err != nil {
 		t.Fatal(err)
 	}
 	got, err := f.sec.Get(ctx, clientcreds.Path("rp"))
@@ -169,7 +148,7 @@ func TestOperatorSeededClientSecret(t *testing.T) {
 	if _, err := f.sec.PutIfVersion(ctx, clientcreds.Path("rp"), record(t, "rotated", "seeded"), got.Version); err != nil {
 		t.Fatal(err)
 	}
-	if doc, _, _ := f.st.External.OIDC("rp").Get(ctx); doc.ClientID != "the-id" || doc.ClientSecret != "rotated" {
+	if doc, _, _ := f.st.OIDCExternal().Client("rp").Get(ctx); doc.ClientID != "the-id" || doc.ClientSecret != "rotated" {
 		t.Fatalf("document = %+v", doc)
 	}
 }

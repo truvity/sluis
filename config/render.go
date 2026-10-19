@@ -258,9 +258,13 @@ func (in *Installation) secrets(s *internal.Sluis) error {
 		return nil
 	}
 	root := SSMRoot(in.Instance)
-	want := internal.Secrets{Source: "ssm", Root: root, Region: in.AWS.Region}
+	want := internal.Secrets{Source: "ssm", Root: root, Region: in.AWS.Region, Layout: internal.SecretsLayoutV5}
 	if got := s.Secrets; got != nil {
 		var errs []error
+		if got.Layout != "" && got.Layout != want.Layout {
+			errs = append(errs, fmt.Errorf("secrets.layout is %q, and shape lambda is on layout %s, the only one (v4 was removed in v1.77.1)",
+				got.Layout, want.Layout))
+		}
 		if got.Source != "" && got.Source != want.Source {
 			errs = append(errs, fmt.Errorf("secrets.source is %q, and shape lambda reads its secrets from ssm", got.Source))
 		}
@@ -274,7 +278,7 @@ func (in *Installation) secrets(s *internal.Sluis) error {
 			return errors.Join(errs...)
 		}
 		want.Endpoint, want.Refresh, want.KMSKeyID = got.Endpoint, got.Refresh, got.KMSKeyID
-		want.Layout, want.Grace = got.Layout, got.Grace
+		want.Grace = got.Grace
 	}
 	s.Secrets = &want
 	if s.Recovery == nil {
@@ -286,23 +290,15 @@ func (in *Installation) secrets(s *internal.Sluis) error {
 	if got := s.Recovery.VerifierSecret; got != "" && got != RecoveryVerifierName {
 		return fmt.Errorf("recovery.verifierSecret is %q, and shape lambda names it %s", got, RecoveryVerifierName)
 	}
-	if want.Layout == internal.SecretsLayoutV5 {
-		// Layout v5 holds the recovery account's verifier (docs/decisions/0076) and the
-		// service never reads the password: the document does not name it, and the
-		// function's role may not read it.
-		s.Recovery.LoginSecret, s.Recovery.VerifierSecret = "", RecoveryVerifierName
-		if c := s.Conformance; c != nil && c.Enabled {
-			if got := c.VerifierSecret; got != "" && got != ConformanceVerifierName {
-				return fmt.Errorf("conformance.verifierSecret is %q, and shape lambda names it %s", got, ConformanceVerifierName)
-			}
-			c.VerifierSecret = ConformanceVerifierName
+	// Layout v5 holds the recovery account's verifier (docs/decisions/0076) and the
+	// service never reads the password: the document does not name it, and the
+	// function's role may not read it.
+	s.Recovery.LoginSecret, s.Recovery.VerifierSecret = "", RecoveryVerifierName
+	if c := s.Conformance; c != nil && c.Enabled {
+		if got := c.VerifierSecret; got != "" && got != ConformanceVerifierName {
+			return fmt.Errorf("conformance.verifierSecret is %q, and shape lambda names it %s", got, ConformanceVerifierName)
 		}
-		return nil
-	}
-	// Layout v4 keeps the password, and the service derives the verifier from it.
-	s.Recovery.LoginSecret = RecoveryPasswordName
-	if c := s.Conformance; c != nil && c.Enabled && c.VerifierSecret == "" {
-		return errors.New("conformance.enabled needs secrets.layout v5, or conformance.verifierSecret naming the account's verifier")
+		c.VerifierSecret = ConformanceVerifierName
 	}
 	return nil
 }
@@ -365,9 +361,6 @@ func (in *Installation) adapters() (map[string]internal.AdapterChoice, error) {
 	region := ""
 	if a := in.AWS; a != nil {
 		region = a.Region
-		if a.Table != "" {
-			set("state", "dynamodb", map[string]any{"table": a.Table, "region": region})
-		}
 		if a.Bucket != "" {
 			set("blobs", "s3", map[string]any{"bucket": a.Bucket, "region": region})
 		}

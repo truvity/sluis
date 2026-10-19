@@ -54,16 +54,7 @@ var declared = []config.DeclaredSecret{
 	{Kind: config.SecretMinter, Subject: "main", Name: "internal/cloudflare/main/minter", Ref: true},
 }
 
-func TestTheAddressesOfEachLayout(t *testing.T) {
-	v4 := []string{
-		"internal/config/clients/console/secret",
-		"internal/config/recovery/password",
-		"internal/config/providers/google/prod/client-id",
-		"internal/config/providers/google/prod/client-secret",
-		"internal/config/issuer/state-secret",
-		"internal/config/directory/C0example/key",
-		"internal/cloudflare/main/minter",
-	}
+func TestTheAddressesOnLayoutV5(t *testing.T) {
 	v5 := []string{
 		"internal/oidc/clients/console",
 		"internal/oidc/recovery-password",
@@ -74,9 +65,6 @@ func TestTheAddressesOfEachLayout(t *testing.T) {
 		"internal/cloudflare/main/minter",
 	}
 	for i, d := range declared {
-		if got := deploycheck.Address(d, config.SecretsLayoutV4); got != v4[i] {
-			t.Errorf("v4 %s: %q, want %q", d.Kind, got, v4[i])
-		}
 		if got := deploycheck.Address(d, config.SecretsLayoutV5); got != v5[i] {
 			t.Errorf("v5 %s: %q, want %q", d.Kind, got, v5[i])
 		}
@@ -110,10 +98,8 @@ func store(layout string, state string) fake {
 		switch {
 		case d.Ref:
 			body = []byte(`{"token":"` + sentinel + `"}`)
-		case layout == config.SecretsLayoutV5:
-			body = raw(v)
 		default:
-			body = []byte(v)
+			body = raw(v)
 		}
 		f["/sluis/prod/"+deploycheck.Address(d, layout)] = deploycheck.Entry{Value: body, Version: int64(i + 1)}
 	}
@@ -121,7 +107,7 @@ func store(layout string, state string) fake {
 }
 
 func TestEveryDeclaredNamePresentPasses(t *testing.T) {
-	for _, layout := range []string{config.SecretsLayoutV4, config.SecretsLayoutV5} {
+	for _, layout := range []string{config.SecretsLayoutV5} {
 		rep := deploycheck.Run(t.Context(), store(layout, goodState()), "/sluis/prod", layout, declared)
 		if !rep.OK || rep.Err() != nil {
 			t.Fatalf("%s: %+v", layout, rep.Failed())
@@ -133,7 +119,7 @@ func TestEveryDeclaredNamePresentPasses(t *testing.T) {
 }
 
 func TestAMissingNameFails(t *testing.T) {
-	for _, layout := range []string{config.SecretsLayoutV4, config.SecretsLayoutV5} {
+	for _, layout := range []string{config.SecretsLayoutV5} {
 		st := store(layout, goodState())
 		gone := "/sluis/prod/" + deploycheck.Address(declared[3], layout)
 		delete(st, gone)
@@ -152,14 +138,11 @@ func TestAMissingNameFails(t *testing.T) {
 }
 
 func TestAnEmptyValueFails(t *testing.T) {
-	for _, layout := range []string{config.SecretsLayoutV4, config.SecretsLayoutV5} {
+	for _, layout := range []string{config.SecretsLayoutV5} {
 		for _, empty := range []string{"", " \n"} {
 			st := store(layout, goodState())
 			addr := "/sluis/prod/" + deploycheck.Address(declared[1], layout)
-			body := []byte(empty)
-			if layout == config.SecretsLayoutV5 {
-				body = raw(empty)
-			}
+			body := raw(empty)
 			st[addr] = deploycheck.Entry{Value: body, Version: 4}
 			rep := deploycheck.Run(t.Context(), st, "/sluis/prod", layout, declared)
 			if failed := rep.Failed(); len(failed) != 1 || failed[0].Address != addr || failed[0].Problem != "empty" {
@@ -168,9 +151,9 @@ func TestAnEmptyValueFails(t *testing.T) {
 		}
 	}
 	// A credential document with no field is empty too.
-	st := store(config.SecretsLayoutV4, goodState())
+	st := store(config.SecretsLayoutV5, goodState())
 	st["/sluis/prod/internal/cloudflare/main/minter"] = deploycheck.Entry{Value: []byte(`{}`), Version: 1}
-	if rep := deploycheck.Run(t.Context(), st, "/sluis/prod", config.SecretsLayoutV4, declared); rep.OK {
+	if rep := deploycheck.Run(t.Context(), st, "/sluis/prod", config.SecretsLayoutV5, declared); rep.OK {
 		t.Error("an empty minter document passed")
 	}
 }
@@ -181,7 +164,7 @@ func TestTheStateSecretIsHeldToItsFormat(t *testing.T) {
 		"placeholder": base64.StdEncoding.EncodeToString(bytes.Repeat([]byte("a"), 40)),
 		"not encoded": "this is not hex or base64 " + sentinel,
 	} {
-		for _, layout := range []string{config.SecretsLayoutV4, config.SecretsLayoutV5} {
+		for _, layout := range []string{config.SecretsLayoutV5} {
 			rep := deploycheck.Run(t.Context(), store(layout, bad), "/sluis/prod", layout, declared)
 			failed := rep.Failed()
 			if len(failed) != 1 || failed[0].Kind != config.SecretStateSecret {
@@ -191,13 +174,13 @@ func TestTheStateSecretIsHeldToItsFormat(t *testing.T) {
 	}
 	// Hex is as good as base64.
 	hex := strings.Repeat("0123456789abcdef", 4)
-	if rep := deploycheck.Run(t.Context(), store(config.SecretsLayoutV4, hex), "/sluis/prod", config.SecretsLayoutV4, declared); !rep.OK {
+	if rep := deploycheck.Run(t.Context(), store(config.SecretsLayoutV5, hex), "/sluis/prod", config.SecretsLayoutV5, declared); !rep.OK {
 		t.Errorf("hex refused: %+v", rep.Failed())
 	}
 }
 
 func TestAnUnreadableNameFailsAndNamesNoValue(t *testing.T) {
-	rep := deploycheck.Run(t.Context(), failing{}, "/sluis/prod", config.SecretsLayoutV4, declared)
+	rep := deploycheck.Run(t.Context(), failing{}, "/sluis/prod", config.SecretsLayoutV5, declared)
 	if rep.OK || len(rep.Failed()) != len(declared) {
 		t.Fatalf("%+v", rep.Failed())
 	}
@@ -206,7 +189,7 @@ func TestAnUnreadableNameFailsAndNamesNoValue(t *testing.T) {
 // Nothing a report prints, encodes or returns as an error holds a value: only
 // names, versions and fixed reasons.
 func TestTheOutputHoldsNamesAndVersionsOnly(t *testing.T) {
-	for _, layout := range []string{config.SecretsLayoutV4, config.SecretsLayoutV5} {
+	for _, layout := range []string{config.SecretsLayoutV5} {
 		for _, state := range []string{goodState(), "not a state secret " + sentinel} {
 			st := store(layout, state)
 			delete(st, "/sluis/prod/"+deploycheck.Address(declared[0], layout))
@@ -237,12 +220,12 @@ func TestTheOutputHoldsNamesAndVersionsOnly(t *testing.T) {
 }
 
 func TestOnlySSMLayoutsAreChecked(t *testing.T) {
-	for _, s := range []*config.Secrets{nil, {Source: "env"}, {Source: "ssm", Layout: "v3"}} {
+	for _, s := range []*config.Secrets{nil, {Source: "env"}, {Source: "ssm", Layout: "v3"}, {Source: "ssm", Layout: "v4"}, {Source: "ssm"}} {
 		if _, err := deploycheck.Layout(s); err == nil {
 			t.Errorf("%+v was accepted", s)
 		}
 	}
-	if l, err := deploycheck.Layout(&config.Secrets{Source: "ssm"}); err != nil || l != config.SecretsLayoutV4 {
-		t.Errorf("the default is v4: %q %v", l, err)
+	if l, err := deploycheck.Layout(&config.Secrets{Source: "ssm", Layout: "v5"}); err != nil || l != config.SecretsLayoutV5 {
+		t.Errorf("layout v5: %q %v", l, err)
 	}
 }

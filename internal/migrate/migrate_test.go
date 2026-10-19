@@ -86,16 +86,17 @@ func TestLegacyToSharedCopiesEveryDomainAndVerifies(t *testing.T) {
 			if err != nil || !found || !bytes.Contains(cred.Data, []byte("TOPSECRET-WS")) {
 				t.Fatalf("the workspace credential on the destination = %+v, %v, %v", cred, found, err)
 			}
-			// Slack and the rest land in storage layout v2: the credentials of each kind
-			// under `credentials/<kind>/<id>/`, and the records under their kind.
+			// Slack and the rest land in the storage layout: the credentials of each
+			// kind under `credentials/<module>/<kind>/<id>/`, and the records under
+			// their kind.
 			paths, err := dst.Ports.Secrets.List(ctx, port.CredentialsPrefix)
 			if err != nil {
 				t.Fatal(err)
 			}
 			for _, want := range []string{
-				"credentials/directory/google/C01/", "credentials/github-org/acme/", "credentials/github-app/link/",
-				"credentials/github-app/renovate/", "credentials/github-runner-app/stable/acme/",
-				"credentials/slack-workspace/acme/", "credentials/slack-app/notifier/", "credentials/console/session-key",
+				"credentials/google/workspace/C01/", "credentials/github/org/acme/", "credentials/github/app/link/",
+				"credentials/github/app/renovate/", "credentials/github/app/runner-stable-acme/",
+				"credentials/slack/workspace/acme/", "credentials/slack/app/notifier/", "credentials/oidc/console/session-key",
 			} {
 				if !slices.ContainsFunc(paths, func(p string) bool { return strings.HasPrefix(p, want) }) {
 					t.Errorf("no credential under %s in the destination: %v", want, paths)
@@ -515,26 +516,29 @@ func TestSkipLeavesADomainOutAndTheReportCanBeKept(t *testing.T) {
 	}
 }
 
-// The Google domain is `google` in the report and in --skip; `directory` is
-// accepted as its name for one release.
-func TestSkipAcceptsTheOldDirectoryNameForGoogle(t *testing.T) {
-	for _, name := range []string{migrate.DomainGoogle, migrate.DomainDirectory} {
-		src := portSide(memory.New().Set(), store.AdapterMemory)
-		seed(t, src)
-		dst := portSide(memory.New().Set(), store.AdapterMemory)
-		report, err := migrate.Run(ctx, side("a", src), side("b", dst), migrate.Options{
-			WritersStopped: true, Skip: []string{name, "issuer"},
-		})
-		if err != nil {
-			t.Fatalf("Skip %q: Run = %v", name, err)
-		}
-		for _, s := range report.Steps {
-			if s.Domain == "google" || s.Domain == "directory" {
-				t.Errorf("Skip %q ran the Google domain: %+v", name, s)
-			}
+// The Google domain is `google` in the report and in --skip; its old name
+// `directory` is refused since v1.77.1.
+func TestSkipTakesGoogleAndRefusesTheOldDirectoryName(t *testing.T) {
+	src := portSide(memory.New().Set(), store.AdapterMemory)
+	seed(t, src)
+	dst := portSide(memory.New().Set(), store.AdapterMemory)
+	report, err := migrate.Run(ctx, side("a", src), side("b", dst), migrate.Options{
+		WritersStopped: true, Skip: []string{migrate.DomainGoogle, "issuer"},
+	})
+	if err != nil {
+		t.Fatalf("Skip google: Run = %v", err)
+	}
+	for _, s := range report.Steps {
+		if s.Domain == "google" {
+			t.Errorf("Skip google ran the Google domain: %+v", s)
 		}
 	}
-	if slices.Contains(migrate.AllDomains, migrate.DomainDirectory) || !slices.Contains(migrate.AllDomains, migrate.DomainGoogle) {
+	if _, err := migrate.Run(ctx, side("a", src), side("b", dst), migrate.Options{
+		WritersStopped: true, Skip: []string{"directory"},
+	}); err == nil || !strings.Contains(err.Error(), `--skip "directory"`) {
+		t.Errorf("Skip directory: Run = %v, want the name refused", err)
+	}
+	if slices.Contains(migrate.AllDomains, "directory") || !slices.Contains(migrate.AllDomains, migrate.DomainGoogle) {
 		t.Errorf("AllDomains = %v, want google and not directory", migrate.AllDomains)
 	}
 }

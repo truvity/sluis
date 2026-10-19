@@ -30,7 +30,7 @@ const (
 
 // The prefixes of layout v4 and of releases before v1.75, where the reports sat
 // at the root of the bucket and the cache under `snapshots/`. Nothing reads or
-// writes them on layout v5 except `sluis migrate v5`, which copies the reports
+// writes them on layout v5 except `sluis migrate`, which copies the reports
 // from them; they can be deleted from a bucket.
 const (
 	LegacyGitHubReports = "reports/github/"

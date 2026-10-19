@@ -40,11 +40,10 @@ type migrateFlags struct {
 
 func migrateUsage(out io.Writer, fs *flag.FlagSet) {
 	_, _ = fmt.Fprint(out, `Usage: sluis migrate --from <config> --to <config> [flags]
-       sluis migrate v5 plan --from <v4 config> --to <v5 config> [flags]
 
 Copies the State of one installation's storage to another's, through the domain
 stores and the ports (docs/decisions/0031, docs/guides/sluis/migrate/migrate-state.md). Each side is
-the configuration file of 'sluis serve' for that storage: the ports.* keys
+the configuration file of 'sluis issuer' for that storage: the ports.* keys
 (and, for the legacy storage, store, release and valkey) say where it is. Domain
 records and secrets are copied through their stores, so a secret is written to the
 destination's Secrets; the issuer's sessions, refresh tokens and keyring schedule are
@@ -117,7 +116,8 @@ func parseMigrate(args []string, out io.Writer) (migrateFlags, bool, error) {
 // migrateCmd is `sluis migrate`.
 func migrateCmd(out io.Writer, args []string) error {
 	if len(args) > 0 && args[0] == "v5" {
-		return migrateV5Cmd(out, args[1:])
+		return fmt.Errorf("%w: `sluis migrate v5` was removed in v1.77.1 with layout v4: "+
+			"an installation still on layout v4 migrates with the v1.77.0 binary first (docs/guides/sluis/upgrade/v1.77.1.md)", errUsage)
 	}
 	f, done, err := parseMigrate(args, out)
 	if err != nil || done {

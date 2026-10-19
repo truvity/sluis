@@ -5,12 +5,10 @@ import (
 	"maps"
 	"sync"
 	"testing"
-	"time"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	ddb "github.com/aws/aws-sdk-go-v2/service/dynamodb"
 
+	"github.com/truvity/sluis/internal/port"
 	dynamoport "github.com/truvity/sluis/internal/port/dynamodb"
 	"github.com/truvity/sluis/internal/port/porttest/grantcost"
 )
@@ -60,55 +58,14 @@ func (c *countingAPI) Scan(ctx context.Context, in *ddb.ScanInput, opts ...func(
 	return c.API.Scan(ctx, in, opts...)
 }
 
-// What one grant costs a real DynamoDB API (LocalStack), held to the same
-// grantcost.Budgets as the fake and the in-memory adapter. It runs where
-// ACCESS_ROSTER_DYNAMODB_URL is set -- `just test-s3`, and CI's LocalStack
-// job, whose -run pattern takes every test named for DynamoDB -- and skips
-// elsewhere, as the conformance suite does.
-func TestGrantCostOnDynamoDB(t *testing.T) {
-	url := localstack(t)
-	grantcost.Run(t, func(t *testing.T) grantcost.Env {
-		ctx := context.Background()
-		awsCfg, err := awsconfig.LoadDefaultConfig(ctx)
-		if err != nil {
-			t.Fatal(err)
-		}
-		client := ddb.NewFromConfig(awsCfg, func(o *ddb.Options) { o.BaseEndpoint = aws.String(url) })
-		api := &countingAPI{API: client, calls: map[string]int{}}
-		name := "ar-" + randomName(t)
-		s, err := dynamoport.New(ctx, api, dynamoport.Config{Table: name, Endpoint: url, Create: true},
-			dynamoport.WithPollInterval(100*time.Millisecond))
-		if err != nil {
-			t.Fatalf("opening the table: %v", err)
-		}
-		t.Cleanup(func() {
-			_, _ = client.DeleteTable(context.Background(), &ddb.DeleteTableInput{TableName: aws.String(name)})
-		})
-		return grantcost.Env{Set: s.Set(), Advance: s.Advance, Calls: api.snapshot}
-	})
-}
-
 // What a reuse of a spent refresh token costs a real DynamoDB API
 // (LocalStack): the first presentation after the grace window ends the
 // session, a repeat finds it gone. Runs where ACCESS_ROSTER_DYNAMODB_URL is
 // set, as TestGrantCostOnDynamoDB does, and skips elsewhere.
 func TestReuseCostOnDynamoDB(t *testing.T) {
 	url := localstack(t)
-	ctx := context.Background()
-	awsCfg, err := awsconfig.LoadDefaultConfig(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := ddb.NewFromConfig(awsCfg, func(o *ddb.Options) { o.BaseEndpoint = aws.String(url) })
-	api := &countingAPI{API: client, calls: map[string]int{}}
-	name := "ar-" + randomName(t)
-	s, err := dynamoport.New(ctx, api, dynamoport.Config{Table: name, Endpoint: url, Create: true},
-		dynamoport.WithPollInterval(100*time.Millisecond))
-	if err != nil {
-		t.Fatalf("opening the table: %v", err)
-	}
-	t.Cleanup(func() {
-		_, _ = client.DeleteTable(context.Background(), &ddb.DeleteTableInput{TableName: aws.String(name)})
-	})
-	dynamoport.ReuseCost(t, grantcost.Env{Set: s.Set(), Advance: s.Advance, Calls: api.snapshot})
+	api := &countingAPI{calls: map[string]int{}}
+	tt := tables(t, url, api)
+	r := tt.Router()
+	dynamoport.ReuseCost(t, grantcost.Env{Set: port.Set{State: r, Index: r}, Advance: tt.Advance, Calls: api.snapshot})
 }

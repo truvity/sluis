@@ -22,8 +22,21 @@ lifetimes: {token: 1h, refresh: 12h, absolute: 24h, hold: 4h, session: 12h}
 aws:
   account: "111122223333"
   region: eu-central-1
-  table: example-sluis-staging
   bucket: example-sluis-staging-111122223333
+
+# The DynamoDB tables, one per module (layout v5).
+adapters:
+  state:
+    adapter: dynamodb
+    settings:
+      region: eu-central-1
+      tables:
+        oidc: sluis-staging-oidc
+        github: sluis-staging-github
+        slack: sluis-staging-slack
+        google: sluis-staging-google
+        cloudflare: sluis-staging-cloudflare
+        backup: sluis-staging-backup
 
 openbao:
   address: https://openbao.example.test

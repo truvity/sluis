@@ -58,13 +58,6 @@ const (
 	DomainBlobs   = "blobs"
 )
 
-// DomainDirectory is the name the Google domain had before v1.75. A run still
-// accepts it in Skip for one release and treats it as [DomainGoogle]; the
-// report names the domain `google`.
-//
-// Deprecated: use [DomainGoogle]. Removed in v1.76.
-const DomainDirectory = "directory"
-
 // AllDomains is every name a run accepts to skip.
 var AllDomains = []string{DomainGoogle, DomainGitHub, DomainSlack, DomainConsole, DomainIssuer, DomainBlobs}
 
@@ -307,12 +300,7 @@ func Run(ctx context.Context, from, to Side, opt Options) (*Report, error) {
 		log = slog.New(slog.DiscardHandler)
 	}
 	opt.Skip = slices.Clone(opt.Skip)
-	for i, name := range opt.Skip {
-		if name == DomainDirectory {
-			log.WarnContext(ctx, "migrate: the domain name directory is deprecated, use google; it is removed in v1.76")
-			opt.Skip[i] = DomainGoogle
-			name = DomainGoogle
-		}
+	for _, name := range opt.Skip {
 		if !contains(AllDomains, name) {
 			return nil, fmt.Errorf("migrate: --skip %q is none of %s", name, strings.Join(AllDomains, ", "))
 		}

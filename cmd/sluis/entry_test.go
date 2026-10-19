@@ -10,7 +10,7 @@ func TestThePlatformEntryNeedsTheRuntime(t *testing.T) {
 	if platformEntry(nil, none) {
 		t.Error("no arguments and no runtime API took the platform entry")
 	}
-	if platformEntry([]string{"serve"}, func(string) string { return "127.0.0.1:9001" }) {
+	if platformEntry([]string{"issuer"}, func(string) string { return "127.0.0.1:9001" }) {
 		t.Error("a command line took the platform entry")
 	}
 }

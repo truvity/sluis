@@ -38,16 +38,16 @@ func doc() *config.Cloudflare {
 // test if Cloudflare is reached.
 func fixture(t *testing.T, shared, leased bool, stored string) *App {
 	t.Helper()
-	stores := secretstore.FromStore(memory.New(), "")
+	stores := secretstore.FromStoreV5(memory.New(), "")
 	if stored != "" {
-		v := stores.External.Cloudflare("dns")
+		v := stores.CloudflareExternal().Preset("dns")
 		if _, err := v.Put(context.Background(), secretstore.Cloudflarev1{ExpiresOn: stored, Token: "t"}, ""); err != nil {
 			t.Fatal(err)
 		}
 	}
 	log := slog.New(slog.DiscardHandler)
 	m, err := minter.New(minter.Config{
-		Instance: "example", Cloudflare: doc(), Internal: stores.Internal, External: stores.External, Log: log,
+		Instance: "example", Cloudflare: doc(), V5: stores, Log: log,
 		Dial: func(context.Context, string, string) (minter.API, error) {
 			return nil, errors.New("dialled")
 		},
