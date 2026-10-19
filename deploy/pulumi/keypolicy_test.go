@@ -690,8 +690,8 @@ func TestKeyAdministratorsAreRoles(t *testing.T) {
 
 // A role reading the external blobs' credential outside its own parameters
 // gets one row for exactly that parameter; a role whose statements already
-// reach it (the module that owns the namespace, backup and restore, the oidc
-// host on layout v4) gets none, and a wildcard address is refused.
+// reach it (the module that owns the namespace, backup and restore) gets none,
+// and a wildcard address is refused.
 func TestBlobCredentialsRowsOnlyWhereTheRoleHasNoReach(t *testing.T) {
 	root := arnPrefix + "ssm:" + kpRegion + ":" + kpAccount + ":parameter/sluis/" + kpInst
 	const ref = "external/cloudflare/blobs"
@@ -699,14 +699,14 @@ func TestBlobCredentialsRowsOnlyWhereTheRoleHasNoReach(t *testing.T) {
 		c := kpBySid(t, st, sid)["Condition"].(map[string]any)["StringLike"].(map[string]any)["kms:EncryptionContext:PARAMETER_ARN"]
 		return c.([]string)
 	}
-	with := func(l Layout) KeyPolicyArgs {
-		a := kpArgs(l)
+	with := func() KeyPolicyArgs {
+		a := kpArgs()
 		for i := range a.Roles {
 			a.Roles[i].BlobCredentialsRef = ref
 		}
 		return a
 	}
-	v5 := kpStatements(t, with(LayoutV5))
+	v5 := kpStatements(t, with())
 	var rows []string
 	for _, sid := range kpSids(v5) {
 		if strings.HasPrefix(sid, sidKeyBlobCredsPrefix) {
@@ -722,13 +722,8 @@ func TestBlobCredentialsRowsOnlyWhereTheRoleHasNoReach(t *testing.T) {
 	if got := kpBySid(t, v5, "SluisKeyBlobCredentialsIssuer")["Action"]; !reflect.DeepEqual(got, []string{"kms:Decrypt", "kms:DescribeKey"}) {
 		t.Errorf("issuer row actions = %v", got)
 	}
-	for _, sid := range kpSids(kpStatements(t, with(LayoutV4))) {
-		if strings.HasPrefix(sid, sidKeyBlobCredsPrefix) {
-			t.Errorf("v4: %s, but the oidc host reaches every parameter", sid)
-		}
-	}
 	for _, bad := range []string{"external/cloudflare/*", "/external/cloudflare/blobs", "external//blobs", "external/../internal/oidc/x"} {
-		a := with(LayoutV5)
+		a := with()
 		a.Roles[0].BlobCredentialsRef = bad
 		if _, err := SluisKeyPolicyStatements(a); err == nil {
 			t.Errorf("%q accepted", bad)
