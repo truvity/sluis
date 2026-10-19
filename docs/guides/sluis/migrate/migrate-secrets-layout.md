@@ -1,6 +1,14 @@
 # Move the secrets to layout v4
 
-Layout v4 (`<root>/internal/...`, `<root>/external/<kind>/<id>`) is the only secrets layout. Layout v3 (`<root>/private/...`, `<root>/export/...`), the `transition` layout, `sluis migrate secrets-layout` and `sluis migrate ssm-layout` were removed in v1.75. An installation still on v3 or `transition` moves on v1.74.x, then upgrades. The layout is in [storage layout](../../../reference/sluis/storage-layout.md).
+Layouts v3 and v4 are both gone: v3 (`<root>/private/...`, `<root>/export/...`), `transition` and `sluis migrate secrets-layout` in v1.75, v4 (`<root>/internal/config/...`, `<root>/internal/credentials/...`) in v1.77.1. This page is the v1.74 move from v3 to v4, kept for an installation still on v3.
+
+| On | Move with | Then |
+|---|---|---|
+| layout v3 or `transition` | v1.74.x, this page | layout v4 |
+| layout v4 | v1.75 to v1.77.0: [upgrade to v1.75](../upgrade/v1.75.md), [v1.76](../upgrade/v1.76.md), `sluis migrate v5` of v1.77.0 | layout v5 |
+| layout v5 | [upgrade to v1.77.1](../upgrade/v1.77.1.md) | v1.77.1 |
+
+The current layout is in [storage layout](../../../reference/sluis/storage-layout.md).
 
 ## Before you start
 

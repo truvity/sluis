@@ -44,8 +44,8 @@ the platform freezes the process between invocations.
 
 A schedule per target replaces the loop. The console's "run now" is an asynchronous invoke of the module's own function.
 
-A module whose `remote` is unset in the issuer's document runs inside the issuer instead ([layouts](../../reference/sluis/pulumi-library.md#layouts)).
-On layout v5 each module has its own function, role, table, parameter namespace and blob prefix.
+A module whose `remote` is unset in the issuer's document runs inside the issuer instead ([module roles](../../reference/sluis/pulumi-library.md#module-roles)).
+Each module has its own function, role, table, parameter namespace and blob prefix.
 
 ## Who may call whom?
 

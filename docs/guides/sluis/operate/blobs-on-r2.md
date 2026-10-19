@@ -11,9 +11,9 @@ Keep the Blob port (status reports, directory snapshots) in a bucket of an S3-co
 
 ## Steps
 
-1. Choose an address `internal/<kind>/<id>`: two lower-case segments, for example `internal/blobs/r2`. Any other address is refused at load.
+1. Choose an address `internal/google/<name>`, such as `internal/google/blobs-r2`, which every process reads. Any other address is refused at load.
 
-2. Seed the document at `<secrets.root>/internal/blobs/r2` out of band, for example with `aws ssm put-parameter --type SecureString` for the SSM source. It follows the [`s3-credentials/v1` schema](https://github.com/truvity/sluis/blob/master/schemas/internal/s3-credentials.v1.schema.json).
+2. Seed the document at `<secrets.root>/internal/google/blobs-r2` out of band, for example with `aws ssm put-parameter --type SecureString` for the SSM source. It follows the [`s3-credentials/v1` schema](https://github.com/truvity/sluis/blob/master/schemas/internal/s3-credentials.v1.schema.json).
 
    ```json
    {"schema": "s3-credentials/v1", "access_key_id": "<key id>", "secret_access_key": "<secret>"}
@@ -29,7 +29,7 @@ Keep the Blob port (status reports, directory snapshots) in a bucket of an S3-co
          bucket: example-sluis
          endpoint: https://<account>.r2.cloudflarestorage.com
          pathStyle: true
-         credentialsRef: internal/blobs/r2
+         credentialsRef: internal/google/blobs-r2
    ```
 
    The Pulumi library writes this block from `StorageArgs.Blobs` ([Pulumi library](../../../reference/sluis/pulumi-library.md)).

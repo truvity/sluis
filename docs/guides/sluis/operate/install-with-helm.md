@@ -33,7 +33,9 @@ preset: k8s-aws
 release: sluis                    # the Helm release name
 issuer:
   url: https://access.example.com # stable for the life of the installation
-aws: {region: eu-west-1, table: sluis, bucket: sluis-blobs}
+aws: {region: eu-west-1, bucket: sluis-blobs}
+adapters:
+  state: {adapter: dynamodb, settings: {region: eu-west-1, tables: {oidc: sluis-example-oidc, github: sluis-example-github, slack: sluis-example-slack, google: sluis-example-google, cloudflare: sluis-example-cloudflare, backup: sluis-example-backup}}}
 signingKey:
   kmsWrapped: {keyId: alias/sluis-example-sign}
 recovery: {enabled: true, serviceAccount: sluis-recovery, audience: sluis-recovery}
@@ -65,14 +67,16 @@ The render writes `rendered/sluis.yaml` and `rendered/policy.yaml` ([installatio
 
 ```sh
 kubectl create namespace sluis
-aws ssm put-parameter --type SecureString --name /sluis/example/internal/config/providers/google/default/client-id     --value <google client id>
-aws ssm put-parameter --type SecureString --name /sluis/example/internal/config/providers/google/default/client-secret --value <google client secret>
-aws ssm put-parameter --type SecureString --name /sluis/example/internal/config/issuer/state-secret --value "$(openssl rand -base64 32)"
-# one per confidential client in the policy
-aws ssm put-parameter --type SecureString --name /sluis/example/internal/config/clients/<client-id>/secret --value <random>
+# each value is a {"value":"<base64>"} document at the oidc module's address
+put() { aws ssm put-parameter --type SecureString --name "/sluis/example/internal/oidc/$1" \
+  --value "{\"value\":\"$(printf %s "$2" | base64 | tr -d '\n')\"}"; }
+put signin/default/client-id     '<google client id>'
+put signin/default/client-secret '<google client secret>'
+put state-secret                 "$(openssl rand -base64 32)"
+put clients/<client-id>          '<random>'   # one per confidential client in the policy
+# list the names, never the values
+aws ssm get-parameters-by-path --path /sluis/example/internal/oidc/ --recursive --query 'Parameters[].Name'
 ```
-
-List the names, never the values, with `aws ssm get-parameters-by-path --path /sluis/example/internal/config/ --recursive --query 'Parameters[].Name'`.
 
 ## 3. Write the deployment values
 

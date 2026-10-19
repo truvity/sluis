@@ -64,18 +64,19 @@ func TestDecodeTheRecoveryPassword(t *testing.T) {
 	}
 }
 
-func TestTheRecoveryPasswordIsReadFromTheV5ParameterAndFallsBackToV4(t *testing.T) {
+func TestTheRecoveryPasswordIsReadFromTheV5Parameter(t *testing.T) {
 	v5 := &fakeParameters{values: map[string]string{"/sluis/acme/internal/oidc/recovery-password": recoveryDocument("secret")}}
 	if got, err := readRecoveryPassword(context.Background(), v5, "acme"); err != nil || got != "secret" {
 		t.Fatalf("v5: %q, %v", got, err)
 	}
 	if len(v5.asked) != 1 {
-		t.Errorf("v5 asked %v: the fallback must not be read when v5 answers", v5.asked)
+		t.Errorf("v5 asked %v", v5.asked)
 	}
 
+	// The layout v4 address is not read (v4 was removed in v1.77.1).
 	v4 := &fakeParameters{values: map[string]string{"/sluis/acme/internal/config/recovery/password": "legacy"}}
-	if got, err := readRecoveryPassword(context.Background(), v4, "acme"); err != nil || got != "legacy" {
-		t.Fatalf("v4: %q, %v", got, err)
+	if _, err := readRecoveryPassword(context.Background(), v4, "acme"); err == nil {
+		t.Fatal("the layout v4 password was read")
 	}
 
 	none := &fakeParameters{values: map[string]string{}}
@@ -89,7 +90,7 @@ func TestTheRecoveryPasswordIsReadFromTheV5ParameterAndFallsBackToV4(t *testing.
 		t.Fatalf("a refusal is not 'not granted': %v", err)
 	}
 	if len(denied.asked) != 1 {
-		t.Errorf("a refusal fell back to v4: %v", denied.asked)
+		t.Errorf("a refusal asked again: %v", denied.asked)
 	}
 }
 

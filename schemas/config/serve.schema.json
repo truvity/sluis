@@ -1299,7 +1299,7 @@
                   "type": "object"
                 },
                 "credentialsRef": {
-                  "description": "Where the credentials for `endpoint` are, in the installation's secrets store (the ssm secrets source): the internal address, `internal/<kind>/<id>`, of the `s3-credentials/v1` document (`access_key_id`, `secret_access_key`) that holds static credentials, or `external/cloudflare/<preset>`, the `cloudflare/v1` document the Cloudflare module rotates for an R2 preset with `store: external` (the access key is the token's id; it is read again with a third of its time left and after a 403). Read at start and again after an answer of 403, at most once a minute. Needs `endpoint`; `region` defaults to `auto` with it. Any other address is refused. This is the simple way and needs no `cloudflare` section in this document, so it is the one to use when the presets are another module's (`cloudflare.remote`).",
+                  "description": "Where the credentials for `endpoint` are, in the installation's secrets store (the ssm secrets source): the internal address, `internal/<module>/<name>`, of the `s3-credentials/v1` document (`access_key_id`, `secret_access_key`) that holds static credentials, or `external/cloudflare/<preset>`, the `cloudflare/v1` document the Cloudflare module rotates for an R2 preset with `store: external` (the access key is the token's id; it is read again with a third of its time left and after a 403). Read at start and again after an answer of 403, at most once a minute. Needs `endpoint`; `region` defaults to `auto` with it. Any other address is refused. This is the simple way and needs no `cloudflare` section in this document, so it is the one to use when the presets are another module's (`cloudflare.remote`).",
                   "pattern": "^(internal/[a-z0-9][a-z0-9-]{0,30}/[a-z0-9][a-z0-9._-]{0,62}|external/cloudflare/[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?)$",
                   "type": "string"
                 },
@@ -1589,7 +1589,7 @@
         },
         "source": {
           "default": "env",
-          "description": "`env`: the variable SLUIS_SECRET_<NAME> (the name upper-cased, every other character an underscore), for a local run. `file`: the file <root>/<name>, read on every use, so a rotated mount takes effect without a restart. `ssm`: the SecureString <root>/internal/config/<name> in AWS SSM Parameter Store, every one under the prefix read at once and again after `refresh` (root /sluis/<instance>).",
+          "description": "`env`: the variable SLUIS_SECRET_<NAME> (the name upper-cased, every other character an underscore), for a local run. `file`: the file <root>/<name>, read on every use, so a rotated mount takes effect without a restart. `ssm`: a SecureString in AWS SSM Parameter Store under <root> (/sluis/<instance>), on layout v5 (`layout`): a name the service knows is read at its module's address (`<root>/internal/oidc/state-secret`, ...), any other at `<root>/internal/config/<name>`.",
           "enum": [
             "env",
             "file",

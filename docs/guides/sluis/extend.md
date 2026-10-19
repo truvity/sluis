@@ -31,6 +31,6 @@ Share the login cache, issuer client and ambient-token detection. Work with an a
 
 ## Reconciler
 
-GitHub and Slack are reconcilers built on `internal/rails` pieces, not a framework. Keep the decision, change calls, credentials, status document and audit actions in the system's own package. Ship a fake of the system (`internal/slackapp/slackfake`) and a pure `reconcile` package. Add a status document, a `controllers.<kind>` section, an enabled list born dry-run, audit actions and a connect page. The controller runs inside `sluis serve` and needs no Deployment.
+GitHub and Slack are reconcilers built on `internal/rails` pieces, not a framework. Keep the decision, change calls, credentials, status document and audit actions in the system's own package. Ship a fake of the system (`internal/slackapp/slackfake`) and a pure `reconcile` package. Add a status document, a `controllers.<kind>` section, an enabled list born dry-run, audit actions and a connect page. The controller runs inside `sluis issuer` and needs no Deployment.
 
 Decided in: [ADR 0024](../../decisions/0024-reconciler-rails-are-shared-pieces-not-a-framework.md), [ADR 0037](../../decisions/0037-one-process-everywhere.md).

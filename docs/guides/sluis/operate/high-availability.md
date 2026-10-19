@@ -1,6 +1,6 @@
 # Run more than one replica
 
-Run `sluis serve` at two or more replicas so a node loss or a rollout stops neither sign-in nor reconciling.
+Run `sluis issuer` at two or more replicas so a node loss or a rollout stops neither sign-in nor reconciling.
 
 ## Before you start
 

@@ -10,7 +10,7 @@ unordered sets for listing a client's or an identity's sessions. The State port 
 
 | `ports.adapter` | Shared | Replicas |
 |---|---|---|
-| `dynamodb` | one table for every replica and process | the State a replica set uses on AWS, required by the chart above one controller replica |
+| `dynamodb` | one table per module, shared by every replica and process | the State a replica set uses on AWS, required by the chart above one controller replica |
 | `legacy` with `valkey.address` | sessions and the key ring in Valkey | the chart refuses a controller above one replica |
 | `memory`, or `legacy` with no Valkey | nothing, process-local | a browser returning to another pod finds nothing |
 
@@ -50,7 +50,7 @@ for that long. Each fetch re-checks that the document's `client_id` matches its 
 
 ## The controllers and the rollout
 
-The GitHub and Slack controllers run inside `sluis serve`, so the Deployment rolls with the default
+The GitHub and Slack controllers run inside `sluis issuer`, so the Deployment rolls with the default
 `RollingUpdate`. An old pod leaves when the new one is Ready: policy loaded, stores open, audit catalogue accepted
 (`/readyz` on `probes.address`, default `:7070`). Pods that crash at start leave the running pods alone.
 

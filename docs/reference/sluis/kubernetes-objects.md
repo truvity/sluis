@@ -1,6 +1,6 @@
 # Kubernetes objects the service owns
 
-The objects `sluis serve` writes in its namespace with `store: kubernetes`. With `ports.adapter: dynamodb` the records live in the State and these objects are not written ([store](../../concepts/sluis/store.md)).
+The objects `sluis issuer` writes in its namespace with `store: kubernetes`. With `ports.adapter: dynamodb` the records live in the State and these objects are not written ([store](../../concepts/sluis/store.md)).
 
 `<release>` is the chart's full name. `<tenant>` is a readable part of the tenant id plus a short hash of it. Why a record and its credential are two objects: [Configuration: the model](../../concepts/sluis/configuration.md#a-record-and-its-credential-are-two-objects).
 

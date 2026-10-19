@@ -1,11 +1,10 @@
 // Package ssm registers the `ssm` Secrets adapter: the installation's secrets
-// in AWS Systems Manager Parameter Store, in layout v4
-// (docs/decisions/0041-the-secret-contract.md).
+// in AWS Systems Manager Parameter Store, in layout v5
+// (docs/decisions/0072-storage-layout-v5-module-first.md).
 //
-// The adapter has no port of its own. Choosing it puts the Secrets port over
-// the layout-v4 stores of the serve document's `secrets` section
-// (internal/secretstore), which keep the parameters at `<root>/internal/` and
-// `<root>/external/`. This package holds the adapter's settings and their
+// The adapter has no port of its own. Choosing it opens the layout v5 stores
+// of the serve document's `secrets` section (internal/secretstore), which keep
+// the parameters at `<root>/internal/<module>/` and `<root>/external/<module>/`. This package holds the adapter's settings and their
 // checks, so that a mistake in them is refused at start.
 //
 // Credentials are ambient: the AWS SDK's default chain (EKS Pod Identity,
@@ -60,12 +59,12 @@ func rootOf(root string) error {
 func init() {
 	port.Register(port.Descriptor{
 		Name: "ssm", Concern: port.ConcernSecrets,
-		Summary:     "Dynamic secrets as SecureString parameters in AWS SSM Parameter Store (layout v4).",
+		Summary:     "Dynamic secrets as SecureString parameters in AWS SSM Parameter Store (layout v5).",
 		Requires:    port.Requires{AWS: true},
 		Runtimes:    []port.Runtime{port.RuntimeKubernetes, port.RuntimeLambda},
 		SecretStore: true,
 		// The factory checks the settings and returns them; the port itself is
-		// the layout-v4 stores, which the store package opens.
+		// the layout v5 stores, which the store package opens.
 		Factory: func(_ context.Context, s port.Settings) (any, error) {
 			var cfg Config
 			if err := s.Decode(&cfg); err != nil {

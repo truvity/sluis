@@ -4,7 +4,7 @@
 
 ## What the flag does
 
-The flag is the maintenance item U27 added to each table ([ADR 0072](../../decisions/0072-storage-layout-v5-module-first.md)). `on` sets it, in the state `migration`, in the one table of layout v4 or in every module's table on v5.
+The flag is the maintenance item U27 added to each table ([ADR 0072](../../decisions/0072-storage-layout-v5-module-first.md)). `on` sets it, in the state `migration`, in every module's table.
 
 The command returns once every replica has read the flag, 15 seconds at most.
 
@@ -31,7 +31,7 @@ Do not set the reserved concurrency to 0. A throttled function cannot sign the d
 
 ## The migration copy
 
-`sluis migrate v5 copy` accepts a frozen source as the proof of a stopped writer. It first waits until every replica has seen the flag. It warns when only `--i-have-stopped-writers` vouches for it. It never copies the flag, so the destination starts out of maintenance, and it refuses a destination that holds one.
+`sluis migrate --from --to` does not read the flag. It writes only with `--i-have-stopped-writers`, after the issuer, the console and both controllers are scaled to 0 ([migrate state](../../guides/sluis/migrate/migrate-state.md)).
 
 ## The operator grant
 
@@ -49,7 +49,7 @@ It allows `GetItem`, `PutItem` and `DeleteItem` on the `maintenance` partition o
 
 ## Audited, or refused
 
-`on`, `off`, `sluis migrate v5 copy` and `sluis migrate v5 prune` change an installation from a workstation, so each is audited synchronously. The record is delivered to the audit destination before the change. If delivery fails, the command refuses and names the queue and the principal AWS denied. Nothing has changed.
+`on` and `off` change an installation from a workstation, so each is audited synchronously. The record is delivered to the audit destination before the change. If delivery fails, the command refuses and names the queue and the principal AWS denied. Nothing has changed.
 
 `--no-audit` is the break-glass. The command goes ahead, prints a warning, and writes the same record to stderr as JSON. Keep that line and report it.
 

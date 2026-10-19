@@ -13,7 +13,7 @@ Settings, engine mapping, limits and IAM of each adapter beyond the [port contra
 
 ## The SSM adapter
 
-`internal/port/ssm`, `adapters.secrets.adapter: ssm`, or the `aws-hybrid`, `aws-serverless` and `k8s-aws` presets. It opens the layout-v4 stores of `secrets` (`internal/secretstore`): one SecureString parameter per secret. Runs on Kubernetes and Lambda.
+`internal/port/ssm`, `adapters.secrets.adapter: ssm`, or the `aws-hybrid`, `aws-serverless` and `k8s-aws` presets. It opens the layout v5 stores (`internal/secretstore`): one SecureString parameter per secret. Runs on Kubernetes and Lambda.
 
 | Aspect | Behavior |
 |---|---|
@@ -24,28 +24,28 @@ Settings, engine mapping, limits and IAM of each adapter beyond the [port contra
 | Size | 4 KiB standard; up to 8 KiB advanced (billed, never downgraded) |
 | Update | Read, then write with Overwrite: not atomic, a writer in between is overwritten. Creation is atomic. The target lease serialises writers |
 
-IAM for the sluis role, on the parameters of the root:
+IAM for a function's role, on its modules' parameters:
 
 ```json
 {
   "Effect": "Allow",
   "Action": [
-    "ssm:GetParameter", "ssm:GetParameters", "ssm:GetParametersByPath",
+    "ssm:GetParameter", "ssm:GetParameters", "ssm:GetParameterHistory",
     "ssm:PutParameter", "ssm:DeleteParameter"
   ],
   "Resource": [
-    "<the SSM parameter ARNs of /sluis/<instance>/internal/credentials/* and /external/*>"
+    "<the SSM parameter ARNs of /sluis/<instance>/internal/<module>/* and /external/<module>/*>"
   ]
 }
 ```
 
 | Grant | Applies to |
 |---|---|
-| Read-only `GetParameter`, `GetParameters`, `GetParametersByPath` on `/sluis/<instance>/internal/config/*` | The issuer module's function, which serves the console. The GitHub and Slack functions (one function per module) are denied |
+| `internal/<module>/*` and `external/<module>/*` | The function that hosts the module. Every other function is denied ([module roles](pulumi-library.md#module-roles)) |
 | `kms:Decrypt`, `kms:Encrypt` on the key | Only when `kmsKeyId` is set |
 | `ssm:GetParameterHistory` | The service role |
 | Resources `<prefix>` and `<prefix>/*` | Every read grant: `GetParametersByPath` is authorised against the path itself |
-| `ssm:GetParameter` (and `kms:Decrypt`) on the exact `/sluis/<instance>/external/<kind>/<id>` parameters | A consumer's External Secrets Operator. Never `internal/*` |
+| `ssm:GetParameter` (and `kms:Decrypt`) on the exact `/sluis/<instance>/external/<module>/<id>` parameters | A consumer's External Secrets Operator. Never `internal/*` |
 
 ## The sqs adapter
 
@@ -96,7 +96,7 @@ One bucket and prefix: every name sits under `<prefix>/`.
 
 ## The DynamoDB adapter
 
-`internal/port/dynamodb`, `ports.adapter: dynamodb`, `ports.dynamodb`. State, the transitional Index and Trigger over one table, shared by all replicas. Blob and Identity come from the legacy adapter unless `ports.blob` names S3. Item attributes are in [storage layout](storage-layout.md#dynamodb-the-dynamodb-state-index-and-trigger-adapter). The revision is a random 64-bit number drawn on every write.
+`internal/port/dynamodb`, `ports.adapter: dynamodb`, `ports.dynamodb`. State, the transitional Index and Trigger over one table per module, shared by all replicas. Blob and Identity come from the legacy adapter unless `ports.blob` names S3. Item attributes are in [storage layout](storage-layout.md#dynamodb-the-dynamodb-state-index-and-trigger-adapter). The revision is a random 64-bit number drawn on every write.
 
 | Operation | DynamoDB |
 |---|---|
@@ -119,9 +119,9 @@ One bucket and prefix: every name sits under `<prefix>/`.
 | Trigger | `Notify` writes `notify.<target>` (one-minute lifetime); `Subscribe` watches the prefix, so up to one poll interval of delay. Lambda uses the `invoke` adapter ([ADR 0029](../../decisions/0029-ticks-per-target-under-a-lease.md)) |
 | Credentials | The table holds none. Without a secrets adapter (`adapters.secrets` or a preset) there is no Secrets port, and any `ports.adapter` but `legacy` refuses to start |
 | Exporters | `StateExporter` and `IndexExporter` read items with their remaining lifetime for `sluis migrate`. The index export is a `Scan` |
-| Layout 5 | Internal until the store wires it: `Config.Tables` names one table per module (default `sluis-<instance>-<module>`), opened with `OpenTables`, which makes no request without `Create`. A module's table holds that module's keys and its own `lease` and `notify`; `Watch`, `Notify` and `ExportState` act on it alone. A write of another module's key is `ErrNotOwner`; a read of one is absent. A peer is a read-only view of the peer's own table ([ADR 0072](../../decisions/0072-storage-layout-v5-module-first.md)) |
-| Table | `ports.dynamodb.create: false` (default) binds to an existing table with string `pk`, string `sk` and TTL on `expires`. `true` creates it (on-demand, TTL on) for tests. Start runs `DescribeTable`, also the readiness probe |
-| IAM | `dynamodb:GetItem`, `PutItem`, `DeleteItem`, `Query`, `DescribeTable`; `Scan` for migration and dotless listing. `dynamodb:LeadingKeys` may restrict to the written families; `notify` and `lease` belong to every ticking role. A restriction listing issuer kinds must include `issuer-sso-cookie`, or every console asks for login again |
+| Tables | `ports.dynamodb.tables` names one table per module (default `sluis-<instance>-<module>`), opened with `OpenTables`, which makes no request without `Create`. A module's table holds that module's keys and its own `lease` and `notify`; `Watch`, `Notify` and `ExportState` act on it alone. A write of another module's key is `ErrNotOwner`; a read of one is absent. A peer is a read-only view of the peer's own table ([ADR 0072](../../decisions/0072-storage-layout-v5-module-first.md)) |
+| Table | `ports.dynamodb.create: false` (default) binds to existing tables with string `pk`, string `sk` and TTL on `expires`. `true` creates them (on-demand, TTL on) for tests. Start runs `DescribeTable`, also the readiness probe |
+| IAM | `dynamodb:GetItem`, `PutItem`, `DeleteItem`, `Query`, `DescribeTable`; `Scan` for migration and dotless listing. `dynamodb:LeadingKeys` may restrict to the written families; `notify` and `lease` belong to every ticking role. A restriction of the `oidc` table must include `sso-cookie`, or every console asks for login again |
 | Limits | A key over 1 KiB or with no first segment (`.x`) is `ErrUnsupported`. A value over 256 KiB is `ErrTooLarge`. A missing table, throttling and network faults are `ErrUnavailable` |
 | Conformance | An in-memory fake of the API in `go test ./...`, LocalStack in CI; only `blob/` and `identity/` are skipped. `hack/dynamodb-conformance.sh` fails on any other skip and runs a migration memory to DynamoDB and back |
 

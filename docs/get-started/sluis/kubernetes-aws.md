@@ -17,11 +17,13 @@ Names below are placeholders; replace them.
 
 ## 1. Create the AWS side
 
-The pod needs a table, a bucket, a symmetric KMS key and a role. The Pulumi library declares the table, bucket and role. You create the key, and its policy reserves the signing context to the pod's role with statements the library returns. In a Pulumi Go project, add the library with `go get github.com/truvity/sluis/deploy/pulumi@vX.Y.Z`:
+The pod needs a table per module, a bucket, a symmetric KMS key and a role. The Pulumi library declares the tables, bucket and role. You create the key, and its policy reserves the signing context to the pod's role with statements the library returns. In a Pulumi Go project, add the library with `go get github.com/truvity/sluis/deploy/pulumi@vX.Y.Z`:
 
 ```go
 store, _ := sluispulumi.NewStorage(ctx, "demo", &sluispulumi.StorageArgs{BucketName: "demo-sluis-111122223333"}, withAWS)
-state, _ := sluispulumi.NewState(ctx, "demo", &sluispulumi.StateArgs{TableName: "demo-sluis"}, withAWS)
+states, _ := sluispulumi.NewStates(ctx, "demo", &sluispulumi.StatesArgs{
+	Modules: sluispulumi.ModuleSet{Instance: "demo"}, // tables sluis-demo-<module>
+}, withAWS)
 
 // The role is named <RoleNamePrefix>-sluis, and the prefix defaults to the component's name, "demo".
 roleArn := "arn:aws:iam::111122223333:role/demo-sluis"
@@ -42,13 +44,13 @@ sluispulumi.NewKubernetesIdentity(ctx, "demo", &sluispulumi.KubernetesIdentityAr
 	Namespace: "sluis", ServiceAccount: "sluis",
 	Instance:             "demo", // the role's SSM grants under /sluis/demo
 	Storage:              store.Grant(),
-	State:                state.Grant(),
+	State:                states.Grant(),
 	WrappedSigningKeyArn: key.Arn,
 }, withAWS)
 ```
 
 ```sh
-pulumi preview    # a bucket, a table, a key and alias, a policy, a role and a pod identity association
+pulumi preview    # a bucket, six tables, a key and alias, a policy, a role and a pod identity association
 pulumi up
 ```
 
@@ -72,8 +74,15 @@ issuer:
 aws:
   account: "111122223333"
   region: eu-central-1
-  table: demo-sluis
   bucket: demo-sluis-111122223333
+
+adapters:
+  state:
+    adapter: dynamodb
+    settings:
+      region: eu-central-1
+      tables: {oidc: sluis-demo-oidc, github: sluis-demo-github, slack: sluis-demo-slack,
+               google: sluis-demo-google, cloudflare: sluis-demo-cloudflare, backup: sluis-demo-backup}
 
 signingKey:
   kmsWrapped:
@@ -105,16 +114,16 @@ Expect no output, exit 0, and `rendered/sluis.yaml` and `rendered/policy.yaml`. 
 
 ## 3. Seed the secrets
 
-The documents name secrets and hold none. With the SSM adapter each secret is a SecureString under the instance's root:
+The documents name secrets and hold none. With the SSM adapter each is a `{"value":"<base64>"}` SecureString at its module's address:
 
 ```sh
 kubectl create namespace sluis
-aws ssm put-parameter --type SecureString --name /sluis/demo/internal/config/issuer/state-secret \
-  --value "$(openssl rand -base64 32)"
-aws ssm get-parameters-by-path --path /sluis/demo/internal/config/ --recursive --query 'Parameters[].Name'
+aws ssm put-parameter --type SecureString --name /sluis/demo/internal/oidc/state-secret \
+  --value "{\"value\":\"$(openssl rand -base64 32 | tr -d '\n' | base64 | tr -d '\n')\"}"
+aws ssm get-parameters-by-path --path /sluis/demo/internal/oidc/ --recursive --query 'Parameters[].Name'
 ```
 
-Expect a parameter version, then `["/sluis/demo/internal/config/issuer/state-secret"]`. Print names only, never values. The state secret keys the sign-in state and must be the same in every replica.
+Expect a parameter version, then `["/sluis/demo/internal/oidc/state-secret"]`. Print names only, never values. The state secret keys the sign-in state and must be the same in every replica.
 
 ### With OpenBao instead of SSM
 

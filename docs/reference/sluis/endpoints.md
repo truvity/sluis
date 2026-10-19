@@ -1,6 +1,6 @@
 # HTTP endpoints
 
-`sluis serve` answers on `listen.address` (default `:8080`): the issuer at the origin root, the console under `console.mount` (default `/console`). Request and response shapes: [contracts](contracts.md). Routes: [Configuration: the model](../../concepts/sluis/configuration.md#two-routes).
+`sluis issuer` answers on `listen.address` (default `:8080`): the issuer at the origin root, the console under `console.mount` (default `/console`). Request and response shapes: [contracts](contracts.md). Routes: [Configuration: the model](../../concepts/sluis/configuration.md#two-routes).
 
 The issuer serves three grants (`authorization_code`, `refresh_token`, token exchange) and three endpoints that discovery advertises (userinfo, `end_session`, revocation).
 

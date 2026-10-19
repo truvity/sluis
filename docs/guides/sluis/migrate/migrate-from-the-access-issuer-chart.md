@@ -48,7 +48,7 @@ The list must match step 1 and show no controller Deployment.
 
 ### 4. Point at the `sluis` chart
 
-Set the chart reference to `oci://ghcr.io/truvity/charts/sluis` in the Helm release, the Argo CD `Application`'s `chart:` or the `HelmRelease`. A `docker run`, Compose file or systemd unit runs `sluis serve` with the same `--config` file. Run `helm template` again. To undo, restore the reference.
+Set the chart reference to `oci://ghcr.io/truvity/charts/sluis` in the Helm release, the Argo CD `Application`'s `chart:` or the `HelmRelease`. A `docker run`, Compose file or systemd unit runs `sluis issuer` with the same `--config` file. Run `helm template` again. To undo, restore the reference.
 
 ### 5. Admit the one ServiceAccount, then roll out
 
