@@ -35,7 +35,7 @@ No access pattern needs a secondary index. Sessions are listed per person under 
 | `rec.backup.run.<id>` | one backup run: its state, counts and the object's size; the backup module's table only, never in a backup | backup | permanent |
 | `rec.backup.restore.<id>` | one restore: its state, the backup it restores from, the counts of the last slice and whether the maintenance flag is still set; the backup module's table only, never in a backup | restore | permanent |
 | `rec.backup.retention` | the last retention pass: what it kept and removed | backup | permanent |
-| `lease.<target>` | the holder of a target's tick, by id | ticks | seconds, renewed |
+| `lease.<kind>:<target>` | the holder of a target's tick, by id | ticks | seconds, renewed |
 | `gate.<target>.<name>` | a held-once ledger entry, a breaker, a fingerprint. Written today: `gate.github.<org>.confirm` and `.pass`, `gate.slack.<workspace>.confirm[.<channel>]` and `.pass` (an operator's confirmation of a removal set, 24 h; a request for a pass now, 24 h), `gate.github-claim.<account>` (the marker of a link claim, below) | ticks, console | by gate |
 | `share.<host>.<channel>` | a Slack Connect share: the guests that were invited and each side's state; written by the host's tick, its write enqueues the guest's tick, and the guest's tick marks its own side accepted | host tick, guest tick | 14 days while a guest is pending, then 7 days once every guest has accepted |
 | `cache.slack.user.<workspace>.<id>` | who a Slack member is (address, team, bot, guest): `users.info` once a day, not once a pass. A deactivated account is never cached | slack tick | 24 h |

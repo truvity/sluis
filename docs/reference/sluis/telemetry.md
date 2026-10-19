@@ -31,7 +31,7 @@ A tracer exists only when a collector is named for traces.
 
 | Where | Span |
 |---|---|
-| The issuer's listener (everything on the public port, the console included) | A server span per request, **named for the route** (`POST token`, `GET login_callback`) and never for the path. The route is one of a fixed set (`issuer.Route`): `discovery`, `jwks`, `authorize`, `authorize_callback`, `token`, `userinfo`, `introspect`, `revoke`, `end_session`, `device_authorization`, `login_chooser`, `login_start`, `login_callback`, `login_recovery`, `logout`, `signed_out`, `account`, `grants`, `sessions_rpc`, `connect_callback`, `console_assets`, `console_rpc`, `console`, `other`. The caller's `traceparent` is continued. |
+| The issuer's listener (everything on the public port, the console included) | A server span per request, **named for the route** (`POST token`, `GET login_callback`) and never for the path. The route is one of a fixed set (`issuer.Route`): `discovery`, `jwks`, `authorize`, `authorize_callback`, `token`, `userinfo`, `introspect`, `revoke`, `end_session`, `device_authorization`, `login_chooser`, `login_start`, `login_callback`, `login_recovery`, `logout`, `signed_out`, `account`, `grants`, `sluis_configuration`, `client_secrets`, `sessions_rpc`, `connect_callback`, `console_assets`, `console_rpc`, `console`, `other`. The caller's `traceparent` is continued. |
 | The console's and the session service's Connect handlers | A server span per call (`rpc.method`). |
 | The controllers' clients of the console | A client span per call, and the `traceparent` carried to the console, so a tick's trace continues into the console's own spans. |
 | A module call (`internal/modcall`) | A client span in the caller and a server span in the callee, `modcall <module>.<method>` (`rpc.system.name` is `sluis.modcall`, `rpc.method` the module and method). The envelope carries the `traceparent` and `tracestate`, so the callee's span is the caller's child on every transport. |
@@ -145,6 +145,13 @@ github_roster.passes (org, outcome)  .changes  .link_changes  .breaker_trips  .r
 slack_roster.passes (workspace, outcome)  and the same family
 audit.emit.*  (the audit component's, alerted there)
 ```
+
+### Adapters and secrets
+
+| Metric | Type | Labels | What it says |
+|---|---|---|---|
+| `sluis.adapter.info` | gauge | `concern`, `adapter` | The adapter in use for each concern; the value is always 1. |
+| `sluis.secret.reads` | counter | `result` | Reads of a stored secret document: `hit` (answered from the process) or `miss` (read from the backend). |
 
 ### The ports
 

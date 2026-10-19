@@ -35,7 +35,7 @@ A purpose is a key name or `{key, context}`. The name is an alias for `kms` and 
 | PublicKey | Takes no context |
 | MAC | HMAC-SHA-256 under a secret unique to purpose and tenant |
 
-On `transit`, a key that cannot carry the binding is refused, because transit ignores `context` on a non-derived key and `hmac` ignores it always. In a policy, name `required_parameters` as well as `allowed_parameters`. [Use the OpenBao backends](../../guides/storage/use-the-openbao-backends.md) has the policies.
+On `transit`, a key that cannot carry the binding is refused. In a policy, name `required_parameters` as well as `allowed_parameters`. [Use the OpenBao backends](../../guides/storage/use-the-openbao-backends.md) has the policies.
 
 ## `state`
 
@@ -65,3 +65,13 @@ On `transit`, a key that cannot carry the binding is refused, because transit ig
 | namespace | Empty is the root namespace |
 | CA file | Added to the system roots |
 | login | JWT auth: mount, role, token file (a projected ServiceAccount token, re-read at every login) |
+
+## `storage/awsotel`
+
+| Call | Behaviour |
+|---|---|
+| `awsotel.Providers()` | Returns the tracer and meter provider an AWS SDK client takes, over the global OpenTelemetry providers. A client built without it reports nothing |
+
+```go
+ssm.NewFromConfig(cfg, func(o *ssm.Options) { o.TracerProvider, o.MeterProvider = awsotel.Providers() })
+```

@@ -19,7 +19,7 @@ Each row is optional. A row folds into its groups after the matchers the access 
 
 | Field | Admits | Into |
 |---|---|---|
-| `Recovery` | one ServiceAccount | each group in `Groups`, which may be derived groups |
+| `Recovery` | one ServiceAccount; leave the row out on Lambda, where recovery is the password | each group in `Groups`, which may be derived groups |
 | `Viewers` | `EmailDomain`, `ServiceAccounts`, `RoleARNs` | `Group`, which may be a derived group |
 | `Controllers` | `ServiceAccounts`, `RoleARNs` | the viewers' group and, when `Group` is set, `Group` |
 | `Probe` | one ServiceAccount, cluster required | `Group`, plus the exchange client `Client` that requires it |

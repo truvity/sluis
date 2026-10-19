@@ -34,6 +34,8 @@ The ingest path, notary and cursor observe write and read the v1 layout (🧪). 
 | `/readyz` beside `/healthz` on the writer, query service and indexer; the chart's readiness probes read it | ✅ | n/a | 📄 |
 | `event=unknown_catalogue` and `audit_writer_catalogue_unknown_total` for a record naming a catalogue version the writer lacks, and the `<name>-writer-unknown-catalogue` alarm | 🧪 | 🧪 | 🧪 |
 | the ingest queue's sender model: `Ingest.Senders` (required) and `Redrivers`, a deny to every other principal | n/a | 🧪 | n/a |
+| a record from a queue is stamped from what SQS sets: `recorded_at` from `SentTimestamp`, the observer from `SenderId` through `senders` | n/a | 🧪 | n/a |
+| `SinkService.Write` holds a caller to the source its workload is listed for (`workloads`) | 🧪 | n/a | 🧪 |
 | metrics over OTLP: acknowledgements by durability, write latency per transport, index lag, consumer failures | 🧪 | 🧪 | 🧪 |
 | queue metrics: the age of each message at receive (`audit.queue.message.age`, from `SentTimestamp`), and CloudWatch alarms on the DLQ and the oldest message | n/a | 🧪 | n/a |
 | chart value `telemetry.otlp` (`endpoint`, `protocol`, `extraEnv`): the OpenTelemetry environment on every pod | 🧪 | n/a | n/a |
@@ -100,6 +102,6 @@ Seals are tested against the in-memory store and LocalStack S3, signed by a key 
 | `audit` toolchain archives and container images | ✅ | ✅ | ✅ |
 | Helm chart | ✅ | n/a | n/a |
 | Helm chart modes per part | 📄 | n/a | n/a |
-| Pulumi library (bucket with Object Lock and lifecycle, keys, queue and DLQ, functions, roles, schedule, alarms, a cross-account read role; `deploy/pulumi`, mocks only) | n/a | 🧪 | n/a |
+| Pulumi library (bucket with Object Lock, lifecycle and a break-glass-only lock policy, seal and digest key policies, queue and DLQ, functions, roles, schedule, alarms, a cross-account read role; `audit/deploy/pulumi`, mocks only) | n/a | 🧪 | n/a |
 | CloudWatch alarm set: throttles, DLQ not empty, oldest message age, errors, unknown catalogue version, notary silence, to SNS and alert-ingress | n/a | 🧪 | n/a |
 | rpm and deb packages | n/a | n/a | 📄 |

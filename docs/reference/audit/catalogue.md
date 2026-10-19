@@ -23,7 +23,7 @@ Applications share the format and the [framework profiles](../../../audit/profil
 | `target_types` | name: `is_person`, attributes schema |
 | `context_areas` | name: schema |
 | `meters` | name: kind (count, gauge), unit, dimensions schema |
-| `actions` | `source.resource.verb`: summary, operation, categories, profiles, capture level, delivery, target types, data schema and version, message per locale, meter with quantity path and counted outcomes (success only by default) |
+| `actions` | `source.resource.verb`: summary, operation, categories, `category` (what routes its records to destinations, [profiles](profiles.md#destinations)), `profiles` (deprecated), capture level, delivery, target types, data schema and version, `extends`, message per locale, meter with quantity path and counted outcomes (success only by default) |
 
 ## Delivery
 

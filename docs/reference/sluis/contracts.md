@@ -2,14 +2,14 @@
 
 Console services, roles, routes and errors. The proto files under [`proto/`](../../../proto) are the source of truth.
 
-Connect also speaks JSON over HTTP, so `curl` works. The proto package is `sluis.v1`; the legacy `directoryroster.v1` and `accessissuer.v1` stay served until v1.76. Tables write `<package>` for either package.
+Connect also speaks JSON over HTTP, so `curl` works. The proto package is `sluis.v1`; the legacy `directoryroster.v1` and `accessissuer.v1` are still served. Tables write `<package>` for either package.
 
 ## Services
 
 | Services | Reached by | Path prefix |
 |---|---|---|
 | `WorkspaceService`, `SettingsService`, `AccessService`, `GitHubService`, `SlackService`, `SlackChannelService`, `SlackSharedChannelService`, `SlackAppService`, `CloudflareService`, `BackupService`, the SPA, and the audit `QueryService` forwarded under `/audit/` | the console, same origin under `console.mount`; a workload with its own ServiceAccount token; `sluisctl`'s bearer token, for `BackupService` only | `/<package>.*/` |
-| `sluis.v1.SessionService` | a browser at the issuer's host (SSO cookie); any caller with a token from this issuer | `/sluis.v1.SessionService/`, legacy `/accessissuer.v1.SessionService/` |
+| `sluis.v1.SessionService` | a browser at the issuer's host (SSO cookie); a person signed in at `sluisctl` or the console, by bearer | `/sluis.v1.SessionService/`, legacy `/accessissuer.v1.SessionService/` |
 | `/login/*`, `/connect/*`, `/.access/*` | the origin root: bootstrap surface and CLI endpoints | none |
 | `directory.v1.DirectoryService` | nothing: it has no listener and no chart value enables one | none |
 
@@ -35,7 +35,8 @@ Connect also speaks JSON over HTTP, so `curl` works. The proto package is `sluis
 |---|---|
 | `GET /login` | login page, one button per enabled source |
 | `GET /login/<backend>/start`, then `/callback` | directory sign-in with `openid email profile`; only the address is taken; an address in no served domain, or absent from the directory, is refused |
-| `POST /login/recovery` | recovery sign-in: ServiceAccount token (TokenReview) in a cluster, generated password elsewhere; bearer `Authorization: Bearer <proof>` is the runbook path |
+| `POST /login/recovery` | recovery sign-in by a ServiceAccount token (TokenReview), as a form field, JSON `proof` or `Authorization: Bearer <proof>`; a password here is `400`, unread |
+| `GET /login/srp.js`, `POST /login/srp/start`, `POST /login/srp/finish` | the recovery password, proved by SRP-6a from the sign-in page where recovery is a password; never sent ([ADR 0076](../../decisions/0076-password-sign-in-is-srp-for-recovery-and-conformance-only.md)) |
 | `GET /connect/<backend>/callback` | consent callback; authority is the signed state (cookie-pinned, ten minutes); failures render a `4xx` page, never `5xx` |
 | `POST /logout` | clears the session |
 
@@ -285,7 +286,7 @@ Served by the issuer. It only removes.
 
 | Caller | Allowed |
 |---|---|
-| Own identity | SSO cookie or a token this issuer minted |
+| Own identity | SSO cookie, or the access token of a live, non-agent sign-in at `sluisctl` or the console |
 | Other identity or whole installation | `all:sluis:operator` |
 
 | RPC | Auth | Request | Response | Notes |
@@ -309,7 +310,7 @@ On another identity `scope` is ignored.
 | `WorkspaceService` | `permission_denied`; `not_found` unknown id; `failed_precondition` operation refused for the workspace kind; `invalid_argument` unparseable key or admin without domain |
 | `AccessService` | `unauthenticated` without a session; `permission_denied`; `not_found` undeclared group; `failed_precondition` deployment-owned state |
 | `SlackChannelService`, `SlackSharedChannelService` | `aborted` when another edit changed the records first: reload and retry; `failed_precondition` with no Kubernetes state |
-| `SessionService` | `unauthenticated` without a cookie or token; `permission_denied` for another identity, or a client-only, global or `contains` listing, without operator; `invalid_argument` for an empty `identity`, or `every_identity` with anything but `client_id` |
+| `SessionService` | `unauthenticated` without a cookie or such a token, and for an ID token, another client's token, a workload's exchange or an ended session; `permission_denied` for another identity, or a client-only, global or `contains` listing, without operator; `invalid_argument` for an empty `identity`, or `every_identity` with anything but `client_id` |
 
 ## Guides
 
@@ -345,7 +346,7 @@ RFC 8693 exchange on `/token`. It applies when `requested_token_type` is the typ
 | Parameter | Value |
 |---|---|
 | `grant_type` | `urn:ietf:params:oauth:grant-type:token-exchange` |
-| `requested_token_type` | `urn:sluis:params:oauth:token-type:github-installation-token` (Go: `tokens.TypeSluisGitHubInstallationToken`); the old spelling `urn:access-roster:params:oauth:token-type:github-installation-token` (`tokens.TypeGitHubInstallationToken`) is accepted until v1.76. The response's `issued_token_type` repeats the one asked |
+| `requested_token_type` | `urn:sluis:params:oauth:token-type:github-installation-token` (Go: `tokens.TypeSluisGitHubInstallationToken`); the old spelling `urn:access-roster:params:oauth:token-type:github-installation-token` (`tokens.TypeGitHubInstallationToken`) is still accepted. The response's `issued_token_type` repeats the one asked |
 | `audience` | `github-app:<catalogue id>`, one |
 | `subject_token` | GitHub Actions token for the issuer URL, federated ServiceAccount token, or sign-in access token |
 | `subject_token_type` | `urn:ietf:params:oauth:token-type:jwt` (first two), `urn:ietf:params:oauth:token-type:access_token` (sign-in) |

@@ -11,7 +11,7 @@ Paths are relative to the installation's prefix. Times are UTC. `<profile>` and 
 | `records/<profile>/<tenant>/<yyyy>/<mm>/<dd>/<hh>/<ULID>` | One object per ingest batch | ingest | Yes, the profile's retention |
 | `catalogue/<app>/<version>` | The application's catalogue at that version | ingest | Yes |
 | `seals/<profile>/<tenant>/<yyyy>/<mm>/<dd>/<hh>.jws` | One seal per profile, tenant and hour | notary | Yes, as the records it covers |
-| `keys/roots.jwks` | The trust anchors, as a JWK Set | the operator | No, versioned |
+| `keys/roots.jwks` | The trust anchors, as a JWK Set | the notary, once, if absent; otherwise the operator | No, versioned |
 | `keys/delegations/<thumbprint>/<ULID>.jws` | Delegations to a signing key | a root | No |
 | `keys/revocations/<ULID>.jws` | Revocations of a signing key | a root | No |
 
@@ -26,6 +26,7 @@ Paths are relative to the installation's prefix. Times are UTC. `<profile>` and 
 | `hash` | Lower-case hex SHA-256 of that canonical encoding |
 | Lines | A writer embeds canonical bytes as they are. A reader canonicalises `record` before hashing, so other whitespace still checks. A line is never changed, merged or reordered. Line numbers, from one, address a record in an index |
 | Tenant with `/` | Cannot be written; the writer keeps the record aside with the reason. `@platform` is valid |
+| Put | Conditional (`If-None-Match: *`): an object is added and a key never replaced |
 | Retention | Set on the put from the profile ([0045](../../decisions/0045-s3-object-lock-as-the-record.md), [0056](../../decisions/0056-lock-modes-and-store-tiers.md)) |
 
 Each line:

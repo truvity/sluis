@@ -20,6 +20,8 @@ The API is on [pkg.go.dev](https://pkg.go.dev/github.com/truvity/sluis/audit/sdk
 | `Bounds` | size limits; default `record.Default` |
 | `Version`, `Instance` | this process on every record; the writer replaces the observer's identity with the one it verified |
 | `Hooks` | `OnDropped`, `OnFailed`, `OnWritten`, `OnRefused`: where a deployment counts and alerts |
+| `SelfReporting` | for an emitter whose sink is the component it emits about: every action is delivered `async`, whatever the catalogue declares. An application leaves it false |
+| `Logger` | where a dropped record is written when no `OnDropped` hook is wired. Default `slog.Default()` |
 
 There is no outbox option and no file. Decided in [0054](../../decisions/0054-two-deliveries-and-a-durable-ack.md).
 

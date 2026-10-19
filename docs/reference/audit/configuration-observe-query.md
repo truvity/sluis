@@ -21,7 +21,8 @@ The keys of the indexer (`audit-observe`), the query service (`audit-query`) and
 | key | type | default | meaning |
 |---|---|---|---|
 | `listen` | `listen` | `:8080` | the address `/healthz` and `/readyz` are served on. `/healthz` says the process is up (the liveness probe); `/readyz` says it can work now (the readiness probe): the index database answers and the archive's catalogues can be listed. A failing check is named in the 503, never its error |
-| `archive` | `archive`, required | | the archive to follow (`bucket`, `prefix`). It has no `lockMode`: this process reads. The catalogues and their extension schemas are read from it too |
+| `deployment` | path, required | | the profile configuration: its `presets` are the stores followed, and its `profiles` say which preset each profile is in |
+| `archive` | `archive` | none | what the process adds to the presets: `stateRoot`, `sluisRoot`, `sluisDir` and `ca`. It has no `kmsKey`: this process reads. The catalogues and their extension schemas are read from the archive too |
 | `database` | `database`, required | | the index, as the indexer's **own** role (`audit migrate --observe`): read and write on the index and its cursors, nothing of the deduplication table, not the owner, and not the writer's or the query service's |
 | `settle` | duration | `2m` | how far behind now the cursor stays. An object's key is fixed when its put starts and it is visible when it ends, so it must be longer than a put can take and than the clocks of the writers and of this process can disagree. It is the least time between a record's acknowledgement and its appearance in search |
 | `interval` | duration | `5m` | the poll: how often a pass runs when nothing woke it. Without a `wake` an object is searchable after the longer of `settle` and the time to the next pass, so at worst after `interval`; with one the woken pass reschedules itself for when the object is old enough, the delay is about `settle` whatever `interval` is, and `interval` only bounds a lost notification |
@@ -51,14 +52,14 @@ A failed pass is retried at the next poll. `/readyz` fails after `readiness.fail
 | `grants` | path, required | | the grants file, below |
 | `sink` | `sink`, required | | the writer every read is recorded through: its `url`, or the ingest `sqs` queue of a writer that runs elsewhere ([AWS](../../guides/audit/operate/aws-run-readers-in-kubernetes.md)) |
 | `require` | `logged`, `queued` or `archived` | none: checks nothing | the weakest durability the writer's acknowledgements may carry. Needs `sink.expect` at least as strong ([durability](configuration-writer.md#durability-require-forward-consume)) |
-| `deployment` | path | none | the profile configuration. A grants preset needs it, because it turns roles into the deployment's own profiles |
+| `deployment` | path | none | the profile configuration. Required with `archive` and with `s3scan`. A grants preset needs it, because it turns roles into the deployment's own profiles |
 | `searcher` | `postgres` or `s3scan` | `postgres` | `postgres` is the index; `s3scan` is the archive, within a budget, for a deployment with no database. The scan orders by `occurred_at` only and refuses `recorded_at`, so a deployment on it can search the trail but cannot follow it: there is no live tail ([search](../../concepts/audit/search.md#tail)) |
 | `database` | `database` | | the index, as the query service's **own** role (`audit migrate --reader`): `usage` on the schema, `select` on the index's tables, not the owner. Tenant row-level security binds only a non-owner. Required unless `searcher` is `s3scan` |
-| `archive.bucket`, `archive.prefix` | `bucket`, string | | what `s3scan` reads, and where Get finds a record's object. Required with `s3scan`. Without it Get still answers, with where the copy is and nothing about whether it has been verified (nothing yet sets that: it is for seals). The service's region is `archive.bucket.region` |
+| `archive` | `archive` | none | what the process adds to the presets (`stateRoot`, `sluisRoot`, `sluisDir`, `ca`). Required with `s3scan`, which reads the stores of the deployment's presets, and where Get finds a record's object. Without it Get still answers, with where the copy is and `seal_unknown` set |
 | `exports.bucket` | `bucket`, required with `exports` | | a separate bucket with no Object Lock, which clears it. Without `exports` the export operation is refused. It inherits nothing from the archive: name its endpoint, path style and `credentialsSecret` here |
 | `exports.expiry` | duration | `168h` | how long an export is kept before the bucket clears it |
 | `exports.linkValid` | duration | `1h` | how long a download link works |
-| `keys` | `keys` | none | the writer's key provider, which turns resolve on. With provider `none`, or no `keys`, there is nothing to resolve and the RPC is `unimplemented`. `local` reads the writer's key directory, which must be shared; `transit` signs in as the query service's own identity, never the writer's |
+| `keys` | `keys` | none | the writer's key provider, which turns resolve on. Needs `archive`. Without `keys` there is nothing to resolve and the RPC is `unimplemented`. `adapter: local` reads the writer's `rootFile`, which must be shared; `transit` signs in as the query service's own identity, never the writer's |
 <!-- /generated -->
 
 The service's limits are fixed, not configured: `filter` 4 terms, `sort` 4, `in` 100 values, `limit` 1000. See the [API reference](api.md).
@@ -127,7 +128,7 @@ The `access-roster` grants preset reads groups named `<scope>:audit:<role>`, the
 |---|---|
 | Union | Every matching rule and audit group counts, per request. On the profile asked for, the tenants of the covering grants are unioned. The read's record names all of them (`acme:audit:viewer,all:audit:security`) |
 | Profiles | A union never crosses profiles |
-| Windows | An unbounded grant on a profile makes the answer unbounded. Two different windows on one profile are refused |
+| Windows | A window is never lent to another grant's tenants. A grant that another covers (its tenants over its window) is set aside. The grants left must share one window, or the request is `denied` |
 
 The service refuses to start in these cases:
 

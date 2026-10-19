@@ -31,9 +31,10 @@ See [sluis on AWS Lambda](../../concepts/sluis/lambda.md) and [the Pulumi librar
 | `{"kind":"tick","controller":"github"\|"slack","target":"<id>"}` | One pass of one target | EventBridge Scheduler, one schedule per target |
 | `{"kind":"run","controller":"github"\|"slack","target":"<id>"}` | The same pass, "run now" | The console, through the `invoke` trigger adapter (`InvocationType: Event`) |
 | `{"kind":"clients"}` | One reconcile of the generated client secrets, and nothing else | EventBridge Scheduler |
-| `{"kind":"refresh"}` | The name before `clients`, accepted for one release: the same reconcile, and one directory refresh under the refresh lease (`DirectoryRefresh.Rate`, 15 minutes) where the directory is hosted in the process, none where `google.remote` is set | EventBridge Scheduler |
+| `{"kind":"refresh"}`, `{"kind":"refresh","workspace":"<id>"}` | The Google function: one directory refresh of every workspace, or of one, under the refresh lease (`DirectoryRefresh.Rate`, 15 minutes). On the issuer the old name of `clients`, accepted for one release: the same reconcile, and a refresh only where the process hosts the directory | EventBridge Scheduler |
+| `{"kind":"cloudflare"}` | The Cloudflare function: rotate the credentials that are due (`CloudflareRotation`) | EventBridge Scheduler |
 | `{"kind":"check"}` | Each declared secret is read; a missing one fails it | A deploy |
-| `{"kind":"backup"}`, `{"kind":"backup","resume":true}` | The [backup module](backup.md)'s function only: a backup; `resume` answers `idle` since format 2; the library no longer creates a resume schedule | EventBridge Scheduler |
+| `{"kind":"backup"}`, `{"kind":"backup","resume":true}` | The [backup module](backup.md)'s function only: a backup; `resume` answers `idle` since format 2; the library no longer creates a resume schedule. The restore function's events are in [backup](backup.md#calls) | EventBridge Scheduler |
 
 A target is a GitHub organisation, `github:links` or a Slack workspace. A pass holds its DynamoDB lease and returns `{"kind":"tick","target":"acme","outcome":"ran"}`.
 
@@ -76,7 +77,7 @@ A failed pass, or a `tick` for an unrun target, returns an error.
 | Variable | Meaning |
 |---|---|
 | `SLUIS_CONFIG` | Service document, `/opt/sluis/sluis.yaml`. The library sets it |
-| `OTEL_*` | OpenTelemetry's own. Use the [OTLP Lambda layer](https://github.com/truvity/observability/blob/master/docs/integrations/aws-lambda.md); `Telemetry.Env` also accepts the layer's `SLUIS_*` settings, `OPENTELEMETRY_*` and `AWS_LAMBDA_EXEC_WRAPPER`. The layer's old `ACCESS_ROSTER_*` spelling is accepted until v1.76 |
+| `OTEL_*` | OpenTelemetry's own. Use the [OTLP Lambda layer](https://github.com/truvity/observability/blob/master/docs/integrations/aws-lambda.md); `Telemetry.Env` also accepts the layer's `SLUIS_*` settings, `OPENTELEMETRY_*` and `AWS_LAMBDA_EXEC_WRAPPER`. The deprecated `ACCESS_ROSTER_*` prefix of the layer's settings is still accepted |
 
 No other variable, flag or secret exists. The start refuses `SLUIS_ROLE`, `SLUIS_CONFIG_FILE`, `SLUIS_SECRET_FILES`, `ssm:<path>` values and [retired variables](configuration.md#retired-environment-variables).
 
@@ -97,7 +98,7 @@ The library renders both from `LambdaArgs.Installation` ([inputs](pulumi-library
 | `apiVersion`, `policy.file` | Fixed |
 | `secrets` | `{source: ssm, root: /sluis/<instance>, region, layout: v5}`, plus `kmsKeyId: <ParameterKeyArn>` when set. Another `kmsKeyId` or `layout` is refused |
 | `ports.dynamodb.tables` | The tables of the modules the function reads, from `TableNames` |
-| `recovery.passwordSecret`, `recovery.verifierSecret`, `recovery.enabled` | `enabled` from `Recovery`. `verifierSecret` is `recovery/verifier`; the password is not named |
+| `recovery.passwordSecret`, `recovery.verifierSecret`, `recovery.enabled`, `conformance.verifierSecret` | `enabled` from `Recovery`. `verifierSecret` is `recovery/verifier` (`conformance/verifier` with `conformance.enabled`); the password is not named |
 | State secret name under `signingKey.kms` or `signingKey.kmsWrapped` | Generated |
 | `adapters.trigger.settings.github`, `.slack` | With `invoke`: this function |
 | `signingKey.verifyOnly` | From `VerifyOnly`: `file` under `/opt/sluis/verify-keys/`, `kid`, `alg`, `until` (RFC 3339) |

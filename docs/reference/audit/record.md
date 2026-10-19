@@ -10,11 +10,11 @@ The writer archives the proto of a record's major beside the schema on first use
 |---|---|---|
 | `id` | emitter | UUIDv7; idempotency key at every hop |
 | `occurred_at` | emitter | RFC 3339 UTC |
-| `recorded_at` | writer | drives the tail cursor |
+| `recorded_at` | writer | drives the tail cursor; from a queue, the message's `SentTimestamp` |
 | `schema_version` | emitter | `major.minor` |
 | `catalogue_version` | emitter | resolves extension schemas |
 | `source` | emitter | namespace of `action` |
-| `observer` | writer | verified publisher identity, version, instance |
+| `observer` | writer | verified publisher identity, version, instance; from a queue, what the message's `SenderId` maps to |
 | `sequence` | emitter | monotonic per instance |
 | `action` | emitter | `resource.verb` under `source` |
 | `operation` | emitter | seven values |
@@ -30,7 +30,7 @@ The writer archives the proto of a record's major beside the schema on first use
 | `meter` | emitter | name, quantity, unit, kind, dimensions |
 | `attributes` | emitter | bounded map |
 | `unmapped` | emitter or adapter | what could not be mapped |
-| `origin_hash` | writer | SHA-256 of the wide record |
+| `origin_hash` | writer | SHA-256 of the wide record, made after the stamp; a stamp in a queue message's body is replaced |
 | `profile` | writer | which copy this is |
 
 ## Bounds

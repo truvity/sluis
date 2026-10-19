@@ -23,7 +23,7 @@ Everything one installation writes, beneath its `prefix`:
 | Placement | A reader finds a record by its ingest hour, not its own date |
 | Names | A profile name must not contain `/`. A record whose tenant id contains `/` is dead-lettered |
 | Catalogue | Written once. The same bytes again succeed; other bytes under the version stop the writer at start-up, or at the first record of a catalogue it did not start with |
-| `identity/` | Exists only when a key provider is configured. `keys.provider: none` (no `keys` block) is the default ([0055](../../decisions/0055-no-pseudonymisation-keys-by-default.md)) |
+| `identity/` | Exists only when a key provider is configured. No `keys` block is the default ([0055](../../decisions/0055-no-pseudonymisation-keys-by-default.md)) |
 | v0 archive | `profile=<p>/tenant=<t>/year=...`, `digest/` and `verified/` are read by nothing in v1. The previous release's CLI (v0.6.x) reads them. A bucket holding both needs both lifecycle rule sets |
 | Exports | A separate bucket without Object Lock, with a lifecycle rule expiring `export/`. `exports.bucket` of the query configuration takes its own `endpoint`, `pathStyle` and `credentialsSecret`, inheriting none from the archive |
 | Lifecycle | The chart creates no buckets ([0065](../../decisions/0065-archive-retention-and-lifecycle.md)). The environment's bucket carries one rule per profile on `<prefix>/records/<profile>/`: Glacier Instant Retrieval at 30 days, Deep Archive at 1 year, expiration only after lock expiry. The profile leads `records/` because a lifecycle filter matches a literal prefix |
@@ -37,7 +37,7 @@ Scope every role under the installation's prefix: the resource is `arn:aws:s3:::
 
 | role | on the archive, under its prefix | elsewhere |
 |---|---|---|
-| **writer** | `s3:PutObject`, `s3:PutObjectRetention`, `s3:GetObjectRetention`, `s3:PutObjectLegalHold` under `records/`, `catalogue/`, `schema/`, `dlq/`, `holds/` and `identity/` (where there are keys); `s3:GetObject` and `s3:ListBucket` on `records/`, `catalogue/`, `holds/`, `schema/`, and `identity/` where there are keys | `kms:GenerateDataKey`, `kms:Encrypt` on the bucket's key |
+| **writer** | `s3:PutObject`, `s3:PutObjectRetention`, `s3:PutObjectLegalHold` under `records/`, `catalogue/`, `schema/`, `dlq/` and `identity/` (where there are keys); `s3:GetObject` on the same and `holds/`; `s3:ListBucket` | `kms:GenerateDataKey`, `kms:Decrypt` on the bucket's key |
 | **verify job** | `s3:GetObject`, `s3:ListBucket`; nothing is put | `kms:Decrypt` on the bucket's key |
 | **indexer** (`audit-observe`) | `s3:GetObject`, `s3:ListBucket` on `records/`, `catalogue/` and `schema/`; nothing is put | `kms:Decrypt` on the bucket's key |
 | **query service** | `s3:GetObject`, `s3:ListBucket` | `s3:PutObject`, `s3:GetObject` on the exports bucket; `kms:Decrypt` |
@@ -53,7 +53,8 @@ Scope every role under the installation's prefix: the resource is `arn:aws:s3:::
 | Rule | Detail |
 |---|---|
 | Separation | The writer may not put under `seals/` or `keys/`. Verify job, indexer and query service write nothing into the archive |
-| Deletes | No role gets `s3:DeleteObject`, `s3:DeleteObjectVersion` or `s3:BypassGovernanceRetention` |
+| Deletes | No role gets `s3:DeleteObject`, `s3:DeleteObjectVersion` or `s3:BypassGovernanceRetention`. The Pulumi library's bucket policy also denies those two and `s3:PutBucketObjectLockConfiguration` to every principal but its break-glass roles |
+| Records are written once | The writer's put under `records/` carries `If-None-Match: *`. The Pulumi library allows it only with `s3:if-none-match: *` |
 | Legal hold | Only the writer holds `s3:PutObjectLegalHold`, and a put sends the header only when placing a hold. A refusal on a plain put means a version that sent it as OFF on every put: upgrade, do not grant |
 | `schema/` | The writer reads the last composition back on every start. A policy that allows put but not get makes it write one object, take a 403 and die in a loop |
 
