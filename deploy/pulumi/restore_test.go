@@ -284,3 +284,105 @@ func TestBackupAndRestoreShareAStack(t *testing.T) {
 		t.Error("the two documents do not differ by backup.role")
 	}
 }
+
+// The restore document carries `backup.recipients` and `backup.verify` when
+// they are given (issue 697), and neither when they are not.
+func TestTheRestoreDocumentRendersVerifyAndRecipients(t *testing.T) {
+	seed := make([]byte, 32)
+	seed[0] = 7
+	_, recipient, err := arp.AgeKeypairFromSeed(seed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec, _ := mustRestore(t, func(a *arp.RestoreArgs) {
+		a.Recipients = pulumi.ToStringArray([]string{recipient})
+		a.Verify = &arp.RestoreVerifyArgs{
+			Query: "https://audit-query.example.test", TokenFile: "/tmp/audit/token", Observer: "sluis-staging-backup",
+		}
+	})
+	doc := layerDocument(t, rec, "staging-restore-config")
+	rs, _ := at(t, doc, "backup", "recipients").([]any)
+	if len(rs) != 1 || rs[0] != recipient {
+		t.Errorf("backup.recipients = %v, want [%s]", at(t, doc, "backup", "recipients"), recipient)
+	}
+	want := map[string]any{"query": "https://audit-query.example.test", "tokenFile": "/tmp/audit/token", "observer": "sluis-staging-backup"}
+	got, _ := at(t, doc, "backup", "verify").(map[string]any)
+	if len(got) != len(want) {
+		t.Errorf("backup.verify = %v, want %v", got, want)
+	}
+	for k, v := range want {
+		if got[k] != v {
+			t.Errorf("backup.verify.%s = %v, want %v", k, got[k], v)
+		}
+	}
+
+	rec, _ = mustRestore(t, func(a *arp.RestoreArgs) {
+		a.Verify = &arp.RestoreVerifyArgs{Query: "http://127.0.0.1:8080", TokenFile: "/tmp/t", Profile: "kept", AnyObserver: true}
+	})
+	doc = layerDocument(t, rec, "staging-restore-config")
+	if v := at(t, doc, "backup", "verify").(map[string]any); v["anyObserver"] != true || v["profile"] != "kept" || v["observer"] != nil {
+		t.Errorf("backup.verify = %v, want anyObserver and the profile", v)
+	}
+	if _, set := doc["backup"].(map[string]any)["recipients"]; set {
+		t.Error("backup.recipients rendered with no Recipients given")
+	}
+
+	rec, _ = mustRestore(t, nil)
+	doc = layerDocument(t, rec, "staging-restore-config")
+	for _, k := range []string{"verify", "recipients"} {
+		if _, set := doc["backup"].(map[string]any)[k]; set {
+			t.Errorf("backup.%s rendered with nothing given", k)
+		}
+	}
+}
+
+func TestRestoreVerifyIsHeldToWhatTheRestoreAccepts(t *testing.T) {
+	ok := arp.RestoreVerifyArgs{Query: "https://audit-query.example.test", TokenFile: "/tmp/t", Observer: "sluis-staging-backup"}
+	for name, mut := range map[string]func(*arp.RestoreVerifyArgs){
+		"no query":            func(v *arp.RestoreVerifyArgs) { v.Query = "" },
+		"plain http":          func(v *arp.RestoreVerifyArgs) { v.Query = "http://audit-query.example.test" },
+		"not a URL":           func(v *arp.RestoreVerifyArgs) { v.Query = "audit-query" },
+		"no token file":       func(v *arp.RestoreVerifyArgs) { v.TokenFile = "" },
+		"no observer":         func(v *arp.RestoreVerifyArgs) { v.Observer = "" },
+		"observer and any":    func(v *arp.RestoreVerifyArgs) { v.AnyObserver = true },
+		"another scheme":      func(v *arp.RestoreVerifyArgs) { v.Query = "ftp://audit-query.example.test" },
+		"http on another 127": func(v *arp.RestoreVerifyArgs) { v.Query = "http://audit.localhost.example.test" },
+	} {
+		v := ok
+		mut(&v)
+		if _, _, err := buildRestore(t, func(a *arp.RestoreArgs) { a.Verify = &v }); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+	for _, q := range []string{"https://audit-query.example.test", "http://localhost:9000", "http://[::1]:9000", "http://127.0.0.1"} {
+		v := ok
+		v.Query = q
+		if _, _, err := buildRestore(t, func(a *arp.RestoreArgs) { a.Verify = &v }); err != nil {
+			t.Errorf("%s: %v", q, err)
+		}
+	}
+}
+
+// The restore function of a stack takes the backup function's recipients.
+func TestTheRestoreTakesTheBackupsRecipients(t *testing.T) {
+	rec, _, err := run(t, func(ctx *pulumi.Context, _ func(string, pulumi.StringInput)) error {
+		b, err := arp.NewBackup(ctx, "staging-backup", &arp.BackupArgs{BackupCommon: backupCommon(t)})
+		if err != nil {
+			return err
+		}
+		_, err = arp.NewRestore(ctx, "staging-restore", &arp.RestoreArgs{
+			BackupCommon:    backupCommon(t),
+			RestoreInvokers: arp.RestoreInvokers{AdminRoleArns: []string{adminRole}, BreakglassRoleArns: []string{breakglassRole}},
+			Recipients:      b.Recipients,
+		})
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := at(t, layerDocument(t, rec, "staging-backup-config"), "backup", "recipients").([]any)
+	r, _ := at(t, layerDocument(t, rec, "staging-restore-config"), "backup", "recipients").([]any)
+	if len(b) == 0 || !slices.Equal(b, r) {
+		t.Errorf("restore recipients %v, backup recipients %v", r, b)
+	}
+}

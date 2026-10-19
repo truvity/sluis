@@ -3,6 +3,7 @@
 ### Added
 
 - **Each `/authorize` request leaves one info line saying whether it carried PKCE.** The line is `authorization request` with `pkce=true|false`, `pkce_method` (the method named, `plain` when a challenge named none) when there is a challenge, `client_id`, and the request's method, path, user agent and request id. The challenge and the verifier are never logged. It shows which clients still send no challenge before `pkce: required` is set on them.
+- **`NewRestore` renders `backup.recipients` and `backup.verify`.** `RestoreArgs.Recipients` (pass `Backup.Recipients` of the same instance) is the restore document's `backup.recipients`, which an unverified restore needs to compare the sidecar with; `RestoreArgs.Verify` (`Query`, `TokenFile`, `Profile`, and one of `Observer` and `AnyObserver`) is its `backup.verify`, held at plan to the rules the restore applies at start. Both are optional and render nothing when unset, so an existing stack is unchanged. The library provisions no query token: `TokenFile` names a file the function's environment provides. Not yet: the audit writer's `senders` table is still not rendered by the audit library, so on Lambda no record carries the backup function's observer until it is, and a verified restore there needs `AnyObserver` meanwhile ([#697](https://github.com/truvity/sluis/issues/697)).
 
 ### Fixed
 

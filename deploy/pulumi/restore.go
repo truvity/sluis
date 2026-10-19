@@ -3,6 +3,8 @@ package sluispulumi
 import (
 	"errors"
 	"fmt"
+	"net/netip"
+	"net/url"
 	"strings"
 	"time"
 
@@ -40,6 +42,100 @@ type RestoreArgs struct {
 	// RestoreInvokers are the principals the function's resource policy allows.
 	// Required.
 	RestoreInvokers RestoreInvokers
+	// Recipients are the age recipients every backup of the instance is
+	// encrypted to, rendered as `backup.recipients`: Backup.Recipients of
+	// NewBackup for the same instance. The restore compares a backup's sidecar
+	// with them, and an unverified restore (`allowUnverified`) is refused without
+	// them. Optional, and recommended: unset, only a verified restore can run.
+	Recipients pulumi.StringArrayInput
+	// Verify is `backup.verify`: how the restore proves, against the audit
+	// trail, that a backup is the one the backup function made. Unset, every
+	// restore is refused unless it is started with `allowUnverified`.
+	Verify *RestoreVerifyArgs
+}
+
+// RestoreVerifyArgs is `backup.verify` of the restore document
+// (docs/reference/sluis/backup.md, Provenance).
+type RestoreVerifyArgs struct {
+	// Query is the audit installation's query service: https, or http on a
+	// loopback address. Required.
+	Query string
+	// TokenFile is the file in the function's environment that holds the bearer
+	// token the query service accepts, such as one a layer writes. The library
+	// provisions no token. Required.
+	TokenFile string
+	// Profile is the audit profile that keeps the `activity` category; the
+	// binary's default (`activity`) when empty.
+	Profile string
+	// Observer is the id the audit writer stamps on the backup function's
+	// records (the observer its `senders` table maps the backup role to). A
+	// record stamped by any other is refused. Required unless AnyObserver.
+	Observer string
+	// AnyObserver accepts a record stamped by anyone: whoever may send to the
+	// audit queue can then vouch for a forged backup, and a start logs a
+	// warning. The explicit opt-out of Observer.
+	AnyObserver bool
+}
+
+// validate holds the arguments to what the restore role's document accepts.
+func (v *RestoreVerifyArgs) validate() error {
+	if v == nil {
+		return nil
+	}
+	var errs []error
+	if err := verifyQueryURL(v.Query); err != nil {
+		errs = append(errs, fmt.Errorf("Verify.Query %q: %w", v.Query, err))
+	}
+	if v.TokenFile == "" {
+		errs = append(errs, errors.New("Verify.TokenFile is required: the query service answers nobody it cannot name"))
+	}
+	switch {
+	case v.Observer == "" && !v.AnyObserver:
+		errs = append(errs, errors.New("Verify.Observer is required: the id the audit writer stamps on the backup function's records "+
+			"(or AnyObserver, which lets any sender of audit records vouch for a backup)"))
+	case v.Observer != "" && v.AnyObserver:
+		errs = append(errs, errors.New("Verify.Observer and Verify.AnyObserver are one or the other"))
+	}
+	return errors.Join(errs...)
+}
+
+// render is the `backup.verify` block.
+func (v *RestoreVerifyArgs) render() map[string]any {
+	out := map[string]any{"query": v.Query, "tokenFile": v.TokenFile}
+	if v.Profile != "" {
+		out["profile"] = v.Profile
+	}
+	if v.Observer != "" {
+		out["observer"] = v.Observer
+	}
+	if v.AnyObserver {
+		out["anyObserver"] = true
+	}
+	return out
+}
+
+// verifyQueryURL refuses a query-service address that is not https, or http on
+// a loopback host: the token and the answer cross it. The binary holds
+// `backup.verify.query` to the same rule at start.
+func verifyQueryURL(raw string) error {
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		return errors.New("not an https address")
+	}
+	switch u.Scheme {
+	case "https":
+		return nil
+	case "http":
+		h := u.Hostname()
+		if h == "localhost" {
+			return nil
+		}
+		if ip, err := netip.ParseAddr(h); err == nil && ip.IsLoopback() {
+			return nil
+		}
+		return errors.New("http is for a loopback address only: use https")
+	}
+	return errors.New("not an https address")
 }
 
 // Restore is the component. Its fields are the outputs.
@@ -101,7 +197,8 @@ func (p *backupPlan) restoreAliasArns() []string {
 }
 
 // NewRestore creates the restore function: the release zip with a
-// `backup.role: restore` document, whose role may write every module's table
+// `backup.role: restore` document (with `backup.recipients` from Recipients
+// and `backup.verify` from Verify when they are given), whose role may write every module's table
 // (the maintenance flag included), parameters and blob prefixes, read the
 // archive and its key, and invoke its own aliases to continue a paused restore.
 //
@@ -117,13 +214,14 @@ func NewRestore(ctx *pulumi.Context, name string, args *RestoreArgs, opts ...pul
 	if args.Archive.Create != nil {
 		return nil, errors.New("sluispulumi: RestoreArgs.Archive.Create: the restore function reads an archive and creates none; NewBackup creates it")
 	}
-	if err := args.RestoreInvokers.validate(); err != nil {
+	if err := errors.Join(args.RestoreInvokers.validate(), args.Verify.validate()); err != nil {
 		return nil, fmt.Errorf("sluispulumi: %w", err)
 	}
 	p, err := args.plan(RoleRestore)
 	if err != nil {
 		return nil, err
 	}
+	p.verify = args.Verify
 	if p.Function.TimeoutSeconds < MinRestoreTimeoutSeconds {
 		return nil, fmt.Errorf("sluispulumi: Function.TimeoutSeconds %d is under %d: "+
 			"the restore keeps back %s of every slice, and a shorter timeout leaves it no time to work",
@@ -140,7 +238,7 @@ func NewRestore(ctx *pulumi.Context, name string, args *RestoreArgs, opts ...pul
 	fn, err := buildFunction(ctx, name, p, pulumi.String(arnPrefix+"s3:::"+p.Archive.Bucket), classes, noRetry, true,
 		func(env ModuleEnv, g ArchiveGrant) ([]map[string]any, error) {
 			return RestoreRoleStatements(env, g, self)
-		}, nil, out)
+		}, args.Recipients, out)
 	if err != nil {
 		return nil, err
 	}

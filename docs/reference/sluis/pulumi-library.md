@@ -195,6 +195,8 @@ The role trusts `pods.eks.amazonaws.com` for this cluster and ServiceAccount.
 | `BackupCommon` | As `BackupArgs` | The same installation and archive. `NewBackup` of the same instance must be in the stack: it creates the restore identity this function reads. `Archive.Create` is refused: `NewBackup` makes the bucket. `FunctionName` defaults to `sluis-<instance>-restore` |
 | `RestoreInvokers` | Required | `AdminRoleArns` and `BreakglassRoleArns`, at least one role each. A wildcard, an account root, a user, or a role in both lists is refused |
 | `Function.TimeoutSeconds` | 900 | At least 180, twice `RestoreMargin` (90 s): the slice a restore keeps back before it pauses and continues itself |
+| `Recipients` | None | `backup.recipients`: pass `Backup.Recipients` of the same instance. A restore compares each backup's sidecar with them, and an unverified restore (`allowUnverified`) is refused without them |
+| `Verify` | None | `backup.verify` ([provenance](backup.md#provenance)): `Query` (https, or http on loopback), `TokenFile` (a file in the function's environment holding the query service's bearer token; the library provisions none), `Profile`, and one of `Observer` (the id the audit writer stamps on the backup function's records) and `AnyObserver`. Held to the restore's own rules at plan. Unset, every restore needs `allowUnverified` |
 
 | Detail | Behavior |
 |---|---|

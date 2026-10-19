@@ -62,6 +62,17 @@ func TestEveryRenderedDocumentLoadsInItsRuntime(t *testing.T) {
 			write(t, "restore", name, archiveFiles(t, rs.one(t, layerType, "staging-restore-config"))["sluis/sluis.yaml"])
 		}
 	}
+	// the restore with backup.verify and backup.recipients.
+	_, recipient, err := arp.AgeKeypairFromSeed(make([]byte, 32))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rv, _ := mustRestore(t, func(a *arp.RestoreArgs) {
+		a.AuditQueueURL = queue
+		a.Recipients = pulumi.ToStringArray([]string{recipient})
+		a.Verify = &arp.RestoreVerifyArgs{Query: "https://audit-query.example.test", TokenFile: "/tmp/audit/token", Observer: "sluis-staging-backup"}
+	})
+	write(t, "restore", "verify recipients", archiveFiles(t, rv.one(t, layerType, "staging-restore-config"))["sluis/sluis.yaml"])
 
 	// the issuer: the audit installed, used, off, or named by the estate; S3 or
 	// external blobs; the one table or a table per module.
