@@ -18,7 +18,7 @@ Deploy the Lambda functions from your own versioned S3 bucket, with the release 
 2. Pin the zip and its digest, or let the library read the digest from the signed `checksums.txt`. Leave `Package` empty to deploy the release the library is.
 
    ```go
-   Package:       "sluis-issuer_1.77.0_linux_arm64.zip",   // may be the mirror's https URL
+   Package:       "sluis-issuer_1.77.1_linux_arm64.zip",   // may be the mirror's https URL
    PackageSHA256: "<digest from checksums.txt>",           // or leave it out and set Release
    Release: &sluispulumi.ReleaseArgs{
        ResolveChecksums: true,                              // verifies checksums.txt.sigstore.json first

@@ -21,9 +21,9 @@ Signing is keyless. The short-lived certificate names `.github/workflows/release
 2. Run the script on a tag.
 
    ```sh
-   just release-verify v1.77.0
+   just release-verify v1.77.1
    # or, without the repository's toolchain:
-   hack/release-verify.sh v1.77.0
+   hack/release-verify.sh v1.77.1
    ```
 
    It downloads the release and fails on the first of these:
@@ -38,7 +38,7 @@ Signing is keyless. The short-lived certificate names `.github/workflows/release
 3. To verify one image by hand:
 
    ```sh
-   ref=ghcr.io/truvity/sluis/sluis:1.77.0
+   ref=ghcr.io/truvity/sluis/sluis:1.77.1
    cosign verify "$ref" \
      --certificate-identity-regexp '^https://github.com/truvity/sluis/.github/workflows/release.yaml@refs/tags/v' \
      --certificate-oidc-issuer https://token.actions.githubusercontent.com
