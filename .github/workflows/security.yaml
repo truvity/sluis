@@ -45,6 +45,9 @@ jobs:
         with:
           python-version: "3.13"
       - run: hack/docs-site.sh _site
+      # The pages link to each other as /sluis/..., the path the site is served
+      # under (site_url). Put the site under that path so the checker finds them.
+      - run: mkdir linkroot && mv _site linkroot/sluis
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .lycheecache
@@ -53,7 +56,7 @@ jobs:
       - id: lychee
         uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
         with:
-          args: --config lychee.toml --no-progress --root-dir "${{ github.workspace }}/_site" '_site/**/*.html'
+          args: --config lychee.toml --no-progress --root-dir "${{ github.workspace }}/linkroot" 'linkroot/sluis/**/*.html'
           fail: false
           output: lychee-report.md
       - if: steps.lychee.outputs.exit_code != '0'
