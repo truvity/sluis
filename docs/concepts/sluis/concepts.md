@@ -26,7 +26,8 @@ A workspace is a directory tenant. A Slack workspace is a Slack team, always wri
 | proof | Something a service verifies without authenticating anyone: a sign-in's ID token, a CI token or a ServiceAccount token. | [Trust](trust.md) |
 | the waist | The internal group name, the one currency of authorization, never re-mapped. | [Trust](trust.md) |
 | federated issuer | An OpenID issuer whose tokens are accepted for exchange, trusted by its public key set alone. | [Verify and issue](verify-and-issue.md) |
-| recovery | The way in when no directory can vouch: a ServiceAccount token checked by the API server. | [Recovery](recovery.md) |
+| recovery | The way in when no directory can vouch: a ServiceAccount token checked by the API server, or an SRP-6a password. | [Recovery](recovery.md) |
+| harness | A client the conformance test account may sign in to, marked `harness: true`. | [Recovery](recovery.md) |
 
 ## Policy
 
@@ -37,6 +38,7 @@ A workspace is a directory tenant. A Slack workspace is a Slack team, always wri
 | matcher | A condition on a verified proof: a CI repository and ref, a ServiceAccount, an address or its domain. | [Policy](policy.md) |
 | claim fragment | What an internal group adds to a token. Fragments deep-merge, and a scalar conflict is refused at load. | [Policy](policy.md) |
 | lifetime | The shortest across the caller's groups, then the client's cap. | [Policy](policy.md) |
+| client document | A client that describes itself by URL, admitted only from an allow-listed origin and always public. | [Policy](policy.md#why-a-self-described-client-is-proportionate) |
 | client | A relying party that asks for a token, declared by the deployment. Its `requires` says who may be issued one. | [Policy clients](../../reference/sluis/policy-clients.md) |
 | resource | What a token is for when that is not the client, named with `resource` (RFC 8707). It has its own `requires`. | [Policy](../../reference/sluis/policy.md#resources--what-a-token-is-for) |
 | scope | A role held over one workspace, the first segment of `<scope>:<thing>:<role>`. | [Trust](trust.md#naming) |
@@ -82,7 +84,7 @@ A workspace is a directory tenant. A Slack workspace is a Slack team, always wri
 | audit installation | The [audit](../audit/README.md) installation that keeps the trail, in this application's namespace. | [Audit](audit.md) |
 | action | One declared thing that can happen, such as `roster.person.signed_in`. | [Audit](audit.md) |
 | record | One action that happened or was refused. Each is also a log line sharing its id. | [Audit](audit.md) |
-| block | The one delivery that waits: a recovery sign-in is refused if its record cannot be kept. | [Audit](audit.md) |
+| block | The delivery that waits: a recovery sign-in, a maintenance change or a restore bypass is refused if its record cannot be kept. | [Audit](audit.md) |
 | async | Every other delivery, queued in the process and retried with backoff. | [Audit](audit.md) |
 
 ## Decided in

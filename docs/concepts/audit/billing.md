@@ -1,6 +1,6 @@
 # Billing and metering
 
-Usage billing is a projection of records the installation already keeps. A billable action is an audit record that carries a quantity. Nothing here is in the request path.
+Usage billing is a projection of records the installation already keeps. A billable action is an audit record that carries a quantity. The metering copy is built. The rollups and the statement are designed, not built.
 
 ## Where a billable record goes
 
@@ -11,16 +11,14 @@ The catalogue declares a billable action with `meter: {name, quantity_path, outc
 | 1 | catalogue | the application declares the meter | built |
 | 2 | emit | the record carries `meter{name, quantity, unit}` | built |
 | 3 | writer | splits a `billing` copy and dedupes by record id | built |
-| 4 | rollups and statement | a rollup row per tenant, meter and hour at index time; a monthly CronJob writes the statement | rollups partly built, statement not built |
+| 4 | rollups and statement | a rollup row per tenant, meter and hour at index time; a monthly CronJob writes the statement | designed, not built |
 | 5 | export | the application pushes the totals or invoices from the statement | the application's |
-
-The indexer reads the meter fields from the object. It does not add anything to the request path.
 
 ## What a billing record holds
 
 A billable record carries `meter` with `name`, `quantity` (decimal string), `unit`, `kind` (`count` or `gauge`) and flat `dimensions`.
 
-The billing copy keeps `id`, `occurred_at`, `recorded_at`, `source`, `action`, `tenant_id`, `meter` and `origin_hash`. It omits actor and subject, so the two copies of one record cannot be joined on a person.
+The billing copy keeps `id`, `occurred_at`, `recorded_at`, `source`, `action`, `outcome`, `tenant_id`, `meter` and `origin_hash`. It omits actor and subject, so the two copies of one record cannot be joined on a person.
 
 Where a deployment runs pseudonymisation keys, the two copies also carry different pseudonyms for one person.
 
@@ -34,6 +32,8 @@ A billable action is `block`. If the record cannot be kept, the operation does n
 
 ## Projection and period close
 
+This section is the design. No code creates the tables.
+
 | table | columns |
 |---|---|
 | `usage_dedup` | `id`, `source`, `seen_at`, kept for the framework profile's dedupe window |
@@ -44,13 +44,9 @@ The period closes `close_after_hours` after its end (default 72). Later events a
 
 The statement is immutable. It names the period, the rollups it summed and the seal of the archive it was computed from. It is written under the metering profile's lock.
 
-Reprocessing replays the period's billing copies into a fresh rollup and diffs it against the statement. The diff is kept as the reconciliation.
-
-## Rating
-
-A rating engine, such as a payment provider's meters or an in-house one, receives rollups in pre-aggregated mode. Use an idempotency key per tenant, meter and hour. The rating engine is never the evidence store.
-
 ## What to watch
+
+The signals apply once rollups exist.
 
 | signal | meaning |
 |---|---|

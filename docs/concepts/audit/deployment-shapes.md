@@ -11,8 +11,6 @@ The [deployment page](../../get-started/audit/README.md) lists the shapes: servi
 | [direct](direct-mode.md) | internal service, or no stream | is the writer | the receiver's pods | one flush interval plus the batch in flight |
 | [stream](stream-mode.md) | a product with many pods, metering or quotas | publishes to JetStream | N consumers, scaled apart | milliseconds |
 
-Switching modes changes the receiver's configuration, not any record.
-
 ## AWS Lambda and the hybrid
 
 [AWS Lambda](aws-lambda.md) runs the writer and the notary as Lambda functions behind an SQS queue, built by a Pulumi library. Its status is on the [capabilities](../../reference/audit/capabilities.md) page.
@@ -31,25 +29,25 @@ How much of the stack an installation runs is a separate axis: the [levels](leve
 
 | storage | direct | stream | holds |
 |---|---|---|---|
-| S3, locked where a profile demands | the environment's bucket, the application's prefix | the same | the record only |
-| Postgres | one database, in its own cluster if needed | one database in the application's cluster | index, cursors, rollups, dedupe table, registry |
+| S3, locked in the `attested` preset | the environment's bucket, the application's prefix | the same | the record only |
+| Postgres | one database, in its own cluster if needed | one database in the application's cluster | index, cursors, dedupe table, registry, wrapped keys with `keys.state.backend: database` |
 | JetStream | not used | one stream on the application's account | records not yet archived |
-| Valkey or another cache | not used | the application's cache, with quotas | counters, corrected hourly |
+| Valkey or another cache | not used | designed for [quotas](usage-quotas.md), not built | counters, corrected hourly |
 | OpenBAO | not used unless a key provider is chosen | the same | pseudonymisation keys, off by default |
 | pod disk | nothing | nothing | nothing |
 
 The index is a projection. `audit reindex` rebuilds it from the archive, so losing it costs search time and no evidence, and it needs no backup.
 
-The bucket belongs to the environment. It has Object Lock, replication and a deny-delete policy, and each application writes its own prefix.
+The bucket belongs to the environment, and each application writes its own prefix. Each install preset has a store of its own: see [presets and their storage](../../reference/audit/profiles.md#presets-and-their-storage).
 
 ## Extensions
 
-Both extensions are switched on per installation. Neither adds anything to the request path.
+Both extensions are designed, not built. The chart accepts their switches and renders nothing for them.
 
 | extension | adds | needs |
 |---|---|---|
-| [billing](billing.md) | rollups at index time, an immutable monthly statement | a metering profile |
-| [usage quotas](usage-quotas.md) | a usage consumer, a counter cache, an hourly reconciler | stream mode |
+| [billing](billing.md) | rollups at index time, an immutable monthly statement; the metering copy is built | a metering profile |
+| [usage quotas](usage-quotas.md) | a usage consumer, a counter cache, an hourly reconciler; none is built | stream mode |
 
 ## Before either mode
 

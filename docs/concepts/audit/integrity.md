@@ -6,11 +6,11 @@ The archive shows that nothing was removed, nothing was changed, and the operato
 
 1. **Hashes.** Every object names its `sha256` and each record line carries its `hash`. `audit verify` recomputes both from the archive alone. This shows each object is the one written. It cannot show that an object was removed or added.
 
-2. **The lock.** On the record tier the store is written in Object Lock compliance mode. Nobody, the account root included, can overwrite or delete an object before its retention ends.
+2. **The lock.** On the record tier the store is written in Object Lock compliance mode. Nobody, the account root included, can overwrite or delete an object before its retention ends. The library's bucket policy denies the bypass of the lock to every principal but the break-glass roles, and a put never replaces an object.
 
 3. **Seals.** The notary writes one signed seal per profile, tenant and hour, empty hours included. Seals chain through `prev` and carry a Merkle root over the hour's record hashes. A seal that disagrees with the bucket shows an object added, removed or changed after sealing.
 
-The current hour is not sealed yet. A seal is due after the settle window and a grace. Until then the lock protects the objects.
+The current hour is not sealed yet. A seal is due after the settle window and a grace. Until then the lock protects the objects. The writer never puts an object into a sealed hour: it uses the first later hour with no seal.
 
 ## Seals come from a job
 

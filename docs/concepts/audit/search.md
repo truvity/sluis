@@ -34,10 +34,13 @@ The core columns come from the record. An extension property is indexed only whe
 | `events_data` | the filterable extension properties |
 | `facet_counts` | what the [Audit page](audit-page.md) navigation reads |
 | `seen` | the writer's dedupe record |
+| `index_cursor` | how far observe has read, per profile and tenant |
+| `catalogues` | the registry of registered catalogues |
+| `audit_wrapped_keys` | wrapped pseudonym keys, with `keys.state.backend: database` |
 
 No shipped framework profile states a purge schedule, so the purge job's `identifyingAfter` has no default.
 
-The three event tables are partitioned monthly on `recorded_at`. The unique key is `(profile, id, recorded_at)`. The write path creates partitions, so a missed job loses nothing. Indexes are tenant-leading composites, BRIN on time, GIN on `target_ids`.
+The three event tables are partitioned monthly on `recorded_at`. The unique key is `(profile, id, recorded_at)`. Observe creates the partitions, so a missed job loses nothing. Indexes are tenant-leading composites, BRIN on time, GIN on `target_ids`.
 
 Row-level security backs the grant. The policies read two transaction-local settings: `audit.tenant_ids`, a JSON array of permitted tenants, and `audit.all_tenants`, which only an operator's grant sets. A connection that sets neither sees nothing.
 
@@ -63,15 +66,15 @@ The archive scan orders by `occurred_at` only and refuses `recorded_at`. `search
 
 The scan's `Capabilities` state that it counts no facets and orders only by occurred time within an ingest day. It refuses other requests with the reason.
 
-Its cursor is an object and a line. A cursor belongs to the searcher that issued it, and one from elsewhere is refused.
+A cursor belongs to the searcher that issued it.
 
 The scan walks ingest days, per the [bucket contract](../../reference/audit/bucket-contract.md). A query on `occurred_at` reads ingest days from its start to its end plus `Lateness` (default 24 hours). A record that arrived later is not found. The index has no such limit.
 
-A budget in objects and seconds stops a scan and returns a cursor. A query without a time range walks back to a horizon, not to the beginning. You set both.
+A budget in objects and seconds stops a scan and returns a cursor. A query without a time range walks back to a horizon, not to the beginning.
 
 ## Reading is recorded
 
-Every answer records `audit.search`, `audit.facets` or `audit.get`, naming the caller, the target and the allowing rule. A refused read is recorded too.
+Every answer records `audit.search`, `audit.facets`, `audit.get` or `audit.pseudonym.resolved`, naming the caller, the target and the allowing rule. A refused read is recorded as a failure with the refusal as its reason, once a minute per caller.
 
 A record outside the grant is reported as absent, not forbidden. The service carries an `OnUnrecorded` hook. Alert on it: an unrecorded read means the service is failing.
 
@@ -82,7 +85,7 @@ audit reindex --profile <p> --from <day> --to <day> \
     --database <url> --bucket <b> --catalogue <file>...
 ```
 
-The range is of ingest days, read tenant by tenant in key order. Rerunning an indexed range is safe.
+The range is of ingest days. Rerunning an indexed range is safe.
 
 The catalogues are required. Without them the rebuild omits data columns, and a later run cannot repair that, because indexing counts a record once.
 

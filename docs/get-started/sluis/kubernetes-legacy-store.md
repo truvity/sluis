@@ -1,7 +1,7 @@
 # Tutorial: an existing Kubernetes installation on the legacy store
 
 !!! warning "Deprecated"
-    The legacy store (`ports.adapter: legacy`, the default) and Valkey are deprecated in v1.74.0 and removed in v1.75.
+    The legacy store (`ports.adapter: legacy`, the default) and Valkey are deprecated since v1.74.0. The removal announced for v1.75 has not shipped.
     Move off them with `sluis migrate`: see [migrate the State](../../guides/sluis/migrate/migrate-state.md).
 
 You have an installation on Kubernetes that keeps its state in Kubernetes objects and Valkey. By the end you can recognise the legacy store and keep it healthy. You also know the path to the DynamoDB state of [Kubernetes with AWS storage](kubernetes-aws.md).
@@ -10,10 +10,10 @@ Start a new installation from [Kubernetes with AWS storage](kubernetes-aws.md). 
 
 ## 1. Recognise it
 
-The adapter is `ports.adapter` in the service document, and it defaults to `legacy`. On a chart release the sign is the chart default `config.store: kubernetes` with no adapter named. Read the release's ConfigMap, named `<release>-config` (`sluis` below):
+The adapter is `ports.adapter` in the service document, and it defaults to `legacy`. On a chart release the sign is the chart default `config.store: kubernetes` with no adapter named. Read the issuer's ConfigMap, named `<release>-issuer-config` (`sluis` below):
 
 ```sh
-kubectl -n sluis get configmap sluis-config -o jsonpath='{.data.config\.yaml}' | grep -E 'store:|adapter|preset|valkey'
+kubectl -n sluis get configmap sluis-issuer-config -o jsonpath='{.data.config\.yaml}' | grep -E 'store:|adapter|preset|valkey'
 ```
 
 Expect `store: kubernetes`, and a `valkey:` block if sessions are shared across replicas. You see no `adapter: dynamodb`, no `preset` and no `adapters:` table. A DynamoDB installation logs `keeping state in DynamoDB` at start.

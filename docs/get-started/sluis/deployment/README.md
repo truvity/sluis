@@ -16,14 +16,4 @@ The module `deploy/pulumi/edge/aws` does not exist yet. It fronts the [AWS Lambd
 
 ## Kubernetes with OpenBao
 
-The preset is not built; see [adapters](../../../reference/sluis/adapters.md#availability). The OpenBao backends are in the [storage module](../../../concepts/storage/README.md). The design:
-
-- The charts sit behind the cluster gateway, so there is no truststore.
-
-- State (DynamoDB) and the blob bucket stay, reached through workload identity ([0030](../../../decisions/0030-workload-identity-on-both-platforms.md)).
-
-- OpenBao KV (State) and transit (keys) are reached through the JWT auth method with the projected ServiceAccount token.
-
-- Audit records go over HTTP to the in-cluster audit writer.
-
-Today, use [Kubernetes with AWS storage](../kubernetes-aws.md). Audit installs beside sluis by default; see [audit deployment](../../audit/README.md).
+The preset is not built; see [adapters](../../../reference/sluis/adapters.md#availability). The OpenBao backends are in the [storage module](../../../concepts/storage/README.md). Today, use [Kubernetes with AWS storage](../kubernetes-aws.md). Audit installs beside sluis by default; see [audit deployment](../../audit/README.md).

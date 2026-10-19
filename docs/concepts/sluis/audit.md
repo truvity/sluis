@@ -28,7 +28,7 @@ The actor is who acted. The subject is who the action concerns, and often differ
 
 A person is named by the address the directory knows, kept in clear. A GitHub login is treated the same way. The installation runs no pseudonymisation keys.
 
-Every record belongs to the audit tenant `@platform`. The process presents its own projected service-account token, or its cloud identity on Lambda, and the installation stamps that verified workload as the observer. The controllers inside the process report through the same path.
+Every record belongs to the audit tenant `@platform`. The process presents its own projected service-account token, or its cloud identity on Lambda, and the installation stamps that verified workload as the observer. Each module reports through the same path.
 
 An event caused by a request keeps the client's address, its User-Agent, the gateway's `X-Request-Id` and the trace. The outermost handler reads them once and passes them in the request context, including to the token endpoint's storage.
 
@@ -44,7 +44,7 @@ No token reaches the browser, and no call crosses origins. The person sees what 
 
 Almost every action goes on a bounded queue in the process before the request completes, and reaches the writer when it can. A slow trail never refuses a sign-in. To handle an unreachable installation, see [read the audit trail](../../guides/sluis/operate/read-the-audit-trail.md#3-when-the-installation-cannot-be-reached).
 
-A recovery sign-in fails closed. Its catalogue entry is `block`: the record must be in the installation before the sign-in succeeds, at the issuer and at the console's own door. When it cannot be, sluis refuses the sign-in and records the refusal.
+A recovery sign-in fails closed. Its catalogue entry is `block`: the record must be in the installation before the sign-in succeeds, at the issuer and at the console's own door. When it cannot be, sluis refuses the sign-in and records the refusal. A maintenance change, a recovery turn-off and a restore bypass are `block` too.
 
 Recovery therefore depends on the installation's writer. A deployment with no installation connected has no trail and does not refuse recovery ([recovery](recovery.md)).
 

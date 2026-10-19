@@ -24,9 +24,9 @@ flowchart TB
   callers --> rp
 ```
 
-sluis is not a database of record and authenticates nobody. The directories hold the people and the relying parties hold their own roles. sluis holds the policy, a directory snapshot, open sessions and what an operator connected through the console. The snapshot and sessions are disposable.
+sluis is not a database of record and authenticates nobody but the recovery account ([recovery](recovery.md)). The directories hold the people and the relying parties hold their own roles. sluis holds the policy, a directory snapshot, open sessions and what an operator connected through the console. The snapshot and sessions are disposable.
 
-The one thing it writes that outlives it is the audit trail, kept by an audit installation in the same namespace. See [audit](audit.md).
+The one thing it writes that outlives it is the audit trail, kept by an audit installation, in the same namespace or behind an SQS queue on Lambda. See [audit](audit.md).
 
 ## Containers
 
@@ -36,7 +36,7 @@ Browsers, the CLI and CI reach the issuer. Each module is a process of its own, 
 flowchart TB
   browser["Browser"]
   cli["sluisctl, kubelogin,<br/>GitHub Actions"]
-  gw["Envoy Gateway<br/>native OIDC"]
+  gw["Gateway<br/>Envoy native OIDC,<br/>or API Gateway"]
   subgraph ar["sluis"]
     subgraph iss["the issuer"]
       issuer["issuer<br/>login, sessions, signer"]
@@ -67,7 +67,7 @@ The controllers are passes in the GitHub and Slack modules. A module whose `remo
 
 The issuer holds the root of the hostname. The issuer URL is the `iss` claim in every token, and discovery sits at `/.well-known/openid-configuration`. The same document is served as RFC 8414 metadata at `/.well-known/oauth-authorization-server`. The console is mounted under `/console/`. See [the console](console.md).
 
-A login makes no network call except to the corporate directory. A client that identifies itself by a URL adds one bounded, cached HTTPS fetch of its own document, from an allow-listed host. While that host is unreachable and the ten-minute cache is cold or expired, that client cannot sign in.
+A login makes no network call except to the corporate directory. A client that identifies itself by a URL adds one bounded, cached HTTPS fetch of its own document, from an allow-listed host. While that host is unreachable and the cache (ten minutes by default) is cold or expired, that client cannot sign in.
 
 Each adapter chooses where State, Secrets and blobs live. See [ports](ports.md), [the store](store.md) and [adapters](../../reference/sluis/adapters.md). Replicas coordinate through the State port. See [high availability](../../guides/sluis/operate/high-availability.md).
 
@@ -80,6 +80,8 @@ One issuer sits in the middle. Everything to its left is a source of identity, a
 | Corporate directories | A workspace: credential, served domains, synced groups. Google is built. Entra is designed, not built. |
 | Clusters, for people | The cluster trusts the issuer. RBAC binds `<env>:k8s:<role>`. The kubeconfig runs `sluisctl kube-token`. |
 | Clusters, for workloads | A row naming the cluster's ServiceAccount key set. |
+| Cloudflare accounts | A minter module and a `cloudflare.grants` row per token. |
+| MCP servers | A `resources` row, and the `resource-proxy` sidecar for a stock server. |
 | AWS accounts | The issuer registered as an IAM OIDC provider, and `sluisctl aws` as the credential process. |
 | GitHub organisations | A controller App per organisation, and `github` bindings in the policy. |
 | Slack workspaces | A bot per workspace, and channels as policy or as console records. |
@@ -102,8 +104,8 @@ Three layers, and none is the fallback for another.
 |---|---|---|---|
 | Holds | The policy, a snapshot, open sessions, one signing key, read credentials | The people: passwords, MFA, devices, groups | Their own roles |
 | Decides | Who may hold a token for which client | Who exists and who is in which group | What a group opens |
-| Authenticates | Nobody | Everybody | Nobody |
-| When down | No new sign-ins. Sessions and tokens live to expiry. Recovery by cluster proof. | The last snapshot stands for the hold window. | Unaffected |
+| Authenticates | Nobody, bar the recovery account | Everybody | Nobody |
+| When down | No new sign-ins. Sessions and tokens live to expiry. Recovery by cluster proof or password. | The last snapshot stands for the hold window. | Unaffected |
 
 For failures, see [failure semantics](failure-semantics.md).
 

@@ -30,9 +30,9 @@ Each tool solves two or three of the seven problems. sluis solves all seven with
 
 When two conflict, the earlier one wins.
 
-1. Verify, never authenticate. Passwords, user records and MFA belong to the identity provider. There are no users here, only sessions.
+1. Verify, never authenticate. Passwords, user records and MFA belong to the identity provider. Two accounts are the exception: recovery and a conformance test account. There are no users here, only sessions.
 2. Configuration is chart values. The policy is a file in git that the console reads and never edits, so `git log` is the history of access. The console writes only bootstrap, removals and a few audited records of its own. They never name an internal group.
-3. Almost nothing is a secret: one signing key, the directory credentials, the GitHub App keys and the Slack bot tokens. Machines prove themselves with their platform's tokens.
+3. Almost nothing is a secret: one signing key, and each module's own credentials. Machines prove themselves with their platform's tokens.
 4. Serve only what is needed. Three grants and three endpoints cover a browser, a CLI and a machine. Every served endpoint must pass the conformance suite.
 5. One issuer, one policy, one vocabulary: one `iss`, one file, one flat `groups` claim.
 6. Authoritative or hold. A failed probe, a stale snapshot or a doubly claimed domain never removes access.

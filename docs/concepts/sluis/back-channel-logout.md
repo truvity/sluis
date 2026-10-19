@@ -8,7 +8,7 @@ A client that declares `backchannel_logout_uri` closes the window. When a sign-o
 
 Session Management and Front-Channel Logout load something from the issuer's origin inside the application's page. Browsers block third-party cookies by default, so both fail quietly. Back-channel logout is an HTTP POST between two servers and does not depend on the browser.
 
-The logout token carries `typ: logout+jwt` and no `nonce`. A relying party that checks too little then cannot mistake it for an ID token. Tests pin both.
+The logout token carries `typ: logout+jwt` and an `exp` two minutes after `iat`. It has no `nonce`. A relying party that checks too little then cannot mistake it for an ID token. Tests pin both.
 
 ## What a proxy can and cannot do
 
@@ -30,7 +30,7 @@ Delivery failures are logged and never raised. A relying party that cannot be re
 
 A person's own sign-out does not revoke agent-class sessions, so sluis tells none of their clients. It sends no logout token, not even the subject-only one.
 
-An `end_session` that names an agent client ends that client's sessions and tells it. Another person signing in in the same browser ends everything and tells every client ([sessions](sessions.md#sign-out-keeps-agent-connections-and-says-so)).
+An `end_session` whose verified `id_token_hint` was issued to an agent client ends that client's sessions and tells it. Another person signing in in the same browser ends everything and tells every client ([sessions](sessions.md#sign-out-keeps-agent-connections-and-says-so)).
 
 ## Revoking somebody else's session
 

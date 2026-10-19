@@ -43,14 +43,14 @@ Each algorithm in `signingKey.additional` has its own ring. Two keys for one alg
 Put no caching header in front of `/keys`. The issuer sets none on `/keys` or discovery, so a go-oidc verifier refetches
 on an unknown `kid`. A proxy that adds a hint reopens the stale-JWKS window that `activationDelay` and `overlap` close.
 
-The client-metadata-document cache is per replica, in process memory for 10 minutes. Replicas can see old and new values
+The client-metadata-document cache is per replica, in process memory, 10 minutes by default. Replicas can see old and new values
 for that long. Each fetch re-checks that the document's `client_id` matches its URL.
 
 <a id="the-controllers-in-the-one-process"></a>
 
 ## The controllers and the rollout
 
-The GitHub and Slack controllers run inside `sluis issuer`, so the Deployment rolls with the default
+Each controller runs in its module's Deployment, so the Deployment rolls with the default
 `RollingUpdate`. An old pod leaves when the new one is Ready: policy loaded, stores open, audit catalogue accepted
 (`/readyz` on `probes.address`, default `:7070`). Pods that crash at start leave the running pods alone.
 
@@ -80,12 +80,11 @@ removals need the directory to vouch.
 
 ## Do upgrades stay safe?
 
-The chart sets no `strategy`, so a rollout is a rolling update. A new pod reads the same key and computes the same
-schedule from the same State. It never mints a `kid` the pods beside it cannot verify. On a process-local store a
-rollout loses what that replica held.
+The chart sets no `strategy`, so a rollout is a rolling update. A new pod reads the same key and the same State,
+so it never mints a `kid` its neighbours cannot verify.
 
 ## Decided in
 
 - [ADR 0027](../../decisions/0027-the-state-port-nats-jetstream-and-dynamodb.md): the State port
 - [ADR 0029](../../decisions/0029-ticks-per-target-under-a-lease.md): ticks per target under a lease
-- [ADR 0037](../../decisions/0037-one-process-everywhere.md): one process everywhere
+- [ADR 0071](../../decisions/0071-least-privilege-modules-one-credential-holder-per-function.md): one process per credential holder

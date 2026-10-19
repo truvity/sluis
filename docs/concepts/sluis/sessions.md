@@ -10,7 +10,8 @@ The cookie `sluis_sso` holds 32 random bytes, base64url, with a `__Host-` prefix
 
 Sign-out ends the sign-in and every session under it, through `/logout` or `end_session`. The order is fixed: end the sign-in, revoke its sessions, write the audit record, tell the clients last. The work survives a browser disconnect for 30 seconds, and each back-channel logout takes at most 5. See [back-channel logout](back-channel-logout.md).
 
-- A request ends only what its cookie proves. An `id_token_hint` ends nothing.
+- `/logout` and `/end_session` show a *Sign out* page first. Its button, bound to the sign-in cookie, ends the sign-in. An `id_token_hint` naming the signed-in person skips the page.
+- `/authorize` binds each request to its browser with the cookie `__Host-sluis_authreq`.
 - When the store is unreadable, sign-out answers 503, ends nothing and keeps the cookie.
 - A new interactive sign-in ends the previous one.
 - An authorization code is bound to its sign-in. If the sign-in ended first, the token endpoint revokes the session and answers `invalid_grant`.
@@ -51,7 +52,7 @@ An agent authorization never completes silently. The person sees a consent page 
 | The browser sign-in passes its limit | Kept. |
 | Another person signs in in the same browser | Ended with the rest. |
 
-A person chooses one of three scopes. *Sign out all browsers and apps* keeps agents. *Disconnect all agents* keeps browsers. *Sign out everything* ends both and is the default. Operator revokes and directory removal ignore the class. See [the Sessions page](console.md#the-sessions-page).
+A person chooses one of [three scopes](people-and-agents.md#what-do-the-three-sign-out-scopes-end), and *Sign out everything* is the default. Operator revokes and directory removal ignore the class.
 
 ## What the console asks of the SSO session
 
@@ -59,7 +60,7 @@ The console reads the SSO session on every request, through the function silent 
 
 - Past the limit, or for a person the directory no longer admits, the request is refused and the sign-in ends.
 - An unreachable directory is answered from the hold window (`lifetimes.hold`, 4 hours by default). See [the directory model](directory-model.md).
-- A recovery sign-in is held to the absolute limit only. The method recorded at sign-in identifies it, never its subject.
+- A recovery sign-in is held to the absolute limit only. The method recorded at sign-in identifies it, never its subject. A refresh repeats the sign-in's `acr` and `amr`.
 
 ## Who may open which console
 

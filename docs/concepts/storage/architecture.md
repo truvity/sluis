@@ -3,7 +3,7 @@
 ```text
 product (sluis, audit)
    │  asks by purpose / by path
-   ├── storage/keys    Key: Encrypt, Decrypt, GenerateDataKey, MAC, PublicKey, Sign (direct signing is deprecated)
+   ├── storage/keys    Key: Encrypt, Decrypt, GenerateDataKey, MAC, PublicKey, Sign, Destroy (direct signing is deprecated)
    │      backends:    kms · transit · local (tests)
    └── storage/state   Store, Value[T]: versioned JSON objects
           backends:    ssm · s3 · openbao (KV v2) · memory (tests)
