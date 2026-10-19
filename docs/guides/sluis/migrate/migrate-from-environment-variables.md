@@ -1,6 +1,6 @@
 # Migrate from environment variables
 
-Move a deployment that configures `sluis` with environment variables, or the chart's old flat values, to the configuration file. The file is the only configuration since v1.52.4.
+Move a deployment that configures `sluis` with environment variables, or the chart's old flat values, to the configuration file. The file is the only configuration.
 
 ## Before you start
 

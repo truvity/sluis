@@ -1,4 +1,4 @@
-# Back up and restore what the console holds
+# Back up and restore the legacy store
 
 Keep a copy of what an operator connected through the console and cannot be minted again, and put it back after a loss.
 

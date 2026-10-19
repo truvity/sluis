@@ -174,7 +174,7 @@ how-to/migrate-from-an-idp.md: guides/sluis/migrate/migrate-from-an-idp.md
 how-to/migrate-from-environment-variables.md: guides/sluis/migrate/migrate-from-environment-variables.md
 how-to/migrate-from-google-group-sync.md: guides/sluis/migrate/migrate-from-google-group-sync.md
 how-to/migrate-from-the-access-issuer-chart.md: guides/sluis/migrate/migrate-from-the-access-issuer-chart.md
-how-to/migrate-secrets-layout.md: guides/sluis/migrate/migrate-secrets-layout.md
+how-to/migrate-secrets-layout.md: guides/sluis/upgrade/v1.74.md
 how-to/migrate-state.md: guides/sluis/migrate/migrate-state.md
 how-to/provide-a-valkey.md: guides/sluis/operate/provide-a-valkey.md
 how-to/read-the-audit-trail.md: guides/sluis/operate/read-the-audit-trail.md

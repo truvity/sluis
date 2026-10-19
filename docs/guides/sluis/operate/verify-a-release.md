@@ -21,14 +21,14 @@ Signing is keyless. The short-lived certificate names `.github/workflows/release
 2. Run the script on a tag.
 
    ```sh
-   just release-verify v1.74.0
+   just release-verify v1.77.0
    # or, without the repository's toolchain:
-   hack/release-verify.sh v1.74.0
+   hack/release-verify.sh v1.77.0
    ```
 
    It downloads the release and fails on the first of these:
 
-   1. An asset whose SHA-256 differs from `checksums.txt`, or a listed file that is not an asset.
+   1. An asset whose SHA-256 differs from `checksums.txt`, a listed file that is not an asset, or a Lambda zip that does not hold `bootstrap` alone (`hack/release-zips.txt`).
    2. A `checksums.txt.sigstore.json` that does not verify `checksums.txt` with `--certificate-identity-regexp '^https://github.com/truvity/sluis/.github/workflows/release.yaml@refs/tags/v'` and `--certificate-oidc-issuer https://token.actions.githubusercontent.com`.
    3. An asset with no attestation from `truvity/sluis/.github/workflows/release.yaml`.
    4. An image or Helm chart whose signature or attestation fails. The list is `hack/release-images.txt`: copy it beside the script. `RELEASE_VERIFY_SKIP_IMAGES=1` skips them.
@@ -38,7 +38,7 @@ Signing is keyless. The short-lived certificate names `.github/workflows/release
 3. To verify one image by hand:
 
    ```sh
-   ref=ghcr.io/truvity/sluis/sluis:1.74.0
+   ref=ghcr.io/truvity/sluis/sluis:1.77.0
    cosign verify "$ref" \
      --certificate-identity-regexp '^https://github.com/truvity/sluis/.github/workflows/release.yaml@refs/tags/v' \
      --certificate-oidc-issuer https://token.actions.githubusercontent.com
@@ -46,7 +46,7 @@ Signing is keyless. The short-lived certificate names `.github/workflows/release
      --signer-workflow truvity/sluis/.github/workflows/release.yaml
    ```
 
-Deploy by digest: verify the tag once, resolve its digest and pin it.
+Deploy by digest: verify the tag once, resolve its digest and pin it. The Pulumi library does this itself with `Release.ResolveChecksums` ([mirrored release](deploy-from-a-mirrored-release.md)).
 
 ## Troubleshooting
 

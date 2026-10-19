@@ -114,7 +114,7 @@ Once the directory works, set `recovery.enabled: false`, render and upgrade. To 
 
 ## Afterwards
 
-Keep the installation, rendered documents and `values.yaml` in your repository. To take a release, render and compare the old and new chart. Only the image tag and version labels should move: read other changes in the [CHANGELOG](../../../../CHANGELOG.md). Then `helm upgrade`.
+Keep the installation, rendered documents and `values.yaml` in your repository. To take a release, render and compare the old and new chart. Only the image tag and version labels should move; read other changes in the [CHANGELOG](../../../../CHANGELOG.md). Then `helm upgrade`.
 
   ```sh
   for v in OLD NEW; do helm template sluis oci://ghcr.io/truvity/charts/sluis --version $v --namespace sluis \

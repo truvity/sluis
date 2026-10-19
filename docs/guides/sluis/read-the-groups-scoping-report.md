@@ -4,7 +4,7 @@ Find out, before enforcing [groups scoping](../../concepts/sluis/groups-in-a-tok
 
 ## Before you start
 
-- Set `config.groupsScoping` to `report`, the default since v1.32.0. In `off` nothing is computed.
+- Set `config.groupsScoping` to `report`, the default. In `off` nothing is computed.
 
 - Read the service's logs: the log store, `kubectl logs`, or CloudWatch on Lambda.
 

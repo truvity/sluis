@@ -12,7 +12,7 @@ Replace a workspace credential, the session key, an OAuth client secret or a Sla
   - `session-key`: restart. It is read once while the stores are wired.
   - `github-links` (App): no restart. The record and credential are read on every use.
 
-- A rotation that has not taken effect looks like one that has, until a later restart picks up the value. A wrong value then takes the directory down at an unrelated moment.
+- A rotation that has not taken effect looks like one that has, until a later restart picks up a wrong value and takes the directory down.
 
 - A restore from a backup is a rotation and needs the same restart.
 

@@ -4,15 +4,18 @@ A workflow holds no secret. It requests its identity token, exchanges it at the 
 
 ## Before you start
 
-- `github.owners` is the trust boundary. Any repository gets a valid GitHub token, and an empty list verifies nothing.
+- `exchange.github.owners` is the trust boundary. Any repository gets a valid GitHub token, and an empty list verifies nothing.
 - The audience a workflow requests is the issuer's own URL. It is not configurable.
 - Deploy the issuer before you write `visibility` in a policy; an older issuer refuses it.
 
 ## 1. Trust the owner
 
 ```yaml
-github:
-  owners: [acme]
+exchange:
+  github:
+    owners: [acme]
+    ownerIds: [1234567]       # optional: pin by id, which a rename cannot change
+    repositoryIds: [7654321]  # optional: pin repositories by id
 ```
 
 ## 2. Map jobs to groups

@@ -66,15 +66,14 @@ Set the product's `state` and `keys` blocks ([adapter block reference](../../ref
 
 ## Verify
 
-Start a development server and run the backends' conformance tests:
+Run the conformance tests; the recipe starts its own development server:
 
 ```sh
-bao server -dev -dev-root-token-id=root -dev-listen-address=127.0.0.1:8200
 just test-openbao
 ```
 
 ## Roll back
 
-Keep the previous backend's policies until the new one has served traffic. State and keys are separate choices, so move them one at a time.
+Keep the previous backend's policies until the new one has served traffic. Move state and keys one at a time.
 
 The policies, line by line, are in the package documentation `storage/doc.go`.

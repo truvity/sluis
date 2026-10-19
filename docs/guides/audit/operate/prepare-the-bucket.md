@@ -8,7 +8,7 @@ Create a bucket on the right tier, with a prefix for this installation.
 
 - Enable Object Lock at creation. On a versioned AWS bucket you can turn it on later, one way: see [turn on the lock](aws-turn-on-object-lock.md).
 
-- Choose the prefix once: changing it moves every key. `prefix: ""` forecloses a second installation.
+- Choose the prefix once: changing it moves every key. An empty prefix forecloses a second installation.
 
 - The writer reads `schema/` on every start. Allow get as well as put, or it loops on 403.
 
@@ -29,15 +29,15 @@ Create a bucket on the right tier, with a prefix for this installation.
      --object-lock-enabled-for-bucket
    ```
 
-   Configure the bucket once per environment:
+   Configure the bucket once:
 
    - Versioning on, and a default compliance retention equal to the shortest profile's.
 
    - SSE-KMS with a customer-managed key. The writer encrypts, the query service and verify role decrypt.
 
-   - Public access blocked, and access logging on.
+   - Public access blocked and access logging on.
 
-   - A policy denying delete, shortening of the lock configuration and `s3:BypassGovernanceRetention` to everyone.
+   - A policy denying delete, a shorter lock and `s3:BypassGovernanceRetention` to all but the break-glass roles, and allowing the writer's put under `records/` only with `s3:if-none-match: *`.
 
    - Cross-region replication to another account, with retention metadata.
 
@@ -48,7 +48,7 @@ Create a bucket on the right tier, with a prefix for this installation.
      standard: {bucket: audit-eu-example-1, region: eu-example-1, prefix: audit/<application>/}
    ```
 
-3. Scope each role's IAM to the prefix. See [archive prefixes and IAM](../../../reference/audit/archive-prefixes-and-iam.md).
+3. Scope each role's IAM to the prefix: [archive prefixes and IAM](../../../reference/audit/archive-prefixes-and-iam.md).
 
 ## No-lock tier
 
@@ -70,7 +70,7 @@ On the record tier, `aws s3api get-object-lock-configuration` shows `Enabled`. A
 
 ## Roll back
 
-Delete an empty bucket; one with versions under compliance retention cannot be deleted. Remove the prefix's roles.
+Delete an empty bucket; one under compliance retention cannot be deleted. Remove the prefix's roles.
 
 ## Also
 

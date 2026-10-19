@@ -18,6 +18,7 @@ allow	*	`access-roster` grants preset|grants preset `access-roster`|name: access
 allow	docs/reference/sluis/chart-values.md	access-issuer	the page is generated from values.schema.json, whose nameOverride and fullnameOverride descriptions name the chart a migration comes from
 allow	docs/reference/sluis/sluisctl-wrappers.md	accessctl	the managed known-hosts file's old name, which sluisctl copies from once
 allow	docs/reference/sluis/sluisctl.md	(?i:accessctl)	the alias binary, default client id, ACCESSCTL_* variables and config directory sluisctl still reads
+allow	*	truvity/openbao/blob/master/docs/integrations/access-roster\.md	the OpenBao repository keeps the old file name of its sluis integration page
 allow	*	decisions/0003-deprecate-access-proxy\.md	ADR 0003's file name keeps the chart it retired: ADR file names never change, so links to it stay
 allow	docs/reference/sluis/endpoints.md	`accessctl`	the client id the client-secrets endpoint accepts (internal/issuer/clientsecrets_http.go ClientSecretsAudiences)
 link	CHANGELOG.md	docs/concepts/sluis/ports.md#the-nats-adapter	history: the heading went with the NATS adapter

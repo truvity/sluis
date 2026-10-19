@@ -34,7 +34,8 @@ Point the pod at an OpenTelemetry collector, then install the alerts and Grafana
    # alerts.yaml
    renders: alerts
    alerts:
-     namespace: sluis              # where the service runs
+     namespace: sluis              # where the service runs; on Lambda: lambda,
+     # namespaceLabel: k8s_namespace_name   # with this label, for the function's series
      ruleLabels:
        k8s_cluster_name: prod      # for the Alertmanager routing tree
    ```

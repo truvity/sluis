@@ -10,7 +10,7 @@ Catch a policy the service would refuse, or one that reads correctly and behaves
 ## 1. Load it in CI
 
 ```sh
-sluisctl policy render policy/ -o policy.yaml
+sluisctl policy render -o policy.yaml policy/
 ```
 
 Run it on every render of the policy. Exit 0 and the one document mean the loader's own checks passed. They catch an unknown key, a client with no `requires`, a redirect that is also a landing page and a vocabulary violation. Verify: an unknown key fails the job.

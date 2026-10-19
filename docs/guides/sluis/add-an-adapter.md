@@ -22,7 +22,7 @@ Start refuses an adapter whose requirements the platform does not meet. Import t
 
 ## 3. Pass the conformance suite
 
-Call `porttest.Run` (state), `porttest.RunSecrets`, `porttest.RunExport` or your concern's suite from a `conformance_test.go` in the package.
+Call `porttest.Run` (state), `porttest.RunSecrets` or your concern's suite from a `conformance_test.go` in the package.
 
 ## 4. Generate and check
 

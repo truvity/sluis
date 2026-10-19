@@ -15,14 +15,19 @@ Deploy the Lambda functions from your own versioned S3 bucket, with the release 
    Artifacts: &sluispulumi.ArtifactsArgs{Bucket: "example-artifacts"},
    ```
 
-2. Pin the zip and its digest from `checksums.txt`. The package may be the mirror's https URL.
+2. Pin the zip and its digest, or let the library read the digest from the signed `checksums.txt`. Leave `Package` empty to deploy the release the library is.
 
    ```go
-   Package:       "sluis-lambda_1.74.0_linux_arm64.zip",
-   PackageSHA256: "<digest from checksums.txt>",
+   Package:       "sluis-issuer_1.77.0_linux_arm64.zip",   // may be the mirror's https URL
+   PackageSHA256: "<digest from checksums.txt>",           // or leave it out and set Release
+   Release: &sluispulumi.ReleaseArgs{
+       ResolveChecksums: true,                              // verifies checksums.txt.sigstore.json first
+       BaseURL: "https://mirror.example.test/releases",     // a mirror copies both files unchanged
+       // TrustedRootJSON: "...",                           // air-gapped: a Sigstore root from a verified source
+   },
    ```
 
-   Leave `Package` empty to deploy the release the library is, with the digest read from that release's `checksums.txt`. To use a mirror of the release page, set `Release: &sluispulumi.ReleaseArgs{BaseURL: "https://mirror.example.test/releases"}`. A set `GITHUB_TOKEN` is sent to github.com.
+   A set `GITHUB_TOKEN` is sent to github.com.
 
 3. Run `pulumi preview`. The library downloads the zip once (cached by SHA-256), checks the digest and uploads it to `sluis/<version>/<sha256>-<file name>`. The function is created from that object version.
 
@@ -40,6 +45,7 @@ aws lambda get-function --function-name <name> --query Configuration.CodeSha256
 
 - "is not versioned": enable versioning on the bucket.
 - "is a development build" or "replaced by a local copy": the program has no release to fetch. Set `Package` or `Release.Version`.
+- "checksums.txt.sigstore.json ...": the mirror lacks the bundle. Copy it, or pass `PackageSHA256` from [a verified release](verify-a-release.md).
 - "has the SHA-256 ... not the ... asked for": the bytes are not the release's. Do not deploy them.
 
 The audit functions take the same fields on the audit library's `Args` ([reference](../../../reference/audit/aws-pulumi-library.md)). `LambdaArgs.Audit` passes the bucket on with its own `audit/` prefix.

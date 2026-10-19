@@ -93,7 +93,7 @@ if err != nil {
 
 The emitter fills the identifier, times, versions and sequence, and validates the record against the catalogue. Set `TenantId` to the customer organisation, or `@platform` for the application's own operations. Put identifiers in the record, never names or e-mail addresses. Record failures too: `RESULT_FAILURE` or `RESULT_DENIED` with a reason.
 
-Wrap the HTTP handler in `emit.Middleware(trustedHops)` to add client address, user agent, request id and trace id. If `trustedHops` is wrong, the trail records your load balancer as every actor's address.
+Wrap the HTTP handler in `emit.Middleware(trustedHops)` to add client address, user agent, request id and trace id. A wrong `trustedHops` records your load balancer as every actor's address.
 
 ### 4. Record from TypeScript
 
@@ -116,7 +116,7 @@ const receiver = createClient(SinkService, createConnectTransport({
 await receiver.write({ records: [record], delivery: Delivery.BLOCK });
 ```
 
-Fill `id` (a UUIDv7), `occurred_at`, `schema_version`, `catalogue_version` and `source` yourself. The receiver dead-letters a record the catalogue does not match.
+Fill `id` (a UUIDv7), `occurred_at`, `schema_version`, `catalogue_version` and `source` yourself.
 
 ## Verify
 

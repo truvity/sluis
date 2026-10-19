@@ -1,5 +1,7 @@
 # Connect an R2 credential broker
 
+> **Deprecated.** Use `sluisctl cloudflare r2 <preset>` ([Cloudflare tokens](../cloudflare-tokens.md)).
+
 A separate R2 credential broker trusts the issuer on an OIDC audience. It mints short-lived, prefix-scoped object-storage credentials. `sluisctl r2 [flags] [-- <args…>]` authenticates and runs the real `r2broker` binary ([reference](../../../reference/sluis/sluisctl-wrappers.md#r2-authenticate-then-run-the-real-r2broker-cli-unchanged)).
 
 sluis decides no bucket, prefix or permission. The broker maps a token's group to a grant. Use this page only for a store with no OIDC federation of its own. For S3, use [`sluisctl aws`](aws-account.md).

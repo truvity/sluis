@@ -6,6 +6,8 @@ Take an installation from no lock (`NONE`) to `GOVERNANCE`, then to `COMPLIANCE`
 
 - Set `Archive.ObjectLockMode`. It has no default.
 
+- `Archive.BreakglassRoleArns` names the roles that alone may change the lock. The role that applies the stack must be one.
+
 - Turning the lock on is one way. S3 never turns it off, and setting `NONE` again only removes the resource from the program.
 
 - Objects written before the switch stay unlocked. Lock them with `PutObjectRetention` or an S3 Batch Operations job.

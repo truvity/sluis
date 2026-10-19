@@ -71,8 +71,6 @@ Store the archive on Cloudflare R2 or another store that speaks the S3 API at it
 
    Keep `refreshInterval` plus the kubelet's sync well under the sluis preset's `lifetime - rotation`. A `subPath` mount does not follow the rotation.
 
-   Binaries before v1.74.0-rc.4 refuse `sluisDir`.
-
 ## Static credentials instead
 
 Without sluis, write a token's pair as a SecureString, outside Pulumi:

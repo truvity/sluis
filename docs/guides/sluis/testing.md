@@ -51,4 +51,4 @@ Run the OpenID Foundation suite by hand before a release that touches the provid
 
 ## What CI runs
 
-`just check` runs `build`, `test`, `lint`, `chart-lint`, `archive-check`, `docs-check`, `leak-canary`, `audit-catalogue` and `ts`. `.github/workflows/security.yaml` runs `just vuln` on its own. For audit action tests see [change the audit catalogue](change-the-audit-catalogue.md).
+`just check` runs the CI groups `ci-console`, `ci-web`, `ci-go-build`, `ci-go-test`, `ci-go-lint` and `ci-docs`, the jobs of `.github/workflows/ci.yaml`. `security.yaml` runs `just vuln` alone. For audit action tests see [change the audit catalogue](change-the-audit-catalogue.md).

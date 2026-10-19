@@ -58,7 +58,7 @@ exchange:
         # jwksUri: ""                   # optional: default <issuer>/.well-known/jwks.json
 ```
 
-An empty list verifies no AWS token; a bad row stops the issuer at start. Adding a row is a rollout ([configuration](../../../reference/sluis/configuration.md), `AWS_FEDERATION_FILE`).
+An empty list verifies no AWS token; a bad row stops the issuer at start. Adding a row is a rollout ([policy document](../../../reference/sluis/policy-document.md)).
 
 ### 4. Write the matcher
 

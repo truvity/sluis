@@ -6,8 +6,6 @@ Stop delivering a confidential client's secret by hand. The issuer makes it, kee
 
 - Use a confidential client (`kind: confidential`), a Secrets adapter that writes only if absent (`ssm` or `openbao`), and a State shared between replicas such as `dynamodb`. Start is refused otherwise.
 
-- Roll every replica first. An older binary refuses `secret: {generate: true}`.
-
 - If `clients/<id>/secret` exists when the issuer first looks, it is adopted unchanged and nothing rotates.
 
 ## 1. Declare the client as generated
@@ -17,6 +15,7 @@ clients:
   grafana:
     kind: confidential
     secret: {generate: true}   # was: secret: grafana-oidc
+    pkce: required             # when the relying party sends an S256 challenge
     requires: [devel:grafana:viewer]
     redirects: [/login/generic_oauth]
 ```

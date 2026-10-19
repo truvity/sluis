@@ -1,0 +1,3 @@
+# Procedures for releases whose tools are removed, kept as upgrade pages.
+
+guides/sluis/migrate/migrate-secrets-layout.md: guides/sluis/upgrade/v1.74.md
