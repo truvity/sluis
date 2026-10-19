@@ -182,9 +182,8 @@ Exactly one of `login`, `tokenFile` and `tokenSecret`.
 | `state` | `{root, address}` | | with `kms`: where the wrapped per-tenant secrets behind `pseudonym` are kept (the installation's SSM store). Nothing in it is usable without the pseudonym key |
 | `openbao` | `openbao` | | with `transit`: the engine and how to sign in |
 | `rootFile` | path | | with `local`: a file of 32 bytes |
-| `provider` | `none`, `local` or `transit` | | **deprecated**: the first releases' shape, still loaded. Use `adapter` and a key per purpose. Unset, or `none`, means no pseudonyms, no key material and no resolve ([0055](../../decisions/0055-no-pseudonymisation-keys-by-default.md)). The `local` and `transit` blocks beside it are deprecated with it |
 
-A key is an alias or a transit key name; an ARN or key id is refused. The archive's own `credentials` (`{root, address}`)
+Without `keys` there are no pseudonyms, no key material and no resolve ([0055](../../decisions/0055-no-pseudonymisation-keys-by-default.md)). A key is an alias or a transit key name; an ARN or key id is refused. The archive's own `credentials` (`{root, address}`)
 read `{accessKeyID, secretAccessKey}` from an `internal/` address, for an archive on an endpoint
 ([archive on R2](../../guides/audit/operate/archive-on-r2.md)).
 <!-- /generated -->
@@ -199,13 +198,12 @@ Every refusal is a start-up error naming the key. The grants file has its own, u
 | `mode: receiver` with `archive`, `catalogues`, `keys` or `consume`, or with neither `stream` nor `forward` |
 | `forward` with none or several of `nats`, `sqs`, `log`; `consume` with none or both of `nats`, `sqs`; `forward` in a writer |
 | `require: archived` in a receiver; `forward.log` without `require: logged`; `require` on an emitter with no `sink` |
-| A `writer` without `archive` |
 | `keys` with no `adapter`, or with the removed `provider`, `local` or `transit` keys |
 | An `openbao` with none or several of `login`, `tokenFile`, `tokenSecret` |
 | `secrets` with `root` and source `env`; source `file` or `ssm` with a root that is not an absolute directory or SSM path |
 | A `signer` with none or several of `kms`, `file` |
 | A database URL with a password |
-| A query service with the `postgres` searcher and no `database`, or `s3scan` and no `archive` |
+| A query service with the `postgres` searcher and no `database`, or `s3scan` with no `archive` or no `deployment`; an `archive` with no `deployment` |
 
 | Refused after the schema | Reason |
 |---|---|

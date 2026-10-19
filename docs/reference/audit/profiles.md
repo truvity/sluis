@@ -160,7 +160,7 @@ Composition only tightens, except for `external_identifiers_are_opaque`: declare
 | Case | Behaviour |
 |---|---|
 | Declared | A composed `external: pseudonym` is treated as `clear`. The writer refuses a record whose external actor, subject or person target carries a direct identifier (an address or whitespace), naming the field |
-| Not declared, `keys.provider: none` | The writer refuses to start if the catalogue declares an external actor kind or a person target type ([0055](../../decisions/0055-no-pseudonymisation-keys-by-default.md)) |
+| Not declared, no `keys` block | The writer refuses to start if the catalogue declares an external actor kind or a person target type ([0055](../../decisions/0055-no-pseudonymisation-keys-by-default.md)) |
 | `internal`, `scoped`, `omit` | Never relaxed |
 
 ## Validation

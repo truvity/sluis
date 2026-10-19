@@ -23,10 +23,10 @@ One binary, two roles chosen by `mode`.
 | `workloads` | path | | the file naming the issuers trusted to say which workload is publishing ([Workload identity](#workload-identity)). Exactly one of `workloads` and `anonymousWrites` |
 | `anonymousWrites` | `true` | | accept writes from callers nobody verified, stamped with no observer. For a trial install only |
 | `catalogues` | path | none | a directory of catalogues registered at start-up. An application that registers its own over `RegisterCatalogue` needs none. Not in a receiver |
-| `archive` | `archive` | | required in `writer` mode, refused in `receiver` mode |
+| `archive` | `archive` | none | what the process adds to the deployment's presets: `stateRoot`, `sluisRoot`, `sluisDir`, `ca` and `kmsKey`. Refused in `receiver` mode |
 | `database` | `database` | none | the shared deduplication table and the catalogue registry, in the application's Postgres, as the writer's **own** role (`audit migrate --writer`): it holds those tables and none of the index, which `audit-observe` writes. Without it the writer deduplicates in process and may run one replica only. The writer refuses to start on a schema version it does not know and never migrates itself |
 | `replicas` | integer, at least 1 | 1 | how many writers share this stream: the number of writer pods, which the writer cannot see for itself |
-| `keys` | `keys` | none, which is provider `none` | pseudonymisation keys. Not in a receiver |
+| `keys` | `keys` | none: no pseudonyms | pseudonymisation keys. Not in a receiver |
 | `forgetIdentities` | boolean | false | do not keep the identity behind each pseudonym, sealed under its key. By default it is kept, so that resolve can find it |
 | `require` | `logged`, `queued` or `archived` | `archived` for a writer, `queued` for a receiver | the weakest durability the chain may give ([0059](../../decisions/0059-sink-durability-and-transports.md)). At start-up the process wraps its chain in `sink.Guard` and refuses to run if the chain can never give it; a write acknowledged weaker fails. See [Durability](#durability-require-forward-consume) |
 | `forward.nats`, `.sqs`, `.log` | exactly one; `nats` and `sqs` as below | | a receiver's onward transport. Required in `receiver` mode (or `stream`, its NATS shorthand); refused in `writer` mode. `forward.nats` takes the keys of `stream` |
@@ -114,7 +114,7 @@ The Pulumi library puts the file in the function's configuration layer at `/opt/
 | `require` | `logged`, `queued` or `archived` | `archived` | the weakest durability the chain may give; the writer gives `archived` at best |
 <!-- /generated -->
 
-The notary Lambda reads `audit-notary`'s file ([audit-notary](configuration-jobs.md#audit-notary)) from the same place. Its `signer.kms` names the seal key by alias.
+The notary Lambda reads `audit-notary`'s file ([audit-notary](configuration-jobs.md#audit-notary)) from the same place. Its `keys.seal` names the seal key by alias.
 
 ## Workload identity
 

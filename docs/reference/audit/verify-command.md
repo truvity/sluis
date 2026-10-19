@@ -63,10 +63,13 @@ A range in the middle of a chain checks its first seal against the seal before t
 | `--profile <p>` | required; the profile to check |
 | `--from`, `--to` | the range of ingest time, `--to` not included |
 | `--last 24h` | the objects ingested in the last this long, ending at the hour that has closed; instead of `--from` and `--to` |
-| `--prefix <p>` | the installation's prefix in the bucket, as `archive.prefix` of the chart's configuration names it; omit only where the installation is at the bucket's root |
+| `--bucket <name>` | required; the bucket the archive is in |
+| `--prefix <p>` | the installation's prefix in the bucket, as the preset's `prefix` names it; omit only where the installation is at the bucket's root |
+| `--region <r>` | the bucket's region, when the environment does not name it |
 | `--root <thumbprints>` | also check the seals, trusting only the root keys with these thumbprints, comma separated; `--settle` and `--grace` set when a seal is due |
 | `--sink <writer>` | record what was checked through the writer. The scheduled job does; an auditor's run by hand should not |
 | `--deployment <file>` | the profile configuration, so the check knows what lock the profile demands. The scheduled job passes it; an auditor without it still gets keys, bytes and hashes checked, with nothing said about locks |
+| `--instance <name>` | the name the run records itself under |
 | `--json` | print the report as JSON |
 | `--endpoint`, `--path-style` | an S3-compatible store that is not AWS, as [put the archive on an S3-compatible store](../../guides/audit/operate/archive-on-r2.md) has it |
 <!-- /generated -->

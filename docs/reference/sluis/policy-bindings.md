@@ -73,7 +73,7 @@ slack:
     globex: {}                              # declared; its channels are bound elsewhere
 ```
 
-The Slack controller runs inside `sluis issuer`. It changes only `controllers.slack.enabledWorkspaces`; other workspaces are dry runs. See [Connect a Slack workspace](../../guides/sluis/connect/slack-workspace.md) and [the Slack reconciler](../../concepts/sluis/slack-reconciler.md).
+The Slack controller runs in the issuer. It changes only `controllers.slack.enabledWorkspaces`; other workspaces are dry runs. See [Connect a Slack workspace](../../guides/sluis/connect/slack-workspace.md) and [the Slack reconciler](../../concepts/sluis/slack-reconciler.md).
 
 | Key | Meaning |
 |---|---|

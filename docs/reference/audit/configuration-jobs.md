@@ -22,8 +22,10 @@ Seals the archive ([0061](../../decisions/0061-seals.md)). Hourly in the chart.
 <!-- generated: config-audit-notary -->
 | key | type | default | meaning |
 |---|---|---|---|
-| `archive` | `archive`, required | | the archive to read and to put seals in (`bucket`, `prefix`, `lockMode`, `kmsKey`); `lockMode` defaults to `compliance`, and a seal is locked as long as the records it covers |
-| `signer` | object, required | | exactly one of `kms`, `transit` and `file` |
+| `deployment` | path, required | | the profile configuration; its `presets` are the stores seals are put in, each profile's in the store of its preset, locked as long as the records it covers |
+| `archive` | `archive` | none | what the process adds to the presets: `stateRoot`, `sluisRoot`, `sluisDir`, `ca` and `kmsKey` ([shared blocks](configuration.md#shared-blocks)) |
+| `keys` | `keys` | | the seal key through the storage port: `keys.seal` names it, and `adapter` says which service holds it (`kms`, `transit` or `local`). Exactly one of `keys` and `signer` |
+| `signer` | object | | **deprecated**, the first releases' shape: exactly one of `kms` and `file`. Use `keys.seal` |
 | `signer.kms` | `{key, region}` | | an AWS KMS key, `ECC_NIST_P384` `SIGN_VERIFY`, by ARN, ID or alias; the credentials are the SDK's ambient ones, the notary's role |
 | `signer.file` | `{path}` | | a P-384 private key in PEM (PKCS#8 or SEC 1), for development |
 | `profiles` | list of strings, at least one, unique | every profile the archive has records for | the profiles to seal |
@@ -42,7 +44,7 @@ Checks the record objects of a range of ingest time against the [bucket contract
 | key | type | default | meaning |
 |---|---|---|---|
 | `deployment` | path, required | | the profile configuration; each object's lock is held to what its profile demands |
-| `archive` | `archive`, required | | the archive to read (`bucket`, `prefix`) |
+| `archive` | `archive` | none | what the process adds to the presets: `stateRoot`, `sluisRoot`, `sluisDir` and `ca`. It has no `kmsKey`: this job reads |
 | `profiles` | list of strings, at least one, unique | every profile the deployment composes | the profiles whose objects to check |
 | `last` | duration | `24h` | check the objects ingested in the last this long, ending at the hour that has closed |
 | `seals` | object | none | also check the seals of the range: `roots` (list of thumbprints, at least one, required) are the only keys trusted; `settle` (default `10m`, keep it equal to the notary's) and `grace` (default `1h`) say when a seal is due. Without it no seal is checked |

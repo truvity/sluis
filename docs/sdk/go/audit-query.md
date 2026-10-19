@@ -76,7 +76,15 @@ Keep the last `next` cursor. Asked later, it returns what was recorded since.
 
 ```go
 got, err := client.Get(ctx, connect.NewRequest(&auditv1.GetRequest{Profile: "security", Id: id}))
-p := got.Msg.GetProvenance()   // p.GetObjectKey(), p.GetLine(), p.GetDigestId(), p.GetVerifiedAt()
+p := got.Msg.GetProvenance()   // p.GetObjectKey(), p.GetLine(), p.GetDigestId(), p.GetVerifiedAt(), p.GetSealUnknown()
 ```
 
-Provenance names the archived copy and whether a seal vouches for it. The digest and time stay empty until seals exist. The service records every `Search` and `Get`.
+Provenance names the archived copy and whether a seal vouches for it:
+
+| getter | value |
+|---|---|
+| `GetDigestId` | the key of the seal covering the record's hour; empty until sealed |
+| `GetVerifiedAt` | empty until a verifier sets it |
+| `GetSealUnknown` | true when the service cannot tell whether the hour is sealed |
+
+The service records every read, and a refused one as a failure.

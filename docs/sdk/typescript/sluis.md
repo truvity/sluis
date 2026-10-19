@@ -3,7 +3,7 @@
 Entry points: the root (`fetchIdentity()`, `Identity`), `/react` (`useIdentity()`, `<UserBadge/>`) and `/server` (a Node verifier). The Go counterpart is the [Go module](../go/sluis.md). Set the registry scope once, in the [SDK overview](../README.md#installing-from-github-packages).
 
 ```sh
-yarn add @truvity/sluis@^1.8.0
+yarn add @truvity/sluis
 ```
 
 `react` (18 or later) and `@mui/material` (6 or later) are optional peers.

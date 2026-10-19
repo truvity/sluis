@@ -1,8 +1,8 @@
 # Go module
 
-The module `github.com/truvity/sluis` verifies a caller, exchanges tokens and evaluates policy. Packages: `identity`, `tokens`, `policy`, `policy/compile`, `config`, `backend` ([extending](../../guides/sluis/extend.md)). TypeScript: [`@truvity/sluis`](../typescript/sluis.md).
+The module `github.com/truvity/sluis` verifies a caller, exchanges tokens and evaluates policy. Packages: `identity`, `identity/resource`, `tokens`, `policy`, `policy/compile`, `config`, `backend` ([extending](../../guides/sluis/extend.md)). TypeScript: [`@truvity/sluis`](../typescript/sluis.md).
 
-Both verifiers of [trust](../../concepts/sluis/trust.md) return one `Verified`: `Subject, Email, Name, GivenName, FamilyName, Groups, ServiceAccount`. See [service to service](../../guides/sluis/connect/service-to-service.md).
+Both verifiers of [trust](../../concepts/sluis/trust.md) return one `Verified`: `Subject, Email, Name, GivenName, FamilyName, ClientID, Groups, ServiceAccount, Recovery`. See [service to service](../../guides/sluis/connect/service-to-service.md).
 
 ```go
 import (
@@ -29,7 +29,7 @@ mux.Handle("/admin/", identity.Require("all:console:operator")(admin))
 http.ListenAndServe(":8080", identity.Middleware(issuer)(mux))
 ```
 
-Discovery is lazy. `Middleware` never refuses. `Require` refuses without naming a group that would work; with no group it admits any vouched caller. The `WhoAmI` body is in [contracts](../../reference/sluis/contracts.md#the-whoami-endpoint).
+`Middleware` never refuses. `Require` refuses without naming a group that would work; with no group it admits any vouched caller. The `WhoAmI` body is in [contracts](../../reference/sluis/contracts.md#the-whoami-endpoint).
 
 ## Cluster anchor
 
@@ -95,7 +95,7 @@ result := set.Evaluate(policy.Input{
 })
 ```
 
-`Input` also takes `GitHub` and `ServiceAccount` proofs. `LoadDeclared` refuses `team_id`, `domains` and `owner` under a Slack workspace, and `owner` under a GitHub organisation.
+`Input` also takes `GitHub`, `ServiceAccount` and `AWS`. `LoadDeclared` refuses `team_id`, `domains` and `owner` under a Slack workspace, and `owner` under a GitHub organisation.
 
 | accessor | returns |
 |---|---|
@@ -113,6 +113,6 @@ in, err := config.LoadInstallation("installation.yaml")
 service, policy, err := config.Render(in)   // sluis.yaml and policy.yaml, as bytes
 ```
 
-`config` holds the service (v3) and policy (v2) document types and the [installation](../../reference/sluis/installation-document.md). `Render` is deterministic and backs `sluisctl render`.
+`config` holds the service (v3) and policy (v2) document types and the [installation](../../reference/sluis/installation-document.md). `Render` backs `sluisctl render`.
 
 Decided in: [0038](../../decisions/0038-estates-render-through-sluis.md).

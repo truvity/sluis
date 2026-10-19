@@ -23,6 +23,11 @@ ConnectRPC serves [sink.proto](../../../audit/proto/audit/v1/sink.proto), [regis
 | `DURABILITY_LOGGED` | The process wrote them to its log |
 | `DURABILITY_UNSPECIFIED` | The hop did not say; weaker than all others |
 
+| `Rejection` for | When |
+|---|---|
+| A source the caller is not listed for | The `workloads` file lists workloads and the record's `source` is not the one its verified caller maps to |
+| A caller not listed | The `workloads` file lists workloads and omits the caller; it writes nothing |
+
 A higher value survives more. A hop reports its next hop's answer; a wrapper never reports more.
 
 | Go call | Effect |
@@ -96,14 +101,20 @@ A predicate on `id` takes whole UUIDs; anything else is `invalid_argument`. `Get
 → {"facets": [{"field": "action", "values": [{"value": "shop.order.placed", "count": "42"}]}]}
 ```
 
-`Get` returns one record and its copy's location. `digest_id` and `verified_at` stay empty until seals ([0061](../../decisions/0061-seals.md)) set them:
+`Get` returns one record and its copy's location ([0061](../../decisions/0061-seals.md)):
 
 ```json
 {"profile": "security", "id": "0199b100-…"}
 → {"record": { … },
    "provenance": {"object_key": "records/security/acme/2026/09/17/10/01K5…", "line": "3",
-                  "digest_id": "", "verified_at": ""}}
+                  "digest_id": "seals/security/acme/2026/09/17/10.jws"}}
 ```
+
+| `provenance` field | Meaning |
+|---|---|
+| `digest_id` | The key of the seal covering the record's hour; absent until sealed |
+| `verified_at` | Absent until a verifier sets it |
+| `seal_unknown` | True when the service cannot tell whether the hour is sealed |
 
 `Export` starts a job. `GetExport` polls it and returns an expiring signed link:
 
@@ -121,6 +132,8 @@ A predicate on `id` takes whole UUIDs; anything else is `invalid_argument`. `Get
 | `sort` | 4 terms |
 | `in` | 100 values |
 | `limit` | 1000; a larger value is cut to it |
+| Request message | 4 MiB as decoded; a larger one is `resource_exhausted` |
+| Server timeouts | 10 s for the headers, 60 s for the request, 5 min for the response, 2 min idle; a 64 KiB header block |
 | Export | 100000 records; a larger match fails the job, asking to narrow the filter |
 | Export recording | `audit.export.requested` is recorded before any read; if it cannot be, the export does not start |
 | Refused reads | `audit.search`, `audit.facets`, `audit.get` and `audit.pseudonym.resolved` are recorded as failures; the same caller refused the same way on a profile is recorded once a minute |

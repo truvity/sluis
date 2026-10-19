@@ -8,8 +8,8 @@ For contributors. [CONTRIBUTING](../../../CONTRIBUTING.md#audit) has the gate an
 |---|---|---|
 | `github.com/truvity/sluis/audit` | `audit/` | The installation: writer, query service, stores, operator command |
 | `github.com/truvity/sluis/audit/sdk` | `audit/sdk/` | What an application imports to emit records. No database driver, stream server, object-store client or JWT library |
-| `github.com/truvity/sluis/audit/deploy/pulumi` | `audit/deploy/pulumi/` | The AWS shape as a Pulumi library. Imports nothing of this repository |
-| `github.com/truvity/sluis/storage` | `storage/` | State and keys by purpose. The only sluis module `audit` imports; the SDK and Pulumi library import none |
+| `github.com/truvity/sluis/audit/deploy/pulumi` | `audit/deploy/pulumi/` | The AWS shape as a Pulumi library. Imports only the `audit` module's `profile` package |
+| `github.com/truvity/sluis/storage` | `storage/` | State and keys by purpose. The only other sluis module `audit` imports; the SDK and Pulumi library import none |
 
 | Rule | Detail |
 |---|---|
@@ -17,7 +17,7 @@ For contributors. [CONTRIBUTING](../../../CONTRIBUTING.md#audit) has the gate an
 | SDK closure | `just audit-sdk-closure` fails, naming packages, when the SDK builds a server-only package. It refuses a list too short to be real |
 | Pulumi tests | `just audit-pulumi-test` runs against Pulumi's mocks with the workspace off |
 | Consumption | The root module is consumed as binaries, images and a chart, not as an import target |
-| Release | `vX.Y.Z` for the root, and `sdk/vX.Y.Z` and `deploy/pulumi/vX.Y.Z` at the same commit. Push the root tag only; the release workflow tags the others |
+| Release | `vX.Y.Z` for the root, and `audit/vX.Y.Z`, `audit/sdk/vX.Y.Z`, `audit/deploy/pulumi/vX.Y.Z` and `storage/vX.Y.Z` at the same commit. Push the root tag only; the release workflow tags the others |
 | Public packages | `sdk/record`, `sdk/catalogue`, `profile`, `sdk/emit`, `sdk/sink`, `keys`, `store`, `index`, `sdk/auth`, `authn`, `writer`, `query`. Everything else is under `internal/`. Test helpers live in `*test` packages. `examples/` imports public packages only, and a test enforces it |
 
 `writer` and `query` are public because the binaries build on them. Embedding a writer in an application is not a shape ([0053](../../decisions/0053-one-installation-per-service-or-product.md)).
@@ -40,7 +40,7 @@ Paths are under `audit/`.
 | `sdk/auth/` | `Principal`, `Authenticator`, `Authorizer`, grants, workload tokens |
 | `sdk/telemetry/`, `sdk/metaschema/`, `sdk/schemas/` | Span names and interceptors; meta-schema validation; meta-schemas |
 | `authn/` | JWT authenticator and the `access-roster` grants preset (legacy identifier, renamed in v1.75–v1.76) |
-| `sinkserver/` | `SinkService` handler and the receiver |
+| `sinkserver/` | `SinkService` handler, the receiver, and `SourceBound`, which holds a caller to the source its workload is listed for |
 | `sink/natssink/`, `sink/sqssink/` | Stream publishers |
 | `dedupe/dynamodbdedupe/` | Deduplication on DynamoDB |
 | `keys/` | Pseudonymisation providers and seal signers |
@@ -50,7 +50,7 @@ Paths are under `audit/`.
 | `internal/writer/`, `internal/observe/`, `internal/query/` | Split, identity, roll, put, dead letters; cursor indexer; search, facets, get, export, resolve |
 | `internal/recobj/`, `internal/merkle/`, `internal/seal/` | Record object; RFC 6962 tree; seals, delegations, revocations |
 | `internal/bucketcontract/` | Bucket-contract checker and conformance suite |
-| `internal/identity/`, `internal/hold/`, `internal/registry/`, `internal/clock/` | Sealed identities; legal holds; registered catalogues; SNTP client |
+| `internal/identity/`, `internal/hold/`, `internal/registry/`, `internal/clock/`, `internal/sqsorigin/` | Sealed identities; legal holds; registered catalogues; SNTP client; the stamp of a record from a queue message's `SenderId` and `SentTimestamp` |
 | `internal/telemetry/`, `internal/cli/`, `internal/config/` | OTLP export; commands; configuration types, loader and schema generator |
 | `internal/s3test/`, `internal/pgtest/`, `internal/authtest/`, `internal/corpus/`, `internal/schemagen/` | Test S3; test database; token issuers; record corpus; JSON Schema generator |
 | `cmd/audit/` | Operator command: `validate`, `check-emitters`, `messages`, `profile`, `verify`, `conformance`, `replay`, `migrate`, `reindex`, `purge`, `clock-sync`, `hold`, `key` |
@@ -65,7 +65,7 @@ Paths are under `audit/`.
 
 | Recipe | Needs | Runs |
 |---|---|---|
-| `just audit-check` | The checkout | Build, unit tests, lint, proto, drift, schemas, chart, telemetry, SDK closure, Pulumi tests |
+| `just audit-check` | The checkout | Build, unit tests, lint, proto, drift, schemas, chart, telemetry, pages, SDK closure, Pulumi tests |
 | `just audit-race` | A C toolchain | Tests under the race detector |
 | `just audit-test-postgres` | Postgres (under `.devbox`) | Index, dedupe table, writer against a database |
 | `just audit-test-s3` | Docker (LocalStack) | Archive walks, Object Lock refusal, KMS signing |

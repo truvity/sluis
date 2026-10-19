@@ -33,6 +33,7 @@ ids, _ := sluispulumi.NewKubernetesIdentity(ctx, "acme", &sluispulumi.Kubernetes
 | `BucketName` | Required without `Blobs` | Bucket name; global |
 | `Blobs` | None | `ExternalBlobs` for an S3-compatible endpoint (R2). One of `BucketName` and `Blobs`; with `Blobs` no bucket is created and `Versioning`, `ProtectedPrefixes`, `Tags` are refused |
 | `Versioning` | Off | S3 versioning |
+| `ProtectedPrefixes` | None | `Prefix` and `AllowedPrincipalArns`: a bucket-policy Deny of writes under the prefix to every other principal ([truststore](#the-edge-modules)) |
 | `Tags` | None | On the bucket |
 
 | Detail | Behavior |
@@ -74,7 +75,7 @@ One [DynamoDB table](storage-layout.md#dynamodb-the-dynamodb-state-index-and-tri
 
 ## Kubernetes identity
 
-One role for the one pod ([switch the serving pod role](../../guides/sluis/operate/switch-serving-pod-role.md)). Outputs: `RoleArn`, `RoleName`.
+One role for the one pod ([switch the serving pod role](../../guides/sluis/operate/switch-serving-pod-role.md)).
 
 | `KubernetesIdentityArgs` | Default | Meaning |
 |---|---|---|
@@ -90,6 +91,7 @@ One role for the one pod ([switch the serving pod role](../../guides/sluis/opera
 | `State` | None | `States.Grant()`; nil for the `legacy` store |
 | `SigningKeyArns` | None | `SigningKeyArn`, `SigningKeyRS256Arn`: allows `kms:Sign`, `kms:GetPublicKey` |
 | `WrappedSigningKeyArn` | None | Symmetric key for `kms-wrapped` ([signing on AWS](../../concepts/sluis/signing-on-aws.md)). List this role in `WrappedSigning.AdditionalSigningRoleArns` |
+| Outputs | n/a | `RoleArn`, `RoleName` |
 
 The role trusts `pods.eks.amazonaws.com` for this cluster and ServiceAccount.
 
@@ -122,6 +124,7 @@ The role trusts `pods.eks.amazonaws.com` for this cluster and ServiceAccount.
 | `FunctionName`, `Function`, `LogRetentionDays` | `sluis-<instance>-backup`; 512 MB, 900 s; 30 | `Function.TimeoutSeconds` is 60 to 900 |
 | `Schedule` | `cron(0 2 * * ? *)`; false | `Daily`, `Paused`. `ResumeRate` is deprecated and ignored: the `<function>-resume` schedule is gone (a run of format 2 does not pause), and an apply deletes it |
 | `AlarmActionArns`, `PermissionsBoundaryArn`, `Tags` | None | Notified by the alarms; boundary of the roles |
+| `Telemetry`, `AdditionalWebIdentityAudiences`, `CodeSigningConfigArn` | None | As `LambdaArgs`: the telemetry layer and its extra audiences (only with `Telemetry`), and the code signing configuration |
 
 | Output | Meaning |
 |---|---|
@@ -146,7 +149,7 @@ The role trusts `pods.eks.amazonaws.com` for this cluster and ServiceAccount.
 |---|---|---|
 | `SluisTableBackup` | `GetItem`, `PutItem`, `UpdateItem`, `DeleteItem`, `Query`, `Scan`, `DescribeTable` | The backup table |
 | `SluisCrossTable`, `…Parameters`, `…Blobs`, `…BlobList` (one statement per kind, the five modules in its resource list) | Read: `GetItem`, `Query`, `Scan`; `ssm:GetParameter`; `s3:GetObject` and the prefix's `ListBucket` | The other five modules' tables, `internal/<module>/*`, `external/<module>/*`, `<module>/` |
-| `SluisCrossParametersList` | `ssm:GetParametersByPath` | `internal/*` and `external/*` of the instance, never the namespace roots: the export lists each module's parameters before it reads them by name (v1.76.3). A listing decrypts nothing |
+| `SluisCrossParametersList` | `ssm:GetParametersByPath` | `internal/*` and `external/*` of the instance, never the namespace roots: the export lists each module's parameters before it reads them by name. A listing decrypts nothing |
 | `SluisMaintenanceDeny` | Deny `PutItem`, `UpdateItem`, `DeleteItem`, `BatchWriteItem`, `TransactWriteItems` | Every table, when the first key is `maintenance`. The role reads the flag and never writes it |
 | `SluisArchiveObjects` | `s3:GetObject`, `PutObject`, `DeleteObject`, and `GetObjectVersion` on a versioned bucket | `<bucket>/<prefix>backup/<instance>/*` |
 | `SluisArchiveList` | `s3:ListBucket`, and `ListBucketVersions` on a versioned bucket | The bucket, `s3:prefix` `<prefix>backup/<instance>/*` |
@@ -162,7 +165,7 @@ The role trusts `pods.eks.amazonaws.com` for this cluster and ServiceAccount.
 | Keypair | `NewBackup` makes a 32-byte `random.RandomBytes` seed (secret in state, never rotated by an apply) and derives the X25519 identity and recipient from it |
 | Recipients | The generated recipient, then `ExtraRecipients`, in the backup document. Keep an offline `ExtraRecipients` identity: it opens backups when the installation is gone |
 | Identity | `AGE-SECRET-KEY-1...` in the byte codec (`{"value":"<base64>"}`), a SecureString at `/sluis/<instance>/internal/backup/restore-identity` under `ParameterKeyArn`. The restore document names it with `backup.identity: restore-identity` |
-| Readers | The restore role, and the deployer: `SluisKeyAdminReads` lets `KeyPolicyOptions.Admins` decrypt it, as the provider does after create and on every refresh (v1.76.2). The backup role is denied the parameter and its decryption (`SluisDenyRestoreIdentity`, `SluisDenyRestoreIdentityKey`); `SluisKeyPolicyStatements` adds `SluisKeyDenyRestoreIdentity` |
+| Readers | The restore role, and the deployer: `SluisKeyAdminReads` lets `KeyPolicyOptions.Admins` decrypt it, as the provider does after create and on every refresh. The backup role is denied the parameter and its decryption (`SluisDenyRestoreIdentity`, `SluisDenyRestoreIdentityKey`); `SluisKeyPolicyStatements` adds `SluisKeyDenyRestoreIdentity` |
 | Adoption | The parameter has `overwrite: true`: an apply whose earlier create succeeded in AWS adopts it, with the same value from the seed in state |
 | Break-glass | `age-keygen -o breakglass.txt` offline; `age-keygen -y breakglass.txt` prints the recipient for `ExtraRecipients` ([guide](../../guides/sluis/operate/back-up-on-layout-v5.md)) |
 | Rotation | `pulumi up --replace` on `<name>-restore-identity-seed` leaves older backups readable by an `ExtraRecipients` identity only |
@@ -276,6 +279,9 @@ l, _ := sluispulumi.NewLambda(ctx, "access", &sluispulumi.LambdaArgs{
 | `FunctionNamePrefix` | `sluis` | Names `<prefix>-scheduler`, `<prefix>-config` and the function default |
 | `FunctionName` | `sluis-<instance>-issuer` | Function, role, policy and log group. `aws.functions` overrides it. A name kept from `sluis` or `sluis-http` replaces nothing (see the CHANGELOG upgrade note) |
 | `Function` | 512 MB; 300 s; unreserved | `FunctionArgs`: `MemoryMB`, `TimeoutSeconds`, `ReservedConcurrency` (`*int`, at least 1) |
+| `Modules` | None | `ModuleArgs` by `cloudflare`, `github`, `google` or `slack`: `FunctionName` (default `sluis-<instance>-<module>`), `Package`, `PackageSHA256`, `MemoryMB`, `TimeoutSeconds` (default `Function`'s), `ReservedConcurrency`, `Document`. Every module function exists with or without an entry. |
+| `BackupFunctionName`, `RestoreFunctionName` | `sluis-<instance>-backup`, `-restore` | The names the issuer's role and the key policy use for the [backup](#backup) and [restore](#restore) functions |
+| `TransitionRoles` | None | `Role` and `OldName`: an old IAM role name kept as a further principal of the renamed role in the key policy and the audit queue's policy. Remove it once nothing runs under the old name |
 | `Function.ReservedConcurrency` | nil | A ceiling on concurrent environments. It costs nothing and is not provisioned concurrency. It bounds a [cold-start herd](../../guides/sluis/operate/survive-a-cold-start-herd.md). A cap set by hand is removed by the next apply unless set here |
 | `LogRetentionDays` | 30 | Function log group |
 | `AccessLogs` | nil (off) | `RetentionDays` (7). Declares log group `/aws/apigateway/<FunctionName>` and `$default` access logs: `requestTime`, `requestId`, `httpMethod`, `path`, `status`, `responseLatency`, `integrationLatency`. The query string, headers, address and identity are never logged. The applying principal needs `logs:CreateLogDelivery`, `logs:PutResourcePolicy` and related actions |
@@ -286,11 +292,12 @@ l, _ := sluispulumi.NewLambda(ctx, "access", &sluispulumi.LambdaArgs{
 | `Schedule.Rate` | `rate(5 minutes)` | EventBridge Scheduler expression |
 | `Schedule.Paused`, `DirectoryRefresh.Paused` | false | Declares the schedules `DISABLED`, keeping roles and grants. `Paused` with `Disabled` is refused |
 | `DirectoryRefresh.Rate`, `.Disabled` | `rate(15 minutes)`, false | Invokes `{"kind":"refresh"}` |
-| `CloudflareRotation.Interval` (or `.Rate`), `.Disabled`, `.Paused` | 15 minutes (`rate(15 minutes)`), false, false | The tick, in whole minutes; `Interval` and `Rate` are exclusive. A credential rotates up to one tick after its `rotation` age, so every preset must satisfy `rotation + tick + 5m < lifetime` (checked for `Interval` and `rate(...)`, at load). Invokes `{"kind":"cloudflare"}`. Exists only when `Installation.Cloudflare` declares a preset the schedule rotates (`store` unset or `external`); presets that are all `store: none` get no schedule, no margin check and no write grant on `external/cloudflare/*`. Declaring presets gives the role that hosts `cloudflare` its `internal/cloudflare/*` and `external/cloudflare/*` ([Cloudflare tokens](../../guides/sluis/cloudflare-tokens.md)) |
+| `IssuerClients.Rate`, `.Disabled`, `.Paused` | `rate(15 minutes)`, false, false | With module functions: invokes the issuer with `{"kind":"clients"}`, the pass that settles the clients' generated secrets. `Paused` with `Disabled` is refused |
+| `CloudflareRotation.Interval` (or `.Rate`), `.Disabled`, `.Paused` | 15 minutes (`rate(15 minutes)`), false, false | The tick, in whole minutes; `Interval` and `Rate` are exclusive. A credential rotates up to one tick after its `rotation` age, so every preset must satisfy `rotation + tick + 5m < lifetime` (checked for `Interval` and `rate(...)`, at load). Invokes `{"kind":"cloudflare"}`. Exists only when `Installation.Cloudflare` declares a preset the schedule rotates (`store` unset or `external`); presets that are all `store: none` get no schedule, no margin check and no write grant on `external/cloudflare/*`. Declaring presets also grants SSM read on `internal/cloudflare/*`, read and write on `internal/cloudflare-minted/*`, write on `external/cloudflare/*` ([Cloudflare tokens](../../guides/sluis/cloudflare-tokens.md)) |
 | `Check` | on (nil) | A post-deploy `aws.lambda.Invocation` of the live alias with `{"kind":"check"}`, after the function, its role policy and the parameters the stack writes exist. A declared secret that is missing, empty or malformed fails `pulumi up` with `check: N of M declared secrets are missing or invalid`, naming each address. Runs again when the function version or the declared names change. `false` leaves it out, for a CI step |
 | `WebIdentityAudience` | Any | Restricts the audience of the role's web identity token |
 | `AdditionalWebIdentityAudiences` | None | Extra exact audiences after it. Any code under the role can mint them. Empty, duplicate, or with empty `WebIdentityAudience`: refused |
-| `Telemetry.LayerArn`, `.Env` | nil | The `otlp-lambda` layer; `Env` accepts `OTEL_*`, `OPENTELEMETRY_*`, the layer's `SLUIS_*` settings (`ACCESS_ROSTER_*` until v1.76), `AWS_LAMBDA_EXEC_WRAPPER` and nothing else. `OTEL_SERVICE_NAME` defaults to the function name. The layer's token comes from an issuer: one other than the function it observes keeps telemetry flowing while that function is saturated. The function drops what the layer refuses |
+| `Telemetry.LayerArn`, `.Env` | nil | The `otlp-lambda` layer; `Env` accepts `OTEL_*`, `OPENTELEMETRY_*`, the layer's `SLUIS_*` settings (the deprecated `ACCESS_ROSTER_*` prefix too), `AWS_LAMBDA_EXEC_WRAPPER` and nothing else. `OTEL_SERVICE_NAME` defaults to the function name. The layer's token comes from an issuer: one other than the function it observes keeps telemetry flowing while that function is saturated. The function drops what the layer refuses |
 | `Tags` | None | On everything that takes tags |
 
 
@@ -300,8 +307,8 @@ l, _ := sluispulumi.NewLambda(ctx, "access", &sluispulumi.LambdaArgs{
 
 | Detail | Behavior |
 |---|---|
-| Role grants | `ModuleRoleStatements` of the hosted modules (`oidc`, `github`, `slack`, `google`, and `cloudflare` with presets): their tables, `internal/<module>`, `external/<module>`, `<module>/` blob prefixes; `SluisMaintenanceDeny` on their tables |
-| Parameters written | `internal/oidc/state-secret`, `internal/oidc/recovery-password` and the verifiers, each as the secret store's document (`{"value":"<base64>"}`) |
+| Role grants | `ModuleRoleStatements` of the hosted modules (`oidc`, `github`, `slack`, `google`, and `cloudflare` with presets): their tables, `internal/<module>`, `external/<module>`, `<module>/` blob prefixes; `SluisMaintenanceDeny` on their tables; the `oidc` host is denied the recovery and conformance passwords (`SluisDenyPasswords`, `SluisDenyPasswordsKey`) |
+| Parameters written | `internal/oidc/state-secret`, `recovery-password` and `recovery-verifier`; with `conformance.enabled`, also `conformance-password` and `conformance-verifier`. Each is the secret store's document (`{"value":"<base64>"}`). A verifier is derived from its password under a random salt kept with it ([ADR 0076](../../decisions/0076-password-sign-in-is-srp-for-recovery-and-conformance-only.md)) |
 | Service document | `secrets.layout: v5` and `ports.dynamodb.tables`. A blob `CredentialsRef` is `internal/<module>/<name>`; `internal/google/<name>` is read by every process |
 | Blobs from a preset | No role other than backup and the Cloudflare function reads the minter. A store whose credentials a preset rotates is read from `external/cloudflare/<preset>` (`CredentialsRef`) |
 | Needs | `State.Tables` (`States.Grant()`) for the hosted modules |
@@ -338,7 +345,7 @@ l, _ := sluispulumi.NewLambda(ctx, "access", &sluispulumi.LambdaArgs{
 | `Artifacts.Prefix` | `sluis/` | Keys are `<prefix><version>/<sha256>-<file name>` |
 | `Release.ResolveChecksums` | false | Reads an empty `PackageSHA256` from `<BaseURL>/v<version>/checksums.txt` **after verifying it** against `checksums.txt.sigstore.json` beside it (sigstore-go): the certificate must be Fulcio's, issued by GitHub's OIDC issuer to the release workflow of `Release.SignerRepository` (default `truvity/sluis`) at the tag of that release, with a certificate timestamp and a Rekor entry; the same identity `hack/release-verify.sh` pins with cosign. A mirror carries the bundle byte for byte. Needs Sigstore's trusted root (TUF) at deploy time |
 | `Release.TrustedRootJSON` | none | A pre-fetched Sigstore `trusted_root.json` to check the signature against, for a mirrored or air-gapped estate; take it from a verified source, never from the release's own mirror. Empty fetches the public-good root through TUF |
-| `Release.UnverifiedChecksums` | false | Reads `checksums.txt` without its signature (the behavior before v1.77.0): the digest then proves only that the download is what the release page says. For an estate that cannot reach the trusted root; prefer a `PackageSHA256` taken from `hack/release-verify.sh` |
+| `Release.UnverifiedChecksums` | false | Reads `checksums.txt` without checking its signature: the digest then proves only that the download is what the release page says. For an estate that cannot reach the trusted root; prefer a `PackageSHA256` taken from `hack/release-verify.sh` |
 | `Release.Version` | From the file name | Names the release when `Package` is empty; `(devel)` is refused |
 | `Release.BaseURL` | Project GitHub releases | For a mirror |
 
@@ -401,8 +408,24 @@ To adopt an existing audit stack, import it under the new component ([resource n
 | `SluisKeyAdminSeeds`, `SluisKeyAdminReads` | `Admins`, as ARN patterns | `Encrypt` and `GenerateDataKey` on any parameter; `Decrypt` of the state secret, the recovery password, on v5 the recovery verifier (and the conformance password and verifier when `Conformance` is on), and, with a backup role on v5, the restore identity |
 | `SluisKeyBreakglass` | `Breakglass` | the four actions on any parameter |
 | `SluisKeyDenyRestoreIdentity` | the backup role | Deny `Decrypt` where the encryption context `PARAMETER_ARN` is the restore identity |
+| `SluisKeyDenyPasswords` | the roles that host `oidc` | Deny `Decrypt` where `PARAMETER_ARN` is `internal/oidc/recovery-password` or `conformance-password` |
 | `SluisKeySign`, `SluisKeySignContextReserved`, `SluisKeySignDirectPurposeOnly`, `SluisKeySignDirectContextKeysOnly` | the roles that host `oidc`, directly | `{instance, purpose: sign}` and the three denies that hold the purpose to them |
 | `SluisKeyRolesNothingElse` | the same, with `DenyOtherActions` | Deny every other action |
+
+### Roles before the stack
+
+| `RoleArgs` field or method | Meaning |
+|---|---|
+| Use | A stack that runs before the sluis stack (the shared key, the audit queue) derives role names without storage, tables or a digest. `LambdaArgs` and `Lambda` have the same methods |
+| `Region`, `AccountID`, `Instance` | Required |
+| `Installation`, `Blobs`, `FunctionName`, `Modules`, `BackupFunctionName`, `RestoreFunctionName`, `TableNames`, `TransitionRoles` | As in `LambdaArgs` |
+| `Backup`, `Restore` | The stack creates `NewBackup`, `NewRestore`; only then is the role `Created` |
+| `FunctionRoles()` | `FunctionRole`: `Role`, `Name`, `Arn`, `Also`, `Created`, `Viewer`; `Matcher()` is the access policy matcher |
+| `Senders()`, `CreatedSenders()` | Role ARNs: all, or those the queue policy may name because the stack creates them or they already exist |
+| `DeferredSenders(ctx)` | Queue senders as outputs. Call `Lambda(l)`, `Backup(b)` and `Restore(x)` after each component, or `Reject(err)` |
+| `Roles()`, `ViewerRoles()`, `ViewerMatchers()` | `KeyRole` list, and the roles and matchers that read modules' records without hosting them |
+| `KeyPolicyStatements(KeyPolicyOptions)` | `SluisKeyPolicyStatements` over `Roles()`. `KeyPolicyOptions` takes `ExternalReaders`, `Admins`, `Breakglass`, `KeyAdmins`, `DenyOtherActions` and `ReaderStatements`; `KeyAdmins` or `Breakglass` is required |
+| `ExternalReaderRole.KeyStatement` | The statement of a role made by `NewExternalReaderRole` that decrypts its exact addresses. Pass it in `ReaderStatements` |
 
 ### The edge modules
 
@@ -461,7 +484,8 @@ front, _ := edgecloudflare.NewEdge(ctx, "access", &edgecloudflare.Args{
 |---|---|
 | Live alias | Every change publishes a version; alias `live` points at the newest. API, schedules, scheduler grant, self-invoke grant and the `invoke` trigger use it. Asynchronous invoke has no retries. Rollback repoints the alias |
 | API | HTTP API (payload 2.0), `$default` route and stage. The `execute-api` endpoint is off unless `KeepDefaultEndpoint`. `Lambda.FrontDoor()` gives a front door the API id, stage and name |
-| Schedules | `<prefix>-github-<org>` and `<prefix>-slack-<workspace>` invoke `{"kind":"tick","controller":"github"\|"slack","target":"<id>"}`; a target is letters, digits and `- _ . :`, at most 40, with `:` becoming `-` in the name. `<prefix>-directory-refresh` invokes `{"kind":"refresh"}`. Role `<prefix>-scheduler` may invoke the function only. No retries |
+| Schedules | `<prefix>-github-<org>` and `<prefix>-slack-<workspace>` invoke `{"kind":"tick","controller":"github"\|"slack","target":"<id>"}` on the `live` alias of that module's function; a target is letters, digits and `- _ . :`, at most 40, with `:` becoming `-` in the name. `<prefix>-directory-refresh` invokes `{"kind":"refresh"}` on the Google function, `<prefix>-cloudflare-rotation` invokes `{"kind":"cloudflare"}` on the Cloudflare function, `<prefix>-issuer-clients` invokes the issuer. Without module functions every schedule targets the issuer. No retries |
+| Scheduler role | `<prefix>-scheduler` may invoke only the aliases its schedules target. It trusts `scheduler.amazonaws.com` for this account and the `default` schedule group: `aws:SourceAccount` and `aws:SourceArn` (the group's ARN). The backup function's scheduler role has the same trust |
 | `ExternalReadPolicy(ExternalReadPolicyArgs)` | IAM policy: `ssm:GetParameter` on exact `external/<kind>/<id>` ARNs under `/sluis/<instance>/`; with `SecretsKeyArn` or `ParameterKeyArn`, `kms:Decrypt` through SSM bound to those ARNs. Wildcards, prefixes, repeats and non-`external/` addresses are refused |
 | `NewExternalReader(ctx, name, &ExternalReaderArgs{RoleName, Region, AccountID, Instance, Addresses, SecretsKeyArn, ParameterKeyArn})` | Attaches that policy to the role inline; output `PolicyJSON` |
 | Related | [v1.76 upgrade](../../guides/sluis/upgrade/v1.76.md), [environment](lambda.md#environment), [IAM](lambda.md#iam-one-role), [signing on AWS](../../concepts/sluis/signing-on-aws.md), [key policy](aws-signing-key.md), [SSM root](lambda.md#instance-and-the-ssm-root) |

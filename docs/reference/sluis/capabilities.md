@@ -1,7 +1,7 @@
 # Capabilities
 
 The status of each part on the two permanent platforms, against the [ports and adapters](../../concepts/sluis/ports.md) design ([0026](../../decisions/0026-two-platforms-permanently-kubernetes-and-aws-lambda.md) to [0034](../../decisions/0034-exports-go-to-openbao-directly.md)).
-A cell reads for master, the Unreleased section of the [changelog](../../../CHANGELOG.md). The adapters are in the generated [adapters](adapters.md).
+A cell reads for master; the [changelog](../../../CHANGELOG.md) dates each change. The adapters are in the generated [adapters](adapters.md).
 
 | Mark | Meaning |
 |---|---|
@@ -18,7 +18,7 @@ The presets `server`, `k8s-minimal` and `k8s-openbao` are unavailable; `aws-serv
 |---|---|---|
 | Ports as Go interfaces (`internal/port`) and the apps depending on them | ✅ | ✅ |
 | Domain stores on the ports: workspaces and credentials, GitHub organisations and Apps, a person's GitHub link (the token pair in Secrets, compare-and-swap refresh), runner and catalogue Apps, the Slack records, the console's session key (`internal/portstore`; any `ports.adapter` but `legacy`, which needs a Secrets adapter) | ✅ | ✅ |
-| Secrets in OpenBao (`adapters.secrets: openbao`, compare-and-swap by KV `cas`; in the Unreleased section of the changelog) | 🧪 | 🧪 |
+| Secrets in OpenBao (`adapters.secrets: openbao`, compare-and-swap by KV `cas`) | 🧪 | 🧪 |
 | Export: copies of the secrets the console keeps (retired by [0041](../../decisions/0041-the-secret-contract.md): a consumer reads the typed document at `external/<kind>/<id>`, [exports](exports.md)) | retired | retired |
 | Export: the External Secrets `PushSecret`s of the chart (`slackApps[].push`, `directory.push`, `githubApps.push`, `githubApps.catalogue[].push`, `slackState.push`; need `config.store: kubernetes`) | deprecated, replaced by the above | n/a |
 | Inputs: mounted ConfigMaps and Secrets | ✅ | n/a |
@@ -73,9 +73,9 @@ The federation verifier is the same code on both platforms.
 | Metrics over OTLP, configured by `OTEL_*` | ✅ | ✅ |
 | The chart sets the `OTEL_*` environment on every pod from `telemetry.otlp` (endpoint, protocol, a service name per component, extra `OTEL_*`); unset renders nothing | 🧪 | n/a |
 | Platform logs over OTLP (observability's otlp-lambda layer) | n/a | ✅ |
-| Traces: HTTP and Connect spans, a span per tick and per port call, the trace continued into the console (trace context across queues waits for the queues) | 🧪 | 📄 |
-| Metrics: the issuer's requests, tokens, sign-ins and keys; ticks and leases; port calls; rate limits ([reference/telemetry.md](telemetry.md)) | 🧪 | 📄 |
+| Traces: HTTP and Connect spans, a span per tick, per port call, per module call and per AWS SDK call, the trace continued into the console and across a module call; the Lambda server span carries `faas.invocation_id` | 🧪 | 🧪 |
+| Metrics: the issuer's requests, tokens, sign-ins and keys; ticks and leases; port calls; rate limits ([reference/telemetry.md](telemetry.md)) | 🧪 | ✅ |
 | Chart modes `renders: alerts` and `renders: dashboards`: eleven rules, unit-tested with `vmalert-tool`, and a dashboard held to `dashboardlint` | 🧪 | n/a |
-| No personal data in a span: an allowlist exporter, tested by planting markers; no person or group in a label | 🧪 | 📄 |
+| No personal data in a span: an allowlist exporter, tested by planting markers; no person or group in a label | 🧪 | 🧪 |
 
 Telemetry is configured by the `OTEL_*` variables only ([0032](../../decisions/0032-one-configuration-file-one-binary-one-chart.md)); see [telemetry](telemetry.md) and [Lambda](lambda.md).
