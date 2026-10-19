@@ -2,11 +2,11 @@
 
 The receiver publishes to a JetStream stream and acknowledges when the stream reports the record replicated. Separate writer pods consume the stream and put the objects. The indexer follows the bucket. Nothing in the application's request path waits for S3.
 
-Use it for a product with many application pods, a record rate that makes batching worth having, a metering profile, or quotas.
+Use it for a product with many application pods or a record rate that makes batching worth having.
 
 ## Write path
 
-Pods emit to the receiver, which publishes to JetStream. The writers drain it into the bucket and the database. The usage consumer feeds the quota cache.
+Pods emit to the receiver, which publishes to JetStream. The writers drain it into the bucket and the database.
 
 ```mermaid
 flowchart TB
@@ -14,36 +14,29 @@ flowchart TB
   R["receiver ×2"]
   NATS[("JetStream<br/>application account")]
   W["writer ×N<br/>consumer mode"]
-  U["usage consumer ×1<br/>quotas only"]
-  PG[("Postgres<br/>index, cursors,<br/>dedupe, rollups")]
+  PG[("Postgres<br/>index, cursors,<br/>dedupe")]
   S3[("environment bucket<br/>audit/app/")]
-  VK[("cache<br/>quotas only")]
   E --> R --> NATS
   NATS --> W
-  NATS --> U
   W --> PG
   W --> S3
-  U --> VK
 ```
 
 ## Read path and jobs
 
-The query service, the CronJobs and the billing statement read the same database and bucket. The console reaches the query service with its own token.
+The query service and the CronJobs read the same database and bucket. The console reaches the query service with its own token.
 
 ```mermaid
 flowchart TB
   CONS["application console"]
   Q["audit-query ×2"]
   CJ["CronJobs<br/>verify, purge, clock-sync"]
-  ST["statement CronJob<br/>billing only, monthly"]
   PG[("database audit")]
   S3[("environment bucket")]
   CONS -- "its own token" --> Q
   Q --> PG
   Q --> S3
   CJ --> S3
-  ST --> PG
-  ST --> S3
 ```
 
 ## One billed operation

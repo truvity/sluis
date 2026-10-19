@@ -8,11 +8,13 @@ Start with [sluis on AWS Lambda](../aws-lambda.md). Design: [Lambda](../../../co
 
 - **DNS and certificate.** The core library stops at the HTTP API and has no custom domain. An edge module adds one: [behind Cloudflare](aws-behind-cloudflare.md), or the planned [AWS edge module](README.md#aws-edge-module).
 
-- **Keys.** You supply the KMS keys by alias: `Keys.Sign`, and `Keys.Secrets` for the SSM parameters. The library looks them up, grants on them and creates none. To move from library-created keys, follow [the state operation](../../../guides/sluis/migrate/supply-your-own-signing-keys.md).
+- **Keys.** You supply the KMS keys by alias: `Keys.Sign`, and `Keys.Secrets` (or `ParameterKeyArn`) for the SSM parameters. The library looks them up, grants on them and creates none. To move from library-created keys, follow [the state operation](../../../guides/sluis/migrate/supply-your-own-signing-keys.md).
 
 - **Secrets layout.** `secrets.layout` is `v5`: a table, a parameter namespace and a blob prefix per module, and a function per module ([module roles](../../../reference/sluis/pulumi-library.md#module-roles)). It is the only layout; a v4 installation moves with v1.77.0 first ([upgrade to v1.77.1](../../../guides/sluis/upgrade/v1.77.1.md)). A consumer of an `external/` secret reads it with `ExternalReadPolicy`.
 
-- **Backup.** `NewBackup` and `NewRestore` write one age-encrypted backup a day to an archive bucket and restore from it ([back up and restore on layout v5](../../../guides/sluis/operate/back-up-on-layout-v5.md)).
+- **Recovery.** The library generates a recovery password and turns recovery on. You turn it off from the console or the configuration ([recover on Lambda](../../../guides/sluis/operate/recover-on-lambda.md)).
+
+- **Backup.** `NewBackup` and `NewRestore` write one age-encrypted backup a day to an archive bucket and restore from it, after checking it against the sealed audit trail ([back up and restore on layout v5](../../../guides/sluis/operate/back-up-on-layout-v5.md)).
 
 - **Blobs.** The bucket is S3 or S3-compatible. R2 takes credentials from an `internal/` address, which needs the `ssm` secrets source. See [R2 storage](../../../guides/sluis/connect/r2-storage.md).
 

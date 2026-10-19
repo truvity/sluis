@@ -22,7 +22,7 @@ Each entry shipped or was asked for, and is not here. Check the reason before yo
 | a Slack Connect record's `from` internal groups | Slack Connect channels are fed by directory groups. A record with internal groups is listed `invalid` |
 | guest-side probe of every shared channel | it cost a call per other workspace per unmanaged channel per pass. Only managed channels are probed |
 | TokenReview for workload exchange | it needs a kubeconfig per cluster. A published key set needs none. It stays for [recovery](recovery.md) alone |
-| the separate controller processes and the proxy chart | one process runs everything. The proxy chart left in v1.32.0 ([ADR 0003](../../decisions/0003-deprecate-access-proxy.md)). A console with no OpenID flow of its own uses [gateway-native OIDC or upstream oauth2-proxy](../../guides/sluis/connect/oauth2-proxy.md) |
+| the proxy chart | It left in v1.32.0 ([ADR 0003](../../decisions/0003-deprecate-access-proxy.md)). A console with no OpenID flow of its own uses [gateway-native OIDC or upstream oauth2-proxy](../../guides/sluis/connect/oauth2-proxy.md) |
 
 ## What was never served?
 
@@ -36,5 +36,5 @@ see [back-channel logout](back-channel-logout.md).
 - [ADR 0018](../../decisions/0018-do-not-configure-what-the-product-knows.md): Do not configure what the product knows
 - [ADR 0020](../../decisions/0020-hold-on-double-definition-instead-of-taking-over.md): A channel defined twice is held
 - [ADR 0023](../../decisions/0023-guest-side-probe-only-for-managed-slack-connect-channels.md): The guest-side probe asks only about managed channels
-- [ADR 0037](../../decisions/0037-one-process-everywhere.md): One process everywhere
+- [ADR 0071](../../decisions/0071-least-privilege-modules-one-credential-holder-per-function.md): One process per credential holder
 - [ADR 0039](../../decisions/0039-the-issuer-generates-confidential-client-secrets.md): The issuer generates confidential client secrets

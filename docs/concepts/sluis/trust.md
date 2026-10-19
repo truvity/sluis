@@ -22,7 +22,7 @@ Scope decides, not preference.
 | A person | An issuer token from a sign-in against a corporate directory. |
 | A CI job | An issuer token from exchanging the platform's identity token. |
 | A laptop | An issuer token from `sluisctl` trading its own sign-in. |
-| The break-glass operator | A ServiceAccount token minted by hand. |
+| The break-glass operator | A ServiceAccount token minted by hand, or the recovery password. |
 
 Of the issuer's own tokens, only the access token of a `sign_in_exchange` client's sign-in, presented by that client, is a proof. An ID token never is.
 
@@ -60,7 +60,7 @@ A person's `sub` is their email. A ServiceAccount's is `<cluster>:k8s:<namespace
 
 Break-glass is a ServiceAccount token minted with `kubectl create token` for an account the chart creates bound to nobody. When the directory is broken, the issuer is unavailable and only the cluster is still trusted. Authorization is cluster RBAC: who may mint that token.
 
-It is the only human path that bypasses the issuer. See [recovery](recovery.md).
+It is the only human path that bypasses the issuer. On Lambda a password takes its place. See [recovery](recovery.md).
 
 ## Consoles and APIs
 

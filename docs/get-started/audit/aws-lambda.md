@@ -11,7 +11,8 @@ See [AWS Lambda](../../concepts/audit/aws-lambda.md) and the [library reference]
 |---|---|
 | A Pulumi (Go) program, an AWS account and a region | |
 | The release zips and checksums | `audit-writer-lambda_<version>_linux_arm64.zip`, `audit-notary-lambda_<version>_linux_arm64.zip`, `checksums.txt` from the GitHub release |
-| Two KMS keys, each with an alias | a symmetric key for the archive (`Keys.Archive`) and an `ECC_NIST_P384` `SIGN_VERIFY` key for the seals (`Keys.Seal`); the library creates none ([keys](../../reference/audit/aws-pulumi-library.md#keys-state-and-an-s3-compatible-archive)) |
+| Two KMS keys, each with an alias | a symmetric key for the archive (`Keys.Archive`) and an `ECC_NIST_P384` `SIGN_VERIFY` key for the seals (`Keys.Seal`); the library creates none ([keys](../../reference/audit/aws-pulumi-library.md#keys-state-and-an-s3-compatible-archive)). Give the seal key the policy `auditpulumi.SealKeyPolicy` returns |
+| The ARN of a break-glass IAM role | the role that applies the stack is one; `Archive.BreakglassRoleArns` is required for a bucket the library creates |
 | The library at the same release | `go get github.com/truvity/sluis/audit/deploy/pulumi@v<version>` |
 | The ARN of the IAM role of each sender | a role or user ARN, not a session ARN |
 | The application's catalogue directory | its document and JSON schemas; optional for a trial |
@@ -41,6 +42,8 @@ a, err := auditpulumi.New(ctx, "audit", &auditpulumi.Args{
 	Presets: map[string]auditpulumi.PresetStorage{
 		"standard": {Bucket: "acme-audit-trial", Create: true},
 	},
+	// Required for a bucket the library creates: the roles that alone may bypass its lock.
+	Archive: auditpulumi.ArchiveArgs{BreakglassRoleArns: []string{breakGlassRoleArn}},
 	Ingest: auditpulumi.IngestArgs{
 		// Required: who may send. Role or user ARNs, never session ARNs.
 		Senders: []pulumi.StringInput{emitterRoleArn},
@@ -106,4 +109,4 @@ The trail holds an `audit.writer.started` record. If the `audit-ingest-dlq-not-e
 - [Turn the Object Lock on](../../guides/audit/operate/aws-turn-on-object-lock.md) when retentions are signed off.
 - [Run readers in Kubernetes](../../guides/audit/operate/aws-run-readers-in-kubernetes.md).
 - [Send the Lambda functions' telemetry](../../guides/audit/operate/aws-send-lambda-telemetry.md).
-- [Upgrade from an earlier release](../../guides/audit/upgrade/v0.13.md).
+- [Upgrade from an earlier release](../../guides/audit/upgrade/v1.75.md).

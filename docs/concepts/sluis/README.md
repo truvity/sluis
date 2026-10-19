@@ -1,6 +1,6 @@
 # sluis
 
-sluis is the identity and access service: who a caller is, what that gets them, and the way out. Pick the row that matches what you are doing.
+sluis is an OpenID Connect issuer for workforce access. People sign in through their directory. CI jobs and workloads exchange a platform token for AWS, GitHub, Kubernetes and Cloudflare credentials. Pick your row.
 
 | You are | Go to | It holds |
 |---|---|---|
@@ -18,5 +18,6 @@ sluis is the identity and access service: who a caller is, what that gets them, 
 - [Architecture](architecture.md), [terms](concepts.md), [trust](trust.md)
 - [Sessions](sessions.md), [people and agents](people-and-agents.md), [console](console.md)
 - [Policy](policy.md), [groups claim](groups-in-a-token.md), [configuration](configuration.md)
-- [Ports](ports.md), [integrations](integrations.md)
-- [Safety](safety.md), [conformance findings](conformance-findings.md)
+- [Ports](ports.md), [integrations](integrations.md), [AWS Lambda](lambda.md)
+- [Recovery](recovery.md), [audit](audit.md), [failure semantics](failure-semantics.md)
+- [Security model](security-model.md), [safety](safety.md), [conformance findings](conformance-findings.md)

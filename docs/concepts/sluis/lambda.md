@@ -2,11 +2,10 @@
 
 sluis runs on Lambda as one function per module, each from its own release zip: the issuer, and `github`, `slack`,
 `google`, `cloudflare`, `backup` and `restore`. Nothing is in a VPC. Every dependency is an AWS API a function reaches
-over its own role. The only inbound path is an API Gateway HTTP API, in front of the issuer. The events, the
-environment, the roles and the version rules are in the [reference](../../reference/sluis/lambda.md).
+over its own role. The only inbound path is an API Gateway HTTP API, in front of the issuer. Recovery is a
+password there ([recovery](recovery.md)). The events, the environment, the roles and the version rules are in the [reference](../../reference/sluis/lambda.md).
 
-The inbound paths are the HTTP API and EventBridge Scheduler, one schedule per target. The issuer calls a module's
-function; a module answers only the caller class its alias names.
+The inbound paths are the HTTP API and EventBridge Scheduler, one schedule per target.
 
 ```mermaid
 flowchart TB
@@ -56,7 +55,7 @@ was invoked through, never from the payload. A method lists the classes it answe
 
 The restore function has `live-admin` and `live-breakglass` only, and its resource policy names the roles of each
 class. A compromised issuer can call a module's methods and cannot read its credentials. The GitHub App keys, the
-Slack tokens and the Google keys are in that module's namespace alone.
+Slack tokens and the Google keys are in that module's namespace alone. The backup function also answers `live-console`, for `sluisctl backup` through the issuer.
 
 ## What is deployed?
 
@@ -81,7 +80,7 @@ the response returns to the platform. A service is assembled once per execution 
 per invocation, as `sluis tick` does.
 
 The backup function writes one age-encrypted `tar.gz` a day, readable without sluis
-([backup](../../reference/sluis/backup.md)).
+([backup](../../reference/sluis/backup.md)). A restore first checks the backup against the sealed audit trail.
 
 The binaries are built without the Kubernetes and Valkey clients, which keeps cold start short
 ([how it is held](../../reference/sluis/lambda.md)).
@@ -89,7 +88,6 @@ The binaries are built without the Kubernetes and Valkey clients, which keeps co
 ## What do you check before deploying?
 
 `PackageSHA256` is a pin. Take it from a reviewed value in the stack's source, never from a digest fetched next to the zip.
-A local `Package` is copied to a temporary file before it is hashed and deployed, so the checked file is the one that runs.
 
 If a secret reaches a document, rotate it and delete the layer versions that hold it with `aws lambda delete-layer-version`.
 The layer is retained (`SkipDestroy`) so that rollback works.

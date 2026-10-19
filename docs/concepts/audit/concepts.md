@@ -14,7 +14,7 @@ The record carries identifiers, never identity attributes. Whoever may see names
 
 ## Catalogue
 
-A catalogue lists a source's actions and what each carries: operation, framework categories, profiles, capture level, delivery mode, target types, the schema of `data`, a sentence template per locale and an optional meter. It also lists the source's actor kinds, target types, context areas and meters.
+A catalogue lists a source's actions and what each carries: operation, framework categories, the destination `category`, capture level, delivery mode, target types, the schema of `data`, a sentence template per locale and an optional meter. It also lists the source's actor kinds, target types, context areas and meters.
 
 You author it next to the emitting code and validate it in that code's CI. It is registered at deploy and copied into the archive on first use. The format is [catalogue.schema.json](../../../audit/sdk/schemas/catalogue.schema.json).
 
@@ -47,8 +47,6 @@ A framework profile is what one framework requires: fields, categories, identity
 ## Prefixes
 
 Each copy lands under `records/<profile>/<tenant>/` and then the hour of ingest, one object per ingest batch, with Object Lock retention set per object. A reader finds a record by the hour it was ingested, not the date it occurred. The [bucket contract](../../reference/audit/bucket-contract.md) specifies the layout.
-
-The writer copies the descriptions on first use. The catalogue lands at `catalogue/<app>/<version>`, written once. The extension schemas, the record's schema and its proto land under a schema prefix.
 
 ## Projections
 

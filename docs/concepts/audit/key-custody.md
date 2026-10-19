@@ -11,34 +11,34 @@ Audit uses two kinds of key. Pseudonymisation keys are off by default. Signing k
 
 No keys is the default (`keys` unset): no key directory, no `identity/` prefix, and resolve refused as unimplemented. Such a deployment declares `external_identifiers_are_opaque` and skips the rest of this section.
 
-Choose a provider only if the contract demands erasure of an identifier from a locked archive. The choice is permanent: moving keys means a new identity for every person.
+Choose a provider only if the contract demands erasure of an identifier from a locked archive. Moving keys later gives every person a new identity.
 
-The model is one key per tenant and purpose, where a purpose is a profile name. The same person, tenant and purpose always yield the same pseudonym. Two purposes yield unrelated pseudonyms.
+The model is one key per tenant and purpose, where a purpose is a profile name. Two purposes yield unrelated pseudonyms for one person.
 
 ```text
 pseudonym = "ps_" + base64url( HMAC-SHA256( key[tenant, purpose], identifier ) )
 ```
 
-For resolve, the writer also seals the identifier with AES-GCM under a sealing key derived from the data key. The sealed form lands at `identity/tenant=<t>/purpose=<p>/<pseudonym>`. Set `ForgetIdentities` or `--keep-identities=false` to turn this off.
+For resolve, the writer also seals the identifier: under the tenant's own key with `transit`, under the `conceal` key with `kms` and `local`. The sealed form lands at `identity/tenant=<t>/purpose=<p>/<pseudonym>`. Set `forgetIdentities: true` to turn this off.
 
 | provider | where the key lives | use it for |
 |---|---|---|
 | `none` | no keys | anything that need not crypto-shred |
 | `local` | 32-byte data keys wrapped under a 32-byte root in a Secret, kept by the local adapter | tests, a laptop, one instance |
-| `transit` | one key per profile and tenant for the `pseudonym` purpose inside an OpenBAO or Vault transit engine | more than one replica, or secrets already in OpenBAO |
+| `transit` | one key per profile and tenant, named `<key>.pseudonym.<tenant>`, inside an OpenBAO or Vault transit engine | more than one replica, or secrets already in OpenBAO |
 | `kms` (`keys.adapter`) | data keys from `GenerateDataKey` under one customer-managed KMS key, wrapped copies in the index database or SSM (`keys.state`) | AWS without OpenBAO |
 
 With `local`, set the root with `keys.rootFile`; the adapter is for tests and a single instance.
 
-With `transit`, the writer creates each tenant's key on first use and signs in with the pod's projected service-account token on a JWT auth mount. Key material never leaves the engine. Policy scopes each role:
+With `transit`, the writer creates each tenant's key on first use and signs in with the pod's projected token on a JWT auth mount. Policy scopes each role:
 
-- The writer may `hmac` and `encrypt` on its profiles' keys, and touch nothing that rotates, configures or trims a key. Sealed identifiers are `encrypt` on the tenant's key, so destroying it makes them unreadable.
+- The writer may `hmac` and `encrypt` on its profiles' keys, and touch nothing that rotates, configures or trims a key.
 - The resolve role may `decrypt` and nothing else.
 - Only a human eraser role reaches `rotate`, `config` and `trim`.
 
 [OpenBAO keys](../../guides/audit/operate/configure-openbao-keys.md) has the engine set-up.
 
-With `kms`, the encryption context names the tenant and purpose, and a processor's IAM role is scoped to the purposes it may unwrap. Set `keys.adapter: kms` and `keys.state`: `backend: database` keeps wrapped secrets in your PostgreSQL with no SSM, `backend: ssm` under `root`. Without `keys.state` the writer cannot pseudonymise.
+With `kms`, set `keys.adapter: kms` and `keys.state`: `backend: database` keeps wrapped secrets in your PostgreSQL, `backend: ssm` keeps them under `root`. Without `keys.state` the writer cannot pseudonymise.
 
 ## Never rotated
 
@@ -48,9 +48,9 @@ Rotating a pseudonymisation key gives every person a second, unrelated pseudonym
 
 `audit key destroy --tenant <t> --purpose <p> --by <who> --reason <why>` is erasure. It refuses while a legal hold covers the tenant. It refuses without a writer to record `audit.key.destroyed`.
 
-The pseudonyms stay in the archive but nothing can compute or match them, and every sealed identity is unreadable. The provider leaves a tombstone, checked before any key is created, so a later record cannot mint a fresh key.
+The pseudonyms stay in the archive but nothing can compute or match them. The provider leaves a tombstone, checked before any key is created, so a later record cannot mint a fresh key. With `transit` every sealed identity is unreadable. With `kms` and `local` the provider refuses to open it, but the `conceal` key still decrypts the stored copy.
 
-With `transit`, destroy rotates the tenant's key once, raises the minimum usable version past the first and trims the first version. The key stays as the tombstone, found before any create, so a destroyed tenant never gets a second identity. A tenant destroyed before it was seen gets a key made and destroyed at once.
+With `transit`, destroy rotates the tenant's key once, raises the minimum usable version past the first and trims the first version. The key stays as the tombstone. A tenant destroyed before it was seen gets a key made and destroyed at once.
 
 ## Signing key
 
@@ -68,7 +68,9 @@ aws kms create-key --key-spec ECC_NIST_P384 --key-usage SIGN_VERIFY \
 aws kms create-alias --alias-name alias/sluis-<instance>-audit-seal --target-key-id <key id>
 ```
 
-The notary signs a SHA-384 digest (`MessageType DIGEST`, `ECDSA_SHA_384`). A key of another spec is refused at start. CloudTrail `Sign` events record when the notary signed.
+The notary signs a SHA-384 digest. A key of another spec is refused at start. CloudTrail `Sign` events record when the notary signed.
+
+Give the seal key the policy `SealKeyPolicy` writes. Only the notary's role signs. The control plane (`kms:PutKeyPolicy`, `kms:CreateGrant`, `kms:ScheduleKeyDeletion`, `kms:DisableKey`, `kms:RevokeGrant`) belongs to named key administrators and is denied to every other principal, the account root included.
 
 `audit key public --kms-key alias/sluis-<instance>-audit-seal --thumbprint` prints the RFC 7638 thumbprint a verifier pins. `--jwks` prints the JWK Set for `keys/roots.jwks`. The default is PEM.
 
@@ -80,7 +82,7 @@ An auditor trusts a key because they pinned its thumbprint, taken from you out o
 
 ### Delegation
 
-A root can sign a statement that another key may sign seals for given profiles and tenants for at most 25 hours. `audit verify` checks the window, the scope, the limit, revocation and that only a pinned root counts. The notary does not take a delegation yet: its key must be listed in `keys/roots.jwks` as a root.
+A root can sign a statement that another key may sign seals for given profiles and tenants for at most 25 hours. `audit verify` checks the window, scope, limit and revocation, and that a pinned root signed it. The notary does not take a delegation yet: its key must be a root in `keys/roots.jwks`.
 
 ### Replacement
 

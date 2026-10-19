@@ -28,7 +28,7 @@ Attributes exist only in matchers, because a cluster role binding cannot read on
 Two groups that set one claim key to different values fail the policy load. Lifetime is a property of the privilege,
 never a function of group and workspace, group and client, or group and person. For an exception, add a new internal group.
 
-A client is declared in one row with `requires` mandatory. No console or workload registers one. A GitHub team or Slack
+A client is declared in one row with `requires` mandatory. No console or workload registers one. A public client always requires PKCE. A confidential one may opt in with `pkce: required`. A GitHub team or Slack
 channel binds to internal groups the way `requires` does.
 
 ## Why a resource is not a client
@@ -70,7 +70,7 @@ seen cannot widen anything: it can only ask a person to consent to reach that pe
 The threat is phishing: a hostile client persuading somebody to sign in and taking the token away. The guard is an
 allow-list of origins. A declared client always wins, so nothing is fetched for one already in the file.
 
-The cached copy is short-lived and transport-only. The display name is bounded and stripped. The audit trail records
+A document that asks for client authentication is refused. The cached copy is short-lived and transport-only. The audit trail records
 the URL, which is the identity.
 
 ## Decided in

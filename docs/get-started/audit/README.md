@@ -40,8 +40,9 @@ The archive has one store per preset, each with its own bucket, prefix, region, 
 Explanations: [deployment shapes](../../concepts/audit/deployment-shapes.md), [direct mode](../../concepts/audit/direct-mode.md),
 [stream mode](../../concepts/audit/stream-mode.md), [AWS Lambda](../../concepts/audit/aws-lambda.md), [levels](../../concepts/audit/levels.md).
 
-## Planned
+## Keys and state
 
-[0041](../../decisions/0041-the-secret-contract.md) moves keys and State to the shared
-[adapter block](../../concepts/storage/adapter-block.md). The chart and the Pulumi library do not take the block yet.
-[Key custody](../../concepts/audit/key-custody.md) describes today's behaviour.
+The configuration files, the chart and the Pulumi library take the shared `keys` block
+([adapter block](../../concepts/storage/adapter-block.md), [0041](../../decisions/0041-the-secret-contract.md)).
+State has no block of its own: credentials and wrapped keys live in SSM or the index database.
+[Key custody](../../concepts/audit/key-custody.md) describes the keys.

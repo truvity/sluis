@@ -13,6 +13,7 @@ An installation from [Kubernetes](kubernetes.md) or [AWS Lambda](aws-lambda.md).
 | The right to write | the writer | Kubernetes: a `workloadIdentity.workloads` entry mapping sluis's ServiceAccount to the source, and its issuer in `workloadIdentity.issuers`. Lambda: sluis's role ARN in `Ingest.Senders` |
 | The right to read | the query service | `query.grants` naming the issuer and audience of sluis's console ([read the trail](../../guides/audit/connect/read-the-trail.md)) |
 | The profiles sluis's actions fall under | the deployment document | `security`, and `history` if the console shows tenant-facing activity |
+| The right to vouch for a backup | the query service, and the writer's observer stamp | a restore searches the trail for `roster.backup.completed` and needs the hour sealed: grant its token `search` and `get` on `backup.verify.profile` and map the backup function's sender to `backup.verify.observer` ([provenance](../../reference/sluis/backup.md#provenance)) |
 
 ## 1. Install audit
 

@@ -20,8 +20,9 @@ Each row names a failure and what consumers and operators see.
 | A Slack pass cannot read the workspace whole, or the directory cannot be read | the report is kept with the failure on it; nothing is decided or changed on a partial read, and nobody is removed |
 | A removal set is over half of a channel or of the workspace's managed members | nobody in that set is removed until an operator confirms that exact fingerprint (valid 24 hours; one confirmation covers every gate it fits) |
 | A channel is defined in both git and the console | held on both sides, unchanged, until one definition is removed |
-| The audit installation cannot be reached | records queue in the process; sign-ins are not refused, except a recovery sign-in, which fails closed |
-| The whole installation is down | no new sign-ins; existing sessions and tokens live to expiry; [recovery](recovery.md) is by cluster proof |
+| The audit installation cannot be reached | records queue in the process; sign-ins are not refused. A recovery sign-in, a maintenance change and a restore bypass fail closed |
+| A restore finds no sealed audit record for the backup | refused as `unverified`, unless an operator passes `--allow-unverified`; the bypass is recorded first ([provenance](../../reference/sluis/backup.md#provenance)) |
+| The whole installation is down | no new sign-ins; existing sessions and tokens live to expiry; [recovery](recovery.md) is by cluster proof or password |
 
 ## Access is removed only on an authoritative answer
 

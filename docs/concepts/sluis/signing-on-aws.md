@@ -32,7 +32,7 @@ A new key enters the JWKS at once and signs after `prepublish` (default `15m`). 
 `lifetimes.token` plus 5m of skew. At start `retain` must be at least that, and `rotateEvery` must exceed `prepublish`
 and be at most 168h.
 
-A process looks for work at most every `pollInterval` (30s), on a request, and on Kubernetes on a timer. The first key of an estate is active at once.
+A process looks for work at most every `pollInterval` (30s), on a request, and on Kubernetes on a timer.
 
 ## The sign key, and moving between signers
 
@@ -75,7 +75,8 @@ The key policy and the account's IAM decide who may call `kms:Decrypt`. Keep tha
 or a PowerUser can read a wrapped key from the State and forge. Only a CloudTrail `Decrypt` records it. On a shared key,
 deny `purpose=sign` to every principal but the signing roles.
 
-Principals with `kms:PutKeyPolicy` can widen who may decrypt, so they are inside the boundary. A multi-Region key needs
+Principals with `kms:PutKeyPolicy` can widen who may decrypt, so they are inside the boundary. Its key policy leaves the
+control plane to the named key administrators ([key policy](../../reference/sluis/aws-signing-key.md)). A multi-Region key needs
 the same policy in every replica.
 
 ## Known limits

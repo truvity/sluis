@@ -1,6 +1,6 @@
 # What does the Slack controller manage?
 
-The Slack controller is a loop in the sluis process (`controllers.slack`) with no listener, on the same [rails](github-controller.md#reconciler-rails) as the GitHub controller. It makes each Slack workspace's channels contain the people who hold the groups bound to them. [How a Slack pass decides](slack-pass.md) covers the pass itself.
+The Slack controller is a loop in the Slack module's process (`controllers.slack`), with `/rpc` as its only listener, on the same [rails](github-controller.md#reconciler-rails) as the GitHub controller. It makes each Slack workspace's channels contain the people who hold the groups bound to them. [How a Slack pass decides](slack-pass.md) covers the pass itself.
 
 To connect a workspace, see [connect a Slack workspace](../../guides/sluis/connect/slack-workspace.md), [Slack Connect channels](../../guides/sluis/connect/slack-connect-channels.md) and [Slack Apps](../../guides/sluis/connect/slack-apps-catalogue.md).
 

@@ -1,6 +1,6 @@
 # What does sluis verify and issue?
 
-sluis verifies three kinds of proof, resolves each to internal groups, and issues tokens through six grants.
+sluis verifies three kinds of proof, resolves each to internal groups, and issues tokens through three grants and three endpoints.
 
 ## The policy
 
@@ -19,12 +19,13 @@ validates its output with the same loader in CI.
 
 | Proof | From | How |
 |---|---|---|
-| a corporate sign-in | Google Workspace, Entra next | an OIDC authorization-code flow this process starts and finishes, resolved against the directory in the same process |
+| a corporate sign-in | Google Workspace, Entra next | an OIDC authorization-code flow the issuer starts and finishes with the Google module, resolved against the directory snapshot; Google's ID token must carry a verified address |
+| a recovery sign-in | the recovery account | a ServiceAccount token checked by the API server, or an SRP-6a password proof ([recovery](recovery.md)) |
 | a CI identity token | GitHub Actions, per organisation | token exchange against GitHub's key set; the audience must be this issuer's own URL |
 | a workload token | a ServiceAccount in any cluster | token exchange against the key set that cluster publishes; one row per cluster, a name and a URL, no credential |
 
-The **owner** allow-list is the whole trust boundary for CI tokens. Anybody gets a valid token for their own repository,
-so an empty list verifies nothing. The audience check stops a token minted for a cloud provider from replaying here.
+The **owner** allow-list is the trust boundary for CI tokens. Anybody gets a valid token for their own repository,
+so an empty list verifies nothing. `exchange.github.ownerIds` and `repositoryIds` also pin the numeric ids, which a rename cannot move. The audience check stops a token minted for a cloud provider from replaying here.
 
 A cluster's key set is public. EKS publishes one per cluster and Talos serves it at `/openid/v1/jwks`. This is how one
 issuer serves many clusters without holding a kubeconfig for each. The issuer's own cluster is a row like any other.
@@ -43,8 +44,7 @@ minutes. TokenReview remains only for [recovery](recovery.md).
 | revocation | "sign out everywhere" and the operator's revoke |
 | token exchange | the one machine grant, and the CLI's re-audiencing for a cluster, AWS or another audience |
 
-Three of the six are grants and three are endpoints. `grant_types_supported` lists three, and the endpoints are
-advertised in their own fields.
+`grant_types_supported` lists the three grants. Discovery advertises the endpoints in their own fields.
 
 Token exchange takes three subject kinds, all verified against a key set this process trusts and holds no credential for:
 

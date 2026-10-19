@@ -50,7 +50,7 @@ The receiver verifies the token as a JWT from the cluster's own OIDC issuer. The
 
 ### On the SQS path
 
-A record arriving through the ingest queue carries no verified caller identity. SQS delivers the body and attributes the sender chose. The writer attributes the record to itself.
+A record arriving through the ingest queue carries no verified caller identity. SQS delivers the body and attributes the sender chose. The writer takes neither.
 
 | Consumer | Stamp in the message |
 |---|---|
@@ -59,7 +59,7 @@ A record arriving through the ingest queue carries no verified caller identity. 
 
 | Stamped from SQS | Value |
 |---|---|
-| `observer.id` | the `senders` entry for the message's `SenderId` (`AROA...` of the role, or the whole id with its session); empty when none |
+| `observer.id` | the `senders` entry for the message's `SenderId` (`AROA...` of the role, or the whole id with its session); empty when none. The Pulumi library renders no `senders` table, so a Lambda writer records none |
 | `recorded_at` | the message's `SentTimestamp` |
 
 Whoever may send to the queue can therefore record under any `source` and `actor` a catalogue admits. Authenticity on this path rests on the queue policy's sender principals alone.
@@ -89,13 +89,17 @@ An authorizer answers with every grant the caller holds. `auth.Effective` picks,
 
 The `access-roster` grants preset (legacy identifier, renamed in v1.75–v1.76) reads the estate's grant grammar, which sluis defines. `authn.SplitGroup` splits it. Roles bind to the framework profiles a profile is composed from, not to profile names. `viewer` must be tenant-scoped. `resolve` and time-boxed grants are explicit rules only. The reference lists the role table.
 
+## Exports
+
+The issuer and subject that asked for an export collect it, and only while their `export` grant on the profile holds. Issuing the link is recorded as `audit.export.completed`, and no link is issued when it cannot be recorded. A CSV cell that starts with `=`, `+`, `-`, `@`, a tab or a carriage return gets a leading `'`.
+
 ## The Audit page
 
 The application's own console hosts the page and passes the token it already holds. See [the Audit page](audit-page.md).
 
 ## Resolution
 
-`resolve` maps a pseudonym back to a person through the identity map. Grant it to as few roles as possible. It emits `audit.get`-class records naming the rule.
+`resolve` maps a pseudonym back to a person through the identity map. Grant it to as few roles as possible. It records `audit.pseudonym.resolved`, confirmed before the identity is returned.
 
 With no `keys` block, there is nothing to resolve. The operation is refused as unimplemented. A grant may still name it.
 

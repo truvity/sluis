@@ -12,9 +12,9 @@ While it is set, the source refuses every write of state with `503` and `Retry-A
 
 ## What keeps answering
 
-- Discovery, the key set, userinfo, introspection, the grants listing and the console's reads.
-- `POST /oauth/token` for a token exchange. A CI job, a workload, an AWS role or a person with a recorded sign-in trades its proof.
-- `POST /oauth/token` for a refresh. It returns the refresh token it was given, unrotated, so the token the copy carries stays the live one.
+- Discovery, the key set, userinfo, the grants listing and the console's reads.
+- `POST /token` for a token exchange. A CI job, a workload, an AWS role or a person with a recorded sign-in trades its proof.
+- `POST /token` for a refresh. It returns the refresh token it was given, unrotated, so the token the copy carries stays the live one.
 - The `{"kind":"check"}` event on Lambda, which reads no state.
 
 An exchange and a refresh write nothing. The access token they mint is a signed JWT that verifies by the key set, and it is not recorded. The copy carries the issuer's records. A record written after the final pass would be missing from the destination.

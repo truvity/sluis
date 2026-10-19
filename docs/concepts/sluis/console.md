@@ -12,7 +12,7 @@ The admin-consent callback stays at the origin root. It runs before anybody can 
 
 ## Sign-in as a client
 
-A person with no session is sent to `/authorize` with the console's declared client. They sign in at the issuer's login page and return with the issuer's session cookie. The console has no login of its own and no proxy in front of it.
+A person with no session is sent to `/authorize` with the console's declared client. They sign in at the issuer's login page and return with the issuer's session cookie. The console has no login of its own, bar recovery, and no proxy in front of it.
 
 The code the flow returns is never redeemed. The console needs the session, not a token, because it reads the directory and the policy in the same process. The code expires unused and is stripped from the URL. See [the console app](../../guides/sluis/connect/console-app.md).
 
@@ -38,6 +38,7 @@ It cannot change who is in an internal group. That is the policy, reviewed in gi
 - Revoke a session, or disconnect something it connected. Disconnecting revokes at the other side, then forgets.
 - Confirm a set of removals a controller held, and import GitHub links approved elsewhere.
 - Archive a console channel in Slack when its record is forgotten, if asked. Slack Connect channels are never archived.
+- Turn recovery off from Settings, never on.
 
 An operator may do these over the installation, or over the one directory that owns the organisation or workspace. Everyone else is a viewer. See [console roles](../../reference/sluis/console-roles.md).
 
@@ -59,12 +60,11 @@ Four pages run before anyone can be authorized, so none can be a console page.
 
 | Path | Purpose |
 |---|---|
-| `/login` | The sign-in chooser, built from the declared policy and the validated request. |
-| `/logout` | The sign-out a person follows, with no `id_token_hint` needed. |
+| `/login` | The sign-in chooser, built from the declared policy and the validated request, with a collapsed *Password sign-in* for the recovery account. |
+| `/logout` | The sign-out a person follows. It asks with a *Sign out* button and needs no `id_token_hint`. |
 | `/signed-out` | The landing page when a client declares none. |
 | A refusal | What `/authorize` and `/end_session` show when no safe redirect exists. |
 
-Re-read these pages when behaviour changes, because nothing fails when they go stale.
 
 ## Decided in
 

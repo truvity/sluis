@@ -72,7 +72,7 @@ A person runs the whole suite at every major and minor release. One profile alon
 
 The Config profile (`just conformance-config`) stays one click away. It needs no credential and guards the discovery document.
 
-[`hack/conformance_drive.py`](../../../hack/conformance_drive.py) drives headless Chrome through the browser half: it signs in through recovery and answers the manual steps with a screenshot. Thirty-five modules are one command. Pass `--manual` to hand one module's browser step to a person, say to check claims with a real account.
+[`hack/conformance_drive.py`](../../../hack/conformance_drive.py) drives headless Chrome through the browser half: it signs in through recovery (a token on a cluster, the test account's password on Lambda) and answers the manual steps with a screenshot. Thirty-five modules are one command. Pass `--manual` to hand one module's browser step to a person, say to check claims with a real account.
 
 ## A reused code revokes what it issued
 

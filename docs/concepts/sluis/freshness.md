@@ -2,7 +2,7 @@
 
 sluis does not read the directory on the request path. It keeps one **snapshot per workspace**: domains, every group with its flat members, every account with its live flag, and `snapshot_at`.
 
-A background refresher replaces the snapshot every `refresh_interval` (default 15 minutes) under a lease the replicas share, so one replica fetches for all.
+A background refresher replaces the snapshot every `freshness.refreshInterval` (default 15 minutes) under a lease the replicas share, so one replica fetches for all.
 
 ## Reads take a freshness
 
@@ -26,13 +26,11 @@ The store is the truth and the reader map is a cache of it. A replica with no re
 
 ## The snapshot is shared
 
-Snapshots, sessions and logins in progress live in the **State port**. On AWS that is DynamoDB, with large snapshots as S3 blobs. On Kubernetes the `legacy` adapter keeps them in ConfigMaps and, optionally, Valkey ([the store](store.md), [ports](ports.md)).
+Snapshots, sessions and logins in progress live in the **State port**. On AWS and on Kubernetes with AWS storage that is DynamoDB, with large snapshots as S3 blobs. The deprecated `legacy` adapter keeps them in ConfigMaps and, optionally, Valkey ([the store](store.md), [ports](ports.md)).
 
 With a shared store, replicas answer from the same snapshot and a restart is warm. The directory is read once per interval whatever the replica count. The snapshot holds no directory credential. Losing it costs one fetch per workspace and, where sessions live in it, one sign-in per person.
 
 Readiness follows the store and liveness does not. A replica that cannot reach the store leaves the gateway's rotation and names the dependency (`internal/health`), and nothing restarts.
-
-With the Valkey-backed legacy adapter, leave cluster mode off unless you run several shards. With one shard, the client learns node addresses from `CLUSTER SLOTS` and bypasses the Kubernetes Service. A moved pod is then dialled at its old address while it reports healthy.
 
 ### The refresh lease
 

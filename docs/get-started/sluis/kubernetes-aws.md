@@ -1,12 +1,10 @@
 # Tutorial: sluis on Kubernetes with AWS storage
 
-You run sluis as one pod on your cluster (preset `k8s-aws`). State is in DynamoDB, blobs in S3 and secrets in SSM or OpenBao. Tokens are signed under a KMS-wrapped key. `sluisctl render` writes the two documents the pod reads from an installation file. CI holds them to it with `--check`. The chart runs in documents mode: it mounts the documents unchanged and keeps only deployment-level values.
+You run the sluis issuer as a pod on your cluster (preset `k8s-aws`). State is in DynamoDB, blobs in S3 and secrets in SSM or OpenBao. Tokens are signed under a KMS-wrapped key. `sluisctl render` writes the two documents the pod reads from an installation file. CI holds them to it with `--check`. The chart runs in documents mode: it mounts the documents unchanged and keeps only deployment-level values.
 
 The full runbook with a gateway and the first sign-in is [Install with Helm](../../guides/sluis/operate/install-with-helm.md). Every chart value is in [chart values](../../reference/sluis/chart-values.md). Design: [ports](../../concepts/sluis/ports.md).
 
 ## What you need
-
-Names below are placeholders; replace them.
 
 | Item | Detail |
 |---|---|
@@ -146,6 +144,7 @@ Set `adapters.openbao.token.audience` to the audience in your role's `bound_audi
 ```yaml
 replicaCount: 2        # replicas coordinate through DynamoDB
 serviceAccount:
+  name: sluis                   # the account step 1 associates with the role
   awsIdentity: pod-identity     # renders nothing: EKS Pod Identity associates the role (step 1)
 ```
 
@@ -158,17 +157,17 @@ helm install sluis oci://ghcr.io/truvity/charts/sluis --version X.Y.Z --namespac
   --set-file documents.service=rendered/sluis.yaml --set-file documents.policy=rendered/policy.yaml
 ```
 
-Expect a ServiceAccount, the `sluis-config` and `sluis-policy` ConfigMaps, one Deployment `sluis` and a Service. Set both documents or neither. Beside them the chart refuses `config`, `policy` and the exchange lists. It also refuses a document that disagrees with the release name, `policy.file` or the public URLs, and names the installation key to change. Helm cannot run the loader, so the service validates the rest at start, after the rollout.
+Expect the ServiceAccounts `sluis` and `sluis-recovery`, the ConfigMaps `sluis-issuer-config` and `sluis-policy`, the Deployment `sluis-issuer` and the Service `sluis`. Set both documents or neither. Beside them the chart refuses `config`, `policy` and the exchange lists. It also refuses a document that disagrees with the release name, `policy.file` or the public URLs, and names the installation key to change. Helm cannot run the loader, so the service validates the rest at start, after the rollout.
 
 ## 5. Check it
 
 ```sh
-kubectl -n sluis rollout status deploy/sluis
+kubectl -n sluis rollout status deploy/sluis-issuer
 kubectl -n sluis port-forward svc/sluis 8080:8080 &
 curl -s localhost:8080/.well-known/openid-configuration
 ```
 
-Expect the rollout to finish and JSON whose `issuer` is `https://access.example.test`. If the pod does not start, `kubectl -n sluis logs deploy/sluis` names the key the loader refused or the missing parameter's path.
+Expect the rollout to finish and JSON whose `issuer` is `https://access.example.test`. If the pod does not start, `kubectl -n sluis logs deploy/sluis-issuer` names the key the loader refused or the missing parameter's path.
 
 Then sign in on the console's login page with a recovery token ([first sign-in](../../guides/sluis/operate/install-with-helm.md#5-first-sign-in)):
 
@@ -196,4 +195,4 @@ To change the installation, review the diff of the installation and both documen
 
 - A release: [upgrade pages](../../guides/sluis/upgrade/v1.64.md) and the [zero-diff gate](../../guides/sluis/operate/install-with-helm.md#afterwards).
 
-Values mode (`config`, `policy`, `exchange`) is deprecated and works for one more minor.
+Values mode (`config`, `policy`, `exchange`) is deprecated.
