@@ -593,19 +593,14 @@ func SluisKeyPolicyStatements(a KeyPolicyArgs) ([]map[string]any, error) {
 }
 
 // keyRoleReach are the parameter patterns (`<prefix>/*`) the role's own
-// statements decrypt: its hosted modules (the whole of internal/ and external/
-// for the oidc host on layout v4), the modules it reads, and its cross grants.
+// statements decrypt: its hosted modules, the modules it reads, and its cross
+// grants.
 func keyRoleReach(a KeyPolicyArgs, r *KeyRole) []string {
 	arns := func(prefixes ...string) []string { return parameterArnsUnder(a.Region, a.Account, prefixes...) }
 	internalAll, externalAll := InternalParameterPrefix(a.Modules.Instance), ExternalParameterPrefix(a.Modules.Instance)
 	var out []string
-	if a.Layout.has4() && r.Role.hosts(ModuleOIDC) {
-		out = append(out, arns(internalAll, externalAll)...)
-	}
-	if a.Layout.has5() || !r.Role.hosts(ModuleOIDC) {
-		for _, m := range r.Role.Hosts {
-			out = append(out, arns(a.Modules.InternalPrefix(m), a.Modules.ExternalPrefix(m))...)
-		}
+	for _, m := range r.Role.Hosts {
+		out = append(out, arns(a.Modules.InternalPrefix(m), a.Modules.ExternalPrefix(m))...)
 	}
 	for _, m := range r.ReadModules {
 		out = append(out, arns(a.Modules.InternalPrefix(m), a.Modules.ExternalPrefix(m))...)
