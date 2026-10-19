@@ -1,5 +1,13 @@
 ## Unreleased
 
+## v1.77.0
+
+v1.77.0-rc.2, which ran overnight on a canary installation, plus one release fix. Its notes are under v1.77.0-rc.2 and v1.77.0-rc.1 below.
+
+### Fixed
+
+- **The release's modules job fetches only this repository's modules directly.** `hack/build-as-consumer.sh` used `GOPROXY=direct` for every dependency, so a third-party module was cloned from its own VCS; on v1.77.0-rc.2 one such clone hung the job for two hours. Third-party modules now come through the public proxy (`GONOPROXY=github.com/truvity/sluis`), and each build and vet is held to `BUILD_TIMEOUT` (600s) so a stuck fetch fails one attempt of the retry loop.
+
 ## v1.77.0-rc.2
 
 ### Security
