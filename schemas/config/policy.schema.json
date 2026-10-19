@@ -286,7 +286,7 @@
             },
             "catalogue": {
               "deprecated": true,
-              "description": "DEPRECATED, removed in v1.77: declare each as a `purpose: catalogue` entry in `apps`. Read as those entries, with a warning.",
+              "description": "DEPRECATED: declare each as a `purpose: catalogue` entry in `apps`. Still read as those entries, with a warning.",
               "items": {
                 "additionalProperties": false,
                 "description": "One App: created under `org` from the console, and installed there.",
@@ -450,7 +450,7 @@
             },
             "runnerTiers": {
               "deprecated": true,
-              "description": "DEPRECATED, removed in v1.77: declare a `purpose: runner` entry in `apps` for each tier. Read as those entries, with a warning.",
+              "description": "DEPRECATED: declare a `purpose: runner` entry in `apps` for each tier. Still read as those entries, with a warning.",
               "items": {
                 "pattern": "^[a-z0-9]([a-z0-9-]{0,14}[a-z0-9])?$",
                 "type": "string"

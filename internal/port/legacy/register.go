@@ -11,9 +11,9 @@ func init() {
 		concern port.Concern
 		summary string
 	}{
-		{port.ConcernState, "ConfigMaps and, optionally, Valkey sessions and leases; deprecated in v1.74.0, removed in v1.75 (migrate with `sluis migrate`)."},
-		{port.ConcernSecrets, "Kubernetes Secrets the service writes; deprecated in v1.74.0, removed in v1.75."},
-		{port.ConcernBlobs, "Reports and snapshots in ConfigMaps or Valkey; deprecated in v1.74.0, removed in v1.75."},
+		{port.ConcernState, "ConfigMaps and, optionally, Valkey sessions and leases; deprecated since v1.74.0, still the default (migrate with `sluis migrate`)."},
+		{port.ConcernSecrets, "Kubernetes Secrets the service writes; deprecated since v1.74.0, still the default."},
+		{port.ConcernBlobs, "Reports and snapshots in ConfigMaps or Valkey; deprecated since v1.74.0, still the default."},
 		{port.ConcernTrigger, "An in-process trigger: a notification reaches only this process."},
 	} {
 		port.Register(port.Descriptor{

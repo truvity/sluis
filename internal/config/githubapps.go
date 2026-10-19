@@ -99,11 +99,10 @@ func (a *AppsGitHub) foldLegacy() int {
 	return n
 }
 
-// FoldLegacy folds the retired sections of the GitHub Apps into the list. The
-// sections are read for one release (removed in v1.77, like the layout they come
-// with); the canonical document `sluisctl policy render` writes carries the list
-// only. How many entries it made is [PolicyDocument.LegacyAppEntries], for the
-// process to warn on.
+// FoldLegacy folds the deprecated sections of the GitHub Apps into the list.
+// They are still read; the canonical document `sluisctl policy render` writes
+// carries the list only. How many entries it made is
+// [PolicyDocument.LegacyAppEntries], for the process to warn on.
 func (a *PolicyApps) FoldLegacy() {
 	if a != nil && a.GitHub != nil {
 		a.GitHub.foldLegacy()
