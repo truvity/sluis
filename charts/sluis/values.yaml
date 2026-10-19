@@ -329,7 +329,7 @@ config:
   #     slack:
   #       consoleURL: http://sluis.access.svc:8080/console
   #
-  #   # DEPRECATED in v1.74.0, removed in v1.75 (as is `ports.adapter: legacy`): migrate with `sluis migrate`.
+  #   # DEPRECATED since v1.74.0, and still read (as is `ports.adapter: legacy`, the default): migrate with `sluis migrate`.
   #   valkey:
   #     address: valkey.example.svc:6379
   #     passwordSecret: valkey/password                       # with `secrets`

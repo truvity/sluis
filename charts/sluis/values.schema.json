@@ -393,7 +393,7 @@
           "properties": {
             "adapter": {
               "default": "legacy",
-              "description": "`legacy` is deprecated in v1.74.0 and removed in v1.75: migrate with `sluis migrate`. It keeps state where it has always been kept: the namespace's ConfigMaps and Secrets and, when `valkey` is set, Valkey. `memory` keeps all of it in this process, which a restart loses: for a local run and the demonstration, and not with `store: kubernetes` or `valkey`.  `dynamodb` keeps the same in one DynamoDB table (`ports.dynamodb`), with the platform's credentials, and takes its Blob from `legacy` unless `ports.blob` names its own.",
+              "description": "`legacy`, the default, is deprecated since v1.74.0 and still ships: migrate with `sluis migrate`. It keeps state where it has always been kept: the namespace's ConfigMaps and Secrets and, when `valkey` is set, Valkey. `memory` keeps all of it in this process, which a restart loses: for a local run and the demonstration, and not with `store: kubernetes` or `valkey`.  `dynamodb` keeps the same in one DynamoDB table (`ports.dynamodb`), with the platform's credentials, and takes its Blob from `legacy` unless `ports.blob` names its own.",
               "enum": [
                 "legacy",
                 "memory",
@@ -1236,7 +1236,7 @@
           "properties": {
             "adapter": {
               "default": "legacy",
-              "description": "`legacy` is deprecated in v1.74.0 and removed in v1.75: migrate with `sluis migrate`. It keeps state where it has always been kept: the namespace's ConfigMaps and Secrets and, when `valkey` is set, Valkey. `memory` keeps all of it in this process, which a restart loses: for a local run and the demonstration, and not with `store: kubernetes` or `valkey`.  `dynamodb` keeps the same in one DynamoDB table (`ports.dynamodb`), with the platform's credentials, and takes its Blob from `legacy` unless `ports.blob` names its own.",
+              "description": "`legacy`, the default, is deprecated since v1.74.0 and still ships: migrate with `sluis migrate`. It keeps state where it has always been kept: the namespace's ConfigMaps and Secrets and, when `valkey` is set, Valkey. `memory` keeps all of it in this process, which a restart loses: for a local run and the demonstration, and not with `store: kubernetes` or `valkey`.  `dynamodb` keeps the same in one DynamoDB table (`ports.dynamodb`), with the platform's credentials, and takes its Blob from `legacy` unless `ports.blob` names its own.",
               "enum": [
                 "legacy",
                 "memory",
@@ -1949,7 +1949,7 @@
                 },
                 "catalogue": {
                   "deprecated": true,
-                  "description": "DEPRECATED, removed in v1.77: declare each as a `purpose: catalogue` entry in `apps`. Read as those entries, with a warning.",
+                  "description": "DEPRECATED: declare each as a `purpose: catalogue` entry in `apps`. Still read as those entries, with a warning.",
                   "items": {
                     "additionalProperties": false,
                     "description": "One App: created under `org` from the console, and installed there.",
@@ -2113,7 +2113,7 @@
                 },
                 "runnerTiers": {
                   "deprecated": true,
-                  "description": "DEPRECATED, removed in v1.77: declare a `purpose: runner` entry in `apps` for each tier. Read as those entries, with a warning.",
+                  "description": "DEPRECATED: declare a `purpose: runner` entry in `apps` for each tier. Still read as those entries, with a warning.",
                   "items": {
                     "pattern": "^[a-z0-9]([a-z0-9-]{0,14}[a-z0-9])?$",
                     "type": "string"
@@ -4535,7 +4535,7 @@
           "properties": {
             "adapter": {
               "default": "legacy",
-              "description": "`legacy` is deprecated in v1.74.0 and removed in v1.75: migrate with `sluis migrate`. It keeps state where it has always been kept: the namespace's ConfigMaps and Secrets and, when `valkey` is set, Valkey. `memory` keeps all of it in this process, which a restart loses: for a local run and the demonstration, and not with `store: kubernetes` or `valkey`.  `dynamodb` keeps the same in one DynamoDB table (`ports.dynamodb`), with the platform's credentials, and takes its Blob from `legacy` unless `ports.blob` names its own.",
+              "description": "`legacy`, the default, is deprecated since v1.74.0 and still ships: migrate with `sluis migrate`. It keeps state where it has always been kept: the namespace's ConfigMaps and Secrets and, when `valkey` is set, Valkey. `memory` keeps all of it in this process, which a restart loses: for a local run and the demonstration, and not with `store: kubernetes` or `valkey`.  `dynamodb` keeps the same in one DynamoDB table (`ports.dynamodb`), with the platform's credentials, and takes its Blob from `legacy` unless `ports.blob` names its own.",
               "enum": [
                 "legacy",
                 "memory",
@@ -5213,7 +5213,7 @@
         },
         "valkey": {
           "additionalProperties": false,
-          "description": "Deprecated in v1.74.0, removed in v1.75: migrate with `sluis migrate`. The shared store for logins in progress and snapshots. Unset keeps both in memory, correct for one replica.",
+          "description": "Deprecated since v1.74.0 and still read: migrate with `sluis migrate`. The shared store for logins in progress and snapshots. Unset keeps both in memory, correct for one replica.",
           "properties": {
             "address": {
               "allOf": [
@@ -6083,7 +6083,7 @@
           "properties": {
             "adapter": {
               "default": "legacy",
-              "description": "`legacy` is deprecated in v1.74.0 and removed in v1.75: migrate with `sluis migrate`. It keeps state where it has always been kept: the namespace's ConfigMaps and Secrets and, when `valkey` is set, Valkey. `memory` keeps all of it in this process, which a restart loses: for a local run and the demonstration, and not with `store: kubernetes` or `valkey`.  `dynamodb` keeps the same in one DynamoDB table (`ports.dynamodb`), with the platform's credentials, and takes its Blob from `legacy` unless `ports.blob` names its own.",
+              "description": "`legacy`, the default, is deprecated since v1.74.0 and still ships: migrate with `sluis migrate`. It keeps state where it has always been kept: the namespace's ConfigMaps and Secrets and, when `valkey` is set, Valkey. `memory` keeps all of it in this process, which a restart loses: for a local run and the demonstration, and not with `store: kubernetes` or `valkey`.  `dynamodb` keeps the same in one DynamoDB table (`ports.dynamodb`), with the platform's credentials, and takes its Blob from `legacy` unless `ports.blob` names its own.",
               "enum": [
                 "legacy",
                 "memory",

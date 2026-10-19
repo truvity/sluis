@@ -884,12 +884,12 @@ func (s *Stores) ForModule(own port.Module, peers ...port.Module) (port.Set, err
 const deprecationDocs = "https://github.com/truvity/sluis/blob/master/docs/guides/sluis/migrate/migrate-state.md"
 
 // warnDeprecated says, once per open, that the legacy store and Valkey go away:
-// they are deprecated since v1.74.0 and removed in v1.75. It changes nothing else.
+// they are deprecated since v1.74.0 and still ship (the legacy store is the default). It changes nothing else.
 func warnDeprecated(ctx context.Context, cfg Config, log *slog.Logger) {
 	if log == nil {
 		return
 	}
-	const removal = "deprecated in v1.74.0, removed in v1.75; migrate with `sluis migrate`"
+	const removal = "deprecated since v1.74.0 and still shipped; migrate with `sluis migrate`"
 	if cfg.Adapter == AdapterLegacy {
 		log.WarnContext(ctx, "the legacy store is "+removal,
 			slog.String("setting", "ports.adapter"), slog.String("adapter", AdapterLegacy),

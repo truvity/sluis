@@ -18,7 +18,7 @@ One adapter can cover several hosts: the `valkey` adapter is ElastiCache, Memory
 |---|---|---|---|---|---|---|---|---|
 | `dynamodb` | ✅ implemented | needs | - | - | ✅ | ✅ | ✅ | State, sessions included, in a DynamoDB table per module with per-item TTL. |
 | `kubernetes` | 💤 on request | - | needs | - | ✅ | - | - | State in a ConfigMap the service rebuilds and owns. |
-| `legacy` | ✅ implemented | - | needs | - | ✅ | - | ✅ | ConfigMaps and, optionally, Valkey sessions and leases; deprecated in v1.74.0, removed in v1.75 (migrate with `sluis migrate`). |
+| `legacy` | ✅ implemented | - | needs | - | ✅ | - | ✅ | ConfigMaps and, optionally, Valkey sessions and leases; deprecated since v1.74.0, still the default (migrate with `sluis migrate`). |
 | `memory` | ✅ implemented | - | - | - | ✅ | ✅ | ✅ | In this process's memory; a restart loses it. For tests and the demonstration. |
 | `postgres` | 💤 on request | - | - | - | ✅ | ✅ | ✅ | State in a PostgreSQL table. |
 | `valkey` | 💤 on request | - | - | - | ✅ | ✅ | ✅ | State, sessions included, in Valkey. |
@@ -28,7 +28,7 @@ One adapter can cover several hosts: the `valkey` adapter is ElastiCache, Memory
 | Adapter | Status | AWS | Kubernetes | OpenBao | kubernetes | lambda | process | What it is |
 |---|---|---|---|---|---|---|---|---|
 | `kubernetes` | 💤 on request | - | needs | - | ✅ | - | - | Dynamic secrets as Kubernetes Secrets the service writes. |
-| `legacy` | ✅ implemented | - | needs | - | ✅ | - | ✅ | Kubernetes Secrets the service writes; deprecated in v1.74.0, removed in v1.75. |
+| `legacy` | ✅ implemented | - | needs | - | ✅ | - | ✅ | Kubernetes Secrets the service writes; deprecated since v1.74.0, still the default. |
 | `memory` | ✅ implemented | - | - | - | ✅ | ✅ | ✅ | In this process's memory; a restart loses it. For tests and the demonstration. |
 | `openbao` | ✅ implemented | - | - | needs | ✅ | ✅ | ✅ | Dynamic secrets as KV version 2 secrets in an OpenBao mount, laid out under its own `private/` and `export/` trees; logs in with a ServiceAccount or web identity JWT. |
 | `ssm` | ✅ implemented | needs | - | - | ✅ | ✅ | - | Dynamic secrets as SecureString parameters in AWS SSM Parameter Store (layout v5). |
@@ -38,7 +38,7 @@ One adapter can cover several hosts: the `valkey` adapter is ElastiCache, Memory
 
 | Adapter | Status | AWS | Kubernetes | OpenBao | kubernetes | lambda | process | What it is |
 |---|---|---|---|---|---|---|---|---|
-| `legacy` | ✅ implemented | - | needs | - | ✅ | - | ✅ | Reports and snapshots in ConfigMaps or Valkey; deprecated in v1.74.0, removed in v1.75. |
+| `legacy` | ✅ implemented | - | needs | - | ✅ | - | ✅ | Reports and snapshots in ConfigMaps or Valkey; deprecated since v1.74.0, still the default. |
 | `memory` | ✅ implemented | - | - | - | ✅ | ✅ | ✅ | In this process's memory; a restart loses it. For tests and the demonstration. |
 | `off` | 💤 on request | - | - | - | ✅ | ✅ | ✅ | No blob storage: reports and snapshots are not kept. |
 | `postgres` | 💤 on request | - | - | - | ✅ | ✅ | ✅ | Blobs in PostgreSQL large objects. |

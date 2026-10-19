@@ -276,8 +276,8 @@ func policyAppsSchema() m {
 	return obj("What an operator may make on the console.", m{
 		"github": obj("GitHub Apps.", m{
 			"apps":        list("Every GitHub App the installation declares, of every purpose: the link App, the catalogue Apps and the runner tiers (docs/guides/sluis/connect/github-apps-catalogue.md). A grant naming an undeclared group stops the service.", githubAppSchema()),
-			"runnerTiers": m{"deprecated": true, "type": "array", "uniqueItems": true, "items": m{"type": "string", "pattern": "^[a-z0-9]([a-z0-9-]{0,14}[a-z0-9])?$"}, "description": "DEPRECATED, removed in v1.77: declare a `purpose: runner` entry in `apps` for each tier. Read as those entries, with a warning."},
-			"catalogue":   deprecated(list("DEPRECATED, removed in v1.77: declare each as a `purpose: catalogue` entry in `apps`. Read as those entries, with a warning.", catalogueAppSchema())),
+			"runnerTiers": m{"deprecated": true, "type": "array", "uniqueItems": true, "items": m{"type": "string", "pattern": "^[a-z0-9]([a-z0-9-]{0,14}[a-z0-9])?$"}, "description": "DEPRECATED: declare a `purpose: runner` entry in `apps` for each tier. Still read as those entries, with a warning."},
+			"catalogue":   deprecated(list("DEPRECATED: declare each as a `purpose: catalogue` entry in `apps`. Still read as those entries, with a warning.", catalogueAppSchema())),
 		}),
 		"slack": obj("Slack Apps.", m{
 			"catalogue": list("Every Slack App the installation declares (docs/guides/sluis/connect/slack-apps-catalogue.md). One for a workspace the policy does not declare stops the service.", slackAppSchema()),
