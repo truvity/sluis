@@ -87,16 +87,11 @@ type Config struct {
 	Cloudflare *config.Cloudflare
 	// Grants is the policy's cloudflare section.
 	Grants *config.PolicyCloudflare
-	// Internal and External are the installation's secrets: the minter
-	// credential is read from Internal, the stored credentials are written to
-	// External.
-	Internal secretstore.Internal
-	External secretstore.External
-	// V5 is the installation's secrets on layout v5 (ADR 0072). When set it is
-	// used and Internal and External are not: the minter credential is read at
-	// the address the account names below internal/cloudflare/, the records of
-	// minted tokens are internal/cloudflare/minted/<preset> and the stored
-	// credentials external/cloudflare/<preset>.
+	// V5 is the installation's secrets on layout v5 (ADR 0072), required: the
+	// minter credential is read at the address the account names below
+	// internal/cloudflare/, the records of minted tokens are
+	// internal/cloudflare/minted/<preset> and the stored credentials
+	// external/cloudflare/<preset>.
 	V5 *secretstore.StoresV5
 	// Dial opens an account (cfapi.Dial).
 	Dial Dialer
@@ -149,6 +144,9 @@ func New(cfg Config) (*Minter, error) {
 	}
 	if cfg.Dial == nil {
 		return nil, errors.New("cloudflare: no way to reach Cloudflare is configured")
+	}
+	if cfg.V5 == nil {
+		return nil, errors.New("cloudflare: the minter credential and the stored credentials live in the installation's SSM secrets on layout v5, and there are none")
 	}
 	if err := cloudflare.ValidateInstance(cfg.Instance); err != nil {
 		return nil, err
@@ -561,26 +559,17 @@ func (m *Minter) sortedPresets() []string {
 	return names
 }
 
-// minterDoc is the minter credential at the address ref, on the installation's layout.
+// minterDoc is the minter credential at the address ref.
 func (m *Minter) minterDoc(ref string) (state.Value[secretstore.CloudflareMinterv1], error) {
-	if m.cfg.V5 != nil {
-		return m.cfg.V5.Cloudflare().MinterAt(ref)
-	}
-	return m.cfg.Internal.CloudflareMinter(ref)
+	return m.cfg.V5.Cloudflare().MinterAt(ref)
 }
 
 // mintedDoc is the record of the tokens minted for a preset.
 func (m *Minter) mintedDoc(preset string) state.Value[secretstore.CloudflareMinted] {
-	if m.cfg.V5 != nil {
-		return m.cfg.V5.Cloudflare().Minted(preset)
-	}
-	return m.cfg.Internal.CloudflareMinted(preset)
+	return m.cfg.V5.Cloudflare().Minted(preset)
 }
 
 // stored is the preset's current credential.
 func (m *Minter) stored(preset string) state.Value[secretstore.Cloudflarev1] {
-	if m.cfg.V5 != nil {
-		return m.cfg.V5.CloudflareExternal().Preset(preset)
-	}
-	return m.cfg.External.Cloudflare(preset)
+	return m.cfg.V5.CloudflareExternal().Preset(preset)
 }

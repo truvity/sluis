@@ -32,21 +32,21 @@ func TestACredentialsRefMustBeAnInternalAddress(t *testing.T) {
 			t.Errorf("%s: %q: %v, want ErrRef", name, ref, err)
 		}
 	}
-	c := blobWith(config.PortsBlobS3{Bucket: "b", CredentialsRef: "internal/blobs/r2"})
+	c := blobWith(config.PortsBlobS3{Bucket: "b", CredentialsRef: "internal/google/blobs-r2"})
 	if err := c.validatePorts(); err == nil || !strings.Contains(err.Error(), "endpoint") {
 		t.Errorf("credentialsRef without endpoint: %v", err)
 	}
-	c = blobWith(config.PortsBlobS3{Bucket: "b", Endpoint: "https://s3.example.test", CredentialsRef: "internal/blobs/r2"})
+	c = blobWith(config.PortsBlobS3{Bucket: "b", Endpoint: "https://s3.example.test", CredentialsRef: "internal/google/blobs-r2"})
 	if err := c.validatePorts(); err != nil {
 		t.Errorf("a valid reference: %v", err)
 	}
 }
 
-func TestACredentialsRefNeedsV4Secrets(t *testing.T) {
-	c := blobWith(config.PortsBlobS3{Bucket: "b", Endpoint: "http://127.0.0.1:1", CredentialsRef: "internal/blobs/r2"})
-	c.v4 = &v4Holder{}
+func TestACredentialsRefNeedsTheSSMSecrets(t *testing.T) {
+	c := blobWith(config.PortsBlobS3{Bucket: "b", Endpoint: "http://127.0.0.1:1", CredentialsRef: "internal/google/blobs-r2"})
+	c.held = &secretsHolder{}
 	if _, err := c.s3Blob(context.Background()); err == nil || !strings.Contains(err.Error(), "ssm secrets source") {
-		t.Fatalf("no v4 stores: %v", err)
+		t.Fatalf("no secrets stores: %v", err)
 	}
 }
 
@@ -55,15 +55,15 @@ func TestACredentialsRefNeedsV4Secrets(t *testing.T) {
 // from the endpoint (unreachable here, so the store is unavailable).
 func TestTheBlobReadsItsCredentialsFromTheInternalAddress(t *testing.T) {
 	ctx := context.Background()
-	stores := secretstore.FromStore(statememory.New(), "")
-	c := blobWith(config.PortsBlobS3{Bucket: "b", Endpoint: "http://127.0.0.1:1", PathStyle: true, CredentialsRef: "internal/blobs/r2"})
-	c.v4 = &v4Holder{stores: stores}
+	stores := secretstore.FromStoreV5(statememory.New(), "")
+	c := blobWith(config.PortsBlobS3{Bucket: "b", Endpoint: "http://127.0.0.1:1", PathStyle: true, CredentialsRef: "internal/google/blobs-r2"})
+	c.held = &secretsHolder{v5: stores}
 
-	if _, err := c.s3Blob(ctx); err == nil || !strings.Contains(err.Error(), "internal/blobs/r2") {
+	if _, err := c.s3Blob(ctx); err == nil || !strings.Contains(err.Error(), "internal/google/blobs-r2") {
 		t.Fatalf("a missing document: %v", err)
 	}
 
-	doc, err := stores.Internal.S3Credentials("internal/blobs/r2")
+	doc, err := stores.S3Credentials("internal/google/blobs-r2")
 	if err != nil {
 		t.Fatal(err)
 	}

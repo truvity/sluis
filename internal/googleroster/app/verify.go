@@ -24,7 +24,7 @@ func (c Config) Verify(ctx context.Context, log *slog.Logger) error {
 	if st == nil {
 		return errors.New("ports.adapter: the Google module keeps its snapshots in the blob store and its lease in its table, and has no Kubernetes to do it in")
 	}
-	base := portstore.New(st.Ports).WithV4(st.V4).WithV5(st.V5)
+	base := portstore.New(st.Ports).WithV5(st.V5)
 	if err = base.RequireSecrets(); err != nil {
 		return fmt.Errorf("ports.adapter %s: %w", st.Adapter, err)
 	}

@@ -16,9 +16,10 @@ import (
 	"github.com/truvity/sluis/internal/store"
 )
 
-// dynamoDest opens a fresh DynamoDB table on the endpoint hack/dynamodb-conformance.sh
-// names, with the in-memory Secrets (a DynamoDB table holds none).
-func dynamoDest(t *testing.T) (*store.Stores, *dynamoport.Store) {
+// dynamoDest opens fresh DynamoDB tables, one per module, on the endpoint
+// hack/dynamodb-conformance.sh names, through the whole-estate router, with the
+// in-memory Secrets (a DynamoDB table holds none).
+func dynamoDest(t *testing.T) (*store.Stores, *dynamoport.Tables) {
 	t.Helper()
 	url := os.Getenv("ACCESS_ROSTER_DYNAMODB_URL")
 	if url == "" {
@@ -31,12 +32,14 @@ func dynamoDest(t *testing.T) (*store.Stores, *dynamoport.Store) {
 	if _, err := rand.Read(b); err != nil {
 		t.Fatal(err)
 	}
-	tbl, err := dynamoport.Open(context.Background(), dynamoport.Config{Table: "ar-migrate-" + hex.EncodeToString(b), Endpoint: url, Create: true})
+	tbl, err := dynamoport.OpenTables(context.Background(), dynamoport.Config{
+		Tables: dynamoport.DefaultTables("ar-migrate-" + hex.EncodeToString(b)), Endpoint: url, Create: true,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	set := tbl.Set()
-	set.Secrets = memory.NewSecrets()
+	r := tbl.Router()
+	set := port.Set{State: r, Index: r, Secrets: memory.NewSecrets()}
 	return portSide(set, store.AdapterDynamoDB), tbl
 }
 

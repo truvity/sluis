@@ -309,7 +309,7 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 		hasCons     bool
 	)
 	if stores.Adapter != store.AdapterLegacy {
-		base := portstore.New(stores.Ports).WithV4(stores.V4).WithV5(stores.V5)
+		base := portstore.New(stores.Ports).WithV5(stores.V5)
 		if err = base.RequireSecrets(); err != nil {
 			stores.Close()
 			return nil, fmt.Errorf("ports.adapter %s: %w", stores.Adapter, err)

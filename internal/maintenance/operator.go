@@ -16,7 +16,7 @@ import (
 
 // Table is one State that holds a flag, and the name it is shown by.
 type Table struct {
-	// Name is the module, or "all" for the one table of layout v4.
+	// Name is the module, or "all" for a single store with no module split.
 	Name  string
 	State port.State
 }

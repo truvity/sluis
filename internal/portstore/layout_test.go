@@ -9,25 +9,27 @@ import (
 	"github.com/truvity/sluis/internal/port/memory"
 )
 
-// The Secrets path of every credential kind: `credentials/<kind>/<id>/<ref>`,
-// which the ssm adapter keeps at `/sluis/private/credentials/...`. The keys
-// are the ones the stores of this package build, so a kind added here without a
-// layout name falls under `other` and fails.
+// The Secrets path of every credential kind when the secrets are a Secrets
+// port (not the layout v5 stores): `credentials/<module>/<kind>/<id>/<ref>`,
+// the key's layout v5 address. The keys are the ones the stores of this package
+// build, so a kind added here without a layout name falls under `other` and
+// fails.
 func TestEveryCredentialKindHasItsSecretPath(t *testing.T) {
 	for _, c := range []struct{ key, ref, want string }{
-		{wsDirKey("google", "C01ipl6j0"), "r1", "credentials/directory/google/C01ipl6j0/r1"},
-		{wsDirKey("entra", "4b1f"), "r1", "credentials/directory/entra/4b1f/r1"},
-		{wsSlackKey("T01"), "r1", "credentials/slack-workspace/T01/r1"},
-		{ghOrgKey("acme"), "r1", "credentials/github-org/acme/r1"},
-		{ghLinkKey(299386), "r1", "credentials/github-link/299386/r1"},
-		{ghLinkAppKey, "r1", "credentials/github-app/link/r1"},
-		{ghCatalogueKey("renovate"), "r1", "credentials/github-app/renovate/r1"},
-		{runnerKey("stable", "acme"), "r1", "credentials/github-runner-app/stable/acme/r1"},
-		{slackCatalogueKey("alerts"), "r1", "credentials/slack-app/alerts/r1"},
-		{sessionKeyKey, "", "credentials/console/session-key"},
+		{wsDirKey("google", "C01ipl6j0"), "r1", "credentials/google/workspace/C01ipl6j0/r1"},
+		// A directory backend with no module is kept whole, under `other`.
+		{wsDirKey("entra", "4b1f"), "r1", "credentials/other/ws.dir.entra.4b1f/r1"},
+		{wsSlackKey("T01"), "r1", "credentials/slack/workspace/T01/r1"},
+		{ghOrgKey("acme"), "r1", "credentials/github/org/acme/r1"},
+		{ghLinkKey(299386), "r1", "credentials/github/link/299386/r1"},
+		{ghLinkAppKey, "r1", "credentials/github/app/link/r1"},
+		{ghCatalogueKey("renovate"), "r1", "credentials/github/app/renovate/r1"},
+		{runnerKey("stable", "acme"), "r1", "credentials/github/app/runner-stable-acme/r1"},
+		{slackCatalogueKey("alerts"), "r1", "credentials/slack/app/alerts/r1"},
+		{sessionKeyKey, "", "credentials/oidc/console/session-key"},
 		// A segment a secret path cannot hold is hex.
-		{wsDirKey("google", "x~y"), "r1", "credentials/directory/google/u-787e374579/r1"},
-		{wsDirKey("google", "u-1"), "r1", "credentials/directory/google/u-752d31/r1"},
+		{wsDirKey("google", "x~y"), "r1", "credentials/google/workspace/u-787e374579/r1"},
+		{wsDirKey("google", "u-1"), "r1", "credentials/google/workspace/u-752d31/r1"},
 	} {
 		if got := secretPath(c.key, c.ref); got != c.want {
 			t.Errorf("secretPath(%q, %q) = %q, want %q", c.key, c.ref, got, c.want)

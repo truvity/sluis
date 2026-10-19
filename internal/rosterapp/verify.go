@@ -24,7 +24,7 @@ func (c Config) Verify(ctx context.Context, log *slog.Logger) error {
 	if st == nil || st.Adapter == store.AdapterLegacy {
 		return nil
 	}
-	if err = portstore.New(st.Ports).WithV4(st.V4).WithV5(st.V5).RequireSecrets(); err != nil {
+	if err = portstore.New(st.Ports).WithV5(st.V5).RequireSecrets(); err != nil {
 		return fmt.Errorf("ports.adapter %s: %w", st.Adapter, err)
 	}
 	return nil

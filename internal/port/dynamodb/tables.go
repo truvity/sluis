@@ -66,11 +66,8 @@ func OpenTables(ctx context.Context, cfg Config, opts ...Option) (*Tables, error
 }
 
 func checkTables(cfg Config) error {
-	if cfg.Table != "" {
-		return errors.New("dynamodb: table and tables are both set (layout 4 and layout 5 do not mix)")
-	}
 	if len(cfg.Tables) == 0 {
-		return errors.New("dynamodb: no tables")
+		return errors.New("dynamodb: no tables: name the table of each module (the single table of layout v4 was removed in v1.77.1)")
 	}
 	names := map[string]port.Module{}
 	for m, name := range cfg.Tables {
@@ -96,7 +93,7 @@ func NewTables(ctx context.Context, api API, cfg Config, opts ...Option) (*Table
 	t := &Tables{stores: map[port.Module]*Store{}}
 	for m, name := range cfg.Tables {
 		s := newStore(api, name, opts)
-		s.v5, s.module = true, m
+		s.module = m
 		t.stores[m] = s
 	}
 	if cfg.Create {

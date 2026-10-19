@@ -69,10 +69,10 @@ func TestPlatformChecksAndOverrides(t *testing.T) {
 	}
 	// An override carries its settings into the Config.
 	c, table, err := Config{Adapter: AdapterLegacy, sel: selection{Adapters: map[string]config.AdapterChoice{
-		"state": {Adapter: "dynamodb", Settings: map[string]any{"table": "t", "region": "eu-west-1"}},
+		"state": {Adapter: "dynamodb", Settings: map[string]any{"tables": map[string]any{"oidc": "t"}, "region": "eu-west-1"}},
 		"blobs": {Adapter: "s3", Settings: map[string]any{"bucket": "b", "pathStyle": true}},
 	}}}.plan(ctx, quiet)
-	if err != nil || c.Adapter != AdapterDynamoDB || c.DynamoDB.Table != "t" || c.Blob == nil || !c.Blob.S3.PathStyle {
+	if err != nil || c.Adapter != AdapterDynamoDB || c.DynamoDB.Tables[port.ModuleOIDC] != "t" || c.Blob == nil || !c.Blob.S3.PathStyle {
 		t.Fatalf("override: %+v %v", c, err)
 	}
 	if table[port.ConcernState].Source != port.SourceOverride {
@@ -129,8 +129,10 @@ func TestTheSecretsConcernIsWiredFromThePlan(t *testing.T) {
 		{"memory state names memory secrets, by the legacy table", Config{Adapter: AdapterMemory, Kube: KubeNone}, false},
 		{"memory chosen", Config{Adapter: AdapterLegacy, Kube: KubeNone, sel: selection{
 			Adapters: map[string]config.AdapterChoice{"secrets": {Adapter: "memory"}}}}, true},
+		// The ssm adapter is the layout v5 stores, read by module (Stores.V5):
+		// there is no Secrets port over them.
 		{"ssm chosen", Config{Adapter: AdapterLegacy, Kube: KubeNone, sel: selection{
-			Adapters: map[string]config.AdapterChoice{"secrets": {Adapter: "ssm", Settings: map[string]any{"root": "/test"}}}}}, true},
+			Adapters: map[string]config.AdapterChoice{"secrets": {Adapter: "ssm", Settings: map[string]any{"root": "/test"}}}}}, false},
 	} {
 		c, table, err := tc.cfg.plan(ctx, quiet)
 		if err != nil {
@@ -358,7 +360,7 @@ func TestTheSSMKeyIsTheDocumentsSecretsKMSKeyID(t *testing.T) {
 			t.Errorf("%s: ssm.Config.KMSKeyID = %q, want %q", name, cfg.KMSKeyID, tc.want)
 		}
 	}
-	f := &config.Serve{Secrets: &config.Secrets{Source: "ssm", Root: "/sluis/example", KMSKeyID: key}}
+	f := &config.Serve{Secrets: &config.Secrets{Source: "ssm", Root: "/sluis/example", KMSKeyID: key, Layout: config.SecretsLayoutV5}}
 	c, err := FromServe(f)
 	if err != nil || c.SecretsKMSKey != key {
 		t.Errorf("FromServe: key %q, %v", c.SecretsKMSKey, err)

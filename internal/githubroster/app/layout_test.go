@@ -15,8 +15,8 @@ import (
 
 // A github controller assembled from the one service document builds its stores
 // from the document's secrets section, not from the controller's own: on layout
-// v4 a blob's credentialsRef resolves, so the controller starts and its stores
-// see layout v4. (Built with and without the lambda tag; CI runs both.)
+// v5 a blob's credentialsRef resolves, so the controller starts and its stores
+// see layout v5. (Built with and without the lambda tag; CI runs both.)
 func TestTheControllerCarriesTheServiceDocumentsSecretsLayout(t *testing.T) {
 	dir := t.TempDir()
 	policy := filepath.Join(dir, "policy.yaml")
@@ -28,8 +28,8 @@ func TestTheControllerCarriesTheServiceDocumentsSecretsLayout(t *testing.T) {
 	doc := "apiVersion: sluis.truvity.github.io/sluis/v3\nissuerURL: https://access.example\npublicURL: https://access.example/console\n" +
 		"policy: {file: " + policy + "}\n" +
 		"ports:\n  adapter: memory\n  blob:\n    adapter: s3\n    s3: {bucket: b, endpoint: 'http://127.0.0.1:1', pathStyle: true,\n" +
-		"      credentialsRef: internal/blobs/r2}\n" +
-		"secrets: {source: ssm, root: /sluis/example, layout: v4}\nadapters:\n  secrets: {adapter: ssm}\n" +
+		"      credentialsRef: internal/google/blobs-r2}\n" +
+		"secrets: {source: ssm, root: /sluis/example, layout: v5}\nadapters:\n  secrets: {adapter: ssm}\n" +
 		"controllers: {github: {}}\n"
 	if err := os.WriteFile(file, []byte(doc), 0o600); err != nil {
 		t.Fatal(err)
@@ -38,14 +38,14 @@ func TestTheControllerCarriesTheServiceDocumentsSecretsLayout(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.stores.SecretsLayout != config.SecretsLayoutV4 || cfg.stores.SecretsRoot != "/sluis/example" {
+	if cfg.stores.SecretsLayout != config.SecretsLayoutV5 || cfg.stores.SecretsRoot != "/sluis/example" {
 		t.Fatalf("the controller dropped the document's secrets: layout %q root %q", cfg.stores.SecretsLayout, cfg.stores.SecretsRoot)
 	}
 
-	// The backend of the v4 stores is memory, holding the blob's credentials.
+	// The backend of the stores is memory, holding the blob's credentials.
 	mem := statememory.New()
 	cfg.stores.OpenState = func(context.Context, string, ...state.Option) (state.Store, error) { return mem, nil }
-	creds, err := secretstore.FromStore(mem, "").Internal.S3Credentials("internal/blobs/r2")
+	creds, err := secretstore.FromStoreV5(mem, "").S3Credentials("internal/google/blobs-r2")
 	if err != nil {
 		t.Fatal(err)
 	}

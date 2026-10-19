@@ -1,0 +1,8 @@
+# Secrets on the ssm source are on layout v5, and say so.
+# error: at '/config/secrets': missing property 'layout'
+config:
+  issuerURL: https://issuer.example
+  preset: k8s-aws
+  secrets: {source: ssm, root: /sluis}
+  ports:
+    dynamodb: {region: eu-west-1, tables: {oidc: sluis-oidc}}

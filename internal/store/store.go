@@ -67,13 +67,13 @@ type Config struct {
 	Kube    KubeNeed
 	// Blob replaces the port of the same name; nil keeps what Adapter brings.
 	Blob *config.PortsBlob
-	// DynamoDB is the table of the `dynamodb` adapter: Table on layout v4,
-	// Tables (one per module) on layout v5.
+	// DynamoDB is the tables of the `dynamodb` adapter: one per module
+	// (layout v5).
 	DynamoDB dynamoport.Config
 
 	// Module is the module this process runs, and Peers the modules whose
-	// tables it may read (ADR 0072). They matter on layout v5 only: the State
-	// is then Module's own table, a write of another module's key is refused,
+	// tables it may read (ADR 0072). They matter on layout v5 (a table, or a
+	// memory store, per module): the State is then Module's own, a write of another module's key is refused,
 	// and each peer is a read-only view. The composition root of each binary
 	// sets them; an empty Module on layout v5 is the whole-estate view of the
 	// migration and the backup (the router over every table).
@@ -95,10 +95,9 @@ type Config struct {
 	// SecretsKMSKey is the serve document's `secrets.kmsKeyId` when its source
 	// is ssm: the key the `ssm` Secrets adapter encrypts what it writes with.
 	SecretsKMSKey string
-	// Secrets layout (ADR 0041): the serve document's `secrets.layout`,
+	// Secrets layout (ADR 0072): the serve document's `secrets.layout`,
 	// `.region`, `.endpoint` and `.grace` when its source is ssm. The layout
-	// is v4 (the Secrets port is over it, internal/secretstore) or v5 (ADR
-	// 0072, [Stores.V5]); the two do not mix with the other layout's tables.
+	// must be v5 ([Stores.V5]), the only one.
 	SecretsLayout   string
 	SecretsSSM      bool
 	SecretsRegion   string
@@ -106,8 +105,8 @@ type Config struct {
 	SecretsGrace    time.Duration
 	// SecretsReadCache is `secrets.readCache`; nil is not set.
 	SecretsReadCache *time.Duration
-	// OpenState opens the backend of the v4 stores (storage/state/ssm over the
-	// service's retryer, openSSMState).
+	// OpenState opens the backend of the secrets stores (storage/state/ssm over
+	// the service's retryer, openSSMState).
 	// Nil is that backend.
 	OpenState secretstore.Opener
 
@@ -120,8 +119,8 @@ type Config struct {
 	// CloudflareDial opens a Cloudflare account; nil is the real client.
 	CloudflareDial minter.Dialer
 
-	// v4 is where secretsOf leaves the v4 stores it built, for [Stores.V4].
-	v4 *v4Holder
+	// held is where secretsOf leaves the stores it built, for [Stores.V5].
+	held *secretsHolder
 
 	// secrets is the secrets adapter the plan chose, nil when nothing chose one.
 	secrets *port.Choice
@@ -176,10 +175,8 @@ func (c Config) validatePorts() error {
 			if _, err := secretstore.CheckInternalRef(ref); err != nil {
 				return fmt.Errorf("ports.blob.s3.credentialsRef: %w", err)
 			}
-			if c.SecretsLayout == config.SecretsLayoutV5 {
-				if _, err := blobRefModule(ref); err != nil {
-					return err
-				}
+			if _, err := blobRefModule(ref); err != nil {
+				return err
 			}
 			if b.S3.Endpoint == "" {
 				return errors.New("ports.blob.s3.credentialsRef: needs ports.blob.s3.endpoint (static credentials are for an S3-compatible store)")
@@ -229,53 +226,42 @@ func blobRefModule(ref string) (secretstore.Module, error) {
 
 // s3Blob builds the S3 Blob adapter. With `credentialsRef` the credentials are
 // the document at that internal address of the installation's secrets stores
-// (`internal/<kind>/<id>` on layout v4, `internal/<module>/<name>` on v5), which
+// (`internal/<module>/<name>`), which
 // secretsOf has built by now; `region` defaults to `auto`, the
 // region an S3-compatible store without regions wants.
 func (c Config) s3Blob(ctx context.Context) (*s3blob.Blob, error) {
 	b := c.Blob.S3
-	v5 := c.v4 != nil && c.v4.v5 != nil
+	v5 := c.held != nil && c.held.v5 != nil
 	cfg := s3blob.Config{
 		Bucket: b.Bucket, Prefix: b.Prefix, Region: b.Region, KMSKey: b.KMSKey,
 		Endpoint: b.Endpoint, PathStyle: b.PathStyle, Checksum: b.Checksum,
 	}
 	if preset, stored := config.CloudflareStoredRef(b.CredentialsRef); stored {
-		if c.v4 == nil || (c.v4.stores == nil && !v5) {
+		if !v5 {
 			return nil, errors.New("credentialsRef needs the installation's secrets on the ssm secrets source (secrets.source), where the stored credential is")
 		}
-		var doc state.Value[secretstore.Cloudflarev1]
-		if v5 {
-			doc = c.v4.v5.CloudflareExternal().Preset(preset)
-		} else {
-			doc = c.v4.stores.External.Cloudflare(preset)
-		}
+		doc := c.held.v5.CloudflareExternal().Preset(preset)
 		if cfg.Region == "" {
 			cfg.Region = "auto"
 		}
 		cfg.Credentials = storedPresetCredentials(doc, b.CredentialsRef, b.Endpoint, time.Now)
 	} else if b.CredentialsRef != "" {
-		if c.v4 == nil || (c.v4.stores == nil && !v5) {
+		if !v5 {
 			return nil, errors.New("credentialsRef needs the installation's secrets on the ssm secrets source (secrets.source), where the internal address is")
 		}
-		var doc state.Value[secretstore.S3Credentialsv1]
-		var err error
-		if v5 {
-			// ADR 0072: the document is internal/<module>/<name>. A process
-			// reads its own module's, and the blob owner's (google): the blob
-			// port is shared by every module (the snapshots of the directory,
-			// the reports of the controllers, the backup), so its credential
-			// has the one home the blob prefix has, and the role of each
-			// process names that parameter and no other.
-			if m, merr := blobRefModule(b.CredentialsRef); merr != nil {
-				return nil, merr
-			} else if c.Module != "" && port.Module(m) != c.Module && m != secretstore.ModuleGoogle {
-				return nil, fmt.Errorf("ports.blob.s3.credentialsRef: %s is the %s module's, and this process runs the %s module",
-					b.CredentialsRef, m, c.Module)
-			}
-			doc, err = c.v4.v5.S3Credentials(b.CredentialsRef)
-		} else {
-			doc, err = c.v4.stores.Internal.S3Credentials(b.CredentialsRef)
+		// ADR 0072: the document is internal/<module>/<name>. A process
+		// reads its own module's, and the blob owner's (google): the blob
+		// port is shared by every module (the snapshots of the directory,
+		// the reports of the controllers, the backup), so its credential
+		// has the one home the blob prefix has, and the role of each
+		// process names that parameter and no other.
+		if m, merr := blobRefModule(b.CredentialsRef); merr != nil {
+			return nil, merr
+		} else if c.Module != "" && port.Module(m) != c.Module && m != secretstore.ModuleGoogle {
+			return nil, fmt.Errorf("ports.blob.s3.credentialsRef: %s is the %s module's, and this process runs the %s module",
+				b.CredentialsRef, m, c.Module)
 		}
+		doc, err := c.held.v5.S3Credentials(b.CredentialsRef)
 		if err != nil {
 			return nil, err
 		}
@@ -291,15 +277,10 @@ func (c Config) s3Blob(ctx context.Context) (*s3blob.Blob, error) {
 		}
 	}
 	if b.Credentials != nil {
-		if c.v4 == nil || (c.v4.stores == nil && !v5) {
+		if !v5 {
 			return nil, errors.New("credentials.preset needs the installation's secrets on the ssm source (secrets.source), where the minter credential is")
 		}
-		mc := minter.Config{Instance: c.Instance, Cloudflare: c.Cloudflare, Dial: c.dial()}
-		if v5 {
-			mc.V5 = c.v4.v5
-		} else {
-			mc.Internal, mc.External = c.v4.stores.Internal, c.v4.stores.External
-		}
+		mc := minter.Config{Instance: c.Instance, Cloudflare: c.Cloudflare, Dial: c.dial(), V5: c.held.v5}
 		m, err := minter.New(mc)
 		if err != nil {
 			return nil, err
@@ -378,7 +359,7 @@ func presetCredentials(p *minter.Provider) s3blob.CredentialsFunc {
 	}
 }
 
-// FromServe reads the configuration of `sluis serve`.
+// FromServe reads the configuration of `sluis issuer`.
 func FromServe(f *config.Serve) (Config, error) {
 	c := Config{
 		Adapter: adapterOf(f.Ports),
@@ -421,8 +402,7 @@ func FromServe(f *config.Serve) (Config, error) {
 }
 
 // As is the Config of a process that runs module own and reads the tables of
-// peers (ADR 0072). It matters on layout v5, where the State is the module's own
-// table; on layout v4 there is one table and it changes nothing.
+// peers (ADR 0072): the State is the module's own table.
 func (c Config) As(own port.Module, peers ...port.Module) Config {
 	c.Module, c.Peers = own, peers
 	return c
@@ -465,14 +445,14 @@ func FromRoster(f *config.Roster) Config {
 	return c
 }
 
-// dynamoOf reads the table's settings; dynamoport.Open refuses an incomplete
-// set, naming it, when the adapter is the chosen one.
+// dynamoOf reads the tables' settings; dynamoport.OpenTables refuses an
+// incomplete set, naming it, when the adapter is the chosen one.
 func dynamoOf(p *config.Ports) dynamoport.Config {
 	if p == nil || p.DynamoDB == nil {
 		return dynamoport.Config{}
 	}
 	d := p.DynamoDB
-	cfg := dynamoport.Config{Table: d.Table, Region: d.Region, Endpoint: d.Endpoint, Create: d.Create}
+	cfg := dynamoport.Config{Region: d.Region, Endpoint: d.Endpoint, Create: d.Create}
 	if len(d.Tables) > 0 {
 		cfg.Tables = map[port.Module]string{}
 		for m, name := range d.Tables {
@@ -483,25 +463,26 @@ func dynamoOf(p *config.Ports) dynamoport.Config {
 }
 
 // layout5 says whether the configuration is layout v5 (ADR 0072): a table per
-// module (`ports.dynamodb.tables`) and, where the secrets are the ssm
-// source's, `secrets.layout: v5`. The two go together, and a configuration that
-// has one without the other, or the layout v4 table beside the v5 tables, is
-// refused here rather than found at the first request.
+// module (`ports.dynamodb.tables`), or the ssm source's secrets, which are on
+// layout v5 and must say so (`secrets.layout: v5`). Layout v4 was removed in
+// v1.77.1: its single table, and an ssm source with no layout or `v4`, are
+// refused here rather than found at the first request. Without either (memory
+// or the legacy adapter, with another secrets source) the State is one store.
 func (c Config) layout5() (bool, error) {
-	tables, table := len(c.DynamoDB.Tables) > 0, c.DynamoDB.Table != ""
-	secrets5 := c.SecretsLayout == config.SecretsLayoutV5
+	tables := len(c.DynamoDB.Tables) > 0
 	switch {
-	case tables && table:
-		return false, errors.New("ports.dynamodb: table (layout v4) and tables (layout v5) are both set; an installation is on one layout")
 	case tables && c.Adapter != AdapterDynamoDB:
 		return false, fmt.Errorf("ports.dynamodb.tables: layout v5 tables are the %s adapter's, and ports.adapter is %q", AdapterDynamoDB, c.Adapter)
-	case tables && c.SecretsSSM && !secrets5:
-		return false, fmt.Errorf("ports.dynamodb.tables is layout v5 but secrets.layout is %q: set secrets.layout: v5, or use ports.dynamodb.table for layout v4",
-			orDefault(c.SecretsLayout, config.SecretsLayoutV4))
-	case secrets5 && c.Adapter == AdapterDynamoDB && !tables:
-		return false, errors.New("secrets.layout: v5 needs ports.dynamodb.tables (one table per module), not ports.dynamodb.table: the layouts do not mix")
+	case c.Adapter == AdapterDynamoDB && !tables:
+		return false, errors.New("ports.dynamodb.tables: the dynamodb adapter needs a table per module (layout v5)")
 	}
-	return tables || secrets5, nil
+	if c.SecretsSSM || c.SecretsLayout != "" {
+		if err := secretstore.CheckLayout(c.SecretsLayout); err != nil {
+			return false, err
+		}
+		return true, nil
+	}
+	return tables, nil
 }
 
 func adapterOf(p *config.Ports) string {
@@ -548,20 +529,16 @@ type Stores struct {
 	// Secrets delivers the secrets the document names, by name: what the
 	// composition root put in Config.Secrets. Nil delivers none.
 	Secrets secrets.Source
-	// V4 is the installation's secrets on layout v4: Internal and External
-	// over one state store. Nil when the secrets are not the ssm source's.
-	V4 *secretstore.Stores
 	// V5 is the installation's secrets on layout v5: module first (ADR 0072).
-	// Nil unless `secrets.layout: v5`; V4 is then nil, and the Secrets port
-	// is not set: a caller reads its module's names from V5. The callers move
-	// to it module by module.
+	// Nil unless the secrets are the ssm source's (`secrets.layout: v5`); the
+	// Secrets port is then not set: a caller reads its module's names from V5.
 	V5 *secretstore.StoresV5
 	// ClientSecrets is the Secrets port of the generated clients' records
-	// (external/oidc/<id>) on layout v5, where Ports.Secrets is not set. Nil on
-	// layout v4; [Stores.ClientSecretPort] picks the one in force.
+	// (external/oidc/<id>) on layout v5, where Ports.Secrets is not set. Nil
+	// without V5; [Stores.ClientSecretPort] picks the one in force.
 	ClientSecrets port.Secrets
-	// Tables is the table of each module on layout v5, nil on layout v4 and
-	// with any other adapter. Router, on it, is the one State over all of them
+	// Tables is the table of each module, nil with any other adapter than
+	// dynamodb. Router, on it, is the one State over all of them
 	// that the migration and the backup use.
 	Tables *dynamoport.Tables
 	// Shared is true when the state is one every replica sees: a Valkey.
@@ -627,8 +604,8 @@ func (s *Stores) RecoveryState() port.State {
 }
 
 // MaintenanceOf is the gate over module m's own table, for a process that hosts
-// several modules (the issuer's function). On layout v4 there is one table, so it
-// is [Stores.Maintenance].
+// several modules (the issuer's function). With one store (memory or the legacy
+// adapter, no module split) it is [Stores.Maintenance].
 func (s *Stores) MaintenanceOf(m port.Module) *maintenance.Gate {
 	if s == nil || s.Ports.Module == "" {
 		return s.Maintenance()
@@ -641,16 +618,18 @@ func (s *Stores) MaintenanceOf(m port.Module) *maintenance.Gate {
 }
 
 // FlagTable is one State that holds a maintenance flag: a module's own table on
-// layout v5, or the one table of layout v4 (Module is then empty).
+// layout v5, or the one memory store of a process with no module split (Module
+// is then empty).
 type FlagTable struct {
-	// Module names the table's module; empty for the one table of layout v4.
+	// Module names the table's module; empty for the one store.
 	Module port.Module
 	State  port.State
 }
 
 // FlagTables are the States that hold the maintenance flag of this installation:
 // one per module on layout v5, where each module reads the flag of its own
-// table, and one on layout v4. The legacy adapter holds no flag and has none.
+// table, and one for a single memory store. The legacy adapter holds no flag
+// and has none.
 func (s *Stores) FlagTables() ([]FlagTable, error) {
 	if s == nil || !s.Usable || s.Adapter == AdapterLegacy || s.Ports.State == nil {
 		return nil, errors.New("this storage holds no maintenance flag: it needs the dynamodb or the memory adapter")
@@ -709,12 +688,12 @@ func Open(ctx context.Context, cfg Config, log *slog.Logger) (*Stores, error) {
 		}
 	}
 	warnDeprecated(ctx, cfg, log)
-	cfg.v4 = &v4Holder{}
+	cfg.held = &secretsHolder{}
 	st, err := open(ctx, cfg, log)
 	if err != nil {
 		return st, err
 	}
-	st.V4, st.V5 = cfg.v4.stores, cfg.v4.v5
+	st.V5 = cfg.held.v5
 	st.Plan = plan
 	st.SecretsRoot = cfg.SecretsRoot
 	st.Secrets = cfg.Secrets
@@ -835,29 +814,18 @@ func openDynamoDB(ctx context.Context, cfg Config, log *slog.Logger) (*Stores, e
 		return nil, err
 	}
 	st.Backend = backend
-	var set port.Set
-	if v5, _ := cfg.layout5(); v5 {
-		tables, err := dynamoport.OpenTables(ctx, cfg.DynamoDB)
-		if err != nil {
-			return nil, fmt.Errorf("ports.dynamodb: %w", err)
-		}
-		st.Tables, st.pinger, st.close = tables, tables, tables.Close
-		if set, err = tablesSet(tables, cfg.Module, cfg.Peers); err != nil {
-			return nil, fmt.Errorf("ports.dynamodb: %w", err)
-		}
-		log.InfoContext(ctx, "keeping state in DynamoDB, a table per module", slog.String("adapter", AdapterDynamoDB),
-			slog.String("module", string(cfg.Module)), slog.Int("peers", len(cfg.Peers)),
-			slog.Int("tables", len(tables.TableNames())), slog.String("region", cfg.DynamoDB.Region), slog.Bool("create", cfg.DynamoDB.Create))
-	} else {
-		table, err := dynamoport.Open(ctx, cfg.DynamoDB)
-		if err != nil {
-			return nil, fmt.Errorf("ports.dynamodb: %w", err)
-		}
-		st.pinger, st.close = table, table.Close
-		set = table.Set()
-		log.InfoContext(ctx, "keeping state in DynamoDB", slog.String("adapter", AdapterDynamoDB),
-			slog.String("table", cfg.DynamoDB.Table), slog.String("region", cfg.DynamoDB.Region), slog.Bool("create", cfg.DynamoDB.Create))
+	tables, err := dynamoport.OpenTables(ctx, cfg.DynamoDB)
+	if err != nil {
+		return nil, fmt.Errorf("ports.dynamodb: %w", err)
 	}
+	st.Tables, st.pinger, st.close = tables, tables, tables.Close
+	set, err := tablesSet(tables, cfg.Module, cfg.Peers)
+	if err != nil {
+		return nil, fmt.Errorf("ports.dynamodb: %w", err)
+	}
+	log.InfoContext(ctx, "keeping state in DynamoDB, a table per module", slog.String("adapter", AdapterDynamoDB),
+		slog.String("module", string(cfg.Module)), slog.Int("peers", len(cfg.Peers)),
+		slog.Int("tables", len(tables.TableNames())), slog.String("region", cfg.DynamoDB.Region), slog.Bool("create", cfg.DynamoDB.Create))
 	set.Blob, set.Identity = rest.Blob, rest.Identity
 	if set, err = cfg.compose(ctx, set, log); err != nil {
 		st.Close()
@@ -892,8 +860,8 @@ func tablesSet(t *dynamoport.Tables, own port.Module, peers []port.Module) (port
 // tables or the memory stores this was opened over. It is how a process that
 // hosts several modules (the issuer's function, until a provider leaves it) gives
 // each its own table: the issuer's State is the oidc table, and a module it
-// hosts writes its own. On layout v4 there is one table and no module to split
-// by, so it is the Ports unchanged. The Blob, Identity and Secrets are the
+// hosts writes its own. With one store and no module to split by, it is the
+// Ports unchanged. The Blob, Identity and Secrets are the
 // process's, observed once.
 func (s *Stores) ForModule(own port.Module, peers ...port.Module) (port.Set, error) {
 	var set port.Set

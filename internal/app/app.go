@@ -655,7 +655,7 @@ func openPortStores(ctx context.Context, cfg Config, st *store.Stores, log *slog
 		Labels: cfg.policy.GitHubAppLabels, RunnerLabels: cfg.policy.RunnerLabels, AppRef: cfg.policy.AppRef,
 	}
 	baseOf := func(set port.Set) *portstore.Base {
-		return portstore.New(set).WithV4(st.V4).WithV5(st.V5).ExportGitHubApps(exported).DeclareGitHubApps(declared)
+		return portstore.New(set).WithV5(st.V5).ExportGitHubApps(exported).DeclareGitHubApps(declared)
 	}
 	base := baseOf(st.Ports)
 	// On layout v5 each module's records are in its own table, and this process

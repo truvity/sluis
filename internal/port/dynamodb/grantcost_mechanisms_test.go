@@ -320,7 +320,7 @@ func TestHeldWriteOverTheFake(t *testing.T) {
 	writes := func() int {
 		n := 0
 		for _, op := range counter.Ops() {
-			if op.Write && op.Kind == "issuer-held" {
+			if op.Write && op.Kind == "held" {
 				n++
 			}
 		}
@@ -381,8 +381,9 @@ func (d *gcDirectory) ResolveUser(context.Context, string) (issuer.Standing, err
 // the OIDC library, which two parallel builds race on under -race.
 func TestInvolveHappensOnceAtSignInOverTheFake(t *testing.T) {
 	ctx := context.Background()
-	store := fakeStore(t, newFake())
-	h := grantcost.New(t, grantcost.Env{Set: store.Set(), Advance: store.Advance})
+	tt := newTables(t, newFake())
+	r := tt.Router()
+	h := grantcost.New(t, grantcost.Env{Set: port.Set{State: r, Index: r}, Advance: tt.Advance})
 	adds := func() int {
 		n := 0
 		for _, op := range h.Counter.Ops() {
@@ -414,7 +415,7 @@ func TestInvolveHappensOnceAtSignInOverTheFake(t *testing.T) {
 	}
 
 	key := "issuer:session:" + sessions[0].ID
-	record, err := store.Get(ctx, key)
+	record, err := r.Get(ctx, key)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -424,7 +425,7 @@ func TestInvolveHappensOnceAtSignInOverTheFake(t *testing.T) {
 	}
 	delete(fields, "involved")
 	raw, _ := json.Marshal(fields)
-	if _, err = store.Update(ctx, key, raw, gcLifetime, record.Revision); err != nil {
+	if _, err = r.Update(ctx, key, raw, gcLifetime, record.Revision); err != nil {
 		t.Fatal(err)
 	}
 

@@ -22,7 +22,6 @@ aws:
   account: "111122223333"
   region: eu-central-1
   functionName: sluis-http
-  table: example-sluis
   bucket: example-sluis-111122223333
   auditQueueURL: https://sqs.eu-central-1.amazonaws.com/111122223333/example-audit-ingest
 

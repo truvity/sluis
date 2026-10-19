@@ -81,7 +81,7 @@ func TestARefreshWritesASnapshotTheIssuerDecodes(t *testing.T) {
 
 	// The issuer's side: the same ports, the snapshot store and the workspace
 	// store, and nothing that could open a reader or refresh.
-	issuer := hub.New(portstore.NewWorkspaces(portstore.New(a.stores.Ports).WithV4(a.stores.V4).WithV5(a.stores.V5)),
+	issuer := hub.New(portstore.NewWorkspaces(portstore.New(a.stores.Ports).WithV5(a.stores.V5)),
 		hub.NewBlobSnapshots(a.stores.Ports.Blob, a.stores.Ports.State), hub.Config{}, slog.New(slog.DiscardHandler))
 	// Even twenty minutes later, with the snapshot due, signing in reads it as it is.
 	issuer.SetClock(func() time.Time { return time.Now().Add(20 * time.Minute) })

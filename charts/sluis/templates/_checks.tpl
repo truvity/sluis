@@ -357,18 +357,20 @@ never the endpoint, which has a value of its own so that one place sets it.
 {{- end -}}
 
 {{/*
-sluis.layoutChecks: layout v5 and its tables go together (docs/decisions/0072),
-and its secrets are in SSM: a Secret the chart would project is never read.
+sluis.layoutChecks: layout v5 is the only one (docs/decisions/0072; v4 was
+removed in v1.77.1): secrets on the ssm source say so, layout v5 and its tables
+go together, and its secrets are in SSM: a Secret the chart would project is
+never read.
 */}}
 {{- define "sluis.layoutChecks" -}}
 {{- $c := .Values.config -}}
-{{- $layout := dig "secrets" "layout" "v4" $c -}}
+{{- $layout := dig "secrets" "layout" "" $c -}}
 {{- $tables := dig "ports" "dynamodb" "tables" dict $c -}}
+{{- if and (eq (dig "secrets" "source" "" $c) "ssm") (ne $layout "v5") -}}
+{{- fail (printf "config.secrets.source is ssm and config.secrets.layout is %q: layout v5 is the only one (v4 was removed in v1.77.1), so set `secrets: {source: ssm, root: <root>, layout: v5}`" $layout) -}}
+{{- end -}}
 {{- if and (eq $layout "v5") (not $tables) (not (dig "adapters" "state" "adapter" "" $c)) -}}
 {{- fail "config.secrets.layout is v5 and config.ports.dynamodb.tables is not set: layout v5 keeps one DynamoDB table per module, so name them (the library default is sluis-<instance>-<module>), or remove layout" -}}
-{{- end -}}
-{{- if and $tables (ne $layout "v5") -}}
-{{- fail (printf "config.ports.dynamodb.tables is set and config.secrets.layout is %q: tables are layout v5's, so set `secrets: {source: ssm, root: <root>, layout: v5}`, or name the one table with `table`" $layout) -}}
 {{- end -}}
 {{- if and (eq $layout "v5") .Values.secrets -}}
 {{- fail "config.secrets.layout is v5, which reads secrets from SSM, and `secrets` projects Secrets as files the service would never read: remove `secrets`" -}}

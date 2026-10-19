@@ -17,18 +17,15 @@ import (
 	"github.com/truvity/sluis/internal/port"
 )
 
-// An operator's command that changes an installation (`sluis maintenance on|off`,
-// `sluis migrate v5 copy` and `prune`) is audited or it does not run. The
-// catalogue declares its actions `block`, so the record is delivered before the
-// call returns, and a delivery that fails refuses the command with the queue
-// and the principal the queue refused. `--no-audit` is the break-glass: the
-// command goes ahead, says so, and writes the same record to stderr as JSON.
+// An operator's command that changes an installation (`sluis maintenance on|off`)
+// is audited or it does not run. The catalogue declares its actions `block`, so
+// the record is delivered before the call returns, and a delivery that fails
+// refuses the command with the queue and the principal the queue refused.
+// `--no-audit` is the break-glass: the command goes ahead, says so, and writes
+// the same record to stderr as JSON.
 
 // noAuditFlag is the break-glass flag of those commands.
 const noAuditFlag = "no-audit"
-
-const noAuditUsage = "break-glass: run without delivering the audit record to the installation (it is printed to stderr as JSON, and the " +
-	"command says so loudly); for the day the operator role cannot send to the audit queue"
 
 // operatorAudit delivers the records of one operator command.
 type operatorAudit struct {

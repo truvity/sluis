@@ -165,8 +165,6 @@ type AWS struct {
 	// `sluis-<instance>-<module>`. The issuer's call to each names it
 	// (`<module>.remote`).
 	Functions map[string]string `json:"functions,omitempty"`
-	// Table is the DynamoDB table of the `dynamodb` state adapter.
-	Table string `json:"table,omitempty"`
 	// Bucket is the S3 bucket of the `s3` blobs adapter.
 	Bucket string `json:"bucket,omitempty"`
 	// AuditQueueURL is the SQS queue of the `sqs` audit adapter.

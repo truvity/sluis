@@ -156,12 +156,6 @@ type layout struct {
 }
 
 var (
-	layoutV4 = layout{
-		name: "v4", recovery: "/sluis/example/internal/config/recovery/password",
-		client: "/sluis/example/internal/config/clients/", suffix: "/secret",
-		session: "/sluis/example/internal/credentials/console/session-key", unrelated: "/sluis/example/internal/config/unrelated/",
-		encode: func(v string) string { return v },
-	}
 	layoutV5 = layout{
 		name: "v5", recovery: "/sluis/example/internal/oidc/recovery-password",
 		client: "/sluis/example/internal/oidc/clients/", suffix: "",
@@ -311,7 +305,7 @@ func (f *ssmFake) reset() {
 // The first request (the discovery document) needs no secret either. Each
 // secret is read by the request that needs it.
 func TestAColdStartMakesNoSSMCall(t *testing.T) {
-	for _, l := range []layout{layoutV4, layoutV5} {
+	for _, l := range []layout{layoutV5} {
 		t.Run(l.name, func(t *testing.T) {
 			fake := newSSMFake(fixtureParams(l))
 			if _, err := coldStart(t, fake, l); err != nil {
@@ -327,7 +321,7 @@ func TestAColdStartMakesNoSSMCall(t *testing.T) {
 // The counter is not blind: the request that needs a secret reads it, by name,
 // once, and the next request within the cache reads nothing.
 func TestAClientsSecretIsReadWhenItAuthenticates(t *testing.T) {
-	for _, l := range []layout{layoutV4, layoutV5} {
+	for _, l := range []layout{layoutV5} {
 		t.Run(l.name, func(t *testing.T) {
 			fake := newSSMFake(fixtureParams(l))
 			fn, err := coldStart(t, fake, l)
@@ -351,7 +345,7 @@ func TestAClientsSecretIsReadWhenItAuthenticates(t *testing.T) {
 // the SDK's default of three attempts is what failed the cold starts of a herd
 // and turned them into 500s. The retry now serves the first request that reads.
 func TestAReadOutlastsAThrottledSSM(t *testing.T) {
-	l := layoutV4
+	l := layoutV5
 	fake := newSSMFake(fixtureParams(l))
 	fn, err := coldStart(t, fake, l)
 	if err != nil {
@@ -482,7 +476,7 @@ func keySet(t *testing.T, fn *lambdaapp.Function) (int, string) {
 // first token signed; the discovery document lists the configured algorithms
 // and does not.
 func TestAWrappedColdStartMakesNoSSMOrKMSCall(t *testing.T) {
-	for _, l := range []layout{layoutV4, layoutV5} {
+	for _, l := range []layout{layoutV5} {
 		t.Run(l.name, func(t *testing.T) {
 			_, fake, kmsF, _ := coldStartWrapped(t, l)
 			if total, by := fake.count(); total != 0 {
@@ -498,7 +492,7 @@ func TestAWrappedColdStartMakesNoSSMOrKMSCall(t *testing.T) {
 // The request that needs a key reads the state secret once, by name, and opens
 // the keys; nothing after it within the cache reads or calls again.
 func TestTheFirstKeySetReadsTheStateSecretOnce(t *testing.T) {
-	for _, l := range []layout{layoutV4, layoutV5} {
+	for _, l := range []layout{layoutV5} {
 		t.Run(l.name, func(t *testing.T) {
 			fn, fake, kmsF, stateSecret := coldStartWrapped(t, l)
 			if code, body := keySet(t, fn); code != http.StatusOK || !strings.Contains(body, `"keys"`) {
@@ -526,7 +520,7 @@ func TestTheFirstKeySetReadsTheStateSecretOnce(t *testing.T) {
 // Concurrent first requests for a key share one read of the state secret and
 // one opening of the keys.
 func TestConcurrentFirstKeySetsReadTheStateSecretOnce(t *testing.T) {
-	for _, l := range []layout{layoutV4, layoutV5} {
+	for _, l := range []layout{layoutV5} {
 		t.Run(l.name, func(t *testing.T) {
 			single, _, singleKMS, _ := coldStartWrapped(t, l)
 			keySet(t, single)
@@ -564,7 +558,7 @@ func TestConcurrentFirstKeySetsReadTheStateSecretOnce(t *testing.T) {
 // A client that authenticates and is refused its grant signs nothing, so it
 // reads its own secret and not the state secret.
 func TestAnAuthenticationDoesNotOpenTheKeys(t *testing.T) {
-	l := layoutV4
+	l := layoutV5
 	fn, fake, kmsF, _ := coldStartWrapped(t, l)
 	authenticate(t, fn, "grafana", "s3cret-grafana")
 	if total, by := fake.count(); total != 1 || !strings.Contains(fake.log[0], l.client+"grafana"+l.suffix) {

@@ -73,9 +73,8 @@ type Base struct {
 	Module port.Module
 	Peers  map[port.Module]port.StateReader
 
-	// v4 and exportApp put the Apps' exported credentials on layout v4 (see
-	// [Base.WithV4]).
-	v4        *secretstore.Stores
+	// exportApp says which catalogue Apps' credentials are exported (see
+	// [Base.ExportGitHubApps]).
 	exportApp func(id string) bool
 
 	// declared is what the configuration says of the GitHub Apps (see
@@ -134,20 +133,23 @@ func encodeItem(it *item) []byte {
 }
 
 // secretPrefix is where the credentials live in Secrets:
-// `credentials/<kind>/<id>/<ref>`, the kind and id being the item's address in
-// the storage layout (internal/port/keys.go; docs/reference/sluis/storage-layout.md).
+// `credentials/<module>/<kind>/<id>/<ref>`, the module, kind and id being the
+// item's address in the storage layout (internal/port/layout5.go;
+// docs/reference/sluis/storage-layout.md).
 const secretPrefix = port.CredentialsPrefix
 
 // secretPath is the Secrets path of a credential of an item key: the item's
-// address, kind and id, and the ref the item names (none for a single stable
-// item such as the console's session key). A segment of the id that a secret
-// path cannot hold (a `~`, an empty one, or one that would be mistaken for the
-// rewritten form) becomes `u-` and its bytes in hex; the mapping is one to
-// one. A key no rule names is kept under the kind `other`, whole.
+// layout v5 address (module, kind and id) and the ref the item names (none for
+// a single stable item such as the console's session key). A segment of the id
+// that a secret path cannot hold (a `~`, an empty one, or one that would be
+// mistaken for the rewritten form) becomes `u-` and its bytes in hex; the
+// mapping is one to one. A key no rule names is kept under the kind `other`,
+// whole. Since v1.77.1 the module is a segment: the layout 4 kinds
+// (`github-org`, `slack-workspace`, ...) are gone.
 func secretPath(key, ref string) string {
-	addr, err := port.Locate(key)
+	addr, err := port.Locate5(key)
 	if err != nil {
-		addr = port.Address{Kind: port.KindOther, ID: key}
+		addr = port.Address5{Kind: port.KindOther, ID: key}
 	}
 	segs := strings.Split(addr.ID, "/")
 	if addr.Kind == port.KindOther {
@@ -158,7 +160,11 @@ func secretPath(key, ref string) string {
 			segs[i] = "u-" + fmt.Sprintf("%x", s)
 		}
 	}
-	p := secretPrefix + addr.Kind + "/" + strings.Join(segs, "/")
+	p := secretPrefix
+	if addr.Module != "" {
+		p += string(addr.Module) + "/"
+	}
+	p += addr.Kind + "/" + strings.Join(segs, "/")
 	if ref != "" {
 		p += "/" + ref
 	}

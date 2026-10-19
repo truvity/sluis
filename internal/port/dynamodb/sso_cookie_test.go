@@ -44,8 +44,8 @@ func SSOCookieFlow(t *testing.T, set port.Set, advance func(time.Duration)) {
 	}
 
 	// The pointer's address on the table: the kind has a partition of its own.
-	if got, err := port.Locate("issuer:sso-cookie:x"); err != nil || got.Kind != "issuer-sso-cookie" || got.ID != "x" {
-		t.Fatalf("Locate(issuer:sso-cookie:x) = %+v, %v; want issuer-sso-cookie/x", got, err)
+	if got, err := port.Locate5("issuer:sso-cookie:x"); err != nil || got.Kind != "sso-cookie" || got.ID != "x" {
+		t.Fatalf("Locate5(issuer:sso-cookie:x) = %+v, %v; want sso-cookie/x", got, err)
 	}
 
 	one, secret, err := sso.Begin(ctx, "ada@north.example", "google")

@@ -17,9 +17,9 @@ func (c Config) Verify(ctx context.Context, log *slog.Logger) error {
 		return err
 	}
 	defer st.Close()
-	if st != nil && st.V4 == nil && st.V5 == nil {
-		return errors.New("cloudflare: the minter credential and the stored credentials live in the SSM secrets store (layout v4 or v5), " +
-			"so `secrets.source: ssm` is required")
+	if st != nil && st.V5 == nil {
+		return errors.New("cloudflare: the minter credential and the stored credentials live in the SSM secrets store on layout v5, " +
+			"so `secrets: {source: ssm, layout: v5}` is required")
 	}
 	return nil
 }

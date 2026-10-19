@@ -1,0 +1,7 @@
+# The single table of layout v4 was removed in v1.77.1: a table per module.
+# error: additional properties 'table' not allowed
+config:
+  issuerURL: https://issuer.example
+  preset: k8s-aws
+  ports:
+    dynamodb: {region: eu-west-1, table: sluis}

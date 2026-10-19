@@ -23,7 +23,7 @@ const (
 )
 
 // Op is one call that crossed a port. It names the key's KIND from the
-// layout (internal/port/keys.go) and never the key: a key names a person or
+// layout (internal/port/layout5.go) and never the key: a key names a person or
 // hashes a bearer token, and a test log is read by people who should see
 // neither.
 type Op struct {
@@ -68,21 +68,21 @@ func (c *Counter) Ops() []Op {
 }
 
 func stateKind(key string) string {
-	if a, err := port.Locate(key); err == nil {
+	if a, err := port.Locate5(key); err == nil {
 		return a.Kind
 	}
 	return "?"
 }
 
 func prefixKind(prefix string) string {
-	if kind, _, ok := port.LocatePrefix(prefix); ok {
+	if _, kind, _, ok := port.LocatePrefix5(prefix); ok {
 		return kind
 	}
 	return "?"
 }
 
 func setKind(set string) string {
-	if a, err := port.LocateSet(set); err == nil {
+	if a, err := port.LocateSet5(set); err == nil {
 		return a.Kind
 	}
 	return "?"

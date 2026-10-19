@@ -154,7 +154,7 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 		stores.Close()
 		return nil, err
 	}
-	base := portstore.New(stores.Ports).WithV4(stores.V4).WithV5(stores.V5)
+	base := portstore.New(stores.Ports).WithV5(stores.V5)
 	if err = base.RequireSecrets(); err != nil {
 		return fail(fmt.Errorf("ports.adapter %s: %w", stores.Adapter, err))
 	}

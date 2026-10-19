@@ -9,7 +9,13 @@ config:
   ports:
     adapter: dynamodb
     dynamodb:
-      table: sluis
+      tables:
+        oidc: sluis-oidc
+        github: sluis-github
+        slack: sluis-slack
+        google: sluis-google
+        cloudflare: sluis-cloudflare
+        backup: sluis-backup
       region: eu-west-1
   controllers:
     github:

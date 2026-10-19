@@ -40,9 +40,6 @@ func (s *Store) indexKeys(set, member string) (pk, sk string, err error) {
 // locateSet is where an Index set lives. In a module's table a set of another
 // module is [port.ErrNotOwner]: every set belongs to the oidc module.
 func (s *Store) locateSet(set string) (port.Address, error) {
-	if !s.v5 {
-		return port.LocateSet(set)
-	}
 	a, err := port.LocateSet5(set)
 	if err != nil {
 		return port.Address{}, err

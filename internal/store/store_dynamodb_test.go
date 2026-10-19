@@ -11,21 +11,24 @@ import (
 
 	"github.com/truvity/sluis/internal/config"
 	"github.com/truvity/sluis/internal/port"
+	dynamoport "github.com/truvity/sluis/internal/port/dynamodb"
 	"github.com/truvity/sluis/internal/store"
 )
 
 func TestTheDynamoDBSettingsReachTheAdapter(t *testing.T) {
-	ports := &config.Ports{Adapter: "dynamodb", DynamoDB: &config.DynamoDB{Table: "ar", Region: "eu-west-1", Endpoint: "http://localstack:4566", Create: true}}
+	ports := &config.Ports{Adapter: "dynamodb", DynamoDB: &config.DynamoDB{
+		Tables: map[string]string{"oidc": "ar"}, Region: "eu-west-1", Endpoint: "http://localstack:4566", Create: true,
+	}}
 	cfg, err := store.FromServe(&config.Serve{IssuerURL: "https://i.example", Ports: ports})
 	if err != nil || cfg.Adapter != store.AdapterDynamoDB || cfg.Kube != store.KubeNone {
 		t.Fatalf("FromServe = %+v, %v", cfg, err)
 	}
-	if d := cfg.DynamoDB; d.Table != "ar" || d.Region != "eu-west-1" || d.Endpoint != "http://localstack:4566" || !d.Create {
+	if d := cfg.DynamoDB; d.Tables[port.ModuleOIDC] != "ar" || d.Region != "eu-west-1" || d.Endpoint != "http://localstack:4566" || !d.Create {
 		t.Errorf("DynamoDB = %+v", d)
 	}
 	// Create is off unless the file turns it on: production binds to the table
 	// the infrastructure code made.
-	cfg = store.FromRoster(&config.Roster{Ports: &config.Ports{Adapter: "dynamodb", DynamoDB: &config.DynamoDB{Table: "ar"}}})
+	cfg = store.FromRoster(&config.Roster{Ports: &config.Ports{Adapter: "dynamodb", DynamoDB: &config.DynamoDB{Tables: map[string]string{"oidc": "ar"}}}})
 	if cfg.Adapter != store.AdapterDynamoDB || cfg.DynamoDB.Create || cfg.Kube != store.KubeRequired {
 		t.Errorf("FromRoster = %+v", cfg)
 	}
@@ -41,7 +44,7 @@ func TestTheDynamoDBSettingsReachTheAdapter(t *testing.T) {
 }
 
 // With a DynamoDB endpoint (ACCESS_ROSTER_DYNAMODB_URL, which hack/dynamodb-conformance.sh
-// sets), two stores opened on one table share State and the Trigger, and are Shared and Usable.
+// sets), two stores opened on one set of tables share State and the Trigger, and are Shared and Usable.
 func TestTheDynamoDBAdapterSharesStateAndTheTriggerAcrossStores(t *testing.T) {
 	url := os.Getenv("ACCESS_ROSTER_DYNAMODB_URL")
 	if url == "" {
@@ -54,7 +57,11 @@ func TestTheDynamoDBAdapterSharesStateAndTheTriggerAcrossStores(t *testing.T) {
 	if _, err := rand.Read(b); err != nil {
 		t.Fatal(err)
 	}
-	ports := &config.Ports{Adapter: "dynamodb", DynamoDB: &config.DynamoDB{Table: "ar-store-" + hex.EncodeToString(b), Endpoint: url, Create: true}}
+	tables := map[string]string{}
+	for m, name := range dynamoport.DefaultTables("ar-store-" + hex.EncodeToString(b)) {
+		tables[string(m)] = name
+	}
+	ports := &config.Ports{Adapter: "dynamodb", DynamoDB: &config.DynamoDB{Tables: tables, Endpoint: url, Create: true}}
 	open := func() *store.Stores {
 		cfg, err := store.FromServe(&config.Serve{IssuerURL: "https://i.example", Ports: ports})
 		if err != nil {

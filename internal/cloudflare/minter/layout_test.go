@@ -2,32 +2,16 @@ package minter_test
 
 import (
 	"errors"
-	"fmt"
-	"os"
 	"testing"
 
 	"github.com/truvity/sluis/internal/cloudflare/minter"
 )
-
-// TestMain runs the suite on layout v4 and then on layout v5 (ADR 0072).
-func TestMain(m *testing.M) {
-	code := m.Run()
-	if code == 0 {
-		useV5 = true
-		fmt.Println("minter suite again, secrets on layout v5")
-		code = m.Run()
-	}
-	os.Exit(code)
-}
 
 // On layout v5 the minter credential is read at the address the account names
 // below internal/cloudflare/, the record of minted tokens is
 // internal/cloudflare/minted/<preset> and the stored credential
 // external/cloudflare/<preset>.
 func TestTheMinterKeepsItsSecretsAtTheLayoutV5Addresses(t *testing.T) {
-	was := useV5
-	useV5 = true
-	defer func() { useV5 = was }()
 	e := setup(t)
 	if res := e.m.TickPreset(ctx, "dns"); res.Err != nil {
 		t.Fatalf("tick = %+v", res)

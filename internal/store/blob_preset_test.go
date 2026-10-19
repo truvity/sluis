@@ -17,7 +17,6 @@ import (
 	"github.com/truvity/sluis/internal/config"
 	"github.com/truvity/sluis/internal/port"
 	"github.com/truvity/sluis/internal/secretstore"
-	"github.com/truvity/sluis/storage/state"
 	statememory "github.com/truvity/sluis/storage/state/memory"
 )
 
@@ -30,7 +29,7 @@ func TestBlobsOnR2StartFromAStaticDocumentWithNoCloudflareSection(t *testing.T) 
 	f, err := config.Load[config.Serve](writeServe(t, `
 apiVersion: sluis.truvity.github.io/serve/v2
 issuerURL: https://access.example
-secrets: {source: ssm, root: /sluis/example, layout: v4}
+secrets: {source: ssm, root: /sluis/example, layout: v5}
 ports:
   adapter: memory
   blob:
@@ -39,7 +38,7 @@ ports:
       bucket: example-bucket
       endpoint: https://0123456789abcdef0123456789abcdef.r2.cloudflarestorage.com
       pathStyle: true
-      credentialsRef: internal/blobs/r2
+      credentialsRef: internal/google/blobs-r2
 `))
 	if err != nil {
 		t.Fatalf("the document does not load: %v", err)
@@ -57,9 +56,9 @@ ports:
 	if err = c.validatePorts(); err != nil {
 		t.Fatal(err)
 	}
-	stores := secretstore.FromStore(statememory.New(), "")
-	c.v4 = &v4Holder{stores: stores}
-	doc, _ := stores.Internal.S3Credentials("internal/blobs/r2")
+	stores := secretstore.FromStoreV5(statememory.New(), "")
+	c.held = &secretsHolder{v5: stores}
+	doc, _ := stores.S3Credentials("internal/google/blobs-r2")
 	if _, err = doc.Put(ctx, secretstore.S3Credentialsv1{AccessKeyID: "example-id", SecretAccessKey: "example-secret"}, ""); err != nil {
 		t.Fatal(err)
 	}
@@ -80,7 +79,7 @@ func TestACredentialsPresetIsHeldToTheCloudflareSection(t *testing.T) {
 		s3   config.PortsBlobS3
 		want string
 	}{
-		"both ways":      {config.PortsBlobS3{Bucket: "b", Endpoint: "https://e.example", CredentialsRef: "internal/blobs/r2", Credentials: &config.PortsBlobCredentials{Preset: "r2-blobs"}}, "exclusive"},
+		"both ways":      {config.PortsBlobS3{Bucket: "b", Endpoint: "https://e.example", CredentialsRef: "internal/google/blobs-r2", Credentials: &config.PortsBlobCredentials{Preset: "r2-blobs"}}, "exclusive"},
 		"no endpoint":    {config.PortsBlobS3{Bucket: "b", Credentials: &config.PortsBlobCredentials{Preset: "r2-blobs"}}, "endpoint"},
 		"unknown preset": {config.PortsBlobS3{Bucket: "b", Endpoint: "https://e.example", Credentials: &config.PortsBlobCredentials{Preset: "nope"}}, "not in cloudflare.presets"},
 		"a token preset": {config.PortsBlobS3{Bucket: "b", Endpoint: "https://e.example", Credentials: &config.PortsBlobCredentials{Preset: "dns"}}, "not an R2 preset"},
@@ -126,22 +125,9 @@ func (a *presetAPI) PermissionGroups(context.Context) (map[string]string, error)
 // The blob mints its own credentials from the preset: no s3-credentials
 // document exists, and the minter credential is what clones the prototype.
 func TestTheBlobMintsItsOwnR2CredentialsFromAPreset(t *testing.T) {
-	for _, layout := range []string{"v4", "v5"} {
-		t.Run(layout, func(t *testing.T) { blobMintsFromPreset(t, layout == "v5") })
-	}
-}
-
-func blobMintsFromPreset(t *testing.T, v5 bool) {
 	ctx := context.Background()
-	holder := &v4Holder{}
-	var mv state.Value[secretstore.CloudflareMinterv1]
-	if v5 {
-		holder.v5 = secretstore.FromStoreV5(statememory.New(), "")
-		mv, _ = holder.v5.Cloudflare().MinterAt("internal/cloudflare/main/minter")
-	} else {
-		holder.stores = secretstore.FromStore(statememory.New(), "")
-		mv, _ = holder.stores.Internal.CloudflareMinter("internal/cloudflare/main/minter")
-	}
+	holder := &secretsHolder{v5: secretstore.FromStoreV5(statememory.New(), "")}
+	mv, _ := holder.v5.Cloudflare().MinterAt("internal/cloudflare/main/minter")
 	if _, err := mv.Put(ctx, secretstore.CloudflareMinterv1{Token: "minter-secret"}, ""); err != nil {
 		t.Fatal(err)
 	}
@@ -159,7 +145,7 @@ func blobMintsFromPreset(t *testing.T, v5 bool) {
 		}
 		return api, nil
 	}
-	c.v4 = holder
+	c.held = holder
 	blob, err := c.s3Blob(ctx)
 	if err != nil {
 		t.Fatal(err)

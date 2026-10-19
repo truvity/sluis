@@ -21,7 +21,13 @@ config:
         until: "2026-11-05T00:00:00Z"
   ports:
     dynamodb:
-      table: sluis
+      tables:
+        oidc: sluis-oidc
+        github: sluis-github
+        slack: sluis-slack
+        google: sluis-google
+        cloudflare: sluis-cloudflare
+        backup: sluis-backup
       region: eu-west-1
     blob:
       adapter: s3

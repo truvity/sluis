@@ -282,9 +282,9 @@ func (c Config) ssmKey(settings port.Settings) (port.Settings, error) {
 }
 
 // secretsOf builds the Secrets port the plan chose, nil when none was chosen.
-// The ssm adapter is the installation's layout-v4 stores (internal/secretstore),
-// opened from the serve document's `secrets` section; every other adapter is
-// built from its settings and used as it is.
+// The ssm adapter is the installation's layout v5 stores (internal/secretstore),
+// opened from the serve document's `secrets` section, with no Secrets port
+// over them; every other adapter is built from its settings and used as it is.
 func (c Config) secretsOf(ctx context.Context) (port.Secrets, error) {
 	if c.secrets == nil {
 		return nil, nil
@@ -302,16 +302,13 @@ func (c Config) secretsOf(ctx context.Context) (port.Secrets, error) {
 		if settings, err = c.ssmKey(settings); err != nil {
 			return nil, err
 		}
-		// The factory only checks the settings; the port is the v4 stores.
+		// The factory only checks the settings; the stores are layout v5's.
 		if _, err := d.Factory(ctx, settings); err != nil {
 			return nil, fmt.Errorf("adapters.secrets: %w", err)
 		}
 		root, _ := settings["root"].(string)
 		key, _ := settings["kmsKeyId"].(string)
-		if c.SecretsLayout == config.SecretsLayoutV5 {
-			return nil, c.overLayout5(ctx, root, key)
-		}
-		return c.overLayout(ctx, root, key)
+		return nil, c.overLayout5(ctx, root, key)
 	}
 	built, err := d.Factory(ctx, settings)
 	if err != nil {
@@ -324,35 +321,10 @@ func (c Config) secretsOf(ctx context.Context) (port.Secrets, error) {
 	return secrets, nil
 }
 
-// v4Holder carries the v4 stores out of [Config.secretsOf], which runs on a
-// copy of the Config.
-type v4Holder struct {
-	stores *secretstore.Stores
-	v5     *secretstore.StoresV5
-}
-
-// overLayout is the Secrets port over layout v4: callers keep their paths and
-// the port maps them (internal/secretstore).
-func (c Config) overLayout(ctx context.Context, root, kmsKeyID string) (port.Secrets, error) {
-	if err := secretstore.CheckLayout(c.SecretsLayout); err != nil {
-		return nil, err
-	}
-	open := c.OpenState
-	if open == nil {
-		open = openSSMState
-	}
-	open = secretstore.CachedOpener(open, c.readCacheTTL())
-	stores, err := secretstore.Open(ctx, &config.Secrets{
-		Source: "ssm", Root: root, Region: c.SecretsRegion, Endpoint: c.SecretsEndpoint,
-		KMSKeyID: kmsKeyID, Layout: config.SecretsLayoutV4,
-	}, open)
-	if err != nil {
-		return nil, err
-	}
-	if c.v4 != nil {
-		c.v4.stores = stores
-	}
-	return secretstore.NewSecrets(stores, c.SecretsGrace), nil
+// secretsHolder carries the layout v5 stores out of [Config.secretsOf], which
+// runs on a copy of the Config.
+type secretsHolder struct {
+	v5 *secretstore.StoresV5
 }
 
 // overLayout5 opens the installation's secrets on layout v5 (ADR 0072), module
@@ -373,8 +345,8 @@ func (c Config) overLayout5(ctx context.Context, root, kmsKeyID string) error {
 	if err != nil {
 		return err
 	}
-	if c.v4 != nil {
-		c.v4.v5 = stores
+	if c.held != nil {
+		c.held.v5 = stores
 	}
 	return nil
 }

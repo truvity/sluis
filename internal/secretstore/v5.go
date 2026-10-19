@@ -12,8 +12,8 @@ import (
 
 // LayoutV5 is the secrets layout whose addresses begin with the module:
 // internal/<module>/<name> and external/<module>/<name>. There is no config or
-// credentials level below the module. Layout v4 stays readable ([Stores],
-// [Secrets]) as the source of the migration and for a rollback.
+// credentials level below the module. It is the only layout: v4 was removed in
+// v1.77.1.
 const LayoutV5 = "v5"
 
 // Module names the part of sluis that owns a secret. A module's view can form

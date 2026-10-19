@@ -614,9 +614,9 @@ type DeclaredSecret struct {
 	// Subject is what the secret belongs to: a Google provider, a client id, a
 	// workspace id, a Cloudflare account; empty when there is one of the kind.
 	Subject string
-	// Name is where layout v4 keeps it. For a Ref it is the internal address
-	// (`internal/<module>/<name>`) the document gives, the same in every
-	// layout; otherwise it is the secret's name below `internal/config/`.
+	// Name is the name the document gives it. For a Ref it is the internal
+	// address (`internal/<module>/<name>`); otherwise it is the name a secrets
+	// source delivers it by (below `internal/config/` on the ssm source).
 	Name string
 	// Ref says Name is an address and not a name.
 	Ref bool

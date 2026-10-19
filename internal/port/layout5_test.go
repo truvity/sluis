@@ -115,35 +115,6 @@ func TestEveryKeyHasItsLayout5Address(t *testing.T) {
 	}
 }
 
-// Every family of layout 4 is a family of layout 5, and the other way round:
-// the key of each row of the layout 4 table lands in a module or is a
-// documented shared family.
-func TestEveryLayout4KeyHasAModuleOrIsShared(t *testing.T) {
-	if len(stateRows) < pinnedRules5 {
-		t.Fatalf("the layout 4 table has %d rows, want at least %d (an empty sweep proves nothing)", len(stateRows), pinnedRules5)
-	}
-	shared := []string{"gate", "cache", "dedupe", "lease", "notify", "maintenance", port.KindOther}
-	for _, r := range stateRows {
-		if r.kind == "directory" && r.id[:len("google/")] != "google/" {
-			if _, err := port.Locate5(r.key); !errors.Is(err, port.ErrUnsupported) {
-				t.Errorf("Locate5(%q) = %v, want ErrUnsupported (no module for the backend)", r.key, err)
-			}
-			continue
-		}
-		got, err := port.Locate5(r.key)
-		if err != nil {
-			t.Errorf("Locate5(%q): %v", r.key, err)
-			continue
-		}
-		if got.Module == "" && !slices.Contains(shared, got.Kind) {
-			t.Errorf("Locate5(%q) = %v: a key family with no module", r.key, got)
-		}
-		if got.Module != "" && !got.Module.Valid() {
-			t.Errorf("Locate5(%q) names the module %q, which is not one", r.key, got.Module)
-		}
-	}
-}
-
 func TestEveryLayout5KindIsPinned(t *testing.T) {
 	state, sets := port.Kinds5()
 	if len(state) == 0 || len(sets) != pinnedSetRules5 {
@@ -169,47 +140,6 @@ func TestEveryLayout5KindIsPinned(t *testing.T) {
 		if !slices.Contains(pinnedSets, k) {
 			t.Errorf("the index kind %q has a rule and no row in the table of this test", k)
 		}
-	}
-}
-
-// Within a module, two families never share a (kind, id) space unless they
-// are the same record in two spellings: the layout 4 kinds that mapped to the
-// same layout 4 kind still do.
-func TestLayout5DoesNotMergeLayout4Kinds(t *testing.T) {
-	merged := map[string]string{} // layout 5 module/kind -> layout 4 kind
-	allowed := map[string][]string{
-		"github/app":           {"github-app", "github-runner-app"},
-		"oidc/session":         {"session", "issuer-session"},
-		"oidc/request":         {"issuer-request"},
-		"oidc/code":            {"issuer-code"},
-		"oidc/code-session":    {"issuer-code-session"},
-		"oidc/srp":             {"issuer-srp"},
-		"oidc/token":           {"issuer-token"},
-		"oidc/sso":             {"issuer-sso"},
-		"oidc/session-token":   {"issuer-session-token"},
-		"oidc/session-rotated": {"issuer-session-rotated"},
-		"oidc/keyring":         {"keyring"},
-		"slack/gate":           {"slack-gate"},
-		"github/gate":          {"github-gate"},
-		"*/gate":               {"gate"},
-	}
-	for _, r := range stateRows {
-		if r.kind == "directory" && r.id[:len("google/")] != "google/" {
-			continue
-		}
-		got, err := port.Locate5(r.key)
-		if err != nil {
-			continue
-		}
-		m := string(got.Module)
-		if m == "" {
-			m = "*"
-		}
-		k := m + "/" + got.Kind
-		if prev, ok := merged[k]; ok && prev != r.kind && !slices.Contains(allowed[k], r.kind) {
-			t.Errorf("layout 5 %s merges the layout 4 kinds %s and %s", k, prev, r.kind)
-		}
-		merged[k] = r.kind
 	}
 }
 
@@ -287,21 +217,6 @@ func TestALayout5PrefixAgreesWithItsKeys(t *testing.T) {
 	}
 }
 
-// Locate5 and Locate see the same keys: the same record lands in one place
-// in each, and the sets likewise.
-func TestLayout5IsAnotherAddressOfTheSameKey(t *testing.T) {
-	for _, r := range rows5 {
-		v4, err4 := port.Locate(r.key)
-		v5, err5 := port.Locate5(r.key)
-		if (err4 == nil) != (err5 == nil) && r.key != "ws.dir.entra.4b1f" {
-			t.Errorf("%q: layout 4 %v, layout 5 %v", r.key, err4, err5)
-		}
-		if err4 == nil && err5 == nil && v4.ID == "" || v5.ID == "" && err5 == nil {
-			t.Errorf("%q: an empty id", r.key)
-		}
-	}
-}
-
 func TestModules(t *testing.T) {
 	want := []string{"oidc", "github", "slack", "cloudflare", "google", "backup"}
 	var got []string
@@ -368,5 +283,17 @@ func TestStatePrefixes5CoverEveryOwnedKind(t *testing.T) {
 	}
 	if len(port.SetPrefixes5(port.ModuleGitHub)) != 0 || len(port.StatePrefixes5("")) != 0 {
 		t.Error("only oidc owns sets, and no module is empty")
+	}
+}
+
+// The browser sign-in's pointer has a partition of its own, apart from the
+// record it names, so a table can tell the two apart.
+func TestTheSSOCookiePointerHasItsOwnAddress(t *testing.T) {
+	got, err := port.Locate5("issuer:sso-cookie:x")
+	if err != nil || got.String() != "oidc/sso-cookie/x" {
+		t.Errorf("Locate5(issuer:sso-cookie:x) = %v, %v; want oidc/sso-cookie/x", got, err)
+	}
+	if rec, err := port.Locate5("issuer:sso:x"); err != nil || rec.Kind == got.Kind {
+		t.Errorf("the record and its pointer share a kind: %v, %v", rec, err)
 	}
 }

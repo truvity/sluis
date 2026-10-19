@@ -25,7 +25,7 @@ publicURL: https://access.example/console
 publicRootURL: https://access.example
 secureCookies: true
 groupsScoping: enforce
-secrets: {source: ssm, root: /sluis/example, region: eu-west-1, endpoint: "http://localhost:4566", refresh: 5m}
+secrets: {source: ssm, root: /sluis/example, layout: v5, region: eu-west-1, endpoint: "http://localhost:4566", refresh: 5m}
 lifetimes: {token: 1h, refresh: 12h, absolute: 24h, hold: 4h, session: 12h}
 freshness: {refreshInterval: 15m, freshnessWindow: 30m, probeInterval: 5m}
 hsts: {maxAge: 720h, includeSubDomains: false}
@@ -67,7 +67,7 @@ platform:
   replicas: 2
 preset: aws-hybrid
 adapters:
-  state: {adapter: dynamodb, settings: {table: sluis, region: eu-west-1}}
+  state: {adapter: dynamodb, settings: {tables: {oidc: sluis-oidc}, region: eu-west-1}}
 controllers:
   github:
     consoleURL: http://access-issuer.access.svc:8080/console

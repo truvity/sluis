@@ -17,18 +17,14 @@ import (
 // after `after`, in key order, until fn returns false. hint is how many items
 // the caller expects to want, to size a Query's pages.
 //
-// A prefix that lies in one kind (internal/port/keys.go) is a Query on its
+// A prefix that lies in one kind (internal/port/layout5.go) is a Query on its
 // partition. Any other names no one partition, so it is a Scan of the table,
 // sorted here.
 func (s *Store) iterate(ctx context.Context, prefix, after string, hint int, fn func(item) bool) error {
-	if s.v5 {
-		if m, pk, skPrefix, ok := port.LocatePrefix5(prefix); ok {
-			if m != "" && m != s.module {
-				return nil // another module's family: nothing of it is in this table
-			}
-			return s.query(ctx, pk, skPrefix, prefix, after, hint, fn)
+	if m, pk, skPrefix, ok := port.LocatePrefix5(prefix); ok {
+		if m != "" && m != s.module {
+			return nil // another module's family: nothing of it is in this table
 		}
-	} else if pk, skPrefix, ok := port.LocatePrefix(prefix); ok {
 		return s.query(ctx, pk, skPrefix, prefix, after, hint, fn)
 	}
 	var all []item

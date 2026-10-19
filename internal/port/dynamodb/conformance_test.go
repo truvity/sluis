@@ -47,27 +47,6 @@ func randomName(t *testing.T) string {
 	return hex.EncodeToString(b)
 }
 
-// table opens a fresh table, made by the adapter itself (Create), and deletes it
-// afterwards: the assertions share their keys and must not see each other's.
-func table(t *testing.T, url string, opts ...dynamoport.Option) *dynamoport.Store {
-	t.Helper()
-	ctx := context.Background()
-	cfg := dynamoport.Config{Table: "ar-" + randomName(t), Endpoint: url, Create: true}
-	s, err := dynamoport.Open(ctx, cfg, append([]dynamoport.Option{dynamoport.WithPollInterval(100 * time.Millisecond)}, opts...)...)
-	if err != nil {
-		t.Fatalf("opening the table: %v", err)
-	}
-	t.Cleanup(func() {
-		awsCfg, err := awsconfig.LoadDefaultConfig(ctx)
-		if err != nil {
-			return
-		}
-		client := ddb.NewFromConfig(awsCfg, func(o *ddb.Options) { o.BaseEndpoint = aws.String(url) })
-		_, _ = client.DeleteTable(ctx, &ddb.DeleteTableInput{TableName: aws.String(cfg.Table)})
-	})
-	return s
-}
-
 // A DynamoDB table holds State, Index and Trigger; Blob and Identity are
 // other adapters' ports, so their assertions are skipped here and run there.
 var otherPorts = map[string]string{
@@ -77,31 +56,28 @@ var otherPorts = map[string]string{
 	"identity/verify":       "Identity is not a DynamoDB port: the TokenReview adapter holds it",
 }
 
-// TestConformance is the whole suite against the real engine's API, every
-// assertion on a table of its own. The skips are the other ports': the guard
-// script counts them, and fails on any other.
-func TestConformance(t *testing.T) {
-	url := localstack(t)
-	porttest.Run(t, func(t *testing.T) porttest.Env {
-		s := table(t, url)
-		return porttest.Env{Set: s.Set(), Advance: s.Advance, Skips: otherPorts}
-	})
-}
-
-// A table that is not there is the store being down, not an empty answer.
+// A table that is not there is the store being down, not an empty answer: the
+// readiness probe says so.
 func TestAMissingTableIsUnavailableNotNotFound(t *testing.T) {
 	url := localstack(t)
-	_, err := dynamoport.Open(context.Background(), dynamoport.Config{Table: "no-such-" + randomName(t), Endpoint: url})
-	if !errors.Is(err, port.ErrUnavailable) {
-		t.Fatalf("binding a missing table without Create: %v, want ErrUnavailable", err)
+	tt, err := dynamoport.OpenTables(context.Background(), dynamoport.Config{
+		Tables: map[port.Module]string{port.ModuleOIDC: "no-such-" + randomName(t)}, Endpoint: url,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = tt.Ping(context.Background()); !errors.Is(err, port.ErrUnavailable) {
+		t.Fatalf("the probe of a missing table without Create: %v, want ErrUnavailable", err)
 	}
 }
 
-// Create is idempotent: a second start finds the table (and its TTL) made.
+// Create is idempotent: a second start finds the tables (and their TTL) made.
 func TestCreatingAnExistingTableIsHarmless(t *testing.T) {
 	url := localstack(t)
-	s := table(t, url)
-	_, err := dynamoport.Open(context.Background(), dynamoport.Config{Table: s.Table(), Endpoint: url, Create: true})
+	s, _ := tables(t, url, nil).Store(port.ModuleOIDC)
+	_, err := dynamoport.OpenTables(context.Background(), dynamoport.Config{
+		Tables: map[port.Module]string{port.ModuleOIDC: s.Table()}, Endpoint: url, Create: true,
+	})
 	if err != nil {
 		t.Fatalf("a second start with Create: %v", err)
 	}
@@ -110,7 +86,7 @@ func TestCreatingAnExistingTableIsHarmless(t *testing.T) {
 // The expiry attribute is the table's TTL, and a lifetime is written to it.
 func TestTheTableHasTTLOnExpires(t *testing.T) {
 	url := localstack(t)
-	s := table(t, url)
+	s, _ := tables(t, url, nil).Store(port.ModuleOIDC)
 	ctx := context.Background()
 	awsCfg, err := awsconfig.LoadDefaultConfig(ctx)
 	if err != nil {

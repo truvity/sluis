@@ -122,44 +122,29 @@ func policiesJSON(group string) json.RawMessage {
 }
 
 type env struct {
-	t      *testing.T
-	api    *fakeAPI
-	m      *minter.Minter
-	rec    *audittest.Recorder
-	stores *secretstore.Stores
-	// v5 is the secrets on layout v5 when the suite runs on it (TestMain); stores
-	// is then nil.
+	t   *testing.T
+	api *fakeAPI
+	m   *minter.Minter
+	rec *audittest.Recorder
+	// v5 is the secrets, on layout v5.
 	v5     *secretstore.StoresV5
 	v5Root state.Store
 	clock  *time.Time
 }
 
-// useV5 is whether the suite runs on layout v5. TestMain runs it on both.
-var useV5 bool
-
-// external is the preset's stored credential on the layout the suite runs on.
+// external is the preset's stored credential.
 func (e *env) external(preset string) state.Value[secretstore.Cloudflarev1] {
-	if e.v5 != nil {
-		return e.v5.CloudflareExternal().Preset(preset)
-	}
-	return e.stores.External.Cloudflare(preset)
+	return e.v5.CloudflareExternal().Preset(preset)
 }
 
 // minterStore is the store the account's minter credential is kept in.
 func (e *env) minterStore() state.Store {
-	if e.v5 != nil {
-		return e.v5Root.Child("internal").Child("cloudflare/main")
-	}
-	return e.stores.Internal.Store().Child("cloudflare/main")
+	return e.v5Root.Child("internal").Child("cloudflare/main")
 }
 
 // secretsConfig puts the suite's secrets in a minter configuration.
 func (e *env) secretsConfig(c *minter.Config) {
-	if e.v5 != nil {
-		c.V5 = e.v5
-		return
-	}
-	c.Internal, c.External = e.stores.Internal, e.stores.External
+	c.V5 = e.v5
 }
 
 func (e *env) advance(d time.Duration) { *e.clock = e.clock.Add(d) }
@@ -182,15 +167,9 @@ func setupWith(t *testing.T, pause minter.Pause, change func(*config.Cloudflare)
 	e := &env{t: t, clock: &clock, rec: audittest.New(t)}
 	now := func() time.Time { return clock }
 	e.api = newFake(now)
-	var minterAt func(string) (state.Value[secretstore.CloudflareMinterv1], error)
-	if useV5 {
-		e.v5Root = memory.New()
-		e.v5 = secretstore.FromStoreV5(e.v5Root, "")
-		minterAt = e.v5.Cloudflare().MinterAt
-	} else {
-		e.stores = secretstore.FromStore(memory.New(), "")
-		minterAt = e.stores.Internal.CloudflareMinter
-	}
+	e.v5Root = memory.New()
+	e.v5 = secretstore.FromStoreV5(e.v5Root, "")
+	minterAt := e.v5.Cloudflare().MinterAt
 	cf := &config.Cloudflare{
 		Accounts: map[string]config.CloudflareAccount{"main": {ID: acct, Minter: "internal/cloudflare/main/minter"}},
 		Presets: map[string]config.CloudflarePreset{

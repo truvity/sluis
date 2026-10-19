@@ -11,21 +11,11 @@ import (
 	"github.com/truvity/sluis/storage/state"
 )
 
-// WithV4 puts the Apps' exported credentials on layout v4 (ADR 0041): an
-// installed App whose key is exported is the whole document at
-// external/github/<app>, with the ids from the App's record, and its key is no
-// longer an internal credential. A nil v4 changes nothing.
-func (b *Base) WithV4(v4 *secretstore.Stores) *Base {
-	b.v4 = v4
-	return b
-}
-
 // WithV5 puts the GitHub Apps on layout v5 (ADR 0072): the credential of an
 // App of any purpose is `internal/github/apps/<id>/<ref>` under a fresh ref per
 // write, and an exported App's document is `external/github/<id>`. The State
 // keys do not change; the adapter locates them (port.Locate5). The other
-// stores keep using the Secrets port. v4 and v5 are exclusive: a Base with
-// both reads and writes layout v5.
+// stores keep using the Secrets port.
 func (b *Base) WithV5(v5 *secretstore.StoresV5) *Base {
 	b.v5 = v5
 	return b
@@ -46,8 +36,8 @@ type v5Cred struct {
 // v5CredOfKey is where the credential of the item with the key lives when the
 // secrets are on layout v5 (ADR 0072): github/apps/<id>/<ref>,
 // github/links/<account>/<ref>, slack/workspaces/<team>/<ref>,
-// slack/apps/<id>/<ref> and google/workspaces/<id>/key. ok is false on layout
-// v4 and for a key that keeps no credential of its own (an organisation's key is
+// slack/apps/<id>/<ref> and google/workspaces/<id>/key. ok is false without
+// the layout v5 stores and for a key that keeps no credential of its own (an organisation's key is
 // its App's).
 func (b *Base) v5CredOfKey(key string) (c v5Cred, ok bool) {
 	if b.v5 == nil {
@@ -139,43 +129,29 @@ func labelsFor(declared, own map[string]string) map[string]string {
 	return own
 }
 
-// v4Writes is whether a credential also goes to layout v4: whenever the
-// installation has v4 stores.
-func (b *Base) v4Writes() bool { return b.v4 != nil || b.v5 != nil }
-
-// v4Reads is whether layout v4 is read first.
-func (b *Base) v4Reads() bool { return b.v4 != nil || b.v5 != nil }
+// exports is whether an exported credential goes to its external document:
+// whenever the installation has the layout v5 stores.
+func (b *Base) exports() bool { return b.v5 != nil }
 
 // keepInternal is whether an exported credential is also kept as an internal
-// one: only when there are no v4 stores to export it to.
-func (b *Base) keepInternal() bool { return b.v4 == nil && b.v5 == nil }
+// one: only when there are no stores to export it to.
+func (b *Base) keepInternal() bool { return b.v5 == nil }
 
-// externalApp is the exported document of the App with the id, wherever the
-// layout keeps it: external/github/<id> on layout v5 and github/<id> on v4.
-// A catalogue id that begins "runner-" fails every call on v4 (see
-// [secretstore.CheckAppName]); layout v5 has one id space, so the runner Apps
-// are told apart by the id alone.
+// externalApp is the exported document of the App with the id,
+// external/github/<id>. Layout v5 has one id space, so the runner Apps are told
+// apart by the id alone.
 func (b *Base) externalApp(id string) state.Value[secretstore.GitHubv1] {
-	if b.v5 != nil {
-		return b.v5.GitHubExternal().App(id)
-	}
-	return b.v4.External.GitHubApp(id)
+	return b.v5.GitHubExternal().App(id)
 }
 
 // externalRunnerApp is [Base.externalApp] of a runner App.
 func (b *Base) externalRunnerApp(tier, org string) state.Value[secretstore.GitHubv1] {
-	if b.v5 != nil {
-		return b.v5.GitHubExternal().App(appid.RunnerID(tier, org))
-	}
-	return b.v4.External.GitHubRunnerApp(tier, org)
+	return b.v5.GitHubExternal().App(appid.RunnerID(tier, org))
 }
 
 // deleteExternalApp removes the exported document of the App with the id.
 func (b *Base) deleteExternalApp(ctx context.Context, id string) error {
-	if b.v5 != nil {
-		return b.v5.GitHubExternal().DeleteApp(ctx, id)
-	}
-	return b.deleteExternal(ctx, b.v4.External.Store(), "github/"+id)
+	return b.v5.GitHubExternal().DeleteApp(ctx, id)
 }
 
 func (b *Base) putGitHub(
@@ -220,28 +196,14 @@ func (b *Base) getGitHub(ctx context.Context, value state.Value[secretstore.GitH
 	return doc, true, nil
 }
 
-func (b *Base) deleteExternal(ctx context.Context, st state.Store, key string) error {
-	if err := st.Delete(ctx, key); err != nil && !errors.Is(err, state.ErrNotFound) {
-		return err
-	}
-	return nil
-}
-
-// externalSlackApp is the exported bot token of the Slack App: external/slack/<app>
-// wherever the layout keeps it, which is the same address on v4 and v5.
+// externalSlackApp is the exported bot token of the Slack App: external/slack/<app>.
 func (b *Base) externalSlackApp(app string) state.Value[secretstore.Slackv1] {
-	if b.v5 != nil {
-		return b.v5.SlackExternal().App(app)
-	}
-	return b.v4.External.SlackApp(app)
+	return b.v5.SlackExternal().App(app)
 }
 
 // deleteExternalSlackApp removes the exported bot token of the Slack App.
 func (b *Base) deleteExternalSlackApp(ctx context.Context, app string) error {
-	if b.v5 != nil {
-		return b.v5.SlackExternal().DeleteApp(ctx, app)
-	}
-	return b.deleteExternal(ctx, b.v4.External.Store(), "slack/"+app)
+	return b.v5.SlackExternal().DeleteApp(ctx, app)
 }
 
 func (b *Base) putSlack(ctx context.Context, app, token string) error {
