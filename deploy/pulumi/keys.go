@@ -233,10 +233,6 @@ type KeyPolicyArgs struct {
 	// Modules names the installation (its Instance is the context's `instance`
 	// and the SSM root).
 	Modules ModuleSet
-	// Layout says which parameter addresses the roles use; empty is v4. v4 gives
-	// the role that hosts oidc the whole of internal/ and external/ (as its IAM
-	// grant does); v5 gives each role its hosted modules only.
-	Layout Layout
 	// Roles are the functions' roles, one per function: the issuer, Cloudflare,
 	// backup, restore. Backup and restore also get the cross-grants of
 	// CrossGrants (read-all, write-all).
@@ -336,10 +332,9 @@ const (
 //   - SluisKeyExternalReaders: Decrypt of `external/*` only, through SSM;
 //   - SluisKeyAdminSeeds: Encrypt and GenerateDataKey through SSM (seed
 //     parameters); SluisKeyAdminReads: Decrypt of the state secret, the
-//     recovery password, on layout v5 the recovery verifier (and with
-//     Conformance the conformance password and verifier), and (with a backup
-//     role on layout v5) the restore identity, which the stack reads back on
-//     every refresh;
+//     recovery password, the recovery verifier (and with Conformance the
+//     conformance password and verifier), and (with a backup role) the
+//     restore identity, which the stack reads back on every refresh;
 //   - SluisKeyBreakglass: the function's operations through SSM;
 //   - SluisKeyControlPlaneAdmins and SluisKeyControlPlaneAdminsOnly: the key's
 //     policy, grants, disabling and deletion (KeyControlPlaneActions) are the
@@ -392,13 +387,8 @@ func SluisKeyPolicyStatements(a KeyPolicyArgs) ([]map[string]any, error) {
 		r := &sorted[i]
 		name := sidName(r.Role.Name)
 		var own []string
-		if a.Layout.has4() && r.Role.hosts(ModuleOIDC) {
-			own = append(own, arns(internalAll, externalAll)...)
-		}
-		if a.Layout.has5() || !r.Role.hosts(ModuleOIDC) {
-			for _, m := range sortedModules(r.Role.Hosts) {
-				own = append(own, arns(a.Modules.InternalPrefix(m), a.Modules.ExternalPrefix(m))...)
-			}
+		for _, m := range sortedModules(r.Role.Hosts) {
+			own = append(own, arns(a.Modules.InternalPrefix(m), a.Modules.ExternalPrefix(m))...)
 		}
 		if len(own) > 0 {
 			st = append(st, allow(sidKeyRolePrefix+name, use, map[string]any{
@@ -476,17 +466,12 @@ func SluisKeyPolicyStatements(a KeyPolicyArgs) ([]map[string]any, error) {
 	if len(a.Admins) > 0 {
 		admins := map[string]any{condPrincipalArn: sortedStrings(a.Admins)}
 		own := []string{StateSecretParameterNameV5(a.Modules.Instance), RecoveryPasswordParameterNameV5(a.Modules.Instance)}
-		if a.Layout.has4() {
-			own = append(own, StateSecretParameterName(a.Modules.Instance), RecoveryPasswordParameterName(a.Modules.Instance))
-		}
-		// The SRP credentials the stack writes on layout v5 (ADR 0076): the
-		// provider decrypts each SecureString it manages after create and on
-		// refresh, so an apply under a customer key needs them read back.
-		if a.Layout.has5() {
-			own = append(own, RecoveryVerifierParameterNameV5(a.Modules.Instance))
-			if a.Conformance {
-				own = append(own, ConformancePasswordParameterNameV5(a.Modules.Instance), ConformanceVerifierParameterNameV5(a.Modules.Instance))
-			}
+		// The SRP credentials the stack writes (ADR 0076): the provider decrypts
+		// each SecureString it manages after create and on refresh, so an apply
+		// under a customer key needs them read back.
+		own = append(own, RecoveryVerifierParameterNameV5(a.Modules.Instance))
+		if a.Conformance {
+			own = append(own, ConformancePasswordParameterNameV5(a.Modules.Instance), ConformanceVerifierParameterNameV5(a.Modules.Instance))
 		}
 		var own2 []string
 		for _, n := range own {
@@ -496,7 +481,7 @@ func SluisKeyPolicyStatements(a KeyPolicyArgs) ([]map[string]any, error) {
 		// SecureString after create and on refresh). Admins read it; the backup role
 		// is denied it below, and nobody else is granted it here.
 		for i := range sorted {
-			if a.Layout.has5() && sorted[i].Role.Name == RoleBackup {
+			if sorted[i].Role.Name == RoleBackup {
 				own2 = append(own2, restoreIdentityArn(a.Region, a.Account, a.Modules))
 				break
 			}
@@ -537,27 +522,25 @@ func SluisKeyPolicyStatements(a KeyPolicyArgs) ([]map[string]any, error) {
 		st = append(st, d)
 	}
 	// The roles that host the oidc module never decrypt the recovery and
-	// conformance passwords on layout v5: the service holds their SRP verifiers
+	// conformance passwords: the service holds their SRP verifiers
 	// (docs/decisions/0076). The role policy denies it; this is the same refusal
 	// in the key's own policy.
-	if a.Layout.has5() {
-		var oidcArns []string
-		for i := range sorted {
-			if sorted[i].Role.hosts(ModuleOIDC) {
-				oidcArns = append(oidcArns, sorted[i].arns()...)
-			}
+	var oidcArns []string
+	for i := range sorted {
+		if sorted[i].Role.hosts(ModuleOIDC) {
+			oidcArns = append(oidcArns, sorted[i].arns()...)
 		}
-		if len(oidcArns) > 0 {
-			d := deny(sidKeyDenyPasswords, map[string]any{
-				condArnEquals: map[string]any{condPrincipalArn: sortedStrings(oidcArns)},
-				condStringEquals: map[string]any{
-					condViaService:   "ssm." + a.Region + ".amazonaws.com",
-					condParameterArn: oidcPasswordArns(a.Region, a.Account, a.Modules),
-				},
-			})
-			d["Action"] = []string{kmsDecrypt}
-			st = append(st, d)
-		}
+	}
+	if len(oidcArns) > 0 {
+		d := deny(sidKeyDenyPasswords, map[string]any{
+			condArnEquals: map[string]any{condPrincipalArn: sortedStrings(oidcArns)},
+			condStringEquals: map[string]any{
+				condViaService:   "ssm." + a.Region + ".amazonaws.com",
+				condParameterArn: oidcPasswordArns(a.Region, a.Account, a.Modules),
+			},
+		})
+		d["Action"] = []string{kmsDecrypt}
+		st = append(st, d)
 	}
 	// The control plane is the administrators' alone.
 	cp, err := KeyControlPlaneStatements(a.Account, append(append([]string(nil), a.KeyAdmins...), a.Breakglass...))
@@ -649,9 +632,6 @@ func coveredBy(arn string, patterns []string) bool {
 func (a KeyPolicyArgs) validate() error {
 	if err := a.Modules.validate(); err != nil {
 		return err
-	}
-	if !a.Layout.valid() {
-		return fmt.Errorf("sluispulumi: KeyPolicyArgs.Layout %q is not v4, v5 or v4+v5", a.Layout)
 	}
 	if a.Region == "" || a.Account == "" {
 		return errors.New("sluispulumi: KeyPolicyArgs.Region and Account are required")

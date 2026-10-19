@@ -13,7 +13,7 @@ const (
 	sidKeyDenyPasswords = "SluisKeyDenyPasswords"
 )
 
-// oidcPasswordArns are the ARNs of the passwords on layout v5.
+// oidcPasswordArns are the ARNs of the passwords.
 func oidcPasswordArns(region, account string, m ModuleSet) []string {
 	base := arnPrefix + "ssm:" + region + ":" + account + ":parameter" + m.InternalPrefix(ModuleOIDC) + "/"
 	return []string{base + "recovery-password", base + "conformance-password"}

@@ -120,7 +120,7 @@ func TestBackupAndRestoreNeedTheInstallationsKey(t *testing.T) {
 const csc = "arn:aws:lambda:eu-central-1:111122223333:code-signing-config:csc-0123456789abcdef0"
 
 func TestEveryFunctionIsPutUnderTheCodeSigningConfigWhenOneIsGiven(t *testing.T) {
-	rec, _ := mustLambda(t, v5Estate(func(a *arp.LambdaArgs) { noDomain(a); a.CodeSigningConfigArn = pulumi.String(csc) }))
+	rec, _ := mustLambda(t, estateWith(func(a *arp.LambdaArgs) { noDomain(a); a.CodeSigningConfigArn = pulumi.String(csc) }))
 	fns := rec.ofType(fnType)
 	if len(fns) < 2 {
 		t.Fatalf("%d functions", len(fns))
@@ -137,7 +137,7 @@ func TestEveryFunctionIsPutUnderTheCodeSigningConfigWhenOneIsGiven(t *testing.T)
 		}
 	}
 	// Left out, nothing changes.
-	rec, _ = mustLambda(t, v5Estate(noDomain))
+	rec, _ = mustLambda(t, estateWith(noDomain))
 	for _, f := range rec.ofType(fnType) {
 		if prop(f, "codeSigningConfigArn").HasValue() {
 			t.Errorf("%s: a code signing configuration nobody asked for", f.Name)

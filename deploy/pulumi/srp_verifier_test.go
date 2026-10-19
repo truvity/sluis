@@ -8,10 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
-
 	sluisconfig "github.com/truvity/sluis/config"
-	arp "github.com/truvity/sluis/deploy/pulumi"
 	"github.com/truvity/sluis/srp"
 )
 
@@ -44,12 +41,12 @@ func creds(t *testing.T, doc string) srp.Credential {
 	return cred
 }
 
-// On layout v5 the library derives the recovery account's SRP credential from
+// The library derives the recovery account's SRP credential from
 // the generated password in the program, stores it where the function reads it,
 // and the document names the verifier and not the password
 // (docs/decisions/0076).
-func TestTheRecoveryVerifierIsDerivedFromTheGeneratedPasswordOnLayoutV5(t *testing.T) {
-	rec, out := mustLambda(t, withLayout(arp.LayoutV5))
+func TestTheRecoveryVerifierIsDerivedFromTheGeneratedPassword(t *testing.T) {
+	rec, out := mustLambda(t, estateWith())
 	p := rec.one(t, ssmParameterType, "staging-recovery-verifier-v5")
 	if prop(p, "name").StringValue() != "/sluis/staging/internal/oidc/recovery-verifier" || prop(p, "type").StringValue() != "SecureString" {
 		t.Errorf("parameter: %v", p.Inputs)
@@ -83,7 +80,7 @@ func TestTheRecoveryVerifierIsDerivedFromTheGeneratedPasswordOnLayoutV5(t *testi
 // it, not a function of the password. And a second run with the same salt and password
 // writes the same parameter, so an apply that rotates nothing rewrites nothing.
 func TestTheSaltIsRandomAndKeptWithThePasswordAndNotDerivedFromIt(t *testing.T) {
-	a, _ := mustLambda(t, withLayout(arp.LayoutV5))
+	a, _ := mustLambda(t, estateWith())
 	salt := a.one(t, "random:index/randomBytes:RandomBytes", "staging-recovery-salt")
 	if prop(salt, "length").NumberValue() != 32 {
 		t.Errorf("salt: %v", salt.Inputs)
@@ -102,7 +99,7 @@ func TestTheSaltIsRandomAndKeptWithThePasswordAndNotDerivedFromIt(t *testing.T) 
 	if got.StringValue() != hex.EncodeToString(sum[:]) || strings.Contains(got.StringValue(), rawPassword) {
 		t.Errorf("the keeper is %q, want the SHA-256 of the password", got.StringValue())
 	}
-	b, _ := mustLambda(t, withLayout(arp.LayoutV5))
+	b, _ := mustLambda(t, estateWith())
 	one := prop(a.one(t, ssmParameterType, "staging-recovery-verifier-v5"), "value").SecretValue().Element.StringValue()
 	two := prop(b.one(t, ssmParameterType, "staging-recovery-verifier-v5"), "value").SecretValue().Element.StringValue()
 	if one != two {
@@ -114,25 +111,10 @@ func TestTheSaltIsRandomAndKeptWithThePasswordAndNotDerivedFromIt(t *testing.T) 
 	}
 }
 
-// On layout v4 the service holds the password and derives the verifier itself;
-// the library writes no verifier and the document keeps naming the password.
-func TestLayoutV4WritesNoVerifierAndKeepsNamingThePassword(t *testing.T) {
-	rec, out := mustLambda(t, withLayout(arp.LayoutV4))
-	if rec.has(ssmParameterType, "staging-recovery-verifier-v5") {
-		t.Error("layout v4 wrote a verifier")
-	}
-	if out["recoveryVerifierParameter"] != "" {
-		t.Errorf("output: %q", out["recoveryVerifierParameter"])
-	}
-	if !strings.Contains(layerFiles(t, rec)["sluis/sluis.yaml"], "passwordSecret: recovery/password") {
-		t.Error("the document no longer names the password on layout v4")
-	}
-}
-
 // The conformance account is off unless the configuration turns it on; then the
 // library makes its password for the operator and its verifier for the function.
 func TestTheConformanceAccountIsMadeOnlyWhenTurnedOn(t *testing.T) {
-	off, offOut := mustLambda(t, withLayout(arp.LayoutV5))
+	off, offOut := mustLambda(t, estateWith())
 	for _, name := range []string{"staging-conformance-password-v5", "staging-conformance-verifier-v5"} {
 		if off.has(ssmParameterType, name) {
 			t.Errorf("%s is made with the account off", name)
@@ -142,7 +124,7 @@ func TestTheConformanceAccountIsMadeOnlyWhenTurnedOn(t *testing.T) {
 		t.Errorf("output with the account off: %q", offOut["conformancePasswordParameter"])
 	}
 
-	on := withLayout(arp.LayoutV5)
+	on := estateWith()
 	on.config = "issuerURL: https://access.example.test\nconformance: {enabled: true}\ncontrollers:\n" +
 		"  github: {consoleURL: \"https://access.example.test/console\"}\n" +
 		"  slack: {consoleURL: \"https://access.example.test/console\"}\n"
@@ -172,30 +154,14 @@ func TestTheConformanceAccountIsMadeOnlyWhenTurnedOn(t *testing.T) {
 	}
 }
 
-func TestTheConformanceAccountNeedsLayoutV5(t *testing.T) {
-	e := withLayout(arp.LayoutV4)
-	e.config = "issuerURL: https://access.example.test\nconformance: {enabled: true}\n"
-	if _, _, err := buildLambda(t, e); err == nil || !strings.Contains(err.Error(), "Layout v5") {
-		t.Errorf("err = %v, want a refusal naming Layout v5", err)
-	}
-}
-
-// An installation on layout v5 reaches the function's document as the renderer
-// writes it for v5: the verifier named, the password not, and the conformance
-// account named when it is on.
-func TestAnInstallationOnLayoutV5NamesTheVerifiersAndNotThePassword(t *testing.T) {
+// An installation reaches the function's document as the renderer writes it:
+// the verifier named, the password not, and the conformance account named when
+// it is on.
+func TestAnInstallationNamesTheVerifiersAndNotThePassword(t *testing.T) {
 	in := exampleInstallation(t)
 	in.Secrets = &sluisconfig.Secrets{KMSKeyID: paramKey}
 	in.Conformance = &sluisconfig.Conformance{Enabled: true}
-	in.AWS.Table = "" // the layout v4 table is not a v5 estate's
-	rec, _ := mustLambda(t, withInstallation(in, func(a *arp.LambdaArgs) {
-		a.Layout = arp.LayoutV5
-		tbl := map[arp.Module]pulumi.StringInput{}
-		for _, m := range arp.Modules() {
-			tbl[m] = pulumi.String(tableArn("sluis-staging-" + string(m)))
-		}
-		a.State.Tables = tbl
-	}))
+	rec, _ := mustLambda(t, withInstallation(in, nil))
 	doc := layerFiles(t, rec)["sluis/sluis.yaml"]
 	if strings.Contains(doc, "passwordSecret") {
 		t.Errorf("the document names the password:\n%s", doc)

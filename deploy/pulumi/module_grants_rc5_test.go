@@ -82,13 +82,6 @@ func noRoleRepeatsASid(t *testing.T, shape string, rec *recorder) {
 	}
 }
 
-// r2v5 is r2 at the address layout v5 keeps its credential at.
-func r2v5() *arp.ExternalBlobs {
-	b := r2()
-	b.CredentialsRef = "internal/google/blobs-r2"
-	return b
-}
-
 // parametersOf are the parameter ARNs a module's own statements name.
 func parametersOf(m string) []string {
 	return []string{ssmBase + "external/" + m + "/*", ssmBase + "internal/" + m + "/*"}
@@ -98,7 +91,7 @@ func parametersOf(m string) []string {
 // exactly the parameters they use: their own, and the sign-in client's for the
 // Google module. Nothing of another module's.
 func TestEveryModuleRoleUsesTheSecretsKeyForItsOwnParametersOnly(t *testing.T) {
-	rec, _ := mustLambda(t, v5Estate(func(a *arp.LambdaArgs) { noDomain(a); a.Keys = suppliedKeys() }))
+	rec, _ := mustLambda(t, estateWith(func(a *arp.LambdaArgs) { noDomain(a); a.Keys = suppliedKeys() }))
 	pol := rolePolicies(t, rec)
 	for _, m := range moduleRoles {
 		keyed := withResource(pol[m], secretsKeyArn)
@@ -148,9 +141,9 @@ func TestTheBlobCredentialsKeyIsNotDroppedBehindTheModulesOwn(t *testing.T) {
 	}
 	for name, mutate := range shapes {
 		t.Run(name, func(t *testing.T) {
-			rec, _ := mustLambda(t, v5Estate(func(a *arp.LambdaArgs) {
+			rec, _ := mustLambda(t, estateWith(func(a *arp.LambdaArgs) {
 				noDomain(a)
-				a.Storage = &arp.StorageGrant{External: r2v5()}
+				a.Storage = &arp.StorageGrant{External: r2()}
 				mutate(a)
 			}))
 			noRoleRepeatsASid(t, name, rec)
@@ -186,36 +179,17 @@ func TestNoRolePolicyOfAnyShapeRepeatsASid(t *testing.T) {
 	shapes := map[string]func(*arp.LambdaArgs){
 		"plain":         func(a *arp.LambdaArgs) { noDomain(a) },
 		"parameter key": func(a *arp.LambdaArgs) { noDomain(a); a.ParameterKeyArn = paramKey },
-		"external":      func(a *arp.LambdaArgs) { noDomain(a); a.Storage = &arp.StorageGrant{External: r2v5()} },
+		"external":      func(a *arp.LambdaArgs) { noDomain(a); a.Storage = &arp.StorageGrant{External: r2()} },
 		"external and key": func(a *arp.LambdaArgs) {
 			noDomain(a)
-			a.Storage = &arp.StorageGrant{External: r2v5()}
+			a.Storage = &arp.StorageGrant{External: r2()}
 			a.ParameterKeyArn = paramKey
 		},
 		"keys": func(a *arp.LambdaArgs) { noDomain(a); a.Keys = suppliedKeys() },
 	}
 	for name, mutate := range shapes {
-		rec, _ := mustLambda(t, v5Estate(mutate))
+		rec, _ := mustLambda(t, estateWith(mutate))
 		noRoleRepeatsASid(t, name, rec)
-	}
-	// The layout v4 issuer too: its external blobs' key statement and its own.
-	rec, _ := mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) {
-		noDomain(a)
-		a.Storage = &arp.StorageGrant{External: r2()}
-		a.ParameterKeyArn = paramKey
-	}})
-	st := statements(t, prop(rec.one(t, policyType, "staging-issuer-policy"), "policy").StringValue())
-	seen := map[any]bool{}
-	for _, s := range st {
-		if seen[s["Sid"]] {
-			t.Errorf("the layout v4 issuer repeats the Sid %v", s["Sid"])
-		}
-		seen[s["Sid"]] = true
-	}
-	for _, s := range []string{"SluisBlobCredentialsKey", "SluisParameterKey"} {
-		if sidOf(st, s) == nil {
-			t.Errorf("layout v4 issuer lost %s", s)
-		}
 	}
 }
 
@@ -243,7 +217,7 @@ func TestNoModuleRoleHoldsTheMinterForItsBlobCredentials(t *testing.T) {
 		a.ParameterKeyArn = paramKey
 		a.Modules = map[string]arp.ModuleArgs{"github": {Document: githubWithPresetBlobs + "secrets:\n  kmsKeyId: " + paramKey + "\n"}}
 	}
-	rec, _ := mustLambda(t, v5Estate(mutate))
+	rec, _ := mustLambda(t, estateWith(mutate))
 	for role, st := range rolePolicies(t, rec) {
 		for _, sid := range []string{"SluisCrossCloudflareMinter", "SluisCrossCloudflareMinted", "SluisParameterKeyMinted"} {
 			if sidOf(st, sid) != nil {
@@ -261,7 +235,7 @@ func TestNoModuleRoleHoldsTheMinterForItsBlobCredentials(t *testing.T) {
 	}
 	noRoleRepeatsASid(t, "preset blobs", rec)
 
-	a := v5Estate(mutate).args(t)
+	a := estateWith(mutate).args(t)
 	roles, err := a.Roles()
 	if err != nil {
 		t.Fatal(err)
@@ -311,7 +285,7 @@ func functionDocuments(t *testing.T, rec *recorder) map[string]string {
 // the role reads is read by key.
 func TestEveryTableAFunctionListsIsCoveredByItsRole(t *testing.T) {
 	for name, mk := range map[string]func() estate{
-		"config": func() estate { return v5Estate(noDomain) },
+		"config": func() estate { return estateWith(noDomain) },
 		"installation": func() estate {
 			return moduleEstate(t, moduleInstallation(t, "modules-full"))
 		},
@@ -414,9 +388,8 @@ var handledEvents = map[string][]string{
 func TestEveryScheduleSendsAKindItsFunctionTakes(t *testing.T) {
 	in := exampleInstallation(t)
 	withCloudflare(in)
-	in.AWS.Table = ""
-	cloudflare := withInstallation(in, func(a *arp.LambdaArgs) { withLayout(arp.LayoutV5).mutate(a) })
-	for name, e := range map[string]estate{"controllers and directory": scheduled(v5Estate()), "cloudflare": cloudflare} {
+	cloudflare := withInstallation(in, nil)
+	for name, e := range map[string]estate{"controllers and directory": scheduled(estateWith()), "cloudflare": cloudflare} {
 		rec, _ := mustLambda(t, e)
 		seen := map[string]bool{}
 		for _, s := range rec.ofType(schedType) {

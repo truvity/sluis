@@ -220,11 +220,9 @@ func TestTheFunctionsRoleIsTheQueuesOnlySender(t *testing.T) {
 func TestTheQueueNamesTheModuleFunctionsRolesToo(t *testing.T) {
 	in := exampleInstallation(t)
 	in.AWS.AuditQueueURL = ""
-	in.AWS.Table = ""
 	rec, _ := mustLambda(t, withInstallation(in, func(a *arp.LambdaArgs) {
 		a.AuditQueueArn = nil
 		a.Audit = installAudit(t)
-		withLayout(arp.LayoutV5).mutate(a)
 	}))
 	qp := prop(rec.one(t, "aws:sqs/queuePolicy:QueuePolicy", "audit-example-ingest"), "policy").StringValue()
 	// The installation declares no Cloudflare preset, so that module has no

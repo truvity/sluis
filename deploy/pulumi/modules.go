@@ -17,7 +17,7 @@ import (
 // role it leaves.
 type Module string
 
-// The modules of layout v5.
+// The modules of the storage layout (docs/decisions/0072).
 const (
 	// ModuleOIDC is the issuer: sign-in, tokens, clients, the console's sessions.
 	ModuleOIDC       Module = "oidc"

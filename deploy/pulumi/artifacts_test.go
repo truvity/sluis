@@ -7,7 +7,9 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime/debug"
+	"slices"
 	"strings"
 	"testing"
 
@@ -134,7 +136,9 @@ func TestArtifactsAreHeldToTheirRules(t *testing.T) {
 
 // ---- the release's checksums.txt
 
-// releaseServer serves the zip and the release's checksums.txt at v1.63.0.
+// releaseServer serves the issuer's zip, the module functions' zips and the
+// release's checksums.txt at v1.63.0. listed, when set, is the issuer zip's
+// digest in checksums.txt; hits counts the downloads of the issuer's zip.
 func releaseServer(t *testing.T, listed string, hits *int) (base, digest string) {
 	t.Helper()
 	pkg := zipFile(t, nil)
@@ -146,16 +150,32 @@ func releaseServer(t *testing.T, listed string, hits *int) (base, digest string)
 	if listed == "" {
 		listed = digest
 	}
+	sums := listed + "  " + zipName + "\n" + strings.Repeat("0", 64) + "  other.tar.gz\n"
+	modules := map[string][]byte{}
+	for _, m := range []string{"cloudflare", "github", "slack", "google"} {
+		name := "sluis-" + m + "_1.63.0_linux_arm64.zip"
+		path := filepath.Join(filepath.Dir(pkg), name)
+		b, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		modules["/v1.63.0/"+name] = b
+		sums += sha(t, path) + "  " + name + "\n"
+	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/v1.63.0/checksums.txt":
-			_, _ = w.Write([]byte(listed + "  " + zipName + "\n" + strings.Repeat("0", 64) + "  other.tar.gz\n"))
+			_, _ = w.Write([]byte(sums))
 		case "/v1.63.0/" + zipName:
 			if hits != nil {
 				*hits++
 			}
 			_, _ = w.Write(raw)
 		default:
+			if b, ok := modules[r.URL.Path]; ok {
+				_, _ = w.Write(b)
+				return
+			}
 			http.NotFound(w, r)
 		}
 	}))
@@ -336,23 +356,29 @@ func TestTheFunctionPublishesAVersionAndCallersUseTheLiveAlias(t *testing.T) {
 	if strIn(t, perm, "qualifier") != "live" || strIn(t, perm, "function") != "sluis-staging-issuer" {
 		t.Errorf("api permission %v", perm.Inputs)
 	}
-	n := 0
-	for _, s := range rec.ofType("aws:scheduler/schedule:Schedule") {
-		n++
-		if got := prop(s, "target").ObjectValue()["arn"].StringValue(); got != live {
-			t.Errorf("%s targets %q", s.Name, got)
-		}
+	// Every schedule targets the live alias of a function: the issuer's, or the
+	// module's that runs the pass.
+	moduleLive := func(m string) string {
+		return arnp + "lambda:eu-west-1:" + account + ":function:sluis-staging-" + m + ":live"
 	}
-	if n != 3 {
-		t.Errorf("%d schedules", n)
+	want := map[string]string{
+		"staging-github-acme": moduleLive("github"), "staging-slack-T1": moduleLive("slack"),
+		"staging-directory-refresh": moduleLive("google"), "staging-issuer-clients": live,
+	}
+	got := map[string]string{}
+	for _, s := range rec.ofType("aws:scheduler/schedule:Schedule") {
+		got[s.Name] = prop(s, "target").ObjectValue()["arn"].StringValue()
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("schedule targets %v, want %v", got, want)
 	}
 	sp := grants(statements(t, prop(rec.one(t, policyType, "staging-scheduler-policy"), "policy").StringValue()))
-	if got := sp["lambda:InvokeFunction"]; len(got) != 1 || got[0] != live {
-		t.Errorf("scheduler grant %v, want exactly the alias", got)
+	if g := sp["lambda:InvokeFunction"]; !slices.Contains(g, live) || slices.ContainsFunc(g, func(a string) bool { return !strings.HasSuffix(a, ":live") }) {
+		t.Errorf("scheduler grant %v, want the live aliases only", g)
 	}
 	fp := grants(statements(t, prop(rec.one(t, policyType, "staging-issuer-policy"), "policy").StringValue()))
-	if got := fp["lambda:InvokeFunction"]; len(got) != 1 || got[0] != arnp+"lambda:"+region+":"+account+":function:sluis-staging-issuer:live" {
-		t.Errorf("self grant %v", got)
+	if g := fp["lambda:InvokeFunction"]; !slices.Contains(g, arnp+"lambda:"+region+":"+account+":function:sluis-staging-issuer:live") {
+		t.Errorf("self grant %v", g)
 	}
 	cfg := rec.one(t, "aws:lambda/functionEventInvokeConfig:FunctionEventInvokeConfig", "staging-issuer")
 	if strIn(t, cfg, "qualifier") != "live" {

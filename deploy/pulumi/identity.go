@@ -64,10 +64,11 @@ type KubernetesIdentityArgs struct {
 	WrappedSigningKeyArn pulumi.StringInput
 
 	// Instance, when set, is the installation's name (`acme`, `prod`) and gives
-	// the role the SSM grants the Lambda role has under `/sluis/<instance>`,
-	// for a pod whose `secrets` or Secrets adapter is `ssm`: read and write
-	// under internal/credentials/* and external/*, read under internal/config/*,
-	// all scoped to that root. Needs Region. Unset, the role has no SSM grant.
+	// the role SSM grants under `/sluis/<instance>`, for a pod whose `secrets`
+	// or Secrets adapter is `ssm`: read and write under internal/credentials/*
+	// and external/*, read under internal/config/*, all scoped to that root.
+	// These are not the module-first paths (internal/<module>/*) a document
+	// with `secrets.layout: v5` reads: a pod on SSM needs more than this. Needs Region. Unset, the role has no SSM grant.
 	Instance string
 	// ParameterKeyArn is the customer-managed key SecureString parameters under
 	// /sluis are encrypted with; with Instance, the role may use it through SSM
@@ -82,8 +83,9 @@ type KubernetesIdentityArgs struct {
 	// credentials the rotation stores at external/cloudflare: set it when every
 	// preset is `store: none`.
 	CloudflareOnDemandOnly bool
-	// State is the DynamoDB table of the State port. Nil when State is not in
-	// DynamoDB (it is in ConfigMaps or memory), and the roles then carry no DynamoDB grant.
+	// State is the DynamoDB tables of the State port (States.Grant()). Nil when
+	// State is not in DynamoDB (it is in ConfigMaps or memory), and the role then
+	// carries no DynamoDB grant.
 	State *StateGrant
 }
 
@@ -107,7 +109,7 @@ type KubernetesIdentity struct {
 // The policy grants the storage (S3 get, put and delete of objects, list of the
 // bucket), kms:Sign and kms:GetPublicKey on SigningKeyArns (or the wrapped key's
 // two calls under their encryption context), when State is given the DynamoDB
-// adapter's item calls and DescribeTable on the one table, and, when Instance is
+// adapter's item calls and DescribeTable on the module tables, and, when Instance is
 // given, the SSM grants of the Lambda role under /sluis/<instance>. The
 // controllers run in the same pod, so their code has all of it. Nothing else.
 func NewKubernetesIdentity(ctx *pulumi.Context, name string, args *KubernetesIdentityArgs, opts ...pulumi.ResourceOption) (*KubernetesIdentity, error) {
@@ -134,8 +136,8 @@ func NewKubernetesIdentity(ctx *pulumi.Context, name string, args *KubernetesIde
 		return nil, errors.New("sluispulumi: KubernetesIdentityArgs.Instance is required with external blobs: " +
 			"the role reads their credentials' address under the installation's SSM root")
 	}
-	if a.State != nil && a.State.TableArn == nil && len(a.State.Tables) == 0 {
-		return nil, errors.New("sluispulumi: KubernetesIdentityArgs.State has no TableArn or Tables (State.Grant() or States.Grant())")
+	if a.State != nil && len(a.State.Tables) == 0 {
+		return nil, errors.New("sluispulumi: KubernetesIdentityArgs.State has no Tables (States.Grant())")
 	}
 	if a.Instance != "" {
 		if !validInstance(a.Instance) {
@@ -195,12 +197,9 @@ func newPodIdentity(ctx *pulumi.Context, parent *KubernetesIdentity, a *Kubernet
 	roleName, desc, trust string) (*iam.Role, error) {
 	child := pulumi.Parent(parent)
 
-	stateTable, stateKey := pulumi.StringInput(pulumi.String("")), pulumi.StringInput(pulumi.String(""))
-	if a.State != nil {
-		stateTable = tableArnOf(a.State)
-		if a.State.KeyArn != nil {
-			stateKey = a.State.KeyArn
-		}
+	stateKey := pulumi.StringInput(pulumi.String(""))
+	if a.State != nil && a.State.KeyArn != nil {
+		stateKey = a.State.KeyArn
 	}
 	withState := a.State != nil
 	withWrapped := a.WrappedSigningKeyArn != nil
@@ -212,7 +211,7 @@ func newPodIdentity(ctx *pulumi.Context, parent *KubernetesIdentity, a *Kubernet
 	if bucketArn == nil {
 		bucketArn = pulumi.String("")
 	}
-	inputs := []any{bucketArn, stateTable, stateKey, wrapped, moduleTableArns(a.State)}
+	inputs := []any{bucketArn, stateKey, wrapped, moduleTableArns(a.State)}
 	for _, k := range a.SigningKeyArns {
 		inputs = append(inputs, k)
 	}
@@ -224,17 +223,17 @@ func newPodIdentity(ctx *pulumi.Context, parent *KubernetesIdentity, a *Kubernet
 			st = credentialsStatements(a.Storage.External, a.Region, a.AccountID, a.Instance, a.ParameterKeyArn)
 		}
 		if withState {
-			st = append(st, stateStatements(v[1].(string), v[2].(string), moduleTablesOf(v[4]), a.Cloudflare)...)
+			st = append(st, stateStatements(v[1].(string), moduleTablesOf(v[3]), a.Cloudflare)...)
 		}
-		if len(v) > 5 {
-			keys := make([]string, 0, len(v)-5)
-			for _, k := range v[5:] {
+		if len(v) > 4 {
+			keys := make([]string, 0, len(v)-4)
+			for _, k := range v[4:] {
 				keys = append(keys, k.(string))
 			}
 			st = append(st, signingStatement(keys))
 		}
 		if withWrapped {
-			st = append(st, wrappedSigningStatement(v[3].(string)))
+			st = append(st, wrappedSigningStatement(v[2].(string)))
 		}
 		if a.Instance != "" {
 			st = append(st, ssmStatements(a.Region, a.AccountID, a.Instance, a.ParameterKeyArn, a.Cloudflare, !a.CloudflareOnDemandOnly)...)

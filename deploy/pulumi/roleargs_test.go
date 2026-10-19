@@ -24,27 +24,26 @@ func roleShapes(t *testing.T) map[string]struct {
 	mk := func(e estate) shape {
 		a := *e.args(t)
 		return shape{full: a, min: arp.RoleArgs{
-			Region: a.Region, AccountID: a.AccountID, Instance: a.Instance, Layout: a.Layout,
+			Region: a.Region, AccountID: a.AccountID, Instance: a.Instance,
 			FunctionName: a.FunctionName, Modules: a.Modules, BackupFunctionName: a.BackupFunctionName,
 			RestoreFunctionName: a.RestoreFunctionName, TransitionRoles: a.TransitionRoles,
 		}}
 	}
 	out := map[string]shape{
-		"plain": mk(v5Estate()),
-		"switching": mk(v5Estate(func(a *arp.LambdaArgs) {
+		"plain": mk(estateWith()),
+		"switching": mk(estateWith(func(a *arp.LambdaArgs) {
 			a.TransitionRoles = []arp.TransitionRole{{Role: arp.RoleIssuer, OldName: "sluis-old"}}
 		})),
-		"names": mk(v5Estate(func(a *arp.LambdaArgs) {
+		"names": mk(estateWith(func(a *arp.LambdaArgs) {
 			a.FunctionName = "acme-issuer"
 			a.BackupFunctionName, a.RestoreFunctionName = "acme-bk", "acme-rs"
 			a.Modules = map[string]arp.ModuleArgs{"github": {FunctionName: "acme-gh"}}
 		})),
-		"v4": mk(withLayout(arp.LayoutV4)),
 	}
 	in := exampleInstallation(t)
 	full := *withInstallation(in, nil).args(t)
 	out["installation"] = shape{full: full, min: arp.RoleArgs{
-		Region: in.AWS.Region, AccountID: account, Instance: in.Instance, Layout: full.Layout, Installation: in,
+		Region: in.AWS.Region, AccountID: account, Instance: in.Instance, Installation: in,
 		Blobs: full.Storage.External,
 	}}
 	return out
@@ -137,7 +136,6 @@ func TestFunctionRolesNameEveryFunction(t *testing.T) {
 func TestRoleArgsRefuseWhatNamesNoRole(t *testing.T) {
 	for name, a := range map[string]arp.RoleArgs{
 		"no instance": {Region: region, AccountID: account},
-		"bad layout":  {Region: region, AccountID: account, Instance: "i1", Layout: "v9"},
 		"bad name":    {Region: region, AccountID: account, Instance: "i1", FunctionName: "no spaces"},
 		"transition":  {Region: region, AccountID: account, Instance: "i1", TransitionRoles: []arp.TransitionRole{{Role: "nope", OldName: "x"}}},
 	} {

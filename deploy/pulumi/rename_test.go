@@ -123,7 +123,7 @@ func oldStateOf(rec *recorder, physical string) []oldResource {
 func TestTheIssuerRenameIsAliasedReplacementsOnly(t *testing.T) {
 	for _, old := range []string{"sluis", "sluis-http"} {
 		t.Run(old, func(t *testing.T) {
-			rec, _ := mustLambda(t, v5Estate())
+			rec, _ := mustLambda(t, estateWith())
 			replaced, created, deleted := previewOf(t, rec, oldStateOf(rec, old))
 			want := []string{
 				"aws:cloudwatch/logGroup:LogGroup/staging-issuer",
@@ -160,7 +160,7 @@ func TestTheIssuerRenameIsAliasedReplacementsOnly(t *testing.T) {
 // An estate that keeps the name it has (FunctionName) is not replaced: the
 // aliases carry its resources to the new logical names and nothing else moves.
 func TestAnEstateThatKeepsItsFunctionNameReplacesNothing(t *testing.T) {
-	rec, _ := mustLambda(t, v5Estate(func(a *arp.LambdaArgs) { a.FunctionName = "sluis" }))
+	rec, _ := mustLambda(t, estateWith(func(a *arp.LambdaArgs) { a.FunctionName = "sluis" }))
 	replaced, _, deleted := previewOf(t, rec, oldStateOf(rec, "sluis"))
 	if len(replaced) != 0 || len(deleted) != 0 {
 		t.Errorf("replaced %v, deleted %v", replaced, deleted)
@@ -170,7 +170,7 @@ func TestAnEstateThatKeepsItsFunctionNameReplacesNothing(t *testing.T) {
 // Every logical name the issuer's resources had is aliased, and the old log
 // group survives the replacement (RetainOnDelete), so nothing is delete-before.
 func TestTheIssuerResourcesAnswerToTheirOldLogicalNames(t *testing.T) {
-	rec, _ := mustLambda(t, v5Estate())
+	rec, _ := mustLambda(t, estateWith())
 	for typ, names := range map[string][2]string{
 		"aws:lambda/function:Function":                                   {"staging-issuer", "staging-http"},
 		"aws:iam/role:Role":                                              {"staging-issuer-role", "staging-http-role"},
@@ -195,7 +195,7 @@ func TestTheIssuerResourcesAnswerToTheirOldLogicalNames(t *testing.T) {
 // `sluis-<instance>-<module>` by default, and an estate overrides any of them
 // through the installation's `aws.functions`.
 func TestEveryFunctionIsNamedForItsInstanceAndModule(t *testing.T) {
-	rec, _ := mustLambda(t, v5Estate())
+	rec, _ := mustLambda(t, estateWith())
 	got := map[string]string{}
 	for _, f := range rec.ofType(fnType) {
 		got[f.Name] = prop(f, "name").StringValue()
@@ -229,12 +229,9 @@ func TestEveryFunctionIsNamedForItsInstanceAndModule(t *testing.T) {
 // library holds the documents to the same names.
 func TestAnInstallationNamesTheIssuerAndTheModulesThroughFunctions(t *testing.T) {
 	in := exampleInstallation(t)
-	in.AWS.FunctionName, in.AWS.Table = "", ""
+	in.AWS.FunctionName = ""
 	in.AWS.Functions = map[string]string{"issuer": "acme-front", "slack": "acme-chat"}
-	e := withInstallation(in, nil)
-	install, layout := e.mutate, v5Estate().mutate
-	e.mutate = func(a *arp.LambdaArgs) { install(a); layout(a) }
-	rec, _ := mustLambda(t, e)
+	rec, _ := mustLambda(t, withInstallation(in, nil))
 	if n := prop(rec.one(t, fnType, "staging-issuer"), "name").StringValue(); n != "acme-front" {
 		t.Errorf("the issuer is %q", n)
 	}

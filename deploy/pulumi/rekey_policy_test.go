@@ -57,7 +57,7 @@ func TestRekeyOperatorStatements(t *testing.T) {
 // secrets.kmsKeyId, and not the AWS-managed key.
 func TestKeysSecretsEncryptsTheParametersTheLibraryCreates(t *testing.T) {
 	rec, _ := mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) { noDomain(a); a.Keys = suppliedKeys() }})
-	p := rec.one(t, "aws:ssm/parameter:Parameter", "staging-state-secret-internal")
+	p := rec.one(t, "aws:ssm/parameter:Parameter", "staging-state-secret-v5")
 	if got := prop(p, "keyId"); !got.HasValue() || got.StringValue() != "alias/acme-secrets" {
 		t.Errorf("keyId = %v, want alias/acme-secrets", got)
 	}

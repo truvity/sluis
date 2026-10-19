@@ -68,7 +68,7 @@ func TestTheRestoreFunctionIsTheReleaseZipWithTheRestoreDocument(t *testing.T) {
 		t.Errorf("document = %v", doc)
 	}
 	if len(at(t, doc, "ports", "dynamodb", "tables").(map[string]any)) != 6 || at(t, doc, "secrets", "layout") != "v5" {
-		t.Error("the restore document does not name the six tables on layout v5")
+		t.Error("the restore document does not name the six tables")
 	}
 	if at(t, doc, "backup", "target", "bucket") != archiveBucket || at(t, doc, "backup", "key") != "alias/staging-archive" {
 		t.Errorf("backup = %v", doc["backup"])

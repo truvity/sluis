@@ -55,7 +55,7 @@ func kpLambdaArgs(t *testing.T, mutate func(*arp.LambdaArgs)) *arp.LambdaArgs {
 	if mutate == nil {
 		mutate = func(*arp.LambdaArgs) {}
 	}
-	return v5Estate(mutate).args(t)
+	return estateWith(mutate).args(t)
 }
 
 func TestLibraryKeyPolicyIsItsGoldenAndFitsKMS(t *testing.T) {
@@ -221,7 +221,7 @@ func TestSendersRolesAndViewersFollowTheNames(t *testing.T) {
 		t.Errorf("viewers include a role that hosts its module or backs up: %v", viewers)
 	}
 	// The same through the built component.
-	args := v5Estate(func(x *arp.LambdaArgs) { x.TransitionRoles = a.TransitionRoles }).args(t)
+	args := estateWith(func(x *arp.LambdaArgs) { x.TransitionRoles = a.TransitionRoles }).args(t)
 	var got []string
 	if _, _, err := run(t, func(ctx *pulumi.Context, _ func(string, pulumi.StringInput)) error {
 		l, err := arp.NewLambda(ctx, "staging", args)

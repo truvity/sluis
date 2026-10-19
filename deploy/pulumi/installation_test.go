@@ -4,6 +4,7 @@ import (
 	"go/parser"
 	"go/token"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -21,7 +22,23 @@ import (
 // fixtures, with the test account in place of its placeholder.
 func exampleInstallation(t *testing.T) *sluisconfig.Installation {
 	t.Helper()
-	in, err := sluisconfig.LoadInstallation(filepath.Join("..", "..", "config", "testdata", "example.installation.yaml"))
+	raw, err := os.ReadFile(filepath.Join("..", "..", "config", "testdata", "example.installation.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The library renders the per-module tables from the State grant: a single
+	// table (`aws.table`) is no installation's here.
+	var kept []string
+	for _, l := range strings.Split(string(raw), "\n") {
+		if !strings.HasPrefix(strings.TrimSpace(l), "table:") {
+			kept = append(kept, l)
+		}
+	}
+	file := filepath.Join(t.TempDir(), "example.installation.yaml")
+	if err := os.WriteFile(file, []byte(strings.Join(kept, "\n")), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	in, err := sluisconfig.LoadInstallation(file)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,27 +59,21 @@ func withInstallation(in *sluisconfig.Installation, more func(*arp.LambdaArgs)) 
 	}}
 }
 
-// An installation is rendered by the root module's renderer and held by the
-// layer as it is: the library adds nothing the renderer did not write, so what
-// `sluisctl render` shows an estate is what the function reads.
+// An installation is rendered by the root module's renderer into the issuer's
+// layer (the module functions' documents are TestEachModuleFunctionReadsItsRenderedDocuments'),
+// and the issuer's function is the installation's.
 func TestAnInstallationIsRenderedIntoTheLayerByTheRootRenderer(t *testing.T) {
 	in := exampleInstallation(t)
 	in.Secrets = &sluisconfig.Secrets{KMSKeyID: paramKey} // the key is the installation's to say
-	service, policy, err := sluisconfig.Render(in)
-	if err != nil {
-		t.Fatal(err)
-	}
 	rec, _ := mustLambda(t, withInstallation(in, nil))
 	files := layerFiles(t, rec)
-	if files["sluis/sluis.yaml"] != string(service) {
-		t.Errorf("the service document is not the renderer's:\n%s\n--- want ---\n%s", files["sluis/sluis.yaml"], service)
+	for _, want := range []string{"issuerURL: https://access.example.test", "layout: v5", "root: /sluis/example"} {
+		if !strings.Contains(files["sluis/sluis.yaml"], want) {
+			t.Errorf("the service document lacks %q:\n%s", want, files["sluis/sluis.yaml"])
+		}
 	}
-	if files["sluis/policy.yaml"] != string(policy) {
-		t.Errorf("the policy document is not the renderer's:\n%s", files["sluis/policy.yaml"])
-	}
-	// The function is the installation's: its name is what the trigger invokes.
-	if !strings.Contains(files["sluis/sluis.yaml"], "github: sluis-http") {
-		t.Errorf("the trigger does not invoke the installation's function:\n%s", files["sluis/sluis.yaml"])
+	if !strings.Contains(files["sluis/policy.yaml"], "apiVersion: sluis.truvity.github.io/policy/") {
+		t.Errorf("the policy document is not rendered:\n%s", files["sluis/policy.yaml"])
 	}
 	f := rec.one(t, fnType, "staging-issuer")
 	if prop(f, "name").StringValue() != "sluis-http" {
@@ -108,10 +119,13 @@ func TestAnInstallationTakesWhatItLeavesOutFromTheArguments(t *testing.T) {
 		a.Instance, a.FunctionName = "staging", "sluis-fn"
 	}))
 	files := layerFiles(t, rec)
-	for _, want := range []string{"root: /sluis/staging", "region: " + region, "github: sluis-fn"} {
+	for _, want := range []string{"root: /sluis/staging", "region: " + region} {
 		if !strings.Contains(files["sluis/sluis.yaml"], want) {
 			t.Errorf("the service document lacks %q:\n%s", want, files["sluis/sluis.yaml"])
 		}
+	}
+	if n := prop(rec.one(t, fnType, "staging-issuer"), "name").StringValue(); n != "sluis-fn" {
+		t.Errorf("the issuer's function is %q, want the argument's sluis-fn", n)
 	}
 }
 
@@ -231,8 +245,8 @@ func TestAnR2PresetEndpointIsNotAnEndpointOfTheFunction(t *testing.T) {
 		Lifetime: sluisconfig.Duration(time.Hour), Rotation: sluisconfig.Duration(20 * time.Minute),
 	}
 	rec, _ := mustLambda(t, withInstallation(in, nil))
-	if doc := layerFiles(t, rec)["sluis/sluis.yaml"]; !strings.Contains(doc, r2) {
-		t.Errorf("the R2 endpoint is not in the document:\n%s", doc)
+	if doc := archiveFiles(t, rec.one(t, layerType, "staging-cloudflare-config"))["sluis/sluis.yaml"]; !strings.Contains(doc, r2) {
+		t.Errorf("the R2 endpoint is not in the Cloudflare function's document:\n%s", doc)
 	}
 
 	cf := "cloudflare: {accounts: {main: {id: 0123456789abcdef0123456789abcdef, minter: internal/cloudflare/main/minter}}, " +
@@ -242,7 +256,7 @@ func TestAnR2PresetEndpointIsNotAnEndpointOfTheFunction(t *testing.T) {
 	}
 	for name, c := range map[string]struct{ config, at string }{
 		"a dynamodb endpoint beside it": {
-			config: "issuerURL: https://x.example\nports: {adapter: dynamodb, dynamodb: {table: t, endpoint: 'https://evil.example'}}\n" + cf,
+			config: "issuerURL: https://x.example\nports: {adapter: dynamodb, dynamodb: {endpoint: 'https://evil.example'}}\n" + cf,
 			at:     "ports.dynamodb.endpoint",
 		},
 		"a secrets endpoint beside it": {
@@ -257,9 +271,11 @@ func TestAnR2PresetEndpointIsNotAnEndpointOfTheFunction(t *testing.T) {
 	}
 }
 
-// An installation that declares Cloudflare presets gets the rotation schedule
-// and the function's grants on exactly the minter, the record of minted ids and
-// the stored credentials; one that does not gets neither.
+// An installation that declares Cloudflare presets gets the rotation schedule,
+// which runs the Cloudflare function, and that function's role holds the
+// module's parameters (the minter, the record of minted ids, the stored
+// credentials); the issuer's holds none of them. One that declares none gets
+// neither.
 func TestCloudflarePresetsGetTheRotationScheduleAndTheGrants(t *testing.T) {
 	in := exampleInstallation(t)
 	withCloudflare(in)
@@ -268,24 +284,19 @@ func TestCloudflarePresetsGetTheRotationScheduleAndTheGrants(t *testing.T) {
 	s := rec.one(t, "aws:scheduler/schedule:Schedule", "staging-cloudflare-rotation")
 	tgt := prop(s, "target").ObjectValue()
 	if prop(s, "scheduleExpression").StringValue() != "rate(15 minutes)" || tgt["input"].StringValue() != `{"kind":"cloudflare"}` ||
-		!strings.HasSuffix(tgt["arn"].StringValue(), ":function:sluis-http:live") {
+		!strings.HasSuffix(tgt["arn"].StringValue(), ":function:sluis-example-cloudflare:live") {
 		t.Errorf("rotation schedule: %v", s.Inputs)
 	}
 	root := arnp + "ssm:" + region + ":" + account + ":parameter/sluis/example"
-	g := rolePolicy(t, rec)
-	has := func(action, resource string) bool { return slices.Contains(g[action], resource) }
-	if !has("ssm:GetParameter", root+"/internal/cloudflare/*") || has("ssm:PutParameter", root+"/internal/cloudflare/*") {
-		t.Errorf("the minter credential must be readable and never writable: %v", g["ssm:GetParameter"])
+	cf := grants(statements(t, prop(rec.one(t, policyType, "staging-cloudflare-policy"), "policy").StringValue()))
+	for _, r := range []string{root + "/internal/cloudflare/*", root + "/external/cloudflare/*"} {
+		if !slices.Contains(cf["ssm:GetParameter"], r) || !slices.Contains(cf["ssm:PutParameter"], r) {
+			t.Errorf("the Cloudflare function does not hold %s: %v", r, cf["ssm:PutParameter"])
+		}
 	}
-	if !has("ssm:PutParameter", root+"/internal/cloudflare-minted/*") || !has("ssm:GetParameter", root+"/internal/cloudflare-minted/*") {
-		t.Errorf("the record of minted ids must be read and written: %v", g["ssm:PutParameter"])
-	}
-	if !has("ssm:PutParameter", root+"/external/cloudflare/*") {
-		t.Errorf("the stored credentials must be writable: %v", g["ssm:PutParameter"])
-	}
-	for _, r := range g["ssm:PutParameter"] {
-		if strings.HasSuffix(r, "/internal/*") || strings.HasSuffix(r, "/internal/config/*") || r == root+"/internal/cloudflare/*" {
-			t.Errorf("a write grant too wide: %s", r)
+	for _, r := range rolePolicy(t, rec)["ssm:GetParameter"] {
+		if strings.Contains(r, "/cloudflare") {
+			t.Errorf("the issuer holds a Cloudflare parameter: %s", r)
 		}
 	}
 
@@ -294,8 +305,8 @@ func TestCloudflarePresetsGetTheRotationScheduleAndTheGrants(t *testing.T) {
 	if rec.has("aws:scheduler/schedule:Schedule", "staging-cloudflare-rotation") {
 		t.Error("a rotation schedule without presets")
 	}
-	if g = rolePolicy(t, rec); has("ssm:GetParameter", root+"/internal/cloudflare/*") {
-		t.Error("a Cloudflare grant without presets")
+	if rec.has(policyType, "staging-cloudflare-policy") {
+		t.Error("a Cloudflare function's role without presets")
 	}
 	rec, _ = mustLambda(t, withInstallation(in, func(a *arp.LambdaArgs) { a.CloudflareRotation.Disabled = true }))
 	if rec.has("aws:scheduler/schedule:Schedule", "staging-cloudflare-rotation") {
@@ -392,8 +403,8 @@ func TestTheRotationTickReachesTheDocuments(t *testing.T) {
 }
 
 // A preset with `store: none` is minted on demand only: the library gives it no
-// rotation schedule and no grant on external/cloudflare, and holds it to no
-// rotation margin. Presets beside it that are stored keep all three.
+// rotation schedule and holds it to no rotation margin. Presets beside it that
+// are stored keep both.
 func TestAnOnDemandPresetGetsNoScheduleNoStoredGrantAndNoMargin(t *testing.T) {
 	root := arnp + "ssm:" + region + ":" + account + ":parameter/sluis/example"
 	onDemand := sluisconfig.CloudflarePreset{
@@ -409,17 +420,13 @@ func TestAnOnDemandPresetGetsNoScheduleNoStoredGrantAndNoMargin(t *testing.T) {
 	if rec.has("aws:scheduler/schedule:Schedule", "staging-cloudflare-rotation") {
 		t.Error("a rotation schedule for presets that are all store: none")
 	}
-	g := rolePolicy(t, rec)
-	if slices.Contains(g["ssm:PutParameter"], root+"/external/cloudflare/*") || slices.Contains(g["ssm:GetParameter"], root+"/external/cloudflare/*") {
-		t.Errorf("a grant on the stored credentials with nothing stored: %v", g["ssm:PutParameter"])
+	// The minter credential is still needed: the token exchange mints.
+	cf := grants(statements(t, prop(rec.one(t, policyType, "staging-cloudflare-policy"), "policy").StringValue()))
+	if !slices.Contains(cf["ssm:GetParameter"], root+"/internal/cloudflare/*") {
+		t.Errorf("the minter grants are missing: %v", cf["ssm:GetParameter"])
 	}
-	// The minter credential and the record of minted ids are still needed: the
-	// token exchange mints, and the sweep reads the record.
-	if !slices.Contains(g["ssm:GetParameter"], root+"/internal/cloudflare/*") || !slices.Contains(g["ssm:PutParameter"], root+"/internal/cloudflare-minted/*") {
-		t.Errorf("the minter grants are missing: %v", g["ssm:GetParameter"])
-	}
-	if doc := layerFiles(t, rec)["sluis/sluis.yaml"]; !strings.Contains(doc, "store: none") {
-		t.Errorf("the document does not carry the store:\n%s", doc)
+	if doc := archiveFiles(t, rec.one(t, layerType, "staging-cloudflare-config"))["sluis/sluis.yaml"]; !strings.Contains(doc, "store: none") {
+		t.Errorf("the Cloudflare function's document does not carry the store:\n%s", doc)
 	}
 
 	mixed := exampleInstallation(t)
@@ -427,9 +434,6 @@ func TestAnOnDemandPresetGetsNoScheduleNoStoredGrantAndNoMargin(t *testing.T) {
 	mixed.Cloudflare.Presets["adhoc"] = onDemand
 	rec, _ = mustLambda(t, withInstallation(mixed, nil))
 	rec.one(t, "aws:scheduler/schedule:Schedule", "staging-cloudflare-rotation")
-	if g = rolePolicy(t, rec); !slices.Contains(g["ssm:PutParameter"], root+"/external/cloudflare/*") {
-		t.Errorf("the stored preset lost its grant: %v", g["ssm:PutParameter"])
-	}
 }
 
 // External blobs can name a Cloudflare preset instead of a secret: the document

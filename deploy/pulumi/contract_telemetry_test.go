@@ -88,7 +88,7 @@ func holdsTelemetry(t *testing.T, rec *recorder, want bool) int {
 }
 
 func TestEveryModuleFunctionCarriesTheTelemetry(t *testing.T) {
-	rec, _ := mustLambda(t, v5Estate(func(a *arp.LambdaArgs) {
+	rec, _ := mustLambda(t, estateWith(func(a *arp.LambdaArgs) {
 		a.WebIdentityAudience = contractAudience
 		a.Telemetry = telemetryLayer()
 		a.AdditionalWebIdentityAudiences = []string{telemetryAudience + "/otlp"}
@@ -107,7 +107,7 @@ func TestEveryModuleFunctionCarriesTheTelemetry(t *testing.T) {
 }
 
 func TestNoFunctionCarriesTelemetryWithoutIt(t *testing.T) {
-	rec, _ := mustLambda(t, v5Estate(func(a *arp.LambdaArgs) {
+	rec, _ := mustLambda(t, estateWith(func(a *arp.LambdaArgs) {
 		a.WebIdentityAudience = contractAudience
 		// Audiences are the issuer's; the module roles hold them with Telemetry only.
 		a.AdditionalWebIdentityAudiences = nil
@@ -119,12 +119,12 @@ func TestNoFunctionCarriesTelemetryWithoutIt(t *testing.T) {
 
 func TestModuleRolesHoldTheTelemetryAudiencesOnlyWithTelemetry(t *testing.T) {
 	audiences := []string{telemetryAudience + "/otlp"}
-	with, _ := mustLambda(t, v5Estate(func(a *arp.LambdaArgs) {
+	with, _ := mustLambda(t, estateWith(func(a *arp.LambdaArgs) {
 		a.WebIdentityAudience = contractAudience
 		a.Telemetry = telemetryLayer()
 		a.AdditionalWebIdentityAudiences = audiences
 	}))
-	without, _ := mustLambda(t, v5Estate(func(a *arp.LambdaArgs) {
+	without, _ := mustLambda(t, estateWith(func(a *arp.LambdaArgs) {
 		a.WebIdentityAudience = contractAudience
 		a.AdditionalWebIdentityAudiences = audiences
 	}))

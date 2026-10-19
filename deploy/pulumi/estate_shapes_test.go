@@ -12,7 +12,7 @@ import (
 
 func r2() *arp.ExternalBlobs {
 	return &arp.ExternalBlobs{
-		Bucket: "acme-blobs", Endpoint: "https://acct.r2.example.test", CredentialsRef: "internal/blobs/r2",
+		Bucket: "acme-blobs", Endpoint: "https://acct.r2.example.test", CredentialsRef: "internal/google/blobs-r2",
 	}
 }
 
@@ -155,12 +155,12 @@ func TestExternalBlobsOnAnS3CompatibleEndpoint(t *testing.T) {
 	}
 	creds := statementBySid(t, rec, "SluisBlobCredentials")
 	if creds == nil || creds["Action"] != "ssm:GetParameter" ||
-		creds["Resource"] != arnp+"ssm:"+region+":"+account+":parameter/sluis/staging/internal/blobs/r2" {
+		creds["Resource"] != arnp+"ssm:"+region+":"+account+":parameter/sluis/staging/internal/google/blobs-r2" {
 		t.Errorf("credentials grant: %v", creds)
 	}
 	doc := layerFiles(t, rec)["sluis/sluis.yaml"]
 	for _, want := range []string{
-		"endpoint: https://acct.r2.example.test", "bucket: acme-blobs", "region: auto", "credentialsRef: internal/blobs/r2", "adapter: s3",
+		"endpoint: https://acct.r2.example.test", "bucket: acme-blobs", "region: auto", "credentialsRef: internal/google/blobs-r2", "adapter: s3",
 	} {
 		if !strings.Contains(doc, want) {
 			t.Errorf("the service document lacks %q:\n%s", want, doc)
@@ -226,7 +226,7 @@ func TestExternalStorageIsRefused(t *testing.T) {
 	// And an endpoint of the document's own is still refused.
 	if _, _, err := buildLambda(t, estate{mutate: func(a *arp.LambdaArgs) {
 		noDomain(a)
-		a.Config += "ports: {dynamodb: {table: x, endpoint: \"https://elsewhere.example.test\"}}\n"
+		a.Config += "ports: {dynamodb: {endpoint: \"https://elsewhere.example.test\"}}\n"
 	}}); err == nil {
 		t.Error("a document endpoint was accepted")
 	}
@@ -246,7 +246,7 @@ func TestKubernetesIdentityWithExternalBlobs(t *testing.T) {
 		t.Fatal(err)
 	}
 	doc := prop(rec.ofType("aws:iam/policy:Policy")[0], "policy").StringValue()
-	if strings.Contains(doc, "s3:") || !strings.Contains(doc, "parameter/sluis/acme/internal/blobs/r2") {
+	if strings.Contains(doc, "s3:") || !strings.Contains(doc, "parameter/sluis/acme/internal/google/blobs-r2") {
 		t.Errorf("policy: %s", doc)
 	}
 }

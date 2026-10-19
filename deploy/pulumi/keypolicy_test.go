@@ -28,9 +28,9 @@ var (
 	kpKeyAdmin = arnPrefix + "iam::" + kpAccount + ":role/key-admin"
 )
 
-func kpArgs(l Layout) KeyPolicyArgs {
+func kpArgs() KeyPolicyArgs {
 	return KeyPolicyArgs{
-		Region: kpRegion, Account: kpAccount, Modules: ModuleSet{Instance: kpInst}, Layout: l,
+		Region: kpRegion, Account: kpAccount, Modules: ModuleSet{Instance: kpInst},
 		Roles: []KeyRole{
 			{Role: Role{Name: RoleIssuer, Hosts: []Module{ModuleOIDC, ModuleGitHub, ModuleSlack, ModuleGoogle}}, Arn: kpIssuer,
 				MinterRefs: []string{"internal/cloudflare/main/minter"}},
@@ -84,11 +84,11 @@ func TestSluisKeyPolicyStatementList(t *testing.T) {
 		"SluisKeyControlPlaneAdmins", "SluisKeyControlPlaneAdminsOnly",
 		"SluisKeySign", "SluisKeySignContextReserved", "SluisKeySignDirectPurposeOnly", "SluisKeySignDirectContextKeysOnly",
 	}
-	got := kpSids(kpStatements(t, kpArgs(LayoutV5)))
+	got := kpSids(kpStatements(t, kpArgs()))
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("statements\n got %v\nwant %v", got, want)
 	}
-	a := kpArgs(LayoutV5)
+	a := kpArgs()
 	a.DenyOtherActions = true
 	got = kpSids(kpStatements(t, a))
 	if got[len(got)-1] != "SluisKeyRolesNothingElse" {
@@ -97,24 +97,22 @@ func TestSluisKeyPolicyStatementList(t *testing.T) {
 }
 
 func TestSluisKeyPolicySidsAreUnique(t *testing.T) {
-	for _, l := range []Layout{LayoutV4, LayoutV5, LayoutV4V5} {
-		a := kpArgs(l)
-		a.DenyOtherActions = true
-		seen := map[string]bool{}
-		for _, sid := range kpSids(kpStatements(t, a)) {
-			if seen[sid] || !strings.HasPrefix(sid, "SluisKey") {
-				t.Errorf("%s: Sid %q repeated or outside the SluisKey prefix", l, sid)
-			}
-			seen[sid] = true
+	a := kpArgs()
+	a.DenyOtherActions = true
+	seen := map[string]bool{}
+	for _, sid := range kpSids(kpStatements(t, a)) {
+		if seen[sid] || !strings.HasPrefix(sid, "SluisKey") {
+			t.Errorf("Sid %q repeated or outside the SluisKey prefix", sid)
 		}
+		seen[sid] = true
 	}
 	// Two roles whose names camel-case to one Sid are refused, not merged.
-	a := kpArgs(LayoutV5)
+	a = kpArgs()
 	a.Roles = append(a.Roles, KeyRole{Role: Role{Name: "backup", Hosts: []Module{ModuleBackup}}, Arn: kpBackup})
 	if _, err := SluisKeyPolicyStatements(a); err == nil {
 		t.Error("a role named twice was accepted")
 	}
-	a = kpArgs(LayoutV5)
+	a = kpArgs()
 	a.Roles = append(a.Roles, KeyRole{Role: Role{Name: "my-fn", Hosts: []Module{ModuleBackup}}, Arn: kpBackup},
 		KeyRole{Role: Role{Name: "my--fn", Hosts: []Module{ModuleBackup}}, Arn: kpBackup})
 	if _, err := SluisKeyPolicyStatements(a); err == nil || !strings.Contains(err.Error(), "repeats Sid") {
@@ -123,7 +121,7 @@ func TestSluisKeyPolicySidsAreUnique(t *testing.T) {
 }
 
 func TestSluisKeyPolicySignContext(t *testing.T) {
-	st := kpStatements(t, kpArgs(LayoutV5))
+	st := kpStatements(t, kpArgs())
 	allow := kpBySid(t, st, "SluisKeySign")
 	cond := allow["Condition"].(map[string]any)
 	if !reflect.DeepEqual(cond["StringEquals"], map[string]any{
@@ -171,7 +169,7 @@ func TestSluisKeyPolicyParameterScopes(t *testing.T) {
 		c := kpBySid(t, st, sid)["Condition"].(map[string]any)["StringLike"].(map[string]any)["kms:EncryptionContext:PARAMETER_ARN"]
 		return c.([]string)
 	}
-	st := kpStatements(t, kpArgs(LayoutV5))
+	st := kpStatements(t, kpArgs())
 	cf := arns("SluisKeyRoleCloudflare", st)
 	if !reflect.DeepEqual(cf, []string{root + "/internal/cloudflare/*", root + "/external/cloudflare/*"}) {
 		t.Errorf("cloudflare role: %v", cf)
@@ -204,11 +202,11 @@ func TestSluisKeyPolicyParameterScopes(t *testing.T) {
 		root + "/internal/backup/restore-identity",
 	}
 	if got := arns("SluisKeyAdminReads", st); !reflect.DeepEqual(got, wantAdmin) {
-		t.Errorf("admin reads v5: %v", got)
+		t.Errorf("admin reads: %v", got)
 	}
 	// With the conformance account, its password and verifier too: the stack
 	// writes them, and the provider decrypts each on create and refresh.
-	withConformance := kpArgs(LayoutV5)
+	withConformance := kpArgs()
 	withConformance.Conformance = true
 	wantConformance := []string{
 		root + "/internal/oidc/state-secret", root + "/internal/oidc/recovery-password", root + "/internal/oidc/recovery-verifier",
@@ -216,15 +214,7 @@ func TestSluisKeyPolicyParameterScopes(t *testing.T) {
 		root + "/internal/backup/restore-identity",
 	}
 	if got := arns("SluisKeyAdminReads", kpStatements(t, withConformance)); !reflect.DeepEqual(got, wantConformance) {
-		t.Errorf("admin reads v5 with conformance: %v", got)
-	}
-	// v4 adds the v4 names and gives the issuer the whole of internal/ and external/.
-	v4 := kpStatements(t, kpArgs(LayoutV4))
-	if got := arns("SluisKeyAdminReads", v4); len(got) != 4 {
-		t.Errorf("admin reads v4: %v", got)
-	}
-	if got := arns("SluisKeyRoleIssuer", v4); got[0] != root+"/internal/*" || got[1] != root+"/external/*" {
-		t.Errorf("issuer v4: %v", got)
+		t.Errorf("admin reads with conformance: %v", got)
 	}
 	// The admin and breakglass statements are about the principals they name.
 	c := kpBySid(t, st, "SluisKeyAdminSeeds")["Condition"].(map[string]any)
@@ -241,7 +231,7 @@ func TestSluisKeyPolicyParameterScopes(t *testing.T) {
 // none uses NotPrincipal, and nothing allows an action on a key outside SSM
 // except the sign roles' direct calls.
 func TestSluisKeyPolicyHasNoCatchAll(t *testing.T) {
-	a := kpArgs(LayoutV4V5)
+	a := kpArgs()
 	a.DenyOtherActions = true
 	for _, s := range kpStatements(t, a) {
 		raw, _ := json.Marshal(s)
@@ -495,7 +485,7 @@ func kpCompare(t *testing.T, estate string, legacies []legacy, got []map[string]
 }
 
 func TestSluisKeyPolicyCoversTheEstatesStatements(t *testing.T) {
-	a := kpArgs(LayoutV4V5)
+	a := kpArgs()
 	a.DenyOtherActions = true
 	got := kpStatements(t, a)
 	// Kernel shape: the function's role is the issuer's; the single-function estate.
@@ -507,7 +497,7 @@ func TestSluisKeyPolicyCoversTheEstatesStatements(t *testing.T) {
 // purposes, a state bucket and a "nothing else" deny over the estate's
 // principals) without a repeated Sid, and the document stays within KMS's limit.
 func TestSluisKeyPolicyComposesWithEstateStatements(t *testing.T) {
-	sluis := kpStatements(t, kpArgs(LayoutV5))
+	sluis := kpStatements(t, kpArgs())
 	sealRole := arnPrefix + "iam::" + kpAccount + ":role/seal"
 	opRole := arnPrefix + "iam::" + kpAccount + ":role/operator"
 	estate := []map[string]any{
@@ -546,7 +536,7 @@ func TestSluisKeyPolicyComposesWithEstateStatements(t *testing.T) {
 }
 
 func TestSluisKeyPolicySize(t *testing.T) {
-	a := kpArgs(LayoutV4V5)
+	a := kpArgs()
 	a.DenyOtherActions = true
 	// The largest realistic input: every role hosts every module and the readers
 	// are a dozen clusters.
@@ -581,13 +571,12 @@ func TestSluisKeyPolicyRefusesBadInput(t *testing.T) {
 		"no account":     func(a *KeyPolicyArgs) { a.Account = "" },
 		"no roles":       func(a *KeyPolicyArgs) { a.Roles = nil },
 		"wildcard role":  func(a *KeyPolicyArgs) { a.Roles[0].Arn = arnPrefix + "iam::" + kpAccount + ":role/*" },
-		"bad layout":     func(a *KeyPolicyArgs) { a.Layout = "v6" },
 		"reader pattern": func(a *KeyPolicyArgs) { a.ExternalReaders = []string{arnPrefix + "iam::" + kpAccount + ":role/*"} },
 		"admin not arn":  func(a *KeyPolicyArgs) { a.Admins = []string{"admin"} },
 		"unknown module": func(a *KeyPolicyArgs) { a.Roles[1].Role.Hosts = []Module{"nope"} },
 		"bad role name":  func(a *KeyPolicyArgs) { a.Roles[1].Role.Name = "Bad Name" },
 	} {
-		a := kpArgs(LayoutV5)
+		a := kpArgs()
 		mut(&a)
 		if _, err := SluisKeyPolicyStatements(a); err == nil {
 			t.Errorf("%s: accepted", name)
@@ -600,7 +589,7 @@ func TestSluisKeyPolicyRefusesBadInput(t *testing.T) {
 // The key policy of the shared key denies the five control-plane actions to every
 // principal but the administrators, and allows them to those alone.
 func TestControlPlaneIsTheAdministratorsAlone(t *testing.T) {
-	st := kpStatements(t, kpArgs(LayoutV5))
+	st := kpStatements(t, kpArgs())
 	wantActions := []string{"kms:CreateGrant", "kms:DisableKey", "kms:PutKeyPolicy", "kms:RevokeGrant", "kms:ScheduleKeyDeletion"}
 	admins := []string{kpGlass, kpKeyAdmin} // sorted: the break-glass role is added to the administrators
 
@@ -642,7 +631,7 @@ func TestControlPlaneIsTheAdministratorsAlone(t *testing.T) {
 // The key could not be administered again without an administrator, so a policy
 // with none is not rendered; the break-glass role alone is one.
 func TestAKeyPolicyNeedsAnAdministrator(t *testing.T) {
-	a := kpArgs(LayoutV5)
+	a := kpArgs()
 	a.KeyAdmins = nil
 	if _, err := SluisKeyPolicyStatements(a); err != nil {
 		t.Errorf("the break-glass role alone administers the key: %v", err)
@@ -690,7 +679,7 @@ func TestKeyAdministratorsAreRoles(t *testing.T) {
 			"Breakglass": func(a *KeyPolicyArgs) { a.Breakglass = []string{v} },
 			"KeyAdmins":  func(a *KeyPolicyArgs) { a.KeyAdmins = []string{v} },
 		} {
-			a := kpArgs(LayoutV5)
+			a := kpArgs()
 			set(&a)
 			if _, err := SluisKeyPolicyStatements(a); err == nil {
 				t.Errorf("%s as %s: rendered", name, field)

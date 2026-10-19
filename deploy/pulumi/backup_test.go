@@ -24,7 +24,7 @@ const hour = time.Hour
 
 const archiveBucket = "acme-sluis-archive"
 
-// backupCommon is an installation on layout v5 with its six tables.
+// backupCommon is an installation with its six tables.
 func backupCommon(t *testing.T) arp.BackupCommon {
 	t.Helper()
 	pkg := zipFile(t, nil)

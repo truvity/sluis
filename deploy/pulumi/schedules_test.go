@@ -31,7 +31,7 @@ func liveOf(fn string) string {
 // function that runs it, and the scheduler's one policy holds those aliases and
 // no others.
 func TestSchedulesTargetTheirModulesLiveAlias(t *testing.T) {
-	rec, out := mustLambda(t, scheduled(v5Estate()))
+	rec, out := mustLambda(t, scheduled(estateWith()))
 	live := liveOf
 	want := map[string]string{
 		"sluis-github-acme":         `{"controller":"github","kind":"tick","target":"acme"} ` + live("sluis-staging-github"),
@@ -79,8 +79,7 @@ func fmtMap(m map[string]string) string {
 func TestTheCloudflareRotationTargetsTheCloudflareFunction(t *testing.T) {
 	in := exampleInstallation(t)
 	withCloudflare(in)
-	in.AWS.Table = ""
-	e := withInstallation(in, func(a *arp.LambdaArgs) { withLayout(arp.LayoutV5).mutate(a) })
+	e := withInstallation(in, nil)
 	rec, _ := mustLambda(t, e)
 	var found bool
 	for _, s := range rec.ofType(schedType) {
@@ -102,51 +101,14 @@ func TestTheCloudflareRotationTargetsTheCloudflareFunction(t *testing.T) {
 	}
 }
 
-// A preview from the one-function layout to the per-module one retargets the
-// schedules in place (same logical and physical names) and creates only the
-// clients schedule; the scheduler's role and policy are not touched.
-func TestThePreviewShapeOfTheSchedules(t *testing.T) {
-	before, _ := mustLambda(t, scheduled(withLayout(arp.LayoutV4)))
-	after, _ := mustLambda(t, scheduled(v5Estate()))
-	s := previewShape(before, after, schedType)
-	if len(s.replaced) != 0 || len(s.deleted) != 0 || !slices.Equal(s.created, []string{"staging-issuer-clients"}) {
-		t.Errorf("schedules: %s %v", s, s.created)
-	}
-	// Four are in both with the same name; their target is what changes.
-	moved := 0
-	b, a := targetsOf(t, before), targetsOf(t, after)
-	for name, tgt := range b {
-		if a[name] == "" {
-			t.Errorf("%s is gone", name)
-		}
-		if a[name] != tgt {
-			moved++
-		}
-	}
-	if moved != 4 {
-		t.Errorf("%d schedules retargeted, want 4 (github x2, slack, google)", moved)
-	}
-	for _, typ := range []string{"aws:iam/role:Role", policyType} {
-		if s := previewShape(before, after, typ); slices.ContainsFunc(append(s.deleted, s.replaced...),
-			func(n string) bool { return strings.Contains(n, "scheduler") }) {
-			t.Errorf("%s: %s touches the scheduler", typ, s)
-		}
-	}
-	// The v4 layout has no clients schedule and its role holds the one alias.
-	pol := grants(statements(t, prop(before.one(t, policyType, "staging-scheduler-policy"), "policy").StringValue()))
-	if got := pol["lambda:InvokeFunction"]; len(got) != 1 || got[0] != liveOf("sluis-staging-issuer") {
-		t.Errorf("v4 scheduler grants %v", got)
-	}
-}
-
 func TestIssuerClientsScheduleIsConfigurable(t *testing.T) {
-	rec, _ := mustLambda(t, scheduled(v5Estate(func(a *arp.LambdaArgs) { a.IssuerClients = arp.IssuerClientsArgs{Rate: "rate(1 hour)", Paused: true} })))
+	rec, _ := mustLambda(t, scheduled(estateWith(func(a *arp.LambdaArgs) { a.IssuerClients = arp.IssuerClientsArgs{Rate: "rate(1 hour)", Paused: true} })))
 	s := rec.one(t, schedType, "staging-issuer-clients")
 	if prop(s, "scheduleExpression").StringValue() != "rate(1 hour)" || prop(s, "state").StringValue() != "DISABLED" {
 		t.Errorf("clients schedule %v", s.Inputs)
 	}
 
-	rec, _ = mustLambda(t, scheduled(v5Estate(func(a *arp.LambdaArgs) { a.IssuerClients.Disabled = true })))
+	rec, _ = mustLambda(t, scheduled(estateWith(func(a *arp.LambdaArgs) { a.IssuerClients.Disabled = true })))
 	if rec.has(schedType, "staging-issuer-clients") {
 		t.Error("Disabled left the clients schedule in")
 	}
@@ -156,7 +118,7 @@ func TestIssuerClientsScheduleIsConfigurable(t *testing.T) {
 	}
 
 	// No schedule at all: no grant to hold.
-	rec, _ = mustLambda(t, v5Estate(func(a *arp.LambdaArgs) { a.IssuerClients.Disabled, a.DirectoryRefresh.Disabled = true, true }))
+	rec, _ = mustLambda(t, estateWith(func(a *arp.LambdaArgs) { a.IssuerClients.Disabled, a.DirectoryRefresh.Disabled = true, true }))
 	if rec.has(policyType, "staging-scheduler-policy") {
 		t.Error("a scheduler with nothing to invoke has a policy")
 	}
@@ -165,14 +127,9 @@ func TestIssuerClientsScheduleIsConfigurable(t *testing.T) {
 		"both":       func(a *arp.LambdaArgs) { a.IssuerClients.Disabled, a.IssuerClients.Paused = true, true },
 		"not a rate": func(a *arp.LambdaArgs) { a.IssuerClients.Rate = "hourly" },
 	} {
-		if _, _, err := buildLambda(t, v5Estate(f)); err == nil || !strings.Contains(err.Error(), "IssuerClients") {
+		if _, _, err := buildLambda(t, estateWith(f)); err == nil || !strings.Contains(err.Error(), "IssuerClients") {
 			t.Errorf("%s: error %v", name, err)
 		}
-	}
-	// The v4 layout never makes it.
-	rec, _ = mustLambda(t, withLayout(arp.LayoutV4))
-	if rec.has(schedType, "staging-issuer-clients") {
-		t.Error("v4 made the clients schedule")
 	}
 }
 
@@ -201,7 +158,7 @@ func TestTheSchedulersTrustNamesTheScheduleGroup(t *testing.T) {
 			t.Errorf("the trust names a schedule, which EventBridge Scheduler never presents: %s", trust)
 		}
 	}
-	rec, _ := mustLambda(t, scheduled(v5Estate()))
+	rec, _ := mustLambda(t, scheduled(estateWith()))
 	check(t, prop(rec.one(t, "aws:iam/role:Role", "staging-scheduler-role"), "assumeRolePolicy").StringValue())
 	// The schedules are in the group the trust names: none sets a group, so `default`.
 	for _, s := range rec.ofType(schedType) {

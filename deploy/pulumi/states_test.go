@@ -1,7 +1,6 @@
 package sluispulumi_test
 
 import (
-	"reflect"
 	"sort"
 	"strings"
 	"testing"
@@ -20,6 +19,16 @@ func mockTableArn(name string) string {
 
 func tableArn(name string) string {
 	return arnp + "dynamodb:" + region + ":" + account + ":table/" + name
+}
+
+// moduleTables is a grant of every module's table, `sluis-staging-<module>`, as
+// States.Grant() gives it.
+func moduleTables() map[arp.Module]pulumi.StringInput {
+	tbl := map[arp.Module]pulumi.StringInput{}
+	for _, m := range arp.Modules() {
+		tbl[m] = pulumi.String(tableArn("sluis-staging-" + string(m)))
+	}
+	return tbl
 }
 
 func statesRun(t *testing.T, args *arp.StatesArgs) (*recorder, error) {
@@ -85,9 +94,6 @@ func TestStatesRefuseWhatCannotBeDeclared(t *testing.T) {
 		"no instance":      {},
 		"unknown module":   {Modules: arp.ModuleSet{Instance: "k"}, Only: []arp.Module{"nope"}},
 		"same table twice": {Modules: arp.ModuleSet{Instance: "k", Tables: map[arp.Module]string{arp.ModuleSlack: "sluis-k-oidc"}}},
-		"legacy unnamed":   {Modules: arp.ModuleSet{Instance: "k"}, Legacy: &arp.LegacyStateArgs{StateArgs: arp.StateArgs{TableName: "old"}}},
-		"legacy is a module's": {Modules: arp.ModuleSet{Instance: "k"},
-			Legacy: &arp.LegacyStateArgs{Name: "x", StateArgs: arp.StateArgs{TableName: "sluis-k-oidc"}}},
 	} {
 		if _, err := statesRun(t, a); err == nil {
 			t.Errorf("%s: accepted", name)
@@ -95,67 +101,13 @@ func TestStatesRefuseWhatCannotBeDeclared(t *testing.T) {
 	}
 }
 
-// Adoption is the same resource: the legacy table is declared as NewState alone
-// declares it, at the same URN, so a preview shows no replace and no delete.
-func TestTheLegacyTableIsTheSameResourceAsNewStateMadeIt(t *testing.T) {
-	alone, _, err := run(t, func(ctx *pulumi.Context, _ func(string, pulumi.StringInput)) error {
-		_, err := arp.NewState(ctx, "staging", &arp.StateArgs{TableName: table})
-		return err
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	both, err := statesRun(t, &arp.StatesArgs{
-		Modules: arp.ModuleSet{Instance: "prod"},
-		Legacy:  &arp.LegacyStateArgs{Name: "staging", StateArgs: arp.StateArgs{TableName: table}},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, d := range alone.ofType("sluis:aws:State") {
-		if !both.has("sluis:aws:State", d.Name) {
-			t.Errorf("the legacy component %s is not declared", d.Name)
-		}
-	}
-	old, adopted := alone.one(t, tableType, "staging-table"), both.one(t, tableType, "staging-table")
-	if !reflect.DeepEqual(old.Inputs, adopted.Inputs) {
-		t.Errorf("the legacy table's inputs changed:\n%v\n%v", old.Inputs, adopted.Inputs)
-	}
-	// Protected, with DynamoDB's deletion protection: leaving the argument out
-	// later is refused by the engine until `pulumi state unprotect`.
-	if !both.isProtected(tableType, "staging-table") || !prop(adopted, "deletionProtectionEnabled").BoolValue() {
-		t.Error("the legacy table is not protected")
-	}
-	if got := len(both.ofType(tableType)); got != 1+len(arp.Modules()) {
-		t.Errorf("%d tables", got)
-	}
-}
-
-// Without the argument the library declares no legacy resource; the stack then
-// holds a protected resource the program no longer names, and the engine's delete
-// of it fails. The guard is the protection and the table's own flag, both
-// asserted above; here, that a stack that never had one declares none.
-func TestWithoutALegacyTableNoneIsDeclared(t *testing.T) {
-	rec, err := statesRun(t, &arp.StatesArgs{Modules: arp.ModuleSet{Instance: "prod"}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(rec.ofType("sluis:aws:State")) != 0 {
-		t.Error("a legacy component without Legacy")
-	}
-}
-
-func TestTheGrantCarriesTheLegacyArnAndEachModulesTable(t *testing.T) {
+func TestTheGrantCarriesEachModulesTable(t *testing.T) {
 	_, out, err := run(t, func(ctx *pulumi.Context, collect func(string, pulumi.StringInput)) error {
-		s, err := arp.NewStates(ctx, "access", &arp.StatesArgs{
-			Modules: arp.ModuleSet{Instance: "prod"},
-			Legacy:  &arp.LegacyStateArgs{Name: "staging", StateArgs: arp.StateArgs{TableName: table}},
-		})
+		s, err := arp.NewStates(ctx, "access", &arp.StatesArgs{Modules: arp.ModuleSet{Instance: "prod"}})
 		if err != nil {
 			return err
 		}
 		g := s.Grant()
-		collect("legacy", g.TableArn)
 		for m, a := range g.Tables {
 			collect("arn-"+string(m), a)
 		}
@@ -167,9 +119,6 @@ func TestTheGrantCarriesTheLegacyArnAndEachModulesTable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if out["legacy"] != mockTableArn(table) {
-		t.Errorf("legacy %q", out["legacy"])
-	}
 	for _, m := range arp.Modules() {
 		want := "sluis-prod-" + string(m)
 		if out["arn-"+string(m)] != mockTableArn(want) || out["name-"+string(m)] != want {
@@ -179,18 +128,11 @@ func TestTheGrantCarriesTheLegacyArnAndEachModulesTable(t *testing.T) {
 }
 
 // The role gets the tables of the modules it hosts, written; the backup table
-// for the maintenance item only; the minter's only with the minter. (Layout
-// v4+v5: on v4 the module tables are not granted, see layout_test.go.)
-func TestTheFunctionRoleIsGrantedTheModuleTablesAndTheLegacyOne(t *testing.T) {
-	tbl := map[arp.Module]pulumi.StringInput{}
-	for _, m := range arp.Modules() {
-		tbl[m] = pulumi.String(tableArn("sluis-staging-" + string(m)))
-	}
-	rec, _ := mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) {
-		a.Layout = arp.LayoutV4V5
-		a.State.Tables = tbl
+// for the maintenance item only; the minter's only with the minter.
+func TestTheFunctionRoleIsGrantedTheModuleTables(t *testing.T) {
+	rec, _ := mustLambda(t, estateWith(func(a *arp.LambdaArgs) {
 		a.State.KeyArn = pulumi.String(arnp + "kms:" + region + ":" + account + ":key/tables")
-	}})
+	}))
 	doc := statements(t, prop(rec.one(t, policyType, "staging-issuer-policy"), "policy").StringValue())
 	byResource := map[string][]string{}
 	for _, s := range doc {
@@ -217,8 +159,8 @@ func TestTheFunctionRoleIsGrantedTheModuleTablesAndTheLegacyOne(t *testing.T) {
 	if got := byResource[tableArn("sluis-staging-cloudflare")]; len(got) != 0 {
 		t.Errorf("the minter's table without the minter: %v", got)
 	}
-	if got := byResource[tableArn(table)]; !contains(got, "dynamodb:PutItem") {
-		t.Errorf("the legacy table lost its grant: %v", got)
+	if got := byResource[tableArn(table)]; len(got) != 0 {
+		t.Errorf("a single table is granted: %v", got)
 	}
 }
 
@@ -231,7 +173,7 @@ func contains(s []string, v string) bool {
 	return false
 }
 
-// A golden: the block a layout v5 installation's document carries.
+// A golden: the block an installation's document carries.
 func TestRenderPortsTablesGolden(t *testing.T) {
 	tables := map[arp.Module]string{}
 	for _, m := range arp.Modules() {
@@ -272,9 +214,8 @@ func TestRenderPortsTablesGolden(t *testing.T) {
 	}
 }
 
-func TestRenderPortsTablesAndTableDoNotMix(t *testing.T) {
+func TestRenderPortsRefusesBadTables(t *testing.T) {
 	for name, p := range map[string]arp.PortsArgs{
-		"both":           {BucketName: bucket, TableName: table, Tables: map[arp.Module]string{arp.ModuleOIDC: "x"}},
 		"unknown module": {BucketName: bucket, Tables: map[arp.Module]string{"nope": "x"}},
 		"empty name":     {BucketName: bucket, Tables: map[arp.Module]string{arp.ModuleOIDC: ""}},
 	} {
