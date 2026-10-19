@@ -1,6 +1,6 @@
 # Tutorial: sluis on AWS Lambda
 
-You deploy the sluis issuer function on AWS Lambda, on secrets layout v4, behind a mutual-TLS custom domain (preset `aws-hybrid`; `aws-serverless` has no Kubernetes beside it). State is in DynamoDB, blobs in S3, secrets in SSM. Tokens are signed by key pairs the function generates and wraps under a KMS key you supply. Allow about an hour, most of it waiting for AWS.
+You deploy the sluis issuer and module functions on AWS Lambda, on secrets layout v5, behind a mutual-TLS custom domain (preset `aws-hybrid`; `aws-serverless` has no Kubernetes beside it). State is in DynamoDB, blobs in S3, secrets in SSM. Tokens are signed by key pairs the function generates and wraps under a KMS key you supply. Allow about an hour, most of it waiting for AWS.
 
 Design: [ports](../../concepts/sluis/ports.md). Library arguments: [Pulumi library](../../reference/sluis/pulumi-library.md). Keys: [configuration](../../reference/sluis/configuration.md).
 
@@ -44,7 +44,6 @@ issuer:
 aws:
   account: "111122223333"
   region: eu-central-1
-  table: demo-sluis
   bucket: demo-sluis-111122223333
 
 signingKey:
@@ -66,7 +65,7 @@ access:
       requires: [all:sluis:viewer]
 ```
 
-`instance` names the installation, and its SSM root is `/sluis/demo`. `table` and `bucket` are the names the library creates in step 4.
+`instance` names the installation, and its SSM root is `/sluis/demo`. `bucket` and the tables `sluis-demo-<module>` are what the library creates in step 4.
 
 ## 2. Render it and read the result
 
@@ -74,14 +73,14 @@ access:
 sluisctl render --installation installation.yaml --out rendered
 ```
 
-Expect no output and exit status 0. `rendered/` holds `sluis.yaml` (the service document) and `policy.yaml`. In `sluis.yaml`, check `preset: aws-hybrid`, the DynamoDB table, the S3 bucket and `secrets: {source: ssm, root: /sluis/demo}`. A mistake in the installation stops here and names the key. The library renders the same documents in step 4. Do not deploy `rendered/`.
+Expect no output and exit status 0. `rendered/` holds `sluis.yaml` (the service document) and `policy.yaml`. In `sluis.yaml`, check `preset: aws-hybrid`, the S3 bucket and `secrets: {source: ssm, root: /sluis/demo, layout: v5}`. A mistake in the installation stops here and names the key. The library renders the same documents in step 4. Do not deploy `rendered/`.
 
 ## 3. Fetch the release and pin its digest
 
-Use one release for the Pulumi library and the binary. This tutorial needs v1.75 or later, where the per-module zips start; it uses v1.76.4.
+Use one release for the Pulumi library and the binary. This tutorial needs v1.77.1 or later, where layout v5 is the only one; it uses v1.77.1.
 
 ```sh
-VERSION=1.76.4        # the release you chose, without the v
+VERSION=1.77.1        # the release you chose, without the v
 gh release download "v$VERSION" --repo truvity/sluis --dir dist \
   --pattern "sluis-issuer_${VERSION}_linux_arm64.zip" --pattern checksums.txt
 grep "sluis-issuer_${VERSION}_linux_arm64.zip" dist/checksums.txt
@@ -94,8 +93,8 @@ Expect one line: a 64-character SHA-256 and the file name. Copy the digest into 
 In an empty Pulumi Go project (`pulumi new aws-go`), add the library at the release's tag and copy `installation.yaml` beside `main.go`. The truststore is the PEM of the CAs a client certificate must chain to. Make a test CA and client certificate:
 
 ```sh
-go get github.com/truvity/sluis/deploy/pulumi@v1.76.4 github.com/truvity/sluis/deploy/pulumi/edge/cloudflare@v1.76.4 \
-  github.com/truvity/sluis@v1.76.4
+go get github.com/truvity/sluis/deploy/pulumi@v1.77.1 github.com/truvity/sluis/deploy/pulumi/edge/cloudflare@v1.77.1 \
+  github.com/truvity/sluis@v1.77.1
 openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -days 30 \
   -keyout ca.key -out truststore.pem -subj "/CN=demo-client-ca"
 openssl req -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes \
@@ -122,7 +121,7 @@ import (
 const (
 	region       = "eu-central-1"
 	account      = "111122223333"
-	version      = "1.76.4"
+	version      = "1.77.1"
 	lambdaSHA256 = "<the digest from step 3>"
 	certArn      = "<the ACM certificate's ARN>"
 	applyRoleArn = "<the ARN of the IAM role you apply with>"
@@ -147,7 +146,10 @@ func main() {
 		if err != nil {
 			return err
 		}
-		state, err := sluispulumi.NewState(ctx, "demo", &sluispulumi.StateArgs{TableName: "demo-sluis"}, withAWS)
+		// One table per module, named sluis-demo-<module>.
+		states, err := sluispulumi.NewStates(ctx, "demo", &sluispulumi.StatesArgs{
+			Modules: sluispulumi.ModuleSet{Instance: "demo"},
+		}, withAWS)
 		if err != nil {
 			return err
 		}
@@ -165,7 +167,7 @@ func main() {
 			Package:        "dist/sluis-issuer_" + version + "_linux_arm64.zip",
 			PackageSHA256:  lambdaSHA256,
 			Storage:        store.Grant(),
-			State:          state.Grant(),
+			State:          states.Grant(),
 			Audit: &sluispulumi.AuditArgs{Use: &sluispulumi.AuditUse{QueueURL: auditQueueURL, QueueArn: auditQueueArn}},
 			Keys:           &sluispulumi.KeysArgs{Sign: "alias/demo-sluis-sign"}, // the key from step 0, by alias
 		}, withAWS)
@@ -200,9 +202,9 @@ pulumi preview
 
 Expect only creates:
 
-- the bucket and the table
+- the bucket and a table per module
 
-- the function with its role and layer
+- the functions with their roles and layers
 
 - the HTTP API
 
@@ -241,8 +243,7 @@ The log group is `/aws/lambda/<function name>`, `sluis-<instance>-issuer` unless
 The library generated the recovery password. Read it from a terminal:
 
 ```sh
-aws ssm get-parameter --with-decryption --name /sluis/demo/internal/config/recovery/password \
-  --query Parameter.Value --output text
+sluisctl recovery password --instance demo --region eu-central-1 --show
 ```
 
 Import `client.crt` and `client.key` into a browser as a PKCS#12 file. Open `https://access.example.test/console/login`, expand **Recovery sign-in** and paste the password. You are `recovery`, an operator. The attempt's audit trail is in [Recovery on Lambda](../../guides/sluis/operate/recover-on-lambda.md).
@@ -251,6 +252,6 @@ Import `client.crt` and `client.key` into a browser as a PKCS#12 file. Open `htt
 
 - Connect a directory: [Google Workspace](../../guides/sluis/connect/google-workspace.md). Then connect each relying party: [how-to index](../../concepts/sluis/README.md).
 
-- Move to layout v5, a function per module and the backup module: [upgrade to v1.75](../../guides/sluis/upgrade/v1.75.md), then [v1.76](../../guides/sluis/upgrade/v1.76.md).
+- Add the backup module: [back up and restore on layout v5](../../guides/sluis/operate/back-up-on-layout-v5.md).
 
 - Operate on Lambda: [Lambda reference](../../reference/sluis/lambda.md).

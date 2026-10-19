@@ -26,8 +26,7 @@ Sign in with the recovery password on a Lambda installation when no directory ca
    # Refuses a terminal unless --show; --profile names an AWS profile.
    sluisctl recovery password --instance <instance> --region <region> | pbcopy
 
-   # Without sluisctl: layout v5 stores {"value":"<base64>"}; layout v4 keeps the
-   # text at /sluis/<instance>/internal/config/recovery/password, readable as is.
+   # Without sluisctl: the parameter is a document, {"value":"<base64>"}.
    aws ssm get-parameter --with-decryption \
      --name /sluis/<instance>/internal/oidc/recovery-password \
      --query Parameter.Value --output text | jq -r .value | base64 --decode

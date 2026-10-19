@@ -69,7 +69,7 @@ publicURL: http://localhost:8099/console
 listen: {address: ":8099"}
 probes: {address: ":7099"}
 YAML
-go run ./cmd/sluis serve --config /tmp/demo.yaml
+go run ./cmd/sluis issuer --config /tmp/demo.yaml
 ```
 
 Open `http://localhost:8099/console/` and choose *Continue with the demonstration directory*.

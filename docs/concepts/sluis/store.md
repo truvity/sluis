@@ -5,7 +5,7 @@ snapshots behind a Blob port. The contracts are in [ports](ports.md). The adapte
 
 | Platform | State | Secrets | Blobs |
 |---|---|---|---|
-| AWS (Lambda or Kubernetes) | DynamoDB, one table with per-item TTL | SSM | S3 |
+| AWS (Lambda or Kubernetes) | DynamoDB, one table per module with per-item TTL | SSM | S3 |
 | Kubernetes, until an estate's cutover | the `legacy` adapter: ConfigMaps and, optionally, Valkey | Kubernetes Secrets the service writes | ConfigMaps or Valkey |
 | tests and the demonstration | memory | memory | memory |
 

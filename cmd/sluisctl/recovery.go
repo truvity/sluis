@@ -33,10 +33,8 @@ import (
 const (
 	recoveryTimeout = 30 * time.Second
 
-	// recoveryPasswordV5 and recoveryPasswordV4 are where the password is on
-	// layout v5 (a document) and on layout v4 (the text itself).
+	// recoveryPasswordV5 is where the password is on layout v5, a document.
 	recoveryPasswordV5 = "/sluis/%s/internal/oidc/recovery-password"
-	recoveryPasswordV4 = "/sluis/%s/internal/config/recovery/password"
 )
 
 // The two accounts that sign in by password (docs/decisions/0076).
@@ -83,9 +81,7 @@ const recoveryUsage = `Usage: sluisctl recovery password --instance <name> [--ac
 Reads the recovery password of a Lambda installation with your own AWS
 credentials (the SDK's default chain) and prints it, decoded, and nothing else.
 The parameter is /sluis/<instance>/internal/oidc/recovery-password (layout v5),
-a document {"value":"<base64>"}; an installation still on layout v4 keeps the
-text at /sluis/<instance>/internal/config/recovery/password, which is read when
-the v5 parameter does not exist.
+a document {"value":"<base64>"}.
 
 --account conformance reads the conformance test account's password instead,
 /sluis/<instance>/internal/oidc/conformance-password (layout v5 only), which a
@@ -226,23 +222,15 @@ func recoveryVerifier(args []string, in io.Reader, out io.Writer) error {
 	return err
 }
 
-// readRecoveryPassword reads the password from the layout v5 parameter and,
-// when there is none, from layout v4's.
+// readRecoveryPassword reads the password from the layout v5 parameter.
 func readRecoveryPassword(ctx context.Context, client parameterAPI, instance string) (string, error) {
 	v5 := fmt.Sprintf(recoveryPasswordV5, instance)
 	text, err := getParameter(ctx, client, v5)
 	if err != nil {
-		if !isParameterNotFound(err) {
-			return "", fmt.Errorf("read %s: %w", v5, err)
+		if isParameterNotFound(err) {
+			return "", fmt.Errorf("%s does not exist: wrong --instance or --region, or recovery was never configured", v5)
 		}
-		v4 := fmt.Sprintf(recoveryPasswordV4, instance)
-		text, err = getParameter(ctx, client, v4)
-		if err != nil {
-			if isParameterNotFound(err) {
-				return "", fmt.Errorf("neither %s nor %s exists: wrong --instance or --region, or recovery was never configured", v5, v4)
-			}
-			return "", fmt.Errorf("read %s: %w", v4, err)
-		}
+		return "", fmt.Errorf("read %s: %w", v5, err)
 	}
 	return decodeRecoveryPassword(text)
 }

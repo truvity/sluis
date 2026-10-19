@@ -15,7 +15,7 @@ flowchart TB
   gh["GitHub Actions<br/>OIDC tokens"]:::ext
   sa["Kubernetes<br/>ServiceAccounts"]:::ext
   hub["the directory<br/>inside sluis"]:::hub
-  iss["sluis serve<br/>issuer, console"]:::token
+  iss["sluis issuer<br/>issuer, console"]:::token
   gws -- "① Admin SDK reads" --> hub
   entra -. "① Graph reads" .-> hub
   gws -- "② OIDC sign-in" --> iss
@@ -33,7 +33,7 @@ The issuer is the trusted issuer of every relying party (⑥–⑩, ⑮). A gate
 
 ```mermaid
 flowchart TB
-  iss["sluis serve<br/>the issuer"]:::token
+  iss["sluis issuer<br/>the issuer"]:::token
   eks["Kubernetes<br/>API servers"]:::ext
   aws["AWS accounts"]:::ext
   argo["ArgoCD, Kargo"]:::ext
@@ -62,8 +62,8 @@ flowchart TB
   act["exchange action<br/>in workflows"]:::token
   iss["the issuer"]:::token
   consoles["Consoles"]:::ext
-  ghr["GitHub controller<br/>a loop in sluis serve"]:::token
-  slr["Slack controller<br/>a loop in sluis serve"]:::token
+  ghr["GitHub controller<br/>a loop in sluis issuer"]:::token
+  slr["Slack controller<br/>a loop in sluis issuer"]:::token
   ghteams["GitHub organisations"]:::ext
   slack["Slack workspaces"]:::ext
   lib -. "⑪ reads the bearer" .-> consoles

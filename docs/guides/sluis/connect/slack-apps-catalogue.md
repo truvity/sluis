@@ -55,7 +55,7 @@ The Secret `<release>-slack-catalogue-apps` is created empty at start.
 | `<id>.client_secret` | The OAuth client secret | From Create |
 | `<id>.slack_bot_token` | The bot token | From Install only |
 
-Slack has no token exchange, so a consumer reads a copy. With a `ports.adapter` other than `legacy` and layout v4, read `external/slack/<id>` ([secrets](../../../reference/sluis/secrets.md#the-external-documents)). `push` is deprecated and applies only to `legacy`:
+Slack has no token exchange, so a consumer reads a copy. With a `ports.adapter` other than `legacy` and SSM secrets, read `external/slack/<id>` ([secrets](../../../reference/sluis/secrets.md#the-external-documents)). `push` is deprecated and applies only to `legacy`:
 
 ```yaml
 push:

@@ -58,7 +58,7 @@ groups:
       - service_account: { cluster: prod, namespace: access, name: sluis }   # the controller runs as the release's ServiceAccount
 ```
 
-The controller runs inside `sluis serve` as the ServiceAccount `<release>`. The chart refuses to render it without an `exchange.clusters` row or a console mount. With `audit.*` set, map the account to the audit source `roster`. To act, follow [Enable a GitHub organisation](../enable-github-organisation.md).
+The controller runs inside `sluis issuer` as the ServiceAccount `<release>`. The chart refuses to render it without an `exchange.clusters` row or a console mount. With `audit.*` set, map the account to the audit source `roster`. To act, follow [Enable a GitHub organisation](../enable-github-organisation.md).
 
 ## 4. Run a pass now
 

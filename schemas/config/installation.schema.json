@@ -2969,7 +2969,7 @@
         },
         "source": {
           "default": "env",
-          "description": "`env`: the variable SLUIS_SECRET_<NAME> (the name upper-cased, every other character an underscore), for a local run. `file`: the file <root>/<name>, read on every use, so a rotated mount takes effect without a restart. `ssm`: the SecureString <root>/internal/config/<name> in AWS SSM Parameter Store, every one under the prefix read at once and again after `refresh` (root /sluis/<instance>).",
+          "description": "`env`: the variable SLUIS_SECRET_<NAME> (the name upper-cased, every other character an underscore), for a local run. `file`: the file <root>/<name>, read on every use, so a rotated mount takes effect without a restart. `ssm`: a SecureString in AWS SSM Parameter Store under <root> (/sluis/<instance>), on layout v5 (`layout`): a name the service knows is read at its module's address (`<root>/internal/oidc/state-secret`, ...), any other at `<root>/internal/config/<name>`.",
           "enum": [
             "env",
             "file",

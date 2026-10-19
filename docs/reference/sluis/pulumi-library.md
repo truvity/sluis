@@ -5,8 +5,7 @@ Source: `deploy/pulumi`. Identifiers: [Go packages](../../sdk/go/sluis.md). Deci
 | Component | Type token | Creates |
 |---|---|---|
 | `NewStorage` | `sluis:aws:Storage` | The blob bucket |
-| `NewState` | `sluis:aws:State` | The DynamoDB table |
-| `NewStates` | `sluis:aws:States` | One table per module ([ADR 0072](../../decisions/0072-storage-layout-v5-module-first.md)), and the legacy table adopted |
+| `NewStates` | `sluis:aws:States` | One DynamoDB table per module ([ADR 0072](../../decisions/0072-storage-layout-v5-module-first.md)) |
 | `NewLambda` | `sluis:aws:Lambda` | Function, role, HTTP API, signing key, schedules. The main path |
 | `NewBackup` | `sluis:aws:Backup` | The [backup function](#backup), its role, aliases, schedules and alarms; optionally the archive bucket |
 | `NewRestore` | `sluis:aws:Restore` | The [restore function](#restore): `backup.role: restore`, its role, two aliases, the resource policy and an alarm |
@@ -16,14 +15,14 @@ Pass the provider with `pulumi.Providers(p)`. `RenderPorts` and `RenderPortsYAML
 
 ```go
 store, _ := sluispulumi.NewStorage(ctx, "acme", &sluispulumi.StorageArgs{BucketName: "acme-prod-sluis"}, pulumi.Providers(awsProvider))
-state, _ := sluispulumi.NewState(ctx, "acme", &sluispulumi.StateArgs{TableName: "acme-sluis"}, pulumi.Providers(awsProvider))
+states, _ := sluispulumi.NewStates(ctx, "acme", &sluispulumi.StatesArgs{Modules: sluispulumi.ModuleSet{Instance: "acme"}}, pulumi.Providers(awsProvider))
 ids, _ := sluispulumi.NewKubernetesIdentity(ctx, "acme", &sluispulumi.KubernetesIdentityArgs{
 	ClusterName: "acme", ClusterArn: clusterArn, AccountID: accountID,
 	Namespace:              "sluis",
 	PermissionsBoundaryArn: boundaryArn,
 	ServiceAccount:         "sluis",
 	Storage:                store.Grant(),
-	State:                  state.Grant(),
+	State:                  states.Grant(),
 }, pulumi.Providers(awsProvider))
 ```
 
@@ -45,9 +44,9 @@ ids, _ := sluispulumi.NewKubernetesIdentity(ctx, "acme", &sluispulumi.Kubernetes
 | `ExternalBlobs` | Meaning |
 |---|---|
 | `Bucket`, `Endpoint` (https), `Region` (default `auto`), `PathStyle`, `Prefix` | The store |
-| `CredentialsRef` | Address `internal/<kind>/<id>`, for example `internal/blobs/r2`, or `external/cloudflare/<preset>`. It names the secret, never holds it. Set this or `CredentialsPreset`, not both |
+| `CredentialsRef` | Address `internal/<module>/<name>`, for example `internal/google/blobs-r2`, or `external/cloudflare/<preset>`. It names the secret, never holds it. Set this or `CredentialsPreset`, not both |
 | `CredentialsRef: external/cloudflare/<preset>` | The credential the Cloudflare module rotates for an R2 preset of `Installation.Cloudflare.Presets`: the preset must be declared, have an `endpoint`, keep `store: external` and be at the blobs' `Endpoint`. Every function that has the blobs reads that one `cloudflare/v1` document (`SluisBlobCredentials`); none holds the minter. The Cloudflare function mints for its own blobs, so it starts before the first rotation. This is the form for an installation with module functions. The adapter reads the document again with a third of its time left and once after a 403, and keeps nothing on disk. Choose `lifetime` longer than `rotation` plus the schedule's tick and five minutes (for example `lifetime: 1h`, `rotation: 20m`, a tick of 15m). Rotate the preset once (the first tick, or Rotate on the console's Cloudflare page) before the other functions switch to the address |
-| `CredentialsPreset` | A key of `Installation.Cloudflare.Presets` with an `endpoint` (R2): sluis mints the store's credentials in process and the document gets `ports.blob.s3.credentials.preset`. No parameter and no `SluisBlobCredentials` grant. It works where the one function holds the minter (presets rendered into it, as on Kubernetes or without module functions); with module functions (layout `v5`) the presets are the Cloudflare module's, no other function can mint, and the library refuses it and names the `CredentialsRef` to use. Exclusive with `CredentialsRef` |
+| `CredentialsPreset` | A key of `Installation.Cloudflare.Presets` with an `endpoint` (R2): sluis mints the store's credentials in process and the document gets `ports.blob.s3.credentials.preset`. No parameter and no `SluisBlobCredentials` grant. It works where the one function holds the minter (presets rendered into it, as on Kubernetes or without module functions); with module functions the presets are the Cloudflare module's, no other function can mint, and the library refuses it and names the `CredentialsRef` to use. Exclusive with `CredentialsRef` |
 
 | With `Blobs` | Behavior |
 |---|---|
@@ -57,35 +56,21 @@ ids, _ := sluispulumi.NewKubernetesIdentity(ctx, "acme", &sluispulumi.Kubernetes
 
 ## State
 
-The table of the [DynamoDB adapter](storage-layout.md#dynamodb-the-dynamodb-state-index-and-trigger-adapter) ([ADR 0027](../../decisions/0027-the-state-port-nats-jetstream-and-dynamodb.md)).
-
-| `StateArgs` | Default | Meaning |
-|---|---|---|
-| `TableName` | Required | `ports.dynamodb.table` |
-| `KeyArn` | None | Customer-managed key; otherwise the AWS-owned key |
-| `Tags` | None | On the table |
-
-| Detail | Behavior |
-|---|---|
-| Outputs | `TableName`, `TableArn`, `Grant()` |
-| Table | Protected, on-demand, point-in-time recovery, TTL on `expires`; only `pk` and `sk` declared; no secondary index |
-
-### States
+One [DynamoDB table](storage-layout.md#dynamodb-the-dynamodb-state-index-and-trigger-adapter) per module ([ADR 0072](../../decisions/0072-storage-layout-v5-module-first.md)).
 
 | `StatesArgs` | Default | Meaning |
 |---|---|---|
 | `Modules` | Required | `ModuleSet`: `Instance`; `Tables` overrides a name (default `sluis-<instance>-<module>`) |
 | `Only` | Every module | The modules that get a table |
-| `KeyArn`, `Tags` | None | On every table |
-| `Legacy` | None | `LegacyStateArgs`: the `Name` and arguments `NewState` had; same URN, protected |
-| `Compat` | None | The function's `CompatArgs`. With `RetireLegacyTable` and `Legacy` set: exports the legacy table to a private bucket that expires it after 30 days (output `legacyTableBackupArn`; refused while the live table has point-in-time recovery off), turns off its deletion protection and unprotects it |
+| `KeyArn` | None | Customer-managed key for every table; otherwise the AWS-owned key |
+| `Tags` | None | On every table |
 
 | Detail | Behavior |
 |---|---|
-| Outputs | `Tables`, `TableArns` (by module), `Legacy`, `LegacyBackupArn`, `Grant()` |
-| Grant | `TableArn` is the legacy table, `Tables` the others; a role gets the tables of the modules it hosts |
-| Dropping `Legacy` | The engine refuses: the table is protected. Apply `Compat.RetireLegacyTable` first (it unprotects), then drop `Legacy` in the next apply |
-| Ports | `PortsArgs.Tables` renders `ports.dynamodb.tables`; exclusive with `TableName` and valid with `secrets.layout: v5` |
+| Outputs | `Tables`, `TableArns` (by module), `Grant()` |
+| Table | Protected, deletion protection, on-demand, point-in-time recovery, TTL on `expires`; only `pk` and `sk` declared; no secondary index |
+| Grant | A role gets the tables of the modules it hosts |
+| Ports | `PortsArgs.Tables` renders `ports.dynamodb.tables`; the document needs `secrets.layout: v5` beside it |
 
 ## Kubernetes identity
 
@@ -102,7 +87,7 @@ One role for the one pod ([switch the serving pod role](../../guides/sluis/opera
 | `Description` | Generated | Policy description; a change replaces the policy |
 | `Instance`, `Region`, `ParameterKeyArn` | None | With `Instance`, the role has the Lambda role's SSM grants under `/sluis/<instance>/`; `Region` becomes required |
 | `Storage` | Required | `Storage.Grant()` |
-| `State` | None | `State.Grant()`; nil for the `legacy` store |
+| `State` | None | `States.Grant()`; nil for the `legacy` store |
 | `SigningKeyArns` | None | `SigningKeyArn`, `SigningKeyRS256Arn`: allows `kms:Sign`, `kms:GetPublicKey` |
 | `WrappedSigningKeyArn` | None | Symmetric key for `kms-wrapped` ([signing on AWS](../../concepts/sluis/signing-on-aws.md)). List this role in `WrappedSigning.AdditionalSigningRoleArns` |
 
@@ -114,7 +99,7 @@ The role trusts `pods.eks.amazonaws.com` for this cluster and ServiceAccount.
 | `SluisBlobList` | `s3:ListBucket` | The bucket; without it a missing key reads 403, not 404 |
 | `SluisSigning` | `kms:Sign`, `kms:GetPublicKey` | Signing keys |
 | `SluisWrappedSigning` | `kms:GenerateDataKeyPairWithoutPlaintext`, `kms:Decrypt` | Symmetric key; only with `kms:EncryptionContext:purpose` = `sluis-signing` and no context keys besides `purpose`, `alg`, `kid` |
-| `SluisState` | `dynamodb:GetItem`, `PutItem`, `UpdateItem`, `DeleteItem`, `Query`, `Scan`, `DescribeTable` | The table |
+| `SluisState` | `dynamodb:GetItem`, `PutItem`, `UpdateItem`, `DeleteItem`, `Query`, `Scan`, `DescribeTable` | The module tables |
 | `SluisStateKey` | `kms:Encrypt`, `Decrypt`, `GenerateDataKey`, `DescribeKey` | The table key, only through DynamoDB (`kms:ViaService`) |
 
 ## Backup
@@ -219,10 +204,11 @@ The role trusts `pods.eks.amazonaws.com` for this cluster and ServiceAccount.
 
 ## Ports configuration
 
-`RenderPorts` never renders `create`, writes only the blob without `TableName`, and refuses an `Adapter` other than `dynamodb`.
+`RenderPorts` never renders `create`, writes only the blob without `Tables`, and refuses an `Adapter` other than `dynamodb`.
 
 ```go
-y, _ := sluispulumi.RenderPortsYAML(sluispulumi.PortsArgs{BucketName: "acme-prod-sluis", TableName: "acme-sluis", Region: "eu-west-1"})
+y, _ := sluispulumi.RenderPortsYAML(sluispulumi.PortsArgs{BucketName: "acme-prod-sluis", Region: "eu-west-1",
+	Tables: map[sluispulumi.Module]string{sluispulumi.ModuleOIDC: "sluis-acme-oidc", sluispulumi.ModuleGoogle: "sluis-acme-google"}})
 ```
 
 ```yaml
@@ -231,12 +217,14 @@ ports:
   blob:
     adapter: s3
     s3: {bucket: acme-prod-sluis, region: eu-west-1}
-  dynamodb: {region: eu-west-1, table: acme-sluis}
+  dynamodb:
+    region: eu-west-1
+    tables: {google: sluis-acme-google, oidc: sluis-acme-oidc}
 ```
 
 ## Lambda
 
-See [AWS Lambda](lambda.md) and [the concept](../../concepts/sluis/lambda.md).
+[AWS Lambda](lambda.md), [the concept](../../concepts/sluis/lambda.md).
 
 ```go
 l, _ := sluispulumi.NewLambda(ctx, "access", &sluispulumi.LambdaArgs{
@@ -246,7 +234,7 @@ l, _ := sluispulumi.NewLambda(ctx, "access", &sluispulumi.LambdaArgs{
 	PackageSHA256: "<the release's digest, pinned here>",
 	Installation:  installation, // *sluisconfig.Installation: the library renders both documents from it
 	Storage:       store.Grant(),
-	State:         state.Grant(),
+	State:         states.Grant(),
 	Audit: &sluispulumi.AuditArgs{
 		WriterPackage: "dist/audit-writer-lambda_<version>_linux_arm64.zip", WriterPackageSHA256: "<its digest>",
 		CatalogueDir: "dist/sluis-audit-catalogue", // the release's sluis-audit-catalogue bundle, unpacked
@@ -271,13 +259,8 @@ l, _ := sluispulumi.NewLambda(ctx, "access", &sluispulumi.LambdaArgs{
 | `Installation` | Required without `Config` | The [installation document](installation-document.md). Rendered like `sluisctl render`; the library fills shape `lambda`, `Instance`, `Region`, `AccountID` and the function name when absent and refuses disagreement |
 | `Config`, `Policy`, `PolicyPath` | Deprecated | Service document; policy or a layer directory (one of the last two). Removed after one minor; `NewLambda` warns |
 | `AllowEndpoints` | false | LocalStack tests only; an R2 preset's endpoint needs no flag |
-| `Storage`, `State` | Required | The grants |
-| `Layout` | `v4` | `v4`, `v5` or `v4+v5`: which grants the role carries and which layout the document names ([layouts](#layouts)) |
+| `Storage`, `State` | Required | The grants; `State` is `States.Grant()` with the table of every module a function hosts |
 | `TableNames` | `sluis-<instance>-<module>` | Table name per module in `ports.dynamodb.tables`; the same map as `StatesArgs.Modules.Tables` |
-| `Compat.KeepV4` | false | Declares the v4 state secret and recovery password parameters on `Layout: v5` as well, for a migration that still needs them. Without it a `v5` apply does not declare them (and deletes them from AWS). Refused with `DropV4` and `RetireLegacyTable` |
-| `Compat.DropV4` | false | Deprecated, kept for source compatibility: a no-op on `v5`, which drops the v4 parameters by default. Refused on `v4` and `v4+v5` |
-| `Compat.RetireLegacyTable` | false | Takes the migration role's read of the legacy table. Needs `Layout: v5`; refused with `KeepV4`; the same `Compat` on `StatesArgs` exports and unprotects the table |
-| `MigrationRoleArn` | None | Role that runs `sluis migrate v5`: an inline policy lets it read the legacy table (`State.TableArn`) and nothing else |
 | `Artifacts`, `Release` | Unset | [Artifacts bucket](#artifacts-bucket) |
 | `Audit` | Install | [Audit](#audit). Needs `Installation` |
 | `AuditQueueArn` | None | Deprecated; exclusive with `Audit`. Required with `Config` |
@@ -303,7 +286,7 @@ l, _ := sluispulumi.NewLambda(ctx, "access", &sluispulumi.LambdaArgs{
 | `Schedule.Rate` | `rate(5 minutes)` | EventBridge Scheduler expression |
 | `Schedule.Paused`, `DirectoryRefresh.Paused` | false | Declares the schedules `DISABLED`, keeping roles and grants. `Paused` with `Disabled` is refused |
 | `DirectoryRefresh.Rate`, `.Disabled` | `rate(15 minutes)`, false | Invokes `{"kind":"refresh"}` |
-| `CloudflareRotation.Interval` (or `.Rate`), `.Disabled`, `.Paused` | 15 minutes (`rate(15 minutes)`), false, false | The tick, in whole minutes; `Interval` and `Rate` are exclusive. A credential rotates up to one tick after its `rotation` age, so every preset must satisfy `rotation + tick + 5m < lifetime` (checked for `Interval` and `rate(...)`, at load). Invokes `{"kind":"cloudflare"}`. Exists only when `Installation.Cloudflare` declares a preset the schedule rotates (`store` unset or `external`); presets that are all `store: none` get no schedule, no margin check and no write grant on `external/cloudflare/*`. Declaring presets also grants SSM read on `internal/cloudflare/*`, read and write on `internal/cloudflare-minted/*`, write on `external/cloudflare/*` ([Cloudflare tokens](../../guides/sluis/cloudflare-tokens.md)) |
+| `CloudflareRotation.Interval` (or `.Rate`), `.Disabled`, `.Paused` | 15 minutes (`rate(15 minutes)`), false, false | The tick, in whole minutes; `Interval` and `Rate` are exclusive. A credential rotates up to one tick after its `rotation` age, so every preset must satisfy `rotation + tick + 5m < lifetime` (checked for `Interval` and `rate(...)`, at load). Invokes `{"kind":"cloudflare"}`. Exists only when `Installation.Cloudflare` declares a preset the schedule rotates (`store` unset or `external`); presets that are all `store: none` get no schedule, no margin check and no write grant on `external/cloudflare/*`. Declaring presets gives the role that hosts `cloudflare` its `internal/cloudflare/*` and `external/cloudflare/*` ([Cloudflare tokens](../../guides/sluis/cloudflare-tokens.md)) |
 | `Check` | on (nil) | A post-deploy `aws.lambda.Invocation` of the live alias with `{"kind":"check"}`, after the function, its role policy and the parameters the stack writes exist. A declared secret that is missing, empty or malformed fails `pulumi up` with `check: N of M declared secrets are missing or invalid`, naming each address. Runs again when the function version or the declared names change. `false` leaves it out, for a CI step |
 | `WebIdentityAudience` | Any | Restricts the audience of the role's web identity token |
 | `AdditionalWebIdentityAudiences` | None | Extra exact audiences after it. Any code under the role can mint them. Empty, duplicate, or with empty `WebIdentityAudience`: refused |
@@ -311,23 +294,18 @@ l, _ := sluispulumi.NewLambda(ctx, "access", &sluispulumi.LambdaArgs{
 | `Tags` | None | On everything that takes tags |
 
 
-### Layouts
+<a id="layouts"></a>
 
-| `Layout` | Role grants | Parameters written | Service document |
-|---|---|---|---|
-| `v4` | The legacy table (writes of the `maintenance` key denied); `internal/credentials`, `internal/config`, `external` (and the Cloudflare paths with presets); the whole bucket | `internal/config/issuer/state-secret`, `internal/config/recovery/password` | `ports.dynamodb.table` or the adapter, as the estate wrote it |
-| `v4+v5` | Both sets; a statement the sets share is written once | The v4 pair and `internal/oidc/state-secret`, `internal/oidc/recovery-password`: the same values from the same generators, the v5 pair as the secret store's document (`{"value":"<base64>"}`) | The v4 document |
-| `v5` | `ModuleRoleStatements` of the hosted modules (`oidc`, `github`, `slack`, `google`, and `cloudflare` with presets): their tables, `internal/<module>`, `external/<module>`, `<module>/` blob prefixes; `SluisMaintenanceDeny` on their tables (and the legacy table on `v4+v5`) | The v5 pair, as documents; no v4 pair unless `Compat.KeepV4` | `secrets.layout: v5` and `ports.dynamodb.tables`; `aws.table` and `ports.dynamodb.table` are refused |
+### Module roles
 
 | Detail | Behavior |
 |---|---|
-| Preview, `v4` to `v4+v5` | 2 created (the v5 parameters), 0 deleted, 0 replaced; the `NewStates` module tables, with the old table adopted as `LegacyState`; role updates |
-| The v5 parameters | Set `overwrite` and adopt the existing copies, with the same `RandomBytes` and `RandomPassword` values. Each holds a document, `{"value":"<base64>"}`; an older library wrote the plain value, which `migrate v5 plan` refuses |
-| The flip to `v5` | The service document carries `secrets.layout: v5` and `ports.dynamodb.tables`. `aws.table` and `ports.dynamodb.table` are refused. A blob `CredentialsRef` is `internal/google/blobs-<name>` |
-| Preview, `v4+v5` to `v5` (policy) | The role policy and the layer change |
-| Preview, `v4+v5` to `v5` | 2 deleted (the v4 parameters), 0 created, 0 replaced; with `Compat.KeepV4`, none |
-| `v5` and blobs from a preset | No role other than backup and the Cloudflare function reads the minter. A store whose credentials a preset rotates is read from `external/cloudflare/<preset>` (`CredentialsRef`) |
-| Needs | `v5` and `v4+v5`: `State.Tables` (`States.Grant()`) for the hosted modules; `v4+v5` also `State.TableArn` |
+| Role grants | `ModuleRoleStatements` of the hosted modules (`oidc`, `github`, `slack`, `google`, and `cloudflare` with presets): their tables, `internal/<module>`, `external/<module>`, `<module>/` blob prefixes; `SluisMaintenanceDeny` on their tables |
+| Parameters written | `internal/oidc/state-secret`, `internal/oidc/recovery-password` and the verifiers, each as the secret store's document (`{"value":"<base64>"}`) |
+| Service document | `secrets.layout: v5` and `ports.dynamodb.tables`. A blob `CredentialsRef` is `internal/<module>/<name>`; `internal/google/<name>` is read by every process |
+| Blobs from a preset | No role other than backup and the Cloudflare function reads the minter. A store whose credentials a preset rotates is read from `external/cloudflare/<preset>` (`CredentialsRef`) |
+| Needs | `State.Tables` (`States.Grant()`) for the hosted modules |
+| Removed | `Layout`, `Compat`, `MigrationRoleArn`, `NewState` and the legacy table: [upgrade to v1.77.1](../../guides/sluis/upgrade/v1.77.1.md) |
 
 ### Outputs
 
@@ -344,9 +322,9 @@ l, _ := sluispulumi.NewLambda(ctx, "access", &sluispulumi.LambdaArgs{
 | `SchedulerRoleArn`, `ScheduleNames` | Scheduler role and schedules |
 | `LiveAliasArn`, `LiveVersion` | Alias `live` and its version |
 | `ConfigLayerArn` | Configuration layer version |
-| `DeclaredParameters` | SSM names the documents declare (layout v4: `internal/config/<name>`), sorted; set whether or not `Check` is on |
-| `StateSecretParameter`, `RecoveryPasswordParameter` | SSM parameters of the OAuth-state secret and the recovery password; the v5 addresses under `Layout: v5` |
-| `RecoveryVerifierParameter`, `ConformancePasswordParameter` | The recovery account's SRP credential on layout v5, and the conformance password with `conformance.enabled`; empty otherwise |
+| `DeclaredParameters` | SSM names the documents declare, below the root, sorted; set whether or not `Check` is on |
+| `StateSecretParameter`, `RecoveryPasswordParameter` | SSM parameters of the OAuth-state secret and the recovery password, `internal/oidc/...` |
+| `RecoveryVerifierParameter`, `ConformancePasswordParameter` | The recovery account's SRP credential, and the conformance password with `conformance.enabled` (empty otherwise) |
 | `Audit` | `*auditpulumi.Audit` the library installed; nil with `Use`, `Enabled: false` or `AuditQueueArn` |
 | `AuditQueueURL`, `AuditQueueArn` | The publish queue; empty when audit is off |
 
@@ -413,7 +391,7 @@ To adopt an existing audit stack, import it under the new component ([resource n
 
 | `SluisKey…` Sid | Principals | Grants, through SSM unless said otherwise |
 |---|---|---|
-| `SluisKeyRole<Role>` | each function role | `Encrypt`, `Decrypt`, `GenerateDataKey`, `DescribeKey` on its hosted modules' `internal/<module>/*` and `external/<module>/*`; on layout v4 the issuer's whole `internal/*` and `external/*` |
+| `SluisKeyRole<Role>` | each function role | `Encrypt`, `Decrypt`, `GenerateDataKey`, `DescribeKey` on its hosted modules' `internal/<module>/*` and `external/<module>/*` |
 | `SluisKeyReadModule<Role>` | a role with `ReadModules` | `Decrypt` of those modules' parameters |
 | `SluisKeySignInClientGoogle` | the google role | `Decrypt` of the sign-in client under `internal/oidc/signin/` |
 | `SluisKeyReadAll<Role>`, `SluisKeyWriteAll<Role>` | the backup role; the restore role | `Decrypt` of every `internal/*` and `external/*` parameter; the same with `Encrypt` and `GenerateDataKey` |

@@ -6,7 +6,7 @@ Back up a catalogue App's private key and hand one App to a consumer. Declare an
 
 - No copy of a key exists outside the Secret: not in git, not in a password manager.
 - A pushed key is a second durable copy of a real credential. Rotate both together; the store is in the App's blast radius.
-- With a `ports.adapter` other than `legacy` and layout v4, read the `github/v1` document at `external/github/<id>` instead of the Secret. See [secrets](../../../reference/sluis/secrets.md#the-external-documents) and [ADR 0041](../../../decisions/0041-the-secret-contract.md).
+- With a `ports.adapter` other than `legacy` and SSM secrets, read the `github/v1` document at `external/github/<id>` instead of the Secret. See [secrets](../../../reference/sluis/secrets.md#the-external-documents) and [ADR 0041](../../../decisions/0041-the-secret-contract.md).
 
 ## 1. Find the key
 

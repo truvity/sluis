@@ -1,6 +1,6 @@
 # Keys: the logical key layout
 
-The records the service keeps in State, by logical key. The in-memory and legacy adapters use the key as written; the AWS adapters use the [storage layout](storage-layout.md), derived in `internal/port/keys.go`. State's contract: [ports](ports.md#state).
+The records the service keeps in State, by logical key. The in-memory and legacy adapters use the key as written; the AWS adapters use the [storage layout](storage-layout.md), derived in `internal/port/layout5.go`. State's contract: [ports](ports.md#state).
 
 No access pattern needs a secondary index. Sessions are listed per person under `ses.<person>.`, and `sid.<sid>` resolves a session id to its person. Listing every session scans all `ses.` partitions: an operator action.
 
@@ -18,7 +18,7 @@ No access pattern needs a secondary index. Sessions are listed per person under 
 | `issuer:sso-cookie:<hash>` | the browser's SSO cookie, hashed, pointing to the sign-in id; the cookie itself is a random secret and is never stored. It has no dot-spelling form because it was introduced after that layout | issuer | the sign-in's |
 | `tok.<jti>` | a minted token's own record, for userinfo and revocation | issuer | until the token expires |
 | `keyring.<kid>` | a signing key's schedule: first seen, activation | issuer replicas | 30 days, renewed on each poll |
-| `ws.dir.<id>` | a connected directory workspace: its record, **with its credential in Secrets** (`credentials/workspace/<id>/<ref>`) | console | permanent |
+| `ws.dir.google.<id>` | a connected Google Workspace: its record, **with its credential in Secrets** (`credentials/google/workspace/<id>/<ref>`) | console | permanent |
 | `ws.slack.<workspace>` | a connected Slack workspace: its record, with its client secret and bot token in Secrets | console | permanent |
 | `gh.org.<org>` | a connected GitHub organisation: its record, with its App key in Secrets | console | permanent |
 | `gh.link.<account>` | a GitHub account's link, keyed by the **account id**; the token pair is in Secrets, the rest of the link, `RefreshingSince` and the `Revision` counter included, is plain | link flow, GitHub tick | permanent |
@@ -28,7 +28,7 @@ No access pattern needs a secondary index. Sessions are listed per person under 
 | `app.slack.cat.<id>` | a catalogue Slack App: record, with the client secret and bot token in Secrets | console | permanent |
 | `rec.slack.shared.<name>` | a Slack Connect channel's definition | console | permanent |
 | `rec.slack.channel.<workspace>.<name>` | a console channel's record | console | permanent |
-| `rec.console.session-key` | the key the console signs its sessions with, in Secrets (`credentials/console/session-key`); created by the first replica that starts | console | permanent |
+| `rec.console.session-key` | the key the console signs its sessions with, in Secrets (`credentials/oidc/console/session-key`); created by the first replica that starts | console | permanent |
 | `rec.recovery.off` | the switch an operator throws to turn the recovery sign-in off: `{disabled: [{generation, at, by}]}`, a set that only grows. Recovery is off while `recovery.generation` of the document is in it; a generation never disabled is on. In the oidc module's table, never in a backup, never written by a restore ([ADR 0075](../../decisions/0075-recovery-is-turned-off-from-the-console-and-on-by-configuration.md)) | console | permanent |
 | `rec.maintenance` | the maintenance flag: present while the module's table is being restored; the module refuses writes until it is gone | restore function | permanent |
 | `rec.backup.run.<id>` | one backup run: its state, counts and the object's size; the backup module's table only, never in a backup | backup | permanent |
@@ -43,4 +43,4 @@ No access pattern needs a secondary index. Sessions are listed per person under 
 
 Only the records marked permanent (`ws.`, `gh.org.`, `gh.link.`, `app.`, `rec.`) have no TTL. A key absent from the table is not written. Name segments (id, login, channel) encode every byte but letters, digits, `-` and `_` as `~XX`, so a dot cannot end a segment.
 
-A credential is never written to State. Domain stores put it in [Secrets](ports.md#secrets) under `credentials/<kind>/<id>` and leave a marker in the record.
+A credential is never written to State. Domain stores put it in [Secrets](ports.md#secrets) at its [storage layout](storage-layout.md) address and leave a marker in the record.

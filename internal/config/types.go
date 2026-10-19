@@ -347,7 +347,7 @@ type (
 		// default, x-amz-checksum-sha256), md5 (Content-MD5) or none, for a
 		// store that refuses SHA-256.
 		Checksum string `json:"checksum,omitempty"`
-		// CredentialsRef is the internal address (`internal/<kind>/<id>`) of
+		// CredentialsRef is the internal address (`internal/<module>/<name>`) of
 		// the s3-credentials/v1 document the installation's secrets store
 		// holds for Endpoint, or `external/cloudflare/<preset>`, the
 		// cloudflare/v1 document the Cloudflare module rotates for an R2 preset

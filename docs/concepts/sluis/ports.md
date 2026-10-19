@@ -41,15 +41,15 @@ domain stores put it in Secrets and leave a marker in the record.
 
 ## Who owns a record, and who may read it?
 
-On layout v5 each module owns one table ([ADR 0072](../../decisions/0072-storage-layout-v5-module-first.md)): `oidc`,
+Each module owns one table ([ADR 0072](../../decisions/0072-storage-layout-v5-module-first.md)): `oidc`,
 `github`, `slack`, `cloudflare`, `google` and `backup`. A process writes its own module's table, and another module's
 key fails with `ErrNotOwner` before any request.
 
 A peer is a read-only view of another module's table. The issuer holds `google`, `github` and `slack`.
 Any other module's read fails.
 
-A listing across modules, such as `ws.`, is `ErrUnsupported` on the router: list `ws.dir.`. Layout v5 pairs
-`secrets.layout: v5` with `ports.dynamodb.tables`, and start refuses a mix.
+A listing across modules, such as `ws.`, is `ErrUnsupported` on the router: list `ws.dir.`. The `dynamodb` adapter
+needs `ports.dynamodb.tables`, and the `ssm` source needs `secrets.layout: v5`; start refuses either without it.
 
 DynamoDB has no cheap change feed, so `Watch` and the Trigger poll the prefix. A notification is a hint, and the lease and
 the backstop schedule make a duplicate or lost one harmless.

@@ -31,7 +31,7 @@ One adapter can cover several hosts: the `valkey` adapter is ElastiCache, Memory
 | `legacy` | ✅ implemented | - | needs | - | ✅ | - | ✅ | Kubernetes Secrets the service writes; deprecated in v1.74.0, removed in v1.75. |
 | `memory` | ✅ implemented | - | - | - | ✅ | ✅ | ✅ | In this process's memory; a restart loses it. For tests and the demonstration. |
 | `openbao` | ✅ implemented | - | - | needs | ✅ | ✅ | ✅ | Dynamic secrets as KV version 2 secrets in an OpenBao mount, laid out under its own `private/` and `export/` trees; logs in with a ServiceAccount or web identity JWT. |
-| `ssm` | ✅ implemented | needs | - | - | ✅ | ✅ | - | Dynamic secrets as SecureString parameters in AWS SSM Parameter Store (layout v4). |
+| `ssm` | ✅ implemented | needs | - | - | ✅ | ✅ | - | Dynamic secrets as SecureString parameters in AWS SSM Parameter Store (layout v5). |
 | `store` | 💤 on request | - | - | - | ✅ | ✅ | ✅ | Secrets in the service's own encrypted store, for a platform with no secret store. |
 
 ## blobs

@@ -28,7 +28,7 @@ Read the variables from the Deployment, Compose file or unit, or start the binar
 
 Write `sluis.yaml` with `apiVersion: sluis.truvity.github.io/sluis/v3`, one key per variable. `ISSUER_URL` is `issuerURL`, `PORT` is `listen.address`, `VALKEY_ADDRESS` is `valkey.address`. Variables the table sends to the policy go in the [policy document](../../../reference/sluis/policy-document.md).
 
-`sluis serve --config sluis.yaml` validates before it starts and names the path of any bad key.
+`sluis issuer --config sluis.yaml` validates before it starts and names the path of any bad key.
 
 ### 3. Name the secrets
 

@@ -1,6 +1,6 @@
 # OpenBao Secrets adapter
 
-`adapters.secrets: {adapter: openbao}` keeps the Secrets port in an OpenBao KV version 2 mount, in the `private/` and `export/` trees that the SSM adapter kept before [layout v4](secrets.md#ssm-layout); this adapter has no v4 layout yet. It needs no `platform.openbao` answer. Source: `internal/port/openbao`. The other adapters are listed in [adapters](adapters.md).
+`adapters.secrets: {adapter: openbao}` keeps the Secrets port in an OpenBao KV version 2 mount, in its own `private/` and `export/` trees. The credentials follow the [layout v5 address](storage-layout.md#another-secrets-store) of their key; the SSM layout's `internal/` and `external/` are not used. It needs no `platform.openbao` answer. Source: `internal/port/openbao`. The other adapters are listed in [adapters](adapters.md).
 
 ## Settings
 
@@ -39,9 +39,9 @@ adapters:
 With namespace `staging`, mount `kv` and root `sluis`:
 
 ```text
-kv/sluis/private/config/<name>                       what an operator seeds (read only if used)
-kv/sluis/private/credentials/<kind>/<id>/<ref>       what sluis writes and reads back
-kv/sluis/export/<path>                               what sluis copies out, for consumers
+kv/sluis/private/config/<name>                            what an operator seeds (read only if used)
+kv/sluis/private/credentials/<module>/<kind>/<id>/<ref>   what sluis writes and reads back
+kv/sluis/export/<path>                                    what sluis copies out, for consumers
 ```
 
 Use `sluis/<instance>` as the root when the OpenBao has no namespace per installation. A root with a `private` or `export` segment is refused at start.
@@ -91,7 +91,10 @@ config:
       stateSecret: issuer/state-secret      # a name in `secrets` below
       rotateEvery: 24h              # the rotation alert fires at 26h
   ports:
-    dynamodb: {table: sluis, region: eu-west-1}
+    dynamodb:
+      region: eu-west-1
+      tables: {oidc: sluis-oidc, github: sluis-github, slack: sluis-slack,
+               google: sluis-google, cloudflare: sluis-cloudflare, backup: sluis-backup}
     blob: {adapter: s3, s3: {bucket: sluis-blobs, region: eu-west-1}}
   adapters:
     secrets:

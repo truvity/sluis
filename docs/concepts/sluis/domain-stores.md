@@ -6,9 +6,9 @@ See [keys](../../reference/sluis/keys.md), [ports](../../reference/sluis/ports.m
 
 The controllers read the same records through `controller.RecordSource` (Slack) and `controller.AppSource` (GitHub). A poll of the records' keys and revisions wakes them, and opens no value.
 
-| Domain (interface) | Keys | In Secrets (`credentials/<kind>/<id>/<ref>`) |
+| Domain (interface) | Keys | In Secrets (`credentials/<module>/<kind>/<id>/<ref>`) |
 |---|---|---|
-| directory workspaces (`hub.Store`, `hub.CredentialStore`) | `ws.dir.<id>`: the record, naming the credential | the credential |
+| directory workspaces (`hub.Store`, `hub.CredentialStore`) | `ws.dir.google.<id>`: the record, naming the credential | the credential |
 | GitHub organisations, the link App, confirmations, pass requests (`server.GitHubConnections`, `GitHubLinkApp`, `GitHubConfirmations`) | `gh.org.<org>`, `app.gh.link`, `gate.github.<org>.confirm`, `.pass` | the App key, the link App's client secret |
 | a person's GitHub link (`server.GitHubLinks`, `controller.LinkStore`) | `gh.link.<account>`, `gate.github-claim.<account>` | the token pair |
 | runner and catalogue Apps (`server.GitHubRunnerApps`, `GitHubCatalogueApps`, `SlackCatalogueApps`) | `app.gh.runner.<tier>.<org>`, `app.gh.cat.<id>`, `app.slack.cat.<id>` | the App key, or the client secret and bot token |
@@ -20,7 +20,7 @@ The controllers read the same records through `controller.RecordSource` (Slack) 
 
 ## Credentials live in Secrets
 
-A credential is written to Secrets under `credentials/<kind>/<id>/<ref>`, and the State item names it by its ref. State never holds one. The ref is fresh on every write, so a credential is never replaced in place.
+A credential is written to Secrets at its [layout v5 address](../../reference/sluis/storage-layout.md), and the State item names it by its ref. State never holds one. The ref is fresh on every write, so a credential is never replaced in place.
 
 A writer that loses the compare-and-swap of the item removes the secret nobody names. A spent single-use refresh token never overwrites the new pair. The service writes the credential first, then the item that names it, then removes the old one, best effort.
 

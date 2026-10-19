@@ -6,7 +6,7 @@ Declare a GitHub App for one automation and create it with two clicks. Deliver i
 
 ## What you need
 
-- A deployment with the GitHub controller connected and `secrets.layout: v4` (the key is kept at `external/github/<id>`).
+- A deployment with the GitHub controller connected and `secrets.layout: v5` (the key is kept at `external/github/<id>`).
 - An owner of the organisation, for the install click.
 - A secrets operator in the consumer's cluster.
 

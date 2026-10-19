@@ -10,7 +10,7 @@ Start with [sluis on AWS Lambda](../aws-lambda.md). Design: [Lambda](../../../co
 
 - **Keys.** You supply the KMS keys by alias: `Keys.Sign`, and `Keys.Secrets` for the SSM parameters. The library looks them up, grants on them and creates none. To move from library-created keys, follow [the state operation](../../../guides/sluis/migrate/supply-your-own-signing-keys.md).
 
-- **Secrets layout.** `secrets.layout` is `v5`: a table, a parameter namespace and a blob prefix per module, and a function per module ([layouts](../../../reference/sluis/pulumi-library.md#layouts)). Layout `v4`, the library's default, is one function and one table; v1.76 is the last release that reads it. A v4 installation moves with [upgrade to v1.75](../../../guides/sluis/upgrade/v1.75.md). A consumer of an `external/` secret reads it with `ExternalReadPolicy`.
+- **Secrets layout.** `secrets.layout` is `v5`: a table, a parameter namespace and a blob prefix per module, and a function per module ([module roles](../../../reference/sluis/pulumi-library.md#module-roles)). It is the only layout; a v4 installation moves with v1.77.0 first ([upgrade to v1.77.1](../../../guides/sluis/upgrade/v1.77.1.md)). A consumer of an `external/` secret reads it with `ExternalReadPolicy`.
 
 - **Backup.** `NewBackup` and `NewRestore` write one age-encrypted backup a day to an archive bucket and restore from it ([back up and restore on layout v5](../../../guides/sluis/operate/back-up-on-layout-v5.md)).
 

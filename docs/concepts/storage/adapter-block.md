@@ -34,9 +34,9 @@ Write names, never ARNs. A file shared between deployments then carries no accou
 
 Each shape decides which backends it accepts: [sluis deployment](../../get-started/sluis/deployment/README.md) and [audit deployment](../../get-started/audit/README.md). Products are still moving to these blocks and may read older keys they replace. Check the product's configuration reference for what it accepts today.
 
-Secrets and published values sit at addresses of one layout: `<root>/internal/...` and `<root>/external/<kind>/<id>`. Each address holds one versioned JSON document. See [layout v4](../../reference/sluis/storage-layout.md).
+Secrets and published values sit at addresses of one layout, module first: `<root>/internal/<module>/...` and `<root>/external/<module>/<id>`. Each address holds one versioned JSON document. See [storage layout](../../reference/sluis/storage-layout.md).
 
-sluis keeps its secrets in layout v4; `secrets.layout` can only be `v4`, the default.
+sluis keeps its secrets in layout v5; the `ssm` source requires `secrets.layout: v5`.
 
 ## Decided in
 

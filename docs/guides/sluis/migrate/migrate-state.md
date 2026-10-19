@@ -5,16 +5,16 @@ Copy an installation's State, secrets and controller reports between storages, a
 ## Before you start
 
 - Write a `serve` file per side. The legacy side needs `store`, `release` and `valkey`. The destination needs a working Secrets adapter, `ssm` or `openbao`.
-- For DynamoDB set `ports.adapter: dynamodb`, `ports.dynamodb` (table, region) and `ports.blob` if reports move. Remove `valkey.address`; keep `store`, `release` and `inCluster`.
+- For DynamoDB set `ports.adapter: dynamodb`, `ports.dynamodb` (`tables`, `region`) and `ports.blob` if reports move. Remove `valkey.address`; keep `store`, `release` and `inCluster`.
 - From a workstation pass `--kubeconfig`, `--kube-context` and `--namespace`.
-- A destination on `secrets.source: ssm` is written in layout v4. An installation still on layout v3 moves first: [secrets layout](migrate-secrets-layout.md).
+- A destination on `secrets.source: ssm` needs `secrets.layout: v5`. An installation on layout v3 or v4 moves first: [secrets layout](migrate-secrets-layout.md).
 - `--i-have-stopped-writers` is your statement that the source is frozen ([freeze](cutover.md#2-freeze)).
 - A differing destination value stops the run and names the key. Pass `--overwrite` only when the source is right.
 - `--with-sessions` keeps sessions and `--skip` leaves out domains. For a backup, copy to a second storage.
 
 | Domain | Moves | Lifetime |
 |---|---|---|
-| `directory` | workspaces and credentials | permanent |
+| `google` | workspaces and credentials | permanent |
 | `github` | organisations, Apps, links with their `Revision`, confirmations, pass requests | permanent; requests keep their timestamp |
 | `slack` | workspaces, catalogue Apps, Connect and console channel records, confirmations, pass requests | as `github` |
 | `console` | session-signing key | permanent |
