@@ -630,6 +630,10 @@ migrate:
   #   purge     delete from the index and the deduplication table
   config: {}
   secretEnv: []
+  # A Secret mounted as a directory, as on the other components: the CA a
+  # database URL's `sslrootcert` names when `trust` (a ConfigMap) is not the
+  # way to deliver it.
+  secretMounts: []
 
 # Pseudonymisation keys held in a directory (the `local` provider). Data keys
 # are random, not derived from the root, so the directory they are wrapped into

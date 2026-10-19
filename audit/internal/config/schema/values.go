@@ -188,7 +188,7 @@ func Values() []byte {
 		}),
 		"catalogues": m{"type": "object", "description": "Catalogue documents mounted for the writer, as name to document, for the `catalogues` key of its config.", "additionalProperties": m{"type": "string"}},
 		"migrate": obj("The index schema, applied by a hook Job before the writer rolls.",
-			with(platform("audit-migrate", false, false), m{"enabled": boolean("Run it.")})),
+			with(platform("audit-migrate", true, false), m{"enabled": boolean("Run it.")})),
 		"keysVolume": obj("The local key provider's directory, mounted at /var/lib/audit/keys.", m{
 			"enabled":               boolean("Mount a volume. Losing it re-keys every tenant."),
 			"size":                  str("The claim's size."),

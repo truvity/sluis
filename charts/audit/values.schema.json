@@ -7576,6 +7576,9 @@
         },
         "secretFiles": {
           "$ref": "#/$defs/secretFiles"
+        },
+        "secretMounts": {
+          "$ref": "#/$defs/secretMounts"
         }
       },
       "type": "object"

@@ -204,3 +204,27 @@ func TestTheKMSNotaryOverlayRendersTheNotary(t *testing.T) {
 		}
 	}
 }
+
+// The migration Job connects to the database like every other part, so it takes
+// the same Secret mounts: a CA copied from a database operator's Secret, which
+// the `trust` ConfigMap cannot carry, reaches it as it reaches the others.
+func TestTheMigrationJobMountsASecretForTheDatabaseCA(t *testing.T) {
+	out, stderr, err := helmOutput(t, "examples/in-cluster-services.yaml", `migrate:
+  secretMounts:
+    - secretName: database-ca
+      mountPath: /etc/audit/database-ca
+`)
+	if err != nil {
+		t.Fatalf("migrate.secretMounts was refused: %s", stderr)
+	}
+	i := strings.Index(out, "kind: Job")
+	if i < 0 {
+		t.Fatal("the render has no migration Job")
+	}
+	job := out[i:]
+	for _, want := range []string{"mountPath: /etc/audit/database-ca", "secretName: database-ca"} {
+		if !strings.Contains(job, want) {
+			t.Errorf("the migration Job lacks %q", want)
+		}
+	}
+}
