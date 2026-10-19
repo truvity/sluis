@@ -6,7 +6,9 @@ The repository holds two products, **sluis** and **audit**, and the shared **sto
 [Artifacts](docs/reference/sluis/artifacts.md) lists every deliverable.
 
 ```
-cmd/sluis           the one binary and image: `serve` and `migrate`
+cmd/sluis           the multi-call binary and image: `issuer`, one command per module, `migrate`, `maintenance`, `secrets`
+cmd/sluis-issuer, sluis-github, sluis-slack, sluis-google, sluis-cloudflare, sluis-backup
+                    the AWS Lambda entry points, one release zip per module
 cmd/sluisctl        the CLI for laptops and CI jobs
 cmd/resource-proxy  the sidecar that fronts a stock MCP server
 cmd/acceptance      the acceptance runner against a kind cluster
@@ -26,7 +28,7 @@ third_party/        patched copies of other projects' modules, each wired in by 
 docs/               see docs/WRITING.md
 ```
 
-`serve` runs the whole service in one process: [one process](docs/concepts/sluis/design.md), [ADR 0037](docs/decisions/0037-one-process-everywhere.md).
+The issuer, the signer and the console are one process, `sluis issuer`. Every other module is a process of its own: [design](docs/concepts/sluis/design.md), [ADR 0071](docs/decisions/0071-least-privilege-modules-one-credential-holder-per-function.md). `sluis serve` is the deprecated name of `sluis issuer`.
 Public Go packages stay free of Kubernetes and framework specifics outside the adapters and store implementations.
 Anything a product might import lives behind a storage interface.
 
