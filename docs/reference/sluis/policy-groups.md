@@ -65,16 +65,17 @@ groups:
 
 The claims are the fixed identity claims plus the deep merge of the `claims` fragments of every group the caller holds.
 
-| Claim | Value |
-|---|---|
-| `sub` | person: their email; ServiceAccount: `<cluster>:k8s:<namespace>:<name>`, or `k8s:<namespace>:<name>` with no cluster |
-| `email`, `email_verified`, `preferred_username` | the address |
-| `name`, `given_name`, `family_name` | from the directory; absent for a workload |
-| `groups` | internal group names, flat, one string each; all of the authorization |
-| `auth_time` | sign-in time; unchanged across refreshes, `iat` is fresh |
-| `sid` | session id as the console lists it; absent when no session backs the token |
+| Claim | Scope | Value |
+|---|---|---|
+| `sub` | any | person: their email; ServiceAccount: `<cluster>:k8s:<namespace>:<name>`, or `k8s:<namespace>:<name>` with no cluster |
+| `email`, `email_verified` | `email` | the address |
+| `preferred_username` | `profile` | the address |
+| `name`, `given_name`, `family_name` | `profile` | from the directory; absent for a workload |
+| `groups` | any | internal group names, flat, one string each; all of the authorization |
+| `auth_time` | any | sign-in time; unchanged across refreshes, `iat` is fresh |
+| `sid` | any | session id as the console lists it; absent when no session backs the token |
 
-The ID token carries all of them. The userinfo endpoint answers the same set.
+The ID token and the userinfo endpoint carry a claim when its scope was granted. A refresh that names no `scope` keeps the sign-in's. The access token carries the names and `groups` for any scope.
 
 | Kind | Merge rule |
 |---|---|

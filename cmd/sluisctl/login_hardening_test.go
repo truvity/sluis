@@ -1,8 +1,10 @@
 package main
 
 import (
+	"encoding/base64"
 	"net"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -117,5 +119,33 @@ func TestTheLoginCallbackStopsOnTheIssuersRefusalWithTheState(t *testing.T) {
 	err = <-done
 	if err == nil || !strings.Contains(err.Error(), "not in the group") {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+// A sign-in asks for `email`, which the issuer answers in the ID token only
+// when it is granted. A session saved without one, by an older issuer or an
+// older sluisctl, still names the person by `sub`, which for a person is the
+// same address.
+func TestASignInAsksForTheAddressAndASessionWithoutOneUsesTheSubject(t *testing.T) {
+	for _, scope := range []string{"openid", "email", "offline_access"} {
+		if !slices.Contains(strings.Fields(loginScope), scope) {
+			t.Errorf("the sign-in asks for %q, want %s among them", loginScope, scope)
+		}
+	}
+
+	payload := base64.RawURLEncoding.EncodeToString([]byte(`{"sub":"ada@north.example"}`))
+	subject, email, ok := readIDToken("e30." + payload + ".sig")
+	if !ok || subject != "ada@north.example" || email != "" {
+		t.Errorf("an ID token without email read as %q %q %v", subject, email, ok)
+	}
+
+	choiceEnv(t)
+	t.Setenv(envGitHubTokenURL, "")
+	const issuer = "https://access.north.example"
+	if err := saveSession(issuer, Session{RefreshToken: "a-refresh", Subject: subject}); err != nil {
+		t.Fatal(err)
+	}
+	if got := baoIdentity(Config{Issuer: issuer}); got != "ada@north.example" {
+		t.Errorf("a session without email names %q, want its subject", got)
 	}
 }

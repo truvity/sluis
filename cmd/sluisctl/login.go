@@ -62,7 +62,7 @@ func login(args []string) error {
 	query := url.Values{
 		"client_id":             {cfg.ClientID},
 		"response_type":         {"code"},
-		"scope":                 {"openid offline_access"},
+		"scope":                 {loginScope},
 		"redirect_uri":          {redirect},
 		"state":                 {state},
 		"code_challenge":        {challenge(verifier)},
@@ -256,6 +256,12 @@ func redeem(ctx context.Context, cfg Config, code, verifier, redirect string) (S
 	}
 	return session, nil
 }
+
+// loginScope is what a sign-in asks for. `email` puts the address in the ID
+// token, which [readIDToken] keeps for display and for the OpenBao cache key;
+// the issuer returns it only when the scope is granted. `offline_access` is
+// the refresh token the session is.
+const loginScope = "openid email offline_access"
 
 // readIDToken reads `sub` and `email` for display. Unverified, and used
 // for nothing else.
