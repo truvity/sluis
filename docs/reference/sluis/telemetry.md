@@ -75,7 +75,7 @@ Prometheus names turn dots into underscores and add `_total` to counters: `sluis
 | `sluis.signing_key_transitions` | counter | `event`, `algorithm` | Keys seen, activated, retired. |
 | `sluis.kms_signatures` | counter | `kid`, `result` | `kms:Sign` calls of a KMS signer: `ok`, `throttled` or `error` ([signing with KMS](../../guides/sluis/operate/sign-with-aws-kms.md)). |
 
-`client_id` is bounded by the policy: undeclared is `other`, none is `none`. `reuse_detected` counts codes presented twice, refresh tokens spent past the 30-second grace, unknown refresh tokens, and negative-cache refusals. A reused code, or a spent refresh token of a live session, ends that session.
+`client_id` is bounded by the policy: undeclared is `other`, none is `none`. `reuse_detected` counts codes presented twice, refresh tokens spent past the 30-second grace, unknown refresh tokens, and negative-cache refusals. A reused code revokes what it issued; a spent refresh token of a live session ends that session.
 
 `login.failures` has these `reason` values:
 

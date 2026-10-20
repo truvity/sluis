@@ -3,10 +3,12 @@ package legacy_test
 import (
 	"context"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/truvity/sluis/internal/issuer"
+	"github.com/truvity/sluis/internal/port"
 	"github.com/truvity/sluis/internal/port/memory"
 	"github.com/truvity/sluis/internal/port/porttest/grantcost"
 )
@@ -102,4 +104,63 @@ func TestAnIdleAgentSessionIsRevocableOverThePorts(t *testing.T) {
 		f := newFixture(t)
 		grantcost.IdleAgentSessionIsRevocable(t, issuer.NewPortState(f.ports.State, f.ports.Index), f.redis.FastForward)
 	})
+}
+
+// A reused authorization code revokes what its first redemption issued over
+// the legacy (Valkey) adapter too: the tombstone is its conditional create
+// (SET NX), as it is DynamoDB's conditional PutItem over the tables.
+//
+// The directory's workspace is kept in memory beside it: the legacy adapter
+// has no object of its own for a `ws.` key, and the directory is not what is
+// under test.
+func TestAReusedCodeRevokesWhatItIssuedOverTheLegacyAdapter(t *testing.T) {
+	grantcost.CodeReuse(t, func(t *testing.T) grantcost.Env {
+		f := newFixture(t)
+		set := f.ports
+		set.State = workspacesApart{State: f.ports.State, ws: memory.New()}
+		return grantcost.Env{Set: set, Advance: f.redis.FastForward}
+	})
+}
+
+// workspacesApart is a State that keeps `ws.` keys in a store of their own.
+type workspacesApart struct {
+	port.State
+	ws port.State
+}
+
+func (w workspacesApart) of(key string) port.State {
+	if strings.HasPrefix(key, "ws.") {
+		return w.ws
+	}
+	return w.State
+}
+
+func (w workspacesApart) Get(ctx context.Context, key string) (port.Record, error) {
+	return w.of(key).Get(ctx, key)
+}
+
+func (w workspacesApart) Put(ctx context.Context, key string, value []byte, ttl time.Duration) (port.Revision, error) {
+	return w.of(key).Put(ctx, key, value, ttl)
+}
+
+func (w workspacesApart) Create(ctx context.Context, key string, value []byte, ttl time.Duration) (port.Revision, error) {
+	return w.of(key).Create(ctx, key, value, ttl)
+}
+
+func (w workspacesApart) Update(
+	ctx context.Context, key string, value []byte, ttl time.Duration, rev port.Revision,
+) (port.Revision, error) {
+	return w.of(key).Update(ctx, key, value, ttl, rev)
+}
+
+func (w workspacesApart) Delete(ctx context.Context, key string) error {
+	return w.of(key).Delete(ctx, key)
+}
+
+func (w workspacesApart) DeleteIfRevision(ctx context.Context, key string, rev port.Revision) error {
+	return w.of(key).DeleteIfRevision(ctx, key, rev)
+}
+
+func (w workspacesApart) List(ctx context.Context, prefix, page string, limit int) (port.Page, error) {
+	return w.of(prefix).List(ctx, prefix, page, limit)
 }
