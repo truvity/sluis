@@ -20,7 +20,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ssm v1.80.0
 	github.com/aws/aws-sdk-go-v2/service/sts v1.51.4
 	github.com/aws/smithy-go v1.28.5
-	github.com/cenkalti/backoff/v5 v5.0.3
+	github.com/cenkalti/backoff/v7 v7.0.1
 	github.com/go-jose/go-jose/v4 v4.1.6
 	github.com/google/uuid v1.6.0
 	github.com/redis/go-redis/v9 v9.23.0
@@ -74,6 +74,7 @@ require (
 	github.com/aws/smithy-go/metrics/smithyotelmetrics v1.0.33 // indirect
 	github.com/aws/smithy-go/tracing/smithyoteltracing v1.0.33 // indirect
 	github.com/bmatcuk/doublestar/v4 v4.10.3 // indirect
+	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/emicklei/go-restful/v3 v3.13.0 // indirect

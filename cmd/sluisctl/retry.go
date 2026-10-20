@@ -11,7 +11,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/cenkalti/backoff/v5"
+	"github.com/cenkalti/backoff/v7"
 )
 
 // Token requests are tried a few times when the failure may pass.
@@ -41,37 +41,41 @@ var newRequestBackOff = func() backoff.BackOff {
 // ctx keeps the failure that preceded it, so its wrapping still decides
 // the exit code.
 func retry[T any](ctx context.Context, operation func() (T, error)) (T, error) {
-	var (
-		tries int
-		last  error
-	)
+	tries := 0
 	result, err := backoff.Retry(ctx, func() (T, error) {
 		tries++
-		result, err := operation()
-		last = err
-		return result, err
+		return operation()
 	}, backoff.WithBackOff(newRequestBackOff()), backoff.WithMaxTries(requestTries))
-	switch {
-	case err == nil:
+	if err == nil {
 		return result, nil
-	case ctx.Err() != nil && last != nil && !errors.Is(last, err):
-		err = errors.Join(unwrapPermanent(last), err)
-	default:
-		err = unwrapPermanent(err)
 	}
+	err = retryFailure(err)
 	if tries > 1 {
 		err = fmt.Errorf("%w (after %d attempts)", err, tries)
 	}
 	return result, err
 }
 
-// unwrapPermanent removes the retry marker, which backoff leaves on a
-// permanent failure met on the last try.
-func unwrapPermanent(err error) error {
-	if permanent, ok := err.(*backoff.PermanentError); ok { // the marker itself, never one nested inside
-		return permanent.Unwrap()
+// retryFailure is the error a failed [backoff.Retry] stands for. backoff
+// reports every failure as a [backoff.RetryError] that pairs the last
+// attempt's error with why it stopped; the callers read the attempt's own
+// error, which carries the wrapping that decides the exit code. Only a stop
+// that came from the context adds its cause, unless the attempt's error
+// already is that cause.
+func retryFailure(err error) error {
+	failure := backoff.AsRetryError(err)
+	switch {
+	case failure == nil:
+		return err
+	case errors.Is(failure.Cause, backoff.ErrPermanent),
+		errors.Is(failure.Cause, backoff.ErrExhausted),
+		errors.Is(failure.Cause, backoff.ErrMaxElapsedTime):
+		return failure.LastErr
+	case failure.LastErr == nil || errors.Is(failure.LastErr, failure.Cause):
+		return failure.Cause
+	default:
+		return errors.Join(failure.LastErr, failure.Cause)
 	}
-	return err
 }
 
 // transientStatus is an answer that may be different a moment later: the
