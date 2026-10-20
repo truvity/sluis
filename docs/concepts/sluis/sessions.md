@@ -19,7 +19,7 @@ Sign-out ends the sign-in and every session under it, through `/logout` or `end_
 
 ## Refresh token reuse
 
-A refresh token is single-use: a refresh spends it and returns a successor. A spent token presented again within 30 seconds returns the same successor, because two replicas of one proxy race the same token. After that, the presentation ends the session the token was spent in.
+A refresh token is single-use: a refresh spends it and returns a successor. A spent token presented again within 30 seconds returns the same successor, for two replicas racing it. After that, the presentation ends the session the token was spent in.
 
 The spent token's pointer is sealed with AES-256-GCM under a key derived from the token itself. A spent token presented under another client is refused and ends nothing.
 
@@ -40,7 +40,7 @@ A session with no `auth_time`, such as a machine's token exchange, has no limit.
 
 ## Agent-class sessions
 
-An MCP host holds a refresh token in its own store and would otherwise force a daily sign-in. A client marked `session: agent` has its chain held to `lifetimes.agent`. By default that is 14 days idle, 30 days from `auth_time` and 30-minute tokens. See [the client keys](../../reference/sluis/policy-clients.md#agent-class-sessions).
+An MCP host keeps a refresh token in its own store. A client marked `session: agent` has its chain held to `lifetimes.agent`. By default that is 14 days idle, 30 days from `auth_time` and 30-minute tokens. See [the client keys](../../reference/sluis/policy-clients.md#agent-class-sessions).
 
 The class is fixed when the authorization completes. A policy change can shorten a chain and never lengthen it. Only the policy chooses the class, never a client document.
 
@@ -58,7 +58,7 @@ A person chooses one of [three scopes](people-and-agents.md#what-do-the-three-si
 
 ## What the console asks of the SSO session
 
-The console reads the SSO session on every request, through the function silent `/authorize` uses, so the two cannot drift.
+The console reads the SSO session on every request, through the function silent `/authorize` uses.
 
 - Past the limit, or for a person the directory no longer admits, the request is refused and the sign-in ends.
 - An unreachable directory is answered from the hold window (`lifetimes.hold`, 4 hours by default). See [the directory model](directory-model.md).

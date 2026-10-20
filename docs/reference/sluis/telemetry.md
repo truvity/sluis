@@ -52,7 +52,7 @@ http.response.status_code  http.route  faas.invocation_id  rpc.system
 rpc.service  aws.request_id  http.status_code
 ```
 
-Events, link attributes and status text are removed. A port call's key is never an attribute. A test asserts no personal marker reaches the next exporter.
+Events, link attributes and status text are removed. A port call's key is never an attribute. A test pins it.
 
 ## Metrics
 
@@ -165,7 +165,7 @@ audit.emit.*  (the audit component's, alerted there)
 | `operation` | `get`, `put`, `create`, `update`, `delete`, `delete_if_revision`, `peek_revision`, `list`, `add`, `remove`, `members`, `read`, `write`, `write_if_version`, `replace`, `read_all` |
 | `outcome` | `ok`, `not_found`, `exists`, `conflict`, `unavailable` (store down), `canceled` (caller gave up), `error` |
 
-A conflict is a lease or session rotation working, not an error. Issuer and port series carry no workspace, organisation, person or group label; controller series carry `target`, `org` or `workspace`.
+A conflict is a lease or session rotation working. Issuer and port series carry no workspace, organisation, person or group label; controller series carry `target`, `org` or `workspace`.
 
 ## Alerts
 

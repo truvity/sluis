@@ -10,7 +10,7 @@ can make. The cloud CLI has no interactive login. A person needs something that 
 exchanges for a role's audience and answers as a credential process. kubectl has kubelogin for the same job.
 
 Run `login` once. Then use `kubeconfig`, `kube-token`, `aws-config`, `aws`, `token`, `github-token` or `cloudflare`.
-The couriers are `bao`, `psql`/`pg` and `r2`, and `exchange` is the raw call. Run `setup` to write the kubeconfig and AWS profiles in one go. The `backup` and `restore` commands go through the issuer. Run `recovery password` to read the recovery password from SSM with your AWS credentials. The CLI refuses an `http://` issuer except on loopback.
+The couriers are `bao`, `psql`/`pg` and `r2`, and `exchange` is the raw call. Run `setup` for the kubeconfig and AWS profiles at once. The `backup` and `restore` commands go through the issuer. Run `recovery password` to read the recovery password from SSM with your AWS credentials. The CLI refuses an `http://` issuer except on loopback.
 
 `render` and `policy render` work on files, not on a sign-in. They turn an installation document into the service and
 policy documents deterministically.
