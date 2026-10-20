@@ -26,7 +26,7 @@ import (
 // A catalogue App declared `export: true`, created and installed through the
 // console's operations the GitHub module's own function serves, is kept where
 // the one process keeps it: its key at external/github/<id>, and no internal
-// credential beside it. (INF-1736: the function's stores were not told of the
+// credential beside it. (The function's stores were once not told of the
 // exports, and kept the key internal.)
 func TestTheGitHubFunctionExportsACatalogueAppItInstalls(t *testing.T) {
 	ctx := context.Background()
