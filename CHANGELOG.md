@@ -1,5 +1,9 @@
 ## Unreleased
 
+## v1.77.4
+
+One fix: creating a GitHub App from the console works again.
+
 ### Fixed
 
 - **Creating a GitHub App from the console works again.** Since v1.77 the console sent `form-action 'self'`, so a browser refused the form that posts an App's manifest to GitHub, and **Create** did nothing for the controller, tokens and link Apps alike. The console's shell now sends `form-action 'self' https://github.com`; every other page of the console and the issuer's policies are unchanged. No action needed.
