@@ -358,6 +358,35 @@ def sign_out(cdp):
     return pressed == "submitted"
 
 
+# The review steps whose page comes AFTER a sign-out that happened. The issuer
+# asks first ("Sign out?") whenever the request carries no id_token_hint for
+# the browser's own sign-in, so for these steps the driver presses the button,
+# as the person would, and photographs where it lands. Every other step wants
+# an error page, and there the button is never pressed: a confirmation page
+# where an error belongs is the issuer's fault, and the screenshot has to show
+# it.
+SIGNED_OUT_STEPS = {"ExpectSuccessfulLogoutPage"}
+
+
+def confirm_sign_out(cdp):
+    """Press *Sign out* on the issuer's `/end_session` page, if that is the page.
+
+    Returns whether it was pressed. The form POSTs the request back with a
+    token bound to the sign-in cookie, so this is the same click a person
+    makes, and the issuer then does what the request asked.
+    """
+    pressed = cdp.eval("""(() => {
+      const form = document.querySelector('form[action="/end_session"]');
+      if (!form) return 'no-form';
+      form.submit();
+      return 'submitted';
+    })()""")
+    if pressed != "submitted":
+        return False
+    time.sleep(2.5)
+    return True
+
+
 def review(cdp, test, seen, pages):
     """Answer the suite's manual steps with what the browser is showing.
 
@@ -371,6 +400,11 @@ def review(cdp, test, seen, pages):
     A screenshot is exactly what a browser has. So the driver takes it,
     fills the placeholder, and marks the URL visited so the suite stops
     waiting on a callback that is not coming.
+
+    A successful-logout step can stop on the issuer's "Sign out?" page,
+    which asks before ending a sign-in the request does not prove is the
+    relying party's. For those steps only, the button is pressed and the
+    page it lands on is the one photographed; see [confirm_sign_out].
 
     WHICH PAGE to photograph is the whole of the difficulty, and there
     are two kinds of step.
@@ -395,6 +429,13 @@ def review(cdp, test, seen, pages):
         return False
 
     here = cdp.eval("window.location.href") or ""
+    # Only when EVERY outstanding step wants the signed-out page: one that
+    # wants an error must see the page as the issuer left it.
+    if (here.startswith(ISSUER)
+            and all(e.get("src") in SIGNED_OUT_STEPS for e in outstanding)
+            and confirm_sign_out(cdp)):
+        print("      pressed Sign out on the page that asks")
+        here = cdp.eval("window.location.href") or ""
     if here.startswith(ISSUER):
         where, shot = here, shoot(cdp)
     elif pages and pages.patient():
