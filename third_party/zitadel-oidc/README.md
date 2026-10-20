@@ -28,7 +28,10 @@ It prints one difference, `pkg/oidc/token.go`.
 
 ## When it goes
 
-Drop this directory and the `replace` once upstream releases the fix, then bump the require to that release.
+The fix is not yet upstream: [zitadel/oidc issue 1020](https://github.com/zitadel/oidc/issues/1020), [pull request 1021](https://github.com/zitadel/oidc/pull/1021).
+Drop this directory and the `replace` only after a zitadel/oidc release contains #1021 or an equivalent fix, then bump the require to that release.
+Dropping either earlier puts `client_id` back in the ID token.
+Conformance then regresses: `oidcc-server` and every module that runs `EnsureIdTokenDoesNotContainNonRequestedClaims` warn again.
 
 A bump of the require alone leaves the `replace` behind, because the `replace` names v3.51.16.
 `internal/issuer/idtoken_claims_test.go` then fails, as an upstream ID token carries `client_id` again.
