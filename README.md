@@ -66,7 +66,7 @@ A policy file maps directory groups to access everywhere ([concepts](docs/concep
 
 ## Standards and conformance
 
-| Status | Meaning, as of v1.77.1 |
+| Status | Meaning, as of v1.77.2 |
 |---|---|
 | Full | Nothing missing that the standard requires or recommends |
 | Almost full | The notes name the gap |
@@ -82,7 +82,7 @@ A policy file maps directory groups to access everywhere ([concepts](docs/concep
 | OpenID Connect Front-Channel Logout, Session Management | Not served, chosen | No consumer asked |
 | RFC 6749 OAuth 2.0 | Almost full | Code, refresh and token exchange. No implicit, password or client credentials grant |
 | RFC 6750 Bearer tokens | Almost full | Header and form body only. No `insufficient_scope` |
-| RFC 7636 PKCE | Almost full | S256 only. Required for public clients; `pkce: required` or `optional` per confidential client |
+| RFC 7636 PKCE | Full | S256 only; a challenge without a method is refused since v1.77.1. Required for public clients; `pkce: required` or `optional` per confidential client |
 | RFC 7009 Revocation | Almost full | A client revokes only its own tokens. A JWT verified offline lives to `exp` |
 | RFC 7662 Introspection | Not served, chosen | The tokens are JWTs. The route answers `404` |
 | RFC 8414 Authorization server metadata | Full | Also at the path-inserted URL |
@@ -106,11 +106,11 @@ A policy file maps directory groups to access everywhere ([concepts](docs/concep
 
 | Date | Version | Plan | Result | Run |
 |---|---|---|---|---|
+| 2026-10-20 | v1.77.1 | Config OP | Passed, suite 5.3.3 | [findings](docs/concepts/sluis/conformance-findings.md) |
+| pending | v1.77.2 | Basic OP | Re-run on v1.77.2 pending. The 2026-10-20 run on v1.77.1 had 0 failed; v1.77.2 fixes its findings | [findings](docs/concepts/sluis/conformance-findings.md#the-2026-10-20-run-on-v1771) |
+| pending | v1.77.2 | RP-Initiated Logout OP | Re-run on v1.77.2 pending. The 2026-10-20 run on v1.77.1 had 0 failed; v1.77.2 fixes its findings | [findings](docs/concepts/sluis/conformance-findings.md#the-2026-10-20-run-on-v1771) |
+| pending | v1.77.2 | Back-Channel Logout OP | Re-run on v1.77.2 pending. The 2026-10-20 run on v1.77.1 had 0 failed | [findings](docs/concepts/sluis/conformance-findings.md#the-2026-10-20-run-on-v1771) |
 | 2026-09-12 | v1.0.0 | Config, Basic OP, RP-Initiated Logout, Back-Channel Logout | 0 failed | [findings](docs/concepts/sluis/conformance-findings.md) |
-| TBD | v1.77.1 | Config OP | TBD | TBD |
-| TBD | v1.77.1 | Basic OP | TBD | TBD |
-| TBD | v1.77.1 | RP-Initiated Logout OP | TBD | TBD |
-| TBD | v1.77.1 | Back-Channel Logout OP | TBD | TBD |
 
 ## Install and a worked example
 

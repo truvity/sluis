@@ -44,7 +44,7 @@ providers:
       - http://localhost:11110/login-callback
 ```
 
-Without `groups` in `scopes`, the token has no `groups` claim and every `oidc:groups:` rule fails.
+The ID token carries `groups` for any scope, and `email` only with the `email` scope.
 
 On each server, install opkssh, which creates the low-privilege `opksshuser`, then wire it into `sshd`.
 
