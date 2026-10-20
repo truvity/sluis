@@ -1,5 +1,9 @@
 ## Unreleased
 
+### Documentation
+
+- **The conformance results are published for v1.77.2.** The README results table and [conformance findings](docs/concepts/sluis/conformance-findings.md) record the 2026-10-20 run on suite 5.3.3: Basic OP 23 passed, 4 warning, 4 review, 4 skipped, 0 failed; RP-Initiated Logout 3 passed, 8 review; Back-Channel Logout 2 passed. The four Basic warnings are accepted and explained there. No behaviour changes.
+
 ## v1.77.3
 
 One configuration change and one addition to the audit Pulumi library, and the documentation refreshed for v1.77.2. A service document with `secureCookies: false` and an https issuer no longer loads; its upgrade note says what to remove ([upgrade to v1.77.3](docs/guides/sluis/upgrade/v1.77.3.md)).
