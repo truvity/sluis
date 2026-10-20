@@ -13,4 +13,4 @@ Recurring and incident tasks for a running installation, on Kubernetes or AWS La
 | nobody can sign in | [Lost operator access](lost-operator-access.md), [recover on Lambda](recover-on-lambda.md), [turn off recovery](turn-off-recovery.md) |
 | scale and availability | [High availability](high-availability.md), [scaling and cache](scaling-and-cache.md), [provide a Valkey](provide-a-valkey.md), [a cold-start herd](survive-a-cold-start-herd.md) |
 | storage and identity of the pod | [Blobs on R2](blobs-on-r2.md), [switch the serving pod's role](switch-serving-pod-role.md) |
-| upgrading | [v1.77.1](../upgrade/v1.77.1.md) and earlier pages, linked from the [CHANGELOG](../../../../CHANGELOG.md) |
+| upgrading | [v1.77.3](../upgrade/v1.77.3.md) and earlier pages, linked from the [CHANGELOG](../../../../CHANGELOG.md) |

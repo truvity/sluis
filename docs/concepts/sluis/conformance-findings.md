@@ -2,20 +2,36 @@
 
 sluis targets four OpenID Foundation profiles and claims one only when the suite passes it. To produce a run, follow [run conformance](../../guides/sluis/run-conformance.md).
 
-The last full run was on 2026-09-12 against the deployed issuer at v1.0.0 (plans `xywkLCaSn66Wo`, `QQw1OfSOykbnC`, `Ps1nixuqZlBQp`, `6hKMyvxwF8baj`).
+The last full run was on 2026-10-20 against sluis v1.77.1, on an AWS Lambda deployment, with suite 5.3.3. It is a self-run, not a certification. A re-run on v1.77.2 is pending.
 
-| Profile | Passed | Review | Skipped | Warning | **Failed** |
-|---|--:|--:|--:|--:|--:|
-| [Config OP](https://openid.net/certification/connect_op_testing/) | 1 | 0 | 0 | 0 | **0** |
-| [Basic OP](https://openid.net/certification/connect_op_testing/) | 21 | 4 | 4 | 6 | **0** |
-| [RP-Initiated Logout OP](https://openid.net/certification/connect_op_logout_testing/) | 3 | 8 | 0 | 0 | **0** |
-| [Back-Channel Logout OP](https://openid.net/certification/connect_op_logout_testing/) | 2 | 0 | 0 | 0 | **0** |
+## The 2026-10-20 run on v1.77.1
 
-Only a failed or interrupted module disqualifies a profile, so all four are certifiable. A submission needs RP-Initiated Logout plus one other logout profile, and that pair is green.
+| Profile | Plan | Passed | Warning | Review | Skipped | **Failed** |
+|---|---|--:|--:|--:|--:|--:|
+| [Config OP](https://openid.net/certification/connect_op_testing/) | `c8JDtGp8cCoQL` | 1 | 0 | 0 | 0 | **0** |
+| [Basic OP](https://openid.net/certification/connect_op_testing/) | `hEgLDyg14iIez` | 20 | 7 | 4 | 4 | **0** |
+| [RP-Initiated Logout OP](https://openid.net/certification/connect_op_logout_testing/) | `5I5FLjBnciJb3` | 3 | 0 | 8 | 0 | **0** |
+| [Back-Channel Logout OP](https://openid.net/certification/connect_op_logout_testing/) | `4EVYlSFBN15vw` | 2 | 0 | 0 | 0 | **0** |
+
+Only a failed or interrupted module disqualifies a profile, and none failed. A submission needs RP-Initiated Logout plus one other logout profile.
+
+v1.77.2 fixes each finding ([upgrade to v1.77.2](../../guides/sluis/upgrade/v1.77.2.md)):
+
+| Module | Finding on v1.77.1 | Fix in v1.77.2 |
+|---|---|---|
+| `oidcc-server` | warning: the ID token carries `client_id` | `client_id` leaves the ID token and `claims_supported` |
+| `oidcc-scope-profile`, `oidcc-alternate-happy-flow`, `oidcc-claims-essential` | warning: userinfo lacks the `profile` claims | the conformance account answers `profile` with `name` and `preferred_username` |
+| `oidcc-scope-email` | warning: userinfo lacks `email` | email and names follow the granted scopes; the account still has no address |
+| `oidcc-ensure-request-with-acr-values-succeeds` | warning: the `acr` is not one requested | discovery lists the conformance class while the account is on |
+| `oidcc-codereuse-30seconds` | warning: userinfo answers 200 after a reused code | a reused code revokes its tokens |
+| `oidcc-rp-initiated-logout-bad-id-token-hint` | review: *Sign out?* where an error is due | an invalid `id_token_hint` is a `400` before the page |
+| `oidcc-rp-initiated-logout-no-params`, `-only-state` | review: the driver photographed *Sign out?* | the driver presses *Sign out* |
+
+A run on 2026-09-12 against v1.0.0 had no failed module either.
 
 ## Review is a screenshot handed to a person
 
-Twelve modules end at a page the suite cannot see: the issuer must refuse, so it never redirects back. A person confirmed all twelve screenshots on 2026-09-12.
+Twelve modules end at a page the suite cannot see: the issuer must refuse, so it never redirects back. A person checks every screenshot.
 
 | What the step demands | Modules | What the screenshot shows |
 |---|--:|---|
@@ -25,7 +41,7 @@ Twelve modules end at a page the suite cannot see: the issuer must refuse, so it
 | the successful logout page | 3 | *Signed out*, after the driver presses the button on *Sign out?* |
 | the login prompt during a second authorization | 2 | the sign-in chooser |
 
-Check the screenshots: a review with the wrong evidence passes silently. A 2026-10-20 run against v1.77.1 (plan `5I5FLjBnciJb3`) caught three of *Sign out?*: the issuer's fault in `oidcc-rp-initiated-logout-bad-id-token-hint`, the driver's in `-no-params` and `-only-state`.
+A review with the wrong evidence passes silently. The 2026-10-20 check caught three of *Sign out?*.
 
 ## Skipped means the discovery document is truthful
 

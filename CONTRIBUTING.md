@@ -130,7 +130,7 @@ Read in this order:
 4. The design of whatever you touch.
 
 Read the newest [CHANGELOG](CHANGELOG.md) entries before the design documents, because the documents describe the shape and not the latest release.
-The [conformance findings](docs/concepts/sluis/conformance-findings.md) record the run at 1.0.
+The [conformance findings](docs/concepts/sluis/conformance-findings.md) record the latest run.
 
 Do not reach for these. Each was the first idea and the wrong one:
 
