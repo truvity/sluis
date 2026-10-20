@@ -8,13 +8,11 @@ Take an installation from no lock (`NONE`) to `GOVERNANCE`, then to `COMPLIANCE`
 
 - `Archive.BreakglassRoleArns` names the roles that alone may change the lock. The role that applies the stack must be one.
 
-- Turning the lock on is one way. S3 never turns it off, and setting `NONE` again only removes the resource from the program.
+- Turning the lock on is one way. Setting `NONE` again only removes the resource from the program.
 
 - Objects written before the switch stay unlocked. Lock them with `PutObjectRetention` or an S3 Batch Operations job.
 
-- `COMPLIANCE` is a new bucket, not an edit. An object keeps the mode it was written with, and nobody, including the account root, can shorten a retention.
-
-- Sign off the retentions, the keys and the lifecycle before `COMPLIANCE`.
+- `COMPLIANCE` is a new bucket, not an edit. Nobody, including the account root, can shorten its retention.
 
 ## NONE to GOVERNANCE
 
@@ -45,7 +43,7 @@ Take an installation from no lock (`NONE`) to `GOVERNANCE`, then to `COMPLIANCE`
    AcknowledgeCompliance: true,
    ```
 
-3. Point the receivers and observe at the new queue and bucket. Empty the trial bucket, or keep it until its retentions lapse. The trial doubles storage for that time.
+3. Point the receivers and observe at the new queue and bucket. Empty the trial bucket, or keep it until its retentions lapse.
 
 ## Verify
 

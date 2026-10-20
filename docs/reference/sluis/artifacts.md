@@ -71,7 +71,7 @@ Packages and actions published by the release workflow:
 | GitHub Action | `truvity/sluis@<commit>` | the repository root, `action.yml` |
 <!-- /generated -->
 
-Every release also carries these assets. [Verify a release](../../guides/sluis/operate/verify-a-release.md) checks them and the attestations on every asset, image and chart.
+Each release also carries these. [Verify a release](../../guides/sluis/operate/verify-a-release.md) checks them.
 
 | Asset | Contents |
 |---|---|
@@ -79,4 +79,4 @@ Every release also carries these assets. [Verify a release](../../guides/sluis/o
 | `checksums.txt.sigstore.json` | the keyless cosign bundle over `checksums.txt` |
 | `<archive>.sbom.spdx.json` | the SPDX SBOM of each archive |
 
-SDKs are Go and TypeScript ([ADR 0042](../../decisions/0042-one-repository-one-release-train.md)). Docs: [home](../../README.md), [audit](../../concepts/audit/README.md).
+SDKs: Go, TypeScript ([ADR 0042](../../decisions/0042-one-repository-one-release-train.md)). Docs: [home](../../README.md), [audit](../../concepts/audit/README.md).

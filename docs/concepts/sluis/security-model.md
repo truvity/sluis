@@ -1,6 +1,6 @@
 # What does sluis protect, and how?
 
-sluis protects three things: the decision about who holds a token, the signing key behind every token, and the credentials its modules hold. This page names the boundary around each. Report a vulnerability as [SECURITY](../../../SECURITY.md) says.
+sluis protects three things: the decision about who holds a token, the signing key behind every token, and the credentials its modules hold. Report a vulnerability as [SECURITY](../../../SECURITY.md) says.
 
 ## What it trusts
 
