@@ -7,8 +7,11 @@ import (
 	"testing"
 )
 
-// `plain` is refused, and a public client with no challenge is refused,
-// both before the login page; S256 goes on to the sign-in.
+// `plain` is refused, a challenge with no method (which is `plain`, RFC
+// 7636 4.3) and one with a method nobody defines are refused, and a public
+// client with no challenge is refused, all before the login page with a 400
+// of the issuer's own: the library would send its refusal back to the
+// redirect_uri instead. S256 goes on to the sign-in.
 func TestAuthorizeRefusesPlainAndMissingPKCE(t *testing.T) {
 	t.Parallel()
 	server, _, _, _ := newMultiAlgServer(t)
@@ -24,6 +27,9 @@ func TestAuthorizeRefusesPlainAndMissingPKCE(t *testing.T) {
 	}{
 		"plain":            {base + challenge + "&code_challenge_method=plain", true},
 		"upper-case plain": {base + challenge + "&code_challenge_method=PLAIN", true},
+		"no method":        {base + challenge, true},
+		"unknown method":   {base + challenge + "&code_challenge_method=S512", true},
+		"lower-case s256":  {base + challenge + "&code_challenge_method=s256", true},
 		"no challenge":     {base, true},
 		"s256":             {base + challenge + "&code_challenge_method=S256", false},
 	} {

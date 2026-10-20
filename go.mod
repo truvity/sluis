@@ -29,7 +29,7 @@ require (
 	github.com/truvity/sluis/audit/sdk v1.77.1
 	github.com/truvity/sluis/storage v1.77.1
 	github.com/urfave/cli/v3 v3.11.0
-	github.com/zitadel/oidc/v3 v3.51.13
+	github.com/zitadel/oidc/v3 v3.51.16
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.72.0
 	go.opentelemetry.io/otel v1.47.0
 	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp v1.47.0
@@ -41,7 +41,7 @@ require (
 	go.yaml.in/yaml/v3 v3.0.5
 	golang.org/x/crypto v0.57.0
 	golang.org/x/oauth2 v0.37.0
-	golang.org/x/sync v0.23.0
+	golang.org/x/sync v0.24.0
 	golang.org/x/sys v0.48.0
 	google.golang.org/api v0.301.0
 	google.golang.org/protobuf v1.36.12
@@ -73,7 +73,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.43.3 // indirect
 	github.com/aws/smithy-go/metrics/smithyotelmetrics v1.0.33 // indirect
 	github.com/aws/smithy-go/tracing/smithyoteltracing v1.0.33 // indirect
-	github.com/bmatcuk/doublestar/v4 v4.10.2 // indirect
+	github.com/bmatcuk/doublestar/v4 v4.10.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/emicklei/go-restful/v3 v3.13.0 // indirect
@@ -121,7 +121,7 @@ require (
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
 	golang.org/x/net v0.60.0 // indirect
 	golang.org/x/term v0.46.0 // indirect
-	golang.org/x/text v0.42.0 // indirect
+	golang.org/x/text v0.43.0 // indirect
 	golang.org/x/time v0.16.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260928230214-8a89bd6388cc // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260928230214-8a89bd6388cc // indirect
@@ -146,9 +146,9 @@ replace github.com/truvity/sluis/storage => ./storage
 // resolves.
 replace github.com/truvity/sluis/audit/sdk => ./audit/sdk
 
-// The OpenID library at v3.51.13 with one line removed: its ID tokens carry
+// The OpenID library at v3.51.16 with one line removed: its ID tokens carry
 // no `client_id` claim (third_party/zitadel-oidc/README.md). The replace names
 // the version, so a bump of the require leaves it behind and the tests that
 // read an ID token fail (internal/issuer/idtoken_claims_test.go): re-apply the
 // patch to the new version, or drop the copy once upstream ships the fix.
-replace github.com/zitadel/oidc/v3 v3.51.13 => ./third_party/zitadel-oidc
+replace github.com/zitadel/oidc/v3 v3.51.16 => ./third_party/zitadel-oidc

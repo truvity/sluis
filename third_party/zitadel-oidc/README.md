@@ -1,7 +1,7 @@
 # zitadel/oidc, patched
 
-A copy of [github.com/zitadel/oidc/v3](https://github.com/zitadel/oidc) at **v3.51.13**, with one line removed.
-The root `go.mod` wires it in with `replace github.com/zitadel/oidc/v3 v3.51.13 => ./third_party/zitadel-oidc`.
+A copy of [github.com/zitadel/oidc/v3](https://github.com/zitadel/oidc) at **v3.51.16**, with one line removed.
+The root `go.mod` wires it in with `replace github.com/zitadel/oidc/v3 v3.51.16 => ./third_party/zitadel-oidc`.
 
 ## The change
 
@@ -19,8 +19,8 @@ Only the packages sluis builds: `internal/otel`, `pkg/client`, `pkg/client/rp`, 
 Every other file is byte-for-byte upstream's, which this command shows:
 
 ```sh
-go mod download github.com/zitadel/oidc/v3@v3.51.13
-up="$(go env GOMODCACHE)/github.com/zitadel/oidc/v3@v3.51.13"
+go mod download github.com/zitadel/oidc/v3@v3.51.16
+up="$(go env GOMODCACHE)/github.com/zitadel/oidc/v3@v3.51.16"
 cd third_party/zitadel-oidc && find . -type f ! -name README.md -exec cmp {} "$up/{}" \;
 ```
 
@@ -30,7 +30,7 @@ It prints one difference, `pkg/oidc/token.go`.
 
 Drop this directory and the `replace` once upstream releases the fix, then bump the require to that release.
 
-A bump of the require alone leaves the `replace` behind, because the `replace` names v3.51.13.
+A bump of the require alone leaves the `replace` behind, because the `replace` names v3.51.16.
 `internal/issuer/idtoken_claims_test.go` then fails, as an upstream ID token carries `client_id` again.
 To take a release without the fix, copy the same packages from it and remove the same line.
 

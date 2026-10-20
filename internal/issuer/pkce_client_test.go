@@ -216,6 +216,21 @@ func TestRequiredPKCEStillRefusesPlain(t *testing.T) {
 	}
 }
 
+// A `code_challenge_method` other than S256 is refused even with no
+// challenge beside it, for a client that may omit PKCE. The library checks
+// the method only when a challenge is sent, so this refusal is the issuer's.
+func TestAMethodOtherThanS256IsRefusedWithoutAChallenge(t *testing.T) {
+	t.Parallel()
+	b := newBrowser(t, pkceServer(t))
+
+	for _, method := range []string{"plain", "S512"} {
+		status, _, body := b.do(http.MethodGet, pkceAuthorize("lax", "https://lax.example/cb", false)+"&code_challenge_method="+method)
+		if status != http.StatusBadRequest || !strings.Contains(body, "invalid_request") {
+			t.Errorf("/authorize with %s and no challenge = %d %s, want 400 invalid_request", method, status, body)
+		}
+	}
+}
+
 // A code issued against a challenge is redeemed with its verifier. A client
 // that requires PKCE and one that merely sent a challenge are refused
 // `invalid_grant` without it -- the library would have let the secret alone

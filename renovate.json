@@ -53,7 +53,7 @@
     },
     {
       "description": [
-        "The root go.mod replaces github.com/zitadel/oidc/v3 v3.51.13 with",
+        "The root go.mod replaces github.com/zitadel/oidc/v3 v3.51.16 with",
         "third_party/zitadel-oidc, a copy with one line removed. A bump leaves the",
         "versioned replace behind and the ID token tests fail. So it gets its own PR,",
         "never the automerged batch, which it would hold red, and a human re-applies",
