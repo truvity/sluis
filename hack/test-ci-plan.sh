@@ -63,6 +63,8 @@ while IFS= read -r mod; do
   case "$dir" in
     .) continue ;;
     audit) continue ;;
+    # A patched copy of another project's module, kept as upstream wrote it.
+    third_party/*) continue ;;
     audit/*) rel="${dir#audit/}"; body="$audit_body" ;;
     *) rel="$dir"; body="$lint_body" ;;
   esac

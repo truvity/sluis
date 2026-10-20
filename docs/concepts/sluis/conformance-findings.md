@@ -46,7 +46,7 @@ A person's claims need their scope. The conformance account's arrive in userinfo
 
 No source holds `birthdate`, `gender`, `zoneinfo`, `locale`, `picture`, `website`, `profile`, `nickname`, `middle_name` or `updated_at`. The directory answer the issuer reads carries an address and names. So the `profile` warning stays. The `email` warning stays only for the conformance account.
 
-The other two warnings come from one module noting that the ID token carries claims the client did not request by scope. One is `groups`, which Kargo and ArgoCD read, so gating it behind a scope would break every consumer. The other is `client_id`, which duplicates `azp` and comes from the OpenID library's claims struct.
+The other two warnings come from one module noting that the ID token carries claims the client did not request by scope. One is `groups`, which Kargo and ArgoCD read, so gating it behind a scope would break every consumer. The other is `client_id`, which duplicates `azp` and came from the OpenID library's claims struct. From v1.77.2 the ID token no longer carries it, and `claims_supported` no longer lists it.
 
 ## Back-channel logout needs the suite in the cluster
 

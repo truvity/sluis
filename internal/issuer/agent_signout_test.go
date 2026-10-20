@@ -214,6 +214,11 @@ func TestEndSessionSparesAgentsExceptTheClientItNames(t *testing.T) {
 		if hint == "" || !rig.listed(t, ssoEmail)[agentClient].Agent() {
 			t.Fatalf("request %s opened no agent session: %v", request, tokens)
 		}
+		// The hint names its client by aud and azp only, so what follows
+		// finds the client without a client_id claim.
+		if claims := payloadOf(t, hint); claims["azp"] != agentClient || claims["client_id"] != nil {
+			t.Fatalf("the hint's azp = %v and client_id = %v, want %s and none", claims["azp"], claims["client_id"], agentClient)
+		}
 
 		if status, _, body := b.do(http.MethodGet, "/end_session?id_token_hint="+url.QueryEscape(hint)); status >= http.StatusBadRequest {
 			t.Fatalf("end_session: %d %s", status, body)

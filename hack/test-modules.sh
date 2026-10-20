@@ -18,6 +18,8 @@ pos() { printf '%s\n' "$list" | grep -nxF "$1" | cut -d: -f1; }
 for dir in storage audit/deploy/pulumi; do pos "$dir" > /dev/null || fail "$dir is not listed"; done
 printf '%s\n' "$list" | grep -qxF . && fail "the root is listed"
 "$mod" paths | grep -qxF github.com/truvity/sluis || fail "the root is not among the paths"
+# A patched copy of another project's module is not one of ours.
+"$mod" paths | grep -q zitadel && fail "third_party/ is among the modules"
 
 # The Pulumi library: the root require moves, and nothing else does.
 cp "$root/deploy/pulumi/go.mod" "$tmp/go.mod"

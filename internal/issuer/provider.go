@@ -61,12 +61,14 @@ func Provider(iss *Issuer, storage op.Storage) (*op.Provider, error) {
 		},
 		// Every claim an ID token or the userinfo response carries. The
 		// fixed ones first (OpenID Connect Core 2, 3.1.3.6, 5.1), then the
-		// issuer's own: `client_id`, and `groups` beside whatever the
-		// policy's claim fragments add, which a list cannot name.
+		// issuer's own: `groups` beside whatever the policy's claim
+		// fragments add, which a list cannot name. Not `client_id`: only
+		// an access token carries it (RFC 9068 2.2), and an ID token names
+		// its client by `azp` (third_party/zitadel-oidc).
 		SupportedClaims: []string{
 			"iss", "sub", "aud", "exp", "iat", "auth_time", "nonce", "acr", "amr", "azp", "at_hash", "sid",
 			"email", "email_verified", "name", "given_name", "family_name", "preferred_username",
-			"client_id", "groups",
+			"groups",
 		},
 		// Back-channel logout IS served, per client and opt-in: a client
 		// that declares no `backchannel_logout_uri` is never contacted.
