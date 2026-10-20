@@ -18,7 +18,9 @@ plugins:
   # TypeScript for the console. protobuf-es v2 emits the message schemas
   # AND the service descriptor, which @connectrpc/connect v2 consumes via
   # createClient — so there is no separate connect-es plugin. Generated
-  # code is committed here too: CI builds the SPA without buf.
-  - remote: buf.build/bufbuild/es
+  # code is committed here too: CI builds the SPA without buf. Pinned to the
+  # @bufbuild/protobuf runtime in frontend/package-lock.json, as audit's is:
+  # an unpinned plugin stamps new headers whenever buf.build releases one.
+  - remote: buf.build/bufbuild/es:v2.16.0
     out: frontend/src/gen
     opt: target=ts
