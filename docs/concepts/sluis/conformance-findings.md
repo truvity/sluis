@@ -25,11 +25,11 @@ Twelve modules end at a page the suite cannot see, because the issuer must refus
 | the successful logout page | 3 | *Signed out* |
 | the login prompt during a second authorization | 2 | the sign-in chooser |
 
-Check the screenshots, because a review whose evidence is wrong passes silently. The review has caught two pages that were wrong and ten screenshots of the wrong page, from a driver fault.
+Check the screenshots, because a review whose evidence is wrong passes silently.
 
 ## Skipped means the discovery document is truthful
 
-Three modules skip because `scopes_supported` omits `address` and `phone`. One skips because the issuer answers `request_not_supported`. The suite read discovery, believed it, and skipped.
+Three modules skip because `scopes_supported` omits `address` and `phone`. One skips because the issuer answers `request_not_supported`.
 
 ## Warnings are mostly personal data sluis does not hold
 
@@ -37,7 +37,9 @@ Four warnings say userinfo omits claims that the `profile` and `email` scopes pe
 
 Missing are `birthdate`, `gender`, `zoneinfo`, `locale`, `picture`, `website`, `profile`, `nickname`, `middle_name` and `updated_at`. The service has no source for them.
 
-The other two warnings come from one module noting that the ID token carries claims the client did not request by scope. One is `groups`, which Kargo and ArgoCD read, so gating it behind a scope would break every consumer. The other is `client_id`, which duplicates `azp` and came from the OpenID library's claims struct. From v1.77.2 the ID token no longer carries it, and `claims_supported` no longer lists it.
+The other two warnings come from one module noting that the ID token carries claims the client did not request by scope. One is `groups`, which Kargo and ArgoCD read, so gating it behind a scope would break every consumer. The other was `client_id`, which duplicates `azp`. The ID token and `claims_supported` no longer carry it.
+
+Known upstream dependency: zitadel/oidc has not released this fix ([issue 1020](https://github.com/zitadel/oidc/issues/1020), [pull request 1021](https://github.com/zitadel/oidc/pull/1021)). Until it does, sluis builds a patched copy, `third_party/zitadel-oidc`, through a `replace` in `go.mod`. Dropping either earlier brings the warning back in `oidcc-server` and every module that runs `EnsureIdTokenDoesNotContainNonRequestedClaims`.
 
 ## Back-channel logout needs the suite in the cluster
 
