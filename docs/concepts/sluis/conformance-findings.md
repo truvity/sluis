@@ -39,6 +39,16 @@ Missing are `birthdate`, `gender`, `zoneinfo`, `locale`, `picture`, `website`, `
 
 The other two warnings come from one module noting that the ID token carries claims the client did not request by scope. One is `groups`, which Kargo and ArgoCD read, so gating it behind a scope would break every consumer. The other is `client_id`, which duplicates `azp` and comes from the OpenID library's claims struct.
 
+`oidcc-ensure-request-with-acr-values-succeeds` asks for every `acr` class discovery lists. Discovery lists the conformance class while `conformance.enabled` is on.
+
+| Sign-in | `acr` |
+|---|---|
+| a directory provider | `urn:truvity:sluis:acr:directory` |
+| recovery, by token or by password | `urn:truvity:sluis:acr:recovery` |
+| the conformance account | `urn:truvity:sluis:acr:conformance` |
+
+A token never claims a class its sign-in did not meet. An exchange carries no `acr`.
+
 ## Back-channel logout needs the suite in the cluster
 
 The Back-Channel module is the one place where the issuer must reach the suite, because a logout token is a server-to-server POST. A suite on a laptop resolves to the pod's own loopback, and pods cannot reach the tailnet.

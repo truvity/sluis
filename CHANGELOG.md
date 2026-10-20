@@ -1,5 +1,9 @@
 ## Unreleased
 
+### Fixed
+
+- **Discovery lists the conformance account's `acr` while the account is on.** `acr_values_supported` named the directory and recovery classes only, and a conformance sign-in's ID token carries `urn:truvity:sluis:acr:conformance`. A client that asked for every listed class therefore got back one it had not asked for: the suite's `oidcc-ensure-request-with-acr-values-succeeds` warned "acr value in id_token is not (one of the) requested values". With `conformance.enabled` the list now ends with `urn:truvity:sluis:acr:conformance`; without it discovery is unchanged. `acr` is still the class the sign-in met (directory, recovery or conformance), whatever `acr_values` asks for: a requested class the sign-in did not meet is never claimed, and tests pin both cases for every sign-in method. The `claims` parameter is not read, so no request makes `acr` essential. [ADR 0076](docs/decisions/0076-password-sign-in-is-srp-for-recovery-and-conformance-only.md) is amended to match; see [conformance findings](docs/concepts/sluis/conformance-findings.md).
+
 ## v1.77.1
 
 v1.77.1-rc.2 as it stands: no change since it. Its notes are under v1.77.1-rc.2 and v1.77.1-rc.1 below.

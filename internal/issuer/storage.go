@@ -159,6 +159,14 @@ func (a *authRequest) GetID() string { return a.ID }
 // deployment had no way to tell a Google sign-in from recovery in a
 // token. Recovery bypasses the directory by design; a relying party that
 // wants to refuse it needs to be able to see it.
+//
+// A request's `acr_values` never changes the answer. The classes are
+// disjoint: none is met by a sign-in of another, so the first requested
+// value the sign-in meets is its own class, and when the request names no
+// value it meets the token still says how the person was proved rather
+// than claiming a class that was not met (OpenID Connect Core 3.1.2.1:
+// the values are voluntary). The `claims` parameter is not read, so no
+// request makes `acr` essential (Core 5.5.1.1).
 func (a *authRequest) GetACR() string { return acrFor(a.How) }
 
 // GetAMR is what was presented. It used to say `pwd` unconditionally,
@@ -317,7 +325,7 @@ func isRecovery(how string) bool { return how == RecoveryHow || how == RecoveryP
 const ConformanceHow = "conformance"
 
 // ACRConformance is the authentication context class of a conformance sign-in.
-// It is not offered in discovery: nothing asks for it.
+// Discovery lists it while the installation turns the account on.
 const ACRConformance = "urn:truvity:sluis:acr:conformance"
 
 // provedWithoutDirectory reports whether how names a sign-in that no directory

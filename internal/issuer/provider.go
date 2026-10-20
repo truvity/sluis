@@ -284,7 +284,7 @@ func HandlerWithSignIn(iss *Issuer, storage op.Storage, signIn SignInDeps) (http
 		loopbackRedirects(storage.GetClientByClientID, authorizeSurface(storage.GetClientByClientID, defaultScope(resourceIndicators(
 			iss.Policy().Resource, storage.GetClientByClientID, requirePKCE(iss.Policy, presentedClients(
 				endSession(signIn, storage.GetClientByClientID, truthfulDiscovery(
-					iss.Config().URL, func() bool { return iss.Policy().ClientDocuments().Enabled() },
+					iss.Config().URL, func() bool { return iss.Policy().ClientDocuments().Enabled() }, iss.ConformanceOn,
 					refusalFilter(provider))))))))))))))
 	// An installation token for a catalogue App is claimed in front of the
 	// library, which can only mint tokens this issuer signs. The storage
@@ -683,10 +683,22 @@ var authorizationServerFields = []string{
 }
 
 // servedACRValues is every authentication context class a token from
-// here can carry, which is exactly two: the directory answered, or
-// recovery bypassed it. For one release each is also listed in its old
+// here can carry: the directory answered, or recovery bypassed it, and,
+// while the installation turns the conformance account on, that account
+// signed in. For one release the first two are also listed in their old
 // spelling; a request in the old one is honoured, and answered in the new.
-var servedACRValues = []string{ACRDirectory, ACRRecovery, legacyACRDirectory, legacyACRRecovery}
+//
+// A class is listed only where a token can carry it. The conformance class
+// was not listed at all, so a client that asked for every listed class (the
+// suite's `oidcc-ensure-request-with-acr-values-succeeds`) got back one it
+// had not asked for and could not have known.
+func servedACRValues(conformance bool) []string {
+	served := []string{ACRDirectory, ACRRecovery, legacyACRDirectory, legacyACRRecovery}
+	if conformance {
+		served = append(served, ACRConformance)
+	}
+	return served
+}
 
 // servedResponseTypes is what this issuer will actually honour. Every
 // client declares `code` and nothing else: the implicit and hybrid flows
@@ -738,12 +750,14 @@ var unservedDiscoveryFields = []string{
 // documentClientsEnabled is read per request rather than captured once, so
 // that discovery always says what the policy this instance decides by says:
 // the policy is immutable for an instance, and a change is a new one.
+// conformanceOn is `conformance.enabled`, read the same way: the conformance
+// class is listed only while the installation turns the account on.
 //
 // The same handler answers the RFC 8414 well-known URI: that request is
 // served as discovery and the corrected document is then narrowed to the
 // members RFC 8414 defines, so headers, status and content come from one
 // place.
-func truthfulDiscovery(issuerURL string, documentClientsEnabled func() bool, next http.Handler) http.Handler {
+func truthfulDiscovery(issuerURL string, documentClientsEnabled, conformanceOn func() bool, next http.Handler) http.Handler {
 	asPath := authorizationServerURI(issuerURL)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		asMetadata := r.URL.Path == asPath
@@ -776,7 +790,7 @@ func truthfulDiscovery(issuerURL string, documentClientsEnabled func() bool, nex
 		// has no way to learn about, and the one that earns its keep is
 		// RECOVERY: a relying party that wants to refuse a break-glass
 		// sign-in has to know the value to refuse.
-		doc["acr_values_supported"] = servedACRValues
+		doc["acr_values_supported"] = servedACRValues(conformanceOn())
 		// Every authorization response carries `iss` (RFC 9207), so a
 		// client that talks to several servers can tell which one sent
 		// it.
