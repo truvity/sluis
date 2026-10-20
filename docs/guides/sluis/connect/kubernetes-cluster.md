@@ -49,7 +49,7 @@ users:
       exec:
         apiVersion: client.authentication.k8s.io/v1
         command: kubectl
-        args: [oidc-login, get-token, --oidc-issuer-url=https://issuer.example.internal, --oidc-client-id=k8s:prod, --oidc-extra-scope=groups]
+        args: [oidc-login, get-token, --oidc-issuer-url=https://issuer.example.internal, --oidc-client-id=k8s:prod, --oidc-extra-scope=email]
 ```
 
 `sluisctl kube-token` trades the cached sign-in for the cluster audience ([calling anywhere else](service-to-service.md#calling-with-an-issuer-token-anywhere-else)). Check with `kubectl get ns`.
