@@ -26,7 +26,7 @@ plugins:
   # @connectrpc/connect v2 consumes them via createClient.
   # Pinned to the @bufbuild/protobuf runtime locked in ts/package-lock.json: an
   # unpinned plugin stamps new headers and drift-ts fails on master.
-  - remote: buf.build/bufbuild/es:v2.15.0
+  - remote: buf.build/bufbuild/es:v2.16.0
     out: ts/src/gen
     # Relative imports carry .js, which Node's ESM resolution requires of the
     # compiled package: without it `./record_pb` resolves in a bundler and
