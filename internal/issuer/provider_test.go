@@ -3,7 +3,10 @@ package issuer
 import (
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"testing"
+
+	"github.com/zitadel/oidc/v3/pkg/oidc"
 )
 
 // A response that carries a credential must never be cached.
@@ -76,8 +79,12 @@ func TestATokenSaysHowThePersonWasProved(t *testing.T) {
 	}{
 		{"google", ACRDirectory, nil},
 		{"entra", ACRDirectory, nil},
+		{"github", ACRDirectory, nil},
+		{"slack", ACRDirectory, nil},
 		{"", ACRDirectory, nil},
 		{RecoveryHow, ACRRecovery, []string{"swk"}},
+		{RecoveryPasswordHow, ACRRecovery, []string{"pwd"}},
+		{ConformanceHow, ACRConformance, []string{"pwd", "conformance"}},
 	} {
 		t.Run(tc.how, func(t *testing.T) {
 			t.Parallel()
@@ -123,11 +130,63 @@ func TestNormalizeACRReadsEitherSpelling(t *testing.T) {
 		ACRDirectory: true, ACRRecovery: true,
 		"urn:truvity:access-roster:acr:directory": true, "urn:truvity:access-roster:acr:recovery": true,
 	}
-	for _, v := range servedACRValues {
+	for _, v := range servedACRValues(false) {
 		delete(want, v)
 	}
 
 	if len(want) != 0 {
 		t.Errorf("discovery lacks %v", want)
+	}
+}
+
+// `acr` is the class the sign-in met, whatever `acr_values` asked for.
+//
+// A requested class that the sign-in met comes back. One it did not meet is
+// never claimed: the token says how the person was proved instead, which a
+// relying party can then refuse (OpenID Connect Core 3.1.2.1). A request in
+// the old spelling is answered in the new.
+func TestRequestedACRValuesAreHonouredOnlyWhenMet(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name      string
+		how       string
+		requested []string
+		want      string
+	}{
+		{"directory asked of a directory sign-in", "google", []string{ACRDirectory}, ACRDirectory},
+		{"recovery asked of a recovery sign-in", RecoveryHow, []string{ACRRecovery}, ACRRecovery},
+		{"recovery asked of a password recovery", RecoveryPasswordHow, []string{ACRDirectory, ACRRecovery}, ACRRecovery},
+		{"conformance asked of a conformance sign-in", ConformanceHow, servedACRValues(true), ACRConformance},
+		{"old spelling", "google", []string{legacyACRDirectory}, ACRDirectory},
+		{"recovery asked of a directory sign-in", "google", []string{ACRRecovery}, ACRDirectory},
+		{"directory asked of a recovery sign-in", RecoveryHow, []string{ACRDirectory}, ACRRecovery},
+		{"directory asked of a conformance sign-in", ConformanceHow, []string{ACRDirectory, ACRRecovery}, ACRConformance},
+		{"an unknown class", "google", []string{"urn:mace:incommon:iap:silver"}, ACRDirectory},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			request := &authRequest{How: tc.how, Req: &oidc.AuthRequest{ACRValues: tc.requested}}
+			if got := request.GetACR(); got != tc.want {
+				t.Errorf("acr = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// Discovery lists the conformance class only while the account is on, and
+// every class a token can carry otherwise.
+func TestServedACRValuesFollowTheConformanceAccount(t *testing.T) {
+	t.Parallel()
+
+	if slices.Contains(servedACRValues(false), ACRConformance) {
+		t.Errorf("the conformance class is listed while the account is off: %v", servedACRValues(false))
+	}
+	on := servedACRValues(true)
+	for _, v := range []string{ACRDirectory, ACRRecovery, ACRConformance} {
+		if !slices.Contains(on, v) {
+			t.Errorf("%s is not listed while the account is on: %v", v, on)
+		}
 	}
 }
