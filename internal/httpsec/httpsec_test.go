@@ -65,6 +65,35 @@ func TestAPolicyForAPageWhoseFormEndsInARedirect(t *testing.T) {
 	}
 }
 
+func TestAPolicyThatLetsAFormGoToAnotherOrigin(t *testing.T) {
+	t.Parallel()
+
+	policy := httpsec.Policy{FormTargets: []string{"https://github.com"}}.String()
+
+	if !strings.HasSuffix(policy, "form-action 'self' https://github.com") {
+		t.Errorf("policy %q does not end in form-action 'self' https://github.com", policy)
+	}
+
+	for _, want := range []string{
+		"default-src 'self'", "style-src 'self' 'unsafe-inline'", "img-src 'self' data:",
+		"frame-ancestors 'none'", "base-uri 'none'", "object-src 'none'",
+	} {
+		if !strings.Contains(policy, want) {
+			t.Errorf("policy %q lacks %s", policy, want)
+		}
+	}
+
+	// The issuer's policies are what they were: the default names the page's
+	// own origin only, and the redirecting pages have no form-action at all.
+	if got := (httpsec.Policy{}).String(); !strings.HasSuffix(got, "form-action 'self'") || strings.Contains(got, "github") {
+		t.Errorf("default policy %q is not `form-action 'self'`", got)
+	}
+
+	if got := (httpsec.Policy{FormsMayRedirect: true, FormTargets: []string{"https://github.com"}}).String(); strings.Contains(got, "form-action") {
+		t.Errorf("policy %q has form-action, which stops the redirect after the form", got)
+	}
+}
+
 func TestLimitBodyRefusesOversizeBodies(t *testing.T) {
 	t.Parallel()
 

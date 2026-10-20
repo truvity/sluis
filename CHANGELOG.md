@@ -1,5 +1,9 @@
 ## Unreleased
 
+### Fixed
+
+- **Creating a GitHub App from the console works again.** Since v1.77 the console sent `form-action 'self'`, so a browser refused the form that posts an App's manifest to GitHub, and **Create** did nothing for the controller, tokens and link Apps alike. The console's shell now sends `form-action 'self' https://github.com`; every other page of the console and the issuer's policies are unchanged. No action needed.
+
 ## v1.77.3
 
 One configuration change and one addition to the audit Pulumi library, and the documentation refreshed for v1.77.2. A service document with `secureCookies: false` and an https issuer no longer loads; its upgrade note says what to remove ([upgrade to v1.77.3](docs/guides/sluis/upgrade/v1.77.3.md)).

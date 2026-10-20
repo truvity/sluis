@@ -104,6 +104,16 @@ type Policy struct {
 	// signing in. These pages are the issuer's recovery form and its agent
 	// consent page.
 	FormsMayRedirect bool
+
+	// FormTargets are origins, beside the page's own, that a form of the
+	// page may be submitted to, each as scheme://host[:port]. The console's
+	// shell names GitHub's, because creating an App is a form the browser
+	// POSTs to GitHub's manifest endpoint. A browser that enforces
+	// `form-action` checks the redirect after the submission as well, so the
+	// page that GitHub sends the person back to has to be this origin's own
+	// or listed here. Ignored with FormsMayRedirect, which has no
+	// `form-action` to extend.
+	FormTargets []string
 }
 
 // String is the header's value.
@@ -125,7 +135,7 @@ func (p Policy) String() string {
 		directives = append(directives, "script-src 'nonce-"+p.ScriptNonce+"'")
 	}
 	if !p.FormsMayRedirect {
-		directives = append(directives, "form-action 'self'")
+		directives = append(directives, strings.Join(append([]string{"form-action 'self'"}, p.FormTargets...), " "))
 	}
 
 	return strings.Join(directives, "; ")

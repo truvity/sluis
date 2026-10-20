@@ -29,6 +29,7 @@ import (
 	"github.com/truvity/sluis/internal/connectalias"
 	"github.com/truvity/sluis/internal/consolecall"
 	"github.com/truvity/sluis/internal/emailaddr"
+	"github.com/truvity/sluis/internal/githubapp"
 	"github.com/truvity/sluis/internal/githubroster/consolewire"
 	"github.com/truvity/sluis/internal/httpsec"
 	"github.com/truvity/sluis/internal/hub"
@@ -404,11 +405,28 @@ func (s *ConsoleServer) index(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "the console is not built into this binary", http.StatusNotFound)
 		return
 	}
+	// Creating a GitHub App is a form the shell POSTs to GitHub, so the shell
+	// may submit to GitHub's web origin and to no other. GitHub answers with
+	// a redirect to this console's own callback, which `'self'` covers.
+	httpsec.Apply(w, httpsec.Policy{FormTargets: githubFormTargets()})
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	if _, err = w.Write(page); err != nil {
 		s.log.WarnContext(r.Context(), "console shell could not be written", slog.Any("error", err))
 	}
+}
+
+// githubFormTargets is the origin of GitHub's web host, which is where the
+// console's shell POSTs an App manifest: scheme and host of
+// [githubapp.WebBase], with no path, so the policy names GitHub's origin and
+// nothing under another one. Empty when the base is not an absolute URL.
+func githubFormTargets() []string {
+	base, err := url.Parse(githubapp.WebBase)
+	if err != nil || base.Scheme == "" || base.Host == "" {
+		return nil
+	}
+
+	return []string{base.Scheme + "://" + base.Host}
 }
 
 // withIdentity resolves the caller once per request and puts the identity
