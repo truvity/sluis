@@ -88,7 +88,8 @@ One table per module, `ports.dynamodb.tables`, by default `sluis-<instance>-<mod
 | `rec.recovery.off` | `oidc` | `recovery` | `off` | the recovery switch: the set `disabled` of `generation`, `at`, `by`. The issuer and console read it at most every 3 s, and once seen never again. Never exported by a backup |
 | `issuer:request:<id>`, `req.<id>` | `oidc` | `request` | `<id>` | a pending authorization request |
 | `issuer:code:<id>`, `code.<id>` | `oidc` | `code` | `<id>` | an authorization code |
-| `issuer:code-session:<id>`, `codesess.<id>` | `oidc` | `code-session` | `<id>` | the session a code opened |
+| `issuer:code-session:<id>`, `codesess.<id>` | `oidc` | `code-session` | `<id>` | legacy: the session a code opened; no longer written |
+| `issuer:code-spent:<sha256>` | `oidc` | `code-spent` | `<sha256>` | the tombstone of a redeemed code: the access token and session it issued |
 | `srp.<handle>` | `oidc` | `srp` | `<handle>` | the half of a password sign-in exchange (SRP) that outlives its first request, for one use and two minutes. Never exported by a backup |
 | `issuer:token:<jti>`, `tok.<jti>` | `oidc` | `token` | `<jti>` | a minted token's record |
 | `issuer:sso:<id>`, `sso.<id>` | `oidc` | `sso` | `<id>` | the browser's SSO session |

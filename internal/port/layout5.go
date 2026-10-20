@@ -182,6 +182,9 @@ var rules5 = []rule5{
 	r5(ModuleOIDC, "request", "issuer:request:", convID),
 	r5(ModuleOIDC, "code", "issuer:code:", convID),
 	r5(ModuleOIDC, "code-session", "issuer:code-session:", convID),
+	// The tombstone of a redeemed authorization code, keyed by the code's
+	// SHA-256: what its redemption issued, for a reuse to revoke.
+	r5(ModuleOIDC, "code-spent", "issuer:code-spent:", convID),
 	r5(ModuleOIDC, "token", "issuer:token:", convID),
 	r5(ModuleOIDC, "sso", "issuer:sso:", convID),
 	r5(ModuleOIDC, "sso-of", "issuer:sso-of:", convID),

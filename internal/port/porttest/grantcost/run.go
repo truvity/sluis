@@ -270,6 +270,77 @@ var guards = []struct {
 	{"stale-snapshot-is-not-authoritative", staleSnapshot},
 	{"index-membership", indexMembership},
 	{"idle-agent-session-is-revocable", idleAgentSession},
+	{"code-reuse-revokes-an-access-token-alone", codeReuseAlone},
+	{"code-reuse-ends-the-refresh-token-family", codeReuseFamily},
+}
+
+// CodeReuse runs the guards of authorization code reuse alone, over an
+// adapter whose costs [Run] does not hold to the budgets (the legacy one).
+func CodeReuse(t *testing.T, factory func(t *testing.T) Env) {
+	t.Helper()
+	for name, guard := range map[string]func(*testing.T, *Harness){
+		"code-reuse-revokes-an-access-token-alone": codeReuseAlone,
+		"code-reuse-ends-the-refresh-token-family": codeReuseFamily,
+	} {
+		t.Run(name, func(t *testing.T) { guard(t, New(t, factory(t))) })
+	}
+}
+
+// A code presented again 30 seconds after its redemption is refused, and the
+// access token it bought stops answering at userinfo (RFC 6749 4.1.2), as the
+// OpenID conformance module oidcc-codereuse-30seconds drives it: a client
+// that asked for no refresh token, so no session stands behind the token.
+func codeReuseAlone(t *testing.T, h *Harness) {
+	code := h.SignInFor("openid profile email")
+	if code == "" {
+		t.Fatal("the sign-in ended in no authorization code")
+	}
+	first := h.Redeem(code)
+	if first.Status != http.StatusOK || first.Access == "" || first.Refresh != "" {
+		t.Fatalf("redeem: %d %q, want 200, an access token and no refresh token", first.Status, first.Error)
+	}
+	if status := h.Userinfo(first.Access); status != http.StatusOK {
+		t.Fatalf("userinfo after the redemption: %d, want 200", status)
+	}
+
+	h.Advance(30 * time.Second)
+	reused := h.Redeem(code)
+	if reused.Status != http.StatusBadRequest || reused.Error != "invalid_grant" {
+		t.Fatalf("the reuse: %d %q, want 400 invalid_grant", reused.Status, reused.Error)
+	}
+	if status := h.Userinfo(first.Access); status < 400 || status > 499 {
+		t.Errorf("userinfo with the first redemption's access token after the reuse: %d, want 4xx", status)
+	}
+	// Idempotent: another presentation is refused the same way.
+	if again := h.Redeem(code); again.Error != "invalid_grant" {
+		t.Errorf("a third presentation: %d %q, want invalid_grant", again.Status, again.Error)
+	}
+}
+
+// With `offline_access` the reuse also ends the session the code opened: the
+// refresh token stops refreshing, and userinfo refuses the access tokens of
+// the family.
+func codeReuseFamily(t *testing.T, h *Harness) {
+	code := h.SignIn()
+	if code == "" {
+		t.Fatal("the sign-in ended in no authorization code")
+	}
+	first := h.Redeem(code)
+	if first.Status != http.StatusOK || first.Refresh == "" {
+		t.Fatalf("redeem: %d %q, want 200 and a refresh token", first.Status, first.Error)
+	}
+
+	h.Advance(30 * time.Second)
+	if reused := h.Redeem(code); reused.Error != "invalid_grant" {
+		t.Fatalf("the reuse: %d %q, want invalid_grant", reused.Status, reused.Error)
+	}
+	if status := h.Userinfo(first.Access); status < 400 || status > 499 {
+		t.Errorf("userinfo after the reuse: %d, want 4xx", status)
+	}
+	if after := h.Refresh(first.Refresh); after.Status == http.StatusOK {
+		t.Error("the refresh token still refreshes after its code was reused")
+	}
+	assertSessions(t, h, 0)
 }
 
 // A spent refresh token presented again within the grace window is answered

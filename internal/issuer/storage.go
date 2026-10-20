@@ -151,6 +151,12 @@ type authRequest struct {
 	// ID token that follows does not record it again. Never written down,
 	// for the same reason as Session.
 	involved bool
+
+	// spent is where the tombstone of the code this request is being
+	// redeemed with goes ([codeSpentKey]), set when the code resolves to
+	// it and written once the tokens are minted ([Storage.spend]). Never
+	// written down, for the same reason as Session.
+	spent string
 }
 
 var _ op.AuthRequest = (*authRequest)(nil)
@@ -413,10 +419,7 @@ func (s *Storage) logger() *slog.Logger {
 // rather than mutating the process-wide default.
 func (s *Storage) UseLog(log *slog.Logger) { s.log = log }
 
-// codeSessionKey remembers which session one authorization code opened,
-// so that a reuse of that code can end it.
-func codeSessionKey(request string) string { return "issuer:code-session:" + request }
-func tokenKey(id string) string            { return "issuer:token:" + id }
+func tokenKey(id string) string { return "issuer:token:" + id }
 
 var (
 	_ op.Storage                            = (*Storage)(nil)
@@ -857,25 +860,31 @@ func (s *Storage) AuthRequestByCode(ctx context.Context, code string) (op.AuthRe
 	}
 
 	if !found {
-		return nil, errors.New("no such authorization code")
+		// Expired or never issued -- or redeemed, and the tombstone of
+		// that redemption outlives the code ([Storage.refuseSpentCode]).
+		return nil, s.refuseSpentCode(ctx, code, false)
 	}
 
-	request, err := s.request(ctx, string(raw))
+	request, err := getJSON[authRequest](ctx, s.state, requestKey(string(raw)))
 	if err != nil {
+		return nil, err
+	}
+
+	if request == nil {
 		// The code is known and its request is gone, which is what a
 		// SECOND redemption looks like: the first one deleted the
 		// request. RFC 6749 4.1.2 says deny it and revoke what it
 		// already issued, and the second half is the one that matters —
 		// a code presented twice is a code somebody else has, and the
 		// tokens from its first use are the ones now in doubt.
-		s.revokeCodeSession(ctx, string(raw))
-
-		return nil, err
+		return nil, s.refuseSpentCode(ctx, code, true)
 	}
 
 	if err = s.checkVerifier(ctx, request); err != nil {
 		return nil, err
 	}
+
+	request.spent = codeSpentKey(code)
 
 	return request, nil
 }
@@ -944,35 +953,6 @@ func (s *Storage) signInEnded(ctx context.Context, sso, clientID string) (bool, 
 	}
 
 	return !live, nil
-}
-
-// revokeCodeSession ends the session one authorization code opened, on
-// learning that the code was presented a second time.
-//
-// Best effort and silent about it: this runs while answering a request
-// that is being refused anyway, and a failure here must not turn a
-// refusal into a server error.
-func (s *Storage) revokeCodeSession(ctx context.Context, request string) {
-	recordReuse(ctx, "authorization_code")
-	raw, found, err := s.state.Get(ctx, codeSessionKey(request))
-	if err != nil || !found {
-		return
-	}
-
-	gone, err := s.iss.Sessions().RevokeID(ctx, string(raw))
-	if err != nil {
-		s.logger().WarnContext(ctx, "an authorization code was reused and its session could not be ended",
-			slog.Any("error", err))
-
-		return
-	}
-
-	// WARN and not INFO: a code presented twice is either a broken client
-	// or a stolen code, and both are worth seeing in a log.
-	s.logger().WarnContext(ctx, "an authorization code was reused; the session it opened has been ended",
-		slog.Bool("ended", gone))
-
-	_ = s.state.Delete(ctx, codeSessionKey(request))
 }
 
 // SaveAuthCode implements [op.AuthStorage].
@@ -1339,6 +1319,13 @@ func (s *Storage) CreateAccessToken(ctx context.Context, request op.TokenRequest
 	if err = s.keep(ctx, request, issued); err != nil {
 		return "", time.Time{}, err
 	}
+	// A code redeemed for an access token alone: the tombstone names the
+	// token, so that a reuse of the code reaches it ([Storage.spend]).
+	if opened, ok := request.(*authRequest); ok {
+		if err = s.spend(ctx, opened, issued); err != nil {
+			return "", time.Time{}, err
+		}
+	}
 	return issued.ID, issued.Expires, nil
 }
 
@@ -1502,21 +1489,14 @@ func (s *Storage) CreateAccessAndRefreshTokens(
 	if opened, ok := request.(*authRequest); ok {
 		opened.Session = session.ID
 
-		// And remember which session this CODE produced, so that a reuse
-		// of it can end that session. RFC 6749 4.1.2: a code used twice
-		// must be denied and SHOULD revoke the tokens already issued from
-		// it — denying alone leaves a stolen code's first redemption
-		// working while telling us it was stolen.
-		//
-		// Kept only as long as a code lives. After that a second
-		// redemption is impossible anyway, and the note would be a record
-		// of who signed in with nothing to do.
-		if err = s.state.Set(ctx, codeSessionKey(opened.ID), []byte(session.ID), authCodeTTL); err != nil {
-			// Not fatal to the sign-in that just succeeded: the person is
-			// authenticated, and what is lost is a defence against a reuse
-			// that may never come.
-			s.logger().WarnContext(ctx, "could not record which session a code opened; "+
-				"reusing that code will be denied but will revoke nothing", slog.Any("error", err))
+		// And leave the tombstone of the CODE, naming the access token and
+		// the session it produced, so that a reuse of it revokes both. RFC
+		// 6749 4.1.2: a code used twice must be denied and SHOULD revoke
+		// the tokens already issued from it — denying alone leaves a
+		// stolen code's first redemption working while telling us it was
+		// stolen ([Storage.spend]).
+		if err = s.spend(ctx, opened, issued); err != nil {
+			return "", "", time.Time{}, err
 		}
 	}
 
