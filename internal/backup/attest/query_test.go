@@ -16,13 +16,14 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	auditv1 "github.com/truvity/sluis/audit/sdk/gen/audit/v1"
 	"github.com/truvity/sluis/audit/sdk/gen/audit/v1/auditv1connect"
 	"google.golang.org/protobuf/types/known/structpb"
 
 	"github.com/truvity/sluis/internal/backup"
 	"github.com/truvity/sluis/internal/backup/attest"
+	"github.com/truvity/sluis/internal/rpcmount"
 )
 
 // trail is a query service holding some records, and what it was asked.
@@ -54,21 +55,22 @@ func page(all []*auditv1.Record, r *auditv1.SearchRequest) *auditv1.SearchRespon
 	return &auditv1.SearchResponse{Items: all[from:to], Cursors: &auditv1.Cursors{Next: fmt.Sprint(to)}}
 }
 
-func (s *trail) Search(_ context.Context, r *connect.Request[auditv1.SearchRequest]) (*connect.Response[auditv1.SearchResponse], error) {
+func (s *trail) Search(ctx context.Context, r *auditv1.SearchRequest) (*auditv1.SearchResponse, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.searches = append(s.searches, r.Msg)
-	s.bearers = append(s.bearers, r.Header().Get("Authorization"))
+	s.searches = append(s.searches, r)
+	info, _ := connect.CallInfoForServerContext(ctx)
+	s.bearers = append(s.bearers, info.RequestHeader().Get("Authorization"))
 	if s.failWith != nil {
 		return nil, s.failWith
 	}
-	return connect.NewResponse(page(s.records, r.Msg)), nil
+	return page(s.records, r), nil
 }
 
-func (s *trail) Get(_ context.Context, r *connect.Request[auditv1.GetRequest]) (*connect.Response[auditv1.GetResponse], error) {
+func (s *trail) Get(_ context.Context, r *auditv1.GetRequest) (*auditv1.GetResponse, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return connect.NewResponse(&auditv1.GetResponse{Provenance: &auditv1.Provenance{DigestId: s.seal[r.Msg.GetId()], SealUnknown: s.unknown}}), nil
+	return &auditv1.GetResponse{Provenance: &auditv1.Provenance{DigestId: s.seal[r.GetId()], SealUnknown: s.unknown}}, nil
 }
 
 func completed(id, backupID string, mutate ...func(*auditv1.Record)) *auditv1.Record {
@@ -87,7 +89,9 @@ func completed(id, backupID string, mutate ...func(*auditv1.Record)) *auditv1.Re
 
 func setup(t *testing.T, s *trail, mutate ...func(*attest.Config)) *attest.Query {
 	t.Helper()
-	_, h := auditv1connect.NewQueryServiceHandler(s)
+	rpc := rpcmount.NewServer()
+	auditv1connect.RegisterQueryServiceHandler(rpc, s)
+	_, h := rpcmount.Handler(rpc)
 	srv := httptest.NewServer(h)
 	t.Cleanup(srv.Close)
 	tok := filepath.Join(t.TempDir(), "token")
@@ -159,8 +163,8 @@ func TestWhatDoesNotConcernThisBackupIsNotAClaim(t *testing.T) {
 
 func TestATrailThatCannotTellIsUnavailable(t *testing.T) {
 	for name, s := range map[string]*trail{
-		"search fails":       {failWith: connect.NewError(connect.CodeUnavailable, errors.New("down"))},
-		"permission denied":  {failWith: connect.NewError(connect.CodePermissionDenied, errors.New("no grant"))},
+		"search fails":       {failWith: connect.NewError(connect.CodeUnavailable, "down")},
+		"permission denied":  {failWith: connect.NewError(connect.CodePermissionDenied, "no grant")},
 		"seal state unknown": {records: []*auditv1.Record{completed("rec-1", "b1")}, unknown: true},
 	} {
 		t.Run(name, func(t *testing.T) {

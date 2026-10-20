@@ -15,7 +15,7 @@ import (
 	"strconv"
 	"strings"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2/connecthttp"
 	"github.com/go-jose/go-jose/v4"
 	"github.com/rs/cors"
 	"github.com/zitadel/oidc/v3/pkg/oidc"
@@ -27,6 +27,7 @@ import (
 	"github.com/truvity/sluis/internal/connectalias"
 	"github.com/truvity/sluis/internal/httpsec"
 	"github.com/truvity/sluis/internal/refusal"
+	"github.com/truvity/sluis/internal/rpcmount"
 	"github.com/truvity/sluis/internal/signer"
 	"github.com/truvity/sluis/internal/telemetry"
 )
@@ -1153,12 +1154,12 @@ func (c *challenged) finish() {
 // older console still calls. One handler answers both, so the CORS and the
 // checks in front of it are the same for each.
 func mountSessions(mux *http.ServeMux, service accessissuerv1connect.SessionServiceHandler, consoleOrigin string) {
-	options := append(append(telemetry.ConnectOptions(), refusal.ConnectOptions(nil)...),
-		// A call to this service is a few fields; the limit is on the message
-		// as decoded, which the listener's cap on the body cannot see when the
-		// body is compressed.
-		connect.WithReadMaxBytes(httpsec.MaxRequestBody))
-	path, sessions := accessissuerv1connect.NewSessionServiceHandler(service, options...)
+	rpc := rpcmount.NewServer(telemetry.ConnectServerInterceptor(), refusal.Interceptor(nil))
+	accessissuerv1connect.RegisterSessionServiceHandler(rpc, service)
+	// A call to this service is a few fields; the limit is on the message as
+	// decoded, which the listener's cap on the body cannot see when the body
+	// is compressed.
+	path, sessions := rpcmount.Handler(rpc, connecthttp.WithReadMaxBytes(httpsec.MaxRequestBody))
 	if consoleOrigin != "" {
 		sessions = browserAllowed(consoleOrigin, sessions)
 	}

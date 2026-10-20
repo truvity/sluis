@@ -8,9 +8,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/truvity/sluis/internal/rpcmount"
 	slackconsole "github.com/truvity/sluis/internal/slackapp/console"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
 	"github.com/truvity/sluis/internal/access"
@@ -69,7 +70,7 @@ func TestWhoMayOperateWhichSlackWorkspacesApps(t *testing.T) {
 			h := slackOwnerHarness(t)
 			ctx := asSlackIdentity(c.who)
 
-			listed, err := h.console.ListSlackApps(ctx, connect.NewRequest(&directoryrosterv1.ListSlackAppsRequest{}))
+			listed, err := h.console.ListSlackApps(ctx, &directoryrosterv1.ListSlackAppsRequest{})
 			if len(c.views) == 0 {
 				if connect.CodeOf(err) != connect.CodePermissionDenied {
 					t.Errorf("List = %v, want permission denied rather than an empty page", err)
@@ -79,7 +80,7 @@ func TestWhoMayOperateWhichSlackWorkspacesApps(t *testing.T) {
 					t.Fatalf("List: %v", err)
 				}
 				seen := map[string]bool{}
-				for _, app := range listed.Msg.GetApps() {
+				for _, app := range listed.GetApps() {
 					seen[app.GetId()] = true
 					if app.GetCanOperate() != c.operates[app.GetId()] {
 						t.Errorf("can_operate of %s = %v, want %v", app.GetId(), app.GetCanOperate(), c.operates[app.GetId()])
@@ -97,7 +98,7 @@ func TestWhoMayOperateWhichSlackWorkspacesApps(t *testing.T) {
 
 			for _, entry := range entries {
 				created := h.create(ctx, entry.id, accepted)
-				_, installed := h.console.InstallSlackApp(ctx, connect.NewRequest(&directoryrosterv1.InstallSlackAppRequest{Id: entry.id}))
+				_, installed := h.console.InstallSlackApp(ctx, &directoryrosterv1.InstallSlackAppRequest{Id: entry.id})
 				if c.operates[entry.id] {
 					// Through the role check, and on to whatever else there is.
 					if created != nil {
@@ -151,11 +152,12 @@ func TestASlackInstallIsFinishedOnlyByAnOperatorOfTheWorkspaceNow(t *testing.T) 
 		{"a foreign operator", southOp, http.StatusForbidden},
 		{"the owning operator", northOp, http.StatusFound},
 	} {
-		begun, err := h.console.InstallSlackApp(operator(), connect.NewRequest(&directoryrosterv1.InstallSlackAppRequest{Id: "acme-bot"}))
+		callCtx, call := rpcmount.ServerContext(operator())
+		begun, err := h.console.InstallSlackApp(callCtx, &directoryrosterv1.InstallSlackAppRequest{Id: "acme-bot"})
 		if err != nil {
 			t.Fatalf("Install: %v", err)
 		}
-		cookie, state := cookieFrom(t, begun.Header()), mustQuery(t, begun.Msg.GetUrl(), "state")
+		cookie, state := cookieFrom(t, rpcmount.HTTPHeader(call.ResponseHeader())), mustQuery(t, begun.GetUrl(), "state")
 		code := h.slack.Install(app.GetAppId(), acmeTeam)
 		request := httptest.NewRequest(http.MethodGet, slackconsole.CatalogueCallbackPath+"?"+url.Values{"code": {code}, "state": {state}}.Encode(), nil)
 		request.AddCookie(&http.Cookie{Name: access.ConnectCookieName, Value: cookie})
@@ -189,11 +191,11 @@ func TestAConnectedWorkspaceWithNoOwnerIsInvisibleToScopedRoles(t *testing.T) {
 		"a scoped viewer":   scoped,
 		"a scoped operator": asSlackIdentity(northOp),
 	} {
-		got, err := h.console.GetSlackStatus(who, connect.NewRequest(&directoryrosterv1.GetSlackStatusRequest{}))
+		got, err := h.console.GetSlackStatus(who, &directoryrosterv1.GetSlackStatusRequest{})
 		if err != nil {
 			t.Fatalf("%s: %v", name, err)
 		}
-		for _, row := range got.Msg.GetWorkspaces() {
+		for _, row := range got.GetWorkspaces() {
 			if row.GetWorkspace() == "initech" {
 				t.Errorf("%s was shown the ownerless workspace initech", name)
 			}

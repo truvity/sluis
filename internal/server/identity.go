@@ -2,10 +2,8 @@ package server
 
 import (
 	"context"
-	"errors"
-	"fmt"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/truvity/sluis/internal/access"
 )
@@ -28,11 +26,11 @@ func IdentityFrom(ctx context.Context) (access.Identity, bool) {
 func requireRole(ctx context.Context, want access.Role) (access.Identity, error) {
 	id, ok := IdentityFrom(ctx)
 	if !ok {
-		return access.Identity{}, connect.NewError(connect.CodeUnauthenticated, errors.New("sign in first"))
+		return access.Identity{}, connect.NewError(connect.CodeUnauthenticated, "sign in first")
 	}
 	if !id.Can(want) {
-		return access.Identity{}, connect.NewError(connect.CodePermissionDenied,
-			fmt.Errorf("this needs the %s role", want))
+		return access.Identity{}, connect.Errorf(connect.CodePermissionDenied,
+			"this needs the %s role", want)
 	}
 	return id, nil
 }
@@ -47,11 +45,11 @@ func requireRole(ctx context.Context, want access.Role) (access.Identity, error)
 func requireWorkspace(ctx context.Context, want access.Role, workspace string) (access.Identity, error) {
 	id, ok := IdentityFrom(ctx)
 	if !ok {
-		return access.Identity{}, connect.NewError(connect.CodeUnauthenticated, errors.New("sign in first"))
+		return access.Identity{}, connect.NewError(connect.CodeUnauthenticated, "sign in first")
 	}
 	if !id.CanFor(want, workspace) {
-		return access.Identity{}, connect.NewError(connect.CodePermissionDenied,
-			fmt.Errorf("this needs the %s role over %s", want, workspace))
+		return access.Identity{}, connect.Errorf(connect.CodePermissionDenied,
+			"this needs the %s role over %s", want, workspace)
 	}
 	return id, nil
 }
@@ -61,11 +59,11 @@ func requireWorkspace(ctx context.Context, want access.Role, workspace string) (
 func requireAnywhere(ctx context.Context, want access.Role) (access.Identity, error) {
 	id, ok := IdentityFrom(ctx)
 	if !ok {
-		return access.Identity{}, connect.NewError(connect.CodeUnauthenticated, errors.New("sign in first"))
+		return access.Identity{}, connect.NewError(connect.CodeUnauthenticated, "sign in first")
 	}
 	if !id.CanAnywhere(want) {
-		return access.Identity{}, connect.NewError(connect.CodePermissionDenied,
-			fmt.Errorf("this needs the %s role", want))
+		return access.Identity{}, connect.Errorf(connect.CodePermissionDenied,
+			"this needs the %s role", want)
 	}
 	return id, nil
 }

@@ -2,12 +2,10 @@ package console
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
 	"github.com/truvity/sluis/internal/access"
@@ -23,17 +21,17 @@ import (
 // watch); a second one under a minute after the first is refused, so the
 // button cannot be leaned on. It is recorded as a configuration change.
 func (c *Service) RequestGitHubPass(
-	ctx context.Context, req *connect.Request[directoryrosterv1.RequestGitHubPassRequest],
-) (*connect.Response[directoryrosterv1.RequestGitHubPassResponse], error) {
+	ctx context.Context, req *directoryrosterv1.RequestGitHubPassRequest,
+) (*directoryrosterv1.RequestGitHubPassResponse, error) {
 	if _, err := requireAnywhere(ctx, access.RoleOperator); err != nil {
 		return nil, err
 	}
-	org := strings.TrimSpace(req.Msg.GetOrg())
+	org := strings.TrimSpace(req.GetOrg())
 	if !status.ValidOrg(org) {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("%q is not an organisation login", org))
+		return nil, connect.Errorf(connect.CodeInvalidArgument, "%q is not an organisation login", org)
 	}
 	if c.deps.Orgs == nil {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("this deployment keeps no state in Kubernetes, so there is no controller to ask"))
+		return nil, connect.NewError(connect.CodeFailedPrecondition, "this deployment keeps no state in Kubernetes, so there is no controller to ask")
 	}
 	who, err := c.requireOrg(ctx, access.RoleOperator, org)
 	if err != nil {
@@ -41,24 +39,24 @@ func (c *Service) RequestGitHubPass(
 	}
 	records, err := c.deps.Orgs.List(ctx)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnavailable, err)
+		return nil, connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
 	}
 	if record, connected := recordOf(records, org); !connected || !record.Installed() {
-		return nil, connect.NewError(connect.CodeFailedPrecondition,
-			fmt.Errorf("GitHub organisation %s is not installed: there is nothing for a pass to act with", org))
+		return nil, connect.Errorf(connect.CodeFailedPrecondition,
+			"GitHub organisation %s is not installed: there is nothing for a pass to act with", org)
 	}
 	now := time.Now().UTC()
 	kept, last, err := c.deps.Orgs.RequestPass(ctx, connection.PassRequest{Org: org, At: now, By: who.Who()})
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnavailable, err)
+		return nil, connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
 	}
 	if !kept {
-		return nil, connect.NewError(connect.CodeResourceExhausted, fmt.Errorf(
+		return nil, connect.Errorf(connect.CodeResourceExhausted,
 			"a pass over %s was asked for %s ago: the controller notices a request within a minute, so wait for it",
-			org, now.Sub(last).Round(time.Second)))
+			org, now.Sub(last).Round(time.Second))
 	}
 	c.record(ctx, audit.GitHubPassRequested(identityActor(who), org))
 	c.notify(ctx, port.ControllerGitHub, org)
 	c.log().InfoContext(ctx, "a GitHub pass was requested", logattr.SafeString("org", org), logattr.SafeString("by", who.Who()))
-	return connect.NewResponse(&directoryrosterv1.RequestGitHubPassResponse{RequestedAt: timestampOf(now)}), nil
+	return &directoryrosterv1.RequestGitHubPassResponse{RequestedAt: timestampOf(now)}, nil
 }

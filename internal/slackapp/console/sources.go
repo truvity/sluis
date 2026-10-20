@@ -2,14 +2,14 @@ package console
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"slices"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
 	"github.com/truvity/sluis/internal/consolecall"
+	"github.com/truvity/sluis/internal/rpcmount"
 	"github.com/truvity/sluis/internal/slackroster/reconcile"
 )
 
@@ -23,11 +23,11 @@ import (
 func (c *Service) checkSources(ctx context.Context, sources, members []string, owner string, ordinary bool) error {
 	facts := consolecall.FactsFrom(ctx)
 	if facts == nil {
-		return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("this deployment reads no directory, so no source can be checked"))
+		return connect.Errorf(connect.CodeFailedPrecondition, "this deployment reads no directory, so no source can be checked")
 	}
 	if ordinary && owner == "" {
 		return connect.NewError(connect.CodeFailedPrecondition,
-			errors.New(reconcile.NoOwner))
+			reconcile.NoOwner)
 	}
 	for _, source := range sources {
 		group, ok := facts.Groups[source]
@@ -35,17 +35,17 @@ func (c *Service) checkSources(ctx context.Context, sources, members []string, o
 			return uncovered(source)
 		}
 		if group.Err != "" {
-			return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("source %q is not a group address: %s", source, group.Err))
+			return connect.Errorf(connect.CodeInvalidArgument, "source %q is not a group address: %s", source, group.Err)
 		}
 		switch {
 		case !group.Found && facts.Users[source].Found && facts.Users[source].Err == "" && facts.Users[source].Workspace != "":
-			return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
-				"%s is a person's address, not a group: enter it under Individual addresses", source))
+			return connect.Errorf(connect.CodeInvalidArgument,
+				"%s is a person's address, not a group: enter it under Individual addresses", source)
 		case !group.Found:
-			return connect.NewError(connect.CodeInvalidArgument,
-				fmt.Errorf("source %s is not a group of a connected directory: pick it from the list", source))
+			return connect.Errorf(connect.CodeInvalidArgument,
+				"source %s is not a group of a connected directory: pick it from the list", source)
 		case ordinary && group.Workspace != owner:
-			return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
+			return rpcmount.NewError(connect.CodeInvalidArgument, fmt.Errorf(
 				"source %s belongs to another directory than the one that owns this workspace (%s): "+
 					"an ordinary channel is fed by its own directory's groups only; a Slack Connect channel takes any", source, owner))
 		}
@@ -57,7 +57,7 @@ func (c *Service) checkSources(ctx context.Context, sources, members []string, o
 // sends a fact for every address of the call, so a field without one is not the
 // console's, and nothing is taken on trust.
 func uncovered(address string) error {
-	return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("the directory facts of this call do not cover %s", address))
+	return connect.Errorf(connect.CodeFailedPrecondition, "the directory facts of this call do not cover %s", address)
 }
 
 // checkMembers is the rule on individual addresses: each is an active user
@@ -71,18 +71,18 @@ func (c *Service) checkMembers(facts *consolecall.DirectoryFacts, members []stri
 			return uncovered(member)
 		}
 		if group.Err != "" {
-			return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("member %q is not an email address: %s", member, group.Err))
+			return connect.Errorf(connect.CodeInvalidArgument, "member %q is not an email address: %s", member, group.Err)
 		}
 		if group.Found {
-			return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
-				"%s is a group, not a person: enter it under Directory groups", member))
+			return connect.Errorf(connect.CodeInvalidArgument,
+				"%s is a group, not a person: enter it under Directory groups", member)
 		}
 		user, ok := facts.Users[member]
 		if !ok {
 			return uncovered(member)
 		}
 		if user.Err != "" {
-			return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("member %q is not an email address: %s", member, user.Err))
+			return connect.Errorf(connect.CodeInvalidArgument, "member %q is not an email address: %s", member, user.Err)
 		}
 		dir := "a connected directory"
 		if ordinary {
@@ -90,13 +90,13 @@ func (c *Service) checkMembers(facts *consolecall.DirectoryFacts, members []stri
 		}
 		switch {
 		case user.Workspace == "" || (ordinary && user.Workspace != owner):
-			return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("%s is not a user of %s — %s", member, dir, where))
+			return connect.Errorf(connect.CodeInvalidArgument, "%s is not a user of %s — %s", member, dir, where)
 		case !user.Found:
-			return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
-				"%s is not a user of %s: the directory does not know that address — %s", member, dir, where))
+			return connect.Errorf(connect.CodeInvalidArgument,
+				"%s is not a user of %s: the directory does not know that address — %s", member, dir, where)
 		case user.Suspended:
-			return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
-				"%s is suspended in %s: only an active user can be listed", member, dir))
+			return connect.Errorf(connect.CodeInvalidArgument,
+				"%s is suspended in %s: only an active user can be listed", member, dir)
 		}
 	}
 	return nil

@@ -11,7 +11,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
 	"github.com/truvity/sluis/internal/consolecall"
@@ -19,6 +19,7 @@ import (
 	"github.com/truvity/sluis/internal/githubroster/connection"
 	"github.com/truvity/sluis/internal/githubroster/consolewire"
 	"github.com/truvity/sluis/internal/modcall"
+	"github.com/truvity/sluis/internal/rpcmount"
 )
 
 // moduleOver is the GitHub module's server over the stores the console under
@@ -42,8 +43,8 @@ func TestTheGitHubOperationsAreTheSameLocalAndRemote(t *testing.T) {
 	seedOrganisations(t, store)
 	_, console := ownerConsoleOver(t, store)
 	ask := func() error {
-		_, err := console.ChangeGitHubOrganisationOwner(asIdentity(everywhere), connect.NewRequest(
-			&directoryrosterv1.ChangeGitHubOrganisationOwnerRequest{Org: "initech", OwnerDirectory: "C0north"}))
+		_, err := console.ChangeGitHubOrganisationOwner(asIdentity(everywhere),
+			&directoryrosterv1.ChangeGitHubOrganisationOwnerRequest{Org: "initech", OwnerDirectory: "C0north"})
 		return err
 	}
 	if err := ask(); err != nil {
@@ -82,7 +83,7 @@ func TestAConsoleMethodRefusesAnotherCallerClass(t *testing.T) {
 		URLs:  map[string]string{consolewire.Module: srv.URL},
 		Token: func(context.Context, string) (string, error) { return "token", nil },
 	}
-	_, err := console.RequestGitHubPass(asIdentity(everywhere), connect.NewRequest(&directoryrosterv1.RequestGitHubPassRequest{Org: "globex"}))
+	_, err := console.RequestGitHubPass(asIdentity(everywhere), &directoryrosterv1.RequestGitHubPassRequest{Org: "globex"})
 	if connect.CodeOf(err) != connect.CodePermissionDenied {
 		t.Fatalf("a console method called as the issuer = %v, want permission denied", err)
 	}
@@ -98,8 +99,7 @@ func TestTheModuleRefusesWhatTheSnapshotMayNotDo(t *testing.T) {
 	store := newMemoryConnections()
 	seedOrganisations(t, store)
 	_, console := ownerConsoleOver(t, store)
-	_, err := console.DisconnectGitHubOrganisation(asIdentity(southOp), connect.NewRequest(
-		&directoryrosterv1.DisconnectGitHubOrganisationRequest{Org: "globex"}))
+	_, err := console.DisconnectGitHubOrganisation(asIdentity(southOp), &directoryrosterv1.DisconnectGitHubOrganisationRequest{Org: "globex"})
 	if connect.CodeOf(err) != connect.CodePermissionDenied {
 		t.Fatalf("a foreign operator = %v, want permission denied", err)
 	}
@@ -107,8 +107,7 @@ func TestTheModuleRefusesWhatTheSnapshotMayNotDo(t *testing.T) {
 		t.Errorf("a refused disconnect changed the records: %+v", records)
 	}
 	// And a snapshot of nobody is unauthenticated before it reaches the module.
-	_, err = console.DisconnectGitHubOrganisation(context.Background(), connect.NewRequest(
-		&directoryrosterv1.DisconnectGitHubOrganisationRequest{Org: "globex"}))
+	_, err = console.DisconnectGitHubOrganisation(context.Background(), &directoryrosterv1.DisconnectGitHubOrganisationRequest{Org: "globex"})
 	if connect.CodeOf(err) != connect.CodeUnauthenticated {
 		t.Errorf("nobody = %v, want unauthenticated", err)
 	}
@@ -131,11 +130,12 @@ func TestAFailedCallbackForwardIsNotRetried(t *testing.T) {
 	startFakeGitHub(t)
 	store := newMemoryConnections()
 	server, console := connectServer(t, store)
-	begun, err := console.BeginGitHubConnect(operator(), connect.NewRequest(&directoryrosterv1.BeginGitHubConnectRequest{Org: "globex"}))
+	callCtx, call := rpcmount.ServerContext(operator())
+	begun, err := console.BeginGitHubConnect(callCtx, &directoryrosterv1.BeginGitHubConnectRequest{Org: "globex"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	cookie, state := cookieFrom(t, begun.Header()), mustQuery(t, begun.Msg.GetUrl(), "state")
+	cookie, state := cookieFrom(t, rpcmount.HTTPHeader(call.ResponseHeader())), mustQuery(t, begun.GetUrl(), "state")
 
 	failing := &countingCaller{err: errors.New("lambda: throttled secret-detail-1234")}
 	console.deps.Modules.GitHub = failing
@@ -161,11 +161,12 @@ func TestAFailedCallbackForwardIsNotRetried(t *testing.T) {
 func TestAFlowRefusalFromTheModuleIsThePage(t *testing.T) {
 	startFakeGitHub(t)
 	server, console := connectServer(t, newMemoryConnections())
-	begun, err := console.BeginGitHubConnect(operator(), connect.NewRequest(&directoryrosterv1.BeginGitHubConnectRequest{Org: "globex"}))
+	callCtx, call := rpcmount.ServerContext(operator())
+	begun, err := console.BeginGitHubConnect(callCtx, &directoryrosterv1.BeginGitHubConnectRequest{Org: "globex"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	cookie, state := cookieFrom(t, begun.Header()), mustQuery(t, begun.Msg.GetUrl(), "state")
+	cookie, state := cookieFrom(t, rpcmount.HTTPHeader(call.ResponseHeader())), mustQuery(t, begun.GetUrl(), "state")
 	console.deps.Modules.GitHub = problemCaller{&consolecall.Problem{Summary: "no thanks", Status: http.StatusForbidden}}
 	got := redirect(server.githubCallback, githubCallbackPath, url.Values{"code": {"created"}, "state": {state}}, cookie)
 	if got.Code != http.StatusForbidden || !strings.Contains(got.Body.String(), "no thanks") {
@@ -244,9 +245,9 @@ func TestALinkCallbackNeedsItsStateAndIsNotRetried(t *testing.T) {
 // the caller snapshot.
 func TestImportingLinksIsRefusedToAViewer(t *testing.T) {
 	r := newLinkRig(t, directory{})
-	_, err := r.console.ImportGitHubLinks(viewer(), connect.NewRequest(&directoryrosterv1.ImportGitHubLinksRequest{
+	_, err := r.console.ImportGitHubLinks(viewer(), &directoryrosterv1.ImportGitHubLinksRequest{
 		Origin: "spreadsheet", Records: []*directoryrosterv1.GitHubLinkRecord{{Login: "ada-gh", ApprovedBy: "ops"}},
-	}))
+	})
 	if connect.CodeOf(err) != connect.CodePermissionDenied {
 		t.Errorf("a viewer = %v, want permission denied", err)
 	}

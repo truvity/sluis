@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
 	"github.com/truvity/sluis/internal/consolecall"
@@ -154,7 +154,7 @@ func TestRequestingAPassIsForTheOrganisationsOperatorsAndRateLimited(t *testing.
 	seed(t, store)
 	svc := service(t, store)
 	ask := func(ctx context.Context, org string) error {
-		_, err := svc.RequestGitHubPass(ctx, connect.NewRequest(&directoryrosterv1.RequestGitHubPassRequest{Org: org}))
+		_, err := svc.RequestGitHubPass(ctx, &directoryrosterv1.RequestGitHubPassRequest{Org: org})
 		return err
 	}
 	if err := ask(southOp(), "globex"); !refused(err) {
@@ -187,8 +187,7 @@ func TestOnlyTheInstallationWideOperatorChangesAnOwner(t *testing.T) {
 	seed(t, store)
 	svc := service(t, store)
 	change := func(ctx context.Context, owner string) error {
-		_, err := svc.ChangeGitHubOrganisationOwner(ctx, connect.NewRequest(
-			&directoryrosterv1.ChangeGitHubOrganisationOwnerRequest{Org: "initech", OwnerDirectory: owner}))
+		_, err := svc.ChangeGitHubOrganisationOwner(ctx, &directoryrosterv1.ChangeGitHubOrganisationOwnerRequest{Org: "initech", OwnerDirectory: owner})
 		return err
 	}
 	if err := change(northOp(), "C0north"); !refused(err) {
@@ -215,7 +214,7 @@ func TestDisconnectingAsksWhoOwnsTheOrganisation(t *testing.T) {
 	seed(t, store)
 	svc := service(t, store)
 	disconnect := func(ctx context.Context) error {
-		_, err := svc.DisconnectGitHubOrganisation(ctx, connect.NewRequest(&directoryrosterv1.DisconnectGitHubOrganisationRequest{Org: "globex"}))
+		_, err := svc.DisconnectGitHubOrganisation(ctx, &directoryrosterv1.DisconnectGitHubOrganisationRequest{Org: "globex"})
 		return err
 	}
 	if err := disconnect(southOp()); !refused(err) {
@@ -352,7 +351,7 @@ func TestConfirmingRemovalsIsRefusedToAForeignOperator(t *testing.T) {
 	store := newMemoryConnections()
 	seed(t, store)
 	svc := service(t, store)
-	_, err := svc.ConfirmGitHubRemovals(southOp(), connect.NewRequest(&directoryrosterv1.ConfirmGitHubRemovalsRequest{Org: "globex", Fingerprint: "abc"}))
+	_, err := svc.ConfirmGitHubRemovals(southOp(), &directoryrosterv1.ConfirmGitHubRemovalsRequest{Org: "globex", Fingerprint: "abc"})
 	if !refused(err) {
 		t.Errorf("a foreign operator = %v, want permission denied", err)
 	}

@@ -12,7 +12,7 @@ import (
 
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/githubapp"
@@ -153,15 +153,15 @@ const adapterKubernetes = "kubernetes"
 
 // ListGitHubApps implements the Apps list: every App in one shape.
 func (c *Service) ListGitHubApps(
-	ctx context.Context, _ *connect.Request[directoryrosterv1.ListGitHubAppsRequest],
-) (*connect.Response[directoryrosterv1.ListGitHubAppsResponse], error) {
+	ctx context.Context, _ *directoryrosterv1.ListGitHubAppsRequest,
+) (*directoryrosterv1.ListGitHubAppsResponse, error) {
 	id, err := c.requireAnyOrg(ctx, access.RoleViewer)
 	if err != nil {
 		return nil, err
 	}
 	specs, facts, err := c.githubAppSpecs(ctx)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnavailable, err)
+		return nil, connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
 	}
 	// Only the Apps of organisations the caller may view: a scoped viewer
 	// never sees another company's organisation, or an App in it.
@@ -182,7 +182,7 @@ func (c *Service) ListGitHubApps(
 	for i := range views {
 		c.decorateApp(views[i], id, &specs[i], ownerDomains(dirs))
 	}
-	return connect.NewResponse(&directoryrosterv1.ListGitHubAppsResponse{
+	return &directoryrosterv1.ListGitHubAppsResponse{
 		OwnerChoices: choices, MayConnectWithoutOwner: mayNone,
 		Apps:                views,
 		ConnectingAvailable: facts.connecting,
@@ -191,7 +191,7 @@ func (c *Service) ListGitHubApps(
 		RunnerTiers:         facts.tiers,
 		BoundOrganisations:  facts.bound,
 		LinkUrl:             facts.linkURL,
-	}), nil
+	}, nil
 }
 
 // decorateApp sets what an App's view says of the caller and of the
@@ -208,12 +208,12 @@ func (c *Service) decorateApp(app *directoryrosterv1.GitHubApp, id access.Identi
 
 // GetGitHubApp implements one App's page.
 func (c *Service) GetGitHubApp(
-	ctx context.Context, req *connect.Request[directoryrosterv1.GetGitHubAppRequest],
-) (*connect.Response[directoryrosterv1.GetGitHubAppResponse], error) {
+	ctx context.Context, req *directoryrosterv1.GetGitHubAppRequest,
+) (*directoryrosterv1.GetGitHubAppResponse, error) {
 	if _, err := requireAnywhere(ctx, access.RoleViewer); err != nil {
 		return nil, err
 	}
-	spec, err := c.githubAppSpec(ctx, req.Msg.GetId())
+	spec, err := c.githubAppSpec(ctx, req.GetId())
 	if err != nil {
 		return nil, err
 	}
@@ -227,7 +227,7 @@ func (c *Service) GetGitHubApp(
 		return nil, err
 	}
 	c.decorateApp(app, id, &spec, ownerDomains(dirs))
-	return connect.NewResponse(&directoryrosterv1.GetGitHubAppResponse{App: app}), nil
+	return &directoryrosterv1.GetGitHubAppResponse{App: app}, nil
 }
 
 // ListGitHubAppTokens implements an App's *Recent tokens*: the last
@@ -244,15 +244,15 @@ func (c *Service) GetGitHubApp(
 // Operator, not viewer: a request names who asked for it, as the Audit
 // page does.
 func (c *Service) ListGitHubAppTokens(
-	ctx context.Context, req *connect.Request[directoryrosterv1.ListGitHubAppTokensRequest],
-) (*connect.Response[directoryrosterv1.ListGitHubAppTokensResponse], error) {
+	ctx context.Context, req *directoryrosterv1.ListGitHubAppTokensRequest,
+) (*directoryrosterv1.ListGitHubAppTokensResponse, error) {
 	if _, err := requireAnywhere(ctx, access.RoleOperator); err != nil {
 		return nil, err
 	}
 	// The App first, so an id nothing declares is not_found rather than an
 	// empty list, and a store that cannot be read says so rather than
 	// reporting that nothing has been asked for.
-	spec, err := c.githubAppSpec(ctx, req.Msg.GetId())
+	spec, err := c.githubAppSpec(ctx, req.GetId())
 	if err != nil {
 		return nil, err
 	}
@@ -263,13 +263,13 @@ func (c *Service) ListGitHubAppTokens(
 	}
 	switch {
 	case spec.purpose != appTokens:
-		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
-			"%s mints no installation tokens: only an App the catalogue declares does", spec.id))
+		return nil, connect.Errorf(connect.CodeFailedPrecondition,
+			"%s mints no installation tokens: only an App the catalogue declares does", spec.id)
 	case c.deps.Mints == nil:
-		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New(
-			"this deployment mints no installation tokens here, so it keeps none to show"))
+		return nil, connect.NewError(connect.CodeFailedPrecondition,
+			"this deployment mints no installation tokens here, so it keeps none to show")
 	}
-	return connect.NewResponse(TokensOf(c.deps.Mints, spec.id)), nil
+	return TokensOf(c.deps.Mints, spec.id), nil
 }
 
 // TokensOf is the ring's last requests of one App, as the console tells them.
@@ -293,12 +293,12 @@ func TokensOf(ring *mints.Ring, app string) *directoryrosterv1.ListGitHubAppToke
 
 // CheckGitHubApp asks GitHub again about one App, whichever kind it is.
 func (c *Service) CheckGitHubApp(
-	ctx context.Context, req *connect.Request[directoryrosterv1.CheckGitHubAppRequest],
-) (*connect.Response[directoryrosterv1.CheckGitHubAppResponse], error) {
+	ctx context.Context, req *directoryrosterv1.CheckGitHubAppRequest,
+) (*directoryrosterv1.CheckGitHubAppResponse, error) {
 	if _, err := requireAnywhere(ctx, access.RoleOperator); err != nil {
 		return nil, err
 	}
-	spec, err := c.githubAppSpec(ctx, req.Msg.GetId())
+	spec, err := c.githubAppSpec(ctx, req.GetId())
 	if err != nil {
 		return nil, err
 	}
@@ -312,7 +312,7 @@ func (c *Service) CheckGitHubApp(
 		return nil, err
 	}
 	c.decorateApp(app, id, &spec, ownerDomains(dirs))
-	return connect.NewResponse(&directoryrosterv1.CheckGitHubAppResponse{App: app}), nil
+	return &directoryrosterv1.CheckGitHubAppResponse{App: app}, nil
 }
 
 // githubAppSpec finds one App by the id the list gives it.
@@ -320,14 +320,14 @@ func (c *Service) githubAppSpec(ctx context.Context, id string) (githubAppSpec, 
 	id = strings.TrimSpace(id)
 	specs, _, err := c.githubAppSpecs(ctx)
 	if err != nil {
-		return githubAppSpec{}, connect.NewError(connect.CodeUnavailable, err)
+		return githubAppSpec{}, connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
 	}
 	for i := range specs {
 		if specs[i].id == id {
 			return specs[i], nil
 		}
 	}
-	return githubAppSpec{}, connect.NewError(connect.CodeNotFound, fmt.Errorf("no App %q is declared or created here", id))
+	return githubAppSpec{}, connect.Errorf(connect.CodeNotFound, "no App %q is declared or created here", id)
 }
 
 // githubAppViews renders every spec, asking GitHub about each in
@@ -1070,7 +1070,7 @@ func permissionRows(declared, app, installation map[string]string) []*directoryr
 func (c *Service) catalogueStore() (catalogueapp.Store, error) {
 	if c.deps.CatalogueApps == nil {
 		return nil, connect.NewError(connect.CodeFailedPrecondition,
-			errors.New("this deployment keeps no state in Kubernetes, so a catalogue App's key would not survive a restart"))
+			"this deployment keeps no state in Kubernetes, so a catalogue App's key would not survive a restart")
 	}
 	return c.deps.CatalogueApps, nil
 }

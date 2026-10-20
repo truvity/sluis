@@ -5,10 +5,12 @@ import (
 	"errors"
 	"net/http"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/truvity/sluis/audit/index"
+	"github.com/truvity/sluis/audit/internal/rpcmount"
 	"github.com/truvity/sluis/audit/internal/telemetry"
 	"github.com/truvity/sluis/audit/sdk/auth"
 	auditv1 "github.com/truvity/sluis/audit/sdk/gen/audit/v1"
@@ -26,25 +28,28 @@ type Handler struct {
 	Authenticator auth.Authenticator
 }
 
-// NewHandler returns the path and handler to mount.
-func NewHandler(s *Service, a auth.Authenticator, opts ...connect.HandlerOption) (string, http.Handler) {
-	all := append(append(jsonwire.HandlerOptions(), telemetry.ConnectOptions()...), opts...)
-	return auditv1connect.NewQueryServiceHandler(&Handler{Service: s, Authenticator: a}, all...)
+// NewHandler returns the path and handler to mount. opts are the HTTP
+// handler's, after this repository's own.
+func NewHandler(s *Service, a auth.Authenticator, opts ...connecthttp.Option) (string, http.Handler) {
+	rpc := rpcmount.NewServer(telemetry.ConnectServerInterceptor())
+	auditv1connect.RegisterQueryServiceHandler(rpc, &Handler{Service: s, Authenticator: a})
+	return rpcmount.Handler(rpc, append(jsonwire.HandlerOptions(), opts...)...)
 }
 
 // Search implements the service.
 func (h *Handler) Search(
-	ctx context.Context, req *connect.Request[auditv1.SearchRequest],
-) (*connect.Response[auditv1.SearchResponse], error) {
-	who, err := h.who(ctx, req.Header())
+	ctx context.Context, req *auditv1.SearchRequest,
+) (*auditv1.SearchResponse, error) {
+	info := rpcmount.CallInfo(ctx)
+	who, err := h.who(ctx, rpcmount.HTTPHeader(info.RequestHeader()))
 	if err != nil {
 		return nil, err
 	}
-	page, grant, err := h.Service.Search(ctx, who, req.Msg)
+	page, grant, err := h.Service.Search(ctx, who, req)
 	if err != nil {
 		return nil, wire(err)
 	}
-	cursors, err := h.Service.Cursors(req.Msg, grant, page)
+	cursors, err := h.Service.Cursors(req, grant, page)
 	if err != nil {
 		return nil, wire(err)
 	}
@@ -57,19 +62,20 @@ func (h *Handler) Search(
 	// what was actually asked — the grant may have narrowed it — and so that a
 	// cursor has something to be checked against.
 	echo := &auditv1.SearchRequest{
-		Profile: req.Msg.GetProfile(), Filter: req.Msg.GetFilter(),
-		Sort: req.Msg.GetSort(), Limit: req.Msg.GetLimit(),
+		Profile: req.GetProfile(), Filter: req.GetFilter(),
+		Sort: req.GetSort(), Limit: req.GetLimit(),
 	}
-	return connect.NewResponse(&auditv1.SearchResponse{
+	return &auditv1.SearchResponse{
 		Items: items, Query: echo, Cursors: cursors,
-	}), nil
+	}, nil
 }
 
 // Access implements the service.
 func (h *Handler) Access(
-	ctx context.Context, req *connect.Request[auditv1.AccessRequest],
-) (*connect.Response[auditv1.AccessResponse], error) {
-	who, err := h.who(ctx, req.Header())
+	ctx context.Context, _ *auditv1.AccessRequest,
+) (*auditv1.AccessResponse, error) {
+	info := rpcmount.CallInfo(ctx)
+	who, err := h.who(ctx, rpcmount.HTTPHeader(info.RequestHeader()))
 	if err != nil {
 		return nil, err
 	}
@@ -95,18 +101,19 @@ func (h *Handler) Access(
 		}
 		out.Profiles = append(out.Profiles, access)
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
 // Facets implements the service.
 func (h *Handler) Facets(
-	ctx context.Context, req *connect.Request[auditv1.FacetsRequest],
-) (*connect.Response[auditv1.FacetsResponse], error) {
-	who, err := h.who(ctx, req.Header())
+	ctx context.Context, req *auditv1.FacetsRequest,
+) (*auditv1.FacetsResponse, error) {
+	info := rpcmount.CallInfo(ctx)
+	who, err := h.who(ctx, rpcmount.HTTPHeader(info.RequestHeader()))
 	if err != nil {
 		return nil, err
 	}
-	facets, _, err := h.Service.Facets(ctx, who, req.Msg)
+	facets, _, err := h.Service.Facets(ctx, who, req)
 	if err != nil {
 		return nil, wire(err)
 	}
@@ -118,18 +125,19 @@ func (h *Handler) Facets(
 		}
 		out = append(out, &auditv1.Facet{Field: f.Field, Values: values})
 	}
-	return connect.NewResponse(&auditv1.FacetsResponse{Facets: out}), nil
+	return &auditv1.FacetsResponse{Facets: out}, nil
 }
 
 // Get implements the service.
 func (h *Handler) Get(
-	ctx context.Context, req *connect.Request[auditv1.GetRequest],
-) (*connect.Response[auditv1.GetResponse], error) {
-	who, err := h.who(ctx, req.Header())
+	ctx context.Context, req *auditv1.GetRequest,
+) (*auditv1.GetResponse, error) {
+	info := rpcmount.CallInfo(ctx)
+	who, err := h.who(ctx, rpcmount.HTTPHeader(info.RequestHeader()))
 	if err != nil {
 		return nil, err
 	}
-	row, where, _, err := h.Service.Get(ctx, who, req.Msg)
+	row, where, _, err := h.Service.Get(ctx, who, req)
 	if err != nil {
 		return nil, wire(err)
 	}
@@ -140,34 +148,35 @@ func (h *Handler) Get(
 	if !where.VerifiedAt.IsZero() {
 		provenance.VerifiedAt = timestamppb.New(where.VerifiedAt)
 	}
-	return connect.NewResponse(&auditv1.GetResponse{Record: asRecord(row), Provenance: provenance}), nil
+	return &auditv1.GetResponse{Record: asRecord(row), Provenance: provenance}, nil
 }
 
 func (h *Handler) who(ctx context.Context, header http.Header) (auth.Principal, error) {
 	if h.Authenticator == nil {
 		return auth.Principal{}, connect.NewError(connect.CodeInternal,
-			errors.New("query: no authenticator is configured, and this would otherwise answer anybody"))
+			"query: no authenticator is configured, and this would otherwise answer anybody")
 	}
 	p, err := h.Authenticator.Principal(ctx, &http.Request{Header: header})
 	if err != nil {
-		return auth.Principal{}, connect.NewError(connect.CodeUnauthenticated, err)
+		return auth.Principal{}, connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
 	return p, nil
 }
 
 // Resolve implements the service.
 func (h *Handler) Resolve(
-	ctx context.Context, req *connect.Request[auditv1.ResolveRequest],
-) (*connect.Response[auditv1.ResolveResponse], error) {
-	who, err := h.who(ctx, req.Header())
+	ctx context.Context, req *auditv1.ResolveRequest,
+) (*auditv1.ResolveResponse, error) {
+	info := rpcmount.CallInfo(ctx)
+	who, err := h.who(ctx, rpcmount.HTTPHeader(info.RequestHeader()))
 	if err != nil {
 		return nil, err
 	}
-	id, err := h.Service.Resolve(ctx, who, req.Msg)
+	id, err := h.Service.Resolve(ctx, who, req)
 	if err != nil {
 		return nil, wire(err)
 	}
-	return connect.NewResponse(&auditv1.ResolveResponse{Identifier: id}), nil
+	return &auditv1.ResolveResponse{Identifier: id}, nil
 }
 
 // wire maps an error to a code a client can act on.
@@ -184,23 +193,23 @@ func (h *Handler) Resolve(
 func wire(err error) error {
 	switch {
 	case errors.Is(err, auth.ErrDenied):
-		return connect.NewError(connect.CodePermissionDenied, err)
+		return connect.NewError(connect.CodePermissionDenied, err.Error()).WithCause(err)
 	case errors.Is(err, ErrCursorMismatch), errors.Is(err, ErrMalformed):
-		return connect.NewError(connect.CodeInvalidArgument, err)
+		return connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	case errors.Is(err, ErrTooMuch):
-		return connect.NewError(connect.CodeResourceExhausted, err)
+		return connect.NewError(connect.CodeResourceExhausted, err.Error()).WithCause(err)
 	case errors.Is(err, ErrNotOffered):
 		// Not configured here is not the caller's mistake and not a fault to
 		// retry: it is a thing this deployment does not do.
-		return connect.NewError(connect.CodeUnimplemented, err)
+		return connect.NewError(connect.CodeUnimplemented, err.Error()).WithCause(err)
 	case errors.Is(err, ErrNotFound):
-		return connect.NewError(connect.CodeNotFound, err)
+		return connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
 	case errors.Is(err, ErrErased):
 		// Not a fault and not the caller's mistake: an erasure did what it is
 		// for. Retrying will never succeed, which is what this code says.
-		return connect.NewError(connect.CodeFailedPrecondition, err)
+		return connect.NewError(connect.CodeFailedPrecondition, err.Error()).WithCause(err)
 	default:
-		return connect.NewError(connect.CodeUnavailable, err)
+		return connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
 	}
 }
 
@@ -243,30 +252,32 @@ func asRecord(r index.Row) *auditv1.Record {
 
 // Export implements the service.
 func (h *Handler) Export(
-	ctx context.Context, req *connect.Request[auditv1.ExportRequest],
-) (*connect.Response[auditv1.ExportResponse], error) {
-	who, err := h.who(ctx, req.Header())
+	ctx context.Context, req *auditv1.ExportRequest,
+) (*auditv1.ExportResponse, error) {
+	info := rpcmount.CallInfo(ctx)
+	who, err := h.who(ctx, rpcmount.HTTPHeader(info.RequestHeader()))
 	if err != nil {
 		return nil, err
 	}
-	job, err := h.Service.Export(ctx, who, req.Msg)
+	job, err := h.Service.Export(ctx, who, req)
 	if err != nil {
 		return nil, wire(err)
 	}
-	return connect.NewResponse(&auditv1.ExportResponse{
+	return &auditv1.ExportResponse{
 		JobId: job.ID, State: job.State(),
-	}), nil
+	}, nil
 }
 
 // GetExport implements the service.
 func (h *Handler) GetExport(
-	ctx context.Context, req *connect.Request[auditv1.GetExportRequest],
-) (*connect.Response[auditv1.GetExportResponse], error) {
-	who, err := h.who(ctx, req.Header())
+	ctx context.Context, req *auditv1.GetExportRequest,
+) (*auditv1.GetExportResponse, error) {
+	info := rpcmount.CallInfo(ctx)
+	who, err := h.who(ctx, rpcmount.HTTPHeader(info.RequestHeader()))
 	if err != nil {
 		return nil, err
 	}
-	job, url, err := h.Service.GetExport(ctx, who, req.Msg.GetJobId())
+	job, url, err := h.Service.GetExport(ctx, who, req.GetJobId())
 	if err != nil {
 		return nil, wire(err)
 	}
@@ -277,5 +288,5 @@ func (h *Handler) GetExport(
 	if !job.ExpiresAt.IsZero() {
 		out.ExpiresAt = timestamppb.New(job.ExpiresAt)
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }

@@ -2,14 +2,13 @@ package console
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"slices"
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
 	"github.com/truvity/sluis/internal/access"
@@ -17,6 +16,7 @@ import (
 	"github.com/truvity/sluis/internal/consoleauthz"
 	"github.com/truvity/sluis/internal/consolecall"
 	"github.com/truvity/sluis/internal/port"
+	"github.com/truvity/sluis/internal/rpcmount"
 	"github.com/truvity/sluis/internal/slackapp"
 	slackcatalogue "github.com/truvity/sluis/internal/slackapp/catalogue"
 	"github.com/truvity/sluis/internal/slackroster/connection"
@@ -78,7 +78,7 @@ func (c *Service) WorkspaceStore() (Workspaces, error) { return c.slackWorkspace
 func (c *Service) slackWorkspaceStore() (Workspaces, error) {
 	if c.d().SlackWorkspaces == nil {
 		return nil, connect.NewError(connect.CodeFailedPrecondition,
-			errors.New("this deployment keeps no state in Kubernetes, so a Slack bot token would not survive a restart"))
+			"this deployment keeps no state in Kubernetes, so a Slack bot token would not survive a restart")
 	}
 	return c.d().SlackWorkspaces, nil
 }
@@ -121,14 +121,14 @@ func (c *Service) BeginSlackWorkspaceConnect(
 	}
 	workspace := strings.TrimSpace(req.GetWorkspace())
 	if !status.ValidWorkspace(workspace) {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("%q is not a workspace key", workspace))
+		return nil, connect.Errorf(connect.CodeInvalidArgument, "%q is not a workspace key", workspace)
 	}
 	if err = c.requireDeclaredSlack(workspace); err != nil {
 		return nil, err
 	}
 	record, credential, found, err := store.Get(ctx, workspace)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnavailable, err)
+		return nil, connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
 	}
 	// Who may connect depends on whether there is anything to own it yet.
 	// A workspace already created belongs to its recorded owner (and to the
@@ -151,12 +151,12 @@ func (c *Service) BeginSlackWorkspaceConnect(
 	}
 	configToken := strings.TrimSpace(req.GetConfigurationToken())
 	if configToken != "" && !plausibleConfigurationToken(configToken) {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New(tokenHint))
+		return nil, connect.NewError(connect.CodeInvalidArgument, tokenHint)
 	}
 	app := slackWorkspaceApp(workspace)
 	manifest, err := slackcatalogue.Manifest(app, c.slackWorkspaceRedirect(caller))
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 
 	callCtx, cancel := context.WithTimeout(ctx, slackTimeout)
@@ -164,11 +164,11 @@ func (c *Service) BeginSlackWorkspaceConnect(
 	switch {
 	case !found:
 		if configToken == "" {
-			return nil, connect.NewError(connect.CodeInvalidArgument, errors.New(tokenHint))
+			return nil, connect.NewError(connect.CodeInvalidArgument, tokenHint)
 		}
 		created, err := c.slackSetup().CreateApp(callCtx, configToken, manifest)
 		if err != nil {
-			return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("slack refused to create the App: %w", err))
+			return nil, rpcmount.NewError(connect.CodeFailedPrecondition, fmt.Errorf("slack refused to create the App: %w", err))
 		}
 		record = connection.Record{
 			Workspace: workspace, Owner: owner, AppID: created.AppID, AuthorizeURL: created.OAuthAuthorizeURL,
@@ -179,7 +179,7 @@ func (c *Service) BeginSlackWorkspaceConnect(
 			ClientID: created.Credentials.ClientID, ClientSecret: created.Credentials.ClientSecret,
 		}
 		if err = store.Put(ctx, record, credential); err != nil {
-			return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf(
+			return nil, rpcmount.NewError(connect.CodeUnavailable, fmt.Errorf(
 				"slack created the App and it could not be saved here: delete it at %s and connect again: %w",
 				AppSettingsURL(created.AppID), err))
 		}
@@ -188,14 +188,14 @@ func (c *Service) BeginSlackWorkspaceConnect(
 		// through its manifest, and Slack changes a manifest only for a
 		// configuration token.
 		if _, err = c.slackSetup().UpdateApp(callCtx, configToken, record.AppID, manifest); err != nil {
-			return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("slack refused to update the App: %w", err))
+			return nil, rpcmount.NewError(connect.CodeFailedPrecondition, fmt.Errorf("slack refused to update the App: %w", err))
 		}
 		record.ManifestScopes = slices.Clone(connection.BotScopes)
 		if err = store.Put(ctx, record, credential); err != nil {
-			return nil, connect.NewError(connect.CodeUnavailable, err)
+			return nil, connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
 		}
 	case len(slackapp.MissingScopes(strings.Join(record.ManifestScopes, ","), connection.BotScopes)) > 0:
-		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
+		return nil, rpcmount.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
 			"the roster now asks for scopes %s was created without: paste an app configuration token so the App can be updated first, "+
 				"or a reinstall would grant nothing new", workspace))
 	}
@@ -205,7 +205,7 @@ func (c *Service) BeginSlackWorkspaceConnect(
 	// state is the console's to add: it signs, and pins the browser.
 	target, err := slackAuthorizeURL(record.AuthorizeURL, c.slackWorkspaceRedirect(caller), record.TeamID, connection.BotScopes)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	return &directoryrosterv1.BeginSlackWorkspaceConnectResponse{Url: target}, nil
 }
@@ -226,7 +226,7 @@ func (c *Service) RequestSlackPass(
 	}
 	workspace := strings.TrimSpace(req.GetWorkspace())
 	if !status.ValidWorkspace(workspace) {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("%q is not a workspace key", workspace))
+		return nil, connect.Errorf(connect.CodeInvalidArgument, "%q is not a workspace key", workspace)
 	}
 	who, err := c.requireSlack(ctx, caller, access.RoleOperator, workspace)
 	if err != nil {
@@ -237,18 +237,18 @@ func (c *Service) RequestSlackPass(
 		return nil, err
 	}
 	if !book[workspace].Installed() {
-		return nil, connect.NewError(connect.CodeFailedPrecondition,
-			fmt.Errorf("slack workspace %s is not installed: there is nothing for a pass to act with", workspace))
+		return nil, connect.Errorf(connect.CodeFailedPrecondition,
+			"slack workspace %s is not installed: there is nothing for a pass to act with", workspace)
 	}
 	now := time.Now().UTC()
 	kept, last, err := store.RequestPass(ctx, connection.PassRequest{Workspace: workspace, At: now, By: who.Who()})
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnavailable, err)
+		return nil, connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
 	}
 	if !kept {
-		return nil, connect.NewError(connect.CodeResourceExhausted, fmt.Errorf(
+		return nil, connect.Errorf(connect.CodeResourceExhausted,
 			"a pass over %s was asked for %s ago: the controller notices a request within a minute, so wait for it",
-			workspace, now.Sub(last).Round(time.Second)))
+			workspace, now.Sub(last).Round(time.Second))
 	}
 	c.notify(ctx, port.ControllerSlack, workspace)
 	c.log().InfoContext(ctx, "a Slack pass was requested", logattr.SafeString("workspace", workspace), logattr.SafeString("by", who.Who()))
@@ -269,7 +269,7 @@ func (c *Service) DisconnectSlackWorkspace(
 	}
 	workspace := strings.TrimSpace(req.GetWorkspace())
 	if !status.ValidWorkspace(workspace) {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("%q is not a workspace key", workspace))
+		return nil, connect.Errorf(connect.CodeInvalidArgument, "%q is not a workspace key", workspace)
 	}
 	who, err := c.requireSlack(ctx, caller, access.RoleOperator, workspace)
 	if err != nil {
@@ -277,17 +277,17 @@ func (c *Service) DisconnectSlackWorkspace(
 	}
 	record, credential, found, err := store.Get(ctx, workspace)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnavailable, err)
+		return nil, connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
 	}
 	if !found {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("slack workspace %s is not connected", workspace))
+		return nil, connect.Errorf(connect.CodeFailedPrecondition, "slack workspace %s is not connected", workspace)
 	}
 
 	revoked, reason := false, ""
 	if credential.BotToken != "" {
 		if err = c.slackRevoke(ctx, credential.BotToken); err != nil {
 			if !req.GetForgetAnyway() {
-				return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf(
+				return nil, rpcmount.NewError(connect.CodeUnavailable, fmt.Errorf(
 					"slack would not revoke the bot token, so the connection was kept: try again, or forget it anyway and remove the App in Slack: %w", err))
 			}
 			reason = "forgotten without revoking the bot token, which Slack would not revoke"
@@ -296,7 +296,7 @@ func (c *Service) DisconnectSlackWorkspace(
 		}
 	}
 	if err = store.Delete(ctx, workspace); err != nil {
-		return nil, connect.NewError(connect.CodeUnavailable, err)
+		return nil, connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
 	}
 	c.record(ctx, audit.SlackWorkspaceDisconnected(consoleauthz.Actor(who),
 		audit.SlackWorkspace{Key: workspace, Team: record.TeamID, App: record.AppID, Owner: record.Owner}, revoked, reason))
@@ -407,11 +407,11 @@ func (c *Service) CompleteWorkspace(ctx context.Context, caller consolecall.Call
 // everything else about it is recorded when it is connected.
 func (c *Service) requireDeclaredSlack(workspace string) error {
 	if c.d().Authorizer == nil {
-		return connect.NewError(connect.CodeFailedPrecondition, errors.New("no policy is loaded"))
+		return connect.NewError(connect.CodeFailedPrecondition, "no policy is loaded")
 	}
 	if !c.d().Authorizer.Policy().SlackWorkspaceDeclared(workspace) {
-		return connect.NewError(connect.CodeFailedPrecondition,
-			fmt.Errorf("the policy's slack.workspaces does not name workspace %q", workspace))
+		return connect.Errorf(connect.CodeFailedPrecondition,
+			"the policy's slack.workspaces does not name workspace %q", workspace)
 	}
 	return nil
 }
@@ -433,15 +433,15 @@ func (c *Service) ChangeSlackWorkspaceOwner(
 		return nil, err
 	}
 	if !status.ValidWorkspace(workspace) {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("%q is not a workspace key", workspace))
+		return nil, connect.Errorf(connect.CodeInvalidArgument, "%q is not a workspace key", workspace)
 	}
 	previous, found, err := store.SetOwner(ctx, workspace, owner)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnavailable, err)
+		return nil, connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
 	}
 	if !found {
-		return nil, connect.NewError(connect.CodeFailedPrecondition,
-			fmt.Errorf("slack workspace %s is not connected: its owner is chosen when it is connected", workspace))
+		return nil, connect.Errorf(connect.CodeFailedPrecondition,
+			"slack workspace %s is not connected: its owner is chosen when it is connected", workspace)
 	}
 	if previous == owner {
 		return &directoryrosterv1.ChangeSlackWorkspaceOwnerResponse{}, nil

@@ -18,54 +18,95 @@
 package directoryv1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1 "github.com/truvity/sluis/gen/directory/v1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// DirectoryServiceName is the fully-qualified name of the DirectoryService service.
 	DirectoryServiceName = "directory.v1.DirectoryService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// DirectoryServiceDescribeProcedure is the fully-qualified name of the DirectoryService's Describe
-	// RPC.
+	// DirectoryServiceDescribeProcedure is the procedure name of the DirectoryService's Describe RPC.
 	DirectoryServiceDescribeProcedure = "/directory.v1.DirectoryService/Describe"
-	// DirectoryServiceProbeProcedure is the fully-qualified name of the DirectoryService's Probe RPC.
+	// DirectoryServiceProbeProcedure is the procedure name of the DirectoryService's Probe RPC.
 	DirectoryServiceProbeProcedure = "/directory.v1.DirectoryService/Probe"
-	// DirectoryServiceGetGroupProcedure is the fully-qualified name of the DirectoryService's GetGroup
-	// RPC.
+	// DirectoryServiceGetGroupProcedure is the procedure name of the DirectoryService's GetGroup RPC.
 	DirectoryServiceGetGroupProcedure = "/directory.v1.DirectoryService/GetGroup"
-	// DirectoryServiceListGroupsProcedure is the fully-qualified name of the DirectoryService's
-	// ListGroups RPC.
+	// DirectoryServiceListGroupsProcedure is the procedure name of the DirectoryService's ListGroups
+	// RPC.
 	DirectoryServiceListGroupsProcedure = "/directory.v1.DirectoryService/ListGroups"
-	// DirectoryServiceGetAccountProcedure is the fully-qualified name of the DirectoryService's
-	// GetAccount RPC.
+	// DirectoryServiceGetAccountProcedure is the procedure name of the DirectoryService's GetAccount
+	// RPC.
 	DirectoryServiceGetAccountProcedure = "/directory.v1.DirectoryService/GetAccount"
-	// DirectoryServiceResolveAccountsProcedure is the fully-qualified name of the DirectoryService's
+	// DirectoryServiceResolveAccountsProcedure is the procedure name of the DirectoryService's
 	// ResolveAccounts RPC.
 	DirectoryServiceResolveAccountsProcedure = "/directory.v1.DirectoryService/ResolveAccounts"
-	// DirectoryServiceResolveUserProcedure is the fully-qualified name of the DirectoryService's
-	// ResolveUser RPC.
+	// DirectoryServiceResolveUserProcedure is the procedure name of the DirectoryService's ResolveUser
+	// RPC.
 	DirectoryServiceResolveUserProcedure = "/directory.v1.DirectoryService/ResolveUser"
+)
+
+var (
+	directoryServiceDescribeSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_directory_v1_directory_proto.Services().ByName("DirectoryService").Methods().ByName("Describe"),
+			Procedure:  DirectoryServiceDescribeProcedure,
+		}
+	})
+	directoryServiceProbeSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_directory_v1_directory_proto.Services().ByName("DirectoryService").Methods().ByName("Probe"),
+			Procedure:  DirectoryServiceProbeProcedure,
+		}
+	})
+	directoryServiceGetGroupSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_directory_v1_directory_proto.Services().ByName("DirectoryService").Methods().ByName("GetGroup"),
+			Procedure:  DirectoryServiceGetGroupProcedure,
+		}
+	})
+	directoryServiceListGroupsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_directory_v1_directory_proto.Services().ByName("DirectoryService").Methods().ByName("ListGroups"),
+			Procedure:  DirectoryServiceListGroupsProcedure,
+		}
+	})
+	directoryServiceGetAccountSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_directory_v1_directory_proto.Services().ByName("DirectoryService").Methods().ByName("GetAccount"),
+			Procedure:  DirectoryServiceGetAccountProcedure,
+		}
+	})
+	directoryServiceResolveAccountsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_directory_v1_directory_proto.Services().ByName("DirectoryService").Methods().ByName("ResolveAccounts"),
+			Procedure:  DirectoryServiceResolveAccountsProcedure,
+		}
+	})
+	directoryServiceResolveUserSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_directory_v1_directory_proto.Services().ByName("DirectoryService").Methods().ByName("ResolveUser"),
+			Procedure:  DirectoryServiceResolveUserProcedure,
+		}
+	})
 )
 
 // DirectoryServiceClient is a client for the directory.v1.DirectoryService service.
@@ -73,129 +114,33 @@ type DirectoryServiceClient interface {
 	// Describe returns the served domains and backend identity. A consumer
 	// uses the domains to decide which addresses this directory vouches for,
 	// and `served` to learn which of them are authoritative right now.
-	Describe(context.Context, *connect.Request[v1.DescribeRequest]) (*connect.Response[v1.DescribeResponse], error)
+	Describe(context.Context, *v1.DescribeRequest) (*v1.DescribeResponse, error)
 	// Probe exercises the credential against the backend (the health
 	// canary). A healthy Probe means reads are working right now.
-	Probe(context.Context, *connect.Request[v1.ProbeRequest]) (*connect.Response[v1.ProbeResponse], error)
+	Probe(context.Context, *v1.ProbeRequest) (*v1.ProbeResponse, error)
 	// GetGroup returns a group's flat membership. Nested groups are NOT
 	// expanded. found=false means the directory returned not-found for a
 	// group in a served domain (an absent group — fail-safe: suppress its
 	// removals), distinct from an RPC error (could not read at all).
-	GetGroup(context.Context, *connect.Request[v1.GetGroupRequest]) (*connect.Response[v1.GetGroupResponse], error)
+	GetGroup(context.Context, *v1.GetGroupRequest) (*v1.GetGroupResponse, error)
 	// ListGroups returns every group with its flat members. For pickers and
 	// for a consumer's whole-directory view.
-	ListGroups(context.Context, *connect.Request[v1.ListGroupsRequest]) (*connect.Response[v1.ListGroupsResponse], error)
+	ListGroups(context.Context, *v1.ListGroupsRequest) (*v1.ListGroupsResponse, error)
 	// GetAccount returns one account's standing. See Account for the
 	// in-domain vs out-of-domain semantics that the fail-safe depends on.
-	GetAccount(context.Context, *connect.Request[v1.GetAccountRequest]) (*connect.Response[v1.GetAccountResponse], error)
+	GetAccount(context.Context, *v1.GetAccountRequest) (*v1.GetAccountResponse, error)
 	// ResolveAccounts is GetAccount for many addresses in one call.
-	ResolveAccounts(context.Context, *connect.Request[v1.ResolveAccountsRequest]) (*connect.Response[v1.ResolveAccountsResponse], error)
+	ResolveAccounts(context.Context, *v1.ResolveAccountsRequest) (*v1.ResolveAccountsResponse, error)
 	// ResolveUser returns the groups an account belongs to plus its
 	// suspension signal — the grant-decision call made at login by whatever
 	// computes roles (an identity provider's hook, a token service).
-	ResolveUser(context.Context, *connect.Request[v1.ResolveUserRequest]) (*connect.Response[v1.ResolveUserResponse], error)
+	ResolveUser(context.Context, *v1.ResolveUserRequest) (*v1.ResolveUserResponse, error)
 }
 
-// NewDirectoryServiceClient constructs a client for the directory.v1.DirectoryService service. By
-// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
-// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
-// connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewDirectoryServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) DirectoryServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	directoryServiceMethods := v1.File_directory_v1_directory_proto.Services().ByName("DirectoryService").Methods()
-	return &directoryServiceClient{
-		describe: connect.NewClient[v1.DescribeRequest, v1.DescribeResponse](
-			httpClient,
-			baseURL+DirectoryServiceDescribeProcedure,
-			connect.WithSchema(directoryServiceMethods.ByName("Describe")),
-			connect.WithClientOptions(opts...),
-		),
-		probe: connect.NewClient[v1.ProbeRequest, v1.ProbeResponse](
-			httpClient,
-			baseURL+DirectoryServiceProbeProcedure,
-			connect.WithSchema(directoryServiceMethods.ByName("Probe")),
-			connect.WithClientOptions(opts...),
-		),
-		getGroup: connect.NewClient[v1.GetGroupRequest, v1.GetGroupResponse](
-			httpClient,
-			baseURL+DirectoryServiceGetGroupProcedure,
-			connect.WithSchema(directoryServiceMethods.ByName("GetGroup")),
-			connect.WithClientOptions(opts...),
-		),
-		listGroups: connect.NewClient[v1.ListGroupsRequest, v1.ListGroupsResponse](
-			httpClient,
-			baseURL+DirectoryServiceListGroupsProcedure,
-			connect.WithSchema(directoryServiceMethods.ByName("ListGroups")),
-			connect.WithClientOptions(opts...),
-		),
-		getAccount: connect.NewClient[v1.GetAccountRequest, v1.GetAccountResponse](
-			httpClient,
-			baseURL+DirectoryServiceGetAccountProcedure,
-			connect.WithSchema(directoryServiceMethods.ByName("GetAccount")),
-			connect.WithClientOptions(opts...),
-		),
-		resolveAccounts: connect.NewClient[v1.ResolveAccountsRequest, v1.ResolveAccountsResponse](
-			httpClient,
-			baseURL+DirectoryServiceResolveAccountsProcedure,
-			connect.WithSchema(directoryServiceMethods.ByName("ResolveAccounts")),
-			connect.WithClientOptions(opts...),
-		),
-		resolveUser: connect.NewClient[v1.ResolveUserRequest, v1.ResolveUserResponse](
-			httpClient,
-			baseURL+DirectoryServiceResolveUserProcedure,
-			connect.WithSchema(directoryServiceMethods.ByName("ResolveUser")),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// directoryServiceClient implements DirectoryServiceClient.
-type directoryServiceClient struct {
-	describe        *connect.Client[v1.DescribeRequest, v1.DescribeResponse]
-	probe           *connect.Client[v1.ProbeRequest, v1.ProbeResponse]
-	getGroup        *connect.Client[v1.GetGroupRequest, v1.GetGroupResponse]
-	listGroups      *connect.Client[v1.ListGroupsRequest, v1.ListGroupsResponse]
-	getAccount      *connect.Client[v1.GetAccountRequest, v1.GetAccountResponse]
-	resolveAccounts *connect.Client[v1.ResolveAccountsRequest, v1.ResolveAccountsResponse]
-	resolveUser     *connect.Client[v1.ResolveUserRequest, v1.ResolveUserResponse]
-}
-
-// Describe calls directory.v1.DirectoryService.Describe.
-func (c *directoryServiceClient) Describe(ctx context.Context, req *connect.Request[v1.DescribeRequest]) (*connect.Response[v1.DescribeResponse], error) {
-	return c.describe.CallUnary(ctx, req)
-}
-
-// Probe calls directory.v1.DirectoryService.Probe.
-func (c *directoryServiceClient) Probe(ctx context.Context, req *connect.Request[v1.ProbeRequest]) (*connect.Response[v1.ProbeResponse], error) {
-	return c.probe.CallUnary(ctx, req)
-}
-
-// GetGroup calls directory.v1.DirectoryService.GetGroup.
-func (c *directoryServiceClient) GetGroup(ctx context.Context, req *connect.Request[v1.GetGroupRequest]) (*connect.Response[v1.GetGroupResponse], error) {
-	return c.getGroup.CallUnary(ctx, req)
-}
-
-// ListGroups calls directory.v1.DirectoryService.ListGroups.
-func (c *directoryServiceClient) ListGroups(ctx context.Context, req *connect.Request[v1.ListGroupsRequest]) (*connect.Response[v1.ListGroupsResponse], error) {
-	return c.listGroups.CallUnary(ctx, req)
-}
-
-// GetAccount calls directory.v1.DirectoryService.GetAccount.
-func (c *directoryServiceClient) GetAccount(ctx context.Context, req *connect.Request[v1.GetAccountRequest]) (*connect.Response[v1.GetAccountResponse], error) {
-	return c.getAccount.CallUnary(ctx, req)
-}
-
-// ResolveAccounts calls directory.v1.DirectoryService.ResolveAccounts.
-func (c *directoryServiceClient) ResolveAccounts(ctx context.Context, req *connect.Request[v1.ResolveAccountsRequest]) (*connect.Response[v1.ResolveAccountsResponse], error) {
-	return c.resolveAccounts.CallUnary(ctx, req)
-}
-
-// ResolveUser calls directory.v1.DirectoryService.ResolveUser.
-func (c *directoryServiceClient) ResolveUser(ctx context.Context, req *connect.Request[v1.ResolveUserRequest]) (*connect.Response[v1.ResolveUserResponse], error) {
-	return c.resolveUser.CallUnary(ctx, req)
+// NewDirectoryServiceClient constructs a client for the directory.v1.DirectoryService service.
+// Multiple service clients may share a single connect.Client.
+func NewDirectoryServiceClient(client *connect.Client) DirectoryServiceClient {
+	return &directoryServiceClient{client: client}
 }
 
 // DirectoryServiceHandler is an implementation of the directory.v1.DirectoryService service.
@@ -203,127 +148,217 @@ type DirectoryServiceHandler interface {
 	// Describe returns the served domains and backend identity. A consumer
 	// uses the domains to decide which addresses this directory vouches for,
 	// and `served` to learn which of them are authoritative right now.
-	Describe(context.Context, *connect.Request[v1.DescribeRequest]) (*connect.Response[v1.DescribeResponse], error)
+	Describe(context.Context, *v1.DescribeRequest) (*v1.DescribeResponse, error)
 	// Probe exercises the credential against the backend (the health
 	// canary). A healthy Probe means reads are working right now.
-	Probe(context.Context, *connect.Request[v1.ProbeRequest]) (*connect.Response[v1.ProbeResponse], error)
+	Probe(context.Context, *v1.ProbeRequest) (*v1.ProbeResponse, error)
 	// GetGroup returns a group's flat membership. Nested groups are NOT
 	// expanded. found=false means the directory returned not-found for a
 	// group in a served domain (an absent group — fail-safe: suppress its
 	// removals), distinct from an RPC error (could not read at all).
-	GetGroup(context.Context, *connect.Request[v1.GetGroupRequest]) (*connect.Response[v1.GetGroupResponse], error)
+	GetGroup(context.Context, *v1.GetGroupRequest) (*v1.GetGroupResponse, error)
 	// ListGroups returns every group with its flat members. For pickers and
 	// for a consumer's whole-directory view.
-	ListGroups(context.Context, *connect.Request[v1.ListGroupsRequest]) (*connect.Response[v1.ListGroupsResponse], error)
+	ListGroups(context.Context, *v1.ListGroupsRequest) (*v1.ListGroupsResponse, error)
 	// GetAccount returns one account's standing. See Account for the
 	// in-domain vs out-of-domain semantics that the fail-safe depends on.
-	GetAccount(context.Context, *connect.Request[v1.GetAccountRequest]) (*connect.Response[v1.GetAccountResponse], error)
+	GetAccount(context.Context, *v1.GetAccountRequest) (*v1.GetAccountResponse, error)
 	// ResolveAccounts is GetAccount for many addresses in one call.
-	ResolveAccounts(context.Context, *connect.Request[v1.ResolveAccountsRequest]) (*connect.Response[v1.ResolveAccountsResponse], error)
+	ResolveAccounts(context.Context, *v1.ResolveAccountsRequest) (*v1.ResolveAccountsResponse, error)
 	// ResolveUser returns the groups an account belongs to plus its
 	// suspension signal — the grant-decision call made at login by whatever
 	// computes roles (an identity provider's hook, a token service).
-	ResolveUser(context.Context, *connect.Request[v1.ResolveUserRequest]) (*connect.Response[v1.ResolveUserResponse], error)
+	ResolveUser(context.Context, *v1.ResolveUserRequest) (*v1.ResolveUserResponse, error)
 }
 
-// NewDirectoryServiceHandler builds an HTTP handler from the service implementation. It returns the
-// path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewDirectoryServiceHandler(svc DirectoryServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	directoryServiceMethods := v1.File_directory_v1_directory_proto.Services().ByName("DirectoryService").Methods()
-	directoryServiceDescribeHandler := connect.NewUnaryHandler(
-		DirectoryServiceDescribeProcedure,
-		svc.Describe,
-		connect.WithSchema(directoryServiceMethods.ByName("Describe")),
-		connect.WithHandlerOptions(opts...),
+// RegisterDirectoryServiceHandler registers svc as the directory.v1.DirectoryService implementation
+// on server.
+func RegisterDirectoryServiceHandler(server *connect.Server, svc DirectoryServiceHandler) {
+	adapter := directoryServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: directoryServiceDescribeSpec(), Handler: adapter.describe},
+		connect.Method{Spec: directoryServiceProbeSpec(), Handler: adapter.probe},
+		connect.Method{Spec: directoryServiceGetGroupSpec(), Handler: adapter.getGroup},
+		connect.Method{Spec: directoryServiceListGroupsSpec(), Handler: adapter.listGroups},
+		connect.Method{Spec: directoryServiceGetAccountSpec(), Handler: adapter.getAccount},
+		connect.Method{Spec: directoryServiceResolveAccountsSpec(), Handler: adapter.resolveAccounts},
+		connect.Method{Spec: directoryServiceResolveUserSpec(), Handler: adapter.resolveUser},
 	)
-	directoryServiceProbeHandler := connect.NewUnaryHandler(
-		DirectoryServiceProbeProcedure,
-		svc.Probe,
-		connect.WithSchema(directoryServiceMethods.ByName("Probe")),
-		connect.WithHandlerOptions(opts...),
-	)
-	directoryServiceGetGroupHandler := connect.NewUnaryHandler(
-		DirectoryServiceGetGroupProcedure,
-		svc.GetGroup,
-		connect.WithSchema(directoryServiceMethods.ByName("GetGroup")),
-		connect.WithHandlerOptions(opts...),
-	)
-	directoryServiceListGroupsHandler := connect.NewUnaryHandler(
-		DirectoryServiceListGroupsProcedure,
-		svc.ListGroups,
-		connect.WithSchema(directoryServiceMethods.ByName("ListGroups")),
-		connect.WithHandlerOptions(opts...),
-	)
-	directoryServiceGetAccountHandler := connect.NewUnaryHandler(
-		DirectoryServiceGetAccountProcedure,
-		svc.GetAccount,
-		connect.WithSchema(directoryServiceMethods.ByName("GetAccount")),
-		connect.WithHandlerOptions(opts...),
-	)
-	directoryServiceResolveAccountsHandler := connect.NewUnaryHandler(
-		DirectoryServiceResolveAccountsProcedure,
-		svc.ResolveAccounts,
-		connect.WithSchema(directoryServiceMethods.ByName("ResolveAccounts")),
-		connect.WithHandlerOptions(opts...),
-	)
-	directoryServiceResolveUserHandler := connect.NewUnaryHandler(
-		DirectoryServiceResolveUserProcedure,
-		svc.ResolveUser,
-		connect.WithSchema(directoryServiceMethods.ByName("ResolveUser")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/directory.v1.DirectoryService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case DirectoryServiceDescribeProcedure:
-			directoryServiceDescribeHandler.ServeHTTP(w, r)
-		case DirectoryServiceProbeProcedure:
-			directoryServiceProbeHandler.ServeHTTP(w, r)
-		case DirectoryServiceGetGroupProcedure:
-			directoryServiceGetGroupHandler.ServeHTTP(w, r)
-		case DirectoryServiceListGroupsProcedure:
-			directoryServiceListGroupsHandler.ServeHTTP(w, r)
-		case DirectoryServiceGetAccountProcedure:
-			directoryServiceGetAccountHandler.ServeHTTP(w, r)
-		case DirectoryServiceResolveAccountsProcedure:
-			directoryServiceResolveAccountsHandler.ServeHTTP(w, r)
-		case DirectoryServiceResolveUserProcedure:
-			directoryServiceResolveUserHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedDirectoryServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedDirectoryServiceHandler struct{}
 
-func (UnimplementedDirectoryServiceHandler) Describe(context.Context, *connect.Request[v1.DescribeRequest]) (*connect.Response[v1.DescribeResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("directory.v1.DirectoryService.Describe is not implemented"))
+func (UnimplementedDirectoryServiceHandler) Describe(context.Context, *v1.DescribeRequest) (*v1.DescribeResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "directory.v1.DirectoryService.Describe is not implemented")
 }
 
-func (UnimplementedDirectoryServiceHandler) Probe(context.Context, *connect.Request[v1.ProbeRequest]) (*connect.Response[v1.ProbeResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("directory.v1.DirectoryService.Probe is not implemented"))
+func (UnimplementedDirectoryServiceHandler) Probe(context.Context, *v1.ProbeRequest) (*v1.ProbeResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "directory.v1.DirectoryService.Probe is not implemented")
 }
 
-func (UnimplementedDirectoryServiceHandler) GetGroup(context.Context, *connect.Request[v1.GetGroupRequest]) (*connect.Response[v1.GetGroupResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("directory.v1.DirectoryService.GetGroup is not implemented"))
+func (UnimplementedDirectoryServiceHandler) GetGroup(context.Context, *v1.GetGroupRequest) (*v1.GetGroupResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "directory.v1.DirectoryService.GetGroup is not implemented")
 }
 
-func (UnimplementedDirectoryServiceHandler) ListGroups(context.Context, *connect.Request[v1.ListGroupsRequest]) (*connect.Response[v1.ListGroupsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("directory.v1.DirectoryService.ListGroups is not implemented"))
+func (UnimplementedDirectoryServiceHandler) ListGroups(context.Context, *v1.ListGroupsRequest) (*v1.ListGroupsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "directory.v1.DirectoryService.ListGroups is not implemented")
 }
 
-func (UnimplementedDirectoryServiceHandler) GetAccount(context.Context, *connect.Request[v1.GetAccountRequest]) (*connect.Response[v1.GetAccountResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("directory.v1.DirectoryService.GetAccount is not implemented"))
+func (UnimplementedDirectoryServiceHandler) GetAccount(context.Context, *v1.GetAccountRequest) (*v1.GetAccountResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "directory.v1.DirectoryService.GetAccount is not implemented")
 }
 
-func (UnimplementedDirectoryServiceHandler) ResolveAccounts(context.Context, *connect.Request[v1.ResolveAccountsRequest]) (*connect.Response[v1.ResolveAccountsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("directory.v1.DirectoryService.ResolveAccounts is not implemented"))
+func (UnimplementedDirectoryServiceHandler) ResolveAccounts(context.Context, *v1.ResolveAccountsRequest) (*v1.ResolveAccountsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "directory.v1.DirectoryService.ResolveAccounts is not implemented")
 }
 
-func (UnimplementedDirectoryServiceHandler) ResolveUser(context.Context, *connect.Request[v1.ResolveUserRequest]) (*connect.Response[v1.ResolveUserResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("directory.v1.DirectoryService.ResolveUser is not implemented"))
+func (UnimplementedDirectoryServiceHandler) ResolveUser(context.Context, *v1.ResolveUserRequest) (*v1.ResolveUserResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "directory.v1.DirectoryService.ResolveUser is not implemented")
+}
+
+type directoryServiceClient struct {
+	client *connect.Client
+}
+
+func (c *directoryServiceClient) Describe(ctx context.Context, req *v1.DescribeRequest) (*v1.DescribeResponse, error) {
+	var res v1.DescribeResponse
+	if err := c.client.CallUnary(ctx, directoryServiceDescribeSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *directoryServiceClient) Probe(ctx context.Context, req *v1.ProbeRequest) (*v1.ProbeResponse, error) {
+	var res v1.ProbeResponse
+	if err := c.client.CallUnary(ctx, directoryServiceProbeSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *directoryServiceClient) GetGroup(ctx context.Context, req *v1.GetGroupRequest) (*v1.GetGroupResponse, error) {
+	var res v1.GetGroupResponse
+	if err := c.client.CallUnary(ctx, directoryServiceGetGroupSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *directoryServiceClient) ListGroups(ctx context.Context, req *v1.ListGroupsRequest) (*v1.ListGroupsResponse, error) {
+	var res v1.ListGroupsResponse
+	if err := c.client.CallUnary(ctx, directoryServiceListGroupsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *directoryServiceClient) GetAccount(ctx context.Context, req *v1.GetAccountRequest) (*v1.GetAccountResponse, error) {
+	var res v1.GetAccountResponse
+	if err := c.client.CallUnary(ctx, directoryServiceGetAccountSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *directoryServiceClient) ResolveAccounts(ctx context.Context, req *v1.ResolveAccountsRequest) (*v1.ResolveAccountsResponse, error) {
+	var res v1.ResolveAccountsResponse
+	if err := c.client.CallUnary(ctx, directoryServiceResolveAccountsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *directoryServiceClient) ResolveUser(ctx context.Context, req *v1.ResolveUserRequest) (*v1.ResolveUserResponse, error) {
+	var res v1.ResolveUserResponse
+	if err := c.client.CallUnary(ctx, directoryServiceResolveUserSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type directoryServiceHandler struct{ svc DirectoryServiceHandler }
+
+func (h directoryServiceHandler) describe(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DescribeRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Describe(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h directoryServiceHandler) probe(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ProbeRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Probe(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h directoryServiceHandler) getGroup(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetGroupRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetGroup(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h directoryServiceHandler) listGroups(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListGroupsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListGroups(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h directoryServiceHandler) getAccount(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetAccountRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetAccount(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h directoryServiceHandler) resolveAccounts(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ResolveAccountsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ResolveAccounts(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h directoryServiceHandler) resolveUser(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ResolveUserRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ResolveUser(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

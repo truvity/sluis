@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/truvity/sluis/backend/fake"
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
@@ -63,12 +63,12 @@ func seedSlackWorkspace(t *testing.T, store *kube.SlackWorkspaces, workspace, ow
 func TestListServedDomainsIsScopedLikeEveryOtherRead(t *testing.T) {
 	console := &Console{deps: ConsoleDeps{Hub: ownerHub(t)}}
 	list := func(ctx context.Context) ([]string, error) {
-		got, err := console.ListServedDomains(ctx, connect.NewRequest(&directoryrosterv1.ListServedDomainsRequest{}))
+		got, err := console.ListServedDomains(ctx, &directoryrosterv1.ListServedDomainsRequest{})
 		if err != nil {
 			return nil, err
 		}
 		var out []string
-		for _, dir := range got.Msg.GetDirectories() {
+		for _, dir := range got.GetDirectories() {
 			out = append(out, dir.GetWorkspaceId()+"="+strings.Join(dir.GetDomains(), ",")+"/"+dir.GetPrimaryDomain())
 		}
 		return out, nil

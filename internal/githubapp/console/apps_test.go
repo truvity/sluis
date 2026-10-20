@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
 	"github.com/truvity/sluis/internal/access"
@@ -62,7 +62,7 @@ func TestListingAppsNeedsAnOrganisationToSee(t *testing.T) {
 	store := &memConn{records: map[string]connection.Record{"globex": {Org: "globex", Owner: "C0north", AppID: 1, AppSlug: "g"}}}
 	svc := New(Deps{Orgs: store, Policy: func() *policy.Set { return set }})
 	list := func(ctx context.Context) error {
-		_, err := svc.ListGitHubApps(ctx, connect.NewRequest(&directoryrosterv1.ListGitHubAppsRequest{}))
+		_, err := svc.ListGitHubApps(ctx, &directoryrosterv1.ListGitHubAppsRequest{})
 		return err
 	}
 	if err := list(

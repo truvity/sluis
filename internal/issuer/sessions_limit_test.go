@@ -6,7 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 
 	sluisv1 "github.com/truvity/sluis/gen/sluis/v1"
 	"github.com/truvity/sluis/gen/sluis/v1/sluisv1connect"
@@ -24,15 +25,15 @@ func TestTheSessionServiceRefusesAnOversizeMessage(t *testing.T) {
 	server := httptest.NewServer(mux)
 	t.Cleanup(server.Close)
 
-	client := sluisv1connect.NewSessionServiceClient(server.Client(), server.URL)
+	client := sluisv1connect.NewSessionServiceClient(connect.NewClient(connecthttp.NewTransport(server.Client(), server.URL)))
 
 	_, err := client.ListSessions(t.Context(),
-		connect.NewRequest(&sluisv1.ListSessionsRequest{Identity: strings.Repeat("x", httpsec.MaxRequestBody+1)}))
+		&sluisv1.ListSessionsRequest{Identity: strings.Repeat("x", httpsec.MaxRequestBody+1)})
 	if got := connect.CodeOf(err); got != connect.CodeResourceExhausted {
 		t.Errorf("an oversize message: %v (%v), want resource_exhausted", got, err)
 	}
 
-	if _, err = client.ListSessions(t.Context(), connect.NewRequest(&sluisv1.ListSessionsRequest{Identity: "ada"})); err != nil {
+	if _, err = client.ListSessions(t.Context(), &sluisv1.ListSessionsRequest{Identity: "ada"}); err != nil {
 		t.Errorf("a small message: %v", err)
 	}
 }

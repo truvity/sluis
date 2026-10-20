@@ -2,12 +2,11 @@ package console
 
 import (
 	"context"
-	"fmt"
 	"maps"
 	"slices"
 	"strings"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/consoleauthz"
@@ -29,7 +28,7 @@ func (c *Service) book(ctx context.Context) (Book, error) {
 	}
 	records, err := c.d().SlackWorkspaces.List(ctx)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnavailable, err)
+		return nil, connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
 	}
 	for i := range records {
 		book[records[i].Workspace] = records[i]
@@ -106,8 +105,8 @@ func (c *Service) requireAnySlack(ctx context.Context, caller consolecall.Caller
 			return id, book, nil
 		}
 	}
-	return access.Identity{}, nil, connect.NewError(connect.CodePermissionDenied,
-		fmt.Errorf("this needs the %s role, installation-wide or over a directory that owns a Slack workspace", want))
+	return access.Identity{}, nil, connect.Errorf(connect.CodePermissionDenied,
+		"this needs the %s role, installation-wide or over a directory that owns a Slack workspace", want)
 }
 
 // slackKeys are every workspace the policy declares or a record exists for.

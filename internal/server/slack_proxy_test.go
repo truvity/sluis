@@ -10,7 +10,7 @@ import (
 	"sync"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	awslambda "github.com/aws/aws-sdk-go-v2/service/lambda"
 	"google.golang.org/protobuf/proto"
 
@@ -57,7 +57,7 @@ func TestTheSlackPagesAnswerTheSameLocallyAndOverTheTransport(t *testing.T) {
 		t.Errorf("connect to a workspace the policy does not name = %v, want failed precondition", err)
 	}
 	// A caller that is not signed in is refused before the module is asked.
-	_, err := h.console.GetSlackStatus(context.Background(), connect.NewRequest(&directoryrosterv1.GetSlackStatusRequest{}))
+	_, err := h.console.GetSlackStatus(context.Background(), &directoryrosterv1.GetSlackStatusRequest{})
 	if connect.CodeOf(err) != connect.CodeUnauthenticated {
 		t.Errorf("an anonymous page = %v", err)
 	}
@@ -143,7 +143,7 @@ func TestACallbackTheModuleCannotAnswerIsRefusedOnceAndNeverRepeated(t *testing.
 	if err != nil {
 		t.Fatalf("connect: %v", err)
 	}
-	cookie, state := cookieFrom(t, begun.Header()), mustQuery(t, begun.Msg.GetUrl(), "state")
+	cookie, state := cookieFrom(t, h.set[begun]), mustQuery(t, begun.GetUrl(), "state")
 	_, credential, _, _ := h.workspaces.Get(context.Background(), "acme")
 	code := h.slack.Install(credential.AppID, acmeTeam)
 
@@ -193,8 +193,8 @@ func TestTheSlackCataloguePagesAnswerTheSameLocallyAndOverTheTransport(t *testin
 		t.Fatalf("Create over the transport: %v", err)
 	}
 	begun, done := h.install(t, "sync", "", acmeTeam)
-	if mustQuery(t, begun.Msg.GetUrl(), "state") == "" || mustQuery(t, begun.Msg.GetUrl(), "scope") != "channels:read,users:read" {
-		t.Errorf("authorize URL = %s", begun.Msg.GetUrl())
+	if mustQuery(t, begun.GetUrl(), "state") == "" || mustQuery(t, begun.GetUrl(), "scope") != "channels:read,users:read" {
+		t.Errorf("authorize URL = %s", begun.GetUrl())
 	}
 	if code, location, body := done(); code != 302 || !strings.HasSuffix(location, "/#/slack-apps") {
 		t.Errorf("callback over the transport = %d %s %s", code, location, body)
@@ -213,16 +213,16 @@ func TestTheSlackModuleRefusesAnAppOfAnotherDirectoryAndListsOnlyWhatIsVisible(t
 		t.Errorf("Create by another directory's operator = %v, want permission denied", err)
 	}
 	if _, err := h.console.InstallSlackApp(
-		foreign, connect.NewRequest(&directoryrosterv1.InstallSlackAppRequest{Id: "sync"}),
+		foreign, &directoryrosterv1.InstallSlackAppRequest{Id: "sync"},
 	); connect.CodeOf(err) != connect.CodePermissionDenied {
 		t.Errorf("Install by another directory's operator = %v, want permission denied", err)
 	}
 	if h.slack.Count("apps.manifest.create") != 0 {
 		t.Error("a refused create reached Slack")
 	}
-	listed, err := h.console.ListSlackApps(foreign, connect.NewRequest(&directoryrosterv1.ListSlackAppsRequest{}))
+	listed, err := h.console.ListSlackApps(foreign, &directoryrosterv1.ListSlackAppsRequest{})
 	if err == nil {
-		for _, app := range listed.Msg.GetApps() {
+		for _, app := range listed.GetApps() {
 			if app.GetWorkspace() == "acme" {
 				t.Errorf("another directory sees %+v", app)
 			}

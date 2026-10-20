@@ -5,20 +5,11 @@
 package directoryrosterv1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1 "github.com/truvity/sluis/gen/directoryroster/v1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// SlackSharedChannelServiceName is the fully-qualified name of the SlackSharedChannelService
@@ -26,26 +17,57 @@ const (
 	SlackSharedChannelServiceName = "directoryroster.v1.SlackSharedChannelService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// SlackSharedChannelServiceListSlackSharedChannelsProcedure is the fully-qualified name of the
+	// SlackSharedChannelServiceListSlackSharedChannelsProcedure is the procedure name of the
 	// SlackSharedChannelService's ListSlackSharedChannels RPC.
 	SlackSharedChannelServiceListSlackSharedChannelsProcedure = "/directoryroster.v1.SlackSharedChannelService/ListSlackSharedChannels"
-	// SlackSharedChannelServiceCreateSlackSharedChannelProcedure is the fully-qualified name of the
+	// SlackSharedChannelServiceCreateSlackSharedChannelProcedure is the procedure name of the
 	// SlackSharedChannelService's CreateSlackSharedChannel RPC.
 	SlackSharedChannelServiceCreateSlackSharedChannelProcedure = "/directoryroster.v1.SlackSharedChannelService/CreateSlackSharedChannel"
-	// SlackSharedChannelServiceUpdateSlackSharedChannelProcedure is the fully-qualified name of the
+	// SlackSharedChannelServiceUpdateSlackSharedChannelProcedure is the procedure name of the
 	// SlackSharedChannelService's UpdateSlackSharedChannel RPC.
 	SlackSharedChannelServiceUpdateSlackSharedChannelProcedure = "/directoryroster.v1.SlackSharedChannelService/UpdateSlackSharedChannel"
-	// SlackSharedChannelServiceDeleteSlackSharedChannelProcedure is the fully-qualified name of the
+	// SlackSharedChannelServiceDeleteSlackSharedChannelProcedure is the procedure name of the
 	// SlackSharedChannelService's DeleteSlackSharedChannel RPC.
 	SlackSharedChannelServiceDeleteSlackSharedChannelProcedure = "/directoryroster.v1.SlackSharedChannelService/DeleteSlackSharedChannel"
+)
+
+var (
+	slackSharedChannelServiceListSlackSharedChannelsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_directoryroster_v1_slack_connect_proto.Services().ByName("SlackSharedChannelService").Methods().ByName("ListSlackSharedChannels"),
+			Procedure:  SlackSharedChannelServiceListSlackSharedChannelsProcedure,
+		}
+	})
+	slackSharedChannelServiceCreateSlackSharedChannelSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_directoryroster_v1_slack_connect_proto.Services().ByName("SlackSharedChannelService").Methods().ByName("CreateSlackSharedChannel"),
+			Procedure:  SlackSharedChannelServiceCreateSlackSharedChannelProcedure,
+		}
+	})
+	slackSharedChannelServiceUpdateSlackSharedChannelSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_directoryroster_v1_slack_connect_proto.Services().ByName("SlackSharedChannelService").Methods().ByName("UpdateSlackSharedChannel"),
+			Procedure:  SlackSharedChannelServiceUpdateSlackSharedChannelProcedure,
+		}
+	})
+	slackSharedChannelServiceDeleteSlackSharedChannelSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_directoryroster_v1_slack_connect_proto.Services().ByName("SlackSharedChannelService").Methods().ByName("DeleteSlackSharedChannel"),
+			Procedure:  SlackSharedChannelServiceDeleteSlackSharedChannelProcedure,
+		}
+	})
 )
 
 // SlackSharedChannelServiceClient is a client for the directoryroster.v1.SlackSharedChannelService
@@ -54,91 +76,27 @@ type SlackSharedChannelServiceClient interface {
 	// ListSlackSharedChannels returns every record the caller may see (a
 	// viewer of the host workspace, or of any `with` workspace), with what
 	// the controller last reported for it, and the choices a form offers.
-	ListSlackSharedChannels(context.Context, *connect.Request[v1.ListSlackSharedChannelsRequest]) (*connect.Response[v1.ListSlackSharedChannelsResponse], error)
+	ListSlackSharedChannels(context.Context, *v1.ListSlackSharedChannelsRequest) (*v1.ListSlackSharedChannelsResponse, error)
 	// CreateSlackSharedChannel validates the record against the policy and
 	// keeps it. Operator of the HOST workspace's owner, or the
 	// installation-wide operator. Refuses a name that is already a record.
-	CreateSlackSharedChannel(context.Context, *connect.Request[v1.CreateSlackSharedChannelRequest]) (*connect.Response[v1.CreateSlackSharedChannelResponse], error)
+	CreateSlackSharedChannel(context.Context, *v1.CreateSlackSharedChannelRequest) (*v1.CreateSlackSharedChannelResponse, error)
 	// UpdateSlackSharedChannel changes `with`, `from` (directory groups),
 	// `members` (individual addresses), `private` and `private_per_side`. The
 	// host, the name and the channel id are immutable: a request naming a
 	// different host is refused, and the answer says to create a new channel
 	// instead.
-	UpdateSlackSharedChannel(context.Context, *connect.Request[v1.UpdateSlackSharedChannelRequest]) (*connect.Response[v1.UpdateSlackSharedChannelResponse], error)
+	UpdateSlackSharedChannel(context.Context, *v1.UpdateSlackSharedChannelRequest) (*v1.UpdateSlackSharedChannelResponse, error)
 	// DeleteSlackSharedChannel forgets the record, and nothing else: the
 	// channel stays in Slack, and the reconciler stops managing it.
-	DeleteSlackSharedChannel(context.Context, *connect.Request[v1.DeleteSlackSharedChannelRequest]) (*connect.Response[v1.DeleteSlackSharedChannelResponse], error)
+	DeleteSlackSharedChannel(context.Context, *v1.DeleteSlackSharedChannelRequest) (*v1.DeleteSlackSharedChannelResponse, error)
 }
 
 // NewSlackSharedChannelServiceClient constructs a client for the
-// directoryroster.v1.SlackSharedChannelService service. By default, it uses the Connect protocol
-// with the binary Protobuf Codec, asks for gzipped responses, and sends uncompressed requests. To
-// use the gRPC or gRPC-Web protocols, supply the connect.WithGRPC() or connect.WithGRPCWeb()
-// options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewSlackSharedChannelServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) SlackSharedChannelServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	slackSharedChannelServiceMethods := v1.File_directoryroster_v1_slack_connect_proto.Services().ByName("SlackSharedChannelService").Methods()
-	return &slackSharedChannelServiceClient{
-		listSlackSharedChannels: connect.NewClient[v1.ListSlackSharedChannelsRequest, v1.ListSlackSharedChannelsResponse](
-			httpClient,
-			baseURL+SlackSharedChannelServiceListSlackSharedChannelsProcedure,
-			connect.WithSchema(slackSharedChannelServiceMethods.ByName("ListSlackSharedChannels")),
-			connect.WithClientOptions(opts...),
-		),
-		createSlackSharedChannel: connect.NewClient[v1.CreateSlackSharedChannelRequest, v1.CreateSlackSharedChannelResponse](
-			httpClient,
-			baseURL+SlackSharedChannelServiceCreateSlackSharedChannelProcedure,
-			connect.WithSchema(slackSharedChannelServiceMethods.ByName("CreateSlackSharedChannel")),
-			connect.WithClientOptions(opts...),
-		),
-		updateSlackSharedChannel: connect.NewClient[v1.UpdateSlackSharedChannelRequest, v1.UpdateSlackSharedChannelResponse](
-			httpClient,
-			baseURL+SlackSharedChannelServiceUpdateSlackSharedChannelProcedure,
-			connect.WithSchema(slackSharedChannelServiceMethods.ByName("UpdateSlackSharedChannel")),
-			connect.WithClientOptions(opts...),
-		),
-		deleteSlackSharedChannel: connect.NewClient[v1.DeleteSlackSharedChannelRequest, v1.DeleteSlackSharedChannelResponse](
-			httpClient,
-			baseURL+SlackSharedChannelServiceDeleteSlackSharedChannelProcedure,
-			connect.WithSchema(slackSharedChannelServiceMethods.ByName("DeleteSlackSharedChannel")),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// slackSharedChannelServiceClient implements SlackSharedChannelServiceClient.
-type slackSharedChannelServiceClient struct {
-	listSlackSharedChannels  *connect.Client[v1.ListSlackSharedChannelsRequest, v1.ListSlackSharedChannelsResponse]
-	createSlackSharedChannel *connect.Client[v1.CreateSlackSharedChannelRequest, v1.CreateSlackSharedChannelResponse]
-	updateSlackSharedChannel *connect.Client[v1.UpdateSlackSharedChannelRequest, v1.UpdateSlackSharedChannelResponse]
-	deleteSlackSharedChannel *connect.Client[v1.DeleteSlackSharedChannelRequest, v1.DeleteSlackSharedChannelResponse]
-}
-
-// ListSlackSharedChannels calls
-// directoryroster.v1.SlackSharedChannelService.ListSlackSharedChannels.
-func (c *slackSharedChannelServiceClient) ListSlackSharedChannels(ctx context.Context, req *connect.Request[v1.ListSlackSharedChannelsRequest]) (*connect.Response[v1.ListSlackSharedChannelsResponse], error) {
-	return c.listSlackSharedChannels.CallUnary(ctx, req)
-}
-
-// CreateSlackSharedChannel calls
-// directoryroster.v1.SlackSharedChannelService.CreateSlackSharedChannel.
-func (c *slackSharedChannelServiceClient) CreateSlackSharedChannel(ctx context.Context, req *connect.Request[v1.CreateSlackSharedChannelRequest]) (*connect.Response[v1.CreateSlackSharedChannelResponse], error) {
-	return c.createSlackSharedChannel.CallUnary(ctx, req)
-}
-
-// UpdateSlackSharedChannel calls
-// directoryroster.v1.SlackSharedChannelService.UpdateSlackSharedChannel.
-func (c *slackSharedChannelServiceClient) UpdateSlackSharedChannel(ctx context.Context, req *connect.Request[v1.UpdateSlackSharedChannelRequest]) (*connect.Response[v1.UpdateSlackSharedChannelResponse], error) {
-	return c.updateSlackSharedChannel.CallUnary(ctx, req)
-}
-
-// DeleteSlackSharedChannel calls
-// directoryroster.v1.SlackSharedChannelService.DeleteSlackSharedChannel.
-func (c *slackSharedChannelServiceClient) DeleteSlackSharedChannel(ctx context.Context, req *connect.Request[v1.DeleteSlackSharedChannelRequest]) (*connect.Response[v1.DeleteSlackSharedChannelResponse], error) {
-	return c.deleteSlackSharedChannel.CallUnary(ctx, req)
+// directoryroster.v1.SlackSharedChannelService service. Multiple service clients may share a single
+// connect.Client.
+func NewSlackSharedChannelServiceClient(client *connect.Client) SlackSharedChannelServiceClient {
+	return &slackSharedChannelServiceClient{client: client}
 }
 
 // SlackSharedChannelServiceHandler is an implementation of the
@@ -147,84 +105,137 @@ type SlackSharedChannelServiceHandler interface {
 	// ListSlackSharedChannels returns every record the caller may see (a
 	// viewer of the host workspace, or of any `with` workspace), with what
 	// the controller last reported for it, and the choices a form offers.
-	ListSlackSharedChannels(context.Context, *connect.Request[v1.ListSlackSharedChannelsRequest]) (*connect.Response[v1.ListSlackSharedChannelsResponse], error)
+	ListSlackSharedChannels(context.Context, *v1.ListSlackSharedChannelsRequest) (*v1.ListSlackSharedChannelsResponse, error)
 	// CreateSlackSharedChannel validates the record against the policy and
 	// keeps it. Operator of the HOST workspace's owner, or the
 	// installation-wide operator. Refuses a name that is already a record.
-	CreateSlackSharedChannel(context.Context, *connect.Request[v1.CreateSlackSharedChannelRequest]) (*connect.Response[v1.CreateSlackSharedChannelResponse], error)
+	CreateSlackSharedChannel(context.Context, *v1.CreateSlackSharedChannelRequest) (*v1.CreateSlackSharedChannelResponse, error)
 	// UpdateSlackSharedChannel changes `with`, `from` (directory groups),
 	// `members` (individual addresses), `private` and `private_per_side`. The
 	// host, the name and the channel id are immutable: a request naming a
 	// different host is refused, and the answer says to create a new channel
 	// instead.
-	UpdateSlackSharedChannel(context.Context, *connect.Request[v1.UpdateSlackSharedChannelRequest]) (*connect.Response[v1.UpdateSlackSharedChannelResponse], error)
+	UpdateSlackSharedChannel(context.Context, *v1.UpdateSlackSharedChannelRequest) (*v1.UpdateSlackSharedChannelResponse, error)
 	// DeleteSlackSharedChannel forgets the record, and nothing else: the
 	// channel stays in Slack, and the reconciler stops managing it.
-	DeleteSlackSharedChannel(context.Context, *connect.Request[v1.DeleteSlackSharedChannelRequest]) (*connect.Response[v1.DeleteSlackSharedChannelResponse], error)
+	DeleteSlackSharedChannel(context.Context, *v1.DeleteSlackSharedChannelRequest) (*v1.DeleteSlackSharedChannelResponse, error)
 }
 
-// NewSlackSharedChannelServiceHandler builds an HTTP handler from the service implementation. It
-// returns the path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewSlackSharedChannelServiceHandler(svc SlackSharedChannelServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	slackSharedChannelServiceMethods := v1.File_directoryroster_v1_slack_connect_proto.Services().ByName("SlackSharedChannelService").Methods()
-	slackSharedChannelServiceListSlackSharedChannelsHandler := connect.NewUnaryHandler(
-		SlackSharedChannelServiceListSlackSharedChannelsProcedure,
-		svc.ListSlackSharedChannels,
-		connect.WithSchema(slackSharedChannelServiceMethods.ByName("ListSlackSharedChannels")),
-		connect.WithHandlerOptions(opts...),
+// RegisterSlackSharedChannelServiceHandler registers svc as the
+// directoryroster.v1.SlackSharedChannelService implementation on server.
+func RegisterSlackSharedChannelServiceHandler(server *connect.Server, svc SlackSharedChannelServiceHandler) {
+	adapter := slackSharedChannelServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: slackSharedChannelServiceListSlackSharedChannelsSpec(), Handler: adapter.listSlackSharedChannels},
+		connect.Method{Spec: slackSharedChannelServiceCreateSlackSharedChannelSpec(), Handler: adapter.createSlackSharedChannel},
+		connect.Method{Spec: slackSharedChannelServiceUpdateSlackSharedChannelSpec(), Handler: adapter.updateSlackSharedChannel},
+		connect.Method{Spec: slackSharedChannelServiceDeleteSlackSharedChannelSpec(), Handler: adapter.deleteSlackSharedChannel},
 	)
-	slackSharedChannelServiceCreateSlackSharedChannelHandler := connect.NewUnaryHandler(
-		SlackSharedChannelServiceCreateSlackSharedChannelProcedure,
-		svc.CreateSlackSharedChannel,
-		connect.WithSchema(slackSharedChannelServiceMethods.ByName("CreateSlackSharedChannel")),
-		connect.WithHandlerOptions(opts...),
-	)
-	slackSharedChannelServiceUpdateSlackSharedChannelHandler := connect.NewUnaryHandler(
-		SlackSharedChannelServiceUpdateSlackSharedChannelProcedure,
-		svc.UpdateSlackSharedChannel,
-		connect.WithSchema(slackSharedChannelServiceMethods.ByName("UpdateSlackSharedChannel")),
-		connect.WithHandlerOptions(opts...),
-	)
-	slackSharedChannelServiceDeleteSlackSharedChannelHandler := connect.NewUnaryHandler(
-		SlackSharedChannelServiceDeleteSlackSharedChannelProcedure,
-		svc.DeleteSlackSharedChannel,
-		connect.WithSchema(slackSharedChannelServiceMethods.ByName("DeleteSlackSharedChannel")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/directoryroster.v1.SlackSharedChannelService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case SlackSharedChannelServiceListSlackSharedChannelsProcedure:
-			slackSharedChannelServiceListSlackSharedChannelsHandler.ServeHTTP(w, r)
-		case SlackSharedChannelServiceCreateSlackSharedChannelProcedure:
-			slackSharedChannelServiceCreateSlackSharedChannelHandler.ServeHTTP(w, r)
-		case SlackSharedChannelServiceUpdateSlackSharedChannelProcedure:
-			slackSharedChannelServiceUpdateSlackSharedChannelHandler.ServeHTTP(w, r)
-		case SlackSharedChannelServiceDeleteSlackSharedChannelProcedure:
-			slackSharedChannelServiceDeleteSlackSharedChannelHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedSlackSharedChannelServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedSlackSharedChannelServiceHandler struct{}
 
-func (UnimplementedSlackSharedChannelServiceHandler) ListSlackSharedChannels(context.Context, *connect.Request[v1.ListSlackSharedChannelsRequest]) (*connect.Response[v1.ListSlackSharedChannelsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("directoryroster.v1.SlackSharedChannelService.ListSlackSharedChannels is not implemented"))
+func (UnimplementedSlackSharedChannelServiceHandler) ListSlackSharedChannels(context.Context, *v1.ListSlackSharedChannelsRequest) (*v1.ListSlackSharedChannelsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "directoryroster.v1.SlackSharedChannelService.ListSlackSharedChannels is not implemented")
 }
 
-func (UnimplementedSlackSharedChannelServiceHandler) CreateSlackSharedChannel(context.Context, *connect.Request[v1.CreateSlackSharedChannelRequest]) (*connect.Response[v1.CreateSlackSharedChannelResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("directoryroster.v1.SlackSharedChannelService.CreateSlackSharedChannel is not implemented"))
+func (UnimplementedSlackSharedChannelServiceHandler) CreateSlackSharedChannel(context.Context, *v1.CreateSlackSharedChannelRequest) (*v1.CreateSlackSharedChannelResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "directoryroster.v1.SlackSharedChannelService.CreateSlackSharedChannel is not implemented")
 }
 
-func (UnimplementedSlackSharedChannelServiceHandler) UpdateSlackSharedChannel(context.Context, *connect.Request[v1.UpdateSlackSharedChannelRequest]) (*connect.Response[v1.UpdateSlackSharedChannelResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("directoryroster.v1.SlackSharedChannelService.UpdateSlackSharedChannel is not implemented"))
+func (UnimplementedSlackSharedChannelServiceHandler) UpdateSlackSharedChannel(context.Context, *v1.UpdateSlackSharedChannelRequest) (*v1.UpdateSlackSharedChannelResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "directoryroster.v1.SlackSharedChannelService.UpdateSlackSharedChannel is not implemented")
 }
 
-func (UnimplementedSlackSharedChannelServiceHandler) DeleteSlackSharedChannel(context.Context, *connect.Request[v1.DeleteSlackSharedChannelRequest]) (*connect.Response[v1.DeleteSlackSharedChannelResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("directoryroster.v1.SlackSharedChannelService.DeleteSlackSharedChannel is not implemented"))
+func (UnimplementedSlackSharedChannelServiceHandler) DeleteSlackSharedChannel(context.Context, *v1.DeleteSlackSharedChannelRequest) (*v1.DeleteSlackSharedChannelResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "directoryroster.v1.SlackSharedChannelService.DeleteSlackSharedChannel is not implemented")
+}
+
+type slackSharedChannelServiceClient struct {
+	client *connect.Client
+}
+
+func (c *slackSharedChannelServiceClient) ListSlackSharedChannels(ctx context.Context, req *v1.ListSlackSharedChannelsRequest) (*v1.ListSlackSharedChannelsResponse, error) {
+	var res v1.ListSlackSharedChannelsResponse
+	if err := c.client.CallUnary(ctx, slackSharedChannelServiceListSlackSharedChannelsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *slackSharedChannelServiceClient) CreateSlackSharedChannel(ctx context.Context, req *v1.CreateSlackSharedChannelRequest) (*v1.CreateSlackSharedChannelResponse, error) {
+	var res v1.CreateSlackSharedChannelResponse
+	if err := c.client.CallUnary(ctx, slackSharedChannelServiceCreateSlackSharedChannelSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *slackSharedChannelServiceClient) UpdateSlackSharedChannel(ctx context.Context, req *v1.UpdateSlackSharedChannelRequest) (*v1.UpdateSlackSharedChannelResponse, error) {
+	var res v1.UpdateSlackSharedChannelResponse
+	if err := c.client.CallUnary(ctx, slackSharedChannelServiceUpdateSlackSharedChannelSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *slackSharedChannelServiceClient) DeleteSlackSharedChannel(ctx context.Context, req *v1.DeleteSlackSharedChannelRequest) (*v1.DeleteSlackSharedChannelResponse, error) {
+	var res v1.DeleteSlackSharedChannelResponse
+	if err := c.client.CallUnary(ctx, slackSharedChannelServiceDeleteSlackSharedChannelSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type slackSharedChannelServiceHandler struct {
+	svc SlackSharedChannelServiceHandler
+}
+
+func (h slackSharedChannelServiceHandler) listSlackSharedChannels(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListSlackSharedChannelsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListSlackSharedChannels(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h slackSharedChannelServiceHandler) createSlackSharedChannel(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CreateSlackSharedChannelRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CreateSlackSharedChannel(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h slackSharedChannelServiceHandler) updateSlackSharedChannel(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.UpdateSlackSharedChannelRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.UpdateSlackSharedChannel(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h slackSharedChannelServiceHandler) deleteSlackSharedChannel(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DeleteSlackSharedChannelRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DeleteSlackSharedChannel(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

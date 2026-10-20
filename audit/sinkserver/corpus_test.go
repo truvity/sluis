@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2/connecthttp"
 
 	"github.com/truvity/sluis/audit/internal/corpus"
 	"github.com/truvity/sluis/audit/sdk/sink"
@@ -27,11 +27,11 @@ func TestTheCorpusCrossesEveryHopUnchanged(t *testing.T) {
 		corpus.Same(t, sent, into.Records())
 	})
 
-	for name, opts := range map[string][]connect.ClientOption{
+	for name, opts := range map[string][]connecthttp.Option{
 		"connect, binary": nil,
 		// JSON is what a browser and the viewer speak, and the codec it goes
 		// through is this repository's own.
-		"connect, JSON": {connect.WithProtoJSON()},
+		"connect, JSON": {connecthttp.WithProtoJSON()},
 	} {
 		t.Run(name, func(t *testing.T) {
 			into := &sink.Memory{}

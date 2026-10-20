@@ -12,7 +12,7 @@ import (
 	"errors"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -53,8 +53,8 @@ func (d *Directory) routing(ctx context.Context, grant *Grant) (map[string]strin
 
 // Describe implements the contract's Describe.
 func (d *Directory) Describe(
-	ctx context.Context, _ *connect.Request[directoryv1.DescribeRequest],
-) (*connect.Response[directoryv1.DescribeResponse], error) {
+	ctx context.Context, _ *directoryv1.DescribeRequest,
+) (*directoryv1.DescribeResponse, error) {
 	served, err := d.hub.Describe(ctx)
 	if err != nil {
 		return nil, rpcError(err)
@@ -86,13 +86,13 @@ func (d *Directory) Describe(
 			SnapshotAt:    stamp(s.SnapshotAt),
 		})
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
 // Probe implements the contract's Probe.
 func (d *Directory) Probe(
-	ctx context.Context, req *connect.Request[directoryv1.ProbeRequest],
-) (*connect.Response[directoryv1.ProbeResponse], error) {
+	ctx context.Context, req *directoryv1.ProbeRequest,
+) (*directoryv1.ProbeResponse, error) {
 	grant := GrantOf(ctx)
 	routes, err := d.routing(ctx, grant)
 	if err != nil {
@@ -102,10 +102,10 @@ func (d *Directory) Probe(
 	// named case answers with nothing rather than refusing, for the same
 	// reason a point lookup does: a refusal would confirm the workspace
 	// exists.
-	if id := req.Msg.GetWorkspaceId(); id != "" && !grant.AllowsWorkspace(id, routes) {
-		return connect.NewResponse(&directoryv1.ProbeResponse{Healthy: true}), nil
+	if id := req.GetWorkspaceId(); id != "" && !grant.AllowsWorkspace(id, routes) {
+		return &directoryv1.ProbeResponse{Healthy: true}, nil
 	}
-	healths, err := d.hub.Probe(ctx, req.Msg.GetWorkspaceId())
+	healths, err := d.hub.Probe(ctx, req.GetWorkspaceId())
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -130,13 +130,13 @@ func (d *Directory) Probe(
 			ProbedAt:    stamp(h.ProbedAt),
 		})
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
 // GetGroup implements the contract's GetGroup.
 func (d *Directory) GetGroup(
-	ctx context.Context, req *connect.Request[directoryv1.GetGroupRequest],
-) (*connect.Response[directoryv1.GetGroupResponse], error) {
+	ctx context.Context, req *directoryv1.GetGroupRequest,
+) (*directoryv1.GetGroupResponse, error) {
 	grant := GrantOf(ctx)
 	routes, err := d.routing(ctx, grant)
 	if err != nil {
@@ -145,26 +145,26 @@ func (d *Directory) GetGroup(
 	// Outside the grant answers exactly as an unserved domain does. A
 	// refusal would say "this group exists and you may not see it",
 	// which is the fact the grant is there to withhold.
-	email := req.Msg.GetEmail()
+	email := req.GetEmail()
 	if !grant.AllowsDomain(domainOf(email), routes) || !grant.AllowsGroup(email) {
-		return connect.NewResponse(&directoryv1.GetGroupResponse{}), nil
+		return &directoryv1.GetGroupResponse{}, nil
 	}
-	got, err := d.hub.Group(ctx, email, maxAge(req.Msg.GetMaxAge()))
+	got, err := d.hub.Group(ctx, email, maxAge(req.GetMaxAge()))
 	if err != nil {
 		return nil, rpcError(err)
 	}
-	return connect.NewResponse(&directoryv1.GetGroupResponse{
+	return &directoryv1.GetGroupResponse{
 		Group:         group(got),
 		Found:         got.Found,
 		Authoritative: got.Authoritative,
 		SnapshotAt:    stamp(got.SnapshotAt),
-	}), nil
+	}, nil
 }
 
 // ListGroups implements the contract's ListGroups.
 func (d *Directory) ListGroups(
-	ctx context.Context, req *connect.Request[directoryv1.ListGroupsRequest],
-) (*connect.Response[directoryv1.ListGroupsResponse], error) {
+	ctx context.Context, req *directoryv1.ListGroupsRequest,
+) (*directoryv1.ListGroupsResponse, error) {
 	grant := GrantOf(ctx)
 	routes, err := d.routing(ctx, grant)
 	if err != nil {
@@ -173,10 +173,10 @@ func (d *Directory) ListGroups(
 	// A domain outside the grant lists nothing, as an unserved domain
 	// does. Naming no domain lists every granted one, so a scoped
 	// consumer's enumeration is its own directory rather than the hub's.
-	if domain := req.Msg.GetDomain(); domain != "" && !grant.AllowsDomain(domain, routes) {
-		return connect.NewResponse(&directoryv1.ListGroupsResponse{}), nil
+	if domain := req.GetDomain(); domain != "" && !grant.AllowsDomain(domain, routes) {
+		return &directoryv1.ListGroupsResponse{}, nil
 	}
-	groups, served, err := d.hub.ListGroups(ctx, req.Msg.GetDomain(), maxAge(req.Msg.GetMaxAge()))
+	groups, served, err := d.hub.ListGroups(ctx, req.GetDomain(), maxAge(req.GetMaxAge()))
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -202,40 +202,40 @@ func (d *Directory) ListGroups(
 			SnapshotAt:    stamp(s.SnapshotAt),
 		})
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
 // GetAccount implements the contract's GetAccount.
 func (d *Directory) GetAccount(
-	ctx context.Context, req *connect.Request[directoryv1.GetAccountRequest],
-) (*connect.Response[directoryv1.GetAccountResponse], error) {
+	ctx context.Context, req *directoryv1.GetAccountRequest,
+) (*directoryv1.GetAccountResponse, error) {
 	grant := GrantOf(ctx)
 	routes, err := d.routing(ctx, grant)
 	if err != nil {
 		return nil, rpcError(err)
 	}
-	email := req.Msg.GetEmail()
+	email := req.GetEmail()
 	if !grant.AllowsDomain(domainOf(email), routes) {
 		// Not found, not in domain — the unserved-domain answer, which
 		// consumers already read fail-safe.
-		return connect.NewResponse(&directoryv1.GetAccountResponse{
+		return &directoryv1.GetAccountResponse{
 			Account: &directoryv1.Account{Email: email},
-		}), nil
+		}, nil
 	}
-	got, err := d.hub.Account(ctx, email, maxAge(req.Msg.GetMaxAge()))
+	got, err := d.hub.Account(ctx, email, maxAge(req.GetMaxAge()))
 	if err != nil {
 		return nil, rpcError(err)
 	}
-	return connect.NewResponse(&directoryv1.GetAccountResponse{
+	return &directoryv1.GetAccountResponse{
 		Account:    account(got),
 		SnapshotAt: stamp(got.SnapshotAt),
-	}), nil
+	}, nil
 }
 
 // ResolveAccounts implements the contract's ResolveAccounts.
 func (d *Directory) ResolveAccounts(
-	ctx context.Context, req *connect.Request[directoryv1.ResolveAccountsRequest],
-) (*connect.Response[directoryv1.ResolveAccountsResponse], error) {
+	ctx context.Context, req *directoryv1.ResolveAccountsRequest,
+) (*directoryv1.ResolveAccountsResponse, error) {
 	grant := GrantOf(ctx)
 	routes, err := d.routing(ctx, grant)
 	if err != nil {
@@ -245,16 +245,16 @@ func (d *Directory) ResolveAccounts(
 	// back as the unserved-domain answer. Dropping them from the request
 	// rather than filtering the response also keeps the hub from reading
 	// a directory this consumer may not see.
-	asked := make([]string, 0, len(req.Msg.GetEmails()))
+	asked := make([]string, 0, len(req.GetEmails()))
 	outside := make([]string, 0)
-	for _, email := range req.Msg.GetEmails() {
+	for _, email := range req.GetEmails() {
 		if grant.AllowsDomain(domainOf(email), routes) {
 			asked = append(asked, email)
 			continue
 		}
 		outside = append(outside, email)
 	}
-	got, oldest, err := d.hub.Accounts(ctx, asked, maxAge(req.Msg.GetMaxAge()))
+	got, oldest, err := d.hub.Accounts(ctx, asked, maxAge(req.GetMaxAge()))
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -268,29 +268,29 @@ func (d *Directory) ResolveAccounts(
 	for _, email := range outside {
 		out.Accounts = append(out.Accounts, &directoryv1.Account{Email: email})
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
 // ResolveUser implements the contract's ResolveUser.
 func (d *Directory) ResolveUser(
-	ctx context.Context, req *connect.Request[directoryv1.ResolveUserRequest],
-) (*connect.Response[directoryv1.ResolveUserResponse], error) {
+	ctx context.Context, req *directoryv1.ResolveUserRequest,
+) (*directoryv1.ResolveUserResponse, error) {
 	grant := GrantOf(ctx)
 	routes, err := d.routing(ctx, grant)
 	if err != nil {
 		return nil, rpcError(err)
 	}
-	email := req.Msg.GetEmail()
+	email := req.GetEmail()
 	if !grant.AllowsDomain(domainOf(email), routes) {
 		// in_domain false, no groups — indistinguishable from an address
 		// in a domain this hub does not serve, which is the point.
-		return connect.NewResponse(&directoryv1.ResolveUserResponse{}), nil
+		return &directoryv1.ResolveUserResponse{}, nil
 	}
-	got, err := d.hub.ResolveUser(ctx, email, maxAge(req.Msg.GetMaxAge()))
+	got, err := d.hub.ResolveUser(ctx, email, maxAge(req.GetMaxAge()))
 	if err != nil {
 		return nil, rpcError(err)
 	}
-	return connect.NewResponse(&directoryv1.ResolveUserResponse{
+	return &directoryv1.ResolveUserResponse{
 		// A group outside the grant is absent from what an address
 		// holds, so a consumer cannot learn a group exists by resolving
 		// somebody who is in it.
@@ -302,7 +302,7 @@ func (d *Directory) ResolveUser(
 		SnapshotAt:    stamp(got.SnapshotAt),
 		GivenName:     got.GivenName,
 		FamilyName:    got.FamilyName,
-	}), nil
+	}, nil
 }
 
 func group(g hub.GroupResult) *directoryv1.Group {
@@ -344,14 +344,14 @@ func stamp(t time.Time) *timestamppb.Timestamp {
 func rpcError(err error) error {
 	switch {
 	case errors.Is(err, hub.ErrInvalidAddress):
-		return connect.NewError(connect.CodeInvalidArgument, err)
+		return connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	case errors.Is(err, hub.ErrNotFound):
-		return connect.NewError(connect.CodeNotFound, err)
+		return connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
 	case errors.Is(err, hub.ErrDeclared):
-		return connect.NewError(connect.CodeFailedPrecondition, err)
+		return connect.NewError(connect.CodeFailedPrecondition, err.Error()).WithCause(err)
 	case errors.Is(err, hub.ErrUnknownDomain), errors.Is(err, hub.ErrUnknownGroup):
-		return connect.NewError(connect.CodeInvalidArgument, err)
+		return connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	default:
-		return connect.NewError(connect.CodeInternal, err)
+		return connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 }

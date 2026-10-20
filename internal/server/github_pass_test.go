@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
 	"github.com/truvity/sluis/internal/access"
@@ -30,7 +30,7 @@ func TestRequestingAGitHubPassIsForTheOrganisationsOperatorsAndRateLimited(t *te
 	trail := audittest.New(t)
 	console.deps.Audit = trail
 	ask := func(ctx context.Context, org string) error {
-		_, err := console.RequestGitHubPass(ctx, connect.NewRequest(&directoryrosterv1.RequestGitHubPassRequest{Org: org}))
+		_, err := console.RequestGitHubPass(ctx, &directoryrosterv1.RequestGitHubPassRequest{Org: org})
 		return err
 	}
 	for name, who := range map[string]context.Context{

@@ -12,9 +12,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/truvity/sluis/internal/rpcmount"
 	slackconsole "github.com/truvity/sluis/internal/slackapp/console"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
@@ -30,6 +31,9 @@ import (
 type wsHarness struct {
 	*slackHarness
 	reports *kube.SlackStatus
+	// set is the response headers of each begin, which carry the flow's
+	// cookie: a Connect handler writes them to the call, not the message.
+	set map[*directoryrosterv1.BeginSlackWorkspaceConnectResponse]http.Header
 }
 
 // newConnectedWorkspaceHarness is the workspace harness with the three
@@ -46,7 +50,7 @@ func newConnectedWorkspaceHarness(t *testing.T) *wsHarness {
 
 func newWorkspaceHarness(t *testing.T) *wsHarness {
 	t.Helper()
-	h := &wsHarness{slackHarness: newBareSlackHarness(t)}
+	h := &wsHarness{slackHarness: newBareSlackHarness(t), set: map[*directoryrosterv1.BeginSlackWorkspaceConnectResponse]http.Header{}}
 	h.slack.AddTeam("T0789IJKL", "Initech")
 	h.reports = kube.NewSlackStatus(h.client)
 	if err := h.reports.Ensure(context.Background()); err != nil {
@@ -56,32 +60,36 @@ func newWorkspaceHarness(t *testing.T) *wsHarness {
 	return h
 }
 
-func (h *wsHarness) begin(ctx context.Context, workspace, token string) (*connect.Response[directoryrosterv1.BeginSlackWorkspaceConnectResponse], error) {
+func (h *wsHarness) begin(ctx context.Context, workspace, token string) (*directoryrosterv1.BeginSlackWorkspaceConnectResponse, error) {
 	return h.beginOwned(ctx, workspace, token, "")
 }
 
 // beginOwned is a connect that names the directory to own the workspace.
 func (h *wsHarness) beginOwned(
 	ctx context.Context, workspace, token, owner string,
-) (*connect.Response[directoryrosterv1.BeginSlackWorkspaceConnectResponse], error) {
-	return h.console.BeginSlackWorkspaceConnect(ctx, connect.NewRequest(
-		&directoryrosterv1.BeginSlackWorkspaceConnectRequest{Workspace: workspace, ConfigurationToken: token, Owner: owner}))
+) (*directoryrosterv1.BeginSlackWorkspaceConnectResponse, error) {
+	ctx, call := rpcmount.ServerContext(ctx)
+	begun, err := h.console.BeginSlackWorkspaceConnect(ctx,
+		&directoryrosterv1.BeginSlackWorkspaceConnectRequest{Workspace: workspace, ConfigurationToken: token, Owner: owner})
+	if begun != nil {
+		h.set[begun] = rpcmount.HTTPHeader(call.ResponseHeader())
+	}
+	return begun, err
 }
 
 func (h *wsHarness) disconnect(
 	ctx context.Context, workspace string, force bool,
-) (*connect.Response[directoryrosterv1.DisconnectSlackWorkspaceResponse], error) {
-	return h.console.DisconnectSlackWorkspace(ctx, connect.NewRequest(
-		&directoryrosterv1.DisconnectSlackWorkspaceRequest{Workspace: workspace, ForgetAnyway: force}))
+) (*directoryrosterv1.DisconnectSlackWorkspaceResponse, error) {
+	return h.console.DisconnectSlackWorkspace(ctx, &directoryrosterv1.DisconnectSlackWorkspaceRequest{Workspace: workspace, ForgetAnyway: force})
 }
 
 func (h *wsHarness) status(ctx context.Context, t *testing.T) *directoryrosterv1.GetSlackStatusResponse {
 	t.Helper()
-	got, err := h.console.GetSlackStatus(ctx, connect.NewRequest(&directoryrosterv1.GetSlackStatusRequest{}))
+	got, err := h.console.GetSlackStatus(ctx, &directoryrosterv1.GetSlackStatusRequest{})
 	if err != nil {
 		t.Fatalf("GetSlackStatus: %v", err)
 	}
-	return got.Msg
+	return got
 }
 
 func (h *wsHarness) row(ctx context.Context, t *testing.T, workspace string) *directoryrosterv1.SlackWorkspaceStatus {
@@ -108,10 +116,10 @@ func (h *wsHarness) credentials(t *testing.T) map[string][]byte {
 // finish plays the owner: Slack sends the browser back from an install
 // into installIn, with the state and cookie the begin handed out.
 func (h *wsHarness) finish(
-	t *testing.T, begun *connect.Response[directoryrosterv1.BeginSlackWorkspaceConnectResponse], workspace, installIn string,
+	t *testing.T, begun *directoryrosterv1.BeginSlackWorkspaceConnectResponse, workspace, installIn string,
 ) *httpResult {
 	t.Helper()
-	cookie, state := cookieFrom(t, begun.Header()), mustQuery(t, begun.Msg.GetUrl(), "state")
+	cookie, state := cookieFrom(t, h.set[begun]), mustQuery(t, begun.GetUrl(), "state")
 	_, credential, found, err := h.workspaces.Get(context.Background(), workspace)
 	if err != nil || !found {
 		t.Fatalf("no credential for %s: %v", workspace, err)
@@ -187,12 +195,12 @@ func TestAWorkspaceIsConnectedRecordedRefusedForAnotherTeamUpgradedAndDisconnect
 		!strings.Contains(created.Manifest, `"name":"sluis-acme"`) {
 		t.Errorf("manifest = %s, scopes = %v", created.Manifest, created.Scopes)
 	}
-	if u := begun.Msg.GetUrl(); mustQuery(t, u, "redirect_uri") != "https://access.example"+slackconsole.WorkspaceCallbackPath ||
+	if u := begun.GetUrl(); mustQuery(t, u, "redirect_uri") != "https://access.example"+slackconsole.WorkspaceCallbackPath ||
 		mustQuery(t, u, "scope") != strings.Join(connection.BotScopes, ",") {
 		t.Errorf("authorize URL = %s", u)
 	}
-	if parsed, _ := url.Parse(begun.Msg.GetUrl()); parsed.Query().Has("team") {
-		t.Errorf("the first install preselects a team nobody recorded yet: %s", begun.Msg.GetUrl())
+	if parsed, _ := url.Parse(begun.GetUrl()); parsed.Query().Has("team") {
+		t.Errorf("the first install preselects a team nobody recorded yet: %s", begun.GetUrl())
 	}
 	row = h.row(ctx, t, "acme")
 	if row.GetConnectionState() != slackCreated || row.GetConnection().GetAppId() != created.ID || row.GetConnection().GetBotUserId() != "" ||
@@ -252,8 +260,8 @@ func TestAWorkspaceIsConnectedRecordedRefusedForAnotherTeamUpgradedAndDisconnect
 	if err != nil {
 		t.Fatal(err)
 	}
-	if mustQuery(t, begun.Msg.GetUrl(), "team") != acmeTeam {
-		t.Errorf("a reinstall does not preselect the recorded team: %s", begun.Msg.GetUrl())
+	if mustQuery(t, begun.GetUrl(), "team") != acmeTeam {
+		t.Errorf("a reinstall does not preselect the recorded team: %s", begun.GetUrl())
 	}
 	got = h.finish(t, begun, "acme", globexTeam)
 	if got.Code != http.StatusConflict || !strings.Contains(got.Body, "revoked") || !strings.Contains(got.Body, `href="/console/#/slack"`) {
@@ -320,7 +328,7 @@ func TestAWorkspaceIsConnectedRecordedRefusedForAnotherTeamUpgradedAndDisconnect
 		t.Fatal("a refused disconnect revoked the token")
 	}
 	gone, err := h.disconnect(asSlackIdentity(northOp), "acme", false)
-	if err != nil || !gone.Msg.GetRevoked() {
+	if err != nil || !gone.GetRevoked() {
 		t.Fatalf("disconnect = %+v, %v", gone, err)
 	}
 	if !h.slack.Revoked(acmeTeam) {
@@ -360,7 +368,7 @@ func TestADisconnectSlackWillNotRevokeKeepsTheConnectionUnlessForced(t *testing.
 		t.Error("a failed disconnect forgot the connection")
 	}
 	gone, err := h.disconnect(ctx, "acme", true)
-	if err != nil || gone.Msg.GetRevoked() {
+	if err != nil || gone.GetRevoked() {
 		t.Fatalf("a forced disconnect = %+v, %v", gone, err)
 	}
 	if h.row(ctx, t, "acme").GetConnectionState() != slackNotConnected {
@@ -376,7 +384,7 @@ func TestADisconnectSlackWillNotRevokeKeepsTheConnectionUnlessForced(t *testing.
 		t.Fatal(err)
 	}
 	gone, err = h.disconnect(ctx, "globex", false)
-	if err != nil || gone.Msg.GetRevoked() || h.slack.Count("auth.revoke") != 2 {
+	if err != nil || gone.GetRevoked() || h.slack.Count("auth.revoke") != 2 {
 		t.Errorf("disconnecting an App never installed = %+v, %v (revokes: %d)", gone, err, h.slack.Count("auth.revoke"))
 	}
 }
@@ -555,7 +563,7 @@ func TestAConnectedWorkspaceIsOperatedByItsRecordedOwnerOnly(t *testing.T) {
 func TestRequestingASlackPassIsForTheWorkspacesOperatorsAndRateLimited(t *testing.T) {
 	h := newConnectedWorkspaceHarness(t)
 	ask := func(ctx context.Context, workspace string) error {
-		_, err := h.console.RequestSlackPass(ctx, connect.NewRequest(&directoryrosterv1.RequestSlackPassRequest{Workspace: workspace}))
+		_, err := h.console.RequestSlackPass(ctx, &directoryrosterv1.RequestSlackPassRequest{Workspace: workspace})
 		return err
 	}
 	for name, who := range map[string]context.Context{
@@ -630,8 +638,7 @@ func TestRequestingASlackPassIsForTheWorkspacesOperatorsAndRateLimited(t *testin
 func TestOnlyTheInstallationWideOperatorChangesAnOwner(t *testing.T) {
 	h := newConnectedWorkspaceHarness(t)
 	change := func(ctx context.Context, workspace, owner string) error {
-		_, err := h.console.ChangeSlackWorkspaceOwner(ctx, connect.NewRequest(
-			&directoryrosterv1.ChangeSlackWorkspaceOwnerRequest{Workspace: workspace, Owner: owner}))
+		_, err := h.console.ChangeSlackWorkspaceOwner(ctx, &directoryrosterv1.ChangeSlackWorkspaceOwnerRequest{Workspace: workspace, Owner: owner})
 		return err
 	}
 	for name, who := range map[string]context.Context{
@@ -719,7 +726,7 @@ func TestAWorkspaceInstallIsFinishedOnlyByTheBrowserThatStartedIt(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	cookie, state := cookieFrom(t, begun.Header()), mustQuery(t, begun.Msg.GetUrl(), "state")
+	cookie, state := cookieFrom(t, h.set[begun]), mustQuery(t, begun.GetUrl(), "state")
 	_, credential, _, _ := h.workspaces.Get(context.Background(), "acme")
 	code := h.slack.Install(credential.AppID, acmeTeam)
 	query := func(state string) url.Values { return url.Values{"code": {code}, "state": {state}} }
@@ -728,7 +735,7 @@ func TestAWorkspaceInstallIsFinishedOnlyByTheBrowserThatStartedIt(t *testing.T) 
 	}
 	callback := func(state, cookie string) int { return callbackQuery(query(state), cookie) }
 
-	set := begun.Header().Get("Set-Cookie")
+	set := h.set[begun].Get("Set-Cookie")
 	if !strings.Contains(set, "HttpOnly") || !strings.Contains(set, "Max-Age=600") {
 		t.Errorf("flow cookie = %s", set)
 	}
@@ -797,7 +804,7 @@ func TestEveryRefusedSlackCallbackIsLoggedAndAuditedWithItsReason(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	cookie, state := cookieFrom(t, begun.Header()), mustQuery(t, begun.Msg.GetUrl(), "state")
+	cookie, state := cookieFrom(t, h.set[begun]), mustQuery(t, begun.GetUrl(), "state")
 	_, credential, _, _ := h.workspaces.Get(context.Background(), "acme")
 	code := h.slack.Install(credential.AppID, acmeTeam)
 	call := func(q url.Values, cookie string) int {
@@ -887,7 +894,7 @@ func TestTheStatusShowsEachCallerOnlyTheWorkspacesItMayView(t *testing.T) {
 			}
 		})
 	}
-	statusReq := connect.NewRequest(&directoryrosterv1.GetSlackStatusRequest{})
+	statusReq := &directoryrosterv1.GetSlackStatusRequest{}
 	if _, err := h.console.GetSlackStatus(asSlackIdentity(elsewhereOp), statusReq); connect.CodeOf(err) != connect.CodePermissionDenied {
 		t.Errorf("an operator of a directory that owns nothing = %v, want permission denied", err)
 	}
@@ -986,8 +993,8 @@ func TestConfirmingSlackRemovalsIsForTheSetTheReportShows(t *testing.T) {
 		},
 	})
 	confirm := func(ctx context.Context, workspace, channel, fingerprint string) error {
-		_, err := h.console.ConfirmSlackRemovals(ctx, connect.NewRequest(
-			&directoryrosterv1.ConfirmSlackRemovalsRequest{Workspace: workspace, Channel: channel, Fingerprint: fingerprint}))
+		_, err := h.console.ConfirmSlackRemovals(ctx,
+			&directoryrosterv1.ConfirmSlackRemovalsRequest{Workspace: workspace, Channel: channel, Fingerprint: fingerprint})
 		return err
 	}
 	denied := func(name string, err error, want connect.Code) {

@@ -2,7 +2,6 @@ package audit_test
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -13,7 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 	auditv1 "github.com/truvity/sluis/audit/sdk/gen/audit/v1"
 	"github.com/truvity/sluis/audit/sdk/gen/audit/v1/auditv1connect"
 
@@ -35,33 +35,36 @@ type installation struct {
 }
 
 func (i *installation) RegisterCatalogue(
-	_ context.Context, _ *connect.Request[auditv1.RegisterCatalogueRequest],
-) (*connect.Response[auditv1.RegisterCatalogueResponse], error) {
+	_ context.Context, _ *auditv1.RegisterCatalogueRequest,
+) (*auditv1.RegisterCatalogueResponse, error) {
 	i.registrations.Add(1)
 	if i.unauth.Load() {
-		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("no"))
+		return nil, connect.NewError(connect.CodeUnauthenticated, "no")
 	}
 	i.mu.Lock()
 	defer i.mu.Unlock()
-	return connect.NewResponse(&auditv1.RegisterCatalogueResponse{Problems: i.problems}), nil
+	return &auditv1.RegisterCatalogueResponse{Problems: i.problems}, nil
 }
 
 func (i *installation) Write(
-	_ context.Context, req *connect.Request[auditv1.WriteRequest],
-) (*connect.Response[auditv1.WriteResponse], error) {
+	_ context.Context, req *auditv1.WriteRequest,
+) (*auditv1.WriteResponse, error) {
 	if i.sinkDown.Load() {
-		return nil, connect.NewError(connect.CodeUnavailable, errors.New("the archive is unreachable"))
+		return nil, connect.NewError(connect.CodeUnavailable, "the archive is unreachable")
 	}
-	n := int32(len(req.Msg.GetRecords()))
+	n := int32(len(req.GetRecords()))
 	i.written.Add(int64(n))
-	return connect.NewResponse(&auditv1.WriteResponse{Accepted: n}), nil
+	return &auditv1.WriteResponse{Accepted: n}, nil
 }
 
 func serve(t *testing.T, i *installation) *httptest.Server {
 	t.Helper()
 	mux := http.NewServeMux()
-	mux.Handle(auditv1connect.NewRegistryServiceHandler(i))
-	mux.Handle(auditv1connect.NewSinkServiceHandler(i))
+	server := connect.NewServer()
+	auditv1connect.RegisterRegistryServiceHandler(server, i)
+	auditv1connect.RegisterSinkServiceHandler(server, i)
+	connecthttp.Mount(mux, server)
+
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	return srv

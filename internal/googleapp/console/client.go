@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	backendpkg "github.com/truvity/sluis/backend"
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
@@ -117,33 +117,33 @@ func ConnectError(err error) error {
 	}
 	var p *consolecall.Problem
 	if errors.As(err, &p) {
-		return connect.NewError(connect.CodeFailedPrecondition, p)
+		return connect.NewError(connect.CodeFailedPrecondition, p.Error()).WithCause(p)
 	}
 	var coded *modcall.Error
 	if errors.As(err, &coded) {
 		msg := errors.New(coded.Message)
 		switch coded.Code {
 		case modcall.CodeForbidden:
-			return connect.NewError(connect.CodePermissionDenied, errors.New(RefusalText))
+			return connect.NewError(connect.CodePermissionDenied, RefusalText)
 		case CodeUnauthenticated:
-			return connect.NewError(connect.CodeUnauthenticated, errors.New("sign in first"))
+			return connect.NewError(connect.CodeUnauthenticated, "sign in first")
 		case CodeInvalidArgument, modcall.CodeBadRequest:
-			return connect.NewError(connect.CodeInvalidArgument, msg)
+			return connect.NewError(connect.CodeInvalidArgument, msg.Error()).WithCause(msg)
 		case CodeNotFound:
-			return connect.NewError(connect.CodeNotFound, msg)
+			return connect.NewError(connect.CodeNotFound, msg.Error()).WithCause(msg)
 		case CodeFailedPrecondition:
-			return connect.NewError(connect.CodeFailedPrecondition, msg)
+			return connect.NewError(connect.CodeFailedPrecondition, msg.Error()).WithCause(msg)
 		case CodeUnimplemented:
-			return connect.NewError(connect.CodeUnimplemented, msg)
+			return connect.NewError(connect.CodeUnimplemented, msg.Error()).WithCause(msg)
 		case modcall.CodeDeadlineExceeded:
-			return connect.NewError(connect.CodeDeadlineExceeded, errors.New("the Google module did not answer in time"))
+			return connect.NewError(connect.CodeDeadlineExceeded, "the Google module did not answer in time")
 		}
-		return connect.NewError(connect.CodeInternal, errors.New("the Google module failed"))
+		return connect.NewError(connect.CodeInternal, "the Google module failed")
 	}
 	if errors.Is(err, context.DeadlineExceeded) {
-		return connect.NewError(connect.CodeDeadlineExceeded, errors.New("the Google module did not answer in time"))
+		return connect.NewError(connect.CodeDeadlineExceeded, "the Google module did not answer in time")
 	}
-	return connect.NewError(connect.CodeUnavailable, errors.New("the Google module could not be reached"))
+	return connect.NewError(connect.CodeUnavailable, "the Google module could not be reached")
 }
 
 // RemoteConnector is the Google connector as the issuer holds it when the

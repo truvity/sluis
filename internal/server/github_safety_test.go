@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
 	"github.com/truvity/sluis/internal/access"
@@ -50,7 +50,7 @@ func TestConfirmingRemovalsIsForTheSetTheReportShows(t *testing.T) {
 	confirmations := &memoryConfirmations{byOrg: map[string]connection.Confirmation{}}
 	console.deps.GitHubConfirmations = confirmations
 	confirm := func(ctx context.Context, fingerprint string) error {
-		_, err := console.ConfirmGitHubRemovals(ctx, connect.NewRequest(&directoryrosterv1.ConfirmGitHubRemovalsRequest{Org: "globex", Fingerprint: fingerprint}))
+		_, err := console.ConfirmGitHubRemovals(ctx, &directoryrosterv1.ConfirmGitHubRemovalsRequest{Org: "globex", Fingerprint: fingerprint})
 		return err
 	}
 
@@ -98,7 +98,7 @@ func TestImportingLinksAppliesTheThreeChecks(t *testing.T) {
 	r.github.AddAccount("out-gh")
 	credentialFor(t, r, "globex")
 
-	response, err := r.console.ImportGitHubLinks(operator(), connect.NewRequest(&directoryrosterv1.ImportGitHubLinksRequest{
+	response, err := r.console.ImportGitHubLinks(operator(), &directoryrosterv1.ImportGitHubLinksRequest{
 		Origin: "github-roster 0.x",
 		Records: []*directoryrosterv1.GitHubLinkRecord{
 			{Login: "ada-gh", Emails: []string{"ada@globex.example"}, ApprovedBy: "boss@globex.example"},
@@ -106,16 +106,16 @@ func TestImportingLinksAppliesTheThreeChecks(t *testing.T) {
 			{Login: "out-gh", Emails: []string{"out@globex.example"}, ApprovedBy: "boss@globex.example"},
 			{Login: "ada-gh", Emails: []string{"ada@globex.example"}},
 		},
-	}))
+	})
 	if err != nil {
 		t.Fatalf("ImportGitHubLinks: %v", err)
 	}
-	if len(response.Msg.GetImported()) != 1 || response.Msg.GetImported()[0].GetLogin() != "ada-gh" ||
-		response.Msg.GetImported()[0].GetSource() != string(link.SourceImported) {
-		t.Errorf("imported = %+v, want ada-gh alone, as imported", response.Msg.GetImported())
+	if len(response.GetImported()) != 1 || response.GetImported()[0].GetLogin() != "ada-gh" ||
+		response.GetImported()[0].GetSource() != string(link.SourceImported) {
+		t.Errorf("imported = %+v, want ada-gh alone, as imported", response.GetImported())
 	}
 	reasons := map[string]string{}
-	for _, skipped := range response.Msg.GetSkipped() {
+	for _, skipped := range response.GetSkipped() {
 		reasons[skipped.GetLogin()] += skipped.GetReason() + ";"
 	}
 	for login, want := range map[string]string{"gone-gh": "suspended", "out-gh": "not a member", "ada-gh": "nobody approved"} {

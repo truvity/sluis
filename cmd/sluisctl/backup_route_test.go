@@ -14,13 +14,14 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	sluisv1 "github.com/truvity/sluis/gen/sluis/v1"
 	"github.com/truvity/sluis/gen/sluis/v1/sluisv1connect"
 	"github.com/truvity/sluis/internal/backup/job"
 	"github.com/truvity/sluis/internal/backup/restorejob"
+	"github.com/truvity/sluis/internal/rpcmount"
 )
 
 const (
@@ -62,15 +63,21 @@ func (f *fakeBackupIssuer) record(name string, h http.Header) {
 	f.bearers = append(f.bearers, h.Get("Authorization"))
 }
 
+// requestHeader is the headers of the call ctx belongs to.
+func requestHeader(ctx context.Context) http.Header {
+	info, _ := connect.CallInfoForServerContext(ctx)
+	return rpcmount.HTTPHeader(info.RequestHeader())
+}
+
 func (f *fakeBackupIssuer) refuse() error {
 	if f.denied {
-		return connect.NewError(connect.CodePermissionDenied, errors.New("starting a backup needs a group that the policy's backup.runGroups names"))
+		return connect.NewError(connect.CodePermissionDenied, "starting a backup needs a group that the policy's backup.runGroups names")
 	}
 	return nil
 }
 
-func (f *fakeBackupIssuer) RunBackup(_ context.Context, req *connect.Request[sluisv1.RunBackupRequest]) (*connect.Response[sluisv1.RunBackupResponse], error) {
-	f.record("RunBackup", req.Header())
+func (f *fakeBackupIssuer) RunBackup(ctx context.Context, _ *sluisv1.RunBackupRequest) (*sluisv1.RunBackupResponse, error) {
+	f.record("RunBackup", requestHeader(ctx))
 	if err := f.refuse(); err != nil {
 		return nil, err
 	}
@@ -82,11 +89,11 @@ func (f *fakeBackupIssuer) RunBackup(_ context.Context, req *connect.Request[slu
 	f.started = true
 	f.mu.Unlock()
 	// The answer is at once and holds no run, as the issuer's does.
-	return connect.NewResponse(&sluisv1.RunBackupResponse{Available: true, Outcome: outcome, Started: timestamppb.Now()}), nil
+	return &sluisv1.RunBackupResponse{Available: true, Outcome: outcome, Started: timestamppb.Now()}, nil
 }
 
-func (f *fakeBackupIssuer) GetBackupStatus(_ context.Context, req *connect.Request[sluisv1.GetBackupStatusRequest]) (*connect.Response[sluisv1.GetBackupStatusResponse], error) {
-	f.record("GetBackupStatus", req.Header())
+func (f *fakeBackupIssuer) GetBackupStatus(ctx context.Context, _ *sluisv1.GetBackupStatusRequest) (*sluisv1.GetBackupStatusResponse, error) {
+	f.record("GetBackupStatus", requestHeader(ctx))
 	if err := f.refuse(); err != nil {
 		return nil, err
 	}
@@ -107,28 +114,28 @@ func (f *fakeBackupIssuer) GetBackupStatus(_ context.Context, req *connect.Reque
 	}
 	run := &sluisv1.BackupRun{Id: testBackup, State: state, Started: timestamppb.Now(), Modules: 6, Records: 42, Chunks: 3, Reason: "bucket", Error: "refused"}
 	if state == "running" {
-		return connect.NewResponse(&sluisv1.GetBackupStatusResponse{Available: true, Latest: run, Unfinished: run}), nil
+		return &sluisv1.GetBackupStatusResponse{Available: true, Latest: run, Unfinished: run}, nil
 	}
-	return connect.NewResponse(&sluisv1.GetBackupStatusResponse{Available: true, Latest: run, LastCompleted: run,
-		Retention: &sluisv1.BackupRetention{At: timestamppb.New(time.Date(2026, 10, 10, 2, 0, 0, 0, time.UTC)), Keep: 7, MaxAge: "720h", Kept: 7, Removed: 2, Cleaned: 1, Refused: 3}}), nil
+	return &sluisv1.GetBackupStatusResponse{Available: true, Latest: run, LastCompleted: run,
+		Retention: &sluisv1.BackupRetention{At: timestamppb.New(time.Date(2026, 10, 10, 2, 0, 0, 0, time.UTC)), Keep: 7, MaxAge: "720h", Kept: 7, Removed: 2, Cleaned: 1, Refused: 3}}, nil
 }
 
-func (f *fakeBackupIssuer) ListBackups(_ context.Context, req *connect.Request[sluisv1.ListBackupsRequest]) (*connect.Response[sluisv1.ListBackupsResponse], error) {
-	f.record("ListBackups", req.Header())
-	return connect.NewResponse(&sluisv1.ListBackupsResponse{Available: true, Backups: []*sluisv1.BackupInfo{
-		{Id: testBackup, Created: timestamppb.New(time.Date(2026, 10, 10, 2, 0, 0, 0, time.UTC)), Modules: 6, Records: 42, Layout: "v5"}}}), nil
+func (f *fakeBackupIssuer) ListBackups(ctx context.Context, _ *sluisv1.ListBackupsRequest) (*sluisv1.ListBackupsResponse, error) {
+	f.record("ListBackups", requestHeader(ctx))
+	return &sluisv1.ListBackupsResponse{Available: true, Backups: []*sluisv1.BackupInfo{
+		{Id: testBackup, Created: timestamppb.New(time.Date(2026, 10, 10, 2, 0, 0, 0, time.UTC)), Modules: 6, Records: 42, Layout: "v5"}}}, nil
 }
 
-func (f *fakeBackupIssuer) GetRestoreStatus(_ context.Context, req *connect.Request[sluisv1.GetRestoreStatusRequest]) (*connect.Response[sluisv1.GetRestoreStatusResponse], error) {
-	f.record("GetRestoreStatus", req.Header())
-	return connect.NewResponse(&sluisv1.GetRestoreStatusResponse{Available: true,
-		Latest: &sluisv1.RestoreRun{Id: "20261010T030000Z-a1b2c3", BackupId: testBackup, State: "completed", By: "someone"}}), nil
+func (f *fakeBackupIssuer) GetRestoreStatus(ctx context.Context, _ *sluisv1.GetRestoreStatusRequest) (*sluisv1.GetRestoreStatusResponse, error) {
+	f.record("GetRestoreStatus", requestHeader(ctx))
+	return &sluisv1.GetRestoreStatusResponse{Available: true,
+		Latest: &sluisv1.RestoreRun{Id: "20261010T030000Z-a1b2c3", BackupId: testBackup, State: "completed", By: "someone"}}, nil
 }
 
-func (f *fakeBackupIssuer) GetRestorePreview(_ context.Context, req *connect.Request[sluisv1.GetRestorePreviewRequest]) (*connect.Response[sluisv1.GetRestorePreviewResponse], error) {
-	f.record("GetRestorePreview", req.Header())
-	return connect.NewResponse(&sluisv1.GetRestorePreviewResponse{Available: true, Outcome: "preview", Installation: "example", BackupId: req.Msg.GetBackupId(), Layout: "v5",
-		Sections: []*sluisv1.RestorePreviewSection{{Module: "oidc", Section: "state", Create: 2, Overwrite: 1, Same: 5}}}), nil
+func (f *fakeBackupIssuer) GetRestorePreview(ctx context.Context, req *sluisv1.GetRestorePreviewRequest) (*sluisv1.GetRestorePreviewResponse, error) {
+	f.record("GetRestorePreview", requestHeader(ctx))
+	return &sluisv1.GetRestorePreviewResponse{Available: true, Outcome: "preview", Installation: "example", BackupId: req.GetBackupId(), Layout: "v5",
+		Sections: []*sluisv1.RestorePreviewSection{{Module: "oidc", Section: "state", Create: 2, Overwrite: 1, Same: 5}}}, nil
 }
 
 func (f *fakeBackupIssuer) called() []string {
@@ -143,7 +150,9 @@ func newFakeBackupIssuer(t *testing.T) *fakeBackupIssuer {
 	t.Helper()
 	f := &fakeBackupIssuer{}
 	mux := http.NewServeMux()
-	path, handler := sluisv1connect.NewBackupServiceHandler(f)
+	rpc := rpcmount.NewServer()
+	sluisv1connect.RegisterBackupServiceHandler(rpc, f)
+	path, handler := rpcmount.Handler(rpc)
 	mux.Handle("/console"+path, http.StripPrefix("/console", handler))
 	mux.HandleFunc(sluisConfigurationPath, func(w http.ResponseWriter, r *http.Request) {
 		f.mu.Lock()

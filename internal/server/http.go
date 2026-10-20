@@ -21,7 +21,8 @@ import (
 
 	"github.com/truvity/sluis/audit/sdk/record"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 
 	"github.com/truvity/sluis/gen/directoryroster/v1/directoryrosterv1connect"
 	"github.com/truvity/sluis/internal/access"
@@ -36,6 +37,7 @@ import (
 	"github.com/truvity/sluis/internal/modcall"
 	"github.com/truvity/sluis/internal/recoverygate"
 	"github.com/truvity/sluis/internal/refusal"
+	"github.com/truvity/sluis/internal/rpcmount"
 	slackconsole "github.com/truvity/sluis/internal/slackapp/console"
 	"github.com/truvity/sluis/internal/telemetry"
 	"github.com/truvity/sluis/internal/version"
@@ -329,7 +331,7 @@ func (s *ConsoleServer) wayIn() string {
 func (s *ConsoleServer) Handler() http.Handler {
 	mux := http.NewServeMux()
 
-	registerRPC(mux, s.console, maintenanceOptions(s.maintenance)...)
+	registerRPC(mux, s.console, maintenanceInterceptors(s.maintenance)...)
 
 	if s.consoleUI != nil {
 		// A request for the directory itself is a 404, not a listing of the files.
@@ -1407,26 +1409,35 @@ type rpcHandlers interface {
 // registerRPC serves the operator services on mux under both their names:
 // sluis.v1.* and the legacy directoryroster.v1.* that older consoles and
 // controllers still call. Both reach the same handler (see connectalias).
-func registerRPC(mux *http.ServeMux, h rpcHandlers, extra ...connect.HandlerOption) {
-	options := append(append(telemetry.ConnectOptions(), refusal.ConnectOptions(nil)...), extra...)
+// extra runs inside the telemetry and refusal interceptors.
+func registerRPC(mux *http.ServeMux, h rpcHandlers, extra ...connect.ServerInterceptor) {
+	interceptors := append([]connect.ServerInterceptor{telemetry.ConnectServerInterceptor(), refusal.Interceptor(nil)}, extra...)
+	for _, register := range []func(*connect.Server){
+		func(s *connect.Server) { directoryrosterv1connect.RegisterWorkspaceServiceHandler(s, h) },
+		func(s *connect.Server) { directoryrosterv1connect.RegisterSettingsServiceHandler(s, h) },
+		func(s *connect.Server) { directoryrosterv1connect.RegisterAccessServiceHandler(s, h) },
+		func(s *connect.Server) { directoryrosterv1connect.RegisterGitHubServiceHandler(s, h) },
+		func(s *connect.Server) { directoryrosterv1connect.RegisterSlackAppServiceHandler(s, h) },
+		func(s *connect.Server) { directoryrosterv1connect.RegisterSlackSharedChannelServiceHandler(s, h) },
+		func(s *connect.Server) { directoryrosterv1connect.RegisterSlackChannelServiceHandler(s, h) },
+		func(s *connect.Server) { directoryrosterv1connect.RegisterSlackServiceHandler(s, h) },
+		func(s *connect.Server) { directoryrosterv1connect.RegisterCloudflareServiceHandler(s, h) },
+		func(s *connect.Server) { directoryrosterv1connect.RegisterBackupServiceHandler(s, h) },
+	} {
+		serveRPC(mux, register, interceptors)
+	}
+}
+
+// serveRPC mounts one operator service, and its sluis.v1 alias, on mux.
+func serveRPC(mux *http.ServeMux, register func(*connect.Server), interceptors []connect.ServerInterceptor) {
+	rpc := rpcmount.NewServer(interceptors...)
+	register(rpc)
 	// A message is capped as it is decoded, which the listener's cap on the
 	// body cannot see when the body is compressed.
-	options = append(options, connect.WithReadMaxBytes(httpsec.MaxRequestBody))
-	serve := func(path string, handler http.Handler) {
-		mux.Handle(path, handler)
-		legacy := strings.Trim(path, "/")
-		connectalias.Mount(mux, "sluis.v1."+strings.TrimPrefix(legacy, "directoryroster.v1."), legacy)
-	}
-	serve(directoryrosterv1connect.NewWorkspaceServiceHandler(h, options...))
-	serve(directoryrosterv1connect.NewSettingsServiceHandler(h, options...))
-	serve(directoryrosterv1connect.NewAccessServiceHandler(h, options...))
-	serve(directoryrosterv1connect.NewGitHubServiceHandler(h, options...))
-	serve(directoryrosterv1connect.NewSlackAppServiceHandler(h, options...))
-	serve(directoryrosterv1connect.NewSlackSharedChannelServiceHandler(h, options...))
-	serve(directoryrosterv1connect.NewSlackChannelServiceHandler(h, options...))
-	serve(directoryrosterv1connect.NewSlackServiceHandler(h, options...))
-	serve(directoryrosterv1connect.NewCloudflareServiceHandler(h, options...))
-	serve(directoryrosterv1connect.NewBackupServiceHandler(h, options...))
+	path, handler := rpcmount.Handler(rpc, connecthttp.WithReadMaxBytes(httpsec.MaxRequestBody))
+	mux.Handle(path, handler)
+	legacy := strings.Trim(path, "/")
+	connectalias.Mount(mux, "sluis.v1."+strings.TrimPrefix(legacy, "directoryroster.v1."), legacy)
 }
 
 // githubWebOrigin is where the shell POSTs a GitHub App manifest. The service

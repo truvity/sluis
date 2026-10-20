@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
 )
@@ -19,15 +19,15 @@ func TestANewConsoleCallsTheSlackModuleInItsOwnProcess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := console.GetSlackStatus(operator(), connect.NewRequest(&directoryrosterv1.GetSlackStatusRequest{}))
+	got, err := console.GetSlackStatus(operator(), &directoryrosterv1.GetSlackStatusRequest{})
 	if err != nil {
 		t.Fatalf("GetSlackStatus: %v", err)
 	}
-	if len(got.Msg.GetWorkspaces()) != 3 || !got.Msg.GetConnectingAvailable() {
-		t.Errorf("the page = %v", got.Msg)
+	if len(got.GetWorkspaces()) != 3 || !got.GetConnectingAvailable() {
+		t.Errorf("the page = %v", got)
 	}
 	if _, err = console.GetSlackStatus(
-		context.Background(), connect.NewRequest(&directoryrosterv1.GetSlackStatusRequest{}),
+		context.Background(), &directoryrosterv1.GetSlackStatusRequest{},
 	); connect.CodeOf(err) != connect.CodeUnauthenticated {
 		t.Errorf("an anonymous page = %v", err)
 	}

@@ -4,15 +4,15 @@ package server
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
 	"github.com/truvity/sluis/internal/access"
 	cfrpc "github.com/truvity/sluis/internal/cloudflare/rpc"
+	"github.com/truvity/sluis/internal/rpcmount"
 	"github.com/truvity/sluis/storage/logattr"
 )
 
@@ -43,7 +43,7 @@ const cloudflareCallTimeout = 30 * time.Second
 
 func (c *Console) cloudflare() (CloudflareModule, error) {
 	if c.deps.Cloudflare == nil {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("this deployment has no cloudflare section"))
+		return nil, connect.NewError(connect.CodeFailedPrecondition, "this deployment has no cloudflare section")
 	}
 	return c.deps.Cloudflare, nil
 }
@@ -56,15 +56,15 @@ func callerOf(id access.Identity) cfrpc.Caller {
 
 // ListCloudflare implements the administrator's contract.
 func (c *Console) ListCloudflare(
-	ctx context.Context, _ *connect.Request[directoryrosterv1.ListCloudflareRequest],
-) (*connect.Response[directoryrosterv1.ListCloudflareResponse], error) {
+	ctx context.Context, _ *directoryrosterv1.ListCloudflareRequest,
+) (*directoryrosterv1.ListCloudflareResponse, error) {
 	id, err := requireRole(ctx, access.RoleViewer)
 	if err != nil {
 		return nil, err
 	}
 	out := &directoryrosterv1.ListCloudflareResponse{CanOperate: id.Can(access.RoleOperator)}
 	if c.deps.Cloudflare == nil {
-		return connect.NewResponse(out), nil
+		return out, nil
 	}
 	ctx, cancel := context.WithTimeout(ctx, cloudflareCallTimeout)
 	defer cancel()
@@ -79,7 +79,7 @@ func (c *Console) ListCloudflare(
 	for i := range st.Presets {
 		out.Presets = append(out.Presets, presetProto(st.Presets[i]))
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
 // presetProto is the module's view of a preset as the page's message.
@@ -104,8 +104,8 @@ func presetProto(p cfrpc.PresetView) *directoryrosterv1.CloudflarePreset {
 
 // RotateCloudflarePreset implements the operator contract.
 func (c *Console) RotateCloudflarePreset(
-	ctx context.Context, req *connect.Request[directoryrosterv1.RotateCloudflarePresetRequest],
-) (*connect.Response[directoryrosterv1.RotateCloudflarePresetResponse], error) {
+	ctx context.Context, req *directoryrosterv1.RotateCloudflarePresetRequest,
+) (*directoryrosterv1.RotateCloudflarePresetResponse, error) {
 	id, err := requireRole(ctx, access.RoleOperator)
 	if err != nil {
 		return nil, err
@@ -116,20 +116,20 @@ func (c *Console) RotateCloudflarePreset(
 	}
 	ctx, cancel := context.WithTimeout(ctx, cloudflareCallTimeout)
 	defer cancel()
-	minted, err := sts.Rotate(ctx, req.Msg.GetPreset(), identityActor(id))
+	minted, err := sts.Rotate(ctx, req.GetPreset(), identityActor(id))
 	if err != nil {
 		return nil, cloudflareError(err)
 	}
-	c.log().InfoContext(ctx, "a Cloudflare preset was rotated from the console", slog.String("preset", logattr.Safe(req.Msg.GetPreset())), slog.String("by", logattr.Safe(id.Who())))
-	return connect.NewResponse(&directoryrosterv1.RotateCloudflarePresetResponse{
+	c.log().InfoContext(ctx, "a Cloudflare preset was rotated from the console", slog.String("preset", logattr.Safe(req.GetPreset())), slog.String("by", logattr.Safe(id.Who())))
+	return &directoryrosterv1.RotateCloudflarePresetResponse{
 		TokenId: minted.TokenID, ExpiresOn: stamp(minted.ExpiresOn),
-	}), nil
+	}, nil
 }
 
 // RevokeCloudflareToken implements the operator contract.
 func (c *Console) RevokeCloudflareToken(
-	ctx context.Context, req *connect.Request[directoryrosterv1.RevokeCloudflareTokenRequest],
-) (*connect.Response[directoryrosterv1.RevokeCloudflareTokenResponse], error) {
+	ctx context.Context, req *directoryrosterv1.RevokeCloudflareTokenRequest,
+) (*directoryrosterv1.RevokeCloudflareTokenResponse, error) {
 	id, err := requireRole(ctx, access.RoleOperator)
 	if err != nil {
 		return nil, err
@@ -140,24 +140,24 @@ func (c *Console) RevokeCloudflareToken(
 	}
 	ctx, cancel := context.WithTimeout(ctx, cloudflareCallTimeout)
 	defer cancel()
-	res, err := sts.Revoke(ctx, req.Msg.GetPreset(), req.Msg.GetTokenId(), identityActor(id))
+	res, err := sts.Revoke(ctx, req.GetPreset(), req.GetTokenId(), identityActor(id))
 	if err != nil {
 		return nil, cloudflareError(err)
 	}
-	return connect.NewResponse(&directoryrosterv1.RevokeCloudflareTokenResponse{Replaced: res.Rotated}), nil
+	return &directoryrosterv1.RevokeCloudflareTokenResponse{Replaced: res.Rotated}, nil
 }
 
 // ListMyCloudflarePresets implements the person contract.
 func (c *Console) ListMyCloudflarePresets(
-	ctx context.Context, _ *connect.Request[directoryrosterv1.ListMyCloudflarePresetsRequest],
-) (*connect.Response[directoryrosterv1.ListMyCloudflarePresetsResponse], error) {
+	ctx context.Context, _ *directoryrosterv1.ListMyCloudflarePresetsRequest,
+) (*directoryrosterv1.ListMyCloudflarePresetsResponse, error) {
 	id, ok := IdentityFrom(ctx)
 	if !ok {
-		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("sign in first"))
+		return nil, connect.NewError(connect.CodeUnauthenticated, "sign in first")
 	}
 	out := &directoryrosterv1.ListMyCloudflarePresetsResponse{}
 	if c.deps.Cloudflare == nil {
-		return connect.NewResponse(out), nil
+		return out, nil
 	}
 	out.Available = true
 	for _, p := range c.deps.Cloudflare.Granted(callerOf(id)) {
@@ -165,29 +165,30 @@ func (c *Console) ListMyCloudflarePresets(
 			Name: p.Name, Description: p.Description, Endpoint: p.Endpoint, LifetimeSeconds: int64(p.Lifetime / time.Second),
 		})
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
 // GetCloudflareCredential implements the person contract. The grant is the
 // minter's to check, and it records the refusal.
 func (c *Console) GetCloudflareCredential(
-	ctx context.Context, req *connect.Request[directoryrosterv1.GetCloudflareCredentialRequest],
-) (*connect.Response[directoryrosterv1.GetCloudflareCredentialResponse], error) {
+	ctx context.Context, req *directoryrosterv1.GetCloudflareCredentialRequest,
+) (*directoryrosterv1.GetCloudflareCredentialResponse, error) {
+	info := rpcmount.CallInfo(ctx)
 	id, ok := IdentityFrom(ctx)
 	if !ok {
-		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("sign in first"))
+		return nil, connect.NewError(connect.CodeUnauthenticated, "sign in first")
 	}
 	sts, err := c.cloudflare()
 	if err != nil {
 		return nil, err
 	}
-	if req.Msg.GetLifetimeSeconds() < 0 {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("lifetime_seconds is negative"))
+	if req.GetLifetimeSeconds() < 0 {
+		return nil, connect.NewError(connect.CodeInvalidArgument, "lifetime_seconds is negative")
 	}
-	lifetime := time.Duration(req.Msg.GetLifetimeSeconds()) * time.Second
+	lifetime := time.Duration(req.GetLifetimeSeconds()) * time.Second
 	ctx, cancel := context.WithTimeout(ctx, cloudflareCallTimeout)
 	defer cancel()
-	minted, err := sts.Credential(ctx, req.Msg.GetPreset(), callerOf(id), lifetime)
+	minted, err := sts.Credential(ctx, req.GetPreset(), callerOf(id), lifetime)
 	if err != nil {
 		return nil, cloudflareError(err)
 	}
@@ -199,8 +200,8 @@ func (c *Console) GetCloudflareCredential(
 	} else {
 		out.Token = minted.Token
 	}
-	resp := connect.NewResponse(out)
-	resp.Header().Set("Cache-Control", "no-store")
+	resp := out
+	info.ResponseHeader().Set("Cache-Control", "no-store")
 	return resp, nil
 }
 
@@ -210,27 +211,27 @@ func cloudflareError(err error) error {
 	var re *cfrpc.RefusedError
 	switch {
 	case errors.Is(err, cfrpc.ErrUnknownPreset):
-		return connect.NewError(connect.CodeNotFound, err)
+		return connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
 	case errors.Is(err, cfrpc.ErrNotGranted):
-		return connect.NewError(connect.CodePermissionDenied, err)
+		return connect.NewError(connect.CodePermissionDenied, err.Error()).WithCause(err)
 	case errors.Is(err, cfrpc.ErrLifetime):
-		return connect.NewError(connect.CodeInvalidArgument, err)
+		return connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	case errors.Is(err, cfrpc.ErrLimit):
-		return connect.NewError(connect.CodeResourceExhausted, err)
+		return connect.NewError(connect.CodeResourceExhausted, err.Error()).WithCause(err)
 	case errors.Is(err, cfrpc.ErrMaintenance):
-		return connect.NewError(connect.CodeUnavailable, err)
+		return connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
 	case errors.Is(err, cfrpc.ErrNotOurs):
-		return connect.NewError(connect.CodeNotFound, err)
+		return connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
 	case errors.Is(err, cfrpc.ErrOnDemandOnly):
-		return connect.NewError(connect.CodeFailedPrecondition, err)
+		return connect.NewError(connect.CodeFailedPrecondition, err.Error()).WithCause(err)
 	case errors.Is(err, cfrpc.ErrContended):
-		return connect.NewError(connect.CodeAborted, err)
+		return connect.NewError(connect.CodeAborted, err.Error()).WithCause(err)
 	case errors.As(err, &re):
-		return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("the prototype is refused: %s", re.Detail))
+		return connect.Errorf(connect.CodeFailedPrecondition, "the prototype is refused: %s", re.Detail)
 	case errors.Is(err, cfrpc.ErrNoMinter):
-		return connect.NewError(connect.CodeFailedPrecondition, err)
+		return connect.NewError(connect.CodeFailedPrecondition, err.Error()).WithCause(err)
 	default:
-		return connect.NewError(connect.CodeInternal, errors.New("the call to Cloudflare or the secrets store did not complete; see the service log"))
+		return connect.NewError(connect.CodeInternal, "the call to Cloudflare or the secrets store did not complete; see the service log")
 	}
 }
 

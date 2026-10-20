@@ -2,13 +2,11 @@ package console
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"strings"
 
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/consoleauthz"
@@ -27,7 +25,7 @@ func (c *Service) githubOwners(ctx context.Context) (map[string]string, error) {
 	}
 	records, err := c.deps.Orgs.List(ctx)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnavailable, err)
+		return nil, connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
 	}
 	out := make(map[string]string, len(records))
 	for i := range records {
@@ -77,7 +75,7 @@ func (c *Service) ownerOfBind(ctx context.Context, binding access.Binding) (owne
 	if c.deps.Orgs != nil {
 		records, err := c.deps.Orgs.List(ctx)
 		if err != nil {
-			return "", subject, connect.NewError(connect.CodeUnavailable, err)
+			return "", subject, connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
 		}
 		if record, connected := recordOf(records, subject); connected {
 			return record.Owner, subject, nil
@@ -138,8 +136,8 @@ func (c *Service) requireAnyOrg(ctx context.Context, want access.Role) (access.I
 			return id, nil
 		}
 	}
-	return access.Identity{}, connect.NewError(connect.CodePermissionDenied,
-		fmt.Errorf("this needs the %s role, installation-wide or over a directory that owns a GitHub organisation", want))
+	return access.Identity{}, connect.Errorf(connect.CodePermissionDenied,
+		"this needs the %s role, installation-wide or over a directory that owns a GitHub organisation", want)
 }
 
 // mayApp is [mayOwned] for one App. The link App belongs to no
@@ -161,7 +159,7 @@ func mayApp(id access.Identity, want access.Role, spec *githubAppSpec) bool {
 func (c *Service) requireApp(ctx context.Context, want access.Role, spec *githubAppSpec) (access.Identity, error) {
 	id, ok := identityFrom(ctx)
 	if !ok {
-		return access.Identity{}, connect.NewError(connect.CodeUnauthenticated, errors.New("sign in first"))
+		return access.Identity{}, connect.NewError(connect.CodeUnauthenticated, "sign in first")
 	}
 	if spec.purpose == appLink {
 		return requireRole(ctx, want)
@@ -169,7 +167,7 @@ func (c *Service) requireApp(ctx context.Context, want access.Role, spec *github
 	if spec.purpose == appController && !spec.created {
 		// Nothing to own yet: the connect itself decides who owns it.
 		if !id.CanAnywhere(want) {
-			return access.Identity{}, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("this needs the %s role", want))
+			return access.Identity{}, connect.Errorf(connect.CodePermissionDenied, "this needs the %s role", want)
 		}
 		return id, nil
 	}

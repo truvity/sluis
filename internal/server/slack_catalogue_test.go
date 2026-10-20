@@ -11,9 +11,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/truvity/sluis/internal/rpcmount"
 	slackconsole "github.com/truvity/sluis/internal/slackapp/console"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 
@@ -141,31 +142,31 @@ func (h *slackHarness) secret(t *testing.T) map[string][]byte {
 
 func (h *slackHarness) app(t *testing.T, id string) *directoryrosterv1.SlackApp {
 	t.Helper()
-	listed, err := h.console.ListSlackApps(viewer(), connect.NewRequest(&directoryrosterv1.ListSlackAppsRequest{}))
+	listed, err := h.console.ListSlackApps(viewer(), &directoryrosterv1.ListSlackAppsRequest{})
 	if err != nil {
 		t.Fatalf("ListSlackApps: %v", err)
 	}
-	if !listed.Msg.GetAvailable() {
+	if !listed.GetAvailable() {
 		t.Fatal("the Slack catalogue is not available")
 	}
-	for _, app := range listed.Msg.GetApps() {
+	for _, app := range listed.GetApps() {
 		if app.GetId() == id {
 			return app
 		}
 	}
-	t.Fatalf("no Slack App %s in %v", id, listed.Msg.GetApps())
+	t.Fatalf("no Slack App %s in %v", id, listed.GetApps())
 	return nil
 }
 
 // installErr is what InstallSlackApp answers, for a test that wants the
 // refusal and not the flow.
 func (h *slackHarness) installErr(ctx context.Context, id, token string) error {
-	_, err := h.console.InstallSlackApp(ctx, connect.NewRequest(&directoryrosterv1.InstallSlackAppRequest{Id: id, ConfigurationToken: token}))
+	_, err := h.console.InstallSlackApp(ctx, &directoryrosterv1.InstallSlackAppRequest{Id: id, ConfigurationToken: token})
 	return err
 }
 
 func (h *slackHarness) create(ctx context.Context, id, token string) error {
-	_, err := h.console.CreateSlackApp(ctx, connect.NewRequest(&directoryrosterv1.CreateSlackAppRequest{Id: id, ConfigurationToken: token}))
+	_, err := h.console.CreateSlackApp(ctx, &directoryrosterv1.CreateSlackAppRequest{Id: id, ConfigurationToken: token})
 	return err
 }
 
@@ -173,13 +174,14 @@ func (h *slackHarness) create(ctx context.Context, id, token string) error {
 // back with a code for the workspace the owner chose.
 func (h *slackHarness) install(
 	t *testing.T, id, configToken, installIn string,
-) (*connect.Response[directoryrosterv1.InstallSlackAppResponse], func() (code int, location, body string)) {
+) (*directoryrosterv1.InstallSlackAppResponse, func() (code int, location, body string)) {
 	t.Helper()
-	begun, err := h.console.InstallSlackApp(operator(), connect.NewRequest(&directoryrosterv1.InstallSlackAppRequest{Id: id, ConfigurationToken: configToken}))
+	callCtx, call := rpcmount.ServerContext(operator())
+	begun, err := h.console.InstallSlackApp(callCtx, &directoryrosterv1.InstallSlackAppRequest{Id: id, ConfigurationToken: configToken})
 	if err != nil {
 		t.Fatalf("InstallSlackApp: %v", err)
 	}
-	cookie, state := cookieFrom(t, begun.Header()), mustQuery(t, begun.Msg.GetUrl(), "state")
+	cookie, state := cookieFrom(t, rpcmount.HTTPHeader(call.ResponseHeader())), mustQuery(t, begun.GetUrl(), "state")
 	app := h.app(t, id)
 	code := h.slack.Install(app.GetAppId(), installIn)
 	return begun, func() (int, string, string) {
@@ -255,7 +257,7 @@ func TestASlackAppIsCreatedInstalledRefusedForTheWrongWorkspaceAndReinstalled(t 
 		"redirect_uri": "https://access.example/connect/slack/catalogue/callback", "team": acmeTeam, "scope": "channels:read,users:read",
 		"client_id": created.ClientID,
 	} {
-		if got := mustQuery(t, begun.Msg.GetUrl(), key); got != want {
+		if got := mustQuery(t, begun.GetUrl(), key); got != want {
 			t.Errorf("authorize URL %s = %q, want %q", key, got, want)
 		}
 	}
@@ -384,7 +386,7 @@ func TestOnlyAnOperatorCreatesOrInstalls(t *testing.T) {
 	if err := h.create(context.Background(), "sync", accepted); connect.CodeOf(err) != connect.CodeUnauthenticated {
 		t.Errorf("an anonymous Create = %v, want unauthenticated", err)
 	}
-	_, err := h.console.ListSlackApps(context.Background(), connect.NewRequest(&directoryrosterv1.ListSlackAppsRequest{}))
+	_, err := h.console.ListSlackApps(context.Background(), &directoryrosterv1.ListSlackAppsRequest{})
 	if connect.CodeOf(err) != connect.CodeUnauthenticated {
 		t.Errorf("an anonymous List = %v, want unauthenticated", err)
 	}
@@ -426,8 +428,8 @@ func TestACatalogueAppIsOnlyWhatTheCatalogueAndThePolicyDeclare(t *testing.T) {
 
 	// No Kubernetes state, no catalogue Apps: listed as declared, unavailable.
 	h.console.deps.SlackCatalogueApps = nil
-	listed, err := h.console.ListSlackApps(viewer(), connect.NewRequest(&directoryrosterv1.ListSlackAppsRequest{}))
-	if err != nil || listed.Msg.GetAvailable() || len(listed.Msg.GetApps()) != 1 {
+	listed, err := h.console.ListSlackApps(viewer(), &directoryrosterv1.ListSlackAppsRequest{})
+	if err != nil || listed.GetAvailable() || len(listed.GetApps()) != 1 {
 		t.Errorf("without a store = %+v, %v", listed, err)
 	}
 	if err = h.create(operator(), "sync", accepted); connect.CodeOf(err) != connect.CodeFailedPrecondition {
@@ -442,16 +444,17 @@ func TestASlackInstallIsFinishedOnlyByTheBrowserThatStartedIt(t *testing.T) {
 	if err := h.create(operator(), "sync", accepted); err != nil {
 		t.Fatalf("Create: %v", err)
 	}
-	begun, err := h.console.InstallSlackApp(operator(), connect.NewRequest(&directoryrosterv1.InstallSlackAppRequest{Id: "sync"}))
+	callCtx, call := rpcmount.ServerContext(operator())
+	begun, err := h.console.InstallSlackApp(callCtx, &directoryrosterv1.InstallSlackAppRequest{Id: "sync"})
 	if err != nil {
 		t.Fatalf("Install: %v", err)
 	}
-	cookie, state := cookieFrom(t, begun.Header()), mustQuery(t, begun.Msg.GetUrl(), "state")
+	cookie, state := cookieFrom(t, rpcmount.HTTPHeader(call.ResponseHeader())), mustQuery(t, begun.GetUrl(), "state")
 	code := h.slack.Install(h.app(t, "sync").GetAppId(), acmeTeam)
 	query := func(state string) url.Values { return url.Values{"code": {code}, "state": {state}} }
 
 	// The cookie the flow set is HttpOnly, and pinned for ten minutes.
-	set := begun.Header().Get("Set-Cookie")
+	set := call.ResponseHeader().Get("Set-Cookie")
 	if !strings.Contains(set, "HttpOnly") || !strings.Contains(set, "Max-Age=600") {
 		t.Errorf("flow cookie = %s", set)
 	}
@@ -506,11 +509,12 @@ func TestARefusedSlackAppInstallIsLoggedAndAuditedWithItsReason(t *testing.T) {
 	if err := h.create(operator(), "sync", accepted); err != nil {
 		t.Fatalf("Create: %v", err)
 	}
-	begun, err := h.console.InstallSlackApp(operator(), connect.NewRequest(&directoryrosterv1.InstallSlackAppRequest{Id: "sync"}))
+	callInfoCtx, callInfo := rpcmount.ServerContext(operator())
+	begun, err := h.console.InstallSlackApp(callInfoCtx, &directoryrosterv1.InstallSlackAppRequest{Id: "sync"})
 	if err != nil {
 		t.Fatalf("Install: %v", err)
 	}
-	cookie, state := cookieFrom(t, begun.Header()), mustQuery(t, begun.Msg.GetUrl(), "state")
+	cookie, state := cookieFrom(t, rpcmount.HTTPHeader(callInfo.ResponseHeader())), mustQuery(t, begun.GetUrl(), "state")
 	call := func(q url.Values, cookie string) int {
 		return redirect(h.server.slackCatalogueCallback, slackconsole.CatalogueCallbackPath, q, cookie).Code
 	}

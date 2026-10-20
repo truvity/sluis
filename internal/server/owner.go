@@ -5,7 +5,7 @@ import (
 	"slices"
 	"strings"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
 	"github.com/truvity/sluis/internal/access"
@@ -54,7 +54,7 @@ func (c *Console) directories(ctx context.Context) ([]connectedDirectory, error)
 	}
 	views, err := c.deps.Hub.WorkspaceViews(ctx)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnavailable, err)
+		return nil, connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
 	}
 	out := make([]connectedDirectory, 0, len(views))
 	for i := range views {
@@ -105,8 +105,8 @@ func ownerChoices(id access.Identity, dirs []connectedDirectory) (refs []*direct
 // ListServedDomains implements the controllers' read: for each connected
 // directory the caller may view, the domains the hub serves for it now.
 func (c *Console) ListServedDomains(
-	ctx context.Context, _ *connect.Request[directoryrosterv1.ListServedDomainsRequest],
-) (*connect.Response[directoryrosterv1.ListServedDomainsResponse], error) {
+	ctx context.Context, _ *directoryrosterv1.ListServedDomainsRequest,
+) (*directoryrosterv1.ListServedDomainsResponse, error) {
 	id, err := requireAnywhere(ctx, access.RoleViewer)
 	if err != nil {
 		return nil, err
@@ -127,5 +127,5 @@ func (c *Console) ListServedDomains(
 			WorkspaceId: dirs[i].id, PrimaryDomain: dirs[i].primary, Domains: slices.Clone(dirs[i].served),
 		})
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }

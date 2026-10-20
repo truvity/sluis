@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/consoleauthz"
@@ -45,11 +45,11 @@ func connectErr(err error) error {
 	case err == nil:
 		return nil
 	case errors.As(err, &e) && e.Code == consoleauthz.CodeUnauthenticated:
-		return connect.NewError(connect.CodeUnauthenticated, errors.New(e.Message))
+		return connect.NewError(connect.CodeUnauthenticated, e.Message)
 	case errors.As(err, &e) && e.Code == modcall.CodeBadRequest:
-		return connect.NewError(connect.CodeInvalidArgument, errors.New(e.Message))
+		return connect.NewError(connect.CodeInvalidArgument, e.Message)
 	case errors.As(err, &e) && e.Code == modcall.CodeForbidden:
-		return connect.NewError(connect.CodePermissionDenied, errors.New(e.Message))
+		return connect.NewError(connect.CodePermissionDenied, e.Message)
 	}
 	return err
 }

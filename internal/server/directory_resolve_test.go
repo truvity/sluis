@@ -5,7 +5,7 @@ import (
 	"slices"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
 	"github.com/truvity/sluis/internal/access"
@@ -13,11 +13,11 @@ import (
 
 func resolveGroups(t *testing.T, console *Console, who access.Identity, groups ...string) (*directoryrosterv1.ResolveDirectoryGroupsResponse, error) {
 	t.Helper()
-	got, err := console.ResolveDirectoryGroups(as(who), connect.NewRequest(&directoryrosterv1.ResolveDirectoryGroupsRequest{Groups: groups}))
+	got, err := console.ResolveDirectoryGroups(as(who), &directoryrosterv1.ResolveDirectoryGroupsRequest{Groups: groups})
 	if err != nil {
 		return nil, err
 	}
-	return got.Msg, nil
+	return got, nil
 }
 
 func TestResolveDirectoryGroupsExpandsNestingAndNamesTheDirectory(t *testing.T) {
@@ -69,7 +69,7 @@ func TestResolveDirectoryGroupsIsGatedLikeEveryOtherRead(t *testing.T) {
 	if err == nil && got.Groups[0].Found {
 		t.Error("an operator of an unrelated directory read another directory's group")
 	}
-	_, err = h.console.ResolveDirectoryGroups(context.Background(), connect.NewRequest(&directoryrosterv1.ResolveDirectoryGroupsRequest{}))
+	_, err = h.console.ResolveDirectoryGroups(context.Background(), &directoryrosterv1.ResolveDirectoryGroupsRequest{})
 	wantCode(t, "no identity", err, connect.CodeUnauthenticated)
 	_, err = resolveGroups(t, h.console, access.Identity{}, "partners@north.example")
 	wantCode(t, "no role", err, connect.CodePermissionDenied)

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
 	"github.com/truvity/sluis/internal/slackroster/connection"
@@ -130,13 +130,13 @@ func TestASharedChannelListsIndividualsOfAnyDirectory(t *testing.T) {
 // serves them and whether the account is active.
 func TestResolveDirectoryGroupsAnswersForUsers(t *testing.T) {
 	h := newConnectHarness(t)
-	got, err := h.console.ResolveDirectoryGroups(as(everywhere), connect.NewRequest(&directoryrosterv1.ResolveDirectoryGroupsRequest{
+	got, err := h.console.ResolveDirectoryGroups(as(everywhere), &directoryrosterv1.ResolveDirectoryGroupsRequest{
 		Users: []string{"Ann@north.example", "eve@south.example", "ghost@north.example", "x@nowhere.example"},
-	}))
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	users := got.Msg.GetUsers()
+	users := got.GetUsers()
 	if len(users) != 4 {
 		t.Fatalf("users = %v", users)
 	}

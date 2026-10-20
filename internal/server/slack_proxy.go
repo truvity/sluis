@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"google.golang.org/protobuf/proto"
 
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
@@ -18,6 +18,7 @@ import (
 	"github.com/truvity/sluis/internal/consolecall"
 	"github.com/truvity/sluis/internal/hub"
 	"github.com/truvity/sluis/internal/modcall"
+	"github.com/truvity/sluis/internal/rpcmount"
 	slackconsole "github.com/truvity/sluis/internal/slackapp/console"
 )
 
@@ -239,7 +240,7 @@ func (c *Console) slackCaller(id access.Identity) consolecall.Caller {
 func slackIdentity(ctx context.Context) (access.Identity, error) {
 	id, ok := IdentityFrom(ctx)
 	if !ok {
-		return access.Identity{}, connect.NewError(connect.CodeUnauthenticated, errors.New("sign in first"))
+		return access.Identity{}, connect.NewError(connect.CodeUnauthenticated, "sign in first")
 	}
 	return id, nil
 }
@@ -263,20 +264,20 @@ func slackError(err error) error {
 	case errors.As(err, &already):
 		return err
 	case errors.As(err, &problem):
-		return connect.NewError(slackconsole.CodeOf(problem), errors.New(problem.Summary))
+		return connect.NewError(slackconsole.CodeOf(problem), problem.Summary)
 	case errors.As(err, &coded):
 		switch coded.Code {
 		case modcall.CodeForbidden:
-			return connect.NewError(connect.CodePermissionDenied, errors.New(coded.Message))
+			return connect.NewError(connect.CodePermissionDenied, coded.Message)
 		case consoleauthz.CodeUnauthenticated:
-			return connect.NewError(connect.CodeUnauthenticated, errors.New(coded.Message))
+			return connect.NewError(connect.CodeUnauthenticated, coded.Message)
 		case modcall.CodeBadRequest:
-			return connect.NewError(connect.CodeInvalidArgument, errors.New(coded.Message))
+			return connect.NewError(connect.CodeInvalidArgument, coded.Message)
 		case modcall.CodeInternal:
-			return connect.NewError(connect.CodeInternal, errors.New("the Slack module failed; see its log"))
+			return connect.NewError(connect.CodeInternal, "the Slack module failed; see its log")
 		}
 	}
-	return connect.NewError(connect.CodeUnavailable, fmt.Errorf("the Slack module did not answer: %w", modcallCause(err)))
+	return rpcmount.NewError(connect.CodeUnavailable, fmt.Errorf("the Slack module did not answer: %w", modcallCause(err)))
 }
 
 // modcallCause is the transport's own words for an error, which carry a code and
@@ -305,111 +306,112 @@ func withState(authorize, state string) (string, error) {
 
 // GetSlackStatus is every Slack workspace the caller may view.
 func (c *Console) GetSlackStatus(
-	ctx context.Context, req *connect.Request[directoryrosterv1.GetSlackStatusRequest],
-) (*connect.Response[directoryrosterv1.GetSlackStatusResponse], error) {
+	ctx context.Context, req *directoryrosterv1.GetSlackStatusRequest,
+) (*directoryrosterv1.GetSlackStatusResponse, error) {
 	id, err := slackIdentity(ctx)
 	if err != nil {
 		return nil, err
 	}
 	resp, err := slackProxy[*directoryrosterv1.GetSlackStatusRequest, *directoryrosterv1.GetSlackStatusResponse](
-		ctx, c, id, slackconsole.MethodGetStatus, req.Msg)
+		ctx, c, id, slackconsole.MethodGetStatus, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }
 
 // BeginSlackWorkspaceConnect creates the roster's App in a workspace, or
 // prepares the reinstall of one created earlier, and returns Slack's authorize
 // URL carrying signed state; the header pins the flow to this browser.
 func (c *Console) BeginSlackWorkspaceConnect(
-	ctx context.Context, req *connect.Request[directoryrosterv1.BeginSlackWorkspaceConnectRequest],
-) (*connect.Response[directoryrosterv1.BeginSlackWorkspaceConnectResponse], error) {
+	ctx context.Context, req *directoryrosterv1.BeginSlackWorkspaceConnectRequest,
+) (*directoryrosterv1.BeginSlackWorkspaceConnectResponse, error) {
+	info := rpcmount.CallInfo(ctx)
 	id, err := slackIdentity(ctx)
 	if err != nil {
 		return nil, err
 	}
 	resp, err := slackProxy[*directoryrosterv1.BeginSlackWorkspaceConnectRequest, *directoryrosterv1.BeginSlackWorkspaceConnectResponse](
-		ctx, c, id, slackconsole.MethodBeginWorkspaceConnect, req.Msg)
+		ctx, c, id, slackconsole.MethodBeginWorkspaceConnect, req)
 	if err != nil {
 		return nil, err
 	}
-	state, err := c.deps.State.IssueAs(access.Binding{Bind: slackconsole.WorkspaceBind + strings.TrimSpace(req.Msg.GetWorkspace()), Actor: id.Who()})
+	state, err := c.deps.State.IssueAs(access.Binding{Bind: slackconsole.WorkspaceBind + strings.TrimSpace(req.GetWorkspace()), Actor: id.Who()})
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	target, err := withState(resp.GetUrl(), state)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
-	out := connect.NewResponse(&directoryrosterv1.BeginSlackWorkspaceConnectResponse{Url: target})
-	c.pinFlow(out.Header(), state)
+	out := &directoryrosterv1.BeginSlackWorkspaceConnectResponse{Url: target}
+	c.pinFlow(info.ResponseHeader(), state)
 	return out, nil
 }
 
 // RequestSlackPass asks the Slack controller to pass over a workspace now.
 func (c *Console) RequestSlackPass(
-	ctx context.Context, req *connect.Request[directoryrosterv1.RequestSlackPassRequest],
-) (*connect.Response[directoryrosterv1.RequestSlackPassResponse], error) {
+	ctx context.Context, req *directoryrosterv1.RequestSlackPassRequest,
+) (*directoryrosterv1.RequestSlackPassResponse, error) {
 	id, err := slackIdentity(ctx)
 	if err != nil {
 		return nil, err
 	}
 	resp, err := slackProxy[*directoryrosterv1.RequestSlackPassRequest, *directoryrosterv1.RequestSlackPassResponse](
-		ctx, c, id, slackconsole.MethodRequestPass, req.Msg)
+		ctx, c, id, slackconsole.MethodRequestPass, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }
 
 // DisconnectSlackWorkspace revokes the bot token and forgets the connection.
 func (c *Console) DisconnectSlackWorkspace(
-	ctx context.Context, req *connect.Request[directoryrosterv1.DisconnectSlackWorkspaceRequest],
-) (*connect.Response[directoryrosterv1.DisconnectSlackWorkspaceResponse], error) {
+	ctx context.Context, req *directoryrosterv1.DisconnectSlackWorkspaceRequest,
+) (*directoryrosterv1.DisconnectSlackWorkspaceResponse, error) {
 	id, err := slackIdentity(ctx)
 	if err != nil {
 		return nil, err
 	}
 	resp, err := slackProxy[*directoryrosterv1.DisconnectSlackWorkspaceRequest, *directoryrosterv1.DisconnectSlackWorkspaceResponse](
-		ctx, c, id, slackconsole.MethodDisconnectWorkspace, req.Msg)
+		ctx, c, id, slackconsole.MethodDisconnectWorkspace, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }
 
 // ChangeSlackWorkspaceOwner changes the directory recorded as a connected
 // workspace's owner, or removes it.
 func (c *Console) ChangeSlackWorkspaceOwner(
-	ctx context.Context, req *connect.Request[directoryrosterv1.ChangeSlackWorkspaceOwnerRequest],
-) (*connect.Response[directoryrosterv1.ChangeSlackWorkspaceOwnerResponse], error) {
+	ctx context.Context, req *directoryrosterv1.ChangeSlackWorkspaceOwnerRequest,
+) (*directoryrosterv1.ChangeSlackWorkspaceOwnerResponse, error) {
 	id, err := slackIdentity(ctx)
 	if err != nil {
 		return nil, err
 	}
 	resp, err := slackProxy[*directoryrosterv1.ChangeSlackWorkspaceOwnerRequest, *directoryrosterv1.ChangeSlackWorkspaceOwnerResponse](
-		ctx, c, id, slackconsole.MethodChangeOwner, req.Msg)
+		ctx, c, id, slackconsole.MethodChangeOwner, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }
 
 // ConfirmSlackRemovals lets exactly the removal set the operator saw go ahead.
 func (c *Console) ConfirmSlackRemovals(
-	ctx context.Context, req *connect.Request[directoryrosterv1.ConfirmSlackRemovalsRequest],
-) (*connect.Response[directoryrosterv1.ConfirmSlackRemovalsResponse], error) {
+	ctx context.Context, req *directoryrosterv1.ConfirmSlackRemovalsRequest,
+) (*directoryrosterv1.ConfirmSlackRemovalsResponse, error) {
 	id, err := slackIdentity(ctx)
 	if err != nil {
 		return nil, err
 	}
 	resp, err := slackProxy[*directoryrosterv1.ConfirmSlackRemovalsRequest, *directoryrosterv1.ConfirmSlackRemovalsResponse](
-		ctx, c, id, slackconsole.MethodConfirmRemovals, req.Msg)
+		ctx, c, id, slackconsole.MethodConfirmRemovals, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }
 
 // ---------------------------------------------------------- SlackAppService
@@ -417,61 +419,62 @@ func (c *Console) ConfirmSlackRemovals(
 // ListSlackApps is every declared App, and every App created from an entry no
 // longer declared, with where each stands.
 func (c *Console) ListSlackApps(
-	ctx context.Context, req *connect.Request[directoryrosterv1.ListSlackAppsRequest],
-) (*connect.Response[directoryrosterv1.ListSlackAppsResponse], error) {
+	ctx context.Context, req *directoryrosterv1.ListSlackAppsRequest,
+) (*directoryrosterv1.ListSlackAppsResponse, error) {
 	id, err := slackIdentity(ctx)
 	if err != nil {
 		return nil, err
 	}
 	resp, err := slackProxy[*directoryrosterv1.ListSlackAppsRequest, *directoryrosterv1.ListSlackAppsResponse](
-		ctx, c, id, slackconsole.MethodListApps, req.Msg)
+		ctx, c, id, slackconsole.MethodListApps, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }
 
 // CreateSlackApp creates a catalogue App in Slack.
 func (c *Console) CreateSlackApp(
-	ctx context.Context, req *connect.Request[directoryrosterv1.CreateSlackAppRequest],
-) (*connect.Response[directoryrosterv1.CreateSlackAppResponse], error) {
+	ctx context.Context, req *directoryrosterv1.CreateSlackAppRequest,
+) (*directoryrosterv1.CreateSlackAppResponse, error) {
 	id, err := slackIdentity(ctx)
 	if err != nil {
 		return nil, err
 	}
 	resp, err := slackProxy[*directoryrosterv1.CreateSlackAppRequest, *directoryrosterv1.CreateSlackAppResponse](
-		ctx, c, id, slackconsole.MethodCreateApp, req.Msg)
+		ctx, c, id, slackconsole.MethodCreateApp, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }
 
 // InstallSlackApp starts installing, or reinstalling, a created App: the
 // response is Slack's authorize URL carrying signed state, and the header pins
 // the flow to this browser.
 func (c *Console) InstallSlackApp(
-	ctx context.Context, req *connect.Request[directoryrosterv1.InstallSlackAppRequest],
-) (*connect.Response[directoryrosterv1.InstallSlackAppResponse], error) {
+	ctx context.Context, req *directoryrosterv1.InstallSlackAppRequest,
+) (*directoryrosterv1.InstallSlackAppResponse, error) {
+	info := rpcmount.CallInfo(ctx)
 	id, err := slackIdentity(ctx)
 	if err != nil {
 		return nil, err
 	}
 	resp, err := slackProxy[*directoryrosterv1.InstallSlackAppRequest, *directoryrosterv1.InstallSlackAppResponse](
-		ctx, c, id, slackconsole.MethodInstallApp, req.Msg)
+		ctx, c, id, slackconsole.MethodInstallApp, req)
 	if err != nil {
 		return nil, err
 	}
-	state, err := c.deps.State.IssueAs(access.Binding{Bind: slackconsole.CatalogueBind + strings.TrimSpace(req.Msg.GetId()), Actor: id.Who()})
+	state, err := c.deps.State.IssueAs(access.Binding{Bind: slackconsole.CatalogueBind + strings.TrimSpace(req.GetId()), Actor: id.Who()})
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	target, err := withState(resp.GetUrl(), state)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
-	out := connect.NewResponse(&directoryrosterv1.InstallSlackAppResponse{Url: target})
-	c.pinFlow(out.Header(), state)
+	out := &directoryrosterv1.InstallSlackAppResponse{Url: target}
+	c.pinFlow(info.ResponseHeader(), state)
 	return out, nil
 }
 
@@ -479,128 +482,128 @@ func (c *Console) InstallSlackApp(
 
 // ListSlackChannels is every record the caller may see, the channels the bots see that nothing manages, and the choices a form offers.
 func (c *Console) ListSlackChannels(
-	ctx context.Context, req *connect.Request[directoryrosterv1.ListSlackChannelsRequest],
-) (*connect.Response[directoryrosterv1.ListSlackChannelsResponse], error) {
+	ctx context.Context, req *directoryrosterv1.ListSlackChannelsRequest,
+) (*directoryrosterv1.ListSlackChannelsResponse, error) {
 	id, err := slackIdentity(ctx)
 	if err != nil {
 		return nil, err
 	}
 	resp, err := slackProxy[*directoryrosterv1.ListSlackChannelsRequest, *directoryrosterv1.ListSlackChannelsResponse](
-		ctx, c, id, slackconsole.MethodListChannels, req.Msg)
+		ctx, c, id, slackconsole.MethodListChannels, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }
 
 // CreateSlackChannel puts a channel under management.
 func (c *Console) CreateSlackChannel(
-	ctx context.Context, req *connect.Request[directoryrosterv1.CreateSlackChannelRequest],
-) (*connect.Response[directoryrosterv1.CreateSlackChannelResponse], error) {
+	ctx context.Context, req *directoryrosterv1.CreateSlackChannelRequest,
+) (*directoryrosterv1.CreateSlackChannelResponse, error) {
 	id, err := slackIdentity(ctx)
 	if err != nil {
 		return nil, err
 	}
 	resp, err := slackProxy[*directoryrosterv1.CreateSlackChannelRequest, *directoryrosterv1.CreateSlackChannelResponse](
-		ctx, c, id, slackconsole.MethodCreateChannel, req.Msg)
+		ctx, c, id, slackconsole.MethodCreateChannel, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }
 
 // UpdateSlackChannel changes a console channel's mode, ignore list and sources.
 func (c *Console) UpdateSlackChannel(
-	ctx context.Context, req *connect.Request[directoryrosterv1.UpdateSlackChannelRequest],
-) (*connect.Response[directoryrosterv1.UpdateSlackChannelResponse], error) {
+	ctx context.Context, req *directoryrosterv1.UpdateSlackChannelRequest,
+) (*directoryrosterv1.UpdateSlackChannelResponse, error) {
 	id, err := slackIdentity(ctx)
 	if err != nil {
 		return nil, err
 	}
 	resp, err := slackProxy[*directoryrosterv1.UpdateSlackChannelRequest, *directoryrosterv1.UpdateSlackChannelResponse](
-		ctx, c, id, slackconsole.MethodUpdateChannel, req.Msg)
+		ctx, c, id, slackconsole.MethodUpdateChannel, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }
 
 // DeleteSlackChannel forgets a console channel's record, and archives the channel when asked.
 func (c *Console) DeleteSlackChannel(
-	ctx context.Context, req *connect.Request[directoryrosterv1.DeleteSlackChannelRequest],
-) (*connect.Response[directoryrosterv1.DeleteSlackChannelResponse], error) {
+	ctx context.Context, req *directoryrosterv1.DeleteSlackChannelRequest,
+) (*directoryrosterv1.DeleteSlackChannelResponse, error) {
 	id, err := slackIdentity(ctx)
 	if err != nil {
 		return nil, err
 	}
 	resp, err := slackProxy[*directoryrosterv1.DeleteSlackChannelRequest, *directoryrosterv1.DeleteSlackChannelResponse](
-		ctx, c, id, slackconsole.MethodDeleteChannel, req.Msg)
+		ctx, c, id, slackconsole.MethodDeleteChannel, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }
 
 // ListSlackSharedChannels is every Slack Connect record the caller may see, with where the controller has each.
 func (c *Console) ListSlackSharedChannels(
-	ctx context.Context, req *connect.Request[directoryrosterv1.ListSlackSharedChannelsRequest],
-) (*connect.Response[directoryrosterv1.ListSlackSharedChannelsResponse], error) {
+	ctx context.Context, req *directoryrosterv1.ListSlackSharedChannelsRequest,
+) (*directoryrosterv1.ListSlackSharedChannelsResponse, error) {
 	id, err := slackIdentity(ctx)
 	if err != nil {
 		return nil, err
 	}
 	resp, err := slackProxy[*directoryrosterv1.ListSlackSharedChannelsRequest, *directoryrosterv1.ListSlackSharedChannelsResponse](
-		ctx, c, id, slackconsole.MethodListSharedChannels, req.Msg)
+		ctx, c, id, slackconsole.MethodListSharedChannels, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }
 
 // CreateSlackSharedChannel defines a Slack Connect channel.
 func (c *Console) CreateSlackSharedChannel(
-	ctx context.Context, req *connect.Request[directoryrosterv1.CreateSlackSharedChannelRequest],
-) (*connect.Response[directoryrosterv1.CreateSlackSharedChannelResponse], error) {
+	ctx context.Context, req *directoryrosterv1.CreateSlackSharedChannelRequest,
+) (*directoryrosterv1.CreateSlackSharedChannelResponse, error) {
 	id, err := slackIdentity(ctx)
 	if err != nil {
 		return nil, err
 	}
 	resp, err := slackProxy[*directoryrosterv1.CreateSlackSharedChannelRequest, *directoryrosterv1.CreateSlackSharedChannelResponse](
-		ctx, c, id, slackconsole.MethodCreateSharedChannel, req.Msg)
+		ctx, c, id, slackconsole.MethodCreateSharedChannel, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }
 
 // UpdateSlackSharedChannel changes a Slack Connect channel's guests, sources and visibility.
 func (c *Console) UpdateSlackSharedChannel(
-	ctx context.Context, req *connect.Request[directoryrosterv1.UpdateSlackSharedChannelRequest],
-) (*connect.Response[directoryrosterv1.UpdateSlackSharedChannelResponse], error) {
+	ctx context.Context, req *directoryrosterv1.UpdateSlackSharedChannelRequest,
+) (*directoryrosterv1.UpdateSlackSharedChannelResponse, error) {
 	id, err := slackIdentity(ctx)
 	if err != nil {
 		return nil, err
 	}
 	resp, err := slackProxy[*directoryrosterv1.UpdateSlackSharedChannelRequest, *directoryrosterv1.UpdateSlackSharedChannelResponse](
-		ctx, c, id, slackconsole.MethodUpdateSharedChannel, req.Msg)
+		ctx, c, id, slackconsole.MethodUpdateSharedChannel, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }
 
 // DeleteSlackSharedChannel forgets a Slack Connect channel's record.
 func (c *Console) DeleteSlackSharedChannel(
-	ctx context.Context, req *connect.Request[directoryrosterv1.DeleteSlackSharedChannelRequest],
-) (*connect.Response[directoryrosterv1.DeleteSlackSharedChannelResponse], error) {
+	ctx context.Context, req *directoryrosterv1.DeleteSlackSharedChannelRequest,
+) (*directoryrosterv1.DeleteSlackSharedChannelResponse, error) {
 	id, err := slackIdentity(ctx)
 	if err != nil {
 		return nil, err
 	}
 	resp, err := slackProxy[*directoryrosterv1.DeleteSlackSharedChannelRequest, *directoryrosterv1.DeleteSlackSharedChannelResponse](
-		ctx, c, id, slackconsole.MethodDeleteSharedChannel, req.Msg)
+		ctx, c, id, slackconsole.MethodDeleteSharedChannel, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }

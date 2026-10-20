@@ -59,8 +59,9 @@ A match over 100000 records fails the job: narrow the filter.
 ### From Go
 
 ```go
-client := auditv1connect.NewQueryServiceClient(httpClientWithYourBearer, "https://audit-query.example.com")
-page, err := client.Search(ctx, connect.NewRequest(&auditv1.SearchRequest{Profile: "security", Limit: 100}))
+client := auditv1connect.NewQueryServiceClient(connect.NewClient( // connect-go v2
+    connecthttp.NewTransport(httpClientWithYourBearer, "https://audit-query.example.com")))
+page, err := client.Search(ctx, &auditv1.SearchRequest{Profile: "security", Limit: 100})
 ```
 
 See [`examples/read`](../../../../audit/examples/read/main.go).

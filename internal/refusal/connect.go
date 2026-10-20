@@ -5,13 +5,8 @@ import (
 	"errors"
 	"log/slog"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 )
-
-// ConnectOptions installs [Interceptor] on a Connect handler.
-func ConnectOptions(log *slog.Logger) []connect.HandlerOption {
-	return []connect.HandlerOption{connect.WithInterceptors(Interceptor(log))}
-}
 
 // Interceptor is how a Connect service says no.
 //
@@ -33,27 +28,17 @@ func ConnectOptions(log *slog.Logger) []connect.HandlerOption {
 // untouched.
 //
 // log is where the originals go; nil is the default logger at the time of
-// the call.
-func Interceptor(log *slog.Logger) connect.Interceptor { return interceptor{log} }
+// the call. Pass it to connect.NewServer.
+func Interceptor(log *slog.Logger) connect.ServerInterceptor {
+	i := interceptor{log}
+	return func(next connect.ServerFunc) connect.ServerFunc {
+		return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
+			return i.mask(ctx, spec.Procedure, next(ctx, spec, stream))
+		}
+	}
+}
 
 type interceptor struct{ log *slog.Logger }
-
-func (i interceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
-	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		response, err := next(ctx, req)
-		return response, i.mask(ctx, req.Spec().Procedure, err)
-	}
-}
-
-func (i interceptor) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
-	return next
-}
-
-func (i interceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
-	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
-		return i.mask(ctx, conn.Spec().Procedure, next(ctx, conn))
-	}
-}
 
 func (i interceptor) mask(ctx context.Context, procedure string, err error) error {
 	if err == nil {
@@ -88,5 +73,5 @@ func (i interceptor) mask(ctx context.Context, procedure string, err error) erro
 		attrs = append([]any{slog.String(LogKey, id)}, attrs...)
 	}
 	log.Log(ctx, level, "refused", attrs...)
-	return connect.NewError(code, fixed)
+	return connect.NewError(code, fixed.Error()).WithCause(fixed)
 }

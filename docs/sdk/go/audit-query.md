@@ -10,11 +10,15 @@ go get github.com/truvity/sluis/audit/sdk@vX.Y.Z
 
 ```go
 import (
+    "connectrpc.com/connect/v2"
+    "connectrpc.com/connect/v2/connecthttp"
+
     auditv1 "github.com/truvity/sluis/audit/sdk/gen/audit/v1"
     "github.com/truvity/sluis/audit/sdk/gen/audit/v1/auditv1connect"
 )
 
-client := auditv1connect.NewQueryServiceClient(httpClient, "https://audit-query.example.com")
+client := auditv1connect.NewQueryServiceClient(connect.NewClient(
+    connecthttp.NewTransport(httpClient, "https://audit-query.example.com")))
 ```
 
 Authentication is yours. Wrap the transport and set `Authorization: Bearer <token>` on every request. A program gets the token by [exchange](sluis.md#token-exchange). The service ANDs the caller's grants into every query.
@@ -46,10 +50,10 @@ query := &auditv1.SearchRequest{
     }},
     Limit: 100,
 }
-page, err := client.Search(ctx, connect.NewRequest(query))
+page, err := client.Search(ctx, query)
 ```
 
-Records in `page.Msg.GetItems()` have typed getters such as `GetOccurredAt()` and `GetActor().GetId()`.
+Records in `page.GetItems()` have typed getters such as `GetOccurredAt()` and `GetActor().GetId()`.
 
 ## Paging
 
@@ -57,13 +61,13 @@ Set the page cursor on the next request until a page comes back short or without
 
 ```go
 for {
-    page, err := client.Search(ctx, connect.NewRequest(query))
+    page, err := client.Search(ctx, query)
     if err != nil {
         return err
     }
-    // ... use page.Msg.GetItems() ...
-    next := page.Msg.GetCursors().GetNext()
-    if len(page.Msg.GetItems()) < int(query.GetLimit()) || next == "" {
+    // ... use page.GetItems() ...
+    next := page.GetCursors().GetNext()
+    if len(page.GetItems()) < int(query.GetLimit()) || next == "" {
         break
     }
     query.Cursor = next
@@ -75,8 +79,8 @@ Keep the last `next` cursor. Asked later, it returns what was recorded since.
 ## One record and where it came from
 
 ```go
-got, err := client.Get(ctx, connect.NewRequest(&auditv1.GetRequest{Profile: "security", Id: id}))
-p := got.Msg.GetProvenance()   // p.GetObjectKey(), p.GetLine(), p.GetDigestId(), p.GetVerifiedAt(), p.GetSealUnknown()
+got, err := client.Get(ctx, &auditv1.GetRequest{Profile: "security", Id: id})
+p := got.GetProvenance()   // p.GetObjectKey(), p.GetLine(), p.GetDigestId(), p.GetVerifiedAt(), p.GetSealUnknown()
 ```
 
 Provenance names the archived copy and whether a seal vouches for it:

@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 
@@ -27,6 +27,7 @@ import (
 	"github.com/truvity/sluis/internal/kube"
 	"github.com/truvity/sluis/internal/port/memory"
 	"github.com/truvity/sluis/internal/portstore"
+	"github.com/truvity/sluis/internal/rpcmount"
 )
 
 // appsRig is a deployment with one of each kind of App: the link App, the
@@ -111,18 +112,18 @@ func (r *appsRig) catalogueApp(t *testing.T, id, key string) {
 // list is the Apps list, by id.
 func (r *appsRig) list(t *testing.T) (map[string]*directoryrosterv1.GitHubApp, *directoryrosterv1.ListGitHubAppsResponse) {
 	t.Helper()
-	listed, err := r.console.ListGitHubApps(operator(), connect.NewRequest(&directoryrosterv1.ListGitHubAppsRequest{}))
+	listed, err := r.console.ListGitHubApps(operator(), &directoryrosterv1.ListGitHubAppsRequest{})
 	if err != nil {
 		t.Fatalf("ListGitHubApps: %v", err)
 	}
 	byID := map[string]*directoryrosterv1.GitHubApp{}
-	for _, app := range listed.Msg.GetApps() {
+	for _, app := range listed.GetApps() {
 		if _, twice := byID[app.GetId()]; twice {
 			t.Errorf("two Apps share the id %s", app.GetId())
 		}
 		byID[app.GetId()] = app
 	}
-	return byID, listed.Msg
+	return byID, listed
 }
 
 func ids(apps map[string]*directoryrosterv1.GitHubApp) []string {
@@ -190,12 +191,12 @@ func TestTheAppsListCarriesEveryKindOfAppInOneShape(t *testing.T) {
 		t.Errorf("a catalogue App = %+v", apps["renovate"])
 	}
 	// One App, one page: the list's id fetches exactly the same App.
-	got, err := rig.console.GetGitHubApp(operator(), connect.NewRequest(&directoryrosterv1.GetGitHubAppRequest{Id: "globex-runners-stable"}))
-	if err != nil || got.Msg.GetApp().GetTier() != "stable" {
-		t.Errorf("GetGitHubApp = %+v, %v", got.Msg.GetApp(), err)
+	got, err := rig.console.GetGitHubApp(operator(), &directoryrosterv1.GetGitHubAppRequest{Id: "globex-runners-stable"})
+	if err != nil || got.GetApp().GetTier() != "stable" {
+		t.Errorf("GetGitHubApp = %+v, %v", got.GetApp(), err)
 	}
 	if _, err = rig.console.GetGitHubApp(operator(),
-		connect.NewRequest(&directoryrosterv1.GetGitHubAppRequest{Id: "no-such-app"})); connect.CodeOf(err) != connect.CodeNotFound {
+		&directoryrosterv1.GetGitHubAppRequest{Id: "no-such-app"}); connect.CodeOf(err) != connect.CodeNotFound {
 		t.Errorf("an id nothing declares = %v, want not found", err)
 	}
 }
@@ -207,16 +208,16 @@ func TestAnAppsListWithoutStoresStillNamesWhatThePolicyAsksFor(t *testing.T) {
 	startFakeGitHub(t)
 	_, console := connectServer(t, nil)
 	console.deps.GitHubOrgs = nil
-	listed, err := console.ListGitHubApps(operator(), connect.NewRequest(&directoryrosterv1.ListGitHubAppsRequest{}))
+	listed, err := console.ListGitHubApps(operator(), &directoryrosterv1.ListGitHubAppsRequest{})
 	if err != nil {
 		t.Fatalf("ListGitHubApps: %v", err)
 	}
-	if listed.Msg.GetConnectingAvailable() || listed.Msg.GetLinkingAvailable() || listed.Msg.GetCatalogueAvailable() ||
-		len(listed.Msg.GetRunnerTiers()) != 0 || listed.Msg.GetLinkUrl() != "" {
-		t.Errorf("without stores = %+v", listed.Msg)
+	if listed.GetConnectingAvailable() || listed.GetLinkingAvailable() || listed.GetCatalogueAvailable() ||
+		len(listed.GetRunnerTiers()) != 0 || listed.GetLinkUrl() != "" {
+		t.Errorf("without stores = %+v", listed)
 	}
 	byID := map[string]*directoryrosterv1.GitHubApp{}
-	for _, app := range listed.Msg.GetApps() {
+	for _, app := range listed.GetApps() {
 		byID[app.GetId()] = app
 	}
 	if !slices.Equal(ids(byID), []string{"acme-controller", "globex-controller"}) {
@@ -229,7 +230,7 @@ func TestAnAppsListWithoutStoresStillNamesWhatThePolicyAsksFor(t *testing.T) {
 
 	viewer := WithIdentity(context.Background(), access.Identity{Email: "viewer@example.test", Role: access.RoleNone})
 	if _, err = console.ListGitHubApps(viewer,
-		connect.NewRequest(&directoryrosterv1.ListGitHubAppsRequest{})); connect.CodeOf(err) != connect.CodePermissionDenied {
+		&directoryrosterv1.ListGitHubAppsRequest{}); connect.CodeOf(err) != connect.CodePermissionDenied {
 		t.Errorf("a caller with no role = %v, want permission denied", err)
 	}
 }
@@ -310,12 +311,12 @@ func TestThePresetAppsAreCheckedAgainstTheirOwnDeclaration(t *testing.T) {
 
 	// Somebody uninstalled the controller App on GitHub.
 	rig.github.installed = nil
-	checked, err := rig.console.CheckGitHubApp(operator(), connect.NewRequest(&directoryrosterv1.CheckGitHubAppRequest{Id: "globex-controller"}))
+	checked, err := rig.console.CheckGitHubApp(operator(), &directoryrosterv1.CheckGitHubAppRequest{Id: "globex-controller"})
 	if err != nil {
 		t.Fatalf("CheckGitHubApp: %v", err)
 	}
-	if !strings.Contains(strings.Join(checked.Msg.GetApp().GetDrift(), "\n"), "installation is gone on GitHub") {
-		t.Errorf("an uninstalled controller App = %v", checked.Msg.GetApp().GetDrift())
+	if !strings.Contains(strings.Join(checked.GetApp().GetDrift(), "\n"), "installation is gone on GitHub") {
+		t.Errorf("an uninstalled controller App = %v", checked.GetApp().GetDrift())
 	}
 }
 
@@ -406,16 +407,17 @@ func TestTheGenericBeginStartsTheSameFlowAsThePerKindOne(t *testing.T) {
 		{name: "the link App", id: "link", owner: "globex", bind: "github-link-app:globex"},
 		{name: "a catalogue App", id: "renovate", bind: "github-catalogue:renovate"},
 	} {
-		begun, err := rig.console.BeginGitHubAppConnect(operator(),
-			connect.NewRequest(&directoryrosterv1.BeginGitHubAppConnectRequest{Id: c.id, Owner: c.owner}))
+		callInfoCtx, callInfo := rpcmount.ServerContext(operator())
+		begun, err := rig.console.BeginGitHubAppConnect(callInfoCtx,
+			&directoryrosterv1.BeginGitHubAppConnectRequest{Id: c.id, Owner: c.owner})
 		if err != nil {
 			t.Fatalf("%s: %v", c.name, err)
 		}
-		if !strings.HasPrefix(begun.Msg.GetUrl(), "https://github.example/organizations/globex/settings/apps/new?state=") || begun.Msg.GetManifest() == "" {
-			t.Errorf("%s = %+v, want globex's create page and a manifest", c.name, begun.Msg)
+		if !strings.HasPrefix(begun.GetUrl(), "https://github.example/organizations/globex/settings/apps/new?state=") || begun.GetManifest() == "" {
+			t.Errorf("%s = %+v, want globex's create page and a manifest", c.name, begun)
 		}
-		state := mustQuery(t, begun.Msg.GetUrl(), "state")
-		if cookie := cookieFrom(t, begun.Header()); cookie != state {
+		state := mustQuery(t, begun.GetUrl(), "state")
+		if cookie := cookieFrom(t, rpcmount.HTTPHeader(callInfo.ResponseHeader())); cookie != state {
 			t.Errorf("%s pinned the flow to %q, not to its state", c.name, cookie)
 		}
 		binding, err := rig.console.deps.State.VerifyBinding(state)
@@ -426,13 +428,14 @@ func TestTheGenericBeginStartsTheSameFlowAsThePerKindOne(t *testing.T) {
 
 	// The state the generic call issued finishes at the callback the
 	// per-kind flow has always used.
-	begun, err := rig.console.BeginGitHubAppConnect(operator(),
-		connect.NewRequest(&directoryrosterv1.BeginGitHubAppConnectRequest{Id: "renovate"}))
+	againCtx, again := rpcmount.ServerContext(operator())
+	begun, err := rig.console.BeginGitHubAppConnect(againCtx,
+		&directoryrosterv1.BeginGitHubAppConnectRequest{Id: "renovate"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	created := redirect(rig.server.githubCatalogueCallback, githubCatalogueCallbackPath,
-		url.Values{"code": {"created"}, "state": {mustQuery(t, begun.Msg.GetUrl(), "state")}}, cookieFrom(t, begun.Header()))
+		url.Values{"code": {"created"}, "state": {mustQuery(t, begun.GetUrl(), "state")}}, cookieFrom(t, rpcmount.HTTPHeader(again.ResponseHeader())))
 	if created.Code != 302 || !strings.Contains(created.Header().Get("Location"), "/installations/new?state=") {
 		t.Fatalf("a generic connect finished at the catalogue callback = %d:\n%s", created.Code, created.Body)
 	}
@@ -440,11 +443,11 @@ func TestTheGenericBeginStartsTheSameFlowAsThePerKindOne(t *testing.T) {
 	// Only an operator, and only an App there is.
 	viewer := WithIdentity(context.Background(), access.Identity{Email: "viewer@example.test", Role: access.RoleViewer})
 	if _, err = rig.console.BeginGitHubAppConnect(viewer,
-		connect.NewRequest(&directoryrosterv1.BeginGitHubAppConnectRequest{Id: "renovate"})); connect.CodeOf(err) != connect.CodePermissionDenied {
+		&directoryrosterv1.BeginGitHubAppConnectRequest{Id: "renovate"}); connect.CodeOf(err) != connect.CodePermissionDenied {
 		t.Errorf("a viewer's Begin = %v, want permission denied", err)
 	}
 	if _, err = rig.console.BeginGitHubAppConnect(operator(),
-		connect.NewRequest(&directoryrosterv1.BeginGitHubAppConnectRequest{Id: "nothing"})); connect.CodeOf(err) != connect.CodeNotFound {
+		&directoryrosterv1.BeginGitHubAppConnectRequest{Id: "nothing"}); connect.CodeOf(err) != connect.CodeNotFound {
 		t.Errorf("Begin on an App there is none of = %v, want not found", err)
 	}
 }
@@ -474,12 +477,12 @@ func TestTheGenericDisconnectForgetsEveryKindOfApp(t *testing.T) {
 		{name: "the link App", id: "link", uninstalls: false,
 			settings: "https://github.example/organizations/globex/settings/apps/globex-access-roster-link"},
 	} {
-		gone, err := rig.console.DisconnectGitHubApp(operator(), connect.NewRequest(&directoryrosterv1.DisconnectGitHubAppRequest{Id: c.id}))
+		gone, err := rig.console.DisconnectGitHubApp(operator(), &directoryrosterv1.DisconnectGitHubAppRequest{Id: c.id})
 		if err != nil {
 			t.Fatalf("%s: %v", c.name, err)
 		}
-		if gone.Msg.GetUninstalled() != c.uninstalls || gone.Msg.GetAppSettingsUrl() != c.settings {
-			t.Errorf("%s = %+v", c.name, gone.Msg)
+		if gone.GetUninstalled() != c.uninstalls || gone.GetAppSettingsUrl() != c.settings {
+			t.Errorf("%s = %+v", c.name, gone)
 		}
 	}
 	if invalidated := rig.lastLinkState(t); invalidated != link.StateUnverifiable {
@@ -497,7 +500,7 @@ func TestTheGenericDisconnectForgetsEveryKindOfApp(t *testing.T) {
 	}
 	// Nothing left to disconnect.
 	if _, err := rig.console.DisconnectGitHubApp(operator(),
-		connect.NewRequest(&directoryrosterv1.DisconnectGitHubAppRequest{Id: "renovate"})); connect.CodeOf(err) != connect.CodeNotFound {
+		&directoryrosterv1.DisconnectGitHubAppRequest{Id: "renovate"}); connect.CodeOf(err) != connect.CodeNotFound {
 		t.Errorf("disconnecting what is gone = %v, want not found", err)
 	}
 }
@@ -522,19 +525,19 @@ func TestTheSupersededGitHubCallsStillAnswer(t *testing.T) {
 	rig.github.app = map[string]string{"contents": "write", "pull_requests": "write", "metadata": "read"}
 	rig.github.installed = rig.github.app
 
-	status, err := rig.console.GetGitHubStatus(operator(), connect.NewRequest(&directoryrosterv1.GetGitHubStatusRequest{}))
+	status, err := rig.console.GetGitHubStatus(operator(), &directoryrosterv1.GetGitHubStatusRequest{})
 	if err != nil {
 		t.Fatalf("GetGitHubStatus: %v", err)
 	}
-	if status.Msg.GetLinkApp().GetAppSlug() != "globex-access-roster-link" || len(status.Msg.GetRunnerApps()) != 1 ||
-		!status.Msg.GetRunnerApps()[0].GetInstalled() || len(status.Msg.GetCatalogueApps()) != 2 {
-		t.Errorf("the App-shaped fields = %+v", status.Msg)
+	if status.GetLinkApp().GetAppSlug() != "globex-access-roster-link" || len(status.GetRunnerApps()) != 1 ||
+		!status.GetRunnerApps()[0].GetInstalled() || len(status.GetCatalogueApps()) != 2 {
+		t.Errorf("the App-shaped fields = %+v", status)
 	}
-	if organisation(t, status.Msg, "globex").GetConnection().GetAppSlug() != "globex-access-roster" {
-		t.Errorf("the organisation's connection = %+v", organisation(t, status.Msg, "globex").GetConnection())
+	if organisation(t, status, "globex").GetConnection().GetAppSlug() != "globex-access-roster" {
+		t.Errorf("the organisation's connection = %+v", organisation(t, status, "globex").GetConnection())
 	}
 	var renovate *directoryrosterv1.GitHubCatalogueApp
-	for _, app := range status.Msg.GetCatalogueApps() {
+	for _, app := range status.GetCatalogueApps() {
 		if app.GetId() == "renovate" {
 			renovate = app
 		}
@@ -543,45 +546,45 @@ func TestTheSupersededGitHubCallsStillAnswer(t *testing.T) {
 		t.Errorf("a catalogue App on the status = %+v", renovate)
 	}
 
-	checked, err := rig.console.CheckGitHubCatalogueApp(operator(), connect.NewRequest(&directoryrosterv1.CheckGitHubCatalogueAppRequest{Id: "renovate"}))
-	if err != nil || checked.Msg.GetApp().GetState() != catalogueInstalled {
-		t.Errorf("CheckGitHubCatalogueApp = %+v, %v", checked.Msg.GetApp(), err)
+	checked, err := rig.console.CheckGitHubCatalogueApp(operator(), &directoryrosterv1.CheckGitHubCatalogueAppRequest{Id: "renovate"})
+	if err != nil || checked.GetApp().GetState() != catalogueInstalled {
+		t.Errorf("CheckGitHubCatalogueApp = %+v, %v", checked.GetApp(), err)
 	}
 	for _, c := range []struct {
 		name string
 		call func() error
 	}{
 		{"the organisation's Begin", func() error {
-			_, err := rig.console.BeginGitHubConnect(operator(), connect.NewRequest(&directoryrosterv1.BeginGitHubConnectRequest{Org: "acme"}))
+			_, err := rig.console.BeginGitHubConnect(operator(), &directoryrosterv1.BeginGitHubConnectRequest{Org: "acme"})
 			return err
 		}},
 		{"a runner App's Begin", func() error {
 			_, err := rig.console.BeginGitHubRunnerAppConnect(operator(),
-				connect.NewRequest(&directoryrosterv1.BeginGitHubRunnerAppConnectRequest{Org: "globex", Tier: "preview"}))
+				&directoryrosterv1.BeginGitHubRunnerAppConnectRequest{Org: "globex", Tier: "preview"})
 			return err
 		}},
 		{"a catalogue App's Begin", func() error {
 			_, err := rig.console.BeginGitHubCatalogueAppConnect(operator(),
-				connect.NewRequest(&directoryrosterv1.BeginGitHubCatalogueAppConnectRequest{Id: "releases"}))
+				&directoryrosterv1.BeginGitHubCatalogueAppConnectRequest{Id: "releases"})
 			return err
 		}},
 		{"the runner App's Disconnect", func() error {
 			_, err := rig.console.DisconnectGitHubRunnerApp(operator(),
-				connect.NewRequest(&directoryrosterv1.DisconnectGitHubRunnerAppRequest{Org: "globex", Tier: "stable"}))
+				&directoryrosterv1.DisconnectGitHubRunnerAppRequest{Org: "globex", Tier: "stable"})
 			return err
 		}},
 		{"the organisation's Disconnect", func() error {
 			_, err := rig.console.DisconnectGitHubOrganisation(operator(),
-				connect.NewRequest(&directoryrosterv1.DisconnectGitHubOrganisationRequest{Org: "globex"}))
+				&directoryrosterv1.DisconnectGitHubOrganisationRequest{Org: "globex"})
 			return err
 		}},
 		{"the link App's Disconnect", func() error {
-			_, err := rig.console.DisconnectGitHubLinkApp(operator(), connect.NewRequest(&directoryrosterv1.DisconnectGitHubLinkAppRequest{}))
+			_, err := rig.console.DisconnectGitHubLinkApp(operator(), &directoryrosterv1.DisconnectGitHubLinkAppRequest{})
 			return err
 		}},
 		{"a catalogue App's Disconnect", func() error {
 			_, err := rig.console.DisconnectGitHubCatalogueApp(operator(),
-				connect.NewRequest(&directoryrosterv1.DisconnectGitHubCatalogueAppRequest{Id: "renovate"}))
+				&directoryrosterv1.DisconnectGitHubCatalogueAppRequest{Id: "renovate"})
 			return err
 		}},
 	} {
@@ -596,12 +599,12 @@ func TestTheSupersededGitHubCallsStillAnswer(t *testing.T) {
 // carries.
 func TestAGroupCarriesTheGitHubTokensItMayMint(t *testing.T) {
 	rig := newAppsRig(t)
-	policy, err := rig.console.GetPolicy(operator(), connect.NewRequest(&directoryrosterv1.GetPolicyRequest{}))
+	policy, err := rig.console.GetPolicy(operator(), &directoryrosterv1.GetPolicyRequest{})
 	if err != nil {
 		t.Fatalf("GetPolicy: %v", err)
 	}
 	byName := map[string]*directoryrosterv1.PolicyGroup{}
-	for _, group := range policy.Msg.GetGroups() {
+	for _, group := range policy.GetGroups() {
 		byName[group.GetName()] = group
 	}
 	grants := byName["all:platform:engineer"].GetGithubGrants()
@@ -616,10 +619,10 @@ func TestAGroupCarriesTheGitHubTokensItMayMint(t *testing.T) {
 
 	// No catalogue, no grants — and no call to GitHub to find that out.
 	rig.console.deps.GitHubCatalogue = nil
-	if policy, err = rig.console.GetPolicy(operator(), connect.NewRequest(&directoryrosterv1.GetPolicyRequest{})); err != nil {
+	if policy, err = rig.console.GetPolicy(operator(), &directoryrosterv1.GetPolicyRequest{}); err != nil {
 		t.Fatalf("GetPolicy: %v", err)
 	}
-	for _, group := range policy.Msg.GetGroups() {
+	for _, group := range policy.GetGroups() {
 		if len(group.GetGithubGrants()) != 0 {
 			t.Errorf("%s mints %+v without a catalogue", group.GetName(), group.GetGithubGrants())
 		}
@@ -676,19 +679,19 @@ func catalogueSecret(t *testing.T, client *kube.Client) map[string][]byte {
 
 func catalogueApp(t *testing.T, console *Console, id string) *directoryrosterv1.GitHubCatalogueApp {
 	t.Helper()
-	status, err := console.GetGitHubStatus(operator(), connect.NewRequest(&directoryrosterv1.GetGitHubStatusRequest{}))
+	status, err := console.GetGitHubStatus(operator(), &directoryrosterv1.GetGitHubStatusRequest{})
 	if err != nil {
 		t.Fatalf("GetGitHubStatus: %v", err)
 	}
-	if !status.Msg.GetCatalogueAvailable() {
+	if !status.GetCatalogueAvailable() {
 		t.Fatal("the catalogue is not available")
 	}
-	for _, app := range status.Msg.GetCatalogueApps() {
+	for _, app := range status.GetCatalogueApps() {
 		if app.GetId() == id {
 			return app
 		}
 	}
-	t.Fatalf("no catalogue App %s in %v", id, status.Msg.GetCatalogueApps())
+	t.Fatalf("no catalogue App %s in %v", id, status.GetCatalogueApps())
 	return nil
 }
 
@@ -708,21 +711,22 @@ func TestACatalogueAppIsCreatedInstalledCheckedForDriftAndDisconnected(t *testin
 		t.Errorf("before Create = %+v", app)
 	}
 
-	begun, err := console.BeginGitHubCatalogueAppConnect(operator(),
-		connect.NewRequest(&directoryrosterv1.BeginGitHubCatalogueAppConnectRequest{Id: "renovate"}))
+	callCtx, call := rpcmount.ServerContext(operator())
+	begun, err := console.BeginGitHubCatalogueAppConnect(callCtx,
+		&directoryrosterv1.BeginGitHubCatalogueAppConnectRequest{Id: "renovate"})
 	if err != nil {
 		t.Fatalf("Begin: %v", err)
 	}
 	var manifest githubapp.Manifest
-	if err = json.Unmarshal([]byte(begun.Msg.GetManifest()), &manifest); err != nil {
+	if err = json.Unmarshal([]byte(begun.GetManifest()), &manifest); err != nil {
 		t.Fatalf("manifest: %v", err)
 	}
 	if manifest.Name != "globex-renovate" || manifest.Description != "Dependency updates" || manifest.DefaultPermissions["pull_requests"] != "write" ||
 		manifest.RedirectURL != "https://access.example"+githubCatalogueCallbackPath || manifest.SetupURL != "https://access.example"+githubCatalogueSetupPath ||
-		!strings.HasPrefix(begun.Msg.GetUrl(), "https://github.example/organizations/globex/settings/apps/new?state=") {
-		t.Errorf("manifest = %+v, url %s", manifest, begun.Msg.GetUrl())
+		!strings.HasPrefix(begun.GetUrl(), "https://github.example/organizations/globex/settings/apps/new?state=") {
+		t.Errorf("manifest = %+v, url %s", manifest, begun.GetUrl())
 	}
-	cookie, state := cookieFrom(t, begun.Header()), mustQuery(t, begun.Msg.GetUrl(), "state")
+	cookie, state := cookieFrom(t, rpcmount.HTTPHeader(call.ResponseHeader())), mustQuery(t, begun.GetUrl(), "state")
 
 	// No other GitHub flow finishes a catalogue App's, nor the other way.
 	if got := redirect(server.githubRunnerCallback, githubRunnerCallbackPath, url.Values{"code": {"created"}, "state": {state}}, cookie); got.Code != 400 {
@@ -751,9 +755,9 @@ func TestACatalogueAppIsCreatedInstalledCheckedForDriftAndDisconnected(t *testin
 	}
 	// Begin again picks up at Install rather than creating a second App.
 	again, err := console.BeginGitHubCatalogueAppConnect(operator(),
-		connect.NewRequest(&directoryrosterv1.BeginGitHubCatalogueAppConnectRequest{Id: "renovate"}))
-	if err != nil || again.Msg.GetManifest() != "" || !strings.Contains(again.Msg.GetUrl(), "/apps/globex-access-roster/installations/new") {
-		t.Errorf("Begin after Create = %+v, %v", again.Msg, err)
+		&directoryrosterv1.BeginGitHubCatalogueAppConnectRequest{Id: "renovate"})
+	if err != nil || again.GetManifest() != "" || !strings.Contains(again.GetUrl(), "/apps/globex-access-roster/installations/new") {
+		t.Errorf("Begin after Create = %+v, %v", again, err)
 	}
 
 	github.installed = map[string]string{"contents": "write", "pull_requests": "write", "metadata": "read"}
@@ -786,18 +790,18 @@ func TestACatalogueAppIsCreatedInstalledCheckedForDriftAndDisconnected(t *testin
 		t.Errorf("installed = %+v", app)
 	}
 	if _, err = console.BeginGitHubCatalogueAppConnect(operator(),
-		connect.NewRequest(&directoryrosterv1.BeginGitHubCatalogueAppConnectRequest{Id: "renovate"})); connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		&directoryrosterv1.BeginGitHubCatalogueAppConnectRequest{Id: "renovate"}); connect.CodeOf(err) != connect.CodeFailedPrecondition {
 		t.Errorf("creating an installed App again = %v, want failed precondition", err)
 	}
 
 	// An owner edits the App on GitHub: it now asks for more, and the
 	// installation has not approved it. Re-check shows both.
 	github.app = map[string]string{"contents": "write", "pull_requests": "read", "issues": "write", "metadata": "read"}
-	checked, err := console.CheckGitHubCatalogueApp(operator(), connect.NewRequest(&directoryrosterv1.CheckGitHubCatalogueAppRequest{Id: "renovate"}))
+	checked, err := console.CheckGitHubCatalogueApp(operator(), &directoryrosterv1.CheckGitHubCatalogueAppRequest{Id: "renovate"})
 	if err != nil {
 		t.Fatalf("Check: %v", err)
 	}
-	app = checked.Msg.GetApp()
+	app = checked.GetApp()
 	drift := strings.Join(app.GetDrift(), "\n")
 	if app.GetState() != catalogueDrifted || !strings.Contains(drift, "issues: write, which the catalogue does not declare") ||
 		!strings.Contains(drift, "pull_requests: read, and the catalogue declares write") || !strings.Contains(drift, "approve the permission request") {
@@ -814,19 +818,19 @@ func TestACatalogueAppIsCreatedInstalledCheckedForDriftAndDisconnected(t *testin
 
 	// Uninstalled on GitHub by somebody else: drift, with what to do.
 	github.installed = nil
-	checked, _ = console.CheckGitHubCatalogueApp(operator(), connect.NewRequest(&directoryrosterv1.CheckGitHubCatalogueAppRequest{Id: "renovate"}))
-	if !strings.Contains(strings.Join(checked.Msg.GetApp().GetDrift(), "\n"), "installation is gone on GitHub") {
-		t.Errorf("an uninstalled App = %v", checked.Msg.GetApp().GetDrift())
+	checked, _ = console.CheckGitHubCatalogueApp(operator(), &directoryrosterv1.CheckGitHubCatalogueAppRequest{Id: "renovate"})
+	if !strings.Contains(strings.Join(checked.GetApp().GetDrift(), "\n"), "installation is gone on GitHub") {
+		t.Errorf("an uninstalled App = %v", checked.GetApp().GetDrift())
 	}
 
 	gone, err := console.DisconnectGitHubCatalogueApp(operator(),
-		connect.NewRequest(&directoryrosterv1.DisconnectGitHubCatalogueAppRequest{Id: "renovate"}))
+		&directoryrosterv1.DisconnectGitHubCatalogueAppRequest{Id: "renovate"})
 	if err != nil {
 		t.Fatalf("Disconnect: %v", err)
 	}
-	if !gone.Msg.GetUninstalled() || !slices.Equal(github.uninstalled, []string{"7"}) ||
-		gone.Msg.GetAppSettingsUrl() != "https://github.example/organizations/globex/settings/apps/globex-access-roster" {
-		t.Errorf("Disconnect = %+v, calls %v", gone.Msg, github.uninstalled)
+	if !gone.GetUninstalled() || !slices.Equal(github.uninstalled, []string{"7"}) ||
+		gone.GetAppSettingsUrl() != "https://github.example/organizations/globex/settings/apps/globex-access-roster" {
+		t.Errorf("Disconnect = %+v, calls %v", gone, github.uninstalled)
 	}
 	for key := range catalogueSecret(t, client) {
 		if strings.HasPrefix(key, "renovate.") {
@@ -837,7 +841,7 @@ func TestACatalogueAppIsCreatedInstalledCheckedForDriftAndDisconnected(t *testin
 		t.Errorf("after Disconnect = %s", app.GetState())
 	}
 	if _, err = console.DisconnectGitHubCatalogueApp(operator(),
-		connect.NewRequest(&directoryrosterv1.DisconnectGitHubCatalogueAppRequest{Id: "renovate"})); connect.CodeOf(err) != connect.CodeNotFound {
+		&directoryrosterv1.DisconnectGitHubCatalogueAppRequest{Id: "renovate"}); connect.CodeOf(err) != connect.CodeNotFound {
 		t.Errorf("disconnecting what is gone = %v, want not found", err)
 	}
 
@@ -862,12 +866,12 @@ func TestACatalogueAppIsOnlyWhatTheCatalogueDeclares(t *testing.T) {
 		{"a viewer", viewer, "renovate", connect.CodePermissionDenied},
 		{"an undeclared id", operator(), "something-else", connect.CodeInvalidArgument},
 	} {
-		_, err := console.BeginGitHubCatalogueAppConnect(c.ctx, connect.NewRequest(&directoryrosterv1.BeginGitHubCatalogueAppConnectRequest{Id: c.id}))
+		_, err := console.BeginGitHubCatalogueAppConnect(c.ctx, &directoryrosterv1.BeginGitHubCatalogueAppConnectRequest{Id: c.id})
 		if connect.CodeOf(err) != c.want {
 			t.Errorf("%s = %v, want %v", c.name, err, c.want)
 		}
 	}
-	_, err := console.CheckGitHubCatalogueApp(viewer, connect.NewRequest(&directoryrosterv1.CheckGitHubCatalogueAppRequest{Id: "renovate"}))
+	_, err := console.CheckGitHubCatalogueApp(viewer, &directoryrosterv1.CheckGitHubCatalogueAppRequest{Id: "renovate"})
 	if connect.CodeOf(err) != connect.CodePermissionDenied {
 		t.Errorf("a viewer's re-check = %v", err)
 	}
@@ -875,13 +879,14 @@ func TestACatalogueAppIsOnlyWhatTheCatalogueDeclares(t *testing.T) {
 	// Created by somebody under another organisation: refused, and nothing
 	// is kept.
 	github.owner = "initech"
-	begun, err := console.BeginGitHubCatalogueAppConnect(operator(),
-		connect.NewRequest(&directoryrosterv1.BeginGitHubCatalogueAppConnectRequest{Id: "releases"}))
+	callCtx, call := rpcmount.ServerContext(operator())
+	begun, err := console.BeginGitHubCatalogueAppConnect(callCtx,
+		&directoryrosterv1.BeginGitHubCatalogueAppConnectRequest{Id: "releases"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	refused := redirect(server.githubCatalogueCallback, githubCatalogueCallbackPath,
-		url.Values{"code": {"created"}, "state": {mustQuery(t, begun.Msg.GetUrl(), "state")}}, cookieFrom(t, begun.Header()))
+		url.Values{"code": {"created"}, "state": {mustQuery(t, begun.GetUrl(), "state")}}, cookieFrom(t, rpcmount.HTTPHeader(call.ResponseHeader())))
 	if refused.Code != 409 || !strings.Contains(refused.Body.String(), "created under initech") {
 		t.Errorf("an App under another organisation = %d:\n%s", refused.Code, refused.Body)
 	}
@@ -893,12 +898,12 @@ func TestACatalogueAppIsOnlyWhatTheCatalogueDeclares(t *testing.T) {
 	// A deployment keeping no state in Kubernetes keeps no catalogue Apps.
 	_, none := connectServer(t, newMemoryConnections())
 	if _, err = none.BeginGitHubCatalogueAppConnect(operator(),
-		connect.NewRequest(&directoryrosterv1.BeginGitHubCatalogueAppConnectRequest{Id: "renovate"})); connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		&directoryrosterv1.BeginGitHubCatalogueAppConnectRequest{Id: "renovate"}); connect.CodeOf(err) != connect.CodeFailedPrecondition {
 		t.Errorf("no store = %v, want failed precondition", err)
 	}
-	status, err := none.GetGitHubStatus(operator(), connect.NewRequest(&directoryrosterv1.GetGitHubStatusRequest{}))
-	if err != nil || status.Msg.GetCatalogueAvailable() || len(status.Msg.GetCatalogueApps()) != 0 {
-		t.Errorf("status without a store = %v, %v", status.Msg.GetCatalogueApps(), err)
+	status, err := none.GetGitHubStatus(operator(), &directoryrosterv1.GetGitHubStatusRequest{})
+	if err != nil || status.GetCatalogueAvailable() || len(status.GetCatalogueApps()) != 0 {
+		t.Errorf("status without a store = %v, %v", status.GetCatalogueApps(), err)
 	}
 }
 
@@ -932,9 +937,9 @@ func TestWhatGitHubSaysOfACatalogueAppIsCachedBriefly(t *testing.T) {
 		t.Errorf("within the minute = %s after %d calls, want the cached answer", app.GetState(), reads())
 	}
 	if checked, err := console.CheckGitHubCatalogueApp(operator(),
-		connect.NewRequest(&directoryrosterv1.CheckGitHubCatalogueAppRequest{Id: "releases"})); err != nil ||
-		checked.Msg.GetApp().GetState() != catalogueDrifted || reads() != 4 {
-		t.Errorf("re-check = %v after %d calls, %v", checked.Msg.GetApp(), reads(), err)
+		&directoryrosterv1.CheckGitHubCatalogueAppRequest{Id: "releases"}); err != nil ||
+		checked.GetApp().GetState() != catalogueDrifted || reads() != 4 {
+		t.Errorf("re-check = %v after %d calls, %v", checked.GetApp(), reads(), err)
 	}
 	github.app = map[string]string{"contents": "write"}
 	now = now.Add(2 * time.Minute)
@@ -978,7 +983,7 @@ func TestAnAppTheCatalogueNoLongerDeclaresCanStillBeDisconnected(t *testing.T) {
 		t.Errorf("GitHub was asked about an App nothing declares: %d calls", github.reads)
 	}
 	if _, err := console.DisconnectGitHubCatalogueApp(operator(),
-		connect.NewRequest(&directoryrosterv1.DisconnectGitHubCatalogueAppRequest{Id: "retired"})); err != nil {
+		&directoryrosterv1.DisconnectGitHubCatalogueAppRequest{Id: "retired"}); err != nil {
 		t.Errorf("Disconnect = %v", err)
 	}
 }
@@ -1011,20 +1016,21 @@ func TestARunnerAppIsCreateThenInstallAndItsKeysAppearOnlyOnceInstalled(t *testi
 	github := startFakeGitHub(t)
 	server, console, client := runnerServer(t, "preview", "stable")
 
-	begun, err := console.BeginGitHubRunnerAppConnect(operator(),
-		connect.NewRequest(&directoryrosterv1.BeginGitHubRunnerAppConnectRequest{Org: "globex", Tier: "stable"}))
+	callCtx, call := rpcmount.ServerContext(operator())
+	begun, err := console.BeginGitHubRunnerAppConnect(callCtx,
+		&directoryrosterv1.BeginGitHubRunnerAppConnectRequest{Org: "globex", Tier: "stable"})
 	if err != nil {
 		t.Fatalf("BeginGitHubRunnerAppConnect: %v", err)
 	}
 	var manifest githubapp.Manifest
-	if err = json.Unmarshal([]byte(begun.Msg.GetManifest()), &manifest); err != nil {
+	if err = json.Unmarshal([]byte(begun.GetManifest()), &manifest); err != nil {
 		t.Fatalf("manifest: %v", err)
 	}
 	if manifest.Name != "globex-runners-stable" || manifest.DefaultPermissions["organization_self_hosted_runners"] != "write" ||
 		manifest.RedirectURL != "https://access.example"+githubRunnerCallbackPath || manifest.SetupURL != "https://access.example"+githubRunnerSetupPath {
 		t.Errorf("manifest = %+v", manifest)
 	}
-	cookie, state := cookieFrom(t, begun.Header()), mustQuery(t, begun.Msg.GetUrl(), "state")
+	cookie, state := cookieFrom(t, rpcmount.HTTPHeader(call.ResponseHeader())), mustQuery(t, begun.GetUrl(), "state")
 
 	// An organisation connect's callback does not finish a runner flow.
 	if got := redirect(server.githubCallback, githubCallbackPath, url.Values{"code": {"created"}, "state": {state}}, cookie); got.Code != 400 {
@@ -1060,23 +1066,23 @@ func TestARunnerAppIsCreateThenInstallAndItsKeysAppearOnlyOnceInstalled(t *testi
 		t.Error("the pending key outlived Install")
 	}
 
-	status, err := console.GetGitHubStatus(operator(), connect.NewRequest(&directoryrosterv1.GetGitHubStatusRequest{}))
+	status, err := console.GetGitHubStatus(operator(), &directoryrosterv1.GetGitHubStatusRequest{})
 	if err != nil {
 		t.Fatalf("GetGitHubStatus: %v", err)
 	}
-	if !slices.Equal(status.Msg.GetRunnerTiers(), []string{"preview", "stable"}) || len(status.Msg.GetRunnerApps()) != 1 ||
-		!status.Msg.GetRunnerApps()[0].GetInstalled() || status.Msg.GetRunnerApps()[0].GetConnectedBy() != "ada@north.example" {
-		t.Errorf("status = tiers %v, apps %+v", status.Msg.GetRunnerTiers(), status.Msg.GetRunnerApps())
+	if !slices.Equal(status.GetRunnerTiers(), []string{"preview", "stable"}) || len(status.GetRunnerApps()) != 1 ||
+		!status.GetRunnerApps()[0].GetInstalled() || status.GetRunnerApps()[0].GetConnectedBy() != "ada@north.example" {
+		t.Errorf("status = tiers %v, apps %+v", status.GetRunnerTiers(), status.GetRunnerApps())
 	}
 
 	_, err = console.BeginGitHubRunnerAppConnect(operator(),
-		connect.NewRequest(&directoryrosterv1.BeginGitHubRunnerAppConnectRequest{Org: "globex", Tier: "stable"}))
+		&directoryrosterv1.BeginGitHubRunnerAppConnectRequest{Org: "globex", Tier: "stable"})
 	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
 		t.Errorf("creating an installed tier's App again = %v, want failed precondition", err)
 	}
 	// Another tier is another App.
 	if _, err = console.BeginGitHubRunnerAppConnect(operator(),
-		connect.NewRequest(&directoryrosterv1.BeginGitHubRunnerAppConnectRequest{Org: "globex", Tier: "preview"})); err != nil {
+		&directoryrosterv1.BeginGitHubRunnerAppConnectRequest{Org: "globex", Tier: "preview"}); err != nil {
 		t.Errorf("the preview tier beside an installed stable one = %v", err)
 	}
 }
@@ -1087,7 +1093,7 @@ func TestARunnerAppNeedsADeclaredTierABoundOrganisationAndAnOperator(t *testing.
 	startFakeGitHub(t)
 	_, console, _ := runnerServer(t, "stable")
 	begin := func(ctx context.Context, org, tier string) error {
-		_, err := console.BeginGitHubRunnerAppConnect(ctx, connect.NewRequest(&directoryrosterv1.BeginGitHubRunnerAppConnectRequest{Org: org, Tier: tier}))
+		_, err := console.BeginGitHubRunnerAppConnect(ctx, &directoryrosterv1.BeginGitHubRunnerAppConnectRequest{Org: org, Tier: tier})
 		return err
 	}
 	viewer := WithIdentity(context.Background(), access.Identity{Email: "viewer@example.test", Role: access.RoleViewer})
@@ -1109,13 +1115,13 @@ func TestARunnerAppNeedsADeclaredTierABoundOrganisationAndAnOperator(t *testing.
 
 	_, none, _ := runnerServer(t)
 	_, err := none.BeginGitHubRunnerAppConnect(operator(),
-		connect.NewRequest(&directoryrosterv1.BeginGitHubRunnerAppConnectRequest{Org: "globex", Tier: "stable"}))
+		&directoryrosterv1.BeginGitHubRunnerAppConnectRequest{Org: "globex", Tier: "stable"})
 	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
 		t.Errorf("no declared tiers = %v, want failed precondition", err)
 	}
-	status, err := none.GetGitHubStatus(operator(), connect.NewRequest(&directoryrosterv1.GetGitHubStatusRequest{}))
-	if err != nil || len(status.Msg.GetRunnerTiers()) != 0 {
-		t.Errorf("status without tiers = %v, %v", status.Msg.GetRunnerTiers(), err)
+	status, err := none.GetGitHubStatus(operator(), &directoryrosterv1.GetGitHubStatusRequest{})
+	if err != nil || len(status.GetRunnerTiers()) != 0 {
+		t.Errorf("status without tiers = %v, %v", status.GetRunnerTiers(), err)
 	}
 }
 
@@ -1134,13 +1140,13 @@ func TestDisconnectingARunnerAppUninstallsThenForgetsItsKeys(t *testing.T) {
 	}
 
 	gone, err := console.DisconnectGitHubRunnerApp(operator(),
-		connect.NewRequest(&directoryrosterv1.DisconnectGitHubRunnerAppRequest{Org: "globex", Tier: "stable"}))
+		&directoryrosterv1.DisconnectGitHubRunnerAppRequest{Org: "globex", Tier: "stable"})
 	if err != nil {
 		t.Fatalf("Disconnect: %v", err)
 	}
-	if !gone.Msg.GetUninstalled() || !slices.Equal(github.uninstalled, []string{"7"}) ||
-		gone.Msg.GetAppSettingsUrl() != "https://github.example/organizations/globex/settings/apps/globex-runners-stable" {
-		t.Errorf("response = %+v, calls = %v", gone.Msg, github.uninstalled)
+	if !gone.GetUninstalled() || !slices.Equal(github.uninstalled, []string{"7"}) ||
+		gone.GetAppSettingsUrl() != "https://github.example/organizations/globex/settings/apps/globex-runners-stable" {
+		t.Errorf("response = %+v, calls = %v", gone, github.uninstalled)
 	}
 	for key := range runnerSecret(t, client) {
 		if strings.HasPrefix(key, "stable.") {
@@ -1152,7 +1158,7 @@ func TestDisconnectingARunnerAppUninstallsThenForgetsItsKeys(t *testing.T) {
 	}
 
 	if _, err = console.DisconnectGitHubRunnerApp(operator(),
-		connect.NewRequest(&directoryrosterv1.DisconnectGitHubRunnerAppRequest{Org: "globex", Tier: "stable"})); connect.CodeOf(err) != connect.CodeNotFound {
+		&directoryrosterv1.DisconnectGitHubRunnerAppRequest{Org: "globex", Tier: "stable"}); connect.CodeOf(err) != connect.CodeNotFound {
 		t.Errorf("disconnecting what is gone = %v, want not found", err)
 	}
 }
@@ -1177,7 +1183,8 @@ func TestTheConsoleCreatesAnAppWithTheLabelsTheConfigurationDeclares(t *testing.
 	console.deps.GitHubRunnerTiers = []string{"stable"}
 
 	for _, id := range []string{"renovate", "globex-runners-stable"} {
-		begun, err := console.BeginGitHubAppConnect(operator(), connect.NewRequest(&directoryrosterv1.BeginGitHubAppConnectRequest{Id: id}))
+		callCtx, call := rpcmount.ServerContext(operator())
+		begun, err := console.BeginGitHubAppConnect(callCtx, &directoryrosterv1.BeginGitHubAppConnectRequest{Id: id})
 		if err != nil {
 			t.Fatalf("Begin %s: %v", id, err)
 		}
@@ -1185,7 +1192,8 @@ func TestTheConsoleCreatesAnAppWithTheLabelsTheConfigurationDeclares(t *testing.
 		if id != "renovate" {
 			callback, path = server.githubRunnerCallback, githubRunnerCallbackPath
 		}
-		created := redirect(callback, path, url.Values{"code": {"created"}, "state": {mustQuery(t, begun.Msg.GetUrl(), "state")}}, cookieFrom(t, begun.Header()))
+		created := redirect(callback, path, url.Values{"code": {"created"}, "state": {mustQuery(t, begun.GetUrl(), "state")}},
+			cookieFrom(t, rpcmount.HTTPHeader(call.ResponseHeader())))
 		if created.Code != 302 {
 			t.Fatalf("after Create %s = %d:\n%s", id, created.Code, created.Body)
 		}

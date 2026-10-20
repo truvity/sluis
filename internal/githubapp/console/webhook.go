@@ -7,13 +7,14 @@ import (
 	"net/http"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
 	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/audit"
 	"github.com/truvity/sluis/internal/clientcreds"
 	"github.com/truvity/sluis/internal/githubapp"
+	"github.com/truvity/sluis/internal/rpcmount"
 	"github.com/truvity/sluis/storage/logattr"
 )
 
@@ -38,12 +39,12 @@ const (
 // failure before that restores the old secret, so deliveries go on exactly
 // as they were.
 func (c *Service) RotateGitHubAppWebhook(
-	ctx context.Context, req *connect.Request[directoryrosterv1.RotateGitHubAppWebhookRequest],
-) (*connect.Response[directoryrosterv1.RotateGitHubAppWebhookResponse], error) {
+	ctx context.Context, req *directoryrosterv1.RotateGitHubAppWebhookRequest,
+) (*directoryrosterv1.RotateGitHubAppWebhookResponse, error) {
 	if _, err := requireAnywhere(ctx, access.RoleOperator); err != nil {
 		return nil, err
 	}
-	spec, err := c.githubAppSpec(ctx, req.Msg.GetId())
+	spec, err := c.githubAppSpec(ctx, req.GetId())
 	if err != nil {
 		return nil, err
 	}
@@ -64,44 +65,44 @@ func (c *Service) RotateGitHubAppWebhook(
 		return nil, err
 	}
 	c.decorateApp(app, id, &spec, ownerDomains(dirs))
-	return connect.NewResponse(&directoryrosterv1.RotateGitHubAppWebhookResponse{App: app}), nil
+	return &directoryrosterv1.RotateGitHubAppWebhookResponse{App: app}, nil
 }
 
 func (c *Service) rotateWebhook(ctx context.Context, actor string, spec githubAppSpec) error {
 	entry := spec.entry
 	if spec.origin != appCatalogue || !spec.declared || entry.Webhook == nil {
-		return connect.NewError(connect.CodeFailedPrecondition,
-			fmt.Errorf("%s declares no webhook: only a catalogue App with a `webhook` has a secret to rotate", spec.id))
+		return connect.Errorf(connect.CodeFailedPrecondition,
+			"%s declares no webhook: only a catalogue App with a `webhook` has a secret to rotate", spec.id)
 	}
 	store, err := c.catalogueStore()
 	if err != nil {
 		return err
 	}
 	if !c.beginRotation(spec.id) {
-		return connect.NewError(connect.CodeAborted, fmt.Errorf("the webhook of %s is being rotated already", spec.id))
+		return connect.Errorf(connect.CodeAborted, "the webhook of %s is being rotated already", spec.id)
 	}
 	defer c.endRotation(spec.id)
 
 	record, key, created, err := store.Get(ctx, spec.id)
 	switch {
 	case err != nil:
-		return connect.NewError(connect.CodeUnavailable, err)
+		return connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
 	case !created:
-		return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("no App %s has been created", spec.id))
+		return connect.Errorf(connect.CodeFailedPrecondition, "no App %s has been created", spec.id)
 	case key == "":
-		return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("the key of %s is not kept here, so GitHub cannot be told anything as the App", spec.id))
+		return connect.Errorf(connect.CodeFailedPrecondition, "the key of %s is not kept here, so GitHub cannot be told anything as the App", spec.id)
 	}
 	old, hadOld, err := store.WebhookSecret(ctx, spec.id)
 	if err != nil {
-		return connect.NewError(connect.CodeUnavailable, err)
+		return connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
 	}
 	token, err := githubapp.AppToken(record.AppID, key, time.Now())
 	if err != nil {
-		return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("the stored key of %s is not usable: %w", spec.id, err))
+		return rpcmount.NewError(connect.CodeFailedPrecondition, fmt.Errorf("the stored key of %s is not usable: %w", spec.id, err))
 	}
 	secret, err := clientcreds.Generate()
 	if err != nil {
-		return connect.NewError(connect.CodeInternal, err)
+		return connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	target := entry.Webhook.Target(secret)
 	who, app := audit.Identified(actor), audit.App{Name: spec.id, ID: record.AppID, Slug: record.AppSlug}
@@ -112,7 +113,7 @@ func (c *Service) rotateWebhook(ctx context.Context, actor string, spec githubAp
 	// 1. The new secret is kept where the consumers read it.
 	if err = store.PutWebhookSecret(ctx, spec.id, secret); err != nil {
 		step(audit.WebhookStaged, audit.Failed(err.Error()))
-		return connect.NewError(connect.CodeUnavailable, fmt.Errorf("the new webhook secret of %s could not be kept: %w", spec.id, err))
+		return rpcmount.NewError(connect.CodeUnavailable, fmt.Errorf("the new webhook secret of %s could not be kept: %w", spec.id, err))
 	}
 	step(audit.WebhookStaged, audit.Succeeded())
 
@@ -137,7 +138,7 @@ func (c *Service) rotateWebhook(ctx context.Context, actor string, spec githubAp
 	// 2. The new target accepts a ping signed with the new secret.
 	if err = c.awaitPing(ctx, target, secret); err != nil {
 		step(audit.WebhookVerified, audit.Failed(err.Error()))
-		return connect.NewError(connect.CodeFailedPrecondition, back(fmt.Errorf(
+		return rpcmount.NewError(connect.CodeFailedPrecondition, back(fmt.Errorf(
 			"%w. GitHub was not told, and the previous secret is back in place. Check that the consumer reads the secret the console keeps, then rotate again", err)))
 	}
 	step(audit.WebhookVerified, audit.Succeeded())
@@ -145,7 +146,7 @@ func (c *Service) rotateWebhook(ctx context.Context, actor string, spec githubAp
 	// 3. GitHub is told: secret and URL in one call.
 	if _, err = githubapp.PatchHookConfig(ctx, c.githubHTTP(), token, githubapp.HookUpdate{URL: target, Secret: secret}); err != nil {
 		step(audit.WebhookRotated, audit.Failed(err.Error()))
-		return connect.NewError(connect.CodeUnavailable, back(fmt.Errorf("GitHub would not take the new webhook: %w", err)))
+		return rpcmount.NewError(connect.CodeUnavailable, back(fmt.Errorf("GitHub would not take the new webhook: %w", err)))
 	}
 
 	// 4. What GitHub now holds is recorded. A failure here leaves everything
@@ -153,7 +154,7 @@ func (c *Service) rotateWebhook(ctx context.Context, actor string, spec githubAp
 	record.WebhookURL, record.HookRotatedAt = target, time.Now().UTC()
 	if err = store.Put(ctx, record, key); err != nil {
 		step(audit.WebhookRotated, audit.Failed(err.Error()))
-		return connect.NewError(connect.CodeUnavailable, fmt.Errorf(
+		return rpcmount.NewError(connect.CodeUnavailable, fmt.Errorf(
 			"the webhook of %s was rotated on GitHub and the console could not record it: %w", spec.id, err))
 	}
 	c.seen.forget(spec.id)

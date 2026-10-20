@@ -9,14 +9,16 @@ managed:
     - file_option: go_package_prefix
       value: github.com/truvity/sluis/audit/sdk/gen
 plugins:
-  # Local plugins (installed via devbox: protoc-gen-go, protoc-gen-connect-go)
-  # to avoid BSR rate limits. The Go types are the SDK module's (sdk/), so they
-  # are written there; the JSON Schema stays at the root, where the writer
-  # embeds it.
+  # Local plugins to avoid BSR rate limits: protoc-gen-go from devbox, and
+  # connect-go v2's protoc-gen-connect-go as a Go tool, pinned by the `tool`
+  # line and the connectrpc.com/connect/v2 require in go.mod (nixpkgs carries
+  # only the v1 generator), so it always matches the runtime. The Go types are
+  # the SDK module's (sdk/), so they are written there; the JSON Schema stays
+  # at the root, where the writer embeds it.
   - local: protoc-gen-go
     out: sdk/gen
     opt: paths=source_relative
-  - local: protoc-gen-connect-go
+  - local: [go, tool, protoc-gen-connect-go]
     out: sdk/gen
     opt: paths=source_relative
   # The record's JSON Schema, with the proto's comments as descriptions. Run

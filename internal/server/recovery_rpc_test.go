@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	auditv1 "github.com/truvity/sluis/audit/sdk/gen/audit/v1"
 
@@ -80,19 +80,19 @@ func newRecoveryRig(t *testing.T, generation string, state port.State) *recovery
 }
 
 func (r *recoveryRig) disable(id access.Identity) (*directoryrosterv1.DisableRecoveryResponse, error) {
-	resp, err := r.console.DisableRecovery(WithIdentity(context.Background(), id), connect.NewRequest(&directoryrosterv1.DisableRecoveryRequest{}))
+	resp, err := r.console.DisableRecovery(WithIdentity(context.Background(), id), &directoryrosterv1.DisableRecoveryRequest{})
 	if err != nil {
 		return nil, err
 	}
-	return resp.Msg, nil
+	return resp, nil
 }
 
 func (r *recoveryRig) status(id access.Identity) (*directoryrosterv1.GetRecoveryResponse, error) {
-	resp, err := r.console.GetRecovery(WithIdentity(context.Background(), id), connect.NewRequest(&directoryrosterv1.GetRecoveryRequest{}))
+	resp, err := r.console.GetRecovery(WithIdentity(context.Background(), id), &directoryrosterv1.GetRecoveryRequest{})
 	if err != nil {
 		return nil, err
 	}
-	return resp.Msg, nil
+	return resp, nil
 }
 
 var (

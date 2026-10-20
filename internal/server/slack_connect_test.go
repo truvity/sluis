@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -96,30 +96,30 @@ func def(name, host string, with, from []string) *directoryrosterv1.SlackSharedC
 }
 
 func (h *connectHarness) create(ctx context.Context, d *directoryrosterv1.SlackSharedChannelDefinition) error {
-	_, err := h.console.CreateSlackSharedChannel(ctx, connect.NewRequest(&directoryrosterv1.CreateSlackSharedChannelRequest{Channel: d}))
+	_, err := h.console.CreateSlackSharedChannel(ctx, &directoryrosterv1.CreateSlackSharedChannelRequest{Channel: d})
 	return err
 }
 
 func (h *connectHarness) update(ctx context.Context, d *directoryrosterv1.SlackSharedChannelDefinition) error {
-	_, err := h.console.UpdateSlackSharedChannel(ctx, connect.NewRequest(&directoryrosterv1.UpdateSlackSharedChannelRequest{Channel: d}))
+	_, err := h.console.UpdateSlackSharedChannel(ctx, &directoryrosterv1.UpdateSlackSharedChannelRequest{Channel: d})
 	return err
 }
 
 func (h *connectHarness) del(ctx context.Context, name string) (string, error) {
-	got, err := h.console.DeleteSlackSharedChannel(ctx, connect.NewRequest(&directoryrosterv1.DeleteSlackSharedChannelRequest{Name: name}))
+	got, err := h.console.DeleteSlackSharedChannel(ctx, &directoryrosterv1.DeleteSlackSharedChannelRequest{Name: name})
 	if err != nil {
 		return "", err
 	}
-	return got.Msg.GetNote(), nil
+	return got.GetNote(), nil
 }
 
 func (h *connectHarness) list(ctx context.Context, t *testing.T) *directoryrosterv1.ListSlackSharedChannelsResponse {
 	t.Helper()
-	got, err := h.console.ListSlackSharedChannels(ctx, connect.NewRequest(&directoryrosterv1.ListSlackSharedChannelsRequest{}))
+	got, err := h.console.ListSlackSharedChannels(ctx, &directoryrosterv1.ListSlackSharedChannelsRequest{})
 	if err != nil {
 		t.Fatalf("ListSlackSharedChannels: %v", err)
 	}
-	return got.Msg
+	return got
 }
 
 func (h *connectHarness) stored(t *testing.T) map[string]string {
@@ -424,7 +424,7 @@ func TestSharedChannelsAreListedByWhatTheCallerMaySee(t *testing.T) {
 		}
 	}
 	// Someone with no role over any Slack workspace is refused the page.
-	_, err := h.console.ListSlackSharedChannels(as(elsewhereOp), connect.NewRequest(&directoryrosterv1.ListSlackSharedChannelsRequest{}))
+	_, err := h.console.ListSlackSharedChannels(as(elsewhereOp), &directoryrosterv1.ListSlackSharedChannelsRequest{})
 	wantCode(t, "list by an unrelated operator", err, connect.CodePermissionDenied)
 }
 
@@ -699,7 +699,7 @@ func TestOnlyTheHostsOperatorMayManageADiscoveredChannel(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			if !tc.sees {
-				_, err := h.console.ListSlackSharedChannels(as(tc.id), connect.NewRequest(&directoryrosterv1.ListSlackSharedChannelsRequest{}))
+				_, err := h.console.ListSlackSharedChannels(as(tc.id), &directoryrosterv1.ListSlackSharedChannelsRequest{})
 				wantCode(t, "list", err, connect.CodePermissionDenied)
 				return
 			}

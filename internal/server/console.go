@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -27,6 +27,7 @@ import (
 	"github.com/truvity/sluis/internal/modcall"
 	"github.com/truvity/sluis/internal/port"
 	"github.com/truvity/sluis/internal/recoverygate"
+	"github.com/truvity/sluis/internal/rpcmount"
 	"github.com/truvity/sluis/internal/settings"
 	slackconsole "github.com/truvity/sluis/internal/slackapp/console"
 	"github.com/truvity/sluis/internal/version"
@@ -295,8 +296,8 @@ func (c *Console) google() *googleconsole.Client {
 
 // ListWorkspaces implements the operator contract.
 func (c *Console) ListWorkspaces(
-	ctx context.Context, _ *connect.Request[directoryrosterv1.ListWorkspacesRequest],
-) (*connect.Response[directoryrosterv1.ListWorkspacesResponse], error) {
+	ctx context.Context, _ *directoryrosterv1.ListWorkspacesRequest,
+) (*directoryrosterv1.ListWorkspacesResponse, error) {
 	id, err := requireAnywhere(ctx, access.RoleViewer)
 	if err != nil {
 		return nil, err
@@ -305,29 +306,31 @@ func (c *Console) ListWorkspaces(
 	if err != nil {
 		return nil, googleconsole.ConnectError(err)
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
 // BeginConnect implements the operator contract: it returns the consent
 // URL and sets the state cookie the callback checks.
 func (c *Console) BeginConnect(
-	ctx context.Context, req *connect.Request[directoryrosterv1.BeginConnectRequest],
-) (*connect.Response[directoryrosterv1.BeginConnectResponse], error) {
-	url, cookie, err := c.beginFlow(ctx, req.Msg.GetBackend(), "")
+	ctx context.Context, req *directoryrosterv1.BeginConnectRequest,
+) (*directoryrosterv1.BeginConnectResponse, error) {
+	info := rpcmount.CallInfo(ctx)
+	url, cookie, err := c.beginFlow(ctx, req.GetBackend(), "")
 	if err != nil {
 		return nil, err
 	}
-	resp := connect.NewResponse(&directoryrosterv1.BeginConnectResponse{ConsentUrl: url})
-	resp.Header().Add("Set-Cookie", cookie)
+	resp := &directoryrosterv1.BeginConnectResponse{ConsentUrl: url}
+	info.ResponseHeader().Add("Set-Cookie", cookie)
 	return resp, nil
 }
 
 // Reconnect implements the operator contract: the same flow, bound to an
 // existing workspace so the callback can refuse a different tenant.
 func (c *Console) Reconnect(
-	ctx context.Context, req *connect.Request[directoryrosterv1.ReconnectRequest],
-) (*connect.Response[directoryrosterv1.ReconnectResponse], error) {
-	id := req.Msg.GetWorkspaceId()
+	ctx context.Context, req *directoryrosterv1.ReconnectRequest,
+) (*directoryrosterv1.ReconnectResponse, error) {
+	info := rpcmount.CallInfo(ctx)
+	id := req.GetWorkspaceId()
 	if _, err := requireWorkspace(ctx, access.RoleOperator, id); err != nil {
 		return nil, err
 	}
@@ -335,8 +338,8 @@ func (c *Console) Reconnect(
 	if err != nil {
 		return nil, err
 	}
-	resp := connect.NewResponse(&directoryrosterv1.ReconnectResponse{ConsentUrl: url})
-	resp.Header().Add("Set-Cookie", cookie)
+	resp := &directoryrosterv1.ReconnectResponse{ConsentUrl: url}
+	info.ResponseHeader().Add("Set-Cookie", cookie)
 	return resp, nil
 }
 
@@ -355,7 +358,7 @@ func (c *Console) beginFlow(
 	// land on a route the gateway covers at all.
 	state, err := c.deps.State.IssueAs(access.Binding{Bind: bind, Actor: id.Who()})
 	if err != nil {
-		return "", "", connect.NewError(connect.CodeInternal, err)
+		return "", "", connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	cookie := access.ConnectCookie(state, c.deps.SecureCookie, 10*time.Minute)
 	if bind != "" {
@@ -379,98 +382,98 @@ func (c *Console) completeConsent(ctx context.Context, caller consolecall.Caller
 // handler in memory on its way to the module, which is the only holder of it: it
 // is bounded here at 64 KB, and no log line or error carries it.
 func (c *Console) UploadKey(
-	ctx context.Context, req *connect.Request[directoryrosterv1.UploadKeyRequest],
-) (*connect.Response[directoryrosterv1.UploadKeyResponse], error) {
+	ctx context.Context, req *directoryrosterv1.UploadKeyRequest,
+) (*directoryrosterv1.UploadKeyResponse, error) {
 	id, err := requireRole(ctx, access.RoleOperator)
 	if err != nil {
 		return nil, err
 	}
-	if len(req.Msg.GetKey()) > googleconsole.MaxKeyBytes {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("a key is at most %d KB", googleconsole.MaxKeyBytes>>10))
+	if len(req.GetKey()) > googleconsole.MaxKeyBytes {
+		return nil, connect.Errorf(connect.CodeInvalidArgument,
+			"a key is at most %d KB", googleconsole.MaxKeyBytes>>10)
 	}
-	out, err := c.google().UploadKey(ctx, consolecall.Snapshot(id), req.Msg)
+	out, err := c.google().UploadKey(ctx, consolecall.Snapshot(id), req)
 	if err != nil {
 		return nil, googleconsole.ConnectError(err)
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
 // SetServedDomains implements the operator contract: which of a tenant's
 // domains this hub answers for.
 func (c *Console) SetServedDomains(
-	ctx context.Context, req *connect.Request[directoryrosterv1.SetServedDomainsRequest],
-) (*connect.Response[directoryrosterv1.SetServedDomainsResponse], error) {
-	id, err := requireWorkspace(ctx, access.RoleOperator, req.Msg.GetWorkspaceId())
+	ctx context.Context, req *directoryrosterv1.SetServedDomainsRequest,
+) (*directoryrosterv1.SetServedDomainsResponse, error) {
+	id, err := requireWorkspace(ctx, access.RoleOperator, req.GetWorkspaceId())
 	if err != nil {
 		return nil, err
 	}
-	out, err := c.google().SetServedDomains(ctx, consolecall.Snapshot(id), req.Msg)
+	out, err := c.google().SetServedDomains(ctx, consolecall.Snapshot(id), req)
 	if err != nil {
 		return nil, googleconsole.ConnectError(err)
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
 // SetSyncedGroups implements the operator contract: which of a tenant's
 // groups this hub keeps.
 func (c *Console) SetSyncedGroups(
-	ctx context.Context, req *connect.Request[directoryrosterv1.SetSyncedGroupsRequest],
-) (*connect.Response[directoryrosterv1.SetSyncedGroupsResponse], error) {
-	id, err := requireWorkspace(ctx, access.RoleOperator, req.Msg.GetWorkspaceId())
+	ctx context.Context, req *directoryrosterv1.SetSyncedGroupsRequest,
+) (*directoryrosterv1.SetSyncedGroupsResponse, error) {
+	id, err := requireWorkspace(ctx, access.RoleOperator, req.GetWorkspaceId())
 	if err != nil {
 		return nil, err
 	}
-	out, err := c.google().SetSyncedGroups(ctx, consolecall.Snapshot(id), req.Msg)
+	out, err := c.google().SetSyncedGroups(ctx, consolecall.Snapshot(id), req)
 	if err != nil {
 		return nil, googleconsole.ConnectError(err)
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
 // Probe implements the operator contract.
 func (c *Console) Probe(
-	ctx context.Context, req *connect.Request[directoryrosterv1.ProbeRequest],
-) (*connect.Response[directoryrosterv1.ProbeResponse], error) {
-	id, err := requireWorkspace(ctx, access.RoleOperator, req.Msg.GetWorkspaceId())
+	ctx context.Context, req *directoryrosterv1.ProbeRequest,
+) (*directoryrosterv1.ProbeResponse, error) {
+	id, err := requireWorkspace(ctx, access.RoleOperator, req.GetWorkspaceId())
 	if err != nil {
 		return nil, err
 	}
-	out, err := c.google().Probe(ctx, consolecall.Snapshot(id), req.Msg)
+	out, err := c.google().Probe(ctx, consolecall.Snapshot(id), req)
 	if err != nil {
 		return nil, googleconsole.ConnectError(err)
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
 // Refresh implements the operator contract: the operator's max_age of zero.
 func (c *Console) Refresh(
-	ctx context.Context, req *connect.Request[directoryrosterv1.RefreshRequest],
-) (*connect.Response[directoryrosterv1.RefreshResponse], error) {
-	id, err := requireWorkspace(ctx, access.RoleOperator, req.Msg.GetWorkspaceId())
+	ctx context.Context, req *directoryrosterv1.RefreshRequest,
+) (*directoryrosterv1.RefreshResponse, error) {
+	id, err := requireWorkspace(ctx, access.RoleOperator, req.GetWorkspaceId())
 	if err != nil {
 		return nil, err
 	}
-	out, err := c.google().Refresh(ctx, consolecall.Snapshot(id), req.Msg)
+	out, err := c.google().Refresh(ctx, consolecall.Snapshot(id), req)
 	if err != nil {
 		return nil, googleconsole.ConnectError(err)
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
 // Disconnect implements the operator contract.
 func (c *Console) Disconnect(
-	ctx context.Context, req *connect.Request[directoryrosterv1.DisconnectRequest],
-) (*connect.Response[directoryrosterv1.DisconnectResponse], error) {
-	id, err := requireWorkspace(ctx, access.RoleOperator, req.Msg.GetWorkspaceId())
+	ctx context.Context, req *directoryrosterv1.DisconnectRequest,
+) (*directoryrosterv1.DisconnectResponse, error) {
+	id, err := requireWorkspace(ctx, access.RoleOperator, req.GetWorkspaceId())
 	if err != nil {
 		return nil, err
 	}
-	out, err := c.google().Disconnect(ctx, consolecall.Snapshot(id), req.Msg)
+	out, err := c.google().Disconnect(ctx, consolecall.Snapshot(id), req)
 	if err != nil {
 		return nil, googleconsole.ConnectError(err)
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
 // -------------------------------------------------------- SettingsService
@@ -478,8 +481,8 @@ func (c *Console) Disconnect(
 // GetSettings implements the operator contract. It never returns the
 // client secret.
 func (c *Console) GetSettings(
-	ctx context.Context, _ *connect.Request[directoryrosterv1.GetSettingsRequest],
-) (*connect.Response[directoryrosterv1.GetSettingsResponse], error) {
+	ctx context.Context, _ *directoryrosterv1.GetSettingsRequest,
+) (*directoryrosterv1.GetSettingsResponse, error) {
 	if _, err := requireRole(ctx, access.RoleViewer); err != nil {
 		return nil, err
 	}
@@ -492,7 +495,7 @@ func (c *Console) GetSettings(
 		source = directoryrosterv1.ClientSource_CLIENT_SOURCE_DECLARED
 	}
 	cfg := c.deps.Hub.Config()
-	return connect.NewResponse(&directoryrosterv1.GetSettingsResponse{
+	return &directoryrosterv1.GetSettingsResponse{
 		OauthClient: &directoryrosterv1.OAuthClient{
 			ClientId:   client.ID,
 			Configured: client.Configured(),
@@ -506,7 +509,7 @@ func (c *Console) GetSettings(
 		KeyConnectors:   c.keyConnectorKinds(),
 		Version:         version.String(),
 		Setup:           c.setupGuidance(),
-	}), nil
+	}, nil
 }
 
 // connectorKinds is the backends this deployment can connect, so the
@@ -588,16 +591,16 @@ func (c *Console) keyConnectorKinds() []directoryrosterv1.Backend {
 
 // WhoAmI implements the operator contract.
 func (c *Console) WhoAmI(
-	ctx context.Context, _ *connect.Request[directoryrosterv1.WhoAmIRequest],
-) (*connect.Response[directoryrosterv1.WhoAmIResponse], error) {
+	ctx context.Context, _ *directoryrosterv1.WhoAmIRequest,
+) (*directoryrosterv1.WhoAmIResponse, error) {
 	id, ok := IdentityFrom(ctx)
 	if !ok {
-		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("sign in first"))
+		return nil, connect.NewError(connect.CodeUnauthenticated, "sign in first")
 	}
-	return connect.NewResponse(&directoryrosterv1.WhoAmIResponse{
+	return &directoryrosterv1.WhoAmIResponse{
 		Identity: identityProto(id),
 		Version:  version.String(),
-	}), nil
+	}, nil
 }
 
 // errNotAuthorised is the one refusal text of Explain, the same for every
@@ -613,18 +616,18 @@ var errNotAuthorised = errors.New("not authorised")
 // operator is served and recorded. Anybody else, a person asking about themselves
 // included, is refused with a fixed text and the refusal is recorded.
 func (c *Console) Explain(
-	ctx context.Context, req *connect.Request[directoryrosterv1.ExplainRequest],
-) (*connect.Response[directoryrosterv1.ExplainResponse], error) {
+	ctx context.Context, req *directoryrosterv1.ExplainRequest,
+) (*directoryrosterv1.ExplainResponse, error) {
 	caller, ok := IdentityFrom(ctx)
 	if !ok {
-		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("sign in first"))
+		return nil, connect.NewError(connect.CodeUnauthenticated, "sign in first")
 	}
-	proof := proofFromRequest(req.Msg)
+	proof := proofFromRequest(req)
 	kind, subject := proofSubject(proof)
 	controller := caller.IsRosterController()
 	if !controller && !caller.Can(access.RoleOperator) {
 		c.record(ctx, audit.AccessExplained(actorOf(ctx), audit.Denied("not authorised"), kind, subject, 0, 0, 0))
-		return nil, connect.NewError(connect.CodePermissionDenied, errNotAuthorised)
+		return nil, connect.NewError(connect.CodePermissionDenied, errNotAuthorised.Error()).WithCause(errNotAuthorised)
 	}
 
 	explained, err := c.deps.Authorizer.Explain(ctx, proof)
@@ -643,7 +646,7 @@ func (c *Console) Explain(
 		c.record(ctx, audit.AccessExplained(actorOf(ctx), audit.Succeeded(), kind, subject,
 			len(out.GetHeld()), len(out.GetClients()), admitted))
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
 // proofSubject names what a look-up is about, as the record keeps it.
@@ -660,8 +663,8 @@ func proofSubject(p access.Proof) (kind, subject string) {
 
 // GetPolicy implements the operator contract.
 func (c *Console) GetPolicy(
-	ctx context.Context, _ *connect.Request[directoryrosterv1.GetPolicyRequest],
-) (*connect.Response[directoryrosterv1.GetPolicyResponse], error) {
+	ctx context.Context, _ *directoryrosterv1.GetPolicyRequest,
+) (*directoryrosterv1.GetPolicyResponse, error) {
 	if _, err := requireRole(ctx, access.RoleViewer); err != nil {
 		return nil, err
 	}
@@ -680,7 +683,7 @@ func (c *Console) GetPolicy(
 	for i := range groups {
 		group, err := policyGroupProto(&groups[i], githubGrants[groups[i].Name])
 		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, err)
+			return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 		}
 		out.Groups = append(out.Groups, group)
 	}
@@ -702,20 +705,20 @@ func (c *Console) GetPolicy(
 			Org: org.Org, Members: org.Members,
 		})
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
 // ListDirectoryGroups implements the operator contract: the groups the hub
 // has snapshotted, so that a membership is a click rather than a typed
 // address.
 func (c *Console) ListDirectoryGroups(
-	ctx context.Context, req *connect.Request[directoryrosterv1.ListDirectoryGroupsRequest],
-) (*connect.Response[directoryrosterv1.ListDirectoryGroupsResponse], error) {
+	ctx context.Context, req *directoryrosterv1.ListDirectoryGroupsRequest,
+) (*directoryrosterv1.ListDirectoryGroupsResponse, error) {
 	id, err := requireAnywhere(ctx, access.RoleViewer)
 	if err != nil {
 		return nil, err
 	}
-	groups, served, err := c.deps.Hub.ListGroups(ctx, req.Msg.GetDomain(), nil)
+	groups, served, err := c.deps.Hub.ListGroups(ctx, req.GetDomain(), nil)
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -738,26 +741,26 @@ func (c *Console) ListDirectoryGroups(
 			Members:     int32(len(g.Members)), //nolint:gosec // a membership count never overflows
 		})
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
 // ListHolders implements the operator contract: who holds an internal
 // group, or who reaches a client, right now.
 func (c *Console) ListHolders(
-	ctx context.Context, req *connect.Request[directoryrosterv1.ListHoldersRequest],
-) (*connect.Response[directoryrosterv1.ListHoldersResponse], error) {
+	ctx context.Context, req *directoryrosterv1.ListHoldersRequest,
+) (*directoryrosterv1.ListHoldersResponse, error) {
 	caller, err := requireAnywhere(ctx, access.RoleViewer)
 	if err != nil {
 		return nil, err
 	}
-	group, client := req.Msg.GetGroup(), req.Msg.GetClient()
+	group, client := req.GetGroup(), req.GetClient()
 	switch {
 	case group == "" && client == "":
 		return nil, connect.NewError(connect.CodeInvalidArgument,
-			errors.New("name an internal group or a client"))
+			"name an internal group or a client")
 	case group != "" && client != "":
 		return nil, connect.NewError(connect.CodeInvalidArgument,
-			errors.New("name an internal group or a client, not both"))
+			"name an internal group or a client, not both")
 	}
 
 	// Every account is examined, because holding a group is a property of
@@ -770,7 +773,7 @@ func (c *Console) ListHolders(
 	}
 	holders := c.deps.Authorizer.HoldersOf(people, group, client)
 
-	limit := int(req.Msg.GetLimit())
+	limit := int(req.GetLimit())
 	if limit <= 0 || limit > len(holders) {
 		limit = len(holders)
 	}
@@ -787,29 +790,29 @@ func (c *Console) ListHolders(
 	for i := range holders[:limit] {
 		out.Holders = append(out.Holders, holderProto(&holders[i]))
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
 // SearchPeople implements the operator contract.
 func (c *Console) SearchPeople(
-	ctx context.Context, req *connect.Request[directoryrosterv1.SearchPeopleRequest],
-) (*connect.Response[directoryrosterv1.SearchPeopleResponse], error) {
+	ctx context.Context, req *directoryrosterv1.SearchPeopleRequest,
+) (*directoryrosterv1.SearchPeopleResponse, error) {
 	id, err := requireAnywhere(ctx, access.RoleViewer)
 	if err != nil {
 		return nil, err
 	}
-	limit := int(req.Msg.GetLimit())
+	limit := int(req.GetLimit())
 	if limit <= 0 {
 		limit = 20
 	}
 	query := hub.PeopleQuery{
-		Text:      req.Msg.GetQuery(),
-		Workspace: req.Msg.GetWorkspaceId(),
-		Domain:    req.Msg.GetDomain(),
+		Text:      req.GetQuery(),
+		Workspace: req.GetWorkspaceId(),
+		Domain:    req.GetDomain(),
 		// Nil for an installation-wide role, so it stays every tenant.
 		Workspaces: id.Workspaces(access.RoleViewer),
 	}
-	switch req.Msg.GetAccount() {
+	switch req.GetAccount() {
 	case directoryrosterv1.AccountFilter_ACCOUNT_FILTER_LIVE:
 		live := true
 		query.Live = &live
@@ -826,7 +829,7 @@ func (c *Console) SearchPeople(
 	// report: no organisation is asked anything.
 	logins, known, linksErr := c.githubLogins(ctx)
 	query.GitHubLogins = logins
-	switch req.Msg.GetGithub() {
+	switch req.GetGithub() {
 	case directoryrosterv1.LinkFilter_LINK_FILTER_LINKED:
 		linked := true
 		query.GitHubLinked = &linked
@@ -841,11 +844,10 @@ func (c *Console) SearchPeople(
 	// linked" or "everybody did".
 	if query.GitHubLinked != nil && !known {
 		if linksErr != nil {
-			return nil, connect.NewError(connect.CodeUnavailable,
-				fmt.Errorf("whether people linked a GitHub account cannot be read: %w", linksErr))
+			return nil, rpcmount.NewError(connect.CodeUnavailable, fmt.Errorf("whether people linked a GitHub account cannot be read: %w", linksErr))
 		}
 		return nil, connect.NewError(connect.CodeFailedPrecondition,
-			errors.New("nobody can link a GitHub account in this deployment: there is nowhere links are kept"))
+			"nobody can link a GitHub account in this deployment: there is nowhere links are kept")
 	}
 	people, total, err := c.deps.Hub.People(ctx, query, limit)
 	if err != nil {
@@ -868,7 +870,7 @@ func (c *Console) SearchPeople(
 			GithubLogin: person.GitHubLogin,
 		})
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
 // githubLogins indexes every address a link proves against the GitHub
@@ -911,12 +913,12 @@ func (c *Console) githubLogins(ctx context.Context) (map[string]string, bool, er
 // its members as the directory reports them, and the internal groups it
 // feeds. The feeds are the memberships table read backwards.
 func (c *Console) GetDirectoryGroup(
-	ctx context.Context, req *connect.Request[directoryrosterv1.GetDirectoryGroupRequest],
-) (*connect.Response[directoryrosterv1.GetDirectoryGroupResponse], error) {
+	ctx context.Context, req *directoryrosterv1.GetDirectoryGroupRequest,
+) (*directoryrosterv1.GetDirectoryGroupResponse, error) {
 	if _, err := requireRole(ctx, access.RoleViewer); err != nil {
 		return nil, err
 	}
-	group, err := c.deps.Hub.DirectoryGroup(ctx, req.Msg.GetEmail())
+	group, err := c.deps.Hub.DirectoryGroup(ctx, req.GetEmail())
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -948,5 +950,5 @@ func (c *Console) GetDirectoryGroup(
 			}
 		}
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }

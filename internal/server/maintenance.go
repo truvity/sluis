@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/truvity/sluis/internal/maintenance"
 	"github.com/truvity/sluis/internal/port"
@@ -82,26 +82,28 @@ func rpcIsRead(procedure string) bool {
 	return false
 }
 
-// maintenanceOptions refuses a write RPC of a module under maintenance, as
-// Unavailable with the retry hint.
-func maintenanceOptions(set maintenance.Set) []connect.HandlerOption {
+// maintenanceInterceptors refuses a write RPC of a module under maintenance,
+// as Unavailable with the retry hint.
+func maintenanceInterceptors(set maintenance.Set) []connect.ServerInterceptor {
 	if len(set) == 0 {
 		return nil
 	}
-	return []connect.HandlerOption{connect.WithInterceptors(connect.UnaryInterceptorFunc(
-		func(next connect.UnaryFunc) connect.UnaryFunc {
-			return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-				proc := req.Spec().Procedure
-				if !rpcIsRead(proc) {
-					if err := set.Of(rpcModule(proc)).Writable(ctx); err != nil {
-						ce := connect.NewError(connect.CodeUnavailable, err)
-						ce.Meta().Set("Retry-After", strconv.Itoa(maintenance.RetryAfter))
-						return nil, ce
+	return []connect.ServerInterceptor{func(next connect.ServerFunc) connect.ServerFunc {
+		return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
+			proc := spec.Procedure
+			if !rpcIsRead(proc) {
+				if err := set.Of(rpcModule(proc)).Writable(ctx); err != nil {
+					// The hint is a response header, which Connect sends with
+					// the error.
+					if info, ok := connect.CallInfoForServerContext(ctx); ok {
+						info.ResponseHeader().Set("Retry-After", strconv.Itoa(maintenance.RetryAfter))
 					}
+					return connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
 				}
-				return next(ctx, req)
 			}
-		}))}
+			return next(ctx, spec, stream)
+		}
+	}}
 }
 
 // pageModule is the module whose records a console page writes, or "" for a

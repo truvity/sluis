@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"connectrpc.com/otelconnect"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
@@ -106,26 +106,33 @@ const TracerName = "github.com/truvity/sluis"
 // until [Start] installs one.
 func Tracer() trace.Tracer { return otel.Tracer(TracerName) }
 
-// ConnectOptions instruments a Connect handler: one server span per call,
-// continuing the caller's trace. Its metrics are off: the HTTP handler's route
-// metrics carry the request rate and latency under this service's own names.
-func ConnectOptions() []connect.HandlerOption {
-	return []connect.HandlerOption{connect.WithInterceptors(connectInterceptor())}
-}
-
-// ConnectClientOptions is the same for a client: one client span per call, and
-// the traceparent carried to the server.
-func ConnectClientOptions() []connect.ClientOption {
-	return []connect.ClientOption{connect.WithInterceptors(connectInterceptor())}
-}
-
-func connectInterceptor() connect.Interceptor {
-	i, err := otelconnect.NewInterceptor(otelconnect.WithoutMetrics(), otelconnect.WithTrustRemote())
+// ConnectServerInterceptor instruments a Connect server: one server span per
+// call, continuing the caller's trace. Its metrics are off: the HTTP handler's
+// route metrics carry the request rate and latency under this service's own
+// names. Pass it to connect.NewServer.
+func ConnectServerInterceptor() connect.ServerInterceptor {
+	i, err := otelconnect.NewServerInterceptor(connectInterceptorOptions()...)
 	if err != nil {
-		// NewInterceptor fails only on a bad option, and these are constants.
+		// NewServerInterceptor fails only on a bad option, and these are
+		// constants.
 		panic("telemetry: " + err.Error())
 	}
 	return i
+}
+
+// ConnectClientInterceptor is the same for a client: one client span per
+// call, and the traceparent carried to the server. Pass it to
+// connect.NewClient.
+func ConnectClientInterceptor() connect.ClientInterceptor {
+	i, err := otelconnect.NewClientInterceptor(connectInterceptorOptions()...)
+	if err != nil {
+		panic("telemetry: " + err.Error())
+	}
+	return i
+}
+
+func connectInterceptorOptions() []otelconnect.Option {
+	return []otelconnect.Option{otelconnect.WithoutMetrics(), otelconnect.WithTrustRemote()}
 }
 
 // HTTPHandler wraps a server's handler in a server span, continuing the

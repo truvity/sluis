@@ -22,7 +22,7 @@ import (
 
 	"github.com/truvity/sluis/storage/awsotel"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
@@ -146,19 +146,23 @@ func (a *AWS) Token(ctx context.Context) (string, error) {
 	return a.token, nil
 }
 
-// Interceptor presents the source's token as the bearer of every call.
-func Interceptor(src Source) connect.Option { return connect.WithInterceptors(Unary(src)) }
-
-// Unary is [Interceptor] as the interceptor itself.
-func Unary(src Source) connect.UnaryInterceptorFunc {
-	return func(next connect.UnaryFunc) connect.UnaryFunc {
-		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
+// Interceptor presents the source's token as the bearer of every call. Pass
+// it to connect.NewClient.
+func Interceptor(src Source) connect.ClientInterceptor {
+	return func(next connect.ClientFunc) connect.ClientFunc {
+		return func(ctx context.Context, spec connect.Spec) (connect.ClientStream, error) {
 			token, err := src.Token(ctx)
 			if err != nil {
 				return nil, err
 			}
-			req.Header().Set("Authorization", "Bearer "+token)
-			return next(ctx, req)
+			// connect.Client attaches the call's CallInfo before the
+			// interceptors run; one without it is not a Connect call.
+			info, ok := connect.CallInfoForClientContext(ctx)
+			if !ok {
+				return nil, errors.New("consoleauth: no Connect call info on the context")
+			}
+			info.RequestHeader().Set("Authorization", "Bearer "+token)
+			return next(ctx, spec)
 		}
 	}
 }

@@ -7,7 +7,8 @@ import (
 	"net/http"
 	"strings"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 
 	auditv1 "github.com/truvity/sluis/audit/sdk/gen/audit/v1"
 	"github.com/truvity/sluis/audit/sdk/gen/audit/v1/auditv1connect"
@@ -27,7 +28,7 @@ type Registration struct {
 	Schemas  map[string][]byte
 	// HTTP is the client to use. A deployment puts its own in, because this is
 	// the call that carries the identity the registry checks.
-	HTTP connect.HTTPClient
+	HTTP connecthttp.HTTPClient
 }
 
 // ErrCatalogueRefused is a registration the deployment answered and refused.
@@ -62,17 +63,17 @@ func Register(ctx context.Context, r Registration) error {
 		client = http.DefaultClient
 	}
 
-	res, err := auditv1connect.NewRegistryServiceClient(client, r.URL).
-		RegisterCatalogue(ctx, connect.NewRequest(&auditv1.RegisterCatalogueRequest{
+	res, err := auditv1connect.NewRegistryServiceClient(connect.NewClient(connecthttp.NewTransport(client, r.URL, connecthttp.WithReadMaxBytes(0)))).
+		RegisterCatalogue(ctx, &auditv1.RegisterCatalogueRequest{
 			Catalogue: &auditv1.Catalogue{
 				Source: r.Source, Version: r.Version,
 				Document: r.Document, Schemas: r.Schemas,
 			},
-		}))
+		})
 	if err != nil {
 		return fmt.Errorf("emit: registering %s %s: %w", r.Source, r.Version, err)
 	}
-	if problems := res.Msg.GetProblems(); len(problems) > 0 {
+	if problems := res.GetProblems(); len(problems) > 0 {
 		return fmt.Errorf("%w: %s %s:\n  %s",
 			ErrCatalogueRefused, r.Source, r.Version, strings.Join(problems, "\n  "))
 	}

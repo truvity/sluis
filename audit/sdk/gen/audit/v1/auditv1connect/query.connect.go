@@ -11,292 +11,328 @@
 package auditv1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1 "github.com/truvity/sluis/audit/sdk/gen/audit/v1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// QueryServiceName is the fully-qualified name of the QueryService service.
 	QueryServiceName = "audit.v1.QueryService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// QueryServiceSearchProcedure is the fully-qualified name of the QueryService's Search RPC.
+	// QueryServiceSearchProcedure is the procedure name of the QueryService's Search RPC.
 	QueryServiceSearchProcedure = "/audit.v1.QueryService/Search"
-	// QueryServiceFacetsProcedure is the fully-qualified name of the QueryService's Facets RPC.
+	// QueryServiceFacetsProcedure is the procedure name of the QueryService's Facets RPC.
 	QueryServiceFacetsProcedure = "/audit.v1.QueryService/Facets"
-	// QueryServiceGetProcedure is the fully-qualified name of the QueryService's Get RPC.
+	// QueryServiceGetProcedure is the procedure name of the QueryService's Get RPC.
 	QueryServiceGetProcedure = "/audit.v1.QueryService/Get"
-	// QueryServiceExportProcedure is the fully-qualified name of the QueryService's Export RPC.
+	// QueryServiceExportProcedure is the procedure name of the QueryService's Export RPC.
 	QueryServiceExportProcedure = "/audit.v1.QueryService/Export"
-	// QueryServiceGetExportProcedure is the fully-qualified name of the QueryService's GetExport RPC.
+	// QueryServiceGetExportProcedure is the procedure name of the QueryService's GetExport RPC.
 	QueryServiceGetExportProcedure = "/audit.v1.QueryService/GetExport"
-	// QueryServiceResolveProcedure is the fully-qualified name of the QueryService's Resolve RPC.
+	// QueryServiceResolveProcedure is the procedure name of the QueryService's Resolve RPC.
 	QueryServiceResolveProcedure = "/audit.v1.QueryService/Resolve"
-	// QueryServiceAccessProcedure is the fully-qualified name of the QueryService's Access RPC.
+	// QueryServiceAccessProcedure is the procedure name of the QueryService's Access RPC.
 	QueryServiceAccessProcedure = "/audit.v1.QueryService/Access"
+)
+
+var (
+	queryServiceSearchSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_audit_v1_query_proto.Services().ByName("QueryService").Methods().ByName("Search"),
+			Procedure:  QueryServiceSearchProcedure,
+		}
+	})
+	queryServiceFacetsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_audit_v1_query_proto.Services().ByName("QueryService").Methods().ByName("Facets"),
+			Procedure:  QueryServiceFacetsProcedure,
+		}
+	})
+	queryServiceGetSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_audit_v1_query_proto.Services().ByName("QueryService").Methods().ByName("Get"),
+			Procedure:  QueryServiceGetProcedure,
+		}
+	})
+	queryServiceExportSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_audit_v1_query_proto.Services().ByName("QueryService").Methods().ByName("Export"),
+			Procedure:  QueryServiceExportProcedure,
+		}
+	})
+	queryServiceGetExportSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_audit_v1_query_proto.Services().ByName("QueryService").Methods().ByName("GetExport"),
+			Procedure:  QueryServiceGetExportProcedure,
+		}
+	})
+	queryServiceResolveSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_audit_v1_query_proto.Services().ByName("QueryService").Methods().ByName("Resolve"),
+			Procedure:  QueryServiceResolveProcedure,
+		}
+	})
+	queryServiceAccessSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_audit_v1_query_proto.Services().ByName("QueryService").Methods().ByName("Access"),
+			Procedure:  QueryServiceAccessProcedure,
+		}
+	})
 )
 
 // QueryServiceClient is a client for the audit.v1.QueryService service.
 type QueryServiceClient interface {
-	Search(context.Context, *connect.Request[v1.SearchRequest]) (*connect.Response[v1.SearchResponse], error)
-	Facets(context.Context, *connect.Request[v1.FacetsRequest]) (*connect.Response[v1.FacetsResponse], error)
-	Get(context.Context, *connect.Request[v1.GetRequest]) (*connect.Response[v1.GetResponse], error)
+	Search(context.Context, *v1.SearchRequest) (*v1.SearchResponse, error)
+	Facets(context.Context, *v1.FacetsRequest) (*v1.FacetsResponse, error)
+	Get(context.Context, *v1.GetRequest) (*v1.GetResponse, error)
 	// Export starts an asynchronous job; GetExport polls it and, when ready,
 	// returns a short-lived signed URL.
-	Export(context.Context, *connect.Request[v1.ExportRequest]) (*connect.Response[v1.ExportResponse], error)
-	GetExport(context.Context, *connect.Request[v1.GetExportRequest]) (*connect.Response[v1.GetExportResponse], error)
+	Export(context.Context, *v1.ExportRequest) (*v1.ExportResponse, error)
+	GetExport(context.Context, *v1.GetExportRequest) (*v1.GetExportResponse, error)
 	// Resolve maps a pseudonym back to the identity behind it. It needs the
 	// resolve operation, which no read grant implies, and is recorded before it
 	// answers.
-	Resolve(context.Context, *connect.Request[v1.ResolveRequest]) (*connect.Response[v1.ResolveResponse], error)
+	Resolve(context.Context, *v1.ResolveRequest) (*v1.ResolveResponse, error)
 	// Access says what the caller may read: every profile a grant names, the
 	// operations allowed on it, and over which tenants and period. It is the
 	// same grants every other call is held to, so a page can show what the
 	// caller may open without its host knowing the deployment's profiles. It
 	// reads no record, and is not recorded.
-	Access(context.Context, *connect.Request[v1.AccessRequest]) (*connect.Response[v1.AccessResponse], error)
+	Access(context.Context, *v1.AccessRequest) (*v1.AccessResponse, error)
 }
 
-// NewQueryServiceClient constructs a client for the audit.v1.QueryService service. By default, it
-// uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses, and sends
-// uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the connect.WithGRPC() or
-// connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewQueryServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) QueryServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	queryServiceMethods := v1.File_audit_v1_query_proto.Services().ByName("QueryService").Methods()
-	return &queryServiceClient{
-		search: connect.NewClient[v1.SearchRequest, v1.SearchResponse](
-			httpClient,
-			baseURL+QueryServiceSearchProcedure,
-			connect.WithSchema(queryServiceMethods.ByName("Search")),
-			connect.WithClientOptions(opts...),
-		),
-		facets: connect.NewClient[v1.FacetsRequest, v1.FacetsResponse](
-			httpClient,
-			baseURL+QueryServiceFacetsProcedure,
-			connect.WithSchema(queryServiceMethods.ByName("Facets")),
-			connect.WithClientOptions(opts...),
-		),
-		get: connect.NewClient[v1.GetRequest, v1.GetResponse](
-			httpClient,
-			baseURL+QueryServiceGetProcedure,
-			connect.WithSchema(queryServiceMethods.ByName("Get")),
-			connect.WithClientOptions(opts...),
-		),
-		export: connect.NewClient[v1.ExportRequest, v1.ExportResponse](
-			httpClient,
-			baseURL+QueryServiceExportProcedure,
-			connect.WithSchema(queryServiceMethods.ByName("Export")),
-			connect.WithClientOptions(opts...),
-		),
-		getExport: connect.NewClient[v1.GetExportRequest, v1.GetExportResponse](
-			httpClient,
-			baseURL+QueryServiceGetExportProcedure,
-			connect.WithSchema(queryServiceMethods.ByName("GetExport")),
-			connect.WithClientOptions(opts...),
-		),
-		resolve: connect.NewClient[v1.ResolveRequest, v1.ResolveResponse](
-			httpClient,
-			baseURL+QueryServiceResolveProcedure,
-			connect.WithSchema(queryServiceMethods.ByName("Resolve")),
-			connect.WithClientOptions(opts...),
-		),
-		access: connect.NewClient[v1.AccessRequest, v1.AccessResponse](
-			httpClient,
-			baseURL+QueryServiceAccessProcedure,
-			connect.WithSchema(queryServiceMethods.ByName("Access")),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// queryServiceClient implements QueryServiceClient.
-type queryServiceClient struct {
-	search    *connect.Client[v1.SearchRequest, v1.SearchResponse]
-	facets    *connect.Client[v1.FacetsRequest, v1.FacetsResponse]
-	get       *connect.Client[v1.GetRequest, v1.GetResponse]
-	export    *connect.Client[v1.ExportRequest, v1.ExportResponse]
-	getExport *connect.Client[v1.GetExportRequest, v1.GetExportResponse]
-	resolve   *connect.Client[v1.ResolveRequest, v1.ResolveResponse]
-	access    *connect.Client[v1.AccessRequest, v1.AccessResponse]
-}
-
-// Search calls audit.v1.QueryService.Search.
-func (c *queryServiceClient) Search(ctx context.Context, req *connect.Request[v1.SearchRequest]) (*connect.Response[v1.SearchResponse], error) {
-	return c.search.CallUnary(ctx, req)
-}
-
-// Facets calls audit.v1.QueryService.Facets.
-func (c *queryServiceClient) Facets(ctx context.Context, req *connect.Request[v1.FacetsRequest]) (*connect.Response[v1.FacetsResponse], error) {
-	return c.facets.CallUnary(ctx, req)
-}
-
-// Get calls audit.v1.QueryService.Get.
-func (c *queryServiceClient) Get(ctx context.Context, req *connect.Request[v1.GetRequest]) (*connect.Response[v1.GetResponse], error) {
-	return c.get.CallUnary(ctx, req)
-}
-
-// Export calls audit.v1.QueryService.Export.
-func (c *queryServiceClient) Export(ctx context.Context, req *connect.Request[v1.ExportRequest]) (*connect.Response[v1.ExportResponse], error) {
-	return c.export.CallUnary(ctx, req)
-}
-
-// GetExport calls audit.v1.QueryService.GetExport.
-func (c *queryServiceClient) GetExport(ctx context.Context, req *connect.Request[v1.GetExportRequest]) (*connect.Response[v1.GetExportResponse], error) {
-	return c.getExport.CallUnary(ctx, req)
-}
-
-// Resolve calls audit.v1.QueryService.Resolve.
-func (c *queryServiceClient) Resolve(ctx context.Context, req *connect.Request[v1.ResolveRequest]) (*connect.Response[v1.ResolveResponse], error) {
-	return c.resolve.CallUnary(ctx, req)
-}
-
-// Access calls audit.v1.QueryService.Access.
-func (c *queryServiceClient) Access(ctx context.Context, req *connect.Request[v1.AccessRequest]) (*connect.Response[v1.AccessResponse], error) {
-	return c.access.CallUnary(ctx, req)
+// NewQueryServiceClient constructs a client for the audit.v1.QueryService service. Multiple service
+// clients may share a single connect.Client.
+func NewQueryServiceClient(client *connect.Client) QueryServiceClient {
+	return &queryServiceClient{client: client}
 }
 
 // QueryServiceHandler is an implementation of the audit.v1.QueryService service.
 type QueryServiceHandler interface {
-	Search(context.Context, *connect.Request[v1.SearchRequest]) (*connect.Response[v1.SearchResponse], error)
-	Facets(context.Context, *connect.Request[v1.FacetsRequest]) (*connect.Response[v1.FacetsResponse], error)
-	Get(context.Context, *connect.Request[v1.GetRequest]) (*connect.Response[v1.GetResponse], error)
+	Search(context.Context, *v1.SearchRequest) (*v1.SearchResponse, error)
+	Facets(context.Context, *v1.FacetsRequest) (*v1.FacetsResponse, error)
+	Get(context.Context, *v1.GetRequest) (*v1.GetResponse, error)
 	// Export starts an asynchronous job; GetExport polls it and, when ready,
 	// returns a short-lived signed URL.
-	Export(context.Context, *connect.Request[v1.ExportRequest]) (*connect.Response[v1.ExportResponse], error)
-	GetExport(context.Context, *connect.Request[v1.GetExportRequest]) (*connect.Response[v1.GetExportResponse], error)
+	Export(context.Context, *v1.ExportRequest) (*v1.ExportResponse, error)
+	GetExport(context.Context, *v1.GetExportRequest) (*v1.GetExportResponse, error)
 	// Resolve maps a pseudonym back to the identity behind it. It needs the
 	// resolve operation, which no read grant implies, and is recorded before it
 	// answers.
-	Resolve(context.Context, *connect.Request[v1.ResolveRequest]) (*connect.Response[v1.ResolveResponse], error)
+	Resolve(context.Context, *v1.ResolveRequest) (*v1.ResolveResponse, error)
 	// Access says what the caller may read: every profile a grant names, the
 	// operations allowed on it, and over which tenants and period. It is the
 	// same grants every other call is held to, so a page can show what the
 	// caller may open without its host knowing the deployment's profiles. It
 	// reads no record, and is not recorded.
-	Access(context.Context, *connect.Request[v1.AccessRequest]) (*connect.Response[v1.AccessResponse], error)
+	Access(context.Context, *v1.AccessRequest) (*v1.AccessResponse, error)
 }
 
-// NewQueryServiceHandler builds an HTTP handler from the service implementation. It returns the
-// path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewQueryServiceHandler(svc QueryServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	queryServiceMethods := v1.File_audit_v1_query_proto.Services().ByName("QueryService").Methods()
-	queryServiceSearchHandler := connect.NewUnaryHandler(
-		QueryServiceSearchProcedure,
-		svc.Search,
-		connect.WithSchema(queryServiceMethods.ByName("Search")),
-		connect.WithHandlerOptions(opts...),
+// RegisterQueryServiceHandler registers svc as the audit.v1.QueryService implementation on server.
+func RegisterQueryServiceHandler(server *connect.Server, svc QueryServiceHandler) {
+	adapter := queryServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: queryServiceSearchSpec(), Handler: adapter.search},
+		connect.Method{Spec: queryServiceFacetsSpec(), Handler: adapter.facets},
+		connect.Method{Spec: queryServiceGetSpec(), Handler: adapter.get},
+		connect.Method{Spec: queryServiceExportSpec(), Handler: adapter.export},
+		connect.Method{Spec: queryServiceGetExportSpec(), Handler: adapter.getExport},
+		connect.Method{Spec: queryServiceResolveSpec(), Handler: adapter.resolve},
+		connect.Method{Spec: queryServiceAccessSpec(), Handler: adapter.access},
 	)
-	queryServiceFacetsHandler := connect.NewUnaryHandler(
-		QueryServiceFacetsProcedure,
-		svc.Facets,
-		connect.WithSchema(queryServiceMethods.ByName("Facets")),
-		connect.WithHandlerOptions(opts...),
-	)
-	queryServiceGetHandler := connect.NewUnaryHandler(
-		QueryServiceGetProcedure,
-		svc.Get,
-		connect.WithSchema(queryServiceMethods.ByName("Get")),
-		connect.WithHandlerOptions(opts...),
-	)
-	queryServiceExportHandler := connect.NewUnaryHandler(
-		QueryServiceExportProcedure,
-		svc.Export,
-		connect.WithSchema(queryServiceMethods.ByName("Export")),
-		connect.WithHandlerOptions(opts...),
-	)
-	queryServiceGetExportHandler := connect.NewUnaryHandler(
-		QueryServiceGetExportProcedure,
-		svc.GetExport,
-		connect.WithSchema(queryServiceMethods.ByName("GetExport")),
-		connect.WithHandlerOptions(opts...),
-	)
-	queryServiceResolveHandler := connect.NewUnaryHandler(
-		QueryServiceResolveProcedure,
-		svc.Resolve,
-		connect.WithSchema(queryServiceMethods.ByName("Resolve")),
-		connect.WithHandlerOptions(opts...),
-	)
-	queryServiceAccessHandler := connect.NewUnaryHandler(
-		QueryServiceAccessProcedure,
-		svc.Access,
-		connect.WithSchema(queryServiceMethods.ByName("Access")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/audit.v1.QueryService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case QueryServiceSearchProcedure:
-			queryServiceSearchHandler.ServeHTTP(w, r)
-		case QueryServiceFacetsProcedure:
-			queryServiceFacetsHandler.ServeHTTP(w, r)
-		case QueryServiceGetProcedure:
-			queryServiceGetHandler.ServeHTTP(w, r)
-		case QueryServiceExportProcedure:
-			queryServiceExportHandler.ServeHTTP(w, r)
-		case QueryServiceGetExportProcedure:
-			queryServiceGetExportHandler.ServeHTTP(w, r)
-		case QueryServiceResolveProcedure:
-			queryServiceResolveHandler.ServeHTTP(w, r)
-		case QueryServiceAccessProcedure:
-			queryServiceAccessHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedQueryServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedQueryServiceHandler struct{}
 
-func (UnimplementedQueryServiceHandler) Search(context.Context, *connect.Request[v1.SearchRequest]) (*connect.Response[v1.SearchResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("audit.v1.QueryService.Search is not implemented"))
+func (UnimplementedQueryServiceHandler) Search(context.Context, *v1.SearchRequest) (*v1.SearchResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "audit.v1.QueryService.Search is not implemented")
 }
 
-func (UnimplementedQueryServiceHandler) Facets(context.Context, *connect.Request[v1.FacetsRequest]) (*connect.Response[v1.FacetsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("audit.v1.QueryService.Facets is not implemented"))
+func (UnimplementedQueryServiceHandler) Facets(context.Context, *v1.FacetsRequest) (*v1.FacetsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "audit.v1.QueryService.Facets is not implemented")
 }
 
-func (UnimplementedQueryServiceHandler) Get(context.Context, *connect.Request[v1.GetRequest]) (*connect.Response[v1.GetResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("audit.v1.QueryService.Get is not implemented"))
+func (UnimplementedQueryServiceHandler) Get(context.Context, *v1.GetRequest) (*v1.GetResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "audit.v1.QueryService.Get is not implemented")
 }
 
-func (UnimplementedQueryServiceHandler) Export(context.Context, *connect.Request[v1.ExportRequest]) (*connect.Response[v1.ExportResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("audit.v1.QueryService.Export is not implemented"))
+func (UnimplementedQueryServiceHandler) Export(context.Context, *v1.ExportRequest) (*v1.ExportResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "audit.v1.QueryService.Export is not implemented")
 }
 
-func (UnimplementedQueryServiceHandler) GetExport(context.Context, *connect.Request[v1.GetExportRequest]) (*connect.Response[v1.GetExportResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("audit.v1.QueryService.GetExport is not implemented"))
+func (UnimplementedQueryServiceHandler) GetExport(context.Context, *v1.GetExportRequest) (*v1.GetExportResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "audit.v1.QueryService.GetExport is not implemented")
 }
 
-func (UnimplementedQueryServiceHandler) Resolve(context.Context, *connect.Request[v1.ResolveRequest]) (*connect.Response[v1.ResolveResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("audit.v1.QueryService.Resolve is not implemented"))
+func (UnimplementedQueryServiceHandler) Resolve(context.Context, *v1.ResolveRequest) (*v1.ResolveResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "audit.v1.QueryService.Resolve is not implemented")
 }
 
-func (UnimplementedQueryServiceHandler) Access(context.Context, *connect.Request[v1.AccessRequest]) (*connect.Response[v1.AccessResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("audit.v1.QueryService.Access is not implemented"))
+func (UnimplementedQueryServiceHandler) Access(context.Context, *v1.AccessRequest) (*v1.AccessResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "audit.v1.QueryService.Access is not implemented")
+}
+
+type queryServiceClient struct {
+	client *connect.Client
+}
+
+func (c *queryServiceClient) Search(ctx context.Context, req *v1.SearchRequest) (*v1.SearchResponse, error) {
+	var res v1.SearchResponse
+	if err := c.client.CallUnary(ctx, queryServiceSearchSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *queryServiceClient) Facets(ctx context.Context, req *v1.FacetsRequest) (*v1.FacetsResponse, error) {
+	var res v1.FacetsResponse
+	if err := c.client.CallUnary(ctx, queryServiceFacetsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *queryServiceClient) Get(ctx context.Context, req *v1.GetRequest) (*v1.GetResponse, error) {
+	var res v1.GetResponse
+	if err := c.client.CallUnary(ctx, queryServiceGetSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *queryServiceClient) Export(ctx context.Context, req *v1.ExportRequest) (*v1.ExportResponse, error) {
+	var res v1.ExportResponse
+	if err := c.client.CallUnary(ctx, queryServiceExportSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *queryServiceClient) GetExport(ctx context.Context, req *v1.GetExportRequest) (*v1.GetExportResponse, error) {
+	var res v1.GetExportResponse
+	if err := c.client.CallUnary(ctx, queryServiceGetExportSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *queryServiceClient) Resolve(ctx context.Context, req *v1.ResolveRequest) (*v1.ResolveResponse, error) {
+	var res v1.ResolveResponse
+	if err := c.client.CallUnary(ctx, queryServiceResolveSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *queryServiceClient) Access(ctx context.Context, req *v1.AccessRequest) (*v1.AccessResponse, error) {
+	var res v1.AccessResponse
+	if err := c.client.CallUnary(ctx, queryServiceAccessSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type queryServiceHandler struct{ svc QueryServiceHandler }
+
+func (h queryServiceHandler) search(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SearchRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Search(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h queryServiceHandler) facets(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.FacetsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Facets(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h queryServiceHandler) get(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Get(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h queryServiceHandler) export(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ExportRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Export(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h queryServiceHandler) getExport(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetExportRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetExport(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h queryServiceHandler) resolve(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ResolveRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Resolve(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h queryServiceHandler) access(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.AccessRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Access(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

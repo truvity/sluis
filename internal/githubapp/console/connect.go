@@ -3,12 +3,10 @@ package console
 import (
 	"context"
 	"encoding/json"
-	"errors"
-	"fmt"
 	"net/http"
 	"strings"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
 	"github.com/truvity/sluis/internal/access"
@@ -86,18 +84,18 @@ func (c *Service) beginOrganisationConnect(
 ) (githubBegin, error) {
 	switch {
 	case !status.ValidOrg(org):
-		return githubBegin{}, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("%q is not an organisation login", org))
+		return githubBegin{}, connect.Errorf(connect.CodeInvalidArgument, "%q is not an organisation login", org)
 	case c.deps.Orgs == nil:
 		return githubBegin{}, connect.NewError(connect.CodeFailedPrecondition,
-			errors.New("this deployment keeps no state in Kubernetes, so a connected organisation would not survive a restart"))
+			"this deployment keeps no state in Kubernetes, so a connected organisation would not survive a restart")
 	}
 	if _, bound := c.bindings()[org]; !bound {
-		return githubBegin{}, connect.NewError(connect.CodeFailedPrecondition,
-			fmt.Errorf("the policy binds no organisation %s: bind its teams first, so nothing is connected that nothing manages", org))
+		return githubBegin{}, connect.Errorf(connect.CodeFailedPrecondition,
+			"the policy binds no organisation %s: bind its teams first, so nothing is connected that nothing manages", org)
 	}
 	records, err := c.deps.Orgs.List(ctx)
 	if err != nil {
-		return githubBegin{}, connect.NewError(connect.CodeUnavailable, err)
+		return githubBegin{}, connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
 	}
 	existing, connected := recordOf(records, org)
 	owner := existing.Owner
@@ -115,8 +113,8 @@ func (c *Service) beginOrganisationConnect(
 		}
 	}
 	if connected && existing.Installed() {
-		return githubBegin{}, connect.NewError(connect.CodeFailedPrecondition,
-			fmt.Errorf("%s is already connected through %s: disconnect it first, or a second App would sit beside the first", org, existing.AppSlug))
+		return githubBegin{}, connect.Errorf(connect.CodeFailedPrecondition,
+			"%s is already connected through %s: disconnect it first, or a second App would sit beside the first", org, existing.AppSlug)
 	}
 
 	// The state carries who asked: the callbacks are redirects from GitHub
@@ -133,7 +131,7 @@ func (c *Service) beginOrganisationConnect(
 	root := c.githubRoot(ctx)
 	manifest, err := json.Marshal(githubapp.NewManifestNamed(org, c.orgAppName(org), c.publicURL(ctx), root+consolewire.CallbackPath, root+consolewire.SetupPath))
 	if err != nil {
-		return githubBegin{}, connect.NewError(connect.CodeInternal, err)
+		return githubBegin{}, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	out.url, out.manifest = githubapp.CreateURL(org, state), string(manifest)
 	return out, nil
@@ -148,9 +146,9 @@ func (c *Service) beginOrganisationConnect(
 // for this organisation to stop being managed, and the detail says what
 // is left to do by hand.
 func (c *Service) DisconnectGitHubOrganisation(
-	ctx context.Context, req *connect.Request[directoryrosterv1.DisconnectGitHubOrganisationRequest],
-) (*connect.Response[directoryrosterv1.DisconnectGitHubOrganisationResponse], error) {
-	org := strings.TrimSpace(req.Msg.GetOrg())
+	ctx context.Context, req *directoryrosterv1.DisconnectGitHubOrganisationRequest,
+) (*directoryrosterv1.DisconnectGitHubOrganisationResponse, error) {
+	org := strings.TrimSpace(req.GetOrg())
 	if _, err := c.requireOrg(ctx, access.RoleOperator, org); err != nil {
 		return nil, err
 	}
@@ -158,9 +156,9 @@ func (c *Service) DisconnectGitHubOrganisation(
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&directoryrosterv1.DisconnectGitHubOrganisationResponse{
+	return &directoryrosterv1.DisconnectGitHubOrganisationResponse{
 		Uninstalled: gone.uninstalled, Detail: gone.detail, AppSettingsUrl: gone.settingsURL,
-	}), nil
+	}, nil
 }
 
 // disconnectOrganisation is the work of it, which
@@ -168,27 +166,27 @@ func (c *Service) DisconnectGitHubOrganisation(
 func (c *Service) disconnectOrganisation(ctx context.Context, org string) (githubDisconnect, error) {
 	switch {
 	case !status.ValidOrg(org):
-		return githubDisconnect{}, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("%q is not an organisation login", org))
+		return githubDisconnect{}, connect.Errorf(connect.CodeInvalidArgument, "%q is not an organisation login", org)
 	case c.deps.Orgs == nil:
-		return githubDisconnect{}, connect.NewError(connect.CodeFailedPrecondition, errors.New("this deployment keeps no connected organisations"))
+		return githubDisconnect{}, connect.NewError(connect.CodeFailedPrecondition, "this deployment keeps no connected organisations")
 	}
 	records, err := c.deps.Orgs.List(ctx)
 	if err != nil {
-		return githubDisconnect{}, connect.NewError(connect.CodeUnavailable, err)
+		return githubDisconnect{}, connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
 	}
 	record, connected := recordOf(records, org)
 	credential, hasCredential, err := c.deps.Orgs.Credential(ctx, org)
 	if err != nil {
-		return githubDisconnect{}, connect.NewError(connect.CodeUnavailable, err)
+		return githubDisconnect{}, connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
 	}
 	if !connected && !hasCredential {
-		return githubDisconnect{}, connect.NewError(connect.CodeNotFound, fmt.Errorf("%s is not connected", org))
+		return githubDisconnect{}, connect.Errorf(connect.CodeNotFound, "%s is not connected", org)
 	}
 
 	out := c.uninstall(ctx, credential.AppID, credential.InstallationID, credential.PrivateKey)
 	out.settingsURL = appSettingsURL(org, record.AppSlug)
 	if err = c.deps.Orgs.Delete(ctx, org); err != nil {
-		return githubDisconnect{}, connect.NewError(connect.CodeUnavailable, err)
+		return githubDisconnect{}, connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
 	}
 	c.record(ctx, audit.GitHubOrgDisconnected(actorOf(ctx), org, out.uninstalled, out.detail))
 	return out, nil
@@ -208,32 +206,32 @@ func recordOf(records []connection.Record, org string) (connection.Record, bool)
 // operator alone: an owner that could hand its organisation to another, or
 // take one, would make "who may operate this" a thing its operators decide.
 func (c *Service) ChangeGitHubOrganisationOwner(
-	ctx context.Context, req *connect.Request[directoryrosterv1.ChangeGitHubOrganisationOwnerRequest],
-) (*connect.Response[directoryrosterv1.ChangeGitHubOrganisationOwnerResponse], error) {
-	org, owner := strings.TrimSpace(req.Msg.GetOrg()), strings.TrimSpace(req.Msg.GetOwnerDirectory())
+	ctx context.Context, req *directoryrosterv1.ChangeGitHubOrganisationOwnerRequest,
+) (*directoryrosterv1.ChangeGitHubOrganisationOwnerResponse, error) {
+	org, owner := strings.TrimSpace(req.GetOrg()), strings.TrimSpace(req.GetOwnerDirectory())
 	who, err := c.requireOwnerChange(ctx, owner)
 	if err != nil {
 		return nil, err
 	}
 	switch {
 	case !status.ValidOrg(org):
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("%q is not an organisation login", org))
+		return nil, connect.Errorf(connect.CodeInvalidArgument, "%q is not an organisation login", org)
 	case c.deps.Orgs == nil:
-		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("this deployment keeps no connected organisations"))
+		return nil, connect.NewError(connect.CodeFailedPrecondition, "this deployment keeps no connected organisations")
 	}
 	previous, connected, err := c.deps.Orgs.SetOwner(ctx, org, owner)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnavailable, err)
+		return nil, connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
 	}
 	if !connected {
-		return nil, connect.NewError(connect.CodeFailedPrecondition,
-			fmt.Errorf("%s is not connected: its owner is chosen when it is connected", org))
+		return nil, connect.Errorf(connect.CodeFailedPrecondition,
+			"%s is not connected: its owner is chosen when it is connected", org)
 	}
 	if previous == owner {
-		return connect.NewResponse(&directoryrosterv1.ChangeGitHubOrganisationOwnerResponse{}), nil
+		return &directoryrosterv1.ChangeGitHubOrganisationOwnerResponse{}, nil
 	}
 	c.record(ctx, audit.GitHubOrgOwnerChanged(identityActor(who), org, previous, owner))
-	return connect.NewResponse(&directoryrosterv1.ChangeGitHubOrganisationOwnerResponse{}), nil
+	return &directoryrosterv1.ChangeGitHubOrganisationOwnerResponse{}, nil
 }
 
 // publicURL is where a browser reaches the console: configured, else the

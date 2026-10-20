@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"k8s.io/client-go/kubernetes/fake"
 
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
@@ -140,51 +140,51 @@ func TestEveryGitHubActionAsksWhoOwnsTheOrganisation(t *testing.T) {
 	app := map[string]string{"globex": "globex-controller", "acme": "acme-controller", "initech": "initech-controller"}
 	actions := map[string]func(ctx context.Context, org string) error{
 		"connect": func(ctx context.Context, org string) error {
-			_, err := console.BeginGitHubConnect(ctx, connect.NewRequest(&directoryrosterv1.BeginGitHubConnectRequest{Org: org}))
+			_, err := console.BeginGitHubConnect(ctx, &directoryrosterv1.BeginGitHubConnectRequest{Org: org})
 			return err
 		},
 		"disconnect": func(ctx context.Context, org string) error {
-			_, err := console.DisconnectGitHubOrganisation(ctx, connect.NewRequest(&directoryrosterv1.DisconnectGitHubOrganisationRequest{Org: org}))
+			_, err := console.DisconnectGitHubOrganisation(ctx, &directoryrosterv1.DisconnectGitHubOrganisationRequest{Org: org})
 			return err
 		},
 		"confirm removals": func(ctx context.Context, org string) error {
-			_, err := console.ConfirmGitHubRemovals(ctx, connect.NewRequest(&directoryrosterv1.ConfirmGitHubRemovalsRequest{Org: org, Fingerprint: "abc123"}))
+			_, err := console.ConfirmGitHubRemovals(ctx, &directoryrosterv1.ConfirmGitHubRemovalsRequest{Org: org, Fingerprint: "abc123"})
 			return err
 		},
 		"begin runner app": func(ctx context.Context, org string) error {
-			_, err := console.BeginGitHubRunnerAppConnect(ctx, connect.NewRequest(&directoryrosterv1.BeginGitHubRunnerAppConnectRequest{Org: org, Tier: "standard"}))
+			_, err := console.BeginGitHubRunnerAppConnect(ctx, &directoryrosterv1.BeginGitHubRunnerAppConnectRequest{Org: org, Tier: "standard"})
 			return err
 		},
 		"disconnect runner app": func(ctx context.Context, org string) error {
-			_, err := console.DisconnectGitHubRunnerApp(ctx, connect.NewRequest(&directoryrosterv1.DisconnectGitHubRunnerAppRequest{Org: org, Tier: "standard"}))
+			_, err := console.DisconnectGitHubRunnerApp(ctx, &directoryrosterv1.DisconnectGitHubRunnerAppRequest{Org: org, Tier: "standard"})
 			return err
 		},
 		"begin catalogue app": func(ctx context.Context, org string) error {
-			_, err := console.BeginGitHubCatalogueAppConnect(ctx, connect.NewRequest(&directoryrosterv1.BeginGitHubCatalogueAppConnectRequest{Id: org + "-bot"}))
+			_, err := console.BeginGitHubCatalogueAppConnect(ctx, &directoryrosterv1.BeginGitHubCatalogueAppConnectRequest{Id: org + "-bot"})
 			return err
 		},
 		"check catalogue app": func(ctx context.Context, org string) error {
-			_, err := console.CheckGitHubCatalogueApp(ctx, connect.NewRequest(&directoryrosterv1.CheckGitHubCatalogueAppRequest{Id: org + "-bot"}))
+			_, err := console.CheckGitHubCatalogueApp(ctx, &directoryrosterv1.CheckGitHubCatalogueAppRequest{Id: org + "-bot"})
 			return err
 		},
 		"disconnect catalogue app": func(ctx context.Context, org string) error {
-			_, err := console.DisconnectGitHubCatalogueApp(ctx, connect.NewRequest(&directoryrosterv1.DisconnectGitHubCatalogueAppRequest{Id: org + "-bot"}))
+			_, err := console.DisconnectGitHubCatalogueApp(ctx, &directoryrosterv1.DisconnectGitHubCatalogueAppRequest{Id: org + "-bot"})
 			return err
 		},
 		"begin app": func(ctx context.Context, org string) error {
-			_, err := console.BeginGitHubAppConnect(ctx, connect.NewRequest(&directoryrosterv1.BeginGitHubAppConnectRequest{Id: app[org]}))
+			_, err := console.BeginGitHubAppConnect(ctx, &directoryrosterv1.BeginGitHubAppConnectRequest{Id: app[org]})
 			return err
 		},
 		"check app": func(ctx context.Context, org string) error {
-			_, err := console.CheckGitHubApp(ctx, connect.NewRequest(&directoryrosterv1.CheckGitHubAppRequest{Id: app[org]}))
+			_, err := console.CheckGitHubApp(ctx, &directoryrosterv1.CheckGitHubAppRequest{Id: app[org]})
 			return err
 		},
 		"disconnect app": func(ctx context.Context, org string) error {
-			_, err := console.DisconnectGitHubApp(ctx, connect.NewRequest(&directoryrosterv1.DisconnectGitHubAppRequest{Id: app[org]}))
+			_, err := console.DisconnectGitHubApp(ctx, &directoryrosterv1.DisconnectGitHubAppRequest{Id: app[org]})
 			return err
 		},
 		"app tokens": func(ctx context.Context, org string) error {
-			_, err := console.ListGitHubAppTokens(ctx, connect.NewRequest(&directoryrosterv1.ListGitHubAppTokensRequest{Id: org + "-bot"}))
+			_, err := console.ListGitHubAppTokens(ctx, &directoryrosterv1.ListGitHubAppTokensRequest{Id: org + "-bot"})
 			return err
 		},
 	}
@@ -226,12 +226,12 @@ func TestEveryGitHubActionAsksWhoOwnsTheOrganisation(t *testing.T) {
 func TestTheRefusalNamesTheOrganisation(t *testing.T) {
 	_, console := ownerConsole(t)
 	_, err := console.DisconnectGitHubOrganisation(asIdentity(northOp),
-		connect.NewRequest(&directoryrosterv1.DisconnectGitHubOrganisationRequest{Org: "acme"}))
+		&directoryrosterv1.DisconnectGitHubOrganisationRequest{Org: "acme"})
 	if !refused(err) || err.Error() != "permission_denied: this needs the operator role over acme's directory" {
 		t.Errorf("another company's organisation = %v", err)
 	}
 	_, err = console.DisconnectGitHubOrganisation(asIdentity(northOp),
-		connect.NewRequest(&directoryrosterv1.DisconnectGitHubOrganisationRequest{Org: "initech"}))
+		&directoryrosterv1.DisconnectGitHubOrganisationRequest{Org: "initech"})
 	if !refused(err) || err.Error() != "permission_denied: this needs the installation-wide operator role: initech names no owning directory" {
 		t.Errorf("an organisation with no owner = %v", err)
 	}
@@ -244,12 +244,12 @@ func TestAScopedViewerSeesOnlyItsOwnersOrganisations(t *testing.T) {
 	_, console := ownerConsole(t)
 	ctx := asIdentity(northViewer)
 
-	got, err := console.GetGitHubStatus(ctx, connect.NewRequest(&directoryrosterv1.GetGitHubStatusRequest{}))
+	got, err := console.GetGitHubStatus(ctx, &directoryrosterv1.GetGitHubStatusRequest{})
 	if err != nil {
 		t.Fatalf("GetGitHubStatus: %v", err)
 	}
 	var seen []string
-	for _, o := range got.Msg.GetOrganisations() {
+	for _, o := range got.GetOrganisations() {
 		seen = append(seen, o.GetOrg())
 		if o.GetCanOperate() {
 			t.Errorf("a viewer is told it can operate %s", o.GetOrg())
@@ -258,40 +258,40 @@ func TestAScopedViewerSeesOnlyItsOwnersOrganisations(t *testing.T) {
 	if !slices.Equal(seen, []string{"globex"}) {
 		t.Errorf("organisations seen = %v, want [globex]", seen)
 	}
-	if got.Msg.GetLinkApp() != nil || len(got.Msg.GetLinks()) != 0 {
+	if got.GetLinkApp() != nil || len(got.GetLinks()) != 0 {
 		t.Error("a scoped viewer was shown the link App or links, which are every organisation's")
 	}
-	for _, app := range got.Msg.GetCatalogueApps() {
+	for _, app := range got.GetCatalogueApps() {
 		if app.GetOrg() != "globex" {
 			t.Errorf("catalogue App %s of %s shown to globex's viewer", app.GetId(), app.GetOrg())
 		}
 	}
 
-	listed, err := console.ListGitHubApps(ctx, connect.NewRequest(&directoryrosterv1.ListGitHubAppsRequest{}))
+	listed, err := console.ListGitHubApps(ctx, &directoryrosterv1.ListGitHubAppsRequest{})
 	if err != nil {
 		t.Fatalf("ListGitHubApps: %v", err)
 	}
-	for _, app := range listed.Msg.GetApps() {
+	for _, app := range listed.GetApps() {
 		if app.GetOrg() != "globex" || app.GetPurpose() == directoryrosterv1.AppPurpose_APP_PURPOSE_LINK {
 			t.Errorf("App %s (%s) shown to globex's viewer", app.GetId(), app.GetOrg())
 		}
 	}
-	if len(listed.Msg.GetApps()) == 0 {
+	if len(listed.GetApps()) == 0 {
 		t.Error("the viewer sees none of its own Apps")
 	}
-	if !slices.Equal(listed.Msg.GetBoundOrganisations(), []string{"globex"}) {
-		t.Errorf("bound organisations = %v, want [globex]", listed.Msg.GetBoundOrganisations())
+	if !slices.Equal(listed.GetBoundOrganisations(), []string{"globex"}) {
+		t.Errorf("bound organisations = %v, want [globex]", listed.GetBoundOrganisations())
 	}
 
-	if _, err = console.GetGitHubApp(ctx, connect.NewRequest(&directoryrosterv1.GetGitHubAppRequest{Id: "acme-controller"})); !refused(err) {
+	if _, err = console.GetGitHubApp(ctx, &directoryrosterv1.GetGitHubAppRequest{Id: "acme-controller"}); !refused(err) {
 		t.Errorf("another company's App page = %v, want permission denied", err)
 	}
-	if _, err = console.GetGitHubApp(ctx, connect.NewRequest(&directoryrosterv1.GetGitHubAppRequest{Id: "globex-controller"})); err != nil {
+	if _, err = console.GetGitHubApp(ctx, &directoryrosterv1.GetGitHubAppRequest{Id: "globex-controller"}); err != nil {
 		t.Errorf("its own App page = %v", err)
 	}
 
 	lonely := asIdentity(access.Identity{Scopes: map[string]access.Role{"C0nowhere": access.RoleViewer}})
-	if _, err = console.GetGitHubStatus(lonely, connect.NewRequest(&directoryrosterv1.GetGitHubStatusRequest{})); !refused(err) {
+	if _, err = console.GetGitHubStatus(lonely, &directoryrosterv1.GetGitHubStatusRequest{}); !refused(err) {
 		t.Errorf("a viewer of a directory owning nothing = %v, want permission denied", err)
 	}
 }
@@ -301,12 +301,12 @@ func TestAScopedViewerSeesOnlyItsOwnersOrganisations(t *testing.T) {
 func TestEachRowSaysWhetherTheCallerMayOperateIt(t *testing.T) {
 	_, console := ownerConsole(t)
 	can := func(id access.Identity) map[string]bool {
-		got, err := console.GetGitHubStatus(asIdentity(id), connect.NewRequest(&directoryrosterv1.GetGitHubStatusRequest{}))
+		got, err := console.GetGitHubStatus(asIdentity(id), &directoryrosterv1.GetGitHubStatusRequest{})
 		if err != nil {
 			t.Fatalf("GetGitHubStatus: %v", err)
 		}
 		out := map[string]bool{}
-		for _, o := range got.Msg.GetOrganisations() {
+		for _, o := range got.GetOrganisations() {
 			out[o.GetOrg()] = o.GetCanOperate()
 		}
 		return out
@@ -321,11 +321,11 @@ func TestEachRowSaysWhetherTheCallerMayOperateIt(t *testing.T) {
 		t.Errorf("installation-wide viewer = %v, want all three visible and none operable", got)
 	}
 
-	listed, err := console.ListGitHubApps(asIdentity(northOp), connect.NewRequest(&directoryrosterv1.ListGitHubAppsRequest{}))
+	listed, err := console.ListGitHubApps(asIdentity(northOp), &directoryrosterv1.ListGitHubAppsRequest{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, app := range listed.Msg.GetApps() {
+	for _, app := range listed.GetApps() {
 		if !app.GetCanOperate() {
 			t.Errorf("App %s of %s: the operator of its directory is told it cannot operate it", app.GetId(), app.GetOrg())
 		}
@@ -349,12 +349,12 @@ func TestARecordWithNoOwnerMeansInstallationWideOnly(t *testing.T) {
 	}
 	console.deps.GitHubOrgs = store
 	_, err = console.DisconnectGitHubOrganisation(asIdentity(northOp),
-		connect.NewRequest(&directoryrosterv1.DisconnectGitHubOrganisationRequest{Org: "globex"}))
+		&directoryrosterv1.DisconnectGitHubOrganisationRequest{Org: "globex"})
 	if !refused(err) {
 		t.Errorf("a scoped operator on a record with no owner = %v, want permission denied", err)
 	}
 	_, err = console.DisconnectGitHubOrganisation(asIdentity(everywhere),
-		connect.NewRequest(&directoryrosterv1.DisconnectGitHubOrganisationRequest{Org: "globex"}))
+		&directoryrosterv1.DisconnectGitHubOrganisationRequest{Org: "globex"})
 	if refused(err) {
 		t.Errorf("the installation-wide operator = %v", err)
 	}
@@ -369,11 +369,11 @@ func TestTheCallbackChecksTheOwnerAgain(t *testing.T) {
 	server, console := ownerConsoleOver(t, store)
 	begin := func() (state string) {
 		response, err := console.BeginGitHubConnect(asIdentity(northOp),
-			connect.NewRequest(&directoryrosterv1.BeginGitHubConnectRequest{Org: "globex"}))
+			&directoryrosterv1.BeginGitHubConnectRequest{Org: "globex"})
 		if err != nil {
 			t.Fatalf("begin: %v", err)
 		}
-		return mustQuery(t, response.Msg.GetUrl(), "state")
+		return mustQuery(t, response.GetUrl(), "state")
 	}
 	finish := func(ctx context.Context) *httptest.ResponseRecorder {
 		state := begin()
@@ -447,16 +447,16 @@ func TestConnectingAnUnconnectedOrganisationFollowsTheOwnerRule(t *testing.T) {
 					err    error
 				)
 				if call == "BeginGitHubConnect" {
-					var response *connect.Response[directoryrosterv1.BeginGitHubConnectResponse]
-					if response, err = console.BeginGitHubConnect(asIdentity(c.who), connect.NewRequest(
-						&directoryrosterv1.BeginGitHubConnectRequest{Org: "globex", OwnerDirectory: c.owner})); err == nil {
-						target = response.Msg.GetUrl()
+					var response *directoryrosterv1.BeginGitHubConnectResponse
+					if response, err = console.BeginGitHubConnect(asIdentity(c.who),
+						&directoryrosterv1.BeginGitHubConnectRequest{Org: "globex", OwnerDirectory: c.owner}); err == nil {
+						target = response.GetUrl()
 					}
 				} else {
-					var response *connect.Response[directoryrosterv1.BeginGitHubAppConnectResponse]
-					if response, err = console.BeginGitHubAppConnect(asIdentity(c.who), connect.NewRequest(
-						&directoryrosterv1.BeginGitHubAppConnectRequest{Id: "globex-controller", OwnerDirectory: c.owner})); err == nil {
-						target = response.Msg.GetUrl()
+					var response *directoryrosterv1.BeginGitHubAppConnectResponse
+					if response, err = console.BeginGitHubAppConnect(asIdentity(c.who),
+						&directoryrosterv1.BeginGitHubAppConnectRequest{Id: "globex-controller", OwnerDirectory: c.owner}); err == nil {
+						target = response.GetUrl()
 					}
 				}
 				if (err == nil) != (c.want == 0) || (err != nil && connect.CodeOf(err) != c.want) {
@@ -489,8 +489,7 @@ func TestOnlyTheInstallationWideOperatorChangesAnOrganisationsOwner(t *testing.T
 	recorded := audittest.New(t)
 	console.deps.Audit = recorded
 	change := func(ctx context.Context, org, owner string) error {
-		_, err := console.ChangeGitHubOrganisationOwner(ctx, connect.NewRequest(
-			&directoryrosterv1.ChangeGitHubOrganisationOwnerRequest{Org: org, OwnerDirectory: owner}))
+		_, err := console.ChangeGitHubOrganisationOwner(ctx, &directoryrosterv1.ChangeGitHubOrganisationOwnerRequest{Org: org, OwnerDirectory: owner})
 		return err
 	}
 	for name, who := range map[string]access.Identity{
@@ -521,7 +520,7 @@ func TestOnlyTheInstallationWideOperatorChangesAnOrganisationsOwner(t *testing.T
 	// The new owner operates it now, and the old one does not.
 	disconnect := func(who access.Identity) error {
 		_, err := console.DisconnectGitHubOrganisation(asIdentity(who),
-			connect.NewRequest(&directoryrosterv1.DisconnectGitHubOrganisationRequest{Org: "globex"}))
+			&directoryrosterv1.DisconnectGitHubOrganisationRequest{Org: "globex"})
 		return err
 	}
 	if err := disconnect(northOp); !refused(err) {
@@ -546,12 +545,12 @@ func TestOnlyTheInstallationWideOperatorChangesAnOrganisationsOwner(t *testing.T
 func TestTheGitHubPagesShowTheOwnersDomainAndWhoMayChangeIt(t *testing.T) {
 	_, console := ownerConsole(t)
 	rows := func(id access.Identity) map[string]*directoryrosterv1.GitHubOrganisation {
-		got, err := console.GetGitHubStatus(asIdentity(id), connect.NewRequest(&directoryrosterv1.GetGitHubStatusRequest{}))
+		got, err := console.GetGitHubStatus(asIdentity(id), &directoryrosterv1.GetGitHubStatusRequest{})
 		if err != nil {
 			t.Fatalf("GetGitHubStatus: %v", err)
 		}
 		out := map[string]*directoryrosterv1.GitHubOrganisation{}
-		for _, o := range got.Msg.GetOrganisations() {
+		for _, o := range got.GetOrganisations() {
 			out[o.GetOrg()] = o
 		}
 		return out
@@ -564,18 +563,18 @@ func TestTheGitHubPagesShowTheOwnersDomainAndWhoMayChangeIt(t *testing.T) {
 	if scoped := rows(northOp)["globex"]; scoped.GetOwnerDomain() != "north.example" || scoped.GetCanChangeOwner() || !scoped.GetCanOperate() {
 		t.Errorf("the owner's operator sees %v: may operate, may not change the owner", scoped)
 	}
-	listed, err := console.ListGitHubApps(asIdentity(everywhere), connect.NewRequest(&directoryrosterv1.ListGitHubAppsRequest{}))
+	listed, err := console.ListGitHubApps(asIdentity(everywhere), &directoryrosterv1.ListGitHubAppsRequest{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	var choices []string
-	for _, dir := range listed.Msg.GetOwnerChoices() {
+	for _, dir := range listed.GetOwnerChoices() {
 		choices = append(choices, dir.GetWorkspaceId()+"="+dir.GetPrimaryDomain())
 	}
-	if !slices.Equal(choices, []string{"C0north=north.example", "C0south=south.example"}) || !listed.Msg.GetMayConnectWithoutOwner() {
-		t.Errorf("installation-wide choices = %v, without owner %v", choices, listed.Msg.GetMayConnectWithoutOwner())
+	if !slices.Equal(choices, []string{"C0north=north.example", "C0south=south.example"}) || !listed.GetMayConnectWithoutOwner() {
+		t.Errorf("installation-wide choices = %v, without owner %v", choices, listed.GetMayConnectWithoutOwner())
 	}
-	for _, app := range listed.Msg.GetApps() {
+	for _, app := range listed.GetApps() {
 		if app.GetId() == "globex-controller" && (app.GetOwnerDirectory() != "C0north" || app.GetOwnerDomain() != "north.example" || !app.GetCanChangeOwner()) {
 			t.Errorf("globex-controller = %v", app)
 		}
@@ -583,12 +582,12 @@ func TestTheGitHubPagesShowTheOwnersDomainAndWhoMayChangeIt(t *testing.T) {
 			t.Errorf("a runner App offers to change the organisation's owner: %v", app)
 		}
 	}
-	scoped, err := console.ListGitHubApps(asIdentity(northOp), connect.NewRequest(&directoryrosterv1.ListGitHubAppsRequest{}))
+	scoped, err := console.ListGitHubApps(asIdentity(northOp), &directoryrosterv1.ListGitHubAppsRequest{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := scoped.Msg.GetOwnerChoices(); len(got) != 1 || got[0].GetWorkspaceId() != "C0north" || scoped.Msg.GetMayConnectWithoutOwner() {
-		t.Errorf("a scoped operator's choices = %v, without owner %v", got, scoped.Msg.GetMayConnectWithoutOwner())
+	if got := scoped.GetOwnerChoices(); len(got) != 1 || got[0].GetWorkspaceId() != "C0north" || scoped.GetMayConnectWithoutOwner() {
+		t.Errorf("a scoped operator's choices = %v, without owner %v", got, scoped.GetMayConnectWithoutOwner())
 	}
 }
 
@@ -615,20 +614,20 @@ func TestAConnectedOrganisationWithNoOwnerIsInvisibleToScopedRoles(t *testing.T)
 
 	for name, who := range map[string]access.Identity{"a viewer": northViewer, "an operator": northOp, "an operator elsewhere": elsewhereOp} {
 		ctx := asIdentity(who)
-		if _, err := console.ListGitHubApps(ctx, connect.NewRequest(&directoryrosterv1.ListGitHubAppsRequest{})); !refused(err) {
+		if _, err := console.ListGitHubApps(ctx, &directoryrosterv1.ListGitHubAppsRequest{}); !refused(err) {
 			t.Errorf("%s listing Apps = %v, want permission denied", name, err)
 		}
-		if _, err := console.GetGitHubStatus(ctx, connect.NewRequest(&directoryrosterv1.GetGitHubStatusRequest{})); !refused(err) {
+		if _, err := console.GetGitHubStatus(ctx, &directoryrosterv1.GetGitHubStatusRequest{}); !refused(err) {
 			t.Errorf("%s reading the status = %v, want permission denied", name, err)
 		}
 	}
 	for name, who := range map[string]access.Identity{"an operator": everywhere, "a viewer": {Role: access.RoleViewer}} {
-		listed, err := console.ListGitHubApps(asIdentity(who), connect.NewRequest(&directoryrosterv1.ListGitHubAppsRequest{}))
+		listed, err := console.ListGitHubApps(asIdentity(who), &directoryrosterv1.ListGitHubAppsRequest{})
 		if err != nil {
 			t.Fatalf("%s installation-wide listing Apps: %v", name, err)
 		}
-		if !slices.Equal(listed.Msg.GetBoundOrganisations(), []string{"initech"}) {
-			t.Errorf("%s installation-wide sees bound %v, want [initech]", name, listed.Msg.GetBoundOrganisations())
+		if !slices.Equal(listed.GetBoundOrganisations(), []string{"initech"}) {
+			t.Errorf("%s installation-wide sees bound %v, want [initech]", name, listed.GetBoundOrganisations())
 		}
 	}
 }

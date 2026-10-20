@@ -4,8 +4,6 @@ import (
 	"context"
 	"strings"
 
-	"connectrpc.com/connect"
-
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
 	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/githubroster/consolewire"
@@ -49,12 +47,12 @@ func (c *Service) BeginGitHubAppConnect(ctx context.Context, r consolewire.Begin
 
 // DisconnectGitHubApp uninstalls any App, then forgets it.
 func (c *Service) DisconnectGitHubApp(
-	ctx context.Context, req *connect.Request[directoryrosterv1.DisconnectGitHubAppRequest],
-) (*connect.Response[directoryrosterv1.DisconnectGitHubAppResponse], error) {
+	ctx context.Context, req *directoryrosterv1.DisconnectGitHubAppRequest,
+) (*directoryrosterv1.DisconnectGitHubAppResponse, error) {
 	if _, err := requireAnywhere(ctx, access.RoleOperator); err != nil {
 		return nil, err
 	}
-	spec, err := c.githubAppSpec(ctx, req.Msg.GetId())
+	spec, err := c.githubAppSpec(ctx, req.GetId())
 	if err != nil {
 		return nil, err
 	}
@@ -75,10 +73,10 @@ func (c *Service) DisconnectGitHubApp(
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&directoryrosterv1.DisconnectGitHubAppResponse{
+	return &directoryrosterv1.DisconnectGitHubAppResponse{
 		Uninstalled:    gone.uninstalled,
 		Detail:         gone.detail,
 		AppSettingsUrl: gone.settingsURL,
 		Invalidated:    int32(gone.invalidated), //nolint:gosec // a count of people
-	}), nil
+	}, nil
 }

@@ -10,9 +10,9 @@ package server
 
 import (
 	"maps"
-	"net/http"
 	"slices"
 
+	"connectrpc.com/connect/v2"
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
 	"github.com/truvity/sluis/internal/access"
 )
@@ -57,6 +57,6 @@ func (c *Console) githubGroupGrants() map[string][]*directoryrosterv1.GitHubGrou
 type githubBegin struct{ url, manifest, state string }
 
 // pinFlow pins a flow to this browser for as long as the two clicks have.
-func (c *Console) pinFlow(header http.Header, state string) {
+func (c *Console) pinFlow(header *connect.Header, state string) {
 	header.Add("Set-Cookie", access.ConnectCookie(state, c.deps.SecureCookie, githubFlowWindow).String())
 }

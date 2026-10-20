@@ -5,9 +5,11 @@ import (
 	"errors"
 	"net/http"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/truvity/sluis/audit/internal/rpcmount"
 	"github.com/truvity/sluis/audit/internal/telemetry"
 	auditv1 "github.com/truvity/sluis/audit/sdk/gen/audit/v1"
 	"github.com/truvity/sluis/audit/sdk/gen/audit/v1/auditv1connect"
@@ -20,9 +22,12 @@ type Handler struct {
 	Registry *Registry
 }
 
-// NewHandler returns the path and handler to mount.
-func NewHandler(r *Registry, opts ...connect.HandlerOption) (string, http.Handler) {
-	return auditv1connect.NewRegistryServiceHandler(&Handler{Registry: r}, append(append(wire.HandlerOptions(), telemetry.ConnectOptions()...), opts...)...)
+// NewHandler returns the path and handler to mount. opts are the HTTP
+// handler's, after this repository's own.
+func NewHandler(r *Registry, opts ...connecthttp.Option) (string, http.Handler) {
+	rpc := rpcmount.NewServer(telemetry.ConnectServerInterceptor())
+	auditv1connect.RegisterRegistryServiceHandler(rpc, &Handler{Registry: r})
+	return rpcmount.Handler(rpc, append(wire.HandlerOptions(), opts...)...)
 }
 
 // RegisterCatalogue implements the service.
@@ -31,49 +36,49 @@ func NewHandler(r *Registry, opts ...connect.HandlerOption) (string, http.Handle
 // the application's to fix and it wants the whole list, and a transport error
 // would make a client retry something that will never succeed.
 func (h *Handler) RegisterCatalogue(
-	ctx context.Context, req *connect.Request[auditv1.RegisterCatalogueRequest],
-) (*connect.Response[auditv1.RegisterCatalogueResponse], error) {
-	c := req.Msg.GetCatalogue()
+	ctx context.Context, req *auditv1.RegisterCatalogueRequest,
+) (*auditv1.RegisterCatalogueResponse, error) {
+	c := req.GetCatalogue()
 	if c == nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("no catalogue"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, "no catalogue")
 	}
 	problems, err := h.Registry.Register(ctx, Entry{
 		Source: c.GetSource(), Version: c.GetVersion(),
 		Document: c.GetDocument(), Schemas: c.GetSchemas(),
 	})
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
-	return connect.NewResponse(&auditv1.RegisterCatalogueResponse{Problems: problems}), nil
+	return &auditv1.RegisterCatalogueResponse{Problems: problems}, nil
 }
 
 // GetCatalogue implements the service.
 func (h *Handler) GetCatalogue(
-	ctx context.Context, req *connect.Request[auditv1.GetCatalogueRequest],
-) (*connect.Response[auditv1.GetCatalogueResponse], error) {
-	e, err := h.Registry.Entry(ctx, req.Msg.GetSource(), req.Msg.GetVersion())
+	ctx context.Context, req *auditv1.GetCatalogueRequest,
+) (*auditv1.GetCatalogueResponse, error) {
+	e, err := h.Registry.Entry(ctx, req.GetSource(), req.GetVersion())
 	if errors.Is(err, ErrNotFound) {
-		return nil, connect.NewError(connect.CodeNotFound, err)
+		return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
 	}
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
-	return connect.NewResponse(&auditv1.GetCatalogueResponse{Catalogue: asProto(e)}), nil
+	return &auditv1.GetCatalogueResponse{Catalogue: asProto(e)}, nil
 }
 
 // ListCatalogues implements the service.
 func (h *Handler) ListCatalogues(
-	ctx context.Context, _ *connect.Request[auditv1.ListCataloguesRequest],
-) (*connect.Response[auditv1.ListCataloguesResponse], error) {
+	ctx context.Context, _ *auditv1.ListCataloguesRequest,
+) (*auditv1.ListCataloguesResponse, error) {
 	entries, err := h.Registry.List(ctx)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	out := make([]*auditv1.Catalogue, 0, len(entries))
 	for _, e := range entries {
 		out = append(out, asProto(e))
 	}
-	return connect.NewResponse(&auditv1.ListCataloguesResponse{Catalogues: out}), nil
+	return &auditv1.ListCataloguesResponse{Catalogues: out}, nil
 }
 
 func asProto(e Entry) *auditv1.Catalogue {

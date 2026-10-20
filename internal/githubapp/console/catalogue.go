@@ -2,21 +2,20 @@ package console
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/truvity/sluis/internal/access"
 )
 
 // CheckGitHubCatalogueApp asks GitHub again about one App.
 func (c *Service) CheckGitHubCatalogueApp(
-	ctx context.Context, req *connect.Request[directoryrosterv1.CheckGitHubCatalogueAppRequest],
-) (*connect.Response[directoryrosterv1.CheckGitHubCatalogueAppResponse], error) {
-	id := strings.TrimSpace(req.Msg.GetId())
+	ctx context.Context, req *directoryrosterv1.CheckGitHubCatalogueAppRequest,
+) (*directoryrosterv1.CheckGitHubCatalogueAppResponse, error) {
+	id := strings.TrimSpace(req.GetId())
 	if _, err := c.requireCatalogueApp(ctx, access.RoleOperator, id); err != nil {
 		return nil, err
 	}
@@ -25,16 +24,16 @@ func (c *Service) CheckGitHubCatalogueApp(
 	}
 	specs, err := c.catalogueAppSpecs(ctx, map[string]bool{})
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnavailable, err)
+		return nil, connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
 	}
 	for i := range specs {
 		if specs[i].id != id {
 			continue
 		}
 		app := legacyCatalogueApp(specs[i], c.githubAppView(ctx, specs[i], true))
-		return connect.NewResponse(&directoryrosterv1.CheckGitHubCatalogueAppResponse{App: app}), nil
+		return &directoryrosterv1.CheckGitHubCatalogueAppResponse{App: app}, nil
 	}
-	return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("the catalogue declares no App %q and none was created", id))
+	return nil, connect.Errorf(connect.CodeNotFound, "the catalogue declares no App %q and none was created", id)
 }
 
 // requireCatalogueApp is [Service.requireOrg] for a catalogue App, by the

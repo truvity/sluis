@@ -8,7 +8,7 @@ import (
 	"os"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -140,9 +140,9 @@ func (c Conformance) profile(ctx context.Context, profile string) ([]Conformance
 		pages    int
 	)
 	for len(records) < limit {
-		res, err := c.Client.Search(ctx, connect.NewRequest(&auditv1.SearchRequest{
+		res, err := c.Client.Search(ctx, &auditv1.SearchRequest{
 			Profile: profile, Limit: size, Cursor: cursor,
-		}))
+		})
 		if err != nil {
 			if pages == 0 {
 				return nil, err
@@ -151,9 +151,9 @@ func (c Conformance) profile(ctx context.Context, profile string) ([]Conformance
 			break
 		}
 		pages++
-		records = append(records, res.Msg.GetItems()...)
-		lastNext = res.Msg.GetCursors().GetNext()
-		if len(res.Msg.GetItems()) == 0 || lastNext == "" {
+		records = append(records, res.GetItems()...)
+		lastNext = res.GetCursors().GetNext()
+		if len(res.GetItems()) == 0 || lastNext == "" {
 			break
 		}
 		cursor = lastNext
@@ -232,14 +232,14 @@ func (c Conformance) gets(ctx context.Context, r *report, profile string, record
 		now = c.Now
 	}
 	for _, rec := range samples(records) {
-		res, err := c.Client.Get(ctx, connect.NewRequest(&auditv1.GetRequest{Profile: profile, Id: rec.GetId()}))
+		res, err := c.Client.Get(ctx, &auditv1.GetRequest{Profile: profile, Id: rec.GetId()})
 		if err != nil {
 			r.check("get returns what search returned", false, "%s: %v", rec.GetId(), err)
 			continue
 		}
-		r.check("get returns what search returned", proto.Equal(res.Msg.GetRecord(), rec),
+		r.check("get returns what search returned", proto.Equal(res.GetRecord(), rec),
 			"%s differs between Search and Get", rec.GetId())
-		prov := res.Msg.GetProvenance()
+		prov := res.GetProvenance()
 		r.check("get says where the copy is", prov.GetObjectKey() != "", "%s has no object key", rec.GetId())
 		if c.VerifiedBefore > 0 && rec.GetOccurredAt().AsTime().Before(now().Add(-c.VerifiedBefore)) {
 			r.check("old records are covered by a verified digest", prov.GetVerifiedAt() != nil,
@@ -251,13 +251,13 @@ func (c Conformance) gets(ctx context.Context, r *report, profile string, record
 func (c Conformance) filters(ctx context.Context, r *report, profile string, records []*auditv1.Record) {
 	sample := records[len(records)/2]
 	search := func(f *auditv1.Filter) ([]*auditv1.Record, error) {
-		res, err := c.Client.Search(ctx, connect.NewRequest(&auditv1.SearchRequest{
+		res, err := c.Client.Search(ctx, &auditv1.SearchRequest{
 			Profile: profile, Filter: []*auditv1.Filter{f}, Limit: 100,
-		}))
+		})
 		if err != nil {
 			return nil, err
 		}
-		return res.Msg.GetItems(), nil
+		return res.GetItems(), nil
 	}
 	equal := func(v string) *auditv1.StringPredicate {
 		return &auditv1.StringPredicate{Operator: &auditv1.StringPredicate_Equal{Equal: v}}
@@ -291,19 +291,19 @@ func (c Conformance) filters(ctx context.Context, r *report, profile string, rec
 }
 
 func (c Conformance) refusals(ctx context.Context, r *report, profile string, size int32) {
-	first, err := c.Client.Search(ctx, connect.NewRequest(&auditv1.SearchRequest{Profile: profile, Limit: size}))
+	first, err := c.Client.Search(ctx, &auditv1.SearchRequest{Profile: profile, Limit: size})
 	if err == nil {
-		next := first.Msg.GetCursors().GetNext()
-		_, err = c.Client.Search(ctx, connect.NewRequest(&auditv1.SearchRequest{
+		next := first.GetCursors().GetNext()
+		_, err = c.Client.Search(ctx, &auditv1.SearchRequest{
 			Profile: profile, Limit: size, Cursor: next,
 			Filter: []*auditv1.Filter{{Action: &auditv1.StringPredicate{
 				Operator: &auditv1.StringPredicate_Equal{Equal: "conformance.no-such-action"},
 			}}},
-		}))
+		})
 		r.check("a cursor is refused with another query", connect.CodeOf(err) == connect.CodeInvalidArgument,
 			"the service answered %v", codeOrOK(err))
 	}
-	_, err = c.Client.Get(ctx, connect.NewRequest(&auditv1.GetRequest{Profile: profile, Id: "conformance-no-such-record"}))
+	_, err = c.Client.Get(ctx, &auditv1.GetRequest{Profile: profile, Id: "conformance-no-such-record"})
 	r.check("an unknown id is not found", connect.CodeOf(err) == connect.CodeNotFound, "the service answered %v", codeOrOK(err))
 }
 

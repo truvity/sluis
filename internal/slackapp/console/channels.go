@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
@@ -18,6 +18,7 @@ import (
 	"github.com/truvity/sluis/internal/consoleauthz"
 	"github.com/truvity/sluis/internal/consolecall"
 	"github.com/truvity/sluis/internal/port"
+	"github.com/truvity/sluis/internal/rpcmount"
 	"github.com/truvity/sluis/internal/slackapp"
 	"github.com/truvity/sluis/internal/slackroster/connection"
 	"github.com/truvity/sluis/internal/slackroster/reconcile"
@@ -28,7 +29,7 @@ import (
 func (c *Service) slackChannelStore() (ChannelRecords, error) {
 	if c.d().SlackChannels == nil {
 		return nil, connect.NewError(connect.CodeFailedPrecondition,
-			errors.New("this deployment keeps no state in Kubernetes, so a channel's record would not survive a restart"))
+			"this deployment keeps no state in Kubernetes, so a channel's record would not survive a restart")
 	}
 	return c.d().SlackChannels, nil
 }
@@ -43,9 +44,9 @@ func channelError(err error) error {
 		return err
 	case errors.Is(err, connection.ErrChannelConflict):
 		return connect.NewError(connect.CodeAborted,
-			errors.New("the console channel records were changed by someone else while this was written: reload and try again"))
+			"the console channel records were changed by someone else while this was written: reload and try again")
 	default:
-		return connect.NewError(connect.CodeUnavailable, err)
+		return connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
 	}
 }
 
@@ -156,7 +157,7 @@ func (c *Service) ListSlackChannels(
 	var records []connection.ChannelRecord
 	if c.d().SlackChannels != nil {
 		if records, err = c.d().SlackChannels.List(ctx); err != nil {
-			return nil, connect.NewError(connect.CodeUnavailable, err)
+			return nil, connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
 		}
 	}
 	for i := range records {
@@ -221,7 +222,7 @@ func (c *Service) sharedClashesWithConsole(ctx context.Context, want reconcile.S
 	}
 	records, err := c.d().SlackChannels.List(ctx)
 	if err != nil {
-		return connect.NewError(connect.CodeUnavailable, err)
+		return connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
 	}
 	for i := range records {
 		rec := &records[i]
@@ -229,8 +230,8 @@ func (c *Service) sharedClashesWithConsole(ctx context.Context, want reconcile.S
 			continue
 		}
 		if rec.Name == want.Name || (want.ChannelID != "" && rec.Channel.ChannelID == want.ChannelID) {
-			return connect.NewError(connect.CodeAlreadyExists, fmt.Errorf(
-				"the channel %s is already managed in %s as an ordinary console channel: delete that record first, a channel is managed one way", rec.Name, want.Host))
+			return connect.Errorf(connect.CodeAlreadyExists,
+				"the channel %s is already managed in %s as an ordinary console channel: delete that record first, a channel is managed one way", rec.Name, want.Host)
 		}
 	}
 	return nil
@@ -244,7 +245,7 @@ func (c *Service) consoleClashesWithShared(ctx context.Context, want reconcile.C
 	}
 	records, err := c.d().SlackShared.List(ctx)
 	if err != nil {
-		return connect.NewError(connect.CodeUnavailable, err)
+		return connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
 	}
 	for i := range records {
 		rec := &records[i]
@@ -252,8 +253,8 @@ func (c *Service) consoleClashesWithShared(ctx context.Context, want reconcile.C
 			continue
 		}
 		if rec.Name == want.Name || (want.ChannelID != "" && rec.Channel.ChannelID == want.ChannelID) {
-			return connect.NewError(connect.CodeAlreadyExists, fmt.Errorf(
-				"the channel %s is already managed in %s as a Slack Connect channel: delete that record first, a channel is managed one way", rec.Name, want.Workspace))
+			return connect.Errorf(connect.CodeAlreadyExists,
+				"the channel %s is already managed in %s as a Slack Connect channel: delete that record first, a channel is managed one way", rec.Name, want.Workspace)
 		}
 	}
 	return nil
@@ -263,7 +264,7 @@ func (c *Service) consoleClashesWithShared(ctx context.Context, want reconcile.C
 // the same the controller makes at each pass.
 func (c *Service) validateConsole(ctx context.Context, want reconcile.ConsoleChannel, book Book) error {
 	if err := want.Validate(c.d().Authorizer.Policy().Declared()); err != nil {
-		return connect.NewError(connect.CodeInvalidArgument, err)
+		return connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
 	return c.checkSources(ctx, want.Sources, want.Members, book.Owner(want.Workspace), true)
 }
@@ -299,13 +300,13 @@ func (c *Service) CreateSlackChannel(
 		seen, found := discoveredOrdinaryIn(reports, want.Workspace, want.ChannelID)
 		switch {
 		case !found:
-			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
+			return nil, rpcmount.NewError(connect.CodeInvalidArgument, fmt.Errorf(
 				"the channel %s has not been discovered in %s: only a channel its bot can see is taken under management; "+
 					"if it is private there, invite the bot and refresh", want.ChannelID, want.Workspace))
 		case seen.Private != want.Private:
-			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
+			return nil, connect.Errorf(connect.CodeInvalidArgument,
 				"the channel %s is %s in Slack and the record says %s: the roster never changes a channel's visibility",
-				want.ChannelID, visibilityWord(seen.Private), visibilityWord(want.Private)))
+				want.ChannelID, visibilityWord(seen.Private), visibilityWord(want.Private))
 		}
 	}
 	actor := caller.Actor
@@ -313,13 +314,13 @@ func (c *Service) CreateSlackChannel(
 	want.CreatedBy, want.CreatedAt, want.UpdatedBy, want.UpdatedAt = actor, now, actor, now
 	err = store.Apply(ctx, want.Workspace, want.Name, func(current *reconcile.ConsoleChannel, all []connection.ChannelRecord) (*reconcile.ConsoleChannel, error) {
 		if current != nil {
-			return nil, connect.NewError(connect.CodeAlreadyExists, fmt.Errorf(
-				"a console channel named %s already exists in %s: edit it, or pick another name", want.Name, want.Workspace))
+			return nil, connect.Errorf(connect.CodeAlreadyExists,
+				"a console channel named %s already exists in %s: edit it, or pick another name", want.Name, want.Workspace)
 		}
 		for i := range all {
 			if all[i].Err == nil && want.ChannelID != "" && all[i].Workspace == want.Workspace && all[i].Channel.ChannelID == want.ChannelID {
-				return nil, connect.NewError(connect.CodeAlreadyExists, fmt.Errorf(
-					"the channel %s is already managed in %s as %s", want.ChannelID, want.Workspace, all[i].Name))
+				return nil, connect.Errorf(connect.CodeAlreadyExists,
+					"the channel %s is already managed in %s as %s", want.ChannelID, want.Workspace, all[i].Name)
 			}
 		}
 		return &want, nil
@@ -355,7 +356,7 @@ func discoveredOrdinaryIn(reports map[string]status.Workspace, workspace, channe
 // errConsoleImmutable is what a change of workspace, name, id or visibility
 // is answered with.
 func errConsoleImmutable(what, was, got string) error {
-	return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
+	return rpcmount.NewError(connect.CodeInvalidArgument, fmt.Errorf(
 		"a console channel's %s cannot change (it is %q, the request says %q): create a new record with the %s you want, "+
 			"and delete this one if the old channel should no longer be managed", what, was, got, what))
 }
@@ -384,7 +385,7 @@ func (c *Service) UpdateSlackChannel(
 	var written reconcile.ConsoleChannel
 	err = store.Apply(ctx, want.Workspace, want.Name, func(current *reconcile.ConsoleChannel, _ []connection.ChannelRecord) (*reconcile.ConsoleChannel, error) {
 		if current == nil {
-			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("there is no console channel named %s in %s", want.Name, want.Workspace))
+			return nil, connect.Errorf(connect.CodeNotFound, "there is no console channel named %s in %s", want.Name, want.Workspace)
 		}
 		if want.ChannelID != current.ChannelID {
 			return nil, errConsoleImmutable("channel id", current.ChannelID, want.ChannelID)
@@ -472,7 +473,7 @@ func (c *Service) DeleteSlackChannel(
 	var gone reconcile.ConsoleChannel
 	err = store.Apply(ctx, workspace, name, func(current *reconcile.ConsoleChannel, _ []connection.ChannelRecord) (*reconcile.ConsoleChannel, error) {
 		if current == nil {
-			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("there is no console channel named %s in %s", name, workspace))
+			return nil, connect.Errorf(connect.CodeNotFound, "there is no console channel named %s in %s", name, workspace)
 		}
 		gone = *current
 		return nil, nil
@@ -497,7 +498,7 @@ type archiveTarget struct{ id, token string }
 
 // byHand is the refusal that sends the operator to Slack: nothing was changed.
 func byHand(format string, args ...any) error {
-	return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(format+"; nothing was changed", args...))
+	return rpcmount.NewError(connect.CodeFailedPrecondition, fmt.Errorf(format+"; nothing was changed", args...))
 }
 
 // slackShared reports whether Slack says a channel is shared beyond its own
@@ -539,7 +540,7 @@ func (c *Service) checkArchive(ctx context.Context, store ChannelRecords, worksp
 	}
 	records, err := store.List(ctx)
 	if err != nil {
-		return archiveTarget{}, connect.NewError(connect.CodeUnavailable, err)
+		return archiveTarget{}, connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
 	}
 	for i := range records {
 		if rec := &records[i]; rec.Err == nil && rec.Workspace == workspace && rec.Name == name && rec.Channel.ChannelID != "" {
@@ -555,7 +556,7 @@ func (c *Service) checkArchive(ctx context.Context, store ChannelRecords, worksp
 	}
 	record, credential, found, err := ws.Get(ctx, workspace)
 	if err != nil {
-		return archiveTarget{}, connect.NewError(connect.CodeUnavailable, err)
+		return archiveTarget{}, connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
 	}
 	if !found || credential.BotToken == "" {
 		return archiveTarget{}, byHand("the workspace has no bot token to act with: archive %s in Slack by hand", name)
@@ -567,7 +568,7 @@ func (c *Service) checkArchive(ctx context.Context, store ChannelRecords, worksp
 	case errors.Is(err, slackapp.ErrChannelNotFound), errors.Is(err, slackapp.ErrNotInChannel):
 		return archiveTarget{}, byHand("the bot cannot see %s (a private channel it is not in): archive it in Slack by hand", name)
 	case err != nil:
-		return archiveTarget{}, connect.NewError(connect.CodeUnavailable, fmt.Errorf(
+		return archiveTarget{}, rpcmount.NewError(connect.CodeUnavailable, fmt.Errorf(
 			"no answer from Slack about %s, so it was not archived and nothing was changed: %w", name, err))
 	case slackShared(info, orDefault(record.TeamID, report.Team)):
 		return archiveTarget{}, byHand("%s is a Slack Connect channel: archiving closes it for every organisation in it; archive it in Slack by hand", name)

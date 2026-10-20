@@ -11,7 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 	"google.golang.org/protobuf/types/known/structpb"
 
 	"github.com/truvity/sluis/audit/index"
@@ -123,7 +124,7 @@ func signedIn(t *testing.T, url string) auditv1connect.QueryServiceClient {
 	if err := os.WriteFile(token, []byte("t\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	return auditv1connect.NewQueryServiceClient(auth.TokenFile(token), url)
+	return auditv1connect.NewQueryServiceClient(connect.NewClient(connecthttp.NewTransport(auth.TokenFile(token), url)))
 }
 
 func scan(s store.Store) index.Searcher { return &s3scan.Scanner{Store: s} }
@@ -180,7 +181,7 @@ func TestConformanceCatchesAServiceThatBreaksItsOrder(t *testing.T) {
 // A caller the service refuses has nothing to check: the run fails rather
 // than reporting an empty profile as conformant.
 func TestConformanceRefusedIsAnError(t *testing.T) {
-	anonymous := auditv1connect.NewQueryServiceClient(http.DefaultClient, deployment(t, scan))
+	anonymous := auditv1connect.NewQueryServiceClient(connect.NewClient(connecthttp.NewTransport(http.DefaultClient, deployment(t, scan))))
 	_, err := cli.Conformance{Client: anonymous, Profiles: []string{"security"}, Out: &bytes.Buffer{}}.Run(context.Background())
 	if connect.CodeOf(err) != connect.CodeUnauthenticated {
 		t.Fatalf("an unauthenticated run: %v", err)

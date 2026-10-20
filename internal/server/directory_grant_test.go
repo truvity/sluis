@@ -7,7 +7,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 
 	"github.com/truvity/sluis/backend/fake"
 	directoryv1 "github.com/truvity/sluis/gen/directory/v1"
@@ -47,15 +48,19 @@ func serveTwoTenants(t *testing.T, grant *server.Grant) directoryv1connect.Direc
 	h.Wait()
 
 	mux := http.NewServeMux()
-	mux.Handle(directoryv1connect.NewDirectoryServiceHandler(server.NewDirectory(h)))
-	// The grant normally arrives from the guard, which is not in this
-	// test's way: what is under test is what the handlers do with one.
+	srv2 := connect.NewServer()
+	directoryv1connect.RegisterDirectoryServiceHandler(srv2, server.NewDirectory(h))
+	connecthttp.
+		// The grant normally arrives from the guard, which is not in this
+		// test's way: what is under test is what the handlers do with one.
+		Mount(mux, srv2)
+
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		mux.ServeHTTP(w, r.WithContext(server.WithGrant(r.Context(), grant)))
 	}))
 	t.Cleanup(srv.Close)
 
-	return directoryv1connect.NewDirectoryServiceClient(srv.Client(), srv.URL)
+	return directoryv1connect.NewDirectoryServiceClient(connect.NewClient(connecthttp.NewTransport(srv.Client(), srv.URL)))
 }
 
 // Discovery itself is scoped. Without this a consumer granted one
@@ -65,24 +70,24 @@ func TestDescribeShowsOnlyTheGrantedDirectory(t *testing.T) {
 	t.Parallel()
 
 	full := serveTwoTenants(t, nil)
-	got, err := full.Describe(context.Background(), connect.NewRequest(&directoryv1.DescribeRequest{}))
+	got, err := full.Describe(context.Background(), &directoryv1.DescribeRequest{})
 	if err != nil {
 		t.Fatalf("Describe: %v", err)
 	}
-	if len(got.Msg.GetDomains()) != 2 {
-		t.Fatalf("an ungranted consumer sees %v, want both domains", got.Msg.GetDomains())
+	if len(got.GetDomains()) != 2 {
+		t.Fatalf("an ungranted consumer sees %v, want both domains", got.GetDomains())
 	}
 
 	scoped := serveTwoTenants(t, &server.Grant{Domains: []string{"example.com"}})
-	got, err = scoped.Describe(context.Background(), connect.NewRequest(&directoryv1.DescribeRequest{}))
+	got, err = scoped.Describe(context.Background(), &directoryv1.DescribeRequest{})
 	if err != nil {
 		t.Fatalf("Describe: %v", err)
 	}
-	if len(got.Msg.GetDomains()) != 1 || got.Msg.GetDomains()[0] != "example.com" {
-		t.Errorf("a scoped consumer sees %v, want only its own domain", got.Msg.GetDomains())
+	if len(got.GetDomains()) != 1 || got.GetDomains()[0] != "example.com" {
+		t.Errorf("a scoped consumer sees %v, want only its own domain", got.GetDomains())
 	}
-	if len(got.Msg.GetServed()) != 1 {
-		t.Errorf("served = %v, want only the granted domain", got.Msg.GetServed())
+	if len(got.GetServed()) != 1 {
+		t.Errorf("served = %v, want only the granted domain", got.GetServed())
 	}
 }
 
@@ -96,32 +101,32 @@ func TestOutsideTheGrantIsIndistinguishableFromUnserved(t *testing.T) {
 	client := serveTwoTenants(t, &server.Grant{Domains: []string{"example.com"}})
 
 	outside, err := client.ResolveUser(context.Background(),
-		connect.NewRequest(&directoryv1.ResolveUserRequest{Email: "carol@other.example"}))
+		&directoryv1.ResolveUserRequest{Email: "carol@other.example"})
 	if err != nil {
 		t.Fatalf("ResolveUser outside the grant returned an error rather than an answer: %v", err)
 	}
-	if outside.Msg.GetInDomain() || outside.Msg.GetFound() || len(outside.Msg.GetGroups()) != 0 {
-		t.Errorf("outside the grant = %+v, want the unserved-domain answer", outside.Msg)
+	if outside.GetInDomain() || outside.GetFound() || len(outside.GetGroups()) != 0 {
+		t.Errorf("outside the grant = %+v, want the unserved-domain answer", outside)
 	}
 
 	unserved, err := client.ResolveUser(context.Background(),
-		connect.NewRequest(&directoryv1.ResolveUserRequest{Email: "nobody@nowhere.example"}))
+		&directoryv1.ResolveUserRequest{Email: "nobody@nowhere.example"})
 	if err != nil {
 		t.Fatalf("ResolveUser: %v", err)
 	}
-	if unserved.Msg.GetInDomain() != outside.Msg.GetInDomain() ||
-		unserved.Msg.GetFound() != outside.Msg.GetFound() ||
-		unserved.Msg.GetAuthoritative() != outside.Msg.GetAuthoritative() {
+	if unserved.GetInDomain() != outside.GetInDomain() ||
+		unserved.GetFound() != outside.GetFound() ||
+		unserved.GetAuthoritative() != outside.GetAuthoritative() {
 		t.Errorf("a withheld domain answers %+v and an unserved one %+v — the difference tells a consumer the domain exists",
-			outside.Msg, unserved.Msg)
+			outside, unserved)
 	}
 
 	inside, err := client.ResolveUser(context.Background(),
-		connect.NewRequest(&directoryv1.ResolveUserRequest{Email: "alice@example.com"}))
+		&directoryv1.ResolveUserRequest{Email: "alice@example.com"})
 	if err != nil {
 		t.Fatalf("ResolveUser: %v", err)
 	}
-	if !inside.Msg.GetFound() {
+	if !inside.GetFound() {
 		t.Error("the granted domain stopped answering")
 	}
 }
@@ -133,26 +138,26 @@ func TestListGroupsStaysInsideTheGrant(t *testing.T) {
 
 	client := serveTwoTenants(t, &server.Grant{Domains: []string{"example.com"}})
 
-	all, err := client.ListGroups(context.Background(), connect.NewRequest(&directoryv1.ListGroupsRequest{}))
+	all, err := client.ListGroups(context.Background(), &directoryv1.ListGroupsRequest{})
 	if err != nil {
 		t.Fatalf("ListGroups: %v", err)
 	}
-	for _, group := range all.Msg.GetGroups() {
+	for _, group := range all.GetGroups() {
 		if group.GetDomain() != "example.com" {
 			t.Errorf("listing every group returned %q from outside the grant", group.GetEmail())
 		}
 	}
-	if len(all.Msg.GetGroups()) == 0 {
+	if len(all.GetGroups()) == 0 {
 		t.Error("listing every group returned nothing inside the grant either")
 	}
 
 	other, err := client.ListGroups(context.Background(),
-		connect.NewRequest(&directoryv1.ListGroupsRequest{Domain: "other.example"}))
+		&directoryv1.ListGroupsRequest{Domain: "other.example"})
 	if err != nil {
 		t.Fatalf("ListGroups: %v", err)
 	}
-	if len(other.Msg.GetGroups()) != 0 || len(other.Msg.GetServed()) != 0 {
-		t.Errorf("naming another company's domain returned %+v, want the unserved answer", other.Msg)
+	if len(other.GetGroups()) != 0 || len(other.GetServed()) != 0 {
+		t.Errorf("naming another company's domain returned %+v, want the unserved answer", other)
 	}
 }
 
@@ -167,28 +172,28 @@ func TestAGroupGrantNarrowsWhatAnAddressHolds(t *testing.T) {
 	})
 
 	got, err := client.ResolveUser(context.Background(),
-		connect.NewRequest(&directoryv1.ResolveUserRequest{Email: "alice@example.com"}))
+		&directoryv1.ResolveUserRequest{Email: "alice@example.com"})
 	if err != nil {
 		t.Fatalf("ResolveUser: %v", err)
 	}
-	if !got.Msg.GetFound() {
+	if !got.GetFound() {
 		t.Fatal("the address stopped resolving")
 	}
-	for _, group := range got.Msg.GetGroups() {
+	for _, group := range got.GetGroups() {
 		if group != "team-eng@example.com" {
 			t.Errorf("resolved groups included %q, which is outside the grant", group)
 		}
 	}
-	if len(got.Msg.GetGroups()) != 1 {
-		t.Errorf("resolved groups = %v, want only the granted one", got.Msg.GetGroups())
+	if len(got.GetGroups()) != 1 {
+		t.Errorf("resolved groups = %v, want only the granted one", got.GetGroups())
 	}
 
 	group, err := client.GetGroup(context.Background(),
-		connect.NewRequest(&directoryv1.GetGroupRequest{Email: "platform@example.com"}))
+		&directoryv1.GetGroupRequest{Email: "platform@example.com"})
 	if err != nil {
 		t.Fatalf("GetGroup: %v", err)
 	}
-	if group.Msg.GetFound() {
+	if group.GetFound() {
 		t.Error("a group outside the grant was found, which tells the consumer it exists")
 	}
 }

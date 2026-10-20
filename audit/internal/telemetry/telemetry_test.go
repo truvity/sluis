@@ -11,7 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -23,6 +24,8 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/truvity/sluis/audit/internal/telemetry"
+	auditv1 "github.com/truvity/sluis/audit/sdk/gen/audit/v1"
+	"github.com/truvity/sluis/audit/sdk/gen/audit/v1/auditv1connect"
 	sdktelemetry "github.com/truvity/sluis/audit/sdk/telemetry"
 )
 
@@ -287,11 +290,14 @@ func TestTheResourceNamesTheLambdaEnvironment(t *testing.T) {
 	}
 }
 
-type jsonCodec struct{}
+// refusingRegistry refuses every call with a message that names a person.
+type refusingRegistry struct {
+	auditv1connect.UnimplementedRegistryServiceHandler
+}
 
-func (jsonCodec) Name() string                    { return "json" }
-func (jsonCodec) Marshal(any) ([]byte, error)     { return []byte("{}"), nil }
-func (jsonCodec) Unmarshal(_ []byte, _ any) error { return nil }
+func (refusingRegistry) RegisterCatalogue(context.Context, *auditv1.RegisterCatalogueRequest) (*auditv1.RegisterCatalogueResponse, error) {
+	return nil, connect.NewError(connect.CodePermissionDenied, "alice@example.com is not allowed")
+}
 
 // A span from an otelconnect call (v0.10 sets rpc.system.name, rpc.method,
 // rpc.response.status_code and, on a failure, error.type) keeps them through the
@@ -303,16 +309,15 @@ func TestAConnectSpanKeepsItsRPCAttributes(t *testing.T) {
 	otel.SetTracerProvider(provider)
 	t.Cleanup(func() { otel.SetTracerProvider(previous); _ = provider.Shutdown(context.Background()) })
 
+	rpc := connect.NewServer(sdktelemetry.ConnectServerInterceptor())
+	auditv1connect.RegisterRegistryServiceHandler(rpc, refusingRegistry{})
 	mux := http.NewServeMux()
-	mux.Handle("/pkg.Service/Method", connect.NewUnaryHandler("/pkg.Service/Method",
-		func(context.Context, *connect.Request[struct{}]) (*connect.Response[struct{}], error) {
-			return nil, connect.NewError(connect.CodePermissionDenied, errors.New("alice@example.com is not allowed"))
-		}, append([]connect.HandlerOption{connect.WithCodec(jsonCodec{})}, sdktelemetry.ConnectOptions()...)...))
+	connecthttp.Mount(mux, rpc)
 	server := httptest.NewServer(mux)
 	defer server.Close()
-	client := connect.NewClient[struct{}, struct{}](server.Client(), server.URL+"/pkg.Service/Method",
-		append([]connect.ClientOption{connect.WithCodec(jsonCodec{})}, sdktelemetry.ConnectClientOptions()...)...)
-	if _, err := client.CallUnary(context.Background(), connect.NewRequest(&struct{}{})); err == nil {
+	client := auditv1connect.NewRegistryServiceClient(connect.NewClient(
+		connecthttp.NewTransport(server.Client(), server.URL), sdktelemetry.ConnectClientInterceptor()))
+	if _, err := client.RegisterCatalogue(context.Background(), &auditv1.RegisterCatalogueRequest{}); err == nil {
 		t.Fatal("the handler's refusal did not arrive")
 	}
 
@@ -326,7 +331,7 @@ func TestAConnectSpanKeepsItsRPCAttributes(t *testing.T) {
 			got[string(kv.Key)] = kv.Value.String()
 		}
 		for k, v := range map[string]string{
-			"rpc.system.name": "connectrpc", "rpc.method": "pkg.Service/Method",
+			"rpc.system.name": "connectrpc", "rpc.method": "audit.v1.RegistryService/RegisterCatalogue",
 			"rpc.response.status_code": "PERMISSION_DENIED", "error.type": "PERMISSION_DENIED",
 		} {
 			if got[k] != v {

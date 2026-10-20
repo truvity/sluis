@@ -10,9 +10,11 @@ import (
 	"context"
 	"net/http"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/truvity/sluis/audit/internal/rpcmount"
 	"github.com/truvity/sluis/audit/internal/telemetry"
 	auditv1 "github.com/truvity/sluis/audit/sdk/gen/audit/v1"
 	"github.com/truvity/sluis/audit/sdk/gen/audit/v1/auditv1connect"
@@ -27,26 +29,29 @@ type Handler struct {
 	sink sink.Sink
 }
 
-// NewHandler returns the path and handler to mount.
-func NewHandler(s sink.Sink, opts ...connect.HandlerOption) (string, http.Handler) {
-	return auditv1connect.NewSinkServiceHandler(&Handler{sink: s}, append(append(wire.HandlerOptions(), telemetry.ConnectOptions()...), opts...)...)
+// NewHandler returns the path and handler to mount. opts are the HTTP
+// handler's, after this repository's own.
+func NewHandler(s sink.Sink, opts ...connecthttp.Option) (string, http.Handler) {
+	rpc := rpcmount.NewServer(telemetry.ConnectServerInterceptor())
+	auditv1connect.RegisterSinkServiceHandler(rpc, &Handler{sink: s})
+	return rpcmount.Handler(rpc, append(wire.HandlerOptions(), opts...)...)
 }
 
 // Write implements the service.
 func (h *Handler) Write(
-	ctx context.Context, req *connect.Request[auditv1.WriteRequest],
-) (*connect.Response[auditv1.WriteResponse], error) {
+	ctx context.Context, req *auditv1.WriteRequest,
+) (*auditv1.WriteResponse, error) {
 	in := &sink.Request{
-		Records:  req.Msg.GetRecords(),
-		Delivery: req.Msg.GetDelivery(),
+		Records:  req.GetRecords(),
+		Delivery: req.GetDelivery(),
 	}
 	ctx, done := sink.Observe(ctx, sink.TransportConnectServer, trace.SpanKindInternal, in)
 	res, err := h.sink.Write(ctx, in)
 	done(res, err)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnavailable, err)
+		return nil, connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
 	}
-	return connect.NewResponse(toProto(res)), nil
+	return toProto(res), nil
 }
 
 func toProto(r *sink.Result) *auditv1.WriteResponse {

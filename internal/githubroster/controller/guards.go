@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/truvity/sluis/audit/sdk/record"
 	"github.com/truvity/sluis/storage/logattr"
 
@@ -63,12 +62,12 @@ func (c *Controller) confirmations(ctx context.Context) map[string]string {
 	if c.deps.Console == nil {
 		return out
 	}
-	response, err := c.deps.Console.GetGitHubStatus(ctx, connect.NewRequest(&directoryrosterv1.GetGitHubStatusRequest{}))
+	response, err := c.deps.Console.GetGitHubStatus(ctx, &directoryrosterv1.GetGitHubStatusRequest{})
 	if err != nil {
 		c.deps.Log.WarnContext(ctx, "confirmations could not be read; a tripped breaker stays tripped", logattr.SafeError("error", err))
 		return out
 	}
-	for _, org := range response.Msg.GetOrganisations() {
+	for _, org := range response.GetOrganisations() {
 		if confirmation := org.GetRemovalConfirmation(); confirmation != nil {
 			out[org.GetOrg()] = confirmation.GetFingerprint()
 		}
@@ -140,10 +139,10 @@ func (c *Controller) matchProfiles(ctx context.Context, token string, members []
 // liveInDirectory is whether the directory, vouching, has a live account
 // at the address.
 func (c *Controller) liveInDirectory(ctx context.Context, email string) bool {
-	response, err := c.deps.Access.Explain(ctx, connect.NewRequest(&directoryrosterv1.ExplainRequest{Email: strings.ToLower(email)}))
+	response, err := c.deps.Access.Explain(ctx, &directoryrosterv1.ExplainRequest{Email: strings.ToLower(email)})
 	if err != nil {
 		return false
 	}
-	msg := response.Msg
+	msg := response
 	return msg.GetInDomain() && msg.GetAuthoritative() && msg.GetFound() && !msg.GetSuspended()
 }

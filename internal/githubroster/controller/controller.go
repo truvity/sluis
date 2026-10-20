@@ -25,7 +25,6 @@ import (
 	"sync"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/truvity/sluis/audit/sdk/record"
 	"github.com/truvity/sluis/storage/logattr"
 
@@ -489,24 +488,24 @@ func (c *Controller) directory() rails.Directory {
 		Guard: rails.PolicyGuard{Digest: c.deps.Policy},
 		Log:   c.deps.Log,
 		ListHolders: func(ctx context.Context, group string) ([]rails.Holder, string, bool, error) {
-			response, err := c.deps.Access.ListHolders(ctx, connect.NewRequest(&directoryrosterv1.ListHoldersRequest{
+			response, err := c.deps.Access.ListHolders(ctx, &directoryrosterv1.ListHoldersRequest{
 				Group: group, Limit: holdersLimit,
-			}))
+			})
 			if err != nil {
 				return nil, "", false, err
 			}
 			var holders []rails.Holder
-			for _, holder := range response.Msg.GetHolders() {
+			for _, holder := range response.GetHolders() {
 				holders = append(holders, rails.Holder{Email: holder.GetEmail(), Live: holder.GetLive()})
 			}
-			return holders, response.Msg.GetPolicyDigest(), response.Msg.GetTruncated(), nil
+			return holders, response.GetPolicyDigest(), response.GetTruncated(), nil
 		},
 		Explain: func(ctx context.Context, email string) (rails.Vouch, string, error) {
-			response, err := c.deps.Access.Explain(ctx, connect.NewRequest(&directoryrosterv1.ExplainRequest{Email: email}))
+			response, err := c.deps.Access.Explain(ctx, &directoryrosterv1.ExplainRequest{Email: email})
 			if err != nil {
 				return rails.Vouch{}, "", err
 			}
-			msg := response.Msg
+			msg := response
 			vouch := rails.Vouch{
 				Authoritative: msg.GetAuthoritative(),
 				Found:         msg.GetFound(),

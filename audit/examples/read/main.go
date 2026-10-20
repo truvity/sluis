@@ -19,7 +19,8 @@ import (
 	"os"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	auditv1 "github.com/truvity/sluis/audit/sdk/gen/audit/v1"
@@ -44,10 +45,10 @@ func (b bearer) RoundTrip(r *http.Request) (*http.Response, error) {
 
 func run() error {
 	ctx := context.Background()
-	client := auditv1connect.NewQueryServiceClient(
+	client := auditv1connect.NewQueryServiceClient(connect.NewClient(connecthttp.NewTransport(
 		&http.Client{Transport: bearer{os.Getenv("AUDIT_BEARER")}},
 		os.Getenv("AUDIT_QUERY"),
-	)
+	)))
 
 	// Failed and denied credential actions in the last day, newest first.
 	// The filter is OR-joined conjunctions of typed predicates; the grant is
@@ -70,19 +71,19 @@ func run() error {
 	// which is what a tail is.
 	var first string
 	for {
-		page, err := client.Search(ctx, connect.NewRequest(query))
+		page, err := client.Search(ctx, query)
 		if err != nil {
 			return err
 		}
-		for _, r := range page.Msg.GetItems() {
+		for _, r := range page.GetItems() {
 			fmt.Printf("%s %s %s %s\n", r.GetOccurredAt().AsTime().Format(time.RFC3339),
 				r.GetAction(), r.GetActor().GetId(), r.GetOutcome().GetResult())
 			if first == "" {
 				first = r.GetId()
 			}
 		}
-		next := page.Msg.GetCursors().GetNext()
-		if len(page.Msg.GetItems()) < int(query.GetLimit()) || next == "" {
+		next := page.GetCursors().GetNext()
+		if len(page.GetItems()) < int(query.GetLimit()) || next == "" {
 			break
 		}
 		query.Cursor = next
@@ -93,11 +94,11 @@ func run() error {
 
 	// One record, with where the copy lives and whether a seal has vouched for
 	// it (the digest and the time stay empty until seals exist).
-	got, err := client.Get(ctx, connect.NewRequest(&auditv1.GetRequest{Profile: "security", Id: first}))
+	got, err := client.Get(ctx, &auditv1.GetRequest{Profile: "security", Id: first})
 	if err != nil {
 		return err
 	}
-	p := got.Msg.GetProvenance()
+	p := got.GetProvenance()
 	fmt.Printf("%s is line %d of %s; digest %q, verified %s\n",
 		first, p.GetLine(), p.GetObjectKey(), p.GetDigestId(), p.GetVerifiedAt().AsTime().Format(time.RFC3339))
 	return nil

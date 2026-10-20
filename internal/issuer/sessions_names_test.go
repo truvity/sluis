@@ -8,7 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 
 	accessissuerv1 "github.com/truvity/sluis/gen/accessissuer/v1"
 	"github.com/truvity/sluis/gen/accessissuer/v1/accessissuerv1connect"
@@ -22,11 +23,11 @@ type namedSessions struct {
 }
 
 func (namedSessions) ListSessions(
-	_ context.Context, req *connect.Request[accessissuerv1.ListSessionsRequest],
-) (*connect.Response[accessissuerv1.ListSessionsResponse], error) {
-	return connect.NewResponse(&accessissuerv1.ListSessionsResponse{
-		Sessions: []*accessissuerv1.Session{{Identity: req.Msg.GetIdentity()}},
-	}), nil
+	_ context.Context, req *accessissuerv1.ListSessionsRequest,
+) (*accessissuerv1.ListSessionsResponse, error) {
+	return &accessissuerv1.ListSessionsResponse{
+		Sessions: []*accessissuerv1.Session{{Identity: req.GetIdentity()}},
+	}, nil
 }
 
 // The session service answers under sluis.v1 and under the legacy
@@ -40,21 +41,21 @@ func TestTheSessionServiceAnswersUnderBothNames(t *testing.T) {
 	server := httptest.NewServer(mux)
 	t.Cleanup(server.Close)
 
-	current, err := sluisv1connect.NewSessionServiceClient(server.Client(), server.URL).
-		ListSessions(t.Context(), connect.NewRequest(&sluisv1.ListSessionsRequest{Identity: "ada"}))
+	current, err := sluisv1connect.NewSessionServiceClient(connect.NewClient(connecthttp.NewTransport(server.Client(), server.URL))).
+		ListSessions(t.Context(), &sluisv1.ListSessionsRequest{Identity: "ada"})
 	if err != nil {
 		t.Fatalf("sluis.v1.SessionService/ListSessions: %v", err)
 	}
-	if got := current.Msg.GetSessions(); len(got) != 1 || got[0].GetIdentity() != "ada" {
+	if got := current.GetSessions(); len(got) != 1 || got[0].GetIdentity() != "ada" {
 		t.Errorf("sluis.v1 answered %v, want one session for ada", got)
 	}
 
-	legacy, err := accessissuerv1connect.NewSessionServiceClient(server.Client(), server.URL).
-		ListSessions(t.Context(), connect.NewRequest(&accessissuerv1.ListSessionsRequest{Identity: "ada"}))
+	legacy, err := accessissuerv1connect.NewSessionServiceClient(connect.NewClient(connecthttp.NewTransport(server.Client(), server.URL))).
+		ListSessions(t.Context(), &accessissuerv1.ListSessionsRequest{Identity: "ada"})
 	if err != nil {
 		t.Fatalf("accessissuer.v1.SessionService/ListSessions: %v", err)
 	}
-	if got := legacy.Msg.GetSessions(); len(got) != 1 || got[0].GetIdentity() != "ada" {
+	if got := legacy.GetSessions(); len(got) != 1 || got[0].GetIdentity() != "ada" {
 		t.Errorf("accessissuer.v1 answered %v, want one session for ada", got)
 	}
 }
@@ -86,9 +87,9 @@ type refusingSessions struct {
 }
 
 func (refusingSessions) ListSessions(
-	context.Context, *connect.Request[accessissuerv1.ListSessionsRequest],
-) (*connect.Response[accessissuerv1.ListSessionsResponse], error) {
-	return nil, connect.NewError(connect.CodePermissionDenied, errors.New("listing every session is an operator's"))
+	context.Context, *accessissuerv1.ListSessionsRequest,
+) (*accessissuerv1.ListSessionsResponse, error) {
+	return nil, connect.NewError(connect.CodePermissionDenied, "listing every session is an operator's")
 }
 
 // The session service is behind the same interceptor as the console's: the
@@ -101,8 +102,8 @@ func TestTheSessionServiceRefusesInFixedWords(t *testing.T) {
 	server := httptest.NewServer(refusal.Middleware(mux))
 	t.Cleanup(server.Close)
 
-	_, err := sluisv1connect.NewSessionServiceClient(server.Client(), server.URL).
-		ListSessions(t.Context(), connect.NewRequest(&sluisv1.ListSessionsRequest{}))
+	_, err := sluisv1connect.NewSessionServiceClient(connect.NewClient(connecthttp.NewTransport(server.Client(), server.URL))).
+		ListSessions(t.Context(), &sluisv1.ListSessionsRequest{})
 	var denied *connect.Error
 	if !errors.As(err, &denied) || denied.Code() != connect.CodePermissionDenied ||
 		!strings.HasPrefix(denied.Message(), "not authorised (request ") || strings.Contains(denied.Message(), "operator") {

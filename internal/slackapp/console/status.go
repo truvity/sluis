@@ -2,14 +2,13 @@ package console
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"maps"
 	"slices"
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
 	"github.com/truvity/sluis/internal/access"
@@ -17,6 +16,7 @@ import (
 	"github.com/truvity/sluis/internal/consoleauthz"
 	"github.com/truvity/sluis/internal/consolecall"
 	"github.com/truvity/sluis/internal/port"
+	"github.com/truvity/sluis/internal/rpcmount"
 	"github.com/truvity/sluis/internal/slackapp"
 	"github.com/truvity/sluis/internal/slackroster/connection"
 	"github.com/truvity/sluis/internal/slackroster/status"
@@ -51,7 +51,7 @@ func (c *Service) GetSlackStatus(
 	if c.d().SlackStatus != nil {
 		read, err := c.d().SlackStatus.Reports(ctx)
 		if err != nil {
-			return nil, connect.NewError(connect.CodeUnavailable, err)
+			return nil, connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
 		}
 		for key, document := range read {
 			if workspace, ok := status.WorkspaceOfKey(key); ok {
@@ -63,14 +63,14 @@ func (c *Service) GetSlackStatus(
 	confirmations := map[string]connection.Confirmation{}
 	if c.d().SlackWorkspaces != nil {
 		if confirmations, err = c.d().SlackWorkspaces.Confirmations(ctx); err != nil {
-			return nil, connect.NewError(connect.CodeUnavailable, err)
+			return nil, connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
 		}
 	}
 
 	passes := map[string]connection.PassRequest{}
 	if c.d().SlackWorkspaces != nil {
 		if passes, err = c.d().SlackWorkspaces.PassRequests(ctx); err != nil {
-			return nil, connect.NewError(connect.CodeUnavailable, err)
+			return nil, connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
 		}
 	}
 
@@ -226,17 +226,17 @@ func (c *Service) ConfirmSlackRemovals(
 	}
 	switch {
 	case !status.ValidWorkspace(workspace) || fingerprint == "" || strings.Contains(channel, "."):
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("a workspace and a fingerprint are required, and a channel name has no dot"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, "a workspace and a fingerprint are required, and a channel name has no dot")
 	case c.d().SlackStatus == nil || c.d().SlackWorkspaces == nil:
-		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("this deployment keeps no reports or confirmations"))
+		return nil, connect.NewError(connect.CodeFailedPrecondition, "this deployment keeps no reports or confirmations")
 	}
 	reports, err := c.d().SlackStatus.Reports(ctx)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnavailable, err)
+		return nil, connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
 	}
 	report, err := status.Decode(reports[status.Key(workspace)])
 	if err != nil {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("%s has no readable report: %w", workspace, err))
+		return nil, rpcmount.NewError(connect.CodeFailedPrecondition, fmt.Errorf("%s has no readable report: %w", workspace, err))
 	}
 	gate := report.Breaker
 	if channel != "" {
@@ -249,13 +249,13 @@ func (c *Service) ConfirmSlackRemovals(
 		}
 	}
 	if gate == nil || gate.Fingerprint != fingerprint {
-		return nil, connect.NewError(connect.CodeFailedPrecondition,
-			fmt.Errorf("the removals in %s have changed since that page was loaded: reload and look again", slackGate(workspace, channel)))
+		return nil, connect.Errorf(connect.CodeFailedPrecondition,
+			"the removals in %s have changed since that page was loaded: reload and look again", slackGate(workspace, channel))
 	}
 	if err = c.d().SlackWorkspaces.PutConfirmation(ctx, connection.Confirmation{
 		Workspace: workspace, Channel: channel, Fingerprint: fingerprint, By: id.Who(), At: time.Now().UTC(),
 	}); err != nil {
-		return nil, connect.NewError(connect.CodeUnavailable, err)
+		return nil, connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
 	}
 	c.record(ctx, audit.SlackRemovalsConfirmed(consoleauthz.Actor(id), workspace, channel, fingerprint, gate.Affected))
 	c.notify(ctx, port.ControllerSlack, workspace)

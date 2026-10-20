@@ -2,7 +2,6 @@ package console
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"maps"
 	"net/http"
@@ -10,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
@@ -18,6 +17,7 @@ import (
 	"github.com/truvity/sluis/internal/audit"
 	"github.com/truvity/sluis/internal/consoleauthz"
 	"github.com/truvity/sluis/internal/consolecall"
+	"github.com/truvity/sluis/internal/rpcmount"
 	"github.com/truvity/sluis/internal/slackapp"
 	slackcatalogue "github.com/truvity/sluis/internal/slackapp/catalogue"
 	"github.com/truvity/sluis/internal/slackapp/catalogueapp"
@@ -36,7 +36,7 @@ const (
 func (c *Service) slackCatalogueStore() (CatalogueApps, error) {
 	if c.d().SlackCatalogueApps == nil {
 		return nil, connect.NewError(connect.CodeFailedPrecondition,
-			errors.New("this deployment keeps no state in Kubernetes, so a Slack App's bot token would not survive a restart"))
+			"this deployment keeps no state in Kubernetes, so a Slack App's bot token would not survive a restart")
 	}
 	return c.d().SlackCatalogueApps, nil
 }
@@ -48,19 +48,19 @@ func (c *Service) slackCatalogueStore() (CatalogueApps, error) {
 // its team and its owner are recorded.
 func (c *Service) connectedSlackTeam(ctx context.Context, workspace string) (string, Book, error) {
 	if c.d().Authorizer == nil {
-		return "", nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("no policy is loaded"))
+		return "", nil, connect.NewError(connect.CodeFailedPrecondition, "no policy is loaded")
 	}
 	if !c.d().Authorizer.Policy().SlackWorkspaceDeclared(workspace) {
-		return "", nil, connect.NewError(connect.CodeFailedPrecondition,
-			fmt.Errorf("the policy's slack.workspaces does not name workspace %q", workspace))
+		return "", nil, connect.Errorf(connect.CodeFailedPrecondition,
+			"the policy's slack.workspaces does not name workspace %q", workspace)
 	}
 	book, err := c.book(ctx)
 	if err != nil {
 		return "", nil, err
 	}
 	if book.Team(workspace) == "" {
-		return "", book, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
-			"connect the workspace first: %s has no connected Slack workspace yet, and a catalogue App is installed into the team recorded when it is", workspace))
+		return "", book, connect.Errorf(connect.CodeFailedPrecondition,
+			"connect the workspace first: %s has no connected Slack workspace yet, and a catalogue App is installed into the team recorded when it is", workspace)
 	}
 	return book.Team(workspace), book, nil
 }
@@ -79,7 +79,7 @@ func (c *Service) ListSlackApps(
 	if c.d().SlackCatalogueApps != nil {
 		records, err := c.d().SlackCatalogueApps.List(ctx)
 		if err != nil {
-			return nil, connect.NewError(connect.CodeUnavailable, err)
+			return nil, connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
 		}
 		for i := range records {
 			kept[records[i].ID] = records[i]
@@ -162,7 +162,7 @@ func (c *Service) slackAppView(entry *slackcatalogue.App, record *catalogueapp.R
 func (c *Service) declaredSlackApp(id string) (slackcatalogue.App, error) {
 	entry, declared := c.d().SlackCatalogue.Get(id)
 	if !declared {
-		return slackcatalogue.App{}, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("the catalogue declares no Slack App %q", id))
+		return slackcatalogue.App{}, connect.Errorf(connect.CodeInvalidArgument, "the catalogue declares no Slack App %q", id)
 	}
 	return entry, nil
 }
@@ -207,24 +207,24 @@ func (c *Service) CreateSlackApp(
 	configToken := strings.TrimSpace(req.GetConfigurationToken())
 	if !plausibleConfigurationToken(configToken) {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
-			errors.New("that is not an app configuration token: generate one at api.slack.com/apps under \"Your App Configuration Tokens\" (one word, starting xoxe.)"))
+			"that is not an app configuration token: generate one at api.slack.com/apps under \"Your App Configuration Tokens\" (one word, starting xoxe.)")
 	}
 	if _, _, created, err := store.Get(ctx, id); err != nil {
-		return nil, connect.NewError(connect.CodeUnavailable, err)
+		return nil, connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
 	} else if created {
-		return nil, connect.NewError(connect.CodeFailedPrecondition,
-			fmt.Errorf("%s is already created: install it, rather than create a second App beside the first", id))
+		return nil, connect.Errorf(connect.CodeFailedPrecondition,
+			"%s is already created: install it, rather than create a second App beside the first", id)
 	}
 	manifest, err := slackcatalogue.Manifest(entry, c.slackRedirect(caller))
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 
 	callCtx, cancel := context.WithTimeout(ctx, slackTimeout)
 	defer cancel()
 	app, err := c.slackSetup().CreateApp(callCtx, configToken, manifest)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("slack refused to create the App: %w", err))
+		return nil, rpcmount.NewError(connect.CodeFailedPrecondition, fmt.Errorf("slack refused to create the App: %w", err))
 	}
 	record := catalogueapp.Record{
 		ID: id, Workspace: entry.Workspace, AppID: app.AppID, ClientID: app.Credentials.ClientID,
@@ -232,7 +232,7 @@ func (c *Service) CreateSlackApp(
 		CreatedAt: time.Now().UTC(), CreatedBy: who.Who(),
 	}
 	if err = store.Put(ctx, record, catalogueapp.Credentials{ClientSecret: app.Credentials.ClientSecret}); err != nil {
-		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf(
+		return nil, rpcmount.NewError(connect.CodeUnavailable, fmt.Errorf(
 			"slack created the App and it could not be saved here: delete it at %s and create it again: %w", AppSettingsURL(app.AppID), err))
 	}
 	c.record(ctx, audit.SlackCatalogueAppCreated(consoleauthz.ActorOf(caller), audit.SlackCatalogueApp{ID: id, App: app.AppID, Workspace: entry.Workspace}))
@@ -266,10 +266,10 @@ func (c *Service) InstallSlackApp(
 	}
 	record, _, created, err := store.Get(ctx, id)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnavailable, err)
+		return nil, connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
 	}
 	if !created {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("%s is not created yet: create it first", id))
+		return nil, connect.Errorf(connect.CodeFailedPrecondition, "%s is not created yet: create it first", id)
 	}
 
 	// Scopes declared after the App was created reach it only through its
@@ -281,34 +281,34 @@ func (c *Service) InstallSlackApp(
 	case configToken != "":
 		if !plausibleConfigurationToken(configToken) {
 			return nil, connect.NewError(connect.CodeInvalidArgument,
-				errors.New("that is not an app configuration token: generate one at api.slack.com/apps under \"Your App Configuration Tokens\" (one word, starting xoxe.)"))
+				"that is not an app configuration token: generate one at api.slack.com/apps under \"Your App Configuration Tokens\" (one word, starting xoxe.)")
 		}
 		manifest, merr := slackcatalogue.Manifest(entry, c.slackRedirect(caller))
 		if merr != nil {
-			return nil, connect.NewError(connect.CodeInternal, merr)
+			return nil, connect.NewError(connect.CodeInternal, merr.Error()).WithCause(merr)
 		}
 		callCtx, cancel := context.WithTimeout(ctx, slackTimeout)
 		defer cancel()
 		if _, err = c.slackSetup().UpdateApp(callCtx, configToken, record.AppID, manifest); err != nil {
-			return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("slack refused to update the App: %w", err))
+			return nil, rpcmount.NewError(connect.CodeFailedPrecondition, fmt.Errorf("slack refused to update the App: %w", err))
 		}
 		record.ManifestScopes = slices.Clone(entry.BotScopes)
 		_, creds, _, err := store.Get(ctx, id)
 		if err != nil {
-			return nil, connect.NewError(connect.CodeUnavailable, err)
+			return nil, connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
 		}
 		if err = store.Put(ctx, record, creds); err != nil {
-			return nil, connect.NewError(connect.CodeUnavailable, err)
+			return nil, connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
 		}
 	case stale:
-		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
+		return nil, rpcmount.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
 			"%s declares scopes the App was created without: paste an app configuration token so the App can be updated first, "+
 				"or a reinstall would grant nothing new", id))
 	}
 
 	target, err := slackAuthorizeURL(record.AuthorizeURL, c.slackRedirect(caller), team, entry.BotScopes)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	return &directoryrosterv1.InstallSlackAppResponse{Url: target}, nil
 }
