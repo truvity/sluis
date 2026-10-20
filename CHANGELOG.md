@@ -1,8 +1,12 @@
 ## Unreleased
 
+### Changed
+
+- **The OpenID library moves from `github.com/zitadel/oidc/v3` v3.51.13 to v3.51.16, still with the ID token's `client_id` line removed (`third_party/zitadel-oidc`).** Upstream's authorization endpoint now refuses a `code_challenge_method` other than `plain` or `S256` when a challenge is sent, and a code bound to such a method no longer verifies. sluis already refused every method but `S256`, and a challenge with no method, before the library sees the request, so `/authorize` answers as it did; tests now pin an unknown method, a lower-case `s256`, a challenge with no method, and a method with no challenge. The library's relying party now makes its PKCE verifier from 32 random octets (RFC 7636 4.1), which sluis does not use, and a failed key-set fetch keeps its underlying error, with the same text. `deploy/pulumi` and its Cloudflare module build against upstream v3.51.16.
+
 ### Fixed
 
-- **An ID token no longer carries `client_id`.** OpenID Connect Core names an ID token's client by `aud` and `azp`, and `client_id` is a JWT access token claim (RFC 9068), so access tokens keep it. The OpenID library set it on both, and the conformance suite warned about it. sluis now builds a copy of `github.com/zitadel/oidc/v3` v3.51.13 with that one line removed, in `third_party/zitadel-oidc`, wired in by a `replace` in `go.mod`. Discovery's `claims_supported` no longer lists `client_id`. A relying party that read `client_id` from an ID token reads `azp` instead. Only sluis's own binaries change: a Go module that imports sluis packages still builds against the upstream library.
+- **An ID token no longer carries `client_id`.** OpenID Connect Core names an ID token's client by `aud` and `azp`, and `client_id` is a JWT access token claim (RFC 9068), so access tokens keep it. The OpenID library set it on both, and the conformance suite warned about it. sluis now builds a copy of `github.com/zitadel/oidc/v3` v3.51.16 with that one line removed, in `third_party/zitadel-oidc`, wired in by a `replace` in `go.mod`. Discovery's `claims_supported` no longer lists `client_id`. A relying party that read `client_id` from an ID token reads `azp` instead. Only sluis's own binaries change: a Go module that imports sluis packages still builds against the upstream library.
 
 ## v1.77.1
 
