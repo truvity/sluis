@@ -4,6 +4,10 @@
 
 - **Configuration that now fails validation: `secureCookies: false` with an https issuer URL.** The service document is refused when it loads, on Lambda and in a cluster, when `secureCookies` is `false` and `issuerURL` or `publicRootURL` is https. The error reads `secureCookies: false is refused when issuerURL is https: session cookies would be sent without the Secure flag; remove secureCookies`. An installation document's `issuer.secureCookies` is refused the same way when it is rendered, so `sluisctl render`, `sluis config check` and a Pulumi preview fail before a function is deployed. The chart already refused it with `route.host`. Plain http with `allowInsecure`, and `secureCookies: true` on either scheme, are unchanged. **Upgrade:** remove `secureCookies: false` when serving https.
 
+### Added
+
+- **`audit/deploy/pulumi` builds the settings of an archive bucket the estate owns.** `NewArchiveBucket` declares the bucket (protected, never force-destroyed), versioning, SSE-KMS under a given key (SSE-C blocked), a public access block, owner-enforced ownership, the TLS-only policy and the archive lifecycle (Glacier IR at 30 days and Deep Archive at 365 under `records/<profile>/` for each profile, incomplete multipart uploads aborted after 7, no expiry; the days are arguments), under the caller's options. The `Aliases` hook returns the `pulumi.Alias` values of each resource by its AWS type token, so an estate that made these resources as children of an older component keeps every URN and physical name. Additive; `New` and its presets are unchanged. See [AWS Pulumi library](docs/reference/audit/aws-pulumi-library.md).
+
 ## v1.77.2
 
 Fixes from the 2026-10-20 OpenID conformance run. One change in behaviour for relying parties, under Changed: the ID token and `/userinfo` return `email` and the names only for their scopes; its upgrade note says what to add.
