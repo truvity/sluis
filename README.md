@@ -107,9 +107,9 @@ A policy file maps directory groups to access everywhere ([concepts](docs/concep
 | Date | Version | Plan | Result | Run |
 |---|---|---|---|---|
 | 2026-10-20 | v1.77.1 | [Config OP](https://openid.net/certification/connect_op_testing/) | Passed, suite 5.3.3 | [findings](docs/concepts/sluis/conformance-findings.md) |
-| pending | v1.77.2 | [Basic OP](https://openid.net/certification/connect_op_testing/) | Re-run on v1.77.2 pending. The 2026-10-20 run on v1.77.1 had 0 failed; v1.77.2 fixes its findings | [findings](docs/concepts/sluis/conformance-findings.md#the-2026-10-20-run-on-v1771) |
-| pending | v1.77.2 | [RP-Initiated Logout OP](https://openid.net/certification/connect_op_logout_testing/) | Re-run on v1.77.2 pending. The 2026-10-20 run on v1.77.1 had 0 failed; v1.77.2 fixes its findings | [findings](docs/concepts/sluis/conformance-findings.md#the-2026-10-20-run-on-v1771) |
-| pending | v1.77.2 | [Back-Channel Logout OP](https://openid.net/certification/connect_op_logout_testing/) | Re-run on v1.77.2 pending. The 2026-10-20 run on v1.77.1 had 0 failed | [findings](docs/concepts/sluis/conformance-findings.md#the-2026-10-20-run-on-v1771) |
+| 2026-10-20 | v1.77.2 | [Basic OP](https://openid.net/certification/connect_op_testing/) | 23 passed, 4 warning, 4 review, 4 skipped, 0 failed; suite 5.3.3 | [findings](docs/concepts/sluis/conformance-findings.md#the-2026-10-20-run-on-v1772) |
+| 2026-10-20 | v1.77.2 | [RP-Initiated Logout OP](https://openid.net/certification/connect_op_logout_testing/) | 3 passed, 8 review, 0 failed; suite 5.3.3 | [findings](docs/concepts/sluis/conformance-findings.md#the-2026-10-20-run-on-v1772) |
+| 2026-10-20 | v1.77.2 | [Back-Channel Logout OP](https://openid.net/certification/connect_op_logout_testing/) | 2 passed, 0 failed; suite 5.3.3 | [findings](docs/concepts/sluis/conformance-findings.md#the-2026-10-20-run-on-v1772) |
 | 2026-09-12 | v1.0.0 | Config, Basic OP, RP-Initiated Logout, Back-Channel Logout | 0 failed | [findings](docs/concepts/sluis/conformance-findings.md) |
 
 ## Install and a worked example
