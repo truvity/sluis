@@ -1,6 +1,7 @@
 package logattr_test
 
 import (
+	"encoding/hex"
 	"errors"
 	"strings"
 	"testing"
@@ -53,7 +54,15 @@ func TestPseudonym(t *testing.T) {
 	if a.Key != "subject" || a.Value.String() != b.Value.String() || a.Value.String() == c.Value.String() {
 		t.Fatalf("not stable or not distinct: %v %v %v", a, b, c)
 	}
-	if len(a.Value.String()) != 16 || strings.Contains(a.Value.String(), "ada") {
-		t.Fatalf("pseudonym = %q", a.Value.String())
+	// The property is that nothing of the address survives: the value is 16
+	// hex digits and nothing else. Looking for a fragment of the address
+	// ("ada") instead failed about one run in 300, whenever the random key
+	// put those three hex digits into the pseudonym.
+	pseudonym := a.Value.String()
+	if raw, err := hex.DecodeString(pseudonym); err != nil || len(raw) != 8 || pseudonym != strings.ToLower(pseudonym) {
+		t.Fatalf("pseudonym = %q, want 16 lowercase hex digits", pseudonym)
+	}
+	if strings.Contains(pseudonym, "ada@example.test") {
+		t.Fatalf("pseudonym %q carries the address", pseudonym)
 	}
 }
