@@ -25,7 +25,7 @@ permissions:
 jobs:
   govulncheck:
     if: github.event.schedule != '17 5 * * 1'
-    uses: truvity/ci-workflows/.github/workflows/check.yaml@d4350d573f67de8f7a145a4de94c392c6b43fd8c # v5.0.0
+    uses: truvity/ci-workflows/.github/workflows/check.yaml@fe1618d3679ee990ef9d0c300d829260eca5812b # v5.2.3
     with:
       recipes: '["vuln","audit-vuln"]'
 
@@ -87,7 +87,7 @@ jobs:
       - env:
           ISSUER: ${{ inputs.issuer }}
         run: hack/conformance-config.sh
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: conformance-config-profile
