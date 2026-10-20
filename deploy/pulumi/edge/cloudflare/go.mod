@@ -8,7 +8,7 @@ toolchain go1.27.2
 require (
 	github.com/pulumi/pulumi-aws/sdk/v7 v7.50.0
 	github.com/pulumi/pulumi/sdk/v3 v3.268.0
-	github.com/truvity/sluis/deploy/pulumi v1.77.1
+	github.com/truvity/sluis/deploy/pulumi v1.77.2
 )
 
 require (
@@ -135,11 +135,11 @@ require (
 	github.com/transparency-dev/formats v0.0.0-20251017110053-404c0d5b696c // indirect
 	github.com/transparency-dev/merkle v0.0.2 // indirect
 	github.com/truvity/policy v1.49.0 // indirect
-	github.com/truvity/sluis v1.77.1 // indirect
-	github.com/truvity/sluis/audit v1.77.1 // indirect
-	github.com/truvity/sluis/audit/deploy/pulumi v1.77.1 // indirect
-	github.com/truvity/sluis/audit/sdk v1.77.1 // indirect
-	github.com/truvity/sluis/storage v1.77.1 // indirect
+	github.com/truvity/sluis v1.77.2 // indirect
+	github.com/truvity/sluis/audit v1.77.2 // indirect
+	github.com/truvity/sluis/audit/deploy/pulumi v1.77.2 // indirect
+	github.com/truvity/sluis/audit/sdk v1.77.2 // indirect
+	github.com/truvity/sluis/storage v1.77.2 // indirect
 	github.com/uber/jaeger-client-go v2.30.0+incompatible // indirect
 	github.com/uber/jaeger-lib v2.4.1+incompatible // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
