@@ -193,6 +193,10 @@ func TestRenderRefusesWhatTheShapeFixes(t *testing.T) {
 		}, "adapters.queue"},
 		"a bad instance": {func(in *config.Installation) { in.Instance = "private" }, "instance"},
 		"no issuer":      {func(in *config.Installation) { in.Issuer.URL = "" }, "issuer.url"},
+		"cookies off on https": {func(in *config.Installation) {
+			off := false
+			in.Issuer.SecureCookies = &off
+		}, "issuer.secureCookies: false is refused when issuer.url is https"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			in := installation(t, "example")

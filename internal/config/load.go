@@ -69,11 +69,11 @@ func Load[T Document](file string) (*T, error) {
 		err = loadPolicyDocument(file, v)
 	case *Sluis:
 		if err = loadSluis(file, v); err == nil {
-			err = checked(file, errors.Join(v.ValidateCloudflare(), v.ValidateRoutes()))
+			err = checked(file, errors.Join(v.ValidateCloudflare(), v.ValidateRoutes(), v.ValidateSecureCookies()))
 		}
 	case *Serve:
 		if err = loadService(file, "serve", v, func(l *legacyPolicy) { v.legacy = l }); err == nil {
-			err = checked(file, v.ValidateCloudflare())
+			err = checked(file, errors.Join(v.ValidateCloudflare(), v.ValidateSecureCookies()))
 		}
 	case *ControllerGitHub:
 		if err = loadService(file, "controller-github", v, func(l *legacyPolicy) { v.legacy = l }); err == nil {

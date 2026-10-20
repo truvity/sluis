@@ -1,5 +1,9 @@
 ## Unreleased
 
+### Changed
+
+- **Configuration that now fails validation: `secureCookies: false` with an https issuer URL.** The service document is refused when it loads, on Lambda and in a cluster, when `secureCookies` is `false` and `issuerURL` or `publicRootURL` is https. The error reads `secureCookies: false is refused when issuerURL is https: session cookies would be sent without the Secure flag; remove secureCookies`. An installation document's `issuer.secureCookies` is refused the same way when it is rendered, so `sluisctl render`, `sluis config check` and a Pulumi preview fail before a function is deployed. The chart already refused it with `route.host`. Plain http with `allowInsecure`, and `secureCookies: true` on either scheme, are unchanged. **Upgrade:** remove `secureCookies: false` when serving https.
+
 ## v1.77.2
 
 Fixes from the 2026-10-20 OpenID conformance run. One change in behaviour for relying parties, under Changed: the ID token and `/userinfo` return `email` and the names only for their scopes; its upgrade note says what to add.

@@ -4932,7 +4932,7 @@
           "type": "object"
         },
         "secureCookies": {
-          "description": "Mark session cookies Secure. Unset follows the scheme the browser will use: https in the URL.",
+          "description": "Mark session cookies Secure. Unset follows the scheme the browser will use: https in the URL. `false` is for a plain-http local run: the service refuses it when `issuerURL` or `publicRootURL` is https.",
           "type": "boolean"
         },
         "signingKey": {

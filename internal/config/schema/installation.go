@@ -71,7 +71,7 @@ func installationSchema() m {
 			"url":           m{"$ref": "#/$defs/url", "description": "The issuer (the service document's `issuerURL`): baked into every token and every relying party's trust."},
 			"consoleURL":    m{"$ref": "#/$defs/url", "description": "Where a browser reaches the console, with its mount (`publicURL`). Default `<url>/console`."},
 			"rootURL":       m{"$ref": "#/$defs/url", "description": "The host's root (`publicRootURL`). Default `url`."},
-			"secureCookies": boolean("Mark session cookies Secure (`secureCookies`). Unset follows the https of the URL."),
+			"secureCookies": boolean("Mark session cookies Secure (`secureCookies`). Unset follows the https of the URL. `false` is refused when `url` or `rootURL` is https."),
 			"groupsScoping": enum("How far per-audience `groups` scoping has been taken: `off`, `report` or `enforce` (`groupsScoping`).", "", "off", "report", "enforce"),
 		}, "url"),
 		"log":       serveProps["log"],

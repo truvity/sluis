@@ -126,6 +126,15 @@ func (in *Installation) check() error {
 	if strings.TrimSpace(in.Issuer.URL) == "" {
 		errs = append(errs, errors.New("issuer.url is required: it is baked into every token and every relying party's trust"))
 	}
+	if sc := in.Issuer.SecureCookies; sc != nil && !*sc {
+		for _, u := range []struct{ key, value string }{{"issuer.url", in.Issuer.URL}, {"issuer.rootURL", in.Issuer.RootURL}} {
+			if strings.HasPrefix(strings.ToLower(strings.TrimSpace(u.value)), "https://") {
+				errs = append(errs, fmt.Errorf("issuer.secureCookies: false is refused when %s is https: "+
+					"session cookies would be sent without the Secure flag; remove issuer.secureCookies", u.key))
+				break
+			}
+		}
+	}
 	if in.Shape == ShapeLambda && (in.AWS == nil || in.AWS.Region == "") {
 		errs = append(errs, errors.New("aws.region is required for shape lambda: it names the SSM parameters and the resources"))
 	}
