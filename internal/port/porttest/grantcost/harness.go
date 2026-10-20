@@ -268,12 +268,19 @@ func (h *Harness) do(method, path string) (status int, location string) {
 // the sign-in did not end in one.
 func (h *Harness) SignIn() string {
 	h.t.Helper()
+	return h.SignInFor("openid profile email offline_access")
+}
+
+// SignInFor is [Harness.SignIn] asking for scope: without `offline_access`
+// the code buys an access token alone and opens no session.
+func (h *Harness) SignInFor(scope string) string {
+	h.t.Helper()
 	sum := sha256.Sum256([]byte(verifier))
 	query := url.Values{
 		"client_id":             {ClientID},
 		"redirect_uri":          {Redirect},
 		"response_type":         {"code"},
-		"scope":                 {"openid profile email offline_access"},
+		"scope":                 {scope},
 		"state":                 {"grant-cost"},
 		"code_challenge":        {base64.RawURLEncoding.EncodeToString(sum[:])},
 		"code_challenge_method": {"S256"},
@@ -348,6 +355,23 @@ func (h *Harness) Refresh(token string) Tokens {
 		"refresh_token": {token},
 		"client_id":     {ClientID},
 	})
+}
+
+// Userinfo is the userinfo endpoint called with access, and its status.
+func (h *Harness) Userinfo(access string) int {
+	h.t.Helper()
+	request, err := http.NewRequestWithContext(h.t.Context(), http.MethodGet, h.Server.URL+"/userinfo", nil)
+	if err != nil {
+		h.t.Fatalf("build the request: %v", err)
+	}
+	request.Header.Set("Authorization", "Bearer "+access)
+	response, err := h.Server.Client().Do(request)
+	if err != nil {
+		h.t.Fatalf("userinfo: %v", err)
+	}
+	defer func() { _ = response.Body.Close() }()
+	_, _ = io.Copy(io.Discard, response.Body)
+	return response.StatusCode
 }
 
 // Revoke is RFC 7009 revocation of a refresh token, by the public client.

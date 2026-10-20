@@ -14,6 +14,7 @@ Sign-out ends the sign-in and every session under it, through `/logout` or `end_
 - When the store is unreadable, sign-out answers 503, ends nothing and keeps the cookie.
 - A new interactive sign-in ends the previous one.
 - An authorization code is bound to its sign-in. If the sign-in ended first, the token endpoint revokes the session and answers `invalid_grant`.
+- A reused authorization code answers `invalid_grant` and revokes the access token and session its first redemption issued.
 
 ## Refresh token reuse
 
@@ -22,6 +23,7 @@ A refresh token is single-use: a refresh spends it and returns a successor. A sp
 The spent token's pointer is sealed with AES-256-GCM under a key derived from the token itself. A spent token presented under another client is refused and ends nothing.
 
 The grant answers `invalid_grant` and the client's `backchannel_logout_uri` receives a logout token. The browser sign-in stays, and issued access tokens live to their expiry. The audit record carries scope `refresh_token_reuse`.
+
 
 ## The absolute session limit
 

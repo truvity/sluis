@@ -52,3 +52,9 @@ A person runs the whole suite at every major and minor release. One profile run 
 The Config profile (`just conformance-config`) stays one click away. It needs no credential and guards the discovery document.
 
 [`hack/conformance_drive.py`](../../../hack/conformance_drive.py) drives headless Chrome through the browser half: it signs in through recovery and answers the manual steps with a screenshot. Thirty-five modules are one command. Pass `--manual` to hand one module's browser step to a person, for example to check claims with a real account.
+
+## A reused code revokes what it issued
+
+Suite 5.3.3 warned in `oidcc-codereuse-30seconds`: after a code was reused, userinfo still answered 200 to the first access token. The suite's client asks for no refresh token, so no session stood behind that token.
+
+A redemption now leaves a tombstone of the code, keyed by its hash, naming the access token and any session it issued. A reuse revokes both, for as long as that token lives. See [the key](../../reference/sluis/keys.md).
