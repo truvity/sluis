@@ -7,6 +7,7 @@ import (
 	"testing"
 	"testing/fstest"
 
+	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/httpsec"
 )
 
@@ -44,7 +45,7 @@ func TestEveryConsoleResponseCarriesTheSecurityHeaders(t *testing.T) {
 		header := recorder.Header()
 		policy := header.Get("Content-Security-Policy")
 
-		for _, want := range []string{"default-src 'self'", "frame-ancestors 'none'", "base-uri 'none'", "form-action 'self' https://github.com", "object-src 'none'"} {
+		for _, want := range []string{"default-src 'self'", "frame-ancestors 'none'", "base-uri 'none'", "form-action 'self'", "object-src 'none'"} {
 			if !strings.Contains(policy, want) {
 				t.Errorf("%s (%d): policy %q lacks %s", name, recorder.Code, policy, want)
 			}
@@ -54,18 +55,81 @@ func TestEveryConsoleResponseCarriesTheSecurityHeaders(t *testing.T) {
 			header.Get("X-Content-Type-Options") != "nosniff" {
 			t.Errorf("%s (%d): headers = %v", name, recorder.Code, header)
 		}
-
-		if policy != wantConsolePolicy {
-			t.Errorf("%s (%d): Content-Security-Policy = %q, want %q", name, recorder.Code, policy, wantConsolePolicy)
-		}
 	}
 }
 
-// The console's whole policy, pinned: the default policy plus GitHub's web
-// origin in `form-action`, so the page can POST the App manifest there. No
-// wildcard, no other origin, every other directive as it was.
-const wantConsolePolicy = "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; " +
-	"frame-ancestors 'none'; base-uri 'none'; object-src 'none'; form-action 'self' https://github.com"
+// signedInShell is the console's shell as a signed-in person gets it.
+func signedInShell(t *testing.T) *httptest.ResponseRecorder {
+	t.Helper()
+
+	handler := consoleWithUI(t)
+
+	start := httptest.NewRecorder()
+	handler.ServeHTTP(start, httptest.NewRequest(http.MethodGet, "/login/demo/start", nil))
+	cookie := start.Result().Cookies()[0] //nolint:bodyclose // a recorder's result has no body to close
+
+	done := httptest.NewRecorder()
+	callback := httptest.NewRequest(http.MethodGet, "/login/demo/callback?code=x&state="+cookie.Value, nil)
+	callback.AddCookie(cookie)
+	handler.ServeHTTP(done, callback)
+
+	var session *http.Cookie
+	for _, c := range done.Result().Cookies() { //nolint:bodyclose // a recorder's result has no body to close
+		if c.Name == access.CookieName {
+			session = c
+		}
+	}
+	if session == nil {
+		t.Fatalf("no session was issued (%d)", done.Code)
+	}
+
+	shell := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/", nil)
+	request.AddCookie(session)
+	handler.ServeHTTP(shell, request)
+
+	return shell
+}
+
+// Creating a GitHub App is a form the shell POSTs to GitHub, and a browser
+// refuses it when the page's policy says `form-action 'self'` alone. The
+// shell may submit to GitHub's origin and to no other, and keeps the rest of
+// the policy; every other page of the console still submits to itself only.
+func TestTheShellMayPostAnAppManifestToGitHubAndNowhereElse(t *testing.T) {
+	t.Parallel()
+
+	shell := signedInShell(t)
+	if shell.Code != http.StatusOK {
+		t.Fatalf("shell = %d, want the page", shell.Code)
+	}
+
+	policy := shell.Header().Get("Content-Security-Policy")
+	for _, want := range []string{
+		"default-src 'self'", "style-src 'self' 'unsafe-inline'", "img-src 'self' data:", "frame-ancestors 'none'",
+		"base-uri 'none'", "object-src 'none'", "form-action 'self' https://github.com",
+	} {
+		if !strings.Contains(policy, want) {
+			t.Errorf("shell policy %q lacks %s", policy, want)
+		}
+	}
+	if strings.Contains(policy, "script-src") {
+		t.Errorf("shell policy %q names script-src; scripts are this origin's own", policy)
+	}
+	if strings.Count(policy, "https://") != 1 {
+		t.Errorf("shell policy %q names more than GitHub's origin", policy)
+	}
+
+	handler := consoleWithUI(t)
+	for _, path := range []string{"/login", "/assets/app.js", "/no-such-page"} {
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, path, nil))
+
+		other := recorder.Header().Get("Content-Security-Policy")
+		if !strings.HasSuffix(other, "form-action 'self'") || strings.Contains(other, "github.com") {
+			t.Errorf("%s policy %q is not the default `form-action 'self'`", path, other)
+		}
+	}
+}
 
 // The console says Strict-Transport-Security on every kind of response it
 // serves when the request came over https, and not over plain http.

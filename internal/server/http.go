@@ -29,7 +29,6 @@ import (
 	"github.com/truvity/sluis/internal/connectalias"
 	"github.com/truvity/sluis/internal/consolecall"
 	"github.com/truvity/sluis/internal/emailaddr"
-	"github.com/truvity/sluis/internal/githubapp"
 	"github.com/truvity/sluis/internal/githubroster/consolewire"
 	"github.com/truvity/sluis/internal/httpsec"
 	"github.com/truvity/sluis/internal/hub"
@@ -377,9 +376,7 @@ func (s *ConsoleServer) Handler() http.Handler {
 	// Every page this console writes, and the shell, carries the same
 	// headers: no framing, no referrer, no sniffing, and a policy that
 	// allows this origin's own files only.
-	// GitHub creates an App only from a manifest the console's page POSTs
-	// to github.com, which `form-action 'self'` would stop.
-	return httpsec.HeadersFor(AuditRequests(s.forwardedForTrustedHops, s.withIdentity(s.withMaintenance(mux))), s.hsts, ConsolePolicy())
+	return httpsec.HeadersWith(AuditRequests(s.forwardedForTrustedHops, s.withIdentity(s.withMaintenance(mux))), s.hsts)
 }
 
 // at turns a path of this console's into one a browser can follow. Every
@@ -407,6 +404,10 @@ func (s *ConsoleServer) index(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "the console is not built into this binary", http.StatusNotFound)
 		return
 	}
+	// Creating a GitHub App is a form the shell POSTs to GitHub, so the shell
+	// alone may submit to GitHub's web origin, and to no other. GitHub's
+	// redirect back lands on this console's own callback, which `'self'` covers.
+	httpsec.Apply(w, httpsec.Policy{FormTargets: []string{githubWebOrigin}})
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	if _, err = w.Write(page); err != nil {
@@ -1428,9 +1429,6 @@ func registerRPC(mux *http.ServeMux, h rpcHandlers, extra ...connect.HandlerOpti
 	serve(directoryrosterv1connect.NewBackupServiceHandler(h, options...))
 }
 
-// ConsolePolicy is the Content-Security-Policy of every console response:
-// the default policy, with GitHub's web origin added to `form-action` for the
-// App manifest form (see GitHub.tsx postManifest). Nothing else is added.
-func ConsolePolicy() httpsec.Policy {
-	return httpsec.Policy{FormTargets: []string{githubapp.WebBase}}
-}
+// githubWebOrigin is where the shell POSTs a GitHub App manifest. The service
+// has no GitHub Enterprise support, so it is github.com.
+const githubWebOrigin = "https://github.com"
