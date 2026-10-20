@@ -145,3 +145,10 @@ replace github.com/truvity/sluis/storage => ./storage
 // audit/sdk/vX is tagged the require above is a placeholder that this replace
 // resolves.
 replace github.com/truvity/sluis/audit/sdk => ./audit/sdk
+
+// The OpenID library at v3.51.13 with one line removed: its ID tokens carry
+// no `client_id` claim (third_party/zitadel-oidc/README.md). The replace names
+// the version, so a bump of the require leaves it behind and the tests that
+// read an ID token fail (internal/issuer/idtoken_claims_test.go): re-apply the
+// patch to the new version, or drop the copy once upstream ships the fix.
+replace github.com/zitadel/oidc/v3 v3.51.13 => ./third_party/zitadel-oidc

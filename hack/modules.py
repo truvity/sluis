@@ -36,7 +36,10 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-SKIP = {".git", "node_modules", "testdata", "vendor", "dist", "_site"}
+# third_party holds patched copies of other projects' modules (a go.mod replace
+# wires each in): they are not this repository's, and pinning or tagging them
+# would rewrite the root's require of the upstream module to the release.
+SKIP = {".git", "node_modules", "testdata", "vendor", "dist", "_site", "third_party"}
 VERSION = re.compile(r"^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$")
 MODULE = re.compile(r"^module\s+(\S+)")
 # A require line, inside a block or on its own: `[require] <path> <version> [// comment]`.
