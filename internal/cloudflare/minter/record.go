@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
 	"slices"
 	"strings"
 	"time"
@@ -60,7 +59,7 @@ func (m *Minter) makeRoom(ctx context.Context, preset string, p config.Cloudflar
 			// What could not be deleted stays recorded for the next sweep; the
 			// check below still holds the record to its size.
 			m.log.WarnContext(ctx, "the expired Cloudflare tokens could not all be deleted before an on-demand mint",
-				slog.String("preset", preset), logattr.SafeError("error", serr))
+				logattr.SafeString("preset", preset), logattr.SafeError("error", serr))
 		}
 		if recorded, err = m.Recorded(ctx, preset); err != nil {
 			return &storeError{err: err}
