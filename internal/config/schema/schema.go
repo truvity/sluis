@@ -274,7 +274,7 @@ func serveSchema() m {
 		"directory":     directorySchema(),
 		"publicURL":     m{"$ref": "#/$defs/url", "description": "Where a browser reaches the console, including its mount. The admin-consent redirect URI and the values the setup steps show are built from it. Default http://localhost:8081."},
 		"publicRootURL": m{"$ref": "#/$defs/url", "description": "The host's root, never carrying the console's mount: the bootstrap surface stays there. Unset follows `publicURL`."},
-		"secureCookies": boolean("Mark session cookies Secure. Unset follows the scheme the browser will use: https in the URL."),
+		"secureCookies": boolean("Mark session cookies Secure. Unset follows the scheme the browser will use: https in the URL. `false` is for a plain-http local run: the service refuses it when `issuerURL` or `publicRootURL` is https."),
 		"hsts": obj("The Strict-Transport-Security header the issuer and the console send on a response that arrived over https. Never `preload`; never sent over http or to a loopback host.", m{
 			"maxAge":            duration("How long a browser keeps the rule, in whole seconds. Zero sends no header.", "8760h"),
 			"includeSubDomains": boolDefault("Extend the rule to the host's subdomains. Off by default: an issuer on an apex or parent domain would pin every sibling subdomain to https for `maxAge`. Turn it on only when every subdomain answers https.", false),

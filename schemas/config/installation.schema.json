@@ -2211,7 +2211,7 @@
           "description": "The host's root (`publicRootURL`). Default `url`."
         },
         "secureCookies": {
-          "description": "Mark session cookies Secure (`secureCookies`). Unset follows the https of the URL.",
+          "description": "Mark session cookies Secure (`secureCookies`). Unset follows the https of the URL. `false` is refused when `url` or `rootURL` is https.",
           "type": "boolean"
         },
         "url": {

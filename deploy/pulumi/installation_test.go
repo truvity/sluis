@@ -83,6 +83,10 @@ func TestAnInstallationAndTheArgumentsAgreeOrAreRefused(t *testing.T) {
 		"an installation the renderer refuses": {func(in *sluisconfig.Installation, _ *arp.LambdaArgs) {
 			in.Controllers.GitHub.EnabledOrgs = []string{"unbound"}
 		}, "unbound"},
+		"cookies off on an https issuer": {func(in *sluisconfig.Installation, _ *arp.LambdaArgs) {
+			off := false
+			in.Issuer.SecureCookies = &off
+		}, "issuer.secureCookies: false is refused when issuer.url is https"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			in := exampleInstallation(t)

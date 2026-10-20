@@ -273,6 +273,9 @@ func FromConfig(f *config.Serve, p *config.PolicyDocument) (Config, error) {
 	// CodeQL raised was about that default rather than about this line.
 	// secureCookies still overrides, in either direction, for the local
 	// http listener and for a TLS terminator that is not in the URL.
+	if err = f.ValidateSecureCookies(); err != nil {
+		return Config{}, err
+	}
 	c.secureCookies = strings.HasPrefix(c.issuerURL, "https://")
 	if f.SecureCookies != nil {
 		c.secureCookies = *f.SecureCookies
