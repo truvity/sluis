@@ -49,7 +49,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: truvity/ci-actions/setup-devbox@0fcf84dbeb8d406bce34d969e6cc32592af5cb5b # v1.15.0
+      - uses: truvity/ci-actions/setup-devbox@70af68e36bd7061fb866e0660c4c945eb91f35dd # v3.0.1
       - run: devbox run -- just ci-console
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
@@ -75,7 +75,7 @@ jobs:
         with:
           # policy-conformance's C5 reads the CHANGELOG against the latest tag.
           fetch-depth: ${{ matrix.group == 'docs' && 0 || 1 }}
-      - uses: truvity/ci-actions/setup-devbox@f9130c63db2899c18884c027a7eade20d0ab796a # v1.18.0
+      - uses: truvity/ci-actions/setup-devbox@70af68e36bd7061fb866e0660c4c945eb91f35dd # v3.0.1
       - if: startsWith(matrix.group, 'go-')
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
@@ -118,7 +118,7 @@ jobs:
       - if: ${{ !cancelled() && matrix.group == 'docs' }}
         uses: truvity/ci-actions/tagged-pins@598251d570fd99ba403b99bfa65ae4472ed25e73 # v1.8.0
       - if: ${{ !cancelled() && matrix.group == 'docs' }}
-        uses: truvity/ci-actions/policy-conformance@f9130c63db2899c18884c027a7eade20d0ab796a # v1.18.0
+        uses: truvity/ci-actions/policy-conformance@70af68e36bd7061fb866e0660c4c945eb91f35dd # v3.0.1
         with:
           strict: "true"
 
@@ -169,7 +169,7 @@ jobs:
   e2e:
     needs: plan
     if: needs.plan.outputs.audit == 'true'
-    uses: truvity/ci-workflows/.github/workflows/integration.yaml@8ab8774ba50e3668dcb5a07ad40ec900866ae140 # v3.33.0
+    uses: truvity/ci-workflows/.github/workflows/integration.yaml@d4350d573f67de8f7a145a4de94c392c6b43fd8c # v5.0.0
     permissions:
       contents: read
       id-token: write
