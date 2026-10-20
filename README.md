@@ -75,41 +75,41 @@ A policy file maps directory groups to access everywhere ([concepts](docs/concep
 
 | Standard | Status | Notes |
 |---|---|---|
-| OpenID Connect Core 1.0 | Almost full | Code flow, `public` subjects. `prompt=consent`, `login_hint`, `claims` and `acr_values` selection are ignored |
-| OpenID Connect Discovery 1.0 | Full | Members the issuer does not serve are absent |
-| OpenID Connect RP-Initiated Logout 1.0 | Full | `/end_session` asks first unless the `id_token_hint` names the signed-in person |
-| OpenID Connect Back-Channel Logout 1.0 | Full | Opt-in per client. No delivery retry |
-| OpenID Connect Front-Channel Logout, Session Management | Not served, chosen | No consumer asked |
-| RFC 6749 OAuth 2.0 | Almost full | Code, refresh and token exchange. No implicit, password or client credentials grant |
-| RFC 6750 Bearer tokens | Almost full | Header and form body only. No `insufficient_scope` |
-| RFC 7636 PKCE | Full | S256 only; a challenge without a method is refused since v1.77.1. Required for public clients; `pkce: required` or `optional` per confidential client |
-| RFC 7009 Revocation | Almost full | A client revokes only its own tokens. A JWT verified offline lives to `exp` |
-| RFC 7662 Introspection | Not served, chosen | The tokens are JWTs. The route answers `404` |
-| RFC 8414 Authorization server metadata | Full | Also at the path-inserted URL |
-| RFC 8693 Token exchange | Partial, chosen | One audience, access token out. No `actor_token` or `act` |
-| RFC 8707 Resource indicators | Almost full | One `resource`, matched in full |
-| RFC 9068 JWT access tokens | Partial | Required claims present. The header `typ` is `JWT`, not `at+jwt` |
-| RFC 9207 `iss` in the response | Full | On every redirect carrying `code` or `error` |
-| RFC 9700 Security best current practice | Almost full | No sender-constrained tokens. A confidential client may omit PKCE |
-| RFC 8252 Native apps | Full | A loopback redirect differs in the port only. A non-loopback `http` redirect is refused |
-| RFC 7517, 7518 Key sets | Full | ES384 and RS256. No JWE |
-| RFC 9728 Protected resource metadata | Partial, chosen | Served by the resource side, the `identity/resource` package and the resource proxy, not by the issuer |
-| RFC 9101 JAR | Not implemented | `request` answers `request_not_supported` |
-| RFC 9126 PAR, RFC 9449 DPoP, RFC 8705 mTLS | Not served, chosen | Surface without a consumer |
-| RFC 7591 Dynamic registration | Not served, chosen | Client ID Metadata Documents replace it |
-| RFC 8628 Device grant | Not served, chosen | Token exchange covers CI jobs and workloads |
-| OAuth 2.1 draft | Almost full | As RFC 9700 |
-| Client ID Metadata Documents (draft) | Almost full | Only `client_name` and `redirect_uris` are read. A document that declares a secret is refused |
-| MCP authorization (2025-06-18, 2025-11-25) | Almost full | Metadata, `resource`, PKCE S256, `iss` and metadata documents. No dynamic registration or step-up |
+| [OpenID Connect Core 1.0](https://openid.net/specs/openid-connect-core-1_0.html) | Almost full | Code flow, `public` subjects. `prompt=consent`, `login_hint`, `claims` and `acr_values` selection are ignored |
+| [OpenID Connect Discovery 1.0](https://openid.net/specs/openid-connect-discovery-1_0.html) | Full | Members the issuer does not serve are absent |
+| [OpenID Connect RP-Initiated Logout 1.0](https://openid.net/specs/openid-connect-rpinitiated-1_0.html) | Full | `/end_session` asks first unless the `id_token_hint` names the signed-in person |
+| [OpenID Connect Back-Channel Logout 1.0](https://openid.net/specs/openid-connect-backchannel-1_0.html) | Full | Opt-in per client. No delivery retry |
+| OpenID Connect [Front-Channel Logout](https://openid.net/specs/openid-connect-frontchannel-1_0.html), [Session Management](https://openid.net/specs/openid-connect-session-1_0.html) | Not served, chosen | No consumer asked |
+| [RFC 6749 OAuth 2.0](https://www.rfc-editor.org/rfc/rfc6749.html) | Almost full | Code, refresh and token exchange. No implicit, password or client credentials grant |
+| [RFC 6750 Bearer tokens](https://www.rfc-editor.org/rfc/rfc6750.html) | Almost full | Header and form body only. No `insufficient_scope` |
+| [RFC 7636 PKCE](https://www.rfc-editor.org/rfc/rfc7636.html) | Full | S256 only; a challenge without a method is refused since v1.77.1. Required for public clients; `pkce: required` or `optional` per confidential client |
+| [RFC 7009 Revocation](https://www.rfc-editor.org/rfc/rfc7009.html) | Almost full | A client revokes only its own tokens. A JWT verified offline lives to `exp` |
+| [RFC 7662 Introspection](https://www.rfc-editor.org/rfc/rfc7662.html) | Not served, chosen | The tokens are JWTs. The route answers `404` |
+| [RFC 8414 Authorization server metadata](https://www.rfc-editor.org/rfc/rfc8414.html) | Full | Also at the path-inserted URL |
+| [RFC 8693 Token exchange](https://www.rfc-editor.org/rfc/rfc8693.html) | Partial, chosen | One audience, access token out. No `actor_token` or `act` |
+| [RFC 8707 Resource indicators](https://www.rfc-editor.org/rfc/rfc8707.html) | Almost full | One `resource`, matched in full |
+| [RFC 9068 JWT access tokens](https://www.rfc-editor.org/rfc/rfc9068.html) | Partial | Required claims present. The header `typ` is `JWT`, not `at+jwt` |
+| [RFC 9207 `iss` in the response](https://www.rfc-editor.org/rfc/rfc9207.html) | Full | On every redirect carrying `code` or `error` |
+| [RFC 9700 Security best current practice](https://www.rfc-editor.org/rfc/rfc9700.html) | Almost full | No sender-constrained tokens. A confidential client may omit PKCE |
+| [RFC 8252 Native apps](https://www.rfc-editor.org/rfc/rfc8252.html) | Full | A loopback redirect differs in the port only. A non-loopback `http` redirect is refused |
+| [RFC 7517](https://www.rfc-editor.org/rfc/rfc7517.html), [7518](https://www.rfc-editor.org/rfc/rfc7518.html) Key sets | Full | ES384 and RS256. No JWE |
+| [RFC 9728 Protected resource metadata](https://www.rfc-editor.org/rfc/rfc9728.html) | Partial, chosen | Served by the resource side, the `identity/resource` package and the resource proxy, not by the issuer |
+| [RFC 9101 JAR](https://www.rfc-editor.org/rfc/rfc9101.html) | Not implemented | `request` answers `request_not_supported` |
+| [RFC 9126 PAR](https://www.rfc-editor.org/rfc/rfc9126.html), [RFC 9449 DPoP](https://www.rfc-editor.org/rfc/rfc9449.html), [RFC 8705 mTLS](https://www.rfc-editor.org/rfc/rfc8705.html) | Not served, chosen | Surface without a consumer |
+| [RFC 7591 Dynamic registration](https://www.rfc-editor.org/rfc/rfc7591.html) | Not served, chosen | Client ID Metadata Documents replace it |
+| [RFC 8628 Device grant](https://www.rfc-editor.org/rfc/rfc8628.html) | Not served, chosen | Token exchange covers CI jobs and workloads |
+| [OAuth 2.1 draft](https://datatracker.ietf.org/doc/draft-ietf-oauth-v2-1/) | Almost full | As RFC 9700 |
+| [Client ID Metadata Documents (draft)](https://datatracker.ietf.org/doc/draft-ietf-oauth-client-id-metadata-document/) | Almost full | Only `client_name` and `redirect_uris` are read. A document that declares a secret is refused |
+| MCP authorization ([2025-06-18](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization), [2025-11-25](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization)) | Almost full | Metadata, `resource`, PKCE S256, `iss` and metadata documents. No dynamic registration or step-up |
 
 ### Conformance results
 
 | Date | Version | Plan | Result | Run |
 |---|---|---|---|---|
-| 2026-10-20 | v1.77.1 | Config OP | Passed, suite 5.3.3 | [findings](docs/concepts/sluis/conformance-findings.md) |
-| pending | v1.77.2 | Basic OP | Re-run on v1.77.2 pending. The 2026-10-20 run on v1.77.1 had 0 failed; v1.77.2 fixes its findings | [findings](docs/concepts/sluis/conformance-findings.md#the-2026-10-20-run-on-v1771) |
-| pending | v1.77.2 | RP-Initiated Logout OP | Re-run on v1.77.2 pending. The 2026-10-20 run on v1.77.1 had 0 failed; v1.77.2 fixes its findings | [findings](docs/concepts/sluis/conformance-findings.md#the-2026-10-20-run-on-v1771) |
-| pending | v1.77.2 | Back-Channel Logout OP | Re-run on v1.77.2 pending. The 2026-10-20 run on v1.77.1 had 0 failed | [findings](docs/concepts/sluis/conformance-findings.md#the-2026-10-20-run-on-v1771) |
+| 2026-10-20 | v1.77.1 | [Config OP](https://openid.net/certification/connect_op_testing/) | Passed, suite 5.3.3 | [findings](docs/concepts/sluis/conformance-findings.md) |
+| pending | v1.77.2 | [Basic OP](https://openid.net/certification/connect_op_testing/) | Re-run on v1.77.2 pending. The 2026-10-20 run on v1.77.1 had 0 failed; v1.77.2 fixes its findings | [findings](docs/concepts/sluis/conformance-findings.md#the-2026-10-20-run-on-v1771) |
+| pending | v1.77.2 | [RP-Initiated Logout OP](https://openid.net/certification/connect_op_logout_testing/) | Re-run on v1.77.2 pending. The 2026-10-20 run on v1.77.1 had 0 failed; v1.77.2 fixes its findings | [findings](docs/concepts/sluis/conformance-findings.md#the-2026-10-20-run-on-v1771) |
+| pending | v1.77.2 | [Back-Channel Logout OP](https://openid.net/certification/connect_op_logout_testing/) | Re-run on v1.77.2 pending. The 2026-10-20 run on v1.77.1 had 0 failed | [findings](docs/concepts/sluis/conformance-findings.md#the-2026-10-20-run-on-v1771) |
 | 2026-09-12 | v1.0.0 | Config, Basic OP, RP-Initiated Logout, Back-Channel Logout | 0 failed | [findings](docs/concepts/sluis/conformance-findings.md) |
 
 ## Install and a worked example
