@@ -112,9 +112,11 @@ The usernames are `recovery` and `conformance`. Any other username gets the same
   - **Never an operator.** It completes as `system:serviceaccount:sluis:conformance`. The service **refuses to start**
     when the policy puts that subject in an operator group; the console never takes a browser signed in by it as a
     principal; the session service reads it as holding no group; and it cannot be a bearer or an exchange proof.
-  - **Its own markers.** Method `conformance`, `acr` `urn:truvity:sluis:acr:conformance` (not offered in discovery),
-    `amr` `["pwd","conformance"]`. The sign-in is recorded as the ordinary `roster.person.signed_in` with `how:
-    conformance`; the catalogue's `how` is a free string, so the catalogue version is unchanged.
+  - **Its own markers.** Method `conformance`, `acr` `urn:truvity:sluis:acr:conformance` (*amended 2026-10-20, owner
+    decision CF3:* listed in `acr_values_supported` while the account is on, so a client that asks for every listed
+    class gets one it asked for), `amr` `["pwd","conformance"]`. The sign-in is recorded as the ordinary
+    `roster.person.signed_in` with `how: conformance`; the catalogue's `how` is a free string, so the catalogue version
+    is unchanged.
   - **Shut by the recovery switch as well.** The switch of 0075 is the one runtime control an operator has over every
     way in that skips the directory. An account that survived it would be a door the operator believes closed, and
     keeping the two together costs nothing: a conformance run is a deliberate act that repeats with a new
