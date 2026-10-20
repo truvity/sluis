@@ -1,5 +1,9 @@
 ## Unreleased
 
+### Fixed
+
+- **The console's GitHub App "Create" button works again.** The console's `Content-Security-Policy` had `form-action 'self'`, which stopped the browser POSTing the App manifest to `https://github.com/organizations/<org>/settings/apps/new` (or the user's equivalent), so the button answered `BeginGitHubAppConnect`, then did nothing. The console's `form-action` is now `'self' https://github.com`, GitHub's web origin and nothing else; every other directive is unchanged, and the issuer's policy is unchanged. Installing an App, and connecting Slack, Google or Cloudflare, navigate the whole page and are not affected by the policy.
+
 ### Documentation
 
 - **The conformance results are published for v1.77.2.** The README results table and [conformance findings](docs/concepts/sluis/conformance-findings.md) record the 2026-10-20 run on suite 5.3.3: Basic OP 23 passed, 4 warning, 4 review, 4 skipped, 0 failed; RP-Initiated Logout 3 passed, 8 review; Back-Channel Logout 2 passed. The four Basic warnings are accepted and explained there. No behaviour changes.

@@ -104,6 +104,14 @@ type Policy struct {
 	// signing in. These pages are the issuer's recovery form and its agent
 	// consent page.
 	FormsMayRedirect bool
+
+	// FormTargets are further origins a page's own forms may be submitted
+	// to, written after `'self'` in `form-action`. Each is an origin
+	// (scheme and host, no path), named exactly: no wildcard. Ignored when
+	// FormsMayRedirect leaves `form-action` out. The console names GitHub's
+	// web origin, because GitHub creates an App only from a manifest the
+	// browser POSTs to github.com.
+	FormTargets []string
 }
 
 // String is the header's value.
@@ -125,7 +133,7 @@ func (p Policy) String() string {
 		directives = append(directives, "script-src 'nonce-"+p.ScriptNonce+"'")
 	}
 	if !p.FormsMayRedirect {
-		directives = append(directives, "form-action 'self'")
+		directives = append(directives, strings.Join(append([]string{"form-action 'self'"}, p.FormTargets...), " "))
 	}
 
 	return strings.Join(directives, "; ")
@@ -272,10 +280,16 @@ func Headers(next http.Handler) http.Handler {
 // hsts to a request that arrived over https. A header already on the
 // response when the request reaches this middleware is left as it is.
 func HeadersWith(next http.Handler, hsts HSTS) http.Handler {
+	return HeadersFor(next, hsts, Policy{})
+}
+
+// HeadersFor is [HeadersWith] under base as the default policy instead of
+// the zero [Policy].
+func HeadersFor(next http.Handler, hsts HSTS, base Policy) http.Handler {
 	value := hsts.Value()
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		Apply(w, Policy{})
+		Apply(w, base)
 
 		if value != "" && w.Header().Get("Strict-Transport-Security") == "" && hsts.secure(r) {
 			w.Header().Set("Strict-Transport-Security", value)
