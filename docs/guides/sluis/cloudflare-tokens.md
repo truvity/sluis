@@ -16,6 +16,7 @@ Make sluis clone a disabled Cloudflare prototype token into expiring account tok
 |---|---|
 | `allowedPermissionGroups` | the prototype may grant only these groups, else `prototype_forbidden`; the forbidden list stays the floor. Prefer setting it |
 | `maxLivePerCaller`, `maxLive`, `maxMintsPerCallerPerHour` | on-demand caps, defaults 10, 50 and 30. Over one the mint is refused (`caller_cap`, `preset_cap`, `rate_limited`), audited, and answered `access_denied` |
+| Record of minted ids | an on-demand mint first deletes the preset's expired tokens; a record that still holds about 100 ids refuses the mint as `record_full` |
 | Caps across containers | soft: each process counts the list Cloudflare gave it up to 10 s ago plus its own mints, so replicas and Lambda containers can overshoot together |
 | Counting fails | a failed list fails the mint (fail closed) |
 
@@ -71,12 +72,12 @@ cloudflare:
 | Limit or rule | Value |
 |---|---|
 | Pass | every 15 minutes per preset by default (`CloudflareRotation.Interval`); a credential rotates up to one tick after its `rotation` age, so `rotation` + tick + 5m must be under `lifetime`; a due rotation reads the prototype, creates a token and deletes the expired ones |
-| `store` | `external` (default) rotates the token into `external/cloudflare/<preset>`. `none` is on-demand only: leave `rotation` out; the pass mints and stores nothing and only deletes its expired tokens; the Pulumi library grants nothing on `external/cloudflare/*` for it, checks no margin, and schedules no rotation when every preset is `none`; the console shows `Store: none` and refuses `Rotate now` |
+| `store` | `external` (default) rotates the token into `external/cloudflare/<preset>`. `none` is on-demand only: leave `rotation` out; the pass mints and stores nothing and only deletes its expired tokens; the Pulumi library checks no margin for it and still declares the schedule; the console shows `Store: none` and refuses `Rotate now` |
 | Rotation timing | the first tick after `rotation` replaces the credential, so make `rotation` a multiple of the tick to rotate when intended (20m on a 15m tick rotates every 30m); the console calls it *due* until then and *overdue* past `rotation` + tick + 1m, taking the tick from `cloudflare.tick`, which the Pulumi library fills from `CloudflareRotation` (a minute when unset) |
 | Cloudflare API | 1,200 requests per 5 minutes per user; past it Cloudflare blocks the API for 5 minutes |
 | Tokens per account | 500; a 1h `lifetime` with a 20m `rotation` keeps about three live per preset |
 | Token names | `sluis/<instance>/<preset>/<time>`; on demand `sluis/<instance>/<preset>/<caller>/<time>` |
-| Sweep | deletes only expired tokens it recorded, under its own preset's prefix |
+| Sweep | deletes only expired tokens it recorded, under its own preset's prefix; the pass and each on-demand mint sweep |
 
 In the policy, grant a group per preset. Pin a CI job by `github` matchers, never by workflow name:
 

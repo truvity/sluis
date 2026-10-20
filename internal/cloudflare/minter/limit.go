@@ -16,6 +16,9 @@ const (
 	reasonCallerCap   = "caller_cap"
 	reasonPresetCap   = "preset_cap"
 	reasonRateLimited = "rate_limited"
+	// reasonRecordFull is a record of minted tokens with no room for another
+	// (see makeRoom).
+	reasonRecordFull = "record_full"
 )
 
 // mintWindow is the span the per-caller mint rate is counted over.
