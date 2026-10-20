@@ -1,5 +1,9 @@
 ## Unreleased
 
+### Added
+
+- **The conformance account's userinfo answers the `profile` scope with what the account has.** With `profile` granted, `/userinfo` for a conformance sign-in carries `name` (`OpenID conformance test account`) and `preferred_username` (`conformance`, the username it signs in with). It answered `sub` alone, so the suite's `VerifyScopesReturnedInUserInfoClaims` listed every `profile` claim as missing. The ID token is unchanged, and so is userinfo without `profile`. The account has no address, so `email` still adds nothing. A token now records how its sign-in was proved, which is how userinfo knows the account. A token minted before this release answers as before until it expires. For a person nothing changes: the address gives `email`, `email_verified` and `preferred_username`, and the directory gives `name`, `given_name` and `family_name`. `middle_name`, `nickname`, `profile`, `picture`, `website`, `gender`, `birthdate`, `zoneinfo`, `locale` and `updated_at` have no source and are never returned, so the `profile` warning stays ([conformance findings](docs/concepts/sluis/conformance-findings.md)).
+
 ## v1.77.1
 
 v1.77.1-rc.2 as it stands: no change since it. Its notes are under v1.77.1-rc.2 and v1.77.1-rc.1 below.
