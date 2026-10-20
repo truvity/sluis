@@ -1,5 +1,9 @@
 ## Unreleased
 
+## v1.77.4
+
+Two fixes: the console's GitHub App "Create" button works again, and the Pulumi library no longer renders `backup.region`, so an estate's backup and restore documents change and their functions get a new version. The Pulumi libraries move to sigstore-go v1.2.2 and its dependencies to clear Dependabot security alerts (#734; no code change). The conformance results for v1.77.2 are published.
+
 ### Fixed
 
 - **The console's GitHub App "Create" button works again.** The console's `Content-Security-Policy` had `form-action 'self'`, which stopped the browser POSTing the App manifest to `https://github.com/organizations/<org>/settings/apps/new` (or the user's equivalent), so the button answered `BeginGitHubAppConnect`, then did nothing. The console's signed-in shell now sends `form-action 'self' https://github.com`, GitHub's web origin and nothing else; every other directive is unchanged, and so are the sign-in page, the assets, the API and the issuer's policies. Installing an App, and connecting Slack, Google or Cloudflare, navigate the whole page and are not affected by the policy.
