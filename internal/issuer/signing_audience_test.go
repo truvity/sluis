@@ -281,6 +281,14 @@ func TestSigningCodeExchangeAccessTokenFollowsResourceIDTokenFollowsClient(t *te
 	if idClaims["azp"] != "local-dev" {
 		t.Errorf("ID token azp = %v, want the client", idClaims["azp"])
 	}
+	// azp names the client; client_id is an access token claim (RFC 9068
+	// 2.2) and stays on the access token only.
+	if value, carried := idClaims["client_id"]; carried {
+		t.Errorf("ID token carries client_id = %v, want none: azp names the client", value)
+	}
+	if accessClaims["client_id"] != "local-dev" {
+		t.Errorf("access token client_id = %v, want the client", accessClaims["client_id"])
+	}
 }
 
 // The other half of the same guarantee, made explicit: a client that
@@ -489,6 +497,9 @@ func TestSigningMintForFollowsItsOwnTargetAudience(t *testing.T) {
 	}
 	if !audMatches(claims["aud"], "mint-rs256") {
 		t.Errorf("aud = %v, want mint-rs256", claims["aud"])
+	}
+	if claims["client_id"] != "mint-rs256" {
+		t.Errorf("client_id = %v, want mint-rs256: an access token names its client (RFC 9068 2.2)", claims["client_id"])
 	}
 
 	defaultToken, _, err := storage.MintFor(ctx, "ada@north.example", "mint-default", time.Minute)

@@ -99,8 +99,10 @@ linters:
         text: default logger should not be used
         path: internal/(githubapp/ratelimit|issuer/clientsecrets_http|issuer/resolve|issuer/session|valkey/retry)\.go
     # gen/ is buf output, committed for `go get`-ability but never hand-edited.
+    # third_party/ is other projects' code, kept as upstream wrote it.
     paths:
       - gen
+      - third_party
 
 formatters:
   enable:
@@ -109,6 +111,7 @@ formatters:
   exclusions:
     paths:
       - gen
+      - third_party
 
 issues:
   max-issues-per-linter: 0

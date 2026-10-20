@@ -37,7 +37,7 @@ Four warnings say userinfo omits claims that the `profile` and `email` scopes pe
 
 Missing are `birthdate`, `gender`, `zoneinfo`, `locale`, `picture`, `website`, `profile`, `nickname`, `middle_name` and `updated_at`. The service has no source for them.
 
-The other two warnings come from one module noting that the ID token carries claims the client did not request by scope. One is `groups`, which Kargo and ArgoCD read, so gating it behind a scope would break every consumer. The other is `client_id`, which duplicates `azp` and comes from the OpenID library's claims struct.
+The other two warnings come from one module noting that the ID token carries claims the client did not request by scope. One is `groups`, which Kargo and ArgoCD read, so gating it behind a scope would break every consumer. The other is `client_id`, which duplicates `azp` and came from the OpenID library's claims struct. From v1.77.2 the ID token no longer carries it, and `claims_supported` no longer lists it.
 
 ## Back-channel logout needs the suite in the cluster
 

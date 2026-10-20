@@ -22,6 +22,7 @@ ts/                 the TypeScript package, published to GitHub Packages by the 
 proto/  gen/        contracts and committed generated code
 audit/              the audit product, a Go module of its own
 storage/            the state and keys module both products use
+third_party/        patched copies of other projects' modules, each wired in by a go.mod replace
 docs/               see docs/WRITING.md
 ```
 

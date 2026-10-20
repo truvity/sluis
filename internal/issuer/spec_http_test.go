@@ -49,11 +49,16 @@ func TestDiscoveryStatesWhatThisIssuerDoes(t *testing.T) {
 	claims := list("claims_supported")
 	for _, want := range []string{
 		"iss", "sub", "aud", "exp", "iat", "auth_time", "nonce", "acr", "amr", "azp", "at_hash", "sid",
-		"email", "email_verified", "name", "given_name", "family_name", "preferred_username", "client_id", "groups",
+		"email", "email_verified", "name", "given_name", "family_name", "preferred_username", "groups",
 	} {
 		if !slices.Contains(claims, want) {
 			t.Errorf("claims_supported lacks %q, which a token carries: %v", want, claims)
 		}
+	}
+	// claims_supported lists ID token and userinfo claims; client_id is on
+	// the access token only.
+	if slices.Contains(claims, "client_id") {
+		t.Errorf("claims_supported lists client_id, which no ID token or userinfo response carries: %v", claims)
 	}
 
 	for _, name := range []string{"introspection_endpoint", "device_authorization_endpoint", "registration_endpoint"} {

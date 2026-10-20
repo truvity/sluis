@@ -1,5 +1,9 @@
 ## Unreleased
 
+### Fixed
+
+- **An ID token no longer carries `client_id`.** OpenID Connect Core names an ID token's client by `aud` and `azp`, and `client_id` is a JWT access token claim (RFC 9068), so access tokens keep it. The OpenID library set it on both, and the conformance suite warned about it. sluis now builds a copy of `github.com/zitadel/oidc/v3` v3.51.13 with that one line removed, in `third_party/zitadel-oidc`, wired in by a `replace` in `go.mod`. Discovery's `claims_supported` no longer lists `client_id`. A relying party that read `client_id` from an ID token reads `azp` instead. Only sluis's own binaries change: a Go module that imports sluis packages still builds against the upstream library.
+
 ## v1.77.1
 
 v1.77.1-rc.2 as it stands: no change since it. Its notes are under v1.77.1-rc.2 and v1.77.1-rc.1 below.
