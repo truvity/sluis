@@ -1,5 +1,9 @@
 ## Unreleased
 
+## v1.77.5
+
+Two fixes. A catalogue GitHub App with `export: true` that the split GitHub function installs is exported again. On-demand Cloudflare presets are swept again: the Pulumi library declares the Cloudflare rotation schedule whenever a preset is declared, `store: none` ones included, and an on-demand mint sweeps expired tokens itself and refuses with `record_full` rather than overflow the record. An estate whose presets are all `store: none` gets one new schedule.
+
 ### Fixed
 
 - **A catalogue GitHub App with `export: true` that the GitHub function installs is exported again.** In a split deployment the console's GitHub operations run in the GitHub function, and its stores were not told which Apps the policy exports, nor their labels or the App an organisation uses. Creating and installing an exported catalogue App there kept its key as an internal credential, `internal/github/apps/<id>/<ref>`, and never wrote `external/github/<id>`. The function now configures its stores from the policy through the same helper as the one process, so the installed App's key is written to `external/github/<id>` and no internal credential is kept beside it. **Upgrade:** none for new Apps. An App installed on an affected build keeps working, because the mint still reads its internal credential, but nothing exports it on its own: write its `external/github/<id>` document by hand, or disconnect and recreate the App.
