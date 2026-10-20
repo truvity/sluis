@@ -1,5 +1,9 @@
 ## Unreleased
 
+## v1.77.1
+
+v1.77.1-rc.2 as it stands: no change since it. Its notes are under v1.77.1-rc.2 and v1.77.1-rc.1 below.
+
 ## v1.77.1-rc.2
 
 ### Breaking
