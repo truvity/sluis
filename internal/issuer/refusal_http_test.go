@@ -312,6 +312,8 @@ func TestEveryAuthorizeRefusalIsUniform(t *testing.T) {
 	}{
 		{"a public client without PKCE", noPKCE, "invalid_request", "invalid request", []string{"code_challenge"}},
 		{"a plain challenge method", authorizeQuery(url.Values{"code_challenge_method": {"plain"}}), "invalid_request", "invalid request", []string{"S256"}},
+		{"an unknown challenge method", authorizeQuery(url.Values{"code_challenge_method": {"S512"}}), "invalid_request", "invalid request", []string{"S256"}},
+		{"a challenge with no method", authorizeQuery(url.Values{"code_challenge_method": nil}), "invalid_request", "invalid request", []string{"S256"}},
 		{"a resource nobody declared", authorizeQuery(url.Values{"resource": {"https://mcp.elsewhere.example/"}}), "invalid_target", "not authorised",
 			[]string{"mcp.elsewhere.example", "declares"}},
 		{"a resource that is not a URI", authorizeQuery(url.Values{"resource": {"/mcp"}}), "invalid_target", "not authorised", []string{"absolute URI"}},
