@@ -390,10 +390,11 @@ func TestTheRotationTickReachesTheDocuments(t *testing.T) {
 	}
 }
 
-// A preset with `store: none` is minted on demand only: the library gives it no
-// rotation schedule and holds it to no rotation margin. Presets beside it that
-// are stored keep both.
-func TestAnOnDemandPresetGetsNoScheduleNoStoredGrantAndNoMargin(t *testing.T) {
+// A preset with `store: none` is minted on demand only: the library holds it to
+// no rotation margin and sets no tick for it, but still declares the schedule,
+// which is the only thing on Lambda that deletes its expired tokens. Presets
+// beside it that are stored keep the margin.
+func TestAnOnDemandPresetGetsTheSweepScheduleButNoMarginOrTick(t *testing.T) {
 	root := arnp + "ssm:" + region + ":" + account + ":parameter/sluis/example"
 	onDemand := sluisconfig.CloudflarePreset{
 		Account: "main", Prototype: "proto-adhoc-01", Description: "On demand",
@@ -405,8 +406,18 @@ func TestAnOnDemandPresetGetsNoScheduleNoStoredGrantAndNoMargin(t *testing.T) {
 	withCloudflare(only)
 	only.Cloudflare.Presets = map[string]sluisconfig.CloudflarePreset{"dns": onDemand}
 	rec, _ := mustLambda(t, withInstallation(only, func(a *arp.LambdaArgs) { a.CloudflareRotation.Interval = 29 * time.Minute }))
-	if rec.has("aws:scheduler/schedule:Schedule", "staging-cloudflare-rotation") {
-		t.Error("a rotation schedule for presets that are all store: none")
+	sched := rec.one(t, "aws:scheduler/schedule:Schedule", "staging-cloudflare-rotation")
+	tgt := prop(sched, "target").ObjectValue()
+	if tgt["input"].StringValue() != `{"kind":"cloudflare"}` || !strings.HasSuffix(tgt["arn"].StringValue(), ":function:sluis-example-cloudflare:live") {
+		t.Errorf("the sweep schedule: %v", sched.Inputs)
+	}
+	// The scheduler's role may invoke what the schedule targets.
+	if !slices.Contains(grants(statements(t, prop(rec.one(t, policyType, "staging-scheduler-policy"), "policy").StringValue()))["lambda:InvokeFunction"],
+		tgt["arn"].StringValue()) {
+		t.Error("the scheduler's role may not invoke the Cloudflare function")
+	}
+	if doc := archiveFiles(t, rec.one(t, layerType, "staging-cloudflare-config"))["sluis/sluis.yaml"]; strings.Contains(doc, "tick:") {
+		t.Errorf("a tick was set for presets that are all store: none:\n%s", doc)
 	}
 	// The minter credential is still needed: the token exchange mints.
 	cf := grants(statements(t, prop(rec.one(t, policyType, "staging-cloudflare-policy"), "policy").StringValue()))

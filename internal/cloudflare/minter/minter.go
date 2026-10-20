@@ -314,7 +314,13 @@ func (m *Minter) MintFor(ctx context.Context, preset string, caller Caller, life
 	who := caller.Actor.ID
 	now := m.now()
 	name := cloudflare.OnDemandName(m.cfg.Instance, preset, who, now)
-	release, err := m.admit(ctx, preset, p, name, now, lifetime)
+	// The record is made room in before the limits are counted, so a mint it
+	// cannot take is refused before Cloudflare creates anything.
+	err := m.makeRoom(ctx, preset, p, now)
+	var release func()
+	if err == nil {
+		release, err = m.admit(ctx, preset, p, name, now, lifetime)
+	}
 	if err != nil {
 		var limit *limitError
 		if errors.As(err, &limit) {

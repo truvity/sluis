@@ -350,8 +350,10 @@ type LambdaArgs struct {
 	// (`{"kind":"clients"}`, the issuer's `live` alias). Disabled leaves it out.
 	IssuerClients IssuerClientsArgs
 	// CloudflareRotation is the schedule that rotates the Cloudflare credentials
-	// that are due (`{"kind":"cloudflare"}`). It exists only when the
-	// Installation declares `cloudflare` presets; Disabled leaves it out.
+	// that are due and deletes the expired tokens sluis minted
+	// (`{"kind":"cloudflare"}`). It exists whenever the Installation declares
+	// `cloudflare` presets, `store: none` ones included: on Lambda it is the
+	// only thing that sweeps them. Disabled leaves it out.
 	CloudflareRotation CloudflareRotationArgs
 	// Check is the post-deploy check: an `aws.lambda.Invocation` of the live
 	// alias with `{"kind":"check"}`, after the function, its alias, its role's
@@ -482,10 +484,11 @@ type DirectoryRefreshArgs struct {
 }
 
 // CloudflareRotationArgs is the Cloudflare rotation schedule: one EventBridge
-// schedule invoking the function with `{"kind":"cloudflare"}`. A pass that finds
-// nothing due costs one read of the secrets store, so the schedule's tick is the
-// rotation's granularity: a credential rotates up to one tick after its
-// `rotation` age. A coarser tick costs fewer lease writes and reads, and is
+// schedule invoking the function with `{"kind":"cloudflare"}`, which rotates the
+// stored presets that are due and deletes every preset's expired tokens. A pass
+// that finds nothing due costs one read of the secrets store, so the schedule's
+// tick is the rotation's granularity: a credential rotates up to one tick after
+// its `rotation` age. A coarser tick costs fewer lease writes and reads, and is
 // held to the presets: rotation + tick + CloudflareConsumerSyncMargin must be
 // shorter than every preset's lifetime.
 type CloudflareRotationArgs struct {
@@ -618,14 +621,6 @@ func checkCloudflareMargin(tick time.Duration, presets map[string]sluisconfig.Cl
 // exist only then.
 func (a *LambdaArgs) cloudflare() bool {
 	return a.Installation != nil && a.Installation.Cloudflare.Declared()
-}
-
-// cloudflareStored reports whether some declared preset is rotated by the
-// schedule (`store` unset or `external`). An installation whose presets are all
-// `store: none` is minted from on demand only, and has no rotation schedule
-// and no grant on the stored credentials.
-func (a *LambdaArgs) cloudflareStored() bool {
-	return a.Installation != nil && a.Installation.Cloudflare.AnyStored()
 }
 
 // DefaultDirectoryRefreshSchedule is the directory refresh's tick when
@@ -2242,13 +2237,15 @@ func newSchedules(ctx *pulumi.Context, name string, a *LambdaArgs, live *lambda.
 		}
 		names = append(names, pulumi.String(rname))
 	}
-	if a.cloudflareStored() && !a.CloudflareRotation.Disabled {
+	// Every preset gets the schedule, `store: none` ones included: it rotates
+	// nothing of theirs, and is what deletes their expired tokens.
+	if a.cloudflare() && !a.CloudflareRotation.Disabled {
 		arn, err := use(RoleCloudflare)
 		if err != nil {
 			return nil, none, err
 		}
 		cname := a.FunctionNamePrefix + "-cloudflare-rotation"
-		if err := mk(name+"-cloudflare-rotation", cname, "Rotates the Cloudflare credentials that are due.",
+		if err := mk(name+"-cloudflare-rotation", cname, "Rotates the Cloudflare credentials that are due and deletes the expired tokens sluis minted.",
 			a.CloudflareRotation.Rate, a.CloudflareRotation.Paused, arn, `{"kind":"cloudflare"}`); err != nil {
 			return nil, none, err
 		}

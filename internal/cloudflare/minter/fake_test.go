@@ -28,6 +28,7 @@ type fakeAPI struct {
 
 	creates, deletes, lists int
 	createErr               error
+	deleteErr               error
 	listErr                 error
 	gotMinter               string
 }
@@ -71,6 +72,9 @@ func (f *fakeAPI) DeleteToken(_ context.Context, id string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.deletes++
+	if f.deleteErr != nil {
+		return f.deleteErr
+	}
 	if _, ok := f.tokens[id]; !ok {
 		return cloudflare.ErrNotFound
 	}

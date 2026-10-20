@@ -182,8 +182,9 @@ func (p CloudflarePreset) StoreMode() string {
 // external/cloudflare/<preset>. False means on-demand only.
 func (p CloudflarePreset) Stored() bool { return p.StoreMode() != CloudflareStoreNone }
 
-// AnyStored reports whether some preset is rotated by the schedule: the
-// rotation schedule and the grants on the stored credentials exist only then.
+// AnyStored reports whether some preset is rotated by the schedule: a
+// `cloudflare.tick` is filled in and the rotation margin checked only then. The
+// schedule itself runs for every preset, to delete expired tokens.
 func (c *Cloudflare) AnyStored() bool {
 	if c == nil {
 		return false
