@@ -652,13 +652,10 @@ func openStores(ctx context.Context, cfg Config, st *store.Stores, log *slog.Log
 // a deployment mounts, which is an input and not a record this service writes.
 func openPortStores(ctx context.Context, cfg Config, st *store.Stores, log *slog.Logger) (stores, error) {
 	// What the policy document's apps.github.apps declares: which Apps are
-	// exported, their labels, and the App an organisation uses.
-	exported := func(id string) bool { return cfg.policy.GitHubAppExported(id) || cfg.githubCatalogue.Exported(id) }
-	declared := portstore.DeclaredGitHubApps{
-		Labels: cfg.policy.GitHubAppLabels, RunnerLabels: cfg.policy.RunnerLabels, AppRef: cfg.policy.AppRef,
-	}
+	// exported, their labels, and the App an organisation uses. The GitHub
+	// module's own function configures its stores the same way.
 	baseOf := func(set port.Set) *portstore.Base {
-		return portstore.New(set).WithV5(st.V5).ExportGitHubApps(exported).DeclareGitHubApps(declared)
+		return portstore.New(set).WithV5(st.V5).ConfigureGitHubApps(cfg.policy, cfg.githubCatalogue.Exported)
 	}
 	base := baseOf(st.Ports)
 	// On layout v5 each module's records are in its own table, and this process

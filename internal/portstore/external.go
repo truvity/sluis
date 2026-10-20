@@ -120,6 +120,34 @@ func (b *Base) DeclareGitHubApps(d DeclaredGitHubApps) *Base {
 	return b
 }
 
+// GitHubAppPolicy is what the configuration says of the GitHub Apps: which are
+// exported, their labels and the App an organisation uses. The policy document
+// (config.PolicyDocument) answers it.
+type GitHubAppPolicy interface {
+	GitHubAppExported(id string) bool
+	GitHubAppLabels(id string) map[string]string
+	RunnerLabels(tier, org string) map[string]string
+	AppRef(org string) string
+}
+
+// ConfigureGitHubApps is [Base.ExportGitHubApps] and [Base.DeclareGitHubApps]
+// from one policy, and is what every process that writes the GitHub Apps calls,
+// so that the monolith and a module's own function cannot keep an App
+// differently. also exports the Apps it says are as well (a demonstration's own
+// catalogue); nil adds none. A nil policy configures nothing.
+func (b *Base) ConfigureGitHubApps(p GitHubAppPolicy, also func(id string) bool) *Base {
+	if p == nil {
+		return b
+	}
+	exported := p.GitHubAppExported
+	if also != nil {
+		exported = func(id string) bool { return p.GitHubAppExported(id) || also(id) }
+	}
+	return b.ExportGitHubApps(exported).DeclareGitHubApps(DeclaredGitHubApps{
+		Labels: p.GitHubAppLabels, RunnerLabels: p.RunnerLabels, AppRef: p.AppRef,
+	})
+}
+
 // labelsFor are the labels a record is written with: the declared ones when
 // there are any, and otherwise its own.
 func labelsFor(declared, own map[string]string) map[string]string {
