@@ -73,6 +73,39 @@ backup:
 	}
 }
 
+// A document that still sets only `backup.region`, as the Pulumi library
+// rendered it until the release that stopped, loads and is reported; the
+// restore role's verification in it is read as before, and a document without
+// the key is not reported.
+func TestADocumentThatSetsOnlyTheFormerRegionLoadsAndIsReported(t *testing.T) {
+	body := `
+backup:
+  role: restore
+  region: eu-west-1
+  identity: dr
+  recipients: [` + recipient1 + `]
+  verify: {query: "https://audit.example.test", tokenFile: /var/run/audit/token, observer: backup-fn}
+  target: {bucket: b, region: eu-west-1}
+`
+	doc, err := config.LoadBackup(writeBackupDoc(t, backupHead+body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(doc.Deprecated(), ","); got != "backup.region" {
+		t.Errorf("deprecated %q, want backup.region", got)
+	}
+	if v := doc.Backup.Verify; v == nil || v.Observer != "backup-fn" || doc.IdentityRef() != "dr" || doc.Backup.Target.Region != "eu-west-1" {
+		t.Errorf("verify %+v, identity %q, target %+v", doc.Backup.Verify, doc.IdentityRef(), doc.Backup.Target)
+	}
+	doc, err = config.LoadBackup(writeBackupDoc(t, backupHead+strings.Replace(body, "  region: eu-west-1\n  identity", "  identity", 1)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := doc.Deprecated(); len(got) != 0 {
+		t.Errorf("deprecated %v, want none", got)
+	}
+}
+
 // The restore role needs no recipients.
 func TestTheRestoreRoleNeedsNoRecipients(t *testing.T) {
 	if _, err := config.LoadBackup(writeBackupDoc(t, backupHead+"backup:\n  role: restore\n  identity: dr\n  target: {bucket: b}\n")); err != nil {
