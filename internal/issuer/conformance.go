@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/zitadel/oidc/v3/pkg/oidc"
 
+	"github.com/truvity/sluis/internal/srpauth"
 	"github.com/truvity/sluis/policy"
 )
 
@@ -103,4 +105,24 @@ func ConformanceSubject(set *policy.Set, subject string) error {
 		}
 	}
 	return nil
+}
+
+// ConformanceName is the conformance account's `name`: what the account is.
+// It names no person, because the account is none.
+const ConformanceName = "OpenID conformance test account"
+
+// conformanceProfile adds the `profile` claims the conformance account has to
+// its userinfo, when the token was granted that scope: its name
+// ([ConformanceName]) and the username it signs in with. Nothing else of the
+// scope is sourced, and the account has no address, so `email` adds nothing.
+//
+// Userinfo only. A code flow always issues an access token, and OpenID Connect
+// Core 5.4 returns a scope's claims from userinfo then, so the ID token stays
+// as it was.
+func conformanceProfile(info *oidc.UserInfo, scopes []string) {
+	if !slices.Contains(scopes, oidc.ScopeProfile) {
+		return
+	}
+	info.Name = ConformanceName
+	info.PreferredUsername = srpauth.ConformanceUser
 }

@@ -83,6 +83,12 @@ type token struct {
 	// shows a person rather than an address. Empty is normal.
 	GivenName  string `json:"givenName,omitempty"`
 	FamilyName string `json:"familyName,omitempty"`
+	// Method is how the subject was proved, as the sign-in recorded it:
+	// [ConformanceHow] for the conformance account, whose `profile` claims
+	// come from the account itself ([conformanceProfile]) and not from a
+	// directory. Empty for a token minted before it was recorded, and for
+	// an exchange, which proves no sign-in.
+	Method string `json:"method,omitempty"`
 	// Session is the session this token was issued under, when there is
 	// one. It is what lets a REVOCATION reach an access token that has
 	// already been minted: the token is a JWT and is verified offline
@@ -1854,6 +1860,7 @@ func (s *Storage) issue(ctx context.Context, request op.TokenRequest) (*token, e
 		Scopes:   request.GetScopes(),
 		Claims:   claims,
 		Expires:  expires,
+		Method:   methodOf(request),
 	}
 	issued.GivenName, issued.FamilyName = given, family
 	return issued, nil
@@ -2570,7 +2577,13 @@ func (s *Storage) SetUserinfoFromToken(ctx context.Context, info *oidc.UserInfo,
 		}
 	}
 
-	return s.fill(ctx, info, issued.Subject, issued.Claims, issued.GivenName, issued.FamilyName)
+	if err = s.fill(ctx, info, issued.Subject, issued.Claims, issued.GivenName, issued.FamilyName); err != nil {
+		return err
+	}
+	if issued.Method == ConformanceHow {
+		conformanceProfile(info, issued.Scopes)
+	}
+	return nil
 }
 
 // SetIntrospectionFromToken implements [op.OPStorage].

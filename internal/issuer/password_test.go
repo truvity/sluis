@@ -184,9 +184,15 @@ var stateField = regexp.MustCompile(`data-state="([^"]+)"`)
 // open starts an authorization request for client and returns the chooser page.
 func openChooser(t *testing.T, b *browser, client string) string {
 	t.Helper()
+	return openChooserFor(t, b, client, "openid")
+}
+
+// openChooserFor is [openChooser] asking for scope.
+func openChooserFor(t *testing.T, b *browser, client, scope string) string {
+	t.Helper()
 	query := url.Values{
 		"client_id": {client}, "redirect_uri": {"http://localhost:8000/callback"}, "response_type": {"code"},
-		"scope": {"openid"}, "state": {"pw-test"}, "code_challenge_method": {"S256"},
+		"scope": {scope}, "state": {"pw-test"}, "code_challenge_method": {"S256"},
 		"code_challenge": {challengeOf(pkceVerifier)},
 	}
 	status, where, body := b.do(http.MethodGet, "/authorize?"+query.Encode())

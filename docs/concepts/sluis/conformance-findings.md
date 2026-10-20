@@ -33,9 +33,18 @@ Three modules skip because `scopes_supported` omits `address` and `phone`. One s
 
 ## Warnings are mostly personal data sluis does not hold
 
-Four warnings say userinfo omits claims that the `profile` and `email` scopes permit. A real Google sign-in returned `sub`, `name`, `given_name`, `family_name`, `preferred_username`, `email`, `email_verified` and `groups`.
+Four warnings say userinfo omits claims that the `profile` and `email` scopes permit. Userinfo returns the claims with a real source.
 
-Missing are `birthdate`, `gender`, `zoneinfo`, `locale`, `picture`, `website`, `profile`, `nickname`, `middle_name` and `updated_at`. The service has no source for them.
+| Claim | Scope | A person | The conformance account |
+|---|---|---|---|
+| `email`, `email_verified` | `email` | the address the directory vouched for | absent, it has no address |
+| `preferred_username` | `profile` | the address | `conformance`, its username |
+| `name` | `profile` | the directory's names, joined | `OpenID conformance test account` |
+| `given_name`, `family_name` | `profile` | the directory's, when it supplies them | absent |
+
+A person's claims arrive whatever the scope. The conformance account's arrive in userinfo only, and only with `profile`.
+
+No source holds `birthdate`, `gender`, `zoneinfo`, `locale`, `picture`, `website`, `profile`, `nickname`, `middle_name` or `updated_at`. The directory answer the issuer reads carries an address and names. So the `profile` warning stays. The `email` warning stays only for the conformance account.
 
 The other two warnings come from one module noting that the ID token carries claims the client did not request by scope. One is `groups`, which Kargo and ArgoCD read, so gating it behind a scope would break every consumer. The other is `client_id`, which duplicates `azp` and comes from the OpenID library's claims struct.
 
