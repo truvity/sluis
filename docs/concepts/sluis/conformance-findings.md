@@ -42,7 +42,7 @@ Four warnings say userinfo omits claims that the `profile` and `email` scopes pe
 | `name` | `profile` | the directory's names, joined | `OpenID conformance test account` |
 | `given_name`, `family_name` | `profile` | the directory's, when it supplies them | absent |
 
-A person's claims arrive whatever the scope. The conformance account's arrive in userinfo only, and only with `profile`.
+A person's claims need their scope. The conformance account's arrive in userinfo only, and only with `profile`.
 
 No source holds `birthdate`, `gender`, `zoneinfo`, `locale`, `picture`, `website`, `profile`, `nickname`, `middle_name` or `updated_at`. The directory answer the issuer reads carries an address and names. So the `profile` warning stays. The `email` warning stays only for the conformance account.
 

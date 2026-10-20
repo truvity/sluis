@@ -1536,7 +1536,7 @@ func (s *Storage) CreateAccessAndRefreshTokens(
 // session behind it (a workload trading a proof, which opens none)
 // carries no `sid` rather than an empty one.
 func (s *Storage) SetUserinfoFromRequest(
-	ctx context.Context, info *oidc.UserInfo, request op.IDTokenRequest, _ []string,
+	ctx context.Context, info *oidc.UserInfo, request op.IDTokenRequest, scopes []string,
 ) error {
 	subject := request.GetSubject()
 
@@ -1552,7 +1552,10 @@ func (s *Storage) SetUserinfoFromRequest(
 
 	claims := scopeClaims(s.iss.Config().GroupsScoping, s.iss.Policy(), Claims(result), clientID, result.Groups)
 	claims = applyGroupsDelimiter(s.iss.Policy(), claims, clientID)
-	if err = s.fill(ctx, info, subject, claims, given, family); err != nil {
+	// scopes is the request's grant as the library hands it on: the
+	// sign-in's for a code, and the session's for a refresh that names
+	// none ([refreshRequest.GetScopes]).
+	if err = s.fill(ctx, info, subject, claims, given, family, scopes); err != nil {
 		return err
 	}
 
@@ -2577,7 +2580,9 @@ func (s *Storage) SetUserinfoFromToken(ctx context.Context, info *oidc.UserInfo,
 		}
 	}
 
-	if err = s.fill(ctx, info, issued.Subject, issued.Claims, issued.GivenName, issued.FamilyName); err != nil {
+	// The scopes this access token was minted with, and nothing the
+	// userinfo request itself says.
+	if err = s.fill(ctx, info, issued.Subject, issued.Claims, issued.GivenName, issued.FamilyName, issued.Scopes); err != nil {
 		return err
 	}
 	if issued.Method == ConformanceHow {
@@ -2832,28 +2837,51 @@ func serviceAccountSubject(subject string) (policy.ServiceAccountRef, bool) {
 	return policy.ParseServiceAccountSubject(subject)
 }
 
+// fill is the one place an ID token's and a userinfo answer's claims about
+// the person are assembled, and so the one place they follow the scopes
+// granted (OpenID Connect Core 5.4). `sub` is always there. `email` and
+// `email_verified` need `email`; `name`, `given_name`, `family_name` and
+// `preferred_username` need `profile`. The policy's own claims (`groups`
+// and the rest) are not standard claims of any scope and arrive as they
+// always did.
+//
+// scopes is what was GRANTED, never what a request names now: the sign-in's
+// scopes for an ID token, kept across a refresh that names none (RFC 6749
+// 6); the scopes the presented access token was minted with for userinfo.
+// A scope this issuer does not know is ignored here, as it was dropped
+// before it was granted.
 func (s *Storage) fill(
 	_ context.Context, info *oidc.UserInfo, subject string, claims map[string]any, given, family string,
+	scopes []string,
 ) error {
 	info.Subject = subject
 
-	if strings.Contains(subject, "@") {
+	person := strings.Contains(subject, "@")
+	if person && slices.Contains(scopes, oidc.ScopeEmail) {
+		// Always together: a relying party that stores the address stores
+		// whether it is verified beside it, and one without the other
+		// reads as an unverified address.
 		info.Email = subject
 		info.EmailVerified = true
-		// The address is also the username a relying party shows when it
-		// has nothing better, and it is what this issuer's subject IS for
-		// a person -- so saying it twice costs nothing and spares every
-		// consumer a fallback.
-		info.PreferredUsername = subject
 	}
 
-	// A person, when the directory said so. `name` is the whole of what a
-	// UI usually renders, and given/family are there for the ones that
-	// want the halves; none of it is authorization, and all of it is
-	// absent for a workload or a recovery sign-in, which have no names to
-	// give.
-	info.GivenName, info.FamilyName = given, family
-	info.Name = displayName(given, family)
+	if slices.Contains(scopes, oidc.ScopeProfile) {
+		if person {
+			// The address is also the username a relying party shows when
+			// it has nothing better, and it is what this issuer's subject
+			// IS for a person -- so saying it twice costs nothing and
+			// spares every consumer a fallback.
+			info.PreferredUsername = subject
+		}
+
+		// A person, when the directory said so. `name` is the whole of
+		// what a UI usually renders, and given/family are there for the
+		// ones that want the halves; none of it is authorization, and all
+		// of it is absent for a workload or a recovery sign-in, which have
+		// no names to give.
+		info.GivenName, info.FamilyName = given, family
+		info.Name = displayName(given, family)
+	}
 
 	for name, value := range claims {
 		info.AppendClaims(name, value)
@@ -3131,5 +3159,9 @@ func (s *Storage) SetUserinfoFromTokenExchangeRequest(
 	// person exchanging one of their own tokens does, so ask the same way.
 	given, family := s.namesOf(ctx, grant.Subject)
 
-	return s.fill(ctx, info, grant.Subject, grant.Claims, given, family)
+	// Gated by the exchange's own scopes. Not reached today: an exchange
+	// mints an access token only ([Storage.ValidateTokenExchangeRequest]
+	// sets the requested type), whose claims come from
+	// [Storage.GetPrivateClaimsFromTokenExchangeRequest] and are not gated.
+	return s.fill(ctx, info, grant.Subject, grant.Claims, given, family, request.GetScopes())
 }
