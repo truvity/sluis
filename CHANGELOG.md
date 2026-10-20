@@ -1,5 +1,9 @@
 ## Unreleased
 
+## v1.77.3
+
+One configuration change and one addition to the audit Pulumi library, and the documentation refreshed for v1.77.2. A service document with `secureCookies: false` and an https issuer no longer loads; its upgrade note says what to remove ([upgrade to v1.77.3](docs/guides/sluis/upgrade/v1.77.3.md)).
+
 ### Changed
 
 - **Configuration that now fails validation: `secureCookies: false` with an https issuer URL.** The service document is refused when it loads, on Lambda and in a cluster, when `secureCookies` is `false` and `issuerURL` or `publicRootURL` is https. The error reads `secureCookies: false is refused when issuerURL is https: session cookies would be sent without the Secure flag; remove secureCookies`. An installation document's `issuer.secureCookies` is refused the same way when it is rendered, so `sluisctl render`, `sluis check` and a Pulumi preview fail before a function is deployed. The chart already refused it with `route.host`. Plain http with `allowInsecure`, and `secureCookies: true` on either scheme, are unchanged. **Upgrade:** remove `secureCookies: false` when serving https.
