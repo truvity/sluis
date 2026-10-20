@@ -56,7 +56,6 @@ import (
 	"sync"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/truvity/sluis/audit/sdk/record"
 
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
@@ -555,12 +554,12 @@ func (c *Controller) sharesWith(shared []reconcile.SharedChannel, a, b string) b
 // servedDomains asks the console which domains each connected directory it
 // may see serves now. One question per pass, however many workspaces ask.
 func (c *Controller) servedDomains(ctx context.Context) (map[string][]string, error) {
-	response, err := c.deps.Access.ListServedDomains(ctx, connect.NewRequest(&directoryrosterv1.ListServedDomainsRequest{}))
+	response, err := c.deps.Access.ListServedDomains(ctx, &directoryrosterv1.ListServedDomainsRequest{})
 	if err != nil {
 		return nil, err
 	}
 	out := map[string][]string{}
-	for _, dir := range response.Msg.GetDirectories() {
+	for _, dir := range response.GetDirectories() {
 		out[dir.GetWorkspaceId()] = dir.GetDomains()
 	}
 	return out, nil
@@ -674,24 +673,24 @@ func (c *Controller) directory() rails.Directory {
 		Guard: rails.PolicyGuard{Digest: c.deps.Digest},
 		Log:   c.deps.Log,
 		ListHolders: func(ctx context.Context, group string) ([]rails.Holder, string, bool, error) {
-			response, err := c.deps.Access.ListHolders(ctx, connect.NewRequest(&directoryrosterv1.ListHoldersRequest{
+			response, err := c.deps.Access.ListHolders(ctx, &directoryrosterv1.ListHoldersRequest{
 				Group: group, Limit: holdersLimit,
-			}))
+			})
 			if err != nil {
 				return nil, "", false, err
 			}
 			var holders []rails.Holder
-			for _, holder := range response.Msg.GetHolders() {
+			for _, holder := range response.GetHolders() {
 				holders = append(holders, rails.Holder{Email: holder.GetEmail(), Live: holder.GetLive()})
 			}
-			return holders, response.Msg.GetPolicyDigest(), response.Msg.GetTruncated(), nil
+			return holders, response.GetPolicyDigest(), response.GetTruncated(), nil
 		},
 		Explain: func(ctx context.Context, email string) (rails.Vouch, string, error) {
-			response, err := c.deps.Access.Explain(ctx, connect.NewRequest(&directoryrosterv1.ExplainRequest{Email: email}))
+			response, err := c.deps.Access.Explain(ctx, &directoryrosterv1.ExplainRequest{Email: email})
 			if err != nil {
 				return rails.Vouch{}, "", err
 			}
-			msg := response.Msg
+			msg := response
 			vouch := rails.Vouch{
 				Authoritative: msg.GetAuthoritative(),
 				Found:         msg.GetFound(),

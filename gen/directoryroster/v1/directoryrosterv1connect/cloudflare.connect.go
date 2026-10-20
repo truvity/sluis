@@ -5,49 +5,78 @@
 package directoryrosterv1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1 "github.com/truvity/sluis/gen/directoryroster/v1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// CloudflareServiceName is the fully-qualified name of the CloudflareService service.
 	CloudflareServiceName = "directoryroster.v1.CloudflareService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// CloudflareServiceListCloudflareProcedure is the fully-qualified name of the CloudflareService's
+	// CloudflareServiceListCloudflareProcedure is the procedure name of the CloudflareService's
 	// ListCloudflare RPC.
 	CloudflareServiceListCloudflareProcedure = "/directoryroster.v1.CloudflareService/ListCloudflare"
-	// CloudflareServiceRotateCloudflarePresetProcedure is the fully-qualified name of the
-	// CloudflareService's RotateCloudflarePreset RPC.
+	// CloudflareServiceRotateCloudflarePresetProcedure is the procedure name of the CloudflareService's
+	// RotateCloudflarePreset RPC.
 	CloudflareServiceRotateCloudflarePresetProcedure = "/directoryroster.v1.CloudflareService/RotateCloudflarePreset"
-	// CloudflareServiceRevokeCloudflareTokenProcedure is the fully-qualified name of the
-	// CloudflareService's RevokeCloudflareToken RPC.
+	// CloudflareServiceRevokeCloudflareTokenProcedure is the procedure name of the CloudflareService's
+	// RevokeCloudflareToken RPC.
 	CloudflareServiceRevokeCloudflareTokenProcedure = "/directoryroster.v1.CloudflareService/RevokeCloudflareToken"
-	// CloudflareServiceListMyCloudflarePresetsProcedure is the fully-qualified name of the
+	// CloudflareServiceListMyCloudflarePresetsProcedure is the procedure name of the
 	// CloudflareService's ListMyCloudflarePresets RPC.
 	CloudflareServiceListMyCloudflarePresetsProcedure = "/directoryroster.v1.CloudflareService/ListMyCloudflarePresets"
-	// CloudflareServiceGetCloudflareCredentialProcedure is the fully-qualified name of the
+	// CloudflareServiceGetCloudflareCredentialProcedure is the procedure name of the
 	// CloudflareService's GetCloudflareCredential RPC.
 	CloudflareServiceGetCloudflareCredentialProcedure = "/directoryroster.v1.CloudflareService/GetCloudflareCredential"
+)
+
+var (
+	cloudflareServiceListCloudflareSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_directoryroster_v1_cloudflare_proto.Services().ByName("CloudflareService").Methods().ByName("ListCloudflare"),
+			Procedure:  CloudflareServiceListCloudflareProcedure,
+		}
+	})
+	cloudflareServiceRotateCloudflarePresetSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_directoryroster_v1_cloudflare_proto.Services().ByName("CloudflareService").Methods().ByName("RotateCloudflarePreset"),
+			Procedure:  CloudflareServiceRotateCloudflarePresetProcedure,
+		}
+	})
+	cloudflareServiceRevokeCloudflareTokenSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_directoryroster_v1_cloudflare_proto.Services().ByName("CloudflareService").Methods().ByName("RevokeCloudflareToken"),
+			Procedure:  CloudflareServiceRevokeCloudflareTokenProcedure,
+		}
+	})
+	cloudflareServiceListMyCloudflarePresetsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_directoryroster_v1_cloudflare_proto.Services().ByName("CloudflareService").Methods().ByName("ListMyCloudflarePresets"),
+			Procedure:  CloudflareServiceListMyCloudflarePresetsProcedure,
+		}
+	})
+	cloudflareServiceGetCloudflareCredentialSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_directoryroster_v1_cloudflare_proto.Services().ByName("CloudflareService").Methods().ByName("GetCloudflareCredential"),
+			Procedure:  CloudflareServiceGetCloudflareCredentialProcedure,
+		}
+	})
 )
 
 // CloudflareServiceClient is a client for the directoryroster.v1.CloudflareService service.
@@ -56,100 +85,28 @@ type CloudflareServiceClient interface {
 	// every preset with the live state of its prototype, the stored token's
 	// metadata and the tokens minted on demand that are still live. Viewer.
 	// Never a token's value.
-	ListCloudflare(context.Context, *connect.Request[v1.ListCloudflareRequest]) (*connect.Response[v1.ListCloudflareResponse], error)
+	ListCloudflare(context.Context, *v1.ListCloudflareRequest) (*v1.ListCloudflareResponse, error)
 	// RotateCloudflarePreset mints the preset's stored token now instead of at
 	// its next rotation, stores it where consumers read it and sweeps the
 	// expired ones. Operator. Audited.
-	RotateCloudflarePreset(context.Context, *connect.Request[v1.RotateCloudflarePresetRequest]) (*connect.Response[v1.RotateCloudflarePresetResponse], error)
+	RotateCloudflarePreset(context.Context, *v1.RotateCloudflarePresetRequest) (*v1.RotateCloudflarePresetResponse, error)
 	// RevokeCloudflareToken deletes a live token of a preset by id. A revoked
 	// stored token is replaced at once. Operator. Audited.
-	RevokeCloudflareToken(context.Context, *connect.Request[v1.RevokeCloudflareTokenRequest]) (*connect.Response[v1.RevokeCloudflareTokenResponse], error)
+	RevokeCloudflareToken(context.Context, *v1.RevokeCloudflareTokenRequest) (*v1.RevokeCloudflareTokenResponse, error)
 	// ListMyCloudflarePresets are the presets the policy grants the signed-in
 	// person through their groups. Anyone signed in.
-	ListMyCloudflarePresets(context.Context, *connect.Request[v1.ListMyCloudflarePresetsRequest]) (*connect.Response[v1.ListMyCloudflarePresetsResponse], error)
+	ListMyCloudflarePresets(context.Context, *v1.ListMyCloudflarePresetsRequest) (*v1.ListMyCloudflarePresetsResponse, error)
 	// GetCloudflareCredential mints a token of a granted preset for the caller:
 	// the prototype's rights, a lifetime up to the preset's, named for the
 	// caller. The value is in the response and nowhere else. Anyone the policy
 	// grants the preset. Audited.
-	GetCloudflareCredential(context.Context, *connect.Request[v1.GetCloudflareCredentialRequest]) (*connect.Response[v1.GetCloudflareCredentialResponse], error)
+	GetCloudflareCredential(context.Context, *v1.GetCloudflareCredentialRequest) (*v1.GetCloudflareCredentialResponse, error)
 }
 
 // NewCloudflareServiceClient constructs a client for the directoryroster.v1.CloudflareService
-// service. By default, it uses the Connect protocol with the binary Protobuf Codec, asks for
-// gzipped responses, and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply
-// the connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewCloudflareServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) CloudflareServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	cloudflareServiceMethods := v1.File_directoryroster_v1_cloudflare_proto.Services().ByName("CloudflareService").Methods()
-	return &cloudflareServiceClient{
-		listCloudflare: connect.NewClient[v1.ListCloudflareRequest, v1.ListCloudflareResponse](
-			httpClient,
-			baseURL+CloudflareServiceListCloudflareProcedure,
-			connect.WithSchema(cloudflareServiceMethods.ByName("ListCloudflare")),
-			connect.WithClientOptions(opts...),
-		),
-		rotateCloudflarePreset: connect.NewClient[v1.RotateCloudflarePresetRequest, v1.RotateCloudflarePresetResponse](
-			httpClient,
-			baseURL+CloudflareServiceRotateCloudflarePresetProcedure,
-			connect.WithSchema(cloudflareServiceMethods.ByName("RotateCloudflarePreset")),
-			connect.WithClientOptions(opts...),
-		),
-		revokeCloudflareToken: connect.NewClient[v1.RevokeCloudflareTokenRequest, v1.RevokeCloudflareTokenResponse](
-			httpClient,
-			baseURL+CloudflareServiceRevokeCloudflareTokenProcedure,
-			connect.WithSchema(cloudflareServiceMethods.ByName("RevokeCloudflareToken")),
-			connect.WithClientOptions(opts...),
-		),
-		listMyCloudflarePresets: connect.NewClient[v1.ListMyCloudflarePresetsRequest, v1.ListMyCloudflarePresetsResponse](
-			httpClient,
-			baseURL+CloudflareServiceListMyCloudflarePresetsProcedure,
-			connect.WithSchema(cloudflareServiceMethods.ByName("ListMyCloudflarePresets")),
-			connect.WithClientOptions(opts...),
-		),
-		getCloudflareCredential: connect.NewClient[v1.GetCloudflareCredentialRequest, v1.GetCloudflareCredentialResponse](
-			httpClient,
-			baseURL+CloudflareServiceGetCloudflareCredentialProcedure,
-			connect.WithSchema(cloudflareServiceMethods.ByName("GetCloudflareCredential")),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// cloudflareServiceClient implements CloudflareServiceClient.
-type cloudflareServiceClient struct {
-	listCloudflare          *connect.Client[v1.ListCloudflareRequest, v1.ListCloudflareResponse]
-	rotateCloudflarePreset  *connect.Client[v1.RotateCloudflarePresetRequest, v1.RotateCloudflarePresetResponse]
-	revokeCloudflareToken   *connect.Client[v1.RevokeCloudflareTokenRequest, v1.RevokeCloudflareTokenResponse]
-	listMyCloudflarePresets *connect.Client[v1.ListMyCloudflarePresetsRequest, v1.ListMyCloudflarePresetsResponse]
-	getCloudflareCredential *connect.Client[v1.GetCloudflareCredentialRequest, v1.GetCloudflareCredentialResponse]
-}
-
-// ListCloudflare calls directoryroster.v1.CloudflareService.ListCloudflare.
-func (c *cloudflareServiceClient) ListCloudflare(ctx context.Context, req *connect.Request[v1.ListCloudflareRequest]) (*connect.Response[v1.ListCloudflareResponse], error) {
-	return c.listCloudflare.CallUnary(ctx, req)
-}
-
-// RotateCloudflarePreset calls directoryroster.v1.CloudflareService.RotateCloudflarePreset.
-func (c *cloudflareServiceClient) RotateCloudflarePreset(ctx context.Context, req *connect.Request[v1.RotateCloudflarePresetRequest]) (*connect.Response[v1.RotateCloudflarePresetResponse], error) {
-	return c.rotateCloudflarePreset.CallUnary(ctx, req)
-}
-
-// RevokeCloudflareToken calls directoryroster.v1.CloudflareService.RevokeCloudflareToken.
-func (c *cloudflareServiceClient) RevokeCloudflareToken(ctx context.Context, req *connect.Request[v1.RevokeCloudflareTokenRequest]) (*connect.Response[v1.RevokeCloudflareTokenResponse], error) {
-	return c.revokeCloudflareToken.CallUnary(ctx, req)
-}
-
-// ListMyCloudflarePresets calls directoryroster.v1.CloudflareService.ListMyCloudflarePresets.
-func (c *cloudflareServiceClient) ListMyCloudflarePresets(ctx context.Context, req *connect.Request[v1.ListMyCloudflarePresetsRequest]) (*connect.Response[v1.ListMyCloudflarePresetsResponse], error) {
-	return c.listMyCloudflarePresets.CallUnary(ctx, req)
-}
-
-// GetCloudflareCredential calls directoryroster.v1.CloudflareService.GetCloudflareCredential.
-func (c *cloudflareServiceClient) GetCloudflareCredential(ctx context.Context, req *connect.Request[v1.GetCloudflareCredentialRequest]) (*connect.Response[v1.GetCloudflareCredentialResponse], error) {
-	return c.getCloudflareCredential.CallUnary(ctx, req)
+// service. Multiple service clients may share a single connect.Client.
+func NewCloudflareServiceClient(client *connect.Client) CloudflareServiceClient {
+	return &cloudflareServiceClient{client: client}
 }
 
 // CloudflareServiceHandler is an implementation of the directoryroster.v1.CloudflareService
@@ -159,98 +116,162 @@ type CloudflareServiceHandler interface {
 	// every preset with the live state of its prototype, the stored token's
 	// metadata and the tokens minted on demand that are still live. Viewer.
 	// Never a token's value.
-	ListCloudflare(context.Context, *connect.Request[v1.ListCloudflareRequest]) (*connect.Response[v1.ListCloudflareResponse], error)
+	ListCloudflare(context.Context, *v1.ListCloudflareRequest) (*v1.ListCloudflareResponse, error)
 	// RotateCloudflarePreset mints the preset's stored token now instead of at
 	// its next rotation, stores it where consumers read it and sweeps the
 	// expired ones. Operator. Audited.
-	RotateCloudflarePreset(context.Context, *connect.Request[v1.RotateCloudflarePresetRequest]) (*connect.Response[v1.RotateCloudflarePresetResponse], error)
+	RotateCloudflarePreset(context.Context, *v1.RotateCloudflarePresetRequest) (*v1.RotateCloudflarePresetResponse, error)
 	// RevokeCloudflareToken deletes a live token of a preset by id. A revoked
 	// stored token is replaced at once. Operator. Audited.
-	RevokeCloudflareToken(context.Context, *connect.Request[v1.RevokeCloudflareTokenRequest]) (*connect.Response[v1.RevokeCloudflareTokenResponse], error)
+	RevokeCloudflareToken(context.Context, *v1.RevokeCloudflareTokenRequest) (*v1.RevokeCloudflareTokenResponse, error)
 	// ListMyCloudflarePresets are the presets the policy grants the signed-in
 	// person through their groups. Anyone signed in.
-	ListMyCloudflarePresets(context.Context, *connect.Request[v1.ListMyCloudflarePresetsRequest]) (*connect.Response[v1.ListMyCloudflarePresetsResponse], error)
+	ListMyCloudflarePresets(context.Context, *v1.ListMyCloudflarePresetsRequest) (*v1.ListMyCloudflarePresetsResponse, error)
 	// GetCloudflareCredential mints a token of a granted preset for the caller:
 	// the prototype's rights, a lifetime up to the preset's, named for the
 	// caller. The value is in the response and nowhere else. Anyone the policy
 	// grants the preset. Audited.
-	GetCloudflareCredential(context.Context, *connect.Request[v1.GetCloudflareCredentialRequest]) (*connect.Response[v1.GetCloudflareCredentialResponse], error)
+	GetCloudflareCredential(context.Context, *v1.GetCloudflareCredentialRequest) (*v1.GetCloudflareCredentialResponse, error)
 }
 
-// NewCloudflareServiceHandler builds an HTTP handler from the service implementation. It returns
-// the path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewCloudflareServiceHandler(svc CloudflareServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	cloudflareServiceMethods := v1.File_directoryroster_v1_cloudflare_proto.Services().ByName("CloudflareService").Methods()
-	cloudflareServiceListCloudflareHandler := connect.NewUnaryHandler(
-		CloudflareServiceListCloudflareProcedure,
-		svc.ListCloudflare,
-		connect.WithSchema(cloudflareServiceMethods.ByName("ListCloudflare")),
-		connect.WithHandlerOptions(opts...),
+// RegisterCloudflareServiceHandler registers svc as the directoryroster.v1.CloudflareService
+// implementation on server.
+func RegisterCloudflareServiceHandler(server *connect.Server, svc CloudflareServiceHandler) {
+	adapter := cloudflareServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: cloudflareServiceListCloudflareSpec(), Handler: adapter.listCloudflare},
+		connect.Method{Spec: cloudflareServiceRotateCloudflarePresetSpec(), Handler: adapter.rotateCloudflarePreset},
+		connect.Method{Spec: cloudflareServiceRevokeCloudflareTokenSpec(), Handler: adapter.revokeCloudflareToken},
+		connect.Method{Spec: cloudflareServiceListMyCloudflarePresetsSpec(), Handler: adapter.listMyCloudflarePresets},
+		connect.Method{Spec: cloudflareServiceGetCloudflareCredentialSpec(), Handler: adapter.getCloudflareCredential},
 	)
-	cloudflareServiceRotateCloudflarePresetHandler := connect.NewUnaryHandler(
-		CloudflareServiceRotateCloudflarePresetProcedure,
-		svc.RotateCloudflarePreset,
-		connect.WithSchema(cloudflareServiceMethods.ByName("RotateCloudflarePreset")),
-		connect.WithHandlerOptions(opts...),
-	)
-	cloudflareServiceRevokeCloudflareTokenHandler := connect.NewUnaryHandler(
-		CloudflareServiceRevokeCloudflareTokenProcedure,
-		svc.RevokeCloudflareToken,
-		connect.WithSchema(cloudflareServiceMethods.ByName("RevokeCloudflareToken")),
-		connect.WithHandlerOptions(opts...),
-	)
-	cloudflareServiceListMyCloudflarePresetsHandler := connect.NewUnaryHandler(
-		CloudflareServiceListMyCloudflarePresetsProcedure,
-		svc.ListMyCloudflarePresets,
-		connect.WithSchema(cloudflareServiceMethods.ByName("ListMyCloudflarePresets")),
-		connect.WithHandlerOptions(opts...),
-	)
-	cloudflareServiceGetCloudflareCredentialHandler := connect.NewUnaryHandler(
-		CloudflareServiceGetCloudflareCredentialProcedure,
-		svc.GetCloudflareCredential,
-		connect.WithSchema(cloudflareServiceMethods.ByName("GetCloudflareCredential")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/directoryroster.v1.CloudflareService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case CloudflareServiceListCloudflareProcedure:
-			cloudflareServiceListCloudflareHandler.ServeHTTP(w, r)
-		case CloudflareServiceRotateCloudflarePresetProcedure:
-			cloudflareServiceRotateCloudflarePresetHandler.ServeHTTP(w, r)
-		case CloudflareServiceRevokeCloudflareTokenProcedure:
-			cloudflareServiceRevokeCloudflareTokenHandler.ServeHTTP(w, r)
-		case CloudflareServiceListMyCloudflarePresetsProcedure:
-			cloudflareServiceListMyCloudflarePresetsHandler.ServeHTTP(w, r)
-		case CloudflareServiceGetCloudflareCredentialProcedure:
-			cloudflareServiceGetCloudflareCredentialHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedCloudflareServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedCloudflareServiceHandler struct{}
 
-func (UnimplementedCloudflareServiceHandler) ListCloudflare(context.Context, *connect.Request[v1.ListCloudflareRequest]) (*connect.Response[v1.ListCloudflareResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("directoryroster.v1.CloudflareService.ListCloudflare is not implemented"))
+func (UnimplementedCloudflareServiceHandler) ListCloudflare(context.Context, *v1.ListCloudflareRequest) (*v1.ListCloudflareResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "directoryroster.v1.CloudflareService.ListCloudflare is not implemented")
 }
 
-func (UnimplementedCloudflareServiceHandler) RotateCloudflarePreset(context.Context, *connect.Request[v1.RotateCloudflarePresetRequest]) (*connect.Response[v1.RotateCloudflarePresetResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("directoryroster.v1.CloudflareService.RotateCloudflarePreset is not implemented"))
+func (UnimplementedCloudflareServiceHandler) RotateCloudflarePreset(context.Context, *v1.RotateCloudflarePresetRequest) (*v1.RotateCloudflarePresetResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "directoryroster.v1.CloudflareService.RotateCloudflarePreset is not implemented")
 }
 
-func (UnimplementedCloudflareServiceHandler) RevokeCloudflareToken(context.Context, *connect.Request[v1.RevokeCloudflareTokenRequest]) (*connect.Response[v1.RevokeCloudflareTokenResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("directoryroster.v1.CloudflareService.RevokeCloudflareToken is not implemented"))
+func (UnimplementedCloudflareServiceHandler) RevokeCloudflareToken(context.Context, *v1.RevokeCloudflareTokenRequest) (*v1.RevokeCloudflareTokenResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "directoryroster.v1.CloudflareService.RevokeCloudflareToken is not implemented")
 }
 
-func (UnimplementedCloudflareServiceHandler) ListMyCloudflarePresets(context.Context, *connect.Request[v1.ListMyCloudflarePresetsRequest]) (*connect.Response[v1.ListMyCloudflarePresetsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("directoryroster.v1.CloudflareService.ListMyCloudflarePresets is not implemented"))
+func (UnimplementedCloudflareServiceHandler) ListMyCloudflarePresets(context.Context, *v1.ListMyCloudflarePresetsRequest) (*v1.ListMyCloudflarePresetsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "directoryroster.v1.CloudflareService.ListMyCloudflarePresets is not implemented")
 }
 
-func (UnimplementedCloudflareServiceHandler) GetCloudflareCredential(context.Context, *connect.Request[v1.GetCloudflareCredentialRequest]) (*connect.Response[v1.GetCloudflareCredentialResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("directoryroster.v1.CloudflareService.GetCloudflareCredential is not implemented"))
+func (UnimplementedCloudflareServiceHandler) GetCloudflareCredential(context.Context, *v1.GetCloudflareCredentialRequest) (*v1.GetCloudflareCredentialResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "directoryroster.v1.CloudflareService.GetCloudflareCredential is not implemented")
+}
+
+type cloudflareServiceClient struct {
+	client *connect.Client
+}
+
+func (c *cloudflareServiceClient) ListCloudflare(ctx context.Context, req *v1.ListCloudflareRequest) (*v1.ListCloudflareResponse, error) {
+	var res v1.ListCloudflareResponse
+	if err := c.client.CallUnary(ctx, cloudflareServiceListCloudflareSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *cloudflareServiceClient) RotateCloudflarePreset(ctx context.Context, req *v1.RotateCloudflarePresetRequest) (*v1.RotateCloudflarePresetResponse, error) {
+	var res v1.RotateCloudflarePresetResponse
+	if err := c.client.CallUnary(ctx, cloudflareServiceRotateCloudflarePresetSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *cloudflareServiceClient) RevokeCloudflareToken(ctx context.Context, req *v1.RevokeCloudflareTokenRequest) (*v1.RevokeCloudflareTokenResponse, error) {
+	var res v1.RevokeCloudflareTokenResponse
+	if err := c.client.CallUnary(ctx, cloudflareServiceRevokeCloudflareTokenSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *cloudflareServiceClient) ListMyCloudflarePresets(ctx context.Context, req *v1.ListMyCloudflarePresetsRequest) (*v1.ListMyCloudflarePresetsResponse, error) {
+	var res v1.ListMyCloudflarePresetsResponse
+	if err := c.client.CallUnary(ctx, cloudflareServiceListMyCloudflarePresetsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *cloudflareServiceClient) GetCloudflareCredential(ctx context.Context, req *v1.GetCloudflareCredentialRequest) (*v1.GetCloudflareCredentialResponse, error) {
+	var res v1.GetCloudflareCredentialResponse
+	if err := c.client.CallUnary(ctx, cloudflareServiceGetCloudflareCredentialSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type cloudflareServiceHandler struct{ svc CloudflareServiceHandler }
+
+func (h cloudflareServiceHandler) listCloudflare(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListCloudflareRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListCloudflare(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h cloudflareServiceHandler) rotateCloudflarePreset(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RotateCloudflarePresetRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RotateCloudflarePreset(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h cloudflareServiceHandler) revokeCloudflareToken(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RevokeCloudflareTokenRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RevokeCloudflareToken(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h cloudflareServiceHandler) listMyCloudflarePresets(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListMyCloudflarePresetsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListMyCloudflarePresets(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h cloudflareServiceHandler) getCloudflareCredential(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetCloudflareCredentialRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetCloudflareCredential(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

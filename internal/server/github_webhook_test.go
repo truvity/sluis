@@ -18,13 +18,14 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
 	"github.com/truvity/sluis/internal/audit/audittest"
 	"github.com/truvity/sluis/internal/githubapp"
 	"github.com/truvity/sluis/internal/githubapp/catalogue"
 	"github.com/truvity/sluis/internal/githubroster/catalogueapp"
+	"github.com/truvity/sluis/internal/rpcmount"
 )
 
 // consumer is a webhook receiver, as Argo CD or Kargo is: it verifies the
@@ -127,20 +128,21 @@ func TestAWebhookAppIsCreatedWithAGeneratedSecretAndRotatedWithoutLosingDeliveri
 	console.deps.GitHubCatalogue = declared
 
 	// The manifest asks for an active webhook, at a placeholder under the base.
-	begun, err := console.BeginGitHubCatalogueAppConnect(operator(),
-		connect.NewRequest(&directoryrosterv1.BeginGitHubCatalogueAppConnectRequest{Id: "renovate"}))
+	callCtx, call := rpcmount.ServerContext(operator())
+	begun, err := console.BeginGitHubCatalogueAppConnect(callCtx,
+		&directoryrosterv1.BeginGitHubCatalogueAppConnectRequest{Id: "renovate"})
 	if err != nil {
 		t.Fatalf("Begin: %v", err)
 	}
 	var manifest githubapp.Manifest
-	if err = json.Unmarshal([]byte(begun.Msg.GetManifest()), &manifest); err != nil {
+	if err = json.Unmarshal([]byte(begun.GetManifest()), &manifest); err != nil {
 		t.Fatal(err)
 	}
 	if !manifest.HookAttributes.Active || manifest.HookAttributes.URL != kargo.server.URL+"/github/pending" ||
 		!slices.Equal(manifest.DefaultEvents, []string{"push"}) {
 		t.Errorf("hook attributes = %+v, events %v", manifest.HookAttributes, manifest.DefaultEvents)
 	}
-	cookie, state := cookieFrom(t, begun.Header()), mustQuery(t, begun.Msg.GetUrl(), "state")
+	cookie, state := cookieFrom(t, rpcmount.HTTPHeader(call.ResponseHeader())), mustQuery(t, begun.GetUrl(), "state")
 	created := redirect(server.githubCatalogueCallback, githubCatalogueCallbackPath, url.Values{"code": {"created"}, "state": {state}}, cookie)
 	if created.Code != 302 {
 		t.Fatalf("after Create = %d:\n%s", created.Code, created.Body)
@@ -183,11 +185,11 @@ func TestAWebhookAppIsCreatedWithAGeneratedSecretAndRotatedWithoutLosingDeliveri
 	}
 
 	rotate := func(id string) (*directoryrosterv1.GitHubApp, error) {
-		out, err := console.RotateGitHubAppWebhook(operator(), connect.NewRequest(&directoryrosterv1.RotateGitHubAppWebhookRequest{Id: id}))
+		out, err := console.RotateGitHubAppWebhook(operator(), &directoryrosterv1.RotateGitHubAppWebhookRequest{Id: id})
 		if err != nil {
 			return nil, err
 		}
-		return out.Msg.GetApp(), nil
+		return out.GetApp(), nil
 	}
 
 	// A consumer that has not reloaded: the new secret does not verify, so
@@ -243,21 +245,21 @@ func TestAWebhookAppIsCreatedWithAGeneratedSecretAndRotatedWithoutLosingDeliveri
 
 	// Somebody edits the webhook on GitHub: drift, with what to do.
 	github.hookURL, github.hookContentType = "https://elsewhere.example/hook", "form"
-	checked, err := console.CheckGitHubApp(operator(), connect.NewRequest(&directoryrosterv1.CheckGitHubAppRequest{Id: "renovate"}))
+	checked, err := console.CheckGitHubApp(operator(), &directoryrosterv1.CheckGitHubAppRequest{Id: "renovate"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	drift := strings.Join(checked.Msg.GetApp().GetDrift(), "\n")
-	if checked.Msg.GetApp().GetState() != appDrifted || !strings.Contains(drift, "other than the one this service set") ||
+	drift := strings.Join(checked.GetApp().GetDrift(), "\n")
+	if checked.GetApp().GetState() != appDrifted || !strings.Contains(drift, "other than the one this service set") ||
 		!strings.Contains(drift, `delivers as "form"`) {
-		t.Errorf("a hand-edited webhook = %s:\n%s", checked.Msg.GetApp().GetState(), drift)
+		t.Errorf("a hand-edited webhook = %s:\n%s", checked.GetApp().GetState(), drift)
 	}
 	if _, err = rotate("renovate"); err != nil {
 		t.Fatalf("a rotation repairs it: %v", err)
 	}
-	checked, _ = console.CheckGitHubApp(operator(), connect.NewRequest(&directoryrosterv1.CheckGitHubAppRequest{Id: "renovate"}))
-	if len(checked.Msg.GetApp().GetDrift()) != 0 {
-		t.Errorf("after the repair: %v", checked.Msg.GetApp().GetDrift())
+	checked, _ = console.CheckGitHubApp(operator(), &directoryrosterv1.CheckGitHubAppRequest{Id: "renovate"})
+	if len(checked.GetApp().GetDrift()) != 0 {
+		t.Errorf("after the repair: %v", checked.GetApp().GetDrift())
 	}
 
 	// An App with no webhook has nothing to rotate.
@@ -286,18 +288,19 @@ apps:
 		t.Fatal(err)
 	}
 	console.deps.GitHubCatalogue = declared
-	begun, err := console.BeginGitHubCatalogueAppConnect(operator(),
-		connect.NewRequest(&directoryrosterv1.BeginGitHubCatalogueAppConnectRequest{Id: "renovate"}))
+	callCtx, call := rpcmount.ServerContext(operator())
+	begun, err := console.BeginGitHubCatalogueAppConnect(callCtx,
+		&directoryrosterv1.BeginGitHubCatalogueAppConnectRequest{Id: "renovate"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	var manifest githubapp.Manifest
-	_ = json.Unmarshal([]byte(begun.Msg.GetManifest()), &manifest)
+	_ = json.Unmarshal([]byte(begun.GetManifest()), &manifest)
 	if manifest.HookAttributes != (githubapp.HookAttributes{URL: "https://argocd.example/api/webhook", Active: true}) {
 		t.Errorf("hook attributes = %+v", manifest.HookAttributes)
 	}
 	created := redirect(server.githubCatalogueCallback, githubCatalogueCallbackPath,
-		url.Values{"code": {"created"}, "state": {mustQuery(t, begun.Msg.GetUrl(), "state")}}, cookieFrom(t, begun.Header()))
+		url.Values{"code": {"created"}, "state": {mustQuery(t, begun.GetUrl(), "state")}}, cookieFrom(t, rpcmount.HTTPHeader(call.ResponseHeader())))
 	if created.Code != 302 || github.hookURL != "https://argocd.example/api/webhook" || github.hookSecret == "" || github.hookSecret == "from-the-conversion" {
 		t.Errorf("after Create = %d, GitHub holds %q", created.Code, github.hookURL)
 	}
@@ -318,10 +321,11 @@ apps:
 `))
 	console.deps.GitHubCatalogue = declared
 	github.hookPatchRefused = true
-	begun, _ := console.BeginGitHubCatalogueAppConnect(operator(),
-		connect.NewRequest(&directoryrosterv1.BeginGitHubCatalogueAppConnectRequest{Id: "renovate"}))
+	callCtx, call := rpcmount.ServerContext(operator())
+	begun, _ := console.BeginGitHubCatalogueAppConnect(callCtx,
+		&directoryrosterv1.BeginGitHubCatalogueAppConnectRequest{Id: "renovate"})
 	created := redirect(server.githubCatalogueCallback, githubCatalogueCallbackPath,
-		url.Values{"code": {"created"}, "state": {mustQuery(t, begun.Msg.GetUrl(), "state")}}, cookieFrom(t, begun.Header()))
+		url.Values{"code": {"created"}, "state": {mustQuery(t, begun.GetUrl(), "state")}}, cookieFrom(t, rpcmount.HTTPHeader(call.ResponseHeader())))
 	if created.Code != 409 || !strings.Contains(created.Body.String(), "webhook could not be set") {
 		t.Fatalf("after Create = %d:\n%s", created.Code, created.Body)
 	}

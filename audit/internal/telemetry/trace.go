@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/http"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel/attribute"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -70,11 +70,16 @@ func keep(in []attribute.KeyValue) []attribute.KeyValue {
 	return out
 }
 
-// ConnectOptions instruments a Connect handler: one server span per call.
-func ConnectOptions() []connect.HandlerOption { return sdktelemetry.ConnectOptions() }
+// ConnectServerInterceptor instruments a Connect server: one server span per
+// call.
+func ConnectServerInterceptor() connect.ServerInterceptor {
+	return sdktelemetry.ConnectServerInterceptor()
+}
 
-// ConnectClientOptions is the same for a client.
-func ConnectClientOptions() []connect.ClientOption { return sdktelemetry.ConnectClientOptions() }
+// ConnectClientInterceptor is the same for a client.
+func ConnectClientInterceptor() connect.ClientInterceptor {
+	return sdktelemetry.ConnectClientInterceptor()
+}
 
 // HTTPHandler wraps a server's mux in an HTTP server span, continuing the
 // caller's traceparent. The liveness and readiness probes are left out: a span every few

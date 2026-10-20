@@ -4,7 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 
 	accessissuerv1 "github.com/truvity/sluis/gen/accessissuer/v1"
 	"github.com/truvity/sluis/gen/accessissuer/v1/accessissuerv1connect"
@@ -18,10 +19,10 @@ import (
 
 func listWith(t *testing.T, rig *sluisctlRig, bearer string) error {
 	t.Helper()
-	client := accessissuerv1connect.NewSessionServiceClient(rig.server.Client(), rig.server.URL)
-	req := connect.NewRequest(&accessissuerv1.ListSessionsRequest{Identity: "ada@north.example"})
-	req.Header().Set("Authorization", "Bearer "+bearer)
-	_, err := client.ListSessions(context.Background(), req)
+	client := accessissuerv1connect.NewSessionServiceClient(connect.NewClient(connecthttp.NewTransport(rig.server.Client(), rig.server.URL)))
+	ctx, info := connect.NewClientContext(context.Background())
+	info.RequestHeader().Set("Authorization", "Bearer "+bearer)
+	_, err := client.ListSessions(ctx, &accessissuerv1.ListSessionsRequest{Identity: "ada@north.example"})
 	return err
 }
 

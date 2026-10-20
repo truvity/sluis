@@ -5,8 +5,6 @@ import (
 	"slices"
 	"testing"
 
-	"connectrpc.com/connect"
-
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
 	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/policy"
@@ -48,11 +46,11 @@ github:
 	console := &Console{deps: ConsoleDeps{Authorizer: access.NewAuthorizer(set, nil, 0)}}
 	ctx := WithIdentity(context.Background(), access.Identity{Role: access.RoleViewer})
 
-	response, err := console.GetPolicy(ctx, connect.NewRequest(&directoryrosterv1.GetPolicyRequest{}))
+	response, err := console.GetPolicy(ctx, &directoryrosterv1.GetPolicyRequest{})
 	if err != nil {
 		t.Fatalf("GetPolicy: %v", err)
 	}
-	got := response.Msg
+	got := response
 
 	var platform *directoryrosterv1.PolicyTeam
 	for _, team := range got.GetTeams() {

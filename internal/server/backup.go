@@ -2,13 +2,11 @@ package server
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"log/slog"
 	"slices"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
 	"github.com/truvity/sluis/internal/access"
@@ -60,18 +58,18 @@ const backupRunTimeout = 16 * time.Minute
 // backupError is a module that could not answer. The message is the transport's
 // and holds no record value.
 func backupError(what string, err error) error {
-	return connect.NewError(connect.CodeUnavailable, fmt.Errorf("%s: %s", what, logattr.Error(err)))
+	return connect.Errorf(connect.CodeUnavailable, "%s: %s", what, logattr.Error(err))
 }
 
 // GetBackupStatus implements the administrator's contract.
 func (c *Console) GetBackupStatus(
-	ctx context.Context, _ *connect.Request[directoryrosterv1.GetBackupStatusRequest],
-) (*connect.Response[directoryrosterv1.GetBackupStatusResponse], error) {
+	ctx context.Context, _ *directoryrosterv1.GetBackupStatusRequest,
+) (*directoryrosterv1.GetBackupStatusResponse, error) {
 	if _, err := requireRole(ctx, access.RoleViewer); err != nil {
 		return nil, err
 	}
 	if c.deps.Backup == nil {
-		return connect.NewResponse(&directoryrosterv1.GetBackupStatusResponse{}), nil
+		return &directoryrosterv1.GetBackupStatusResponse{}, nil
 	}
 	ctx, cancel := context.WithTimeout(ctx, backupCallTimeout)
 	defer cancel()
@@ -88,25 +86,25 @@ func (c *Console) GetBackupStatus(
 			Removed: int32(len(p.Removed)), Cleaned: int32(len(p.Orphans)), Refused: int32(len(p.Failed)),
 		}
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
 // ListBackups implements the administrator's contract.
 func (c *Console) ListBackups(
-	ctx context.Context, req *connect.Request[directoryrosterv1.ListBackupsRequest],
-) (*connect.Response[directoryrosterv1.ListBackupsResponse], error) {
+	ctx context.Context, req *directoryrosterv1.ListBackupsRequest,
+) (*directoryrosterv1.ListBackupsResponse, error) {
 	if _, err := requireRole(ctx, access.RoleViewer); err != nil {
 		return nil, err
 	}
-	if req.Msg.GetLimit() < 0 {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("limit cannot be negative"))
+	if req.GetLimit() < 0 {
+		return nil, connect.NewError(connect.CodeInvalidArgument, "limit cannot be negative")
 	}
 	if c.deps.Backup == nil {
-		return connect.NewResponse(&directoryrosterv1.ListBackupsResponse{}), nil
+		return &directoryrosterv1.ListBackupsResponse{}, nil
 	}
 	ctx, cancel := context.WithTimeout(ctx, backupCallTimeout)
 	defer cancel()
-	all, err := c.deps.Backup.List(ctx, int(req.Msg.GetLimit()))
+	all, err := c.deps.Backup.List(ctx, int(req.GetLimit()))
 	if err != nil {
 		return nil, backupError("the backup module did not answer", err)
 	}
@@ -121,18 +119,18 @@ func (c *Console) ListBackups(
 			Modules: int32(b.Modules), Records: b.Records, Chunks: int32(b.Chunks), Error: b.Error,
 		})
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
 // GetRestoreStatus implements the administrator's contract.
 func (c *Console) GetRestoreStatus(
-	ctx context.Context, _ *connect.Request[directoryrosterv1.GetRestoreStatusRequest],
-) (*connect.Response[directoryrosterv1.GetRestoreStatusResponse], error) {
+	ctx context.Context, _ *directoryrosterv1.GetRestoreStatusRequest,
+) (*directoryrosterv1.GetRestoreStatusResponse, error) {
 	if _, err := requireRole(ctx, access.RoleViewer); err != nil {
 		return nil, err
 	}
 	if c.deps.Backup == nil {
-		return connect.NewResponse(&directoryrosterv1.GetRestoreStatusResponse{}), nil
+		return &directoryrosterv1.GetRestoreStatusResponse{}, nil
 	}
 	ctx, cancel := context.WithTimeout(ctx, backupCallTimeout)
 	defer cancel()
@@ -148,7 +146,7 @@ func (c *Console) GetRestoreStatus(
 			Module: string(m.Module), State: m.State, Since: stamp(m.Since), By: m.By, Unreadable: m.Unreadable,
 		})
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
 // backupRunThrottle is how long a person waits between two backups they start.
@@ -168,32 +166,32 @@ const (
 // when the module has been handed the run, not when the run ends: the caller
 // reads the run with GetBackupStatus.
 func (c *Console) RunBackup(
-	ctx context.Context, req *connect.Request[directoryrosterv1.RunBackupRequest],
-) (*connect.Response[directoryrosterv1.RunBackupResponse], error) {
+	ctx context.Context, req *directoryrosterv1.RunBackupRequest,
+) (*directoryrosterv1.RunBackupResponse, error) {
 	id, ok := IdentityFrom(ctx)
 	if !ok {
-		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("sign in first"))
+		return nil, connect.NewError(connect.CodeUnauthenticated, "sign in first")
 	}
 	// The group is the gate, and nothing else opens it: not the operator role,
 	// which only the groups the policy names are asked to stand in for.
 	if c.deps.BackupRunners == nil || !c.deps.BackupRunners.MayRun(id.Groups) {
 		return nil, connect.NewError(connect.CodePermissionDenied,
-			errors.New("starting a backup needs a group that the policy's backup.runGroups names"))
+			"starting a backup needs a group that the policy's backup.runGroups names")
 	}
 	if c.deps.Backup == nil {
-		return connect.NewResponse(&directoryrosterv1.RunBackupResponse{}), nil
+		return &directoryrosterv1.RunBackupResponse{}, nil
 	}
 	// By is the address, or for a workload the subject: what the audit record
 	// names. A caller with neither is refused rather than recorded as nobody.
 	by := id.Who()
 	if by == "" || id.Source == access.SourceRecovery {
-		return nil, connect.NewError(connect.CodePermissionDenied, errors.New("this sign-in cannot be named in the audit record of a backup"))
+		return nil, connect.NewError(connect.CodePermissionDenied, "this sign-in cannot be named in the audit record of a backup")
 	}
-	answer := func(outcome string, at time.Time) *connect.Response[directoryrosterv1.RunBackupResponse] {
-		return connect.NewResponse(&directoryrosterv1.RunBackupResponse{Available: true, Outcome: outcome, Started: stamp(at)})
+	answer := func(outcome string, at time.Time) *directoryrosterv1.RunBackupResponse {
+		return &directoryrosterv1.RunBackupResponse{Available: true, Outcome: outcome, Started: stamp(at)}
 	}
 	// A run is one invocation since format 2, so a resume has nothing to continue.
-	if req.Msg.GetResume() {
+	if req.GetResume() {
 		return answer(runIdle, time.Time{}), nil
 	}
 	now := time.Now()
@@ -249,22 +247,22 @@ func (c *Console) releaseRun(by string) {
 // GetRestorePreview implements the operator's contract: counts per section, and
 // no record's name or value.
 func (c *Console) GetRestorePreview(
-	ctx context.Context, req *connect.Request[directoryrosterv1.GetRestorePreviewRequest],
-) (*connect.Response[directoryrosterv1.GetRestorePreviewResponse], error) {
+	ctx context.Context, req *directoryrosterv1.GetRestorePreviewRequest,
+) (*directoryrosterv1.GetRestorePreviewResponse, error) {
 	if _, err := requireRole(ctx, access.RoleOperator); err != nil {
 		return nil, err
 	}
 	// An id names an object under the installation's archive prefix: one path
 	// segment of letters, digits, dot, dash and underscore, never a path.
-	if !backup.ValidName(req.Msg.GetBackupId()) {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("backup_id is not the id of a backup"))
+	if !backup.ValidName(req.GetBackupId()) {
+		return nil, connect.NewError(connect.CodeInvalidArgument, "backup_id is not the id of a backup")
 	}
 	if c.deps.Backup == nil {
-		return connect.NewResponse(&directoryrosterv1.GetRestorePreviewResponse{}), nil
+		return &directoryrosterv1.GetRestorePreviewResponse{}, nil
 	}
 	ctx, cancel := context.WithTimeout(ctx, backupRunTimeout)
 	defer cancel()
-	res, err := c.deps.Backup.PreviewRestore(ctx, req.Msg.GetBackupId())
+	res, err := c.deps.Backup.PreviewRestore(ctx, req.GetBackupId())
 	if err != nil {
 		return nil, backupError("the restore function did not answer", err)
 	}
@@ -281,7 +279,7 @@ func (c *Console) GetRestorePreview(
 			})
 		}
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
 func backupRun(v *job.View) *directoryrosterv1.BackupRun {

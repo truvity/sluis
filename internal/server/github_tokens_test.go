@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
 	"github.com/truvity/sluis/internal/access"
@@ -38,11 +38,11 @@ func tokensRig(t *testing.T) (*appsRig, *mints.Ring) {
 func (r *appsRig) tokens(t *testing.T, id string) *directoryrosterv1.ListGitHubAppTokensResponse {
 	t.Helper()
 	listed, err := r.console.ListGitHubAppTokens(operator(),
-		connect.NewRequest(&directoryrosterv1.ListGitHubAppTokensRequest{Id: id}))
+		&directoryrosterv1.ListGitHubAppTokensRequest{Id: id})
 	if err != nil {
 		t.Fatalf("ListGitHubAppTokens(%s): %v", id, err)
 	}
-	return listed.Msg
+	return listed
 }
 
 // The page's whole point: the last requests of one App, newest first,
@@ -110,7 +110,7 @@ func TestADeploymentThatKeepsNoRecentTokensSaysSo(t *testing.T) {
 	rig, _ := tokensRig(t)
 	rig.console.deps.GitHubMints = nil
 	_, err := rig.console.ListGitHubAppTokens(operator(),
-		connect.NewRequest(&directoryrosterv1.ListGitHubAppTokensRequest{Id: "renovate"}))
+		&directoryrosterv1.ListGitHubAppTokensRequest{Id: "renovate"})
 	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
 		t.Fatalf("a deployment keeping none = %v, want failed_precondition", err)
 	}
@@ -127,12 +127,12 @@ func TestOnlyACatalogueAppHasRecentTokens(t *testing.T) {
 	rig, _ := tokensRig(t)
 	rig.connect(t, rig.github.pem)
 	_, err := rig.console.ListGitHubAppTokens(operator(),
-		connect.NewRequest(&directoryrosterv1.ListGitHubAppTokensRequest{Id: "globex-controller"}))
+		&directoryrosterv1.ListGitHubAppTokensRequest{Id: "globex-controller"})
 	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
 		t.Fatalf("a controller App = %v, want failed_precondition", err)
 	}
 	if _, err = rig.console.ListGitHubAppTokens(operator(),
-		connect.NewRequest(&directoryrosterv1.ListGitHubAppTokensRequest{Id: "no-such-app"})); connect.CodeOf(err) != connect.CodeNotFound {
+		&directoryrosterv1.ListGitHubAppTokensRequest{Id: "no-such-app"}); connect.CodeOf(err) != connect.CodeNotFound {
 		t.Errorf("an App nothing declares = %v, want not_found", err)
 	}
 }
@@ -146,7 +146,7 @@ func TestAnUnreadableStoreIsNotAQuietWeek(t *testing.T) {
 	rig, _ := tokensRig(t)
 	rig.console.deps.GitHubCatalogueApps = unreadableApps{}
 	_, err := rig.console.ListGitHubAppTokens(operator(),
-		connect.NewRequest(&directoryrosterv1.ListGitHubAppTokensRequest{Id: "renovate"}))
+		&directoryrosterv1.ListGitHubAppTokensRequest{Id: "renovate"})
 	if connect.CodeOf(err) != connect.CodeUnavailable {
 		t.Fatalf("an unreadable store = %v, want unavailable", err)
 	}
@@ -162,7 +162,7 @@ func TestRecentTokensAreOperatorOnly(t *testing.T) {
 	rig, _ := tokensRig(t)
 	viewer := WithIdentity(context.Background(), access.Identity{Email: "lee@north.example", Role: access.RoleViewer})
 	_, err := rig.console.ListGitHubAppTokens(viewer,
-		connect.NewRequest(&directoryrosterv1.ListGitHubAppTokensRequest{Id: "renovate"}))
+		&directoryrosterv1.ListGitHubAppTokensRequest{Id: "renovate"})
 	if connect.CodeOf(err) != connect.CodePermissionDenied {
 		t.Errorf("a viewer = %v, want permission_denied", err)
 	}
@@ -251,13 +251,13 @@ func TestARemoteModulesAppTokensAreAnsweredFromTheIssuersRing(t *testing.T) {
 	// The module still decides what the App is: an App nothing declares is
 	// not_found, and one that mints no tokens is refused, as locally.
 	_, err := rig.console.ListGitHubAppTokens(operator(),
-		connect.NewRequest(&directoryrosterv1.ListGitHubAppTokensRequest{Id: "no-such-app"}))
+		&directoryrosterv1.ListGitHubAppTokensRequest{Id: "no-such-app"})
 	if connect.CodeOf(err) != connect.CodeNotFound {
 		t.Errorf("an App nothing declares = %v, want not_found", err)
 	}
 	rig.connect(t, rig.github.pem)
 	_, err = rig.console.ListGitHubAppTokens(operator(),
-		connect.NewRequest(&directoryrosterv1.ListGitHubAppTokensRequest{Id: "globex-controller"}))
+		&directoryrosterv1.ListGitHubAppTokensRequest{Id: "globex-controller"})
 	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
 		t.Errorf("a controller App = %v, want failed_precondition", err)
 	}
@@ -265,7 +265,7 @@ func TestARemoteModulesAppTokensAreAnsweredFromTheIssuersRing(t *testing.T) {
 	// Truly no ring anywhere keeps the sentence.
 	rig.console.deps.GitHubMints = nil
 	_, err = rig.console.ListGitHubAppTokens(operator(),
-		connect.NewRequest(&directoryrosterv1.ListGitHubAppTokensRequest{Id: "renovate"}))
+		&directoryrosterv1.ListGitHubAppTokensRequest{Id: "renovate"})
 	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
 		t.Errorf("no ring = %v, want failed_precondition", err)
 	}

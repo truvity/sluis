@@ -228,9 +228,9 @@ storage-test:
 vuln: console
     govulncheck ./...
 
-# Regenerate gen/ from proto/ (buf + protoc-gen-go + protoc-gen-connect-go,
-# all from devbox). Generated code is COMMITTED so the module is
-# `go get`-able without buf installed.
+# Regenerate gen/ from proto/ (buf and protoc-gen-go from devbox; connect-go
+# v2's protoc-gen-connect-go through `go tool`, pinned in go.mod). Generated
+# code is COMMITTED so the module is `go get`-able without buf installed.
 generate:
     buf lint
     buf generate

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"google.golang.org/protobuf/proto"
 
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
@@ -17,6 +17,7 @@ import (
 	ghconsole "github.com/truvity/sluis/internal/githubapp/console"
 	"github.com/truvity/sluis/internal/githubroster/consolewire"
 	"github.com/truvity/sluis/internal/modcall"
+	"github.com/truvity/sluis/internal/rpcmount"
 )
 
 // The console's GitHub operations are the GitHub module's (docs/decisions/0071,
@@ -112,16 +113,16 @@ func githubError(err error) error {
 				code = *parsed
 			}
 		}
-		return connect.NewError(code, errors.New(p.Summary))
+		return connect.NewError(code, p.Summary)
 	}
 	var e *modcall.Error
 	switch {
 	case errors.Is(err, context.DeadlineExceeded), errors.As(err, &e) && e.Code == modcall.CodeDeadlineExceeded:
-		return connect.NewError(connect.CodeDeadlineExceeded, errors.New("the GitHub service did not answer in time"))
+		return connect.NewError(connect.CodeDeadlineExceeded, "the GitHub service did not answer in time")
 	case errors.As(err, &e) && e.Code == modcall.CodeForbidden:
-		return connect.NewError(connect.CodePermissionDenied, fmt.Errorf("the GitHub service refused the console: %w", err))
+		return rpcmount.NewError(connect.CodePermissionDenied, fmt.Errorf("the GitHub service refused the console: %w", err))
 	}
-	return connect.NewError(connect.CodeInternal, fmt.Errorf("the GitHub service: %w", err))
+	return rpcmount.NewError(connect.CodeInternal, fmt.Errorf("the GitHub service: %w", err))
 }
 
 // githubProto is a console method that is the module's, over the contract's own
@@ -133,38 +134,39 @@ func githubProto[Req, Resp any, PReq interface {
 	*Resp
 	proto.Message
 }](
-	ctx context.Context, c *Console, method string, want access.Role, req *connect.Request[Req],
-) (*connect.Response[Resp], error) {
+	ctx context.Context, c *Console, method string, want access.Role, req *Req,
+) (*Resp, error) {
 	caller, _, err := c.githubCaller(ctx, want)
 	if err != nil {
 		return nil, err
 	}
 	ctx, cancel := context.WithTimeout(ctx, githubCallTimeout)
 	defer cancel()
-	ctx = consolecall.WithFacts(ctx, c.githubFacts(ctx, githubImportAddresses(PReq(req.Msg))))
-	out, err := consolecall.Proxy[PReq, PResp](ctx, c.githubModule(), consolewire.Module, method, caller, PReq(req.Msg))
+	ctx = consolecall.WithFacts(ctx, c.githubFacts(ctx, githubImportAddresses(PReq(req))))
+	out, err := consolecall.Proxy[PReq, PResp](ctx, c.githubModule(), consolewire.Module, method, caller, PReq(req))
 	if err != nil {
 		return nil, githubError(err)
 	}
-	return connect.NewResponse((*Resp)(out)), nil
+	return (*Resp)(out), nil
 }
 
 // BeginGitHubConnect starts connecting an organisation: the module decides who
 // may and what is made, and this signs the state that pins the flow to this
 // browser, which the module never holds the key for.
 func (c *Console) BeginGitHubConnect(
-	ctx context.Context, req *connect.Request[directoryrosterv1.BeginGitHubConnectRequest],
-) (*connect.Response[directoryrosterv1.BeginGitHubConnectResponse], error) {
+	ctx context.Context, req *directoryrosterv1.BeginGitHubConnectRequest,
+) (*directoryrosterv1.BeginGitHubConnectResponse, error) {
+	info := rpcmount.CallInfo(ctx)
 	_, id, err := c.githubCaller(ctx, access.RoleOperator)
 	if err != nil {
 		return nil, err
 	}
-	begun, err := c.beginOrganisationConnect(ctx, id, req.Msg.GetOrg(), req.Msg.GetOwnerDirectory())
+	begun, err := c.beginOrganisationConnect(ctx, id, req.GetOrg(), req.GetOwnerDirectory())
 	if err != nil {
 		return nil, err
 	}
-	response := connect.NewResponse(&directoryrosterv1.BeginGitHubConnectResponse{Url: begun.url, Manifest: begun.manifest})
-	c.pinFlow(response.Header(), begun.state)
+	response := &directoryrosterv1.BeginGitHubConnectResponse{Url: begun.url, Manifest: begun.manifest}
+	c.pinFlow(info.ResponseHeader(), begun.state)
 	return response, nil
 }
 
@@ -172,15 +174,15 @@ func (c *Console) BeginGitHubConnect(
 func (c *Console) signBegun(id access.Identity, begun consolewire.Begun) (githubBegin, error) {
 	state, err := c.deps.State.IssueAs(access.Binding{Bind: begun.Bind, Actor: id.Who(), Owner: begun.Owner})
 	if err != nil {
-		return githubBegin{}, connect.NewError(connect.CodeInternal, err)
+		return githubBegin{}, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	return githubBegin{url: githubWithState(begun.URL, state), manifest: begun.Manifest, state: state}, nil
 }
 
 // DisconnectGitHubOrganisation revokes, then forgets: in the module.
 func (c *Console) DisconnectGitHubOrganisation(
-	ctx context.Context, req *connect.Request[directoryrosterv1.DisconnectGitHubOrganisationRequest],
-) (*connect.Response[directoryrosterv1.DisconnectGitHubOrganisationResponse], error) {
+	ctx context.Context, req *directoryrosterv1.DisconnectGitHubOrganisationRequest,
+) (*directoryrosterv1.DisconnectGitHubOrganisationResponse, error) {
 	return githubProto[directoryrosterv1.DisconnectGitHubOrganisationRequest, directoryrosterv1.DisconnectGitHubOrganisationResponse](
 		ctx, c, consolewire.DisconnectOrganisation, access.RoleOperator, req)
 }
@@ -188,8 +190,8 @@ func (c *Console) DisconnectGitHubOrganisation(
 // ChangeGitHubOrganisationOwner changes the directory recorded as a connected
 // organisation's owner, or removes it: in the module.
 func (c *Console) ChangeGitHubOrganisationOwner(
-	ctx context.Context, req *connect.Request[directoryrosterv1.ChangeGitHubOrganisationOwnerRequest],
-) (*connect.Response[directoryrosterv1.ChangeGitHubOrganisationOwnerResponse], error) {
+	ctx context.Context, req *directoryrosterv1.ChangeGitHubOrganisationOwnerRequest,
+) (*directoryrosterv1.ChangeGitHubOrganisationOwnerResponse, error) {
 	return githubProto[directoryrosterv1.ChangeGitHubOrganisationOwnerRequest, directoryrosterv1.ChangeGitHubOrganisationOwnerResponse](
 		ctx, c, consolewire.ChangeOrganisationOwner, access.RoleOperator, req)
 }
@@ -197,8 +199,8 @@ func (c *Console) ChangeGitHubOrganisationOwner(
 // RequestGitHubPass asks the GitHub controller to pass over now: in the module,
 // which records the request and ticks itself.
 func (c *Console) RequestGitHubPass(
-	ctx context.Context, req *connect.Request[directoryrosterv1.RequestGitHubPassRequest],
-) (*connect.Response[directoryrosterv1.RequestGitHubPassResponse], error) {
+	ctx context.Context, req *directoryrosterv1.RequestGitHubPassRequest,
+) (*directoryrosterv1.RequestGitHubPassResponse, error) {
 	return githubProto[directoryrosterv1.RequestGitHubPassRequest, directoryrosterv1.RequestGitHubPassResponse](
 		ctx, c, consolewire.RequestPass, access.RoleOperator, req)
 }
@@ -263,15 +265,15 @@ func (c *Console) githubDeps() ghconsole.Deps {
 
 // ListGitHubApps lists every App in one shape.
 func (c *Console) ListGitHubApps(
-	ctx context.Context, req *connect.Request[directoryrosterv1.ListGitHubAppsRequest],
-) (*connect.Response[directoryrosterv1.ListGitHubAppsResponse], error) {
+	ctx context.Context, req *directoryrosterv1.ListGitHubAppsRequest,
+) (*directoryrosterv1.ListGitHubAppsResponse, error) {
 	return githubProto[directoryrosterv1.ListGitHubAppsRequest, directoryrosterv1.ListGitHubAppsResponse](ctx, c, consolewire.ListApps, access.RoleViewer, req)
 }
 
 // GetGitHubApp reads one App.
 func (c *Console) GetGitHubApp(
-	ctx context.Context, req *connect.Request[directoryrosterv1.GetGitHubAppRequest],
-) (*connect.Response[directoryrosterv1.GetGitHubAppResponse], error) {
+	ctx context.Context, req *directoryrosterv1.GetGitHubAppRequest,
+) (*directoryrosterv1.GetGitHubAppResponse, error) {
 	return githubProto[directoryrosterv1.GetGitHubAppRequest, directoryrosterv1.GetGitHubAppResponse](ctx, c, consolewire.GetApp, access.RoleViewer, req)
 }
 
@@ -280,7 +282,7 @@ func (c *Console) GetGitHubApp(
 func (c *Console) githubLoginsRemote(ctx context.Context) (map[string]string, bool, error) {
 	id, ok := IdentityFrom(ctx)
 	if !ok {
-		return nil, false, connect.NewError(connect.CodeUnauthenticated, errors.New("sign in first"))
+		return nil, false, connect.NewError(connect.CodeUnauthenticated, "sign in first")
 	}
 	ctx, cancel := context.WithTimeout(ctx, githubCallTimeout)
 	defer cancel()
@@ -304,10 +306,10 @@ func (c *Console) githubLoginsRemote(ctx context.Context) (map[string]string, bo
 // there is nothing to forward the question to: the module is asked only which
 // App this is and whether the person may operate it, and the ring answers.
 func (c *Console) ListGitHubAppTokens(
-	ctx context.Context, req *connect.Request[directoryrosterv1.ListGitHubAppTokensRequest],
-) (*connect.Response[directoryrosterv1.ListGitHubAppTokensResponse], error) {
+	ctx context.Context, req *directoryrosterv1.ListGitHubAppTokensRequest,
+) (*directoryrosterv1.ListGitHubAppTokensResponse, error) {
 	if c.deps.Modules.GitHub != nil {
-		return c.listGitHubAppTokensRemote(ctx, req.Msg.GetId())
+		return c.listGitHubAppTokensRemote(ctx, req.GetId())
 	}
 	return githubProto[directoryrosterv1.ListGitHubAppTokensRequest, directoryrosterv1.ListGitHubAppTokensResponse](
 		ctx, c, consolewire.ListAppTokens, access.RoleOperator, req)
@@ -315,56 +317,56 @@ func (c *Console) ListGitHubAppTokens(
 
 func (c *Console) listGitHubAppTokensRemote(
 	ctx context.Context, id string,
-) (*connect.Response[directoryrosterv1.ListGitHubAppTokensResponse], error) {
+) (*directoryrosterv1.ListGitHubAppTokensResponse, error) {
 	// Operator, not viewer: a request names who asked for it.
 	if _, err := requireAnywhere(ctx, access.RoleOperator); err != nil {
 		return nil, err
 	}
 	got, err := githubProto[directoryrosterv1.GetGitHubAppRequest, directoryrosterv1.GetGitHubAppResponse](
-		ctx, c, consolewire.GetApp, access.RoleViewer, connect.NewRequest(&directoryrosterv1.GetGitHubAppRequest{Id: id}))
+		ctx, c, consolewire.GetApp, access.RoleViewer, &directoryrosterv1.GetGitHubAppRequest{Id: id})
 	if err != nil {
 		return nil, err
 	}
-	app := got.Msg.GetApp()
+	app := got.GetApp()
 	switch {
 	case app.GetPurpose() != directoryrosterv1.AppPurpose_APP_PURPOSE_TOKENS:
-		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
-			"%s mints no installation tokens: only an App the catalogue declares does", app.GetId()))
+		return nil, connect.Errorf(connect.CodeFailedPrecondition,
+			"%s mints no installation tokens: only an App the catalogue declares does", app.GetId())
 	case !app.GetCanOperate():
-		return nil, connect.NewError(connect.CodePermissionDenied, errors.New("this needs the operator role over the App's organisation"))
+		return nil, connect.NewError(connect.CodePermissionDenied, "this needs the operator role over the App's organisation")
 	case c.deps.GitHubMints == nil:
-		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New(
-			"this deployment mints no installation tokens here, so it keeps none to show"))
+		return nil, connect.NewError(connect.CodeFailedPrecondition,
+			"this deployment mints no installation tokens here, so it keeps none to show")
 	}
-	return connect.NewResponse(ghconsole.TokensOf(c.deps.GitHubMints, app.GetId())), nil
+	return ghconsole.TokensOf(c.deps.GitHubMints, app.GetId()), nil
 }
 
 // CheckGitHubApp asks GitHub again about one App, whichever kind it is.
 func (c *Console) CheckGitHubApp(
-	ctx context.Context, req *connect.Request[directoryrosterv1.CheckGitHubAppRequest],
-) (*connect.Response[directoryrosterv1.CheckGitHubAppResponse], error) {
+	ctx context.Context, req *directoryrosterv1.CheckGitHubAppRequest,
+) (*directoryrosterv1.CheckGitHubAppResponse, error) {
 	return githubProto[directoryrosterv1.CheckGitHubAppRequest, directoryrosterv1.CheckGitHubAppResponse](ctx, c, consolewire.CheckApp, access.RoleOperator, req)
 }
 
 // RotateGitHubAppWebhook gives an App's webhook a new secret.
 func (c *Console) RotateGitHubAppWebhook(
-	ctx context.Context, req *connect.Request[directoryrosterv1.RotateGitHubAppWebhookRequest],
-) (*connect.Response[directoryrosterv1.RotateGitHubAppWebhookResponse], error) {
+	ctx context.Context, req *directoryrosterv1.RotateGitHubAppWebhookRequest,
+) (*directoryrosterv1.RotateGitHubAppWebhookResponse, error) {
 	return githubProto[directoryrosterv1.RotateGitHubAppWebhookRequest, directoryrosterv1.RotateGitHubAppWebhookResponse](
 		ctx, c, consolewire.RotateAppWebhook, access.RoleOperator, req)
 }
 
 // GetGitHubStatus implements the GitHub page.
 func (c *Console) GetGitHubStatus(
-	ctx context.Context, req *connect.Request[directoryrosterv1.GetGitHubStatusRequest],
-) (*connect.Response[directoryrosterv1.GetGitHubStatusResponse], error) {
+	ctx context.Context, req *directoryrosterv1.GetGitHubStatusRequest,
+) (*directoryrosterv1.GetGitHubStatusResponse, error) {
 	return githubProto[directoryrosterv1.GetGitHubStatusRequest, directoryrosterv1.GetGitHubStatusResponse](ctx, c, consolewire.GetStatus, access.RoleViewer, req)
 }
 
 // CheckGitHubCatalogueApp asks GitHub again about one catalogue App.
 func (c *Console) CheckGitHubCatalogueApp(
-	ctx context.Context, req *connect.Request[directoryrosterv1.CheckGitHubCatalogueAppRequest],
-) (*connect.Response[directoryrosterv1.CheckGitHubCatalogueAppResponse], error) {
+	ctx context.Context, req *directoryrosterv1.CheckGitHubCatalogueAppRequest,
+) (*directoryrosterv1.CheckGitHubCatalogueAppResponse, error) {
 	return githubProto[directoryrosterv1.CheckGitHubCatalogueAppRequest, directoryrosterv1.CheckGitHubCatalogueAppResponse](
 		ctx, c, consolewire.CheckCatalogueApp, access.RoleOperator, req)
 }
@@ -394,14 +396,15 @@ func beginAs[Req any](ctx context.Context, c *Console, id access.Identity, metho
 // BeginGitHubCatalogueAppConnect starts creating a catalogue App, or finishing
 // installing one created before.
 func (c *Console) BeginGitHubCatalogueAppConnect(
-	ctx context.Context, req *connect.Request[directoryrosterv1.BeginGitHubCatalogueAppConnectRequest],
-) (*connect.Response[directoryrosterv1.BeginGitHubCatalogueAppConnectResponse], error) {
-	begun, err := c.beginCatalogueAppConnect(ctx, req.Msg.GetId())
+	ctx context.Context, req *directoryrosterv1.BeginGitHubCatalogueAppConnectRequest,
+) (*directoryrosterv1.BeginGitHubCatalogueAppConnectResponse, error) {
+	info := rpcmount.CallInfo(ctx)
+	begun, err := c.beginCatalogueAppConnect(ctx, req.GetId())
 	if err != nil {
 		return nil, err
 	}
-	response := connect.NewResponse(&directoryrosterv1.BeginGitHubCatalogueAppConnectResponse{Url: begun.url, Manifest: begun.manifest})
-	c.pinFlow(response.Header(), begun.state)
+	response := &directoryrosterv1.BeginGitHubCatalogueAppConnectResponse{Url: begun.url, Manifest: begun.manifest}
+	c.pinFlow(info.ResponseHeader(), begun.state)
 	return response, nil
 }
 
@@ -411,8 +414,8 @@ func (c *Console) beginCatalogueAppConnect(ctx context.Context, id string) (gith
 
 // DisconnectGitHubCatalogueApp uninstalls a catalogue App, then forgets it.
 func (c *Console) DisconnectGitHubCatalogueApp(
-	ctx context.Context, req *connect.Request[directoryrosterv1.DisconnectGitHubCatalogueAppRequest],
-) (*connect.Response[directoryrosterv1.DisconnectGitHubCatalogueAppResponse], error) {
+	ctx context.Context, req *directoryrosterv1.DisconnectGitHubCatalogueAppRequest,
+) (*directoryrosterv1.DisconnectGitHubCatalogueAppResponse, error) {
 	return githubProto[directoryrosterv1.DisconnectGitHubCatalogueAppRequest, directoryrosterv1.DisconnectGitHubCatalogueAppResponse](
 		ctx, c, consolewire.DisconnectCatalogueApp, access.RoleOperator, req)
 }
@@ -420,14 +423,15 @@ func (c *Console) DisconnectGitHubCatalogueApp(
 // BeginGitHubRunnerAppConnect starts creating a runner App, or finishing
 // installing one created before.
 func (c *Console) BeginGitHubRunnerAppConnect(
-	ctx context.Context, req *connect.Request[directoryrosterv1.BeginGitHubRunnerAppConnectRequest],
-) (*connect.Response[directoryrosterv1.BeginGitHubRunnerAppConnectResponse], error) {
-	begun, err := c.beginRunnerAppConnect(ctx, req.Msg.GetOrg(), req.Msg.GetTier())
+	ctx context.Context, req *directoryrosterv1.BeginGitHubRunnerAppConnectRequest,
+) (*directoryrosterv1.BeginGitHubRunnerAppConnectResponse, error) {
+	info := rpcmount.CallInfo(ctx)
+	begun, err := c.beginRunnerAppConnect(ctx, req.GetOrg(), req.GetTier())
 	if err != nil {
 		return nil, err
 	}
-	response := connect.NewResponse(&directoryrosterv1.BeginGitHubRunnerAppConnectResponse{Url: begun.url, Manifest: begun.manifest})
-	c.pinFlow(response.Header(), begun.state)
+	response := &directoryrosterv1.BeginGitHubRunnerAppConnectResponse{Url: begun.url, Manifest: begun.manifest}
+	c.pinFlow(info.ResponseHeader(), begun.state)
 	return response, nil
 }
 
@@ -437,8 +441,8 @@ func (c *Console) beginRunnerAppConnect(ctx context.Context, org, tier string) (
 
 // DisconnectGitHubRunnerApp uninstalls a runner App, then forgets it.
 func (c *Console) DisconnectGitHubRunnerApp(
-	ctx context.Context, req *connect.Request[directoryrosterv1.DisconnectGitHubRunnerAppRequest],
-) (*connect.Response[directoryrosterv1.DisconnectGitHubRunnerAppResponse], error) {
+	ctx context.Context, req *directoryrosterv1.DisconnectGitHubRunnerAppRequest,
+) (*directoryrosterv1.DisconnectGitHubRunnerAppResponse, error) {
 	return githubProto[directoryrosterv1.DisconnectGitHubRunnerAppRequest, directoryrosterv1.DisconnectGitHubRunnerAppResponse](
 		ctx, c, consolewire.DisconnectRunnerApp, access.RoleOperator, req)
 }
@@ -446,61 +450,63 @@ func (c *Console) DisconnectGitHubRunnerApp(
 // BeginGitHubAppConnect starts creating any App, or finishing installing one
 // created before. The module knows which kind an id is, and who may operate it.
 func (c *Console) BeginGitHubAppConnect(
-	ctx context.Context, req *connect.Request[directoryrosterv1.BeginGitHubAppConnectRequest],
-) (*connect.Response[directoryrosterv1.BeginGitHubAppConnectResponse], error) {
+	ctx context.Context, req *directoryrosterv1.BeginGitHubAppConnectRequest,
+) (*directoryrosterv1.BeginGitHubAppConnectResponse, error) {
+	info := rpcmount.CallInfo(ctx)
 	begun, err := beginVia(ctx, c, consolewire.BeginAppConnect, consolewire.BeginAppConnectRequest{
-		ID: req.Msg.GetId(), Owner: req.Msg.GetOwner(), OwnerDirectory: req.Msg.GetOwnerDirectory(),
+		ID: req.GetId(), Owner: req.GetOwner(), OwnerDirectory: req.GetOwnerDirectory(),
 	})
 	if err != nil {
 		return nil, err
 	}
-	response := connect.NewResponse(&directoryrosterv1.BeginGitHubAppConnectResponse{Url: begun.url, Manifest: begun.manifest})
-	c.pinFlow(response.Header(), begun.state)
+	response := &directoryrosterv1.BeginGitHubAppConnectResponse{Url: begun.url, Manifest: begun.manifest}
+	c.pinFlow(info.ResponseHeader(), begun.state)
 	return response, nil
 }
 
 // DisconnectGitHubApp uninstalls any App, then forgets it.
 func (c *Console) DisconnectGitHubApp(
-	ctx context.Context, req *connect.Request[directoryrosterv1.DisconnectGitHubAppRequest],
-) (*connect.Response[directoryrosterv1.DisconnectGitHubAppResponse], error) {
+	ctx context.Context, req *directoryrosterv1.DisconnectGitHubAppRequest,
+) (*directoryrosterv1.DisconnectGitHubAppResponse, error) {
 	return githubProto[directoryrosterv1.DisconnectGitHubAppRequest, directoryrosterv1.DisconnectGitHubAppResponse](
 		ctx, c, consolewire.DisconnectApp, access.RoleOperator, req)
 }
 
 // BeginGitHubLinkAppConnect starts creating the link App.
 func (c *Console) BeginGitHubLinkAppConnect(
-	ctx context.Context, req *connect.Request[directoryrosterv1.BeginGitHubLinkAppConnectRequest],
-) (*connect.Response[directoryrosterv1.BeginGitHubLinkAppConnectResponse], error) {
-	begun, err := beginVia(ctx, c, consolewire.BeginLinkAppConnect, consolewire.BeginLinkAppConnectRequest{Owner: req.Msg.GetOwner()})
+	ctx context.Context, req *directoryrosterv1.BeginGitHubLinkAppConnectRequest,
+) (*directoryrosterv1.BeginGitHubLinkAppConnectResponse, error) {
+	info := rpcmount.CallInfo(ctx)
+	begun, err := beginVia(ctx, c, consolewire.BeginLinkAppConnect, consolewire.BeginLinkAppConnectRequest{Owner: req.GetOwner()})
 	if err != nil {
 		return nil, err
 	}
-	response := connect.NewResponse(&directoryrosterv1.BeginGitHubLinkAppConnectResponse{Url: begun.url, Manifest: begun.manifest})
-	c.pinFlow(response.Header(), begun.state)
+	response := &directoryrosterv1.BeginGitHubLinkAppConnectResponse{Url: begun.url, Manifest: begun.manifest}
+	c.pinFlow(info.ResponseHeader(), begun.state)
 	return response, nil
 }
 
 // DisconnectGitHubLinkApp forgets the link App and makes every link made with it
 // unverifiable.
 func (c *Console) DisconnectGitHubLinkApp(
-	ctx context.Context, req *connect.Request[directoryrosterv1.DisconnectGitHubLinkAppRequest],
-) (*connect.Response[directoryrosterv1.DisconnectGitHubLinkAppResponse], error) {
+	ctx context.Context, req *directoryrosterv1.DisconnectGitHubLinkAppRequest,
+) (*directoryrosterv1.DisconnectGitHubLinkAppResponse, error) {
 	return githubProto[directoryrosterv1.DisconnectGitHubLinkAppRequest, directoryrosterv1.DisconnectGitHubLinkAppResponse](
 		ctx, c, consolewire.DisconnectLinkApp, access.RoleOperator, req)
 }
 
 // ConfirmGitHubRemovals lets exactly the removal set the operator saw go ahead.
 func (c *Console) ConfirmGitHubRemovals(
-	ctx context.Context, req *connect.Request[directoryrosterv1.ConfirmGitHubRemovalsRequest],
-) (*connect.Response[directoryrosterv1.ConfirmGitHubRemovalsResponse], error) {
+	ctx context.Context, req *directoryrosterv1.ConfirmGitHubRemovalsRequest,
+) (*directoryrosterv1.ConfirmGitHubRemovalsResponse, error) {
 	return githubProto[directoryrosterv1.ConfirmGitHubRemovalsRequest, directoryrosterv1.ConfirmGitHubRemovalsResponse](
 		ctx, c, consolewire.ConfirmRemovals, access.RoleOperator, req)
 }
 
 // ImportGitHubLinks adopts approved pairings as links.
 func (c *Console) ImportGitHubLinks(
-	ctx context.Context, req *connect.Request[directoryrosterv1.ImportGitHubLinksRequest],
-) (*connect.Response[directoryrosterv1.ImportGitHubLinksResponse], error) {
+	ctx context.Context, req *directoryrosterv1.ImportGitHubLinksRequest,
+) (*directoryrosterv1.ImportGitHubLinksResponse, error) {
 	return githubProto[directoryrosterv1.ImportGitHubLinksRequest, directoryrosterv1.ImportGitHubLinksResponse](
 		ctx, c, consolewire.ImportLinks, access.RoleOperator, req)
 }

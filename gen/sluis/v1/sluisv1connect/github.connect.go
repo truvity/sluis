@@ -5,97 +5,237 @@
 package sluisv1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1 "github.com/truvity/sluis/gen/sluis/v1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// GitHubServiceName is the fully-qualified name of the GitHubService service.
 	GitHubServiceName = "sluis.v1.GitHubService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// GitHubServiceListGitHubAppsProcedure is the fully-qualified name of the GitHubService's
-	// ListGitHubApps RPC.
+	// GitHubServiceListGitHubAppsProcedure is the procedure name of the GitHubService's ListGitHubApps
+	// RPC.
 	GitHubServiceListGitHubAppsProcedure = "/sluis.v1.GitHubService/ListGitHubApps"
-	// GitHubServiceGetGitHubAppProcedure is the fully-qualified name of the GitHubService's
-	// GetGitHubApp RPC.
+	// GitHubServiceGetGitHubAppProcedure is the procedure name of the GitHubService's GetGitHubApp RPC.
 	GitHubServiceGetGitHubAppProcedure = "/sluis.v1.GitHubService/GetGitHubApp"
-	// GitHubServiceListGitHubAppTokensProcedure is the fully-qualified name of the GitHubService's
+	// GitHubServiceListGitHubAppTokensProcedure is the procedure name of the GitHubService's
 	// ListGitHubAppTokens RPC.
 	GitHubServiceListGitHubAppTokensProcedure = "/sluis.v1.GitHubService/ListGitHubAppTokens"
-	// GitHubServiceBeginGitHubAppConnectProcedure is the fully-qualified name of the GitHubService's
+	// GitHubServiceBeginGitHubAppConnectProcedure is the procedure name of the GitHubService's
 	// BeginGitHubAppConnect RPC.
 	GitHubServiceBeginGitHubAppConnectProcedure = "/sluis.v1.GitHubService/BeginGitHubAppConnect"
-	// GitHubServiceDisconnectGitHubAppProcedure is the fully-qualified name of the GitHubService's
+	// GitHubServiceDisconnectGitHubAppProcedure is the procedure name of the GitHubService's
 	// DisconnectGitHubApp RPC.
 	GitHubServiceDisconnectGitHubAppProcedure = "/sluis.v1.GitHubService/DisconnectGitHubApp"
-	// GitHubServiceCheckGitHubAppProcedure is the fully-qualified name of the GitHubService's
-	// CheckGitHubApp RPC.
+	// GitHubServiceCheckGitHubAppProcedure is the procedure name of the GitHubService's CheckGitHubApp
+	// RPC.
 	GitHubServiceCheckGitHubAppProcedure = "/sluis.v1.GitHubService/CheckGitHubApp"
-	// GitHubServiceRotateGitHubAppWebhookProcedure is the fully-qualified name of the GitHubService's
+	// GitHubServiceRotateGitHubAppWebhookProcedure is the procedure name of the GitHubService's
 	// RotateGitHubAppWebhook RPC.
 	GitHubServiceRotateGitHubAppWebhookProcedure = "/sluis.v1.GitHubService/RotateGitHubAppWebhook"
-	// GitHubServiceGetGitHubStatusProcedure is the fully-qualified name of the GitHubService's
+	// GitHubServiceGetGitHubStatusProcedure is the procedure name of the GitHubService's
 	// GetGitHubStatus RPC.
 	GitHubServiceGetGitHubStatusProcedure = "/sluis.v1.GitHubService/GetGitHubStatus"
-	// GitHubServiceBeginGitHubConnectProcedure is the fully-qualified name of the GitHubService's
+	// GitHubServiceBeginGitHubConnectProcedure is the procedure name of the GitHubService's
 	// BeginGitHubConnect RPC.
 	GitHubServiceBeginGitHubConnectProcedure = "/sluis.v1.GitHubService/BeginGitHubConnect"
-	// GitHubServiceRequestGitHubPassProcedure is the fully-qualified name of the GitHubService's
+	// GitHubServiceRequestGitHubPassProcedure is the procedure name of the GitHubService's
 	// RequestGitHubPass RPC.
 	GitHubServiceRequestGitHubPassProcedure = "/sluis.v1.GitHubService/RequestGitHubPass"
-	// GitHubServiceChangeGitHubOrganisationOwnerProcedure is the fully-qualified name of the
-	// GitHubService's ChangeGitHubOrganisationOwner RPC.
+	// GitHubServiceChangeGitHubOrganisationOwnerProcedure is the procedure name of the GitHubService's
+	// ChangeGitHubOrganisationOwner RPC.
 	GitHubServiceChangeGitHubOrganisationOwnerProcedure = "/sluis.v1.GitHubService/ChangeGitHubOrganisationOwner"
-	// GitHubServiceDisconnectGitHubOrganisationProcedure is the fully-qualified name of the
-	// GitHubService's DisconnectGitHubOrganisation RPC.
+	// GitHubServiceDisconnectGitHubOrganisationProcedure is the procedure name of the GitHubService's
+	// DisconnectGitHubOrganisation RPC.
 	GitHubServiceDisconnectGitHubOrganisationProcedure = "/sluis.v1.GitHubService/DisconnectGitHubOrganisation"
-	// GitHubServiceBeginGitHubLinkAppConnectProcedure is the fully-qualified name of the
-	// GitHubService's BeginGitHubLinkAppConnect RPC.
+	// GitHubServiceBeginGitHubLinkAppConnectProcedure is the procedure name of the GitHubService's
+	// BeginGitHubLinkAppConnect RPC.
 	GitHubServiceBeginGitHubLinkAppConnectProcedure = "/sluis.v1.GitHubService/BeginGitHubLinkAppConnect"
-	// GitHubServiceBeginGitHubRunnerAppConnectProcedure is the fully-qualified name of the
-	// GitHubService's BeginGitHubRunnerAppConnect RPC.
+	// GitHubServiceBeginGitHubRunnerAppConnectProcedure is the procedure name of the GitHubService's
+	// BeginGitHubRunnerAppConnect RPC.
 	GitHubServiceBeginGitHubRunnerAppConnectProcedure = "/sluis.v1.GitHubService/BeginGitHubRunnerAppConnect"
-	// GitHubServiceDisconnectGitHubRunnerAppProcedure is the fully-qualified name of the
-	// GitHubService's DisconnectGitHubRunnerApp RPC.
+	// GitHubServiceDisconnectGitHubRunnerAppProcedure is the procedure name of the GitHubService's
+	// DisconnectGitHubRunnerApp RPC.
 	GitHubServiceDisconnectGitHubRunnerAppProcedure = "/sluis.v1.GitHubService/DisconnectGitHubRunnerApp"
-	// GitHubServiceDisconnectGitHubLinkAppProcedure is the fully-qualified name of the GitHubService's
+	// GitHubServiceDisconnectGitHubLinkAppProcedure is the procedure name of the GitHubService's
 	// DisconnectGitHubLinkApp RPC.
 	GitHubServiceDisconnectGitHubLinkAppProcedure = "/sluis.v1.GitHubService/DisconnectGitHubLinkApp"
-	// GitHubServiceConfirmGitHubRemovalsProcedure is the fully-qualified name of the GitHubService's
+	// GitHubServiceConfirmGitHubRemovalsProcedure is the procedure name of the GitHubService's
 	// ConfirmGitHubRemovals RPC.
 	GitHubServiceConfirmGitHubRemovalsProcedure = "/sluis.v1.GitHubService/ConfirmGitHubRemovals"
-	// GitHubServiceImportGitHubLinksProcedure is the fully-qualified name of the GitHubService's
+	// GitHubServiceImportGitHubLinksProcedure is the procedure name of the GitHubService's
 	// ImportGitHubLinks RPC.
 	GitHubServiceImportGitHubLinksProcedure = "/sluis.v1.GitHubService/ImportGitHubLinks"
-	// GitHubServiceBeginGitHubCatalogueAppConnectProcedure is the fully-qualified name of the
-	// GitHubService's BeginGitHubCatalogueAppConnect RPC.
+	// GitHubServiceBeginGitHubCatalogueAppConnectProcedure is the procedure name of the GitHubService's
+	// BeginGitHubCatalogueAppConnect RPC.
 	GitHubServiceBeginGitHubCatalogueAppConnectProcedure = "/sluis.v1.GitHubService/BeginGitHubCatalogueAppConnect"
-	// GitHubServiceDisconnectGitHubCatalogueAppProcedure is the fully-qualified name of the
-	// GitHubService's DisconnectGitHubCatalogueApp RPC.
+	// GitHubServiceDisconnectGitHubCatalogueAppProcedure is the procedure name of the GitHubService's
+	// DisconnectGitHubCatalogueApp RPC.
 	GitHubServiceDisconnectGitHubCatalogueAppProcedure = "/sluis.v1.GitHubService/DisconnectGitHubCatalogueApp"
-	// GitHubServiceCheckGitHubCatalogueAppProcedure is the fully-qualified name of the GitHubService's
+	// GitHubServiceCheckGitHubCatalogueAppProcedure is the procedure name of the GitHubService's
 	// CheckGitHubCatalogueApp RPC.
 	GitHubServiceCheckGitHubCatalogueAppProcedure = "/sluis.v1.GitHubService/CheckGitHubCatalogueApp"
+)
+
+var (
+	gitHubServiceListGitHubAppsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_sluis_v1_github_proto.Services().ByName("GitHubService").Methods().ByName("ListGitHubApps"),
+			Procedure:  GitHubServiceListGitHubAppsProcedure,
+		}
+	})
+	gitHubServiceGetGitHubAppSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_sluis_v1_github_proto.Services().ByName("GitHubService").Methods().ByName("GetGitHubApp"),
+			Procedure:  GitHubServiceGetGitHubAppProcedure,
+		}
+	})
+	gitHubServiceListGitHubAppTokensSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_sluis_v1_github_proto.Services().ByName("GitHubService").Methods().ByName("ListGitHubAppTokens"),
+			Procedure:  GitHubServiceListGitHubAppTokensProcedure,
+		}
+	})
+	gitHubServiceBeginGitHubAppConnectSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_sluis_v1_github_proto.Services().ByName("GitHubService").Methods().ByName("BeginGitHubAppConnect"),
+			Procedure:  GitHubServiceBeginGitHubAppConnectProcedure,
+		}
+	})
+	gitHubServiceDisconnectGitHubAppSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_sluis_v1_github_proto.Services().ByName("GitHubService").Methods().ByName("DisconnectGitHubApp"),
+			Procedure:  GitHubServiceDisconnectGitHubAppProcedure,
+		}
+	})
+	gitHubServiceCheckGitHubAppSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_sluis_v1_github_proto.Services().ByName("GitHubService").Methods().ByName("CheckGitHubApp"),
+			Procedure:  GitHubServiceCheckGitHubAppProcedure,
+		}
+	})
+	gitHubServiceRotateGitHubAppWebhookSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_sluis_v1_github_proto.Services().ByName("GitHubService").Methods().ByName("RotateGitHubAppWebhook"),
+			Procedure:  GitHubServiceRotateGitHubAppWebhookProcedure,
+		}
+	})
+	gitHubServiceGetGitHubStatusSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_sluis_v1_github_proto.Services().ByName("GitHubService").Methods().ByName("GetGitHubStatus"),
+			Procedure:  GitHubServiceGetGitHubStatusProcedure,
+		}
+	})
+	gitHubServiceBeginGitHubConnectSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_sluis_v1_github_proto.Services().ByName("GitHubService").Methods().ByName("BeginGitHubConnect"),
+			Procedure:  GitHubServiceBeginGitHubConnectProcedure,
+		}
+	})
+	gitHubServiceRequestGitHubPassSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_sluis_v1_github_proto.Services().ByName("GitHubService").Methods().ByName("RequestGitHubPass"),
+			Procedure:  GitHubServiceRequestGitHubPassProcedure,
+		}
+	})
+	gitHubServiceChangeGitHubOrganisationOwnerSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_sluis_v1_github_proto.Services().ByName("GitHubService").Methods().ByName("ChangeGitHubOrganisationOwner"),
+			Procedure:  GitHubServiceChangeGitHubOrganisationOwnerProcedure,
+		}
+	})
+	gitHubServiceDisconnectGitHubOrganisationSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_sluis_v1_github_proto.Services().ByName("GitHubService").Methods().ByName("DisconnectGitHubOrganisation"),
+			Procedure:  GitHubServiceDisconnectGitHubOrganisationProcedure,
+		}
+	})
+	gitHubServiceBeginGitHubLinkAppConnectSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_sluis_v1_github_proto.Services().ByName("GitHubService").Methods().ByName("BeginGitHubLinkAppConnect"),
+			Procedure:  GitHubServiceBeginGitHubLinkAppConnectProcedure,
+		}
+	})
+	gitHubServiceBeginGitHubRunnerAppConnectSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_sluis_v1_github_proto.Services().ByName("GitHubService").Methods().ByName("BeginGitHubRunnerAppConnect"),
+			Procedure:  GitHubServiceBeginGitHubRunnerAppConnectProcedure,
+		}
+	})
+	gitHubServiceDisconnectGitHubRunnerAppSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_sluis_v1_github_proto.Services().ByName("GitHubService").Methods().ByName("DisconnectGitHubRunnerApp"),
+			Procedure:  GitHubServiceDisconnectGitHubRunnerAppProcedure,
+		}
+	})
+	gitHubServiceDisconnectGitHubLinkAppSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_sluis_v1_github_proto.Services().ByName("GitHubService").Methods().ByName("DisconnectGitHubLinkApp"),
+			Procedure:  GitHubServiceDisconnectGitHubLinkAppProcedure,
+		}
+	})
+	gitHubServiceConfirmGitHubRemovalsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_sluis_v1_github_proto.Services().ByName("GitHubService").Methods().ByName("ConfirmGitHubRemovals"),
+			Procedure:  GitHubServiceConfirmGitHubRemovalsProcedure,
+		}
+	})
+	gitHubServiceImportGitHubLinksSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_sluis_v1_github_proto.Services().ByName("GitHubService").Methods().ByName("ImportGitHubLinks"),
+			Procedure:  GitHubServiceImportGitHubLinksProcedure,
+		}
+	})
+	gitHubServiceBeginGitHubCatalogueAppConnectSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_sluis_v1_github_proto.Services().ByName("GitHubService").Methods().ByName("BeginGitHubCatalogueAppConnect"),
+			Procedure:  GitHubServiceBeginGitHubCatalogueAppConnectProcedure,
+		}
+	})
+	gitHubServiceDisconnectGitHubCatalogueAppSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_sluis_v1_github_proto.Services().ByName("GitHubService").Methods().ByName("DisconnectGitHubCatalogueApp"),
+			Procedure:  GitHubServiceDisconnectGitHubCatalogueAppProcedure,
+		}
+	})
+	gitHubServiceCheckGitHubCatalogueAppSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_sluis_v1_github_proto.Services().ByName("GitHubService").Methods().ByName("CheckGitHubCatalogueApp"),
+			Procedure:  GitHubServiceCheckGitHubCatalogueAppProcedure,
+		}
+	})
 )
 
 // GitHubServiceClient is a client for the sluis.v1.GitHubService service.
@@ -105,10 +245,10 @@ type GitHubServiceClient interface {
 	// organisation, one runner App per organisation per declared tier, and
 	// every App the catalogue declares — each in the same shape, with what
 	// GitHub says of it beside what the deployment declares. Viewer.
-	ListGitHubApps(context.Context, *connect.Request[v1.ListGitHubAppsRequest]) (*connect.Response[v1.ListGitHubAppsResponse], error)
+	ListGitHubApps(context.Context, *v1.ListGitHubAppsRequest) (*v1.ListGitHubAppsResponse, error)
 	// GetGitHubApp returns one App by the id ListGitHubApps gives it.
 	// Viewer.
-	GetGitHubApp(context.Context, *connect.Request[v1.GetGitHubAppRequest]) (*connect.Response[v1.GetGitHubAppResponse], error)
+	GetGitHubApp(context.Context, *v1.GetGitHubAppRequest) (*v1.GetGitHubAppResponse, error)
 	// ListGitHubAppTokens returns the last installation tokens asked of one
 	// App, minted or refused, newest first. Operator: a request names who
 	// asked for it.
@@ -116,7 +256,7 @@ type GitHubServiceClient interface {
 	// This service's own memory of them, kept since it started and bounded
 	// per App — not the audit trail, which holds every request for as long
 	// as the bucket does and is one link away on an App's page.
-	ListGitHubAppTokens(context.Context, *connect.Request[v1.ListGitHubAppTokensRequest]) (*connect.Response[v1.ListGitHubAppTokensResponse], error)
+	ListGitHubAppTokens(context.Context, *v1.ListGitHubAppTokensRequest) (*v1.ListGitHubAppTokensResponse, error)
 	// BeginGitHubAppConnect starts creating any one of those Apps, or
 	// finishing installing one created before: its manifest and where to
 	// post it, or where to install it. Sets the flow's state cookie.
@@ -125,14 +265,14 @@ type GitHubServiceClient interface {
 	// The state it issues is the one the App's kind has always used, so a
 	// browser part-way through a flow finishes at the same callback even if
 	// the service restarts under it.
-	BeginGitHubAppConnect(context.Context, *connect.Request[v1.BeginGitHubAppConnectRequest]) (*connect.Response[v1.BeginGitHubAppConnectResponse], error)
+	BeginGitHubAppConnect(context.Context, *v1.BeginGitHubAppConnectRequest) (*v1.BeginGitHubAppConnectResponse, error)
 	// DisconnectGitHubApp uninstalls one App, then forgets its record and
 	// key. The App itself stays on GitHub, for its owner to delete.
 	// Operator.
-	DisconnectGitHubApp(context.Context, *connect.Request[v1.DisconnectGitHubAppRequest]) (*connect.Response[v1.DisconnectGitHubAppResponse], error)
+	DisconnectGitHubApp(context.Context, *v1.DisconnectGitHubAppRequest) (*v1.DisconnectGitHubAppResponse, error)
 	// CheckGitHubApp asks GitHub again what one App and its installation
 	// hold, bypassing the short cache the list reads through. Operator.
-	CheckGitHubApp(context.Context, *connect.Request[v1.CheckGitHubAppRequest]) (*connect.Response[v1.CheckGitHubAppResponse], error)
+	CheckGitHubApp(context.Context, *v1.CheckGitHubAppRequest) (*v1.CheckGitHubAppResponse, error)
 	// RotateGitHubAppWebhook replaces the secret GitHub signs a catalogue
 	// App's webhook deliveries with. It keeps the new secret (where the
 	// consumers read it), sends the new target a signed ping until it
@@ -140,7 +280,7 @@ type GitHubServiceClient interface {
 	// receiver, the URL derived from it, in one call. A consumer holds one
 	// secret, so there is no overlap: a failure before GitHub is told
 	// restores the old secret and leaves deliveries as they were. Operator.
-	RotateGitHubAppWebhook(context.Context, *connect.Request[v1.RotateGitHubAppWebhookRequest]) (*connect.Response[v1.RotateGitHubAppWebhookResponse], error)
+	RotateGitHubAppWebhook(context.Context, *v1.RotateGitHubAppWebhookRequest) (*v1.RotateGitHubAppWebhookResponse, error)
 	// GetGitHubStatus returns every organisation the policy binds or the
 	// controller reports on, each with its bound teams and the members the
 	// controller derived for them. Viewer.
@@ -151,7 +291,7 @@ type GitHubServiceClient interface {
 	// organisation's connection — are still filled in, so a client
 	// generated against an older proto keeps working; nothing new is
 	// added to them.
-	GetGitHubStatus(context.Context, *connect.Request[v1.GetGitHubStatusRequest]) (*connect.Response[v1.GetGitHubStatusResponse], error)
+	GetGitHubStatus(context.Context, *v1.GetGitHubStatusRequest) (*v1.GetGitHubStatusResponse, error)
 	// BeginGitHubConnect starts connecting an organisation the policy
 	// binds: the App's manifest and where to post it, or — for an App
 	// already created and not yet installed — where to install it. Sets the
@@ -163,7 +303,7 @@ type GitHubServiceClient interface {
 	//
 	// Superseded by BeginGitHubAppConnect, which does this for every kind of
 	// App. Kept so a console mid-rollout keeps working.
-	BeginGitHubConnect(context.Context, *connect.Request[v1.BeginGitHubConnectRequest]) (*connect.Response[v1.BeginGitHubConnectResponse], error)
+	BeginGitHubConnect(context.Context, *v1.BeginGitHubConnectRequest) (*v1.BeginGitHubConnectResponse, error)
 	// RequestGitHubPass asks the GitHub controller to pass over now instead of
 	// at its next interval: it leaves a marker in the records the controller
 	// watches. The operator of the organisation's recorded owner, or the
@@ -171,18 +311,18 @@ type GitHubServiceClient interface {
 	// organisation is not installed (there is nothing for a pass to act with)
 	// and with RESOURCE_EXHAUSTED while the organisation's last request is
 	// under a minute old. Recorded as a configuration change.
-	RequestGitHubPass(context.Context, *connect.Request[v1.RequestGitHubPassRequest]) (*connect.Response[v1.RequestGitHubPassResponse], error)
+	RequestGitHubPass(context.Context, *v1.RequestGitHubPassRequest) (*v1.RequestGitHubPassResponse, error)
 	// ChangeGitHubOrganisationOwner changes the directory recorded as a
 	// connected organisation's owner, or removes it. Installation-wide
 	// operator only: an owner may not hand its own organisation to another
 	// or take it for itself. Recorded as a configuration change.
-	ChangeGitHubOrganisationOwner(context.Context, *connect.Request[v1.ChangeGitHubOrganisationOwnerRequest]) (*connect.Response[v1.ChangeGitHubOrganisationOwnerResponse], error)
+	ChangeGitHubOrganisationOwner(context.Context, *v1.ChangeGitHubOrganisationOwnerRequest) (*v1.ChangeGitHubOrganisationOwnerResponse, error)
 	// DisconnectGitHubOrganisation uninstalls the App, then forgets the
 	// organisation's record and credential. Operator.
 	//
 	// Superseded by DisconnectGitHubApp, which does this for every kind of
 	// App. Kept so a console mid-rollout keeps working.
-	DisconnectGitHubOrganisation(context.Context, *connect.Request[v1.DisconnectGitHubOrganisationRequest]) (*connect.Response[v1.DisconnectGitHubOrganisationResponse], error)
+	DisconnectGitHubOrganisation(context.Context, *v1.DisconnectGitHubOrganisationRequest) (*v1.DisconnectGitHubOrganisationResponse, error)
 	// BeginGitHubLinkAppConnect starts creating the link App: the one App
 	// people authorize, as themselves, to link their GitHub account to their
 	// work addresses. Public, installed nowhere, and asking only to read the
@@ -191,7 +331,7 @@ type GitHubServiceClient interface {
 	//
 	// Superseded by BeginGitHubAppConnect, which does this for every kind of
 	// App. Kept so a console mid-rollout keeps working.
-	BeginGitHubLinkAppConnect(context.Context, *connect.Request[v1.BeginGitHubLinkAppConnectRequest]) (*connect.Response[v1.BeginGitHubLinkAppConnectResponse], error)
+	BeginGitHubLinkAppConnect(context.Context, *v1.BeginGitHubLinkAppConnectRequest) (*v1.BeginGitHubLinkAppConnectResponse, error)
 	// BeginGitHubRunnerAppConnect starts creating a runner App: the App a
 	// self-hosted runner scale set in one tier registers with in one
 	// organisation the policy binds. Its manifest and where to post it, or —
@@ -204,13 +344,13 @@ type GitHubServiceClient interface {
 	//
 	// Superseded by BeginGitHubAppConnect, which does this for every kind of
 	// App. Kept so a console mid-rollout keeps working.
-	BeginGitHubRunnerAppConnect(context.Context, *connect.Request[v1.BeginGitHubRunnerAppConnectRequest]) (*connect.Response[v1.BeginGitHubRunnerAppConnectResponse], error)
+	BeginGitHubRunnerAppConnect(context.Context, *v1.BeginGitHubRunnerAppConnectRequest) (*v1.BeginGitHubRunnerAppConnectResponse, error)
 	// DisconnectGitHubRunnerApp uninstalls a runner App, then forgets it.
 	// Runners registered with it stop getting jobs. Operator.
 	//
 	// Superseded by DisconnectGitHubApp, which does this for every kind of
 	// App. Kept so a console mid-rollout keeps working.
-	DisconnectGitHubRunnerApp(context.Context, *connect.Request[v1.DisconnectGitHubRunnerAppRequest]) (*connect.Response[v1.DisconnectGitHubRunnerAppResponse], error)
+	DisconnectGitHubRunnerApp(context.Context, *v1.DisconnectGitHubRunnerAppRequest) (*v1.DisconnectGitHubRunnerAppResponse, error)
 	// DisconnectGitHubLinkApp forgets the link App. Every link made with it
 	// becomes unverifiable — nothing can check its tokens any more — which
 	// removes nobody and adds nobody until each person links again.
@@ -218,20 +358,20 @@ type GitHubServiceClient interface {
 	//
 	// Superseded by DisconnectGitHubApp, which does this for every kind of
 	// App. Kept so a console mid-rollout keeps working.
-	DisconnectGitHubLinkApp(context.Context, *connect.Request[v1.DisconnectGitHubLinkAppRequest]) (*connect.Response[v1.DisconnectGitHubLinkAppResponse], error)
+	DisconnectGitHubLinkApp(context.Context, *v1.DisconnectGitHubLinkAppRequest) (*v1.DisconnectGitHubLinkAppResponse, error)
 	// ConfirmGitHubRemovals lets a pass that would remove more than half an
 	// organisation go ahead — for exactly the set of removals the operator
 	// saw, named by its fingerprint in the organisation's report. A
 	// different set needs confirming again; a confirmation lapses after a
 	// day. Operator.
-	ConfirmGitHubRemovals(context.Context, *connect.Request[v1.ConfirmGitHubRemovalsRequest]) (*connect.Response[v1.ConfirmGitHubRemovalsResponse], error)
+	ConfirmGitHubRemovals(context.Context, *v1.ConfirmGitHubRemovalsRequest) (*v1.ConfirmGitHubRemovalsResponse, error)
 	// ImportGitHubLinks adopts pairings of a GitHub login and work addresses
 	// that somebody approved elsewhere — github-roster 0.x kept them. Each
 	// becomes a link only when the pairing was approved, an address is a
 	// live account the directory vouches for, and the account is a member of
 	// a connected organisation; a link the person made is never displaced.
 	// Operator.
-	ImportGitHubLinks(context.Context, *connect.Request[v1.ImportGitHubLinksRequest]) (*connect.Response[v1.ImportGitHubLinksResponse], error)
+	ImportGitHubLinks(context.Context, *v1.ImportGitHubLinksRequest) (*v1.ImportGitHubLinksResponse, error)
 	// BeginGitHubCatalogueAppConnect starts creating an App the deployment
 	// declares in its catalogue, under the organisation the entry names: its
 	// manifest and where to post it, or — for an App already created and not
@@ -243,291 +383,27 @@ type GitHubServiceClient interface {
 	//
 	// Superseded by BeginGitHubAppConnect, which does this for every kind of
 	// App. Kept so a console mid-rollout keeps working.
-	BeginGitHubCatalogueAppConnect(context.Context, *connect.Request[v1.BeginGitHubCatalogueAppConnectRequest]) (*connect.Response[v1.BeginGitHubCatalogueAppConnectResponse], error)
+	BeginGitHubCatalogueAppConnect(context.Context, *v1.BeginGitHubCatalogueAppConnectRequest) (*v1.BeginGitHubCatalogueAppConnectResponse, error)
 	// DisconnectGitHubCatalogueApp uninstalls a catalogue App, then forgets
 	// its record and key. The App itself stays on GitHub, for its owner to
 	// delete. Operator.
 	//
 	// Superseded by DisconnectGitHubApp, which does this for every kind of
 	// App. Kept so a console mid-rollout keeps working.
-	DisconnectGitHubCatalogueApp(context.Context, *connect.Request[v1.DisconnectGitHubCatalogueAppRequest]) (*connect.Response[v1.DisconnectGitHubCatalogueAppResponse], error)
+	DisconnectGitHubCatalogueApp(context.Context, *v1.DisconnectGitHubCatalogueAppRequest) (*v1.DisconnectGitHubCatalogueAppResponse, error)
 	// CheckGitHubCatalogueApp asks GitHub again what one catalogue App and
 	// its installation hold, bypassing the short cache GetGitHubStatus reads
 	// through. Operator.
 	//
 	// Superseded by CheckGitHubApp, which does this for every kind of
 	// App. Kept so a console mid-rollout keeps working.
-	CheckGitHubCatalogueApp(context.Context, *connect.Request[v1.CheckGitHubCatalogueAppRequest]) (*connect.Response[v1.CheckGitHubCatalogueAppResponse], error)
+	CheckGitHubCatalogueApp(context.Context, *v1.CheckGitHubCatalogueAppRequest) (*v1.CheckGitHubCatalogueAppResponse, error)
 }
 
-// NewGitHubServiceClient constructs a client for the sluis.v1.GitHubService service. By default, it
-// uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses, and sends
-// uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the connect.WithGRPC() or
-// connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewGitHubServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) GitHubServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	gitHubServiceMethods := v1.File_sluis_v1_github_proto.Services().ByName("GitHubService").Methods()
-	return &gitHubServiceClient{
-		listGitHubApps: connect.NewClient[v1.ListGitHubAppsRequest, v1.ListGitHubAppsResponse](
-			httpClient,
-			baseURL+GitHubServiceListGitHubAppsProcedure,
-			connect.WithSchema(gitHubServiceMethods.ByName("ListGitHubApps")),
-			connect.WithClientOptions(opts...),
-		),
-		getGitHubApp: connect.NewClient[v1.GetGitHubAppRequest, v1.GetGitHubAppResponse](
-			httpClient,
-			baseURL+GitHubServiceGetGitHubAppProcedure,
-			connect.WithSchema(gitHubServiceMethods.ByName("GetGitHubApp")),
-			connect.WithClientOptions(opts...),
-		),
-		listGitHubAppTokens: connect.NewClient[v1.ListGitHubAppTokensRequest, v1.ListGitHubAppTokensResponse](
-			httpClient,
-			baseURL+GitHubServiceListGitHubAppTokensProcedure,
-			connect.WithSchema(gitHubServiceMethods.ByName("ListGitHubAppTokens")),
-			connect.WithClientOptions(opts...),
-		),
-		beginGitHubAppConnect: connect.NewClient[v1.BeginGitHubAppConnectRequest, v1.BeginGitHubAppConnectResponse](
-			httpClient,
-			baseURL+GitHubServiceBeginGitHubAppConnectProcedure,
-			connect.WithSchema(gitHubServiceMethods.ByName("BeginGitHubAppConnect")),
-			connect.WithClientOptions(opts...),
-		),
-		disconnectGitHubApp: connect.NewClient[v1.DisconnectGitHubAppRequest, v1.DisconnectGitHubAppResponse](
-			httpClient,
-			baseURL+GitHubServiceDisconnectGitHubAppProcedure,
-			connect.WithSchema(gitHubServiceMethods.ByName("DisconnectGitHubApp")),
-			connect.WithClientOptions(opts...),
-		),
-		checkGitHubApp: connect.NewClient[v1.CheckGitHubAppRequest, v1.CheckGitHubAppResponse](
-			httpClient,
-			baseURL+GitHubServiceCheckGitHubAppProcedure,
-			connect.WithSchema(gitHubServiceMethods.ByName("CheckGitHubApp")),
-			connect.WithClientOptions(opts...),
-		),
-		rotateGitHubAppWebhook: connect.NewClient[v1.RotateGitHubAppWebhookRequest, v1.RotateGitHubAppWebhookResponse](
-			httpClient,
-			baseURL+GitHubServiceRotateGitHubAppWebhookProcedure,
-			connect.WithSchema(gitHubServiceMethods.ByName("RotateGitHubAppWebhook")),
-			connect.WithClientOptions(opts...),
-		),
-		getGitHubStatus: connect.NewClient[v1.GetGitHubStatusRequest, v1.GetGitHubStatusResponse](
-			httpClient,
-			baseURL+GitHubServiceGetGitHubStatusProcedure,
-			connect.WithSchema(gitHubServiceMethods.ByName("GetGitHubStatus")),
-			connect.WithClientOptions(opts...),
-		),
-		beginGitHubConnect: connect.NewClient[v1.BeginGitHubConnectRequest, v1.BeginGitHubConnectResponse](
-			httpClient,
-			baseURL+GitHubServiceBeginGitHubConnectProcedure,
-			connect.WithSchema(gitHubServiceMethods.ByName("BeginGitHubConnect")),
-			connect.WithClientOptions(opts...),
-		),
-		requestGitHubPass: connect.NewClient[v1.RequestGitHubPassRequest, v1.RequestGitHubPassResponse](
-			httpClient,
-			baseURL+GitHubServiceRequestGitHubPassProcedure,
-			connect.WithSchema(gitHubServiceMethods.ByName("RequestGitHubPass")),
-			connect.WithClientOptions(opts...),
-		),
-		changeGitHubOrganisationOwner: connect.NewClient[v1.ChangeGitHubOrganisationOwnerRequest, v1.ChangeGitHubOrganisationOwnerResponse](
-			httpClient,
-			baseURL+GitHubServiceChangeGitHubOrganisationOwnerProcedure,
-			connect.WithSchema(gitHubServiceMethods.ByName("ChangeGitHubOrganisationOwner")),
-			connect.WithClientOptions(opts...),
-		),
-		disconnectGitHubOrganisation: connect.NewClient[v1.DisconnectGitHubOrganisationRequest, v1.DisconnectGitHubOrganisationResponse](
-			httpClient,
-			baseURL+GitHubServiceDisconnectGitHubOrganisationProcedure,
-			connect.WithSchema(gitHubServiceMethods.ByName("DisconnectGitHubOrganisation")),
-			connect.WithClientOptions(opts...),
-		),
-		beginGitHubLinkAppConnect: connect.NewClient[v1.BeginGitHubLinkAppConnectRequest, v1.BeginGitHubLinkAppConnectResponse](
-			httpClient,
-			baseURL+GitHubServiceBeginGitHubLinkAppConnectProcedure,
-			connect.WithSchema(gitHubServiceMethods.ByName("BeginGitHubLinkAppConnect")),
-			connect.WithClientOptions(opts...),
-		),
-		beginGitHubRunnerAppConnect: connect.NewClient[v1.BeginGitHubRunnerAppConnectRequest, v1.BeginGitHubRunnerAppConnectResponse](
-			httpClient,
-			baseURL+GitHubServiceBeginGitHubRunnerAppConnectProcedure,
-			connect.WithSchema(gitHubServiceMethods.ByName("BeginGitHubRunnerAppConnect")),
-			connect.WithClientOptions(opts...),
-		),
-		disconnectGitHubRunnerApp: connect.NewClient[v1.DisconnectGitHubRunnerAppRequest, v1.DisconnectGitHubRunnerAppResponse](
-			httpClient,
-			baseURL+GitHubServiceDisconnectGitHubRunnerAppProcedure,
-			connect.WithSchema(gitHubServiceMethods.ByName("DisconnectGitHubRunnerApp")),
-			connect.WithClientOptions(opts...),
-		),
-		disconnectGitHubLinkApp: connect.NewClient[v1.DisconnectGitHubLinkAppRequest, v1.DisconnectGitHubLinkAppResponse](
-			httpClient,
-			baseURL+GitHubServiceDisconnectGitHubLinkAppProcedure,
-			connect.WithSchema(gitHubServiceMethods.ByName("DisconnectGitHubLinkApp")),
-			connect.WithClientOptions(opts...),
-		),
-		confirmGitHubRemovals: connect.NewClient[v1.ConfirmGitHubRemovalsRequest, v1.ConfirmGitHubRemovalsResponse](
-			httpClient,
-			baseURL+GitHubServiceConfirmGitHubRemovalsProcedure,
-			connect.WithSchema(gitHubServiceMethods.ByName("ConfirmGitHubRemovals")),
-			connect.WithClientOptions(opts...),
-		),
-		importGitHubLinks: connect.NewClient[v1.ImportGitHubLinksRequest, v1.ImportGitHubLinksResponse](
-			httpClient,
-			baseURL+GitHubServiceImportGitHubLinksProcedure,
-			connect.WithSchema(gitHubServiceMethods.ByName("ImportGitHubLinks")),
-			connect.WithClientOptions(opts...),
-		),
-		beginGitHubCatalogueAppConnect: connect.NewClient[v1.BeginGitHubCatalogueAppConnectRequest, v1.BeginGitHubCatalogueAppConnectResponse](
-			httpClient,
-			baseURL+GitHubServiceBeginGitHubCatalogueAppConnectProcedure,
-			connect.WithSchema(gitHubServiceMethods.ByName("BeginGitHubCatalogueAppConnect")),
-			connect.WithClientOptions(opts...),
-		),
-		disconnectGitHubCatalogueApp: connect.NewClient[v1.DisconnectGitHubCatalogueAppRequest, v1.DisconnectGitHubCatalogueAppResponse](
-			httpClient,
-			baseURL+GitHubServiceDisconnectGitHubCatalogueAppProcedure,
-			connect.WithSchema(gitHubServiceMethods.ByName("DisconnectGitHubCatalogueApp")),
-			connect.WithClientOptions(opts...),
-		),
-		checkGitHubCatalogueApp: connect.NewClient[v1.CheckGitHubCatalogueAppRequest, v1.CheckGitHubCatalogueAppResponse](
-			httpClient,
-			baseURL+GitHubServiceCheckGitHubCatalogueAppProcedure,
-			connect.WithSchema(gitHubServiceMethods.ByName("CheckGitHubCatalogueApp")),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// gitHubServiceClient implements GitHubServiceClient.
-type gitHubServiceClient struct {
-	listGitHubApps                 *connect.Client[v1.ListGitHubAppsRequest, v1.ListGitHubAppsResponse]
-	getGitHubApp                   *connect.Client[v1.GetGitHubAppRequest, v1.GetGitHubAppResponse]
-	listGitHubAppTokens            *connect.Client[v1.ListGitHubAppTokensRequest, v1.ListGitHubAppTokensResponse]
-	beginGitHubAppConnect          *connect.Client[v1.BeginGitHubAppConnectRequest, v1.BeginGitHubAppConnectResponse]
-	disconnectGitHubApp            *connect.Client[v1.DisconnectGitHubAppRequest, v1.DisconnectGitHubAppResponse]
-	checkGitHubApp                 *connect.Client[v1.CheckGitHubAppRequest, v1.CheckGitHubAppResponse]
-	rotateGitHubAppWebhook         *connect.Client[v1.RotateGitHubAppWebhookRequest, v1.RotateGitHubAppWebhookResponse]
-	getGitHubStatus                *connect.Client[v1.GetGitHubStatusRequest, v1.GetGitHubStatusResponse]
-	beginGitHubConnect             *connect.Client[v1.BeginGitHubConnectRequest, v1.BeginGitHubConnectResponse]
-	requestGitHubPass              *connect.Client[v1.RequestGitHubPassRequest, v1.RequestGitHubPassResponse]
-	changeGitHubOrganisationOwner  *connect.Client[v1.ChangeGitHubOrganisationOwnerRequest, v1.ChangeGitHubOrganisationOwnerResponse]
-	disconnectGitHubOrganisation   *connect.Client[v1.DisconnectGitHubOrganisationRequest, v1.DisconnectGitHubOrganisationResponse]
-	beginGitHubLinkAppConnect      *connect.Client[v1.BeginGitHubLinkAppConnectRequest, v1.BeginGitHubLinkAppConnectResponse]
-	beginGitHubRunnerAppConnect    *connect.Client[v1.BeginGitHubRunnerAppConnectRequest, v1.BeginGitHubRunnerAppConnectResponse]
-	disconnectGitHubRunnerApp      *connect.Client[v1.DisconnectGitHubRunnerAppRequest, v1.DisconnectGitHubRunnerAppResponse]
-	disconnectGitHubLinkApp        *connect.Client[v1.DisconnectGitHubLinkAppRequest, v1.DisconnectGitHubLinkAppResponse]
-	confirmGitHubRemovals          *connect.Client[v1.ConfirmGitHubRemovalsRequest, v1.ConfirmGitHubRemovalsResponse]
-	importGitHubLinks              *connect.Client[v1.ImportGitHubLinksRequest, v1.ImportGitHubLinksResponse]
-	beginGitHubCatalogueAppConnect *connect.Client[v1.BeginGitHubCatalogueAppConnectRequest, v1.BeginGitHubCatalogueAppConnectResponse]
-	disconnectGitHubCatalogueApp   *connect.Client[v1.DisconnectGitHubCatalogueAppRequest, v1.DisconnectGitHubCatalogueAppResponse]
-	checkGitHubCatalogueApp        *connect.Client[v1.CheckGitHubCatalogueAppRequest, v1.CheckGitHubCatalogueAppResponse]
-}
-
-// ListGitHubApps calls sluis.v1.GitHubService.ListGitHubApps.
-func (c *gitHubServiceClient) ListGitHubApps(ctx context.Context, req *connect.Request[v1.ListGitHubAppsRequest]) (*connect.Response[v1.ListGitHubAppsResponse], error) {
-	return c.listGitHubApps.CallUnary(ctx, req)
-}
-
-// GetGitHubApp calls sluis.v1.GitHubService.GetGitHubApp.
-func (c *gitHubServiceClient) GetGitHubApp(ctx context.Context, req *connect.Request[v1.GetGitHubAppRequest]) (*connect.Response[v1.GetGitHubAppResponse], error) {
-	return c.getGitHubApp.CallUnary(ctx, req)
-}
-
-// ListGitHubAppTokens calls sluis.v1.GitHubService.ListGitHubAppTokens.
-func (c *gitHubServiceClient) ListGitHubAppTokens(ctx context.Context, req *connect.Request[v1.ListGitHubAppTokensRequest]) (*connect.Response[v1.ListGitHubAppTokensResponse], error) {
-	return c.listGitHubAppTokens.CallUnary(ctx, req)
-}
-
-// BeginGitHubAppConnect calls sluis.v1.GitHubService.BeginGitHubAppConnect.
-func (c *gitHubServiceClient) BeginGitHubAppConnect(ctx context.Context, req *connect.Request[v1.BeginGitHubAppConnectRequest]) (*connect.Response[v1.BeginGitHubAppConnectResponse], error) {
-	return c.beginGitHubAppConnect.CallUnary(ctx, req)
-}
-
-// DisconnectGitHubApp calls sluis.v1.GitHubService.DisconnectGitHubApp.
-func (c *gitHubServiceClient) DisconnectGitHubApp(ctx context.Context, req *connect.Request[v1.DisconnectGitHubAppRequest]) (*connect.Response[v1.DisconnectGitHubAppResponse], error) {
-	return c.disconnectGitHubApp.CallUnary(ctx, req)
-}
-
-// CheckGitHubApp calls sluis.v1.GitHubService.CheckGitHubApp.
-func (c *gitHubServiceClient) CheckGitHubApp(ctx context.Context, req *connect.Request[v1.CheckGitHubAppRequest]) (*connect.Response[v1.CheckGitHubAppResponse], error) {
-	return c.checkGitHubApp.CallUnary(ctx, req)
-}
-
-// RotateGitHubAppWebhook calls sluis.v1.GitHubService.RotateGitHubAppWebhook.
-func (c *gitHubServiceClient) RotateGitHubAppWebhook(ctx context.Context, req *connect.Request[v1.RotateGitHubAppWebhookRequest]) (*connect.Response[v1.RotateGitHubAppWebhookResponse], error) {
-	return c.rotateGitHubAppWebhook.CallUnary(ctx, req)
-}
-
-// GetGitHubStatus calls sluis.v1.GitHubService.GetGitHubStatus.
-func (c *gitHubServiceClient) GetGitHubStatus(ctx context.Context, req *connect.Request[v1.GetGitHubStatusRequest]) (*connect.Response[v1.GetGitHubStatusResponse], error) {
-	return c.getGitHubStatus.CallUnary(ctx, req)
-}
-
-// BeginGitHubConnect calls sluis.v1.GitHubService.BeginGitHubConnect.
-func (c *gitHubServiceClient) BeginGitHubConnect(ctx context.Context, req *connect.Request[v1.BeginGitHubConnectRequest]) (*connect.Response[v1.BeginGitHubConnectResponse], error) {
-	return c.beginGitHubConnect.CallUnary(ctx, req)
-}
-
-// RequestGitHubPass calls sluis.v1.GitHubService.RequestGitHubPass.
-func (c *gitHubServiceClient) RequestGitHubPass(ctx context.Context, req *connect.Request[v1.RequestGitHubPassRequest]) (*connect.Response[v1.RequestGitHubPassResponse], error) {
-	return c.requestGitHubPass.CallUnary(ctx, req)
-}
-
-// ChangeGitHubOrganisationOwner calls sluis.v1.GitHubService.ChangeGitHubOrganisationOwner.
-func (c *gitHubServiceClient) ChangeGitHubOrganisationOwner(ctx context.Context, req *connect.Request[v1.ChangeGitHubOrganisationOwnerRequest]) (*connect.Response[v1.ChangeGitHubOrganisationOwnerResponse], error) {
-	return c.changeGitHubOrganisationOwner.CallUnary(ctx, req)
-}
-
-// DisconnectGitHubOrganisation calls sluis.v1.GitHubService.DisconnectGitHubOrganisation.
-func (c *gitHubServiceClient) DisconnectGitHubOrganisation(ctx context.Context, req *connect.Request[v1.DisconnectGitHubOrganisationRequest]) (*connect.Response[v1.DisconnectGitHubOrganisationResponse], error) {
-	return c.disconnectGitHubOrganisation.CallUnary(ctx, req)
-}
-
-// BeginGitHubLinkAppConnect calls sluis.v1.GitHubService.BeginGitHubLinkAppConnect.
-func (c *gitHubServiceClient) BeginGitHubLinkAppConnect(ctx context.Context, req *connect.Request[v1.BeginGitHubLinkAppConnectRequest]) (*connect.Response[v1.BeginGitHubLinkAppConnectResponse], error) {
-	return c.beginGitHubLinkAppConnect.CallUnary(ctx, req)
-}
-
-// BeginGitHubRunnerAppConnect calls sluis.v1.GitHubService.BeginGitHubRunnerAppConnect.
-func (c *gitHubServiceClient) BeginGitHubRunnerAppConnect(ctx context.Context, req *connect.Request[v1.BeginGitHubRunnerAppConnectRequest]) (*connect.Response[v1.BeginGitHubRunnerAppConnectResponse], error) {
-	return c.beginGitHubRunnerAppConnect.CallUnary(ctx, req)
-}
-
-// DisconnectGitHubRunnerApp calls sluis.v1.GitHubService.DisconnectGitHubRunnerApp.
-func (c *gitHubServiceClient) DisconnectGitHubRunnerApp(ctx context.Context, req *connect.Request[v1.DisconnectGitHubRunnerAppRequest]) (*connect.Response[v1.DisconnectGitHubRunnerAppResponse], error) {
-	return c.disconnectGitHubRunnerApp.CallUnary(ctx, req)
-}
-
-// DisconnectGitHubLinkApp calls sluis.v1.GitHubService.DisconnectGitHubLinkApp.
-func (c *gitHubServiceClient) DisconnectGitHubLinkApp(ctx context.Context, req *connect.Request[v1.DisconnectGitHubLinkAppRequest]) (*connect.Response[v1.DisconnectGitHubLinkAppResponse], error) {
-	return c.disconnectGitHubLinkApp.CallUnary(ctx, req)
-}
-
-// ConfirmGitHubRemovals calls sluis.v1.GitHubService.ConfirmGitHubRemovals.
-func (c *gitHubServiceClient) ConfirmGitHubRemovals(ctx context.Context, req *connect.Request[v1.ConfirmGitHubRemovalsRequest]) (*connect.Response[v1.ConfirmGitHubRemovalsResponse], error) {
-	return c.confirmGitHubRemovals.CallUnary(ctx, req)
-}
-
-// ImportGitHubLinks calls sluis.v1.GitHubService.ImportGitHubLinks.
-func (c *gitHubServiceClient) ImportGitHubLinks(ctx context.Context, req *connect.Request[v1.ImportGitHubLinksRequest]) (*connect.Response[v1.ImportGitHubLinksResponse], error) {
-	return c.importGitHubLinks.CallUnary(ctx, req)
-}
-
-// BeginGitHubCatalogueAppConnect calls sluis.v1.GitHubService.BeginGitHubCatalogueAppConnect.
-func (c *gitHubServiceClient) BeginGitHubCatalogueAppConnect(ctx context.Context, req *connect.Request[v1.BeginGitHubCatalogueAppConnectRequest]) (*connect.Response[v1.BeginGitHubCatalogueAppConnectResponse], error) {
-	return c.beginGitHubCatalogueAppConnect.CallUnary(ctx, req)
-}
-
-// DisconnectGitHubCatalogueApp calls sluis.v1.GitHubService.DisconnectGitHubCatalogueApp.
-func (c *gitHubServiceClient) DisconnectGitHubCatalogueApp(ctx context.Context, req *connect.Request[v1.DisconnectGitHubCatalogueAppRequest]) (*connect.Response[v1.DisconnectGitHubCatalogueAppResponse], error) {
-	return c.disconnectGitHubCatalogueApp.CallUnary(ctx, req)
-}
-
-// CheckGitHubCatalogueApp calls sluis.v1.GitHubService.CheckGitHubCatalogueApp.
-func (c *gitHubServiceClient) CheckGitHubCatalogueApp(ctx context.Context, req *connect.Request[v1.CheckGitHubCatalogueAppRequest]) (*connect.Response[v1.CheckGitHubCatalogueAppResponse], error) {
-	return c.checkGitHubCatalogueApp.CallUnary(ctx, req)
+// NewGitHubServiceClient constructs a client for the sluis.v1.GitHubService service. Multiple
+// service clients may share a single connect.Client.
+func NewGitHubServiceClient(client *connect.Client) GitHubServiceClient {
+	return &gitHubServiceClient{client: client}
 }
 
 // GitHubServiceHandler is an implementation of the sluis.v1.GitHubService service.
@@ -537,10 +413,10 @@ type GitHubServiceHandler interface {
 	// organisation, one runner App per organisation per declared tier, and
 	// every App the catalogue declares — each in the same shape, with what
 	// GitHub says of it beside what the deployment declares. Viewer.
-	ListGitHubApps(context.Context, *connect.Request[v1.ListGitHubAppsRequest]) (*connect.Response[v1.ListGitHubAppsResponse], error)
+	ListGitHubApps(context.Context, *v1.ListGitHubAppsRequest) (*v1.ListGitHubAppsResponse, error)
 	// GetGitHubApp returns one App by the id ListGitHubApps gives it.
 	// Viewer.
-	GetGitHubApp(context.Context, *connect.Request[v1.GetGitHubAppRequest]) (*connect.Response[v1.GetGitHubAppResponse], error)
+	GetGitHubApp(context.Context, *v1.GetGitHubAppRequest) (*v1.GetGitHubAppResponse, error)
 	// ListGitHubAppTokens returns the last installation tokens asked of one
 	// App, minted or refused, newest first. Operator: a request names who
 	// asked for it.
@@ -548,7 +424,7 @@ type GitHubServiceHandler interface {
 	// This service's own memory of them, kept since it started and bounded
 	// per App — not the audit trail, which holds every request for as long
 	// as the bucket does and is one link away on an App's page.
-	ListGitHubAppTokens(context.Context, *connect.Request[v1.ListGitHubAppTokensRequest]) (*connect.Response[v1.ListGitHubAppTokensResponse], error)
+	ListGitHubAppTokens(context.Context, *v1.ListGitHubAppTokensRequest) (*v1.ListGitHubAppTokensResponse, error)
 	// BeginGitHubAppConnect starts creating any one of those Apps, or
 	// finishing installing one created before: its manifest and where to
 	// post it, or where to install it. Sets the flow's state cookie.
@@ -557,14 +433,14 @@ type GitHubServiceHandler interface {
 	// The state it issues is the one the App's kind has always used, so a
 	// browser part-way through a flow finishes at the same callback even if
 	// the service restarts under it.
-	BeginGitHubAppConnect(context.Context, *connect.Request[v1.BeginGitHubAppConnectRequest]) (*connect.Response[v1.BeginGitHubAppConnectResponse], error)
+	BeginGitHubAppConnect(context.Context, *v1.BeginGitHubAppConnectRequest) (*v1.BeginGitHubAppConnectResponse, error)
 	// DisconnectGitHubApp uninstalls one App, then forgets its record and
 	// key. The App itself stays on GitHub, for its owner to delete.
 	// Operator.
-	DisconnectGitHubApp(context.Context, *connect.Request[v1.DisconnectGitHubAppRequest]) (*connect.Response[v1.DisconnectGitHubAppResponse], error)
+	DisconnectGitHubApp(context.Context, *v1.DisconnectGitHubAppRequest) (*v1.DisconnectGitHubAppResponse, error)
 	// CheckGitHubApp asks GitHub again what one App and its installation
 	// hold, bypassing the short cache the list reads through. Operator.
-	CheckGitHubApp(context.Context, *connect.Request[v1.CheckGitHubAppRequest]) (*connect.Response[v1.CheckGitHubAppResponse], error)
+	CheckGitHubApp(context.Context, *v1.CheckGitHubAppRequest) (*v1.CheckGitHubAppResponse, error)
 	// RotateGitHubAppWebhook replaces the secret GitHub signs a catalogue
 	// App's webhook deliveries with. It keeps the new secret (where the
 	// consumers read it), sends the new target a signed ping until it
@@ -572,7 +448,7 @@ type GitHubServiceHandler interface {
 	// receiver, the URL derived from it, in one call. A consumer holds one
 	// secret, so there is no overlap: a failure before GitHub is told
 	// restores the old secret and leaves deliveries as they were. Operator.
-	RotateGitHubAppWebhook(context.Context, *connect.Request[v1.RotateGitHubAppWebhookRequest]) (*connect.Response[v1.RotateGitHubAppWebhookResponse], error)
+	RotateGitHubAppWebhook(context.Context, *v1.RotateGitHubAppWebhookRequest) (*v1.RotateGitHubAppWebhookResponse, error)
 	// GetGitHubStatus returns every organisation the policy binds or the
 	// controller reports on, each with its bound teams and the members the
 	// controller derived for them. Viewer.
@@ -583,7 +459,7 @@ type GitHubServiceHandler interface {
 	// organisation's connection — are still filled in, so a client
 	// generated against an older proto keeps working; nothing new is
 	// added to them.
-	GetGitHubStatus(context.Context, *connect.Request[v1.GetGitHubStatusRequest]) (*connect.Response[v1.GetGitHubStatusResponse], error)
+	GetGitHubStatus(context.Context, *v1.GetGitHubStatusRequest) (*v1.GetGitHubStatusResponse, error)
 	// BeginGitHubConnect starts connecting an organisation the policy
 	// binds: the App's manifest and where to post it, or — for an App
 	// already created and not yet installed — where to install it. Sets the
@@ -595,7 +471,7 @@ type GitHubServiceHandler interface {
 	//
 	// Superseded by BeginGitHubAppConnect, which does this for every kind of
 	// App. Kept so a console mid-rollout keeps working.
-	BeginGitHubConnect(context.Context, *connect.Request[v1.BeginGitHubConnectRequest]) (*connect.Response[v1.BeginGitHubConnectResponse], error)
+	BeginGitHubConnect(context.Context, *v1.BeginGitHubConnectRequest) (*v1.BeginGitHubConnectResponse, error)
 	// RequestGitHubPass asks the GitHub controller to pass over now instead of
 	// at its next interval: it leaves a marker in the records the controller
 	// watches. The operator of the organisation's recorded owner, or the
@@ -603,18 +479,18 @@ type GitHubServiceHandler interface {
 	// organisation is not installed (there is nothing for a pass to act with)
 	// and with RESOURCE_EXHAUSTED while the organisation's last request is
 	// under a minute old. Recorded as a configuration change.
-	RequestGitHubPass(context.Context, *connect.Request[v1.RequestGitHubPassRequest]) (*connect.Response[v1.RequestGitHubPassResponse], error)
+	RequestGitHubPass(context.Context, *v1.RequestGitHubPassRequest) (*v1.RequestGitHubPassResponse, error)
 	// ChangeGitHubOrganisationOwner changes the directory recorded as a
 	// connected organisation's owner, or removes it. Installation-wide
 	// operator only: an owner may not hand its own organisation to another
 	// or take it for itself. Recorded as a configuration change.
-	ChangeGitHubOrganisationOwner(context.Context, *connect.Request[v1.ChangeGitHubOrganisationOwnerRequest]) (*connect.Response[v1.ChangeGitHubOrganisationOwnerResponse], error)
+	ChangeGitHubOrganisationOwner(context.Context, *v1.ChangeGitHubOrganisationOwnerRequest) (*v1.ChangeGitHubOrganisationOwnerResponse, error)
 	// DisconnectGitHubOrganisation uninstalls the App, then forgets the
 	// organisation's record and credential. Operator.
 	//
 	// Superseded by DisconnectGitHubApp, which does this for every kind of
 	// App. Kept so a console mid-rollout keeps working.
-	DisconnectGitHubOrganisation(context.Context, *connect.Request[v1.DisconnectGitHubOrganisationRequest]) (*connect.Response[v1.DisconnectGitHubOrganisationResponse], error)
+	DisconnectGitHubOrganisation(context.Context, *v1.DisconnectGitHubOrganisationRequest) (*v1.DisconnectGitHubOrganisationResponse, error)
 	// BeginGitHubLinkAppConnect starts creating the link App: the one App
 	// people authorize, as themselves, to link their GitHub account to their
 	// work addresses. Public, installed nowhere, and asking only to read the
@@ -623,7 +499,7 @@ type GitHubServiceHandler interface {
 	//
 	// Superseded by BeginGitHubAppConnect, which does this for every kind of
 	// App. Kept so a console mid-rollout keeps working.
-	BeginGitHubLinkAppConnect(context.Context, *connect.Request[v1.BeginGitHubLinkAppConnectRequest]) (*connect.Response[v1.BeginGitHubLinkAppConnectResponse], error)
+	BeginGitHubLinkAppConnect(context.Context, *v1.BeginGitHubLinkAppConnectRequest) (*v1.BeginGitHubLinkAppConnectResponse, error)
 	// BeginGitHubRunnerAppConnect starts creating a runner App: the App a
 	// self-hosted runner scale set in one tier registers with in one
 	// organisation the policy binds. Its manifest and where to post it, or —
@@ -636,13 +512,13 @@ type GitHubServiceHandler interface {
 	//
 	// Superseded by BeginGitHubAppConnect, which does this for every kind of
 	// App. Kept so a console mid-rollout keeps working.
-	BeginGitHubRunnerAppConnect(context.Context, *connect.Request[v1.BeginGitHubRunnerAppConnectRequest]) (*connect.Response[v1.BeginGitHubRunnerAppConnectResponse], error)
+	BeginGitHubRunnerAppConnect(context.Context, *v1.BeginGitHubRunnerAppConnectRequest) (*v1.BeginGitHubRunnerAppConnectResponse, error)
 	// DisconnectGitHubRunnerApp uninstalls a runner App, then forgets it.
 	// Runners registered with it stop getting jobs. Operator.
 	//
 	// Superseded by DisconnectGitHubApp, which does this for every kind of
 	// App. Kept so a console mid-rollout keeps working.
-	DisconnectGitHubRunnerApp(context.Context, *connect.Request[v1.DisconnectGitHubRunnerAppRequest]) (*connect.Response[v1.DisconnectGitHubRunnerAppResponse], error)
+	DisconnectGitHubRunnerApp(context.Context, *v1.DisconnectGitHubRunnerAppRequest) (*v1.DisconnectGitHubRunnerAppResponse, error)
 	// DisconnectGitHubLinkApp forgets the link App. Every link made with it
 	// becomes unverifiable — nothing can check its tokens any more — which
 	// removes nobody and adds nobody until each person links again.
@@ -650,20 +526,20 @@ type GitHubServiceHandler interface {
 	//
 	// Superseded by DisconnectGitHubApp, which does this for every kind of
 	// App. Kept so a console mid-rollout keeps working.
-	DisconnectGitHubLinkApp(context.Context, *connect.Request[v1.DisconnectGitHubLinkAppRequest]) (*connect.Response[v1.DisconnectGitHubLinkAppResponse], error)
+	DisconnectGitHubLinkApp(context.Context, *v1.DisconnectGitHubLinkAppRequest) (*v1.DisconnectGitHubLinkAppResponse, error)
 	// ConfirmGitHubRemovals lets a pass that would remove more than half an
 	// organisation go ahead — for exactly the set of removals the operator
 	// saw, named by its fingerprint in the organisation's report. A
 	// different set needs confirming again; a confirmation lapses after a
 	// day. Operator.
-	ConfirmGitHubRemovals(context.Context, *connect.Request[v1.ConfirmGitHubRemovalsRequest]) (*connect.Response[v1.ConfirmGitHubRemovalsResponse], error)
+	ConfirmGitHubRemovals(context.Context, *v1.ConfirmGitHubRemovalsRequest) (*v1.ConfirmGitHubRemovalsResponse, error)
 	// ImportGitHubLinks adopts pairings of a GitHub login and work addresses
 	// that somebody approved elsewhere — github-roster 0.x kept them. Each
 	// becomes a link only when the pairing was approved, an address is a
 	// live account the directory vouches for, and the account is a member of
 	// a connected organisation; a link the person made is never displaced.
 	// Operator.
-	ImportGitHubLinks(context.Context, *connect.Request[v1.ImportGitHubLinksRequest]) (*connect.Response[v1.ImportGitHubLinksResponse], error)
+	ImportGitHubLinks(context.Context, *v1.ImportGitHubLinksRequest) (*v1.ImportGitHubLinksResponse, error)
 	// BeginGitHubCatalogueAppConnect starts creating an App the deployment
 	// declares in its catalogue, under the organisation the entry names: its
 	// manifest and where to post it, or — for an App already created and not
@@ -675,289 +551,561 @@ type GitHubServiceHandler interface {
 	//
 	// Superseded by BeginGitHubAppConnect, which does this for every kind of
 	// App. Kept so a console mid-rollout keeps working.
-	BeginGitHubCatalogueAppConnect(context.Context, *connect.Request[v1.BeginGitHubCatalogueAppConnectRequest]) (*connect.Response[v1.BeginGitHubCatalogueAppConnectResponse], error)
+	BeginGitHubCatalogueAppConnect(context.Context, *v1.BeginGitHubCatalogueAppConnectRequest) (*v1.BeginGitHubCatalogueAppConnectResponse, error)
 	// DisconnectGitHubCatalogueApp uninstalls a catalogue App, then forgets
 	// its record and key. The App itself stays on GitHub, for its owner to
 	// delete. Operator.
 	//
 	// Superseded by DisconnectGitHubApp, which does this for every kind of
 	// App. Kept so a console mid-rollout keeps working.
-	DisconnectGitHubCatalogueApp(context.Context, *connect.Request[v1.DisconnectGitHubCatalogueAppRequest]) (*connect.Response[v1.DisconnectGitHubCatalogueAppResponse], error)
+	DisconnectGitHubCatalogueApp(context.Context, *v1.DisconnectGitHubCatalogueAppRequest) (*v1.DisconnectGitHubCatalogueAppResponse, error)
 	// CheckGitHubCatalogueApp asks GitHub again what one catalogue App and
 	// its installation hold, bypassing the short cache GetGitHubStatus reads
 	// through. Operator.
 	//
 	// Superseded by CheckGitHubApp, which does this for every kind of
 	// App. Kept so a console mid-rollout keeps working.
-	CheckGitHubCatalogueApp(context.Context, *connect.Request[v1.CheckGitHubCatalogueAppRequest]) (*connect.Response[v1.CheckGitHubCatalogueAppResponse], error)
+	CheckGitHubCatalogueApp(context.Context, *v1.CheckGitHubCatalogueAppRequest) (*v1.CheckGitHubCatalogueAppResponse, error)
 }
 
-// NewGitHubServiceHandler builds an HTTP handler from the service implementation. It returns the
-// path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewGitHubServiceHandler(svc GitHubServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	gitHubServiceMethods := v1.File_sluis_v1_github_proto.Services().ByName("GitHubService").Methods()
-	gitHubServiceListGitHubAppsHandler := connect.NewUnaryHandler(
-		GitHubServiceListGitHubAppsProcedure,
-		svc.ListGitHubApps,
-		connect.WithSchema(gitHubServiceMethods.ByName("ListGitHubApps")),
-		connect.WithHandlerOptions(opts...),
+// RegisterGitHubServiceHandler registers svc as the sluis.v1.GitHubService implementation on
+// server.
+func RegisterGitHubServiceHandler(server *connect.Server, svc GitHubServiceHandler) {
+	adapter := gitHubServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: gitHubServiceListGitHubAppsSpec(), Handler: adapter.listGitHubApps},
+		connect.Method{Spec: gitHubServiceGetGitHubAppSpec(), Handler: adapter.getGitHubApp},
+		connect.Method{Spec: gitHubServiceListGitHubAppTokensSpec(), Handler: adapter.listGitHubAppTokens},
+		connect.Method{Spec: gitHubServiceBeginGitHubAppConnectSpec(), Handler: adapter.beginGitHubAppConnect},
+		connect.Method{Spec: gitHubServiceDisconnectGitHubAppSpec(), Handler: adapter.disconnectGitHubApp},
+		connect.Method{Spec: gitHubServiceCheckGitHubAppSpec(), Handler: adapter.checkGitHubApp},
+		connect.Method{Spec: gitHubServiceRotateGitHubAppWebhookSpec(), Handler: adapter.rotateGitHubAppWebhook},
+		connect.Method{Spec: gitHubServiceGetGitHubStatusSpec(), Handler: adapter.getGitHubStatus},
+		connect.Method{Spec: gitHubServiceBeginGitHubConnectSpec(), Handler: adapter.beginGitHubConnect},
+		connect.Method{Spec: gitHubServiceRequestGitHubPassSpec(), Handler: adapter.requestGitHubPass},
+		connect.Method{Spec: gitHubServiceChangeGitHubOrganisationOwnerSpec(), Handler: adapter.changeGitHubOrganisationOwner},
+		connect.Method{Spec: gitHubServiceDisconnectGitHubOrganisationSpec(), Handler: adapter.disconnectGitHubOrganisation},
+		connect.Method{Spec: gitHubServiceBeginGitHubLinkAppConnectSpec(), Handler: adapter.beginGitHubLinkAppConnect},
+		connect.Method{Spec: gitHubServiceBeginGitHubRunnerAppConnectSpec(), Handler: adapter.beginGitHubRunnerAppConnect},
+		connect.Method{Spec: gitHubServiceDisconnectGitHubRunnerAppSpec(), Handler: adapter.disconnectGitHubRunnerApp},
+		connect.Method{Spec: gitHubServiceDisconnectGitHubLinkAppSpec(), Handler: adapter.disconnectGitHubLinkApp},
+		connect.Method{Spec: gitHubServiceConfirmGitHubRemovalsSpec(), Handler: adapter.confirmGitHubRemovals},
+		connect.Method{Spec: gitHubServiceImportGitHubLinksSpec(), Handler: adapter.importGitHubLinks},
+		connect.Method{Spec: gitHubServiceBeginGitHubCatalogueAppConnectSpec(), Handler: adapter.beginGitHubCatalogueAppConnect},
+		connect.Method{Spec: gitHubServiceDisconnectGitHubCatalogueAppSpec(), Handler: adapter.disconnectGitHubCatalogueApp},
+		connect.Method{Spec: gitHubServiceCheckGitHubCatalogueAppSpec(), Handler: adapter.checkGitHubCatalogueApp},
 	)
-	gitHubServiceGetGitHubAppHandler := connect.NewUnaryHandler(
-		GitHubServiceGetGitHubAppProcedure,
-		svc.GetGitHubApp,
-		connect.WithSchema(gitHubServiceMethods.ByName("GetGitHubApp")),
-		connect.WithHandlerOptions(opts...),
-	)
-	gitHubServiceListGitHubAppTokensHandler := connect.NewUnaryHandler(
-		GitHubServiceListGitHubAppTokensProcedure,
-		svc.ListGitHubAppTokens,
-		connect.WithSchema(gitHubServiceMethods.ByName("ListGitHubAppTokens")),
-		connect.WithHandlerOptions(opts...),
-	)
-	gitHubServiceBeginGitHubAppConnectHandler := connect.NewUnaryHandler(
-		GitHubServiceBeginGitHubAppConnectProcedure,
-		svc.BeginGitHubAppConnect,
-		connect.WithSchema(gitHubServiceMethods.ByName("BeginGitHubAppConnect")),
-		connect.WithHandlerOptions(opts...),
-	)
-	gitHubServiceDisconnectGitHubAppHandler := connect.NewUnaryHandler(
-		GitHubServiceDisconnectGitHubAppProcedure,
-		svc.DisconnectGitHubApp,
-		connect.WithSchema(gitHubServiceMethods.ByName("DisconnectGitHubApp")),
-		connect.WithHandlerOptions(opts...),
-	)
-	gitHubServiceCheckGitHubAppHandler := connect.NewUnaryHandler(
-		GitHubServiceCheckGitHubAppProcedure,
-		svc.CheckGitHubApp,
-		connect.WithSchema(gitHubServiceMethods.ByName("CheckGitHubApp")),
-		connect.WithHandlerOptions(opts...),
-	)
-	gitHubServiceRotateGitHubAppWebhookHandler := connect.NewUnaryHandler(
-		GitHubServiceRotateGitHubAppWebhookProcedure,
-		svc.RotateGitHubAppWebhook,
-		connect.WithSchema(gitHubServiceMethods.ByName("RotateGitHubAppWebhook")),
-		connect.WithHandlerOptions(opts...),
-	)
-	gitHubServiceGetGitHubStatusHandler := connect.NewUnaryHandler(
-		GitHubServiceGetGitHubStatusProcedure,
-		svc.GetGitHubStatus,
-		connect.WithSchema(gitHubServiceMethods.ByName("GetGitHubStatus")),
-		connect.WithHandlerOptions(opts...),
-	)
-	gitHubServiceBeginGitHubConnectHandler := connect.NewUnaryHandler(
-		GitHubServiceBeginGitHubConnectProcedure,
-		svc.BeginGitHubConnect,
-		connect.WithSchema(gitHubServiceMethods.ByName("BeginGitHubConnect")),
-		connect.WithHandlerOptions(opts...),
-	)
-	gitHubServiceRequestGitHubPassHandler := connect.NewUnaryHandler(
-		GitHubServiceRequestGitHubPassProcedure,
-		svc.RequestGitHubPass,
-		connect.WithSchema(gitHubServiceMethods.ByName("RequestGitHubPass")),
-		connect.WithHandlerOptions(opts...),
-	)
-	gitHubServiceChangeGitHubOrganisationOwnerHandler := connect.NewUnaryHandler(
-		GitHubServiceChangeGitHubOrganisationOwnerProcedure,
-		svc.ChangeGitHubOrganisationOwner,
-		connect.WithSchema(gitHubServiceMethods.ByName("ChangeGitHubOrganisationOwner")),
-		connect.WithHandlerOptions(opts...),
-	)
-	gitHubServiceDisconnectGitHubOrganisationHandler := connect.NewUnaryHandler(
-		GitHubServiceDisconnectGitHubOrganisationProcedure,
-		svc.DisconnectGitHubOrganisation,
-		connect.WithSchema(gitHubServiceMethods.ByName("DisconnectGitHubOrganisation")),
-		connect.WithHandlerOptions(opts...),
-	)
-	gitHubServiceBeginGitHubLinkAppConnectHandler := connect.NewUnaryHandler(
-		GitHubServiceBeginGitHubLinkAppConnectProcedure,
-		svc.BeginGitHubLinkAppConnect,
-		connect.WithSchema(gitHubServiceMethods.ByName("BeginGitHubLinkAppConnect")),
-		connect.WithHandlerOptions(opts...),
-	)
-	gitHubServiceBeginGitHubRunnerAppConnectHandler := connect.NewUnaryHandler(
-		GitHubServiceBeginGitHubRunnerAppConnectProcedure,
-		svc.BeginGitHubRunnerAppConnect,
-		connect.WithSchema(gitHubServiceMethods.ByName("BeginGitHubRunnerAppConnect")),
-		connect.WithHandlerOptions(opts...),
-	)
-	gitHubServiceDisconnectGitHubRunnerAppHandler := connect.NewUnaryHandler(
-		GitHubServiceDisconnectGitHubRunnerAppProcedure,
-		svc.DisconnectGitHubRunnerApp,
-		connect.WithSchema(gitHubServiceMethods.ByName("DisconnectGitHubRunnerApp")),
-		connect.WithHandlerOptions(opts...),
-	)
-	gitHubServiceDisconnectGitHubLinkAppHandler := connect.NewUnaryHandler(
-		GitHubServiceDisconnectGitHubLinkAppProcedure,
-		svc.DisconnectGitHubLinkApp,
-		connect.WithSchema(gitHubServiceMethods.ByName("DisconnectGitHubLinkApp")),
-		connect.WithHandlerOptions(opts...),
-	)
-	gitHubServiceConfirmGitHubRemovalsHandler := connect.NewUnaryHandler(
-		GitHubServiceConfirmGitHubRemovalsProcedure,
-		svc.ConfirmGitHubRemovals,
-		connect.WithSchema(gitHubServiceMethods.ByName("ConfirmGitHubRemovals")),
-		connect.WithHandlerOptions(opts...),
-	)
-	gitHubServiceImportGitHubLinksHandler := connect.NewUnaryHandler(
-		GitHubServiceImportGitHubLinksProcedure,
-		svc.ImportGitHubLinks,
-		connect.WithSchema(gitHubServiceMethods.ByName("ImportGitHubLinks")),
-		connect.WithHandlerOptions(opts...),
-	)
-	gitHubServiceBeginGitHubCatalogueAppConnectHandler := connect.NewUnaryHandler(
-		GitHubServiceBeginGitHubCatalogueAppConnectProcedure,
-		svc.BeginGitHubCatalogueAppConnect,
-		connect.WithSchema(gitHubServiceMethods.ByName("BeginGitHubCatalogueAppConnect")),
-		connect.WithHandlerOptions(opts...),
-	)
-	gitHubServiceDisconnectGitHubCatalogueAppHandler := connect.NewUnaryHandler(
-		GitHubServiceDisconnectGitHubCatalogueAppProcedure,
-		svc.DisconnectGitHubCatalogueApp,
-		connect.WithSchema(gitHubServiceMethods.ByName("DisconnectGitHubCatalogueApp")),
-		connect.WithHandlerOptions(opts...),
-	)
-	gitHubServiceCheckGitHubCatalogueAppHandler := connect.NewUnaryHandler(
-		GitHubServiceCheckGitHubCatalogueAppProcedure,
-		svc.CheckGitHubCatalogueApp,
-		connect.WithSchema(gitHubServiceMethods.ByName("CheckGitHubCatalogueApp")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/sluis.v1.GitHubService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case GitHubServiceListGitHubAppsProcedure:
-			gitHubServiceListGitHubAppsHandler.ServeHTTP(w, r)
-		case GitHubServiceGetGitHubAppProcedure:
-			gitHubServiceGetGitHubAppHandler.ServeHTTP(w, r)
-		case GitHubServiceListGitHubAppTokensProcedure:
-			gitHubServiceListGitHubAppTokensHandler.ServeHTTP(w, r)
-		case GitHubServiceBeginGitHubAppConnectProcedure:
-			gitHubServiceBeginGitHubAppConnectHandler.ServeHTTP(w, r)
-		case GitHubServiceDisconnectGitHubAppProcedure:
-			gitHubServiceDisconnectGitHubAppHandler.ServeHTTP(w, r)
-		case GitHubServiceCheckGitHubAppProcedure:
-			gitHubServiceCheckGitHubAppHandler.ServeHTTP(w, r)
-		case GitHubServiceRotateGitHubAppWebhookProcedure:
-			gitHubServiceRotateGitHubAppWebhookHandler.ServeHTTP(w, r)
-		case GitHubServiceGetGitHubStatusProcedure:
-			gitHubServiceGetGitHubStatusHandler.ServeHTTP(w, r)
-		case GitHubServiceBeginGitHubConnectProcedure:
-			gitHubServiceBeginGitHubConnectHandler.ServeHTTP(w, r)
-		case GitHubServiceRequestGitHubPassProcedure:
-			gitHubServiceRequestGitHubPassHandler.ServeHTTP(w, r)
-		case GitHubServiceChangeGitHubOrganisationOwnerProcedure:
-			gitHubServiceChangeGitHubOrganisationOwnerHandler.ServeHTTP(w, r)
-		case GitHubServiceDisconnectGitHubOrganisationProcedure:
-			gitHubServiceDisconnectGitHubOrganisationHandler.ServeHTTP(w, r)
-		case GitHubServiceBeginGitHubLinkAppConnectProcedure:
-			gitHubServiceBeginGitHubLinkAppConnectHandler.ServeHTTP(w, r)
-		case GitHubServiceBeginGitHubRunnerAppConnectProcedure:
-			gitHubServiceBeginGitHubRunnerAppConnectHandler.ServeHTTP(w, r)
-		case GitHubServiceDisconnectGitHubRunnerAppProcedure:
-			gitHubServiceDisconnectGitHubRunnerAppHandler.ServeHTTP(w, r)
-		case GitHubServiceDisconnectGitHubLinkAppProcedure:
-			gitHubServiceDisconnectGitHubLinkAppHandler.ServeHTTP(w, r)
-		case GitHubServiceConfirmGitHubRemovalsProcedure:
-			gitHubServiceConfirmGitHubRemovalsHandler.ServeHTTP(w, r)
-		case GitHubServiceImportGitHubLinksProcedure:
-			gitHubServiceImportGitHubLinksHandler.ServeHTTP(w, r)
-		case GitHubServiceBeginGitHubCatalogueAppConnectProcedure:
-			gitHubServiceBeginGitHubCatalogueAppConnectHandler.ServeHTTP(w, r)
-		case GitHubServiceDisconnectGitHubCatalogueAppProcedure:
-			gitHubServiceDisconnectGitHubCatalogueAppHandler.ServeHTTP(w, r)
-		case GitHubServiceCheckGitHubCatalogueAppProcedure:
-			gitHubServiceCheckGitHubCatalogueAppHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedGitHubServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedGitHubServiceHandler struct{}
 
-func (UnimplementedGitHubServiceHandler) ListGitHubApps(context.Context, *connect.Request[v1.ListGitHubAppsRequest]) (*connect.Response[v1.ListGitHubAppsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sluis.v1.GitHubService.ListGitHubApps is not implemented"))
+func (UnimplementedGitHubServiceHandler) ListGitHubApps(context.Context, *v1.ListGitHubAppsRequest) (*v1.ListGitHubAppsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "sluis.v1.GitHubService.ListGitHubApps is not implemented")
 }
 
-func (UnimplementedGitHubServiceHandler) GetGitHubApp(context.Context, *connect.Request[v1.GetGitHubAppRequest]) (*connect.Response[v1.GetGitHubAppResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sluis.v1.GitHubService.GetGitHubApp is not implemented"))
+func (UnimplementedGitHubServiceHandler) GetGitHubApp(context.Context, *v1.GetGitHubAppRequest) (*v1.GetGitHubAppResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "sluis.v1.GitHubService.GetGitHubApp is not implemented")
 }
 
-func (UnimplementedGitHubServiceHandler) ListGitHubAppTokens(context.Context, *connect.Request[v1.ListGitHubAppTokensRequest]) (*connect.Response[v1.ListGitHubAppTokensResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sluis.v1.GitHubService.ListGitHubAppTokens is not implemented"))
+func (UnimplementedGitHubServiceHandler) ListGitHubAppTokens(context.Context, *v1.ListGitHubAppTokensRequest) (*v1.ListGitHubAppTokensResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "sluis.v1.GitHubService.ListGitHubAppTokens is not implemented")
 }
 
-func (UnimplementedGitHubServiceHandler) BeginGitHubAppConnect(context.Context, *connect.Request[v1.BeginGitHubAppConnectRequest]) (*connect.Response[v1.BeginGitHubAppConnectResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sluis.v1.GitHubService.BeginGitHubAppConnect is not implemented"))
+func (UnimplementedGitHubServiceHandler) BeginGitHubAppConnect(context.Context, *v1.BeginGitHubAppConnectRequest) (*v1.BeginGitHubAppConnectResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "sluis.v1.GitHubService.BeginGitHubAppConnect is not implemented")
 }
 
-func (UnimplementedGitHubServiceHandler) DisconnectGitHubApp(context.Context, *connect.Request[v1.DisconnectGitHubAppRequest]) (*connect.Response[v1.DisconnectGitHubAppResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sluis.v1.GitHubService.DisconnectGitHubApp is not implemented"))
+func (UnimplementedGitHubServiceHandler) DisconnectGitHubApp(context.Context, *v1.DisconnectGitHubAppRequest) (*v1.DisconnectGitHubAppResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "sluis.v1.GitHubService.DisconnectGitHubApp is not implemented")
 }
 
-func (UnimplementedGitHubServiceHandler) CheckGitHubApp(context.Context, *connect.Request[v1.CheckGitHubAppRequest]) (*connect.Response[v1.CheckGitHubAppResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sluis.v1.GitHubService.CheckGitHubApp is not implemented"))
+func (UnimplementedGitHubServiceHandler) CheckGitHubApp(context.Context, *v1.CheckGitHubAppRequest) (*v1.CheckGitHubAppResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "sluis.v1.GitHubService.CheckGitHubApp is not implemented")
 }
 
-func (UnimplementedGitHubServiceHandler) RotateGitHubAppWebhook(context.Context, *connect.Request[v1.RotateGitHubAppWebhookRequest]) (*connect.Response[v1.RotateGitHubAppWebhookResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sluis.v1.GitHubService.RotateGitHubAppWebhook is not implemented"))
+func (UnimplementedGitHubServiceHandler) RotateGitHubAppWebhook(context.Context, *v1.RotateGitHubAppWebhookRequest) (*v1.RotateGitHubAppWebhookResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "sluis.v1.GitHubService.RotateGitHubAppWebhook is not implemented")
 }
 
-func (UnimplementedGitHubServiceHandler) GetGitHubStatus(context.Context, *connect.Request[v1.GetGitHubStatusRequest]) (*connect.Response[v1.GetGitHubStatusResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sluis.v1.GitHubService.GetGitHubStatus is not implemented"))
+func (UnimplementedGitHubServiceHandler) GetGitHubStatus(context.Context, *v1.GetGitHubStatusRequest) (*v1.GetGitHubStatusResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "sluis.v1.GitHubService.GetGitHubStatus is not implemented")
 }
 
-func (UnimplementedGitHubServiceHandler) BeginGitHubConnect(context.Context, *connect.Request[v1.BeginGitHubConnectRequest]) (*connect.Response[v1.BeginGitHubConnectResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sluis.v1.GitHubService.BeginGitHubConnect is not implemented"))
+func (UnimplementedGitHubServiceHandler) BeginGitHubConnect(context.Context, *v1.BeginGitHubConnectRequest) (*v1.BeginGitHubConnectResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "sluis.v1.GitHubService.BeginGitHubConnect is not implemented")
 }
 
-func (UnimplementedGitHubServiceHandler) RequestGitHubPass(context.Context, *connect.Request[v1.RequestGitHubPassRequest]) (*connect.Response[v1.RequestGitHubPassResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sluis.v1.GitHubService.RequestGitHubPass is not implemented"))
+func (UnimplementedGitHubServiceHandler) RequestGitHubPass(context.Context, *v1.RequestGitHubPassRequest) (*v1.RequestGitHubPassResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "sluis.v1.GitHubService.RequestGitHubPass is not implemented")
 }
 
-func (UnimplementedGitHubServiceHandler) ChangeGitHubOrganisationOwner(context.Context, *connect.Request[v1.ChangeGitHubOrganisationOwnerRequest]) (*connect.Response[v1.ChangeGitHubOrganisationOwnerResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sluis.v1.GitHubService.ChangeGitHubOrganisationOwner is not implemented"))
+func (UnimplementedGitHubServiceHandler) ChangeGitHubOrganisationOwner(context.Context, *v1.ChangeGitHubOrganisationOwnerRequest) (*v1.ChangeGitHubOrganisationOwnerResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "sluis.v1.GitHubService.ChangeGitHubOrganisationOwner is not implemented")
 }
 
-func (UnimplementedGitHubServiceHandler) DisconnectGitHubOrganisation(context.Context, *connect.Request[v1.DisconnectGitHubOrganisationRequest]) (*connect.Response[v1.DisconnectGitHubOrganisationResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sluis.v1.GitHubService.DisconnectGitHubOrganisation is not implemented"))
+func (UnimplementedGitHubServiceHandler) DisconnectGitHubOrganisation(context.Context, *v1.DisconnectGitHubOrganisationRequest) (*v1.DisconnectGitHubOrganisationResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "sluis.v1.GitHubService.DisconnectGitHubOrganisation is not implemented")
 }
 
-func (UnimplementedGitHubServiceHandler) BeginGitHubLinkAppConnect(context.Context, *connect.Request[v1.BeginGitHubLinkAppConnectRequest]) (*connect.Response[v1.BeginGitHubLinkAppConnectResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sluis.v1.GitHubService.BeginGitHubLinkAppConnect is not implemented"))
+func (UnimplementedGitHubServiceHandler) BeginGitHubLinkAppConnect(context.Context, *v1.BeginGitHubLinkAppConnectRequest) (*v1.BeginGitHubLinkAppConnectResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "sluis.v1.GitHubService.BeginGitHubLinkAppConnect is not implemented")
 }
 
-func (UnimplementedGitHubServiceHandler) BeginGitHubRunnerAppConnect(context.Context, *connect.Request[v1.BeginGitHubRunnerAppConnectRequest]) (*connect.Response[v1.BeginGitHubRunnerAppConnectResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sluis.v1.GitHubService.BeginGitHubRunnerAppConnect is not implemented"))
+func (UnimplementedGitHubServiceHandler) BeginGitHubRunnerAppConnect(context.Context, *v1.BeginGitHubRunnerAppConnectRequest) (*v1.BeginGitHubRunnerAppConnectResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "sluis.v1.GitHubService.BeginGitHubRunnerAppConnect is not implemented")
 }
 
-func (UnimplementedGitHubServiceHandler) DisconnectGitHubRunnerApp(context.Context, *connect.Request[v1.DisconnectGitHubRunnerAppRequest]) (*connect.Response[v1.DisconnectGitHubRunnerAppResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sluis.v1.GitHubService.DisconnectGitHubRunnerApp is not implemented"))
+func (UnimplementedGitHubServiceHandler) DisconnectGitHubRunnerApp(context.Context, *v1.DisconnectGitHubRunnerAppRequest) (*v1.DisconnectGitHubRunnerAppResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "sluis.v1.GitHubService.DisconnectGitHubRunnerApp is not implemented")
 }
 
-func (UnimplementedGitHubServiceHandler) DisconnectGitHubLinkApp(context.Context, *connect.Request[v1.DisconnectGitHubLinkAppRequest]) (*connect.Response[v1.DisconnectGitHubLinkAppResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sluis.v1.GitHubService.DisconnectGitHubLinkApp is not implemented"))
+func (UnimplementedGitHubServiceHandler) DisconnectGitHubLinkApp(context.Context, *v1.DisconnectGitHubLinkAppRequest) (*v1.DisconnectGitHubLinkAppResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "sluis.v1.GitHubService.DisconnectGitHubLinkApp is not implemented")
 }
 
-func (UnimplementedGitHubServiceHandler) ConfirmGitHubRemovals(context.Context, *connect.Request[v1.ConfirmGitHubRemovalsRequest]) (*connect.Response[v1.ConfirmGitHubRemovalsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sluis.v1.GitHubService.ConfirmGitHubRemovals is not implemented"))
+func (UnimplementedGitHubServiceHandler) ConfirmGitHubRemovals(context.Context, *v1.ConfirmGitHubRemovalsRequest) (*v1.ConfirmGitHubRemovalsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "sluis.v1.GitHubService.ConfirmGitHubRemovals is not implemented")
 }
 
-func (UnimplementedGitHubServiceHandler) ImportGitHubLinks(context.Context, *connect.Request[v1.ImportGitHubLinksRequest]) (*connect.Response[v1.ImportGitHubLinksResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sluis.v1.GitHubService.ImportGitHubLinks is not implemented"))
+func (UnimplementedGitHubServiceHandler) ImportGitHubLinks(context.Context, *v1.ImportGitHubLinksRequest) (*v1.ImportGitHubLinksResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "sluis.v1.GitHubService.ImportGitHubLinks is not implemented")
 }
 
-func (UnimplementedGitHubServiceHandler) BeginGitHubCatalogueAppConnect(context.Context, *connect.Request[v1.BeginGitHubCatalogueAppConnectRequest]) (*connect.Response[v1.BeginGitHubCatalogueAppConnectResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sluis.v1.GitHubService.BeginGitHubCatalogueAppConnect is not implemented"))
+func (UnimplementedGitHubServiceHandler) BeginGitHubCatalogueAppConnect(context.Context, *v1.BeginGitHubCatalogueAppConnectRequest) (*v1.BeginGitHubCatalogueAppConnectResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "sluis.v1.GitHubService.BeginGitHubCatalogueAppConnect is not implemented")
 }
 
-func (UnimplementedGitHubServiceHandler) DisconnectGitHubCatalogueApp(context.Context, *connect.Request[v1.DisconnectGitHubCatalogueAppRequest]) (*connect.Response[v1.DisconnectGitHubCatalogueAppResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sluis.v1.GitHubService.DisconnectGitHubCatalogueApp is not implemented"))
+func (UnimplementedGitHubServiceHandler) DisconnectGitHubCatalogueApp(context.Context, *v1.DisconnectGitHubCatalogueAppRequest) (*v1.DisconnectGitHubCatalogueAppResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "sluis.v1.GitHubService.DisconnectGitHubCatalogueApp is not implemented")
 }
 
-func (UnimplementedGitHubServiceHandler) CheckGitHubCatalogueApp(context.Context, *connect.Request[v1.CheckGitHubCatalogueAppRequest]) (*connect.Response[v1.CheckGitHubCatalogueAppResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sluis.v1.GitHubService.CheckGitHubCatalogueApp is not implemented"))
+func (UnimplementedGitHubServiceHandler) CheckGitHubCatalogueApp(context.Context, *v1.CheckGitHubCatalogueAppRequest) (*v1.CheckGitHubCatalogueAppResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "sluis.v1.GitHubService.CheckGitHubCatalogueApp is not implemented")
+}
+
+type gitHubServiceClient struct {
+	client *connect.Client
+}
+
+func (c *gitHubServiceClient) ListGitHubApps(ctx context.Context, req *v1.ListGitHubAppsRequest) (*v1.ListGitHubAppsResponse, error) {
+	var res v1.ListGitHubAppsResponse
+	if err := c.client.CallUnary(ctx, gitHubServiceListGitHubAppsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *gitHubServiceClient) GetGitHubApp(ctx context.Context, req *v1.GetGitHubAppRequest) (*v1.GetGitHubAppResponse, error) {
+	var res v1.GetGitHubAppResponse
+	if err := c.client.CallUnary(ctx, gitHubServiceGetGitHubAppSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *gitHubServiceClient) ListGitHubAppTokens(ctx context.Context, req *v1.ListGitHubAppTokensRequest) (*v1.ListGitHubAppTokensResponse, error) {
+	var res v1.ListGitHubAppTokensResponse
+	if err := c.client.CallUnary(ctx, gitHubServiceListGitHubAppTokensSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *gitHubServiceClient) BeginGitHubAppConnect(ctx context.Context, req *v1.BeginGitHubAppConnectRequest) (*v1.BeginGitHubAppConnectResponse, error) {
+	var res v1.BeginGitHubAppConnectResponse
+	if err := c.client.CallUnary(ctx, gitHubServiceBeginGitHubAppConnectSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *gitHubServiceClient) DisconnectGitHubApp(ctx context.Context, req *v1.DisconnectGitHubAppRequest) (*v1.DisconnectGitHubAppResponse, error) {
+	var res v1.DisconnectGitHubAppResponse
+	if err := c.client.CallUnary(ctx, gitHubServiceDisconnectGitHubAppSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *gitHubServiceClient) CheckGitHubApp(ctx context.Context, req *v1.CheckGitHubAppRequest) (*v1.CheckGitHubAppResponse, error) {
+	var res v1.CheckGitHubAppResponse
+	if err := c.client.CallUnary(ctx, gitHubServiceCheckGitHubAppSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *gitHubServiceClient) RotateGitHubAppWebhook(ctx context.Context, req *v1.RotateGitHubAppWebhookRequest) (*v1.RotateGitHubAppWebhookResponse, error) {
+	var res v1.RotateGitHubAppWebhookResponse
+	if err := c.client.CallUnary(ctx, gitHubServiceRotateGitHubAppWebhookSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *gitHubServiceClient) GetGitHubStatus(ctx context.Context, req *v1.GetGitHubStatusRequest) (*v1.GetGitHubStatusResponse, error) {
+	var res v1.GetGitHubStatusResponse
+	if err := c.client.CallUnary(ctx, gitHubServiceGetGitHubStatusSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *gitHubServiceClient) BeginGitHubConnect(ctx context.Context, req *v1.BeginGitHubConnectRequest) (*v1.BeginGitHubConnectResponse, error) {
+	var res v1.BeginGitHubConnectResponse
+	if err := c.client.CallUnary(ctx, gitHubServiceBeginGitHubConnectSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *gitHubServiceClient) RequestGitHubPass(ctx context.Context, req *v1.RequestGitHubPassRequest) (*v1.RequestGitHubPassResponse, error) {
+	var res v1.RequestGitHubPassResponse
+	if err := c.client.CallUnary(ctx, gitHubServiceRequestGitHubPassSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *gitHubServiceClient) ChangeGitHubOrganisationOwner(ctx context.Context, req *v1.ChangeGitHubOrganisationOwnerRequest) (*v1.ChangeGitHubOrganisationOwnerResponse, error) {
+	var res v1.ChangeGitHubOrganisationOwnerResponse
+	if err := c.client.CallUnary(ctx, gitHubServiceChangeGitHubOrganisationOwnerSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *gitHubServiceClient) DisconnectGitHubOrganisation(ctx context.Context, req *v1.DisconnectGitHubOrganisationRequest) (*v1.DisconnectGitHubOrganisationResponse, error) {
+	var res v1.DisconnectGitHubOrganisationResponse
+	if err := c.client.CallUnary(ctx, gitHubServiceDisconnectGitHubOrganisationSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *gitHubServiceClient) BeginGitHubLinkAppConnect(ctx context.Context, req *v1.BeginGitHubLinkAppConnectRequest) (*v1.BeginGitHubLinkAppConnectResponse, error) {
+	var res v1.BeginGitHubLinkAppConnectResponse
+	if err := c.client.CallUnary(ctx, gitHubServiceBeginGitHubLinkAppConnectSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *gitHubServiceClient) BeginGitHubRunnerAppConnect(ctx context.Context, req *v1.BeginGitHubRunnerAppConnectRequest) (*v1.BeginGitHubRunnerAppConnectResponse, error) {
+	var res v1.BeginGitHubRunnerAppConnectResponse
+	if err := c.client.CallUnary(ctx, gitHubServiceBeginGitHubRunnerAppConnectSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *gitHubServiceClient) DisconnectGitHubRunnerApp(ctx context.Context, req *v1.DisconnectGitHubRunnerAppRequest) (*v1.DisconnectGitHubRunnerAppResponse, error) {
+	var res v1.DisconnectGitHubRunnerAppResponse
+	if err := c.client.CallUnary(ctx, gitHubServiceDisconnectGitHubRunnerAppSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *gitHubServiceClient) DisconnectGitHubLinkApp(ctx context.Context, req *v1.DisconnectGitHubLinkAppRequest) (*v1.DisconnectGitHubLinkAppResponse, error) {
+	var res v1.DisconnectGitHubLinkAppResponse
+	if err := c.client.CallUnary(ctx, gitHubServiceDisconnectGitHubLinkAppSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *gitHubServiceClient) ConfirmGitHubRemovals(ctx context.Context, req *v1.ConfirmGitHubRemovalsRequest) (*v1.ConfirmGitHubRemovalsResponse, error) {
+	var res v1.ConfirmGitHubRemovalsResponse
+	if err := c.client.CallUnary(ctx, gitHubServiceConfirmGitHubRemovalsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *gitHubServiceClient) ImportGitHubLinks(ctx context.Context, req *v1.ImportGitHubLinksRequest) (*v1.ImportGitHubLinksResponse, error) {
+	var res v1.ImportGitHubLinksResponse
+	if err := c.client.CallUnary(ctx, gitHubServiceImportGitHubLinksSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *gitHubServiceClient) BeginGitHubCatalogueAppConnect(ctx context.Context, req *v1.BeginGitHubCatalogueAppConnectRequest) (*v1.BeginGitHubCatalogueAppConnectResponse, error) {
+	var res v1.BeginGitHubCatalogueAppConnectResponse
+	if err := c.client.CallUnary(ctx, gitHubServiceBeginGitHubCatalogueAppConnectSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *gitHubServiceClient) DisconnectGitHubCatalogueApp(ctx context.Context, req *v1.DisconnectGitHubCatalogueAppRequest) (*v1.DisconnectGitHubCatalogueAppResponse, error) {
+	var res v1.DisconnectGitHubCatalogueAppResponse
+	if err := c.client.CallUnary(ctx, gitHubServiceDisconnectGitHubCatalogueAppSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *gitHubServiceClient) CheckGitHubCatalogueApp(ctx context.Context, req *v1.CheckGitHubCatalogueAppRequest) (*v1.CheckGitHubCatalogueAppResponse, error) {
+	var res v1.CheckGitHubCatalogueAppResponse
+	if err := c.client.CallUnary(ctx, gitHubServiceCheckGitHubCatalogueAppSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type gitHubServiceHandler struct{ svc GitHubServiceHandler }
+
+func (h gitHubServiceHandler) listGitHubApps(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListGitHubAppsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListGitHubApps(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h gitHubServiceHandler) getGitHubApp(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetGitHubAppRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetGitHubApp(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h gitHubServiceHandler) listGitHubAppTokens(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListGitHubAppTokensRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListGitHubAppTokens(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h gitHubServiceHandler) beginGitHubAppConnect(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.BeginGitHubAppConnectRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.BeginGitHubAppConnect(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h gitHubServiceHandler) disconnectGitHubApp(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DisconnectGitHubAppRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DisconnectGitHubApp(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h gitHubServiceHandler) checkGitHubApp(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CheckGitHubAppRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CheckGitHubApp(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h gitHubServiceHandler) rotateGitHubAppWebhook(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RotateGitHubAppWebhookRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RotateGitHubAppWebhook(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h gitHubServiceHandler) getGitHubStatus(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetGitHubStatusRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetGitHubStatus(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h gitHubServiceHandler) beginGitHubConnect(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.BeginGitHubConnectRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.BeginGitHubConnect(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h gitHubServiceHandler) requestGitHubPass(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RequestGitHubPassRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RequestGitHubPass(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h gitHubServiceHandler) changeGitHubOrganisationOwner(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ChangeGitHubOrganisationOwnerRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ChangeGitHubOrganisationOwner(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h gitHubServiceHandler) disconnectGitHubOrganisation(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DisconnectGitHubOrganisationRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DisconnectGitHubOrganisation(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h gitHubServiceHandler) beginGitHubLinkAppConnect(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.BeginGitHubLinkAppConnectRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.BeginGitHubLinkAppConnect(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h gitHubServiceHandler) beginGitHubRunnerAppConnect(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.BeginGitHubRunnerAppConnectRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.BeginGitHubRunnerAppConnect(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h gitHubServiceHandler) disconnectGitHubRunnerApp(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DisconnectGitHubRunnerAppRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DisconnectGitHubRunnerApp(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h gitHubServiceHandler) disconnectGitHubLinkApp(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DisconnectGitHubLinkAppRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DisconnectGitHubLinkApp(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h gitHubServiceHandler) confirmGitHubRemovals(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ConfirmGitHubRemovalsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ConfirmGitHubRemovals(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h gitHubServiceHandler) importGitHubLinks(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ImportGitHubLinksRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ImportGitHubLinks(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h gitHubServiceHandler) beginGitHubCatalogueAppConnect(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.BeginGitHubCatalogueAppConnectRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.BeginGitHubCatalogueAppConnect(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h gitHubServiceHandler) disconnectGitHubCatalogueApp(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DisconnectGitHubCatalogueAppRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DisconnectGitHubCatalogueApp(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h gitHubServiceHandler) checkGitHubCatalogueApp(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CheckGitHubCatalogueAppRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CheckGitHubCatalogueApp(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

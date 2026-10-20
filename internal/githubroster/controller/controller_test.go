@@ -16,7 +16,6 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	"google.golang.org/protobuf/proto"
 
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
@@ -51,34 +50,34 @@ type console struct {
 const testPolicy = "rig-policy"
 
 func (c *console) ListHolders(
-	_ context.Context, req *connect.Request[directoryrosterv1.ListHoldersRequest],
-) (*connect.Response[directoryrosterv1.ListHoldersResponse], error) {
+	_ context.Context, req *directoryrosterv1.ListHoldersRequest,
+) (*directoryrosterv1.ListHoldersResponse, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.asked++
 	out := &directoryrosterv1.ListHoldersResponse{PolicyDigest: c.policy}
-	for email, live := range c.holders[req.Msg.GetGroup()] {
+	for email, live := range c.holders[req.GetGroup()] {
 		out.Holders = append(out.Holders, &directoryrosterv1.Holder{Email: email, Live: live, Authoritative: true})
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
 func (c *console) Explain(
-	_ context.Context, req *connect.Request[directoryrosterv1.ExplainRequest],
-) (*connect.Response[directoryrosterv1.ExplainResponse], error) {
+	_ context.Context, req *directoryrosterv1.ExplainRequest,
+) (*directoryrosterv1.ExplainResponse, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	digest := c.policy
 	if c.explainPolicy != "" {
 		digest = c.explainPolicy
 	}
-	answer, ok := c.people[req.Msg.GetEmail()]
+	answer, ok := c.people[req.GetEmail()]
 	if !ok {
 		answer = &directoryrosterv1.ExplainResponse{Authoritative: true, Found: false}
 	}
 	out, _ := proto.Clone(answer).(*directoryrosterv1.ExplainResponse)
 	out.PolicyDigest = digest
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
 // auditLog collects what the controller records, held to the catalogue.

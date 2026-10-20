@@ -9,7 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -17,6 +18,8 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"go.opentelemetry.io/otel/trace"
 
+	directoryv1 "github.com/truvity/sluis/gen/directory/v1"
+	"github.com/truvity/sluis/gen/directory/v1/directoryv1connect"
 	"github.com/truvity/sluis/internal/telemetry"
 )
 
@@ -128,17 +131,16 @@ func TestAnHTTPSpanIsNamedForTheRouteAndCarriesNoRawPath(t *testing.T) {
 // error message (which may quote a group) does not leave.
 func TestAConnectSpanKeepsTheMethodAndDropsTheError(t *testing.T) {
 	memory, _ := exported(t)
+	rpc := connect.NewServer(telemetry.ConnectServerInterceptor())
+	directoryv1connect.RegisterDirectoryServiceHandler(rpc, refusingDirectory{})
 	mux := http.NewServeMux()
-	mux.Handle("/pkg.Service/Method", connect.NewUnaryHandler("/pkg.Service/Method",
-		func(context.Context, *connect.Request[struct{}]) (*connect.Response[struct{}], error) {
-			return nil, connect.NewError(connect.CodePermissionDenied, errors.New(markers[0]+" is not in "+markers[1]))
-		}, append([]connect.HandlerOption{connect.WithCodec(jsonCodec{})}, telemetry.ConnectOptions()...)...))
+	connecthttp.Mount(mux, rpc)
 	server := httptest.NewServer(mux)
 	defer server.Close()
 
-	client := connect.NewClient[struct{}, struct{}](server.Client(), server.URL+"/pkg.Service/Method",
-		append([]connect.ClientOption{connect.WithCodec(jsonCodec{})}, telemetry.ConnectClientOptions()...)...)
-	_, err := client.CallUnary(context.Background(), connect.NewRequest(&struct{}{}))
+	client := directoryv1connect.NewDirectoryServiceClient(connect.NewClient(
+		connecthttp.NewTransport(server.Client(), server.URL), telemetry.ConnectClientInterceptor()))
+	_, err := client.Describe(context.Background(), &directoryv1.DescribeRequest{})
 	if err == nil {
 		t.Fatal("the handler's refusal did not arrive")
 	}
@@ -149,7 +151,7 @@ func TestAConnectSpanKeepsTheMethodAndDropsTheError(t *testing.T) {
 			t.Errorf("%q left the process:\n%s", marker, out)
 		}
 	}
-	if !strings.Contains(out, "rpc.method=pkg.Service/Method") {
+	if !strings.Contains(out, "rpc.method=directory.v1.DirectoryService/Describe") {
 		t.Errorf("the RPC's method was dropped:\n%s", out)
 	}
 }
@@ -166,9 +168,11 @@ func TestTheAllowlistHoldsNothingPersonal(t *testing.T) {
 	}
 }
 
-// jsonCodec lets the test speak Connect without a generated message.
-type jsonCodec struct{}
+// refusingDirectory refuses with a message that quotes a person and a group.
+type refusingDirectory struct {
+	directoryv1connect.UnimplementedDirectoryServiceHandler
+}
 
-func (jsonCodec) Name() string                    { return "json" }
-func (jsonCodec) Marshal(any) ([]byte, error)     { return []byte("{}"), nil }
-func (jsonCodec) Unmarshal(_ []byte, _ any) error { return nil }
+func (refusingDirectory) Describe(context.Context, *directoryv1.DescribeRequest) (*directoryv1.DescribeResponse, error) {
+	return nil, connect.NewError(connect.CodePermissionDenied, markers[0]+" is not in "+markers[1])
+}

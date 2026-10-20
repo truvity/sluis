@@ -15,40 +15,48 @@
 package accessissuerv1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1 "github.com/truvity/sluis/gen/accessissuer/v1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// SessionServiceName is the fully-qualified name of the SessionService service.
 	SessionServiceName = "accessissuer.v1.SessionService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// SessionServiceListSessionsProcedure is the fully-qualified name of the SessionService's
-	// ListSessions RPC.
+	// SessionServiceListSessionsProcedure is the procedure name of the SessionService's ListSessions
+	// RPC.
 	SessionServiceListSessionsProcedure = "/accessissuer.v1.SessionService/ListSessions"
-	// SessionServiceRevokeSessionsProcedure is the fully-qualified name of the SessionService's
+	// SessionServiceRevokeSessionsProcedure is the procedure name of the SessionService's
 	// RevokeSessions RPC.
 	SessionServiceRevokeSessionsProcedure = "/accessissuer.v1.SessionService/RevokeSessions"
+)
+
+var (
+	sessionServiceListSessionsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_accessissuer_v1_session_proto.Services().ByName("SessionService").Methods().ByName("ListSessions"),
+			Procedure:  SessionServiceListSessionsProcedure,
+		}
+	})
+	sessionServiceRevokeSessionsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_accessissuer_v1_session_proto.Services().ByName("SessionService").Methods().ByName("RevokeSessions"),
+			Procedure:  SessionServiceRevokeSessionsProcedure,
+		}
+	})
 )
 
 // SessionServiceClient is a client for the accessissuer.v1.SessionService service.
@@ -57,51 +65,15 @@ type SessionServiceClient interface {
 	// client, which anybody may ask about their own; naming neither is the
 	// global listing, and it is refused unless the caller is an operator,
 	// paged by page_size/page_token.
-	ListSessions(context.Context, *connect.Request[v1.ListSessionsRequest]) (*connect.Response[v1.ListSessionsResponse], error)
+	ListSessions(context.Context, *v1.ListSessionsRequest) (*v1.ListSessionsResponse, error)
 	// RevokeSessions ends a set of them and says how many it ended.
-	RevokeSessions(context.Context, *connect.Request[v1.RevokeSessionsRequest]) (*connect.Response[v1.RevokeSessionsResponse], error)
+	RevokeSessions(context.Context, *v1.RevokeSessionsRequest) (*v1.RevokeSessionsResponse, error)
 }
 
-// NewSessionServiceClient constructs a client for the accessissuer.v1.SessionService service. By
-// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
-// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
-// connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewSessionServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) SessionServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	sessionServiceMethods := v1.File_accessissuer_v1_session_proto.Services().ByName("SessionService").Methods()
-	return &sessionServiceClient{
-		listSessions: connect.NewClient[v1.ListSessionsRequest, v1.ListSessionsResponse](
-			httpClient,
-			baseURL+SessionServiceListSessionsProcedure,
-			connect.WithSchema(sessionServiceMethods.ByName("ListSessions")),
-			connect.WithClientOptions(opts...),
-		),
-		revokeSessions: connect.NewClient[v1.RevokeSessionsRequest, v1.RevokeSessionsResponse](
-			httpClient,
-			baseURL+SessionServiceRevokeSessionsProcedure,
-			connect.WithSchema(sessionServiceMethods.ByName("RevokeSessions")),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// sessionServiceClient implements SessionServiceClient.
-type sessionServiceClient struct {
-	listSessions   *connect.Client[v1.ListSessionsRequest, v1.ListSessionsResponse]
-	revokeSessions *connect.Client[v1.RevokeSessionsRequest, v1.RevokeSessionsResponse]
-}
-
-// ListSessions calls accessissuer.v1.SessionService.ListSessions.
-func (c *sessionServiceClient) ListSessions(ctx context.Context, req *connect.Request[v1.ListSessionsRequest]) (*connect.Response[v1.ListSessionsResponse], error) {
-	return c.listSessions.CallUnary(ctx, req)
-}
-
-// RevokeSessions calls accessissuer.v1.SessionService.RevokeSessions.
-func (c *sessionServiceClient) RevokeSessions(ctx context.Context, req *connect.Request[v1.RevokeSessionsRequest]) (*connect.Response[v1.RevokeSessionsResponse], error) {
-	return c.revokeSessions.CallUnary(ctx, req)
+// NewSessionServiceClient constructs a client for the accessissuer.v1.SessionService service.
+// Multiple service clients may share a single connect.Client.
+func NewSessionServiceClient(client *connect.Client) SessionServiceClient {
+	return &sessionServiceClient{client: client}
 }
 
 // SessionServiceHandler is an implementation of the accessissuer.v1.SessionService service.
@@ -110,49 +82,74 @@ type SessionServiceHandler interface {
 	// client, which anybody may ask about their own; naming neither is the
 	// global listing, and it is refused unless the caller is an operator,
 	// paged by page_size/page_token.
-	ListSessions(context.Context, *connect.Request[v1.ListSessionsRequest]) (*connect.Response[v1.ListSessionsResponse], error)
+	ListSessions(context.Context, *v1.ListSessionsRequest) (*v1.ListSessionsResponse, error)
 	// RevokeSessions ends a set of them and says how many it ended.
-	RevokeSessions(context.Context, *connect.Request[v1.RevokeSessionsRequest]) (*connect.Response[v1.RevokeSessionsResponse], error)
+	RevokeSessions(context.Context, *v1.RevokeSessionsRequest) (*v1.RevokeSessionsResponse, error)
 }
 
-// NewSessionServiceHandler builds an HTTP handler from the service implementation. It returns the
-// path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewSessionServiceHandler(svc SessionServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	sessionServiceMethods := v1.File_accessissuer_v1_session_proto.Services().ByName("SessionService").Methods()
-	sessionServiceListSessionsHandler := connect.NewUnaryHandler(
-		SessionServiceListSessionsProcedure,
-		svc.ListSessions,
-		connect.WithSchema(sessionServiceMethods.ByName("ListSessions")),
-		connect.WithHandlerOptions(opts...),
+// RegisterSessionServiceHandler registers svc as the accessissuer.v1.SessionService implementation
+// on server.
+func RegisterSessionServiceHandler(server *connect.Server, svc SessionServiceHandler) {
+	adapter := sessionServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: sessionServiceListSessionsSpec(), Handler: adapter.listSessions},
+		connect.Method{Spec: sessionServiceRevokeSessionsSpec(), Handler: adapter.revokeSessions},
 	)
-	sessionServiceRevokeSessionsHandler := connect.NewUnaryHandler(
-		SessionServiceRevokeSessionsProcedure,
-		svc.RevokeSessions,
-		connect.WithSchema(sessionServiceMethods.ByName("RevokeSessions")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/accessissuer.v1.SessionService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case SessionServiceListSessionsProcedure:
-			sessionServiceListSessionsHandler.ServeHTTP(w, r)
-		case SessionServiceRevokeSessionsProcedure:
-			sessionServiceRevokeSessionsHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedSessionServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedSessionServiceHandler struct{}
 
-func (UnimplementedSessionServiceHandler) ListSessions(context.Context, *connect.Request[v1.ListSessionsRequest]) (*connect.Response[v1.ListSessionsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("accessissuer.v1.SessionService.ListSessions is not implemented"))
+func (UnimplementedSessionServiceHandler) ListSessions(context.Context, *v1.ListSessionsRequest) (*v1.ListSessionsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "accessissuer.v1.SessionService.ListSessions is not implemented")
 }
 
-func (UnimplementedSessionServiceHandler) RevokeSessions(context.Context, *connect.Request[v1.RevokeSessionsRequest]) (*connect.Response[v1.RevokeSessionsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("accessissuer.v1.SessionService.RevokeSessions is not implemented"))
+func (UnimplementedSessionServiceHandler) RevokeSessions(context.Context, *v1.RevokeSessionsRequest) (*v1.RevokeSessionsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "accessissuer.v1.SessionService.RevokeSessions is not implemented")
+}
+
+type sessionServiceClient struct {
+	client *connect.Client
+}
+
+func (c *sessionServiceClient) ListSessions(ctx context.Context, req *v1.ListSessionsRequest) (*v1.ListSessionsResponse, error) {
+	var res v1.ListSessionsResponse
+	if err := c.client.CallUnary(ctx, sessionServiceListSessionsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *sessionServiceClient) RevokeSessions(ctx context.Context, req *v1.RevokeSessionsRequest) (*v1.RevokeSessionsResponse, error) {
+	var res v1.RevokeSessionsResponse
+	if err := c.client.CallUnary(ctx, sessionServiceRevokeSessionsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type sessionServiceHandler struct{ svc SessionServiceHandler }
+
+func (h sessionServiceHandler) listSessions(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListSessionsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListSessions(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h sessionServiceHandler) revokeSessions(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RevokeSessionsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RevokeSessions(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

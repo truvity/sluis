@@ -8,7 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -41,9 +42,18 @@ func underMaintenance(t *testing.T, st port.State) {
 
 func callRPC(t *testing.T, srv *httptest.Server, procedure string) error {
 	t.Helper()
-	c := connect.NewClient[emptypb.Empty, emptypb.Empty](srv.Client(), srv.URL+procedure)
-	_, err := c.CallUnary(t.Context(), connect.NewRequest(&emptypb.Empty{}))
+	_, err := callRPCHeader(t, srv, procedure)
 	return err
+}
+
+// callRPCHeader is callRPC with the response headers, which carry a refusal's
+// Retry-After.
+func callRPCHeader(t *testing.T, srv *httptest.Server, procedure string) (*connect.Header, error) {
+	t.Helper()
+	c := connect.NewClient(connecthttp.NewTransport(srv.Client(), srv.URL))
+	ctx, info := connect.NewClientContext(t.Context())
+	err := c.CallUnary(ctx, connect.Spec{Procedure: procedure, StreamType: connect.StreamTypeUnary}, &emptypb.Empty{}, &emptypb.Empty{})
+	return info.ResponseHeader(), err
 }
 
 // Each module's write RPCs are refused by that module's flag and by no other's,
@@ -63,7 +73,7 @@ func TestEachModuleRefusesItsWritesUnderMaintenance(t *testing.T) {
 		t.Run(string(c.module), func(t *testing.T) {
 			set, tables := gates(t)
 			mux := http.NewServeMux()
-			registerRPC(mux, named{}, maintenanceOptions(set)...)
+			registerRPC(mux, named{}, maintenanceInterceptors(set)...)
 			srv := httptest.NewServer(mux)
 			t.Cleanup(srv.Close)
 
@@ -72,12 +82,12 @@ func TestEachModuleRefusesItsWritesUnderMaintenance(t *testing.T) {
 				t.Fatalf("no flag: %s = %v, want it to reach the handler", c.write, got)
 			}
 			underMaintenance(t, tables[c.module])
-			err := callRPC(t, srv, c.write)
+			header, err := callRPCHeader(t, srv, c.write)
 			var ce *connect.Error
 			if !errors.As(err, &ce) || ce.Code() != connect.CodeUnavailable || !strings.Contains(ce.Message(), "maintenance") {
 				t.Fatalf("under maintenance: %s = %v, want unavailable naming maintenance", c.write, err)
 			}
-			if ce.Meta().Get("Retry-After") == "" {
+			if header.Get("Retry-After") == "" {
 				t.Error("the refusal carries no Retry-After")
 			}
 			if got := connect.CodeOf(callRPC(t, srv, c.read)); got != connect.CodeUnimplemented {
@@ -193,7 +203,7 @@ func TestWhoamiReportsTheModuleUnderMaintenance(t *testing.T) {
 func TestDisableRecoveryIsServedUnderMaintenance(t *testing.T) {
 	set, tables := gates(t)
 	mux := http.NewServeMux()
-	registerRPC(mux, named{}, maintenanceOptions(set)...)
+	registerRPC(mux, named{}, maintenanceInterceptors(set)...)
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 

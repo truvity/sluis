@@ -5,7 +5,7 @@ go 1.27.0
 toolchain go1.27.3
 
 require (
-	connectrpc.com/connect v1.21.0
+	connectrpc.com/connect/v2 v2.0.1
 	connectrpc.com/otelconnect v0.12.0
 	filippo.io/age v1.3.2
 	github.com/alicebob/miniredis/v2 v2.40.0
@@ -55,7 +55,7 @@ require (
 	cloud.google.com/go/auth v0.24.1-0.20261001053825-dbc26066f70a // indirect
 	cloud.google.com/go/auth/oauth2adapt v0.3.0 // indirect
 	cloud.google.com/go/compute/metadata v0.10.0 // indirect
-	connectrpc.com/connect/v2 v2.0.0 // indirect
+	connectrpc.com/connect v1.21.1 // indirect
 	filippo.io/hpke v0.4.0 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.22 // indirect
 	github.com/aws/aws-sdk-go-v2/credentials v1.20.9 // indirect
@@ -154,3 +154,5 @@ replace github.com/truvity/sluis/audit/sdk => ./audit/sdk
 // read an ID token fail (internal/issuer/idtoken_claims_test.go): re-apply the
 // patch to the new version, or drop the copy once upstream ships the fix.
 replace github.com/zitadel/oidc/v3 v3.51.16 => ./third_party/zitadel-oidc
+
+tool connectrpc.com/connect/v2/cmd/protoc-gen-connect-go

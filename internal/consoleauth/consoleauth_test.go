@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/go-jose/go-jose/v4"
@@ -171,22 +171,23 @@ func TestTheFileSourceReadsAfreshEveryTime(t *testing.T) {
 
 func TestTheInterceptorSetsTheBearerAndStopsOnATokenError(t *testing.T) {
 	src, _ := consoleauth.NewAWSWith(&fakeSTS{expiry: time.Now().Add(time.Hour)}, "a", time.Now)
-	req := connect.NewRequest(&struct{}{})
-	next := func(_ context.Context, r connect.AnyRequest) (connect.AnyResponse, error) {
-		if got := r.Header().Get("Authorization"); got != "Bearer token-1" {
+	next := func(ctx context.Context, _ connect.Spec) (connect.ClientStream, error) {
+		info, _ := connect.CallInfoForClientContext(ctx)
+		if got := info.RequestHeader().Get("Authorization"); got != "Bearer token-1" {
 			t.Errorf("Authorization %q", got)
 		}
 		return nil, nil
 	}
-	if _, err := consoleauth.Unary(src)(next)(context.Background(), req); err != nil {
+	ctx, _ := connect.NewClientContext(context.Background())
+	if _, err := consoleauth.Interceptor(src)(next)(ctx, connect.Spec{}); err != nil {
 		t.Fatal(err)
 	}
 	failing, _ := consoleauth.NewAWSWith(&fakeSTS{err: errors.New("denied")}, "a", time.Now)
 	called := false
-	_, err := consoleauth.Unary(failing)(func(context.Context, connect.AnyRequest) (connect.AnyResponse, error) {
+	_, err := consoleauth.Interceptor(failing)(func(context.Context, connect.Spec) (connect.ClientStream, error) {
 		called = true
 		return nil, nil
-	})(context.Background(), connect.NewRequest(&struct{}{}))
+	})(ctx, connect.Spec{})
 	if err == nil || called {
 		t.Errorf("a call went out without a token: err=%v called=%v", err, called)
 	}

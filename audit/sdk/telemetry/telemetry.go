@@ -8,7 +8,7 @@
 package telemetry
 
 import (
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"connectrpc.com/otelconnect"
 	"go.opentelemetry.io/otel/attribute"
 )
@@ -50,27 +50,29 @@ var SpanAttributeAllowlist = map[attribute.Key]bool{
 	"url.path": true,
 }
 
-// ConnectOptions instruments a Connect handler: one server span per call; the
-// interceptor adds no peer attributes unless asked, and FilterExporter would
-// drop them regardless. Without a tracer provider installed it records nothing.
-func ConnectOptions() []connect.HandlerOption {
-	i, err := otelconnect.NewInterceptor(
+// ConnectServerInterceptor instruments a Connect server: one server span per
+// call; the interceptor adds no peer attributes unless asked, and
+// FilterExporter would drop them regardless. Without a tracer provider
+// installed it records nothing. Pass it to connect.NewServer.
+func ConnectServerInterceptor() connect.ServerInterceptor {
+	i, err := otelconnect.NewServerInterceptor(
 		// This repository's own instruments carry the metrics; the
 		// interceptor's would double them under another name.
 		otelconnect.WithoutMetrics(),
 	)
 	if err != nil {
-		// NewInterceptor fails only on a bad option, and there are none.
+		// NewServerInterceptor fails only on a bad option, and there are none.
 		panic("telemetry: " + err.Error())
 	}
-	return []connect.HandlerOption{connect.WithInterceptors(i)}
+	return i
 }
 
-// ConnectClientOptions is the same for a client.
-func ConnectClientOptions() []connect.ClientOption {
-	i, err := otelconnect.NewInterceptor(otelconnect.WithoutMetrics())
+// ConnectClientInterceptor is the same for a client. Pass it to
+// connect.NewClient.
+func ConnectClientInterceptor() connect.ClientInterceptor {
+	i, err := otelconnect.NewClientInterceptor(otelconnect.WithoutMetrics())
 	if err != nil {
 		panic("telemetry: " + err.Error())
 	}
-	return []connect.ClientOption{connect.WithInterceptors(i)}
+	return i
 }

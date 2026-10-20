@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
 	"github.com/truvity/sluis/internal/access"
@@ -81,11 +81,11 @@ func backupConsole(m BackupModule) *Console {
 func TestBackupStatusCarriesTheRunsAndTheRetention(t *testing.T) {
 	t.Parallel()
 	res, err := backupConsole(newFakeBackup()).GetBackupStatus(asRole(access.RoleViewer),
-		connect.NewRequest(&directoryrosterv1.GetBackupStatusRequest{}))
+		&directoryrosterv1.GetBackupStatusRequest{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := res.Msg
+	m := res
 	if !m.GetAvailable() || m.GetLatest().GetState() != "paused" || m.GetUnfinished().GetUnits() != 8 || m.GetUnfinished().GetDone() != 3 {
 		t.Errorf("status = %v", m)
 	}
@@ -101,25 +101,25 @@ func TestBackupListIsNewestFirstAndKeepsAnUnreadableManifest(t *testing.T) {
 	t.Parallel()
 	f := newFakeBackup()
 	res, err := backupConsole(f).ListBackups(asRole(access.RoleViewer),
-		connect.NewRequest(&directoryrosterv1.ListBackupsRequest{Limit: 10}))
+		&directoryrosterv1.ListBackupsRequest{Limit: 10})
 	if err != nil {
 		t.Fatal(err)
 	}
 	var ids []string
-	for _, b := range res.Msg.GetBackups() {
+	for _, b := range res.GetBackups() {
 		ids = append(ids, b.GetId())
 	}
 	if got := ids; len(got) != 3 || got[0] != "new" || got[1] != "old" || got[2] != "bad" {
 		t.Errorf("order = %v, want new, old, bad", got)
 	}
-	if res.Msg.GetBackups()[2].GetError() == "" {
+	if res.GetBackups()[2].GetError() == "" {
 		t.Error("an unreadable manifest lost its error")
 	}
 	if len(f.limits) != 1 || f.limits[0] != 10 {
 		t.Errorf("the limit reached the module as %v", f.limits)
 	}
 	if _, err := backupConsole(f).ListBackups(asRole(access.RoleViewer),
-		connect.NewRequest(&directoryrosterv1.ListBackupsRequest{Limit: -1})); code(err) != connect.CodeInvalidArgument {
+		&directoryrosterv1.ListBackupsRequest{Limit: -1}); code(err) != connect.CodeInvalidArgument {
 		t.Errorf("a negative limit = %v", err)
 	}
 }
@@ -127,11 +127,11 @@ func TestBackupListIsNewestFirstAndKeepsAnUnreadableManifest(t *testing.T) {
 func TestRestoreStatusListsTheModulesUnderMaintenance(t *testing.T) {
 	t.Parallel()
 	res, err := backupConsole(newFakeBackup()).GetRestoreStatus(asRole(access.RoleViewer),
-		connect.NewRequest(&directoryrosterv1.GetRestoreStatusRequest{}))
+		&directoryrosterv1.GetRestoreStatusRequest{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := res.Msg
+	m := res
 	if !m.GetAvailable() || m.GetLatest().GetBackupId() != "new" || m.GetUnfinished().GetState() != "paused" || len(m.GetMaintenance()) != 2 {
 		t.Fatalf("restore status = %v", m)
 	}
@@ -145,15 +145,15 @@ func TestTheBackupReadsAreForASignedInViewerAndNoOneElse(t *testing.T) {
 	c := backupConsole(newFakeBackup())
 	for name, call := range map[string]func(context.Context) error{
 		"status": func(ctx context.Context) error {
-			_, err := c.GetBackupStatus(ctx, connect.NewRequest(&directoryrosterv1.GetBackupStatusRequest{}))
+			_, err := c.GetBackupStatus(ctx, &directoryrosterv1.GetBackupStatusRequest{})
 			return err
 		},
 		"list": func(ctx context.Context) error {
-			_, err := c.ListBackups(ctx, connect.NewRequest(&directoryrosterv1.ListBackupsRequest{}))
+			_, err := c.ListBackups(ctx, &directoryrosterv1.ListBackupsRequest{})
 			return err
 		},
 		"restore": func(ctx context.Context) error {
-			_, err := c.GetRestoreStatus(ctx, connect.NewRequest(&directoryrosterv1.GetRestoreStatusRequest{}))
+			_, err := c.GetRestoreStatus(ctx, &directoryrosterv1.GetRestoreStatusRequest{})
 			return err
 		},
 	} {
@@ -172,8 +172,8 @@ func TestTheBackupReadsAreForASignedInViewerAndNoOneElse(t *testing.T) {
 func TestWithoutTheModulesThePageIsNotAvailable(t *testing.T) {
 	t.Parallel()
 	res, err := backupConsole(nil).GetBackupStatus(asRole(access.RoleViewer),
-		connect.NewRequest(&directoryrosterv1.GetBackupStatusRequest{}))
-	if err != nil || res.Msg.GetAvailable() {
+		&directoryrosterv1.GetBackupStatusRequest{})
+	if err != nil || res.GetAvailable() {
 		t.Errorf("no module: %v, %v", res, err)
 	}
 }
@@ -183,7 +183,7 @@ func TestAModuleThatDoesNotAnswerIsUnavailableAndSaysWhy(t *testing.T) {
 	f := newFakeBackup()
 	f.err = errors.New("lambda: throttled")
 	_, err := backupConsole(f).GetRestoreStatus(asRole(access.RoleViewer),
-		connect.NewRequest(&directoryrosterv1.GetRestoreStatusRequest{}))
+		&directoryrosterv1.GetRestoreStatusRequest{})
 	if code(err) != connect.CodeUnavailable {
 		t.Errorf("code = %v, want unavailable (%v)", code(err), err)
 	}
@@ -237,8 +237,8 @@ func TestRunBackupNeedsAGroupThePolicyNames(t *testing.T) {
 	f := newFakeBackup()
 	f.status.Unfinished = nil
 	c := runnerConsole(f, "backup-runners")
-	req := func() *connect.Request[directoryrosterv1.RunBackupRequest] {
-		return connect.NewRequest(&directoryrosterv1.RunBackupRequest{})
+	req := func() *directoryrosterv1.RunBackupRequest {
+		return &directoryrosterv1.RunBackupRequest{}
 	}
 
 	if _, err := c.RunBackup(context.Background(), req()); code(err) != connect.CodeUnauthenticated {
@@ -261,8 +261,8 @@ func TestRunBackupNeedsAGroupThePolicyNames(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !res.Msg.GetAvailable() || res.Msg.GetOutcome() != "started" {
-		t.Errorf("run = %v", res.Msg)
+	if !res.GetAvailable() || res.GetOutcome() != "started" {
+		t.Errorf("run = %v", res)
 	}
 	// The module is told who asked, which is what its audit record names.
 	if len(f.ran) != 1 || f.ran[0] != "ada@example.com" {
@@ -277,7 +277,7 @@ func TestNobodyMayRunABackupWhenThePolicyNamesNoGroup(t *testing.T) {
 		"no runners":         {deps: ConsoleDeps{Backup: f}},
 		"an empty group set": runnerConsole(f),
 	} {
-		_, err := c.RunBackup(asRole(access.RoleOperator, policy.GroupOperators, "backup-runners"), connect.NewRequest(&directoryrosterv1.RunBackupRequest{}))
+		_, err := c.RunBackup(asRole(access.RoleOperator, policy.GroupOperators, "backup-runners"), &directoryrosterv1.RunBackupRequest{})
 		if code(err) != connect.CodePermissionDenied {
 			t.Errorf("%s: %v", name, err)
 		}
@@ -287,8 +287,8 @@ func TestNobodyMayRunABackupWhenThePolicyNamesNoGroup(t *testing.T) {
 	}
 }
 
-func runReq(resume bool) *connect.Request[directoryrosterv1.RunBackupRequest] {
-	return connect.NewRequest(&directoryrosterv1.RunBackupRequest{Resume: resume})
+func runReq(resume bool) *directoryrosterv1.RunBackupRequest {
+	return &directoryrosterv1.RunBackupRequest{Resume: resume}
 }
 
 // A run is started and the answer comes at once, with the issuer's clock for the
@@ -302,8 +302,8 @@ func TestRunBackupAnswersWhenTheModuleHasTheRun(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Msg.GetOutcome() != "started" || res.Msg.GetStarted() == nil || res.Msg.GetId() != "" {
-		t.Errorf("answer = %v", res.Msg)
+	if res.GetOutcome() != "started" || res.GetStarted() == nil || res.GetId() != "" {
+		t.Errorf("answer = %v", res)
 	}
 	if len(f.ran) != 1 || f.ran[0] != "ada@example.com" {
 		t.Errorf("the module was told %v", f.ran)
@@ -315,7 +315,7 @@ func TestRunBackupIsContendedWhileARunIsGoing(t *testing.T) {
 	f := newFakeBackup()
 	f.status.Unfinished = &job.View{ID: "x", State: job.StateRunning}
 	res, err := runnerConsole(f, "r").RunBackup(asRole(access.RoleNone, "r"), runReq(false))
-	if err != nil || res.Msg.GetOutcome() != "contended" || len(f.ran) != 0 {
+	if err != nil || res.GetOutcome() != "contended" || len(f.ran) != 0 {
 		t.Errorf("%v, %v, %v", res, err, f.ran)
 	}
 }
@@ -326,16 +326,16 @@ func TestARepeatedRunBackupByOnePersonIsContended(t *testing.T) {
 	f := newFakeBackup()
 	f.status.Unfinished = nil
 	c := runnerConsole(f, "r")
-	if res, err := c.RunBackup(asRole(access.RoleNone, "r"), runReq(false)); err != nil || res.Msg.GetOutcome() != "started" {
+	if res, err := c.RunBackup(asRole(access.RoleNone, "r"), runReq(false)); err != nil || res.GetOutcome() != "started" {
 		t.Fatalf("first: %v, %v", res, err)
 	}
 	res, err := c.RunBackup(asRole(access.RoleNone, "r"), runReq(false))
-	if err != nil || res.Msg.GetOutcome() != "contended" || len(f.ran) != 1 {
+	if err != nil || res.GetOutcome() != "contended" || len(f.ran) != 1 {
 		t.Errorf("second: %v, %v, %v", res, err, f.ran)
 	}
 	// Someone else is not held by it.
 	other := WithIdentity(context.Background(), access.Identity{Email: "bob@example.com", Groups: []string{"r"}})
-	if res, err = c.RunBackup(other, runReq(false)); err != nil || res.Msg.GetOutcome() != "started" {
+	if res, err = c.RunBackup(other, runReq(false)); err != nil || res.GetOutcome() != "started" {
 		t.Errorf("another person: %v, %v", res, err)
 	}
 }
@@ -350,7 +350,7 @@ func TestAFailedStartDoesNotHoldThePersonOff(t *testing.T) {
 		t.Fatalf("code = %v", code(err))
 	}
 	f.startErr = nil
-	if res, err := c.RunBackup(asRole(access.RoleNone, "r"), runReq(false)); err != nil || res.Msg.GetOutcome() != "started" {
+	if res, err := c.RunBackup(asRole(access.RoleNone, "r"), runReq(false)); err != nil || res.GetOutcome() != "started" {
 		t.Errorf("retry: %v, %v", res, err)
 	}
 }
@@ -359,7 +359,7 @@ func TestAResumeHasNothingToContinue(t *testing.T) {
 	t.Parallel()
 	f := newFakeBackup()
 	res, err := runnerConsole(f, "r").RunBackup(asRole(access.RoleNone, "r"), runReq(true))
-	if err != nil || res.Msg.GetOutcome() != "idle" || len(f.ran) != 0 {
+	if err != nil || res.GetOutcome() != "idle" || len(f.ran) != 0 {
 		t.Errorf("%v, %v, %v", res, err, f.ran)
 	}
 }
@@ -369,7 +369,7 @@ func TestPreviewRefusesAnIdThatIsAPath(t *testing.T) {
 	f := newFakeBackup()
 	c := backupConsole(f)
 	for _, id := range []string{"..", "../x", "a/b", "a%2Fb", `a\b`, ".hidden", "a b", "a\x00b", strings.Repeat("a", 65), "x/../../y"} {
-		_, err := c.GetRestorePreview(asRole(access.RoleOperator), connect.NewRequest(&directoryrosterv1.GetRestorePreviewRequest{BackupId: id}))
+		_, err := c.GetRestorePreview(asRole(access.RoleOperator), &directoryrosterv1.GetRestorePreviewRequest{BackupId: id})
 		if code(err) != connect.CodeInvalidArgument {
 			t.Errorf("%q: %v", id, err)
 		}
@@ -381,7 +381,7 @@ func TestRunBackupRefusesASignInThatCannotBeNamed(t *testing.T) {
 	f := newFakeBackup()
 	c := runnerConsole(f, "r")
 	ctx := WithIdentity(context.Background(), access.Identity{Source: access.SourceRecovery, Subject: "system:serviceaccount:ns:recovery", Groups: []string{"r"}})
-	if _, err := c.RunBackup(ctx, connect.NewRequest(&directoryrosterv1.RunBackupRequest{})); code(err) != connect.CodePermissionDenied {
+	if _, err := c.RunBackup(ctx, &directoryrosterv1.RunBackupRequest{}); code(err) != connect.CodePermissionDenied {
 		t.Errorf("recovery: %v", err)
 	}
 	if len(f.ran) != 0 {
@@ -395,8 +395,8 @@ func TestRestorePreviewIsAnOperatorsAndCarriesCountsOnly(t *testing.T) {
 	f.preview = rpc.PreviewResponse{Outcome: "preview", Backup: "new", Report: &restore.Report{Installation: "example", ID: "new", Layout: "v5",
 		Created: "2026-10-10T02:00:00Z", Sections: []restore.SectionReport{{Module: port.ModuleOIDC, Section: "state", Create: 2, Overwrite: 1, Same: 7}}}}
 	c := backupConsole(f)
-	req := func(id string) *connect.Request[directoryrosterv1.GetRestorePreviewRequest] {
-		return connect.NewRequest(&directoryrosterv1.GetRestorePreviewRequest{BackupId: id})
+	req := func(id string) *directoryrosterv1.GetRestorePreviewRequest {
+		return &directoryrosterv1.GetRestorePreviewRequest{BackupId: id}
 	}
 	if _, err := c.GetRestorePreview(context.Background(), req("new")); code(err) != connect.CodeUnauthenticated {
 		t.Errorf("anonymous: %v", err)
@@ -411,7 +411,7 @@ func TestRestorePreviewIsAnOperatorsAndCarriesCountsOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := res.Msg
+	m := res
 	if !m.GetAvailable() || m.GetOutcome() != "preview" || m.GetBackupId() != "new" || len(m.GetSections()) != 1 ||
 		m.GetSections()[0].GetCreate() != 2 || m.GetSections()[0].GetOverwrite() != 1 || m.GetSections()[0].GetModule() != "oidc" {
 		t.Errorf("preview = %v", m)

@@ -5,64 +5,132 @@
 package directoryrosterv1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1 "github.com/truvity/sluis/gen/directoryroster/v1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// AccessServiceName is the fully-qualified name of the AccessService service.
 	AccessServiceName = "directoryroster.v1.AccessService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// AccessServiceWhoAmIProcedure is the fully-qualified name of the AccessService's WhoAmI RPC.
+	// AccessServiceWhoAmIProcedure is the procedure name of the AccessService's WhoAmI RPC.
 	AccessServiceWhoAmIProcedure = "/directoryroster.v1.AccessService/WhoAmI"
-	// AccessServiceExplainProcedure is the fully-qualified name of the AccessService's Explain RPC.
+	// AccessServiceExplainProcedure is the procedure name of the AccessService's Explain RPC.
 	AccessServiceExplainProcedure = "/directoryroster.v1.AccessService/Explain"
-	// AccessServiceListHoldersProcedure is the fully-qualified name of the AccessService's ListHolders
-	// RPC.
+	// AccessServiceListHoldersProcedure is the procedure name of the AccessService's ListHolders RPC.
 	AccessServiceListHoldersProcedure = "/directoryroster.v1.AccessService/ListHolders"
-	// AccessServiceSearchPeopleProcedure is the fully-qualified name of the AccessService's
-	// SearchPeople RPC.
+	// AccessServiceSearchPeopleProcedure is the procedure name of the AccessService's SearchPeople RPC.
 	AccessServiceSearchPeopleProcedure = "/directoryroster.v1.AccessService/SearchPeople"
-	// AccessServiceListServedDomainsProcedure is the fully-qualified name of the AccessService's
+	// AccessServiceListServedDomainsProcedure is the procedure name of the AccessService's
 	// ListServedDomains RPC.
 	AccessServiceListServedDomainsProcedure = "/directoryroster.v1.AccessService/ListServedDomains"
-	// AccessServiceGetPolicyProcedure is the fully-qualified name of the AccessService's GetPolicy RPC.
+	// AccessServiceGetPolicyProcedure is the procedure name of the AccessService's GetPolicy RPC.
 	AccessServiceGetPolicyProcedure = "/directoryroster.v1.AccessService/GetPolicy"
-	// AccessServiceListDirectoryGroupsProcedure is the fully-qualified name of the AccessService's
+	// AccessServiceListDirectoryGroupsProcedure is the procedure name of the AccessService's
 	// ListDirectoryGroups RPC.
 	AccessServiceListDirectoryGroupsProcedure = "/directoryroster.v1.AccessService/ListDirectoryGroups"
-	// AccessServiceGetDirectoryGroupProcedure is the fully-qualified name of the AccessService's
+	// AccessServiceGetDirectoryGroupProcedure is the procedure name of the AccessService's
 	// GetDirectoryGroup RPC.
 	AccessServiceGetDirectoryGroupProcedure = "/directoryroster.v1.AccessService/GetDirectoryGroup"
-	// AccessServiceResolveDirectoryGroupsProcedure is the fully-qualified name of the AccessService's
+	// AccessServiceResolveDirectoryGroupsProcedure is the procedure name of the AccessService's
 	// ResolveDirectoryGroups RPC.
 	AccessServiceResolveDirectoryGroupsProcedure = "/directoryroster.v1.AccessService/ResolveDirectoryGroups"
-	// AccessServiceGetRecoveryProcedure is the fully-qualified name of the AccessService's GetRecovery
-	// RPC.
+	// AccessServiceGetRecoveryProcedure is the procedure name of the AccessService's GetRecovery RPC.
 	AccessServiceGetRecoveryProcedure = "/directoryroster.v1.AccessService/GetRecovery"
-	// AccessServiceDisableRecoveryProcedure is the fully-qualified name of the AccessService's
+	// AccessServiceDisableRecoveryProcedure is the procedure name of the AccessService's
 	// DisableRecovery RPC.
 	AccessServiceDisableRecoveryProcedure = "/directoryroster.v1.AccessService/DisableRecovery"
+)
+
+var (
+	accessServiceWhoAmISpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_directoryroster_v1_access_proto.Services().ByName("AccessService").Methods().ByName("WhoAmI"),
+			Procedure:  AccessServiceWhoAmIProcedure,
+		}
+	})
+	accessServiceExplainSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_directoryroster_v1_access_proto.Services().ByName("AccessService").Methods().ByName("Explain"),
+			Procedure:  AccessServiceExplainProcedure,
+		}
+	})
+	accessServiceListHoldersSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_directoryroster_v1_access_proto.Services().ByName("AccessService").Methods().ByName("ListHolders"),
+			Procedure:  AccessServiceListHoldersProcedure,
+		}
+	})
+	accessServiceSearchPeopleSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_directoryroster_v1_access_proto.Services().ByName("AccessService").Methods().ByName("SearchPeople"),
+			Procedure:  AccessServiceSearchPeopleProcedure,
+		}
+	})
+	accessServiceListServedDomainsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_directoryroster_v1_access_proto.Services().ByName("AccessService").Methods().ByName("ListServedDomains"),
+			Procedure:  AccessServiceListServedDomainsProcedure,
+		}
+	})
+	accessServiceGetPolicySpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_directoryroster_v1_access_proto.Services().ByName("AccessService").Methods().ByName("GetPolicy"),
+			Procedure:  AccessServiceGetPolicyProcedure,
+		}
+	})
+	accessServiceListDirectoryGroupsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_directoryroster_v1_access_proto.Services().ByName("AccessService").Methods().ByName("ListDirectoryGroups"),
+			Procedure:  AccessServiceListDirectoryGroupsProcedure,
+		}
+	})
+	accessServiceGetDirectoryGroupSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_directoryroster_v1_access_proto.Services().ByName("AccessService").Methods().ByName("GetDirectoryGroup"),
+			Procedure:  AccessServiceGetDirectoryGroupProcedure,
+		}
+	})
+	accessServiceResolveDirectoryGroupsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_directoryroster_v1_access_proto.Services().ByName("AccessService").Methods().ByName("ResolveDirectoryGroups"),
+			Procedure:  AccessServiceResolveDirectoryGroupsProcedure,
+		}
+	})
+	accessServiceGetRecoverySpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_directoryroster_v1_access_proto.Services().ByName("AccessService").Methods().ByName("GetRecovery"),
+			Procedure:  AccessServiceGetRecoveryProcedure,
+		}
+	})
+	accessServiceDisableRecoverySpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_directoryroster_v1_access_proto.Services().ByName("AccessService").Methods().ByName("DisableRecovery"),
+			Procedure:  AccessServiceDisableRecoveryProcedure,
+		}
+	})
 )
 
 // AccessServiceClient is a client for the directoryroster.v1.AccessService service.
@@ -70,7 +138,7 @@ type AccessServiceClient interface {
 	// WhoAmI returns the caller's identity: who they are, how they were
 	// established, the role they hold and the internal groups behind it.
 	// Any signed-in identity.
-	WhoAmI(context.Context, *connect.Request[v1.WhoAmIRequest]) (*connect.Response[v1.WhoAmIResponse], error)
+	WhoAmI(context.Context, *v1.WhoAmIRequest) (*v1.WhoAmIResponse, error)
 	// Explain answers "what does this proof effectively get, and why": the
 	// internal groups it lands in, what put it in each, the merged claims,
 	// the token lifetime, and which clients would admit it.
@@ -80,17 +148,17 @@ type AccessServiceClient interface {
 	// is. Operator only, and the roster controllers (workloads in
 	// the policy's roster-controller group): anyone else, a person asking about themselves included, is
 	// refused with "not authorised". An operator's look-up is recorded.
-	Explain(context.Context, *connect.Request[v1.ExplainRequest]) (*connect.Response[v1.ExplainResponse], error)
+	Explain(context.Context, *v1.ExplainRequest) (*v1.ExplainResponse, error)
 	// ListHolders resolves an internal group, or a client, to the people who
 	// hold it right now. It is the question an auditor actually asks, and
 	// the one the policy file cannot answer on its own: the file says which
 	// directory groups count, and only the directory knows who is in them.
 	// Viewer.
-	ListHolders(context.Context, *connect.Request[v1.ListHoldersRequest]) (*connect.Response[v1.ListHoldersResponse], error)
+	ListHolders(context.Context, *v1.ListHoldersRequest) (*v1.ListHoldersResponse, error)
 	// SearchPeople finds accounts by address or name across every
 	// snapshotted workspace, so that a console can start from a name rather
 	// than from a navigation tree. Viewer.
-	SearchPeople(context.Context, *connect.Request[v1.SearchPeopleRequest]) (*connect.Response[v1.SearchPeopleResponse], error)
+	SearchPeople(context.Context, *v1.SearchPeopleRequest) (*v1.SearchPeopleResponse, error)
 	// ListServedDomains returns, for every connected directory the caller
 	// may view, the domains the hub serves for it now. It is what a
 	// controller looks a person up by: a Slack workspace names no domains of
@@ -98,7 +166,7 @@ type AccessServiceClient interface {
 	// and its people are those with an address in that directory's served
 	// domains. Viewer, installation-wide or over the directory: a scoped
 	// viewer is told only of its own directories.
-	ListServedDomains(context.Context, *connect.Request[v1.ListServedDomainsRequest]) (*connect.Response[v1.ListServedDomainsResponse], error)
+	ListServedDomains(context.Context, *v1.ListServedDomainsRequest) (*v1.ListServedDomainsResponse, error)
 	// GetPolicy returns every internal group with its members and what each
 	// adds, the state of the break-glass admin, and the enabled sign-in
 	// sources. Viewer.
@@ -108,18 +176,18 @@ type AccessServiceClient interface {
 	// from the installation's own access model and reviewed in git; a
 	// console that could disagree with git was a second source of truth
 	// and a merge to reconcile them.
-	GetPolicy(context.Context, *connect.Request[v1.GetPolicyRequest]) (*connect.Response[v1.GetPolicyResponse], error)
+	GetPolicy(context.Context, *v1.GetPolicyRequest) (*v1.GetPolicyResponse, error)
 	// ListDirectoryGroups returns the groups the hub has snapshotted, so
 	// that a membership is a click rather than a typed address that may be
 	// a typo. Viewer.
-	ListDirectoryGroups(context.Context, *connect.Request[v1.ListDirectoryGroupsRequest]) (*connect.Response[v1.ListDirectoryGroupsResponse], error)
+	ListDirectoryGroups(context.Context, *v1.ListDirectoryGroupsRequest) (*v1.ListDirectoryGroupsResponse, error)
 	// GetDirectoryGroup returns one snapshotted directory group as the
 	// console shows it: where it came from and whether that can be vouched
 	// for, its members straight from the directory, and the internal groups
 	// it feeds. It is the reverse of a membership — an admin who just
 	// changed a group in the directory wants to know its blast radius, and
 	// that direction is not derivable from the policy alone. Viewer.
-	GetDirectoryGroup(context.Context, *connect.Request[v1.GetDirectoryGroupRequest]) (*connect.Response[v1.GetDirectoryGroupResponse], error)
+	GetDirectoryGroup(context.Context, *v1.GetDirectoryGroupRequest) (*v1.GetDirectoryGroupResponse, error)
 	// ResolveDirectoryGroups returns, for each directory group asked, who is
 	// in it with nested groups expanded, and which directory it comes from:
 	// the question a controller asks to feed a channel from directory groups
@@ -128,11 +196,11 @@ type AccessServiceClient interface {
 	// group of a directory it may not view, so the answer never reveals a
 	// directory the caller cannot see. The answer carries the policy digest,
 	// like ListHolders, so a consumer checks it decided under the same policy.
-	ResolveDirectoryGroups(context.Context, *connect.Request[v1.ResolveDirectoryGroupsRequest]) (*connect.Response[v1.ResolveDirectoryGroupsResponse], error)
+	ResolveDirectoryGroups(context.Context, *v1.ResolveDirectoryGroupsRequest) (*v1.ResolveDirectoryGroupsResponse, error)
 	// GetRecovery reports the state of the recovery sign-in: whether it can
 	// be used now, and when and by whom it was turned off if it was, and
 	// whether the caller may turn it off from this sign-in. Operator.
-	GetRecovery(context.Context, *connect.Request[v1.GetRecoveryRequest]) (*connect.Response[v1.GetRecoveryResponse], error)
+	GetRecovery(context.Context, *v1.GetRecoveryRequest) (*v1.GetRecoveryResponse, error)
 	// DisableRecovery turns the recovery sign-in off for the whole
 	// installation, at once, and ends every session recovery opened. It is
 	// the ONLY switch: nothing here turns recovery on, which is a change of
@@ -141,157 +209,13 @@ type AccessServiceClient interface {
 	// sign-in, a workload and a scoped operator are refused. Idempotent. The
 	// switch takes effect before the audit record is written and does not wait
 	// for it. See docs/decisions/0075.
-	DisableRecovery(context.Context, *connect.Request[v1.DisableRecoveryRequest]) (*connect.Response[v1.DisableRecoveryResponse], error)
+	DisableRecovery(context.Context, *v1.DisableRecoveryRequest) (*v1.DisableRecoveryResponse, error)
 }
 
-// NewAccessServiceClient constructs a client for the directoryroster.v1.AccessService service. By
-// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
-// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
-// connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewAccessServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) AccessServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	accessServiceMethods := v1.File_directoryroster_v1_access_proto.Services().ByName("AccessService").Methods()
-	return &accessServiceClient{
-		whoAmI: connect.NewClient[v1.WhoAmIRequest, v1.WhoAmIResponse](
-			httpClient,
-			baseURL+AccessServiceWhoAmIProcedure,
-			connect.WithSchema(accessServiceMethods.ByName("WhoAmI")),
-			connect.WithClientOptions(opts...),
-		),
-		explain: connect.NewClient[v1.ExplainRequest, v1.ExplainResponse](
-			httpClient,
-			baseURL+AccessServiceExplainProcedure,
-			connect.WithSchema(accessServiceMethods.ByName("Explain")),
-			connect.WithClientOptions(opts...),
-		),
-		listHolders: connect.NewClient[v1.ListHoldersRequest, v1.ListHoldersResponse](
-			httpClient,
-			baseURL+AccessServiceListHoldersProcedure,
-			connect.WithSchema(accessServiceMethods.ByName("ListHolders")),
-			connect.WithClientOptions(opts...),
-		),
-		searchPeople: connect.NewClient[v1.SearchPeopleRequest, v1.SearchPeopleResponse](
-			httpClient,
-			baseURL+AccessServiceSearchPeopleProcedure,
-			connect.WithSchema(accessServiceMethods.ByName("SearchPeople")),
-			connect.WithClientOptions(opts...),
-		),
-		listServedDomains: connect.NewClient[v1.ListServedDomainsRequest, v1.ListServedDomainsResponse](
-			httpClient,
-			baseURL+AccessServiceListServedDomainsProcedure,
-			connect.WithSchema(accessServiceMethods.ByName("ListServedDomains")),
-			connect.WithClientOptions(opts...),
-		),
-		getPolicy: connect.NewClient[v1.GetPolicyRequest, v1.GetPolicyResponse](
-			httpClient,
-			baseURL+AccessServiceGetPolicyProcedure,
-			connect.WithSchema(accessServiceMethods.ByName("GetPolicy")),
-			connect.WithClientOptions(opts...),
-		),
-		listDirectoryGroups: connect.NewClient[v1.ListDirectoryGroupsRequest, v1.ListDirectoryGroupsResponse](
-			httpClient,
-			baseURL+AccessServiceListDirectoryGroupsProcedure,
-			connect.WithSchema(accessServiceMethods.ByName("ListDirectoryGroups")),
-			connect.WithClientOptions(opts...),
-		),
-		getDirectoryGroup: connect.NewClient[v1.GetDirectoryGroupRequest, v1.GetDirectoryGroupResponse](
-			httpClient,
-			baseURL+AccessServiceGetDirectoryGroupProcedure,
-			connect.WithSchema(accessServiceMethods.ByName("GetDirectoryGroup")),
-			connect.WithClientOptions(opts...),
-		),
-		resolveDirectoryGroups: connect.NewClient[v1.ResolveDirectoryGroupsRequest, v1.ResolveDirectoryGroupsResponse](
-			httpClient,
-			baseURL+AccessServiceResolveDirectoryGroupsProcedure,
-			connect.WithSchema(accessServiceMethods.ByName("ResolveDirectoryGroups")),
-			connect.WithClientOptions(opts...),
-		),
-		getRecovery: connect.NewClient[v1.GetRecoveryRequest, v1.GetRecoveryResponse](
-			httpClient,
-			baseURL+AccessServiceGetRecoveryProcedure,
-			connect.WithSchema(accessServiceMethods.ByName("GetRecovery")),
-			connect.WithClientOptions(opts...),
-		),
-		disableRecovery: connect.NewClient[v1.DisableRecoveryRequest, v1.DisableRecoveryResponse](
-			httpClient,
-			baseURL+AccessServiceDisableRecoveryProcedure,
-			connect.WithSchema(accessServiceMethods.ByName("DisableRecovery")),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// accessServiceClient implements AccessServiceClient.
-type accessServiceClient struct {
-	whoAmI                 *connect.Client[v1.WhoAmIRequest, v1.WhoAmIResponse]
-	explain                *connect.Client[v1.ExplainRequest, v1.ExplainResponse]
-	listHolders            *connect.Client[v1.ListHoldersRequest, v1.ListHoldersResponse]
-	searchPeople           *connect.Client[v1.SearchPeopleRequest, v1.SearchPeopleResponse]
-	listServedDomains      *connect.Client[v1.ListServedDomainsRequest, v1.ListServedDomainsResponse]
-	getPolicy              *connect.Client[v1.GetPolicyRequest, v1.GetPolicyResponse]
-	listDirectoryGroups    *connect.Client[v1.ListDirectoryGroupsRequest, v1.ListDirectoryGroupsResponse]
-	getDirectoryGroup      *connect.Client[v1.GetDirectoryGroupRequest, v1.GetDirectoryGroupResponse]
-	resolveDirectoryGroups *connect.Client[v1.ResolveDirectoryGroupsRequest, v1.ResolveDirectoryGroupsResponse]
-	getRecovery            *connect.Client[v1.GetRecoveryRequest, v1.GetRecoveryResponse]
-	disableRecovery        *connect.Client[v1.DisableRecoveryRequest, v1.DisableRecoveryResponse]
-}
-
-// WhoAmI calls directoryroster.v1.AccessService.WhoAmI.
-func (c *accessServiceClient) WhoAmI(ctx context.Context, req *connect.Request[v1.WhoAmIRequest]) (*connect.Response[v1.WhoAmIResponse], error) {
-	return c.whoAmI.CallUnary(ctx, req)
-}
-
-// Explain calls directoryroster.v1.AccessService.Explain.
-func (c *accessServiceClient) Explain(ctx context.Context, req *connect.Request[v1.ExplainRequest]) (*connect.Response[v1.ExplainResponse], error) {
-	return c.explain.CallUnary(ctx, req)
-}
-
-// ListHolders calls directoryroster.v1.AccessService.ListHolders.
-func (c *accessServiceClient) ListHolders(ctx context.Context, req *connect.Request[v1.ListHoldersRequest]) (*connect.Response[v1.ListHoldersResponse], error) {
-	return c.listHolders.CallUnary(ctx, req)
-}
-
-// SearchPeople calls directoryroster.v1.AccessService.SearchPeople.
-func (c *accessServiceClient) SearchPeople(ctx context.Context, req *connect.Request[v1.SearchPeopleRequest]) (*connect.Response[v1.SearchPeopleResponse], error) {
-	return c.searchPeople.CallUnary(ctx, req)
-}
-
-// ListServedDomains calls directoryroster.v1.AccessService.ListServedDomains.
-func (c *accessServiceClient) ListServedDomains(ctx context.Context, req *connect.Request[v1.ListServedDomainsRequest]) (*connect.Response[v1.ListServedDomainsResponse], error) {
-	return c.listServedDomains.CallUnary(ctx, req)
-}
-
-// GetPolicy calls directoryroster.v1.AccessService.GetPolicy.
-func (c *accessServiceClient) GetPolicy(ctx context.Context, req *connect.Request[v1.GetPolicyRequest]) (*connect.Response[v1.GetPolicyResponse], error) {
-	return c.getPolicy.CallUnary(ctx, req)
-}
-
-// ListDirectoryGroups calls directoryroster.v1.AccessService.ListDirectoryGroups.
-func (c *accessServiceClient) ListDirectoryGroups(ctx context.Context, req *connect.Request[v1.ListDirectoryGroupsRequest]) (*connect.Response[v1.ListDirectoryGroupsResponse], error) {
-	return c.listDirectoryGroups.CallUnary(ctx, req)
-}
-
-// GetDirectoryGroup calls directoryroster.v1.AccessService.GetDirectoryGroup.
-func (c *accessServiceClient) GetDirectoryGroup(ctx context.Context, req *connect.Request[v1.GetDirectoryGroupRequest]) (*connect.Response[v1.GetDirectoryGroupResponse], error) {
-	return c.getDirectoryGroup.CallUnary(ctx, req)
-}
-
-// ResolveDirectoryGroups calls directoryroster.v1.AccessService.ResolveDirectoryGroups.
-func (c *accessServiceClient) ResolveDirectoryGroups(ctx context.Context, req *connect.Request[v1.ResolveDirectoryGroupsRequest]) (*connect.Response[v1.ResolveDirectoryGroupsResponse], error) {
-	return c.resolveDirectoryGroups.CallUnary(ctx, req)
-}
-
-// GetRecovery calls directoryroster.v1.AccessService.GetRecovery.
-func (c *accessServiceClient) GetRecovery(ctx context.Context, req *connect.Request[v1.GetRecoveryRequest]) (*connect.Response[v1.GetRecoveryResponse], error) {
-	return c.getRecovery.CallUnary(ctx, req)
-}
-
-// DisableRecovery calls directoryroster.v1.AccessService.DisableRecovery.
-func (c *accessServiceClient) DisableRecovery(ctx context.Context, req *connect.Request[v1.DisableRecoveryRequest]) (*connect.Response[v1.DisableRecoveryResponse], error) {
-	return c.disableRecovery.CallUnary(ctx, req)
+// NewAccessServiceClient constructs a client for the directoryroster.v1.AccessService service.
+// Multiple service clients may share a single connect.Client.
+func NewAccessServiceClient(client *connect.Client) AccessServiceClient {
+	return &accessServiceClient{client: client}
 }
 
 // AccessServiceHandler is an implementation of the directoryroster.v1.AccessService service.
@@ -299,7 +223,7 @@ type AccessServiceHandler interface {
 	// WhoAmI returns the caller's identity: who they are, how they were
 	// established, the role they hold and the internal groups behind it.
 	// Any signed-in identity.
-	WhoAmI(context.Context, *connect.Request[v1.WhoAmIRequest]) (*connect.Response[v1.WhoAmIResponse], error)
+	WhoAmI(context.Context, *v1.WhoAmIRequest) (*v1.WhoAmIResponse, error)
 	// Explain answers "what does this proof effectively get, and why": the
 	// internal groups it lands in, what put it in each, the merged claims,
 	// the token lifetime, and which clients would admit it.
@@ -309,17 +233,17 @@ type AccessServiceHandler interface {
 	// is. Operator only, and the roster controllers (workloads in
 	// the policy's roster-controller group): anyone else, a person asking about themselves included, is
 	// refused with "not authorised". An operator's look-up is recorded.
-	Explain(context.Context, *connect.Request[v1.ExplainRequest]) (*connect.Response[v1.ExplainResponse], error)
+	Explain(context.Context, *v1.ExplainRequest) (*v1.ExplainResponse, error)
 	// ListHolders resolves an internal group, or a client, to the people who
 	// hold it right now. It is the question an auditor actually asks, and
 	// the one the policy file cannot answer on its own: the file says which
 	// directory groups count, and only the directory knows who is in them.
 	// Viewer.
-	ListHolders(context.Context, *connect.Request[v1.ListHoldersRequest]) (*connect.Response[v1.ListHoldersResponse], error)
+	ListHolders(context.Context, *v1.ListHoldersRequest) (*v1.ListHoldersResponse, error)
 	// SearchPeople finds accounts by address or name across every
 	// snapshotted workspace, so that a console can start from a name rather
 	// than from a navigation tree. Viewer.
-	SearchPeople(context.Context, *connect.Request[v1.SearchPeopleRequest]) (*connect.Response[v1.SearchPeopleResponse], error)
+	SearchPeople(context.Context, *v1.SearchPeopleRequest) (*v1.SearchPeopleResponse, error)
 	// ListServedDomains returns, for every connected directory the caller
 	// may view, the domains the hub serves for it now. It is what a
 	// controller looks a person up by: a Slack workspace names no domains of
@@ -327,7 +251,7 @@ type AccessServiceHandler interface {
 	// and its people are those with an address in that directory's served
 	// domains. Viewer, installation-wide or over the directory: a scoped
 	// viewer is told only of its own directories.
-	ListServedDomains(context.Context, *connect.Request[v1.ListServedDomainsRequest]) (*connect.Response[v1.ListServedDomainsResponse], error)
+	ListServedDomains(context.Context, *v1.ListServedDomainsRequest) (*v1.ListServedDomainsResponse, error)
 	// GetPolicy returns every internal group with its members and what each
 	// adds, the state of the break-glass admin, and the enabled sign-in
 	// sources. Viewer.
@@ -337,18 +261,18 @@ type AccessServiceHandler interface {
 	// from the installation's own access model and reviewed in git; a
 	// console that could disagree with git was a second source of truth
 	// and a merge to reconcile them.
-	GetPolicy(context.Context, *connect.Request[v1.GetPolicyRequest]) (*connect.Response[v1.GetPolicyResponse], error)
+	GetPolicy(context.Context, *v1.GetPolicyRequest) (*v1.GetPolicyResponse, error)
 	// ListDirectoryGroups returns the groups the hub has snapshotted, so
 	// that a membership is a click rather than a typed address that may be
 	// a typo. Viewer.
-	ListDirectoryGroups(context.Context, *connect.Request[v1.ListDirectoryGroupsRequest]) (*connect.Response[v1.ListDirectoryGroupsResponse], error)
+	ListDirectoryGroups(context.Context, *v1.ListDirectoryGroupsRequest) (*v1.ListDirectoryGroupsResponse, error)
 	// GetDirectoryGroup returns one snapshotted directory group as the
 	// console shows it: where it came from and whether that can be vouched
 	// for, its members straight from the directory, and the internal groups
 	// it feeds. It is the reverse of a membership — an admin who just
 	// changed a group in the directory wants to know its blast radius, and
 	// that direction is not derivable from the policy alone. Viewer.
-	GetDirectoryGroup(context.Context, *connect.Request[v1.GetDirectoryGroupRequest]) (*connect.Response[v1.GetDirectoryGroupResponse], error)
+	GetDirectoryGroup(context.Context, *v1.GetDirectoryGroupRequest) (*v1.GetDirectoryGroupResponse, error)
 	// ResolveDirectoryGroups returns, for each directory group asked, who is
 	// in it with nested groups expanded, and which directory it comes from:
 	// the question a controller asks to feed a channel from directory groups
@@ -357,11 +281,11 @@ type AccessServiceHandler interface {
 	// group of a directory it may not view, so the answer never reveals a
 	// directory the caller cannot see. The answer carries the policy digest,
 	// like ListHolders, so a consumer checks it decided under the same policy.
-	ResolveDirectoryGroups(context.Context, *connect.Request[v1.ResolveDirectoryGroupsRequest]) (*connect.Response[v1.ResolveDirectoryGroupsResponse], error)
+	ResolveDirectoryGroups(context.Context, *v1.ResolveDirectoryGroupsRequest) (*v1.ResolveDirectoryGroupsResponse, error)
 	// GetRecovery reports the state of the recovery sign-in: whether it can
 	// be used now, and when and by whom it was turned off if it was, and
 	// whether the caller may turn it off from this sign-in. Operator.
-	GetRecovery(context.Context, *connect.Request[v1.GetRecoveryRequest]) (*connect.Response[v1.GetRecoveryResponse], error)
+	GetRecovery(context.Context, *v1.GetRecoveryRequest) (*v1.GetRecoveryResponse, error)
 	// DisableRecovery turns the recovery sign-in off for the whole
 	// installation, at once, and ends every session recovery opened. It is
 	// the ONLY switch: nothing here turns recovery on, which is a change of
@@ -370,155 +294,297 @@ type AccessServiceHandler interface {
 	// sign-in, a workload and a scoped operator are refused. Idempotent. The
 	// switch takes effect before the audit record is written and does not wait
 	// for it. See docs/decisions/0075.
-	DisableRecovery(context.Context, *connect.Request[v1.DisableRecoveryRequest]) (*connect.Response[v1.DisableRecoveryResponse], error)
+	DisableRecovery(context.Context, *v1.DisableRecoveryRequest) (*v1.DisableRecoveryResponse, error)
 }
 
-// NewAccessServiceHandler builds an HTTP handler from the service implementation. It returns the
-// path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewAccessServiceHandler(svc AccessServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	accessServiceMethods := v1.File_directoryroster_v1_access_proto.Services().ByName("AccessService").Methods()
-	accessServiceWhoAmIHandler := connect.NewUnaryHandler(
-		AccessServiceWhoAmIProcedure,
-		svc.WhoAmI,
-		connect.WithSchema(accessServiceMethods.ByName("WhoAmI")),
-		connect.WithHandlerOptions(opts...),
+// RegisterAccessServiceHandler registers svc as the directoryroster.v1.AccessService implementation
+// on server.
+func RegisterAccessServiceHandler(server *connect.Server, svc AccessServiceHandler) {
+	adapter := accessServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: accessServiceWhoAmISpec(), Handler: adapter.whoAmI},
+		connect.Method{Spec: accessServiceExplainSpec(), Handler: adapter.explain},
+		connect.Method{Spec: accessServiceListHoldersSpec(), Handler: adapter.listHolders},
+		connect.Method{Spec: accessServiceSearchPeopleSpec(), Handler: adapter.searchPeople},
+		connect.Method{Spec: accessServiceListServedDomainsSpec(), Handler: adapter.listServedDomains},
+		connect.Method{Spec: accessServiceGetPolicySpec(), Handler: adapter.getPolicy},
+		connect.Method{Spec: accessServiceListDirectoryGroupsSpec(), Handler: adapter.listDirectoryGroups},
+		connect.Method{Spec: accessServiceGetDirectoryGroupSpec(), Handler: adapter.getDirectoryGroup},
+		connect.Method{Spec: accessServiceResolveDirectoryGroupsSpec(), Handler: adapter.resolveDirectoryGroups},
+		connect.Method{Spec: accessServiceGetRecoverySpec(), Handler: adapter.getRecovery},
+		connect.Method{Spec: accessServiceDisableRecoverySpec(), Handler: adapter.disableRecovery},
 	)
-	accessServiceExplainHandler := connect.NewUnaryHandler(
-		AccessServiceExplainProcedure,
-		svc.Explain,
-		connect.WithSchema(accessServiceMethods.ByName("Explain")),
-		connect.WithHandlerOptions(opts...),
-	)
-	accessServiceListHoldersHandler := connect.NewUnaryHandler(
-		AccessServiceListHoldersProcedure,
-		svc.ListHolders,
-		connect.WithSchema(accessServiceMethods.ByName("ListHolders")),
-		connect.WithHandlerOptions(opts...),
-	)
-	accessServiceSearchPeopleHandler := connect.NewUnaryHandler(
-		AccessServiceSearchPeopleProcedure,
-		svc.SearchPeople,
-		connect.WithSchema(accessServiceMethods.ByName("SearchPeople")),
-		connect.WithHandlerOptions(opts...),
-	)
-	accessServiceListServedDomainsHandler := connect.NewUnaryHandler(
-		AccessServiceListServedDomainsProcedure,
-		svc.ListServedDomains,
-		connect.WithSchema(accessServiceMethods.ByName("ListServedDomains")),
-		connect.WithHandlerOptions(opts...),
-	)
-	accessServiceGetPolicyHandler := connect.NewUnaryHandler(
-		AccessServiceGetPolicyProcedure,
-		svc.GetPolicy,
-		connect.WithSchema(accessServiceMethods.ByName("GetPolicy")),
-		connect.WithHandlerOptions(opts...),
-	)
-	accessServiceListDirectoryGroupsHandler := connect.NewUnaryHandler(
-		AccessServiceListDirectoryGroupsProcedure,
-		svc.ListDirectoryGroups,
-		connect.WithSchema(accessServiceMethods.ByName("ListDirectoryGroups")),
-		connect.WithHandlerOptions(opts...),
-	)
-	accessServiceGetDirectoryGroupHandler := connect.NewUnaryHandler(
-		AccessServiceGetDirectoryGroupProcedure,
-		svc.GetDirectoryGroup,
-		connect.WithSchema(accessServiceMethods.ByName("GetDirectoryGroup")),
-		connect.WithHandlerOptions(opts...),
-	)
-	accessServiceResolveDirectoryGroupsHandler := connect.NewUnaryHandler(
-		AccessServiceResolveDirectoryGroupsProcedure,
-		svc.ResolveDirectoryGroups,
-		connect.WithSchema(accessServiceMethods.ByName("ResolveDirectoryGroups")),
-		connect.WithHandlerOptions(opts...),
-	)
-	accessServiceGetRecoveryHandler := connect.NewUnaryHandler(
-		AccessServiceGetRecoveryProcedure,
-		svc.GetRecovery,
-		connect.WithSchema(accessServiceMethods.ByName("GetRecovery")),
-		connect.WithHandlerOptions(opts...),
-	)
-	accessServiceDisableRecoveryHandler := connect.NewUnaryHandler(
-		AccessServiceDisableRecoveryProcedure,
-		svc.DisableRecovery,
-		connect.WithSchema(accessServiceMethods.ByName("DisableRecovery")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/directoryroster.v1.AccessService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case AccessServiceWhoAmIProcedure:
-			accessServiceWhoAmIHandler.ServeHTTP(w, r)
-		case AccessServiceExplainProcedure:
-			accessServiceExplainHandler.ServeHTTP(w, r)
-		case AccessServiceListHoldersProcedure:
-			accessServiceListHoldersHandler.ServeHTTP(w, r)
-		case AccessServiceSearchPeopleProcedure:
-			accessServiceSearchPeopleHandler.ServeHTTP(w, r)
-		case AccessServiceListServedDomainsProcedure:
-			accessServiceListServedDomainsHandler.ServeHTTP(w, r)
-		case AccessServiceGetPolicyProcedure:
-			accessServiceGetPolicyHandler.ServeHTTP(w, r)
-		case AccessServiceListDirectoryGroupsProcedure:
-			accessServiceListDirectoryGroupsHandler.ServeHTTP(w, r)
-		case AccessServiceGetDirectoryGroupProcedure:
-			accessServiceGetDirectoryGroupHandler.ServeHTTP(w, r)
-		case AccessServiceResolveDirectoryGroupsProcedure:
-			accessServiceResolveDirectoryGroupsHandler.ServeHTTP(w, r)
-		case AccessServiceGetRecoveryProcedure:
-			accessServiceGetRecoveryHandler.ServeHTTP(w, r)
-		case AccessServiceDisableRecoveryProcedure:
-			accessServiceDisableRecoveryHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedAccessServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedAccessServiceHandler struct{}
 
-func (UnimplementedAccessServiceHandler) WhoAmI(context.Context, *connect.Request[v1.WhoAmIRequest]) (*connect.Response[v1.WhoAmIResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("directoryroster.v1.AccessService.WhoAmI is not implemented"))
+func (UnimplementedAccessServiceHandler) WhoAmI(context.Context, *v1.WhoAmIRequest) (*v1.WhoAmIResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "directoryroster.v1.AccessService.WhoAmI is not implemented")
 }
 
-func (UnimplementedAccessServiceHandler) Explain(context.Context, *connect.Request[v1.ExplainRequest]) (*connect.Response[v1.ExplainResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("directoryroster.v1.AccessService.Explain is not implemented"))
+func (UnimplementedAccessServiceHandler) Explain(context.Context, *v1.ExplainRequest) (*v1.ExplainResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "directoryroster.v1.AccessService.Explain is not implemented")
 }
 
-func (UnimplementedAccessServiceHandler) ListHolders(context.Context, *connect.Request[v1.ListHoldersRequest]) (*connect.Response[v1.ListHoldersResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("directoryroster.v1.AccessService.ListHolders is not implemented"))
+func (UnimplementedAccessServiceHandler) ListHolders(context.Context, *v1.ListHoldersRequest) (*v1.ListHoldersResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "directoryroster.v1.AccessService.ListHolders is not implemented")
 }
 
-func (UnimplementedAccessServiceHandler) SearchPeople(context.Context, *connect.Request[v1.SearchPeopleRequest]) (*connect.Response[v1.SearchPeopleResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("directoryroster.v1.AccessService.SearchPeople is not implemented"))
+func (UnimplementedAccessServiceHandler) SearchPeople(context.Context, *v1.SearchPeopleRequest) (*v1.SearchPeopleResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "directoryroster.v1.AccessService.SearchPeople is not implemented")
 }
 
-func (UnimplementedAccessServiceHandler) ListServedDomains(context.Context, *connect.Request[v1.ListServedDomainsRequest]) (*connect.Response[v1.ListServedDomainsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("directoryroster.v1.AccessService.ListServedDomains is not implemented"))
+func (UnimplementedAccessServiceHandler) ListServedDomains(context.Context, *v1.ListServedDomainsRequest) (*v1.ListServedDomainsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "directoryroster.v1.AccessService.ListServedDomains is not implemented")
 }
 
-func (UnimplementedAccessServiceHandler) GetPolicy(context.Context, *connect.Request[v1.GetPolicyRequest]) (*connect.Response[v1.GetPolicyResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("directoryroster.v1.AccessService.GetPolicy is not implemented"))
+func (UnimplementedAccessServiceHandler) GetPolicy(context.Context, *v1.GetPolicyRequest) (*v1.GetPolicyResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "directoryroster.v1.AccessService.GetPolicy is not implemented")
 }
 
-func (UnimplementedAccessServiceHandler) ListDirectoryGroups(context.Context, *connect.Request[v1.ListDirectoryGroupsRequest]) (*connect.Response[v1.ListDirectoryGroupsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("directoryroster.v1.AccessService.ListDirectoryGroups is not implemented"))
+func (UnimplementedAccessServiceHandler) ListDirectoryGroups(context.Context, *v1.ListDirectoryGroupsRequest) (*v1.ListDirectoryGroupsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "directoryroster.v1.AccessService.ListDirectoryGroups is not implemented")
 }
 
-func (UnimplementedAccessServiceHandler) GetDirectoryGroup(context.Context, *connect.Request[v1.GetDirectoryGroupRequest]) (*connect.Response[v1.GetDirectoryGroupResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("directoryroster.v1.AccessService.GetDirectoryGroup is not implemented"))
+func (UnimplementedAccessServiceHandler) GetDirectoryGroup(context.Context, *v1.GetDirectoryGroupRequest) (*v1.GetDirectoryGroupResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "directoryroster.v1.AccessService.GetDirectoryGroup is not implemented")
 }
 
-func (UnimplementedAccessServiceHandler) ResolveDirectoryGroups(context.Context, *connect.Request[v1.ResolveDirectoryGroupsRequest]) (*connect.Response[v1.ResolveDirectoryGroupsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("directoryroster.v1.AccessService.ResolveDirectoryGroups is not implemented"))
+func (UnimplementedAccessServiceHandler) ResolveDirectoryGroups(context.Context, *v1.ResolveDirectoryGroupsRequest) (*v1.ResolveDirectoryGroupsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "directoryroster.v1.AccessService.ResolveDirectoryGroups is not implemented")
 }
 
-func (UnimplementedAccessServiceHandler) GetRecovery(context.Context, *connect.Request[v1.GetRecoveryRequest]) (*connect.Response[v1.GetRecoveryResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("directoryroster.v1.AccessService.GetRecovery is not implemented"))
+func (UnimplementedAccessServiceHandler) GetRecovery(context.Context, *v1.GetRecoveryRequest) (*v1.GetRecoveryResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "directoryroster.v1.AccessService.GetRecovery is not implemented")
 }
 
-func (UnimplementedAccessServiceHandler) DisableRecovery(context.Context, *connect.Request[v1.DisableRecoveryRequest]) (*connect.Response[v1.DisableRecoveryResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("directoryroster.v1.AccessService.DisableRecovery is not implemented"))
+func (UnimplementedAccessServiceHandler) DisableRecovery(context.Context, *v1.DisableRecoveryRequest) (*v1.DisableRecoveryResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "directoryroster.v1.AccessService.DisableRecovery is not implemented")
+}
+
+type accessServiceClient struct {
+	client *connect.Client
+}
+
+func (c *accessServiceClient) WhoAmI(ctx context.Context, req *v1.WhoAmIRequest) (*v1.WhoAmIResponse, error) {
+	var res v1.WhoAmIResponse
+	if err := c.client.CallUnary(ctx, accessServiceWhoAmISpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *accessServiceClient) Explain(ctx context.Context, req *v1.ExplainRequest) (*v1.ExplainResponse, error) {
+	var res v1.ExplainResponse
+	if err := c.client.CallUnary(ctx, accessServiceExplainSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *accessServiceClient) ListHolders(ctx context.Context, req *v1.ListHoldersRequest) (*v1.ListHoldersResponse, error) {
+	var res v1.ListHoldersResponse
+	if err := c.client.CallUnary(ctx, accessServiceListHoldersSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *accessServiceClient) SearchPeople(ctx context.Context, req *v1.SearchPeopleRequest) (*v1.SearchPeopleResponse, error) {
+	var res v1.SearchPeopleResponse
+	if err := c.client.CallUnary(ctx, accessServiceSearchPeopleSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *accessServiceClient) ListServedDomains(ctx context.Context, req *v1.ListServedDomainsRequest) (*v1.ListServedDomainsResponse, error) {
+	var res v1.ListServedDomainsResponse
+	if err := c.client.CallUnary(ctx, accessServiceListServedDomainsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *accessServiceClient) GetPolicy(ctx context.Context, req *v1.GetPolicyRequest) (*v1.GetPolicyResponse, error) {
+	var res v1.GetPolicyResponse
+	if err := c.client.CallUnary(ctx, accessServiceGetPolicySpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *accessServiceClient) ListDirectoryGroups(ctx context.Context, req *v1.ListDirectoryGroupsRequest) (*v1.ListDirectoryGroupsResponse, error) {
+	var res v1.ListDirectoryGroupsResponse
+	if err := c.client.CallUnary(ctx, accessServiceListDirectoryGroupsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *accessServiceClient) GetDirectoryGroup(ctx context.Context, req *v1.GetDirectoryGroupRequest) (*v1.GetDirectoryGroupResponse, error) {
+	var res v1.GetDirectoryGroupResponse
+	if err := c.client.CallUnary(ctx, accessServiceGetDirectoryGroupSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *accessServiceClient) ResolveDirectoryGroups(ctx context.Context, req *v1.ResolveDirectoryGroupsRequest) (*v1.ResolveDirectoryGroupsResponse, error) {
+	var res v1.ResolveDirectoryGroupsResponse
+	if err := c.client.CallUnary(ctx, accessServiceResolveDirectoryGroupsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *accessServiceClient) GetRecovery(ctx context.Context, req *v1.GetRecoveryRequest) (*v1.GetRecoveryResponse, error) {
+	var res v1.GetRecoveryResponse
+	if err := c.client.CallUnary(ctx, accessServiceGetRecoverySpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *accessServiceClient) DisableRecovery(ctx context.Context, req *v1.DisableRecoveryRequest) (*v1.DisableRecoveryResponse, error) {
+	var res v1.DisableRecoveryResponse
+	if err := c.client.CallUnary(ctx, accessServiceDisableRecoverySpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type accessServiceHandler struct{ svc AccessServiceHandler }
+
+func (h accessServiceHandler) whoAmI(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.WhoAmIRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.WhoAmI(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h accessServiceHandler) explain(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ExplainRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Explain(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h accessServiceHandler) listHolders(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListHoldersRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListHolders(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h accessServiceHandler) searchPeople(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SearchPeopleRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SearchPeople(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h accessServiceHandler) listServedDomains(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListServedDomainsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListServedDomains(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h accessServiceHandler) getPolicy(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetPolicyRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetPolicy(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h accessServiceHandler) listDirectoryGroups(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListDirectoryGroupsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListDirectoryGroups(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h accessServiceHandler) getDirectoryGroup(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetDirectoryGroupRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetDirectoryGroup(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h accessServiceHandler) resolveDirectoryGroups(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ResolveDirectoryGroupsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ResolveDirectoryGroups(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h accessServiceHandler) getRecovery(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetRecoveryRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetRecovery(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h accessServiceHandler) disableRecovery(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DisableRecoveryRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DisableRecovery(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

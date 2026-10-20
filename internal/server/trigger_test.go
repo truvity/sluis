@@ -7,8 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
-
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
 	"github.com/truvity/sluis/internal/port/memory"
 )
@@ -64,7 +62,7 @@ func TestAGitHubPassRequestNotifiesItsOrganisationOnly(t *testing.T) {
 	trigger, n := spyOn(t)
 	console.deps.Trigger = trigger
 	ask := func(ctx context.Context, org string) error {
-		_, err := console.RequestGitHubPass(ctx, connect.NewRequest(&directoryrosterv1.RequestGitHubPassRequest{Org: org}))
+		_, err := console.RequestGitHubPass(ctx, &directoryrosterv1.RequestGitHubPassRequest{Org: org})
 		return err
 	}
 
@@ -90,7 +88,7 @@ func TestSlackWritesNotifyTheWorkspacesTheyConcern(t *testing.T) {
 	h.console.deps.Trigger = trigger
 
 	ask := func(ctx context.Context) error {
-		_, err := h.console.RequestSlackPass(ctx, connect.NewRequest(&directoryrosterv1.RequestSlackPassRequest{Workspace: "acme"}))
+		_, err := h.console.RequestSlackPass(ctx, &directoryrosterv1.RequestSlackPassRequest{Workspace: "acme"})
 		return err
 	}
 	if err := ask(asSlackIdentity(southOp)); err == nil {

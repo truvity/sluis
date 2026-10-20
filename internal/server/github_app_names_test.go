@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"testing"
 
-	"connectrpc.com/connect"
-
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
 	"github.com/truvity/sluis/internal/githubapp"
 	"github.com/truvity/sluis/internal/githubroster/connection"
@@ -25,12 +23,12 @@ func TestTheConnectManifestCarriesTheConfiguredOrganisationAppName(t *testing.T)
 	}
 	name := func(org string) string {
 		t.Helper()
-		begun, err := rig.console.BeginGitHubConnect(operator(), connect.NewRequest(&directoryrosterv1.BeginGitHubConnectRequest{Org: org}))
+		begun, err := rig.console.BeginGitHubConnect(operator(), &directoryrosterv1.BeginGitHubConnectRequest{Org: org})
 		if err != nil {
 			t.Fatalf("BeginGitHubConnect(%s): %v", org, err)
 		}
 		var manifest githubapp.Manifest
-		if err = json.Unmarshal([]byte(begun.Msg.GetManifest()), &manifest); err != nil {
+		if err = json.Unmarshal([]byte(begun.GetManifest()), &manifest); err != nil {
 			t.Fatalf("manifest: %v", err)
 		}
 		return manifest.Name
@@ -49,12 +47,12 @@ func TestTheLinkAppTakesItsConfiguredNameUntilItExists(t *testing.T) {
 	rig := newAppsRig(t)
 	rig.console.deps.GitHubLinkAppName = "globex-sign-in-link"
 
-	begun, err := rig.console.BeginGitHubLinkAppConnect(operator(), connect.NewRequest(&directoryrosterv1.BeginGitHubLinkAppConnectRequest{Owner: "globex"}))
+	begun, err := rig.console.BeginGitHubLinkAppConnect(operator(), &directoryrosterv1.BeginGitHubLinkAppConnectRequest{Owner: "globex"})
 	if err != nil {
 		t.Fatalf("BeginGitHubLinkAppConnect: %v", err)
 	}
 	var manifest githubapp.Manifest
-	if err = json.Unmarshal([]byte(begun.Msg.GetManifest()), &manifest); err != nil {
+	if err = json.Unmarshal([]byte(begun.GetManifest()), &manifest); err != nil {
 		t.Fatalf("manifest: %v", err)
 	}
 	if manifest.Name != "globex-sign-in-link" || !manifest.Public || len(manifest.CallbackURLs) != 1 {

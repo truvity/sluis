@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/truvity/sluis/audit/sdk/record"
 	"github.com/zitadel/oidc/v3/pkg/oidc"
 	"github.com/zitadel/oidc/v3/pkg/op"
@@ -19,6 +19,7 @@ import (
 	"github.com/truvity/sluis/gen/accessissuer/v1/accessissuerv1connect"
 	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/audit"
+	"github.com/truvity/sluis/internal/rpcmount"
 	"github.com/truvity/sluis/policy"
 )
 
@@ -196,7 +197,7 @@ func (s *SessionsService) who(ctx context.Context, header http.Header) (caller, 
 	bearer := strings.TrimSpace(header.Get("Authorization"))
 	if len(bearer) < 7 || !strings.EqualFold(bearer[:7], "bearer ") {
 		return caller{}, connect.NewError(connect.CodeUnauthenticated,
-			errors.New("this service needs a token from this issuer, or its session"))
+			"this service needs a token from this issuer, or its session")
 	}
 
 	identity, groups, err := s.verify(ctx, strings.TrimSpace(bearer[7:]))
@@ -205,7 +206,7 @@ func (s *SessionsService) who(ctx context.Context, header http.Header) (caller, 
 		// unauthenticated client what was wrong with its token helps it
 		// produce a better one.
 		return caller{}, connect.NewError(connect.CodeUnauthenticated,
-			errors.New("that token was not accepted"))
+			"that token was not accepted")
 	}
 
 	return withGroups(identity, groups), nil
@@ -275,16 +276,17 @@ const (
 
 // ListSessions implements the contract.
 func (s *SessionsService) ListSessions(
-	ctx context.Context, req *connect.Request[accessissuerv1.ListSessionsRequest],
-) (*connect.Response[accessissuerv1.ListSessionsResponse], error) {
-	who, err := s.who(ctx, req.Header())
+	ctx context.Context, req *accessissuerv1.ListSessionsRequest,
+) (*accessissuerv1.ListSessionsResponse, error) {
+	info := rpcmount.CallInfo(ctx)
+	who, err := s.who(ctx, rpcmount.HTTPHeader(info.RequestHeader()))
 	if err != nil {
 		return nil, err
 	}
 
-	identity := strings.TrimSpace(req.Msg.GetIdentity())
-	clientID := strings.TrimSpace(req.Msg.GetClientId())
-	contains := req.Msg.GetContains()
+	identity := strings.TrimSpace(req.GetIdentity())
+	clientID := strings.TrimSpace(req.GetClientId())
+	contains := req.GetContains()
 
 	// A substring is operator-only, and this refusal is the whole of why.
 	// Every rule below decides what a caller may see from the identity
@@ -298,7 +300,7 @@ func (s *SessionsService) ListSessions(
 	// worse than one that says no.
 	if contains && !who.operator {
 		return nil, connect.NewError(connect.CodePermissionDenied,
-			errors.New("matching sessions by substring is an operator's"))
+			"matching sessions by substring is an operator's")
 	}
 
 	// Naming neither is the global listing: every session in the
@@ -309,19 +311,19 @@ func (s *SessionsService) ListSessions(
 	// already piece together, one identity at a time.
 	if identity == "" && clientID == "" && !who.operator {
 		return nil, connect.NewError(connect.CodePermissionDenied,
-			errors.New("listing every session is an operator's"))
+			"listing every session is an operator's")
 	}
 
 	// Listing by client alone would name everybody on it, so it is an
 	// operator's question. Listing your own is anyone's.
 	if identity == "" && clientID != "" && !who.operator {
 		return nil, connect.NewError(connect.CodePermissionDenied,
-			errors.New("listing a client's sessions is an operator's"))
+			"listing a client's sessions is an operator's")
 	}
 
 	if identity != "" && !who.may(identity) {
 		return nil, connect.NewError(connect.CodePermissionDenied,
-			errors.New("that is somebody else's session"))
+			"that is somebody else's session")
 	}
 
 	names := s.namer(ctx)
@@ -337,14 +339,14 @@ func (s *SessionsService) ListSessions(
 
 	found, err := s.sessions.List(ctx, query)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 
 	if byName {
 		found = slices.DeleteFunc(found, func(held Session) bool { return !names.matches(held, clientID) })
 	}
 
-	page, nextToken := paginate(found, int(req.Msg.GetPageSize()), strings.TrimSpace(req.Msg.GetPageToken()))
+	page, nextToken := paginate(found, int(req.GetPageSize()), strings.TrimSpace(req.GetPageToken()))
 
 	out := &accessissuerv1.ListSessionsResponse{
 		Sessions:      make([]*accessissuerv1.Session, 0, len(page)),
@@ -367,7 +369,7 @@ func (s *SessionsService) ListSessions(
 	// page and left the thing that admits a browser untouched — and the
 	// console's own sign-in appears as no session at all, because it
 	// never redeems the code it gets back.
-	if s.sso != nil && strings.TrimSpace(req.Msg.GetPageToken()) == "" {
+	if s.sso != nil && strings.TrimSpace(req.GetPageToken()) == "" {
 		// The sign-ins are filtered the same way the sessions were, or
 		// the page contradicts itself: four rows for one person and a
 		// browser summary listing everybody who is signed in.
@@ -378,7 +380,7 @@ func (s *SessionsService) ListSessions(
 
 		signIns, err := list(ctx, identity)
 		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, err)
+			return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 		}
 
 		for i := range signIns {
@@ -392,7 +394,7 @@ func (s *SessionsService) ListSessions(
 		}
 	}
 
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
 // paginate slices an already-sorted (newest first) list into one page.
@@ -436,55 +438,56 @@ func paginate(sessions []Session, size int, token string) ([]Session, string) {
 
 // RevokeSessions implements the contract.
 func (s *SessionsService) RevokeSessions(
-	ctx context.Context, req *connect.Request[accessissuerv1.RevokeSessionsRequest],
-) (*connect.Response[accessissuerv1.RevokeSessionsResponse], error) {
-	who, err := s.who(ctx, req.Header())
+	ctx context.Context, req *accessissuerv1.RevokeSessionsRequest,
+) (*accessissuerv1.RevokeSessionsResponse, error) {
+	info := rpcmount.CallInfo(ctx)
+	who, err := s.who(ctx, rpcmount.HTTPHeader(info.RequestHeader()))
 	if err != nil {
 		return nil, err
 	}
 
-	identity := strings.TrimSpace(req.Msg.GetIdentity())
+	identity := strings.TrimSpace(req.GetIdentity())
 
 	// One client for everybody: the incident lever for a client whose
 	// tokens are in doubt (docs/decisions/0040-agent-class-sessions.md,
 	// decision 7). Asked for by name, never inferred from a missing
 	// identity, and an operator's.
-	if req.Msg.GetEveryIdentity() {
-		return s.revokeClientEverywhere(ctx, who, req.Msg)
+	if req.GetEveryIdentity() {
+		return s.revokeClientEverywhere(ctx, who, req)
 	}
 
 	if identity == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
-			errors.New("name the identity whose sessions to end"))
+			"name the identity whose sessions to end")
 	}
 
 	if !who.may(identity) {
 		return nil, connect.NewError(connect.CodePermissionDenied,
-			errors.New("that is somebody else's session"))
+			"that is somebody else's session")
 	}
 
 	// One session by id, when the console offers a row its own button.
 	// Still checked against the identity above, so an id alone is never
 	// enough to end a session belonging to somebody else.
-	if id := strings.TrimSpace(req.Msg.GetSessionId()); id != "" {
+	if id := strings.TrimSpace(req.GetSessionId()); id != "" {
 		one, found, err := s.sessions.ByID(ctx, id)
 		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, err)
+			return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 		}
 
 		if !found || !sameIdentity(one.Identity, identity) {
 			// A session that is not there and one that is somebody
 			// else's are the same answer, so that an id cannot be probed.
-			return connect.NewResponse(&accessissuerv1.RevokeSessionsResponse{}), nil
+			return &accessissuerv1.RevokeSessionsResponse{}, nil
 		}
 
 		gone, err := s.sessions.RevokeID(ctx, id)
 		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, err)
+			return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 		}
 
 		s.revoked(ctx, who.identity, identity, "", "one session", int(boolToCount(gone)))
-		return connect.NewResponse(&accessissuerv1.RevokeSessionsResponse{Ended: boolToCount(gone)}), nil
+		return &accessissuerv1.RevokeSessionsResponse{Ended: boolToCount(gone)}, nil
 	}
 
 	// One BROWSER: everything it opened, and the sign-in that let it.
@@ -495,7 +498,7 @@ func (s *SessionsService) RevokeSessions(
 	// /authorize completed silently with no password. Reported from the
 	// console — "I revoked all sessions, but still has access
 	// everywhere" — and it was right.
-	if sso := strings.TrimSpace(req.Msg.GetSso()); sso != "" {
+	if sso := strings.TrimSpace(req.GetSso()); sso != "" {
 		// Whose browser it is, checked before anything is ended. The
 		// permission check above is against the IDENTITY the caller
 		// named, so without this an id alone would end somebody else's
@@ -512,17 +515,17 @@ func (s *SessionsService) RevokeSessions(
 		if s.sso != nil {
 			record, found, err := s.sso.Get(ctx, sso)
 			if err != nil {
-				return nil, connect.NewError(connect.CodeInternal, err)
+				return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 			}
 
 			if found && !sameIdentity(record.Identity, identity) {
-				return connect.NewResponse(&accessissuerv1.RevokeSessionsResponse{}), nil
+				return &accessissuerv1.RevokeSessionsResponse{}, nil
 			}
 		}
 
 		ended, err := s.sessions.Revoke(ctx, Query{Identity: identity, SSO: sso})
 		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, err)
+			return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 		}
 
 		// The sign-in goes last: if ending the sessions fails halfway,
@@ -531,21 +534,21 @@ func (s *SessionsService) RevokeSessions(
 		// the browser they belong to.
 		if s.sso != nil {
 			if err = s.sso.End(ctx, sso); err != nil {
-				return nil, connect.NewError(connect.CodeInternal, err)
+				return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 			}
 		}
 
 		s.revoked(ctx, who.identity, identity, "", "one browser", ended)
-		return connect.NewResponse(&accessissuerv1.RevokeSessionsResponse{Ended: int32(ended)}), nil
+		return &accessissuerv1.RevokeSessionsResponse{Ended: int32(ended)}, nil
 	}
 
-	clientID := strings.TrimSpace(req.Msg.GetClientId())
+	clientID := strings.TrimSpace(req.GetClientId())
 
 	// A person's own sign-out everywhere, narrowed to one class: "Sign out
 	// all browsers and apps" or "Disconnect all agents". Everything else --
 	// "Sign out everything", an operator's revoke of somebody else, any
 	// narrower revoke -- falls through and ends every class.
-	if class, scoped := ownScope(who, identity, clientID, req.Msg.GetScope()); scoped {
+	if class, scoped := ownScope(who, identity, clientID, req.GetScope()); scoped {
 		return s.revokeClass(ctx, who, identity, class)
 	}
 
@@ -601,12 +604,12 @@ func (s *SessionsService) RevokeSessions(
 
 	switch {
 	case err != nil:
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	case endErr != nil:
-		return nil, connect.NewError(connect.CodeInternal, endErr)
+		return nil, connect.NewError(connect.CodeInternal, endErr.Error()).WithCause(endErr)
 	}
 
-	return connect.NewResponse(&accessissuerv1.RevokeSessionsResponse{Ended: int32(ended)}), nil
+	return &accessissuerv1.RevokeSessionsResponse{Ended: int32(ended)}, nil
 }
 
 // ownScope reports which class a revoke ends when it is a person's own
@@ -645,7 +648,7 @@ func ownScope(who caller, identity, clientID string, scope accessissuerv1.Revoke
 // scope, the class ended and the class kept.
 func (s *SessionsService) revokeClass(
 	ctx context.Context, who caller, identity string, class SessionClass,
-) (*connect.Response[accessissuerv1.RevokeSessionsResponse], error) {
+) (*accessissuerv1.RevokeSessionsResponse, error) {
 	scope, kept := audit.ScopeEveryBrowserAndApp, ClassAgent
 	if class == ClassAgent {
 		scope, kept = audit.ScopeEveryAgent, ClassInteractive
@@ -665,7 +668,7 @@ func (s *SessionsService) revokeClass(
 
 	held, err := s.sessions.List(ctx, Query{Identity: identity})
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 
 	var ending, running []Session
@@ -700,12 +703,12 @@ func (s *SessionsService) revokeClass(
 
 	switch {
 	case err != nil:
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	case endErr != nil:
-		return nil, connect.NewError(connect.CodeInternal, endErr)
+		return nil, connect.NewError(connect.CodeInternal, endErr.Error()).WithCause(endErr)
 	}
 
-	return connect.NewResponse(&accessissuerv1.RevokeSessionsResponse{Ended: int32(ended)}), nil
+	return &accessissuerv1.RevokeSessionsResponse{Ended: int32(ended)}, nil
 }
 
 // notRunning drops from the `openid`-only clients of the ended sign-ins
@@ -740,17 +743,17 @@ const ScopeClientEverywhere = audit.ScopeClientEveryIdentity
 // told by Back-Channel Logout, as for the per-client revoke of one person.
 func (s *SessionsService) revokeClientEverywhere(
 	ctx context.Context, who caller, msg *accessissuerv1.RevokeSessionsRequest,
-) (*connect.Response[accessissuerv1.RevokeSessionsResponse], error) {
+) (*accessissuerv1.RevokeSessionsResponse, error) {
 	if !who.operator {
 		return nil, connect.NewError(connect.CodePermissionDenied,
-			errors.New("ending a client for everybody is an operator's"))
+			"ending a client for everybody is an operator's")
 	}
 
 	clientID := strings.TrimSpace(msg.GetClientId())
 	if clientID == "" || strings.TrimSpace(msg.GetIdentity()) != "" ||
 		strings.TrimSpace(msg.GetSso()) != "" || strings.TrimSpace(msg.GetSessionId()) != "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
-			errors.New("every_identity takes a client_id and nothing else"))
+			"every_identity takes a client_id and nothing else")
 	}
 
 	ended, err := s.sessions.Revoke(ctx, Query{ClientID: clientID})
@@ -759,12 +762,12 @@ func (s *SessionsService) revokeClientEverywhere(
 		// has still ended those.
 		s.revoked(ctx, who.identity, "", clientID, ScopeClientEverywhere, ended)
 
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 
 	s.revoked(ctx, who.identity, "", clientID, ScopeClientEverywhere, ended)
 
-	return connect.NewResponse(&accessissuerv1.RevokeSessionsResponse{Ended: int32(ended)}), nil
+	return &accessissuerv1.RevokeSessionsResponse{Ended: int32(ended)}, nil
 }
 
 // withInvolved adds to the sessions held those involved clients that held

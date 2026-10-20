@@ -18,12 +18,13 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
 	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/githubapp"
 	"github.com/truvity/sluis/internal/githubroster/connection"
+	"github.com/truvity/sluis/internal/rpcmount"
 )
 
 // memoryConnections is the store, in memory.
@@ -278,22 +279,23 @@ func TestConnectingAnOrganisationIsCreateThenInstall(t *testing.T) {
 	store := newMemoryConnections()
 	server, console := connectServer(t, store)
 
-	begun, err := console.BeginGitHubConnect(operator(), connect.NewRequest(&directoryrosterv1.BeginGitHubConnectRequest{Org: "globex"}))
+	callCtx, call := rpcmount.ServerContext(operator())
+	begun, err := console.BeginGitHubConnect(callCtx, &directoryrosterv1.BeginGitHubConnectRequest{Org: "globex"})
 	if err != nil {
 		t.Fatalf("BeginGitHubConnect: %v", err)
 	}
-	if !strings.HasPrefix(begun.Msg.GetUrl(), "https://github.example/organizations/globex/settings/apps/new?state=") {
-		t.Errorf("url = %s, want globex's create page", begun.Msg.GetUrl())
+	if !strings.HasPrefix(begun.GetUrl(), "https://github.example/organizations/globex/settings/apps/new?state=") {
+		t.Errorf("url = %s, want globex's create page", begun.GetUrl())
 	}
 	var manifest githubapp.Manifest
-	if err = json.Unmarshal([]byte(begun.Msg.GetManifest()), &manifest); err != nil {
+	if err = json.Unmarshal([]byte(begun.GetManifest()), &manifest); err != nil {
 		t.Fatalf("manifest: %v", err)
 	}
 	if manifest.RedirectURL != "https://access.example/connect/github/callback" || manifest.SetupURL != "https://access.example/connect/github/setup" {
 		t.Errorf("callbacks = %s, %s; want both at the origin root", manifest.RedirectURL, manifest.SetupURL)
 	}
-	cookie := cookieFrom(t, begun.Header())
-	state := mustQuery(t, begun.Msg.GetUrl(), "state")
+	cookie := cookieFrom(t, rpcmount.HTTPHeader(call.ResponseHeader()))
+	state := mustQuery(t, begun.GetUrl(), "state")
 
 	// After Create.
 	created := redirect(server.githubCallback, githubCallbackPath, url.Values{"code": {"created"}, "state": {state}}, cookie)
@@ -333,7 +335,7 @@ func TestConnectingAnOrganisationIsCreateThenInstall(t *testing.T) {
 
 	// Connected and installed: connecting again would put a second App
 	// beside the first.
-	_, err = console.BeginGitHubConnect(operator(), connect.NewRequest(&directoryrosterv1.BeginGitHubConnectRequest{Org: "globex"}))
+	_, err = console.BeginGitHubConnect(operator(), &directoryrosterv1.BeginGitHubConnectRequest{Org: "globex"})
 	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
 		t.Errorf("connecting an installed organisation again = %v, want failed precondition", err)
 	}
@@ -346,11 +348,12 @@ func TestAGitHubRedirectThisBrowserDidNotStartIsRefused(t *testing.T) {
 	store := newMemoryConnections()
 	server, console := connectServer(t, store)
 
-	begun, err := console.BeginGitHubConnect(operator(), connect.NewRequest(&directoryrosterv1.BeginGitHubConnectRequest{Org: "globex"}))
+	callCtx, call := rpcmount.ServerContext(operator())
+	begun, err := console.BeginGitHubConnect(callCtx, &directoryrosterv1.BeginGitHubConnectRequest{Org: "globex"})
 	if err != nil {
 		t.Fatalf("BeginGitHubConnect: %v", err)
 	}
-	cookie, state := cookieFrom(t, begun.Header()), mustQuery(t, begun.Msg.GetUrl(), "state")
+	cookie, state := cookieFrom(t, rpcmount.HTTPHeader(call.ResponseHeader())), mustQuery(t, begun.GetUrl(), "state")
 
 	created := url.Values{"code": {"created"}, "state": {state}}
 	if got := redirect(server.githubCallback, githubCallbackPath, created, ""); got.Code != http.StatusBadRequest {
@@ -393,7 +396,7 @@ func TestOnlyAnOperatorConnectsOnlyABoundOrganisation(t *testing.T) {
 	startFakeGitHub(t)
 	_, console := connectServer(t, newMemoryConnections())
 	begin := func(ctx context.Context, org string) error {
-		_, err := console.BeginGitHubConnect(ctx, connect.NewRequest(&directoryrosterv1.BeginGitHubConnectRequest{Org: org}))
+		_, err := console.BeginGitHubConnect(ctx, &directoryrosterv1.BeginGitHubConnectRequest{Org: org})
 		return err
 	}
 	viewer := WithIdentity(context.Background(), access.Identity{Email: "viewer@example.test", Role: access.RoleViewer})
@@ -410,7 +413,7 @@ func TestOnlyAnOperatorConnectsOnlyABoundOrganisation(t *testing.T) {
 	_, noStore := connectServer(t, nil)
 	noStore.deps.GitHubOrgs = nil
 	if _, err := noStore.BeginGitHubConnect(operator(),
-		connect.NewRequest(&directoryrosterv1.BeginGitHubConnectRequest{Org: "globex"})); connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		&directoryrosterv1.BeginGitHubConnectRequest{Org: "globex"}); connect.CodeOf(err) != connect.CodeFailedPrecondition {
 		t.Errorf("no store = %v, want failed precondition", err)
 	}
 }
@@ -425,12 +428,12 @@ func TestAnUninstalledAppIsFinishedRatherThanCreatedAgain(t *testing.T) {
 		connection.Credential{Org: "globex", AppID: 42, PrivateKey: "k"})
 	_, console := connectServer(t, store)
 
-	begun, err := console.BeginGitHubConnect(operator(), connect.NewRequest(&directoryrosterv1.BeginGitHubConnectRequest{Org: "globex"}))
+	begun, err := console.BeginGitHubConnect(operator(), &directoryrosterv1.BeginGitHubConnectRequest{Org: "globex"})
 	if err != nil {
 		t.Fatalf("BeginGitHubConnect: %v", err)
 	}
-	if begun.Msg.GetManifest() != "" || !strings.Contains(begun.Msg.GetUrl(), "/apps/globex-access-roster/installations/new") {
-		t.Errorf("response = %+v, want the install page and no manifest", begun.Msg)
+	if begun.GetManifest() != "" || !strings.Contains(begun.GetUrl(), "/apps/globex-access-roster/installations/new") {
+		t.Errorf("response = %+v, want the install page and no manifest", begun)
 	}
 }
 
@@ -445,15 +448,15 @@ func TestDisconnectingUninstallsThenForgets(t *testing.T) {
 	_, console := connectServer(t, store)
 
 	gone, err := console.DisconnectGitHubOrganisation(operator(),
-		connect.NewRequest(&directoryrosterv1.DisconnectGitHubOrganisationRequest{Org: "globex"}))
+		&directoryrosterv1.DisconnectGitHubOrganisationRequest{Org: "globex"})
 	if err != nil {
 		t.Fatalf("Disconnect: %v", err)
 	}
-	if !gone.Msg.GetUninstalled() || !slices.Equal(github.uninstalled, []string{"7"}) {
-		t.Errorf("uninstalled = %v, calls = %v", gone.Msg.GetUninstalled(), github.uninstalled)
+	if !gone.GetUninstalled() || !slices.Equal(github.uninstalled, []string{"7"}) {
+		t.Errorf("uninstalled = %v, calls = %v", gone.GetUninstalled(), github.uninstalled)
 	}
-	if gone.Msg.GetAppSettingsUrl() != "https://github.example/organizations/globex/settings/apps/globex-access-roster" {
-		t.Errorf("settings url = %s", gone.Msg.GetAppSettingsUrl())
+	if gone.GetAppSettingsUrl() != "https://github.example/organizations/globex/settings/apps/globex-access-roster" {
+		t.Errorf("settings url = %s", gone.GetAppSettingsUrl())
 	}
 	if records := mustList(t, store); len(records) != 0 {
 		t.Errorf("after Disconnect = %+v", records)
@@ -465,16 +468,16 @@ func TestDisconnectingUninstallsThenForgets(t *testing.T) {
 		connection.Record{Org: "globex", AppID: 42, AppSlug: "globex-access-roster", InstallationID: 7},
 		connection.Credential{Org: "globex", AppID: 42, InstallationID: 7, PrivateKey: "not a key"})
 	gone, err = console.DisconnectGitHubOrganisation(operator(),
-		connect.NewRequest(&directoryrosterv1.DisconnectGitHubOrganisationRequest{Org: "globex"}))
-	if err != nil || gone.Msg.GetUninstalled() || gone.Msg.GetDetail() == "" {
-		t.Errorf("a failed uninstall = %+v, %v; want forgotten with a detail", gone.Msg, err)
+		&directoryrosterv1.DisconnectGitHubOrganisationRequest{Org: "globex"})
+	if err != nil || gone.GetUninstalled() || gone.GetDetail() == "" {
+		t.Errorf("a failed uninstall = %+v, %v; want forgotten with a detail", gone, err)
 	}
 	if records := mustList(t, store); len(records) != 0 {
 		t.Error("a failed uninstall kept the organisation")
 	}
 
 	if _, err = console.DisconnectGitHubOrganisation(operator(),
-		connect.NewRequest(&directoryrosterv1.DisconnectGitHubOrganisationRequest{Org: "globex"})); connect.CodeOf(err) != connect.CodeNotFound {
+		&directoryrosterv1.DisconnectGitHubOrganisationRequest{Org: "globex"}); connect.CodeOf(err) != connect.CodeNotFound {
 		t.Errorf("disconnecting what is not connected = %v, want not found", err)
 	}
 }

@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
 	"github.com/truvity/sluis/internal/access"
@@ -22,6 +22,7 @@ import (
 	"github.com/truvity/sluis/internal/githubapp/githubfake"
 	"github.com/truvity/sluis/internal/githubroster/link"
 	"github.com/truvity/sluis/internal/hub"
+	"github.com/truvity/sluis/internal/rpcmount"
 )
 
 // memoryLinkApp keeps the link App in memory.
@@ -293,13 +294,14 @@ func TestCreatingTheLinkAppKeepsItsClientCredentials(t *testing.T) {
 	app, links := &memoryLinkApp{}, &memoryLinks{byID: map[int64]link.Link{}}
 	console.deps.GitHubLinkApp, console.deps.GitHubLinks = app, links
 
-	begun, err := console.BeginGitHubLinkAppConnect(operator(),
-		connect.NewRequest(&directoryrosterv1.BeginGitHubLinkAppConnectRequest{Owner: "globex"}))
+	callCtx, call := rpcmount.ServerContext(operator())
+	begun, err := console.BeginGitHubLinkAppConnect(callCtx,
+		&directoryrosterv1.BeginGitHubLinkAppConnectRequest{Owner: "globex"})
 	if err != nil {
 		t.Fatalf("BeginGitHubLinkAppConnect: %v", err)
 	}
 	var manifest githubapp.Manifest
-	if err = json.Unmarshal([]byte(begun.Msg.GetManifest()), &manifest); err != nil {
+	if err = json.Unmarshal([]byte(begun.GetManifest()), &manifest); err != nil {
 		t.Fatal(err)
 	}
 	if !manifest.Public || !maps.Equal(manifest.DefaultPermissions, map[string]string{"emails": "read"}) ||
@@ -308,7 +310,7 @@ func TestCreatingTheLinkAppKeepsItsClientCredentials(t *testing.T) {
 	}
 
 	created := redirect(server.githubLinkAppCallback, githubLinkAppCallbackPath,
-		url.Values{"code": {"created"}, "state": {mustQuery(t, begun.Msg.GetUrl(), "state")}}, cookieFrom(t, begun.Header()))
+		url.Values{"code": {"created"}, "state": {mustQuery(t, begun.GetUrl(), "state")}}, cookieFrom(t, rpcmount.HTTPHeader(call.ResponseHeader())))
 	if created.Code != http.StatusFound || created.Header().Get("Location") != "/console/#/github" {
 		t.Fatalf("after Create = %d:\n%s", created.Code, created.Body)
 	}
@@ -324,12 +326,12 @@ func TestCreatingTheLinkAppKeepsItsClientCredentials(t *testing.T) {
 	}
 
 	if _, err = console.BeginGitHubLinkAppConnect(operator(),
-		connect.NewRequest(&directoryrosterv1.BeginGitHubLinkAppConnectRequest{Owner: "globex"})); connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		&directoryrosterv1.BeginGitHubLinkAppConnectRequest{Owner: "globex"}); connect.CodeOf(err) != connect.CodeFailedPrecondition {
 		t.Errorf("creating a second link App = %v, want failed precondition", err)
 	}
 	viewer := WithIdentity(context.Background(), access.Identity{Email: "viewer@example.test", Role: access.RoleViewer})
 	if _, err = console.DisconnectGitHubLinkApp(viewer,
-		connect.NewRequest(&directoryrosterv1.DisconnectGitHubLinkAppRequest{})); connect.CodeOf(err) != connect.CodePermissionDenied {
+		&directoryrosterv1.DisconnectGitHubLinkAppRequest{}); connect.CodeOf(err) != connect.CodePermissionDenied {
 		t.Errorf("a viewer disconnecting = %v, want permission denied", err)
 	}
 }
@@ -354,12 +356,12 @@ func TestDisconnectingTheLinkAppMakesLinksUnverifiable(t *testing.T) {
 		t.Error("the status page carries a person's token")
 	}
 
-	gone, err := r.console.DisconnectGitHubLinkApp(operator(), connect.NewRequest(&directoryrosterv1.DisconnectGitHubLinkAppRequest{}))
+	gone, err := r.console.DisconnectGitHubLinkApp(operator(), &directoryrosterv1.DisconnectGitHubLinkAppRequest{})
 	if err != nil {
 		t.Fatalf("DisconnectGitHubLinkApp: %v", err)
 	}
-	if gone.Msg.GetInvalidated() != 1 {
-		t.Errorf("invalidated = %d, want 1", gone.Msg.GetInvalidated())
+	if gone.GetInvalidated() != 1 {
+		t.Errorf("invalidated = %d, want 1", gone.GetInvalidated())
 	}
 	if got := r.links.byID[account.ID]; got.State != link.StateUnverifiable || got.AccessToken != "" {
 		t.Errorf("link = %+v, want unverifiable with no tokens", got)

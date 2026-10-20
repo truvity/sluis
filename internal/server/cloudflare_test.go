@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
@@ -20,6 +20,7 @@ import (
 	"github.com/truvity/sluis/internal/cloudflare"
 	"github.com/truvity/sluis/internal/cloudflare/minter"
 	cfrpc "github.com/truvity/sluis/internal/cloudflare/rpc"
+	"github.com/truvity/sluis/internal/rpcmount"
 )
 
 const secretValue = "cf-secret-value-that-must-not-be-listed"
@@ -139,17 +140,17 @@ func TestCloudflareListIsTheAdministratorsAndRedactsTheAccount(t *testing.T) {
 	sts.checks["backup"] = &cloudflare.PrototypeError{Reason: cloudflare.ReasonPrototypeActive, Detail: "the prototype is active"}
 	c := cloudflareConsole(sts)
 
-	if _, err := c.ListCloudflare(context.Background(), connect.NewRequest(&directoryrosterv1.ListCloudflareRequest{})); code(err) != connect.CodeUnauthenticated {
+	if _, err := c.ListCloudflare(context.Background(), &directoryrosterv1.ListCloudflareRequest{}); code(err) != connect.CodeUnauthenticated {
 		t.Fatalf("anonymous list: %v", err)
 	}
-	if _, err := c.ListCloudflare(asRole(access.RoleNone), connect.NewRequest(&directoryrosterv1.ListCloudflareRequest{})); code(err) != connect.CodePermissionDenied {
+	if _, err := c.ListCloudflare(asRole(access.RoleNone), &directoryrosterv1.ListCloudflareRequest{}); code(err) != connect.CodePermissionDenied {
 		t.Fatalf("a person with no role may not list: %v", err)
 	}
-	resp, err := c.ListCloudflare(asRole(access.RoleViewer), connect.NewRequest(&directoryrosterv1.ListCloudflareRequest{}))
+	resp, err := c.ListCloudflare(asRole(access.RoleViewer), &directoryrosterv1.ListCloudflareRequest{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := resp.Msg
+	m := resp
 	if !m.Available || m.CanOperate {
 		t.Fatalf("available=%v canOperate=%v, want a viewer to see it and not operate", m.Available, m.CanOperate)
 	}
@@ -182,8 +183,8 @@ func TestCloudflareListIsTheAdministratorsAndRedactsTheAccount(t *testing.T) {
 	if dns.RotationTickSeconds != 900 {
 		t.Fatalf("rotation tick = %d, want 900: the console calls a credential overdue only past rotation + tick", dns.RotationTickSeconds)
 	}
-	op, err := c.ListCloudflare(asRole(access.RoleOperator), connect.NewRequest(&directoryrosterv1.ListCloudflareRequest{}))
-	if err != nil || !op.Msg.CanOperate {
+	op, err := c.ListCloudflare(asRole(access.RoleOperator), &directoryrosterv1.ListCloudflareRequest{})
+	if err != nil || !op.CanOperate {
 		t.Fatalf("an operator can operate: %v %v", op, err)
 	}
 }
@@ -215,8 +216,8 @@ func TestCloudflareListResponseHasNoFieldForAValue(t *testing.T) {
 func TestCloudflareActionsNeedTheOperatorAndAreAttributed(t *testing.T) {
 	sts := newFakeSTS()
 	c := cloudflareConsole(sts)
-	rotate := connect.NewRequest(&directoryrosterv1.RotateCloudflarePresetRequest{Preset: "dns"})
-	revoke := connect.NewRequest(&directoryrosterv1.RevokeCloudflareTokenRequest{Preset: "dns", TokenId: "demand1"})
+	rotate := &directoryrosterv1.RotateCloudflarePresetRequest{Preset: "dns"}
+	revoke := &directoryrosterv1.RevokeCloudflareTokenRequest{Preset: "dns", TokenId: "demand1"}
 
 	if _, err := c.RotateCloudflarePreset(asRole(access.RoleViewer), rotate); code(err) != connect.CodePermissionDenied {
 		t.Fatalf("a viewer rotated: %v", err)
@@ -232,22 +233,22 @@ func TestCloudflareActionsNeedTheOperatorAndAreAttributed(t *testing.T) {
 	}
 
 	got, err := c.RotateCloudflarePreset(asRole(access.RoleOperator), rotate)
-	if err != nil || got.Msg.TokenId != "new1" {
+	if err != nil || got.TokenId != "new1" {
 		t.Fatalf("rotate: %v %v", got, err)
 	}
-	if strings.Contains(got.Msg.String(), secretValue) {
+	if strings.Contains(got.String(), secretValue) {
 		t.Fatal("the rotate response carries the token's value")
 	}
 	if _, err = c.RevokeCloudflareToken(asRole(access.RoleOperator), revoke); err != nil {
 		t.Fatalf("revoke: %v", err)
 	}
 	replaced, err := c.RevokeCloudflareToken(asRole(access.RoleOperator),
-		connect.NewRequest(&directoryrosterv1.RevokeCloudflareTokenRequest{Preset: "dns", TokenId: "stored1"}))
-	if err != nil || !replaced.Msg.Replaced {
+		&directoryrosterv1.RevokeCloudflareTokenRequest{Preset: "dns", TokenId: "stored1"})
+	if err != nil || !replaced.Replaced {
 		t.Fatalf("revoking the stored token reports its replacement: %v %v", replaced, err)
 	}
 	if _, err = c.RevokeCloudflareToken(asRole(access.RoleOperator),
-		connect.NewRequest(&directoryrosterv1.RevokeCloudflareTokenRequest{Preset: "dns", TokenId: "foreign"})); code(err) != connect.CodeNotFound {
+		&directoryrosterv1.RevokeCloudflareTokenRequest{Preset: "dns", TokenId: "foreign"}); code(err) != connect.CodeNotFound {
 		t.Fatalf("a token that is not ours: %v", err)
 	}
 	for _, a := range sts.actors {
@@ -261,7 +262,7 @@ func TestCloudflareRotateReportsAContendedLeaseAsAborted(t *testing.T) {
 	sts := newFakeSTS()
 	sts.rotateOf = minter.ErrContended
 	_, err := cloudflareConsole(sts).RotateCloudflarePreset(asRole(access.RoleOperator),
-		connect.NewRequest(&directoryrosterv1.RotateCloudflarePresetRequest{Preset: "dns"}))
+		&directoryrosterv1.RotateCloudflarePresetRequest{Preset: "dns"})
 	if code(err) != connect.CodeAborted {
 		t.Fatalf("got %v", err)
 	}
@@ -271,7 +272,7 @@ func TestCloudflareInternalFailuresDoNotLeakDetail(t *testing.T) {
 	sts := newFakeSTS()
 	sts.rotateOf = errors.New("PUT https://api.example/accounts/0123/tokens: 403 token=" + secretValue)
 	_, err := cloudflareConsole(sts).RotateCloudflarePreset(asRole(access.RoleOperator),
-		connect.NewRequest(&directoryrosterv1.RotateCloudflarePresetRequest{Preset: "dns"}))
+		&directoryrosterv1.RotateCloudflarePresetRequest{Preset: "dns"})
 	if code(err) != connect.CodeInternal || strings.Contains(err.Error(), secretValue) {
 		t.Fatalf("got %v", err)
 	}
@@ -281,11 +282,11 @@ func TestCloudflarePersonSeesOnlyGrantedPresets(t *testing.T) {
 	c := cloudflareConsole(newFakeSTS())
 	list := func(ctx context.Context) []*directoryrosterv1.MyCloudflarePreset {
 		t.Helper()
-		resp, err := c.ListMyCloudflarePresets(ctx, connect.NewRequest(&directoryrosterv1.ListMyCloudflarePresetsRequest{}))
+		resp, err := c.ListMyCloudflarePresets(ctx, &directoryrosterv1.ListMyCloudflarePresetsRequest{})
 		if err != nil {
 			t.Fatal(err)
 		}
-		return resp.Msg.Presets
+		return resp.Presets
 	}
 	if got := list(asRole(access.RoleNone, "platform")); len(got) != 1 || got[0].Name != "dns" {
 		t.Fatalf("a member of platform sees %v", got)
@@ -293,7 +294,7 @@ func TestCloudflarePersonSeesOnlyGrantedPresets(t *testing.T) {
 	if got := list(asRole(access.RoleOperator, "other")); len(got) != 0 {
 		t.Fatalf("an operator in no granting group sees %v: the role grants nothing here", got)
 	}
-	if _, err := c.ListMyCloudflarePresets(context.Background(), connect.NewRequest(&directoryrosterv1.ListMyCloudflarePresetsRequest{})); code(err) != connect.CodeUnauthenticated {
+	if _, err := c.ListMyCloudflarePresets(context.Background(), &directoryrosterv1.ListMyCloudflarePresetsRequest{}); code(err) != connect.CodeUnauthenticated {
 		t.Fatalf("anonymous: %v", err)
 	}
 }
@@ -301,17 +302,18 @@ func TestCloudflarePersonSeesOnlyGrantedPresets(t *testing.T) {
 func TestCloudflareCredentialIsShownToAGrantedPersonOnce(t *testing.T) {
 	sts := newFakeSTS()
 	c := cloudflareConsole(sts)
-	ask := func(ctx context.Context, preset string, seconds int64) (*connect.Response[directoryrosterv1.GetCloudflareCredentialResponse], error) {
-		return c.GetCloudflareCredential(ctx, connect.NewRequest(&directoryrosterv1.GetCloudflareCredentialRequest{Preset: preset, LifetimeSeconds: seconds}))
+	ask := func(ctx context.Context, preset string, seconds int64) (*directoryrosterv1.GetCloudflareCredentialResponse, error) {
+		return c.GetCloudflareCredential(ctx, &directoryrosterv1.GetCloudflareCredentialRequest{Preset: preset, LifetimeSeconds: seconds})
 	}
-	resp, err := ask(asRole(access.RoleNone, "platform"), "dns", 0)
+	callCtx, call := rpcmount.ServerContext(asRole(access.RoleNone, "platform"))
+	resp, err := ask(callCtx, "dns", 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resp.Msg.Token != secretValue || resp.Msg.TokenId != "od1" {
-		t.Fatalf("got %v", resp.Msg)
+	if resp.Token != secretValue || resp.TokenId != "od1" {
+		t.Fatalf("got %v", resp)
 	}
-	if resp.Header().Get("Cache-Control") != "no-store" {
+	if rpcmount.HTTPHeader(call.ResponseHeader()).Get("Cache-Control") != "no-store" {
 		t.Fatal("a credential must not be cached")
 	}
 	if _, err = ask(asRole(access.RoleOperator, "other"), "dns", 0); code(err) != connect.CodePermissionDenied {
@@ -330,14 +332,14 @@ func TestCloudflareCredentialIsShownToAGrantedPersonOnce(t *testing.T) {
 
 func TestCloudflareOffWithoutTheSection(t *testing.T) {
 	c := cloudflareConsole(nil)
-	resp, err := c.ListCloudflare(asRole(access.RoleViewer), connect.NewRequest(&directoryrosterv1.ListCloudflareRequest{}))
-	if err != nil || resp.Msg.Available {
+	resp, err := c.ListCloudflare(asRole(access.RoleViewer), &directoryrosterv1.ListCloudflareRequest{})
+	if err != nil || resp.Available {
 		t.Fatalf("got %v %v", resp, err)
 	}
-	if _, err = c.RotateCloudflarePreset(asRole(access.RoleOperator), connect.NewRequest(&directoryrosterv1.RotateCloudflarePresetRequest{Preset: "dns"})); code(err) != connect.CodeFailedPrecondition {
+	if _, err = c.RotateCloudflarePreset(asRole(access.RoleOperator), &directoryrosterv1.RotateCloudflarePresetRequest{Preset: "dns"}); code(err) != connect.CodeFailedPrecondition {
 		t.Fatalf("got %v", err)
 	}
-	if my, err := c.ListMyCloudflarePresets(asRole(access.RoleNone), connect.NewRequest(&directoryrosterv1.ListMyCloudflarePresetsRequest{})); err != nil || my.Msg.Available {
+	if my, err := c.ListMyCloudflarePresets(asRole(access.RoleNone), &directoryrosterv1.ListMyCloudflarePresetsRequest{}); err != nil || my.Available {
 		t.Fatalf("got %v %v", my, err)
 	}
 }

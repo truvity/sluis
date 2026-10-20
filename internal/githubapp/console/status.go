@@ -6,7 +6,7 @@ import (
 	"slices"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
@@ -36,8 +36,8 @@ import (
 // and every link are people's across all organisations, so they are the
 // installation-wide viewer's alone.
 func (c *Service) GetGitHubStatus(
-	ctx context.Context, _ *connect.Request[directoryrosterv1.GetGitHubStatusRequest],
-) (*connect.Response[directoryrosterv1.GetGitHubStatusResponse], error) {
+	ctx context.Context, _ *directoryrosterv1.GetGitHubStatusRequest,
+) (*directoryrosterv1.GetGitHubStatusResponse, error) {
 	id, err := c.requireAnyOrg(ctx, access.RoleViewer)
 	if err != nil {
 		return nil, err
@@ -51,7 +51,7 @@ func (c *Service) GetGitHubStatus(
 	if c.deps.Reports != nil {
 		read, err := c.deps.Reports.Reports(ctx)
 		if err != nil {
-			return nil, connect.NewError(connect.CodeUnavailable, err)
+			return nil, connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
 		}
 		for key, document := range read {
 			if org, ok := status.OrgOfKey(key); ok {
@@ -64,7 +64,7 @@ func (c *Service) GetGitHubStatus(
 	if c.deps.Orgs != nil {
 		records, err := c.deps.Orgs.List(ctx)
 		if err != nil {
-			return nil, connect.NewError(connect.CodeUnavailable, err)
+			return nil, connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
 		}
 		for i := range records {
 			connections[records[i].Org] = records[i]
@@ -75,7 +75,7 @@ func (c *Service) GetGitHubStatus(
 	if c.deps.Orgs != nil {
 		read, err := c.deps.Orgs.PassRequests(ctx)
 		if err != nil {
-			return nil, connect.NewError(connect.CodeUnavailable, err)
+			return nil, connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
 		}
 		passes = read
 	}
@@ -84,7 +84,7 @@ func (c *Service) GetGitHubStatus(
 	if c.deps.Confirmations != nil {
 		read, err := c.deps.Confirmations.Confirmations(ctx)
 		if err != nil {
-			return nil, connect.NewError(connect.CodeUnavailable, err)
+			return nil, connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
 		}
 		confirmations = read
 	}
@@ -127,14 +127,14 @@ func (c *Service) GetGitHubStatus(
 	out.Organisations = visibleOrganisations(id, owners, ownerDomains(dirs), out.Organisations)
 	if id.Can(access.RoleViewer) {
 		if err = c.linkStatus(ctx, out); err != nil {
-			return nil, connect.NewError(connect.CodeUnavailable, err)
+			return nil, connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
 		}
 	}
 	if err = c.runnerStatus(ctx, out); err != nil {
-		return nil, connect.NewError(connect.CodeUnavailable, err)
+		return nil, connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
 	}
 	if err = c.catalogueStatus(ctx, out); err != nil {
-		return nil, connect.NewError(connect.CodeUnavailable, err)
+		return nil, connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
 	}
 	out.RunnerApps = slices.DeleteFunc(out.RunnerApps, func(app *directoryrosterv1.GitHubRunnerApp) bool {
 		return !mayOwned(id, access.RoleViewer, owners[app.GetOrg()])
@@ -142,7 +142,7 @@ func (c *Service) GetGitHubStatus(
 	out.CatalogueApps = slices.DeleteFunc(out.CatalogueApps, func(app *directoryrosterv1.GitHubCatalogueApp) bool {
 		return !mayOwned(id, access.RoleViewer, owners[app.GetOrg()])
 	})
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
 // linkStatus adds the link App and every link, never with a token.

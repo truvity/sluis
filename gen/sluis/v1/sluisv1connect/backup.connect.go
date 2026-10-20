@@ -5,48 +5,76 @@
 package sluisv1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1 "github.com/truvity/sluis/gen/sluis/v1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// BackupServiceName is the fully-qualified name of the BackupService service.
 	BackupServiceName = "sluis.v1.BackupService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// BackupServiceGetBackupStatusProcedure is the fully-qualified name of the BackupService's
+	// BackupServiceGetBackupStatusProcedure is the procedure name of the BackupService's
 	// GetBackupStatus RPC.
 	BackupServiceGetBackupStatusProcedure = "/sluis.v1.BackupService/GetBackupStatus"
-	// BackupServiceListBackupsProcedure is the fully-qualified name of the BackupService's ListBackups
-	// RPC.
+	// BackupServiceListBackupsProcedure is the procedure name of the BackupService's ListBackups RPC.
 	BackupServiceListBackupsProcedure = "/sluis.v1.BackupService/ListBackups"
-	// BackupServiceGetRestoreStatusProcedure is the fully-qualified name of the BackupService's
+	// BackupServiceGetRestoreStatusProcedure is the procedure name of the BackupService's
 	// GetRestoreStatus RPC.
 	BackupServiceGetRestoreStatusProcedure = "/sluis.v1.BackupService/GetRestoreStatus"
-	// BackupServiceRunBackupProcedure is the fully-qualified name of the BackupService's RunBackup RPC.
+	// BackupServiceRunBackupProcedure is the procedure name of the BackupService's RunBackup RPC.
 	BackupServiceRunBackupProcedure = "/sluis.v1.BackupService/RunBackup"
-	// BackupServiceGetRestorePreviewProcedure is the fully-qualified name of the BackupService's
+	// BackupServiceGetRestorePreviewProcedure is the procedure name of the BackupService's
 	// GetRestorePreview RPC.
 	BackupServiceGetRestorePreviewProcedure = "/sluis.v1.BackupService/GetRestorePreview"
+)
+
+var (
+	backupServiceGetBackupStatusSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_sluis_v1_backup_proto.Services().ByName("BackupService").Methods().ByName("GetBackupStatus"),
+			Procedure:  BackupServiceGetBackupStatusProcedure,
+		}
+	})
+	backupServiceListBackupsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_sluis_v1_backup_proto.Services().ByName("BackupService").Methods().ByName("ListBackups"),
+			Procedure:  BackupServiceListBackupsProcedure,
+		}
+	})
+	backupServiceGetRestoreStatusSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_sluis_v1_backup_proto.Services().ByName("BackupService").Methods().ByName("GetRestoreStatus"),
+			Procedure:  BackupServiceGetRestoreStatusProcedure,
+		}
+	})
+	backupServiceRunBackupSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_sluis_v1_backup_proto.Services().ByName("BackupService").Methods().ByName("RunBackup"),
+			Procedure:  BackupServiceRunBackupProcedure,
+		}
+	})
+	backupServiceGetRestorePreviewSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_sluis_v1_backup_proto.Services().ByName("BackupService").Methods().ByName("GetRestorePreview"),
+			Procedure:  BackupServiceGetRestorePreviewProcedure,
+		}
+	})
 )
 
 // BackupServiceClient is a client for the sluis.v1.BackupService service.
@@ -54,101 +82,29 @@ type BackupServiceClient interface {
 	// GetBackupStatus is the latest backup run and its state, the newest
 	// completed one, a run that is running or paused with its progress, and the
 	// last retention pass. Viewer.
-	GetBackupStatus(context.Context, *connect.Request[v1.GetBackupStatusRequest]) (*connect.Response[v1.GetBackupStatusResponse], error)
+	GetBackupStatus(context.Context, *v1.GetBackupStatusRequest) (*v1.GetBackupStatusResponse, error)
 	// ListBackups is what the archive holds, newest first, from the backups'
 	// own manifests. The manifests are not verified here, so they are
 	// informational. Viewer.
-	ListBackups(context.Context, *connect.Request[v1.ListBackupsRequest]) (*connect.Response[v1.ListBackupsResponse], error)
+	ListBackups(context.Context, *v1.ListBackupsRequest) (*v1.ListBackupsResponse, error)
 	// GetRestoreStatus is the latest restore, one that is running or paused,
 	// and the modules whose maintenance flag is set. Viewer.
-	GetRestoreStatus(context.Context, *connect.Request[v1.GetRestoreStatusRequest]) (*connect.Response[v1.GetRestoreStatusResponse], error)
+	GetRestoreStatus(context.Context, *v1.GetRestoreStatusRequest) (*v1.GetRestoreStatusResponse, error)
 	// RunBackup starts a backup and answers at once: started, or contended when
 	// a run is already going or this person started one a moment ago. The run
 	// is read back with GetBackupStatus. The caller must hold a group that the
 	// policy's `backup.runGroups` names; the run is audited with who asked.
 	// Anything else is refused as permission denied.
-	RunBackup(context.Context, *connect.Request[v1.RunBackupRequest]) (*connect.Response[v1.RunBackupResponse], error)
+	RunBackup(context.Context, *v1.RunBackupRequest) (*v1.RunBackupResponse, error)
 	// GetRestorePreview reports what restoring a backup would do, as counts per
 	// module and section, and writes nothing. Operator.
-	GetRestorePreview(context.Context, *connect.Request[v1.GetRestorePreviewRequest]) (*connect.Response[v1.GetRestorePreviewResponse], error)
+	GetRestorePreview(context.Context, *v1.GetRestorePreviewRequest) (*v1.GetRestorePreviewResponse, error)
 }
 
-// NewBackupServiceClient constructs a client for the sluis.v1.BackupService service. By default, it
-// uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses, and sends
-// uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the connect.WithGRPC() or
-// connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewBackupServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) BackupServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	backupServiceMethods := v1.File_sluis_v1_backup_proto.Services().ByName("BackupService").Methods()
-	return &backupServiceClient{
-		getBackupStatus: connect.NewClient[v1.GetBackupStatusRequest, v1.GetBackupStatusResponse](
-			httpClient,
-			baseURL+BackupServiceGetBackupStatusProcedure,
-			connect.WithSchema(backupServiceMethods.ByName("GetBackupStatus")),
-			connect.WithClientOptions(opts...),
-		),
-		listBackups: connect.NewClient[v1.ListBackupsRequest, v1.ListBackupsResponse](
-			httpClient,
-			baseURL+BackupServiceListBackupsProcedure,
-			connect.WithSchema(backupServiceMethods.ByName("ListBackups")),
-			connect.WithClientOptions(opts...),
-		),
-		getRestoreStatus: connect.NewClient[v1.GetRestoreStatusRequest, v1.GetRestoreStatusResponse](
-			httpClient,
-			baseURL+BackupServiceGetRestoreStatusProcedure,
-			connect.WithSchema(backupServiceMethods.ByName("GetRestoreStatus")),
-			connect.WithClientOptions(opts...),
-		),
-		runBackup: connect.NewClient[v1.RunBackupRequest, v1.RunBackupResponse](
-			httpClient,
-			baseURL+BackupServiceRunBackupProcedure,
-			connect.WithSchema(backupServiceMethods.ByName("RunBackup")),
-			connect.WithClientOptions(opts...),
-		),
-		getRestorePreview: connect.NewClient[v1.GetRestorePreviewRequest, v1.GetRestorePreviewResponse](
-			httpClient,
-			baseURL+BackupServiceGetRestorePreviewProcedure,
-			connect.WithSchema(backupServiceMethods.ByName("GetRestorePreview")),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// backupServiceClient implements BackupServiceClient.
-type backupServiceClient struct {
-	getBackupStatus   *connect.Client[v1.GetBackupStatusRequest, v1.GetBackupStatusResponse]
-	listBackups       *connect.Client[v1.ListBackupsRequest, v1.ListBackupsResponse]
-	getRestoreStatus  *connect.Client[v1.GetRestoreStatusRequest, v1.GetRestoreStatusResponse]
-	runBackup         *connect.Client[v1.RunBackupRequest, v1.RunBackupResponse]
-	getRestorePreview *connect.Client[v1.GetRestorePreviewRequest, v1.GetRestorePreviewResponse]
-}
-
-// GetBackupStatus calls sluis.v1.BackupService.GetBackupStatus.
-func (c *backupServiceClient) GetBackupStatus(ctx context.Context, req *connect.Request[v1.GetBackupStatusRequest]) (*connect.Response[v1.GetBackupStatusResponse], error) {
-	return c.getBackupStatus.CallUnary(ctx, req)
-}
-
-// ListBackups calls sluis.v1.BackupService.ListBackups.
-func (c *backupServiceClient) ListBackups(ctx context.Context, req *connect.Request[v1.ListBackupsRequest]) (*connect.Response[v1.ListBackupsResponse], error) {
-	return c.listBackups.CallUnary(ctx, req)
-}
-
-// GetRestoreStatus calls sluis.v1.BackupService.GetRestoreStatus.
-func (c *backupServiceClient) GetRestoreStatus(ctx context.Context, req *connect.Request[v1.GetRestoreStatusRequest]) (*connect.Response[v1.GetRestoreStatusResponse], error) {
-	return c.getRestoreStatus.CallUnary(ctx, req)
-}
-
-// RunBackup calls sluis.v1.BackupService.RunBackup.
-func (c *backupServiceClient) RunBackup(ctx context.Context, req *connect.Request[v1.RunBackupRequest]) (*connect.Response[v1.RunBackupResponse], error) {
-	return c.runBackup.CallUnary(ctx, req)
-}
-
-// GetRestorePreview calls sluis.v1.BackupService.GetRestorePreview.
-func (c *backupServiceClient) GetRestorePreview(ctx context.Context, req *connect.Request[v1.GetRestorePreviewRequest]) (*connect.Response[v1.GetRestorePreviewResponse], error) {
-	return c.getRestorePreview.CallUnary(ctx, req)
+// NewBackupServiceClient constructs a client for the sluis.v1.BackupService service. Multiple
+// service clients may share a single connect.Client.
+func NewBackupServiceClient(client *connect.Client) BackupServiceClient {
+	return &backupServiceClient{client: client}
 }
 
 // BackupServiceHandler is an implementation of the sluis.v1.BackupService service.
@@ -156,99 +112,163 @@ type BackupServiceHandler interface {
 	// GetBackupStatus is the latest backup run and its state, the newest
 	// completed one, a run that is running or paused with its progress, and the
 	// last retention pass. Viewer.
-	GetBackupStatus(context.Context, *connect.Request[v1.GetBackupStatusRequest]) (*connect.Response[v1.GetBackupStatusResponse], error)
+	GetBackupStatus(context.Context, *v1.GetBackupStatusRequest) (*v1.GetBackupStatusResponse, error)
 	// ListBackups is what the archive holds, newest first, from the backups'
 	// own manifests. The manifests are not verified here, so they are
 	// informational. Viewer.
-	ListBackups(context.Context, *connect.Request[v1.ListBackupsRequest]) (*connect.Response[v1.ListBackupsResponse], error)
+	ListBackups(context.Context, *v1.ListBackupsRequest) (*v1.ListBackupsResponse, error)
 	// GetRestoreStatus is the latest restore, one that is running or paused,
 	// and the modules whose maintenance flag is set. Viewer.
-	GetRestoreStatus(context.Context, *connect.Request[v1.GetRestoreStatusRequest]) (*connect.Response[v1.GetRestoreStatusResponse], error)
+	GetRestoreStatus(context.Context, *v1.GetRestoreStatusRequest) (*v1.GetRestoreStatusResponse, error)
 	// RunBackup starts a backup and answers at once: started, or contended when
 	// a run is already going or this person started one a moment ago. The run
 	// is read back with GetBackupStatus. The caller must hold a group that the
 	// policy's `backup.runGroups` names; the run is audited with who asked.
 	// Anything else is refused as permission denied.
-	RunBackup(context.Context, *connect.Request[v1.RunBackupRequest]) (*connect.Response[v1.RunBackupResponse], error)
+	RunBackup(context.Context, *v1.RunBackupRequest) (*v1.RunBackupResponse, error)
 	// GetRestorePreview reports what restoring a backup would do, as counts per
 	// module and section, and writes nothing. Operator.
-	GetRestorePreview(context.Context, *connect.Request[v1.GetRestorePreviewRequest]) (*connect.Response[v1.GetRestorePreviewResponse], error)
+	GetRestorePreview(context.Context, *v1.GetRestorePreviewRequest) (*v1.GetRestorePreviewResponse, error)
 }
 
-// NewBackupServiceHandler builds an HTTP handler from the service implementation. It returns the
-// path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewBackupServiceHandler(svc BackupServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	backupServiceMethods := v1.File_sluis_v1_backup_proto.Services().ByName("BackupService").Methods()
-	backupServiceGetBackupStatusHandler := connect.NewUnaryHandler(
-		BackupServiceGetBackupStatusProcedure,
-		svc.GetBackupStatus,
-		connect.WithSchema(backupServiceMethods.ByName("GetBackupStatus")),
-		connect.WithHandlerOptions(opts...),
+// RegisterBackupServiceHandler registers svc as the sluis.v1.BackupService implementation on
+// server.
+func RegisterBackupServiceHandler(server *connect.Server, svc BackupServiceHandler) {
+	adapter := backupServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: backupServiceGetBackupStatusSpec(), Handler: adapter.getBackupStatus},
+		connect.Method{Spec: backupServiceListBackupsSpec(), Handler: adapter.listBackups},
+		connect.Method{Spec: backupServiceGetRestoreStatusSpec(), Handler: adapter.getRestoreStatus},
+		connect.Method{Spec: backupServiceRunBackupSpec(), Handler: adapter.runBackup},
+		connect.Method{Spec: backupServiceGetRestorePreviewSpec(), Handler: adapter.getRestorePreview},
 	)
-	backupServiceListBackupsHandler := connect.NewUnaryHandler(
-		BackupServiceListBackupsProcedure,
-		svc.ListBackups,
-		connect.WithSchema(backupServiceMethods.ByName("ListBackups")),
-		connect.WithHandlerOptions(opts...),
-	)
-	backupServiceGetRestoreStatusHandler := connect.NewUnaryHandler(
-		BackupServiceGetRestoreStatusProcedure,
-		svc.GetRestoreStatus,
-		connect.WithSchema(backupServiceMethods.ByName("GetRestoreStatus")),
-		connect.WithHandlerOptions(opts...),
-	)
-	backupServiceRunBackupHandler := connect.NewUnaryHandler(
-		BackupServiceRunBackupProcedure,
-		svc.RunBackup,
-		connect.WithSchema(backupServiceMethods.ByName("RunBackup")),
-		connect.WithHandlerOptions(opts...),
-	)
-	backupServiceGetRestorePreviewHandler := connect.NewUnaryHandler(
-		BackupServiceGetRestorePreviewProcedure,
-		svc.GetRestorePreview,
-		connect.WithSchema(backupServiceMethods.ByName("GetRestorePreview")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/sluis.v1.BackupService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case BackupServiceGetBackupStatusProcedure:
-			backupServiceGetBackupStatusHandler.ServeHTTP(w, r)
-		case BackupServiceListBackupsProcedure:
-			backupServiceListBackupsHandler.ServeHTTP(w, r)
-		case BackupServiceGetRestoreStatusProcedure:
-			backupServiceGetRestoreStatusHandler.ServeHTTP(w, r)
-		case BackupServiceRunBackupProcedure:
-			backupServiceRunBackupHandler.ServeHTTP(w, r)
-		case BackupServiceGetRestorePreviewProcedure:
-			backupServiceGetRestorePreviewHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedBackupServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedBackupServiceHandler struct{}
 
-func (UnimplementedBackupServiceHandler) GetBackupStatus(context.Context, *connect.Request[v1.GetBackupStatusRequest]) (*connect.Response[v1.GetBackupStatusResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sluis.v1.BackupService.GetBackupStatus is not implemented"))
+func (UnimplementedBackupServiceHandler) GetBackupStatus(context.Context, *v1.GetBackupStatusRequest) (*v1.GetBackupStatusResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "sluis.v1.BackupService.GetBackupStatus is not implemented")
 }
 
-func (UnimplementedBackupServiceHandler) ListBackups(context.Context, *connect.Request[v1.ListBackupsRequest]) (*connect.Response[v1.ListBackupsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sluis.v1.BackupService.ListBackups is not implemented"))
+func (UnimplementedBackupServiceHandler) ListBackups(context.Context, *v1.ListBackupsRequest) (*v1.ListBackupsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "sluis.v1.BackupService.ListBackups is not implemented")
 }
 
-func (UnimplementedBackupServiceHandler) GetRestoreStatus(context.Context, *connect.Request[v1.GetRestoreStatusRequest]) (*connect.Response[v1.GetRestoreStatusResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sluis.v1.BackupService.GetRestoreStatus is not implemented"))
+func (UnimplementedBackupServiceHandler) GetRestoreStatus(context.Context, *v1.GetRestoreStatusRequest) (*v1.GetRestoreStatusResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "sluis.v1.BackupService.GetRestoreStatus is not implemented")
 }
 
-func (UnimplementedBackupServiceHandler) RunBackup(context.Context, *connect.Request[v1.RunBackupRequest]) (*connect.Response[v1.RunBackupResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sluis.v1.BackupService.RunBackup is not implemented"))
+func (UnimplementedBackupServiceHandler) RunBackup(context.Context, *v1.RunBackupRequest) (*v1.RunBackupResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "sluis.v1.BackupService.RunBackup is not implemented")
 }
 
-func (UnimplementedBackupServiceHandler) GetRestorePreview(context.Context, *connect.Request[v1.GetRestorePreviewRequest]) (*connect.Response[v1.GetRestorePreviewResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sluis.v1.BackupService.GetRestorePreview is not implemented"))
+func (UnimplementedBackupServiceHandler) GetRestorePreview(context.Context, *v1.GetRestorePreviewRequest) (*v1.GetRestorePreviewResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "sluis.v1.BackupService.GetRestorePreview is not implemented")
+}
+
+type backupServiceClient struct {
+	client *connect.Client
+}
+
+func (c *backupServiceClient) GetBackupStatus(ctx context.Context, req *v1.GetBackupStatusRequest) (*v1.GetBackupStatusResponse, error) {
+	var res v1.GetBackupStatusResponse
+	if err := c.client.CallUnary(ctx, backupServiceGetBackupStatusSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *backupServiceClient) ListBackups(ctx context.Context, req *v1.ListBackupsRequest) (*v1.ListBackupsResponse, error) {
+	var res v1.ListBackupsResponse
+	if err := c.client.CallUnary(ctx, backupServiceListBackupsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *backupServiceClient) GetRestoreStatus(ctx context.Context, req *v1.GetRestoreStatusRequest) (*v1.GetRestoreStatusResponse, error) {
+	var res v1.GetRestoreStatusResponse
+	if err := c.client.CallUnary(ctx, backupServiceGetRestoreStatusSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *backupServiceClient) RunBackup(ctx context.Context, req *v1.RunBackupRequest) (*v1.RunBackupResponse, error) {
+	var res v1.RunBackupResponse
+	if err := c.client.CallUnary(ctx, backupServiceRunBackupSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *backupServiceClient) GetRestorePreview(ctx context.Context, req *v1.GetRestorePreviewRequest) (*v1.GetRestorePreviewResponse, error) {
+	var res v1.GetRestorePreviewResponse
+	if err := c.client.CallUnary(ctx, backupServiceGetRestorePreviewSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type backupServiceHandler struct{ svc BackupServiceHandler }
+
+func (h backupServiceHandler) getBackupStatus(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetBackupStatusRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetBackupStatus(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h backupServiceHandler) listBackups(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListBackupsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListBackups(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h backupServiceHandler) getRestoreStatus(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetRestoreStatusRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetRestoreStatus(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h backupServiceHandler) runBackup(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RunBackupRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RunBackup(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h backupServiceHandler) getRestorePreview(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetRestorePreviewRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetRestorePreview(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

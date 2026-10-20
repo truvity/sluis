@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
@@ -119,8 +119,8 @@ func (c *Console) recoveryKindNow(ctx context.Context) string {
 
 // GetRecovery implements the operator contract.
 func (c *Console) GetRecovery(
-	ctx context.Context, _ *connect.Request[directoryrosterv1.GetRecoveryRequest],
-) (*connect.Response[directoryrosterv1.GetRecoveryResponse], error) {
+	ctx context.Context, _ *directoryrosterv1.GetRecoveryRequest,
+) (*directoryrosterv1.GetRecoveryResponse, error) {
 	id, err := requireRole(ctx, access.RoleOperator)
 	if err != nil {
 		return nil, err
@@ -156,16 +156,16 @@ func (c *Console) GetRecovery(
 		out.CannotDisableReason = recoveryDisableRefusal(id)
 		out.CanDisable = out.CannotDisableReason == ""
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
 // DisableRecovery implements the operator contract.
 func (c *Console) DisableRecovery(
-	ctx context.Context, _ *connect.Request[directoryrosterv1.DisableRecoveryRequest],
-) (*connect.Response[directoryrosterv1.DisableRecoveryResponse], error) {
+	ctx context.Context, _ *directoryrosterv1.DisableRecoveryRequest,
+) (*directoryrosterv1.DisableRecoveryResponse, error) {
 	id, ok := IdentityFrom(ctx)
 	if !ok {
-		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("sign in first"))
+		return nil, connect.NewError(connect.CodeUnauthenticated, "sign in first")
 	}
 	gate := c.deps.RecoveryGate
 	if why := recoveryDisableRefusal(id); why != "" {
@@ -181,11 +181,11 @@ func (c *Console) DisableRecovery(
 			}
 			c.record(ctx, audit.RecoveryDisabled(actor, c.installation(), gate.Generation(), 0, 0, false, audit.Denied(reason)))
 		}
-		return nil, connect.NewError(connect.CodePermissionDenied, errors.New(why))
+		return nil, connect.NewError(connect.CodePermissionDenied, why)
 	}
 	if !c.recoveryConfigured() {
 		return nil, connect.NewError(connect.CodeFailedPrecondition,
-			errors.New("the recovery sign-in is not enabled on this installation; there is nothing to turn off"))
+			"the recovery sign-in is not enabled on this installation; there is nothing to turn off")
 	}
 
 	// The switch first: it is the act, and nothing after it may undo it. The
@@ -195,11 +195,11 @@ func (c *Console) DisableRecovery(
 	switch {
 	case errors.Is(err, recoverygate.ErrUnsupported):
 		return nil, connect.NewError(connect.CodeFailedPrecondition,
-			errors.New("this installation's state cannot keep a turn-off across restarts, so it is not made; set recovery.enabled to false in the configuration"))
+			"this installation's state cannot keep a turn-off across restarts, so it is not made; set recovery.enabled to false in the configuration")
 	case err != nil:
 		c.log().ErrorContext(ctx, "recovery could not be turned off", logattr.SafeError("error", err))
 		c.record(ctx, audit.RecoveryDisabled(actorOf(ctx), c.installation(), gate.Generation(), 0, 0, false, audit.Failed("the switch could not be kept")))
-		return nil, connect.NewError(connect.CodeUnavailable, errors.New("the switch could not be kept; recovery is still on. Try again"))
+		return nil, connect.NewError(connect.CodeUnavailable, "the switch could not be kept; recovery is still on. Try again")
 	}
 
 	var signIns, sessions int
@@ -234,7 +234,7 @@ func (c *Console) DisableRecovery(
 	}
 	c.log().WarnContext(ctx, "recovery turned off from the console",
 		logattr.SafeString("by", rec.By), slog.Bool("already", !created), slog.Int("sign_ins_ended", signIns), slog.Int("sessions_ended", sessions))
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
 // installation is how the audit trail names this installation.

@@ -20,6 +20,8 @@ import (
 	"strings"
 	"time"
 
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 	"github.com/truvity/sluis/storage/awsotel"
 
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -988,7 +990,7 @@ func conformance(args []string) error {
 		httpClient = auth.TokenFile(*tokenFile)
 	}
 	failed, err := cli.Conformance{
-		Client:         auditv1connect.NewQueryServiceClient(httpClient, *url),
+		Client:         auditv1connect.NewQueryServiceClient(connect.NewClient(connecthttp.NewTransport(httpClient, *url, connecthttp.WithReadMaxBytes(0)))),
 		Profiles:       profiles,
 		Max:            *limit,
 		VerifiedBefore: *verified,

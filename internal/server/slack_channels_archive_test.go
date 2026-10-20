@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
 	"github.com/truvity/sluis/internal/kube"
@@ -56,11 +56,11 @@ func (r *archiveRig) forget(t *testing.T, name string, archive bool) (*directory
 		t.Fatalf("create %s: %v", name, err)
 	}
 	request := &directoryrosterv1.DeleteSlackChannelRequest{Workspace: "acme", Name: name, Archive: archive}
-	got, err := r.console.DeleteSlackChannel(as(northOp), connect.NewRequest(request))
+	got, err := r.console.DeleteSlackChannel(as(northOp), request)
 	if err != nil {
 		return nil, err
 	}
-	return got.Msg, nil
+	return got, nil
 }
 
 func TestForgettingAChannelArchivesItOnlyWhenAskedTo(t *testing.T) {
@@ -115,7 +115,7 @@ func (r *archiveRig) refuses(t *testing.T, name, want string) {
 		t.Fatal(err)
 	}
 	request := &directoryrosterv1.DeleteSlackChannelRequest{Workspace: "acme", Name: name, Archive: true}
-	_, err := r.console.DeleteSlackChannel(as(northOp), connect.NewRequest(request))
+	_, err := r.console.DeleteSlackChannel(as(northOp), request)
 	if err == nil || !strings.Contains(err.Error(), want) {
 		t.Fatalf("err = %v, want it to say %q", err, want)
 	}
@@ -156,12 +156,12 @@ func TestArchivingNeedsAReportThatSaysTheWorkspaceActs(t *testing.T) {
 	}
 	r.reports[status.Key("acme")] = raw
 	request := &directoryrosterv1.DeleteSlackChannelRequest{Workspace: "acme", Name: "eng", Archive: true}
-	if _, err = r.console.DeleteSlackChannel(as(northOp), connect.NewRequest(request)); connect.CodeOf(err) != connect.CodeFailedPrecondition ||
+	if _, err = r.console.DeleteSlackChannel(as(northOp), request); connect.CodeOf(err) != connect.CodeFailedPrecondition ||
 		!strings.Contains(err.Error(), "dry run") {
 		t.Fatalf("disabled workspace: %v", err)
 	}
 	r.reports[status.Key("acme")] = "not a report"
-	if _, err = r.console.DeleteSlackChannel(as(northOp), connect.NewRequest(request)); connect.CodeOf(err) != connect.CodeFailedPrecondition {
+	if _, err = r.console.DeleteSlackChannel(as(northOp), request); connect.CodeOf(err) != connect.CodeFailedPrecondition {
 		t.Fatalf("unreadable report: %v", err)
 	}
 	if r.slack.Count("conversations.archive") != 0 || r.slack.Count("conversations.info") != 0 || len(r.storedChannels(t)) != 1 {
@@ -177,7 +177,7 @@ func TestArchivingWhenSlackIsUnreachableKeepsTheRecord(t *testing.T) {
 	}
 	r.console.deps.SlackAPI = []slackapp.Option{slackapp.WithBaseURL("http://127.0.0.1:1")}
 	request := &directoryrosterv1.DeleteSlackChannelRequest{Workspace: "acme", Name: "eng", Archive: true}
-	_, err := r.console.DeleteSlackChannel(as(northOp), connect.NewRequest(request))
+	_, err := r.console.DeleteSlackChannel(as(northOp), request)
 	if connect.CodeOf(err) != connect.CodeUnavailable {
 		t.Fatalf("err = %v", err)
 	}

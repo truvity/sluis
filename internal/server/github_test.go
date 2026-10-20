@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
 	"github.com/truvity/sluis/internal/access"
@@ -58,11 +58,11 @@ github:
 func githubStatus(t *testing.T, console *Console, role access.Role) (*directoryrosterv1.GetGitHubStatusResponse, error) {
 	t.Helper()
 	ctx := WithIdentity(context.Background(), access.Identity{Email: "someone@example.test", Role: role})
-	response, err := console.GetGitHubStatus(ctx, connect.NewRequest(&directoryrosterv1.GetGitHubStatusRequest{}))
+	response, err := console.GetGitHubStatus(ctx, &directoryrosterv1.GetGitHubStatusRequest{})
 	if err != nil {
 		return nil, err
 	}
-	return response.Msg, nil
+	return response, nil
 }
 
 func organisation(t *testing.T, got *directoryrosterv1.GetGitHubStatusResponse, org string) *directoryrosterv1.GitHubOrganisation {
@@ -218,7 +218,7 @@ func TestTheGitHubPageNeedsAnInstallationWideViewer(t *testing.T) {
 		Role:   access.RoleNone,
 		Scopes: map[string]access.Role{"C0north": access.RoleViewer},
 	})
-	_, err := console.GetGitHubStatus(scoped, connect.NewRequest(&directoryrosterv1.GetGitHubStatusRequest{}))
+	_, err := console.GetGitHubStatus(scoped, &directoryrosterv1.GetGitHubStatusRequest{})
 	if connect.CodeOf(err) != connect.CodePermissionDenied {
 		t.Errorf("a viewer of one tenant = %v, want permission denied", err)
 	}

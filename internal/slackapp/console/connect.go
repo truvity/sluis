@@ -8,7 +8,7 @@ import (
 	"slices"
 	"strings"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
 	"github.com/truvity/sluis/internal/access"
@@ -16,6 +16,7 @@ import (
 	"github.com/truvity/sluis/internal/consoleauthz"
 	"github.com/truvity/sluis/internal/consolecall"
 	"github.com/truvity/sluis/internal/port"
+	"github.com/truvity/sluis/internal/rpcmount"
 	"github.com/truvity/sluis/internal/slackroster/connection"
 	"github.com/truvity/sluis/internal/slackroster/reconcile"
 	"github.com/truvity/sluis/internal/slackroster/status"
@@ -34,7 +35,7 @@ const (
 
 // errSharedImmutable is what a change of host or name is answered with.
 func errSharedImmutable(what, was, got string) error {
-	return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
+	return rpcmount.NewError(connect.CodeInvalidArgument, fmt.Errorf(
 		"a shared channel's %s cannot change (it is %q, the request says %q): create a new channel with the %s you want, "+
 			"and delete this record if the old channel should no longer be managed", what, was, got, what))
 }
@@ -42,7 +43,7 @@ func errSharedImmutable(what, was, got string) error {
 func (c *Service) slackSharedStore() (SharedRecords, error) {
 	if c.d().SlackShared == nil {
 		return nil, connect.NewError(connect.CodeFailedPrecondition,
-			errors.New("this deployment keeps no state in Kubernetes, so a shared channel's record would not survive a restart"))
+			"this deployment keeps no state in Kubernetes, so a shared channel's record would not survive a restart")
 	}
 	return c.d().SlackShared, nil
 }
@@ -78,7 +79,7 @@ func (c *Service) ListSlackSharedChannels(
 	}
 	records, err := c.d().SlackShared.List(ctx)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnavailable, err)
+		return nil, connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
 	}
 	reports := c.slackReports(ctx)
 	for i := range records {
@@ -262,9 +263,9 @@ func sharedError(err error) error {
 		return err
 	case errors.Is(err, connection.ErrSharedConflict):
 		return connect.NewError(connect.CodeAborted,
-			errors.New("the shared channel records were changed by someone else while this was written: reload and try again"))
+			"the shared channel records were changed by someone else while this was written: reload and try again")
 	default:
-		return connect.NewError(connect.CodeUnavailable, err)
+		return connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
 	}
 }
 
@@ -286,7 +287,7 @@ func (c *Service) CreateSlackSharedChannel(
 		return nil, err
 	}
 	if err = want.Validate(c.d().Authorizer.Policy().Declared()); err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
 	if err = c.checkSources(ctx, want.Sources, want.Members, "", false); err != nil {
 		return nil, err
@@ -299,22 +300,22 @@ func (c *Service) CreateSlackSharedChannel(
 		seen, found := discoveredIn(reports, want.Host, want.ChannelID)
 		switch {
 		case !found:
-			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
+			return nil, rpcmount.NewError(connect.CodeInvalidArgument, fmt.Errorf(
 				"the channel %s has not been discovered in the host workspace %s: only a channel its bot can see is taken under management; "+
 					"if it is private there, invite the bot and refresh", want.ChannelID, want.Host))
 		case seen.HostTeam != "" && reports[want.Host].Team != "" && seen.HostTeam != reports[want.Host].Team:
-			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
-				"the channel %s is hosted by another Slack team, not by %s: it can be managed only from a connected workspace that hosts it", want.ChannelID, want.Host))
+			return nil, connect.Errorf(connect.CodeInvalidArgument,
+				"the channel %s is hosted by another Slack team, not by %s: it can be managed only from a connected workspace that hosts it", want.ChannelID, want.Host)
 		}
 	}
 	err = store.Apply(ctx, want.Name, func(current *reconcile.SharedChannel) (*reconcile.SharedChannel, error) {
 		if current != nil {
 			// Another host's record is named to a caller only when the caller may see it.
 			if book, berr := c.book(ctx); berr == nil && maySeeShared(id, book, *current) {
-				return nil, connect.NewError(connect.CodeAlreadyExists, fmt.Errorf(
-					"a shared channel named %s already exists, hosted by %s: edit it, or pick another name", want.Name, current.Host))
+				return nil, connect.Errorf(connect.CodeAlreadyExists,
+					"a shared channel named %s already exists, hosted by %s: edit it, or pick another name", want.Name, current.Host)
 			}
-			return nil, connect.NewError(connect.CodeAlreadyExists, fmt.Errorf("a shared channel named %s already exists: pick another name", want.Name))
+			return nil, connect.Errorf(connect.CodeAlreadyExists, "a shared channel named %s already exists: pick another name", want.Name)
 		}
 		return &want, nil
 	})
@@ -355,7 +356,7 @@ func (c *Service) UpdateSlackSharedChannel(
 			return nil, errSharedImmutable("channel id", current.ChannelID, want.ChannelID)
 		}
 		if err := want.Validate(c.d().Authorizer.Policy().Declared()); err != nil {
-			return nil, connect.NewError(connect.CodeInvalidArgument, err)
+			return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 		}
 		if err := c.checkSources(ctx, want.Sources, want.Members, "", false); err != nil {
 			return nil, err
@@ -383,7 +384,7 @@ func (c *Service) UpdateSlackSharedChannel(
 // answer cannot be used to find out which names another directory's workspace
 // hosts. A caller who may see it but may not operate it is refused plainly.
 func (c *Service) requireStoredShared(ctx context.Context, caller consolecall.Caller, id access.Identity, name string, current *reconcile.SharedChannel) error {
-	notFound := connect.NewError(connect.CodeNotFound, fmt.Errorf("there is no shared channel named %s", name))
+	notFound := connect.Errorf(connect.CodeNotFound, "there is no shared channel named %s", name)
 	if current == nil {
 		return notFound
 	}

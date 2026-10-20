@@ -14,396 +14,446 @@
 package sluisv1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1 "github.com/truvity/sluis/gen/sluis/v1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// WorkspaceServiceName is the fully-qualified name of the WorkspaceService service.
 	WorkspaceServiceName = "sluis.v1.WorkspaceService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// WorkspaceServiceListWorkspacesProcedure is the fully-qualified name of the WorkspaceService's
+	// WorkspaceServiceListWorkspacesProcedure is the procedure name of the WorkspaceService's
 	// ListWorkspaces RPC.
 	WorkspaceServiceListWorkspacesProcedure = "/sluis.v1.WorkspaceService/ListWorkspaces"
-	// WorkspaceServiceBeginConnectProcedure is the fully-qualified name of the WorkspaceService's
+	// WorkspaceServiceBeginConnectProcedure is the procedure name of the WorkspaceService's
 	// BeginConnect RPC.
 	WorkspaceServiceBeginConnectProcedure = "/sluis.v1.WorkspaceService/BeginConnect"
-	// WorkspaceServiceReconnectProcedure is the fully-qualified name of the WorkspaceService's
-	// Reconnect RPC.
+	// WorkspaceServiceReconnectProcedure is the procedure name of the WorkspaceService's Reconnect RPC.
 	WorkspaceServiceReconnectProcedure = "/sluis.v1.WorkspaceService/Reconnect"
-	// WorkspaceServiceUploadKeyProcedure is the fully-qualified name of the WorkspaceService's
-	// UploadKey RPC.
+	// WorkspaceServiceUploadKeyProcedure is the procedure name of the WorkspaceService's UploadKey RPC.
 	WorkspaceServiceUploadKeyProcedure = "/sluis.v1.WorkspaceService/UploadKey"
-	// WorkspaceServiceSetServedDomainsProcedure is the fully-qualified name of the WorkspaceService's
+	// WorkspaceServiceSetServedDomainsProcedure is the procedure name of the WorkspaceService's
 	// SetServedDomains RPC.
 	WorkspaceServiceSetServedDomainsProcedure = "/sluis.v1.WorkspaceService/SetServedDomains"
-	// WorkspaceServiceSetSyncedGroupsProcedure is the fully-qualified name of the WorkspaceService's
+	// WorkspaceServiceSetSyncedGroupsProcedure is the procedure name of the WorkspaceService's
 	// SetSyncedGroups RPC.
 	WorkspaceServiceSetSyncedGroupsProcedure = "/sluis.v1.WorkspaceService/SetSyncedGroups"
-	// WorkspaceServiceProbeProcedure is the fully-qualified name of the WorkspaceService's Probe RPC.
+	// WorkspaceServiceProbeProcedure is the procedure name of the WorkspaceService's Probe RPC.
 	WorkspaceServiceProbeProcedure = "/sluis.v1.WorkspaceService/Probe"
-	// WorkspaceServiceRefreshProcedure is the fully-qualified name of the WorkspaceService's Refresh
-	// RPC.
+	// WorkspaceServiceRefreshProcedure is the procedure name of the WorkspaceService's Refresh RPC.
 	WorkspaceServiceRefreshProcedure = "/sluis.v1.WorkspaceService/Refresh"
-	// WorkspaceServiceDisconnectProcedure is the fully-qualified name of the WorkspaceService's
-	// Disconnect RPC.
+	// WorkspaceServiceDisconnectProcedure is the procedure name of the WorkspaceService's Disconnect
+	// RPC.
 	WorkspaceServiceDisconnectProcedure = "/sluis.v1.WorkspaceService/Disconnect"
+)
+
+var (
+	workspaceServiceListWorkspacesSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_sluis_v1_workspace_proto.Services().ByName("WorkspaceService").Methods().ByName("ListWorkspaces"),
+			Procedure:  WorkspaceServiceListWorkspacesProcedure,
+		}
+	})
+	workspaceServiceBeginConnectSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_sluis_v1_workspace_proto.Services().ByName("WorkspaceService").Methods().ByName("BeginConnect"),
+			Procedure:  WorkspaceServiceBeginConnectProcedure,
+		}
+	})
+	workspaceServiceReconnectSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_sluis_v1_workspace_proto.Services().ByName("WorkspaceService").Methods().ByName("Reconnect"),
+			Procedure:  WorkspaceServiceReconnectProcedure,
+		}
+	})
+	workspaceServiceUploadKeySpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_sluis_v1_workspace_proto.Services().ByName("WorkspaceService").Methods().ByName("UploadKey"),
+			Procedure:  WorkspaceServiceUploadKeyProcedure,
+		}
+	})
+	workspaceServiceSetServedDomainsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_sluis_v1_workspace_proto.Services().ByName("WorkspaceService").Methods().ByName("SetServedDomains"),
+			Procedure:  WorkspaceServiceSetServedDomainsProcedure,
+		}
+	})
+	workspaceServiceSetSyncedGroupsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_sluis_v1_workspace_proto.Services().ByName("WorkspaceService").Methods().ByName("SetSyncedGroups"),
+			Procedure:  WorkspaceServiceSetSyncedGroupsProcedure,
+		}
+	})
+	workspaceServiceProbeSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_sluis_v1_workspace_proto.Services().ByName("WorkspaceService").Methods().ByName("Probe"),
+			Procedure:  WorkspaceServiceProbeProcedure,
+		}
+	})
+	workspaceServiceRefreshSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_sluis_v1_workspace_proto.Services().ByName("WorkspaceService").Methods().ByName("Refresh"),
+			Procedure:  WorkspaceServiceRefreshProcedure,
+		}
+	})
+	workspaceServiceDisconnectSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_sluis_v1_workspace_proto.Services().ByName("WorkspaceService").Methods().ByName("Disconnect"),
+			Procedure:  WorkspaceServiceDisconnectProcedure,
+		}
+	})
 )
 
 // WorkspaceServiceClient is a client for the sluis.v1.WorkspaceService service.
 type WorkspaceServiceClient interface {
 	// ListWorkspaces returns every workspace with its domains, health and
 	// snapshot age. Viewer.
-	ListWorkspaces(context.Context, *connect.Request[v1.ListWorkspacesRequest]) (*connect.Response[v1.ListWorkspacesResponse], error)
+	ListWorkspaces(context.Context, *v1.ListWorkspacesRequest) (*v1.ListWorkspacesResponse, error)
 	// BeginConnect starts the admin-consent flow for a new workspace: it
 	// sets the state cookie on the response and returns the consent URL the
 	// browser navigates to. The callback is a plain HTTP route
 	// (`/connect/<backend>/callback`), authenticated by the gateway like any
 	// other page. Operator.
-	BeginConnect(context.Context, *connect.Request[v1.BeginConnectRequest]) (*connect.Response[v1.BeginConnectResponse], error)
+	BeginConnect(context.Context, *v1.BeginConnectRequest) (*v1.BeginConnectResponse, error)
 	// Reconnect is BeginConnect bound to an existing workspace: the callback
 	// verifies the consenting tenant is the same and replaces the
 	// credential. Operator.
-	Reconnect(context.Context, *connect.Request[v1.ReconnectRequest]) (*connect.Response[v1.ReconnectResponse], error)
+	Reconnect(context.Context, *v1.ReconnectRequest) (*v1.ReconnectResponse, error)
 	// UploadKey connects (or re-credentials) a workspace with a
 	// service-account key and the admin to act as. Operator.
-	UploadKey(context.Context, *connect.Request[v1.UploadKeyRequest]) (*connect.Response[v1.UploadKeyResponse], error)
+	UploadKey(context.Context, *v1.UploadKeyRequest) (*v1.UploadKeyResponse, error)
 	// SetServedDomains narrows a workspace to a subset of its domains, or
 	// widens it back. An empty list serves every domain the tenant owns,
 	// which is the default. Only a domain discovery returns may be named:
 	// the ceiling is the tenant's own verified domains, so every setting is
 	// a subtraction from what the directory itself allows. A declared
 	// workspace refuses — the deployment states its list. Operator.
-	SetServedDomains(context.Context, *connect.Request[v1.SetServedDomainsRequest]) (*connect.Response[v1.SetServedDomainsResponse], error)
+	SetServedDomains(context.Context, *v1.SetServedDomainsRequest) (*v1.SetServedDomainsResponse, error)
 	// SetSyncedGroups narrows a workspace to a subset of its groups, or
 	// widens it back. An empty list keeps every group in the served
 	// domains, which is the default. Only a group the last read of the
 	// directory held may be named, so the ceiling is the tenant's own list.
 	// A declared workspace refuses. Operator.
-	SetSyncedGroups(context.Context, *connect.Request[v1.SetSyncedGroupsRequest]) (*connect.Response[v1.SetSyncedGroupsResponse], error)
+	SetSyncedGroups(context.Context, *v1.SetSyncedGroupsRequest) (*v1.SetSyncedGroupsResponse, error)
 	// Probe checks one workspace's credential now and re-reads its domain
 	// list. Operator.
-	Probe(context.Context, *connect.Request[v1.ProbeRequest]) (*connect.Response[v1.ProbeResponse], error)
+	Probe(context.Context, *v1.ProbeRequest) (*v1.ProbeResponse, error)
 	// Refresh takes a new snapshot of one workspace now — the operator's
 	// max_age=0. Operator.
-	Refresh(context.Context, *connect.Request[v1.RefreshRequest]) (*connect.Response[v1.RefreshResponse], error)
+	Refresh(context.Context, *v1.RefreshRequest) (*v1.RefreshResponse, error)
 	// Disconnect revokes the credential at the backend, then deletes the
 	// workspace. A declared (overlay) workspace refuses: it is removed from
 	// the deployment instead. Operator.
-	Disconnect(context.Context, *connect.Request[v1.DisconnectRequest]) (*connect.Response[v1.DisconnectResponse], error)
+	Disconnect(context.Context, *v1.DisconnectRequest) (*v1.DisconnectResponse, error)
 }
 
-// NewWorkspaceServiceClient constructs a client for the sluis.v1.WorkspaceService service. By
-// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
-// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
-// connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewWorkspaceServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) WorkspaceServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	workspaceServiceMethods := v1.File_sluis_v1_workspace_proto.Services().ByName("WorkspaceService").Methods()
-	return &workspaceServiceClient{
-		listWorkspaces: connect.NewClient[v1.ListWorkspacesRequest, v1.ListWorkspacesResponse](
-			httpClient,
-			baseURL+WorkspaceServiceListWorkspacesProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("ListWorkspaces")),
-			connect.WithClientOptions(opts...),
-		),
-		beginConnect: connect.NewClient[v1.BeginConnectRequest, v1.BeginConnectResponse](
-			httpClient,
-			baseURL+WorkspaceServiceBeginConnectProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("BeginConnect")),
-			connect.WithClientOptions(opts...),
-		),
-		reconnect: connect.NewClient[v1.ReconnectRequest, v1.ReconnectResponse](
-			httpClient,
-			baseURL+WorkspaceServiceReconnectProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("Reconnect")),
-			connect.WithClientOptions(opts...),
-		),
-		uploadKey: connect.NewClient[v1.UploadKeyRequest, v1.UploadKeyResponse](
-			httpClient,
-			baseURL+WorkspaceServiceUploadKeyProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("UploadKey")),
-			connect.WithClientOptions(opts...),
-		),
-		setServedDomains: connect.NewClient[v1.SetServedDomainsRequest, v1.SetServedDomainsResponse](
-			httpClient,
-			baseURL+WorkspaceServiceSetServedDomainsProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("SetServedDomains")),
-			connect.WithClientOptions(opts...),
-		),
-		setSyncedGroups: connect.NewClient[v1.SetSyncedGroupsRequest, v1.SetSyncedGroupsResponse](
-			httpClient,
-			baseURL+WorkspaceServiceSetSyncedGroupsProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("SetSyncedGroups")),
-			connect.WithClientOptions(opts...),
-		),
-		probe: connect.NewClient[v1.ProbeRequest, v1.ProbeResponse](
-			httpClient,
-			baseURL+WorkspaceServiceProbeProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("Probe")),
-			connect.WithClientOptions(opts...),
-		),
-		refresh: connect.NewClient[v1.RefreshRequest, v1.RefreshResponse](
-			httpClient,
-			baseURL+WorkspaceServiceRefreshProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("Refresh")),
-			connect.WithClientOptions(opts...),
-		),
-		disconnect: connect.NewClient[v1.DisconnectRequest, v1.DisconnectResponse](
-			httpClient,
-			baseURL+WorkspaceServiceDisconnectProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("Disconnect")),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// workspaceServiceClient implements WorkspaceServiceClient.
-type workspaceServiceClient struct {
-	listWorkspaces   *connect.Client[v1.ListWorkspacesRequest, v1.ListWorkspacesResponse]
-	beginConnect     *connect.Client[v1.BeginConnectRequest, v1.BeginConnectResponse]
-	reconnect        *connect.Client[v1.ReconnectRequest, v1.ReconnectResponse]
-	uploadKey        *connect.Client[v1.UploadKeyRequest, v1.UploadKeyResponse]
-	setServedDomains *connect.Client[v1.SetServedDomainsRequest, v1.SetServedDomainsResponse]
-	setSyncedGroups  *connect.Client[v1.SetSyncedGroupsRequest, v1.SetSyncedGroupsResponse]
-	probe            *connect.Client[v1.ProbeRequest, v1.ProbeResponse]
-	refresh          *connect.Client[v1.RefreshRequest, v1.RefreshResponse]
-	disconnect       *connect.Client[v1.DisconnectRequest, v1.DisconnectResponse]
-}
-
-// ListWorkspaces calls sluis.v1.WorkspaceService.ListWorkspaces.
-func (c *workspaceServiceClient) ListWorkspaces(ctx context.Context, req *connect.Request[v1.ListWorkspacesRequest]) (*connect.Response[v1.ListWorkspacesResponse], error) {
-	return c.listWorkspaces.CallUnary(ctx, req)
-}
-
-// BeginConnect calls sluis.v1.WorkspaceService.BeginConnect.
-func (c *workspaceServiceClient) BeginConnect(ctx context.Context, req *connect.Request[v1.BeginConnectRequest]) (*connect.Response[v1.BeginConnectResponse], error) {
-	return c.beginConnect.CallUnary(ctx, req)
-}
-
-// Reconnect calls sluis.v1.WorkspaceService.Reconnect.
-func (c *workspaceServiceClient) Reconnect(ctx context.Context, req *connect.Request[v1.ReconnectRequest]) (*connect.Response[v1.ReconnectResponse], error) {
-	return c.reconnect.CallUnary(ctx, req)
-}
-
-// UploadKey calls sluis.v1.WorkspaceService.UploadKey.
-func (c *workspaceServiceClient) UploadKey(ctx context.Context, req *connect.Request[v1.UploadKeyRequest]) (*connect.Response[v1.UploadKeyResponse], error) {
-	return c.uploadKey.CallUnary(ctx, req)
-}
-
-// SetServedDomains calls sluis.v1.WorkspaceService.SetServedDomains.
-func (c *workspaceServiceClient) SetServedDomains(ctx context.Context, req *connect.Request[v1.SetServedDomainsRequest]) (*connect.Response[v1.SetServedDomainsResponse], error) {
-	return c.setServedDomains.CallUnary(ctx, req)
-}
-
-// SetSyncedGroups calls sluis.v1.WorkspaceService.SetSyncedGroups.
-func (c *workspaceServiceClient) SetSyncedGroups(ctx context.Context, req *connect.Request[v1.SetSyncedGroupsRequest]) (*connect.Response[v1.SetSyncedGroupsResponse], error) {
-	return c.setSyncedGroups.CallUnary(ctx, req)
-}
-
-// Probe calls sluis.v1.WorkspaceService.Probe.
-func (c *workspaceServiceClient) Probe(ctx context.Context, req *connect.Request[v1.ProbeRequest]) (*connect.Response[v1.ProbeResponse], error) {
-	return c.probe.CallUnary(ctx, req)
-}
-
-// Refresh calls sluis.v1.WorkspaceService.Refresh.
-func (c *workspaceServiceClient) Refresh(ctx context.Context, req *connect.Request[v1.RefreshRequest]) (*connect.Response[v1.RefreshResponse], error) {
-	return c.refresh.CallUnary(ctx, req)
-}
-
-// Disconnect calls sluis.v1.WorkspaceService.Disconnect.
-func (c *workspaceServiceClient) Disconnect(ctx context.Context, req *connect.Request[v1.DisconnectRequest]) (*connect.Response[v1.DisconnectResponse], error) {
-	return c.disconnect.CallUnary(ctx, req)
+// NewWorkspaceServiceClient constructs a client for the sluis.v1.WorkspaceService service. Multiple
+// service clients may share a single connect.Client.
+func NewWorkspaceServiceClient(client *connect.Client) WorkspaceServiceClient {
+	return &workspaceServiceClient{client: client}
 }
 
 // WorkspaceServiceHandler is an implementation of the sluis.v1.WorkspaceService service.
 type WorkspaceServiceHandler interface {
 	// ListWorkspaces returns every workspace with its domains, health and
 	// snapshot age. Viewer.
-	ListWorkspaces(context.Context, *connect.Request[v1.ListWorkspacesRequest]) (*connect.Response[v1.ListWorkspacesResponse], error)
+	ListWorkspaces(context.Context, *v1.ListWorkspacesRequest) (*v1.ListWorkspacesResponse, error)
 	// BeginConnect starts the admin-consent flow for a new workspace: it
 	// sets the state cookie on the response and returns the consent URL the
 	// browser navigates to. The callback is a plain HTTP route
 	// (`/connect/<backend>/callback`), authenticated by the gateway like any
 	// other page. Operator.
-	BeginConnect(context.Context, *connect.Request[v1.BeginConnectRequest]) (*connect.Response[v1.BeginConnectResponse], error)
+	BeginConnect(context.Context, *v1.BeginConnectRequest) (*v1.BeginConnectResponse, error)
 	// Reconnect is BeginConnect bound to an existing workspace: the callback
 	// verifies the consenting tenant is the same and replaces the
 	// credential. Operator.
-	Reconnect(context.Context, *connect.Request[v1.ReconnectRequest]) (*connect.Response[v1.ReconnectResponse], error)
+	Reconnect(context.Context, *v1.ReconnectRequest) (*v1.ReconnectResponse, error)
 	// UploadKey connects (or re-credentials) a workspace with a
 	// service-account key and the admin to act as. Operator.
-	UploadKey(context.Context, *connect.Request[v1.UploadKeyRequest]) (*connect.Response[v1.UploadKeyResponse], error)
+	UploadKey(context.Context, *v1.UploadKeyRequest) (*v1.UploadKeyResponse, error)
 	// SetServedDomains narrows a workspace to a subset of its domains, or
 	// widens it back. An empty list serves every domain the tenant owns,
 	// which is the default. Only a domain discovery returns may be named:
 	// the ceiling is the tenant's own verified domains, so every setting is
 	// a subtraction from what the directory itself allows. A declared
 	// workspace refuses — the deployment states its list. Operator.
-	SetServedDomains(context.Context, *connect.Request[v1.SetServedDomainsRequest]) (*connect.Response[v1.SetServedDomainsResponse], error)
+	SetServedDomains(context.Context, *v1.SetServedDomainsRequest) (*v1.SetServedDomainsResponse, error)
 	// SetSyncedGroups narrows a workspace to a subset of its groups, or
 	// widens it back. An empty list keeps every group in the served
 	// domains, which is the default. Only a group the last read of the
 	// directory held may be named, so the ceiling is the tenant's own list.
 	// A declared workspace refuses. Operator.
-	SetSyncedGroups(context.Context, *connect.Request[v1.SetSyncedGroupsRequest]) (*connect.Response[v1.SetSyncedGroupsResponse], error)
+	SetSyncedGroups(context.Context, *v1.SetSyncedGroupsRequest) (*v1.SetSyncedGroupsResponse, error)
 	// Probe checks one workspace's credential now and re-reads its domain
 	// list. Operator.
-	Probe(context.Context, *connect.Request[v1.ProbeRequest]) (*connect.Response[v1.ProbeResponse], error)
+	Probe(context.Context, *v1.ProbeRequest) (*v1.ProbeResponse, error)
 	// Refresh takes a new snapshot of one workspace now — the operator's
 	// max_age=0. Operator.
-	Refresh(context.Context, *connect.Request[v1.RefreshRequest]) (*connect.Response[v1.RefreshResponse], error)
+	Refresh(context.Context, *v1.RefreshRequest) (*v1.RefreshResponse, error)
 	// Disconnect revokes the credential at the backend, then deletes the
 	// workspace. A declared (overlay) workspace refuses: it is removed from
 	// the deployment instead. Operator.
-	Disconnect(context.Context, *connect.Request[v1.DisconnectRequest]) (*connect.Response[v1.DisconnectResponse], error)
+	Disconnect(context.Context, *v1.DisconnectRequest) (*v1.DisconnectResponse, error)
 }
 
-// NewWorkspaceServiceHandler builds an HTTP handler from the service implementation. It returns the
-// path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewWorkspaceServiceHandler(svc WorkspaceServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	workspaceServiceMethods := v1.File_sluis_v1_workspace_proto.Services().ByName("WorkspaceService").Methods()
-	workspaceServiceListWorkspacesHandler := connect.NewUnaryHandler(
-		WorkspaceServiceListWorkspacesProcedure,
-		svc.ListWorkspaces,
-		connect.WithSchema(workspaceServiceMethods.ByName("ListWorkspaces")),
-		connect.WithHandlerOptions(opts...),
+// RegisterWorkspaceServiceHandler registers svc as the sluis.v1.WorkspaceService implementation on
+// server.
+func RegisterWorkspaceServiceHandler(server *connect.Server, svc WorkspaceServiceHandler) {
+	adapter := workspaceServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: workspaceServiceListWorkspacesSpec(), Handler: adapter.listWorkspaces},
+		connect.Method{Spec: workspaceServiceBeginConnectSpec(), Handler: adapter.beginConnect},
+		connect.Method{Spec: workspaceServiceReconnectSpec(), Handler: adapter.reconnect},
+		connect.Method{Spec: workspaceServiceUploadKeySpec(), Handler: adapter.uploadKey},
+		connect.Method{Spec: workspaceServiceSetServedDomainsSpec(), Handler: adapter.setServedDomains},
+		connect.Method{Spec: workspaceServiceSetSyncedGroupsSpec(), Handler: adapter.setSyncedGroups},
+		connect.Method{Spec: workspaceServiceProbeSpec(), Handler: adapter.probe},
+		connect.Method{Spec: workspaceServiceRefreshSpec(), Handler: adapter.refresh},
+		connect.Method{Spec: workspaceServiceDisconnectSpec(), Handler: adapter.disconnect},
 	)
-	workspaceServiceBeginConnectHandler := connect.NewUnaryHandler(
-		WorkspaceServiceBeginConnectProcedure,
-		svc.BeginConnect,
-		connect.WithSchema(workspaceServiceMethods.ByName("BeginConnect")),
-		connect.WithHandlerOptions(opts...),
-	)
-	workspaceServiceReconnectHandler := connect.NewUnaryHandler(
-		WorkspaceServiceReconnectProcedure,
-		svc.Reconnect,
-		connect.WithSchema(workspaceServiceMethods.ByName("Reconnect")),
-		connect.WithHandlerOptions(opts...),
-	)
-	workspaceServiceUploadKeyHandler := connect.NewUnaryHandler(
-		WorkspaceServiceUploadKeyProcedure,
-		svc.UploadKey,
-		connect.WithSchema(workspaceServiceMethods.ByName("UploadKey")),
-		connect.WithHandlerOptions(opts...),
-	)
-	workspaceServiceSetServedDomainsHandler := connect.NewUnaryHandler(
-		WorkspaceServiceSetServedDomainsProcedure,
-		svc.SetServedDomains,
-		connect.WithSchema(workspaceServiceMethods.ByName("SetServedDomains")),
-		connect.WithHandlerOptions(opts...),
-	)
-	workspaceServiceSetSyncedGroupsHandler := connect.NewUnaryHandler(
-		WorkspaceServiceSetSyncedGroupsProcedure,
-		svc.SetSyncedGroups,
-		connect.WithSchema(workspaceServiceMethods.ByName("SetSyncedGroups")),
-		connect.WithHandlerOptions(opts...),
-	)
-	workspaceServiceProbeHandler := connect.NewUnaryHandler(
-		WorkspaceServiceProbeProcedure,
-		svc.Probe,
-		connect.WithSchema(workspaceServiceMethods.ByName("Probe")),
-		connect.WithHandlerOptions(opts...),
-	)
-	workspaceServiceRefreshHandler := connect.NewUnaryHandler(
-		WorkspaceServiceRefreshProcedure,
-		svc.Refresh,
-		connect.WithSchema(workspaceServiceMethods.ByName("Refresh")),
-		connect.WithHandlerOptions(opts...),
-	)
-	workspaceServiceDisconnectHandler := connect.NewUnaryHandler(
-		WorkspaceServiceDisconnectProcedure,
-		svc.Disconnect,
-		connect.WithSchema(workspaceServiceMethods.ByName("Disconnect")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/sluis.v1.WorkspaceService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case WorkspaceServiceListWorkspacesProcedure:
-			workspaceServiceListWorkspacesHandler.ServeHTTP(w, r)
-		case WorkspaceServiceBeginConnectProcedure:
-			workspaceServiceBeginConnectHandler.ServeHTTP(w, r)
-		case WorkspaceServiceReconnectProcedure:
-			workspaceServiceReconnectHandler.ServeHTTP(w, r)
-		case WorkspaceServiceUploadKeyProcedure:
-			workspaceServiceUploadKeyHandler.ServeHTTP(w, r)
-		case WorkspaceServiceSetServedDomainsProcedure:
-			workspaceServiceSetServedDomainsHandler.ServeHTTP(w, r)
-		case WorkspaceServiceSetSyncedGroupsProcedure:
-			workspaceServiceSetSyncedGroupsHandler.ServeHTTP(w, r)
-		case WorkspaceServiceProbeProcedure:
-			workspaceServiceProbeHandler.ServeHTTP(w, r)
-		case WorkspaceServiceRefreshProcedure:
-			workspaceServiceRefreshHandler.ServeHTTP(w, r)
-		case WorkspaceServiceDisconnectProcedure:
-			workspaceServiceDisconnectHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedWorkspaceServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedWorkspaceServiceHandler struct{}
 
-func (UnimplementedWorkspaceServiceHandler) ListWorkspaces(context.Context, *connect.Request[v1.ListWorkspacesRequest]) (*connect.Response[v1.ListWorkspacesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sluis.v1.WorkspaceService.ListWorkspaces is not implemented"))
+func (UnimplementedWorkspaceServiceHandler) ListWorkspaces(context.Context, *v1.ListWorkspacesRequest) (*v1.ListWorkspacesResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "sluis.v1.WorkspaceService.ListWorkspaces is not implemented")
 }
 
-func (UnimplementedWorkspaceServiceHandler) BeginConnect(context.Context, *connect.Request[v1.BeginConnectRequest]) (*connect.Response[v1.BeginConnectResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sluis.v1.WorkspaceService.BeginConnect is not implemented"))
+func (UnimplementedWorkspaceServiceHandler) BeginConnect(context.Context, *v1.BeginConnectRequest) (*v1.BeginConnectResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "sluis.v1.WorkspaceService.BeginConnect is not implemented")
 }
 
-func (UnimplementedWorkspaceServiceHandler) Reconnect(context.Context, *connect.Request[v1.ReconnectRequest]) (*connect.Response[v1.ReconnectResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sluis.v1.WorkspaceService.Reconnect is not implemented"))
+func (UnimplementedWorkspaceServiceHandler) Reconnect(context.Context, *v1.ReconnectRequest) (*v1.ReconnectResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "sluis.v1.WorkspaceService.Reconnect is not implemented")
 }
 
-func (UnimplementedWorkspaceServiceHandler) UploadKey(context.Context, *connect.Request[v1.UploadKeyRequest]) (*connect.Response[v1.UploadKeyResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sluis.v1.WorkspaceService.UploadKey is not implemented"))
+func (UnimplementedWorkspaceServiceHandler) UploadKey(context.Context, *v1.UploadKeyRequest) (*v1.UploadKeyResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "sluis.v1.WorkspaceService.UploadKey is not implemented")
 }
 
-func (UnimplementedWorkspaceServiceHandler) SetServedDomains(context.Context, *connect.Request[v1.SetServedDomainsRequest]) (*connect.Response[v1.SetServedDomainsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sluis.v1.WorkspaceService.SetServedDomains is not implemented"))
+func (UnimplementedWorkspaceServiceHandler) SetServedDomains(context.Context, *v1.SetServedDomainsRequest) (*v1.SetServedDomainsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "sluis.v1.WorkspaceService.SetServedDomains is not implemented")
 }
 
-func (UnimplementedWorkspaceServiceHandler) SetSyncedGroups(context.Context, *connect.Request[v1.SetSyncedGroupsRequest]) (*connect.Response[v1.SetSyncedGroupsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sluis.v1.WorkspaceService.SetSyncedGroups is not implemented"))
+func (UnimplementedWorkspaceServiceHandler) SetSyncedGroups(context.Context, *v1.SetSyncedGroupsRequest) (*v1.SetSyncedGroupsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "sluis.v1.WorkspaceService.SetSyncedGroups is not implemented")
 }
 
-func (UnimplementedWorkspaceServiceHandler) Probe(context.Context, *connect.Request[v1.ProbeRequest]) (*connect.Response[v1.ProbeResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sluis.v1.WorkspaceService.Probe is not implemented"))
+func (UnimplementedWorkspaceServiceHandler) Probe(context.Context, *v1.ProbeRequest) (*v1.ProbeResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "sluis.v1.WorkspaceService.Probe is not implemented")
 }
 
-func (UnimplementedWorkspaceServiceHandler) Refresh(context.Context, *connect.Request[v1.RefreshRequest]) (*connect.Response[v1.RefreshResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sluis.v1.WorkspaceService.Refresh is not implemented"))
+func (UnimplementedWorkspaceServiceHandler) Refresh(context.Context, *v1.RefreshRequest) (*v1.RefreshResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "sluis.v1.WorkspaceService.Refresh is not implemented")
 }
 
-func (UnimplementedWorkspaceServiceHandler) Disconnect(context.Context, *connect.Request[v1.DisconnectRequest]) (*connect.Response[v1.DisconnectResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sluis.v1.WorkspaceService.Disconnect is not implemented"))
+func (UnimplementedWorkspaceServiceHandler) Disconnect(context.Context, *v1.DisconnectRequest) (*v1.DisconnectResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "sluis.v1.WorkspaceService.Disconnect is not implemented")
+}
+
+type workspaceServiceClient struct {
+	client *connect.Client
+}
+
+func (c *workspaceServiceClient) ListWorkspaces(ctx context.Context, req *v1.ListWorkspacesRequest) (*v1.ListWorkspacesResponse, error) {
+	var res v1.ListWorkspacesResponse
+	if err := c.client.CallUnary(ctx, workspaceServiceListWorkspacesSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *workspaceServiceClient) BeginConnect(ctx context.Context, req *v1.BeginConnectRequest) (*v1.BeginConnectResponse, error) {
+	var res v1.BeginConnectResponse
+	if err := c.client.CallUnary(ctx, workspaceServiceBeginConnectSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *workspaceServiceClient) Reconnect(ctx context.Context, req *v1.ReconnectRequest) (*v1.ReconnectResponse, error) {
+	var res v1.ReconnectResponse
+	if err := c.client.CallUnary(ctx, workspaceServiceReconnectSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *workspaceServiceClient) UploadKey(ctx context.Context, req *v1.UploadKeyRequest) (*v1.UploadKeyResponse, error) {
+	var res v1.UploadKeyResponse
+	if err := c.client.CallUnary(ctx, workspaceServiceUploadKeySpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *workspaceServiceClient) SetServedDomains(ctx context.Context, req *v1.SetServedDomainsRequest) (*v1.SetServedDomainsResponse, error) {
+	var res v1.SetServedDomainsResponse
+	if err := c.client.CallUnary(ctx, workspaceServiceSetServedDomainsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *workspaceServiceClient) SetSyncedGroups(ctx context.Context, req *v1.SetSyncedGroupsRequest) (*v1.SetSyncedGroupsResponse, error) {
+	var res v1.SetSyncedGroupsResponse
+	if err := c.client.CallUnary(ctx, workspaceServiceSetSyncedGroupsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *workspaceServiceClient) Probe(ctx context.Context, req *v1.ProbeRequest) (*v1.ProbeResponse, error) {
+	var res v1.ProbeResponse
+	if err := c.client.CallUnary(ctx, workspaceServiceProbeSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *workspaceServiceClient) Refresh(ctx context.Context, req *v1.RefreshRequest) (*v1.RefreshResponse, error) {
+	var res v1.RefreshResponse
+	if err := c.client.CallUnary(ctx, workspaceServiceRefreshSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *workspaceServiceClient) Disconnect(ctx context.Context, req *v1.DisconnectRequest) (*v1.DisconnectResponse, error) {
+	var res v1.DisconnectResponse
+	if err := c.client.CallUnary(ctx, workspaceServiceDisconnectSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type workspaceServiceHandler struct{ svc WorkspaceServiceHandler }
+
+func (h workspaceServiceHandler) listWorkspaces(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListWorkspacesRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListWorkspaces(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h workspaceServiceHandler) beginConnect(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.BeginConnectRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.BeginConnect(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h workspaceServiceHandler) reconnect(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ReconnectRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Reconnect(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h workspaceServiceHandler) uploadKey(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.UploadKeyRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.UploadKey(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h workspaceServiceHandler) setServedDomains(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SetServedDomainsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SetServedDomains(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h workspaceServiceHandler) setSyncedGroups(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SetSyncedGroupsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SetSyncedGroups(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h workspaceServiceHandler) probe(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ProbeRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Probe(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h workspaceServiceHandler) refresh(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RefreshRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Refresh(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h workspaceServiceHandler) disconnect(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DisconnectRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Disconnect(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

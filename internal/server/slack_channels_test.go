@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
@@ -31,30 +31,30 @@ func withID(d *directoryrosterv1.SlackChannelDefinition, id string) *directoryro
 }
 
 func (h *connectHarness) createChannel(ctx context.Context, d *directoryrosterv1.SlackChannelDefinition) error {
-	_, err := h.console.CreateSlackChannel(ctx, connect.NewRequest(&directoryrosterv1.CreateSlackChannelRequest{Channel: d}))
+	_, err := h.console.CreateSlackChannel(ctx, &directoryrosterv1.CreateSlackChannelRequest{Channel: d})
 	return err
 }
 
 func (h *connectHarness) updateChannel(ctx context.Context, d *directoryrosterv1.SlackChannelDefinition) error {
-	_, err := h.console.UpdateSlackChannel(ctx, connect.NewRequest(&directoryrosterv1.UpdateSlackChannelRequest{Channel: d}))
+	_, err := h.console.UpdateSlackChannel(ctx, &directoryrosterv1.UpdateSlackChannelRequest{Channel: d})
 	return err
 }
 
 func (h *connectHarness) deleteChannel(ctx context.Context, workspace, name string) (string, error) {
-	got, err := h.console.DeleteSlackChannel(ctx, connect.NewRequest(&directoryrosterv1.DeleteSlackChannelRequest{Workspace: workspace, Name: name}))
+	got, err := h.console.DeleteSlackChannel(ctx, &directoryrosterv1.DeleteSlackChannelRequest{Workspace: workspace, Name: name})
 	if err != nil {
 		return "", err
 	}
-	return got.Msg.GetNote(), nil
+	return got.GetNote(), nil
 }
 
 func (h *connectHarness) listChannels(ctx context.Context, t *testing.T) *directoryrosterv1.ListSlackChannelsResponse {
 	t.Helper()
-	got, err := h.console.ListSlackChannels(ctx, connect.NewRequest(&directoryrosterv1.ListSlackChannelsRequest{}))
+	got, err := h.console.ListSlackChannels(ctx, &directoryrosterv1.ListSlackChannelsRequest{})
 	if err != nil {
 		t.Fatalf("ListSlackChannels: %v", err)
 	}
-	return got.Msg
+	return got
 }
 
 func (h *connectHarness) storedChannels(t *testing.T) map[string]string {
@@ -363,7 +363,7 @@ func TestWhoMayManageConsoleChannels(t *testing.T) {
 	}
 	// Somebody with no role at all is refused every call.
 	h := newConnectHarness(t)
-	_, err := h.console.ListSlackChannels(as(elsewhereOp), connect.NewRequest(&directoryrosterv1.ListSlackChannelsRequest{}))
+	_, err := h.console.ListSlackChannels(as(elsewhereOp), &directoryrosterv1.ListSlackChannelsRequest{})
 	wantCode(t, "list by an unrelated operator", err, connect.CodePermissionDenied)
 }
 

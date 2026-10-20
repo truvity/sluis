@@ -1,14 +1,21 @@
 package wire_test
 
 import (
+	"context"
 	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	auditv1 "github.com/truvity/sluis/audit/sdk/gen/audit/v1"
+	"github.com/truvity/sluis/audit/sdk/gen/audit/v1/auditv1connect"
 	"github.com/truvity/sluis/audit/wire"
 )
 
@@ -78,9 +85,53 @@ func TestTheCodecReadsEitherSpelling(t *testing.T) {
 	}
 }
 
-func TestTheCodecAnswersToBothJSONNames(t *testing.T) {
-	// One per name Connect asks for JSON by, and the limit on a message.
-	if n := len(wire.HandlerOptions()); n != 3 {
-		t.Fatalf("%d options; want one per name Connect asks for JSON by, and the read limit", n)
+// Both names Connect asks for JSON by get snake_case, binary protobuf still
+// works, and a message over the limit is refused: connect-go v2's codec option
+// replaces the whole list, so a missing one would be a codec nobody serves.
+func TestTheHandlerOptionsServeEveryCodec(t *testing.T) {
+	rpc := connect.NewServer()
+	auditv1connect.RegisterQueryServiceHandler(rpc, searchStub{})
+	mux := http.NewServeMux()
+	connecthttp.Mount(mux, rpc, wire.HandlerOptions()...)
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+
+	for _, contentType := range []string{"application/json", "application/json; charset=utf-8"} {
+		res, err := server.Client().Post(server.URL+auditv1connect.QueryServiceSearchProcedure, contentType, strings.NewReader("{}"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		raw, _ := io.ReadAll(res.Body)
+		_ = res.Body.Close()
+		if res.StatusCode != http.StatusOK || !strings.Contains(string(raw), `"tenant_id"`) {
+			t.Fatalf("%s: %d %s; want snake_case JSON", contentType, res.StatusCode, raw)
+		}
+		if keys := CamelCase(t, raw); len(keys) > 0 {
+			t.Fatalf("%s: camelCase keys %v", contentType, keys)
+		}
 	}
+
+	client := auditv1connect.NewQueryServiceClient(connect.NewClient(connecthttp.NewTransport(server.Client(), server.URL)))
+	got, err := client.Search(context.Background(), &auditv1.SearchRequest{})
+	if err != nil || len(got.GetItems()) != 1 {
+		t.Fatalf("binary protobuf: %v, %v", got, err)
+	}
+
+	big := strings.NewReader(`{"q": "` + strings.Repeat("x", wire.MaxRequestBytes) + `"}`)
+	res, err := server.Client().Post(server.URL+auditv1connect.QueryServiceSearchProcedure, "application/json", big)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = res.Body.Close()
+	if res.StatusCode == http.StatusOK {
+		t.Fatal("a message over MaxRequestBytes was read")
+	}
+}
+
+type searchStub struct {
+	auditv1connect.UnimplementedQueryServiceHandler
+}
+
+func (searchStub) Search(context.Context, *auditv1.SearchRequest) (*auditv1.SearchResponse, error) {
+	return &auditv1.SearchResponse{Items: []*auditv1.Record{{TenantId: "acme"}}}, nil
 }

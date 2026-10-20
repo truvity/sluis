@@ -20,7 +20,8 @@ import (
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 
 	"github.com/truvity/sluis/blobprefix"
 	"github.com/truvity/sluis/gen/directoryroster/v1/directoryrosterv1connect"
@@ -339,10 +340,10 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 		proof = aws
 	}
 	bearer := consoleauth.Interceptor(proof)
+	web := &http.Client{Timeout: 30 * time.Second}
 	// And one client span per call, with the traceparent carried to the
 	// console, so a tick's trace continues into the console's own spans.
-	console := append([]connect.ClientOption{bearer}, telemetry.ConnectClientOptions()...)
-	web := &http.Client{Timeout: 30 * time.Second}
+	console := connect.NewClient(connecthttp.NewTransport(web, cfg.console, connecthttp.WithReadMaxBytes(0)), bearer, telemetry.ConnectClientInterceptor())
 
 	log.InfoContext(ctx, "the Slack controller is assembled",
 		slog.Int("workspaces", len(declared.Slack.Workspaces)), slog.Any("enabled", slices.Sorted(maps.Keys(cfg.enabled))),
@@ -384,7 +385,7 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 			Interval: cfg.interval, Enabled: cfg.enabled, CredentialsDir: cfg.credentialsDir, RecordsDir: cfg.recordsDir,
 		}, controller.Deps{
 			Log:     log,
-			Access:  directoryrosterv1connect.NewAccessServiceClient(web, cfg.console, console...),
+			Access:  directoryrosterv1connect.NewAccessServiceClient(console),
 			Audit:   trail,
 			Status:  rails.NewBlobReports(stores.Ports.Blob, blobprefix.SlackReports),
 			Leases:  &rails.Leases{State: leaseState, Holder: rails.NewHolder(), Log: log, Maintenance: stores.Maintenance()},

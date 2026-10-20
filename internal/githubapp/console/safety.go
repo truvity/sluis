@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
 	"github.com/truvity/sluis/internal/access"
@@ -17,6 +17,7 @@ import (
 	"github.com/truvity/sluis/internal/githubroster/link"
 	"github.com/truvity/sluis/internal/githubroster/status"
 	"github.com/truvity/sluis/internal/port"
+	"github.com/truvity/sluis/internal/rpcmount"
 )
 
 // importLimit bounds one import. The records this exists for number in the
@@ -28,40 +29,40 @@ const importLimit = 500
 // shows: confirming a set that has since changed would confirm people
 // nobody looked at.
 func (c *Service) ConfirmGitHubRemovals(
-	ctx context.Context, req *connect.Request[directoryrosterv1.ConfirmGitHubRemovalsRequest],
-) (*connect.Response[directoryrosterv1.ConfirmGitHubRemovalsResponse], error) {
-	org, fingerprint := strings.TrimSpace(req.Msg.GetOrg()), strings.TrimSpace(req.Msg.GetFingerprint())
+	ctx context.Context, req *directoryrosterv1.ConfirmGitHubRemovalsRequest,
+) (*directoryrosterv1.ConfirmGitHubRemovalsResponse, error) {
+	org, fingerprint := strings.TrimSpace(req.GetOrg()), strings.TrimSpace(req.GetFingerprint())
 	id, err := c.requireOrg(ctx, access.RoleOperator, org)
 	if err != nil {
 		return nil, err
 	}
 	switch {
 	case !status.ValidOrg(org) || fingerprint == "":
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("an organisation and a fingerprint are required"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, "an organisation and a fingerprint are required")
 	case c.deps.Reports == nil || c.deps.Confirmations == nil:
-		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("this deployment keeps no reports or confirmations"))
+		return nil, connect.NewError(connect.CodeFailedPrecondition, "this deployment keeps no reports or confirmations")
 	}
 	reports, err := c.deps.Reports.Reports(ctx)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnavailable, err)
+		return nil, connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
 	}
 	report, err := status.Decode(reports[status.Key(org)])
 	if err != nil {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("%s has no readable report: %w", org, err))
+		return nil, rpcmount.NewError(connect.CodeFailedPrecondition, fmt.Errorf("%s has no readable report: %w", org, err))
 	}
 	if report.Breaker == nil || report.Breaker.Fingerprint != fingerprint {
-		return nil, connect.NewError(connect.CodeFailedPrecondition,
-			fmt.Errorf("the removals in %s have changed since that page was loaded: reload and look again", org))
+		return nil, connect.Errorf(connect.CodeFailedPrecondition,
+			"the removals in %s have changed since that page was loaded: reload and look again", org)
 	}
 	if err = c.deps.Confirmations.PutConfirmation(ctx, connection.Confirmation{
 		Org: org, Fingerprint: fingerprint, By: id.Who(), At: time.Now().UTC(),
 	}); err != nil {
-		return nil, connect.NewError(connect.CodeUnavailable, err)
+		return nil, connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
 	}
 	c.record(ctx, audit.GitHubRemovalsConfirmed(identityActor(id), org, fingerprint,
 		report.Breaker.Affected, report.Breaker.Members))
 	c.notify(ctx, port.ControllerGitHub, org)
-	return connect.NewResponse(&directoryrosterv1.ConfirmGitHubRemovalsResponse{}), nil
+	return &directoryrosterv1.ConfirmGitHubRemovalsResponse{}, nil
 }
 
 // ImportGitHubLinks adopts approved pairings as links, after three checks
@@ -69,8 +70,8 @@ func (c *Service) ConfirmGitHubRemovals(
 // directory vouches for, and the account is a member of a connected
 // organisation. A link the person made is never displaced.
 func (c *Service) ImportGitHubLinks(
-	ctx context.Context, req *connect.Request[directoryrosterv1.ImportGitHubLinksRequest],
-) (*connect.Response[directoryrosterv1.ImportGitHubLinksResponse], error) {
+	ctx context.Context, req *directoryrosterv1.ImportGitHubLinksRequest,
+) (*directoryrosterv1.ImportGitHubLinksResponse, error) {
 	// Links are people's, not an organisation's, so the call is open to an
 	// operator of any directory — but it adopts an account only on the
 	// evidence of an organisation the caller may operate, so one company's
@@ -79,19 +80,19 @@ func (c *Service) ImportGitHubLinks(
 	if err != nil {
 		return nil, err
 	}
-	records := req.Msg.GetRecords()
-	origin := strings.TrimSpace(req.Msg.GetOrigin())
+	records := req.GetRecords()
+	origin := strings.TrimSpace(req.GetOrigin())
 	switch {
 	case len(records) == 0 || len(records) > importLimit:
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("between 1 and %d records, please", importLimit))
+		return nil, connect.Errorf(connect.CodeInvalidArgument, "between 1 and %d records, please", importLimit)
 	case origin == "":
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("say where the records come from"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, "say where the records come from")
 	case c.deps.Orgs == nil || c.deps.Links == nil:
-		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("this deployment keeps no links"))
+		return nil, connect.NewError(connect.CodeFailedPrecondition, "this deployment keeps no links")
 	}
 	members, err := c.memberCheck(ctx, id)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnavailable, err)
+		return nil, connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
 	}
 
 	out := &directoryrosterv1.ImportGitHubLinksResponse{}
@@ -141,11 +142,11 @@ func (c *Service) ImportGitHubLinks(
 		})
 	}
 	if len(candidates) == 0 {
-		return connect.NewResponse(out), nil
+		return out, nil
 	}
 	adopted, skipped, err := c.deps.Links.Adopt(ctx, candidates)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnavailable, err)
+		return nil, connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
 	}
 	for accountID, reason := range skipped {
 		skip(logins[accountID], reason)
@@ -155,7 +156,7 @@ func (c *Service) ImportGitHubLinks(
 		out.Imported = append(out.Imported, linkProto(&l))
 		c.record(ctx, audit.GitHubLinkImported(identityActor(id), l.Emails[0], l.Login, l.Note))
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
 // memberCheck returns a function answering whether a login is a member of

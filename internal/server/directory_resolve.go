@@ -6,7 +6,7 @@ import (
 	"slices"
 	"strings"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
 	"github.com/truvity/sluis/internal/access"
@@ -25,16 +25,16 @@ const (
 // ResolveDirectoryGroups implements the operator contract: the members of
 // each directory group asked, nested groups expanded.
 func (c *Console) ResolveDirectoryGroups(
-	ctx context.Context, req *connect.Request[directoryrosterv1.ResolveDirectoryGroupsRequest],
-) (*connect.Response[directoryrosterv1.ResolveDirectoryGroupsResponse], error) {
+	ctx context.Context, req *directoryrosterv1.ResolveDirectoryGroupsRequest,
+) (*directoryrosterv1.ResolveDirectoryGroupsResponse, error) {
 	caller, err := requireAnywhere(ctx, access.RoleViewer)
 	if err != nil {
 		return nil, err
 	}
-	asked := req.Msg.GetGroups()
-	users := req.Msg.GetUsers()
+	asked := req.GetGroups()
+	users := req.GetUsers()
 	if len(asked) > resolveMaxGroups || len(users) > resolveMaxGroups {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("ask about at most 200 groups and 200 users at a time"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, "ask about at most 200 groups and 200 users at a time")
 	}
 	groups, err := c.deps.Hub.ResolveGroups(ctx, asked, resolveMaxDepth, resolveMaxNested)
 	if err != nil {
@@ -69,7 +69,7 @@ func (c *Console) ResolveDirectoryGroups(
 		}
 		out.Users = append(out.Users, resolved)
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
 // resolveUser answers for one individually listed address: the directory

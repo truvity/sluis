@@ -4,7 +4,8 @@ import (
 	"context"
 	"net/http"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 	"go.opentelemetry.io/otel/trace"
 
 	auditv1 "github.com/truvity/sluis/audit/sdk/gen/audit/v1"
@@ -19,16 +20,20 @@ type Client struct {
 	best   Durability
 }
 
-// NewClient returns a Sink backed by the SinkService at baseURL.
-func NewClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) *Client {
+// NewClient returns a Sink backed by the SinkService at baseURL. opts are the
+// HTTP transport's: a codec, a compression, a read limit.
+func NewClient(httpClient connecthttp.HTTPClient, baseURL string, opts ...connecthttp.Option) *Client {
 	if httpClient == nil {
 		httpClient = http.DefaultClient
 	}
+	// No read limit unless the caller sets one, as connect-go v1 had it: v2's
+	// default of 4 MiB is a response this client used to accept. A caller's
+	// own options come after and may set one.
+	opts = append([]connecthttp.Option{connecthttp.WithReadMaxBytes(0)}, opts...)
 	// The call carries the caller's trace, when there is one: an interceptor
-	// that does nothing without a tracer provider. A caller's own options come
-	// after and may add to it.
-	opts = append(telemetry.ConnectClientOptions(), opts...)
-	return &Client{client: auditv1connect.NewSinkServiceClient(httpClient, baseURL, opts...)}
+	// that does nothing without a tracer provider.
+	client := connect.NewClient(connecthttp.NewTransport(httpClient, baseURL, opts...), telemetry.ConnectClientInterceptor())
+	return &Client{client: auditv1connect.NewSinkServiceClient(client)}
 }
 
 // Expecting names the strongest durability the service at the other end is
@@ -52,14 +57,14 @@ func (c *Client) Write(ctx context.Context, req *Request) (*Result, error) {
 }
 
 func (c *Client) write(ctx context.Context, req *Request) (*Result, error) {
-	res, err := c.client.Write(ctx, connect.NewRequest(&auditv1.WriteRequest{
+	res, err := c.client.Write(ctx, &auditv1.WriteRequest{
 		Records:  req.Records,
 		Delivery: req.Delivery,
-	}))
+	})
 	if err != nil {
 		return nil, err
 	}
-	return fromProto(res.Msg), nil
+	return fromProto(res), nil
 }
 
 func fromProto(m *auditv1.WriteResponse) *Result {

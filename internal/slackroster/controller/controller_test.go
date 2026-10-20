@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 
@@ -91,15 +91,15 @@ type fakeDirGroup struct {
 }
 
 func (c *console) ResolveDirectoryGroups(
-	_ context.Context, req *connect.Request[directoryrosterv1.ResolveDirectoryGroupsRequest],
-) (*connect.Response[directoryrosterv1.ResolveDirectoryGroupsResponse], error) {
+	_ context.Context, req *directoryrosterv1.ResolveDirectoryGroupsRequest,
+) (*directoryrosterv1.ResolveDirectoryGroupsResponse, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.resolveErr != nil {
 		return nil, c.resolveErr
 	}
 	out := &directoryrosterv1.ResolveDirectoryGroupsResponse{PolicyDigest: c.policy}
-	for _, g := range req.Msg.GetGroups() {
+	for _, g := range req.GetGroups() {
 		resolved := &directoryrosterv1.ResolvedDirectoryGroup{Email: g}
 		out.Groups = append(out.Groups, resolved)
 		explicit := c.dirGroups[g]
@@ -129,7 +129,7 @@ func (c *console) ResolveDirectoryGroups(
 			resolved.Members = append(resolved.Members, &directoryrosterv1.DirectoryGroupMember{Email: m, Known: true, Live: true})
 		}
 	}
-	for _, u := range req.Msg.GetUsers() {
+	for _, u := range req.GetUsers() {
 		email := strings.ToLower(u)
 		resolved := &directoryrosterv1.ResolvedDirectoryUser{Email: email}
 		switch {
@@ -143,12 +143,12 @@ func (c *console) ResolveDirectoryGroups(
 		}
 		out.Users = append(out.Users, resolved)
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
 func (c *console) ListServedDomains(
-	context.Context, *connect.Request[directoryrosterv1.ListServedDomainsRequest],
-) (*connect.Response[directoryrosterv1.ListServedDomainsResponse], error) {
+	context.Context, *directoryrosterv1.ListServedDomainsRequest,
+) (*directoryrosterv1.ListServedDomainsResponse, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.servedErr != nil {
@@ -160,30 +160,30 @@ func (c *console) ListServedDomains(
 			WorkspaceId: id, PrimaryDomain: c.served[id][0], Domains: c.served[id],
 		})
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
 func (c *console) ListHolders(
-	_ context.Context, req *connect.Request[directoryrosterv1.ListHoldersRequest],
-) (*connect.Response[directoryrosterv1.ListHoldersResponse], error) {
+	_ context.Context, req *directoryrosterv1.ListHoldersRequest,
+) (*directoryrosterv1.ListHoldersResponse, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.held++
 	out := &directoryrosterv1.ListHoldersResponse{PolicyDigest: c.policy}
 	for _, addr := range slices.Sorted(maps.Keys(c.dir)) {
-		if slices.Contains(c.dir[addr], req.Msg.GetGroup()) {
+		if slices.Contains(c.dir[addr], req.GetGroup()) {
 			out.Holders = append(out.Holders, &directoryrosterv1.Holder{Email: addr, Live: true, Authoritative: true})
 		}
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
 func (c *console) Explain(
-	_ context.Context, req *connect.Request[directoryrosterv1.ExplainRequest],
-) (*connect.Response[directoryrosterv1.ExplainResponse], error) {
+	_ context.Context, req *directoryrosterv1.ExplainRequest,
+) (*directoryrosterv1.ExplainResponse, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	addr := req.Msg.GetEmail()
+	addr := req.GetEmail()
 	c.explained[addr]++
 	groups, found := c.dir[addr]
 	out := &directoryrosterv1.ExplainResponse{PolicyDigest: c.policy, Authoritative: !c.unsure[addr], Found: found}
@@ -193,7 +193,7 @@ func (c *console) Explain(
 			out.DirectoryGroups = append(out.DirectoryGroups, g)
 		}
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
 func (c *console) set(f func()) {
@@ -602,21 +602,21 @@ type policySplit struct {
 	console *console
 }
 
-func (p *policySplit) ListHolders(ctx context.Context, req *connect.Request[directoryrosterv1.ListHoldersRequest],
-) (*connect.Response[directoryrosterv1.ListHoldersResponse], error) {
+func (p *policySplit) ListHolders(ctx context.Context, req *directoryrosterv1.ListHoldersRequest,
+) (*directoryrosterv1.ListHoldersResponse, error) {
 	return p.console.ListHolders(ctx, req)
 }
 
-func (p *policySplit) ListServedDomains(ctx context.Context, req *connect.Request[directoryrosterv1.ListServedDomainsRequest],
-) (*connect.Response[directoryrosterv1.ListServedDomainsResponse], error) {
+func (p *policySplit) ListServedDomains(ctx context.Context, req *directoryrosterv1.ListServedDomainsRequest,
+) (*directoryrosterv1.ListServedDomainsResponse, error) {
 	return p.console.ListServedDomains(ctx, req)
 }
 
-func (p *policySplit) Explain(ctx context.Context, req *connect.Request[directoryrosterv1.ExplainRequest],
-) (*connect.Response[directoryrosterv1.ExplainResponse], error) {
+func (p *policySplit) Explain(ctx context.Context, req *directoryrosterv1.ExplainRequest,
+) (*directoryrosterv1.ExplainResponse, error) {
 	res, err := p.console.Explain(ctx, req)
 	if err == nil {
-		res.Msg.PolicyDigest = "old-policy"
+		res.PolicyDigest = "old-policy"
 	}
 	return res, err
 }
@@ -991,7 +991,7 @@ func TestTheControllerReadsWhatTheConsoleWrites(t *testing.T) {
 		{Name: "joint", Host: "acme", With: []string{"globex"}, From: []string{dirAll}, Private: true},
 		{Name: "sided", Host: "acme", With: []string{"globex"}, From: []string{dirAll}, PrivatePerSide: map[string]bool{"acme": true, "globex": false}},
 	} {
-		if _, err = console.CreateSlackSharedChannel(ctx, connect.NewRequest(&directoryrosterv1.CreateSlackSharedChannelRequest{Channel: def})); err != nil {
+		if _, err = console.CreateSlackSharedChannel(ctx, &directoryrosterv1.CreateSlackSharedChannelRequest{Channel: def}); err != nil {
 			t.Fatalf("create %s: %v", def.Name, err)
 		}
 	}
@@ -1071,7 +1071,9 @@ func TestAWorkspaceWithNoOwnerHoldsItsPeople(t *testing.T) {
 // strict channel must not empty itself on a question nobody answered.
 func TestAnUnreadableOrUnconnectedOwnerFailsThePass(t *testing.T) {
 	for name, set := range map[string]func(*rig){
-		"the console cannot say": func(r *rig) { r.console.servedErr = connect.NewError(connect.CodeUnavailable, io.ErrUnexpectedEOF) },
+		"the console cannot say": func(r *rig) {
+			r.console.servedErr = connect.NewError(connect.CodeUnavailable, io.ErrUnexpectedEOF.Error()).WithCause(io.ErrUnexpectedEOF)
+		},
 		"the owner is not connected": func(r *rig) {
 			delete(r.console.served, "C0acme")
 		},

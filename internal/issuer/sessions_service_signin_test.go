@@ -6,10 +6,11 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	accessissuerv1 "github.com/truvity/sluis/gen/accessissuer/v1"
 	"github.com/truvity/sluis/internal/issuer"
+	"github.com/truvity/sluis/internal/rpcmount"
 	"github.com/truvity/sluis/policy"
 )
 
@@ -78,20 +79,22 @@ func (g *accountsRig) signIn(t *testing.T, identity, how string, authTime time.T
 }
 
 func (g *accountsRig) list(secret string, req *accessissuerv1.ListSessionsRequest) error {
-	r := connect.NewRequest(req)
-	r.Header().Set("Cookie", issuer.SSOCookieName+"="+secret)
-	_, err := g.svc.ListSessions(context.Background(), r)
+	r := req
+	ctx, call := rpcmount.ServerContext(context.Background())
+	call.RequestHeader().Set("Cookie", issuer.SSOCookieName+"="+secret)
+	_, err := g.svc.ListSessions(ctx, r)
 	return err
 }
 
 func (g *accountsRig) revoke(secret string, req *accessissuerv1.RevokeSessionsRequest) (int32, error) {
-	r := connect.NewRequest(req)
-	r.Header().Set("Cookie", issuer.SSOCookieName+"="+secret)
-	got, err := g.svc.RevokeSessions(context.Background(), r)
+	r := req
+	ctx, call := rpcmount.ServerContext(context.Background())
+	call.RequestHeader().Set("Cookie", issuer.SSOCookieName+"="+secret)
+	got, err := g.svc.RevokeSessions(ctx, r)
 	if err != nil {
 		return 0, err
 	}
-	return got.Msg.GetEnded(), nil
+	return got.GetEnded(), nil
 }
 
 func (g *accountsRig) live(t *testing.T, id string) bool {

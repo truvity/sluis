@@ -5,46 +5,68 @@
 package directoryrosterv1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1 "github.com/truvity/sluis/gen/directoryroster/v1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// SlackChannelServiceName is the fully-qualified name of the SlackChannelService service.
 	SlackChannelServiceName = "directoryroster.v1.SlackChannelService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// SlackChannelServiceListSlackChannelsProcedure is the fully-qualified name of the
-	// SlackChannelService's ListSlackChannels RPC.
+	// SlackChannelServiceListSlackChannelsProcedure is the procedure name of the SlackChannelService's
+	// ListSlackChannels RPC.
 	SlackChannelServiceListSlackChannelsProcedure = "/directoryroster.v1.SlackChannelService/ListSlackChannels"
-	// SlackChannelServiceCreateSlackChannelProcedure is the fully-qualified name of the
-	// SlackChannelService's CreateSlackChannel RPC.
+	// SlackChannelServiceCreateSlackChannelProcedure is the procedure name of the SlackChannelService's
+	// CreateSlackChannel RPC.
 	SlackChannelServiceCreateSlackChannelProcedure = "/directoryroster.v1.SlackChannelService/CreateSlackChannel"
-	// SlackChannelServiceUpdateSlackChannelProcedure is the fully-qualified name of the
-	// SlackChannelService's UpdateSlackChannel RPC.
+	// SlackChannelServiceUpdateSlackChannelProcedure is the procedure name of the SlackChannelService's
+	// UpdateSlackChannel RPC.
 	SlackChannelServiceUpdateSlackChannelProcedure = "/directoryroster.v1.SlackChannelService/UpdateSlackChannel"
-	// SlackChannelServiceDeleteSlackChannelProcedure is the fully-qualified name of the
-	// SlackChannelService's DeleteSlackChannel RPC.
+	// SlackChannelServiceDeleteSlackChannelProcedure is the procedure name of the SlackChannelService's
+	// DeleteSlackChannel RPC.
 	SlackChannelServiceDeleteSlackChannelProcedure = "/directoryroster.v1.SlackChannelService/DeleteSlackChannel"
+)
+
+var (
+	slackChannelServiceListSlackChannelsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_directoryroster_v1_slack_channels_proto.Services().ByName("SlackChannelService").Methods().ByName("ListSlackChannels"),
+			Procedure:  SlackChannelServiceListSlackChannelsProcedure,
+		}
+	})
+	slackChannelServiceCreateSlackChannelSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_directoryroster_v1_slack_channels_proto.Services().ByName("SlackChannelService").Methods().ByName("CreateSlackChannel"),
+			Procedure:  SlackChannelServiceCreateSlackChannelProcedure,
+		}
+	})
+	slackChannelServiceUpdateSlackChannelSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_directoryroster_v1_slack_channels_proto.Services().ByName("SlackChannelService").Methods().ByName("UpdateSlackChannel"),
+			Procedure:  SlackChannelServiceUpdateSlackChannelProcedure,
+		}
+	})
+	slackChannelServiceDeleteSlackChannelSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_directoryroster_v1_slack_channels_proto.Services().ByName("SlackChannelService").Methods().ByName("DeleteSlackChannel"),
+			Procedure:  SlackChannelServiceDeleteSlackChannelProcedure,
+		}
+	})
 )
 
 // SlackChannelServiceClient is a client for the directoryroster.v1.SlackChannelService service.
@@ -53,84 +75,24 @@ type SlackChannelServiceClient interface {
 	// the workspace's owner), with what the controller last reported for it,
 	// the workspaces a form offers, and every channel the workspaces' bots can
 	// see that nothing manages.
-	ListSlackChannels(context.Context, *connect.Request[v1.ListSlackChannelsRequest]) (*connect.Response[v1.ListSlackChannelsResponse], error)
+	ListSlackChannels(context.Context, *v1.ListSlackChannelsRequest) (*v1.ListSlackChannelsResponse, error)
 	// CreateSlackChannel validates and keeps a record. Operator of the
 	// workspace's owner, or the installation-wide operator.
-	CreateSlackChannel(context.Context, *connect.Request[v1.CreateSlackChannelRequest]) (*connect.Response[v1.CreateSlackChannelResponse], error)
+	CreateSlackChannel(context.Context, *v1.CreateSlackChannelRequest) (*v1.CreateSlackChannelResponse, error)
 	// UpdateSlackChannel changes the mode, the ignore list, the sources
 	// (directory groups) and the members (individual addresses). The workspace, the name, the channel id and the visibility are
 	// immutable.
-	UpdateSlackChannel(context.Context, *connect.Request[v1.UpdateSlackChannelRequest]) (*connect.Response[v1.UpdateSlackChannelResponse], error)
+	UpdateSlackChannel(context.Context, *v1.UpdateSlackChannelRequest) (*v1.UpdateSlackChannelResponse, error)
 	// DeleteSlackChannel forgets the record: the channel stays in Slack and the
 	// reconciler stops managing its members, unless archive is set, which also
 	// archives the channel in Slack (audited as roster.slack_channel.archived).
-	DeleteSlackChannel(context.Context, *connect.Request[v1.DeleteSlackChannelRequest]) (*connect.Response[v1.DeleteSlackChannelResponse], error)
+	DeleteSlackChannel(context.Context, *v1.DeleteSlackChannelRequest) (*v1.DeleteSlackChannelResponse, error)
 }
 
 // NewSlackChannelServiceClient constructs a client for the directoryroster.v1.SlackChannelService
-// service. By default, it uses the Connect protocol with the binary Protobuf Codec, asks for
-// gzipped responses, and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply
-// the connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewSlackChannelServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) SlackChannelServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	slackChannelServiceMethods := v1.File_directoryroster_v1_slack_channels_proto.Services().ByName("SlackChannelService").Methods()
-	return &slackChannelServiceClient{
-		listSlackChannels: connect.NewClient[v1.ListSlackChannelsRequest, v1.ListSlackChannelsResponse](
-			httpClient,
-			baseURL+SlackChannelServiceListSlackChannelsProcedure,
-			connect.WithSchema(slackChannelServiceMethods.ByName("ListSlackChannels")),
-			connect.WithClientOptions(opts...),
-		),
-		createSlackChannel: connect.NewClient[v1.CreateSlackChannelRequest, v1.CreateSlackChannelResponse](
-			httpClient,
-			baseURL+SlackChannelServiceCreateSlackChannelProcedure,
-			connect.WithSchema(slackChannelServiceMethods.ByName("CreateSlackChannel")),
-			connect.WithClientOptions(opts...),
-		),
-		updateSlackChannel: connect.NewClient[v1.UpdateSlackChannelRequest, v1.UpdateSlackChannelResponse](
-			httpClient,
-			baseURL+SlackChannelServiceUpdateSlackChannelProcedure,
-			connect.WithSchema(slackChannelServiceMethods.ByName("UpdateSlackChannel")),
-			connect.WithClientOptions(opts...),
-		),
-		deleteSlackChannel: connect.NewClient[v1.DeleteSlackChannelRequest, v1.DeleteSlackChannelResponse](
-			httpClient,
-			baseURL+SlackChannelServiceDeleteSlackChannelProcedure,
-			connect.WithSchema(slackChannelServiceMethods.ByName("DeleteSlackChannel")),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// slackChannelServiceClient implements SlackChannelServiceClient.
-type slackChannelServiceClient struct {
-	listSlackChannels  *connect.Client[v1.ListSlackChannelsRequest, v1.ListSlackChannelsResponse]
-	createSlackChannel *connect.Client[v1.CreateSlackChannelRequest, v1.CreateSlackChannelResponse]
-	updateSlackChannel *connect.Client[v1.UpdateSlackChannelRequest, v1.UpdateSlackChannelResponse]
-	deleteSlackChannel *connect.Client[v1.DeleteSlackChannelRequest, v1.DeleteSlackChannelResponse]
-}
-
-// ListSlackChannels calls directoryroster.v1.SlackChannelService.ListSlackChannels.
-func (c *slackChannelServiceClient) ListSlackChannels(ctx context.Context, req *connect.Request[v1.ListSlackChannelsRequest]) (*connect.Response[v1.ListSlackChannelsResponse], error) {
-	return c.listSlackChannels.CallUnary(ctx, req)
-}
-
-// CreateSlackChannel calls directoryroster.v1.SlackChannelService.CreateSlackChannel.
-func (c *slackChannelServiceClient) CreateSlackChannel(ctx context.Context, req *connect.Request[v1.CreateSlackChannelRequest]) (*connect.Response[v1.CreateSlackChannelResponse], error) {
-	return c.createSlackChannel.CallUnary(ctx, req)
-}
-
-// UpdateSlackChannel calls directoryroster.v1.SlackChannelService.UpdateSlackChannel.
-func (c *slackChannelServiceClient) UpdateSlackChannel(ctx context.Context, req *connect.Request[v1.UpdateSlackChannelRequest]) (*connect.Response[v1.UpdateSlackChannelResponse], error) {
-	return c.updateSlackChannel.CallUnary(ctx, req)
-}
-
-// DeleteSlackChannel calls directoryroster.v1.SlackChannelService.DeleteSlackChannel.
-func (c *slackChannelServiceClient) DeleteSlackChannel(ctx context.Context, req *connect.Request[v1.DeleteSlackChannelRequest]) (*connect.Response[v1.DeleteSlackChannelResponse], error) {
-	return c.deleteSlackChannel.CallUnary(ctx, req)
+// service. Multiple service clients may share a single connect.Client.
+func NewSlackChannelServiceClient(client *connect.Client) SlackChannelServiceClient {
+	return &slackChannelServiceClient{client: client}
 }
 
 // SlackChannelServiceHandler is an implementation of the directoryroster.v1.SlackChannelService
@@ -140,82 +102,133 @@ type SlackChannelServiceHandler interface {
 	// the workspace's owner), with what the controller last reported for it,
 	// the workspaces a form offers, and every channel the workspaces' bots can
 	// see that nothing manages.
-	ListSlackChannels(context.Context, *connect.Request[v1.ListSlackChannelsRequest]) (*connect.Response[v1.ListSlackChannelsResponse], error)
+	ListSlackChannels(context.Context, *v1.ListSlackChannelsRequest) (*v1.ListSlackChannelsResponse, error)
 	// CreateSlackChannel validates and keeps a record. Operator of the
 	// workspace's owner, or the installation-wide operator.
-	CreateSlackChannel(context.Context, *connect.Request[v1.CreateSlackChannelRequest]) (*connect.Response[v1.CreateSlackChannelResponse], error)
+	CreateSlackChannel(context.Context, *v1.CreateSlackChannelRequest) (*v1.CreateSlackChannelResponse, error)
 	// UpdateSlackChannel changes the mode, the ignore list, the sources
 	// (directory groups) and the members (individual addresses). The workspace, the name, the channel id and the visibility are
 	// immutable.
-	UpdateSlackChannel(context.Context, *connect.Request[v1.UpdateSlackChannelRequest]) (*connect.Response[v1.UpdateSlackChannelResponse], error)
+	UpdateSlackChannel(context.Context, *v1.UpdateSlackChannelRequest) (*v1.UpdateSlackChannelResponse, error)
 	// DeleteSlackChannel forgets the record: the channel stays in Slack and the
 	// reconciler stops managing its members, unless archive is set, which also
 	// archives the channel in Slack (audited as roster.slack_channel.archived).
-	DeleteSlackChannel(context.Context, *connect.Request[v1.DeleteSlackChannelRequest]) (*connect.Response[v1.DeleteSlackChannelResponse], error)
+	DeleteSlackChannel(context.Context, *v1.DeleteSlackChannelRequest) (*v1.DeleteSlackChannelResponse, error)
 }
 
-// NewSlackChannelServiceHandler builds an HTTP handler from the service implementation. It returns
-// the path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewSlackChannelServiceHandler(svc SlackChannelServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	slackChannelServiceMethods := v1.File_directoryroster_v1_slack_channels_proto.Services().ByName("SlackChannelService").Methods()
-	slackChannelServiceListSlackChannelsHandler := connect.NewUnaryHandler(
-		SlackChannelServiceListSlackChannelsProcedure,
-		svc.ListSlackChannels,
-		connect.WithSchema(slackChannelServiceMethods.ByName("ListSlackChannels")),
-		connect.WithHandlerOptions(opts...),
+// RegisterSlackChannelServiceHandler registers svc as the directoryroster.v1.SlackChannelService
+// implementation on server.
+func RegisterSlackChannelServiceHandler(server *connect.Server, svc SlackChannelServiceHandler) {
+	adapter := slackChannelServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: slackChannelServiceListSlackChannelsSpec(), Handler: adapter.listSlackChannels},
+		connect.Method{Spec: slackChannelServiceCreateSlackChannelSpec(), Handler: adapter.createSlackChannel},
+		connect.Method{Spec: slackChannelServiceUpdateSlackChannelSpec(), Handler: adapter.updateSlackChannel},
+		connect.Method{Spec: slackChannelServiceDeleteSlackChannelSpec(), Handler: adapter.deleteSlackChannel},
 	)
-	slackChannelServiceCreateSlackChannelHandler := connect.NewUnaryHandler(
-		SlackChannelServiceCreateSlackChannelProcedure,
-		svc.CreateSlackChannel,
-		connect.WithSchema(slackChannelServiceMethods.ByName("CreateSlackChannel")),
-		connect.WithHandlerOptions(opts...),
-	)
-	slackChannelServiceUpdateSlackChannelHandler := connect.NewUnaryHandler(
-		SlackChannelServiceUpdateSlackChannelProcedure,
-		svc.UpdateSlackChannel,
-		connect.WithSchema(slackChannelServiceMethods.ByName("UpdateSlackChannel")),
-		connect.WithHandlerOptions(opts...),
-	)
-	slackChannelServiceDeleteSlackChannelHandler := connect.NewUnaryHandler(
-		SlackChannelServiceDeleteSlackChannelProcedure,
-		svc.DeleteSlackChannel,
-		connect.WithSchema(slackChannelServiceMethods.ByName("DeleteSlackChannel")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/directoryroster.v1.SlackChannelService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case SlackChannelServiceListSlackChannelsProcedure:
-			slackChannelServiceListSlackChannelsHandler.ServeHTTP(w, r)
-		case SlackChannelServiceCreateSlackChannelProcedure:
-			slackChannelServiceCreateSlackChannelHandler.ServeHTTP(w, r)
-		case SlackChannelServiceUpdateSlackChannelProcedure:
-			slackChannelServiceUpdateSlackChannelHandler.ServeHTTP(w, r)
-		case SlackChannelServiceDeleteSlackChannelProcedure:
-			slackChannelServiceDeleteSlackChannelHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedSlackChannelServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedSlackChannelServiceHandler struct{}
 
-func (UnimplementedSlackChannelServiceHandler) ListSlackChannels(context.Context, *connect.Request[v1.ListSlackChannelsRequest]) (*connect.Response[v1.ListSlackChannelsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("directoryroster.v1.SlackChannelService.ListSlackChannels is not implemented"))
+func (UnimplementedSlackChannelServiceHandler) ListSlackChannels(context.Context, *v1.ListSlackChannelsRequest) (*v1.ListSlackChannelsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "directoryroster.v1.SlackChannelService.ListSlackChannels is not implemented")
 }
 
-func (UnimplementedSlackChannelServiceHandler) CreateSlackChannel(context.Context, *connect.Request[v1.CreateSlackChannelRequest]) (*connect.Response[v1.CreateSlackChannelResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("directoryroster.v1.SlackChannelService.CreateSlackChannel is not implemented"))
+func (UnimplementedSlackChannelServiceHandler) CreateSlackChannel(context.Context, *v1.CreateSlackChannelRequest) (*v1.CreateSlackChannelResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "directoryroster.v1.SlackChannelService.CreateSlackChannel is not implemented")
 }
 
-func (UnimplementedSlackChannelServiceHandler) UpdateSlackChannel(context.Context, *connect.Request[v1.UpdateSlackChannelRequest]) (*connect.Response[v1.UpdateSlackChannelResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("directoryroster.v1.SlackChannelService.UpdateSlackChannel is not implemented"))
+func (UnimplementedSlackChannelServiceHandler) UpdateSlackChannel(context.Context, *v1.UpdateSlackChannelRequest) (*v1.UpdateSlackChannelResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "directoryroster.v1.SlackChannelService.UpdateSlackChannel is not implemented")
 }
 
-func (UnimplementedSlackChannelServiceHandler) DeleteSlackChannel(context.Context, *connect.Request[v1.DeleteSlackChannelRequest]) (*connect.Response[v1.DeleteSlackChannelResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("directoryroster.v1.SlackChannelService.DeleteSlackChannel is not implemented"))
+func (UnimplementedSlackChannelServiceHandler) DeleteSlackChannel(context.Context, *v1.DeleteSlackChannelRequest) (*v1.DeleteSlackChannelResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "directoryroster.v1.SlackChannelService.DeleteSlackChannel is not implemented")
+}
+
+type slackChannelServiceClient struct {
+	client *connect.Client
+}
+
+func (c *slackChannelServiceClient) ListSlackChannels(ctx context.Context, req *v1.ListSlackChannelsRequest) (*v1.ListSlackChannelsResponse, error) {
+	var res v1.ListSlackChannelsResponse
+	if err := c.client.CallUnary(ctx, slackChannelServiceListSlackChannelsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *slackChannelServiceClient) CreateSlackChannel(ctx context.Context, req *v1.CreateSlackChannelRequest) (*v1.CreateSlackChannelResponse, error) {
+	var res v1.CreateSlackChannelResponse
+	if err := c.client.CallUnary(ctx, slackChannelServiceCreateSlackChannelSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *slackChannelServiceClient) UpdateSlackChannel(ctx context.Context, req *v1.UpdateSlackChannelRequest) (*v1.UpdateSlackChannelResponse, error) {
+	var res v1.UpdateSlackChannelResponse
+	if err := c.client.CallUnary(ctx, slackChannelServiceUpdateSlackChannelSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *slackChannelServiceClient) DeleteSlackChannel(ctx context.Context, req *v1.DeleteSlackChannelRequest) (*v1.DeleteSlackChannelResponse, error) {
+	var res v1.DeleteSlackChannelResponse
+	if err := c.client.CallUnary(ctx, slackChannelServiceDeleteSlackChannelSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type slackChannelServiceHandler struct{ svc SlackChannelServiceHandler }
+
+func (h slackChannelServiceHandler) listSlackChannels(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListSlackChannelsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListSlackChannels(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h slackChannelServiceHandler) createSlackChannel(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CreateSlackChannelRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CreateSlackChannel(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h slackChannelServiceHandler) updateSlackChannel(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.UpdateSlackChannelRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.UpdateSlackChannel(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h slackChannelServiceHandler) deleteSlackChannel(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DeleteSlackChannelRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DeleteSlackChannel(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

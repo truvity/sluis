@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	auditv1 "github.com/truvity/sluis/audit/sdk/gen/audit/v1"
 
@@ -31,7 +31,7 @@ func explainConsole(t *testing.T) (*Console, *audittest.Recorder) {
 
 func explainAs(console *Console, id access.Identity, email string) error {
 	ctx := WithIdentity(context.Background(), id)
-	_, err := console.Explain(ctx, connect.NewRequest(&directoryrosterv1.ExplainRequest{Email: email}))
+	_, err := console.Explain(ctx, &directoryrosterv1.ExplainRequest{Email: email})
 	return err
 }
 

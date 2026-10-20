@@ -8,7 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
 	"github.com/truvity/sluis/gen/directoryroster/v1/directoryrosterv1connect"
@@ -33,9 +34,9 @@ type named struct {
 }
 
 func (named) ListHolders(
-	_ context.Context, req *connect.Request[directoryrosterv1.ListHoldersRequest],
-) (*connect.Response[directoryrosterv1.ListHoldersResponse], error) {
-	return connect.NewResponse(&directoryrosterv1.ListHoldersResponse{PolicyDigest: "for " + req.Msg.GetGroup()}), nil
+	_ context.Context, req *directoryrosterv1.ListHoldersRequest,
+) (*directoryrosterv1.ListHoldersResponse, error) {
+	return &directoryrosterv1.ListHoldersResponse{PolicyDigest: "for " + req.GetGroup()}, nil
 }
 
 // Every operator service answers under sluis.v1 and under the legacy
@@ -49,25 +50,25 @@ func TestTheOperatorServicesAnswerUnderBothNames(t *testing.T) {
 	server := httptest.NewServer(mux)
 	t.Cleanup(server.Close)
 
-	current, err := sluisv1connect.NewAccessServiceClient(server.Client(), server.URL).
-		ListHolders(t.Context(), connect.NewRequest(&sluisv1.ListHoldersRequest{Group: "g"}))
+	current, err := sluisv1connect.NewAccessServiceClient(connect.NewClient(connecthttp.NewTransport(server.Client(), server.URL))).
+		ListHolders(t.Context(), &sluisv1.ListHoldersRequest{Group: "g"})
 	if err != nil {
 		t.Fatalf("sluis.v1.AccessService/ListHolders: %v", err)
 	}
-	legacy, err := directoryrosterv1connect.NewAccessServiceClient(server.Client(), server.URL).
-		ListHolders(t.Context(), connect.NewRequest(&directoryrosterv1.ListHoldersRequest{Group: "g"}))
+	legacy, err := directoryrosterv1connect.NewAccessServiceClient(connect.NewClient(connecthttp.NewTransport(server.Client(), server.URL))).
+		ListHolders(t.Context(), &directoryrosterv1.ListHoldersRequest{Group: "g"})
 	if err != nil {
 		t.Fatalf("directoryroster.v1.AccessService/ListHolders: %v", err)
 	}
-	if current.Msg.GetPolicyDigest() != "for g" || legacy.Msg.GetPolicyDigest() != "for g" {
+	if current.GetPolicyDigest() != "for g" || legacy.GetPolicyDigest() != "for g" {
 		t.Errorf("answers = %q (sluis.v1), %q (legacy), want %q from both",
-			current.Msg.GetPolicyDigest(), legacy.Msg.GetPolicyDigest(), "for g")
+			current.GetPolicyDigest(), legacy.GetPolicyDigest(), "for g")
 	}
 
 	// A method the handler leaves unimplemented says so under the new
 	// name, which is what a client's fallback keys on.
-	_, err = sluisv1connect.NewWorkspaceServiceClient(server.Client(), server.URL).
-		ListWorkspaces(t.Context(), connect.NewRequest(&sluisv1.ListWorkspacesRequest{}))
+	_, err = sluisv1connect.NewWorkspaceServiceClient(connect.NewClient(connecthttp.NewTransport(server.Client(), server.URL))).
+		ListWorkspaces(t.Context(), &sluisv1.ListWorkspacesRequest{})
 	if connect.CodeOf(err) != connect.CodeUnimplemented {
 		t.Errorf("an unimplemented method under sluis.v1 = %v, want unimplemented", err)
 	}
@@ -110,16 +111,16 @@ func TestEveryLegacyServiceHasANewNameOnTheMux(t *testing.T) {
 type refusing struct{ named }
 
 func (refusing) ListHolders(
-	context.Context, *connect.Request[directoryrosterv1.ListHoldersRequest],
-) (*connect.Response[directoryrosterv1.ListHoldersResponse], error) {
+	context.Context, *directoryrosterv1.ListHoldersRequest,
+) (*directoryrosterv1.ListHoldersResponse, error) {
 	return nil, connect.NewError(connect.CodePermissionDenied,
-		errors.New("this needs the operator role over acme's directory"))
+		"this needs the operator role over acme's directory")
 }
 
 func (refusing) ListWorkspaces(
-	context.Context, *connect.Request[directoryrosterv1.ListWorkspacesRequest],
-) (*connect.Response[directoryrosterv1.ListWorkspacesResponse], error) {
-	return nil, connect.NewError(connect.CodeInternal, errors.New("pq: connection to 10.1.2.3 refused"))
+	context.Context, *directoryrosterv1.ListWorkspacesRequest,
+) (*directoryrosterv1.ListWorkspacesResponse, error) {
+	return nil, connect.NewError(connect.CodeInternal, "pq: connection to 10.1.2.3 refused")
 }
 
 // Every operator service is behind the interceptor, under both names: what
@@ -138,25 +139,25 @@ func TestTheOperatorServicesRefuseInFixedWords(t *testing.T) {
 	}{
 		"sluis.v1": {
 			func() error {
-				_, err := sluisv1connect.NewAccessServiceClient(server.Client(), server.URL).
-					ListHolders(t.Context(), connect.NewRequest(&sluisv1.ListHoldersRequest{Group: "g"}))
+				_, err := sluisv1connect.NewAccessServiceClient(connect.NewClient(connecthttp.NewTransport(server.Client(), server.URL))).
+					ListHolders(t.Context(), &sluisv1.ListHoldersRequest{Group: "g"})
 				return err
 			},
 			func() error {
-				_, err := sluisv1connect.NewWorkspaceServiceClient(server.Client(), server.URL).
-					ListWorkspaces(t.Context(), connect.NewRequest(&sluisv1.ListWorkspacesRequest{}))
+				_, err := sluisv1connect.NewWorkspaceServiceClient(connect.NewClient(connecthttp.NewTransport(server.Client(), server.URL))).
+					ListWorkspaces(t.Context(), &sluisv1.ListWorkspacesRequest{})
 				return err
 			},
 		},
 		"directoryroster.v1": {
 			func() error {
-				_, err := directoryrosterv1connect.NewAccessServiceClient(server.Client(), server.URL).
-					ListHolders(t.Context(), connect.NewRequest(&directoryrosterv1.ListHoldersRequest{Group: "g"}))
+				_, err := directoryrosterv1connect.NewAccessServiceClient(connect.NewClient(connecthttp.NewTransport(server.Client(), server.URL))).
+					ListHolders(t.Context(), &directoryrosterv1.ListHoldersRequest{Group: "g"})
 				return err
 			},
 			func() error {
-				_, err := directoryrosterv1connect.NewWorkspaceServiceClient(server.Client(), server.URL).
-					ListWorkspaces(t.Context(), connect.NewRequest(&directoryrosterv1.ListWorkspacesRequest{}))
+				_, err := directoryrosterv1connect.NewWorkspaceServiceClient(connect.NewClient(connecthttp.NewTransport(server.Client(), server.URL))).
+					ListWorkspaces(t.Context(), &directoryrosterv1.ListWorkspacesRequest{})
 				return err
 			},
 		},

@@ -8,10 +8,11 @@ import (
 	"testing"
 	"time"
 
-	connect "connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	accessissuerv1 "github.com/truvity/sluis/gen/accessissuer/v1"
 	"github.com/truvity/sluis/internal/issuer"
+	"github.com/truvity/sluis/internal/rpcmount"
 )
 
 // preUpgrade files a sign-in the way the release before the cookie secret
@@ -77,10 +78,11 @@ func TestAPreUpgradeCookieCanSignOutAndNothingElse(t *testing.T) {
 				t.Errorf("a pre-upgrade cookie was sent to %q by /account", to)
 			}
 
-			req := connect.NewRequest(&accessissuerv1.ListSessionsRequest{Identity: ssoEmail})
-			req.Header().Set("Cookie", issuer.SSOCookieName+"=old-sign-in")
+			req := &accessissuerv1.ListSessionsRequest{Identity: ssoEmail}
+			ctx, call := rpcmount.ServerContext(context.Background())
+			call.RequestHeader().Set("Cookie", issuer.SSOCookieName+"=old-sign-in")
 
-			if _, err := rig.service().ListSessions(context.Background(), req); connect.CodeOf(err) != connect.CodeUnauthenticated {
+			if _, err := rig.service().ListSessions(ctx, req); connect.CodeOf(err) != connect.CodeUnauthenticated {
 				t.Errorf("a pre-upgrade cookie on the session service: %v", err)
 			}
 

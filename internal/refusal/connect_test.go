@@ -8,31 +8,43 @@ import (
 	"strings"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 
+	directoryv1 "github.com/truvity/sluis/gen/directory/v1"
+	"github.com/truvity/sluis/gen/directory/v1/directoryv1connect"
 	"github.com/truvity/sluis/internal/refusal"
 	"github.com/truvity/sluis/storage/logtest"
 )
+
+// failing answers every Describe with the error it holds.
+type failing struct {
+	directoryv1connect.UnimplementedDirectoryServiceHandler
+	err error
+}
+
+func (f failing) Describe(context.Context, *directoryv1.DescribeRequest) (*directoryv1.DescribeResponse, error) {
+	return nil, f.err
+}
+
+// procedure is the RPC the tests call.
+const procedure = directoryv1connect.DirectoryServiceDescribeProcedure
 
 // The interceptor is exercised through a real Connect handler, so what it
 // guarantees is what a client reads off the wire.
 func call(t *testing.T, handlerErr error) (*connect.Error, *logtest.Handler) {
 	t.Helper()
 	logger, records := logtest.Logger()
-	handler := connect.NewUnaryHandler("/test.v1.Service/Do",
-		func(context.Context, *connect.Request[struct{}]) (*connect.Response[struct{}], error) {
-			return nil, handlerErr
-		}, connect.WithInterceptors(refusal.Interceptor(logger)),
-		connect.WithCodec(jsonCodec{}))
+	rpc := connect.NewServer(refusal.Interceptor(logger))
+	directoryv1connect.RegisterDirectoryServiceHandler(rpc, failing{err: handlerErr})
 	mux := http.NewServeMux()
-	mux.Handle("/test.v1.Service/Do", refusal.Middleware(handler))
-	server := httptest.NewServer(mux)
+	connecthttp.Mount(mux, rpc)
+	server := httptest.NewServer(refusal.Middleware(mux))
 	t.Cleanup(server.Close)
 
-	client := connect.NewClient[struct{}, struct{}](server.Client(), server.URL+"/test.v1.Service/Do",
-		connect.WithCodec(jsonCodec{}))
-	request := connect.NewRequest(&struct{}{})
-	_, err := client.CallUnary(t.Context(), request)
+	client := directoryv1connect.NewDirectoryServiceClient(connect.NewClient(
+		connecthttp.NewTransport(server.Client(), server.URL)))
+	_, err := client.Describe(t.Context(), &directoryv1.DescribeRequest{})
 	var coded *connect.Error
 	if !errors.As(err, &coded) {
 		t.Fatalf("the call returned %v, want a Connect error", err)
@@ -43,7 +55,7 @@ func call(t *testing.T, handlerErr error) (*connect.Error, *logtest.Handler) {
 func TestPermissionDeniedIsTheFixedWordsAndTheReasonIsLogged(t *testing.T) {
 	t.Parallel()
 	denied, records := call(t, connect.NewError(connect.CodePermissionDenied,
-		errors.New("this needs the operator role over acme's directory")))
+		"this needs the operator role over acme's directory"))
 	if denied.Code() != connect.CodePermissionDenied {
 		t.Fatalf("code = %v, want permission_denied", denied.Code())
 	}
@@ -59,7 +71,7 @@ func TestPermissionDeniedIsTheFixedWordsAndTheReasonIsLogged(t *testing.T) {
 	if record.String(refusal.LogKey) != id {
 		t.Errorf("the log names request %q, the caller was told %q", record.String(refusal.LogKey), id)
 	}
-	if !strings.Contains(record.String("message"), "acme's directory") || record.String("procedure") != "/test.v1.Service/Do" {
+	if !strings.Contains(record.String("message"), "acme's directory") || record.String("procedure") != procedure {
 		t.Errorf("the log does not carry the original: %v", record)
 	}
 }
@@ -70,7 +82,7 @@ func TestInternalAndUnknownAreServerErrorAndTheErrorIsLogged(t *testing.T) {
 		handlerErr error
 		logged     string
 	}{
-		"internal": {connect.NewError(connect.CodeInternal, errors.New("pq: password authentication failed for user sluis")), "password authentication failed"},
+		"internal": {connect.NewError(connect.CodeInternal, "pq: password authentication failed for user sluis"), "password authentication failed"},
 		"unknown":  {errors.New("dial tcp 10.1.2.3:5432: connection refused"), "connection refused"},
 	} {
 		failed, records := call(t, tc.handlerErr)
@@ -89,7 +101,7 @@ func TestInternalAndUnknownAreServerErrorAndTheErrorIsLogged(t *testing.T) {
 func TestUnauthenticatedStaysSignInFirstWhateverTheHandlerSaid(t *testing.T) {
 	t.Parallel()
 	for _, said := range []string{"sign in first", "that token was not accepted: it expired at 12:00"} {
-		failed, _ := call(t, connect.NewError(connect.CodeUnauthenticated, errors.New(said)))
+		failed, _ := call(t, connect.NewError(connect.CodeUnauthenticated, said))
 		if failed.Code() != connect.CodeUnauthenticated || failed.Message() != "sign in first" {
 			t.Errorf("%q became %v %q, want unauthenticated \"sign in first\"", said, failed.Code(), failed.Message())
 		}
@@ -99,7 +111,7 @@ func TestUnauthenticatedStaysSignInFirstWhateverTheHandlerSaid(t *testing.T) {
 func TestOtherCodesPassUntouched(t *testing.T) {
 	t.Parallel()
 	for _, code := range []connect.Code{connect.CodeNotFound, connect.CodeInvalidArgument, connect.CodeFailedPrecondition, connect.CodeUnavailable} {
-		failed, records := call(t, connect.NewError(code, errors.New("the handler's own answer")))
+		failed, records := call(t, connect.NewError(code, "the handler's own answer"))
 		if failed.Code() != code || failed.Message() != "the handler's own answer" {
 			t.Errorf("%v became %v %q, want it passed through", code, failed.Code(), failed.Message())
 		}

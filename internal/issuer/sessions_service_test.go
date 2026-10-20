@@ -6,10 +6,11 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	accessissuerv1 "github.com/truvity/sluis/gen/accessissuer/v1"
 	"github.com/truvity/sluis/internal/issuer"
+	"github.com/truvity/sluis/internal/rpcmount"
 	"github.com/truvity/sluis/policy"
 )
 
@@ -43,29 +44,31 @@ func verifier() func(context.Context, string) (string, []string, error) {
 func list(t *testing.T, s *issuer.SessionsService, as string, req *accessissuerv1.ListSessionsRequest) (*accessissuerv1.ListSessionsResponse, error) {
 	t.Helper()
 
-	r := connect.NewRequest(req)
-	r.Header().Set("Authorization", "Bearer "+as)
+	r := req
+	ctx, call := rpcmount.ServerContext(context.Background())
+	call.RequestHeader().Set("Authorization", "Bearer "+as)
 
-	got, err := s.ListSessions(context.Background(), r)
+	got, err := s.ListSessions(ctx, r)
 	if err != nil {
 		return nil, err
 	}
 
-	return got.Msg, nil
+	return got, nil
 }
 
 func revoke(t *testing.T, s *issuer.SessionsService, as string, req *accessissuerv1.RevokeSessionsRequest) (int32, error) {
 	t.Helper()
 
-	r := connect.NewRequest(req)
-	r.Header().Set("Authorization", "Bearer "+as)
+	r := req
+	ctx, call := rpcmount.ServerContext(context.Background())
+	call.RequestHeader().Set("Authorization", "Bearer "+as)
 
-	got, err := s.RevokeSessions(context.Background(), r)
+	got, err := s.RevokeSessions(ctx, r)
 	if err != nil {
 		return 0, err
 	}
 
-	return got.Msg.GetEnded(), nil
+	return got.GetEnded(), nil
 }
 
 // Your own sessions are yours to see and end; somebody else's need an
@@ -667,8 +670,8 @@ func TestTheConsoleCanVouchForItsCaller(t *testing.T) {
 		}
 	}
 
-	ask := func(ctx context.Context, req *accessissuerv1.ListSessionsRequest) (*connect.Response[accessissuerv1.ListSessionsResponse], error) {
-		return svc.ListSessions(ctx, connect.NewRequest(req))
+	ask := func(ctx context.Context, req *accessissuerv1.ListSessionsRequest) (*accessissuerv1.ListSessionsResponse, error) {
+		return svc.ListSessions(ctx, req)
 	}
 
 	// Without the console's word and without credentials: nobody.
@@ -678,7 +681,7 @@ func TestTheConsoleCanVouchForItsCaller(t *testing.T) {
 
 	operator := issuer.WithConsoleCaller(ctx, "system:serviceaccount:sluis:recovery", true)
 	got, err := ask(operator, &accessissuerv1.ListSessionsRequest{})
-	if err != nil || len(got.Msg.GetSessions()) != 2 {
+	if err != nil || len(got.GetSessions()) != 2 {
 		t.Fatalf("an operator the console vouches for: %v, %v", got, err)
 	}
 
@@ -687,7 +690,7 @@ func TestTheConsoleCanVouchForItsCaller(t *testing.T) {
 		t.Errorf("a person listing everything = %v, want permission denied", err)
 	}
 	got, err = ask(person, &accessissuerv1.ListSessionsRequest{Identity: "ada@north.example"})
-	if err != nil || len(got.Msg.GetSessions()) != 1 {
+	if err != nil || len(got.GetSessions()) != 1 {
 		t.Errorf("a person listing their own: %v, %v", got, err)
 	}
 	if _, err := ask(person, &accessissuerv1.ListSessionsRequest{Identity: "eli@south.example"}); connect.CodeOf(err) != connect.CodePermissionDenied {

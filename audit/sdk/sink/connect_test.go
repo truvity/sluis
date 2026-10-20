@@ -6,7 +6,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 
 	auditv1 "github.com/truvity/sluis/audit/sdk/gen/audit/v1"
 	"github.com/truvity/sluis/audit/sdk/gen/audit/v1/auditv1connect"
@@ -20,20 +21,21 @@ type stub struct {
 	got *auditv1.WriteRequest
 }
 
-func (s *stub) Write(_ context.Context, req *connect.Request[auditv1.WriteRequest]) (*connect.Response[auditv1.WriteResponse], error) {
-	s.got = req.Msg
-	return connect.NewResponse(&auditv1.WriteResponse{
-		Accepted:   int32(len(req.Msg.GetRecords())),
+func (s *stub) Write(_ context.Context, req *auditv1.WriteRequest) (*auditv1.WriteResponse, error) {
+	s.got = req
+	return &auditv1.WriteResponse{
+		Accepted:   int32(len(req.GetRecords())),
 		Durability: sink.Queued,
 		Rejected:   []*auditv1.Rejection{{Id: "bad", Reason: "no"}},
-	}), nil
+	}, nil
 }
 
 func TestClientCarriesTheBatchAndTheAnswer(t *testing.T) {
 	far := &stub{}
-	path, handler := auditv1connect.NewSinkServiceHandler(far)
+	rpc := connect.NewServer()
+	auditv1connect.RegisterSinkServiceHandler(rpc, far)
 	mux := http.NewServeMux()
-	mux.Handle(path, handler)
+	connecthttp.Mount(mux, rpc)
 	server := httptest.NewServer(mux)
 	t.Cleanup(server.Close)
 

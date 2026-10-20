@@ -11,7 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	sluisv1 "github.com/truvity/sluis/gen/sluis/v1"
@@ -258,8 +259,8 @@ func newIssuerBackup(ctx context.Context, cfg Config) (*issuerBackup, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &issuerBackup{client: sluisv1connect.NewBackupServiceClient(
-		&http.Client{Transport: backupBearer{token: token.AccessToken}}, cfg.Issuer+consoleMount)}, nil
+	return &issuerBackup{client: sluisv1connect.NewBackupServiceClient(connect.NewClient(connecthttp.NewTransport(
+		&http.Client{Transport: backupBearer{token: token.AccessToken}}, cfg.Issuer+consoleMount, connecthttp.WithReadMaxBytes(0))))}, nil
 }
 
 // issuerError says what a refusal by the issuer means for the caller.
@@ -273,7 +274,7 @@ func issuerError(err error) error {
 	}
 	// An Unavailable the client made up (a refused connection, a closed one) is
 	// the issuer being down; one the issuer sent is a module that did not answer.
-	if coded.Code() == connect.CodeUnavailable && !connect.IsWireError(err) {
+	if coded.Code() == connect.CodeUnavailable && !coded.IsRemote() {
 		return fmt.Errorf("%w: %w", errUnreachable, err)
 	}
 	switch coded.Code() {
@@ -293,14 +294,14 @@ var errNoBackupModule = errors.New("the issuer has no backup module connected; a
 // the run, not when it ends: outcome is started, contended or idle, and started
 // is the issuer's clock when the run was handed over, to find the run by.
 func (i *issuerBackup) run(ctx context.Context, resume bool) (res job.Result, started time.Time, err error) {
-	got, err := i.client.RunBackup(ctx, connect.NewRequest(&sluisv1.RunBackupRequest{Resume: resume}))
+	got, err := i.client.RunBackup(ctx, &sluisv1.RunBackupRequest{Resume: resume})
 	if err != nil {
 		return job.Result{}, time.Time{}, issuerError(err)
 	}
-	if !got.Msg.GetAvailable() {
+	if !got.GetAvailable() {
 		return job.Result{}, time.Time{}, errNoBackupModule
 	}
-	return job.Result{Outcome: got.Msg.GetOutcome(), ID: got.Msg.GetId(), Run: viewOf(got.Msg.GetRun())}, stampOf(got.Msg.GetStarted()), nil
+	return job.Result{Outcome: got.GetOutcome(), ID: got.GetId(), Run: viewOf(got.GetRun())}, stampOf(got.GetStarted()), nil
 }
 
 // runSkew is how far before the issuer's start a run's own start may be read.
@@ -338,11 +339,11 @@ type retentionCounts struct {
 }
 
 func (i *issuerBackup) status(ctx context.Context) (job.Status, *retentionCounts, error) {
-	res, err := i.client.GetBackupStatus(ctx, connect.NewRequest(&sluisv1.GetBackupStatusRequest{}))
+	res, err := i.client.GetBackupStatus(ctx, &sluisv1.GetBackupStatusRequest{})
 	if err != nil {
 		return job.Status{}, nil, issuerError(err)
 	}
-	m := res.Msg
+	m := res
 	if !m.GetAvailable() {
 		return job.Status{}, nil, errNoBackupModule
 	}
@@ -356,15 +357,15 @@ func (i *issuerBackup) status(ctx context.Context) (job.Status, *retentionCounts
 }
 
 func (i *issuerBackup) list(ctx context.Context, limit int) ([]job.Info, error) {
-	res, err := i.client.ListBackups(ctx, connect.NewRequest(&sluisv1.ListBackupsRequest{Limit: int32(limit)}))
+	res, err := i.client.ListBackups(ctx, &sluisv1.ListBackupsRequest{Limit: int32(limit)})
 	if err != nil {
 		return nil, issuerError(err)
 	}
-	if !res.Msg.GetAvailable() {
+	if !res.GetAvailable() {
 		return nil, errNoBackupModule
 	}
-	out := make([]job.Info, 0, len(res.Msg.GetBackups()))
-	for _, b := range res.Msg.GetBackups() {
+	out := make([]job.Info, 0, len(res.GetBackups()))
+	for _, b := range res.GetBackups() {
 		out = append(out, job.Info{ID: b.GetId(), Created: stampOf(b.GetCreated()), Creator: b.GetCreator(), Format: int(b.GetFormat()),
 			Layout: b.GetLayout(), Modules: int(b.GetModules()), Records: b.GetRecords(), Chunks: int(b.GetChunks()), Error: b.GetError()})
 	}
@@ -372,11 +373,11 @@ func (i *issuerBackup) list(ctx context.Context, limit int) ([]job.Info, error) 
 }
 
 func (i *issuerBackup) restoreStatus(ctx context.Context) (restorejob.Status, error) {
-	res, err := i.client.GetRestoreStatus(ctx, connect.NewRequest(&sluisv1.GetRestoreStatusRequest{}))
+	res, err := i.client.GetRestoreStatus(ctx, &sluisv1.GetRestoreStatusRequest{})
 	if err != nil {
 		return restorejob.Status{}, issuerError(err)
 	}
-	m := res.Msg
+	m := res
 	if !m.GetAvailable() {
 		return restorejob.Status{}, errors.New("the issuer has no restore function connected; add --direct to use your own AWS credentials")
 	}
@@ -389,11 +390,11 @@ func (i *issuerBackup) restoreStatus(ctx context.Context) (restorejob.Status, er
 }
 
 func (i *issuerBackup) preview(ctx context.Context, id string) (restoreAnswer, error) {
-	res, err := i.client.GetRestorePreview(ctx, connect.NewRequest(&sluisv1.GetRestorePreviewRequest{BackupId: id}))
+	res, err := i.client.GetRestorePreview(ctx, &sluisv1.GetRestorePreviewRequest{BackupId: id})
 	if err != nil {
 		return restoreAnswer{}, issuerError(err)
 	}
-	m := res.Msg
+	m := res
 	if !m.GetAvailable() {
 		return restoreAnswer{}, errors.New("the issuer has no restore function connected; add --direct to use your own AWS credentials")
 	}

@@ -5,7 +5,7 @@ import (
 	"errors"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"google.golang.org/protobuf/proto"
 
 	"github.com/truvity/sluis/internal/consolecall"
@@ -92,14 +92,14 @@ func handleProto[Req, Resp any, PReq interface {
 	proto.Message
 }](
 	c *Service, s *modcall.Server, method string,
-	fn func(context.Context, *connect.Request[Req]) (*connect.Response[Resp], error), opts ...modcall.Option,
+	fn func(context.Context, *Req) (*Resp, error), opts ...modcall.Option,
 ) {
 	consolecall.Handle(s, method, func(ctx context.Context, caller consolecall.Caller, req PReq) (PResp, error) {
-		resp, err := fn(WithCaller(ctx, caller), connect.NewRequest((*Req)(req)))
+		resp, err := fn(WithCaller(ctx, caller), (*Req)(req))
 		if err != nil {
 			return nil, c.told(ctx, err)
 		}
-		return PResp(resp.Msg), nil
+		return PResp(resp), nil
 	}, opts...)
 }
 

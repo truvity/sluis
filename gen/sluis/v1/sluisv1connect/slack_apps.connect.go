@@ -5,43 +5,58 @@
 package sluisv1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1 "github.com/truvity/sluis/gen/sluis/v1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// SlackAppServiceName is the fully-qualified name of the SlackAppService service.
 	SlackAppServiceName = "sluis.v1.SlackAppService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// SlackAppServiceListSlackAppsProcedure is the fully-qualified name of the SlackAppService's
+	// SlackAppServiceListSlackAppsProcedure is the procedure name of the SlackAppService's
 	// ListSlackApps RPC.
 	SlackAppServiceListSlackAppsProcedure = "/sluis.v1.SlackAppService/ListSlackApps"
-	// SlackAppServiceCreateSlackAppProcedure is the fully-qualified name of the SlackAppService's
+	// SlackAppServiceCreateSlackAppProcedure is the procedure name of the SlackAppService's
 	// CreateSlackApp RPC.
 	SlackAppServiceCreateSlackAppProcedure = "/sluis.v1.SlackAppService/CreateSlackApp"
-	// SlackAppServiceInstallSlackAppProcedure is the fully-qualified name of the SlackAppService's
+	// SlackAppServiceInstallSlackAppProcedure is the procedure name of the SlackAppService's
 	// InstallSlackApp RPC.
 	SlackAppServiceInstallSlackAppProcedure = "/sluis.v1.SlackAppService/InstallSlackApp"
+)
+
+var (
+	slackAppServiceListSlackAppsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_sluis_v1_slack_apps_proto.Services().ByName("SlackAppService").Methods().ByName("ListSlackApps"),
+			Procedure:  SlackAppServiceListSlackAppsProcedure,
+		}
+	})
+	slackAppServiceCreateSlackAppSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_sluis_v1_slack_apps_proto.Services().ByName("SlackAppService").Methods().ByName("CreateSlackApp"),
+			Procedure:  SlackAppServiceCreateSlackAppProcedure,
+		}
+	})
+	slackAppServiceInstallSlackAppSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_sluis_v1_slack_apps_proto.Services().ByName("SlackAppService").Methods().ByName("InstallSlackApp"),
+			Procedure:  SlackAppServiceInstallSlackAppProcedure,
+		}
+	})
 )
 
 // SlackAppServiceClient is a client for the sluis.v1.SlackAppService service.
@@ -52,73 +67,25 @@ type SlackAppServiceClient interface {
 	// workspace: a scoped viewer sees only the Apps of workspaces its
 	// directory owns.
 	// Never a client secret or a bot token.
-	ListSlackApps(context.Context, *connect.Request[v1.ListSlackAppsRequest]) (*connect.Response[v1.ListSlackAppsResponse], error)
+	ListSlackApps(context.Context, *v1.ListSlackAppsRequest) (*v1.ListSlackAppsResponse, error)
 	// CreateSlackApp creates the App in Slack from the entry's manifest with
 	// the configuration token, and keeps the App's client id and secret as
 	// "created, not installed". Operator of the workspace's owner, or the
 	// installation-wide operator.
 	//
 	// The configuration token lives in this request and in one call to Slack.
-	CreateSlackApp(context.Context, *connect.Request[v1.CreateSlackAppRequest]) (*connect.Response[v1.CreateSlackAppResponse], error)
+	CreateSlackApp(context.Context, *v1.CreateSlackAppRequest) (*v1.CreateSlackAppResponse, error)
 	// InstallSlackApp starts installing a created App, or reinstalling an
 	// installed one whose granted scopes lack declared ones. Operator. The
 	// response header pins the flow to this browser with a cookie, as GitHub's
 	// connect does.
-	InstallSlackApp(context.Context, *connect.Request[v1.InstallSlackAppRequest]) (*connect.Response[v1.InstallSlackAppResponse], error)
+	InstallSlackApp(context.Context, *v1.InstallSlackAppRequest) (*v1.InstallSlackAppResponse, error)
 }
 
-// NewSlackAppServiceClient constructs a client for the sluis.v1.SlackAppService service. By
-// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
-// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
-// connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewSlackAppServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) SlackAppServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	slackAppServiceMethods := v1.File_sluis_v1_slack_apps_proto.Services().ByName("SlackAppService").Methods()
-	return &slackAppServiceClient{
-		listSlackApps: connect.NewClient[v1.ListSlackAppsRequest, v1.ListSlackAppsResponse](
-			httpClient,
-			baseURL+SlackAppServiceListSlackAppsProcedure,
-			connect.WithSchema(slackAppServiceMethods.ByName("ListSlackApps")),
-			connect.WithClientOptions(opts...),
-		),
-		createSlackApp: connect.NewClient[v1.CreateSlackAppRequest, v1.CreateSlackAppResponse](
-			httpClient,
-			baseURL+SlackAppServiceCreateSlackAppProcedure,
-			connect.WithSchema(slackAppServiceMethods.ByName("CreateSlackApp")),
-			connect.WithClientOptions(opts...),
-		),
-		installSlackApp: connect.NewClient[v1.InstallSlackAppRequest, v1.InstallSlackAppResponse](
-			httpClient,
-			baseURL+SlackAppServiceInstallSlackAppProcedure,
-			connect.WithSchema(slackAppServiceMethods.ByName("InstallSlackApp")),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// slackAppServiceClient implements SlackAppServiceClient.
-type slackAppServiceClient struct {
-	listSlackApps   *connect.Client[v1.ListSlackAppsRequest, v1.ListSlackAppsResponse]
-	createSlackApp  *connect.Client[v1.CreateSlackAppRequest, v1.CreateSlackAppResponse]
-	installSlackApp *connect.Client[v1.InstallSlackAppRequest, v1.InstallSlackAppResponse]
-}
-
-// ListSlackApps calls sluis.v1.SlackAppService.ListSlackApps.
-func (c *slackAppServiceClient) ListSlackApps(ctx context.Context, req *connect.Request[v1.ListSlackAppsRequest]) (*connect.Response[v1.ListSlackAppsResponse], error) {
-	return c.listSlackApps.CallUnary(ctx, req)
-}
-
-// CreateSlackApp calls sluis.v1.SlackAppService.CreateSlackApp.
-func (c *slackAppServiceClient) CreateSlackApp(ctx context.Context, req *connect.Request[v1.CreateSlackAppRequest]) (*connect.Response[v1.CreateSlackAppResponse], error) {
-	return c.createSlackApp.CallUnary(ctx, req)
-}
-
-// InstallSlackApp calls sluis.v1.SlackAppService.InstallSlackApp.
-func (c *slackAppServiceClient) InstallSlackApp(ctx context.Context, req *connect.Request[v1.InstallSlackAppRequest]) (*connect.Response[v1.InstallSlackAppResponse], error) {
-	return c.installSlackApp.CallUnary(ctx, req)
+// NewSlackAppServiceClient constructs a client for the sluis.v1.SlackAppService service. Multiple
+// service clients may share a single connect.Client.
+func NewSlackAppServiceClient(client *connect.Client) SlackAppServiceClient {
+	return &slackAppServiceClient{client: client}
 }
 
 // SlackAppServiceHandler is an implementation of the sluis.v1.SlackAppService service.
@@ -129,71 +96,109 @@ type SlackAppServiceHandler interface {
 	// workspace: a scoped viewer sees only the Apps of workspaces its
 	// directory owns.
 	// Never a client secret or a bot token.
-	ListSlackApps(context.Context, *connect.Request[v1.ListSlackAppsRequest]) (*connect.Response[v1.ListSlackAppsResponse], error)
+	ListSlackApps(context.Context, *v1.ListSlackAppsRequest) (*v1.ListSlackAppsResponse, error)
 	// CreateSlackApp creates the App in Slack from the entry's manifest with
 	// the configuration token, and keeps the App's client id and secret as
 	// "created, not installed". Operator of the workspace's owner, or the
 	// installation-wide operator.
 	//
 	// The configuration token lives in this request and in one call to Slack.
-	CreateSlackApp(context.Context, *connect.Request[v1.CreateSlackAppRequest]) (*connect.Response[v1.CreateSlackAppResponse], error)
+	CreateSlackApp(context.Context, *v1.CreateSlackAppRequest) (*v1.CreateSlackAppResponse, error)
 	// InstallSlackApp starts installing a created App, or reinstalling an
 	// installed one whose granted scopes lack declared ones. Operator. The
 	// response header pins the flow to this browser with a cookie, as GitHub's
 	// connect does.
-	InstallSlackApp(context.Context, *connect.Request[v1.InstallSlackAppRequest]) (*connect.Response[v1.InstallSlackAppResponse], error)
+	InstallSlackApp(context.Context, *v1.InstallSlackAppRequest) (*v1.InstallSlackAppResponse, error)
 }
 
-// NewSlackAppServiceHandler builds an HTTP handler from the service implementation. It returns the
-// path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewSlackAppServiceHandler(svc SlackAppServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	slackAppServiceMethods := v1.File_sluis_v1_slack_apps_proto.Services().ByName("SlackAppService").Methods()
-	slackAppServiceListSlackAppsHandler := connect.NewUnaryHandler(
-		SlackAppServiceListSlackAppsProcedure,
-		svc.ListSlackApps,
-		connect.WithSchema(slackAppServiceMethods.ByName("ListSlackApps")),
-		connect.WithHandlerOptions(opts...),
+// RegisterSlackAppServiceHandler registers svc as the sluis.v1.SlackAppService implementation on
+// server.
+func RegisterSlackAppServiceHandler(server *connect.Server, svc SlackAppServiceHandler) {
+	adapter := slackAppServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: slackAppServiceListSlackAppsSpec(), Handler: adapter.listSlackApps},
+		connect.Method{Spec: slackAppServiceCreateSlackAppSpec(), Handler: adapter.createSlackApp},
+		connect.Method{Spec: slackAppServiceInstallSlackAppSpec(), Handler: adapter.installSlackApp},
 	)
-	slackAppServiceCreateSlackAppHandler := connect.NewUnaryHandler(
-		SlackAppServiceCreateSlackAppProcedure,
-		svc.CreateSlackApp,
-		connect.WithSchema(slackAppServiceMethods.ByName("CreateSlackApp")),
-		connect.WithHandlerOptions(opts...),
-	)
-	slackAppServiceInstallSlackAppHandler := connect.NewUnaryHandler(
-		SlackAppServiceInstallSlackAppProcedure,
-		svc.InstallSlackApp,
-		connect.WithSchema(slackAppServiceMethods.ByName("InstallSlackApp")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/sluis.v1.SlackAppService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case SlackAppServiceListSlackAppsProcedure:
-			slackAppServiceListSlackAppsHandler.ServeHTTP(w, r)
-		case SlackAppServiceCreateSlackAppProcedure:
-			slackAppServiceCreateSlackAppHandler.ServeHTTP(w, r)
-		case SlackAppServiceInstallSlackAppProcedure:
-			slackAppServiceInstallSlackAppHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedSlackAppServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedSlackAppServiceHandler struct{}
 
-func (UnimplementedSlackAppServiceHandler) ListSlackApps(context.Context, *connect.Request[v1.ListSlackAppsRequest]) (*connect.Response[v1.ListSlackAppsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sluis.v1.SlackAppService.ListSlackApps is not implemented"))
+func (UnimplementedSlackAppServiceHandler) ListSlackApps(context.Context, *v1.ListSlackAppsRequest) (*v1.ListSlackAppsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "sluis.v1.SlackAppService.ListSlackApps is not implemented")
 }
 
-func (UnimplementedSlackAppServiceHandler) CreateSlackApp(context.Context, *connect.Request[v1.CreateSlackAppRequest]) (*connect.Response[v1.CreateSlackAppResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sluis.v1.SlackAppService.CreateSlackApp is not implemented"))
+func (UnimplementedSlackAppServiceHandler) CreateSlackApp(context.Context, *v1.CreateSlackAppRequest) (*v1.CreateSlackAppResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "sluis.v1.SlackAppService.CreateSlackApp is not implemented")
 }
 
-func (UnimplementedSlackAppServiceHandler) InstallSlackApp(context.Context, *connect.Request[v1.InstallSlackAppRequest]) (*connect.Response[v1.InstallSlackAppResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sluis.v1.SlackAppService.InstallSlackApp is not implemented"))
+func (UnimplementedSlackAppServiceHandler) InstallSlackApp(context.Context, *v1.InstallSlackAppRequest) (*v1.InstallSlackAppResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "sluis.v1.SlackAppService.InstallSlackApp is not implemented")
+}
+
+type slackAppServiceClient struct {
+	client *connect.Client
+}
+
+func (c *slackAppServiceClient) ListSlackApps(ctx context.Context, req *v1.ListSlackAppsRequest) (*v1.ListSlackAppsResponse, error) {
+	var res v1.ListSlackAppsResponse
+	if err := c.client.CallUnary(ctx, slackAppServiceListSlackAppsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *slackAppServiceClient) CreateSlackApp(ctx context.Context, req *v1.CreateSlackAppRequest) (*v1.CreateSlackAppResponse, error) {
+	var res v1.CreateSlackAppResponse
+	if err := c.client.CallUnary(ctx, slackAppServiceCreateSlackAppSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *slackAppServiceClient) InstallSlackApp(ctx context.Context, req *v1.InstallSlackAppRequest) (*v1.InstallSlackAppResponse, error) {
+	var res v1.InstallSlackAppResponse
+	if err := c.client.CallUnary(ctx, slackAppServiceInstallSlackAppSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type slackAppServiceHandler struct{ svc SlackAppServiceHandler }
+
+func (h slackAppServiceHandler) listSlackApps(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListSlackAppsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListSlackApps(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h slackAppServiceHandler) createSlackApp(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CreateSlackAppRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CreateSlackApp(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h slackAppServiceHandler) installSlackApp(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.InstallSlackAppRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.InstallSlackApp(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

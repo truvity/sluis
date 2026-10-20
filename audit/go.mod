@@ -5,7 +5,7 @@ go 1.27.0
 toolchain go1.27.3
 
 require (
-	connectrpc.com/connect v1.21.0
+	connectrpc.com/connect/v2 v2.0.1
 	github.com/aws/aws-lambda-go v1.55.1
 	github.com/aws/aws-sdk-go-v2 v1.47.3
 	github.com/aws/aws-sdk-go-v2/config v1.33.9
@@ -44,7 +44,7 @@ require (
 )
 
 require (
-	connectrpc.com/connect/v2 v2.0.0 // indirect
+	connectrpc.com/connect v1.21.1 // indirect
 	connectrpc.com/otelconnect v0.12.0 // indirect
 	github.com/antithesishq/antithesis-sdk-go v0.8.0-default-no-op // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.22 // indirect
@@ -101,7 +101,10 @@ require (
 	oras.land/oras-go/v2 v2.6.2 // indirect
 )
 
-tool github.com/truvity/ocictl/cmd/helmctl
+tool (
+	connectrpc.com/connect/v2/cmd/protoc-gen-connect-go
+	github.com/truvity/ocictl/cmd/helmctl
+)
 
 // The SDK is a module of its own, in this checkout beside the root: the
 // emitter packages an application imports must not drag the writer's

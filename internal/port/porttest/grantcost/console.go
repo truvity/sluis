@@ -8,9 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
-
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connectinprocess"
 	accessissuerv1 "github.com/truvity/sluis/gen/accessissuer/v1"
+	"github.com/truvity/sluis/gen/accessissuer/v1/accessissuerv1connect"
 	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/issuer"
 	"github.com/truvity/sluis/internal/server"
@@ -88,13 +89,18 @@ func (h *Harness) OwnSessions() (int, error) {
 	if h.accounts == nil {
 		h.accounts = issuer.NewSessionsService(h.Issuer, nil, false)
 	}
-	request := connect.NewRequest(&accessissuerv1.ListSessionsRequest{Identity: Person})
+	// Through a Connect server in process: the service reads the cookie off
+	// the call's headers, which only a call carries.
+	rpc := connect.NewServer()
+	accessissuerv1connect.RegisterSessionServiceHandler(rpc, h.accounts)
+	client := accessissuerv1connect.NewSessionServiceClient(connect.NewClient(connectinprocess.New(rpc)))
+	ctx, info := connect.NewClientContext(h.t.Context())
 	for name, value := range h.cookies {
-		request.Header().Add("Cookie", (&http.Cookie{Name: name, Value: value}).String())
+		info.RequestHeader().Add("Cookie", (&http.Cookie{Name: name, Value: value}).String())
 	}
-	response, err := h.accounts.ListSessions(h.t.Context(), request)
+	response, err := client.ListSessions(ctx, &accessissuerv1.ListSessionsRequest{Identity: Person})
 	if err != nil {
 		return 0, err
 	}
-	return len(response.Msg.GetSessions()), nil
+	return len(response.GetSessions()), nil
 }

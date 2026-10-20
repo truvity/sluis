@@ -15,23 +15,31 @@ package wire
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
+	"connectrpc.com/connect/v2/connectproto"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 )
 
 // HandlerOptions make a handler write snake_case JSON, under both names a
 // Connect client may ask for JSON by, and refuse a message over
-// [MaxRequestBytes].
-func HandlerOptions() []connect.HandlerOption {
-	return []connect.HandlerOption{
-		connect.WithCodec(Codec{name: "json"}),
-		connect.WithCodec(Codec{name: "json; charset=utf-8"}),
-		connect.WithReadMaxBytes(MaxRequestBytes),
+// [MaxRequestBytes]. connect-go v2's codec option replaces the whole list, so
+// binary protobuf, which Go clients speak, is listed with them.
+func HandlerOptions() []connecthttp.Option {
+	return []connecthttp.Option{
+		connecthttp.WithCodecs(
+			connectproto.NewBinaryCodec(),
+			Codec{name: connect.CodecNameJSON},
+			Codec{name: connect.CodecNameJSON + "; charset=utf-8"},
+		),
+		connecthttp.WithReadMaxBytes(MaxRequestBytes),
 	}
 }
 
@@ -49,6 +57,8 @@ const MaxRequestBytes = 4 << 20
 type Codec struct{ name string }
 
 var (
+	_ connect.StableCodec = Codec{}
+
 	marshal   = protojson.MarshalOptions{UseProtoNames: true}
 	unmarshal = protojson.UnmarshalOptions{DiscardUnknown: true}
 )
@@ -56,12 +66,12 @@ var (
 // Name implements connect.Codec.
 func (c Codec) Name() string {
 	if c.name == "" {
-		return "json"
+		return connect.CodecNameJSON
 	}
 	return c.name
 }
 
-// Marshal implements connect.Codec.
+// Marshal is the JSON of message, with the proto's own field names.
 func (Codec) Marshal(message any) ([]byte, error) {
 	m, ok := message.(proto.Message)
 	if !ok {
@@ -70,33 +80,35 @@ func (Codec) Marshal(message any) ([]byte, error) {
 	return marshal.Marshal(m)
 }
 
-// MarshalAppend implements connect's optional append codec.
-func (Codec) MarshalAppend(dst []byte, message any) ([]byte, error) {
-	m, ok := message.(proto.Message)
-	if !ok {
-		return nil, notProto(message)
-	}
-	return marshal.MarshalAppend(dst, m)
-}
-
-// MarshalStable implements connect's optional stable codec, which GET requests
-// use as a cache key. protojson's whitespace is not stable, so it is compacted.
-func (c Codec) MarshalStable(message any) ([]byte, error) {
+// MarshalWrite implements connect.Codec.
+func (c Codec) MarshalWrite(_ context.Context, dst io.Writer, message any) error {
 	out, err := c.Marshal(message)
 	if err != nil {
-		return nil, err
+		return err
+	}
+	_, err = dst.Write(out)
+	return err
+}
+
+// MarshalWriteStable implements connect.StableCodec, which GET requests use as
+// a cache key. protojson's whitespace is not stable, so it is compacted.
+func (c Codec) MarshalWriteStable(_ context.Context, dst io.Writer, message any) error {
+	out, err := c.Marshal(message)
+	if err != nil {
+		return err
 	}
 	var compact bytes.Buffer
 	if err := json.Compact(&compact, out); err != nil {
-		return nil, err
+		return err
 	}
-	return compact.Bytes(), nil
+	_, err = dst.Write(compact.Bytes())
+	return err
 }
 
-// IsBinary implements connect's optional binary marker.
+// IsBinary implements connect.StableCodec.
 func (Codec) IsBinary() bool { return false }
 
-// Unmarshal implements connect.Codec.
+// Unmarshal reads JSON into message, either spelling of a field name.
 func (Codec) Unmarshal(data []byte, message any) error {
 	m, ok := message.(proto.Message)
 	if !ok {
@@ -109,6 +121,15 @@ func (Codec) Unmarshal(data []byte, message any) error {
 		return fmt.Errorf("wire: unmarshal into %T: %w", message, err)
 	}
 	return nil
+}
+
+// UnmarshalRead implements connect.Codec.
+func (c Codec) UnmarshalRead(_ context.Context, src io.Reader, message any) error {
+	data, err := io.ReadAll(src)
+	if err != nil {
+		return err
+	}
+	return c.Unmarshal(data, message)
 }
 
 func notProto(message any) error {

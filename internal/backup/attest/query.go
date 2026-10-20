@@ -24,7 +24,8 @@ import (
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 	"github.com/truvity/sluis/audit/sdk/auth"
 	auditv1 "github.com/truvity/sluis/audit/sdk/gen/audit/v1"
 	"github.com/truvity/sluis/audit/sdk/gen/audit/v1/auditv1connect"
@@ -82,7 +83,7 @@ type Config struct {
 	Timeout time.Duration
 	// HTTP is the client to reach the service with; one that presents
 	// TokenFile when nil. For tests.
-	HTTP connect.HTTPClient
+	HTTP connecthttp.HTTPClient
 	// Log is where a record of another observer is reported; slog.Default()
 	// when nil.
 	Log *slog.Logger
@@ -118,7 +119,8 @@ func New(c Config) (*Query, error) {
 		}
 		hc = noRedirectAcrossOrigins(auth.TokenFile(c.TokenFile))
 	}
-	q := &Query{client: auditv1connect.NewQueryServiceClient(hc, strings.TrimRight(c.URL, "/")),
+	q := &Query{client: auditv1connect.NewQueryServiceClient(connect.NewClient(
+		connecthttp.NewTransport(hc, strings.TrimRight(c.URL, "/"), connecthttp.WithReadMaxBytes(0)))),
 		profile: c.Profile, observer: c.Observer, timeout: c.Timeout, log: c.Log}
 	if q.log == nil {
 		q.log = slog.Default()
@@ -163,11 +165,11 @@ func (q *Query) Attest(ctx context.Context, _, id string) ([]backup.Claim, error
 	var claims []backup.Claim
 	for _, r := range items {
 		c := ClaimOf(r)
-		got, err := q.client.Get(ctx, connect.NewRequest(&auditv1.GetRequest{Profile: q.profile, Id: r.GetId()}))
+		got, err := q.client.Get(ctx, &auditv1.GetRequest{Profile: q.profile, Id: r.GetId()})
 		if err != nil {
 			return nil, unavailable("read the record's seal", err)
 		}
-		p := got.Msg.GetProvenance()
+		p := got.GetProvenance()
 		if p.GetSealUnknown() {
 			return nil, fmt.Errorf("%w: the query service cannot tell whether the hour of record %s is sealed", backup.ErrAttestUnavailable, r.GetId())
 		}
@@ -187,7 +189,7 @@ func (q *Query) search(ctx context.Context, id string) ([]*auditv1.Record, error
 	foreign := 0
 	cursor := ""
 	for page := 0; page < maxPages; page++ {
-		res, err := q.client.Search(ctx, connect.NewRequest(&auditv1.SearchRequest{
+		res, err := q.client.Search(ctx, &auditv1.SearchRequest{
 			Profile: q.profile,
 			Limit:   pageSize,
 			Cursor:  cursor,
@@ -197,11 +199,11 @@ func (q *Query) search(ctx context.Context, id string) ([]*auditv1.Record, error
 				Targets: &auditv1.TargetPredicate{Operator: &auditv1.TargetPredicate_In{In: &auditv1.TargetList{
 					Values: []*auditv1.TargetRef{{Type: "backup", Id: id}}}}},
 			}},
-		}))
+		})
 		if err != nil {
 			return nil, unavailable("search the trail", err)
 		}
-		for _, r := range res.Msg.GetItems() {
+		for _, r := range res.GetItems() {
 			if !hasTarget(r, id) || r.GetSource() != audit.Source || r.GetAction() != Action ||
 				r.GetOutcome().GetResult() != auditv1.Outcome_RESULT_SUCCESS {
 				continue
@@ -218,8 +220,8 @@ func (q *Query) search(ctx context.Context, id string) ([]*auditv1.Record, error
 				return nil, fmt.Errorf("%w: more than %d records name backup %s; a backup has one", backup.ErrMismatch, maxRecords, id)
 			}
 		}
-		cursor = res.Msg.GetCursors().GetNext()
-		if len(res.Msg.GetItems()) == 0 || cursor == "" {
+		cursor = res.GetCursors().GetNext()
+		if len(res.GetItems()) == 0 || cursor == "" {
 			if foreign > maxLogged {
 				q.log.ErrorContext(ctx, "more completed-backup records by other observers were ignored", slog.String("backup", id), slog.Int("ignored", foreign-maxLogged))
 			}

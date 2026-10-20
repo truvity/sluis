@@ -18,13 +18,14 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	accessissuerv1 "github.com/truvity/sluis/gen/accessissuer/v1"
 	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/audit/audittest"
 	"github.com/truvity/sluis/internal/demo"
 	"github.com/truvity/sluis/internal/issuer"
+	"github.com/truvity/sluis/internal/rpcmount"
 	"github.com/truvity/sluis/policy"
 )
 
@@ -575,9 +576,10 @@ func TestTheSignInIDAsACookieSignsNobodyIn(t *testing.T) {
 
 	t.Run("session service", func(t *testing.T) {
 		call := func(cookie string) error {
-			req := connect.NewRequest(&accessissuerv1.ListSessionsRequest{Identity: ssoEmail})
-			req.Header().Set("Cookie", issuer.SSOCookieName+"="+cookie)
-			_, err := rig.service().ListSessions(context.Background(), req)
+			req := &accessissuerv1.ListSessionsRequest{Identity: ssoEmail}
+			ctx, call := rpcmount.ServerContext(context.Background())
+			call.RequestHeader().Set("Cookie", issuer.SSOCookieName+"="+cookie)
+			_, err := rig.service().ListSessions(ctx, req)
 
 			return err
 		}

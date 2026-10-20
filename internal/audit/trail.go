@@ -11,7 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/truvity/sluis/audit/sdk/auth"
 	"github.com/truvity/sluis/audit/sdk/catalogue"
 	"github.com/truvity/sluis/audit/sdk/emit"

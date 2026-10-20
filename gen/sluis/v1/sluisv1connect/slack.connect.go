@@ -5,52 +5,88 @@
 package sluisv1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1 "github.com/truvity/sluis/gen/sluis/v1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// SlackServiceName is the fully-qualified name of the SlackService service.
 	SlackServiceName = "sluis.v1.SlackService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// SlackServiceGetSlackStatusProcedure is the fully-qualified name of the SlackService's
-	// GetSlackStatus RPC.
+	// SlackServiceGetSlackStatusProcedure is the procedure name of the SlackService's GetSlackStatus
+	// RPC.
 	SlackServiceGetSlackStatusProcedure = "/sluis.v1.SlackService/GetSlackStatus"
-	// SlackServiceBeginSlackWorkspaceConnectProcedure is the fully-qualified name of the SlackService's
+	// SlackServiceBeginSlackWorkspaceConnectProcedure is the procedure name of the SlackService's
 	// BeginSlackWorkspaceConnect RPC.
 	SlackServiceBeginSlackWorkspaceConnectProcedure = "/sluis.v1.SlackService/BeginSlackWorkspaceConnect"
-	// SlackServiceRequestSlackPassProcedure is the fully-qualified name of the SlackService's
+	// SlackServiceRequestSlackPassProcedure is the procedure name of the SlackService's
 	// RequestSlackPass RPC.
 	SlackServiceRequestSlackPassProcedure = "/sluis.v1.SlackService/RequestSlackPass"
-	// SlackServiceChangeSlackWorkspaceOwnerProcedure is the fully-qualified name of the SlackService's
+	// SlackServiceChangeSlackWorkspaceOwnerProcedure is the procedure name of the SlackService's
 	// ChangeSlackWorkspaceOwner RPC.
 	SlackServiceChangeSlackWorkspaceOwnerProcedure = "/sluis.v1.SlackService/ChangeSlackWorkspaceOwner"
-	// SlackServiceDisconnectSlackWorkspaceProcedure is the fully-qualified name of the SlackService's
+	// SlackServiceDisconnectSlackWorkspaceProcedure is the procedure name of the SlackService's
 	// DisconnectSlackWorkspace RPC.
 	SlackServiceDisconnectSlackWorkspaceProcedure = "/sluis.v1.SlackService/DisconnectSlackWorkspace"
-	// SlackServiceConfirmSlackRemovalsProcedure is the fully-qualified name of the SlackService's
+	// SlackServiceConfirmSlackRemovalsProcedure is the procedure name of the SlackService's
 	// ConfirmSlackRemovals RPC.
 	SlackServiceConfirmSlackRemovalsProcedure = "/sluis.v1.SlackService/ConfirmSlackRemovals"
+)
+
+var (
+	slackServiceGetSlackStatusSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_sluis_v1_slack_proto.Services().ByName("SlackService").Methods().ByName("GetSlackStatus"),
+			Procedure:  SlackServiceGetSlackStatusProcedure,
+		}
+	})
+	slackServiceBeginSlackWorkspaceConnectSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_sluis_v1_slack_proto.Services().ByName("SlackService").Methods().ByName("BeginSlackWorkspaceConnect"),
+			Procedure:  SlackServiceBeginSlackWorkspaceConnectProcedure,
+		}
+	})
+	slackServiceRequestSlackPassSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_sluis_v1_slack_proto.Services().ByName("SlackService").Methods().ByName("RequestSlackPass"),
+			Procedure:  SlackServiceRequestSlackPassProcedure,
+		}
+	})
+	slackServiceChangeSlackWorkspaceOwnerSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_sluis_v1_slack_proto.Services().ByName("SlackService").Methods().ByName("ChangeSlackWorkspaceOwner"),
+			Procedure:  SlackServiceChangeSlackWorkspaceOwnerProcedure,
+		}
+	})
+	slackServiceDisconnectSlackWorkspaceSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_sluis_v1_slack_proto.Services().ByName("SlackService").Methods().ByName("DisconnectSlackWorkspace"),
+			Procedure:  SlackServiceDisconnectSlackWorkspaceProcedure,
+		}
+	})
+	slackServiceConfirmSlackRemovalsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_sluis_v1_slack_proto.Services().ByName("SlackService").Methods().ByName("ConfirmSlackRemovals"),
+			Procedure:  SlackServiceConfirmSlackRemovalsProcedure,
+		}
+	})
 )
 
 // SlackServiceClient is a client for the sluis.v1.SlackService service.
@@ -64,7 +100,7 @@ type SlackServiceClient interface {
 	// could connect it. A scoped viewer over a directory that owns no Slack
 	// workspace is refused (permission denied) rather than shown an empty
 	// list. Never a client secret or a bot token.
-	GetSlackStatus(context.Context, *connect.Request[v1.GetSlackStatusRequest]) (*connect.Response[v1.GetSlackStatusResponse], error)
+	GetSlackStatus(context.Context, *v1.GetSlackStatusRequest) (*v1.GetSlackStatusResponse, error)
 	// BeginSlackWorkspaceConnect creates the roster's Slack App for a
 	// workspace from its manifest with the configuration token, or — for a
 	// workspace whose App is already created — prepares a reinstall, and
@@ -79,119 +115,35 @@ type SlackServiceClient interface {
 	//
 	// The configuration token lives in this request and in one call to
 	// Slack: it is neither stored nor logged.
-	BeginSlackWorkspaceConnect(context.Context, *connect.Request[v1.BeginSlackWorkspaceConnectRequest]) (*connect.Response[v1.BeginSlackWorkspaceConnectResponse], error)
+	BeginSlackWorkspaceConnect(context.Context, *v1.BeginSlackWorkspaceConnectRequest) (*v1.BeginSlackWorkspaceConnectResponse, error)
 	// RequestSlackPass asks the Slack controller to pass over now instead of at
 	// its next interval: it leaves a marker in the records the controller
 	// watches. The operator of the workspace's recorded owner, or the
 	// installation-wide operator. Refused with RESOURCE_EXHAUSTED while the
 	// workspace's last request is under a minute old.
-	RequestSlackPass(context.Context, *connect.Request[v1.RequestSlackPassRequest]) (*connect.Response[v1.RequestSlackPassResponse], error)
+	RequestSlackPass(context.Context, *v1.RequestSlackPassRequest) (*v1.RequestSlackPassResponse, error)
 	// ChangeSlackWorkspaceOwner changes the directory recorded as a
 	// connected workspace's owner, or removes it. Installation-wide
 	// operator only: an owner may not hand its own workspace to another or
 	// take it for itself. Recorded as a configuration change.
-	ChangeSlackWorkspaceOwner(context.Context, *connect.Request[v1.ChangeSlackWorkspaceOwnerRequest]) (*connect.Response[v1.ChangeSlackWorkspaceOwnerResponse], error)
+	ChangeSlackWorkspaceOwner(context.Context, *v1.ChangeSlackWorkspaceOwnerRequest) (*v1.ChangeSlackWorkspaceOwnerResponse, error)
 	// DisconnectSlackWorkspace revokes the workspace's bot token at Slack and
 	// forgets the connection, so the controller stops acting there. Operator
 	// of the workspace's owner, or the installation-wide operator. The App
 	// itself is deleted in Slack, which this service cannot do.
-	DisconnectSlackWorkspace(context.Context, *connect.Request[v1.DisconnectSlackWorkspaceRequest]) (*connect.Response[v1.DisconnectSlackWorkspaceResponse], error)
+	DisconnectSlackWorkspace(context.Context, *v1.DisconnectSlackWorkspaceRequest) (*v1.DisconnectSlackWorkspaceResponse, error)
 	// ConfirmSlackRemovals lets a pass that would remove more than half of a
 	// channel, or of a workspace, go ahead — for exactly the set of removals
 	// the operator saw, named by its fingerprint in the latest report. A
 	// different set needs confirming again; a confirmation lapses after a
 	// day. Operator.
-	ConfirmSlackRemovals(context.Context, *connect.Request[v1.ConfirmSlackRemovalsRequest]) (*connect.Response[v1.ConfirmSlackRemovalsResponse], error)
+	ConfirmSlackRemovals(context.Context, *v1.ConfirmSlackRemovalsRequest) (*v1.ConfirmSlackRemovalsResponse, error)
 }
 
-// NewSlackServiceClient constructs a client for the sluis.v1.SlackService service. By default, it
-// uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses, and sends
-// uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the connect.WithGRPC() or
-// connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewSlackServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) SlackServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	slackServiceMethods := v1.File_sluis_v1_slack_proto.Services().ByName("SlackService").Methods()
-	return &slackServiceClient{
-		getSlackStatus: connect.NewClient[v1.GetSlackStatusRequest, v1.GetSlackStatusResponse](
-			httpClient,
-			baseURL+SlackServiceGetSlackStatusProcedure,
-			connect.WithSchema(slackServiceMethods.ByName("GetSlackStatus")),
-			connect.WithClientOptions(opts...),
-		),
-		beginSlackWorkspaceConnect: connect.NewClient[v1.BeginSlackWorkspaceConnectRequest, v1.BeginSlackWorkspaceConnectResponse](
-			httpClient,
-			baseURL+SlackServiceBeginSlackWorkspaceConnectProcedure,
-			connect.WithSchema(slackServiceMethods.ByName("BeginSlackWorkspaceConnect")),
-			connect.WithClientOptions(opts...),
-		),
-		requestSlackPass: connect.NewClient[v1.RequestSlackPassRequest, v1.RequestSlackPassResponse](
-			httpClient,
-			baseURL+SlackServiceRequestSlackPassProcedure,
-			connect.WithSchema(slackServiceMethods.ByName("RequestSlackPass")),
-			connect.WithClientOptions(opts...),
-		),
-		changeSlackWorkspaceOwner: connect.NewClient[v1.ChangeSlackWorkspaceOwnerRequest, v1.ChangeSlackWorkspaceOwnerResponse](
-			httpClient,
-			baseURL+SlackServiceChangeSlackWorkspaceOwnerProcedure,
-			connect.WithSchema(slackServiceMethods.ByName("ChangeSlackWorkspaceOwner")),
-			connect.WithClientOptions(opts...),
-		),
-		disconnectSlackWorkspace: connect.NewClient[v1.DisconnectSlackWorkspaceRequest, v1.DisconnectSlackWorkspaceResponse](
-			httpClient,
-			baseURL+SlackServiceDisconnectSlackWorkspaceProcedure,
-			connect.WithSchema(slackServiceMethods.ByName("DisconnectSlackWorkspace")),
-			connect.WithClientOptions(opts...),
-		),
-		confirmSlackRemovals: connect.NewClient[v1.ConfirmSlackRemovalsRequest, v1.ConfirmSlackRemovalsResponse](
-			httpClient,
-			baseURL+SlackServiceConfirmSlackRemovalsProcedure,
-			connect.WithSchema(slackServiceMethods.ByName("ConfirmSlackRemovals")),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// slackServiceClient implements SlackServiceClient.
-type slackServiceClient struct {
-	getSlackStatus             *connect.Client[v1.GetSlackStatusRequest, v1.GetSlackStatusResponse]
-	beginSlackWorkspaceConnect *connect.Client[v1.BeginSlackWorkspaceConnectRequest, v1.BeginSlackWorkspaceConnectResponse]
-	requestSlackPass           *connect.Client[v1.RequestSlackPassRequest, v1.RequestSlackPassResponse]
-	changeSlackWorkspaceOwner  *connect.Client[v1.ChangeSlackWorkspaceOwnerRequest, v1.ChangeSlackWorkspaceOwnerResponse]
-	disconnectSlackWorkspace   *connect.Client[v1.DisconnectSlackWorkspaceRequest, v1.DisconnectSlackWorkspaceResponse]
-	confirmSlackRemovals       *connect.Client[v1.ConfirmSlackRemovalsRequest, v1.ConfirmSlackRemovalsResponse]
-}
-
-// GetSlackStatus calls sluis.v1.SlackService.GetSlackStatus.
-func (c *slackServiceClient) GetSlackStatus(ctx context.Context, req *connect.Request[v1.GetSlackStatusRequest]) (*connect.Response[v1.GetSlackStatusResponse], error) {
-	return c.getSlackStatus.CallUnary(ctx, req)
-}
-
-// BeginSlackWorkspaceConnect calls sluis.v1.SlackService.BeginSlackWorkspaceConnect.
-func (c *slackServiceClient) BeginSlackWorkspaceConnect(ctx context.Context, req *connect.Request[v1.BeginSlackWorkspaceConnectRequest]) (*connect.Response[v1.BeginSlackWorkspaceConnectResponse], error) {
-	return c.beginSlackWorkspaceConnect.CallUnary(ctx, req)
-}
-
-// RequestSlackPass calls sluis.v1.SlackService.RequestSlackPass.
-func (c *slackServiceClient) RequestSlackPass(ctx context.Context, req *connect.Request[v1.RequestSlackPassRequest]) (*connect.Response[v1.RequestSlackPassResponse], error) {
-	return c.requestSlackPass.CallUnary(ctx, req)
-}
-
-// ChangeSlackWorkspaceOwner calls sluis.v1.SlackService.ChangeSlackWorkspaceOwner.
-func (c *slackServiceClient) ChangeSlackWorkspaceOwner(ctx context.Context, req *connect.Request[v1.ChangeSlackWorkspaceOwnerRequest]) (*connect.Response[v1.ChangeSlackWorkspaceOwnerResponse], error) {
-	return c.changeSlackWorkspaceOwner.CallUnary(ctx, req)
-}
-
-// DisconnectSlackWorkspace calls sluis.v1.SlackService.DisconnectSlackWorkspace.
-func (c *slackServiceClient) DisconnectSlackWorkspace(ctx context.Context, req *connect.Request[v1.DisconnectSlackWorkspaceRequest]) (*connect.Response[v1.DisconnectSlackWorkspaceResponse], error) {
-	return c.disconnectSlackWorkspace.CallUnary(ctx, req)
-}
-
-// ConfirmSlackRemovals calls sluis.v1.SlackService.ConfirmSlackRemovals.
-func (c *slackServiceClient) ConfirmSlackRemovals(ctx context.Context, req *connect.Request[v1.ConfirmSlackRemovalsRequest]) (*connect.Response[v1.ConfirmSlackRemovalsResponse], error) {
-	return c.confirmSlackRemovals.CallUnary(ctx, req)
+// NewSlackServiceClient constructs a client for the sluis.v1.SlackService service. Multiple service
+// clients may share a single connect.Client.
+func NewSlackServiceClient(client *connect.Client) SlackServiceClient {
+	return &slackServiceClient{client: client}
 }
 
 // SlackServiceHandler is an implementation of the sluis.v1.SlackService service.
@@ -205,7 +157,7 @@ type SlackServiceHandler interface {
 	// could connect it. A scoped viewer over a directory that owns no Slack
 	// workspace is refused (permission denied) rather than shown an empty
 	// list. Never a client secret or a bot token.
-	GetSlackStatus(context.Context, *connect.Request[v1.GetSlackStatusRequest]) (*connect.Response[v1.GetSlackStatusResponse], error)
+	GetSlackStatus(context.Context, *v1.GetSlackStatusRequest) (*v1.GetSlackStatusResponse, error)
 	// BeginSlackWorkspaceConnect creates the roster's Slack App for a
 	// workspace from its manifest with the configuration token, or — for a
 	// workspace whose App is already created — prepares a reinstall, and
@@ -220,117 +172,193 @@ type SlackServiceHandler interface {
 	//
 	// The configuration token lives in this request and in one call to
 	// Slack: it is neither stored nor logged.
-	BeginSlackWorkspaceConnect(context.Context, *connect.Request[v1.BeginSlackWorkspaceConnectRequest]) (*connect.Response[v1.BeginSlackWorkspaceConnectResponse], error)
+	BeginSlackWorkspaceConnect(context.Context, *v1.BeginSlackWorkspaceConnectRequest) (*v1.BeginSlackWorkspaceConnectResponse, error)
 	// RequestSlackPass asks the Slack controller to pass over now instead of at
 	// its next interval: it leaves a marker in the records the controller
 	// watches. The operator of the workspace's recorded owner, or the
 	// installation-wide operator. Refused with RESOURCE_EXHAUSTED while the
 	// workspace's last request is under a minute old.
-	RequestSlackPass(context.Context, *connect.Request[v1.RequestSlackPassRequest]) (*connect.Response[v1.RequestSlackPassResponse], error)
+	RequestSlackPass(context.Context, *v1.RequestSlackPassRequest) (*v1.RequestSlackPassResponse, error)
 	// ChangeSlackWorkspaceOwner changes the directory recorded as a
 	// connected workspace's owner, or removes it. Installation-wide
 	// operator only: an owner may not hand its own workspace to another or
 	// take it for itself. Recorded as a configuration change.
-	ChangeSlackWorkspaceOwner(context.Context, *connect.Request[v1.ChangeSlackWorkspaceOwnerRequest]) (*connect.Response[v1.ChangeSlackWorkspaceOwnerResponse], error)
+	ChangeSlackWorkspaceOwner(context.Context, *v1.ChangeSlackWorkspaceOwnerRequest) (*v1.ChangeSlackWorkspaceOwnerResponse, error)
 	// DisconnectSlackWorkspace revokes the workspace's bot token at Slack and
 	// forgets the connection, so the controller stops acting there. Operator
 	// of the workspace's owner, or the installation-wide operator. The App
 	// itself is deleted in Slack, which this service cannot do.
-	DisconnectSlackWorkspace(context.Context, *connect.Request[v1.DisconnectSlackWorkspaceRequest]) (*connect.Response[v1.DisconnectSlackWorkspaceResponse], error)
+	DisconnectSlackWorkspace(context.Context, *v1.DisconnectSlackWorkspaceRequest) (*v1.DisconnectSlackWorkspaceResponse, error)
 	// ConfirmSlackRemovals lets a pass that would remove more than half of a
 	// channel, or of a workspace, go ahead — for exactly the set of removals
 	// the operator saw, named by its fingerprint in the latest report. A
 	// different set needs confirming again; a confirmation lapses after a
 	// day. Operator.
-	ConfirmSlackRemovals(context.Context, *connect.Request[v1.ConfirmSlackRemovalsRequest]) (*connect.Response[v1.ConfirmSlackRemovalsResponse], error)
+	ConfirmSlackRemovals(context.Context, *v1.ConfirmSlackRemovalsRequest) (*v1.ConfirmSlackRemovalsResponse, error)
 }
 
-// NewSlackServiceHandler builds an HTTP handler from the service implementation. It returns the
-// path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewSlackServiceHandler(svc SlackServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	slackServiceMethods := v1.File_sluis_v1_slack_proto.Services().ByName("SlackService").Methods()
-	slackServiceGetSlackStatusHandler := connect.NewUnaryHandler(
-		SlackServiceGetSlackStatusProcedure,
-		svc.GetSlackStatus,
-		connect.WithSchema(slackServiceMethods.ByName("GetSlackStatus")),
-		connect.WithHandlerOptions(opts...),
+// RegisterSlackServiceHandler registers svc as the sluis.v1.SlackService implementation on server.
+func RegisterSlackServiceHandler(server *connect.Server, svc SlackServiceHandler) {
+	adapter := slackServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: slackServiceGetSlackStatusSpec(), Handler: adapter.getSlackStatus},
+		connect.Method{Spec: slackServiceBeginSlackWorkspaceConnectSpec(), Handler: adapter.beginSlackWorkspaceConnect},
+		connect.Method{Spec: slackServiceRequestSlackPassSpec(), Handler: adapter.requestSlackPass},
+		connect.Method{Spec: slackServiceChangeSlackWorkspaceOwnerSpec(), Handler: adapter.changeSlackWorkspaceOwner},
+		connect.Method{Spec: slackServiceDisconnectSlackWorkspaceSpec(), Handler: adapter.disconnectSlackWorkspace},
+		connect.Method{Spec: slackServiceConfirmSlackRemovalsSpec(), Handler: adapter.confirmSlackRemovals},
 	)
-	slackServiceBeginSlackWorkspaceConnectHandler := connect.NewUnaryHandler(
-		SlackServiceBeginSlackWorkspaceConnectProcedure,
-		svc.BeginSlackWorkspaceConnect,
-		connect.WithSchema(slackServiceMethods.ByName("BeginSlackWorkspaceConnect")),
-		connect.WithHandlerOptions(opts...),
-	)
-	slackServiceRequestSlackPassHandler := connect.NewUnaryHandler(
-		SlackServiceRequestSlackPassProcedure,
-		svc.RequestSlackPass,
-		connect.WithSchema(slackServiceMethods.ByName("RequestSlackPass")),
-		connect.WithHandlerOptions(opts...),
-	)
-	slackServiceChangeSlackWorkspaceOwnerHandler := connect.NewUnaryHandler(
-		SlackServiceChangeSlackWorkspaceOwnerProcedure,
-		svc.ChangeSlackWorkspaceOwner,
-		connect.WithSchema(slackServiceMethods.ByName("ChangeSlackWorkspaceOwner")),
-		connect.WithHandlerOptions(opts...),
-	)
-	slackServiceDisconnectSlackWorkspaceHandler := connect.NewUnaryHandler(
-		SlackServiceDisconnectSlackWorkspaceProcedure,
-		svc.DisconnectSlackWorkspace,
-		connect.WithSchema(slackServiceMethods.ByName("DisconnectSlackWorkspace")),
-		connect.WithHandlerOptions(opts...),
-	)
-	slackServiceConfirmSlackRemovalsHandler := connect.NewUnaryHandler(
-		SlackServiceConfirmSlackRemovalsProcedure,
-		svc.ConfirmSlackRemovals,
-		connect.WithSchema(slackServiceMethods.ByName("ConfirmSlackRemovals")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/sluis.v1.SlackService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case SlackServiceGetSlackStatusProcedure:
-			slackServiceGetSlackStatusHandler.ServeHTTP(w, r)
-		case SlackServiceBeginSlackWorkspaceConnectProcedure:
-			slackServiceBeginSlackWorkspaceConnectHandler.ServeHTTP(w, r)
-		case SlackServiceRequestSlackPassProcedure:
-			slackServiceRequestSlackPassHandler.ServeHTTP(w, r)
-		case SlackServiceChangeSlackWorkspaceOwnerProcedure:
-			slackServiceChangeSlackWorkspaceOwnerHandler.ServeHTTP(w, r)
-		case SlackServiceDisconnectSlackWorkspaceProcedure:
-			slackServiceDisconnectSlackWorkspaceHandler.ServeHTTP(w, r)
-		case SlackServiceConfirmSlackRemovalsProcedure:
-			slackServiceConfirmSlackRemovalsHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedSlackServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedSlackServiceHandler struct{}
 
-func (UnimplementedSlackServiceHandler) GetSlackStatus(context.Context, *connect.Request[v1.GetSlackStatusRequest]) (*connect.Response[v1.GetSlackStatusResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sluis.v1.SlackService.GetSlackStatus is not implemented"))
+func (UnimplementedSlackServiceHandler) GetSlackStatus(context.Context, *v1.GetSlackStatusRequest) (*v1.GetSlackStatusResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "sluis.v1.SlackService.GetSlackStatus is not implemented")
 }
 
-func (UnimplementedSlackServiceHandler) BeginSlackWorkspaceConnect(context.Context, *connect.Request[v1.BeginSlackWorkspaceConnectRequest]) (*connect.Response[v1.BeginSlackWorkspaceConnectResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sluis.v1.SlackService.BeginSlackWorkspaceConnect is not implemented"))
+func (UnimplementedSlackServiceHandler) BeginSlackWorkspaceConnect(context.Context, *v1.BeginSlackWorkspaceConnectRequest) (*v1.BeginSlackWorkspaceConnectResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "sluis.v1.SlackService.BeginSlackWorkspaceConnect is not implemented")
 }
 
-func (UnimplementedSlackServiceHandler) RequestSlackPass(context.Context, *connect.Request[v1.RequestSlackPassRequest]) (*connect.Response[v1.RequestSlackPassResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sluis.v1.SlackService.RequestSlackPass is not implemented"))
+func (UnimplementedSlackServiceHandler) RequestSlackPass(context.Context, *v1.RequestSlackPassRequest) (*v1.RequestSlackPassResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "sluis.v1.SlackService.RequestSlackPass is not implemented")
 }
 
-func (UnimplementedSlackServiceHandler) ChangeSlackWorkspaceOwner(context.Context, *connect.Request[v1.ChangeSlackWorkspaceOwnerRequest]) (*connect.Response[v1.ChangeSlackWorkspaceOwnerResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sluis.v1.SlackService.ChangeSlackWorkspaceOwner is not implemented"))
+func (UnimplementedSlackServiceHandler) ChangeSlackWorkspaceOwner(context.Context, *v1.ChangeSlackWorkspaceOwnerRequest) (*v1.ChangeSlackWorkspaceOwnerResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "sluis.v1.SlackService.ChangeSlackWorkspaceOwner is not implemented")
 }
 
-func (UnimplementedSlackServiceHandler) DisconnectSlackWorkspace(context.Context, *connect.Request[v1.DisconnectSlackWorkspaceRequest]) (*connect.Response[v1.DisconnectSlackWorkspaceResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sluis.v1.SlackService.DisconnectSlackWorkspace is not implemented"))
+func (UnimplementedSlackServiceHandler) DisconnectSlackWorkspace(context.Context, *v1.DisconnectSlackWorkspaceRequest) (*v1.DisconnectSlackWorkspaceResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "sluis.v1.SlackService.DisconnectSlackWorkspace is not implemented")
 }
 
-func (UnimplementedSlackServiceHandler) ConfirmSlackRemovals(context.Context, *connect.Request[v1.ConfirmSlackRemovalsRequest]) (*connect.Response[v1.ConfirmSlackRemovalsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sluis.v1.SlackService.ConfirmSlackRemovals is not implemented"))
+func (UnimplementedSlackServiceHandler) ConfirmSlackRemovals(context.Context, *v1.ConfirmSlackRemovalsRequest) (*v1.ConfirmSlackRemovalsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "sluis.v1.SlackService.ConfirmSlackRemovals is not implemented")
+}
+
+type slackServiceClient struct {
+	client *connect.Client
+}
+
+func (c *slackServiceClient) GetSlackStatus(ctx context.Context, req *v1.GetSlackStatusRequest) (*v1.GetSlackStatusResponse, error) {
+	var res v1.GetSlackStatusResponse
+	if err := c.client.CallUnary(ctx, slackServiceGetSlackStatusSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *slackServiceClient) BeginSlackWorkspaceConnect(ctx context.Context, req *v1.BeginSlackWorkspaceConnectRequest) (*v1.BeginSlackWorkspaceConnectResponse, error) {
+	var res v1.BeginSlackWorkspaceConnectResponse
+	if err := c.client.CallUnary(ctx, slackServiceBeginSlackWorkspaceConnectSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *slackServiceClient) RequestSlackPass(ctx context.Context, req *v1.RequestSlackPassRequest) (*v1.RequestSlackPassResponse, error) {
+	var res v1.RequestSlackPassResponse
+	if err := c.client.CallUnary(ctx, slackServiceRequestSlackPassSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *slackServiceClient) ChangeSlackWorkspaceOwner(ctx context.Context, req *v1.ChangeSlackWorkspaceOwnerRequest) (*v1.ChangeSlackWorkspaceOwnerResponse, error) {
+	var res v1.ChangeSlackWorkspaceOwnerResponse
+	if err := c.client.CallUnary(ctx, slackServiceChangeSlackWorkspaceOwnerSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *slackServiceClient) DisconnectSlackWorkspace(ctx context.Context, req *v1.DisconnectSlackWorkspaceRequest) (*v1.DisconnectSlackWorkspaceResponse, error) {
+	var res v1.DisconnectSlackWorkspaceResponse
+	if err := c.client.CallUnary(ctx, slackServiceDisconnectSlackWorkspaceSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *slackServiceClient) ConfirmSlackRemovals(ctx context.Context, req *v1.ConfirmSlackRemovalsRequest) (*v1.ConfirmSlackRemovalsResponse, error) {
+	var res v1.ConfirmSlackRemovalsResponse
+	if err := c.client.CallUnary(ctx, slackServiceConfirmSlackRemovalsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type slackServiceHandler struct{ svc SlackServiceHandler }
+
+func (h slackServiceHandler) getSlackStatus(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetSlackStatusRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetSlackStatus(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h slackServiceHandler) beginSlackWorkspaceConnect(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.BeginSlackWorkspaceConnectRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.BeginSlackWorkspaceConnect(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h slackServiceHandler) requestSlackPass(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RequestSlackPassRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RequestSlackPass(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h slackServiceHandler) changeSlackWorkspaceOwner(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ChangeSlackWorkspaceOwnerRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ChangeSlackWorkspaceOwner(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h slackServiceHandler) disconnectSlackWorkspace(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DisconnectSlackWorkspaceRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DisconnectSlackWorkspace(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h slackServiceHandler) confirmSlackRemovals(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ConfirmSlackRemovalsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ConfirmSlackRemovals(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

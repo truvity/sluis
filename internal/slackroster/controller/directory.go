@@ -6,8 +6,6 @@ import (
 	"slices"
 	"strings"
 
-	"connectrpc.com/connect"
-
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
 	"github.com/truvity/sluis/internal/rails"
 	"github.com/truvity/sluis/internal/slackroster/reconcile"
@@ -65,14 +63,14 @@ func (c *Controller) resolveDirectory(ctx context.Context, groups, users []strin
 		n := min(len(groups), resolveBatch)
 		batch := groups[:n]
 		groups = groups[n:]
-		response, err := c.deps.Access.ResolveDirectoryGroups(ctx, connect.NewRequest(&directoryrosterv1.ResolveDirectoryGroupsRequest{Groups: batch}))
+		response, err := c.deps.Access.ResolveDirectoryGroups(ctx, &directoryrosterv1.ResolveDirectoryGroupsRequest{Groups: batch})
 		if err != nil {
 			return directoryGroups{}, fmt.Errorf("ask who is in the directory groups: %w", err)
 		}
-		if err = c.directory().Guard.Check(response.Msg.GetPolicyDigest()); err != nil {
+		if err = c.directory().Guard.Check(response.GetPolicyDigest()); err != nil {
 			return directoryGroups{}, fmt.Errorf("ask who is in the directory groups: %w", err)
 		}
-		for _, g := range response.Msg.GetGroups() {
+		for _, g := range response.GetGroups() {
 			email := strings.ToLower(g.GetEmail())
 			out.groups[email] = dirGroup{
 				found: g.GetFound(), authoritative: g.GetAuthoritative(), truncated: g.GetTruncated(),
@@ -89,14 +87,14 @@ func (c *Controller) resolveDirectory(ctx context.Context, groups, users []strin
 		n := min(len(users), resolveBatch)
 		batch := users[:n]
 		users = users[n:]
-		response, err := c.deps.Access.ResolveDirectoryGroups(ctx, connect.NewRequest(&directoryrosterv1.ResolveDirectoryGroupsRequest{Users: batch}))
+		response, err := c.deps.Access.ResolveDirectoryGroups(ctx, &directoryrosterv1.ResolveDirectoryGroupsRequest{Users: batch})
 		if err != nil {
 			return directoryGroups{}, fmt.Errorf("ask about the individually listed users: %w", err)
 		}
-		if err = c.directory().Guard.Check(response.Msg.GetPolicyDigest()); err != nil {
+		if err = c.directory().Guard.Check(response.GetPolicyDigest()); err != nil {
 			return directoryGroups{}, fmt.Errorf("ask about the individually listed users: %w", err)
 		}
-		for _, u := range response.Msg.GetUsers() {
+		for _, u := range response.GetUsers() {
 			out.users[strings.ToLower(u.GetEmail())] = dirUser{owner: u.GetWorkspaceId(), live: u.GetFound() && u.GetLive()}
 		}
 	}

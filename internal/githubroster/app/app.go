@@ -19,7 +19,8 @@ import (
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 
 	"github.com/truvity/sluis/blobprefix"
 	"github.com/truvity/sluis/gen/directoryroster/v1/directoryrosterv1connect"
@@ -277,10 +278,10 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 		proof = aws
 	}
 	bearer := consoleauth.Interceptor(proof)
+	web := &http.Client{Timeout: 30 * time.Second}
 	// And one client span per call, with the traceparent carried to the
 	// console, so a tick's trace continues into the console's own spans.
-	console := append([]connect.ClientOption{bearer}, telemetry.ConnectClientOptions()...)
-	web := &http.Client{Timeout: 30 * time.Second}
+	console := connect.NewClient(connecthttp.NewTransport(web, cfg.console, connecthttp.WithReadMaxBytes(0)), bearer, telemetry.ConnectClientInterceptor())
 
 	log.InfoContext(ctx, "the GitHub controller is assembled",
 		slog.Int("organisations", len(declared.GitHub)), slog.Any("enabled", keys(cfg.enabled)), slog.Duration("interval", cfg.interval),
@@ -322,9 +323,9 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 		controller: controller.New(controller.Config{Interval: cfg.interval, Enabled: cfg.enabled, AppsDir: cfg.appsDir, RecordsDir: cfg.recordsDir}, controller.Deps{
 			Log:      log,
 			GitHub:   web,
-			Access:   directoryrosterv1connect.NewAccessServiceClient(web, cfg.console, console...),
+			Access:   directoryrosterv1connect.NewAccessServiceClient(console),
 			Audit:    trail,
-			Console:  directoryrosterv1connect.NewGitHubServiceClient(web, cfg.console, console...),
+			Console:  directoryrosterv1connect.NewGitHubServiceClient(console),
 			Policy:   set.Digest(),
 			Status:   rails.NewBlobReports(stores.Ports.Blob, blobprefix.GitHubReports),
 			Leases:   &rails.Leases{State: leaseState, Holder: rails.NewHolder(), Log: log, Maintenance: stores.Maintenance()},
