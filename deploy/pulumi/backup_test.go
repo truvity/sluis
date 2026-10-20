@@ -196,6 +196,50 @@ func TestTheBackupFunctionIsTheReleaseZipWithTheBackupDocument(t *testing.T) {
 	}
 }
 
+// Backup format 2 ignores `backup.region` and the function warns at every run
+// when a document sets it, so the library renders it only beside the deprecated
+// `backup.key` that a format v1 binary reads it with. The region stays where it
+// is used: the secrets, the ports, the audit queue and the archive target.
+func TestTheBackupDocumentsRenderNoRegionKeyUnlessTheFormerArchiveKeyIsSet(t *testing.T) {
+	noKey := func(a *arp.BackupCommon) { a.ArchiveKeyAlias = "" }
+	for name, build := range map[string]func() (*recorder, string){
+		"backup": func() (*recorder, string) {
+			rec, _ := mustBackup(t, func(a *arp.BackupArgs) { noKey(&a.BackupCommon) })
+			return rec, "staging-backup-config"
+		},
+		"restore": func() (*recorder, string) {
+			rec, _ := mustRestore(t, func(a *arp.RestoreArgs) {
+				noKey(&a.BackupCommon)
+				a.Verify = &arp.RestoreVerifyArgs{Query: "https://audit-query.example.test", TokenFile: "/tmp/t", Observer: "sluis-staging-backup"}
+			})
+			return rec, "staging-restore-config"
+		},
+	} {
+		rec, layer := build()
+		doc := layerDocument(t, rec, layer)
+		bk := doc["backup"].(map[string]any)
+		for _, k := range []string{"region", "key"} {
+			if v, set := bk[k]; set {
+				t.Errorf("%s: backup.%s = %v: format 2 ignores it and warns", name, k, v)
+			}
+		}
+		if at(t, doc, "backup", "target", "region") != region || at(t, doc, "secrets", "region") != region ||
+			at(t, doc, "ports", "dynamodb", "region") != region {
+			t.Errorf("%s: the region is gone from where it is used: %v", name, doc)
+		}
+		if name == "restore" && at(t, doc, "backup", "verify", "query") != "https://audit-query.example.test" {
+			t.Errorf("restore: backup.verify = %v", bk["verify"])
+		}
+	}
+
+	// With the former key set (format v1 compatibility) the region goes with it.
+	rec, _ := mustBackup(t, nil)
+	bk := layerDocument(t, rec, "staging-backup-config")["backup"].(map[string]any)
+	if bk["key"] != "alias/staging-archive" || bk["region"] != region {
+		t.Errorf("backup key and region = %v, %v", bk["key"], bk["region"])
+	}
+}
+
 func TestTheBackupDocumentWithoutAuditLogsTheRecords(t *testing.T) {
 	rec, _ := mustBackup(t, func(a *arp.BackupArgs) { a.AuditQueueURL = "" })
 	doc := layerDocument(t, rec, "staging-backup-config")

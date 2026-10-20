@@ -562,13 +562,16 @@ func (p *backupPlan) document(recipients []string) (string, error) {
 		target["kmsKey"] = p.Archive.SSEKeyArn
 	}
 	bk := map[string]any{
-		"region": p.Region, "target": target,
+		"target":    target,
 		"retention": map[string]any{"keep": p.retention.Keep, "maxAge": durationText(p.retention.MaxAge)},
 	}
 	if p.ArchiveKeyAlias != "" {
 		// Deprecated, and rendered only while it is set: a binary of format v1
-		// opens its archive key from it. Format v2 names no key.
+		// opens its archive key from it, in the region of the function. Format v2
+		// names no key and ignores both, and warns when either is set, so the
+		// region goes with the key and is never rendered without it.
 		bk["key"] = p.ArchiveKeyAlias
+		bk["region"] = p.Region
 	}
 	if p.role == RoleRestore {
 		bk["role"] = RoleRestore
