@@ -13,7 +13,7 @@ The last full run was on 2026-10-20 against sluis v1.77.2, on an AWS Lambda depl
 | [RP-Initiated Logout OP](https://openid.net/certification/connect_op_logout_testing/) | 3 | 0 | 8 | 0 | **0** |
 | [Back-Channel Logout OP](https://openid.net/certification/connect_op_logout_testing/) | 2 | 0 | 0 | 0 | **0** |
 
-Only a failed or interrupted module disqualifies a profile, and none failed. The Config result is from v1.77.1. A submission needs RP-Initiated Logout plus one other logout profile.
+Only a failed or interrupted module disqualifies a profile, and none failed. Config ran in the same run. A submission needs RP-Initiated Logout plus one other logout profile.
 
 The four Basic warnings come from reruns with a real Google sign-in, which the conformance account cannot stand in for. They are listed below.
 
