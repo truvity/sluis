@@ -44,7 +44,7 @@ func TestEveryConsoleResponseCarriesTheSecurityHeaders(t *testing.T) {
 		header := recorder.Header()
 		policy := header.Get("Content-Security-Policy")
 
-		for _, want := range []string{"default-src 'self'", "frame-ancestors 'none'", "base-uri 'none'", "form-action 'self'", "object-src 'none'"} {
+		for _, want := range []string{"default-src 'self'", "frame-ancestors 'none'", "base-uri 'none'", "form-action 'self' https://github.com", "object-src 'none'"} {
 			if !strings.Contains(policy, want) {
 				t.Errorf("%s (%d): policy %q lacks %s", name, recorder.Code, policy, want)
 			}
@@ -54,8 +54,18 @@ func TestEveryConsoleResponseCarriesTheSecurityHeaders(t *testing.T) {
 			header.Get("X-Content-Type-Options") != "nosniff" {
 			t.Errorf("%s (%d): headers = %v", name, recorder.Code, header)
 		}
+
+		if policy != wantConsolePolicy {
+			t.Errorf("%s (%d): Content-Security-Policy = %q, want %q", name, recorder.Code, policy, wantConsolePolicy)
+		}
 	}
 }
+
+// The console's whole policy, pinned: the default policy plus GitHub's web
+// origin in `form-action`, so the page can POST the App manifest there. No
+// wildcard, no other origin, every other directive as it was.
+const wantConsolePolicy = "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; " +
+	"frame-ancestors 'none'; base-uri 'none'; object-src 'none'; form-action 'self' https://github.com"
 
 // The console says Strict-Transport-Security on every kind of response it
 // serves when the request came over https, and not over plain http.

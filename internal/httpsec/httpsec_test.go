@@ -65,6 +65,25 @@ func TestAPolicyForAPageWhoseFormEndsInARedirect(t *testing.T) {
 	}
 }
 
+func TestAPolicyNamesFormTargetsExactly(t *testing.T) {
+	t.Parallel()
+
+	const want = "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'; " +
+		"base-uri 'none'; object-src 'none'; form-action 'self' https://github.com"
+
+	if got := (httpsec.Policy{FormTargets: []string{"https://github.com"}}).String(); got != want {
+		t.Errorf("policy = %q, want %q", got, want)
+	}
+
+	if strings.Contains(httpsec.Policy{}.String(), "github") || strings.Contains(httpsec.Policy{}.String(), "*") {
+		t.Error("the default policy names an extra origin")
+	}
+
+	if got := (httpsec.Policy{FormsMayRedirect: true, FormTargets: []string{"https://github.com"}}).String(); strings.Contains(got, "form-action") {
+		t.Errorf("policy %q has form-action although forms may redirect", got)
+	}
+}
+
 func TestLimitBodyRefusesOversizeBodies(t *testing.T) {
 	t.Parallel()
 

@@ -29,6 +29,7 @@ import (
 	"github.com/truvity/sluis/internal/connectalias"
 	"github.com/truvity/sluis/internal/consolecall"
 	"github.com/truvity/sluis/internal/emailaddr"
+	"github.com/truvity/sluis/internal/githubapp"
 	"github.com/truvity/sluis/internal/githubroster/consolewire"
 	"github.com/truvity/sluis/internal/httpsec"
 	"github.com/truvity/sluis/internal/hub"
@@ -376,7 +377,9 @@ func (s *ConsoleServer) Handler() http.Handler {
 	// Every page this console writes, and the shell, carries the same
 	// headers: no framing, no referrer, no sniffing, and a policy that
 	// allows this origin's own files only.
-	return httpsec.HeadersWith(AuditRequests(s.forwardedForTrustedHops, s.withIdentity(s.withMaintenance(mux))), s.hsts)
+	// GitHub creates an App only from a manifest the console's page POSTs
+	// to github.com, which `form-action 'self'` would stop.
+	return httpsec.HeadersFor(AuditRequests(s.forwardedForTrustedHops, s.withIdentity(s.withMaintenance(mux))), s.hsts, ConsolePolicy())
 }
 
 // at turns a path of this console's into one a browser can follow. Every
@@ -1423,4 +1426,11 @@ func registerRPC(mux *http.ServeMux, h rpcHandlers, extra ...connect.HandlerOpti
 	serve(directoryrosterv1connect.NewSlackServiceHandler(h, options...))
 	serve(directoryrosterv1connect.NewCloudflareServiceHandler(h, options...))
 	serve(directoryrosterv1connect.NewBackupServiceHandler(h, options...))
+}
+
+// ConsolePolicy is the Content-Security-Policy of every console response:
+// the default policy, with GitHub's web origin added to `form-action` for the
+// App manifest form (see GitHub.tsx postManifest). Nothing else is added.
+func ConsolePolicy() httpsec.Policy {
+	return httpsec.Policy{FormTargets: []string{githubapp.WebBase}}
 }
