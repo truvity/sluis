@@ -1,5 +1,10 @@
 ## Unreleased
 
+### Fixed
+
+- **`/end_session` refuses an `id_token_hint` it cannot accept, before it asks anything.** A hint is now verified first: this issuer as `iss`, a signature by one of its own keys, and every `aud` and `azp` a declared client or a client document the allow-list admits. Anything else answers `400` `invalid_request`, the refused page for a browser and the OAuth error for a program, with a `refused` log line that carries `status=400` and `reason=id_token_hint invalid`. It ended at the *Sign out?* page before: the issuer read the unverified `aud`, looked it up as a client (a URL there was resolved as a client document, and refused in a log line without a status), and then asked. The conformance module `oidcc-rp-initiated-logout-bad-id-token-hint` (HS256, the issuer's own URL as `aud`) got the page that asks where the specification wants an error. A hint that does not verify now reaches no client lookup, so no client-document fetch. An expired hint this issuer signed for one of its clients is still accepted, as RP-Initiated Logout 1.0 allows. *Behaviour:* a relying party that sends a hint naming a client this installation does not have gets the error page, not the page that asks.
+- **`hack/conformance_drive.py` presses *Sign out* where a step wants the successful logout page.** Since v1.77 the issuer asks before an RP-initiated sign-out that carries no hint for the browser's own sign-in, so `oidcc-rp-initiated-logout-no-params` and `-only-state` uploaded a screenshot of *Sign out?* instead of *Signed out*. For a step whose expectation is `ExpectSuccessfulLogoutPage`, the driver now presses the button and photographs the page it lands on. For a step that wants an error page it never presses it.
+
 ## v1.77.1
 
 v1.77.1-rc.2 as it stands: no change since it. Its notes are under v1.77.1-rc.2 and v1.77.1-rc.1 below.

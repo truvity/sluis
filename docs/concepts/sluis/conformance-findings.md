@@ -22,10 +22,12 @@ Twelve modules end at a page the suite cannot see, because the issuer must refus
 | an error page, the `redirect_uri` is not registered | 2 | *That sign-in request was not valid* |
 | an error page, the `id_token_hint` is not valid | 2 | *That sign-out request was not valid: id_token_hint invalid* |
 | an error page, the `post_logout_redirect_uri` is not registered | 3 | *That sign-out request was not valid: post_logout_redirect_uri invalid* |
-| the successful logout page | 3 | *Signed out* |
+| the successful logout page | 3 | *Signed out*, after the driver presses the button on *Sign out?* |
 | the login prompt during a second authorization | 2 | the sign-in chooser |
 
 Check the screenshots, because a review whose evidence is wrong passes silently. The review has caught two pages that were wrong and ten screenshots of the wrong page, from a driver fault.
+
+A 2026-10-20 run against v1.77.1 (plan `5I5FLjBnciJb3`) caught three screenshots of *Sign out?*. The issuer was at fault in `oidcc-rp-initiated-logout-bad-id-token-hint`, and the driver in `-no-params` and `-only-state`.
 
 ## Skipped means the discovery document is truthful
 

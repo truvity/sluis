@@ -283,7 +283,8 @@ func HandlerWithSignIn(iss *Issuer, storage op.Storage, signIn SignInDeps) (http
 	protocol := withoutUnserved(bindAuthorization(signIn, singleValued(challenges(iss.Config().URL, refusedAuthorize(
 		loopbackRedirects(storage.GetClientByClientID, authorizeSurface(storage.GetClientByClientID, defaultScope(resourceIndicators(
 			iss.Policy().Resource, storage.GetClientByClientID, requirePKCE(iss.Policy, presentedClients(
-				endSession(signIn, storage.GetClientByClientID, truthfulDiscovery(
+				endSession(signIn, storage.GetClientByClientID, endSessionHints(
+					iss.Config().URL, provider.IDTokenHintVerifier, knownClient(iss, storage)), truthfulDiscovery(
 					iss.Config().URL, func() bool { return iss.Policy().ClientDocuments().Enabled() },
 					refusalFilter(provider))))))))))))))
 	// An installation token for a catalogue App is claimed in front of the
@@ -398,7 +399,7 @@ var tokenPaths = map[string]bool{"/token": true, "/oauth/token": true}
 // `/token` and wrong here: this endpoint's caller is a person whose
 // browser was redirected to it. Anything that did not ask for HTML still
 // gets the JSON.
-func endSession(signIn SignInDeps, clients clientLookup, next http.Handler) http.Handler {
+func endSession(signIn SignInDeps, clients clientLookup, hints hintCheck, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != endSessionPath {
 			next.ServeHTTP(w, r)
@@ -414,6 +415,16 @@ func endSession(signIn SignInDeps, clients clientLookup, next http.Handler) http
 				"post_logout_redirect_uri invalid: the request carries no id_token_hint "+
 					"and no client_id, so there is no client to have registered it")
 			return
+		}
+
+		// A hint is verified before anything reads it: a bad one is the
+		// invalid-request page, never the page that asks, and its claims
+		// reach no client lookup. See [endSessionHints].
+		if hint := r.Form.Get("id_token_hint"); hint != "" && hints != nil {
+			if err := hints(r.Context(), hint); err != nil {
+				refuseHint(w, r, err)
+				return
+			}
 		}
 
 		// The post-logout address is held to the client's registered ones
