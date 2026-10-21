@@ -9,6 +9,8 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"math/rand/v2"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -199,6 +201,14 @@ func readCloudflareFile(path string) (tokens.CloudflareCredential, error) {
 // cloudflareCredential returns a credential of the preset, from the cache
 // while a third of its lifetime is left, and minted by the issuer otherwise.
 // With noCache it always mints, and touches no cache file and no lock.
+//
+// A refusal is remembered too, beside the credential: for a short while the
+// next call fails at once, from the marker, without asking. A credential
+// helper is run again for every request of the program that called it, so a
+// refusal that was not remembered became a request to the issuer per request,
+// thousands in a job, and tripped the edge's rate limit for every other caller.
+// Only an answer that says no is remembered: a server error or an unreachable
+// issuer may pass, and is tried again as the retry policy says.
 func cloudflareCredential(ctx context.Context, cfg Config, preset string, lifetime time.Duration, noCache bool) (tokens.CloudflareCredential, error) {
 	audience := tokens.CloudflareAudiencePrefix + preset
 	path, cacheErr := "", error(nil)
@@ -211,6 +221,9 @@ func cloudflareCredential(ctx context.Context, cfg Config, preset string, lifeti
 		if cached, ok := readCloudflareCache(path, time.Now()); ok {
 			return cached, nil
 		}
+		if refusal, ok := readCloudflareRefusal(path, time.Now()); ok {
+			return tokens.CloudflareCredential{}, refusal.err(preset, time.Now())
+		}
 	}
 	mint := func() (tokens.CloudflareCredential, error) {
 		// Re-read under the lock: a caller that waited finds the answer
@@ -218,6 +231,9 @@ func cloudflareCredential(ctx context.Context, cfg Config, preset string, lifeti
 		if cacheErr == nil {
 			if cached, ok := readCloudflareCache(path, time.Now()); ok {
 				return cached, nil
+			}
+			if refusal, ok := readCloudflareRefusal(path, time.Now()); ok {
+				return tokens.CloudflareCredential{}, refusal.err(preset, time.Now())
 			}
 		}
 		held, err := proofFor(ctx, cfg, audience)
@@ -227,9 +243,20 @@ func cloudflareCredential(ctx context.Context, cfg Config, preset string, lifeti
 		exchanger := &tokens.Exchanger{Issuer: cfg.Issuer, ClientID: held.Client, Client: retryingClient()}
 		started := time.Now()
 		cred, err := exchanger.CloudflareToken(ctx, held.Subject, held.Type, preset, lifetime)
+		var refusal *tokens.RefusalError
 		switch {
-		case errors.Is(err, tokens.ErrRefused):
+		case errors.As(err, &refusal) && refusal.Status < http.StatusInternalServerError:
+			if cacheErr == nil {
+				_ = writeCloudflareRefusal(path, refusal, time.Now())
+			}
+			if refusal.Status == http.StatusTooManyRequests {
+				// A rate limit is not a verdict on the caller: it passes.
+				return tokens.CloudflareCredential{}, fmt.Errorf("%w: %w", errUnreachable, err)
+			}
 			return tokens.CloudflareCredential{}, fmt.Errorf("%w: %w", errNotGranted, err)
+		case errors.Is(err, tokens.ErrRefused):
+			// A server error that outlasted the retries: not a verdict, not remembered.
+			return tokens.CloudflareCredential{}, fmt.Errorf("%w: %w", errUnreachable, err)
 		case err != nil:
 			return tokens.CloudflareCredential{}, fmt.Errorf("%w: %w", errUnreachable, err)
 		}
@@ -237,6 +264,7 @@ func cloudflareCredential(ctx context.Context, cfg Config, preset string, lifeti
 			// A cache that cannot be written is not a reason to withhold a
 			// credential the caller already has.
 			_ = writeCloudflareCache(path, cred, started)
+			clearCloudflareRefusal(path)
 		}
 		return cred, nil
 	}
@@ -296,14 +324,20 @@ func readCloudflareCache(path string, now time.Time) (tokens.CloudflareCredentia
 // this account. mintedAt is when the request was started: the lifetime is
 // counted from it, a little short of the truth, which only renews early.
 func writeCloudflareCache(path string, cred tokens.CloudflareCredential, mintedAt time.Time) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return fmt.Errorf("create %s: %w", filepath.Dir(path), err)
-	}
 	body, err := json.Marshal(cloudflareCached{
 		CloudflareCredential: cred, LifetimeSeconds: int64(cred.ExpiresOn.Sub(mintedAt).Seconds()),
 	})
 	if err != nil {
 		return fmt.Errorf("render the credential: %w", err)
+	}
+	return writeCacheFile(path, body)
+}
+
+// writeCacheFile writes body to path, atomically and readable only by this
+// account.
+func writeCacheFile(path string, body []byte) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return fmt.Errorf("create %s: %w", filepath.Dir(path), err)
 	}
 	tmp, err := os.CreateTemp(filepath.Dir(path), ".cloudflare-*.tmp")
 	if err != nil {
@@ -322,6 +356,101 @@ func writeCloudflareCache(path string, cred tokens.CloudflareCredential, mintedA
 		return fmt.Errorf("close %s: %w", tmp.Name(), err)
 	}
 	return os.Rename(tmp.Name(), path)
+}
+
+// The refusal marker is how long a refusal is remembered. Without a
+// Retry-After of the answer's own it is half a minute and up to half a minute
+// more, jittered so that the jobs that were refused together do not all ask
+// again in the same second; with one it is what the answer asked for, kept
+// between a second and ten minutes.
+const (
+	refusalBase       = 30 * time.Second
+	refusalJitter     = 30 * time.Second
+	refusalMaxBackOff = 10 * time.Minute
+)
+
+// refusalBackOff is how long to remember a refusal that asked for retryAfter
+// (zero when it asked for nothing). A variable so a test can fix the wait.
+var refusalBackOff = func(retryAfter time.Duration) time.Duration {
+	if retryAfter > 0 {
+		return min(max(retryAfter, time.Second), refusalMaxBackOff)
+	}
+	return refusalBase + rand.N(refusalJitter) //nolint:gosec // jitter, not a secret
+}
+
+// cloudflareRefusal is the marker of a refusal: when it came, what kind it
+// was, how long it is to be believed, and the issuer's sentence.
+type cloudflareRefusal struct {
+	RefusedAt         time.Time `json:"refused_at"`
+	Kind              string    `json:"kind"`
+	RetryAfterSeconds int64     `json:"retry_after_seconds"`
+	Message           string    `json:"message"`
+}
+
+// kindRateLimited is the kind of a refusal that was a 429.
+const kindRateLimited = "rate_limited"
+
+// cloudflareRefusalPath is the marker beside a cache file. Not .json: it is
+// not a credential, and a listing of the caches should not find it.
+func cloudflareRefusalPath(cachePath string) string {
+	return strings.TrimSuffix(cachePath, ".json") + ".refused"
+}
+
+// readCloudflareRefusal returns the marker while it is fresh. Every failure
+// is a miss, and so is a marker dated in the future: a clock that was set back
+// must not lock a caller out for longer than the marker says.
+func readCloudflareRefusal(cachePath string, now time.Time) (cloudflareRefusal, bool) {
+	body, err := os.ReadFile(cloudflareRefusalPath(cachePath)) //nolint:gosec // our own cache file
+	if err != nil {
+		return cloudflareRefusal{}, false
+	}
+	var r cloudflareRefusal
+	if err = json.Unmarshal(body, &r); err != nil || r.RefusedAt.IsZero() || r.RetryAfterSeconds <= 0 {
+		return cloudflareRefusal{}, false
+	}
+	age := now.Sub(r.RefusedAt)
+	if age < 0 || age >= time.Duration(r.RetryAfterSeconds)*time.Second {
+		return cloudflareRefusal{}, false
+	}
+	return r, true
+}
+
+// err is the failure a fresh marker answers with, with no request made. It
+// keeps the exit class of the refusal it stands for.
+func (r cloudflareRefusal) err(preset string, now time.Time) error {
+	wait := time.Duration(r.RetryAfterSeconds)*time.Second - now.Sub(r.RefusedAt)
+	class := errNotGranted
+	if r.Kind == kindRateLimited {
+		class = errUnreachable
+	}
+	return fmt.Errorf("%w: cloudflare preset %q was refused (%s) at %s and is not asked for again for another %ds: %s",
+		class, preset, r.Kind, r.RefusedAt.Local().Format("15:04:05"), int64(wait.Round(time.Second).Seconds()), r.Message)
+}
+
+// writeCloudflareRefusal remembers a refusal, atomically and readable only by
+// this account.
+func writeCloudflareRefusal(cachePath string, refusal *tokens.RefusalError, now time.Time) error {
+	kind := refusal.Code
+	if refusal.Status == http.StatusTooManyRequests {
+		kind = kindRateLimited
+	}
+	if kind == "" {
+		kind = "refused"
+	}
+	body, err := json.Marshal(cloudflareRefusal{
+		RefusedAt: now, Kind: kind,
+		RetryAfterSeconds: int64(refusalBackOff(refusal.RetryAfter).Round(time.Second).Seconds()),
+		Message:           refusal.Detail,
+	})
+	if err != nil {
+		return fmt.Errorf("render the refusal: %w", err)
+	}
+	return writeCacheFile(cloudflareRefusalPath(cachePath), body)
+}
+
+// clearCloudflareRefusal forgets a refusal: the issuer has said yes since.
+func clearCloudflareRefusal(cachePath string) {
+	_ = os.Remove(cloudflareRefusalPath(cachePath))
 }
 
 // writeCloudflareGrants lists the presets for `whoami`.

@@ -346,3 +346,26 @@ func TestAnInstallationTokenRefusalCarriesTheIssuersSentence(t *testing.T) {
 		t.Error("a JWT was taken for an installation token")
 	}
 }
+
+// A refusal says what status it came with and how long it asked to be left
+// alone, so a caller can tell a rate limit from a verdict and back off.
+func TestARefusalCarriesItsStatusAndRetryAfter(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Retry-After", "42")
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = w.Write([]byte("<html>rate limited</html>"))
+	}))
+	t.Cleanup(server.Close)
+	exchanger := &tokens.Exchanger{Issuer: server.URL, Client: server.Client()}
+
+	_, err := exchanger.CloudflareToken(context.Background(), "a-subject", "", "preset", 0)
+	var refusal *tokens.RefusalError
+	if !errors.Is(err, tokens.ErrRefused) || !errors.As(err, &refusal) {
+		t.Fatalf("err = %v, want a RefusalError that is ErrRefused", err)
+	}
+	if refusal.Status != http.StatusTooManyRequests || refusal.RetryAfter != 42*time.Second {
+		t.Errorf("refusal = %+v, want 429 and 42 s", refusal)
+	}
+}

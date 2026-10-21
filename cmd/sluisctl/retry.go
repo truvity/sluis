@@ -84,6 +84,16 @@ func transientStatus(code int) bool {
 	return code == http.StatusTooManyRequests || code >= http.StatusInternalServerError
 }
 
+// retryableAnswer is the part of transientStatus that retryingTransport
+// retries: a failure on the server's side. A 429 is not, because it is the
+// issuer's or its edge's rate limit answering, and a retry is one more request
+// against the very limit that refused: four tries per helper run turned one
+// refusal into a storm that kept the limit tripped for every other caller. The
+// 429 is returned as the answer it is, for the caller to back off from.
+func retryableAnswer(code int) bool {
+	return code >= http.StatusInternalServerError
+}
+
 // transientTransport says whether a request that got no answer at all is
 // worth another try. A connection reset or refused, a timeout, a
 // temporary DNS failure all are; a certificate the tool does not trust, a
@@ -120,8 +130,9 @@ func transient(retry bool, err error) error {
 // retryingTransport applies the request policy to a client whose requests are
 // built elsewhere — the token exchange, which the tokens library makes and
 // which reports every non-200 alike, so the retry has to happen below it.
-// A transient status that outlasts the attempts is returned as the answer
-// it is, for the caller to read as before.
+// A server error is retried and, when it outlasts the attempts, returned as the
+// answer it is, for the caller to read as before. A 429 is never retried: it is
+// returned at once (see [retryableAnswer]).
 type retryingTransport struct {
 	base http.RoundTripper
 }
@@ -157,7 +168,7 @@ func (t retryingTransport) RoundTrip(request *http.Request) (*http.Response, err
 			return struct{}{}, err
 		}
 		last = response
-		if transientStatus(response.StatusCode) {
+		if retryableAnswer(response.StatusCode) {
 			return struct{}{}, fmt.Errorf("answered %s", response.Status)
 		}
 		return struct{}{}, nil

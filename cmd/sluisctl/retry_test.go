@@ -252,3 +252,30 @@ func TestTheWaitsAreShort(t *testing.T) {
 		t.Errorf("waits between %d tries add up to %v, want seconds at most", requestTries, total)
 	}
 }
+
+// The transport retries a server error and answers a 429 at once: a retry of a
+// rate limit is one more request against it.
+func TestRetryingTransportRetriesServerErrorsButNotTooManyRequests(t *testing.T) {
+	for name, tc := range map[string]struct {
+		status int
+		calls  int32
+	}{
+		"a server error":    {http.StatusServiceUnavailable, requestTries},
+		"too many requests": {http.StatusTooManyRequests, 1},
+		"a refusal":         {http.StatusForbidden, 1},
+	} {
+		t.Run(name, func(t *testing.T) {
+			quickRetries(t)
+			server, calls := jobTokenServer(t, 100, status(tc.status))
+
+			response, err := retryingClient().Get(server.URL)
+			if err != nil {
+				t.Fatalf("Get: %v", err)
+			}
+			_ = response.Body.Close()
+			if response.StatusCode != tc.status || calls.Load() != tc.calls {
+				t.Errorf("got status %d after %d calls, want %d after %d", response.StatusCode, calls.Load(), tc.status, tc.calls)
+			}
+		})
+	}
+}
