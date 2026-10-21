@@ -116,7 +116,7 @@ jobs:
           args: --config lychee.toml --offline --no-progress --root-dir "${{ github.workspace }}" --files-from changed.txt
           fail: true
       - if: ${{ !cancelled() && matrix.group == 'docs' }}
-        uses: truvity/ci-actions/tagged-pins@598251d570fd99ba403b99bfa65ae4472ed25e73 # v1.8.0
+        uses: truvity/ci-actions/tagged-pins@f9130c63db2899c18884c027a7eade20d0ab796a # v1.18.0
       - if: ${{ !cancelled() && matrix.group == 'docs' }}
         uses: truvity/ci-actions/policy-conformance@eae9926515d96296eeed99aa358d2957a89647e8 # v3.3.1
         with:
