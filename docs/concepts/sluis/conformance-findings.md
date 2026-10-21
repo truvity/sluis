@@ -2,7 +2,7 @@
 
 sluis targets four OpenID Foundation profiles and claims one only when the suite passes it. To produce a run, follow [run conformance](../../guides/sluis/run-conformance.md).
 
-The last full run was on 2026-10-20 against sluis v1.77.2, on an AWS Lambda deployment, with suite 5.3.3. It is a self-run, not a certification. No module failed, and each warning is accepted below.
+The last full run was on 2026-10-20 against sluis v1.77.2, on an AWS Lambda deployment, with suite 5.3.3. A second, independent installation ran Basic OP and RP-Initiated Logout on 2026-10-21 against v1.77.5 with the same suite. Both are self-runs, not certifications. No module failed in either, and each warning is accepted below.
 
 ## The 2026-10-20 run on v1.77.2
 
@@ -30,9 +30,27 @@ Fixed since v1.77.1 ([upgrade to v1.77.2](../../guides/sluis/upgrade/v1.77.2.md)
 
 A run on 2026-09-12 against v1.0.0 had no failed module either.
 
+## The 2026-10-21 run on a second installation (v1.77.5)
+
+A second, independent installation ran two profiles against v1.77.5 with suite 5.3.3.
+
+| Profile | Modules | Passed | Warning | Review | Skipped | **Failed** |
+|---|--:|--:|--:|--:|--:|--:|
+| [Basic OP](https://openid.net/certification/connect_op_testing/) | 35 | 23 | 4 | 4 | 4 | **0** |
+| [RP-Initiated Logout OP](https://openid.net/certification/connect_op_logout_testing/) | 11 | 3 | 0 | 8 | 0 | **0** |
+
+Back-Channel Logout and Config did not run there. The findings equal those of v1.77.2:
+
+- The same four [accepted warnings](#accepted-warnings), run with a real person's sign-in.
+- The same four skips, which discovery explains.
+- Basic reviews: `prompt-login` and `max-age-1` show the sign-in again. `ensure-registered-redirect-uri` and `ensure-request-object-with-redirect-uri` show *Invalid request*.
+- Logout reviews: five bad requests show *Invalid request*, and three valid logouts show *Signed out*.
+
+A person checked every review screenshot. The plan exports hold client secrets, so only counts are recorded.
+
 ## Review is a screenshot handed to a person
 
-Twelve modules end at a page the suite cannot see: the issuer must refuse, so it never redirects back. A person checked every screenshot on 2026-10-20 and judged that it shows the page the module requires.
+Twelve modules end at a page the suite cannot see: the issuer must refuse, so it never redirects back. A person checked every screenshot on 2026-10-20, and again on 2026-10-21 for the second installation, and judged that it shows the page the module requires.
 
 | What the step demands | Modules | What the screenshot shows |
 |---|--:|---|

@@ -106,6 +106,8 @@ A policy file maps directory groups to access everywhere ([concepts](docs/concep
 
 | Date | Version | Plan | Result | Run |
 |---|---|---|---|---|
+| 2026-10-21 | v1.77.5 | [Basic OP](https://openid.net/certification/connect_op_testing/), second installation | 23 passed, 4 warning, 4 review, 4 skipped, 0 failed; suite 5.3.3 | [findings](docs/concepts/sluis/conformance-findings.md#the-2026-10-21-run-on-a-second-installation-v1775) |
+| 2026-10-21 | v1.77.5 | [RP-Initiated Logout OP](https://openid.net/certification/connect_op_logout_testing/), second installation | 3 passed, 8 review, 0 failed; suite 5.3.3 | [findings](docs/concepts/sluis/conformance-findings.md#the-2026-10-21-run-on-a-second-installation-v1775) |
 | 2026-10-20 | v1.77.2 | [Config OP](https://openid.net/certification/connect_op_testing/) | 1 passed, 0 failed; suite 5.3.3 | [findings](docs/concepts/sluis/conformance-findings.md#the-2026-10-20-run-on-v1772) |
 | 2026-10-20 | v1.77.2 | [Basic OP](https://openid.net/certification/connect_op_testing/) | 23 passed, 4 warning, 4 review, 4 skipped, 0 failed; suite 5.3.3 | [findings](docs/concepts/sluis/conformance-findings.md#the-2026-10-20-run-on-v1772) |
 | 2026-10-20 | v1.77.2 | [RP-Initiated Logout OP](https://openid.net/certification/connect_op_logout_testing/) | 3 passed, 8 review, 0 failed; suite 5.3.3 | [findings](docs/concepts/sluis/conformance-findings.md#the-2026-10-20-run-on-v1772) |
