@@ -1,5 +1,9 @@
 ## Unreleased
 
+### Changed
+
+- **The conformance results include a second, independent installation.** The README results table and [conformance findings](docs/concepts/sluis/conformance-findings.md) record the 2026-10-21 run on v1.77.5 with suite 5.3.3: Basic OP 23 passed, 4 warning, 4 review, 4 skipped, 0 failed; RP-Initiated Logout 3 passed, 8 review, 0 failed. The warnings are the four accepted ones. Back-Channel Logout and Config were not run there. No behaviour changes.
+
 ## v1.78.0
 
 Dependencies refreshed, and connect-go v2. The generated Go packages move to connect-go v2, which breaks Go programs that import them, so this ships as a minor. The wire protocol and the proto contracts do not change: Connect, gRPC and gRPC-Web clients of any version, the console and every non-Go consumer are unaffected.
