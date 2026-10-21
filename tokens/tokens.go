@@ -24,6 +24,7 @@ import (
 	"net/http"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -80,6 +81,44 @@ const CloudflareAudiencePrefix = "cloudflare:"
 // a group the requested audience admits. It is separated from a
 // transport failure because a caller should retry one and not the other.
 var ErrRefused = errors.New("tokens: the exchange was refused")
+
+// RefusalError is an answer other than 200 to an exchange: what the issuer, or
+// the edge in front of it, said. It is [ErrRefused] to [errors.Is], and its text
+// is that sentence followed by the issuer's own. A caller that wants to decide
+// whether to ask again reads it with [errors.As]: Status tells a policy refusal
+// (4xx) from a failure on the server's side (5xx), and RetryAfter is what the
+// answer asked the caller to wait, zero when it did not.
+type RefusalError struct {
+	// Status is the HTTP status of the answer.
+	Status int
+	// Code is the OAuth error code, empty when the answer had none.
+	Code string
+	// Detail is the issuer's sentence, or the code, or the HTTP status.
+	Detail string
+	// RetryAfter is the Retry-After the answer carried, zero when absent.
+	RetryAfter time.Duration
+}
+
+func (e *RefusalError) Error() string { return ErrRefused.Error() + ": " + e.Detail }
+
+// Unwrap makes a RefusalError an [ErrRefused].
+func (e *RefusalError) Unwrap() error { return ErrRefused }
+
+// retryAfter reads a Retry-After header: whole seconds, or an HTTP date. An
+// absent or unreadable one is zero.
+func retryAfter(header string, now time.Time) time.Duration {
+	header = strings.TrimSpace(header)
+	if header == "" {
+		return 0
+	}
+	if seconds, err := strconv.ParseInt(header, 10, 64); err == nil {
+		return max(time.Duration(seconds)*time.Second, 0)
+	}
+	if at, err := http.ParseTime(header); err == nil {
+		return max(at.Sub(now), 0)
+	}
+	return 0
+}
 
 // Exchanger trades a subject token for one audienced elsewhere.
 type Exchanger struct {
@@ -344,7 +383,10 @@ func (e *Exchanger) post(ctx context.Context, form url.Values, out any) error {
 		if detail == "" {
 			detail = response.Status
 		}
-		return fmt.Errorf("%w: %s", ErrRefused, detail)
+		return &RefusalError{
+			Status: response.StatusCode, Code: strings.TrimSpace(failure.Error), Detail: detail,
+			RetryAfter: retryAfter(response.Header.Get("Retry-After"), time.Now()),
+		}
 	}
 
 	if err = json.Unmarshal(body, out); err != nil {

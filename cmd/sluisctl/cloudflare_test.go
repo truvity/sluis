@@ -21,6 +21,15 @@ type fakeCloudflareIssuer struct {
 	exchanges atomic.Int32
 	lastForm  atomic.Value // map[string][]string
 	lifetime  time.Duration
+	// refuse, when set, answers every exchange with it instead of a credential.
+	refuse atomic.Pointer[cloudflareRefusalAnswer]
+}
+
+// cloudflareRefusalAnswer is a refusal the fake issuer gives.
+type cloudflareRefusalAnswer struct {
+	status     int
+	code, said string
+	retryAfter string
 }
 
 func newFakeCloudflareIssuer(t *testing.T) *fakeCloudflareIssuer {
@@ -43,6 +52,14 @@ func newFakeCloudflareIssuer(t *testing.T) *fakeCloudflareIssuer {
 		case r.Form.Get("requested_token_type") == tokens.TypeCloudflareToken:
 			f.exchanges.Add(1)
 			f.lastForm.Store(map[string][]string(r.Form))
+			if refusal := f.refuse.Load(); refusal != nil {
+				if refusal.retryAfter != "" {
+					w.Header().Set("Retry-After", refusal.retryAfter)
+				}
+				w.WriteHeader(refusal.status)
+				_ = json.NewEncoder(w).Encode(map[string]string{"error": refusal.code, "error_description": refusal.said})
+				return
+			}
 			preset := strings.TrimPrefix(r.Form.Get("audience"), "cloudflare:")
 			life := f.lifetime
 			body := map[string]any{
@@ -473,5 +490,201 @@ func TestCloudflareNoCacheIgnoresAnExistingCache(t *testing.T) {
 	cached()
 	if n := issuer.exchanges.Load(); n != 2 {
 		t.Errorf("a junk %s turned the cache off: %d exchanges", envCloudflareNoCache, n)
+	}
+}
+
+// refusedHome is a signed-in home whose issuer refuses every exchange the way
+// sluis refuses one over its per-caller cap, with the refusal's wait fixed.
+func refusedHome(t *testing.T, answer cloudflareRefusalAnswer) *fakeCloudflareIssuer {
+	t.Helper()
+	issuer := newFakeCloudflareIssuer(t)
+	issuer.refuse.Store(&answer)
+	signedInHome(t, issuer.URL)
+	saved := refusalBackOff
+	refusalBackOff = func(retryAfter time.Duration) time.Duration {
+		if retryAfter > 0 {
+			return saved(retryAfter)
+		}
+		return 45 * time.Second
+	}
+	t.Cleanup(func() { refusalBackOff = saved })
+	return issuer
+}
+
+func askForR2(issuer *fakeCloudflareIssuer) error {
+	return run([]string{"cloudflare", "r2", "r2-archive", "--issuer", issuer.URL})
+}
+
+func refusalMarkers(t *testing.T) []string {
+	t.Helper()
+	dir, err := configDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	files, _ := filepath.Glob(filepath.Join(dir, "cloudflare", "*.refused"))
+	return files
+}
+
+var capRefusal = cloudflareRefusalAnswer{
+	status: http.StatusForbidden, code: "access_denied",
+	said: "cloudflare: too many tokens: limit on live or recent on-demand tokens",
+}
+
+// A refusal is remembered: the calls that follow fail at once, with the
+// issuer's sentence and no request, until the marker has run out.
+func TestCloudflareRefusalIsCachedAndSuppressesCallsUntilItExpires(t *testing.T) {
+	issuer := refusedHome(t, capRefusal)
+
+	err := askForR2(issuer)
+	if codeFor(err) != exitNotGranted || !strings.Contains(err.Error(), "too many tokens") {
+		t.Fatalf("the refusal exits %d (%v), want %d with the issuer's sentence", codeFor(err), err, exitNotGranted)
+	}
+	if n := issuer.exchanges.Load(); n != 1 {
+		t.Fatalf("exchanged %d times for the first call, want 1", n)
+	}
+	markers := refusalMarkers(t)
+	if len(markers) != 1 {
+		t.Fatalf("refusal markers = %v, want one", markers)
+	}
+	var marker cloudflareRefusal
+	body, _ := os.ReadFile(markers[0])
+	if err = json.Unmarshal(body, &marker); err != nil || marker.Kind != "access_denied" || marker.RetryAfterSeconds != 45 || marker.RefusedAt.IsZero() {
+		t.Fatalf("marker = %s (%v), want the kind, 45 s and the time", body, err)
+	}
+
+	for range 5 {
+		out, err := captureStdoutErr(t, func() error { return askForR2(issuer) })
+		if codeFor(err) != exitNotGranted || out != "" {
+			t.Fatalf("a call under a fresh marker = %q, %v, want a refusal and nothing on stdout", out, err)
+		}
+		if !strings.Contains(err.Error(), "access_denied") || !strings.Contains(err.Error(), "too many tokens") {
+			t.Errorf("the cached refusal says %q, want its kind and the sentence", err)
+		}
+	}
+	if n := issuer.exchanges.Load(); n != 1 {
+		t.Fatalf("exchanged %d times under a fresh marker, want 1", n)
+	}
+
+	// Past the wait the issuer is asked again.
+	marker.RefusedAt = time.Now().Add(-46 * time.Second)
+	body, _ = json.Marshal(marker)
+	if err = os.WriteFile(markers[0], body, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err = askForR2(issuer); codeFor(err) != exitNotGranted {
+		t.Fatalf("after the wait: %v", err)
+	}
+	if n := issuer.exchanges.Load(); n != 2 {
+		t.Errorf("exchanged %d times once the marker ran out, want 2", n)
+	}
+}
+
+// A success forgets an earlier refusal, and a credential that is cached is
+// served without a look at the marker's age.
+func TestCloudflareSuccessClearsTheRefusal(t *testing.T) {
+	issuer := refusedHome(t, capRefusal)
+	if err := askForR2(issuer); err == nil {
+		t.Fatal("the refusal was not an error")
+	}
+	markers := refusalMarkers(t)
+	if len(markers) != 1 {
+		t.Fatalf("refusal markers = %v, want one", markers)
+	}
+	// The wait is over and the issuer has relented.
+	var marker cloudflareRefusal
+	body, _ := os.ReadFile(markers[0])
+	_ = json.Unmarshal(body, &marker)
+	marker.RefusedAt = time.Now().Add(-time.Hour)
+	body, _ = json.Marshal(marker)
+	_ = os.WriteFile(markers[0], body, 0o600)
+	issuer.refuse.Store(nil)
+
+	out := captureStdout(t, func() error { return askForR2(issuer) })
+	if !strings.Contains(out, "s3-secret") {
+		t.Fatalf("no credential after the issuer relented: %q", out)
+	}
+	if left := refusalMarkers(t); len(left) != 0 {
+		t.Errorf("the marker survived a success: %v", left)
+	}
+	// Served from the cache from now on, with no further exchange.
+	captureStdout(t, func() error { return askForR2(issuer) })
+	if n := issuer.exchanges.Load(); n != 2 {
+		t.Errorf("exchanged %d times, want 2 (the refusal, then the success)", n)
+	}
+}
+
+// A 429 is answered, not retried; it is remembered for what the answer asked,
+// and it exits as a failure to reach the issuer, which a script may retry.
+func TestCloudflareTooManyRequestsIsNotRetriedAndHonoursRetryAfter(t *testing.T) {
+	issuer := refusedHome(t, cloudflareRefusalAnswer{status: http.StatusTooManyRequests, code: "", said: "slow down", retryAfter: "120"})
+	waitBetweenTries(t, time.Millisecond)
+
+	err := askForR2(issuer)
+	if codeFor(err) != exitUnreachable {
+		t.Fatalf("a 429 exits %d (%v), want %d", codeFor(err), err, exitUnreachable)
+	}
+	if n := issuer.exchanges.Load(); n != 1 {
+		t.Fatalf("a 429 was sent %d times, want 1: it must not be retried", n)
+	}
+	markers := refusalMarkers(t)
+	if len(markers) != 1 {
+		t.Fatalf("refusal markers = %v, want one", markers)
+	}
+	var marker cloudflareRefusal
+	body, _ := os.ReadFile(markers[0])
+	if err = json.Unmarshal(body, &marker); err != nil || marker.Kind != kindRateLimited || marker.RetryAfterSeconds != 120 {
+		t.Fatalf("marker = %s (%v), want %s for the 120 s the answer asked", body, err, kindRateLimited)
+	}
+	if err = askForR2(issuer); codeFor(err) != exitUnreachable || issuer.exchanges.Load() != 1 {
+		t.Errorf("under the marker: %v after %d exchanges, want the refusal from the marker alone", err, issuer.exchanges.Load())
+	}
+}
+
+// A server error is retried with a back-off, and is not remembered: it may
+// pass, and the retry policy, not a marker, decides when to ask again.
+func TestCloudflareServerErrorsAreRetriedAndNotRemembered(t *testing.T) {
+	issuer := refusedHome(t, cloudflareRefusalAnswer{status: http.StatusBadGateway, code: "temporarily_unavailable", said: "bad gateway"})
+	quickRetries(t)
+
+	err := askForR2(issuer)
+	if codeFor(err) != exitUnreachable {
+		t.Fatalf("a 502 exits %d (%v), want %d", codeFor(err), err, exitUnreachable)
+	}
+	if n := issuer.exchanges.Load(); n != requestTries {
+		t.Errorf("a 502 was sent %d times, want %d", n, requestTries)
+	}
+	if markers := refusalMarkers(t); len(markers) != 0 {
+		t.Errorf("a server error was remembered: %v", markers)
+	}
+}
+
+// With no cache there is nowhere to remember a refusal, and none is written.
+func TestCloudflareNoCacheRemembersNoRefusal(t *testing.T) {
+	issuer := refusedHome(t, capRefusal)
+	for range 2 {
+		if err := run([]string{"cloudflare", "r2", "r2-archive", "--no-cache", "--issuer", issuer.URL}); err == nil {
+			t.Fatal("the refusal was not an error")
+		}
+	}
+	if n := issuer.exchanges.Load(); n != 2 {
+		t.Errorf("exchanged %d times for two runs, want 2", n)
+	}
+	if markers := refusalMarkers(t); len(markers) != 0 {
+		t.Errorf("--no-cache wrote a marker: %v", markers)
+	}
+}
+
+func TestRefusalBackOffIsJitteredAndBounded(t *testing.T) {
+	for range 200 {
+		if d := refusalBackOff(0); d < 30*time.Second || d >= 60*time.Second {
+			t.Fatalf("a refusal with no Retry-After is remembered for %s, want 30-60 s", d)
+		}
+	}
+	for asked, want := range map[time.Duration]time.Duration{
+		90 * time.Second: 90 * time.Second, time.Hour: 10 * time.Minute,
+	} {
+		if d := refusalBackOff(asked); d != want {
+			t.Errorf("Retry-After %s is remembered for %s, want %s", asked, d, want)
+		}
 	}
 }
