@@ -1,5 +1,7 @@
 ## Unreleased
 
+## v1.78.0
+
 Dependencies refreshed, and connect-go v2. The generated Go packages move to connect-go v2, which breaks Go programs that import them, so this ships as a minor. The wire protocol and the proto contracts do not change: Connect, gRPC and gRPC-Web clients of any version, the console and every non-Go consumer are unaffected.
 
 ### Breaking (Go API)
