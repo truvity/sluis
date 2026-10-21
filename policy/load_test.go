@@ -109,6 +109,11 @@ var policyFields = map[string]mergeRule{
 		declare: "version: 1\npeople: { jdoe: [j@a.example] }\n",
 		twice:   clash,
 	},
+	"ExchangeLimits": {
+		rule:    "additive: every file's limits, an identical limit once",
+		declare: "version: 1\nexchange_limits: [{ match: { email: a@a.example }, clients: [c] }]\n",
+		twice:   same,
+	},
 	"Slack": {
 		rule:    "field by field: see slackFields",
 		declare: "version: 1\nslack: { workspaces: { acme: { channels: { ops: { from: [g] } } } } }\n",
@@ -385,6 +390,10 @@ slack:
       channels:
         ops: { from: [devel:k8s:admin], adopt: C0123ABCD }
     globex: {}
+`,
+		`exchange_limits:
+  - match: { email: ops@a.example }
+    clients: [a-console]
 `,
 	}
 

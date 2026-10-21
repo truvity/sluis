@@ -64,6 +64,9 @@ slack:
     example:
       channels:
         ops: {private: true, from: [all:access-roster:operator]}
+exchange_limits:
+  - match: {aws: {account: "111122223333", role: sluis-github, path: /}}
+    clients: [access-console]
 exchange:
   clusters:
     - {name: devel, issuer: "https://kubernetes.default.svc", jwksUri: "https://devel.example/openid/v1/jwks"}

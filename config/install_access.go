@@ -29,6 +29,12 @@ type Bootstrap struct {
 	Controllers *BootstrapControllers
 	// Probe is the workload that proves the exchange.
 	Probe *BootstrapProbe
+	// ExchangeLimits narrow, per workload, which clients it may exchange a
+	// proof for: the policy's `exchange_limits`, one limit per workload of
+	// each row, in the order listed. A workload's groups still decide
+	// whether a client admits it; a limit only takes clients away. See
+	// [policy.ExchangeLimit].
+	ExchangeLimits []BootstrapExchangeLimit
 	// GenerateSecrets writes every confidential client's secret as
 	// `{generate: true}` and not as the name the access document gives. The
 	// issuer then makes and keeps the value.
@@ -97,6 +103,25 @@ type BootstrapProbe struct {
 	ServiceAccount BootstrapServiceAccount
 }
 
+// BootstrapExchangeLimit limits a set of workloads to a set of clients: each
+// of them may exchange its proof for these clients and no other. A workload
+// named on several rows may be exchanged for every client those rows name.
+//
+// It is how an estate keeps its own functions, admitted to a group many
+// clients require, from exchanging for any of them but the one each needs:
+// the limit names the function's role, not a group, so it holds whatever
+// groups that role is put in later.
+type BootstrapExchangeLimit struct {
+	// ServiceAccounts are Kubernetes ServiceAccounts.
+	ServiceAccounts []BootstrapServiceAccount
+	// RoleARNs are IAM roles, `arn:aws:iam::<account>:role/[path/]<name>`:
+	// each is matched by its account, its name and its path, exactly.
+	RoleARNs []string
+	// Clients are the client ids they may be exchanged for, at least one.
+	// [Render] refuses one the policy does not declare.
+	Clients []string
+}
+
 var (
 	// dnsLabel is a Kubernetes namespace; dnsName is a name or a cluster.
 	dnsLabel = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$`)
@@ -142,7 +167,59 @@ func FromAccess(access policy.Access, b Bootstrap) (Access, error) {
 	if len(b.Claims) > 0 {
 		pol.Claims = maps.Clone(b.Claims)
 	}
+	if pol.ExchangeLimits, err = b.exchangeLimits(); err != nil {
+		return Access{}, err
+	}
 	return Access{Policy: pol}, nil
+}
+
+// exchangeLimits checks the exchange-limit rows and writes them as the
+// policy's limits: one per workload, with that row's clients.
+func (b Bootstrap) exchangeLimits() ([]policy.ExchangeLimit, error) {
+	var out []policy.ExchangeLimit
+	for i, row := range b.ExchangeLimits {
+		name := fmt.Sprintf("exchange limit %d", i+1)
+		if len(row.ServiceAccounts) == 0 && len(row.RoleARNs) == 0 {
+			return nil, fmt.Errorf("%s: no workload to limit", name)
+		}
+		if len(row.Clients) == 0 {
+			return nil, fmt.Errorf("%s: no clients: a limit names the clients its workloads may be exchanged for", name)
+		}
+		clients := make([]string, 0, len(row.Clients))
+		for _, id := range row.Clients {
+			if id == "" || strings.TrimSpace(id) != id {
+				return nil, fmt.Errorf("%s: client %q is not a client id", name, id)
+			}
+			if slices.Contains(clients, id) {
+				return nil, fmt.Errorf("%s: client %q is listed twice", name, id)
+			}
+			clients = append(clients, id)
+		}
+		seen := map[string]bool{}
+		for _, sa := range row.ServiceAccounts {
+			if err := sa.check(name, false); err != nil {
+				return nil, err
+			}
+			key := fmt.Sprintf("%s/%s/%s", sa.Cluster, sa.Namespace, sa.Name)
+			if seen[key] {
+				return nil, fmt.Errorf("%s: service account %s/%s is listed twice", name, sa.Namespace, sa.Name)
+			}
+			seen[key] = true
+			out = append(out, policy.ExchangeLimit{Match: sa.matcher(), Clients: slices.Clone(clients)})
+		}
+		for _, arn := range row.RoleARNs {
+			m, err := parseRoleARN(arn)
+			if err != nil {
+				return nil, fmt.Errorf("%s: %w", name, err)
+			}
+			if seen["role/"+arn] {
+				return nil, fmt.Errorf("%s: role %s is listed twice", name, arn)
+			}
+			seen["role/"+arn] = true
+			out = append(out, policy.ExchangeLimit{Match: m, Clients: slices.Clone(clients)})
+		}
+	}
+	return out, nil
 }
 
 // overlay validates the rows and writes them as the overlay of an access

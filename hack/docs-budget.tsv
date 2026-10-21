@@ -4,7 +4,7 @@ charts/audit	250
 charts/sluis	236
 docs	138
 docs/concepts/audit	9206
-docs/concepts/sluis	19540
+docs/concepts/sluis	19660
 docs/concepts/storage	639
 docs/get-started/audit	1586
 docs/get-started/sluis	2300
@@ -21,7 +21,7 @@ docs/guides/sluis/operate	7627
 docs/guides/sluis/upgrade	3294
 docs/guides/storage	308
 docs/reference/audit	3823
-docs/reference/sluis	7695
+docs/reference/sluis	7723
 docs/reference/storage	94
 docs/sdk	121
 docs/sdk/go	665

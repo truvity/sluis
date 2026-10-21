@@ -71,11 +71,16 @@ var ErrUnknownTarget = errors.New("the requested audience is not a declared clie
 // rule-gated audience design rests on: a cloud trust policy can see only
 // `sub`, `aud`, `amr` and `email`, so the decision has to ride in `aud`,
 // which means the audience must be refused here or not at all.
+//
+// It is also the error for a proof an exchange limit
+// ([policy.Policy.ExchangeLimits]) keeps from the audience: to the caller
+// "not for you" is one answer, whichever rule gave it.
 var ErrRefused = errors.New("no group admits this proof to the requested audience")
 
 // Exchange decides one token exchange: it resolves the proof to internal
 // groups, checks the requested audience is a client whose requirements
-// those groups meet, and returns the claims the token should carry.
+// those groups meet and that no exchange limit on the proof's identity
+// keeps it from, and returns the claims the token should carry.
 //
 // A person's groups come from the hub and may be held; a machine's come
 // from matchers alone, which is why a CI job keeps working while the
@@ -90,6 +95,19 @@ func (i *Issuer) Exchange(ctx context.Context, proof Proof, audience string) (Gr
 		i.record(ctx, exchangeRefused(proof, audience, audit.Denied("the requested audience is not a declared client"),
 			i.exchangeRefusal(ctx, proof, audience, "unknown_audience")))
 		return Grant{}, fmt.Errorf("%w: %q", ErrUnknownTarget, audience)
+	}
+
+	// The identity's own limit, before anything else is resolved: it reads
+	// the proof alone, so a workload limited to one client is refused every
+	// other one even while the directory is unreachable, and whatever
+	// groups it has come to hold. A refusal here is ErrRefused like the
+	// one below, so the caller sees one answer for both.
+	if !i.set.ExchangeAllowed(proof.identity(), audience) {
+		allowed, _ := i.set.ExchangeClients(proof.identity())
+		i.record(ctx, exchangeRefused(proof, audience, audit.Denied("this identity's exchange limit does not name the requested audience"),
+			i.exchangeRefusal(ctx, proof, audience, "exchange_limited")))
+		return Grant{}, fmt.Errorf("%w: this proof is limited to %v, which does not include %q",
+			ErrRefused, allowed, audience)
 	}
 
 	result, held, err := i.evaluate(ctx, proof)
@@ -131,6 +149,12 @@ func (i *Issuer) Exchange(ctx context.Context, proof Proof, audience string) (Gr
 		Claims:   claims,
 		Held:     held,
 	}, nil
+}
+
+// identity is the proof as a matcher reads it, and nothing the directory
+// says: what an exchange limit is matched against.
+func (p Proof) identity() policy.Input {
+	return policy.Input{Email: p.Email, GitHub: p.GitHub, ServiceAccount: p.ServiceAccount, AWS: p.AWS}
 }
 
 // evaluate resolves a proof to the groups it holds: a person's through

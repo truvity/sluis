@@ -1,6 +1,6 @@
 # Policy: clients, resources and self-described clients
 
-The `clients`, `resources` and `client_documents` tables of [the policy](policy.md). Decided in [ADR 0001](../../decisions/0001-sessions-and-an-absolute-limit.md), [0033](../../decisions/0033-a-longer-absolute-limit-for-read-only-resources.md), [0039](../../decisions/0039-the-issuer-generates-confidential-client-secrets.md), [0040](../../decisions/0040-agent-class-sessions.md).
+The `clients`, `exchange_limits`, `resources` and `client_documents` tables of [the policy](policy.md). Decided in [ADR 0001](../../decisions/0001-sessions-and-an-absolute-limit.md), [0033](../../decisions/0033-a-longer-absolute-limit-for-read-only-resources.md), [0039](../../decisions/0039-the-issuer-generates-confidential-client-secrets.md), [0040](../../decisions/0040-agent-class-sessions.md).
 
 ## Clients
 
@@ -10,7 +10,7 @@ A client's id is the `aud`, unless the request named a [resource](#resources).
 |---|---|
 | `requires` | mandatory; an empty list means nobody; sluis refuses to start on one |
 | A caller in no `requires` group | refused before a token exists |
-| Token exchange | target's `requires` decides; each proof is checked against its own issuer's keys |
+| Token exchange | target's `requires` decides, and an [exchange limit](#exchange-limits) can narrow it; each proof is checked against its own issuer's keys |
 
 | Kind | Used by | Secret |
 |---|---|---|
@@ -95,6 +95,30 @@ How: [let the issuer generate a secret](../../guides/sluis/let-the-issuer-genera
 | Refused | name over 80 characters; description over 200; blank; control, line-break, tab or bidirectional character |
 | Output | HTML-escaped |
 | Older build | refuses both keys as unknown; deploy the service first |
+
+## Exchange limits
+
+```yaml
+exchange_limits:
+  - match: { aws: { account: "111122223333", role: "sluis-*", path: "/" } }
+    clients: [otlp]
+  - match: { service_account: { cluster: east, namespace: sluis, name: sluis } }
+    clients: [otlp, grafana]
+```
+
+| Rule | Value |
+|---|---|
+| Effect | a proof `match` matches is exchanged for its `clients` and no other audience |
+| `match` | one [matcher](policy-groups.md), any kind; read against the proof, never the directory |
+| `clients` | at least one declared client id, each once |
+| Several limits match | the union of their `clients` |
+| No limit matches | unchanged: the client's `requires` decides |
+| A listed client | still needs its `requires` to admit the proof; a limit grants nothing |
+| Refused exchange | `invalid_target`, the same answer as an unknown audience; audit `reason_code` `exchange_limited` |
+| Applies to | the token exchange and the console mint; not a browser sign-in |
+| Refused at load | an undeclared client; an empty `clients`; a client twice; a matcher a group would refuse |
+| Across files | limits add up; an identical limit is kept once |
+| Rationale | [why an identity can be limited](../../concepts/sluis/verify-and-issue.md#why-an-identity-can-be-limited-to-some-audiences) |
 
 ## Resources
 
