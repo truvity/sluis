@@ -305,6 +305,171 @@
           },
           "type": "object"
         },
+        "exchange_limits": {
+          "description": "Per identity, which clients a proof may be exchanged for (docs/reference/sluis/policy-clients.md#exchange-limits). A proof that a limit's `match` matches may be exchanged only for that limit's clients, the union when several match; a proof no limit matches is not limited. A limit grants nothing: the client's `requires` must still admit the proof.",
+          "items": {
+            "additionalProperties": false,
+            "description": "One limit.",
+            "properties": {
+              "clients": {
+                "description": "The client ids such a proof may be exchanged for. Each must be a declared client.",
+                "items": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "minItems": 1,
+                "type": "array",
+                "uniqueItems": true
+              },
+              "match": {
+                "additionalProperties": false,
+                "description": "The identity the limit is about: one matcher, as a group's, matched against the proof alone. Exactly one kind is set.",
+                "properties": {
+                  "aws": {
+                    "additionalProperties": false,
+                    "description": "An IAM role in an account `exchange.aws` federates.",
+                    "properties": {
+                      "account": {
+                        "description": "The 12-digit account id.",
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "function": {
+                        "description": "A Lambda function's name.",
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "org_id": {
+                        "description": "The AWS Organizations id.",
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "path": {
+                        "description": "The role's path.",
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "role": {
+                        "description": "The role's name, a glob.",
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "account"
+                    ],
+                    "type": "object"
+                  },
+                  "email": {
+                    "description": "One signed-in address.",
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "email_domain": {
+                    "description": "Every signed-in address in a domain.",
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "github": {
+                    "additionalProperties": false,
+                    "description": "A GitHub Actions job, by what its verified token says.",
+                    "properties": {
+                      "environment": {
+                        "description": "The deployment environment.",
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "event_name": {
+                        "description": "The triggering event.",
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "job_workflow_ref": {
+                        "description": "The reusable workflow at a ref, a glob.",
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "owner": {
+                        "description": "The repository's owner.",
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "ref": {
+                        "description": "The ref, a glob.",
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "ref_type": {
+                        "description": "branch or tag.",
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "repository": {
+                        "description": "owner/name, a glob.",
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "sha": {
+                        "description": "The commit.",
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "visibility": {
+                        "description": "public, private or internal.",
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "workflow": {
+                        "description": "The workflow's name.",
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "workflow_ref": {
+                        "description": "The workflow file at a ref, a glob.",
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "service_account": {
+                    "additionalProperties": false,
+                    "description": "A ServiceAccount on a federated cluster.",
+                    "properties": {
+                      "cluster": {
+                        "description": "The cluster's name in `exchange.clusters`. Unset is the unqualified subject.",
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "name": {
+                        "description": "The ServiceAccount.",
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "namespace": {
+                        "description": "The namespace.",
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "namespace",
+                      "name"
+                    ],
+                    "type": "object"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "required": [
+              "match",
+              "clients"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
         "github": {
           "additionalProperties": {
             "additionalProperties": false,

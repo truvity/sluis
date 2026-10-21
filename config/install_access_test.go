@@ -217,6 +217,22 @@ func TestFromAccessRefuses(t *testing.T) {
 			b.Controllers = &config.BootstrapControllers{Group: "same", ServiceAccounts: []config.BootstrapServiceAccount{sa}}
 			b.Probe = &config.BootstrapProbe{Group: "same", Client: "p", ServiceAccount: config.BootstrapServiceAccount{Cluster: "c", Namespace: "n", Name: "p"}}
 		}, "is also the controllers group"},
+		{"exchange limit without workloads", func(b *config.Bootstrap) {
+			b.ExchangeLimits = []config.BootstrapExchangeLimit{{Clients: []string{"console"}}}
+		}, "no workload to limit"},
+		{"exchange limit without clients", func(b *config.Bootstrap) {
+			b.ExchangeLimits = []config.BootstrapExchangeLimit{{ServiceAccounts: []config.BootstrapServiceAccount{sa}}}
+		}, "no clients"},
+		{"exchange limit client twice", func(b *config.Bootstrap) {
+			b.ExchangeLimits = []config.BootstrapExchangeLimit{{ServiceAccounts: []config.BootstrapServiceAccount{sa}, Clients: []string{"console", "console"}}}
+		}, "listed twice"},
+		{"exchange limit bad role ARN", func(b *config.Bootstrap) {
+			b.ExchangeLimits = []config.BootstrapExchangeLimit{{RoleARNs: []string{"sluis-issuer"}, Clients: []string{"console"}}}
+		}, "not an IAM role ARN"},
+		{"exchange limit role twice", func(b *config.Bootstrap) {
+			arn := "arn:aws:iam::111122223333:role/x"
+			b.ExchangeLimits = []config.BootstrapExchangeLimit{{RoleARNs: []string{arn, arn}, Clients: []string{"console"}}}
+		}, "listed twice"},
 		{"probe group is the viewers group", func(b *config.Bootstrap) {
 			b.Viewers = &config.BootstrapViewers{Group: "same"}
 			b.Probe = &config.BootstrapProbe{Group: "same", Client: "p", ServiceAccount: config.BootstrapServiceAccount{Cluster: "c", Namespace: "n", Name: "p"}}
@@ -247,5 +263,48 @@ func TestFromAccessAdmitsAControllerOnceAsViewer(t *testing.T) {
 	}
 	if n := len(got.Groups["c"].Matchers); n != 1 {
 		t.Fatalf("controllers hold %d matchers, want the role", n)
+	}
+}
+
+// Each workload of an exchange-limit row becomes one limit with the row's
+// clients, matched exactly as the viewers' rows are; the policy then refuses a
+// client it does not declare.
+func TestFromAccessWritesExchangeLimits(t *testing.T) {
+	sa := config.BootstrapServiceAccount{Cluster: "east", Namespace: "sluis", Name: "sluis"}
+	b := config.Bootstrap{ExchangeLimits: []config.BootstrapExchangeLimit{{
+		ServiceAccounts: []config.BootstrapServiceAccount{sa},
+		RoleARNs:        []string{"arn:aws:iam::111122223333:role/service/sluis-slack"},
+		Clients:         []string{"console"},
+	}}}
+	got, err := config.FromAccess(loadAccess(t), b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := len(got.ExchangeLimits); n != 2 {
+		t.Fatalf("%d limits, want one per workload: %+v", n, got.ExchangeLimits)
+	}
+	if m := got.ExchangeLimits[0].Match.ServiceAccount; m == nil || m.Cluster != "east" || m.Name != "sluis" {
+		t.Errorf("limit 1 matches %+v, want the service account", got.ExchangeLimits[0].Match)
+	}
+	if m := got.ExchangeLimits[1].Match.AWS; m == nil || m.Account != "111122223333" || m.Role != "sluis-slack" || m.Path != "/service/" {
+		t.Errorf("limit 2 matches %+v, want the role by account, name and path", got.ExchangeLimits[1].Match)
+	}
+	for _, l := range got.ExchangeLimits {
+		if len(l.Clients) != 1 || l.Clients[0] != "console" {
+			t.Errorf("clients = %v", l.Clients)
+		}
+	}
+	if !strings.Contains(accessYAML(t, got), "exchange_limits:") {
+		t.Errorf("the section does not carry the limits:\n%s", accessYAML(t, got))
+	}
+
+	b.ExchangeLimits[0].Clients = []string{"no-such-client"}
+	got, err = config.FromAccess(loadAccess(t), b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got.Version = 1
+	if err := got.Validate(); err == nil || !strings.Contains(err.Error(), "not a declared client") {
+		t.Errorf("an undeclared client: %v, want it refused", err)
 	}
 }

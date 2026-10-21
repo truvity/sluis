@@ -63,6 +63,14 @@ The protocol is the library `github.com/zitadel/oidc/v3`, certified for the Basi
 contributes the storage behind the library, the mapping from policy to token claims, the verifiers, the session index
 and two small HTML pages. Absent surface is listed in [not served](not-served.md).
 
+## Why an identity can be limited to some audiences
+
+A client's `requires` names groups, and a group is shared. Every identity in it may exchange for every client it opens. That is right for people and wrong for a workload that needs one audience.
+
+An exchange limit names the identity, by the same matcher a group uses, and lists the clients it may reach. It holds when the identity is put in a wider group or a group is renamed. It only takes audiences away, so a mistaken limit can stop a workload but never widen it.
+
+A refused exchange answers as an unknown audience does, so a caller cannot learn which audiences exist. The audit record holds the reason.
+
 ## Decided in
 
 - [ADR 0002](../../decisions/0002-mission-boundary-tokens-and-memberships.md): mission-boundary tokens and memberships

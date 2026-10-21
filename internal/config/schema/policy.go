@@ -57,6 +57,18 @@ func matcherSchema() m {
 	})
 }
 
+// exchangeLimitsSchema is `exchange_limits`: per identity, the clients it may
+// be exchanged for.
+func exchangeLimitsSchema() m {
+	match := matcherSchema()
+	match["description"] = "The identity the limit is about: one matcher, as a group's, matched against the proof alone. Exactly one kind is set."
+	return list("Per identity, which clients a proof may be exchanged for (docs/reference/sluis/policy-clients.md#exchange-limits). A proof that a limit's `match` matches may be exchanged only for that limit's clients, the union when several match; a proof no limit matches is not limited. A limit grants nothing: the client's `requires` must still admit the proof.",
+		obj("One limit.", m{
+			"match":   match,
+			"clients": m{"type": "array", "minItems": 1, "uniqueItems": true, "items": m{"type": "string", "minLength": 1}, "description": "The client ids such a proof may be exchanged for. Each must be a declared client."},
+		}, "match", "clients"))
+}
+
 func vocabularySchema() m {
 	role := m{
 		"description": "A role: the roles it implies, or `{implies, scopes}` to restrict it to some of its thing's scopes.",
@@ -311,6 +323,7 @@ func policySchema() m {
 		"github":           githubTableSchema(),
 		"people":           table("Which addresses are one person, by a name the installation chooses.", strList("The addresses.")),
 		"slack":            slackTableSchema(),
+		"exchange_limits":  exchangeLimitsSchema(),
 		"exchange":         policyExchangeSchema(),
 		"apps":             policyAppsSchema(),
 		"controllers":      policyControllersSchema(),

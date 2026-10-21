@@ -118,6 +118,22 @@ func (s *Set) Client(id string) (Client, bool) {
 	return c, ok
 }
 
+// ExchangeAllowed reports whether the exchange limits in force let in be
+// exchanged for audience; see [Policy.ExchangeAllowed].
+func (s *Set) ExchangeAllowed(in Input, audience string) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.declared.ExchangeAllowed(in, audience)
+}
+
+// ExchangeClients reports the clients in may be exchanged for under the
+// exchange limits in force; see [Policy.ExchangeClients].
+func (s *Set) ExchangeClients(in Input) (clients []string, limited bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.declared.ExchangeClients(in)
+}
+
 // Resource returns a declared resource.
 func (s *Set) Resource(id string) (Resource, bool) {
 	s.mu.RLock()
@@ -490,6 +506,17 @@ func (p *Policy) mergeLayer(other Policy, from string) error {
 		return fmt.Errorf("%s: person %q is declared twice", from, person)
 	}); err != nil {
 		return err
+	}
+	// Exchange limits are additive, as their meaning is: several limits
+	// matching one proof allow the union of their clients, so a second
+	// file's limits mean the same thing whichever file they sit in. A limit
+	// declared identically in two files is kept once, so a layer repeated
+	// by a renderer changes nothing.
+	for i := range other.ExchangeLimits {
+		limit := other.ExchangeLimits[i]
+		if !slices.ContainsFunc(p.ExchangeLimits, func(have ExchangeLimit) bool { return reflect.DeepEqual(have, limit) }) {
+			p.ExchangeLimits = append(p.ExchangeLimits, limit)
+		}
 	}
 	return p.mergeSlack(other.Slack, from)
 }

@@ -165,7 +165,7 @@ func TestEveryPolicyTableHasASource(t *testing.T) {
 	source := map[string]string{
 		"Version": "set to 1", "Vocabulary": "access", "Groups": "access, bootstrap", "Claims": "Bootstrap.Claims",
 		"Lifetimes": "access", "Resources": "access", "ClientDocuments": "access", "Clients": "access, bootstrap",
-		"GitHub": "access", "People": "access", "Slack": "access",
+		"GitHub": "access", "People": "access", "Slack": "access", "ExchangeLimits": "Bootstrap.ExchangeLimits",
 	}
 	typ := reflect.TypeFor[policy.Policy]()
 	var fields []string

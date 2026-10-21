@@ -364,6 +364,31 @@ type Policy struct {
 	// that reads it is being built, and until it ships nothing does.
 	// See [Slack].
 	Slack Slack `yaml:"slack,omitempty"`
+	// ExchangeLimits narrow which clients an identity may exchange a proof
+	// for. A client's `requires` says which groups may ask for it; a group
+	// is shared, so everyone in it may ask for every client it opens. A
+	// limit is about one identity instead: when its matcher matches the
+	// proof, the exchange is refused for any audience not in its clients.
+	// See [ExchangeLimit] and [Policy.ExchangeClients].
+	ExchangeLimits []ExchangeLimit `yaml:"exchange_limits,omitempty"`
+}
+
+// ExchangeLimit narrows the token exchange for every proof its matcher
+// matches: such a proof may be exchanged for the listed clients and for
+// no other, whatever groups it holds. It grants nothing — the client's
+// own `requires` still has to admit the proof — so a limit can only ever
+// take an audience away.
+//
+// Several limits may match one proof; it may then be exchanged for the
+// union of their clients. A proof no limit matches is not limited.
+type ExchangeLimit struct {
+	// Match is the identity the limit is about: one [Matcher], exactly as
+	// a group's, matched against the proof alone. A directory group is not
+	// a matcher, so a limit never depends on the directory answering.
+	Match Matcher `yaml:"match"`
+	// Clients are the client ids such a proof may be exchanged for. Each
+	// must be a declared client.
+	Clients []string `yaml:"clients"`
 }
 
 // GitHubOrg is one organisation's bindings.
@@ -938,6 +963,9 @@ func (p Policy) Validate() error {
 	if err := p.ClientDocuments.validate(p); err != nil {
 		return err
 	}
+	if err := p.validateExchangeLimits(); err != nil {
+		return err
+	}
 	return p.checkFragments()
 }
 
@@ -1011,26 +1039,101 @@ func (g Group) validate(name string) error {
 		}
 	}
 	for i := range g.Matchers {
-		switch n := g.Matchers[i].kinds(); {
-		case n == 0:
-			return fmt.Errorf("group %q: matcher %d has no condition", name, i)
-		case n > 1:
-			return fmt.Errorf("group %q: matcher %d has %d conditions, exactly one is allowed", name, i, n)
-		}
-		if gh := g.Matchers[i].GitHub; gh != nil && *gh == (GitHubMatcher{}) {
-			return fmt.Errorf("group %q: matcher %d matches every CI job", name, i)
-		}
-		if gh := g.Matchers[i].GitHub; gh != nil && gh.Visibility != "" && !visibilities[gh.Visibility] {
-			return fmt.Errorf("group %q: matcher %d: visibility %q is not public, private or internal", name, i, gh.Visibility)
-		}
-		if sa := g.Matchers[i].ServiceAccount; sa != nil && (sa.Namespace == "" || sa.Name == "") {
-			return fmt.Errorf("group %q: matcher %d needs a namespace and a name", name, i)
-		}
-		if err := g.Matchers[i].AWS.validate(); err != nil {
-			return fmt.Errorf("group %q: matcher %d: %w", name, i, err)
+		if err := g.Matchers[i].validate(fmt.Sprintf("group %q: matcher %d", name, i)); err != nil {
+			return err
 		}
 	}
 	return nil
+}
+
+// validate checks one matcher's shape: exactly one kind, and that kind
+// well formed. where names it in the error, for example `group "g":
+// matcher 0`.
+func (m Matcher) validate(where string) error {
+	switch n := m.kinds(); {
+	case n == 0:
+		return fmt.Errorf("%s has no condition", where)
+	case n > 1:
+		return fmt.Errorf("%s has %d conditions, exactly one is allowed", where, n)
+	}
+	if gh := m.GitHub; gh != nil && *gh == (GitHubMatcher{}) {
+		return fmt.Errorf("%s matches every CI job", where)
+	}
+	if gh := m.GitHub; gh != nil && gh.Visibility != "" && !visibilities[gh.Visibility] {
+		return fmt.Errorf("%s: visibility %q is not public, private or internal", where, gh.Visibility)
+	}
+	if sa := m.ServiceAccount; sa != nil && (sa.Namespace == "" || sa.Name == "") {
+		return fmt.Errorf("%s needs a namespace and a name", where)
+	}
+	if err := m.AWS.validate(); err != nil {
+		return fmt.Errorf("%s: %w", where, err)
+	}
+	return nil
+}
+
+// validateExchangeLimits checks every limit: a well-formed matcher, and
+// clients that are declared. A limit naming a client that does not exist
+// would read as a narrowing and grant the identity nothing it could use,
+// which is a typo nobody would find until a workload stopped working; it
+// is refused at load instead. A limit with no clients is refused too: it
+// would shut the identity out of every exchange, and that is not
+// something to express by leaving a list empty.
+func (p Policy) validateExchangeLimits() error {
+	for i := range p.ExchangeLimits {
+		limit := &p.ExchangeLimits[i]
+		where := fmt.Sprintf("exchange_limits[%d]", i)
+		if err := limit.Match.validate(where + ": match"); err != nil {
+			return err
+		}
+		if len(limit.Clients) == 0 {
+			return fmt.Errorf("%s: no clients: a limit names the clients its identity may be exchanged for", where)
+		}
+		seen := make(map[string]bool, len(limit.Clients))
+		for _, id := range limit.Clients {
+			if _, ok := p.Clients[id]; !ok {
+				return fmt.Errorf("%s: clients: %q is not a declared client", where, id)
+			}
+			if seen[id] {
+				return fmt.Errorf("%s: clients: %q is listed twice", where, id)
+			}
+			seen[id] = true
+		}
+	}
+	return nil
+}
+
+// ExchangeClients reports which clients a proof may be exchanged for
+// under [Policy.ExchangeLimits]: the union of the clients of every limit
+// whose matcher matches in, sorted, and limited true. A proof no limit
+// matches is not limited, and clients is nil.
+//
+// Only the proof's own identity is read — the address, the CI claims, the
+// ServiceAccount, the AWS role — never the directory groups, so the
+// answer does not change while the directory is unreachable.
+func (p Policy) ExchangeClients(in Input) (clients []string, limited bool) {
+	for i := range p.ExchangeLimits {
+		limit := &p.ExchangeLimits[i]
+		if !limit.Match.matches(in) {
+			continue
+		}
+		limited = true
+		for _, id := range limit.Clients {
+			if !slices.Contains(clients, id) {
+				clients = append(clients, id)
+			}
+		}
+	}
+	slices.Sort(clients)
+	return clients, limited
+}
+
+// ExchangeAllowed reports whether [Policy.ExchangeLimits] let a proof be
+// exchanged for audience: true when no limit matches it, or when one that
+// does names audience. It decides nothing else — whether the client's
+// `requires` admits the proof is [Client.Admits]'s question.
+func (p Policy) ExchangeAllowed(in Input, audience string) bool {
+	clients, limited := p.ExchangeClients(in)
+	return !limited || slices.Contains(clients, audience)
 }
 
 // validate checks an aws matcher: an account that is exactly twelve

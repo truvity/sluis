@@ -23,6 +23,7 @@ Each row is optional. A row folds into its groups after the matchers the access 
 | `Viewers` | `EmailDomain`, `ServiceAccounts`, `RoleARNs` | `Group`, which may be a derived group |
 | `Controllers` | `ServiceAccounts`, `RoleARNs` | the viewers' group and, when `Group` is set, `Group` |
 | `Probe` | one ServiceAccount, cluster required | `Group`, plus the exchange client `Client` that requires it |
+| `ExchangeLimits[]` | `ServiceAccounts`, `RoleARNs` | no group: one [exchange limit](policy-clients.md#exchange-limits) per workload, naming the row's `Clients` |
 
 `GenerateSecrets` writes every confidential client's secret as `{generate: true}`. `Claims` is copied to the `claims` table, which the access document does not have.
 
@@ -32,10 +33,11 @@ Each row is optional. A row folds into its groups after the matchers the access 
 
 - a namespace, name, cluster, group or role ARN that is malformed;
 - a workload listed twice in one row;
+- an `ExchangeLimits` row with no workload, no client, or a client twice;
 - a `Controllers.Group` or `Probe.Group` that the access document also declares, or that two rows share;
 - a `Probe.Client` that the access document also declares;
 - an access document that declares a group, client or person twice.
 
 ## Fields
 
-No field of the access part is dropped, except seven client fields that describe the relying party's own deployment: `secretKey`, `hostname`, `prefix`, `mount`, `cluster`, `proxy` and `deliver`. `FromAccess` does not validate the policy; [`config.Render`](installation-document.md) does.
+No field of the access part is dropped, except seven client fields that describe the relying party's own deployment: `secretKey`, `hostname`, `prefix`, `mount`, `cluster`, `proxy` and `deliver`. `FromAccess` does not validate the policy; [`config.Render`](installation-document.md) does. It refuses an exchange limit naming a client the policy does not declare.
