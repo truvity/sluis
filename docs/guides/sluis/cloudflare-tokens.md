@@ -105,7 +105,7 @@ sluisctl aws-config                   # adds a profile r2-archive@r2 per R2 pres
 aws --profile r2-archive@r2 s3 ls s3://example-archive/
 ```
 
-The CLI caches under `<config>/cloudflare/` and mints again with a third of the lifetime left. `--no-cache` writes nothing to disk. A refusal is cached there too, as a `.refused` marker: for 30 to 60 seconds (or the `Retry-After` of the answer, at most 10 minutes) the command exits at once with the issuer's sentence on stderr and makes no request, so a credential helper that the AWS SDK runs for every request does not hammer the issuer while the caller is over its cap or the edge is rate limiting. A success deletes the marker. A 429 is not retried; a 5xx answer or a network error is, with a jittered back-off.
+The CLI caches under `<config>/cloudflare/` and mints again with a third of the lifetime left. `--no-cache` writes nothing to disk.
 
 ## 5. Mint for CI or a workload
 
