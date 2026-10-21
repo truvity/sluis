@@ -43,7 +43,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: "3.13"
+          python-version: "3.15"
       - run: hack/docs-site.sh _site
       # The pages link to each other as /sluis/..., the path the site is served
       # under (site_url). Put the site under that path so the checker finds them.

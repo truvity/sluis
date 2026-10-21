@@ -983,7 +983,7 @@
         }
       }
     },
-    "postgresql@17": {
+    "postgresql@17.10": {
       "last_modified": "2026-07-08T01:50:52Z",
       "plugin_version": "0.0.2",
       "resolved": "github:NixOS/nixpkgs/05988b07fb05cbcb50be6bce197b4b5f75b5e61b#postgresql",
