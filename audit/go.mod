@@ -28,8 +28,8 @@ require (
 	github.com/truvity/gateway-auth v0.7.1
 	github.com/truvity/gemaal v0.26.2
 	github.com/truvity/policy v1.54.1
-	github.com/truvity/sluis/audit/sdk v1.78.0
-	github.com/truvity/sluis/storage v1.78.0
+	github.com/truvity/sluis/audit/sdk v1.78.1
+	github.com/truvity/sluis/storage v1.78.1
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.72.0
 	go.opentelemetry.io/otel v1.47.0
 	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp v1.47.0
