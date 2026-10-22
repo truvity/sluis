@@ -25,7 +25,7 @@ permissions:
 jobs:
   govulncheck:
     if: github.event.schedule != '17 5 * * 1'
-    uses: truvity/ci-workflows/.github/workflows/check.yaml@fe1618d3679ee990ef9d0c300d829260eca5812b # v5.2.3
+    uses: truvity/ci-workflows/.github/workflows/check.yaml@51bc0eb7d5d89931d336219f87bde091deaf48ed # v5.4.0
     with:
       recipes: '["vuln","audit-vuln"]'
 

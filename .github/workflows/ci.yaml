@@ -89,10 +89,30 @@ jobs:
           path: ~/.cache/golangci-lint
           key: golangci-${{ matrix.group }}-${{ hashFiles('devbox.lock') }}-${{ hashFiles('**/go.sum') }}
           restore-keys: golangci-${{ matrix.group }}-${{ hashFiles('devbox.lock') }}-
+      # The Go build cache and module cache of the Go groups: this repository
+      # runs on hosted runners, where nothing else keeps them between runs.
+      # One cache per group, saved once per change of a go.sum or devbox.lock;
+      # the newest earlier cache of the group warms the first run after one.
+      - id: gocache
+        if: startsWith(matrix.group, 'go-') || matrix.group == 'audit'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: gocache-${{ matrix.group }}-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('devbox.lock') }}-${{ hashFiles('**/go.sum') }}
+          restore-keys: gocache-${{ matrix.group }}-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('devbox.lock') }}-
       - name: just ci-${{ matrix.group }}
         env:
           GROUP: ${{ matrix.group }}
         run: devbox run -- just "ci-$GROUP"
+      - if: always() && steps.gocache.conclusion == 'success' && steps.gocache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ steps.gocache.outputs.cache-primary-key }}
       - if: always() && steps.golangci.conclusion == 'success' && steps.golangci.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -169,7 +189,7 @@ jobs:
   e2e:
     needs: plan
     if: needs.plan.outputs.audit == 'true'
-    uses: truvity/ci-workflows/.github/workflows/integration.yaml@fe1618d3679ee990ef9d0c300d829260eca5812b # v5.2.3
+    uses: truvity/ci-workflows/.github/workflows/integration.yaml@51bc0eb7d5d89931d336219f87bde091deaf48ed # v5.4.0
     permissions:
       contents: read
       id-token: write
