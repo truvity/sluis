@@ -1,5 +1,9 @@
 ## Unreleased
 
+### Fixed
+
+- **Re-check on a catalogue or runner GitHub App finds an installation made directly on GitHub.** The installation id was recorded only by the setup redirect the console's Install flow ends in, so an owner who installed the App on GitHub itself left it at "created, not installed" for good, and no token could be minted for it. Re-check, on the Apps page and on the catalogue page, now asks GitHub as the App where it is installed when the App is created and recorded as not installed. An installation on the organisation the declaration names is recorded exactly as the setup redirect records it: the same record and keys, the cached answer dropped, and the App shown as installed. It is audited as `roster.catalogue_app.installed` or `roster.runner_app.installed`, with the operator who pressed Re-check as the actor and the reason `found by re-check`. An App installed nowhere stays as it was, with no error; an installation on any other account is ignored; GitHub failing to answer is shown as the App's reason and records nothing. Only a Re-check looks, never opening a page, and nothing runs it on a schedule: it is an action an operator asks for, not a repair pass. The organisation controller App is not covered. **Upgrade:** none; the audit catalogue does not change.
+
 ## v1.78.1
 
 Two changes and a documentation update. The policy can limit which clients an identity may exchange for (`exchange_limits`; nothing changes without it), and `sluisctl cloudflare r2` and `cloudflare token` remember a refusal and no longer retry a 429, which ends the mint storm a runner over its cap caused. The conformance results include a second installation.

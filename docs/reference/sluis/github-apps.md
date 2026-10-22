@@ -23,6 +23,7 @@ The service asks GitHub, as the App, for `GET /app` and `GET /app/installations/
 | The installation itself | Uninstalled or suspended is said as such |
 
 GitHub's answer is kept for one minute. *Re-check* asks again at once.
+*Re-check* also looks for the installation of a catalogue or runner App that is created and not installed. One made directly on GitHub, on the declared organisation, is recorded as the Install flow would, audited with the reason `found by re-check`.
 A failure to ask, such as GitHub down or a damaged key, is shown as the App's reason. The rest of the GitHub page is unaffected.
 
 GitHub has no API to change an App's permissions, events or name. To fix drift, edit the App at `https://github.com/organizations/<org>/settings/apps/<slug>` or change the catalogue, approve the installation's request, and press *Re-check*.

@@ -479,7 +479,7 @@ export function fixSentence(app: GitHubAppView): string {
         ? "Create it: an owner of an organisation creates it in one click, and it is installed nowhere."
         : `Create it: an owner of ${app.org} creates it, then installs it — two clicks.`;
     case "install":
-      return `Finish installing it: an owner of ${app.org} installs it on GitHub.`;
+      return `Finish installing it: an owner of ${app.org} installs it on GitHub. An installation made there directly is found by Re-check.`;
     case "recheck":
       return `An owner of ${app.org} edits its permissions in the App's settings on GitHub — or the declaration changes to match — then Re-check.`;
     case "disconnect":

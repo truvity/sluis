@@ -98,6 +98,10 @@ type githubAppSpec struct {
 	// place is where the App's key is kept, for a deployment copying it.
 	place keyPlace
 
+	// installLookup is why a re-check could not find out whether the App is
+	// installed, empty when it could or was not asked.
+	installLookup string
+
 	// linked is how many accounts people linked through the link App.
 	linked int
 	// reported is whether the controller has reported on the organisation
@@ -305,6 +309,9 @@ func (c *Service) CheckGitHubApp(
 	id, err := c.requireApp(ctx, access.RoleOperator, &spec)
 	if err != nil {
 		return nil, err
+	}
+	if spec, err = c.findInstallation(ctx, spec, id.Who()); err != nil {
+		return nil, connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
 	}
 	app := c.githubAppView(ctx, spec, true)
 	dirs, err := c.directories(ctx)
@@ -736,6 +743,9 @@ func (c *Service) githubAppView(ctx context.Context, spec githubAppSpec, fresh b
 		c.seen.put(spec.id, seen)
 	}
 	out.CheckedAt, out.Reason = timestampOf(seen.at), seen.err
+	if out.Reason == "" {
+		out.Reason = spec.installLookup
+	}
 	var appPermissions, installationPermissions map[string]string
 	if seen.app != nil {
 		appPermissions = seen.app.Permissions

@@ -129,6 +129,12 @@ type fakeGitHub struct {
 	hookURL, hookSecret, hookContentType string
 	hookPatches                          int
 	hookPatchRefused                     bool
+	// installationLogins are the accounts GET /app/installations lists the
+	// App as installed on, each as installation 7; nil is globex alone, and
+	// an empty one is an App installed nowhere. installationsStatus, when
+	// set, is the status the listing fails with.
+	installationLogins  []string
+	installationsStatus int
 }
 
 // githubBaseMu is held by the test that has pointed githubapp at its fake.
@@ -185,7 +191,22 @@ func startFakeGitHub(t *testing.T) *fakeGitHub {
 		_ = json.NewEncoder(w).Encode(map[string]any{"url": fake.hookURL, "content_type": fake.hookContentType, "secret": "********"})
 	})
 	mux.HandleFunc("GET /app/installations", func(w http.ResponseWriter, _ *http.Request) {
-		_ = json.NewEncoder(w).Encode([]map[string]any{{"id": 7, "account": map[string]any{"login": "globex"}}})
+		fake.mu.Lock()
+		defer fake.mu.Unlock()
+		if fake.installationsStatus != 0 {
+			w.WriteHeader(fake.installationsStatus)
+			_, _ = w.Write([]byte(`{"message":"Server Error"}`))
+			return
+		}
+		logins := fake.installationLogins
+		if logins == nil {
+			logins = []string{"globex"}
+		}
+		listed := []map[string]any{}
+		for _, login := range logins {
+			listed = append(listed, map[string]any{"id": 7, "account": map[string]any{"login": login}})
+		}
+		_ = json.NewEncoder(w).Encode(listed)
 	})
 	mux.HandleFunc("GET /app", func(w http.ResponseWriter, _ *http.Request) {
 		fake.mu.Lock()

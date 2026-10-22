@@ -792,6 +792,21 @@ func CatalogueAppInstalled(actor Actor, org string, app App, installation int64)
 		[]*record.Target{app.target(), targetOrg(org)}, app.installed(installation))
 }
 
+// InstallationFoundByRecheck is the reason of an installed record written
+// when a re-check, not the setup redirect, found the installation: the owner
+// installed the App on GitHub directly, outside the console's Install flow.
+const InstallationFoundByRecheck = "found by re-check"
+
+// CatalogueAppInstallationFound is a catalogued App's installation found by a
+// re-check and recorded: the same action as CatalogueAppInstalled, with the
+// reason saying how it came to be known.
+func CatalogueAppInstallationFound(actor Actor, org string, app App, installation int64) *record.Record {
+	o := Succeeded()
+	o.Reason = InstallationFoundByRecheck
+	return build("roster.catalogue_app.installed", actor, o, nil,
+		[]*record.Target{app.target(), targetOrg(org)}, app.installed(installation))
+}
+
 // CatalogueAppDisconnected is a catalogued App disconnected.
 func CatalogueAppDisconnected(actor Actor, org string, app App, uninstalled bool, reason string) *record.Record {
 	o := Succeeded()
@@ -837,6 +852,16 @@ func RunnerAppCreated(actor Actor, org string, app App) *record.Record {
 // RunnerAppInstalled is a runner App installed.
 func RunnerAppInstalled(actor Actor, org string, app App, installation int64) *record.Record {
 	return build("roster.runner_app.installed", actor, Succeeded(), nil,
+		[]*record.Target{app.target(), targetOrg(org)}, app.installed(installation))
+}
+
+// RunnerAppInstallationFound is a runner App's installation found by a
+// re-check and recorded: the same action as RunnerAppInstalled, with the
+// reason saying how it came to be known.
+func RunnerAppInstallationFound(actor Actor, org string, app App, installation int64) *record.Record {
+	o := Succeeded()
+	o.Reason = InstallationFoundByRecheck
+	return build("roster.runner_app.installed", actor, o, nil,
 		[]*record.Target{app.target(), targetOrg(org)}, app.installed(installation))
 }
 
