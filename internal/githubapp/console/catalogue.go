@@ -16,7 +16,8 @@ func (c *Service) CheckGitHubCatalogueApp(
 	ctx context.Context, req *directoryrosterv1.CheckGitHubCatalogueAppRequest,
 ) (*directoryrosterv1.CheckGitHubCatalogueAppResponse, error) {
 	id := strings.TrimSpace(req.GetId())
-	if _, err := c.requireCatalogueApp(ctx, access.RoleOperator, id); err != nil {
+	who, err := c.requireCatalogueApp(ctx, access.RoleOperator, id)
+	if err != nil {
 		return nil, err
 	}
 	if _, err := c.catalogueStore(); err != nil {
@@ -30,7 +31,11 @@ func (c *Service) CheckGitHubCatalogueApp(
 		if specs[i].id != id {
 			continue
 		}
-		app := legacyCatalogueApp(specs[i], c.githubAppView(ctx, specs[i], true))
+		spec, err := c.findInstallation(ctx, specs[i], who.Who())
+		if err != nil {
+			return nil, connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
+		}
+		app := legacyCatalogueApp(spec, c.githubAppView(ctx, spec, true))
 		return &directoryrosterv1.CheckGitHubCatalogueAppResponse{App: app}, nil
 	}
 	return nil, connect.Errorf(connect.CodeNotFound, "the catalogue declares no App %q and none was created", id)
