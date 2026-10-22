@@ -33,6 +33,9 @@ func createdCatalogueApp(t *testing.T, server *ConsoleServer, console *Console) 
 	}
 }
 
+// appCreatedState is an App created and not installed.
+const appCreatedState = directoryrosterv1.AppState_APP_STATE_CREATED
+
 func recheck(t *testing.T, console *Console, id string) *directoryrosterv1.GitHubApp {
 	t.Helper()
 	checked, err := console.CheckGitHubApp(operator(), &directoryrosterv1.CheckGitHubAppRequest{Id: id})
@@ -64,11 +67,11 @@ func TestRecheckFindsACatalogueAppInstalledDirectlyOnGitHub(t *testing.T) {
 	// Not installed yet: today's state, no error, nothing recorded. Opening
 	// the page never looks for an installation, even where there is one.
 	github.installationLogins = []string{}
-	if app := recheck(t, console, "renovate"); app.GetState() != directoryrosterv1.AppState_APP_STATE_CREATED || app.GetInstallationId() != 0 || app.GetReason() != "" {
+	if app := recheck(t, console, "renovate"); app.GetState() != appCreatedState || app.GetInstallationId() != 0 || app.GetReason() != "" {
 		t.Errorf("not installed = state %s, installation %d, reason %q", app.GetState(), app.GetInstallationId(), app.GetReason())
 	}
 	github.installationLogins = nil
-	if app := listed(t, console, "renovate"); app.GetState() != directoryrosterv1.AppState_APP_STATE_CREATED {
+	if app := listed(t, console, "renovate"); app.GetState() != appCreatedState {
 		t.Errorf("a page load found an installation: %s", app.GetState())
 	}
 	if _, ok := catalogueSecret(t, client)["renovate.github_app_installation_id"]; ok {
@@ -137,13 +140,13 @@ func TestRecheckRecordsNoInstallationOnAnotherOrganisationOrWhenGitHubFails(t *t
 	github.app = map[string]string{"contents": "write", "pull_requests": "write", "metadata": "read"}
 
 	github.installationLogins = []string{"initech", "globex-labs"}
-	if app := recheck(t, console, "renovate"); app.GetState() != directoryrosterv1.AppState_APP_STATE_CREATED || app.GetInstallationId() != 0 || app.GetReason() != "" {
+	if app := recheck(t, console, "renovate"); app.GetState() != appCreatedState || app.GetInstallationId() != 0 || app.GetReason() != "" {
 		t.Errorf("an installation elsewhere = state %s, installation %d, reason %q", app.GetState(), app.GetInstallationId(), app.GetReason())
 	}
 
 	github.installationsStatus = 500
 	app := recheck(t, console, "renovate")
-	if app.GetState() != directoryrosterv1.AppState_APP_STATE_CREATED || app.GetInstallationId() != 0 || !strings.Contains(app.GetReason(), "could not say whether the App is installed") {
+	if app.GetState() != appCreatedState || app.GetInstallationId() != 0 || !strings.Contains(app.GetReason(), "could not say whether the App is installed") {
 		t.Errorf("GitHub failing = state %s, installation %d, reason %q", app.GetState(), app.GetInstallationId(), app.GetReason())
 	}
 
@@ -193,7 +196,7 @@ func TestRecheckFindsARunnerAppInstalledDirectlyOnGitHub(t *testing.T) {
 	github.installed = github.app
 
 	github.installationLogins = []string{"initech"}
-	if app := recheck(t, console, id); app.GetState() != directoryrosterv1.AppState_APP_STATE_CREATED || app.GetInstallationId() != 0 {
+	if app := recheck(t, console, id); app.GetState() != appCreatedState || app.GetInstallationId() != 0 {
 		t.Errorf("an installation elsewhere = state %s, installation %d", app.GetState(), app.GetInstallationId())
 	}
 

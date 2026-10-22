@@ -75,7 +75,7 @@ func (c *Service) findInstallation(ctx context.Context, spec githubAppSpec, acto
 	if err != nil {
 		return spec, fmt.Errorf("the App is installed on %s and the installation could not be recorded here: %w", spec.org, err)
 	}
-	c.log().InfoContext(ctx, "App installation found by a re-check", logattr.SafeString("id", spec.id),
+	c.log().InfoContext(ctx, "an App installation was found by a re-check", logattr.SafeString("id", spec.id),
 		logattr.SafeString("org", spec.org), slog.Int64("installation", installation), logattr.SafeString("by", actor))
 	if spec.purpose == appRunners {
 		c.record(ctx, audit.RunnerAppInstallationFound(audit.Identified(actor), spec.org, app, installation))
