@@ -131,7 +131,7 @@ Source: `internal/clientcreds/telemetry.go`.
 | `sluis.leases.held` | up-down counter | `kind` | Leases this runner holds now. |
 
 
-Each tick emits `sluis.ticks`, `sluis.tick.duration` and, when ok, `sluis.tick.last_success_timestamp` (`kind`: `github-tick`, `github-links`, `slack-tick`). A vanished series needs `absent(...)`. `SluisTickStale` looks back two hours: a series that stopped reporting leaves it.
+Each tick emits `sluis.ticks`, `sluis.tick.duration` and, when ok, `sluis.tick.last_success_timestamp` (`kind`: `github-tick`, `github-links`, `slack-tick`). A vanished series needs `absent(...)`. `SluisTickStale` looks back two hours.
 
 ```text
 absent(last_over_time(sluis_tick_last_success_timestamp_seconds[1d]))
@@ -199,7 +199,7 @@ Source: `tests/golden/sluis/alerts.yaml`, the render of `charts/sluis/templates/
 | `SluisIssuer5xx` | Server errors. The dashboard's 5xx panel names the route. If `SluisPortErrors` also fires, the store is the cause. Otherwise check `directory_unreachable` and policy loading. |
 | `SluisTokenEndpointSlow` | Slow p99. A token costs one store write: check the port latency panel (DynamoDB, or the API server with the legacy store), then the policy size. |
 | `SluisTickFailing` | A target's ticks failed three times in 45 minutes. The console's controller page and the log ("a pass over an organisation failed") give the error: uninstalled App, revoked credential or GitHub down. |
-| `SluisTickStale` | No tick for an hour: the controller is not running, nobody can take the lease, or the loop hangs. Check the sluis pod, a lease held by a gone runner (it expires on its own) and the log. A target removed from the policy, renamed, or relabelled fires for at most an hour (until its series is two hours old), so remove it from the policy first. |
+| `SluisTickStale` | No tick for an hour: the controller is not running, nobody can take the lease, or the loop hangs. Check the sluis pod, a lease held by a gone runner (it expires on its own) and the log. A target removed, renamed or relabelled fires for at most an hour. |
 | `SluisLeaseLost` | One loss is normal. Repeated losses mean two runners on one target (more than one replica without a shared State, which the chart refuses; [high availability](../../guides/sluis/operate/high-availability.md)) or an unreachable State: see `SluisPortErrors`. |
 | `SluisCloudflareRotationStale` | A preset's credential is older than twice its `rotation`. The log line "a Cloudflare token was not minted" gives the reason: `prototype_active`, `prototype_forbidden`, `prototype_missing`, `minter_missing`, `store_error` or `cloudflare_error`. On Lambda check that the `{"kind":"cloudflare"}` schedule invokes the function. |
 | `SluisGitHubRateLimitLow` | Budget under 100 for half an hour. `github_roster_rate_limited_total` shows waits. Lengthen the controller's `interval` or find what else spends the App's budget. |
