@@ -119,6 +119,7 @@ type estate struct {
 	config              string
 	policy              string
 	orgs, workspaces    []string
+	outline             []string
 	rate                string
 	telemetry           bool
 	noSigningAlias      bool // leave SigningKeyAlias empty on the legacy path
@@ -159,7 +160,7 @@ func (e estate) args(t *testing.T) *arp.LambdaArgs {
 			TruststoreBucketName: "acme-sluis-truststore",
 			KeepDefaultEndpoint:  e.keepDefaultEndpoint,
 		},
-		Schedule: arp.ScheduleArgs{GitHubOrgs: e.orgs, SlackWorkspaces: e.workspaces, Rate: e.rate},
+		Schedule: arp.ScheduleArgs{GitHubOrgs: e.orgs, SlackWorkspaces: e.workspaces, OutlineWorkspaces: e.outline, Rate: e.rate},
 	}
 	if e.telemetry {
 		a.Telemetry = &arp.TelemetryArgs{

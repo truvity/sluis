@@ -55,6 +55,10 @@ describe("parse", () => {
     expect(parse(`#${paths.githubRunners()}`)).toMatchObject({ view: "github", id: "runners", rest: [] });
   });
 
+  it("reads Outline as a page of its own", () => {
+    expect(parse(`#${paths.outline()}`)).toMatchObject({ view: "outline", id: undefined, rest: [] });
+  });
+
   it("opens the overview at the root, so the rail can highlight it", () => {
     expect(parse("#/").view).toBe("overview");
     expect(parse("").view).toBe("overview");

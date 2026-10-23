@@ -19,7 +19,8 @@ export type NavOptions = { sessions: boolean; audit: boolean; cloudflare?: boole
  *    accounts, and the rules that admit a proof by its shape.
  *  - Access: what they get here — internal groups, the clients those open,
  *    and the sessions that result.
- *  - Systems: what the roster keeps in step, one entry each (GitHub, Slack),
+ *  - Systems: what the roster keeps in step, one entry each (GitHub, Slack,
+ *    Outline),
  *    each with tabs of its own rather than an entry per concept.
  *  - Admin: the trail, the backups and the settings.
  *
@@ -55,6 +56,7 @@ export function clusters(options: NavOptions): NavCluster[] {
       entries: [
         { value: "github", label: "GitHub", to: paths.github() },
         { value: "slack", label: "Slack", to: paths.slack() },
+        { value: "outline", label: "Outline", to: paths.outline() },
         ...(options.cloudflare ? [{ value: "cloudflare", label: "Cloudflare", to: paths.cloudflare() }] : []),
       ],
     },

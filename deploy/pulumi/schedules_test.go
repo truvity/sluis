@@ -66,6 +66,23 @@ func TestSchedulesTargetTheirModulesLiveAlias(t *testing.T) {
 	}
 }
 
+// An Outline workspace ticks the issuer's alias, which hosts its controller,
+// at its own rate.
+func TestOutlineSchedulesTargetTheIssuer(t *testing.T) {
+	e := estateWith()
+	e.outline = []string{"wiki"}
+	rec, _ := mustLambda(t, e)
+	got := targetsOf(t, rec)
+	if want := `{"controller":"outline","kind":"tick","target":"wiki"} ` + liveOf("sluis-staging-issuer"); got["sluis-outline-wiki"] != want {
+		t.Errorf("the Outline schedule = %q, want %q", got["sluis-outline-wiki"], want)
+	}
+	for _, s := range rec.ofType(schedType) {
+		if prop(s, "name").StringValue() == "sluis-outline-wiki" && prop(s, "scheduleExpression").StringValue() != arp.DefaultOutlineSchedule {
+			t.Errorf("the Outline rate: %v", s.Inputs)
+		}
+	}
+}
+
 func fmtMap(m map[string]string) string {
 	var ks []string
 	for k, v := range m {

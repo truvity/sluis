@@ -11,7 +11,7 @@ describe("clusters", () => {
       ["", ["Overview"]],
       ["Identity", ["Directories", "Directory groups", "People", "Rules"]],
       ["Access", ["Internal groups", "Clients", "Sessions"]],
-      ["Systems", ["GitHub", "Slack"]],
+      ["Systems", ["GitHub", "Slack", "Outline"]],
       ["Admin", ["Audit", "Settings"]],
     ]);
   });
@@ -21,14 +21,14 @@ describe("clusters", () => {
       ["", ["Overview"]],
       ["Identity", ["Directories", "Directory groups", "People", "Rules"]],
       ["Access", ["Internal groups", "Clients"]],
-      ["Systems", ["GitHub", "Slack"]],
+      ["Systems", ["GitHub", "Slack", "Outline"]],
       ["Admin", ["Settings"]],
     ]);
   });
 
   it("shows Cloudflare under Systems only where sluis mints for it", () => {
-    expect(labels({ sessions: false, audit: false, cloudflare: true })[3]).toEqual(["Systems", ["GitHub", "Slack", "Cloudflare"]]);
-    expect(labels({ sessions: false, audit: false })[3]).toEqual(["Systems", ["GitHub", "Slack"]]);
+    expect(labels({ sessions: false, audit: false, cloudflare: true })[3]).toEqual(["Systems", ["GitHub", "Slack", "Outline", "Cloudflare"]]);
+    expect(labels({ sessions: false, audit: false })[3]).toEqual(["Systems", ["GitHub", "Slack", "Outline"]]);
   });
 
   it("shows Backups beside Audit and Settings only where the module is connected", () => {

@@ -8,7 +8,7 @@ Connect also speaks JSON over HTTP, so `curl` works. The proto package is `sluis
 
 | Services | Reached by | Path prefix |
 |---|---|---|
-| `WorkspaceService`, `SettingsService`, `AccessService`, `GitHubService`, `SlackService`, `SlackChannelService`, `SlackSharedChannelService`, `SlackAppService`, `CloudflareService`, `BackupService`, the SPA, and the audit `QueryService` forwarded under `/audit/` | the console, same origin under `console.mount`; a workload with its own ServiceAccount token; `sluisctl`'s bearer token, for `BackupService` only | `/<package>.*/` |
+| `WorkspaceService`, `SettingsService`, `AccessService`, `GitHubService`, `SlackService`, `SlackChannelService`, `SlackSharedChannelService`, `SlackAppService`, `CloudflareService`, `BackupService`, `OutlineService`, the SPA, and the audit `QueryService` forwarded under `/audit/` | the console, same origin under `console.mount`; a workload with its own ServiceAccount token; `sluisctl`'s bearer token, for `BackupService` only | `/<package>.*/` |
 | `sluis.v1.SessionService` | a browser at the issuer's host (SSO cookie); a person signed in at `sluisctl` or the console, by bearer | `/sluis.v1.SessionService/`, legacy `/accessissuer.v1.SessionService/` |
 | `/login/*`, `/connect/*`, `/.access/*` | the origin root: bootstrap surface and CLI endpoints | none |
 | `directory.v1.DirectoryService` | nothing: it has no listener and no chart value enables one | none |
@@ -269,6 +269,16 @@ Minted Cloudflare tokens and R2 credentials. Only `GetCloudflareCredential` retu
 | `RevokeCloudflareToken` | operator | `preset`, `token_id` | `replaced` | `not_found` for a token sluis did not mint; a revoked stored token is replaced; audit `roster.cloudflare.token.revoked` |
 | `ListMyCloudflarePresets` | any signed-in | none | `available`, `presets[]{name, description, endpoint, lifetime_seconds}` | presets granted by `cloudflare.grants` |
 | `GetCloudflareCredential` | granted by `cloudflare.grants` | `preset`, `lifetime_seconds?` | `preset`, `token_id`, `expires_on`, `token` or `access_key_id`, `secret_access_key`, `endpoint` | shown once, `Cache-Control: no-store`; audit `roster.cloudflare.token.minted` or `.refused` |
+
+## OutlineService
+
+| RPC | Role | Request | Response | Notes |
+|---|---|---|---|---|
+| `GetOutlineStatus` | viewer | none | `workspaces[]` (`workspace`, `connected`, `url`, `key_user`, `connected_by`, `connected_at`, `enabled`, `report_json`) | every declared workspace of the [Outline controller](outline.md); `report_json` is its status document, version 1; no message carries the API key back |
+| `ConnectOutlineWorkspace` | operator | `workspace`, `url`, `api_key` | `key_user`, `key_user_ignored` | asks Outline `auth.info`; refuses a key that is not an admin's, or of another team than the one connected before; audit `roster.outline_workspace.connected` |
+| `DisconnectOutlineWorkspace` | operator | `workspace` | none | forgets the record, the key, the confirmations and the pass request; audit `roster.outline_workspace.disconnected` |
+| `RequestOutlinePass` | operator | `workspace` | `kept`, `last` | at most once a minute |
+| `ConfirmOutlineBreaker` | operator | `workspace`, `scope`, `fingerprint` | none | only the latest report's set; lapses after 24 hours; audit `roster.outline_breaker.confirmed` |
 
 ## BackupService
 

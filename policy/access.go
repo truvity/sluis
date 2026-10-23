@@ -409,7 +409,8 @@ func (a Access) outline() (Outline, error) {
 			return Outline{}, fmt.Errorf("outline workspace %q is declared twice", w.Workspace)
 		}
 		ws := OutlineWorkspace{Client: w.Client, Roles: OutlineRoles{Admin: w.Admins}, Ignore: w.Ignore}
-		for _, c := range w.Collections {
+		for i := range w.Collections {
+			c := &w.Collections[i]
 			if ws.Collections == nil {
 				ws.Collections = make(map[string]OutlineCollection, len(w.Collections))
 			}

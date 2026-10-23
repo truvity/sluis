@@ -291,14 +291,15 @@ func (c *Controller) workspace(ctx context.Context, key string) (status.Workspac
 		return fail(err)
 	}
 	if record.Team != "" && team != record.Team {
-		return fail(fmt.Errorf("the API key belongs to another Outline team (%s) than the one this workspace was connected to (%s): connect it again", team, record.Team))
+		return fail(fmt.Errorf("the API key belongs to another Outline team (%s) than the one this workspace was connected to (%s): "+
+			"connect it again", team, record.Team))
 	}
 	scanned := false
 	if c.cfg.ShareScan > 0 && started.Sub(previous.SharesScannedAt) >= c.cfg.ShareScan {
 		shares, err := scanShares(ctx, client, bound, observed)
 		switch {
 		case outlineapi.RateLimited(err):
-			return fail(fmt.Errorf("Outline's rate limit was reached reading the shares; the next pass tries again: %w", err))
+			return fail(fmt.Errorf("the rate limit of Outline was reached reading the shares; the next pass tries again: %w", err))
 		case err != nil:
 			c.deps.Log.WarnContext(ctx, "the single-document shares could not be read; the last findings stand", logattr.SafeString("workspace", key),
 				logattr.SafeError("error", err))
@@ -511,7 +512,7 @@ func observe(ctx context.Context, client *outlineapi.Client, bound policy.Outlin
 		}
 		members, err := client.GroupMembers(ctx, found[0].ID)
 		if outlineapi.RateLimited(err) {
-			return out, "", fmt.Errorf("Outline's rate limit was reached; the next pass tries again: %w", err)
+			return out, "", fmt.Errorf("the rate limit of Outline was reached; the next pass tries again: %w", err)
 		}
 		if err == nil {
 			out.Members[found[0].ID] = members
@@ -554,7 +555,7 @@ func observe(ctx context.Context, client *outlineapi.Client, bound policy.Outlin
 				}
 			}
 			if outlineapi.RateLimited(err) {
-				return out, "", fmt.Errorf("Outline's rate limit was reached; the next pass tries again: %w", err)
+				return out, "", fmt.Errorf("the rate limit of Outline was reached; the next pass tries again: %w", err)
 			}
 		}
 	}

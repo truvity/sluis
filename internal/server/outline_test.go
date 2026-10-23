@@ -31,7 +31,8 @@ func (o *outlineRecords) List(context.Context) ([]connection.Record, error) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	var out []connection.Record
-	for _, r := range o.records {
+	for k := range o.records {
+		r := o.records[k]
 		out = append(out, r)
 	}
 	return out, nil
@@ -164,7 +165,8 @@ func TestConnectingAnOutlineWorkspaceChecksTheKey(t *testing.T) {
 		t.Errorf("an undeclared workspace: %v", err)
 	}
 	if _, err = c.ConnectOutlineWorkspace(asRole(access.RoleOperator),
-		&directoryrosterv1.ConnectOutlineWorkspaceRequest{Workspace: "wiki", Url: "http://wiki.example.com", ApiKey: "key-admin"}); code(err) != connect.CodeInvalidArgument {
+		&directoryrosterv1.ConnectOutlineWorkspaceRequest{Workspace: "wiki", Url: "http://wiki.example.com", ApiKey: "key-admin"},
+	); code(err) != connect.CodeInvalidArgument {
 		t.Errorf("an http URL: %v", err)
 	}
 }
@@ -207,7 +209,8 @@ func TestOutlineStatusAndConfirmation(t *testing.T) {
 		t.Error("the confirmation was not recorded")
 	}
 
-	if resp, err := c.RequestOutlinePass(asRole(access.RoleOperator), &directoryrosterv1.RequestOutlinePassRequest{Workspace: "wiki"}); err != nil || !resp.GetKept() {
+	resp, err := c.RequestOutlinePass(asRole(access.RoleOperator), &directoryrosterv1.RequestOutlinePassRequest{Workspace: "wiki"})
+	if err != nil || !resp.GetKept() {
 		t.Errorf("request = %+v, %v", resp, err)
 	}
 	if _, err = c.DisconnectOutlineWorkspace(asRole(access.RoleOperator), &directoryrosterv1.DisconnectOutlineWorkspaceRequest{Workspace: "wiki"}); err != nil {
