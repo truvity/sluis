@@ -612,6 +612,11 @@ type stores struct {
 	slackReports server.SlackStatusReports
 	// slackWorkspaces is where Slack workspaces are connected.
 	slackWorkspaces server.SlackWorkspaces
+	// outlineWorkspaces is where Outline workspaces are connected, in the
+	// issuer's own table (docs/decisions/0077), and outlineReports what the
+	// Outline controller reported. Nil outside the port stores.
+	outlineWorkspaces server.OutlineWorkspaces
+	outlineReports    server.OutlineStatusReports
 	// maintenance are the gates over each module's maintenance flag, in the
 	// module's own table. Nil outside the port stores.
 	maintenance maintenance.Set
@@ -742,6 +747,8 @@ func openPortStores(ctx context.Context, cfg Config, st *store.Stores, log *slog
 		out.slackChannels = portstore.NewSlackChannels(slack)
 		out.slackWorkspaces = portstore.NewSlackWorkspaces(slack)
 	}
+	out.outlineWorkspaces = portstore.NewOutlineWorkspaces(base)
+	out.outlineReports = rails.NewBlobReports(st.Ports.Blob, blobprefix.OutlineReports)
 	// The flag of a module that is another function's is read by that module.
 	out.maintenance = maintenance.Set{
 		port.ModuleOIDC:   st.Maintenance(),
@@ -1120,6 +1127,9 @@ func New(ctx context.Context, cfg Config, st *store.Stores, log *slog.Logger) (*
 		SlackChannels:       kept.slackChannels,
 		SlackStatus:         kept.slackReports,
 		SlackWorkspaces:     kept.slackWorkspaces,
+		OutlineWorkspaces:   kept.outlineWorkspaces,
+		OutlineStatus:       kept.outlineReports,
+		OutlineEnabled:      cfg.policy.EnabledOutlineWorkspaces(),
 		GitHubHTTP:          demoGitHub(cfg.demo && kept.githubCatalogueApps == nil),
 		Audit:               recorder,
 	})

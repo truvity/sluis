@@ -603,6 +603,9 @@ type Sluis struct {
 type Controllers struct {
 	GitHub *GitHubController `json:"github,omitempty"`
 	Slack  *SlackController  `json:"slack,omitempty"`
+	// Outline is the Outline controller. It runs in the issuer's process and
+	// function (docs/decisions/0077); there is no `sluis controller outline`.
+	Outline *OutlineController `json:"outline,omitempty"`
 }
 
 // ControllerCommon is what both controllers' sections share.
@@ -627,6 +630,17 @@ type GitHubController struct {
 type SlackController struct {
 	ControllerCommon
 	CredentialsDir string `json:"credentialsDir,omitempty"`
+}
+
+// OutlineController is `controllers.outline`. The controller runs in this
+// process and asks the console in it directly, as the roster controllers'
+// workload, so it names no console URL and presents no token.
+type OutlineController struct {
+	// Interval is the time between passes. Unset is two minutes.
+	Interval *Duration `json:"interval,omitempty"`
+	// ShareScan is how often the single-document shares are read. Unset is an
+	// hour.
+	ShareScan *Duration `json:"shareScan,omitempty"`
 }
 
 // roster is what the controller's own section and the process's shared keys

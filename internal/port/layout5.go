@@ -167,6 +167,11 @@ var rules5 = []rule5{
 
 	// oidc: the issuer's records and the console's session key.
 	r5exact(ModuleOIDC, "console", "rec.console.session-key", "session-key"),
+	// oidc: an Outline workspace's connection (its record, and its API key in
+	// the secrets) and the console's gates on it: the issuer hosts the Outline
+	// controller (docs/decisions/0077).
+	r5(ModuleOIDC, "outline-workspace", "ws.outline.", convID),
+	r5(ModuleOIDC, "outline-gate", "gate.outline.", convDots),
 	r5exact(ModuleOIDC, "recovery", "rec.recovery.off", "off"),
 	r5(ModuleOIDC, "session", "ses.", convDots),
 	r5(ModuleOIDC, "session-pointer", "sid.", convID),

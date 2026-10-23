@@ -1,0 +1,106 @@
+syntax = "proto3";
+
+package sluis.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// OutlineService is the console's view of the Outline controller: each
+// Outline workspace the policy declares, its connection record, whether the
+// controller acts in it or runs it dry, and what the last pass reported; and
+// the operator's four actions on it.
+//
+// The API key an operator gives when connecting is checked with Outline and
+// kept beside the record, where only the controller reads it. No message of
+// this service ever carries it back.
+service OutlineService {
+  // GetOutlineStatus is every declared workspace: its connection, whether it
+  // acts, and its last report. Viewer.
+  rpc GetOutlineStatus(GetOutlineStatusRequest) returns (GetOutlineStatusResponse);
+
+  // ConnectOutlineWorkspace keeps a workspace's URL and API key, or replaces
+  // the key. The key is asked who it is (auth.info) first: it must belong to
+  // an admin, and a workspace connected before keeps its Outline team.
+  // Operator.
+  rpc ConnectOutlineWorkspace(ConnectOutlineWorkspaceRequest) returns (ConnectOutlineWorkspaceResponse);
+
+  // DisconnectOutlineWorkspace forgets a workspace's record and key, its
+  // confirmations and its pass request. Nothing in Outline changes. Operator.
+  rpc DisconnectOutlineWorkspace(DisconnectOutlineWorkspaceRequest) returns (DisconnectOutlineWorkspaceResponse);
+
+  // RequestOutlinePass asks for a pass over one workspace now, at most once a
+  // minute. Operator.
+  rpc RequestOutlinePass(RequestOutlinePassRequest) returns (RequestOutlinePassResponse);
+
+  // ConfirmOutlineBreaker lets one held set go ahead: the breaker's scope and
+  // the fingerprint the latest report shows. A confirmation lapses after 24
+  // hours. Operator.
+  rpc ConfirmOutlineBreaker(ConfirmOutlineBreakerRequest) returns (ConfirmOutlineBreakerResponse);
+}
+
+message GetOutlineStatusRequest {}
+
+message GetOutlineStatusResponse {
+  repeated OutlineWorkspaceStatus workspaces = 1;
+}
+
+// OutlineWorkspaceStatus is one declared workspace.
+message OutlineWorkspaceStatus {
+  // workspace is the policy's key.
+  string workspace = 1;
+  // connected is whether a connection record and a key are kept.
+  bool connected = 2;
+  // url is the workspace's origin.
+  string url = 3;
+  // key_user is the address of the Outline account the key belongs to.
+  string key_user = 4;
+  string connected_by = 5;
+  google.protobuf.Timestamp connected_at = 6;
+  // enabled is whether the controller acts in it
+  // (`controllers.outline.enabledWorkspaces`); otherwise it is a dry run.
+  bool enabled = 7;
+  // report_json is the controller's last report, the status document of
+  // version 1 (docs/reference/sluis/outline.md); empty before the first pass.
+  string report_json = 8;
+}
+
+message ConnectOutlineWorkspaceRequest {
+  string workspace = 1;
+  // url is the origin Outline is served at, https.
+  string url = 2;
+  // api_key is an API key of an Outline admin. It is kept, never returned.
+  string api_key = 3;
+}
+
+message ConnectOutlineWorkspaceResponse {
+  // key_user is the address of the account the key belongs to, which must be
+  // on the workspace's `ignore` list.
+  string key_user = 1;
+  // key_user_ignored is whether it is.
+  bool key_user_ignored = 2;
+}
+
+message DisconnectOutlineWorkspaceRequest {
+  string workspace = 1;
+}
+
+message DisconnectOutlineWorkspaceResponse {}
+
+message RequestOutlinePassRequest {
+  string workspace = 1;
+}
+
+message RequestOutlinePassResponse {
+  // kept is false when another request came within the minute.
+  bool kept = 1;
+  google.protobuf.Timestamp last = 2;
+}
+
+message ConfirmOutlineBreakerRequest {
+  string workspace = 1;
+  // scope is the breaker's: `admins`, `suspensions`, `group:<name>` or
+  // `collection:<name>`.
+  string scope = 2;
+  string fingerprint = 3;
+}
+
+message ConfirmOutlineBreakerResponse {}

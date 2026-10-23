@@ -166,6 +166,29 @@ func slackTableSchema() m {
 	})
 }
 
+func outlineTableSchema() m {
+	groups := func(level string) m {
+		return strList("The internal groups granted `" + level + "` on the collection. A group at two levels takes the higher.")
+	}
+	return obj("Outline workspaces: the admin role and the collections, bound to internal groups (docs/reference/sluis/outline.md). The URL and the API key are the console's connection record, never policy.", m{
+		"workspaces": table("Each workspace, by the installation's key (the rules of a Slack workspace key).", obj("A workspace.", m{
+			"client": str("The sluis client the workspace signs in through. An account that reaches none of its required groups is suspended. Unset, an account must hold a group the workspace binds."),
+			"roles": obj("The workspace roles.", m{
+				"admin": strList("The internal groups whose holders are workspace admins. Every other managed account is a member."),
+			}),
+			"ignore": strList("Addresses never demoted, removed or suspended: the API key's owner among them. Joined across files."),
+			"collections": table("Each collection, by name as Outline spells it.", obj("A collection's binding.", m{
+				"mode":       m{"enum": []string{"extend", "strict"}, "description": "`extend` (the default) only adds grants; `strict` also removes the group grants and direct members the policy does not name."},
+				"directory":  str("The connected directory, by workspace id or primary domain, that every bound group's members must come from. A collection whose groups reach outside it is held."),
+				"adopt":      str("The id of an existing collection to adopt: for a renamed one, or when two carry the name."),
+				"read":       groups("read"),
+				"read_write": groups("read_write"),
+				"admin":      groups("admin"),
+			})),
+		})),
+	})
+}
+
 func githubTableSchema() m {
 	return table("GitHub organisations bound to internal groups, by login.", obj("An organisation's bindings.", m{
 		"members": strList("The groups whose holders belong in the organisation."),
@@ -307,6 +330,9 @@ func policyControllersSchema() m {
 		"slack": obj("The Slack controller.", m{
 			"enabledWorkspaces": list("The workspaces it changes, by key. Each must be declared by the slack table.", m{"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$"}),
 		}),
+		"outline": obj("The Outline controller.", m{
+			"enabledWorkspaces": list("The workspaces it changes, by key. Each must be declared by the outline table. The rest are dry runs.", m{"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$"}),
+		}),
 	})
 }
 
@@ -323,6 +349,7 @@ func policySchema() m {
 		"github":           githubTableSchema(),
 		"people":           table("Which addresses are one person, by a name the installation chooses.", strList("The addresses.")),
 		"slack":            slackTableSchema(),
+		"outline":          outlineTableSchema(),
 		"exchange_limits":  exchangeLimitsSchema(),
 		"exchange":         policyExchangeSchema(),
 		"apps":             policyAppsSchema(),

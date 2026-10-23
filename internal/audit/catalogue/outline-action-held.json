@@ -1,0 +1,22 @@
+{
+  "$id": "https://schemas.example/access-roster/v1/outline-action-held.json",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "change": {
+      "type": "string",
+      "description": "What is held.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none",
+      "x-audit-facet": true,
+      "enum": [
+        "workspace",
+        "user",
+        "group",
+        "member",
+        "collection",
+        "grant"
+      ]
+    }
+  }
+}

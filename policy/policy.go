@@ -364,6 +364,10 @@ type Policy struct {
 	// that reads it is being built, and until it ships nothing does.
 	// See [Slack].
 	Slack Slack `yaml:"slack,omitempty"`
+	// Outline binds internal groups to an Outline wiki's workspace role and
+	// collections, in one or more workspaces. It grants nothing and appears
+	// in no token; the Outline controller reads it. See [Outline].
+	Outline Outline `yaml:"outline,omitempty"`
 	// ExchangeLimits narrow which clients an identity may exchange a proof
 	// for. A client's `requires` says which groups may ask for it; a group
 	// is shared, so everyone in it may ask for every client it opens. A
@@ -950,6 +954,9 @@ func (p Policy) Validate() error {
 	if err := p.validateSlack(); err != nil {
 		return err
 	}
+	if err := p.validateOutline(); err != nil {
+		return err
+	}
 	for _, id := range slices.Sorted(maps.Keys(p.Clients)) {
 		if err := p.Clients[id].validate(id, p); err != nil {
 			return err
@@ -1436,6 +1443,7 @@ func conventional(name string) bool {
 //   - any GitHub binding (organisation [GitHubOrg.Members] or team
 //     [GitHubTeam.Members]/[GitHubTeam.Maintainers])
 //   - any Slack binding (a channel's [SlackChannel.From])
+//   - any Outline binding (a workspace's admin role, or a collection's grants)
 //   - this hub's own roles (groups whose [thing] segment is [ThingSelf] or
 //     [ThingSluis] and whose role is [RoleOperator] or [RoleViewer], which the hub reads
 //     directly from the token)
@@ -1576,6 +1584,14 @@ func (p Policy) Unconsumed(catalogueGroups ...string) []string {
 			for _, group := range ws.Channels[name].From {
 				consumed[group] = true
 			}
+		}
+	}
+
+	// Outline bindings: a workspace's admin role and a collection's grants
+	// consume their groups as a team does.
+	for _, ws := range p.Outline.Workspaces {
+		for _, group := range ws.Groups() {
+			consumed[group] = true
 		}
 	}
 

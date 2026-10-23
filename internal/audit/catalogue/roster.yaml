@@ -19,7 +19,7 @@
 # A change to what an action carries is a new version. The installation keeps
 # every version it was sent, so records already written keep their meaning.
 source: roster
-version: "1.22.0"
+version: "1.23.0"
 locales: [en]
 
 actor_kinds:
@@ -75,6 +75,15 @@ target_types:
     description: A group of a connected directory, by its address.
   directory_user:
     description: A person of a connected directory listed individually on a Slack channel, by address.
+    is_person: true
+  outline_workspace:
+    description: An Outline workspace, by the key the policy names it under.
+  outline_group:
+    description: An Outline group the controller manages, as <workspace key>/<group name>.
+  outline_collection:
+    description: An Outline collection the policy binds, as <workspace key>/<collection name>.
+  outline_user:
+    description: A person's Outline account, by Outline user id.
     is_person: true
 
 actions:
@@ -1053,3 +1062,181 @@ actions:
     data_schema: https://schemas.example/access-roster/v1/slack-action-held.json
     message:
       en: "a leaver in {targets_0_id} was reported: {outcome_reason}"
+
+  # ------------------------------------------------- Outline
+
+  roster.outline_workspace.connected:
+    summary: An Outline workspace was connected, or its API key replaced, from the console.
+    operation: create
+    categories: [configuration_change]
+    category: activity
+    target_types: [outline_workspace]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/outline-workspace.json
+    message:
+      en: "{outcome, select, success {{actor} connected Outline workspace {targets_0_id}} other {{actor} could not connect Outline workspace {targets_0_id}: {outcome_reason}}}"
+
+  roster.outline_workspace.disconnected:
+    summary: An Outline workspace's connection record and API key were removed from the console.
+    operation: remove
+    categories: [configuration_change]
+    category: activity
+    target_types: [outline_workspace]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/outline-workspace.json
+    message:
+      en: "{actor} disconnected Outline workspace {targets_0_id}"
+
+  roster.outline_group.created:
+    summary: The Outline controller created a group it manages.
+    operation: create
+    categories: [configuration_change]
+    category: activity
+    target_types: [outline_workspace, outline_group]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/outline-change.json
+    message:
+      en: "{outcome, select, success {the Outline group {targets_1_id} was created} other {Outline refused to create the group {targets_1_id}}}"
+
+  roster.outline_member.added:
+    summary: A person was added to an Outline group the controller manages.
+    operation: create
+    categories: [account_lifecycle]
+    category: activity
+    target_types: [outline_workspace, outline_group, outline_user]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/outline-change.json
+    message:
+      en: "{outcome, select, success {{subject} was added to the Outline group {targets_1_id}} other {Outline refused to add {subject} to the group {targets_1_id}}}"
+
+  roster.outline_member.removed:
+    summary: A person was removed from an Outline group the controller manages.
+    operation: remove
+    categories: [account_lifecycle]
+    category: activity
+    target_types: [outline_workspace, outline_group, outline_user]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/outline-change.json
+    message:
+      en: "{outcome, select, success {{subject} was removed from the Outline group {targets_1_id}} other {Outline refused to remove {subject} from the group {targets_1_id}}}"
+
+  roster.outline_role.changed:
+    summary: An Outline account's workspace role was changed.
+    operation: modify
+    categories: [account_lifecycle, privileged_access]
+    category: security
+    target_types: [outline_workspace, outline_user]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/outline-change.json
+    message:
+      en: "{outcome, select, success {{subject}'s Outline role in {targets_0_id} was changed to {data_role}} other {Outline refused to change {subject}'s role in {targets_0_id}}}"
+
+  roster.outline_collection.created:
+    summary: The Outline controller created a collection the policy binds.
+    operation: create
+    categories: [configuration_change]
+    category: activity
+    target_types: [outline_workspace, outline_collection]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/outline-change.json
+    message:
+      en: "{outcome, select, success {the Outline collection {targets_1_id} was created} other {Outline refused to create the collection {targets_1_id}}}"
+
+  roster.outline_collection.adopted:
+    summary: An existing Outline collection came under the controller, recorded once.
+    operation: modify
+    categories: [configuration_change]
+    category: activity
+    target_types: [outline_workspace, outline_collection]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/outline-change.json
+    message:
+      en: "the Outline collection {targets_1_id} is managed from the policy"
+
+  roster.outline_collection.granted:
+    summary: A group was granted a permission on an Outline collection, or its permission changed.
+    operation: modify
+    categories: [privileged_access]
+    category: security
+    target_types: [outline_workspace, outline_group, outline_collection]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/outline-change.json
+    message:
+      en: "{outcome, select, success {{targets_1_id} was granted {data_permission} on {targets_2_id}} other {Outline refused to grant {targets_1_id} on {targets_2_id}}}"
+
+  roster.outline_collection.revoked:
+    summary: A group's grant the policy does not name was removed from a strict Outline collection.
+    operation: remove
+    categories: [privileged_access]
+    category: security
+    target_types: [outline_workspace, outline_group, outline_collection]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/outline-change.json
+    message:
+      en: "{outcome, select, success {the grant of {targets_1_id} on {targets_2_id} was removed} other {Outline refused to remove the grant of {targets_1_id} on {targets_2_id}}}"
+
+  roster.outline_collection.member_removed:
+    summary: A direct member was removed from a strict Outline collection.
+    operation: remove
+    categories: [privileged_access]
+    category: security
+    target_types: [outline_workspace, outline_collection, outline_user]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/outline-change.json
+    message:
+      en: "{outcome, select, success {{subject} was removed from {targets_1_id}} other {Outline refused to remove {subject} from {targets_1_id}}}"
+
+  roster.outline_user.suspended:
+    summary: A leaver's Outline account was suspended.
+    operation: modify
+    categories: [account_lifecycle]
+    category: security
+    target_types: [outline_workspace, outline_user]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/outline-change.json
+    message:
+      en: "{outcome, select, success {{subject} was suspended in {targets_0_id}: {data_reason}} other {Outline refused to suspend {subject} in {targets_0_id}}}"
+
+  roster.outline_user.activated:
+    summary: A suspended Outline account the directory has back was reactivated.
+    operation: modify
+    categories: [account_lifecycle]
+    category: security
+    target_types: [outline_workspace, outline_user]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/outline-change.json
+    message:
+      en: "{outcome, select, success {{subject} was reactivated in {targets_0_id}} other {Outline refused to reactivate {subject} in {targets_0_id}}}"
+
+  roster.outline_action.held:
+    summary: A change to an Outline workspace is held, and needs an operator.
+    operation: modify
+    categories: [account_lifecycle]
+    category: activity
+    target_types: [outline_workspace, outline_group, outline_collection, outline_user]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/outline-action-held.json
+    message:
+      en: "a change to {targets_0_id} is held: {outcome_reason}"
+
+  roster.outline_breaker.tripped:
+    summary: A set of Outline removals, demotions or suspensions past its limit was held until an operator confirms it.
+    operation: modify
+    categories: [privileged_access, account_lifecycle]
+    category: security
+    target_types: [outline_workspace]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/outline-breaker.json
+    message:
+      en: "a breaker of {targets_0_id} held {data_affected} changes: {outcome_reason}"
+
+  roster.outline_breaker.confirmed:
+    summary: An operator confirmed a set of Outline changes a breaker held.
+    operation: modify
+    categories: [privileged_access, account_lifecycle]
+    category: security
+    target_types: [outline_workspace]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/outline-breaker.json
+    message:
+      en: "{actor} confirmed {data_affected} held changes in {targets_0_id}"

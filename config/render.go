@@ -410,7 +410,7 @@ func (in *Installation) adapters() (map[string]internal.AdapterChoice, error) {
 // serviceControllers is the service document's `controllers`: each section that
 // is present is a controller that is on.
 func (in *Installation) serviceControllers() *internal.Controllers {
-	if in.Controllers == nil || (in.Controllers.GitHub == nil && in.Controllers.Slack == nil) {
+	if in.Controllers == nil || (in.Controllers.GitHub == nil && in.Controllers.Slack == nil && in.Controllers.Outline == nil) {
 		return nil
 	}
 	out := &internal.Controllers{}
@@ -421,6 +421,10 @@ func (in *Installation) serviceControllers() *internal.Controllers {
 	if g := in.Controllers.Slack; g != nil {
 		c := copyOf(&g.SlackController)
 		out.Slack = c
+	}
+	if g := in.Controllers.Outline; g != nil {
+		c := copyOf(&g.OutlineController)
+		out.Outline = c
 	}
 	return out
 }
@@ -464,7 +468,10 @@ func (in *Installation) policyDocument() (*internal.PolicyDocument, error) {
 		if c.Slack != nil && len(c.Slack.EnabledWorkspaces) > 0 {
 			pc.Slack = &internal.ControllersSlack{EnabledWorkspaces: sortedSet(c.Slack.EnabledWorkspaces)}
 		}
-		if pc.GitHub != nil || pc.Slack != nil {
+		if c.Outline != nil && len(c.Outline.EnabledWorkspaces) > 0 {
+			pc.Outline = &internal.ControllersOutline{EnabledWorkspaces: sortedSet(c.Outline.EnabledWorkspaces)}
+		}
+		if pc.GitHub != nil || pc.Slack != nil || pc.Outline != nil {
 			doc.Controllers = pc
 		}
 	}

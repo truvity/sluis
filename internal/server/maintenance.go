@@ -57,6 +57,10 @@ func rpcModule(procedure string) port.Module {
 	case "BackupService":
 		// Reads only; mapped so that a write added later is held by its own flag.
 		return port.ModuleBackup
+	case "OutlineService":
+		// The Outline controller's records are the issuer's until it has a
+		// function of its own (docs/decisions/0077).
+		return port.ModuleOIDC
 	}
 	// Settings and access are the issuer's own and have no write: the policy in
 	// force and who holds what.

@@ -572,6 +572,23 @@
           },
           "type": "object"
         },
+        "outline": {
+          "additionalProperties": false,
+          "description": "The Outline controller: makes each Outline workspace's groups, roles and collections match the policy's outline table (docs/reference/sluis/outline.md). It runs in this process, and on Lambda in the issuer's function, and asks the console in it directly. It needs a storage adapter other than `legacy`: the workspaces' connections are on the State port.",
+          "properties": {
+            "interval": {
+              "$ref": "#/$defs/duration",
+              "default": "2m",
+              "description": "How long between passes. Positive. Short, because a person signing in for the first time sees nothing but their own documents until the next pass."
+            },
+            "shareScan": {
+              "$ref": "#/$defs/duration",
+              "default": "1h",
+              "description": "How often the single-document shares in the collections that name a directory are read and reported. Each document is two calls to Outline."
+            }
+          },
+          "type": "object"
+        },
         "slack": {
           "additionalProperties": false,
           "description": "The Slack controller: makes each Slack workspace's user groups match the policy's slack table.",

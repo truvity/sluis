@@ -156,8 +156,9 @@ type (
 	// PolicyControllers is what each controller may change. Everything else
 	// the policy binds is derived and reported, and left alone.
 	PolicyControllers struct {
-		GitHub *ControllersGitHub `yaml:"github,omitempty"`
-		Slack  *ControllersSlack  `yaml:"slack,omitempty"`
+		GitHub  *ControllersGitHub  `yaml:"github,omitempty"`
+		Slack   *ControllersSlack   `yaml:"slack,omitempty"`
+		Outline *ControllersOutline `yaml:"outline,omitempty"`
 	}
 
 	// ControllersGitHub is what the GitHub controller may change.
@@ -181,6 +182,14 @@ type (
 	ControllersSlack struct {
 		// EnabledWorkspaces are the workspaces it changes, by the policy's
 		// key. Each must be declared by the policy's slack table.
+		EnabledWorkspaces []string `yaml:"enabledWorkspaces,omitempty"`
+	}
+
+	// ControllersOutline is what the Outline controller may change.
+	ControllersOutline struct {
+		// EnabledWorkspaces are the workspaces it changes, by the policy's
+		// key. Each must be declared by the policy's outline table. Every
+		// other declared workspace is a dry run.
 		EnabledWorkspaces []string `yaml:"enabledWorkspaces,omitempty"`
 	}
 )
@@ -409,6 +418,14 @@ func (d *PolicyDocument) EnabledWorkspaces() []string {
 	return d.Controllers.Slack.EnabledWorkspaces
 }
 
+// EnabledOutlineWorkspaces are the workspaces the Outline controller changes.
+func (d *PolicyDocument) EnabledOutlineWorkspaces() []string {
+	if d == nil || d.Controllers == nil || d.Controllers.Outline == nil {
+		return nil
+	}
+	return d.Controllers.Outline.EnabledWorkspaces
+}
+
 // The algorithms an AWS account's outbound identity tokens are signed with.
 const (
 	AWSAlgES384 = "ES384"
@@ -486,6 +503,11 @@ func (d *PolicyDocument) validateControllers() []error {
 	for _, ws := range d.EnabledWorkspaces() {
 		if _, declared := d.Policy.Slack.Workspaces[ws]; !declared {
 			errs = append(errs, fmt.Errorf("controllers.slack.enabledWorkspaces names %s, which the policy's slack table does not declare", ws))
+		}
+	}
+	for _, ws := range d.EnabledOutlineWorkspaces() {
+		if _, declared := d.Policy.Outline.Workspaces[ws]; !declared {
+			errs = append(errs, fmt.Errorf("controllers.outline.enabledWorkspaces names %s, which the policy's outline table does not declare", ws))
 		}
 	}
 	return errs
