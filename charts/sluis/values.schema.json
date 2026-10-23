@@ -2475,6 +2475,21 @@
               },
               "type": "object"
             },
+            "outline": {
+              "additionalProperties": false,
+              "description": "The Outline controller.",
+              "properties": {
+                "enabledWorkspaces": {
+                  "description": "The workspaces it changes, by key. Each must be declared by the outline table. The rest are dry runs.",
+                  "items": {
+                    "pattern": "^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$",
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              },
+              "type": "object"
+            },
             "slack": {
               "additionalProperties": false,
               "description": "The Slack controller.",
@@ -3015,6 +3030,104 @@
             "description": "A lifetime."
           },
           "description": "How long a token lives, by group, and `default`. The shortest across a caller's groups wins.",
+          "type": "object"
+        },
+        "outline": {
+          "additionalProperties": false,
+          "description": "Outline workspaces: the admin role and the collections, bound to internal groups (docs/reference/sluis/outline.md). The URL and the API key are the console's connection record, never policy.",
+          "properties": {
+            "workspaces": {
+              "additionalProperties": {
+                "additionalProperties": false,
+                "description": "A workspace.",
+                "properties": {
+                  "client": {
+                    "description": "The sluis client the workspace signs in through. An account that reaches none of its required groups is suspended. Unset, an account must hold a group the workspace binds.",
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "collections": {
+                    "additionalProperties": {
+                      "additionalProperties": false,
+                      "description": "A collection's binding.",
+                      "properties": {
+                        "admin": {
+                          "description": "The internal groups granted `admin` on the collection. A group at two levels takes the higher.",
+                          "items": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "adopt": {
+                          "description": "The id of an existing collection to adopt: for a renamed one, or when two carry the name.",
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "directory": {
+                          "description": "The connected directory, by workspace id or primary domain, that every bound group's members must come from. A collection whose groups reach outside it is held.",
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "mode": {
+                          "description": "`extend` (the default) only adds grants; `strict` also removes the group grants and direct members the policy does not name.",
+                          "enum": [
+                            "extend",
+                            "strict"
+                          ]
+                        },
+                        "read": {
+                          "description": "The internal groups granted `read` on the collection. A group at two levels takes the higher.",
+                          "items": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "read_write": {
+                          "description": "The internal groups granted `read_write` on the collection. A group at two levels takes the higher.",
+                          "items": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "description": "Each collection, by name as Outline spells it.",
+                    "type": "object"
+                  },
+                  "ignore": {
+                    "description": "Addresses never demoted, removed or suspended: the API key's owner among them. Joined across files.",
+                    "items": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "roles": {
+                    "additionalProperties": false,
+                    "description": "The workspace roles.",
+                    "properties": {
+                      "admin": {
+                        "description": "The internal groups whose holders are workspace admins. Every other managed account is a member.",
+                        "items": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "type": "array"
+                      }
+                    },
+                    "type": "object"
+                  }
+                },
+                "type": "object"
+              },
+              "description": "Each workspace, by the installation's key (the rules of a Slack workspace key).",
+              "type": "object"
+            }
+          },
           "type": "object"
         },
         "people": {
@@ -3795,6 +3908,23 @@
                   "description": "This pod's projected ServiceAccount token, presented to the console and read afresh on every call.",
                   "minLength": 1,
                   "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "outline": {
+              "additionalProperties": false,
+              "description": "The Outline controller: makes each Outline workspace's groups, roles and collections match the policy's outline table (docs/reference/sluis/outline.md). It runs in this process, and on Lambda in the issuer's function, and asks the console in it directly. It needs a storage adapter other than `legacy`: the workspaces' connections are on the State port.",
+              "properties": {
+                "interval": {
+                  "$ref": "#/definitions/config-sluis.duration",
+                  "default": "2m",
+                  "description": "How long between passes. Positive. Short, because a person signing in for the first time sees nothing but their own documents until the next pass."
+                },
+                "shareScan": {
+                  "$ref": "#/definitions/config-sluis.duration",
+                  "default": "1h",
+                  "description": "How often the single-document shares in the collections that name a directory are read and reported. Each document is two calls to Outline."
                 }
               },
               "type": "object"

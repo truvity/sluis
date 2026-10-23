@@ -1,0 +1,19 @@
+{
+  "$id": "https://schemas.example/access-roster/v1/outline-workspace.json",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "url": {
+      "type": "string",
+      "description": "The workspace's URL, its origin.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none"
+    },
+    "team": {
+      "type": "string",
+      "description": "The Outline team the key belongs to, by id.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none"
+    }
+  }
+}

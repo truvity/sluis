@@ -119,6 +119,44 @@ var policyFields = map[string]mergeRule{
 		declare: "version: 1\nslack: { workspaces: { acme: { channels: { ops: { from: [g] } } } } }\n",
 		twice:   clash,
 	},
+	"Outline": {
+		rule:    "field by field: see outlineFields",
+		declare: "version: 1\noutline: { workspaces: { wiki: { collections: { General: { read: [g] } } } } }\n",
+		twice:   clash,
+	},
+}
+
+// outlineFields is the `outline` block one level down: its one table.
+var outlineFields = map[string]mergeRule{
+	"Workspaces": {
+		rule:    "per workspace, field by field: see outlineWorkspaceFields",
+		declare: "version: 1\noutline: { workspaces: { wiki: { collections: { General: { read: [g] } } } } }\n",
+		twice:   clash,
+	},
+}
+
+// outlineWorkspaceFields is an Outline workspace's rule per field.
+var outlineWorkspaceFields = map[string]mergeRule{
+	"Client": {
+		rule:    "one file per workspace's client; a second is a clash",
+		declare: "version: 1\noutline: { workspaces: { wiki: { client: wiki } } }\n",
+		twice:   clash,
+	},
+	"Roles": {
+		rule:    "one file per workspace's admin role; a second is a clash",
+		declare: "version: 1\noutline: { workspaces: { wiki: { roles: { admin: [g] } } } }\n",
+		twice:   clash,
+	},
+	"Ignore": {
+		rule:    "additive: every file's entries, each once",
+		declare: "version: 1\noutline: { workspaces: { wiki: { ignore: [someone@a.example] } } }\n",
+		twice:   same,
+	},
+	"Collections": {
+		rule:    "per collection; a collection in two files is a clash",
+		declare: "version: 1\noutline: { workspaces: { wiki: { collections: { General: { read: [g] } } } } }\n",
+		twice:   clash,
+	},
 }
 
 // slackFields is the `slack` block one level down: its one table.
@@ -191,6 +229,18 @@ func TestMergeCoversEveryField(t *testing.T) {
 			name: "SlackWorkspace", typ: reflect.TypeFor[policy.SlackWorkspace](), rules: slackWorkspaceFields,
 			field: func(p policy.Policy, name string) reflect.Value {
 				return reflect.ValueOf(p.Slack.Workspaces["acme"]).FieldByName(name)
+			},
+		},
+		{
+			name: "Outline", typ: reflect.TypeFor[policy.Outline](), rules: outlineFields,
+			field: func(p policy.Policy, name string) reflect.Value {
+				return reflect.ValueOf(p.Outline).FieldByName(name)
+			},
+		},
+		{
+			name: "OutlineWorkspace", typ: reflect.TypeFor[policy.OutlineWorkspace](), rules: outlineWorkspaceFields,
+			field: func(p policy.Policy, name string) reflect.Value {
+				return reflect.ValueOf(p.Outline.Workspaces["wiki"]).FieldByName(name)
 			},
 		},
 	} {
@@ -394,6 +444,15 @@ slack:
 		`exchange_limits:
   - match: { email: ops@a.example }
     clients: [a-console]
+`,
+		`outline:
+  workspaces:
+    wiki:
+      client: an-editor
+      roles: { admin: [devel:k8s:admin] }
+      ignore: [owner@a.example]
+      collections:
+        General: { mode: strict, read_write: [devel:k8s:viewer], admin: [devel:k8s:admin] }
 `,
 	}
 

@@ -64,6 +64,15 @@ slack:
     example:
       channels:
         ops: {private: true, from: [all:access-roster:operator]}
+outline:
+  workspaces:
+    wiki:
+      client: access-console
+      roles: {admin: [all:access-roster:operator]}
+      ignore: [key.owner@example.com]
+      collections:
+        General: {mode: strict, read_write: [all:access-roster:viewer], admin: [all:access-roster:operator]}
+        Shop: {mode: strict, directory: example.com, read: [prod:shop:deployer]}
 exchange_limits:
   - match: {aws: {account: "111122223333", role: sluis-github, path: /}}
     clients: [access-console]
@@ -107,6 +116,7 @@ apps:
 controllers:
   github: {enabledOrgs: [example-org], appRefs: {example-org: renovate}}
   slack: {enabledWorkspaces: [example]}
+  outline: {enabledWorkspaces: [wiki]}
 cloudflare:
   grants:
     - group: "all:access-roster:operator"

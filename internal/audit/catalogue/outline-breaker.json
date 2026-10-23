@@ -1,0 +1,31 @@
+{
+  "$id": "https://schemas.example/access-roster/v1/outline-breaker.json",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "scope": {
+      "type": "string",
+      "description": "The breaker: admins, suspensions, group:<name> or collection:<name>.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none"
+    },
+    "fingerprint": {
+      "type": "string",
+      "description": "The fingerprint of the held set.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none"
+    },
+    "affected": {
+      "type": "integer",
+      "description": "How many changes the set holds.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none"
+    },
+    "total": {
+      "type": "integer",
+      "description": "How many the breaker's scope has.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none"
+    }
+  }
+}

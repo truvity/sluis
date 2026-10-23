@@ -214,6 +214,12 @@ func (in *Installation) issuerOf(svc *internal.Sluis) *internal.Sluis {
 	}
 	s.GitHub, s.Slack, s.Google = route(ModuleGitHub), route(ModuleSlack), route(ModuleGoogle)
 	s.Controllers = nil
+	// The Outline controller is the issuer's until it has a function of its own
+	// (docs/decisions/0077), and asks the console in that process.
+	if svc.Controllers != nil && svc.Controllers.Outline != nil {
+		o := *svc.Controllers.Outline
+		s.Controllers = &internal.Controllers{Outline: &o}
+	}
 	s.Directory = nil
 	s.Cloudflare = nil
 	if in.Cloudflare.Declared() {
