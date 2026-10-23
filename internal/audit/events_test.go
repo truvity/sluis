@@ -37,6 +37,10 @@ func every() []*record.Record {
 	sharedChannel := audit.SlackSharedChannel{Name: "partners", Host: "acme", With: []string{"globex", "initech"},
 		Sources: []string{"engineers@acme.example"}, Members: []string{"a.person@example.com"},
 		PerSide: map[string]bool{"acme": true, "globex": false, "initech": true}}
+	ow := audit.OutlineWorkspace{Key: "wiki", URL: "https://wiki.example.com", KeyUser: "Key.Owner@example.com", Team: "t-1"}
+	oc := audit.OutlineChange{Workspace: "wiki", Group: "all:wiki:acme", UserID: "u-1", Person: "a.person@example.com", Reason: "holds all:wiki:acme",
+		Groups: []string{"all:wiki:acme"}}
+	ob := audit.OutlineBreaker{Workspace: "wiki", Scope: "suspensions", Fingerprint: "f00d", Reason: "more than 3", Affected: 4, Total: 10}
 	consoleChannel := audit.SlackConsoleChannel{Workspace: "acme", Name: "platform", Private: true, Mode: "strict",
 		Sources: []string{"engineers@acme.example", "ops@acme.example"}, Members: []string{"A.Person@Example.com"}}
 	sa := audit.SlackCatalogueApp{ID: "sync", App: "A0123", Workspace: "acme", Team: "T0123", Scopes: []string{"channels:read", "users:read"}}
@@ -65,6 +69,23 @@ func every() []*record.Record {
 		audit.SlackActionHeld("acme", nil, nil, "remove", "the breaker tripped"),
 		audit.SlackRemovalsConfirmed(person, "acme", "", "f00d", 3),
 		audit.SlackRemovalsConfirmed(person, "acme", "platform", "f00d", 1),
+		audit.OutlineWorkspaceConnected(person, ow, audit.Succeeded()),
+		audit.OutlineWorkspaceConnected(person, ow, audit.Denied("the key's user is not an admin")),
+		audit.OutlineWorkspaceDisconnected(person, ow),
+		audit.OutlineGroupCreated(audit.OutlineChange{Workspace: "wiki", Group: "all:wiki:acme", Reason: "bound by the policy"}, audit.Succeeded()),
+		audit.OutlineMemberAdded(oc, audit.Succeeded()),
+		audit.OutlineMemberRemoved(oc, audit.Failed("refused")),
+		audit.OutlineRoleChanged(audit.OutlineChange{Workspace: "wiki", UserID: "u-1", Person: "a.person@example.com", Role: "admin", From: "member"}, audit.Succeeded()),
+		audit.OutlineCollectionCreated(audit.OutlineChange{Workspace: "wiki", Collection: "General"}, audit.Succeeded()),
+		audit.OutlineCollectionAdopted(audit.OutlineChange{Workspace: "wiki", Collection: "General"}),
+		audit.OutlineCollectionGranted(audit.OutlineChange{Workspace: "wiki", Group: "all:wiki:acme", Collection: "General", Permission: "read_write"}, audit.Succeeded()),
+		audit.OutlineCollectionRevoked(audit.OutlineChange{Workspace: "wiki", Group: "by-hand", Collection: "General", Permission: "read"}, audit.Succeeded()),
+		audit.OutlineCollectionMemberRemoved(audit.OutlineChange{Workspace: "wiki", Collection: "General", UserID: "u-2", Person: "b@example.org"}, audit.Succeeded()),
+		audit.OutlineUserSuspended(audit.OutlineChange{Workspace: "wiki", UserID: "u-3", Person: "c@example.com", Reason: "the directory no longer has the account"}, audit.Succeeded()),
+		audit.OutlineUserActivated(audit.OutlineChange{Workspace: "wiki", UserID: "u-3", Person: "c@example.com"}, audit.Succeeded()),
+		audit.OutlineActionHeld(audit.OutlineChange{Workspace: "wiki", Collection: "Acme", Reason: "the directory acme.example is not connected"}, "collection"),
+		audit.OutlineBreakerTripped(ob),
+		audit.OutlineBreakerConfirmed(person, ob),
 		audit.SlackLeaverReported("acme", "gone@example.com", "U0999", "no longer in the directory"),
 		audit.SignedIn(person, "console", "google", audit.Succeeded()),
 		audit.SignedInSession(person, "mcp-host", "google", "agent", time.Date(2026, 11, 6, 9, 0, 0, 0, time.UTC), audit.Succeeded()),

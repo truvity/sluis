@@ -31,6 +31,7 @@ type named struct {
 	directoryrosterv1connect.UnimplementedSlackServiceHandler
 	directoryrosterv1connect.UnimplementedCloudflareServiceHandler
 	directoryrosterv1connect.UnimplementedBackupServiceHandler
+	directoryrosterv1connect.UnimplementedOutlineServiceHandler
 }
 
 func (named) ListHolders(

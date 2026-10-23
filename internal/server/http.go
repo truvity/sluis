@@ -1404,6 +1404,7 @@ type rpcHandlers interface {
 	directoryrosterv1connect.SlackServiceHandler
 	directoryrosterv1connect.CloudflareServiceHandler
 	directoryrosterv1connect.BackupServiceHandler
+	directoryrosterv1connect.OutlineServiceHandler
 }
 
 // registerRPC serves the operator services on mux under both their names:
@@ -1423,6 +1424,7 @@ func registerRPC(mux *http.ServeMux, h rpcHandlers, extra ...connect.ServerInter
 		func(s *connect.Server) { directoryrosterv1connect.RegisterSlackServiceHandler(s, h) },
 		func(s *connect.Server) { directoryrosterv1connect.RegisterCloudflareServiceHandler(s, h) },
 		func(s *connect.Server) { directoryrosterv1connect.RegisterBackupServiceHandler(s, h) },
+		func(s *connect.Server) { directoryrosterv1connect.RegisterOutlineServiceHandler(s, h) },
 	} {
 		serveRPC(mux, register, interceptors)
 	}

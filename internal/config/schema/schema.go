@@ -420,11 +420,21 @@ func sluisSchema() m {
 		"slack": obj("The Slack controller: makes each Slack workspace's user groups match the policy's slack table.", controllerProps(
 			"/var/run/secrets/slack-roster/token", "/var/run/slack-roster/workspaces",
 			"credentialsDir", "One file per connected workspace: the app's credentials and its bot token. Read only with `ports.adapter: legacy`; with another adapter they are on the State port.", "/var/run/slack-roster/credentials")),
+		"outline": obj("The Outline controller: makes each Outline workspace's groups, roles and collections match the policy's outline table (docs/reference/sluis/outline.md). It runs in this process, and on Lambda in the issuer's function, and asks the console in it directly. It needs a storage adapter other than `legacy`: the workspaces' connections are on the State port.", outlineControllerProps()),
 	})
 	s["$id"] = ID("sluis", apiVersionOf(props))
 	s["title"] = "sluis"
 	s["description"] = "The configuration of `sluis serve`, the one process of sluis: the issuer, the console and the directory hub and, under `controllers`, the GitHub and Slack controllers. On Kubernetes it is one Deployment; on AWS Lambda it is one function." + secretsNote
 	return s
+}
+
+// outlineControllerProps is the Outline controller's own section: its two
+// intervals. It asks the console in its own process, so it names none.
+func outlineControllerProps() m {
+	return m{
+		"interval":  duration("How long between passes. Positive. Short, because a person signing in for the first time sees nothing but their own documents until the next pass.", "2m"),
+		"shareScan": duration("How often the single-document shares in the collections that name a directory are read and reported. Each document is two calls to Outline.", "1h"),
+	}
 }
 
 // controllerProps is what is a controller's own in the one document.

@@ -84,6 +84,10 @@ controllers:
     consoleURL: http://sluis.example.svc:8080/console
     interval: 15m
     enabledWorkspaces: [example]
+  outline:
+    interval: 2m
+    shareScan: 1h
+    enabledWorkspaces: [wiki]
 access:
   groups:
     all:access-roster:operator:
@@ -101,6 +105,13 @@ access:
       example:
         channels:
           ops: {private: true, from: [all:access-roster:operator]}
+  outline:
+    workspaces:
+      wiki:
+        roles: {admin: [all:access-roster:operator]}
+        ignore: [key.owner@example.com]
+        collections:
+          General: {mode: strict, read_write: [all:access-roster:operator]}
 cloudflare:
   remote:
     function: sluis-cloudflare

@@ -228,6 +228,20 @@ func (o OIDCInternal) Client(id string) state.Value[[]byte] {
 	return state.NewValue(o.s, "clients/"+segment(id), state.Raw())
 }
 
+// OutlineCredential is one write of an Outline workspace's API key:
+// oidc/outline/<workspace>/<ref>. The issuer's function hosts the Outline
+// controller until the controller has a function of its own
+// (docs/decisions/0077), so the key is the oidc module's.
+func (o OIDCInternal) OutlineCredential(workspace, ref string) state.Value[[]byte] {
+	return state.NewValue(o.s, "outline/"+segment(workspace)+"/"+segment(ref), state.Raw())
+}
+
+// DeleteOutlineCredential removes one write of an Outline workspace's API key.
+// An absent one is not an error.
+func (o OIDCInternal) DeleteOutlineCredential(ctx context.Context, workspace, ref string) error {
+	return deleteName(ctx, o.s, "outline/"+segment(workspace)+"/"+segment(ref))
+}
+
 // GitHubInternal is internal/github.
 type GitHubInternal struct{ view }
 

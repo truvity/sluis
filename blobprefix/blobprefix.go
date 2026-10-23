@@ -14,6 +14,9 @@ const (
 	GitHub = "github/"
 	Slack  = "slack/"
 	Google = "google/"
+	// OIDC is the issuer's: it hosts the Outline controller until that has a
+	// function of its own (docs/decisions/0077).
+	OIDC = "oidc/"
 )
 
 // The prefixes below a module's root.
@@ -24,6 +27,9 @@ const (
 	// SlackReports holds what the Slack controller last reported, one object per
 	// workspace.
 	SlackReports = Slack + "reports/"
+	// OutlineReports holds what the Outline controller last reported, one
+	// object per workspace.
+	OutlineReports = OIDC + "reports/outline/"
 	// GoogleCache holds the hub's directory snapshots, one object per workspace.
 	GoogleCache = Google + "cache/"
 )
@@ -48,6 +54,7 @@ func Used() map[string][]string {
 		"github": {GitHubReports},
 		"slack":  {SlackReports},
 		"google": {GoogleCache},
+		"oidc":   {OutlineReports},
 	}
 }
 

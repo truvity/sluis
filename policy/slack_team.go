@@ -48,7 +48,7 @@ func refuseRemovedKeys(data []byte) error {
 		return nil // the strict decode reports a malformed file
 	}
 	top := doc.Content[0]
-	check := func(table *yaml.Node, section string, removed map[string]string) error {
+	check := func(table *yaml.Node, section, verb string, removed map[string]string) error {
 		if table == nil || table.Kind != yaml.MappingNode {
 			return nil
 		}
@@ -59,8 +59,8 @@ func refuseRemovedKeys(data []byte) error {
 			}
 			for j := 0; j+1 < len(entry.Content); j += 2 {
 				if why, gone := removed[entry.Content[j].Value]; gone {
-					return fmt.Errorf("%s %s: %q is no longer a policy key: %s",
-						section, table.Content[i].Value, entry.Content[j].Value, why)
+					return fmt.Errorf("%s %s: %q %s a policy key: %s",
+						section, table.Content[i].Value, entry.Content[j].Value, verb, why)
 				}
 			}
 		}
@@ -74,10 +74,23 @@ func refuseRemovedKeys(data []byte) error {
 	githubKeys := map[string]string{
 		"owner": "the owning directory is chosen on the console when the organisation is connected; delete the key",
 	}
-	if err := check(mapValue(mapValue(top, "slack"), "workspaces"), "slack workspace", slackKeys); err != nil {
+	if err := check(mapValue(mapValue(top, "slack"), "workspaces"), "slack workspace", "is no longer", slackKeys); err != nil {
 		return err
 	}
-	return check(mapValue(top, "github"), "github organisation", githubKeys)
+	if err := check(mapValue(mapValue(top, "outline"), "workspaces"), "outline workspace", "is not", outlineConsoleKeys); err != nil {
+		return err
+	}
+	return check(mapValue(top, "github"), "github organisation", "is no longer", githubKeys)
+}
+
+// outlineConsoleKeys are what an Outline workspace's connection record on the
+// console holds and the policy never does (docs/decisions/0018): where the
+// workspace is, the API key the controller acts with, and whose it is.
+var outlineConsoleKeys = map[string]string{
+	"url":     "it lives on the console, in the workspace's connection record; delete the key",
+	"token":   "the API key lives on the console, in the workspace's connection record, and only the controller reads it; delete the key",
+	"api_key": "the API key lives on the console, in the workspace's connection record, and only the controller reads it; delete the key",
+	"owner":   "it lives on the console, in the workspace's connection record; delete the key",
 }
 
 // mapValue is the value under key in a mapping node, or nil.

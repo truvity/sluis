@@ -518,7 +518,10 @@ func (p *Policy) mergeLayer(other Policy, from string) error {
 			p.ExchangeLimits = append(p.ExchangeLimits, limit)
 		}
 	}
-	return p.mergeSlack(other.Slack, from)
+	if err := p.mergeSlack(other.Slack, from); err != nil {
+		return err
+	}
+	return p.mergeOutline(other.Outline, from)
 }
 
 // mergeTable adds every entry of from to *into and refuses a key already

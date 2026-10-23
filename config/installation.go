@@ -253,8 +253,9 @@ func (a Apps) MarshalJSON() ([]byte, error) { return yamlToJSON(a.PolicyApps) }
 
 // Controllers are the controllers the installation runs. A nil one is off.
 type Controllers struct {
-	GitHub *GitHubController `json:"github,omitempty"`
-	Slack  *SlackController  `json:"slack,omitempty"`
+	GitHub  *GitHubController  `json:"github,omitempty"`
+	Slack   *SlackController   `json:"slack,omitempty"`
+	Outline *OutlineController `json:"outline,omitempty"`
 }
 
 // GitHubController is the GitHub controller: its own keys go to the service
@@ -276,6 +277,13 @@ type GitHubController struct {
 // SlackController is [GitHubController] for Slack.
 type SlackController struct {
 	internal.SlackController
+	EnabledWorkspaces []string `json:"enabledWorkspaces,omitempty"`
+}
+
+// OutlineController is [GitHubController] for Outline. It runs in the
+// issuer's process and function.
+type OutlineController struct {
+	internal.OutlineController
 	EnabledWorkspaces []string `json:"enabledWorkspaces,omitempty"`
 }
 

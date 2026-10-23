@@ -1,0 +1,42 @@
+{
+  "$id": "https://schemas.example/access-roster/v1/outline-change.json",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "reason": {
+      "type": "string",
+      "description": "Why the change was made.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none"
+    },
+    "groups": {
+      "type": "array",
+      "description": "The internal groups the change rests on.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none",
+      "items": {
+        "type": "string",
+        "x-audit-class": "shared",
+        "x-audit-pii": "none"
+      }
+    },
+    "permission": {
+      "type": "string",
+      "description": "A grant's level: read, read_write or admin.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none"
+    },
+    "role": {
+      "type": "string",
+      "description": "A role change's new role.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none"
+    },
+    "from": {
+      "type": "string",
+      "description": "A role change's role before.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none"
+    }
+  }
+}
