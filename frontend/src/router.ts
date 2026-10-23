@@ -137,6 +137,9 @@ export const paths = {
   slackDiscovered: (filter?: { workspace?: string; kind?: string; visibility?: string; q?: string; sort?: string }) => withQuery("/slack/discovered", filter),
   // The Slack Apps the deployment declares: create, install, reinstall.
   slackApps: () => "/slack/apps",
+  // The Outline workspaces the policy declares: connection, the last pass,
+  // and who and what in each is not yet as the policy says.
+  outline: () => "/outline",
   // Cloudflare tokens and R2 credentials: what a person may ask for, and
   // what an operator watches, rotates and revokes.
   cloudflare: () => "/cloudflare",

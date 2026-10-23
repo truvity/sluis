@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -64,7 +65,7 @@ func (c *Console) outlineReport(ctx context.Context, workspace string) (status.W
 	}
 	reports, err := c.deps.OutlineStatus.Reports(ctx)
 	if err != nil {
-		c.log().WarnContext(ctx, "the Outline controller's reports could not be read", "error", err)
+		c.log().WarnContext(ctx, "the Outline controller's reports could not be read", slog.Any("error", err))
 		return status.Workspace{}, "", false
 	}
 	raw, ok := reports[status.Key(workspace)]
@@ -90,7 +91,8 @@ func (c *Console) GetOutlineStatus(ctx context.Context, _ *directoryrosterv1.Get
 		if err != nil {
 			return nil, connect.NewError(connect.CodeUnavailable, "the Outline connections could not be read").WithCause(err)
 		}
-		for _, r := range list {
+		for i := range list {
+			r := list[i]
 			records[r.Workspace] = r
 		}
 	}

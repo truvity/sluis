@@ -136,7 +136,8 @@ func (d *decider) count() {
 			t.Retrying++
 		}
 	}
-	for _, u := range d.report.Users {
+	for i := range d.report.Users {
+		u := &d.report.Users[i]
 		tally(u.State)
 	}
 	for _, g := range d.report.Groups {
@@ -145,7 +146,8 @@ func (d *decider) count() {
 			tally(m.State)
 		}
 	}
-	for _, c := range d.report.Collections {
+	for i := range d.report.Collections {
+		c := &d.report.Collections[i]
 		tally(c.State)
 		for _, g := range c.Grants {
 			tally(g.State)
@@ -402,7 +404,8 @@ func (d *decider) groups() (creates, members []Action) {
 					m.State, m.Reason = status.StateHeld, why
 				} else {
 					m.State, m.Action, m.Reason = status.StateWillAdd, status.ActionAdd, "holds "+name
-					members = append(members, Action{Kind: status.ActionAdd, Group: name, GroupID: row.ID, UserID: u.ID, Email: u.Email, Reason: m.Reason, Groups: []string{name}})
+					members = append(members, Action{Kind: status.ActionAdd, Group: name, GroupID: row.ID, UserID: u.ID, Email: u.Email,
+						Reason: m.Reason, Groups: []string{name}})
 				}
 			case !in:
 				continue
@@ -626,10 +629,10 @@ func (d *decider) collectionGrants(row *status.Collection, bound policy.OutlineC
 		if g, ok := have[strings.ToLower(group)]; ok && groupID != "" && g.GroupID == groupID {
 			grant.Permission = g.Permission
 		}
-		switch {
-		case grant.Permission == want:
+		switch grant.Permission {
+		case want:
 			grant.State = status.StateOK
-		case grant.Permission == "":
+		case "":
 			grant.State, grant.Action, grant.Reason = status.StateWillAdd, status.ActionGrant, "bound at "+want
 			grants = append(grants, Action{Kind: status.ActionGrant, Collection: row.Name, CollectionID: row.ID, Group: group, GroupID: groupID,
 				Permission: want, Reason: grant.Reason, Groups: []string{group}})
@@ -731,7 +734,8 @@ func (d *decider) findings() {
 		d.report.Reported = append(d.report.Reported, d.shareFindings()...)
 	}
 	byID := map[string]string{}
-	for _, c := range d.report.Collections {
+	for i := range d.report.Collections {
+		c := &d.report.Collections[i]
 		if c.ID != "" {
 			byID[c.ID] = c.Name
 		}
@@ -767,7 +771,8 @@ func ShareFindings(w status.Workspace) []status.Finding {
 func (d *decider) shareFindings() []status.Finding {
 	dirs := map[string]Directory{}
 	names := map[string]string{}
-	for _, c := range d.report.Collections {
+	for i := range d.report.Collections {
+		c := &d.report.Collections[i]
 		bound := d.in.Policy.Collections[c.Name]
 		if c.ID == "" || bound.Directory == "" {
 			continue

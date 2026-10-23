@@ -188,7 +188,17 @@ export type StateKind =
   | "will-invite"
   | "will-remove"
   | "slack-reported"
-  | "slack-ignored";
+  | "slack-ignored"
+  // An Outline workspace: whether the controller acts in it, and where a
+  // person, a group or a grant stands.
+  | "acts"
+  | "connected"
+  | "will-add"
+  | "will-change"
+  | "will-suspend"
+  | "will-activate"
+  // A state a newer controller wrote and this console does not know.
+  | "unrecognised";
 
 const states: Record<StateKind, { label: string; color: "success" | "warning" | "secondary" | "default"; filled?: boolean; title: string }> = {
   live: { label: "live", color: "success", title: "The provider reports this account as active." },
@@ -286,6 +296,13 @@ const states: Record<StateKind, { label: string; color: "success" | "warning" | 
   "will-remove": { label: "will remove", color: "warning", filled: true, title: "In a strict channel and no group the policy binds holds them: the controller removes them." },
   "slack-reported": { label: "reported", color: "secondary", title: "Said and never acted on: a guest, a leaver, or an account nobody can vouch for." },
   "slack-ignored": { label: "ignored", color: "default", title: "On the channel's ignore list: never removed." },
+  acts: { label: "acts", color: "success", title: "The controller makes the changes it derives." },
+  connected: { label: "connected", color: "success", title: "A connection record and an API key are kept for this workspace." },
+  "will-add": { label: "will add", color: "secondary", title: "Belongs and is not there: the controller adds it." },
+  "will-change": { label: "will change", color: "secondary", title: "Differs from what the policy says: the controller changes it." },
+  "will-suspend": { label: "will suspend", color: "warning", filled: true, title: "No longer in the directory: the controller suspends the account." },
+  "will-activate": { label: "will reactivate", color: "secondary", title: "Suspended, and the directory has the person back: the controller reactivates the account." },
+  unrecognised: { label: "unknown", color: "default", title: "A state this console does not know." },
   unreadable: {
     label: "cannot read",
     color: "default",

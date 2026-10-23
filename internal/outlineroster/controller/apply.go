@@ -30,7 +30,8 @@ func (c *Controller) apply(ctx context.Context, client *outlineapi.Client, key s
 	groupIDs, collectionIDs := map[string]string{}, map[string]string{}
 	out := make([]result, 0, len(actions))
 	limited := ""
-	for _, a := range actions {
+	for i := range actions {
+		a := actions[i]
 		r := result{action: a}
 		if a.GroupID == "" && a.Group != "" {
 			a.GroupID = groupIDs[strings.ToLower(a.Group)]
@@ -44,7 +45,7 @@ func (c *Controller) apply(ctx context.Context, client *outlineapi.Client, key s
 		case ctx.Err() != nil:
 			r.skipped = "the tick ended first"
 		default:
-			r.err, r.skipped = c.do(ctx, client, &a, groupIDs, collectionIDs)
+			r.skipped, r.err = c.do(ctx, client, &a, groupIDs, collectionIDs)
 			r.action = a
 			if outlineapi.RateLimited(r.err) {
 				limited = "Outline's rate limit was reached; the next pass tries again"
@@ -55,7 +56,7 @@ func (c *Controller) apply(ctx context.Context, client *outlineapi.Client, key s
 			c.metrics.recordChange(ctx, key, a.Kind, r.err == nil)
 		}
 		if r.err != nil {
-			c.deps.Log.WarnContext(ctx, "Outline refused a change", logattr.SafeString("workspace", key), logattr.SafeString("action", string(a.Kind)),
+			c.deps.Log.WarnContext(ctx, "a change was refused by Outline", logattr.SafeString("workspace", key), logattr.SafeString("action", string(a.Kind)),
 				logattr.SafeError("error", r.err))
 		}
 		out = append(out, r)
@@ -63,8 +64,10 @@ func (c *Controller) apply(ctx context.Context, client *outlineapi.Client, key s
 	return out
 }
 
-// do makes one change.
-func (c *Controller) do(ctx context.Context, client *outlineapi.Client, a *reconcile.Action, groupIDs, collectionIDs map[string]string) (error, string) {
+// do makes one change. skipped says why it was not tried.
+func (c *Controller) do(
+	ctx context.Context, client *outlineapi.Client, a *reconcile.Action, groupIDs, collectionIDs map[string]string,
+) (skipped string, err error) {
 	needGroup := func() string {
 		if a.GroupID == "" {
 			return "the group " + a.Group + " was not created"
@@ -84,38 +87,38 @@ func (c *Controller) do(ctx context.Context, client *outlineapi.Client, a *recon
 			if err == nil {
 				collectionIDs[a.Collection], a.CollectionID = col.ID, col.ID
 			}
-			return err, ""
+			return "", err
 		}
 		g, err := client.CreateGroup(ctx, a.Group, reconcile.ManagedDescription)
 		if err == nil {
 			groupIDs[strings.ToLower(a.Group)], a.GroupID = g.ID, g.ID
 		}
-		return err, ""
+		return "", err
 	case status.ActionAdd:
 		if why := needGroup(); why != "" {
-			return nil, why
+			return why, nil
 		}
-		return client.AddGroupUser(ctx, a.GroupID, a.UserID), ""
+		return "", client.AddGroupUser(ctx, a.GroupID, a.UserID)
 	case status.ActionRemove:
 		if a.Collection != "" {
-			return client.RemoveCollectionUser(ctx, a.CollectionID, a.UserID), ""
+			return "", client.RemoveCollectionUser(ctx, a.CollectionID, a.UserID)
 		}
-		return client.RemoveGroupUser(ctx, a.GroupID, a.UserID), ""
+		return "", client.RemoveGroupUser(ctx, a.GroupID, a.UserID)
 	case status.ActionPromote, status.ActionDemote:
-		return client.UpdateRole(ctx, a.UserID, a.Role), ""
+		return "", client.UpdateRole(ctx, a.UserID, a.Role)
 	case status.ActionGrant:
 		if why := needCollection() + needGroup(); why != "" {
-			return nil, why
+			return why, nil
 		}
-		return client.AddCollectionGroup(ctx, a.CollectionID, a.GroupID, a.Permission), ""
+		return "", client.AddCollectionGroup(ctx, a.CollectionID, a.GroupID, a.Permission)
 	case status.ActionRevoke:
-		return client.RemoveCollectionGroup(ctx, a.CollectionID, a.GroupID), ""
+		return "", client.RemoveCollectionGroup(ctx, a.CollectionID, a.GroupID)
 	case status.ActionSuspend:
-		return client.Suspend(ctx, a.UserID), ""
+		return "", client.Suspend(ctx, a.UserID)
 	case status.ActionActivate:
-		return client.Activate(ctx, a.UserID), ""
+		return "", client.Activate(ctx, a.UserID)
 	}
-	return fmt.Errorf("unknown change %q", a.Kind), ""
+	return "", fmt.Errorf("unknown change %q", a.Kind)
 }
 
 // audit records one change that was tried.
@@ -169,7 +172,8 @@ func (c *Controller) audit(ctx context.Context, key string, r result) {
 // with Outline's words) or not tried.
 func fold(report *status.Workspace, results []result) {
 	report.Tick.Changes = 0
-	for _, r := range results {
+	for i := range results {
+		r := &results[i]
 		state, action, reason := status.StateOK, r.action.Kind, ""
 		switch {
 		case r.skipped != "":
@@ -284,7 +288,8 @@ func (c *Controller) recordOnce(ctx context.Context, key string, report *status.
 	if report.Held != "" {
 		held("workspace", report.Held, audit.OutlineChange{}, "workspace")
 	}
-	for _, u := range report.Users {
+	for i := range report.Users {
+		u := &report.Users[i]
 		if u.State == status.StateHeld {
 			held("user/"+u.ID, u.Reason, audit.OutlineChange{UserID: u.ID, Person: u.Email}, "user")
 		}
@@ -299,7 +304,8 @@ func (c *Controller) recordOnce(ctx context.Context, key string, report *status.
 			}
 		}
 	}
-	for _, col := range report.Collections {
+	for i := range report.Collections {
+		col := &report.Collections[i]
 		if col.State == status.StateHeld {
 			held("collection/"+col.Name, col.Reason, audit.OutlineChange{Collection: col.Name}, "collection")
 		}

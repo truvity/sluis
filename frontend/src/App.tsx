@@ -32,6 +32,7 @@ import ShieldIcon from "@mui/icons-material/Shield";
 import AppsIcon from "@mui/icons-material/Apps";
 import RuleIcon from "@mui/icons-material/Rule";
 import CloudIcon from "@mui/icons-material/Cloud";
+import ArticleIcon from "@mui/icons-material/Article";
 
 import { mounted, personName, whoami, type Me } from "./api";
 import { maintenancePollMs, maintenanceText, type Maintenance } from "./maintenanceModel";
@@ -54,6 +55,7 @@ import { SlackHub } from "./SlackHub";
 import { AuditPage } from "./Audit";
 import { SettingsView } from "./Settings";
 import { CloudflarePage } from "./Cloudflare";
+import { OutlinePage } from "./Outline";
 import { BackupsPage } from "./Backups";
 
 const drawerWidth = 236;
@@ -73,6 +75,7 @@ const icons: Record<string, React.ReactNode> = {
   sessions: <KeyIcon fontSize="small" />,
   github: <GitHubIcon fontSize="small" />,
   slack: <TagIcon fontSize="small" />,
+  outline: <ArticleIcon fontSize="small" />,
   cloudflare: <CloudIcon fontSize="small" />,
   backups: <BackupIcon fontSize="small" />,
   audit: <HistoryIcon fontSize="small" />,
@@ -345,6 +348,8 @@ function PageFor({
       return <GitHubPage section={id} rest={rest} onDone={onDone} />;
     case "slack":
       return <SlackHub section={id} rest={rest} query={query} auditConnected={Boolean(me?.audit)} onDone={onDone} />;
+    case "outline":
+      return <OutlinePage operator={operator} onDone={onDone} />;
     case "cloudflare":
       return <CloudflarePage me={me} operator={operator} onDone={onDone} />;
     case "sessions":

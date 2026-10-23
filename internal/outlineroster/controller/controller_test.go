@@ -299,10 +299,9 @@ func TestTheBreakers(t *testing.T) {
 	t.Run("a group's removals", func(t *testing.T) {
 		t.Parallel()
 		h := newHarness(t, basePolicy, enabled())
-		var users []string
 		for i := range 3 {
 			email := fmt.Sprintf("g%d@example.org", i)
-			users = append(users, h.o.AddUser(email, email, "member").ID)
+			h.o.AddUser(email, email, "member")
 			h.dir.set(email, "all:wiki:globex")
 		}
 		h.pass()
