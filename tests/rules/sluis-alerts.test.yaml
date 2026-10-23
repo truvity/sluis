@@ -245,11 +245,11 @@ tests:
         exp_alerts: []
 
   # ---------------------------------------------------------------- no successful tick (absence)
-  - name: a target whose last ok tick is two hours old fires
+  - name: a live target whose last ok tick is two hours old fires
     interval: 1m
     input_series:
       - series: 'sluis_tick_last_success_timestamp_seconds{namespace="sluis",k8s_cluster_name="example",kind="slack-tick",target="acme"}'
-        values: '946684800 _x200'
+        values: '946684800x200'
     alert_rule_test:
       - eval_time: 2h
         alertname: SluisTickStale
@@ -268,6 +268,18 @@ tests:
                 Check that the controller's Deployment is running, that its leases are not held
                 by a runner that is gone (SluisLeaseLost), and the log for the failures.
               runbook_url: https://github.com/truvity/sluis/blob/master/docs/reference/sluis/telemetry.md#sluistickstale
+
+  - name: a series that stopped reporting, as after a rename of its target, does not fire
+    interval: 1m
+    input_series:
+      - series: 'sluis_tick_last_success_timestamp_seconds{namespace="sluis",k8s_cluster_name="example",kind="slack-tick",target="acme-old"}'
+        values: '946684800+60x30 _x300'
+      - series: 'sluis_tick_last_success_timestamp_seconds{namespace="sluis",k8s_cluster_name="example",kind="slack-tick",target="acme"}'
+        values: '946684800+60x330'
+    alert_rule_test:
+      - eval_time: 4h
+        alertname: SluisTickStale
+        exp_alerts: []
 
   - name: targets that tick, one of which ticks only every quarter hour, do not fire
     interval: 1m

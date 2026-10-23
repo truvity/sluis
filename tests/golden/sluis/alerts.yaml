@@ -132,13 +132,17 @@ spec:
         # The time since a target's last ok tick, from a gauge each ok tick stamps. It
         # catches what a failure counter cannot: a controller that is not running, a
         # lease nobody can take, a loop that hangs. One hour is four default intervals
-        # (15m), which tolerates three missed passes; `last_over_time` over a day keeps
-        # the series visible after the controller is gone, so a dead controller fires and
-        # is not mistaken for an absent one. A target the policy no longer declares fires
-        # for at most a day and then leaves.
+        # (15m), which tolerates three missed passes. A running controller reports the
+        # gauge on every export with its last ok stamp, so a live target that stalls keeps
+        # a series whose stamp ages. `last_over_time` over two hours keeps that series
+        # visible, and lets one that stopped reporting leave: a target the policy no
+        # longer declares (renamed, removed) or a label that changed leaves a series
+        # that never reports again, and fires for at most the hour between the threshold
+        # and the end of that window. A controller gone for good then leaves silence, which
+        # only `absent(...)` sees.
         - alert: SluisTickStale
           expr: >-
-            time() - max by (k8s_cluster_name, namespace, kind, target) (last_over_time(sluis_tick_last_success_timestamp_seconds{namespace="sluis"}[1d])) > 3600
+            time() - max by (k8s_cluster_name, namespace, kind, target) (last_over_time(sluis_tick_last_success_timestamp_seconds{namespace="sluis"}[2h])) > 3600
           for: 10m
           labels:
             k8s_cluster_name: example
