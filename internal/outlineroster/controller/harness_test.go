@@ -85,7 +85,9 @@ func (d *fakeDirectory) ListServedDomains(context.Context, *directoryrosterv1.Li
 	return &directoryrosterv1.ListServedDomainsResponse{Directories: d.served}, nil
 }
 
-func (d *fakeDirectory) ResolveDirectoryGroups(_ context.Context, req *directoryrosterv1.ResolveDirectoryGroupsRequest) (*directoryrosterv1.ResolveDirectoryGroupsResponse, error) {
+func (d *fakeDirectory) ResolveDirectoryGroups(
+	_ context.Context, req *directoryrosterv1.ResolveDirectoryGroupsRequest,
+) (*directoryrosterv1.ResolveDirectoryGroupsResponse, error) {
 	out := &directoryrosterv1.ResolveDirectoryGroupsResponse{PolicyDigest: d.digest}
 	for _, g := range req.GetGroups() {
 		owner, found := d.groups[g]
@@ -203,7 +205,9 @@ func newHarness(t *testing.T, text string, opts ...option) *harness {
 		now: time.Date(2026, 10, 24, 12, 0, 0, 0, time.UTC),
 	}
 	h.rec = &records{connected: true,
-		record:     connection.Record{Version: 1, Workspace: "wiki", URL: h.o.URL(), KeyUser: "key.owner@example.com", Team: "team-1"},
+		record: connection.Record{
+			Version: 1, Workspace: "wiki", URL: h.o.URL(), KeyUser: "key.owner@example.com", Team: "team-1",
+		},
 		credential: connection.Credential{Version: 1, Workspace: "wiki", APIKey: "key-admin"},
 	}
 	// The key's own user is an admin the directory has.
@@ -248,9 +252,10 @@ func (h *harness) methods() []string {
 }
 
 func userRow(report status.Workspace, email string) status.User {
-	for _, u := range report.Users {
+	for i := range report.Users {
+		u := &report.Users[i]
 		if u.Email == email {
-			return u
+			return *u
 		}
 	}
 	return status.User{}
@@ -271,9 +276,10 @@ func groupMember(report status.Workspace, group, email string) status.Member {
 }
 
 func collectionRow(report status.Workspace, name string) status.Collection {
-	for _, c := range report.Collections {
+	for i := range report.Collections {
+		c := &report.Collections[i]
 		if c.Name == name {
-			return c
+			return *c
 		}
 	}
 	return status.Collection{}

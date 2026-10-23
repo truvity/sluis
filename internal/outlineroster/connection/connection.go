@@ -69,7 +69,7 @@ func NormaliseURL(raw string) (string, error) {
 	}
 	loopback := u.Hostname() == "localhost" || u.Hostname() == "127.0.0.1" || u.Hostname() == "::1"
 	switch {
-	case u.Scheme != "https" && !(u.Scheme == "http" && loopback):
+	case u.Scheme != "https" && (u.Scheme != "http" || !loopback):
 		return "", fmt.Errorf("connection: %q is not an https URL", raw)
 	case u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "":
 		return "", fmt.Errorf("connection: %q must be an origin: a scheme and a host, with no user, query or fragment", raw)

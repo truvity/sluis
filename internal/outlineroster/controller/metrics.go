@@ -45,7 +45,8 @@ func (m instruments) recordPass(ctx context.Context, report *status.Workspace) {
 	workspace := attribute.String("workspace", report.Workspace)
 	m.passes.Add(ctx, 1, metric.WithAttributes(workspace, attribute.String("outcome", string(report.Tick.Outcome))))
 	rows := map[status.State]int64{}
-	for _, u := range report.Users {
+	for i := range report.Users {
+		u := &report.Users[i]
 		rows[u.State]++
 	}
 	for _, g := range report.Groups {
@@ -53,7 +54,8 @@ func (m instruments) recordPass(ctx context.Context, report *status.Workspace) {
 			rows[member.State]++
 		}
 	}
-	for _, c := range report.Collections {
+	for i := range report.Collections {
+		c := &report.Collections[i]
 		for _, g := range c.Grants {
 			rows[g.State]++
 		}

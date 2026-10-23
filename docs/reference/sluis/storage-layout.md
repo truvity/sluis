@@ -22,6 +22,7 @@ Layout v5: a logical key ([keys](keys.md)) is a module, a kind and an id, mapped
 | `internal/oidc/signin/<provider>/client-id`, `client-secret` | the Google sign-in client (`oauthClient.provider`) | an operator seeds it |
 | `internal/oidc/clients/<id>` | a delivered client secret, the document's `clients/<id>/secret` | an operator seeds it |
 | `internal/oidc/console-session-key` | the key the console signs its sessions with | sluis |
+| `internal/oidc/outline/<workspace>/<ref>` | an Outline workspace's API key; the issuer hosts the [Outline controller](outline.md) | sluis |
 | `internal/google/workspaces/<id>/key` | a Google Workspace's service-account key, replaced in place | sluis |
 | `internal/github/apps/<id>/<ref>` | a GitHub App's key ([GitHub Apps](#github-apps)) | sluis |
 | `internal/github/links/<github-user-id>/<ref>` | a person's GitHub token pair | sluis |

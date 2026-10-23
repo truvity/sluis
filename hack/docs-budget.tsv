@@ -13,7 +13,7 @@ docs/get-started/storage	53
 docs/guides/audit/connect	1550
 docs/guides/audit/operate	8337
 docs/guides/audit/upgrade	1213
-docs/guides/sluis	5579
+docs/guides/sluis	5893
 docs/guides/sluis/connect	11108
 docs/guides/sluis/connect/examples	2745
 docs/guides/sluis/migrate	3184
@@ -21,7 +21,7 @@ docs/guides/sluis/operate	7627
 docs/guides/sluis/upgrade	3294
 docs/guides/storage	308
 docs/reference/audit	3823
-docs/reference/sluis	7764
+docs/reference/sluis	7983
 docs/reference/storage	94
 docs/sdk	121
 docs/sdk/go	665

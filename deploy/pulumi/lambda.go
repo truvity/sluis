@@ -92,6 +92,10 @@ func ConformanceVerifierParameterNameV5(instance string) string {
 // DefaultSchedule is the controllers' tick when LambdaArgs.Schedule.Rate is empty.
 const DefaultSchedule = "rate(5 minutes)"
 
+// DefaultOutlineSchedule is the Outline controller's tick when
+// LambdaArgs.Schedule.OutlineRate is empty.
+const DefaultOutlineSchedule = "rate(2 minutes)"
+
 // LambdaArgs is the whole Lambda shape of sluis: the issuer's function from the
 // release zip with its role, the HTTP API in front of it, the token-signing key,
 // a function and a role per module function ([ModuleFunctions]), and one
@@ -739,8 +743,18 @@ type ScheduleArgs struct {
 	// both a GitHub organisation and a Slack workspace needs to be told.
 	GitHubOrgs      []string
 	SlackWorkspaces []string
+	// OutlineWorkspaces are the Outline workspaces: one schedule each, which
+	// invokes the ISSUER's function with
+	// `{"kind":"tick","controller":"outline","target":"<key>"}`, because the
+	// issuer hosts the Outline controller (docs/decisions/0077). The function's
+	// document must carry `controllers.outline`.
+	OutlineWorkspaces []string
 	// Rate is the EventBridge Scheduler expression. Default DefaultSchedule.
 	Rate string
+	// OutlineRate is the Outline workspaces' schedule. Default
+	// DefaultOutlineSchedule: a person signing in for the first time sees
+	// nothing but their own documents until the next pass.
+	OutlineRate string
 	// Paused declares every target's schedule DISABLED (EventBridge
 	// Scheduler's `state`) and keeps everything else, the role's grants
 	// included: an estate preparing a cutover declares the ticks and turns them
@@ -879,7 +893,8 @@ type Lambda struct {
 	// SchedulerRoleArn is the role EventBridge Scheduler assumes.
 	SchedulerRoleArn pulumi.StringOutput
 	// ScheduleNames are the schedules: the GitHub then the Slack targets, the
-	// directory refresh, the Cloudflare rotation, the issuer's clients pass.
+	// directory refresh, the Cloudflare rotation, the issuer's clients pass, then
+	// the Outline targets.
 	ScheduleNames pulumi.StringArrayOutput
 
 	// ConfigLayerArn is the configuration layer's version ARN: the service
@@ -1266,7 +1281,14 @@ func (a *LambdaArgs) validate() (LambdaArgs, error) {
 	if r := out.Schedule.Rate; !strings.HasPrefix(r, "rate(") && !strings.HasPrefix(r, "cron(") && !strings.HasPrefix(r, "at(") {
 		return out, fmt.Errorf("sluispulumi: Schedule.Rate %q is not an EventBridge Scheduler expression", r)
 	}
-	for kind, ids := range map[string][]string{"GitHubOrgs": out.Schedule.GitHubOrgs, "SlackWorkspaces": out.Schedule.SlackWorkspaces} {
+	if out.Schedule.OutlineRate == "" {
+		out.Schedule.OutlineRate = DefaultOutlineSchedule
+	}
+	if r := out.Schedule.OutlineRate; !strings.HasPrefix(r, "rate(") && !strings.HasPrefix(r, "cron(") {
+		return out, fmt.Errorf("sluispulumi: Schedule.OutlineRate %q is not an EventBridge Scheduler expression", r)
+	}
+	for kind, ids := range map[string][]string{"GitHubOrgs": out.Schedule.GitHubOrgs, "SlackWorkspaces": out.Schedule.SlackWorkspaces,
+		"OutlineWorkspaces": out.Schedule.OutlineWorkspaces} {
 		seen := map[string]bool{}
 		for _, id := range ids {
 			if !targetID.MatchString(id) {
@@ -2259,6 +2281,22 @@ func newSchedules(ctx *pulumi.Context, name string, a *LambdaArgs, live *lambda.
 			return nil, none, err
 		}
 		names = append(names, pulumi.String(kname))
+	}
+	// The Outline workspaces tick the issuer, which hosts their controller.
+	for i, id := range a.Schedule.OutlineWorkspaces {
+		if i == 0 && a.IssuerClients.Disabled {
+			invoked = append(invoked, live.Arn)
+		}
+		payload, err := json.Marshal(map[string]string{"kind": "tick", "controller": "outline", "target": id})
+		if err != nil {
+			return nil, none, err
+		}
+		sname := a.FunctionNamePrefix + "-outline-" + id
+		if err := mk(name+"-outline-"+id, sname, "Ticks the Outline controller for "+id+".",
+			a.Schedule.OutlineRate, a.Schedule.Paused, live.Arn, string(payload)); err != nil {
+			return nil, none, err
+		}
+		names = append(names, pulumi.String(sname))
 	}
 
 	// The role may invoke the aliases its schedules target and nothing else: a

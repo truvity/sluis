@@ -3,7 +3,7 @@ import type { Sentences } from "@truvity/audit";
 
 export const roster: Sentences = {
   "source": "roster",
-  "version": "1.22.0",
+  "version": "1.23.0",
   "locales": [
     "en"
   ],
@@ -258,6 +258,102 @@ export const roster: Sentences = {
       "summary": "An operator ran `sluis migrate v5 copy` for real and it had something to write. A record with `phase` started is kept before the first write and counts what will be written and which differing destination values `overwrite` replaces (by name); the record with `phase` completed (or a failed outcome) says how it ended. Names and counts only, never a value.",
       "message": {
         "en": "{outcome, select, success {{data_phase, select, started {{actor} is copying {data_written, plural, one {# item} other {# items}} into {targets_0_id}} other {{actor} copied {data_written, plural, one {# item} other {# items}} into {targets_0_id}}}} other {{actor} could not finish copying into {targets_0_id}}}"
+      }
+    },
+    "roster.outline_action.held": {
+      "summary": "A change to an Outline workspace is held, and needs an operator.",
+      "message": {
+        "en": "a change to {targets_0_id} is held: {outcome_reason}"
+      }
+    },
+    "roster.outline_breaker.confirmed": {
+      "summary": "An operator confirmed a set of Outline changes a breaker held.",
+      "message": {
+        "en": "{actor} confirmed {data_affected} held changes in {targets_0_id}"
+      }
+    },
+    "roster.outline_breaker.tripped": {
+      "summary": "A set of Outline removals, demotions or suspensions past its limit was held until an operator confirms it.",
+      "message": {
+        "en": "a breaker of {targets_0_id} held {data_affected} changes: {outcome_reason}"
+      }
+    },
+    "roster.outline_collection.adopted": {
+      "summary": "An existing Outline collection came under the controller, recorded once.",
+      "message": {
+        "en": "the Outline collection {targets_1_id} is managed from the policy"
+      }
+    },
+    "roster.outline_collection.created": {
+      "summary": "The Outline controller created a collection the policy binds.",
+      "message": {
+        "en": "{outcome, select, success {the Outline collection {targets_1_id} was created} other {Outline refused to create the collection {targets_1_id}}}"
+      }
+    },
+    "roster.outline_collection.granted": {
+      "summary": "A group was granted a permission on an Outline collection, or its permission changed.",
+      "message": {
+        "en": "{outcome, select, success {{targets_1_id} was granted {data_permission} on {targets_2_id}} other {Outline refused to grant {targets_1_id} on {targets_2_id}}}"
+      }
+    },
+    "roster.outline_collection.member_removed": {
+      "summary": "A direct member was removed from a strict Outline collection.",
+      "message": {
+        "en": "{outcome, select, success {{subject} was removed from {targets_1_id}} other {Outline refused to remove {subject} from {targets_1_id}}}"
+      }
+    },
+    "roster.outline_collection.revoked": {
+      "summary": "A group's grant the policy does not name was removed from a strict Outline collection.",
+      "message": {
+        "en": "{outcome, select, success {the grant of {targets_1_id} on {targets_2_id} was removed} other {Outline refused to remove the grant of {targets_1_id} on {targets_2_id}}}"
+      }
+    },
+    "roster.outline_group.created": {
+      "summary": "The Outline controller created a group it manages.",
+      "message": {
+        "en": "{outcome, select, success {the Outline group {targets_1_id} was created} other {Outline refused to create the group {targets_1_id}}}"
+      }
+    },
+    "roster.outline_member.added": {
+      "summary": "A person was added to an Outline group the controller manages.",
+      "message": {
+        "en": "{outcome, select, success {{subject} was added to the Outline group {targets_1_id}} other {Outline refused to add {subject} to the group {targets_1_id}}}"
+      }
+    },
+    "roster.outline_member.removed": {
+      "summary": "A person was removed from an Outline group the controller manages.",
+      "message": {
+        "en": "{outcome, select, success {{subject} was removed from the Outline group {targets_1_id}} other {Outline refused to remove {subject} from the group {targets_1_id}}}"
+      }
+    },
+    "roster.outline_role.changed": {
+      "summary": "An Outline account's workspace role was changed.",
+      "message": {
+        "en": "{outcome, select, success {{subject}'s Outline role in {targets_0_id} was changed to {data_role}} other {Outline refused to change {subject}'s role in {targets_0_id}}}"
+      }
+    },
+    "roster.outline_user.activated": {
+      "summary": "A suspended Outline account the directory has back was reactivated.",
+      "message": {
+        "en": "{outcome, select, success {{subject} was reactivated in {targets_0_id}} other {Outline refused to reactivate {subject} in {targets_0_id}}}"
+      }
+    },
+    "roster.outline_user.suspended": {
+      "summary": "A leaver's Outline account was suspended.",
+      "message": {
+        "en": "{outcome, select, success {{subject} was suspended in {targets_0_id}: {data_reason}} other {Outline refused to suspend {subject} in {targets_0_id}}}"
+      }
+    },
+    "roster.outline_workspace.connected": {
+      "summary": "An Outline workspace was connected, or its API key replaced, from the console.",
+      "message": {
+        "en": "{outcome, select, success {{actor} connected Outline workspace {targets_0_id}} other {{actor} could not connect Outline workspace {targets_0_id}: {outcome_reason}}}"
+      }
+    },
+    "roster.outline_workspace.disconnected": {
+      "summary": "An Outline workspace's connection record and API key were removed from the console.",
+      "message": {
+        "en": "{actor} disconnected Outline workspace {targets_0_id}"
       }
     },
     "roster.person.signed_in": {

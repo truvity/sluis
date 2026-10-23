@@ -12,7 +12,7 @@ The actions sluis records, from the catalogue [`internal/audit/catalogue/roster.
 
 <!-- generated: audit-actions -->
 
-Catalogue version 1.22.0, 86 actions.
+Catalogue version 1.23.0, 102 actions.
 
 | Action | Operation | Targets | Delivery | Summary |
 |---|---|---|---|---|
@@ -102,4 +102,20 @@ Catalogue version 1.22.0, 86 actions.
 | `roster.slack_action.held` | modify | slack_workspace, slack_channel, slack_user | async | A change to a Slack workspace or channel is held, and needs an operator. |
 | `roster.slack_removals.confirmed` | modify | slack_workspace, slack_channel | async | An operator confirmed a set of Slack removals that were held. |
 | `roster.slack_leaver.reported` | access | slack_workspace, slack_user | async | A person gone from the directory is still an active Slack member; reported rather than acted on. |
+| `roster.outline_workspace.connected` | create | outline_workspace | async | An Outline workspace was connected, or its API key replaced, from the console. |
+| `roster.outline_workspace.disconnected` | remove | outline_workspace | async | An Outline workspace's connection record and API key were removed from the console. |
+| `roster.outline_group.created` | create | outline_workspace, outline_group | async | The Outline controller created a group it manages. |
+| `roster.outline_member.added` | create | outline_workspace, outline_group, outline_user | async | A person was added to an Outline group the controller manages. |
+| `roster.outline_member.removed` | remove | outline_workspace, outline_group, outline_user | async | A person was removed from an Outline group the controller manages. |
+| `roster.outline_role.changed` | modify | outline_workspace, outline_user | async | An Outline account's workspace role was changed. |
+| `roster.outline_collection.created` | create | outline_workspace, outline_collection | async | The Outline controller created a collection the policy binds. |
+| `roster.outline_collection.adopted` | modify | outline_workspace, outline_collection | async | An existing Outline collection came under the controller, recorded once. |
+| `roster.outline_collection.granted` | modify | outline_workspace, outline_group, outline_collection | async | A group was granted a permission on an Outline collection, or its permission changed. |
+| `roster.outline_collection.revoked` | remove | outline_workspace, outline_group, outline_collection | async | A group's grant the policy does not name was removed from a strict Outline collection. |
+| `roster.outline_collection.member_removed` | remove | outline_workspace, outline_collection, outline_user | async | A direct member was removed from a strict Outline collection. |
+| `roster.outline_user.suspended` | modify | outline_workspace, outline_user | async | A leaver's Outline account was suspended. |
+| `roster.outline_user.activated` | modify | outline_workspace, outline_user | async | A suspended Outline account the directory has back was reactivated. |
+| `roster.outline_action.held` | modify | outline_workspace, outline_group, outline_collection, outline_user | async | A change to an Outline workspace is held, and needs an operator. |
+| `roster.outline_breaker.tripped` | modify | outline_workspace | async | A set of Outline removals, demotions or suspensions past its limit was held until an operator confirms it. |
+| `roster.outline_breaker.confirmed` | modify | outline_workspace | async | An operator confirmed a set of Outline changes a breaker held. |
 <!-- /generated -->
