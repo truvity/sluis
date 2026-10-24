@@ -59,6 +59,7 @@ var conformanceFamilies = map[port.Module][2]string{
 	port.ModuleGoogle:     {"cache.", "ws.dir.google."},
 	port.ModuleCloudflare: {"cache.", "rec.t."},
 	port.ModuleBackup:     {"cache.", "rec.t."},
+	port.ModuleOutline:    {"gate.outline.", "ws.outline."},
 }
 
 // The whole conformance suite over the table of every module, each through the

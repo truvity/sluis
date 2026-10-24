@@ -59,6 +59,7 @@ budget_slack := lambda_budget
 budget_google := lambda_budget
 budget_cloudflare := lambda_budget
 budget_backup := lambda_budget
+budget_outline := lambda_budget
 
 lambda-size: console
     #!/usr/bin/env bash
@@ -74,6 +75,7 @@ lambda-size: console
         "sluis-google:{{budget_google}}"
         "sluis-cloudflare:{{budget_cloudflare}}"
         "sluis-backup:{{budget_backup}}"
+        "sluis-outline:{{budget_outline}}"
     )
     built=0
     for entry in "${mains[@]}"; do

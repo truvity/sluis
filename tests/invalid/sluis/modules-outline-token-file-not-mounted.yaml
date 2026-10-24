@@ -1,0 +1,20 @@
+# The token the Outline module presents to the console is mounted at one path.
+# error: modules.outline.config.tokenFile must be /var/run/secrets/outline-roster/token
+config:
+  issuerURL: https://issuer.example
+exchange:
+  clusters:
+    - name: example-cluster
+      issuer: https://oidc.eu-example-1.example/id/EXAMPLE
+      jwksUri: https://oidc.eu-example-1.example/id/EXAMPLE/keys
+modules:
+  outline:
+    enabled: true
+    config:
+      preset: k8s-aws
+      ports:
+        dynamodb:
+          region: eu-west-1
+          tables:
+            outline: sluis-outline
+      tokenFile: /etc/token

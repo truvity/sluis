@@ -158,6 +158,17 @@ builds:
     ldflags:
       - -s -w -X github.com/truvity/sluis/internal/version.Version={{.Version}} -X github.com/truvity/sluis/internal/version.Module=sluis-module=slack
 
+  - id: sluis-outline
+    main: ./cmd/sluis-outline
+    binary: bootstrap
+    env: [CGO_ENABLED=0]
+    goos: [linux]
+    goarch: [arm64]
+    flags: [-trimpath]
+    tags: [lambda, lambda.norpc]
+    ldflags:
+      - -s -w -X github.com/truvity/sluis/internal/version.Version={{.Version}} -X github.com/truvity/sluis/internal/version.Module=sluis-module=outline
+
   - id: sluis-google
     main: ./cmd/sluis-google
     binary: bootstrap
@@ -231,6 +242,13 @@ archives:
     wrap_in_directory: false
     files: ["none*"]
     name_template: "sluis-slack_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+  - id: lambda-outline
+    ids: [sluis-outline]
+    formats: [zip]
+    wrap_in_directory: false
+    files: ["none*"]
+    name_template: "sluis-outline_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
 
   - id: lambda-google
     ids: [sluis-google]
@@ -356,7 +374,7 @@ release:
     |---|---|
     | Image | `ghcr.io/truvity/sluis/sluis:{{ .Version }}` |
     | Sidecar image | `ghcr.io/truvity/sluis/resource-proxy:{{ .Version }}` |
-    | Module images | `ghcr.io/truvity/sluis/sluis-{issuer,github,slack,google,cloudflare,backup}:{{ .Version }}` |
+    | Module images | `ghcr.io/truvity/sluis/sluis-{issuer,github,slack,google,cloudflare,backup,outline}:{{ .Version }}` |
     | Chart | `oci://ghcr.io/truvity/charts/sluis:{{ .Version }}` |
     | TypeScript | `@truvity/sluis@{{ .Version }}` on GitHub Packages |
     | Go | `go get github.com/truvity/sluis@{{ .Tag }}` |
@@ -373,7 +391,7 @@ release:
     signer and the console),
     `sluis-github_{{ .Version }}_linux_arm64.zip`,
     `sluis-slack_{{ .Version }}_linux_arm64.zip`, `sluis-google_{{ .Version }}_linux_arm64.zip`,
-    `sluis-cloudflare_{{ .Version }}_linux_arm64.zip` and
+    `sluis-outline_{{ .Version }}_linux_arm64.zip`, `sluis-cloudflare_{{ .Version }}_linux_arm64.zip` and
     `sluis-backup_{{ .Version }}_linux_arm64.zip` (deployed as the backup and the restore
     function). The single `sluis-lambda` zip is no longer published
     (`docs/reference/sluis/lambda.md`). The telemetry layer is

@@ -182,7 +182,7 @@ func TestARunWritesAVerifiableBackupAndItsRecords(t *testing.T) {
 	if rd.Manifest().Creator != "sluis-backup test" || rd.Manifest().Layout != backup.LayoutV5 {
 		t.Errorf("manifest %+v", rd.Manifest())
 	}
-	if res.Run.Records < 14 || res.Run.Modules != 5 || res.Run.Chunks != 1 || res.Run.Size == 0 {
+	if res.Run.Records < 14 || res.Run.Modules != 6 || res.Run.Chunks != 1 || res.Run.Size == 0 {
 		t.Errorf("counts %+v", res.Run)
 	}
 	st, err := j.Status(ctx)

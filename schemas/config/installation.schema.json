@@ -728,8 +728,8 @@
                           "type": "string"
                         },
                         "directory": {
-                          "description": "The connected directory, by workspace id or primary domain, that every bound group's members must come from. A collection whose groups reach outside it is held.",
-                          "minLength": 1,
+                          "description": "The connected directory, by its primary domain (`example.com`), that every bound group's members must come from. A collection whose groups reach outside it is held.",
+                          "pattern": "^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$",
                           "type": "string"
                         },
                         "mode": {
@@ -2131,8 +2131,41 @@
         },
         "outline": {
           "additionalProperties": false,
-          "description": "The Outline controller: makes each Outline workspace's groups, roles and collections match the policy's outline table (docs/reference/sluis/outline.md). It runs in this process, and on Lambda in the issuer's function, and asks the console in it directly. It needs a storage adapter other than `legacy`: the workspaces' connections are on the State port.",
+          "description": "The Outline module (docs/decisions/0077): a function of its own on Lambda (`sluis-<instance>-outline`), its document rendered from these keys; the issuer's document routes the console's Outline pages to it. `enabledWorkspaces` goes to the policy document's `controllers.outline`.",
           "properties": {
+            "console": {
+              "additionalProperties": false,
+              "description": "How the controller proves itself to the console, when the pod's `tokenFile` is not the way.",
+              "properties": {
+                "auth": {
+                  "additionalProperties": false,
+                  "description": "The proof. Absent, `tokenFile`.",
+                  "properties": {
+                    "aws": {
+                      "additionalProperties": false,
+                      "description": "The function role's AWS outbound web identity token (`sts:GetWebIdentityToken`), re-minted every four minutes. The console's issuer must federate the account, and its policy must declare an `aws` matcher for the role.",
+                      "properties": {
+                        "audience": {
+                          "description": "The audience requested from STS. It must equal the issuer's `console.awsAudience` (default `<issuerURL>/console`), NOT the audience of its AWS federation file.",
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "audience"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "type": "object"
+                }
+              },
+              "type": "object"
+            },
+            "consoleURL": {
+              "$ref": "#/$defs/url",
+              "description": "The console's API, which answers who holds a group. Unset is `publicURL`."
+            },
             "enabledWorkspaces": {
               "description": "The workspaces the controller may CHANGE (the policy document's `controllers.outline.enabledWorkspaces`), by the key of `access.outline.workspaces`. The rest are dry runs.",
               "items": {
@@ -2150,6 +2183,12 @@
               "$ref": "#/$defs/duration",
               "default": "1h",
               "description": "How often the single-document shares in the collections that name a directory are read and reported. Each document is two calls to Outline."
+            },
+            "tokenFile": {
+              "default": "/var/run/secrets/outline-roster/token",
+              "description": "This pod's projected ServiceAccount token, presented to the console and read afresh on every call.",
+              "minLength": 1,
+              "type": "string"
             }
           },
           "type": "object"

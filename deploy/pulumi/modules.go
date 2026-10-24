@@ -29,11 +29,14 @@ const (
 	ModuleGoogle Module = "google"
 	// ModuleBackup holds the backup and restore state.
 	ModuleBackup Module = "backup"
+	// ModuleOutline is the Outline workspaces (docs/decisions/0077). It comes
+	// last, as in the storage layout's module list.
+	ModuleOutline Module = "outline"
 )
 
 // Modules is every module, in a fixed order.
 func Modules() []Module {
-	return []Module{ModuleOIDC, ModuleGitHub, ModuleSlack, ModuleCloudflare, ModuleGoogle, ModuleBackup}
+	return []Module{ModuleOIDC, ModuleGitHub, ModuleSlack, ModuleCloudflare, ModuleGoogle, ModuleBackup, ModuleOutline}
 }
 
 // MaintenancePartition is the partition key of the maintenance item. Every
@@ -123,13 +126,16 @@ const (
 	RoleGitHub     = "github"
 	RoleSlack      = "slack"
 	RoleGoogle     = "google"
+	// RoleOutline is the Outline module's function. NewLambda makes it only for
+	// an installation that declares `controllers.outline` (see hostsModule).
+	RoleOutline = "outline"
 )
 
 // ModuleFunctions are the roles NewLambda makes a function for besides the
 // issuer, in a fixed order. Each is the key of [LambdaArgs.Modules] and of the
 // outputs Functions, RoleArns and AliasArns.
 func ModuleFunctions() []string {
-	return []string{RoleCloudflare, RoleGitHub, RoleGoogle, RoleSlack}
+	return []string{RoleCloudflare, RoleGitHub, RoleGoogle, RoleOutline, RoleSlack}
 }
 
 // ModuleOfFunction is the module a function of [ModuleFunctions] serves.
@@ -229,9 +235,10 @@ type CrossGrant struct {
 //     its function. It invokes, as the class issuer, the functions that serve
 //     sign-in and the token endpoint (github for a mint, google for
 //     `identify`, cloudflare for a mint), and, as the class console, the
-//     functions behind the console pages (github, slack, google, cloudflare and
-//     backup; v1.76 D-v176-1 b). Every invoke is on the alias `live-<class>`,
-//     never the unqualified function;
+//     functions behind the console pages (github, slack, google, cloudflare,
+//     outline and backup; v1.76 D-v176-1 b). It reads nothing of the outline
+//     module: its console pages are the outline function's. Every invoke is on
+//     the alias `live-<class>`, never the unqualified function;
 //   - the backup role reads everything; the restore role writes everything and
 //     is invokable only by the administrators the stack names (RestoreInvokeStatement).
 var CrossGrants = []CrossGrant{
@@ -239,7 +246,7 @@ var CrossGrants = []CrossGrant{
 	{Role: RoleIssuer, Verb: CrossInvoke, Class: ClassIssuer,
 		Functions: []string{RoleCloudflare, RoleGitHub, RoleGoogle}},
 	{Role: RoleIssuer, Verb: CrossInvoke, Class: ClassConsole,
-		Functions: []string{RoleBackup, RoleCloudflare, RoleGoogle, RoleSlack, RoleGitHub}},
+		Functions: []string{RoleBackup, RoleCloudflare, RoleGoogle, RoleSlack, RoleGitHub, RoleOutline}},
 	{Role: RoleIssuer, Verb: CrossReadBlobs, Modules: []Module{ModuleGoogle}},
 	{Role: RoleBackup, Verb: CrossReadAll, Modules: Modules()},
 	{Role: RoleRestore, Verb: CrossWriteAll, Modules: Modules()},
@@ -247,12 +254,12 @@ var CrossGrants = []CrossGrant{
 
 // ConsoleCallers are the roles whose function calls the issuer's console over
 // HTTP and proves itself with its role's outbound web identity token
-// (`sts:GetWebIdentityToken`, internal/consoleauth): the GitHub and Slack
-// controllers, which ask the console who holds a group, or which roster to
-// apply, on every pass. Their documents carry `console.auth.aws`
+// (`sts:GetWebIdentityToken`, internal/consoleauth): the GitHub, Slack and
+// Outline controllers, which ask the console who holds a group, or which roster
+// to apply, on every pass. Their documents carry `console.auth.aws`
 // (config.moduleBuilder.rosterOf). The role of each holds the token grant, on the
 // console's audience, and no other module role does.
-var ConsoleCallers = []string{RoleGitHub, RoleSlack}
+var ConsoleCallers = []string{RoleGitHub, RoleSlack, RoleOutline}
 
 // ModuleCall is one call from a function to another, as the policies and the
 // aliases are derived from it.

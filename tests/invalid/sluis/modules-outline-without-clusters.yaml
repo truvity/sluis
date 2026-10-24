@@ -1,0 +1,14 @@
+# The console verifies the Outline module's token against this cluster's row of exchange.clusters.
+# error: modules.outline.enabled is true and exchange.clusters is empty
+config:
+  issuerURL: https://issuer.example
+modules:
+  outline:
+    enabled: true
+    config:
+      preset: k8s-aws
+      ports:
+        dynamodb:
+          region: eu-west-1
+          tables:
+            outline: sluis-outline

@@ -9,6 +9,7 @@ import (
 	_ "github.com/truvity/sluis/internal/lambdaapp/githubfn"
 	_ "github.com/truvity/sluis/internal/lambdaapp/googlefn"
 	_ "github.com/truvity/sluis/internal/lambdaapp/issuerfn"
+	_ "github.com/truvity/sluis/internal/lambdaapp/outlinefn"
 	_ "github.com/truvity/sluis/internal/lambdaapp/slackfn"
 )
 

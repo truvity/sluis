@@ -88,13 +88,13 @@ func holdsTelemetry(t *testing.T, rec *recorder, want bool) int {
 }
 
 func TestEveryModuleFunctionCarriesTheTelemetry(t *testing.T) {
-	rec, _ := mustLambda(t, estateWith(func(a *arp.LambdaArgs) {
+	rec, _ := mustLambda(t, estateWith(withOutlineDocument, func(a *arp.LambdaArgs) {
 		a.WebIdentityAudience = contractAudience
 		a.Telemetry = telemetryLayer()
 		a.AdditionalWebIdentityAudiences = []string{telemetryAudience + "/otlp"}
 	}))
 	// The issuer and the module functions: more than the issuer alone.
-	if n := holdsTelemetry(t, rec, true); n < 5 {
+	if n := holdsTelemetry(t, rec, true); n < 6 {
 		t.Fatalf("%d functions: a short list proves nothing", n)
 	}
 	// The console callers keep the console's audience first.

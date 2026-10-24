@@ -201,6 +201,34 @@
       ],
       "Condition": {
         "ArnEquals": {
+          "aws:PrincipalArn": "arn:aws:iam::111122223333:role/sluis-staging-outline"
+        },
+        "StringEquals": {
+          "kms:ViaService": "ssm.eu-central-1.amazonaws.com"
+        },
+        "StringLike": {
+          "kms:EncryptionContext:PARAMETER_ARN": [
+            "arn:aws:ssm:eu-central-1:111122223333:parameter/sluis/staging/internal/outline/*",
+            "arn:aws:ssm:eu-central-1:111122223333:parameter/sluis/staging/external/outline/*"
+          ]
+        }
+      },
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "arn:aws:iam::111122223333:root"
+      },
+      "Resource": "*",
+      "Sid": "SluisKeyRoleOutline"
+    },
+    {
+      "Action": [
+        "kms:Encrypt",
+        "kms:Decrypt",
+        "kms:GenerateDataKey",
+        "kms:DescribeKey"
+      ],
+      "Condition": {
+        "ArnEquals": {
           "aws:PrincipalArn": "arn:aws:iam::111122223333:role/sluis-staging-restore"
         },
         "StringEquals": {

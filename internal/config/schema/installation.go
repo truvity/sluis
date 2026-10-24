@@ -46,8 +46,15 @@ func installationSchema() m {
 	githubProps["appRefs"] = m{"type": "object", "propertyNames": m{"pattern": "^[A-Za-z0-9](?:[A-Za-z0-9]|-[A-Za-z0-9])*$"}, "additionalProperties": m{"type": "string", "pattern": "^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$"}, "description": "Optional. For an organisation `access.github` binds, the id of the catalogue App (in `apps.github.apps`, created under that organisation) whose key its record refers to (the policy document's `controllers.github.appRefs`). An organisation connected with an App of its own keeps naming it without an entry; an entry names another App, or declares an organisation anew."}
 	githubProps["appNames"] = m{"type": "object", "propertyNames": m{"pattern": "^[A-Za-z0-9](?:[A-Za-z0-9]|-[A-Za-z0-9])*$"}, "additionalProperties": m{"type": "string", "minLength": 1, "maxLength": 34}, "description": "Optional. For an organisation `access.github` binds, the name its App is created with on GitHub (at most 34 characters; the policy document's `controllers.github.appNames`). An organisation with no entry gets the built-in default. An App already created keeps the name it has."}
 	slackProps["enabledWorkspaces"] = list("The workspaces the controller may CHANGE (the policy document's `controllers.slack.enabledWorkspaces`), by the key of `access.slack.workspaces`.", m{"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$"})
-	outline, _ := cprops["outline"].(m)
-	outlineProps, _ := outline["properties"].(m)
+	outlineDoc := sluisOutlineSchema()["properties"].(m)
+	outlineProps := m{
+		"consoleURL": url("The console's API, which answers who holds a group. Unset is `publicURL`."),
+		"tokenFile":  outlineDoc["tokenFile"],
+		"console":    outlineDoc["console"],
+		"interval":   outlineDoc["interval"],
+		"shareScan":  outlineDoc["outline"].(m)["properties"].(m)["shareScan"],
+	}
+	cprops["outline"] = obj("The Outline module (docs/decisions/0077): a function of its own on Lambda (`sluis-<instance>-outline`), its document rendered from these keys; the issuer's document routes the console's Outline pages to it. `enabledWorkspaces` goes to the policy document's `controllers.outline`.", outlineProps)
 	outlineProps["enabledWorkspaces"] = list("The workspaces the controller may CHANGE (the policy document's `controllers.outline.enabledWorkspaces`), by the key of `access.outline.workspaces`. The rest are dry runs.", m{"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$"})
 	controllers["description"] = "The controllers this installation runs, each in its own loop; an absent one is off. A section's own keys go to the service document's `controllers`; `enabledOrgs` and `enabledWorkspaces` go to the policy document's."
 

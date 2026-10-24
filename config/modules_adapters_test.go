@@ -52,6 +52,10 @@ func TestEveryModuleDocumentResolvesItsAdapters(t *testing.T) {
 						if cfg, err = store.FromServe(doc.Serve()); err != nil {
 							t.Fatal(err)
 						}
+					case config.ModuleOutline:
+						doc := load[internalconfig.SluisOutline](t, raw)
+						cfg = store.FromRoster(&doc.Roster)
+						cfg.SetSecrets(doc.Secrets)
 					case config.ModuleCloudflare:
 						doc := load[internalconfig.Sluis](t, raw)
 						var err error

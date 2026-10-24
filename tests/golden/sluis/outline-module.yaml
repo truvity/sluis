@@ -1,0 +1,707 @@
+---
+# Source: sluis/templates/networkpolicy.yaml
+# The issuer. Ingress: the gateway and the namespaces that call it (the proxies
+# verifying tokens, the workloads exchanging them), and the controllers, which
+# read the console's API through the release's own Service.
+# Egress is DNS, the module's own peers, and HTTPS to `networkPolicy.egress.https`
+# (the providers' hosts, the cloud APIs and the API server cannot be named in a
+# NetworkPolicy), and what `networkPolicy.egress.extra.issuer` adds.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: sluis-issuer
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: issuer
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: sluis
+      app.kubernetes.io/instance: sluis
+      app.kubernetes.io/component: issuer
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+      ports:
+        - port: 8080
+    - from:
+        - podSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/component
+                operator: In
+                values: ["outline"]
+            matchLabels:
+              app.kubernetes.io/name: sluis
+              app.kubernetes.io/instance: sluis
+      ports:
+        - port: 8080
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - { port: 53, protocol: UDP }
+        - { port: 53, protocol: TCP }
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: sluis
+              app.kubernetes.io/instance: sluis
+              app.kubernetes.io/component: outline
+      ports:
+        - port: 8081
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - { port: 443, protocol: TCP }
+
+---
+# Source: sluis/templates/networkpolicy.yaml
+# The outline module answers /rpc, and only the issuer's pods may call it: the
+# module checks the caller's token too, and this is the second lock.
+# Egress is DNS, the module's own peers, and HTTPS to `networkPolicy.egress.https`
+# (the providers' hosts, the cloud APIs and the API server cannot be named in a
+# NetworkPolicy), and what `networkPolicy.egress.extra.outline` adds.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: sluis-outline
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: outline
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: sluis
+      app.kubernetes.io/instance: sluis
+      app.kubernetes.io/component: outline
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: sluis
+              app.kubernetes.io/instance: sluis
+              app.kubernetes.io/component: issuer
+      ports:
+        - port: 8081
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - { port: 53, protocol: UDP }
+        - { port: 53, protocol: TCP }
+    # The console's API, through the release's Service.
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: sluis
+              app.kubernetes.io/instance: sluis
+              app.kubernetes.io/component: issuer
+      ports:
+        - port: 8080
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - { port: 443, protocol: TCP }
+
+---
+# Source: sluis/templates/modules.yaml
+# Voluntary disruptions (a node drain) may take down only as many of the
+# issuer module's pods as this allows.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: sluis-issuer
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: issuer
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sluis
+      app.kubernetes.io/instance: sluis
+      app.kubernetes.io/component: issuer
+
+---
+# Source: sluis/templates/modules.yaml
+# Voluntary disruptions (a node drain) may take down only as many of the
+# outline module's pods as this allows.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: sluis-outline
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: outline
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sluis
+      app.kubernetes.io/instance: sluis
+      app.kubernetes.io/component: outline
+
+---
+# Source: sluis/templates/modules.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sluis-issuer
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: issuer
+
+---
+# Source: sluis/templates/modules.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sluis-outline
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: outline
+
+---
+# Source: sluis/templates/serviceaccount.yaml
+# The account a recovery token is minted for. Deliberately bound to
+# NOTHING: it needs no permissions, because the token is a proof of
+# identity and not a way to act. Granting `create` on
+# `serviceaccounts/token` for this account is how an installation says who
+# may recover, and that grant is the whole of the access control.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: access-issuer-recovery
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+
+---
+# Source: sluis/templates/modules.yaml
+# The issuer module's document, read once at start.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sluis-issuer-config
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: issuer
+data:
+  config.yaml: |
+    apiVersion: sluis.truvity.github.io/sluis/v3
+    audit:
+      tokenFile: /var/run/audit/token
+    inCluster: true
+    issuerURL: https://issuer.example
+    lifetimes:
+      absolute: 24h
+      hold: 4h
+      refresh: 12h
+      token: 1h
+    listen:
+      address: :8080
+    outline:
+      remote:
+        audience: outline
+        tokenFile: /var/run/secrets/sluis/outline/token
+        url: http://sluis-outline.default.svc:8081
+    policy:
+      file: /var/run/access-issuer/policy/policy.yaml
+    probes:
+      address: :7070
+    recovery:
+      audience: access-issuer-recovery
+      enabled: true
+      serviceAccount: access-issuer-recovery
+    secrets:
+      root: /var/run/sluis/secrets
+      source: file
+    signingKey:
+      activationDelay: 15m
+      file: /var/run/access-issuer/signing-key/tls.key
+      pollInterval: 30s
+    store: kubernetes
+
+---
+# Source: sluis/templates/modules.yaml
+# The outline module's document, read once at start.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sluis-outline-config
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: outline
+data:
+  config.yaml: |
+    apiVersion: sluis.truvity.github.io/sluis-outline/v1
+    consoleURL: http://sluis.default.svc:8080/console
+    outline:
+      serve:
+        address: :8081
+        audience: outline
+        issuers:
+        - system:serviceaccount:default:sluis-issuer
+    policy:
+      file: /var/run/access-issuer/policy/policy.yaml
+    ports:
+      dynamodb:
+        region: eu-west-1
+        tables:
+          outline: sluis-outline
+    preset: k8s-aws
+    secrets:
+      layout: v5
+      root: /sluis
+      source: ssm
+
+---
+# Source: sluis/templates/policy-configmap.yaml
+# The policy document (schemas/config/policy.schema.json): what every process
+# of this installation decides by, read once at start. Mounted as a directory
+# by the service and both controllers, so a change rolls all three.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sluis-policy
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+data:
+  policy.yaml: |
+    apiVersion: sluis.truvity.github.io/policy/v2
+    exchange:
+      clusters:
+      - issuer: https://oidc.eu-example-1.example/id/EXAMPLE
+        jwksUri: https://oidc.eu-example-1.example/id/EXAMPLE/keys
+        name: example-cluster
+
+---
+# Source: sluis/templates/serviceaccount.yaml
+# The one cluster-scoped permission this service ever needs, and the one
+# thing left that asks the API server anything: creating TokenReviews, so
+# that recovery can check a token proving cluster access. It reads
+# nothing.
+#
+# Workloads used to need it too. They do not any more: a
+# ServiceAccount token is verified against the key set its own cluster
+# publishes, so this service holds no access to any cluster including its
+# own. Recovery keeps it because on the day everything else is broken it
+# should depend on nothing but the cluster.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: sluis-default-tokenreview
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+rules:
+  - apiGroups: ["authentication.k8s.io"]
+    resources: ["tokenreviews"]
+    verbs: ["create"]
+
+---
+# Source: sluis/templates/modules.yaml
+# The module checks its callers' tokens with a TokenReview, which is the one
+# thing system:auth-delegator allows (and a SubjectAccessReview).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: sluis-default-outline-auth-delegator
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: outline
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:auth-delegator
+subjects:
+  - kind: ServiceAccount
+    name: sluis-outline
+    namespace: default
+
+---
+# Source: sluis/templates/serviceaccount.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: sluis-default-tokenreview
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: sluis-default-tokenreview
+subjects:
+  - kind: ServiceAccount
+    name: sluis-issuer
+    namespace: default
+
+---
+# Source: sluis/templates/serviceaccount.yaml
+# The directory store is plain Kubernetes objects in THIS namespace:
+# workspace records (ConfigMaps) and their credentials (Secrets), written
+# by this service itself. A namespaced Role and never a ClusterRole —
+# which is why this service gets a namespace of its own.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: sluis
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+rules:
+  - apiGroups: [""]
+    resources: ["secrets", "configmaps"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+---
+# Source: sluis/templates/serviceaccount.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: sluis
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: sluis
+subjects:
+  - kind: ServiceAccount
+    name: sluis-issuer
+    namespace: default
+
+---
+# Source: sluis/templates/modules.yaml
+# Calls to the outline module, on /rpc. A call carries a projected ServiceAccount
+# token minted for the module's audience, which the module checks with a TokenReview.
+apiVersion: v1
+kind: Service
+metadata:
+  name: sluis-outline
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: outline
+spec:
+  selector:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/component: outline
+  ports:
+    - name: rpc
+      port: 8081
+      targetPort: rpc
+
+---
+# Source: sluis/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: sluis
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selector:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/component: issuer
+  ports:
+    - name: issuer
+      port: 8080
+      targetPort: issuer
+
+---
+# Source: sluis/templates/modules.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sluis-issuer
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: issuer
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sluis
+      app.kubernetes.io/instance: sluis
+      app.kubernetes.io/component: issuer
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: sluis
+        app.kubernetes.io/instance: sluis
+        app.kubernetes.io/component: issuer
+      annotations:
+        # Each document is read once, at start: a change to it, or to the
+        # policy, is a rollout.
+        checksum/config: c2c7e48a4559af0df68b89d348b89ec52cac453f2853ffa993c7de843e61ef0b
+        checksum/policy: 9909eca423d3080cb9a8538d9e143b48ef12798afd703ad5562657bc38b316e5
+    spec:
+      serviceAccountName: sluis-issuer
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: issuer
+          image: "ghcr.io/truvity/sluis/sluis:0.0.0"
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          ports:
+            - name: issuer
+              containerPort: 8080
+            - name: health
+              containerPort: 7070
+          args:
+            - issuer
+            - --config=/etc/sluis/config.yaml
+          volumeMounts:
+            - name: config
+              mountPath: /etc/sluis/config.yaml
+              subPath: config.yaml
+              readOnly: true
+            - name: policy
+              mountPath: /var/run/access-issuer/policy
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+            
+            - name: signing-key
+              mountPath: /var/run/access-issuer/signing-key
+              readOnly: true
+            # The token a call to outline carries, minted for its audience.
+            - name: call-outline
+              mountPath: /var/run/secrets/sluis/outline
+              readOnly: true
+          livenessProbe:
+            httpGet: { path: /healthz, port: health }
+          readinessProbe:
+            httpGet: { path: /readyz, port: health }
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+      volumes:
+        - name: config
+          configMap:
+            name: sluis-issuer-config
+        - name: policy
+          configMap:
+            name: sluis-policy
+        - name: tmp
+          emptyDir: {}
+        
+        - name: signing-key
+          secret:
+            secretName: sluis-signing-key
+        - name: call-outline
+          projected:
+            sources:
+              - serviceAccountToken:
+                  audience: outline
+                  expirationSeconds: 3600
+                  path: token
+
+---
+# Source: sluis/templates/modules.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sluis-outline
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: outline
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sluis
+      app.kubernetes.io/instance: sluis
+      app.kubernetes.io/component: outline
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: sluis
+        app.kubernetes.io/instance: sluis
+        app.kubernetes.io/component: outline
+      annotations:
+        # Each document is read once, at start: a change to it, or to the
+        # policy, is a rollout.
+        checksum/config: ec526184fbefb1e1c67a7c545fbb50cbf7d58d2799227877f52ff33cbd346540
+        checksum/policy: 9909eca423d3080cb9a8538d9e143b48ef12798afd703ad5562657bc38b316e5
+    spec:
+      serviceAccountName: sluis-outline
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: outline
+          image: "ghcr.io/truvity/sluis/sluis:0.0.0"
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          ports:
+            - name: rpc
+              containerPort: 8081
+            - name: health
+              containerPort: 7070
+          args:
+            - outline
+            - --config=/etc/sluis/config.yaml
+          volumeMounts:
+            - name: config
+              mountPath: /etc/sluis/config.yaml
+              subPath: config.yaml
+              readOnly: true
+            - name: policy
+              mountPath: /var/run/access-issuer/policy
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+            
+            - name: outline-token
+              mountPath: /var/run/secrets/outline-roster
+              readOnly: true
+          livenessProbe:
+            httpGet: { path: /healthz, port: health }
+          readinessProbe:
+            httpGet: { path: /readyz, port: health }
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+      volumes:
+        - name: config
+          configMap:
+            name: sluis-outline-config
+        - name: policy
+          configMap:
+            name: sluis-policy
+        - name: tmp
+          emptyDir: {}
+        
+        # The token the Outline module presents to the console.
+        - name: outline-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  audience: sluis
+                  expirationSeconds: 3600
+                  path: token
+
+---
+# Source: sluis/templates/signing-key.yaml
+# The signing key, issued by cert-manager.
+#
+# The certificate is a by-product: only the key is used. cert-manager is
+# here because it generates the key in the cluster, keeps it out of every
+# other system, and rotates it on a schedule the platform already
+# understands — none of which is true of a key this service minted for
+# itself, and the last of which is the reason it does not.
+#
+# `rotationPolicy: Always` makes a renewal a *new key*, which is the
+# point: a renewed certificate over the same key would rotate nothing.
+#
+# The algorithm decides what the issuer signs with -- RSA signs RS256, and
+# P-256, P-384 and P-521 sign ES256, ES384 and ES512 -- and that is what
+# the discovery document advertises, so every relying party has to accept
+# it. Changing it here rotates the key, so tokens signed with the previous
+# one stop verifying once the old public key leaves the JWKS -- which the
+# issuer itself now schedules, with no restart of this Deployment needed
+# either to notice the new key or to retire the old one; see
+# `signingKey.rotation` for the delays that govern it.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: sluis-signing-key
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  secretName: sluis-signing-key
+  commonName: sluis
+  duration: "8760h"
+  renewBefore: "720h"
+  privateKey:
+    algorithm: ECDSA
+    size: 384
+    encoding: PKCS8
+    rotationPolicy: Always
+  issuerRef:
+    name: "selfsigned"
+    kind: "ClusterIssuer"
+    group: cert-manager.io

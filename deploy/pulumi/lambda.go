@@ -315,11 +315,13 @@ type LambdaArgs struct {
 	// Function tunes the function.
 	Function FunctionArgs
 	// Modules configures the function of each module besides the issuer, keyed
-	// by [ModuleFunctions]: cloudflare, github, google and slack.
+	// by [ModuleFunctions]: cloudflare, github, google, outline and slack.
 	// Every one of them exists whatever is set here (there is no switch that
-	// leaves a module in the issuer): the settings are memory, timeout,
-	// reserved concurrency, the name, the zip and the document, all optional.
-	// Their names are `sluis-<instance>-<module>`.
+	// leaves a module in the issuer), but for a module the installation renders
+	// no document for: the Cloudflare module with no preset, the Outline module
+	// with no `controllers.outline`. The settings are memory, timeout, reserved
+	// concurrency, the name, the zip and the document, all optional. Their names
+	// are `sluis-<instance>-<module>`.
 	Modules map[string]ModuleArgs
 	// BackupFunctionName is the name of the Backup component's function, which
 	// the issuer's role may invoke through the alias `live-console`. Default
@@ -744,10 +746,10 @@ type ScheduleArgs struct {
 	GitHubOrgs      []string
 	SlackWorkspaces []string
 	// OutlineWorkspaces are the Outline workspaces: one schedule each, which
-	// invokes the ISSUER's function with
-	// `{"kind":"tick","controller":"outline","target":"<key>"}`, because the
-	// issuer hosts the Outline controller (docs/decisions/0077). The function's
-	// document must carry `controllers.outline`.
+	// invokes the Outline function's `live` alias with
+	// `{"kind":"tick","controller":"outline","target":"<key>"}`
+	// (docs/decisions/0077). The function exists only for an installation that
+	// declares `controllers.outline`; without it a workspace is refused.
 	OutlineWorkspaces []string
 	// Rate is the EventBridge Scheduler expression. Default DefaultSchedule.
 	Rate string
@@ -857,8 +859,9 @@ type Lambda struct {
 	LiveAliasArn, LiveVersion pulumi.StringOutput
 	RoleArn, RoleName         pulumi.StringOutput
 	// Functions, RoleArns and AliasArns are the functions, their roles and their
-	// aliases by role: `issuer` and every [ModuleFunctions] (cloudflare, github,
-	// google, slack). Functions holds the unqualified function ARNs
+	// aliases by role: `issuer` and every [ModuleFunctions] NewLambda makes
+	// (cloudflare, github, google, outline, slack; outline only with
+	// `controllers.outline`). Functions holds the unqualified function ARNs
 	// and AliasArns, per role, the ARN of each alias by alias name (`live`,
 	// `live-issuer`): a call goes through an alias.
 	Functions, RoleArns pulumi.StringMapOutput
@@ -955,7 +958,7 @@ func (a *LambdaArgs) validateTables() error {
 	}
 	if a.State != nil {
 		var missing []string
-		for _, m := range tablesNeeded() {
+		for _, m := range a.tablesNeeded() {
 			if a.State.Tables[m] == nil {
 				missing = append(missing, string(m))
 			}
@@ -1308,6 +1311,11 @@ func (a *LambdaArgs) validate() (LambdaArgs, error) {
 	}
 	if err := out.validateModules(); err != nil {
 		return out, err
+	}
+	if len(out.Schedule.OutlineWorkspaces) > 0 && !out.hostsModule(RoleOutline) {
+		return out, fmt.Errorf("sluispulumi: Schedule.OutlineWorkspaces %v tick the Outline function, which is made only for an installation "+
+			"that declares controllers.outline (or with LambdaArgs.Modules[outline].Document): declare it, or leave the workspaces out",
+			out.Schedule.OutlineWorkspaces)
 	}
 	return out, nil
 }
@@ -2172,9 +2180,8 @@ func schedulerTrust(region, account string) map[string]any {
 // newSchedules is the scheduler's role and one schedule per target, one for the
 // directory refresh, one for the Cloudflare rotation and, with the module
 // functions, one for the issuer's clients pass. Each targets the `live` alias of
-// the function that runs it (github, slack, google, cloudflare, the issuer); the
-// role's one policy holds exactly the aliases the schedules invoke. Without the
-// module functions every schedule targets the issuer's alias.
+// the function that runs it (github, slack, google, cloudflare, outline, the
+// issuer); the role's one policy holds exactly the aliases the schedules invoke.
 func newSchedules(ctx *pulumi.Context, name string, a *LambdaArgs, live *lambda.Alias, mods *moduleFunctions,
 	tags pulumi.StringMapInput, opts ...pulumi.ResourceOption) (*iam.Role, pulumi.StringArrayOutput, error) {
 	var none pulumi.StringArrayOutput
@@ -2282,18 +2289,20 @@ func newSchedules(ctx *pulumi.Context, name string, a *LambdaArgs, live *lambda.
 		}
 		names = append(names, pulumi.String(kname))
 	}
-	// The Outline workspaces tick the issuer, which hosts their controller.
-	for i, id := range a.Schedule.OutlineWorkspaces {
-		if i == 0 && a.IssuerClients.Disabled {
-			invoked = append(invoked, live.Arn)
-		}
-		payload, err := json.Marshal(map[string]string{"kind": "tick", "controller": "outline", "target": id})
+	// The Outline workspaces tick the Outline function, at their own rate.
+	for _, id := range a.Schedule.OutlineWorkspaces {
+		payload, err := json.Marshal(map[string]string{"kind": "tick", "controller": RoleOutline, "target": id})
 		if err != nil {
 			return nil, none, err
 		}
-		sname := a.FunctionNamePrefix + "-outline-" + id
-		if err := mk(name+"-outline-"+id, sname, "Ticks the Outline controller for "+id+".",
-			a.Schedule.OutlineRate, a.Schedule.Paused, live.Arn, string(payload)); err != nil {
+		arn, err := use(RoleOutline)
+		if err != nil {
+			return nil, none, err
+		}
+		rid := strings.ReplaceAll(id, ":", "-")
+		sname := a.FunctionNamePrefix + "-" + RoleOutline + "-" + rid
+		if err := mk(name+"-"+RoleOutline+"-"+rid, sname, "Ticks the Outline controller for "+id+".",
+			a.Schedule.OutlineRate, a.Schedule.Paused, arn, string(payload)); err != nil {
 			return nil, none, err
 		}
 		names = append(names, pulumi.String(sname))

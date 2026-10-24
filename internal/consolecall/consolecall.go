@@ -44,6 +44,8 @@ const (
 	ModuleGitHub = "github"
 	ModuleSlack  = "slack"
 	ModuleGoogle = "google"
+	// ModuleOutline is the Outline module (docs/decisions/0077).
+	ModuleOutline = "outline"
 )
 
 // ListMaxBytes is the bound of a method that lists: above
@@ -283,6 +285,9 @@ func Violations(s *modcall.Server) []string {
 // [modcall.Caller] each, sending as the class [Class].
 type Callers struct {
 	GitHub, Slack, Google modcall.Caller
+	// Outline is the Outline module's, which is never in the console's
+	// process: nil is an installation that runs none.
+	Outline modcall.Caller
 }
 
 // OrLocal fills each caller that is nil with the in-process servers, as the

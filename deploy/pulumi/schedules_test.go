@@ -66,19 +66,45 @@ func TestSchedulesTargetTheirModulesLiveAlias(t *testing.T) {
 	}
 }
 
-// An Outline workspace ticks the issuer's alias, which hosts its controller,
-// at its own rate.
-func TestOutlineSchedulesTargetTheIssuer(t *testing.T) {
-	e := estateWith()
+// An Outline workspace ticks the Outline function's `live` alias at its own
+// rate, and the scheduler's policy holds that alias.
+func TestOutlineSchedulesTargetTheOutlineFunction(t *testing.T) {
+	in := exampleInstallation(t)
+	withOutline(in)
+	e := withInstallation(in, nil)
 	e.outline = []string{"wiki"}
 	rec, _ := mustLambda(t, e)
 	got := targetsOf(t, rec)
-	if want := `{"controller":"outline","kind":"tick","target":"wiki"} ` + liveOf("sluis-staging-issuer"); got["sluis-outline-wiki"] != want {
-		t.Errorf("the Outline schedule = %q, want %q", got["sluis-outline-wiki"], want)
+	if want := `{"controller":"outline","kind":"tick","target":"wiki"} ` + liveOf("sluis-example-outline"); got["sluis-outline-wiki"] != want {
+		t.Errorf("the Outline schedule = %q, want %q (all: %v)", got["sluis-outline-wiki"], want, got)
 	}
 	for _, s := range rec.ofType(schedType) {
 		if prop(s, "name").StringValue() == "sluis-outline-wiki" && prop(s, "scheduleExpression").StringValue() != arp.DefaultOutlineSchedule {
 			t.Errorf("the Outline rate: %v", s.Inputs)
+		}
+	}
+	pol := grants(statements(t, prop(rec.one(t, policyType, "staging-scheduler-policy"), "policy").StringValue()))["lambda:InvokeFunction"]
+	if !slices.Contains(pol, liveOf("sluis-example-outline")) {
+		t.Errorf("the scheduler may not invoke the Outline alias: %v", pol)
+	}
+
+	// A rate of its own.
+	e.mutate = withInstallation(in, func(a *arp.LambdaArgs) { a.Schedule.OutlineRate = "rate(7 minutes)" }).mutate
+	rec, _ = mustLambda(t, e)
+	if s := rec.one(t, schedType, "staging-outline-wiki"); prop(s, "scheduleExpression").StringValue() != "rate(7 minutes)" {
+		t.Errorf("the Outline rate: %v", s.Inputs)
+	}
+}
+
+// An Outline workspace with no Outline function to tick is refused: the
+// installation declares no `controllers.outline`, or there is no installation.
+func TestOutlineWorkspacesNeedTheOutlineFunction(t *testing.T) {
+	e := withInstallation(exampleInstallation(t), nil)
+	e.outline = []string{"wiki"}
+	for name, e := range map[string]estate{"installation": e, "documents": {outline: []string{"wiki"}}} {
+		if _, _, err := buildLambda(t, e); err == nil || !strings.Contains(err.Error(), "Schedule.OutlineWorkspaces") ||
+			!strings.Contains(err.Error(), "controllers.outline") {
+			t.Errorf("%s: error %v, want the Outline workspaces refused", name, err)
 		}
 	}
 }

@@ -1,7 +1,7 @@
 {{- include "sluis.prepare" . -}}
 {{- if and (eq .Values.renders "app") .Values.networkPolicy.enabled -}}
 {{- /* One policy per module, on that module's pods (the component label). */ -}}
-{{- range $mod := list "issuer" "github" "slack" "google" "cloudflare" }}
+{{- range $mod := list "issuer" "github" "slack" "google" "cloudflare" "outline" }}
 {{- if include "sluis.moduleOn" (dict "root" $ "module" $mod) }}
 {{- $args := dict "root" $ "module" $mod }}
 {{- $callee := include "sluis.isCallee" $args }}
@@ -55,7 +55,7 @@ spec:
       ports:
         - port: {{ include "sluis.port" $ }}
     {{- $callers := list }}
-    {{- range $kind := list "github" "slack" }}
+    {{- range $kind := list "github" "slack" "outline" }}
     {{- if or (include "sluis.moduleOn" (dict "root" $ "module" $kind)) (include "sluis.hosts" (dict "root" $ "module" "issuer" "kind" $kind)) }}
     {{- $callers = append $callers (ternary $kind "issuer" (ne (include "sluis.moduleOn" (dict "root" $ "module" $kind)) "")) }}
     {{- end }}
@@ -105,7 +105,7 @@ spec:
         - port: {{ include "sluis.moduleRPCPort" (dict "root" $ "module" $to) }}
     {{- end }}
     {{- end }}
-    {{- else if or (eq $mod "github") (eq $mod "slack") }}
+    {{- else if or (eq $mod "github") (eq $mod "slack") (eq $mod "outline") }}
     # The console's API, through the release's Service.
     - to:
         - podSelector:

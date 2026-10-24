@@ -410,7 +410,7 @@ func (in *Installation) adapters() (map[string]internal.AdapterChoice, error) {
 // serviceControllers is the service document's `controllers`: each section that
 // is present is a controller that is on.
 func (in *Installation) serviceControllers() *internal.Controllers {
-	if in.Controllers == nil || (in.Controllers.GitHub == nil && in.Controllers.Slack == nil && in.Controllers.Outline == nil) {
+	if in.Controllers == nil || (in.Controllers.GitHub == nil && in.Controllers.Slack == nil) {
 		return nil
 	}
 	out := &internal.Controllers{}
@@ -421,10 +421,6 @@ func (in *Installation) serviceControllers() *internal.Controllers {
 	if g := in.Controllers.Slack; g != nil {
 		c := copyOf(&g.SlackController)
 		out.Slack = c
-	}
-	if g := in.Controllers.Outline; g != nil {
-		c := copyOf(&g.OutlineController)
-		out.Outline = c
 	}
 	return out
 }

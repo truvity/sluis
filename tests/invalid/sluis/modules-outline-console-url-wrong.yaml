@@ -1,0 +1,20 @@
+# The console the Outline module reads is this release's own Service.
+# error: modules.outline.config.consoleURL must be http://sluis.default.svc:8080/console
+config:
+  issuerURL: https://issuer.example
+exchange:
+  clusters:
+    - name: example-cluster
+      issuer: https://oidc.eu-example-1.example/id/EXAMPLE
+      jwksUri: https://oidc.eu-example-1.example/id/EXAMPLE/keys
+modules:
+  outline:
+    enabled: true
+    config:
+      preset: k8s-aws
+      ports:
+        dynamodb:
+          region: eu-west-1
+          tables:
+            outline: sluis-outline
+      consoleURL: http://elsewhere.example:8080/console

@@ -44,7 +44,6 @@ import (
 	"github.com/truvity/sluis/internal/issuer"
 	"github.com/truvity/sluis/internal/issuerapp"
 	"github.com/truvity/sluis/internal/modcall"
-	outlineapp "github.com/truvity/sluis/internal/outlineroster/app"
 	"github.com/truvity/sluis/internal/port"
 	"github.com/truvity/sluis/internal/recoverygate"
 	"github.com/truvity/sluis/internal/secrets"
@@ -69,9 +68,6 @@ type Config struct {
 	// clears them before [New], which would run their loops.
 	GitHub *githubapp.Config
 	Slack  *slackapp.Config
-	// Outline is the Outline controller (`controllers.outline`); nil is off.
-	// It is always this process's: the issuer hosts it (docs/decisions/0077).
-	Outline *outlineapp.Config
 	// Cloudflare is sluis as the STS for Cloudflare tokens and R2 credentials
 	// (`cloudflare`); nil is off. Grants are the policy's, Instance names the
 	// tokens it mints.
@@ -107,6 +103,9 @@ const (
 	moduleGitHub = "github"
 	moduleSlack  = "slack"
 	moduleGoogle = "google"
+	// moduleOutline is never hosted here: the console's Outline pages call it
+	// where `outline.remote` says (docs/decisions/0077).
+	moduleOutline = "outline"
 )
 
 // Hosted reports whether the module runs in this process: its section names no
@@ -145,20 +144,14 @@ func Load(file string) (Config, error) {
 	if cfg.GitHub, cfg.Slack, err = controllersOf(svc, p); err != nil {
 		return Config{}, err
 	}
-	if svc.Controllers != nil && svc.Controllers.Outline != nil {
-		c, err := outlineapp.FromService(svc, p)
-		if err != nil {
-			return Config{}, fmt.Errorf("controllers.outline: %w", err)
-		}
-		cfg.Outline = &c
-	}
+
 	// With the Google module elsewhere the hub only reads its snapshots; the
 	// module's own schedule refreshes them (docs/decisions/0071, D-v176-6 a).
 	cfg.Directory.Reader = svc.Google != nil && svc.Google.Remote != nil
 	// A module that is another function's is not assembled here: its controller
 	// runs there, one pass per invocation, and this process only calls it.
 	cfg.Remote = map[string]config.ModuleRemote{}
-	for _, module := range []string{moduleGitHub, moduleSlack, moduleGoogle} {
+	for _, module := range []string{moduleGitHub, moduleSlack, moduleGoogle, moduleOutline} {
 		if r, ok := svc.Targets()[module]; ok {
 			cfg.Remote[module] = r
 		}
@@ -282,9 +275,6 @@ type App struct {
 	// when the document names none.
 	github *githubapp.App
 	slack  *slackapp.App
-	// outline is the Outline controller; nil when the document names none. It
-	// asks the console in this process directly.
-	outline *outlineapp.App
 	// consoles are where the controllers read the console, which is this very
 	// process: a controller starts its passes once its console answers.
 	consoles map[string]string
@@ -422,12 +412,6 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 		a.consoles["slack"] = cfg.Slack.ConsoleURL()
 		controllerReady = append(controllerReady, a.slack.Readiness())
 	}
-	if cfg.Outline != nil {
-		if a.outline, err = a.newOutline(ctx, *cfg.Outline); err != nil {
-			a.Close()
-			return nil, fmt.Errorf("controllers.outline: %w", err)
-		}
-	}
 	// Freshness stays the hub's own decision, which is why no maximum age
 	// is passed: a login that forced a live read on every sign-in would
 	// turn one corporate directory's slowness into everybody's.
@@ -563,6 +547,16 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 		}
 		directory.ConsoleServer().UseSlack(caller)
 	}
+	if r, ok := cfg.Remote[moduleOutline]; ok {
+		// The Outline pages run in the Outline module, the only holder of the
+		// workspaces' API keys: the console calls it as `console`.
+		caller, err := dialConsole(ctx, cfg, moduleOutline, r)
+		if err != nil {
+			a.Close()
+			return nil, err
+		}
+		directory.ConsoleServer().UseOutline(caller)
+	}
 	if cfg.Backup != nil {
 		// The Backups page reads the two modules as the caller class `console`.
 		client, err := backuprpc.Dial(ctx, cfg.Backup)
@@ -600,9 +594,6 @@ func (a *App) Run(ctx context.Context) error {
 			return a.slack.RunLoop(gctx, func(ctx context.Context) { awaitConsole(ctx, a.log, "slack", a.consoles["slack"]) })
 		})
 	}
-	if a.outline != nil {
-		group.Go(func() error { return a.outline.RunLoop(gctx) })
-	}
 	if a.cloudflare != nil {
 		group.Go(func() error { a.runCloudflare(gctx); return nil })
 	}
@@ -610,25 +601,6 @@ func (a *App) Run(ctx context.Context) error {
 		return fmt.Errorf("sluis: %w", err)
 	}
 	return nil
-}
-
-// newOutline assembles the Outline controller over this process's stores, its
-// console and its audit trail.
-func (a *App) newOutline(ctx context.Context, cfg outlineapp.Config) (*outlineapp.App, error) {
-	console := a.directory.ConsoleServer()
-	return outlineapp.New(ctx, cfg, outlineapp.Deps{
-		Stores: a.stores, Directory: console.ControllerAccess("outline"), Audit: console.Recorder(),
-	}, a.log)
-}
-
-// Outline is the Outline controller this process hosts, assembled anew for one
-// pass: what a Lambda invocation runs. Nil, with no error, when the document
-// names none.
-func (a *App) Outline(ctx context.Context, cfg *outlineapp.Config) (*outlineapp.App, error) {
-	if cfg == nil {
-		return nil, nil
-	}
-	return a.newOutline(ctx, *cfg)
 }
 
 // auditTokenLifetime is how long a token the console mints for the audit

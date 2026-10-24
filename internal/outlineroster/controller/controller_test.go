@@ -438,3 +438,46 @@ func TestAnExistingCollectionIsAdoptedAndExtendKeeps(t *testing.T) {
 		t.Errorf("%d collections, want General adopted and Acme created", got)
 	}
 }
+
+// An answer the directory cannot vouch for adds a person to an ordinary group,
+// and never makes anybody an admin: not of the workspace, and not of a
+// collection through a group granted `admin` on it.
+func TestANonAuthoritativeAnswerNeverPromotes(t *testing.T) {
+	t.Parallel()
+	text := strings.Replace(basePolicy, "  all:wiki:globex: { matchers: [{ email_domain: example.org }] }\n",
+		"  all:wiki:globex: { matchers: [{ email_domain: example.org }] }\n  acme:wiki:manager: { members: [wiki-managers@example.com] }\n", 1)
+	text = strings.Replace(text, "Acme: { mode: strict, directory: example.com, read_write: [all:wiki:acme] }",
+		"Acme: { mode: strict, directory: example.com, read_write: [all:wiki:acme], admin: [acme:wiki:manager] }", 1)
+	h := newHarness(t, text, enabled())
+	nina := h.o.AddUser("Nina", "nina@example.com", "member")
+	h.dir.setPerson("nina@example.com", person{authoritative: false, found: true,
+		groups: []string{"all:wiki:admin", "all:wiki:acme", "acme:wiki:manager"}})
+
+	report := h.pass()
+	if nina.Role != "member" {
+		t.Errorf("a non-authoritative answer made nina %s", nina.Role)
+	}
+	if u := userRow(report, "nina@example.com"); u.State != status.StateRetrying {
+		t.Errorf("nina's role row = %+v, want retrying", u)
+	}
+	for _, group := range []string{"all:wiki:admin", "acme:wiki:manager"} {
+		if slices.Contains(h.o.GroupByName(group).Members, nina.ID) {
+			t.Errorf("a non-authoritative answer put nina in %s, which makes its holders admins", group)
+		}
+		if m := groupMember(report, group, "nina@example.com"); m.State != status.StateRetrying {
+			t.Errorf("nina in %s = %+v, want retrying", group, m)
+		}
+	}
+	if !slices.Contains(h.o.GroupByName("all:wiki:acme").Members, nina.ID) {
+		t.Error("a non-authoritative answer that holds an ordinary group did not add nina to it")
+	}
+
+	// Once the directory vouches, the promotions go ahead.
+	h.dir.setPerson("nina@example.com", person{authoritative: true, found: true,
+		groups: []string{"all:wiki:admin", "all:wiki:acme", "acme:wiki:manager"}})
+	h.pass()
+	if nina.Role != "admin" || !slices.Contains(h.o.GroupByName("acme:wiki:manager").Members, nina.ID) {
+		t.Errorf("an authoritative answer: role %s, in acme:wiki:manager %v; want admin, true", nina.Role,
+			slices.Contains(h.o.GroupByName("acme:wiki:manager").Members, nina.ID))
+	}
+}

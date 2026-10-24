@@ -120,17 +120,18 @@ func load(t *testing.T, path string) map[string]any {
 
 // moduleDocuments are the modules' ConfigMaps, which the issuer's is not: each
 // is derived from the values (modules_test.go holds what), and the two
-// controllers' are files their binaries accept.
+// controllers' and the Outline module's are files their binaries accept.
 var moduleDocuments = map[string]string{
 	"github":     "controller-github",
 	"slack":      "controller-slack",
 	"google":     "",
 	"cloudflare": "",
+	"outline":    "sluis-outline",
 }
 
 // callees are the modules the issuer routes to: the chart writes each one's
 // `<module>.remote` into the issuer's document.
-var callees = []string{"github", "slack", "google", "cloudflare"}
+var callees = []string{"github", "slack", "google", "cloudflare", "outline"}
 
 // The chart passes `config` through: the ConfigMap it renders for the issuer
 // holds exactly the block the values gave, with nothing added but the
@@ -353,7 +354,8 @@ func TestTheRenderedPolicyDocumentLoads(t *testing.T) {
 // own command, every volume it mounts is one it defines, and a controller's
 // token, credentials and records are mounted in the pod that runs it (its
 // module's, or in documents mode the issuer's, whose document names it) and
-// in no other.
+// in no other. The Outline module's token is mounted in its own pod alone: the
+// issuer never runs it.
 func TestEachModuleRunsItsOwnCommandInItsOwnDeployment(t *testing.T) {
 	cases, _ := filepath.Glob(filepath.Join("..", "cases", "sluis", "*", "values.yaml"))
 	defaults := load(t, filepath.Join("..", "..", "charts", "sluis", "values.yaml"))
@@ -381,7 +383,7 @@ func TestEachModuleRunsItsOwnCommandInItsOwnDeployment(t *testing.T) {
 		}
 		named, _ := controllers.(map[string]any)
 		wantOn := map[string]bool{"issuer": true}
-		for _, m := range []string{"github", "slack", "google", "cloudflare"} {
+		for _, m := range []string{"github", "slack", "google", "cloudflare", "outline"} {
 			if on, _ := dig(values, "modules", m, "enabled"); on == true {
 				wantOn[m] = true
 			}
@@ -444,9 +446,15 @@ func TestEachModuleRunsItsOwnCommandInItsOwnDeployment(t *testing.T) {
 					checked[kind] = true
 				}
 			}
+			if _, has := mounted["outline-token"]; has != (component == "outline") {
+				t.Errorf("%s: the %s pod mounts the Outline module's token is %v", shape, component, has)
+			}
+			if component == "outline" {
+				checked["outline"] = true
+			}
 		}
 	}
-	for _, kind := range []string{"github", "slack"} {
+	for _, kind := range []string{"github", "slack", "outline"} {
 		if !checked[kind] {
 			t.Errorf("no case runs the %s controller: the sweep proved nothing", kind)
 		}

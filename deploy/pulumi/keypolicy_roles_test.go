@@ -207,7 +207,7 @@ func TestSendersRolesAndViewersFollowTheNames(t *testing.T) {
 		t.Errorf("senders unsorted: %v", senders)
 	}
 	roles, err := a.Roles()
-	if err != nil || len(roles) != 7 {
+	if err != nil || len(roles) != 8 {
 		t.Fatalf("roles: %d %v", len(roles), err)
 	}
 	viewers, err := a.ViewerRoles()

@@ -561,6 +561,11 @@
                       "minLength": 1,
                       "type": "string"
                     },
+                    "outline": {
+                      "description": "The name of the outline module's table. The library default is `sluis-<instance>-outline`.",
+                      "minLength": 1,
+                      "type": "string"
+                    },
                     "slack": {
                       "description": "The name of the slack module's table. The library default is `sluis-<instance>-slack`.",
                       "minLength": 1,
@@ -1401,6 +1406,11 @@
                     },
                     "oidc": {
                       "description": "The name of the oidc module's table. The library default is `sluis-<instance>-oidc`.",
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "outline": {
+                      "description": "The name of the outline module's table. The library default is `sluis-<instance>-outline`.",
                       "minLength": 1,
                       "type": "string"
                     },
@@ -3065,8 +3075,8 @@
                           "type": "string"
                         },
                         "directory": {
-                          "description": "The connected directory, by workspace id or primary domain, that every bound group's members must come from. A collection whose groups reach outside it is held.",
-                          "minLength": 1,
+                          "description": "The connected directory, by its primary domain (`example.com`), that every bound group's members must come from. A collection whose groups reach outside it is held.",
+                          "pattern": "^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$",
                           "type": "string"
                         },
                         "mode": {
@@ -3912,23 +3922,6 @@
               },
               "type": "object"
             },
-            "outline": {
-              "additionalProperties": false,
-              "description": "The Outline controller: makes each Outline workspace's groups, roles and collections match the policy's outline table (docs/reference/sluis/outline.md). It runs in this process, and on Lambda in the issuer's function, and asks the console in it directly. It needs a storage adapter other than `legacy`: the workspaces' connections are on the State port.",
-              "properties": {
-                "interval": {
-                  "$ref": "#/definitions/config-sluis.duration",
-                  "default": "2m",
-                  "description": "How long between passes. Positive. Short, because a person signing in for the first time sees nothing but their own documents until the next pass."
-                },
-                "shareScan": {
-                  "$ref": "#/definitions/config-sluis.duration",
-                  "default": "1h",
-                  "description": "How often the single-document shares in the collections that name a directory are read and reported. Each document is two calls to Outline."
-                }
-              },
-              "type": "object"
-            },
             "slack": {
               "additionalProperties": false,
               "description": "The Slack controller: makes each Slack workspace's user groups match the policy's slack table.",
@@ -4757,6 +4750,39 @@
           },
           "type": "object"
         },
+        "outline": {
+          "additionalProperties": false,
+          "description": "The Outline module's routing (docs/decisions/0077). The issuer never runs the module: unset, the console's Outline pages say there is none.",
+          "properties": {
+            "remote": {
+              "additionalProperties": false,
+              "description": "Where the Outline module is: the console's Outline pages are its. Set exactly one of `function` and `url`.",
+              "properties": {
+                "audience": {
+                  "description": "The audience of that token. The module's name, `outline`, when unset.",
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "function": {
+                  "description": "The module's Lambda function, name or ARN. It is invoked through the `live-<class>` alias of this process's caller class.",
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "tokenFile": {
+                  "description": "Where the projected token is mounted. `/var/run/secrets/sluis/outline/token` when unset.",
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "url": {
+                  "$ref": "#/definitions/config-sluis.url",
+                  "description": "The module's Kubernetes Service. A call carries the pod's projected ServiceAccount token."
+                }
+              },
+              "type": "object"
+            }
+          },
+          "type": "object"
+        },
         "platform": {
           "additionalProperties": false,
           "description": "What this installation has to build on. The answers pick a preset (the decision tree in docs/concepts/sluis/ports.md), and start refuses an adapter that needs an answer that is no. Absent, the `ports` keys decide and nothing is checked against the platform.",
@@ -4995,6 +5021,11 @@
                     },
                     "oidc": {
                       "description": "The name of the oidc module's table. The library default is `sluis-<instance>-oidc`.",
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "outline": {
+                      "description": "The name of the outline module's table. The library default is `sluis-<instance>-outline`.",
                       "minLength": 1,
                       "type": "string"
                     },
@@ -6546,6 +6577,11 @@
                       "minLength": 1,
                       "type": "string"
                     },
+                    "outline": {
+                      "description": "The name of the outline module's table. The library default is `sluis-<instance>-outline`.",
+                      "minLength": 1,
+                      "type": "string"
+                    },
                     "slack": {
                       "description": "The name of the slack module's table. The library default is `sluis-<instance>-slack`.",
                       "minLength": 1,
@@ -6723,6 +6759,725 @@
       "type": "string"
     },
     "config-sluis-backup.url": {
+      "allOf": [
+        {
+          "pattern": "^https?://\\S+$"
+        },
+        {
+          "not": {
+            "pattern": "^https?://[^/?#\\s]*@"
+          }
+        }
+      ],
+      "description": "An http or https URL with a host and no credentials: a password in a URL is a secret in the file, and a secret is named, never carried.",
+      "minLength": 1,
+      "type": "string"
+    },
+    "config-sluis-outline": {
+      "additionalProperties": false,
+      "description": "The configuration of the Outline module (`sluis outline`, and the `sluis-outline` function): the controller that makes each Outline workspace's admins, groups and collections match the policy's outline table. Secrets are never in this file: a field ending in ...Secret holds the NAME of a secret, which `secrets` says how to deliver, and a field ending in ...File holds a path (a credential the platform mounts and rotates). Telemetry is the OTEL_* environment, not configuration.",
+      "properties": {
+        "adapters": {
+          "additionalProperties": false,
+          "description": "Names the adapter of single concerns, over the preset and the `ports` keys. The names and what each needs are in the matrix of docs/reference/sluis/adapters.md.",
+          "properties": {
+            "audit": {
+              "additionalProperties": false,
+              "description": "The adapter for the audit sink, replacing the preset's.",
+              "properties": {
+                "adapter": {
+                  "description": "The adapter's name, as the compatibility matrix lists it.",
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "settings": {
+                  "description": "The adapter's own settings (an object; the adapter refuses a key it does not know).",
+                  "type": "object"
+                }
+              },
+              "required": [
+                "adapter"
+              ],
+              "type": "object"
+            },
+            "blobs": {
+              "additionalProperties": false,
+              "description": "The adapter for blobs, replacing the preset's.",
+              "properties": {
+                "adapter": {
+                  "description": "The adapter's name, as the compatibility matrix lists it.",
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "settings": {
+                  "description": "The adapter's own settings (an object; the adapter refuses a key it does not know).",
+                  "type": "object"
+                }
+              },
+              "required": [
+                "adapter"
+              ],
+              "type": "object"
+            },
+            "schedule": {
+              "additionalProperties": false,
+              "description": "The adapter for the schedule of passes, replacing the preset's.",
+              "properties": {
+                "adapter": {
+                  "description": "The adapter's name, as the compatibility matrix lists it.",
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "settings": {
+                  "description": "The adapter's own settings (an object; the adapter refuses a key it does not know).",
+                  "type": "object"
+                }
+              },
+              "required": [
+                "adapter"
+              ],
+              "type": "object"
+            },
+            "secrets": {
+              "additionalProperties": false,
+              "description": "The adapter for secrets (dynamic secrets), replacing the preset's.",
+              "properties": {
+                "adapter": {
+                  "description": "The adapter's name, as the compatibility matrix lists it.",
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "settings": {
+                  "description": "The adapter's own settings (an object; the adapter refuses a key it does not know).",
+                  "type": "object"
+                }
+              },
+              "required": [
+                "adapter"
+              ],
+              "type": "object"
+            },
+            "signing": {
+              "additionalProperties": false,
+              "description": "The adapter for token signing, replacing the preset's.",
+              "properties": {
+                "adapter": {
+                  "description": "The adapter's name, as the compatibility matrix lists it.",
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "settings": {
+                  "description": "The adapter's own settings (an object; the adapter refuses a key it does not know).",
+                  "type": "object"
+                }
+              },
+              "required": [
+                "adapter"
+              ],
+              "type": "object"
+            },
+            "state": {
+              "additionalProperties": false,
+              "description": "The adapter for state, sessions included, replacing the preset's.",
+              "properties": {
+                "adapter": {
+                  "description": "The adapter's name, as the compatibility matrix lists it.",
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "settings": {
+                  "description": "The adapter's own settings (an object; the adapter refuses a key it does not know).",
+                  "type": "object"
+                }
+              },
+              "required": [
+                "adapter"
+              ],
+              "type": "object"
+            },
+            "trigger": {
+              "additionalProperties": false,
+              "description": "The adapter for the \"run a pass now\" trigger, replacing the preset's.",
+              "properties": {
+                "adapter": {
+                  "description": "The adapter's name, as the compatibility matrix lists it.",
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "settings": {
+                  "description": "The adapter's own settings (an object; the adapter refuses a key it does not know).",
+                  "type": "object"
+                }
+              },
+              "required": [
+                "adapter"
+              ],
+              "type": "object"
+            }
+          },
+          "type": "object"
+        },
+        "audit": {
+          "additionalProperties": false,
+          "description": "The audit installation the controller records to, as its own workload. Unset only logs what it did.",
+          "properties": {
+            "tokenFile": {
+              "description": "This workload's projected service-account token.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "writer": {
+              "$ref": "#/definitions/config-sluis-outline.url",
+              "description": "The installation's receiver."
+            }
+          },
+          "type": "object"
+        },
+        "console": {
+          "additionalProperties": false,
+          "description": "How the controller proves itself to the console, when the pod's `tokenFile` is not the way.",
+          "properties": {
+            "auth": {
+              "additionalProperties": false,
+              "description": "The proof. Absent, `tokenFile`.",
+              "properties": {
+                "aws": {
+                  "additionalProperties": false,
+                  "description": "The function role's AWS outbound web identity token (`sts:GetWebIdentityToken`), re-minted every four minutes. The console's issuer must federate the account, and its policy must declare an `aws` matcher for the role.",
+                  "properties": {
+                    "audience": {
+                      "description": "The audience requested from STS. It must equal the issuer's `console.awsAudience` (default `<issuerURL>/console`), NOT the audience of its AWS federation file.",
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "audience"
+                  ],
+                  "type": "object"
+                }
+              },
+              "type": "object"
+            }
+          },
+          "type": "object"
+        },
+        "consoleURL": {
+          "$ref": "#/definitions/config-sluis-outline.url",
+          "description": "The console's API, which answers who holds a group."
+        },
+        "interval": {
+          "$ref": "#/definitions/config-sluis-outline.duration",
+          "default": "2m",
+          "description": "How long between passes. Positive. Short, because a person signing in for the first time sees nothing but their own documents until the next pass."
+        },
+        "log": {
+          "additionalProperties": false,
+          "description": "Structured logging. One level for the whole service: per-package levels are deliberately not part of the contract.",
+          "properties": {
+            "level": {
+              "default": "info",
+              "description": "The lowest level that is written.",
+              "enum": [
+                "debug",
+                "info",
+                "warn",
+                "error"
+              ]
+            }
+          },
+          "type": "object"
+        },
+        "outline": {
+          "additionalProperties": false,
+          "description": "What is the Outline module's own (docs/reference/sluis/outline.md).",
+          "properties": {
+            "serve": {
+              "additionalProperties": false,
+              "description": "Makes the Outline module answer the console's calls on Kubernetes. The module listens on `address` and accepts a call whose projected ServiceAccount token was minted for `audience`, checked with a TokenReview, and whose subject is one of `issuers`; any other call is a 401. On Lambda the function answers `rpc` events and IAM decides who may invoke it. Unset serves nothing.",
+              "properties": {
+                "address": {
+                  "description": "The listener, `host:port`; it also answers `GET /healthz`. `:8081` when unset.",
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "audience": {
+                  "description": "The audience a caller's token must be minted for. The module's name, `outline`, when unset.",
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "issuers": {
+                  "description": "The issuer's ServiceAccount, as `system:serviceaccount:<namespace>:<name>`. A call from it is both the issuer class (`mint_installation`) and the console class (the console methods); a token of any other subject is a 401.",
+                  "items": {
+                    "pattern": "^system:serviceaccount:[^:]+:[^:]+$",
+                    "type": "string"
+                  },
+                  "minItems": 1,
+                  "type": "array",
+                  "uniqueItems": true
+                }
+              },
+              "required": [
+                "issuers"
+              ],
+              "type": "object"
+            },
+            "shareScan": {
+              "$ref": "#/definitions/config-sluis-outline.duration",
+              "default": "1h",
+              "description": "How often the single-document shares in the collections that name a directory are read and reported. Each document is two calls to Outline."
+            }
+          },
+          "type": "object"
+        },
+        "platform": {
+          "additionalProperties": false,
+          "description": "What this installation has to build on. The answers pick a preset (the decision tree in docs/concepts/sluis/ports.md), and start refuses an adapter that needs an answer that is no. Absent, the `ports` keys decide and nothing is checked against the platform.",
+          "properties": {
+            "aws": {
+              "description": "AWS is available: its credentials, DynamoDB, S3, SSM, KMS, SQS and EventBridge.",
+              "type": "boolean"
+            },
+            "kubernetes": {
+              "description": "A Kubernetes cluster is available.",
+              "type": "boolean"
+            },
+            "openbao": {
+              "description": "An OpenBao is available.",
+              "type": "boolean"
+            },
+            "replicas": {
+              "default": 1,
+              "description": "How many replicas share this installation's state. Above 1 start refuses an adapter that keeps its data in the process (`memory`).",
+              "minimum": 1,
+              "type": "integer"
+            },
+            "runtime": {
+              "description": "Where sluis itself runs. Absent: `kubernetes` with a cluster, else `lambda` on AWS, else `process`.",
+              "enum": [
+                "kubernetes",
+                "lambda",
+                "process"
+              ]
+            }
+          },
+          "type": "object"
+        },
+        "policy": {
+          "additionalProperties": false,
+          "description": "The policy document: the bindings are its outline table, and its `controllers.outline.enabledWorkspaces` is what this module may change.",
+          "properties": {
+            "file": {
+              "description": "The policy document: the one canonical file `sluisctl policy render` writes (schemas/config/policy.schema.json). Read once, at start: a change is a new instance.",
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "file"
+          ],
+          "type": "object"
+        },
+        "ports": {
+          "additionalProperties": false,
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "adapter": {
+                    "const": "dynamodb"
+                  }
+                },
+                "required": [
+                  "adapter"
+                ]
+              },
+              "then": {
+                "required": [
+                  "dynamodb"
+                ]
+              }
+            }
+          ],
+          "description": "The adapters behind the storage ports (docs/concepts/sluis/ports.md).",
+          "properties": {
+            "adapter": {
+              "default": "legacy",
+              "description": "`legacy`, the default, is deprecated since v1.74.0 and still ships: migrate with `sluis migrate`. It keeps state where it has always been kept: the namespace's ConfigMaps and Secrets and, when `valkey` is set, Valkey. `memory` keeps all of it in this process, which a restart loses: for a local run and the demonstration, and not with `store: kubernetes` or `valkey`.  `dynamodb` keeps the same in one DynamoDB table (`ports.dynamodb`), with the platform's credentials, and takes its Blob from `legacy` unless `ports.blob` names its own.",
+              "enum": [
+                "legacy",
+                "memory",
+                "dynamodb"
+              ]
+            },
+            "blob": {
+              "additionalProperties": false,
+              "allOf": [
+                {
+                  "if": {
+                    "properties": {
+                      "adapter": {
+                        "const": "s3"
+                      }
+                    }
+                  },
+                  "then": {
+                    "required": [
+                      "s3"
+                    ]
+                  }
+                }
+              ],
+              "description": "Replaces the Blob port (status reports, directory snapshots) with an adapter of its own, whatever `ports.adapter` is. Absent, the Blob is `ports.adapter`'s.",
+              "properties": {
+                "adapter": {
+                  "description": "`s3` keeps the blobs in an S3 bucket.",
+                  "enum": [
+                    "s3"
+                  ]
+                },
+                "s3": {
+                  "additionalProperties": false,
+                  "dependentRequired": {
+                    "credentials": [
+                      "endpoint"
+                    ],
+                    "credentialsRef": [
+                      "endpoint"
+                    ]
+                  },
+                  "description": "Where the S3 adapter keeps its objects. Credentials are the platform's (EKS Pod Identity, IRSA, a Lambda role) and are never configured here.",
+                  "not": {
+                    "required": [
+                      "credentialsRef",
+                      "credentials"
+                    ]
+                  },
+                  "properties": {
+                    "bucket": {
+                      "description": "The bucket. It must exist, with public access blocked.",
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "checksum": {
+                      "default": "sha256",
+                      "description": "The integrity header of every upload: `sha256` (x-amz-checksum-sha256, computed over the whole body and sent precomputed, never as an aws-chunked trailer), `md5` (Content-MD5) or `none`, for a store that refuses SHA-256. AWS refuses a PutObject without one on an Object Lock bucket.",
+                      "enum": [
+                        "sha256",
+                        "md5",
+                        "none"
+                      ]
+                    },
+                    "credentials": {
+                      "additionalProperties": false,
+                      "description": "Instead of a static document, sluis mints its own R2 credentials from a Cloudflare preset: the account's minter credential clones the preset's prototype, the credentials are renewed with a third of their lifetime left and minted again once after a 403. Exclusive with `credentialsRef`. Needs `endpoint`, the ssm secrets source, and the `cloudflare` section.",
+                      "properties": {
+                        "preset": {
+                          "description": "A key of `cloudflare.presets` that has an `endpoint` (an R2 preset).",
+                          "pattern": "^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "preset"
+                      ],
+                      "type": "object"
+                    },
+                    "credentialsRef": {
+                      "description": "Where the credentials for `endpoint` are, in the installation's secrets store (the ssm secrets source): the internal address, `internal/<module>/<name>`, of the `s3-credentials/v1` document (`access_key_id`, `secret_access_key`) that holds static credentials, or `external/cloudflare/<preset>`, the `cloudflare/v1` document the Cloudflare module rotates for an R2 preset with `store: external` (the access key is the token's id; it is read again with a third of its time left and after a 403). Read at start and again after an answer of 403, at most once a minute. Needs `endpoint`; `region` defaults to `auto` with it. Any other address is refused. This is the simple way and needs no `cloudflare` section in this document, so it is the one to use when the presets are another module's (`cloudflare.remote`).",
+                      "pattern": "^(internal/[a-z0-9][a-z0-9-]{0,30}/[a-z0-9][a-z0-9._-]{0,62}|external/cloudflare/[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?)$",
+                      "type": "string"
+                    },
+                    "endpoint": {
+                      "$ref": "#/definitions/config-sluis-outline.url",
+                      "description": "Overrides the S3 address: LocalStack or an S3-compatible store (Cloudflare R2, MinIO)."
+                    },
+                    "kmsKey": {
+                      "description": "A KMS key id, ARN or alias for server-side encryption (SSE-KMS) of every write. Absent, the bucket's default encryption applies.",
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "pathStyle": {
+                      "description": "Addresses the bucket in the path and not the host name, which LocalStack and most S3-compatible stores need.",
+                      "type": "boolean"
+                    },
+                    "prefix": {
+                      "description": "A key prefix inside the bucket, for an installation that shares it.",
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "region": {
+                      "description": "The bucket's region. Absent, the SDK's own resolution (`AWS_REGION`).",
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "bucket"
+                  ],
+                  "type": "object"
+                }
+              },
+              "required": [
+                "adapter"
+              ],
+              "type": "object"
+            },
+            "dynamodb": {
+              "additionalProperties": false,
+              "description": "The DynamoDB tables of the `dynamodb` adapter: one table per module (`tables`, layout v5). Each has a string partition key `pk`, a string sort key `sk` and the TTL attribute `expires`. Credentials are the platform's (EKS Pod Identity, IRSA, a Lambda role) and are never configured here; an S3-compatible `endpoint` with no such identity names a credentials document by address (`credentialsRef`), never by value.",
+              "properties": {
+                "create": {
+                  "default": false,
+                  "description": "Create the table (on-demand, TTL on `expires`) at start when it is not there, for a test or a development installation. Off, the table must exist: production uses the one the infrastructure code made, and the role needs `dynamodb:DescribeTable` on it (layout v5: the readiness probe asks, not the start).",
+                  "type": "boolean"
+                },
+                "endpoint": {
+                  "$ref": "#/definitions/config-sluis-outline.url",
+                  "description": "Overrides the DynamoDB address: LocalStack or DynamoDB Local."
+                },
+                "region": {
+                  "description": "The table's region. Absent, the SDK's own resolution (`AWS_REGION`).",
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "tables": {
+                  "additionalProperties": false,
+                  "description": "Layout v5 (docs/decisions/0072-storage-layout-v5-module-first.md): the table of each module, by module name. A process names its own module's table and the tables of the peers it reads; a module it does not name is not opened. The single table of layout v4 (`table`) was removed in v1.77.1.",
+                  "minProperties": 1,
+                  "properties": {
+                    "backup": {
+                      "description": "The name of the backup module's table. The library default is `sluis-<instance>-backup`.",
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "cloudflare": {
+                      "description": "The name of the cloudflare module's table. The library default is `sluis-<instance>-cloudflare`.",
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "github": {
+                      "description": "The name of the github module's table. The library default is `sluis-<instance>-github`.",
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "google": {
+                      "description": "The name of the google module's table. The library default is `sluis-<instance>-google`.",
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "oidc": {
+                      "description": "The name of the oidc module's table. The library default is `sluis-<instance>-oidc`.",
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "outline": {
+                      "description": "The name of the outline module's table. The library default is `sluis-<instance>-outline`.",
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "slack": {
+                      "description": "The name of the slack module's table. The library default is `sluis-<instance>-slack`.",
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              },
+              "required": [
+                "tables"
+              ],
+              "type": "object"
+            }
+          },
+          "type": "object"
+        },
+        "preset": {
+          "description": "The adapters of a whole platform, one per concern: `server` (no AWS, no Kubernetes), `k8s-minimal`, `k8s-openbao`, `aws-serverless`, `aws-hybrid` (sluis on Lambda, a cluster for the workloads), `k8s-aws` (sluis as a pod on Kubernetes with AWS storage: DynamoDB, S3, KMS-wrapped signing; SSM secrets, or OpenBao with `adapters.secrets`). `aws-eks` is the deprecated name of `k8s-aws`. Absent, the preset the `platform` answers lead to; with neither, the `ports` keys decide. `adapters` and the `ports` keys override single concerns.",
+          "enum": [
+            "server",
+            "k8s-minimal",
+            "k8s-openbao",
+            "aws-serverless",
+            "aws-hybrid",
+            "k8s-aws",
+            "aws-eks"
+          ]
+        },
+        "probes": {
+          "additionalProperties": false,
+          "default": {
+            "address": ":7070"
+          },
+          "description": "The health listener. Separate from the service's own traffic, so that readiness is answerable when the service's listener is saturated, and so that a probe is not reachable from outside.",
+          "properties": {
+            "address": {
+              "description": "host:port for /health/live and /health/ready.",
+              "pattern": "^[^\\s]*:[0-9]{1,5}$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "address"
+          ],
+          "type": "object"
+        },
+        "release": {
+          "default": "sluis",
+          "description": "The name the installation's objects carry. It must be the release's full name: the controller reads the report and the records the service writes under it.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "secrets": {
+          "additionalProperties": false,
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "source": {
+                    "enum": [
+                      "file",
+                      "ssm"
+                    ]
+                  }
+                }
+              },
+              "then": {
+                "required": [
+                  "root"
+                ]
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "source": {
+                    "const": "ssm"
+                  }
+                },
+                "required": [
+                  "source"
+                ]
+              },
+              "then": {
+                "required": [
+                  "layout"
+                ]
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "source": {
+                    "enum": [
+                      "env",
+                      "file"
+                    ]
+                  }
+                }
+              },
+              "then": {
+                "not": {
+                  "anyOf": [
+                    {
+                      "required": [
+                        "kmsKeyId"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "layout"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "grace"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "readCache"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          ],
+          "description": "How the secrets this document names are delivered (truvity/policy config.md section 5). Absent is `env`.",
+          "properties": {
+            "endpoint": {
+              "$ref": "#/definitions/config-sluis-outline.url",
+              "description": "`ssm`: overrides the SSM address, for LocalStack."
+            },
+            "grace": {
+              "$ref": "#/definitions/config-sluis-outline.duration",
+              "default": "24h",
+              "description": "`ssm`: how long the previous value of a rotated client secret is still accepted: the document's previous revision, while the current one is younger than this (docs/decisions/0039-the-issuer-generates-confidential-client-secrets.md, the overlap)."
+            },
+            "kmsKeyId": {
+              "description": "`ssm`: the id, ARN or alias of the customer-managed KMS key the parameters the service itself writes (its credentials) are encrypted with. Unset, the AWS-managed `alias/aws/ssm`. The `ssm` secrets adapter's `kmsKeyId` setting; naming another there is refused.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "layout": {
+              "description": "`ssm`, required: the storage layout of the installation's secrets, `v5`, the only one: the module first, `<root>/internal/<module>/` and `<root>/external/<module>/` (docs/decisions/0072-storage-layout-v5-module-first.md). Layout `v4` was removed in v1.77.1 (an installation still on it migrates with `sluis migrate v5` of v1.77.0 first), and with it the reading of an absent layout as `v4`.",
+              "enum": [
+                "v5"
+              ]
+            },
+            "readCache": {
+              "$ref": "#/definitions/config-sluis-outline.duration",
+              "default": "5m",
+              "description": "`ssm`: how long a process keeps a document it read; a write drops it. `0s` is off. SLUIS_SECRETS_READ_CACHE_TTL overrides."
+            },
+            "refresh": {
+              "$ref": "#/definitions/config-sluis-outline.duration",
+              "default": "1m",
+              "description": "`ssm`: how old a secret's copy may be before it is read again: a rotated secret reaches every instance within it."
+            },
+            "region": {
+              "description": "`ssm`: the region. Unset follows the AWS SDK's own resolution.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "root": {
+              "description": "`file`: the directory the secrets are mounted under. `ssm`: the installation's root, /sluis/<instance>.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "source": {
+              "default": "env",
+              "description": "`env`: the variable SLUIS_SECRET_<NAME> (the name upper-cased, every other character an underscore), for a local run. `file`: the file <root>/<name>, read on every use, so a rotated mount takes effect without a restart. `ssm`: a SecureString in AWS SSM Parameter Store under <root> (/sluis/<instance>), on layout v5 (`layout`): a name the service knows is read at its module's address (`<root>/internal/oidc/state-secret`, ...), any other at `<root>/internal/config/<name>`.",
+              "enum": [
+                "env",
+                "file",
+                "ssm"
+              ]
+            }
+          },
+          "required": [
+            "source"
+          ],
+          "type": "object"
+        },
+        "tokenFile": {
+          "default": "/var/run/secrets/outline-roster/token",
+          "description": "This pod's projected ServiceAccount token, presented to the console and read afresh on every call.",
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "title": "sluis outline",
+      "type": "object"
+    },
+    "config-sluis-outline.duration": {
+      "description": "A Go duration: 30s, 2m, 168h.",
+      "pattern": "^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$",
+      "type": "string"
+    },
+    "config-sluis-outline.url": {
       "allOf": [
         {
           "pattern": "^https?://\\S+$"
@@ -8249,6 +9004,88 @@
           },
           "type": "object"
         },
+        "outline": {
+          "additionalProperties": false,
+          "description": "The Outline module (the controller, docs/decisions/0077), with a Service on /rpc for the issuer's console calls. The issuer never runs it: its document then holds only `outline.remote`, which the chart writes.",
+          "properties": {
+            "audience": {
+              "description": "The audience a call to this module carries: the module's name when empty.",
+              "type": "string"
+            },
+            "config": {
+              "$ref": "#/definitions/config-sluis-outline",
+              "description": "The Outline module's document, without its apiVersion, which the chart writes (sluis-outline/v1). Required once the module is enabled; there is no `config.controllers.outline`. The chart fills `consoleURL`, `policy.file` and `outline.serve` when they are unset. Its schema is schemas/config/sluis-outline.schema.json."
+            },
+            "enabled": {
+              "default": false,
+              "description": "Render this module's Deployment, ServiceAccount and ConfigMap (and, for a module that answers calls, its Service).",
+              "type": "boolean"
+            },
+            "image": {
+              "additionalProperties": false,
+              "description": "Overrides the chart's image for this module. Unset takes `image` (and `image.perModule`).",
+              "properties": {
+                "repository": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "tag": {
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "podDisruptionBudget": {
+              "additionalProperties": false,
+              "description": "The module's PodDisruptionBudget: maxUnavailable 1 unless minAvailable is given (one of the two; a number at or above the replicas is refused).",
+              "properties": {
+                "enabled": {
+                  "default": true,
+                  "type": "boolean"
+                },
+                "maxUnavailable": {
+                  "default": 1,
+                  "description": "A number of pods, or a percentage such as 50%.",
+                  "type": [
+                    "integer",
+                    "string"
+                  ]
+                },
+                "minAvailable": {
+                  "description": "A number of pods, or a percentage such as 50%.",
+                  "type": [
+                    "integer",
+                    "string"
+                  ]
+                }
+              },
+              "type": "object"
+            },
+            "replicas": {
+              "description": "Replicas. Unset: `replicaCount` for the issuer, 1 for another module. More than one controller replica needs the tick leases in a State they share.",
+              "minimum": 1,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "resources": {
+              "type": "object"
+            },
+            "rpcPort": {
+              "default": 8081,
+              "description": "The port of the module's Service on /rpc, and of its listener.",
+              "maximum": 65535,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "serviceAccount": {
+              "$ref": "#/definitions/moduleServiceAccount",
+              "description": "This module's own account. Name empty: <release>-<module> (the issuer's: the release's `serviceAccount.name` when that is set). With irsa, each module but the issuer has its own `awsRoleArn`; the issuer takes the release's."
+            }
+          },
+          "type": "object"
+        },
         "slack": {
           "additionalProperties": false,
           "description": "The Slack module (the controller), with a Service on /rpc for the issuer's console calls.",
@@ -8385,6 +9222,12 @@
                   "type": "array"
                 },
                 "issuer": {
+                  "items": {
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                "outline": {
                   "items": {
                     "type": "object"
                   },

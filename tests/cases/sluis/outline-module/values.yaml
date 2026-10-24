@@ -1,0 +1,32 @@
+# The Outline module on, with the least its document can say: a storage
+# adapter other than legacy (layout v5: its DynamoDB table, its secrets in
+# SSM). It gets a Deployment, a ServiceAccount, a ConfigMap with its
+# sluis-outline/v1 document (the chart fills consoleURL, policy.file and
+# outline.serve), a budget, a Service on /rpc and an auth-delegator binding.
+# The issuer's document routes the console's Outline pages to it by
+# `outline.remote`, and the issuer's pod projects the call token for audience
+# outline. The NetworkPolicies are on: the module takes /rpc from the issuer's
+# pods only and reaches the issuer's console.
+config:
+  issuerURL: https://issuer.example
+modules:
+  outline:
+    enabled: true
+    config:
+      preset: k8s-aws
+      ports:
+        dynamodb:
+          region: eu-west-1
+          tables:
+            outline: sluis-outline
+      secrets:
+        source: ssm
+        root: /sluis
+        layout: v5
+networkPolicy:
+  enabled: true
+exchange:
+  clusters:
+    - name: example-cluster
+      issuer: https://oidc.eu-example-1.example/id/EXAMPLE
+      jwksUri: https://oidc.eu-example-1.example/id/EXAMPLE/keys

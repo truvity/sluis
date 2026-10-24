@@ -88,6 +88,7 @@ func TestEveryModuleDocumentValidatesAgainstItsSchema(t *testing.T) {
 	kinds := map[string]string{
 		config.ModuleIssuer: "sluis", config.ModuleGitHub: "controller-github",
 		config.ModuleSlack: "controller-slack", config.ModuleGoogle: "sluis-google", config.ModuleCloudflare: "sluis",
+		config.ModuleOutline: "sluis-outline",
 	}
 	for _, name := range moduleFixtures {
 		_, docs := renderModules(t, name)
@@ -144,7 +145,7 @@ func TestTheIssuerCallsEachModuleByItsFunction(t *testing.T) {
 	svc := load[internalconfig.Sluis](t, docs.Issuer)
 	want := map[string]string{
 		"github": "sluis-staging-github", "slack": "sluis-staging-chat", "google": "sluis-staging-google",
-		"cloudflare": "sluis-staging-cloudflare",
+		"cloudflare": "sluis-staging-cloudflare", "outline": "sluis-staging-outline",
 	}
 	got := map[string]string{}
 	for m, r := range svc.Targets() {
@@ -186,6 +187,7 @@ func TestAModuleDocumentOpensItsOwnTableAndReadsLayoutV5(t *testing.T) {
 		config.ModuleGitHub: "github:sluis-staging-github",
 		config.ModuleSlack:  "slack:chat-table", config.ModuleGoogle: "google:sluis-staging-google",
 		config.ModuleCloudflare: "cloudflare:sluis-staging-cloudflare",
+		config.ModuleOutline:    "outline:sluis-staging-outline",
 	}
 	issuer := load[internalconfig.Sluis](t, docs.Issuer)
 	for module, doc := range docs.Modules {
@@ -333,3 +335,32 @@ func load[T internalconfig.Service](t *testing.T, doc []byte) *T {
 }
 
 func equal(a, b map[string]string) bool { return maps.Equal(a, b) }
+
+// The Outline module has a function only where the installation declares
+// `controllers.outline`, and the issuer's document then routes the console's
+// Outline pages to it; the issuer's document never runs it.
+func TestTheOutlineModuleHasADocumentOnlyWhenDeclared(t *testing.T) {
+	_, small := renderModules(t, "modules-small")
+	if _, has := small.Modules[config.ModuleOutline]; has {
+		t.Error("the Outline module has a document and no controllers.outline")
+	}
+	if svc := load[internalconfig.Sluis](t, small.Issuer); svc.Outline != nil {
+		t.Errorf("the issuer routes to an Outline module that does not exist: %+v", svc.Outline)
+	}
+	_, full := renderModules(t, "modules-full")
+	doc, has := full.Modules[config.ModuleOutline]
+	if !has {
+		t.Fatal("controllers.outline renders no Outline document")
+	}
+	outline := load[internalconfig.SluisOutline](t, doc)
+	if outline.Console == nil || outline.Console.Auth == nil || outline.Console.Auth.AWS == nil {
+		t.Error("the Outline function holds no console proof")
+	}
+	if outline.Outline == nil || outline.Outline.ShareScan == nil || outline.Interval == nil {
+		t.Errorf("the module's own keys did not reach its document: %+v", outline)
+	}
+	issuer := load[internalconfig.Sluis](t, full.Issuer)
+	if issuer.Controllers != nil {
+		t.Errorf("the issuer's document runs controllers: %+v", issuer.Controllers)
+	}
+}

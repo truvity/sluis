@@ -9,7 +9,7 @@ import (
 )
 
 // An Outline workspace's record and API key are one item, its key under the
-// oidc module's secrets on layout v5; the confirmations and the pass request
+// outline module's secrets on layout v5; the confirmations and the pass request
 // sit beside it and go with it.
 func TestOutlineWorkspacesOnLayoutV5(t *testing.T) {
 	each(t, func(t *testing.T, e env) {
@@ -20,7 +20,7 @@ func TestOutlineWorkspacesOnLayoutV5(t *testing.T) {
 		if err := ws.Put(ctx, record, connection.Credential{Workspace: "wiki", APIKey: "ol_api_TOPSECRET"}); err != nil {
 			t.Fatal(err)
 		}
-		wantPaths(t, "workspace Put", l.written(), "internal/oidc/outline/wiki/<ref>")
+		wantPaths(t, "workspace Put", l.written(), "internal/outline/workspaces/wiki/<ref>")
 		got, cred, found, err := ws.Get(ctx, "wiki")
 		if err != nil || !found || cred.APIKey != "ol_api_TOPSECRET" || got.URL != record.URL {
 			t.Fatalf("Get = %+v, %v, %v", got, found, err)
@@ -52,7 +52,7 @@ func TestOutlineWorkspacesOnLayoutV5(t *testing.T) {
 		if err = ws.Delete(ctx, "wiki"); err != nil {
 			t.Fatal(err)
 		}
-		wantPaths(t, "workspace Delete", l.removed(), "internal/oidc/outline/wiki/<ref>")
+		wantPaths(t, "workspace Delete", l.removed(), "internal/outline/workspaces/wiki/<ref>")
 		if _, _, found, _ := ws.Get(ctx, "wiki"); found {
 			t.Error("a deleted workspace is still connected")
 		}

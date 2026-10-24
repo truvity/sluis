@@ -381,6 +381,7 @@ var handledEvents = map[string][]string{
 	"slack":      {"tick", "run", "check"},
 	"google":     {"refresh", "check"},
 	"cloudflare": {"cloudflare", "check"},
+	"outline":    {"tick", "run", "check"},
 }
 
 // Every schedule the library makes sends its function an event kind that
@@ -389,7 +390,11 @@ func TestEveryScheduleSendsAKindItsFunctionTakes(t *testing.T) {
 	in := exampleInstallation(t)
 	withCloudflare(in)
 	cloudflare := withInstallation(in, nil)
-	for name, e := range map[string]estate{"controllers and directory": scheduled(estateWith()), "cloudflare": cloudflare} {
+	ol := exampleInstallation(t)
+	withOutline(ol)
+	outline := withInstallation(ol, nil)
+	outline.outline = []string{"wiki"}
+	for name, e := range map[string]estate{"controllers and directory": scheduled(estateWith()), "cloudflare": cloudflare, "outline": outline} {
 		rec, _ := mustLambda(t, e)
 		seen := map[string]bool{}
 		for _, s := range rec.ofType(schedType) {

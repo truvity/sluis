@@ -1,0 +1,12 @@
+# The Outline module reads its own document and has no other source: there is no config.controllers.outline.
+# error: modules.outline.config is empty
+config:
+  issuerURL: https://issuer.example
+exchange:
+  clusters:
+    - name: example-cluster
+      issuer: https://oidc.eu-example-1.example/id/EXAMPLE
+      jwksUri: https://oidc.eu-example-1.example/id/EXAMPLE/keys
+modules:
+  outline:
+    enabled: true
