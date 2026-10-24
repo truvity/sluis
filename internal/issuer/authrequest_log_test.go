@@ -168,6 +168,11 @@ func TestARefusalAtAuthorizeNamesTheRedirectURIOfAKnownClient(t *testing.T) {
 	}
 }
 
+// lookupFailed is the error the library gives a failed client lookup.
+func lookupFailed(cause error) error {
+	return oidc.ErrInvalidRequestRedirectURI().WithDescription("unable to retrieve client by id").WithParent(cause)
+}
+
 // The level follows the fault: the caller's mistakes are warnings, the
 // server's own failures stay errors, and a failure of ours that reached the
 // library wrapped in an invalid request is still one.
@@ -182,9 +187,9 @@ func TestAnAuthRequestErrorIsLoggedAtTheLevelOfItsFault(t *testing.T) {
 		"an unregistered redirect":   {oidc.ErrInvalidRequestRedirectURI().WithDescription("nope"), slog.LevelWarn},
 		"a server error":             {oidc.ErrServerError().WithDescription("the store is down"), slog.LevelError},
 		"an error of no type":        {errors.New("something broke"), slog.LevelError},
-		"a fault behind a mistake":   {oidc.ErrInvalidRequestRedirectURI().WithDescription("unable to retrieve client by id").WithParent(oidc.ErrServerError().WithDescription("the store is down")), slog.LevelError},
-		"a lookup that found none":   {oidc.ErrInvalidRequestRedirectURI().WithDescription("unable to retrieve client by id").WithParent(oidc.ErrInvalidClient()), slog.LevelWarn},
-		"a plain cause of a mistake": {oidc.ErrInvalidRequestRedirectURI().WithDescription("unable to retrieve client by id").WithParent(errors.New("unknown")), slog.LevelWarn},
+		"a fault behind a mistake":   {lookupFailed(oidc.ErrServerError().WithDescription("the store is down")), slog.LevelError},
+		"a lookup that found none":   {lookupFailed(oidc.ErrInvalidClient()), slog.LevelWarn},
+		"a plain cause of a mistake": {lookupFailed(errors.New("unknown")), slog.LevelWarn},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
