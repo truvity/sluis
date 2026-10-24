@@ -216,3 +216,27 @@ func TestAnAuthRequestErrorIsLoggedAtTheLevelOfItsFault(t *testing.T) {
 		})
 	}
 }
+
+// What a caller puts in a client_id is text in the log, not control of it:
+// control and bidirectional characters are removed and the length is bounded.
+func TestAnAuthRequestLineKeepsACallersControlCharactersOut(t *testing.T) {
+	t.Parallel()
+
+	const path = "/log-sanitise-test"
+	id := "sanitise-\x1b[31m‮" + strings.Repeat("x", 1000)
+	request := httptest.NewRequest(http.MethodGet, path, nil)
+	request.Form = url.Values{"client_id": {id}}
+	op.AuthRequestError(httptest.NewRecorder(), request, nil, oidc.ErrInvalidRequest().WithDescription("bad"), nil)
+
+	found := logsWhere(func(r logtest.Record) bool { return r.Message == "auth request" && r.String("path") == path })
+	if len(found) != 1 {
+		t.Fatalf("%d lines for %s, want 1", len(found), path)
+	}
+	got := found[0].String("client_id")
+	if !strings.HasPrefix(got, "sanitise-[31m") || strings.ContainsAny(got, "\x1b‮") {
+		t.Errorf("client_id = %q, want the control characters gone", got)
+	}
+	if len([]rune(got)) > 260 {
+		t.Errorf("client_id is %d runes, want it bounded", len([]rune(got)))
+	}
+}
