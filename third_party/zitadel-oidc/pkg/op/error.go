@@ -95,7 +95,7 @@ func authRequestLogLevel(e *oidc.Error, err error) slog.Level {
 // never the query, the state, a PKCE challenge or any other parameter, which
 // is why the error itself is not logged as a value (it carries the state).
 func authRequestLogArgs(r *http.Request, authReq ErrAuthRequest, e *oidc.Error) []any {
-	args := []any{slog.String("error", string(e.ErrorType))}
+	args := []any{slog.String("error", logValue(string(e.ErrorType)))}
 	if e.Description != "" {
 		args = append(args, slog.String("reason", logValue(e.Description)))
 	}
