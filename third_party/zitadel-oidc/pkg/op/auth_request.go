@@ -101,11 +101,11 @@ func Authorize(w http.ResponseWriter, r *http.Request, authorizer Authorizer) {
 		}
 	}
 	if authReq.ClientID == "" {
-		AuthRequestError(w, r, nil, fmt.Errorf("auth request is missing client_id"), authorizer)
+		AuthRequestError(w, r, nil, oidc.ErrInvalidRequest().WithDescription("auth request is missing client_id"), authorizer)
 		return
 	}
 	if authReq.RedirectURI == "" {
-		AuthRequestError(w, r, nil, fmt.Errorf("auth request is missing redirect_uri"), authorizer)
+		AuthRequestError(w, r, nil, oidc.ErrInvalidRequest().WithDescription("auth request is missing redirect_uri"), authorizer)
 		return
 	}
 

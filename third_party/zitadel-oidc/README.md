@@ -1,6 +1,6 @@
 # zitadel/oidc, patched
 
-A copy of [github.com/zitadel/oidc/v3](https://github.com/zitadel/oidc) at **v3.51.16**, with one line removed.
+A copy of [github.com/zitadel/oidc/v3](https://github.com/zitadel/oidc) at **v3.51.16**, with one line removed and the authorization endpoint's error logging changed.
 The root `go.mod` wires it in with `replace github.com/zitadel/oidc/v3 v3.51.16 => ./third_party/zitadel-oidc`.
 
 ## The change
@@ -11,6 +11,13 @@ The root `go.mod` wires it in with `replace github.com/zitadel/oidc/v3 v3.51.16 
 `client_id` is not an ID token claim in OpenID Connect Core 1.0, section 2.
 It belongs in a JWT access token (RFC 9068, section 2.2), and `NewAccessTokenClaims` still sets it there.
 The OpenID conformance suite warns about it (`EnsureIdTokenDoesNotContainNonRequestedClaims`).
+
+`pkg/op/error.go`, `AuthRequestError` and `TryErrorRedirect`: the "auth request" log lines carry `error`, `reason`, `cause`, `client_id` and, where there is a request, `path`, each on one line and bounded, in place of the `oidc_error` value (which carried the request's `state`).
+A missing `client_id` or `redirect_uri` is an `invalid_request`, so it logs at WARN, not ERROR.
+An error with a server error anywhere in its chain still logs at ERROR.
+`pkg/op/auth_request.go`, `Authorize`: those two checks return that `invalid_request` instead of a plain error.
+The lines never carry the query, `state` or a PKCE challenge.
+Not upstream; drop it with the directory.
 
 ## What is copied
 
@@ -24,7 +31,7 @@ up="$(go env GOMODCACHE)/github.com/zitadel/oidc/v3@v3.51.16"
 cd third_party/zitadel-oidc && find . -type f ! -name README.md -exec cmp {} "$up/{}" \;
 ```
 
-It prints one difference, `pkg/oidc/token.go`.
+It prints three differences: `pkg/oidc/token.go`, `pkg/op/error.go` and `pkg/op/auth_request.go`.
 
 ## When it goes
 

@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 )
@@ -92,4 +93,43 @@ func TestNoteClientReachesTheRefusal(t *testing.T) {
 			t.Errorf("client_id, path = %q, %q, want argocd, /login", got["client_id"], got["path"])
 		}
 	})).ServeHTTP(httptest.NewRecorder(), r)
+}
+
+// A refusal at /authorize names the redirect_uri only for a client the
+// installation declares, only there, and without the query or fragment a
+// callback might carry a handle in.
+func TestWithRequestNamesTheRedirectURIOnlyOfAKnownClientAtAuthorize(t *testing.T) {
+	known := func(id string) bool { return id == "local-dev" }
+	redirect := "http://localhost:8000/callback?handle=h-0123#frag-0123"
+	for name, tc := range map[string]struct {
+		path, client string
+		known        func(string) bool
+		want         string
+	}{
+		"a known client at /authorize": {"/authorize", "local-dev", known, "http://localhost:8000/callback"},
+		"an unknown client":            {"/authorize", "stranger", known, ""},
+		"no client":                    {"/authorize", "", known, ""},
+		"another endpoint":             {"/token", "local-dev", known, ""},
+		"an issuer that knows none":    {"/authorize", "local-dev", nil, ""},
+	} {
+		t.Run(name, func(t *testing.T) {
+			r := httptest.NewRequest(http.MethodGet, tc.path+"?"+url.Values{
+				"client_id": {tc.client}, "redirect_uri": {redirect}, "state": {"s-0123"},
+			}.Encode(), nil)
+
+			var got map[string]string
+			withRequestFactsKnowing(tc.known, http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+				got = attrsOf(t, withRequest(r.Context(), r, []any{slog.String("reason", "why")}))
+			})).ServeHTTP(httptest.NewRecorder(), r)
+
+			if got["redirect_uri"] != tc.want {
+				t.Errorf("redirect_uri = %q, want %q", got["redirect_uri"], tc.want)
+			}
+			for key, value := range got {
+				if strings.Contains(value, "h-0123") || strings.Contains(value, "frag-0123") || strings.Contains(value, "s-0123") {
+					t.Errorf("%s = %q carries part of the query", key, value)
+				}
+			}
+		})
+	}
 }
