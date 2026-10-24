@@ -195,7 +195,23 @@ type ArchiveArgs struct {
 	// CheckKeyAdmin). Required when the library manages a bucket, and refused
 	// when it does not. Include the role that applies the stack, which changes
 	// the lock configuration. The lifecycle expiry is S3's own and is not denied.
+	// A preset's existing bucket gets nothing written: see ExistingBucketLockGuard.
 	BreakglassRoleArns []string
+	// ExistingBucketLockGuard is what the library does about a preset's EXISTING
+	// AWS bucket (neither Create nor Adopt), whose policy is its owner's and gets
+	// no lock guard from the library. Before anything is deployed the library
+	// reads the bucket's policy and, for the attested preset, its Object Lock
+	// configuration (the deploying identity needs s3:GetBucketPolicy and
+	// s3:GetBucketObjectLockConfiguration), and:
+	//
+	//   - "report" (the default) warns when the policy has no statement
+	//     equivalent to ArchiveLockGuard (HasArchiveLockGuard), or cannot be read;
+	//   - "require" refuses to deploy in that case;
+	//   - "off" does not look.
+	//
+	// A bucket without Object Lock is only ever reported, never refused: Object
+	// Lock is enabled when a bucket is made, or through AWS support.
+	ExistingBucketLockGuard string
 	// AcknowledgeCompliance is the deliberate step before COMPLIANCE: true says
 	// the retentions were seen working in a governance trial and the deployer has
 	// signed them off. With ObjectLockMode COMPLIANCE and this false the library

@@ -40,6 +40,11 @@ type recorder struct {
 	// as a bucket without versioning does; wrongCode makes Lambda report other
 	// code than the function was given.
 	unversioned, wrongCode bool
+	// bucketPolicy and objectLock, when set, are what S3 answers for an existing
+	// bucket's policy and its Object Lock (ObjectLockEnabled), by bucket name; a
+	// bucket not in the map has none. Nil answers with the arguments, as any other
+	// invoke.
+	bucketPolicy, objectLock map[string]string
 }
 
 // mockCall is an invoke the library made: its token, and the provider it was made
@@ -155,6 +160,22 @@ func (r *recorder) Call(a pulumi.MockCallArgs) (resource.PropertyMap, error) {
 			"targetKeyArn": resource.NewStringProperty(arnp + "kms:eu-west-1:" + account + ":key/" + strings.ReplaceAll(strings.TrimPrefix(name, "alias/"), "/", "-")),
 			"targetKeyId":  resource.NewStringProperty(strings.ReplaceAll(strings.TrimPrefix(name, "alias/"), "/", "-")),
 		}, nil
+	}
+	if a.Token == "aws:s3/getBucketPolicy:getBucketPolicy" && r.bucketPolicy != nil {
+		b := a.Args["bucket"].StringValue()
+		p, ok := r.bucketPolicy[b]
+		if !ok {
+			return nil, errors.New("reading S3 Bucket Policy (" + b + "): NoSuchBucketPolicy: The bucket policy does not exist")
+		}
+		return resource.PropertyMap{"bucket": a.Args["bucket"], "id": a.Args["bucket"], "policy": resource.NewStringProperty(p)}, nil
+	}
+	if a.Token == "aws:s3/getBucketObjectLockConfiguration:getBucketObjectLockConfiguration" && r.objectLock != nil {
+		b := a.Args["bucket"].StringValue()
+		on, ok := r.objectLock[b]
+		if !ok {
+			return nil, errors.New("reading S3 Bucket (" + b + ") Object Lock Configuration: couldn't find resource")
+		}
+		return resource.PropertyMap{"bucket": a.Args["bucket"], "objectLockEnabled": resource.NewStringProperty(on)}, nil
 	}
 	if a.Token == "aws:s3/getObject:getObject" {
 		key := a.Args["key"].StringValue()

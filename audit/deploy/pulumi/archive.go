@@ -34,6 +34,9 @@ func (c *Args) checkArchive() error {
 	if err := checkKeyAdmins("Archive.BreakglassRoleArns", ar.BreakglassRoleArns); err != nil {
 		return err
 	}
+	if err := checkLockGuardMode(ar.ExistingBucketLockGuard); err != nil {
+		return err
+	}
 
 	// Object Lock is the attested preset's bucket alone, and only the library's
 	// own bucket is configured by it.
