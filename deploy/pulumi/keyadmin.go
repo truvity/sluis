@@ -8,12 +8,12 @@ import (
 )
 
 // The control plane of a KMS key is what changes WHO may use it: the key
-// policy, grants, the key's state and its deletion. A key policy that hands
+// policy, grants, the key's state, its deletion and its aliases. A key policy that hands
 // the account's root the whole of kms:* hands it to every IAM principal that
 // has an allow for it (an operator's power role, an automation role, a
 // StackSet role), and any of them can rewrite the policy, give itself the data
 // plane and decrypt what the key wraps or sign what the key signs. These
-// statements close that: the five actions below are denied to every principal
+// statements close that: the actions below are denied to every principal
 // but the named administrators.
 //
 // The administrators are role ARNs (patterns for an SSO role with a hash
@@ -25,20 +25,23 @@ const (
 )
 
 // KeyControlPlaneActions are the actions only the administrators hold on a key
-// that sluis uses: the policy, the grants, disabling the key and scheduling its
-// deletion.
+// that sluis uses: the policy, the grants, disabling the key, scheduling its
+// deletion, and the aliases. An alias is how a writer names the key (SSM
+// SecureStrings by `alias/...`), so retargeting one sends new writes to a key of
+// someone else's choosing: creating, updating and deleting an alias of the key
+// needs the action on the key too, and only the administrators have it.
 var KeyControlPlaneActions = []string{
-	"kms:CreateGrant", "kms:DisableKey", "kms:PutKeyPolicy", "kms:RevokeGrant", "kms:ScheduleKeyDeletion",
+	"kms:CreateAlias", "kms:CreateGrant", "kms:DeleteAlias", "kms:DisableKey", "kms:PutKeyPolicy", "kms:RevokeGrant",
+	"kms:ScheduleKeyDeletion", "kms:UpdateAlias",
 }
 
 // keyAdministerActions are what the account root delegates to IAM for the key's
 // upkeep without changing who may use it: describing and listing, tags, the
-// description, aliases, rotation and cancelling a deletion. None changes the
-// key policy or a grant.
+// description, rotation and cancelling a deletion. None changes the key policy,
+// a grant or an alias.
 var keyAdministerActions = []string{
-	"kms:CancelKeyDeletion", "kms:CreateAlias", "kms:DeleteAlias", "kms:DescribeKey", "kms:DisableKeyRotation",
-	"kms:EnableKey", "kms:EnableKeyRotation", "kms:Get*", "kms:List*", "kms:TagResource", "kms:UntagResource",
-	"kms:UpdateAlias", "kms:UpdateKeyDescription",
+	"kms:CancelKeyDeletion", "kms:DescribeKey", "kms:DisableKeyRotation", "kms:EnableKey", "kms:EnableKeyRotation",
+	"kms:Get*", "kms:List*", "kms:TagResource", "kms:UntagResource", "kms:UpdateKeyDescription",
 }
 
 // KeyControlPlaneStatements are the two statements that hold a key's control

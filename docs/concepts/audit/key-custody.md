@@ -70,7 +70,7 @@ aws kms create-alias --alias-name alias/sluis-<instance>-audit-seal --target-key
 
 The notary signs a SHA-384 digest. A key of another spec is refused at start. CloudTrail `Sign` events record when the notary signed.
 
-Give the seal key the policy `SealKeyPolicy` writes. Only the notary's role signs. The control plane (`kms:PutKeyPolicy`, `kms:CreateGrant`, `kms:ScheduleKeyDeletion`, `kms:DisableKey`, `kms:RevokeGrant`) belongs to named key administrators and is denied to every other principal, the account root included.
+Give the seal key the policy `SealKeyPolicy` writes. Only the notary's role signs. The control plane (the key policy, grants, aliases, disabling and deletion) belongs to named key administrators and is denied to every other principal, the account root included.
 
 `audit key public --kms-key alias/sluis-<instance>-audit-seal --thumbprint` prints the RFC 7638 thumbprint a verifier pins. `--jwks` prints the JWK Set for `keys/roots.jwks`. The default is PEM.
 
