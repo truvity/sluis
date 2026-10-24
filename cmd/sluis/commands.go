@@ -16,6 +16,7 @@ import (
 	"github.com/truvity/sluis/internal/module/github"
 	"github.com/truvity/sluis/internal/module/google"
 	"github.com/truvity/sluis/internal/module/issuer"
+	"github.com/truvity/sluis/internal/module/outline"
 	"github.com/truvity/sluis/internal/module/slack"
 	"github.com/truvity/sluis/internal/version"
 )
@@ -86,6 +87,7 @@ func newApp(out io.Writer) *cli.Command {
 			moduleCmd(slack.Module{}, "controller-slack", "the Slack module: the controller's loop, or `tick <target>` once", out),
 			moduleCmd(cloudflare.Module{}, "sluis", "the Cloudflare module: the STS minter's rotation loop, or `tick <preset>` once", out),
 			moduleCmd(google.Module{}, "sluis-google", "the Google module: the hub's refresh loop, or `tick <workspace>` once", out),
+			moduleCmd(outline.Module{}, "sluis-outline", "the Outline module: the controller's loop and the console's Outline calls, or `tick <workspace>` once", out),
 			legacy("backup", "the backup module: run, list, status or prune (sluis backup --help)", backupCmd, out),
 			legacy("restore", "the restore role of the backup zip: preview, start or status (sluis restore --help)", restoreCmd, out),
 			// Today's commands, unchanged.
@@ -188,6 +190,7 @@ var pinnedCommands = map[string][]string{
 	"github":     {"github"},
 	"slack":      {"slack"},
 	"google":     {"google"},
+	"outline":    {"outline"},
 }
 
 // checkPin refuses a command line whose command is not the pinned module's.

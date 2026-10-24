@@ -39,7 +39,7 @@ const policy = "https://github.com/truvity/policy/schemas/"
 // schemas/config/<name>.schema.json. The first three are the service documents,
 // one per process; `policy` is the one policy document they all name; `installation`
 // is what `sluisctl render` writes both from.
-var Names = []string{"sluis", "serve", "controller-github", "controller-slack", "sluis-backup", "sluis-google", "policy", "installation"}
+var Names = []string{"sluis", "serve", "controller-github", "controller-slack", "sluis-backup", "sluis-google", "sluis-outline", "policy", "installation"}
 
 // Services are the service documents: the ones a process is started with.
 // `sluis` is the one document of the one process (v3): the serve settings and,
@@ -413,6 +413,7 @@ func sluisSchema() m {
 	props, _ := s["properties"].(m)
 	props["apiVersion"] = apiVersionSluis()
 	addRemotes(props)
+	props["outline"] = outlineRemoteSchema()
 	props["controllers"] = obj("The controllers this process runs beside the issuer and the console, each in its own loop. A controller that is absent is off. Which organisations and workspaces a running controller may CHANGE is the policy document's `controllers.<kind>.enabledOrgs` and `enabledWorkspaces`, as before. A controller reads the console's API as a workload, so the policy's exchange must admit its proof (a ServiceAccount token on Kubernetes, the function role's web identity token on Lambda).", m{
 		"github": obj("The GitHub controller: makes each GitHub organisation's teams match the policy's github table.", controllerProps(
 			"/var/run/secrets/github-roster/token", "/var/run/github-roster/records",
@@ -462,7 +463,7 @@ func portsSchema() m {
 // portsDynamoDBSchema is `ports.dynamodb`: the table of the `dynamodb` adapter.
 func portsDynamoDBSchema() m {
 	tables := m{}
-	for _, mod := range []string{"oidc", "github", "slack", "cloudflare", "google", "backup"} {
+	for _, mod := range []string{"oidc", "github", "slack", "cloudflare", "google", "backup", "outline"} {
 		tables[mod] = str("The name of the " + mod + " module's table. The library default is `sluis-<instance>-" + mod + "`.")
 	}
 	named := obj("Layout v5 (docs/decisions/0072-storage-layout-v5-module-first.md): the table of each module, by module name. A process names its own module's table and the tables of the peers it reads; a module it does not name is not opened. The single table of layout v4 (`table`) was removed in v1.77.1.",
@@ -570,6 +571,8 @@ func Schema(name string) ([]byte, bool) {
 		s = sluisBackupSchema()
 	case "sluis-google":
 		s = sluisGoogleSchema()
+	case "sluis-outline":
+		s = sluisOutlineSchema()
 	case "policy":
 		s = policySchema()
 	case "installation":

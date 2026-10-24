@@ -62,10 +62,10 @@ func TestSluisV1IsTheLegacyPackagesUnchanged(t *testing.T) {
 		return true
 	})
 
-	// Each of the 11 legacy files has its twin; a package that lost one
+	// Each of the 12 legacy files has its twin; a package that lost one
 	// would pass the loop above without being looked at.
-	if checked != 11 {
-		t.Errorf("compared %d files, want 11", checked)
+	if checked != 12 {
+		t.Errorf("compared %d files, want 12", checked)
 	}
 }
 

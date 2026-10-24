@@ -23,6 +23,9 @@ const (
 	ModuleSlack      = "slack"
 	ModuleGoogle     = "google"
 	ModuleCloudflare = "cloudflare"
+	// ModuleOutline is the Outline module's function (docs/decisions/0077). It
+	// has one only when the installation declares `controllers.outline`.
+	ModuleOutline = "outline"
 	// ModuleIssuer names the issuer for [ModuleSecrets]; it has no entry in
 	// [ModuleDocuments.Modules].
 	ModuleIssuer = "issuer"
@@ -33,7 +36,7 @@ const (
 
 // Modules are the module functions, in a fixed order.
 func Modules() []string {
-	return []string{ModuleCloudflare, ModuleGitHub, ModuleGoogle, ModuleSlack}
+	return []string{ModuleCloudflare, ModuleGitHub, ModuleGoogle, ModuleOutline, ModuleSlack}
 }
 
 // ZipModules are the modules a release publishes a Lambda zip for, in a fixed
@@ -214,6 +217,11 @@ func (in *Installation) issuerOf(svc *internal.Sluis) *internal.Sluis {
 	}
 	s.GitHub, s.Slack, s.Google = route(ModuleGitHub), route(ModuleSlack), route(ModuleGoogle)
 	s.Controllers = nil
+	// The console's Outline pages are the Outline function's.
+	s.Outline = nil
+	if in.Controllers != nil && in.Controllers.Outline != nil {
+		s.Outline = route(ModuleOutline)
+	}
 	s.Directory = nil
 	s.Cloudflare = nil
 	if in.Cloudflare.Declared() {
@@ -248,6 +256,8 @@ func (b moduleBuilder) document(module string) (any, error) {
 		return b.google()
 	case ModuleCloudflare:
 		return b.cloudflare()
+	case ModuleOutline:
+		return b.outline()
 	}
 	return nil, fmt.Errorf("%q is not a module", module)
 }
@@ -337,6 +347,24 @@ func (b moduleBuilder) shared() *internal.Sluis {
 	t.GitHub, t.Slack, t.Google, t.Controllers = nil, nil, nil, nil
 	t.Ports, t.Platform, t.Adapters = nil, nil, nil
 	return &t
+}
+
+// outline is the Outline module's document (docs/decisions/0077), or nil for an
+// installation that declares no `controllers.outline`: a module with nothing to
+// do has no function.
+func (b moduleBuilder) outline() (any, error) {
+	if b.in.Controllers == nil || b.in.Controllers.Outline == nil {
+		return nil, nil //nolint:nilnil // no module, no document
+	}
+	o := b.in.Controllers.Outline
+	doc := b.shared().OutlineDocument(internal.ControllerCommon{
+		ConsoleURL: o.ConsoleURL, TokenFile: o.TokenFile, Console: o.Console, Interval: o.Interval,
+	}, o.ShareScan)
+	if err := b.rosterOf(ModuleOutline, &doc.Roster, true); err != nil {
+		return nil, err
+	}
+	doc.Ports = b.ports(ModuleOutline)
+	return doc, nil
 }
 
 func (b moduleBuilder) github() (any, error) {
@@ -489,6 +517,9 @@ func validateModule(module string, doc, policy []byte) error {
 		case ModuleSlack:
 			_, err := internal.Load[internal.ControllerSlack](f["sluis"])
 			return err
+		case ModuleOutline:
+			_, err := internal.Load[internal.SluisOutline](f["sluis"])
+			return err
 		case ModuleGoogle:
 			_, err := internal.LoadGoogle(f["sluis"])
 			return err
@@ -552,8 +583,9 @@ func moduleSecretsOf(module string, doc, policy []byte) ([]DeclaredSecret, error
 				return err
 			}
 			out = internal.DeclaredSecrets(&svc.Serve, pol)
-		case ModuleGitHub, ModuleSlack:
-			// An App's credential is made at run time and no document names it.
+		case ModuleGitHub, ModuleSlack, ModuleOutline:
+			// An App's credential, and an Outline workspace's API key, is made at
+			// run time and no document names it.
 		case ModuleGoogle:
 			g, err := internal.LoadGoogle(f["sluis"])
 			if err != nil {

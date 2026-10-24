@@ -191,7 +191,8 @@ func (a *LambdaArgs) planModules() ([]moduleFunctionPlan, error) {
 
 // moduleDocumentVersion is the apiVersion, without the group, of the document a
 // module function reads: the GitHub module reads the
-// controller's, the Cloudflare module the service document with `cloudflare.serve`.
+// controller's, the Outline module its own (`sluis-outline/v1`), the Cloudflare
+// module the service document with `cloudflare.serve`.
 func moduleDocumentVersion(role string) string {
 	switch role {
 	case RoleGitHub:
@@ -200,6 +201,8 @@ func moduleDocumentVersion(role string) string {
 		return "controller-slack/v2"
 	case RoleGoogle:
 		return "sluis-google/v1"
+	case RoleOutline:
+		return "sluis-outline/v1"
 	}
 	return "sluis/v3"
 }
@@ -251,8 +254,9 @@ func (m *moduleFunctions) outputs(
 }
 
 // tablesNeeded are the modules whose tables the roles of NewLambda are granted:
-// those the functions host, and those the issuer reads.
-func tablesNeeded() []Module {
+// those the functions host, and those the issuer reads. The Outline module's is
+// needed only when its function is made (hostsModule).
+func (a *LambdaArgs) tablesNeeded() []Module {
 	seen := map[Module]bool{}
 	var out []Module
 	add := func(ms ...Module) {
@@ -264,6 +268,9 @@ func tablesNeeded() []Module {
 		}
 	}
 	for _, r := range append([]string{RoleIssuer}, ModuleFunctions()...) {
+		if r == RoleOutline && !a.hostsModule(r) {
+			continue
+		}
 		add(FunctionHosts(r)...)
 		for _, g := range CrossGrants {
 			if g.Role == r && (g.Verb == CrossReadTable || g.Verb == CrossReadSnapshot || g.Verb == CrossReadAll || g.Verb == CrossReadModule) {
@@ -313,14 +320,21 @@ func (a *LambdaArgs) moduleSenders(ctx *pulumi.Context) (senders []pulumi.String
 	return senders, resolve, reject
 }
 
-// hostsModule is whether NewLambda makes the module's function. It makes all
-// five, but for the module the installation rendered no document for: it has
-// nothing to do (the Cloudflare module of an installation with no preset), and a
-// function that could not start would fail the deploy's check. A role that does
-// not exist is not a sender the audit queue can name.
+// hostsModule is whether NewLambda makes the module's function. It makes every
+// one, but for the module the installation rendered no document for: it has
+// nothing to do (the Cloudflare module of an installation with no preset, the
+// Outline module of one with no `controllers.outline`), and a function that
+// could not start would fail the deploy's check. A role that does not exist is
+// not a sender the audit queue can name. Without an installation (the
+// deprecated Config and Policy) every function is made but the Outline one,
+// which only an installation declares, or a document of its own
+// (ModuleArgs.Document).
 func (a *LambdaArgs) hostsModule(role string) bool {
-	if a.moduleDocs == nil || a.Modules[role].Document != "" {
+	if a.Modules[role].Document != "" {
 		return true
+	}
+	if a.moduleDocs == nil {
+		return role != RoleOutline
 	}
 	_, ok := a.moduleDocs[role]
 	return ok

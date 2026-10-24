@@ -21,8 +21,9 @@ import (
 // each controller last reported. The hub's directory snapshots (`google/`) are
 // a cache that the module rewrites on its next refresh and are not kept.
 var BlobPrefixes = map[port.Module][]string{
-	port.ModuleGitHub: {blobprefix.GitHubReports},
-	port.ModuleSlack:  {blobprefix.SlackReports},
+	port.ModuleGitHub:  {blobprefix.GitHubReports},
+	port.ModuleSlack:   {blobprefix.SlackReports},
+	port.ModuleOutline: {blobprefix.OutlineReports},
 }
 
 // Source is what an export reads. All four are required.

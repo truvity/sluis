@@ -593,9 +593,12 @@ type Sluis struct {
 	Serve
 	// GitHub, Slack and Google say where those modules are when they are not in
 	// this process: `<module>.remote`, shaped as `cloudflare.remote`.
-	GitHub      *ModuleRoute `json:"github,omitempty"`
-	Slack       *ModuleRoute `json:"slack,omitempty"`
-	Google      *ModuleRoute `json:"google,omitempty"`
+	GitHub *ModuleRoute `json:"github,omitempty"`
+	Slack  *ModuleRoute `json:"slack,omitempty"`
+	Google *ModuleRoute `json:"google,omitempty"`
+	// Outline says where the Outline module is: the console calls it for the
+	// Outline pages, and this process never runs it (docs/decisions/0077).
+	Outline     *ModuleRoute `json:"outline,omitempty"`
 	Controllers *Controllers `json:"controllers,omitempty"`
 }
 

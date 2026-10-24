@@ -103,6 +103,9 @@ const (
 	moduleGitHub = "github"
 	moduleSlack  = "slack"
 	moduleGoogle = "google"
+	// moduleOutline is never hosted here: the console's Outline pages call it
+	// where `outline.remote` says (docs/decisions/0077).
+	moduleOutline = "outline"
 )
 
 // Hosted reports whether the module runs in this process: its section names no
@@ -141,13 +144,14 @@ func Load(file string) (Config, error) {
 	if cfg.GitHub, cfg.Slack, err = controllersOf(svc, p); err != nil {
 		return Config{}, err
 	}
+
 	// With the Google module elsewhere the hub only reads its snapshots; the
 	// module's own schedule refreshes them (docs/decisions/0071, D-v176-6 a).
 	cfg.Directory.Reader = svc.Google != nil && svc.Google.Remote != nil
 	// A module that is another function's is not assembled here: its controller
 	// runs there, one pass per invocation, and this process only calls it.
 	cfg.Remote = map[string]config.ModuleRemote{}
-	for _, module := range []string{moduleGitHub, moduleSlack, moduleGoogle} {
+	for _, module := range []string{moduleGitHub, moduleSlack, moduleGoogle, moduleOutline} {
 		if r, ok := svc.Targets()[module]; ok {
 			cfg.Remote[module] = r
 		}
@@ -542,6 +546,16 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 			return nil, err
 		}
 		directory.ConsoleServer().UseSlack(caller)
+	}
+	if r, ok := cfg.Remote[moduleOutline]; ok {
+		// The Outline pages run in the Outline module, the only holder of the
+		// workspaces' API keys: the console calls it as `console`.
+		caller, err := dialConsole(ctx, cfg, moduleOutline, r)
+		if err != nil {
+			a.Close()
+			return nil, err
+		}
+		directory.ConsoleServer().UseOutline(caller)
 	}
 	if cfg.Backup != nil {
 		// The Backups page reads the two modules as the caller class `console`.

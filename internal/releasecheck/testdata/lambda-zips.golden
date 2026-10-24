@@ -4,4 +4,5 @@ sluis-cloudflare_<version>_linux_arm64.zip | sluis-cloudflare | ./cmd/sluis-clou
 sluis-backup_<version>_linux_arm64.zip | sluis-backup | ./cmd/sluis-backup | sluis-module=backup | lambda-backup
 sluis-github_<version>_linux_arm64.zip | sluis-github | ./cmd/sluis-github | sluis-module=github | lambda-github
 sluis-slack_<version>_linux_arm64.zip | sluis-slack | ./cmd/sluis-slack | sluis-module=slack | lambda-slack
+sluis-outline_<version>_linux_arm64.zip | sluis-outline | ./cmd/sluis-outline | sluis-module=outline | lambda-outline
 sluis-google_<version>_linux_arm64.zip | sluis-google | ./cmd/sluis-google | sluis-module=google | lambda-google

@@ -20,7 +20,9 @@ import (
 	"github.com/truvity/sluis/internal/lambdaapp/githubfn"
 	"github.com/truvity/sluis/internal/lambdaapp/googlefn"
 	"github.com/truvity/sluis/internal/lambdaapp/issuerfn"
+	"github.com/truvity/sluis/internal/lambdaapp/outlinefn"
 	"github.com/truvity/sluis/internal/lambdaapp/slackfn"
+	outlineapp "github.com/truvity/sluis/internal/outlineroster/app"
 	_ "github.com/truvity/sluis/internal/port/invoke" // registers the adapter the preset names for the trigger
 	"github.com/truvity/sluis/internal/rosterapp"
 	slackapp "github.com/truvity/sluis/internal/slackroster/app"
@@ -49,6 +51,7 @@ var moduleChecks = map[string]moduleCheck{
 	config.ModuleSlack:      {verifier(slackapp.Load, slackapp.Config.Verify), slackfn.CheckFile},
 	config.ModuleGoogle:     {verifier(googleapp.Load, googleapp.Config.Verify), googlefn.CheckFile},
 	config.ModuleCloudflare: {verifier(cfapp.Load, cfapp.Config.Verify), cloudflarefn.CheckFile},
+	config.ModuleOutline:    {verifier(outlineapp.Load, outlineapp.Config.Verify), outlinefn.CheckFile},
 	config.ModuleIssuer:     {verifier(rosterapp.Load, rosterapp.Config.Verify), issuerfn.CheckFile},
 }
 

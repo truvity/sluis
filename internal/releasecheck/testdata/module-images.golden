@@ -6,3 +6,4 @@ ghcr.io/truvity/sluis/sluis-slack | sluis-module=slack | linux/amd64,linux/arm64
 ghcr.io/truvity/sluis/sluis-google | sluis-module=google | linux/amd64,linux/arm64 | gcr.io/distroless/static:nonroot
 ghcr.io/truvity/sluis/sluis-cloudflare | sluis-module=cloudflare | linux/amd64,linux/arm64 | gcr.io/distroless/static:nonroot
 ghcr.io/truvity/sluis/sluis-backup | sluis-module=backup | linux/amd64,linux/arm64 | gcr.io/distroless/static:nonroot
+ghcr.io/truvity/sluis/sluis-outline | sluis-module=outline | linux/amd64,linux/arm64 | gcr.io/distroless/static:nonroot

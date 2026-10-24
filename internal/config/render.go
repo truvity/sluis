@@ -161,6 +161,12 @@ func (d *PolicyDocument) merge(layer *PolicyDocument, from string) error {
 			}
 			d.Controllers.Slack.EnabledWorkspaces = union(d.Controllers.Slack.EnabledWorkspaces, c.Slack.EnabledWorkspaces)
 		}
+		if c.Outline != nil {
+			if d.Controllers.Outline == nil {
+				d.Controllers.Outline = &ControllersOutline{}
+			}
+			d.Controllers.Outline.EnabledWorkspaces = union(d.Controllers.Outline.EnabledWorkspaces, c.Outline.EnabledWorkspaces)
+		}
 	}
 	if c := layer.CloudflareGrants; c != nil {
 		if d.CloudflareGrants == nil {

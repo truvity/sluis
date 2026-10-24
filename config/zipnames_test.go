@@ -6,7 +6,7 @@ import (
 )
 
 func TestZipModulesAreTheRegistry(t *testing.T) {
-	want := []string{"issuer", "cloudflare", "github", "google", "slack", "backup"}
+	want := []string{"issuer", "cloudflare", "github", "google", "outline", "slack", "backup"}
 	if got := ZipModules(); !slices.Equal(got, want) {
 		t.Fatalf("ZipModules = %v, want %v", got, want)
 	}

@@ -54,6 +54,7 @@ type Access struct {
 	Groups          []AccessGroup          `yaml:"groups,omitempty"`
 	People          []AccessPerson         `yaml:"people,omitempty"`
 	Slack           []AccessWorkspace      `yaml:"slack,omitempty"`
+	Outline         []AccessOutline        `yaml:"outline,omitempty"`
 	GitHub          []AccessOrg            `yaml:"github,omitempty"`
 	Vocabulary      *AccessVocabulary      `yaml:"vocabulary,omitempty"`
 	Clients         []AccessClient         `yaml:"clients,omitempty"`
@@ -119,6 +120,27 @@ type AccessSlackChannel struct {
 	Adopt   string   `yaml:"adopt,omitempty"`
 	Ignore  []string `yaml:"ignore,omitempty"`
 	From    []string `yaml:"from,omitempty"`
+}
+
+// AccessOutline is one Outline workspace's bindings: [OutlineWorkspace] as a
+// list.
+type AccessOutline struct {
+	Workspace   string                    `yaml:"workspace"`
+	Client      string                    `yaml:"client,omitempty"`
+	Admins      []string                  `yaml:"admins,omitempty"`
+	Ignore      []string                  `yaml:"ignore,omitempty"`
+	Collections []AccessOutlineCollection `yaml:"collections,omitempty"`
+}
+
+// AccessOutlineCollection is one collection's binding.
+type AccessOutlineCollection struct {
+	Name      string   `yaml:"name"`
+	Mode      string   `yaml:"mode,omitempty"`
+	Directory string   `yaml:"directory,omitempty"`
+	Adopt     string   `yaml:"adopt,omitempty"`
+	Read      []string `yaml:"read,omitempty"`
+	ReadWrite []string `yaml:"read_write,omitempty"`
+	Admin     []string `yaml:"admin,omitempty"`
 }
 
 // AccessOrg is one GitHub organisation's bindings.
@@ -309,6 +331,9 @@ func (a Access) policy() (Policy, error) {
 	if out.Slack, err = a.slack(); err != nil {
 		return Policy{}, err
 	}
+	if out.Outline, err = a.outline(); err != nil {
+		return Policy{}, err
+	}
 	if out.GitHub, err = a.github(); err != nil {
 		return Policy{}, err
 	}
@@ -370,6 +395,33 @@ func (a Access) groups() (map[string]Group, error) {
 			matchers = append(matchers, Matcher{AWS: &AWSMatcher{Account: r.Account, Role: r.Role, Path: r.Path}})
 		}
 		out[g.Name] = Group{Members: g.Members, Matchers: matchers}
+	}
+	return out, nil
+}
+
+func (a Access) outline() (Outline, error) {
+	if len(a.Outline) == 0 {
+		return Outline{}, nil
+	}
+	out := Outline{Workspaces: make(map[string]OutlineWorkspace, len(a.Outline))}
+	for _, w := range a.Outline {
+		if _, dup := out.Workspaces[w.Workspace]; dup {
+			return Outline{}, fmt.Errorf("outline workspace %q is declared twice", w.Workspace)
+		}
+		ws := OutlineWorkspace{Client: w.Client, Roles: OutlineRoles{Admin: w.Admins}, Ignore: w.Ignore}
+		for i := range w.Collections {
+			c := &w.Collections[i]
+			if ws.Collections == nil {
+				ws.Collections = make(map[string]OutlineCollection, len(w.Collections))
+			}
+			if _, dup := ws.Collections[c.Name]; dup {
+				return Outline{}, fmt.Errorf("outline collection %s/%s is declared twice", w.Workspace, c.Name)
+			}
+			ws.Collections[c.Name] = OutlineCollection{
+				Mode: c.Mode, Directory: c.Directory, Adopt: c.Adopt, Read: c.Read, ReadWrite: c.ReadWrite, Admin: c.Admin,
+			}
+		}
+		out.Workspaces[w.Workspace] = ws
 	}
 	return out, nil
 }

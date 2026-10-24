@@ -236,6 +236,7 @@ var (
 	_ directoryrosterv1connect.SlackChannelServiceHandler       = (*Console)(nil)
 	_ directoryrosterv1connect.SlackServiceHandler              = (*Console)(nil)
 	_ directoryrosterv1connect.CloudflareServiceHandler         = (*Console)(nil)
+	_ directoryrosterv1connect.OutlineServiceHandler            = (*Console)(nil)
 	_ directoryrosterv1connect.BackupServiceHandler             = (*Console)(nil)
 )
 

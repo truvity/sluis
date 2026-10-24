@@ -1,0 +1,42 @@
+apiVersion: sluis.truvity.github.io/sluis-outline/v1
+adapters:
+  audit:
+    adapter: sqs
+    settings:
+      queueURL: https://sqs.eu-central-1.amazonaws.com/111122223333/example-audit-ingest
+      region: eu-central-1
+  trigger:
+    adapter: memory
+console:
+  auth:
+    aws:
+      audience: https://access.example.test/console
+consoleURL: https://access.example.test/console
+interval: 2m
+log:
+  level: info
+outline:
+  shareScan: 1h
+platform:
+  aws: true
+  runtime: lambda
+policy:
+  file: /opt/sluis/policy.yaml
+ports:
+  adapter: dynamodb
+  blob:
+    adapter: s3
+    s3:
+      bucket: example-sluis-111122223333
+      region: eu-central-1
+  dynamodb:
+    region: eu-central-1
+    tables:
+      outline: sluis-staging-outline
+preset: aws-hybrid
+release: access-issuer
+secrets:
+  layout: v5
+  region: eu-central-1
+  root: /sluis/staging
+  source: ssm

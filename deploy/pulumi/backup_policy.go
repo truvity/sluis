@@ -116,7 +116,7 @@ func restoreArchiveStatements(g ArchiveGrant) []statement {
 
 // BackupRoleStatements is the statement list of the backup function's role: the
 // module pattern of [ModuleRoleStatements] for the role [RoleBackup] (its own
-// table, the read-all cross-grant on the other five modules, the explicit deny
+// table, the read-all cross-grant on the other six modules, the explicit deny
 // of the maintenance flag's writes on every table, so that it reads the flag in
 // its own table and never writes one) and the archive.
 //
@@ -204,7 +204,7 @@ func ArchiveBucketGuardStatement(bucketArn string, breakglass []string) (map[str
 // RestoreRoleStatements is the statement list of the restore function's role:
 // the module pattern for the role [RoleRestore] (its own table, which holds
 // `rec.backup.restore.*` and `lease.restore:*`, and the write-all cross-grant on
-// the other five modules' tables, parameters and blob prefixes; no deny of the
+// the other six modules' tables, parameters and blob prefixes; no deny of the
 // maintenance flag: this role alone writes it), the archive for reading, and
 // lambda:InvokeFunction on the ARNs it continues itself through.
 //

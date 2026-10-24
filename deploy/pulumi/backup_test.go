@@ -24,7 +24,7 @@ const hour = time.Hour
 
 const archiveBucket = "acme-sluis-archive"
 
-// backupCommon is an installation with its six tables.
+// backupCommon is an installation with its seven tables.
 func backupCommon(t *testing.T) arp.BackupCommon {
 	t.Helper()
 	pkg := zipFile(t, nil)
@@ -152,8 +152,8 @@ func TestTheBackupFunctionIsTheReleaseZipWithTheBackupDocument(t *testing.T) {
 		t.Errorf("secrets = %v", doc["secrets"])
 	}
 	tables := at(t, doc, "ports", "dynamodb", "tables").(map[string]any)
-	if len(tables) != 6 {
-		t.Errorf("ports.dynamodb.tables = %v, want all six modules", tables)
+	if len(tables) != len(arp.Modules()) {
+		t.Errorf("ports.dynamodb.tables = %v, want all seven modules", tables)
 	}
 	for _, m := range arp.Modules() {
 		if tables[string(m)] != "sluis-staging-"+string(m) {

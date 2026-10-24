@@ -58,6 +58,9 @@ login:
   directory: true
 oauthClient:
   provider: default
+outline:
+  remote:
+    function: sluis-staging-outline
 policy:
   file: /opt/sluis/policy.yaml
 preset: aws-hybrid

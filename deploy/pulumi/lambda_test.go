@@ -60,7 +60,7 @@ func zipFile(t *testing.T, extra map[string]string) string {
 		t.Fatal(err)
 	}
 	// The module functions' zips lie beside the issuer's, each its own bytes.
-	for _, m := range []string{"cloudflare", "github", "slack", "google"} {
+	for _, m := range []string{"cloudflare", "github", "slack", "google", "outline"} {
 		zb := moduleZip(t, files, m)
 		if err := os.WriteFile(filepath.Join(dir, "sluis-"+m+"_1.63.0_linux_arm64.zip"), zb, 0o600); err != nil {
 			t.Fatal(err)
@@ -119,6 +119,7 @@ type estate struct {
 	config              string
 	policy              string
 	orgs, workspaces    []string
+	outline             []string
 	rate                string
 	telemetry           bool
 	noSigningAlias      bool // leave SigningKeyAlias empty on the legacy path
@@ -159,7 +160,7 @@ func (e estate) args(t *testing.T) *arp.LambdaArgs {
 			TruststoreBucketName: "acme-sluis-truststore",
 			KeepDefaultEndpoint:  e.keepDefaultEndpoint,
 		},
-		Schedule: arp.ScheduleArgs{GitHubOrgs: e.orgs, SlackWorkspaces: e.workspaces, Rate: e.rate},
+		Schedule: arp.ScheduleArgs{GitHubOrgs: e.orgs, SlackWorkspaces: e.workspaces, OutlineWorkspaces: e.outline, Rate: e.rate},
 	}
 	if e.telemetry {
 		a.Telemetry = &arp.TelemetryArgs{
@@ -339,7 +340,7 @@ func shape(t *testing.T, rec *recorder, out map[string]string, domain string) {
 
 	// The issuer's function from the package, arm64, provided.al2023, no VPC,
 	// beside one per module function.
-	if n := len(rec.ofType(fnType)); n != 1+len(arp.ModuleFunctions()) {
+	if n := len(rec.ofType(fnType)); n != 1+len(moduleRoles) { // no controllers.outline, no Outline function
 		t.Fatalf("%d functions, want the issuer's and one per module function", n)
 	}
 	f := rec.one(t, fnType, "staging-issuer")
@@ -380,7 +381,7 @@ func shape(t *testing.T, rec *recorder, out map[string]string, domain string) {
 	}
 
 	// A role per function, and the scheduler's.
-	if n := len(rec.ofType("aws:iam/role:Role")); n != 1+len(arp.ModuleFunctions())+1 {
+	if n := len(rec.ofType("aws:iam/role:Role")); n != 1+len(moduleRoles)+1 {
 		t.Errorf("%d roles, want one per function and the scheduler's", n)
 	}
 	role := rec.one(t, "aws:iam/role:Role", "staging-issuer-role")
@@ -614,7 +615,7 @@ func TestTheHiveShapeIsExpressible(t *testing.T) {
 			t.Error("the function is in a VPC")
 		}
 	}
-	if n := len(rec.ofType("aws:iam/role:Role")); n != 1+len(arp.ModuleFunctions())+1 {
+	if n := len(rec.ofType("aws:iam/role:Role")); n != 1+len(moduleRoles)+1 {
 		t.Errorf("%d roles, want one per function and the scheduler's", n)
 	}
 	if g := rolePolicy(t, rec); len(g["kms:Sign"]) != 2 || len(g["kms:GetPublicKey"]) != 2 {
@@ -1838,7 +1839,7 @@ const invocationType = "aws:lambda/invocation:Invocation"
 // hash of the declared names.
 func TestThePostDeployCheckInvokesTheLiveAliasWithTheCheckEvent(t *testing.T) {
 	rec, out := mustLambda(t, estate{})
-	if n := len(rec.ofType(invocationType)); n != 1+len(arp.ModuleFunctions()) {
+	if n := len(rec.ofType(invocationType)); n != 1+len(moduleRoles) {
 		t.Fatalf("%d invocations, want one check per function: %v", n, rec.names())
 	}
 	inv := rec.one(t, invocationType, "staging-check")

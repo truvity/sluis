@@ -63,8 +63,8 @@ func TestCreatedSendersAreTheRolesTheStackCreates(t *testing.T) {
 	}
 	// Every role is a principal of the key, created or not.
 	all, err := base.Senders()
-	if err != nil || len(all) != 7 {
-		t.Errorf("senders %v (%v), want the seven roles", all, err)
+	if err != nil || len(all) != 8 {
+		t.Errorf("senders %v (%v), want the eight roles", all, err)
 	}
 	bk := base
 	bk.Backup = true

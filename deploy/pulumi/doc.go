@@ -3,8 +3,9 @@
 // (one per module), and, as the main path, the Lambda deployment:
 // one function per module from the release zips, each with its own role. The
 // issuer function (issuer, signer and console) sits behind an HTTP API and
-// owns the token-signing key; the github, slack, google and cloudflare
-// functions hold their module's credentials and run its passes; the backup
+// owns the token-signing key; the github, slack, google, cloudflare and outline
+// functions hold their module's credentials and run its passes (the outline
+// one only with `controllers.outline`); the backup
 // function writes one age-encrypted archive a day, and the restore function is
 // the backup zip deployed a second time. The custom domain with mutual TLS, the
 // certificate and the truststore are a front door's: an edge module

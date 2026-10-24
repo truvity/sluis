@@ -570,6 +570,11 @@
                   "minLength": 1,
                   "type": "string"
                 },
+                "outline": {
+                  "description": "The name of the outline module's table. The library default is `sluis-<instance>-outline`.",
+                  "minLength": 1,
+                  "type": "string"
+                },
                 "slack": {
                   "description": "The name of the slack module's table. The library default is `sluis-<instance>-slack`.",
                   "minLength": 1,

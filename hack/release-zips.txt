@@ -13,3 +13,4 @@ module backup
 module github
 module slack
 module google
+module outline

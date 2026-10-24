@@ -155,7 +155,7 @@ type BackupCommon struct {
 	// Storage.External, which carries its own.
 	BlobBucketName string
 	BlobPrefix     string
-	// State is the per-module tables (States.Grant()): all six. Required.
+	// State is the per-module tables (States.Grant()): all seven. Required.
 	State *StateGrant
 	// TableNames overrides a module's table name; the default is
 	// `sluis-<instance>-<module>` (the same as LambdaArgs.TableNames).
@@ -337,7 +337,7 @@ func (c *BackupCommon) plan(role string) (*backupPlan, error) {
 	} else {
 		for _, m := range Modules() {
 			if p.State.Tables[m] == nil {
-				errs = append(errs, fmt.Errorf("State.Tables has no table for module %q: the role reads or writes all six", m))
+				errs = append(errs, fmt.Errorf("State.Tables has no table for module %q: the role reads or writes all seven", m))
 			}
 		}
 	}

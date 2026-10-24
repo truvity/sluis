@@ -133,3 +133,6 @@ slack:
     url: http://slack.sluis.svc:8080
     audience: slack
     tokenFile: /var/run/secrets/sluis/slack/token
+outline:
+  remote:
+    function: sluis-acme-outline

@@ -1,0 +1,22 @@
+# A rendered service document is taken as it stands: the chart cannot write outline.remote into it.
+# error: modules.outline.enabled is true and documents.service is set
+documents:
+  service: |
+    apiVersion: sluis.truvity.github.io/sluis/v3
+    issuerURL: https://issuer.example
+    policy:
+      file: /var/run/access-issuer/policy/policy.yaml
+    signingKey:
+      file: /var/run/access-issuer/signing-key/tls.key
+  policy: |
+    apiVersion: sluis.truvity.github.io/policy/v2
+modules:
+  outline:
+    enabled: true
+    config:
+      preset: k8s-aws
+      ports:
+        dynamodb:
+          region: eu-west-1
+          tables:
+            outline: sluis-outline

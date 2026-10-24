@@ -28,6 +28,8 @@ var rows5 = []struct{ key, module, kind, id string }{
 	{"gate.github-claim.42", "github", "claim", "42"},
 	{"gate.github.acme.confirm", "github", "gate", "acme/confirm"},
 	{"gate.slack.acme.confirm.ops", "slack", "gate", "acme/confirm/ops"},
+	{"ws.outline.wiki", "outline", "workspace", "wiki"},
+	{"gate.outline.wiki.confirm.admins", "outline", "gate", "wiki/confirm/admins"},
 	{"gate.other.thing", "", "gate", "other/thing"},
 	{"share.acme.partners", "slack", "share", "acme/partners"},
 	{"cache.slack.user.acme.U1", "slack", "user-cache", "acme/U1"},
@@ -219,7 +221,7 @@ func TestALayout5PrefixAgreesWithItsKeys(t *testing.T) {
 }
 
 func TestModules(t *testing.T) {
-	want := []string{"oidc", "github", "slack", "cloudflare", "google", "backup"}
+	want := []string{"oidc", "github", "slack", "cloudflare", "google", "backup", "outline"}
 	var got []string
 	for _, m := range port.Modules() {
 		got = append(got, string(m))

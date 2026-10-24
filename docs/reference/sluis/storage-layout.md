@@ -27,6 +27,7 @@ Layout v5: a logical key ([keys](keys.md)) is a module, a kind and an id, mapped
 | `internal/github/links/<github-user-id>/<ref>` | a person's GitHub token pair | sluis |
 | `internal/slack/workspaces/<team>/<ref>` | a Slack workspace's client secret and bot token | sluis |
 | `internal/slack/apps/<id>/<ref>` | a Slack App's client secret | sluis |
+| `internal/outline/workspaces/<workspace>/<ref>` | an Outline workspace's API key ([Outline](outline.md)) | sluis |
 | `internal/cloudflare/<account>/minter` | an account's minter credential | an operator seeds it |
 | `internal/cloudflare/minted/<preset>` | the record of the tokens minted for a preset | sluis |
 | `internal/<module>/<name>` | static S3 credentials (`credentialsRef`), in the module that reads them | an operator seeds it |

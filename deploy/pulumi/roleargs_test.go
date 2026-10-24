@@ -98,7 +98,7 @@ func TestFunctionRolesNameEveryFunction(t *testing.T) {
 	}
 	want := map[string]string{
 		"issuer": "acme-issuer", "github": "acme-gh", "slack": "sluis-staging-slack", "google": "sluis-staging-google",
-		"cloudflare": "sluis-staging-cloudflare", "backup": "acme-bk", "restore": "acme-rs",
+		"cloudflare": "sluis-staging-cloudflare", "outline": "sluis-staging-outline", "backup": "acme-bk", "restore": "acme-rs",
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("function names %v, want %v", got, want)

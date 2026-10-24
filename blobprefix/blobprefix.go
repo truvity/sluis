@@ -11,9 +11,10 @@ package blobprefix
 
 // The module roots.
 const (
-	GitHub = "github/"
-	Slack  = "slack/"
-	Google = "google/"
+	GitHub  = "github/"
+	Slack   = "slack/"
+	Google  = "google/"
+	Outline = "outline/"
 )
 
 // The prefixes below a module's root.
@@ -24,6 +25,9 @@ const (
 	// SlackReports holds what the Slack controller last reported, one object per
 	// workspace.
 	SlackReports = Slack + "reports/"
+	// OutlineReports holds what the Outline controller last reported, one
+	// object per workspace.
+	OutlineReports = Outline + "reports/"
 	// GoogleCache holds the hub's directory snapshots, one object per workspace.
 	GoogleCache = Google + "cache/"
 )
@@ -45,9 +49,10 @@ func Root(module string) string { return module + "/" }
 // The backup export keeps the reports and not the cache.
 func Used() map[string][]string {
 	return map[string][]string{
-		"github": {GitHubReports},
-		"slack":  {SlackReports},
-		"google": {GoogleCache},
+		"github":  {GitHubReports},
+		"slack":   {SlackReports},
+		"google":  {GoogleCache},
+		"outline": {OutlineReports},
 	}
 }
 

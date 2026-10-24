@@ -259,15 +259,17 @@ func TestEachRoleGetsExactlyTheStorageAndTheTables(t *testing.T) {
 	rec, _ := mustStack(t, opts{})
 	bucketArn := arnp + "s3:::" + bucket
 	var written []string
-	for _, m := range []string{"oidc", "github", "slack", "google"} {
+	for _, m := range []string{"oidc", "github", "slack", "google", "outline"} {
 		written = append(written, mockTableArn("sluis-staging-"+m))
 	}
+	// The backup table comes in the order of Modules(): before outline.
+	read := append(append(append([]string(nil), written[:4]...), mockTableArn("sluis-staging-backup")), written[4:]...)
 	want := map[string][]string{
 		"s3:GetObject":           {bucketArn + "/*"},
 		"s3:PutObject":           {bucketArn + "/*"},
 		"s3:DeleteObject":        {bucketArn + "/*"},
 		"s3:ListBucket":          {bucketArn},
-		"dynamodb:GetItem":       append(append([]string(nil), written...), mockTableArn("sluis-staging-backup")),
+		"dynamodb:GetItem":       read,
 		"dynamodb:PutItem":       written,
 		"dynamodb:UpdateItem":    written,
 		"dynamodb:DeleteItem":    written,
@@ -326,11 +328,11 @@ func TestWithAnInstanceTheRoleHasTheModuleSSMGrantsUnderItsRoot(t *testing.T) {
 	g := grants(statements(t, prop(p, "policy").StringValue()))
 	ssmArn := arnp + "ssm:eu-west-1:" + account + ":parameter"
 	var writes []string
-	for _, m := range []string{"oidc", "github", "slack", "google", "backup"} {
+	for _, m := range []string{"oidc", "github", "slack", "google", "backup", "outline"} {
 		p := ssmArn + "/sluis/staging/internal/" + m
 		writes = append(writes, p, p+"/*")
 	}
-	for _, m := range []string{"oidc", "github", "slack", "cloudflare", "google", "backup"} {
+	for _, m := range []string{"oidc", "github", "slack", "cloudflare", "google", "backup", "outline"} {
 		p := ssmArn + "/sluis/staging/external/" + m
 		writes = append(writes, p, p+"/*")
 	}

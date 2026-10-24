@@ -14,6 +14,7 @@ const (
 	moduleGitHub     = "github"
 	moduleSlack      = "slack"
 	moduleGoogle     = "google"
+	moduleOutline    = "outline"
 )
 
 // ModuleRoute is the section of a module that is not its own settings:
@@ -154,7 +155,7 @@ func validateRoutes(routes map[string]*ModuleRoute) error {
 }
 
 func (s *Sluis) routes() map[string]*ModuleRoute {
-	return map[string]*ModuleRoute{moduleGitHub: s.GitHub, moduleSlack: s.Slack, moduleGoogle: s.Google}
+	return map[string]*ModuleRoute{moduleGitHub: s.GitHub, moduleSlack: s.Slack, moduleGoogle: s.Google, moduleOutline: s.Outline}
 }
 
 func (r *Roster) routes() map[string]*ModuleRoute {

@@ -16,6 +16,7 @@ import { SlackSharedChannelService } from "./gen/sluis/v1/slack_connect_pb";
 import { SlackChannelService } from "./gen/sluis/v1/slack_channels_pb";
 import { SlackService } from "./gen/sluis/v1/slack_pb";
 import { CloudflareService } from "./gen/sluis/v1/cloudflare_pb";
+import { OutlineService } from "./gen/sluis/v1/outline_pb";
 import { BackupService } from "./gen/sluis/v1/backup_pb";
 import { SessionService, How } from "./gen/sluis/v1/session_pb";
 import { withLegacyFallback } from "./legacyFallback";
@@ -59,6 +60,7 @@ export const slackConnect = createClient(SlackSharedChannelService, transport);
 export const slackChannels = createClient(SlackChannelService, transport);
 export const slack = createClient(SlackService, transport);
 export const cloudflare = createClient(CloudflareService, transport);
+export const outline = createClient(OutlineService, transport);
 export const backups = createClient(BackupService, transport);
 
 // The audit installation's query service, through this console: the console

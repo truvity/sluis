@@ -464,7 +464,10 @@ func (in *Installation) policyDocument() (*internal.PolicyDocument, error) {
 		if c.Slack != nil && len(c.Slack.EnabledWorkspaces) > 0 {
 			pc.Slack = &internal.ControllersSlack{EnabledWorkspaces: sortedSet(c.Slack.EnabledWorkspaces)}
 		}
-		if pc.GitHub != nil || pc.Slack != nil {
+		if c.Outline != nil && len(c.Outline.EnabledWorkspaces) > 0 {
+			pc.Outline = &internal.ControllersOutline{EnabledWorkspaces: sortedSet(c.Outline.EnabledWorkspaces)}
+		}
+		if pc.GitHub != nil || pc.Slack != nil || pc.Outline != nil {
 			doc.Controllers = pc
 		}
 	}
