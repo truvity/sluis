@@ -75,7 +75,7 @@ The federation verifier is the same code on both platforms.
 | Platform logs over OTLP (observability's otlp-lambda layer) | n/a | ✅ |
 | Traces: HTTP and Connect spans, a span per tick, per port call, per module call and per AWS SDK call, the trace continued into the console and across a module call; the Lambda server span carries `faas.invocation_id` | 🧪 | 🧪 |
 | Metrics: the issuer's requests, tokens, sign-ins and keys; ticks and leases; port calls; rate limits ([reference/telemetry.md](telemetry.md)) | 🧪 | ✅ |
-| Chart modes `renders: alerts` and `renders: dashboards`: eleven rules, unit-tested with `vmalert-tool`, and a dashboard held to `dashboardlint` | 🧪 | n/a |
+| Chart modes `renders: alerts` and `renders: dashboards`: twelve rules, unit-tested with `vmalert-tool`, and a dashboard held to `dashboardlint` | 🧪 | n/a |
 | No personal data in a span: an allowlist exporter, tested by planting markers; no person or group in a label | 🧪 | 🧪 |
 
 Telemetry is configured by the `OTEL_*` variables only ([0032](../../decisions/0032-one-configuration-file-one-binary-one-chart.md)); see [telemetry](telemetry.md) and [Lambda](lambda.md).
