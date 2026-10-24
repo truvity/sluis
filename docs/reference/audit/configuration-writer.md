@@ -23,7 +23,7 @@ One binary, two roles chosen by `mode`.
 | `workloads` | path | | the file naming the issuers trusted to say which workload is publishing ([Workload identity](#workload-identity)). Exactly one of `workloads` and `anonymousWrites` |
 | `anonymousWrites` | `true` | | accept writes from callers nobody verified, stamped with no observer. For a trial install only |
 | `catalogues` | path | none | a directory of catalogues registered at start-up. An application that registers its own over `RegisterCatalogue` needs none. Not in a receiver |
-| `archive` | `archive` | none | what the process adds to the deployment's presets: `stateRoot`, `sluisRoot`, `sluisDir`, `ca` and `kmsKey`. Refused in `receiver` mode |
+| `archive` | `archive` | none | what the process adds to the deployment's presets: `stateRoot`, `sluisRoot`, `sluisDir`, `ca`, `kmsKey`, `attemptTimeout` (default `2s` here) and `maxAttempts` (default 3). Refused in `receiver` mode |
 | `database` | `database` | none | the shared deduplication table and the catalogue registry, in the application's Postgres, as the writer's **own** role (`audit migrate --writer`): it holds those tables and none of the index, which `audit-observe` writes. Without it the writer deduplicates in process and may run one replica only. The writer refuses to start on a schema version it does not know and never migrates itself |
 | `replicas` | integer, at least 1 | 1 | how many writers share this stream: the number of writer pods, which the writer cannot see for itself |
 | `keys` | `keys` | none: no pseudonyms | pseudonymisation keys. Not in a receiver |

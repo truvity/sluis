@@ -142,6 +142,8 @@ The processes that open the archive take it: `audit-writer` (mode `writer`), the
 | `sluisDir` | path | none | the directory a secrets operator projects a preset's `credentials_ref` into, read at `<sluisDir>/<credentials_ref>`. Exclusive with `sluisRoot` |
 | `ca` | path | the system trust store | a CA bundle for a store whose certificate is not signed by a public root |
 | `kmsKey` | string | the bucket's default encryption | the key objects are encrypted with where a preset names no `key_alias`. Only the writer and the notary have it |
+| `attemptTimeout` | duration | `2s` in the writer and the writer Lambda; no bound elsewhere | how long one attempt of a request to the stores may stall (connect, TLS handshake, waiting for headers, a pause in the body) before it fails and is retried. A body that keeps arriving is not cut off |
+| `maxAttempts` | integer | 3 | how many times a request to the stores is tried, the first included. With `attemptTimeout` set, the pause between attempts is at most 500 ms |
 
 **`listen`**: `address` (string, `host:port` such as `:8080`, required when the
 block is present). Both servers default it to `:8080`.

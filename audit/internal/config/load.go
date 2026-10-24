@@ -354,7 +354,28 @@ func (w *WriterLambda) finish() error {
 	if err := w.Archive.adoptKey(w.Keys); err != nil {
 		return err
 	}
+	w.Archive.writerBounds()
 	return nil
+}
+
+// The bounds on each archive request a writer starts with when the file sets
+// none. Two seconds is many times what a put takes, and three attempts with a
+// short pause between them keep one request that stalls on every attempt
+// under eight seconds.
+const (
+	WriterArchiveAttemptTimeout = 2 * time.Second
+	WriterArchiveMaxAttempts    = 3
+)
+
+// writerBounds gives a writer's archive its bounded requests unless the file
+// says otherwise.
+func (a *Archive) writerBounds() {
+	if a.AttemptTimeout == 0 {
+		a.AttemptTimeout = Duration(WriterArchiveAttemptTimeout)
+	}
+	if a.MaxAttempts == 0 {
+		a.MaxAttempts = WriterArchiveMaxAttempts
+	}
 }
 
 func (w *Writer) finish() error {
@@ -390,6 +411,7 @@ func (w *Writer) finish() error {
 		if err := w.Archive.adoptKey(w.Keys); err != nil {
 			return err
 		}
+		w.Archive.writerBounds()
 	}
 	return checkDatabase(w.Database, w.Secrets)
 }

@@ -85,6 +85,10 @@ func run() error {
 		fmt.Println("audit-writer-lambda", buildinfo.Version)
 		return nil
 	}
+	// Everything until the runtime polls for work is the platform's init, which
+	// has a limit of its own (10 s). Each step says how long it took, so that a
+	// slow start names its step.
+	started := time.Now()
 	configFile, err := config.Path(os.Args[1:], "audit-writer-lambda", defaultConfig, legacyConfig)
 	if err != nil {
 		return err
@@ -93,6 +97,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	started = initPhase("config_load", started)
 
 	// SIGTERM is the platform's shutdown, sent when an extension is registered
 	// (the telemetry layer is one) and the environment is idle: the one chance to
@@ -112,6 +117,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	started = initPhase("profiles", started, slog.Int("profiles", len(profiles)))
 	// Each preset is its own store. A profile whose preset is not configured, or
 	// whose frameworks demand a lock its preset's bucket is not written with, is
 	// refused before a copy lands where it could be deleted (ADR 0056).
@@ -119,6 +125,8 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	started = initPhase("s3_clients", started, slog.Int("presets", len(d.Presets)),
+		slog.Float64("attempt_timeout_ms", float64(cfg.Archive.AttemptTimeout.D().Milliseconds())), slog.Int("max_attempts", cfg.Archive.MaxAttempts))
 	provider, err := cli.OpenKeysFrom(ctx, cfg.Keys, cfg.SecretReader())
 	if err != nil {
 		return err
@@ -132,6 +140,7 @@ func run() error {
 			return err
 		}
 	}
+	started = initPhase("catalogues_load", started, slog.Int("catalogues", len(found)))
 
 	table := cfg.Dedupe.DynamoDB
 	var opts []func(*awsconfig.LoadOptions) error
@@ -151,6 +160,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	started = initPhase("dedupe_client", started)
 
 	stopTelemetry, err := telemetry.Start(ctx, "audit-writer", buildinfo.Version, slog.Default())
 	if err != nil {
@@ -160,6 +170,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	started = initPhase("otel_start", started)
 
 	evidence, err := cli.WriterEvidence(cfg.Source, cfg.Deployment, "", cfg.Catalogues)
 	if err != nil {
@@ -188,6 +199,9 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	// writer.Open logs its own steps (holds, ensure_catalogues,
+	// record_compositions); this is their sum with the evidence digests.
+	initPhase("writer_open", started)
 	front, err := guard(w, cfg.Require)
 	if err != nil {
 		return err
@@ -225,6 +239,15 @@ func run() error {
 		slog.String("table", table.Table), slog.String("window", window.String()))
 	lambda.StartWithOptions(h.Handle, lambda.WithContext(ctx))
 	return nil
+}
+
+// initPhase logs how long one step of the function's init took, and returns
+// the time the next step starts.
+func initPhase(name string, started time.Time, attrs ...any) time.Time {
+	now := time.Now()
+	args := append([]any{slog.String("phase", name), slog.Float64("duration_ms", float64(now.Sub(started).Microseconds())/1000)}, attrs...)
+	slog.InfoContext(context.Background(), "audit-writer-lambda init phase", args...)
+	return now
 }
 
 // handlerFor is the handler of the function: the writer behind its guard, the

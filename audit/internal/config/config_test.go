@@ -1096,3 +1096,37 @@ func TestSendersMapASenderIdToAnObserver(t *testing.T) {
 		})
 	}
 }
+
+// A writer starts by writing its catalogues to the archive, and on a function
+// platform that is inside the start-up limit: its archive requests are
+// bounded per attempt unless the file says otherwise. Other processes keep the
+// SDK's own.
+func TestAWriterBoundsItsArchiveRequests(t *testing.T) {
+	lambda, err := config.LoadWriterLambda(writeAs(t, "audit-writer-lambda", "deployment: /d.yaml\narchive: {}\ndedupe: {dynamodb: {table: t}}\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	server, err := config.LoadWriter(writeAs(t, "audit-writer", minimalWriter))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, a := range map[string]config.Archive{"lambda": lambda.Archive, "server": *server.Archive} {
+		if a.AttemptTimeout.D() != config.WriterArchiveAttemptTimeout || a.MaxAttempts != config.WriterArchiveMaxAttempts {
+			t.Errorf("%s: archive bounds %s x %d, want the writer's defaults", name, a.AttemptTimeout.D(), a.MaxAttempts)
+		}
+	}
+
+	set, err := config.LoadWriterLambda(writeAs(t, "audit-writer-lambda",
+		"deployment: /d.yaml\narchive: {attemptTimeout: 5s, maxAttempts: 2}\ndedupe: {dynamodb: {table: t}}\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if set.Archive.AttemptTimeout.D() != 5*time.Second || set.Archive.MaxAttempts != 2 {
+		t.Errorf("the file's bounds were replaced: %+v", set.Archive)
+	}
+
+	if _, err := config.LoadWriterLambda(writeAs(t, "audit-writer-lambda",
+		"deployment: /d.yaml\narchive: {maxAttempts: 0}\ndedupe: {dynamodb: {table: t}}\n")); err == nil {
+		t.Error("maxAttempts 0 was accepted")
+	}
+}
