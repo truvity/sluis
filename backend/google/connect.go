@@ -2,6 +2,8 @@ package google
 
 import (
 	"context"
+	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -106,14 +108,39 @@ func (c OAuthClient) signInConfig() *oauth2.Config {
 // there is no refresh token to want, and a person who signed in a minute
 // ago should not be asked again. The account chooser is Google's, which
 // is why this hub asks nobody for an address first.
+//
+// The request carries a `nonce` derived from the state ([Nonce]), which
+// Google copies into the ID token: [IdentifyAccount] refuses a token whose nonce is
+// not the one of the state the callback came back with, so that a code
+// obtained for another sign-in (another browser's, or another person's)
+// cannot complete this one.
 func (c OAuthClient) SignInURL(state string) string {
-	return c.signInConfig().AuthCodeURL(state)
+	return c.signInConfig().AuthCodeURL(state, oauth2.SetAuthURLParam("nonce", Nonce(state)))
+}
+
+// Nonce is the OpenID Connect `nonce` of the sign-in started with state: a
+// hash of it, so that the callback recomputes it from the state it was handed,
+// which the caller has already held to the browser that started the sign-in.
+// It needs no storage of its own, and it is not secret: it travels in the same
+// URL as the state.
+func Nonce(state string) string {
+	sum := sha256.Sum256([]byte("sluis google sign-in nonce\x00" + state))
+	return base64.RawURLEncoding.EncodeToString(sum[:])
+}
+
+// Account is who a sign-in proved: the address, and Google's stable account
+// id (`sub`), which stays with the account when the address is renamed and is
+// never given to another account when the address is.
+type Account struct {
+	Email   string
+	Subject string
 }
 
 // Identify turns a sign-in callback's code into the address that
-// authenticated. It is the whole of what the flow is for: the hub decides
-// everything else from the address, through the directory it already
-// reads.
+// authenticated, without checking the ID token's nonce.
+//
+// Deprecated: use [IdentifyAccount], which checks the nonce [OAuthClient.SignInURL]
+// sends against the callback's state and returns the account's `sub`.
 func Identify(ctx context.Context, client OAuthClient, code string) (string, error) {
 	if code == "" {
 		return "", errors.New("google: the sign-in returned no code")
@@ -122,13 +149,34 @@ func Identify(ctx context.Context, client OAuthClient, code string) (string, err
 	if err != nil {
 		return "", fmt.Errorf("google: exchange the sign-in code: %w", err)
 	}
-	return signedInAccount(token, client.HostedDomains)
+	account, err := signedInAccount(token, client.HostedDomains, "")
+	return account.Email, err
+}
+
+// IdentifyAccount turns a sign-in callback's code into the account that
+// authenticated. state is the callback's state, which the caller has already
+// held to this browser: the ID token must carry its [Nonce]. The hub decides
+// everything else from the address, through the directory it already reads;
+// the subject is for the caller to pin the address to.
+func IdentifyAccount(ctx context.Context, client OAuthClient, code, state string) (Account, error) {
+	if code == "" {
+		return Account{}, errors.New("google: the sign-in returned no code")
+	}
+	if state == "" {
+		return Account{}, errors.New("google: the sign-in has no state to check its nonce against")
+	}
+	token, err := client.signInConfig().Exchange(ctx, code)
+	if err != nil {
+		return Account{}, fmt.Errorf("google: exchange the sign-in code: %w", err)
+	}
+	return signedInAccount(token, client.HostedDomains, Nonce(state))
 }
 
 // signedInAccount is the address a sign-in's ID token vouches for, when Google
 // vouches for it.
 //
-// Three things are asked of the token beyond an address. `email_verified` must
+// Four things are asked of the token beyond an address. Its `nonce` must be
+// the one this sign-in sent ([Nonce]). `email_verified` must
 // be true: Google says the account has proved it owns the address, and an
 // address it has not verified is a string somebody typed. When hosted domains
 // are configured, `hd` must be one of them, so that an address of the
@@ -137,32 +185,37 @@ func Identify(ctx context.Context, client OAuthClient, code string) (string, err
 // account id, which a token without is not one this client was handed.
 //
 // The identity is still the address, as every link and every grant here is
-// keyed by it; `sub` is not recorded. Keying by `sub` would orphan every
-// existing link, so it is a migration and not part of this check.
-func signedInAccount(token *oauth2.Token, hostedDomains []string) (string, error) {
+// keyed by it. `sub` is returned beside it, for the caller to pin the address
+// to the account that first signed in with it, so that an address deleted and
+// given to a new account is not taken for the old one.
+func signedInAccount(token *oauth2.Token, hostedDomains []string, nonce string) (Account, error) {
 	claims, ok := idTokenClaims(token)
 	if !ok {
-		return "", errors.New("google: the sign-in did not say which account it was; " +
+		return Account{}, errors.New("google: the sign-in did not say which account it was; " +
 			"the OAuth client must be allowed the openid and email scopes")
+	}
+	// nonce is empty only for the deprecated [Identify], which checks none.
+	if nonce != "" && (claims.Nonce == "" || subtle.ConstantTimeCompare([]byte(claims.Nonce), []byte(nonce)) != 1) {
+		return Account{}, errors.New("google: the sign-in's ID token is not for this sign-in (its nonce is missing or another one)")
 	}
 	email := strings.ToLower(strings.TrimSpace(claims.Email))
 	if email == "" {
-		return "", errors.New("google: the sign-in did not say which account it was; " +
+		return Account{}, errors.New("google: the sign-in did not say which account it was; " +
 			"the OAuth client must be allowed the openid and email scopes")
 	}
 	if claims.Subject == "" {
-		return "", errors.New("google: the sign-in carried no subject")
+		return Account{}, errors.New("google: the sign-in carried no subject")
 	}
 	if !claims.EmailVerified.true() {
-		return "", errors.New("google: the account's address is not verified")
+		return Account{}, errors.New("google: the account's address is not verified")
 	}
 	if len(hostedDomains) > 0 {
 		hosted := strings.TrimSpace(claims.HostedDomain)
 		if !slices.ContainsFunc(hostedDomains, func(d string) bool { return strings.EqualFold(strings.TrimSpace(d), hosted) }) || hosted == "" {
-			return "", errors.New("google: the account is not in a hosted domain this installation signs in")
+			return Account{}, errors.New("google: the account is not in a hosted domain this installation signs in")
 		}
 	}
-	return email, nil
+	return Account{Email: email, Subject: claims.Subject}, nil
 }
 
 // verifiedFlag is Google's `email_verified`, a boolean in an ID token and a
@@ -192,6 +245,7 @@ type idTokenClaim struct {
 	Email         string       `json:"email"`
 	EmailVerified verifiedFlag `json:"email_verified"`
 	HostedDomain  string       `json:"hd"`
+	Nonce         string       `json:"nonce"`
 }
 
 // idTokenClaims reads the claims out of the ID token that came back with a

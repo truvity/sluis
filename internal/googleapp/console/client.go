@@ -193,7 +193,8 @@ func (r *RemoteConnector) SignInURL(state string) (string, error) {
 // Identify implements [SignInConnector] with `google.identify`. A module that
 // is cold answers late and one that is gone answers not at all, so the error is
 // the caller's to show: a sign-in cannot be completed without it.
-func (r *RemoteConnector) Identify(ctx context.Context, code string) (string, error) {
-	out, err := modcall.Do[identifyRequest, identifyResponse](modcall.WithoutRetry(ctx), r.c, Module, MethodIdentify, identifyRequest{Code: code})
+func (r *RemoteConnector) Identify(ctx context.Context, code, state string) (string, error) {
+	out, err := modcall.Do[identifyRequest, identifyResponse](modcall.WithoutRetry(ctx), r.c, Module, MethodIdentify,
+		identifyRequest{Code: code, State: state})
 	return out.Email, err
 }

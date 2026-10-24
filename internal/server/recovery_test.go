@@ -317,7 +317,7 @@ type stubSignIn struct{}
 func (stubSignIn) Kind() string                     { return "google" }
 func (stubSignIn) AuthURL(string) (string, error)   { return "https://consent.example", nil }
 func (stubSignIn) SignInURL(string) (string, error) { return "https://signin.example", nil }
-func (stubSignIn) Identify(context.Context, string) (string, error) {
+func (stubSignIn) Identify(context.Context, string, string) (string, error) {
 	return "ada@north.example", nil
 }
 func (stubSignIn) Exchange(context.Context, string, string) (hub.Workspace, backend.Backend, error) {

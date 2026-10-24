@@ -391,12 +391,12 @@ func (s *Service) signIn(kind string) (SignInConnector, bool) {
 // Identify turns the sign-in's code into the address that authenticated. It
 // answers the issuer alone ([Register]); what that address may do is decided
 // by the directory and the policy, not here.
-func (s *Service) Identify(ctx context.Context, code string) (string, error) {
+func (s *Service) Identify(ctx context.Context, code, state string) (string, error) {
 	conn, ok := s.signIn("google")
 	if !ok {
 		return "", modcall.Coded(CodeFailedPrecondition, "this module cannot sign anyone in")
 	}
-	return conn.Identify(ctx, code)
+	return conn.Identify(ctx, code, state)
 }
 
 // SignInURL is where the browser goes to sign in.
@@ -527,7 +527,7 @@ func RegisterLazy(s *modcall.Server, log *slog.Logger, open func(context.Context
 		if err != nil {
 			return identifyResponse{}, err
 		}
-		email, err := svc.Identify(ctx, r.Code)
+		email, err := svc.Identify(ctx, r.Code, r.State)
 		if err != nil {
 			// The provider's words are the module's log's: a sign-in that failed
 			// says so, and why is not the issuer's to relay to a browser.
