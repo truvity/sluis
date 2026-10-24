@@ -17,6 +17,7 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"connectrpc.com/connect/v2"
@@ -217,6 +218,26 @@ func (a *App) Close() error { return a.trail.Close() }
 // not record every held and reported row again.
 var _ controller.StatusReader = (*rails.BlobReports)(nil)
 
+// unconsumedWarned is the sets of unconsumed groups this process has already
+// said so about, each by its sorted names.
+var unconsumedWarned sync.Map
+
+// warnUnconsumedOnce says that internal groups are declared but nothing
+// consumes them, once per process for each distinct set of groups. The Lambda
+// function assembles a controller for every invocation, and the same words on
+// every one of them are noise: the answer cannot change until the policy does,
+// and a changed policy that names other groups is a different set, said again.
+func warnUnconsumedOnce(ctx context.Context, log *slog.Logger, unconsumed []string) {
+	if len(unconsumed) == 0 {
+		return
+	}
+	if _, seen := unconsumedWarned.LoadOrStore(strings.Join(unconsumed, "\x00"), struct{}{}); seen {
+		return
+	}
+	log.WarnContext(ctx, "internal groups are declared but nothing consumes them",
+		slog.Any("groups", unconsumed))
+}
+
 // New assembles the controller.
 func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 	declared := cfg.policy.Policy
@@ -229,10 +250,7 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 	// The catalogue's grants are consumers too: the policy document carries
 	// them, so a group that exists only to let some identity mint an App's
 	// token is not reported as unconsumed.
-	if unconsumed := cfg.policy.Unconsumed(); len(unconsumed) > 0 {
-		log.WarnContext(ctx, "internal groups are declared but nothing consumes them",
-			slog.Any("groups", unconsumed))
-	}
+	warnUnconsumedOnce(ctx, log, cfg.policy.Unconsumed())
 	if len(declared.GitHub) == 0 {
 		log.WarnContext(ctx, "the policy binds no GitHub organisation: every pass will do nothing")
 	}

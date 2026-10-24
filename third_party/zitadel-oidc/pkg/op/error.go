@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	httphelper "github.com/zitadel/oidc/v3/pkg/http"
 	"github.com/zitadel/oidc/v3/pkg/oidc"
@@ -28,10 +29,11 @@ type LogAuthRequest interface {
 
 func AuthRequestError(w http.ResponseWriter, r *http.Request, authReq ErrAuthRequest, err error, authorizer Authorizer) {
 	e := oidc.DefaultToServerError(err, err.Error())
-	args := []any{slog.Any("oidc_error", e)}
+	level := authRequestLogLevel(e, err)
+	args := authRequestLogArgs(r, authReq, e)
 
 	if authReq == nil {
-		slog.Log(r.Context(), e.LogLevel(), "auth request", args...)
+		slog.Log(r.Context(), level, "auth request", args...)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -41,7 +43,7 @@ func AuthRequestError(w http.ResponseWriter, r *http.Request, authReq ErrAuthReq
 	}
 
 	if authReq.GetRedirectURI() == "" || e.IsRedirectDisabled() {
-		slog.Log(r.Context(), e.LogLevel(), "auth request: not redirecting", args...)
+		slog.Log(r.Context(), level, "auth request: not redirecting", args...)
 		http.Error(w, e.Description, http.StatusBadRequest)
 		return
 	}
@@ -63,8 +65,66 @@ func AuthRequestError(w http.ResponseWriter, r *http.Request, authReq ErrAuthReq
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	slog.Log(r.Context(), e.LogLevel(), "auth request", args...)
+	slog.Log(r.Context(), level, "auth request", args...)
 	http.Redirect(w, r, url, http.StatusFound)
+}
+
+// maxAuthRequestLogValue bounds a request value copied into a log line, so a
+// caller cannot make a line as long as its query string.
+const maxAuthRequestLogValue = 256
+
+// authRequestLogLevel is the level an auth request error is logged at. The
+// error's own level stands, except that an error which wraps a server error
+// anywhere in its chain is logged as one: the authorization endpoint words a
+// failed client lookup as an invalid request (so the error is never redirected
+// to an unchecked address), and that must not hide a fault of the server's own
+// behind a warning.
+func authRequestLogLevel(e *oidc.Error, err error) slog.Level {
+	for cur := err; cur != nil; cur = errors.Unwrap(cur) {
+		if inner, ok := cur.(*oidc.Error); ok && inner.ErrorType == oidc.ServerError {
+			return slog.LevelError
+		}
+	}
+	return e.LogLevel()
+}
+
+// authRequestLogArgs are the fields of an auth request error's log line:
+// the error code and why, the client the request names and, when there is a
+// request, the path it was made to. Only these: never the query, the state, a
+// PKCE challenge or any other parameter.
+func authRequestLogArgs(r *http.Request, authReq ErrAuthRequest, e *oidc.Error) []any {
+	args := []any{slog.Any("oidc_error", e), slog.String("error", string(e.ErrorType))}
+	if e.Description != "" {
+		args = append(args, slog.String("reason", truncateLogValue(e.Description)))
+	}
+	if e.Parent != nil {
+		args = append(args, slog.String("cause", truncateLogValue(e.Parent.Error())))
+	}
+	var clientID string
+	if named, ok := authReq.(interface{ GetClientID() string }); ok {
+		clientID = named.GetClientID()
+	}
+	if clientID == "" && r != nil {
+		if r.Form != nil {
+			clientID = r.Form.Get("client_id")
+		} else {
+			clientID = r.URL.Query().Get("client_id")
+		}
+	}
+	if clientID != "" {
+		args = append(args, slog.String("client_id", truncateLogValue(clientID)))
+	}
+	if r != nil {
+		args = append(args, slog.String("path", truncateLogValue(r.URL.Path)))
+	}
+	return args
+}
+
+func truncateLogValue(s string) string {
+	if len(s) <= maxAuthRequestLogValue {
+		return s
+	}
+	return strings.ToValidUTF8(s[:maxAuthRequestLogValue], "") + "..."
 }
 
 func RequestError(w http.ResponseWriter, r *http.Request, err error, _ *slog.Logger) {
@@ -85,10 +145,11 @@ func RequestError(w http.ResponseWriter, r *http.Request, err error, _ *slog.Log
 // to the client instead.
 func TryErrorRedirect(ctx context.Context, authReq ErrAuthRequest, parent error, encoder httphelper.Encoder, _ *slog.Logger) (*Redirect, error) {
 	e := oidc.DefaultToServerError(parent, parent.Error())
-	args := []any{slog.Any("oidc_error", e)}
+	level := authRequestLogLevel(e, parent)
+	args := authRequestLogArgs(nil, authReq, e)
 
 	if authReq == nil {
-		slog.Log(ctx, e.LogLevel(), "auth request", args...)
+		slog.Log(ctx, level, "auth request", args...)
 		return nil, AsStatusError(e, http.StatusBadRequest)
 	}
 
@@ -97,7 +158,7 @@ func TryErrorRedirect(ctx context.Context, authReq ErrAuthRequest, parent error,
 	}
 
 	if authReq.GetRedirectURI() == "" || e.IsRedirectDisabled() {
-		slog.Log(ctx, e.LogLevel(), "auth request: not redirecting", args...)
+		slog.Log(ctx, level, "auth request: not redirecting", args...)
 		return nil, AsStatusError(e, http.StatusBadRequest)
 	}
 
@@ -119,7 +180,7 @@ func TryErrorRedirect(ctx context.Context, authReq ErrAuthRequest, parent error,
 		return nil, AsStatusError(err, http.StatusBadRequest)
 	}
 	args = append(args, slog.String("url", url))
-	slog.Log(ctx, e.LogLevel(), "auth request redirect", args...)
+	slog.Log(ctx, level, "auth request redirect", args...)
 	return NewRedirect(url), nil
 }
 
