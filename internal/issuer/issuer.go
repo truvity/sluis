@@ -170,6 +170,9 @@ type Issuer struct {
 	cloudflare atomic.Pointer[CloudflareMinter]
 	// sluisConfig is the document at SluisConfigurationPath; nil is a 404.
 	sluisConfig atomic.Pointer[SluisConfiguration]
+	// pins holds the account at the provider each address first signed in
+	// from (pinSubject); nil pins nothing.
+	pins State
 }
 
 // UseAudit gives the issuer the service's recorder. The directory half
@@ -216,6 +219,7 @@ func New(cfg Config, set *policy.Set, dir Directory, state State) *Issuer {
 	// starts after the directory went quiet finds what the last one learned.
 	if state != nil {
 		i.resolver.UseState(state)
+		i.pins = state
 	}
 	// The sessions index asks the policy, per session, for the limit its
 	// resources allow: it is read at every open and every refresh, so a

@@ -201,7 +201,7 @@ func (c *Connector) SignInURL(state string) (string, error) {
 }
 
 // Identify implements [server.SignInConnector].
-func (c *Connector) Identify(_ context.Context, code string) (string, error) {
+func (c *Connector) Identify(_ context.Context, code, _ string) (string, error) {
 	if code == "" {
 		return "", fmt.Errorf("demo: the callback carried no code")
 	}

@@ -39,7 +39,7 @@ type identifyingNobody struct {
 	calls int
 }
 
-func (c *identifyingNobody) Identify(context.Context, string) (string, error) {
+func (c *identifyingNobody) Identify(context.Context, string, string) (string, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.calls++

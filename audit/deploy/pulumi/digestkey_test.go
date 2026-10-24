@@ -89,8 +89,6 @@ func TestDigestKeyPolicyIsTheEstatesText(t *testing.T) {
     {
       "Action": [
         "kms:CancelKeyDeletion",
-        "kms:CreateAlias",
-        "kms:DeleteAlias",
         "kms:DescribeKey",
         "kms:DisableKeyRotation",
         "kms:EnableKey",
@@ -100,7 +98,6 @@ func TestDigestKeyPolicyIsTheEstatesText(t *testing.T) {
         "kms:Sign",
         "kms:TagResource",
         "kms:UntagResource",
-        "kms:UpdateAlias",
         "kms:UpdateKeyDescription",
         "kms:Verify"
       ],
@@ -113,11 +110,14 @@ func TestDigestKeyPolicyIsTheEstatesText(t *testing.T) {
     },
     {
       "Action": [
+        "kms:CreateAlias",
         "kms:CreateGrant",
+        "kms:DeleteAlias",
         "kms:DisableKey",
         "kms:PutKeyPolicy",
         "kms:RevokeGrant",
-        "kms:ScheduleKeyDeletion"
+        "kms:ScheduleKeyDeletion",
+        "kms:UpdateAlias"
       ],
       "Condition": {
         "ArnLike": {
@@ -135,11 +135,14 @@ func TestDigestKeyPolicyIsTheEstatesText(t *testing.T) {
     },
     {
       "Action": [
+        "kms:CreateAlias",
         "kms:CreateGrant",
+        "kms:DeleteAlias",
         "kms:DisableKey",
         "kms:PutKeyPolicy",
         "kms:RevokeGrant",
-        "kms:ScheduleKeyDeletion"
+        "kms:ScheduleKeyDeletion",
+        "kms:UpdateAlias"
       ],
       "Condition": {
         "ArnNotLike": {

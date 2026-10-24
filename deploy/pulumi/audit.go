@@ -139,6 +139,10 @@ type AuditArchiveArgs struct {
 	// principal. Required when a preset's bucket is created (the default install
 	// creates one), refused when none is.
 	BreakglassRoleArns []string
+	// ExistingBucketLockGuard is auditpulumi.ArchiveArgs.ExistingBucketLockGuard:
+	// what the library does about a preset's existing bucket whose policy has no
+	// lock guard, "report" (the default), "require" or "off".
+	ExistingBucketLockGuard string
 }
 
 // AuditUse is an audit installation that exists: the outputs of its ingest queue.
@@ -321,7 +325,7 @@ func (a *LambdaArgs) auditInstallArgs(p *auditPlan, role pulumi.StringInput, mor
 		Encryption:     ar.Encryption,
 		ObjectLockMode: ar.ObjectLockMode, AcknowledgeCompliance: ar.AcknowledgeCompliance,
 		DefaultRetentionDays: ar.DefaultRetentionDays, GlacierIRDays: ar.GlacierIRDays, DeepArchiveDays: ar.DeepArchiveDays,
-		BreakglassRoleArns: ar.BreakglassRoleArns,
+		BreakglassRoleArns: ar.BreakglassRoleArns, ExistingBucketLockGuard: ar.ExistingBucketLockGuard,
 	}
 	presets := map[string]auditpulumi.PresetStorage{}
 	if au.Presets == nil {

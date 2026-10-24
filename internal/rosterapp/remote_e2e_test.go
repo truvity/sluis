@@ -106,7 +106,7 @@ func (*e2eGoogle) SignInURL(state string) (string, error) {
 	return "https://accounts.google.example/signin?state=" + url.QueryEscape(state), nil
 }
 
-func (g *e2eGoogle) Identify(context.Context, string) (string, error) {
+func (g *e2eGoogle) Identify(context.Context, string, string) (string, error) {
 	g.identified.Add(1)
 	return g.email, nil
 }

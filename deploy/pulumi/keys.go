@@ -358,7 +358,7 @@ const (
 // sops, a state bucket) keep working. The estate concatenates its own statements
 // with these and passes the lists to KeyPolicyDocument, which refuses a repeated
 // Sid and a policy over KMS's size limit. The estate keeps what is its own: the
-// root statement that enables IAM (which should no longer grant the five
+// root statement that enables IAM (which should no longer grant the
 // control-plane actions to every principal: for the upkeep alone, see
 // KeyControlPlaneStatements), its other usages, and a "nothing else" deny over
 // its own principals, which must name the sluis roles among the principals it

@@ -34,6 +34,14 @@ type ArchiveBucketArgs struct {
 	GlacierIRDays, DeepArchiveDays, MultipartDays int
 	// Tags are put on the bucket.
 	Tags map[string]string
+	// BreakglassRoleArns are the roles that alone may bypass the bucket's lock:
+	// set, the policy carries ArchiveLockGuard beside the TLS-only statement, so
+	// that a role with a broad S3 allow cannot delete a version of the archive
+	// or change its lock. Role ARNs (a `*` only in the hash of an SSO role's
+	// name, see CheckKeyAdmin); include the role that applies the stack.
+	// Optional: without it the policy is the TLS-only statement alone, as before
+	// v1.78.2, and the program logs a warning naming the gap.
+	BreakglassRoleArns []string
 	// Aliases returns the [pulumi.Alias] values of a resource, by its AWS type
 	// token (the Archive*Type constants), for resources whose URN is being moved
 	// (a new parent, a rename). nil adds none.
@@ -77,6 +85,9 @@ func NewArchiveBucket(ctx *pulumi.Context, name string, args *ArchiveBucketArgs,
 	}
 	if len(args.Profiles) == 0 {
 		return nil, errors.New("auditpulumi: ArchiveBucketArgs.Profiles is required: a lifecycle rule is made per profile")
+	}
+	if err := checkKeyAdmins("ArchiveBucketArgs.BreakglassRoleArns", args.BreakglassRoleArns); err != nil {
+		return nil, err
 	}
 	seen := map[string]bool{}
 	for _, p := range args.Profiles {
@@ -157,6 +168,17 @@ func NewArchiveBucket(ctx *pulumi.Context, name string, args *ArchiveBucketArgs,
 
 	policy := fmt.Sprintf(`{"Statement":[{"Action":"s3:*","Condition":{"Bool":{"aws:SecureTransport":"false"}},`+
 		`"Effect":"Deny","Principal":"*","Resource":["%[1]s","%[1]s/*"],"Sid":"OnlyOverTLS"}],"Version":"2012-10-17"}`, bucketArn)
+	if len(args.BreakglassRoleArns) > 0 {
+		policy = policyJSON(statement{
+			"Sid": "OnlyOverTLS", "Effect": "Deny", "Principal": "*", "Action": "s3:*",
+			"Resource":  []string{bucketArn, bucketArn + "/*"},
+			"Condition": map[string]any{"Bool": map[string]any{"aws:SecureTransport": "false"}},
+		}, ArchiveLockGuard(bucketArn, args.BreakglassRoleArns))
+	} else if err := ctx.Log.Warn("auditpulumi: the archive bucket "+args.BucketName+" gets no lock guard: ArchiveBucketArgs.BreakglassRoleArns "+
+		"is empty, so any role with a broad S3 allow may delete a version of the archive or change its lock. Name the break-glass "+
+		"roles and the role that applies the stack", nil); err != nil {
+		return nil, err
+	}
 	if _, err := s3.NewBucketPolicy(ctx, name, &s3.BucketPolicyArgs{
 		Bucket: bucket.ID(),
 		Policy: pulumi.String(policy),

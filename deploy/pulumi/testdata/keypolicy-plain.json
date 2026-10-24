@@ -403,11 +403,14 @@
     },
     {
       "Action": [
+        "kms:CreateAlias",
         "kms:CreateGrant",
+        "kms:DeleteAlias",
         "kms:DisableKey",
         "kms:PutKeyPolicy",
         "kms:RevokeGrant",
-        "kms:ScheduleKeyDeletion"
+        "kms:ScheduleKeyDeletion",
+        "kms:UpdateAlias"
       ],
       "Condition": {
         "ArnLike": {
@@ -425,11 +428,14 @@
     },
     {
       "Action": [
+        "kms:CreateAlias",
         "kms:CreateGrant",
+        "kms:DeleteAlias",
         "kms:DisableKey",
         "kms:PutKeyPolicy",
         "kms:RevokeGrant",
-        "kms:ScheduleKeyDeletion"
+        "kms:ScheduleKeyDeletion",
+        "kms:UpdateAlias"
       ],
       "Condition": {
         "ArnNotLike": {

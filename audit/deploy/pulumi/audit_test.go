@@ -227,7 +227,12 @@ func TestTheSealKeyPolicyKeepsTheAccountRootOutOfSign(t *testing.T) {
 	if !strings.Contains(pol, notary) {
 		t.Errorf("the seal key's policy does not name the notary's role: %s", pol)
 	}
-	control := []string{"kms:CreateGrant", "kms:DisableKey", "kms:PutKeyPolicy", "kms:RevokeGrant", "kms:ScheduleKeyDeletion"}
+	// The aliases are the control plane's too (A2 follow-up): retargeting the alias
+	// a caller names the key by sends it to a key of someone else's choosing.
+	control := []string{
+		"kms:CreateAlias", "kms:CreateGrant", "kms:DeleteAlias", "kms:DisableKey", "kms:PutKeyPolicy", "kms:RevokeGrant",
+		"kms:ScheduleKeyDeletion", "kms:UpdateAlias",
+	}
 	by := map[string]map[string]any{}
 	for _, s := range policyOf(t, pol) {
 		by[s["Sid"].(string)] = s
@@ -243,7 +248,7 @@ func TestTheSealKeyPolicyKeepsTheAccountRootOutOfSign(t *testing.T) {
 			if slices.Contains(control, a) && s["Sid"] != "AdministerTheKey" {
 				t.Errorf("%v allows %s", s["Sid"], a)
 			}
-			if s["Sid"] != "AdministerTheKey" && (strings.HasPrefix(a, "kms:Create") && a != "kms:CreateAlias" || strings.HasPrefix(a, "kms:Put")) {
+			if s["Sid"] != "AdministerTheKey" && (strings.HasPrefix(a, "kms:Create") || strings.HasPrefix(a, "kms:Put")) {
 				t.Errorf("%v allows %s wholesale", s["Sid"], a)
 			}
 		}

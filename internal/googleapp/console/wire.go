@@ -90,6 +90,8 @@ type CompleteResponse struct {
 
 type identifyRequest struct {
 	Code string `json:"code"`
+	// State is the callback's, which the sign-in's nonce is derived from.
+	State string `json:"state,omitempty"`
 }
 
 type identifyResponse struct {

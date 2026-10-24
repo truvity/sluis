@@ -19,8 +19,6 @@
           {
             "Action": [
               "kms:CancelKeyDeletion",
-              "kms:CreateAlias",
-              "kms:DeleteAlias",
               "kms:DescribeKey",
               "kms:DisableKeyRotation",
               "kms:EnableKey",
@@ -30,7 +28,6 @@
               "kms:Sign",
               "kms:TagResource",
               "kms:UntagResource",
-              "kms:UpdateAlias",
               "kms:UpdateKeyDescription",
               "kms:Verify"
             ],
@@ -43,11 +40,14 @@
           },
           {
             "Action": [
+              "kms:CreateAlias",
               "kms:CreateGrant",
+              "kms:DeleteAlias",
               "kms:DisableKey",
               "kms:PutKeyPolicy",
               "kms:RevokeGrant",
-              "kms:ScheduleKeyDeletion"
+              "kms:ScheduleKeyDeletion",
+              "kms:UpdateAlias"
             ],
             "Condition": {
               "ArnLike": {
@@ -65,11 +65,14 @@
           },
           {
             "Action": [
+              "kms:CreateAlias",
               "kms:CreateGrant",
+              "kms:DeleteAlias",
               "kms:DisableKey",
               "kms:PutKeyPolicy",
               "kms:RevokeGrant",
-              "kms:ScheduleKeyDeletion"
+              "kms:ScheduleKeyDeletion",
+              "kms:UpdateAlias"
             ],
             "Condition": {
               "ArnNotLike": {

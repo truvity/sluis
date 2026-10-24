@@ -18,8 +18,12 @@ on:
 permissions:
   contents: read
 
+# A pull request's newer push cancels its older run. A push to master never
+# cancels another: each commit there gets its own group, because the release
+# gate (hack/release-gate.sh) needs master's own CI to have passed on the
+# tagged commit, and a run cancelled by the next merge would refuse the release.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
   cancel-in-progress: true
 
 jobs:
@@ -34,6 +38,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
       - id: plan
         env:
           EVENT: ${{ github.event_name }}
@@ -49,6 +54,8 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: truvity/ci-actions/setup-devbox@eae9926515d96296eeed99aa358d2957a89647e8 # v3.3.1
       - run: devbox run -- just ci-console
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -75,6 +82,7 @@ jobs:
         with:
           # policy-conformance's C5 reads the CHANGELOG against the latest tag.
           fetch-depth: ${{ matrix.group == 'docs' && 0 || 1 }}
+          persist-credentials: false
       - uses: truvity/ci-actions/setup-devbox@eae9926515d96296eeed99aa358d2957a89647e8 # v3.3.1
       - if: startsWith(matrix.group, 'go-')
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
@@ -169,6 +177,8 @@ jobs:
       AUDIT_OPENBAO_TOKEN: root
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - run: docker compose -f hack/services.compose.yaml up -d --wait
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
