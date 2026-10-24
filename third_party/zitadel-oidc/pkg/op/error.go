@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"unicode"
 
 	httphelper "github.com/zitadel/oidc/v3/pkg/http"
 	"github.com/zitadel/oidc/v3/pkg/oidc"
@@ -95,10 +96,10 @@ func authRequestLogLevel(e *oidc.Error, err error) slog.Level {
 func authRequestLogArgs(r *http.Request, authReq ErrAuthRequest, e *oidc.Error) []any {
 	args := []any{slog.Any("oidc_error", e), slog.String("error", string(e.ErrorType))}
 	if e.Description != "" {
-		args = append(args, slog.String("reason", truncateLogValue(e.Description)))
+		args = append(args, slog.String("reason", logValue(e.Description)))
 	}
 	if e.Parent != nil {
-		args = append(args, slog.String("cause", truncateLogValue(e.Parent.Error())))
+		args = append(args, slog.String("cause", logValue(e.Parent.Error())))
 	}
 	var clientID string
 	if named, ok := authReq.(interface{ GetClientID() string }); ok {
@@ -112,19 +113,36 @@ func authRequestLogArgs(r *http.Request, authReq ErrAuthRequest, e *oidc.Error) 
 		}
 	}
 	if clientID != "" {
-		args = append(args, slog.String("client_id", truncateLogValue(clientID)))
+		args = append(args, slog.String("client_id", logValue(clientID)))
 	}
 	if r != nil {
-		args = append(args, slog.String("path", truncateLogValue(r.URL.Path)))
+		args = append(args, slog.String("path", logValue(r.URL.Path)))
 	}
 	return args
 }
 
-func truncateLogValue(s string) string {
-	if len(s) <= maxAuthRequestLogValue {
-		return s
+// logValue is a request value made fit for a log line: on one line, without
+// control or bidirectional-control characters, and at most maxAuthRequestLogValue
+// runes. The same rule as sluis's own storage/logattr.Safe, which this module
+// cannot import.
+func logValue(v string) string {
+	// The two ReplaceAll calls are the sanitiser code scanners recognise
+	// (go/log-injection); keep them inline and first.
+	v = strings.ReplaceAll(v, "\n", "")
+	v = strings.ReplaceAll(v, "\r", "")
+	v = strings.Map(func(r rune) rune {
+		switch {
+		case unicode.IsControl(r), r == '\u2028', r == '\u2029',
+			r >= '\u202a' && r <= '\u202e', r >= '\u2066' && r <= '\u2069',
+			r == '\u200e', r == '\u200f', r == '\u061c':
+			return -1
+		}
+		return r
+	}, v)
+	if runes := []rune(v); len(runes) > maxAuthRequestLogValue {
+		v = string(runes[:maxAuthRequestLogValue]) + "\u2026"
 	}
-	return strings.ToValidUTF8(s[:maxAuthRequestLogValue], "") + "..."
+	return v
 }
 
 func RequestError(w http.ResponseWriter, r *http.Request, err error, _ *slog.Logger) {
