@@ -198,6 +198,7 @@ func TestRenderPortsTablesGolden(t *testing.T) {
             github: sluis-prod-github
             google: sluis-prod-google
             oidc: sluis-prod-oidc
+            outline: sluis-prod-outline
             slack: sluis-prod-slack
 `
 	if y != golden {

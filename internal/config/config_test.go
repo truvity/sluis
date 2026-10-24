@@ -70,6 +70,7 @@ func TestTheTypesAndTheSchemasDescribeTheSameKeys(t *testing.T) {
 		{"controller-slack", &config.ControllerSlack{}},
 		{"sluis-backup", &config.SluisBackup{}},
 		{"sluis-google", &config.SluisGoogle{}},
+		{"sluis-outline", &config.SluisOutline{}},
 	} { // The policy document is held to its type in policydoc_test.go.
 		t.Run(c.name, func(t *testing.T) {
 			raw, err := os.ReadFile(filepath.Join("testdata", c.name+".full.yaml"))

@@ -231,6 +231,11 @@ func (d *decider) people() (roles, leavers []Action) {
 			row.State, row.Reason = status.StateReported, "a guest: guests are left alone"
 		case u.Role == target:
 			row.State, row.Target = status.StateOK, target
+		case target == RoleAdmin && !p.Authoritative:
+			// An answer the directory cannot vouch for adds people, and never
+			// makes anybody an admin.
+			row.State, row.Target, row.Reason = status.StateRetrying, target,
+				"the directory cannot vouch for "+u.Email+" right now, so the admin role waits for an answer it can"
 		case target == RoleAdmin || u.Role == RoleViewer:
 			row.State, row.Target, row.Action = status.StateWillChange, target, status.ActionPromote
 			row.Reason = "holds " + strings.Join(intersect(p.Groups, d.in.Policy.Roles.Admin), ", ")
@@ -402,6 +407,9 @@ func (d *decider) groups() (creates, members []Action) {
 			case holds:
 				if why := d.addHeld(name, u.Email); why != "" {
 					m.State, m.Reason = status.StateHeld, why
+				} else if !p.Authoritative && d.confersAdmin(name) {
+					m.State, m.Reason = status.StateRetrying, "the directory cannot vouch for "+u.Email+
+						" right now, and "+name+" makes its holders admins: the addition waits for an answer it can vouch for"
 				} else {
 					m.State, m.Action, m.Reason = status.StateWillAdd, status.ActionAdd, "holds "+name
 					members = append(members, Action{Kind: status.ActionAdd, Group: name, GroupID: row.ID, UserID: u.ID, Email: u.Email,
@@ -443,6 +451,21 @@ func (d *decider) groups() (creates, members []Action) {
 		d.report.Groups = append(d.report.Groups, row)
 	}
 	return creates, members
+}
+
+// confersAdmin reports a managed group that makes its holders admins: of the
+// workspace (roles.admin), or of a collection (granted `admin` on one). An
+// answer the directory cannot vouch for adds nobody to such a group.
+func (d *decider) confersAdmin(group string) bool {
+	if slices.Contains(d.in.Policy.Roles.Admin, group) {
+		return true
+	}
+	for name := range d.in.Policy.Collections {
+		if d.in.Policy.Collections[name].Grants()[group] == policy.OutlineAdmin {
+			return true
+		}
+	}
+	return false
 }
 
 // addHeld is why a person is not added to a managed group, empty when they
@@ -500,7 +523,7 @@ func (d *decider) directoryCheck(c policy.OutlineCollection) (Directory, string)
 	var dir Directory
 	found := false
 	for _, candidate := range d.in.Directories {
-		if candidate.ID == c.Directory || strings.EqualFold(candidate.Primary, c.Directory) {
+		if strings.EqualFold(candidate.Primary, c.Directory) {
 			dir, found = candidate, true
 			break
 		}

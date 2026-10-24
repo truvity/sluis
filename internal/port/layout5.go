@@ -38,11 +38,12 @@ const (
 	ModuleCloudflare Module = "cloudflare"
 	ModuleGoogle     Module = "google"
 	ModuleBackup     Module = "backup"
+	ModuleOutline    Module = "outline"
 )
 
 // Modules lists every module, in the order above.
 func Modules() []Module {
-	return []Module{ModuleOIDC, ModuleGitHub, ModuleSlack, ModuleCloudflare, ModuleGoogle, ModuleBackup}
+	return []Module{ModuleOIDC, ModuleGitHub, ModuleSlack, ModuleCloudflare, ModuleGoogle, ModuleBackup, ModuleOutline}
 }
 
 // Valid reports whether m is one of [Modules].
@@ -114,6 +115,8 @@ func leaseModule(rest string) Module {
 		return ModuleSlack
 	case strings.HasPrefix(kind, "cloudflare"):
 		return ModuleCloudflare
+	case strings.HasPrefix(kind, "outline"):
+		return ModuleOutline
 	case kind == "refresh":
 		return ModuleGoogle
 	case kind == "backup", kind == "restore":
@@ -146,6 +149,11 @@ var rules5 = []rule5{
 	r5(ModuleSlack, "share", "share.", convDots),
 	r5(ModuleSlack, "user-cache", "cache.slack.user.", convDots),
 
+	// outline: a workspace's connection (its record, and its API key in the
+	// secrets) and the console's gates on it.
+	r5(ModuleOutline, "workspace", "ws.outline.", convID),
+	r5(ModuleOutline, "gate", "gate.outline.", convDots),
+
 	// github: one kind `app` for every App, keyed by its id; the link App is
 	// `link`, a catalogue App is its id, a runner App is `runner-<tier>-<org>`
 	// (the id its exported key has had since ADR 0041). A catalogue id may be
@@ -167,11 +175,7 @@ var rules5 = []rule5{
 
 	// oidc: the issuer's records and the console's session key.
 	r5exact(ModuleOIDC, "console", "rec.console.session-key", "session-key"),
-	// oidc: an Outline workspace's connection (its record, and its API key in
-	// the secrets) and the console's gates on it: the issuer hosts the Outline
-	// controller (docs/decisions/0077).
-	r5(ModuleOIDC, "outline-workspace", "ws.outline.", convID),
-	r5(ModuleOIDC, "outline-gate", "gate.outline.", convDots),
+
 	r5exact(ModuleOIDC, "recovery", "rec.recovery.off", "off"),
 	r5(ModuleOIDC, "session", "ses.", convDots),
 	r5(ModuleOIDC, "session-pointer", "sid.", convID),

@@ -37,7 +37,7 @@ type v5Cred struct {
 // secrets are on layout v5 (ADR 0072): github/apps/<id>/<ref>,
 // github/links/<account>/<ref>, slack/workspaces/<team>/<ref>,
 // slack/apps/<id>/<ref>, google/workspaces/<id>/key and
-// oidc/outline/<workspace>/<ref>. ok is false without
+// outline/workspaces/<workspace>/<ref>. ok is false without
 // the layout v5 stores and for a key that keeps no credential of its own (an organisation's key is
 // its App's).
 func (b *Base) v5CredOfKey(key string) (c v5Cred, ok bool) {
@@ -77,11 +77,11 @@ func (b *Base) v5CredOfKey(key string) (c v5Cred, ok bool) {
 				return b.v5.Slack().DeleteAppCredential(ctx, addr.ID, ref)
 			},
 		}, true
-	case addr.Module == port.ModuleOIDC && addr.Kind == "outline-workspace":
+	case addr.Module == port.ModuleOutline && addr.Kind == "workspace":
 		return v5Cred{
-			at: func(ref string) state.Value[[]byte] { return b.v5.OIDC().OutlineCredential(addr.ID, ref) },
+			at: func(ref string) state.Value[[]byte] { return b.v5.Outline().WorkspaceCredential(addr.ID, ref) },
 			drop: func(ctx context.Context, ref string) error {
-				return b.v5.OIDC().DeleteOutlineCredential(ctx, addr.ID, ref)
+				return b.v5.Outline().DeleteWorkspaceCredential(ctx, addr.ID, ref)
 			},
 		}, true
 	case addr.Module == port.ModuleGoogle && addr.Kind == "workspace":

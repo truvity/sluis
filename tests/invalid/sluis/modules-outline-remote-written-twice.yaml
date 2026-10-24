@@ -1,0 +1,22 @@
+# The chart writes the issuer's route to the Outline module once it is enabled: a remote in config would be overwritten.
+# error: config.outline.remote is set and modules.outline.enabled is true
+config:
+  issuerURL: https://issuer.example
+  outline:
+    remote:
+      url: http://elsewhere.example:8081
+exchange:
+  clusters:
+    - name: example-cluster
+      issuer: https://oidc.eu-example-1.example/id/EXAMPLE
+      jwksUri: https://oidc.eu-example-1.example/id/EXAMPLE/keys
+modules:
+  outline:
+    enabled: true
+    config:
+      preset: k8s-aws
+      ports:
+        dynamodb:
+          region: eu-west-1
+          tables:
+            outline: sluis-outline

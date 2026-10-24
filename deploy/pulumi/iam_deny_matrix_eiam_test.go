@@ -15,7 +15,7 @@ import (
 // written out per module, and each one names its expected answer.
 
 // eiamProviders are the modules that moved behind their own function.
-var eiamProviders = []Module{ModuleGitHub, ModuleSlack, ModuleGoogle, ModuleCloudflare}
+var eiamProviders = []Module{ModuleGitHub, ModuleSlack, ModuleGoogle, ModuleCloudflare, ModuleOutline}
 
 // eiamMinMatrix pins the sweep: a shrunk sweep proves nothing.
 const eiamMinMatrix = 500
@@ -70,7 +70,7 @@ func eiamRows(t *testing.T) (rows []mxRow, identity map[string]iameval.Policy, k
 		add(iss, "eiam-ddb", ms+" Query", "dynamodb:Query", tbl, google, leading)
 		add(iss, "eiam-ddb", ms+" Scan", "dynamodb:Scan", tbl, false, nil)
 	}
-	for _, m := range []Module{ModuleGitHub, ModuleSlack, ModuleGoogle} {
+	for _, m := range []Module{ModuleGitHub, ModuleSlack, ModuleGoogle, ModuleOutline} {
 		ms, obj := string(m), mxBucket+"/"+string(m)+"/obj"
 		add(iss, "eiam-s3", ms+" PutObject", "s3:PutObject", obj, false, nil)
 		add(iss, "eiam-s3", ms+" DeleteObject", "s3:DeleteObject", obj, false, nil)
@@ -101,7 +101,7 @@ func eiamRows(t *testing.T) (rows []mxRow, identity map[string]iameval.Policy, k
 	for _, a := range []string{"Decrypt", "GenerateDataKey"} {
 		add(iss, "eiam-kms", "minter credential "+a, "kms:"+a, mxKey, false, viaSSM(minter))
 	}
-	console := map[string]bool{"github": true, "slack": true, "google": true, "cloudflare": true, "backup": true}
+	console := map[string]bool{"github": true, "slack": true, "google": true, "cloudflare": true, "backup": true, "outline": true}
 	issuerClass := map[string]bool{"github": true, "google": true, "cloudflare": true}
 	for _, f := range mxFunctions {
 		fn := mxFn(f)

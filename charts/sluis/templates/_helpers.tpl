@@ -143,11 +143,11 @@ secret the same way. Returned as YAML, since a template returns a string.
 {{/*
 sluis.document: a document as the chart renders it, its apiVersion first:
 sluis.truvity.github.io/<kind>/v<N> (the service document, `sluis`, is v3;
-the backup module's, `sluis-backup`, and the Google module's, `sluis-google`, are v1; the policy is v2). Takes (dict "kind" "sluis" "doc" <its values>).
+the backup module's, `sluis-backup`, the Google module's, `sluis-google`, and the Outline module's, `sluis-outline`, are v1; the policy is v2). Takes (dict "kind" "sluis" "doc" <its values>).
 */}}
 {{- define "sluis.document" -}}
 {{- $d := omit (.doc | default dict) "apiVersion" -}}
-apiVersion: sluis.truvity.github.io/{{ .kind }}/{{ if eq .kind "sluis" }}v3{{ else if or (eq .kind "sluis-backup") (eq .kind "sluis-google") }}v1{{ else }}v2{{ end }}
+apiVersion: sluis.truvity.github.io/{{ .kind }}/{{ if eq .kind "sluis" }}v3{{ else if has .kind (list "sluis-backup" "sluis-google" "sluis-outline") }}v1{{ else }}v2{{ end }}
 {{- if $d }}
 {{ toYaml $d }}
 {{- end }}

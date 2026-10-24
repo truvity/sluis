@@ -39,7 +39,7 @@ const policy = "https://github.com/truvity/policy/schemas/"
 // schemas/config/<name>.schema.json. The first three are the service documents,
 // one per process; `policy` is the one policy document they all name; `installation`
 // is what `sluisctl render` writes both from.
-var Names = []string{"sluis", "serve", "controller-github", "controller-slack", "sluis-backup", "sluis-google", "policy", "installation"}
+var Names = []string{"sluis", "serve", "controller-github", "controller-slack", "sluis-backup", "sluis-google", "sluis-outline", "policy", "installation"}
 
 // Services are the service documents: the ones a process is started with.
 // `sluis` is the one document of the one process (v3): the serve settings and,
@@ -413,6 +413,7 @@ func sluisSchema() m {
 	props, _ := s["properties"].(m)
 	props["apiVersion"] = apiVersionSluis()
 	addRemotes(props)
+	props["outline"] = outlineRemoteSchema()
 	props["controllers"] = obj("The controllers this process runs beside the issuer and the console, each in its own loop. A controller that is absent is off. Which organisations and workspaces a running controller may CHANGE is the policy document's `controllers.<kind>.enabledOrgs` and `enabledWorkspaces`, as before. A controller reads the console's API as a workload, so the policy's exchange must admit its proof (a ServiceAccount token on Kubernetes, the function role's web identity token on Lambda).", m{
 		"github": obj("The GitHub controller: makes each GitHub organisation's teams match the policy's github table.", controllerProps(
 			"/var/run/secrets/github-roster/token", "/var/run/github-roster/records",
@@ -420,21 +421,11 @@ func sluisSchema() m {
 		"slack": obj("The Slack controller: makes each Slack workspace's user groups match the policy's slack table.", controllerProps(
 			"/var/run/secrets/slack-roster/token", "/var/run/slack-roster/workspaces",
 			"credentialsDir", "One file per connected workspace: the app's credentials and its bot token. Read only with `ports.adapter: legacy`; with another adapter they are on the State port.", "/var/run/slack-roster/credentials")),
-		"outline": obj("The Outline controller: makes each Outline workspace's groups, roles and collections match the policy's outline table (docs/reference/sluis/outline.md). It runs in this process, and on Lambda in the issuer's function, and asks the console in it directly. It needs a storage adapter other than `legacy`: the workspaces' connections are on the State port.", outlineControllerProps()),
 	})
 	s["$id"] = ID("sluis", apiVersionOf(props))
 	s["title"] = "sluis"
 	s["description"] = "The configuration of `sluis serve`, the one process of sluis: the issuer, the console and the directory hub and, under `controllers`, the GitHub and Slack controllers. On Kubernetes it is one Deployment; on AWS Lambda it is one function." + secretsNote
 	return s
-}
-
-// outlineControllerProps is the Outline controller's own section: its two
-// intervals. It asks the console in its own process, so it names none.
-func outlineControllerProps() m {
-	return m{
-		"interval":  duration("How long between passes. Positive. Short, because a person signing in for the first time sees nothing but their own documents until the next pass.", "2m"),
-		"shareScan": duration("How often the single-document shares in the collections that name a directory are read and reported. Each document is two calls to Outline.", "1h"),
-	}
 }
 
 // controllerProps is what is a controller's own in the one document.
@@ -472,7 +463,7 @@ func portsSchema() m {
 // portsDynamoDBSchema is `ports.dynamodb`: the table of the `dynamodb` adapter.
 func portsDynamoDBSchema() m {
 	tables := m{}
-	for _, mod := range []string{"oidc", "github", "slack", "cloudflare", "google", "backup"} {
+	for _, mod := range []string{"oidc", "github", "slack", "cloudflare", "google", "backup", "outline"} {
 		tables[mod] = str("The name of the " + mod + " module's table. The library default is `sluis-<instance>-" + mod + "`.")
 	}
 	named := obj("Layout v5 (docs/decisions/0072-storage-layout-v5-module-first.md): the table of each module, by module name. A process names its own module's table and the tables of the peers it reads; a module it does not name is not opened. The single table of layout v4 (`table`) was removed in v1.77.1.",
@@ -580,6 +571,8 @@ func Schema(name string) ([]byte, bool) {
 		s = sluisBackupSchema()
 	case "sluis-google":
 		s = sluisGoogleSchema()
+	case "sluis-outline":
+		s = sluisOutlineSchema()
 	case "policy":
 		s = policySchema()
 	case "installation":

@@ -15,6 +15,7 @@ Release assets (the GitHub release of tag `vX.Y.Z`):
 | sluis | `sluis-backup_<version>_<os>_<arch>.zip` | sluis-backup |
 | sluis | `sluis-github_<version>_<os>_<arch>.zip` | sluis-github |
 | sluis | `sluis-slack_<version>_<os>_<arch>.zip` | sluis-slack |
+| sluis | `sluis-outline_<version>_<os>_<arch>.zip` | sluis-outline |
 | sluis | `sluis-google_<version>_<os>_<arch>.zip` | sluis-google |
 | sluis | `sluis-config-schemas_<version>.tar.gz` | config-schemas (bundled files) |
 | sluis | `sluis-audit-catalogue_<version>.tar.gz` | audit-catalogue (bundled files) |
@@ -34,6 +35,7 @@ Container images:
 | sluis | `ghcr.io/truvity/sluis/sluis-google` |
 | sluis | `ghcr.io/truvity/sluis/sluis-cloudflare` |
 | sluis | `ghcr.io/truvity/sluis/sluis-backup` |
+| sluis | `ghcr.io/truvity/sluis/sluis-outline` |
 | audit | `ghcr.io/truvity/audit/audit-writer` |
 | audit | `ghcr.io/truvity/audit/audit-query` |
 | audit | `ghcr.io/truvity/audit/audit-notary` |

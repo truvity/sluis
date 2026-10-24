@@ -66,7 +66,7 @@ type OutlineCollection struct {
 	// policy does not name.
 	Mode string `yaml:"mode,omitempty"`
 	// Directory, when set, is the connected directory every bound group's
-	// members must come from: its workspace id or its primary domain. It is
+	// members must come from, by its primary domain (`example.com`). It is
 	// checked every pass, and a collection whose groups reach outside it is
 	// held, so one misplaced line cannot open a company's collection to
 	// another company.
@@ -161,8 +161,8 @@ var (
 	// outlineCollectionID is the shape of an Outline collection id: a UUID.
 	outlineCollectionID = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 	// outlineDirectory is what a collection's `directory` may be: a
-	// directory's workspace id, or its primary domain.
-	outlineDirectory = regexp.MustCompile(`^[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$`)
+	// directory's primary domain, lowercase, with at least one dot.
+	outlineDirectory = regexp.MustCompile(`^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$`)
 )
 
 // outlineMaxName is Outline's own limit on a collection's name.
@@ -250,7 +250,7 @@ func (p Policy) validateOutlineWorkspace(key string) error {
 			return fmt.Errorf("%s: mode %q is neither extend nor strict", where, c.Mode)
 		}
 		if c.Directory != "" && !outlineDirectory.MatchString(c.Directory) {
-			return fmt.Errorf("%s: directory %q is neither a directory's workspace id nor its primary domain", where, c.Directory)
+			return fmt.Errorf("%s: directory %q is not a primary domain (lowercase, like example.com)", where, c.Directory)
 		}
 		if c.Adopt == "" {
 			continue

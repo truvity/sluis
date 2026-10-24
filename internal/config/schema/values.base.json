@@ -416,7 +416,8 @@
                 "github": {"type": "array", "items": {"type": "object"}},
                 "slack": {"type": "array", "items": {"type": "object"}},
                 "google": {"type": "array", "items": {"type": "object"}},
-                "cloudflare": {"type": "array", "items": {"type": "object"}}
+                "cloudflare": {"type": "array", "items": {"type": "object"}},
+                "outline": {"type": "array", "items": {"type": "object"}}
               }
             }
           }
@@ -1061,6 +1062,88 @@
           "type": "object",
           "additionalProperties": false,
           "description": "The Cloudflare module (the STS minter's rotation), with a Service on /rpc.",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": false,
+              "description": "Render this module's Deployment, ServiceAccount and ConfigMap (and, for a module that answers calls, its Service)."
+            },
+            "replicas": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 1,
+              "description": "Replicas. Unset: `replicaCount` for the issuer, 1 for another module. More than one controller replica needs the tick leases in a State they share."
+            },
+            "resources": {
+              "type": "object"
+            },
+            "image": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Overrides the chart's image for this module. Unset takes `image` (and `image.perModule`).",
+              "properties": {
+                "repository": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "tag": {
+                  "type": "string"
+                }
+              }
+            },
+            "serviceAccount": {
+              "$ref": "#/definitions/moduleServiceAccount",
+              "description": "This module's own account. Name empty: <release>-<module> (the issuer's: the release's `serviceAccount.name` when that is set). With irsa, each module but the issuer has its own `awsRoleArn`; the issuer takes the release's."
+            },
+            "podDisruptionBudget": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "The module's PodDisruptionBudget: maxUnavailable 1 unless minAvailable is given (one of the two; a number at or above the replicas is refused).",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "default": true
+                },
+                "minAvailable": {
+                  "type": [
+                    "integer",
+                    "string"
+                  ],
+                  "description": "A number of pods, or a percentage such as 50%."
+                },
+                "maxUnavailable": {
+                  "type": [
+                    "integer",
+                    "string"
+                  ],
+                  "default": 1,
+                  "description": "A number of pods, or a percentage such as 50%."
+                }
+              }
+            },
+            "rpcPort": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65535,
+              "default": 8081,
+              "description": "The port of the module's Service on /rpc, and of its listener."
+            },
+            "audience": {
+              "type": "string",
+              "description": "The audience a call to this module carries: the module's name when empty."
+            },
+            "config": {
+              "type": "object",
+              "description": "The module's document, without its apiVersion. Required once the module is enabled."
+            }
+          }
+        },
+        "outline": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "The Outline module (the controller, docs/decisions/0077), with a Service on /rpc for the issuer's console calls. The issuer never runs it: its document then holds only `outline.remote`, which the chart writes.",
           "properties": {
             "enabled": {
               "type": "boolean",

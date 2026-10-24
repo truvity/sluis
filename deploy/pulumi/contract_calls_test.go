@@ -52,7 +52,8 @@ func webIdentityStatements(st []map[string]any) []map[string]any {
 }
 
 func TestTheRoutingTableIsHeldByTheLibrary(t *testing.T) {
-	rec, _ := mustLambda(t, estateWith(func(a *arp.LambdaArgs) { a.WebIdentityAudience = contractAudience }))
+	// The Outline function is made: every callee of the table exists.
+	rec, _ := mustLambda(t, estateWith(withOutlineDocument, func(a *arp.LambdaArgs) { a.WebIdentityAudience = contractAudience }))
 	backup, _ := mustBackup(t, nil)
 	calls := arp.ModuleCalls()
 	if len(calls) < 10 {

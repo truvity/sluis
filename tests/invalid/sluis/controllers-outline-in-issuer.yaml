@@ -1,0 +1,13 @@
+# The issuer never runs the Outline controller: its document is modules.outline.config.
+# error: at '/config/controllers': additional properties 'outline' not allowed
+replicaCount: 1
+config:
+  issuerURL: https://issuer.example
+  controllers:
+    outline: {}
+console:
+  mount: /console
+exchange:
+  clusters:
+  - issuer: https://oidc.example
+    name: example

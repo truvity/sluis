@@ -2,7 +2,7 @@
 {{- if eq .Values.renders "app" -}}
 {{- include "sluis.checks" . }}
 {{- include "sluis.moduleChecks" . }}
-{{- range $mod := list "issuer" "github" "slack" "google" "cloudflare" }}
+{{- range $mod := list "issuer" "github" "slack" "google" "cloudflare" "outline" }}
 {{- if include "sluis.moduleOn" (dict "root" $ "module" $mod) }}
 {{- $args := dict "root" $ "module" $mod }}
 ---

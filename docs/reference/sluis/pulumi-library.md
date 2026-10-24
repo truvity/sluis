@@ -279,7 +279,7 @@ l, _ := sluispulumi.NewLambda(ctx, "access", &sluispulumi.LambdaArgs{
 | `FunctionNamePrefix` | `sluis` | Names `<prefix>-scheduler`, `<prefix>-config` and the function default |
 | `FunctionName` | `sluis-<instance>-issuer` | Function, role, policy and log group. `aws.functions` overrides it. A name kept from `sluis` or `sluis-http` replaces nothing (see the CHANGELOG upgrade note) |
 | `Function` | 512 MB; 300 s; unreserved | `FunctionArgs`: `MemoryMB`, `TimeoutSeconds`, `ReservedConcurrency` (`*int`, at least 1) |
-| `Modules` | None | `ModuleArgs` by `cloudflare`, `github`, `google` or `slack`: `FunctionName` (default `sluis-<instance>-<module>`), `Package`, `PackageSHA256`, `MemoryMB`, `TimeoutSeconds` (default `Function`'s), `ReservedConcurrency`, `Document`. Every module function exists with or without an entry. |
+| `Modules` | None | `ModuleArgs` by `cloudflare`, `github`, `google`, `outline` or `slack`: `FunctionName` (default `sluis-<instance>-<module>`), `Package`, `PackageSHA256`, `MemoryMB`, `TimeoutSeconds` (default `Function`'s), `ReservedConcurrency`, `Document`. Every module function exists with or without an entry, except `outline`, which exists only with an outline document (the installation's `controllers.outline`). |
 | `BackupFunctionName`, `RestoreFunctionName` | `sluis-<instance>-backup`, `-restore` | The names the issuer's role and the key policy use for the [backup](#backup) and [restore](#restore) functions |
 | `TransitionRoles` | None | `Role` and `OldName`: an old IAM role name kept as a further principal of the renamed role in the key policy and the audit queue's policy. Remove it once nothing runs under the old name |
 | `Function.ReservedConcurrency` | nil | A ceiling on concurrent environments. It costs nothing and is not provisioned concurrency. It bounds a [cold-start herd](../../guides/sluis/operate/survive-a-cold-start-herd.md). A cap set by hand is removed by the next apply unless set here |
@@ -288,7 +288,8 @@ l, _ := sluispulumi.NewLambda(ctx, "access", &sluispulumi.LambdaArgs{
 | `PermissionsBoundaryArn` | None | Boundary of the role and the scheduler's |
 | `API.DomainName`, `.CertificateArn`, `.TruststorePEM`, `.TruststoreBucketName` | Deprecated | All four together keep the mutual-TLS domain with a warning. Move to the [edge module](#the-edge-modules) ([cutover](../../guides/sluis/migrate/move-the-domain-to-the-edge-module.md)) |
 | `API.KeepDefaultEndpoint` | false | Keeps the `execute-api` endpoint for the acceptance suite; turn it off after, it bypasses the client certificate |
-| `Schedule.GitHubOrgs`, `.SlackWorkspaces` | None | Targets, one schedule each |
+| `Schedule.GitHubOrgs`, `.SlackWorkspaces`, `.OutlineWorkspaces` | None | Targets, one schedule each. `OutlineWorkspaces` needs the outline function |
+| `Schedule.OutlineRate` | `rate(2 minutes)` | The Outline workspaces' schedule |
 | `Schedule.Rate` | `rate(5 minutes)` | EventBridge Scheduler expression |
 | `Schedule.Paused`, `DirectoryRefresh.Paused` | false | Declares the schedules `DISABLED`, keeping roles and grants. `Paused` with `Disabled` is refused |
 | `DirectoryRefresh.Rate`, `.Disabled` | `rate(15 minutes)`, false | Invokes `{"kind":"refresh"}` |
@@ -307,7 +308,7 @@ l, _ := sluispulumi.NewLambda(ctx, "access", &sluispulumi.LambdaArgs{
 
 | Detail | Behavior |
 |---|---|
-| Role grants | `ModuleRoleStatements` of the hosted modules (`oidc`, `github`, `slack`, `google`, and `cloudflare` with presets): their tables, `internal/<module>`, `external/<module>`, `<module>/` blob prefixes; `SluisMaintenanceDeny` on their tables; the `oidc` host is denied the recovery and conformance passwords (`SluisDenyPasswords`, `SluisDenyPasswordsKey`) |
+| Role grants | `ModuleRoleStatements` of the hosted modules (`oidc`, `github`, `slack`, `google`, `outline` with its document, and `cloudflare` with presets): their tables, `internal/<module>`, `external/<module>`, `<module>/` blob prefixes; `SluisMaintenanceDeny` on their tables; the `oidc` host is denied the recovery and conformance passwords (`SluisDenyPasswords`, `SluisDenyPasswordsKey`) |
 | Parameters written | `internal/oidc/state-secret`, `recovery-password` and `recovery-verifier`; with `conformance.enabled`, also `conformance-password` and `conformance-verifier`. Each is the secret store's document (`{"value":"<base64>"}`). A verifier is derived from its password under a random salt kept with it ([ADR 0076](../../decisions/0076-password-sign-in-is-srp-for-recovery-and-conformance-only.md)) |
 | Service document | `secrets.layout: v5` and `ports.dynamodb.tables`. A blob `CredentialsRef` is `internal/<module>/<name>`; `internal/google/<name>` is read by every process |
 | Blobs from a preset | No role other than backup and the Cloudflare function reads the minter. A store whose credentials a preset rotates is read from `external/cloudflare/<preset>` (`CredentialsRef`) |
@@ -403,7 +404,7 @@ To adopt an existing audit stack, import it under the new component ([resource n
 | `SluisKeySignInClientGoogle` | the google role | `Decrypt` of the sign-in client under `internal/oidc/signin/` |
 | `SluisKeyReadAll<Role>`, `SluisKeyWriteAll<Role>` | the backup role; the restore role | `Decrypt` of every `internal/*` and `external/*` parameter; the same with `Encrypt` and `GenerateDataKey` |
 | `SluisKeyMinter<Role>` | a role with `KeyRole.MinterRefs` (none today) that does not host `cloudflare` | `Decrypt` of the `MinterRefs` |
-| `SluisKeyBlobCredentials<Role>` | each role that reads the external blobs' credential (`KeyRole.BlobCredentialsRef`, from `StorageArgs.Blobs.CredentialsRef`) and whose own statements do not reach it: on v5 with a stored preset, the issuer and the github, google and slack roles | `Decrypt` and `DescribeKey` of that one parameter |
+| `SluisKeyBlobCredentials<Role>` | each role that reads the external blobs' credential (`KeyRole.BlobCredentialsRef`, from `StorageArgs.Blobs.CredentialsRef`) and whose own statements do not reach it: on v5 with a stored preset, the issuer and the github, google, outline and slack roles | `Decrypt` and `DescribeKey` of that one parameter |
 | `SluisKeyExternalReaders` | `ExternalReaders` | `Decrypt` of `external/*` |
 | `SluisKeyAdminSeeds`, `SluisKeyAdminReads` | `Admins`, as ARN patterns | `Encrypt` and `GenerateDataKey` on any parameter; `Decrypt` of the state secret, the recovery password, on v5 the recovery verifier (and the conformance password and verifier when `Conformance` is on), and, with a backup role on v5, the restore identity |
 | `SluisKeyBreakglass` | `Breakglass` | the four actions on any parameter |
@@ -484,7 +485,7 @@ front, _ := edgecloudflare.NewEdge(ctx, "access", &edgecloudflare.Args{
 |---|---|
 | Live alias | Every change publishes a version; alias `live` points at the newest. API, schedules, scheduler grant, self-invoke grant and the `invoke` trigger use it. Asynchronous invoke has no retries. Rollback repoints the alias |
 | API | HTTP API (payload 2.0), `$default` route and stage. The `execute-api` endpoint is off unless `KeepDefaultEndpoint`. `Lambda.FrontDoor()` gives a front door the API id, stage and name |
-| Schedules | `<prefix>-github-<org>` and `<prefix>-slack-<workspace>` invoke `{"kind":"tick","controller":"github"\|"slack","target":"<id>"}` on the `live` alias of that module's function; a target is letters, digits and `- _ . :`, at most 40, with `:` becoming `-` in the name. `<prefix>-directory-refresh` invokes `{"kind":"refresh"}` on the Google function, `<prefix>-cloudflare-rotation` invokes `{"kind":"cloudflare"}` on the Cloudflare function, `<prefix>-issuer-clients` invokes the issuer. Without module functions every schedule targets the issuer. No retries |
+| Schedules | `<prefix>-github-<org>`, `<prefix>-slack-<workspace>` and `<prefix>-outline-<workspace>` invoke `{"kind":"tick","controller":"github"\|"slack"\|"outline","target":"<id>"}` on the `live` alias of that module's function; a target is letters, digits and `- _ . :`, at most 40, with `:` becoming `-` in the name. `<prefix>-directory-refresh` invokes `{"kind":"refresh"}` on the Google function, `<prefix>-cloudflare-rotation` invokes `{"kind":"cloudflare"}` on the Cloudflare function, `<prefix>-issuer-clients` invokes the issuer. Without module functions every schedule targets the issuer. No retries |
 | Scheduler role | `<prefix>-scheduler` may invoke only the aliases its schedules target. It trusts `scheduler.amazonaws.com` for this account and the `default` schedule group: `aws:SourceAccount` and `aws:SourceArn` (the group's ARN). The backup function's scheduler role has the same trust |
 | `ExternalReadPolicy(ExternalReadPolicyArgs)` | IAM policy: `ssm:GetParameter` on exact `external/<kind>/<id>` ARNs under `/sluis/<instance>/`; with `SecretsKeyArn` or `ParameterKeyArn`, `kms:Decrypt` through SSM bound to those ARNs. Wildcards, prefixes, repeats and non-`external/` addresses are refused |
 | `NewExternalReader(ctx, name, &ExternalReaderArgs{RoleName, Region, AccountID, Instance, Addresses, SecretsKeyArn, ParameterKeyArn})` | Attaches that policy to the role inline; output `PolicyJSON` |

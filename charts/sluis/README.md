@@ -1,6 +1,6 @@
 # sluis chart
 
-The chart deploys one Deployment per module from the image `ghcr.io/truvity/sluis/sluis`: the issuer, and each GitHub, Slack, Google or Cloudflare module that is enabled.
+The chart deploys one Deployment per module from the image `ghcr.io/truvity/sluis/sluis`: the issuer, and each GitHub, Slack, Google, Cloudflare or Outline module that is enabled.
 
 The chart is published to `oci://ghcr.io/truvity/charts/sluis` on every `v*` tag. The tag is the chart version.
 

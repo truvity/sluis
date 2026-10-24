@@ -335,6 +335,30 @@ that reads as a failure). Only `ports.adapter: dynamodb` shares them.
 {{- end -}}
 
 {{/*
+sluis.outlineChecks: what the Outline module's document must agree with, as
+sluis.controllerChecks holds a controller's section. The chart writes the
+console's address and the policy's path when the document leaves them unset;
+a value given must be the one the chart would write. Takes the root.
+*/}}
+{{- define "sluis.outlineChecks" -}}
+{{- $root := . -}}
+{{- $name := "modules.outline.config" -}}
+{{- $c := dig "config" dict $root.Values.modules.outline -}}
+{{- if not $root.Values.exchange.clusters -}}
+{{- fail "modules.outline.enabled is true and exchange.clusters is empty: the console verifies the module's ServiceAccount token against this cluster's key set, and with no row it verifies nothing" -}}
+{{- end -}}
+{{- if not (include "sluis.consoleMount" $root) -}}
+{{- fail "modules.outline.enabled is true and console.mount is empty: the module reads the console's API, and with no mount there is none" -}}
+{{- end -}}
+{{- $want := printf "http://%s.%s.svc:%s%s" (include "sluis.fullname" $root) $root.Release.Namespace (include "sluis.port" $root) (include "sluis.consoleMount" $root) -}}
+{{- if and $c.consoleURL (ne (trimSuffix "/" $c.consoleURL) $want) -}}
+{{- fail (printf "%s.consoleURL must be %s, the console this release serves (got %q); unset, the chart writes it" $name $want $c.consoleURL) -}}
+{{- end -}}
+{{- include "sluis.expectPath" (dict "key" (printf "%s.tokenFile" $name) "got" $c.tokenFile "want" "/var/run/secrets/outline-roster/token" "source" "the projected ServiceAccount token" "present" true "default" true) -}}
+{{- include "sluis.expectPath" (dict "key" (printf "%s.policy.file" $name) "got" (dig "policy" "file" "" $c) "want" "/var/run/access-issuer/policy/policy.yaml" "source" "policy" "present" true "default" true) -}}
+{{- end -}}
+
+{{/*
 sluis.validateTelemetry: what `telemetry.otlp` may say. The endpoint is
 an http(s) URL with a host; `extraEnv` holds other OTEL_* variables only, and
 never the endpoint, which has a value of its own so that one place sets it.

@@ -16,7 +16,6 @@ import (
 	githubcontroller "github.com/truvity/sluis/internal/githubroster/controller"
 	"github.com/truvity/sluis/internal/hub"
 	"github.com/truvity/sluis/internal/lambdaapp"
-	outlinecontroller "github.com/truvity/sluis/internal/outlineroster/controller"
 	"github.com/truvity/sluis/internal/port/invoke"
 	"github.com/truvity/sluis/internal/rosterapp"
 	slackapp "github.com/truvity/sluis/internal/slackroster/app"
@@ -24,10 +23,6 @@ import (
 )
 
 func init() { lambdaapp.Register(lambdaapp.ModuleIssuer, open) }
-
-// outlineKind is the controller an Outline workspace's tick names:
-// {"kind":"tick","controller":"outline","target":"<key>"}.
-const outlineKind = "outline"
 
 // CheckFile is the {"kind":"check"} answer of the function whose document is in
 // file: the adapters the issuer builds at start (State and the peers' tables, the
@@ -61,8 +56,8 @@ func open(ctx context.Context, file string) (*lambdaapp.Function, error) {
 	// `github.remote` or `slack.remote` says so (rosterapp.Load leaves it out of
 	// cfg then). Taken out of the settings before the
 	// service is assembled, whose New would run their loops.
-	github, slack, outline := cfg.GitHub, cfg.Slack, cfg.Outline
-	cfg.GitHub, cfg.Slack, cfg.Outline = nil, nil, nil
+	github, slack := cfg.GitHub, cfg.Slack
+	cfg.GitHub, cfg.Slack = nil, nil
 	// The KMS signing modes read the state secret and call KMS to open their
 	// keys: the first request that needs a key does it, not the start.
 	cfg.Issuer.LazySigningKeys = true
@@ -109,16 +104,6 @@ func open(ctx context.Context, file string) (*lambdaapp.Function, error) {
 				return app, nil
 			}}
 	}
-	if outline != nil {
-		// The Outline controller is this function's own (docs/decisions/0077): its
-		// schedule invokes the issuer, and the pass asks the console in this
-		// process.
-		controllers[outlineKind] = &lambdaapp.Controller{Name: outlineKind, Log: log,
-			Unknown: func(err error) bool { return errors.Is(err, outlinecontroller.ErrUnknownTarget) },
-			Open: func(ctx context.Context) (lambdaapp.Pass, error) {
-				return service.Outline(ctx, outline)
-			}}
-	}
 	if slack != nil {
 		controllers[invoke.KindSlack] = &lambdaapp.Controller{Name: "slack", Log: log,
 			Unknown: func(err error) bool { return errors.Is(err, slackcontroller.ErrUnknownTarget) },
@@ -143,16 +128,7 @@ func open(ctx context.Context, file string) (*lambdaapp.Function, error) {
 		// snapshots and both are the Google module's.
 		service.UseRequestRefresh(hub.DefaultRequestRefreshTimeout)
 	}
-	// A target's kinds, for the events this function runs: the trigger's, and
-	// the Outline controller's, which no trigger invokes.
-	eventKinds := func(target string) []string {
-		kinds := kindsOf(target)
-		if outline != nil && set.OutlineWorkspaceDeclared(target) {
-			kinds = append(kinds, outlineKind)
-		}
-		return kinds
-	}
-	http := lambdaapp.NewHTTP(service.Handler(), service.Settle, log).WithControllers(eventKinds, controllers).WithCheck(CheckFile(file))
+	http := lambdaapp.NewHTTP(service.Handler(), service.Settle, log).WithControllers(kindsOf, controllers).WithCheck(CheckFile(file))
 	if service.Cloudflare() != nil && (cfg.Cloudflare == nil || cfg.Cloudflare.Remote == nil) {
 		http.WithCloudflare(func(ctx context.Context) (int, string, error) {
 			res, err := service.TickCloudflare(ctx)

@@ -12,6 +12,9 @@ import (
 	arp "github.com/truvity/sluis/deploy/pulumi"
 )
 
+// moduleRoles are the module functions NewLambda makes for the estates of these
+// tests: every one but the Outline function, which only an installation that
+// declares `controllers.outline` has (TestTheOutlineFunctionIsMadeOnlyForControllersOutline).
 var moduleRoles = []string{"cloudflare", "github", "google", "slack"}
 
 // estateWith is the estate of the other tests with the changes more makes.
@@ -171,6 +174,9 @@ func TestTheIssuerCanInvokeOnlyTheAliasesItNeeds(t *testing.T) {
 		fnArn("sluis-staging-google") + ":live-issuer", fnArn("sluis-staging-google") + ":live-console",
 		fnArn("sluis-staging-slack") + ":live-console",
 		fnArn("sluis-staging-backup") + ":live-console",
+		// The grant is the routing table's: it is there whether or not the
+		// installation makes the Outline function.
+		fnArn("sluis-staging-outline") + ":live-console",
 	}
 	slices.Sort(invokes)
 	slices.Sort(want)

@@ -11,12 +11,10 @@ package blobprefix
 
 // The module roots.
 const (
-	GitHub = "github/"
-	Slack  = "slack/"
-	Google = "google/"
-	// OIDC is the issuer's: it hosts the Outline controller until that has a
-	// function of its own (docs/decisions/0077).
-	OIDC = "oidc/"
+	GitHub  = "github/"
+	Slack   = "slack/"
+	Google  = "google/"
+	Outline = "outline/"
 )
 
 // The prefixes below a module's root.
@@ -29,7 +27,7 @@ const (
 	SlackReports = Slack + "reports/"
 	// OutlineReports holds what the Outline controller last reported, one
 	// object per workspace.
-	OutlineReports = OIDC + "reports/outline/"
+	OutlineReports = Outline + "reports/"
 	// GoogleCache holds the hub's directory snapshots, one object per workspace.
 	GoogleCache = Google + "cache/"
 )
@@ -51,10 +49,10 @@ func Root(module string) string { return module + "/" }
 // The backup export keeps the reports and not the cache.
 func Used() map[string][]string {
 	return map[string][]string{
-		"github": {GitHubReports},
-		"slack":  {SlackReports},
-		"google": {GoogleCache},
-		"oidc":   {OutlineReports},
+		"github":  {GitHubReports},
+		"slack":   {SlackReports},
+		"google":  {GoogleCache},
+		"outline": {OutlineReports},
 	}
 }
 

@@ -110,6 +110,7 @@
         "arn:aws:dynamodb:r1:111122223333:table/sluis-i1-github",
         "arn:aws:dynamodb:r1:111122223333:table/sluis-i1-google",
         "arn:aws:dynamodb:r1:111122223333:table/sluis-i1-oidc",
+        "arn:aws:dynamodb:r1:111122223333:table/sluis-i1-outline",
         "arn:aws:dynamodb:r1:111122223333:table/sluis-i1-slack"
       ],
       "Sid": "SluisCrossTable"
@@ -129,6 +130,8 @@
         "arn:aws:ssm:r1:111122223333:parameter/sluis/i1/external/google/*",
         "arn:aws:ssm:r1:111122223333:parameter/sluis/i1/internal/oidc/*",
         "arn:aws:ssm:r1:111122223333:parameter/sluis/i1/external/oidc/*",
+        "arn:aws:ssm:r1:111122223333:parameter/sluis/i1/internal/outline/*",
+        "arn:aws:ssm:r1:111122223333:parameter/sluis/i1/external/outline/*",
         "arn:aws:ssm:r1:111122223333:parameter/sluis/i1/internal/slack/*",
         "arn:aws:ssm:r1:111122223333:parameter/sluis/i1/external/slack/*"
       ],
@@ -144,6 +147,7 @@
         "arn:aws:s3:::acme-blobs/github/*",
         "arn:aws:s3:::acme-blobs/google/*",
         "arn:aws:s3:::acme-blobs/oidc/*",
+        "arn:aws:s3:::acme-blobs/outline/*",
         "arn:aws:s3:::acme-blobs/slack/*"
       ],
       "Sid": "SluisCrossBlobs"
@@ -157,6 +161,7 @@
             "github/*",
             "google/*",
             "oidc/*",
+            "outline/*",
             "slack/*"
           ]
         }
@@ -198,6 +203,7 @@
         "arn:aws:dynamodb:r1:111122223333:table/sluis-i1-github",
         "arn:aws:dynamodb:r1:111122223333:table/sluis-i1-google",
         "arn:aws:dynamodb:r1:111122223333:table/sluis-i1-oidc",
+        "arn:aws:dynamodb:r1:111122223333:table/sluis-i1-outline",
         "arn:aws:dynamodb:r1:111122223333:table/sluis-i1-slack"
       ],
       "Sid": "SluisMaintenanceDeny"
@@ -217,6 +223,8 @@
             "arn:aws:ssm:r1:111122223333:parameter/sluis/i1/external/google/*",
             "arn:aws:ssm:r1:111122223333:parameter/sluis/i1/internal/oidc/*",
             "arn:aws:ssm:r1:111122223333:parameter/sluis/i1/external/oidc/*",
+            "arn:aws:ssm:r1:111122223333:parameter/sluis/i1/internal/outline/*",
+            "arn:aws:ssm:r1:111122223333:parameter/sluis/i1/external/outline/*",
             "arn:aws:ssm:r1:111122223333:parameter/sluis/i1/internal/slack/*",
             "arn:aws:ssm:r1:111122223333:parameter/sluis/i1/external/slack/*"
           ],
