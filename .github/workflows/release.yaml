@@ -21,9 +21,8 @@ on:
     tags:
       - "v*"
 
-permissions:
-  contents: write
-  packages: write
+# Nothing by default: every job names what it needs.
+permissions: {}
 
 # Never cancel a running publish: a half-pushed artifact set is worse than a
 # queued wait.
@@ -32,17 +31,34 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # Before anything is published: refuse a tag whose commit is not the pinned release commit.
+  # Before anything is published, every other job waiting on it: refuse a tag
+  # whose commit is not on master, whose CI on master did not pass, or that is
+  # not the pinned release commit. A tag can be pushed by whoever the tag
+  # rulesets allow; this is what holds a release to reviewed, green code.
   gate:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # Master's CI on the commit may still be running when the tag lands: the
+    # gate waits for it (hack/release-gate.sh, up to 60 minutes).
+    timeout-minutes: 75
     permissions:
       contents: read
+      actions: read
+      checks: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # origin/master's history, for the ancestry check.
+          fetch-depth: 0
+          persist-credentials: false
       # --release: the tagged commit must already have every go.mod pinned to
       # the release (`just release-pin`)
       - run: ./hack/modules.py check "$GITHUB_REF_NAME" --release
+      # On master, and master's CI (the `check` context) passed on it. Fails
+      # closed: no run, a red one or an unreadable answer is a refusal.
+      - name: The commit is on master and its CI passed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: hack/release-gate.sh "$GITHUB_REF_NAME"
 
   release:
     needs: gate
@@ -72,6 +88,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
       - uses: truvity/ci-actions/public-runners@eae9926515d96296eeed99aa358d2957a89647e8 # v3.3.1
         with:
           runners: ubuntu-latest
@@ -165,35 +182,44 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24.22.0
           registry-url: https://npm.pkg.github.com
           scope: "@truvity"
-      - name: Build, test and publish
+      # Built and tested WITHOUT the publish token: `npm ci` runs the install
+      # scripts of every dependency, and none of them is to see a credential
+      # that can publish @truvity packages.
+      #
+      # The audit packages, from audit/. @truvity/audit is the framework-free
+      # query client; @truvity/audit-react is the hooks and the MUI view over
+      # it. Both are built and tested first (audit-react installs the first
+      # from the checkout, so audit/ts/dist must exist), and both are
+      # published at the tag's version: audit-react depends on exactly the
+      # @truvity/audit published with it, which the checkout spells file:..
+      - name: Build and test
+        run: |
+          set -euo pipefail
+          (cd ts && npm ci && npx tsc --noEmit && npx vitest run && npx tsc -p tsconfig.build.json)
+          (cd audit/ts && npm ci && npx tsc --noEmit && npx vitest run && npx tsc -p tsconfig.build.json)
+          (cd audit/react && npm ci && npx tsc --noEmit && npx vitest run && npx tsc -p tsconfig.build.json)
+      - name: Publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          (cd ts && npm ci && npx tsc --noEmit && npx vitest run && npx tsc -p tsconfig.build.json)
           # The repository's version is the tag; package.json carries none.
           npm version "${TAG#v}" --no-git-tag-version --allow-same-version
           # npm refuses a pre-release (vX.Y.Z-rc.N) without a dist-tag.
           dist=latest
           case "$TAG" in *-*) dist=next ;; esac
-          npm publish --tag "$dist"
-          # The audit packages, from audit/. @truvity/audit is the framework-free
-          # query client; @truvity/audit-react is the hooks and the MUI view over
-          # it. Both are built and tested first (audit-react installs the first
-          # from the checkout, so audit/ts/dist must exist), and both are
-          # published at the tag's version: audit-react depends on exactly the
-          # @truvity/audit published with it, which the checkout spells file:..
-          (cd audit/ts && npm ci && npx tsc --noEmit && npx vitest run && npx tsc -p tsconfig.build.json)
-          (cd audit/react && npm ci && npx tsc --noEmit && npx vitest run && npx tsc -p tsconfig.build.json)
-          (cd audit && npm version "${TAG#v}" --no-git-tag-version --allow-same-version && npm publish --tag "$dist")
+          npm publish --ignore-scripts --tag "$dist"
+          (cd audit && npm version "${TAG#v}" --no-git-tag-version --allow-same-version && npm publish --ignore-scripts --tag "$dist")
           (cd audit/react && npm version "${TAG#v}" --no-git-tag-version --allow-same-version \
-            && npm pkg set "dependencies.@truvity/audit=${TAG#v}" && npm publish --tag "$dist")
+            && npm pkg set "dependencies.@truvity/audit=${TAG#v}" && npm publish --ignore-scripts --tag "$dist")
 
   # Supply-chain assurance, after the release and audit jobs have put every
   # asset on the GitHub release. It is a job of this workflow rather than a
