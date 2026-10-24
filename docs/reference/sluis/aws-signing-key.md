@@ -82,9 +82,9 @@ Deprecated. The function's role, and the Kubernetes role when it signs, get on t
 
 | Sid | Effect | Principal | Action | Condition |
 |---|---|---|---|---|
-| `EnableIAMPolicies` | Allow | the account root | `kms:Decrypt`, `Encrypt`, `GenerateDataKey*`, `ReEncrypt*` and the upkeep actions (describe, list, tags, aliases, rotation) | none (IAM policies govern the use of the key) |
-| `SluisKeyControlPlaneAdmins` | Allow | the account root | `kms:PutKeyPolicy`, `CreateGrant`, `RevokeGrant`, `DisableKey`, `ScheduleKeyDeletion` | `aws:PrincipalArn` matches `KeyAdmins` |
-| `SluisKeyControlPlaneAdminsOnly` | Deny | `*` | the same five | `aws:PrincipalArn` matches none of `KeyAdmins`, and the caller is not an AWS service |
+| `EnableIAMPolicies` | Allow | the account root | `kms:Decrypt`, `Encrypt`, `GenerateDataKey*`, `ReEncrypt*` and the upkeep actions (describe, list, tags, rotation) | none (IAM policies govern the use of the key) |
+| `SluisKeyControlPlaneAdmins` | Allow | the account root | `kms:PutKeyPolicy`, `CreateGrant`, `RevokeGrant`, `DisableKey`, `ScheduleKeyDeletion`, `CreateAlias`, `UpdateAlias`, `DeleteAlias` | `aws:PrincipalArn` matches `KeyAdmins` |
+| `SluisKeyControlPlaneAdminsOnly` | Deny | `*` | the same eight | `aws:PrincipalArn` matches none of `KeyAdmins`, and the caller is not an AWS service |
 | `SluisSigningContextReserved` | Deny | `*` | `kms:Decrypt`, `kms:Encrypt`, `kms:ReEncrypt*`, `kms:GenerateDataKey*`, `kms:CreateGrant` | `kms:EncryptionContext:purpose` is `sluis-signing`, and `aws:PrincipalArn` is **not** one of the signing roles (the function's role, and `WrappedSigning.AdditionalSigningRoleArns`, the Kubernetes role) |
 | `SluisSigningRolePurposeOnly` | Deny | `*` | `kms:GenerateDataKeyPairWithoutPlaintext`, `kms:Decrypt` | `aws:PrincipalArn` is a signing role, and `kms:EncryptionContext:purpose` is not `sluis-signing` |
 | `SluisSigningRoleContextKeysOnly` | Deny | `*` | the same two | a signing role, and `ForAnyValue:StringNotEquals kms:EncryptionContextKeys` `["purpose","alg","kid"]` |

@@ -586,11 +586,16 @@ func TestSluisKeyPolicyRefusesBadInput(t *testing.T) {
 
 // ---- the key's control plane (audit 2026-10-18, A2)
 
-// The key policy of the shared key denies the five control-plane actions to every
-// principal but the administrators, and allows them to those alone.
+// The key policy of the shared key denies the control-plane actions to every
+// principal but the administrators, and allows them to those alone. The aliases
+// are among them (audit 2026-10-18, A2 follow-up): a role that may retarget the
+// alias a writer names the key by sends new writes to a key of its choosing.
 func TestControlPlaneIsTheAdministratorsAlone(t *testing.T) {
 	st := kpStatements(t, kpArgs())
-	wantActions := []string{"kms:CreateGrant", "kms:DisableKey", "kms:PutKeyPolicy", "kms:RevokeGrant", "kms:ScheduleKeyDeletion"}
+	wantActions := []string{
+		"kms:CreateAlias", "kms:CreateGrant", "kms:DeleteAlias", "kms:DisableKey", "kms:PutKeyPolicy", "kms:RevokeGrant",
+		"kms:ScheduleKeyDeletion", "kms:UpdateAlias",
+	}
 	admins := []string{kpGlass, kpKeyAdmin} // sorted: the break-glass role is added to the administrators
 
 	deny := kpBySid(t, st, "SluisKeyControlPlaneAdminsOnly")
