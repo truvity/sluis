@@ -91,10 +91,11 @@ func authRequestLogLevel(e *oidc.Error, err error) slog.Level {
 
 // authRequestLogArgs are the fields of an auth request error's log line:
 // the error code and why, the client the request names and, when there is a
-// request, the path it was made to. Only these: never the query, the state, a
-// PKCE challenge or any other parameter.
+// request, the path it was made to. Only these, each made fit for a log line:
+// never the query, the state, a PKCE challenge or any other parameter, which
+// is why the error itself is not logged as a value (it carries the state).
 func authRequestLogArgs(r *http.Request, authReq ErrAuthRequest, e *oidc.Error) []any {
-	args := []any{slog.Any("oidc_error", e), slog.String("error", string(e.ErrorType))}
+	args := []any{slog.String("error", string(e.ErrorType))}
 	if e.Description != "" {
 		args = append(args, slog.String("reason", logValue(e.Description)))
 	}
