@@ -142,6 +142,7 @@ func (x *Lease) Release(ctx context.Context) error {
 // lifetime, which is as good as lost), so a tick stops before its next
 // external write. The lease is released when fn returns.
 func (l *Leases) Do(ctx context.Context, kind, target string, fn func(ctx context.Context)) (ran bool, err error) {
+	primeLeaseCounters(ctx, kind)
 	if l.Maintenance != nil && l.Maintenance.Writable(ctx) != nil {
 		meters.skipped.Add(ctx, 1, leaseAttr(kind))
 		return false, nil

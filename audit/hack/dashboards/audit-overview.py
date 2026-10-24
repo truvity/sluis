@@ -191,6 +191,33 @@ series("Records the emitters refused as invalid",
        "Records that do not satisfy their catalogue, by application namespace: a bug in the emitting code, caught before it left the process.",
        [('sum by (namespace) (increase(audit_emit_records_refused_total{%s}[$__rate_interval]))' % K, "{{namespace}}")],
        12, y, 12, "short")
+y += 8
+
+# The SDK's own client metrics (client.call.errors, client.call.duration), as
+# the AWS adapters publish them over the same OTLP pipe: generic names, so the
+# audit services are picked out by the job (the service name) and not by the
+# metric.
+J = '%s,job=~".*audit.*"' % K
+EXPECTED = "NotFound|PreconditionFailed|ParameterNotFound|ConditionalCheckFailedException"
+CALLS = "sum by (rpc_service) (rate(client_call_duration_seconds_count{%s}[$__rate_interval]))" % J
+FAILURES = 'sum by (rpc_service) (rate(client_call_errors_total{%s,exception_type!~"%s"}[$__rate_interval]))' % (J, EXPECTED)
+
+row("AWS SDK calls", y)
+y += 1
+series("AWS SDK call errors per second, by service and exception",
+       "Calls to AWS (DynamoDB, S3, SQS, SSM) that returned an error, from the SDK's own client.call.errors counter, for the audit services of "
+       "the cluster. Several are ordinary outcomes of a conditional write or a probe and are expected at a steady rate: PreconditionFailed (an "
+       "object the archive already holds), NotFound, ConditionalCheckFailedException and ParameterNotFound. Look for a rate that moves, for "
+       "*http.ResponseError (AWS answered with a failure) and for context.deadlineExceededError (a call that outlived its deadline).",
+       [('sum by (rpc_service, exception_type) (rate(client_call_errors_total{%s}[$__rate_interval]))' % J, "{{rpc_service}} {{exception_type}}")],
+       0, y, 12, "ops")
+series("AWS SDK call failure share, by service",
+       "Share of the calls to each AWS service that failed in a way that is not an ordinary conditional outcome (PreconditionFailed, NotFound, "
+       "ConditionalCheckFailedException and ParameterNotFound are left out). A service above a few percent for a quarter of an hour is a "
+       "dependency to look at; the writer's dead letters and the write latency above say what it cost. A service that made calls and had no "
+       "failure reads 0.",
+       [('(%s or 0 * %s) / %s' % (FAILURES, CALLS, CALLS), "{{rpc_service}}")],
+       12, y, 12, "percentunit")
 
 
 def var_ds():

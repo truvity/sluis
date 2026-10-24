@@ -71,6 +71,7 @@ func TestTheIssuerRefusesWritesUnderMaintenanceAndKeepsDiscoveryAndKeys(t *testi
 	for _, c := range []struct{ method, path string }{
 		{http.MethodGet, "/authorize?client_id=console"},
 		{http.MethodPost, "/oauth/token"},
+		{http.MethodPost, "/token"},
 		{http.MethodPost, "/revoke"},
 		{http.MethodGet, "/end_session"},
 		{http.MethodGet, "/login"},
@@ -140,16 +141,20 @@ func TestAMigrationFreezeServesReadsAndTheReadOnlyGrants(t *testing.T) {
 		"grant_type=urn:ietf:params:oauth:grant-type:device_code&device_code=x",
 		"",
 	} {
-		if w := post("/oauth/token", form); w.Code != http.StatusServiceUnavailable || w.Header().Get("Retry-After") == "" {
-			t.Errorf("token %q frozen = %d, want 503 with Retry-After", form, w.Code)
+		for _, path := range []string{"/token", "/oauth/token"} {
+			if w := post(path, form); w.Code != http.StatusServiceUnavailable || w.Header().Get("Retry-After") == "" {
+				t.Errorf("POST %s %q frozen = %d, want 503 with Retry-After", path, form, w.Code)
+			}
 		}
 	}
 	for _, form := range []string{
 		"grant_type=urn:ietf:params:oauth:grant-type:token-exchange&subject_token=x",
 		"grant_type=refresh_token&refresh_token=x&client_id=console",
 	} {
-		if w := post("/oauth/token", form); strings.Contains(w.Body.String(), `"error":"maintenance"`) {
-			t.Errorf("token %q was refused by the freeze: %s", form, w.Body.String())
+		for _, path := range []string{"/token", "/oauth/token"} {
+			if w := post(path, form); strings.Contains(w.Body.String(), `"error":"maintenance"`) {
+				t.Errorf("POST %s %q was refused by the freeze: %s", path, form, w.Body.String())
+			}
 		}
 	}
 	for _, path := range []string{"/.well-known/openid-configuration", "/keys"} {

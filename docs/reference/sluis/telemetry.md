@@ -31,7 +31,7 @@ A tracer exists only when a collector is named for traces.
 
 | Where | Span |
 |---|---|
-| The issuer's listener (everything on the public port, the console included) | A server span per request, **named for the route** (`POST token`, `GET login_callback`) and never for the path. The route is one of a fixed set (`issuer.Route`): `discovery`, `jwks`, `authorize`, `authorize_callback`, `token`, `userinfo`, `introspect`, `revoke`, `end_session`, `device_authorization`, `login_chooser`, `login_start`, `login_callback`, `login_recovery`, `logout`, `signed_out`, `account`, `grants`, `sluis_configuration`, `client_secrets`, `sessions_rpc`, `connect_callback`, `console_assets`, `console_rpc`, `console`, `other`. The caller's `traceparent` is continued. |
+| The issuer's listener (everything on the public port, the console included) | A server span per request, **named for the route** (`POST token`, `GET login_callback`) and never for the path. The route is one of a fixed set (`issuer.Route`): `discovery`, `jwks`, `authorize`, `authorize_callback`, `token` (`/token`, which discovery names, and `/oauth/token`), `userinfo`, `introspect`, `revoke`, `end_session`, `device_authorization`, `login_chooser`, `login_start`, `login_callback`, `login_recovery`, `logout`, `signed_out`, `account`, `grants`, `sluis_configuration`, `client_secrets`, `sessions_rpc`, `connect_callback`, `console_assets`, `console_rpc`, `console`, `other`. The caller's `traceparent` is continued. |
 | The console's and the session service's Connect handlers | A server span per call (`rpc.method`). |
 | The controllers' clients of the console | A client span per call, and the `traceparent` carried to the console, so a tick's trace continues into the console's own spans. |
 | A module call (`internal/modcall`) | A client span in the caller and a server span in the callee, `modcall <module>.<method>` (`rpc.system.name` is `sluis.modcall`, `rpc.method` the module and method). The envelope carries the `traceparent` and `tracestate`, so the callee's span is the caller's child on every transport. |
@@ -126,9 +126,9 @@ Source: `internal/clientcreds/telemetry.go`.
 | `sluis.tick.duration` | histogram, `s` | `kind`, `outcome` | How long a tick took. |
 | `sluis.tick.last_success_timestamp` | gauge, `s` | `kind`, `target` | When a target's last ok tick ended (Unix seconds). |
 | `sluis.leases.acquired` | counter | `kind` | Leases taken by this runner. |
-| `sluis.leases.contended` | counter | `kind` | Leases asked for and held by another runner. |
-| `sluis.leases.skipped` | counter | `kind` | Ticks not started because the module is under maintenance. |
-| `sluis.leases.lost` | counter | `kind` | Leases held and lost: taken over, or not renewable for a whole lifetime. The tick stopped before its next write. |
+| `sluis.leases.contended` | counter | `kind` | Leases asked for and held by another runner. Added to by 0 at a kind's first lease, so it reads 0 before the first event. |
+| `sluis.leases.skipped` | counter | `kind` | Ticks not started because the module is under maintenance. Added to by 0 at a kind's first lease, so it reads 0 before the first event. |
+| `sluis.leases.lost` | counter | `kind` | Leases held and lost: taken over, or not renewable for a whole lifetime. The tick stopped before its next write. Added to by 0 at a kind's first lease, so it reads 0 before the first event. |
 | `sluis.leases.held` | up-down counter | `kind` | Leases this runner holds now. |
 
 
@@ -138,7 +138,7 @@ Each tick emits `sluis.ticks`, `sluis.tick.duration` and, when ok, `sluis.tick.l
 absent(last_over_time(sluis_tick_last_success_timestamp_seconds[1d]))
 ```
 
-The other controller series:
+Other controller series:
 
 ```text
 github_roster.passes (org, outcome)  .changes  .link_changes  .breaker_trips  .rows
@@ -190,6 +190,13 @@ Source: `tests/golden/sluis/alerts.yaml`, the render of `charts/sluis/templates/
 | `SluisSeatsShort` | warning | 30m | The controller could not invite everyone the policy admits to this organisation because it has no free seats. | `max by (k8s_cluster_name, namespace, org) (github_roster_seats_short{namespace="sluis"}) > 0` |
 | `SluisPortErrors` | critical | 10m | More than 5% of the calls to this storage port failed in the last 5 minutes. | `( sum by (k8s_cluster_name, namespace, port) (increase(sluis_port_operation_duration_seconds_count{namespace="sluis",outcome=~"unavailable\|error"}[5m])) / sum by (k8s_cluster_name, namespace, port) (increase(sluis_port_operation_duration_seconds_count{namespace="sluis"}[5m])) ) > 0.05 and sum by (k8s_cluster_name, namespace, port) (increase(sluis_port_operation_duration_seconds_count{namespace="sluis",outcome=~"unavailable\|error"}[5m])) >= 5` |
 <!-- /generated -->
+
+### Lambda
+
+| Signal | Where it is read |
+|---|---|
+| Cold starts, init duration, init timeouts and errors | No metric carries them. The platform's `INIT_REPORT` events (`event.name` `platform.initReport`; `faas.name`, `status`, `durationMs`) reach the log store, and the `sluis-lambda` dashboard reads them there. `status` `timeout` is the 10 second init limit. Lambda runs a failed init again inside the first invocation and reports it again (`phase` `invoke`). No rule alerts on it: the chart's rules are over metrics |
+| `client_call_errors_total`, `client_call_duration_seconds_count` | The AWS SDK's client metrics (`rpc_service`, `rpc_method`, `exception_type`), read by the overview's "AWS SDK calls" row for jobs named `sluis`. `ConditionalCheckFailedException`, `NotFound`, `PreconditionFailed` and `ParameterNotFound` are ordinary conditional outcomes, left out of the failure share |
 
 ### Runbook
 
