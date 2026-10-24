@@ -163,6 +163,7 @@ Releases are cut by hand. To cut `vX.Y.Z` or a pre-release `vX.Y.Z-rc.1`:
 3. The workflow publishes everything in [artifacts](docs/reference/sluis/artifacts.md). `just release-check vX.Y.Z` rehearses it.
 
 The `gate` job runs `hack/modules.py check vX.Y.Z --release` first and fails the release when a `go.mod` is unpinned.
+Then `hack/release-gate.sh` refuses a tag whose commit is not on `master` or whose CI there did not pass, waiting up to an hour for a run in progress.
 Pin all modules together: pinning one alone breaks the others.
 
 The workflow builds sluis through the shared `release-public` workflow, then the audit job (`audit/.goreleaser.yaml`, `just audit-release`), the TypeScript packages, and last the `modules` job.

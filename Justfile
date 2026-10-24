@@ -216,6 +216,7 @@ release-chain:
     hack/modules.py check v9.9.9 > /dev/null
     hack/test-release-verify.sh
     hack/test-ci-plan.sh
+    hack/test-release-gate.sh
 
 # Test the storage module (storage/). Like deploy/pulumi it is a module of its
 # own that the root build, test and lint never see, so this recipe is its gate.
