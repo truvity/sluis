@@ -223,7 +223,7 @@ func TestAnAuthRequestLineKeepsACallersControlCharactersOut(t *testing.T) {
 	t.Parallel()
 
 	const path = "/log-sanitise-test"
-	id := "sanitise-\x1b[31m‮" + strings.Repeat("x", 1000)
+	id := "sanitise-\x1b[31m\u202e" + strings.Repeat("x", 1000)
 	request := httptest.NewRequest(http.MethodGet, path, nil)
 	request.Form = url.Values{"client_id": {id}}
 	op.AuthRequestError(httptest.NewRecorder(), request, nil, oidc.ErrInvalidRequest().WithDescription("bad"), nil)
@@ -233,7 +233,7 @@ func TestAnAuthRequestLineKeepsACallersControlCharactersOut(t *testing.T) {
 		t.Fatalf("%d lines for %s, want 1", len(found), path)
 	}
 	got := found[0].String("client_id")
-	if !strings.HasPrefix(got, "sanitise-[31m") || strings.ContainsAny(got, "\x1b‮") {
+	if !strings.HasPrefix(got, "sanitise-[31m") || strings.ContainsAny(got, "\x1b\u202e") {
 		t.Errorf("client_id = %q, want the control characters gone", got)
 	}
 	if len([]rune(got)) > 260 {
