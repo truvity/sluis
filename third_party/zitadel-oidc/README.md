@@ -12,7 +12,7 @@ The root `go.mod` wires it in with `replace github.com/zitadel/oidc/v3 v3.51.16 
 It belongs in a JWT access token (RFC 9068, section 2.2), and `NewAccessTokenClaims` still sets it there.
 The OpenID conformance suite warns about it (`EnsureIdTokenDoesNotContainNonRequestedClaims`).
 
-`pkg/op/error.go`, `AuthRequestError` and `TryErrorRedirect`: the "auth request" log lines carry `error`, `reason`, `cause`, `client_id` and, where there is a request, `path`.
+`pkg/op/error.go`, `AuthRequestError` and `TryErrorRedirect`: the "auth request" log lines carry `error`, `reason`, `cause`, `client_id` and, where there is a request, `path`, each on one line and bounded, in place of the `oidc_error` value (which carried the request's `state`).
 A missing `client_id` or `redirect_uri` is an `invalid_request`, so it logs at WARN, not ERROR.
 An error with a server error anywhere in its chain still logs at ERROR.
 `pkg/op/auth_request.go`, `Authorize`: those two checks return that `invalid_request` instead of a plain error.
