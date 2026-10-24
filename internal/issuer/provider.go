@@ -302,7 +302,10 @@ func HandlerWithSignIn(iss *Issuer, storage op.Storage, signIn SignInDeps) (http
 
 	served := withSigningAudience(withOneResolution(authorizationResponseIssuer(iss.Config().URL, mux)))
 
-	return refusal.Middleware(withRequestFacts(httpsec.HeadersWith(served, iss.hsts()))), nil
+	return refusal.Middleware(withRequestFactsKnowing(func(id string) bool {
+		_, declared := iss.Policy().Client(id)
+		return declared
+	}, httpsec.HeadersWith(served, iss.hsts()))), nil
 }
 
 // withSigningAudience installs a fresh [signingAudience] carrier on every

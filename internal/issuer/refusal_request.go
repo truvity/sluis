@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"net/url"
 
 	"github.com/truvity/sluis/storage/logattr"
 )
@@ -34,6 +35,9 @@ const maxUserAgent = 200
 // same request can name it.
 type requestFacts struct {
 	method, path, userAgent, clientID string
+	// known says whether a client id is one this installation declares; nil
+	// knows none, so no redirect URI is ever logged.
+	known func(clientID string) bool
 }
 
 type requestFactsKey struct{}
@@ -42,12 +46,20 @@ type requestFactsKey struct{}
 // client on its context, for [deny], which is given a context and no
 // request, to log.
 func withRequestFacts(next http.Handler) http.Handler {
+	return withRequestFactsKnowing(nil, next)
+}
+
+// withRequestFactsKnowing is [withRequestFacts] for an issuer that can say
+// which clients it declares, so that a refusal at `/authorize` also names the
+// `redirect_uri` the request asked for when the client is a declared one.
+func withRequestFactsKnowing(known func(clientID string) bool, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if _, ok := r.Context().Value(requestFactsKey{}).(*requestFacts); ok {
 			next.ServeHTTP(w, r)
 			return
 		}
 		facts := factsOf(r)
+		facts.known = known
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), requestFactsKey{}, facts)))
 	})
 }
@@ -116,10 +128,37 @@ func withRequest(ctx context.Context, r *http.Request, attrs []any) []any {
 	if clientID != "" && !have["client"] {
 		add(logattr.SafeString("client_id", clientID))
 	}
+	if redirect := redirectNamedBy(r, facts, clientID); redirect != "" {
+		add(logattr.SafeString("redirect_uri", redirect))
+	}
 	if facts.userAgent != "" {
 		add(logattr.SafeString("user_agent", truncate(facts.userAgent, maxUserAgent)))
 	}
 	return attrs
+}
+
+// redirectNamedBy is the `redirect_uri` of an authorization request, for a
+// refusal's log line, or empty. Only at `/authorize`, only when the request
+// names a client this installation declares (an address named by nobody
+// known is somebody else's text in this log), and without its query and
+// fragment, where a callback may carry a handle.
+func redirectNamedBy(r *http.Request, facts *requestFacts, clientID string) string {
+	if r == nil || facts.path != authorizePath || clientID == "" || facts.known == nil || !facts.known(clientID) {
+		return ""
+	}
+	var raw string
+	if r.Form != nil {
+		raw = r.Form.Get("redirect_uri")
+	} else {
+		raw = r.URL.Query().Get("redirect_uri")
+	}
+	target, err := url.Parse(raw)
+	if raw == "" || err != nil {
+		return ""
+	}
+	target.RawQuery, target.Fragment, target.User = "", "", nil
+
+	return target.String()
 }
 
 // keysOf is the keys a list of slog arguments sets, in either of the forms
