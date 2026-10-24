@@ -57,7 +57,7 @@ func rulesOf(t *testing.T, doc map[string]any) []map[string]any {
 // template. A guard that sweeps nothing proves nothing, so each check below
 // counts what it saw against it.
 const (
-	templateRuleCount = 11
+	templateRuleCount = 12
 	ruleCount         = templateRuleCount
 )
 

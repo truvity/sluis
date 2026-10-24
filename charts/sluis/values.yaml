@@ -137,6 +137,19 @@ alerts:
       # (15m), which tolerates three missed passes.
       maxAgeSeconds: 3600
       for: 10m
+      # A target is live while its series has a sample this recent, which is
+      # what separates a controller that keeps failing (this rule) from a
+      # series that stopped (tickSeriesStale reads the same window).
+      liveWindow: 15m
+      labels: {}
+    tickSeriesStale:
+      enabled: true
+      severity: warning
+      # A target's series had a sample within the last 2h and none within
+      # `tickStale.liveWindow`: the target was renamed or removed, a label
+      # changed, or its controller is gone. It leaves the rule 2h after its
+      # last sample.
+      for: 5m
       labels: {}
     leaseLost:
       enabled: true
