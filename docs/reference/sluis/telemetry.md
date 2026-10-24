@@ -92,6 +92,7 @@ Prometheus names turn dots into underscores and add `_total` to counters: `sluis
 | `unaudited` | the audit trail could not be written |
 | `not_waiting` | the authorization request is gone |
 | `consent_refused` | an agent connection's consent was not accepted in that browser |
+| `subject_changed`, `subject_unchecked` | the address first signed in from another account at the provider, or that could not be checked |
 | `bad_request` | the request was malformed |
 
 ### Generated client secrets

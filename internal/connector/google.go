@@ -66,13 +66,15 @@ func (g *Google) SignInURL(state string) (string, error) {
 	return client.SignInURL(state), nil
 }
 
-// Identify implements the console's sign-in contract.
-func (g *Google) Identify(ctx context.Context, code string) (string, error) {
+// Identify implements the console's sign-in contract: the ID token must carry
+// the nonce of state.
+func (g *Google) Identify(ctx context.Context, code, state string) (string, error) {
 	client, err := g.client()
 	if err != nil {
 		return "", err
 	}
-	return google.Identify(ctx, client, code)
+	account, err := google.IdentifyAccount(ctx, client, code, state)
+	return account.Email, err
 }
 
 // Exchange implements the console's connector contract: the callback's

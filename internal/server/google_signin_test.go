@@ -24,9 +24,9 @@ type moduleSignIn struct {
 }
 
 func (*moduleSignIn) Kind() string { return "google" }
-func (m *moduleSignIn) Identify(ctx context.Context, code string) (string, error) {
+func (m *moduleSignIn) Identify(ctx context.Context, code, state string) (string, error) {
 	m.identified.Add(1)
-	return m.signInConnector.Identify(ctx, code)
+	return m.signInConnector.Identify(ctx, code, state)
 }
 
 func signInThrough(t *testing.T, server *ConsoleServer, backend string) *httptest.ResponseRecorder {

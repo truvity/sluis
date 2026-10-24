@@ -172,8 +172,15 @@ func TestSignInAsksForNothingButAnAddress(t *testing.T) {
 		t.Error("the two flows share a redirect URI")
 	}
 
-	if _, err = Identify(context.Background(), client, ""); err == nil {
+	if _, err = IdentifyAccount(context.Background(), client, "", "state-9"); err == nil {
 		t.Error("a callback with no code was accepted")
+	}
+	if _, err = IdentifyAccount(context.Background(), client, "code", ""); err == nil {
+		t.Error("a callback with no state to check the nonce against was accepted")
+	}
+	// The nonce is the state's, and the state's alone.
+	if got := query.Get("nonce"); got == "" || got != Nonce("state-9") || got == Nonce("state-8") || got == "state-9" {
+		t.Errorf("nonce = %q, want Nonce(state)", got)
 	}
 }
 
@@ -182,9 +189,11 @@ func signInToken(claims string) *oauth2.Token {
 	return (&oauth2.Token{}).WithExtra(map[string]any{"id_token": "header." + payload + ".signature"})
 }
 
-// A sign-in is believed only as far as Google vouches for the address: the
-// account must have verified it, and where the installation names the domains
-// it signs in, the account must belong to one.
+// A sign-in is believed only as far as Google vouches for the address: the ID
+// token must be for this sign-in (its nonce), the account must have verified
+// the address, and where the installation names the domains it signs in, the
+// account must belong to one. Every claim set below carries the right nonce
+// unless it names one.
 func TestASignInNeedsAVerifiedAddress(t *testing.T) {
 	t.Parallel()
 
@@ -211,18 +220,26 @@ func TestASignInNeedsAVerifiedAddress(t *testing.T) {
 		},
 		"hosted domain absent":    {claims: `{"sub":"1","email":"ada@north.example","email_verified":true}`, hosted: []string{"north.example"}, fail: true},
 		"hosted domain not asked": {claims: `{"sub":"1","email":"ada@north.example","email_verified":true,"hd":"south.example"}`, want: "ada@north.example"},
+		"nonce absent":            {claims: `{"nonce":"","sub":"1","email":"ada@north.example","email_verified":true}`, fail: true},
+		"nonce of another sign-in": {
+			claims: `{"nonce":"` + Nonce("another") + `","sub":"1","email":"ada@north.example","email_verified":true}`, fail: true,
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			got, err := signedInAccount(signInToken(tc.claims), tc.hosted)
+			claims := tc.claims
+			if !strings.Contains(claims, `"nonce"`) {
+				claims = `{"nonce":"` + Nonce("state-1") + `",` + strings.TrimPrefix(claims, "{")
+			}
+			got, err := signedInAccount(signInToken(claims), tc.hosted, Nonce("state-1"))
 			if tc.fail {
 				if err == nil {
-					t.Fatalf("accepted %s as %q", tc.claims, got)
+					t.Fatalf("accepted %s as %v", claims, got)
 				}
 				return
 			}
-			if err != nil || got != tc.want {
-				t.Errorf("= %q, %v; want %q", got, err, tc.want)
+			if err != nil || got.Email != tc.want || got.Subject != "1" {
+				t.Errorf("= %v, %v; want %q with subject 1", got, err, tc.want)
 			}
 		})
 	}
@@ -231,7 +248,7 @@ func TestASignInNeedsAVerifiedAddress(t *testing.T) {
 func TestASignInWithNoIDTokenIsRefused(t *testing.T) {
 	t.Parallel()
 
-	if _, err := signedInAccount(&oauth2.Token{}, nil); err == nil {
+	if _, err := signedInAccount(&oauth2.Token{}, nil, Nonce("s")); err == nil {
 		t.Error("a sign-in with no ID token was accepted")
 	}
 }

@@ -50,6 +50,25 @@ type ContextSignIn interface {
 	URLContext(ctx context.Context, state string) (string, error)
 }
 
+// AccountSignIn is a [SignIn] that checks the callback against the state the
+// sign-in was started with (an OpenID Connect nonce), and says which account at
+// the provider signed in beside the address. The issuer calls IdentifyAccount
+// in place of Identify, with the callback's state, and pins the address to the
+// account: a later sign-in with the address from another account is refused.
+type AccountSignIn interface {
+	SignIn
+	IdentifyAccount(ctx context.Context, code, state string) (email, subject string, err error)
+}
+
+// identify is who signed in, through IdentifyAccount where the provider has it.
+func identify(ctx context.Context, provider SignIn, code, state string) (email, subject string, err error) {
+	if p, ok := provider.(AccountSignIn); ok {
+		return p.IdentifyAccount(ctx, code, state)
+	}
+	email, err = provider.Identify(ctx, code)
+	return email, "", err
+}
+
 // signInURL is where to send the browser for provider, under the request's
 // context where the provider takes one.
 func signInURL(ctx context.Context, provider SignIn, state string) (string, error) {
@@ -790,7 +809,7 @@ func (s *signIn) callback(w http.ResponseWriter, r *http.Request) {
 	}
 	access.SetCookie(w, access.LoginCookie("", s.deps.Secure, 0))
 
-	email, err := provider.Identify(r.Context(), r.URL.Query().Get("code"))
+	email, subject, err := identify(r.Context(), provider, r.URL.Query().Get("code"), state)
 	if err != nil {
 		s.deps.Log.WarnContext(r.Context(), "sign-in exchange failed",
 			slog.String("provider", provider.Kind()), logattr.SafeError("error", err))
@@ -798,6 +817,27 @@ func (s *signIn) callback(w http.ResponseWriter, r *http.Request) {
 		s.recordRefusal(r, request, audit.Anonymous(), provider.Kind(), audit.Failed("the provider could not say who signed in: "+err.Error()),
 			audit.Refusal{Code: "provider_failed", Directory: "not_applicable"})
 		refusalPage(w, r, http.StatusBadGateway, "the sign-in could not be completed", err, logattr.SafeString("provider", provider.Kind()))
+		return
+	}
+
+	// The address must still be the account that first signed in with it.
+	if err := s.deps.Issuer.pinSubject(r.Context(), provider.Kind(), email, subject); err != nil {
+		if errors.Is(err, ErrSubjectChanged) {
+			s.deps.Log.WarnContext(r.Context(), "sign-in refused: the address is pinned to another account",
+				logattr.Pseudonym("subject", email), slog.String("provider", provider.Kind()))
+			recordLoginFailure(r.Context(), LoginSubjectChanged)
+			s.recordRefusal(r, request, audit.Identified(email), provider.Kind(),
+				audit.Denied("the address first signed in here from another account at the provider"),
+				audit.Refusal{Code: "subject_changed", Directory: "not_applicable"})
+			refusalPage(w, r, http.StatusForbidden, "this address first signed in here from another account; "+
+				"an operator must confirm the change before it can sign in", nil, logattr.Pseudonym("subject", email))
+			return
+		}
+		s.deps.Log.ErrorContext(r.Context(), "the sign-in's account could not be checked", logattr.Pseudonym("subject", email), logattr.SafeError("error", err))
+		recordLoginFailure(r.Context(), LoginSubjectUnchecked)
+		s.recordRefusal(r, request, audit.Identified(email), provider.Kind(), audit.Failed("the account could not be checked: "+err.Error()),
+			audit.Refusal{Code: "subject_unchecked", Directory: "not_applicable"})
+		refusalPage(w, r, http.StatusServiceUnavailable, "the sign-in could not be checked", err, logattr.Pseudonym("subject", email))
 		return
 	}
 

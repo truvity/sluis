@@ -124,7 +124,7 @@ func TestEachMethodAnswersItsOwnClassOnly(t *testing.T) {
 	}
 	// identify is refused to the console class.
 	conn := googleconsole.NewRemoteConnector(moduleAs(svc, consolecall.Class))
-	if _, err = conn.Identify(ctx, "code"); codeOf(t, err) != modcall.CodeForbidden {
+	if _, err = conn.Identify(ctx, "code", "state"); codeOf(t, err) != modcall.CodeForbidden {
 		t.Errorf("identify called as the console = %v, want forbidden", err)
 	}
 	if _, err = conn.SignInURL("state"); codeOf(t, err) != modcall.CodeForbidden {
@@ -229,7 +229,35 @@ func TestTheConsentForwardIsNeverRetriedAndIsBounded(t *testing.T) {
 	}
 	// And the sign-in's identify is single-use too.
 	f = &failing{err: modcall.ErrTransport}
-	if _, err = googleconsole.NewRemoteConnector(f).Identify(context.Background(), "c"); err == nil || !f.noRetry {
+	if _, err = googleconsole.NewRemoteConnector(f).Identify(context.Background(), "c", "s"); err == nil || !f.noRetry {
 		t.Errorf("identify: %v, no-retry %v", err, f.noRetry)
+	}
+}
+
+// stateSignIn is a sign-in connector that remembers the state it identified
+// under.
+type stateSignIn struct {
+	stubConsent
+	state *string
+}
+
+func (stateSignIn) SignInURL(string) (string, error) { return "https://signin.example", nil }
+func (s stateSignIn) Identify(_ context.Context, _, state string) (string, error) {
+	*s.state = state
+	return "ada@north.example", nil
+}
+
+// The issuer's identify carries the callback's state to the module, where the
+// sign-in's nonce is checked against it (audit 2026-10-18, C).
+func TestIdentifyCarriesTheStateToTheModule(t *testing.T) {
+	t.Parallel()
+	var got string
+	svc := googleconsole.NewService(quietHub(), []googleconsole.Connector{stateSignIn{state: &got}}, nil, slog.New(slog.DiscardHandler))
+	email, err := googleconsole.NewRemoteConnector(moduleAs(svc, googleconsole.CallerIssuer)).Identify(context.Background(), "code", "state-7")
+	if err != nil || email != "ada@north.example" {
+		t.Fatalf("identify = %q, %v", email, err)
+	}
+	if got != "state-7" {
+		t.Errorf("the module identified under state %q, want the callback's", got)
 	}
 }

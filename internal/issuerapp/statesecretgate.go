@@ -79,6 +79,20 @@ func (g gatedSignIn) Identify(ctx context.Context, code string) (string, error) 
 	return g.ContextSignIn.Identify(ctx, code)
 }
 
+// gatedAccountSignIn is [gatedSignIn] over a provider that checks the state and
+// names the account ([issuer.AccountSignIn]).
+type gatedAccountSignIn struct {
+	gatedSignIn
+	account issuer.AccountSignIn
+}
+
+func (g gatedAccountSignIn) IdentifyAccount(ctx context.Context, code, state string) (email, subject string, err error) {
+	if err := g.gate.ensure(ctx); err != nil {
+		return "", "", err
+	}
+	return g.account.IdentifyAccount(ctx, code, state)
+}
+
 // gateSignIns puts the gate in front of every provider.
 func gateSignIns(providers []issuer.SignIn, gate *stateSecretGate) []issuer.SignIn {
 	if gate == nil {
@@ -87,7 +101,12 @@ func gateSignIns(providers []issuer.SignIn, gate *stateSecretGate) []issuer.Sign
 	out := make([]issuer.SignIn, 0, len(providers))
 	for _, p := range providers {
 		if c, ok := p.(issuer.ContextSignIn); ok {
-			out = append(out, gatedSignIn{ContextSignIn: c, gate: gate})
+			gated := gatedSignIn{ContextSignIn: c, gate: gate}
+			if a, ok := p.(issuer.AccountSignIn); ok {
+				out = append(out, gatedAccountSignIn{gatedSignIn: gated, account: a})
+				continue
+			}
+			out = append(out, gated)
 			continue
 		}
 		out = append(out, p)

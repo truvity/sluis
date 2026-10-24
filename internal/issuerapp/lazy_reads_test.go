@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/truvity/sluis/backend/google"
 	"github.com/truvity/sluis/internal/issuer"
 	"github.com/truvity/sluis/internal/issuerapp"
 	"github.com/truvity/sluis/internal/port"
@@ -49,6 +50,15 @@ func TestTheSignInClientIsReadAtTheFirstSignIn(t *testing.T) {
 	}
 	if u := url(); !strings.Contains(u, "client_id=client-id.example") {
 		t.Errorf("the sign-in address does not carry the client: %s", u)
+	} else if !strings.Contains(u, "nonce="+google.Nonce("state-1")) {
+		t.Errorf("the sign-in address does not carry the state's nonce: %s", u)
+	}
+	// The Google sign-in is identified with the callback's state, and never without.
+	if _, ok := providers[0].(issuer.AccountSignIn); !ok {
+		t.Error("the Google sign-in does not check the state's nonce (issuer.AccountSignIn)")
+	}
+	if _, err := providers[0].Identify(ctx, "code"); err == nil {
+		t.Error("the Google sign-in identified a callback without its state")
 	}
 	want := []string{"internal/oidc/signin/google/client-id", "internal/oidc/signin/google/client-secret"}
 	got := rec.Addresses("get")
@@ -172,5 +182,31 @@ func TestTheStateSecretIsCheckedAtTheFirstSignIn(t *testing.T) {
 	}
 	if _, err = refused[0].Identify(ctx, "code"); err == nil || errors.Is(err, port.ErrNotFound) {
 		t.Errorf("a refused check was remembered as passed: %v", err)
+	}
+}
+
+type accountSignIn struct{ fixedSignIn }
+
+func (*accountSignIn) IdentifyAccount(_ context.Context, _, state string) (email, subject string, err error) {
+	return "a@b.example", "sub-" + state, nil
+}
+
+// The gate keeps a provider's account and nonce check (audit 2026-10-18, C): a
+// gated provider that had IdentifyAccount still has it, and the state reaches
+// it; one that had not does not gain it.
+func TestTheGateKeepsTheAccountSignIn(t *testing.T) {
+	ctx := context.Background()
+	state := &memoryIssuerState{values: map[string][]byte{}}
+	gated, _ := issuerapp.GateSignInsForTest([]issuer.SignIn{&accountSignIn{}, &fixedSignIn{}}, state, []byte("0123456789abcdef0123456789abcdef-a"),
+		memory.New().Set().State)
+	account, ok := gated[0].(issuer.AccountSignIn)
+	if !ok {
+		t.Fatal("the gate dropped IdentifyAccount")
+	}
+	if email, sub, err := account.IdentifyAccount(ctx, "code", "st"); err != nil || email != "a@b.example" || sub != "sub-st" {
+		t.Errorf("IdentifyAccount = %q, %q, %v", email, sub, err)
+	}
+	if _, ok := gated[1].(issuer.AccountSignIn); ok {
+		t.Error("a provider without IdentifyAccount gained it through the gate")
 	}
 }

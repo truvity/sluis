@@ -98,6 +98,12 @@ const (
 	// LoginConsentRefused is an agent connection's acceptance that did not
 	// verify, or one whose browser sign-in no longer stood when it arrived.
 	LoginConsentRefused = "consent_refused"
+	// LoginSubjectChanged is a sign-in whose address first signed in here from
+	// another account at the provider (pinSubject).
+	LoginSubjectChanged = "subject_changed"
+	// LoginSubjectUnchecked is a sign-in whose account could not be checked
+	// against its address's pin: the shared State did not answer.
+	LoginSubjectUnchecked = "subject_unchecked"
 )
 
 // recordLoginFailure counts one sign-in that did not complete.

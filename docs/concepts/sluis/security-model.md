@@ -17,7 +17,7 @@ sluis verifies proofs produced elsewhere: a directory sign-in, a platform's job 
 | The page cannot be framed or sniffed | Every response carries a content security policy, `X-Frame-Options: DENY` and `nosniff`; HSTS is sent on https |
 | A client's own document is untrusted | It is fetched from an allowed origin to public addresses only, and it may declare no client secret |
 
-A Google sign-in needs a verified address, and `google.oauthClient.hostedDomains` limits the domains. The full list is [endpoints: hardening](../../reference/sluis/endpoints.md#hardening).
+A Google sign-in needs a verified address and its own nonce, and `google.oauthClient.hostedDomains` limits the domains. An address stays with the Google account that first signed in with it. The full list is [endpoints: hardening](../../reference/sluis/endpoints.md#hardening).
 
 ## A token
 
