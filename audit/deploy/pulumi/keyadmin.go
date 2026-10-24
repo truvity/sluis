@@ -9,11 +9,11 @@ import (
 )
 
 // The control plane of a KMS key is what changes WHO may use it: the key
-// policy, grants, the key's state and its deletion. A key policy that hands the
+// policy, grants, the key's state, its deletion and its aliases. A key policy that hands the
 // account's root the whole of kms:* hands it to every IAM principal that has an
 // allow for it (a power role, an automation role, a StackSet role), and any of
 // them can rewrite the policy, give itself kms:Sign on the seal key and forge
-// audit seals. The seal key's and the digest key's policies hold the five
+// audit seals. The seal key's and the digest key's policies hold the
 // actions below to the named administrators, and deny them to everyone else.
 //
 // This is the audit library's own copy of what deploy/pulumi has for the keys it
@@ -26,17 +26,19 @@ const (
 )
 
 // KeyControlPlaneActions are the actions only the administrators hold on a key.
+// The aliases are among them: retargeting an alias a caller names the key by
+// sends that caller to a key of someone else's choosing.
 var KeyControlPlaneActions = []string{
-	"kms:CreateGrant", "kms:DisableKey", "kms:PutKeyPolicy", "kms:RevokeGrant", "kms:ScheduleKeyDeletion",
+	"kms:CreateAlias", "kms:CreateGrant", "kms:DeleteAlias", "kms:DisableKey", "kms:PutKeyPolicy", "kms:RevokeGrant",
+	"kms:ScheduleKeyDeletion", "kms:UpdateAlias",
 }
 
 // keyAdministerActions are what the account root delegates to IAM for the key's
 // upkeep without changing who may use it: describing and listing, tags, the
-// description, aliases, rotation and cancelling a deletion.
+// description, rotation and cancelling a deletion.
 var keyAdministerActions = []string{
-	"kms:CancelKeyDeletion", "kms:CreateAlias", "kms:DeleteAlias", "kms:DescribeKey", "kms:DisableKeyRotation",
-	"kms:EnableKey", "kms:EnableKeyRotation", "kms:Get*", "kms:List*", "kms:TagResource", "kms:UntagResource",
-	"kms:UpdateAlias", "kms:UpdateKeyDescription",
+	"kms:CancelKeyDeletion", "kms:DescribeKey", "kms:DisableKeyRotation", "kms:EnableKey", "kms:EnableKeyRotation",
+	"kms:Get*", "kms:List*", "kms:TagResource", "kms:UntagResource", "kms:UpdateKeyDescription",
 }
 
 var adminArnRE = regexp.MustCompile(`^arn:` + `aws[a-z-]*:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_*/-]+$`)
@@ -107,7 +109,7 @@ func sortedCopy(in []string) []string {
 }
 
 // controlPlane are the two statements that hold a key's control plane to its
-// administrators: an allow of the five actions for the account root, narrowed to
+// administrators: an allow of the actions for the account root, narrowed to
 // them, and a deny to everyone else (AWS services acting on their own are not
 // named by the condition).
 func controlPlane(rootArn string, admins []string) []statement {
