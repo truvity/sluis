@@ -7123,6 +7123,31 @@
               },
               "type": "object"
             },
+            "tickSeriesStale": {
+              "additionalProperties": false,
+              "description": "A target's series stopped reporting.",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "for": {
+                  "description": "How long the condition holds before the alert fires, as a duration.",
+                  "type": "string"
+                },
+                "labels": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "description": "Labels added to this rule only.",
+                  "type": "object"
+                },
+                "severity": {
+                  "description": "The severity label.",
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
             "tickStale": {
               "additionalProperties": false,
               "description": "A target has had no ok tick for `maxAgeSeconds`.",
@@ -7140,6 +7165,10 @@
                   },
                   "description": "Labels added to this rule only.",
                   "type": "object"
+                },
+                "liveWindow": {
+                  "description": "The age of the newest sample that makes a target live.",
+                  "type": "string"
                 },
                 "maxAgeSeconds": {
                   "description": "The age, in seconds.",

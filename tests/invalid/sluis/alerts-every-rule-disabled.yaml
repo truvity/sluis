@@ -9,6 +9,7 @@ alerts:
     tokenLatency: {enabled: false}
     tickFailing: {enabled: false}
     tickStale: {enabled: false}
+    tickSeriesStale: {enabled: false}
     leaseLost: {enabled: false}
     rateLimitLow: {enabled: false}
     seatsShort: {enabled: false}

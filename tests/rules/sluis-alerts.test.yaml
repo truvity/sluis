@@ -244,8 +244,12 @@ tests:
         alertname: SluisTickFailing
         exp_alerts: []
 
-  # ---------------------------------------------------------------- no successful tick (absence)
-  - name: a live target whose last ok tick is two hours old fires
+  # ---------------------------------------------------------------- no successful tick
+  # SluisTickStale reads a series with a sample in the last 15 minutes (live) and
+  # an ok stamp over an hour old: a controller that runs and does not succeed.
+  # SluisTickSeriesStale reads a series seen in the last two hours and not in the
+  # last 15 minutes: nothing exports it. A series is one or the other.
+  - name: a live target that is stuck fires the critical rule only
     interval: 1m
     input_series:
       - series: 'sluis_tick_last_success_timestamp_seconds{namespace="sluis",k8s_cluster_name="example",kind="slack-tick",target="acme"}'
@@ -264,12 +268,72 @@ tests:
             exp_annotations:
               summary: 'No successful slack-tick of acme for 2h 0m 0s'
               description: >-
-                This target has not completed a tick for longer than 3600s.
-                Check that the controller's Deployment is running, that its leases are not held
-                by a runner that is gone (SluisLeaseLost), and the log for the failures.
+                This target is still reporting but has not completed a tick for longer than 3600s.
+                Check that its leases are not held by a runner that is gone (SluisLeaseLost),
+                and the controller's log for the failures.
               runbook_url: https://github.com/truvity/sluis/blob/master/docs/reference/sluis/telemetry.md#sluistickstale
+      - eval_time: 2h
+        alertname: SluisTickSeriesStale
+        exp_alerts: []
 
-  - name: a series that stopped reporting, as after a rename of its target, does not fire
+  - name: a series that stopped reporting fires the warning only, within two hours, then nothing
+    interval: 1m
+    input_series:
+      - series: 'sluis_tick_last_success_timestamp_seconds{namespace="sluis",k8s_cluster_name="example",kind="slack-tick",target="acme"}'
+        values: '946684800+60x30 _x300'
+    alert_rule_test:
+      # Reported until minute 30; at 40 minutes it has been silent 10 minutes.
+      - eval_time: 40m
+        alertname: SluisTickSeriesStale
+        exp_alerts: []
+      - eval_time: 1h
+        alertname: SluisTickSeriesStale
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              team: platform
+              k8s_cluster_name: example
+              namespace: sluis
+              kind: slack-tick
+              target: acme
+            exp_annotations:
+              summary: 'The slack-tick series of acme stopped reporting: probably renamed or removed; check the policy'
+              description: >-
+                No sample of this target's last-success gauge has arrived for 15m, though one did
+                within the last two hours. If the policy renamed or removed the target, or a
+                label changed, nothing is wrong and this clears on its own. Otherwise the
+                controller is gone: check that its Deployment is running.
+              runbook_url: https://github.com/truvity/sluis/blob/master/docs/reference/sluis/telemetry.md#sluistickseriesstale
+      - eval_time: 2h
+        alertname: SluisTickSeriesStale
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              team: platform
+              k8s_cluster_name: example
+              namespace: sluis
+              kind: slack-tick
+              target: acme
+            exp_annotations:
+              summary: 'The slack-tick series of acme stopped reporting: probably renamed or removed; check the policy'
+              description: >-
+                No sample of this target's last-success gauge has arrived for 15m, though one did
+                within the last two hours. If the policy renamed or removed the target, or a
+                label changed, nothing is wrong and this clears on its own. Otherwise the
+                controller is gone: check that its Deployment is running.
+              runbook_url: https://github.com/truvity/sluis/blob/master/docs/reference/sluis/telemetry.md#sluistickseriesstale
+      - eval_time: 3h
+        alertname: SluisTickSeriesStale
+        exp_alerts: []
+      # Never the critical rule: its stamp was at most 30 minutes old when it stopped.
+      - eval_time: 1h
+        alertname: SluisTickStale
+        exp_alerts: []
+      - eval_time: 3h
+        alertname: SluisTickStale
+        exp_alerts: []
+
+  - name: a renamed target and its live successor do not fire the critical rule
     interval: 1m
     input_series:
       - series: 'sluis_tick_last_success_timestamp_seconds{namespace="sluis",k8s_cluster_name="example",kind="slack-tick",target="acme-old"}'
@@ -277,8 +341,36 @@ tests:
       - series: 'sluis_tick_last_success_timestamp_seconds{namespace="sluis",k8s_cluster_name="example",kind="slack-tick",target="acme"}'
         values: '946684800+60x330'
     alert_rule_test:
+      - eval_time: 45m
+        alertname: SluisTickStale
+        exp_alerts: []
+      - eval_time: 90m
+        alertname: SluisTickStale
+        exp_alerts: []
       - eval_time: 4h
         alertname: SluisTickStale
+        exp_alerts: []
+      # Only the old name is reported as stale, and it leaves after two hours.
+      - eval_time: 90m
+        alertname: SluisTickSeriesStale
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              team: platform
+              k8s_cluster_name: example
+              namespace: sluis
+              kind: slack-tick
+              target: acme-old
+            exp_annotations:
+              summary: 'The slack-tick series of acme-old stopped reporting: probably renamed or removed; check the policy'
+              description: >-
+                No sample of this target's last-success gauge has arrived for 15m, though one did
+                within the last two hours. If the policy renamed or removed the target, or a
+                label changed, nothing is wrong and this clears on its own. Otherwise the
+                controller is gone: check that its Deployment is running.
+              runbook_url: https://github.com/truvity/sluis/blob/master/docs/reference/sluis/telemetry.md#sluistickseriesstale
+      - eval_time: 4h
+        alertname: SluisTickSeriesStale
         exp_alerts: []
 
   - name: targets that tick, one of which ticks only every quarter hour, do not fire
@@ -291,6 +383,9 @@ tests:
     alert_rule_test:
       - eval_time: 2h
         alertname: SluisTickStale
+        exp_alerts: []
+      - eval_time: 2h
+        alertname: SluisTickSeriesStale
         exp_alerts: []
 
   # ---------------------------------------------------------------- lease lost

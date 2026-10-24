@@ -1814,6 +1814,35 @@
                   "type": "integer",
                   "minimum": 1,
                   "description": "The age, in seconds."
+                },
+                "liveWindow": {
+                  "type": "string",
+                  "description": "The age of the newest sample that makes a target live."
+                }
+              }
+            },
+            "tickSeriesStale": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "A target's series stopped reporting.",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "severity": {
+                  "type": "string",
+                  "description": "The severity label."
+                },
+                "for": {
+                  "type": "string",
+                  "description": "How long the condition holds before the alert fires, as a duration."
+                },
+                "labels": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "description": "Labels added to this rule only."
                 }
               }
             },
