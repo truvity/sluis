@@ -215,3 +215,40 @@ func TestATickIsSkippedUnderMaintenance(t *testing.T) {
 		t.Fatalf("once cleared Do = %v, %v, ran %v", r, err, ran)
 	}
 }
+
+// The counters of rare events have a series at zero from a kind's first lease,
+// so a panel reads 0 rather than "no data" and `increase()` sees the first loss.
+func TestRareLeaseCountersExistAtZeroFromTheFirstLease(t *testing.T) {
+	value(t, "x")
+	l := &rails.Leases{State: memory.New(), Holder: "a"}
+	if ran, err := l.Do(context.Background(), "lease-prime", "acme", func(context.Context) {}); !ran || err != nil {
+		t.Fatalf("Do = %v, %v", ran, err)
+	}
+	var rm metricdata.ResourceMetrics
+	if err := reader.Collect(context.Background(), &rm); err != nil {
+		t.Fatal(err)
+	}
+	want := attribute.NewSet(kind("lease-prime"))
+	for _, name := range []string{"sluis.leases.contended", "sluis.leases.lost", "sluis.leases.skipped"} {
+		found := false
+		for _, scope := range rm.ScopeMetrics {
+			for _, m := range scope.Metrics {
+				sum, ok := m.Data.(metricdata.Sum[int64])
+				if m.Name != name || !ok {
+					continue
+				}
+				for _, p := range sum.DataPoints {
+					if p.Attributes.Equals(&want) {
+						found = true
+						if p.Value != 0 {
+							t.Errorf("%s = %d after one uncontended lease, want 0", name, p.Value)
+						}
+					}
+				}
+			}
+		}
+		if !found {
+			t.Errorf("%s has no series for the kind after its first lease", name)
+		}
+	}
+}

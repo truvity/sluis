@@ -143,6 +143,7 @@ Responses: [respond to an audit alert](../../guides/audit/operate/respond-to-ale
 |---|---|
 | Tiles | Dead letters, rejections, index rows deferred, newest seal age, emitter drops, consumer failures |
 | Series | Ingest rate by transport, durability mix, rejection and dead-letter rates, write latency, index lag, newest seal age by profile, each application's emitter queue and drops |
+| AWS SDK calls | Errors per second by AWS service and exception, and the share of calls that failed for a reason other than an ordinary conditional outcome (`PreconditionFailed`, `NotFound`, `ConditionalCheckFailedException`, `ParameterNotFound`), for the jobs whose name contains `audit`. Lambda cold starts and init timeouts are on the `sluis-lambda` dashboard of the sluis chart, from the platform's log events |
 
 Install it where Grafana runs:
 

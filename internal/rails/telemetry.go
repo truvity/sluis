@@ -107,3 +107,16 @@ func StartTick(ctx context.Context, kind, target string) (context.Context, func(
 func leaseAttr(kind string) metric.MeasurementOption {
 	return metric.WithAttributes(attribute.String("kind", kind))
 }
+
+// primeLeaseCounters gives the counters of an event that is rare by design a
+// series at zero for a kind from its first lease, instead of one that appears
+// at the first event. A counter exists in the store only once it has been added
+// to, so without this the dashboard's contended and lost panels read "no data"
+// until the day something goes wrong, and `increase()` over a series born at 1
+// sees no rise: the rule on repeated losses would miss the first one.
+func primeLeaseCounters(ctx context.Context, kind string) {
+	attr := leaseAttr(kind)
+	meters.skipped.Add(ctx, 0, attr)
+	meters.contended.Add(ctx, 0, attr)
+	meters.lost.Add(ctx, 0, attr)
+}

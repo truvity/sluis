@@ -81,6 +81,7 @@ func roundTrip(ctx context.Context, client *http.Client, build func() (*http.Req
 			return nil, err
 		}
 		recordBudget(ctx, response)
+		primeWaits(ctx)
 		wait, kind, limited := rateLimit(response)
 		if !limited || attempt >= Retries {
 			return response, nil
@@ -90,6 +91,21 @@ func roundTrip(ctx context.Context, client *http.Client, build func() (*http.Req
 		if err = waitOut(ctx, kind, wait); err != nil {
 			return nil, err
 		}
+	}
+}
+
+// waitKinds are the values of the `kind` of a wait, in the order rateLimit
+// decides them.
+var waitKinds = []string{"retry_after", "primary", "secondary"}
+
+// primeWaits gives the wait counter a series at zero for each kind from the
+// first call, instead of one that appears at the first wait. A counter exists
+// in the store only once it has been added to, so without this the "Rate-limit
+// waits" panel reads "no data" until GitHub first limits the App, and
+// `increase()` over a series born at 1 sees no rise.
+func primeWaits(ctx context.Context) {
+	for _, kind := range waitKinds {
+		waits.Add(ctx, 0, metric.WithAttributes(attribute.String("kind", kind)))
 	}
 }
 
