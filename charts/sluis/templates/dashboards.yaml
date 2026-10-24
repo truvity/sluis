@@ -11,11 +11,15 @@ The operator of THIS cluster places them in a folder `sluis` under the cluster's
 own folder (dashboards.clusterFolderUID); it holds Edit on that folder only and a
 nested folder inherits it. Dashboard uids are global in the shared Grafana, so
 each is derived from the cluster folder (<clusterFolderUID>-sluis-overview,
-<clusterFolderUID>-sluis-audit): a fixed uid would collide across
+<clusterFolderUID>-sluis-audit, <clusterFolderUID>-sluis-lambda): a fixed uid would collide across
 clusters. The GrafanaFolder is Argo CD sync wave 0 and the dashboards wave 1;
 the operator does not retry a dashboard applied before its folder.
 
-Both dashboards are the files in dashboards/. audit-overview.json is a copy of
+The dashboards are the files in dashboards/. sluis-overview and audit-overview read
+the metrics store; sluis-lambda reads the log store (the Lambda platform's INIT_REPORT
+events carry cold starts, init durations and init timeouts, which no metric does), so
+its datasource variable is a VictoriaLogs one and defaults to dashboards.datasources.logs.
+audit-overview.json is a copy of
 charts/audit/dashboards/audit-overview.json (Helm cannot read outside the chart,
 and the audit chart is a separate release); tests/chart holds the two byte-equal.
 
@@ -27,12 +31,12 @@ query. The datasource uid is only the variable's default, filled in here.
 {{- $d := .Values.dashboards -}}
 {{- $folder := required "dashboards.clusterFolderUID is required: the uid of this cluster's folder in the shared Grafana (the folder.uid of the observability-cluster chart)" $d.clusterFolderUID -}}
 {{- $metrics := required "dashboards.datasources.metrics is required: the uid of the metrics datasource of the Grafana these dashboards live in" $d.datasources.metrics -}}
-{{- $_ := required "dashboards.datasources.logs is required: the uid of the logs datasource of the Grafana these dashboards live in" $d.datasources.logs -}}
+{{- $logs := required "dashboards.datasources.logs is required: the uid of the logs datasource of the Grafana these dashboards live in" $d.datasources.logs -}}
 {{- $fuid := printf "%s-sluis" $folder -}}
 {{- $selector := dict "matchLabels" (dict "observability.truvity.io/grafana" "shared") -}}
 {{- if $d.instanceSelector }}{{ $selector = $d.instanceSelector }}{{ end -}}
 {{- $ann := $d.commonAnnotations | default dict -}}
-{{- $names := dict "sluis-overview" "sluis-overview" "audit-overview" "sluis-audit" -}}
+{{- $names := dict "sluis-overview" "sluis-overview" "audit-overview" "sluis-audit" "sluis-lambda" "sluis-lambda" -}}
 {{- /* Check every uid before rendering any of them. */ -}}
 {{- range $file, $suffix := $names }}
 {{- $u := printf "%s-%s" $folder $suffix }}
@@ -65,7 +69,8 @@ spec:
 {{- $_ := set $dash "uid" (printf "%s-%s" $folder (get $names $name)) }}
 {{- range $v := $dash.templating.list }}
 {{- if eq $v.name "datasource" }}
-{{- $_ := set $v "current" (dict "selected" false "text" $metrics "value" $metrics) }}
+{{- $uid := ternary $logs $metrics (eq $v.query "victoriametrics-logs-datasource") }}
+{{- $_ := set $v "current" (dict "selected" false "text" $uid "value" $uid) }}
 {{- end }}
 {{- end }}
 ---

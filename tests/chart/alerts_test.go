@@ -149,15 +149,20 @@ func TestDashboardsModeRendersTheFolderAndTheDashboards(t *testing.T) {
 				t.Errorf("dashboard uid %q: want prod-sluis-... of at most 40 characters", uid)
 			}
 			uids[uid] = true
-			if !strings.Contains(body.(string), `"value": "prod-metrics"`) {
-				t.Errorf("%s: the metrics datasource uid is not the datasource variable's default", uid)
+			// The Lambda dashboard reads the log store; the others the metrics store.
+			want, other := "prod-metrics", "prod-logs"
+			if uid == "prod-sluis-lambda" {
+				want, other = other, want
+			}
+			if !strings.Contains(body.(string), `"value": "`+want+`"`) || strings.Contains(body.(string), `"value": "`+other+`"`) {
+				t.Errorf("%s: the datasource variable's default is not %s", uid, want)
 			}
 		default:
 			t.Errorf("a %v in dashboards mode", d["kind"])
 		}
 	}
-	if folders != 1 || !uids["prod-sluis-overview"] || !uids["prod-sluis-audit"] || len(uids) != 2 {
-		t.Errorf("%d folders and dashboards %v; want one folder, sluis-overview and audit-overview", folders, uids)
+	if folders != 1 || !uids["prod-sluis-overview"] || !uids["prod-sluis-audit"] || !uids["prod-sluis-lambda"] || len(uids) != 3 {
+		t.Errorf("%d folders and dashboards %v; want one folder, sluis-overview, audit-overview and sluis-lambda", folders, uids)
 	}
 }
 

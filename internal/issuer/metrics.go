@@ -176,7 +176,10 @@ func Route(r *http.Request) string {
 		return "authorize"
 	case "/authorize/callback":
 		return "authorize_callback"
-	case "/oauth/token":
+	case "/token", "/oauth/token":
+		// `/token` is the endpoint discovery names (provider.go); `/oauth/token`
+		// is the protocol library's default path, which the single-valued and
+		// no-store guards also still list.
 		return "token"
 	case "/userinfo":
 		return "userinfo"

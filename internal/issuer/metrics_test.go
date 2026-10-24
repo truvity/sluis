@@ -155,6 +155,7 @@ func TestRouteIsAFixedSet(t *testing.T) {
 	for _, c := range []struct{ method, path, want string }{
 		{"GET", "/.well-known/openid-configuration", "discovery"},
 		{"GET", "/keys", "jwks"},
+		{"POST", "/token", "token"},
 		{"POST", "/oauth/token", "token"},
 		{"GET", "/authorize", "authorize"},
 		{"GET", "/userinfo", "userinfo"},
