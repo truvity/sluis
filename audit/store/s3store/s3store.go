@@ -25,6 +25,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
+	"net/http"
 	"sort"
 	"strings"
 	"time"
@@ -32,6 +34,7 @@ import (
 	"github.com/truvity/sluis/storage/awsotel"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/aws/retry"
 	awshttp "github.com/aws/aws-sdk-go-v2/aws/transport/http"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
@@ -138,6 +141,23 @@ type Options struct {
 	// sent once more if it replaced the credentials. See [Reauth]. Nil (the
 	// default, and the case for static credentials) never retries.
 	Reauth Reauth
+
+	// AttemptTimeout bounds each attempt of a request, separately at each
+	// point an attempt can stall: connecting, the TLS handshake, waiting for
+	// the response's headers once the request is sent, and any pause while
+	// the response body is read. An attempt that stalls fails at this and is
+	// retried, within MaxAttempts, instead of holding the call for as long as
+	// the connection stays open. A slow body that keeps arriving is not cut
+	// off, so it bounds a stall and not the size of an object. Zero keeps the
+	// SDK's own, which waits for the headers for ever. It applies only to a
+	// store built by FromConfig.
+	AttemptTimeout time.Duration
+	// MaxAttempts is how many times a request is tried, the first included.
+	// Zero keeps the SDK's (3, or AWS_MAX_ATTEMPTS).
+	MaxAttempts int
+	// MaxBackoff caps the wait between two attempts. Zero keeps the SDK's
+	// (up to 20 seconds).
+	MaxBackoff time.Duration
 }
 
 // New returns a store.
@@ -218,11 +238,22 @@ func (s *Store) Lock() LockMode {
 	return Compliance
 }
 
-// configure is what the options change about the client. With no endpoint
-// and no path style it changes nothing, so an AWS deployment gets the client
-// it always had.
+// configure is what the options change about the client. With no endpoint,
+// no path style and no bounds on attempts it changes nothing, so an AWS
+// deployment gets the client it always had.
 func configure(o Options) func(*s3.Options) {
 	return func(c *s3.Options) {
+		if o.AttemptTimeout > 0 {
+			c.HTTPClient = boundAttempts(c.HTTPClient, o.AttemptTimeout)
+		}
+		if o.MaxAttempts > 0 {
+			// Applied by the client after this function, onto whichever
+			// retryer it has, so the retry mode the environment chose stays.
+			c.RetryMaxAttempts = o.MaxAttempts
+		}
+		if o.MaxBackoff > 0 && c.Retryer != nil {
+			c.Retryer = retry.AddWithMaxBackoffDelay(c.Retryer, o.MaxBackoff)
+		}
 		if o.Endpoint != "" {
 			c.BaseEndpoint = aws.String(o.Endpoint)
 			// The SDK adds a CRC32 to every put and expects one on every get
@@ -238,6 +269,32 @@ func configure(o Options) func(*s3.Options) {
 			c.UsePathStyle = true
 		}
 	}
+}
+
+// boundAttempts is the client's HTTP client with every point an attempt can
+// stall at bounded by d. The SDK classifies each of these failures as a
+// connection error, which its retryer retries; the caller's context is not
+// touched, so a deadline the caller set still ends the whole call.
+//
+// A client that is not the SDK's buildable one (a caller's own) is returned
+// as it is: its timeouts are the caller's to set.
+func boundAttempts(client s3.HTTPClient, d time.Duration) s3.HTTPClient {
+	var b *awshttp.BuildableClient
+	switch c := client.(type) {
+	case nil:
+		b = awshttp.NewBuildableClient()
+	case *awshttp.BuildableClient:
+		b = c
+	default:
+		return client
+	}
+	return b.
+		WithDialerOptions(func(dialer *net.Dialer) { dialer.Timeout = d }).
+		WithTransportOptions(func(t *http.Transport) {
+			t.TLSHandshakeTimeout = d
+			t.ResponseHeaderTimeout = d
+		}).
+		WithReadTimeout(d)
 }
 
 // Put implements store.Store.

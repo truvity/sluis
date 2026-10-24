@@ -7,6 +7,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/truvity/sluis/storage/awsotel"
 
@@ -86,6 +87,10 @@ func awsConfig(ctx context.Context, b config.Bucket, creds *config.StateRef, sec
 	return awsconfig.LoadDefaultConfig(ctx, opts...)
 }
 
+// archiveMaxBackoff caps the pause between two attempts of an archive request
+// whose attempts are bounded (archive.attemptTimeout).
+const archiveMaxBackoff = 500 * time.Millisecond
+
 // PresetPlan is how one install preset's store is opened: the store's options
 // and the address of its static credentials, if it has any.
 type PresetPlan struct {
@@ -146,7 +151,14 @@ func PlanPresets(d *profile.Deployment, a config.Archive) (map[profile.Preset]Pr
 			// with one, so the layout stays <prefix>records/<profile>/... .
 			Prefix: strings.TrimSuffix(st.Prefix, "/"), Lock: lock,
 			Endpoint: st.Endpoint, PathStyle: st.PathStyle,
+			AttemptTimeout: a.AttemptTimeout.D(), MaxAttempts: a.MaxAttempts,
 		}}
+		if a.AttemptTimeout > 0 {
+			// A request bounded per attempt is retried promptly too: the SDK's
+			// pause before a retry grows to seconds, which would give back
+			// what the bound saved.
+			plan.Options.MaxBackoff = archiveMaxBackoff
+		}
 		switch {
 		case st.External():
 			if name == profile.Attested {

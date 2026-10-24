@@ -8,6 +8,8 @@ archive:
   stateRoot: /audit/main
   ca: /etc/audit/trust/ca.crt
   kmsKey: alias/audit-archive
+  attemptTimeout: 3s
+  maxAttempts: 4
 keys:
   adapter: transit
   instance: audit

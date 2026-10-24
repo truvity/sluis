@@ -4,6 +4,7 @@ package cli
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/truvity/sluis/audit/internal/config"
 	"github.com/truvity/sluis/audit/profile"
@@ -201,6 +202,30 @@ func TestCredentialsRefIsOneSourceOnAnEndpoint(t *testing.T) {
 		_, err := profile.ParseDeployment([]byte("apiVersion: " + profile.DeploymentAPIVersion + "\npresets:\n  operational: " + doc + "\nprofiles:\n  a: {frameworks: [history]}\n"))
 		if err == nil || !strings.Contains(err.Error(), "credentials_ref") {
 			t.Errorf("%s: %v", name, err)
+		}
+	}
+}
+
+// The archive's request bounds reach every preset's store, with a short pause
+// between attempts so that a retry is prompt; unset, the store keeps the SDK's.
+func TestTheArchiveBoundsReachEveryStore(t *testing.T) {
+	a := config.Archive{KMSKey: "alias/audit-default", AttemptTimeout: config.Duration(2 * time.Second), MaxAttempts: 3}
+	plans, err := PlanPresets(deploymentFor(t, mixedPresets), a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, p := range plans {
+		if p.Options.AttemptTimeout != 2*time.Second || p.Options.MaxAttempts != 3 || p.Options.MaxBackoff != archiveMaxBackoff {
+			t.Errorf("%s: %+v", name, p.Options)
+		}
+	}
+	plans, err = PlanPresets(deploymentFor(t, mixedPresets), config.Archive{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, p := range plans {
+		if p.Options.AttemptTimeout != 0 || p.Options.MaxAttempts != 0 || p.Options.MaxBackoff != 0 {
+			t.Errorf("%s: bounds set that nobody asked for: %+v", name, p.Options)
 		}
 	}
 }
