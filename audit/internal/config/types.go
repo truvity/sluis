@@ -149,12 +149,22 @@ type (
 	// process's own identity, or below a directory a secrets operator projected
 	// the documents into. One of them, and only where a preset names
 	// `credentials_ref`.
+	//
+	// AttemptTimeout and MaxAttempts bound each request to the stores: an
+	// attempt that stalls for AttemptTimeout fails and is tried again, up to
+	// MaxAttempts in all. Unset keeps the SDK's own (no bound, 3 attempts),
+	// except in the writer and the writer Lambda, which start with 2s and 3
+	// (WriterArchiveAttemptTimeout, WriterArchiveMaxAttempts): their start-up
+	// writes the catalogues before taking a record, and on a function
+	// platform one request left hanging would outlast the start-up limit.
 	Archive struct {
-		StateRoot string `json:"stateRoot,omitempty"`
-		SluisRoot string `json:"sluisRoot,omitempty"`
-		SluisDir  string `json:"sluisDir,omitempty"`
-		CA        string `json:"ca,omitempty"`
-		KMSKey    string `json:"kmsKey,omitempty"`
+		StateRoot      string   `json:"stateRoot,omitempty"`
+		SluisRoot      string   `json:"sluisRoot,omitempty"`
+		SluisDir       string   `json:"sluisDir,omitempty"`
+		CA             string   `json:"ca,omitempty"`
+		KMSKey         string   `json:"kmsKey,omitempty"`
+		AttemptTimeout Duration `json:"attemptTimeout,omitempty"`
+		MaxAttempts    int      `json:"maxAttempts,omitempty"`
 	}
 
 	// Sink is the writer a process records through. Expect says what the

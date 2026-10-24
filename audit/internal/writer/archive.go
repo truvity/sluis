@@ -7,8 +7,12 @@ import (
 	"fmt"
 	"io/fs"
 	"path"
+	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
+
+	"golang.org/x/sync/errgroup"
 
 	"github.com/truvity/sluis/audit"
 	"github.com/truvity/sluis/audit/internal/recobj"
@@ -51,8 +55,25 @@ type SchemaArchive struct {
 	// exists to prevent.
 	RetainUntil func(at time.Time) time.Time
 	Now         func() time.Time
+	// Parallel is how many of a catalogue's schemas are written at once.
+	// Zero is DefaultParallel. A writer ensures every catalogue it runs with
+	// before it takes a record, which on a function platform is inside the
+	// platform's start-up limit: one round trip per schema, one after
+	// another, is what made that start slow.
+	Parallel int
 
 	done sync.Map
+}
+
+// DefaultParallel is how many schemas SchemaArchive writes at once unless told
+// otherwise.
+const DefaultParallel = 8
+
+// Archived is what one ensure did: how many objects it put or found, and how
+// many of those were already in the archive.
+type Archived struct {
+	Objects int
+	Existed int
 }
 
 // SchemaPrefix is where the things that describe records live, away from the
@@ -62,25 +83,88 @@ const SchemaPrefix = "schema"
 // EnsureCatalogue writes the catalogue at catalogue/<app>/<version>, and its
 // extension schemas beside the record's under schema/.
 func (a *SchemaArchive) EnsureCatalogue(ctx context.Context, c *catalogue.Catalogue) error {
+	_, err := a.EnsureCatalogueCounted(ctx, c)
+	return err
+}
+
+// EnsureCatalogueCounted is EnsureCatalogue, saying how many objects it wrote
+// or found already there. A catalogue this archive has already ensured counts
+// nothing.
+//
+// The writes come in two groups, and the order between them is the point:
+//
+//  1. The catalogue document, alone. It is the one object whose bytes are
+//     compared when its key is taken, and a different document under the same
+//     version is a conflict the writer refuses to run on. Nothing else of that
+//     version is written before the comparison has passed, so a conflicting
+//     catalogue never leaves schemas it does not describe under the version's
+//     directory, locked beside a document that is not theirs.
+//  2. The extension schemas, at most Parallel at a time. Each is written once
+//     and a taken key is success, so they are independent of one another and
+//     their order means nothing. The first that fails stops the rest and is
+//     returned naming its key, and the catalogue is not marked done, so the
+//     next call writes what is missing.
+func (a *SchemaArchive) EnsureCatalogueCounted(ctx context.Context, c *catalogue.Catalogue) (Archived, error) {
 	mark := "catalogue/" + c.Source + "@" + c.Version
 	if _, seen := a.done.Load(mark); seen {
-		return nil
+		return Archived{}, nil
 	}
 	for what, part := range map[string]string{"source": c.Source, "version": c.Version} {
 		if why := store.KeyComponent(part); why != "" {
-			return fmt.Errorf("writer: the catalogue's %s %q %s, so it has no key", what, part, why)
+			return Archived{}, fmt.Errorf("writer: the catalogue's %s %q %s, so it has no key", what, part, why)
 		}
 	}
-	if err := a.putCatalogue(ctx, c); err != nil {
-		return err
+	existed, err := a.putCatalogue(ctx, c)
+	if err != nil {
+		return Archived{}, err
 	}
-	for id, raw := range c.Schemas() {
-		if err := a.put(ctx, store.SchemaDir(c.Source, c.Version)+schemaFileName(id), raw, "application/schema+json"); err != nil {
-			return err
-		}
+	n := Archived{Objects: 1}
+	if existed {
+		n.Existed++
 	}
+
+	schemas := c.Schemas()
+	ids := make([]string, 0, len(schemas))
+	for id := range schemas {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	dir := store.SchemaDir(c.Source, c.Version)
+	var taken atomic.Int64
+	g, gctx := errgroup.WithContext(ctx)
+	g.SetLimit(a.parallel())
+	for _, id := range ids {
+		key, raw := dir+schemaFileName(id), schemas[id]
+		g.Go(func() error {
+			if gctx.Err() != nil {
+				// Another write failed, or the caller gave up: nothing more is
+				// sent, and the error that stopped it is the one returned.
+				return gctx.Err()
+			}
+			existed, err := a.put(gctx, key, raw, "application/schema+json")
+			if err != nil {
+				return fmt.Errorf("writer: archiving %s: %w", key, err)
+			}
+			if existed {
+				taken.Add(1)
+			}
+			return nil
+		})
+	}
+	if err := g.Wait(); err != nil {
+		return Archived{}, err
+	}
+	n.Objects += len(ids)
+	n.Existed += int(taken.Load())
 	a.done.Store(mark, true)
-	return nil
+	return n, nil
+}
+
+func (a *SchemaArchive) parallel() int {
+	if a.Parallel > 0 {
+		return a.Parallel
+	}
+	return DefaultParallel
 }
 
 // EnsureRecord copies the record's own schema and proto for a major version.
@@ -99,7 +183,7 @@ func (a *SchemaArchive) EnsureRecord(ctx context.Context, schemaVersion string) 
 	if err != nil {
 		return err
 	}
-	if err := a.put(ctx, base+"/"+schemagen.FileName, published, "application/schema+json"); err != nil {
+	if _, err := a.put(ctx, base+"/"+schemagen.FileName, published, "application/schema+json"); err != nil {
 		return err
 	}
 	protos, err := fs.ReadDir(audit.Proto, fmt.Sprintf("proto/audit/v%d", major))
@@ -111,7 +195,7 @@ func (a *SchemaArchive) EnsureRecord(ctx context.Context, schemaVersion string) 
 		if err != nil {
 			return err
 		}
-		if err := a.put(ctx, base+"/"+e.Name(), body, "text/plain"); err != nil {
+		if _, err := a.put(ctx, base+"/"+e.Name(), body, "text/plain"); err != nil {
 			return err
 		}
 	}
@@ -132,39 +216,40 @@ func (a *SchemaArchive) retainUntil() time.Time {
 }
 
 // putCatalogue writes the catalogue document once. A key already present with
-// the same bytes is success; with other bytes, a conflict.
-func (a *SchemaArchive) putCatalogue(ctx context.Context, c *catalogue.Catalogue) error {
+// the same bytes is success, and says it existed; with other bytes, a conflict.
+func (a *SchemaArchive) putCatalogue(ctx context.Context, c *catalogue.Catalogue) (existed bool, err error) {
 	key := store.CatalogueKey(c.Source, c.Version)
 	body := c.Document()
-	err := a.Store.Put(ctx, store.Object{
+	err = a.Store.Put(ctx, store.Object{
 		Key: key, Body: body, RetainUntil: a.retainUntil(), ContentType: "application/yaml",
 		Metadata: map[string]string{store.MetaSHA256: recobj.SHA256(body)},
 	})
 	if !errors.Is(err, store.ErrExists) {
-		return err
+		return false, err
 	}
 	held, err := a.Store.Get(ctx, key)
 	if err != nil {
-		return fmt.Errorf("writer: reading %s: %w", key, err)
+		return false, fmt.Errorf("writer: reading %s: %w", key, err)
 	}
 	if !bytes.Equal(held, body) {
-		return fmt.Errorf("%w: %s holds %d bytes (sha256 %s) and this writer has %d (sha256 %s)",
+		return false, fmt.Errorf("%w: %s holds %d bytes (sha256 %s) and this writer has %d (sha256 %s)",
 			ErrCatalogueConflict, key, len(held), recobj.SHA256(held), len(body), recobj.SHA256(body))
 	}
-	return nil
+	return true, nil
 }
 
-func (a *SchemaArchive) put(ctx context.Context, key string, body []byte, contentType string) error {
-	err := a.Store.Put(ctx, store.Object{
+// put writes one description and says whether its key was already taken.
+func (a *SchemaArchive) put(ctx context.Context, key string, body []byte, contentType string) (existed bool, err error) {
+	err = a.Store.Put(ctx, store.Object{
 		Key: key, Body: body, RetainUntil: a.retainUntil(), ContentType: contentType,
 	})
 	if errors.Is(err, store.ErrExists) {
 		// A catalogue version is immutable by construction: a changed
 		// catalogue is a new version. Finding the key taken means another
 		// writer got there first, which is the outcome either way.
-		return nil
+		return true, nil
 	}
-	return err
+	return false, err
 }
 
 // schemaFileName turns a schema's identifier into a file name, keeping the last

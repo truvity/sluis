@@ -103,10 +103,19 @@
         ]
       },
       "properties": {
+        "attemptTimeout": {
+          "$ref": "#/$defs/duration",
+          "description": "How long one attempt of a request to the stores may stall -- connecting, the TLS handshake, waiting for the answer's headers, a pause in reading its body -- before it fails and is tried again. A slow body that keeps arriving is not cut off. Unset is `2s` in the writer and the writer Lambda and no bound in every other process."
+        },
         "ca": {
           "description": "A bundle of certificate authorities, for a store whose certificate is not signed by a public root.",
           "minLength": 1,
           "type": "string"
+        },
+        "maxAttempts": {
+          "description": "How many times a request to the stores is tried, the first included. Unset is 3 (the SDK's own, or AWS_MAX_ATTEMPTS outside the writer).",
+          "minimum": 1,
+          "type": "integer"
         },
         "sluisDir": {
           "description": "The directory a secrets operator projects the documents a preset's `credentials_ref` names into: the document is read at `<sluisDir>/<credentials_ref>`, and read again when it changes and before the credential expires. Mount the Secret as a directory, not with subPath, so the file follows the rotation. Exclusive with `sluisRoot`.",

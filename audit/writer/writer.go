@@ -124,6 +124,11 @@ type Config struct {
 	// Evidence says, in the writer's start-up record, which configuration it
 	// ran under: digests of the files it read. Empty says nothing.
 	Evidence Evidence
+	// CatalogueParallel is how many of a catalogue's schemas Open writes to the
+	// archive at once. Default 8. The catalogue document itself is always
+	// written, and compared, before any of its schemas.
+	CatalogueParallel int
+
 	// FromStream says this writer consumes a stream its own installation's
 	// receivers publish to, so a record arriving already stamped keeps that
 	// stamp. A consumer reading messages has no caller to verify, and
@@ -232,9 +237,11 @@ func Open(ctx context.Context, c Config) (*Writer, error) {
 	// Read once before anything is written. After that, a failed refresh
 	// keeps the last answer: forgetting a hold is worse than acting on a list
 	// a minute old.
+	started := time.Now()
 	if err := holds.Refresh(ctx); err != nil {
 		return nil, fmt.Errorf("writer: reading the legal holds: %w", err)
 	}
+	phase(ctx, log, "holds", started)
 
 	counts, err := telemetry.NewWriter(meter)
 	if err != nil {
@@ -257,12 +264,20 @@ func Open(ctx context.Context, c Config) (*Writer, error) {
 	// means something else than what the archive holds under it is a writer
 	// that refuses to run, not one that finds out on its first record
 	// (docs/reference/audit/bucket-contract.md, Catalogue).
-	described := &inner.SchemaArchive{Store: c.Archive, RetainUntil: keep}
-	for _, cat := range append([]*catalogue.Catalogue{common}, c.Catalogues...) {
-		if err := described.EnsureCatalogue(ctx, cat); err != nil {
+	described := &inner.SchemaArchive{Store: c.Archive, RetainUntil: keep, Parallel: c.CatalogueParallel}
+	started = time.Now()
+	var archived inner.Archived
+	ensured := append([]*catalogue.Catalogue{common}, c.Catalogues...)
+	for _, cat := range ensured {
+		n, err := described.EnsureCatalogueCounted(ctx, cat)
+		if err != nil {
 			return nil, fmt.Errorf("writer: catalogue %s %s: %w", cat.Source, cat.Version, err)
 		}
+		archived.Objects += n.Objects
+		archived.Existed += n.Existed
 	}
+	phase(ctx, log, "ensure_catalogues", started, slog.Int("catalogues", len(ensured)),
+		slog.Int("objects", archived.Objects), slog.Int("existed", archived.Existed))
 
 	self := c.Self
 	w, err := inner.New(&inner.Writer{
@@ -350,10 +365,12 @@ func Open(ctx context.Context, c Config) (*Writer, error) {
 	for name, p := range frameworks {
 		versions[name] = p.Version
 	}
+	started = time.Now()
 	if err := w.RecordCompositions(ctx, c.Profiles, versions); err != nil {
 		_ = w.Close(context.Background())
 		return nil, err
 	}
+	phase(ctx, log, "record_compositions", started, slog.Int("profiles", len(c.Profiles)))
 
 	out := &Writer{inner: w, holds: holds}
 	watching, stop := context.WithCancel(context.Background())
@@ -374,6 +391,15 @@ func Open(ctx context.Context, c Config) (*Writer, error) {
 		w.Registered(ctx, cat)
 	}
 	return out, nil
+}
+
+// phase logs how long one step of Open took, so that a slow start says which
+// step it was. On a function platform the whole of Open is inside the
+// platform's start-up limit.
+func phase(ctx context.Context, log *slog.Logger, name string, started time.Time, attrs ...any) {
+	took := time.Since(started)
+	args := append([]any{slog.String("phase", name), slog.Float64("duration_ms", float64(took.Microseconds())/1000)}, attrs...)
+	log.InfoContext(ctx, "writer start-up phase", args...)
 }
 
 // Guarantees implements sink.Guarantor.
