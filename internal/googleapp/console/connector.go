@@ -74,8 +74,10 @@ type SignInConnector interface {
 	SignInURL(state string) (string, error)
 	// Identify turns the callback's code into the address that
 	// authenticated. Nothing else is taken from it: what that address may
-	// do is decided by the directory and the policy.
-	Identify(ctx context.Context, code string) (string, error)
+	// do is decided by the directory and the policy. state is the
+	// callback's, already held to the browser: a provider that sent a nonce
+	// derived from it checks the answer against it.
+	Identify(ctx context.Context, code, state string) (string, error)
 }
 
 // ConsentRedirects is where a backend's CONSENT flow comes back: always the

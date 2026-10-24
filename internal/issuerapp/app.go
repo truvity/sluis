@@ -1166,12 +1166,21 @@ func (g *googleSignIn) URLContext(ctx context.Context, state string) (string, er
 	return client.SignInURL(state), nil
 }
 
-func (g *googleSignIn) Identify(ctx context.Context, code string) (string, error) {
+// Identify is refused: a Google sign-in is checked against the state it was
+// started with (its nonce), which only [googleSignIn.IdentifyAccount] is given.
+func (g *googleSignIn) Identify(context.Context, string) (string, error) {
+	return "", errors.New("the Google sign-in needs the callback's state to check its nonce")
+}
+
+// IdentifyAccount implements [issuer.AccountSignIn]: the ID token must carry the
+// nonce of state, and the account's `sub` is what the issuer pins the address to.
+func (g *googleSignIn) IdentifyAccount(ctx context.Context, code, state string) (email, subject string, err error) {
 	client, err := g.client.Get(ctx)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
-	return google.Identify(ctx, client, code)
+	account, err := google.IdentifyAccount(ctx, client, code, state)
+	return account.Email, account.Subject, err
 }
 
 // signingKey reads the key this installation was given.

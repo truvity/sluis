@@ -740,7 +740,7 @@ func (s *ConsoleServer) signInCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	access.SetCookie(w, access.LoginCookie("", s.sessions.Secure(), 0))
 
-	email, err := connector.Identify(r.Context(), r.URL.Query().Get("code"))
+	email, err := connector.Identify(r.Context(), r.URL.Query().Get("code"), state)
 	if err != nil && moduleUnavailable(err) {
 		s.signInUnavailable(w, r, connector.Kind(), err)
 		return

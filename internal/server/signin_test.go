@@ -30,7 +30,7 @@ func (signInConnector) AuthURL(string) (string, error) {
 func (c signInConnector) SignInURL(state string) (string, error) {
 	return "https://provider.example/authorize?state=" + state, nil
 }
-func (c signInConnector) Identify(context.Context, string) (string, error) {
+func (c signInConnector) Identify(context.Context, string, string) (string, error) {
 	if c.fail != nil {
 		return "", c.fail
 	}
