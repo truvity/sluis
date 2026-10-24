@@ -299,6 +299,9 @@ func New(ctx *pulumi.Context, name string, args *Args, opts ...pulumi.ResourceOp
 	if err := checkCatalogues(ctx, a, child); err != nil {
 		return nil, err
 	}
+	if err := checkExistingBuckets(ctx, a, child); err != nil {
+		return nil, err
+	}
 
 	// ---- the roles come first: the seal key's policy names the notary's.
 	var writerRole, notaryRole *iam.Role

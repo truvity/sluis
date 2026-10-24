@@ -437,7 +437,7 @@ func sealKeyPolicy(accountRootArn, notaryRoleArn string, admins []string) (strin
 func ArchiveLockGuard(bucketArn string, breakglass []string) map[string]any {
 	return statement{
 		"Sid": "LockBreakglassOnly", "Effect": "Deny", "Principal": "*",
-		"Action":    []string{"s3:BypassGovernanceRetention", "s3:DeleteObjectVersion", "s3:PutBucketObjectLockConfiguration"},
+		"Action":    append([]string(nil), ArchiveGuardActions...),
 		"Resource":  []string{bucketArn, bucketArn + "/*"},
 		"Condition": map[string]any{"ArnNotLike": map[string]any{"aws:PrincipalArn": dedupe(sortedCopy(breakglass))}},
 	}
