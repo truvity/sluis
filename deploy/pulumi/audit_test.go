@@ -502,3 +502,17 @@ func TestAuditProfilesNeedPresets(t *testing.T) {
 		t.Errorf("profiles with no presets: %v", err)
 	}
 }
+
+// The audit library's handling of an existing bucket without the lock guard is
+// passed through (audit 2026-10-18, A5): a value it does not know is its refusal.
+func TestAuditExistingBucketLockGuardIsPassedThrough(t *testing.T) {
+	au := installAudit(t)
+	au.Archive.ExistingBucketLockGuard = "enforce"
+	if _, _, err := buildLambda(t, auditEstate(t, au, nil)); err == nil || !strings.Contains(err.Error(), "ExistingBucketLockGuard") {
+		t.Errorf("an unknown mode: %v, want the audit library's refusal", err)
+	}
+	au.Archive.ExistingBucketLockGuard = auditpulumi.LockGuardRequire
+	if _, _, err := buildLambda(t, auditEstate(t, au, nil)); err != nil {
+		t.Errorf("require with created buckets only: %v", err)
+	}
+}
