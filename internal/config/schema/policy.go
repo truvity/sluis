@@ -179,7 +179,7 @@ func outlineTableSchema() m {
 			"ignore": strList("Addresses never demoted, removed or suspended: the API key's owner among them. Joined across files."),
 			"collections": table("Each collection, by name as Outline spells it.", obj("A collection's binding.", m{
 				"mode":       m{"enum": []string{"extend", "strict"}, "description": "`extend` (the default) only adds grants; `strict` also removes the group grants and direct members the policy does not name."},
-				"directory":  str("The connected directory, by workspace id or primary domain, that every bound group's members must come from. A collection whose groups reach outside it is held."),
+				"directory":  m{"type": "string", "pattern": "^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$", "description": "The connected directory, by its primary domain (`example.com`), that every bound group's members must come from. A collection whose groups reach outside it is held."},
 				"adopt":      str("The id of an existing collection to adopt: for a renamed one, or when two carry the name."),
 				"read":       groups("read"),
 				"read_write": groups("read_write"),

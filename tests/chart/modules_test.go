@@ -1,12 +1,15 @@
 package chart_test
 
 import (
+	"os"
 	"path/filepath"
 	"reflect"
 	"sort"
 	"testing"
 
 	"sigs.k8s.io/yaml"
+
+	"github.com/truvity/sluis/internal/config"
 )
 
 // The chart renders a workload per module, and binds the permissions to the
@@ -314,5 +317,172 @@ func TestTheGitHubAndSlackModulesServeTheIssuerOnRPC(t *testing.T) {
 		if audiences["call-"+m] != m {
 			t.Errorf("the issuer projects %q for %s, want %q", audiences["call-"+m], m, m)
 		}
+	}
+}
+
+// The Outline module runs on its own, as the Slack module does: a Deployment,
+// ServiceAccount, document, budget, Service on /rpc and auth-delegator binding
+// of its own, a sluis-outline/v1 document the module loads, the token it
+// presents to the console in its pod alone, and the issuer routing the
+// console's Outline pages to it by `outline.remote` with a call token for its
+// audience. The issuer never runs it, and the controllers' Role is not its.
+func TestTheOutlineModuleRunsOnItsOwn(t *testing.T) {
+	docs := render(t, filepath.Join("..", "cases", "sluis", "outline-module", "values.yaml"), "default")
+	byName := map[string]map[string]any{}
+	for _, d := range docs {
+		k, _ := d["kind"].(string)
+		n, _ := dig(d, "metadata", "name")
+		byName[k+"/"+n.(string)] = d
+	}
+	for _, want := range []string{
+		"Deployment/sluis-outline", "ServiceAccount/sluis-outline", "ConfigMap/sluis-outline-config",
+		"PodDisruptionBudget/sluis-outline", "Service/sluis-outline", "NetworkPolicy/sluis-outline",
+		"ClusterRoleBinding/sluis-default-outline-auth-delegator",
+	} {
+		if byName[want] == nil {
+			t.Errorf("no %s", want)
+		}
+	}
+	if byName["Role/sluis-controllers"] != nil {
+		t.Error("the controllers' Role is rendered, and the Outline module reports into no ConfigMap")
+	}
+	subjects, _ := dig(byName["ClusterRoleBinding/sluis-default-outline-auth-delegator"], "subjects")
+	if s, _ := subjects.([]any); len(s) != 1 || s[0].(map[string]any)["name"] != "sluis-outline" {
+		t.Errorf("system:auth-delegator is bound to %v, want sluis-outline", subjects)
+	}
+
+	// The module's document: its apiVersion, and what the chart fills.
+	raw, _ := dig(byName["ConfigMap/sluis-outline-config"], "data", "config.yaml")
+	file := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(file, []byte(raw.(string)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := config.LoadOutline(file)
+	if err != nil {
+		t.Fatalf("the Outline module's document does not load: %v", err)
+	}
+	if loaded.APIVersion != config.APIVersion("sluis-outline") {
+		t.Errorf("apiVersion %q", loaded.APIVersion)
+	}
+	if loaded.ConsoleURL != "http://sluis.default.svc:8080/console" {
+		t.Errorf("consoleURL %q, want this release's console", loaded.ConsoleURL)
+	}
+	if loaded.Policy == nil || loaded.Policy.File != "/var/run/access-issuer/policy/policy.yaml" {
+		t.Errorf("policy %+v, want the policy the chart mounts", loaded.Policy)
+	}
+	if loaded.TokenFile != "" {
+		t.Errorf("tokenFile %q, want the module's default, where the chart mounts the token", loaded.TokenFile)
+	}
+	if loaded.Outline == nil {
+		t.Fatal("the Outline module's document has no outline section: the chart writes outline.serve")
+	}
+	if serve := loaded.Outline.Serve; serve == nil || serve.Address != ":8081" || serve.Audience != "outline" ||
+		!reflect.DeepEqual(serve.Issuers, []string{"system:serviceaccount:default:sluis-issuer"}) {
+		t.Errorf("outline.serve is %+v, want :8081, outline, the issuer's account alone", serve)
+	}
+
+	// The module's pod: its own command, the rpc port, and the token it presents
+	// to the console, minted for the exchange audience.
+	pod, _ := dig(byName["Deployment/sluis-outline"], "spec", "template", "spec")
+	container := pod.(map[string]any)["containers"].([]any)[0].(map[string]any)
+	if args := container["args"].([]any); args[0] != "outline" {
+		t.Errorf("the outline container runs %v", args)
+	}
+	var rpc bool
+	for _, p := range container["ports"].([]any) {
+		rpc = rpc || (p.(map[string]any)["name"] == "rpc" && p.(map[string]any)["containerPort"] == float64(8081))
+	}
+	if !rpc {
+		t.Error("the outline container has no rpc port on 8081")
+	}
+	mounts := map[string]string{}
+	for _, m := range container["volumeMounts"].([]any) {
+		mounts[m.(map[string]any)["name"].(string)] = m.(map[string]any)["mountPath"].(string)
+	}
+	if mounts["outline-token"] != filepath.Dir(config.OutlineTokenFile) {
+		t.Errorf("the outline-token volume is mounted at %q, want %q", mounts["outline-token"], filepath.Dir(config.OutlineTokenFile))
+	}
+	audiences := func(deployment string) map[string]string {
+		volumes, _ := dig(byName["Deployment/"+deployment], "spec", "template", "spec", "volumes")
+		out := map[string]string{}
+		for _, v := range volumes.([]any) {
+			vol := v.(map[string]any)
+			if src, ok := dig(vol, "projected", "sources"); ok {
+				if a, ok := dig(src.([]any)[0].(map[string]any), "serviceAccountToken", "audience"); ok {
+					out[vol["name"].(string)] = a.(string)
+				}
+			}
+		}
+		return out
+	}
+	if got := audiences("sluis-outline")["outline-token"]; got != "sluis" {
+		t.Errorf("the module's token is minted for %q, want the exchange audience sluis", got)
+	}
+	if got := audiences("sluis-issuer")["call-outline"]; got != "outline" {
+		t.Errorf("the issuer's call token for the module is minted for %q, want outline", got)
+	}
+	if _, ok := audiences("sluis-issuer")["outline-token"]; ok {
+		t.Error("the issuer's pod mounts the Outline module's own token: the issuer never runs it")
+	}
+
+	// The issuer's document routes the console's Outline pages to the module.
+	raw, _ = dig(byName["ConfigMap/sluis-issuer-config"], "data", "config.yaml")
+	var issuer map[string]any
+	if err := yaml.Unmarshal([]byte(raw.(string)), &issuer); err != nil {
+		t.Fatal(err)
+	}
+	remote, _ := dig(issuer, "outline", "remote")
+	want := map[string]any{
+		"url": "http://sluis-outline.default.svc:8081", "audience": "outline", "tokenFile": "/var/run/secrets/sluis/outline/token",
+	}
+	if !reflect.DeepEqual(remote, want) {
+		t.Errorf("outline.remote is %v, want %v", remote, want)
+	}
+	if section, _ := issuer["outline"].(map[string]any); len(section) != 1 {
+		t.Errorf("the issuer's outline section is %v, want the remote alone", section)
+	}
+
+	// The fences: /rpc from the issuer's pods only, the console from the
+	// module's, and the issuer reaching the module.
+	from, _ := dig(byName["NetworkPolicy/sluis-outline"], "spec", "ingress")
+	if rules := from.([]any); len(rules) != 1 {
+		t.Errorf("the module takes %d ingress rules, want one", len(rules))
+	} else {
+		peer := rules[0].(map[string]any)["from"].([]any)[0].(map[string]any)
+		if c, _ := dig(peer, "podSelector", "matchLabels", "app.kubernetes.io/component"); c != "issuer" {
+			t.Errorf("the module takes /rpc from component %v, want issuer", c)
+		}
+	}
+	peers := func(name string) []string {
+		egress, _ := dig(byName["NetworkPolicy/"+name], "spec", "egress")
+		var out []string
+		for _, r := range egress.([]any) {
+			to, _ := r.(map[string]any)["to"].([]any)
+			for _, t := range to {
+				if c, ok := dig(t.(map[string]any), "podSelector", "matchLabels", "app.kubernetes.io/component"); ok {
+					out = append(out, c.(string))
+				}
+			}
+		}
+		return out
+	}
+	if got := peers("sluis-outline"); !reflect.DeepEqual(got, []string{"issuer"}) {
+		t.Errorf("the module reaches the pods of %v, want the issuer's console", got)
+	}
+	if got := peers("sluis-issuer"); !reflect.DeepEqual(got, []string{"outline"}) {
+		t.Errorf("the issuer reaches the pods of %v, want the module", got)
+	}
+	ingress, _ := dig(byName["NetworkPolicy/sluis-issuer"], "spec", "ingress")
+	var callers any
+	for _, r := range ingress.([]any) {
+		sources, _ := r.(map[string]any)["from"].([]any) // the gateway's rule is empty without a namespace
+		for _, f := range sources {
+			if exprs, ok := dig(f.(map[string]any), "podSelector", "matchExpressions"); ok {
+				callers = exprs.([]any)[0].(map[string]any)["values"]
+			}
+		}
+	}
+	if !reflect.DeepEqual(callers, []any{"outline"}) {
+		t.Errorf("the issuer takes its console from the pods of %v, want the module's", callers)
 	}
 }

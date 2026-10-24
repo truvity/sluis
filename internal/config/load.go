@@ -44,12 +44,12 @@ func Validate(name string, doc any) error {
 
 // Document is what [Load] reads: a service document or the policy document.
 type Document interface {
-	Sluis | Serve | ControllerGitHub | ControllerSlack | PolicyDocument
+	Sluis | Serve | ControllerGitHub | ControllerSlack | SluisOutline | PolicyDocument
 }
 
 // Service is a service document: what a process is started with.
 type Service interface {
-	Sluis | Serve | ControllerGitHub | ControllerSlack
+	Sluis | Serve | ControllerGitHub | ControllerSlack | SluisOutline
 }
 
 // Load reads one document from a file, holds it to its schema and decodes it,
@@ -82,6 +82,11 @@ func Load[T Document](file string) (*T, error) {
 	case *ControllerSlack:
 		if err = loadService(file, "controller-slack", v, func(l *legacyPolicy) { v.legacy = l }); err == nil {
 			err = checked(file, v.ValidateRoutes())
+		}
+	case *SluisOutline:
+		var doc *SluisOutline
+		if doc, err = LoadOutline(file); err == nil {
+			*v = *doc
 		}
 	}
 	if err != nil {
@@ -139,6 +144,8 @@ func PolicyOf[S Service](svc *S, fallback *policy.Policy) (*PolicyDocument, erro
 		ref, legacy = v.Policy, v.legacy
 	case *ControllerSlack:
 		ref, legacy = v.Policy, v.legacy
+	case *SluisOutline:
+		ref = v.Policy
 	}
 	switch {
 	case legacy != nil:
@@ -338,6 +345,8 @@ func APIVersion(document string) string {
 		return Group + "/sluis-backup/v1"
 	case "sluis-google":
 		return Group + "/sluis-google/v1"
+	case "sluis-outline":
+		return Group + "/sluis-outline/v1"
 	}
 	return Group + "/" + document + "/v2"
 }

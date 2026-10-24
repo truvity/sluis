@@ -107,11 +107,9 @@ func TestEachModuleRefusesItsWritesUnderMaintenance(t *testing.T) {
 
 // A method added to a service without a thought is a write, and a service added
 // without a module is the issuer's: this holds every service the console serves
-// to a module of its own, apart from the ones that are the issuer's: the
-// settings, the access model, and the Outline controller the issuer hosts
-// (docs/decisions/0077).
+// to a module of its own, apart from the two that are the issuer's.
 func TestEveryOperatorServiceIsMappedToAModule(t *testing.T) {
-	issuers := map[string]bool{"SettingsService": true, "AccessService": true, "OutlineService": true}
+	issuers := map[string]bool{"SettingsService": true, "AccessService": true}
 	seen := 0
 	protoregistry.GlobalFiles.RangeFilesByPackage("directoryroster.v1", func(f protoreflect.FileDescriptor) bool {
 		for i := range f.Services().Len() {

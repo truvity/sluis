@@ -64,6 +64,10 @@ controllers:
   slack:
     interval: 10m
     enabledWorkspaces: [example]
+  outline:
+    interval: 2m
+    shareScan: 1h
+    enabledWorkspaces: [wiki]
 
 cloudflare:
   forbiddenPermissionGroups: [Workers Scripts Write]
@@ -122,3 +126,10 @@ access:
       example:
         channels:
           ops: {private: true, from: [all:access-roster:operator]}
+  outline:
+    workspaces:
+      wiki:
+        roles: {admin: [all:access-roster:operator]}
+        ignore: [key.owner@example.test]
+        collections:
+          General: {mode: strict, read_write: [all:access-roster:viewer], admin: [all:access-roster:operator]}

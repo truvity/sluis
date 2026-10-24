@@ -163,16 +163,6 @@ type ConsoleDeps struct {
 	// GitHubHTTP makes the calls to GitHub that connecting and
 	// disconnecting need. Nil is a client with a short timeout.
 	GitHubHTTP *http.Client
-	// OutlineWorkspaces is where Outline workspaces are connected. Nil
-	// connects none. OutlineStatus is what the Outline controller last
-	// reported, OutlineEnabled the workspaces it acts in (the policy's
-	// `controllers.outline.enabledWorkspaces`), and OutlineHTTP the client
-	// connecting asks Outline through (nil keeps private addresses and refuses
-	// loopback and link-local ones).
-	OutlineWorkspaces OutlineWorkspaces
-	OutlineStatus     OutlineStatusReports
-	OutlineEnabled    []string
-	OutlineHTTP       *http.Client
 	// Cloudflare is the minter of Cloudflare credentials. Nil is a
 	// deployment with no `cloudflare` section and no Cloudflare page; it is
 	// connected late, by [ConsoleServer.UseCloudflare].

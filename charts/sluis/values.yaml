@@ -855,7 +855,8 @@ route:
 # One NetworkPolicy per module, when enabled.
 #   * Ingress: the issuer takes the gateway and the namespaces that call it,
 #     and the controllers' pods; github, google and cloudflare take /rpc from
-#     the issuer's pods only (so does slack, whose pages the console calls).
+#     the issuer's pods only (so do slack and outline, whose pages the console
+#     calls).
 #   * Egress (below): DNS, the module's peers, HTTPS and what `extra` adds.
 networkPolicy:
   enabled: false
@@ -883,6 +884,7 @@ networkPolicy:
       slack: []
       google: []
       cloudflare: []
+      outline: []
 
 serviceAccount:
   name: ""
@@ -1112,13 +1114,14 @@ tolerations: []
 # rendered, and each other module when it is enabled. For each module:
 # a Deployment, a ServiceAccount named <full name>-<module>, a ConfigMap with
 # the module's own document, a PodDisruptionBudget and, with
-# `networkPolicy.enabled`, a NetworkPolicy. github, slack, google and cloudflare
-# get a Service on /rpc as well. The issuer keeps the release's own Service, so the
-# routes are unchanged. The issuer, and only the issuer, may scale with an HPA.
+# `networkPolicy.enabled`, a NetworkPolicy. github, slack, google, cloudflare
+# and outline get a Service on /rpc as well. The issuer keeps the release's own
+# Service, so the routes are unchanged. The issuer, and only the issuer, may
+# scale with an HPA.
 #   * The controllers' Role is bound to the github and slack accounts only.
 #   * The accounts of the modules other modules call (github, slack, google,
-#     cloudflare) are bound to system:auth-delegator, for the TokenReview that
-#     checks a caller's projected ServiceAccount token.
+#     cloudflare, outline) are bound to system:auth-delegator, for the
+#     TokenReview that checks a caller's projected ServiceAccount token.
 #   * The issuer's document is `config` without `controllers`, plus a
 #     `<module>.remote` ({url, audience, tokenFile}) for each enabled module
 #     that answers calls: that is how the issuer routes to it. The issuer pod
@@ -1128,7 +1131,8 @@ tolerations: []
 #     in their documents, which the chart writes): the issuer calls the
 #     installation-token mint and the console's GitHub and Slack pages there,
 #     as the pod's projected token, which the module checks with a TokenReview
-#     and accepts from the issuer's ServiceAccount alone.
+#     and accepts from the issuer's ServiceAccount alone. The outline module
+#     answers the console's Outline pages the same way (`outline.serve`).
 #   * A controller's section stays in `config.controllers.<kind>` (it still
 #     feeds the Apps' pushes and the checks); the module's document is that
 #     section with `modules.<kind>.config` over it. Naming a controller there
@@ -1212,6 +1216,29 @@ modules:
     # chart fills `cloudflare.serve` ({address, audience}) when it is unset.
     # Required once the module is enabled; the issuer's own document then holds
     # only `cloudflare.remote`.
+    config: {}
+  # The Outline module (docs/decisions/0077): the controller that keeps each
+  # Outline workspace as the policy's outline table says, and the console's
+  # Outline pages, which the issuer calls on /rpc. The issuer never runs it.
+  outline:
+    enabled: false
+    replicas: null
+    resources: {}
+    image: {}
+    rpcPort: 8081
+    # The audience of the tokens that call this module. Default: outline.
+    audience: ""
+    serviceAccount: {}
+    podDisruptionBudget:
+      enabled: true
+    # The module's document (sluis-outline), required once the module is
+    # enabled: its storage adapter (not legacy), secrets and the like. The chart
+    # fills `consoleURL` (this release's console), `policy.file` (the policy
+    # the chart mounts) and `outline.serve` ({address, audience, issuers}) when
+    # they are unset, and mounts the token the module presents to the console
+    # at /var/run/secrets/outline-roster/token (the default `tokenFile`). There
+    # is no `config.controllers.outline`: the issuer's document holds only
+    # `outline.remote`, which the chart writes.
     config: {}
 
 # The console that shows this issuer's sessions.

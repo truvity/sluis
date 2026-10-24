@@ -1,6 +1,6 @@
 # Outline reference
 
-The policy table, the rows, the breakers, the console and the audit actions of the Outline controller.
+The policy table, the rows, the breakers, the module and the audit actions of the Outline controller.
 Setup: [Connect and enable an Outline workspace](../../guides/sluis/enable-outline-workspace.md).
 
 ## The policy table
@@ -14,7 +14,7 @@ Setup: [Connect and enable an Outline workspace](../../guides/sluis/enable-outli
 | `collections.<name>` | One collection, by its name in Outline. Created private when missing |
 | `read`, `read_write`, `admin` | Internal groups granted that permission (`admin` is "Manage"). A group at two levels takes the higher |
 | `mode` | `extend` (default) only adds; `strict` also removes the group grants and direct members the policy does not name |
-| `directory` | The connected directory, by workspace id or primary domain, that every bound group must come from |
+| `directory` | The connected directory, by its primary domain (`example.com`), that every bound group must come from |
 | `adopt` | The id of the collection meant, for a renamed one or two of one name |
 | `controllers.outline.enabledWorkspaces` | The workspaces the controller changes. The rest are dry runs |
 
@@ -34,6 +34,8 @@ Refused at load: a group or client nothing declares, a collection with no group,
 | `ignored` | On `ignore`, or the key's own user |
 
 A workspace whose key's user is not an admin is held as a whole.
+
+An answer the directory cannot vouch for adds people to groups that make nobody an admin. Promotions, removals, demotions and suspensions wait for an answer it can vouch for.
 
 ## Breakers
 
@@ -58,18 +60,21 @@ An operator confirms the fingerprint the latest report shows. A confirmation lap
 
 `auth.info`, `users.list` (`filter: all`), `users.update_role`, `users.suspend`, `users.activate`, `groups.list`, `groups.memberships`, `groups.create`, `groups.add_user`, `groups.remove_user`, `collections.list` (`includeListOnly`), `collections.memberships`, `collections.group_memberships`, `collections.create`, `collections.add_group`, `collections.remove_group`, `collections.remove_user`, `documents.list`, `documents.memberships`, `documents.group_memberships`, `integrations.list`. Lists page at 100. A 429 ends the tick or its changes; the next pass goes on.
 
-## Where it is kept
+## The module
 
 | What | Where |
 |---|---|
-| Connection record | State, kind `outline-workspace` of the `oidc` module |
-| API key | `internal/oidc/outline/<workspace>/<ref>` |
-| Confirmations, pass requests | State, kind `outline-gate` of the `oidc` module |
-| Reports | Blob prefix `oidc/reports/outline/` |
+| Process | `sluis outline` on Kubernetes (`modules.outline`); the function `sluis-<instance>-outline` on Lambda |
+| Document | `sluis-outline/v1`: a controller document, with `outline.serve` and `outline.shareScan` |
+| Connection record | State, kind `workspace` of the `outline` module |
+| API key | `internal/outline/workspaces/<workspace>/<ref>`; the issuer cannot read it |
+| Confirmations, pass requests | State, kind `gate` of the `outline` module |
+| Reports | Blob prefix `outline/reports/` |
+| Schedule | One per workspace: `{"kind":"tick","controller":"outline","target":"<key>"}` |
 
 ## Console and API
 
-SYSTEMS, Outline (`#/outline`) shows each workspace, its report, the breakers with **Confirm**, **Refresh**, **Connect** and **Disconnect**. `OutlineService`: `GetOutlineStatus`, `ConnectOutlineWorkspace`, `DisconnectOutlineWorkspace`, `RequestOutlinePass`, `ConfirmOutlineBreaker`. See the [contracts](contracts.md).
+SYSTEMS, Outline (`#/outline`) shows each workspace, its report, the breakers with **Confirm**, **Refresh**, **Connect** and **Disconnect**. The console calls the module for each, as the caller class `console` (`outline.remote`). `OutlineService`: `GetOutlineStatus`, `ConnectOutlineWorkspace`, `DisconnectOutlineWorkspace`, `RequestOutlinePass`, `ConfirmOutlineBreaker`. See the [contracts](contracts.md).
 
 ## Metrics
 
@@ -90,4 +95,4 @@ SYSTEMS, Outline (`#/outline`) shows each workspace, its report, the breakers wi
 
 ## Decided in
 
-- [ADR 0077](../../decisions/0077-the-outline-controller-is-hosted-by-the-issuer.md): the Outline controller, hosted by the issuer
+- [ADR 0077](../../decisions/0077-the-outline-controller-is-a-module-of-its-own.md): the Outline controller, a module of its own

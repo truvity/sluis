@@ -126,6 +126,7 @@ func TestV5ViewsAreScopedToTheirModule(t *testing.T) {
 	views := map[secretstore.Module]interface{ Prefix() string }{
 		secretstore.ModuleOIDC: s.OIDC(), secretstore.ModuleGitHub: s.GitHub(), secretstore.ModuleSlack: s.Slack(),
 		secretstore.ModuleCloudflare: s.Cloudflare(), secretstore.ModuleGoogle: s.Google(), secretstore.ModuleBackup: s.Backup(),
+		secretstore.ModuleOutline: s.Outline(),
 	}
 	if len(views) != len(secretstore.Modules()) {
 		t.Fatalf("%d views for %d modules", len(views), len(secretstore.Modules()))

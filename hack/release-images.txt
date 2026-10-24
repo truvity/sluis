@@ -10,6 +10,7 @@ image ghcr.io/truvity/sluis/sluis-slack
 image ghcr.io/truvity/sluis/sluis-google
 image ghcr.io/truvity/sluis/sluis-cloudflare
 image ghcr.io/truvity/sluis/sluis-backup
+image ghcr.io/truvity/sluis/sluis-outline
 image ghcr.io/truvity/sluis/resource-proxy
 image ghcr.io/truvity/audit/audit
 image ghcr.io/truvity/audit/audit-query

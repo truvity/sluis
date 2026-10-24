@@ -115,9 +115,10 @@ func TestEachPlatformBuilds(t *testing.T) {
 func TestProviderModulesImportNeitherIssuerappNorSigner(t *testing.T) {
 	const mod = "github.com/truvity/sluis/"
 	roles := map[string][]string{
-		"github": {"internal/module/github", "internal/githubroster", "internal/githubapp", "internal/lambdaapp/githubfn", "internal/lambdaapp/githubmintfn"},
-		"slack":  {"internal/module/slack", "internal/slackroster", "internal/slackapp", "internal/lambdaapp/slackfn"},
-		"google": {"internal/module/google", "internal/googleroster", "internal/lambdaapp/googlefn"},
+		"github":  {"internal/module/github", "internal/githubroster", "internal/githubapp", "internal/lambdaapp/githubfn", "internal/lambdaapp/githubmintfn"},
+		"slack":   {"internal/module/slack", "internal/slackroster", "internal/slackapp", "internal/lambdaapp/slackfn"},
+		"google":  {"internal/module/google", "internal/googleroster", "internal/lambdaapp/googlefn"},
+		"outline": {"internal/module/outline", "internal/outlineroster", "internal/lambdaapp/outlinefn"},
 	}
 	forbidden := []string{mod + "internal/issuerapp", mod + "internal/signer"}
 	for role, dirs := range roles {
@@ -178,7 +179,8 @@ func TestTheProviderZipsLinkOnlyTheirOwnFunction(t *testing.T) {
 		other     []string
 	}{
 		{"sluis-github", "githubfn", []string{"slackfn", "issuerfn", "cloudflarefn", "backupfn"}},
-		{"sluis-slack", "slackfn", []string{"githubfn", "issuerfn", "cloudflarefn", "backupfn"}},
+		{"sluis-slack", "slackfn", []string{"githubfn", "issuerfn", "cloudflarefn", "backupfn", "outlinefn"}},
+		{"sluis-outline", "outlinefn", []string{"githubfn", "slackfn", "issuerfn", "cloudflarefn", "backupfn"}},
 	} {
 		t.Run(c.main, func(t *testing.T) {
 			list := exec.Command("go", "list", "-tags", "lambda,lambda.norpc", "-deps", "-f", "{{.ImportPath}}", "./cmd/"+c.main)

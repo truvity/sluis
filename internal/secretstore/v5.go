@@ -29,11 +29,12 @@ const (
 	ModuleCloudflare Module = "cloudflare"
 	ModuleGoogle     Module = "google"
 	ModuleBackup     Module = "backup"
+	ModuleOutline    Module = "outline"
 )
 
 // Modules are all of them, in a fixed order.
 func Modules() []Module {
-	return []Module{ModuleOIDC, ModuleGitHub, ModuleSlack, ModuleCloudflare, ModuleGoogle, ModuleBackup}
+	return []Module{ModuleOIDC, ModuleGitHub, ModuleSlack, ModuleCloudflare, ModuleGoogle, ModuleBackup, ModuleOutline}
 }
 
 // ModuleExternal reports whether m has an external namespace: the secrets it
@@ -101,6 +102,11 @@ func (s *StoresV5) Cloudflare() CloudflareInternal {
 // Google is the Google module's internal view: internal/google/....
 func (s *StoresV5) Google() GoogleInternal {
 	return GoogleInternal{view{ModuleGoogle, s.in(ModuleGoogle)}}
+}
+
+// Outline is the Outline module's internal view: internal/outline/....
+func (s *StoresV5) Outline() OutlineInternal {
+	return OutlineInternal{view{ModuleOutline, s.in(ModuleOutline)}}
 }
 
 // Backup is the backup module's internal view: internal/backup/....
@@ -228,20 +234,6 @@ func (o OIDCInternal) Client(id string) state.Value[[]byte] {
 	return state.NewValue(o.s, "clients/"+segment(id), state.Raw())
 }
 
-// OutlineCredential is one write of an Outline workspace's API key:
-// oidc/outline/<workspace>/<ref>. The issuer's function hosts the Outline
-// controller until the controller has a function of its own
-// (docs/decisions/0077), so the key is the oidc module's.
-func (o OIDCInternal) OutlineCredential(workspace, ref string) state.Value[[]byte] {
-	return state.NewValue(o.s, "outline/"+segment(workspace)+"/"+segment(ref), state.Raw())
-}
-
-// DeleteOutlineCredential removes one write of an Outline workspace's API key.
-// An absent one is not an error.
-func (o OIDCInternal) DeleteOutlineCredential(ctx context.Context, workspace, ref string) error {
-	return deleteName(ctx, o.s, "outline/"+segment(workspace)+"/"+segment(ref))
-}
-
 // GitHubInternal is internal/github.
 type GitHubInternal struct{ view }
 
@@ -317,6 +309,21 @@ func (s SlackInternal) DeleteWorkspaceCredential(ctx context.Context, team, ref 
 // one is not an error.
 func (s SlackInternal) DeleteAppCredential(ctx context.Context, id, ref string) error {
 	return deleteName(ctx, s.s, "apps/"+segment(id)+"/"+segment(ref))
+}
+
+// OutlineInternal is internal/outline.
+type OutlineInternal struct{ view }
+
+// WorkspaceCredential is one write of an Outline workspace's API key:
+// outline/workspaces/<workspace>/<ref>.
+func (o OutlineInternal) WorkspaceCredential(workspace, ref string) state.Value[[]byte] {
+	return state.NewValue(o.s, "workspaces/"+segment(workspace)+"/"+segment(ref), state.Raw())
+}
+
+// DeleteWorkspaceCredential removes one write of an Outline workspace's API
+// key. An absent one is not an error.
+func (o OutlineInternal) DeleteWorkspaceCredential(ctx context.Context, workspace, ref string) error {
+	return deleteName(ctx, o.s, "workspaces/"+segment(workspace)+"/"+segment(ref))
 }
 
 // CloudflareInternal is internal/cloudflare.

@@ -14,7 +14,8 @@ The issuer is always there; another module is there when `modules.<m>.enabled`.
 "true" when the module's pod runs the controller `kind`: the github module the
 GitHub controller, the slack module the Slack one. In documents mode the
 documents are rendered as they stand, so the issuer's document still names the
-controllers it runs and its pod carries their mounts. Takes (dict "root" $
+controllers it runs and its pod carries their mounts. The outline module runs
+the Outline controller, which the issuer never does. Takes (dict "root" $
 "module" "issuer" "kind" "github").
 */}}
 {{- define "sluis.hosts" -}}
@@ -43,6 +44,7 @@ github
 slack
 google
 cloudflare
+outline
 {{- end }}
 
 {{- define "sluis.isCallee" -}}
@@ -97,6 +99,8 @@ The module's document as a map, as YAML, before its apiVersion. Takes
   slack       likewise, with slack.serve
   google      modules.google.config
   cloudflare  modules.cloudflare.config, and cloudflare.serve when unset
+  outline     modules.outline.config, with consoleURL, policy.file and
+              outline.serve when unset (there is no config.controllers.outline)
 */}}
 {{- define "sluis.moduleDocumentBody" -}}
 {{- $root := .root -}}
@@ -114,9 +118,13 @@ The module's document as a map, as YAML, before its apiVersion. Takes
 {{- $_ := set $doc $callee (mergeOverwrite (deepCopy (dig $callee dict $doc)) (dict "remote" $remote)) -}}
 {{- end -}}
 {{- end -}}
-{{- else if or (eq .module "github") (eq .module "slack") -}}
+{{- else if or (eq .module "github") (eq .module "slack") (eq .module "outline") -}}
 {{- $doc = deepCopy (dig "controllers" .module dict $root.Values.config) -}}
 {{- $_ := set $doc "consoleURL" (printf "http://%s.%s.svc:%s%s" (include "sluis.fullname" $root) $root.Release.Namespace (include "sluis.port" $root) $root.Values.console.mount) -}}
+{{- if eq .module "outline" -}}
+{{- /* The module's document is its own, and names the policy the chart mounts in every pod. */ -}}
+{{- $_ := set $doc "policy" (dict "file" "/var/run/access-issuer/policy/policy.yaml") -}}
+{{- end -}}
 {{- $doc = mergeOverwrite $doc (deepCopy ($m.config | default dict)) -}}
 {{- /* The module answers the issuer on /rpc: the listener, the audience of the token, and the one account let in. */ -}}
 {{- $args := dict "root" $root "module" .module -}}
@@ -147,7 +155,7 @@ The module's document as a map, as YAML, before its apiVersion. Takes
 {{- if and (eq .module "issuer") (include "sluis.documentsMode" .root) -}}
 {{- .root.Values.documents.service | trimSuffix "\n" -}}
 {{- else -}}
-{{- $kind := dict "issuer" "sluis" "github" "controller-github" "slack" "controller-slack" "google" "sluis-google" "cloudflare" "sluis" -}}
+{{- $kind := dict "issuer" "sluis" "github" "controller-github" "slack" "controller-slack" "google" "sluis-google" "cloudflare" "sluis" "outline" "sluis-outline" -}}
 {{- include "sluis.document" (dict "kind" (get $kind .module) "doc" (fromYaml (include "sluis.moduleDocumentBody" .))) -}}
 {{- end -}}
 {{- end }}
@@ -163,7 +171,7 @@ What the per-module model refuses. Takes the root.
 {{- define "sluis.moduleChecks" -}}
 {{- $root := . -}}
 {{- $docs := include "sluis.documentsMode" . -}}
-{{- range $mod := list "github" "slack" "google" "cloudflare" -}}
+{{- range $mod := list "github" "slack" "google" "cloudflare" "outline" -}}
 {{- if and $docs (include "sluis.moduleOn" (dict "root" $root "module" $mod)) -}}
 {{- fail (printf "modules.%s.enabled is true and documents.service is set: the chart writes `%s.remote` into the issuer's document, which it cannot do to a rendered one. Put the remote in the document, or use config" $mod $mod) -}}
 {{- end -}}
@@ -179,7 +187,7 @@ What the per-module model refuses. Takes the root.
 {{- fail (printf "modules.%s.enabled is true and the module has no document section: set config.controllers.%s (an empty `{}` takes the defaults) or modules.%s.config. Without one the %s module would start with nothing to do" $kind $kind $kind $kind) -}}
 {{- end -}}
 {{- end -}}
-{{- range $mod := list "google" "cloudflare" -}}
+{{- range $mod := list "google" "cloudflare" "outline" -}}
 {{- if and (include "sluis.moduleOn" (dict "root" $root "module" $mod)) (not (dig "config" dict (get $root.Values.modules $mod))) -}}
 {{- fail (printf "modules.%s.enabled is true and modules.%s.config is empty: the module reads its own document and has no other source, so write it there" $mod $mod) -}}
 {{- end -}}
@@ -194,8 +202,11 @@ What the per-module model refuses. Takes the root.
 {{- if and (include "sluis.moduleOn" (dict "root" $root "module" "cloudflare")) (dig "cloudflare" dict $root.Values.config) -}}
 {{- fail "config.cloudflare is set and modules.cloudflare.enabled is true: the issuer's document then holds only `cloudflare.remote`, which the chart writes. The accounts and presets belong in modules.cloudflare.config.cloudflare" -}}
 {{- end -}}
+{{- if include "sluis.moduleOn" (dict "root" $root "module" "outline") -}}
+{{- include "sluis.outlineChecks" $root -}}
 {{- end -}}
-{{- range $mod := list "issuer" "github" "slack" "google" "cloudflare" -}}
+{{- end -}}
+{{- range $mod := list "issuer" "github" "slack" "google" "cloudflare" "outline" -}}
 {{- if include "sluis.moduleOn" (dict "root" $root "module" $mod) -}}
 {{- $m := get $root.Values.modules $mod -}}
 {{- $pdb := dig "podDisruptionBudget" dict $m -}}
@@ -392,6 +403,11 @@ spec:
               mountPath: /var/run/slack-roster/workspaces
               readOnly: true
             {{- end }}
+            {{- if eq $mod "outline" }}
+            - name: outline-token
+              mountPath: /var/run/secrets/outline-roster
+              readOnly: true
+            {{- end }}
             {{- with include "sluis.exportsMounts" $root }}
             {{- . | nindent 12 }}
             {{- end }}
@@ -488,6 +504,16 @@ spec:
           configMap:
             name: {{ include "sluis.fullname" $root }}-slack-workspaces
             optional: true
+        {{- end }}
+        {{- if eq $mod "outline" }}
+        # The token the Outline module presents to the console.
+        - name: outline-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  audience: {{ include "sluis.exchangeAudience" $root }}
+                  expirationSeconds: 3600
+                  path: token
         {{- end }}
         {{- with include "sluis.exportsVolumes" $root }}
         {{- . | nindent 8 }}

@@ -73,6 +73,7 @@ const (
 	ModuleGitHub     = "github"
 	ModuleSlack      = "slack"
 	ModuleGoogle     = "google"
+	ModuleOutline    = "outline"
 )
 
 // documentModules maps the apiVersion of a module's own document to the module.
@@ -83,6 +84,7 @@ var documentModules = map[string]string{
 	config.APIVersion("controller-github"): ModuleGitHub,
 	config.APIVersion("controller-slack"):  ModuleSlack,
 	config.APIVersion("sluis-google"):      ModuleGoogle,
+	config.APIVersion("sluis-outline"):     ModuleOutline,
 }
 
 // apiVersionOf is the apiVersion of the document in file, or "" for a file

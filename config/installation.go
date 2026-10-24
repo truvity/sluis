@@ -280,11 +280,21 @@ type SlackController struct {
 	EnabledWorkspaces []string `json:"enabledWorkspaces,omitempty"`
 }
 
-// OutlineController is [GitHubController] for Outline. It runs in the
-// issuer's process and function.
+// OutlineController is the Outline module (docs/decisions/0077): its own keys
+// go to the module's document (`sluis-outline/v1`, a function of its own on
+// Lambda), EnabledWorkspaces to the policy document's `controllers.outline`.
 type OutlineController struct {
-	internal.OutlineController
-	EnabledWorkspaces []string `json:"enabledWorkspaces,omitempty"`
+	// ConsoleURL is the console's API. Unset is `publicURL`.
+	ConsoleURL string `json:"consoleURL,omitempty"`
+	// TokenFile and Console say how the module proves itself to the console.
+	// On Lambda the function role's web identity token is the default.
+	TokenFile string                  `json:"tokenFile,omitempty"`
+	Console   *internal.RosterConsole `json:"console,omitempty"`
+	// Interval is the time between passes, and ShareScan how often the
+	// single-document shares are read.
+	Interval          *internal.Duration `json:"interval,omitempty"`
+	ShareScan         *internal.Duration `json:"shareScan,omitempty"`
+	EnabledWorkspaces []string           `json:"enabledWorkspaces,omitempty"`
 }
 
 // Access is the access model's tables, as the policy document holds them.

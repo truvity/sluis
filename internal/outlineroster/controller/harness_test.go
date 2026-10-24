@@ -196,7 +196,9 @@ func newHarness(t *testing.T, text string, opts ...option) *harness {
 	}
 	h := &harness{
 		t: t, o: outlinefake.New(t),
-		dir: &fakeDirectory{people: map[string]person{}, digest: digest, groups: map[string]string{"wiki-admins@example.com": "dir-acme"},
+		dir: &fakeDirectory{people: map[string]person{}, digest: digest, groups: map[string]string{
+			"wiki-admins@example.com": "dir-acme", "wiki-managers@example.com": "dir-acme",
+		},
 			served: []*directoryrosterv1.DirectoryDomains{
 				{WorkspaceId: "dir-acme", PrimaryDomain: "example.com", Domains: []string{"example.com"}},
 				{WorkspaceId: "dir-globex", PrimaryDomain: "example.org", Domains: []string{"example.org"}},

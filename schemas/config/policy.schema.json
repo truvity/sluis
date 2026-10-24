@@ -1397,8 +1397,8 @@
                       "type": "string"
                     },
                     "directory": {
-                      "description": "The connected directory, by workspace id or primary domain, that every bound group's members must come from. A collection whose groups reach outside it is held.",
-                      "minLength": 1,
+                      "description": "The connected directory, by its primary domain (`example.com`), that every bound group's members must come from. A collection whose groups reach outside it is held.",
+                      "pattern": "^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$",
                       "type": "string"
                     },
                     "mode": {

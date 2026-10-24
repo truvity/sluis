@@ -33,6 +33,7 @@ fixture() {
   zipof github 'ELF sluis-module=github ELF'
   zipof slack 'ELF sluis-module=slack ELF'
   zipof google 'ELF sluis-module=google ELF'
+  zipof outline 'ELF sluis-module=outline ELF'
   sums
 }
 fixture

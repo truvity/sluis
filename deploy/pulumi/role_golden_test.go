@@ -36,8 +36,8 @@ func TestEveryRolesPolicyIsItsGolden(t *testing.T) {
 	}
 	docs[RoleRestore] = rs
 
-	if len(docs) != 7 {
-		t.Fatalf("%d roles, want the issuer, the four module functions, the backup and the restore", len(docs))
+	if len(docs) != 8 {
+		t.Fatalf("%d roles, want the issuer, the five module functions, the backup and the restore", len(docs))
 	}
 	for name, st := range docs {
 		raw, err := json.Marshal(map[string]any{"Version": "2012-10-17", "Statement": st})

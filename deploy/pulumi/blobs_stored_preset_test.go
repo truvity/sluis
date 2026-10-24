@@ -166,7 +166,7 @@ func TestTheKeyPolicyAdmitsTheBlobCredentialsReaders(t *testing.T) {
 				got[strings.TrimPrefix(sid, "SluisKeyBlobCredentials")] = s
 			}
 		}
-		for _, role := range []string{"Issuer", "Github", "Google", "Slack"} {
+		for _, role := range []string{"Issuer", "Github", "Google", "Outline", "Slack"} {
 			s := got[role]
 			if s == nil {
 				t.Errorf("%s: no SluisKeyBlobCredentials%s: the reader cannot decrypt the blob credential", name, role)

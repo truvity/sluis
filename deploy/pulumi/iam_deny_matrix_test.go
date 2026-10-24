@@ -33,7 +33,7 @@ const (
 // mxRows is the fewest rows the matrix may have. It is pinned so that a sweep
 // that silently shrinks (a role dropped, Modules() emptied, a group skipped)
 // fails instead of passing. Raise it when roles or groups are added; never lower it.
-const mxRows = 2762
+const mxRows = 3629
 
 // roleSpec is what a role is for in v1.76.
 type roleSpec struct {
@@ -65,7 +65,7 @@ func mxParam(prefix string, m string, leaf string) string {
 	return arnPrefix + "ssm:" + mxRegion + ":" + mxAccount + ":parameter/sluis/" + mxInst + "/" + prefix + "/" + m + "/" + leaf
 }
 
-var mxFunctions = []string{"issuer", "cloudflare", "backup", "restore", "github", "slack", "google"}
+var mxFunctions = []string{"issuer", "cloudflare", "backup", "restore", "github", "slack", "google", "outline"}
 
 func mxSpecs() []roleSpec {
 	return []roleSpec{
@@ -76,7 +76,7 @@ func mxSpecs() []roleSpec {
 				mxFn("github") + ":live-issuer", mxFn("slack") + ":live-console", mxFn("github") + ":live-console",
 				mxFn("google") + ":live-issuer", mxFn("google") + ":live-console",
 				mxFn("cloudflare") + ":live-issuer", mxFn("cloudflare") + ":live-console",
-				mxFn("backup") + ":live-console",
+				mxFn("backup") + ":live-console", mxFn("outline") + ":live-console",
 			}},
 		{name: "backup", hosts: []Module{ModuleBackup}, readAll: true},
 		{name: "restore", hosts: []Module{ModuleBackup}, writeAll: true, invokes: []string{mxFn("restore") + ":live-console"}},
@@ -85,6 +85,8 @@ func mxSpecs() []roleSpec {
 		{name: "github", hosts: []Module{ModuleGitHub}, invokes: []string{mxFn("github") + ":live-console"}},
 		{name: "slack", hosts: []Module{ModuleSlack}, invokes: []string{mxFn("slack") + ":live-console"}},
 		{name: "google", hosts: []Module{ModuleGoogle}},
+		// The Outline controller has no run-now of its own: it invokes nothing.
+		{name: "outline", hosts: []Module{ModuleOutline}},
 	}
 }
 
@@ -555,7 +557,7 @@ func TestCrossInvokeGrantsTheQualifiedAlias(t *testing.T) {
 	// mint, google identify, cloudflare mint); every function behind a console
 	// page is called as the class console. Nothing else, and no other alias.
 	issuerClass := map[string]bool{"github": true, "google": true, "cloudflare": true}
-	for _, f := range []string{"github", "slack", "google", "cloudflare"} {
+	for _, f := range []string{"github", "slack", "google", "cloudflare", "outline"} {
 		fn := mxFn(f)
 		if got := call(fn + ":live-issuer"); got != issuerClass[f] {
 			t.Errorf("%s:live-issuer: granted %v, want %v", fn, got, issuerClass[f])

@@ -572,23 +572,6 @@
           },
           "type": "object"
         },
-        "outline": {
-          "additionalProperties": false,
-          "description": "The Outline controller: makes each Outline workspace's groups, roles and collections match the policy's outline table (docs/reference/sluis/outline.md). It runs in this process, and on Lambda in the issuer's function, and asks the console in it directly. It needs a storage adapter other than `legacy`: the workspaces' connections are on the State port.",
-          "properties": {
-            "interval": {
-              "$ref": "#/$defs/duration",
-              "default": "2m",
-              "description": "How long between passes. Positive. Short, because a person signing in for the first time sees nothing but their own documents until the next pass."
-            },
-            "shareScan": {
-              "$ref": "#/$defs/duration",
-              "default": "1h",
-              "description": "How often the single-document shares in the collections that name a directory are read and reported. Each document is two calls to Outline."
-            }
-          },
-          "type": "object"
-        },
         "slack": {
           "additionalProperties": false,
           "description": "The Slack controller: makes each Slack workspace's user groups match the policy's slack table.",
@@ -1391,6 +1374,39 @@
       },
       "type": "object"
     },
+    "outline": {
+      "additionalProperties": false,
+      "description": "The Outline module's routing (docs/decisions/0077). The issuer never runs the module: unset, the console's Outline pages say there is none.",
+      "properties": {
+        "remote": {
+          "additionalProperties": false,
+          "description": "Where the Outline module is: the console's Outline pages are its. Set exactly one of `function` and `url`.",
+          "properties": {
+            "audience": {
+              "description": "The audience of that token. The module's name, `outline`, when unset.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "function": {
+              "description": "The module's Lambda function, name or ARN. It is invoked through the `live-<class>` alias of this process's caller class.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "tokenFile": {
+              "description": "Where the projected token is mounted. `/var/run/secrets/sluis/outline/token` when unset.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "url": {
+              "$ref": "#/$defs/url",
+              "description": "The module's Kubernetes Service. A call carries the pod's projected ServiceAccount token."
+            }
+          },
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
     "platform": {
       "additionalProperties": false,
       "description": "What this installation has to build on. The answers pick a preset (the decision tree in docs/concepts/sluis/ports.md), and start refuses an adapter that needs an answer that is no. Absent, the `ports` keys decide and nothing is checked against the platform.",
@@ -1629,6 +1645,11 @@
                 },
                 "oidc": {
                   "description": "The name of the oidc module's table. The library default is `sluis-<instance>-oidc`.",
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "outline": {
+                  "description": "The name of the outline module's table. The library default is `sluis-<instance>-outline`.",
                   "minLength": 1,
                   "type": "string"
                 },

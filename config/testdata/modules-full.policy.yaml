@@ -54,6 +54,21 @@ slack:
           private: true
           from:
             - all:access-roster:operator
+outline:
+  workspaces:
+    wiki:
+      roles:
+        admin:
+          - all:access-roster:operator
+      ignore:
+        - key.owner@example.test
+      collections:
+        General:
+          mode: strict
+          read_write:
+            - all:access-roster:viewer
+          admin:
+            - all:access-roster:operator
 exchange:
   github:
     owners:
@@ -70,6 +85,9 @@ controllers:
   slack:
     enabledWorkspaces:
       - example
+  outline:
+    enabledWorkspaces:
+      - wiki
 cloudflare:
   grants:
     - group: all:infra:dns-editors
