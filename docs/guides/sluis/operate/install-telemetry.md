@@ -54,11 +54,11 @@ Point the pod at an OpenTelemetry collector, then install the alerts and Grafana
      clusterFolderUID: prod          # folder.uid of the observability-cluster chart; at most 25 characters
      datasources:
        metrics: prod-metrics         # the uids of the Grafana's datasources
-       logs: prod-logs
+       logs: prod-logs               # read by the sluis-lambda dashboard
      # instanceSelector: {}          # the shared Grafana by default
    ```
 
-   The uids are `<clusterFolderUID>-sluis-overview` and `-sluis-audit`.
+   The uids end `-sluis-overview`, `-sluis-audit` and `-sluis-lambda`.
 
    ```sh
    helm install sluis-dashboards oci://ghcr.io/truvity/charts/sluis --version X.Y.Z -n sluis -f dashboards.yaml
@@ -70,7 +70,7 @@ Point the pod at an OpenTelemetry collector, then install the alerts and Grafana
 
 - The ruler lists one group of eleven rules, none erroring.
 
-- The shared Grafana has `<cluster> / sluis` with both dashboards, each with a `$cluster` variable.
+- The shared Grafana has `<cluster> / sluis` with three dashboards, each with a `$cluster` variable.
 - A log line written inside a request carries `trace_id`, `span_id` and `trace_flags` (W3C hex), the trace's own id; a line outside a span has none. Logs stay on stdout. In Lambda the OTLP layer forwards only platform events, so function logs reach CloudWatch Logs only.
 
 A rule with no series does not fire; the platform's scrape alert covers a down service.

@@ -1460,6 +1460,155 @@ spec:
           ],
           "title": "Records the emitters refused as invalid",
           "type": "timeseries"
+        },
+        {
+          "collapsed": false,
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 64
+          },
+          "id": 25,
+          "panels": [],
+          "title": "AWS SDK calls",
+          "type": "row"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "Calls to AWS (DynamoDB, S3, SQS, SSM) that returned an error, from the SDK's own client.call.errors counter, for the audit services of the cluster. Several are ordinary outcomes of a conditional write or a probe and are expected at a steady rate: PreconditionFailed (an object the archive already holds), NotFound, ConditionalCheckFailedException and ParameterNotFound. Look for a rate that moves, for *http.ResponseError (AWS answered with a failure) and for context.deadlineExceededError (a call that outlived its deadline).",
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineWidth": 1,
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                }
+              },
+              "noValue": "no data",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "ops"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 65
+          },
+          "id": 26,
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "editorMode": "code",
+              "expr": "sum by (rpc_service, exception_type) (rate(client_call_errors_total{k8s_cluster_name=~\"$cluster\",job=~\".*audit.*\"}[$__rate_interval]))",
+              "instant": false,
+              "legendFormat": "{{rpc_service}} {{exception_type}}",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "AWS SDK call errors per second, by service and exception",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "Share of the calls to each AWS service that failed in a way that is not an ordinary conditional outcome (PreconditionFailed, NotFound, ConditionalCheckFailedException and ParameterNotFound are left out). A service above a few percent for a quarter of an hour is a dependency to look at; the writer's dead letters and the write latency above say what it cost. A service that made calls and had no failure reads 0.",
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineWidth": 1,
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                }
+              },
+              "noValue": "no data",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "percentunit"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 65
+          },
+          "id": 27,
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "editorMode": "code",
+              "expr": "(sum by (rpc_service) (rate(client_call_errors_total{k8s_cluster_name=~\"$cluster\",job=~\".*audit.*\",exception_type!~\"NotFound|PreconditionFailed|ParameterNotFound|ConditionalCheckFailedException\"}[$__rate_interval])) or 0 * sum by (rpc_service) (rate(client_call_duration_seconds_count{k8s_cluster_name=~\"$cluster\",job=~\".*audit.*\"}[$__rate_interval]))) / sum by (rpc_service) (rate(client_call_duration_seconds_count{k8s_cluster_name=~\"$cluster\",job=~\".*audit.*\"}[$__rate_interval]))",
+              "instant": false,
+              "legendFormat": "{{rpc_service}}",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "AWS SDK call failure share, by service",
+          "type": "timeseries"
         }
       ],
       "refresh": "1m",
@@ -1543,6 +1692,964 @@ spec:
       "timezone": "",
       "title": "Audit overview - $cluster",
       "uid": "prod-sluis-audit"
+    }
+
+---
+# Source: sluis/templates/dashboards.yaml
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaDashboard
+metadata:
+  name: sluis-sluis-lambda
+  namespace: sluis
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: dashboards
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  allowCrossNamespaceImport: true
+  folderUID: "prod-sluis"
+  instanceSelector:
+    matchLabels:
+      observability.truvity.io/grafana: shared
+  json: |
+    {
+      "annotations": {
+        "list": []
+      },
+      "description": "The Lambda functions' starts: cold starts, init duration, and inits that ran into the 10 second limit or failed, read from the platform's INIT_REPORT events in the log store.",
+      "editable": false,
+      "graphTooltip": 1,
+      "links": [],
+      "panels": [
+        {
+          "collapsed": false,
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 0
+          },
+          "id": 1,
+          "panels": [],
+          "title": "Is anything failing to start?",
+          "type": "row"
+        },
+        {
+          "datasource": {
+            "type": "victoriametrics-logs-datasource",
+            "uid": "${datasource}"
+          },
+          "description": "Inits that ran into the Lambda init limit in the range (INIT_REPORT with status timeout). Lambda gives a function's init phase 10 seconds; a longer one is cut off and reported with status timeout, and Lambda then initialises again inside the first invocation. One is a bad cold start; repeats are a dependency that is slow to answer during init (the configuration, a secret, a store) or a function whose init grew past the limit. See the telemetry runbook.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "decimals": 0,
+              "mappings": [],
+              "noValue": "0",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "orange",
+                    "value": 1
+                  },
+                  {
+                    "color": "red",
+                    "value": 3
+                  }
+                ]
+              },
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 4,
+            "x": 0,
+            "y": 1
+          },
+          "id": 2,
+          "options": {
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "value"
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "victoriametrics-logs-datasource",
+                "uid": "${datasource}"
+              },
+              "editorMode": "code",
+              "expr": "event.name:\"platform.initReport\" k8s.cluster.name:\"$cluster\" faas.name:$function status:timeout | stats count() as n",
+              "queryType": "stats",
+              "refId": "A"
+            }
+          ],
+          "title": "Init timeouts (range)",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "victoriametrics-logs-datasource",
+            "uid": "${datasource}"
+          },
+          "description": "Inits that ended with a status other than success or timeout (INIT_REPORT with status error or failure): the function crashed or refused to start. The function's log has the reason.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "decimals": 0,
+              "mappings": [],
+              "noValue": "0",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 1
+                  }
+                ]
+              },
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 4,
+            "x": 4,
+            "y": 1
+          },
+          "id": 3,
+          "options": {
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "value"
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "victoriametrics-logs-datasource",
+                "uid": "${datasource}"
+              },
+              "editorMode": "code",
+              "expr": "event.name:\"platform.initReport\" k8s.cluster.name:\"$cluster\" faas.name:$function status:!success status:!timeout | stats count() as n",
+              "queryType": "stats",
+              "refId": "A"
+            }
+          ],
+          "title": "Other init failures (range)",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "victoriametrics-logs-datasource",
+            "uid": "${datasource}"
+          },
+          "description": "Function instances initialised in the range, one INIT_REPORT each. A rate that rises with no rise in traffic is instances being recycled sooner, or a deploy. An init that failed is run again inside the first invocation and reported a second time, so a failure counts twice.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "decimals": 0,
+              "mappings": [],
+              "noValue": "0",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 4,
+            "x": 8,
+            "y": 1
+          },
+          "id": 4,
+          "options": {
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "value"
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "victoriametrics-logs-datasource",
+                "uid": "${datasource}"
+              },
+              "editorMode": "code",
+              "expr": "event.name:\"platform.initReport\" k8s.cluster.name:\"$cluster\" faas.name:$function | stats count() as n",
+              "queryType": "stats",
+              "refId": "A"
+            }
+          ],
+          "title": "Cold starts (range)",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "victoriametrics-logs-datasource",
+            "uid": "${datasource}"
+          },
+          "description": "The 99th-percentile init duration over the range, across the chosen functions. The limit is 10 s.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "decimals": 0,
+              "mappings": [],
+              "noValue": "0",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "orange",
+                    "value": 5000
+                  },
+                  {
+                    "color": "red",
+                    "value": 8000
+                  }
+                ]
+              },
+              "unit": "ms"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 4,
+            "x": 12,
+            "y": 1
+          },
+          "id": 5,
+          "options": {
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "value"
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "victoriametrics-logs-datasource",
+                "uid": "${datasource}"
+              },
+              "editorMode": "code",
+              "expr": "event.name:\"platform.initReport\" k8s.cluster.name:\"$cluster\" faas.name:$function | stats quantile(0.99, durationMs) as p99",
+              "queryType": "stats",
+              "refId": "A"
+            }
+          ],
+          "title": "Init p99 (range)",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "victoriametrics-logs-datasource",
+            "uid": "${datasource}"
+          },
+          "description": "The longest init in the range. Past 8 s a cold start is one slow dependency away from the 10 s limit.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "decimals": 0,
+              "mappings": [],
+              "noValue": "0",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "orange",
+                    "value": 5000
+                  },
+                  {
+                    "color": "red",
+                    "value": 8000
+                  }
+                ]
+              },
+              "unit": "ms"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 4,
+            "x": 16,
+            "y": 1
+          },
+          "id": 6,
+          "options": {
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "value"
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "victoriametrics-logs-datasource",
+                "uid": "${datasource}"
+              },
+              "editorMode": "code",
+              "expr": "event.name:\"platform.initReport\" k8s.cluster.name:\"$cluster\" faas.name:$function | stats max(durationMs) as longest",
+              "queryType": "stats",
+              "refId": "A"
+            }
+          ],
+          "title": "Longest init (range)",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "victoriametrics-logs-datasource",
+            "uid": "${datasource}"
+          },
+          "description": "Timeouts over all inits in the range. Zero is healthy.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "decimals": 2,
+              "mappings": [],
+              "noValue": "0",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "orange",
+                    "value": 0.001
+                  },
+                  {
+                    "color": "red",
+                    "value": 0.01
+                  }
+                ]
+              },
+              "unit": "percentunit"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 4,
+            "x": 20,
+            "y": 1
+          },
+          "id": 7,
+          "options": {
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "value"
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "victoriametrics-logs-datasource",
+                "uid": "${datasource}"
+              },
+              "editorMode": "code",
+              "expr": "event.name:\"platform.initReport\" k8s.cluster.name:\"$cluster\" faas.name:$function | stats count() if (status:timeout) as t, count() as n | math t / n as share | fields share",
+              "queryType": "stats",
+              "refId": "A"
+            }
+          ],
+          "title": "Inits that did not finish before the limit (share)",
+          "type": "stat"
+        },
+        {
+          "collapsed": false,
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 5
+          },
+          "id": 8,
+          "panels": [],
+          "title": "Cold starts and init duration",
+          "type": "row"
+        },
+        {
+          "datasource": {
+            "type": "victoriametrics-logs-datasource",
+            "uid": "${datasource}"
+          },
+          "description": "Function instances initialised in each bucket (INIT_REPORT events), stacked by function. The bucket follows the time range.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "drawStyle": "bars",
+                "fillOpacity": 60,
+                "lineWidth": 1,
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "normal"
+                }
+              },
+              "noValue": "no data",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 6
+          },
+          "id": 9,
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "victoriametrics-logs-datasource",
+                "uid": "${datasource}"
+              },
+              "editorMode": "code",
+              "expr": "event.name:\"platform.initReport\" k8s.cluster.name:\"$cluster\" faas.name:$function | rename faas.name as function | stats by (function) count() as cold_starts",
+              "legendFormat": "{{function}}",
+              "queryType": "statsRange",
+              "refId": "A",
+              "step": "$__interval"
+            }
+          ],
+          "title": "Cold starts per bucket, by function",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "victoriametrics-logs-datasource",
+            "uid": "${datasource}"
+          },
+          "description": "The 99th-percentile init duration per bucket. Each point is a bucket that had a cold start; a function that stays warm leaves gaps. The init limit is 10 s.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "drawStyle": "points",
+                "fillOpacity": 10,
+                "lineWidth": 1,
+                "pointSize": 6,
+                "showPoints": "always",
+                "spanNulls": false
+              },
+              "noValue": "no data",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "orange",
+                    "value": 5000
+                  },
+                  {
+                    "color": "red",
+                    "value": 8000
+                  }
+                ]
+              },
+              "unit": "ms"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 6
+          },
+          "id": 10,
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "victoriametrics-logs-datasource",
+                "uid": "${datasource}"
+              },
+              "editorMode": "code",
+              "expr": "event.name:\"platform.initReport\" k8s.cluster.name:\"$cluster\" faas.name:$function | rename faas.name as function | stats by (function) quantile(0.99, durationMs) as p99",
+              "legendFormat": "{{function}}",
+              "queryType": "statsRange",
+              "refId": "A",
+              "step": "$__interval"
+            }
+          ],
+          "title": "Init duration p99, by function",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "victoriametrics-logs-datasource",
+            "uid": "${datasource}"
+          },
+          "description": "The longest init per bucket. A point near 10 000 ms is a timeout.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "drawStyle": "points",
+                "fillOpacity": 10,
+                "lineWidth": 1,
+                "pointSize": 6,
+                "showPoints": "always",
+                "spanNulls": false
+              },
+              "noValue": "no data",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "orange",
+                    "value": 5000
+                  },
+                  {
+                    "color": "red",
+                    "value": 8000
+                  }
+                ]
+              },
+              "unit": "ms"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 14
+          },
+          "id": 11,
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "victoriametrics-logs-datasource",
+                "uid": "${datasource}"
+              },
+              "editorMode": "code",
+              "expr": "event.name:\"platform.initReport\" k8s.cluster.name:\"$cluster\" faas.name:$function | rename faas.name as function | stats by (function) max(durationMs) as longest",
+              "legendFormat": "{{function}}",
+              "queryType": "statsRange",
+              "refId": "A",
+              "step": "$__interval"
+            }
+          ],
+          "title": "Longest init, by function",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "victoriametrics-logs-datasource",
+            "uid": "${datasource}"
+          },
+          "description": "Inits that did not succeed, by function and status (timeout, error, failure). Empty is healthy. A timeout that stands alone is a bad cold start; repeats are the thing to chase.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "drawStyle": "bars",
+                "fillOpacity": 60,
+                "lineWidth": 1,
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "normal"
+                }
+              },
+              "noValue": "no data",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 1
+                  }
+                ]
+              },
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 14
+          },
+          "id": 12,
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "victoriametrics-logs-datasource",
+                "uid": "${datasource}"
+              },
+              "editorMode": "code",
+              "expr": "event.name:\"platform.initReport\" k8s.cluster.name:\"$cluster\" faas.name:$function status:!success | rename faas.name as function | stats by (function, status) count() as n",
+              "legendFormat": "{{function}} {{status}}",
+              "queryType": "statsRange",
+              "refId": "A",
+              "step": "$__interval"
+            }
+          ],
+          "title": "Init timeouts and failures per bucket, by function and status",
+          "type": "timeseries"
+        },
+        {
+          "collapsed": false,
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 22
+          },
+          "id": 13,
+          "panels": [],
+          "title": "Inits by function",
+          "type": "row"
+        },
+        {
+          "datasource": {
+            "type": "victoriametrics-logs-datasource",
+            "uid": "${datasource}"
+          },
+          "description": "Every INIT_REPORT in the range, by function and status, with the p99 and the longest init in milliseconds.",
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "align": "auto"
+              },
+              "noValue": "no data",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              }
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "p99_ms"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "ms"
+                  },
+                  {
+                    "id": "decimals",
+                    "value": 0
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "max_ms"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "ms"
+                  },
+                  {
+                    "id": "decimals",
+                    "value": 0
+                  }
+                ]
+              }
+            ]
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 24,
+            "x": 0,
+            "y": 23
+          },
+          "id": 14,
+          "options": {
+            "cellHeight": "sm",
+            "showHeader": true
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "victoriametrics-logs-datasource",
+                "uid": "${datasource}"
+              },
+              "editorMode": "code",
+              "expr": "event.name:\"platform.initReport\" k8s.cluster.name:\"$cluster\" faas.name:$function | rename faas.name as function | stats by (function, status) count() as inits, quantile(0.99, durationMs) as p99_ms, max(durationMs) as max_ms | sort by (inits desc) limit 100",
+              "queryType": "instant",
+              "refId": "A"
+            }
+          ],
+          "title": "Inits by function and status",
+          "type": "table"
+        }
+      ],
+      "refresh": "5m",
+      "schemaVersion": 39,
+      "tags": [
+        "sluis",
+        "lambda"
+      ],
+      "templating": {
+        "list": [
+          {
+            "current": {
+              "selected": false,
+              "text": "prod-logs",
+              "value": "prod-logs"
+            },
+            "hide": 0,
+            "includeAll": false,
+            "label": "datasource",
+            "multi": false,
+            "name": "datasource",
+            "options": [],
+            "query": "victoriametrics-logs-datasource",
+            "refresh": 1,
+            "regex": "",
+            "skipUrlSync": false,
+            "type": "datasource"
+          },
+          {
+            "current": {},
+            "datasource": {
+              "type": "victoriametrics-logs-datasource",
+              "uid": "${datasource}"
+            },
+            "definition": "field values of k8s.cluster.name",
+            "hide": 0,
+            "includeAll": false,
+            "label": "cluster",
+            "multi": false,
+            "name": "cluster",
+            "options": [],
+            "query": {
+              "field": "k8s.cluster.name",
+              "limit": 100,
+              "query": "event.name:\"platform.initReport\"",
+              "type": "fieldValue"
+            },
+            "refresh": 2,
+            "regex": "",
+            "skipUrlSync": false,
+            "sort": 1,
+            "type": "query"
+          },
+          {
+            "allValue": "*",
+            "current": {
+              "selected": true,
+              "text": "All",
+              "value": "$__all"
+            },
+            "datasource": {
+              "type": "victoriametrics-logs-datasource",
+              "uid": "${datasource}"
+            },
+            "definition": "field values of faas.name",
+            "hide": 0,
+            "includeAll": true,
+            "label": "function",
+            "multi": false,
+            "name": "function",
+            "options": [],
+            "query": {
+              "field": "faas.name",
+              "limit": 100,
+              "query": "event.name:\"platform.initReport\" k8s.cluster.name:\"$cluster\"",
+              "type": "fieldValue"
+            },
+            "refresh": 2,
+            "regex": "",
+            "skipUrlSync": false,
+            "sort": 1,
+            "type": "query"
+          }
+        ]
+      },
+      "time": {
+        "from": "now-24h",
+        "to": "now"
+      },
+      "timezone": "",
+      "title": "sluis Lambda - $cluster",
+      "uid": "prod-sluis-lambda"
     }
 
 ---
@@ -3465,6 +4572,155 @@ spec:
             "x": 0,
             "y": 89
           },
+          "id": 37,
+          "panels": [],
+          "title": "AWS SDK calls",
+          "type": "row"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "Calls to AWS (DynamoDB, SSM, SQS, S3, Lambda) that returned an error, from the SDK's own client.call.errors counter, for the sluis services of the cluster. Several errors are ordinary outcomes of a conditional write or a probe and are expected at a steady rate: ConditionalCheckFailedException (a lost compare-and-swap), NotFound, PreconditionFailed and ParameterNotFound (a read of something not yet stored). Look for a rate that moves, for *http.ResponseError (AWS answered with a failure) and for context.deadlineExceededError (a call that outlived its deadline); the next panel leaves the expected ones out.",
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineWidth": 1,
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                }
+              },
+              "noValue": "no data",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "ops"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 90
+          },
+          "id": 38,
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "editorMode": "code",
+              "expr": "sum by (rpc_service, exception_type) (rate(client_call_errors_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\",job=~\".*sluis.*\"}[$__rate_interval]))",
+              "instant": false,
+              "legendFormat": "{{rpc_service}} {{exception_type}}",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "AWS SDK call errors per second, by service and exception",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "Share of the calls to each AWS service that failed in a way that is not an ordinary conditional outcome (ConditionalCheckFailedException, NotFound, PreconditionFailed and ParameterNotFound are left out), from client.call.errors over client.call.duration. A service above a few percent for a quarter of an hour is a dependency to look at: the Storage ports row shows whether the store is the one. A service that made calls and had no failure reads 0.",
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineWidth": 1,
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                }
+              },
+              "noValue": "no data",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "percentunit"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 90
+          },
+          "id": 39,
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "editorMode": "code",
+              "expr": "(sum by (rpc_service) (rate(client_call_errors_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\",job=~\".*sluis.*\",exception_type!~\"NotFound|PreconditionFailed|ParameterNotFound|ConditionalCheckFailedException\"}[$__rate_interval])) or 0 * sum by (rpc_service) (rate(client_call_duration_seconds_count{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\",job=~\".*sluis.*\"}[$__rate_interval]))) / sum by (rpc_service) (rate(client_call_duration_seconds_count{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\",job=~\".*sluis.*\"}[$__rate_interval]))",
+              "instant": false,
+              "legendFormat": "{{rpc_service}}",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "AWS SDK call failure share, by service",
+          "type": "timeseries"
+        },
+        {
+          "collapsed": false,
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 98
+          },
           "id": 32,
           "panels": [],
           "title": "GitHub rate limits and seats",
@@ -3507,7 +4763,7 @@ spec:
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 90
+            "y": 99
           },
           "id": 33,
           "options": {
@@ -3543,7 +4799,7 @@ spec:
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "description": "Calls that waited out a GitHub rate limit, by kind of limit (primary or secondary).",
+          "description": "Waits for a GitHub rate limit, by kind: retry_after (GitHub named a time), primary (the budget was spent; waited for its reset) or secondary (an abuse limit, waited a minute). Each kind reads 0 once the controllers have made a call, so a flat line is a quiet day and \"no data\" is a controller that has not called GitHub.",
           "fieldConfig": {
             "defaults": {
               "custom": {
@@ -3575,7 +4831,7 @@ spec:
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 90
+            "y": 99
           },
           "id": 34,
           "options": {
@@ -3643,7 +4899,7 @@ spec:
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 98
+            "y": 107
           },
           "id": 35,
           "options": {
@@ -3711,7 +4967,7 @@ spec:
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 98
+            "y": 107
           },
           "id": 36,
           "options": {
