@@ -118,6 +118,7 @@ Source: `internal/clientcreds/telemetry.go`.
 | `sluis.cloudflare.rotation.interval` | gauge, `s` | `preset` | The preset's configured `rotation`. |
 | `sluis.cloudflare.tokens.minted` | counter | `preset`, `variant`, `outcome` | Credentials minted. `variant` is `stored` or `on_demand`; `outcome` is `ok`, `refused` (a prototype or a grant said no) or `failed`. |
 | `sluis.cloudflare.tokens.swept` | counter | `preset` | Expired tokens deleted. |
+| `sluis.cloudflare.record.drift` | counter | `preset`, `kind` | Entries the pass corrected in a preset's record of minted tokens. `kind` is `unrecorded` (Cloudflare had the token and the record did not, so the on-demand caps missed it) or `gone` (recorded, and deleted outside sluis). Any `unrecorded` is worth a look. |
 | `sluis.cloudflare.prototype.refused` | counter | `preset`, `reason` | Prototypes refused at a mint or at the check on start (`prototype_active`, `prototype_forbidden`, `prototype_missing`). Any is an error to look at. |
 
 ### The controllers and the rails

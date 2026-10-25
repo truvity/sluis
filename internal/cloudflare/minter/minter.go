@@ -122,14 +122,16 @@ type Minter struct {
 
 	mu     sync.Mutex
 	groups map[string]cachedGroups
-	// minting is what this process has minted lately and has under way, by
-	// preset and caller, for the limits that Cloudflare's own list cannot show:
-	// a token that expired inside the hour, and one not yet created.
-	minting map[string][]time.Time
-	// limitMu admits on-demand mints one at a time (see admit), and lists holds
-	// the last list of each preset's live tokens.
+	// limitMu admits on-demand mints one at a time (see admit). It guards only
+	// this process's own accounting below: nothing is read or called under it.
 	limitMu sync.Mutex
-	lists   map[string]*liveList
+	// minting is when this process minted for each preset and caller in the
+	// last hour, for the hourly rate the record cannot show once a token that
+	// expired inside the hour has been swept.
+	minting map[string][]time.Time
+	// reserved are the unexpired on-demand mints this process admitted, by
+	// preset, counted beside the record until it shows them (see admit).
+	reserved map[string][]*reservation
 }
 
 type cachedGroups struct {
@@ -154,7 +156,7 @@ func New(cfg Config) (*Minter, error) {
 	if err := cfg.Cloudflare.Validate(); err != nil {
 		return nil, err
 	}
-	m := &Minter{cfg: cfg, log: cfg.Log, now: cfg.Now, groups: map[string]cachedGroups{}, minting: map[string][]time.Time{}, lists: map[string]*liveList{}}
+	m := &Minter{cfg: cfg, log: cfg.Log, now: cfg.Now, groups: map[string]cachedGroups{}, minting: map[string][]time.Time{}, reserved: map[string][]*reservation{}}
 	if m.log == nil {
 		m.log = slog.Default()
 	}
@@ -315,11 +317,12 @@ func (m *Minter) MintFor(ctx context.Context, preset string, caller Caller, life
 	now := m.now()
 	name := cloudflare.OnDemandName(m.cfg.Instance, preset, who, now)
 	// The record is made room in before the limits are counted, so a mint it
-	// cannot take is refused before Cloudflare creates anything.
-	err := m.makeRoom(ctx, preset, p, now)
-	var release func()
+	// cannot take is refused before Cloudflare creates anything; the limits are
+	// counted from what it then holds, with no call to Cloudflare.
+	recorded, err := m.makeRoom(ctx, preset, p, now)
+	var claim *hold
 	if err == nil {
-		release, err = m.admit(ctx, preset, p, name, now, lifetime)
+		claim, err = m.admit(preset, p, name, recorded, now, lifetime)
 	}
 	if err != nil {
 		var limit *limitError
@@ -332,10 +335,11 @@ func (m *Minter) MintFor(ctx context.Context, preset string, caller Caller, life
 	}
 	out, err := m.mint(ctx, preset, p, name, now, lifetime)
 	if err != nil {
-		release()
+		claim.release()
 		m.fail(ctx, caller.Actor, preset, audit.CloudflareOnDemand, err)
 		return nil, err
 	}
+	claim.created(out.TokenID, out.ExpiresOn)
 	m.cfg.record(ctx, audit.CloudflareTokenMinted(caller.Actor, preset, audit.CloudflareToken{
 		Variant: audit.CloudflareOnDemand, R2: p.R2(), Account: p.Account, TokenID: out.TokenID, ExpiresOn: out.ExpiresOn,
 	}))
@@ -397,7 +401,7 @@ func (m *Minter) mint(ctx context.Context, preset string, p config.CloudflarePre
 	}
 	// Recorded before the value leaves: a token nobody can sweep is a token
 	// that counts toward the account's limit for good.
-	if err = m.track(ctx, preset, created.ID, expires); err != nil {
+	if err = m.track(ctx, preset, created.ID, name, expires); err != nil {
 		dctx := context.WithoutCancel(ctx)
 		if derr := api.DeleteToken(dctx, created.ID); derr != nil && !errors.Is(derr, cloudflare.ErrNotFound) {
 			m.log.WarnContext(ctx, "a minted token could not be recorded and could not be deleted",

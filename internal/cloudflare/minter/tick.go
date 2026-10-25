@@ -86,9 +86,12 @@ func (m *Minter) Tick(ctx context.Context) TickResult {
 // TickPreset is one preset's tick under its lease: if the stored credential is
 // older than the preset's rotation, mint a new one, store it at
 // external/cloudflare/<preset>, and delete this preset's own tokens that have
-// expired. A stored credential that is not yet due costs no call to Cloudflare.
-// A preset with `store: none` is never minted or stored by the tick; its
-// expired on-demand tokens are still swept.
+// expired. A stored credential that is not yet due costs no call to Cloudflare,
+// except that once every [ReconcileEvery] the tick of a preset the policy
+// grants holds its record against the tokens Cloudflare lists (see reconcile),
+// which the on-demand caps are counted from. A preset with `store: none` is
+// never minted or stored by the tick; its expired on-demand tokens are still
+// swept.
 func (m *Minter) TickPreset(ctx context.Context, preset string) PresetResult {
 	res := PresetResult{Preset: preset, Outcome: OutcomeFresh}
 	p, ok := m.cfg.Cloudflare.Presets[preset]
@@ -100,9 +103,18 @@ func (m *Minter) TickPreset(ctx context.Context, preset string) PresetResult {
 		res.Outcome = OutcomeMaintenance
 		return res
 	}
-	run := func(ctx context.Context) { res = m.tick(ctx, preset, p) }
+	pass := m.tick
 	if !p.Stored() {
-		run = func(ctx context.Context) { res = m.tickOnDemand(ctx, preset, p) }
+		pass = m.tickOnDemand
+	}
+	run := func(ctx context.Context) {
+		// The record is held against Cloudflare first, so a token found
+		// unrecorded and already expired is deleted by this pass's sweep.
+		rerr := m.reconcileIfDue(ctx, preset, p)
+		res = pass(ctx, preset, p)
+		if rerr != nil {
+			res.Err = errors.Join(res.Err, fmt.Errorf("reconcile the record with Cloudflare: %w", rerr))
+		}
 	}
 	if m.cfg.Lock == nil {
 		run(ctx)
@@ -367,6 +379,7 @@ func (m *Minter) Revoke(ctx context.Context, preset, tokenID string, actor audit
 		return RevokeResult{}, fmt.Errorf("delete the token: %w", err)
 	}
 	m.cfg.record(ctx, audit.CloudflareTokenRevoked(actor, preset, p.Account, tokenID))
+	m.forget(preset, tokenID)
 	if err = m.untrack(ctx, preset, tokenID); err != nil {
 		m.log.WarnContext(ctx, "a revoked token could not be removed from the record; the sweep forgets it", slog.String("preset", preset),
 			slog.String("token", tokenID), logattr.SafeError("error", err))

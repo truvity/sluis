@@ -1842,7 +1842,7 @@
                 "description": "How long each minted token lives: its `expires_on`. At least 1m, at most 24h. Past it sluis deletes the token in Cloudflare."
               },
               "maxLive": {
-                "description": "How many unexpired on-demand tokens this preset may have in all, whoever holds them; a mint over it is refused (`preset_cap`). Cloudflare allows an account 500 tokens in all, and an expired one counts until it is deleted. Unset is 50.",
+                "description": "How many unexpired on-demand tokens this preset may have in all, whoever holds them; a mint over it is refused (`preset_cap`). Cloudflare allows an account 500 tokens in all, and an expired one counts until it is deleted. The record of minted tokens holds about 65 on-demand tokens, so a value above about 60 is refused as `record_full` first. Unset is 50.",
                 "minimum": 1,
                 "type": "integer"
               },
@@ -1852,7 +1852,7 @@
                 "type": "integer"
               },
               "maxMintsPerCallerPerHour": {
-                "description": "How many tokens of this preset one caller may be minted in an hour; one over it is refused (`rate_limited`). Counted from the tokens Cloudflare still lists as live and from this process's own, so a token that expired inside the hour is only counted where it was minted. Unset is 30.",
+                "description": "How many tokens of this preset one caller may be minted in an hour; one over it is refused (`rate_limited`). Counted from the preset's record of minted tokens and from this process's own mints, so a token that expired inside the hour and was deleted is only counted where it was minted. Unset is 30.",
                 "minimum": 1,
                 "type": "integer"
               },

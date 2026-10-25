@@ -4,8 +4,11 @@ package minter_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -134,6 +137,59 @@ type env struct {
 	v5     *secretstore.StoresV5
 	v5Root state.Store
 	clock  *time.Time
+	// cfg is what m was made of, for another replica over the same store.
+	cfg minter.Config
+	// faults fail the reads or the writes of the records of minted tokens.
+	faults recordFaults
+}
+
+// recordFaults switch failures of the records of minted tokens on and off.
+type recordFaults struct{ get, put atomic.Bool }
+
+var errRecordStore = errors.New("the store is down")
+
+// faultStore is a store whose records of minted tokens can fail.
+type faultStore struct {
+	state.Store
+	f *recordFaults
+}
+
+func isRecord(key string) bool { return strings.HasPrefix(key, "minted/") }
+
+func (s faultStore) Get(ctx context.Context, key string) (state.Item, error) {
+	if isRecord(key) && s.f.get.Load() {
+		return state.Item{}, errRecordStore
+	}
+	return s.Store.Get(ctx, key)
+}
+
+func (s faultStore) Put(ctx context.Context, key string, value []byte, ifRev state.Rev) (state.Rev, error) {
+	if isRecord(key) && s.f.put.Load() {
+		return "", errRecordStore
+	}
+	return s.Store.Put(ctx, key, value, ifRev)
+}
+
+func (s faultStore) Child(prefix string, opts ...state.Option) state.Store {
+	return faultStore{Store: s.Store.Child(prefix, opts...), f: s.f}
+}
+
+// replica is another minter over the same store and account: another Lambda
+// container or Kubernetes replica, with nothing in memory of its own.
+func (e *env) replica() *minter.Minter {
+	e.t.Helper()
+	m, err := minter.New(e.cfg)
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	return m
+}
+
+// listCount is how many times the account's tokens were listed.
+func (e *env) listCount() int {
+	e.api.mu.Lock()
+	defer e.api.mu.Unlock()
+	return e.api.lists
 }
 
 // external is the preset's stored credential.
@@ -171,7 +227,7 @@ func setupWith(t *testing.T, pause minter.Pause, change func(*config.Cloudflare)
 	e := &env{t: t, clock: &clock, rec: audittest.New(t)}
 	now := func() time.Time { return clock }
 	e.api = newFake(now)
-	e.v5Root = memory.New()
+	e.v5Root = faultStore{Store: memory.New(), f: &e.faults}
 	e.v5 = secretstore.FromStoreV5(e.v5Root, "")
 	minterAt := e.v5.Cloudflare().MinterAt
 	cf := &config.Cloudflare{
@@ -210,6 +266,7 @@ func setupWith(t *testing.T, pause minter.Pause, change func(*config.Cloudflare)
 		Audit: e.rec, Now: now, Propagation: -1, Maintenance: pause,
 	}
 	e.secretsConfig(&mc)
+	e.cfg = mc
 	e.m, err = minter.New(mc)
 	if err != nil {
 		t.Fatal(err)
