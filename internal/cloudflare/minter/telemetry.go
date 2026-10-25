@@ -17,6 +17,7 @@ import (
 //	sluis.cloudflare.rotation.interval         the preset's `rotation`, in seconds
 //	sluis.cloudflare.tokens.minted             mints by preset, variant and outcome (ok, refused, failed)
 //	sluis.cloudflare.tokens.swept              expired tokens deleted, by preset
+//	sluis.cloudflare.record.drift              record entries the pass corrected against Cloudflare, by preset and kind (unrecorded, gone)
 //
 // The alert fires when the last rotation is older than twice the interval.
 const meterName = "github.com/truvity/sluis/cloudflare"
@@ -31,6 +32,7 @@ type instruments struct {
 	minted       metric.Int64Counter
 	sweptTokens  metric.Int64Counter
 	refused      metric.Int64Counter
+	recordDrift  metric.Int64Counter
 }
 
 var meters = newInstruments()
@@ -49,7 +51,9 @@ func newInstruments() instruments {
 		metric.WithDescription("Expired Cloudflare tokens sluis deleted, by preset."))
 	refused, _ := meter.Int64Counter("sluis.cloudflare.prototype.refused",
 		metric.WithDescription("Prototypes refused at a mint or a check, by preset and reason (prototype_active, prototype_forbidden, prototype_missing). Any is an error to look at."))
-	return instruments{lastRotation: last, rotation: interval, minted: minted, sweptTokens: swept, refused: refused}
+	drift, _ := meter.Int64Counter("sluis.cloudflare.record.drift",
+		metric.WithDescription("Differences the pass found between a preset's record of minted tokens and the tokens Cloudflare has, by preset and kind: unrecorded (Cloudflare has it, the record lacked it; it was uncounted by the on-demand caps until then) or gone (recorded, and deleted outside sluis). Any unrecorded is worth a look."))
+	return instruments{lastRotation: last, rotation: interval, minted: minted, sweptTokens: swept, refused: refused, recordDrift: drift}
 }
 
 func (i instruments) lastRotationAt(ctx context.Context, preset string, at time.Time) {
@@ -63,6 +67,10 @@ func (i instruments) mint(ctx context.Context, preset, variant, outcome string) 
 
 func (i instruments) swept(ctx context.Context, preset string, n int) {
 	i.sweptTokens.Add(ctx, int64(n), metric.WithAttributes(attribute.String("preset", preset)))
+}
+
+func (i instruments) drift(ctx context.Context, preset, kind string, n int) {
+	i.recordDrift.Add(ctx, int64(n), metric.WithAttributes(attribute.String("preset", preset), attribute.String("kind", kind)))
 }
 
 func (i instruments) interval(ctx context.Context, preset string, d time.Duration) {

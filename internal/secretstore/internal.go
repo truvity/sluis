@@ -39,12 +39,25 @@ func CheckInternalRef(ref string) (string, error) {
 type CloudflareMintedToken struct {
 	ID        string    `json:"id"`
 	ExpiresOn time.Time `json:"expires_on"`
+	// Caller is, for a token minted on demand, a short digest of the caller's
+	// segment of its name: the on-demand caps count by it. Empty for the
+	// preset's stored token, and for an entry an older release wrote, which the
+	// pass fills in from the token's name. A digest keeps every entry the same
+	// short length whoever the caller is, so the record stays within 8 KiB.
+	Caller string `json:"caller,omitempty"`
+	// Minted is when a token minted on demand was minted, in Unix seconds, for
+	// the per-caller hourly rate; zero when Caller is empty.
+	Minted int64 `json:"minted,omitempty"`
 }
 
 // CloudflareMinted is the record of the tokens sluis minted for a preset, which
-// the sweep deletes by id. Cloudflare hides an expired token from its list while
-// still counting it toward the account's 500, so a sweep that listed would never
-// find what it must delete. The ids are not secrets.
+// the sweep deletes by id and the on-demand caps count. Cloudflare hides an
+// expired token from its list while still counting it toward the account's
+// 500, so a sweep that listed would never find what it must delete. The ids are
+// not secrets.
 type CloudflareMinted struct {
 	Tokens []CloudflareMintedToken `json:"tokens"`
+	// ReconciledAt is when the pass last held the record against the tokens
+	// Cloudflare lists; zero before the first time.
+	ReconciledAt time.Time `json:"reconciled_at,omitzero"`
 }

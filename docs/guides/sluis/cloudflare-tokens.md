@@ -16,9 +16,10 @@ Make sluis clone a disabled Cloudflare prototype token into expiring account tok
 |---|---|
 | `allowedPermissionGroups` | the prototype may grant only these groups, else `prototype_forbidden`; the forbidden list stays the floor. Prefer setting it |
 | `maxLivePerCaller`, `maxLive`, `maxMintsPerCallerPerHour` | on-demand caps, defaults 10, 50 and 30. Over one the mint is refused (`caller_cap`, `preset_cap`, `rate_limited`), audited, and answered `access_denied` |
-| Record of minted ids | an on-demand mint first deletes the preset's expired tokens; a record that still holds about 100 ids refuses the mint as `record_full` |
-| Caps across containers | soft: each process counts the list Cloudflare gave it up to 10 s ago plus its own mints, so replicas and Lambda containers can overshoot together |
-| Counting fails | a failed list fails the mint (fail closed) |
+| Record of minted ids | an on-demand mint first deletes the preset's expired tokens; a record that still holds about 100 stored or 65 on-demand ids refuses the mint as `record_full` |
+| Counting | from the preset's record of minted tokens and the mints under way in the process; a mint never lists the account |
+| Caps between passes | soft: a token created and never recorded counts from the next pass, at most `ReconcileEvery` (10m) or one tick later; two replicas reading the record at once can overshoot together |
+| Counting fails | a record that cannot be read fails the mint (fail closed) |
 
 ## 1. Create the minter token
 
@@ -78,6 +79,7 @@ cloudflare:
 | Tokens per account | 500; a 1h `lifetime` with a 20m `rotation` keeps about three live per preset |
 | Token names | `sluis/<instance>/<preset>/<time>`; on demand `sluis/<instance>/<preset>/<caller>/<time>` |
 | Sweep | deletes only expired tokens it recorded, under its own preset's prefix; the pass and each on-demand mint sweep |
+| Reconcile | for a granted preset, the pass lists the account every `ReconcileEvery` (10m), records the preset's tokens the record lacks, and forgets entries for tokens Cloudflare no longer has; each is logged and counted in `sluis.cloudflare.record.drift` |
 
 In the policy, grant a group per preset. Pin a CI job by `github` matchers, never by workflow name:
 
