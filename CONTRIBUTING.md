@@ -16,7 +16,7 @@ v1 lives on `master` and gets fixes only. For a v1 fix, branch from `master` and
 
 Describe the problem before the solution. Say who has the problem and what they do today.
 The maintainer replies with one of: accepted, needs a decision, out of scope. New scope needs an ADR first (see [GOVERNANCE.md](GOVERNANCE.md)).
-Accepted features are tracked on the public [sluis roadmap](https://github.com/orgs/truvity/projects) project and in `docs/roadmap.md` once that file exists.
+Accepted features are tracked on the public [sluis roadmap](https://github.com/orgs/truvity/projects/9) project and in `docs/roadmap.md` once that file exists.
 
 ## Proposing a decision
 
