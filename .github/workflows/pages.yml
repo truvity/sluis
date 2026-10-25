@@ -1,0 +1,122 @@
+# Builds the sluis.id website (Astro Starlight, site/ and docs/) together with the
+# v1 documentation from the `master` branch (under /v1/), and publishes it to
+# GitHub Pages. This workflow publishes; checks.yml judges pull requests.
+#
+# THE DEPLOY IS OFF. Until the owner switches Pages over from `master` to this
+# branch, the build runs on every push and proves the site builds, but the
+# `deploy` job runs only on a manual run (workflow_dispatch) from `main`, and
+# `published` only follows a deploy. To switch over, see the pull request that
+# added this file: it lists the steps (the github-pages environment must allow
+# `main`, and the Pages workflow on `master` must stop publishing).
+#
+# The DNS of sluis.id is managed outside this repository, and this workflow does
+# not touch the Pages settings or the custom domain.
+name: Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+      - "docs/**"
+      - "Justfile"
+      - "lychee.toml"
+      - "devbox.json"
+      - "devbox.lock"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      # Images and fonts are in Git LFS (.gitattributes), so lfs: true.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          lfs: true
+          persist-credentials: false
+      # v1: the MkDocs site on master, built under /v1/ by site/scripts/build-v1.sh.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: master
+          path: v1-src
+          lfs: true
+          persist-credentials: false
+      - uses: truvity/ci-actions/setup-devbox@eae9926515d96296eeed99aa358d2957a89647e8 # v3.3.1
+      - name: Build the site (strict)
+        run: devbox run -- just site-build
+      - name: Build v1 into /v1/
+        run: devbox run -- site/scripts/build-v1.sh v1-src site/dist
+      - name: Check the built site
+        run: devbox run -- site/scripts/check-built.sh site/dist
+      - name: Stamp the build
+        # build.json is what `published` compares against the live site.
+        run: |
+          touch site/dist/.nojekyll
+          printf '{"commit":"%s","run":"%s"}\n' "$GITHUB_SHA" "$GITHUB_RUN_ID" > site/dist/build.json
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: site/dist
+
+  # Manual only, from main, until the owner switches Pages over. To switch,
+  # replace the event condition with `github.event_name != 'pull_request'`.
+  deploy:
+    needs: build
+    if: ${{ !cancelled() && needs.build.result == 'success' && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    outputs:
+      page_url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+
+  # A green run is not a live site. Fetch the site and fail unless the build
+  # that was just deployed is the one being served.
+  published:
+    needs: [build, deploy]
+    if: ${{ !cancelled() && needs.build.result == 'success' && needs.deploy.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PAGE_URL: ${{ needs.deploy.outputs.page_url }}
+    steps:
+      - name: The deployed build is live
+        run: |
+          set -euo pipefail
+          base="${PAGE_URL%/}"
+          [ -n "$base" ] || { echo "::error::the deploy reported no page_url"; exit 1; }
+          for i in $(seq 1 30); do
+            live=$(curl -fsS --max-time 20 "$base/build.json?run=$GITHUB_RUN_ID-$i" 2>/dev/null | sed -n 's/.*"commit":"\([0-9a-f]*\)".*/\1/p' || true)
+            if [ "$live" = "$GITHUB_SHA" ]; then
+              echo "$base serves build $live"
+              break
+            fi
+            echo "attempt $i: $base serves '${live:-nothing}', want $GITHUB_SHA"
+            [ "$i" -lt 30 ] || { echo "::error::$base does not serve the build that was deployed"; exit 1; }
+            sleep 10
+          done
+          landing=$(curl -fsS --max-time 20 "$base/")
+          case "$landing" in
+            *"a pluggable identity and access broker"*) ;;
+            *) echo "::error::the landing page is not the expected one"; exit 1 ;;
+          esac
+          curl -fsS --max-time 20 -o /dev/null "$base/v1/" \
+            || { echo "::error::the v1 documentation is not served at $base/v1/"; exit 1; }
+          curl -fsS --max-time 20 -o /dev/null "$base/pagefind/pagefind.js" \
+            || { echo "::error::the search index is not served"; exit 1; }

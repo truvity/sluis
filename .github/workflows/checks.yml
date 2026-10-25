@@ -1,0 +1,76 @@
+# Judges pull requests to the sluis.id website: description lint, a strict build,
+# a link check, the workflows themselves, and the v1 build under /v1/. It never
+# publishes (pages.yml does), and it is not path-filtered, so it can be made a
+# required check on `main`.
+name: Checks
+
+on:
+  pull_request:
+  merge_group:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  site:
+    name: site (lint, strict build, links)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          lfs: true
+          persist-credentials: false
+      - uses: truvity/ci-actions/setup-devbox@eae9926515d96296eeed99aa358d2957a89647e8 # v3.3.1
+      - run: devbox run -- just site-check
+
+  v1:
+    name: v1 under /v1/
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          lfs: true
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: master
+          path: v1-src
+          lfs: true
+          persist-credentials: false
+      - uses: truvity/ci-actions/setup-devbox@eae9926515d96296eeed99aa358d2957a89647e8 # v3.3.1
+      - run: devbox run -- just site-build
+      - run: devbox run -- site/scripts/build-v1.sh v1-src site/dist
+      - run: devbox run -- site/scripts/check-built.sh site/dist
+
+  workflows:
+    name: workflows (actionlint)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: truvity/ci-actions/setup-devbox@eae9926515d96296eeed99aa358d2957a89647e8 # v3.3.1
+      - run: devbox run -- actionlint
+
+  # One name to require. A job that was skipped or cancelled is not a pass.
+  checks:
+    needs: [site, v1, workflows]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Every check succeeded
+        env:
+          RESULTS: ${{ needs.site.result }} ${{ needs.v1.result }} ${{ needs.workflows.result }}
+        run: |
+          echo "site v1 workflows: $RESULTS"
+          for r in $RESULTS; do
+            [ "$r" = "success" ] || { echo "::error::a check did not succeed"; exit 1; }
+          done

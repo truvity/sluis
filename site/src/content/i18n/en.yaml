@@ -1,0 +1,3 @@
+# Starlight reads this collection on every build and warns when it is empty.
+# The one key restates the default so the collection has content.
+search.label: Search
