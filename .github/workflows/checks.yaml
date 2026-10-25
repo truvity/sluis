@@ -1,6 +1,6 @@
 # Judges pull requests to the sluis.id website: description lint, a strict build,
 # a link check, the workflows themselves, and the v1 build under /v1/. It never
-# publishes (pages.yaml does), and it is not path-filtered, so it can be made a
+# publishes (site.yaml does), and it is not path-filtered, so it can be made a
 # required check on `main`.
 name: Checks
 
