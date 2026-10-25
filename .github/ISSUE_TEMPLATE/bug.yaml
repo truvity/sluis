@@ -1,0 +1,57 @@
+name: Bug
+description: Something does not work as documented.
+labels: ["type:bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not report vulnerabilities here. Use the private security advisory link on the issue chooser.
+        Do not paste real secrets, tokens, hostnames or personal data.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Release tag or commit, and the branch (`main` or `master`).
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - core
+        - port
+        - driver
+        - integration
+        - service
+        - deploy
+        - conformance
+        - docs
+        - not sure
+    validations:
+      required: true
+  - type: textarea
+    id: happened
+    attributes:
+      label: What happened
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: The smallest steps that show the problem.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or output
+      description: Remove secrets and personal data first.
+      render: text
