@@ -151,6 +151,8 @@ func (m *Minter) reconcile(ctx context.Context, preset string, p config.Cloudfla
 	var added, full []string
 	uerr := m.updateRecord(ctx, preset, func(d *secretstore.CloudflareMinted) {
 		added, full = nil, nil
+		// Set first, so the room counted below is the room the write has.
+		d.ReconciledAt = now.UTC()
 		d.Tokens = slices.DeleteFunc(d.Tokens, func(t secretstore.CloudflareMintedToken) bool { return slices.Contains(gone, t.ID) })
 		for i, t := range d.Tokens {
 			if n, ok := names[t.ID]; ok && t.Caller == "" {
@@ -169,7 +171,6 @@ func (m *Minter) reconcile(ctx context.Context, preset string, p config.Cloudfla
 			d.Tokens = append(d.Tokens, u)
 			added = append(added, u.ID)
 		}
-		d.ReconciledAt = now.UTC()
 	})
 	if uerr != nil {
 		return errors.Join(append(errs, fmt.Errorf("update the record: %w", uerr))...)
