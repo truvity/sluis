@@ -377,7 +377,7 @@
       "id": 6,
       "type": "stat",
       "title": "Targets not ticking",
-      "description": "Targets (GitHub organisations, Slack workspaces) with no ok tick for over an hour, four default intervals. See SluisTickStale.",
+      "description": "Live targets (GitHub organisations, Slack workspaces, Outline workspaces: a tick counted in the last 15 minutes) with no ok tick in the last hour, four default intervals, from the tick counter. See SluisTickStale.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -395,7 +395,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "count(time() - max by (k8s_cluster_name, namespace, kind, target) (last_over_time(sluis_tick_last_success_timestamp_seconds{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[1d])) > 3600) or vector(0)",
+          "expr": "count(max by (k8s_cluster_name, namespace, kind, target) (last_over_time(sluis_ticks_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[15m])) unless sum by (k8s_cluster_name, namespace, kind, target) (increase(sluis_ticks_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\",outcome=\"ok\"}[1h])) > 0) or vector(0)",
           "legendFormat": "",
           "range": false,
           "instant": true,
@@ -1387,8 +1387,8 @@
     {
       "id": 23,
       "type": "timeseries",
-      "title": "Seconds since the last ok tick, by target",
-      "description": "For every target, how long since its last ok tick. A line that climbs past an hour (four default intervals) is a target nobody is reconciling: SluisTickStale.",
+      "title": "Ok ticks in the last hour, by target",
+      "description": "For every target, its ok ticks over the last hour, from the tick counter: four at the default interval (15m). A line at zero for a target that still reports is a target nobody is reconciling: SluisTickStale.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -1406,7 +1406,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "time() - max by (kind, target) (last_over_time(sluis_tick_last_success_timestamp_seconds{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\"}[1d]))",
+          "expr": "sum by (kind, target) (increase(sluis_ticks_total{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\",outcome=\"ok\"}[1h]))",
           "legendFormat": "{{kind}} {{target}}",
           "range": true,
           "instant": false,
@@ -1415,7 +1415,7 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "s",
+          "unit": "short",
           "noValue": "no data",
           "custom": {
             "drawStyle": "line",

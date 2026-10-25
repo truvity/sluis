@@ -41,6 +41,6 @@ To roll back, roll back the release. Do not scale the old Deployment down or del
 
 ## Alert on a stopped controller
 
-Alert on `sluis.tick.last_success_timestamp` per `kind` and `target`. The chart's [SluisTickStale](../../../reference/sluis/telemetry.md) ages it and `SluisTickSeriesStale` flags a stopped series. The series is absent before a first tick and after two hours of silence, so add `absent(...)` for a gone controller. The series are listed in [telemetry](../../../reference/sluis/telemetry.md#the-controllers-and-the-rails). Stop a controller in a test installation to see the alert fire.
+Alert on the ok ticks of `sluis.ticks` per `kind` and `target`; the last-success gauge is per process. The chart's [SluisTickStale](../../../reference/sluis/telemetry.md) counts them and `SluisTickSeriesStale` flags a stopped series. After two hours of silence the series is absent, so add `absent(...)` for a gone controller. The series are listed in [telemetry](../../../reference/sluis/telemetry.md#the-controllers-and-the-rails). Stop a test controller to see it fire.
 
 More than one replica is [high availability](high-availability.md): losing one pauses reconciling only while a new pod starts.
