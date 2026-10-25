@@ -10,6 +10,21 @@ import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
     pagefind: false,
   }}
 >
+  <!--
+    v1 pages moved from the site root to /v1/. Old links (sluis.id/<page>, and
+    truvity.github.io/sluis/<page>, which GitHub redirects here) land on this
+    page; send them on when the same path exists under /v1/.
+  -->
+  <script is:inline>
+    (() => {
+      const path = location.pathname;
+      if (path === '/v1' || path.startsWith('/v1/')) return;
+      const target = '/v1' + path;
+      fetch(target, { method: 'HEAD' })
+        .then((r) => { if (r.ok) location.replace(target + location.search + location.hash); })
+        .catch(() => {});
+    })();
+  </script>
   <p>There is nothing at this address.</p>
   <ul>
     <li><a href="/">The start page</a></li>
