@@ -116,9 +116,26 @@ alerts:
     tokenLatency:
       enabled: true
       severity: warning
-      # p99 of the token endpoint, over 10m. A token is signed in memory and
-      # one store write: milliseconds when healthy.
+      # p99 of the token endpoint (route `token`), over `window`. A token is
+      # signed in memory and one store write: milliseconds when healthy. A
+      # Cloudflare mint is route `token_mint` and tokenMintLatency's.
       thresholdSeconds: 2
+      window: 30m
+      # The fewest token requests in `window` that count: below 100, a p99
+      # is the slowest single request.
+      minRequests: 100
+      for: 15m
+      labels: {}
+    tokenMintLatency:
+      enabled: true
+      severity: warning
+      # p95 of the token endpoint's Cloudflare mints (route `token_mint`),
+      # over `window`. A mint waits on the Cloudflare module and on
+      # Cloudflare, so seconds are expected; 10s is a mint path in trouble.
+      thresholdSeconds: 10
+      window: 1h
+      # The fewest mints in `window` that count.
+      minRequests: 5
       for: 15m
       labels: {}
     tickFailing:

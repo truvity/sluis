@@ -3326,7 +3326,7 @@ spec:
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "description": "The token endpoint on its own, the one clients wait on. SluisTokenEndpointSlow fires on its p99.",
+          "description": "The token endpoint on its own, the one clients wait on. SluisTokenEndpointSlow fires on its p99. A Cloudflare credential mint (route token_mint) is apart: it waits on the Cloudflare module and on Cloudflare, so seconds are its normal; its p95 is over an hour, as mints are few. SluisTokenMintSlow fires on it.",
           "fieldConfig": {
             "defaults": {
               "custom": {
@@ -3396,9 +3396,21 @@ spec:
               "legendFormat": "p99",
               "range": true,
               "refId": "B"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "editorMode": "code",
+              "expr": "histogram_quantile(0.95, sum by (le) (rate(sluis_http_request_duration_seconds_bucket{k8s_cluster_name=~\"$cluster\",namespace=~\"$namespace\",route=\"token_mint\"}[1h])))",
+              "instant": false,
+              "legendFormat": "Cloudflare mint p95 (1h)",
+              "range": true,
+              "refId": "C"
             }
           ],
-          "title": "Token endpoint latency, p50 and p99",
+          "title": "Token endpoint latency, p50 and p99, and Cloudflare mints",
           "type": "timeseries"
         },
         {

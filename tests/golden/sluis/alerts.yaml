@@ -89,12 +89,14 @@ spec:
         # A token is signed in memory and costs one store write, so the p99 of the token
         # endpoint is milliseconds when healthy. Two seconds is two orders of magnitude
         # over that and still short of the clients' timeouts, which is where a slow
-        # issuer starts to look like a down one. Ten minutes of rate smooths a single slow
-        # request; the quantile over `le` buckets of every replica together is the one a
-        # client sees.
+        # issuer starts to look like a down one. The quantile over `le` buckets of every
+        # replica together is the one a client sees. Only `route="token"`: a Cloudflare
+        # mint is `token_mint`, seconds by design, and SluisTokenMintSlow's. Below
+        # `minRequests` (100) in `window` (30m) a p99 is the slowest single request, so
+        # the rule says nothing until there are enough.
         - alert: SluisTokenEndpointSlow
           expr: >-
-            histogram_quantile(0.99, sum by (k8s_cluster_name, namespace, le) (rate(sluis_http_request_duration_seconds_bucket{namespace="sluis",route="token"}[10m]))) > 2
+            histogram_quantile(0.99, sum by (k8s_cluster_name, namespace, le) (rate(sluis_http_request_duration_seconds_bucket{namespace="sluis",route="token"}[30m]))) > 2 and sum by (k8s_cluster_name, namespace) (increase(sluis_http_request_duration_seconds_count{namespace="sluis",route="token"}[30m])) >= 100
           for: 15m
           labels:
             k8s_cluster_name: example
@@ -104,9 +106,31 @@ spec:
             summary: 'The sluis token endpoint in {{ $labels.namespace }} has a p99 of {{ $value | humanizeDuration }}'
             description: >-
               Token requests are taking longer than 2s at the
-              99th percentile. The store (see the port latency panel), the policy's size and
+              99th percentile over 30m, Cloudflare mints apart. The store (see the port latency panel), the policy's size and
               the directory are what a token waits on.
             runbook_url: "https://github.com/truvity/sluis/blob/master/docs/reference/sluis/telemetry.md#sluistokenendpointslow"
+        # A Cloudflare credential is minted while the caller waits: the token endpoint
+        # calls the Cloudflare module, which lists the account's tokens and creates one
+        # at Cloudflare, so a mint takes seconds where any other token takes
+        # milliseconds. Its requests are `route="token_mint"`. A p95 over `thresholdSeconds`
+        # (10s) is a mint path in trouble (Cloudflare slow or retrying, the module cold
+        # or throttled) and close to a caller's timeout. Mints are few, tens a day, so
+        # the window is an hour and `minRequests` (5) keeps one slow mint from being it.
+        - alert: SluisTokenMintSlow
+          expr: >-
+            histogram_quantile(0.95, sum by (k8s_cluster_name, namespace, le) (rate(sluis_http_request_duration_seconds_bucket{namespace="sluis",route="token_mint"}[1h]))) > 10 and sum by (k8s_cluster_name, namespace) (increase(sluis_http_request_duration_seconds_count{namespace="sluis",route="token_mint"}[1h])) >= 5
+          for: 15m
+          labels:
+            k8s_cluster_name: example
+            severity: warning
+            team: platform
+          annotations:
+            summary: 'Cloudflare mints at the sluis token endpoint in {{ $labels.namespace }} have a p95 of {{ $value | humanizeDuration }}'
+            description: >-
+              Cloudflare credential mints are taking longer than 10s at the
+              95th percentile over 1h. The Cloudflare module's log and traces say whether
+              Cloudflare's API is slow or retrying; the function's duration and throttles say whether the module is.
+            runbook_url: "https://github.com/truvity/sluis/blob/master/docs/reference/sluis/telemetry.md#sluistokenmintslow"
         # A tick that fails once is a console mid-rollout or GitHub having a moment, and
         # the next pass repairs it. The default interval is 15 minutes, so
         # `failures` (3) failed ticks of ONE target within `window` (45m) is three in a

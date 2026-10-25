@@ -13,12 +13,14 @@ import (
 	"time"
 
 	"github.com/zitadel/oidc/v3/pkg/oidc"
+	"go.opentelemetry.io/otel/attribute"
 
 	"github.com/truvity/sluis/internal/cloudflare/minter"
 	cfrpc "github.com/truvity/sluis/internal/cloudflare/rpc"
 	"github.com/truvity/sluis/internal/config"
 	"github.com/truvity/sluis/internal/issuer"
 	"github.com/truvity/sluis/internal/maintenance"
+	"github.com/truvity/sluis/internal/telemetry"
 	"github.com/truvity/sluis/policy"
 	"github.com/truvity/sluis/tokens"
 )
@@ -132,7 +134,9 @@ func serveCloudflare(t *testing.T, withMinter bool) cloudflareIssuer {
 	if err != nil {
 		t.Fatalf("handler: %v", err)
 	}
-	server := httptest.NewServer(h)
+	// Wrapped as the issuer's listener is (issuerapp), so the request metrics
+	// carry the route the token endpoint records.
+	server := httptest.NewServer(telemetry.HTTPHandler(h, "access-issuer", issuer.Route))
 	t.Cleanup(server.Close)
 	return cloudflareIssuer{server: server, iss: iss, minter: fake}
 }
@@ -365,5 +369,33 @@ func TestACloudflareModuleUnderMaintenanceIsAServiceUnavailable(t *testing.T) {
 	status, body, header := c.ask(t, "", url.Values{"subject_token": {"job:release.yml"}, "audience": {"cloudflare:dns"}})
 	if status != http.StatusServiceUnavailable || body["error"] != maintenance.Code || header.Get("Retry-After") == "" {
 		t.Errorf("mint under maintenance = %d %v (Retry-After %q), want 503 %q with Retry-After", status, body, header.Get("Retry-After"), maintenance.Code)
+	}
+}
+
+// A Cloudflare mint is recorded under its own route, `token_mint`, so its
+// seconds stay out of the token endpoint's latency; any other token request,
+// a token exchange included, stays `token`.
+func TestACloudflareMintIsRecordedAsTokenMint(t *testing.T) {
+	metricsReader()
+	c := serveCloudflare(t, true)
+	mintOK := []attribute.KeyValue{attribute.String("route", issuer.RouteTokenMint), attribute.String("status_class", "2xx")}
+	tokenRefused := []attribute.KeyValue{attribute.String("route", "token"), attribute.String("status_class", "4xx")}
+	mints, tokens0 := counted(t, "sluis.http.requests", mintOK...), counted(t, "sluis.http.requests", tokenRefused...)
+
+	if status, body, _ := c.ask(t, "", url.Values{"subject_token": {"job:release.yml"}, "audience": {"cloudflare:dns"}}); status != http.StatusOK {
+		t.Fatalf("mint = %d %v", status, body)
+	}
+	// An exchange for an ordinary access token, refused for its audience.
+	if status, body, _ := c.ask(t, "", url.Values{
+		"subject_token": {"job:release.yml"}, "audience": {"nobody"}, "requested_token_type": {string(oidc.AccessTokenType)},
+	}); status != http.StatusBadRequest {
+		t.Fatalf("exchange = %d %v, want 400", status, body)
+	}
+
+	if got := counted(t, "sluis.http.requests", mintOK...) - mints; got < 1 {
+		t.Errorf("token_mint 2xx grew by %d, want the mint", got)
+	}
+	if got := counted(t, "sluis.http.requests", tokenRefused...) - tokens0; got < 1 {
+		t.Errorf("token 4xx grew by %d, want the exchange", got)
 	}
 }

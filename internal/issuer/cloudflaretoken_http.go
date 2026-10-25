@@ -18,6 +18,7 @@ import (
 
 	cfrpc "github.com/truvity/sluis/internal/cloudflare/rpc"
 	"github.com/truvity/sluis/internal/maintenance"
+	"github.com/truvity/sluis/internal/telemetry"
 	"github.com/truvity/sluis/tokens"
 )
 
@@ -78,6 +79,12 @@ func cloudflareTokens(iss *Issuer, storage *Storage, provider *op.Provider, next
 			next.ServeHTTP(w, r)
 			return
 		}
+		// A mint waits on the Cloudflare module and on Cloudflare, seconds
+		// where any other token is milliseconds, so its latency is recorded
+		// apart from the token endpoint's. The label only: the migration
+		// freeze still decides on the path and the grant (issuer.Route), and
+		// a frozen installation's Cloudflare module refuses the mint itself.
+		telemetry.SetRoute(r.Context(), RouteTokenMint)
 		serveCloudflareToken(w, r, iss, storage, provider, form)
 	})
 }
