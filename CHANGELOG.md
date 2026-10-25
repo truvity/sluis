@@ -1,5 +1,9 @@
 ## Unreleased
 
+## v1.79.1
+
+A patch release: alerts that stop paging falsely, and traces of the Cloudflare mint. `SluisTickStale` and `SluisTickSeriesStale` read the tick counter instead of the last-success gauge, which on Lambda mixes the stamps of every warm environment and paged a healthy target as stale. A Cloudflare credential mint is recorded as its own route, `token_mint`; `SluisTokenEndpointSlow` leaves mints out and needs 100 requests in 30 minutes, and a new warning, `SluisTokenMintSlow`, the 13th rule, watches the mints. Each call to Cloudflare's API is now a span, with one child span per attempt. Upgrade notes: the chart renders the new rule, so route or silence `SluisTokenMintSlow` as a warning; a silence on the old `SluisTickStale` summary text must match the new one; a rule or panel of your own that reads `route="token"` no longer sees Cloudflare mints.
+
 ### Added
 
 - **Each call to Cloudflare's API is a span, and each attempt a child span.** A Cloudflare mint spent seconds the traces could not place. The Cloudflare module's client (`internal/cloudflare/cfapi`) now opens `cloudflare <Method>` for `ListTokens`, `GetToken`, `CreateToken`, `DeleteToken` and `PermissionGroups`, and under it one `cloudflare <HTTP method>` span per attempt with `http.response.status_code`, `error.type` and `http.request.resend_count`, so a retry shows as its own span. A listing carries the pages it read and the entries it returned (`sluis.cloudflare.pages`, `sluis.cloudflare.listed`), the three new keys of the exporter's allowlist. No span carries the URL, the account, a token's id, name or value; a test holds that before any filter. **Upgrade:** none.
