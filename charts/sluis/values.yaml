@@ -133,11 +133,12 @@ alerts:
     tickStale:
       enabled: true
       severity: critical
-      # No ok tick of a target for this long: 1h is four default intervals
-      # (15m), which tolerates three missed passes.
+      # No ok tick of a target for this long, counted on sluis_ticks_total
+      # (the window of its increase): 1h is four default intervals (15m),
+      # which tolerates three missed passes.
       maxAgeSeconds: 3600
       for: 10m
-      # A target is live while its series has a sample this recent, which is
+      # A target is live while its tick counter has a sample this recent, which is
       # what separates a controller that keeps failing (this rule) from a
       # series that stopped (tickSeriesStale reads the same window).
       liveWindow: 15m

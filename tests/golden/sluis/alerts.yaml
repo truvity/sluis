@@ -129,41 +129,45 @@ spec:
               console, and the log's "a pass over an organisation failed" or the Slack
               equivalent) names the error.
             runbook_url: "https://github.com/truvity/sluis/blob/master/docs/reference/sluis/telemetry.md#sluistickfailing"
-        # The time since a live target's last ok tick, from a gauge each ok tick stamps.
-        # It catches what a failure counter cannot: a loop that hangs, a lease nobody
-        # can take, a controller that runs and never succeeds. One hour is four default
-        # intervals (15m), which tolerates three missed passes. A running controller
-        # reports the gauge on every export with its last ok stamp, so a live target
-        # that stalls keeps a series whose stamp ages. Only a series with a sample in
-        # the last `liveWindow` (15m) is read: one that stopped reporting, as a target
-        # renamed, removed from the policy or relabelled does, is not a stuck
-        # controller, and SluisTickSeriesStale says that instead, as a warning.
+        # No ok tick of a live target within `maxAgeSeconds` (one hour), read from the
+        # tick counter. It catches what a failure counter cannot: a loop that hangs, a
+        # lease nobody can take, a controller that runs and never succeeds. One hour is
+        # four default intervals (15m), which tolerates three missed passes. A target is
+        # live while any of its `sluis_ticks_total` series has a sample in the last
+        # `liveWindow` (15m): one that stopped reporting, as a target renamed, removed
+        # from the policy or relabelled does, is not a stuck controller, and
+        # SluisTickSeriesStale says that instead, as a warning. `unless` rather than
+        # `== 0`, so a target with no ok series at all (every tick failed since the
+        # process started) still fires. The counter, not the last-success gauge: on
+        # Lambda every warm environment keeps its own gauge and exports it under the
+        # same labels, so the series takes whichever environment exported last, and
+        # one that last succeeded hours ago makes a healthy target look stale.
         - alert: SluisTickStale
           expr: >-
-            time() - max by (k8s_cluster_name, namespace, kind, target) (last_over_time(sluis_tick_last_success_timestamp_seconds{namespace="sluis"}[15m])) > 3600
+            max by (k8s_cluster_name, namespace, kind, target) (last_over_time(sluis_ticks_total{namespace="sluis"}[15m])) unless sum by (k8s_cluster_name, namespace, kind, target) (increase(sluis_ticks_total{namespace="sluis",outcome="ok"}[3600s])) > 0
           for: 10m
           labels:
             k8s_cluster_name: example
             severity: critical
             team: platform
           annotations:
-            summary: 'No successful {{ $labels.kind }} of {{ $labels.target }} for {{ $value | humanizeDuration }}'
+            summary: 'No successful {{ $labels.kind }} of {{ $labels.target }} in the last 3600s'
             description: >-
-              This target is still reporting but has not completed a tick for longer than 3600s.
+              This target is still reporting ticks but none of them succeeded in the last 3600s.
               Check that its leases are not held by a runner that is gone (SluisLeaseLost),
               and the controller's log for the failures.
             runbook_url: "https://github.com/truvity/sluis/blob/master/docs/reference/sluis/telemetry.md#sluistickstale"
-        # A target's series that had a sample in the last two hours and has none in the
-        # last `tickStale.liveWindow` (15m): nothing exports it any more. The usual
-        # cause is a target the policy no longer declares or declares under another
-        # name, or a label that changed; the other is a controller gone. It is a
-        # warning because the usual cause is a change somebody made, and it leaves the
-        # rule by itself two hours after the series' last sample. The two hours are the
-        # look-back, so a controller gone for good leaves silence which only
+        # A target's tick counter that had a sample in the last two hours and has none
+        # in the last `tickStale.liveWindow` (15m): nothing exports it any more. The
+        # usual cause is a target the policy no longer declares or declares under
+        # another name, or a label that changed; the other is a controller gone. It is
+        # a warning because the usual cause is a change somebody made, and it leaves
+        # the rule by itself two hours after the series' last sample. The two hours are
+        # the look-back, so a controller gone for good leaves silence which only
         # `absent(...)` sees, as the health guide says.
         - alert: SluisTickSeriesStale
           expr: >-
-            max by (k8s_cluster_name, namespace, kind, target) (last_over_time(sluis_tick_last_success_timestamp_seconds{namespace="sluis"}[2h])) unless max by (k8s_cluster_name, namespace, kind, target) (last_over_time(sluis_tick_last_success_timestamp_seconds{namespace="sluis"}[15m]))
+            max by (k8s_cluster_name, namespace, kind, target) (last_over_time(sluis_ticks_total{namespace="sluis"}[2h])) unless max by (k8s_cluster_name, namespace, kind, target) (last_over_time(sluis_ticks_total{namespace="sluis"}[15m]))
           for: 5m
           labels:
             k8s_cluster_name: example
@@ -172,7 +176,7 @@ spec:
           annotations:
             summary: 'The {{ $labels.kind }} series of {{ $labels.target }} stopped reporting: probably renamed or removed; check the policy'
             description: >-
-              No sample of this target's last-success gauge has arrived for 15m, though one did
+              No sample of this target's tick counter has arrived for 15m, though one did
               within the last two hours. If the policy renamed or removed the target, or a
               label changed, nothing is wrong and this clears on its own. Otherwise the
               controller is gone: check that its Deployment is running.

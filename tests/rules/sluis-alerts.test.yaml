@@ -245,16 +245,41 @@ tests:
         exp_alerts: []
 
   # ---------------------------------------------------------------- no successful tick
-  # SluisTickStale reads a series with a sample in the last 15 minutes (live) and
-  # an ok stamp over an hour old: a controller that runs and does not succeed.
-  # SluisTickSeriesStale reads a series seen in the last two hours and not in the
-  # last 15 minutes: nothing exports it. A series is one or the other.
-  - name: a live target that is stuck fires the critical rule only
+  # Both rules read the tick counter, sluis_ticks_total. SluisTickStale reads a
+  # target with a sample in the last 15 minutes (live) and no ok tick in the
+  # last hour: a controller that runs and does not succeed. SluisTickSeriesStale
+  # reads a target seen in the last two hours and not in the last 15 minutes:
+  # nothing exports it. A target is one or the other. The last-success gauge is
+  # not read: on Lambda every warm environment exports its own under the same
+  # labels, so the series mixes fresh and hours-old stamps.
+  - name: live targets with ok ticks, one of which ticks only every quarter hour, fire nothing
     interval: 1m
     input_series:
-      - series: 'sluis_tick_last_success_timestamp_seconds{namespace="sluis",k8s_cluster_name="example",kind="slack-tick",target="acme"}'
-        values: '946684800x200'
+      - series: 'sluis_ticks_total{namespace="sluis",k8s_cluster_name="example",kind="slack-tick",target="acme",outcome="ok"}'
+        values: '0+1x200'
+      - series: 'sluis_ticks_total{namespace="sluis",k8s_cluster_name="example",kind="github-tick",target="truvity",outcome="ok"}'
+        values: '0x14 1x14 2x14 3x14 4x14 5x14 6x14 7x14 8x14'
     alert_rule_test:
+      - eval_time: 2h
+        alertname: SluisTickStale
+        exp_alerts: []
+      - eval_time: 2h
+        alertname: SluisTickSeriesStale
+        exp_alerts: []
+
+  - name: a live target whose ticks all fail for over an hour fires the critical rule only
+    interval: 1m
+    input_series:
+      # Ok ticks until minute 30, then every tick fails; both series keep reporting.
+      - series: 'sluis_ticks_total{namespace="sluis",k8s_cluster_name="example",kind="slack-tick",target="acme",outcome="ok"}'
+        values: '0+1x30 30x170'
+      - series: 'sluis_ticks_total{namespace="sluis",k8s_cluster_name="example",kind="slack-tick",target="acme",outcome="failed"}'
+        values: '0x30 0+1x170'
+    alert_rule_test:
+      # An ok tick within the hour: nothing yet.
+      - eval_time: 1h
+        alertname: SluisTickStale
+        exp_alerts: []
       - eval_time: 2h
         alertname: SluisTickStale
         exp_alerts:
@@ -266,9 +291,9 @@ tests:
               kind: slack-tick
               target: acme
             exp_annotations:
-              summary: 'No successful slack-tick of acme for 2h 0m 0s'
+              summary: 'No successful slack-tick of acme in the last 3600s'
               description: >-
-                This target is still reporting but has not completed a tick for longer than 3600s.
+                This target is still reporting ticks but none of them succeeded in the last 3600s.
                 Check that its leases are not held by a runner that is gone (SluisLeaseLost),
                 and the controller's log for the failures.
               runbook_url: https://github.com/truvity/sluis/blob/master/docs/reference/sluis/telemetry.md#sluistickstale
@@ -276,11 +301,59 @@ tests:
         alertname: SluisTickSeriesStale
         exp_alerts: []
 
+  - name: a live target that never had an ok tick fires the critical rule
+    interval: 1m
+    input_series:
+      # No ok series at all, as after a restart in which every tick failed.
+      - series: 'sluis_ticks_total{namespace="sluis",k8s_cluster_name="example",kind="github-tick",target="truvity",outcome="failed"}'
+        values: '0+1x100'
+    alert_rule_test:
+      - eval_time: 90m
+        alertname: SluisTickStale
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              team: platform
+              k8s_cluster_name: example
+              namespace: sluis
+              kind: github-tick
+              target: truvity
+            exp_annotations:
+              summary: 'No successful github-tick of truvity in the last 3600s'
+              description: >-
+                This target is still reporting ticks but none of them succeeded in the last 3600s.
+                Check that its leases are not held by a runner that is gone (SluisLeaseLost),
+                and the controller's log for the failures.
+              runbook_url: https://github.com/truvity/sluis/blob/master/docs/reference/sluis/telemetry.md#sluistickstale
+
+  - name: a target with mixed stale and fresh gauge samples but ok ticks fires nothing
+    interval: 1m
+    input_series:
+      # The regression: two warm environments export the last-success gauge under
+      # the same labels, one with a fresh stamp and one whose stamp is hours old,
+      # and the series takes whichever exported last: here a quarter of an hour of
+      # each in turn, long enough for the old gauge rule to fire (at 55m and 1h55m).
+      # The ok ticks are what count.
+      - series: 'sluis_tick_last_success_timestamp_seconds{namespace="sluis",k8s_cluster_name="example",kind="github-tick",target="truvity"}'
+        values: '946684800+60x14 946680000x14 946686600+60x14 946680000x14 946688400+60x14 946680000x14 946690200+60x14 946680000x14 946692000+60x14 946680000x14'
+      - series: 'sluis_ticks_total{namespace="sluis",k8s_cluster_name="example",kind="github-tick",target="truvity",outcome="ok"}'
+        values: '0x14 1x14 2x14 3x14 4x14 5x14 6x14 7x14 8x14'
+    alert_rule_test:
+      - eval_time: 55m
+        alertname: SluisTickStale
+        exp_alerts: []
+      - eval_time: 115m
+        alertname: SluisTickStale
+        exp_alerts: []
+      - eval_time: 115m
+        alertname: SluisTickSeriesStale
+        exp_alerts: []
+
   - name: a series that stopped reporting fires the warning only, within two hours, then nothing
     interval: 1m
     input_series:
-      - series: 'sluis_tick_last_success_timestamp_seconds{namespace="sluis",k8s_cluster_name="example",kind="slack-tick",target="acme"}'
-        values: '946684800+60x30 _x300'
+      - series: 'sluis_ticks_total{namespace="sluis",k8s_cluster_name="example",kind="slack-tick",target="acme",outcome="ok"}'
+        values: '0+1x30 _x300'
     alert_rule_test:
       # Reported until minute 30; at 40 minutes it has been silent 10 minutes.
       - eval_time: 40m
@@ -299,7 +372,7 @@ tests:
             exp_annotations:
               summary: 'The slack-tick series of acme stopped reporting: probably renamed or removed; check the policy'
               description: >-
-                No sample of this target's last-success gauge has arrived for 15m, though one did
+                No sample of this target's tick counter has arrived for 15m, though one did
                 within the last two hours. If the policy renamed or removed the target, or a
                 label changed, nothing is wrong and this clears on its own. Otherwise the
                 controller is gone: check that its Deployment is running.
@@ -317,7 +390,7 @@ tests:
             exp_annotations:
               summary: 'The slack-tick series of acme stopped reporting: probably renamed or removed; check the policy'
               description: >-
-                No sample of this target's last-success gauge has arrived for 15m, though one did
+                No sample of this target's tick counter has arrived for 15m, though one did
                 within the last two hours. If the policy renamed or removed the target, or a
                 label changed, nothing is wrong and this clears on its own. Otherwise the
                 controller is gone: check that its Deployment is running.
@@ -325,7 +398,7 @@ tests:
       - eval_time: 3h
         alertname: SluisTickSeriesStale
         exp_alerts: []
-      # Never the critical rule: its stamp was at most 30 minutes old when it stopped.
+      # Never the critical rule: a target that stopped reporting is not live.
       - eval_time: 1h
         alertname: SluisTickStale
         exp_alerts: []
@@ -336,10 +409,10 @@ tests:
   - name: a renamed target and its live successor do not fire the critical rule
     interval: 1m
     input_series:
-      - series: 'sluis_tick_last_success_timestamp_seconds{namespace="sluis",k8s_cluster_name="example",kind="slack-tick",target="acme-old"}'
-        values: '946684800+60x30 _x300'
-      - series: 'sluis_tick_last_success_timestamp_seconds{namespace="sluis",k8s_cluster_name="example",kind="slack-tick",target="acme"}'
-        values: '946684800+60x330'
+      - series: 'sluis_ticks_total{namespace="sluis",k8s_cluster_name="example",kind="slack-tick",target="acme-old",outcome="ok"}'
+        values: '0+1x30 _x300'
+      - series: 'sluis_ticks_total{namespace="sluis",k8s_cluster_name="example",kind="slack-tick",target="acme",outcome="ok"}'
+        values: '0+1x330'
     alert_rule_test:
       - eval_time: 45m
         alertname: SluisTickStale
@@ -364,27 +437,12 @@ tests:
             exp_annotations:
               summary: 'The slack-tick series of acme-old stopped reporting: probably renamed or removed; check the policy'
               description: >-
-                No sample of this target's last-success gauge has arrived for 15m, though one did
+                No sample of this target's tick counter has arrived for 15m, though one did
                 within the last two hours. If the policy renamed or removed the target, or a
                 label changed, nothing is wrong and this clears on its own. Otherwise the
                 controller is gone: check that its Deployment is running.
               runbook_url: https://github.com/truvity/sluis/blob/master/docs/reference/sluis/telemetry.md#sluistickseriesstale
       - eval_time: 4h
-        alertname: SluisTickSeriesStale
-        exp_alerts: []
-
-  - name: targets that tick, one of which ticks only every quarter hour, do not fire
-    interval: 1m
-    input_series:
-      - series: 'sluis_tick_last_success_timestamp_seconds{namespace="sluis",k8s_cluster_name="example",kind="slack-tick",target="acme"}'
-        values: '946684800+60x200'
-      - series: 'sluis_tick_last_success_timestamp_seconds{namespace="sluis",k8s_cluster_name="example",kind="github-tick",target="truvity"}'
-        values: '946684800x15 946685700x15 946686600x15 946687500x15 946688400x15 946689300x15 946690200x15 946691100x15 946692000x15'
-    alert_rule_test:
-      - eval_time: 2h
-        alertname: SluisTickStale
-        exp_alerts: []
-      - eval_time: 2h
         alertname: SluisTickSeriesStale
         exp_alerts: []
 

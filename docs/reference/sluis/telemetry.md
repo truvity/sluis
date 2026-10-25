@@ -124,7 +124,7 @@ Source: `internal/clientcreds/telemetry.go`.
 |---|---|---|---|
 | `sluis.ticks` | counter | `kind`, `target`, `outcome` | Ticks. `outcome` is `ok` (the tick ran to its report, whatever the report says about the target) or `failed`. |
 | `sluis.tick.duration` | histogram, `s` | `kind`, `outcome` | How long a tick took. |
-| `sluis.tick.last_success_timestamp` | gauge, `s` | `kind`, `target` | When a target's last ok tick ended (Unix seconds). |
+| `sluis.tick.last_success_timestamp` | gauge, `s` | `kind`, `target` | When a target's last ok tick ended (Unix seconds), as this process saw it. Per process: on Lambda every warm environment exports its own under the same labels, so the series mixes fresh and hours-old stamps. Do not alert on it across environments; count ok ticks on `sluis.ticks`. |
 | `sluis.leases.acquired` | counter | `kind` | Leases taken by this runner. |
 | `sluis.leases.contended` | counter | `kind` | Leases asked for and held by another runner. Added to by 0 at a kind's first lease, so it reads 0 before the first event. |
 | `sluis.leases.skipped` | counter | `kind` | Ticks not started because the module is under maintenance. Added to by 0 at a kind's first lease, so it reads 0 before the first event. |
@@ -132,10 +132,10 @@ Source: `internal/clientcreds/telemetry.go`.
 | `sluis.leases.held` | up-down counter | `kind` | Leases this runner holds now. |
 
 
-Each tick emits `sluis.ticks`, `sluis.tick.duration` and, when ok, `sluis.tick.last_success_timestamp` (`kind`: `github-tick`, `github-links`, `slack-tick`). `SluisTickSeriesStale` reports two hours of silence; `absent(...)` the rest.
+Each tick emits `sluis.ticks`, `sluis.tick.duration` and, when ok, `sluis.tick.last_success_timestamp` (`kind`: `github-tick`, `github-links`, `slack-tick`, `outline-tick`). `SluisTickSeriesStale` reports two hours of silence; `absent(...)` the rest.
 
 ```text
-absent(last_over_time(sluis_tick_last_success_timestamp_seconds[1d]))
+absent(last_over_time(sluis_ticks_total[1d]))
 ```
 
 Other controller series:
@@ -183,8 +183,8 @@ Source: `tests/golden/sluis/alerts.yaml`, the render of `charts/sluis/templates/
 | `SluisIssuer5xx` | critical | 10m | More than 5% of the requests in the last 10 minutes failed on the server side. | `( sum by (k8s_cluster_name, namespace) (increase(sluis_http_requests_total{namespace="sluis",status_class="5xx"}[10m])) / sum by (k8s_cluster_name, namespace) (increase(sluis_http_requests_total{namespace="sluis"}[10m])) ) > 0.05 and sum by (k8s_cluster_name, namespace) (increase(sluis_http_requests_total{namespace="sluis",status_class="5xx"}[10m])) >= 5` |
 | `SluisTokenEndpointSlow` | warning | 15m | Token requests are taking longer than 2s at the 99th percentile. | `histogram_quantile(0.99, sum by (k8s_cluster_name, namespace, le) (rate(sluis_http_request_duration_seconds_bucket{namespace="sluis",route="token"}[10m]))) > 2` |
 | `SluisTickFailing` | warning | 0m | The controller's tick of this target failed 3 or more times within 45m. | `sum by (k8s_cluster_name, namespace, kind, target) (increase(sluis_ticks_total{namespace="sluis",outcome="failed"}[45m])) >= 3` |
-| `SluisTickStale` | critical | 10m | This target is still reporting but has not completed a tick for longer than 3600s. | `time() - max by (k8s_cluster_name, namespace, kind, target) (last_over_time(sluis_tick_last_success_timestamp_seconds{namespace="sluis"}[15m])) > 3600` |
-| `SluisTickSeriesStale` | warning | 5m | No sample of this target's last-success gauge has arrived for 15m, though one did within the last two hours. | `max by (k8s_cluster_name, namespace, kind, target) (last_over_time(sluis_tick_last_success_timestamp_seconds{namespace="sluis"}[2h])) unless max by (k8s_cluster_name, namespace, kind, target) (last_over_time(sluis_tick_last_success_timestamp_seconds{namespace="sluis"}[15m]))` |
+| `SluisTickStale` | critical | 10m | This target is still reporting ticks but none of them succeeded in the last 3600s. | `max by (k8s_cluster_name, namespace, kind, target) (last_over_time(sluis_ticks_total{namespace="sluis"}[15m])) unless sum by (k8s_cluster_name, namespace, kind, target) (increase(sluis_ticks_total{namespace="sluis",outcome="ok"}[3600s])) > 0` |
+| `SluisTickSeriesStale` | warning | 5m | No sample of this target's tick counter has arrived for 15m, though one did within the last two hours. | `max by (k8s_cluster_name, namespace, kind, target) (last_over_time(sluis_ticks_total{namespace="sluis"}[2h])) unless max by (k8s_cluster_name, namespace, kind, target) (last_over_time(sluis_ticks_total{namespace="sluis"}[15m]))` |
 | `SluisLeaseLost` | warning | 0m | Controllers lost their lease on a target 3 or more times within 1h. | `sum by (k8s_cluster_name, namespace, kind) (increase(sluis_leases_lost_total{namespace="sluis"}[1h])) >= 3` |
 | `SluisCloudflareRotationStale` | critical | 5m | The stored credential of this preset is older than 2 times its rotation. | `time() - max by (k8s_cluster_name, namespace, preset) (last_over_time(sluis_cloudflare_rotation_last_timestamp_seconds{namespace="sluis"}[1d])) > 2 * max by (k8s_cluster_name, namespace, preset) (last_over_time(sluis_cloudflare_rotation_interval_seconds{namespace="sluis"}[1d]))` |
 | `SluisGitHubRateLimitLow` | warning | 30m | The GitHub budget for this resource has been under 100 requests for 30m. | `min by (k8s_cluster_name, namespace, resource) (github_roster_rate_limit_remaining{namespace="sluis"}) < 100` |
@@ -208,8 +208,8 @@ Source: `tests/golden/sluis/alerts.yaml`, the render of `charts/sluis/templates/
 | `SluisIssuer5xx` | Server errors. The dashboard's 5xx panel names the route. If `SluisPortErrors` also fires, the store is the cause. Otherwise check `directory_unreachable` and policy loading. |
 | `SluisTokenEndpointSlow` | Slow p99. A token costs one store write: check the port latency panel (DynamoDB, or the API server with the legacy store), then the policy size. |
 | `SluisTickFailing` | A target's ticks failed three times in 45 minutes. The console's controller page and the log ("a pass over an organisation failed") give the error: uninstalled App, revoked credential or GitHub down. |
-| `SluisTickStale` | A reporting target has had no ok tick for an hour: the lease is held, or the loop hangs or fails. Check the log. |
-| `SluisTickSeriesStale` | A series stopped: a target renamed or removed (clears in two hours), or a gone controller. |
+| `SluisTickStale` | A target still counting ticks has had no ok tick for an hour: the lease is held, or the loop hangs or fails. Check the log. |
+| `SluisTickSeriesStale` | A target's tick counter stopped: a target renamed or removed (clears in two hours), or a gone controller. |
 | `SluisLeaseLost` | One loss is normal. Repeated losses mean two runners on one target (more than one replica without a shared State, which the chart refuses; [high availability](../../guides/sluis/operate/high-availability.md)) or an unreachable State: see `SluisPortErrors`. |
 | `SluisCloudflareRotationStale` | A preset's credential is older than twice its `rotation`. The log line "a Cloudflare token was not minted" gives the reason: `prototype_active`, `prototype_forbidden`, `prototype_missing`, `minter_missing`, `store_error` or `cloudflare_error`. On Lambda check that the `{"kind":"cloudflare"}` schedule invokes the function. |
 | `SluisGitHubRateLimitLow` | Budget under 100 for half an hour. `github_roster_rate_limited_total` shows waits. Lengthen the controller's `interval` or find what else spends the App's budget. |
