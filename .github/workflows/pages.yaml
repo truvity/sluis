@@ -1,6 +1,6 @@
 # Builds the sluis.id website (Astro Starlight, site/ and docs/) together with the
 # v1 documentation from the `master` branch (under /v1/), and publishes it to
-# GitHub Pages. This workflow publishes; checks.yml judges pull requests.
+# GitHub Pages. This workflow publishes; checks.yaml judges pull requests.
 #
 # THE DEPLOY IS OFF. Until the owner switches Pages over from `master` to this
 # branch, the build runs on every push and proves the site builds, but the
@@ -23,7 +23,7 @@ on:
       - "lychee.toml"
       - "devbox.json"
       - "devbox.lock"
-      - ".github/workflows/pages.yml"
+      - ".github/workflows/pages.yaml"
   workflow_dispatch:
 
 permissions:
