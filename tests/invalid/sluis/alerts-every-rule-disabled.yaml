@@ -7,6 +7,7 @@ alerts:
     signingKeyRotationStalled: {enabled: false}
     issuer5xx: {enabled: false}
     tokenLatency: {enabled: false}
+    tokenMintLatency: {enabled: false}
     tickFailing: {enabled: false}
     tickStale: {enabled: false}
     tickSeriesStale: {enabled: false}

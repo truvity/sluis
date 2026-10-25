@@ -8069,7 +8069,7 @@
             },
             "tokenLatency": {
               "additionalProperties": false,
-              "description": "The token endpoint's p99 is over `thresholdSeconds`.",
+              "description": "The token endpoint's p99, Cloudflare mints apart, is over `thresholdSeconds`.",
               "properties": {
                 "enabled": {
                   "type": "boolean"
@@ -8085,6 +8085,11 @@
                   "description": "Labels added to this rule only.",
                   "type": "object"
                 },
+                "minRequests": {
+                  "description": "The fewest requests in the window that count: below 100, a p99 is the slowest request.",
+                  "minimum": 1,
+                  "type": "integer"
+                },
                 "severity": {
                   "description": "The severity label.",
                   "type": "string"
@@ -8094,6 +8099,50 @@
                   "maximum": 3600,
                   "minimum": 0.001,
                   "type": "number"
+                },
+                "window": {
+                  "description": "The window of the quantile and of the request count, as a duration.",
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "tokenMintLatency": {
+              "additionalProperties": false,
+              "description": "The p95 of the token endpoint's Cloudflare mints is over `thresholdSeconds`.",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "for": {
+                  "description": "How long the condition holds before the alert fires, as a duration.",
+                  "type": "string"
+                },
+                "labels": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "description": "Labels added to this rule only.",
+                  "type": "object"
+                },
+                "minRequests": {
+                  "description": "The fewest mints in the window that count.",
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "severity": {
+                  "description": "The severity label.",
+                  "type": "string"
+                },
+                "thresholdSeconds": {
+                  "description": "The p95, in seconds.",
+                  "maximum": 3600,
+                  "minimum": 0.001,
+                  "type": "number"
+                },
+                "window": {
+                  "description": "The window of the quantile and of the request count, as a duration.",
+                  "type": "string"
                 }
               },
               "type": "object"

@@ -162,17 +162,22 @@ tests:
         exp_alerts: []
 
   # ---------------------------------------------------------------- token endpoint latency
-  - name: a token endpoint answering in seconds fires on its p99
+  # SluisTokenEndpointSlow reads route="token" and needs 100 requests in 30m;
+  # a Cloudflare mint is route="token_mint", seconds by design, and
+  # SluisTokenMintSlow's: a p95 over 10s with at least 5 mints in an hour.
+  - name: sustained slow token requests above the minimum fire on their p99
     interval: 1m
     input_series:
       - series: 'sluis_http_request_duration_seconds_bucket{namespace="sluis",k8s_cluster_name="example",route="token",le="0.5"}'
-        values: '0x40'
+        values: '0x60'
       - series: 'sluis_http_request_duration_seconds_bucket{namespace="sluis",k8s_cluster_name="example",route="token",le="5"}'
-        values: '0+10x40'
+        values: '0+10x60'
       - series: 'sluis_http_request_duration_seconds_bucket{namespace="sluis",k8s_cluster_name="example",route="token",le="+Inf"}'
-        values: '0+10x40'
+        values: '0+10x60'
+      - series: 'sluis_http_request_duration_seconds_count{namespace="sluis",k8s_cluster_name="example",route="token"}'
+        values: '0+10x60'
     alert_rule_test:
-      - eval_time: 30m
+      - eval_time: 45m
         alertname: SluisTokenEndpointSlow
         exp_alerts:
           - exp_labels:
@@ -184,9 +189,43 @@ tests:
               summary: 'The sluis token endpoint in sluis has a p99 of 4.955s'
               description: >-
                 Token requests are taking longer than 2s at the
-                99th percentile. The store (see the port latency panel), the policy's size and
+                99th percentile over 30m, Cloudflare mints apart. The store (see the port latency panel), the policy's size and
                 the directory are what a token waits on.
               runbook_url: https://github.com/truvity/sluis/blob/master/docs/reference/sluis/telemetry.md#sluistokenendpointslow
+      - eval_time: 45m
+        alertname: SluisTokenMintSlow
+        exp_alerts: []
+
+  - name: one slow token and one slow mint among few requests fire nothing
+    interval: 1m
+    input_series:
+      # A token request a minute, one of them slow, from minute 21: thirty in
+      # the window, under the hundred a p99 needs, so the p99 (about 3.6s) is
+      # that one request and says nothing.
+      - series: 'sluis_http_request_duration_seconds_bucket{namespace="sluis",k8s_cluster_name="example",route="token",le="0.5"}'
+        values: '0+1x20 20+1x39'
+      - series: 'sluis_http_request_duration_seconds_bucket{namespace="sluis",k8s_cluster_name="example",route="token",le="5"}'
+        values: '0+1x60'
+      - series: 'sluis_http_request_duration_seconds_bucket{namespace="sluis",k8s_cluster_name="example",route="token",le="+Inf"}'
+        values: '0+1x60'
+      - series: 'sluis_http_request_duration_seconds_count{namespace="sluis",k8s_cluster_name="example",route="token"}'
+        values: '0+1x60'
+      # One Cloudflare mint of seven seconds: its own route, and one is not five.
+      - series: 'sluis_http_request_duration_seconds_bucket{namespace="sluis",k8s_cluster_name="example",route="token_mint",le="5"}'
+        values: '0x60'
+      - series: 'sluis_http_request_duration_seconds_bucket{namespace="sluis",k8s_cluster_name="example",route="token_mint",le="10"}'
+        values: '0x20 1x39'
+      - series: 'sluis_http_request_duration_seconds_bucket{namespace="sluis",k8s_cluster_name="example",route="token_mint",le="+Inf"}'
+        values: '0x20 1x39'
+      - series: 'sluis_http_request_duration_seconds_count{namespace="sluis",k8s_cluster_name="example",route="token_mint"}'
+        values: '0x20 1x39'
+    alert_rule_test:
+      - eval_time: 45m
+        alertname: SluisTokenEndpointSlow
+        exp_alerts: []
+      - eval_time: 45m
+        alertname: SluisTokenMintSlow
+        exp_alerts: []
 
   - name: a fast token endpoint beside a slow authorize route does not fire
     interval: 1m
@@ -195,12 +234,66 @@ tests:
         values: '0+10x40'
       - series: 'sluis_http_request_duration_seconds_bucket{namespace="sluis",k8s_cluster_name="example",route="token",le="+Inf"}'
         values: '0+10x40'
+      - series: 'sluis_http_request_duration_seconds_count{namespace="sluis",k8s_cluster_name="example",route="token"}'
+        values: '0+10x40'
       - series: 'sluis_http_request_duration_seconds_bucket{namespace="sluis",k8s_cluster_name="example",route="authorize",le="0.5"}'
         values: '0x40'
       - series: 'sluis_http_request_duration_seconds_bucket{namespace="sluis",k8s_cluster_name="example",route="authorize",le="+Inf"}'
         values: '0+10x40'
     alert_rule_test:
       - eval_time: 30m
+        alertname: SluisTokenEndpointSlow
+        exp_alerts: []
+
+  - name: sustained slow mints above the minimum fire the mint rule only
+    interval: 1m
+    input_series:
+      # A mint a minute, each of 10 to 30 seconds.
+      - series: 'sluis_http_request_duration_seconds_bucket{namespace="sluis",k8s_cluster_name="example",route="token_mint",le="10"}'
+        values: '0x90'
+      - series: 'sluis_http_request_duration_seconds_bucket{namespace="sluis",k8s_cluster_name="example",route="token_mint",le="30"}'
+        values: '0+1x90'
+      - series: 'sluis_http_request_duration_seconds_bucket{namespace="sluis",k8s_cluster_name="example",route="token_mint",le="+Inf"}'
+        values: '0+1x90'
+      - series: 'sluis_http_request_duration_seconds_count{namespace="sluis",k8s_cluster_name="example",route="token_mint"}'
+        values: '0+1x90'
+    alert_rule_test:
+      - eval_time: 45m
+        alertname: SluisTokenMintSlow
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              team: platform
+              k8s_cluster_name: example
+              namespace: sluis
+            exp_annotations:
+              summary: 'Cloudflare mints at the sluis token endpoint in sluis have a p95 of 29s'
+              description: >-
+                Cloudflare credential mints are taking longer than 10s at the
+                95th percentile over 1h. The Cloudflare module's log and traces say whether
+                Cloudflare's API is slow or retrying; the function's duration and throttles say whether the module is.
+              runbook_url: https://github.com/truvity/sluis/blob/master/docs/reference/sluis/telemetry.md#sluistokenmintslow
+      - eval_time: 45m
+        alertname: SluisTokenEndpointSlow
+        exp_alerts: []
+
+  - name: mints of seconds, as designed, do not fire
+    interval: 1m
+    input_series:
+      # A mint a minute, each of 5 to 10 seconds: a p95 under 10s.
+      - series: 'sluis_http_request_duration_seconds_bucket{namespace="sluis",k8s_cluster_name="example",route="token_mint",le="5"}'
+        values: '0x90'
+      - series: 'sluis_http_request_duration_seconds_bucket{namespace="sluis",k8s_cluster_name="example",route="token_mint",le="10"}'
+        values: '0+1x90'
+      - series: 'sluis_http_request_duration_seconds_bucket{namespace="sluis",k8s_cluster_name="example",route="token_mint",le="+Inf"}'
+        values: '0+1x90'
+      - series: 'sluis_http_request_duration_seconds_count{namespace="sluis",k8s_cluster_name="example",route="token_mint"}'
+        values: '0+1x90'
+    alert_rule_test:
+      - eval_time: 45m
+        alertname: SluisTokenMintSlow
+        exp_alerts: []
+      - eval_time: 45m
         alertname: SluisTokenEndpointSlow
         exp_alerts: []
 

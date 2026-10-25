@@ -127,6 +127,29 @@ func TestAnHTTPSpanIsNamedForTheRouteAndCarriesNoRawPath(t *testing.T) {
 	}
 }
 
+// A handler that learns more than the path renames the request: the span is
+// named and labelled for the new route, not the one the path gave.
+func TestAHandlerCanRenameItsRoute(t *testing.T) {
+	memory, _ := exported(t)
+	handler := telemetry.HTTPHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		telemetry.SetRoute(r.Context(), "token_mint")
+		w.WriteHeader(http.StatusOK)
+	}), "test", func(*http.Request) string { return "token" })
+	handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/token", nil))
+
+	out := dump(memory)
+	for _, want := range []string{`name="POST token_mint"`, "http.route=token_mint"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %s:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "http.route=token\n") || strings.Contains(out, `name="POST token"`) {
+		t.Errorf("the path's route is still on the span:\n%s", out)
+	}
+	// Outside HTTPHandler it does nothing.
+	telemetry.SetRoute(t.Context(), "token_mint")
+}
+
 // A Connect call is a server span with the RPC's own attributes, whose handler
 // error message (which may quote a group) does not leave.
 func TestAConnectSpanKeepsTheMethodAndDropsTheError(t *testing.T) {

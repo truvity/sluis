@@ -31,13 +31,14 @@ A tracer exists only when a collector is named for traces.
 
 | Where | Span |
 |---|---|
-| The issuer's listener (everything on the public port, the console included) | A server span per request, **named for the route** (`POST token`, `GET login_callback`) and never for the path. The route is one of a fixed set (`issuer.Route`): `discovery`, `jwks`, `authorize`, `authorize_callback`, `token` (`/token`, which discovery names, and `/oauth/token`), `userinfo`, `introspect`, `revoke`, `end_session`, `device_authorization`, `login_chooser`, `login_start`, `login_callback`, `login_recovery`, `logout`, `signed_out`, `account`, `grants`, `sluis_configuration`, `client_secrets`, `sessions_rpc`, `connect_callback`, `console_assets`, `console_rpc`, `console`, `other`. The caller's `traceparent` is continued. |
+| The issuer's listener (everything on the public port, the console included) | A server span per request, **named for the route** (`POST token`, `GET login_callback`) and never for the path. The route is one of a fixed set (`issuer.Route`): `discovery`, `jwks`, `authorize`, `authorize_callback`, `token` (`/token`, which discovery names, and `/oauth/token`), `token_mint` (a token exchange for a Cloudflare credential, an audience `cloudflare:<preset>`: the handler renames the request once it has read the form, because a mint waits seconds on the Cloudflare module and on Cloudflare; the migration freeze still decides on `token`, so it admits the exchange and the frozen Cloudflare module refuses the mint with 503 `maintenance`), `userinfo`, `introspect`, `revoke`, `end_session`, `device_authorization`, `login_chooser`, `login_start`, `login_callback`, `login_recovery`, `logout`, `signed_out`, `account`, `grants`, `sluis_configuration`, `client_secrets`, `sessions_rpc`, `connect_callback`, `console_assets`, `console_rpc`, `console`, `other`. The caller's `traceparent` is continued. |
 | The console's and the session service's Connect handlers | A server span per call (`rpc.method`). |
 | The controllers' clients of the console | A client span per call, and the `traceparent` carried to the console, so a tick's trace continues into the console's own spans. |
 | A module call (`internal/modcall`) | A client span in the caller and a server span in the callee, `modcall <module>.<method>` (`rpc.system.name` is `sluis.modcall`, `rpc.method` the module and method). The envelope carries the `traceparent` and `tracestate`, so the callee's span is the caller's child on every transport. |
 | A tick | `tick <kind>`, with the target kind, the target and the outcome (`ok` or `failed`). The kinds are `github-tick`, `github-links` and `slack-tick`. |
 | An AWS SDK call (every client of every adapter: `storage/awsotel`) | One span per call named `<Service>.<Operation>` (`SSM.GetParameter`; `rpc.system` is `aws-api`, with `rpc.service` and `rpc.method`), a child of the span in the call's context, and under it ten child spans: `RetryLoop`, `Attempt` (one per try), `OperationSerializer`, `ResolveAuthScheme`, `GetIdentity`, `ResolveEndpoint`, `ComputePayloadSHA256`, `SignRequest`, `DoHTTPRequest` and `OperationDeserializer`. The SDK's own client metrics go to the same meter provider. |
 | A function invocation on Lambda | The server span of a module call (and of an API Gateway request) carries the Lambda request id as `faas.invocation_id`, and continues the caller's `traceparent`. X-Ray is not used. |
+| A Cloudflare API call (the Cloudflare module, `internal/cloudflare/cfapi`) | A client span per method, `cloudflare <Method>` (`rpc.system` is `cloudflare`, `rpc.method` `ListTokens`, `GetToken`, `CreateToken`, `DeleteToken` or `PermissionGroups`); a listing carries the pages it read (`sluis.cloudflare.pages`) and the entries it returned (`sluis.cloudflare.listed`). Under it one span per attempt, `cloudflare <HTTP method>`, with `http.response.status_code`, `error.type` and `http.request.resend_count` (0 the first try), so a retry is a span of its own. Never the URL, the account, a token's id, name or value. |
 | A storage port call | `port <port> <operation>`, with the port, the operation and the outcome. Only inside a trace that is already being recorded, so a loop that started none makes no root span per call. |
 
 ### What leaves the process
@@ -49,7 +50,8 @@ access_roster.target.kind  access_roster.target.id  access_roster.outcome
 access_roster.port  access_roster.operation  rpc.system.name  rpc.method
 rpc.response.status_code  error.type  http.request.method
 http.response.status_code  http.route  faas.invocation_id  rpc.system
-rpc.service  aws.request_id  http.status_code
+rpc.service  aws.request_id  http.status_code  http.request.resend_count
+sluis.cloudflare.pages  sluis.cloudflare.listed
 ```
 
 Events, link attributes and status text are removed. A port call's key is never an attribute. A test pins it.
@@ -63,7 +65,7 @@ Prometheus names turn dots into underscores and add `_total` to counters: `sluis
 | Metric | Type | Labels | What it says |
 |---|---|---|---|
 | `sluis.http.requests` | counter | `route`, `status_class` | Requests the listener answered. `status_class` is `2xx` to `5xx`. |
-| `sluis.http.request.duration` | histogram, `s` | `route`, `status_class` | Time from a request's arrival to the handler returning. |
+| `sluis.http.request.duration` | histogram, `s` | `route`, `status_class` | Time from a request's arrival to the handler returning. Buckets 5 ms to 60 s; the 30 s and 60 s bounds are for a Cloudflare mint (`token_mint`), which is synchronous and takes seconds. |
 | `sluis.tokens.issued` | counter | `client_id`, `grant_type` | Access tokens signed. `grant_type` is `authorization_code`, `refresh_token`, `token_exchange`, `client_credentials` or `console_mint`. |
 | `sluis.login.failures` | counter | `reason` | Sign-ins that did not complete. |
 | `sluis.login.successes` | counter | `method` | Sign-ins that completed: a directory's kind, `recovery`, `conformance`, `browser_session` or `agent_consent` (an agent connection accepted on the consent page). |
@@ -170,18 +172,19 @@ A conflict is a lease or session rotation working. Issuer and port series carry 
 
 ## Alerts
 
-Twelve rules, rendered with `renders: alerts`. A threshold is `alerts.rules.<rule>`. A rule whose series is absent does not fire.
+Thirteen rules, rendered with `renders: alerts`. A threshold is `alerts.rules.<rule>`. A rule whose series is absent does not fire.
 
 <!-- generated: telemetry-alerts -->
 
-Source: `tests/golden/sluis/alerts.yaml`, the render of `charts/sluis/templates/alerts.yaml` with default values (12 rules). The expressions carry the default thresholds; every one is a value under `alerts.rules`.
+Source: `tests/golden/sluis/alerts.yaml`, the render of `charts/sluis/templates/alerts.yaml` with default values (13 rules). The expressions carry the default thresholds; every one is a value under `alerts.rules`.
 
 | Alert | Severity | For | What it says | Default expression |
 |---|---|---|---|---|
 | `SluisNoSigningKeyPublished` | critical | 5m | The issuer's key ring holds no key to publish for this algorithm, so its JWKS is empty and no relying party can verify a token. | `min by (k8s_cluster_name, namespace, algorithm) (sluis_signing_keys_published{namespace="sluis"}) < 1` |
 | `SluisSigningKeyRotationStalled` | warning | 1h | The active signing key is older than 30240000s and has not rotated. | `time() - max by (k8s_cluster_name, namespace, algorithm) (sluis_signing_key_active_since_timestamp_seconds{namespace="sluis"}) > 30240000` |
 | `SluisIssuer5xx` | critical | 10m | More than 5% of the requests in the last 10 minutes failed on the server side. | `( sum by (k8s_cluster_name, namespace) (increase(sluis_http_requests_total{namespace="sluis",status_class="5xx"}[10m])) / sum by (k8s_cluster_name, namespace) (increase(sluis_http_requests_total{namespace="sluis"}[10m])) ) > 0.05 and sum by (k8s_cluster_name, namespace) (increase(sluis_http_requests_total{namespace="sluis",status_class="5xx"}[10m])) >= 5` |
-| `SluisTokenEndpointSlow` | warning | 15m | Token requests are taking longer than 2s at the 99th percentile. | `histogram_quantile(0.99, sum by (k8s_cluster_name, namespace, le) (rate(sluis_http_request_duration_seconds_bucket{namespace="sluis",route="token"}[10m]))) > 2` |
+| `SluisTokenEndpointSlow` | warning | 15m | Token requests are taking longer than 2s at the 99th percentile over 30m, Cloudflare mints apart. | `histogram_quantile(0.99, sum by (k8s_cluster_name, namespace, le) (rate(sluis_http_request_duration_seconds_bucket{namespace="sluis",route="token"}[30m]))) > 2 and sum by (k8s_cluster_name, namespace) (increase(sluis_http_request_duration_seconds_count{namespace="sluis",route="token"}[30m])) >= 100` |
+| `SluisTokenMintSlow` | warning | 15m | Cloudflare credential mints are taking longer than 10s at the 95th percentile over 1h. | `histogram_quantile(0.95, sum by (k8s_cluster_name, namespace, le) (rate(sluis_http_request_duration_seconds_bucket{namespace="sluis",route="token_mint"}[1h]))) > 10 and sum by (k8s_cluster_name, namespace) (increase(sluis_http_request_duration_seconds_count{namespace="sluis",route="token_mint"}[1h])) >= 5` |
 | `SluisTickFailing` | warning | 0m | The controller's tick of this target failed 3 or more times within 45m. | `sum by (k8s_cluster_name, namespace, kind, target) (increase(sluis_ticks_total{namespace="sluis",outcome="failed"}[45m])) >= 3` |
 | `SluisTickStale` | critical | 10m | This target is still reporting ticks but none of them succeeded in the last 3600s. | `max by (k8s_cluster_name, namespace, kind, target) (last_over_time(sluis_ticks_total{namespace="sluis"}[15m])) unless sum by (k8s_cluster_name, namespace, kind, target) (increase(sluis_ticks_total{namespace="sluis",outcome="ok"}[3600s])) > 0` |
 | `SluisTickSeriesStale` | warning | 5m | No sample of this target's tick counter has arrived for 15m, though one did within the last two hours. | `max by (k8s_cluster_name, namespace, kind, target) (last_over_time(sluis_ticks_total{namespace="sluis"}[2h])) unless max by (k8s_cluster_name, namespace, kind, target) (last_over_time(sluis_ticks_total{namespace="sluis"}[15m]))` |
@@ -206,7 +209,8 @@ Source: `tests/golden/sluis/alerts.yaml`, the render of `charts/sluis/templates/
 | `SluisNoSigningKeyPublished` | The key ring is empty, so the JWKS is empty. Check the Secret at `config.signingKey.file` (cert-manager's Certificate or `signingKey.existingSecret`) and the issuer log ("the active signing key changed", "a signing key was seen"). A rollout shows zero for seconds, not five minutes. |
 | `SluisSigningKeyRotationStalled` | The active key was not replaced. cert-manager renews `signingKey.certificate.renewBefore` early (720h before 8760h), so a key is at most about 335 days old and the rule fires at 350. Check `kubectl describe certificate` and `config.signingKey.pollInterval`. After changing `duration` or `renewBefore`, set `maxAgeSeconds` to their difference plus two weeks. For hand rotation, turn the rule off or set your cadence. |
 | `SluisIssuer5xx` | Server errors. The dashboard's 5xx panel names the route. If `SluisPortErrors` also fires, the store is the cause. Otherwise check `directory_unreachable` and policy loading. |
-| `SluisTokenEndpointSlow` | Slow p99. A token costs one store write: check the port latency panel (DynamoDB, or the API server with the legacy store), then the policy size. |
+| `SluisTokenEndpointSlow` | Slow p99 over 30 minutes with at least 100 token requests, Cloudflare mints apart. A token costs one store write: check the port latency panel (DynamoDB, or the API server with the legacy store), then the policy size. |
+| `SluisTokenMintSlow` | Cloudflare mints' p95 over 10 s in an hour, with at least five mints. A mint is synchronous: the token endpoint calls the Cloudflare module, which reads the account's tokens and creates one at Cloudflare, so seconds are normal for now. Check the Cloudflare module's traces (one span per Cloudflare API call, with its status and attempt) and its function's duration and throttles. |
 | `SluisTickFailing` | A target's ticks failed three times in 45 minutes. The console's controller page and the log ("a pass over an organisation failed") give the error: uninstalled App, revoked credential or GitHub down. |
 | `SluisTickStale` | A target still counting ticks has had no ok tick for an hour: the lease is held, or the loop hangs or fails. Check the log. |
 | `SluisTickSeriesStale` | A target's tick counter stopped: a target renamed or removed (clears in two hours), or a gone controller. |

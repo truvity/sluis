@@ -25,8 +25,13 @@ import (
 	"strings"
 	"time"
 
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
+
 	"github.com/truvity/sluis/internal/cloudflare"
 	"github.com/truvity/sluis/internal/cloudflare/minter"
+	"github.com/truvity/sluis/internal/telemetry"
 )
 
 // BaseURL is Cloudflare's API.
@@ -150,8 +155,27 @@ func retryable(method string, status int, err error) bool {
 	return status == http.StatusTooManyRequests || status >= http.StatusInternalServerError
 }
 
+// call is the span of one API method (ListTokens, CreateToken, ...): its
+// attempts are child spans, from [Client.do]. A span names the method and
+// never the URL, the account, a token's id, name or value: the path names a
+// token's id, and every attribute is a count or a status.
+func call(ctx context.Context, name string) (context.Context, trace.Span) {
+	return telemetry.Tracer().Start(ctx, "cloudflare "+name, trace.WithSpanKind(trace.SpanKindClient),
+		trace.WithAttributes(attribute.String("rpc.system", "cloudflare"), attribute.String("rpc.method", name)))
+}
+
+// end ends a method's span, marking it failed when err is not nil.
+func end(span trace.Span, err error) {
+	if err != nil {
+		span.SetStatus(codes.Error, "")
+	}
+	span.End()
+}
+
 // do makes one call and decodes the envelope's result into out (when not nil).
-// It returns the raw envelope for callers that read more of it.
+// It returns the raw envelope for callers that read more of it. Each attempt
+// is a span of its own, with the HTTP status and which attempt it was, so a
+// retried call shows its retries and the wait between them.
 func (c *Client) do(ctx context.Context, method, path string, query url.Values, body []byte, out any) ([]byte, error) {
 	u := c.base + path
 	if len(query) > 0 {
@@ -163,7 +187,21 @@ func (c *Client) do(ctx context.Context, method, path string, query url.Values, 
 		err    error
 	)
 	for attempt := 0; ; attempt++ {
-		raw, status, err = c.once(ctx, method, u, body)
+		actx, span := telemetry.Tracer().Start(ctx, "cloudflare "+method, trace.WithSpanKind(trace.SpanKindClient),
+			trace.WithAttributes(attribute.String("http.request.method", method), attribute.Int(telemetry.AttrResendCount, attempt)))
+		raw, status, err = c.once(actx, method, u, body)
+		if status > 0 {
+			span.SetAttributes(attribute.Int("http.response.status_code", status))
+		}
+		switch {
+		case err != nil:
+			span.SetAttributes(attribute.String("error.type", "transport"))
+			span.SetStatus(codes.Error, "")
+		case status >= 400:
+			span.SetAttributes(attribute.String("error.type", strconv.Itoa(status)))
+			span.SetStatus(codes.Error, "")
+		}
+		span.End()
 		if attempt >= maxRetries || !retryable(method, status, err) {
 			break
 		}
@@ -232,16 +270,20 @@ func (c *Client) tokens(rest ...string) string {
 }
 
 // GetToken implements [minter.API].
-func (c *Client) GetToken(ctx context.Context, id string) (cloudflare.Token, error) {
+func (c *Client) GetToken(ctx context.Context, id string) (_ cloudflare.Token, err error) {
+	ctx, span := call(ctx, "GetToken")
+	defer func() { end(span, err) }()
 	var w wire
-	if _, err := c.do(ctx, http.MethodGet, c.tokens(id), nil, nil, &w); err != nil {
+	if _, err = c.do(ctx, http.MethodGet, c.tokens(id), nil, nil, &w); err != nil {
 		return cloudflare.Token{}, err
 	}
 	return w.token(), nil
 }
 
 // CreateToken implements [minter.API].
-func (c *Client) CreateToken(ctx context.Context, in cloudflare.NewToken) (cloudflare.Created, error) {
+func (c *Client) CreateToken(ctx context.Context, in cloudflare.NewToken) (_ cloudflare.Created, err error) {
+	ctx, span := call(ctx, "CreateToken")
+	defer func() { end(span, err) }()
 	body := map[string]any{"name": in.Name, "policies": in.Policies, "expires_on": in.ExpiresOn.UTC().Format(time.RFC3339)}
 	if len(in.Condition) > 0 {
 		body["condition"] = in.Condition
@@ -262,18 +304,30 @@ func (c *Client) CreateToken(ctx context.Context, in cloudflare.NewToken) (cloud
 }
 
 // DeleteToken implements [minter.API].
-func (c *Client) DeleteToken(ctx context.Context, id string) error {
-	_, err := c.do(ctx, http.MethodDelete, c.tokens(id), nil, nil, nil)
+func (c *Client) DeleteToken(ctx context.Context, id string) (err error) {
+	ctx, span := call(ctx, "DeleteToken")
+	defer func() { end(span, err) }()
+	_, err = c.do(ctx, http.MethodDelete, c.tokens(id), nil, nil, nil)
 	return err
 }
 
 // ListTokens implements [minter.API]: every page, the recently expired
 // included.
-func (c *Client) ListTokens(ctx context.Context) ([]cloudflare.Token, error) {
+func (c *Client) ListTokens(ctx context.Context) (_ []cloudflare.Token, err error) {
+	ctx, span := call(ctx, "ListTokens")
 	var out []cloudflare.Token
+	pages := 0
+	defer func() {
+		span.SetAttributes(attribute.Int(telemetry.AttrCloudflarePages, pages), attribute.Int(telemetry.AttrCloudflareListed, len(out)))
+		end(span, err)
+	}()
 	for page := 1; ; page++ {
-		var result []wire
-		raw, err := c.do(ctx, http.MethodGet, c.tokens(), url.Values{
+		pages = page
+		var (
+			result []wire
+			raw    []byte
+		)
+		raw, err = c.do(ctx, http.MethodGet, c.tokens(), url.Values{
 			"include_expired": {"true"}, "per_page": {"50"}, "page": {strconv.Itoa(page)},
 		}, nil, &result)
 		if err != nil {
@@ -297,12 +351,14 @@ func (c *Client) ListTokens(ctx context.Context) ([]cloudflare.Token, error) {
 }
 
 // PermissionGroups implements [minter.API].
-func (c *Client) PermissionGroups(ctx context.Context) (map[string]string, error) {
+func (c *Client) PermissionGroups(ctx context.Context) (_ map[string]string, err error) {
+	ctx, span := call(ctx, "PermissionGroups")
+	defer func() { end(span, err) }()
 	var result []struct {
 		ID   string `json:"id"`
 		Name string `json:"name"`
 	}
-	if _, err := c.do(ctx, http.MethodGet, c.tokens("permission_groups"), nil, nil, &result); err != nil {
+	if _, err = c.do(ctx, http.MethodGet, c.tokens("permission_groups"), nil, nil, &result); err != nil {
 		return nil, err
 	}
 	out := make(map[string]string, len(result))

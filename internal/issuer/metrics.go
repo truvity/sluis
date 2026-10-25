@@ -167,10 +167,17 @@ func grantTypeOf(request op.TokenRequest) string {
 	}
 }
 
+// RouteTokenMint is the route of a token request for a Cloudflare credential
+// (an audience `cloudflare:<preset>`), which the token endpoint sets once it has
+// read the form (telemetry.SetRoute). [Route] itself says `token`: it decides
+// on the path alone, before the handler runs, and so does the migration freeze.
+const RouteTokenMint = "token_mint"
+
 // Route is the name of the endpoint a request to the issuer's listener is for,
 // from a small FIXED set: it is the `route` label of the request metrics and
 // the name of the span, and a raw path never is, because a path carries
 // callback codes and, on the console, names. Anything not listed is `other`.
+// The token endpoint renames a Cloudflare mint [RouteTokenMint] as it runs.
 func Route(r *http.Request) string {
 	path := r.URL.Path
 	switch path {

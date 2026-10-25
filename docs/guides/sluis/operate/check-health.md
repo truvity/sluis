@@ -21,6 +21,7 @@ Read what the console says is wrong with a directory, a workspace or a rollout, 
 | A domain shows *no longer owned* | the served list names a domain the directory no longer lists | drop the entry |
 | Every domain non-authoritative | the snapshot store (Blob and State ports) is unreachable | restore it. The service refills it within one refresh interval |
 | A workspace shows *declared* with no Reconnect or Disconnect | it comes from the chart's overlay | change the deployment's values |
+| A Cloudflare token request takes seconds (`route` `token_mint`) | a mint is synchronous: the token endpoint calls the Cloudflare module, which calls Cloudflare | expected for now. `SluisTokenEndpointSlow` leaves mints out; `SluisTokenMintSlow` fires on a p95 over 10 s |
 | After a restart: "no backend: the credential is not loaded" | its entry in `Secret <release>-workspace-credentials` is gone or unreadable | restore the Secret from a backup and restart, or **Reconnect**, or upload the key again. The record is intact |
 
 After the action the row's health returns to ok. The actions only reconnect or retry.

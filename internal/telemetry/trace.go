@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"strconv"
+	"sync"
 	"time"
 
 	"connectrpc.com/connect/v2"
@@ -34,6 +35,14 @@ const (
 	// KEY of the call is never an attribute: it names a person.
 	AttrPort      = "access_roster.port"
 	AttrOperation = "access_roster.operation"
+	// AttrResendCount is OpenTelemetry's name for which attempt of a request a
+	// span is: 0 the first, 1 the first retry.
+	AttrResendCount = "http.request.resend_count"
+	// AttrCloudflarePages and AttrCloudflareListed are how many pages a
+	// Cloudflare listing read and how many entries it returned: counts, never
+	// a name or an id.
+	AttrCloudflarePages  = "sluis.cloudflare.pages"
+	AttrCloudflareListed = "sluis.cloudflare.listed"
 )
 
 // SpanAttributeAllowlist is every attribute a span leaving this process may
@@ -60,6 +69,10 @@ var SpanAttributeAllowlist = map[attribute.Key]bool{
 	// the AWS request id. None names a caller or a stored key.
 	"faas.invocation_id": true, "rpc.system": true, "rpc.service": true,
 	"aws.request_id": true, "http.status_code": true,
+
+	// A call to Cloudflare's API (internal/cloudflare/cfapi): which attempt,
+	// and a listing's size. Never the URL, which names a token's id.
+	AttrResendCount: true, AttrCloudflarePages: true, AttrCloudflareListed: true,
 }
 
 // FilterExporter wraps an exporter so that only [SpanAttributeAllowlist]
@@ -142,6 +155,9 @@ func connectInterceptorOptions() []otelconnect.Option {
 // span's name, `http.route` and the metrics' `route` label, and a raw path must
 // never reach any of them (a path carries callback codes, state and, on a
 // console, names). The set is the caller's to keep bounded.
+//
+// A handler that learns more than the path told route can rename the request
+// with [SetRoute]: the span and the metrics then carry that name instead.
 func HTTPHandler(next http.Handler, service string, route func(*http.Request) string) http.Handler {
 	instruments := newHTTPInstruments()
 	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -149,9 +165,16 @@ func HTTPHandler(next http.Handler, service string, route func(*http.Request) st
 		span := trace.SpanFromContext(r.Context())
 		span.SetAttributes(attribute.String("http.route", name))
 		span.SetAttributes(InvocationAttrs(r.Context())...)
+		holder := &routeHolder{name: name}
+		r = r.WithContext(context.WithValue(r.Context(), routeKey{}, holder))
 		recorder := &statusRecorder{ResponseWriter: w}
 		started := time.Now()
 		next.ServeHTTP(recorder, r)
+		if renamed := holder.get(); renamed != name {
+			name = renamed
+			span.SetAttributes(attribute.String("http.route", name))
+			span.SetName(r.Method + " " + name)
+		}
 		instruments.record(r.Context(), name, recorder.status(), time.Since(started))
 	})
 	return otelhttp.NewHandler(inner, service,
@@ -159,6 +182,35 @@ func HTTPHandler(next http.Handler, service string, route func(*http.Request) st
 		otelhttp.WithMeterProvider(noop.NewMeterProvider()),
 		otelhttp.WithSpanNameFormatter(func(_ string, r *http.Request) string { return r.Method + " " + route(r) }),
 	)
+}
+
+// routeKey carries a request's [routeHolder] from [HTTPHandler] to the handler.
+type routeKey struct{}
+
+// routeHolder is the route a request is recorded under, which [SetRoute] may
+// change while the handler runs.
+type routeHolder struct {
+	mu   sync.Mutex
+	name string
+}
+
+func (h *routeHolder) get() string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.name
+}
+
+// SetRoute renames the route of the request whose context ctx is, for its span
+// and its request metrics, once a handler knows more than the path said: the
+// token endpoint names a Cloudflare mint `token_mint` once it has read the
+// audience. name must be one of the same small fixed set the route function
+// keeps, never anything a request carries. Outside [HTTPHandler] it does nothing.
+func SetRoute(ctx context.Context, name string) {
+	if h, ok := ctx.Value(routeKey{}).(*routeHolder); ok {
+		h.mu.Lock()
+		h.name = name
+		h.mu.Unlock()
+	}
 }
 
 const httpMeterName = "github.com/truvity/sluis/http"
@@ -177,7 +229,10 @@ func newHTTPInstruments() httpInstruments {
 	duration := NewFloat64Histogram(meter, "access_issuer.http.request.duration",
 		metric.WithUnit("s"),
 		metric.WithDescription("Seconds from a request's arrival to the handler returning, by route and status class."),
-		metric.WithExplicitBucketBoundaries(0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10))
+		// 30 and 60 for a Cloudflare mint (route token_mint), which waits on
+		// another function and on Cloudflare: a quantile cannot read above the
+		// last finite bound, so with 10 the last, a mint rule over 10s could never fire.
+		metric.WithExplicitBucketBoundaries(0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60))
 	return httpInstruments{requests, duration}
 }
 
