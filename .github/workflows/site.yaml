@@ -11,7 +11,7 @@
 #
 # The DNS of sluis.id is managed outside this repository, and this workflow does
 # not touch the Pages settings or the custom domain.
-name: Pages
+name: Site
 
 on:
   push:
@@ -23,7 +23,7 @@ on:
       - "lychee.toml"
       - "devbox.json"
       - "devbox.lock"
-      - ".github/workflows/pages.yaml"
+      - ".github/workflows/site.yaml"
   workflow_dispatch:
 
 permissions:
