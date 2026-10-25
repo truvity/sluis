@@ -192,7 +192,7 @@
                 ]
               },
               "redirects": {
-                "description": "The redirect URIs.",
+                "description": "The redirect URIs. Plain `http://` only to `127.0.0.1`, `[::1]` or `localhost`.",
                 "items": {
                   "minLength": 1,
                   "type": "string"
@@ -243,7 +243,7 @@
                 "type": "boolean"
               },
               "signed_out": {
-                "description": "Where sign-out may return the browser.",
+                "description": "Where sign-out may return the browser. Plain `http://` as for `redirects`.",
                 "items": {
                   "minLength": 1,
                   "type": "string"

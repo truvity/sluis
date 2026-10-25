@@ -208,7 +208,9 @@ func CreateIDToken(ctx context.Context, issuer string, request IDTokenRequest, v
 		acr = authRequest.GetACR()
 		nonce = authRequest.GetNonce()
 	}
-	claims := oidc.NewIDTokenClaims(issuer, request.GetSubject(), request.GetAudience(), exp, request.GetAuthTime(), nonce, acr, request.GetAMR(), request.GetClientID(), client.ClockSkew())
+	// sluis: an ID token is for the client alone; the resource a request named
+	// is the access token's audience, never the ID token's.
+	claims := oidc.NewIDTokenClaims(issuer, request.GetSubject(), []string{request.GetClientID()}, exp, request.GetAuthTime(), nonce, acr, request.GetAMR(), request.GetClientID(), client.ClockSkew())
 	if actorReq, ok := request.(TokenActorRequest); ok {
 		claims.Actor = actorReq.GetActor()
 	}

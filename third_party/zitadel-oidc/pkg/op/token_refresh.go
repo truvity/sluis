@@ -126,6 +126,10 @@ func AuthorizeRefreshClient(ctx context.Context, tokenReq *oidc.RefreshTokenRequ
 		return nil, nil, oidc.ErrInvalidClient()
 	}
 	if client.AuthMethod() == oidc.AuthMethodNone {
+		// sluis: a client that authenticates with nothing presents nothing.
+		if tokenReq.ClientSecret != "" {
+			return nil, nil, oidc.ErrInvalidClient().WithDescription("a public client presents no secret")
+		}
 		request, err = RefreshTokenRequestByRefreshToken(ctx, exchanger.Storage(), tokenReq.RefreshToken)
 		return request, client, err
 	}

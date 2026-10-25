@@ -15,6 +15,7 @@ package policy
 import (
 	"fmt"
 	"maps"
+	"net/url"
 	"path"
 	"regexp"
 	"slices"
@@ -592,7 +593,8 @@ type Client struct {
 	// its credentials. The secret itself is never in this file. See
 	// [ClientSecret].
 	Secret ClientSecret `yaml:"secret,omitempty" json:"secret,omitempty"`
-	// Redirects are the allowed redirect URIs.
+	// Redirects are the allowed redirect URIs. Plain `http://` is accepted
+	// only to a loopback host ([plainHTTPOnLoopback]).
 	Redirects []string `yaml:"redirects,omitempty"`
 	// SignedOut are the allowed landing pages after an RP-initiated
 	// sign-out (OIDC RP-Initiated Logout `post_logout_redirect_uri`).
@@ -1243,6 +1245,16 @@ func (c Client) validate(id string, p Policy) error {
 			"traded for cluster and cloud credentials is a person's CLI, and a month-long chain there would "+
 			"make every credential traded from it a month long in effect", id)
 	}
+	for _, uri := range c.Redirects {
+		if err := plainHTTPOnLoopback(uri); err != nil {
+			return fmt.Errorf("client %q: redirect %w", id, err)
+		}
+	}
+	for _, uri := range c.SignedOut {
+		if err := plainHTTPOnLoopback(uri); err != nil {
+			return fmt.Errorf("client %q: signed-out landing page %w", id, err)
+		}
+	}
 	// A post-logout URI that is also a redirect URI sends the person
 	// straight back into the login they just ended. It is the one mistake
 	// this pair of lists exists to prevent, so it fails the load.
@@ -1279,6 +1291,32 @@ func (c Client) validate(id string, p Policy) error {
 		return err
 	}
 	return nil
+}
+
+// plainHTTPOnLoopback refuses an `http://` URI whose host is not this machine.
+//
+// A code, and on sign-out the person, are sent to these URIs; over plain HTTP
+// anybody on the path reads the code or rewrites the landing page. A secret or
+// PKCE does not make that harmless, because the response is what is exposed.
+// The one place plain HTTP is right is a native application's loopback
+// listener (RFC 8252 7.3, 8.3), which never leaves the machine: `127.0.0.1`,
+// `[::1]` or `localhost`. Every other scheme is left as it is.
+func plainHTTPOnLoopback(uri string) error {
+	parsed, err := url.Parse(uri)
+	if err != nil {
+		if len(uri) >= len("http://") && strings.EqualFold(uri[:len("http://")], "http://") {
+			return fmt.Errorf("%q is plain http and does not parse as a URL", uri)
+		}
+		return nil
+	}
+	if !strings.EqualFold(parsed.Scheme, "http") {
+		return nil
+	}
+	switch strings.ToLower(parsed.Hostname()) {
+	case "127.0.0.1", "::1", "localhost":
+		return nil
+	}
+	return fmt.Errorf("%q is plain http to a host that is not loopback: use https, or 127.0.0.1, [::1] or localhost for a native application", uri)
 }
 
 // The longest a client's display text may be, in characters. A name is a

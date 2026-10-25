@@ -98,6 +98,13 @@ type token struct {
 	// Empty for a grant that opens no session. Such a token lives out
 	// its lifetime, which is what it is for.
 	Session string `json:"session,omitempty"`
+	// SignIn is the browser sign-in an authorization code was completed
+	// under, for a code redeemed without a session (`openid` alone, no
+	// `offline_access`). Signing out ends that sign-in, and with no
+	// session to end, this is the only thing that tells the record so
+	// ([Storage.recordLive]). Empty for a token that has a session, and
+	// for a grant that involves no browser at all (an exchange).
+	SignIn string `json:"signIn,omitempty"`
 }
 
 // authRequest is a login in progress: a browser part-way between the
@@ -1854,6 +1861,9 @@ func (s *Storage) issue(ctx context.Context, request op.TokenRequest) (*token, e
 		Method:   methodOf(request),
 	}
 	issued.GivenName, issued.FamilyName = given, family
+	if opened, ok := request.(*authRequest); ok {
+		issued.SignIn = opened.SSO
+	}
 	return issued, nil
 }
 
@@ -2543,6 +2553,13 @@ func (s *Storage) SetUserinfoFromScopes(context.Context, *oidc.UserInfo, string,
 // token from the first redemption. Fixing only that case would have left
 // every OTHER revocation with the same hole.
 //
+// A token redeemed from a code without a session is held to the browser
+// sign-in it was completed under instead ([token.SignIn]), so signing out
+// reaches it here too. A relying party that verifies the JWT itself and
+// never calls this endpoint still honours the token until its `exp`: that
+// is inherent in a signed token, and the client's `ttl_cap` is what bounds
+// it.
+//
 // What it returns decides the status: a plain error is a token that is no
 // longer good (the library says 403, [challenges] makes it the 401
 // `invalid_token` of RFC 6750 3.1), and a [fault] is this issuer's own
@@ -2557,15 +2574,12 @@ func (s *Storage) SetUserinfoFromToken(ctx context.Context, info *oidc.UserInfo,
 		return errors.New("no such token")
 	}
 
-	if issued.Session != "" {
-		_, live, err := s.iss.Sessions().ByID(ctx, issued.Session)
-		if err != nil {
-			return fault(ctx, err)
-		}
-
-		if !live {
-			return errors.New("the session this token was issued under has ended")
-		}
+	live, err := s.recordLive(ctx, issued)
+	if err != nil {
+		return fault(ctx, err)
+	}
+	if !live {
+		return errors.New("the session or sign-in this token was issued under has ended")
 	}
 
 	// The scopes this access token was minted with, and nothing the
@@ -2958,6 +2972,10 @@ const verifiedKey = "access-roster:verified-proof"
 // amr and email — so the decision has to ride in the audience, and an
 // audience wrongly minted is an audience wrongly trusted.
 func (s *Storage) ValidateTokenExchangeRequest(ctx context.Context, request op.TokenExchangeRequest) error {
+	if err := exchangeParameters(ctx, request); err != nil {
+		return err
+	}
+
 	audiences := request.GetAudience()
 	if len(audiences) != 1 {
 		reason := errors.New("an exchange names exactly one audience: it is the decision")
@@ -3005,6 +3023,30 @@ func (s *Storage) ValidateTokenExchangeRequest(ctx context.Context, request op.T
 	// expires the job asks again, or it is over.
 	request.SetRequestedTokenType(oidc.AccessTokenType)
 	s.grants.Store(request, grant)
+	return nil
+}
+
+// exchangeParameters refuses what an exchange may ask for and this issuer
+// does not serve, rather than answering a request other than the one made.
+//
+// An actor: delegation is a second principal in a token, and this design has
+// exactly one, the subject. An actor the library accepted used to be carried
+// no further, so a caller asking to act for somebody got a token with no `act`
+// and no word that its actor was ignored. The GitHub and Cloudflare exchanges
+// refuse it the same way.
+//
+// A token type other than an access token: an exchange issues an access token
+// and nothing else (no refresh token, no ID token), so asking for another kind
+// is answered with a refusal, not with an access token in its place. Naming
+// none, or an access token, is the request this issuer serves.
+func exchangeParameters(ctx context.Context, request op.TokenExchangeRequest) error {
+	if request.GetExchangeActorTokenIDOrToken() != "" || request.GetExchangeActor() != "" ||
+		request.GetExchangeActorTokenType() != "" {
+		return malformed(ctx, errors.New("actor_token: acting for another party is not served by this issuer"))
+	}
+	if wanted := request.GetRequestedTokenType(); wanted != "" && wanted != oidc.AccessTokenType {
+		return malformed(ctx, fmt.Errorf("requested_token_type: an exchange issues an access token, not %s", wanted))
+	}
 	return nil
 }
 

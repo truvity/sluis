@@ -224,15 +224,6 @@ func HandlerWithSignIn(iss *Issuer, storage op.Storage, signIn SignInDeps) (http
 	// A console sharing this issuer's origin reaches it with the
 	// browser's own session cookie and needs no CORS at all; the wrapper
 	// below is for the other shape, a console on a host of its own.
-	// The verifier is told which algorithm to accept, because the
-	// library's default when it is not told is RS256, ES256 and PS256 --
-	// so a P-384 or P-521 signing key produces tokens this service would
-	// refuse to verify itself, and the refusal arrives as a generic
-	// "invalid" a long way from the cause. [signingAlgorithms] rather than
-	// only today's algorithm, for the same reason [Provider] uses it: this
-	// verifier's real defence is [keySetOf], which only ever accepts a
-	// signature one of this issuer's own published keys produces.
-	verifier := accessTokenVerifier(iss, storage)
 	sessionsService := NewSessionsService(iss, storage, signIn.Secure)
 	sessionsService.announce = signIn.Announce
 	if concrete, ok := storage.(*Storage); ok {
@@ -242,12 +233,18 @@ func HandlerWithSignIn(iss *Issuer, storage op.Storage, signIn SignInDeps) (http
 	mountSessions(mux, sessionsService, signIn.ConsoleOrigin)
 
 	// What the caller's own groups open, for `sluisctl kubeconfig` and
-	// `aws-config`. The same verifier, so a bearer cannot mean one thing
-	// here and another to the session service.
+	// `aws-config`. An access token this issuer holds the record of, whose
+	// session or sign-in still stands ([Storage.recordedAccessClaims]): not
+	// an ID token, not a token whose session has ended or been revoked. A
+	// workload's exchanged token has a record and no session, and is read.
 	mux.Handle(GrantsPath, grantsHandler(iss.Policy(), iss, func(ctx context.Context, bearer string) (string, []string, error) {
-		claims, err := op.VerifyAccessToken[*oidc.AccessTokenClaims](ctx, bearer, verifier)
-		if err != nil {
-			return "", nil, err
+		concrete, ok := storage.(*Storage)
+		if !ok {
+			return "", nil, errors.New("no token record to check")
+		}
+		claims, _, ok := concrete.recordedAccessClaims(ctx, bearer)
+		if !ok {
+			return "", nil, errors.New("not an access token of a live grant")
 		}
 		return claims.Subject, groupsOf(claims), nil
 	}))
@@ -262,11 +259,19 @@ func HandlerWithSignIn(iss *Issuer, storage op.Storage, signIn SignInDeps) (http
 		return ok
 	}))
 	// An operator's rotation, look and purge of a generated client's secret.
-	// The same verifier again; the groups in the token are what admit it.
+	// The rule the session service applies ([Storage.liveSignInAtAnyClient]):
+	// the access token of a person's live sign-in, never an ID token or the
+	// token of a session that has ended. Which client it was issued to is the
+	// handler's question, so that a token of another client is an audited
+	// refusal; the groups in the token are what admit it.
 	mux.Handle(ClientSecretsPath+"/", clientSecretsHandler(iss, func(ctx context.Context, bearer string) (string, []string, []string, error) {
-		claims, err := op.VerifyAccessToken[*oidc.AccessTokenClaims](ctx, bearer, verifier)
-		if err != nil {
-			return "", nil, nil, err
+		concrete, ok := storage.(*Storage)
+		if !ok {
+			return "", nil, nil, errors.New("no token record to check")
+		}
+		claims, ok := concrete.liveSignInAtAnyClient(ctx, bearer)
+		if !ok {
+			return "", nil, nil, errors.New("not the access token of a live sign-in")
 		}
 		// The audience, and the authorized party where the issuer marks the
 		// client that way: either names the client the token was issued to.
@@ -1176,6 +1181,17 @@ func mountSessions(mux *http.ServeMux, service accessissuerv1connect.SessionServ
 // own keys. It is one function so that the session service, the operator
 // endpoints, the discovery document and the console's bearer reader cannot come
 // to accept different tokens.
+//
+// The verifier is told which algorithm to accept, because the library's
+// default when it is not told is RS256, ES256 and PS256 -- so a P-384 or P-521
+// signing key produces tokens this service would refuse to verify itself, and
+// the refusal arrives as a generic "invalid" a long way from the cause.
+// [signingAlgorithms] rather than only today's algorithm, for the same reason
+// [Provider] uses it: this verifier's real defence is [keySetOf], which only
+// ever accepts a signature one of this issuer's own published keys produces.
+//
+// A signature is all it checks. Every bearer endpoint asks the token's record
+// as well ([Storage.recordedAccessClaims]).
 func accessTokenVerifier(iss *Issuer, storage op.Storage) *op.AccessTokenVerifier {
 	return op.NewAccessTokenVerifier(
 		iss.Config().URL,

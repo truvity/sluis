@@ -16,8 +16,8 @@ import (
 	"github.com/truvity/sluis/policy"
 )
 
-// The endpoint behind the real verifier: a bearer this issuer signed, whose
-// audience is the client it was issued to.
+// The endpoint behind the real verifier: the access token of a live sign-in,
+// whose audience is the client it was issued to.
 func TestTheClientSecretsEndpointChecksTheRealTokensAudience(t *testing.T) {
 	t.Parallel()
 	declared, err := policy.Parse([]byte("version: 1\n" +
@@ -51,11 +51,7 @@ func TestTheClientSecretsEndpointChecksTheRealTokensAudience(t *testing.T) {
 	server := httptest.NewServer(handler)
 	t.Cleanup(server.Close)
 
-	show := func(client string) (int, string) {
-		token, _, err := storage.MintFor(context.Background(), "ada@north.example", client, time.Minute)
-		if err != nil {
-			t.Fatalf("mint for %s: %v", client, err)
-		}
+	show := func(token string) (int, string) {
 		req, _ := http.NewRequestWithContext(t.Context(), http.MethodPost, server.URL+issuer.ClientSecretsPath+"/show", strings.NewReader(`{"client":"grafana"}`))
 		req.Header.Set("Authorization", "Bearer "+token)
 		resp, err := server.Client().Do(req)
@@ -66,13 +62,26 @@ func TestTheClientSecretsEndpointChecksTheRealTokensAudience(t *testing.T) {
 		body, _ := io.ReadAll(resp.Body)
 		return resp.StatusCode, string(body)
 	}
+	signedIn := func(client string) string {
+		access, _ := signedInTokens(t, server, iss, client)["access_token"].(string)
+		return access
+	}
 	for _, client := range []string{"accessctl", "console"} {
-		if code, body := show(client); code != http.StatusOK {
+		if code, body := show(signedIn(client)); code != http.StatusOK {
 			t.Errorf("a token for %s: %d %s", client, code, body)
 		}
 	}
-	if code, body := show("grafana"); code != http.StatusForbidden {
+	if code, body := show(signedIn("grafana")); code != http.StatusForbidden {
 		t.Errorf("a token for another client: %d %s", code, body)
+	}
+	// A token with no sign-in behind it is not a person at the console or the
+	// CLI, whatever client it names: refused before anything is audited.
+	minted, _, err := storage.MintFor(context.Background(), "ada@north.example", "accessctl", time.Minute)
+	if err != nil {
+		t.Fatalf("mint: %v", err)
+	}
+	if code, body := show(minted); code != http.StatusUnauthorized {
+		t.Errorf("a token with no sign-in behind it: %d %s", code, body)
 	}
 	denied := trail.Find("roster.client.secret.denied")
 	if len(denied) != 1 || denied[0].GetOutcome().GetReason() != "wrong_audience" || denied[0].GetActor().GetId() != "ada@north.example" {

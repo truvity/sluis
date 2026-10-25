@@ -230,28 +230,49 @@ func TestTheAccessTokenStillNamesThePersonForOpenIDAlone(t *testing.T) {
 	}
 }
 
-// An exchange mints an access token and nothing else, even asked for an ID
-// token, so no exchange carries claims gated by scope. Its callers read the
-// access token, which is not gated.
+// An exchange issues an access token and nothing else. Asking for an ID token
+// is refused rather than answered with an access token in its place; asking
+// for nothing, or for an access token, gets one, and never an ID token beside
+// it however the scope reads.
 func TestAnExchangeMintsNoIDToken(t *testing.T) {
 	t.Parallel()
 	server, _ := serveIssuer(t)
 
-	status, body := post(t, server, url.Values{
-		"grant_type":           {"urn:ietf:params:oauth:grant-type:token-exchange"},
-		"subject_token":        {"github:example-org/gitops@refs/heads/master"},
-		"subject_token_type":   {"urn:ietf:params:oauth:token-type:jwt"},
-		"requested_token_type": {"urn:ietf:params:oauth:token-type:id_token"},
-		"audience":             {"aws:1111:deployer"},
-		"scope":                {"openid email profile"},
-	}, "local-dev")
-	if status != http.StatusOK {
-		t.Fatalf("exchange: %d %v", status, body)
+	form := func(requested string) url.Values {
+		f := url.Values{
+			"grant_type":         {"urn:ietf:params:oauth:grant-type:token-exchange"},
+			"subject_token":      {"github:example-org/gitops@refs/heads/master"},
+			"subject_token_type": {"urn:ietf:params:oauth:token-type:jwt"},
+			"audience":           {"aws:1111:deployer"},
+			"scope":              {"openid email profile"},
+		}
+		if requested != "" {
+			f.Set("requested_token_type", requested)
+		}
+		return f
 	}
-	if body["issued_token_type"] != "urn:ietf:params:oauth:token-type:access_token" {
-		t.Errorf("issued_token_type = %v, want an access token", body["issued_token_type"])
+
+	for _, requested := range []string{
+		"urn:ietf:params:oauth:token-type:id_token",
+		"urn:ietf:params:oauth:token-type:refresh_token",
+		"urn:ietf:params:oauth:token-type:jwt",
+	} {
+		status, body := post(t, server, form(requested), "local-dev")
+		if status != http.StatusBadRequest || body["error"] != "invalid_request" {
+			t.Errorf("an exchange asking for %s: %d %v, want 400 invalid_request", requested, status, body)
+		}
 	}
-	if _, present := body["id_token"]; present {
-		t.Errorf("an exchange returned an ID token: %v", body)
+
+	for _, requested := range []string{"", "urn:ietf:params:oauth:token-type:access_token"} {
+		status, body := post(t, server, form(requested), "local-dev")
+		if status != http.StatusOK {
+			t.Fatalf("exchange asking for %q: %d %v", requested, status, body)
+		}
+		if body["issued_token_type"] != "urn:ietf:params:oauth:token-type:access_token" {
+			t.Errorf("issued_token_type = %v, want an access token", body["issued_token_type"])
+		}
+		if _, present := body["id_token"]; present {
+			t.Errorf("an exchange returned an ID token: %v", body)
+		}
 	}
 }

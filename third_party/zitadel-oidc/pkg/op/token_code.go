@@ -106,6 +106,10 @@ func AuthorizeCodeClient(ctx context.Context, tokenReq *oidc.AccessTokenRequest,
 		return nil, nil, oidc.ErrInvalidClient().WithDescription("private_key_jwt not allowed for this client")
 	}
 	if client.AuthMethod() == oidc.AuthMethodNone {
+		// sluis: a client that authenticates with nothing presents nothing.
+		if tokenReq.ClientSecret != "" {
+			return nil, nil, oidc.ErrInvalidClient().WithDescription("a public client presents no secret")
+		}
 		if codeChallenge == nil {
 			return nil, nil, oidc.ErrInvalidRequest().WithDescription("PKCE required")
 		}
