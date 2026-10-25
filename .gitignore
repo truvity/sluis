@@ -11,8 +11,13 @@ coverage.*
 go.work
 go.work.sum
 
-# Website (mkdocs)
-/site/
+# Website (Astro Starlight source is site/; only its build output is ignored)
+/site/dist/
+/site/.astro/
+/_site/
+# The v1 documentation: master is checked out here and built under /v1/.
+/v1-src/
+.lycheecache
 .cache/
 
 # Python tooling for the website
@@ -26,6 +31,9 @@ node_modules/
 .yarn/*
 !.yarn/releases/
 !.yarn/plugins/
+**/.yarn/*
+!**/.yarn/releases/
+!**/.yarn/plugins/
 .pnp.*
 
 # Local environment

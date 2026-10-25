@@ -1,0 +1,22 @@
+---
+import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
+import { render } from 'astro:content';
+import { decisionDescription, decisionTitle, listDecisions, sourceUrl } from '../../lib-decisions';
+
+export async function getStaticPaths() {
+  const entries = await listDecisions();
+  return entries.map((entry) => ({ params: { id: entry.id }, props: { entry } }));
+}
+
+const { entry } = Astro.props;
+const { Content } = await render(entry);
+---
+
+<StarlightPage
+  frontmatter={{ title: decisionTitle(entry), description: decisionDescription(entry) }}
+>
+  <Content />
+  <p>
+    <a href={sourceUrl(entry)}>View this record on GitHub</a>
+  </p>
+</StarlightPage>

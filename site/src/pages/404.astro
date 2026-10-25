@@ -1,0 +1,18 @@
+---
+import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
+---
+
+<StarlightPage
+  frontmatter={{
+    title: 'Page not found',
+    description: 'The page you asked for is not on sluis.id. Use the search, the sidebar, or go back to the start page.',
+    template: 'splash',
+    pagefind: false,
+  }}
+>
+  <p>There is nothing at this address.</p>
+  <ul>
+    <li><a href="/">The start page</a></li>
+    <li><a href="/v1/">The v1 documentation</a></li>
+  </ul>
+</StarlightPage>
