@@ -1,0 +1,61 @@
+name: Decision proposal (ADR)
+description: Propose a decision about scope, design, a standard or the process.
+labels: ["type:decision", "status:needs-decision"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This starts an architecture decision. When the direction is clear, it becomes a pull request that adds a record under `docs/decisions/`.
+        Keep it public and generic: name no private deployment, account, hostname, ticket or person.
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+      description: What has to be decided?
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Why now? What constraints apply? Link related issues, standards and v1 ADRs.
+    validations:
+      required: true
+  - type: textarea
+    id: options
+    attributes:
+      label: Options
+      description: Each option with its pros and cons.
+    validations:
+      required: true
+  - type: textarea
+    id: recommendation
+    attributes:
+      label: Recommendation
+      description: Which option, and why. Say which options you would not take.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - core
+        - port
+        - driver
+        - integration
+        - service
+        - deploy
+        - conformance
+        - docs
+        - process
+        - not sure
+    validations:
+      required: true
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Does it change
+      options:
+        - label: product scope
+        - label: the design model
+        - label: compatibility or a stored format
+        - label: a standard we claim
