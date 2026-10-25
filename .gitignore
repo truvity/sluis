@@ -1,0 +1,49 @@
+# Build output
+/bin/
+/dist/
+/out/
+*.test
+*.out
+coverage.*
+*.prof
+
+# Go workspace files are local by choice
+go.work
+go.work.sum
+
+# Website (mkdocs)
+/site/
+.cache/
+
+# Python tooling for the website
+.venv/
+__pycache__/
+*.pyc
+
+# Node tooling (frontend, TypeScript SDK)
+node_modules/
+.pnpm-store/
+.yarn/*
+!.yarn/releases/
+!.yarn/plugins/
+.pnp.*
+
+# Local environment
+.env
+.env.*
+!.env.example
+*.local
+.direnv/
+.devbox/
+
+# Editors and operating systems
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+
+# Scratch
+/tmp/
+*.log
