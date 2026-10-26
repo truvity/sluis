@@ -1,5 +1,13 @@
 ## Unreleased
 
+## v1.79.2
+
+A security release for [GHSA-m7q8-643q-pjjf](https://github.com/truvity/sluis/security/advisories/GHSA-m7q8-643q-pjjf). Upgrade from any version up to 1.79.1; the advisory carries the details and upgrade notes.
+
+### Fixed
+
+- **Security fix (GHSA-m7q8-643q-pjjf).** See the advisory. **Upgrade:** read the advisory before upgrading.
+
 ## v1.79.1
 
 A patch release: alerts that stop paging falsely, and traces of the Cloudflare mint. `SluisTickStale` and `SluisTickSeriesStale` read the tick counter instead of the last-success gauge, which on Lambda mixes the stamps of every warm environment and paged a healthy target as stale. A Cloudflare credential mint is recorded as its own route, `token_mint`; `SluisTokenEndpointSlow` leaves mints out and needs 100 requests in 30 minutes, and a new warning, `SluisTokenMintSlow`, the 13th rule, watches the mints. Each call to Cloudflare's API is now a span, with one child span per attempt. Upgrade notes: the chart renders the new rule, so route or silence `SluisTokenMintSlow` as a warning; a silence on the old `SluisTickStale` summary text must match the new one; a rule or panel of your own that reads `route="token"` no longer sees Cloudflare mints.
