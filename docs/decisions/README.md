@@ -41,5 +41,4 @@ Every record has these parts, in this order:
 
 | ADR | Decision | Status |
 |-----|----------|--------|
-
-No v2 records have been accepted yet.
+| [0001](0001-v1-and-v2-lines.md) | v1 and v2 are two lines that coexist until v2 replaces v1 | Accepted |

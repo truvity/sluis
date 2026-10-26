@@ -6,7 +6,10 @@ It describes the project as it is today: one maintainer, a young v2 line, and a 
 ## Branches and versions
 
 - `main` holds **v2**, built from scratch. It started as an orphan branch and shares no history with v1.
-- `master` holds **v1**. It gets fixes only: security fixes, incident fixes and small agreed items. Big features are built on `main` only.
+- `master` holds **v1**. It continues its agreed roadmap releases (v1.80 to v1.85) and takes fixes. Any other v1 feature needs a decision issue first. New feature requests target v2.
+- v2 is built alongside v1 and has to reach parity with v1 as it is at cutover.
+- v1 is supported until the maintainers' own production deployments run v2. There is no fixed end date. See [ADR 0001](docs/decisions/0001-v1-and-v2-lines.md).
+- v1 issues carry the label `line:v1`. An issue without it is about v2. The two lines have their own boards: [sluis v2](https://github.com/orgs/truvity/projects/9) and [sluis v1](https://github.com/orgs/truvity/projects/10).
 - At cutover `master` is renamed `v1` and `main` becomes the default branch. Before the rename, workflow triggers, dependency-bot settings and rulesets learn the new name.
 - v2 versions are `v2.x`. Until cutover they are pre-releases named `v2.0.0-alpha.N`. The Go module path ends in `/v2`.
 - **A published version is never reused, moved or deleted.** Module proxies cache every version they have seen, so reuse breaks checksums. A mistake is fixed by the next version.

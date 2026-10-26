@@ -7,6 +7,7 @@ body:
       value: |
         sluis issues credentials and brokers identity. New scope needs a decision first.
         If you are not sure whether your idea fits, use the Decision proposal form.
+        New features are planned for v2. v1 builds only its agreed roadmap and fixes; any other v1 feature needs a decision issue first.
   - type: textarea
     id: problem
     attributes:

@@ -3,20 +3,25 @@
 Thank you for helping. This file describes how to work on sluis v2 (`main`).
 Who decides what is in [GOVERNANCE.md](GOVERNANCE.md). Security reports go through [SECURITY.md](SECURITY.md), not through issues.
 
-v1 lives on `master` and gets fixes only. For a v1 fix, branch from `master` and open the pull request against `master`.
+v1 lives on `master`. It builds its agreed roadmap (v1.80 to v1.85) and takes fixes. New feature requests target v2. Any other v1 feature needs a decision issue first.
+For a v1 change, branch from `master` and open the pull request against `master`.
+The two lines are in [ADR 0001](docs/decisions/0001-v1-and-v2-lines.md).
+
+An issue about v1 carries the label `line:v1`. An issue without it is about v2.
+Work is tracked on two public boards: [sluis v2](https://github.com/orgs/truvity/projects/9) and [sluis v1](https://github.com/orgs/truvity/projects/10).
 
 ## Before you start
 
 - Look for an existing issue or pull request first.
 - For a bug, open an issue with the *Bug* form.
-- For a feature, open an issue with the *Feature request* form. Wait for the maintainer's answer before you build anything large.
+- For a feature, open an issue with the *Feature request* form. It is planned for v2. Wait for the maintainer's answer before you build anything large.
 - For a question about direction, scope or design, open an issue with the *Decision proposal* form. See below.
 
 ## Proposing a feature
 
 Describe the problem before the solution. Say who has the problem and what they do today.
 The maintainer replies with one of: accepted, needs a decision, out of scope. New scope needs an ADR first (see [GOVERNANCE.md](GOVERNANCE.md)).
-Accepted features are tracked on the public [sluis roadmap](https://github.com/orgs/truvity/projects/9) project and in `docs/roadmap.md` once that file exists.
+Accepted features are tracked on the public [sluis v2](https://github.com/orgs/truvity/projects/9) board and in the [roadmap](docs/roadmap.md).
 
 ## Proposing a decision
 

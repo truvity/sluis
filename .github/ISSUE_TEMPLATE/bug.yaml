@@ -7,11 +7,22 @@ body:
       value: |
         Do not report vulnerabilities here. Use the private security advisory link on the issue chooser.
         Do not paste real secrets, tokens, hostnames or personal data.
-  - type: input
+  - type: dropdown
     id: version
     attributes:
       label: Version
-      description: Release tag or commit, and the branch (`main` or `master`).
+      description: Which line is the problem in? v1 issues are labelled `line:v1`; an issue without that label is about v2.
+      options:
+        - "v1.x (master)"
+        - "v2 (main)"
+        - "Not sure"
+    validations:
+      required: true
+  - type: input
+    id: release
+    attributes:
+      label: Release tag or commit
+      description: The exact release tag or commit you tested.
     validations:
       required: true
   - type: dropdown
