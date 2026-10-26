@@ -13,4 +13,6 @@ The roadmap lives in two public GitHub Projects under the `truvity` organization
 v1 keeps its own roadmap while v2 is built alongside it. New feature requests target v2. An issue about v1 carries the label `line:v1`; an issue without it is about v2.
 The reasoning is in [ADR 0001](https://github.com/truvity/sluis/blob/main/docs/decisions/0001-v1-and-v2-lines.md).
 
+The [features page](/features/) lists what v1 does and where each capability stands in v2.
+
 Planned work is also tracked as [issues](https://github.com/truvity/sluis/issues) and milestones in the repository.
