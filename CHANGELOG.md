@@ -2,11 +2,11 @@
 
 ## v1.79.2
 
-A security release for [GHSA-m7q8-643q-pjjf](https://github.com/truvity/sluis/security/advisories/GHSA-m7q8-643q-pjjf). Upgrade from any version up to 1.79.1; the advisory carries the details and upgrade notes.
+A security release for [GHSA-m7q8-643q-pjjf](https://github.com/truvity/sluis/security/advisories/GHSA-m7q8-643q-pjjf) (medium). Upgrade from any version up to 1.79.1. Upgrade notes: before upgrading, check that no client in the policy uses a plain `http://` redirect or signed-out URI to a host other than 127.0.0.1, [::1] or localhost, since such a policy is now refused at load, and that no public client sends a client secret to `/token`. Tokens issued before the upgrade stay valid until they expire.
 
 ### Fixed
 
-- **Security fix (GHSA-m7q8-643q-pjjf).** See the advisory. **Upgrade:** read the advisory before upgrading.
+- **Bearer and token-endpoint checks are stricter (GHSA-m7q8-643q-pjjf).** `/.access/grants` and `/.access/client-secrets/` accept only an access token whose session or sign-in is still live, never an ID token. A token redeemed without a session stops at `/userinfo` once its sign-in ends. The ID token's `aud` is the client alone. Token exchange refuses `actor_token` and any `requested_token_type` other than an access token. A public client that sends a `client_secret` to `/token` gets `invalid_client`. A policy with a plain `http://` redirect or signed-out URI to a non-loopback host is refused at load. **Upgrade:** check the policy's `redirects` and `signed_out` for plain `http://` to a host other than 127.0.0.1, [::1] or localhost, and that no public client is configured with a client secret.
 
 ## v1.79.1
 
