@@ -15,7 +15,7 @@ go.work.sum
 /site/dist/
 /site/.astro/
 /_site/
-# The v1 documentation: master is checked out here and built under /v1/.
+# The v1 documentation: the newest v1 release tag is checked out here and built under /v1/.
 /v1-src/
 .lycheecache
 .cache/

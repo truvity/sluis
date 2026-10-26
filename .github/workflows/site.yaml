@@ -1,6 +1,11 @@
 # Builds the sluis.id website (Astro Starlight, site/ and docs/) together with the
-# v1 documentation from the `master` branch (under /v1/), and publishes it to
-# GitHub Pages. This workflow publishes; checks.yaml judges pull requests.
+# v1 documentation of the newest stable v1 release tag (under /v1/), and publishes
+# it to GitHub Pages. This workflow publishes; checks.yaml judges pull requests.
+#
+# The v1 tag is looked up on every run (site/scripts/latest-v1-tag.sh), so a run
+# started after a new v1.X.Y tag is pushed picks it up. The tag and its commit are
+# stamped into build.json next to this branch's own commit. The build names no
+# branch of v1: when `master` is renamed `v1` at the cutover, nothing here changes.
 #
 # THE DEPLOY IS OFF. Until the owner switches Pages over from `master` to this
 # branch, the build runs on every push and proves the site builds, but the
@@ -37,16 +42,28 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    outputs:
+      v1_tag: ${{ steps.v1.outputs.tag }}
+      v1_commit: ${{ steps.v1.outputs.commit }}
     steps:
       # Images and fonts are in Git LFS (.gitattributes), so lfs: true.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           lfs: true
           persist-credentials: false
-      # v1: the MkDocs site on master, built under /v1/ by site/scripts/build-v1.sh.
+      # v1: the MkDocs site at the newest stable v1 release tag, built under /v1/
+      # by site/scripts/build-v1.sh. The step fails when there is no such tag.
+      - name: Find the newest stable v1 tag
+        id: v1
+        run: |
+          set -euo pipefail
+          read -r tag commit < <(site/scripts/latest-v1-tag.sh "https://github.com/$GITHUB_REPOSITORY")
+          echo "v1 documentation: $tag ($commit)"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: master
+          ref: ${{ steps.v1.outputs.tag }}
           path: v1-src
           lfs: true
           persist-credentials: false
@@ -58,10 +75,16 @@ jobs:
       - name: Check the built site
         run: devbox run -- site/scripts/check-built.sh site/dist
       - name: Stamp the build
-        # build.json is what `published` compares against the live site.
+        # build.json is what `published` compares against the live site. The v1
+        # keys are distinct and flat, so "commit" is only ever this branch's commit.
+        env:
+          V1_TAG: ${{ steps.v1.outputs.tag }}
+          V1_COMMIT: ${{ steps.v1.outputs.commit }}
         run: |
           touch site/dist/.nojekyll
-          printf '{"commit":"%s","run":"%s"}\n' "$GITHUB_SHA" "$GITHUB_RUN_ID" > site/dist/build.json
+          jq -nc --arg commit "$GITHUB_SHA" --arg run "$GITHUB_RUN_ID" --arg v1_tag "$V1_TAG" --arg v1_commit "$V1_COMMIT" \
+            '{commit: $commit, run: $run, v1_tag: $v1_tag, v1_commit: $v1_commit}' > site/dist/build.json
+          cat site/dist/build.json
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: site/dist
@@ -95,6 +118,7 @@ jobs:
     timeout-minutes: 10
     env:
       PAGE_URL: ${{ needs.deploy.outputs.page_url }}
+      V1_TAG: ${{ needs.build.outputs.v1_tag }}
     steps:
       - name: The deployed build is live
         run: |
@@ -102,12 +126,14 @@ jobs:
           base="${PAGE_URL%/}"
           [ -n "$base" ] || { echo "::error::the deploy reported no page_url"; exit 1; }
           for i in $(seq 1 30); do
-            live=$(curl -fsS --max-time 20 "$base/build.json?run=$GITHUB_RUN_ID-$i" 2>/dev/null | sed -n 's/.*"commit":"\([0-9a-f]*\)".*/\1/p' || true)
-            if [ "$live" = "$GITHUB_SHA" ]; then
-              echo "$base serves build $live"
+            body=$(curl -fsS --max-time 20 "$base/build.json?run=$GITHUB_RUN_ID-$i" 2>/dev/null || true)
+            live=$(printf '%s' "$body" | jq -r '.commit // empty' 2>/dev/null || true)
+            live_v1=$(printf '%s' "$body" | jq -r '.v1_tag // empty' 2>/dev/null || true)
+            if [ "$live" = "$GITHUB_SHA" ] && [ "$live_v1" = "$V1_TAG" ]; then
+              echo "$base serves build $live with v1 $live_v1"
               break
             fi
-            echo "attempt $i: $base serves '${live:-nothing}', want $GITHUB_SHA"
+            echo "attempt $i: $base serves '${live:-nothing}' with v1 '${live_v1:-nothing}', want $GITHUB_SHA with v1 $V1_TAG"
             [ "$i" -lt 30 ] || { echo "::error::$base does not serve the build that was deployed"; exit 1; }
             sleep 10
           done
