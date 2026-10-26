@@ -89,7 +89,7 @@ const (
 // StoredConfig is what a [StoredProvider] is made of.
 type StoredConfig struct {
 	// Read returns the document. It is called at the first Retrieve, whenever
-	// the held credential is due, and after a 403.
+	// the held credential is due, and after a 401 or 403.
 	Read func(ctx context.Context) ([]byte, error)
 	// Source names where the document is read from (a parameter, a file), for
 	// errors. It is never a value.
@@ -112,7 +112,8 @@ type StoredConfig struct {
 // StoredProvider hands out the R2 credential sluis rotates for a preset
 // (ADR 0070, decision 6): it reads the `cloudflare/v1` document sluis keeps at
 // external/cloudflare/<preset>, from SSM or from a file a secrets operator
-// projected, and reads it again before the credential expires and after a 403.
+// projected, and reads it again before the credential expires and after a 401
+// or 403.
 // It mints nothing and holds no minter credential. It is an
 // [aws.CredentialsProvider]: wrap it in aws.NewCredentialsCache for an S3 client.
 //
@@ -165,7 +166,7 @@ func (p *StoredProvider) Retrieve(ctx context.Context) (aws.Credentials, error) 
 	return aws.Credentials{}, err
 }
 
-// Reauthenticate reads the document again because the store answered 403,
+// Reauthenticate reads the document again because the store answered 401 or 403,
 // unless it did so less than [MinReauth] ago, and reports whether the
 // credential changed. A caller holding the credentials in a cache invalidates
 // it when this answers true.

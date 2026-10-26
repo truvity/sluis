@@ -150,7 +150,7 @@ func (p *Provider) Remint(ctx context.Context) (aws.Credentials, error) {
 // not asked again.
 const MinReauth = 30 * time.Second
 
-// Reauthenticate mints new credentials because the store answered 403, unless it
+// Reauthenticate mints new credentials because the store answered 401 or 403, unless it
 // did so less than [MinReauth] ago, and reports whether it did. A caller holding
 // the credentials in a cache invalidates it when this answers true.
 func (p *Provider) Reauthenticate(ctx context.Context) (bool, error) {

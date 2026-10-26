@@ -137,7 +137,7 @@ type Options struct {
 	// does its wildcard cover a bucket subdomain? -- rather than of the
 	// endpoint, which is why it is its own switch.
 	PathStyle bool
-	// Reauth, when set, is called after the store answers 403, and the request is
+	// Reauth, when set, is called after the store answers 401 or 403, and the request is
 	// sent once more if it replaced the credentials. See [Reauth]. Nil (the
 	// default, and the case for static credentials) never retries.
 	Reauth Reauth
