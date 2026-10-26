@@ -11,6 +11,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 
+	"github.com/truvity/sluis/storage/state"
 	"github.com/truvity/sluis/storage/state/memory"
 )
 
@@ -118,6 +119,56 @@ func TestTheRotatedCredentialsAreReadFromTheSluisStore(t *testing.T) {
 	token, _ := storedFromState(st, "/sluis/main", "external/cloudflare/token", "")
 	if _, err := token.Retrieve(ctx); err == nil || strings.Contains(err.Error(), "s3cret") {
 		t.Fatalf("a token preset's document: %v", err)
+	}
+}
+
+// stale is a caching store whose copy of every document is the first it read:
+// only a read marked state.WithFreshRead reaches the backend.
+type stale struct {
+	state.Store
+	copies map[string]state.Item
+}
+
+func (s *stale) Get(ctx context.Context, key string) (state.Item, error) {
+	if it, ok := s.copies[key]; ok && !state.FreshRead(ctx) {
+		return it, nil
+	}
+	it, err := s.Store.Get(ctx, key)
+	if err == nil {
+		s.copies[key] = it
+	}
+	return it, err
+}
+
+// The reauth after a refused credential reads the rotated document from the
+// backend, not the copy a caching store kept of the one just refused.
+func TestTheRotatedCredentialsAreReadPastACache(t *testing.T) {
+	ctx := context.Background()
+	mem := memory.New()
+	doc := func(id string) []byte {
+		return []byte(`{"schema":"cloudflare/v1","access_key_id":"` + id + `","secret_access_key":"s3cret-` + id + `","endpoint":"https://acct.r2.example.test","expires_on":"` +
+			time.Now().Add(15*time.Minute).UTC().Format(time.RFC3339) + `"}`)
+	}
+	rev, err := mem.Put(ctx, "external/cloudflare/r2", doc("k1"), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	prov, err := storedFromState(&stale{Store: mem, copies: map[string]state.Item{}}, "/sluis/main", "external/cloudflare/r2", "https://acct.r2.example.test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cache := aws.NewCredentialsCache(prov)
+	if c, err := cache.Retrieve(ctx); err != nil || c.AccessKeyID != "k1" {
+		t.Fatalf("first read: %+v %v", c, err)
+	}
+	if _, err = mem.Put(ctx, "external/cloudflare/r2", doc("k2"), rev); err != nil {
+		t.Fatal(err)
+	}
+	if replaced, err := reauthenticate(prov, cache).Reauthenticate(ctx); err != nil || !replaced {
+		t.Fatalf("after a 401: %v %v", replaced, err)
+	}
+	if c, _ := cache.Retrieve(ctx); c.AccessKeyID != "k2" {
+		t.Fatalf("after a rotation: %s", c.AccessKeyID)
 	}
 }
 

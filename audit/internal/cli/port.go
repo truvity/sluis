@@ -253,7 +253,9 @@ func readMinter(ctx context.Context, st state.Store, address string) (string, er
 // are the ones a sluis installation rotates (the preset's credentials_ref): the
 // cloudflare/v1 document is read from that installation's secret store on SSM
 // with the process's own identity, or from the file a secrets operator
-// projected, and read again before the credential expires and after a 403.
+// projected, and read again before the credential expires and after a 401 or
+// 403. Every read asks for a fresh copy (state.WithFreshRead), so a caching
+// store never hands back the credential the store just refused.
 // Nothing is minted and no minter is read.
 func storedProvider(ctx context.Context, c StoredCredentials) (*cloudflare.StoredProvider, error) {
 	if c.Dir != "" {
@@ -276,7 +278,7 @@ func storedFromState(st state.Store, root, ref, endpoint string) (*cloudflare.St
 	return cloudflare.NewStoredProvider(cloudflare.StoredConfig{
 		Source: root + "/" + ref, Endpoint: endpoint,
 		Read: func(ctx context.Context) ([]byte, error) {
-			item, err := st.Get(ctx, ref)
+			item, err := st.Get(state.WithFreshRead(ctx), ref)
 			if err != nil {
 				return nil, err
 			}
@@ -285,13 +287,13 @@ func storedFromState(st state.Store, root, ref, endpoint string) (*cloudflare.St
 	})
 }
 
-// reauther is a provider that replaces its credentials after a 403: the
+// reauther is a provider that replaces its credentials after a 401 or 403: the
 // minting one mints, the stored one reads the rotated document again.
 type reauther interface {
 	Reauthenticate(ctx context.Context) (bool, error)
 }
 
-// reauthenticate is what the store does after a 403: have the provider replace
+// reauthenticate is what the store does after a 401 or 403: have the provider replace
 // its credentials (at most once in cloudflare.MinReauth) and drop the cached
 // ones so the request is signed anew. It answers false when nothing was replaced.
 func reauthenticate(prov reauther, cache *aws.CredentialsCache) s3store.Reauth {

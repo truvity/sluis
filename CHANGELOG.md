@@ -1,5 +1,9 @@
 ## Unreleased
 
+### Fixed
+
+- **The audit store reads its credential again after a 401, not only after a 403.** An S3-compatible store can answer 401 rather than 403 for a key that was rotated away, at the moment the rotated credential replaces it. The archive store of an audit profile with `credentials_ref` or `credentials_preset` reread its credential only on 403, so on 401 it kept the revoked one: the writer failed the batch (listing `holds/`, the seal probe's head or the put) and the queue delivered it again. Nothing was lost. A 401 is now treated as a 403: the credential is read again and the request is sent once more, never twice. The rotated document is read with `state.WithFreshRead`, so a caching store never hands back the credential that was just refused. Each reauth is logged as a warning, `s3store: the store refused the credentials; reauthenticated`, with `status`, `operation` and `replaced`, and a retry that fails again as `s3store: the request failed again after the reauth`; neither carries a credential. **Upgrade:** none.
+
 ## v1.79.3
 
 A patch release: faster Cloudflare mints. An on-demand mint of a `cloudflare:<preset>` audience counts its caps from the preset's record of minted tokens instead of listing every token in the account, and the pass of each granted preset holds the record against Cloudflare's list every `ReconcileEvery`. Upgrade notes: the record holds about 65 on-demand tokens, so a preset whose `maxLive` is above about 60 is refused as `record_full` before `preset_cap`; lower such a `maxLive` to 60 or less to keep the refusal's reason. Watch the new metric `sluis.cloudflare.record.drift` for corrections the pass makes.
