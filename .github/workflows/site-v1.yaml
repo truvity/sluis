@@ -1,0 +1,36 @@
+# Rebuilds sluis.id when a v1 release is tagged. The site is built and
+# published from the `main` branch (`.github/workflows/site.yaml` there), which
+# builds this documentation into /v1/ from the latest v1 release tag, so a new
+# tag must start that build. This workflow only dispatches it: no checkout, no
+# build, and the one permission it needs to start a run.
+#
+# Only a stable root tag vX.Y.Z of v1: the module tags (audit/v...) and
+# pre-releases (-rc.N) do not match. A tag that release.yaml's gate refuses
+# still dispatches; the build picks the latest v1 tag itself.
+name: Site v1
+
+on:
+  push:
+    tags:
+      - "v1.[0-9]+.[0-9]+"
+
+# Nothing by default: the job names what it needs.
+permissions: {}
+
+# Tags pushed together dispatch one after another; each build takes the
+# latest tag, so none needs cancelling.
+concurrency:
+  group: site-v1
+  cancel-in-progress: false
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Start the site build on main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run site.yaml --ref main -R "$GITHUB_REPOSITORY"
