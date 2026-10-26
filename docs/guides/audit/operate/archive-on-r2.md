@@ -23,7 +23,7 @@ Store the archive on Cloudflare R2 or another store that speaks the S3 API at it
        credentials_ref: external/cloudflare/audit-r2
    ```
 
-   Each process rereads it within a minute, before it expires, and after a 401 or 403.
+   Each process rereads it every minute, before expiry, and on a 401 or 403.
 
 2. On Lambda, give the functions the parameter:
 
