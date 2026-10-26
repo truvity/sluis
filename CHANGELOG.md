@@ -1,5 +1,9 @@
 ## Unreleased
 
+### Changed
+
+- **Pushing a v1 release tag rebuilds sluis.id; master no longer publishes the documentation site.** sluis.id is built from the `main` branch (`.github/workflows/site.yaml` there), which builds this documentation into /v1/ from the latest v1 release tag. A new workflow, `.github/workflows/site-v1.yaml`, starts that build when a tag `v1.X.Y` is pushed; module tags and pre-releases do not start it. `.github/workflows/pages.yaml`, already disabled, is removed. The documentation sources, `mkdocs.yaml` and the `hack/` scripts the build uses stay on master. **Upgrade:** none.
+
 ### Fixed
 
 - **The audit store reads its credential again after a 401, not only after a 403.** An S3-compatible store can answer 401 rather than 403 for a key that was rotated away, at the moment the rotated credential replaces it. The archive store of an audit profile with `credentials_ref` or `credentials_preset` reread its credential only on 403, so on 401 it kept the revoked one: the writer failed the batch (listing `holds/`, the seal probe's head or the put) and the queue delivered it again. Nothing was lost. A 401 is now treated as a 403: the credential is read again and the request is sent once more, never twice. The rotated document is read with `state.WithFreshRead`, so a caching store never hands back the credential that was just refused. Each reauth is logged as a warning, `s3store: the store refused the credentials; reauthenticated`, with `status`, `operation` and `replaced`, and a retry that fails again as `s3store: the request failed again after the reauth`; neither carries a credential. **Upgrade:** none.

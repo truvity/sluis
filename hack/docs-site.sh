@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Build the documentation site GitHub Pages serves: mkdocs (strict) into <out>,
 # the Mermaid bundle its diagrams need, and every JSON schema at the path its
-# $id says (hack/pages-site.sh). Used by the docs CI group (`just docs-site`),
-# the Pages deploy and the weekly link check, so the site is built one way.
+# $id says (hack/pages-site.sh). Used by the docs CI group (`just docs-site`)
+# and the weekly link check, so the site is built one way. sluis.id is built
+# from the `main` branch, which builds /v1/ from the latest v1 release tag.
 #
 # usage: hack/docs-site.sh [out]   (default _site)
 set -euo pipefail
