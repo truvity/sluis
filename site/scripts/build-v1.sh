@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# Build the v1 documentation (the MkDocs site on the `master` branch) so that it
+# Build the v1 documentation (the MkDocs site at a v1 release tag) so that it
 # can be served under /v1/ of this site.
 #
 # usage: site/scripts/build-v1.sh <v1-checkout> <site-output>
 #
-#   <v1-checkout>  a checkout of the `master` branch (CI: actions/checkout with
-#                  `ref: master` and `path: v1-src`)
+#   <v1-checkout>  a checkout of a v1 release tag, the newest stable one (CI:
+#                  actions/checkout with `ref: <tag>` and `path: v1-src`, the tag
+#                  from site/scripts/latest-v1-tag.sh)
 #   <site-output>  the Starlight build output (site/dist); the v1 site is copied
 #                  to <site-output>/v1/
 #
@@ -27,7 +28,7 @@ src=$(cd "$src" && pwd)
 dist=$(cd "$dist" && pwd)
 
 for f in mkdocs.yaml hack/pages-requirements.txt hack/fetch-mermaid.sh hack/pages-site.sh; do
-  [ -f "$src/$f" ] || { echo "build-v1: $src has no $f; is it a checkout of master?" >&2; exit 1; }
+  [ -f "$src/$f" ] || { echo "build-v1: $src has no $f; is it a checkout of a v1 release tag?" >&2; exit 1; }
 done
 
 cd "$src"

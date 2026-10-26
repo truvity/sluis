@@ -31,12 +31,18 @@ site-links:
 # What a pull request must pass.
 site-check: site-lint site-build site-links
 
-# Refresh v1-src from `master` and build the v1 documentation into site/dist/v1.
-# The Pages workflow does the same with actions/checkout. Needs python3, jq, curl.
-site-v1 ref='origin/master':
-    git fetch --quiet origin master
+# Refresh v1-src from the newest stable v1 release tag (or the tag given) and build
+# the v1 documentation into site/dist/v1. The Pages workflow picks the tag by the
+# same rule (site/scripts/latest-v1-tag.sh). Needs python3, jq, curl.
+site-v1 tag='':
+    #!/usr/bin/env bash
+    set -euo pipefail
+    tag='{{ tag }}'
+    [ -n "$tag" ] || tag=$(site/scripts/latest-v1-tag.sh origin | cut -d' ' -f1)
+    echo "v1 documentation: $tag"
+    git fetch --quiet --no-tags origin "+refs/tags/$tag:refs/tags/$tag"
     rm -rf v1-src && mkdir v1-src
-    git archive '{{ ref }}' | tar -x -C v1-src
+    git archive "$tag" | tar -x -C v1-src
     site/scripts/build-v1.sh v1-src site/dist
     site/scripts/check-built.sh site/dist
 
