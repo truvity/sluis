@@ -37,9 +37,17 @@ jobs:
         with:
           lfs: true
           persist-credentials: false
+      # The tag the Pages workflow publishes under /v1/ (site/scripts/latest-v1-tag.sh).
+      - name: Find the newest stable v1 tag
+        id: v1
+        run: |
+          set -euo pipefail
+          read -r tag commit < <(site/scripts/latest-v1-tag.sh "https://github.com/$GITHUB_REPOSITORY")
+          echo "v1 documentation: $tag ($commit)"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: master
+          ref: ${{ steps.v1.outputs.tag }}
           path: v1-src
           lfs: true
           persist-credentials: false
