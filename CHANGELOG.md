@@ -1,5 +1,9 @@
 ## Unreleased
 
+## v1.79.4
+
+A patch release: the audit writer rereads its credential after a 401 as after a 403, so an S3-compatible store that answers 401 for a rotated key no longer fails a batch at each rotation; and pushing a v1 release tag now rebuilds the documentation site. Correction to v1.79.3: its notes give about 0.5 to 1 s for an on-demand Cloudflare mint; measured, a warm mint takes about 1.3 to 1.4 s, of which Cloudflare's GetToken and CreateToken take about 1 s. Upgrade notes: none.
+
 ### Changed
 
 - **Pushing a v1 release tag rebuilds sluis.id; master no longer publishes the documentation site.** sluis.id is built from the `main` branch (`.github/workflows/site.yaml` there), which builds this documentation into /v1/ from the latest v1 release tag. A new workflow, `.github/workflows/site-v1.yaml`, starts that build when a tag `v1.X.Y` is pushed; module tags and pre-releases do not start it. `.github/workflows/pages.yaml`, already disabled, is removed. The documentation sources, `mkdocs.yaml` and the `hack/` scripts the build uses stay on master. **Upgrade:** none.
