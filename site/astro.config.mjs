@@ -52,6 +52,7 @@ export default defineConfig({
         { label: 'Architecture', items: [{ autogenerate: { directory: 'architecture' } }] },
         { label: 'Decisions', link: '/decisions/' },
         { label: 'Roadmap', slug: 'roadmap' },
+        { label: 'Features: v1 and v2', slug: 'features' },
         { label: 'Contributing', slug: 'contributing' },
         { label: 'v1 documentation', link: '/v1/' },
       ],
