@@ -18,6 +18,8 @@ Each row is tracked as a GitHub issue labelled [`parity`](https://github.com/tru
 
 The links in the v1 documentation column go to the [v1 documentation](/v1/), served under `/v1/`.
 
+Three words are used in a fixed way here and in the v2 issues. A **driver** is the storage or crypto technology behind a port (DynamoDB, KMS, rqlite, PKCS#11). An **integration** is a connector to an external system (Google, GitHub, Slack, Outline, Cloudflare). A **client or relying party** is anything that consumes sluis tokens (sign-in for Kubernetes, AWS, Argo CD, the console, MCP and so on).
+
 ## Core
 
 The issuer and the policy engine: protocol endpoints, proofs, tokens, sessions and the policy model.
@@ -62,7 +64,7 @@ The storage and platform interfaces sluis depends on, and the adapters behind th
 | **[Adapter presets and registry](https://github.com/truvity/sluis/issues/803)** | Selects the adapters per concern from named presets (aws-serverless, aws-hybrid, k8s-aws, plus unbuilt ones), refuses unbuilt adapters at start and lets a fork register a new adapter package. | [Adapters](/v1/reference/sluis/adapters/)<br />[Add an adapter in a fork](/v1/guides/sluis/add-an-adapter/)<br />[How are storage, signalling and identity cut into ports?](/v1/concepts/sluis/ports/) | Planned |
 | **[State migration between storages](https://github.com/truvity/sluis/issues/804)** | Copies State, secrets and reports between storages (including off the deprecated legacy Kubernetes store) with a plan, dry run, create-if-absent or overwrite, read-back verification and rollback by the same command. | [Move the State with `sluis migrate`](/v1/guides/sluis/migrate/migrate-state/)<br />[Cut over from Kubernetes to AWS](/v1/guides/sluis/migrate/cutover/)<br />[Tutorial: an existing Kubernetes installation on the legacy store](/v1/get-started/sluis/kubernetes-legacy-store/) | Planned |
 
-## Drivers
+## Integrations
 
 Connectors that read from, or act on, external systems: directories, GitHub, Slack, Outline and Cloudflare.
 
@@ -82,7 +84,7 @@ Connectors that read from, or act on, external systems: directories, GitHub, Sla
 | **[Cloudflare API tokens](https://github.com/truvity/sluis/issues/816)** | Mints short-lived Cloudflare API tokens by cloning a disabled prototype token under policy `cloudflare.grants`, with forbidden-permission refusals, per-caller and per-preset caps, stored or on-demand modes, sweeping and drift reconcile. | [Mint short-lived Cloudflare tokens and R2 credentials](/v1/guides/sluis/cloudflare-tokens/)<br />[HTTP endpoints](/v1/reference/sluis/endpoints/) | Planned |
 | **[Cloudflare R2 credentials](https://github.com/truvity/sluis/issues/817)** | Mints R2 access-key credentials from an R2 preset's prototype through token exchange or the console, delivered as an AWS credential-process answer and a per-preset AWS profile. | [Mint short-lived Cloudflare tokens and R2 credentials](/v1/guides/sluis/cloudflare-tokens/)<br />[Example: short-lived R2 credentials for a bucket](/v1/guides/sluis/connect/examples/cloudflare-r2-credentials/)<br />[sluisctl](/v1/reference/sluis/sluisctl/#cloudflare-token-and-cloudflare-r2) | Planned |
 
-## Integrations
+## Clients and relying parties
 
 How people, CI jobs, workloads and applications sign in to and call sluis, and the command-line tool and libraries.
 
