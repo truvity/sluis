@@ -16,12 +16,6 @@
     "bypass was supposed to make unnecessary."
   ],
   "platformAutomerge": false,
-  "lockFileMaintenance": {
-    "enabled": true,
-    "schedule": [
-      "before 6am"
-    ]
-  },
   "packageRules": [
     {
       "description": [
