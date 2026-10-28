@@ -1,0 +1,79 @@
+---
+title: Audit explorer
+description: An interactive map of how sluis audit works on each deployment shape, from the outbox to the sealed archive and the index, drawn from data files.
+status: target
+tableOfContents: false
+sidebar:
+  order: 8
+---
+import AuditExplorer from '../../site/src/components/explorer/AuditExplorer.astro';
+import OpenDecision from '../../site/src/components/explorer/OpenDecision.astro';
+import Proposed from '../../site/src/components/explorer/Proposed.astro';
+
+This is the target state, not a running system. Every role writes its records to a durable outbox and moves on. One writer turns them into ordered batches in an object-storage archive, a separate notary seals the batches, and each node keeps a search index fed from the same ordered batch stream. The page is drawn from `site/src/data/explorer/audit.yaml`, which today is written by hand from the design; once the permission manifest exists, the roles, sockets and call edges are generated from it.
+
+The same roles, the same records and the same integrity chain run on every shape. Only the drivers behind the outbox, key, state, blob and index ports change. Pick a shape; the map, the flows, the sockets and the outage table follow it. Without script the page shows T4 and every table is plain HTML.
+
+## Shapes
+
+<AuditExplorer part="toggle" />
+
+## Map and flows
+
+Select a box to see what it holds, what it never holds and who it calls. Choose a flow to step through it: each step lights the lines it uses, in order. Roles listen only on Unix sockets; the only network listeners are the edge connector in front of central and, on a cluster, the state driver's Raft port. The architecture explorer shows [the sockets and processes](/architecture/explorer/) of each shape.
+
+<AuditExplorer part="map" />
+
+## What audit promises
+
+The promises are the same on every shape. How each is kept changes with the drivers.
+
+<AuditExplorer part="promises" />
+
+## The outbox port
+
+A request returns once its audit record is durable in the outbox, never waiting for the writer. The port has three calls, Append for producers and Receive and Ack for the writer. One contract; the driver behind it depends on the shape. The outbox may deliver out of order, twice or late: the sequence is made later, when the writer registers a batch, and the writer dedupes by record id.
+
+<AuditExplorer part="outbox" />
+
+<OpenDecision id="OD-5" title="Audit outbox port per shape">
+A local spool on servers and a queue on Lambda are the lean. Kubernetes is a queue or blocking, and is not decided. The recovery path is separate and agreed: it spools locally on every shape and never blocks.
+</OpenDecision>
+
+## The integrity chain
+
+How an auditor can tell that nothing was removed, changed or added. The notary signs batch heads, which form a hash chain, and verification never trusts the index or the state.
+
+<AuditExplorer part="chain" />
+
+<Proposed>
+The state store sits on the write path of every batch. This is acceptable given the outbox, a reconciler that compares the bucket listing with `audit_batches`, and verification that reads the archive and the seals only.
+</Proposed>
+
+## Index and lag
+
+<AuditExplorer part="lag" />
+
+<OpenDecision id="OD-12" title="Index host on Lambda">
+A node keeps its index in a file on servers. On Lambda there is no node to hold one, and the lean is Aurora Serverless v2, still to be verified.
+</OpenDecision>
+
+## When the writer is down for an hour
+
+Step through the last flow on the map for the order of events. This table says what queues where on each shape and how it drains.
+
+<AuditExplorer part="outage" />
+
+## From v1 to v2
+
+What stays and what changes. v1 is the audit product in the repository today.
+
+<AuditExplorer part="compare" />
+
+## Open points
+
+Ids are rows of [Open decisions](/open-decisions/). A point without an id is proposed in the design and not yet decided.
+
+<AuditExplorer part="open" />
+
+See also [the architecture explorer](/architecture/explorer/).
