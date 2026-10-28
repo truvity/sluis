@@ -15,6 +15,14 @@ A role or driver that listens on a TCP port can be reached by anything that can 
 - **The Raft driver port over mTLS is the only TCP port between nodes.** No role is reachable from another node.
 - **Every Unix socket is mode 0660, with a group generated from the manifest.** The group is the set of roles allowed to call the socket. The callee reads the caller's uid, gid and pid with `SO_PEERCRED`, maps the uid to a role, and checks the call graph, default deny.
 
+:::note[Proposed]
+On Kubernetes the group cannot do this job, because supplementary groups are set for a whole pod and not for a container. The proposal is that reachability is generated from the manifest **by group on a host and by mount on Kubernetes**: each callee has its own volume for its socket directory, mounted read-only into exactly the containers that the call graph allows. The callee still maps the peer's user id to a role and checks the call graph. The pid is not used on Kubernetes, because containers have separate PID namespaces. See [Kubernetes](/shapes/kubernetes/#what-runs-where).
+:::
+
+:::note[Proposed]
+**An exception for the edge relay (OD-24).** The rule above says that only `entry`'s API listens on TCP. On Kubernetes the proposal adds one exception: a key-less **edge relay** in the same pod listens on the pod address and forwards to `entry` on `127.0.0.1`, so that a Gateway API implementation or an Ingress controller can route to the pod. The relay holds no key. `entry` itself stays on `127.0.0.1`. If the maintainer prefers to keep the rule as it is, the alternative is `cloudflared` only on Kubernetes, at the price of working with a gateway. See [OD-24](/open-decisions/#od-24).
+:::
+
 The `entry` listener is bound to the loopback address, never to `0.0.0.0` or a pod or network address (on Kubernetes see below), so the node opens no inbound port: the security group or host firewall needs no inbound rule for sluis. The port is set in configuration; this site uses `8080` as an example.
 
 An example of the socket directory on one node (illustrative):
@@ -62,12 +70,12 @@ Three details keep this safe:
 | T1, T2 boards | `127.0.0.1:<port>` | `cloudflared` on the same board |
 | T3, T4 EC2 | `127.0.0.1:<port>` | `cloudflared` on the same instance |
 | T5 Lambda | `127.0.0.1:<port>` inside the function's sandbox | The Lambda Web Adapter, pinned at v1.1.0 and vendored into sluis's own layer. The edge in front of the function is API Gateway |
-| Kubernetes | Proposed, below | An in-pod edge, or the gateway through the pod IP |
+| T6 Kubernetes (proposed) | `entry` on `127.0.0.1:<port>`, bridged in the pod, as below | An edge relay in the same pod (proposed default), or `cloudflared` |
 
 On Lambda the loopback port is inside a micro-VM that holds only sluis's own processes. It is not reachable from the network.
 
 :::note[Proposed]
-On Kubernetes the loopback port is not reachable from outside the pod, and a gateway reaches a pod by its address. Two ways to bridge that are being considered: an in-pod edge, such as a `cloudflared` sidecar that connects to the loopback port in the same pod, so the listener stays on `127.0.0.1`; or binding the pod IP, so that a gateway can route to it, with a default-deny NetworkPolicy that opens the port to the gateway alone. This is not designed yet; Kubernetes joins the test matrix later.
+On Kubernetes the loopback port is not reachable from outside the pod, and a gateway reaches a pod by its address. The proposal keeps the listener on `127.0.0.1` and bridges it from inside the pod, in one of two modes: a key-less edge relay on the pod address that forwards to `entry`, which is the default, or a `cloudflared` sidecar that connects to the loopback port and accepts no inbound connection. The kubelet probes `entry` with an `exec` probe, which runs inside the container's network namespace. Binding the pod address in `entry` is not proposed, because it would put an unauthenticated listener on the pod network. Details and options are on [Kubernetes](/shapes/kubernetes/#edge) and in [OD-24](/open-decisions/#od-24).
 :::
 
 ## The only port between nodes

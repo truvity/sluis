@@ -50,7 +50,7 @@ A secret is a reference such as `cred:sluis-int-github.app-key`, resolved at run
 Values come from layers. A later layer overrides an earlier one:
 
 1. **defaults**, built into the schema;
-2. **shape profile**, for example the single-node or Lambda profile;
+2. **shape profile**, for example the single-node or Lambda profile (on Kubernetes, `kubernetes`, and for development `kubernetes-dev`, as proposed in [OD-25](/open-decisions/#od-25));
 3. **install**, the file the operator edits;
 4. **environment**, for the few fields marked as tunable.
 

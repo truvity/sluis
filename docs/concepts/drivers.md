@@ -20,7 +20,11 @@ A driver is a platform-started service that speaks ConnectRPC over a Unix socket
 |---|---|
 | Single node, cluster, EC2 | A systemd service (and socket) |
 | Lambda | A Lambda extension |
-| Kubernetes | A sidecar container, or a pod of its own |
+| Kubernetes (proposed) | A native sidecar container in the same pod as the role |
+
+:::note[Proposed]
+On Kubernetes a driver is never a pod of its own, because a Unix socket cannot cross a pod boundary. It is a native sidecar, which the platform starts before the roles that call it. This replaces "a sidecar container, or a pod of its own". See [Kubernetes](/shapes/kubernetes/#what-runs-where).
+:::
 
 This has consequences that the rest of the design leans on:
 
