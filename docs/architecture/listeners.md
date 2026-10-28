@@ -75,4 +75,4 @@ On the local shape (T0) the same sockets live in a runtime directory inside the 
 
 - [Processes](/architecture/processes/) shows the roles behind these sockets.
 - [Deployment](/architecture/deployment/) describes the firewall rules and sandboxing that keep the exceptions narrow.
-- [Shapes](/shapes/) lists what each shape opens.
+- [Shapes](/shapes/) lists what each shape opens: [EC2 cluster](/shapes/aws-ec2-cluster/), [Lambda](/shapes/aws-lambda/) and [Kubernetes](/shapes/kubernetes/) carry the exceptions.

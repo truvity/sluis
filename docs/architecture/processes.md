@@ -20,6 +20,8 @@ The rules the split follows:
 
 ## Core roles
 
+The concept is explained on [Roles](/concepts/roles/); the shared drivers on [Drivers](/concepts/drivers/); the six integration roles on [Integrations](/concepts/integrations/); the key custody behind `signer` and `ca` on [Keys](/concepts/keys/); and the audit roles on [Audit](/concepts/audit/).
+
 There are about eight core roles, plus integrations. `signer` and `policy` are split out from the first slice rather than later: splitting later is what v1 deferred and never did.
 
 | Role | Responsibility | Holds | Cannot |
@@ -90,7 +92,7 @@ Every component ships as its own binary. On a host that uses packages, the binar
 The directory names and the layout are agreed (PK-1); the binary names above are illustrative. Each role has one systemd unit, one uid, and one socket directory `/run/sluis/<role>/`. Roles are pinned by the unit: the binary a unit starts is the only code in that process, so a role cannot contain another role's code. Lambda ships one zip per role, and the Lambda Web Adapter is vendored into our own layer. Kubernetes runs one pod per role, from a multi-arch image, with the image pinned by digest.
 :::
 
-One version covers the whole repository. See [Distribution](/distribution/) for the artifacts, the apt and dnf repositories, and signing.
+One version covers the whole repository. See [Packages](/distribution/packages/) for the artifacts, the apt and dnf repositories, and signing.
 
 Why not Go plugins: a Go `.so` shares the host's address space and so has no isolation at all; it needs the same toolchain and dependency versions as the host, so it can never be released independently; and it cannot be unloaded. Why not WebAssembly: dropped. Plugins always run out of process: a Unix socket with peer credentials locally, a Lambda invoke on AWS, HTTPS with mTLS remotely.
 
@@ -164,7 +166,7 @@ flowchart LR
 
 The solid line from `gh` to `policy` is a decision request; the integration asks "may this caller have this", never the reverse. Dashed lines to `audit-writer` are asynchronous emits. The `node-agent` dashes stand for the workload JWT it issues to every role; the picture omits them for the other roles to stay readable.
 
-On a three-node [cluster](/shapes/) every node runs this set, and the `state-owner` processes talk to each other over the Raft driver's mTLS port. Each node's `audit-writer` drains its own spool, and the notary co-signs batch heads 2 of 3 across nodes. On [Lambda](/shapes/) the same roles are separate functions with no node-agent; on Kubernetes they are separate pods.
+On a three-node [cluster](/shapes/aws-ec2-cluster/) every node runs this set, and the `state-owner` processes talk to each other over the Raft driver's mTLS port. Each node's `audit-writer` drains its own spool, and the notary co-signs batch heads 2 of 3 across nodes. On [Lambda](/shapes/aws-lambda/) the same roles are separate functions with no node-agent; on [Kubernetes](/shapes/kubernetes/) they are separate pods.
 
 :::caution[Open decision OD-5: Audit outbox port per shape]
 Where an audit record waits before it is sealed differs by shape: a local spool on self-hosted and EC2 shapes, a queue on Lambda, and either a queue or blocking on Kubernetes. The lean is a spool for self-hosted shapes and a queue for Lambda.

@@ -51,4 +51,4 @@ flowchart TB
 | [Data](/concepts/data/) | Who may write which record, and how are writes made safe? |
 | [Audit](/concepts/audit/) | What is recorded, and why can the trail be trusted? |
 
-For the same system drawn as boxes and sockets, see [Architecture](/architecture/).
+For the same system drawn as boxes and sockets, see [Architecture](/architecture/), or open the [architecture explorer](/architecture/explorer/).

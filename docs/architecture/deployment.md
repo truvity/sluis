@@ -6,7 +6,7 @@ sidebar:
   order: 4
 ---
 
-The [permission manifest](/architecture/#the-permission-manifest-is-the-spine) says what each role may do. This page says what enforces it on each [shape](/shapes/). The goal on every shape is the baseline that one Lambda function per role gives for free: one role is one identity that the resources can see, and nothing else can act as it.
+The [permission manifest](/architecture/#the-permission-manifest-is-the-spine) says what each role may do. This page says what enforces it on each [shape](/shapes/): see [EC2 cluster](/shapes/aws-ec2-cluster/), [Lambda](/shapes/aws-lambda/) and [Kubernetes](/shapes/kubernetes/) for the per-shape pages. The goal on every shape is the baseline that one Lambda function per role gives for free: one role is one identity that the resources can see, and nothing else can act as it.
 
 Two axes are enforced separately:
 

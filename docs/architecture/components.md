@@ -17,12 +17,12 @@ Every major component is a ConnectRPC contract, even when caller and callee shar
 | **Front** | web surface, OIDC endpoints, CLI and CI API, webhook ingress, PKI endpoint, exports API, console HTTP, audit query HTTP | Parse the wire protocol, apply uniform hardening (headers, cookies, throttling, uniform refusals), and delegate every decision to an owner. A front component decides nothing |
 | **Identity path** | authn, authorization flows, sessions, token exchange, token issuer, client registry, key ring, proof verifier, facts broker, policy, mint broker, tick scheduler, grants export, console | Own sessions, codes, refresh tokens and clients; verify proofs; turn facts into grants; ask for credentials to be minted |
 | **Certificates and quota** | PKI, SSH CA, quota, backup, restore | Issue X.509 and SSH certificates, admit metered operations, and protect and recover the install |
-| **Audit and trust** | audit writer, notary, witness coordinator, audit indexer, audit query, trust log, static publisher | Take records from every other component, seal them in batches, sign the batch heads, and serve them back |
-| **Integrations** | upstream, workload verifier, facts source, credential minter, provisioner, notifier | Talk to one external system each. Return facts, or carry out effects core has authorized |
+| **Audit and trust** | audit writer, notary, witness coordinator, audit indexer, audit query, trust log, static publisher | Take records from every other component, seal them in batches, sign the batch heads, and serve them back ([Audit](/concepts/audit/)) |
+| **Integrations** | upstream, workload verifier, facts source, credential minter, provisioner, notifier | Talk to one external system each ([Integrations](/concepts/integrations/)). Return facts, or carry out effects core has authorized |
 | **Ports** | state, index, keys, blob, queue, lease, cloud | Libraries linked into the component that needs them. Never a hop |
-| **Drivers** | the technology behind one port | See [Drivers](/concepts/) and the table below |
+| **Drivers** | the technology behind one port | See [Drivers](/concepts/drivers/) and the table below |
 
-The groups map onto [process roles](/architecture/processes/): `central` hosts the front, authn, sessions, exchange, client registry and console; `signer` hosts the key ring; `policy` hosts the decision point; `ca` hosts PKI and SSH; the audit components split across `audit-writer`, `notary` and `audit-read`; `quota` is its own role; and each integration runs as its own process.
+The groups map onto [process roles](/architecture/processes/) (see also [Roles](/concepts/roles/)): `central` hosts the front, authn, sessions, exchange, client registry and console; `signer` hosts the key ring; `policy` hosts the decision point; `ca` hosts PKI and SSH; the audit components split across `audit-writer`, `notary` and `audit-read`; `quota` is its own role; and each integration runs as its own process.
 
 :::caution[Open decision OD-1: Name of the central process]
 `central` is a placeholder for the process that speaks the OIDC protocol. The name is open: coordinator, central, hub, and others.

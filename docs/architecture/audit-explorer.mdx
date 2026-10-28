@@ -10,7 +10,7 @@ import AuditExplorer from '../../site/src/components/explorer/AuditExplorer.astr
 import OpenDecision from '../../site/src/components/explorer/OpenDecision.astro';
 import Proposed from '../../site/src/components/explorer/Proposed.astro';
 
-This is the target state, not a running system. Every role writes its records to a durable outbox and moves on. One writer turns them into ordered batches in an object-storage archive, a separate notary seals the batches, and each node keeps a search index fed from the same ordered batch stream. The page is drawn from `site/src/data/explorer/audit.yaml`, which today is written by hand from the design; once the permission manifest exists, the roles, sockets and call edges are generated from it.
+This is the target state, not a running system. Every role writes its records to a durable outbox and moves on. One writer turns them into ordered batches in an object-storage archive, a separate notary seals the batches, and each node keeps a search index fed from the same ordered batch stream. The page is drawn from `site/src/data/explorer/audit.yaml`, which today is written by hand from the design; once the permission manifest exists, the roles, sockets and call edges are generated from it. The ideas behind the page are on [Audit](/concepts/audit/); the roles are described under [Roles](/concepts/roles/).
 
 The same roles, the same records and the same integrity chain run on every shape. Only the drivers behind the outbox, key, state, blob and index ports change. Pick a shape; the map, the flows, the sockets and the outage table follow it. Without script the page shows T4 and every table is plain HTML.
 

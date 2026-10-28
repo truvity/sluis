@@ -14,7 +14,7 @@ The architecture of sluis is described at three zoom levels. Each level answers 
 | **L2, components** | Which component is responsible for each operation, and through which contract? | Components with one responsibility each, their contracts and ports, the call graph, and one writer per record kind | [Components](/architecture/components/) |
 | **L3, processes** | What runs where, with which credentials, and what enforces that on each shape? | Process roles, one permission manifest per role, packaging, and the enforcement for each shape | [Processes](/architecture/processes/), [Deployment](/architecture/deployment/) |
 
-Three further pages cover the parts that cut across the levels: [Listeners](/architecture/listeners/) (what accepts connections, and where), [Source layout](/architecture/source-layout/) (languages, shared kits, and the repository tree), and the interactive explorers described below.
+Three further pages cover the parts that cut across the levels: [Listeners](/architecture/listeners/) (what accepts connections, and where), [Source layout](/architecture/source-layout/) (languages, shared kits, and the repository tree), and the interactive explorers described below. To try sluis rather than read about it, follow the [single-node install](/tutorials/single-node-install/).
 
 ## The permission manifest is the spine
 
@@ -60,8 +60,8 @@ Three consequences follow from making the manifest the single source:
 | [Deployment](/architecture/deployment/) | L3 | Enforcement per shape and mechanism, and the residual risk |
 | [Listeners](/architecture/listeners/) | L3 | Unix sockets, the edge connector, and the exceptions |
 | [Source layout](/architecture/source-layout/) | | Languages per component, shared kits, the repository tree |
-| [Architecture explorer](/architecture/) | L1 to L3 | An interactive view of the components and their calls (link follows when the explorer is published) |
-| [Audit explorer](/architecture/) | L2 | An interactive view of the audit pipeline (link follows when the explorer is published) |
+| [Architecture explorer](/architecture/explorer/) | L1 to L3 | An interactive view of the components and their calls |
+| [Audit explorer](/architecture/audit-explorer/) | L2 | An interactive view of the audit pipeline |
 
 Related sections: [Concepts](/concepts/) explains the vocabulary (roles, drivers, integrations, keys), [Shapes](/shapes/) describes each way to install sluis, and [Open decisions](/open-decisions/) lists what is not settled.
 
