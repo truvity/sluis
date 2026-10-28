@@ -50,6 +50,10 @@ flowchart TB
 - The ASG replaces a lost instance, and the replacement joins the Raft cluster.
 
 :::note[Proposed]
+The `node-agent` holding the instance role, brokering per-role credentials and verifying what it installs is the proposed design. It is not yet decided.
+:::
+
+:::note[Proposed]
 How a replacement instance is added to the Raft membership, and how a lost one is removed, is not yet decided.
 :::
 
@@ -81,10 +85,18 @@ Options: only the Raft driver port over mTLS; or that plus a role port. The lean
 - Each instance publishes its workload-identity discovery document and JWKS under `nodes/<node>/` in the distribution bucket. An AWS role trusts only the issuers of the instances that run it, so a compromised instance can assume only its own roles.
 - Every instance runs `cloudflared` with the ingress `unix:/run/sluis/central/api.sock`. The tunnel gives the edge three connectors, so it survives the loss of an instance.
 
+:::note[Proposed]
+`cloudflared` as the edge connector on the EC2 shapes is a proposal, not a decision. The listener rule itself (only `central`'s public API is reachable from outside) is the design; the choice of connector is not final.
+:::
+
 ## Limits and residual risk
 
 - Raft tolerates one lost instance. Two lost instances in one window stop writes. Spread the group over availability zones so that one zone outage costs one instance.
-- The instance role is the host's root of trust for AWS. If a role can reach IMDS, it can assume other roles. The node-agent closes IMDS to every uid but its own, and the per-role IAM trust policies carry labels. Both are controls against mislabelling and lateral movement, and host root defeats them.
+:::note[Proposed]
+The `node-agent` closes IMDS to every uid but its own, and the per-role IAM trust policies carry labels. Both are proposed controls against mislabelling and lateral movement, and host root defeats them.
+:::
+
+- The instance role is the host's root of trust for AWS. If a role can reach IMDS, it can assume other roles.
 - A `t4g.nano` has little memory. Eight roles, the drivers and rqlite have to fit in it. The memory measurement on this instance type also decides whether Rust is used for the cloud drivers (OD-14).
 - Spool records not yet sealed are lost with an instance that dies before it drains.
 - KMS is a regional service. A regional outage stops signing; there is no software fallback key, because the code refuses one on a production shape.

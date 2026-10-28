@@ -64,6 +64,11 @@ The `node-agent` brokers per-role AWS credentials over a Unix socket and closes 
 
 - Role identity on the instance is the uid, read by peer credentials. Calls to AWS use the role's own IAM role, so CloudTrail names the role and the instance.
 - `cloudflared` runs on the instance and reaches `central` on `unix:/run/sluis/central/api.sock`. The security group needs no inbound rule for sluis.
+
+:::note[Proposed]
+`cloudflared` as the edge connector on the EC2 shapes is a proposal, not a decision. Only `central`'s public API is ever reachable from outside; how the edge reaches it is settled when the maintainer reviews this design.
+:::
+
 - The node publishes its workload-identity discovery document and JWKS, public keys only, to the distribution bucket under `nodes/<node>/`.
 
 ## Limits and residual risk
