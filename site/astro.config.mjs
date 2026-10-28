@@ -39,6 +39,17 @@ const fillPrefetchPlaceholders = () => ({
   },
 });
 
+// Mermaid draws every diagram at its natural size: with `useMaxWidth` true (the
+// default) the SVG is scaled down to the ~720 px content column and a wide
+// sequence diagram ends up with 6 px text. The diagram types below all take the
+// option; src/styles/mermaid.css lets a wide diagram scroll inside its box, and
+// src/scripts/mermaid-zoom.ts adds the Expand button (pan and zoom).
+const naturalSize = Object.fromEntries(
+  ['flowchart', 'sequence', 'class', 'state', 'er', 'gantt', 'journey', 'timeline', 'pie', 'requirement',
+    'architecture', 'mindmap', 'kanban', 'gitGraph', 'c4', 'quadrantChart', 'xyChart', 'sankey', 'packet',
+    'block', 'radar'].map((t) => [t, { useMaxWidth: false }]),
+);
+
 // https://sluis.id. The custom domain and its DNS are managed outside this
 // repository; the site is served from the root, with the v1 documentation
 // copied in under /v1/ (site/scripts/build-v1.sh).
@@ -58,7 +69,12 @@ export default defineConfig({
   markdown: { processor: satteri({ mdastPlugins: [statusPlugin] }) },
   integrations: [
     // Must come before Starlight so the ```mermaid fences are claimed first.
-    mermaid({ theme: 'neutral', autoTheme: true, enableLog: false }),
+    mermaid({
+      theme: 'neutral',
+      autoTheme: true,
+      enableLog: false,
+      mermaidConfig: { ...naturalSize, themeVariables: { fontSize: '16px' } },
+    }),
     starlight({
       title: 'sluis',
       description:
@@ -89,9 +105,10 @@ export default defineConfig({
         },
       ],
       // The status badge beside each page title, its colours and the rule that
-      // hides the status paragraph on the page (it stays in llms.txt).
-      components: { PageTitle: './src/components/PageTitle.astro' },
-      customCss: ['./src/styles/status.css'],
+      // hides the status paragraph on the page (it stays in llms.txt). Footer
+      // is the default one plus the diagram Expand script.
+      components: { PageTitle: './src/components/PageTitle.astro', Footer: './src/components/Footer.astro' },
+      customCss: ['./src/styles/status.css', './src/styles/mermaid.css'],
       routeMiddleware: './src/route-middleware.ts',
       sidebar: [
         { label: 'Overview', slug: 'overview' },

@@ -29,6 +29,15 @@ Every page has a required `status` in its front matter, shown as a badge next to
 
 The status also starts the page in `llms.txt`. Change it in the same pull request that builds the thing, and a page marked `shipped` describes what shipped. When a page and a [decision record](/decisions/) disagree, the record is the reasoning and the page is fixed.
 
+### Diagrams
+
+Mermaid diagrams (a ```` ```mermaid ```` fence) are drawn at their natural size. One wider than the page column scrolls inside its box, and the **Expand** button opens it fullscreen with pan and zoom. A diagram that needs the scrolling and the zoom to be read is too big; keep it to a size a reader takes in at a glance:
+
+- At most about 6 participants in a sequence diagram.
+- Short labels, on nodes and on messages: a few words, not a sentence. Put the detail in the text beside the diagram.
+- Split a big flow into steps: several small diagrams, each with a heading and a line of prose, read better than one large one.
+- Prefer `flowchart LR` for a wide flowchart, with a few nodes per column, over `TB` with a long row.
+
 ### Asides
 
 How settled a point is shows in how it is written:

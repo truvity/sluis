@@ -1,0 +1,12 @@
+---
+// Starlight's footer, plus the script that gives each Mermaid diagram an Expand
+// button (src/scripts/mermaid-zoom.ts). The footer renders on every docs page,
+// so the one bundled page script is there wherever a diagram is.
+import Default from '@astrojs/starlight/components/Footer.astro';
+---
+
+<Default {...Astro.props}><slot /></Default>
+
+<script>
+  import '../scripts/mermaid-zoom.ts';
+</script>
