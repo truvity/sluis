@@ -34,7 +34,7 @@ flowchart LR
 
 The outbox is the port a role appends to; the driver behind it decides what "durable" means: a local fsync'd spool on servers, a queue on Lambda.
 
-The audit outbox is a local spool on self-hosted shapes, co-signed in cluster mode, and an SQS queue on Lambda. Kubernetes: later.
+The audit outbox is a local spool on self-hosted shapes, co-signed in cluster mode, and an SQS queue on Lambda. On Kubernetes it is open ([OD-22](/open-decisions/#od-22)); SQS on EKS is proposed.
 
 On a cluster, each node's writer drains its own spool, and the notary co-signs batch heads 2 of 3 across the nodes. How the notary signs depends on the shape:
 
@@ -44,6 +44,7 @@ On a cluster, each node's writer drains its own spool, and the notary co-signs b
 | T4 EC2 cluster | Each node has its own KMS `ECC_NIST_P384` signing key, co-signed 2 of 3. The node's key also signs that node's workload JWTs. A shared key cannot support co-signing, because KMS `Sign` takes no encryption context and IAM cannot restrict which message gets signed |
 | T5 Lambda | A single notary key, used only by the notary function's role. There is no co-signing; the function role is the isolation |
 | T1 single board and T3 EC2 single | One key. The residual risk, that root on the node can sign, is documented |
+| T6 Kubernetes (proposed) | A dedicated notary with its own key, in the audit pod, with its own ServiceAccount and key policy. There is no co-signing across replicas. This is [OD-23](/open-decisions/#od-23) |
 
 ## The index lags the chain
 

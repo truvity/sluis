@@ -6,7 +6,7 @@ sidebar:
   order: 1
 ---
 
-sluis is not one program. It is about eight **core roles**, each with one job, plus the **integrations** that talk to vendors. A role is the unit of least privilege: it is its own OS user and systemd unit on a self-hosted node, its own Lambda function on Lambda, and its own pod on Kubernetes. What the platform lets a role touch is written once, in that role's [permission manifest](/architecture/), and generated into IAM policies, key policies, driver access lists, systemd units and network rules.
+sluis is not one program. It is about eight **core roles**, each with one job, plus the **integrations** that talk to vendors. A role is the unit of least privilege: it is its own OS user and systemd unit on a self-hosted node, its own Lambda function on Lambda, and a container on Kubernetes (proposed, see below). What the platform lets a role touch is written once, in that role's [permission manifest](/architecture/), and generated into IAM policies, key policies, driver access lists, systemd units and network rules.
 
 ## The roles
 
@@ -54,6 +54,10 @@ On a small node there is not enough memory for every role to be its own process 
 
 Both halves are checked. The first means fusion never grants a role something it did not already have in its own unit, it only puts the two together. The second keeps the line that matters most: a process that is reachable without authentication, such as `entry` behind the edge connector, never also holds a key. The rule is tested: a profile that fuses roles in a way that breaks it fails the build.
 
+:::note[Proposed]
+On Kubernetes the "unit" of this rule is proposed to be the **credential scope**, which is the container, because one pod holds several roles, each with its own token audience. Read literally, a pod that holds `entry` and `signer` would break the second half. With the container as the unit, the build checks that no container that can use a key also has a listener. Which meaning of "unit" applies is [OD-18](/open-decisions/#od-18).
+:::
+
 ## Roles on every shape
 
 The set of roles is the same on every shape. What changes is how each one is run and what is behind its ports.
@@ -62,6 +66,10 @@ The set of roles is the same on every shape. What changes is how each one is run
 |---|---|
 | Single node, cluster, EC2 | An OS user and a systemd unit; a few roles may be fused under the rule above |
 | Lambda | One function per role |
-| Kubernetes | One pod per role |
+| Kubernetes (proposed) | A container per role, in a node pod or an audit pod |
 
-See [Shapes](/shapes/single-node/) for each shape and [Processes](/architecture/processes/) for what runs where.
+:::note[Proposed]
+On Kubernetes a role is a container with its own user id and its own token audience, and a pod holds several roles. This replaces one pod, with one ServiceAccount, per role. The layout is [OD-17](/open-decisions/#od-17); see [Kubernetes](/shapes/kubernetes/).
+:::
+
+See [Shapes](/shapes/) for each shape and [Processes](/architecture/processes/) for what runs where.

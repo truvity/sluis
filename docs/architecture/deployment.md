@@ -25,7 +25,7 @@ The table reads shape by mechanism. Every mechanism is generated from the manife
 | **T3 AWS EC2 single** | IAM role per process role, through the node agent's workload JWT; the instance role holds almost nothing | KMS key policies replace `key-holder`. DynamoDB IAM replaces `state-owner` | Every unit | IMDS closed to every uid but the node agent; egress allow-lists | Per role |
 | **T4 AWS EC2 cluster** (ASG of three) | As T3 | KMS replaces `key-holder`; `state-owner` in front of Raft | Every unit | As T3, plus the Raft port between nodes | Per role |
 | **T5 AWS Lambda** | The function's execution role, one per role. Calls between functions are authorized by resource policy on an alias | None: IAM does the job | The platform's sandbox | Not available. A VPC route can cut `policy` off entirely | Optional, in process |
-| **Kubernetes** | EKS Pod Identity: a ServiceAccount per role bound to an IAM role | None where the cloud does it; same as T4 with Raft | Pod security context | NetworkPolicy, with FQDN egress rules | Optional |
+| **T6 Kubernetes** (proposed) | A projected ServiceAccount token per container, one audience per role, exchanged for a cloud role. Pod Identity only for a single-role pod | None where the cloud does it. The socket volume mounted into the permitted callers is the first lock | Pod security context per container | NetworkPolicy per pod kind. FQDN egress needs Cilium (optional). Egress is the union over the containers of a pod | Optional |
 
 ### Workload JWT and per-cloud exchange
 
@@ -38,7 +38,7 @@ On self-hosted nodes (T1 to T4), the node agent (`sluis-node`) issues a short-li
 | GCP | Workload Identity Federation | ES256 |
 | Azure | A federated credential | RS256 |
 
-The node's non-extractable hardware key signs the workload JWT, about once an hour per role (about 120 ms per signature). Platform-native identity is used where it exists: a Lambda function role, EKS Pod Identity.
+The node's non-extractable hardware key signs the workload JWT, about once an hour per role (about 120 ms per signature). Platform-native identity is used where it exists: a Lambda function role. On Kubernetes the platform's own token is proposed to be used (see the T6 row above and [Identity](/concepts/identity/)).
 
 Discovery is a static document plus the public keys at an HTTPS URL served from the distribution bucket. There is **one issuer per node**, `https://<issuer>/nodes/<node>/`. Each cloud role trusts only the issuers of the nodes that run that role, so a compromised node can mint only its own roles. AWS allows at most 100 EC keys in a JWKS and 100 OIDC providers per account, and requires https with no port and no query.
 
@@ -47,7 +47,7 @@ IAM Roles Anywhere stays an AWS-only alternative. `aws_signing_helper serve` is 
 
 ### IAM per role
 
-Each role has its own IAM role (or Lambda function role, or Pod Identity association), generated from its manifest. The trust relationship differs by shape; the permissions policy is the same on all of them.
+Each role has its own IAM role (or Lambda function role; on Kubernetes, proposed, an IAM role that trusts the cluster's issuer and the role's token audience), generated from its manifest. The trust relationship differs by shape; the permissions policy is the same on all of them.
 
 KMS key policies name one role each. On AWS there is one symmetric key (`ENCRYPT_DECRYPT`) with encryption contexts for every sealing need, and one `ECC_NIST_P384` `SIGN_VERIFY` key per authority purpose (token signing, CA, notary, grant), because KMS allows one usage per key and `Sign` takes no encryption context. On T4 each node has its own notary signing key instead, so that batch heads can be co-signed 2 of 3; a shared key cannot do that, because IAM cannot restrict which message gets signed. A generated key policy for the notary key looks like this (an example; `<account-id>` and `<install>` are placeholders):
 

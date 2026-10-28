@@ -6,7 +6,7 @@ sidebar:
   order: 3
 ---
 
-At the third zoom level the [components](/architecture/components/) are placed into **process roles**. A role is a unit with one credential set. Each role is its own OS user and systemd unit, its own Lambda function, or its own pod, so a compromise of one role gives the attacker that role's credentials and nothing else.
+At the third zoom level the [components](/architecture/components/) are placed into **process roles**. A role is a unit with one credential set. Each role is its own OS user and systemd unit, its own Lambda function, or (on Kubernetes, as proposed) its own container, so a compromise of one role gives the attacker that role's credentials and nothing else.
 
 The rules the split follows:
 
@@ -66,6 +66,10 @@ Roles are not the same as units. A shape may run several roles in one unit, to f
 2. **No unit holds a key next to an unauthenticated listener.**
 
 Both are tested for every shape. For example, `signer` cannot be fused into `entry`: the fusion would put the signing key beside the internet-facing listener. On Lambda the same reasoning keeps `signer` a separate function, because the key grant must stay out of the role of the function that faces the internet. Small, listener-free roles that hold no key (`quota` and an integration with no external secret, for instance) can share a unit on a 2 GB board.
+
+:::note[Proposed]
+On Kubernetes a pod holds several roles, so the word "unit" in rule 2 needs a definition. The proposal is that the unit is the **credential scope**: the systemd unit on a node, the function on Lambda, and the container on Kubernetes, where each container has its own token audience. A generated check then fails the build if any container that can use a key also has a listener. A pod that holds `entry` and `signer` as two containers passes in substance, because `entry`'s container cannot reach the credentials of `signer`'s. This is [OD-18](/open-decisions/#od-18).
+:::
 
 ## Packaging
 
@@ -158,8 +162,8 @@ flowchart LR
 
 The solid line from `gh` to `policy` is a decision request; the integration asks "may this caller have this", never the reverse. Dashed lines to `audit-writer` are asynchronous emits. The node agent dashes stand for the workload JWT it issues to every role; the picture omits them for the other roles to stay readable.
 
-On a three-node [cluster](/shapes/aws-ec2-cluster/) every node runs this set, and the `state-owner` processes talk to each other over the Raft driver's mTLS port. Each node's `audit-writer` drains its own spool, and the notary co-signs batch heads 2 of 3 across nodes. On [Lambda](/shapes/aws-lambda/) the same roles are separate functions with no sluis-node; on [Kubernetes](/shapes/kubernetes/) they are separate pods.
+On a three-node [cluster](/shapes/aws-ec2-cluster/) every node runs this set, and the `state-owner` processes talk to each other over the Raft driver's mTLS port. Each node's `audit-writer` drains its own spool, and the notary co-signs batch heads 2 of 3 across nodes. On [Lambda](/shapes/aws-lambda/) the same roles are separate functions with no sluis-node; on [Kubernetes](/shapes/kubernetes/) they are proposed to be containers of a node pod and an audit pod.
 
-Where an audit record waits before it is sealed differs by shape: a local spool on self-hosted and EC2 shapes (co-signed in cluster mode), an SQS queue on Lambda. Kubernetes: later.
+Where an audit record waits before it is sealed differs by shape: a local spool on self-hosted and EC2 shapes (co-signed in cluster mode), an SQS queue on Lambda. On Kubernetes the outbox is open ([OD-22](/open-decisions/#od-22)); SQS on EKS is proposed.
 
 Next: [Deployment](/architecture/deployment/) shows how each shape enforces these boundaries.
