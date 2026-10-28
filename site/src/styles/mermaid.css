@@ -1,0 +1,152 @@
+/* Mermaid diagrams at their natural size (astro.config.mjs sets useMaxWidth
+   false). astro-mermaid injects its own `pre.mermaid` rules at run time,
+   including `svg { max-width: 100%; height: auto }`, which would scale a wide
+   diagram down to the content column again; the selectors here are one
+   attribute more specific, so they win whatever the order. A diagram wider than
+   the column scrolls inside its box, never the page; a narrow one stays
+   centred (auto margins centre it without clipping the start when it
+   overflows). */
+pre.mermaid[data-processed] {
+  display: flex;
+  justify-content: flex-start;
+  overflow-x: auto;
+  overflow-y: hidden;
+  max-width: 100%;
+}
+
+pre.mermaid[data-processed] > svg {
+  flex: none;
+  max-width: none;
+  margin-inline: auto;
+}
+
+/* The wrapper around a diagram and its Expand button (src/scripts/mermaid-zoom.ts). */
+.mz-wrap {
+  position: relative;
+  display: flow-root;
+  margin: 2rem 0;
+}
+
+.mz-wrap > pre.mermaid {
+  margin: 0;
+}
+
+.mz-wrap:has(> pre.mermaid:not([data-processed])) > .mz-expand {
+  visibility: hidden;
+}
+
+.mz-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35em;
+  min-width: 2.25rem;
+  min-height: 2.25rem;
+  padding: 0 0.7rem;
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 0.4rem;
+  background: var(--sl-color-bg-nav);
+  color: var(--sl-color-text);
+  font: inherit;
+  font-size: var(--sl-text-sm);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.mz-btn:hover {
+  border-color: var(--sl-color-accent);
+  color: var(--sl-color-white);
+}
+
+.mz-btn:focus-visible {
+  outline: 2px solid var(--sl-color-accent);
+  outline-offset: 2px;
+}
+
+/* The button sits in a row of its own above the diagram, so it never covers
+   a participant box. */
+.mz-wrap > .mz-expand {
+  display: flex;
+  margin: 0 0 0.4rem auto;
+}
+
+/* The fullscreen viewer. */
+dialog.mz-dialog {
+  box-sizing: border-box;
+  display: none;
+  flex-direction: column;
+  /* Starlight resets margins, which un-centres a modal dialog. */
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  width: min(98vw, 120rem);
+  height: 96vh;
+  height: 96dvh;
+  max-width: none;
+  max-height: none;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 0.6rem;
+  background: var(--sl-color-bg);
+  color: var(--sl-color-text);
+}
+
+dialog.mz-dialog[open] {
+  display: flex;
+}
+
+dialog.mz-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.6);
+}
+
+html:has(dialog.mz-dialog[open]) {
+  overflow: hidden;
+}
+
+.mz-bar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem;
+  border-bottom: 1px solid var(--sl-color-gray-5);
+}
+
+.mz-bar .mz-spacer {
+  flex: 1;
+}
+
+.mz-view {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.mz-view:focus-visible {
+  outline: 2px solid var(--sl-color-accent);
+  outline-offset: -2px;
+}
+
+.mz-view.mz-dragging {
+  cursor: grabbing;
+}
+
+.mz-stage {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  will-change: transform;
+}
+
+.mz-stage > svg {
+  display: block;
+  max-width: none;
+  max-height: none;
+}

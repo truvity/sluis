@@ -7,6 +7,10 @@
 //   - the page raises no exception and logs no console error;
 //   - every `pre.mermaid` ends up holding an <svg> (and the page has at least
 //     one, where it must);
+//   - every diagram has an Expand button, the diagram text is readable (the
+//     computed font size of each SVG label times the SVG's rendered scale is at
+//     least MIN_TEXT_PX), and on the first diagram a click on Expand opens the
+//     <dialog> with an <svg> in it, which Escape closes;
 //   - on the explorer pages, the explorer script ran (the root gets `ex-js`).
 //
 // Needs Chrome or Chromium (CHROME, or google-chrome / chromium on PATH) and
@@ -27,6 +31,7 @@ const shots = process.argv[3] ? resolve(process.argv[3]) : null;
 // path, number of diagrams required (at least), whether it is an explorer page.
 const PAGES = [
   { path: '/concepts/', mermaid: 1 },
+  { path: '/concepts/identity/', mermaid: 1 },
   { path: '/architecture/context/', mermaid: 1 },
   { path: '/shapes/local/', mermaid: 1 },
   { path: '/architecture/explorer/', explorer: true },
@@ -34,6 +39,9 @@ const PAGES = [
 ];
 const SCHEMES = ['light', 'dark'];
 const WAIT_MS = 20000;
+// The smallest on-screen size, in CSS px, of any diagram text. Mermaid fits an
+// SVG to its column by default, which shrank a wide sequence diagram to 6 px.
+const MIN_TEXT_PX = 11;
 
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
   '.svg': 'image/svg+xml', '.json': 'application/json', '.txt': 'text/plain; charset=utf-8', '.xml': 'application/xml',
@@ -94,10 +102,45 @@ function connect(url) {
   }));
 }
 
+// Per diagram: whether it holds an svg, whether it has its Expand button, and
+// the smallest rendered text size. A label is an SVG <text>, or, in a flowchart
+// with HTML labels, an element inside a <foreignObject> that holds a text node
+// of its own. Its size on screen is its computed font size times the SVG's
+// scale (rendered width over viewBox width).
 const STATE = `(() => ({
   pres: [...document.querySelectorAll('pre.mermaid')].map((p) => !!p.querySelector('svg')),
+  buttons: [...document.querySelectorAll('pre.mermaid')].map((p) => !!p.parentElement?.querySelector(':scope > button.mz-expand')),
+  sizes: [...document.querySelectorAll('pre.mermaid svg')].map((svg) => {
+    const vb = svg.viewBox.baseVal;
+    const scale = vb && vb.width > 0 ? svg.getBoundingClientRect().width / vb.width : 1;
+    const labels = [...svg.querySelectorAll('text, foreignObject *')].filter((el) =>
+      el.localName === 'text' ? el.textContent.trim() : [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim()));
+    const px = labels.map((el) => parseFloat(getComputedStyle(el).fontSize) * scale);
+    return { scale, labels: labels.length, min: px.length ? Math.min(...px) : null };
+  }),
   explorer: document.documentElement.classList.contains('ex-js'),
 }))()`;
+
+// Click Expand on the first diagram: a <dialog> opens with an svg in it. Then
+// Escape (a real key press) must close it and focus must return to the button.
+const EXPAND = `(async () => {
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const btn = document.querySelector('pre.mermaid')?.parentElement?.querySelector(':scope > button.mz-expand');
+  if (!btn) return { error: 'no Expand button' };
+  btn.focus();
+  btn.click();
+  await wait(200);
+  const dlg = document.querySelector('dialog.mz-dialog');
+  const out = { open: !!dlg?.open, svg: !!dlg?.querySelector('svg'), controls: dlg ? dlg.querySelectorAll('button').length : 0 };
+  const stage = dlg?.querySelector('.mz-stage');
+  out.transform = stage ? stage.style.transform : '';
+  return out;
+})()`;
+const AFTER_ESC = `(() => {
+  const dlg = document.querySelector('dialog.mz-dialog');
+  const btn = document.querySelector('pre.mermaid')?.parentElement?.querySelector(':scope > button.mz-expand');
+  return { open: !!dlg?.open, focusBack: document.activeElement === btn };
+})()`;
 
 async function checkPage(cdp, base, page, scheme) {
   const problems = [];
@@ -123,7 +166,7 @@ async function checkPage(cdp, base, page, scheme) {
     await sleep(250);
     const r = await cdp.send('Runtime.evaluate', { expression: STATE, returnByValue: true });
     st = r.result.value;
-    const drawn = st && st.pres.length >= (page.mermaid ?? 0) && st.pres.every(Boolean);
+    const drawn = st && st.pres.length >= (page.mermaid ?? 0) && st.pres.every(Boolean) && st.buttons.every(Boolean);
     const ready = page.explorer ? st?.explorer : drawn;
     if (ready) break;
     if (Date.now() - t0 > WAIT_MS) break;
@@ -132,6 +175,34 @@ async function checkPage(cdp, base, page, scheme) {
   if (page.mermaid && (!st || st.pres.length < page.mermaid)) problems.push(`expected at least ${page.mermaid} pre.mermaid, found ${st ? st.pres.length : 'none'}`);
   if (st && st.pres.some((d) => !d)) problems.push(`${st.pres.filter((d) => !d).length} of ${st.pres.length} pre.mermaid hold no <svg>: the diagram is raw text`);
   if (page.explorer && !st?.explorer) problems.push('the explorer script did not run (no ex-js class on <html>)');
+  if (st && st.buttons.some((b) => !b)) problems.push(`${st.buttons.filter((b) => !b).length} of ${st.buttons.length} pre.mermaid have no Expand button`);
+  if (st) {
+    st.sizes.forEach((z, i) => {
+      if (z.min === null) problems.push(`diagram ${i + 1}: found no text to measure`);
+      else if (z.min < MIN_TEXT_PX) problems.push(`diagram ${i + 1}: text renders at ${z.min.toFixed(1)} px (scale ${z.scale.toFixed(2)}), below the ${MIN_TEXT_PX} px minimum`);
+    });
+  }
+  if (page.mermaid && st && st.pres.length && st.buttons[0]) {
+    const ex = (await cdp.send('Runtime.evaluate', { expression: EXPAND, awaitPromise: true, returnByValue: true })).result.value;
+    if (ex.error) problems.push(`expand: ${ex.error}`);
+    else {
+      if (!ex.open) problems.push('expand: clicking Expand did not open the dialog');
+      if (!ex.svg) problems.push('expand: the dialog holds no <svg>');
+      if (ex.controls < 4) problems.push(`expand: the dialog has ${ex.controls} buttons, expected zoom in, zoom out, reset and close`);
+      if (shots && ex.open) {
+        mkdirSync(shots, { recursive: true });
+        const png = await cdp.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
+        writeFileSync(join(shots, `mermaid-${page.path.replace(/^\/|\/$/g, '').replace(/\//g, '-')}-${scheme}-expanded.png`), Buffer.from(png.data, 'base64'));
+      }
+      for (const type of ['keyDown', 'keyUp']) {
+        await cdp.send('Input.dispatchKeyEvent', { type, key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27, nativeVirtualKeyCode: 27 });
+      }
+      await sleep(200);
+      const after = (await cdp.send('Runtime.evaluate', { expression: AFTER_ESC, returnByValue: true })).result.value;
+      if (after.open) problems.push('expand: Escape did not close the dialog');
+      else if (!after.focusBack) problems.push('expand: focus did not return to the Expand button');
+    }
+  }
   if (shots) {
     const png = await cdp.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
     mkdirSync(shots, { recursive: true });
