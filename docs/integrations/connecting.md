@@ -14,10 +14,10 @@ The command lines on this page are **examples of the shape**, not a decided comm
 
 ```mermaid
 flowchart LR
-  decl["1. Declare<br/>in configuration"] --> cer["2. Ceremony<br/>at the vendor"]
-  cer --> cred["3. Store<br/>as a credential"]
-  cred --> chk["4. Check<br/>dry run, drift"]
-  chk --> on["5. Enable<br/>policy decides"]
+  decl["1. Declare"] --> cer["2. Ceremony"]
+  cer --> cred["3. Store"]
+  cred --> chk["4. Check"]
+  chk --> on["5. Enable"]
 ```
 
 1. **Declare.** The operator writes what the integration is allowed to be: the organisation, the permissions, the scopes, the domains. This is *declared* data, in a file under version control.
