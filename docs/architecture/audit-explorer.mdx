@@ -52,9 +52,7 @@ The state store sits on the write path of every batch. This is acceptable given 
 
 <AuditExplorer part="lag" />
 
-<OpenDecision id="OD-12" title="Index host on Lambda">
-A node keeps its index in a file on servers. On Lambda there is no node to hold one, and the lean is Aurora Serverless v2, still to be verified.
-</OpenDecision>
+A node keeps its index in a file on servers. Lambda ships no index: `audit-read` and its index run in a separate audit install that reads the same bucket, on Kubernetes with Postgres or on a server with `sqlite`. The index is a rebuildable cache; the chain in the bucket is the record.
 
 ## When the writer is down for an hour
 

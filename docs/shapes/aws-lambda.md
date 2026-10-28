@@ -19,14 +19,14 @@ flowchart LR
   ep --> lwa
   app -- "invoke" --> signer["signer"]
   app -- "invoke" --> policy["policy"]
-  app -- "invoke" --> others["ca, notary, audit-writer,<br/>audit-read, quota"]
+  app -- "invoke" --> others["ca, notary, audit-writer, quota"]
   signer --> kms["AWS KMS"]
   others --> kms
   app --> ddb["DynamoDB"]
   others --> ddb
   others -. "outbox" .-> q["Queue"]
   q --> writer["audit-writer"] --> blob["Blob store"]
-  others --> idx["postgres index"]
+  blob -. "same bucket" .-> aud["Separate audit install:<br/>audit-read and its index"]
 ```
 
 ## What runs where
@@ -47,11 +47,7 @@ flowchart LR
 
 - **State:** DynamoDB, with conditional writes and one writer per record kind.
 - **Audit outbox:** an SQS queue, because a function's local disk does not outlive its sandbox. The `audit-writer` consumes the queue, seals batches and writes them to the blob store; the `notary` signs batch heads with a single notary key, used only by the notary function's role. There is no co-signing; the function role is the isolation.
-- **Index:** `postgres`, which is proposed as Aurora Serverless v2.
-
-:::caution[Open decision OD-12: Index host on Lambda]
-Options: Aurora Serverless v2, or DynamoDB only. The lean is Aurora, to be verified.
-:::
+- **Index:** none. T5 ships no audit index. `audit-read` and its index run in a separate audit install on another shape that reads the same bucket: Kubernetes with Postgres (any connection string, for example CNPG), or a server with `sqlite`. A small install can run `sluis audit search` from the CLI, which builds a local `sqlite` index from the chain. The index is a rebuildable cache; the chain in the bucket is the record.
 
 ## Identity and edge
 
@@ -66,4 +62,4 @@ Options: Aurora Serverless v2, or DynamoDB only. The lean is Aurora, to be verif
 - Outside a VPC, egress is unrestricted. In a VPC, egress rules work by IP, not by name, so a per-function allow-list by hostname needs a proxy or firewall.
 - Per-function role granularity needs one zip and one IAM role per role. It raises the number of artifacts and resources to keep in step; the generator derives them all from the manifest.
 - The vendored adapter is part of the supply chain. It is pinned to a version, rebuilt into sluis's layer, and signed with the rest of the release.
-- The Aurora index adds a standing cost and a network dependency that no other shape has.
+- Search over the audit trail needs a separate audit install, or `sluis audit search` from the CLI, because T5 has no index of its own.

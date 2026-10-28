@@ -111,8 +111,7 @@ function build(sh: any): AuditShape {
       if (n.port === 'keys') rows.push({ k: 'Notary seal key', v: au.notary_key });
       if (n.port === 'state') rows = [{ k: 'Backend', v: sh.state }, { k: 'Holds', v: 'audit_batches, cursors and dedupe, replicated; no record bodies' }];
       if (n.port === 'index') {
-        rows = [{ k: 'Backend', v: d.backing }, { k: 'Placement', v: sh.runtime === 'lambda' ? 'Shared database host; no node to keep a file on' : 'One file per node' }];
-        if (d.od) notes.push({ id: d.od, text: 'The index host on Lambda is not decided.' });
+        rows = [{ k: 'Backend', v: d.backing }, { k: 'Placement', v: sh.runtime === 'lambda' ? 'None in this install; a separate audit install holds the index' : 'One file per node' }];
       }
     } else if (cls === 'external') {
       kind = 'outside sluis';
@@ -142,7 +141,7 @@ function build(sh: any): AuditShape {
       // The index node is an index store, not a driver.
       const d = arch.drivers[sh.ports.index];
       const bl = arch.backing_lines[`index.${sh.ports.index}`];
-      nodes.push(place({ id, lane: n.lane, row: n.row, cls: 'store', shared: false, title: 'index', l2: bl[0], l3: bl[1], detail: { ...detail, kind: 'index', cls: 'store', status: d.status, od: d.od, rows: [{ k: 'Backend', v: d.backing }, { k: 'Placement', v: lambda ? 'a shared database host: there is no node to keep a file on' : 'one file per node' }], notes: d.od ? [{ id: d.od, text: 'The index host on Lambda is not decided.' }] : [] } }));
+      nodes.push(place({ id, lane: n.lane, row: n.row, cls: 'store', shared: false, title: 'index', l2: bl[0], l3: bl[1], detail: { ...detail, kind: 'index', cls: 'store', status: d.status, od: d.od, rows: [{ k: 'Backend', v: d.backing }, { k: 'Placement', v: lambda ? 'none in this install: a separate audit install holds the index' : 'one file per node' }], notes: [] } }));
       nameOf[id] = 'index';
       continue;
     }
@@ -164,7 +163,7 @@ function build(sh: any): AuditShape {
 
   const { width, height, lanes } = size(nodes, data.lanes);
   const noteList = [];
-  if (au.note) noteList.push({ text: au.note, status: au.assumed ? 'proposed' : 'open', od: sh.id === 'T5' ? 'OD-12' : undefined });
+  if (au.note) noteList.push({ text: au.note, status: au.assumed ? 'proposed' : 'agreed' });
   return {
     id: sh.id, name: sh.name, nodes, edges, width, height, lanes,
     intro: `Outbox: ${ok.short}. Keys: ${sh.keys}. State: ${sh.state}. Archive: ${au.blob}, ${au.lock}.`,

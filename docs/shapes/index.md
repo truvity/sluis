@@ -14,15 +14,15 @@ There are six shapes, T0 to T5, and Kubernetes, which is supported in the model.
 
 | Shape | Hardware | Keys | State | Index | Audit outbox | Identity | Edge | Test-matrix role |
 |---|---|---|---|---|---|---|---|---|
-| [T0 Local](/shapes/local/) | Docker on a workstation, one node | Software, or the host's YubiKey through its `pcscd` socket | Embedded single-node store | `sqlite` | Local spool | Unix uid per role, peer credentials | None built in | Development and CI |
+| [T0 Local](/shapes/local/) | Docker on a workstation, one node | Software, or the host's YubiKey through a host `key-holder` | Embedded single-node store | `sqlite` | Local spool | Unix uid per role, peer credentials | None built in | Development and CI |
 | [T1 Single node](/shapes/single-node/) | One arm64 single-board computer, 2 GB RAM, eMMC, a YubiKey | YubiKey PIV | Single-node store, no Raft | `sqlite` | Local spool | Unix uid per role; workload JWT from `sluis-node` | `cloudflared` to `entry`'s loopback port | Integration tests and tutorials |
 | [T2 Cluster](/shapes/cluster/) | Three single-board computers, Ubuntu and Rocky may mix | A YubiKey per node | rqlite (Raft) across three nodes | `sqlite` | Local spool per node | As T1, one issuer per node | `cloudflared` on each node | Integration tests and tutorials |
 | [T3 AWS EC2 single](/shapes/aws-ec2-single/) | One `t4g.nano`, Amazon Linux 2023 | AWS KMS | DynamoDB | `sqlite` | Local spool | Unix uid per role; per-role AWS credentials (proposed) | `cloudflared` to `entry`'s loopback port (proposed) | Integration tests and tutorials |
 | [T4 AWS EC2 cluster](/shapes/aws-ec2-cluster/) | An ASG of three `t4g.nano`, Amazon Linux 2023 | AWS KMS | rqlite (Raft) | `sqlite` | Local spool per node | As T3, one issuer per node; per-role AWS credentials (proposed) | `cloudflared` on each node (proposed) | The first build target; integration tests and tutorials |
-| [T5 AWS Lambda](/shapes/aws-lambda/) | One Lambda function per role | AWS KMS | DynamoDB | `postgres` (OD-12) | SQS queue | The function's IAM role | API Gateway, through the Lambda Web Adapter to `entry`'s loopback port | Integration tests and tutorials |
+| [T5 AWS Lambda](/shapes/aws-lambda/) | One Lambda function per role | AWS KMS | DynamoDB | None: a separate audit install holds it | SQS queue | The function's IAM role | API Gateway, through the Lambda Web Adapter to `entry`'s loopback port | Integration tests and tutorials |
 | [Kubernetes](/shapes/kubernetes/) | Pods, one per role | By platform: KMS on AWS | By platform | `postgres` | Later | A ServiceAccount per role | An in-pod edge or the pod IP (to be designed) | In the model; in the matrix later |
 
-The edge connector, the Lambda index and the Kubernetes edge are marked on their own pages where they are proposed or open.
+The edge connector and the Kubernetes edge are marked on their own pages where they are proposed or open.
 
 :::note[Proposed]
 The per-role AWS credentials on T3 and T4 (the node agent, `sluis-node`, which brokers them and closes IMDS) and `cloudflared` as the edge connector on the EC2 shapes are proposals, not decisions.
