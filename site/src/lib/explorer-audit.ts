@@ -53,15 +53,15 @@ function build(sh: any): AuditShape {
       const rid = n.role;
       if (lambda && n.l2_lambda) { l2 = n.l2_lambda; l3 = n.l3_lambda; }
       else if (lambda && n.l3_lambda) { l3 = n.l3_lambda; }
-      else if (!n.l2 || n.role === 'central') {
-        if (n.role !== 'central') { l2 = fill(rt.role.id_short, { id: rid }); l3 = fill(rt.role.sock_short, { id: rid }); }
+      else if (!n.l2 || n.role === 'entry') {
+        if (n.role !== 'entry') { l2 = fill(rt.role.id_short, { id: rid }); l3 = fill(rt.role.sock_short, { id: rid }); }
       }
       kind = 'role';
       status = 'agreed';
       rows = [
         { k: 'Unit', v: fill(rt.role.unit, { id: rid }), code: true },
         { k: 'Identity', v: fill(rt.role.identity, { id: rid }), code: true },
-        { k: 'Listens', v: rid === 'central' && lambda ? 'Loopback TCP inside the sandbox, through the Lambda Web Adapter' : fill(rt.role.listen, { id: rid }), code: true },
+        { k: 'Listens', v: rid === 'entry' ? (lambda ? 'TCP 127.0.0.1:8080 (an example port) inside the sandbox, through the Lambda Web Adapter' : 'TCP 127.0.0.1:8080 (an example port), loopback only') : fill(rt.role.listen, { id: rid }), code: true },
       ];
       if (rid === 'notary') rows.push({ k: 'Seal key', v: au.notary_key });
     } else if (n.port && cls === 'driver') {
@@ -73,7 +73,7 @@ function build(sh: any): AuditShape {
       const portTitle = label(n.port);
       l2 = `${d.title}, ${d.instance}`;
       l3 = `${portTitle} port`;
-      kind = perRole ? 'driver service, per-role' : `driver service, shared${d.mediator ? ` (${d.mediator})` : ''}`;
+      kind = perRole ? 'driver service, per-role' : `driver service, shared${d.shared_name ? ` (${d.shared_name})` : ''}`;
       status = d.status;
       od = d.od;
       rows = [

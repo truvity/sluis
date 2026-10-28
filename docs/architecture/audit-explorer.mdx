@@ -20,7 +20,7 @@ The same roles, the same records and the same integrity chain run on every shape
 
 ## Map and flows
 
-Select a box to see what it holds, what it never holds and who it calls. Choose a flow to step through it: each step lights the lines it uses, in order. Roles listen only on Unix sockets; the only network listeners are the edge connector in front of central and, on a cluster, the state driver's Raft port. The architecture explorer shows [the sockets and processes](/architecture/explorer/) of each shape.
+Select a box to see what it holds, what it never holds and who it calls. Choose a flow to step through it: each step lights the lines it uses, in order. Roles other than `entry` listen only on Unix sockets; the network listeners are `entry`'s loopback port, which the edge connector connects to, and, on a cluster, the state driver's Raft port. The architecture explorer shows [the sockets and processes](/architecture/explorer/) of each shape.
 
 <AuditExplorer part="map" />
 
@@ -36,9 +36,7 @@ A request returns once its audit record is durable in the outbox, never waiting 
 
 <AuditExplorer part="outbox" />
 
-<OpenDecision id="OD-5" title="Audit outbox port per shape">
-A local spool on servers and a queue on Lambda are the lean. Kubernetes is a queue or blocking, and is not decided. The recovery path is separate and agreed: it spools locally on every shape and never blocks.
-</OpenDecision>
+The audit outbox is a local spool on servers, co-signed in cluster mode, and an SQS queue on Lambda. Kubernetes: later. The recovery path is separate: it spools locally on every shape and never blocks.
 
 ## The integrity chain
 

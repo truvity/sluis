@@ -6,7 +6,7 @@ const $$ = <T extends Element = HTMLElement>(sel: string, from: ParentNode = doc
 const toggle = document.querySelector<HTMLElement>('[data-ex-toggle]');
 const mapRoot = document.querySelector<HTMLElement>('[data-ex-map]');
 const KEY = mapRoot?.dataset.storageKey ?? 'sluis-explorer-shape';
-const DEFAULT_NODE = mapRoot?.dataset.defaultNode ?? 'central';
+const DEFAULT_NODE = mapRoot?.dataset.defaultNode ?? 'entry';
 const state = { shape: '', sel: DEFAULT_NODE, mode: 'explore', step: 0 };
 const dflt = (toggle?.closest<HTMLElement>('[data-default]') ?? mapRoot)?.dataset.default ?? 'T4';
 
