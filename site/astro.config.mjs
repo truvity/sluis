@@ -77,7 +77,10 @@ export default defineConfig({
         starlightLinksValidator({
           errorOnRelativeLinks: false,
           // The ADR pages and the v1 documentation are not Starlight content.
-          exclude: ['/v1/', '/v1/**', '/decisions/', '/decisions/**'],
+          // The two explorer pages are MDX (they import components), and the
+          // validator collects no headings from an MDX page, so a link to one
+          // would always fail; the pages themselves are still built and checked.
+          exclude: ['/v1/', '/v1/**', '/decisions/', '/decisions/**', '/architecture/explorer/', '/architecture/audit-explorer/'],
         }),
         starlightLlmsTxt({
           projectName: 'sluis',

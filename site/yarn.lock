@@ -4768,6 +4768,7 @@ __metadata:
     sharp: "npm:0.35.5"
     starlight-links-validator: "npm:0.27.0"
     starlight-llms-txt: "npm:0.12.0"
+    yaml: "npm:2.9.1"
   languageName: unknown
   linkType: soft
 
@@ -5374,7 +5375,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"yaml@npm:^2.8.3, yaml@npm:^2.9.1":
+"yaml@npm:2.9.1, yaml@npm:^2.8.3, yaml@npm:^2.9.1":
   version: 2.9.1
   resolution: "yaml@npm:2.9.1"
   bin:
