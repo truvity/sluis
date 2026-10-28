@@ -70,10 +70,10 @@ Internal programs are not on `PATH`. The only command for humans is `/usr/bin/sl
 ```text
 /usr/bin/sluis                         the only command for humans
 /usr/libexec/sluis/
-  roles/                               central, signer, policy, ca, notary, audit-writer, audit-read, quota
+  roles/                               entry, signer, policy, ca, notary, audit-writer, audit-read, quota
   drivers/                             one directory entry per driver
   integrations/                        one per integration
-  node/                                node-agent, and other node services
+  node/                                sluis-node, and other node services
   vendor/                              third-party binaries, such as the state store
 ```
 
@@ -93,30 +93,22 @@ The same roles run on every shape. The drivers behind their ports are what chang
 | lease | state compare-and-set | state compare-and-set | Raft leader lease, others on state | DynamoDB conditional write | Raft leader lease, others on state | DynamoDB conditional write |
 | cloud | aws, gcp, azure drivers as configured | as configured | as configured | aws | aws | aws |
 
-The keys, state and index columns follow the agreed shapes. T0 may use the host's YubiKey through the host's `pcscd` socket, which is undecided.
-
-:::caution[Open decision OD-8: YubiKey in Docker]
-For the local shape the options are to use the host's `pcscd` socket, or to use software keys only. The current lean is the `pcscd` socket.
-:::
+The keys, state and index columns follow the agreed shapes. T0 may use the host's YubiKey: the container's `key-holder` talks to the host's `pcscd` socket, and `pcscd` lets several programs share the card, so the host keeps using the key. The pcsc-lite client protocol in the image must match the host daemon; if it cannot, the fallback is to run the `key-holder` on the host and mount its socket.
 
 :::caution[Open decision OD-12: Index host on Lambda]
 The options are Aurora Serverless v2 (the lean, still to be verified) or DynamoDB only.
 :::
 
 :::note[Proposed]
-The blob, queue, lease and cloud rows are the working design and are not settled shape by shape. The audit outbox per shape is open as OD-5 and is covered in [Audit](/concepts/audit/).
+The blob, queue, lease and cloud rows are the working design and are not settled shape by shape. The audit outbox per shape is covered in [Audit](/concepts/audit/).
 :::
 
-:::caution[Open decision OD-4: Inter-node ports]
-The only agreed inter-node traffic is the state driver's own Raft port, over mutual TLS. Whether any other port exists between nodes is open: the options are that port alone, or that plus a role port. The current lean is the Raft port alone.
-:::
+The only inter-node traffic is the state driver's own Raft port, over mutual TLS. It is the only TCP port between nodes.
 
 ## Why separate services
 
 Compiling every driver into every role would make fat binaries, noisy scanner results for code a role never uses, and a rebuild to add a backend. A role that spawned its own driver would need exec rights and would put supervision in our code. A single AWS driver shared by all roles would hold every role's credentials and lose IAM's per-role enforcement. Separate services cost a socket to protect, contract versioning across images and some memory, and one Unix-socket hop is a fraction of a millisecond against the several milliseconds a KMS or DynamoDB call takes.
 
-:::caution[Open decision OD-14: Rust cloud drivers]
-The aws, gcp and azure drivers are Go unless a memory measurement on the smallest EC2 instance shows Rust is worth a second toolchain.
-:::
+The aws, gcp and azure drivers are written in Rust.
 
 Where the sockets live and which of them ever listen on TCP is on [Listeners](/architecture/listeners/).

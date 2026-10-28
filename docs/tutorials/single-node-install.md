@@ -7,7 +7,7 @@ sidebar:
 ---
 
 :::caution
-This tutorial describes the intended experience. It can't be run yet, because sluis v2 is not released. The commands, outputs and file names are examples of what the finished product shows. Only `sluis doctor`, `sluis config check` and `sluis config explain` are named in the design; the other `sluis` subcommands below are illustrative.
+This tutorial describes the intended experience. It can't be run yet, because sluis v2 is not released. The commands, outputs and file names are examples of what the finished product shows. Only `sluis doctor`, `sluis config check` and `sluis config explain` are named in the design; the other `sluis` subcommands below are illustrative. Every command is a subcommand of the one `sluis` binary, for operators and for users alike.
 :::
 
 You install sluis on one arm64 single-board computer with a YubiKey, the [single-node shape](/shapes/single-node/) (T1). You finish with a running sluis at `https://sluis.example.com`, a token you have verified yourself, and the audit record of your own sign-in.
@@ -34,16 +34,16 @@ gpg --show-keys --fingerprint sluis-release.asc
 
 ```text
 # Example output
-pub   ed25519 2026-10-01 [SC]
+pub   nistp384 2026-10-01 [SC]
       3F2A 91C4 7D0E 55B8 A6C1  0E49 7B2D 8E3F 14A0 C9D2
 uid           sluis release signing <release@sluis.example.org>
-sub   ed25519 2026-10-01 [S] [expires: 2027-04-01]
+sub   nistp384 2026-10-01 [S] [expires: 2027-04-01]
 ```
 
-The primary key is kept offline on a hardware key. The subkey that CI signs the repository metadata with expires, and a new one is published under the same primary key. Compare the primary key's fingerprint with the copy attached to the GitHub release, which is a different channel from the distribution site.
+The release identity is a dedicated sluis key. Its primary key is kept offline on a pair of YubiKeys. The subkey that CI signs the repository metadata with expires, and a new one is published under the same primary key. Compare the primary key's fingerprint with the copy attached to the GitHub release, which is a different channel from the distribution site.
 
 :::note[Proposed]
-Where the fingerprint is published for this comparison is not yet decided.
+The channels that publish the fingerprint (keys.openpgp.org, a Web Key Directory on sluis.id, DNS, `SECURITY.md`, the GitHub release and the site) are under research; see [Release signing](/distribution/release-signing/#the-openpgp-release-key). Compare on at least two of them.
 :::
 
 Install the key and the repository for the board's architecture.
@@ -65,7 +65,7 @@ apt update
 apt install sluis
 ```
 
-The package installs the roles, drivers and the node-agent under `/usr/libexec/sluis/{roles,drivers,integrations,node,vendor}/<short-name>`, creates one system user per role, and installs one systemd unit per role and driver. It enables nothing yet.
+The package installs the roles, drivers and the node agent (`sluis-node`) under `/usr/libexec/sluis/{roles,drivers,integrations,node,vendor}/<short-name>`, creates one system user per role, and installs one systemd unit per role and driver. It enables nothing yet.
 
 ```sh
 # Example
@@ -74,7 +74,7 @@ ls /usr/libexec/sluis/roles
 
 ```text
 # Example output
-audit-read  audit-writer  ca  central  notary  policy  quota  signer
+audit-read  audit-writer  ca  entry  notary  policy  quota  signer
 ```
 
 ## 4. Run `sluis doctor`
@@ -216,19 +216,29 @@ sluis-notary.service        loaded active running  sluis notary
 sluis-audit-writer.service  loaded active running  sluis audit-writer
 sluis-audit-read.service    loaded active running  sluis audit-read
 sluis-quota.service         loaded active running  sluis quota
-sluis-central.service       loaded active running  sluis central
+sluis-entry.service         loaded active running  sluis entry
+sluis-node.service          loaded active running  sluis node agent
 ```
 
-Each unit runs as its own user. Nothing listens on a TCP port: every role and driver listens on a Unix socket under `/run/sluis/<role>/`, and `central`'s API is `/run/sluis/central/api.sock`.
+Each unit runs as its own user. One TCP listener exists: `entry`'s public API, bound to `127.0.0.1:8080` (the port is an example). Every other role and driver listens on a Unix socket under `/run/sluis/<role>/`.
 
 ```sh
 # Example
-ls -l /run/sluis/central/
+ss -ltn
+ls -l /run/sluis/signer/
 ```
 
-## 9. Connect cloudflared to the central socket
+```text
+# Example output
+State   Recv-Q  Send-Q  Local Address:Port  Peer Address:Port
+LISTEN  0       4096    127.0.0.1:8080      0.0.0.0:*
+```
 
-`cloudflared` reaches `central` through its Unix socket, so the board opens no inbound port. Install `cloudflared` from Cloudflare's own repository, create the tunnel, and point the ingress at the socket.
+On a single node that is the only TCP listener, and it is bound to the loopback address only.
+
+## 9. Connect cloudflared to the entry listener
+
+`cloudflared` connects to `entry`'s loopback port and makes outbound connections only, so the board opens no inbound port. Install `cloudflared` from Cloudflare's own repository, create the tunnel, and point the ingress at the loopback port. The port, `8080` here, is an example.
 
 ```yaml
 # Example: /etc/cloudflared/config.yaml
@@ -236,11 +246,9 @@ tunnel: <tunnel-id-from-cloudflare>
 credentials-file: /etc/cloudflared/credentials.json
 ingress:
   - hostname: sluis.example.com
-    service: unix:/run/sluis/central/api.sock
+    service: http://127.0.0.1:8080
   - service: http_status:404
 ```
-
-The `cloudflared` user must be able to open the socket, and nothing else should. The socket's group is the one that the permission manifest allows to call `central`, so add `cloudflared` to that group and nothing more.
 
 ```sh
 # Example
@@ -265,7 +273,7 @@ On the other machine, sign in through the upstream provider.
 sluis login --issuer https://sluis.example.com
 ```
 
-A browser opens at the upstream provider. After you sign in, sluis maps the provider's facts to grants through its policy and issues a token. The command prints where it stored the token.
+A browser opens at the upstream provider. sluis relies on the provider's multi-factor authentication for now; passkeys are a later roadmap feature. After you sign in, sluis maps the provider's facts to grants through its policy and issues a token. The command prints where it stored the token.
 
 ```text
 # Example output

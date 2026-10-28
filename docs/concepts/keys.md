@@ -1,6 +1,6 @@
 ---
 title: Keys
-description: "Which key backs which purpose on each shape: key modes and floors, direct and derived signing, algorithms, KMS and YubiKey layouts, randomness, FIPS and JOSE."
+description: "Which key backs which purpose on each shape: key modes and floors, direct signing, algorithms, KMS and YubiKey layouts, randomness, FIPS and JOSE."
 status: target
 sidebar:
   order: 4
@@ -22,22 +22,18 @@ The key mode is a property of the shape:
 **Floors in code, choices above them in config.** The code refuses a software key on a production shape. Configuration chooses among the modes the floor allows. A development install can therefore never be mistaken for a production one by loading its configuration on the wrong node.
 :::
 
-## Direct or derived signing
+## Direct signing
 
-A key can sign every token directly, or it can certify a short-lived software key that signs tokens for it (a derived key). Direct signing is simpler and keeps the key non-extractable the whole time. Derived signing is faster.
+Tokens are signed directly with the non-extractable key on every shape. A key is never used to certify a short-lived software key that signs in its place, so there are no derived signing keys and no burst key: a hardware key or KMS signs each token itself, and the signing key never leaves the device or the service.
 
-The volume decides. On a production install, a measurement showed about 25,000 tokens in 7 days, with a peak of 0.8 per second. 95 % of them were token exchange. At that volume:
+The volume makes this affordable. On a production install, a measurement showed about 25,000 tokens in 7 days, with a peak of 0.8 per second. 95 % of them were token exchange. At that volume:
 
-- **KMS shapes sign directly.** Signing every token with KMS costs about $2.62 a month.
-- **YubiKey shapes** sign P-384 in about 120 ms, which is about 8 signatures per second. The measured peak is a tenth of that. Software P-384 would sign about 200 per second per core.
-
-:::caution[Open decision OD-3: Derived signing keys on hardware shapes]
-Options: (a) always direct; (b) always derived; (c) direct on KMS, and derived only for bursts on a YubiKey. The lean is (c). It waits for two benchmarks: the latency of KMS `Sign` and a YubiKey on firmware 5.8. The burst-key question for YubiKey shapes alone is listed as OD-13.
-:::
+- **KMS shapes** pay about $2.62 a month for signing every token with KMS.
+- **YubiKey shapes** sign P-384 in about 120 ms, which is about 8 signatures per second. The measured peak is a tenth of that. A software P-384 key would sign about 200 per second per core, which is why the development shape can use one.
 
 ## Algorithms
 
-- **EC P-384 everywhere. No RSA.** One curve means one set of verifiers, one JWKS key type and one sealing scheme.
+- **EC P-384 everywhere. No RSA**, apart from the two exceptions below. One curve means one set of verifiers, one JWKS key type and one sealing scheme.
 - **The cloud-federation exception.** A key used to sign a workload token for a cloud may use the algorithm that cloud requires, each in its own slot or key and never shared with anything else:
 
 | Cloud | Algorithm |
@@ -47,6 +43,8 @@ Options: (a) always direct; (b) always derived; (c) direct on KMS, and derived o
 | Azure Entra | RSA-2048 (RS256) |
 
 See [Identity](/concepts/identity/) for how these keys are used.
+
+- **The per-audience RS256 exception.** Some verifiers cannot take an elliptic-curve signature. For an audience that is configured to need RS256, sluis signs that audience's tokens with a separate RSA key, kept in its own slot or KMS key and used for nothing else. Every other audience keeps getting EC P-384 tokens. The RSA public key is published in the JWKS beside the EC keys.
 
 ## AWS KMS layout
 
@@ -87,13 +85,7 @@ The consequence is that sealing needs the YubiKey only when opening. Retired slo
 
 ## TPM 2.0
 
-:::note[Proposed]
-A TPM 2.0 is supported as an optional add-on **in addition to** the YubiKey, not instead of it.
-:::
-
-:::caution[Open decision OD-11: Role of TPM 2.0]
-Options: an optional add-on, or not supported. The lean is an optional add-on.
-:::
+TPM 2.0 is a backlog feature. When it ships, it is an addition to the YubiKey, not a replacement for it.
 
 ## Randomness
 
@@ -109,13 +101,11 @@ The vendor kernel 5.10 that the boards run for now makes `sluis doctor` warn on 
 
 ## FIPS
 
-:::note[Proposed]
 The **default build** runs Go's FIPS 140-3 module in `fips140=on` mode, using the latest module. That refuses X25519 and ChaCha20 in TLS and runs pairwise consistency tests when keys are generated, and both are acceptable for sluis.
 
 A **separate build** pins the CMVP-certified module (certificate #5247, module v1.0.0) for installs that need the certificate itself.
 
 BoringCrypto is not used.
-:::
 
 ## JOSE
 

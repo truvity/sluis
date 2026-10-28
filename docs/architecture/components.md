@@ -22,11 +22,7 @@ Every major component is a ConnectRPC contract, even when caller and callee shar
 | **Ports** | state, index, keys, blob, queue, lease, cloud | Libraries linked into the component that needs them. Never a hop |
 | **Drivers** | the technology behind one port | See [Drivers](/concepts/drivers/) and the table below |
 
-The groups map onto [process roles](/architecture/processes/) (see also [Roles](/concepts/roles/)): `central` hosts the front, authn, sessions, exchange, client registry and console; `signer` hosts the key ring; `policy` hosts the decision point; `ca` hosts PKI and SSH; the audit components split across `audit-writer`, `notary` and `audit-read`; `quota` is its own role; and each integration runs as its own process.
-
-:::caution[Open decision OD-1: Name of the central process]
-`central` is a placeholder for the process that speaks the OIDC protocol. The name is open: coordinator, central, hub, and others.
-:::
+The groups map onto [process roles](/architecture/processes/) (see also [Roles](/concepts/roles/)): `entry` hosts the front, authn, sessions, exchange, client registry and console; `signer` hosts the key ring; `policy` hosts the decision point; `ca` hosts PKI and SSH; the audit components split across `audit-writer`, `notary` and `audit-read`; `quota` is its own role; and each integration runs as its own process.
 
 ## Integration contracts
 
@@ -108,15 +104,13 @@ The keys port binds a **key role** to a backend and refuses a backend that is to
 | -------- | -------- | ---------- | ------------------ |
 | `token-signing` | Never exportable; used by the `signer` role only | One `ECC_NIST_P384` key; tokens are signed directly | Slot 9c; about 8 signatures per second |
 | `ca` (X.509 and SSH) | Never exportable; used by the `ca` role only | One `ECC_NIST_P384` key | Slots 9c and 82 |
-| `notary` | Never exportable; separate custody from the audit writer | One `ECC_NIST_P384` key | A node key; clusters co-sign 2 of 3 |
+| `notary` | Never exportable; separate custody from the audit writer | One `ECC_NIST_P384` key; on T4 one per node | A node key; clusters co-sign 2 of 3 |
 | `grant` | Never exportable; used by the `policy` role only | One `ECC_NIST_P384` key | A node key |
 | `sealing` | Wraps and unwraps; takes an encryption context | One symmetric key with encryption contexts | ECDH plus HKDF (HPKE-style) with a P-384 key in slot 9d |
 
 Each backend describes itself with traits: exportability, attestation, whether a human must touch it, latency class, throughput, and who enforces which caller may use it (platform IAM, a shared driver, or nothing). The port signs bytes or digests; JWT shaping (`exp`, `iat`, lifetime limits) lives in a `jose` library in the token issuer, not in the port. `Derive` (a keyed, deterministic function) and `Agree` (ECDH) are separate operations because a PIV token has no HMAC. EC P-384 is used everywhere; the cloud-federation keys are the exception, each in its own slot or key in the algorithm that cloud requires.
 
-:::caution[Open decision OD-3: Derived signing keys on hardware shapes]
-Whether YubiKey shapes need a derived, short-lived software signing key (certified by the hardware key) for bursts is open. A P-384 signature on a YubiKey takes about 120 ms. The options are (a) always direct, (b) always derived, (c) direct on KMS and derived only for bursts on a YubiKey. The lean is (c), pending benchmarks. The same question is tracked as OD-13.
-:::
+Tokens are signed directly with the non-extractable key on every shape; there are no derived signing keys. A P-384 signature on a YubiKey takes about 120 ms, which is about 8 tokens per second, far above the measured load.
 
 ## The call graph
 
@@ -126,7 +120,7 @@ The picture below is the graph at role granularity. A solid arrow is a synchrono
 flowchart TB
   clients(["browsers, CLI, CI jobs, workloads, cert-manager, auditors"])
 
-  subgraph FRONT["Front, in central"]
+  subgraph FRONT["Front, in entry"]
     oidc["OIDC endpoints"]
     cli["CLI and CI API"]
     con["console"]
@@ -238,7 +232,7 @@ Every record kind has exactly one component that writes it. Others read through 
 | ----------- | ------ |
 | Sessions (single sign-on, per client, agent class), refresh tokens, the revocation list | sessions |
 | Authorization codes, consent, device authorization records | authorization flows |
-| Pending sign-in state, passkeys, the recovery verifier and switch | authn |
+| Pending sign-in state, the recovery verifier and switch (passkeys are a later roadmap feature) | authn |
 | Client secret versions and the client metadata cache | client registry |
 | The signing ring (published keys, key references) and its rotation schedule | key ring |
 | Last-known (held) fact sets per subject | facts broker |
@@ -278,7 +272,7 @@ The shape above is kept by tests that run in CI. They are cheap to write because
 | The deny matrix: for every pair of roles, X is denied Y's records, secrets, keys and sockets | A generated policy that is too wide |
 
 :::note[Proposed]
-Two further start-up checks are proposed but not yet agreed. First, every process that links the policy engine (central, mint, PKI, exports, quota) reports its policy digest, and the install refuses to serve if they disagree for more than a few seconds. Second, the trust graph between installs, where one sluis trusts another as an upstream or a verifier, must be a directed acyclic graph, checked when the configuration loads.
+Two further start-up checks are proposed but not yet agreed. First, every process that links the policy engine (entry, mint, PKI, exports, quota) reports its policy digest, and the install refuses to serve if they disagree for more than a few seconds. Second, the trust graph between installs, where one sluis trusts another as an upstream or a verifier, must be a directed acyclic graph, checked when the configuration loads.
 :::
 
 Next: [Processes](/architecture/processes/) says which of these components run together, and with which credentials.

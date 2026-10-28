@@ -17,13 +17,13 @@ flowchart LR
   subgraph ec2["EC2 t4g.nano (Amazon Linux 2023)"]
     direction TB
     cfd["cloudflared"]
-    central["central"]
+    entry["entry"]
     roles["signer, policy, ca, notary,<br/>audit-writer, audit-read, quota"]
-    na["node-agent"]
+    na["sluis-node"]
     kmsd["kms driver"]
     ddb["dynamodb driver"]
-    cfd -- "Unix socket" --> central
-    central --> roles
+    cfd -- "http://127.0.0.1:8080" --> entry
+    entry --> roles
     roles --> kmsd
     roles --> ddb
     na -. "per-role credentials" .-> kmsd
@@ -36,12 +36,12 @@ flowchart LR
 ## What runs where
 
 - Each process role is its own OS user and systemd unit, with the manifest generating the units. The packages install from the dnf repository; see [Packages](/distribution/packages/).
-- The `node-agent` is the only process that holds the instance role. Each role gets short-lived credentials for its own IAM role.
+- The node agent (`sluis-node`) is the only process that holds the instance role. Each role gets short-lived credentials for its own IAM role.
 - The systemd floor is 252, which Amazon Linux 2023 provides, so the units use `LoadCredentialEncrypted=` where they need it.
 - Egress is closed by default for roles that need no network (`policy` and `signer`).
 
 :::note[Proposed]
-The `node-agent` brokers per-role AWS credentials over a Unix socket and closes IMDS to every uid but its own, so that a compromised role cannot assume another role. The research behind it is on [Deployment](/architecture/deployment/).
+The node agent (`sluis-node`) brokers per-role AWS credentials over a Unix socket and closes IMDS to every uid but its own, so that a compromised role cannot assume another role. The research behind it is on [Deployment](/architecture/deployment/).
 :::
 
 ## Keys
@@ -57,16 +57,16 @@ The `node-agent` brokers per-role AWS credentials over a Unix socket and closes 
 - **State:** DynamoDB behind the state port, with conditional writes and one writer per record kind.
 - **Index:** `sqlite` on the instance.
 - **Audit outbox:** a local spool on the instance.
-- **Audit:** the `audit-writer` seals batches and writes them to the blob store; the `notary` signs the batch heads with its KMS key. A dedicated notary (EC2, a Kubernetes Job or Lambda) is optional.
+- **Audit:** the `audit-writer` seals batches and writes them to the blob store; the `notary` signs the batch heads with one KMS key. The residual risk, that root on the instance can sign, is documented under the limits below.
 - A reconciler compares the bucket listing with `audit_batches`. Verification never trusts the index or the state.
 
 ## Identity and edge
 
 - Role identity on the instance is the uid, read by peer credentials. Calls to AWS use the role's own IAM role, so CloudTrail names the role and the instance.
-- `cloudflared` runs on the instance and reaches `central` on `unix:/run/sluis/central/api.sock`. The security group needs no inbound rule for sluis.
+- `cloudflared` runs on the instance and reaches `entry`'s loopback port, `http://127.0.0.1:8080` in the example (the port is configuration). The security group needs no inbound rule for sluis.
 
 :::note[Proposed]
-`cloudflared` as the edge connector on the EC2 shapes is a proposal, not a decision. Only `central`'s public API is ever reachable from outside; how the edge reaches it is settled when the maintainer reviews this design.
+`cloudflared` as the edge connector on the EC2 shapes is a proposal, not a decision. Only `entry`'s public API is ever reachable from outside, and it listens on `127.0.0.1` only; see [Listeners](/architecture/listeners/).
 :::
 
 - The node publishes its workload-identity discovery document and JWKS, public keys only, to the distribution bucket under `nodes/<node>/`.

@@ -19,7 +19,7 @@ Examples (illustrative; the full list is generated from the manifests):
 | Audit batch sequence | `audit-writer` | The sequence must have no gaps or forks. Purge and erasure requests go to the writer through a call and are appended by it. |
 | Quota balances | `quota` | Counters change by adjust only |
 | Signing ring | `signer` | The ring is the authority for token keys |
-| Sessions | `central` | The protocol owner |
+| Sessions | `entry` | The protocol owner |
 | Directory snapshots | The facts integration that produced them | Another process holds only a cached copy with an expiry |
 | Console-set configuration | The console API | Learned and declared origins stay with their own writers |
 

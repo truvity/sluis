@@ -6,27 +6,23 @@ sidebar:
   order: 7
 ---
 
-Kubernetes is a supported shape in the model: each process role is a pod, with its own ServiceAccount, and the chart renders the network policy from the permission manifest. Whether it is in the test matrix now is undecided.
-
-:::caution[Open decision OD-7: Kubernetes in the test matrix]
-Options: test Kubernetes now, or later. The lean is later. Until it is decided, the shape is specified here and validated by the generators, but it is not covered by integration tests the way T1 to T5 are.
-:::
+Kubernetes is a supported shape in the model: each process role is a pod, with its own ServiceAccount, and the chart renders the network policy from the permission manifest. Kubernetes joins the test matrix later. Until then the shape is specified here and validated by the generators, but integration tests do not cover it the way they cover T1 to T5.
 
 ## Topology
 
 ```mermaid
 flowchart LR
   user["Browser, CLI,<br/>relying parties"] --> gw["Gateway"]
-  gw -- "route to pod port" --> central
+  gw -- "to be designed" --> entry
   subgraph ns["Namespace sluis"]
-    central["central pod"]
+    entry["entry pod"]
     signer["signer pod"]
     policy["policy pod"]
     others["ca, notary, audit-writer,<br/>audit-read, quota pods"]
     drv["driver sidecars"]
-    central --> signer
-    central --> policy
-    central --> others
+    entry --> signer
+    entry --> policy
+    entry --> others
     signer --> drv
     others --> drv
   end
@@ -56,24 +52,23 @@ Key custody for a Kubernetes cluster outside AWS is not yet decided. The shape d
 ## State and audit
 
 - **Index:** `postgres`.
-- **Audit outbox:** a queue, or blocking.
+- **Audit outbox:** Kubernetes: later.
 - Sealed batches are written to the blob store, and the `notary` signs batch heads. A dedicated notary can run as a Kubernetes Job.
 - The state store is chosen by the platform; the state port, the one-writer-per-record-kind rule and the audit chain are the same as in every shape.
-
-:::caution[Open decision OD-5: Audit outbox per shape]
-Options: spool, queue, blocking. On Kubernetes the candidates are a queue, or blocking until the batch is written.
-:::
 
 ## Identity and edge
 
 - A role's identity is its ServiceAccount, with a projected token bound to the callee's audience. The callee's interceptor verifies the token and maps `sub` to the role before it applies the call graph.
 - On AWS, EKS Pod Identity gives each ServiceAccount its own IAM role. This is the platform-native identity, used where it exists.
 - NetworkPolicy or CiliumNetworkPolicy allows only the call-graph edges. A Cilium policy can also express egress by FQDN, with default deny.
-- **Listener exception.** The pod port the gateway routes to is `central`'s TCP listener. No key-holding role and no driver has a TCP listener outside the pod.
+- **Listener.** `entry`'s public API is the only TCP listener, and no key-holding role and no driver has one. See [Listeners](/architecture/listeners/).
+
+:::note[Proposed]
+`entry` binds `127.0.0.1` on every shape, and a gateway cannot route to a loopback address in another pod. Two ways to reach it are being considered: an in-pod edge, such as a `cloudflared` sidecar that connects to the loopback port, or binding the pod IP behind a default-deny NetworkPolicy. This is still to be designed.
+:::
 
 ## Limits and residual risk
 
-- The shape is not in the test matrix yet (OD-7), so a regression here can go unnoticed longer than on T1 to T5.
+- The shape is not in the test matrix yet, so a regression here can go unnoticed longer than on T1 to T5.
 - Identity is as strong as the cluster. A cluster admin, a compromised node or a permissive admission policy can impersonate a ServiceAccount.
 - A `postgres` index adds a stateful dependency.
-- The outbox choice decides the failure mode: a queue keeps serving when the writer lags, and blocking does not.

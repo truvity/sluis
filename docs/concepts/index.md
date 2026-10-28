@@ -12,7 +12,7 @@ The concepts explain the model that the rest of the documentation relies on. Rea
 flowchart TB
   shape["Shape<br/>local, single node, cluster,<br/>EC2, Lambda, Kubernetes"]
   manifest["Permission manifest<br/>one per role"]
-  roles["Roles<br/>central, signer, policy, ca,<br/>notary, audit, quota"]
+  roles["Roles<br/>entry, signer, policy, ca,<br/>notary, audit, quota"]
   drivers["Drivers<br/>technology behind a port"]
   integ["Integrations<br/>six roles, called by core"]
   keys["Keys<br/>mode by shape"]

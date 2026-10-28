@@ -92,7 +92,7 @@ Multi-arch images (amd64 and arm64) are published to GHCR. Pull by digest.
 
 ```sh
 # Example
-docker pull ghcr.io/truvity/sluis-central@sha256:<digest>
+docker pull ghcr.io/truvity/sluis-entry@sha256:<digest>
 ```
 
 ## Helm charts

@@ -14,17 +14,17 @@ T2 is three single-board computers (arm64, 2 GB RAM, eMMC), each with its own Yu
 flowchart TB
   edge["Cloudflare edge"]
   subgraph n1["Node 1 (Ubuntu)"]
-    cfd1["cloudflared"] --> c1["central + roles"]
+    cfd1["cloudflared"] -- "127.0.0.1" --> c1["entry + roles"]
     c1 --> kh1["key-holder"] --> yk1["YubiKey 1"]
     c1 --> r1["rqlite"]
   end
   subgraph n2["Node 2 (Rocky)"]
-    cfd2["cloudflared"] --> c2["central + roles"]
+    cfd2["cloudflared"] -- "127.0.0.1" --> c2["entry + roles"]
     c2 --> kh2["key-holder"] --> yk2["YubiKey 2"]
     c2 --> r2["rqlite"]
   end
   subgraph n3["Node 3 (Ubuntu)"]
-    cfd3["cloudflared"] --> c3["central + roles"]
+    cfd3["cloudflared"] -- "127.0.0.1" --> c3["entry + roles"]
     c3 --> kh3["key-holder"] --> yk3["YubiKey 3"]
     c3 --> r3["rqlite"]
   end
@@ -53,22 +53,15 @@ flowchart TB
 
 ## State and audit
 
-- **State:** rqlite across three nodes. Raft peer traffic uses the state driver's own TCP port over mTLS.
+- **State:** rqlite across three nodes. Raft peer traffic uses the state driver's own TCP port over mTLS. It is the only TCP port between the nodes.
 - **Index:** `sqlite` on each node. It lags the chain and is never trusted by verification.
-- **Audit:** each node's `audit-writer` drains its own local spool.
-
-:::note[Proposed]
-The `notary` co-signs batch heads 2 of 3 across the nodes, with no separate notary YubiKey. A batch head carries the signatures of two nodes, so one compromised node cannot extend the chain alone.
-:::
-
-:::caution[Open decision OD-4: Inter-node ports]
-Options: only the Raft driver port over mTLS; or that plus a role port. The lean is the Raft driver port only.
-:::
+- **Audit:** the audit outbox is a local spool on each node, and each node's `audit-writer` drains its own spool.
+- **Notary:** the `notary` co-signs batch heads 2 of 3 across the nodes, with no separate notary YubiKey. A batch head carries the signatures of two nodes, so one compromised node cannot extend the chain alone.
 
 ## Identity and edge
 
-- Role identity is the uid on the node, by peer credentials. Across nodes, calls use mTLS with a per-role leaf certificate from the node identity.
-- Each node runs its own `cloudflared`. The ingress service is `unix:/run/sluis/central/api.sock`, so no TCP port is opened for sluis, apart from the Raft port between the nodes.
+- Role identity is the uid on the node, by peer credentials. Across nodes, the state drivers talk Raft over mTLS, with a certificate from the node identity. No role is called across nodes.
+- Each node runs its own `cloudflared`. The ingress service is `http://127.0.0.1:8080`, `entry`'s loopback port (an example port), so no inbound TCP port is opened for sluis, and the only TCP port between the nodes is the Raft port.
 - Each node is its own issuer for workload identity: `https://<issuer>/nodes/<node>/`. A cloud role trusts only the issuers of the nodes that run it.
 
 ## Board OS exception
@@ -79,6 +72,5 @@ The boards run the vendor's Ubuntu 22.04 for now, a declared exception. systemd 
 
 - Raft tolerates the loss of one node of three. Losing two stops writes, and sign-in stops with them, because state is needed for sessions and grants.
 - The three boards usually share a site, a network and a power feed. T2 is not a multi-site design.
-- The notary co-signing is proposed and awaits the maintainer's decision.
 - A node's YubiKey and PIN guard its key. Physical access to a board with its key and PIN allows signing as that node, which the 2-of-3 notary rule limits for the audit chain but not for tokens.
 - Mixed distributions widen what has to be tested, because the systemd, kernel and library versions differ between them.
