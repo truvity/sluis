@@ -33,13 +33,20 @@ const decisionsLoader = (): Loader => ({
   },
 });
 
+// Every page says how far its content is from being built: `target` is a
+// design that is not built, `partial` is partly built, `shipped` describes
+// what exists. The badge, the sidebar, llms.txt and the CI check read it.
+// `badge: false` is for the pages built in src/pages (the 404 page, the ADRs),
+// which are not documentation of a feature and show no badge.
+export const PAGE_STATUSES = ['target', 'partial', 'shipped'] as const;
+
 export const collections = {
   docs: defineCollection({
     loader: glob({
       base: 'src/content/docs',
       pattern: ['**/[^_]*.{md,mdx}', '!decisions/**'],
     }),
-    schema: docsSchema(),
+    schema: docsSchema({ extend: z.object({ status: z.enum(PAGE_STATUSES), badge: z.boolean().default(true) }) }),
   }),
   i18n: defineCollection({ loader: i18nLoader(), schema: i18nSchema() }),
   decisions: defineCollection({

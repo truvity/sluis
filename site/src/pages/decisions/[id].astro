@@ -13,7 +13,12 @@ const { Content } = await render(entry);
 ---
 
 <StarlightPage
-  frontmatter={{ title: decisionTitle(entry), description: decisionDescription(entry) }}
+  frontmatter={{
+    title: decisionTitle(entry),
+    description: decisionDescription(entry),
+    status: 'shipped',
+    badge: false,
+  }}
 >
   <Content />
   <p>
