@@ -1,0 +1,14 @@
+---
+// Starlight's page title with the page's status as a badge beside it. The
+// meanings are explained in docs/contributing.md ("Writing target-state pages").
+import Default from '@astrojs/starlight/components/PageTitle.astro';
+import { STATUSES } from '../status';
+
+const { status, badge } = Astro.locals.starlightRoute.entry.data;
+const info = STATUSES[status];
+---
+
+<div class="sluis-title">
+  <Default {...Astro.props} />
+  {badge && <span class="sluis-status-badge" data-status={status} title={info.hint} tabindex="0">{info.label}</span>}
+</div>

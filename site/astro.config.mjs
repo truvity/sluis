@@ -3,6 +3,8 @@ import starlight from '@astrojs/starlight';
 import mermaid from 'astro-mermaid';
 import starlightLinksValidator from 'starlight-links-validator';
 import starlightLlmsTxt from 'starlight-llms-txt';
+import { satteri } from '@astrojs/markdown-satteri';
+import { statusPlugin } from './src/remark-status.mjs';
 
 // https://sluis.id. The custom domain and its DNS are managed outside this
 // repository; the site is served from the root, with the v1 documentation
@@ -15,6 +17,10 @@ export default defineConfig({
     // warning is expected for it and the build allows no other warning.
     build: { chunkSizeWarningLimit: 4000 },
   },
+  // Astro's Markdown processor is Sätteri; statusPlugin puts each page's status
+  // in its first paragraph (src/remark-status.mjs). Starlight adds its own
+  // plugins (asides, heading links) to the same processor.
+  markdown: { processor: satteri({ mdastPlugins: [statusPlugin] }) },
   integrations: [
     // Must come before Starlight so the ```mermaid fences are claimed first.
     mermaid({ theme: 'neutral', autoTheme: true, enableLog: false }),
@@ -47,9 +53,19 @@ export default defineConfig({
           }),
         },
       ],
+      // The status badge beside each page title, its colours and the rule that
+      // hides the status paragraph on the page (it stays in llms.txt).
+      components: { PageTitle: './src/components/PageTitle.astro' },
+      customCss: ['./src/styles/status.css'],
+      routeMiddleware: './src/route-middleware.ts',
       sidebar: [
         { label: 'Overview', slug: 'overview' },
+        { label: 'Concepts', items: [{ autogenerate: { directory: 'concepts' } }] },
         { label: 'Architecture', items: [{ autogenerate: { directory: 'architecture' } }] },
+        { label: 'Shapes', items: [{ autogenerate: { directory: 'shapes' } }] },
+        { label: 'Tutorials', items: [{ autogenerate: { directory: 'tutorials' } }] },
+        { label: 'Distribution', items: [{ autogenerate: { directory: 'distribution' } }] },
+        { label: 'Open decisions', slug: 'open-decisions' },
         { label: 'Decisions', link: '/decisions/' },
         { label: 'Roadmap', slug: 'roadmap' },
         { label: 'Features: v1 and v2', slug: 'features' },
@@ -66,7 +82,9 @@ export default defineConfig({
         starlightLlmsTxt({
           projectName: 'sluis',
           description:
-            'sluis is a pluggable identity and access broker for people, robots and external systems. v2 is being designed in the open; v1 documentation is at /v1/.',
+            'sluis is a pluggable identity and access broker for people, robots and external systems. v2 is being designed in the open; v1 documentation is at /v1/. Each page starts with its status: target state, partly built or shipped.',
+          // Keep the Proposed asides (notes) in llms-small.txt as well.
+          minify: { note: false },
         }),
       ],
     }),
