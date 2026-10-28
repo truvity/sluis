@@ -20,9 +20,11 @@ site-build: site-install
     site/scripts/strict-build.sh
     site/scripts/check-built.sh site/dist
 
-# Front-matter descriptions of 40 to 160 characters on every page in docs/.
+# Front-matter descriptions of 40 to 160 characters, a valid status, and
+# registered open-decision ids on every page in docs/.
 site-lint:
     site/scripts/check-descriptions.mjs
+    site/scripts/check-status.mjs
 
 # Every link in the built site, internal and external (lychee.toml). Needs `just site-build`.
 site-links:
