@@ -1,6 +1,6 @@
 ---
 title: Drivers
-description: "Ports and drivers: platform-started services on Unix sockets that nobody execs, per-role and shared instances, the uid rule, shared drivers and the on-disk layout."
+description: "Ports and drivers: platform-started services on Unix sockets that nobody execs, per-role and shared instances, the uid rule, shared drivers and layout."
 status: target
 sidebar:
   order: 2
