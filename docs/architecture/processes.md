@@ -49,7 +49,7 @@ All integrations share one shape: ingress only from `central` and from the decis
 
 Integrations with no standing work are not resident. A directory refresh or a reconcile tick runs from a systemd timer and exits. A request-driven one starts on its socket and exits when idle.
 
-## Mediators and the node agent
+## Shared drivers and the node agent
 
 Two roles exist because some backends cannot tell their callers apart. Each is a **shared driver**: one process serves every role, authenticates the caller by peer credentials (`SO_PEERCRED`), checks an ACL generated from the manifests, performs the operation, and audits every use before acting.
 
@@ -58,7 +58,7 @@ Two roles exist because some backends cannot tell their callers apart. Each is a
 | `key-holder` | The keys driver for an HSM, a YubiKey, or a software key | `(caller role, key purpose, operation)`. Callers never see a PIN, an authentication key or key material. The device node is mode 0600 for its uid only |
 | `state-owner` | rqlite or the Raft store, as the state driver | `(caller role, record kind, operation)`, and **one writer role per record kind**. rqlite binds to loopback with one credential only it can read |
 
-Neither has internet egress, loads plugins, or has reconcile logic. One code path per operation, fuzz-tested decoding. Their blast radius is the whole resource class, and that price is paid once, in a small audited process, rather than in every owner. With AWS KMS or DynamoDB the platform does this job (a key policy and a per-role identity; IAM leading-key conditions), so the mediator is not used there.
+Neither has internet egress, loads plugins, or has reconcile logic. One code path per operation, fuzz-tested decoding. Their blast radius is the whole resource class, and that price is paid once, in a small audited process, rather than in every owner. With AWS KMS or DynamoDB the platform does this job (a key policy and a per-role identity; IAM leading-key conditions), so the shared driver is not used there.
 
 The **node agent** (self-hosted shapes) is the root-owned process that is the node's trusted base. It issues a short-lived workload JWT per role, brokers cloud credentials, pulls and verifies signed configuration and binaries, and starts units. Everything in [Deployment](/architecture/deployment/) depends on it staying small.
 
@@ -130,7 +130,7 @@ flowchart LR
 
     quota["quota"]
 
-    subgraph med["Mediators, shared drivers"]
+    subgraph med["Shared drivers"]
       kh["key-holder"]
       so["state-owner"]
     end

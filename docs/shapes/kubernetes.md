@@ -39,7 +39,7 @@ flowchart LR
 ## What runs where
 
 - One pod per process role, each with its own ServiceAccount. A driver runs as a sidecar of the role that uses it, or as its own pod when it is shared.
-- A shared driver (the `key-holder` and `state-owner` mediators) authenticates each caller and checks an ACL generated from the manifest.
+- A shared driver (`key-holder` or `state-owner`) authenticates each caller and checks an ACL generated from the manifest.
 - Helm charts are OCI artifacts with images pinned by digest. They are built from the release output; see [Packages](/distribution/packages/).
 - Roles run non-root with a read-only root filesystem, no capabilities and the runtime default seccomp profile.
 - sluis does not write Kubernetes objects. It exports, and clusters pull. cert-manager and trust-manager stay as clients of sluis.

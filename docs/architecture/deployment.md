@@ -1,6 +1,6 @@
 ---
 title: Deployment
-description: "L3, enforcement per shape: how IAM, mediators, systemd, nftables and Landlock hold each role to its permission manifest, and what stays residual risk."
+description: "L3, enforcement per shape: how IAM, shared drivers, systemd, nftables and Landlock hold each role to its permission manifest, and what stays residual risk."
 status: target
 sidebar:
   order: 4
@@ -11,13 +11,13 @@ The [permission manifest](/architecture/#the-permission-manifest-is-the-spine) s
 Two axes are enforced separately:
 
 - **The shape axis** decides who the process is and how the platform proves it.
-- **The backend axis** decides what the resource can refuse on its own. Where a backend cannot tell its callers apart, a mediator owns the resource.
+- **The backend axis** decides what the resource can refuse on its own. Where a backend cannot tell its callers apart, a shared driver owns the resource.
 
 ## Enforcement per shape
 
 The table reads shape by mechanism. Every mechanism is generated from the manifests; none is written by hand.
 
-| Shape | Identity to cloud resources | Mediator ACLs | systemd sandboxing | nftables per uid | Landlock |
+| Shape | Identity to cloud resources | Shared-driver ACLs | systemd sandboxing | nftables per uid | Landlock |
 | ----- | --------------------------- | ------------- | ------------------ | ---------------- | -------- |
 | **T0 Local** (development) | None. Software keys; nothing is production | `state-owner` and `key-holder` optional | Not used in a container | Not used | Not used |
 | **T1 Single node** (one single-board computer, YubiKey) | Workload JWT per role; cloud-free needs no cloud credential | `key-holder` for the YubiKey; `state-owner` in front of the single-node store | Every unit | Default-deny egress with per-uid allow-lists | Not on the current board image (kernel 5.10); the other layers carry the load |
@@ -71,9 +71,9 @@ KMS key policies name one role each. On AWS there is one symmetric key (`ENCRYPT
 
 On EC2 the instance role holds only what the node agent needs: the permission to hand out the per-role identities, to read signed configuration and binaries, and to complete lifecycle hooks. It holds no KMS, no secrets and no state access, and every key policy denies it.
 
-### Mediator ACLs
+### Shared-driver ACLs
 
-Where the backend cannot separate callers, a mediator owns it and applies an ACL generated from the manifests.
+Where the backend cannot separate callers, a shared driver owns it and applies an ACL generated from the manifests.
 
 | Backend | Separates callers itself? | Who enforces |
 | ------- | ------------------------- | ------------ |
@@ -83,7 +83,7 @@ Where the backend cannot separate callers, a mediator owns it and applies an ACL
 | rqlite | No: permissions are per operation, not per table or record | `state-owner`, with `(role, record kind, operation)` and one writer per kind |
 | Embedded Raft | No: it is a library | `state-owner` is the Raft node; the state machine applies the ACL on every command |
 
-Both mediators emit the audit record first, then act.
+Both shared drivers emit the audit record first, then act.
 
 ### systemd sandboxing
 
@@ -139,7 +139,7 @@ Some guarantees cannot be matched without hardware isolation per process. They a
 | **Memory reads** | Processes are long-lived, and secrets and a decrypted signing ring stay in memory. A same-uid or root attacker reading memory, or a core dump, sees them | `ProtectProc=invisible`, `PrivateTmp`, no core dumps, no ptrace, restarts on rotation. Authority keys never enter process memory: they stay in KMS or on the token |
 | **Kernel or sandbox escape** | The roles share one kernel | Minimal syscalls, `NoNewPrivileges`, Landlock; accept |
 | **The node agent is a trusted base** | It can obtain credentials for every role on its node | Keep it tiny and audited; no parsing of caller input beyond a fixed protocol |
-| **A mediator is one door** | A compromised `key-holder` can use every key it serves while it runs; a compromised `state-owner` can read and write every record. Neither can extract the keys | One small process, no egress, fuzzed decoding, an audit record before every action |
+| **A shared driver is one door** | A compromised `key-holder` can use every key it serves while it runs; a compromised `state-owner` can read and write every record. Neither can extract the keys | One small process, no egress, fuzzed decoding, an audit record before every action |
 | **One PIN per YubiKey** | A PIV device has no per-slot caller separation. Unattended signing needs a touch policy of never, so physical theft of a powered host is use | One device per trust domain; the root pair offline |
 | **A cluster is one trust domain** | A compromised node reads replicated state | The blast radius is the install, not the estate |
 | **Shared egress address** | One NAT means no per-role source identity at the network layer. A proxy is a software control | Make the proxy mandatory by firewall |

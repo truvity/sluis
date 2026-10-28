@@ -10,7 +10,7 @@ sluis keeps records: sessions, directory facts, rate-limit counters, the signing
 
 ## One writer per record kind
 
-Every **record kind** has exactly one **record writer**: one role that is allowed to create and change it. Other roles may read it, if their manifest says so, and may not write it. The writer of a kind is written down in the manifests and enforced by the `state-owner` mediator, which checks every call against `(caller role, record kind, operation)` and lets exactly one role write each kind. See [Drivers](/concepts/drivers/).
+Every **record kind** has exactly one **record writer**: one role that is allowed to create and change it. Other roles may read it, if their manifest says so, and may not write it. The writer of a kind is written down in the manifests and enforced by the `state-owner` shared driver, which checks every call against `(caller role, record kind, operation)` and lets exactly one role write each kind. See [Drivers](/concepts/drivers/).
 
 Examples (illustrative; the full list is generated from the manifests):
 
