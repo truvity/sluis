@@ -8,6 +8,8 @@ sidebar:
 
 An **integration** connects sluis to something outside it: a sign-in provider, a directory, a cloud, a chat workspace. Each integration is its own process and holds only its own vendor credential. It implements one of six **integration roles**, which are ConnectRPC contracts over one shared base contract.
 
+This page is the model. For what each integration is *for*, what sluis asks its vendor for and how to connect it, see [Integrations](/integrations/) and the [setup patterns](/integrations/connecting/). For the standards the integrations and the protocol follow, see the [standards register](/standards/).
+
 ## The six roles
 
 | Role | It answers or does | Examples of what it connects |
