@@ -8,7 +8,7 @@ sidebar:
 
 A shape is a supported way of running sluis. Each shape fixes the hardware, the key mode, the state store and the audit path, and sluis enforces its least-privilege rules in each one with the means that platform offers. The [permission manifest](/architecture/deployment/) of every process role is the same in all shapes; the shape decides how it is turned into units, policies and ACLs.
 
-There are six shapes, T0 to T5, and Kubernetes, which is supported in the model.
+There are seven shapes, T0 to T6. T6, Kubernetes, is in design and test scope now, and its design is proposed.
 
 ## Comparison
 
@@ -20,9 +20,9 @@ There are six shapes, T0 to T5, and Kubernetes, which is supported in the model.
 | [T3 AWS EC2 single](/shapes/aws-ec2-single/) | One `t4g.nano`, Amazon Linux 2023 | AWS KMS | DynamoDB | `sqlite` | Local spool | Unix uid per role; per-role AWS credentials (proposed) | `cloudflared` to `entry`'s loopback port (proposed) | Integration tests and tutorials |
 | [T4 AWS EC2 cluster](/shapes/aws-ec2-cluster/) | An ASG of three `t4g.nano`, Amazon Linux 2023 | AWS KMS | rqlite (Raft) | `sqlite` | Local spool per node | As T3, one issuer per node; per-role AWS credentials (proposed) | `cloudflared` on each node (proposed) | The first build target; integration tests and tutorials |
 | [T5 AWS Lambda](/shapes/aws-lambda/) | One Lambda function per role | AWS KMS | DynamoDB | None: a separate audit install holds it | SQS queue | The function's IAM role | API Gateway, through the Lambda Web Adapter to `entry`'s loopback port | Integration tests and tutorials |
-| [Kubernetes](/shapes/kubernetes/) | Pods, one per role | By platform: KMS on AWS | By platform | `postgres` | Later | A ServiceAccount per role | An in-pod edge or the pod IP (to be designed) | In the model; in the matrix later |
+| [T6 Kubernetes](/shapes/kubernetes/) (proposed) | A node pod and an audit pod, a container per role | AWS KMS on EKS; no mode yet for other clusters (OD-20) | DynamoDB on EKS (OD-21) | `postgres` | SQS on EKS (OD-22) | Projected ServiceAccount tokens, one audience per role (OD-19) | An edge relay or `cloudflared` (OD-24) | A kind smoke test on every pull request, and a real EKS cluster nightly (proposed) |
 
-The edge connector and the Kubernetes edge are marked on their own pages where they are proposed or open.
+The edge connector and everything in the T6 row are marked on their own pages where they are proposed or open. The T6 row is the proposal in full, and its open points are [OD-17 to OD-30](/open-decisions/#od-17).
 
 :::note[Proposed]
 The per-role AWS credentials on T3 and T4 (the node agent, `sluis-node`, which brokers them and closes IMDS) and `cloudflared` as the edge connector on the EC2 shapes are proposals, not decisions.
@@ -30,7 +30,7 @@ The per-role AWS credentials on T3 and T4 (the node agent, `sluis-node`, which b
 
 The audit path in all shapes is the one on [Audit](/concepts/audit/): every success is audited, records go to an outbox first and then into sealed batches, and the notary signs batch heads into a hash chain.
 
-Integration tests and the [tutorials](/tutorials/) run on all five shapes T1 to T5. Development uses T0.
+Integration tests and the [tutorials](/tutorials/) run on the five shapes T1 to T5. T6 is in test scope too, with the tests described on its page. Development uses T0.
 
 ## Choosing a shape
 
@@ -43,7 +43,7 @@ flowchart TD
   ha1 -- no --> t1["T1 Single node"]
   ha1 -- yes --> t2["T2 Cluster"]
   cloud -- yes --> k8s{"Already run<br/>Kubernetes?"}
-  k8s -- yes --> kube["Kubernetes"]
+  k8s -- yes --> kube["T6 Kubernetes"]
   k8s -- no --> ops{"Want no servers<br/>to patch?"}
   ops -- yes --> t5["T5 AWS Lambda"]
   ops -- no --> ha2{"Survive the loss<br/>of an instance?"}
@@ -58,7 +58,7 @@ Pick by the failure you have to survive and the key custody you accept:
 - **On-premises with a spare:** T2. Three boards run rqlite, and a signing key lives on each node's YubiKey. The audit notary co-signs batch heads 2 of 3 across nodes.
 - **AWS, always on, minimal moving parts:** T3 for one instance, T4 for three. T4 is the first shape to be built, and the other shapes follow its design.
 - **AWS, no hosts to operate:** T5. Each role is a function. Zip packaging and the Lambda size limits shape the build.
-- **You already run a cluster:** Kubernetes. Each role is a pod under its own ServiceAccount.
+- **You already run a cluster:** T6 Kubernetes (proposed). A node pod and an audit pod hold the roles, each in a container with its own token audience. The first release is EKS with AWS KMS.
 
 A key mode follows from the shape, not from a switch: KMS on AWS shapes, a YubiKey on board shapes, a software key only in development.
 
@@ -78,4 +78,4 @@ The two board shapes, T1 and T2, run the board vendor's Ubuntu 22.04 for now. Th
 - [AWS EC2 single](/shapes/aws-ec2-single/): T3, KMS and DynamoDB.
 - [AWS EC2 cluster](/shapes/aws-ec2-cluster/): T4, KMS and Raft.
 - [AWS Lambda](/shapes/aws-lambda/): T5, a function per role.
-- [Kubernetes](/shapes/kubernetes/): pods per role.
+- [Kubernetes](/shapes/kubernetes/): T6, a node pod and an audit pod (proposed).
