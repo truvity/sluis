@@ -39,8 +39,7 @@ outbox_kinds:
     drain: "The event source mapping delivers the backlog in batches as fast as the function and its archive and state limits allow. A batch that fails returns its messages; dedupe by record id absorbs repeats. Messages that fail repeatedly go to the dead-letter queue."
     bound: "Queue retention (up to 14 days), function concurrency, archive and state throughput"
     instance: "per-role: each producer sends under its own IAM role"
-    status: open
-    od: OD-5
+    status: agreed
 
 # ---------------------------------------------------------------------------
 # Audit-specific facts per shape
@@ -54,27 +53,27 @@ shapes:
     assumed: true
     note: "T0 uses a local spool, a software key and a local S3-compatible store as an assumption: the agreed outbox list names the other shapes only."
   T1:
-    notary_key: "the node's own key on its YubiKey (one key per node, no separate notary YubiKey), used by the notary's own Unix user through the shared key driver"
+    notary_key: "one key, the node's own on its YubiKey, used by the notary's own Unix user through the shared key driver. Residual risk: root on the node can sign."
     blob: "an S3-compatible store (for example R2)"
     lock: "object lock per install"
     cluster: "single node"
   T2:
-    notary_key: "each node co-signs batch heads (2 of 3) with its own YubiKey key; no separate notary YubiKey (proposed)"
+    notary_key: "each node co-signs batch heads (2 of 3) with its own YubiKey key; no separate notary YubiKey"
     blob: "an S3-compatible store (for example R2)"
     lock: "object lock per install"
     cluster: "three nodes; each node's writer drains its own spool"
   T3:
-    notary_key: "its own KMS key; the key policy names the notary role only"
+    notary_key: "one KMS key; the key policy names the notary role only. Residual risk: root on the node can sign."
     blob: "an S3 bucket"
     lock: "object lock per install"
     cluster: "single node"
   T4:
-    notary_key: "each node co-signs batch heads (2 of 3) with its authority key in KMS (one ECC_NIST_P384 key per purpose); only the notary role may sign with it (proposed)"
+    notary_key: "each node co-signs batch heads (2 of 3) with its own KMS ECC_NIST_P384 signing key (one per node, which also signs that node's workload JWTs); only the notary role may sign with it. A shared key cannot support co-signing, because KMS Sign takes no encryption context"
     blob: "an S3 bucket"
     lock: "object lock per install"
     cluster: "three instances; each node's writer drains its own spool"
   T5:
-    notary_key: "its own KMS key; the key policy names the notary function's role only. A dedicated notary (a Lambda function) is optional."
+    notary_key: "a single notary key, used only by the notary function's role. There is no co-signing; the function role is the isolation."
     blob: "an S3 bucket"
     lock: "object lock per install"
     cluster: "managed by the platform"
@@ -104,17 +103,17 @@ nodes:
     l2: browser or CLI
     l3: outside sluis
     does: A person searching, getting, exporting or erasing audit records.
-  central:
+  entry:
     lane: 0
     row: 2.3
     cls: role
-    role: central
-    title: central
+    role: entry
+    title: entry
     l2: behind the edge
-    l3: Unix socket
-    l3_lambda: loopback TCP
+    l3: tcp 127.0.0.1
+    l3_lambda: tcp 127.0.0.1
     does: Takes the public request, forwards search to audit-read, and is also a producer.
-    holds: Its Unix socket, reached through the edge connector
+    holds: Its loopback TCP port, reached through the edge connector
     never: Any key; a way to read the outbox
   producers:
     lane: 0
@@ -135,7 +134,7 @@ nodes:
     l3: sluis recovery
     does: The break-glass tool. Its proof needs no Kubernetes (a hardware-token challenge or SRP). It spools its audit record locally and delivers it later, instead of blocking.
     holds: A local spool on the machine it runs on
-    never: A dependency on central, the state store or the writer
+    never: A dependency on entry, the state store or the writer
   outbox:
     lane: 1
     row: 2.3
@@ -181,7 +180,7 @@ nodes:
     role: audit-read
     title: audit-read
     l2_lambda: Lambda function
-    l3_lambda: called by central
+    l3_lambda: called by entry
     does: Applies the batch stream to the node's index, answers search and records each read.
     holds: Read on audit_batches and the archive; the node's index
     never: Write on the archive; any signing key
@@ -236,12 +235,12 @@ nodes:
     does: "Object storage, S3-compatible or S3. The record lives here: batch objects, seals and the trust log. With object lock nobody can overwrite or delete before retention ends. A put never replaces an object."
 
 calls:
-  - { f: client, t: central, m: "POST /token", d: "Token exchange; success or refusal, both are audited." }
-  - { f: auditor, t: central, m: HTTPS, d: "Search, get, export or erasure request." }
-  - { f: central, t: producers, m: "Decide, Sign", d: "Asks the other roles to verify, decide and sign." }
-  - { f: central, t: outbox, m: Append, d: Records the exchange. }
+  - { f: client, t: entry, m: "POST /token", d: "Token exchange; success or refusal, both are audited." }
+  - { f: auditor, t: entry, m: HTTPS, d: "Search, get, export or erasure request." }
+  - { f: entry, t: producers, m: "Decide, Sign", d: "Asks the other roles to verify, decide and sign." }
+  - { f: entry, t: outbox, m: Append, d: Records the exchange. }
   - { f: producers, t: outbox, m: Append, d: Record of what each role did. }
-  - { f: central, t: read, m: Search, d: "Forwards the search with the caller's grant." }
+  - { f: entry, t: read, m: Search, d: "Forwards the search with the caller's grant." }
   - { f: writer, t: outbox, m: "Receive, Ack", d: "Takes records, acknowledges after the batch is registered." }
   - { f: read, t: outbox, m: Append, d: Records each read of the trail. }
   - { f: recovery, t: rspool, m: Append, d: "Break-glass record, fsync'd locally." }
@@ -264,13 +263,13 @@ flows:
     why: From a workload's request to a sealed batch and a searchable record.
     steps:
       - title: A workload exchanges a token
-        nodes: [client, central]
-        edges: ["client>central"]
-        text: A CI job or workload posts its token through the edge connector to central. Whatever happens next, success or refusal, leaves a record.
-      - title: central asks the other roles
-        nodes: [central, producers]
-        edges: ["central>producers"]
-        text: central has the subject verified, asks policy to decide and signer to sign. A refusal stops here with a reason, and is audited the same way.
+        nodes: [client, entry]
+        edges: ["client>entry"]
+        text: A CI job or workload posts its token through the edge connector to entry. Whatever happens next, success or refusal, leaves a record.
+      - title: entry asks the other roles
+        nodes: [entry, producers]
+        edges: ["entry>producers"]
+        text: entry has the subject verified, asks policy to decide and signer to sign. A refusal stops here with a reason, and is audited the same way.
       - title: Each role appends its record
         nodes: [producers, outbox]
         edges: ["producers>outbox"]
@@ -278,10 +277,10 @@ flows:
         variants:
           - { shapes: [T0, T1, T2, T3, T4], text: "The spool driver checks the caller's peer credentials and notes which role appended." }
           - { shapes: [T5], text: "Each role sends under its own IAM role." }
-      - title: central records the exchange and answers
-        nodes: [central, outbox, client]
-        edges: ["central>outbox"]
-        text: central appends the exchange record. The outbox answers that it is durable, and central then answers the client. The request never waited for the writer, the archive or the index.
+      - title: entry records the exchange and answers
+        nodes: [entry, outbox, client]
+        edges: ["entry>outbox"]
+        text: entry appends the exchange record. The outbox answers that it is durable, and entry then answers the client. The request never waited for the writer, the archive or the index.
         variants:
           - { shapes: [T0, T1, T2, T3, T4], text: "Durable means the record was appended to the local spool and fsync'd." }
           - { shapes: [T5], text: "Durable means SQS accepted the message." }
@@ -290,7 +289,7 @@ flows:
         edges: ["writer>outbox"]
         text: The writer receives records, validates each against the catalogue, stamps recorded_at and the observer from the verified caller, and skips a record id it has already written.
         variants:
-          - { shapes: [T2, T4], text: "Each node's writer drains its own spool (proposed)." }
+          - { shapes: [T2, T4], text: "Each node's writer drains its own spool." }
       - title: The batch object is put
         nodes: [writer, blobdrv, archive]
         edges: ["writer>blobdrv", "blobdrv>archive"]
@@ -308,7 +307,10 @@ flows:
         edges: ["notary>keysdrv", "keysdrv>keystore"]
         text: It builds the seal, signs the batch head and chains it to the previous seal. The writer has no path to this key.
         variants:
-          - { shapes: [T2, T4], text: "Proposed: the notary co-signs batch heads 2 of 3 across the nodes, with no separate notary YubiKey." }
+          - { shapes: [T2], text: "The notary co-signs batch heads 2 of 3 across the nodes, with no separate notary YubiKey." }
+          - { shapes: [T4], text: "Each node signs with its own KMS signing key, and the notary co-signs batch heads 2 of 3 across the nodes." }
+          - { shapes: [T1, T3], text: "One key signs the head. Root on the node can sign; that residual risk is written down." }
+          - { shapes: [T5], text: "A single notary key, used only by the notary function's role. There is no co-signing; the function role is the isolation." }
       - title: The seal goes to the archive
         nodes: [notary, blobdrv, archive]
         edges: ["notary>blobdrv", "blobdrv>archive"]
@@ -322,13 +324,13 @@ flows:
     why: audit-read answers from the node's index; the read is itself audited.
     steps:
       - title: The auditor sends a search
-        nodes: [auditor, central]
-        edges: ["auditor>central"]
-        text: The auditor opens the console or CLI and sends a search with their session token to central, which maps it to a grant.
-      - title: central forwards it to audit-read
-        nodes: [central, read]
-        edges: ["central>read"]
-        text: central calls audit-read on its socket. The grant goes with the call and becomes one more term of the query, not a check beside it.
+        nodes: [auditor, entry]
+        edges: ["auditor>entry"]
+        text: The auditor opens the console or CLI and sends a search with their session token to entry, which maps it to a grant.
+      - title: entry forwards it to audit-read
+        nodes: [entry, read]
+        edges: ["entry>read"]
+        text: entry calls audit-read on its socket. The grant goes with the call and becomes one more term of the query, not a check beside it.
         variants:
           - { shapes: [T5], text: "The call is a Lambda invoke." }
       - title: The query runs on the local index
@@ -344,21 +346,21 @@ flows:
         edges: ["read>blobdrv", "blobdrv>archive"]
         text: When the auditor opens a single record, audit-read fetches the batch object from the archive and returns the line, which carries its own hash. The index is never the only copy.
       - title: The answer says how fresh it is
-        nodes: [central, auditor]
-        edges: ["auditor>central"]
+        nodes: [entry, auditor]
+        edges: ["auditor>entry"]
         text: The answer can name this node's cursor and the leader sequence it last saw, so the auditor knows how far behind it is (illustrative). Records still waiting in the outbox are not searchable yet.
   - id: erasure
     title: An erasure reaches every node
     why: A purge travels in the same ordered stream as the records it affects.
     steps:
       - title: An operator asks for an erasure
-        nodes: [auditor, central]
-        edges: ["auditor>central"]
+        nodes: [auditor, entry]
+        edges: ["auditor>entry"]
         text: An operator with the erasure grant asks to erase an identity under one tenant, with a reason. A grant to read is not a grant to erase.
-      - title: central records the request
-        nodes: [central, outbox]
-        edges: ["central>outbox"]
-        text: "central appends an erasure record: who asked, what scope, why. It returns when that record is durable in the outbox, like any other request."
+      - title: entry records the request
+        nodes: [entry, outbox]
+        edges: ["entry>outbox"]
+        text: "entry appends an erasure record: who asked, what scope, why. It returns when that record is durable in the outbox, like any other request."
       - title: The writer cuts a purge entry
         nodes: [writer, outbox]
         edges: ["writer>outbox"]
@@ -382,22 +384,22 @@ flows:
       - title: The platform is damaged
         nodes: [recovery]
         edges: []
-        down: [writer, central]
-        text: central, the state store or the writer is down and an operator has to act, for example to restore a key or re-enrol a node. Recovery is the break-glass path and needs none of them.
+        down: [writer, entry]
+        text: entry, the state store or the writer is down and an operator has to act, for example to restore a key or re-enrol a node. Recovery is the break-glass path and needs none of them.
       - title: Recovery spools its record first
         nodes: [recovery, rspool]
         edges: ["recovery>rspool"]
-        down: [writer, central]
+        down: [writer, entry]
         text: Before the action, recovery appends its audit record (who, what, why) to a spool on the machine it runs on and fsyncs it. This is a local file on every shape.
       - title: The action goes ahead
         nodes: [recovery]
         edges: []
-        down: [writer, central]
+        down: [writer, entry]
         text: Recovery does not wait on audit. The outbox, the writer, the archive and the index can all be down.
       - title: The platform comes back
-        nodes: [writer, outbox, central]
+        nodes: [writer, outbox, entry]
         edges: []
-        text: central, the state store and the writer are running again, and the normal outbox accepts records again.
+        text: entry, the state store and the writer are running again, and the normal outbox accepts records again.
       - title: The spool is replayed
         nodes: [rspool, outbox]
         edges: ["rspool>outbox"]
@@ -418,10 +420,10 @@ flows:
         variants:
           - { shapes: [T2, T4], text: "On a cluster another node's writer keeps draining its own spool; this is the case where no writer can run." }
       - title: Requests keep succeeding
-        nodes: [client, central, producers, outbox]
-        edges: ["client>central", "central>outbox", "producers>outbox"]
+        nodes: [client, entry, producers, outbox]
+        edges: ["client>entry", "entry>outbox", "producers>outbox"]
         down: [writer]
-        text: central and the other roles keep appending. The outbox answers as before, so callers see no change in errors or latency.
+        text: entry and the other roles keep appending. The outbox answers as before, so callers see no change in errors or latency.
       - title: Records queue in the outbox
         nodes: [outbox]
         edges: []
@@ -470,8 +472,8 @@ promises:
     text: Given the outbox, a reconciler that compares the bucket listing with audit_batches, and verification that never trusts state.
     status: proposed
   - title: Clusters drain per node and co-sign
-    text: Each node's writer drains its own spool. The notary co-signs batch heads 2 of 3 across the nodes, with no separate notary YubiKey. A dedicated notary (Lambda, Kubernetes Job or EC2) is optional where there is no cluster.
-    status: proposed
+    text: Each node's writer drains its own spool. The notary co-signs batch heads 2 of 3 across the nodes. On T2 there is no separate notary YubiKey, and on T4 each node has its own KMS signing key. On T5 a single notary key is used only by the notary function's role, with no co-signing.
+    status: agreed
   - title: Recovery never blocks on audit
     text: The recovery proof needs no Kubernetes. Recovery spools its audit record locally and delivers it later.
     status: agreed
@@ -500,8 +502,8 @@ chain:
       text: An auditor trusts a key because they pinned its thumbprint. Anything in the trust log is distribution; a verifier ignores an unpinned key.
       status: agreed
     - title: Who holds the seal key
-      text: The notary alone. On hardware shapes its own Unix user, and on a cluster each node co-signs 2 of 3 with no separate notary YubiKey. On AWS shapes its own KMS key, under its own role.
-      status: proposed
+      text: The notary alone. On hardware shapes its own Unix user, and on a cluster each node co-signs 2 of 3 with no separate notary YubiKey. On T4 each node has its own KMS signing key, on T5 a single key behind the notary function's role, and on T3 one KMS key under the notary role.
+      status: agreed
     - title: Seal granularity
       text: A seal covers the batches since the previous seal. The cadence (hourly, or after N batches) is not yet decided.
       status: proposed
@@ -541,7 +543,6 @@ compare_note: "A mismatch worth naming. v1 makes the bucket the only contract be
 # Open points. `od` ids are rows of /open-decisions/; the others are listed
 # as not yet decided and carry no id.
 open_points:
-  - { od: OD-5, title: "The audit outbox port per shape", text: "A spool on servers and a queue on Lambda are the lean. Kubernetes (a queue, or blocking) is not decided." }
   - { od: OD-12, title: "The index host on Lambda", text: "There is no node to hold an index file. Aurora Serverless v2 is the lean, to be verified." }
   - { od: null, title: "Spool format and size cap", text: "One segment file per run or per size, a cap per node or per install, and what a request does at the cap: fail closed, shed load, or write somewhere else." }
   - { od: null, title: "Who replays a recovery spool", text: "The recovery tool on its next run, the writer on its next start, or an operator command." }

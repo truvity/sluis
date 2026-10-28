@@ -28,7 +28,7 @@ Select a box to see what it holds, its manifest summary and its listeners; the l
 
 ## Processes and listeners
 
-The same facts as tables, for the shape picked above. Roles and drivers listen only on Unix sockets under `/run/sluis/`, and only `central`'s public API ever gets a TCP listener: on the self-hosted shapes the edge connector reaches central's Unix socket, so no TCP port is opened. The written-down exceptions are the Lambda Web Adapter's loopback port inside the Lambda sandbox and the pod port a Kubernetes gateway routes to.
+The same facts as tables, for the shape picked above. `entry`'s public API listens on TCP, bound to `127.0.0.1`, on every shape: `cloudflared` connects to that loopback port on the self-hosted shapes, and the Lambda Web Adapter does on Lambda. Every other role and driver listens on Unix sockets under `/run/sluis/` only. How Kubernetes reaches the loopback port is still to be designed.
 
 <ArchExplorer part="tables" />
 
@@ -40,20 +40,11 @@ On a cluster each node runs the full set of processes. Each node's audit writer 
 
 <ArchExplorer part="cluster" />
 
-<OpenDecision id="OD-4" title="Which TCP ports exist between nodes">
-Raft peer traffic uses the state driver's own TCP port, over mTLS. Whether any other inter-node port exists is not decided; the lean is the Raft driver only.
-</OpenDecision>
+Raft peer traffic uses the state driver's own TCP port, over mTLS. It is the only TCP port between nodes.
 
 ## Open points
-
-<OpenDecision id="OD-1" title="Name of the central process">
-The data and this page use the placeholder `central`.
-</OpenDecision>
-
-<OpenDecision id="OD-2" title="Name of the node agent">
-The data and this page use the placeholder `node-agent`.
-</OpenDecision>
 
 <ArchExplorer part="open" />
 
 See also [the architecture overview](/architecture/) and [the audit explorer](/architecture/audit-explorer/).
+

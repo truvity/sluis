@@ -56,30 +56,30 @@ function build(shape: any): ShapeModel {
       does: edgeKind.does,
       rows: [
         { k: 'Listens', v: edgeKind.listen },
-        { k: 'Reaches central by', v: edgeKind.transport },
+        { k: 'Reaches entry by', v: edgeKind.transport },
       ],
       lists: [], notes: [],
     },
   });
-  const centralRole = data.roles.central;
+  const entryRole = data.roles.entry;
   add({
-    id: 'central', lane: 0, row: 2.4, cls: 'role', shared: false,
-    title: 'central', l2: fill(rt.role.id_short, { id: 'central' }), l3: shape.runtime === 'lambda' ? 'loopback TCP' : fill(rt.role.sock_short, { id: 'central' }),
-    detail: roleDetail('central', centralRole),
+    id: 'entry', lane: 0, row: 2.4, cls: 'role', shared: false,
+    title: 'entry', l2: fill(rt.role.id_short, { id: 'entry' }), l3: 'tcp 127.0.0.1',
+    detail: roleDetail('entry', entryRole),
   });
   if (shape.node_agent) {
     const na = data.node_agent;
     add({
-      id: 'node-agent', lane: 0, row: 4.4, cls: 'node', shared: false,
-      title: na.title, l2: fill(rt.role.id_short, { id: 'node-agent' }), l3: fill(rt.role.sock_short, { id: 'node-agent' }),
+      id: 'sluis-node', lane: 0, row: 4.4, cls: 'node', shared: false,
+      title: na.title, l2: fill(rt.role.id_short, { id: 'node' }), l3: fill(rt.role.sock_short, { id: 'node' }),
       detail: {
-        title: 'node-agent', kind: 'node service, workload identity', cls: 'node', status: na.status, od: na.od,
+        title: 'sluis-node', kind: 'node service, workload identity', cls: 'node', status: na.status, od: na.od,
         does: na.does,
         rows: [
-          { k: 'Unit', v: fill(rt.role.unit, { id: 'node-agent' }), code: true },
-          { k: 'Identity', v: fill(rt.role.identity, { id: 'node-agent' }), code: true },
+          { k: 'Unit', v: fill(rt.role.unit, { id: 'node' }), code: true },
+          { k: 'Identity', v: fill(rt.role.identity, { id: 'node' }), code: true },
           { k: 'Binary', v: `/usr/libexec/sluis/${na.binary}`, code: true },
-          { k: 'Listens', v: fill(rt.role.listen, { id: 'node-agent' }), code: true },
+          { k: 'Listens', v: fill(rt.role.listen, { id: 'node' }), code: true },
           { k: 'Holds', v: na.holds },
         ],
         lists: [{ title: 'Manifest summary (illustrative)', items: na.resources }],
@@ -113,7 +113,7 @@ function build(shape: any): ShapeModel {
     const rows: Row[] = [
       { k: 'Instance', v: perRole ? `per-role: one per role that uses it (${users.length}), each running as that role` : 'shared: one instance, which checks each caller by peer credentials against an access list generated from the manifest' },
     ];
-    if (d.mediator) rows.push({ k: 'Mediator', v: `${d.mediator}: audits every use` });
+    if (d.shared_name) rows.push({ k: 'Shared driver', v: `${d.shared_name}: audits every use` });
     if (!perRole) {
       rows.push({ k: 'Unit', v: fill(tpl.unit, vars), code: true });
       rows.push({ k: 'Identity', v: fill(tpl.identity, vars), code: true });
@@ -123,7 +123,7 @@ function build(shape: any): ShapeModel {
     rows.push({ k: 'Backed by', v: d.backing });
     rows.push({ k: 'Holds', v: d.holds });
     if (d.slots) rows.push({ k: 'Slot plan', v: d.slots });
-    if (d.peer_port) rows.push({ k: 'Peer traffic', v: "The driver's own TCP port, over mTLS (the port is set in configuration; 4002 is an example). Open: whether any other inter-node port exists (OD-4)." });
+    if (d.peer_port) rows.push({ k: 'Peer traffic', v: "The driver's own TCP port, over mTLS (the port is set in configuration; 4002 is an example). It is the only TCP port between nodes." });
     const lists = [
       { title: 'Used by', items: users },
       ...(perRole ? [{ title: 'Instances (unit: socket)', items: instances }] : []),
@@ -138,7 +138,7 @@ function build(shape: any): ShapeModel {
       l3: perRole ? 'uid of each role' : fill(tpl.sock_short, vars),
       detail: {
         title: `${label(port)} driver: ${d.title}`,
-        kind: perRole ? 'driver service, per-role' : `driver service, shared${d.mediator ? ` (${d.mediator})` : ''}`,
+        kind: perRole ? 'driver service, per-role' : `driver service, shared${d.shared_name ? ` (${d.shared_name})` : ''}`,
         cls: perRole ? 'driver-role' : 'driver-shared',
         status: d.status, od: d.od, does: d.does, rows, lists, notes,
       },
@@ -149,7 +149,7 @@ function build(shape: any): ShapeModel {
       title: bl[0], l2: bl[1], l3: p.store_title,
       detail: {
         title: `${label(p.store_title)}: ${d.backing}`, kind: 'backing store', cls: 'store', does: `The ${port} port's backing store on this shape: ${d.backing}.`,
-        rows: [], lists: [], notes: port === 'keys' && shape.id === 'T0' ? [{ id: 'OD-8', text: "A YubiKey on the host can be reached through the host's pcscd socket; not decided." }] : [],
+        rows: [], lists: [], notes: port === 'keys' && shape.id === 'T0' ? [{ text: "A YubiKey on the host is reached through the host's pcscd socket, which lets several programs share the card." }] : [],
       },
     });
   }
@@ -210,7 +210,7 @@ function build(shape: any): ShapeModel {
   };
   const live = edgesAll.filter((e: any) => ids.has(e.f) && ids.has(e.t) && okWhen(e.when));
 
-  const edges = routeEdges(nodes, live, (e) => (`${e.f}>${e.t}` === 'edge>central' ? edgeKind.transport : e.m));
+  const edges = routeEdges(nodes, live, (e) => (`${e.f}>${e.t}` === 'edge>entry' ? edgeKind.transport : e.m));
 
   // ---- derived call lists on each detail
   const nm = (id: string) => nameOf[id] ?? id;
@@ -221,7 +221,7 @@ function build(shape: any): ShapeModel {
     if (outs.length) n.detail.lists.push({ title: 'Calls', items: outs.map((e) => `${nm(e.t)}: ${e.m}${e.d ? `. ${e.d}` : ''}`) });
     if (ins.length) n.detail.lists.push({ title: 'Called by', items: ins.map((e) => `${nm(e.f)}: ${e.m}`) });
     if (n.cls === 'role' || n.cls === 'integration') {
-      if (shape.node_agent) n.detail.lists.push({ title: 'Also', items: ['Asks node-agent for its workload JWT at start and renewal (not drawn).'] });
+      if (shape.node_agent) n.detail.lists.push({ title: 'Also', items: ['Asks sluis-node for its workload JWT at start and renewal (not drawn).'] });
     }
   }
 
@@ -256,7 +256,7 @@ function build(shape: any): ShapeModel {
       { k: 'Identity', v: fill(rt.role.identity, { id }), code: true },
       { k: 'Binary', v: `/usr/libexec/sluis/${r.binary}`, code: true },
       { k: 'Listens', v: listen, code: true },
-      { k: 'Called over', v: id === 'central' ? edgeKind.transport : rt.role_call },
+      { k: 'Called over', v: id === 'entry' ? edgeKind.transport : rt.role_call },
       { k: 'Holds', v: r.holds },
     ];
     const notes: Detail['notes'] = [];
