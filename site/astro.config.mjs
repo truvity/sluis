@@ -113,10 +113,12 @@ export default defineConfig({
       sidebar: [
         { label: 'Overview', slug: 'overview' },
         { label: 'Concepts', items: [{ autogenerate: { directory: 'concepts' } }] },
+        { label: 'Integrations', items: [{ autogenerate: { directory: 'integrations' } }] },
         { label: 'Architecture', items: [{ autogenerate: { directory: 'architecture' } }] },
         { label: 'Shapes', items: [{ autogenerate: { directory: 'shapes' } }] },
         { label: 'Tutorials', items: [{ autogenerate: { directory: 'tutorials' } }] },
         { label: 'Distribution', items: [{ autogenerate: { directory: 'distribution' } }] },
+        { label: 'Standards and conformance', items: [{ autogenerate: { directory: 'standards' } }] },
         { label: 'Open decisions', slug: 'open-decisions' },
         { label: 'Decisions', link: '/decisions/' },
         { label: 'Roadmap', slug: 'roadmap' },
