@@ -45,7 +45,7 @@ flowchart TB
 ## What runs where
 
 - Every instance runs the roles of [T3](/shapes/aws-ec2-single/): each role its own OS user and systemd unit, the drivers as platform-started services, and a `node-agent` holding the instance role.
-- The state driver is rqlite, the `state-owner` mediator. It enforces one writer per record kind and audits every use.
+- The state driver is rqlite, the `state-owner` shared driver. It enforces one writer per record kind and audits every use.
 - Instances boot from the Amazon Linux 2023 image and install the signed packages from the dnf repository. The node-agent verifies what it installs. No machine image is baked.
 - The ASG replaces a lost instance, and the replacement joins the Raft cluster.
 

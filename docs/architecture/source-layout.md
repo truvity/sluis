@@ -75,7 +75,7 @@ docs/  site/
 | `node/agent/` | The node agent |
 | `cli/sluis/` | The `sluis` command |
 | `console/` | The TypeScript console |
-| `manifest/` | The permission manifests. They generate the IAM policies, key policies, mediator ACLs, systemd units, network rules and the deny-matrix tests |
+| `manifest/` | The permission manifests. They generate the IAM policies, key policies, shared-driver ACLs, systemd units, network rules and the deny-matrix tests |
 | `deploy/` | Packaging for each artifact: `.deb` and `.rpm` packages, Helm charts, Lambda archives, infrastructure as code |
 | `tests/shapes/`, `tests/tutorials/` | Integration tests that run on all five shapes (T1 to T5), and the tutorials as tests |
 | `docs/`, `site/` | This documentation and the site that builds it |

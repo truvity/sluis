@@ -30,7 +30,7 @@ flowchart LR
 
   m --> iam["IAM policies and<br/>trust policies"]
   m --> kms["KMS key policies<br/>one role per key"]
-  m --> acl["mediator ACLs<br/>key-holder, state-owner"]
+  m --> acl["shared-driver ACLs<br/>key-holder, state-owner"]
   m --> units["systemd units<br/>and sandbox drop-ins"]
   m --> net["network rules<br/>nftables, NetworkPolicy"]
   m --> cg["call graph<br/>default deny"]

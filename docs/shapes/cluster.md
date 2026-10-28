@@ -41,7 +41,7 @@ flowchart TB
 ## What runs where
 
 - Every node runs the same roles as [T1](/shapes/single-node/): each its own OS user and systemd unit, with the drivers as platform-started services.
-- The state driver is rqlite on every node. It is the `state-owner` mediator, a shared driver that checks each caller by peer credentials and enforces one writer per record kind.
+- The state driver is rqlite on every node. It is the `state-owner` shared driver. It checks each caller by peer credentials and enforces one writer per record kind.
 - The nodes need a quorum of two of three. A node that is down is replaced or repaired without losing state.
 - Mixed distributions share one package set. The `.deb` and `.rpm` packages are built from the same binaries; see [Packages](/distribution/packages/).
 

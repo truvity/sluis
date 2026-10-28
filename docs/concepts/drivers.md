@@ -1,6 +1,6 @@
 ---
 title: Drivers
-description: "Ports and drivers: platform-started services on Unix sockets that nobody execs, per-role and shared instances, the uid rule, mediators and the on-disk layout."
+description: "Ports and drivers: platform-started services on Unix sockets that nobody execs, per-role and shared instances, the uid rule, shared drivers and the on-disk layout."
 status: target
 sidebar:
   order: 2
@@ -52,11 +52,11 @@ For example, the AWS driver for `signer` is a unit that runs as the `signer` use
 
 Another role cannot open `aws.sock`, and AWS does the rest: the KMS key policy names the signer role and no other.
 
-## The two mediators
+## The two shared drivers
 
-Some resources cannot refuse a caller by themselves. A YubiKey has one PIN; a state store has one login. For these, a **mediator** owns the resource and every other process goes through it. Both are shared drivers, and both audit every use.
+Some resources cannot refuse a caller by themselves. A YubiKey has one PIN; a state store has one login. For these, a **shared driver** owns the resource and every other process goes through it. There are two, and both audit every use.
 
-| Mediator | Fronts | What it enforces |
+| Shared driver | Fronts | What it enforces |
 |---|---|---|
 | `key-holder` | The keys driver for HSMs, YubiKeys and software keys | An access list of caller role × key purpose × operation, generated from the manifests. The device node is closed to everyone else, and keys are created non-extractable and sign-only. |
 | `state-owner` | The replicated state store (rqlite on Raft) | An access list of caller role × record kind × operation, with exactly one role allowed to write each record kind. The store's own listener is closed to everyone else. See [Data](/concepts/data/). |

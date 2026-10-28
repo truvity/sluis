@@ -112,7 +112,7 @@ The keys port binds a **key role** to a backend and refuses a backend that is to
 | `grant` | Never exportable; used by the `policy` role only | One `ECC_NIST_P384` key | A node key |
 | `sealing` | Wraps and unwraps; takes an encryption context | One symmetric key with encryption contexts | ECDH plus HKDF (HPKE-style) with a P-384 key in slot 9d |
 
-Each backend describes itself with traits: exportability, attestation, whether a human must touch it, latency class, throughput, and who enforces which caller may use it (platform IAM, a mediator, or nothing). The port signs bytes or digests; JWT shaping (`exp`, `iat`, lifetime limits) lives in a `jose` library in the token issuer, not in the port. `Derive` (a keyed, deterministic function) and `Agree` (ECDH) are separate operations because a PIV token has no HMAC. EC P-384 is used everywhere; the cloud-federation keys are the exception, each in its own slot or key in the algorithm that cloud requires.
+Each backend describes itself with traits: exportability, attestation, whether a human must touch it, latency class, throughput, and who enforces which caller may use it (platform IAM, a shared driver, or nothing). The port signs bytes or digests; JWT shaping (`exp`, `iat`, lifetime limits) lives in a `jose` library in the token issuer, not in the port. `Derive` (a keyed, deterministic function) and `Agree` (ECDH) are separate operations because a PIV token has no HMAC. EC P-384 is used everywhere; the cloud-federation keys are the exception, each in its own slot or key in the algorithm that cloud requires.
 
 :::caution[Open decision OD-3: Derived signing keys on hardware shapes]
 Whether YubiKey shapes need a derived, short-lived software signing key (certified by the hardware key) for bursts is open. A P-384 signature on a YubiKey takes about 120 ms. The options are (a) always direct, (b) always derived, (c) direct on KMS and derived only for bursts on a YubiKey. The lean is (c), pending benchmarks. The same question is tracked as OD-13.
@@ -232,7 +232,7 @@ Rules the graph encodes:
 
 ## One writer per record kind
 
-Every record kind has exactly one component that writes it. Others read through the owner's contract, or read a prefix the owner publishes. The manifest generator refuses two roles that both declare `writer: true` for one kind, and on self-hosted shapes the `state-owner` mediator enforces the same rule at run time.
+Every record kind has exactly one component that writes it. Others read through the owner's contract, or read a prefix the owner publishes. The manifest generator refuses two roles that both declare `writer: true` for one kind, and on self-hosted shapes the `state-owner` shared driver enforces the same rule at run time.
 
 | Record kind | Writer |
 | ----------- | ------ |
