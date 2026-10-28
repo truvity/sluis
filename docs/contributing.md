@@ -42,7 +42,7 @@ How settled a point is shows in how it is written:
 Each node agent holds its own signing key.
 :::
 
-:::caution[Open decision OD-12: Index host on Lambda]
-Options: Aurora Serverless v2, or DynamoDB only.
+:::caution[Open decision OD-6: Diagram tool]
+Options: LikeC4 generated from the model, or Mermaid only.
 :::
 ```

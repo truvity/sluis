@@ -25,11 +25,11 @@ shapes:
     node_agent: false
     edge: cloudflared
     ports: { keys: soft, state: embedded, blob: s3, outbox: spool, index: sqlite }
-    keys: software key, or the host's YubiKey through the host's pcscd socket
+    keys: software key, or the host's YubiKey through a key-holder on the host
     state: embedded single-node store
     use: Development and CI.
     notes:
-      - text: "With the host's YubiKey, the container's key-holder uses the host's pcscd socket. pcscd lets several programs share the card, so the host keeps using the key. The pcsc-lite client protocol in the image must match the host daemon; if it does not, key-holder runs on the host and its socket is mounted into the container."
+      - text: "With the host's YubiKey, key-holder runs natively on the host and talks to the host's pcscd. The container mounts only key-holder's Unix socket, and the host keeps using the YubiKey. The fallback is to mount the host pcscd socket into the container, with the risk that the pcsc-lite protocol versions must match."
         status: agreed
   - id: T1
     name: Single node
@@ -100,14 +100,13 @@ shapes:
     nodes: 0
     node_agent: false
     edge: lwa
-    ports: { keys: aws, state: aws, blob: s3, outbox: sqs, index: postgres }
+    ports: { keys: aws, state: aws, blob: s3, outbox: sqs, index: remote }
     keys: AWS KMS
     state: DynamoDB
     use: Integration tests and tutorials.
     notes:
-      - text: The index has no node to keep a file on. Aurora Serverless v2 is the lean, still to be verified.
-        status: open
-        od: OD-12
+      - text: "T5 ships no audit index. audit-read and its index run in a separate audit install on another shape that reads the same bucket: Kubernetes with Postgres (any connection string, for example CNPG), or a server with sqlite. A small install can run sluis audit search from the CLI, which builds a local sqlite index from the chain. The index is a rebuildable cache; the chain in the bucket is the record."
+        status: agreed
       - text: "The outbox is an SQS queue here. Kubernetes: later."
         status: agreed
       - text: "The notary is a single key used only by the notary function's role. There is no co-signing; the function role is the isolation."
@@ -304,17 +303,26 @@ drivers:
     holds: The index file
     backing: SQLite file
     status: proposed
+  remote:
+    port: index
+    title: none here
+    instance: file
+    shared_name: null
+    binary: null
+    does: "T5 ships no audit index. audit-read and its index run in a separate audit install on another shape that reads the same bucket (Kubernetes with Postgres, or a server with sqlite). The index is a rebuildable cache; the chain in the bucket is the record."
+    holds: Nothing
+    backing: an index in a separate audit install
+    status: agreed
   postgres:
     port: index
     title: postgres
     instance: per-role
     shared_name: null
     binary: drivers/postgres
-    does: The index port on Postgres, for Lambda and Kubernetes (Aurora Serverless v2, to verify).
+    does: The index port on Postgres, for the Kubernetes shape and for a separate audit install (any connection string, for example CNPG).
     holds: Nothing
     backing: Postgres
-    status: open
-    od: OD-12
+    status: agreed
 
 # The four drivers shown on the map are the ports; the backing stores are
 # described per port and driver.
@@ -544,7 +552,8 @@ backing_lines:
   outbox.spool: ["local spool", "fsync'd segments"]
   outbox.sqs: ["SQS queue", "dead-letter queue"]
   index.sqlite: ["SQLite + FTS5", "one file per node"]
-  index.postgres: ["Postgres", "Aurora Serverless v2"]
+  index.postgres: ["Postgres", "any connection string"]
+  index.remote: ["no index here", "separate audit install"]
 
 # ---------------------------------------------------------------------------
 # The call graph. `from > to`. `when` limits an edge to shapes or drivers;
@@ -768,12 +777,13 @@ flows:
         nodes: [audit-read, drv-state, drv-blob, store-index]
         edges: ["audit-read>drv-state", "audit-read>drv-blob", "audit-read>store-index"]
         text: audit-read follows audit_batches from its cursor, fetches each new batch and applies it to the index. Verification never trusts the index. The audit explorer shows lag and the integrity chain.
+        variants:
+          - { shapes: [T5], text: "T5 has no index of its own. The audit-read of a separate audit install follows the chain in the same bucket." }
 
 # ---------------------------------------------------------------------------
 # Open points that touch the architecture
 # ---------------------------------------------------------------------------
-open_points:
-  - { od: OD-12, text: "The index host on Lambda. The map shows Postgres, still to be verified." }
+open_points: []
 
 # What runs where on a cluster shape (T2, T4).
 cluster:

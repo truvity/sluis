@@ -77,7 +77,7 @@ shapes:
     blob: "an S3 bucket"
     lock: "object lock per install"
     cluster: "managed by the platform"
-    note: "There is no node to keep an index file on. Aurora Serverless v2 is the lean for the index, still to be verified."
+    note: "T5 ships no audit index. audit-read and its index run in a separate audit install on another shape that reads the same bucket: Kubernetes with Postgres (any connection string, for example CNPG), or a server with sqlite. A small install can run sluis audit search from the CLI, which builds a local sqlite index from the chain. The index is a rebuildable cache; the chain in the bucket is the record."
 
 # ---------------------------------------------------------------------------
 # The map
@@ -319,6 +319,8 @@ flows:
         nodes: [read, statedrv, blobdrv, index]
         edges: ["read>statedrv", "read>blobdrv", "read>index", "statedrv>statestore", "blobdrv>archive"]
         text: audit-read on each node follows audit_batches from its cursor, fetches each new batch object and applies it to the index, then advances the cursor. Lag is the leader sequence minus that cursor.
+        variants:
+          - { shapes: [T5], text: "T5 has no index of its own. The audit-read of a separate audit install follows the chain in the same bucket and keeps the index there." }
   - id: search
     title: An auditor searches
     why: audit-read answers from the node's index; the read is itself audited.
@@ -543,7 +545,6 @@ compare_note: "A mismatch worth naming. v1 makes the bucket the only contract be
 # Open points. `od` ids are rows of /open-decisions/; the others are listed
 # as not yet decided and carry no id.
 open_points:
-  - { od: OD-12, title: "The index host on Lambda", text: "There is no node to hold an index file. Aurora Serverless v2 is the lean, to be verified." }
   - { od: null, title: "Spool format and size cap", text: "One segment file per run or per size, a cap per node or per install, and what a request does at the cap: fail closed, shed load, or write somewhere else." }
   - { od: null, title: "Who replays a recovery spool", text: "The recovery tool on its next run, the writer on its next start, or an operator command." }
   - { od: null, title: "Whether the notary calls KMS directly", text: "On cloud shapes the notary could call KMS from its own role without a driver service, since KMS already enforces which role may sign." }

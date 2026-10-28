@@ -87,17 +87,13 @@ The same roles run on every shape. The drivers behind their ports are what chang
 |---|---|---|---|---|---|---|
 | keys | software (or the host's YubiKey) | YubiKey PIV, shared | YubiKey per node, shared | AWS KMS, per-role | AWS KMS, per-role | AWS KMS, per-role |
 | state | embedded single-node store | single-node store, no Raft | rqlite on Raft, behind `state-owner` | DynamoDB | rqlite on Raft, behind `state-owner` | DynamoDB |
-| index | sqlite | sqlite | sqlite | sqlite | sqlite | postgres |
+| index | sqlite | sqlite | sqlite | sqlite | sqlite | none: a separate audit install holds it (postgres on Kubernetes, or sqlite on a server) |
 | blob | S3-compatible store | S3-compatible store | S3-compatible store | S3 | S3 | S3 |
 | queue (audit outbox) | local spool | local spool | local spool | local spool | local spool | queue |
 | lease | state compare-and-set | state compare-and-set | Raft leader lease, others on state | DynamoDB conditional write | Raft leader lease, others on state | DynamoDB conditional write |
 | cloud | aws, gcp, azure drivers as configured | as configured | as configured | aws | aws | aws |
 
-The keys, state and index columns follow the agreed shapes. T0 may use the host's YubiKey: the container's `key-holder` talks to the host's `pcscd` socket, and `pcscd` lets several programs share the card, so the host keeps using the key. The pcsc-lite client protocol in the image must match the host daemon; if it cannot, the fallback is to run the `key-holder` on the host and mount its socket.
-
-:::caution[Open decision OD-12: Index host on Lambda]
-The options are Aurora Serverless v2 (the lean, still to be verified) or DynamoDB only.
-:::
+The keys, state and index columns follow the agreed shapes. T0 may use the host's YubiKey: the `key-holder` runs natively on the host and talks to the host's `pcscd`, and the container mounts only the `key-holder`'s Unix socket, so the host keeps using the key. The fallback is to mount the host's `pcscd` socket into the container, with the risk that the pcsc-lite protocol versions must match.
 
 :::note[Proposed]
 The blob, queue, lease and cloud rows are the working design and are not settled shape by shape. The audit outbox per shape is covered in [Audit](/concepts/audit/).

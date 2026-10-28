@@ -47,7 +47,7 @@ On a cluster, each node's writer drains its own spool, and the notary co-signs b
 
 ## The index lags the chain
 
-The `audit-read` role serves queries from an **index**, which is a search view of the batches. The index is a convenience. It follows the chain and lags it, and it can always be rebuilt from the batches. On servers the index is `sqlite`; on Lambda and Kubernetes it is `postgres`.
+The `audit-read` role serves queries from an **index**, which is a search view of the batches. The index is a convenience. It follows the chain and lags it, and it can always be rebuilt from the batches. On servers the index is `sqlite`; on Kubernetes it is `postgres`, with any connection string (for example CNPG). Lambda ships no index: `audit-read` and its index run in a separate audit install, on Kubernetes with Postgres or on a server with `sqlite`, that reads the same bucket. A small install can run `sluis audit search` from the CLI, which builds a local `sqlite` index from the chain. The index is a rebuildable cache; the chain in the bucket is the record.
 
 **Verification never trusts the index, or the state store.** To check the trail, a verifier reads the batches from the archive and the notary's signatures, and recomputes the chain itself. If the index or the state store has been tampered with, verification still passes or fails by what the archive and the notary say. The state store may sit on the write path, because the outbox and a reconciler that compares the archive's listing with the batch sequence recover from its loss, and because verification does not depend on it.
 

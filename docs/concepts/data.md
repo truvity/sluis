@@ -68,8 +68,5 @@ On a Raft cluster, leadership is just one named lease called `leader`. Every oth
 The drivers behind the ports differ by shape (see [Ports and drivers by shape](/concepts/drivers/)). Two choices matter for data:
 
 - **State** is a single-node store on one node, **rqlite on Raft** across three nodes, and **DynamoDB** on Lambda and the single EC2 shape. The Raft peer traffic is the state driver's own port over mutual TLS.
-- **Index** is `sqlite` on servers and `postgres` on Lambda. The index is derived from the audit batches and can always be rebuilt from them.
+- **Index** is `sqlite` on servers and `postgres` on Kubernetes (any connection string, for example CNPG). Lambda ships no index: `audit-read` and its index run in a separate audit install that reads the same bucket. The index is derived from the audit batches and can always be rebuilt from them.
 
-:::caution[Open decision OD-12: Index host on Lambda]
-Options: Aurora Serverless v2 (the lean, to be verified) or DynamoDB only.
-:::

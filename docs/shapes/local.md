@@ -27,7 +27,8 @@ flowchart LR
     others --> state
     entry --> state
   end
-  keyholder -. "optional" .-> pcscd["host pcscd socket"]
+  keyholder -. "optional: mounted Unix socket" .-> hostkh["key-holder on the host"]
+  hostkh --> pcscd["host pcscd"]
   pcscd --> yk["YubiKey on the host"]
 ```
 
@@ -41,9 +42,9 @@ flowchart LR
 ## Keys
 
 - **Default:** software keys, EC P-384. No production secret is involved.
-- **Optional:** the host's YubiKey, reached through the host's `pcscd` socket mounted into the container. The `key-holder` is the only role that talks to the socket.
+- **Optional:** the host's YubiKey. The `key-holder` runs natively on the host, talks to the host's `pcscd`, and the container mounts only the `key-holder`'s Unix socket. Other roles reach the YubiKey only through it.
 
-In the local shape the container's `key-holder` uses the host's `pcscd` socket. `pcscd` lets several programs share the card, so the host keeps using the key. The pcsc-lite client protocol in the image must match the host daemon; if it does not, the `key-holder` runs on the host and its socket is mounted into the container.
+In the local shape the `key-holder` runs natively on the host and talks to the host's `pcscd`. The container mounts only the `key-holder`'s Unix socket, and the host keeps using the YubiKey. The fallback is to mount the host's `pcscd` socket into the container; the risk is that the pcsc-lite protocol versions of the image and the host must match.
 
 ## State and audit
 
@@ -67,6 +68,6 @@ See [Listeners](/architecture/listeners/) for the rule.
 ## Limits and residual risk
 
 - Software keys are extractable by anyone who can read the container's filesystem. T0 is for development data only.
-- With the host `pcscd` socket mounted, any process in the container that can open the socket can ask the YubiKey to sign, subject to the PIN. The `key-holder` ACL is the control inside the container, and the socket is shared with the host.
+- With the host's YubiKey, any process in the container that can open the mounted `key-holder` socket can ask for a signature, subject to the `key-holder` ACL. The host keeps using the YubiKey too, because `pcscd` lets several programs share the card. In the fallback where the host `pcscd` socket itself is mounted, the ACL does not apply and the pcsc-lite protocol versions of the image and the host must match.
 - One node has one failure domain. T0 proves behaviour, not availability.
 - T0 does not exercise the platform controls of the other shapes (IAM and KMS key policies, systemd sandboxing, Cilium policy). Those are tested on T1 to T5.

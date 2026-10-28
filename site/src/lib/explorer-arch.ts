@@ -162,7 +162,7 @@ function build(shape: any): ShapeModel {
       title: bl[0], l2: bl[1], l3: 'index',
       detail: {
         title: `Index: ${d.title}`, kind: 'backing store', cls: 'store', status: d.status, od: d.od,
-        does: d.does, rows: [{ k: 'Binary', v: `/usr/libexec/sluis/${d.binary}`, code: true }], lists: [],
+        does: d.does, rows: d.binary ? [{ k: 'Binary', v: `/usr/libexec/sluis/${d.binary}`, code: true }] : [], lists: [],
         notes: d.od ? [{ id: d.od, text: 'See the open decisions page.' }] : [],
       },
     });
