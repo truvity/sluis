@@ -9,7 +9,7 @@ let ids: Set<string> | undefined;
 export function registeredOpenDecisions(): Set<string> {
   if (!ids) {
     const text = readFileSync(resolve(process.cwd(), '../docs/open-decisions.md'), 'utf8');
-    ids = new Set([...text.matchAll(/^\|\s*(OD-\d+)\s*\|/gm)].map((m) => m[1]));
+    ids = new Set([...text.matchAll(/^\|\s*(?:<a id="od-\d+"><\/a>)?\s*(OD-\d+)\s*\|/gm)].map((m) => m[1]));
   }
   return ids;
 }

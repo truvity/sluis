@@ -41,7 +41,7 @@ function status(fm) {
 function registeredIds() {
   const ids = new Set();
   for (const line of readFileSync(registry, 'utf8').split('\n')) {
-    const m = /^\|\s*(OD-\d+)\s*\|/.exec(line);
+    const m = /^\|\s*(?:<a id="od-\d+"><\/a>)?\s*(OD-\d+)\s*\|/.exec(line);
     if (m) ids.add(m[1]);
   }
   return ids;
