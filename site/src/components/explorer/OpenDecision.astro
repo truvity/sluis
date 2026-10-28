@@ -1,0 +1,12 @@
+---
+// An "Open decision" aside for the MDX explorer pages. Same look as the
+// `:::caution[Open decision OD-n: title]` aside of the Markdown pages, and the id
+// is checked against docs/open-decisions.md at build time.
+import { Aside } from '@astrojs/starlight/components';
+import { assertOpenDecision } from '../../lib/od';
+
+interface Props { id: string; title: string }
+const { id, title } = Astro.props;
+assertOpenDecision(id);
+---
+<Aside type="caution" title={`Open decision ${id}: ${title}`}><slot /></Aside>

@@ -1,0 +1,164 @@
+/* Shared by the two explorers. Everything uses Starlight's colour variables, so
+   both themes work. The pages are wider than a docs page: the diagram needs it. */
+:root { --ex-gap: 1rem; --ex-font: var(--sl-font, system-ui, -apple-system, 'Segoe UI', sans-serif); --ex-mono: var(--sl-font-mono, ui-monospace, Menlo, Consolas, monospace); }
+
+:root { --sl-content-width: 70rem; }
+
+.ex { margin-block: 1.5rem; }
+.ex *, .ex *::before, .ex *::after { box-sizing: border-box; }
+
+/* kinds */
+.ex { --k-edge: var(--sl-color-purple); --k-role: var(--sl-color-blue); --k-driver: var(--sl-color-orange);
+      --k-integration: var(--sl-color-green); --k-store: var(--sl-color-gray-3); --k-external: var(--sl-color-gray-3);
+      --k-node: var(--sl-color-purple); --k-out: var(--sl-color-accent); --k-in: var(--sl-color-orange-high); }
+
+/* chips */
+.ex-chip { display: inline-block; padding: 0 .55em; border: 1px solid var(--sl-color-gray-4); border-radius: 1em;
+  font-size: var(--sl-text-xs); line-height: 1.7; white-space: nowrap; color: var(--sl-color-gray-2); background: var(--sl-color-bg-nav); text-decoration: none; }
+.ex-chip-agreed { border-color: var(--sl-color-green); color: var(--sl-color-green-high); background: var(--sl-color-green-low); }
+.ex-chip-proposed { border-color: var(--sl-color-orange); color: var(--sl-color-orange-high); background: var(--sl-color-orange-low); }
+.ex-chip-open { border-color: var(--sl-color-red); color: var(--sl-color-red-high); background: var(--sl-color-red-low); }
+.ex-chip-illustrative { border-style: dashed; }
+
+/* shape toggle */
+.ex-toggle { display: flex; flex-wrap: wrap; gap: .5rem; margin: 0; padding: .5rem 0; position: sticky; top: var(--sl-nav-height, 3.5rem);
+  z-index: 3; background: var(--sl-color-bg); }
+.ex-toggle button, .ex-tabs button, .ex-step-nav button { margin: 0; }
+.ex-toggle button { flex: 1 1 8rem; text-align: left; font: inherit; cursor: pointer; padding: .4rem .6rem; color: var(--sl-color-text);
+  background: var(--sl-color-bg-nav); border: 2px solid var(--sl-color-gray-5); border-radius: .5rem; display: grid; gap: 0; align-content: start; }
+.ex-toggle button b { font-family: var(--ex-mono); font-size: var(--sl-text-sm); }
+.ex-toggle button span { font-size: var(--sl-text-xs); color: var(--sl-color-gray-2); line-height: 1.3; }
+.ex-toggle button[aria-checked='true'] { border-color: var(--sl-color-accent); background: var(--sl-color-accent-low); }
+.ex-toggle[hidden] { display: none; }
+.ex :focus-visible { outline: 3px solid var(--sl-color-accent-high); outline-offset: 2px; }
+
+/* tables */
+.ex-table-wrap { overflow-x: auto; max-width: 100%; border: 1px solid var(--sl-color-gray-5); border-radius: .5rem; }
+.ex table { border-collapse: collapse; width: 100%; font-size: var(--sl-text-sm); margin: 0; }
+.ex th, .ex td { padding: .4rem .6rem; text-align: left; vertical-align: top; border-bottom: 1px solid var(--sl-color-gray-5); }
+.ex thead th { font-size: var(--sl-text-xs); text-transform: uppercase; letter-spacing: .04em; color: var(--sl-color-gray-3); background: var(--sl-color-bg-nav); white-space: nowrap; }
+.ex tbody tr:last-child td { border-bottom: 0; }
+.ex tr.ex-hl td { background: var(--sl-color-accent-low); }
+.ex td code, .ex dd code { overflow-wrap: anywhere; font-size: .9em; }
+.ex-mono { font-family: var(--ex-mono); font-size: var(--sl-text-xs); overflow-wrap: anywhere; }
+
+/* legend */
+.ex-legend { display: flex; flex-wrap: wrap; gap: .4rem 1.2rem; list-style: none; padding: 0; margin: 0; font-size: var(--sl-text-sm); }
+.ex-legend li { display: flex; align-items: center; gap: .4rem; margin: 0; }
+.ex-legend svg { width: 2.2rem; height: .9rem; flex: none; }
+.ex-sw { fill: var(--sl-color-bg); stroke-width: 2; }
+
+/* map */
+.ex-tabs { display: flex; flex-wrap: wrap; gap: .35rem; margin: .5rem 0; padding: 0; }
+.ex-tabs button { font: inherit; font-size: var(--sl-text-sm); cursor: pointer; color: var(--sl-color-text); background: var(--sl-color-bg-nav);
+  border: 1px solid var(--sl-color-gray-4); border-radius: 1em; padding: .15rem .8rem; }
+.ex-tabs button[aria-selected='true'] { background: var(--sl-color-accent-low); border-color: var(--sl-color-accent); color: var(--sl-color-white); }
+.ex-diagram { overflow-x: auto; border: 1px solid var(--sl-color-gray-5); border-radius: .5rem; background: var(--sl-color-bg-nav); }
+.ex-diagram svg { display: block; width: 100%; min-width: 900px; height: auto; }
+.ex-lane { fill: var(--sl-color-gray-6); fill-opacity: .6; }
+.ex-lane-t { font: 600 11px var(--ex-font); letter-spacing: .06em; text-transform: uppercase; fill: var(--sl-color-gray-3); }
+.ex-node { cursor: pointer; }
+.ex-node .box { fill: var(--sl-color-bg); stroke: var(--sl-color-gray-4); stroke-width: 1.3; }
+.ex-node .bar { fill: var(--k, var(--sl-color-gray-3)); }
+.ex-node .t { font: 600 12.5px var(--ex-font); fill: var(--sl-color-white); }
+.ex-node .m { font: 400 10.5px var(--ex-mono); fill: var(--sl-color-gray-2); }
+.ex-node:hover .box { stroke: var(--sl-color-white); }
+.ex-node:focus { outline: none; }
+.ex-node:focus-visible .box { stroke: var(--sl-color-accent-high); stroke-width: 3.5; }
+.ex-node.shared .box { stroke-dasharray: 6 3; }
+.ex-node.external .box { stroke-dasharray: 2 3; }
+.ex-node.k-edge, .ex-node.k-node { --k: var(--k-edge); }
+.ex-node.k-role { --k: var(--k-role); }
+.ex-node.k-driver-role, .ex-node.k-driver-shared { --k: var(--k-driver); }
+.ex-node.k-integration { --k: var(--k-integration); }
+.ex-node.k-store, .ex-node.k-external { --k: var(--k-store); }
+.ex-node.nb-out .box { stroke: var(--k-out); stroke-width: 2.2; }
+.ex-node.nb-in .box { stroke: var(--k-in); stroke-width: 2.2; }
+.ex-node.sel .box { fill: var(--sl-color-accent-low); stroke: var(--sl-color-accent-high); stroke-width: 3; }
+.ex-node.step .box { fill: var(--sl-color-accent-low); stroke: var(--sl-color-accent-high); stroke-width: 3; }
+.ex-node.done .box { stroke: var(--sl-color-accent); stroke-width: 1.8; }
+.ex-node.dim { opacity: .35; }
+.ex-edge { fill: none; stroke: var(--sl-color-gray-4); stroke-width: 1.4; stroke-opacity: .55; pointer-events: none; stroke-linecap: round; }
+.ex-edge.out { stroke: var(--k-out); stroke-width: 2.4; stroke-opacity: 1; }
+.ex-edge.in { stroke: var(--k-in); stroke-width: 2.4; stroke-opacity: 1; }
+.ex-edge.step { stroke: var(--sl-color-accent-high); stroke-width: 3; stroke-opacity: 1; }
+.ex-edge.done { stroke: var(--sl-color-accent); stroke-width: 2; stroke-opacity: .9; }
+.ex-edge.hide { stroke-opacity: .12; }
+.ex-ah { fill: var(--sl-color-gray-4); }
+.ex-elabel { font: 600 10.5px var(--ex-font); fill: var(--sl-color-white); paint-order: stroke; stroke: var(--sl-color-bg-nav); stroke-width: 4px; stroke-linejoin: round; display: none; pointer-events: none; }
+.ex-elabel.on { display: block; }
+
+/* detail panel and flows */
+.ex-panel { margin-top: 1rem; border: 1px solid var(--sl-color-gray-5); border-radius: .5rem; padding: 1rem 1.2rem; background: var(--sl-color-bg-nav); }
+.ex-panel h3, .ex-panel h4 { margin: 0; }
+.ex-panel h3 { font-size: var(--sl-text-xl); }
+.ex-panel h4 { margin-top: 1rem; font-size: var(--sl-text-xs); text-transform: uppercase; letter-spacing: .06em; color: var(--sl-color-gray-3); }
+.ex-panel p { margin: .4rem 0; }
+.ex-panel ul { margin: .3rem 0 0; padding-left: 1.1rem; font-size: var(--sl-text-sm); }
+.ex-panel li { margin: .15rem 0; overflow-wrap: anywhere; }
+.ex-panel dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: .25rem .9rem; margin: .6rem 0 0; font-size: var(--sl-text-sm); }
+.ex-panel dt { color: var(--sl-color-gray-3); margin: 0; }
+.ex-panel dd { margin: 0 !important; overflow-wrap: anywhere; }
+.ex-kind { display: inline-block; font: 500 var(--sl-text-xs) var(--ex-mono); padding: 0 .5em; border: 1px solid var(--k, var(--sl-color-gray-4)); border-radius: 1em; color: var(--sl-color-gray-2); margin-right: .4rem; }
+.ex-kind.k-role { --k: var(--k-role); } .ex-kind.k-driver-role, .ex-kind.k-driver-shared { --k: var(--k-driver); }
+.ex-kind.k-integration { --k: var(--k-integration); } .ex-kind.k-edge, .ex-kind.k-node { --k: var(--k-edge); }
+.ex-note { margin: .6rem 0 0; padding: .4rem .7rem; border-inline-start: 3px solid var(--sl-color-gray-4); font-size: var(--sl-text-sm); background: var(--sl-color-gray-6); }
+.ex-note.open { border-color: var(--sl-color-red); }
+.ex-steps { list-style: none; counter-reset: step; padding: 0; margin: .8rem 0 0; }
+.ex-steps li { counter-increment: step; margin: 0 0 .5rem; padding: .4rem .7rem .4rem 2.4rem; position: relative; border: 1px solid var(--sl-color-gray-5); border-radius: .4rem; background: var(--sl-color-bg); }
+.ex-steps li::before { content: counter(step); position: absolute; left: .6rem; top: .45rem; font: 600 var(--sl-text-sm) var(--ex-mono); color: var(--sl-color-gray-3); }
+.ex-steps li.on { border-color: var(--sl-color-accent); background: var(--sl-color-accent-low); }
+.ex-steps button { all: unset; cursor: pointer; font-weight: 600; display: block; width: 100%; }
+.ex-steps button:focus-visible { outline: 3px solid var(--sl-color-accent-high); outline-offset: 2px; }
+.ex-steps p { margin: .25rem 0 0; font-size: var(--sl-text-sm); }
+.ex-step-nav { display: flex; gap: .5rem; margin-top: .6rem; }
+.ex-step-nav button { font: inherit; cursor: pointer; padding: .2rem .9rem; color: var(--sl-color-text); background: var(--sl-color-bg); border: 1px solid var(--sl-color-gray-4); border-radius: .4rem; }
+.ex-step-nav button:disabled { opacity: .4; cursor: default; }
+.ps-label { font-family: var(--ex-mono); font-size: var(--sl-text-xs); margin-right: .3rem; color: var(--sl-color-gray-3); }
+
+/* progressive enhancement: without script everything is stacked and readable */
+.ex-js .ex-only-nojs { display: none; }
+html:not(.ex-js) .ex-only-js { display: none; }
+.ex-js [data-detail][hidden], .ex-js [data-flow][hidden] { display: none; }
+html:not(.ex-js) [data-detail] { margin-bottom: 1rem; }
+
+@media (max-width: 50rem) {
+  .ex-panel { padding: .8rem; }
+  .ex-panel dl { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .ex-panel dd { margin-bottom: .4rem; }
+}
+@media (prefers-reduced-motion: reduce) { .ex * { transition: none !important; animation: none !important; } }
+
+/* Starlight puts a top margin between sibling elements of the content; the
+   explorers lay their own spacing out. */
+.ex-panel > *, .ex-panel dl > *, .ex-panel li, .ex-steps li, .ex-steps li > * { margin-top: 0; }
+.ex-panel h4 { margin-top: 1rem; }
+.ex-panel p { margin-top: .4rem; }
+.ex-steps li { margin-bottom: .5rem; }
+.ex-steps p { margin-top: .25rem; }
+.ex-note { margin-top: .6rem; }
+.ex-edge:not(.out):not(.in):not(.step):not(.done) { marker-end: none; }
+
+/* audit: integrity chain, cards, lag bars */
+.ex-chain { display: flex; flex-wrap: wrap; align-items: stretch; gap: .4rem; }
+.ex-chain-arrow { align-self: center; color: var(--sl-color-gray-3); font-family: var(--ex-mono); font-size: var(--sl-text-sm); }
+.ex-chain-box { display: flex; flex-direction: column; gap: .1rem; padding: .5rem .7rem; min-width: 9rem; border: 2px solid var(--sl-color-gray-4); border-radius: .5rem; background: var(--sl-color-bg-nav); font-size: var(--sl-text-sm); }
+.ex-chain-box b { font-size: var(--sl-text-sm); }
+.ex-chain-box span { font-family: var(--ex-mono); font-size: var(--sl-text-xs); color: var(--sl-color-gray-2); }
+.ex-chain-box em { font-size: var(--sl-text-xs); color: var(--sl-color-gray-3); font-style: normal; margin-top: .2rem; }
+.ex-chain-box.by-writer { border-color: var(--sl-color-blue); }
+.ex-chain-box.by-notary { border-color: var(--sl-color-purple); }
+.ex-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: .8rem; margin-top: 1rem; }
+.ex-card { border: 1px solid var(--sl-color-gray-5); border-radius: .5rem; padding: .7rem .9rem; background: var(--sl-color-bg-nav); font-size: var(--sl-text-sm); }
+.ex-card p { margin: .3rem 0 0; }
+.ex-bar { display: block; width: 100%; min-width: 6rem; height: .6rem; background: var(--sl-color-gray-5); border-radius: .3rem; overflow: hidden; }
+.ex-bar i { display: block; height: 100%; background: var(--sl-color-accent); }
+.ex-node.down .box { stroke: var(--sl-color-red); stroke-dasharray: 4 3; stroke-width: 2.4; }
+.ex-node.down { opacity: .8; }
+
+.ex table { display: table; width: 100%; }
+.ex-card, .ex-chain-box, .ex-table-wrap, .ex-diagram { margin: 0; }
+.ex-sub { font-weight: 600; margin: 1rem 0 .4rem; }
+.ex ol { margin-top: .4rem; }
+.ex p { margin-top: .5rem; }
+@media (max-width: 50rem) { .ex-toggle { position: static; } }
