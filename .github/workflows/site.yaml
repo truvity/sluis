@@ -70,6 +70,8 @@ jobs:
       - uses: truvity/ci-actions/setup-devbox@eae9926515d96296eeed99aa358d2957a89647e8 # v3.3.1
       - name: Build the site (strict)
         run: devbox run -- just site-build
+      - name: Render the pages in headless Chrome
+        run: devbox run -- just site-render
       - name: Build v1 into /v1/
         run: devbox run -- site/scripts/build-v1.sh v1-src site/dist
       - name: Check the built site

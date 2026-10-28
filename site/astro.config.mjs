@@ -6,13 +6,48 @@ import starlightLlmsTxt from 'starlight-llms-txt';
 import { satteri } from '@astrojs/markdown-satteri';
 import { statusPlugin } from './src/remark-status.mjs';
 
+// Starlight's default (prefetch every link on hover), stated here so the Vite
+// plugin below fills in the same values Astro's prefetch script is configured with.
+const prefetch = { prefetchAll: true, defaultStrategy: 'hover' };
+
+// Astro's prefetch script (astro/dist/prefetch/index.js) holds the placeholders
+// __PREFETCH_PREFETCH_ALL__, __PREFETCH_DEFAULT_STRATEGY__ and
+// __EXPERIMENTAL_CLIENT_PRERENDER__, which Astro's `astro:prefetch` Vite plugin
+// replaces in a transform hook (astro/dist/prefetch/vite-plugin-prefetch.js,
+// unchanged in astro 7.4.4). That hook matches the module id against the literal
+// path `astro/dist/prefetch/index.js`. With `nodeLinker: pnpm` (site/.yarnrc.yml)
+// the id is the real path, node_modules/.store/astro-virtual-<hash>/package/dist/...,
+// which does not match, so the placeholders shipped. Starlight enables prefetch,
+// so the script lands in the one bundled page script and throws a ReferenceError
+// before astro-mermaid's init runs: every diagram stayed a raw <pre>.
+// This plugin does the same replacement whatever the layout. Drop it once Astro
+// matches the package directory rather than a path containing `astro/`;
+// site/scripts/check-built.sh fails the build if a placeholder ever ships again.
+const fillPrefetchPlaceholders = () => ({
+  name: 'sluis:fill-prefetch-placeholders',
+  enforce: 'pre',
+  transform(code, id) {
+    if (!/[\\/]dist[\\/]prefetch[\\/]index\.js(\?|$)/.test(id)) return null;
+    if (!code.includes('__PREFETCH_PREFETCH_ALL__')) return null;
+    return {
+      code: code
+        .replace('__PREFETCH_PREFETCH_ALL__', JSON.stringify(prefetch.prefetchAll))
+        .replace('__PREFETCH_DEFAULT_STRATEGY__', JSON.stringify(prefetch.defaultStrategy))
+        .replace('__EXPERIMENTAL_CLIENT_PRERENDER__', 'false'),
+      map: null,
+    };
+  },
+});
+
 // https://sluis.id. The custom domain and its DNS are managed outside this
 // repository; the site is served from the root, with the v1 documentation
 // copied in under /v1/ (site/scripts/build-v1.sh).
 export default defineConfig({
   site: 'https://sluis.id',
   trailingSlash: 'always',
+  prefetch,
   vite: {
+    plugins: [fillPrefetchPlaceholders()],
     // Mermaid's diagram engines are one large lazily loaded chunk; the size
     // warning is expected for it and the build allows no other warning.
     build: { chunkSizeWarningLimit: 4000 },
