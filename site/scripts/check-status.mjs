@@ -3,7 +3,8 @@
 // partial | shipped` in its front matter, and every aside titled
 // `Open decision OD-<n>` (a `:::caution[...]` aside in Markdown, an
 // `<OpenDecision id="OD-<n>"` component in MDX) must name an id that is a row
-// of docs/open-decisions.md.
+// of the "Open" table of docs/open-decisions.md. An id of the "Decided" table
+// is settled: a page states it as plain prose, never as an aside.
 // The ADRs in docs/decisions/ are not pages of the site and are not linted here.
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
@@ -37,14 +38,25 @@ function status(fm) {
   return m ? m[1].trim().replace(/^(["'])(.*)\1$/, '$2') : undefined;
 }
 
-// The ids that are rows of the registry table: `| OD-3 | ...`.
+// The ids that are rows of the registry tables: `| OD-3 | ...`. The rows under
+// the "## Open" heading are open; the rows under "## Decided" are decided.
 function registeredIds() {
-  const ids = new Set();
+  const open = new Set();
+  const decided = new Set();
+  let section = null;
   for (const line of readFileSync(registry, 'utf8').split('\n')) {
+    const h = /^##\s+(.*?)\s*$/.exec(line);
+    if (h) {
+      section = /^open$/i.test(h[1]) ? open : /^decided$/i.test(h[1]) ? decided : null;
+      continue;
+    }
     const m = /^\|\s*(?:<a id="od-\d+"><\/a>)?\s*(OD-\d+)\s*\|/.exec(line);
-    if (m) ids.add(m[1]);
+    if (!m) continue;
+    if (section === null) throw new Error(`${m[1]} is a row outside the "Open" and "Decided" tables`);
+    if (open.has(m[1]) || decided.has(m[1])) throw new Error(`${m[1]} is listed twice`);
+    section.add(m[1]);
   }
-  return ids;
+  return { open, decided };
 }
 
 // The titles of the `:::caution[Open decision ...]` asides outside code fences.
@@ -83,13 +95,18 @@ function* openDecisionComponents(text) {
 let ids;
 try {
   ids = registeredIds();
-} catch {
-  console.error(`check-status: cannot read ${relative(root, registry)}`);
+} catch (e) {
+  console.error(`check-status: cannot read ${relative(root, registry)}: ${e.message}`);
   process.exit(1);
 }
-if (ids.size === 0) {
-  console.error(`check-status: no OD-<n> rows in ${relative(root, registry)}; an empty registry proves nothing`);
+if (ids.open.size === 0 || ids.decided.size === 0) {
+  console.error(`check-status: ${relative(root, registry)} has ${ids.open.size} open and ${ids.decided.size} decided OD-<n> rows; an empty table proves nothing`);
   process.exit(1);
+}
+// One message for an id that an aside may not cite.
+function notOpen(id) {
+  if (ids.decided.has(id)) return `${id} is decided; state it as plain prose, not as an open-decision aside`;
+  return `${id} is not a row of ${relative(root, registry)}`;
 }
 
 let failures = 0;
@@ -110,13 +127,13 @@ for (const file of walk(docs)) {
     asides++;
     const m = /^Open decision (OD-\d+)(?::|$)/.exec(title);
     if (!m) problems.push(`line ${line}: "${title}" must read "Open decision OD-<n>: short title"`);
-    else if (!ids.has(m[1])) problems.push(`line ${line}: ${m[1]} is not a row of ${relative(root, registry)}`);
+    else if (!ids.open.has(m[1])) problems.push(`line ${line}: ${notOpen(m[1])}`);
   }
   if (file.endsWith('.mdx')) {
     for (const { line, id } of openDecisionComponents(text)) {
       asides++;
       if (!/^OD-\d+$/.test(id)) problems.push(`line ${line}: <OpenDecision id="${id}"> must read OD-<n>`);
-      else if (!ids.has(id)) problems.push(`line ${line}: ${id} is not a row of ${relative(root, registry)}`);
+      else if (!ids.open.has(id)) problems.push(`line ${line}: ${notOpen(id)}`);
     }
   }
   checked++;
@@ -134,4 +151,4 @@ if (failures > 0) {
   console.error(`check-status: ${failures} problems in ${checked} pages`);
   process.exit(1);
 }
-console.log(`check-status: ${checked} pages with a valid status, ${asides} open-decision asides, ${ids.size} registered ids`);
+console.log(`check-status: ${checked} pages with a valid status, ${asides} open-decision asides, ${ids.open.size} open and ${ids.decided.size} decided ids`);
