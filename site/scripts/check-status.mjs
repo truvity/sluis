@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 // Page-status lint: every page under docs/ must carry `status: target |
 // partial | shipped` in its front matter, and every aside titled
-// `Open decision OD-<n>` must name an id that is a row of docs/open-decisions.md.
+// `Open decision OD-<n>` (a `:::caution[...]` aside in Markdown, an
+// `<OpenDecision id="OD-<n>"` component in MDX) must name an id that is a row
+// of docs/open-decisions.md.
 // The ADRs in docs/decisions/ are not pages of the site and are not linted here.
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
@@ -61,6 +63,23 @@ function* openDecisionAsides(text) {
   }
 }
 
+// The ids of the `<OpenDecision id="OD-n"` components of an MDX page, outside code fences.
+function* openDecisionComponents(text) {
+  let fence = null;
+  for (const [i, line] of text.split('\n').entries()) {
+    const f = /^\s*(`{3,}|~{3,})/.exec(line);
+    if (f) {
+      if (fence === null) fence = f[1][0];
+      else if (f[1][0] === fence) fence = null;
+      continue;
+    }
+    if (fence !== null) continue;
+    for (const m of line.matchAll(/<OpenDecision\b[^>]*?\bid=(?:"([^"]*)"|'([^']*)'|\{["'`]([^"'`]*)["'`]\})/g)) {
+      yield { line: i + 1, id: m[1] ?? m[2] ?? m[3] };
+    }
+  }
+}
+
 let ids;
 try {
   ids = registeredIds();
@@ -92,6 +111,13 @@ for (const file of walk(docs)) {
     const m = /^Open decision (OD-\d+)(?::|$)/.exec(title);
     if (!m) problems.push(`line ${line}: "${title}" must read "Open decision OD-<n>: short title"`);
     else if (!ids.has(m[1])) problems.push(`line ${line}: ${m[1]} is not a row of ${relative(root, registry)}`);
+  }
+  if (file.endsWith('.mdx')) {
+    for (const { line, id } of openDecisionComponents(text)) {
+      asides++;
+      if (!/^OD-\d+$/.test(id)) problems.push(`line ${line}: <OpenDecision id="${id}"> must read OD-<n>`);
+      else if (!ids.has(id)) problems.push(`line ${line}: ${id} is not a row of ${relative(root, registry)}`);
+    }
   }
   checked++;
   for (const p of problems) {
