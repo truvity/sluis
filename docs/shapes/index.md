@@ -17,12 +17,18 @@ There are six shapes, T0 to T5, and Kubernetes, which is supported in the model.
 | [T0 Local](/shapes/local/) | Docker on a workstation, one node | Software, or the host's YubiKey through its `pcscd` socket (OD-8) | Embedded single-node store | `sqlite` | Local spool | Unix uid per role, peer credentials | None built in | Development and CI |
 | [T1 Single node](/shapes/single-node/) | One arm64 single-board computer, 2 GB RAM, eMMC, a YubiKey | YubiKey PIV | Single-node store, no Raft | `sqlite` | Local spool | Unix uid per role; node-agent workload JWT | `cloudflared` to a Unix socket | Integration tests and tutorials |
 | [T2 Cluster](/shapes/cluster/) | Three single-board computers, Ubuntu and Rocky may mix | A YubiKey per node | rqlite (Raft) across three nodes | `sqlite` | Local spool per node | As T1, one issuer per node | `cloudflared` on each node | Integration tests and tutorials |
-| [T3 AWS EC2 single](/shapes/aws-ec2-single/) | One `t4g.nano`, Amazon Linux 2023 | AWS KMS | DynamoDB | `sqlite` | Local spool | Unix uid per role; per-role AWS credentials | `cloudflared` to a Unix socket | Integration tests and tutorials |
-| [T4 AWS EC2 cluster](/shapes/aws-ec2-cluster/) | An ASG of three `t4g.nano`, Amazon Linux 2023 | AWS KMS | rqlite (Raft) | `sqlite` | Local spool per node | As T3, one issuer per node | `cloudflared` on each node | The first build target; integration tests and tutorials |
+| [T3 AWS EC2 single](/shapes/aws-ec2-single/) | One `t4g.nano`, Amazon Linux 2023 | AWS KMS | DynamoDB | `sqlite` | Local spool | Unix uid per role; per-role AWS credentials (proposed) | `cloudflared` to a Unix socket (proposed) | Integration tests and tutorials |
+| [T4 AWS EC2 cluster](/shapes/aws-ec2-cluster/) | An ASG of three `t4g.nano`, Amazon Linux 2023 | AWS KMS | rqlite (Raft) | `sqlite` | Local spool per node | As T3, one issuer per node; per-role AWS credentials (proposed) | `cloudflared` on each node (proposed) | The first build target; integration tests and tutorials |
 | [T5 AWS Lambda](/shapes/aws-lambda/) | One Lambda function per role | AWS KMS | DynamoDB | `postgres` (OD-12) | Queue | The function's IAM role | A Lambda function URL or API Gateway, through the Lambda Web Adapter | Integration tests and tutorials |
 | [Kubernetes](/shapes/kubernetes/) | Pods, one per role | By platform: KMS on AWS | By platform | `postgres` | Queue, or blocking (OD-5) | A ServiceAccount per role | The gateway route to the pod port | In the model; in the matrix later (OD-7) |
 
-The edge, the Lambda index and the Kubernetes outbox are marked on their own pages where they are proposed or open. The audit path in all shapes is the one on [Audit](/concepts/audit/): every success is audited, records go to an outbox first and then into sealed batches, and the notary signs batch heads into a hash chain.
+The edge, the Lambda index and the Kubernetes outbox are marked on their own pages where they are proposed or open.
+
+:::note[Proposed]
+The per-role AWS credentials on T3 and T4 (a `node-agent` that brokers them and closes IMDS) and `cloudflared` as the edge connector on the EC2 shapes are proposals, not decisions.
+:::
+
+The audit path in all shapes is the one on [Audit](/concepts/audit/): every success is audited, records go to an outbox first and then into sealed batches, and the notary signs batch heads into a hash chain.
 
 Integration tests and the [tutorials](/tutorials/) run on all five shapes T1 to T5. Development uses T0.
 
