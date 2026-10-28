@@ -9,7 +9,7 @@ The roadmap lives in two public GitHub Projects under the `truvity` organization
 - **sluis v2**: [github.com/orgs/truvity/projects/9](https://github.com/orgs/truvity/projects/9). The line built on `main`.
 - **sluis v1**: [github.com/orgs/truvity/projects/10](https://github.com/orgs/truvity/projects/10). The agreed v1 roadmap (v1.80 to v1.85) and fixes, on `master`.
 
-### Goal views of the v2 board
+## Goal views of the v2 board
 
 The v2 board has a multi-select project field `Goal`, and its views are filters on that field. Items are being tagged, so a view fills in as the tagging proceeds.
 
