@@ -17,6 +17,7 @@ The key mode is a property of the shape:
 | AWS shapes (EC2, Lambda) | AWS KMS |
 | Board shapes (single node, cluster) | A hardware key, a YubiKey in PIV mode |
 | Development (local) | A software key |
+| Kubernetes (T6, proposed) | AWS KMS on EKS; no mode yet for other clusters |
 
 :::note[Proposed]
 **Floors in code, choices above them in config.** The code refuses a software key on a production shape. Configuration chooses among the modes the floor allows. A development install can therefore never be mistaken for a production one by loading its configuration on the wrong node.
@@ -43,6 +44,10 @@ The volume makes this affordable. On a production install, a measurement showed 
 | Azure Entra | RSA-2048 (RS256) |
 
 See [Identity](/concepts/identity/) for how these keys are used.
+
+:::note[Proposed]
+**Kubernetes (T6).** On EKS the keys are the AWS KMS keys of the layout below. A cluster outside AWS has no key mode that the floor allows yet, and refuses to start rather than fall back to a software key; which mode comes first is [OD-20](/open-decisions/#od-20). The workload tokens on Kubernetes are the cluster's own ServiceAccount tokens, signed by the cluster's key with the algorithm the cluster uses. sluis neither holds nor signs them, so the P-384 rule above does not cover them. How a role gets its cloud identity from them is [OD-19](/open-decisions/#od-19). See [Kubernetes](/shapes/kubernetes/).
+:::
 
 - **The per-audience RS256 exception.** Some verifiers cannot take an elliptic-curve signature. For an audience that is configured to need RS256, sluis signs that audience's tokens with a separate RSA key, kept in its own slot or KMS key and used for nothing else. Every other audience keeps getting EC P-384 tokens. The RSA public key is published in the JWKS beside the EC keys.
 
