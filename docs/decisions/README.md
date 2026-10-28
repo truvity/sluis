@@ -2,7 +2,7 @@
 
 One record per decision that shapes sluis from the outside: what a user must do, what an installation must accept, what a release removes.
 A record says why the thing is shaped the way it is, what else was weighed, and what follows.
-Explanation pages say how the shipped thing works. When the two disagree, the pages describe what shipped and the record is the reasoning that led there.
+Explanation pages describe the target state and carry a status badge; a page marked `shipped` describes what shipped. When a page and a record disagree, the record is the reasoning and the page is fixed.
 
 How a decision is made is in [GOVERNANCE.md](../../GOVERNANCE.md).
 

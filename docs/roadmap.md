@@ -1,6 +1,7 @@
 ---
 title: Roadmap
 description: Where sluis is going. The roadmap is two public GitHub Project boards, one for v2 and one for v1; this page links to both.
+status: shipped
 ---
 
 :::note[Placeholder]

@@ -1,6 +1,7 @@
 ---
 title: Overview
 description: What sluis is for, who it serves and what it deliberately leaves out. A skeleton page; the full overview is written as v2 takes shape.
+status: target
 ---
 
 :::note[Skeleton]

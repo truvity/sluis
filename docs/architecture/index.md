@@ -1,6 +1,9 @@
 ---
 title: Architecture
 description: How sluis is put together, drawn as C4 diagrams in Mermaid. The context, container, component and deployment views are placeholders for now.
+status: target
+sidebar:
+  order: 0
 ---
 
 :::note[Skeleton]

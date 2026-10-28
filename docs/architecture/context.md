@@ -1,6 +1,7 @@
 ---
 title: System context
 description: C4 level 1. sluis in its surroundings, with the people, robots and external systems it brokers identity for. A placeholder diagram.
+status: target
 ---
 
 :::note[Placeholder]

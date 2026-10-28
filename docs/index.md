@@ -1,6 +1,7 @@
 ---
 title: "sluis: a pluggable identity and access broker"
 description: sluis is an open-source identity and access broker for people, robots and external systems. v2 is being designed in the open.
+status: target
 template: splash
 hero:
   tagline: A pluggable identity and access broker for people, robots and external systems.
@@ -16,6 +17,6 @@ hero:
 
 ## Status
 
-v2 is being designed in the open; v1 docs are at [/v1/](/v1/).
+This site documents the **target state** of sluis v2. Each page carries a badge that says whether it describes a design that is not built yet, something partly built, or something shipped. v1 docs are at [/v1/](/v1/).
 
-The decisions behind v2 are recorded as [architecture decision records](/decisions/), the plan is on the [roadmap](/roadmap/), and how to take part is in [Contributing](/contributing/).
+The points that are still undecided are listed on [Open decisions](/open-decisions/). The decisions already made are recorded as [architecture decision records](/decisions/), the plan is on the [roadmap](/roadmap/), and how to take part is in [Contributing](/contributing/).

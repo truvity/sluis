@@ -1,6 +1,7 @@
 ---
 title: "Features: v1 and v2"
 description: Every user-visible capability of sluis v1, grouped by area, with its v1 documentation and where it stands in v2.
+status: shipped
 ---
 
 This page lists what sluis v1 does today and where each capability stands in v2. v2 is a from-scratch rewrite, and it reaches parity with v1 before it adds anything new, so this list is the checklist for that.
