@@ -55,10 +55,12 @@ Three ideas hold the design together:
 | Section | What you find there | Start with |
 |---|---|---|
 | [Concepts](/concepts/) | The model: roles, drivers, integrations, keys, identity, configuration, data and audit. | [Concepts map](/concepts/) |
+| [Integrations](/integrations/) | Every system sluis connects to, what each is for, what sluis asks the vendor for, and the setup patterns for GitHub and Slack apps, Google Workspace, Cloudflare, AWS and OIDC. | [Integrations](/integrations/) |
 | [Architecture](/architecture/) | The same system at three zoom levels: context, components and processes, with the deployment and listener details and two interactive explorers. | [Architecture](/architecture/) |
 | [Shapes](/shapes/) | How sluis is deployed: local, single node, cluster, AWS EC2, AWS Lambda, Kubernetes. | [Single node](/shapes/single-node/) |
 | [Tutorials](/tutorials/) | Step-by-step installs that run in CI on the supported shapes. | [Single-node install](/tutorials/single-node-install/) |
 | [Distribution](/distribution/) | Packages, release signing and supported platforms. | [Packages](/distribution/packages/) |
+| [Standards and conformance](/standards/) | The RFCs, specifications and certifications sluis uses or plans to, and the plan to prove conformance with the OpenID Foundation test plans. | [Standards register](/standards/) |
 | [Open decisions](/open-decisions/) | The points of the design the maintainer has not decided, each with options and the current lean. | [Open decisions](/open-decisions/) |
 
 Every page says how settled it is. A badge beside the title shows whether it describes a design that is not built yet, something partly built or something shipped. Inside a page, plain prose is agreed, a **Proposed** note is a design awaiting the maintainer, and an **Open decision** note is undecided. The rules are in [Contributing](/contributing/).
