@@ -30,8 +30,16 @@ site-lint:
 site-links:
     lychee --config lychee.toml --root-dir "$PWD/site/dist" --no-progress 'site/dist/**/*.html'
 
+# Open the built site in headless Chrome and assert that every Mermaid diagram is
+# drawn (an <svg> in each pre.mermaid), the explorers' script ran and the console
+# is clean, in light and dark mode. Needs Chrome or Chromium (CHROME, or
+# google-chrome / chromium on PATH) and `just site-build`. Screenshots: pass a
+# directory, `just site-render site/dist /tmp/shots`.
+site-render dist='site/dist' shots='':
+    site/scripts/check-render.mjs {{ dist }} {{ shots }}
+
 # What a pull request must pass.
-site-check: site-lint site-build site-links
+site-check: site-lint site-build site-render site-links
 
 # Refresh v1-src from the newest stable v1 release tag (or the tag given) and build
 # the v1 documentation into site/dist/v1. The Pages workflow picks the tag by the
