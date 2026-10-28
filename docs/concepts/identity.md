@@ -6,7 +6,7 @@ sidebar:
   order: 5
 ---
 
-A sluis role that talks to a cloud, for example to write an audit archive to a bucket, needs that cloud's credentials. On a cloud-native platform the platform hands the role its identity: the Lambda function's role, or EKS Pod Identity. On a node that the platform does not manage, nothing does. sluis fills that gap with workload identity.
+A sluis role that talks to a cloud, for example to write an audit archive to a bucket, needs that cloud's credentials. On a cloud-native platform the platform hands the role its identity: the Lambda function's role. On Kubernetes the identity is proposed to come from a projected ServiceAccount token (see below). On a node that the platform does not manage, nothing does. sluis fills that gap with workload identity.
 
 ## Workload identity
 
@@ -38,7 +38,13 @@ GCP and Azure each need an algorithm other than P-384. The exception is made for
 
 ## Platform-native identity
 
-Where the platform supplies an identity, sluis uses it and does not add a layer: the Lambda function role on Lambda, and EKS Pod Identity on Kubernetes on AWS. The node agent exists for the nodes where none does.
+Where the platform supplies an identity, sluis uses it and does not add a layer: the Lambda function role on Lambda. The node agent exists for the nodes where none does.
+
+:::note[Proposed]
+**Kubernetes (T6).** The identity of a role is a projected ServiceAccount token, with one audience per sluis role, mounted only into that role's container and its driver. The role's cloud driver exchanges the token with the cloud in the same way as in the sequence below (`AssumeRoleWithWebIdentity` on AWS, Workload Identity Federation on Google Cloud, a federated credential on Azure). Only the source of the token differs: the kubelet and the API server issue it, and the node agent `sluis-node` is not used on Kubernetes. The cloud role of each sluis role trusts the cluster's issuer, that role's audience, and the namespace and ServiceAccount of the install. The workload tokens are the cluster's, not sluis keys; see [Keys](/concepts/keys/).
+
+EKS Pod Identity is used only for a pod that holds a single role, because its credentials belong to the pod and not to a container. This is [OD-19](/open-decisions/#od-19); options and limits are on [Kubernetes](/shapes/kubernetes/#identity).
+:::
 
 ## A role getting AWS credentials
 
