@@ -30,7 +30,7 @@ The table reads shape by mechanism. Every mechanism is generated from the manife
 ### Workload JWT and per-cloud exchange
 
 :::note[Proposed]
-On self-hosted nodes (T1 to T4), the node agent issues a short-lived **workload JWT per role**. The role's identity comes from its uid, read from the Unix socket's peer credentials. Each cloud driver (AWS, GCP, Azure) exchanges the workload JWT for that cloud's credentials:
+On self-hosted nodes (T1 to T4), the node agent (`sluis-node`) issues a short-lived **workload JWT per role**. The role's identity comes from its uid, read from the Unix socket's peer credentials. Each cloud driver (AWS, GCP, Azure) exchanges the workload JWT for that cloud's credentials:
 
 | Cloud | Mechanism | Signing algorithm |
 | ----- | --------- | ----------------- |
@@ -49,7 +49,7 @@ IAM Roles Anywhere stays an AWS-only alternative. `aws_signing_helper serve` is 
 
 Each role has its own IAM role (or Lambda function role, or Pod Identity association), generated from its manifest. The trust relationship differs by shape; the permissions policy is the same on all of them.
 
-KMS key policies name one role each. On AWS there is one symmetric key (`ENCRYPT_DECRYPT`) with encryption contexts for every sealing need, and one `ECC_NIST_P384` `SIGN_VERIFY` key per authority purpose (token signing, CA, notary, grant), because KMS allows one usage per key and `Sign` takes no encryption context. A generated key policy for the notary key looks like this (an example; `<account-id>` and `<install>` are placeholders):
+KMS key policies name one role each. On AWS there is one symmetric key (`ENCRYPT_DECRYPT`) with encryption contexts for every sealing need, and one `ECC_NIST_P384` `SIGN_VERIFY` key per authority purpose (token signing, CA, notary, grant), because KMS allows one usage per key and `Sign` takes no encryption context. On T4 each node has its own notary signing key instead, so that batch heads can be co-signed 2 of 3; a shared key cannot do that, because IAM cannot restrict which message gets signed. A generated key policy for the notary key looks like this (an example; `<account-id>` and `<install>` are placeholders):
 
 ```json
 {
@@ -117,7 +117,7 @@ The firewall is default-closed and keyed on the owner of the socket:
 
 - **IMDS** (`169.254.169.254` and its IPv6 address) is dropped for every uid but the node agent, so a compromised role cannot reach the instance role.
 - **Egress** is an allow-list per uid (`meta skuid`): an integration reaches its provider's hosts and nothing else. `policy`, `signer`, `key-holder` and `state-owner` have no egress at all.
-- **The Raft port** accepts only the other nodes' addresses.
+- **Inbound** is closed except for the Raft port, which accepts only the other nodes' addresses and is the only TCP port between nodes. `entry`'s public API listens on `127.0.0.1` and takes no inbound connection from the network; the edge connector reaches it from the same host.
 
 The per-unit `IPAddressAllow=` and `IPAddressDeny=` directives are a second layer, tested so that no unit lacks them.
 
@@ -148,6 +148,3 @@ Some guarantees cannot be matched without hardware isolation per process. They a
 
 Lambda removes the first three rows: the platform attests the function and runs each in its own micro-VM. That is why a shape on Lambda needs no node agent.
 
-:::caution[Open decision OD-4: Which TCP ports exist between nodes]
-Raft peer traffic is the state driver's own TCP port over mTLS. Whether any other inter-node port exists (a role port) is open. The lean is that only the Raft port does.
-:::

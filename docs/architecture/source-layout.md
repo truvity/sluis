@@ -7,30 +7,26 @@ sidebar:
 ---
 
 :::note[Proposed]
-The languages and the layout below are the design as proposed, awaiting the maintainer's review. The two open language questions are marked.
+The languages and the layout below are the design as proposed, awaiting the maintainer's review. All language choices below are proposed except the cloud drivers and the `policy` role, which are decided.
 :::
 
 ## Languages
 
 | Component | Language | Status |
 | --------- | -------- | ------ |
-| Roles (`central`, `signer`, `policy`, `ca`, `notary`, `audit-writer`, `audit-read`, `quota`) | Go | Proposed |
+| Roles other than `policy` (`entry`, `signer`, `ca`, `notary`, `audit-writer`, `audit-read`, `quota`) | Go | Proposed |
 | Most drivers (state, index, blob, queue, lease, keys for KMS and YubiKey) | Go. The YubiKey driver needs cgo against pcsc-lite, so it builds in a native per-architecture CI job | Proposed |
 | Integrations | Go | Proposed |
-| Cloud drivers (AWS, GCP, Azure) | Go, or Rust | Open: OD-14 |
-| Policy engine | Depends on the policy language | Open: OD-10 |
+| Cloud drivers (AWS, GCP, Azure) | Rust | Decided |
+| `policy` role and its Cedar engine | Rust, with the `cedar-policy` crate | Decided |
 | Console | TypeScript | Proposed |
-| `sluis` CLI | Go | Proposed |
+| `sluis` CLI (one `sluis` binary, with subcommands for operators and users) | Go | Proposed |
 
-:::caution[Open decision OD-14: Rust for the AWS, GCP and Azure drivers]
-Rust is a candidate for the three cloud drivers, if a memory spike on a `t4g.nano` shows a gain. The options are Rust or Go. A measurement decides. There is no Rust JOSE driver; tokens are standard JWS/JWT, so any language verifies them against the published key set.
-:::
+Rust is used for the aws, gcp and azure cloud drivers. There is no Rust JOSE driver; tokens are standard JWS/JWT, so any language verifies them against the published key set.
 
-:::caution[Open decision OD-10: Policy language]
-The language the policy role evaluates depends on the choice between Cedar and an own file format. The options are Cedar, or an own file format. This is open, and it decides the implementation language of the policy engine.
-:::
+The `policy` role is written in Rust with the `cedar-policy` crate, and Cedar is the policy language.
 
-A role can be written in any language, because every contract is ConnectRPC and every integration is out of process. The language choice is per component; the contracts do not change.
+The command-line tool is one `sluis` binary with subcommands for operators and for users. A role can be written in any language, because every contract is ConnectRPC and every integration is out of process. The language choice is per component; the contracts do not change.
 
 ## Shared kits
 
@@ -72,8 +68,8 @@ docs/  site/
 | `schema/` | The Pkl sources that define the configuration shape, and the JSON Schema (draft 2020-12) generated from them. The schema is part of the public API |
 | `kits/` | The shared kits above, one directory per language, plus the conformance suite |
 | `roles/`, `drivers/`, `integrations/` | One directory per component, matching the layout under `/usr/libexec/sluis/` that the [packages](/architecture/processes/#packaging) install |
-| `node/agent/` | The node agent |
-| `cli/sluis/` | The `sluis` command |
+| `node/agent/` | The node agent (`sluis-node`) |
+| `cli/sluis/` | The one `sluis` binary, with subcommands for operators and users |
 | `console/` | The TypeScript console |
 | `manifest/` | The permission manifests. They generate the IAM policies, key policies, shared-driver ACLs, systemd units, network rules and the deny-matrix tests |
 | `deploy/` | Packaging for each artifact: `.deb` and `.rpm` packages, Helm charts, Lambda archives, infrastructure as code |

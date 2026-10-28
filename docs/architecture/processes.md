@@ -26,8 +26,8 @@ There are about eight core roles, plus integrations. `signer` and `policy` are s
 
 | Role | Responsibility | Holds | Cannot |
 | ---- | -------------- | ----- | ------ |
-| `central` | The OIDC protocol: sign-in, sessions, token exchange, the console API. Sits behind the edge connector | Sessions, refresh tokens, client secret verifiers. **No key** | Read the signing keys, or reach an integration's vendor credential |
-| `signer` | Holds the signing ring and signs tokens under a signing policy; it is not a pure oracle. It checks the issuer URL, the audience set, the lifetime and the algorithm | The token-signing key use (KMS `Sign`, or the hardware key through `key-holder`) | Accept a request from anyone but `central`, or parse internet input |
+| `entry` | The OIDC protocol: sign-in, sessions, token exchange, the console API. Sits behind the edge connector | Sessions, refresh tokens, client secret verifiers. **No key** | Read the signing keys, or reach an integration's vendor credential |
+| `signer` | Holds the signing ring and signs tokens under a signing policy; it is not a pure oracle. It checks the issuer URL, the audience set, the lifetime and the algorithm | The token-signing key use (KMS `Sign`, or the hardware key through `key-holder`) | Accept a request from anyone but `entry`, or parse internet input |
 | `policy` | The decision point. Reviewed, file-based policy maps facts to grants. Signs mint grants with its own key | The grant key. No state, no network, no secrets | Reach any resource: a bad process can decide wrongly, but exfiltrates nothing |
 | `ca` | X.509 and the SSH CA | The CA keys | Sign anything outside its policy roles |
 | `notary` | Signs audit batch heads | The notary key, in a separate custody domain from the writer | Write a record |
@@ -35,17 +35,13 @@ There are about eight core roles, plus integrations. `signer` and `policy` are s
 | `audit-read` | Serves audit queries from the index | Read access only. It audits every read | Write to the evidence |
 | `quota` | Rate limits and caps, with conditional adjust | Its own balances and ledger | Touch identity records |
 
-The blast radius of each is small by construction. A compromised `central` can ask `signer` for tokens while it runs (a signing oracle), but cannot read the key and cannot reach an integration. A compromised `signer` holds the ability to sign, not the ability to parse a request. A compromised integration reaches its own provider account and its own state.
-
-:::caution[Open decision OD-1: Name of the central process]
-`central` is a placeholder. The name is open: coordinator, central, hub, and others.
-:::
+The blast radius of each is small by construction. A compromised `entry` can ask `signer` for tokens while it runs (a signing oracle), but cannot read the key and cannot reach an integration. A compromised `signer` holds the ability to sign, not the ability to parse a request. A compromised integration reaches its own provider account and its own state.
 
 ## Integration roles
 
 Each integration runs as its own process and holds its own vendor credential: the GitHub App keys, a chat token, the minter credential for a cloud API, a directory service account. Integrations that hold no external secret (a verifier of workload tokens, for example) are still separate roles, because they separate code and policy and are good candidates for fusion when memory is tight.
 
-All integrations share one shape: ingress only from `central` and from the decision point by the call graph; state and secrets only in their own namespace (`<integration>/<connection>/*`); an audit emit; and egress to an allow-list of the provider's hosts, nothing else. They return facts or carry out authorized effects, and they call no other integration.
+All integrations share one shape: ingress only from `entry` and from the decision point by the call graph; state and secrets only in their own namespace (`<integration>/<connection>/*`); an audit emit; and egress to an allow-list of the provider's hosts, nothing else. They return facts or carry out authorized effects, and they call no other integration.
 
 Integrations with no standing work are not resident. A directory refresh or a reconcile tick runs from a systemd timer and exits. A request-driven one starts on its socket and exits when idle.
 
@@ -60,11 +56,7 @@ Two roles exist because some backends cannot tell their callers apart. Each is a
 
 Neither has internet egress, loads plugins, or has reconcile logic. One code path per operation, fuzz-tested decoding. Their blast radius is the whole resource class, and that price is paid once, in a small audited process, rather than in every owner. With AWS KMS or DynamoDB the platform does this job (a key policy and a per-role identity; IAM leading-key conditions), so the shared driver is not used there.
 
-The **node agent** (self-hosted shapes) is the root-owned process that is the node's trusted base. It issues a short-lived workload JWT per role, brokers cloud credentials, pulls and verifies signed configuration and binaries, and starts units. Everything in [Deployment](/architecture/deployment/) depends on it staying small.
-
-:::caution[Open decision OD-2: Name of the node agent]
-`node-agent` is a placeholder name.
-:::
+The **node agent** (`sluis-node`, self-hosted shapes) is the root-owned process that is the node's trusted base. It issues a short-lived workload JWT per role, brokers cloud credentials, pulls and verifies signed configuration and binaries, and starts units. Everything in [Deployment](/architecture/deployment/) depends on it staying small.
 
 ## The fusion rule
 
@@ -73,7 +65,7 @@ Roles are not the same as units. A shape may run several roles in one unit, to f
 1. **The unit's manifest is the union of the manifests of the roles in it.** Fusing never grants something no member role was allowed.
 2. **No unit holds a key next to an unauthenticated listener.**
 
-Both are tested for every shape. For example, `signer` cannot be fused into `central`: the fusion would put the signing key beside the internet-facing listener. On Lambda the same reasoning keeps `signer` a separate function, because the key grant must stay out of the role of the function that faces the internet. Small, listener-free roles that hold no key (`quota` and an integration with no external secret, for instance) can share a unit on a 2 GB board.
+Both are tested for every shape. For example, `signer` cannot be fused into `entry`: the fusion would put the signing key beside the internet-facing listener. On Lambda the same reasoning keeps `signer` a separate function, because the key grant must stay out of the role of the function that faces the internet. Small, listener-free roles that hold no key (`quota` and an integration with no external secret, for instance) can share a unit on a 2 GB board.
 
 ## Packaging
 
@@ -82,10 +74,10 @@ Every component ships as its own binary. On a host that uses packages, the binar
 
 ```text
 /usr/libexec/sluis/
-  roles/          central  signer  policy  ca  notary  audit-writer  audit-read  quota
+  roles/          entry  signer  policy  ca  notary  audit-writer  audit-read  quota
   drivers/        state-owner  key-holder  <port drivers>
   integrations/   <one binary per integration>
-  node/           node-agent
+  node/           sluis-node
   vendor/         third-party binaries that sluis starts, such as rqlite
 ```
 
@@ -98,7 +90,7 @@ Why not Go plugins: a Go `.so` shares the host's address space and so has no iso
 
 ## One node, drawn out
 
-A self-hosted node (a single-board computer, or an EC2 instance) runs every role as its own user. Arrows are Unix-socket calls allowed by the call graph. The only thing that reaches `central` from outside is the edge connector, and it reaches a socket, not a port. See [Listeners](/architecture/listeners/).
+A self-hosted node (a single-board computer, or an EC2 instance) runs every role as its own user. Arrows are Unix-socket calls allowed by the call graph. The only thing that reaches `entry` from outside is the edge connector, and it connects to `entry`'s loopback TCP port; every other call is a Unix-socket call. See [Listeners](/architecture/listeners/).
 
 ```mermaid
 flowchart LR
@@ -108,7 +100,7 @@ flowchart LR
     cf["cloudflared<br/>outbound only"]
 
     subgraph front["Parses requests, holds no key"]
-      central["central"]
+      entry["entry"]
     end
 
     subgraph authority["Hold or use authority keys, no listener on the network"]
@@ -135,41 +127,39 @@ flowchart LR
       so["state-owner"]
     end
 
-    agent["node-agent<br/>root, small"]
+    agent["sluis-node<br/>root, small"]
     dev[("YubiKey")]
     db[("rqlite or Raft")]
   end
 
   net --> cf
-  cf -->|"unix:/run/sluis/central/api.sock"| central
-  central --> signer
-  central --> policy
-  central --> quota
-  central --> gh
-  central --> cl
+  cf -->|"http://127.0.0.1:8080"| entry
+  entry --> signer
+  entry --> policy
+  entry --> quota
+  entry --> gh
+  entry --> cl
   gh --> policy
   signer --> kh
   ca --> kh
   notary --> kh
   kh --> dev
-  central --> so
+  entry --> so
   quota --> so
   aw --> so
   ar --> so
   so --> db
-  central -.-> aw
+  entry -.-> aw
   gh -.-> aw
   aw --> notary
-  agent -.->|"workload JWT per role"| central
+  agent -.->|"workload JWT per role"| entry
   agent -.->|"workload JWT per role"| signer
 ```
 
-The solid line from `gh` to `policy` is a decision request; the integration asks "may this caller have this", never the reverse. Dashed lines to `audit-writer` are asynchronous emits. The `node-agent` dashes stand for the workload JWT it issues to every role; the picture omits them for the other roles to stay readable.
+The solid line from `gh` to `policy` is a decision request; the integration asks "may this caller have this", never the reverse. Dashed lines to `audit-writer` are asynchronous emits. The node agent dashes stand for the workload JWT it issues to every role; the picture omits them for the other roles to stay readable.
 
-On a three-node [cluster](/shapes/aws-ec2-cluster/) every node runs this set, and the `state-owner` processes talk to each other over the Raft driver's mTLS port. Each node's `audit-writer` drains its own spool, and the notary co-signs batch heads 2 of 3 across nodes. On [Lambda](/shapes/aws-lambda/) the same roles are separate functions with no node-agent; on [Kubernetes](/shapes/kubernetes/) they are separate pods.
+On a three-node [cluster](/shapes/aws-ec2-cluster/) every node runs this set, and the `state-owner` processes talk to each other over the Raft driver's mTLS port. Each node's `audit-writer` drains its own spool, and the notary co-signs batch heads 2 of 3 across nodes. On [Lambda](/shapes/aws-lambda/) the same roles are separate functions with no sluis-node; on [Kubernetes](/shapes/kubernetes/) they are separate pods.
 
-:::caution[Open decision OD-5: Audit outbox port per shape]
-Where an audit record waits before it is sealed differs by shape: a local spool on self-hosted and EC2 shapes, a queue on Lambda, and either a queue or blocking on Kubernetes. The lean is a spool for self-hosted shapes and a queue for Lambda.
-:::
+Where an audit record waits before it is sealed differs by shape: a local spool on self-hosted and EC2 shapes (co-signed in cluster mode), an SQS queue on Lambda. Kubernetes: later.
 
 Next: [Deployment](/architecture/deployment/) shows how each shape enforces these boundaries.

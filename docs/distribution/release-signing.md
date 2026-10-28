@@ -14,7 +14,7 @@ Every sluis artifact can be checked against more than one signature, made by dif
 - **GoReleaser v2**, open-source edition, builds the release. Rust builds are included. The YubiKey driver builds in a native per-architecture CI job because it needs cgo against pcsc-lite.
 - **A `.sha256` per file**, and a **`SHA256SUMS`** file for the release, signed twice: a cosign signature (`.sig`) and an OpenPGP signature (`.asc`).
 - **cosign keyless signing** through GitHub OIDC. There is no long-lived cosign private key; the signature is tied to the workflow identity that ran in the repository.
-- **OpenPGP-signed apt and dnf metadata.** The primary key is offline, on a hardware key. CI signs with an **expiring signing subkey** certified by that primary key.
+- **OpenPGP-signed apt and dnf metadata.** The primary key is offline, on a hardware key. CI signs with an **expiring signing subkey** certified by that primary key. See [The OpenPGP release key](#the-openpgp-release-key).
 - **Build provenance attestations**, made by GitHub, for every artifact.
 - **Two copies.** R2 serves the files; GitHub Releases is the immutable record.
 
@@ -82,14 +82,36 @@ Images and charts are signed by cosign keyless, and each carries a provenance at
 
 ```sh
 # Example
-cosign verify ghcr.io/truvity/sluis-central@sha256:<digest> \
+cosign verify ghcr.io/truvity/sluis-entry@sha256:<digest> \
   --certificate-identity-regexp '^https://github.com/truvity/sluis/' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 
-gh attestation verify oci://ghcr.io/truvity/sluis-central@sha256:<digest> --repo truvity/sluis
+gh attestation verify oci://ghcr.io/truvity/sluis-entry@sha256:<digest> --repo truvity/sluis
 ```
 
 A Helm chart pins its images by digest, so verifying the chart and installing it gives the images that were released with it.
+
+## The OpenPGP release key
+
+The OpenPGP key is a **dedicated sluis release identity**, not anyone's personal key.
+
+- **The primary key is generated on a pair of YubiKeys**, so it never exists outside hardware, and the second key is the spare.
+- **CI signs with an expiring subkey.** The subkey is certified by the primary key. When it expires, a new subkey is published under the same primary key.
+- **The maintainer's personal key certifies the release key**, so a user who already trusts the maintainer's key has a path to the release identity.
+- **Nothing is signed before phase 2** of the [roadmap](/roadmap/). The guides and tests show how to generate the root key on YubiKeys, as a key ceremony, so the ceremony is something anyone can read and rehearse.
+
+:::note[Proposed]
+How a user finds and verifies the public key is under research. The plan is to use several independent channels, so one compromised channel cannot replace the key:
+
+- keys.openpgp.org;
+- the Web Key Directory, direct method, on sluis.id (static files work on GitHub Pages);
+- DNS `OPENPGPKEY` records (RFC 7929), if DNSSEC is enabled on the zone;
+- `SECURITY.md` in the repository;
+- the GitHub release;
+- the site.
+
+The exact set of channels is not decided. To check a signature, a user can use `gpgv`, Sequoia `sqv`, `cosign`, `gh attestation verify` or `slsa-verifier`.
+:::
 
 ## How CI uploads
 
@@ -106,4 +128,4 @@ Only the workflow identity that the policy names can obtain the token, so a fork
 
 - A signature shows who published the file and that it wasn't changed. It doesn't show that the code is free of bugs.
 - The OpenPGP signing subkey is on CI. If CI is compromised during its validity, a bad repository can be signed. The offline primary key limits that to the subkey's life, and the cosign identity, the GitHub attestation and the immutable release are independent checks that don't depend on that subkey.
-- A new install trusts the key it first sees. Compare the fingerprint on a different channel.
+- A new install trusts the key it first sees. Compare the fingerprint on a different channel, for example the copy in the repository's `SECURITY.md`.

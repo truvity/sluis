@@ -35,14 +35,14 @@ On Ubuntu 22.04:
 
 ## FIPS builds
 
-- **Default build.** It runs Go's FIPS 140-3 module in `fips140=on` mode, using the latest module. In this mode TLS refuses X25519 and ChaCha20, and key generation runs pairwise consistency tests. Both behaviours are acceptable for sluis.
-- **Certified build.** A separate build pins the CMVP-certified module, certificate #5247, module v1.0.0, for installs that need the certificate.
+- **Default build.** FIPS mode is on by default. It runs Go's FIPS 140-3 module in `fips140=on` mode, using the latest module. In this mode TLS refuses X25519 and ChaCha20, and key generation runs pairwise consistency tests. Both behaviours are acceptable for sluis.
+- **Certified build.** A separately pinned build uses the CMVP-certified module, certificate #5247, module v1.0.0, for installs that need the certificate.
 - **BoringCrypto is not used.**
 
 :::note[Proposed]
-The FIPS design is proposed. How the certified build is named and delivered (its own repository path, tarballs or both) is not yet decided.
+How the certified build is named and delivered (its own repository path, tarballs or both) is not yet decided.
 :::
 
 ## Algorithms across platforms
 
-EC P-384 is used everywhere, with no RSA. A cloud-federation key may use the algorithm its cloud requires, each in its own slot or key: P-384 for AWS, P-256 (ES256) for GCP, and RSA-2048 (RS256) for Azure Entra. See [Keys](/concepts/keys/).
+EC P-384 is used everywhere, with no RSA, apart from two exceptions. A cloud-federation key may use the algorithm its cloud requires, each in its own slot or key: P-384 for AWS, P-256 (ES256) for GCP, and RSA-2048 (RS256) for Azure Entra. An audience whose verifiers cannot take EC may get RS256 tokens signed with a separate RSA key. See [Keys](/concepts/keys/).

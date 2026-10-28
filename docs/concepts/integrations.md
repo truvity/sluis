@@ -37,7 +37,7 @@ Caps and rate limits are not integration business either. They live in core, in 
 
 ```mermaid
 sequenceDiagram
-  participant C as central
+  participant C as entry
   participant P as policy
   participant M as CredentialMinter
   participant V as Vendor API
@@ -52,7 +52,7 @@ sequenceDiagram
 
 ## Core calls integrations, never the reverse
 
-Calls go one way. `central`, `policy` and the other core roles call integrations; an integration never calls a core role. Where an integration needs something from core, such as the desired state for a provisioner, core publishes it as data in a read-only prefix and the integration reads it.
+Calls go one way. `entry`, `policy` and the other core roles call integrations; an integration never calls a core role. Where an integration needs something from core, such as the desired state for a provisioner, core publishes it as data in a read-only prefix and the integration reads it.
 
 Three invariants are checked by tests, so the rule survives changes:
 

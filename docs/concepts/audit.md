@@ -34,13 +34,16 @@ flowchart LR
 
 The outbox is the port a role appends to; the driver behind it decides what "durable" means: a local fsync'd spool on servers, a queue on Lambda.
 
-:::caution[Open decision OD-5: Audit outbox port per shape]
-Options: a local spool, a queue, or blocking. The lean is a local spool on self-hosted shapes and a queue on Lambda. For Kubernetes the options are a queue or blocking.
-:::
+The audit outbox is a local spool on self-hosted shapes, co-signed in cluster mode, and an SQS queue on Lambda. Kubernetes: later.
 
-:::note[Proposed]
-On a cluster, each node's writer drains its own spool, and the notary co-signs batch heads 2 of 3 across the nodes, so there is no separate notary YubiKey. On Lambda, Kubernetes and EC2 a dedicated notary is optional: a Lambda function, a Kubernetes Job or an EC2 instance.
-:::
+On a cluster, each node's writer drains its own spool, and the notary co-signs batch heads 2 of 3 across the nodes. How the notary signs depends on the shape:
+
+| Shape | Notary signing |
+|---|---|
+| T2 cluster of boards | Each node signs with its own YubiKey key, 2 of 3, with no separate notary YubiKey |
+| T4 EC2 cluster | Each node has its own KMS `ECC_NIST_P384` signing key, co-signed 2 of 3. The node's key also signs that node's workload JWTs. A shared key cannot support co-signing, because KMS `Sign` takes no encryption context and IAM cannot restrict which message gets signed |
+| T5 Lambda | A single notary key, used only by the notary function's role. There is no co-signing; the function role is the isolation |
+| T1 single board and T3 EC2 single | One key. The residual risk, that root on the node can sign, is documented |
 
 ## The index lags the chain
 

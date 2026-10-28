@@ -111,6 +111,10 @@ Browser redirect routes under `/connect/<integration>/` complete the provider fl
 | `sluis backup`, `restore`, `migrate`, `doctor` | On the host, against state and secrets directly |
 | Scheduled work (directory refresh, reconcile ticks, rotation, backup) | Events from a timer, a queue, or a platform scheduler, not user API |
 
+### Second factor
+
+sluis relies on the upstream identity provider's multi-factor authentication for now. A person signs in at the upstream provider, and sluis takes the provider's result as a fact. Passkeys, including a step-up inside sluis for high-privilege roles, are a later roadmap feature.
+
 ### Added in v2
 
 :::note[Proposed]
@@ -118,7 +122,7 @@ The operations below are new in v2. Their paths and RPC names are proposed and m
 
 | Operation | Shape |
 | --------- | ----- |
-| Device login (RFC 8628) | `POST /device_authorization`, `GET /device`, approve and deny calls, and `grant_type=urn:ietf:params:oauth:grant-type:device_code` on `/token`. The verification page requires a session with MFA and shows the client, host, IP address and location |
+| Device login (RFC 8628) | `POST /device_authorization`, `GET /device`, approve and deny calls, and `grant_type=urn:ietf:params:oauth:grant-type:device_code` on `/token`. The verification page requires a session that the upstream provider authenticated with MFA, and shows the client, host, IP address and location |
 | Certificates for workloads, people and hosts | A Connect call for cert-manager's external-issuer library, and `sluis pki` and `sluis ssh` for people and robots |
 | Static publication | `GET` of CA certificates, CRLs, bundles, SSH CA keys and the key revocation list, public |
 | Audit receiver | `SinkService.Send` served by sluis, so other installs can send records |

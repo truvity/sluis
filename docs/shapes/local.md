@@ -12,20 +12,20 @@ T0 is the development shape: sluis in Docker on one workstation, with one node a
 
 ```mermaid
 flowchart LR
-  dev["Developer or CI job"] --> central
+  dev["Developer or CI job"] --> entry
   subgraph container["Docker container (one node)"]
     direction TB
-    central["central"]
+    entry["entry"]
     signer["signer"]
     policy["policy"]
     others["ca, notary, audit-writer,<br/>audit-read, quota"]
     keyholder["key-holder<br/>(driver)"]
     state["embedded store<br/>(driver)"]
-    central --> signer
-    central --> policy
+    entry --> signer
+    entry --> policy
     signer --> keyholder
     others --> state
-    central --> state
+    entry --> state
   end
   keyholder -. "optional" .-> pcscd["host pcscd socket"]
   pcscd --> yk["YubiKey on the host"]
@@ -43,9 +43,7 @@ flowchart LR
 - **Default:** software keys, EC P-384. No production secret is involved.
 - **Optional:** the host's YubiKey, reached through the host's `pcscd` socket mounted into the container. The `key-holder` is the only role that talks to the socket.
 
-:::caution[Open decision OD-8: YubiKey in Docker]
-Options: (a) mount the host's `pcscd` socket into the container; (b) software keys only in the local shape. The current lean is (a).
-:::
+In the local shape the container's `key-holder` uses the host's `pcscd` socket. `pcscd` lets several programs share the card, so the host keeps using the key. The pcsc-lite client protocol in the image must match the host daemon; if it does not, the `key-holder` runs on the host and its socket is mounted into the container.
 
 ## State and audit
 
@@ -57,13 +55,14 @@ Options: (a) mount the host's `pcscd` socket into the container; (b) software ke
 ## Identity and edge
 
 - Each role's process identity is its uid, read through peer credentials on the Unix socket.
-- Roles listen only on Unix sockets under `/run/sluis/<role>/`. Only `central`'s public API ever gets a TCP listener.
+- `entry`'s public API listens on TCP, bound to `127.0.0.1` inside the container. Every other role and every driver listens only on Unix sockets under `/run/sluis/<role>/`.
+- A browser or a test harness on the workstation reaches `entry` through a port the container publishes. That published port is a development convenience; no production shape publishes it.
 
 :::note[Proposed]
-How a browser on the workstation reaches `central` is not yet decided. Two candidates are an edge-connector container (`cloudflared` with a `unix:` ingress service, as on the board shapes) and a local reverse proxy that forwards to `/run/sluis/central/api.sock`.
+How a developer reaches `entry` with the real edge in the loop is not yet decided. One candidate is an edge-connector container (`cloudflared` with an `http://127.0.0.1:<port>` service, as on the board shapes) next to the sluis container.
 :::
 
-See [Listeners](/architecture/listeners/) for the rule and its exceptions.
+See [Listeners](/architecture/listeners/) for the rule.
 
 ## Limits and residual risk
 
