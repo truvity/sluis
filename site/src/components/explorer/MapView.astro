@@ -1,0 +1,139 @@
+---
+// The process map, the detail panel and the flows, shared by both explorers.
+// The model is built in the page's own lib; this renders it.
+import '../../styles/explorer.css';
+import { W, H, type MapModel } from '../../lib/explorer-layout';
+
+interface Props {
+  models: MapModel[];
+  flows: any[];
+  statuses: Record<string, string>;
+  dflt: string;
+  defaultNode: string;
+  storageKey: string;
+}
+const { models, flows, statuses, dflt, defaultNode, storageKey } = Astro.props;
+const chip = (status?: string, od?: string) => (status ? { cls: `ex-chip-${status}`, text: od ? `${statuses[status]} · ${od}` : statuses[status] } : null);
+const ARROW = 'M0 0L8 4L0 8z';
+---
+<div class="ex" data-ex-map data-default={dflt} data-default-node={defaultNode} data-storage-key={storageKey}>
+    <div class="ex-only-js ex-tabs" role="tablist" aria-label="What to show on the map" hidden data-ex-tabs>
+      <button type="button" role="tab" aria-selected="true" data-mode="explore">Explore</button>
+      {flows.map((f: any) => <button type="button" role="tab" aria-selected="false" data-mode={f.id}>{f.title}</button>)}
+    </div>
+    <p class="ex-only-js" style="font-size:var(--sl-text-sm);margin:.2rem 0" aria-live="polite" data-ex-status hidden></p>
+
+    {models.map((m) => (
+      <div data-shape-block={m.id} hidden={m.id !== dflt}>
+        <p style="font-size:var(--sl-text-sm);margin:.4rem 0">
+          <b>{m.id} · {m.name}.</b> {m.intro}
+        </p>
+        {m.notes.map((n: any) => (
+          <p class={`ex-note ${n.status === 'open' ? 'open' : ''}`}><span class={`ex-chip ex-chip-${n.status}`}>{statuses[n.status]}{n.od ? ` · ${n.od}` : ''}</span> {n.text}</p>
+        ))}
+        <div class="ex-diagram" tabindex="0" role="group" aria-label={`Process map of ${m.id}. Scrolls sideways on narrow screens.`}>
+          <svg viewBox={`0 0 ${m.width} ${m.height}`} role="group" aria-label={`Processes of ${m.name}`}>
+            <defs>
+              <marker id={`ex-ah-${m.id}`} viewBox="0 0 8 8" refX="7.5" refY="4" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto">
+                <path d={ARROW} fill="context-stroke" />
+              </marker>
+            </defs>
+            <g>{m.lanes.map((l) => (
+              <>
+                <rect class="ex-lane" x={l.x - 6} y="6" width={W + 12} height={m.height - 12} rx="8" />
+                <text class="ex-lane-t" x={l.x} y="26">{l.title}</text>
+              </>
+            ))}</g>
+            <g>
+              {m.edges.map((e) => (
+                <path class="ex-edge" data-key={e.key} data-from={e.f} data-to={e.t} d={e.path} marker-end={`url(#ex-ah-${m.id})`} />
+              ))}
+            </g>
+            <g>
+              {m.nodes.map((n) => (
+                <g class={`ex-node k-${n.cls} ${n.shared ? 'shared' : ''} ${n.cls === 'external' ? 'external' : ''}`} data-id={n.id} tabindex="0" role="button" aria-pressed="false"
+                   aria-label={`${n.title}, ${n.detail.kind}. Show its calls and details.`}>
+                  <rect class="box" x={n.x} y={n.y} width={W} height={H} rx="7" />
+                  <rect class="bar" x={n.x + 1.5} y={n.y + 1.5} width="5" height={H - 3} rx="2.5" />
+                  <text class="t" x={n.x + 15} y={n.y + 20}>{n.title}</text>
+                  <text class="m" x={n.x + 15} y={n.y + 37}>{n.l2}</text>
+                  <text class="m" x={n.x + 15} y={n.y + 51}>{n.l3}</text>
+                </g>
+              ))}
+            </g>
+            <g>
+              {m.edges.filter((e) => e.m).map((e) => (
+                <>
+                  <text class="ex-elabel" data-key={e.key} data-end="t" x={e.tx} y={e.ty}>{e.m}</text>
+                  <text class="ex-elabel" data-key={e.key} data-end="f" x={e.fx} y={e.fy}>{e.m}</text>
+                </>
+              ))}
+            </g>
+          </svg>
+        </div>
+
+        <div class="ex-panel ex-details" data-ex-details aria-live="polite">
+          {m.nodes.map((n) => (
+            <article data-detail={n.id} hidden={n.id !== defaultNode}>
+              <h3>{n.detail.title}</h3>
+              <p>
+                <span class={`ex-kind k-${n.detail.cls}`}>{n.detail.kind}</span>
+                {chip(n.detail.status, n.detail.od) && (
+                  n.detail.od
+                    ? <a class={`ex-chip ${chip(n.detail.status, n.detail.od)!.cls}`} href="/open-decisions/">{chip(n.detail.status, n.detail.od)!.text}</a>
+                    : <span class={`ex-chip ${chip(n.detail.status)!.cls}`}>{chip(n.detail.status)!.text}</span>
+                )}
+              </p>
+              <p>{n.detail.does}</p>
+              {n.detail.rows.length > 0 && (
+                <dl>
+                  {n.detail.rows.map((r) => (<><dt>{r.k}</dt><dd>{r.code ? <code>{r.v}</code> : r.v}</dd></>))}
+                </dl>
+              )}
+              {n.detail.lists.filter((l) => l.items.length).map((l) => (
+                <>
+                  <h4>{l.title}</h4>
+                  <ul>{l.items.map((i) => <li>{i}</li>)}</ul>
+                </>
+              ))}
+              {n.detail.notes.map((x) => (
+                <p class={`ex-note ${x.id ? 'open' : ''}`}>
+                  {x.id && <a class="ex-chip ex-chip-open" href="/open-decisions/">{x.id}</a>} {x.text}
+                </p>
+              ))}
+            </article>
+          ))}
+        </div>
+      </div>
+    ))}
+
+    <div class="ex-panel ex-flows">
+      {flows.map((f: any) => (
+        <section data-flow={f.id} data-nodes-of-flow>
+          <h3>{f.title}</h3>
+          <p>{f.why}</p>
+          <ol class="ex-steps">
+            {f.steps.map((s: any, i: number) => (
+              <li data-step={i} data-nodes={s.nodes.join(' ')} data-edges={s.edges.join(' ')} data-down={(s.down ?? []).join(' ')}>
+                <button type="button">{s.title}</button>
+                <p>
+                  {s.text}
+                  {(s.variants ?? []).map((v: any) => (
+                    <span class="ps" data-shapes={v.shapes.join(' ')}> <span class="ps-label">{v.shapes.join(', ')}:</span>{v.text}</span>
+                  ))}
+                </p>
+              </li>
+            ))}
+          </ol>
+          <div class="ex-step-nav ex-only-js">
+            <button type="button" data-nav="prev">Previous step</button>
+            <button type="button" data-nav="next">Next step</button>
+          </div>
+        </section>
+      ))}
+    </div>
+  </div>
+
+<script>
+  import '../../scripts/explorer-map.ts';
+</script>

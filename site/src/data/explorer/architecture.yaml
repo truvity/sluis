@@ -1,0 +1,784 @@
+# Data for the architecture explorer (docs/architecture/explorer.mdx).
+#
+# The facts live here and the component only renders them. Today the file is
+# written by hand from the design ledger; once the permission manifest exists,
+# the roles, drivers, edges, uids and sockets below are generated from it and
+# the prose fields stay. `status` is agreed | proposed | open; `od` names a row
+# on /open-decisions/.
+
+default_shape: T4
+
+statuses:
+  agreed: Agreed
+  proposed: Proposed
+  open: Open
+
+# ---------------------------------------------------------------------------
+# Shapes. `ports` names the driver behind each port on that shape.
+# ---------------------------------------------------------------------------
+shapes:
+  - id: T0
+    name: Local (development)
+    hardware: Docker on a workstation, one node
+    runtime: docker
+    nodes: 1
+    node_agent: false
+    edge: cloudflared
+    ports: { keys: soft, state: embedded, blob: s3, outbox: spool, index: sqlite }
+    keys: software key, or the host's YubiKey through the host's pcscd socket
+    state: embedded single-node store
+    use: Development and CI.
+    notes:
+      - text: Whether a YubiKey on the host reaches the containers through the host's pcscd socket, or only software keys are used, is not decided.
+        status: open
+        od: OD-8
+  - id: T1
+    name: Single node
+    hardware: One single-board computer (arm64, 2 GB RAM, eMMC), one YubiKey
+    runtime: systemd
+    nodes: 1
+    node_agent: true
+    edge: cloudflared
+    ports: { keys: yubikey, state: embedded, blob: s3, outbox: spool, index: sqlite }
+    keys: YubiKey PIV
+    state: single-node store, no Raft
+    use: The poor man's choice. Integration tests and the single-node tutorial run here.
+    notes:
+      - text: "The boards run the vendor's Ubuntu 22.04 for now, as a declared exception. systemd 249 has no LoadCredentialEncrypted=, so units use plain LoadCredential=, and sluis doctor warns about kernel 5.10. Building Ubuntu 26.04 and Rocky 10.2 images is a backlog task."
+        status: agreed
+  - id: T2
+    name: Cluster
+    hardware: Three single-board computers, which may mix Ubuntu and Rocky
+    runtime: systemd
+    nodes: 3
+    node_agent: true
+    edge: cloudflared
+    ports: { keys: yubikey, state: rqlite, blob: s3, outbox: spool, index: sqlite }
+    keys: One YubiKey per node
+    state: rqlite (Raft) across three nodes
+    use: Integration tests and tutorials.
+    notes:
+      - text: "The boards run the vendor's Ubuntu 22.04 for now, as a declared exception. systemd 249 has no LoadCredentialEncrypted=, so units use plain LoadCredential=, and sluis doctor warns about kernel 5.10. Building Ubuntu 26.04 and Rocky 10.2 images is a backlog task."
+        status: agreed
+  - id: T3
+    name: AWS EC2 single
+    hardware: One t4g.nano, Amazon Linux 2023
+    runtime: systemd
+    nodes: 1
+    node_agent: true
+    edge: cloudflared
+    ports: { keys: aws, state: aws, blob: s3, outbox: spool, index: sqlite }
+    keys: AWS KMS
+    state: DynamoDB
+    use: Integration tests and tutorials.
+  - id: T4
+    name: AWS EC2 cluster
+    hardware: An Auto Scaling group of three t4g.nano, Amazon Linux 2023
+    runtime: systemd
+    nodes: 3
+    node_agent: true
+    edge: cloudflared
+    ports: { keys: aws, state: rqlite, blob: s3, outbox: spool, index: sqlite }
+    keys: AWS KMS
+    state: Raft (rqlite)
+    use: The first build target.
+  - id: T5
+    name: AWS Lambda
+    hardware: One Lambda function per role
+    runtime: lambda
+    nodes: 0
+    node_agent: false
+    edge: lwa
+    ports: { keys: aws, state: aws, blob: s3, outbox: sqs, index: postgres }
+    keys: AWS KMS
+    state: DynamoDB
+    use: Integration tests and tutorials.
+    notes:
+      - text: The index has no node to keep a file on. Aurora Serverless v2 is the lean, still to be verified.
+        status: open
+        od: OD-12
+      - text: The outbox is a queue here. The port for Kubernetes (a queue, or blocking) is not decided.
+        status: open
+        od: OD-5
+
+# What each runtime turns a process id into. {id} is the process id, {driver}
+# the driver id, {role} the role the driver belongs to.
+runtimes:
+  docker:
+    label: Docker Compose
+    process: compose service
+    role:
+      unit: "sluis-{id} (compose service)"
+      identity: "container user sluis-{id}"
+      id_short: "user sluis-{id}"
+      listen: "/run/sluis/{id}/api.sock"
+      sock_short: "sock {id}"
+    shared_driver:
+      unit: "sluis-driver-{driver} (compose service)"
+      identity: "container user sluis-drv-{driver}"
+      id_short: "user sluis-drv-{driver}"
+      listen: "/run/sluis/driver-{driver}/api.sock"
+      sock_short: "sock driver-{driver}"
+    role_driver:
+      unit: "sluis-driver-{driver}-{role} (compose service)"
+      identity: "the role's own user, sluis-{role}"
+      id_short: "user sluis-{role}"
+      listen: "/run/sluis/{role}/{driver}.sock"
+      sock_short: "{driver}.sock"
+    role_call: Unix socket
+    driver_call: Unix socket on a shared volume
+  systemd:
+    label: systemd
+    process: systemd unit
+    role:
+      unit: "sluis-{id}.service (+ .socket)"
+      identity: "uid sluis-{id}"
+      id_short: "uid sluis-{id}"
+      listen: "/run/sluis/{id}/api.sock"
+      sock_short: "sock {id}"
+    shared_driver:
+      unit: "sluis-driver-{driver}.service (+ .socket)"
+      identity: "uid sluis-drv-{driver}"
+      id_short: "uid sluis-drv-{driver}"
+      listen: "/run/sluis/driver-{driver}/api.sock"
+      sock_short: "sock driver-{driver}"
+    role_driver:
+      unit: "sluis-driver-{driver}@{role}.service (+ .socket)"
+      identity: "the role's own uid, sluis-{role}"
+      id_short: "uid sluis-{role}"
+      listen: "/run/sluis/{role}/{driver}.sock"
+      sock_short: "{driver}.sock"
+    role_call: Unix socket
+    driver_call: Unix socket
+  lambda:
+    label: AWS Lambda
+    process: Lambda function
+    role:
+      unit: "Lambda function sluis-{id}"
+      identity: "execution role sluis-{id}"
+      id_short: "role sluis-{id}"
+      listen: "no socket: called by Lambda invoke"
+      sock_short: "invoke"
+    shared_driver:
+      unit: "Lambda extension sluis-driver-{driver} (layer)"
+      identity: "the function's execution role"
+      id_short: "execution role"
+      listen: "/tmp/sluis/{driver}.sock"
+      sock_short: "sock {driver}"
+    role_driver:
+      unit: "Lambda extension sluis-driver-{driver} (layer of sluis-{role})"
+      identity: "the function's execution role, sluis-{role}"
+      id_short: "role sluis-{role}"
+      listen: "/tmp/sluis/{driver}.sock"
+      sock_short: "{driver}.sock"
+    role_call: Lambda invoke
+    driver_call: Unix socket (extension)
+
+# The edge connector, per kind.
+edges_kinds:
+  cloudflared:
+    title: edge connector
+    sub: cloudflared tunnel
+    line2: "cloudflared"
+    line3: "unix: ingress"
+    does: The Cloudflare tunnel client. Its ingress rule is a `unix:` service, so it dials central's Unix socket directly and no TCP port is opened on the node.
+    listen: Outbound tunnel only. It dials /run/sluis/central/api.sock.
+    transport: Unix socket
+    status: proposed
+  lwa:
+    title: edge connector
+    sub: Lambda Web Adapter
+    line2: "Lambda Web Adapter"
+    line3: "loopback TCP"
+    does: The Lambda Web Adapter, pinned and vendored into sluis's own layer. It forwards the invocation to central over a loopback TCP port inside the sandbox, which holds only sluis processes.
+    listen: Loopback TCP inside the sandbox (an example port is 8080). This is the written-down exception.
+    transport: Loopback TCP
+    status: proposed
+
+# ---------------------------------------------------------------------------
+# Drivers. A driver is the technology behind a port; it is a service that
+# speaks ConnectRPC over a Unix socket, started by the platform.
+# ---------------------------------------------------------------------------
+drivers:
+  soft:
+    port: keys
+    title: soft
+    instance: shared
+    mediator: key-holder
+    binary: drivers/soft
+    does: Software keys under its own uid. A development driver; the code refuses it on a production shape.
+    holds: The software key files
+    backing: software key file
+    status: agreed
+  yubikey:
+    port: keys
+    title: yubikey
+    instance: shared
+    mediator: key-holder
+    binary: drivers/yubikey
+    does: Serves the keys port from the node's YubiKey (PIV). One device and one PIN, so one shared instance that checks every caller against an access list generated from the manifest. Built with cgo against pcsc-lite.
+    holds: The PIN, as a systemd credential. No symmetric keys; sealing uses ECDH plus HKDF with the P-384 key in slot 9d.
+    backing: YubiKey PIV
+    slots: "9c node intermediate and signing; 9d ECDH sealing and ring wrap; 82 SSH CA; 83 to 95 retired sealing keys; 9e avoided"
+    status: agreed
+  embedded:
+    port: state
+    title: embedded
+    instance: shared
+    mediator: state-owner
+    binary: drivers/embedded
+    does: Serves the state port from a single-node embedded store, with no Raft. It enforces one writer per record kind with the same access list as the cluster driver.
+    holds: The store file
+    backing: embedded single-node store
+    status: agreed
+  rqlite:
+    port: state
+    title: rqlite
+    instance: shared
+    mediator: state-owner
+    binary: drivers/rqlite
+    does: Serves the state port on rqlite. rqlite has one credential, so this shared instance checks every caller against a per-role prefix access list and allows one writer per record kind. Raft peer traffic is this driver's own TCP port, over mTLS.
+    holds: The Raft peer TLS credential
+    backing: rqlited (Raft, three nodes)
+    status: agreed
+    peer_port: true
+  aws:
+    port: any
+    title: aws
+    instance: per-role
+    mediator: null
+    binary: drivers/aws
+    does: One binary for KMS (keys), DynamoDB (state), S3 or an S3-compatible store (blob) and SQS (outbox). One instance per role, running as that role's uid, so the cloud's own IAM or key policy is the enforcer.
+    holds: Nothing. Credentials come from the platform identity, or from a workload JWT exchanged for cloud credentials.
+    backing: AWS KMS, DynamoDB, S3 or SQS
+    status: agreed
+  spool:
+    port: outbox
+    title: spool
+    instance: shared
+    mediator: null
+    binary: drivers/spool
+    does: A local, fsync'd spool. A producer's request returns once its record is durable here. One shared instance that checks every caller's peer credentials.
+    holds: The spool segment files
+    backing: local spool on disk
+    status: proposed
+  s3:
+    port: blob
+    title: aws (S3 API)
+    instance: per-role
+    mediator: null
+    binary: drivers/aws
+    does: The blob port, served by the aws driver over the S3 API (S3 itself, or an S3-compatible store). Only audit-writer, notary and audit-read use it.
+    holds: Nothing
+    backing: object store
+    status: agreed
+  sqs:
+    port: outbox
+    title: aws (SQS)
+    instance: per-role
+    mediator: null
+    binary: drivers/aws
+    does: The outbox port on SQS. Each producer sends under its own IAM role; the writer takes the observer from the queue's sender, not from the message body.
+    holds: Nothing
+    backing: SQS queue
+    status: open
+    od: OD-5
+  sqlite:
+    port: index
+    title: sqlite
+    instance: file
+    mediator: null
+    binary: drivers/sqlite
+    does: The index port on a SQLite file with FTS5, one per node. A projection of the batch stream, never the evidence.
+    holds: The index file
+    backing: SQLite file
+    status: proposed
+  postgres:
+    port: index
+    title: postgres
+    instance: per-role
+    mediator: null
+    binary: drivers/postgres
+    does: The index port on Postgres, for Lambda and Kubernetes (Aurora Serverless v2, to verify).
+    holds: Nothing
+    backing: Postgres
+    status: open
+    od: OD-12
+
+# The four drivers shown on the map are the ports; the backing stores are
+# described per port and driver.
+ports:
+  keys:
+    node: drv-keys
+    title: keys
+    store_node: store-keys
+    store_title: key custody
+    users: [policy, signer, ca, notary]
+  state:
+    node: drv-state
+    title: state
+    store_node: store-state
+    store_title: state store
+    users: [central, signer, quota, notary, audit-writer, audit-read]
+  blob:
+    node: drv-blob
+    title: blob
+    store_node: store-blob
+    store_title: archive
+    users: [audit-writer, notary, audit-read]
+  outbox:
+    node: drv-outbox
+    title: outbox
+    store_node: store-outbox
+    store_title: outbox
+    users: [central, policy, signer, ca, quota, notary, audit-writer, audit-read]
+  index:
+    node: null
+    store_node: store-index
+    store_title: index
+
+# ---------------------------------------------------------------------------
+# Roles. Each is its own OS user and unit, its own Lambda function, or its
+# own pod. `resources` is an illustrative slice of the permission manifest.
+# ---------------------------------------------------------------------------
+roles:
+  central:
+    status: open
+    od: OD-1
+    name: central
+    kind: role
+    binary: roles/central
+    does: "The OIDC protocol: sign-in, sessions, token exchange and the console API. It sits behind the edge connector and is the only role whose API is public. The name is a placeholder."
+    holds: No key
+    uses: [state, outbox]
+    resources:
+      - "state: sessions/*, clients/*, grants/*, directory/*, cursors/* (its own record kinds)"
+      - "calls: policy, signer, quota, ca, audit-read and every integration"
+      - "outbox: append"
+      - "keys: none"
+    listen_by_runtime:
+      lambda: "Loopback TCP inside the sandbox (an example port is 8080), through the Lambda Web Adapter"
+    listener_note: "Only central's public API ever gets a TCP listener, and on the self-hosted shapes it does not: the edge connector reaches its Unix socket."
+  policy:
+    status: agreed
+    name: policy
+    kind: role
+    binary: roles/policy
+    does: "The decision point. A reviewed, file-based policy maps facts to grants. It keeps no state and opens no network connection. It signs mint grants with its own key."
+    holds: The grant key
+    uses: [keys, outbox]
+    resources:
+      - "keys: sign with the grant key"
+      - "state: none; network: none"
+      - "outbox: append"
+    od_note:
+      - { id: OD-10, text: "Whether the policy language is Cedar or an own file format is not decided." }
+  signer:
+    status: agreed
+    name: signer
+    kind: role
+    binary: roles/signer
+    does: "Holds the signing ring and signs tokens under a signing policy. It is not a pure oracle."
+    holds: The token-signing keys
+    uses: [keys, state, outbox]
+    resources:
+      - "keys: sign with the token-signing keys"
+      - "state: ring/* read and write"
+      - "outbox: append"
+    od_note:
+      - { id: OD-3, text: "Whether hardware shapes sign directly or with a derived short-lived key is not decided." }
+  ca:
+    status: agreed
+    name: ca
+    kind: role
+    binary: roles/ca
+    does: "X.509 and the SSH CA (one role)."
+    holds: The CA keys (slot 9c for the node intermediate, 82 for the SSH CA on a YubiKey)
+    uses: [keys, outbox]
+    resources:
+      - "keys: sign with the CA keys, one key per purpose"
+      - "outbox: append"
+  notary:
+    status: agreed
+    name: notary
+    kind: role
+    binary: roles/notary
+    does: "Signs audit batch heads. It holds nothing the audit writer holds."
+    holds: The notary key
+    uses: [keys, state, blob, outbox]
+    resources:
+      - "keys: sign with the notary key"
+      - "state: audit sequence, adjust; read audit_batches"
+      - "blob: read batches; write only under seals/ and keys/"
+      - "outbox: append"
+  quota:
+    status: agreed
+    name: quota
+    kind: role
+    binary: roles/quota
+    does: "Rate limits and caps, with a conditional adjust. Caps and limits live in core."
+    holds: Counters (state), no key
+    uses: [state, outbox]
+    resources:
+      - "state: quota/* conditional adjust"
+      - "outbox: append"
+  audit-writer:
+    status: agreed
+    name: audit-writer
+    kind: role
+    binary: roles/audit-writer
+    does: "Seals audit batches and writes them to the blob store. It reads the outbox, dedupes, rolls batches, puts the batch object and registers it in audit_batches. It has no signing key; it calls notary."
+    holds: No signing key
+    uses: [outbox, blob, state]
+    resources:
+      - "outbox: receive and ack"
+      - "blob: write on the batch prefix"
+      - "state: append audit_batches"
+  audit-read:
+    status: agreed
+    name: audit-read
+    kind: role
+    binary: roles/audit-read
+    does: "Serves audit queries from the index. It applies the ordered batch stream to the node's index and records each read."
+    holds: Read-only; the node's index file
+    uses: [state, blob, outbox]
+    resources:
+      - "state: read audit_batches and its cursor"
+      - "blob: read batches"
+      - "index: read and apply"
+      - "outbox: append (each read is audited)"
+
+# ---------------------------------------------------------------------------
+# Integrations: six kinds, each its own process. The names are examples.
+# ---------------------------------------------------------------------------
+integrations:
+  int-upstream:
+    kind: Upstream
+    example: int-google
+    does: Federates sign-in from an upstream identity provider (Authorize, Callback). Returns facts; it never decides.
+    holds: The provider's client secret
+    egress: the provider's own hosts only
+  int-workload:
+    kind: WorkloadVerifier
+    example: int-workload
+    does: Verifies workload tokens (Kubernetes and CI OIDC subject tokens) against the issuers' published keys. Holds no secret.
+    holds: No secret
+    egress: the configured issuers' key hosts only
+  int-facts:
+    kind: FactsSource
+    example: int-github
+    does: Returns directory facts (workspace directories, GitHub teams, chat workspaces). central stores the cursor it returns.
+    holds: The source's credential
+    egress: the source's API host only
+  int-minter:
+    kind: CredentialMinter
+    example: int-cloudflare
+    does: Mints a short-lived downstream credential (cloud API token, GitHub installation token, AWS credentials). It receives a mint grant signed by policy and carries it out; it never decides.
+    holds: The connection's parent credential
+    egress: the vendor's API host only
+  int-provisioner:
+    kind: Provisioner
+    example: int-gitops
+    does: Pulls a digest-addressed desired state and carries it out. Core calls it; it never calls core.
+    holds: The target's credential
+    egress: the desired-state source and the target only
+  int-notifier:
+    kind: Notifier
+    example: int-slack
+    does: Sends notifications.
+    holds: The service's webhook or token
+    egress: the service's host only
+
+# ---------------------------------------------------------------------------
+# Node services
+# ---------------------------------------------------------------------------
+node_agent:
+  status: open
+  od: OD-2
+  title: node-agent
+  binary: node/node-agent
+  does: "Issues a short-lived workload JWT per role. Each role's process identity comes from its uid, by peer credentials. The node's non-extractable hardware key signs the JWT (about 120 ms per signature, hourly per role). The name is a placeholder."
+  holds: The node's hardware key, through the keys driver
+  resources:
+    - "keys: sign workload JWTs with the node key"
+    - "callers: every sluis uid listed in the uid-to-role map generated from the manifest"
+  listener_note: "Roles and drivers listen only on Unix sockets. node-agent publishes no listener; the issuer's discovery document and JWKS (public keys only) are static files served from the distribution bucket, one issuer per node."
+
+# ---------------------------------------------------------------------------
+# External and backing nodes (drawn, not run by sluis)
+# ---------------------------------------------------------------------------
+externals:
+  client:
+    title: client
+    sub: browser, CLI, CI job
+    does: A person, a robot or a workload calling sluis.
+  upstream:
+    title: upstream
+    sub: IdPs, token issuers
+    does: Upstream identity providers and the issuers of workload tokens.
+  vendor:
+    title: external systems
+    sub: directories, vendors
+    does: The systems that integrations read facts from, mint credentials in, or notify.
+  downstream:
+    title: cloud IAM
+    sub: STS, GCP WIF, Entra
+    does: The cloud's token service. A cloud driver exchanges a workload JWT for that cloud's credentials there.
+
+# What a port's backing node says, per port and driver.
+backing_lines:
+  keys.soft: ["software key file", "under driver-soft"]
+  keys.yubikey: ["YubiKey PIV", "one per node"]
+  keys.aws: ["AWS KMS", "key per purpose"]
+  state.embedded: ["embedded store", "single node"]
+  state.rqlite: ["rqlited", "Raft, 3 nodes"]
+  state.aws: ["DynamoDB", "table per record kind"]
+  blob.s3: ["object store", "S3 API"]
+  outbox.spool: ["local spool", "fsync'd segments"]
+  outbox.sqs: ["SQS queue", "dead-letter queue"]
+  index.sqlite: ["SQLite + FTS5", "one file per node"]
+  index.postgres: ["Postgres", "Aurora Serverless v2"]
+
+# ---------------------------------------------------------------------------
+# The call graph. `from > to`. `when` limits an edge to shapes or drivers;
+# an edge to a node a shape does not have is dropped.
+# ---------------------------------------------------------------------------
+calls:
+  - { f: client, t: edge, m: HTTPS, d: "Sign-in, token exchange, mint and the console reach sluis through the edge connector." }
+  - { f: edge, t: central, m: connect, d: "The edge connector reaches central's API socket; this is the only public path in." }
+  - { f: central, t: policy, m: Decide, d: Every decision. }
+  - { f: central, t: signer, m: SignToken, d: Issue a token. }
+  - { f: central, t: quota, m: Adjust, d: Rate and count limits. }
+  - { f: central, t: ca, m: Issue, d: Certificates and SSH certificates. }
+  - { f: central, t: audit-read, m: Search, d: The console audit page. }
+  - { f: central, t: drv-state, m: "State: own records", d: "sessions/*, clients/*, grants/*, directory/*, cursors/*" }
+  - { f: central, t: int-upstream, m: "Authorize / Callback", d: Human sign-in upstream. }
+  - { f: central, t: int-workload, m: Verify, d: Check a workload subject token. }
+  - { f: central, t: int-facts, m: Pull(cursor), d: Directory sync; central stores the returned cursor. }
+  - { f: central, t: int-minter, m: Mint(grant), d: "Downstream mint, with a grant signed by policy." }
+  - { f: central, t: int-provisioner, m: Reconcile, d: Pull a digest-addressed desired state. }
+  - { f: central, t: int-notifier, m: Notify, d: Notifications. }
+  - { f: int-upstream, t: upstream, m: OIDC, d: The user authenticates at the upstream provider. }
+  - { f: int-workload, t: upstream, m: JWKS, d: Fetches the issuer's published keys. }
+  - { f: int-facts, t: vendor, m: Read, d: Reads directory facts. }
+  - { f: int-minter, t: vendor, m: Mint, d: Mints the credential at the vendor. }
+  - { f: int-provisioner, t: vendor, m: Pull, d: Pulls the desired state and applies it. }
+  - { f: int-notifier, t: vendor, m: Send, d: Sends the notification. }
+  - { f: policy, t: drv-keys, m: "Sign(grant)", d: Signs mint grants with its own key. }
+  - { f: signer, t: drv-keys, m: "Sign(token)", d: Token signatures. }
+  - { f: ca, t: drv-keys, m: "Sign(cert)", d: Certificates. }
+  - { f: notary, t: drv-keys, m: "Sign(head)", d: Audit batch heads. }
+  - { f: signer, t: drv-state, m: "ring/*", d: The signing ring. }
+  - { f: quota, t: drv-state, m: "quota/*", d: Conditional adjust of counters. }
+  - { f: notary, t: drv-state, m: "audit sequence", d: Reads audit_batches; adjusts its sequence. }
+  - { f: audit-writer, t: drv-state, m: "audit_batches", d: Registers each batch in order. }
+  - { f: audit-read, t: drv-state, m: "Follow batches", d: Reads audit_batches from its cursor. }
+  - { f: audit-writer, t: drv-blob, m: "Put batch", d: Puts the batch object. }
+  - { f: notary, t: drv-blob, m: "Seals", d: Reads batches; puts seals and the trust log. }
+  - { f: audit-read, t: drv-blob, m: "Get batch", d: Fetches batch objects. }
+  - { f: audit-read, t: store-index, m: "Apply / Query", d: Applies batches and answers queries. }
+  - { f: central, t: drv-outbox, m: Append, d: Records the exchange. }
+  - { f: policy, t: drv-outbox, m: Append, d: Records each decision. }
+  - { f: signer, t: drv-outbox, m: Append, d: Records each signature. }
+  - { f: ca, t: drv-outbox, m: Append, d: Records each certificate. }
+  - { f: quota, t: drv-outbox, m: Append, d: Records each limit decision. }
+  - { f: notary, t: drv-outbox, m: Append, d: Records each seal. }
+  - { f: audit-read, t: drv-outbox, m: Append, d: Records each read of the trail. }
+  - { f: audit-writer, t: drv-outbox, m: "Receive / Ack", d: Takes records, acknowledges after the batch is registered. }
+  - { f: drv-keys, t: store-keys, m: "", d: "" }
+  - { f: drv-state, t: store-state, m: "", d: "" }
+  - { f: drv-blob, t: store-blob, m: "", d: "" }
+  - { f: drv-outbox, t: store-outbox, m: "", d: "" }
+  - { f: node-agent, t: drv-keys, m: "Sign(JWT)", d: "Signs the workload JWT with the node's hardware key.", when: { node_agent: true } }
+  - { f: drv-keys, t: node-agent, m: "Workload JWT", d: "A cloud key driver asks node-agent for its role's JWT (uid from peer credentials).", when: { node_agent: true, ports: { keys: aws } } }
+  - { f: drv-state, t: node-agent, m: "Workload JWT", d: "A cloud state driver asks node-agent for its role's JWT.", when: { node_agent: true, ports: { state: aws } } }
+  - { f: drv-blob, t: node-agent, m: "Workload JWT", d: "The blob driver asks node-agent for its role's JWT (uid from peer credentials).", when: { node_agent: true } }
+  - { f: drv-keys, t: downstream, m: "AssumeRoleWithWebIdentity", d: "Exchanges the workload JWT for the cloud's credentials.", when: { node_agent: true, ports: { keys: aws } } }
+  - { f: drv-state, t: downstream, m: "AssumeRoleWithWebIdentity", d: "Exchanges the workload JWT for the cloud's credentials.", when: { node_agent: true, ports: { state: aws } } }
+  - { f: drv-blob, t: downstream, m: "AssumeRoleWithWebIdentity", d: "Exchanges the workload JWT for the cloud's credentials.", when: { node_agent: true } }
+  - { f: drv-keys, t: downstream, m: "Platform identity", d: "The Lambda execution role is the identity; no workload JWT.", when: { node_agent: false, ports: { keys: aws } } }
+
+# ---------------------------------------------------------------------------
+# Flows. Nodes and edges name map nodes; ids that a shape lacks are skipped.
+# `variants` add shape-specific sentences.
+# ---------------------------------------------------------------------------
+flows:
+  - id: signin
+    title: Human sign-in
+    why: A person signs in with an upstream identity provider and gets a session.
+    steps:
+      - title: The browser reaches the edge
+        nodes: [client, edge]
+        edges: ["client>edge"]
+        text: The browser opens the console and HTTPS arrives at the edge connector. Nothing on the node listens on a public TCP port.
+      - title: The edge connector forwards to central
+        nodes: [edge, central]
+        edges: ["edge>central"]
+        text: The edge connector hands the request to central's API socket.
+        variants:
+          - { shapes: [T5], text: "The Lambda Web Adapter forwards it to central over loopback TCP inside the sandbox." }
+      - title: central asks the upstream integration
+        nodes: [central, int-upstream]
+        edges: ["central>int-upstream"]
+        text: central calls the upstream integration (Authorize) for the redirect, and later (Callback) with the code. The integration returns facts; it does not decide.
+      - title: The user authenticates upstream
+        nodes: [int-upstream, upstream]
+        edges: ["int-upstream>upstream"]
+        text: The user authenticates at the upstream provider. The integration verifies the code and returns subject, email and groups as facts.
+      - title: policy decides
+        nodes: [central, policy]
+        edges: ["central>policy"]
+        text: central asks policy to map the facts to grants. The policy is a reviewed file; policy keeps no state and opens no network connection.
+      - title: The session is stored
+        nodes: [central, drv-state, store-state]
+        edges: ["central>drv-state", "drv-state>store-state"]
+        text: central writes the session through the state driver. It owns the sessions record kind; the state driver refuses any other role writing it.
+      - title: The sign-in is audited
+        nodes: [central, drv-outbox, store-outbox]
+        edges: ["central>drv-outbox", "drv-outbox>store-outbox"]
+        text: central appends a record to the outbox. The request returns once the record is durable there, never waiting for the audit writer.
+  - id: exchange
+    title: Token exchange
+    why: A workload trades its CI or Kubernetes token for a sluis token (RFC 8693).
+    steps:
+      - title: The workload posts its token
+        nodes: [client, edge, central]
+        edges: ["client>edge", "edge>central"]
+        text: A CI job or workload posts its subject token to the token endpoint, through the edge connector. Whatever happens next, success or refusal, leaves a record.
+      - title: The subject token is verified
+        nodes: [central, int-workload, upstream]
+        edges: ["central>int-workload", "int-workload>upstream"]
+        text: central asks the workload verifier to check the token. The verifier fetches the issuer's published keys and returns facts.
+      - title: policy decides
+        nodes: [central, policy]
+        edges: ["central>policy"]
+        text: policy maps the facts to a grant, or refuses. A refusal stops here with a reason and is audited the same way.
+      - title: The limit is adjusted
+        nodes: [central, quota, drv-state]
+        edges: ["central>quota", "quota>drv-state"]
+        text: quota applies a conditional adjust to the counter. Caps and rate limits live in core.
+      - title: signer signs the token
+        nodes: [central, signer, drv-keys, store-keys]
+        edges: ["central>signer", "signer>drv-keys", "drv-keys>store-keys"]
+        text: signer signs the token under its signing policy through the keys driver.
+        variants:
+          - { shapes: [T3, T4, T5], text: "The token is signed directly with the non-extractable KMS key. A production install measured about 25,000 tokens in 7 days, a peak of 0.8 per second, so direct signing costs about $2.62 per month." }
+          - { shapes: [T1, T2], text: "P-384 on the YubiKey signs at about 120 ms, 8 per second. Whether burst traffic needs a derived, short-lived software key certified by the hardware key is not decided (OD-3, OD-13)." }
+          - { shapes: [T0], text: "A software key signs it; the code refuses a software key on a production shape." }
+      - title: The exchange is audited
+        nodes: [central, drv-outbox, store-outbox]
+        edges: ["central>drv-outbox", "policy>drv-outbox", "signer>drv-outbox", "drv-outbox>store-outbox"]
+        text: central, policy and signer each append a record to the outbox. The token goes back to the client once central's record is durable.
+  - id: mint
+    title: Downstream mint
+    why: A caller asks for a short-lived downstream credential, such as a cloud API token.
+    steps:
+      - title: The caller names the connection
+        nodes: [client, edge, central]
+        edges: ["client>edge", "edge>central"]
+        text: The caller posts to the mint endpoint, naming the connection and the preset.
+      - title: policy decides
+        nodes: [central, policy]
+        edges: ["central>policy"]
+        text: policy decides whether this caller may mint this credential.
+      - title: policy signs a mint grant
+        nodes: [policy, drv-keys, store-keys]
+        edges: ["policy>drv-keys", "drv-keys>store-keys"]
+        text: policy signs the mint grant (connection, preset, ttl, nonce, expiry) with its own grant key. The grant key is not the token-signing key, and only policy may use it.
+      - title: central calls the minter with the grant
+        nodes: [central, int-minter]
+        edges: ["central>int-minter"]
+        text: central passes the grant to the minter. The minter verifies the grant against policy's public key and the nonce. It does not decide; caps and rate limits already live in core.
+      - title: The minter mints at the vendor
+        nodes: [int-minter, vendor]
+        edges: ["int-minter>vendor"]
+        text: The minter holds only the connection's parent credential. It mints the short-lived credential and returns it.
+      - title: The mint is audited
+        nodes: [central, drv-outbox, store-outbox]
+        edges: ["central>drv-outbox", "drv-outbox>store-outbox"]
+        text: central appends the record and returns the credential to the caller.
+  - id: workload
+    title: Workload credentials
+    why: A role's cloud driver gets the cloud credentials it needs, on a node that runs node-agent.
+    steps:
+      - title: The driver asks node-agent
+        nodes: [drv-keys, drv-state, drv-blob, node-agent]
+        edges: ["drv-keys>node-agent", "drv-state>node-agent", "drv-blob>node-agent"]
+        text: The cloud driver of a role asks node-agent for its role's workload JWT. node-agent reads the caller's uid from the socket (SO_PEERCRED) and maps the uid to the role. On a node, the key driver, state driver and blob driver that are cloud drivers each ask for their own role's JWT.
+        variants:
+          - { shapes: [T0], text: "T0 has no node-agent and no cloud federation; development uses software keys." }
+          - { shapes: [T5], text: "T5 has no node-agent: the Lambda execution role of each function is the identity, so there is no workload JWT. Platform-native identity is used where it exists." }
+      - title: The node key signs the JWT
+        nodes: [node-agent, drv-keys, store-keys]
+        edges: ["node-agent>drv-keys", "drv-keys>store-keys"]
+        text: The node's non-extractable hardware key signs the JWT, about 120 ms per signature, hourly per role. AWS accepts ES384. GCP needs ES256 and Entra needs RS256, the written-down exception to P-384 everywhere.
+        variants:
+          - { shapes: [T3, T4], text: "Which non-extractable key signs the node's JWT on an EC2 instance is not stated in the design yet." }
+      - title: The driver exchanges the JWT
+        nodes: [drv-keys, drv-state, drv-blob, downstream]
+        edges: ["drv-keys>downstream", "drv-state>downstream", "drv-blob>downstream"]
+        text: "The driver trades the JWT for the cloud's credentials: AssumeRoleWithWebIdentity against an IAM OIDC provider on AWS, Workload Identity Federation on GCP, a federated credential on Azure. The credentials last an hour and the driver refreshes them before they expire."
+      - title: The issuer is trusted per node
+        nodes: [downstream]
+        edges: []
+        text: "Each node publishes a static discovery document and JWKS (public keys only) at https://<issuer>/nodes/<node>/, served from the distribution bucket. A cloud role trusts only the issuers of the nodes that run that role, so a compromised node can mint only its own roles. AWS allows at most 100 EC keys in a JWKS and 100 OIDC providers per account."
+  - id: audit
+    title: Audit write
+    why: A request becomes evidence, and a record reaches the index.
+    steps:
+      - title: A role appends a record
+        nodes: [central, policy, signer, drv-outbox, store-outbox]
+        edges: ["central>drv-outbox", "policy>drv-outbox", "signer>drv-outbox", "drv-outbox>store-outbox"]
+        text: Every role that acted appends what it did to the outbox. The request returns once the record is durable there. Every success is audited.
+        variants:
+          - { shapes: [T0, T1, T2, T3, T4], text: "Durable means an fsync to the node's local spool." }
+          - { shapes: [T5], text: "Durable means the queue accepted the message." }
+      - title: The writer takes the records
+        nodes: [audit-writer, drv-outbox]
+        edges: ["audit-writer>drv-outbox"]
+        text: audit-writer receives records, validates and stamps them, drops duplicates by record id and rolls them into a batch.
+        variants:
+          - { shapes: [T2, T4], text: "On a cluster each node's writer drains its own spool." }
+      - title: The batch object is put
+        nodes: [audit-writer, drv-blob, store-blob]
+        edges: ["audit-writer>drv-blob", "drv-blob>store-blob"]
+        text: The writer puts the batch object in the archive. Its blob driver may write the batch prefix and nothing else.
+      - title: The batch is registered
+        nodes: [audit-writer, drv-state, store-state]
+        edges: ["audit-writer>drv-state", "drv-state>store-state"]
+        text: Only after the put, the writer appends an entry to audit_batches in the state store, then acks the outbox. The state store is on the write path, which is accepted given the outbox, a reconciler against the bucket listing, and verification that never trusts state.
+      - title: The notary seals the head
+        nodes: [notary, drv-state, drv-blob, drv-keys, store-keys]
+        edges: ["notary>drv-state", "notary>drv-blob", "notary>drv-keys", "drv-keys>store-keys"]
+        text: The notary reads new batches, checks them and signs the batch head with its own key. It writes only seals and the trust log.
+        variants:
+          - { shapes: [T2, T4], text: "Proposed: the notary co-signs batch heads 2 of 3 across the nodes, with no separate notary YubiKey." }
+          - { shapes: [T5], text: "A dedicated notary (a Lambda function) is optional." }
+      - title: The index follows the chain
+        nodes: [audit-read, drv-state, drv-blob, store-index]
+        edges: ["audit-read>drv-state", "audit-read>drv-blob", "audit-read>store-index"]
+        text: audit-read follows audit_batches from its cursor, fetches each new batch and applies it to the index. Verification never trusts the index. The audit explorer shows lag and the integrity chain.
+
+# ---------------------------------------------------------------------------
+# Open points that touch the architecture
+# ---------------------------------------------------------------------------
+open_points:
+  - { od: OD-1, text: "The name of the central process. The data uses the placeholder `central`." }
+  - { od: OD-2, text: "The name of the node agent. The data uses the placeholder `node-agent`." }
+  - { od: OD-3, text: "Whether hardware shapes sign with a derived short-lived key. The map shows direct signing." }
+  - { od: OD-4, text: "Which TCP ports exist between nodes, and so how a role calls a role on another node without a role TCP listener. The map shows only the state driver's Raft port over mTLS." }
+  - { od: OD-5, text: "The audit outbox port per shape. The map shows a spool on servers and a queue on Lambda." }
+  - { od: OD-8, text: "The key for the local shape when a YubiKey runs in Docker." }
+  - { od: OD-12, text: "The index host on Lambda. The map shows Postgres, still to be verified." }
+
+# What runs where on a cluster shape (T2, T4).
+cluster:
+  - { process: edge connector, where: every node, status: proposed }
+  - { process: central, where: "every node, behind that node's edge connector", status: proposed }
+  - { process: "signer, policy, ca, quota", where: "every node; an earlier draft made each single-active, with a named lease and a fencing token, and standbys on the other nodes", status: proposed }
+  - { process: audit-writer, where: "every node; each node's writer drains its own spool", status: proposed }
+  - { process: notary, where: "every node; batch heads are co-signed 2 of 3 across nodes, with no separate notary YubiKey", status: proposed }
+  - { process: "state driver and its store", where: "every node; Raft quorum of three over the state driver's own TCP port with mTLS", status: agreed }
+  - { process: keys driver, where: "T2: each node's own YubiKey; T4: AWS KMS, a regional service", status: agreed }
+  - { process: node-agent, where: every node, status: proposed }
+  - { process: integrations, where: "next to central on each node, over Unix sockets; how one node calls a role on another is not decided (OD-4)", status: open }

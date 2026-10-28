@@ -1,0 +1,198 @@
+---
+// The audit explorer. `part` picks the piece, so the page can put its own
+// headings between them. The facts are in src/data/explorer/audit.yaml.
+import '../../styles/explorer.css';
+import MapView from './MapView.astro';
+import { data, shapes, statuses } from '../../lib/explorer-audit';
+
+interface Props {
+  part: 'toggle' | 'map' | 'promises' | 'outbox' | 'chain' | 'lag' | 'outage' | 'compare' | 'open';
+}
+const { part } = Astro.props;
+const models = shapes();
+const dflt: string = data.default_shape;
+const chip = (s: string) => ({ cls: `ex-chip-${s}`, text: statuses[s] });
+---
+
+{part === 'toggle' && (
+  <div class="ex" data-ex-root data-default={dflt}>
+    <div class="ex-toggle ex-only-js" role="radiogroup" aria-label="Deployment shape" data-ex-toggle hidden>
+      {models.map((m) => (
+        <button type="button" role="radio" aria-checked={m.id === dflt ? 'true' : 'false'} data-shape={m.id} tabindex={m.id === dflt ? 0 : -1}>
+          <b>{m.id}</b><span>{m.name}</span>
+        </button>
+      ))}
+    </div>
+    <div class="ex-table-wrap">
+      <table>
+        <thead><tr><th>Shape</th><th>Outbox</th><th>State</th><th>Notary key</th><th>Archive</th><th>Index</th></tr></thead>
+        <tbody>
+          {models.map((m) => (
+            <tr data-shape-row={m.id}>
+              <td><b>{m.id}</b> {m.name}</td>
+              <td>{m.outbox.title}</td>
+              <td>{m.shape.state}</td>
+              <td>{m.audit.notary_key}</td>
+              <td>{m.audit.blob}, {m.audit.lock}</td>
+              <td>{m.nodes.find((n) => n.id === 'index')!.l2}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+    <p class="ex-only-js" style="font-size:var(--sl-text-sm);margin-top:.5rem">The row of the shape you picked is highlighted. The map, the flows, the outage table and the sockets follow it.</p>
+  </div>
+)}
+
+{part === 'map' && (
+  <MapView models={models} flows={data.flows} statuses={statuses} dflt={dflt} defaultNode="writer" storageKey="sluis-explorer-audit-shape" />
+)}
+
+{part === 'promises' && (
+  <div class="ex">
+    <div class="ex-table-wrap">
+      <table>
+        <thead><tr><th>Promise</th><th>What it means</th><th>Status</th></tr></thead>
+        <tbody>
+          {data.promises.map((p: any) => (
+            <tr><td><b>{p.title}</b></td><td>{p.text}</td><td><span class={`ex-chip ${chip(p.status).cls}`}>{chip(p.status).text}</span></td></tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </div>
+)}
+
+{part === 'outbox' && (
+  <div class="ex">
+    <div class="ex-table-wrap">
+      <table>
+        <thead><tr><th>Driver</th><th>Used on</th><th>Durable means</th><th>Records wait</th><th>Instance</th><th>Status</th></tr></thead>
+        <tbody>
+          {Object.values(data.outbox_kinds).map((o: any) => (
+            <tr data-outbox-kind={o.driver}>
+              <td><b>{o.title}</b></td><td>{o.used_on}</td><td>{o.durable}</td><td>{o.wait}</td><td>{o.instance}</td>
+              <td>{o.od ? <a class={`ex-chip ${chip(o.status).cls}`} href="/open-decisions/">{chip(o.status).text} · {o.od}</a> : <span class={`ex-chip ${chip(o.status).cls}`}>{chip(o.status).text}</span>}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </div>
+)}
+
+{part === 'chain' && (
+  <div class="ex">
+    <div class="ex-chain" role="group" aria-label="The integrity chain, from a record to a seal">
+      {data.chain.stages.map((s: any, i: number) => (
+        <>
+          {i > 0 && <span class="ex-chain-arrow" aria-hidden="true">→</span>}
+          <div class={`ex-chain-box by-${s.by}`}>
+            <b>{s.title}</b>
+            {s.lines.map((l: string) => <span>{l}</span>)}
+            <em>by {s.by === 'writer' ? 'audit-writer' : 'notary'}</em>
+          </div>
+        </>
+      ))}
+    </div>
+    <p style="font-size:var(--sl-text-sm);margin:.8rem 0 .3rem">Seals chain through <code>prev</code>. A seal covers the batches since the previous one (numbers are examples).</p>
+    <div class="ex-chain" role="group" aria-label="The seal chain">
+      {data.chain.seals.map((s: any, i: number) => (
+        <>
+          {i > 0 && <span class="ex-chain-arrow" aria-hidden="true">← prev</span>}
+          <div class="ex-chain-box by-notary"><b>{s.id}</b><span>{s.covers}</span></div>
+        </>
+      ))}
+    </div>
+    <p class="ex-sub">An auditor verifies with <code>audit verify</code> (illustrative), which reads the archive and nothing else:</p>
+    <ol>{data.chain.verifier.map((v: string) => <li>{v}</li>)}</ol>
+    <div class="ex-cards">
+      {data.chain.notes.map((n: any) => (
+        <div class="ex-card"><b>{n.title}</b> <span class={`ex-chip ${chip(n.status).cls}`}>{chip(n.status).text}</span><p>{n.text}</p></div>
+      ))}
+    </div>
+  </div>
+)}
+
+{part === 'lag' && (
+  <div class="ex" data-ex-lag data-leader={data.lag.leader} data-rate={data.lag.rate_per_min}>
+    <p style="font-size:var(--sl-text-sm)">Lag is the leader sequence minus the node's cursor. A node answers from what it has applied and says how far behind it is. Numbers are an example, for three nodes.</p>
+    <div class="ex-table-wrap">
+      <table>
+        <thead><tr><th>Node</th><th>Cursor</th><th>Lag</th><th>Applied</th></tr></thead>
+        <tbody>
+          {data.lag.nodes.map((n: any) => (
+            <tr data-cursor={n.cursor}>
+              <td>{n.id}</td><td>{n.cursor}</td><td data-lag>{data.lag.leader - n.cursor}</td>
+              <td><span class="ex-bar"><i style={`width:${Math.round((n.cursor / data.lag.leader) * 100)}%`} data-bar></i></span></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+    <p>Leader sequence <b data-leader-out>{data.lag.leader}</b>. Outbox depth <b data-depth-out>0</b> records.</p>
+    <p class="ex-only-js">
+      <label>Writer down for <b data-min-out>0</b> minutes
+        <input type="range" min="0" max="60" value="0" data-lag-range aria-label="Minutes the writer is down" style="width:min(24rem,100%);display:block" />
+      </label>
+    </p>
+    <p class="ex-only-js" data-lag-msg style="font-size:var(--sl-text-sm)">Move the slider to take the writer down. The leader sequence stops, so lag stays where it is while the outbox grows: watch the outbox age as well as the lag.</p>
+    <div class="ex-cards">
+      {data.index_notes.map((n: any) => (
+        <div class="ex-card"><b>{n.title}</b> <span class={`ex-chip ${chip(n.status).cls}`}>{chip(n.status).text}</span><p>{n.text}</p></div>
+      ))}
+    </div>
+  </div>
+)}
+
+{part === 'outage' && (
+  <div class="ex">
+    <div class="ex-table-wrap">
+      <table>
+        <thead><tr><th>Shape</th><th>Where records wait</th><th>What bounds it</th><th>How it drains</th></tr></thead>
+        <tbody>
+          {models.map((m) => (
+            <tr data-shape-row={m.id}>
+              <td><b>{m.id}</b> {m.name}</td><td>{m.wait}</td><td>{m.bound}</td><td>{m.recv} {m.drain}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+    <p style="font-size:var(--sl-text-sm);margin-top:.5rem">In every case requests keep succeeding, because they return when the record is durable in the outbox. The index serves what it already has, and the archive and seals have nothing new.</p>
+  </div>
+)}
+
+{part === 'compare' && (
+  <div class="ex">
+    <div class="ex-table-wrap">
+      <table>
+        <thead><tr><th>Topic</th><th>v1</th><th>v2 (this design)</th></tr></thead>
+        <tbody>{data.compare.map((c: any) => <tr><td><b>{c.topic}</b></td><td>{c.v1}</td><td>{c.v2}</td></tr>)}</tbody>
+      </table>
+    </div>
+    <p class="ex-note">{data.compare_note}</p>
+  </div>
+)}
+
+{part === 'open' && (
+  <div class="ex">
+    <div class="ex-table-wrap">
+      <table>
+        <thead><tr><th>Id</th><th>Point</th><th>Detail</th></tr></thead>
+        <tbody>
+          {data.open_points.map((o: any) => (
+            <tr>
+              <td>{o.od ? <a class="ex-chip ex-chip-open" href="/open-decisions/">{o.od}</a> : <span class="ex-chip ex-chip-proposed">not yet decided</span>}</td>
+              <td><b>{o.title}</b></td><td>{o.text}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </div>
+)}
+
+<script>
+  import '../../scripts/explorer-lag.ts';
+</script>
