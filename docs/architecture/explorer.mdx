@@ -1,0 +1,59 @@
+---
+title: Architecture explorer
+description: An interactive map of the sluis processes, drivers, sockets and flows on each deployment shape, drawn from data files.
+status: target
+tableOfContents: false
+sidebar:
+  order: 7
+---
+import ArchExplorer from '../../site/src/components/explorer/ArchExplorer.astro';
+import OpenDecision from '../../site/src/components/explorer/OpenDecision.astro';
+import Proposed from '../../site/src/components/explorer/Proposed.astro';
+
+This is the target state, not a running system. The map below is drawn from `site/src/data/explorer/architecture.yaml`, which today is written by hand from the design. Once the [permission manifest](/architecture/) exists, the roles, drivers, call edges, users and sockets are generated from it and this page reads that instead.
+
+Pick a shape. The map, the tables and the flows follow it. Without script the page shows T4, the first build target, and every table below is plain HTML.
+
+## Shapes
+
+<ArchExplorer part="toggle" />
+
+## The map
+
+Select a box to see what it holds, its manifest summary and its listeners; the lines show who it calls and who calls it. Choose a flow to step through it.
+
+<ArchExplorer part="legend" />
+
+<ArchExplorer part="map" />
+
+## Processes and listeners
+
+The same facts as tables, for the shape picked above. Roles and drivers listen only on Unix sockets under `/run/sluis/`, and only `central`'s public API ever gets a TCP listener: on the self-hosted shapes the edge connector reaches central's Unix socket, so no TCP port is opened. The written-down exceptions are the Lambda Web Adapter's loopback port inside the Lambda sandbox and the pod port a Kubernetes gateway routes to.
+
+<ArchExplorer part="tables" />
+
+## Clusters
+
+<Proposed>
+On a cluster each node runs the full set of processes. Each node's audit writer drains its own spool, and the notary co-signs batch heads 2 of 3 across the nodes, with no separate notary YubiKey.
+</Proposed>
+
+<ArchExplorer part="cluster" />
+
+<OpenDecision id="OD-4" title="Which TCP ports exist between nodes">
+Raft peer traffic uses the state driver's own TCP port, over mTLS. Whether any other inter-node port exists is not decided; the lean is the Raft driver only.
+</OpenDecision>
+
+## Open points
+
+<OpenDecision id="OD-1" title="Name of the central process">
+The data and this page use the placeholder `central`.
+</OpenDecision>
+
+<OpenDecision id="OD-2" title="Name of the node agent">
+The data and this page use the placeholder `node-agent`.
+</OpenDecision>
+
+<ArchExplorer part="open" />
+
+See also [the architecture overview](/architecture/) and [the audit explorer](/architecture/audit-explorer/).
