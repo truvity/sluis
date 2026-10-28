@@ -35,14 +35,14 @@ How settled a point is shows in how it is written:
 
 - Plain prose is **agreed**.
 - `:::note[Proposed]` is the design as proposed, awaiting the maintainer.
-- `:::caution[Open decision OD-n: short title]` is undecided and lists the options. The id must be a row on [Open decisions](/open-decisions/); `just site-lint` refuses an id that is not there.
+- `:::caution[Open decision OD-n: short title]` is undecided and lists the options. The id must be a row of the "Open" table on [Open decisions](/open-decisions/); `just site-lint` refuses an id that is not there, and refuses an id that has been decided. A decided point is written as plain prose.
 
 ```md
 :::note[Proposed]
 Each node agent holds its own signing key.
 :::
 
-:::caution[Open decision OD-3: Derived signing keys]
-Options: (a) always direct; (b) always derived; (c) direct on a KMS, derived only for bursts on a YubiKey.
+:::caution[Open decision OD-12: Index host on Lambda]
+Options: Aurora Serverless v2, or DynamoDB only.
 :::
 ```
