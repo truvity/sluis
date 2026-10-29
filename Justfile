@@ -23,7 +23,7 @@ site-build: site-install
 # Front-matter descriptions of 40 to 160 characters, a valid status, and
 # registered open-decision ids on every page in docs/, and the requirements
 # catalogue in docs/requirements/ (schema, statement rules, traceability, public safety).
-site-lint:
+site-lint: site-install
     site/scripts/check-descriptions.mjs
     site/scripts/check-status.mjs
     site/scripts/check-requirements.mjs

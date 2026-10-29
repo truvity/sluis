@@ -1,0 +1,176 @@
+---
+import ReqLayout from '../../components/requirements/ReqLayout.astro';
+import { areaPath, catalogue, count, hasKind, KIND_LABEL, odPath, reqPath, type Req } from '../../lib/requirements';
+
+const c = catalogue();
+const scope = (r: Req) => c.areaByCode.get(r.area)!.scopeOpen;
+const musts = c.reqs.filter((r) => r.level === 'MUST');
+const live = (r: Req) => r.status !== 'withdrawn';
+const pct = (n: number, d: number) => (d ? `${Math.round((100 * n) / d)}%` : '-');
+const row = (label: string, rs: Req[]) => ({ label, n: rs.length, core: rs.filter((r) => !scope(r)).length });
+
+const noSuite = musts.filter((r) => live(r) && !hasKind(r, 'conformance-suite', 'test-vectors'));
+const manualOnly = musts.filter((r) => r.verification.length > 0 && r.verification.every((v) => v.kind === 'manual'));
+const noStandard = c.reqs.filter((r) => live(r) && r.standards.length === 0);
+const designOnly = c.reqs.filter((r) => live(r) && r.features.length > 0 && r.features.every((f) => f === 'design'));
+const waiting = c.reqs.filter((r) => r.status === 'open' || r.status === 'partial');
+const byGap = new Map<string, Req[]>();
+for (const r of waiting) {
+  const keys = [...(r.decisions ?? []), ...(r.gap ? [r.gap] : [])];
+  for (const k of keys.length ? keys : ['(none)']) byGap.set(k, [...(byGap.get(k) ?? []), r]);
+}
+const gapKeys = [...byGap.keys()].sort((a, b) => a.localeCompare(b, 'en', { numeric: true }));
+const cited = new Set(c.reqs.flatMap((r) => r.standards.map((s) => s.id)));
+const uncited = c.standards.filter((s) => !cited.has(s.id));
+
+const stats = [
+  row('All requirements', c.reqs),
+  row('MUST', musts),
+  row('MUST with a conformance suite or test vectors', musts.filter((r) => hasKind(r, 'conformance-suite', 'test-vectors'))),
+  row('MUST without a conformance suite or test vectors', noSuite),
+  row('MUST verified by manual review only', manualOnly),
+  row('Requirements citing no standard', noStandard),
+  row('Requirements traced to design only (no issue yet)', designOnly),
+  row('Open or partial requirements', waiting),
+];
+
+const perArea = c.areas.map((a) => {
+  const m = a.reqs.filter((r) => r.level === 'MUST');
+  return {
+    a,
+    total: a.reqs.length,
+    must: m.length,
+    suite: m.filter((r) => hasKind(r, 'conformance-suite', 'test-vectors')).length,
+    test: m.filter((r) => hasKind(r, 'integration-test')).length,
+    manual: m.filter((r) => r.verification.every((v) => v.kind === 'manual')).length,
+    std: a.reqs.filter((r) => r.standards.length > 0).length,
+  };
+});
+const kindCounts = count(c.reqs.flatMap((r) => r.verification.map((v) => ({ r, v }))), (x) => x.v.kind);
+const noSuiteByArea = c.areas.map((a) => [a, noSuite.filter((r) => r.area === a.code)] as const).filter(([, rs]) => rs.length);
+---
+
+<ReqLayout
+  current="coverage"
+  jump={[['summary', 'Summary'], ['by-area', 'By area'], ['no-suite', 'MUST without suite'], ['manual', 'Manual only'], ['no-standard', 'No standard'], ['design-only', 'Design only'], ['waiting', 'Open and partial'], ['standards', 'Unused standards']]}
+  title="Requirements coverage"
+  description="What the sluis v2 requirements catalogue covers and what it does not: MUST clauses without a suite or test vectors, open records and unused standards."
+>
+  <p>
+    Statistics computed from the catalogue at build time ({c.reqs.length} requirements, checked {c.checked}). The "core" column leaves out the
+    account-hosting areas whose scope is open. A MUST that has an integration test but no conformance suite and no test vectors is not a
+    gap in itself: the list below says where sluis owes its own vectors or an official suite does not reach.
+  </p>
+
+  <h2 id="summary">Summary</h2>
+  <div class="rq-table-wrap">
+    <table class="rq-table rq-stats">
+      <thead><tr><th>Measure</th><th>Requirements</th><th>Core only</th></tr></thead>
+      <tbody>
+        {stats.map((s) => <tr><td data-label="Measure">{s.label}</td><td data-label="Requirements">{s.n}</td><td data-label="Core only">{s.core}</td></tr>)}
+      </tbody>
+    </table>
+  </div>
+  <p>
+    Verification entries by kind:{" "}
+    {c.vocabulary.verification.map((k, i) => <>{i > 0 && ', '}{KIND_LABEL[k]} {kindCounts.get(k) ?? 0}</>)}.
+    A record can have several.
+  </p>
+
+  <h2 id="by-area">By area</h2>
+  <div class="rq-table-wrap">
+    <table class="rq-table rq-stats">
+      <thead><tr><th>Area</th><th>Total</th><th>MUST</th><th>MUST with suite or vectors</th><th>MUST with integration test</th><th>MUST manual only</th><th>With a standard</th></tr></thead>
+      <tbody>
+        {perArea.map((p) => (
+          <tr>
+            <td data-label="Area"><a href={areaPath(p.a.code)}>{p.a.code}</a>{p.a.scopeOpen && <> <span class="rq-badge rq-scope-badge">scope open</span></>}</td>
+            <td data-label="Total">{p.total}</td>
+            <td data-label="MUST">{p.must}</td>
+            <td data-label="MUST with suite or vectors">{p.suite} <span class="rq-note">{pct(p.suite, p.must)}</span></td>
+            <td data-label="MUST with integration test">{p.test} <span class="rq-note">{pct(p.test, p.must)}</span></td>
+            <td data-label="MUST manual only">{p.manual}</td>
+            <td data-label="With a standard">{p.std} <span class="rq-note">{pct(p.std, p.total)}</span></td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+
+  <h2 id="no-suite">MUST without a conformance suite or test vectors</h2>
+  <p>{noSuite.length} requirements, by area. Each is verified by an integration test or by manual review.</p>
+  {noSuiteByArea.map(([a, rs]) => (
+    <details class="rq-details">
+      <summary><b>{a.code}</b> {a.title.replace(/ \(open scope\)$/, '')}: {rs.length}{a.scopeOpen && <> <span class="rq-badge rq-scope-badge">scope open</span></>}</summary>
+      <ul class="rq-list">
+        {rs.map((r) => <li><a href={reqPath(r)}>{r.id}</a> {r.statement} <span class="rq-note">({[...new Set(r.verification.map((v) => KIND_LABEL[v.kind]))].join(', ')})</span></li>)}
+      </ul>
+    </details>
+  ))}
+
+  <h2 id="manual">MUST verified by manual review only</h2>
+  <p>{manualOnly.length} requirements. Each states why no automated check is possible.</p>
+  {manualOnly.length === 0 ? <p><em>None.</em></p> : (
+    <ul class="rq-list">
+      {manualOnly.map((r) => <li><a href={reqPath(r)}>{r.id}</a> {r.statement} <span class="rq-note">{r.manual_reason}</span></li>)}
+    </ul>
+  )}
+
+  <h2 id="no-standard">Requirements citing no standard</h2>
+  <p>{noStandard.length} requirements. Most are sluis's own behaviour with no external specification.</p>
+  <details class="rq-details">
+    <summary>Show the {noStandard.length} ids</summary>
+    <p class="rq-chips">{noStandard.map((r) => <a class="rq-chip" href={reqPath(r)}>{r.id}</a>)}</p>
+  </details>
+
+  <h2 id="design-only">Requirements traced to design only</h2>
+  <p>{designOnly.length} requirements are specified but have no feature issue yet. Each is a candidate for one.</p>
+  <details class="rq-details">
+    <summary>Show the {designOnly.length} ids</summary>
+    <p class="rq-chips">{designOnly.map((r) => <a class="rq-chip" href={reqPath(r)}>{r.id}</a>)}</p>
+  </details>
+
+  <h2 id="waiting">Open and partial requirements</h2>
+  <p>{waiting.length} requirements wait for a decision or a plan, grouped by the open decision or the gap key they name. A record that names several appears under each.</p>
+  <div class="rq-table-wrap">
+    <table class="rq-table rq-stats">
+      <thead><tr><th>Waiting for</th><th>Requirements</th><th>Ids</th></tr></thead>
+      <tbody>
+        {gapKeys.map((k) => (
+          <tr>
+            <td data-label="Waiting for">
+              {/^OD-\d+$/.test(k) ? <a href={odPath(k)}>{k}</a> : <code>{k}</code>}
+              {c.gaps[k] && <div class="rq-note">{c.gaps[k]}</div>}
+            </td>
+            <td data-label="Requirements">{byGap.get(k)!.length}</td>
+            <td data-label="Ids">
+              <details class="rq-details"><summary>Show</summary><p class="rq-chips">{byGap.get(k)!.map((r) => <a class="rq-chip" href={reqPath(r)}>{r.id}</a>)}</p></details>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+
+  <h2 id="standards">Register rows without a requirement</h2>
+  <p>
+    {uncited.length} of {c.standards.length} standards cite no requirement. A row marked "register" is on the
+    <a href="/standards/">standards register</a>; the others are rows the research proposed for it. Each needs a requirement or a mark
+    (reference only, refused, candidate, dropped).
+  </p>
+  <div class="rq-table-wrap">
+    <table class="rq-table rq-stats">
+      <thead><tr><th>Id</th><th>Standard</th><th>Group</th><th>Register</th></tr></thead>
+      <tbody>
+        {uncited.map((s) => (
+          <tr>
+            <td data-label="Id">{s.id}</td>
+            <td data-label="Standard">{s.url ? <a href={s.url}>{s.name}</a> : s.name}</td>
+            <td data-label="Group">{s.group}</td>
+            <td data-label="Register">{s.register ? 'register' : 'proposed'}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+</ReqLayout>

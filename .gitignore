@@ -5,6 +5,7 @@
 *.test
 *.out
 coverage.*
+!site/src/pages/requirements/coverage.astro
 *.prof
 
 # Go workspace files are local by choice
