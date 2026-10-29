@@ -1,36 +1,36 @@
 ---
 title: Keys
-description: "Which key backs which purpose on each shape: key modes and floors, direct signing, algorithms, KMS and YubiKey layouts, randomness, FIPS and JOSE."
+description: "Which key backs which purpose in each preset: key modes and floors, direct signing, algorithms, KMS and YubiKey layouts, randomness, FIPS and JOSE."
 status: target
 sidebar:
   order: 4
 ---
 
-sluis holds four authority keys (token signing, the certificate authorities, the audit notary and the mint grant), plus the keys that seal secrets at rest. This page says what backs each one on each shape, how it signs, and which algorithms it uses. The access rules, which role may use which key, are enforced by the driver or the cloud, not by this page: see [Drivers](/concepts/drivers/).
+sluis holds four authority keys (token signing, the certificate authorities, the audit notary and the mint grant), plus the keys that seal secrets at rest. This page says what backs each one in each preset, how it signs, and which algorithms it uses. The access rules, which actor may use which key, are enforced by the driver or the cloud, not by this page: see [Drivers](/concepts/drivers/).
 
 ## Key modes
 
-The key mode is a property of the shape:
+The key mode is the choice of the `keys` driver, and it follows the preset:
 
-| Shape | Mode |
+| Preset | Mode |
 |---|---|
-| AWS shapes (EC2, Lambda) | AWS KMS |
-| Board shapes (single node, cluster) | A hardware key, a YubiKey in PIV mode |
-| Development (local) | A software key |
+| AWS presets (T3 EC2 single, T4 EC2 cluster, T5 AWS Lambda) | AWS KMS (`aws-kms`) |
+| Board presets (T1 Single board, T2 Board cluster) | A hardware key, a YubiKey in PIV mode (`yubikey-piv`) |
+| Development (T0 Local) | A software key (`software`), or the host's YubiKey |
 | Kubernetes (T6, proposed) | AWS KMS on EKS; no mode yet for other clusters |
 
 :::note[Proposed]
-**Floors in code, choices above them in config.** The code refuses a software key on a production shape. Configuration chooses among the modes the floor allows. A development install can therefore never be mistaken for a production one by loading its configuration on the wrong node.
+**Floors in code, choices above them in config.** The code refuses a software key in a production installation. Configuration chooses among the modes the floor allows. A development install can therefore never be mistaken for a production one by loading its configuration on the wrong node.
 :::
 
 ## Direct signing
 
-Tokens are signed directly with the non-extractable key on every shape. A key is never used to certify a short-lived software key that signs in its place, so there are no derived signing keys and no burst key: a hardware key or KMS signs each token itself, and the signing key never leaves the device or the service.
+Tokens are signed directly with the non-extractable key in every preset. A key is never used to certify a short-lived software key that signs in its place, so there are no derived signing keys and no burst key: a hardware key or KMS signs each token itself, and the signing key never leaves the device or the service.
 
 The volume makes this affordable. On a production install, a measurement showed about 25,000 tokens in 7 days, with a peak of 0.8 per second. 95 % of them were token exchange. At that volume:
 
-- **KMS shapes** pay about $2.62 a month for signing every token with KMS.
-- **YubiKey shapes** sign P-384 in about 120 ms, which is about 8 signatures per second. The measured peak is a tenth of that. A software P-384 key would sign about 200 per second per core, which is why the development shape can use one.
+- **KMS presets** pay about $2.62 a month for signing every token with KMS.
+- **YubiKey presets** sign P-384 in about 120 ms, which is about 8 signatures per second. The measured peak is a tenth of that. A software P-384 key would sign about 200 per second per core, which is why the development preset can use one.
 
 ## Algorithms
 
@@ -45,17 +45,17 @@ The volume makes this affordable. On a production install, a measurement showed 
 
 See [Identity](/concepts/identity/) for how these keys are used.
 
-**Kubernetes (T6).** For now the Kubernetes shape supports AWS KMS only (EKS), and the keys are the AWS KMS keys of the layout below ([OD-20](/open-decisions/#od-20)). A cluster outside AWS has no key mode that the floor allows, and refuses to start rather than fall back to a software key.
+**Kubernetes (T6).** For now the Kubernetes preset supports AWS KMS only (EKS), and the keys are the AWS KMS keys of the layout below ([OD-20](/open-decisions/#od-20)). A cluster outside AWS has no key mode that the floor allows, and refuses to start rather than fall back to a software key.
 
 :::note[Proposed]
-The workload tokens on Kubernetes are the cluster's own ServiceAccount tokens, signed by the cluster's key with the algorithm the cluster uses. sluis neither holds nor signs them, so the P-384 rule above does not cover them. How a role gets its cloud identity from them is [OD-19](/open-decisions/#od-19). See [Kubernetes](/shapes/kubernetes/).
+The workload tokens on Kubernetes are the cluster's own ServiceAccount tokens, signed by the cluster's key with the algorithm the cluster uses. sluis neither holds nor signs them, so the P-384 rule above does not cover them. How an actor gets its cloud identity from them is [OD-19](/open-decisions/#od-19). See [Kubernetes](/environments/kubernetes/).
 :::
 
 - **The per-audience RS256 exception.** Some verifiers cannot take an elliptic-curve signature. For an audience that is configured to need RS256, sluis signs that audience's tokens with a separate RSA key, kept in its own slot or KMS key and used for nothing else. Every other audience keeps getting EC P-384 tokens. The RSA public key is published in the JWKS beside the EC keys.
 
 ## AWS KMS layout
 
-On AWS shapes there are five keys:
+On the AWS presets there are five keys:
 
 | Key | Spec | Purpose |
 |---|---|---|
@@ -65,7 +65,7 @@ On AWS shapes there are five keys:
 | Notary | `ECC_NIST_P384`, `SIGN_VERIFY` | Audit batch heads |
 | Grant | `ECC_NIST_P384`, `SIGN_VERIFY` | Mint grants, held by `policy` |
 
-The reason for one key per authority purpose is how KMS works. A KMS key has one usage, and `Sign` takes no encryption context, so the only way to say "only this role may sign with this key" is a key policy on a key that exists for that one purpose. With a key per purpose, each key policy names exactly one role. Sealing is the exception, because `Encrypt` and `Decrypt` do take an encryption context, so one key serves every sealing need with a context per use.
+The reason for one key per authority purpose is how KMS works. A KMS key has one usage, and `Sign` takes no encryption context, so the only way to say "only this actor may sign with this key" is a key policy on a key that exists for that one purpose. With a key per purpose, each key policy names exactly one actor. Sealing is the exception, because `Encrypt` and `Decrypt` do take an encryption context, so one key serves every sealing need with a context per use.
 
 ## YubiKey layout
 
@@ -117,7 +117,7 @@ BoringCrypto is not used.
 ## JOSE
 
 :::note[Proposed]
-JOSE is implemented with `github.com/lestrrat-go/jwx/v4` behind sluis's own `jose` package, so the library can be replaced without touching the roles. There is no Rust JOSE driver.
+JOSE is implemented with `github.com/lestrrat-go/jwx/v4` behind sluis's own `jose` package, so the library can be replaced without touching the actors. There is no Rust JOSE driver.
 
 Tokens are standard JWS and JWT. Any language verifies them with its standard libraries against the published JWKS, so sluis needs no client library. Small verification demos in a few languages are on the backlog.
 :::

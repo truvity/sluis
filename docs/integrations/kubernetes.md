@@ -16,9 +16,9 @@ Kubernetes appears twice. A **workload** in a cluster proves itself to sluis wit
 - **A controller reads sluis's data as itself.** An in-cluster reconciler proves who it is with its ServiceAccount token and is admitted to the read-only calls it needs.
 - **Many clusters, no credentials for them.** sluis checks a token against the cluster's published key set. It needs no kubeconfig and calls no cluster API.
 
-## Integration roles
+## Integration actors
 
-| Role | What it does for Kubernetes |
+| Actor | What it does for Kubernetes |
 |---|---|
 | `WorkloadVerifier` | Verifies a ServiceAccount token against the issuing cluster's published key set and returns `cluster`, `namespace` and `name` as attributes. It holds no secret. |
 
@@ -61,7 +61,7 @@ An example; the verifier is a small block, and the API server needs a few flags.
 integrations:
   kubernetes:
     prod:
-      roles: [verifier]
+      actors: [verifier]
       issuer: https://oidc.cluster.example.org/id/EXAMPLE
       jwks_uri: https://oidc.cluster.example.org/id/EXAMPLE/keys
       api_server_client:
@@ -76,6 +76,6 @@ Keep a break-glass path outside sluis, the cloud's own cluster access, until a p
 ## v1 → v2 notes
 
 - v1 does both today: ServiceAccount tokens from any number of clusters, and the API server sign-in. See [Connect a Kubernetes cluster](/v1/guides/sluis/connect/kubernetes-cluster/) and [Call one service from another](/v1/guides/sluis/connect/service-to-service/). The person's commands are `sluisctl kubeconfig` and `sluisctl kube-token`.
-- In v2 a node's workload identity ([Identity](/concepts/identity/)) is separate from this: it is how sluis's own roles reach a cloud, not how a cluster's workloads reach sluis.
-- Kubernetes as a **shape** (running sluis in pods) is separate from this page; see [Kubernetes](/shapes/kubernetes/).
+- In v2 a node's workload identity ([Identity](/concepts/identity/)) is separate from this: it is how sluis's own actors reach a cloud, not how a cluster's workloads reach sluis.
+- Kubernetes as an **environment** (running sluis in pods) is separate from this page; see [Kubernetes](/environments/kubernetes/).
 - Parity issues: [#784](https://github.com/truvity/sluis/issues/784) workload proofs, [#818](https://github.com/truvity/sluis/issues/818) the API server sign-in.

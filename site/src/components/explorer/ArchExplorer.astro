@@ -1,11 +1,11 @@
 ---
 // The architecture explorer. `part` picks which piece to render, so the page can
 // put its own headings between them:
-//   toggle  the shape toggle and the shapes-at-a-glance table
+//   toggle  the preset toggle and the presets-at-a-glance table
 //   legend  what the map's boxes and lines mean
 //   map     the process map, the detail panel and the flows
 //   tables  the same facts as tables, which read without script
-//   cluster what runs where on a cluster shape
+//   cluster what runs where on a cluster (bare-metal, N nodes)
 //   open    the open points the data carries
 // The facts are in src/data/explorer/architecture.yaml.
 import '../../styles/explorer.css';
@@ -22,7 +22,7 @@ const dflt: string = data.default_shape;
 
 {part === 'toggle' && (
   <div class="ex" data-ex-root data-default={dflt}>
-    <div class="ex-toggle ex-only-js" role="radiogroup" aria-label="Deployment shape" data-ex-toggle hidden>
+    <div class="ex-toggle ex-only-js" role="radiogroup" aria-label="Preset" data-ex-toggle hidden>
       {models.map((m) => (
         <button type="button" role="radio" aria-checked={m.shape.id === dflt ? 'true' : 'false'} data-shape={m.shape.id} tabindex={m.shape.id === dflt ? 0 : -1}>
           <b>{m.shape.id}</b><span>{m.shape.name}</span>
@@ -31,7 +31,7 @@ const dflt: string = data.default_shape;
     </div>
     <div class="ex-table-wrap">
       <table>
-        <thead><tr><th>Shape</th><th>Hardware</th><th>Keys</th><th>State</th><th>Runs as</th><th>Used for</th></tr></thead>
+        <thead><tr><th>Preset</th><th>Hardware</th><th>Keys</th><th>State</th><th>Environment</th><th>Used for</th></tr></thead>
         <tbody>
           {models.map((m) => (
             <tr data-shape-row={m.shape.id}>
@@ -39,14 +39,14 @@ const dflt: string = data.default_shape;
               <td>{m.shape.hardware}</td>
               <td>{m.shape.keys}</td>
               <td>{m.shape.state}</td>
-              <td>{m.runtime.label}{m.shape.nodes > 1 ? `, ${m.shape.nodes} nodes` : ''}</td>
+              <td>{m.shape.environment} ({m.runtime.label}){m.shape.nodes > 1 ? `, ${m.shape.nodes} nodes` : m.shape.nodes === 0 ? ', elastic' : ', 1 node'}</td>
               <td>{m.shape.use}</td>
             </tr>
           ))}
         </tbody>
       </table>
     </div>
-    <p class="ex-only-js" style="font-size:var(--sl-text-sm);margin-top:.5rem">The row of the shape you picked is highlighted. Every part of this page follows the toggle.</p>
+    <p class="ex-only-js" style="font-size:var(--sl-text-sm);margin-top:.5rem">The row of the preset you picked is highlighted. Every part of this page follows the toggle.</p>
   </div>
 )}
 
@@ -54,8 +54,8 @@ const dflt: string = data.default_shape;
   <div class="ex">
     <ul class="ex-legend" aria-label="Legend">
       <li><svg viewBox="0 0 34 14" aria-hidden="true"><rect class="ex-sw" x="1" y="1" width="32" height="12" rx="3" stroke="var(--sl-color-purple)" /></svg>edge connector, node service</li>
-      <li><svg viewBox="0 0 34 14" aria-hidden="true"><rect class="ex-sw" x="1" y="1" width="32" height="12" rx="3" stroke="var(--sl-color-blue)" /></svg>role</li>
-      <li><svg viewBox="0 0 34 14" aria-hidden="true"><rect class="ex-sw" x="1" y="1" width="32" height="12" rx="3" stroke="var(--sl-color-orange)" /></svg>driver service, per-role (solid)</li>
+      <li><svg viewBox="0 0 34 14" aria-hidden="true"><rect class="ex-sw" x="1" y="1" width="32" height="12" rx="3" stroke="var(--sl-color-blue)" /></svg>actor</li>
+      <li><svg viewBox="0 0 34 14" aria-hidden="true"><rect class="ex-sw" x="1" y="1" width="32" height="12" rx="3" stroke="var(--sl-color-orange)" /></svg>driver service, per-actor (solid)</li>
       <li><svg viewBox="0 0 34 14" aria-hidden="true"><rect class="ex-sw" x="1" y="1" width="32" height="12" rx="3" stroke="var(--sl-color-orange)" stroke-dasharray="6 3" /></svg>driver service, shared (dashed)</li>
       <li><svg viewBox="0 0 34 14" aria-hidden="true"><rect class="ex-sw" x="1" y="1" width="32" height="12" rx="3" stroke="var(--sl-color-green)" /></svg>integration</li>
       <li><svg viewBox="0 0 34 14" aria-hidden="true"><rect class="ex-sw" x="1" y="1" width="32" height="12" rx="3" stroke="var(--sl-color-gray-3)" stroke-dasharray="2 3" /></svg>backing store, or outside sluis</li>
@@ -64,7 +64,7 @@ const dflt: string = data.default_shape;
       <li><svg viewBox="0 0 34 14" aria-hidden="true"><path d="M1 7H33" stroke="var(--sl-color-accent-high)" stroke-width="3.2" /></svg>the current flow step</li>
       <li><span class="ex-chip ex-chip-agreed">Agreed</span><span class="ex-chip ex-chip-proposed">Proposed</span><span class="ex-chip ex-chip-open">Open</span></li>
     </ul>
-    <p style="font-size:var(--sl-text-sm);margin-top:.6rem">A box shows its name, then its user (or role) and its socket. A line is a ConnectRPC call from the box on its tail to the box on its head; the answer travels back along the same line.</p>
+    <p style="font-size:var(--sl-text-sm);margin-top:.6rem">A box shows its name, then its user (or role, on serverless) and its socket. A line is a ConnectRPC call from the box on its tail to the box on its head; the answer travels back along the same line.</p>
   </div>
 )}
 
@@ -76,7 +76,7 @@ const dflt: string = data.default_shape;
   <div class="ex" data-ex-tables>
     {models.map((m) => (
       <div data-shape-block={m.shape.id} hidden={m.shape.id !== dflt}>
-        <p class="ex-sub">Processes on {m.shape.id} ({m.runtime.label})</p>
+        <p class="ex-sub">Processes in {m.shape.id} ({m.shape.environment}, {m.runtime.label})</p>
         <div class="ex-table-wrap">
           <table>
             <thead><tr><th>Process</th><th>Kind</th><th>{m.runtime.process}</th><th>Identity</th><th>Listens</th></tr></thead>
@@ -84,13 +84,13 @@ const dflt: string = data.default_shape;
               {m.processes.map((p) => (
                 <tr>
                   <td>{p.title}</td><td>{p.kind}</td>
-                  <td class="ex-mono">{p.unit}</td><td class="ex-mono">{p.identity}</td><td class="ex-mono">{p.listen || 'per-role instances, see the map'}</td>
+                  <td class="ex-mono">{p.unit}</td><td class="ex-mono">{p.identity}</td><td class="ex-mono">{p.listen || 'per-actor instances, see the map'}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-        <p class="ex-sub">Drivers behind the ports on {m.shape.id}</p>
+        <p class="ex-sub">Drivers behind the ports in {m.shape.id}</p>
         <div class="ex-table-wrap">
           <table>
             <thead><tr><th>Port</th><th>Driver</th><th>Instance</th><th>Backed by</th></tr></thead>
@@ -106,7 +106,7 @@ const dflt: string = data.default_shape;
   <div class="ex">
     <div class="ex-table-wrap">
       <table>
-        <thead><tr><th>Process</th><th>On a cluster shape (T2, T4)</th><th>Status</th></tr></thead>
+        <thead><tr><th>Process</th><th>On a bare-metal cluster (T2, T4)</th><th>Status</th></tr></thead>
         <tbody>
           {data.cluster.map((r: any) => (
             <tr><td>{r.process}</td><td>{r.where}</td><td><span class={`ex-chip ex-chip-${r.status}`}>{data.statuses[r.status]}</span></td></tr>

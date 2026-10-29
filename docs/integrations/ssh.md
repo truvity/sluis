@@ -1,12 +1,12 @@
 ---
 title: SSH
-description: How people and robots log in to hosts with short-lived SSH certificates from the sluis ca role, and how clients trust a host CA instead of each host key.
+description: How people and robots log in to hosts with short-lived SSH certificates from the sluis ca actor, and how clients trust a host CA instead of each host key.
 status: target
 sidebar:
   order: 9
 ---
 
-SSH is a **client profile** like [PostgreSQL](/integrations/postgresql/): the `ca` role holds an SSH certificate authority key (slot 82 on a YubiKey, an ECC key on KMS), and sluis calls nothing outside.
+SSH is a **client profile** like [PostgreSQL](/integrations/postgresql/): the `ca` actor holds an SSH certificate authority key (slot 82 on a YubiKey, an ECC key on KMS), and sluis calls nothing outside.
 
 ## What it's for
 
@@ -15,9 +15,9 @@ SSH is a **client profile** like [PostgreSQL](/integrations/postgresql/): the `c
 - **A client trusts a host without a first-connection prompt.** The host's key is signed by the host CA, and the client trusts the CA for a domain with one `known_hosts` line.
 - **Break-glass access** for administrators is a separate principal with a shorter lifetime and an audit record.
 
-## Integration roles
+## Integration actors
 
-None; this is a client profile. The roles it uses are the [`ca`](/concepts/roles/) role (signs) and the `policy` role (decides who may have which principals).
+None; this is a client profile. The actors it uses are the [`ca`](/concepts/actors/) actor (signs) and the `policy` actor (decides who may have which principals).
 
 ## What sluis asks the vendor for
 
@@ -65,7 +65,7 @@ For people who have no `sluis` command on the machine they work from, the altern
 ## v1 → v2 notes
 
 - **v1 never signs an SSH key.** People log in with `opkssh` against sluis's OpenID provider, and machines and hosts get certificates from OpenBao's SSH CA. See [Connect SSH for people and machines](/v1/guides/sluis/connect/ssh/) and [SSH hosts](/v1/guides/sluis/connect/ssh-hosts/). The v1 commands are `sluisctl bao ssh …` and `sluisctl ssh known-hosts`.
-- In v2 the `ca` role is an SSH CA, so sluis signs both user and host certificates. `opkssh` sign-in remains a supported client profile.
+- In v2 the `ca` actor is an SSH CA, so sluis signs both user and host certificates. `opkssh` sign-in remains a supported client profile.
 - Parity issues: [#825](https://github.com/truvity/sluis/issues/825) `opkssh` sign-in, [#824](https://github.com/truvity/sluis/issues/824) OpenBao certificates, [#829](https://github.com/truvity/sluis/issues/829) the wrappers.
 
 :::note[Proposed]

@@ -2,9 +2,15 @@
 #
 # The facts live here and the component only renders them. Today the file is
 # written by hand from the design ledger; once the permission manifest exists,
-# the roles, drivers, edges, uids and sockets below are generated from it and
+# the actors, drivers, edges, uids and sockets below are generated from it and
 # the prose fields stay. `status` is agreed | proposed | open; `od` names a row
 # on /open-decisions/.
+#
+# Vocabulary (docs/TAXONOMY): an actor is a process with one responsibility; an
+# environment is the runtime kind (bare-metal, serverless, kubernetes); a preset
+# is a named, tested installation (T0 to T6). The keys below keep their old
+# names so that the code that reads them does not change: `shapes` lists the
+# presets, `roles` lists the actors, and `runtimes` are the runtime templates.
 
 default_shape: T4
 
@@ -14,17 +20,19 @@ statuses:
   open: Open
 
 # ---------------------------------------------------------------------------
-# Shapes. `ports` names the driver behind each port on that shape.
+# Presets (the key stays `shapes`). `environment` is the runtime kind of the
+# preset. `ports` names the driver behind each port in that preset.
 # ---------------------------------------------------------------------------
 shapes:
   - id: T0
     name: Local (development)
+    environment: bare-metal
     hardware: Docker on a workstation, one node
     runtime: docker
     nodes: 1
     node_agent: false
     edge: cloudflared
-    ports: { keys: soft, state: embedded, blob: s3, outbox: spool, index: sqlite }
+    ports: { keys: soft, state: embedded, blob: s3, transport: spool, index: sqlite }
     keys: software key, or the host's YubiKey through a key-holder on the host
     state: embedded single-node store
     use: Development and CI.
@@ -32,13 +40,14 @@ shapes:
       - text: "With the host's YubiKey, key-holder runs natively on the host and talks to the host's pcscd. The container mounts only key-holder's Unix socket, and the host keeps using the YubiKey. The fallback is to mount the host pcscd socket into the container, with the risk that the pcsc-lite protocol versions must match."
         status: agreed
   - id: T1
-    name: Single node
+    name: Single board
+    environment: bare-metal
     hardware: One single-board computer (arm64, 2 GB RAM, eMMC), one YubiKey
     runtime: systemd
     nodes: 1
     node_agent: true
     edge: cloudflared
-    ports: { keys: yubikey, state: embedded, blob: s3, outbox: spool, index: sqlite }
+    ports: { keys: yubikey, state: embedded, blob: s3, transport: spool, index: sqlite }
     keys: YubiKey PIV
     state: single-node store, no Raft
     use: The poor man's choice. Integration tests and the single-node tutorial run here.
@@ -48,13 +57,14 @@ shapes:
       - text: "The boards run the vendor's Ubuntu 22.04 for now, as a declared exception. systemd 249 has no LoadCredentialEncrypted=, so units use plain LoadCredential=, and sluis doctor warns about kernel 5.10. Building Ubuntu 26.04 and Rocky 10.2 images is a backlog task."
         status: agreed
   - id: T2
-    name: Cluster
+    name: Board cluster
+    environment: bare-metal
     hardware: Three single-board computers, which may mix Ubuntu and Rocky
     runtime: systemd
     nodes: 3
     node_agent: true
     edge: cloudflared
-    ports: { keys: yubikey, state: rqlite, blob: s3, outbox: spool, index: sqlite }
+    ports: { keys: yubikey, state: rqlite, blob: s3, transport: spool, index: sqlite }
     keys: One YubiKey per node
     state: rqlite (Raft) across three nodes
     use: Integration tests and tutorials.
@@ -64,13 +74,14 @@ shapes:
       - text: "The boards run the vendor's Ubuntu 22.04 for now, as a declared exception. systemd 249 has no LoadCredentialEncrypted=, so units use plain LoadCredential=, and sluis doctor warns about kernel 5.10. Building Ubuntu 26.04 and Rocky 10.2 images is a backlog task."
         status: agreed
   - id: T3
-    name: AWS EC2 single
+    name: EC2 single
+    environment: bare-metal
     hardware: One t4g.nano, Amazon Linux 2023
     runtime: systemd
     nodes: 1
     node_agent: true
     edge: cloudflared
-    ports: { keys: aws, state: aws, blob: s3, outbox: spool, index: sqlite }
+    ports: { keys: aws, state: aws, blob: s3, transport: spool, index: sqlite }
     keys: AWS KMS
     state: DynamoDB
     use: Integration tests and tutorials.
@@ -78,13 +89,14 @@ shapes:
       - text: "The notary uses one key. The residual risk is written down: root on the node can sign."
         status: agreed
   - id: T4
-    name: AWS EC2 cluster
+    name: EC2 cluster
+    environment: bare-metal
     hardware: An Auto Scaling group of three t4g.nano, Amazon Linux 2023
     runtime: systemd
     nodes: 3
     node_agent: true
     edge: cloudflared
-    ports: { keys: aws, state: rqlite, blob: s3, outbox: spool, index: sqlite }
+    ports: { keys: aws, state: rqlite, blob: s3, transport: spool, index: sqlite }
     keys: AWS KMS
     state: Raft (rqlite)
     use: The first build target.
@@ -95,27 +107,28 @@ shapes:
         status: agreed
   - id: T5
     name: AWS Lambda
-    hardware: One Lambda function per role
+    environment: serverless
+    hardware: One Lambda function per actor
     runtime: lambda
     nodes: 0
     node_agent: false
     edge: lwa
-    ports: { keys: aws, state: aws, blob: s3, outbox: sqs, index: remote }
+    ports: { keys: aws, state: aws, blob: s3, transport: sqs, index: remote }
     keys: AWS KMS
     state: DynamoDB
     use: Integration tests and tutorials.
     notes:
-      - text: "T5 ships no audit index. audit-read and its index run in a separate audit install on another shape that reads the same bucket: Kubernetes with Postgres (any connection string, for example CNPG), or a server with sqlite. A small install can run sluis audit search from the CLI, which builds a local sqlite index from the chain. The index is a rebuildable cache; the chain in the bucket is the record."
+      - text: "T5 ships no search index. audit-read and its search index run in a separate audit install on another preset that reads the same bucket: Kubernetes with Postgres (any connection string, for example CNPG), or a server with sqlite. Where Search runs is open (OD-32). A small install can run sluis audit search from the CLI, which builds a local sqlite index from the chain. The search index is a rebuildable cache; the chain in the blob is the record."
         status: agreed
-      - text: "The outbox is an SQS queue here."
+      - text: "The transport is an SQS queue here."
         status: agreed
-      - text: "Kubernetes is in design scope as T6 and is proposed, not agreed: see /shapes/kubernetes/. Its audit outbox is an SQS queue for now, as here."
+      - text: "Kubernetes is in design scope as preset T6 and is proposed, not agreed: see /environments/kubernetes/. Its audit transport is an SQS queue for now, as here (decided), and the transport per preset is open (OD-34)."
         status: proposed
-      - text: "The notary is a single key used only by the notary function's role. There is no co-signing; the function role is the isolation."
+      - text: "The notary is a single key used only by the notary function's IAM role. There is no co-signing; the function's role is the isolation."
         status: agreed
 
 # What each runtime turns a process id into. {id} is the process id, {driver}
-# the driver id, {role} the role the driver belongs to.
+# the driver id, {role} the actor the driver belongs to.
 runtimes:
   docker:
     label: Docker Compose
@@ -219,7 +232,7 @@ drivers:
     instance: shared
     shared_name: key-holder
     binary: drivers/soft
-    does: Software keys under its own uid. A development driver; the code refuses it on a production shape.
+    does: Software keys under its own uid. A development driver; the code refuses it in production.
     holds: The software key files
     backing: software key file
     status: agreed
@@ -250,7 +263,7 @@ drivers:
     instance: shared
     shared_name: state-owner
     binary: drivers/rqlite
-    does: Serves the state port on rqlite. rqlite has one credential, so this shared instance checks every caller against a per-role prefix access list and allows one writer per record kind. Raft peer traffic is this driver's own TCP port, over mTLS.
+    does: Serves the state port on rqlite. rqlite has one credential, so this shared instance checks every caller against a per-actor prefix access list and allows one writer per record kind. Raft peer traffic is this driver's own TCP port, over mTLS.
     holds: The Raft peer TLS credential
     backing: rqlited (Raft, three nodes)
     status: agreed
@@ -258,27 +271,28 @@ drivers:
   aws:
     port: any
     title: aws
-    instance: per-role
+    instance: per-actor
     shared_name: null
     binary: drivers/aws
-    does: One binary for KMS (keys), DynamoDB (state), S3 or an S3-compatible store (blob) and SQS (outbox). One instance per role, running as that role's uid, so the cloud's own IAM or key policy is the enforcer.
+    does: One binary for KMS (keys), DynamoDB (state), S3 or an S3-compatible store (blob) and SQS (transport). One instance per actor, running as that actor's uid, so the cloud's own IAM or key policy is the enforcer.
     holds: Nothing. Credentials come from the platform identity, or from a workload JWT exchanged for cloud credentials.
     backing: AWS KMS, DynamoDB, S3 or SQS
     status: agreed
   spool:
-    port: outbox
+    port: transport
+    mode: queue
     title: spool
     instance: shared
     shared_name: null
     binary: drivers/spool
-    does: A local, fsync'd spool. A producer's request returns once its record is durable here. One shared instance that checks every caller's peer credentials.
+    does: The transport port in queue mode on a local, fsync'd spool. A producer's request returns once its record is durable here. One shared instance that checks every caller's peer credentials.
     holds: The spool segment files
     backing: local spool on disk
     status: proposed
   s3:
     port: blob
     title: aws (S3 API)
-    instance: per-role
+    instance: per-actor
     shared_name: null
     binary: drivers/aws
     does: The blob port, served by the aws driver over the S3 API (S3 itself, or an S3-compatible store). Only audit-writer, notary and audit-read use it.
@@ -286,12 +300,13 @@ drivers:
     backing: object store
     status: agreed
   sqs:
-    port: outbox
+    port: transport
+    mode: queue
     title: aws (SQS)
-    instance: per-role
+    instance: per-actor
     shared_name: null
     binary: drivers/aws
-    does: The outbox port on SQS. Each producer sends under its own IAM role; the writer takes the observer from the queue's sender, not from the message body.
+    does: The transport port in queue mode on SQS. Each producer sends under its own IAM role; the writer takes the observer from the queue's sender, not from the message body.
     holds: Nothing
     backing: SQS queue
     status: agreed
@@ -311,17 +326,17 @@ drivers:
     instance: file
     shared_name: null
     binary: null
-    does: "T5 ships no audit index. audit-read and its index run in a separate audit install on another shape that reads the same bucket (Kubernetes with Postgres, or a server with sqlite). The index is a rebuildable cache; the chain in the bucket is the record."
+    does: "T5 ships no search index. audit-read and its search index run in a separate audit install on another preset that reads the same bucket (Kubernetes with Postgres, or a server with sqlite). The search index is a rebuildable cache; the chain in the blob is the record."
     holds: Nothing
     backing: an index in a separate audit install
     status: agreed
   postgres:
     port: index
     title: postgres
-    instance: per-role
+    instance: per-actor
     shared_name: null
     binary: drivers/postgres
-    does: The index port on Postgres, for the Kubernetes shape and for a separate audit install (any connection string, for example CNPG).
+    does: The index port on Postgres, for the Kubernetes environment and for a separate audit install (any connection string, for example CNPG).
     holds: Nothing
     backing: Postgres
     status: agreed
@@ -345,13 +360,13 @@ ports:
     node: drv-blob
     title: blob
     store_node: store-blob
-    store_title: archive
+    store_title: blob
     users: [audit-writer, notary, audit-read]
-  outbox:
-    node: drv-outbox
-    title: outbox
-    store_node: store-outbox
-    store_title: outbox
+  transport:
+    node: drv-transport
+    title: transport
+    store_node: store-transport
+    store_title: transport
     users: [entry, policy, signer, ca, quota, notary, audit-writer, audit-read]
   index:
     node: null
@@ -359,112 +374,125 @@ ports:
     store_title: index
 
 # ---------------------------------------------------------------------------
-# Roles. Each is its own OS user and unit, its own Lambda function, or its
-# own pod. `resources` is an illustrative slice of the permission manifest.
+# Actors (the key stays `roles`). Each is its own OS user and unit, its own
+# Lambda function, or its own container. `resources` is an illustrative slice
+# of the permission manifest.
 # ---------------------------------------------------------------------------
 roles:
   entry:
     status: agreed
     name: entry
-    kind: role
+    kind: actor
     binary: roles/entry
-    does: "The OIDC protocol: sign-in, sessions, token exchange and the console API. It sits behind the edge connector and is the only role whose API is public."
+    does: "The OIDC protocol: sign-in, sessions, token exchange and the console API. It sits behind the edge connector and is the only actor whose API is public."
     holds: No key
-    uses: [state, outbox]
+    uses: [state, transport]
     resources:
       - "state: sessions/*, clients/*, grants/*, directory/*, cursors/* (its own record kinds)"
       - "calls: policy, signer, quota, ca, audit-read and every integration"
-      - "outbox: append"
+      - "transport: put"
       - "keys: none"
     listen_by_runtime:
       docker: "TCP 127.0.0.1:8080 (an example port), loopback only"
       systemd: "TCP 127.0.0.1:8080 (an example port), loopback only"
       lambda: "TCP 127.0.0.1:8080 (an example port) inside the sandbox, through the Lambda Web Adapter"
-    listener_note: "entry's public API is the only TCP listener of a role, bound to 127.0.0.1 on every shape. The edge connector (cloudflared, or the Lambda Web Adapter) connects to that loopback port. Every other role listens on Unix sockets only."
+    listener_note: "entry's public API is the only TCP listener of an actor, bound to 127.0.0.1 in every environment. The edge connector (cloudflared, or the Lambda Web Adapter) connects to that loopback port. Every other actor listens on Unix sockets only."
   policy:
     status: agreed
     name: policy
-    kind: role
+    kind: actor
     binary: roles/policy
     does: "The decision point. A reviewed, file-based Cedar policy maps facts to grants. It is written in Rust with the cedar-policy crate. It keeps no state and opens no network connection. It signs mint grants with its own key."
     holds: The grant key
-    uses: [keys, outbox]
+    uses: [keys, transport]
     resources:
       - "keys: sign with the grant key"
       - "state: none; network: none"
-      - "outbox: append"
+      - "transport: put"
   signer:
     status: agreed
     name: signer
-    kind: role
+    kind: actor
     binary: roles/signer
     does: "Holds the signing ring and signs tokens under a signing policy. It is not a pure oracle."
     holds: The token-signing keys
-    uses: [keys, state, outbox]
+    uses: [keys, state, transport]
     resources:
       - "keys: sign with the token-signing keys"
       - "state: ring/* read and write"
-      - "outbox: append"
+      - "transport: put"
   ca:
     status: agreed
     name: ca
-    kind: role
+    kind: actor
     binary: roles/ca
-    does: "X.509 and the SSH CA (one role)."
+    does: "X.509 and the SSH CA (one actor)."
     holds: The CA keys (slot 9c for the node intermediate, 82 for the SSH CA on a YubiKey)
-    uses: [keys, outbox]
+    uses: [keys, transport]
     resources:
       - "keys: sign with the CA keys, one key per purpose"
-      - "outbox: append"
+      - "transport: put"
   notary:
     status: agreed
     name: notary
-    kind: role
+    kind: actor
     binary: roles/notary
     does: "Signs audit batch heads. It holds nothing the audit writer holds. On a cluster the notaries co-sign each head 2 of 3."
     holds: The notary key (one per node on a cluster)
-    uses: [keys, state, blob, outbox]
+    uses: [keys, state, blob, transport]
     resources:
       - "keys: sign with the notary key"
       - "state: audit sequence, adjust; read audit_batches"
       - "blob: read batches; write only under seals/ and keys/"
-      - "outbox: append"
+      - "transport: put"
+    od_note:
+      - { id: OD-39, text: "Proposed: the audit actors become writer, indexer, reader and witness. The notary is then folded into the key-holder access list, or kept as a thin checker; the witness co-signs." }
   quota:
-    status: agreed
+    status: open
+    od: OD-38
     name: quota
-    kind: role
+    kind: actor
     binary: roles/quota
-    does: "Rate limits and caps, with a conditional adjust. Caps and limits live in core."
+    does: "Rate limits and caps, with a conditional adjust. Caps and limits live in core. Quota (quota engine, quota state) is a separate box; where it runs is open."
     holds: Counters (state), no key
-    uses: [state, outbox]
+    uses: [state, transport]
     resources:
-      - "state: quota/* conditional adjust"
-      - "outbox: append"
+      - "state: quota/* conditional adjust (the state port with compare-and-set)"
+      - "transport: put"
+    od_note:
+      - { id: OD-38, text: "Quota is its own box. Whether it is a separate product or a core actor is open." }
+      - { id: OD-33, text: "Quota as enforcement needs live state with compare-and-set; as metering it can be a view derived from the log. Open." }
   audit-writer:
     status: agreed
     name: audit-writer
-    kind: role
+    kind: actor
     binary: roles/audit-writer
-    does: "Seals audit batches and writes them to the blob store. It reads the outbox, dedupes, rolls batches, puts the batch object and registers it in audit_batches. It has no signing key; it calls notary."
+    does: "Seals audit batches and writes them to the blob. It reads the transport, dedupes, rolls batches, puts the batch object and registers it in audit_batches. It has no signing key; it calls notary. It declares instances: exactly 1, so with more than one node it needs the lease port."
     holds: No signing key
-    uses: [outbox, blob, state]
+    uses: [transport, blob, state]
     resources:
-      - "outbox: receive and ack"
+      - "transport: receive and ack"
       - "blob: write on the batch prefix"
       - "state: append audit_batches"
+    od_note:
+      - { id: OD-39, text: "Proposed name: writer. The audit actors writer, indexer, reader and witness replace notary, audit-writer and audit-read." }
+      - { id: OD-37, text: "Proposed: audit runs its own instances of the shared ports' drivers, under its own identities." }
   audit-read:
     status: agreed
     name: audit-read
-    kind: role
+    kind: actor
     binary: roles/audit-read
-    does: "Serves audit queries from the index. It applies the ordered batch stream to the node's index and records each read."
-    holds: Read-only; the node's index file
-    uses: [state, blob, outbox]
+    does: "Search. Serves audit queries from the search index. It applies the ordered batch stream to the node's search index and records each read."
+    holds: Read-only; the node's search index file
+    uses: [state, blob, transport]
     resources:
       - "state: read audit_batches and its cursor"
       - "blob: read batches"
       - "index: read and apply"
-      - "outbox: append (each read is audited)"
+      - "transport: put (each read is audited)"
+    od_note:
+      - { id: OD-32, text: "Search (indexer, search index, reader) is its own box. Where it runs is open: on the log host, a separate host or Deployment, or nowhere (the scan instead). It does not run inside serverless." }
+      - { id: OD-39, text: "Proposed: this actor is split into an indexer, which applies the batch stream to the search index, and a reader, which answers queries." }
 
 # ---------------------------------------------------------------------------
 # Integrations: six kinds, each its own process. The names are examples.
@@ -514,12 +542,12 @@ node_agent:
   status: agreed
   title: sluis-node
   binary: node/sluis-node
-  does: "Issues a short-lived workload JWT per role. Each role's process identity comes from its uid, by peer credentials. The node's non-extractable hardware key signs the JWT (about 120 ms per signature, hourly per role)."
+  does: "Issues a short-lived workload JWT per actor. Each actor's process identity comes from its uid, by peer credentials. The node's non-extractable hardware key signs the JWT (about 120 ms per signature, hourly per actor)."
   holds: The node's hardware key, through the keys driver
   resources:
     - "keys: sign workload JWTs with the node key"
-    - "callers: every sluis uid listed in the uid-to-role map generated from the manifest"
-  listener_note: "Every role except entry, and every driver, listens on Unix sockets only. sluis-node publishes no network listener; the issuer's discovery document and JWKS (public keys only) are static files served from the distribution bucket, one issuer per node."
+    - "callers: every sluis uid listed in the uid-to-actor map generated from the manifest"
+  listener_note: "Every actor except entry, and every driver, listens on Unix sockets only. sluis-node publishes no network listener; the issuer's discovery document and JWKS (public keys only) are static files served from the distribution bucket, one issuer per node."
 
 # ---------------------------------------------------------------------------
 # External and backing nodes (drawn, not run by sluis)
@@ -551,15 +579,15 @@ backing_lines:
   state.rqlite: ["rqlited", "Raft, 3 nodes"]
   state.aws: ["DynamoDB", "table per record kind"]
   blob.s3: ["object store", "S3 API"]
-  outbox.spool: ["local spool", "fsync'd segments"]
-  outbox.sqs: ["SQS queue", "dead-letter queue"]
+  transport.spool: ["local spool", "fsync'd segments"]
+  transport.sqs: ["SQS queue", "dead-letter queue"]
   index.sqlite: ["SQLite + FTS5", "one file per node"]
   index.postgres: ["Postgres", "any connection string"]
   index.remote: ["no index here", "separate audit install"]
 
 # ---------------------------------------------------------------------------
-# The call graph. `from > to`. `when` limits an edge to shapes or drivers;
-# an edge to a node a shape does not have is dropped.
+# The call graph. `from > to`. `when` limits an edge to presets or drivers;
+# an edge to a node a preset does not have is dropped.
 # ---------------------------------------------------------------------------
 calls:
   - { f: client, t: edge, m: HTTPS, d: "Sign-in, token exchange, mint and the console reach sluis through the edge connector." }
@@ -595,30 +623,30 @@ calls:
   - { f: notary, t: drv-blob, m: "Seals", d: Reads batches; puts seals and the trust log. }
   - { f: audit-read, t: drv-blob, m: "Get batch", d: Fetches batch objects. }
   - { f: audit-read, t: store-index, m: "Apply / Query", d: Applies batches and answers queries. }
-  - { f: entry, t: drv-outbox, m: Append, d: Records the exchange. }
-  - { f: policy, t: drv-outbox, m: Append, d: Records each decision. }
-  - { f: signer, t: drv-outbox, m: Append, d: Records each signature. }
-  - { f: ca, t: drv-outbox, m: Append, d: Records each certificate. }
-  - { f: quota, t: drv-outbox, m: Append, d: Records each limit decision. }
-  - { f: notary, t: drv-outbox, m: Append, d: Records each seal. }
-  - { f: audit-read, t: drv-outbox, m: Append, d: Records each read of the trail. }
-  - { f: audit-writer, t: drv-outbox, m: "Receive / Ack", d: Takes records, acknowledges after the batch is registered. }
+  - { f: entry, t: drv-transport, m: Put, d: Records the exchange. }
+  - { f: policy, t: drv-transport, m: Put, d: Records each decision. }
+  - { f: signer, t: drv-transport, m: Put, d: Records each signature. }
+  - { f: ca, t: drv-transport, m: Put, d: Records each certificate. }
+  - { f: quota, t: drv-transport, m: Put, d: Records each limit decision. }
+  - { f: notary, t: drv-transport, m: Put, d: Records each seal. }
+  - { f: audit-read, t: drv-transport, m: Put, d: Records each read of the trail. }
+  - { f: audit-writer, t: drv-transport, m: "Receive / Ack", d: Takes records, acknowledges after the batch is registered. }
   - { f: drv-keys, t: store-keys, m: "", d: "" }
   - { f: drv-state, t: store-state, m: "", d: "" }
   - { f: drv-blob, t: store-blob, m: "", d: "" }
-  - { f: drv-outbox, t: store-outbox, m: "", d: "" }
+  - { f: drv-transport, t: store-transport, m: "", d: "" }
   - { f: sluis-node, t: drv-keys, m: "Sign(JWT)", d: "Signs the workload JWT with the node's hardware key.", when: { node_agent: true } }
-  - { f: drv-keys, t: sluis-node, m: "Workload JWT", d: "A cloud key driver asks sluis-node for its role's JWT (uid from peer credentials).", when: { node_agent: true, ports: { keys: aws } } }
-  - { f: drv-state, t: sluis-node, m: "Workload JWT", d: "A cloud state driver asks sluis-node for its role's JWT.", when: { node_agent: true, ports: { state: aws } } }
-  - { f: drv-blob, t: sluis-node, m: "Workload JWT", d: "The blob driver asks sluis-node for its role's JWT (uid from peer credentials).", when: { node_agent: true } }
+  - { f: drv-keys, t: sluis-node, m: "Workload JWT", d: "A cloud key driver asks sluis-node for its actor's JWT (uid from peer credentials).", when: { node_agent: true, ports: { keys: aws } } }
+  - { f: drv-state, t: sluis-node, m: "Workload JWT", d: "A cloud state driver asks sluis-node for its actor's JWT.", when: { node_agent: true, ports: { state: aws } } }
+  - { f: drv-blob, t: sluis-node, m: "Workload JWT", d: "The blob driver asks sluis-node for its actor's JWT (uid from peer credentials).", when: { node_agent: true } }
   - { f: drv-keys, t: downstream, m: "AssumeRoleWithWebIdentity", d: "Exchanges the workload JWT for the cloud's credentials.", when: { node_agent: true, ports: { keys: aws } } }
   - { f: drv-state, t: downstream, m: "AssumeRoleWithWebIdentity", d: "Exchanges the workload JWT for the cloud's credentials.", when: { node_agent: true, ports: { state: aws } } }
   - { f: drv-blob, t: downstream, m: "AssumeRoleWithWebIdentity", d: "Exchanges the workload JWT for the cloud's credentials.", when: { node_agent: true } }
   - { f: drv-keys, t: downstream, m: "Platform identity", d: "The Lambda execution role is the identity; no workload JWT.", when: { node_agent: false, ports: { keys: aws } } }
 
 # ---------------------------------------------------------------------------
-# Flows. Nodes and edges name map nodes; ids that a shape lacks are skipped.
-# `variants` add shape-specific sentences.
+# Flows. Nodes and edges name map nodes; ids that a preset lacks are skipped.
+# `variants` add preset-specific sentences (the key stays `shapes`).
 # ---------------------------------------------------------------------------
 flows:
   - id: signin
@@ -650,11 +678,11 @@ flows:
       - title: The session is stored
         nodes: [entry, drv-state, store-state]
         edges: ["entry>drv-state", "drv-state>store-state"]
-        text: entry writes the session through the state driver. It owns the sessions record kind; the state driver refuses any other role writing it.
+        text: entry writes the session through the state driver. It owns the sessions record kind; the state driver refuses any other actor writing it.
       - title: The sign-in is audited
-        nodes: [entry, drv-outbox, store-outbox]
-        edges: ["entry>drv-outbox", "drv-outbox>store-outbox"]
-        text: entry appends a record to the outbox. The request returns once the record is durable there, never waiting for the audit writer.
+        nodes: [entry, drv-transport, store-transport]
+        edges: ["entry>drv-transport", "drv-transport>store-transport"]
+        text: entry puts a record on the transport. The request returns once the record is durable there, never waiting for the audit writer.
   - id: exchange
     title: Token exchange
     why: A workload trades its CI or Kubernetes token for a sluis token (RFC 8693).
@@ -682,11 +710,11 @@ flows:
         variants:
           - { shapes: [T3, T4, T5], text: "The token is signed directly with the non-extractable KMS key. A production install measured about 25,000 tokens in 7 days, a peak of 0.8 per second, so direct signing costs about $2.62 per month." }
           - { shapes: [T1, T2], text: "P-384 on the YubiKey signs at about 120 ms, 8 per second, far above the measured load. The YubiKey signs each token itself; there are no derived signing keys." }
-          - { shapes: [T0], text: "A software key signs it; the code refuses a software key on a production shape." }
+          - { shapes: [T0], text: "A software key signs it; the code refuses a software key in production." }
       - title: The exchange is audited
-        nodes: [entry, drv-outbox, store-outbox]
-        edges: ["entry>drv-outbox", "policy>drv-outbox", "signer>drv-outbox", "drv-outbox>store-outbox"]
-        text: entry, policy and signer each append a record to the outbox. The token goes back to the client once entry's record is durable.
+        nodes: [entry, drv-transport, store-transport]
+        edges: ["entry>drv-transport", "policy>drv-transport", "signer>drv-transport", "drv-transport>store-transport"]
+        text: entry, policy and signer each put a record on the transport. The token goes back to the client once entry's record is durable.
   - id: mint
     title: Downstream mint
     why: A caller asks for a short-lived downstream credential, such as a cloud API token.
@@ -712,24 +740,24 @@ flows:
         edges: ["int-minter>vendor"]
         text: The minter holds only the connection's parent credential. It mints the short-lived credential and returns it.
       - title: The mint is audited
-        nodes: [entry, drv-outbox, store-outbox]
-        edges: ["entry>drv-outbox", "drv-outbox>store-outbox"]
+        nodes: [entry, drv-transport, store-transport]
+        edges: ["entry>drv-transport", "drv-transport>store-transport"]
         text: entry appends the record and returns the credential to the caller.
   - id: workload
     title: Workload credentials
-    why: A role's cloud driver gets the cloud credentials it needs, on a node that runs sluis-node.
+    why: An actor's cloud driver gets the cloud credentials it needs, on a node that runs sluis-node.
     steps:
       - title: The driver asks sluis-node
         nodes: [drv-keys, drv-state, drv-blob, sluis-node]
         edges: ["drv-keys>sluis-node", "drv-state>sluis-node", "drv-blob>sluis-node"]
-        text: The cloud driver of a role asks sluis-node for its role's workload JWT. sluis-node reads the caller's uid from the socket (SO_PEERCRED) and maps the uid to the role. On a node, the key driver, state driver and blob driver that are cloud drivers each ask for their own role's JWT.
+        text: The cloud driver of an actor asks sluis-node for its actor's workload JWT. sluis-node reads the caller's uid from the socket (SO_PEERCRED) and maps the uid to the actor. On a node, the key driver, state driver and blob driver that are cloud drivers each ask for their own actor's JWT.
         variants:
           - { shapes: [T0], text: "T0 has no sluis-node and no cloud federation; development uses software keys." }
           - { shapes: [T5], text: "T5 has no sluis-node: the Lambda execution role of each function is the identity, so there is no workload JWT. Platform-native identity is used where it exists." }
       - title: The node key signs the JWT
         nodes: [sluis-node, drv-keys, store-keys]
         edges: ["sluis-node>drv-keys", "drv-keys>store-keys"]
-        text: The node's non-extractable hardware key signs the JWT, about 120 ms per signature, hourly per role. AWS accepts ES384. GCP needs ES256 and Entra needs RS256, the written-down exception to P-384 everywhere.
+        text: The node's non-extractable hardware key signs the JWT, about 120 ms per signature, hourly per actor. AWS accepts ES384. GCP needs ES256 and Entra needs RS256, the written-down exception to P-384 everywhere.
         variants:
           - { shapes: [T4], text: "On T4 the node's own KMS ECC P-384 key, the same key that signs that node's notary co-signature, signs the node's JWT." }
           - { shapes: [T3], text: "Which non-extractable key signs the node's JWT on a single EC2 instance is not stated in the design yet." }
@@ -740,32 +768,32 @@ flows:
       - title: The issuer is trusted per node
         nodes: [downstream]
         edges: []
-        text: "Each node publishes a static discovery document and JWKS (public keys only) at https://<issuer>/nodes/<node>/, served from the distribution bucket. A cloud role trusts only the issuers of the nodes that run that role, so a compromised node can mint only its own roles. AWS allows at most 100 EC keys in a JWKS and 100 OIDC providers per account."
+        text: "Each node publishes a static discovery document and JWKS (public keys only) at https://<issuer>/nodes/<node>/, served from the distribution bucket. A cloud role trusts only the issuers of the nodes that run that actor, so a compromised node can mint only its own roles. AWS allows at most 100 EC keys in a JWKS and 100 OIDC providers per account."
   - id: audit
     title: Audit write
     why: A request becomes evidence, and a record reaches the index.
     steps:
-      - title: A role appends a record
-        nodes: [entry, policy, signer, drv-outbox, store-outbox]
-        edges: ["entry>drv-outbox", "policy>drv-outbox", "signer>drv-outbox", "drv-outbox>store-outbox"]
-        text: Every role that acted appends what it did to the outbox. The request returns once the record is durable there. Every success is audited.
+      - title: An actor appends a record
+        nodes: [entry, policy, signer, drv-transport, store-transport]
+        edges: ["entry>drv-transport", "policy>drv-transport", "signer>drv-transport", "drv-transport>store-transport"]
+        text: Every actor that acted puts what it did on the transport. The request returns once the record is durable there. Every success is audited.
         variants:
           - { shapes: [T0, T1, T2, T3, T4], text: "Durable means an fsync to the node's local spool." }
           - { shapes: [T5], text: "Durable means the queue accepted the message." }
       - title: The writer takes the records
-        nodes: [audit-writer, drv-outbox]
-        edges: ["audit-writer>drv-outbox"]
+        nodes: [audit-writer, drv-transport]
+        edges: ["audit-writer>drv-transport"]
         text: audit-writer receives records, validates and stamps them, drops duplicates by record id and rolls them into a batch.
         variants:
           - { shapes: [T2, T4], text: "On a cluster each node's writer drains its own spool." }
       - title: The batch object is put
         nodes: [audit-writer, drv-blob, store-blob]
         edges: ["audit-writer>drv-blob", "drv-blob>store-blob"]
-        text: The writer puts the batch object in the archive. Its blob driver may write the batch prefix and nothing else.
+        text: The writer puts the batch object in the blob. Its blob driver may write the batch prefix and nothing else.
       - title: The batch is registered
         nodes: [audit-writer, drv-state, store-state]
         edges: ["audit-writer>drv-state", "drv-state>store-state"]
-        text: Only after the put, the writer appends an entry to audit_batches in the state store, then acks the outbox. The state store is on the write path, which is accepted given the outbox, a reconciler against the bucket listing, and verification that never trusts state.
+        text: Only after the put, the writer appends an entry to audit_batches in the state store, then acks the transport (queue mode). The state store is on the write path, which is accepted given the transport, a reconciler against the bucket listing, and verification that never trusts state.
       - title: The notary seals the head
         nodes: [notary, drv-state, drv-blob, drv-keys, store-keys]
         edges: ["notary>drv-state", "notary>drv-blob", "notary>drv-keys", "drv-keys>store-keys"]
@@ -774,27 +802,29 @@ flows:
           - { shapes: [T2], text: "The notary co-signs batch heads 2 of 3 across the nodes, with no separate notary YubiKey." }
           - { shapes: [T4], text: "Each node signs with its own KMS ECC P-384 key, and the notary co-signs batch heads 2 of 3 across the nodes." }
           - { shapes: [T1, T3], text: "One key signs the heads. The residual risk is written down: root on the node can sign." }
-          - { shapes: [T5], text: "A single notary key, used only by the notary function's role. There is no co-signing; the function role is the isolation." }
+          - { shapes: [T5], text: "A single notary key, used only by the notary function's IAM role. There is no co-signing; the function's role is the isolation." }
       - title: The index follows the chain
         nodes: [audit-read, drv-state, drv-blob, store-index]
         edges: ["audit-read>drv-state", "audit-read>drv-blob", "audit-read>store-index"]
         text: audit-read follows audit_batches from its cursor, fetches each new batch and applies it to the index. Verification never trusts the index. The audit explorer shows lag and the integrity chain.
         variants:
-          - { shapes: [T5], text: "T5 has no index of its own. The audit-read of a separate audit install follows the chain in the same bucket." }
+          - { shapes: [T5], text: "T5 has no search index of its own. The audit-read of a separate audit install follows the chain in the same bucket." }
 
 # ---------------------------------------------------------------------------
 # Open points that touch the architecture
 # ---------------------------------------------------------------------------
 open_points: []
 
-# What runs where on a cluster shape (T2, T4).
+# What runs where on a cluster (T2, T4: bare-metal with N nodes).
 cluster:
   - { process: edge connector, where: every node, status: proposed }
+  - { process: quota, where: "open (OD-38): a separate product or an actor; enforcement needs live state with compare-and-set (OD-33)", status: open }
+  - { process: "Search (indexer, search index, reader)", where: "open (OD-32): on the log host, a separate host or Deployment, or nowhere (the scan instead). Today's draft runs a search index on every node", status: open }
   - { process: entry, where: "every node, bound to 127.0.0.1 behind that node's edge connector", status: agreed }
-  - { process: "signer, policy, ca, quota", where: "every node; an earlier draft made each single-active, with a named lease and a fencing token, and standbys on the other nodes", status: proposed }
-  - { process: audit-writer, where: "every node; each node's writer drains its own spool", status: proposed }
-  - { process: notary, where: "every node; batch heads are co-signed 2 of 3 across nodes (T2: no separate notary YubiKey; T4: a KMS signing key per node)", status: agreed }
+  - { process: "signer, policy, ca", where: "every node; an earlier draft made each single-active, with a named lease and a fencing token, and standbys on the other nodes", status: proposed }
+  - { process: audit-writer, where: "every node in the current draft, each draining its own spool. The writer declares instances: exactly 1, so on more than one node it needs the lease port. Placement is per installation (OD-34)", status: proposed }
+  - { process: "notary (OD-39: witness)", where: "every node; batch heads are co-signed 2 of 3 across nodes (T2: no separate notary YubiKey; T4: a KMS signing key per node)", status: agreed }
   - { process: "state driver and its store", where: "every node; Raft quorum of three over the state driver's own TCP port with mTLS", status: agreed }
   - { process: keys driver, where: "T2: each node's own YubiKey; T4: AWS KMS, a regional service", status: agreed }
   - { process: sluis-node, where: every node, status: agreed }
-  - { process: integrations, where: "next to entry on each node, over Unix sockets; no role is called across nodes, and the Raft port is the only TCP port between nodes", status: agreed }
+  - { process: integrations, where: "next to entry on each node, over Unix sockets; no actor is called across nodes, and the Raft port is the only TCP port between nodes", status: agreed }

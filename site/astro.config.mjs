@@ -56,6 +56,20 @@ const naturalSize = Object.fromEntries(
 export default defineConfig({
   site: 'https://sluis.id',
   trailingSlash: 'always',
+  // The v2 taxonomy renamed the "shapes" pages to "environments" and merged the
+  // five bare-metal shapes into presets; "roles" became "actors". The old paths
+  // keep working. A preset keeps its short id (T0 to T6) as an anchor.
+  redirects: {
+    '/shapes/': '/environments/',
+    '/shapes/local/': '/environments/presets/#t0-local',
+    '/shapes/single-node/': '/environments/presets/#t1-single-board',
+    '/shapes/cluster/': '/environments/presets/#t2-board-cluster',
+    '/shapes/aws-ec2-single/': '/environments/presets/#t3-ec2-single',
+    '/shapes/aws-ec2-cluster/': '/environments/presets/#t4-ec2-cluster',
+    '/shapes/aws-lambda/': '/environments/serverless/',
+    '/shapes/kubernetes/': '/environments/kubernetes/',
+    '/concepts/roles/': '/concepts/actors/',
+  },
   prefetch,
   vite: {
     plugins: [fillPrefetchPlaceholders()],
@@ -115,7 +129,7 @@ export default defineConfig({
         { label: 'Concepts', items: [{ autogenerate: { directory: 'concepts' } }] },
         { label: 'Integrations', items: [{ autogenerate: { directory: 'integrations' } }] },
         { label: 'Architecture', items: [{ autogenerate: { directory: 'architecture' } }] },
-        { label: 'Shapes', items: [{ autogenerate: { directory: 'shapes' } }] },
+        { label: 'Environments', items: [{ autogenerate: { directory: 'environments' } }] },
         { label: 'Tutorials', items: [{ autogenerate: { directory: 'tutorials' } }] },
         { label: 'Distribution', items: [{ autogenerate: { directory: 'distribution' } }] },
         { label: 'Standards and conformance', items: [{ autogenerate: { directory: 'standards' } }] },

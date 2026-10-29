@@ -26,7 +26,7 @@ flowchart LR
 4. **Check.** `sluis integrations check <name>` compares what was declared with what the vendor actually granted (drift), and runs the integration as a dry run.
 5. **Enable.** Nothing acts until the integration is enabled. A dry run lists what would change.
 
-**Secrets are referenced, never inlined.** An operator secret in a configuration file is a reference such as `cred:sluis-int-github.example-org.publisher.app-key`, resolved at runtime from the credential store the shape provides ([Configuration](/concepts/configuration/)). The approver at the vendor and the operator of sluis are usually two people, which is a feature: neither alone can connect an integration.
+**Secrets are referenced, never inlined.** An operator secret in a configuration file is a reference such as `cred:sluis-int-github.example-org.publisher.app-key`, resolved at runtime from the credential store the environment provides ([Configuration](/concepts/configuration/)). The approver at the vendor and the operator of sluis are usually two people, which is a feature: neither alone can connect an integration.
 
 | Task | Command shape (example) | In v1 |
 |---|---|---|
@@ -237,7 +237,7 @@ Accounts trust sluis as a web identity provider. Two kinds of object are needed 
 3. Apply the template with your infrastructure tool.
 4. Check with `aws sts get-caller-identity` on a profile that `sluis aws-config` wrote. A mismatched `aud` fails as an access-denied error on the assume call.
 
-For **sluis's own roles on a self-hosted node** the same shape is generated per node: the provider is the node's issuer (`https://<issuer>/nodes/<node>/`), and a role trusts only the issuers of the nodes that run it ([Identity](/concepts/identity/)). AWS allows 100 providers per account and 100 EC keys in a key set.
+For **sluis's own actors on a self-hosted node** the same pattern is generated per node: the provider is the node's issuer (`https://<issuer>/nodes/<node>/`), and an actor's cloud role trusts only the issuers of the nodes that run it ([Identity](/concepts/identity/)). AWS allows 100 providers per account and 100 EC keys in a key set.
 
 For **AWS roles that call sluis**, each account turns on outbound identity federation, and the role's policy allows `sts:GetWebIdentityToken` for one audience, one algorithm and a short duration. The operator declares the account's issuer in the verifier block.
 

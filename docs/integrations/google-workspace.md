@@ -6,7 +6,7 @@ sidebar:
   order: 2
 ---
 
-Google Workspace is the corporate directory in the common case. It plays two roles: people sign in with their Google account, and sluis reads the tenant's users, groups and domains as facts.
+Google Workspace is the corporate directory in the common case. It plays two integration actors: people sign in with their Google account, and sluis reads the tenant's users, groups and domains as facts.
 
 ## What it's for
 
@@ -15,9 +15,9 @@ Google Workspace is the corporate directory in the common case. It plays two rol
 - **A leaver loses access when the directory says so.** Group membership changes reach sluis on the next refresh, and a failed read is an error, never an empty answer that would remove everyone.
 - **Several companies, one sluis.** Each connected tenant serves the domains it owns, and an address is routed to the tenant that owns its domain.
 
-## Integration roles
+## Integration actors
 
-| Role | What it does for Google |
+| Actor | What it does for Google |
 |---|---|
 | `Upstream` | Runs the sign-in: sends the person to Google, checks the returned ID token (issuer, audience, `nonce`, verified email), and returns a verified identity. |
 | `FactsSource` | Reads users, groups and domains, keeps a snapshot per tenant refreshed on an interval, and answers "what groups is this person in" with a freshness: `as_of`, `max_age` and whether the answer is authoritative. |
@@ -76,7 +76,7 @@ An example; the full flow is in [the setup patterns](/integrations/connecting/#g
 integrations:
   google-workspace:
     example-org:
-      roles: [upstream, facts]
+      actors: [upstream, facts]
       admin: admin@example.org            # the account the delegation impersonates
       serve: [example.org]                # omitted: every domain the tenant owns
       oauth_client:

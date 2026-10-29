@@ -6,18 +6,18 @@ sidebar:
   order: 3
 ---
 
-Google Workspace is one upstream sign-in provider. The **generic OpenID Connect upstream** is the same role for any provider that publishes OIDC discovery: a customer's identity provider, a partner's, or a standalone one. A **peer sluis** is the special case where the provider is another sluis installation.
+Google Workspace is one upstream sign-in provider. The **generic OpenID Connect upstream** is the same kind of integration actor for any provider that publishes OIDC discovery: a customer's identity provider, a partner's, or a standalone one. A **peer sluis** is the special case where the provider is another sluis installation.
 
 ## What it's for
 
 - **A customer or partner signs in with their own provider.** Their company runs an OpenID Connect provider; sluis sends the person there and accepts the proof it returns.
 - **A person is routed by the domain of their email address.** `person@partner.example` goes to the partner's provider, `person@example.org` to the company directory. The routing is on the domain, and a domain claim is proven with a DNS TXT record rather than taken on trust.
-- **Several environments, one place to sign in.** An installation in one environment accepts people vouched for by an installation in another, and the trust graph stays acyclic.
-- **A robot in one environment calls a service in another.** The peer's tokens are verified inbound; outbound, the peer's own policy decides what the caller gets.
+- **Several stages, one place to sign in.** An installation in one stage (or in one regulated entity) accepts people vouched for by an installation in another, and the trust graph stays acyclic.
+- **A robot in one stage calls a service in another.** The peer's tokens are verified inbound; outbound, the peer's own policy decides what the caller gets.
 
-## Integration roles
+## Integration actors
 
-| Role | What it does |
+| Actor | What it does |
 |---|---|
 | `Upstream` | Begins and completes a sign-in as an OpenID relying party. |
 | `FactsSource` | Returns the claims in the ID token as facts. Whether groups asserted by the provider are used at all is a per-connection switch, default off. |
@@ -57,7 +57,7 @@ An example; see [the generic OIDC pattern](/integrations/connecting/#generic-oid
 integrations:
   oidc:
     partner:
-      roles: [upstream, facts]
+      actors: [upstream, facts]
       issuer: https://idp.example.org
       client_id: sluis-partner
       client_secret: cred:sluis-int-oidc.partner.client-secret

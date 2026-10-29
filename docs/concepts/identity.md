@@ -6,13 +6,13 @@ sidebar:
   order: 5
 ---
 
-A sluis role that talks to a cloud, for example to write an audit archive to a bucket, needs that cloud's credentials. On a cloud-native platform the platform hands the role its identity: the Lambda function's role. On Kubernetes the identity is proposed to come from a projected ServiceAccount token (see below). On a node that the platform does not manage, nothing does. sluis fills that gap with workload identity.
+A sluis actor that talks to a cloud, for example to write an audit archive to a bucket, needs that cloud's credentials. On a cloud-native platform the platform hands the actor its identity: the Lambda function's role. On Kubernetes the identity is proposed to come from a projected ServiceAccount token (see below). On a node that the platform does not manage, nothing does. sluis fills that gap with workload identity.
 
 ## Workload identity
 
-The **node agent** (`sluis-node`) runs on each self-hosted node. It issues a short-lived **workload JWT** per role. It knows which role is asking without trusting what the caller says: the role's identity comes from its **uid**, read from the connection's peer credentials on its Unix socket.
+The **node agent** (`sluis-node`) runs on each self-hosted node. It issues a short-lived **workload JWT** per actor. It knows which actor is asking without trusting what the caller says: the actor's identity comes from its **uid**, read from the connection's peer credentials on its Unix socket.
 
-The node agent signs each token with the **node's non-extractable key**, so a token cannot be made without the node. Tokens are valid for an hour and refreshed hourly per role. At about 120 ms per signature on a YubiKey, the cost is negligible.
+The node agent signs each token with the **node's non-extractable key**, so a token cannot be made without the node. Tokens are valid for an hour and refreshed hourly per actor. At about 120 ms per signature on a YubiKey, the cost is negligible.
 
 ## Per-node OIDC issuers
 
@@ -20,7 +20,7 @@ Each node is its own OIDC issuer.
 
 - The issuer publishes a **static discovery document** and a **JWKS** containing public keys only, at an HTTPS URL served from the distribution bucket. Nothing runs to serve them.
 - The issuer URL is `https://<issuer>/nodes/<node>/`, one per node.
-- A cloud role **trusts only the issuers of the nodes that run that role**. A compromised node can therefore mint credentials only for the roles it was allowed to run, never for another node's.
+- The cloud role of an actor **trusts only the issuers of the nodes that run that actor**. A compromised node can therefore mint credentials only for the actors it was allowed to run, never for another node's.
 
 AWS bounds this design: a JWKS holds at most 100 EC keys, an account has at most 100 OIDC providers, the issuer URL must be `https` with no port and no query, and the token must carry `iat`.
 
@@ -38,17 +38,17 @@ GCP and Azure each need an algorithm other than P-384. The exception is made for
 
 ## Platform-native identity
 
-Where the platform supplies an identity, sluis uses it and does not add a layer: the Lambda function role on Lambda. The node agent exists for the nodes where none does.
+Where the platform supplies an identity, sluis uses it and does not add a layer: the function's role on serverless (AWS Lambda). The node agent exists for the nodes where none does.
 
 :::note[Proposed]
-**Kubernetes (T6).** The identity of a role is a projected ServiceAccount token, with one audience per sluis role, mounted only into that role's container and its driver. The role's cloud driver exchanges the token with the cloud in the same way as in step 2 below (`AssumeRoleWithWebIdentity` on AWS, Workload Identity Federation on Google Cloud, a federated credential on Azure). Only the source of the token differs: the kubelet and the API server issue it, and the node agent `sluis-node` is not used on Kubernetes. The cloud role of each sluis role trusts the cluster's issuer, that role's audience, and the namespace and ServiceAccount of the install. The workload tokens are the cluster's, not sluis keys; see [Keys](/concepts/keys/).
+**Kubernetes (T6).** The identity of an actor is a projected ServiceAccount token, with one audience per sluis actor, mounted only into that actor's container and its driver. The actor's cloud driver exchanges the token with the cloud in the same way as in step 2 below (`AssumeRoleWithWebIdentity` on AWS, Workload Identity Federation on Google Cloud, a federated credential on Azure). Only the source of the token differs: the kubelet and the API server issue it, and the node agent `sluis-node` is not used on Kubernetes. The cloud role of each sluis actor trusts the cluster's issuer, that actor's audience, and the namespace and ServiceAccount of the install. The workload tokens are the cluster's, not sluis keys; see [Keys](/concepts/keys/).
 
-EKS Pod Identity is used only for a pod that holds a single role, because its credentials belong to the pod and not to a container. This is [OD-19](/open-decisions/#od-19); options and limits are on [Kubernetes](/shapes/kubernetes/#identity).
+EKS Pod Identity is used only for a pod that holds a single actor, because its credentials belong to the pod and not to a container. This is [OD-19](/open-decisions/#od-19); options and limits are on [Kubernetes](/environments/kubernetes/#identity).
 :::
 
-## A role getting AWS credentials
+## An actor getting AWS credentials
 
-This is how a role on an EC2 node, such as `audit-writer`, obtains AWS credentials to write to its bucket. The role's AWS driver runs under the role's own uid. The issuer URL and node name are examples. The flow has two steps.
+This is how an actor on an EC2 node, such as `audit-writer`, obtains AWS credentials to write to its bucket. The actor's AWS driver runs under the actor's own uid. The issuer URL and node name are examples. The flow has two steps.
 
 ### Step 1: the node agent issues a workload token
 
@@ -58,13 +58,13 @@ sequenceDiagram
   participant N as sluis-node
   participant K as Node key
   D->>N: request a token
-  N->>N: map uid to role
+  N->>N: map uid to actor
   N->>K: sign the JWT
   K-->>N: signature
   N-->>D: workload JWT
 ```
 
-The driver asks for a workload token for the audience `sts.amazonaws.com` over the node agent's Unix socket. The node agent reads the caller's uid from the peer credentials and maps the uid to a role. It signs a JWT with ES384 using the node key, which is non-extractable, with the claims `iss=https://issuer.example.org/nodes/node-1/`, `sub=<role>`, `iat` and `exp`. The JWT is valid for about 1 hour.
+The driver asks for a workload token for the audience `sts.amazonaws.com` over the node agent's Unix socket. The node agent reads the caller's uid from the peer credentials and maps the uid to an actor. It signs a JWT with ES384 using the node key, which is non-extractable, with the claims `iss=https://issuer.example.org/nodes/node-1/`, `sub=<actor>`, `iat` and `exp`. The JWT is valid for about 1 hour.
 
 ### Step 2: the cloud exchanges the token for credentials
 
@@ -84,7 +84,7 @@ sequenceDiagram
 
 The driver calls `AssumeRoleWithWebIdentity` with the role ARN and the workload JWT. STS fetches the discovery document and the JWKS from the issuer bucket, and caches them. It verifies the signature, `iss`, `aud` and `sub` against the role's trust policy, then returns temporary AWS credentials. The driver calls the AWS service with them.
 
-The driver never holds a key. A token for a role other than the caller's cannot be requested, because the node agent decides the role from the uid and not from the request. And the IAM role's trust policy names this node's issuer and this role's `sub`, so the same token is refused for every other role.
+The driver never holds a key. A token for an actor other than the caller cannot be requested, because the node agent decides the actor from the uid and not from the request. And the IAM role's trust policy names this node's issuer and this actor's `sub`, so the same token is refused for every other actor.
 
 ## IAM Roles Anywhere
 
@@ -92,4 +92,4 @@ IAM Roles Anywhere is an AWS-only alternative. It accepts RSA, EC and ML-DSA cer
 
 ## Why not the signing helper
 
-The AWS signing helper (`aws_signing_helper serve`) exposes the credentials on port 9911 on the node, and **every local process can read them**. That removes the per-role separation this page exists to create, so sluis does not use it. The node agent's socket checks the caller's uid on each request.
+The AWS signing helper (`aws_signing_helper serve`) exposes the credentials on port 9911 on the node, and **every local process can read them**. That removes the per-actor separation this page exists to create, so sluis does not use it. The node agent's socket checks the caller's uid on each request.

@@ -1,12 +1,12 @@
 ---
 title: Integrations
-description: Every system sluis connects to, the integration role it plays, the use case it serves, and how to connect it. One page per integration, plus the setup patterns.
+description: "Every system sluis connects to, the integration actor it plays, the use case it serves, and how to connect it, one page each."
 status: target
 sidebar:
   order: 0
 ---
 
-An integration connects sluis to something outside it. [Concepts: Integrations](/concepts/integrations/) explains the model: six integration roles, each integration its own process holding only its own vendor credential, and one rule, **integrations return facts, or carry out effects that core has already authorized; they never decide**. This section is the other half: what each integration is *for*, what it asks the vendor for, and how an operator connects it.
+An integration connects sluis to something outside it. [Concepts: Integrations](/concepts/integrations/) explains the model: six kinds of integration actor, each integration its own process holding only its own vendor credential, and one rule, **integrations return facts, or carry out effects that core has already authorized; they never decide**. This section is the other half: what each integration is *for*, what it asks the vendor for, and how an operator connects it.
 
 ## How to read a page
 
@@ -15,7 +15,7 @@ Every integration page has the same seven parts, in this order.
 | Part | Answers |
 |---|---|
 | What it's for | The real use cases, written generically: "a CI job publishes a package", "an engineer opens a database session". |
-| Integration roles | Which of the six roles the integration plays. |
+| Integration actors | Which of the six kinds of integration actor the integration plays. |
 | What sluis asks the vendor for | The credentials, scopes and permissions sluis needs, at least privilege. |
 | What policy controls | Which decisions stay in the reviewed policy, and which limits live in core. |
 | What is audited | Which events leave a record. A credential value is never recorded. |
@@ -24,9 +24,9 @@ Every integration page has the same seven parts, in this order.
 
 ## The integrations
 
-The six roles are `Upstream` (sign-in providers), `WorkloadVerifier` (verifies workload tokens), `FactsSource` (directory facts), `CredentialMinter` (downstream credentials), `Provisioner` (reconciles an external system to a desired state) and `Notifier` (sends a message).
+The six integration actors are `Upstream` (sign-in providers), `WorkloadVerifier` (verifies workload tokens), `FactsSource` (directory facts), `CredentialMinter` (downstream credentials), `Provisioner` (reconciles an external system to a desired state) and `Notifier` (sends a message).
 
-| Integration | Roles | The use cases it serves | Page |
+| Integration | Integration actors | The use cases it serves | Page |
 |---|---|---|---|
 | GitHub | `FactsSource`, `Provisioner`, `CredentialMinter`, `WorkloadVerifier` | A CI job publishes a package or opens a release with a token that lives for minutes and covers one repository. A new engineer joins the organisation's teams because the directory says so. A job proves where it runs with its Actions identity token. | [GitHub](/integrations/github/) |
 | Google Workspace | `Upstream`, `FactsSource` | People sign in with the account they already have. Policy says "members of this group" and the group lives in the company directory. | [Google Workspace](/integrations/google-workspace/) |
@@ -35,8 +35,8 @@ The six roles are `Upstream` (sign-in providers), `WorkloadVerifier` (verifies w
 | Cloudflare | `CredentialMinter` | A release job gets a DNS-edit token for one zone, or an object-store credential for one bucket, that expires within the hour. | [Cloudflare](/integrations/cloudflare/) |
 | AWS | `WorkloadVerifier`, plus accounts that trust sluis | An engineer assumes a role in an AWS account without an identity-centre product. A CI job deploys with a role. A Lambda function proves itself to a service. | [AWS](/integrations/aws/) |
 | Kubernetes | `WorkloadVerifier`, plus clusters that trust sluis | An engineer runs `kubectl` with their group mapped to RBAC. A service in one cluster calls a service in another with its ServiceAccount identity. | [Kubernetes](/integrations/kubernetes/) |
-| PostgreSQL | Client profile on the `ca` role | An engineer opens a database session with a client certificate that expires the same day, in place of a password. | [PostgreSQL](/integrations/postgresql/) |
-| SSH | Client profile on the `ca` role | An engineer or a robot logs in to a host with an SSH certificate; a client trusts a host's CA, not each host key. | [SSH](/integrations/ssh/) |
+| PostgreSQL | Client profile on the `ca` actor | An engineer opens a database session with a client certificate that expires the same day, in place of a password. | [PostgreSQL](/integrations/postgresql/) |
+| SSH | Client profile on the `ca` actor | An engineer or a robot logs in to a host with an SSH certificate; a client trusts a host's CA, not each host key. | [SSH](/integrations/ssh/) |
 | Outline | `Provisioner` | A wiki's admins, groups and collection grants follow the directory, and a leaver loses access. | [Outline](/integrations/outline/) |
 | GoAlert and Telegram | `Provisioner`, `Notifier` | The on-call tool knows who is on which rotation, and a person can be reached on a chat app linked to their identity. | [GoAlert and Telegram](/integrations/oncall/) |
 | Applications and gateways | Client profiles | A deployment console, an MCP server or an application with its own sign-in trusts sluis as its issuer. cert-manager asks for a certificate. | [Applications and gateways](/integrations/applications/) |

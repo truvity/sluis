@@ -15,9 +15,9 @@ Outline is a team wiki. sluis does not host or read the wiki's documents; it kee
 - **Collections follow teams.** A private collection for the finance team is readable by exactly the finance group; the grant is removed from anything the policy does not name when the collection is *strict*.
 - **Risky settings are reported.** Public sharing turned on, members allowed to create collections, a document in a restricted collection shared with someone the directory does not serve: each is a finding, reported rather than silently changed.
 
-## Integration roles
+## Integration actors
 
-| Role | What it does for Outline |
+| Actor | What it does for Outline |
 |---|---|
 | `Provisioner` | Pulls the desired state core publishes (admins, groups, members, collections, grants) and reconciles Outline to it. |
 

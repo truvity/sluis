@@ -1,6 +1,6 @@
 ---
 title: Conformance
-description: "How sluis proves the standards it claims: the OpenID Foundation test plans v2 targets, how they run in CI against each shape, and when certification is planned."
+description: "How sluis proves the standards it claims: the OpenID Foundation test plans v2 targets, how they run in CI per preset, and when certification is planned."
 status: target
 sidebar:
   order: 1
@@ -69,8 +69,8 @@ A suite module may skip because the discovery document says a feature is not ser
 The design is that conformance is a pipeline, not a ritual, because a run done by hand rots.
 
 - **The suite** is the open-source OpenID Foundation conformance suite, a self-hosted instance.
-- **Against the shapes.** Each plan runs against a v2 installation, on the local shape and on one cloud shape, using the [test shapes harness](https://github.com/truvity/sluis/issues/877). The cloud shape runs only in a restricted private runner group ([#891](https://github.com/truvity/sluis/issues/891)) that has no pull-request trigger.
-- **When.** On pull requests that touch protocol code, against the local shape; nightly and on every release, for the full set and the cloud shape. A change that breaks a claimed plan fails CI.
+- **Against the presets.** Each plan runs against a v2 installation, on the local preset ([T0](/environments/presets/#t0-local)) and on one cloud preset, using the [test presets harness](https://github.com/truvity/sluis/issues/877). The cloud preset runs only in a restricted private runner group ([#891](https://github.com/truvity/sluis/issues/891)) that has no pull-request trigger.
+- **When.** On pull requests that touch protocol code, against the local preset; nightly and on every release, for the full set and the cloud preset. A change that breaks a claimed plan fails CI.
 - **The inputs.** The harness clients and a conformance sign-in account are declared in a reviewed file. They exist only in the test installation.
 - **The outputs.** Logs and result bundles are archived per release. Result exports hold client secrets, so what is published is the plan, the variant, the version and the counts.
 - **The attended steps.** Some modules end at a page the suite cannot judge, such as an error page the issuer must show. v1 hands those screenshots to a person. Whether v2 keeps a person in that loop, or compares the page automatically, is not decided.
@@ -90,7 +90,7 @@ Certification is planned after v2 passes the first-wave plans in CI on a tagged 
 
 OpenID plans cover the protocol surface. Two other suites cover what sits underneath.
 
-**The port conformance suite** ([#851](https://github.com/truvity/sluis/issues/851)). Every driver of every [port](/concepts/drivers/) (state, index, keys, blob, queue, lease, cloud) must pass one shared behavioural suite. In v1 the suite ran against memory, the legacy store and DynamoDB; in v2 it lives in `kits/conformance` and runs per driver and per kit language (Go, Rust and TypeScript). A new driver is accepted when it passes; a fork that adds one runs the same suite.
+**The port conformance suite** ([#851](https://github.com/truvity/sluis/issues/851)). Every driver of every [port](/concepts/drivers/) (keys, state, lease, blob, transport, index, witness, cloud) must pass one shared behavioural suite. In v1 the suite ran against memory, the legacy store and DynamoDB; in v2 it lives in `kits/conformance` and runs per driver and per kit language (Go, Rust and TypeScript). A new driver is accepted when it passes; a fork that adds one runs the same suite.
 
 **The kits' conformance vectors** ([#861](https://github.com/truvity/sluis/issues/861)). The shared kits exist in parallel in three languages: the ConnectRPC server and client over Unix sockets with peer credentials, the configuration loader and validator, and the command-line shape. One shared set of vectors runs against all three, so they agree. For configuration, that includes which documents are valid under the generated JSON Schema ([Configuration](/concepts/configuration/)).
 
@@ -98,7 +98,7 @@ OpenID plans cover the protocol surface. Two other suites cover what sits undern
 
 **Policy tests** ([#852](https://github.com/truvity/sluis/issues/852)). The policy has its own tests for the grant naming, the matchers and the lifetimes.
 
-**The deny matrix.** The permission manifest generates tests that prove a role cannot do what its manifest does not say ([Architecture](/architecture/)).
+**The deny matrix.** The permission manifest generates tests that prove an actor cannot do what its manifest does not say ([Architecture](/architecture/)).
 
 ## Where to follow it
 

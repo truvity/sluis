@@ -6,7 +6,7 @@ import MapView from './MapView.astro';
 import { data, shapes, statuses } from '../../lib/explorer-audit';
 
 interface Props {
-  part: 'toggle' | 'map' | 'promises' | 'outbox' | 'chain' | 'lag' | 'outage' | 'compare' | 'open';
+  part: 'toggle' | 'map' | 'promises' | 'transport' | 'chain' | 'lag' | 'outage' | 'compare' | 'open';
 }
 const { part } = Astro.props;
 const models = shapes();
@@ -16,7 +16,7 @@ const chip = (s: string) => ({ cls: `ex-chip-${s}`, text: statuses[s] });
 
 {part === 'toggle' && (
   <div class="ex" data-ex-root data-default={dflt}>
-    <div class="ex-toggle ex-only-js" role="radiogroup" aria-label="Deployment shape" data-ex-toggle hidden>
+    <div class="ex-toggle ex-only-js" role="radiogroup" aria-label="Preset" data-ex-toggle hidden>
       {models.map((m) => (
         <button type="button" role="radio" aria-checked={m.id === dflt ? 'true' : 'false'} data-shape={m.id} tabindex={m.id === dflt ? 0 : -1}>
           <b>{m.id}</b><span>{m.name}</span>
@@ -25,12 +25,13 @@ const chip = (s: string) => ({ cls: `ex-chip-${s}`, text: statuses[s] });
     </div>
     <div class="ex-table-wrap">
       <table>
-        <thead><tr><th>Shape</th><th>Outbox</th><th>State</th><th>Notary key</th><th>Archive</th><th>Index</th></tr></thead>
+        <thead><tr><th>Preset</th><th>Environment</th><th>Transport</th><th>State</th><th>Notary key</th><th>Blob</th><th>Search index</th></tr></thead>
         <tbody>
           {models.map((m) => (
             <tr data-shape-row={m.id}>
               <td><b>{m.id}</b> {m.name}</td>
-              <td>{m.outbox.title}</td>
+              <td>{m.shape.environment}</td>
+              <td>{m.transport.title}</td>
               <td>{m.shape.state}</td>
               <td>{m.audit.notary_key}</td>
               <td>{m.audit.blob}, {m.audit.lock}</td>
@@ -40,7 +41,7 @@ const chip = (s: string) => ({ cls: `ex-chip-${s}`, text: statuses[s] });
         </tbody>
       </table>
     </div>
-    <p class="ex-only-js" style="font-size:var(--sl-text-sm);margin-top:.5rem">The row of the shape you picked is highlighted. The map, the flows, the outage table and the sockets follow it.</p>
+    <p class="ex-only-js" style="font-size:var(--sl-text-sm);margin-top:.5rem">The row of the preset you picked is highlighted. The map, the flows, the outage table and the sockets follow it.</p>
   </div>
 )}
 
@@ -63,14 +64,14 @@ const chip = (s: string) => ({ cls: `ex-chip-${s}`, text: statuses[s] });
   </div>
 )}
 
-{part === 'outbox' && (
+{part === 'transport' && (
   <div class="ex">
     <div class="ex-table-wrap">
       <table>
-        <thead><tr><th>Driver</th><th>Used on</th><th>Durable means</th><th>Records wait</th><th>Instance</th><th>Status</th></tr></thead>
+        <thead><tr><th>Driver (mode)</th><th>Used on</th><th>Durable means</th><th>Records wait</th><th>Instance</th><th>Status</th></tr></thead>
         <tbody>
-          {Object.values(data.outbox_kinds).map((o: any) => (
-            <tr data-outbox-kind={o.driver}>
+          {Object.values(data.transport_kinds).map((o: any) => (
+            <tr data-transport-kind={o.driver}>
               <td><b>{o.title}</b></td><td>{o.used_on}</td><td>{o.durable}</td><td>{o.wait}</td><td>{o.instance}</td>
               <td>{o.od ? <a class={`ex-chip ${chip(o.status).cls}`} href="/open-decisions/">{chip(o.status).text} · {o.od}</a> : <span class={`ex-chip ${chip(o.status).cls}`}>{chip(o.status).text}</span>}</td>
             </tr>
@@ -104,7 +105,7 @@ const chip = (s: string) => ({ cls: `ex-chip-${s}`, text: statuses[s] });
         </>
       ))}
     </div>
-    <p class="ex-sub">An auditor verifies with <code>audit verify</code> (illustrative), which reads the archive and nothing else:</p>
+    <p class="ex-sub">An auditor verifies with <code>audit verify</code> (illustrative), which reads the blob and nothing else:</p>
     <ol>{data.chain.verifier.map((v: string) => <li>{v}</li>)}</ol>
     <div class="ex-cards">
       {data.chain.notes.map((n: any) => (
@@ -130,13 +131,13 @@ const chip = (s: string) => ({ cls: `ex-chip-${s}`, text: statuses[s] });
         </tbody>
       </table>
     </div>
-    <p>Leader sequence <b data-leader-out>{data.lag.leader}</b>. Outbox depth <b data-depth-out>0</b> records.</p>
+    <p>Leader sequence <b data-leader-out>{data.lag.leader}</b>. Transport depth (queue mode) <b data-depth-out>0</b> records.</p>
     <p class="ex-only-js">
       <label>Writer down for <b data-min-out>0</b> minutes
         <input type="range" min="0" max="60" value="0" data-lag-range aria-label="Minutes the writer is down" style="width:min(24rem,100%);display:block" />
       </label>
     </p>
-    <p class="ex-only-js" data-lag-msg style="font-size:var(--sl-text-sm)">Move the slider to take the writer down. The leader sequence stops, so lag stays where it is while the outbox grows: watch the outbox age as well as the lag.</p>
+    <p class="ex-only-js" data-lag-msg style="font-size:var(--sl-text-sm)">Move the slider to take the writer down. The leader sequence stops, so lag stays where it is while the transport grows: watch the transport age as well as the lag.</p>
     <div class="ex-cards">
       {data.index_notes.map((n: any) => (
         <div class="ex-card"><b>{n.title}</b> <span class={`ex-chip ${chip(n.status).cls}`}>{chip(n.status).text}</span><p>{n.text}</p></div>
@@ -149,7 +150,7 @@ const chip = (s: string) => ({ cls: `ex-chip-${s}`, text: statuses[s] });
   <div class="ex">
     <div class="ex-table-wrap">
       <table>
-        <thead><tr><th>Shape</th><th>Where records wait</th><th>What bounds it</th><th>How it drains</th></tr></thead>
+        <thead><tr><th>Preset</th><th>Where records wait</th><th>What bounds it</th><th>How it drains</th></tr></thead>
         <tbody>
           {models.map((m) => (
             <tr data-shape-row={m.id}>
@@ -159,7 +160,7 @@ const chip = (s: string) => ({ cls: `ex-chip-${s}`, text: statuses[s] });
         </tbody>
       </table>
     </div>
-    <p style="font-size:var(--sl-text-sm);margin-top:.5rem">In every case requests keep succeeding, because they return when the record is durable in the outbox. The index serves what it already has, and the archive and seals have nothing new.</p>
+    <p style="font-size:var(--sl-text-sm);margin-top:.5rem">In every case requests keep succeeding, because they return when the record is durable on the transport (in queue mode). The search index serves what it already has, and the blob and seals have nothing new.</p>
   </div>
 )}
 

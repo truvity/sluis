@@ -1,6 +1,6 @@
 ---
-title: Install sluis on a single node
-description: Install sluis on one arm64 single-board computer with a YubiKey, sign in, verify a token against the JWKS and read the audit trail.
+title: Install sluis on a single board
+description: Install sluis on one arm64 single-board computer with a YubiKey (preset T1, bare-metal), sign in, verify a token against the JWKS and read the audit trail.
 status: target
 sidebar:
   order: 1
@@ -10,7 +10,7 @@ sidebar:
 This tutorial describes the intended experience. It can't be run yet, because sluis v2 is not released. The commands, outputs and file names are examples of what the finished product shows. Only `sluis doctor`, `sluis config check` and `sluis config explain` are named in the design; the other `sluis` subcommands below are illustrative. Every command is a subcommand of the one `sluis` binary, for operators and for users alike.
 :::
 
-You install sluis on one arm64 single-board computer with a YubiKey, the [single-node shape](/shapes/single-node/) (T1). You finish with a running sluis at `https://sluis.example.com`, a token you have verified yourself, and the audit record of your own sign-in.
+You install sluis on one arm64 single-board computer with a YubiKey: preset [T1, Single board](/environments/presets/#t1-single-board), on the [bare-metal](/environments/bare-metal/) environment with one node. You finish with a running sluis at `https://sluis.example.com`, a token you have verified yourself, and the audit record of your own sign-in.
 
 ## 1. Prerequisites
 
@@ -65,7 +65,7 @@ apt update
 apt install sluis
 ```
 
-The package installs the roles, drivers and the node agent (`sluis-node`) under `/usr/libexec/sluis/{roles,drivers,integrations,node,vendor}/<short-name>`, creates one system user per role, and installs one systemd unit per role and driver. It enables nothing yet.
+The package installs the actors, drivers and the node agent (`sluis-node`) under `/usr/libexec/sluis/{roles,drivers,integrations,node,vendor}/<short-name>`, creates one system user per actor, and installs one systemd unit per role and driver. It enables nothing yet.
 
 ```sh
 # Example
@@ -141,11 +141,12 @@ Type the PIN and finish with Ctrl-D. The unit passes it to the `key-holder` with
 
 ## 6. Write a minimal config
 
-Configuration has four layers: defaults, the shape profile, your install, and the environment. The single-node shape profile already sets the key mode, the state store and the local audit spool, so the install layer holds only what is yours.
+Configuration has five layers: defaults, the environment, the preset, your install, and stage overrides. The bare-metal environment and the T1 preset already set the key mode, the state store and the local audit spool, so the install layer holds only what is yours.
 
 ```yaml
 # Example: /etc/sluis/install.yaml
-shape: single-node
+environment: bare-metal
+preset: T1
 issuer: https://sluis.example.com
 upstreams:
   - id: workforce
@@ -164,7 +165,7 @@ install -m 0600 /dev/stdin /etc/sluis/credentials/idp-client-secret
 ```
 
 :::note[Proposed]
-The location and the exact key names of the install file are not yet decided. The layers and the rule that secrets are referenced are.
+The location and the exact key names of the install file are not yet decided, and the rule that secrets are referenced is agreed. The five layers (defaults, environment, preset, install, stage overrides) are proposed; a stage is a development, staging or production boundary of the installation.
 :::
 
 ## 7. Check and explain the config
@@ -186,11 +187,12 @@ sluis config explain
 
 ```text
 # Example output
-shape                  single-node                 install
-keys.mode              yubikey                     shape profile
-state.driver           single-node store           shape profile
-audit.outbox           local spool                 shape profile
-audit.index            sqlite                      shape profile
+environment            bare-metal                  install
+preset                 T1                          install
+keys.mode              yubikey                     preset
+state.driver           embedded                    preset
+audit.transport        spool                       preset
+audit.index            sqlite                      preset
 issuer                 https://sluis.example.com   install
 upstreams[0].issuer    https://idp.example.org     install
 ```
@@ -220,7 +222,7 @@ sluis-entry.service         loaded active running  sluis entry
 sluis-node.service          loaded active running  sluis node agent
 ```
 
-Each unit runs as its own user. One TCP listener exists: `entry`'s public API, bound to `127.0.0.1:8080` (the port is an example). Every other role and driver listens on a Unix socket under `/run/sluis/<role>/`.
+Each unit runs as its own user. One TCP listener exists: `entry`'s public API, bound to `127.0.0.1:8080` (the port is an example). Every other actor and driver listens on a Unix socket under `/run/sluis/<role>/`.
 
 ```sh
 # Example
@@ -306,7 +308,7 @@ Tokens are signed with EC P-384, so the algorithm is `ES384`. The JWKS lists onl
 
 ## 12. Read the audit trail
 
-Every success is audited. Your sign-in produced a record that went to the local spool, then into a sealed batch whose head the `notary` signed.
+Every success is audited. Your sign-in produced a record that went through the spool transport, then into a sealed batch whose head the `notary` signed.
 
 ```sh
 # Example
@@ -316,7 +318,7 @@ sluis audit verify
 
 ```text
 # Example output
-2026-10-28T09:14:02Z  token.issued  sub=you@example.org  role=signer  batch=pending
+2026-10-28T09:14:02Z  token.issued  sub=you@example.org  actor=signer  batch=pending
 ...
 chain ok: 1 batch, head signed by notary key 9c, 0 gaps
 ```
@@ -325,8 +327,8 @@ chain ok: 1 batch, head signed by notary key 9c, 0 gaps
 
 ## 13. Next steps
 
-- Read what you installed: the [roles](/concepts/roles/), the [drivers](/concepts/drivers/) and the [keys](/concepts/keys/).
-- Add a second board and a YubiKey each, and move to the [cluster shape](/shapes/cluster/).
+- Read what you installed: the [actors](/concepts/actors/), the [drivers](/concepts/drivers/) and the [keys](/concepts/keys/).
+- Add a second board and a YubiKey each, and move to the [board cluster preset](/environments/presets/#t2-board-cluster).
 - Understand the packages and how to verify what you installed: [Packages](/distribution/packages/) and [Release signing](/distribution/release-signing/).
-- Keep the blob store off the board if you want the audit chain to outlive it; see [Limits and residual risk](/shapes/single-node/#limits-and-residual-risk).
+- Keep the blob store off the board if you want the audit chain to outlive it; see [Limits and residual risk](/environments/presets/#t1-single-board).
 - Check the [open decisions](/open-decisions/) that may change the commands in this tutorial.

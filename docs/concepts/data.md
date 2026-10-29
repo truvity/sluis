@@ -1,6 +1,6 @@
 ---
 title: Data
-description: "How sluis keeps records safe: one writer per record kind, separate trust classes, the state, index, blob, queue and lease ports, batches and fencing tokens."
+description: "How sluis keeps records safe: one writer per record kind, separate trust classes, the state, index, blob, transport and lease ports, batches and fencing tokens."
 status: target
 sidebar:
   order: 7
@@ -10,7 +10,7 @@ sluis keeps records: sessions, directory facts, rate-limit counters, the signing
 
 ## One writer per record kind
 
-Every **record kind** has exactly one **record writer**: one role that is allowed to create and change it. Other roles may read it, if their manifest says so, and may not write it. The writer of a kind is written down in the manifests and enforced by the `state-owner` shared driver, which checks every call against `(caller role, record kind, operation)` and lets exactly one role write each kind. See [Drivers](/concepts/drivers/).
+Every **record kind** has exactly one **record writer**: one actor that is allowed to create and change it. Other actors may read it, if their manifest says so, and may not write it. The writer of a kind is written down in the manifests and enforced by the `state-owner` shared driver, which checks every call against `(caller actor, record kind, operation)` and lets exactly one actor write each kind. See [Drivers](/concepts/drivers/).
 
 Examples (illustrative; the full list is generated from the manifests):
 
@@ -29,7 +29,7 @@ When two processes seem to need to write one record, the record is split instead
 
 In v1 one state store holds hot sessions, the signing key ring, leases, controller journals, directory records and run records. Write access to that store is therefore inside the trust boundary, and on a store without per-record permissions the isolation between them is only a rule in a query layer.
 
-v2 keeps records of different **trust classes** apart, in separate namespaces at least and in separate stores where a shape allows. The signing ring and leases never share a namespace with sessions and directory records. Key material has its own three classes:
+v2 keeps records of different **trust classes** apart, in separate namespaces at least and in separate stores where an installation allows. The signing ring and leases never share a namespace with sessions and directory records. Key material has its own three classes:
 
 1. the ring and its wrapping, used by the issuer only;
 2. software keys held by integrations (a GitHub App key, a chat token);
@@ -37,14 +37,14 @@ v2 keeps records of different **trust classes** apart, in separate namespaces at
 
 ## Ports
 
-Roles reach their data through five ports. Each has a contract that does not change with the technology behind it.
+Actors reach their data through five ports. Each has a contract that does not change with the technology behind it.
 
-| Port | What it holds | Shape of the contract |
+| Port | What it holds | The contract |
 |---|---|---|
 | `state` | Records, with revisions | Get, create, compare-and-swap, delete-if, list by prefix, an atomic batch, a conditional adjust, and a feed of changes since a cursor |
-| `index` | A searchable view derived from batches | Apply a batch, read and set a cursor, query, rebuild from the batches |
-| `blob` | Immutable objects, such as audit batches | Put and get by key |
-| `queue` | Messages that must survive a restart, such as audit records | Publish, receive, acknowledge, return with a delay |
+| `index` | A search index derived from batches | Apply a batch, read and set a cursor, query, rebuild from the batches |
+| `blob` | Immutable objects, such as audit batches | Put once, get and list by key, with a lock mode of none, removable or compliance |
+| `transport` | Messages that must survive a restart, such as audit records, or a stream of them to the writer | Put, receive, acknowledge, return with a delay; or a direct stream |
 | `lease` | Named, time-limited ownership | Acquire a named lease, renew, release |
 
 The contract has no unconditional put. A caller changes a record only against the revision it read.
@@ -65,8 +65,8 @@ On a Raft cluster, leadership is just one named lease called `leader`. Every oth
 
 ## Where the data lives
 
-The drivers behind the ports differ by shape (see [Ports and drivers by shape](/concepts/drivers/)). Two choices matter for data:
+The drivers behind the ports differ by installation (see [Ports and drivers by preset](/concepts/drivers/#ports-and-drivers-by-preset)). Two choices matter for data:
 
-- **State** is a single-node store on one node, **rqlite on Raft** across three nodes, and **DynamoDB** on Lambda and the single EC2 shape. The Raft peer traffic is the state driver's own port over mutual TLS.
-- **Index** is `sqlite` on servers and `postgres` on Kubernetes (any connection string, for example CNPG). Lambda ships no index: `audit-read` and its index run in a separate audit install that reads the same bucket. The index is derived from the audit batches and can always be rebuilt from them.
+- **State** is the embedded single-node store on one node, **rqlite on Raft** across three nodes, and **DynamoDB** on serverless and on a single EC2 node. The Raft peer traffic is the state driver's own port over mutual TLS.
+- **Index** is `sqlite` on servers and `postgres` on Kubernetes (any connection string, for example CNPG). Serverless ships no index: `audit-read` and its index run in a separate audit install that reads the same bucket. The search index is derived from the audit batches and can always be rebuilt from them.
 

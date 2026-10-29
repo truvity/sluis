@@ -16,13 +16,13 @@ Cloudflare is a credential minter. sluis holds one account-level token that can 
 - **Infrastructure-as-code runs mint on demand.** A preset marked on-demand stores nothing; each run mints its own token and the token is swept after it expires.
 - **sluis's own release pipeline uploads to its distribution bucket** with a credential minted for the job, with no static key (see [Release signing](/distribution/release-signing/)).
 
-## Integration roles
+## Integration actors
 
-| Role | What it does for Cloudflare |
+| Actor | What it does for Cloudflare |
 |---|---|
-| `CredentialMinter` | Receives a mint grant signed by the `policy` role, checks the prototype, creates a token by cloning the prototype with an expiry, and sweeps expired tokens it created. |
+| `CredentialMinter` | Receives a mint grant signed by the `policy` actor, checks the prototype, creates a token by cloning the prototype with an expiry, and sweeps expired tokens it created. |
 
-That is the only role. Cloudflare supplies no facts and takes no desired state.
+That is the only integration actor. Cloudflare supplies no facts and takes no desired state.
 
 ## What sluis asks the vendor for
 
@@ -70,7 +70,7 @@ An example; see [the setup pattern](/integrations/connecting/#cloudflare-the-min
 integrations:
   cloudflare:
     main:
-      roles: [minter]
+      actors: [minter]
       account_id: <account-id>
       minter: cred:sluis-int-cloudflare.main.minter
       presets:
