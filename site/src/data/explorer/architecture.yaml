@@ -205,7 +205,7 @@ drivers:
     does: Serves the keys port from the node's YubiKey (PIV). One device and one PIN, so one shared instance that checks every caller against an access list generated from the manifest. Built with cgo against pcsc-lite.
     holds: The PIN, as a systemd credential. No symmetric keys; sealing uses ECDH plus HKDF with the P-384 key in slot 9d.
     backing: YubiKey PIV
-    slots: "9c node intermediate and signing; 9d ECDH sealing and ring wrap; 82 SSH CA; 83 to 95 retired sealing keys; 9e avoided"
+    slots: "9c node intermediate and signing; 9d ECDH sealing and ring wrap; 82 SSH user CA; 83 SSH host CA; 84 release subkey; 85 to 95 retired sealing keys (proposed); 9e avoided"
     status: agreed
   embedded:
     port: state
@@ -407,7 +407,7 @@ roles:
     kind: actor
     binary: actors/ca
     does: "X.509 and the SSH CA (one actor)."
-    holds: The CA keys (slot 9c for the node intermediate, 82 for the SSH CA on a YubiKey)
+    holds: The CA keys (slot 9c for the node intermediate, 82 for the SSH user CA and 83 for the SSH host CA on a YubiKey, proposed)
     uses: [keys, transport]
     resources:
       - "keys: sign with the CA keys, one key per purpose"
