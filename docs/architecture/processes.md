@@ -43,9 +43,7 @@ The blast radius of each is small by construction. A compromised `entry` can ask
 The three audit actors `notary`, `audit-writer` and `audit-read` are proposed to be replaced by four: a **writer**, a **witness** that co-signs batch heads, an **indexer** and a **reader**. The notary is then folded into the `key-holder` access list, or kept as a thin checker. See [OD-39](/open-decisions/#od-39). The tables on this page use the current names.
 :::
 
-:::caution[Open decision OD-38: Quota as a separate product or an actor]
-`quota` is drawn as its own box. Whether it stays a core actor or becomes a separate product is open: [OD-38](/open-decisions/#od-38). Whether it enforces limits (which needs live state with compare-and-set) or only meters them, as a view derived from the log, is also open: [OD-33](/open-decisions/#od-33).
-:::
+`quota` is drawn as its own box. Quota is a separate piece of the audit design, combinable with sluis in one installation, where it shares sluis's driver instances ([OD-37](/open-decisions/#od-37) and [OD-38](/open-decisions/#od-38)). It meters by default and enforces per policy rule, which needs `state` with compare-and-set on the mint path ([OD-33](/open-decisions/#od-33)). Turning enforcement on in production still waits for the k6 load test.
 
 ## Integration actors
 
@@ -180,7 +178,7 @@ On a three-node installation (the presets T2 and T4) every node runs this set, a
 
 ### Serverless
 
-On serverless the same actors are separate Lambda functions with no `sluis-node`. The platform gives each function an execution role, which is its identity. The audit writer has a reserved concurrency of 1, which stands in for the lease. The transport is an SQS queue. Search does not run inside the functions (this is decided): the search index is in a separate audit installation that reads the same blob, or nowhere, and a small installation uses the scan from the CLI. See [Serverless](/environments/serverless/).
+On serverless the same actors are separate Lambda functions with no `sluis-node`. The platform gives each function an execution role, which is its identity. The audit writer has a reserved concurrency of 1, which stands in for the lease. The transport is an SQS queue. Search may run inside the functions with a `postgres` index, through RDS Proxy (proposed) ([OD-12](/open-decisions/#od-12), revised). The default of the AWS Lambda preset is no index (proposed), and then Search is a separate installation that reads the same blob, or a small installation uses the scan from the CLI. See [Serverless](/environments/serverless/).
 
 ### Kubernetes
 
@@ -190,7 +188,7 @@ On Kubernetes the actors are containers of a node pod and of an audit pod, cut a
 
 ## The audit installation
 
-Audit is built from the same ports as the rest of sluis and adds one port, the witness. Four parts make up an audit installation: the **transport** (direct, or a queue), the **writer**, the **blob** (with a lock mode) and the **witness**. Their placement is a property of the installation, not of the environment or the preset. A writer on the same node as sluis is one installation's choice. A separate audit installation connected over the network is another, and is the direction of [OD-31](/open-decisions/#od-31).
+Audit is built from the same ports as the rest of sluis and adds one port, the witness. Audit is made of four separate pieces ([OD-37](/open-decisions/#od-37), decided): the **emitter** (a library inside each end application, not a process), the **log** (the writer, a blob with a lock mode, and the witness), **Search** and **Quota**. The **transport** (direct, or a queue) is a port, not a piece. Each piece can be its own installation, and pieces combined in one installation, even with sluis, share driver instances. A writer on the same node as sluis is one installation's choice. A separate audit installation connected over the network is another, and is the direction of [OD-31](/open-decisions/#od-31).
 
 | Part | Placement | Where it is decided |
 | ---- | --------- | ------------------- |
@@ -199,12 +197,12 @@ Audit is built from the same ports as the rest of sluis and adds one port, the w
 | Blob | Per installation, with a lock mode of none, removable or compliance | |
 | Witness | Per installation, and optional or required is open | [OD-36](/open-decisions/#od-36) |
 
-Two further boxes are separate from the audit trail and their placement is open:
+Two further pieces are separate from the log:
 
-| Box | What it is | Where it runs |
+| Piece | What it is | Where it runs |
 | --- | ---------- | ------------- |
-| **Search** | The indexer, the search index and the reader | Open: on the log host, a separate host or Deployment, or nowhere (the scan instead). It does not run inside serverless. [OD-32](/open-decisions/#od-32) |
-| **Quota** | The quota engine and its quota state (the state port with compare-and-set) | Open: a separate product or an actor, and enforcement or metering. [OD-38](/open-decisions/#od-38), [OD-33](/open-decisions/#od-33) |
+| **Search** | The indexer, the search index and the reader | Derived from the port and driver rules, not decided per preset: for example, with a `sqlite` index on a cluster the reader runs on the indexer's node. See [Ports and drivers](/concepts/drivers/#where-an-actor-runs-is-derived) and [OD-32](/open-decisions/#od-32) |
+| **Quota** | The quota engine and its quota state (the state port with compare-and-set) | Derived in the same way. A separate piece, combinable with sluis, sharing its driver instances. It meters by default and enforces per policy rule. [OD-38](/open-decisions/#od-38), [OD-33](/open-decisions/#od-33) |
 
 The [audit explorer](/architecture/audit-explorer/) draws these boxes for each preset, and the [architecture explorer](/architecture/explorer/) draws the actor processes.
 

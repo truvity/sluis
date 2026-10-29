@@ -43,7 +43,7 @@ flowchart LR
   blob -. "same bucket" .-> aud["Separate audit install"]
 ```
 
-The other actors put their audit records into the queue, the SQS transport driver. The separate audit install runs `audit-read` and its index, and reads the same bucket.
+The other actors put their audit records into the queue, the SQS transport driver. The separate audit install, when the preset has no index of its own, runs `audit-read` and its index, and reads the same bucket.
 
 ## What runs where
 
@@ -64,7 +64,7 @@ The other actors put their audit records into the queue, the SQS transport drive
 
 - **State:** DynamoDB, with conditional writes and one writer per record kind.
 - **Audit transport:** an SQS queue, because a function's local disk does not outlive its sandbox. The `audit-writer` consumes the queue, seals batches and writes them to the blob store (S3); the `notary` signs batch heads with a single notary key, used only by the notary function's role. There is no co-signing; the function role is the isolation. Which transport each preset uses is [OD-34](/open-decisions/#od-34).
-- **Index:** none. Serverless ships no audit index. `audit-read` and its index run in a separate audit install in another environment that reads the same bucket: Kubernetes with Postgres (any connection string, for example CNPG), or a server with `sqlite`. A small install can run `sluis audit search` from the CLI, which builds a local `sqlite` index from the chain. The index is a rebuildable cache; the chain in the bucket is the record. Where Search runs is [OD-32](/open-decisions/#od-32); that it does not run inside serverless is decided.
+- **Index:** serverless may run the indexer and the reader with a `postgres` index ([OD-12](/open-decisions/#od-12), revised). On AWS the provisioning mode is `rds` or `aurora`, and the functions reach the database through RDS Proxy (proposed), so that short-lived functions do not exhaust its connections. The `external` mode takes a connection string only. The AWS Lambda preset's default index stays `none` (proposed); with no index, `audit-read` and its index run in a separate audit install in another environment that reads the same bucket: Kubernetes with Postgres (`cnpg`, or `external` with a connection string), or a server with `sqlite`. A small install can run `sluis audit search` from the CLI, which builds a local `sqlite` index from the chain. The index is a rebuildable cache; the chain in the bucket is the record. Where Search runs is derived from the port and driver rules ([OD-32](/open-decisions/#od-32)). See [The postgres index driver](/concepts/drivers/#the-postgres-index-driver).
 
 ## Identity and edge
 
@@ -80,4 +80,4 @@ The other actors put their audit records into the queue, the SQS transport drive
 - Outside a VPC, egress is unrestricted. In a VPC, egress rules work by IP, not by name, so a per-function allow-list by host name needs a proxy or firewall.
 - Per-function granularity needs one zip and one IAM role per actor. It raises the number of artifacts and resources to keep in step; the generator derives them all from the manifest.
 - The vendored adapter is part of the supply chain. It is pinned to a version, rebuilt into sluis's layer, and signed with the rest of the release.
-- Search over the audit trail needs a separate audit install, or `sluis audit search` from the CLI, because serverless has no index of its own.
+- Search over the audit trail needs a `postgres` index, a separate audit install, or `sluis audit search` from the CLI. The default preset has no index of its own (proposed).

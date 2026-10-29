@@ -42,3 +42,6 @@ Every record has these parts, in this order:
 | ADR | Decision | Status |
 |-----|----------|--------|
 | [0001](0001-v1-and-v2-lines.md) | v1 and v2 are two lines that coexist until v2 replaces v1 | Accepted |
+| [0002](0002-actors-declare-ports-placement-is-derived.md) | Actors declare ports, drivers declare requirements, and placement is derived | Accepted |
+| [0003](0003-environments-are-runtime-kinds.md) | Environments are runtime kinds; installations add nodes and dependencies; presets name tested installations | Accepted |
+| [0004](0004-audit-is-four-pieces-joined-by-a-transport-port.md) | Audit is four pieces joined by a transport port | Accepted |

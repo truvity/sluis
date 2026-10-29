@@ -118,7 +118,7 @@ shapes:
     state: DynamoDB
     use: Integration tests and tutorials.
     notes:
-      - text: "T5 ships no search index. audit-read and its search index run in a separate audit install on another preset that reads the same bucket: Kubernetes with Postgres (any connection string, for example CNPG), or a server with sqlite. Where Search runs is open (OD-32). A small install can run sluis audit search from the CLI, which builds a local sqlite index from the chain. The search index is a rebuildable cache; the chain in the blob is the record."
+      - text: "The default index of T5 is none (proposed). Serverless may run the indexer and the reader with a postgres index, through RDS Proxy (proposed). With no index, audit-read and its search index run in a separate audit install on another preset that reads the same bucket: Kubernetes with Postgres (cnpg, or external with a connection string), or a server with sqlite. Where Search runs is derived from the port and driver rules. A small install can run sluis audit search from the CLI, which builds a local sqlite index from the chain. The search index is a rebuildable cache; the chain in the blob is the record."
         status: agreed
       - text: "The transport is an SQS queue here."
         status: agreed
@@ -326,7 +326,7 @@ drivers:
     instance: file
     shared_name: null
     binary: null
-    does: "T5 ships no search index. audit-read and its search index run in a separate audit install on another preset that reads the same bucket (Kubernetes with Postgres, or a server with sqlite). The search index is a rebuildable cache; the chain in the blob is the record."
+    does: "The default index of T5 is none (proposed); a postgres index through RDS Proxy is allowed. With no index, audit-read and its search index run in a separate audit install on another preset that reads the same bucket (Kubernetes with Postgres, or a server with sqlite). The search index is a rebuildable cache; the chain in the blob is the record."
     holds: Nothing
     backing: an index in a separate audit install
     status: agreed
@@ -336,7 +336,7 @@ drivers:
     instance: per-actor
     shared_name: null
     binary: drivers/postgres
-    does: The index port on Postgres, for the Kubernetes environment and for a separate audit install (any connection string, for example CNPG).
+    does: "The index port on Postgres, one driver with a provisioning mode: rds or aurora on AWS (through RDS Proxy on serverless, proposed), cnpg on Kubernetes (proposed), or external, a connection string only. Exposing CNPG through a load balancer is not a driver of its own; it is external."
     holds: Nothing
     backing: Postgres
     status: agreed
@@ -448,20 +448,16 @@ roles:
     od_note:
       - { id: OD-39, text: "Proposed: the audit actors become writer, indexer, reader and witness. The notary is then folded into the key-holder access list, or kept as a thin checker; the witness co-signs." }
   quota:
-    status: open
-    od: OD-38
+    status: agreed
     name: quota
     kind: actor
     binary: roles/quota
-    does: "Rate limits and caps, with a conditional adjust. Caps and limits live in core. Quota (quota engine, quota state) is a separate box; where it runs is open."
+    does: "Rate limits and caps, with a conditional adjust. Caps and limits live in core. Quota (quota engine, quota state) is a separate piece, combinable with sluis, and it shares sluis's driver instances. It meters by default and enforces per policy rule."
     holds: Counters (state), no key
     uses: [state, transport]
     resources:
       - "state: quota/* conditional adjust (the state port with compare-and-set)"
       - "transport: put"
-    od_note:
-      - { id: OD-38, text: "Quota is its own box. Whether it is a separate product or a core actor is open." }
-      - { id: OD-33, text: "Quota as enforcement needs live state with compare-and-set; as metering it can be a view derived from the log. Open." }
   audit-writer:
     status: agreed
     name: audit-writer
@@ -476,13 +472,12 @@ roles:
       - "state: append audit_batches"
     od_note:
       - { id: OD-39, text: "Proposed name: writer. The audit actors writer, indexer, reader and witness replace notary, audit-writer and audit-read." }
-      - { id: OD-37, text: "Proposed: audit runs its own instances of the shared ports' drivers, under its own identities." }
   audit-read:
     status: agreed
     name: audit-read
     kind: actor
     binary: roles/audit-read
-    does: "Search. Serves audit queries from the search index. It applies the ordered batch stream to the node's search index and records each read."
+    does: "Search. Serves audit queries from the search index; where it runs is derived from the port and driver rules. It applies the ordered batch stream to the node's search index and records each read."
     holds: Read-only; the node's search index file
     uses: [state, blob, transport]
     resources:
@@ -491,7 +486,6 @@ roles:
       - "index: read and apply"
       - "transport: put (each read is audited)"
     od_note:
-      - { id: OD-32, text: "Search (indexer, search index, reader) is its own box. Where it runs is open: on the log host, a separate host or Deployment, or nowhere (the scan instead). It does not run inside serverless." }
       - { id: OD-39, text: "Proposed: this actor is split into an indexer, which applies the batch stream to the search index, and a reader, which answers queries." }
 
 # ---------------------------------------------------------------------------
@@ -582,7 +576,7 @@ backing_lines:
   transport.spool: ["local spool", "fsync'd segments"]
   transport.sqs: ["SQS queue", "dead-letter queue"]
   index.sqlite: ["SQLite + FTS5", "one file per node"]
-  index.postgres: ["Postgres", "any connection string"]
+  index.postgres: ["Postgres", "rds, cnpg or external"]
   index.remote: ["no index here", "separate audit install"]
 
 # ---------------------------------------------------------------------------
@@ -808,7 +802,7 @@ flows:
         edges: ["audit-read>drv-state", "audit-read>drv-blob", "audit-read>store-index"]
         text: audit-read follows audit_batches from its cursor, fetches each new batch and applies it to the index. Verification never trusts the index. The audit explorer shows lag and the integrity chain.
         variants:
-          - { shapes: [T5], text: "T5 has no search index of its own. The audit-read of a separate audit install follows the chain in the same bucket." }
+          - { shapes: [T5], text: "The default of T5 is no search index of its own (proposed). With none, the audit-read of a separate audit install follows the chain in the same bucket." }
 
 # ---------------------------------------------------------------------------
 # Open points that touch the architecture
@@ -818,8 +812,8 @@ open_points: []
 # What runs where on a cluster (T2, T4: bare-metal with N nodes).
 cluster:
   - { process: edge connector, where: every node, status: proposed }
-  - { process: quota, where: "open (OD-38): a separate product or an actor; enforcement needs live state with compare-and-set (OD-33)", status: open }
-  - { process: "Search (indexer, search index, reader)", where: "open (OD-32): on the log host, a separate host or Deployment, or nowhere (the scan instead). Today's draft runs a search index on every node", status: open }
+  - { process: quota, where: "derived from the port and driver rules: a separate piece, combinable with sluis and sharing its driver instances; metering by default, enforcement per policy rule", status: agreed }
+  - { process: "Search (indexer, search index, reader)", where: "derived from the port and driver rules: with a sqlite index the reader runs on the indexer's node. Today's draft runs a search index on every node", status: agreed }
   - { process: entry, where: "every node, bound to 127.0.0.1 behind that node's edge connector", status: agreed }
   - { process: "signer, policy, ca", where: "every node; an earlier draft made each single-active, with a named lease and a fencing token, and standbys on the other nodes", status: proposed }
   - { process: audit-writer, where: "every node in the current draft, each draining its own spool. The writer declares instances: exactly 1, so on more than one node it needs the lease port. Placement is per installation (OD-34)", status: proposed }

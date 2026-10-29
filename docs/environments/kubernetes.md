@@ -58,7 +58,7 @@ The audit pod runs two replicas, and one of them writes. The transport is the on
 :::caution[Open decision OD-31: Audit as a separate installation]
 The audit side is being redesigned as its own installation, connected to sluis over the network. Open: the actors of the audit installation, the transport from emitters, how an emitter authenticates, and a co-located profile for a small install. The design is not settled. The lean is that audit is its own installation, and sluis emits over TCP or a queue through the transport port.
 
-The points [OD-32](/open-decisions/#od-32) to [OD-39](/open-decisions/#od-39) refine this one: where Search runs, quota, the transport per preset, direct mode when the writer is down, the witness, the driver instances of audit, and the audit actors.
+The points [OD-32](/open-decisions/#od-32) to [OD-39](/open-decisions/#od-39) refine this one. Four are decided: placement is derived from the port and driver rules (OD-32), quota meters by default and enforces per policy rule (OD-33), and audit is four pieces that share driver instances when combined (OD-37 and OD-38). Four are open: the transport per preset ([OD-34](/open-decisions/#od-34)), direct mode when the writer is down ([OD-35](/open-decisions/#od-35)), the witness ([OD-36](/open-decisions/#od-36)) and the audit actors ([OD-39](/open-decisions/#od-39)).
 :::
 
 ## What runs where
@@ -134,7 +134,7 @@ A Postgres state driver, for example on CNPG, with a database role for each slui
 
 ## Audit
 
-- **Index:** `postgres`, with any connection string (for example CNPG).
+- **Index:** `postgres`, in the `cnpg` mode (proposed): a CloudNativePG (CNPG) cluster in the same Kubernetes cluster. The `external` mode takes a connection string only, for a database someone else runs, such as a CNPG cluster in another Kubernetes cluster behind a load balancer. Exposing CNPG through a load balancer is not a driver of its own; from sluis's side it is `external`. See [The postgres index driver](/concepts/drivers/#the-postgres-index-driver).
 - The sealed batches go to the blob store, and the `notary` signs batch heads into the hash chain, as in every environment.
 - A separate audit install, which holds `audit-read` and the index for an install that has no index of its own, such as [serverless](/environments/serverless/), runs from the same chart with a different profile.
 - **Transport:** for now SQS is the audit transport on Kubernetes ([OD-22](/open-decisions/#od-22)), as on Lambda. Producers may only send, and the writer receives. Blocking on the archive is not used, because a request must never wait for the writer, the archive or the index.

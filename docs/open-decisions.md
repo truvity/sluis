@@ -22,14 +22,10 @@ The **current lean** is where the design points today. It is not a decision.
 | <a id="od-28"></a>OD-28 | Kubernetes baseline | Minimum version and features required (native sidecars, `restricted` PodSecurity, projected tokens, a NetworkPolicy-enforcing CNI); optional Cilium for FQDN; OpenShift and sandboxed runtimes supported or not | Native sidecars and `restricted` required; Cilium optional; OpenShift and gVisor/Kata not in the first cut |
 | <a id="od-29"></a>OD-29 | Placement of integrations on Kubernetes | Containers of the node pod; separate pods per integration; a manifest switch per integration | Containers now; a `placement` switch designed, built when an integration's egress or lifecycle needs it |
 | <a id="od-30"></a>OD-30 | One chart or two | One chart with an `install` and an `audit-install` profile; a chart for sluis and a chart for the audit install | One chart |
-| <a id="od-31"></a>OD-31 | Audit as a separate installation: actors, transport from emitters, emitter authentication, co-located profile | Being designed; refined by [OD-32](#od-32) to [OD-39](#od-39) | Audit is its own installation; sluis emits over TCP or a queue through the transport port |
-| <a id="od-32"></a>OD-32 | Where Search runs | On the log host; a separate host or Deployment; nowhere (the scan instead). It is decided that it does not run inside serverless | No lean yet |
-| <a id="od-33"></a>OD-33 | Quota: enforcement or metering | Enforcement needs live state with compare-and-set. Metering can be a view derived from the log | No lean yet |
+| <a id="od-31"></a>OD-31 | Audit as a separate installation: actors, transport from emitters, emitter authentication, co-located profile | Being designed; refined by [OD-32](#od-32) to [OD-39](#od-39). Of those, OD-32, OD-33, OD-37 and OD-38 are decided; [OD-34](#od-34), [OD-35](#od-35), [OD-36](#od-36) and [OD-39](#od-39) remain open | Audit is its own installation; sluis emits over TCP or a queue through the transport port |
 | <a id="od-34"></a>OD-34 | Transport per preset | Direct or queue, and where NATS JetStream fits (clusters, or Kubernetes instead of SQS) | No lean yet |
 | <a id="od-35"></a>OD-35 | Direct mode when the writer is down | (a) fail the operation; (b) fall back to a local spool; (c) an in-memory buffer, which is unsafe | No lean yet |
 | <a id="od-36"></a>OD-36 | Witness optional or required | Optional; required | No lean yet |
-| <a id="od-37"></a>OD-37 | Audit's driver instances | Separate instances under audit's own identities (proposed) | Separate instances under audit's own identities |
-| <a id="od-38"></a>OD-38 | Quota: a separate product, or an actor | A separate product; an actor | No lean yet |
 | <a id="od-39"></a>OD-39 | Audit actors | The writer, indexer, reader and witness replace the notary, audit-writer and audit-read (proposed). The notary is folded into the `key-holder` ACL, or kept as a thin checker | The writer, indexer, reader and witness |
 
 ## Decided
@@ -49,7 +45,7 @@ Each row says what was decided. The anchors stay, so links to a decided point st
 | <a id="od-9"></a>OD-9 | How CI reaches the hardware boards | Design agreed, work in the CI backlog |
 | <a id="od-10"></a>OD-10 | Policy language | Cedar; the `policy` actor in Rust with `cedar-policy` |
 | <a id="od-11"></a>OD-11 | Role of TPM 2.0 | TPM is a backlog feature |
-| <a id="od-12"></a>OD-12 | Index host on Lambda | (a) T5 ships no audit index; `audit-read` and its index run in a separate audit install (Kubernetes with Postgres, or a server with sqlite) that reads the same bucket. Where Search runs in general is [OD-32](#od-32) |
+| <a id="od-12"></a>OD-12 | Index host on Lambda | Revised: serverless may run the indexer and the reader with a `postgres` index (RDS or Aurora through RDS Proxy, proposed). The earlier answer, (a) no index inside serverless, is withdrawn. The T5 preset's default index stays `none`; that default is proposed. Where Search runs in general is derived from the port and driver rules, see [OD-32](#od-32) |
 | <a id="od-13"></a>OD-13 | Derived key for bursts on YubiKey presets | Closed by OD-3, no burst key |
 | <a id="od-14"></a>OD-14 | Rust for the AWS, GCP and Azure drivers | Rust for the cloud drivers |
 | <a id="od-15"></a>OD-15 | RS256 for specific audiences (verifiers that can't take EC) | (a) per-audience RS256 exception with its own RSA key |
@@ -58,3 +54,7 @@ Each row says what was decided. The anchors stay, so links to a decided point st
 | <a id="od-20"></a>OD-20 | Key custody on clusters outside AWS | For now the kubernetes environment supports AWS KMS only (EKS) |
 | <a id="od-21"></a>OD-21 | State driver on Kubernetes | For now the kubernetes environment supports DynamoDB only for state |
 | <a id="od-22"></a>OD-22 | Audit transport on Kubernetes (the remaining part of OD-5) | For now SQS is the audit transport on Kubernetes |
+| <a id="od-32"></a>OD-32 | Where Search runs, and where every actor runs | (a) Where an actor runs is derived from the port and driver rules, for Search (the indexer and the reader) and for every sluis actor. There are no per-preset placement decisions: `sluis config check` enforces the rules and each preset only names its default drivers. For example, with a `sqlite` index on a cluster the reader runs on the indexer's node. See [Ports and drivers](/concepts/drivers/) |
+| <a id="od-33"></a>OD-33 | Quota: enforcement or metering | (c) Metering by default, with enforcement per policy rule for chosen subjects or audiences. Enforcement needs `state` with compare-and-set on the mint path. The earlier decision that strict quota comes only after the k6 load test still applies to turning enforcement on in production |
+| <a id="od-37"></a>OD-37 | Audit's driver instances, together with OD-38 | Audit is four separate pieces: the **emitter** (a library inside each end application, configured by that application, not a process), the **log** (writer, blob and witness), **Search** (indexer, index and reader) and **Quota** (quota engine and state). Transport is a port, not a piece. Each piece can be its own installation. When pieces are combined in one installation, even with sluis, they share driver instances. This replaces the earlier lean of separate instances |
+| <a id="od-38"></a>OD-38 | Quota: a separate product, or an actor, together with OD-37 | Resolved by the four pieces of [OD-37](#od-37): Quota is a separate piece, combinable with sluis in one installation, where it shares driver instances |

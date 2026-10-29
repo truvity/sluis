@@ -68,5 +68,5 @@ On a Raft cluster, leadership is just one named lease called `leader`. Every oth
 The drivers behind the ports differ by installation (see [Ports and drivers by preset](/concepts/drivers/#ports-and-drivers-by-preset)). Two choices matter for data:
 
 - **State** is the embedded single-node store on one node, **rqlite on Raft** across three nodes, and **DynamoDB** on serverless and on a single EC2 node. The Raft peer traffic is the state driver's own port over mutual TLS.
-- **Index** is `sqlite` on servers and `postgres` on Kubernetes (any connection string, for example CNPG). Serverless ships no index: `audit-read` and its index run in a separate audit install that reads the same bucket. The search index is derived from the audit batches and can always be rebuilt from them.
+- **Index** is `sqlite` on servers and `postgres` on Kubernetes (the `cnpg` mode, or `external` with any connection string). Serverless may run the indexer and the reader with a `postgres` index through RDS Proxy (proposed); the default of the AWS Lambda preset is no index (proposed), and `audit-read` and its index then run in a separate audit install that reads the same bucket. The search index is derived from the audit batches and can always be rebuilt from them.
 

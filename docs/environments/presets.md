@@ -8,7 +8,7 @@ sidebar:
 
 A **preset** is a named, tested [installation](/environments/#nodes-and-dependencies-are-not-part-of-an-environment): an [environment](/environments/), a node count, the available dependencies and one [driver](/concepts/drivers/) per port. The documentation, the tutorials and the test matrix refer to presets by their short id, T0 to T6. The ids are the old deployment-shape ids, kept short.
 
-A preset is a choice of drivers, and a driver choice that used to be a per-shape decision now reads as "this preset's driver choice": the spool on the bare-metal presets and SQS on serverless ([OD-5](/open-decisions/#od-5)), SQS on Kubernetes ([OD-22](/open-decisions/#od-22)), KMS on Kubernetes ([OD-20](/open-decisions/#od-20)), and no index inside serverless ([OD-12](/open-decisions/#od-12)). The key mode follows the same rule: KMS on the AWS presets, a YubiKey on the board presets, a software key only on T0.
+A preset is a choice of drivers, and a driver choice that used to be a per-shape decision now reads as "this preset's driver choice": the spool on the bare-metal presets and SQS on serverless ([OD-5](/open-decisions/#od-5)), SQS on Kubernetes ([OD-22](/open-decisions/#od-22)), KMS on Kubernetes ([OD-20](/open-decisions/#od-20)), and serverless may run the indexer and the reader with a `postgres` index ([OD-12](/open-decisions/#od-12), revised). The key mode follows the same rule: KMS on the AWS presets, a YubiKey on the board presets, a software key only on T0.
 
 :::note[Proposed]
 The configuration layers are defaults, then the environment, then the preset, then the install, then stage overrides, each overriding the one before. A stage is a development, staging or production boundary of one installation. See [Configuration](/concepts/configuration/).
@@ -233,7 +233,7 @@ flowchart TB
 
 One Lambda function per actor, with KMS keys and DynamoDB state. The details, the request path and the audit path are on [Serverless](/environments/serverless/). Environment: [serverless](/environments/serverless/), elastic nodes.
 
-- **Drivers:** aws-kms for keys, DynamoDB for state and lease, an SQS queue for transport (a function's disk does not outlive its sandbox), S3 for the blob. There is no index: a separate audit install holds it ([OD-12](/open-decisions/#od-12)).
+- **Drivers:** aws-kms for keys, DynamoDB for state and lease, an SQS queue for transport (a function's disk does not outlive its sandbox), S3 for the blob. The default index is `none` (proposed): a separate audit install holds it, or the scan from the CLI is used. A `postgres` index (`rds` or `aurora` through RDS Proxy, proposed) is allowed ([OD-12](/open-decisions/#od-12), revised).
 - **Writer:** the audit writer runs with reserved concurrency 1.
 - **Identity and edge:** the function's IAM role is its identity. API Gateway sits in front of `entry`, through the Lambda Web Adapter to `entry`'s loopback port.
 - **Limits:** five layers and 250 MB unzipped bound a function; cold starts; egress is not name-restricted.
@@ -242,7 +242,7 @@ One Lambda function per actor, with KMS keys and DynamoDB state. The details, th
 
 A node pod and an audit pod, a container per actor, on Amazon EKS with AWS KMS. T6 is in design and test scope now, and its design is proposed. The details and the open points are on [Kubernetes](/environments/kubernetes/). Environment: [kubernetes](/environments/kubernetes/), N nodes.
 
-- **Drivers:** aws-kms for keys ([OD-20](/open-decisions/#od-20)), DynamoDB for state ([OD-21](/open-decisions/#od-21)), Kubernetes Lease for the lease, SQS for transport for now ([OD-22](/open-decisions/#od-22)), S3 for the blob, `postgres` for the index.
+- **Drivers:** aws-kms for keys ([OD-20](/open-decisions/#od-20)), DynamoDB for state ([OD-21](/open-decisions/#od-21)), Kubernetes Lease for the lease, SQS for transport for now ([OD-22](/open-decisions/#od-22)), S3 for the blob, and `postgres` on `cnpg` for the index (proposed; the `external` mode takes a connection string only).
 - **Identity:** projected ServiceAccount tokens, one audience per actor ([OD-19](/open-decisions/#od-19)).
 - **Edge:** an edge relay or `cloudflared` ([OD-24](/open-decisions/#od-24)).
 - **Tests:** a kind smoke test on every pull request, and a real EKS cluster nightly (proposed). The preset's entry in the test matrix is open.

@@ -30,7 +30,7 @@ Select a box to see what it holds, its manifest summary and its listeners; the l
 
 The same facts as tables, for the preset picked above. `entry`'s public API listens on TCP, bound to `127.0.0.1`, in every environment: `cloudflared` connects to that loopback port on bare-metal, and the Lambda Web Adapter does on serverless. Every other actor and driver listens on Unix sockets under `/run/sluis/` only. How Kubernetes reaches the loopback port is on [Listeners](/architecture/listeners/).
 
-Quota and Search are separate boxes whose placement is open: see [OD-38](/open-decisions/#od-38), [OD-33](/open-decisions/#od-33) and [OD-32](/open-decisions/#od-32).
+Quota and Search are separate pieces whose placement is derived from the port and driver rules, not decided per preset: see [Ports and drivers](/concepts/drivers/#where-an-actor-runs-is-derived), [OD-38](/open-decisions/#od-38), [OD-33](/open-decisions/#od-33) and [OD-32](/open-decisions/#od-32).
 
 <ArchExplorer part="tables" />
 

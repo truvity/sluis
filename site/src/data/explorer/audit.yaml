@@ -6,8 +6,10 @@
 # permission manifest once it exists. `status` is agreed | proposed | open.
 #
 # Audit shares the sluis port definitions (keys, state, lease, blob, transport,
-# index, cloud) and adds one port, witness. Whether audit runs its own
-# instances of those drivers under its own identities is proposed (OD-37).
+# index, cloud) and adds one port, witness. Audit is four separate pieces
+# (emitter, log, Search, Quota); pieces combined in one installation, even with
+# sluis, share driver instances. Where an actor runs is derived from the port
+# and driver rules.
 # The keys keep their old names where code reads them: `shapes` lists the
 # presets, `nodes[].role` names an actor of architecture.yaml.
 
@@ -119,7 +121,7 @@ shapes:
     blob: "an S3 bucket"
     lock: "lock mode compliance (Object Lock), per install"
     cluster: "managed by the platform"
-    note: "T5 ships no search index; it is decided that Search does not run inside serverless. audit-read and its search index run in a separate audit install that reads the same blob: Kubernetes with Postgres (any connection string, for example CNPG), or a server with sqlite. Where Search runs is open (OD-32). A small install can run sluis audit search from the CLI, which builds a local sqlite index from the chain. The search index is a rebuildable cache; the chain in the blob is the record."
+    note: "The default index of T5 is none (proposed). Serverless may run the indexer and the reader with a postgres index, through RDS Proxy (proposed). With no index, audit-read and its search index run in a separate audit install that reads the same blob: Kubernetes with Postgres (cnpg, or external with a connection string), or a server with sqlite. Where Search runs is derived from the port and driver rules. A small install can run sluis audit search from the CLI, which builds a local sqlite index from the chain. The search index is a rebuildable cache; the chain in the blob is the record."
 
 # ---------------------------------------------------------------------------
 # The map
@@ -175,19 +177,15 @@ nodes:
     cls: role
     title: quota
     l2: engine and state (cas)
-    l3: placement open
+    l3: derived placement
     kind: actor
-    status: open
-    od: OD-38
-    does: "Rate limits and caps. A separate box: the quota engine, with its quota state (the state port with compare-and-set). Every limit decision is audited, so it is a producer like every other actor."
+    status: agreed
+    does: "Rate limits and caps. A separate piece: the quota engine, with its quota state (the state port with compare-and-set). It can be combined with sluis in one installation, where it shares driver instances. Every limit decision is audited, so it is a producer like every other actor."
     rows:
-      - { k: Placement, v: "Open: a separate product or an actor (OD-38)." }
-      - { k: Mode, v: "Enforcement needs live state with compare-and-set; metering can be a view derived from the log (OD-33)." }
+      - { k: Placement, v: "Derived from the port and driver rules; a separate piece, combinable with sluis." }
+      - { k: Mode, v: "Metering by default; enforcement per policy rule, which needs state with compare-and-set on the mint path. Turning enforcement on in production waits for the k6 load test." }
     holds: Put on the transport; its own quota state
     never: Blob, index or key access for audit
-    od_note:
-      - { id: OD-33, text: "Quota as enforcement or metering." }
-      - { id: OD-38, text: "Quota as a separate product, or an actor." }
   recovery:
     lane: 0
     row: 5.8
@@ -271,18 +269,16 @@ nodes:
     cls: role
     title: indexer
     l2: applies the batch stream
-    l3: placement open
+    l3: derived placement
     kind: actor
-    status: open
-    od: OD-32
-    does: "Search, the indexer. Follows audit_batches from its cursor, fetches each new batch from the blob and applies it to the search index. It declares instances: exactly 1; with more than one node it needs the lease port. It does not run inside serverless."
+    status: proposed
+    does: "Search, the indexer. Follows audit_batches from its cursor, fetches each new batch from the blob and applies it to the search index. It declares instances: exactly 1; with more than one node it needs the lease port. It can run in serverless with a postgres index."
     rows:
-      - { k: Placement, v: "Open: on the log host, a separate host or Deployment, or nowhere (the scan instead) (OD-32)." }
+      - { k: Placement, v: "Derived from the port and driver rules, not decided per preset." }
       - { k: Instances, v: "exactly 1; the lease port when nodes > 1" }
     holds: Read on audit_batches and the blob; write on the search index
     never: Write on the blob; any signing key
     od_note:
-      - { id: OD-32, text: "Where Search runs." }
       - { id: OD-39, text: "Proposed name: indexer." }
   read:
     lane: 2
@@ -293,12 +289,11 @@ nodes:
     l2: reader
     l3: queries, audits reads
     l2_lambda: separate audit install
-    l3_lambda: placement open
-    does: "Search, the reader. Answers search from the search index and records each read. Where Search runs is open: on the log host, a separate host or Deployment, or nowhere (the scan instead). It does not run inside serverless."
+    l3_lambda: default none (proposed)
+    does: "Search, the reader. Answers search from the search index and records each read. Where it runs is derived from the port and driver rules: with a sqlite index on a cluster, the reader runs on the indexer's node. On serverless it can run with a postgres index."
     holds: Read on the blob; the search index
     never: Write on the blob; any signing key
     od_note:
-      - { id: OD-32, text: "Where Search runs is open. It is decided that it does not run inside serverless." }
       - { id: OD-39, text: "Proposed name: reader." }
   index:
     lane: 2
@@ -314,8 +309,6 @@ nodes:
     port: state
     title: state driver
     does: The state port. Holds audit_batches, cursors and dedupe, replicated.
-    od_note:
-      - { id: OD-37, text: "Proposed: audit runs its own instances of the shared ports' drivers (keys, state, lease, blob, transport, index, cloud), under its own identities. The only port audit adds is witness." }
   keysdrv:
     lane: 3
     row: 2.6
@@ -448,9 +441,9 @@ flows:
       - title: The indexer updates the search index
         nodes: [indexer, statedrv, blobdrv, index]
         edges: ["indexer>statedrv", "indexer>blobdrv", "indexer>index", "statedrv>statestore", "blobdrv>archive"]
-        text: The indexer follows audit_batches from its cursor, fetches each new batch object and applies it to the search index, then advances the cursor. Lag is the leader sequence minus that cursor. In the current draft every node has an indexer; where Search runs is open (OD-32).
+        text: The indexer follows audit_batches from its cursor, fetches each new batch object and applies it to the search index, then advances the cursor. Lag is the leader sequence minus that cursor. In the current draft every node has an indexer; where Search runs is derived from the port and driver rules.
         variants:
-          - { shapes: [T5], text: "T5 has no search index of its own; Search does not run inside serverless. The indexer of a separate audit install follows the chain in the same blob and keeps the index there." }
+          - { shapes: [T5], text: "The default of T5 is no search index of its own (proposed); a postgres index through RDS Proxy is allowed. With no index, the indexer of a separate audit install follows the chain in the same blob and keeps the index there." }
   - id: search
     title: An auditor searches
     why: audit-read answers from the search index; the read is itself audited.
@@ -610,7 +603,7 @@ promises:
     text: The recovery proof needs no Kubernetes. Recovery spools its audit record locally and delivers it later.
     status: agreed
   - title: Audit shares the sluis ports
-    text: The ports are keys, state, lease, blob, transport, index and cloud, plus witness, the only port audit adds. The log is a blob with a lock mode, quota state is state with compare-and-set, and Search uses the index port. That audit runs its own instances of those drivers under its own identities is proposed (OD-37).
+    text: The ports are keys, state, lease, blob, transport, index and cloud, plus witness, the only port audit adds. The log is a blob with a lock mode, quota state is state with compare-and-set, and Search uses the index port. Audit is four separate pieces, the emitter, the log, Search and Quota; pieces combined in one installation, even with sluis, share driver instances.
     status: agreed
 
 chain:
@@ -653,7 +646,7 @@ lag:
 
 index_notes:
   - title: One search index per node (current draft)
-    text: SQLite with FTS5, fed by the ordered audit_batches sequence in replicated state. Each node applies batches from its own cursor, so a node that was down catches up in order, and a new node replays from zero. Purges and erasures are entries in the same sequence. Where Search runs at all is open (OD-32).
+    text: SQLite with FTS5, fed by the ordered audit_batches sequence in replicated state. Each node applies batches from its own cursor, so a node that was down catches up in order, and a new node replays from zero. Purges and erasures are entries in the same sequence. Where Search runs is derived from the port and driver rules.
     status: proposed
   - title: Rebuilding
     text: The search index can be thrown away. A node rebuilds by replaying audit_batches from zero and fetching each batch object.
@@ -667,7 +660,7 @@ compare:
   - { topic: "How a record is accepted", v1: "emit library with block or async delivery to a receiver, JetStream or SQS", v2: "transport port (direct, or queue: spool, SQS, NATS JetStream); the request returns on transport durability" }
   - { topic: "Who runs it", v1: "pods or Lambda functions, a chart or a Pulumi library; a CronJob for the notary", v2: "actors started by the platform; drivers as services, no exec" }
   - { topic: "Coordination between parts", v1: "none: the bucket layout is the contract and each part lists the bucket", v2: "the ordered audit_batches sequence in replicated state" }
-  - { topic: Index, v1: "PostgreSQL, fed by observe, which lists the bucket from a cursor after a settle window", v2: "a search index (SQLite on servers in the current draft), fed by the batch stream from the indexer's cursor; where Search runs is open (OD-32)" }
+  - { topic: Index, v1: "PostgreSQL, fed by observe, which lists the bucket from a cursor after a settle window", v2: "a search index (SQLite on servers in the current draft), fed by the batch stream from the indexer's cursor; where Search runs is derived from the port and driver rules" }
   - { topic: Seals, v1: "one per profile, tenant and hour, built by listing the bucket; empty hours sealed", v2: "one per run over new batches, chained by prev; cadence not yet decided" }
   - { topic: "Notary key", v1: "KMS, a transit key or a key file; a separate service account from the writer", v2: "its own key on the keys driver, or its own KMS key; separate in all cases" }
   - { topic: Recovery, v1: "not part of audit", v2: "a local spool in every preset; never blocks" }
@@ -685,10 +678,6 @@ open_points:
   - { od: OD-36, title: "Witness optional or required", text: "Whether a witness cosigns the trust log and batch heads, whether that is optional or required, and who would. The witness port has the drivers none, peer and external." }
   - { od: OD-34, title: "Transport per preset", text: "Direct or queue (spool, SQS, NATS JetStream), and where NATS JetStream fits: clusters, or Kubernetes instead of SQS." }
   - { od: OD-35, title: "Direct mode when the writer is down", text: "Fail the operation, fall back to a local spool, or hold the record in memory, which is unsafe." }
-  - { od: OD-32, title: "Where Search runs", text: "On the log host, a separate host or Deployment, or nowhere (the scan instead). It is decided that it does not run inside serverless." }
-  - { od: OD-33, title: "Quota: enforcement or metering", text: "Enforcement needs live state with compare-and-set. Metering can be a view derived from the log." }
-  - { od: OD-38, title: "Quota: a separate product, or an actor", text: "Quota is its own box either way; this is about what it is." }
-  - { od: OD-37, title: "Audit's driver instances", text: "Separate instances of the shared ports' drivers under audit's own identities (proposed)." }
   - { od: OD-39, title: "Audit actors", text: "Writer, indexer, reader and witness replace notary, audit-writer and audit-read (proposed). The notary is folded into the key-holder access list, or kept as a thin checker." }
   - { od: null, title: "Observer identity on a node without Kubernetes", text: "The candidates are the peer credentials the spool driver saw, or the workload JWT from the node agent." }
   - { od: null, title: "Writers across nodes", text: "Each node's writer drains its own spool, so no writer reads another node's spool. The writer declares exactly 1 instance, so with more than one node it needs the lease port. Still open: how batch sequence numbers stay ordered across the writers (the state store hands them out), and what drains a spool while its node is down." }
