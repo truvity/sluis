@@ -1,0 +1,260 @@
+#!/usr/bin/env node
+// Lint for the requirements catalogue in docs/requirements/ (index.yaml, standards.yaml and one
+// <area>.yaml per area). The rules are the ones in the catalogue's design notes (L1 to L17):
+//
+//   L1  every file validates against requirements.schema.json (closed objects, enums, patterns)
+//   L2  every area has its file and every file is declared; ids are unique; the id prefix equals the area
+//   L3  the vocabularies in index.yaml equal the schema's enums
+//   L5  split_from exists, is in the same area and is not itself a split clause
+//   L6  a statement has exactly one RFC 2119 keyword, `level` equals its class, one sentence
+//   L7  a rationale is one sentence
+//   L8  no two statements are equal after normalising case and punctuation
+//   L10 public safety: no ticket key, estate word, e-mail address, URL outside .example or account-id-shaped number
+//   L11 every MUST has a verification
+//   L12 a MUST verified by manual review only has manual_reason; manual_reason is forbidden elsewhere
+//   L13 every cited standard is a row of standards.yaml; a Full citation has a section (warning)
+//   L14 a planned record has a feature entry (an issue number, parity or design)
+//   L15 an open or partial record names an open decision or a declared gap key; gap is allowed on no other status
+//   L16 a standard that no requirement cites (warning)
+//   L17 an out-of-scope record is a MUST NOT or a MAY and has a verification
+//   OD  every decision id is a row of docs/open-decisions.md
+//
+// No dependency beyond `yaml`: the JSON Schema subset the schema uses is checked by the small
+// validator below. Errors fail the run; warnings print and do not, unless --strict is given.
+//
+// usage: site/scripts/check-requirements.mjs [--strict] [dir]   (dir defaults to docs/requirements)
+import { readFileSync, readdirSync } from 'node:fs';
+import { dirname, join, relative, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { parse } from 'yaml';
+
+const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+const args = process.argv.slice(2);
+const strict = args.includes('--strict');
+const dir = resolve(args.find((a) => !a.startsWith('--')) ?? join(root, 'docs', 'requirements'));
+
+// ---- public safety: patterns, not names. A hit is an error; the data must not need an exception.
+// A ticket key is LETTERS-DIGITS; the prefixes below are standards, algorithms and the catalogue's own ids.
+const NOT_TICKET = new Set([
+  'REQ', 'OD', 'ST', 'NC', 'SU', 'RFC', 'BCP', 'FIPS', 'SP', 'ISO', 'IEC', 'UTF', 'SHA', 'AES', 'RSA', 'ES', 'PS', 'RS', 'HS',
+  'EC', 'ECDSA', 'EDDSA', 'ED', 'X', 'TLS', 'SSL', 'IPV', 'HTTP', 'SHA3', 'P', 'SECP', 'WCAG', 'AAL', 'IAL', 'FAL', 'CVE',
+  'CWE', 'EN', 'TS', 'ETSI', 'NIST', 'PKCS', 'SEC', 'BLAKE', 'ML', 'KEM', 'DSA', 'SLH', 'SHAKE', 'HMAC', 'GCM', 'CBC', 'ECB',
+  'CTR', 'SSH', 'DNS', 'UUID', 'COSE', 'JWT', 'JWS', 'JWE', 'JWK', 'OAUTH', 'OIDC', 'FIDO', 'FIDO2', 'UTC', 'RS256', 'ES256',
+]);
+const DENY = [
+  [/\b(private-term)\b/i, 'estate word'],
+  [/private-domain/i, 'estate domain'],
+  [/[\w.+-]+@[\w-]+(\.[\w-]+)+/, 'e-mail address'],
+  [/\b\d{12}\b/, 'account-id-shaped number'],
+];
+const TICKET = /(?<!REQ-)\b([A-Z][A-Z0-9]{1,9})-(\d{1,6})\b/g;
+const URLISH = /https?:\/\/(?![a-z0-9.-]*\.example\b)/i;
+
+const errors = [];
+const warnings = [];
+const E = (m) => errors.push(m);
+const W = (m) => warnings.push(m);
+
+const load = (name) => parse(readFileSync(join(dir, name), 'utf8'));
+const schema = JSON.parse(readFileSync(join(dir, 'requirements.schema.json'), 'utf8'));
+
+// ---- the JSON Schema subset the schema file uses
+function validate(node, value, path, out) {
+  if (node.$ref) {
+    const target = node.$ref.replace(/^#\//, '').split('/').reduce((n, k) => n?.[k], schema);
+    if (!target) return out.push(`${path}: unknown $ref ${node.$ref}`);
+    return validate(target, value, path, out);
+  }
+  const type = Array.isArray(value) ? 'array' : value === null ? 'null' : typeof value;
+  if ('const' in node && value !== node.const) return out.push(`${path}: must be ${JSON.stringify(node.const)}`);
+  if (node.enum && !node.enum.includes(value)) return out.push(`${path}: ${JSON.stringify(value)} is not one of ${node.enum.join(', ')}`);
+  if (node.oneOf) {
+    const hits = node.oneOf.filter((n) => { const o = []; validate(n, value, path, o); return o.length === 0; });
+    if (hits.length !== 1) out.push(`${path}: matches ${hits.length} of the allowed shapes, expected exactly one`);
+    return;
+  }
+  if (node.type) {
+    const ok = node.type === 'integer' ? Number.isInteger(value) : node.type === type;
+    if (!ok) return out.push(`${path}: expected ${node.type}, got ${type}`);
+  }
+  if (type === 'string') {
+    if (node.minLength !== undefined && value.length < node.minLength) out.push(`${path}: shorter than ${node.minLength} characters`);
+    if (node.maxLength !== undefined && value.length > node.maxLength) out.push(`${path}: longer than ${node.maxLength} characters`);
+    if (node.pattern && !new RegExp(node.pattern).test(value)) out.push(`${path}: ${JSON.stringify(value.slice(0, 60))} does not match ${node.pattern}`);
+  }
+  if (type === 'array') {
+    if (node.minItems !== undefined && value.length < node.minItems) out.push(`${path}: fewer than ${node.minItems} items`);
+    if (node.maxItems !== undefined && value.length > node.maxItems) out.push(`${path}: more than ${node.maxItems} items`);
+    if (node.uniqueItems && new Set(value.map((v) => JSON.stringify(v))).size !== value.length) out.push(`${path}: items are not unique`);
+    if (node.items) value.forEach((v, i) => validate(node.items, v, `${path}/${i}`, out));
+  }
+  if (type === 'object') {
+    for (const k of node.required ?? []) if (!(k in value)) out.push(`${path}: missing ${k}`);
+    const props = node.properties ?? {};
+    for (const [k, v] of Object.entries(value)) {
+      if (node.propertyNames) validate(node.propertyNames, k, `${path}/${k} (name)`, out);
+      if (k in props) validate(props[k], v, `${path}/${k}`, out);
+      else if (node.additionalProperties === false) out.push(`${path}: unknown key ${k}`);
+      else if (node.additionalProperties && typeof node.additionalProperties === 'object') validate(node.additionalProperties, v, `${path}/${k}`, out);
+    }
+  }
+}
+
+// ---- load
+const files = new Map();
+const index = load('index.yaml');
+files.set('index.yaml', index);
+for (const name of readdirSync(dir).filter((f) => f.endsWith('.yaml')).sort()) {
+  if (name !== 'index.yaml' && name !== 'standards.yaml') files.set(name, load(name));
+}
+const standardsDoc = load('standards.yaml');
+
+// L1
+for (const [name, doc] of files) {
+  const out = [];
+  validate(schema.$defs[name === 'index.yaml' ? 'indexFile' : 'areaFile'], doc, '', out);
+  out.forEach((m) => E(`L1 ${name}${m}`));
+}
+if (!Array.isArray(standardsDoc?.standards) || standardsDoc.standards.length === 0) E('L1 standards.yaml: no standards list');
+for (const s of standardsDoc?.standards ?? []) {
+  if (!/^(ST|NC)-\d{2,3}$/.test(s.id ?? '') || !s.name || typeof s.register !== 'boolean') E(`L1 standards.yaml: bad row ${JSON.stringify(s)}`);
+}
+if (errors.length) finish(0);
+
+const cat = index.catalogue;
+const register = new Map(standardsDoc.standards.map((s) => [s.id, s]));
+if (register.size !== standardsDoc.standards.length) E('L1 standards.yaml: duplicate id');
+
+// L3
+const enumOf = (def) => schema.$defs[def].enum;
+for (const [key, def] of [['level', 'level'], ['origin', 'origin'], ['status', 'status'], ['runtimes', 'runtime'], ['verification', 'verificationKind'], ['depth', 'depth']]) {
+  if (JSON.stringify(cat.vocabulary[key]) !== JSON.stringify(enumOf(def))) E(`L3 index.yaml: vocabulary ${key} differs from the schema`);
+}
+
+// open-decision ids: the rows of docs/open-decisions.md
+const decisionIds = new Set(
+  [...readFileSync(join(root, 'docs', 'open-decisions.md'), 'utf8').matchAll(/^\|\s*(?:<a id="od-\d+"><\/a>)?\s*(OD-\d+)\s*\|/gm)].map((m) => m[1]),
+);
+if (decisionIds.size === 0) E('OD docs/open-decisions.md: no decision rows found; an empty registry proves nothing');
+
+// L2
+const reqs = [];
+const byId = new Map();
+const declared = new Set(Object.values(cat.areas).map((a) => a.file));
+for (const [code, a] of Object.entries(cat.areas)) {
+  if (a.file !== `${code.toLowerCase()}.yaml`) E(`L2 area ${code}: its file must be ${code.toLowerCase()}.yaml`);
+  const doc = files.get(a.file);
+  if (!doc) E(`L2 area ${code}: file ${a.file} is missing`);
+  else if (doc.area !== code) E(`L2 ${a.file}: area is ${doc.area}, expected ${code}`);
+}
+for (const [name, doc] of files) {
+  if (name === 'index.yaml') continue;
+  if (!declared.has(name)) E(`L2 ${name}: not declared in index.yaml`);
+  for (const r of doc.requirements) {
+    if (r.area !== doc.area) E(`L2 ${r.id}: area ${r.area} differs from its file (${doc.area})`);
+    if (r.id.split('-')[1] !== r.area) E(`L2 ${r.id}: the id prefix does not equal the area ${r.area}`);
+    if (byId.has(r.id)) E(`L2 ${r.id}: duplicate id`);
+    byId.set(r.id, r);
+    reqs.push(r);
+  }
+}
+
+// ---- per-record rules
+const KW = /\b(MUST NOT|MUST|SHOULD NOT|SHOULD|MAY)\b/g;
+const strings = (v, out = []) => {
+  if (typeof v === 'string') out.push(v);
+  else if (Array.isArray(v)) v.forEach((x) => strings(x, out));
+  else if (v && typeof v === 'object') Object.values(v).forEach((x) => strings(x, out));
+  return out;
+};
+const seen = new Map();
+const cited = new Map();
+for (const r of reqs) {
+  const i = r.id;
+  const ks = r.statement.match(KW) ?? [];
+  if (ks.length !== 1) E(`L6 ${i}: the statement has ${ks.length} RFC 2119 keywords, expected exactly one`);
+  else {
+    const cls = ks[0].startsWith('MUST') ? 'MUST' : ks[0].startsWith('SHOULD') ? 'SHOULD' : 'MAY';
+    if (cls !== r.level) E(`L6 ${i}: level ${r.level} does not match the keyword ${ks[0]}`);
+  }
+  if (/\.\s+[A-Z]/.test(r.statement)) E(`L6 ${i}: the statement is more than one sentence`);
+  if (/\.\s+[A-Z]/.test(r.rationale)) E(`L7 ${i}: the rationale is more than one sentence`);
+  const norm = r.statement.toLowerCase().replace(/\W+/g, ' ');
+  if (seen.has(norm)) E(`L8 ${i}: the same statement as ${seen.get(norm)}`);
+  seen.set(norm, i);
+
+  if (r.split_from) {
+    const parent = byId.get(r.split_from);
+    if (!parent) E(`L5 ${i}: split_from ${r.split_from} does not exist`);
+    else {
+      if (parent.split_from) E(`L5 ${i}: split_from ${r.split_from} is itself a split clause`);
+      if (parent.area !== r.area) E(`L5 ${i}: split_from ${r.split_from} is in another area`);
+    }
+  }
+
+  // L10
+  // The free text of a record; ids, enums and standard references are not prose.
+  for (const text of [r.statement, r.rationale, r.manual_reason ?? '', ...r.verification.map((v) => v.ref)]) {
+    for (const [rx, what] of DENY) if (rx.test(text)) E(`L10 ${i}: ${what} in ${JSON.stringify(text.slice(0, 60))}`);
+    if (URLISH.test(text)) E(`L10 ${i}: a URL that is not under .example`);
+    for (const m of text.matchAll(TICKET)) if (!NOT_TICKET.has(m[1])) E(`L10 ${i}: ticket-key shaped text ${m[0]}`);
+  }
+
+  const ver = r.verification;
+  const live = r.status !== 'withdrawn';
+  if (r.level === 'MUST' && live && ver.length === 0) E(`L11 ${i}: a MUST without a verification`);
+  const manualOnly = ver.length > 0 && ver.every((v) => v.kind === 'manual');
+  if (r.level === 'MUST' && manualOnly && !r.manual_reason) E(`L12 ${i}: a MUST verified by manual review only needs manual_reason`);
+  if (r.manual_reason && !manualOnly) E(`L12 ${i}: manual_reason is set but the record has an automated verification`);
+
+  for (const s of r.standards) {
+    (cited.get(s.id) ?? cited.set(s.id, []).get(s.id)).push(i);
+    if (!register.has(s.id)) E(`L13 ${i}: standard ${s.id} is not a row of standards.yaml`);
+    if (s.depth === 'Full' && !s.section) W(`L13 ${i}: standard ${s.id} has depth Full but no section`);
+  }
+  if (r.status === 'planned' && r.features.length === 0) E(`L14 ${i}: a planned record needs a feature number, parity or design`);
+  for (const d of r.decisions ?? []) if (!decisionIds.has(d)) E(`OD ${i}: ${d} is not a row of docs/open-decisions.md`);
+  if ((r.status === 'open' || r.status === 'partial') && !(r.decisions?.length) && !r.gap) E(`L15 ${i}: an ${r.status} record needs a decision id or a gap key`);
+  if (r.gap) {
+    if (!(r.gap in cat.gaps)) E(`L15 ${i}: gap key ${r.gap} is not declared in index.yaml`);
+    if (r.status !== 'open' && r.status !== 'partial') E(`L15 ${i}: gap is set on a ${r.status} record`);
+  }
+  if (r.status === 'out-of-scope') {
+    if (!(r.level === 'MAY' || r.statement.includes('MUST NOT'))) E(`L17 ${i}: an out-of-scope record must be a MUST NOT or a MAY`);
+    if (ver.length === 0) E(`L17 ${i}: an out-of-scope record needs a verification`);
+  }
+  if (r.status === 'withdrawn' && !r.superseded_by?.length) E(`L4 ${i}: a withdrawn record needs superseded_by`);
+  for (const s of r.superseded_by ?? []) if (!byId.has(s)) E(`L4 ${i}: superseded_by ${s} does not exist`);
+  if (r.superseded_by && r.status !== 'withdrawn') E(`L4 ${i}: superseded_by is set on a ${r.status} record`);
+}
+
+// the index and the register carry text too
+for (const [where, doc] of [['index.yaml', index], ['standards.yaml', standardsDoc]]) {
+  for (const text of strings(where === 'index.yaml' ? doc : standardsDoc.standards.map((s) => [s.id, s.name, s.group]))) {
+    for (const [rx, what] of DENY) if (rx.test(text)) E(`L10 ${where}: ${what} in ${JSON.stringify(text.slice(0, 60))}`);
+    if (where === 'index.yaml' && URLISH.test(text)) E(`L10 ${where}: a URL that is not under .example`);
+  }
+}
+
+// L16
+for (const s of standardsDoc.standards) {
+  if (!cited.has(s.id) && s.register) W(`L16 standard ${s.id} (${s.name}) is a register row that no requirement cites`);
+}
+
+finish(reqs.length);
+
+function finish(n) {
+  for (const m of warnings) console.warn(`warning: ${m}`);
+  for (const m of errors) console.error(`error: ${m}`);
+  const rel = relative(root, dir);
+  if (errors.length || (strict && warnings.length)) {
+    console.error(`check-requirements: ${errors.length} errors, ${warnings.length} warnings in ${rel}`);
+    process.exit(1);
+  }
+  if (n === 0) {
+    console.error('check-requirements: no requirement was checked; an empty sweep proves nothing');
+    process.exit(1);
+  }
+  console.log(`check-requirements: ${n} requirements in ${files.size - 1} areas, ${warnings.length} warnings, no errors`);
+  process.exit(0);
+}

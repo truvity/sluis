@@ -1,0 +1,1032 @@
+# REG: Registration, recovery and lifecycle (open scope)
+schema: 1
+area: REG
+requirements:
+  - id: REQ-REG-001
+    area: REG
+    statement: "Registration MUST be reachable by a link from the identifier page."
+    rationale: "Any sign-in can lead to registration."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-28, section: "3.1.2.1", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "identifier page link test"}
+  - id: REQ-REG-002
+    area: REG
+    statement: "Registration MUST be reachable directly by prompt=create, including through a pushed authorization request."
+    rationale: "Any relying party can start registration."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-28, section: "3.1.2.1", depth: Partial}
+      - {id: ST-16, section: "2", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "prompt=create PAR test"}
+  - id: REQ-REG-003
+    area: REG
+    statement: "Registration MUST complete the steps e-mail address, one-time code, display profile, terms acceptance, passkey creation and recovery codes, in this order."
+    rationale: "The account gets a factor and a recovery path before any code is issued."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-59, section: "7", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "registration order test"}
+  - id: REQ-REG-004
+    area: REG
+    statement: "The account MUST become live only when registration completes."
+    rationale: "A half-registered account must not reach a product."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-28, section: "5", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "state after completion test"}
+  - id: REQ-REG-005
+    area: REG
+    statement: "Discovery MUST list create in prompt_values_supported."
+    rationale: "Relying parties learn from discovery that they can start registration."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-29, section: "3", depth: Partial}
+      - {id: ST-104, section: "test plan", depth: Full}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: conformance-suite, ref: "OIDF Config OP"}
+  - id: REQ-REG-006
+    area: REG
+    statement: "No authorization code MUST be issued until the account has a verified e-mail address, a passkey, an acknowledged set of recovery codes and accepted terms."
+    rationale: "A half-registered account must not reach a product."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-28, section: "3.1.2.1", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "abandoned registration test"}
+  - id: REQ-REG-007
+    area: REG
+    statement: "Abandoning registration at any step MUST leave the account pending."
+    rationale: "Only a complete registration makes an account live."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-28, section: "5", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "abandon-at-each-step test"}
+  - id: REQ-REG-008
+    area: REG
+    statement: "The session of a completed registration MUST have the configured registration assurance level, by default the lowest."
+    rationale: "Registration proves little beyond the new factor."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: NC-01, section: "8176", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "registration level test"}
+  - id: REQ-REG-009
+    area: REG
+    statement: "Registration mail MUST be sent asynchronously."
+    rationale: "Synchronous mail would make the response time depend on the account."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: NC-14, section: "SPF DKIM DMARC", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "response timing test"}
+  - id: REQ-REG-010
+    area: REG
+    statement: "The owner of an existing account MUST receive an already-registered notice in place of a code."
+    rationale: "Registration must not become an oracle for who is a customer."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: NC-14, section: "SPF DKIM DMARC", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "mail sink content test"}
+  - id: REQ-REG-011
+    area: REG
+    statement: "An e-mail verification code MUST be six digits from a cryptographic random source."
+    rationale: "A random code cannot be predicted."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-90, section: "A", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "code format and entropy test"}
+  - id: REQ-REG-012
+    area: REG
+    statement: "An e-mail verification code MUST be single use."
+    rationale: "A replayed code must not verify."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-14, section: "4", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "code reuse test"}
+  - id: REQ-REG-013
+    area: REG
+    statement: "An e-mail verification code MUST be valid for at most 10 minutes."
+    rationale: "A short life limits guessing."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-14, section: "4", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "code expiry test"}
+  - id: REQ-REG-014
+    area: REG
+    statement: "An e-mail verification code MUST allow at most 5 attempts."
+    rationale: "Attempts must be bounded to resist guessing."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-14, section: "4", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "attempt limit test"}
+  - id: REQ-REG-015
+    area: REG
+    statement: "At most 5 e-mail verification codes MUST be issued per address per hour."
+    rationale: "Bounded issuance limits mail abuse."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-14, section: "4", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "issuance limit test"}
+  - id: REQ-REG-016
+    area: REG
+    statement: "Only a keyed hash of an e-mail verification code MUST be stored."
+    rationale: "A stolen store must not reveal live codes."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: NC-06, section: "2104", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "code storage scan"}
+  - id: REQ-REG-017
+    area: REG
+    statement: "The account MUST record the verification time of its e-mail address when the code is verified."
+    rationale: "E-mail is the contact and notice channel, so its ownership must be proven."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-28, section: "5.1", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "verified claim after registration test"}
+  - id: REQ-REG-018
+    area: REG
+    statement: "Registration MUST record the accepted terms version and time on the account."
+    rationale: "The controller must prove consent to its terms."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-28, section: "5", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "terms record test"}
+  - id: REQ-REG-019
+    area: REG
+    statement: "When the current terms version differs from the account's, the next interactive sign-in of a personal account MUST show the terms interstitial before a code is issued."
+    rationale: "A change of terms needs fresh consent."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-28, section: "3.1.2.4", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "terms version change test"}
+  - id: REQ-REG-020
+    area: REG
+    statement: "A corporate account MUST NOT be shown the terms page."
+    rationale: "The organisation's contract covers corporate accounts."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-28, section: "3.1.2.4", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "corporate sign-in test"}
+  - id: REQ-REG-021
+    area: REG
+    statement: "A terms acceptance MUST be sent to the control plane as an event that names the account reference."
+    rationale: "The control plane needs the record without the internal identifier."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-97, section: "1", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "outbox event test"}
+  - id: REQ-REG-022
+    area: REG
+    statement: "A personal account MUST receive recovery codes right after its first passkey."
+    rationale: "Passkey-only accounts need self-service recovery."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-59, section: "1", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "recovery code issuance test"}
+  - id: REQ-REG-023
+    area: REG
+    statement: "A recovery code MUST carry 80 bits of entropy."
+    rationale: "The code must resist offline and online guessing."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-90, section: "A", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: test-vectors, ref: "recovery code vector"}
+      - {kind: integration-test, ref: "entropy test"}
+  - id: REQ-REG-024
+    area: REG
+    statement: "Recovery codes MUST be shown only once."
+    rationale: "A code shown again would have to be stored in clear."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-59, section: "1", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "single display test"}
+  - id: REQ-REG-025
+    area: REG
+    statement: "The person MUST confirm that the recovery codes are saved before registration continues."
+    rationale: "An unconfirmed code set is a false recovery path."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-59, section: "1", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "confirmation gate test"}
+  - id: REQ-REG-026
+    area: REG
+    statement: "A typed recovery code MUST be canonicalised before hashing: uppercase, spaces and hyphens removed, I and L read as 1, O read as 0."
+    rationale: "Typing errors must not lock out a person."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: NC-06, section: "2104", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: test-vectors, ref: "recovery code canonicalisation vectors"}
+  - id: REQ-REG-027
+    area: REG
+    statement: "A recovery code MUST verify only once."
+    rationale: "A used code must not work again."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-59, section: "1", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "code reuse test"}
+  - id: REQ-REG-028
+    area: REG
+    statement: "Regenerating recovery codes MUST invalidate all old codes."
+    rationale: "A leaked old set must stop working."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-59, section: "1", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "regeneration test"}
+  - id: REQ-REG-029
+    area: REG
+    statement: "The mail module MUST send verification codes, notices and recovery messages."
+    rationale: "Registration, notices and recovery depend on mail."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: NC-14, section: "SPF DKIM DMARC", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "code delivery to sink test"}
+  - id: REQ-REG-030
+    area: REG
+    statement: "The mail module MUST provide templates for every configured locale."
+    rationale: "Messages must reach people in their language."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: NC-04, section: "WCAG 2.1", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "locale template coverage test"}
+  - id: REQ-REG-031
+    area: REG
+    statement: "The mail module MUST send through an outbox with retries."
+    rationale: "A transient failure must not lose a message."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: NC-14, section: "SPF DKIM DMARC", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "mail transport failure test"}
+  - id: REQ-REG-032
+    area: REG
+    statement: "The mail module MUST apply per-address and global abuse limits."
+    rationale: "Mail must not become an amplification channel."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: NC-14, section: "SPF DKIM DMARC", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "abuse limit test"}
+  - id: REQ-REG-033
+    area: REG
+    statement: "The mail module MUST sign messages with DKIM on the operator's domain in the production profile."
+    rationale: "Unsigned mail is distrusted or spoofed."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: NC-14, section: "DKIM", depth: Full}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "DKIM signature check"}
+  - id: REQ-REG-034
+    area: REG
+    statement: "The built-in mail sink MUST be refused at load in the production profile."
+    rationale: "A sink keeps messages readable by the test interface."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: NC-14, section: "SPF DKIM DMARC", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "production load refusal test"}
+  - id: REQ-REG-035
+    area: REG
+    statement: "A pending account and its pointer records MUST expire after a configured time to live, by default 72 hours."
+    rationale: "Abandoned registrations must not hold addresses forever."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-96, section: "2020-12", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "pending expiry test"}
+  - id: REQ-REG-036
+    area: REG
+    statement: "Completing registration MUST make the account permanent."
+    rationale: "A live account must not expire as a pending one."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-96, section: "2020-12", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "expiry removal test"}
+  - id: REQ-REG-037
+    area: REG
+    statement: "Registration and fallback sign-in MUST call a pluggable challenge port."
+    rationale: "Bot protection must be replaceable."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-14, section: "4", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "challenge enforcement test"}
+  - id: REQ-REG-038
+    area: REG
+    statement: "The none challenge adapter MUST be refused at load in the production profile."
+    rationale: "Production must not run without bot protection."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-14, section: "4", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "production load refusal test"}
+  - id: REQ-REG-039
+    area: REG
+    statement: "A verified recovery code MUST open a session that is restricted to passkey enrolment."
+    rationale: "A stolen code must not give access to a regulated entity."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-59, section: "1", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "restricted recovery session test"}
+  - id: REQ-REG-040
+    area: REG
+    statement: "A recovery session MUST NOT be able to obtain an authorization code."
+    rationale: "The session exists only to enrol a passkey."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-59, section: "1", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "recovery session code refusal test"}
+  - id: REQ-REG-041
+    area: REG
+    statement: "Every recovery MUST start a cool-down of a configured length, by default 72 hours."
+    rationale: "Recovery is the main takeover path."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-59, section: "1", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "cool-down start test"}
+  - id: REQ-REG-042
+    area: REG
+    statement: "During a cool-down a signed cancel link MUST be sent by e-mail and shown on the account page."
+    rationale: "The real owner must be able to stop a takeover."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-59, section: "1", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "cancel link test"}
+  - id: REQ-REG-043
+    area: REG
+    statement: "During a cool-down any old authenticator MUST be able to cancel the recovery."
+    rationale: "The old factors still belong to the real owner."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-59, section: "1", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "cancel by old authenticator test"}
+  - id: REQ-REG-044
+    area: REG
+    statement: "During a cool-down tokens MUST carry a cool-down marker."
+    rationale: "Relying parties can then apply their own caution."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-52, section: "4", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "cool-down marker test"}
+  - id: REQ-REG-045
+    area: REG
+    statement: "During a cool-down the assurance level MUST be capped at the configured cap."
+    rationale: "A fresh recovery must not open regulated contexts."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: NC-01, section: "8176", depth: Partial}
+      - {id: ST-28, section: "3.1.2.1", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "acr under cool-down test"}
+  - id: REQ-REG-046
+    area: REG
+    statement: "Where shared signals are deployed, a recovery MUST emit a recovery-activated signal to contexts."
+    rationale: "Contexts can then react to the risk."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-26, section: "CAEP", depth: Partial}
+      - {id: NC-03, section: "8417", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "recovery signal test"}
+  - id: REQ-REG-047
+    area: REG
+    statement: "Recovery without codes MUST be an enrolment action that the control plane issues after identity is re-verified outside sluis."
+    rationale: "No single insider may be able to take over an account."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-59, section: "1", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: manual, ref: "process review"}
+      - {kind: integration-test, ref: "action issuance test"}
+  - id: REQ-REG-048
+    area: REG
+    statement: "The accounts module MUST execute an enrolment action for recovery only with a dual-signed intent."
+    rationale: "Two people must agree."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-49, section: "7", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "single-signature refusal test"}
+  - id: REQ-REG-049
+    area: REG
+    statement: "A recovery enrolment action MUST revoke all sessions and old factors, including the vault password and one-time password."
+    rationale: "The old factors may be in the attacker's hands."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-59, section: "1", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "factor revocation test"}
+  - id: REQ-REG-050
+    area: REG
+    statement: "The vault provider's own password reset MUST be disabled."
+    rationale: "Mailbox control must not equal account control."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-59, section: "1", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "vault reset disabled test"}
+  - id: REQ-REG-051
+    area: REG
+    statement: "A relying-party access token, an exchanged token or an administrative intent MUST NOT add, change or remove a factor."
+    rationale: "A token leak must never become a persistent takeover."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-14, section: "4", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "bearer-token mutation scan"}
+  - id: REQ-REG-052
+    area: REG
+    statement: "A factor change MUST need a fresh own factor from the person on the account host."
+    rationale: "The person, not a token, authorises the change."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-59, section: "1", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "factor change authorisation test"}
+  - id: REQ-REG-053
+    area: REG
+    statement: "An e-mail change MUST require a fresh own factor at the second assurance level."
+    rationale: "Changing the contact channel is a takeover step."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: NC-01, section: "8176", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "e-mail change authorisation test"}
+  - id: REQ-REG-054
+    area: REG
+    statement: "The new address of an e-mail change MUST be verified by code."
+    rationale: "The new mailbox must be proven."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-28, section: "5.1", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "new address verification test"}
+  - id: REQ-REG-055
+    area: REG
+    statement: "An e-mail change MUST NOT change any relying-party subject."
+    rationale: "Subjects are derived from the account identifier, not the address."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-28, section: "8.1", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "subject unchanged after e-mail change test"}
+  - id: REQ-REG-056
+    area: REG
+    statement: "Lifecycle rules MUST live in a policy table."
+    rationale: "Operators must be able to review the lifecycle."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-96, section: "2020-12", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "lifecycle policy load test"}
+  - id: REQ-REG-057
+    area: REG
+    statement: "A corporate account MUST be disabled when its connection is removed or after an idle period, and deleted after retention."
+    rationale: "An orphaned corporate account is a standing credential."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-96, section: "2020-12", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "corporate lifecycle test"}
+  - id: REQ-REG-058
+    area: REG
+    statement: "A personal account MUST be deleted after an idle period, with prior notice."
+    rationale: "Unused accounts should not be kept forever."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-96, section: "2020-12", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "idle deletion notice test"}
+  - id: REQ-REG-059
+    area: REG
+    statement: "Data-subject export and deletion MUST be supported."
+    rationale: "The person's rights must be exercisable."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-96, section: "2020-12", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "export and deletion test"}
+  - id: REQ-REG-060
+    area: REG
+    statement: "Account deletion MUST run in the order hub sign-out, entity response window, hub delete, context disable with grant revocation, vault delete."
+    rationale: "Each step depends on the one before."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-31, section: "2.4", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "deletion saga order test"}
+  - id: REQ-REG-061
+    area: REG
+    statement: "The deletion saga MUST be idempotent under replay and leave no pointer records."
+    rationale: "A crashed deletion must be safely retried."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-96, section: "2020-12", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "saga replay test"}
+  - id: REQ-REG-062
+    area: REG
+    statement: "Organisation events MUST NOT delete people."
+    rationale: "An organisation's decision must not erase a person's personal account."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-96, section: "2020-12", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "organisation event test"}
+  - id: REQ-REG-063
+    area: REG
+    statement: "A cohort import MUST create each account live and personal, idempotently per record."
+    rationale: "A re-run must not create duplicates."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-96, section: "2020-12", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "re-run import test"}
+  - id: REQ-REG-064
+    area: REG
+    statement: "A cohort import MUST NOT merge accounts by e-mail address."
+    rationale: "Merging by address would join two people."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-28, section: "5.7", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "conflicting address test"}
+  - id: REQ-REG-065
+    area: REG
+    statement: "Password hashes MUST NOT transit sluis during a cohort import."
+    rationale: "Offline-guessable verifiers must not pass through the platform."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-96, section: "2020-12", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "import payload scan"}
+  - id: REQ-REG-066
+    area: REG
+    statement: "A cohort import MUST create a vault user with the pseudonym only."
+    rationale: "The vault must stay blind."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: NC-06, section: "2104", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "import vault record test"}
+  - id: REQ-REG-067
+    area: REG
+    statement: "Imported password hashes MUST be loaded into the vault by its configuration pipeline under a journaled dual-signed migration intent."
+    rationale: "The load is a vault mutation like any other."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-49, section: "7", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "import pipeline journal test"}
+  - id: REQ-REG-068
+    area: REG
+    statement: "The accounts module MUST confirm each imported vault user by inventory: exactly one password and no one-time password."
+    rationale: "The inventory proves that the import did what was approved."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-96, section: "2020-12", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "inventory confirmation test"}
+  - id: REQ-REG-069
+    area: REG
+    statement: "The first sign-in of a migrated account MUST run e-mail code, terms, passkey and recovery codes in that order."
+    rationale: "The migrated account gets the same protection as a new one."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-59, section: "7", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "migrant first sign-in test"}
+  - id: REQ-REG-070
+    area: REG
+    statement: "The e-mail-first path of a migrated account MUST close once the account has a passkey."
+    rationale: "Otherwise it would be a reset by e-mail."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-59, section: "1", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "path closure test"}
+  - id: REQ-REG-071
+    area: REG
+    statement: "An imported password MUST become usable as a fallback only after one-time-password enrolment through a ticket."
+    rationale: "A password alone is a single factor and gives no evidence."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: NC-01, section: "8176", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "imported password gate test"}
+  - id: REQ-REG-072
+    area: REG
+    statement: "A person MUST be able to regenerate recovery codes after a fresh own factor, with a notice."
+    rationale: "Codes need replacing after use or loss."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-59, section: "1", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "regeneration authorisation and notice test"}
+  - id: REQ-REG-073
+    area: REG
+    statement: "Recovery codes MUST NOT be offered as a fallback sign-in."
+    rationale: "A recovery code is a recovery path, not a sign-in factor."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-59, section: "1", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "fallback sign-in code refusal test"}

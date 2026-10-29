@@ -1,0 +1,490 @@
+# TOKEN: Tokens and token endpoint
+schema: 1
+area: TOKEN
+requirements:
+  - id: REQ-TOKEN-001
+    area: TOKEN
+    statement: "An access token issued as a JWT MUST carry the media type at+jwt in its header."
+    rationale: "A typed access token cannot be confused with an ID token."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-13, section: "2.1", depth: Full}
+      - {id: ST-52, section: "4", depth: Full}
+      - {id: ST-49, section: "4", depth: Full}
+    features: ["#776"]
+    verification:
+      - {kind: test-vectors, ref: "own at+jwt claim vectors"}
+  - id: REQ-TOKEN-017
+    area: TOKEN
+    split_from: REQ-TOKEN-001
+    statement: "An access token issued as a JWT MUST carry a kid in its header."
+    rationale: "Verifiers select the key by kid."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-13, section: "2.1", depth: Full}
+      - {id: ST-52, section: "4", depth: Full}
+      - {id: ST-49, section: "4", depth: Full}
+    features: ["#776"]
+    verification:
+      - {kind: test-vectors, ref: "JOSE vectors"}
+  - id: REQ-TOKEN-018
+    area: TOKEN
+    split_from: REQ-TOKEN-001
+    statement: "An access token issued as a JWT MUST carry the claims iss, sub, aud, exp, iat and jti."
+    rationale: "A typed access token cannot be confused with an ID token."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-13, section: "2.1", depth: Full}
+      - {id: ST-52, section: "4", depth: Full}
+      - {id: ST-49, section: "4", depth: Full}
+    features: ["#776"]
+    verification:
+      - {kind: test-vectors, ref: "own at+jwt claim vectors"}
+  - id: REQ-TOKEN-002
+    area: TOKEN
+    statement: "sluis MUST sign tokens with the algorithm configured for the audience."
+    rationale: "Verifiers need a stable key set and a default that every driver supports."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-51, section: "3", depth: Partial}
+      - {id: ST-50, section: "5", depth: Full}
+      - {id: ST-53, section: "3", depth: Full}
+      - {id: ST-104, section: "test plan", depth: Full}
+      - {id: ST-106, section: "test plan", depth: Full}
+    features: ["#774", "#788", "#800"]
+    decisions: ["OD-15"]
+    verification:
+      - {kind: test-vectors, ref: "Wycheproof ECDSA"}
+      - {kind: conformance-suite, ref: "OIDF Config OP"}
+  - id: REQ-TOKEN-019
+    area: TOKEN
+    split_from: REQ-TOKEN-002
+    statement: "Token signing MUST default to ES384 when no algorithm is configured for the audience."
+    rationale: "One curve that every driver supports keeps the default simple."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-51, section: "3", depth: Partial}
+      - {id: ST-50, section: "5", depth: Full}
+      - {id: ST-53, section: "3", depth: Full}
+      - {id: ST-106, section: "test plan", depth: Full}
+    features: ["#774", "#788", "#800"]
+    decisions: ["OD-15"]
+    verification:
+      - {kind: test-vectors, ref: "Wycheproof ECDSA"}
+  - id: REQ-TOKEN-020
+    area: TOKEN
+    split_from: REQ-TOKEN-002
+    statement: "sluis MUST publish every active and next key in the key set with a kid."
+    rationale: "Verifiers need a stable key set and a default that every driver supports."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-51, section: "3", depth: Partial}
+      - {id: ST-50, section: "5", depth: Full}
+      - {id: ST-53, section: "3", depth: Full}
+      - {id: ST-104, section: "test plan", depth: Full}
+    features: ["#774", "#788", "#800"]
+    decisions: ["OD-15"]
+    verification:
+      - {kind: test-vectors, ref: "RFC 7517 appendix"}
+      - {kind: conformance-suite, ref: "OIDF Config OP"}
+  - id: REQ-TOKEN-003
+    area: TOKEN
+    statement: "An access token MUST name exactly one audience."
+    rationale: "A single-audience token cannot be replayed at another resource."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-52, section: "4.1.3", depth: Full}
+      - {id: ST-56, section: "3.3", depth: Full}
+    features: ["#776", "#791"]
+    verification:
+      - {kind: integration-test, ref: "property test over all grants"}
+  - id: REQ-TOKEN-004
+    area: TOKEN
+    statement: "A resource indicator MUST NOT appear in the audience of an ID token."
+    rationale: "The ID token audience is the client; leaking the resource confuses verifiers."
+    level: MUST
+    origin: security-review
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-28, section: "2", depth: Full}
+      - {id: ST-08, section: "2", depth: Full}
+    features: ["#776", "#791"]
+    verification:
+      - {kind: integration-test, ref: "negative test"}
+  - id: REQ-TOKEN-005
+    area: TOKEN
+    statement: "sluis MUST issue an access token for a specific resource only when the request names it with the resource parameter."
+    rationale: "Audience restriction depends on the client naming the target."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-08, section: "2", depth: Full}
+    features: ["#791"]
+    verification:
+      - {kind: integration-test, ref: "resource matrix across code and refresh grants"}
+  - id: REQ-TOKEN-021
+    area: TOKEN
+    split_from: REQ-TOKEN-005
+    statement: "A request for an unknown or unlisted resource MUST fail with invalid_target."
+    rationale: "Audience restriction depends on the client naming the target."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-08, section: "2", depth: Full}
+    features: ["#791"]
+    verification:
+      - {kind: integration-test, ref: "invalid_target negative test"}
+  - id: REQ-TOKEN-006
+    area: TOKEN
+    statement: "Personal data such as names and e-mail addresses MUST be released only when the granted scopes request it."
+    rationale: "Minimal disclosure limits the impact of a leaked token."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-28, section: "5.4", depth: Full}
+      - {id: ST-56, section: "3.2", depth: Partial}
+    features: ["#776"]
+    verification:
+      - {kind: integration-test, ref: "claim-release matrix"}
+  - id: REQ-TOKEN-022
+    area: TOKEN
+    split_from: REQ-TOKEN-006
+    statement: "Personal data MUST NOT appear in access tokens issued for another resource."
+    rationale: "Minimal disclosure limits the impact of a leaked token."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-28, section: "5.4", depth: Full}
+      - {id: ST-56, section: "3.2", depth: Partial}
+    features: ["#776"]
+    verification:
+      - {kind: integration-test, ref: "cross-resource token scan"}
+  - id: REQ-TOKEN-007
+    area: TOKEN
+    statement: "A deployment MAY configure access tokens for people to omit client_id and carry azp instead."
+    rationale: "Some integrators separate person tokens from machine tokens by claim presence."
+    level: MAY
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-13, section: "2.2", depth: Partial}
+      - {id: ST-52, section: "4", depth: Full}
+    features: ["#776"]
+    gap: stakeholder-only
+    verification:
+      - {kind: integration-test, ref: "configured-variant test"}
+  - id: REQ-TOKEN-023
+    area: TOKEN
+    split_from: REQ-TOKEN-007
+    statement: "The default access token format MUST conform to the JWT access token profile."
+    rationale: "A default that follows the profile keeps ordinary verifiers working."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-13, section: "2.2", depth: Partial}
+      - {id: ST-52, section: "4", depth: Full}
+    features: ["#776"]
+    gap: stakeholder-only
+    verification:
+      - {kind: integration-test, ref: "default-profile conformance test"}
+  - id: REQ-TOKEN-008
+    area: TOKEN
+    statement: "The userinfo endpoint MUST return only claims granted by scope for a token whose session is still live."
+    rationale: "A token must not outlive the sign-in it came from."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-28, section: "5.3", depth: Full}
+      - {id: ST-02, section: "3", depth: Full}
+      - {id: ST-104, section: "test plan", depth: Full}
+    features: ["#778", "#793"]
+    verification:
+      - {kind: conformance-suite, ref: "OIDF Basic OP userinfo modules"}
+  - id: REQ-TOKEN-024
+    area: TOKEN
+    split_from: REQ-TOKEN-008
+    statement: "The userinfo endpoint MUST answer 401 for a token whose session ended."
+    rationale: "A token must not outlive the sign-in it came from."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-28, section: "5.3", depth: Full}
+      - {id: ST-02, section: "3", depth: Full}
+    features: ["#778", "#793"]
+    verification:
+      - {kind: integration-test, ref: "post-logout test"}
+  - id: REQ-TOKEN-009
+    area: TOKEN
+    statement: "The revocation endpoint MUST accept a token together with a client authentication."
+    rationale: "A uniform answer does not reveal token existence."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-11, section: "2", depth: Full}
+    features: ["#778"]
+    verification:
+      - {kind: integration-test, ref: "revocation request test"}
+  - id: REQ-TOKEN-025
+    area: TOKEN
+    split_from: REQ-TOKEN-009
+    statement: "The revocation endpoint MUST end exactly the grant that a refresh token belongs to."
+    rationale: "Revoking one grant must not end the others."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-11, section: "2", depth: Full}
+    features: ["#778"]
+    verification:
+      - {kind: integration-test, ref: "grant-scope revocation test"}
+  - id: REQ-TOKEN-026
+    area: TOKEN
+    split_from: REQ-TOKEN-009
+    statement: "The revocation endpoint MUST answer 200 for an unknown token or a token of another client."
+    rationale: "A uniform answer does not reveal token existence."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-11, section: "2", depth: Full}
+    features: ["#778"]
+    verification:
+      - {kind: integration-test, ref: "uniform-answer test"}
+  - id: REQ-TOKEN-010
+    area: TOKEN
+    statement: "Token endpoint responses MUST be JSON."
+    rationale: "Tokens must never be cached."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-01, section: "5.1", depth: Full}
+      - {id: ST-104, section: "test plan", depth: Full}
+    features: ["#776"]
+    verification:
+      - {kind: conformance-suite, ref: "OIDF Basic OP"}
+  - id: REQ-TOKEN-027
+    area: TOKEN
+    split_from: REQ-TOKEN-010
+    statement: "Token endpoint responses MUST carry Cache-Control no-store."
+    rationale: "Tokens must never be cached."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-01, section: "5.1", depth: Full}
+    features: ["#776"]
+    verification:
+      - {kind: integration-test, ref: "header test"}
+  - id: REQ-TOKEN-028
+    area: TOKEN
+    split_from: REQ-TOKEN-010
+    statement: "A token endpoint error MUST be reported as an error code with status 400, or 401 for invalid_client."
+    rationale: "Clients branch on the status and the code."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-01, section: "5.1", depth: Full}
+      - {id: ST-104, section: "test plan", depth: Full}
+    features: ["#776"]
+    verification:
+      - {kind: conformance-suite, ref: "OIDF Basic OP"}
+      - {kind: integration-test, ref: "error status test"}
+  - id: REQ-TOKEN-011
+    area: TOKEN
+    statement: "sluis SHOULD bind access tokens to a client-held key with DPoP for clients of a sender-constrained profile."
+    rationale: "Sender-constrained tokens cannot be replayed by a thief."
+    level: SHOULD
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-18, section: "7", depth: Full}
+      - {id: ST-58, section: "3", depth: Full}
+    features: ["design"]
+    gap: stakeholder-only
+    verification:
+      - {kind: conformance-suite, ref: "FAPI2-SP (DPoP variant)"}
+      - {kind: integration-test, ref: "proof-replay tests"}
+  - id: REQ-TOKEN-029
+    area: TOKEN
+    split_from: REQ-TOKEN-011
+    statement: "A DPoP-bound access token SHOULD carry a cnf claim."
+    rationale: "The cnf claim lets a resource server check the binding."
+    level: SHOULD
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-18, section: "7", depth: Full}
+      - {id: ST-58, section: "3", depth: Full}
+    features: ["design"]
+    gap: stakeholder-only
+    verification:
+      - {kind: integration-test, ref: "cnf claim test"}
+  - id: REQ-TOKEN-012
+    area: TOKEN
+    statement: "A DPoP proof sent by a client of a profile that does not use DPoP MUST be refused with invalid_request."
+    rationale: "Silently issuing a bearer token to a client that asked for binding is a downgrade."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-18, section: "5", depth: Partial}
+    features: ["design"]
+    gap: stakeholder-only
+    verification:
+      - {kind: integration-test, ref: "negative test"}
+  - id: REQ-TOKEN-013
+    area: TOKEN
+    statement: "An ID token MUST carry iss, sub, aud equal to the client, exp and iat."
+    rationale: "The ID token is the proof of sign-in the client verifies."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-28, section: "2", depth: Full}
+      - {id: ST-52, section: "4", depth: Full}
+      - {id: ST-104, section: "test plan", depth: Full}
+    features: ["#776"]
+    verification:
+      - {kind: conformance-suite, ref: "OIDF Basic OP"}
+  - id: REQ-TOKEN-030
+    area: TOKEN
+    split_from: REQ-TOKEN-013
+    statement: "An ID token MUST carry nonce when the request supplied one."
+    rationale: "The nonce binds the token to the request."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-28, section: "2", depth: Full}
+      - {id: ST-52, section: "4", depth: Full}
+      - {id: ST-104, section: "test plan", depth: Full}
+    features: ["#776"]
+    verification:
+      - {kind: conformance-suite, ref: "OIDF Basic OP"}
+  - id: REQ-TOKEN-031
+    area: TOKEN
+    split_from: REQ-TOKEN-013
+    statement: "An ID token MUST carry auth_time when it was requested."
+    rationale: "The ID token is the proof of sign-in the client verifies."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-28, section: "2", depth: Full}
+      - {id: ST-52, section: "4", depth: Full}
+      - {id: ST-104, section: "test plan", depth: Full}
+    features: ["#776"]
+    verification:
+      - {kind: conformance-suite, ref: "OIDF Basic OP"}
+  - id: REQ-TOKEN-014
+    area: TOKEN
+    statement: "sluis MAY serve token introspection to explicitly permitted confidential clients, reporting active=false once the session has ended."
+    rationale: "Resource servers sometimes need liveness."
+    level: MAY
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-12, section: "2", depth: Full}
+    features: ["design"]
+    gap: stakeholder-only
+    verification:
+      - {kind: integration-test, ref: "introspection tests"}
+  - id: REQ-TOKEN-015
+    area: TOKEN
+    statement: "sluis MAY issue pairwise subject identifiers per sector, derived with a keyed hash that is never rotated, so that two sectors cannot correlate a person."
+    rationale: "Pairwise subjects prevent cross-service tracking."
+    level: MAY
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-28, section: "8.1", depth: Partial}
+      - {id: NC-06, section: "2104", depth: Full}
+      - {id: ST-104, section: "test plan", depth: Full}
+    features: ["design"]
+    gap: stakeholder-only
+    verification:
+      - {kind: test-vectors, ref: "own subject vectors"}
+      - {kind: conformance-suite, ref: "OIDF Basic OP with pairwise subject"}
+  - id: REQ-TOKEN-016
+    area: TOKEN
+    statement: "A subject identifier MUST be an opaque string."
+    rationale: "Reversible subjects leak the underlying identifier."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-28, section: "2", depth: Full}
+    features: ["design"]
+    gap: stakeholder-only
+    verification:
+      - {kind: integration-test, ref: "subject opacity test"}
+  - id: REQ-TOKEN-032
+    area: TOKEN
+    split_from: REQ-TOKEN-016
+    statement: "A subject identifier MUST NOT be derived with a reversible cipher."
+    rationale: "Reversible subjects leak the underlying identifier."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-28, section: "2", depth: Full}
+    features: ["design"]
+    gap: stakeholder-only
+    verification:
+      - {kind: integration-test, ref: "subject derivation review test"}

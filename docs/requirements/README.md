@@ -1,0 +1,77 @@
+# sluis requirements
+
+This directory is the source of truth for what sluis v2 must do. Each requirement is one clause with one
+[RFC 2119](https://www.rfc-editor.org/rfc/rfc2119) keyword and one testable behaviour. The files are YAML; the website
+generates its pages from them and test tools read the same data.
+
+| File | Content |
+|---|---|
+| `index.yaml` | The vocabularies, the areas, the gap keys and the glossary. The only place that declares them. |
+| `<area>.yaml` | The requirements of one area, named by the lower-case area code (`authn.yaml`). |
+| `standards.yaml` | The standards register as data: the ids (`ST-nn`, `NC-nn`) that records cite. |
+| `requirements.schema.json` | JSON Schema 2020-12 for `index.yaml` and every area file. Objects are closed. |
+
+## What the build makes from it
+
+- [sluis.id/requirements/](https://sluis.id/requirements/): counts, the areas, and one table of all records with a filter by area,
+  level, status, origin and runtime. The account-hosting areas (CIAM, ACCT, SUBJ, VAULT, REG) carry a "scope open" badge and can be hidden.
+- `/requirements/<area>/`: one page per area, with standards, features, decisions and verification for each record.
+- `/requirements/matrix/`: requirement to standard, feature and verification, and back.
+- `/requirements/coverage/`: statistics, MUST records without a conformance suite or test vectors, open records by decision,
+  and register rows that no requirement cites.
+- `/requirements.json`: every record flattened. Test tools in any language read this file and nothing else.
+
+`just site-lint` checks the files (`site/scripts/check-requirements.mjs`): the schema, one keyword per statement and a level that matches
+it, unique ids, a verification for every MUST, known standards and open decisions, and a scan for ticket keys and private names.
+
+## Ids
+
+An id is `REQ-<AREA>-<nnn>`, for example `REQ-AUTHN-002`.
+
+- It is stable and never reused. Ids are not renumbered when records are added, split or withdrawn, so a link or a test name keeps working.
+- The area prefix equals the `area` field and the file it sits in.
+- A longer record that is cut into clauses keeps its id for the first clause. Each further clause gets the next free id in the same area
+  and `split_from: <original id>`. Clauses sit next to their parent in the file, so ids are not always in order.
+- Records are not merged. A record that no longer applies gets `status: withdrawn` and `superseded_by: [ids]`.
+
+## Record fields
+
+| Field | Rule |
+|---|---|
+| `statement` | One sentence ending in a period with exactly one of MUST, MUST NOT, SHOULD, SHOULD NOT, MAY. Names a role (sluis, an operator, a relying party), never a person or a company. |
+| `rationale` | One sentence ending in a period. |
+| `level` | MUST, SHOULD or MAY; equals the class of the keyword (MUST NOT counts as MUST). |
+| `origin` | A category: `v1-parity`, `stakeholder-ciam`, `stakeholder-integrator`, `security-review`, `design-decision`, `standard`. |
+| `status` | `planned` (an agreed feature or design covers it), `partial` (the plan is weaker), `open` (needs a decision or has no plan), `out-of-scope` (a boundary kept as a refusal), `withdrawn`. |
+| `runtimes` | `all`, or a list of `bare-metal`, `serverless`, `kubernetes`. |
+| `standards` | `{id, section, depth}`: an id from `standards.yaml`, the section, and `Full` or `Partial`. |
+| `features` | `#nnn` issue numbers, `parity` (no single issue) or `design` (specified, no issue yet). |
+| `decisions` | Open-decision ids `OD-nn`, rows of [open decisions](../open-decisions.md). |
+| `verification` | `{kind, ref}`; `kind` is `conformance-suite`, `test-vectors`, `integration-test` or `manual`. Every MUST needs at least one. |
+| `gap` | For an `open` or `partial` record that names no decision: a key of `gaps` in `index.yaml`. |
+| `manual_reason` | Required for a MUST verified by manual review only; forbidden otherwise. |
+| `superseded_by` | Required when `status` is `withdrawn`. |
+
+## How a test names a requirement
+
+A test case that proves a requirement carries its id in its name, and a table-driven test adds the case after a slash:
+
+```go
+t.Run("REQ-AUTHN-002/plain_method", func(t *testing.T) { /* send code_challenge_method=plain, expect invalid_request */ })
+```
+
+Because a record is one clause, one record is one test or one small table of cases. A tool that joins tests to requirements reads
+`/requirements.json`, selects records by `verification[].kind`, and reports the ids that a test names and the catalogue lacks (an error)
+and the `planned` MUST records that no test names (a gap).
+
+## Adding a requirement
+
+1. Pick the area and the next free number in it. Never reuse an id, not even of a withdrawn record.
+2. Write one clause: one keyword, one behaviour, one sentence. If you want to write "and" between two behaviours, write two records.
+3. Fill the traceability: the standards it implements (`section` when `depth` is `Full`), the features that deliver it (`design` when none yet),
+   and how it is verified. A MUST needs a verification.
+4. Set the status honestly. An `open` or `partial` record names the open decision it waits for, or a `gap` key.
+5. Keep it public. No names of people or companies, no tickets, no addresses, no mention of any private infrastructure; the lint scans for them.
+6. Run `just site-lint`, then `just site-check`. The pages and `requirements.json` are generated, never committed.
+
+To add an area, declare it in `index.yaml` (`areas`), create `<area>.yaml` with `schema: 1`, `area` and `requirements`, and keep the file name equal to the lower-case code.

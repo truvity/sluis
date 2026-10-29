@@ -1,0 +1,326 @@
+# CLIENT: Clients and client authentication
+schema: 1
+area: CLIENT
+requirements:
+  - id: REQ-CLIENT-001
+    area: CLIENT
+    statement: "A public client that presents a client secret MUST be refused with invalid_client."
+    rationale: "A secret in a public client is a configuration error that must be visible."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-01, section: "2.3", depth: Full}
+    features: ["#789"]
+    verification:
+      - {kind: integration-test, ref: "negative test"}
+  - id: REQ-CLIENT-002
+    area: CLIENT
+    statement: "A confidential client MUST authenticate with its registered method, form-URL-decoded where the method is basic authentication."
+    rationale: "Secrets with reserved characters must work."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-01, section: "2.3.1", depth: Full}
+      - {id: ST-104, section: "test plan", depth: Full}
+    features: ["#789", "#790"]
+    verification:
+      - {kind: conformance-suite, ref: "OIDF Basic OP"}
+      - {kind: integration-test, ref: "special-character secrets"}
+  - id: REQ-CLIENT-003
+    area: CLIENT
+    statement: "Generated client secrets MUST come from a cryptographic random source."
+    rationale: "Predictable or leaked secrets defeat client authentication."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-01, section: "2.3", depth: Full}
+      - {id: ST-90, section: "A", depth: Partial}
+    features: ["#790"]
+    manual_reason: "The quality of a random source is established by code review of the generator, not by a black-box test."
+    verification:
+      - {kind: manual, ref: "entropy review"}
+  - id: REQ-CLIENT-015
+    area: CLIENT
+    split_from: REQ-CLIENT-003
+    statement: "Client secrets MUST be compared in constant time."
+    rationale: "Predictable or leaked secrets defeat client authentication."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-01, section: "2.3", depth: Full}
+      - {id: ST-90, section: "A", depth: Partial}
+    features: ["#790"]
+    verification:
+      - {kind: integration-test, ref: "comparison timing test"}
+  - id: REQ-CLIENT-016
+    area: CLIENT
+    split_from: REQ-CLIENT-003
+    statement: "A client secret MUST be replaceable with an overlap window in which the old and the new secret both authenticate."
+    rationale: "Rotation without an overlap forces a coordinated outage."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-01, section: "2.3", depth: Full}
+      - {id: ST-90, section: "A", depth: Partial}
+    features: ["#790"]
+    verification:
+      - {kind: integration-test, ref: "overlap window test"}
+  - id: REQ-CLIENT-004
+    area: CLIENT
+    statement: "sluis SHOULD support private_key_jwt client authentication."
+    rationale: "Asymmetric client authentication removes shared secrets."
+    level: SHOULD
+    origin: stakeholder-ciam
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-20, section: "7523 2.2", depth: Full}
+      - {id: ST-28, section: "9", depth: Full}
+    features: ["design"]
+    verification:
+      - {kind: conformance-suite, ref: "FAPI2-SP"}
+      - {kind: integration-test, ref: "happy-path test"}
+  - id: REQ-CLIENT-017
+    area: CLIENT
+    split_from: REQ-CLIENT-004
+    statement: "A client assertion SHOULD be refused unless iss and sub equal the client and aud equals the issuer."
+    rationale: "Asymmetric client authentication removes shared secrets."
+    level: SHOULD
+    origin: stakeholder-ciam
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-20, section: "7523 2.2", depth: Full}
+      - {id: ST-28, section: "9", depth: Full}
+    features: ["design"]
+    verification:
+      - {kind: integration-test, ref: "alg=none and HS256 tests"}
+      - {kind: integration-test, ref: "claim mismatch tests"}
+  - id: REQ-CLIENT-018
+    area: CLIENT
+    split_from: REQ-CLIENT-004
+    statement: "A client assertion SHOULD have a lifetime of at most 60 seconds."
+    rationale: "A short lifetime limits replay."
+    level: SHOULD
+    origin: stakeholder-ciam
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-20, section: "7523 2.2", depth: Full}
+      - {id: ST-28, section: "9", depth: Full}
+    features: ["design"]
+    verification:
+      - {kind: integration-test, ref: "lifetime test"}
+  - id: REQ-CLIENT-019
+    area: CLIENT
+    split_from: REQ-CLIENT-004
+    statement: "A client assertion SHOULD carry a jti that is accepted once."
+    rationale: "Asymmetric client authentication removes shared secrets."
+    level: SHOULD
+    origin: stakeholder-ciam
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-20, section: "7523 2.2", depth: Full}
+      - {id: ST-28, section: "9", depth: Full}
+    features: ["design"]
+    verification:
+      - {kind: integration-test, ref: "replay test"}
+  - id: REQ-CLIENT-005
+    area: CLIENT
+    statement: "A client MUST be of exactly one type from a closed set."
+    rationale: "A closed model prevents contradictory configuration."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-01, section: "2.1", depth: Full}
+    features: ["#789"]
+    verification:
+      - {kind: integration-test, ref: "type-set test"}
+  - id: REQ-CLIENT-020
+    area: CLIENT
+    split_from: REQ-CLIENT-005
+    statement: "The loader MUST refuse a combination of capabilities that the client type forbids."
+    rationale: "A closed model prevents contradictory configuration."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-01, section: "2.1", depth: Full}
+    features: ["#789"]
+    verification:
+      - {kind: integration-test, ref: "profile contradiction tests"}
+  - id: REQ-CLIENT-006
+    area: CLIENT
+    statement: "A revoked or deleted client MUST receive invalid_client on its next request."
+    rationale: "Revocation must be prompt."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-01, section: "5.2", depth: Full}
+    features: ["#789"]
+    verification:
+      - {kind: integration-test, ref: "revocation test"}
+  - id: REQ-CLIENT-007
+    area: CLIENT
+    statement: "sluis MUST accept a client identifier that is an https URL only after fetching its metadata document through an SSRF-safe fetcher from an allow-listed origin."
+    rationale: "Metadata documents mint trust and must be constrained."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-22, section: "4", depth: Full}
+      - {id: ST-14, section: "4", depth: Partial}
+    features: ["#792"]
+    verification:
+      - {kind: integration-test, ref: "fetch-policy tests"}
+      - {kind: manual, ref: "track draft revision"}
+  - id: REQ-CLIENT-008
+    area: CLIENT
+    statement: "sluis MUST NOT offer open dynamic client registration."
+    rationale: "Open registration mints trust to anyone."
+    level: MUST
+    origin: design-decision
+    status: out-of-scope
+    runtimes: all
+    standards:
+      - {id: ST-21, section: "3", depth: Full}
+    features: ["#822"]
+    verification:
+      - {kind: integration-test, ref: "404 test"}
+      - {kind: manual, ref: "verify pinned MCP revision does not require it"}
+  - id: REQ-CLIENT-009
+    area: CLIENT
+    statement: "sluis MAY issue tokens to machine clients through the client credentials grant, to one resource from the client's declared list, without a refresh token."
+    rationale: "Some external systems speak only this grant."
+    level: MAY
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-01, section: "4.4", depth: Full}
+      - {id: ST-08, section: "2", depth: Full}
+    features: ["design"]
+    gap: stakeholder-only
+    verification:
+      - {kind: integration-test, ref: "client credentials matrix"}
+  - id: REQ-CLIENT-010
+    area: CLIENT
+    statement: "Runtime-created machine clients MUST register a public key only."
+    rationale: "Stored shared secrets are theft targets."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-20, section: "7523", depth: Partial}
+    features: ["design"]
+    gap: stakeholder-only
+    verification:
+      - {kind: integration-test, ref: "private-JWK rejection test"}
+  - id: REQ-CLIENT-021
+    area: CLIENT
+    split_from: REQ-CLIENT-010
+    statement: "sluis MUST NOT generate or store a shared secret for a runtime-created machine client."
+    rationale: "Stored shared secrets are theft targets."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-20, section: "7523", depth: Partial}
+    features: ["design"]
+    gap: stakeholder-only
+    verification:
+      - {kind: integration-test, ref: "storage scan"}
+  - id: REQ-CLIENT-011
+    area: CLIENT
+    statement: "Custom scopes MUST be declared in policy."
+    rationale: "Dropping a scope hides a failure."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-01, section: "3.3", depth: Partial}
+    features: ["design"]
+    gap: stakeholder-only
+    verification:
+      - {kind: integration-test, ref: "policy declaration test"}
+  - id: REQ-CLIENT-022
+    area: CLIENT
+    split_from: REQ-CLIENT-011
+    statement: "A request for an unknown scope MUST fail with invalid_scope instead of being dropped."
+    rationale: "Dropping a scope hides a failure."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-01, section: "3.3", depth: Partial}
+    features: ["design"]
+    gap: stakeholder-only
+    verification:
+      - {kind: integration-test, ref: "negative test"}
+  - id: REQ-CLIENT-012
+    area: CLIENT
+    statement: "A resource server that delegates authorization to sluis MUST be able to publish protected resource metadata that names sluis as its authorization server."
+    rationale: "Clients discover the authorization server from the resource."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-09, section: "3", depth: Full}
+      - {id: ST-05, section: "3", depth: Full}
+    features: ["#822", "#823"]
+    verification:
+      - {kind: test-vectors, ref: "own metadata goldens"}
+      - {kind: integration-test, ref: "resource proxy discovery test"}
+  - id: REQ-CLIENT-013
+    area: CLIENT
+    statement: "sluis MUST implement the pinned revision of the MCP authorization specification for agent clients, using protected resource metadata, authorization server metadata, resource indicators and client metadata documents."
+    rationale: "Agent clients depend on a specific revision of this specification."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-25, section: "auth", depth: Full}
+      - {id: ST-09, section: "3", depth: Full}
+      - {id: ST-22, section: "4", depth: Full}
+      - {id: ST-08, section: "2", depth: Full}
+    features: ["#822"]
+    verification:
+      - {kind: integration-test, ref: "MCP client end-to-end test"}
+      - {kind: manual, ref: "pin the revision in a decision record"}
+  - id: REQ-CLIENT-014
+    area: CLIENT
+    statement: "sluis MAY support mutual-TLS client authentication and certificate-bound access tokens for systems outside the platform."
+    rationale: "Some external systems can use only client certificates."
+    level: MAY
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-19, section: "2-3", depth: Full}
+    features: ["design"]
+    gap: stakeholder-only
+    verification:
+      - {kind: conformance-suite, ref: "FAPI2-SP (MTLS variant)"}

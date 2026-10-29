@@ -1,0 +1,199 @@
+# OPS: Operations and configuration
+schema: 1
+area: OPS
+requirements:
+  - id: REQ-OPS-001
+    area: OPS
+    statement: "`sluis config check` MUST validate an installation against the requirements declared by its drivers."
+    rationale: "Placement is derived from rules, not chosen."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-96, section: "2020-12", depth: Full}
+    features: ["#864", "#867"]
+    decisions: ["OD-32"]
+    verification:
+      - {kind: integration-test, ref: "driver-requirement tests"}
+  - id: REQ-OPS-009
+    area: OPS
+    split_from: REQ-OPS-001
+    statement: "`sluis config check` MUST refuse a combination that the compatibility table marks impossible."
+    rationale: "Placement is derived from rules, not chosen."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-96, section: "2020-12", depth: Full}
+    features: ["#864", "#867"]
+    decisions: ["OD-32"]
+    verification:
+      - {kind: integration-test, ref: "compatibility matrix tests"}
+  - id: REQ-OPS-002
+    area: OPS
+    statement: "Configuration MUST be strictly validated against a generated schema."
+    rationale: "Silent typos are bugs."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-96, section: "2020-12", depth: Full}
+    features: ["#864", "#865"]
+    verification:
+      - {kind: test-vectors, ref: "JSON-Schema-Test-Suite"}
+  - id: REQ-OPS-010
+    area: OPS
+    split_from: REQ-OPS-002
+    statement: "Unknown configuration keys MUST be refused."
+    rationale: "Silent typos are bugs."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-96, section: "2020-12", depth: Full}
+    features: ["#864", "#865"]
+    verification:
+      - {kind: integration-test, ref: "unknown-key test"}
+  - id: REQ-OPS-003
+    area: OPS
+    statement: "An actor that declares exactly one instance MUST acquire a lease when the installation has more than one node or elastic nodes."
+    rationale: "A duplicated singleton corrupts state."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-81, section: "8446", depth: Partial}
+      - {id: ST-103, section: "test plan", depth: Full}
+    features: ["#847"]
+    verification:
+      - {kind: test-vectors, ref: "port suite lease"}
+  - id: REQ-OPS-004
+    area: OPS
+    statement: "Nodes of a cluster MUST join through discovery."
+    rationale: "Autoscaling replaces nodes."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: ["bare-metal"]
+    standards:
+      - {id: ST-81, section: "8446", depth: Full}
+    features: ["#887"]
+    verification:
+      - {kind: integration-test, ref: "join test"}
+  - id: REQ-OPS-011
+    area: OPS
+    split_from: REQ-OPS-004
+    statement: "A node that has been unreachable for a configured time MUST be removed from the cluster."
+    rationale: "Autoscaling replaces nodes."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: ["bare-metal"]
+    standards:
+      - {id: ST-81, section: "8446", depth: Full}
+    features: ["#887"]
+    verification:
+      - {kind: integration-test, ref: "node replacement test"}
+  - id: REQ-OPS-012
+    area: OPS
+    split_from: REQ-OPS-004
+    statement: "A node MUST leave the cluster cleanly when scaled in."
+    rationale: "Autoscaling replaces nodes."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: ["bare-metal"]
+    standards:
+      - {id: ST-81, section: "8446", depth: Full}
+    features: ["#887"]
+    verification:
+      - {kind: integration-test, ref: "scale-in test"}
+  - id: REQ-OPS-005
+    area: OPS
+    statement: "sluis MUST migrate state between storage drivers."
+    rationale: "Operators change storage."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-96, section: "2020-12", depth: Partial}
+    features: ["#804"]
+    verification:
+      - {kind: integration-test, ref: "migration round trip"}
+  - id: REQ-OPS-006
+    area: OPS
+    statement: "When a dependency needed for a decision is unavailable, sluis MUST refuse the request with the documented error."
+    rationale: "Fail closed with bounded impact."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-14, section: "4", depth: Partial}
+    features: ["design"]
+    gap: stakeholder-only
+    verification:
+      - {kind: integration-test, ref: "dependency-down matrix"}
+  - id: REQ-OPS-013
+    area: OPS
+    split_from: REQ-OPS-006
+    statement: "When a dependency needed for a decision is unavailable, sluis MUST NOT take a weaker path."
+    rationale: "Fail closed with bounded impact."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-14, section: "4", depth: Partial}
+    features: ["design"]
+    gap: stakeholder-only
+    verification:
+      - {kind: integration-test, ref: "no-weaker-path test"}
+  - id: REQ-OPS-014
+    area: OPS
+    split_from: REQ-OPS-006
+    statement: "Tokens already issued MUST remain valid until expiry when a dependency is unavailable."
+    rationale: "Fail closed with bounded impact."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-14, section: "4", depth: Partial}
+    features: ["design"]
+    gap: stakeholder-only
+    verification:
+      - {kind: integration-test, ref: "issued-token validity test"}
+  - id: REQ-OPS-007
+    area: OPS
+    statement: "In an installation that enforces a region policy, every table, bucket, key replica and index MUST be in an allowed region, checked at load and at deployment."
+    rationale: "Residency is a legal requirement for some users."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-96, section: "2020-12", depth: Partial}
+    features: ["design"]
+    gap: stakeholder-only
+    verification:
+      - {kind: integration-test, ref: "region guard test"}
+  - id: REQ-OPS-008
+    area: OPS
+    statement: "A production profile MUST refuse every feature that exists only for tests."
+    rationale: "Test doors must not ship."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-14, section: "4", depth: Partial}
+    features: ["#877"]
+    verification:
+      - {kind: integration-test, ref: "production-profile refusal tests"}

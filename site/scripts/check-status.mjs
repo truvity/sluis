@@ -5,7 +5,7 @@
 // `<OpenDecision id="OD-<n>"` component in MDX) must name an id that is a row
 // of the "Open" table of docs/open-decisions.md. An id of the "Decided" table
 // is settled: a page states it as plain prose, never as an aside.
-// The ADRs in docs/decisions/ are not pages of the site and are not linted here.
+// The ADRs in docs/decisions/ are not pages of the site and are not linted here. Nor is docs/requirements/ (see check-requirements.mjs).
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -19,7 +19,7 @@ function* walk(dir) {
   for (const name of readdirSync(dir).sort()) {
     const path = join(dir, name);
     if (statSync(path).isDirectory()) {
-      if (path === join(docs, 'decisions')) continue;
+      if (path === join(docs, 'decisions') || path === join(docs, 'requirements')) continue;
       yield* walk(path);
     } else if (/\.(md|mdx)$/.test(name) && !name.startsWith('_')) {
       yield path;

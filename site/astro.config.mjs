@@ -145,6 +145,15 @@ export default defineConfig({
         { label: 'Decisions', link: '/decisions/' },
         { label: 'Roadmap', slug: 'roadmap' },
         { label: 'Features: v1 and v2', slug: 'features' },
+        // Generated from docs/requirements/*.yaml (src/pages/requirements/).
+        {
+          label: 'Requirements',
+          items: [
+            { label: 'Overview and areas', link: '/requirements/' },
+            { label: 'Matrix', link: '/requirements/matrix/' },
+            { label: 'Coverage', link: '/requirements/coverage/' },
+          ],
+        },
         { label: 'Contributing', slug: 'contributing' },
         { label: 'v1 documentation', link: '/v1/' },
       ],

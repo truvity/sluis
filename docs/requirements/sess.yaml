@@ -1,0 +1,336 @@
+# SESS: Sessions, refresh and logout
+schema: 1
+area: SESS
+requirements:
+  - id: REQ-SESS-001
+    area: SESS
+    statement: "A refresh token MUST be single use."
+    rationale: "Reuse indicates theft."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-01, section: "6", depth: Full}
+      - {id: ST-14, section: "4.14", depth: Full}
+    features: ["#777"]
+    verification:
+      - {kind: integration-test, ref: "single-use test"}
+  - id: REQ-SESS-013
+    area: SESS
+    split_from: REQ-SESS-001
+    statement: "Two concurrent presentations of a refresh token within a short grace window MUST both succeed with the same successor."
+    rationale: "Retried requests must not lock a client out."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-01, section: "6", depth: Full}
+      - {id: ST-14, section: "4.14", depth: Full}
+    features: ["#777"]
+    verification:
+      - {kind: test-vectors, ref: "concurrent-replay vectors"}
+      - {kind: integration-test, ref: "grace-window tests"}
+  - id: REQ-SESS-014
+    area: SESS
+    split_from: REQ-SESS-001
+    statement: "A presentation of a refresh token after the grace window MUST end the whole token chain."
+    rationale: "Reuse indicates theft."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-01, section: "6", depth: Full}
+      - {id: ST-14, section: "4.14", depth: Full}
+    features: ["#777"]
+    verification:
+      - {kind: integration-test, ref: "reuse-detection chain-end test"}
+  - id: REQ-SESS-002
+    area: SESS
+    statement: "A refresh token MUST be bound to the client session."
+    rationale: "A session limit that tokens can outlive is no limit."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-01, section: "6", depth: Full}
+      - {id: ST-28, section: "3.1.2.1", depth: Partial}
+    features: ["#777", "#793"]
+    verification:
+      - {kind: integration-test, ref: "session-binding test"}
+  - id: REQ-SESS-015
+    area: SESS
+    split_from: REQ-SESS-002
+    statement: "A refresh token MUST end at sign-out, at the idle limit and at the absolute limit."
+    rationale: "A session limit that tokens can outlive is no limit."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-01, section: "6", depth: Full}
+      - {id: ST-28, section: "3.1.2.1", depth: Partial}
+    features: ["#777", "#793"]
+    verification:
+      - {kind: integration-test, ref: "idle and absolute limit tests"}
+  - id: REQ-SESS-003
+    area: SESS
+    statement: "A refresh MUST re-check that the grant, the client and the account are still allowed."
+    rationale: "Refresh must not upgrade or hide a state change."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-01, section: "6", depth: Full}
+    features: ["#777"]
+    verification:
+      - {kind: integration-test, ref: "refresh re-check tests"}
+  - id: REQ-SESS-016
+    area: SESS
+    split_from: REQ-SESS-003
+    statement: "A refresh MUST keep acr, amr, auth_time and sid from the original authentication."
+    rationale: "Refresh must not upgrade or hide a state change."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-01, section: "6", depth: Full}
+    features: ["#777"]
+    verification:
+      - {kind: integration-test, ref: "claim-preservation test"}
+  - id: REQ-SESS-004
+    area: SESS
+    statement: "Each client session MUST have a sid that is unique per installation, client and single sign-on session."
+    rationale: "The sid links tokens to a session for revocation."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-28, section: "2", depth: Full}
+      - {id: ST-31, section: "2.4", depth: Full}
+      - {id: ST-104, section: "test plan", depth: Full}
+    features: ["#793"]
+    verification:
+      - {kind: conformance-suite, ref: "OIDF BCL OP"}
+      - {kind: integration-test, ref: "sid uniqueness test"}
+  - id: REQ-SESS-017
+    area: SESS
+    split_from: REQ-SESS-004
+    statement: "The sid MUST appear in ID tokens, access tokens and logout tokens."
+    rationale: "The sid links tokens to a session for revocation."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-28, section: "2", depth: Full}
+      - {id: ST-31, section: "2.4", depth: Full}
+    features: ["#793"]
+    verification:
+      - {kind: integration-test, ref: "sid presence test"}
+  - id: REQ-SESS-005
+    area: SESS
+    statement: "Session records MUST NOT contain e-mail addresses or names."
+    rationale: "Durable, minimal records keep privacy and availability."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-14, section: "4", depth: Partial}
+    features: ["#793"]
+    verification:
+      - {kind: integration-test, ref: "storage scan for personal data"}
+  - id: REQ-SESS-018
+    area: SESS
+    split_from: REQ-SESS-005
+    statement: "Session records MUST survive process restarts and upgrades."
+    rationale: "Durable, minimal records keep privacy and availability."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-14, section: "4", depth: Partial}
+    features: ["#793"]
+    verification:
+      - {kind: integration-test, ref: "restart test"}
+  - id: REQ-SESS-006
+    area: SESS
+    statement: "sluis MUST allow an operator and a user to list and revoke sessions."
+    rationale: "Session visibility is a basic control."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-14, section: "4", depth: Partial}
+    features: ["#793"]
+    verification:
+      - {kind: integration-test, ref: "session listing and revocation tests"}
+  - id: REQ-SESS-007
+    area: SESS
+    statement: "Session cookies MUST be Secure, HttpOnly, host-prefixed and without a Domain attribute."
+    rationale: "Host-prefixed cookies cannot be set by a sibling origin."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: NC-05, section: "6265bis", depth: Full}
+    features: ["#796"]
+    verification:
+      - {kind: integration-test, ref: "cookie attribute test"}
+  - id: REQ-SESS-019
+    area: SESS
+    split_from: REQ-SESS-007
+    statement: "Session cookies MUST be named with an installation prefix."
+    rationale: "Two installations on one parent domain must not read each other's cookies."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: NC-05, section: "6265bis", depth: Full}
+    features: ["#796"]
+    verification:
+      - {kind: integration-test, ref: "cookie name test"}
+  - id: REQ-SESS-008
+    area: SESS
+    statement: "The end-session endpoint MUST accept an ID token hint that this installation signed for the named client even after expiry."
+    rationale: "An expired hint is still proof of the session."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-30, section: "2", depth: Full}
+      - {id: ST-104, section: "test plan", depth: Full}
+    features: ["#779"]
+    verification:
+      - {kind: conformance-suite, ref: "OIDF RP-Initiated Logout OP"}
+      - {kind: integration-test, ref: "expired-hint test"}
+  - id: REQ-SESS-020
+    area: SESS
+    split_from: REQ-SESS-008
+    statement: "The end-session endpoint MUST validate the post-logout redirect URI against the registered list."
+    rationale: "An expired hint is still proof of the session."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-30, section: "2", depth: Full}
+      - {id: ST-104, section: "test plan", depth: Full}
+    features: ["#779"]
+    verification:
+      - {kind: conformance-suite, ref: "OIDF RP-Initiated Logout OP"}
+      - {kind: integration-test, ref: "redirect-URI tests"}
+  - id: REQ-SESS-009
+    area: SESS
+    statement: "A client that registers a back-channel logout URI MUST receive a logout token with typ logout+jwt, iss, aud, iat, exp of at most two minutes, jti, sid or sub, the backchannel-logout event, and no nonce."
+    rationale: "The logout token profile is what receivers verify."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-31, section: "2.4", depth: Full}
+      - {id: ST-52, section: "4", depth: Full}
+      - {id: ST-104, section: "test plan", depth: Full}
+    features: ["#780"]
+    verification:
+      - {kind: conformance-suite, ref: "OIDF BCL OP"}
+  - id: REQ-SESS-010
+    area: SESS
+    statement: "Delivery of logout tokens MUST retry with exponential backoff."
+    rationale: "A missed logout leaves a session alive."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-31, section: "2.5", depth: Partial}
+    features: ["#780"]
+    verification:
+      - {kind: integration-test, ref: "receiver-down retry test"}
+  - id: REQ-SESS-021
+    area: SESS
+    split_from: REQ-SESS-010
+    statement: "A dead-lettered logout delivery MUST raise an alarm."
+    rationale: "A missed logout leaves a session alive."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-31, section: "2.5", depth: Partial}
+    features: ["#780"]
+    verification:
+      - {kind: integration-test, ref: "dead-letter alarm test"}
+  - id: REQ-SESS-011
+    area: SESS
+    statement: "A global sign-out MUST end every session of the account at every client."
+    rationale: "Broadcast keeps the hub from building a person-to-service graph."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-31, section: "2.4", depth: Full}
+      - {id: ST-26, section: "CAEP", depth: Partial}
+    features: ["design"]
+    gap: stakeholder-only
+    verification:
+      - {kind: integration-test, ref: "global sign-out session test"}
+  - id: REQ-SESS-022
+    area: SESS
+    split_from: REQ-SESS-011
+    statement: "A global sign-out MUST notify every registered receiver without sluis learning which receivers know the person."
+    rationale: "Broadcast keeps the hub from building a person-to-service graph."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-31, section: "2.4", depth: Full}
+      - {id: ST-26, section: "CAEP", depth: Partial}
+    features: ["design"]
+    gap: stakeholder-only
+    verification:
+      - {kind: integration-test, ref: "broadcast test"}
+  - id: REQ-SESS-012
+    area: SESS
+    statement: "An agent-class session MUST require explicit consent."
+    rationale: "Consent for an agent is the user's only control."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-25, section: "auth", depth: Partial}
+      - {id: ST-14, section: "4", depth: Partial}
+    features: ["#794"]
+    verification:
+      - {kind: integration-test, ref: "consent matrix"}
+  - id: REQ-SESS-023
+    area: SESS
+    split_from: REQ-SESS-012
+    statement: "An agent-class session MUST be bound to that consent for its entire lifetime."
+    rationale: "Consent for an agent is the user's only control."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-25, section: "auth", depth: Partial}
+      - {id: ST-14, section: "4", depth: Partial}
+    features: ["#794"]
+    verification:
+      - {kind: integration-test, ref: "consent-binding test"}

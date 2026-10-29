@@ -1,0 +1,35 @@
+# A11Y: Accessibility
+schema: 1
+area: A11Y
+requirements:
+  - id: REQ-A11Y-001
+    area: A11Y
+    statement: "Hosted pages MUST meet WCAG 2.1 level AA."
+    rationale: "Accessibility is a legal and ethical baseline."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: NC-04, section: "WCAG 2.1 AA", depth: Full}
+    features: ["design"]
+    gap: stakeholder-only
+    verification:
+      - {kind: integration-test, ref: "automated accessibility checks"}
+      - {kind: manual, ref: "manual audit"}
+  - id: REQ-A11Y-002
+    area: A11Y
+    statement: "A sign-in path that does not need a smartphone MUST exist, such as a roaming security key."
+    rationale: "Not everyone has a phone."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-59, section: "1", depth: Partial}
+      - {id: NC-04, section: "WCAG 2.1 AA", depth: Partial}
+    features: ["design"]
+    gap: stakeholder-only
+    manual_reason: "Availability of a non-smartphone path is established by a walkthrough by people."
+    verification:
+      - {kind: manual, ref: "path walkthrough"}

@@ -1,0 +1,651 @@
+# AUDIT: Audit log
+schema: 1
+area: AUDIT
+requirements:
+  - id: REQ-AUDIT-001
+    area: AUDIT
+    statement: "Every successful mint, grant, exchange and administrative change MUST produce an audit record."
+    rationale: "An action without a record cannot be reviewed."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-96, section: "2020-12", depth: Partial}
+    features: ["#833", "#841"]
+    verification:
+      - {kind: integration-test, ref: "record-per-action test over the catalogue"}
+  - id: REQ-AUDIT-021
+    area: AUDIT
+    split_from: REQ-AUDIT-001
+    statement: "Every denial or refusal MUST produce an audit record that carries its reason code."
+    rationale: "An action without a record cannot be reviewed."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-96, section: "2020-12", depth: Partial}
+    features: ["#833", "#841"]
+    verification:
+      - {kind: integration-test, ref: "refusal record test over the catalogue"}
+  - id: REQ-AUDIT-002
+    area: AUDIT
+    statement: "Every audit record MUST validate against the schema of its catalogue entry."
+    rationale: "A closed catalogue keeps records interpretable."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-96, section: "2020-12", depth: Full}
+    features: ["#841"]
+    verification:
+      - {kind: test-vectors, ref: "JSON-Schema-Test-Suite"}
+  - id: REQ-AUDIT-022
+    area: AUDIT
+    split_from: REQ-AUDIT-002
+    statement: "The emitter MUST refuse an unknown action."
+    rationale: "A closed catalogue keeps records interpretable."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-96, section: "2020-12", depth: Full}
+    features: ["#841"]
+    verification:
+      - {kind: integration-test, ref: "unknown-action test"}
+  - id: REQ-AUDIT-003
+    area: AUDIT
+    statement: "Audit records, logs and traces MUST NOT contain e-mail addresses, names, secrets or tokens."
+    rationale: "The trail must not become a personal-data store."
+    level: MUST
+    origin: security-review
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-98, section: "OTLP", depth: Partial}
+    features: ["#840"]
+    verification:
+      - {kind: integration-test, ref: "scan of records and logs for personal data and secrets"}
+  - id: REQ-AUDIT-023
+    area: AUDIT
+    split_from: REQ-AUDIT-003
+    statement: "An external actor MUST be recorded under a keyed pseudonym."
+    rationale: "The trail must not become a personal-data store."
+    level: MUST
+    origin: security-review
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-98, section: "OTLP", depth: Partial}
+    features: ["#840"]
+    verification:
+      - {kind: integration-test, ref: "pseudonym test"}
+  - id: REQ-AUDIT-004
+    area: AUDIT
+    statement: "The hash of an audit record MUST be computed over its canonical JSON form."
+    rationale: "A canonical form makes hashes reproducible."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-78, section: "8785", depth: Full}
+    features: ["#837"]
+    verification:
+      - {kind: test-vectors, ref: "RFC 8785 test data"}
+  - id: REQ-AUDIT-005
+    area: AUDIT
+    statement: "Audit records of a period MUST be organised in a Merkle tree following the RFC 6962 hash rules."
+    rationale: "Proofs let anyone verify the log without trusting the operator."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-77, section: "2.1", depth: Full}
+    features: ["#837", "#838"]
+    verification:
+      - {kind: test-vectors, ref: "RFC 6962 examples"}
+      - {kind: test-vectors, ref: "shared Merkle vector file"}
+  - id: REQ-AUDIT-024
+    area: AUDIT
+    split_from: REQ-AUDIT-005
+    statement: "Inclusion and consistency proofs MUST verify offline."
+    rationale: "Proofs let anyone verify the log without trusting the operator."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-77, section: "2.1", depth: Full}
+    features: ["#837", "#838"]
+    verification:
+      - {kind: test-vectors, ref: "RFC 6962 examples"}
+      - {kind: integration-test, ref: "offline verification test"}
+  - id: REQ-AUDIT-006
+    area: AUDIT
+    statement: "Each sealed period MUST be signed over its root with a key from the signing port."
+    rationale: "A sealed period is the unit of evidence."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-49, section: "7515", depth: Full}
+      - {id: ST-53, section: "3", depth: Full}
+    features: ["#838"]
+    verification:
+      - {kind: test-vectors, ref: "seal vectors"}
+  - id: REQ-AUDIT-025
+    area: AUDIT
+    split_from: REQ-AUDIT-006
+    statement: "A sealed period MUST be immutable after sealing."
+    rationale: "A sealed period is the unit of evidence."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-49, section: "7515", depth: Full}
+      - {id: ST-53, section: "3", depth: Full}
+    features: ["#838"]
+    verification:
+      - {kind: integration-test, ref: "immutability test"}
+  - id: REQ-AUDIT-026
+    area: AUDIT
+    split_from: REQ-AUDIT-006
+    statement: "A sealed period MUST be verifiable offline using only the public key set and the sealed data."
+    rationale: "A sealed period is the unit of evidence."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-49, section: "7515", depth: Full}
+      - {id: ST-53, section: "3", depth: Full}
+    features: ["#838"]
+    verification:
+      - {kind: integration-test, ref: "offline seal verification test"}
+  - id: REQ-AUDIT-007
+    area: AUDIT
+    statement: "There MUST be exactly one writer per log."
+    rationale: "Two writers fork the chain."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-77, section: "2.1", depth: Partial}
+    features: ["#837"]
+    decisions: ["OD-31"]
+    verification:
+      - {kind: integration-test, ref: "two-writer negative test"}
+  - id: REQ-AUDIT-027
+    area: AUDIT
+    split_from: REQ-AUDIT-007
+    statement: "An installation with more than one node or with elastic nodes MUST protect the writer with a lease."
+    rationale: "Two writers fork the chain."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-77, section: "2.1", depth: Partial}
+      - {id: ST-103, section: "test plan", depth: Full}
+    features: ["#837"]
+    decisions: ["OD-31"]
+    verification:
+      - {kind: test-vectors, ref: "port suite lease"}
+  - id: REQ-AUDIT-008
+    area: AUDIT
+    statement: "The log store MUST be a blob store with an explicit lock mode of none, removable or compliance."
+    rationale: "The lock mode defines what tamper-evidence the log gives."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-96, section: "2020-12", depth: Partial}
+      - {id: ST-103, section: "test plan", depth: Full}
+    features: ["#837"]
+    decisions: ["OD-37"]
+    verification:
+      - {kind: test-vectors, ref: "port suite blob"}
+  - id: REQ-AUDIT-028
+    area: AUDIT
+    split_from: REQ-AUDIT-008
+    statement: "`sluis config check` MUST report the lock mode of the configured blob driver."
+    rationale: "The lock mode defines what tamper-evidence the log gives."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-96, section: "2020-12", depth: Partial}
+    features: ["#837"]
+    decisions: ["OD-37"]
+    verification:
+      - {kind: integration-test, ref: "config-check lock-mode report test"}
+  - id: REQ-AUDIT-009
+    area: AUDIT
+    statement: "A cluster MUST keep one log per node."
+    rationale: "Peers narrow the window in which one node can rewrite its log."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: ["bare-metal", "kubernetes"]
+    standards:
+      - {id: ST-73, section: "1", depth: Partial}
+      - {id: ST-74, section: "1", depth: Partial}
+      - {id: ST-76, section: "1", depth: Partial}
+    features: ["#886"]
+    decisions: ["OD-36"]
+    verification:
+      - {kind: integration-test, ref: "per-node log test"}
+  - id: REQ-AUDIT-029
+    area: AUDIT
+    split_from: REQ-AUDIT-009
+    statement: "Where peer witnesses are configured, the other nodes of a cluster MUST be the peer witnesses that co-sign a node's checkpoints, two of three."
+    rationale: "Peers narrow the window in which one node can rewrite its log."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: ["bare-metal", "kubernetes"]
+    standards:
+      - {id: ST-73, section: "1", depth: Partial}
+      - {id: ST-74, section: "1", depth: Partial}
+      - {id: ST-76, section: "1", depth: Partial}
+    features: ["#886"]
+    decisions: ["OD-36"]
+    verification:
+      - {kind: integration-test, ref: "co-signing and failure tests"}
+  - id: REQ-AUDIT-010
+    area: AUDIT
+    statement: "Where no witness is configured, `sluis config check` MUST warn."
+    rationale: "Witnesses are optional but the risk must be visible."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-74, section: "1", depth: Partial}
+    features: ["design"]
+    decisions: ["OD-36"]
+    verification:
+      - {kind: integration-test, ref: "config-check warning test"}
+  - id: REQ-AUDIT-030
+    area: AUDIT
+    split_from: REQ-AUDIT-010
+    statement: "The documentation MUST state that, with no witness, a compromised writer can obtain a rewritten checkpoint."
+    rationale: "Witnesses are optional but the risk must be visible."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-74, section: "1", depth: Partial}
+    features: ["design"]
+    decisions: ["OD-36"]
+    manual_reason: "A statement in the documentation is checked by reading it."
+    verification:
+      - {kind: manual, ref: "documentation review"}
+  - id: REQ-AUDIT-011
+    area: AUDIT
+    statement: "sluis MAY adopt a published transparency-log checkpoint and witness protocol so that independent parties can witness a log."
+    rationale: "Interoperable witnesses strengthen the log."
+    level: MAY
+    origin: design-decision
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-71, section: "1", depth: Full}
+      - {id: ST-72, section: "1", depth: Full}
+      - {id: ST-73, section: "1", depth: Full}
+      - {id: ST-74, section: "1", depth: Full}
+    features: ["design"]
+    gap: proposed-design
+    verification:
+      - {kind: test-vectors, ref: "spec vectors"}
+      - {kind: integration-test, ref: "witness protocol test"}
+  - id: REQ-AUDIT-031
+    area: AUDIT
+    split_from: REQ-AUDIT-011
+    statement: "sluis MAY anchor sealed periods externally with a time-stamp authority."
+    rationale: "An external anchor bounds the time of a seal."
+    level: MAY
+    origin: design-decision
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-79, section: "3161", depth: Full}
+    features: ["design"]
+    gap: proposed-design
+    verification:
+      - {kind: integration-test, ref: "time-stamp anchor test"}
+  - id: REQ-AUDIT-012
+    area: AUDIT
+    statement: "The audit emitter MUST be a library inside each application."
+    rationale: "The application must not depend on writer availability."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-97, section: "1", depth: Partial}
+    features: ["#802", "#841"]
+    decisions: ["OD-37"]
+    manual_reason: "The rule constrains the architecture of the applications that embed the emitter."
+    verification:
+      - {kind: manual, ref: "architecture review"}
+  - id: REQ-AUDIT-032
+    area: AUDIT
+    split_from: REQ-AUDIT-012
+    statement: "The audit emitter MUST be decoupled from the writer by a transport."
+    rationale: "The application must not depend on writer availability."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-97, section: "1", depth: Partial}
+      - {id: ST-103, section: "test plan", depth: Full}
+    features: ["#802", "#841"]
+    decisions: ["OD-37"]
+    verification:
+      - {kind: test-vectors, ref: "port suite transport"}
+  - id: REQ-AUDIT-013
+    area: AUDIT
+    statement: "In direct transport mode, when the writer is unavailable, the emitter MUST fall back to a local spool."
+    rationale: "Direct mode needs durability."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: ["bare-metal", "kubernetes"]
+    standards:
+      - {id: ST-97, section: "1", depth: Partial}
+    features: ["#802"]
+    decisions: ["OD-35"]
+    verification:
+      - {kind: integration-test, ref: "writer-down fallback test"}
+  - id: REQ-AUDIT-033
+    area: AUDIT
+    split_from: REQ-AUDIT-013
+    statement: "The emitter MUST NOT drop records or buffer them only in memory when the writer is unavailable."
+    rationale: "Direct mode needs durability."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: ["bare-metal", "kubernetes"]
+    standards:
+      - {id: ST-97, section: "1", depth: Partial}
+    features: ["#802"]
+    decisions: ["OD-35"]
+    verification:
+      - {kind: integration-test, ref: "writer-down no-loss test"}
+  - id: REQ-AUDIT-014
+    area: AUDIT
+    statement: "Delivery from the emitter to the writer MUST be at least once."
+    rationale: "Networks duplicate; the log must not."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-97, section: "1", depth: Partial}
+      - {id: ST-103, section: "test plan", depth: Full}
+    features: ["#802", "#837"]
+    verification:
+      - {kind: test-vectors, ref: "port suite transport"}
+  - id: REQ-AUDIT-034
+    area: AUDIT
+    split_from: REQ-AUDIT-014
+    statement: "The writer MUST deduplicate records by record identifier."
+    rationale: "Networks duplicate; the log must not."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-97, section: "1", depth: Partial}
+    features: ["#802", "#837"]
+    verification:
+      - {kind: integration-test, ref: "duplicate delivery test"}
+  - id: REQ-AUDIT-015
+    area: AUDIT
+    statement: "Credential and administrative changes SHOULD use blocking delivery so that the change fails when its record cannot be written."
+    rationale: "A change without a record must not happen."
+    level: SHOULD
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-97, section: "1", depth: Partial}
+    features: ["design"]
+    verification:
+      - {kind: integration-test, ref: "blocked-write test"}
+  - id: REQ-AUDIT-016
+    area: AUDIT
+    statement: "The search index MUST be rebuildable from the log alone."
+    rationale: "The index is a cache, never the record."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-97, section: "1", depth: Partial}
+    features: ["#839"]
+    decisions: ["OD-32"]
+    verification:
+      - {kind: integration-test, ref: "reindex test"}
+  - id: REQ-AUDIT-035
+    area: AUDIT
+    split_from: REQ-AUDIT-016
+    statement: "A reader MUST be able to merge several node logs by time."
+    rationale: "The index is a cache, never the record."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-97, section: "1", depth: Partial}
+      - {id: ST-103, section: "test plan", depth: Full}
+    features: ["#839"]
+    decisions: ["OD-32"]
+    verification:
+      - {kind: test-vectors, ref: "port suite index"}
+  - id: REQ-AUDIT-017
+    area: AUDIT
+    statement: "A clock-synchronisation check MUST run."
+    rationale: "Seal times depend on the clock."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-80, section: "5905", depth: Full}
+    features: ["#838", "#867"]
+    verification:
+      - {kind: integration-test, ref: "clock check test"}
+  - id: REQ-AUDIT-036
+    area: AUDIT
+    split_from: REQ-AUDIT-017
+    statement: "A seal MUST record the observed clock offset."
+    rationale: "Seal times depend on the clock."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-80, section: "5905", depth: Full}
+    features: ["#838", "#867"]
+    verification:
+      - {kind: integration-test, ref: "seal offset test"}
+  - id: REQ-AUDIT-018
+    area: AUDIT
+    statement: "A subject erasure request MUST be satisfied by destroying a per-subject key."
+    rationale: "Erasure and an immutable log need crypto-shredding."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-78, section: "8785", depth: Partial}
+    features: ["#840"]
+    gap: stakeholder-only
+    verification:
+      - {kind: integration-test, ref: "erasure test"}
+  - id: REQ-AUDIT-019
+    area: AUDIT
+    statement: "Audit records MUST carry enough data to roll state forward after a restore for the record kinds that need it."
+    rationale: "Roll-forward replaces a backup of fast-changing data."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-96, section: "2020-12", depth: Partial}
+    features: ["#841"]
+    verification:
+      - {kind: integration-test, ref: "roll-forward restore test"}
+  - id: REQ-AUDIT-037
+    area: AUDIT
+    split_from: REQ-AUDIT-019
+    statement: "Audit records MUST NOT carry secrets."
+    rationale: "A secret in an immutable log can never be removed."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-96, section: "2020-12", depth: Partial}
+    features: ["#841"]
+    verification:
+      - {kind: integration-test, ref: "secret scan of records"}
+  - id: REQ-AUDIT-020
+    area: AUDIT
+    statement: "Records MUST be routed to a tenant at write time."
+    rationale: "Controllers must not read each other's records."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-96, section: "2020-12", depth: Partial}
+    features: ["#840"]
+    verification:
+      - {kind: integration-test, ref: "tenant routing test"}
+  - id: REQ-AUDIT-038
+    area: AUDIT
+    split_from: REQ-AUDIT-020
+    statement: "The operator's own view of a tenant's records MUST contain only the class, the outcome and rotating pseudonyms."
+    rationale: "Controllers must not read each other's records."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-96, section: "2020-12", depth: Partial}
+    features: ["#840"]
+    verification:
+      - {kind: integration-test, ref: "tenant isolation test"}
+  - id: REQ-AUDIT-039
+    area: AUDIT
+    statement: "A witness MUST be optional in every installation."
+    rationale: "Witnesses add dependencies that some installations cannot meet."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-74, section: "1", depth: Partial}
+    features: ["design"]
+    decisions: ["OD-36"]
+    verification:
+      - {kind: integration-test, ref: "no-witness installation test"}
+  - id: REQ-AUDIT-040
+    area: AUDIT
+    statement: "The audit writer MUST obtain checkpoint signatures from the key-holder."
+    rationale: "Only the key-holder touches the log key."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-49, section: "7515", depth: Partial}
+    features: ["design"]
+    decisions: ["OD-39"]
+    verification:
+      - {kind: integration-test, ref: "checkpoint signing test"}
+  - id: REQ-AUDIT-041
+    area: AUDIT
+    statement: "The key-holder access list MUST allow only the audit writer to use the log key."
+    rationale: "Restricting the key to the writer replaces a separate notary."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-88, section: "1", depth: Partial}
+    features: ["design"]
+    decisions: ["OD-39"]
+    verification:
+      - {kind: integration-test, ref: "key access denial test"}
+  - id: REQ-AUDIT-042
+    area: AUDIT
+    statement: "sluis MUST NOT run a separate notary actor for audit checkpoints."
+    rationale: "The notary is folded into the key-holder access list."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-49, section: "7515", depth: Partial}
+    features: ["design"]
+    decisions: ["OD-39"]
+    verification:
+      - {kind: integration-test, ref: "actor inventory test"}
+  - id: REQ-AUDIT-043
+    area: AUDIT
+    statement: "`sluis config check` MUST refuse direct audit transport on a runtime that has no local disk."
+    rationale: "Direct mode falls back to a local spool and so needs a disk."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: ["serverless"]
+    standards:
+      - {id: ST-97, section: "1", depth: Partial}
+    features: ["design"]
+    decisions: ["OD-35"]
+    verification:
+      - {kind: integration-test, ref: "config-check refusal test"}
+  - id: REQ-AUDIT-044
+    area: AUDIT
+    statement: "The default audit transport driver MUST be spool on bare-metal and SQS on serverless and kubernetes."
+    rationale: "Direct and JetStream are supported but are not defaults."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-97, section: "1", depth: Partial}
+    features: ["design"]
+    decisions: ["OD-34"]
+    verification:
+      - {kind: integration-test, ref: "default driver test"}
+  - id: REQ-AUDIT-045
+    area: AUDIT
+    statement: "Each node of a cluster MUST have its own audit writer, spool and log key."
+    rationale: "One log per node means one writer per log."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: ["bare-metal", "kubernetes"]
+    standards:
+      - {id: ST-77, section: "2.1", depth: Partial}
+    features: ["#886"]
+    decisions: ["OD-36"]
+    verification:
+      - {kind: integration-test, ref: "per-node writer test"}

@@ -1,0 +1,100 @@
+---
+import ReqLayout from '../../components/requirements/ReqLayout.astro';
+import ReqTable from '../../components/requirements/ReqTable.astro';
+import Filter from '../../components/requirements/Filter.astro';
+import { areaPath, catalogue, count, SOURCE, STATUS_HINT } from '../../lib/requirements';
+
+const c = catalogue();
+const by = (key: 'level' | 'status' | 'origin') => c.vocabulary[key].map((k) => [k, count(c.reqs, (r) => r[key]).get(k) ?? 0] as const);
+const perArea = (code: string, f: (r: (typeof c.reqs)[number]) => boolean) => c.areaByCode.get(code)!.reqs.filter(f).length;
+const core = c.reqs.filter((r) => !c.areaByCode.get(r.area)!.scopeOpen).length;
+const open = c.reqs.length - core;
+---
+
+<ReqLayout
+  current="overview"
+  jump={[['counts', 'Counts'], ['areas', 'Areas'], ['all', 'All requirements'], ['glossary', 'Glossary'], ['ids', 'Ids and statuses']]}
+  title="Requirements"
+  description="The sluis v2 requirements catalogue: one testable clause per record, traced to standards, features and verification. Filter by area, level or status."
+>
+  <p>
+    This catalogue holds <strong>{c.reqs.length} requirements</strong> in {c.areas.length} areas. Each is one clause with one RFC 2119
+    keyword and one testable behaviour, written for a role (sluis, an operator, a relying party) and not for a person. Each is traced to
+    the standards it implements, the features that deliver it and the way it is verified. The files are in
+    <a href={SOURCE}><code>docs/requirements/</code></a>; this site is generated from them, and test tools read
+    <a href="/requirements.json"><code>/requirements.json</code></a>. The <a href="/requirements/matrix/">matrix</a> relates requirements
+    to standards, features and verification, and the <a href="/requirements/coverage/">coverage</a> page lists what has no test or no
+    standard yet. Checked {c.checked}.
+  </p>
+
+  <aside class="rq-scope" aria-label="Scope">
+    <span class="rq-badge rq-scope-badge">scope open</span>
+    <p>
+      {open} of the requirements ({c.areas.filter((a) => a.scopeOpen).map((a) => a.code).join(', ')}) describe customer account hosting.
+      Whether sluis hosts customer accounts at all is undecided, so they are published and marked, and the filter below can hide them.
+      The other {core} requirements do not depend on that decision.
+    </p>
+  </aside>
+
+  <h2 id="counts">Counts</h2>
+  <div class="rq-grid">
+    {(['level', 'status', 'origin'] as const).map((key) => (
+      <table class="rq-mini">
+        <caption>By {key}</caption>
+        <tbody>
+          {by(key).map(([k, n]) => (
+            <tr>
+              <th scope="row" title={key === 'status' ? STATUS_HINT[k] : undefined}>{k}</th>
+              <td>{n}</td>
+              <td class="rq-barcell"><span class="rq-bar" style={`width:${(100 * n) / c.reqs.length}%`}></span></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    ))}
+  </div>
+
+  <h2 id="areas">Areas</h2>
+  <div class="rq-table-wrap">
+    <table class="rq-table rq-areas">
+      <thead>
+        <tr><th>Area</th><th>Title</th><th>Total</th><th>MUST</th><th>planned</th><th>partial</th><th>open</th><th>out of scope</th></tr>
+      </thead>
+      <tbody>
+        {c.areas.map((a) => (
+          <tr data-rq-area data-scope-open={a.scopeOpen ? '' : undefined}>
+            <td data-label="Area"><a href={areaPath(a.code)}>{a.code}</a></td>
+            <td data-label="Title">{a.title.replace(/ \(open scope\)$/, '')} {a.scopeOpen && <span class="rq-badge rq-scope-badge">scope open</span>}</td>
+            <td data-label="Total">{a.reqs.length}</td>
+            <td data-label="MUST">{perArea(a.code, (r) => r.level === 'MUST')}</td>
+            <td data-label="planned">{perArea(a.code, (r) => r.status === 'planned')}</td>
+            <td data-label="partial">{perArea(a.code, (r) => r.status === 'partial')}</td>
+            <td data-label="open">{perArea(a.code, (r) => r.status === 'open')}</td>
+            <td data-label="out of scope">{perArea(a.code, (r) => r.status === 'out-of-scope' || r.status === 'withdrawn')}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+
+  <h2 id="all">All requirements</h2>
+  <p>Each id links to its row on the page of its area.</p>
+  <Filter />
+  <ReqTable reqs={c.reqs} filterable />
+
+  <h2 id="glossary">Glossary</h2>
+  <dl class="rq-glossary">
+    {Object.entries(c.glossary).map(([term, text]) => (<><dt>{term}</dt><dd>{text}</dd></>))}
+  </dl>
+
+  <h2 id="ids">How ids and statuses work</h2>
+  <p>
+    An id is <code>REQ-&lt;AREA&gt;-&lt;nnn&gt;</code>. It is stable and never reused, and a test that proves a requirement names it, for
+    example <code>REQ-AUTHN-002/plain_method</code>. A status says how far the plan is: <em>planned</em> (an agreed feature or design covers it),
+    <em>partial</em> (the plan is weaker), <em>open</em> (a decision or a plan is missing), <em>out-of-scope</em> (a boundary kept as a
+    refusal) or <em>withdrawn</em> (a tombstone). An open or partial record names the <a href="/open-decisions/">open decision</a> or the gap it waits for.
+  </p>
+  <ul>
+    {Object.entries(c.gaps).map(([k, text]) => (<li><code>{k}</code>: {text}</li>))}
+  </ul>
+</ReqLayout>

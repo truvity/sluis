@@ -1,0 +1,89 @@
+# EXPORT: Export
+schema: 1
+area: EXPORT
+requirements:
+  - id: REQ-EXPORT-001
+    area: EXPORT
+    statement: "sluis MUST publish only a small typed set of public or per-consumer documents."
+    rationale: "An export is a disclosure."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-96, section: "2020-12", depth: Partial}
+      - {id: ST-103, section: "test plan", depth: Full}
+    features: ["#798"]
+    verification:
+      - {kind: test-vectors, ref: "port suite export"}
+  - id: REQ-EXPORT-003
+    area: EXPORT
+    split_from: REQ-EXPORT-001
+    statement: "Each export MUST be authorised."
+    rationale: "An export is a disclosure."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-96, section: "2020-12", depth: Partial}
+    features: ["#798"]
+    verification:
+      - {kind: integration-test, ref: "export authorisation test"}
+  - id: REQ-EXPORT-004
+    area: EXPORT
+    split_from: REQ-EXPORT-001
+    statement: "Each export MUST be recorded in the audit log."
+    rationale: "An export is a disclosure."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-96, section: "2020-12", depth: Partial}
+    features: ["#798"]
+    verification:
+      - {kind: integration-test, ref: "export audit test"}
+  - id: REQ-EXPORT-002
+    area: EXPORT
+    statement: "A file-drop or bucket-drop export that contains a secret MUST be age-encrypted to the consumer's own recipient."
+    rationale: "The consumer, not sluis, decrypts."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-95, section: "age", depth: Full}
+      - {id: NC-10, section: "PIV", depth: Partial}
+    features: ["design"]
+    verification:
+      - {kind: test-vectors, ref: "age vectors"}
+  - id: REQ-EXPORT-005
+    area: EXPORT
+    split_from: REQ-EXPORT-002
+    statement: "sluis MUST hold only the public recipient of an export consumer."
+    rationale: "The consumer, not sluis, decrypts."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-95, section: "age", depth: Full}
+      - {id: NC-10, section: "PIV", depth: Partial}
+    features: ["design"]
+    verification:
+      - {kind: integration-test, ref: "recipient-only test"}
+  - id: REQ-EXPORT-006
+    area: EXPORT
+    statement: "The export documentation SHOULD describe an age recipient whose identity is held on the consumer's hardware token."
+    rationale: "The consumer decrypts with a key that sluis never sees."
+    level: SHOULD
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-95, section: "age", depth: Full}
+      - {id: NC-10, section: "PIV", depth: Partial}
+    features: ["#798"]
+    verification:
+      - {kind: manual, ref: "documentation review"}
