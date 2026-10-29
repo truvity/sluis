@@ -1,0 +1,174 @@
+# QUOTA: Quota and metering
+schema: 1
+area: QUOTA
+requirements:
+  - id: REQ-QUOTA-001
+    area: QUOTA
+    statement: "Quota MUST be metering by default, with enforcement configurable per policy rule for chosen subjects or audiences."
+    rationale: "Enforcement carries availability risk."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-97, section: "1", depth: Partial}
+    features: ["design"]
+    decisions: ["OD-33"]
+    verification:
+      - {kind: integration-test, ref: "metering-only and enforcing configurations"}
+  - id: REQ-QUOTA-002
+    area: QUOTA
+    statement: "Under strict enforcement the admitted total MUST never exceed the configured limit under concurrent requests."
+    rationale: "These are the testable accuracy guarantees."
+    level: MUST
+    origin: stakeholder-integrator
+    status: planned
+    runtimes: all
+    standards:
+      - {id: NC-15, section: "Idempotency", depth: Partial}
+    features: ["design"]
+    decisions: ["OD-33"]
+    verification:
+      - {kind: integration-test, ref: "concurrent admit test"}
+  - id: REQ-QUOTA-009
+    area: QUOTA
+    split_from: REQ-QUOTA-002
+    statement: "Under soft enforcement the admitted total MUST exceed the limit by no more than one grant per instance."
+    rationale: "These are the testable accuracy guarantees."
+    level: MUST
+    origin: stakeholder-integrator
+    status: planned
+    runtimes: all
+    standards:
+      - {id: NC-15, section: "Idempotency", depth: Partial}
+    features: ["design"]
+    decisions: ["OD-33"]
+    verification:
+      - {kind: integration-test, ref: "k6 load test"}
+  - id: REQ-QUOTA-003
+    area: QUOTA
+    statement: "A request to admit, to confirm usage or to cancel MUST be idempotent under a caller-supplied request identifier."
+    rationale: "Retries must not double-count."
+    level: MUST
+    origin: stakeholder-integrator
+    status: planned
+    runtimes: all
+    standards:
+      - {id: NC-15, section: "Idempotency-Key", depth: Full}
+    features: ["design"]
+    verification:
+      - {kind: integration-test, ref: "retry test"}
+  - id: REQ-QUOTA-004
+    area: QUOTA
+    statement: "The effect of an event on a balance MUST be separate from the meter it counts towards."
+    rationale: "Top-ups and consumption are different facts."
+    level: MUST
+    origin: stakeholder-integrator
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-96, section: "2020-12", depth: Partial}
+    features: ["design"]
+    gap: stakeholder-only
+    verification:
+      - {kind: integration-test, ref: "effect catalogue test"}
+  - id: REQ-QUOTA-010
+    area: QUOTA
+    split_from: REQ-QUOTA-004
+    statement: "The effect of an event on a balance MUST be able to be negative, zero or positive."
+    rationale: "Top-ups and consumption are different facts."
+    level: MUST
+    origin: stakeholder-integrator
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-96, section: "2020-12", depth: Partial}
+    features: ["design"]
+    gap: stakeholder-only
+    verification:
+      - {kind: integration-test, ref: "signed effect test"}
+  - id: REQ-QUOTA-005
+    area: QUOTA
+    statement: "A top-up pushed to the quota engine MUST be idempotent and audited."
+    rationale: "Money-like operations need exactly-once effects."
+    level: MUST
+    origin: stakeholder-integrator
+    status: planned
+    runtimes: all
+    standards:
+      - {id: NC-15, section: "Idempotency-Key", depth: Full}
+    features: ["design"]
+    verification:
+      - {kind: integration-test, ref: "duplicate top-up test"}
+  - id: REQ-QUOTA-006
+    area: QUOTA
+    statement: "The quota policy MUST define whether an exhausted balance blocks or allows overage."
+    rationale: "Operators choose the risk."
+    level: MUST
+    origin: stakeholder-integrator
+    status: planned
+    runtimes: all
+    standards:
+      - {id: NC-15, section: "Idempotency-Key", depth: Partial}
+    features: ["design"]
+    decisions: ["OD-35"]
+    verification:
+      - {kind: integration-test, ref: "exhaustion test"}
+  - id: REQ-QUOTA-011
+    area: QUOTA
+    split_from: REQ-QUOTA-006
+    statement: "The quota policy MUST define whether an unavailable quota engine fails open or fails closed."
+    rationale: "Operators choose the risk."
+    level: MUST
+    origin: stakeholder-integrator
+    status: planned
+    runtimes: all
+    standards:
+      - {id: NC-15, section: "Idempotency-Key", depth: Partial}
+    features: ["design"]
+    decisions: ["OD-35"]
+    verification:
+      - {kind: integration-test, ref: "outage test"}
+  - id: REQ-QUOTA-007
+    area: QUOTA
+    statement: "A client MUST be able to query current usage and remaining balance."
+    rationale: "Aggregates must be verifiable."
+    level: MUST
+    origin: stakeholder-integrator
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-97, section: "1", depth: Partial}
+      - {id: ST-78, section: "8785", depth: Partial}
+    features: ["#839"]
+    verification:
+      - {kind: integration-test, ref: "usage query test"}
+  - id: REQ-QUOTA-012
+    area: QUOTA
+    split_from: REQ-QUOTA-007
+    statement: "Hourly aggregates MUST list the identifiers of their events so that their sum equals the count of facts."
+    rationale: "Aggregates must be verifiable."
+    level: MUST
+    origin: stakeholder-integrator
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-97, section: "1", depth: Partial}
+      - {id: ST-78, section: "8785", depth: Partial}
+    features: ["#839"]
+    verification:
+      - {kind: integration-test, ref: "aggregate-sum test"}
+  - id: REQ-QUOTA-008
+    area: QUOTA
+    statement: "Turning enforcement on in production MUST be preceded by a load test of the mint path with enforcement enabled."
+    rationale: "Enforcement adds state writes to the hot path."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-97, section: "1", depth: Partial}
+    features: ["design"]
+    decisions: ["OD-33"]
+    verification:
+      - {kind: integration-test, ref: "load test"}

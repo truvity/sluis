@@ -1,0 +1,31 @@
+# PERF: Scale and performance
+schema: 1
+area: PERF
+requirements:
+  - id: REQ-PERF-001
+    area: PERF
+    statement: "Changes to the sign-in, code and refresh paths MUST update the recorded read and write budgets and state the reason."
+    rationale: "Budgets prevent silent cost growth."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-97, section: "1", depth: Partial}
+    features: ["#776"]
+    verification:
+      - {kind: integration-test, ref: "budget regression tests"}
+  - id: REQ-PERF-002
+    area: PERF
+    statement: "Mass revocation of sessions MUST be paginated, asynchronous and idempotent."
+    rationale: "A large revocation must not exceed a time budget."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-97, section: "1", depth: Partial}
+    features: ["design"]
+    gap: stakeholder-only
+    verification:
+      - {kind: integration-test, ref: "100000-session revocation test"}

@@ -1,0 +1,149 @@
+---
+import ReqLayout from '../../components/requirements/ReqLayout.astro';
+import Chips from '../../components/requirements/Chips.astro';
+import { catalogue, featureUrl, KIND_LABEL, reqPath, type Req } from '../../lib/requirements';
+
+const c = catalogue();
+const link = (r: Req) => ({ id: r.id, href: reqPath(r), open: c.areaByCode.get(r.area)!.scopeOpen, level: r.level });
+const group = (key: (r: Req) => string[]) => {
+  const m = new Map<string, Req[]>();
+  for (const r of c.reqs) for (const k of key(r)) m.set(k, [...(m.get(k) ?? []), r]);
+  return m;
+};
+const byStandard = group((r) => r.standards.map((s) => s.id));
+const byFeature = group((r) => r.features);
+const byKind = c.vocabulary.verification.map((kind) => {
+  const refs = new Map<string, Req[]>();
+  for (const r of c.reqs) for (const v of r.verification) if (v.kind === kind) refs.set(v.ref, [...(refs.get(v.ref) ?? []), r]);
+  return { kind, refs: [...refs].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0])) };
+});
+const featureKeys = [...byFeature.keys()].sort((a, b) => {
+  const rank = (k: string) => (k.startsWith('#') ? 0 : k === 'parity' ? 1 : 2);
+  return rank(a) - rank(b) || a.localeCompare(b, 'en', { numeric: true });
+});
+const stdKeys = [...byStandard.keys()].sort((a, b) => a.localeCompare(b, 'en', { numeric: true }));
+const views = [
+  ['requirement', 'By requirement'],
+  ['standard', 'By standard'],
+  ['feature', 'By feature'],
+  ['verification', 'By verification'],
+] as const;
+---
+
+<ReqLayout
+  current="matrix"
+  title="Requirements matrix"
+  description="Traceability from each sluis v2 requirement to the standards it implements, the features that deliver it and the verification that proves it."
+>
+  <p>
+    One matrix, four ways to read it. Every cell links both ways: an id goes to its row on the page of its area. Requirements of the
+    account-hosting areas (scope open) are marked with a dagger.
+  </p>
+
+  <div class="rq-tabs" role="tablist" aria-label="Matrix views" data-rq-tabs hidden>
+    {views.map(([key, label], i) => <button role="tab" type="button" aria-selected={i === 0 ? 'true' : 'false'} aria-controls={`view-${key}`} data-view={key}>{label}</button>)}
+  </div>
+
+  <section id="view-requirement" class="rq-view" data-rq-view="requirement" aria-label="By requirement">
+    <div class="rq-table-wrap">
+      <table class="rq-table rq-matrix">
+        <thead><tr><th>Id</th><th>Level</th><th>Standards</th><th>Features</th><th>Verification</th></tr></thead>
+        <tbody>
+          {c.reqs.map((r) => (
+            <tr>
+              <td data-label="Id"><a href={reqPath(r)}>{r.id}</a>{c.areaByCode.get(r.area)!.scopeOpen && <sup title="Scope open"> &dagger;</sup>}</td>
+              <td data-label="Level">{r.level}</td>
+              <td data-label="Standards" class="rq-chips">{r.standards.length ? <Chips req={r} only="standards" /> : <span class="rq-none">none</span>}</td>
+              <td data-label="Features" class="rq-chips"><Chips req={r} only="features" /></td>
+              <td data-label="Verification">{r.verification.length ? [...new Set(r.verification.map((v) => KIND_LABEL[v.kind]))].join(', ') : <span class="rq-none">none</span>}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="view-standard" class="rq-view" data-rq-view="standard" aria-label="By standard">
+    <div class="rq-table-wrap">
+      <table class="rq-table rq-matrix">
+        <thead><tr><th>Standard</th><th>Requirements</th></tr></thead>
+        <tbody>
+          {stdKeys.map((id) => {
+            const s = c.standardById.get(id);
+            return (
+              <tr>
+                <td data-label="Standard">
+                  <b>{id}</b> {s?.url ? <a href={s.url}>{s.name}</a> : s?.name}
+                  <div class="rq-note">{byStandard.get(id)!.length} requirements{s && !s.register ? '; not yet a row of the register' : ''}</div>
+                </td>
+                <td data-label="Requirements" class="rq-chips">
+                  {byStandard.get(id)!.map((r) => { const l = link(r); return <a class="rq-chip" href={l.href}>{l.id}{l.open ? '†' : ''}</a>; })}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="view-feature" class="rq-view" data-rq-view="feature" aria-label="By feature">
+    <p>An issue number links to the feature on GitHub. <code>parity</code> means part of v1 parity with no single issue; <code>design</code> means specified with no issue yet.</p>
+    <div class="rq-table-wrap">
+      <table class="rq-table rq-matrix">
+        <thead><tr><th>Feature</th><th>Requirements</th></tr></thead>
+        <tbody>
+          {featureKeys.map((f) => (
+            <tr>
+              <td data-label="Feature">{featureUrl(f) ? <a href={featureUrl(f)}>{f}</a> : <b>{f}</b>}<div class="rq-note">{byFeature.get(f)!.length} requirements</div></td>
+              <td data-label="Requirements" class="rq-chips">
+                {byFeature.get(f)!.map((r) => { const l = link(r); return <a class="rq-chip" href={l.href}>{l.id}{l.open ? '†' : ''}</a>; })}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="view-verification" class="rq-view" data-rq-view="verification" aria-label="By verification">
+    {byKind.map(({ kind, refs }) => (
+      <>
+        <h2 id={`v-${kind}`}>{KIND_LABEL[kind]}</h2>
+        <p>{new Set(refs.flatMap(([, rs]) => rs.map((r) => r.id))).size} requirements, {refs.length} distinct references.</p>
+        <div class="rq-table-wrap">
+          <table class="rq-table rq-matrix">
+            <thead><tr><th>Reference</th><th>Requirements</th></tr></thead>
+            <tbody>
+              {refs.map(([ref, rs]) => (
+                <tr>
+                  <td data-label="Reference">{ref}</td>
+                  <td data-label="Requirements" class="rq-chips">
+                    {rs.map((r) => { const l = link(r); return <a class="rq-chip" href={l.href}>{l.id}{l.open ? '†' : ''}</a>; })}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </>
+    ))}
+  </section>
+</ReqLayout>
+
+<script>
+  // Switch between the four views; without the script all four are shown one after the other.
+  const tabs = document.querySelector<HTMLElement>('[data-rq-tabs]');
+  if (tabs) {
+    const buttons = [...tabs.querySelectorAll<HTMLButtonElement>('button')];
+    const views = [...document.querySelectorAll<HTMLElement>('[data-rq-view]')];
+    const show = (key: string) => {
+      for (const b of buttons) b.setAttribute('aria-selected', String(b.dataset.view === key));
+      for (const v of views) v.hidden = v.dataset.rqView !== key;
+    };
+    tabs.hidden = false;
+    for (const b of buttons) b.addEventListener('click', () => { show(b.dataset.view!); history.replaceState(null, '', `#view-${b.dataset.view}`); });
+    const fromHash = /^#view-(\w+)$/.exec(location.hash)?.[1];
+    show(fromHash && buttons.some((b) => b.dataset.view === fromHash) ? fromHash : 'requirement');
+  }
+</script>

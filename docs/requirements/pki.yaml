@@ -1,0 +1,382 @@
+# PKI: Internal PKI and ceremonies
+schema: 1
+area: PKI
+requirements:
+  - id: REQ-PKI-001
+    area: PKI
+    statement: "The certificate authority actor MUST issue only short-lived certificates by default."
+    rationale: "Short lifetimes make revocation a break-glass control rather than the main control."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: ["bare-metal", "serverless", "kubernetes"]
+    standards:
+      - {id: ST-62, section: "5280", depth: Full}
+    features: ["design"]
+    verification:
+      - {kind: integration-test, ref: "lifetime-ceiling test"}
+  - id: REQ-PKI-002
+    area: PKI
+    statement: "A certificate authority MUST give every certificate a random 128-bit serial number."
+    rationale: "Random serials remove the need for a ledger and stop prediction."
+    level: MUST
+    origin: standard
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-62, section: "4.1.2.2", depth: Full}
+      - {id: ST-106, section: "test plan", depth: Full}
+    features: ["design"]
+    verification:
+      - {kind: test-vectors, ref: "x509-limbo"}
+      - {kind: integration-test, ref: "serial entropy test"}
+  - id: REQ-PKI-003
+    area: PKI
+    statement: "Issuance MUST be governed by a role policy that fixes subject constraints, extensions and maximum lifetime."
+    rationale: "Requesters must not choose names or extensions."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-62, section: "4", depth: Full}
+      - {id: ST-106, section: "test plan", depth: Full}
+    features: ["design"]
+    verification:
+      - {kind: test-vectors, ref: "x509-limbo"}
+      - {kind: integration-test, ref: "role-policy tests"}
+  - id: REQ-PKI-010
+    area: PKI
+    split_from: REQ-PKI-003
+    statement: "A certificate request without a common name MUST be accepted when the role policy supplies identity."
+    rationale: "Requesters must not choose names or extensions."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-62, section: "4", depth: Full}
+    features: ["design"]
+    verification:
+      - {kind: integration-test, ref: "CN-less request test"}
+  - id: REQ-PKI-004
+    area: PKI
+    statement: "A root key MUST be generated on a hardware token with attestation."
+    rationale: "Independent roots avoid copying keys and keep attestation."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: ["bare-metal", "kubernetes"]
+    standards:
+      - {id: ST-62, section: "5280", depth: Full}
+      - {id: NC-10, section: "PIV", depth: Full}
+    features: ["design"]
+    verification:
+      - {kind: manual, ref: "ceremony record"}
+      - {kind: integration-test, ref: "attestation verification test"}
+  - id: REQ-PKI-011
+    area: PKI
+    split_from: REQ-PKI-004
+    statement: "Each token of a pair MUST hold its own independent root."
+    rationale: "Independent roots mean losing one card does not lose the other."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: ["bare-metal", "kubernetes"]
+    standards:
+      - {id: ST-62, section: "5280", depth: Full}
+      - {id: NC-10, section: "PIV", depth: Full}
+    features: ["design"]
+    manual_reason: "Independence of the roots is evidenced by the ceremony record and the token attestations."
+    verification:
+      - {kind: manual, ref: "ceremony record"}
+  - id: REQ-PKI-012
+    area: PKI
+    split_from: REQ-PKI-004
+    statement: "A root key MUST NOT be copied to another token."
+    rationale: "A copied key loses its attestation."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: ["bare-metal", "kubernetes"]
+    standards:
+      - {id: ST-62, section: "5280", depth: Full}
+      - {id: NC-10, section: "PIV", depth: Full}
+    features: ["design"]
+    verification:
+      - {kind: integration-test, ref: "attestation distinctness test"}
+  - id: REQ-PKI-013
+    area: PKI
+    split_from: REQ-PKI-004
+    statement: "Both roots of a pair MUST be authoritative."
+    rationale: "A verifier must be able to trust either root."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: ["bare-metal", "kubernetes"]
+    standards:
+      - {id: ST-62, section: "5280", depth: Full}
+      - {id: NC-10, section: "PIV", depth: Full}
+    features: ["design"]
+    verification:
+      - {kind: integration-test, ref: "either-root chain test"}
+  - id: REQ-PKI-014
+    area: PKI
+    split_from: REQ-PKI-004
+    statement: "Both roots of a pair MUST be present in every trust bundle."
+    rationale: "Independent roots avoid copying keys and keep attestation."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: ["bare-metal", "kubernetes"]
+    standards:
+      - {id: ST-62, section: "5280", depth: Full}
+      - {id: NC-10, section: "PIV", depth: Full}
+    features: ["design"]
+    verification:
+      - {kind: integration-test, ref: "trust-bundle content test"}
+  - id: REQ-PKI-005
+    area: PKI
+    statement: "Root key operations MUST run on a machine that is neither a server nor a CI runner."
+    rationale: "Operator presence is the control."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: ["bare-metal"]
+    standards:
+      - {id: NC-10, section: "PIV", depth: Full}
+    features: ["design"]
+    manual_reason: "The environment of a root ceremony is a human procedure that only a checklist can evidence."
+    verification:
+      - {kind: manual, ref: "ceremony checklist"}
+  - id: REQ-PKI-015
+    area: PKI
+    split_from: REQ-PKI-005
+    statement: "Every root key signature MUST require a PIN and a touch."
+    rationale: "Operator presence is the control."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: ["bare-metal"]
+    standards:
+      - {id: NC-10, section: "PIV", depth: Full}
+    features: ["design"]
+    verification:
+      - {kind: manual, ref: "ceremony checklist"}
+      - {kind: integration-test, ref: "token policy attestation test"}
+  - id: REQ-PKI-006
+    area: PKI
+    statement: "A certificate signing ceremony MUST reserve its attempt before signing."
+    rationale: "A burnt attempt must never be reusable."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-62, section: "4", depth: Partial}
+      - {id: ST-78, section: "RFC 8785", depth: Partial}
+    features: ["design"]
+    verification:
+      - {kind: integration-test, ref: "dry-run ceremony with a throwaway root"}
+  - id: REQ-PKI-016
+    area: PKI
+    split_from: REQ-PKI-006
+    statement: "A certificate signing ceremony MUST refuse a wrong confirmation hash before reserving."
+    rationale: "A mistyped confirmation must not burn an attempt."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-62, section: "4", depth: Partial}
+      - {id: ST-78, section: "RFC 8785", depth: Partial}
+    features: ["design"]
+    verification:
+      - {kind: integration-test, ref: "wrong-hash dry-run test"}
+  - id: REQ-PKI-017
+    area: PKI
+    split_from: REQ-PKI-006
+    statement: "A certificate signing ceremony MUST write a hash-chained ceremony record that contains no secrets."
+    rationale: "A burnt attempt must never be reusable."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-62, section: "4", depth: Partial}
+      - {id: ST-78, section: "RFC 8785", depth: Partial}
+    features: ["design"]
+    verification:
+      - {kind: integration-test, ref: "record chain and secret scan test"}
+  - id: REQ-PKI-007
+    area: PKI
+    statement: "sluis MAY publish a static certificate revocation list."
+    rationale: "Static revocation fits short-lived certificates."
+    level: MAY
+    origin: design-decision
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-62, section: "5", depth: Full}
+      - {id: ST-64, section: "1", depth: Full}
+    features: ["design"]
+    gap: proposed-design
+    verification:
+      - {kind: integration-test, ref: "CRL parse and nextUpdate tests"}
+  - id: REQ-PKI-018
+    area: PKI
+    split_from: REQ-PKI-007
+    statement: "sluis MAY support ACME for host certificates."
+    rationale: "Static revocation fits short-lived certificates."
+    level: MAY
+    origin: design-decision
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-62, section: "5", depth: Full}
+      - {id: ST-64, section: "1", depth: Full}
+    features: ["design"]
+    gap: proposed-design
+    verification:
+      - {kind: integration-test, ref: "ACME issuance test"}
+  - id: REQ-PKI-008
+    area: PKI
+    statement: "sluis MUST NOT run an online certificate status responder until a decision to do so is recorded."
+    rationale: "A responder adds an always-on dependency to relying parties."
+    level: MUST
+    origin: design-decision
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-63, section: "1", depth: Full}
+    features: ["design"]
+    gap: proposed-design
+    verification:
+      - {kind: manual, ref: "decision record"}
+      - {kind: integration-test, ref: "404 test for a status endpoint"}
+  - id: REQ-PKI-009
+    area: PKI
+    statement: "sluis MAY issue post-quantum or hybrid certificates once a certificate profile is standardised."
+    rationale: "PQ transition planning."
+    level: MAY
+    origin: standard
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-67, section: "9881", depth: Full}
+    features: ["design"]
+    gap: proposed-design
+    verification:
+      - {kind: test-vectors, ref: "NIST ACVP"}
+  - id: REQ-PKI-019
+    area: PKI
+    statement: "Each intermediate key MUST be certified by both roots of a pair, with one certificate from each root."
+    rationale: "Two certificates for one key let either root card be lost without breaking a chain."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: ["bare-metal", "kubernetes"]
+    standards:
+      - {id: ST-62, section: "5280", depth: Full}
+      - {id: NC-10, section: "PIV", depth: Partial}
+    features: ["design"]
+    verification:
+      - {kind: integration-test, ref: "two-chain verification test"}
+      - {kind: manual, ref: "ceremony record"}
+  - id: REQ-PKI-020
+    area: PKI
+    statement: "The loss of either root card MUST NOT break any certificate chain."
+    rationale: "This is the property that dual certification buys."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: ["bare-metal", "kubernetes"]
+    standards:
+      - {id: ST-62, section: "5280", depth: Full}
+    features: ["design"]
+    verification:
+      - {kind: integration-test, ref: "single-root chain verification test"}
+  - id: REQ-PKI-021
+    area: PKI
+    statement: "A root MUST be revoked by removing it from every trust bundle through the trust registry."
+    rationale: "Removal from the bundles is the only way to revoke a root."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: ["bare-metal", "kubernetes"]
+    standards:
+      - {id: ST-62, section: "5280", depth: Partial}
+    features: ["design"]
+    verification:
+      - {kind: integration-test, ref: "trust-bundle removal test"}
+      - {kind: manual, ref: "runbook review"}
+  - id: REQ-PKI-022
+    area: PKI
+    statement: "The lost-card runbook MUST generate the replacement root on a fresh hardware token."
+    rationale: "A replacement root must have its own attestation."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: ["bare-metal", "kubernetes"]
+    standards:
+      - {id: NC-10, section: "PIV", depth: Full}
+    features: ["design"]
+    manual_reason: "A runbook step is exercised in a drill by people."
+    verification:
+      - {kind: manual, ref: "runbook drill"}
+  - id: REQ-PKI-023
+    area: PKI
+    statement: "The lost-card runbook MUST re-issue any intermediate that chained only to the lost root."
+    rationale: "Dual certification should leave none, but the runbook must still check."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: ["bare-metal", "kubernetes"]
+    standards:
+      - {id: ST-62, section: "5280", depth: Partial}
+    features: ["design"]
+    verification:
+      - {kind: manual, ref: "runbook drill"}
+      - {kind: integration-test, ref: "orphaned-intermediate scan"}
+  - id: REQ-PKI-024
+    area: PKI
+    statement: "Cross-signing between the two roots of a pair MAY be used."
+    rationale: "Cross-signing is optional because both roots are already authoritative."
+    level: MAY
+    origin: design-decision
+    status: planned
+    runtimes: ["bare-metal", "kubernetes"]
+    standards:
+      - {id: ST-62, section: "5280", depth: Partial}
+    features: ["design"]
+    verification:
+      - {kind: integration-test, ref: "cross-signature chain test"}
+  - id: REQ-PKI-025
+    area: PKI
+    statement: "The documentation MUST NOT describe the second token of a pair as a spare copy of the first."
+    rationale: "The second token holds its own independent root, not a copy."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: NC-10, section: "PIV", depth: Partial}
+    features: ["design"]
+    manual_reason: "A statement in the documentation is checked by reading it."
+    verification:
+      - {kind: manual, ref: "documentation review"}
+  - id: REQ-PKI-026
+    area: PKI
+    statement: "sluis MUST provide a ceremony command for hardware-token root and intermediate operations."
+    rationale: "The ceremony automates every step that is not a human act and leaves PIN, touch and custody manual."
+    level: MUST
+    origin: design-decision
+    status: open
+    runtimes: ["bare-metal", "kubernetes"]
+    standards:
+      - {id: NC-10, section: "PIV", depth: Full}
+    features: ["design"]
+    gap: proposed-design
+    manual_reason: "The feature is planned; a dry run with a throwaway root is the first available evidence."
+    verification:
+      - {kind: manual, ref: "ceremony dry-run with a throwaway root"}

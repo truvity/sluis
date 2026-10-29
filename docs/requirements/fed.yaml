@@ -1,0 +1,290 @@
+# FED: Federation (sluis as a relying party)
+schema: 1
+area: FED
+requirements:
+  - id: REQ-FED-001
+    area: FED
+    statement: "When sluis consumes an upstream ID token it MUST verify the signature against the connection key set."
+    rationale: "An RP that skips a check is a login bypass."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-28, section: "3.1.3.7", depth: Full}
+      - {id: ST-56, section: "3", depth: Full}
+      - {id: ST-49, section: "5", depth: Full}
+      - {id: ST-104, section: "test plan", depth: Full}
+    features: ["#807"]
+    verification:
+      - {kind: conformance-suite, ref: "OIDF RP plans"}
+      - {kind: integration-test, ref: "bad-signature and unknown-kid cases"}
+  - id: REQ-FED-011
+    area: FED
+    split_from: REQ-FED-001
+    statement: "When sluis consumes an upstream ID token it MUST restrict the algorithms to an allow-list that excludes none and HMAC."
+    rationale: "An RP that skips a check is a login bypass."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-28, section: "3.1.3.7", depth: Full}
+      - {id: ST-56, section: "3", depth: Full}
+      - {id: ST-49, section: "5", depth: Full}
+    features: ["#807"]
+    verification:
+      - {kind: integration-test, ref: "alg=none and HMAC negative cases"}
+  - id: REQ-FED-012
+    area: FED
+    split_from: REQ-FED-001
+    statement: "When sluis consumes an upstream ID token it MUST verify iss, aud, azp, nonce and the time claims."
+    rationale: "An RP that skips a check is a login bypass."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-28, section: "3.1.3.7", depth: Full}
+      - {id: ST-56, section: "3", depth: Full}
+      - {id: ST-49, section: "5", depth: Full}
+    features: ["#807"]
+    verification:
+      - {kind: integration-test, ref: "wrong-aud and wrong-nonce cases"}
+  - id: REQ-FED-013
+    area: FED
+    split_from: REQ-FED-001
+    statement: "sluis MUST NOT read identity claims from an unsigned upstream token."
+    rationale: "An RP that skips a check is a login bypass."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-28, section: "3.1.3.7", depth: Full}
+      - {id: ST-56, section: "3", depth: Full}
+      - {id: ST-49, section: "5", depth: Full}
+    features: ["#807"]
+    verification:
+      - {kind: integration-test, ref: "unsigned-token negative case"}
+  - id: REQ-FED-002
+    area: FED
+    statement: "A federated identity MUST be linked by the tuple of connection, issuer and subject."
+    rationale: "E-mail is not a stable or verified key."
+    level: MUST
+    origin: stakeholder-ciam
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-28, section: "5.7", depth: Full}
+    features: ["design"]
+    verification:
+      - {kind: integration-test, ref: "link-key test"}
+  - id: REQ-FED-014
+    area: FED
+    split_from: REQ-FED-002
+    statement: "A federated identity MUST NOT be linked by e-mail address."
+    rationale: "E-mail is not a stable or verified key."
+    level: MUST
+    origin: stakeholder-ciam
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-28, section: "5.7", depth: Full}
+    features: ["design"]
+    verification:
+      - {kind: integration-test, ref: "e-mail link negative test"}
+  - id: REQ-FED-003
+    area: FED
+    statement: "A client of an upstream connection MUST check iss in the authorization response."
+    rationale: "This stops mix-up attacks across upstreams."
+    level: MUST
+    origin: stakeholder-ciam
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-10, section: "2.4", depth: Full}
+    features: ["design"]
+    verification:
+      - {kind: integration-test, ref: "mix-up tests"}
+  - id: REQ-FED-015
+    area: FED
+    split_from: REQ-FED-003
+    statement: "A client of an upstream connection MUST refuse a missing iss when the upstream advertises support."
+    rationale: "This stops mix-up attacks across upstreams."
+    level: MUST
+    origin: stakeholder-ciam
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-10, section: "2.4", depth: Full}
+    features: ["design"]
+    verification:
+      - {kind: integration-test, ref: "missing-iss test"}
+  - id: REQ-FED-004
+    area: FED
+    statement: "Each upstream connection MUST carry a trust policy that sets an assurance ceiling, optional required authentication methods and a maximum authentication age."
+    rationale: "The relying decision is per connection."
+    level: MUST
+    origin: stakeholder-ciam
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-28, section: "3.1.2.1", depth: Partial}
+      - {id: NC-01, section: "8176", depth: Partial}
+    features: ["design"]
+    verification:
+      - {kind: integration-test, ref: "trust-policy matrix"}
+  - id: REQ-FED-005
+    area: FED
+    statement: "sluis MUST read only a configured allow-list of claims from an upstream."
+    rationale: "Only declared claims enter the model."
+    level: MUST
+    origin: stakeholder-ciam
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-28, section: "3.1.2", depth: Partial}
+    features: ["design"]
+    verification:
+      - {kind: integration-test, ref: "claim allow-list test"}
+  - id: REQ-FED-016
+    area: FED
+    split_from: REQ-FED-005
+    statement: "sluis MUST NOT read upstream roles or groups."
+    rationale: "Upstream roles are not evidence that sluis has verified."
+    level: MUST
+    origin: stakeholder-ciam
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-28, section: "3.1.2", depth: Partial}
+    features: ["design"]
+    verification:
+      - {kind: integration-test, ref: "role-claim negative test"}
+  - id: REQ-FED-017
+    area: FED
+    split_from: REQ-FED-005
+    statement: "sluis MUST refuse identity-provider-initiated sign-in."
+    rationale: "An unsolicited response is a login CSRF vector."
+    level: MUST
+    origin: stakeholder-ciam
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-28, section: "3.1.2", depth: Partial}
+    features: ["design"]
+    verification:
+      - {kind: integration-test, ref: "unsolicited-response negative test"}
+  - id: REQ-FED-006
+    area: FED
+    statement: "A domain MUST become routable to a connection only after a DNS TXT record proves control of the domain."
+    rationale: "Home-realm routing for the wrong domain is an account-takeover path."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-28, section: "3", depth: Partial}
+    features: ["design"]
+    gap: stakeholder-only
+    verification:
+      - {kind: integration-test, ref: "domain verification test"}
+  - id: REQ-FED-007
+    area: FED
+    statement: "sluis SHOULD be usable as an upstream by another sluis installation through the same connector, with peer trust declared by key set."
+    rationale: "Peer trust composes installations."
+    level: SHOULD
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-28, section: "3", depth: Full}
+      - {id: ST-29, section: "4", depth: Full}
+      - {id: ST-07, section: "2", depth: Partial}
+    features: ["design"]
+    verification:
+      - {kind: integration-test, ref: "peer integration test"}
+  - id: REQ-FED-008
+    area: FED
+    statement: "All outbound discovery, key-set and token fetches MUST pass an egress policy that checks addresses after name resolution and refuses loopback, link-local and private addresses outside the local profile."
+    rationale: "SSRF through an attacker-chosen discovery URL reaches internal services."
+    level: MUST
+    origin: stakeholder-ciam
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-14, section: "4", depth: Partial}
+    features: ["#792"]
+    verification:
+      - {kind: integration-test, ref: "SSRF tests (metadata address, loopback, private)"}
+  - id: REQ-FED-009
+    area: FED
+    statement: "sluis MAY provide a SAML service-provider connector."
+    rationale: "SAML is outside the current register."
+    level: MAY
+    origin: stakeholder-ciam
+    status: out-of-scope
+    runtimes: all
+    standards:
+      - {id: ST-43, section: "2", depth: Partial}
+    features: ["design"]
+    verification:
+      - {kind: manual, ref: "scope record"}
+  - id: REQ-FED-018
+    area: FED
+    split_from: REQ-FED-009
+    statement: "A SAML service-provider connector, where provided, MUST NOT accept an unsigned assertion."
+    rationale: "SAML is outside the current register."
+    level: MUST
+    origin: stakeholder-ciam
+    status: out-of-scope
+    runtimes: all
+    standards:
+      - {id: ST-43, section: "2", depth: Partial}
+    features: ["design"]
+    verification:
+      - {kind: integration-test, ref: "signature-wrapping corpus"}
+  - id: REQ-FED-019
+    area: FED
+    split_from: REQ-FED-009
+    statement: "A SAML service-provider connector, where provided, MUST NOT accept an unsolicited response."
+    rationale: "SAML is outside the current register."
+    level: MUST
+    origin: stakeholder-ciam
+    status: out-of-scope
+    runtimes: all
+    standards:
+      - {id: ST-43, section: "2", depth: Partial}
+    features: ["design"]
+    verification:
+      - {kind: integration-test, ref: "unsolicited-response test"}
+  - id: REQ-FED-010
+    area: FED
+    statement: "A social-identity sign-in MUST count as a first factor only."
+    rationale: "Social sign-in carries no assurance sluis has verified."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-28, section: "2", depth: Partial}
+    features: ["design"]
+    gap: stakeholder-only
+    verification:
+      - {kind: integration-test, ref: "first-factor-only test"}
+  - id: REQ-FED-020
+    area: FED
+    split_from: REQ-FED-010
+    statement: "A further own factor MUST be required before any assurance level is granted to a social-identity sign-in."
+    rationale: "Social sign-in carries no assurance sluis has verified."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-28, section: "2", depth: Partial}
+    features: ["design"]
+    gap: stakeholder-only
+    verification:
+      - {kind: integration-test, ref: "further-factor test"}

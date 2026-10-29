@@ -1,0 +1,45 @@
+---
+import ReqLayout from '../../components/requirements/ReqLayout.astro';
+import ReqTable from '../../components/requirements/ReqTable.astro';
+import { areaPath, catalogue, count, SOURCE } from '../../lib/requirements';
+
+export function getStaticPaths() {
+  return catalogue().areas.map((a) => ({ params: { area: a.code.toLowerCase() }, props: { code: a.code } }));
+}
+
+const c = catalogue();
+const area = c.areaByCode.get(Astro.props.code)!;
+const title = area.title.replace(/ \(open scope\)$/, '');
+const n = (f: (r: (typeof area.reqs)[number]) => boolean) => area.reqs.filter(f).length;
+const index = c.areas.findIndex((a) => a.code === area.code);
+const prev = c.areas[index - 1];
+const next = c.areas[index + 1];
+---
+
+<ReqLayout
+  title={`${area.code}: ${title}`}
+  description={`The ${area.reqs.length} sluis v2 requirements of the ${title.toLowerCase()} area, with their standards, features, decisions and verification.`}
+>
+  {area.scopeOpen && (
+    <aside class="rq-scope" aria-label="Scope">
+      <span class="rq-badge rq-scope-badge">scope open</span>
+      <p>
+        This area belongs to customer account hosting. Whether sluis hosts customer accounts is undecided, so these requirements wait for
+        that decision and are all open. They are published so that the question can be judged on the whole text.
+      </p>
+    </aside>
+  )}
+  <p>
+    {area.reqs.length} requirements: {n((r) => r.level === 'MUST')} MUST, {n((r) => r.level === 'SHOULD')} SHOULD,
+    {' '}{n((r) => r.level === 'MAY')} MAY. {n((r) => r.status === 'planned')} planned,
+    {' '}{n((r) => r.status === 'partial')} partial, {n((r) => r.status === 'open')} open.
+    Source: <a href={`${SOURCE}${area.file}`}><code>docs/requirements/{area.file}</code></a>.
+    A clause cut from a longer record sits under it and says "Split from".
+  </p>
+  <ReqTable reqs={area.reqs} detail />
+  <nav class="rq-pager" aria-label="Areas">
+    {prev ? <a href={areaPath(prev.code)}>&larr; {prev.code}</a> : <span></span>}
+    <a href="/requirements/#areas">All areas</a>
+    {next ? <a href={areaPath(next.code)}>{next.code} &rarr;</a> : <span></span>}
+  </nav>
+</ReqLayout>

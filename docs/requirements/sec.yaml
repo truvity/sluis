@@ -1,0 +1,277 @@
+# SEC: Security hardening
+schema: 1
+area: SEC
+requirements:
+  - id: REQ-SEC-001
+    area: SEC
+    statement: "A library that verifies tokens MUST pin the expected algorithm."
+    rationale: "These are the failures of real token verifiers."
+    level: MUST
+    origin: standard
+    status: partial
+    runtimes: all
+    standards:
+      - {id: ST-56, section: "3", depth: Full}
+      - {id: ST-52, section: "7", depth: Full}
+      - {id: ST-49, section: "5", depth: Full}
+    features: ["#830", "#869"]
+    gap: register-gap
+    verification:
+      - {kind: test-vectors, ref: "JWT BCP negative vectors"}
+  - id: REQ-SEC-012
+    area: SEC
+    split_from: REQ-SEC-001
+    statement: "A library that verifies tokens MUST reject alg none and algorithm confusion."
+    rationale: "These are the failures of real token verifiers."
+    level: MUST
+    origin: standard
+    status: partial
+    runtimes: all
+    standards:
+      - {id: ST-56, section: "3", depth: Full}
+      - {id: ST-52, section: "7", depth: Full}
+      - {id: ST-49, section: "5", depth: Full}
+    features: ["#830", "#869"]
+    gap: register-gap
+    verification:
+      - {kind: test-vectors, ref: "JWT BCP negative vectors"}
+  - id: REQ-SEC-013
+    area: SEC
+    split_from: REQ-SEC-001
+    statement: "A library that verifies tokens MUST verify typ, iss and aud."
+    rationale: "These are the failures of real token verifiers."
+    level: MUST
+    origin: standard
+    status: partial
+    runtimes: all
+    standards:
+      - {id: ST-56, section: "3", depth: Full}
+      - {id: ST-52, section: "7", depth: Full}
+      - {id: ST-49, section: "5", depth: Full}
+    features: ["#830", "#869"]
+    gap: register-gap
+    verification:
+      - {kind: test-vectors, ref: "JWT BCP negative vectors"}
+      - {kind: test-vectors, ref: "RFC 7520 cookbook"}
+  - id: REQ-SEC-002
+    area: SEC
+    statement: "sluis MUST pass a review against every recommendation of the OAuth security best current practice before a release."
+    rationale: "A checklist pass closes the gap between intent and behaviour."
+    level: MUST
+    origin: standard
+    status: partial
+    runtimes: all
+    standards:
+      - {id: ST-14, section: "2-4", depth: Full}
+    features: ["#775", "#777", "#782"]
+    gap: register-gap
+    manual_reason: "A checklist review is the requirement; the tests it maps to are listed in the next requirement."
+    verification:
+      - {kind: manual, ref: "checklist review"}
+  - id: REQ-SEC-014
+    area: SEC
+    split_from: REQ-SEC-002
+    statement: "Each recommendation of the OAuth security best current practice MUST map to a test."
+    rationale: "A checklist pass closes the gap between intent and behaviour."
+    level: MUST
+    origin: standard
+    status: partial
+    runtimes: all
+    standards:
+      - {id: ST-14, section: "2-4", depth: Full}
+    features: ["#775", "#777", "#782"]
+    gap: register-gap
+    verification:
+      - {kind: integration-test, ref: "one test per recommendation"}
+  - id: REQ-SEC-003
+    area: SEC
+    statement: "A state-changing endpoint MUST check that a present Origin header is in the endpoint's exact allow-list."
+    rationale: "Same-site sibling origins are not trusted."
+    level: MUST
+    origin: security-review
+    status: planned
+    runtimes: all
+    standards:
+      - {id: NC-05, section: "Fetch Metadata", depth: Full}
+    features: ["#796"]
+    verification:
+      - {kind: integration-test, ref: "origin matrix"}
+  - id: REQ-SEC-015
+    area: SEC
+    split_from: REQ-SEC-003
+    statement: "A state-changing endpoint MUST refuse Sec-Fetch-Site other than same-origin."
+    rationale: "Same-site sibling origins are not trusted."
+    level: MUST
+    origin: security-review
+    status: planned
+    runtimes: all
+    standards:
+      - {id: NC-05, section: "Fetch Metadata", depth: Full}
+    features: ["#796"]
+    verification:
+      - {kind: integration-test, ref: "Sec-Fetch-Site matrix"}
+  - id: REQ-SEC-016
+    area: SEC
+    split_from: REQ-SEC-003
+    statement: "A state-changing endpoint MUST require a CSRF token when neither header is present."
+    rationale: "Same-site sibling origins are not trusted."
+    level: MUST
+    origin: security-review
+    status: planned
+    runtimes: all
+    standards:
+      - {id: NC-05, section: "Fetch Metadata", depth: Full}
+    features: ["#796"]
+    verification:
+      - {kind: integration-test, ref: "CSRF token test"}
+  - id: REQ-SEC-004
+    area: SEC
+    statement: "Every page MUST be sent with a restrictive content security policy, HSTS with includeSubDomains, no-referrer, nosniff and frame-ancestors none."
+    rationale: "Browser headers are the second line of defence."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: NC-05, section: "CSP/HSTS", depth: Full}
+    features: ["#796"]
+    verification:
+      - {kind: integration-test, ref: "header test per page kind"}
+  - id: REQ-SEC-005
+    area: SEC
+    statement: "The endpoint that lists a caller's grants MUST list only clients and presets that the caller's groups admit."
+    rationale: "A grant list is an information disclosure."
+    level: MUST
+    origin: security-review
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-14, section: "4", depth: Partial}
+    features: ["#774"]
+    verification:
+      - {kind: integration-test, ref: "grant-visibility test"}
+  - id: REQ-SEC-006
+    area: SEC
+    statement: "Authentication, token and recovery endpoints MUST be rate-limited per account, factor and source, with a progressive delay."
+    rationale: "Throttling stops guessing; global lock-out is a denial of service."
+    level: MUST
+    origin: security-review
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-14, section: "4", depth: Partial}
+    features: ["design"]
+    verification:
+      - {kind: integration-test, ref: "rate-limit test"}
+  - id: REQ-SEC-017
+    area: SEC
+    split_from: REQ-SEC-006
+    statement: "Authentication, token and recovery endpoints MUST NOT apply a global lock-out."
+    rationale: "A global lock-out is a denial of service."
+    level: MUST
+    origin: security-review
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-14, section: "4", depth: Partial}
+    features: ["design"]
+    verification:
+      - {kind: integration-test, ref: "no-global-lockout test"}
+  - id: REQ-SEC-007
+    area: SEC
+    statement: "Fuzz targets MUST exist for authorization and token parameter parsing, token and signature parsing, WebAuthn response handling and policy loading."
+    rationale: "Parsers fail on unexpected inputs."
+    level: MUST
+    origin: standard
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-49, section: "7515", depth: Partial}
+    features: ["design"]
+    verification:
+      - {kind: integration-test, ref: "fuzz corpus in CI"}
+  - id: REQ-SEC-008
+    area: SEC
+    statement: "Cryptographic primitives and protocol parsers MUST come from approved, maintained libraries."
+    rationale: "Home-made crypto is the main risk."
+    level: MUST
+    origin: standard
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-88, section: "1", depth: Partial}
+    features: ["design"]
+    verification:
+      - {kind: manual, ref: "dependency lint"}
+      - {kind: integration-test, ref: "vulnerability scan"}
+  - id: REQ-SEC-018
+    area: SEC
+    split_from: REQ-SEC-008
+    statement: "sluis MUST NOT implement its own cryptographic primitives or protocol parsers."
+    rationale: "Home-made crypto is the main risk."
+    level: MUST
+    origin: standard
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-88, section: "1", depth: Partial}
+    features: ["design"]
+    manual_reason: "The rule constrains the source tree and its dependencies; a reviewer confirms the dependency lint."
+    verification:
+      - {kind: manual, ref: "dependency lint"}
+  - id: REQ-SEC-009
+    area: SEC
+    statement: "A threat model and its negative tests MUST exist before code is merged for the authentication, federation, exchange and administration surfaces."
+    rationale: "Independent tests find different bugs."
+    level: MUST
+    origin: security-review
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-14, section: "4", depth: Partial}
+    features: ["design"]
+    manual_reason: "The rule governs the review process and is evidenced by review records."
+    verification:
+      - {kind: manual, ref: "review evidence"}
+  - id: REQ-SEC-019
+    area: SEC
+    split_from: REQ-SEC-009
+    statement: "The negative tests of a surface MUST be written by someone other than the code's author."
+    rationale: "Independent tests find different bugs."
+    level: MUST
+    origin: security-review
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-14, section: "4", depth: Partial}
+    features: ["design"]
+    manual_reason: "The rule governs who writes tests and is evidenced by review records."
+    verification:
+      - {kind: manual, ref: "review evidence"}
+  - id: REQ-SEC-010
+    area: SEC
+    statement: "An administrative surface MUST NOT be reachable on the public listener."
+    rationale: "Operator doors do not belong on the internet."
+    level: MUST
+    origin: security-review
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-14, section: "4", depth: Partial}
+    features: ["design"]
+    verification:
+      - {kind: integration-test, ref: "404 on public listener"}
+  - id: REQ-SEC-011
+    area: SEC
+    statement: "Tokens of one installation MUST NOT be accepted by another installation's token endpoint, introspection or exchange."
+    rationale: "Cross-installation replay breaks isolation."
+    level: MUST
+    origin: standard
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-52, section: "7", depth: Full}
+      - {id: ST-56, section: "3", depth: Full}
+    features: ["design"]
+    verification:
+      - {kind: integration-test, ref: "cross-installation negative test"}

@@ -2,7 +2,8 @@
 // Front-matter description lint: every page under docs/ must carry a
 // `description:` of 40 to 160 characters (search results, link previews and
 // llms.txt are built from it). The ADRs in docs/decisions/ are indexed by the
-// site rather than rendered as pages of their own, so they are not linted here.
+// site rather than rendered as pages of their own, so they are not linted here. Nor is docs/requirements/ (YAML data, linted by
+// check-requirements.mjs; its pages are generated).
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -16,7 +17,7 @@ function* walk(dir) {
   for (const name of readdirSync(dir).sort()) {
     const path = join(dir, name);
     if (statSync(path).isDirectory()) {
-      if (path === join(docs, 'decisions')) continue;
+      if (path === join(docs, 'decisions') || path === join(docs, 'requirements')) continue;
       yield* walk(path);
     } else if (/\.(md|mdx)$/.test(name) && !name.startsWith('_')) {
       yield path;

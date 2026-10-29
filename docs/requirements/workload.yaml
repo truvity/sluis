@@ -1,0 +1,61 @@
+# WORKLOAD: Workload identity
+schema: 1
+area: WORKLOAD
+requirements:
+  - id: REQ-WORKLOAD-001
+    area: WORKLOAD
+    statement: "A CI identity token MUST be verified against the provider's key set, with iss and aud pinned and the subject matched against policy."
+    rationale: "The token is the only proof of the job."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-44, section: "1", depth: Full}
+      - {id: ST-56, section: "3", depth: Full}
+      - {id: ST-52, section: "7", depth: Full}
+    features: ["#783"]
+    verification:
+      - {kind: test-vectors, ref: "provider token fixtures"}
+  - id: REQ-WORKLOAD-002
+    area: WORKLOAD
+    statement: "A Kubernetes service-account token MUST be verified offline against the cluster key set without calling the token review API, except on a recovery path."
+    rationale: "The review API is a runtime dependency on the cluster."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: ["bare-metal", "kubernetes"]
+    standards:
+      - {id: ST-45, section: "1", depth: Full}
+    features: ["#784"]
+    verification:
+      - {kind: test-vectors, ref: "per-cluster fixtures"}
+  - id: REQ-WORKLOAD-003
+    area: WORKLOAD
+    statement: "A cloud role token MUST be verified using the cloud's published key set and its documented claims."
+    rationale: "Per-cloud rules differ in issuer and audience."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-46, section: "1", depth: Full}
+      - {id: ST-47, section: "1", depth: Partial}
+    features: ["#784"]
+    verification:
+      - {kind: test-vectors, ref: "per-account fixtures"}
+  - id: REQ-WORKLOAD-004
+    area: WORKLOAD
+    statement: "sluis SHOULD publish a public issuer URL with discovery and a key set so that a cloud provider can federate with it."
+    rationale: "Cloud federation fetches both documents."
+    level: SHOULD
+    origin: design-decision
+    status: planned
+    runtimes: ["bare-metal", "kubernetes"]
+    standards:
+      - {id: ST-29, section: "3", depth: Full}
+      - {id: ST-50, section: "5", depth: Full}
+      - {id: ST-46, section: "1", depth: Full}
+    features: ["#870"]
+    verification:
+      - {kind: integration-test, ref: "cloud STS acceptance test"}

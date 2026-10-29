@@ -1,0 +1,115 @@
+# UX: Pages and user experience
+schema: 1
+area: UX
+requirements:
+  - id: REQ-UX-001
+    area: UX
+    statement: "A refusal shown to a user MUST show only a generic message and a request identifier."
+    rationale: "Detailed reasons help an attacker."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-14, section: "4", depth: Partial}
+    features: ["#796"]
+    verification:
+      - {kind: integration-test, ref: "page-text assertion"}
+  - id: REQ-UX-006
+    area: UX
+    split_from: REQ-UX-001
+    statement: "The reason for a refusal MUST be written to the log only."
+    rationale: "Detailed reasons help an attacker."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-14, section: "4", depth: Partial}
+    features: ["#796"]
+    verification:
+      - {kind: integration-test, ref: "log-only reason test"}
+  - id: REQ-UX-002
+    area: UX
+    statement: "Every page MUST be rendered from a template with message catalogues."
+    rationale: "Sign-in pages are user interface."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: NC-04, section: "WCAG 2.1", depth: Partial}
+    features: ["#779", "#796"]
+    verification:
+      - {kind: integration-test, ref: "catalogue coverage test"}
+  - id: REQ-UX-007
+    area: UX
+    split_from: REQ-UX-002
+    statement: "The supported locales MUST be configurable."
+    rationale: "Sign-in pages are user interface."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: NC-04, section: "WCAG 2.1", depth: Partial}
+    features: ["#779", "#796"]
+    verification:
+      - {kind: integration-test, ref: "locale selection tests"}
+  - id: REQ-UX-003
+    area: UX
+    statement: "A client MUST name a theme from the declared set."
+    rationale: "Branding without free-form injection."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: NC-04, section: "WCAG 2.1", depth: Partial}
+    features: ["design"]
+    gap: stakeholder-only
+    verification:
+      - {kind: integration-test, ref: "theme declaration test"}
+  - id: REQ-UX-008
+    area: UX
+    split_from: REQ-UX-003
+    statement: "An unknown theme MUST be refused at load."
+    rationale: "Branding without free-form injection."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: NC-04, section: "WCAG 2.1", depth: Partial}
+    features: ["design"]
+    gap: stakeholder-only
+    verification:
+      - {kind: integration-test, ref: "theme load test"}
+  - id: REQ-UX-004
+    area: UX
+    statement: "Credential and consent pages MUST name the requesting client and the account controller."
+    rationale: "Users must see who asks."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: NC-04, section: "WCAG 2.1", depth: Partial}
+    features: ["design"]
+    gap: stakeholder-only
+    verification:
+      - {kind: integration-test, ref: "page text test"}
+  - id: REQ-UX-005
+    area: UX
+    statement: "Hosted pages MUST carry stable machine-readable hooks for test drivers: page kind, field names and action markers."
+    rationale: "Tests need stable selectors."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: NC-04, section: "WCAG 2.1", depth: Partial}
+    features: ["design"]
+    gap: stakeholder-only
+    verification:
+      - {kind: integration-test, ref: "hook contract test"}

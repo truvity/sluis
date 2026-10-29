@@ -1,0 +1,368 @@
+# BACKUP: Backup and restore
+schema: 1
+area: BACKUP
+requirements:
+  - id: REQ-BACKUP-001
+    area: BACKUP
+    statement: "A backup archive MUST be encrypted with age to at least two recipients that are held apart."
+    rationale: "One recipient is a single point of loss."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-95, section: "age", depth: Full}
+    features: ["#834"]
+    verification:
+      - {kind: test-vectors, ref: "age vectors"}
+  - id: REQ-BACKUP-006
+    area: BACKUP
+    split_from: REQ-BACKUP-001
+    statement: "A backup archive MUST be readable with stock age and tar tools."
+    rationale: "An operator must be able to recover with no sluis binary."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-95, section: "age", depth: Full}
+    features: ["#834"]
+    verification:
+      - {kind: integration-test, ref: "stock-tool restore test"}
+  - id: REQ-BACKUP-007
+    area: BACKUP
+    split_from: REQ-BACKUP-001
+    statement: "`sluis config check` MUST refuse fewer than two backup recipients in production."
+    rationale: "One recipient is a single point of loss."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-95, section: "age", depth: Full}
+    features: ["#834"]
+    verification:
+      - {kind: integration-test, ref: "recipient-count test"}
+  - id: REQ-BACKUP-002
+    area: BACKUP
+    statement: "A backup MUST NOT contain private keys, refresh tokens or long-lived sessions."
+    rationale: "Secrets and bearer credentials must not travel in archives."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-95, section: "age", depth: Partial}
+    features: ["#834", "#835"]
+    verification:
+      - {kind: integration-test, ref: "archive content scan"}
+  - id: REQ-BACKUP-008
+    area: BACKUP
+    split_from: REQ-BACKUP-002
+    statement: "A restore MUST invalidate all refresh tokens and sessions."
+    rationale: "Secrets and bearer credentials must not travel in archives."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-95, section: "age", depth: Partial}
+    features: ["#834", "#835"]
+    verification:
+      - {kind: integration-test, ref: "post-restore invalidation test"}
+  - id: REQ-BACKUP-003
+    area: BACKUP
+    statement: "A restore MUST verify the integrity of every object before writing."
+    rationale: "A bad restore must not go live."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-95, section: "age", depth: Partial}
+      - {id: ST-96, section: "2020-12", depth: Partial}
+      - {id: ST-49, section: "7515", depth: Partial}
+    features: ["#835"]
+    verification:
+      - {kind: integration-test, ref: "corrupted-object restore test"}
+  - id: REQ-BACKUP-009
+    area: BACKUP
+    split_from: REQ-BACKUP-003
+    statement: "A restore MUST verify the provenance of the backup in the audit log before writing."
+    rationale: "An archive that no audited backup produced is not trusted."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-95, section: "age", depth: Partial}
+      - {id: ST-96, section: "2020-12", depth: Partial}
+      - {id: ST-49, section: "7515", depth: Partial}
+    features: ["#835"]
+    verification:
+      - {kind: integration-test, ref: "foreign-archive provenance test"}
+  - id: REQ-BACKUP-010
+    area: BACKUP
+    split_from: REQ-BACKUP-003
+    statement: "A restore MUST verify configuration compatibility before writing."
+    rationale: "A bad restore must not go live."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-95, section: "age", depth: Partial}
+      - {id: ST-96, section: "2020-12", depth: Partial}
+      - {id: ST-49, section: "7515", depth: Partial}
+    features: ["#835"]
+    verification:
+      - {kind: integration-test, ref: "incompatible-configuration restore test"}
+  - id: REQ-BACKUP-011
+    area: BACKUP
+    split_from: REQ-BACKUP-003
+    statement: "A restore MUST verify that the keys it needs are reachable before writing."
+    rationale: "A bad restore must not go live."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-95, section: "age", depth: Partial}
+      - {id: ST-96, section: "2020-12", depth: Partial}
+      - {id: ST-49, section: "7515", depth: Partial}
+    features: ["#835"]
+    verification:
+      - {kind: integration-test, ref: "key-unreachable restore test"}
+  - id: REQ-BACKUP-012
+    area: BACKUP
+    split_from: REQ-BACKUP-003
+    statement: "A restore MUST lift maintenance only after a clean read-back."
+    rationale: "A bad restore must not go live."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-95, section: "age", depth: Partial}
+      - {id: ST-96, section: "2020-12", depth: Partial}
+      - {id: ST-49, section: "7515", depth: Partial}
+    features: ["#835"]
+    verification:
+      - {kind: integration-test, ref: "read-back test"}
+  - id: REQ-BACKUP-004
+    area: BACKUP
+    statement: "A restore MUST NOT restore a witness to an older state."
+    rationale: "A rolled-back witness would co-sign a rewritten view."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-74, section: "1", depth: Full}
+    features: ["#835"]
+    verification:
+      - {kind: integration-test, ref: "witness-reset test"}
+  - id: REQ-BACKUP-013
+    area: BACKUP
+    split_from: REQ-BACKUP-004
+    statement: "A restore MUST re-bootstrap a witness."
+    rationale: "A rolled-back witness would co-sign a rewritten view."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-74, section: "1", depth: Full}
+    features: ["#835"]
+    verification:
+      - {kind: integration-test, ref: "witness re-bootstrap test"}
+  - id: REQ-BACKUP-005
+    area: BACKUP
+    statement: "A scheduled restore rehearsal into a scratch installation SHOULD compare per-kind counts and hashes with the manifest."
+    rationale: "An untested backup is a hope."
+    level: SHOULD
+    origin: design-decision
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-95, section: "age", depth: Partial}
+    features: ["#835"]
+    gap: register-gap
+    verification:
+      - {kind: integration-test, ref: "rehearsal test"}
+  - id: REQ-BACKUP-014
+    area: BACKUP
+    statement: "After a restore, state MUST be rolled forward from the audit log for the record kinds whose audit records carry enough data."
+    rationale: "Roll-forward replaces a backup of fast-changing data."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-78, section: "8785", depth: Partial}
+    features: ["#835", "#841"]
+    verification:
+      - {kind: integration-test, ref: "roll-forward restore test"}
+  - id: REQ-BACKUP-015
+    area: BACKUP
+    statement: "Roll-forward after a restore MUST cover revocations, client registration metadata and grants."
+    rationale: "These kinds change between backups and must not revert."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-78, section: "8785", depth: Partial}
+    features: ["#835", "#841"]
+    verification:
+      - {kind: integration-test, ref: "revocation, registration and grant roll-forward test"}
+  - id: REQ-BACKUP-016
+    area: BACKUP
+    statement: "A restore MUST NOT depend on a certificate serial-number ledger."
+    rationale: "Random 128-bit serials need no ledger."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-62, section: "4.1.2.2", depth: Partial}
+    features: ["design"]
+    verification:
+      - {kind: integration-test, ref: "restore-without-ledger test"}
+  - id: REQ-BACKUP-017
+    area: BACKUP
+    statement: "The data key of a backup archive MUST be wrapped through the keys port."
+    rationale: "One wrapping path works on every runtime."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-95, section: "age", depth: Partial}
+      - {id: ST-89, section: "6", depth: Partial}
+    features: ["#834"]
+    verification:
+      - {kind: integration-test, ref: "wrap and unwrap round trip test"}
+  - id: REQ-BACKUP-018
+    area: BACKUP
+    statement: "On AWS the data key of a backup archive MUST be wrapped by a KMS encrypt operation whose encryption context names the backup."
+    rationale: "The context binds the wrapped key to its backup."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-89, section: "6", depth: Partial}
+    features: ["#834"]
+    verification:
+      - {kind: integration-test, ref: "encryption-context test"}
+  - id: REQ-BACKUP-019
+    area: BACKUP
+    statement: "On a hardware-token installation the data key of a backup archive MUST be wrapped by the hardware token."
+    rationale: "The token is the key custodian where no cloud key service exists."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: ["bare-metal"]
+    standards:
+      - {id: NC-10, section: "PIV", depth: Partial}
+    features: ["#834"]
+    verification:
+      - {kind: integration-test, ref: "hardware-token wrap test"}
+  - id: REQ-BACKUP-020
+    area: BACKUP
+    statement: "A backup archive MUST have at least one offline operator hardware-token recipient for break-glass."
+    rationale: "A recipient that is offline survives the loss of the online key path."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-95, section: "age", depth: Full}
+      - {id: NC-10, section: "PIV", depth: Partial}
+    features: ["#834"]
+    verification:
+      - {kind: test-vectors, ref: "age vectors"}
+      - {kind: integration-test, ref: "offline recipient restore test"}
+  - id: REQ-BACKUP-021
+    area: BACKUP
+    statement: "On AWS only the restore role MUST be able to decrypt a backup data key."
+    rationale: "A narrow decrypt grant limits who can read a backup."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-89, section: "6", depth: Partial}
+    features: ["#834"]
+    verification:
+      - {kind: integration-test, ref: "key policy test"}
+  - id: REQ-BACKUP-022
+    area: BACKUP
+    statement: "The backup archive and its wrapping key SHOULD live in a separate account."
+    rationale: "A separate account survives the compromise of the main one."
+    level: SHOULD
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-95, section: "age", depth: Partial}
+    features: ["#834"]
+    verification:
+      - {kind: manual, ref: "account layout review"}
+  - id: REQ-BACKUP-023
+    area: BACKUP
+    statement: "The backup archive blob SHOULD use the compliance lock mode."
+    rationale: "A compliance lock prevents deletion before expiry."
+    level: SHOULD
+    origin: design-decision
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-96, section: "2020-12", depth: Partial}
+    features: ["#835"]
+    gap: register-gap
+    verification:
+      - {kind: integration-test, ref: "lock-mode check"}
+  - id: REQ-BACKUP-024
+    area: BACKUP
+    statement: "The backup function and the restore function SHOULD run as separate actors with separate identities."
+    rationale: "Separate identities limit what a stolen backup identity can do."
+    level: SHOULD
+    origin: design-decision
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-96, section: "2020-12", depth: Partial}
+    features: ["#835"]
+    gap: register-gap
+    verification:
+      - {kind: manual, ref: "actor identity review"}
+  - id: REQ-BACKUP-025
+    area: BACKUP
+    statement: "The restore actor SHOULD be able to run while the entry and signer actors are down."
+    rationale: "Restore is needed exactly when the service is unavailable."
+    level: SHOULD
+    origin: design-decision
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-96, section: "2020-12", depth: Partial}
+    features: ["#835"]
+    gap: register-gap
+    verification:
+      - {kind: integration-test, ref: "restore-with-services-down test"}
+  - id: REQ-BACKUP-026
+    area: BACKUP
+    statement: "The audit log blob SHOULD be protected by lock mode, witnesses and replication instead of being archived."
+    rationale: "The log protects itself and would only bloat a tarball."
+    level: SHOULD
+    origin: design-decision
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-77, section: "2.1", depth: Partial}
+    features: ["#835"]
+    gap: register-gap
+    verification:
+      - {kind: manual, ref: "backup scope review"}

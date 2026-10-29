@@ -1,0 +1,132 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sluis.id/requirements/requirements.schema.json",
+  "title": "sluis requirements catalogue file",
+  "description": "Validates index.yaml and each <area>.yaml of docs/requirements/. The lint adds the rules that JSON Schema cannot express (see schema-notes.md section 5).",
+  "oneOf": [
+    { "$ref": "#/$defs/indexFile" },
+    { "$ref": "#/$defs/areaFile" }
+  ],
+  "$defs": {
+    "areaCode": { "type": "string", "pattern": "^[A-Z][A-Z0-9]{1,11}$" },
+    "reqId": { "type": "string", "pattern": "^REQ-[A-Z][A-Z0-9]{1,11}-[0-9]{3}$" },
+    "level": { "enum": ["MUST", "SHOULD", "MAY"] },
+    "origin": { "enum": ["v1-parity", "stakeholder-ciam", "stakeholder-integrator", "security-review", "design-decision", "standard"] },
+    "status": { "enum": ["planned", "partial", "open", "out-of-scope", "withdrawn"] },
+    "runtime": { "enum": ["bare-metal", "serverless", "kubernetes"] },
+    "depth": { "enum": ["Full", "Partial"] },
+    "verificationKind": { "enum": ["conformance-suite", "test-vectors", "integration-test", "manual"] },
+    "sentence": { "type": "string", "minLength": 12, "maxLength": 400, "pattern": "\\.$" },
+    "standardRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "depth"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^(ST|NC)-[0-9]{2,3}$" },
+        "section": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "depth": { "$ref": "#/$defs/depth" }
+      }
+    },
+    "verificationRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "ref"],
+      "properties": {
+        "kind": { "$ref": "#/$defs/verificationKind" },
+        "ref": { "type": "string", "minLength": 3, "maxLength": 200 },
+        "suite": { "type": "string", "pattern": "^SU-[A-Z0-9-]+$", "description": "Reserved for the suite registry (suites.yaml); optional until it exists." }
+      }
+    },
+    "requirement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "area", "statement", "rationale", "level", "origin", "status", "runtimes", "standards", "features", "verification"],
+      "properties": {
+        "id": { "$ref": "#/$defs/reqId" },
+        "area": { "$ref": "#/$defs/areaCode" },
+        "split_from": { "$ref": "#/$defs/reqId", "description": "Set on every clause cut from a compound record; names the record whose id the first clause kept." },
+        "statement": { "$ref": "#/$defs/sentence" },
+        "rationale": { "$ref": "#/$defs/sentence" },
+        "level": { "$ref": "#/$defs/level" },
+        "origin": { "$ref": "#/$defs/origin" },
+        "status": { "$ref": "#/$defs/status" },
+        "runtimes": {
+          "oneOf": [
+            { "const": "all" },
+            { "type": "array", "minItems": 1, "maxItems": 3, "uniqueItems": true, "items": { "$ref": "#/$defs/runtime" } }
+          ]
+        },
+        "standards": { "type": "array", "items": { "$ref": "#/$defs/standardRef" } },
+        "features": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^(design|parity|#[0-9]{3})$" }
+        },
+        "decisions": { "type": "array", "uniqueItems": true, "items": { "type": "string", "pattern": "^OD-[0-9]+$" } },
+        "verification": { "type": "array", "items": { "$ref": "#/$defs/verificationRef" } },
+        "gap": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$", "description": "Key into catalogue.gaps. Required for an open or partial record that names no decision." },
+        "manual_reason": { "type": "string", "minLength": 12, "maxLength": 300, "description": "Required for a MUST whose verification is manual only." },
+        "superseded_by": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/reqId" }, "description": "Required when status is withdrawn." }
+      }
+    },
+    "areaFile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "area", "requirements"],
+      "properties": {
+        "schema": { "const": 1 },
+        "area": { "$ref": "#/$defs/areaCode" },
+        "requirements": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/requirement" } }
+      }
+    },
+    "indexFile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "catalogue"],
+      "properties": {
+        "schema": { "const": 1 },
+        "catalogue": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["title", "checked", "vocabulary", "areas", "gaps", "glossary"],
+          "properties": {
+            "title": { "type": "string" },
+            "checked": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
+            "vocabulary": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["level", "origin", "status", "runtimes", "verification", "depth"],
+              "properties": {
+                "level": { "type": "array", "items": { "$ref": "#/$defs/level" } },
+                "origin": { "type": "array", "items": { "$ref": "#/$defs/origin" } },
+                "status": { "type": "array", "items": { "$ref": "#/$defs/status" } },
+                "runtimes": { "type": "array", "items": { "$ref": "#/$defs/runtime" } },
+                "verification": { "type": "array", "items": { "$ref": "#/$defs/verificationKind" } },
+                "depth": { "type": "array", "items": { "$ref": "#/$defs/depth" } }
+              }
+            },
+            "areas": {
+              "type": "object",
+              "propertyNames": { "$ref": "#/$defs/areaCode" },
+              "additionalProperties": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["title", "file"],
+                "properties": {
+                  "title": { "type": "string", "minLength": 3 },
+                  "file": { "type": "string", "pattern": "^[a-z0-9]+\\.yaml$" }
+                }
+              }
+            },
+            "gaps": {
+              "type": "object",
+              "propertyNames": { "pattern": "^[a-z][a-z0-9-]*$" },
+              "additionalProperties": { "type": "string", "minLength": 12 }
+            },
+            "glossary": { "type": "object", "additionalProperties": { "type": "string", "minLength": 12 } }
+          }
+        }
+      }
+    }
+  }
+}

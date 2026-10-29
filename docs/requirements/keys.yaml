@@ -1,0 +1,342 @@
+# KEYS: Keys and signing
+schema: 1
+area: KEYS
+requirements:
+  - id: REQ-KEYS-001
+    area: KEYS
+    statement: "Every private-key operation MUST go through the signing port."
+    rationale: "One port makes drivers swappable and auditable."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-89, section: "6", depth: Full}
+      - {id: ST-88, section: "1", depth: Full}
+      - {id: ST-103, section: "test plan", depth: Full}
+    features: ["#800"]
+    verification:
+      - {kind: test-vectors, ref: "port suite"}
+  - id: REQ-KEYS-013
+    area: KEYS
+    split_from: REQ-KEYS-001
+    statement: "Business code MUST NOT import a key-management SDK."
+    rationale: "One port makes drivers swappable and auditable."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-89, section: "6", depth: Full}
+      - {id: ST-88, section: "1", depth: Full}
+    features: ["#800"]
+    manual_reason: "The rule constrains the source tree; a reviewer confirms that the import lint covers every package."
+    verification:
+      - {kind: manual, ref: "import lint"}
+  - id: REQ-KEYS-002
+    area: KEYS
+    statement: "A private signing key held by a hardware or managed key driver MUST be non-extractable."
+    rationale: "A key that cannot leave the device cannot be stolen from disk."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-88, section: "1", depth: Full}
+      - {id: ST-89, section: "6", depth: Full}
+    features: ["#800"]
+    decisions: ["OD-3"]
+    verification:
+      - {kind: manual, ref: "driver attestation review"}
+      - {kind: integration-test, ref: "export negative test"}
+  - id: REQ-KEYS-003
+    area: KEYS
+    statement: "sluis MUST support signing with PS256, ES256 and EdDSA for profiles that require the FAPI 2.0 algorithm set."
+    rationale: "FAPI 2.0 forbids ES384; the default keeps one curve everywhere else."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-51, section: "3", depth: Partial}
+      - {id: ST-55, section: "RFC 8037", depth: Partial}
+      - {id: ST-37, section: "5.4", depth: Full}
+      - {id: ST-106, section: "test plan", depth: Full}
+    features: ["design"]
+    verification:
+      - {kind: test-vectors, ref: "Wycheproof ECDSA, RSA PSS and EdDSA"}
+      - {kind: conformance-suite, ref: "FAPI2-SP"}
+  - id: REQ-KEYS-014
+    area: KEYS
+    split_from: REQ-KEYS-003
+    statement: "sluis MUST NOT select PS256, ES256 or EdDSA unless a profile or an audience requires it."
+    rationale: "ES384 stays the default everywhere else, so one curve serves the rest."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-51, section: "3", depth: Partial}
+    features: ["design"]
+    verification:
+      - {kind: integration-test, ref: "default-algorithm test"}
+  - id: REQ-KEYS-004
+    area: KEYS
+    statement: "Each key driver MUST declare which signature algorithms it supports."
+    rationale: "PS256 on a hardware token is slow and EdDSA needs recent firmware."
+    level: MUST
+    origin: design-decision
+    status: partial
+    runtimes: ["bare-metal", "serverless", "kubernetes"]
+    standards:
+      - {id: ST-51, section: "3", depth: Partial}
+      - {id: ST-88, section: "1", depth: Partial}
+    features: ["design"]
+    gap: register-gap
+    verification:
+      - {kind: integration-test, ref: "driver declaration test"}
+  - id: REQ-KEYS-015
+    area: KEYS
+    split_from: REQ-KEYS-004
+    statement: "`sluis config check` MUST refuse a policy that pins an algorithm the configured driver cannot sign."
+    rationale: "PS256 on a hardware token is slow and EdDSA needs recent firmware."
+    level: MUST
+    origin: design-decision
+    status: partial
+    runtimes: ["bare-metal", "serverless", "kubernetes"]
+    standards:
+      - {id: ST-51, section: "3", depth: Partial}
+      - {id: ST-88, section: "1", depth: Partial}
+    features: ["design"]
+    gap: register-gap
+    verification:
+      - {kind: integration-test, ref: "config-check matrix per driver"}
+  - id: REQ-KEYS-005
+    area: KEYS
+    statement: "RSA keys MUST be used only for a named audience or algorithm that requires them, and with a key separate from the default."
+    rationale: "Interoperating clouds and libraries require RS256 and PS256."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-51, section: "3.3", depth: Partial}
+    features: ["#788"]
+    decisions: ["OD-15"]
+    verification:
+      - {kind: integration-test, ref: "per-audience key separation test"}
+  - id: REQ-KEYS-006
+    area: KEYS
+    statement: "sluis MUST publish its public keys as a key set whose entries each carry kid, kty, alg and use."
+    rationale: "Key rotation depends on timely discovery."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-50, section: "5", depth: Full}
+      - {id: ST-53, section: "3", depth: Full}
+    features: ["#774"]
+    verification:
+      - {kind: test-vectors, ref: "RFC 7517 appendix"}
+  - id: REQ-KEYS-016
+    area: KEYS
+    split_from: REQ-KEYS-006
+    statement: "A published key set MUST be cacheable for no longer than a documented bound."
+    rationale: "Rotation depends on timely discovery."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-50, section: "5", depth: Full}
+      - {id: ST-53, section: "3", depth: Full}
+    features: ["#774"]
+    verification:
+      - {kind: integration-test, ref: "rotation overlap test"}
+  - id: REQ-KEYS-007
+    area: KEYS
+    statement: "Key rotation MUST overlap for at least the token lifetime plus allowed clock skew."
+    rationale: "A new key must be verifiable before it signs."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-50, section: "5", depth: Full}
+    features: ["#800"]
+    verification:
+      - {kind: integration-test, ref: "rotation test"}
+  - id: REQ-KEYS-008
+    area: KEYS
+    statement: "A software key driver MUST be refused in a production installation."
+    rationale: "Software keys are for development only."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-88, section: "1", depth: Partial}
+    features: ["#867"]
+    verification:
+      - {kind: integration-test, ref: "config-check negative test"}
+  - id: REQ-KEYS-009
+    area: KEYS
+    statement: "Keys with different purposes MUST be separate keys."
+    rationale: "Cross-protocol key reuse is avoidable."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-62, section: "5280", depth: Partial}
+      - {id: ST-65, section: "1", depth: Partial}
+    features: ["design"]
+    manual_reason: "The rule constrains key configuration; a reviewer checks the key-purpose table for each release."
+    verification:
+      - {kind: manual, ref: "key-purpose table review"}
+  - id: REQ-KEYS-017
+    area: KEYS
+    split_from: REQ-KEYS-009
+    statement: "A key MUST NOT be shared between protocols, in particular between certificate signing and SSH certificate signing."
+    rationale: "Cross-protocol key reuse is avoidable."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-62, section: "5280", depth: Partial}
+      - {id: ST-65, section: "1", depth: Partial}
+    features: ["design"]
+    manual_reason: "The rule constrains key configuration; a reviewer checks the key-purpose table for each release."
+    verification:
+      - {kind: manual, ref: "key-purpose table review"}
+  - id: REQ-KEYS-010
+    area: KEYS
+    statement: "sluis MUST provide a build that uses a FIPS 140-3 validated cryptographic module."
+    rationale: "Regulated users need a validated module."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-88, section: "1", depth: Full}
+    features: ["#868"]
+    verification:
+      - {kind: integration-test, ref: "FIPS build smoke test"}
+      - {kind: manual, ref: "module-version check"}
+  - id: REQ-KEYS-018
+    area: KEYS
+    split_from: REQ-KEYS-010
+    statement: "sluis MUST state that sluis itself is not the validated module."
+    rationale: "A false claim of validation would mislead regulated users."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-88, section: "1", depth: Full}
+    features: ["#868"]
+    manual_reason: "A statement in the documentation is checked by reading it."
+    verification:
+      - {kind: manual, ref: "documentation review"}
+  - id: REQ-KEYS-011
+    area: KEYS
+    statement: "An alarm MUST be raised on key-ring decryption outside planned rotation."
+    rationale: "Key misuse is silent without alarms."
+    level: MUST
+    origin: security-review
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-88, section: "1", depth: Partial}
+    features: ["design"]
+    verification:
+      - {kind: integration-test, ref: "alert-rule test (key-ring)"}
+  - id: REQ-KEYS-019
+    area: KEYS
+    split_from: REQ-KEYS-011
+    statement: "An alarm MUST be raised on use of a signing key by an unexpected actor."
+    rationale: "Key misuse is silent without alarms."
+    level: MUST
+    origin: security-review
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-88, section: "1", depth: Partial}
+    features: ["design"]
+    verification:
+      - {kind: integration-test, ref: "alert-rule test (actor)"}
+  - id: REQ-KEYS-020
+    area: KEYS
+    split_from: REQ-KEYS-011
+    statement: "An alarm MUST be raised on a new key identifier in a pinned upstream key set."
+    rationale: "Key misuse is silent without alarms."
+    level: MUST
+    origin: security-review
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-88, section: "1", depth: Partial}
+    features: ["design"]
+    verification:
+      - {kind: integration-test, ref: "alert-rule test (upstream key set)"}
+  - id: REQ-KEYS-012
+    area: KEYS
+    statement: "sluis SHOULD be able to sign with post-quantum algorithms (ML-DSA) once the key drivers support them, selected by policy."
+    rationale: "NIST plans deprecation of classical signatures after 2030."
+    level: SHOULD
+    origin: design-decision
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-57, section: "9964", depth: Full}
+      - {id: ST-91, section: "204", depth: Full}
+      - {id: ST-93, section: "1", depth: Partial}
+    features: ["design"]
+    gap: proposed-design
+    verification:
+      - {kind: test-vectors, ref: "NIST ACVP vectors"}
+  - id: REQ-KEYS-021
+    area: KEYS
+    statement: "The keys port MUST provide wrap and unwrap operations for data keys."
+    rationale: "Backup data keys are wrapped through the port so that no driver-specific code touches them."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-89, section: "6", depth: Partial}
+      - {id: NC-10, section: "PIV", depth: Partial}
+      - {id: ST-103, section: "test plan", depth: Full}
+    features: ["#800", "#834"]
+    verification:
+      - {kind: test-vectors, ref: "port suite keys (wrap and unwrap round trip)"}
+  - id: REQ-KEYS-022
+    area: KEYS
+    statement: "The hardware-token PIV driver MUST refuse EdDSA signing on a device whose firmware does not support it."
+    rationale: "PIV EdDSA needs a recent device firmware."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: ["bare-metal", "kubernetes"]
+    standards:
+      - {id: NC-10, section: "PIV", depth: Partial}
+      - {id: ST-55, section: "RFC 8037", depth: Partial}
+    features: ["#800"]
+    verification:
+      - {kind: integration-test, ref: "old-firmware refusal test"}
+  - id: REQ-KEYS-023
+    area: KEYS
+    statement: "`sluis config check` SHOULD warn when a pinned algorithm is slow on the configured hardware driver."
+    rationale: "PS256 on a hardware token takes about two seconds per signature."
+    level: SHOULD
+    origin: design-decision
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-51, section: "3", depth: Partial}
+    features: ["design"]
+    gap: proposed-design
+    verification:
+      - {kind: integration-test, ref: "config-check warning test"}

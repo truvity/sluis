@@ -1,0 +1,64 @@
+# sluis requirements catalogue: index. Declares the vocabularies, the areas and the glossary.
+# One file per area sits beside this file (<area>.yaml, lower case). Ids are stable and never reused.
+# No person, company, estate or ticket names appear in these files; the site lint enforces it.
+schema: 1
+catalogue:
+  title: "sluis requirements"
+  checked: "2026-10-29"
+  vocabulary:
+    level: [MUST, SHOULD, MAY]
+    origin: [v1-parity, stakeholder-ciam, stakeholder-integrator, security-review, design-decision, standard]
+    status: [planned, partial, open, out-of-scope, withdrawn]
+    runtimes: [bare-metal, serverless, kubernetes]
+    verification: [conformance-suite, test-vectors, integration-test, manual]
+    depth: [Full, Partial]
+  areas:
+    AUTHN: {title: "Authentication and authorization endpoint", file: authn.yaml}
+    TOKEN: {title: "Tokens and token endpoint", file: token.yaml}
+    EXCH: {title: "Token exchange", file: exch.yaml}
+    SESS: {title: "Sessions, refresh and logout", file: sess.yaml}
+    FED: {title: "Federation (sluis as a relying party)", file: fed.yaml}
+    CLIENT: {title: "Clients and client authentication", file: client.yaml}
+    WORKLOAD: {title: "Workload identity", file: workload.yaml}
+    POLICY: {title: "Policy", file: policy.yaml}
+    KEYS: {title: "Keys and signing", file: keys.yaml}
+    PKI: {title: "Internal PKI and ceremonies", file: pki.yaml}
+    SSH: {title: "SSH certificates", file: ssh.yaml}
+    DB: {title: "Database access", file: db.yaml}
+    AUDIT: {title: "Audit log", file: audit.yaml}
+    QUOTA: {title: "Quota and metering", file: quota.yaml}
+    SECRETS: {title: "Secrets", file: secrets.yaml}
+    EXPORT: {title: "Export", file: export.yaml}
+    BACKUP: {title: "Backup and restore", file: backup.yaml}
+    OBS: {title: "Observability", file: obs.yaml}
+    OPS: {title: "Operations and configuration", file: ops.yaml}
+    SEC: {title: "Security hardening", file: sec.yaml}
+    UX: {title: "Pages and user experience", file: ux.yaml}
+    A11Y: {title: "Accessibility", file: a11y.yaml}
+    PERF: {title: "Scale and performance", file: perf.yaml}
+    DEPLOY: {title: "Deployment and packaging", file: deploy.yaml}
+    SUPPLY: {title: "Release and supply chain", file: supply.yaml}
+    TEST: {title: "Conformance and test strategy", file: test.yaml}
+    CIAM: {title: "Customer account hosting: scope and boundaries (open scope)", file: ciam.yaml}
+    ACCT: {title: "Customer accounts (open scope)", file: acct.yaml}
+    SUBJ: {title: "Subjects and sectors (open scope)", file: subj.yaml}
+    VAULT: {title: "Fallback credential vault (open scope)", file: vault.yaml}
+    REG: {title: "Registration, recovery and lifecycle (open scope)", file: reg.yaml}
+  gaps:
+    account-hosting-scope: "Whether sluis hosts customer accounts at all is undecided, so every requirement of the account-hosting groups waits for that scope decision."
+    stakeholder-only: "A stakeholder needs it but no v2 feature accepts it yet."
+    register-gap: "The standards register or the feature plan is weaker than this requirement."
+    proposed-design: "The design is proposed in research and not yet decided."
+  glossary:
+    "actor": "A process with one responsibility, for example the entry, signer, policy, ca or quota actor."
+    "port": "An abstract interface with capability flags, such as keys, state, lease, blob, transport, index, witness, cloud, secrets or export."
+    "driver": "An implementation of a port. A driver declares what it needs: a long-running process, a disk, a node count, a dependency."
+    "runtime": "The kind of platform that starts the processes: bare-metal, serverless or kubernetes."
+    "installation": "One concrete deployment: a runtime, a node count, available dependencies and one driver per port."
+    "tested installation": "One of the four installations the project tests: local, boards, lambda, kubernetes. Any other combination is possible but untested."
+    "hub installation": "In an account-hosting setup, the installation that holds customer accounts and issues pairwise subjects."
+    "context installation": "In an account-hosting setup, an installation of one regulated entity. It has its own issuer, keys, subjects and sessions, and gets sign-in silently from the hub."
+    "accounts module": "The module of a hub installation that holds the account registry and runs registration, passkey and recovery ceremonies."
+    "sector": "A group of relying parties that share one pairwise subject for a person."
+    "fallback credential vault": "An external identity provider that holds an optional fallback password and one-time-password factor and knows only a pseudonym."
+    "control plane": "The external system through which operators and support issue signed administrative intents."
