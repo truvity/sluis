@@ -69,7 +69,7 @@ The set of roles is the same on every shape. What changes is how each one is run
 | Kubernetes (proposed) | A container per role, in a node pod or an audit pod |
 
 :::note[Proposed]
-On Kubernetes a role is a container with its own user id and its own token audience, and a pod holds several roles. This replaces one pod, with one ServiceAccount, per role. The layout is [OD-17](/open-decisions/#od-17); see [Kubernetes](/shapes/kubernetes/).
+On Kubernetes a role is a container with its own user id and its own token audience, and a pod holds several roles. This replaces one pod, with one ServiceAccount, per role. The layout is a node pod plus a separate audit side ([OD-17](/open-decisions/#od-17)); the audit side is being redesigned as a separate audit installation ([OD-31](/open-decisions/#od-31)). See [Kubernetes](/shapes/kubernetes/).
 :::
 
 See [Shapes](/shapes/) for each shape and [Processes](/architecture/processes/) for what runs where.

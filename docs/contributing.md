@@ -51,7 +51,7 @@ How settled a point is shows in how it is written:
 Each node agent holds its own signing key.
 :::
 
-:::caution[Open decision OD-6: Diagram tool]
-Options: LikeC4 generated from the model, or Mermaid only.
+:::caution[Open decision OD-24: Edge on Kubernetes]
+Options: a `cloudflared` sidecar, or a key-less edge relay on the pod address.
 :::
 ```

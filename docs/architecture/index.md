@@ -65,6 +65,4 @@ Three consequences follow from making the manifest the single source:
 
 Related sections: [Concepts](/concepts/) explains the vocabulary (roles, drivers, integrations, keys), [Shapes](/shapes/) describes each way to install sluis, and [Open decisions](/open-decisions/) lists what is not settled.
 
-:::caution[Open decision OD-6: Diagram tool]
-The diagrams on these pages are Mermaid, written next to the text and reviewed in a pull request. Whether they are generated from the design model instead (LikeC4) is undecided.
-:::
+The diagrams on these pages are Mermaid, written next to the text and reviewed in a pull request ([OD-6](/open-decisions/#od-6)). Once the permission manifest exists, they are generated from the design model with LikeC4.
